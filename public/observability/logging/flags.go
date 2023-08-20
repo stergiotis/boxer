@@ -68,6 +68,9 @@ var LoggingFlags = []cli.Flag{
 			case "spew":
 				log.Logger = log.Output(NewCborSpewLogger(os.Stderr))
 				break
+			case "json":
+				log.Logger = log.Output(NewJsonIndentLogger(os.Stderr))
+				break
 			case "cbor":
 				log.Logger = log.Output(os.Stderr)
 				break
