@@ -15,7 +15,7 @@ go get github.com/stergiotis/boxer
 ``
 
 ## Contributing
-Currently, no third party contributions are accepted.
+Currently, no third-party contributions are accepted.
 
 ## License
 The MIT License (MIT) 2023 - [Panos Stergiotis](https://github.com/stergiotis/). See [LICENSE](LICENSE) for the full license text.

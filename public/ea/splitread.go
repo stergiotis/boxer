@@ -6,7 +6,7 @@ import (
 	"math/rand"
 )
 
-// TransferDataWithSplitReadAndWrites copies nBytesToRead from r to dest by randomly using io.Reader and io.ByteReader interface. The number of bytes transferred by each method is rougly balanced.
+// TransferDataWithSplitReadAndWrites copies nBytesToRead from r to dest by randomly using io.Reader and io.ByteReader interface. The number of bytes transferred by each method is roughly balanced.
 func TransferDataWithSplitReadAndWrites(dest ByteBlockWriter, nBytesToRead int, r ByteReadReader, maxConsecutiveBytesToRead int, ra *rand.Rand) (singleByteReads int, blockReads int, bytesBlockReads int, n int, err error) {
 	if maxConsecutiveBytesToRead < 2 {
 		err = eh.Errorf("maxConsecutiveBytesToRead has to be larger or equal to 2")

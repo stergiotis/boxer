@@ -260,6 +260,7 @@ func (inst *Curlier) Run(reqBody io.Reader) (resp *http.Response, err error) {
 		bo := inst.bo
 		bo.Reset()
 		for IsTransientError(resp.StatusCode) && t < cfg.Retry {
+			t++
 			time.Sleep(bo.NextBackOff())
 			resp, err = inst.client.Do(req)
 			if err != nil {
@@ -269,7 +270,6 @@ func (inst *Curlier) Run(reqBody io.Reader) (resp *http.Response, err error) {
 				err = eh.Errorf("unable to perform http request: %w", err)
 				return
 			} else {
-				t++
 				return
 			}
 		}
