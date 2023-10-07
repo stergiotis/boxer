@@ -385,7 +385,7 @@ func (inst *gatherFactsAndStacks) addError(err error, parentId uint64) error {
 	if ses != nil {
 		parentId = id
 		for _, se := range ses {
-			if se != err {
+			if se != err && se != nil {
 				err = inst.addError(se, parentId)
 				if err != nil {
 					return err
@@ -435,6 +435,8 @@ func MarshalError(err error) interface{} {
 		return nil
 	}
 	g := newGatherFactsAndStacks()
-	_ = g.addError(err, 0)
+	if err != nil {
+		_ = g.addError(err, 0)
+	}
 	return g
 }
