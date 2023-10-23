@@ -61,6 +61,16 @@ func (inst *Unmarshaller) ReadInt() (v int) {
 	}
 	return
 }
+func (inst *Unmarshaller) ReadInt16() (v int16) {
+	const signBit uint16 = 1 << 15
+	u := inst.ReadUInt16()
+	if u&signBit != 0 {
+		v = -int16(u & ^signBit)
+	} else {
+		v = int16(u)
+	}
+	return
+}
 func (inst *Unmarshaller) ReadFloat32() (v float32) {
 	v = math.Float32frombits(inst.ReadUInt32())
 	return

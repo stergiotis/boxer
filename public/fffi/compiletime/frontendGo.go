@@ -114,7 +114,7 @@ func (inst *CodeTransformerFrontendGo) generate(decl *ast.FuncDecl, id uint32, r
 		_, _ = b.WriteString(fmt.Sprintf("0x%08x", id))
 		_, _ = b.WriteString(")\n")
 	}
-	var paramNames, paramGoTypes, resultNames, resultGoTypes, resultGoCastTypes, paramDeref, resultDeref []string
+	var paramNames, paramGoTypes, resultNames, resultGoTypes, paramDeref, resultDeref, resultGoCastTypes []string
 	var explicitErrVarName string
 	paramNames, paramGoTypes, _, paramDeref, resultNames, resultGoTypes, resultGoCastTypes, resultDeref, explicitErrVarName, err = getParamsAndResultTypes(decl, resolver)
 	if err != nil {
@@ -152,7 +152,7 @@ func (inst *CodeTransformerFrontendGo) generate(decl *ast.FuncDecl, id uint32, r
 			_, _ = b.WriteString("if _err_ != nil {\n")
 			_, _ = b.WriteString("  ")
 			_, _ = b.WriteString(instvar)
-			_, _ = b.WriteString("  .handleError(_err_)\n")
+			_, _ = b.WriteString(".handleError(_err_)\n")
 			_, _ = b.WriteString("  return\n")
 			_, _ = b.WriteString("}\n")
 		}
@@ -168,22 +168,56 @@ func (inst *CodeTransformerFrontendGo) generate(decl *ast.FuncDecl, id uint32, r
 				err = eb.Build().Str("goType", resultGoTypes[i]).Errorf("unable to compose send result function call: %w", err)
 				return
 			}
+			tdest := resultGoCastTypes[i]
+			tsrc := resultGoTypes[i]
 
 			_, _ = b.WriteString(resultDeref[i])
 			_, _ = b.WriteString(name)
 			_, _ = b.WriteString(" = ")
-			cast := resultGoCastTypes[i]
-			if cast != "" {
-				_, _ = b.WriteString(cast)
-				_, _ = b.WriteString("(")
+			if (isSliceType(tsrc) || isArrayType(tsrc)) &&
+				(isSliceType(tdest) || isArrayType(tdest)) {
+				// element wise. Example:
+				// type ImGuiID uint32
+				// func() (r []ImGuiID)
+				_, _ = b.WriteString("runtime.Get")
+				_, _ = b.WriteString(funcNameSuffix)
+				_, _ = b.WriteString("Retr[")
+				t := tdest
+				_, t, err = splitArrayOrSliceType(t)
+				if err != nil {
+					err = eb.Build().Str("type", tdest).Errorf("unable to split array or slice type")
+					return
+				}
+				_, _ = b.WriteString(t)
+				_, _ = b.WriteString("](f)")
+				_, _ = b.WriteString("\n")
+			} else if isSliceType(tsrc) || isArrayType(tsrc) {
+				// type ImVec2 [2]float
+				// func() (r ImVec2)
+				_, _ = b.WriteString(tdest)
+				_, _ = b.WriteString("(runtime.Get")
+				_, _ = b.WriteString(funcNameSuffix)
+				_, _ = b.WriteString("Retr[")
+				t := tsrc
+				_, t, err = splitArrayOrSliceType(t)
+				if err != nil {
+					err = eb.Build().Str("type", tsrc).Errorf("unable to split array or slice type")
+					return
+				}
+				_, _ = b.WriteString(t)
+				_, _ = b.WriteString("](f))")
+				_, _ = b.WriteString("\n")
+			} else {
+				// scalar
+				_, _ = b.WriteString(tdest)
+				_, _ = b.WriteString("(runtime.Get")
+				_, _ = b.WriteString(funcNameSuffix)
+				_, _ = b.WriteString("Retr[")
+				_, _ = b.WriteString(tsrc)
+				_, _ = b.WriteString("](f))")
+				_, _ = b.WriteString("\n")
 			}
-			_, _ = b.WriteString("f.Get")
-			_, _ = b.WriteString(funcNameSuffix)
-			_, _ = b.WriteString("Retr()")
-			if cast != "" {
-				_, _ = b.WriteString(")")
-			}
-			_, _ = b.WriteString("\n")
+			// b.WriteString(fmt.Sprintf("_ = `tdest=%s,tsrc=%s`\n", tdest, tsrc))
 		}
 	}
 

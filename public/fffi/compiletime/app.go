@@ -3,9 +3,9 @@ package compiletime
 import (
 	"errors"
 	"github.com/stergiotis/boxer/public/config"
+	"github.com/stergiotis/boxer/public/fffi/runtime"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/stergiotis/boxer/public/fffi/runtime"
 	"github.com/urfave/cli/v2"
 	"io"
 	"os"

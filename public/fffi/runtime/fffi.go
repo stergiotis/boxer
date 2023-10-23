@@ -45,7 +45,7 @@ func (inst *Fffi2) AddProcedureId(id FuncProcId) {
 	AddUint32Arg(inst, id)
 }
 func (inst *Fffi2) readError() (err error) {
-	s := inst.GetStringRetr()
+	s := GetStringRetr[string](inst)
 	if s != "" {
 		err = eh.New(s)
 	}

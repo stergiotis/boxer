@@ -82,10 +82,14 @@ func isErrorInterface(interf *types.Interface) bool {
 	return false
 }
 func lexicalName(t *types.Named) (lex string) {
-	lex = t.String()
-	idx := strings.LastIndex(lex, ".")
+	u := t.String()
+	idx := strings.LastIndex(u, ".")
+	idxB := strings.LastIndex(u, "]")
+	if idxB < 0 {
+		idxB = 0
+	}
 	if idx >= 0 {
-		lex = lex[idx+1:]
+		lex = u[:idxB] + u[idx+1:]
 	}
 	return
 }
@@ -114,11 +118,16 @@ func (inst *IDLDriverGoFile) resolveBasicTypeType(t types.Type, castTypeP string
 				Int64("len", tt.Len()).
 				Errorf("error while resolving element type of array type: %w", err)
 		}
+		var pfx string
 		if tt.Len() < 0 {
-			typeName = "[]" + elem
+			pfx = "[]" + elem
 		} else {
-			typeName = fmt.Sprintf("[%d]%s", tt.Len(), elem)
+			pfx = fmt.Sprintf("[%d]", tt.Len())
 		}
+		if castType != "" && castTypeP == "" {
+			castType = pfx + castType
+		}
+		typeName = pfx + elem
 		return
 	case *types.Slice:
 		var elem string
@@ -130,6 +139,9 @@ func (inst *IDLDriverGoFile) resolveBasicTypeType(t types.Type, castTypeP string
 				Errorf("error while resolving element type of array type: %w", err)
 		}
 		typeName = "[]" + elem
+		if castType != "" && castTypeP == "" {
+			castType = "[]" + castType
+		}
 		//err = eb.Build().Str("type", spew.Sdump(t)).Errorf("unable to resolve type: slices are not supported")
 		return
 	case *types.Pointer:
