@@ -57,9 +57,8 @@ func (inst *CodeTransformerBackendPresenterCpp) AddFunction(decl *ast.FuncDecl, 
 		_, _ = b.WriteString(";\n")
 	}
 
-	if len(resultNames) > 1 {
-		// skip primary return value (will be handled by `auto r = `)
-		for i, name := range resultNames[1:] {
+	if len(resultNames) > 0 {
+		for i, name := range resultNames {
 			var typeNameCpp string
 			typeNameCpp, err = inst.namer.GoTypeNameToCppTypeName(resultGoTypes[i])
 			if err != nil {
@@ -85,6 +84,7 @@ func (inst *CodeTransformerBackendPresenterCpp) AddFunction(decl *ast.FuncDecl, 
 		err = eh.New("no body statements in function declaration")
 		return
 	}
+	_, _ = b.WriteString("    {\n") // begin new scope to allow shadowing the return values declared above
 	_, callCode, _, err = splitIdlBody(lst)
 	if err != nil {
 		return eb.Build().Str("name", decl.Name.Name).Errorf("unable to extract call code from body: %w", err)
@@ -108,6 +108,7 @@ func (inst *CodeTransformerBackendPresenterCpp) AddFunction(decl *ast.FuncDecl, 
 		}
 		_, _ = b.WriteString("    flushSend();\n")
 	}
+	_, _ = b.WriteString("  }\n")
 	_, _ = b.WriteString("  }\n")
 	_, _ = b.WriteString("  break;\n")
 
