@@ -76,7 +76,7 @@ func (inst *Namer) GoTypeNameToCppTypeName(name string) (r string, err error) {
 		r = name + "_t"
 		break
 	case "[]uint8", "[]uint16", "[]uint32", "[]uint64", "[]int8", "[]int16", "[]int32":
-		r = "*" + strings.TrimPrefix(name, "[]") + "_t"
+		r = strings.TrimPrefix(name, "[]") + "_t*"
 		break
 	case "byte":
 		r = "uint8_t"
@@ -107,7 +107,7 @@ func (inst *Namer) GoTypeNameToCppTypeName(name string) (r string, err error) {
 				err = eb.Build().Str("name", name).Str("rest", rest).Errorf("unable to convert rest of slice or array to cpp typename: %w", err)
 				return
 			}
-			r = "*" + restCpp
+			r = restCpp + "*"
 		} else {
 			err = eb.Build().Str("name", name).Errorf("unable to convert go type to cpp type name")
 			return
