@@ -75,3 +75,31 @@ func (inst *MyStruct) MyExportedFunction2(a uint32,b MyEnumE) (success MyBool, e
          }`
 }
 ```
+
+## Build Flags
+IDL Code: 
+```go
+//go:build fffi_idl_code
+```
+Application Code:
+```go
+//go:build !bootstrap
+```
+
+## Imports
+
+## Limitations
+Multi-line imports are not supported in IDL code files
+Example:
+Supported:
+```go
+import "foo"
+import "bar"
+```
+Not supported:
+```go
+import (
+	"foo"
+    "bar"
+)
+```

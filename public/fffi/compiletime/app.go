@@ -68,7 +68,7 @@ func generateBackendCode(idlDriver IDLDriver, cfg *Config, namer *Namer) (err er
 	return
 }
 func generateFrontendCode(idlDriver IDLDriver, cfg *Config, namer *Namer) (err error) {
-	fe := NewCodeTransformerFrontendGo(namer)
+	fe := NewCodeTransformerFrontendGo(namer, cfg.GoCodeProlog)
 	err = idlDriver.DriveFrontend(fe)
 	if err != nil {
 		err = eh.Errorf("unable to generate code: %w", err)
@@ -109,6 +109,7 @@ func NewCommand(cfg *Config, namerCfg *NamerConfig) *cli.Command {
 	if cfg == nil {
 		cfg = &Config{
 			IdlBuildTag:         "fffi_idl_code",
+			GoCodeProlog:        "",
 			IdlPackagePattern:   "",
 			GoOutputFile:        "",
 			CppOutputFile:       "",

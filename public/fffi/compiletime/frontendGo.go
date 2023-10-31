@@ -24,9 +24,10 @@ type CodeTransformerFrontendGo struct {
 	namer                  *Namer
 	printerCfg             *printer.Config
 	needsAdditionalImports bool
+	goCodeProlog           string
 }
 
-func NewCodeTransformerFrontendGo(namer *Namer) *CodeTransformerFrontendGo {
+func NewCodeTransformerFrontendGo(namer *Namer, goCodeProlog string) *CodeTransformerFrontendGo {
 	builder := &bytes.Buffer{}
 	cfg := &printer.Config{
 		Mode:     printer.UseSpaces, //| printer.SourcePos,
@@ -40,6 +41,7 @@ func NewCodeTransformerFrontendGo(namer *Namer) *CodeTransformerFrontendGo {
 		builderSmall: &bytes.Buffer{},
 		namer:        namer,
 		printerCfg:   cfg,
+		goCodeProlog: goCodeProlog,
 	}
 }
 
@@ -253,13 +255,15 @@ func (inst *CodeTransformerFrontendGo) Emit(out io.Writer) (n int, err error) {
 	scanner.Split(bufio.ScanLines)
 	i := 0
 	emitImports := false
+	emitProlog := false
 	for scanner.Scan() {
 		t := scanner.Text()
 		t = strings.TrimPrefix(t, " \t")
-		if strings.HasPrefix(t, "package ") {
+		if strings.HasPrefix(t, "package ") || strings.HasPrefix(t, "import") {
 			i++
 			if i == 1 {
 				emitImports = true
+				emitProlog = true
 			} else {
 				n2, err = out.Write(deactivated)
 				n += n2
@@ -280,6 +284,15 @@ func (inst *CodeTransformerFrontendGo) Emit(out io.Writer) (n int, err error) {
 		if err != nil {
 			err = eh.Errorf("unable to write line feed to output: %w", err)
 			return
+		}
+		if emitProlog {
+			emitProlog = false
+			n2, err = out.Write([]byte(inst.goCodeProlog))
+			n += n2
+			if err != nil {
+				err = eh.Errorf("unable to write go code prolog: %w", err)
+				return
+			}
 		}
 		if emitImports {
 			n2, err = out.Write([]byte(defaultImports))

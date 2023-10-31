@@ -105,3 +105,7 @@ func AddComplex64Arg[T ~complex64](inst *Fffi2, v T) {
 func AddComplex128Arg[T ~complex128](inst *Fffi2, v T) {
 	inst.marshaller.WriteComplex128(complex128(v))
 }
+func AddComplex64Array2Arg[T ~complex64](inst *Fffi2, v [2]T) {
+	inst.marshaller.WriteComplex64(complex64(v[0]))
+	inst.marshaller.WriteComplex64(complex64(v[1]))
+}

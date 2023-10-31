@@ -6,6 +6,7 @@ import (
 )
 
 type Config struct {
+	GoCodeProlog        string
 	IdlBuildTag         string
 	IdlPackagePattern   string
 	GoOutputFile        string
@@ -37,6 +38,11 @@ func (inst *Config) ToCliFlags(nameTransf config.NameTransformFunc, envVarNameTr
 			Required: inst.CppOutputFile == "",
 			Value:    inst.CppOutputFile,
 		},
+		&cli.StringFlag{
+			Name:     nameTransf("goCodeProlog"),
+			Required: false,
+			Value:    inst.GoCodeProlog,
+		},
 		&cli.UintFlag{
 			Name:  "funcProcIdOffset",
 			Value: uint(inst.FuncProcIdOffset),
@@ -50,6 +56,7 @@ func (inst *Config) FromContext(nameTransf config.NameTransformFunc, ctx *cli.Co
 	inst.GoOutputFile = ctx.String(nameTransf("goOutputFile"))
 	inst.CppOutputFile = ctx.String(nameTransf("cppOutputFile"))
 	inst.FuncProcIdOffset = uint32(ctx.Uint(nameTransf("funcProcIdOffset")))
+	inst.GoCodeProlog = ctx.String(nameTransf("goCodeProlog"))
 	nMessages = inst.Validate(true)
 	return
 }
