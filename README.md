@@ -25,6 +25,19 @@ Unstable, alpha, API may still change heavily.
 <dt>eh</dt><dd>Error handling.</dd>
 <dt>fec</dt><dd>Forward error correction.</dd>
 <dt>inst</dt><dd>Instance (similar to self, this).</dd>
+<dt>fffi></dt><dd>Frame oriented Foreign Function Interface</dd>
+</dl>
+
+## Style Conventions
+### File Extensions
+Boxer uses chained file extension (e.g. `file.docx.pdf.txt`):
+<dl>
+<dt>`.out.&lt;ext&gt;.`</dt>
+<dd>Generated source code checked in repository e.g. `myfile.out.go`</dd>
+<dt>`.gen.&lt;ext&gt;.`</dt>
+<dd>Source code generated in regular build process (i.e. part of binary distribution but not source distribution): e.g. `myfile.gen.go`</dd>
+<dt>`.idl.go`</dt>
+<dd>A (Framed) Foreign Function Interface (FFI) Interface Defintion Language (IDL) file. A subset of go language.
 </dl>
 
 ## Contributing
