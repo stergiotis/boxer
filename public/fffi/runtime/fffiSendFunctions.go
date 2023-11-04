@@ -70,6 +70,28 @@ func AddUint32SliceArg[T ~uint32](inst *Fffi2, vs []T) {
 		m.WriteUInt32(uint32(v))
 	}
 }
+func AddFloat32SliceArg[T ~float32](inst *Fffi2, vs []T) {
+	m := inst.marshaller
+	if vs == nil {
+		m.WriteNilSlice()
+		return
+	}
+	m.WriteSliceLength(len(vs))
+	for _, v := range vs {
+		m.WriteFloat32(float32(v))
+	}
+}
+func AddFloat64liceArg[T ~float64](inst *Fffi2, vs []T) {
+	m := inst.marshaller
+	if vs == nil {
+		m.WriteNilSlice()
+		return
+	}
+	m.WriteSliceLength(len(vs))
+	for _, v := range vs {
+		m.WriteFloat64(float64(v))
+	}
+}
 func AddRuneSliceArg[T ~rune](inst *Fffi2, vs []T) {
 	m := inst.marshaller
 	if vs == nil {
