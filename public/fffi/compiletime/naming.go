@@ -78,6 +78,9 @@ func (inst *Namer) GoTypeNameToCppTypeName(name string) (r string, err error) {
 	case "[]uint8", "[]uint16", "[]uint32", "[]uint64", "[]int8", "[]int16", "[]int32":
 		r = strings.TrimPrefix(name, "[]") + "_t*"
 		break
+	case "[]string":
+		r = "const char* const"
+		break
 	case "byte":
 		r = "uint8_t"
 		break
@@ -122,6 +125,9 @@ func (inst *Namer) GoTypeNameToSendRecvFuncNameSuffix(name string) (r string, er
 		break
 	case "[]byte":
 		r = "Bytes"
+		break
+	case "[]string":
+		r = "Strings"
 		break
 	default:
 		if isArrayType(name) || isSliceType(name) {
@@ -230,7 +236,7 @@ func isSupportedSliceType(name string) bool {
 		log.Fatal().Err(err).Msg("found inconsistent type")
 		return false
 	}
-	return isSupportedValueType(rest)
+	return isSupportedValueType(rest) || rest == "string"
 }
 func isSupportedArrayType(name string) bool {
 	if !isArrayType(name) {

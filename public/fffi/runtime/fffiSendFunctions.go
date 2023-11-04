@@ -34,6 +34,17 @@ func AddStringArg[T ~string](inst *Fffi2, v T) {
 func AddBytesArg(inst *Fffi2, v []byte) {
 	inst.marshaller.WriteBytes(v)
 }
+func AddStringsArg[T ~string](inst *Fffi2, vs []T) {
+	m := inst.marshaller
+	if vs == nil {
+		m.WriteNilSlice()
+		return
+	}
+	m.WriteSliceLength(len(vs))
+	for _, v := range vs {
+		m.WriteString(string(v))
+	}
+}
 func AddIntArg[T ~int](inst *Fffi2, v T) {
 	inst.marshaller.WriteInt(int(v))
 }
@@ -81,7 +92,7 @@ func AddFloat32SliceArg[T ~float32](inst *Fffi2, vs []T) {
 		m.WriteFloat32(float32(v))
 	}
 }
-func AddFloat64liceArg[T ~float64](inst *Fffi2, vs []T) {
+func AddFloat64SliceArg[T ~float64](inst *Fffi2, vs []T) {
 	m := inst.marshaller
 	if vs == nil {
 		m.WriteNilSlice()
