@@ -167,10 +167,6 @@ func (inst *IDLDriverGoFile) DriveBackend(generator CodeTransformerBackend) (err
 			}
 			switch decl := node.(type) {
 			case *ast.FuncDecl:
-				if decl.Recv == nil || decl.Recv.List == nil || len(decl.Recv.List) != 1 {
-					err = eb.Build().Str("name", decl.Name.Name).Errorf("unable to generate code for function, must be method")
-					return false
-				}
 				err = generator.AddFunction(decl, inst, inst.FuncDeclToId(decl))
 				if err != nil {
 					position := fset.Position(decl.Pos())

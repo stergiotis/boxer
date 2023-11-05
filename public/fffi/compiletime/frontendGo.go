@@ -98,20 +98,29 @@ func (inst *CodeTransformerFrontendGo) generate(decl *ast.FuncDecl, id uint32, r
 	b := inst.builderSmall
 	b.Reset()
 
-	if decl.Recv == nil || decl.Recv.List == nil || len(decl.Recv.List) != 1 {
-		err = eb.Build().Str("name", decl.Name.Name).Errorf("unable to generate code for function, must be method")
-		return
-	}
-	recv0 := decl.Recv.List[0]
-	instvar := recv0.Names[0].Name
+	isMethod := isMethodDeclaration(decl)
+	instvar := ""
+	const currentFffiVarName = "currentFffiVar" // TODO make variable name configurable
+	const currentFffiErrHandler = "currentFffiErrorHandler"
 	{
-		_, _ = b.WriteString("f := ")
-		_, _ = b.WriteString(instvar)
-		_, _ = b.WriteString(".getFffi()\n")
-		if isFunction {
-			_, _ = b.WriteString("f.AddFunctionId(")
+		if isMethod {
+			recv0 := decl.Recv.List[0]
+			instvar = recv0.Names[0].Name
+			_, _ = b.WriteString("_f := ")
+			_, _ = b.WriteString(instvar)
+			_, _ = b.WriteString(".getFffi()\n")
 		} else {
-			_, _ = b.WriteString("f.AddProcedureId(")
+			_, _ = b.WriteString("_f :=  ")
+			_, _ = b.WriteString(currentFffiVarName)
+			_, _ = b.WriteRune('\n')
+		}
+	}
+
+	{
+		if isFunction {
+			_, _ = b.WriteString("_f.AddFunctionId(")
+		} else {
+			_, _ = b.WriteString("_f.AddProcedureId(")
 		}
 		_, _ = b.WriteString(fmt.Sprintf("0x%08x", id))
 		_, _ = b.WriteString(")\n")
@@ -134,7 +143,7 @@ func (inst *CodeTransformerFrontendGo) generate(decl *ast.FuncDecl, id uint32, r
 			_, _ = b.WriteString("runtime.Add")
 			_, _ = b.WriteString(suffix)
 			_, _ = b.WriteString("Arg")
-			_, _ = b.WriteString("(f,")
+			_, _ = b.WriteString("(_f,")
 			_, _ = b.WriteString(paramDeref[i])
 			_, _ = b.WriteString(name)
 			_, _ = b.WriteString(")\n")
@@ -144,22 +153,27 @@ func (inst *CodeTransformerFrontendGo) generate(decl *ast.FuncDecl, id uint32, r
 	if isFunction {
 		if explicitErrVarName != "" {
 			_, _ = b.WriteString(explicitErrVarName)
-			_, _ = b.WriteString(" = f.CallFunction()\nif ")
+			_, _ = b.WriteString(" = _f.CallFunction()\nif ")
 			_, _ = b.WriteString(explicitErrVarName)
 			_, _ = b.WriteString(" != nil {\n")
 			_, _ = b.WriteString("  return\n")
 			_, _ = b.WriteString("}\n")
 		} else {
-			_, _ = b.WriteString("_err_ := f.CallFunction()\n")
+			_, _ = b.WriteString("_err_ := _f.CallFunction()\n")
 			_, _ = b.WriteString("if _err_ != nil {\n")
 			_, _ = b.WriteString("  ")
-			_, _ = b.WriteString(instvar)
-			_, _ = b.WriteString(".handleError(_err_)\n")
+			if isMethod {
+				_, _ = b.WriteString(instvar)
+				_, _ = b.WriteString(".handleError")
+			} else {
+				_, _ = b.WriteString(currentFffiErrHandler)
+			}
+			_, _ = b.WriteString("(_err_)\n")
 			_, _ = b.WriteString("  return\n")
 			_, _ = b.WriteString("}\n")
 		}
 	} else {
-		_, _ = b.WriteString("f.CallProcedure()\n")
+		_, _ = b.WriteString("_f.CallProcedure()\n")
 	}
 
 	{
@@ -191,7 +205,7 @@ func (inst *CodeTransformerFrontendGo) generate(decl *ast.FuncDecl, id uint32, r
 					return
 				}
 				_, _ = b.WriteString(t)
-				_, _ = b.WriteString("](f)")
+				_, _ = b.WriteString("](_f)")
 				_, _ = b.WriteString("\n")
 			} else if isSliceType(tsrc) || isArrayType(tsrc) {
 				// type ImVec2 [2]float
@@ -207,7 +221,7 @@ func (inst *CodeTransformerFrontendGo) generate(decl *ast.FuncDecl, id uint32, r
 					return
 				}
 				_, _ = b.WriteString(t)
-				_, _ = b.WriteString("](f))")
+				_, _ = b.WriteString("](_f))")
 				_, _ = b.WriteString("\n")
 			} else {
 				// scalar
@@ -216,7 +230,7 @@ func (inst *CodeTransformerFrontendGo) generate(decl *ast.FuncDecl, id uint32, r
 				_, _ = b.WriteString(funcNameSuffix)
 				_, _ = b.WriteString("Retr[")
 				_, _ = b.WriteString(tsrc)
-				_, _ = b.WriteString("](f))")
+				_, _ = b.WriteString("](_f))")
 				_, _ = b.WriteString("\n")
 			}
 			// b.WriteString(fmt.Sprintf("_ = `tdest=%s,tsrc=%s`\n", tdest, tsrc))

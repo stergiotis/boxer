@@ -57,6 +57,22 @@ func (inst *Marshaller) WriteUint(v uint) {
 	// ILP32, LLP64, LP64
 	inst.WriteUInt32(uint32(v))
 }
+func (inst *Marshaller) WriteInt8(v int8) {
+	// sign-magnitude
+	if v < 0 {
+		inst.WriteUInt8(1<<7 | uint8(-v))
+	} else {
+		inst.WriteUInt8(uint8(v))
+	}
+}
+func (inst *Marshaller) WriteInt16(v int16) {
+	// sign-magnitude
+	if v < 0 {
+		inst.WriteUInt16(1<<15 | uint16(-v))
+	} else {
+		inst.WriteUInt16(uint16(v))
+	}
+}
 func (inst *Marshaller) WriteInt32(v int32) {
 	// sign-magnitude
 	if v < 0 {

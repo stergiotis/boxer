@@ -105,9 +105,15 @@ func parseFunctionBodyCode(code string) (res []ast.Stmt, err error) {
 	}
 	return
 }
+func isMethodDeclaration(decl *ast.FuncDecl) bool {
+	return decl != nil && decl.Recv != nil && decl.Recv.List != nil && len(decl.Recv.List) == 1
+}
 func getParamsAndResultTypes(decl *ast.FuncDecl, resolver TypeResolver) (paramNames []string, paramGoTypes []string, paramGoCast []bool, paramDeref []string, resultNames []string, resultGoTypes []string, resultGoCastTypes []string, resultDeref []string, explicitErrVarName string, err error) {
 	t := decl.Type
-	sendReceiver := sendReceiverAsArg(decl.Recv.List[0])
+	sendReceiver := false
+	if isMethodDeclaration(decl) {
+		sendReceiver = sendReceiverAsArg(decl.Recv.List[0])
+	}
 	hasRegularParams := t.Params != nil && t.Params.List != nil && len(t.Params.List) > 0
 	if hasRegularParams || sendReceiver {
 		l := 0
