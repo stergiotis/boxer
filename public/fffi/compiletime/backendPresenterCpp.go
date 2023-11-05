@@ -24,11 +24,6 @@ func NewCodeTransformerBackendPresenterCpp(namer *Namer) *CodeTransformerBackend
 	}
 }
 func (inst *CodeTransformerBackendPresenterCpp) AddFunction(decl *ast.FuncDecl, resolver TypeResolver, id runtime.FuncProcId) (err error) {
-	t := decl.Type
-	if t.TypeParams != nil {
-		return eh.New("type params are currently not implemented")
-	}
-
 	var paramNames, paramGoTypes, resultNames, resultGoTypes []string
 	paramNames, paramGoTypes, _, _, resultNames, resultGoTypes, _, _, _, err = getParamsAndResultTypes(decl, resolver)
 	if err != nil {

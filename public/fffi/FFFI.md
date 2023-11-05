@@ -10,6 +10,7 @@
     - Explicitly (last result type is an interface containing `error`): Return values are left untouched.
 * Reserved Names in go:
     - Variable `_err_` is used for implicitly handled errors.
+    - Variable `_f` is used for the fffi runtime handle.
     - Receiver name `foreignptr` is used to detect foreign pointers/instances to enable object-oriented interfaces.
 * Reserved Names in C++:
     - Goto label `skipAfterError` is reserved.
@@ -47,6 +48,11 @@ func (inst *MyStruct) getFffi() *fffi2.Fffi2 {
     return inst.fffi	
 }
 ```
+For the use of IDL function stubs instead of method stubs the following variables need to be defined:
+```go
+var currentFffiVar *runtime.Fffi2
+var currentFffiErrorHandler func(err error)
+```
 Interface definition language file (e.g. .idl.go):
 ```go
 package mypackage
@@ -76,6 +82,23 @@ func (inst *MyStruct) MyExportedFunction2(a uint32,b MyEnumE) (success MyBool, e
 }
 ```
 
+Use of methods with a foreign pointer type as receiver:
+```go
+type MyStruct uintptr
+func (foreignptr *MyStruct) MyExportedMethod(t uint32) (r bool) {
+	_ = `r = ((MyStruct)foreignptr)->MyExportedMethod(t)`
+}
+```
+
+Use of generics in IDL stubs:
+* Type needs to be constrained with a resolvable (in the sense of fffi) type. 
+* Currently only one constraint is supported.
+```go
+func MyExportedFunction3[T ~int](data []T, t bool) (r uint32) {
+	_ = `myExportedFunc3(data,t)`
+}
+```
+
 ## Build Flags
 IDL Code: 
 ```go
@@ -102,4 +125,19 @@ import (
 	"foo"
     "bar"
 )
+```
+For parametric type params (i.e. generics) currently only one type constraint is supported. The type needs to be resolvable by the fffi naming resolver.
+```go
+// Okay
+func MyExportedFunction3[T ~int](data []T, t bool) (r uint32) {
+_ = `myExportedFunc3(data,t)`
+}
+// Not supported: multiple type constraints
+func MyExportedFunction3[T ~int|~uint](data []T, t bool) (r uint32) {
+_ = `myExportedFunc3(data,t)`
+}
+// Not supported: non-resolvable type
+func MyExportedFunction3[T ~MyStruct](data []T, t bool) (r uint32) {
+_ = `myExportedFunc3(data,t)`
+}
 ```

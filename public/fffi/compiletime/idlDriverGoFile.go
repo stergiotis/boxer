@@ -102,11 +102,22 @@ func (inst *IDLDriverGoFile) resolveBasicTypeType(t types.Type, castTypeP string
 	case *types.Named:
 		return inst.resolveBasicTypeType(tt.Underlying(), lexicalName(tt))
 	case *types.Interface:
-		if isErrorInterface(tt) {
-			return "error", tt.String(), nil
+		if tt.IsMethodSet() {
+			if isErrorInterface(tt) {
+				return "error", tt.String(), nil
+			} else {
+				err = eb.Build().Str("type", spew.Sdump(t)).Errorf("interface types other than error are not implemented")
+				return
+			}
 		} else {
-			err = eb.Build().Str("type", spew.Sdump(t)).Errorf("interface types other than error are not implemented")
-			return
+			// assuming constraint in generic type
+			switch tt.NumEmbeddeds() {
+			case 1:
+				return inst.resolveBasicTypeType(tt.EmbeddedType(0), castType)
+			default:
+				err = eb.Build().Str("type", spew.Sdump(t)).Errorf("unable to handle interface with multiple embedded types: are you using more than one constraint type in generic type param?")
+				return
+			}
 		}
 	case *types.Array:
 		var elem string
@@ -142,10 +153,41 @@ func (inst *IDLDriverGoFile) resolveBasicTypeType(t types.Type, castTypeP string
 		if castType != "" && castTypeP == "" {
 			castType = "[]" + castType
 		}
-		//err = eb.Build().Str("type", spew.Sdump(t)).Errorf("unable to resolve type: slices are not supported")
+		return
+	case *types.Union:
+		switch tt.Len() {
+		case 1:
+			term := tt.Term(0)
+			if !term.Tilde() {
+				log.Info().Str("term", term.String()).Msg("encountered union type that with tilde = false")
+			}
+			return inst.resolveBasicTypeType(term.Type(), castType)
+		default:
+			err = eb.Build().Str("str", tt.String()).Errorf("encountered unsupported kind of union type: len != 1")
+		}
 		return
 	case *types.Pointer:
 		err = eb.Build().Str("type", spew.Sdump(t)).Errorf("unable to resolve type: pointers are not supported")
+		return
+	case *types.TypeParam:
+		constraint := tt.Constraint().String()
+		if len(constraint) > 0 && constraint[0] == '~' && !strings.Contains(constraint[1:], "~") { // FIXME remove this check (see union type and interface type)
+			var u string
+			castType, u, err = inst.resolveBasicTypeType(tt.Constraint(), "")
+			if err != nil {
+				err = eb.Build().Str("constraint", constraint).Errorf("unable to resolve type constraint in parametric/template type: %w", err)
+				return
+			}
+			if u != "" {
+				err = eb.Build().Str("constraint", constraint).Str("cast", u).Errorf("unable to resolve type constraint in parametric/template type: constraint needs cast")
+				return
+			}
+			typeName = castType
+			castType = ""
+		} else {
+			err = eb.Build().Str("type", tt.String()).Str("constraint", constraint).Errorf("unable to resolve parametric/templated type")
+			return
+		}
 		return
 	default:
 		err = eb.Build().Str("type", spew.Sdump(t)).Errorf("unable to resolve type")
