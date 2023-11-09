@@ -167,6 +167,9 @@ func (inst *Namer) goTypeNameToExprCpp(name string, varname string, prefix strin
 		r = fmt.Sprintf("%sString(%s)", prefix, varname)
 	} else if isSupportedValueType(name) {
 		switch name {
+		case "int", "int8", "int16", "int32", "int64":
+			r = fmt.Sprintf("%sValueSignMagnitude<%s>(%s)", prefix, name, varname)
+			return
 		case "complex64":
 			r = fmt.Sprintf("%sArray<%s,%d>(%s)", prefix, "float", 2, varname)
 			return
