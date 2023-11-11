@@ -39,6 +39,11 @@ func GetFloat32Array4Retr[T ~float32](inst *Fffi2) (r [4]T) {
 	r[3] = T(inst.unmarshaller.ReadFloat32())
 	return
 }
+func GetFloat32Array2Retr[T ~float32](inst *Fffi2) (r [2]T) {
+	r[0] = T(inst.unmarshaller.ReadFloat32())
+	r[1] = T(inst.unmarshaller.ReadFloat32())
+	return
+}
 func GetFloat64Retr[T ~float64](inst *Fffi2) (r T) {
 	r = T(inst.unmarshaller.ReadFloat64())
 	return
@@ -56,6 +61,15 @@ func GetUintptrRetr[T ~uintptr](inst *Fffi2) (r T) {
 	return
 }
 
+func GetFloat32SliceRetr[T ~float32](inst *Fffi2) (r []T) {
+	l := inst.getSliceLength()
+	r = make([]T, 0, l)
+	u := inst.unmarshaller
+	for i := uint32(0); i < l; i++ {
+		r = append(r, T(u.ReadFloat32()))
+	}
+	return
+}
 func GetUint32SliceRetr[T ~uint32](inst *Fffi2) (r []T) {
 	l := inst.getSliceLength()
 	r = make([]T, 0, l)

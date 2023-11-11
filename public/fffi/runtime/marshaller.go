@@ -33,6 +33,11 @@ func (inst *Marshaller) WriteUInt8(v uint8) {
 	inst.buf[0] = v
 	inst.writeBuf(1)
 }
+func (inst *Marshaller) WriteUInt(v uint) {
+	// FIXME static assert sizeof?
+	inst.bin.PutUint32(inst.buf, uint32(v))
+	inst.writeBuf(4)
+}
 func (inst *Marshaller) WriteUInt16(v uint16) {
 	inst.bin.PutUint16(inst.buf, v)
 	inst.writeBuf(2)

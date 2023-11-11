@@ -70,6 +70,45 @@ func AddIntArray4Arg[T ~int](inst *Fffi2, v [4]T) {
 func AddFloat32Arg[T ~float32](inst *Fffi2, v T) {
 	inst.marshaller.WriteFloat32(float32(v))
 }
+func AddFloat64Array4Arg[T ~float64](inst *Fffi2, v [4]T) {
+	inst.marshaller.WriteFloat64(float64(v[0]))
+	inst.marshaller.WriteFloat64(float64(v[1]))
+	inst.marshaller.WriteFloat64(float64(v[2]))
+	inst.marshaller.WriteFloat64(float64(v[3]))
+}
+func AddUintSliceArg[T ~uint](inst *Fffi2, vs []T) {
+	m := inst.marshaller
+	if vs == nil {
+		m.WriteNilSlice()
+		return
+	}
+	m.WriteSliceLength(len(vs))
+	for _, v := range vs {
+		m.WriteUInt(uint(v))
+	}
+}
+func AddUint8SliceArg[T ~uint8](inst *Fffi2, vs []T) {
+	m := inst.marshaller
+	if vs == nil {
+		m.WriteNilSlice()
+		return
+	}
+	m.WriteSliceLength(len(vs))
+	for _, v := range vs {
+		m.WriteUInt8(uint8(v))
+	}
+}
+func AddUint16SliceArg[T ~uint16](inst *Fffi2, vs []T) {
+	m := inst.marshaller
+	if vs == nil {
+		m.WriteNilSlice()
+		return
+	}
+	m.WriteSliceLength(len(vs))
+	for _, v := range vs {
+		m.WriteUInt16(uint16(v))
+	}
+}
 func AddUint32SliceArg[T ~uint32](inst *Fffi2, vs []T) {
 	m := inst.marshaller
 	if vs == nil {
@@ -81,6 +120,17 @@ func AddUint32SliceArg[T ~uint32](inst *Fffi2, vs []T) {
 		m.WriteUInt32(uint32(v))
 	}
 }
+func AddIntSliceArg[T ~int](inst *Fffi2, vs []T) {
+	m := inst.marshaller
+	if vs == nil {
+		m.WriteNilSlice()
+		return
+	}
+	m.WriteSliceLength(len(vs))
+	for _, v := range vs {
+		m.WriteInt(int(v))
+	}
+}
 func AddInt8SliceArg[T ~int8](inst *Fffi2, vs []T) {
 	m := inst.marshaller
 	if vs == nil {
@@ -90,6 +140,28 @@ func AddInt8SliceArg[T ~int8](inst *Fffi2, vs []T) {
 	m.WriteSliceLength(len(vs))
 	for _, v := range vs {
 		m.WriteInt8(int8(v))
+	}
+}
+func AddInt16SliceArg[T ~int16](inst *Fffi2, vs []T) {
+	m := inst.marshaller
+	if vs == nil {
+		m.WriteNilSlice()
+		return
+	}
+	m.WriteSliceLength(len(vs))
+	for _, v := range vs {
+		m.WriteInt16(int16(v))
+	}
+}
+func AddInt32SliceArg[T ~int32](inst *Fffi2, vs []T) {
+	m := inst.marshaller
+	if vs == nil {
+		m.WriteNilSlice()
+		return
+	}
+	m.WriteSliceLength(len(vs))
+	for _, v := range vs {
+		m.WriteInt32(int32(v))
 	}
 }
 func AddFloat32SliceArg[T ~float32](inst *Fffi2, vs []T) {
