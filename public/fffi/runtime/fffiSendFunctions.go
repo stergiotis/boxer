@@ -25,6 +25,15 @@ func AddUint32Arg[T ~uint32](inst *Fffi2, v T) {
 func AddUint64Arg[T ~uint64](inst *Fffi2, v T) {
 	inst.marshaller.WriteUInt64(uint64(v))
 }
+func AddInt8Arg[T ~int8](inst *Fffi2, v T) {
+	inst.marshaller.WriteInt8(int8(v))
+}
+func AddInt16Arg[T ~int16](inst *Fffi2, v T) {
+	inst.marshaller.WriteInt16(int16(v))
+}
+func AddInt32Arg[T ~int32](inst *Fffi2, v T) {
+	inst.marshaller.WriteInt32(int32(v))
+}
 func AddInt64Arg[T ~int64](inst *Fffi2, v T) {
 	inst.marshaller.WriteInt64(int64(v))
 }

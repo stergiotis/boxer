@@ -61,6 +61,16 @@ func (inst *Unmarshaller) ReadInt() (v int) {
 	}
 	return
 }
+func (inst *Unmarshaller) ReadInt8() (v int8) {
+	const signBit uint8 = 1 << 7
+	u := inst.ReadUInt8()
+	if u&signBit != 0 {
+		v = -int8(u & ^signBit)
+	} else {
+		v = int8(u)
+	}
+	return
+}
 func (inst *Unmarshaller) ReadInt16() (v int16) {
 	const signBit uint16 = 1 << 15
 	u := inst.ReadUInt16()
@@ -68,6 +78,26 @@ func (inst *Unmarshaller) ReadInt16() (v int16) {
 		v = -int16(u & ^signBit)
 	} else {
 		v = int16(u)
+	}
+	return
+}
+func (inst *Unmarshaller) ReadInt32() (v int32) {
+	const signBit uint32 = 1 << 31
+	u := inst.ReadUInt32()
+	if u&signBit != 0 {
+		v = -int32(u & ^signBit)
+	} else {
+		v = int32(u)
+	}
+	return
+}
+func (inst *Unmarshaller) ReadInt64() (v int64) {
+	const signBit uint64 = 1 << 63
+	u := inst.ReadUInt64()
+	if u&signBit != 0 {
+		v = -int64(u & ^signBit)
+	} else {
+		v = int64(u)
 	}
 	return
 }
