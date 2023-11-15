@@ -168,7 +168,15 @@ func (inst *Namer) goTypeNameToExprCpp(name string, varname string, prefix strin
 	} else if isSupportedValueType(name) {
 		switch name {
 		case "int", "int8", "int16", "int32", "int64":
-			r = fmt.Sprintf("%sValueSignMagnitude<%s>(%s)", prefix, name, varname)
+			{
+				var tn string
+				tn, err = inst.GoTypeNameToCppTypeName(name)
+				if err != nil {
+					err = eh.Errorf("unable to compose ValueSignMagnitude template param: %w", err)
+					return
+				}
+				r = fmt.Sprintf("%sValueSignMagnitude<%s>(%s)", prefix, tn, varname)
+			}
 			return
 		case "complex64":
 			r = fmt.Sprintf("%sArray<%s,%d>(%s)", prefix, "float", 2, varname)
