@@ -157,6 +157,10 @@ func (inst *Namer) GoTypeNameToSendRecvFuncNameSuffix(name string) (r string, er
 	return
 }
 func (inst *Namer) GoTypeNameToRecvExprCpp(name string) (r string, err error) {
+	switch name {
+	case "[]string":
+		return "receiveStrings()", nil
+	}
 	return inst.goTypeNameToExprCpp(name, "", "receive")
 }
 func (inst *Namer) GoTypeNameToSendExprCpp(name string, varname string) (r string, err error) {

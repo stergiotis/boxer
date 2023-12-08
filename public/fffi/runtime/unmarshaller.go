@@ -50,6 +50,9 @@ func (inst *Unmarshaller) ReadUInt64() (v uint64) {
 	}
 	return
 }
+func (inst *Unmarshaller) ReadUint() (v uint) {
+	return uint(inst.ReadUInt32())
+}
 func (inst *Unmarshaller) ReadInt() (v int) {
 	// sign-magnitude ILP32, LLP64, LP64
 	const signBit uint32 = 1 << 31

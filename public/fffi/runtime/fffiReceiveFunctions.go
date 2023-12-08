@@ -28,6 +28,10 @@ func GetIntRetr[T ~int](inst *Fffi2) (r T) {
 	r = T(inst.unmarshaller.ReadInt())
 	return
 }
+func GetUintRetr[T ~uint](inst *Fffi2) (r T) {
+	r = T(inst.unmarshaller.ReadUint())
+	return
+}
 func GetInt8Retr[T ~int8](inst *Fffi2) (r T) {
 	r = T(inst.unmarshaller.ReadInt8())
 	return
@@ -95,6 +99,19 @@ func GetUintptrRetr[T ~uintptr](inst *Fffi2) (r T) {
 	return
 }
 
+func GetBytesRetr[T byte](inst *Fffi2) (r []byte) {
+	r = inst.unmarshaller.ReadBytes()
+	return
+}
+func GetBoolSliceRetr[T ~bool](inst *Fffi2) (r []T) {
+	l := inst.getSliceLength()
+	r = make([]T, 0, l)
+	u := inst.unmarshaller
+	for i := uint32(0); i < l; i++ {
+		r = append(r, T(u.ReadBool()))
+	}
+	return
+}
 func GetFloat32SliceRetr[T ~float32](inst *Fffi2) (r []T) {
 	l := inst.getSliceLength()
 	r = make([]T, 0, l)
@@ -110,6 +127,15 @@ func GetFloat64SliceRetr[T ~float64](inst *Fffi2) (r []T) {
 	u := inst.unmarshaller
 	for i := uint32(0); i < l; i++ {
 		r = append(r, T(u.ReadFloat64()))
+	}
+	return
+}
+func GetUintSliceRetr[T ~uint](inst *Fffi2) (r []T) {
+	l := inst.getSliceLength()
+	r = make([]T, 0, l)
+	u := inst.unmarshaller
+	for i := uint32(0); i < l; i++ {
+		r = append(r, T(u.ReadUint()))
 	}
 	return
 }

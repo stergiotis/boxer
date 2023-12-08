@@ -85,6 +85,17 @@ func AddFloat64Array4Arg[T ~float64](inst *Fffi2, v [4]T) {
 	inst.marshaller.WriteFloat64(float64(v[2]))
 	inst.marshaller.WriteFloat64(float64(v[3]))
 }
+func AddBoolSliceArg[T ~bool](inst *Fffi2, vs []T) {
+	m := inst.marshaller
+	if vs == nil {
+		m.WriteNilSlice()
+		return
+	}
+	m.WriteSliceLength(len(vs))
+	for _, v := range vs {
+		m.WriteBool(bool(v))
+	}
+}
 func AddUintSliceArg[T ~uint](inst *Fffi2, vs []T) {
 	m := inst.marshaller
 	if vs == nil {

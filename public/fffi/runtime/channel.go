@@ -18,11 +18,13 @@ type Channel interface {
 }
 
 type InlineIoChannel struct {
-	in         *bufio.Reader
-	out        *bufio.Writer
-	marshall   *Marshaller
-	unmarshall *Unmarshaller
-	errHandler func(err error)
+	in             *bufio.Reader
+	out            *bufio.Writer
+	marshall       *Marshaller
+	unmarshall     *Unmarshaller
+	bin            binary.ByteOrder
+	allocateBuffer func(l uint32) []byte
+	errHandler     func(err error)
 }
 
 func (inst *InlineIoChannel) Marshaller() *Marshaller {
@@ -36,22 +38,30 @@ func (inst *InlineIoChannel) Unmarshaller() *Unmarshaller {
 var DefaultErrorHandler = func(err error) {}
 var DefaultAllocater = func(l uint32) []byte { return make([]byte, int(l), int(l)) }
 
-func NewInlineChannel(out *bufio.Writer, in *bufio.Reader, bin binary.ByteOrder, errHandler func(err error), allocateBuffer func(l uint32) []byte) *InlineIoChannel {
+func NewInlineChannel(in *bufio.Reader, out *bufio.Writer, bin binary.ByteOrder, errHandler func(err error), allocateBuffer func(l uint32) []byte) (inst *InlineIoChannel) {
 	if allocateBuffer == nil {
 		allocateBuffer = DefaultAllocater
 	}
-	marshaller := NewMarshaller(out, bin, errHandler)
-	unmarshaller := NewUnmarshaller(in, bin, errHandler, allocateBuffer)
 	if errHandler == nil {
 		errHandler = DefaultErrorHandler
 	}
-	return &InlineIoChannel{
-		in:         in,
-		out:        out,
-		marshall:   marshaller,
-		unmarshall: unmarshaller,
-		errHandler: errHandler,
+	inst = &InlineIoChannel{
+		in:             nil,
+		out:            nil,
+		marshall:       nil,
+		unmarshall:     nil,
+		bin:            bin,
+		allocateBuffer: allocateBuffer,
+		errHandler:     errHandler,
 	}
+	inst.SetInOut(in, out)
+	return
+}
+func (inst *InlineIoChannel) SetInOut(in *bufio.Reader, out *bufio.Writer) {
+	inst.in = in
+	inst.out = out
+	inst.marshall = NewMarshaller(out, inst.bin, inst.errHandler)
+	inst.unmarshall = NewUnmarshaller(in, inst.bin, inst.errHandler, inst.allocateBuffer)
 }
 
 func (inst *InlineIoChannel) CallFunction() (err error) {
