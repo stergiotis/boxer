@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"os"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -11,6 +12,29 @@ import (
 	"github.com/rs/zerolog/log"
 	cli "github.com/urfave/cli/v2"
 )
+
+func getBuildTags(info *debug.BuildInfo) []string {
+	for _, v := range info.Settings {
+		if v.Key == "-tags" {
+			return strings.Split(v.Value, " ")
+		}
+	}
+	return []string{}
+}
+
+func checkZeroLogCborBuild() {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		panic("unable to read build info: can not verify that cbor logging is available")
+	}
+	tags := getBuildTags(info)
+	for _, t := range tags {
+		if t == "binary_log" {
+			return
+		}
+	}
+	panic("cbor logging unavailable, build did not include the `binary_log` build tag")
+}
 
 var LoggingFlags = []cli.Flag{
 	&cli.StringFlag{
@@ -72,6 +96,7 @@ var LoggingFlags = []cli.Flag{
 				log.Logger = log.Output(NewJsonIndentLogger(os.Stderr))
 				break
 			case "cbor":
+				checkZeroLogCborBuild()
 				log.Logger = log.Output(os.Stderr)
 				break
 			default:
