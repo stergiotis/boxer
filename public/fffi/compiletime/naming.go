@@ -161,14 +161,16 @@ func (inst *Namer) GoTypeNameToRecvExprCpp(name string) (r string, err error) {
 	case "[]string":
 		return "receiveStrings()", nil
 	}
-	return inst.goTypeNameToExprCpp(name, "", "receive")
+	return inst.goTypeNameToExprCpp(name, "", "receive", false)
 }
 func (inst *Namer) GoTypeNameToSendExprCpp(name string, varname string) (r string, err error) {
-	return inst.goTypeNameToExprCpp(name, varname, "send")
+	return inst.goTypeNameToExprCpp(name, varname, "send", true)
 }
-func (inst *Namer) goTypeNameToExprCpp(name string, varname string, prefix string) (r string, err error) {
+func (inst *Namer) goTypeNameToExprCpp(name string, varname string, prefix string, send bool) (r string, err error) {
 	if isStringType(name) {
 		r = fmt.Sprintf("%sString(%s)", prefix, varname)
+	} else if isPointerType(name) && send {
+		r = fmt.Sprintf("%sValue(%s)", prefix, varname)
 	} else if isSupportedValueType(name) {
 		switch name {
 		case "int", "int8", "int16", "int32", "int64":
@@ -232,6 +234,9 @@ func (inst *Namer) goTypeNameToExprCpp(name string, varname string, prefix strin
 }
 func isStringType(name string) bool {
 	return name == "string"
+}
+func isPointerType(name string) bool {
+	return name == "uintptr"
 }
 func isSupportedValueType(name string) bool {
 	switch name {

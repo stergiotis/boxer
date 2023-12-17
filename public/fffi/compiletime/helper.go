@@ -108,11 +108,23 @@ func parseFunctionBodyCode(code string) (res []ast.Stmt, err error) {
 func isMethodDeclaration(decl *ast.FuncDecl) bool {
 	return decl != nil && decl.Recv != nil && decl.Recv.List != nil && len(decl.Recv.List) == 1
 }
+func sendReceiverAsArg(field *ast.Field) (send bool, err error) {
+	if field.Names == nil {
+		err = eh.Errorf("unnamed function receivers are not supported")
+		return
+	}
+	send = field.Names[0].Name == "foreignptr"
+	return
+}
 func getParamsAndResultTypes(decl *ast.FuncDecl, resolver TypeResolver) (paramNames []string, paramGoTypes []string, paramGoCast []bool, paramDeref []string, resultNames []string, resultGoTypes []string, resultGoCastTypes []string, resultDeref []string, explicitErrVarName string, err error) {
 	t := decl.Type
 	sendReceiver := false
 	if isMethodDeclaration(decl) {
-		sendReceiver = sendReceiverAsArg(decl.Recv.List[0])
+		sendReceiver, err = sendReceiverAsArg(decl.Recv.List[0])
+		if err != nil {
+			err = eb.Build().Str("decl", spew.Sdump(decl)).Errorf("error while handling receiver variable: %w", err)
+			return
+		}
 	}
 	hasRegularParams := t.Params != nil && t.Params.List != nil && len(t.Params.List) > 0
 	if hasRegularParams || sendReceiver {
@@ -209,9 +221,6 @@ func getParamsAndResultTypes(decl *ast.FuncDecl, resolver TypeResolver) (paramNa
 		resultDeref = resultDeref[:len(resultDeref)-1]
 	}
 	return
-}
-func sendReceiverAsArg(field *ast.Field) (send bool) {
-	return field.Names[0].Name == "foreignptr"
 }
 func checkForBuildTag(a *ast.File, tag string) (outerIndex int, innerIndex int, err error) {
 	outerIndex = -1
