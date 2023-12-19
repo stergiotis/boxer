@@ -141,3 +141,13 @@ func MyExportedFunction3[T ~MyStruct](data []T, t bool) (r uint32) {
 _ = `myExportedFunc3(data,t)`
 }
 ```
+For cross-package sharing of types either user dot imports (not recommended) or type aliases:
+```go
+import . "my/package/with/fffi/relevant/types"
+```
+
+```go
+import "my/package/with/fffi/relevant/types"
+type myimportedtype = types.TypeA
+type myimportedtype = types.TypeB
+```
