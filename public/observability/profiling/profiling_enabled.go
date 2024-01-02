@@ -1,7 +1,11 @@
+//go:build boxer_enable_profiling
+
 package profiling
 
 import (
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"runtime/pprof"
 
@@ -36,6 +40,19 @@ var ProfilingFlags = []cli.Flag{
 			if err != nil {
 				return eh.Errorf("unable to start cpu profiling: %w", err)
 			}
+			return nil
+		},
+	},
+	&cli.StringFlag{
+		Name:     "httpServerAddress",
+		Category: "profiling",
+		Action: func(context *cli.Context, s string) error {
+			go func() {
+				err := http.ListenAndServe(s, nil)
+				if err != nil {
+					log.Error().Str("address", s).Err(err).Msg("unable to start http server, ignoring error")
+				}
+			}()
 			return nil
 		},
 	},
