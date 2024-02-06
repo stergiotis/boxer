@@ -1,6 +1,6 @@
 package imgui
 
-const imguiUsesBGRAColorFormat = true
+const ImguiUsesBGRAColorFormat = true
 
 func ColorU32(rgba uint32) (c uint32) {
 	//return bits.Reverse32(rgba)
@@ -15,14 +15,14 @@ func ColorU32ToImVec(rgba uint32) (c ImVec4) {
 	g := uint8(rgba >> 8)
 	b := uint8(rgba >> 16)
 	a := uint8(rgba >> 24)
-	if imguiUsesBGRAColorFormat {
+	if ImguiUsesBGRAColorFormat {
 		return ImVec4([4]float32{float32(b) / 255.0, float32(g) / 255.0, float32(r) / 255.0, float32(a) / 255.0})
 	} else {
 		return ImVec4([4]float32{float32(r) / 255.0, float32(g) / 255.0, float32(b) / 255.0, float32(a) / 255.0})
 	}
 }
 func Color32U8(r uint8, g uint8, b uint8, a uint8) (c uint32) {
-	if imguiUsesBGRAColorFormat {
+	if ImguiUsesBGRAColorFormat {
 		c = uint32(a) << 24
 		c = c | uint32(r)<<16
 		c = c | uint32(g)<<8
@@ -39,7 +39,7 @@ func Color32U8(r uint8, g uint8, b uint8, a uint8) (c uint32) {
 // ToColorU32 see ColorConvertFloat4ToU32
 func (inst ImVec4) ToColorU32() uint32 {
 	var r, g, b, a float32
-	if imguiUsesBGRAColorFormat {
+	if ImguiUsesBGRAColorFormat {
 		b = inst[0]
 		g = inst[1]
 		r = inst[2]
