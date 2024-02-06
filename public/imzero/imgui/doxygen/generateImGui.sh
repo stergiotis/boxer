@@ -52,9 +52,9 @@ xsltproc --stringparam apidefine "IMGUI_API" transform.xslt namespaceImGui.xml |
 xsltproc --stringparam package $package enums.xslt imgui_8h.xml > enums_api.out.go
 xsltproc --stringparam package $package enums.xslt imgui__internal_8h.xml > enums_internal.out.go
 xsltproc --stringparam file imgui.h --stringparam package $package --stringparam tags fffi_idl_code          --stringparam mode auto functions.xslt namespaceImGui2.xml > functions_auto_api.out.idl.go
-xsltproc --stringparam file imgui.h --stringparam package $package --stringparam tags fffi_idl_code,disabled --stringparam mode manual functions.xslt namespaceImGui2.xml > functions_manual_api.out.idl.go
+xsltproc --stringparam file imgui.h --stringparam package $package --stringparam tags "fffi_idl_code && disabled" --stringparam mode manual functions.xslt namespaceImGui2.xml > functions_manual_api.out.idl.go
 xsltproc --stringparam file imgui_internal.h --stringparam package $package --stringparam tags fffi_idl_code          --stringparam mode auto functions.xslt namespaceImGui2.xml > functions_auto_internal.out.idl.go
-xsltproc --stringparam file imgui_internal.h --stringparam package $package --stringparam tags fffi_idl_code,disabled --stringparam mode manual functions.xslt namespaceImGui2.xml > functions_manual_internal.out.idl.go
+xsltproc --stringparam file imgui_internal.h --stringparam package $package --stringparam tags "fffi_idl_code && disabled" --stringparam mode manual functions.xslt namespaceImGui2.xml > functions_manual_internal.out.idl.go
 
 xsltproc --stringparam apidefine "IMGUI_API" transform.xslt structImDrawList.xml | xsltproc semantics.xslt - > structImDrawList2.xml
 xsltproc --stringparam file imgui.h --stringparam package $package --stringparam instvar "foreignptr ImDrawListPtr" --stringparam tags fffi_idl_code      --stringparam mode auto functions.xslt structImDrawList2.xml > drawlist_auto_api.out.idl.go
@@ -92,4 +92,5 @@ cp functions_auto_api.out.idl.go "$dest_dir/"
 #cp functions_auto_internal.out.idl.go "$dest_dir/"
 cp enums_api.out.go "$dest_dir/"
 #cp enums_internal.out.go "$dest_dir/"
+rm -f enums_internal.out.go
 cp drawlist_auto_api.out.idl.go "$dest_dir/"

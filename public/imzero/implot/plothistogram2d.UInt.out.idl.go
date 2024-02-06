@@ -8,6 +8,7 @@ func PlotHistogram2DUInt[T ~uint](label_id string, xs []T, ys []T) (r float64) {
 	_ = `r = ImPlot::PlotHistogram2D(label_id,xs,ys,getSliceLength(xs))`
 	return
 }
+
 // PlotHistogram2DV Plots two dimensional, bivariate histogram as a heatmap. #x_bins and #y_bins can be a positive integer or an ImPlotBin. If #range is left unspecified, the min/max of
 // #xs an #ys will be used as the ranges. Otherwise, outlier values outside of range are not binned. The largest bin count or density is returned.
 func PlotHistogram2DUIntV[T ~uint](label_id string, xs []T, ys []T, x_bins ImPlotBin, y_bins ImPlotBin, rangeP ImPlotRect, flags ImPlotHistogramFlags) (r float64) {

@@ -9,3 +9,6 @@ find . -type f -name "*.out.go" -delete
 ./implot/doxygen/generate.sh
 ./imcolortextedit/generate.sh
 rm -f "$here/main"
+
+cd "$here"
+gofmt -l -w .

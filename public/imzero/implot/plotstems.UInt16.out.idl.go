@@ -11,9 +11,9 @@ func PlotStemsUInt16V[T ~uint16](label_id string, values []T, ref float64, scale
 }
 
 func PlotStemsXYUInt16[T ~uint16](label_id string, xs []T, ys []T) {
-_ = `ImPlot::PlotStems(label_id,xs,ys,(int)std::min(getSliceLength(xs),getSliceLength(ys)))`
+	_ = `ImPlot::PlotStems(label_id,xs,ys,(int)std::min(getSliceLength(xs),getSliceLength(ys)))`
 }
 
 func PlotStemsXYUInt16V[T ~uint16](label_id string, xs []T, ys []T, ref float64, flags ImPlotStemsFlags, offset int, stride int) {
-_ = `ImPlot::PlotStems(label_id,xs,ys,(int)std::min(getSliceLength(xs),getSliceLength(ys)),ref,flags,offset,stride)`
+	_ = `ImPlot::PlotStems(label_id,xs,ys,(int)std::min(getSliceLength(xs),getSliceLength(ys)),ref,flags,offset,stride)`
 }

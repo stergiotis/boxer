@@ -19,9 +19,9 @@ func PlotShadedXYUIntV(label_id string, xs []uint, ys []uint, yref float64, flag
 }
 
 func PlotShadedXY1Y2UInt(label_id string, xs []uint, y1s []uint, y2s []uint) {
-_ = `ImPlot::PlotShaded(label_id,xs,y1s,y2s,(int)std::min(std::min(getSliceLength(xs),getSliceLength(y1s)),getSliceLength(y2s)))`
+	_ = `ImPlot::PlotShaded(label_id,xs,y1s,y2s,(int)std::min(std::min(getSliceLength(xs),getSliceLength(y1s)),getSliceLength(y2s)))`
 }
 
 func PlotShadedXY1Y2UIntV(label_id string, xs []uint, y1s []uint, y2s []uint, flags ImPlotShadedFlags, offset int, stride int) {
-_ = `ImPlot::PlotShaded(label_id,xs,y1s,y2s,(int)std::min(std::min(getSliceLength(xs),getSliceLength(y1s)),getSliceLength(y2s)),flags,offset,stride)`
+	_ = `ImPlot::PlotShaded(label_id,xs,y1s,y2s,(int)std::min(std::min(getSliceLength(xs),getSliceLength(y1s)),getSliceLength(y2s)),flags,offset,stride)`
 }

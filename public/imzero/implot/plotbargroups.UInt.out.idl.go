@@ -14,7 +14,7 @@ ImPlot::PlotBarGroups(ary_labels,values,(int)n_labels,groups);
 }
 
 func PlotBarGroupsUIntV(label_ids NullSeparatedStringArray, values []uint, groups int, size float64, shift float64, flags ImPlotBarGroupsFlags) {
-_ = `
+	_ = `
 size_t n_labels;
 auto ary_labels = convertNullSeparatedStringArrayToArray(label_ids,n_labels);
 if(groups == 0) {

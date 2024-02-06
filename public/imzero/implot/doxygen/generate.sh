@@ -58,9 +58,9 @@ xsltproc --stringparam apidefine "IMPLOT_API" "$xslt_dir/transform.xslt" namespa
 xsltproc --stringparam blacklist "$enum_blacklist" --stringparam autoValueValue -1 --stringparam autoValueNameSuffix "_AUTO" --stringparam package $package --stringparam goImports "$goImports" --stringparam tags fffi_idl_code "$xslt_dir/enums.xslt" implot_8h.xml > enums_api.out.go
 xsltproc --stringparam blacklist "$enum_blacklist" --stringparam autoValueValue -1 --stringparam autoValueNameSuffix "_AUTO" --stringparam package $package --stringparam goImports "$goImports" --stringparam tags fffi_idl_code "$xslt_dir/enums.xslt" implot__internal_8h.xml > enums_internal.out.go
 xsltproc --stringparam package $package --stringparam goImports "$goImports" --stringparam tags fffi_idl_code          --stringparam mode auto "$xslt_dir/functions.xslt" namespaceImPlot2.xml > functions_auto_api.out.idl.go
-xsltproc --stringparam package $package --stringparam goImports "$goImports" --stringparam tags fffi_idl_code,disabled --stringparam mode manual "$xslt_dir/functions.xslt" namespaceImPlot2.xml > functions_manual_api.out.idl.go
+xsltproc --stringparam package $package --stringparam goImports "$goImports" --stringparam tags "fffi_idl_code && disabled" --stringparam mode manual "$xslt_dir/functions.xslt" namespaceImPlot2.xml > functions_manual_api.out.idl.go
 xsltproc --stringparam package $package --stringparam goImports "$goImports" --stringparam tags fffi_idl_code          --stringparam mode auto "$xslt_dir/functions.xslt" namespaceImPlot2.xml > functions_auto_internal.out.idl.go
-xsltproc --stringparam package $package --stringparam goImports "$goImports" --stringparam tags fffi_idl_code,disabled --stringparam mode manual "$xslt_dir/functions.xslt" namespaceImPlot2.xml > functions_manual_internal.out.idl.go
+xsltproc --stringparam package $package --stringparam goImports "$goImports" --stringparam tags "fffi_idl_code && disabled" --stringparam mode manual "$xslt_dir/functions.xslt" namespaceImPlot2.xml > functions_manual_internal.out.idl.go
 
 # resolve naming conflincts (overloads)
 function renameFunction() {
@@ -94,4 +94,5 @@ cp functions_auto_api.out.idl.go "$dest_dir/"
 #cp functions_auto_internal.out.idl.go "$dest_dir/"
 cp enums_api.out.go "$dest_dir/"
 #cp enums_internal.out.go "$dest_dir/"
+rm -f enums_internal.out.go
 "$dest_dir/generate.sh"

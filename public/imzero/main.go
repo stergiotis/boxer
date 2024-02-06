@@ -3,12 +3,12 @@ package main
 import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/fffi/compiletime"
+	"github.com/stergiotis/boxer/public/imzero/demo"
+	"github.com/stergiotis/boxer/public/imzero/nerdfont/generator"
 	"github.com/stergiotis/boxer/public/observability/logging"
 	"github.com/stergiotis/boxer/public/observability/ph"
 	"github.com/stergiotis/boxer/public/observability/profiling"
 	"github.com/stergiotis/boxer/public/observability/vcs"
-	"github.com/stergiotis/boxer/public/imzero/demo"
-	"github.com/stergiotis/boxer/public/imzero/nerdfont/generator"
 	"github.com/urfave/cli/v2"
 	"os"
 )

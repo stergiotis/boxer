@@ -5,13 +5,13 @@ package demo
 import (
 	"github.com/stergiotis/boxer/public/config"
 	"github.com/stergiotis/boxer/public/fffi/runtime"
-	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/imzero/application"
 	"github.com/stergiotis/boxer/public/imzero/imcolortextedit"
 	"github.com/stergiotis/boxer/public/imzero/imgui"
 	"github.com/stergiotis/boxer/public/imzero/implot"
 	"github.com/stergiotis/boxer/public/imzero/widgets/gostats"
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/urfave/cli/v2"
 	"time"
 )
