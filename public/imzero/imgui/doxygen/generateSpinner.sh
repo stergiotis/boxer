@@ -30,7 +30,7 @@ echo "namespace ImSpinner {" > out.h
 cat imspinner.h | grep "inline void Spinner" | sed 's/$/;/g' | sed 's/inline void/IMGUI_API void/g' | tr -d '{' >> out.h
 echo "}" >> out.h
 
-$doxygen config.doxygen
+"$IMZERO_DOXYGEN" config.doxygen
 
 cd -
 cp "$spinner_dir/xml/namespaceImSpinner.xml" .

@@ -36,7 +36,7 @@ function imgui_comment_preparation() {
 }
 imgui_comment_preparation imgui.h
 imgui_comment_preparation imgui_internal.h
-$doxygen config.doxygen
+"$IMZERO_DOXYGEN" config.doxygen
 
 cd -
 cp "$imgui_dir/xml/namespaceImGui.xml" .

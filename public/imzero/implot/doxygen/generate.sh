@@ -4,7 +4,6 @@ here=$(dirname "$(readlink -f "$BASH_SOURCE")")
 cd "$here"
 
 implot_dir="../../../../../contrib/imgui_implot"
-doxygen="$HOME/Downloads/doxygen-1.10.0/bin/doxygen"
 package="implot"
 dest_dir=".."
 xslt_dir="$here/../../imgui/doxygen"
@@ -39,7 +38,7 @@ function comment_preparation() {
 }
 comment_preparation implot.h
 comment_preparation implot_internal.h
-$doxygen config.doxygen
+"$IMZERO_DOXYGEN" config.doxygen
 
 cd -
 cp "$implot_dir/xml/namespaceImPlot.xml" .
