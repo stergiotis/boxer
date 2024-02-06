@@ -1,0 +1,6 @@
+functions_auto_api.out.idl.go: 0
+functions_auto_internal.out.idl.go: 0
+functions_manual_api.out.idl.go: 0
+functions_manual_internal.out.idl.go: 0
+../../../../../contrib/imgui_implot/implot.h (IMPLOT_API): 139
+../../../../../contrib/imgui_implot/implot.h (IMPLOT_TMP): 24

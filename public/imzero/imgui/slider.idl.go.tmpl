@@ -1,0 +1,34 @@
+//go:build fffi_idl_code
+
+package imgui
+
+func Slider${typeName}(label string, vP ${typeGo}, p_min ${typeGo}, p_max ${typeGo}) (v ${typeGo}, r bool) {
+_ = `
+r = ImGui::SliderScalar(label,${typeImGui},(void*)&vP,(const void*)&p_min,(const void*)&p_max);
+v = vP;
+`
+	return
+}
+func Slider${typeName}V(label string, vP ${typeGo},  p_min ${typeGo}, p_max ${typeGo}, format string, flags ImGuiSliderFlags) (v ${typeGo}, r bool) {
+_ = `
+r = ImGui::SliderScalar(label,${typeImGui},(void*)&vP,(const void*)&p_min,(const void*)&p_max,format,flags);
+v = vP;
+`
+	return
+}
+func Slider${typeName}NV(label string, vP []${typeGo},  v_min ${typeGo}, v_max ${typeGo}, format string, flags ImGuiSliderFlags) (v []${typeGo}, r bool) {
+_ = `
+size_t v_len = getSliceLength(vP);
+r = ImGui::SliderScalarN(label,${typeImGui},(void*)vP,(int)v_len,(const void*)&v_min,(const void*)&v_max,format,flags);
+v = vP;
+`
+	return
+}
+func Slider${typeName}N(label string, vP []${typeGo}, v_min ${typeGo}, v_max ${typeGo}) (v []${typeGo}, r bool) {
+_ = `
+size_t v_len = getSliceLength(vP);
+r = ImGui::SliderScalarN(label,${typeImGui},(void*)vP,(int)v_len,(const void*)&v_min,(const void*)&v_max);
+v = vP;
+`
+	return
+}

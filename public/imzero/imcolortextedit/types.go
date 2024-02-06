@@ -1,0 +1,3 @@
+package imcolortextedit
+
+type ImColorEditorForeignPtr uintptr

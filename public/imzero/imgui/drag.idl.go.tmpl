@@ -1,0 +1,34 @@
+//go:build fffi_idl_code
+
+package imgui
+
+func Drag${typeName}(label string, vP ${typeGo}) (v ${typeGo}, r bool) {
+_ = `
+r = ImGui::DragScalar(label,${typeImGui},(void*)&vP);
+v = vP;
+`
+	return
+}
+func Drag${typeName}V(label string, vP ${typeGo}, v_speed float32, p_min ${typeGo}, p_max ${typeGo}, format string, flags ImGuiSliderFlags) (v ${typeGo}, r bool) {
+_ = `
+r = ImGui::DragScalar(label,${typeImGui},(void*)&vP,v_speed,(const void*)&p_min,(const void*)&p_max,format,flags);
+v = vP;
+`
+	return
+}
+func Drag${typeName}NV(label string, vP []${typeGo}, v_speed float32, v_min ${typeGo}, v_max ${typeGo}, format string, flags ImGuiSliderFlags) (v []${typeGo}, r bool) {
+_ = `
+size_t v_len = getSliceLength(vP);
+r = ImGui::DragScalarN(label,${typeImGui},(void*)vP,(int)v_len,v_speed,(const void*)&v_min,(const void*)&v_max,format,flags);
+v = vP;
+`
+	return
+}
+func Drag${typeName}N(label string, vP []${typeGo}) (v []${typeGo}, r bool) {
+_ = `
+size_t v_len = getSliceLength(vP);
+r = ImGui::DragScalarN(label,${typeImGui},(void*)vP,(int)v_len);
+v = vP;
+`
+	return
+}

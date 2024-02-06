@@ -71,7 +71,7 @@ func (inst *CodeTransformerFrontendGo) AddFile(fset *token.FileSet, file *ast.Fi
 				nt.Doc.List = append(nt.Doc.List, extraComments...)
 			}
 			c.Replace(nt)
-			log.Info().Str("func", nt.Name.Name).Msg("replacing function")
+			log.Debug().Str("func", nt.Name.Name).Msg("replacing function")
 			break
 		}
 
