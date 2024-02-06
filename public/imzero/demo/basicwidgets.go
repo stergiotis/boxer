@@ -5,6 +5,7 @@ package demo
 import (
 	"fmt"
 	"github.com/stergiotis/boxer/public/imzero/imgui"
+	"github.com/stergiotis/boxer/public/logical"
 )
 
 type comboBoxState struct {
@@ -199,7 +200,6 @@ func MakeRenderBasicWidgets() func() {
 		RenderColoredButton()
 
 		imgui.SeparatorText("checkbox")
-		RenderColoredButton()
 		checkboxRenderer()
 	}
 }
@@ -215,8 +215,12 @@ func MakeRenderInputText() func() {
 	}
 }
 func MakeRenderCheckbox() func() {
-	//checkboxState := imgui.Tristate(0)
+	checkboxState := logical.TriNil
 	return func() {
-		//checkboxState, _ = imgui.Checkbox("click me if you can", checkboxState)
+		checkboxState, _ = imgui.Checkbox("click me if you can", checkboxState)
+		imgui.SameLine()
+		if imgui.Button("reset to nil") {
+			checkboxState = logical.TriNil
+		}
 	}
 }

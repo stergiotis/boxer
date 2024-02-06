@@ -3,16 +3,19 @@
 package imgui
 
 func Checkbox(label string, state Tristate) (checked Tristate, clicked bool) {
-	_ = `bool *p = nullptr;
-         bool v = state > 0;
-         if(state != 0) {
-            p = &v;
-         }
-         clicked = ImGui::Checkbox(label, p);
-         if(p != nullptr) {
-            checked = (*p > 0);
+	_ = `
+       bool v = state > 0;
+         if(state == 0) {
+              ImGui::PushItemFlag(ImGuiItemFlags_MixedValue, true);
+              clicked = ImGui::Checkbox(label, &v);
+              ImGui::PopItemFlag();
+              if(clicked) {
+                      checked = 1;
+              }
          } else {
-            checked = 0;
-         }`
+              clicked = ImGui::Checkbox(label, &v);
+              checked = v ? 1 : -1;
+         }
+`
 	return
 }
