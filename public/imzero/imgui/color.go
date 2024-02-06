@@ -1,7 +1,5 @@
 package imgui
 
-const ImguiUsesBGRAColorFormat = true
-
 func ColorU32(rgba uint32) (c uint32) {
 	//return bits.Reverse32(rgba)
 	return Color32U8(uint8(rgba>>24),
