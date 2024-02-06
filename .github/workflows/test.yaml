@@ -15,7 +15,7 @@ jobs:
           go-version-file: 'go.mod'
           cache-dependency-path: 'go.sum'
       - name: Setup gotestsum
-        uses: autero1/action-gotestsum@v2
+        uses: autero1/action-gotestsum@v2.0.0
         with:
           gotestsum_version: 1.11.0
       - name: Sync go dependencies
