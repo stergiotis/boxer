@@ -3,8 +3,10 @@ set -ev
 here=$(dirname "$(readlink -f "$BASH_SOURCE")")
 cd "$here"
 
-./main_go nerdfont generate --glyphJson ./glyphnames.json \
+../build.sh
+../main --logFormat console nerdfont generate --glyphJson ./glyphnames.json \
 	--staticGlyphsGoPackage "nerdfont" \
-	--staticGlyphsGoFile "../public/nerdfont/staticGlyphs.go" \
+	--staticGlyphsGoFile "./staticGlyphs.go" \
 	--dynamicGlyphsGoPackage "nerdfont" \
-	--dynamicGlyphsGoFile "../public/nerdfont/dynamicGlyphs.go"
+	--dynamicGlyphsGoFile "./dynamicGlyphs.go"
+gofmt -l -w .
