@@ -25,7 +25,8 @@ Unstable, alpha, API may still change heavily.
 <dt>eh</dt><dd>Error handling.</dd>
 <dt>fec</dt><dd>Forward error correction.</dd>
 <dt>inst</dt><dd>Instance (similar to self, this).</dd>
-<dt>fffi></dt><dd>Frame oriented Foreign Function Interface</dd>
+<dt>fffi</dt><dd>Frame oriented Foreign Function Interface</dd>
+<dt>imzero</dt><dd>A CGO-free immediate mode GUI library based on <a href="https://github.com/ocornut/imgui">DearImGui<a></dd>
 </dl>
 
 ## Style Conventions
