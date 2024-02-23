@@ -5,6 +5,7 @@ Go packages helping to win by K.O. when fighting cross-cutting concerns.
 * Apply **low allocation** coding practices;
 * use **data oriented programming** whenever appropriate;
 * introduce as little [**runtime dependencies**](https://deps.dev/go/github.com%252Fstergiotis%252Fboxer) as possible;
+* provide a **productive**, **pleasant** and **low churn** developer experience,
 * have **predictable performance**;
 * provide production grade **error reporting**.
 
@@ -26,7 +27,7 @@ Unstable, alpha, API may still change heavily.
 <dt>fec</dt><dd>Forward error correction.</dd>
 <dt>inst</dt><dd>Instance (similar to self, this).</dd>
 <dt>fffi</dt><dd>Frame oriented Foreign Function Interface</dd>
-<dt>imzero</dt><dd>A CGO-free immediate mode GUI library based on <a href="https://github.com/ocornut/imgui">DearImGui<a></dd>
+<dt>imzero</dt><dd>A CGO-free immediate mode GUI library based on <a href="https://github.com/ocornut/imgui">DearImGui</a>. Client applications are available in <a href="https://github.com/stergiotis/imzero_client_cpp">imzero_client_cpp</a>.</dd>
 </dl>
 
 ## Style Conventions
