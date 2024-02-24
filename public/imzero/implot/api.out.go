@@ -9,6 +9,7 @@ import "github.com/stergiotis/boxer/public/fffi/runtime"
 // -- deactivated -- // import . "github.com/stergiotis/boxer/public/imzero/imgui"
 
 func GetLocationPos(outer_rect imgui.ImRect, inner_size imgui.ImVec2, loc ImPlotLocation, pad imgui.ImVec2) (r imgui.ImVec2) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000003e8)
 	runtime.AddFloat32Array4Arg(_f, outer_rect)
@@ -495,6 +496,7 @@ var _ = imgui.ImVec2(0)
 //foreign code:
 //  auto r = ImPlot::GetStyleColorName(col)
 func GetStyleColorName(col ImPlotCol) (r string) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000003ec)
 	runtime.AddIntArg(_f, col)
@@ -504,7 +506,6 @@ func GetStyleColorName(col ImPlotCol) (r string) {
 		return
 	}
 	r = (runtime.GetStringRetr[string](_f))
-
 	return
 }
 
@@ -2174,7 +2175,6 @@ func PlotBarGroupsFloat32(label_ids NullSeparatedStringArray, values []float32, 
 	runtime.AddFloat32SliceArg(_f, values)
 	runtime.AddIntArg(_f, groups)
 	_f.CallProcedure()
-
 }
 
 func PlotBarGroupsFloat32V(label_ids NullSeparatedStringArray, values []float32, groups int, size float64, shift float64, flags ImPlotBarGroupsFlags) {
@@ -2201,7 +2201,6 @@ func PlotBarGroupsFloat64(label_ids NullSeparatedStringArray, values []float64, 
 	runtime.AddFloat64SliceArg(_f, values)
 	runtime.AddIntArg(_f, groups)
 	_f.CallProcedure()
-
 }
 
 func PlotBarGroupsFloat64V(label_ids NullSeparatedStringArray, values []float64, groups int, size float64, shift float64, flags ImPlotBarGroupsFlags) {
@@ -2228,7 +2227,6 @@ func PlotBarGroupsInt(label_ids NullSeparatedStringArray, values []int, groups i
 	runtime.AddIntSliceArg(_f, values)
 	runtime.AddIntArg(_f, groups)
 	_f.CallProcedure()
-
 }
 
 func PlotBarGroupsIntV(label_ids NullSeparatedStringArray, values []int, groups int, size float64, shift float64, flags ImPlotBarGroupsFlags) {
@@ -2255,7 +2253,6 @@ func PlotBarGroupsInt16(label_ids NullSeparatedStringArray, values []int16, grou
 	runtime.AddInt16SliceArg(_f, values)
 	runtime.AddIntArg(_f, groups)
 	_f.CallProcedure()
-
 }
 
 func PlotBarGroupsInt16V(label_ids NullSeparatedStringArray, values []int16, groups int, size float64, shift float64, flags ImPlotBarGroupsFlags) {
@@ -2282,7 +2279,6 @@ func PlotBarGroupsInt32(label_ids NullSeparatedStringArray, values []int32, grou
 	runtime.AddInt32SliceArg(_f, values)
 	runtime.AddIntArg(_f, groups)
 	_f.CallProcedure()
-
 }
 
 func PlotBarGroupsInt32V(label_ids NullSeparatedStringArray, values []int32, groups int, size float64, shift float64, flags ImPlotBarGroupsFlags) {
@@ -2309,7 +2305,6 @@ func PlotBarGroupsInt8(label_ids NullSeparatedStringArray, values []int8, groups
 	runtime.AddInt8SliceArg(_f, values)
 	runtime.AddIntArg(_f, groups)
 	_f.CallProcedure()
-
 }
 
 func PlotBarGroupsInt8V(label_ids NullSeparatedStringArray, values []int8, groups int, size float64, shift float64, flags ImPlotBarGroupsFlags) {
@@ -2336,7 +2331,6 @@ func PlotBarGroupsUInt(label_ids NullSeparatedStringArray, values []uint, groups
 	runtime.AddUintSliceArg(_f, values)
 	runtime.AddIntArg(_f, groups)
 	_f.CallProcedure()
-
 }
 
 func PlotBarGroupsUIntV(label_ids NullSeparatedStringArray, values []uint, groups int, size float64, shift float64, flags ImPlotBarGroupsFlags) {
@@ -2363,7 +2357,6 @@ func PlotBarGroupsUInt16(label_ids NullSeparatedStringArray, values []uint16, gr
 	runtime.AddUint16SliceArg(_f, values)
 	runtime.AddIntArg(_f, groups)
 	_f.CallProcedure()
-
 }
 
 func PlotBarGroupsUInt16V(label_ids NullSeparatedStringArray, values []uint16, groups int, size float64, shift float64, flags ImPlotBarGroupsFlags) {
@@ -2390,7 +2383,6 @@ func PlotBarGroupsUInt32(label_ids NullSeparatedStringArray, values []uint32, gr
 	runtime.AddUint32SliceArg(_f, values)
 	runtime.AddIntArg(_f, groups)
 	_f.CallProcedure()
-
 }
 
 func PlotBarGroupsUInt32V(label_ids NullSeparatedStringArray, values []uint32, groups int, size float64, shift float64, flags ImPlotBarGroupsFlags) {
@@ -2417,7 +2409,6 @@ func PlotBarGroupsUInt8(label_ids NullSeparatedStringArray, values []uint8, grou
 	runtime.AddUint8SliceArg(_f, values)
 	runtime.AddIntArg(_f, groups)
 	_f.CallProcedure()
-
 }
 
 func PlotBarGroupsUInt8V(label_ids NullSeparatedStringArray, values []uint8, groups int, size float64, shift float64, flags ImPlotBarGroupsFlags) {
@@ -2446,6 +2437,7 @@ func PlotBarsFloat32(label_id string, values []float32) {
 }
 
 func PlotBarsFloat32V(label_id string, values []float32, bar_size float64, shift float64, flags ImPlotBarsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000477)
 	runtime.AddStringArg(_f, label_id)
@@ -2456,7 +2448,6 @@ func PlotBarsFloat32V(label_id string, values []float32, bar_size float64, shift
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotBarsXYFloat32(label_id string, xs []float32, ys []float32, bar_size float64) {
@@ -2497,6 +2488,7 @@ func PlotBarsFloat64(label_id string, values []float64) {
 }
 
 func PlotBarsFloat64V(label_id string, values []float64, bar_size float64, shift float64, flags ImPlotBarsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x0000047b)
 	runtime.AddStringArg(_f, label_id)
@@ -2507,7 +2499,6 @@ func PlotBarsFloat64V(label_id string, values []float64, bar_size float64, shift
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotBarsXYFloat64(label_id string, xs []float64, ys []float64, bar_size float64) {
@@ -2548,6 +2539,7 @@ func PlotBarsInt(label_id string, values []int) {
 }
 
 func PlotBarsIntV(label_id string, values []int, bar_size float64, shift float64, flags ImPlotBarsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x0000047f)
 	runtime.AddStringArg(_f, label_id)
@@ -2558,7 +2550,6 @@ func PlotBarsIntV(label_id string, values []int, bar_size float64, shift float64
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotBarsXYInt(label_id string, xs []int, ys []int, bar_size float64) {
@@ -2599,6 +2590,7 @@ func PlotBarsInt16(label_id string, values []int16) {
 }
 
 func PlotBarsInt16V(label_id string, values []int16, bar_size float64, shift float64, flags ImPlotBarsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000483)
 	runtime.AddStringArg(_f, label_id)
@@ -2609,7 +2601,6 @@ func PlotBarsInt16V(label_id string, values []int16, bar_size float64, shift flo
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotBarsXYInt16(label_id string, xs []int16, ys []int16, bar_size float64) {
@@ -2650,6 +2641,7 @@ func PlotBarsInt32(label_id string, values []int32) {
 }
 
 func PlotBarsInt32V(label_id string, values []int32, bar_size float64, shift float64, flags ImPlotBarsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000487)
 	runtime.AddStringArg(_f, label_id)
@@ -2660,7 +2652,6 @@ func PlotBarsInt32V(label_id string, values []int32, bar_size float64, shift flo
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotBarsXYInt32(label_id string, xs []int32, ys []int32, bar_size float64) {
@@ -2701,6 +2692,7 @@ func PlotBarsInt8(label_id string, values []int8) {
 }
 
 func PlotBarsInt8V(label_id string, values []int8, bar_size float64, shift float64, flags ImPlotBarsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x0000048b)
 	runtime.AddStringArg(_f, label_id)
@@ -2711,7 +2703,6 @@ func PlotBarsInt8V(label_id string, values []int8, bar_size float64, shift float
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotBarsXYInt8(label_id string, xs []int8, ys []int8, bar_size float64) {
@@ -2752,6 +2743,7 @@ func PlotBarsUInt(label_id string, values []uint) {
 }
 
 func PlotBarsUIntV(label_id string, values []uint, bar_size float64, shift float64, flags ImPlotBarsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x0000048f)
 	runtime.AddStringArg(_f, label_id)
@@ -2762,7 +2754,6 @@ func PlotBarsUIntV(label_id string, values []uint, bar_size float64, shift float
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotBarsXYUInt(label_id string, xs []uint, ys []uint, bar_size float64) {
@@ -2803,6 +2794,7 @@ func PlotBarsUInt16(label_id string, values []uint16) {
 }
 
 func PlotBarsUInt16V(label_id string, values []uint16, bar_size float64, shift float64, flags ImPlotBarsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000493)
 	runtime.AddStringArg(_f, label_id)
@@ -2813,7 +2805,6 @@ func PlotBarsUInt16V(label_id string, values []uint16, bar_size float64, shift f
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotBarsXYUInt16(label_id string, xs []uint16, ys []uint16, bar_size float64) {
@@ -2854,6 +2845,7 @@ func PlotBarsUInt32(label_id string, values []uint32) {
 }
 
 func PlotBarsUInt32V(label_id string, values []uint32, bar_size float64, shift float64, flags ImPlotBarsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000497)
 	runtime.AddStringArg(_f, label_id)
@@ -2864,7 +2856,6 @@ func PlotBarsUInt32V(label_id string, values []uint32, bar_size float64, shift f
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotBarsXYUInt32(label_id string, xs []uint32, ys []uint32, bar_size float64) {
@@ -2905,6 +2896,7 @@ func PlotBarsUInt8(label_id string, values []uint8) {
 }
 
 func PlotBarsUInt8V(label_id string, values []uint8, bar_size float64, shift float64, flags ImPlotBarsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x0000049b)
 	runtime.AddStringArg(_f, label_id)
@@ -2915,7 +2907,6 @@ func PlotBarsUInt8V(label_id string, values []uint8, bar_size float64, shift flo
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotBarsXYUInt8(label_id string, xs []uint8, ys []uint8, bar_size float64) {
@@ -2957,6 +2948,7 @@ func PlotDigitalFloat32[T ~float32](label_id string, xs []T, ys []T) {
 }
 
 func PlotDigitalFloat32V[T ~float32](label_id string, xs []T, ys []T, flags ImPlotDigitalFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x0000049f)
 	runtime.AddStringArg(_f, label_id)
@@ -2966,7 +2958,6 @@ func PlotDigitalFloat32V[T ~float32](label_id string, xs []T, ys []T, flags ImPl
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 
@@ -2983,6 +2974,7 @@ func PlotDigitalFloat64[T ~float64](label_id string, xs []T, ys []T) {
 }
 
 func PlotDigitalFloat64V[T ~float64](label_id string, xs []T, ys []T, flags ImPlotDigitalFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000004a1)
 	runtime.AddStringArg(_f, label_id)
@@ -2992,7 +2984,6 @@ func PlotDigitalFloat64V[T ~float64](label_id string, xs []T, ys []T, flags ImPl
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 
@@ -3009,6 +3000,7 @@ func PlotDigitalInt[T ~int](label_id string, xs []T, ys []T) {
 }
 
 func PlotDigitalIntV[T ~int](label_id string, xs []T, ys []T, flags ImPlotDigitalFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000004a3)
 	runtime.AddStringArg(_f, label_id)
@@ -3018,7 +3010,6 @@ func PlotDigitalIntV[T ~int](label_id string, xs []T, ys []T, flags ImPlotDigita
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 
@@ -3035,6 +3026,7 @@ func PlotDigitalInt16[T ~int16](label_id string, xs []T, ys []T) {
 }
 
 func PlotDigitalInt16V[T ~int16](label_id string, xs []T, ys []T, flags ImPlotDigitalFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000004a5)
 	runtime.AddStringArg(_f, label_id)
@@ -3044,7 +3036,6 @@ func PlotDigitalInt16V[T ~int16](label_id string, xs []T, ys []T, flags ImPlotDi
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 
@@ -3061,6 +3052,7 @@ func PlotDigitalInt32[T ~int32](label_id string, xs []T, ys []T) {
 }
 
 func PlotDigitalInt32V[T ~int32](label_id string, xs []T, ys []T, flags ImPlotDigitalFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000004a7)
 	runtime.AddStringArg(_f, label_id)
@@ -3070,7 +3062,6 @@ func PlotDigitalInt32V[T ~int32](label_id string, xs []T, ys []T, flags ImPlotDi
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 
@@ -3087,6 +3078,7 @@ func PlotDigitalInt8[T ~int8](label_id string, xs []T, ys []T) {
 }
 
 func PlotDigitalInt8V[T ~int8](label_id string, xs []T, ys []T, flags ImPlotDigitalFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000004a9)
 	runtime.AddStringArg(_f, label_id)
@@ -3096,7 +3088,6 @@ func PlotDigitalInt8V[T ~int8](label_id string, xs []T, ys []T, flags ImPlotDigi
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 
@@ -3113,6 +3104,7 @@ func PlotDigitalUInt[T ~uint](label_id string, xs []T, ys []T) {
 }
 
 func PlotDigitalUIntV[T ~uint](label_id string, xs []T, ys []T, flags ImPlotDigitalFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000004ab)
 	runtime.AddStringArg(_f, label_id)
@@ -3122,7 +3114,6 @@ func PlotDigitalUIntV[T ~uint](label_id string, xs []T, ys []T, flags ImPlotDigi
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 
@@ -3139,6 +3130,7 @@ func PlotDigitalUInt16[T ~uint16](label_id string, xs []T, ys []T) {
 }
 
 func PlotDigitalUInt16V[T ~uint16](label_id string, xs []T, ys []T, flags ImPlotDigitalFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000004ad)
 	runtime.AddStringArg(_f, label_id)
@@ -3148,7 +3140,6 @@ func PlotDigitalUInt16V[T ~uint16](label_id string, xs []T, ys []T, flags ImPlot
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 
@@ -3165,6 +3156,7 @@ func PlotDigitalUInt32[T ~uint32](label_id string, xs []T, ys []T) {
 }
 
 func PlotDigitalUInt32V[T ~uint32](label_id string, xs []T, ys []T, flags ImPlotDigitalFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000004af)
 	runtime.AddStringArg(_f, label_id)
@@ -3174,7 +3166,6 @@ func PlotDigitalUInt32V[T ~uint32](label_id string, xs []T, ys []T, flags ImPlot
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 
@@ -3191,6 +3182,7 @@ func PlotDigitalUInt8[T ~uint8](label_id string, xs []T, ys []T) {
 }
 
 func PlotDigitalUInt8V[T ~uint8](label_id string, xs []T, ys []T, flags ImPlotDigitalFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000004b1)
 	runtime.AddStringArg(_f, label_id)
@@ -3200,7 +3192,6 @@ func PlotDigitalUInt8V[T ~uint8](label_id string, xs []T, ys []T, flags ImPlotDi
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 
@@ -3218,6 +3209,7 @@ func PlotErrorBarsFloat32[T ~float32](label_id string, xs []T, ys []T, errs []T)
 }
 
 func PlotErrorBarsFloat32V[T ~float32](label_id string, xs []T, ys []T, errs []T, flags ImPlotErrorBarsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000004b3)
 	runtime.AddStringArg(_f, label_id)
@@ -3228,7 +3220,6 @@ func PlotErrorBarsFloat32V[T ~float32](label_id string, xs []T, ys []T, errs []T
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotErrorBarsPosNegFloat32[T ~float32](label_id string, xs []T, ys []T, neg []T, pos []T) {
@@ -3273,6 +3264,7 @@ func PlotErrorBarsFloat64[T ~float64](label_id string, xs []T, ys []T, errs []T)
 }
 
 func PlotErrorBarsFloat64V[T ~float64](label_id string, xs []T, ys []T, errs []T, flags ImPlotErrorBarsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000004b7)
 	runtime.AddStringArg(_f, label_id)
@@ -3283,7 +3275,6 @@ func PlotErrorBarsFloat64V[T ~float64](label_id string, xs []T, ys []T, errs []T
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotErrorBarsPosNegFloat64[T ~float64](label_id string, xs []T, ys []T, neg []T, pos []T) {
@@ -3328,6 +3319,7 @@ func PlotErrorBarsInt[T ~int](label_id string, xs []T, ys []T, errs []T) {
 }
 
 func PlotErrorBarsIntV[T ~int](label_id string, xs []T, ys []T, errs []T, flags ImPlotErrorBarsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000004bb)
 	runtime.AddStringArg(_f, label_id)
@@ -3338,7 +3330,6 @@ func PlotErrorBarsIntV[T ~int](label_id string, xs []T, ys []T, errs []T, flags 
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotErrorBarsPosNegInt[T ~int](label_id string, xs []T, ys []T, neg []T, pos []T) {
@@ -3383,6 +3374,7 @@ func PlotErrorBarsInt16[T ~int16](label_id string, xs []T, ys []T, errs []T) {
 }
 
 func PlotErrorBarsInt16V[T ~int16](label_id string, xs []T, ys []T, errs []T, flags ImPlotErrorBarsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000004bf)
 	runtime.AddStringArg(_f, label_id)
@@ -3393,7 +3385,6 @@ func PlotErrorBarsInt16V[T ~int16](label_id string, xs []T, ys []T, errs []T, fl
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotErrorBarsPosNegInt16[T ~int16](label_id string, xs []T, ys []T, neg []T, pos []T) {
@@ -3438,6 +3429,7 @@ func PlotErrorBarsInt32[T ~int32](label_id string, xs []T, ys []T, errs []T) {
 }
 
 func PlotErrorBarsInt32V[T ~int32](label_id string, xs []T, ys []T, errs []T, flags ImPlotErrorBarsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000004c3)
 	runtime.AddStringArg(_f, label_id)
@@ -3448,7 +3440,6 @@ func PlotErrorBarsInt32V[T ~int32](label_id string, xs []T, ys []T, errs []T, fl
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotErrorBarsPosNegInt32[T ~int32](label_id string, xs []T, ys []T, neg []T, pos []T) {
@@ -3493,6 +3484,7 @@ func PlotErrorBarsInt8[T ~int8](label_id string, xs []T, ys []T, errs []T) {
 }
 
 func PlotErrorBarsInt8V[T ~int8](label_id string, xs []T, ys []T, errs []T, flags ImPlotErrorBarsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000004c7)
 	runtime.AddStringArg(_f, label_id)
@@ -3503,7 +3495,6 @@ func PlotErrorBarsInt8V[T ~int8](label_id string, xs []T, ys []T, errs []T, flag
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotErrorBarsPosNegInt8[T ~int8](label_id string, xs []T, ys []T, neg []T, pos []T) {
@@ -3548,6 +3539,7 @@ func PlotErrorBarsUInt[T ~uint](label_id string, xs []T, ys []T, errs []T) {
 }
 
 func PlotErrorBarsUIntV[T ~uint](label_id string, xs []T, ys []T, errs []T, flags ImPlotErrorBarsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000004cb)
 	runtime.AddStringArg(_f, label_id)
@@ -3558,7 +3550,6 @@ func PlotErrorBarsUIntV[T ~uint](label_id string, xs []T, ys []T, errs []T, flag
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotErrorBarsPosNegUInt[T ~uint](label_id string, xs []T, ys []T, neg []T, pos []T) {
@@ -3603,6 +3594,7 @@ func PlotErrorBarsUInt16[T ~uint16](label_id string, xs []T, ys []T, errs []T) {
 }
 
 func PlotErrorBarsUInt16V[T ~uint16](label_id string, xs []T, ys []T, errs []T, flags ImPlotErrorBarsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000004cf)
 	runtime.AddStringArg(_f, label_id)
@@ -3613,7 +3605,6 @@ func PlotErrorBarsUInt16V[T ~uint16](label_id string, xs []T, ys []T, errs []T, 
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotErrorBarsPosNegUInt16[T ~uint16](label_id string, xs []T, ys []T, neg []T, pos []T) {
@@ -3658,6 +3649,7 @@ func PlotErrorBarsUInt32[T ~uint32](label_id string, xs []T, ys []T, errs []T) {
 }
 
 func PlotErrorBarsUInt32V[T ~uint32](label_id string, xs []T, ys []T, errs []T, flags ImPlotErrorBarsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000004d3)
 	runtime.AddStringArg(_f, label_id)
@@ -3668,7 +3660,6 @@ func PlotErrorBarsUInt32V[T ~uint32](label_id string, xs []T, ys []T, errs []T, 
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotErrorBarsPosNegUInt32[T ~uint32](label_id string, xs []T, ys []T, neg []T, pos []T) {
@@ -3713,6 +3704,7 @@ func PlotErrorBarsUInt8[T ~uint8](label_id string, xs []T, ys []T, errs []T) {
 }
 
 func PlotErrorBarsUInt8V[T ~uint8](label_id string, xs []T, ys []T, errs []T, flags ImPlotErrorBarsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000004d7)
 	runtime.AddStringArg(_f, label_id)
@@ -3723,7 +3715,6 @@ func PlotErrorBarsUInt8V[T ~uint8](label_id string, xs []T, ys []T, errs []T, fl
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotErrorBarsPosNegUInt8[T ~uint8](label_id string, xs []T, ys []T, neg []T, pos []T) {
@@ -3767,6 +3758,7 @@ func PlotHeatmapFloat32[T ~float32](label_id string, values []T, rows int) {
 }
 
 func PlotHeatmapFloat32V[T ~float32](label_id string, values []T, rows int, scale_min float64, scale_max float64, label_fmt string, bounds_min ImPlotPoint, bounds_max ImPlotPoint, flags ImPlotHeatmapFlags) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000004db)
 	runtime.AddStringArg(_f, label_id)
@@ -3779,7 +3771,6 @@ func PlotHeatmapFloat32V[T ~float32](label_id string, values []T, rows int, scal
 	runtime.AddComplex128Arg(_f, bounds_max)
 	runtime.AddIntArg(_f, flags)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 
@@ -3796,6 +3787,7 @@ func PlotHeatmapFloat64[T ~float64](label_id string, values []T, rows int) {
 }
 
 func PlotHeatmapFloat64V[T ~float64](label_id string, values []T, rows int, scale_min float64, scale_max float64, label_fmt string, bounds_min ImPlotPoint, bounds_max ImPlotPoint, flags ImPlotHeatmapFlags) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000004dd)
 	runtime.AddStringArg(_f, label_id)
@@ -3808,7 +3800,6 @@ func PlotHeatmapFloat64V[T ~float64](label_id string, values []T, rows int, scal
 	runtime.AddComplex128Arg(_f, bounds_max)
 	runtime.AddIntArg(_f, flags)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 
@@ -3825,6 +3816,7 @@ func PlotHeatmapInt[T ~int](label_id string, values []T, rows int) {
 }
 
 func PlotHeatmapIntV[T ~int](label_id string, values []T, rows int, scale_min float64, scale_max float64, label_fmt string, bounds_min ImPlotPoint, bounds_max ImPlotPoint, flags ImPlotHeatmapFlags) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000004df)
 	runtime.AddStringArg(_f, label_id)
@@ -3837,7 +3829,6 @@ func PlotHeatmapIntV[T ~int](label_id string, values []T, rows int, scale_min fl
 	runtime.AddComplex128Arg(_f, bounds_max)
 	runtime.AddIntArg(_f, flags)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 
@@ -3854,6 +3845,7 @@ func PlotHeatmapInt16[T ~int16](label_id string, values []T, rows int) {
 }
 
 func PlotHeatmapInt16V[T ~int16](label_id string, values []T, rows int, scale_min float64, scale_max float64, label_fmt string, bounds_min ImPlotPoint, bounds_max ImPlotPoint, flags ImPlotHeatmapFlags) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000004e1)
 	runtime.AddStringArg(_f, label_id)
@@ -3866,7 +3858,6 @@ func PlotHeatmapInt16V[T ~int16](label_id string, values []T, rows int, scale_mi
 	runtime.AddComplex128Arg(_f, bounds_max)
 	runtime.AddIntArg(_f, flags)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 
@@ -3883,6 +3874,7 @@ func PlotHeatmapInt32[T ~int32](label_id string, values []T, rows int) {
 }
 
 func PlotHeatmapInt32V[T ~int32](label_id string, values []T, rows int, scale_min float64, scale_max float64, label_fmt string, bounds_min ImPlotPoint, bounds_max ImPlotPoint, flags ImPlotHeatmapFlags) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000004e3)
 	runtime.AddStringArg(_f, label_id)
@@ -3895,7 +3887,6 @@ func PlotHeatmapInt32V[T ~int32](label_id string, values []T, rows int, scale_mi
 	runtime.AddComplex128Arg(_f, bounds_max)
 	runtime.AddIntArg(_f, flags)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 
@@ -3912,6 +3903,7 @@ func PlotHeatmapInt8[T ~int8](label_id string, values []T, rows int) {
 }
 
 func PlotHeatmapInt8V[T ~int8](label_id string, values []T, rows int, scale_min float64, scale_max float64, label_fmt string, bounds_min ImPlotPoint, bounds_max ImPlotPoint, flags ImPlotHeatmapFlags) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000004e5)
 	runtime.AddStringArg(_f, label_id)
@@ -3924,7 +3916,6 @@ func PlotHeatmapInt8V[T ~int8](label_id string, values []T, rows int, scale_min 
 	runtime.AddComplex128Arg(_f, bounds_max)
 	runtime.AddIntArg(_f, flags)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 
@@ -3941,6 +3932,7 @@ func PlotHeatmapUInt[T ~uint](label_id string, values []T, rows int) {
 }
 
 func PlotHeatmapUIntV[T ~uint](label_id string, values []T, rows int, scale_min float64, scale_max float64, label_fmt string, bounds_min ImPlotPoint, bounds_max ImPlotPoint, flags ImPlotHeatmapFlags) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000004e7)
 	runtime.AddStringArg(_f, label_id)
@@ -3953,7 +3945,6 @@ func PlotHeatmapUIntV[T ~uint](label_id string, values []T, rows int, scale_min 
 	runtime.AddComplex128Arg(_f, bounds_max)
 	runtime.AddIntArg(_f, flags)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 
@@ -3970,6 +3961,7 @@ func PlotHeatmapUInt16[T ~uint16](label_id string, values []T, rows int) {
 }
 
 func PlotHeatmapUInt16V[T ~uint16](label_id string, values []T, rows int, scale_min float64, scale_max float64, label_fmt string, bounds_min ImPlotPoint, bounds_max ImPlotPoint, flags ImPlotHeatmapFlags) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000004e9)
 	runtime.AddStringArg(_f, label_id)
@@ -3982,7 +3974,6 @@ func PlotHeatmapUInt16V[T ~uint16](label_id string, values []T, rows int, scale_
 	runtime.AddComplex128Arg(_f, bounds_max)
 	runtime.AddIntArg(_f, flags)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 
@@ -3999,6 +3990,7 @@ func PlotHeatmapUInt32[T ~uint32](label_id string, values []T, rows int) {
 }
 
 func PlotHeatmapUInt32V[T ~uint32](label_id string, values []T, rows int, scale_min float64, scale_max float64, label_fmt string, bounds_min ImPlotPoint, bounds_max ImPlotPoint, flags ImPlotHeatmapFlags) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000004eb)
 	runtime.AddStringArg(_f, label_id)
@@ -4011,7 +4003,6 @@ func PlotHeatmapUInt32V[T ~uint32](label_id string, values []T, rows int, scale_
 	runtime.AddComplex128Arg(_f, bounds_max)
 	runtime.AddIntArg(_f, flags)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 
@@ -4028,6 +4019,7 @@ func PlotHeatmapUInt8[T ~uint8](label_id string, values []T, rows int) {
 }
 
 func PlotHeatmapUInt8V[T ~uint8](label_id string, values []T, rows int, scale_min float64, scale_max float64, label_fmt string, bounds_min ImPlotPoint, bounds_max ImPlotPoint, flags ImPlotHeatmapFlags) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000004ed)
 	runtime.AddStringArg(_f, label_id)
@@ -4040,7 +4032,6 @@ func PlotHeatmapUInt8V[T ~uint8](label_id string, values []T, rows int, scale_mi
 	runtime.AddComplex128Arg(_f, bounds_max)
 	runtime.AddIntArg(_f, flags)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 
@@ -4062,6 +4053,7 @@ func PlotHistogramFloat32[T ~float32](label_id string, values []T) (r float64) {
 }
 
 func PlotHistogramFloat32V[T ~float32](label_id string, values []T, bins ImPlotBin, bar_scale float64, rangeP ImPlotRange, flags ImPlotHistogramFlags) (r float64) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000004ef)
 	runtime.AddStringArg(_f, label_id)
@@ -4076,7 +4068,6 @@ func PlotHistogramFloat32V[T ~float32](label_id string, values []T, bins ImPlotB
 		return
 	}
 	r = (runtime.GetFloat64Retr[float64](_f))
-
 	return
 }
 // -- deactivated -- // //go:build fffi_idl_code
@@ -4099,6 +4090,7 @@ func PlotHistogramFloat64[T ~float64](label_id string, values []T) (r float64) {
 }
 
 func PlotHistogramFloat64V[T ~float64](label_id string, values []T, bins ImPlotBin, bar_scale float64, rangeP ImPlotRange, flags ImPlotHistogramFlags) (r float64) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000004f1)
 	runtime.AddStringArg(_f, label_id)
@@ -4113,7 +4105,6 @@ func PlotHistogramFloat64V[T ~float64](label_id string, values []T, bins ImPlotB
 		return
 	}
 	r = (runtime.GetFloat64Retr[float64](_f))
-
 	return
 }
 // -- deactivated -- // //go:build fffi_idl_code
@@ -4136,6 +4127,7 @@ func PlotHistogramInt[T ~int](label_id string, values []T) (r float64) {
 }
 
 func PlotHistogramIntV[T ~int](label_id string, values []T, bins ImPlotBin, bar_scale float64, rangeP ImPlotRange, flags ImPlotHistogramFlags) (r float64) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000004f3)
 	runtime.AddStringArg(_f, label_id)
@@ -4150,7 +4142,6 @@ func PlotHistogramIntV[T ~int](label_id string, values []T, bins ImPlotBin, bar_
 		return
 	}
 	r = (runtime.GetFloat64Retr[float64](_f))
-
 	return
 }
 // -- deactivated -- // //go:build fffi_idl_code
@@ -4173,6 +4164,7 @@ func PlotHistogramInt16[T ~int16](label_id string, values []T) (r float64) {
 }
 
 func PlotHistogramInt16V[T ~int16](label_id string, values []T, bins ImPlotBin, bar_scale float64, rangeP ImPlotRange, flags ImPlotHistogramFlags) (r float64) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000004f5)
 	runtime.AddStringArg(_f, label_id)
@@ -4187,7 +4179,6 @@ func PlotHistogramInt16V[T ~int16](label_id string, values []T, bins ImPlotBin, 
 		return
 	}
 	r = (runtime.GetFloat64Retr[float64](_f))
-
 	return
 }
 // -- deactivated -- // //go:build fffi_idl_code
@@ -4210,6 +4201,7 @@ func PlotHistogramInt32[T ~int32](label_id string, values []T) (r float64) {
 }
 
 func PlotHistogramInt32V[T ~int32](label_id string, values []T, bins ImPlotBin, bar_scale float64, rangeP ImPlotRange, flags ImPlotHistogramFlags) (r float64) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000004f7)
 	runtime.AddStringArg(_f, label_id)
@@ -4224,7 +4216,6 @@ func PlotHistogramInt32V[T ~int32](label_id string, values []T, bins ImPlotBin, 
 		return
 	}
 	r = (runtime.GetFloat64Retr[float64](_f))
-
 	return
 }
 // -- deactivated -- // //go:build fffi_idl_code
@@ -4247,6 +4238,7 @@ func PlotHistogramInt8[T ~int8](label_id string, values []T) (r float64) {
 }
 
 func PlotHistogramInt8V[T ~int8](label_id string, values []T, bins ImPlotBin, bar_scale float64, rangeP ImPlotRange, flags ImPlotHistogramFlags) (r float64) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000004f9)
 	runtime.AddStringArg(_f, label_id)
@@ -4261,7 +4253,6 @@ func PlotHistogramInt8V[T ~int8](label_id string, values []T, bins ImPlotBin, ba
 		return
 	}
 	r = (runtime.GetFloat64Retr[float64](_f))
-
 	return
 }
 // -- deactivated -- // //go:build fffi_idl_code
@@ -4284,6 +4275,7 @@ func PlotHistogramUInt[T ~uint](label_id string, values []T) (r float64) {
 }
 
 func PlotHistogramUIntV[T ~uint](label_id string, values []T, bins ImPlotBin, bar_scale float64, rangeP ImPlotRange, flags ImPlotHistogramFlags) (r float64) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000004fb)
 	runtime.AddStringArg(_f, label_id)
@@ -4298,7 +4290,6 @@ func PlotHistogramUIntV[T ~uint](label_id string, values []T, bins ImPlotBin, ba
 		return
 	}
 	r = (runtime.GetFloat64Retr[float64](_f))
-
 	return
 }
 // -- deactivated -- // //go:build fffi_idl_code
@@ -4321,6 +4312,7 @@ func PlotHistogramUInt16[T ~uint16](label_id string, values []T) (r float64) {
 }
 
 func PlotHistogramUInt16V[T ~uint16](label_id string, values []T, bins ImPlotBin, bar_scale float64, rangeP ImPlotRange, flags ImPlotHistogramFlags) (r float64) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000004fd)
 	runtime.AddStringArg(_f, label_id)
@@ -4335,7 +4327,6 @@ func PlotHistogramUInt16V[T ~uint16](label_id string, values []T, bins ImPlotBin
 		return
 	}
 	r = (runtime.GetFloat64Retr[float64](_f))
-
 	return
 }
 // -- deactivated -- // //go:build fffi_idl_code
@@ -4358,6 +4349,7 @@ func PlotHistogramUInt32[T ~uint32](label_id string, values []T) (r float64) {
 }
 
 func PlotHistogramUInt32V[T ~uint32](label_id string, values []T, bins ImPlotBin, bar_scale float64, rangeP ImPlotRange, flags ImPlotHistogramFlags) (r float64) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000004ff)
 	runtime.AddStringArg(_f, label_id)
@@ -4372,7 +4364,6 @@ func PlotHistogramUInt32V[T ~uint32](label_id string, values []T, bins ImPlotBin
 		return
 	}
 	r = (runtime.GetFloat64Retr[float64](_f))
-
 	return
 }
 // -- deactivated -- // //go:build fffi_idl_code
@@ -4395,6 +4386,7 @@ func PlotHistogramUInt8[T ~uint8](label_id string, values []T) (r float64) {
 }
 
 func PlotHistogramUInt8V[T ~uint8](label_id string, values []T, bins ImPlotBin, bar_scale float64, rangeP ImPlotRange, flags ImPlotHistogramFlags) (r float64) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000501)
 	runtime.AddStringArg(_f, label_id)
@@ -4409,7 +4401,6 @@ func PlotHistogramUInt8V[T ~uint8](label_id string, values []T, bins ImPlotBin, 
 		return
 	}
 	r = (runtime.GetFloat64Retr[float64](_f))
-
 	return
 }
 // -- deactivated -- // //go:build fffi_idl_code
@@ -4421,6 +4412,7 @@ func PlotHistogramUInt8V[T ~uint8](label_id string, values []T, bins ImPlotBin, 
 //foreign code:
 //  r = ImPlot::PlotHistogram2D(label_id,xs,ys,getSliceLength(xs))
 func PlotHistogram2DFloat32[T ~float32](label_id string, xs []T, ys []T) (r float64) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000502)
 	runtime.AddStringArg(_f, label_id)
@@ -4467,6 +4459,7 @@ func PlotHistogram2DFloat32V[T ~float32](label_id string, xs []T, ys []T, x_bins
 //foreign code:
 //  r = ImPlot::PlotHistogram2D(label_id,xs,ys,getSliceLength(xs))
 func PlotHistogram2DFloat64[T ~float64](label_id string, xs []T, ys []T) (r float64) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000504)
 	runtime.AddStringArg(_f, label_id)
@@ -4513,6 +4506,7 @@ func PlotHistogram2DFloat64V[T ~float64](label_id string, xs []T, ys []T, x_bins
 //foreign code:
 //  r = ImPlot::PlotHistogram2D(label_id,xs,ys,getSliceLength(xs))
 func PlotHistogram2DInt[T ~int](label_id string, xs []T, ys []T) (r float64) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000506)
 	runtime.AddStringArg(_f, label_id)
@@ -4559,6 +4553,7 @@ func PlotHistogram2DIntV[T ~int](label_id string, xs []T, ys []T, x_bins ImPlotB
 //foreign code:
 //  r = ImPlot::PlotHistogram2D(label_id,xs,ys,getSliceLength(xs))
 func PlotHistogram2DInt16[T ~int16](label_id string, xs []T, ys []T) (r float64) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000508)
 	runtime.AddStringArg(_f, label_id)
@@ -4605,6 +4600,7 @@ func PlotHistogram2DInt16V[T ~int16](label_id string, xs []T, ys []T, x_bins ImP
 //foreign code:
 //  r = ImPlot::PlotHistogram2D(label_id,xs,ys,getSliceLength(xs))
 func PlotHistogram2DInt32[T ~int32](label_id string, xs []T, ys []T) (r float64) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000050a)
 	runtime.AddStringArg(_f, label_id)
@@ -4651,6 +4647,7 @@ func PlotHistogram2DInt32V[T ~int32](label_id string, xs []T, ys []T, x_bins ImP
 //foreign code:
 //  r = ImPlot::PlotHistogram2D(label_id,xs,ys,getSliceLength(xs))
 func PlotHistogram2DInt8[T ~int8](label_id string, xs []T, ys []T) (r float64) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000050c)
 	runtime.AddStringArg(_f, label_id)
@@ -4697,6 +4694,7 @@ func PlotHistogram2DInt8V[T ~int8](label_id string, xs []T, ys []T, x_bins ImPlo
 //foreign code:
 //  r = ImPlot::PlotHistogram2D(label_id,xs,ys,getSliceLength(xs))
 func PlotHistogram2DUInt[T ~uint](label_id string, xs []T, ys []T) (r float64) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000050e)
 	runtime.AddStringArg(_f, label_id)
@@ -4743,6 +4741,7 @@ func PlotHistogram2DUIntV[T ~uint](label_id string, xs []T, ys []T, x_bins ImPlo
 //foreign code:
 //  r = ImPlot::PlotHistogram2D(label_id,xs,ys,getSliceLength(xs))
 func PlotHistogram2DUInt16[T ~uint16](label_id string, xs []T, ys []T) (r float64) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000510)
 	runtime.AddStringArg(_f, label_id)
@@ -4789,6 +4788,7 @@ func PlotHistogram2DUInt16V[T ~uint16](label_id string, xs []T, ys []T, x_bins I
 //foreign code:
 //  r = ImPlot::PlotHistogram2D(label_id,xs,ys,getSliceLength(xs))
 func PlotHistogram2DUInt32[T ~uint32](label_id string, xs []T, ys []T) (r float64) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000512)
 	runtime.AddStringArg(_f, label_id)
@@ -4835,6 +4835,7 @@ func PlotHistogram2DUInt32V[T ~uint32](label_id string, xs []T, ys []T, x_bins I
 //foreign code:
 //  r = ImPlot::PlotHistogram2D(label_id,xs,ys,getSliceLength(xs))
 func PlotHistogram2DUInt8[T ~uint8](label_id string, xs []T, ys []T) (r float64) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000514)
 	runtime.AddStringArg(_f, label_id)
@@ -4886,6 +4887,7 @@ func PlotInfLinesFloat32[T ~float32](label_id string, values []T) {
 }
 
 func PlotInfLinesFloat32V[T ~float32](label_id string, values []T, flags ImPlotInfLinesFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000517)
 	runtime.AddStringArg(_f, label_id)
@@ -4894,7 +4896,6 @@ func PlotInfLinesFloat32V[T ~float32](label_id string, values []T, flags ImPlotI
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 
@@ -4910,6 +4911,7 @@ func PlotInfLinesFloat64[T ~float64](label_id string, values []T) {
 }
 
 func PlotInfLinesFloat64V[T ~float64](label_id string, values []T, flags ImPlotInfLinesFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000519)
 	runtime.AddStringArg(_f, label_id)
@@ -4918,7 +4920,6 @@ func PlotInfLinesFloat64V[T ~float64](label_id string, values []T, flags ImPlotI
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 
@@ -4934,6 +4935,7 @@ func PlotInfLinesInt[T ~int](label_id string, values []T) {
 }
 
 func PlotInfLinesIntV[T ~int](label_id string, values []T, flags ImPlotInfLinesFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x0000051b)
 	runtime.AddStringArg(_f, label_id)
@@ -4942,7 +4944,6 @@ func PlotInfLinesIntV[T ~int](label_id string, values []T, flags ImPlotInfLinesF
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 
@@ -4958,6 +4959,7 @@ func PlotInfLinesInt16[T ~int16](label_id string, values []T) {
 }
 
 func PlotInfLinesInt16V[T ~int16](label_id string, values []T, flags ImPlotInfLinesFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x0000051d)
 	runtime.AddStringArg(_f, label_id)
@@ -4966,7 +4968,6 @@ func PlotInfLinesInt16V[T ~int16](label_id string, values []T, flags ImPlotInfLi
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 
@@ -4982,6 +4983,7 @@ func PlotInfLinesInt32[T ~int32](label_id string, values []T) {
 }
 
 func PlotInfLinesInt32V[T ~int32](label_id string, values []T, flags ImPlotInfLinesFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x0000051f)
 	runtime.AddStringArg(_f, label_id)
@@ -4990,7 +4992,6 @@ func PlotInfLinesInt32V[T ~int32](label_id string, values []T, flags ImPlotInfLi
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 
@@ -5006,6 +5007,7 @@ func PlotInfLinesInt8[T ~int8](label_id string, values []T) {
 }
 
 func PlotInfLinesInt8V[T ~int8](label_id string, values []T, flags ImPlotInfLinesFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000521)
 	runtime.AddStringArg(_f, label_id)
@@ -5014,7 +5016,6 @@ func PlotInfLinesInt8V[T ~int8](label_id string, values []T, flags ImPlotInfLine
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 
@@ -5030,6 +5031,7 @@ func PlotInfLinesUInt[T ~uint](label_id string, values []T) {
 }
 
 func PlotInfLinesUIntV[T ~uint](label_id string, values []T, flags ImPlotInfLinesFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000523)
 	runtime.AddStringArg(_f, label_id)
@@ -5038,7 +5040,6 @@ func PlotInfLinesUIntV[T ~uint](label_id string, values []T, flags ImPlotInfLine
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 
@@ -5054,6 +5055,7 @@ func PlotInfLinesUInt16[T ~uint16](label_id string, values []T) {
 }
 
 func PlotInfLinesUInt16V[T ~uint16](label_id string, values []T, flags ImPlotInfLinesFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000525)
 	runtime.AddStringArg(_f, label_id)
@@ -5062,7 +5064,6 @@ func PlotInfLinesUInt16V[T ~uint16](label_id string, values []T, flags ImPlotInf
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 
@@ -5078,6 +5079,7 @@ func PlotInfLinesUInt32[T ~uint32](label_id string, values []T) {
 }
 
 func PlotInfLinesUInt32V[T ~uint32](label_id string, values []T, flags ImPlotInfLinesFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000527)
 	runtime.AddStringArg(_f, label_id)
@@ -5086,7 +5088,6 @@ func PlotInfLinesUInt32V[T ~uint32](label_id string, values []T, flags ImPlotInf
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 
@@ -5102,6 +5103,7 @@ func PlotInfLinesUInt8[T ~uint8](label_id string, values []T) {
 }
 
 func PlotInfLinesUInt8V[T ~uint8](label_id string, values []T, flags ImPlotInfLinesFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000529)
 	runtime.AddStringArg(_f, label_id)
@@ -5110,7 +5112,6 @@ func PlotInfLinesUInt8V[T ~uint8](label_id string, values []T, flags ImPlotInfLi
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 
@@ -5126,6 +5127,7 @@ func PlotLineFloat32[T ~float32](label_id string, values []T) {
 }
 
 func PlotLineFloat32V[T ~float32](label_id string, values []T, xscale float64, xstart float64, flags ImPlotLineFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x0000052b)
 	runtime.AddStringArg(_f, label_id)
@@ -5136,7 +5138,6 @@ func PlotLineFloat32V[T ~float32](label_id string, values []T, xscale float64, x
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotLineXYFloat32(label_id string, xs []float32, ys []float32) {
@@ -5175,6 +5176,7 @@ func PlotLineFloat64[T ~float64](label_id string, values []T) {
 }
 
 func PlotLineFloat64V[T ~float64](label_id string, values []T, xscale float64, xstart float64, flags ImPlotLineFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x0000052f)
 	runtime.AddStringArg(_f, label_id)
@@ -5185,7 +5187,6 @@ func PlotLineFloat64V[T ~float64](label_id string, values []T, xscale float64, x
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotLineXYFloat64(label_id string, xs []float64, ys []float64) {
@@ -5224,6 +5225,7 @@ func PlotLineInt[T ~int](label_id string, values []T) {
 }
 
 func PlotLineIntV[T ~int](label_id string, values []T, xscale float64, xstart float64, flags ImPlotLineFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000533)
 	runtime.AddStringArg(_f, label_id)
@@ -5234,7 +5236,6 @@ func PlotLineIntV[T ~int](label_id string, values []T, xscale float64, xstart fl
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotLineXYInt(label_id string, xs []int, ys []int) {
@@ -5273,6 +5274,7 @@ func PlotLineInt16[T ~int16](label_id string, values []T) {
 }
 
 func PlotLineInt16V[T ~int16](label_id string, values []T, xscale float64, xstart float64, flags ImPlotLineFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000537)
 	runtime.AddStringArg(_f, label_id)
@@ -5283,7 +5285,6 @@ func PlotLineInt16V[T ~int16](label_id string, values []T, xscale float64, xstar
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotLineXYInt16(label_id string, xs []int16, ys []int16) {
@@ -5322,6 +5323,7 @@ func PlotLineInt32[T ~int32](label_id string, values []T) {
 }
 
 func PlotLineInt32V[T ~int32](label_id string, values []T, xscale float64, xstart float64, flags ImPlotLineFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x0000053b)
 	runtime.AddStringArg(_f, label_id)
@@ -5332,7 +5334,6 @@ func PlotLineInt32V[T ~int32](label_id string, values []T, xscale float64, xstar
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotLineXYInt32(label_id string, xs []int32, ys []int32) {
@@ -5371,6 +5372,7 @@ func PlotLineInt8[T ~int8](label_id string, values []T) {
 }
 
 func PlotLineInt8V[T ~int8](label_id string, values []T, xscale float64, xstart float64, flags ImPlotLineFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x0000053f)
 	runtime.AddStringArg(_f, label_id)
@@ -5381,7 +5383,6 @@ func PlotLineInt8V[T ~int8](label_id string, values []T, xscale float64, xstart 
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotLineXYInt8(label_id string, xs []int8, ys []int8) {
@@ -5420,6 +5421,7 @@ func PlotLineUInt[T ~uint](label_id string, values []T) {
 }
 
 func PlotLineUIntV[T ~uint](label_id string, values []T, xscale float64, xstart float64, flags ImPlotLineFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000543)
 	runtime.AddStringArg(_f, label_id)
@@ -5430,7 +5432,6 @@ func PlotLineUIntV[T ~uint](label_id string, values []T, xscale float64, xstart 
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotLineXYUInt(label_id string, xs []uint, ys []uint) {
@@ -5469,6 +5470,7 @@ func PlotLineUInt16[T ~uint16](label_id string, values []T) {
 }
 
 func PlotLineUInt16V[T ~uint16](label_id string, values []T, xscale float64, xstart float64, flags ImPlotLineFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000547)
 	runtime.AddStringArg(_f, label_id)
@@ -5479,7 +5481,6 @@ func PlotLineUInt16V[T ~uint16](label_id string, values []T, xscale float64, xst
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotLineXYUInt16(label_id string, xs []uint16, ys []uint16) {
@@ -5518,6 +5519,7 @@ func PlotLineUInt32[T ~uint32](label_id string, values []T) {
 }
 
 func PlotLineUInt32V[T ~uint32](label_id string, values []T, xscale float64, xstart float64, flags ImPlotLineFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x0000054b)
 	runtime.AddStringArg(_f, label_id)
@@ -5528,7 +5530,6 @@ func PlotLineUInt32V[T ~uint32](label_id string, values []T, xscale float64, xst
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotLineXYUInt32(label_id string, xs []uint32, ys []uint32) {
@@ -5567,6 +5568,7 @@ func PlotLineUInt8[T ~uint8](label_id string, values []T) {
 }
 
 func PlotLineUInt8V[T ~uint8](label_id string, values []T, xscale float64, xstart float64, flags ImPlotLineFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x0000054f)
 	runtime.AddStringArg(_f, label_id)
@@ -5577,7 +5579,6 @@ func PlotLineUInt8V[T ~uint8](label_id string, values []T, xscale float64, xstar
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotLineXYUInt8(label_id string, xs []uint8, ys []uint8) {
@@ -5616,7 +5617,6 @@ func PlotPieChartFloat32[T ~float32](label_ids NullSeparatedStringArray, values 
 	runtime.AddFloat64Arg(_f, y)
 	runtime.AddFloat64Arg(_f, radius)
 	_f.CallProcedure()
-
 }
 
 func PlotPieChartFloat32V[T ~float32](label_ids NullSeparatedStringArray, values []T, x float64, y float64, radius float64, label_fmt string, angle0 float64, flags ImPlotPieChartFlags) {
@@ -5647,7 +5647,6 @@ func PlotPieChartFloat64[T ~float64](label_ids NullSeparatedStringArray, values 
 	runtime.AddFloat64Arg(_f, y)
 	runtime.AddFloat64Arg(_f, radius)
 	_f.CallProcedure()
-
 }
 
 func PlotPieChartFloat64V[T ~float64](label_ids NullSeparatedStringArray, values []T, x float64, y float64, radius float64, label_fmt string, angle0 float64, flags ImPlotPieChartFlags) {
@@ -5678,7 +5677,6 @@ func PlotPieChartInt[T ~int](label_ids NullSeparatedStringArray, values []T, x f
 	runtime.AddFloat64Arg(_f, y)
 	runtime.AddFloat64Arg(_f, radius)
 	_f.CallProcedure()
-
 }
 
 func PlotPieChartIntV[T ~int](label_ids NullSeparatedStringArray, values []T, x float64, y float64, radius float64, label_fmt string, angle0 float64, flags ImPlotPieChartFlags) {
@@ -5709,7 +5707,6 @@ func PlotPieChartInt16[T ~int16](label_ids NullSeparatedStringArray, values []T,
 	runtime.AddFloat64Arg(_f, y)
 	runtime.AddFloat64Arg(_f, radius)
 	_f.CallProcedure()
-
 }
 
 func PlotPieChartInt16V[T ~int16](label_ids NullSeparatedStringArray, values []T, x float64, y float64, radius float64, label_fmt string, angle0 float64, flags ImPlotPieChartFlags) {
@@ -5740,7 +5737,6 @@ func PlotPieChartInt32[T ~int32](label_ids NullSeparatedStringArray, values []T,
 	runtime.AddFloat64Arg(_f, y)
 	runtime.AddFloat64Arg(_f, radius)
 	_f.CallProcedure()
-
 }
 
 func PlotPieChartInt32V[T ~int32](label_ids NullSeparatedStringArray, values []T, x float64, y float64, radius float64, label_fmt string, angle0 float64, flags ImPlotPieChartFlags) {
@@ -5771,7 +5767,6 @@ func PlotPieChartInt8[T ~int8](label_ids NullSeparatedStringArray, values []T, x
 	runtime.AddFloat64Arg(_f, y)
 	runtime.AddFloat64Arg(_f, radius)
 	_f.CallProcedure()
-
 }
 
 func PlotPieChartInt8V[T ~int8](label_ids NullSeparatedStringArray, values []T, x float64, y float64, radius float64, label_fmt string, angle0 float64, flags ImPlotPieChartFlags) {
@@ -5802,7 +5797,6 @@ func PlotPieChartUInt[T ~uint](label_ids NullSeparatedStringArray, values []T, x
 	runtime.AddFloat64Arg(_f, y)
 	runtime.AddFloat64Arg(_f, radius)
 	_f.CallProcedure()
-
 }
 
 func PlotPieChartUIntV[T ~uint](label_ids NullSeparatedStringArray, values []T, x float64, y float64, radius float64, label_fmt string, angle0 float64, flags ImPlotPieChartFlags) {
@@ -5833,7 +5827,6 @@ func PlotPieChartUInt16[T ~uint16](label_ids NullSeparatedStringArray, values []
 	runtime.AddFloat64Arg(_f, y)
 	runtime.AddFloat64Arg(_f, radius)
 	_f.CallProcedure()
-
 }
 
 func PlotPieChartUInt16V[T ~uint16](label_ids NullSeparatedStringArray, values []T, x float64, y float64, radius float64, label_fmt string, angle0 float64, flags ImPlotPieChartFlags) {
@@ -5864,7 +5857,6 @@ func PlotPieChartUInt32[T ~uint32](label_ids NullSeparatedStringArray, values []
 	runtime.AddFloat64Arg(_f, y)
 	runtime.AddFloat64Arg(_f, radius)
 	_f.CallProcedure()
-
 }
 
 func PlotPieChartUInt32V[T ~uint32](label_ids NullSeparatedStringArray, values []T, x float64, y float64, radius float64, label_fmt string, angle0 float64, flags ImPlotPieChartFlags) {
@@ -5895,7 +5887,6 @@ func PlotPieChartUInt8[T ~uint8](label_ids NullSeparatedStringArray, values []T,
 	runtime.AddFloat64Arg(_f, y)
 	runtime.AddFloat64Arg(_f, radius)
 	_f.CallProcedure()
-
 }
 
 func PlotPieChartUInt8V[T ~uint8](label_ids NullSeparatedStringArray, values []T, x float64, y float64, radius float64, label_fmt string, angle0 float64, flags ImPlotPieChartFlags) {
@@ -5926,6 +5917,7 @@ func PlotScatterFloat32(label_id string, values []float32) {
 }
 
 func PlotScatterFloat32V(label_id string, values []float32, xscale float64, xstart float64, flags ImPlotScatterFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000567)
 	runtime.AddStringArg(_f, label_id)
@@ -5936,7 +5928,6 @@ func PlotScatterFloat32V(label_id string, values []float32, xscale float64, xsta
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotScatterXYFloat32(label_id string, xs []float32, ys []float32) {
@@ -5975,6 +5966,7 @@ func PlotScatterFloat64(label_id string, values []float64) {
 }
 
 func PlotScatterFloat64V(label_id string, values []float64, xscale float64, xstart float64, flags ImPlotScatterFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x0000056b)
 	runtime.AddStringArg(_f, label_id)
@@ -5985,7 +5977,6 @@ func PlotScatterFloat64V(label_id string, values []float64, xscale float64, xsta
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotScatterXYFloat64(label_id string, xs []float64, ys []float64) {
@@ -6024,6 +6015,7 @@ func PlotScatterInt(label_id string, values []int) {
 }
 
 func PlotScatterIntV(label_id string, values []int, xscale float64, xstart float64, flags ImPlotScatterFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x0000056f)
 	runtime.AddStringArg(_f, label_id)
@@ -6034,7 +6026,6 @@ func PlotScatterIntV(label_id string, values []int, xscale float64, xstart float
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotScatterXYInt(label_id string, xs []int, ys []int) {
@@ -6073,6 +6064,7 @@ func PlotScatterInt16(label_id string, values []int16) {
 }
 
 func PlotScatterInt16V(label_id string, values []int16, xscale float64, xstart float64, flags ImPlotScatterFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000573)
 	runtime.AddStringArg(_f, label_id)
@@ -6083,7 +6075,6 @@ func PlotScatterInt16V(label_id string, values []int16, xscale float64, xstart f
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotScatterXYInt16(label_id string, xs []int16, ys []int16) {
@@ -6122,6 +6113,7 @@ func PlotScatterInt32(label_id string, values []int32) {
 }
 
 func PlotScatterInt32V(label_id string, values []int32, xscale float64, xstart float64, flags ImPlotScatterFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000577)
 	runtime.AddStringArg(_f, label_id)
@@ -6132,7 +6124,6 @@ func PlotScatterInt32V(label_id string, values []int32, xscale float64, xstart f
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotScatterXYInt32(label_id string, xs []int32, ys []int32) {
@@ -6171,6 +6162,7 @@ func PlotScatterInt8(label_id string, values []int8) {
 }
 
 func PlotScatterInt8V(label_id string, values []int8, xscale float64, xstart float64, flags ImPlotScatterFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x0000057b)
 	runtime.AddStringArg(_f, label_id)
@@ -6181,7 +6173,6 @@ func PlotScatterInt8V(label_id string, values []int8, xscale float64, xstart flo
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotScatterXYInt8(label_id string, xs []int8, ys []int8) {
@@ -6220,6 +6211,7 @@ func PlotScatterUInt(label_id string, values []uint) {
 }
 
 func PlotScatterUIntV(label_id string, values []uint, xscale float64, xstart float64, flags ImPlotScatterFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x0000057f)
 	runtime.AddStringArg(_f, label_id)
@@ -6230,7 +6222,6 @@ func PlotScatterUIntV(label_id string, values []uint, xscale float64, xstart flo
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotScatterXYUInt(label_id string, xs []uint, ys []uint) {
@@ -6269,6 +6260,7 @@ func PlotScatterUInt16(label_id string, values []uint16) {
 }
 
 func PlotScatterUInt16V(label_id string, values []uint16, xscale float64, xstart float64, flags ImPlotScatterFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000583)
 	runtime.AddStringArg(_f, label_id)
@@ -6279,7 +6271,6 @@ func PlotScatterUInt16V(label_id string, values []uint16, xscale float64, xstart
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotScatterXYUInt16(label_id string, xs []uint16, ys []uint16) {
@@ -6318,6 +6309,7 @@ func PlotScatterUInt32(label_id string, values []uint32) {
 }
 
 func PlotScatterUInt32V(label_id string, values []uint32, xscale float64, xstart float64, flags ImPlotScatterFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000587)
 	runtime.AddStringArg(_f, label_id)
@@ -6328,7 +6320,6 @@ func PlotScatterUInt32V(label_id string, values []uint32, xscale float64, xstart
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotScatterXYUInt32(label_id string, xs []uint32, ys []uint32) {
@@ -6367,6 +6358,7 @@ func PlotScatterUInt8(label_id string, values []uint8) {
 }
 
 func PlotScatterUInt8V(label_id string, values []uint8, xscale float64, xstart float64, flags ImPlotScatterFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x0000058b)
 	runtime.AddStringArg(_f, label_id)
@@ -6377,7 +6369,6 @@ func PlotScatterUInt8V(label_id string, values []uint8, xscale float64, xstart f
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotScatterXYUInt8(label_id string, xs []uint8, ys []uint8) {
@@ -6416,6 +6407,7 @@ func PlotShadedFloat32(label_id string, values []float32) {
 }
 
 func PlotShadedFloat32V(label_id string, values []float32, yref float64, xscale float64, xstart float64, flags ImPlotShadedFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x0000058f)
 	runtime.AddStringArg(_f, label_id)
@@ -6427,7 +6419,6 @@ func PlotShadedFloat32V(label_id string, values []float32, yref float64, xscale 
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotShadedXYFloat32(label_id string, xs []float32, ys []float32) {
@@ -6492,6 +6483,7 @@ func PlotShadedFloat64(label_id string, values []float64) {
 }
 
 func PlotShadedFloat64V(label_id string, values []float64, yref float64, xscale float64, xstart float64, flags ImPlotShadedFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000595)
 	runtime.AddStringArg(_f, label_id)
@@ -6503,7 +6495,6 @@ func PlotShadedFloat64V(label_id string, values []float64, yref float64, xscale 
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotShadedXYFloat64(label_id string, xs []float64, ys []float64) {
@@ -6568,6 +6559,7 @@ func PlotShadedInt(label_id string, values []int) {
 }
 
 func PlotShadedIntV(label_id string, values []int, yref float64, xscale float64, xstart float64, flags ImPlotShadedFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x0000059b)
 	runtime.AddStringArg(_f, label_id)
@@ -6579,7 +6571,6 @@ func PlotShadedIntV(label_id string, values []int, yref float64, xscale float64,
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotShadedXYInt(label_id string, xs []int, ys []int) {
@@ -6644,6 +6635,7 @@ func PlotShadedInt16(label_id string, values []int16) {
 }
 
 func PlotShadedInt16V(label_id string, values []int16, yref float64, xscale float64, xstart float64, flags ImPlotShadedFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000005a1)
 	runtime.AddStringArg(_f, label_id)
@@ -6655,7 +6647,6 @@ func PlotShadedInt16V(label_id string, values []int16, yref float64, xscale floa
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotShadedXYInt16(label_id string, xs []int16, ys []int16) {
@@ -6720,6 +6711,7 @@ func PlotShadedInt32(label_id string, values []int32) {
 }
 
 func PlotShadedInt32V(label_id string, values []int32, yref float64, xscale float64, xstart float64, flags ImPlotShadedFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000005a7)
 	runtime.AddStringArg(_f, label_id)
@@ -6731,7 +6723,6 @@ func PlotShadedInt32V(label_id string, values []int32, yref float64, xscale floa
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotShadedXYInt32(label_id string, xs []int32, ys []int32) {
@@ -6796,6 +6787,7 @@ func PlotShadedInt8(label_id string, values []int8) {
 }
 
 func PlotShadedInt8V(label_id string, values []int8, yref float64, xscale float64, xstart float64, flags ImPlotShadedFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000005ad)
 	runtime.AddStringArg(_f, label_id)
@@ -6807,7 +6799,6 @@ func PlotShadedInt8V(label_id string, values []int8, yref float64, xscale float6
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotShadedXYInt8(label_id string, xs []int8, ys []int8) {
@@ -6872,6 +6863,7 @@ func PlotShadedUInt(label_id string, values []uint) {
 }
 
 func PlotShadedUIntV(label_id string, values []uint, yref float64, xscale float64, xstart float64, flags ImPlotShadedFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000005b3)
 	runtime.AddStringArg(_f, label_id)
@@ -6883,7 +6875,6 @@ func PlotShadedUIntV(label_id string, values []uint, yref float64, xscale float6
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotShadedXYUInt(label_id string, xs []uint, ys []uint) {
@@ -6948,6 +6939,7 @@ func PlotShadedUInt16(label_id string, values []uint16) {
 }
 
 func PlotShadedUInt16V(label_id string, values []uint16, yref float64, xscale float64, xstart float64, flags ImPlotShadedFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000005b9)
 	runtime.AddStringArg(_f, label_id)
@@ -6959,7 +6951,6 @@ func PlotShadedUInt16V(label_id string, values []uint16, yref float64, xscale fl
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotShadedXYUInt16(label_id string, xs []uint16, ys []uint16) {
@@ -7024,6 +7015,7 @@ func PlotShadedUInt32(label_id string, values []uint32) {
 }
 
 func PlotShadedUInt32V(label_id string, values []uint32, yref float64, xscale float64, xstart float64, flags ImPlotShadedFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000005bf)
 	runtime.AddStringArg(_f, label_id)
@@ -7035,7 +7027,6 @@ func PlotShadedUInt32V(label_id string, values []uint32, yref float64, xscale fl
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotShadedXYUInt32(label_id string, xs []uint32, ys []uint32) {
@@ -7100,6 +7091,7 @@ func PlotShadedUInt8(label_id string, values []uint8) {
 }
 
 func PlotShadedUInt8V(label_id string, values []uint8, yref float64, xscale float64, xstart float64, flags ImPlotShadedFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000005c5)
 	runtime.AddStringArg(_f, label_id)
@@ -7111,7 +7103,6 @@ func PlotShadedUInt8V(label_id string, values []uint8, yref float64, xscale floa
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotShadedXYUInt8(label_id string, xs []uint8, ys []uint8) {
@@ -7176,6 +7167,7 @@ func PlotStairsFloat32(label_id string, values []float32) {
 }
 
 func PlotStairsFloat32V(label_id string, values []float32, xscale float64, xstart float64, flags ImPlotStairsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000005cb)
 	runtime.AddStringArg(_f, label_id)
@@ -7186,7 +7178,6 @@ func PlotStairsFloat32V(label_id string, values []float32, xscale float64, xstar
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotStairsXYFloat32(label_id string, xs []float32, ys []float32) {
@@ -7225,6 +7216,7 @@ func PlotStairsFloat64(label_id string, values []float64) {
 }
 
 func PlotStairsFloat64V(label_id string, values []float64, xscale float64, xstart float64, flags ImPlotStairsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000005cf)
 	runtime.AddStringArg(_f, label_id)
@@ -7235,7 +7227,6 @@ func PlotStairsFloat64V(label_id string, values []float64, xscale float64, xstar
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotStairsXYFloat64(label_id string, xs []float64, ys []float64) {
@@ -7274,6 +7265,7 @@ func PlotStairsInt(label_id string, values []int) {
 }
 
 func PlotStairsIntV(label_id string, values []int, xscale float64, xstart float64, flags ImPlotStairsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000005d3)
 	runtime.AddStringArg(_f, label_id)
@@ -7284,7 +7276,6 @@ func PlotStairsIntV(label_id string, values []int, xscale float64, xstart float6
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotStairsXYInt(label_id string, xs []int, ys []int) {
@@ -7323,6 +7314,7 @@ func PlotStairsInt16(label_id string, values []int16) {
 }
 
 func PlotStairsInt16V(label_id string, values []int16, xscale float64, xstart float64, flags ImPlotStairsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000005d7)
 	runtime.AddStringArg(_f, label_id)
@@ -7333,7 +7325,6 @@ func PlotStairsInt16V(label_id string, values []int16, xscale float64, xstart fl
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotStairsXYInt16(label_id string, xs []int16, ys []int16) {
@@ -7372,6 +7363,7 @@ func PlotStairsInt32(label_id string, values []int32) {
 }
 
 func PlotStairsInt32V(label_id string, values []int32, xscale float64, xstart float64, flags ImPlotStairsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000005db)
 	runtime.AddStringArg(_f, label_id)
@@ -7382,7 +7374,6 @@ func PlotStairsInt32V(label_id string, values []int32, xscale float64, xstart fl
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotStairsXYInt32(label_id string, xs []int32, ys []int32) {
@@ -7421,6 +7412,7 @@ func PlotStairsInt8(label_id string, values []int8) {
 }
 
 func PlotStairsInt8V(label_id string, values []int8, xscale float64, xstart float64, flags ImPlotStairsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000005df)
 	runtime.AddStringArg(_f, label_id)
@@ -7431,7 +7423,6 @@ func PlotStairsInt8V(label_id string, values []int8, xscale float64, xstart floa
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotStairsXYInt8(label_id string, xs []int8, ys []int8) {
@@ -7470,6 +7461,7 @@ func PlotStairsUInt(label_id string, values []uint) {
 }
 
 func PlotStairsUIntV(label_id string, values []uint, xscale float64, xstart float64, flags ImPlotStairsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000005e3)
 	runtime.AddStringArg(_f, label_id)
@@ -7480,7 +7472,6 @@ func PlotStairsUIntV(label_id string, values []uint, xscale float64, xstart floa
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotStairsXYUInt(label_id string, xs []uint, ys []uint) {
@@ -7519,6 +7510,7 @@ func PlotStairsUInt16(label_id string, values []uint16) {
 }
 
 func PlotStairsUInt16V(label_id string, values []uint16, xscale float64, xstart float64, flags ImPlotStairsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000005e7)
 	runtime.AddStringArg(_f, label_id)
@@ -7529,7 +7521,6 @@ func PlotStairsUInt16V(label_id string, values []uint16, xscale float64, xstart 
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotStairsXYUInt16(label_id string, xs []uint16, ys []uint16) {
@@ -7568,6 +7559,7 @@ func PlotStairsUInt32(label_id string, values []uint32) {
 }
 
 func PlotStairsUInt32V(label_id string, values []uint32, xscale float64, xstart float64, flags ImPlotStairsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000005eb)
 	runtime.AddStringArg(_f, label_id)
@@ -7578,7 +7570,6 @@ func PlotStairsUInt32V(label_id string, values []uint32, xscale float64, xstart 
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotStairsXYUInt32(label_id string, xs []uint32, ys []uint32) {
@@ -7617,6 +7608,7 @@ func PlotStairsUInt8(label_id string, values []uint8) {
 }
 
 func PlotStairsUInt8V(label_id string, values []uint8, xscale float64, xstart float64, flags ImPlotStairsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000005ef)
 	runtime.AddStringArg(_f, label_id)
@@ -7627,7 +7619,6 @@ func PlotStairsUInt8V(label_id string, values []uint8, xscale float64, xstart fl
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotStairsXYUInt8(label_id string, xs []uint8, ys []uint8) {
@@ -7666,6 +7657,7 @@ func PlotStemsFloat32[T ~float32](label_id string, values []T) {
 }
 
 func PlotStemsFloat32V[T ~float32](label_id string, values []T, ref float64, scale float64, start float64, flags ImPlotStemsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000005f3)
 	runtime.AddStringArg(_f, label_id)
@@ -7677,7 +7669,6 @@ func PlotStemsFloat32V[T ~float32](label_id string, values []T, ref float64, sca
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotStemsXYFloat32[T ~float32](label_id string, xs []T, ys []T) {
@@ -7717,6 +7708,7 @@ func PlotStemsFloat64[T ~float64](label_id string, values []T) {
 }
 
 func PlotStemsFloat64V[T ~float64](label_id string, values []T, ref float64, scale float64, start float64, flags ImPlotStemsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000005f7)
 	runtime.AddStringArg(_f, label_id)
@@ -7728,7 +7720,6 @@ func PlotStemsFloat64V[T ~float64](label_id string, values []T, ref float64, sca
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotStemsXYFloat64[T ~float64](label_id string, xs []T, ys []T) {
@@ -7768,6 +7759,7 @@ func PlotStemsInt[T ~int](label_id string, values []T) {
 }
 
 func PlotStemsIntV[T ~int](label_id string, values []T, ref float64, scale float64, start float64, flags ImPlotStemsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000005fb)
 	runtime.AddStringArg(_f, label_id)
@@ -7779,7 +7771,6 @@ func PlotStemsIntV[T ~int](label_id string, values []T, ref float64, scale float
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotStemsXYInt[T ~int](label_id string, xs []T, ys []T) {
@@ -7819,6 +7810,7 @@ func PlotStemsInt16[T ~int16](label_id string, values []T) {
 }
 
 func PlotStemsInt16V[T ~int16](label_id string, values []T, ref float64, scale float64, start float64, flags ImPlotStemsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000005ff)
 	runtime.AddStringArg(_f, label_id)
@@ -7830,7 +7822,6 @@ func PlotStemsInt16V[T ~int16](label_id string, values []T, ref float64, scale f
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotStemsXYInt16[T ~int16](label_id string, xs []T, ys []T) {
@@ -7870,6 +7861,7 @@ func PlotStemsInt32[T ~int32](label_id string, values []T) {
 }
 
 func PlotStemsInt32V[T ~int32](label_id string, values []T, ref float64, scale float64, start float64, flags ImPlotStemsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000603)
 	runtime.AddStringArg(_f, label_id)
@@ -7881,7 +7873,6 @@ func PlotStemsInt32V[T ~int32](label_id string, values []T, ref float64, scale f
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotStemsXYInt32[T ~int32](label_id string, xs []T, ys []T) {
@@ -7921,6 +7912,7 @@ func PlotStemsInt8[T ~int8](label_id string, values []T) {
 }
 
 func PlotStemsInt8V[T ~int8](label_id string, values []T, ref float64, scale float64, start float64, flags ImPlotStemsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000607)
 	runtime.AddStringArg(_f, label_id)
@@ -7932,7 +7924,6 @@ func PlotStemsInt8V[T ~int8](label_id string, values []T, ref float64, scale flo
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotStemsXYInt8[T ~int8](label_id string, xs []T, ys []T) {
@@ -7972,6 +7963,7 @@ func PlotStemsUInt[T ~uint](label_id string, values []T) {
 }
 
 func PlotStemsUIntV[T ~uint](label_id string, values []T, ref float64, scale float64, start float64, flags ImPlotStemsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x0000060b)
 	runtime.AddStringArg(_f, label_id)
@@ -7983,7 +7975,6 @@ func PlotStemsUIntV[T ~uint](label_id string, values []T, ref float64, scale flo
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotStemsXYUInt[T ~uint](label_id string, xs []T, ys []T) {
@@ -8023,6 +8014,7 @@ func PlotStemsUInt16[T ~uint16](label_id string, values []T) {
 }
 
 func PlotStemsUInt16V[T ~uint16](label_id string, values []T, ref float64, scale float64, start float64, flags ImPlotStemsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x0000060f)
 	runtime.AddStringArg(_f, label_id)
@@ -8034,7 +8026,6 @@ func PlotStemsUInt16V[T ~uint16](label_id string, values []T, ref float64, scale
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotStemsXYUInt16[T ~uint16](label_id string, xs []T, ys []T) {
@@ -8074,6 +8065,7 @@ func PlotStemsUInt32[T ~uint32](label_id string, values []T) {
 }
 
 func PlotStemsUInt32V[T ~uint32](label_id string, values []T, ref float64, scale float64, start float64, flags ImPlotStemsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000613)
 	runtime.AddStringArg(_f, label_id)
@@ -8085,7 +8077,6 @@ func PlotStemsUInt32V[T ~uint32](label_id string, values []T, ref float64, scale
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotStemsXYUInt32[T ~uint32](label_id string, xs []T, ys []T) {
@@ -8125,6 +8116,7 @@ func PlotStemsUInt8[T ~uint8](label_id string, values []T) {
 }
 
 func PlotStemsUInt8V[T ~uint8](label_id string, values []T, ref float64, scale float64, start float64, flags ImPlotStemsFlags, offset int, stride int) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000617)
 	runtime.AddStringArg(_f, label_id)
@@ -8136,7 +8128,6 @@ func PlotStemsUInt8V[T ~uint8](label_id string, values []T, ref float64, scale f
 	runtime.AddIntArg(_f, offset)
 	runtime.AddIntArg(_f, stride)
 	_f.CallProcedure()
-
 }
 
 func PlotStemsXYUInt8[T ~uint8](label_id string, xs []T, ys []T) {

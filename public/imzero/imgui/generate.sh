@@ -31,10 +31,10 @@ cd ".."
 outfile="./imgui/api.out.go"
 rm -f main
 rm -f "$outfile"
-go build -tags binary_log,bootstrap main.go
+./build.sh
 mkdir -p "$IMZERO_CPP_BINDING_DIR/imgui"
 ./main generateFffiCode --idlBuildTag fffi_idl_code \
 	                --idlPackagePattern github.com/stergiotis/boxer/public/imzero/imgui \
 	                --goOutputFile "$outfile" \
 			--runeCppType "ImWchar" \
-			--cppOutputFile "$IMZERO_CPP_BINDING_DIR/imgui/dispatch.h" 2>&1 | cbor-diag
+			--cppOutputFile "$IMZERO_CPP_BINDING_DIR/imgui/dispatch.h" 2>&1 | ./main cbor diag

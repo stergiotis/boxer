@@ -44,12 +44,13 @@ applyTemplates2 "histogram2d"
 applyTemplates2 "digital"
 
 mkdir -p "$IMZERO_CPP_BINDING_DIR/implot"
+./build.sh
 ./main generateFffiCode --idlBuildTag fffi_idl_code \
 	                --idlPackagePattern github.com/stergiotis/boxer/public/imzero/implot \
 	                --goOutputFile "$outfile" \
 	                --funcProcIdOffset 1000 \
 			--goCodeProlog $'import "github.com/stergiotis/boxer/public/imzero/imgui"\n' \
-			--cppOutputFile "$IMZERO_CPP_BINDING_DIR/implot/dispatch.h" 2>&1 | cbor-diag
+			--cppOutputFile "$IMZERO_CPP_BINDING_DIR/implot/dispatch.h" 2>&1 | ./main cbor diag
 sed -i "s/ ImVec2/ imgui.ImVec2/g" "$outfile"
 sed -i "s/ ImVec4/ imgui.ImVec4/g" "$outfile"
 sed -i "s/ ImRect/ imgui.ImRect/g" "$outfile"
