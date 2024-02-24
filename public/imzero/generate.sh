@@ -21,4 +21,5 @@ find . -type f -name "*.out.go" -delete
 rm -f "$here/main"
 
 cd "$here"
-gofmt -l -w .
+
+find . -name "*.go" -perm /200 -not -name "*manual*" -exec gofmt -w {} \;
