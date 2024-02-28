@@ -117,8 +117,8 @@ func (inst *Marshaller) WriteComplex128(v complex128) {
 	inst.WriteFloat64(imag(v))
 }
 func (inst *Marshaller) writeBuf(n int) {
-	inst.written += n
-	_, err := inst.w.Write(inst.buf[:n])
+	u, err := inst.w.Write(inst.buf[:n])
+	inst.written += u
 	inst.handleError(err)
 }
 func (inst *Marshaller) handleError(err error) {
