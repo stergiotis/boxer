@@ -61,6 +61,12 @@ func menu(app *application.Application, beginMenu func(name string) bool, endMen
 		}
 		endMenu()
 	}
+	if beginMenu("Development") {
+		if menuItem(nerdfont.FaBomb + " Assertions") {
+			render = RenderAssertDemo
+		}
+		endMenu()
+	}
 
 	if beginMenu("FFFI") {
 		if beginMenu("Sub sub\nmenu") {
