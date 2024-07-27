@@ -5132,6 +5132,7 @@ func BeginPopupModal(name string) (r bool) {
 // * p_open bool * = NULL
 // * flags ImGuiWindowFlags = 0
 //foreign code:
+//  p_open = true; /* see issue #5 */
 //  auto r = ImGui::BeginPopupModal(name, &p_open, flags)
 func BeginPopupModalV(name string, flags ImGuiWindowFlags /* = 0*/) (r bool, p_open bool) {
 	_f := currentFffiVar
@@ -5916,6 +5917,7 @@ func BeginTabItem(label string) (r bool) {
 // * p_open bool * = NULL
 // * flags ImGuiTabItemFlags = 0
 //foreign code:
+//  p_open = true; /* see issue #5 */
 //  auto r = ImGui::BeginTabItem(label, &p_open, flags)
 func BeginTabItemV(label string, flags ImGuiTabItemFlags /* = 0*/) (r bool, p_open bool) {
 	_f := currentFffiVar

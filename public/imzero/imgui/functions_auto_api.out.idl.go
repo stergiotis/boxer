@@ -93,7 +93,8 @@ func Begin(name string) (r bool) {
 	return
 }
 func BeginV(name string, flags ImGuiWindowFlags /* = 0*/) (r bool, p_open bool) {
-	_ = `auto r = ImGui::Begin(name, &p_open, flags)`
+	_ = `p_open = true; /* see issue #5 */
+auto r = ImGui::Begin(name, &p_open, flags)`
 	return
 }
 func End() {
@@ -968,7 +969,8 @@ func BeginPopupModal(name string) (r bool) {
 // * p_open bool * = NULL
 // * flags ImGuiWindowFlags = 0
 func BeginPopupModalV(name string, flags ImGuiWindowFlags /* = 0*/) (r bool, p_open bool) {
-	_ = `auto r = ImGui::BeginPopupModal(name, &p_open, flags)`
+	_ = `p_open = true; /* see issue #5 */
+auto r = ImGui::BeginPopupModal(name, &p_open, flags)`
 	return
 }
 
@@ -1279,7 +1281,8 @@ func BeginTabItem(label string) (r bool) {
 // * p_open bool * = NULL
 // * flags ImGuiTabItemFlags = 0
 func BeginTabItemV(label string, flags ImGuiTabItemFlags /* = 0*/) (r bool, p_open bool) {
-	_ = `auto r = ImGui::BeginTabItem(label, &p_open, flags)`
+	_ = `p_open = true; /* see issue #5 */
+auto r = ImGui::BeginTabItem(label, &p_open, flags)`
 	return
 }
 

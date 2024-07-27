@@ -24,7 +24,7 @@
 		</xsl:otherwise>
 	</xsl:choose>
         <xsl:variable name="nParamsMand" select="count(param[not(defval) and @semantics = 'in'])"/>
-	<xsl:variable name="nParamsOpt" select="count(param[defval and @semantics = 'in'])"/>
+	    <xsl:variable name="nParamsOpt" select="count(param[defval and @semantics = 'in'])"/>
 
 
         <!-- mandatory arguments -->
@@ -142,12 +142,17 @@
                 <xsl:if test="type = 'bool *'"><xsl:value-of select="concat(declname,' bool')"/></xsl:if>
             </xsl:for-each>
     	</xsl:variable>
-	<xsl:variable name="callee">
-		<xsl:choose>
-			<xsl:when test="$instvar=''"><xsl:value-of select="qualifiedname"/></xsl:when>
-			<xsl:otherwise><xsl:value-of select="concat('((',$instvarns,substring-before(qualifiedname,'::'),'*)foreignptr)->', substring-after(qualifiedname,'::'))"/></xsl:otherwise>
-		</xsl:choose>
-	</xsl:variable>
+        <xsl:variable name="cppParamInitialization">
+            <xsl:for-each select="param[(not(defval) or $pmode='optional') and @cppInitialization != '']">
+                <xsl:value-of select="concat(@cppInitialization,$lf)"/>
+            </xsl:for-each>
+        </xsl:variable>
+        <xsl:variable name="callee">
+            <xsl:choose>
+                <xsl:when test="$instvar=''"><xsl:value-of select="qualifiedname"/></xsl:when>
+                <xsl:otherwise><xsl:value-of select="concat('((',$instvarns,substring-before(qualifiedname,'::'),'*)foreignptr)->', substring-after(qualifiedname,'::'))"/></xsl:otherwise>
+            </xsl:choose>
+        </xsl:variable>
         <xsl:choose>
             <xsl:when test="$type = 'void'">
                 <xsl:choose>
@@ -160,7 +165,7 @@
                 </xsl:choose>
 
                 <!-- cpp -->
-                <xsl:value-of select="concat('  _ = `',$callee,'(')" />
+                <xsl:value-of select="concat('  _ = `',$cppParamInitialization,$callee,'(')" />
                 <xsl:for-each select="param[not(defval) or $pmode='optional']">
                     <xsl:call-template name="emitParamCode"/>
                     <xsl:if test="position() &lt; $nParams">
@@ -182,7 +187,7 @@
                 </xsl:choose>
 
                 <!-- cpp -->
-                <xsl:value-of select="concat('  _ = `','auto r = ',$callee,'(')" />
+                <xsl:value-of select="concat('  _ = `',$cppParamInitialization,'auto r = ',$callee,'(')" />
                 <xsl:for-each select="param[not(defval) or $pmode='optional']">
                     <xsl:call-template name="emitParamCode"/>
                     <xsl:if test="position() &lt; $nParams">
