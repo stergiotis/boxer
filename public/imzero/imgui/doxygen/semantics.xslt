@@ -22,6 +22,7 @@
                     <xsl:when test="type = 'ImGuiKey'"><xsl:value-of select="type"/>(</xsl:when>
                     <xsl:when test="type = 'ImGuiMouseSource'"><xsl:value-of select="type"/>(</xsl:when>
                     <xsl:when test="type = 'ImTextureID'"><xsl:value-of select="type"/>(</xsl:when>
+                    <xsl:when test="type = 'ImGuiDir'"><xsl:value-of select="type"/>(</xsl:when>
                 </xsl:choose>
             </xsl:attribute>
             <xsl:attribute name="castEnd">
@@ -29,6 +30,7 @@
                     <xsl:when test="type = 'ImGuiKey'">)</xsl:when>
                     <xsl:when test="type = 'ImGuiMouseSource'">)</xsl:when>
                     <xsl:when test="type = 'ImTextureID'">)</xsl:when>
+                    <xsl:when test="type = 'ImGuiDir'">)</xsl:when>
                 </xsl:choose>
             </xsl:attribute>
             <xsl:apply-templates select="node()|@*|text()"/>

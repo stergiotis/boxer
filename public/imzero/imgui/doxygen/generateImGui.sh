@@ -71,12 +71,14 @@ sed -i "s.PushID(int_id int.PushIDInt(int_id int.g" functions_auto_api.out.idl.g
 sed -i "s.PushStyleColor(idx ImGuiCol,col ImVec4).PushStyleColorImVec4(idx ImGuiCol,col ImVec4).g" functions_auto_api.out.idl.go
 sed -i "s.PushStyleVar(idx ImGuiStyleVar,val ImVec2).PushStyleVarImVec2(idx ImGuiStyleVar,val ImVec2).g" functions_auto_api.out.idl.go
 sed -i "s.GetColorU32(col ImVec4).GetColorU32ImVec4(col ImVec4).g" functions_auto_api.out.idl.go
+sed -i "s.GetColorU32V(idx ImGuiCol.GetColorU32ImGuiColV(idx ImGuiCol.g" functions_auto_api.out.idl.go
 sed -i "s.GetColorU32(idx ImGuiCol).GetColorU32ImGuiCol(idx ImGuiCol).g" functions_auto_api.out.idl.go
 sed -i "s.OpenPopup(id ImGuiID.OpenPopupID(id ImGuiID.g" functions_auto_api.out.idl.go
 sed -i "s.OpenPopupV(id ImGuiID.OpenPopupVID(id ImGuiID.g" functions_auto_api.out.idl.go
 sed -i "s.IsRectVisible(rect_min ImVec2,rect_max ImVec2).IsRectVisible2(rect_min ImVec2,rect_max ImVec2).g" functions_auto_api.out.idl.go
 sed -i "s.ImageButtonV(user_texture_id ImTextureID.ImageButtonVOld(user_texture_id ImTextureID.g" functions_auto_api.out.idl.go
 sed -i "s.ImageButton(user_texture_id ImTextureID.ImageButtonOld(user_texture_id ImTextureID.g" functions_auto_api.out.idl.go
+sed -i "s.GetID(int_id int).GetIDInt(int_id int).g" functions_auto_api.out.idl.go
 
 function count_functions() {
 	echo -n "$1: " >> stat.txt

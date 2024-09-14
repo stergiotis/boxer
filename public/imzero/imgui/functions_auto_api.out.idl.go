@@ -166,25 +166,25 @@ func GetWindowDpiScale() (r float32) {
 	return
 }
 
-// GetWindowPos get current window position in screen space (note: it is unlikely you need to use this. Consider using current layout pos instead, GetCursorScreenPos())
+// GetWindowPos get current window position in screen space (IT IS UNLIKELY YOU EVER NEED TO USE THIS. Consider always using GetCursorScreenPos() and GetContentRegionAvail() instead)
 func GetWindowPos() (r ImVec2) {
 	_ = `auto r = ImGui::GetWindowPos()`
 	return
 }
 
-// GetWindowSize get current window size (note: it is unlikely you need to use this. Consider using GetCursorScreenPos() and e.g. GetContentRegionAvail() instead)
+// GetWindowSize get current window size (IT IS UNLIKELY YOU EVER NEED TO USE THIS. Consider always using GetCursorScreenPos() and GetContentRegionAvail() instead)
 func GetWindowSize() (r ImVec2) {
 	_ = `auto r = ImGui::GetWindowSize()`
 	return
 }
 
-// GetWindowWidth get current window width (shortcut for GetWindowSize().x)
+// GetWindowWidth get current window width (IT IS UNLIKELY YOU EVER NEED TO USE THIS). Shortcut for GetWindowSize().x.
 func GetWindowWidth() (r float32) {
 	_ = `auto r = ImGui::GetWindowWidth()`
 	return
 }
 
-// GetWindowHeight get current window height (shortcut for GetWindowSize().y)
+// GetWindowHeight get current window height (IT IS UNLIKELY YOU EVER NEED TO USE THIS). Shortcut for GetWindowSize().y.
 func GetWindowHeight() (r float32) {
 	_ = `auto r = ImGui::GetWindowHeight()`
 	return
@@ -292,30 +292,6 @@ func SetWindowFocus(name string) {
 	_ = `ImGui::SetWindowFocus(name)`
 }
 
-// GetContentRegionAvail == GetContentRegionMax() - GetCursorPos()
-func GetContentRegionAvail() (r ImVec2) {
-	_ = `auto r = ImGui::GetContentRegionAvail()`
-	return
-}
-
-// GetContentRegionMax current content boundaries (typically window boundaries including scrolling, or current column boundaries), in windows coordinates
-func GetContentRegionMax() (r ImVec2) {
-	_ = `auto r = ImGui::GetContentRegionMax()`
-	return
-}
-
-// GetWindowContentRegionMin content boundaries min for the full window (roughly (0,0)-Scroll), in window coordinates
-func GetWindowContentRegionMin() (r ImVec2) {
-	_ = `auto r = ImGui::GetWindowContentRegionMin()`
-	return
-}
-
-// GetWindowContentRegionMax content boundaries max for the full window (roughly (0,0)+Size-Scroll) where Size can be overridden with SetNextWindowContentSize(), in window coordinates
-func GetWindowContentRegionMax() (r ImVec2) {
-	_ = `auto r = ImGui::GetWindowContentRegionMax()`
-	return
-}
-
 // GetScrollX get scrolling amount [0 .. GetScrollMaxX()]
 func GetScrollX() (r float32) {
 	_ = `auto r = ImGui::GetScrollX()`
@@ -411,14 +387,24 @@ func PopStyleColorV(count int /* = 1*/) {
 	_ = `ImGui::PopStyleColor(count)`
 }
 
-// PushStyleVar modify a style float variable. always use this if you modify the style after NewFrame().
+// PushStyleVar modify a style float variable. always use this if you modify the style after NewFrame()!
 func PushStyleVar(idx ImGuiStyleVar, val float32) {
 	_ = `ImGui::PushStyleVar(idx, val)`
 }
 
-// PushStyleVar modify a style ImVec2 variable. always use this if you modify the style after NewFrame().
+// PushStyleVar modify a style ImVec2 variable. "
 func PushStyleVarImVec2(idx ImGuiStyleVar, val ImVec2) {
 	_ = `ImGui::PushStyleVar(idx, val)`
+}
+
+// PushStyleVarX modify X component of a style ImVec2 variable. "
+func PushStyleVarX(idx ImGuiStyleVar, val_x float32) {
+	_ = `ImGui::PushStyleVarX(idx, val_x)`
+}
+
+// PushStyleVarY modify Y component of a style ImVec2 variable. "
+func PushStyleVarY(idx ImGuiStyleVar, val_y float32) {
+	_ = `ImGui::PushStyleVarY(idx, val_y)`
 }
 func PopStyleVar() {
 	_ = `ImGui::PopStyleVar()`
@@ -427,20 +413,12 @@ func PopStyleVarV(count int /* = 1*/) {
 	_ = `ImGui::PopStyleVar(count)`
 }
 
-// PushTabStop == tab stop enable. Allow focusing using TAB/Shift-TAB, enabled by default but you can disable it for certain widgets
-func PushTabStop(tab_stop bool) {
-	_ = `ImGui::PushTabStop(tab_stop)`
+// PushItemFlag modify specified shared item flag, e.g. PushItemFlag(ImGuiItemFlags_NoTabStop, true)
+func PushItemFlag(option ImGuiItemFlags, enabled bool) {
+	_ = `ImGui::PushItemFlag(option, enabled)`
 }
-func PopTabStop() {
-	_ = `ImGui::PopTabStop()`
-}
-
-// PushButtonRepeat in 'repeat' mode, Button*() functions return repeated true in a typematic manner (using io.KeyRepeatDelay/io.KeyRepeatRate setting). Note that you can call IsItemActive() after any Button() to tell if the button is held in the current frame.
-func PushButtonRepeat(repeat bool) {
-	_ = `ImGui::PushButtonRepeat(repeat)`
-}
-func PopButtonRepeat() {
-	_ = `ImGui::PopButtonRepeat()`
+func PopItemFlag() {
+	_ = `ImGui::PopItemFlag()`
 }
 
 // PushItemWidth push width of items for common large "item+label" widgets. >0.0f: width in pixels, <0.0f align xx pixels to the right of window (so -FLT_MIN always align width to the right side).
@@ -482,7 +460,7 @@ func GetFontSize() (r float32) {
 	return
 }
 
-// GetFontTexUvWhitePixel get UV coordinate for a while pixel, useful to draw custom shapes via the ImDrawList API
+// GetFontTexUvWhitePixel get UV coordinate for a white pixel, useful to draw custom shapes via the ImDrawList API
 func GetFontTexUvWhitePixel() (r ImVec2) {
 	_ = `auto r = ImGui::GetFontTexUvWhitePixel()`
 	return
@@ -496,7 +474,7 @@ func GetColorU32ImGuiCol(idx ImGuiCol) (r uint32) {
 
 // GetColorU32V retrieve given style color with style alpha applied and optional extra alpha multiplier, packed as a 32-bit value suitable for ImDrawList
 // * alpha_mul float = 1.0f
-func GetColorU32V(idx ImGuiCol, alpha_mul float32 /* = 1.0f*/) (r uint32) {
+func GetColorU32ImGuiColV(idx ImGuiCol, alpha_mul float32 /* = 1.0f*/) (r uint32) {
 	_ = `auto r = ImGui::GetColorU32(idx, alpha_mul)`
 	return
 }
@@ -513,24 +491,37 @@ func GetColorU32(col uint32) (r uint32) {
 	return
 }
 
+// GetColorU32V retrieve given color with style alpha applied, packed as a 32-bit value suitable for ImDrawList
+// * alpha_mul float = 1.0f
+func GetColorU32V(col uint32, alpha_mul float32 /* = 1.0f*/) (r uint32) {
+	_ = `auto r = ImGui::GetColorU32(col, alpha_mul)`
+	return
+}
+
 // GetStyleColorVec4 retrieve style color as stored in ImGuiStyle structure. use to feed back into PushStyleColor(), otherwise use GetColorU32() to get style color with style alpha baked in.
 func GetStyleColorVec4(idx ImGuiCol) (r ImVec4) {
 	_ = `auto r = ImGui::GetStyleColorVec4(idx)`
 	return
 }
 
-// GetCursorScreenPos cursor position in absolute coordinates (prefer using this, also more useful to work with ImDrawList API).
+// GetCursorScreenPos cursor position, absolute coordinates. THIS IS YOUR BEST FRIEND (prefer using this rather than GetCursorPos(), also more useful to work with ImDrawList API).
 func GetCursorScreenPos() (r ImVec2) {
 	_ = `auto r = ImGui::GetCursorScreenPos()`
 	return
 }
 
-// SetCursorScreenPos cursor position in absolute coordinates
+// SetCursorScreenPos cursor position, absolute coordinates. THIS IS YOUR BEST FRIEND.
 func SetCursorScreenPos(pos ImVec2) {
 	_ = `ImGui::SetCursorScreenPos(pos)`
 }
 
-// GetCursorPos [window-local] cursor position in window coordinates (relative to window position)
+// GetContentRegionAvail available space from current position. THIS IS YOUR BEST FRIEND.
+func GetContentRegionAvail() (r ImVec2) {
+	_ = `auto r = ImGui::GetContentRegionAvail()`
+	return
+}
+
+// GetCursorPos [window-local] cursor position in window-local coordinates. This is not your best friend.
 func GetCursorPos() (r ImVec2) {
 	_ = `auto r = ImGui::GetCursorPos()`
 	return
@@ -563,7 +554,7 @@ func SetCursorPosY(local_y float32) {
 	_ = `ImGui::SetCursorPosY(local_y)`
 }
 
-// GetCursorStartPos [window-local] initial cursor position, in window coordinates
+// GetCursorStartPos [window-local] initial cursor position, in window-local coordinates. Call GetCursorScreenPos() after Begin() to get the absolute coordinates version.
 func GetCursorStartPos() (r ImVec2) {
 	_ = `auto r = ImGui::GetCursorStartPos()`
 	return
@@ -682,6 +673,10 @@ func GetID(str_id string) (r ImGuiID) {
 	_ = `auto r = ImGui::GetID(str_id)`
 	return
 }
+func GetIDInt(int_id int) (r ImGuiID) {
+	_ = `auto r = ImGui::GetID(int_id)`
+	return
+}
 
 // SeparatorText currently: formatted text with an horizontal line
 func SeparatorText(label string) {
@@ -722,7 +717,7 @@ func InvisibleButtonV(str_id string, size ImVec2, flags ImGuiButtonFlags /* = 0*
 
 // ArrowButton square button with an arrow shape
 func ArrowButton(str_id string, dir ImGuiDir) (r bool) {
-	_ = `auto r = ImGui::ArrowButton(str_id, dir)`
+	_ = `auto r = ImGui::ArrowButton(str_id, ImGuiDir(dir))`
 	return
 }
 
@@ -741,6 +736,23 @@ func ProgressBarV(fraction float32, size_arg ImVec2 /* = ImVec2(-FLT_MIN, 0)*/, 
 // Bullet draw a small circle + keep the cursor on the same line. advance cursor x position by GetTreeNodeToLabelSpacing(), same distance that TreeNode() uses
 func Bullet() {
 	_ = `ImGui::Bullet()`
+}
+
+// TextLink hyperlink text button, return true when clicked
+func TextLink(label string) (r bool) {
+	_ = `auto r = ImGui::TextLink(label)`
+	return
+}
+
+// TextLinkOpenURL hyperlink text button, automatically open file/url when clicked
+func TextLinkOpenURL(label string) {
+	_ = `ImGui::TextLinkOpenURL(label)`
+}
+
+// TextLinkOpenURLV hyperlink text button, automatically open file/url when clicked
+// * url const char * = NULL
+func TextLinkOpenURLV(label string, url string /* = NULL*/) {
+	_ = `ImGui::TextLinkOpenURL(label, url)`
 }
 func Image(user_texture_id ImTextureID, image_size ImVec2) {
 	_ = `ImGui::Image(ImTextureID(user_texture_id), image_size)`
@@ -841,6 +853,11 @@ func SetNextItemOpenV(is_open bool, cond ImGuiCond /* = 0*/) {
 	_ = `ImGui::SetNextItemOpen(is_open, cond)`
 }
 
+// SetNextItemStorageID set id to use for open/close storage (default to same as item id).
+func SetNextItemStorageID(storage_id ImGuiID) {
+	_ = `ImGui::SetNextItemStorageID(storage_id)`
+}
+
 // Selectable "bool selected" carry the selection state (read-only). Selectable() is clicked is returns true so you can modify your selection state. size.x==0.0: use remaining width, size.x>0.0: specify width. size.y==0.0: use label height, size.y>0.0: specify height
 func Selectable(label string) (r bool) {
 	_ = `auto r = ImGui::Selectable(label)`
@@ -853,6 +870,12 @@ func Selectable(label string) (r bool) {
 // * size const ImVec2 & = ImVec2(0, 0)
 func SelectableV(label string, selected bool /* = false*/, flags ImGuiSelectableFlags /* = 0*/, size ImVec2 /* = ImVec2(0, 0)*/) (r bool) {
 	_ = `auto r = ImGui::Selectable(label, selected, flags, size)`
+	return
+}
+
+// IsItemToggledSelection Was the last item selection state toggled? Useful if you need the per-item information _before_ reaching EndMultiSelect(). We only returns toggle _event_ in order to handle clipping correctly.
+func IsItemToggledSelection() (r bool) {
+	_ = `auto r = ImGui::IsItemToggledSelection()`
 	return
 }
 
@@ -1072,12 +1095,12 @@ func IsPopupOpenV(str_id string, flags ImGuiPopupFlags /* = 0*/) (r bool) {
 	_ = `auto r = ImGui::IsPopupOpen(str_id, flags)`
 	return
 }
-func BeginTable(str_id string, column int) (r bool) {
-	_ = `auto r = ImGui::BeginTable(str_id, column)`
+func BeginTable(str_id string, columns int) (r bool) {
+	_ = `auto r = ImGui::BeginTable(str_id, columns)`
 	return
 }
-func BeginTableV(str_id string, column int, flags ImGuiTableFlags /* = 0*/, outer_size ImVec2 /* = ImVec2(0.0f, 0.0f)*/, inner_width float32 /* = 0.0f*/) (r bool) {
-	_ = `auto r = ImGui::BeginTable(str_id, column, flags, outer_size, inner_width)`
+func BeginTableV(str_id string, columns int, flags ImGuiTableFlags /* = 0*/, outer_size ImVec2 /* = ImVec2(0.0f, 0.0f)*/, inner_width float32 /* = 0.0f*/) (r bool) {
+	_ = `auto r = ImGui::BeginTable(str_id, columns, flags, outer_size, inner_width)`
 	return
 }
 
@@ -1185,6 +1208,12 @@ func TableSetColumnEnabled(column_n int, v bool) {
 	_ = `ImGui::TableSetColumnEnabled(column_n, v)`
 }
 
+// TableGetHoveredColumn return hovered column. return -1 when table is not hovered. return columns_count if the unused space at the right of visible columns is hovered. Can also use (TableGetColumnFlags() & ImGuiTableColumnFlags_IsHovered) instead.
+func TableGetHoveredColumn() (r int) {
+	_ = `auto r = ImGui::TableGetHoveredColumn()`
+	return
+}
+
 // TableSetBgColor change the color of a cell, row, or column. See ImGuiTableBgTarget_ flags for details.
 func TableSetBgColor(target ImGuiTableBgTarget, color uint32) {
 	_ = `ImGui::TableSetBgColor(target, color)`
@@ -1198,8 +1227,8 @@ func TableSetBgColorV(target ImGuiTableBgTarget, color uint32, column_n int /* =
 func Columns() {
 	_ = `ImGui::Columns()`
 }
-func ColumnsV(count int /* = 1*/, id string /* = NULL*/, border bool /* = true*/) {
-	_ = `ImGui::Columns(count, id, border)`
+func ColumnsV(count int /* = 1*/, id string /* = NULL*/, borders bool /* = true*/) {
+	_ = `ImGui::Columns(count, id, borders)`
 }
 
 // NextColumn next column, defaults to current row or next row if the current row is finished
@@ -1308,8 +1337,8 @@ func TabItemButtonV(label string, flags ImGuiTabItemFlags /* = 0*/) (r bool) {
 func SetTabItemClosed(tab_or_docked_window_label string) {
 	_ = `ImGui::SetTabItemClosed(tab_or_docked_window_label)`
 }
-func DockSpace(id ImGuiID) (r ImGuiID) {
-	_ = `auto r = ImGui::DockSpace(id)`
+func DockSpace(dockspace_id ImGuiID) (r ImGuiID) {
+	_ = `auto r = ImGui::DockSpace(dockspace_id)`
 	return
 }
 func DockSpaceOverViewport() (r ImGuiID) {
@@ -1563,13 +1592,13 @@ func GetItemRectSize() (r ImVec2) {
 	return
 }
 
-// GetBackgroundDrawList get background draw list for the viewport associated to the current window. this draw list will be the first rendering one. Useful to quickly draw shapes/text behind dear imgui contents.
+// GetBackgroundDrawList get background draw list for the given viewport or viewport associated to the current window. this draw list will be the first rendering one. Useful to quickly draw shapes/text behind dear imgui contents.
 func GetBackgroundDrawList() (r ImDrawListPtr) {
 	_ = `auto r = ImGui::GetBackgroundDrawList()`
 	return
 }
 
-// GetForegroundDrawList get foreground draw list for the viewport associated to the current window. this draw list will be the last rendered one. Useful to quickly draw shapes/text over dear imgui contents.
+// GetForegroundDrawList get foreground draw list for the given viewport or viewport associated to the current window. this draw list will be the top-most rendered one. Useful to quickly draw shapes/text over dear imgui contents.
 func GetForegroundDrawList() (r ImDrawListPtr) {
 	_ = `auto r = ImGui::GetForegroundDrawList()`
 	return
@@ -1655,6 +1684,11 @@ func SetNextFrameWantCaptureKeyboard(want_capture_keyboard bool) {
 	_ = `ImGui::SetNextFrameWantCaptureKeyboard(want_capture_keyboard)`
 }
 
+// SetItemKeyOwner Set key owner to last item ID if it is hovered or active. Equivalent to 'if (IsItemHovered() || IsItemActive()) { SetKeyOwner(key, GetItemID());'.
+func SetItemKeyOwner(key ImGuiKey) {
+	_ = `ImGui::SetItemKeyOwner(ImGuiKey(key))`
+}
+
 // IsMouseDown is mouse button held?
 func IsMouseDown(button ImGuiMouseButton) (r bool) {
 	_ = `auto r = ImGui::IsMouseDown(button)`
@@ -1723,26 +1757,26 @@ func GetMousePosOnOpeningCurrentPopup() (r ImVec2) {
 	return
 }
 
-// IsMouseDragging is mouse dragging? (if lock_threshold < -1.0f, uses io.MouseDraggingThreshold)
+// IsMouseDragging is mouse dragging? (uses io.MouseDraggingThreshold if lock_threshold < 0.0f)
 func IsMouseDragging(button ImGuiMouseButton) (r bool) {
 	_ = `auto r = ImGui::IsMouseDragging(button)`
 	return
 }
 
-// IsMouseDraggingV is mouse dragging? (if lock_threshold < -1.0f, uses io.MouseDraggingThreshold)
+// IsMouseDraggingV is mouse dragging? (uses io.MouseDraggingThreshold if lock_threshold < 0.0f)
 // * lock_threshold float = -1.0f
 func IsMouseDraggingV(button ImGuiMouseButton, lock_threshold float32 /* = -1.0f*/) (r bool) {
 	_ = `auto r = ImGui::IsMouseDragging(button, lock_threshold)`
 	return
 }
 
-// GetMouseDragDelta return the delta from the initial clicking position while the mouse button is pressed or was just released. This is locked and return 0.0f until the mouse moves past a distance threshold at least once (if lock_threshold < -1.0f, uses io.MouseDraggingThreshold)
+// GetMouseDragDelta return the delta from the initial clicking position while the mouse button is pressed or was just released. This is locked and return 0.0f until the mouse moves past a distance threshold at least once (uses io.MouseDraggingThreshold if lock_threshold < 0.0f)
 func GetMouseDragDelta() (r ImVec2) {
 	_ = `auto r = ImGui::GetMouseDragDelta()`
 	return
 }
 
-// GetMouseDragDeltaV return the delta from the initial clicking position while the mouse button is pressed or was just released. This is locked and return 0.0f until the mouse moves past a distance threshold at least once (if lock_threshold < -1.0f, uses io.MouseDraggingThreshold)
+// GetMouseDragDeltaV return the delta from the initial clicking position while the mouse button is pressed or was just released. This is locked and return 0.0f until the mouse moves past a distance threshold at least once (uses io.MouseDraggingThreshold if lock_threshold < 0.0f)
 // * button ImGuiMouseButton = 0
 // * lock_threshold float = -1.0f
 func GetMouseDragDeltaV(button ImGuiMouseButton /* = 0*/, lock_threshold float32 /* = -1.0f*/) (r ImVec2) {
@@ -1811,6 +1845,9 @@ func DebugTextEncoding(text string) {
 func DebugFlashStyleColor(idx ImGuiCol) {
 	_ = `ImGui::DebugFlashStyleColor(idx)`
 }
+func DebugStartItemPicker() {
+	_ = `ImGui::DebugStartItemPicker()`
+}
 
 // DebugCheckVersionAndDataLayout This is called by IMGUI_CHECKVERSION() macro.
 func DebugCheckVersionAndDataLayout(version_str string, sz_io Size_t, sz_style Size_t, sz_vec2 Size_t, sz_vec4 Size_t, sz_drawvert Size_t, sz_drawidx Size_t) (r bool) {
@@ -1833,9 +1870,21 @@ func DestroyPlatformWindows() {
 	_ = `ImGui::DestroyPlatformWindows()`
 }
 
-// GetKeyIndex map ImGuiKey_* values into legacy native key index. == io.KeyMap[key]
-func GetKeyIndex(key ImGuiKey) (r ImGuiKey) {
-	_ = `auto r = ImGui::GetKeyIndex(ImGuiKey(key))`
+// GetContentRegionMax Content boundaries max (e.g. window boundaries including scrolling, or current column boundaries). You should never need this. Always use GetCursorScreenPos() and GetContentRegionAvail()!
+func GetContentRegionMax() (r ImVec2) {
+	_ = `auto r = ImGui::GetContentRegionMax()`
+	return
+}
+
+// GetWindowContentRegionMin Content boundaries min for the window (roughly (0,0)-Scroll), in window-local coordinates. You should never need this. Always use GetCursorScreenPos() and GetContentRegionAvail()!
+func GetWindowContentRegionMin() (r ImVec2) {
+	_ = `auto r = ImGui::GetWindowContentRegionMin()`
+	return
+}
+
+// GetWindowContentRegionMax Content boundaries max for the window (roughly (0,0)+Size-Scroll), in window-local coordinates. You should never need this. Always use GetCursorScreenPos() and GetContentRegionAvail()!
+func GetWindowContentRegionMax() (r ImVec2) {
+	_ = `auto r = ImGui::GetWindowContentRegionMax()`
 	return
 }
 
@@ -1844,19 +1893,8 @@ func SetItemAllowOverlap() {
 	_ = `ImGui::SetItemAllowOverlap()`
 }
 
-// ImageButton Use new ImageButton() signature (explicit item id, regular FramePadding)
-func ImageButtonOld(user_texture_id ImTextureID, size ImVec2) (r bool) {
-	_ = `auto r = ImGui::ImageButton(ImTextureID(user_texture_id), size)`
-	return
-}
-
-// ImageButtonV Use new ImageButton() signature (explicit item id, regular FramePadding)
-// * uv0 const ImVec2 & = ImVec2(0, 0)
-// * uv1 const ImVec2 & = ImVec2(1, 1)
-// * frame_padding int = -1
-// * bg_col const ImVec4 & = ImVec4(0, 0, 0, 0)
-// * tint_col const ImVec4 & = ImVec4(1, 1, 1, 1)
-func ImageButtonVOld(user_texture_id ImTextureID, size ImVec2, uv0 ImVec2 /* = ImVec2(0, 0)*/, uv1 ImVec2 /* = ImVec2(1, 1)*/, frame_padding int /* = -1*/, bg_col ImVec4 /* = ImVec4(0, 0, 0, 0)*/, tint_col ImVec4 /* = ImVec4(1, 1, 1, 1)*/) (r bool) {
-	_ = `auto r = ImGui::ImageButton(ImTextureID(user_texture_id), size, uv0, uv1, frame_padding, bg_col, tint_col)`
+// GetKeyIndex Map ImGuiKey_* values into legacy native key index. == io.KeyMap[key]. When using a 1.87+ backend using io.AddKeyEvent(), calling GetKeyIndex() with ANY ImGuiKey_XXXX values will return the same value!
+func GetKeyIndex(key ImGuiKey) (r ImGuiKey) {
+	_ = `auto r = ImGui::GetKeyIndex(ImGuiKey(key))`
 	return
 }

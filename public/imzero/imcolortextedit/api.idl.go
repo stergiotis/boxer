@@ -15,23 +15,23 @@ func (foreignptr ImColorEditorForeignPtr) Destroy() {
 func (foreignptr ImColorEditorForeignPtr) Render(title string) {
 	_ = `((TextEditor*)foreignptr)->Render(title)`
 }
-func (foreignptr ImColorEditorForeignPtr) RenderV(title string, aSize imgui.ImVec2, aBorder bool) {
-	_ = `((TextEditor*)foreignptr)->Render(title, aSize, aBorder)`
+func (foreignptr ImColorEditorForeignPtr) RenderV(title string, parentIsFocused bool, aSize imgui.ImVec2, aBorder bool) {
+	_ = `((TextEditor*)foreignptr)->Render(title, parentIsFocused, aSize, aBorder)`
 }
 func (foreignptr ImColorEditorForeignPtr) SetText(text string) {
 	_ = `((TextEditor*)foreignptr)->SetText(text)`
 }
 
 func (foreignptr ImColorEditorForeignPtr) GetText() (text string) {
-	_ = `auto text = ((TextEditor*)foreignptr)->GetText()`
+	_ = `text = ((TextEditor*)foreignptr)->GetText().c_str()`
 	return
 }
 func (foreignptr ImColorEditorForeignPtr) GetSelectedText() (text string) {
-	_ = `auto text = ((TextEditor*)foreignptr)->GetSelectedText()`
+	_ = `text = ((TextEditor*)foreignptr)->GetSelectedText().c_str()`
 	return
 }
 func (foreignptr ImColorEditorForeignPtr) GetCurrentLineText() (text string) {
-	_ = `auto text = ((TextEditor*)foreignptr)->GetCurrentLineText()`
+	_ = `text = ((TextEditor*)foreignptr)->GetCurrentLineText().c_str()`
 	return
 }
 func (foreignptr ImColorEditorForeignPtr) GetTotalLines() (lines int) {
@@ -49,10 +49,17 @@ func (foreignptr ImColorEditorForeignPtr) IsReadOnly() (readonly bool) {
 	_ = `readonly = ((TextEditor*)foreignptr)->IsReadOnly()`
 	return
 }
-func (foreignptr ImColorEditorForeignPtr) IsChanged() (text bool, cursor bool) {
+func (foreignptr ImColorEditorForeignPtr) IsChanged() (textChanged bool) {
 	_ = `auto p = ((TextEditor*)foreignptr);
-cursor = p->IsCursorPositionChanged();
-text = p->IsTextChanged()`
+textChanged = p->IsTextChanged();`
+	return
+}
+func (foreignptr ImColorEditorForeignPtr) GetCursorPosition() (line int, column int) {
+	_ = `auto p = ((TextEditor*)foreignptr);
+auto c = p->GetCursorPosition();
+line = c.mLine;
+column = c.mColumn;
+`
 	return
 }
 func (foreignptr ImColorEditorForeignPtr) IsColorizerEnabled() (enabled bool) {

@@ -16,6 +16,7 @@ type ImGuiStyleForeignPtr uintptr
 type ImDrawListPtr uintptr
 type ImHexEditorPtr uintptr
 type Tristate = logical.Tristate
+type ImU8 uint8
 
 // ImGuiStyle You may modify the ImGui::GetStyle() main instance during initialization and before NewFrame().
 // During the frame, use ImGui::PushStyleVar(ImGuiStyleVar_XXXX)/PopStyleVar() to alter the main style values,

@@ -97,17 +97,17 @@ func (foreignptr ImDrawListPtr) AddNgonV(center ImVec2, radius float32, col uint
 func (foreignptr ImDrawListPtr) AddNgonFilled(center ImVec2, radius float32, col uint32, num_segments int) {
 	_ = `((ImDrawList*)foreignptr)->AddNgonFilled(center, radius, col, num_segments)`
 }
-func (foreignptr ImDrawListPtr) AddEllipse(center ImVec2, radius_x float32, radius_y float32, col uint32) {
-	_ = `((ImDrawList*)foreignptr)->AddEllipse(center, radius_x, radius_y, col)`
+func (foreignptr ImDrawListPtr) AddEllipse(center ImVec2, radius ImVec2, col uint32) {
+	_ = `((ImDrawList*)foreignptr)->AddEllipse(center, radius, col)`
 }
-func (foreignptr ImDrawListPtr) AddEllipseV(center ImVec2, radius_x float32, radius_y float32, col uint32, rot float32 /* = 0.0f*/, num_segments int /* = 0*/, thickness float32 /* = 1.0f*/) {
-	_ = `((ImDrawList*)foreignptr)->AddEllipse(center, radius_x, radius_y, col, rot, num_segments, thickness)`
+func (foreignptr ImDrawListPtr) AddEllipseV(center ImVec2, radius ImVec2, col uint32, rot float32 /* = 0.0f*/, num_segments int /* = 0*/, thickness float32 /* = 1.0f*/) {
+	_ = `((ImDrawList*)foreignptr)->AddEllipse(center, radius, col, rot, num_segments, thickness)`
 }
-func (foreignptr ImDrawListPtr) AddEllipseFilled(center ImVec2, radius_x float32, radius_y float32, col uint32) {
-	_ = `((ImDrawList*)foreignptr)->AddEllipseFilled(center, radius_x, radius_y, col)`
+func (foreignptr ImDrawListPtr) AddEllipseFilled(center ImVec2, radius ImVec2, col uint32) {
+	_ = `((ImDrawList*)foreignptr)->AddEllipseFilled(center, radius, col)`
 }
-func (foreignptr ImDrawListPtr) AddEllipseFilledV(center ImVec2, radius_x float32, radius_y float32, col uint32, rot float32 /* = 0.0f*/, num_segments int /* = 0*/) {
-	_ = `((ImDrawList*)foreignptr)->AddEllipseFilled(center, radius_x, radius_y, col, rot, num_segments)`
+func (foreignptr ImDrawListPtr) AddEllipseFilledV(center ImVec2, radius ImVec2, col uint32, rot float32 /* = 0.0f*/, num_segments int /* = 0*/) {
+	_ = `((ImDrawList*)foreignptr)->AddEllipseFilled(center, radius, col, rot, num_segments)`
 }
 
 // AddBezierCubic Cubic Bezier (4 control points)
@@ -162,14 +162,14 @@ func (foreignptr ImDrawListPtr) PathArcToFast(center ImVec2, radius float32, a_m
 }
 
 // PathEllipticalArcTo Ellipse
-func (foreignptr ImDrawListPtr) PathEllipticalArcTo(center ImVec2, radius_x float32, radius_y float32, rot float32, a_min float32, a_max float32) {
-	_ = `((ImDrawList*)foreignptr)->PathEllipticalArcTo(center, radius_x, radius_y, rot, a_min, a_max)`
+func (foreignptr ImDrawListPtr) PathEllipticalArcTo(center ImVec2, radius ImVec2, rot float32, a_min float32, a_max float32) {
+	_ = `((ImDrawList*)foreignptr)->PathEllipticalArcTo(center, radius, rot, a_min, a_max)`
 }
 
 // PathEllipticalArcToV Ellipse
 // * num_segments int = 0
-func (foreignptr ImDrawListPtr) PathEllipticalArcToV(center ImVec2, radius_x float32, radius_y float32, rot float32, a_min float32, a_max float32, num_segments int /* = 0*/) {
-	_ = `((ImDrawList*)foreignptr)->PathEllipticalArcTo(center, radius_x, radius_y, rot, a_min, a_max, num_segments)`
+func (foreignptr ImDrawListPtr) PathEllipticalArcToV(center ImVec2, radius ImVec2, rot float32, a_min float32, a_max float32, num_segments int /* = 0*/) {
+	_ = `((ImDrawList*)foreignptr)->PathEllipticalArcTo(center, radius, rot, a_min, a_max, num_segments)`
 }
 
 // PathBezierCubicCurveTo Cubic Bezier (4 control points)
@@ -247,6 +247,9 @@ func (foreignptr ImDrawListPtr) _OnChangedTextureID() {
 }
 func (foreignptr ImDrawListPtr) _OnChangedVtxOffset() {
 	_ = `((ImDrawList*)foreignptr)->_OnChangedVtxOffset()`
+}
+func (foreignptr ImDrawListPtr) _SetTextureID(texture_id ImTextureID) {
+	_ = `((ImDrawList*)foreignptr)->_SetTextureID(ImTextureID(texture_id))`
 }
 func (foreignptr ImDrawListPtr) _CalcCircleAutoSegmentCount(radius float32) (r int) {
 	_ = `auto r = ((ImDrawList*)foreignptr)->_CalcCircleAutoSegmentCount(radius)`

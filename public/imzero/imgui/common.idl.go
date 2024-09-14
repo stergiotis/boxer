@@ -15,10 +15,6 @@ func CurrentCursorPos() (r ImVec2) {
 	_ = `auto r = ImGui::GetCurrentWindow()->DC.CursorPos`
 	return
 }
-func GetContentRegionMaxAbs() (r ImVec2) {
-	_ = `auto r = ImGui::GetContentRegionMaxAbs()`
-	return
-}
 func BeginCustomWidget() (visible bool, currentWindowDrawList ImDrawListPtr, pos ImVec2, availableRegion ImVec2, keyboardNavActive bool, seed ImGuiID) {
 	_ = `ImVec2 pos;
          ImVec2 availableRegion;

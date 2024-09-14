@@ -27,7 +27,6 @@ const (
 	ImGuiWindowFlags_NoNav                     = ImGuiWindowFlags(ImGuiWindowFlags_NoNavInputs | ImGuiWindowFlags_NoNavFocus)
 	ImGuiWindowFlags_NoDecoration              = ImGuiWindowFlags(ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoCollapse)
 	ImGuiWindowFlags_NoInputs                  = ImGuiWindowFlags(ImGuiWindowFlags_NoMouseInputs | ImGuiWindowFlags_NoNavInputs | ImGuiWindowFlags_NoNavFocus)
-	ImGuiWindowFlags_NavFlattened              = ImGuiWindowFlags(1 << 23)
 	ImGuiWindowFlags_ChildWindow               = ImGuiWindowFlags(1 << 24)
 	ImGuiWindowFlags_Tooltip                   = ImGuiWindowFlags(1 << 25)
 	ImGuiWindowFlags_Popup                     = ImGuiWindowFlags(1 << 26)
@@ -35,13 +34,14 @@ const (
 	ImGuiWindowFlags_ChildMenu                 = ImGuiWindowFlags(1 << 28)
 	ImGuiWindowFlags_DockNodeHost              = ImGuiWindowFlags(1 << 29)
 	ImGuiWindowFlags_AlwaysUseWindowPadding    = ImGuiWindowFlags(1 << 30)
+	ImGuiWindowFlags_NavFlattened              = ImGuiWindowFlags(1 << 31)
 )
 
 type ImGuiChildFlags int
 
 const (
 	ImGuiChildFlags_None                   = ImGuiChildFlags(0)
-	ImGuiChildFlags_Border                 = ImGuiChildFlags(1 << 0)
+	ImGuiChildFlags_Borders                = ImGuiChildFlags(1 << 0)
 	ImGuiChildFlags_AlwaysUseWindowPadding = ImGuiChildFlags(1 << 1)
 	ImGuiChildFlags_ResizeX                = ImGuiChildFlags(1 << 2)
 	ImGuiChildFlags_ResizeY                = ImGuiChildFlags(1 << 3)
@@ -49,6 +49,20 @@ const (
 	ImGuiChildFlags_AutoResizeY            = ImGuiChildFlags(1 << 5)
 	ImGuiChildFlags_AlwaysAutoResize       = ImGuiChildFlags(1 << 6)
 	ImGuiChildFlags_FrameStyle             = ImGuiChildFlags(1 << 7)
+	ImGuiChildFlags_NavFlattened           = ImGuiChildFlags(1 << 8)
+	ImGuiChildFlags_Border                 = ImGuiChildFlags(ImGuiChildFlags_Borders)
+)
+
+type ImGuiItemFlags int
+
+const (
+	ImGuiItemFlags_None              = ImGuiItemFlags(0)
+	ImGuiItemFlags_NoTabStop         = ImGuiItemFlags(1 << 0)
+	ImGuiItemFlags_NoNav             = ImGuiItemFlags(1 << 1)
+	ImGuiItemFlags_NoNavDefaultFocus = ImGuiItemFlags(1 << 2)
+	ImGuiItemFlags_ButtonRepeat      = ImGuiItemFlags(1 << 3)
+	ImGuiItemFlags_AutoClosePopups   = ImGuiItemFlags(1 << 4)
+	ImGuiItemFlags_AllowDuplicateId  = ImGuiItemFlags(1 << 5)
 )
 
 type ImGuiInputTextFlags int
@@ -57,25 +71,27 @@ const (
 	ImGuiInputTextFlags_None                = ImGuiInputTextFlags(0)
 	ImGuiInputTextFlags_CharsDecimal        = ImGuiInputTextFlags(1 << 0)
 	ImGuiInputTextFlags_CharsHexadecimal    = ImGuiInputTextFlags(1 << 1)
-	ImGuiInputTextFlags_CharsUppercase      = ImGuiInputTextFlags(1 << 2)
-	ImGuiInputTextFlags_CharsNoBlank        = ImGuiInputTextFlags(1 << 3)
-	ImGuiInputTextFlags_AutoSelectAll       = ImGuiInputTextFlags(1 << 4)
-	ImGuiInputTextFlags_EnterReturnsTrue    = ImGuiInputTextFlags(1 << 5)
-	ImGuiInputTextFlags_CallbackCompletion  = ImGuiInputTextFlags(1 << 6)
-	ImGuiInputTextFlags_CallbackHistory     = ImGuiInputTextFlags(1 << 7)
-	ImGuiInputTextFlags_CallbackAlways      = ImGuiInputTextFlags(1 << 8)
-	ImGuiInputTextFlags_CallbackCharFilter  = ImGuiInputTextFlags(1 << 9)
-	ImGuiInputTextFlags_AllowTabInput       = ImGuiInputTextFlags(1 << 10)
-	ImGuiInputTextFlags_CtrlEnterForNewLine = ImGuiInputTextFlags(1 << 11)
-	ImGuiInputTextFlags_NoHorizontalScroll  = ImGuiInputTextFlags(1 << 12)
-	ImGuiInputTextFlags_AlwaysOverwrite     = ImGuiInputTextFlags(1 << 13)
-	ImGuiInputTextFlags_ReadOnly            = ImGuiInputTextFlags(1 << 14)
-	ImGuiInputTextFlags_Password            = ImGuiInputTextFlags(1 << 15)
+	ImGuiInputTextFlags_CharsScientific     = ImGuiInputTextFlags(1 << 2)
+	ImGuiInputTextFlags_CharsUppercase      = ImGuiInputTextFlags(1 << 3)
+	ImGuiInputTextFlags_CharsNoBlank        = ImGuiInputTextFlags(1 << 4)
+	ImGuiInputTextFlags_AllowTabInput       = ImGuiInputTextFlags(1 << 5)
+	ImGuiInputTextFlags_EnterReturnsTrue    = ImGuiInputTextFlags(1 << 6)
+	ImGuiInputTextFlags_EscapeClearsAll     = ImGuiInputTextFlags(1 << 7)
+	ImGuiInputTextFlags_CtrlEnterForNewLine = ImGuiInputTextFlags(1 << 8)
+	ImGuiInputTextFlags_ReadOnly            = ImGuiInputTextFlags(1 << 9)
+	ImGuiInputTextFlags_Password            = ImGuiInputTextFlags(1 << 10)
+	ImGuiInputTextFlags_AlwaysOverwrite     = ImGuiInputTextFlags(1 << 11)
+	ImGuiInputTextFlags_AutoSelectAll       = ImGuiInputTextFlags(1 << 12)
+	ImGuiInputTextFlags_ParseEmptyRefVal    = ImGuiInputTextFlags(1 << 13)
+	ImGuiInputTextFlags_DisplayEmptyRefVal  = ImGuiInputTextFlags(1 << 14)
+	ImGuiInputTextFlags_NoHorizontalScroll  = ImGuiInputTextFlags(1 << 15)
 	ImGuiInputTextFlags_NoUndoRedo          = ImGuiInputTextFlags(1 << 16)
-	ImGuiInputTextFlags_CharsScientific     = ImGuiInputTextFlags(1 << 17)
-	ImGuiInputTextFlags_CallbackResize      = ImGuiInputTextFlags(1 << 18)
-	ImGuiInputTextFlags_CallbackEdit        = ImGuiInputTextFlags(1 << 19)
-	ImGuiInputTextFlags_EscapeClearsAll     = ImGuiInputTextFlags(1 << 20)
+	ImGuiInputTextFlags_CallbackCompletion  = ImGuiInputTextFlags(1 << 17)
+	ImGuiInputTextFlags_CallbackHistory     = ImGuiInputTextFlags(1 << 18)
+	ImGuiInputTextFlags_CallbackAlways      = ImGuiInputTextFlags(1 << 19)
+	ImGuiInputTextFlags_CallbackCharFilter  = ImGuiInputTextFlags(1 << 20)
+	ImGuiInputTextFlags_CallbackResize      = ImGuiInputTextFlags(1 << 21)
+	ImGuiInputTextFlags_CallbackEdit        = ImGuiInputTextFlags(1 << 22)
 )
 
 type ImGuiTreeNodeFlags int
@@ -95,8 +111,9 @@ const (
 	ImGuiTreeNodeFlags_FramePadding         = ImGuiTreeNodeFlags(1 << 10)
 	ImGuiTreeNodeFlags_SpanAvailWidth       = ImGuiTreeNodeFlags(1 << 11)
 	ImGuiTreeNodeFlags_SpanFullWidth        = ImGuiTreeNodeFlags(1 << 12)
-	ImGuiTreeNodeFlags_SpanAllColumns       = ImGuiTreeNodeFlags(1 << 13)
-	ImGuiTreeNodeFlags_NavLeftJumpsBackHere = ImGuiTreeNodeFlags(1 << 14)
+	ImGuiTreeNodeFlags_SpanTextWidth        = ImGuiTreeNodeFlags(1 << 13)
+	ImGuiTreeNodeFlags_SpanAllColumns       = ImGuiTreeNodeFlags(1 << 14)
+	ImGuiTreeNodeFlags_NavLeftJumpsBackHere = ImGuiTreeNodeFlags(1 << 15)
 	ImGuiTreeNodeFlags_CollapsingHeader     = ImGuiTreeNodeFlags(ImGuiTreeNodeFlags_Framed | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_NoAutoOpenOnLog)
 	ImGuiTreeNodeFlags_AllowItemOverlap     = ImGuiTreeNodeFlags(ImGuiTreeNodeFlags_AllowOverlap)
 )
@@ -110,23 +127,26 @@ const (
 	ImGuiPopupFlags_MouseButtonMiddle       = ImGuiPopupFlags(2)
 	ImGuiPopupFlags_MouseButtonMask_        = ImGuiPopupFlags(0x1F)
 	ImGuiPopupFlags_MouseButtonDefault_     = ImGuiPopupFlags(1)
-	ImGuiPopupFlags_NoOpenOverExistingPopup = ImGuiPopupFlags(1 << 5)
-	ImGuiPopupFlags_NoOpenOverItems         = ImGuiPopupFlags(1 << 6)
-	ImGuiPopupFlags_AnyPopupId              = ImGuiPopupFlags(1 << 7)
-	ImGuiPopupFlags_AnyPopupLevel           = ImGuiPopupFlags(1 << 8)
+	ImGuiPopupFlags_NoReopen                = ImGuiPopupFlags(1 << 5)
+	ImGuiPopupFlags_NoOpenOverExistingPopup = ImGuiPopupFlags(1 << 7)
+	ImGuiPopupFlags_NoOpenOverItems         = ImGuiPopupFlags(1 << 8)
+	ImGuiPopupFlags_AnyPopupId              = ImGuiPopupFlags(1 << 10)
+	ImGuiPopupFlags_AnyPopupLevel           = ImGuiPopupFlags(1 << 11)
 	ImGuiPopupFlags_AnyPopup                = ImGuiPopupFlags(ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)
 )
 
 type ImGuiSelectableFlags int
 
 const (
-	ImGuiSelectableFlags_None             = ImGuiSelectableFlags(0)
-	ImGuiSelectableFlags_DontClosePopups  = ImGuiSelectableFlags(1 << 0)
-	ImGuiSelectableFlags_SpanAllColumns   = ImGuiSelectableFlags(1 << 1)
-	ImGuiSelectableFlags_AllowDoubleClick = ImGuiSelectableFlags(1 << 2)
-	ImGuiSelectableFlags_Disabled         = ImGuiSelectableFlags(1 << 3)
-	ImGuiSelectableFlags_AllowOverlap     = ImGuiSelectableFlags(1 << 4)
-	ImGuiSelectableFlags_AllowItemOverlap = ImGuiSelectableFlags(ImGuiSelectableFlags_AllowOverlap)
+	ImGuiSelectableFlags_None              = ImGuiSelectableFlags(0)
+	ImGuiSelectableFlags_NoAutoClosePopups = ImGuiSelectableFlags(1 << 0)
+	ImGuiSelectableFlags_SpanAllColumns    = ImGuiSelectableFlags(1 << 1)
+	ImGuiSelectableFlags_AllowDoubleClick  = ImGuiSelectableFlags(1 << 2)
+	ImGuiSelectableFlags_Disabled          = ImGuiSelectableFlags(1 << 3)
+	ImGuiSelectableFlags_AllowOverlap      = ImGuiSelectableFlags(1 << 4)
+	ImGuiSelectableFlags_Highlight         = ImGuiSelectableFlags(1 << 5)
+	ImGuiSelectableFlags_DontClosePopups   = ImGuiSelectableFlags(ImGuiSelectableFlags_NoAutoClosePopups)
+	ImGuiSelectableFlags_AllowItemOverlap  = ImGuiSelectableFlags(ImGuiSelectableFlags_AllowOverlap)
 )
 
 type ImGuiComboFlags int
@@ -154,8 +174,9 @@ const (
 	ImGuiTabBarFlags_NoCloseWithMiddleMouseButton = ImGuiTabBarFlags(1 << 3)
 	ImGuiTabBarFlags_NoTabListScrollingButtons    = ImGuiTabBarFlags(1 << 4)
 	ImGuiTabBarFlags_NoTooltip                    = ImGuiTabBarFlags(1 << 5)
-	ImGuiTabBarFlags_FittingPolicyResizeDown      = ImGuiTabBarFlags(1 << 6)
-	ImGuiTabBarFlags_FittingPolicyScroll          = ImGuiTabBarFlags(1 << 7)
+	ImGuiTabBarFlags_DrawSelectedOverline         = ImGuiTabBarFlags(1 << 6)
+	ImGuiTabBarFlags_FittingPolicyResizeDown      = ImGuiTabBarFlags(1 << 7)
+	ImGuiTabBarFlags_FittingPolicyScroll          = ImGuiTabBarFlags(1 << 8)
 	ImGuiTabBarFlags_FittingPolicyMask_           = ImGuiTabBarFlags(ImGuiTabBarFlags_FittingPolicyResizeDown | ImGuiTabBarFlags_FittingPolicyScroll)
 	ImGuiTabBarFlags_FittingPolicyDefault_        = ImGuiTabBarFlags(ImGuiTabBarFlags_FittingPolicyResizeDown)
 )
@@ -237,11 +258,14 @@ const (
 	ImGuiDragDropFlags_SourceNoHoldToOpenOthers = ImGuiDragDropFlags(1 << 2)
 	ImGuiDragDropFlags_SourceAllowNullID        = ImGuiDragDropFlags(1 << 3)
 	ImGuiDragDropFlags_SourceExtern             = ImGuiDragDropFlags(1 << 4)
-	ImGuiDragDropFlags_SourceAutoExpirePayload  = ImGuiDragDropFlags(1 << 5)
+	ImGuiDragDropFlags_PayloadAutoExpire        = ImGuiDragDropFlags(1 << 5)
+	ImGuiDragDropFlags_PayloadNoCrossContext    = ImGuiDragDropFlags(1 << 6)
+	ImGuiDragDropFlags_PayloadNoCrossProcess    = ImGuiDragDropFlags(1 << 7)
 	ImGuiDragDropFlags_AcceptBeforeDelivery     = ImGuiDragDropFlags(1 << 10)
 	ImGuiDragDropFlags_AcceptNoDrawDefaultRect  = ImGuiDragDropFlags(1 << 11)
 	ImGuiDragDropFlags_AcceptNoPreviewTooltip   = ImGuiDragDropFlags(1 << 12)
 	ImGuiDragDropFlags_AcceptPeekOnly           = ImGuiDragDropFlags(ImGuiDragDropFlags_AcceptBeforeDelivery | ImGuiDragDropFlags_AcceptNoDrawDefaultRect)
+	ImGuiDragDropFlags_SourceAutoExpirePayload  = ImGuiDragDropFlags(ImGuiDragDropFlags_PayloadAutoExpire)
 )
 
 type ImGuiDataType int
@@ -257,6 +281,7 @@ const (
 	ImGuiDataType_U64    = iota
 	ImGuiDataType_Float  = iota
 	ImGuiDataType_Double = iota
+	ImGuiDataType_Bool   = iota
 	ImGuiDataType_COUNT  = iota
 )
 
@@ -271,7 +296,7 @@ const (
 	ImGuiDir_COUNT = iota
 )
 
-type ImGuiSortDirection int
+type ImGuiSortDirection ImU8
 
 const (
 	ImGuiSortDirection_None       = ImGuiSortDirection(0)
@@ -443,17 +468,33 @@ const (
 	ImGuiMod_Shift               = ImGuiKey(1 << 13)
 	ImGuiMod_Alt                 = ImGuiKey(1 << 14)
 	ImGuiMod_Super               = ImGuiKey(1 << 15)
-	ImGuiMod_Shortcut            = ImGuiKey(1 << 11)
-	ImGuiMod_Mask_               = ImGuiKey(0xF800)
+	ImGuiMod_Mask_               = ImGuiKey(0xF000)
 	ImGuiKey_NamedKey_BEGIN      = ImGuiKey(512)
 	ImGuiKey_NamedKey_END        = ImGuiKey(ImGuiKey_COUNT)
 	ImGuiKey_NamedKey_COUNT      = ImGuiKey(ImGuiKey_NamedKey_END - ImGuiKey_NamedKey_BEGIN)
 	ImGuiKey_KeysData_SIZE       = ImGuiKey(ImGuiKey_COUNT)
 	ImGuiKey_KeysData_OFFSET     = ImGuiKey(0)
+	ImGuiMod_Shortcut            = ImGuiKey(ImGuiMod_Ctrl)
 	ImGuiKey_ModCtrl             = ImGuiKey(ImGuiMod_Ctrl)
 	ImGuiKey_ModShift            = ImGuiKey(ImGuiMod_Shift)
 	ImGuiKey_ModAlt              = ImGuiKey(ImGuiMod_Alt)
 	ImGuiKey_ModSuper            = ImGuiKey(ImGuiMod_Super)
+)
+
+type ImGuiInputFlags int
+
+const (
+	ImGuiInputFlags_None                 = ImGuiInputFlags(0)
+	ImGuiInputFlags_Repeat               = ImGuiInputFlags(1 << 0)
+	ImGuiInputFlags_RouteActive          = ImGuiInputFlags(1 << 10)
+	ImGuiInputFlags_RouteFocused         = ImGuiInputFlags(1 << 11)
+	ImGuiInputFlags_RouteGlobal          = ImGuiInputFlags(1 << 12)
+	ImGuiInputFlags_RouteAlways          = ImGuiInputFlags(1 << 13)
+	ImGuiInputFlags_RouteOverFocused     = ImGuiInputFlags(1 << 14)
+	ImGuiInputFlags_RouteOverActive      = ImGuiInputFlags(1 << 15)
+	ImGuiInputFlags_RouteUnlessBgFocused = ImGuiInputFlags(1 << 16)
+	ImGuiInputFlags_RouteFromRootWindow  = ImGuiInputFlags(1 << 17)
+	ImGuiInputFlags_Tooltip              = ImGuiInputFlags(1 << 18)
 )
 
 type ImGuiNavInput int
@@ -488,7 +529,8 @@ const (
 	ImGuiConfigFlags_NavNoCaptureKeyboard    = ImGuiConfigFlags(1 << 3)
 	ImGuiConfigFlags_NoMouse                 = ImGuiConfigFlags(1 << 4)
 	ImGuiConfigFlags_NoMouseCursorChange     = ImGuiConfigFlags(1 << 5)
-	ImGuiConfigFlags_DockingEnable           = ImGuiConfigFlags(1 << 6)
+	ImGuiConfigFlags_NoKeyboard              = ImGuiConfigFlags(1 << 6)
+	ImGuiConfigFlags_DockingEnable           = ImGuiConfigFlags(1 << 7)
 	ImGuiConfigFlags_ViewportsEnable         = ImGuiConfigFlags(1 << 10)
 	ImGuiConfigFlags_DpiEnableScaleViewports = ImGuiConfigFlags(1 << 14)
 	ImGuiConfigFlags_DpiEnableScaleFonts     = ImGuiConfigFlags(1 << 15)
@@ -512,109 +554,118 @@ const (
 type ImGuiCol int
 
 const (
-	ImGuiCol_Text                  = iota
-	ImGuiCol_TextDisabled          = iota
-	ImGuiCol_WindowBg              = iota
-	ImGuiCol_ChildBg               = iota
-	ImGuiCol_PopupBg               = iota
-	ImGuiCol_Border                = iota
-	ImGuiCol_BorderShadow          = iota
-	ImGuiCol_FrameBg               = iota
-	ImGuiCol_FrameBgHovered        = iota
-	ImGuiCol_FrameBgActive         = iota
-	ImGuiCol_TitleBg               = iota
-	ImGuiCol_TitleBgActive         = iota
-	ImGuiCol_TitleBgCollapsed      = iota
-	ImGuiCol_MenuBarBg             = iota
-	ImGuiCol_ScrollbarBg           = iota
-	ImGuiCol_ScrollbarGrab         = iota
-	ImGuiCol_ScrollbarGrabHovered  = iota
-	ImGuiCol_ScrollbarGrabActive   = iota
-	ImGuiCol_CheckMark             = iota
-	ImGuiCol_SliderGrab            = iota
-	ImGuiCol_SliderGrabActive      = iota
-	ImGuiCol_Button                = iota
-	ImGuiCol_ButtonHovered         = iota
-	ImGuiCol_ButtonActive          = iota
-	ImGuiCol_Header                = iota
-	ImGuiCol_HeaderHovered         = iota
-	ImGuiCol_HeaderActive          = iota
-	ImGuiCol_Separator             = iota
-	ImGuiCol_SeparatorHovered      = iota
-	ImGuiCol_SeparatorActive       = iota
-	ImGuiCol_ResizeGrip            = iota
-	ImGuiCol_ResizeGripHovered     = iota
-	ImGuiCol_ResizeGripActive      = iota
-	ImGuiCol_Tab                   = iota
-	ImGuiCol_TabHovered            = iota
-	ImGuiCol_TabActive             = iota
-	ImGuiCol_TabUnfocused          = iota
-	ImGuiCol_TabUnfocusedActive    = iota
-	ImGuiCol_DockingPreview        = iota
-	ImGuiCol_DockingEmptyBg        = iota
-	ImGuiCol_PlotLines             = iota
-	ImGuiCol_PlotLinesHovered      = iota
-	ImGuiCol_PlotHistogram         = iota
-	ImGuiCol_PlotHistogramHovered  = iota
-	ImGuiCol_TableHeaderBg         = iota
-	ImGuiCol_TableBorderStrong     = iota
-	ImGuiCol_TableBorderLight      = iota
-	ImGuiCol_TableRowBg            = iota
-	ImGuiCol_TableRowBgAlt         = iota
-	ImGuiCol_TextSelectedBg        = iota
-	ImGuiCol_DragDropTarget        = iota
-	ImGuiCol_NavHighlight          = iota
-	ImGuiCol_NavWindowingHighlight = iota
-	ImGuiCol_NavWindowingDimBg     = iota
-	ImGuiCol_ModalWindowDimBg      = iota
-	ImGuiCol_COUNT                 = iota
+	ImGuiCol_Text                      = iota
+	ImGuiCol_TextDisabled              = iota
+	ImGuiCol_WindowBg                  = iota
+	ImGuiCol_ChildBg                   = iota
+	ImGuiCol_PopupBg                   = iota
+	ImGuiCol_Border                    = iota
+	ImGuiCol_BorderShadow              = iota
+	ImGuiCol_FrameBg                   = iota
+	ImGuiCol_FrameBgHovered            = iota
+	ImGuiCol_FrameBgActive             = iota
+	ImGuiCol_TitleBg                   = iota
+	ImGuiCol_TitleBgActive             = iota
+	ImGuiCol_TitleBgCollapsed          = iota
+	ImGuiCol_MenuBarBg                 = iota
+	ImGuiCol_ScrollbarBg               = iota
+	ImGuiCol_ScrollbarGrab             = iota
+	ImGuiCol_ScrollbarGrabHovered      = iota
+	ImGuiCol_ScrollbarGrabActive       = iota
+	ImGuiCol_CheckMark                 = iota
+	ImGuiCol_SliderGrab                = iota
+	ImGuiCol_SliderGrabActive          = iota
+	ImGuiCol_Button                    = iota
+	ImGuiCol_ButtonHovered             = iota
+	ImGuiCol_ButtonActive              = iota
+	ImGuiCol_Header                    = iota
+	ImGuiCol_HeaderHovered             = iota
+	ImGuiCol_HeaderActive              = iota
+	ImGuiCol_Separator                 = iota
+	ImGuiCol_SeparatorHovered          = iota
+	ImGuiCol_SeparatorActive           = iota
+	ImGuiCol_ResizeGrip                = iota
+	ImGuiCol_ResizeGripHovered         = iota
+	ImGuiCol_ResizeGripActive          = iota
+	ImGuiCol_TabHovered                = iota
+	ImGuiCol_Tab                       = iota
+	ImGuiCol_TabSelected               = iota
+	ImGuiCol_TabSelectedOverline       = iota
+	ImGuiCol_TabDimmed                 = iota
+	ImGuiCol_TabDimmedSelected         = iota
+	ImGuiCol_TabDimmedSelectedOverline = iota
+	ImGuiCol_DockingPreview            = iota
+	ImGuiCol_DockingEmptyBg            = iota
+	ImGuiCol_PlotLines                 = iota
+	ImGuiCol_PlotLinesHovered          = iota
+	ImGuiCol_PlotHistogram             = iota
+	ImGuiCol_PlotHistogramHovered      = iota
+	ImGuiCol_TableHeaderBg             = iota
+	ImGuiCol_TableBorderStrong         = iota
+	ImGuiCol_TableBorderLight          = iota
+	ImGuiCol_TableRowBg                = iota
+	ImGuiCol_TableRowBgAlt             = iota
+	ImGuiCol_TextLink                  = iota
+	ImGuiCol_TextSelectedBg            = iota
+	ImGuiCol_DragDropTarget            = iota
+	ImGuiCol_NavHighlight              = iota
+	ImGuiCol_NavWindowingHighlight     = iota
+	ImGuiCol_NavWindowingDimBg         = iota
+	ImGuiCol_ModalWindowDimBg          = iota
+	ImGuiCol_COUNT                     = iota
+	ImGuiCol_TabActive                 = ImGuiCol(ImGuiCol_TabSelected)
+	ImGuiCol_TabUnfocused              = ImGuiCol(ImGuiCol_TabDimmed)
+	ImGuiCol_TabUnfocusedActive        = ImGuiCol(ImGuiCol_TabDimmedSelected)
 )
 
 type ImGuiStyleVar int
 
 const (
-	ImGuiStyleVar_Alpha                   = iota
-	ImGuiStyleVar_DisabledAlpha           = iota
-	ImGuiStyleVar_WindowPadding           = iota
-	ImGuiStyleVar_WindowRounding          = iota
-	ImGuiStyleVar_WindowBorderSize        = iota
-	ImGuiStyleVar_WindowMinSize           = iota
-	ImGuiStyleVar_WindowTitleAlign        = iota
-	ImGuiStyleVar_ChildRounding           = iota
-	ImGuiStyleVar_ChildBorderSize         = iota
-	ImGuiStyleVar_PopupRounding           = iota
-	ImGuiStyleVar_PopupBorderSize         = iota
-	ImGuiStyleVar_FramePadding            = iota
-	ImGuiStyleVar_FrameRounding           = iota
-	ImGuiStyleVar_FrameBorderSize         = iota
-	ImGuiStyleVar_ItemSpacing             = iota
-	ImGuiStyleVar_ItemInnerSpacing        = iota
-	ImGuiStyleVar_IndentSpacing           = iota
-	ImGuiStyleVar_CellPadding             = iota
-	ImGuiStyleVar_ScrollbarSize           = iota
-	ImGuiStyleVar_ScrollbarRounding       = iota
-	ImGuiStyleVar_GrabMinSize             = iota
-	ImGuiStyleVar_GrabRounding            = iota
-	ImGuiStyleVar_TabRounding             = iota
-	ImGuiStyleVar_TabBarBorderSize        = iota
-	ImGuiStyleVar_ButtonTextAlign         = iota
-	ImGuiStyleVar_SelectableTextAlign     = iota
-	ImGuiStyleVar_SeparatorTextBorderSize = iota
-	ImGuiStyleVar_SeparatorTextAlign      = iota
-	ImGuiStyleVar_SeparatorTextPadding    = iota
-	ImGuiStyleVar_DockingSeparatorSize    = iota
-	ImGuiStyleVar_COUNT                   = iota
+	ImGuiStyleVar_Alpha                       = iota
+	ImGuiStyleVar_DisabledAlpha               = iota
+	ImGuiStyleVar_WindowPadding               = iota
+	ImGuiStyleVar_WindowRounding              = iota
+	ImGuiStyleVar_WindowBorderSize            = iota
+	ImGuiStyleVar_WindowMinSize               = iota
+	ImGuiStyleVar_WindowTitleAlign            = iota
+	ImGuiStyleVar_ChildRounding               = iota
+	ImGuiStyleVar_ChildBorderSize             = iota
+	ImGuiStyleVar_PopupRounding               = iota
+	ImGuiStyleVar_PopupBorderSize             = iota
+	ImGuiStyleVar_FramePadding                = iota
+	ImGuiStyleVar_FrameRounding               = iota
+	ImGuiStyleVar_FrameBorderSize             = iota
+	ImGuiStyleVar_ItemSpacing                 = iota
+	ImGuiStyleVar_ItemInnerSpacing            = iota
+	ImGuiStyleVar_IndentSpacing               = iota
+	ImGuiStyleVar_CellPadding                 = iota
+	ImGuiStyleVar_ScrollbarSize               = iota
+	ImGuiStyleVar_ScrollbarRounding           = iota
+	ImGuiStyleVar_GrabMinSize                 = iota
+	ImGuiStyleVar_GrabRounding                = iota
+	ImGuiStyleVar_TabRounding                 = iota
+	ImGuiStyleVar_TabBorderSize               = iota
+	ImGuiStyleVar_TabBarBorderSize            = iota
+	ImGuiStyleVar_TabBarOverlineSize          = iota
+	ImGuiStyleVar_TableAngledHeadersAngle     = iota
+	ImGuiStyleVar_TableAngledHeadersTextAlign = iota
+	ImGuiStyleVar_ButtonTextAlign             = iota
+	ImGuiStyleVar_SelectableTextAlign         = iota
+	ImGuiStyleVar_SeparatorTextBorderSize     = iota
+	ImGuiStyleVar_SeparatorTextAlign          = iota
+	ImGuiStyleVar_SeparatorTextPadding        = iota
+	ImGuiStyleVar_DockingSeparatorSize        = iota
+	ImGuiStyleVar_COUNT                       = iota
 )
 
 type ImGuiButtonFlags int
 
 const (
-	ImGuiButtonFlags_None                = ImGuiButtonFlags(0)
-	ImGuiButtonFlags_MouseButtonLeft     = ImGuiButtonFlags(1 << 0)
-	ImGuiButtonFlags_MouseButtonRight    = ImGuiButtonFlags(1 << 1)
-	ImGuiButtonFlags_MouseButtonMiddle   = ImGuiButtonFlags(1 << 2)
-	ImGuiButtonFlags_MouseButtonMask_    = ImGuiButtonFlags(ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle)
-	ImGuiButtonFlags_MouseButtonDefault_ = ImGuiButtonFlags(ImGuiButtonFlags_MouseButtonLeft)
+	ImGuiButtonFlags_None              = ImGuiButtonFlags(0)
+	ImGuiButtonFlags_MouseButtonLeft   = ImGuiButtonFlags(1 << 0)
+	ImGuiButtonFlags_MouseButtonRight  = ImGuiButtonFlags(1 << 1)
+	ImGuiButtonFlags_MouseButtonMiddle = ImGuiButtonFlags(1 << 2)
+	ImGuiButtonFlags_MouseButtonMask_  = ImGuiButtonFlags(ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle)
 )
 
 type ImGuiColorEditFlags int
@@ -659,6 +710,7 @@ const (
 	ImGuiSliderFlags_Logarithmic     = ImGuiSliderFlags(1 << 5)
 	ImGuiSliderFlags_NoRoundToFormat = ImGuiSliderFlags(1 << 6)
 	ImGuiSliderFlags_NoInput         = ImGuiSliderFlags(1 << 7)
+	ImGuiSliderFlags_WrapAround      = ImGuiSliderFlags(1 << 8)
 	ImGuiSliderFlags_InvalidMask_    = ImGuiSliderFlags(0x7000000F)
 )
 
@@ -797,6 +849,36 @@ const (
 	ImGuiTableBgTarget_CellBg = ImGuiTableBgTarget(3)
 )
 
+type ImGuiMultiSelectFlags int
+
+const (
+	ImGuiMultiSelectFlags_None                  = ImGuiMultiSelectFlags(0)
+	ImGuiMultiSelectFlags_SingleSelect          = ImGuiMultiSelectFlags(1 << 0)
+	ImGuiMultiSelectFlags_NoSelectAll           = ImGuiMultiSelectFlags(1 << 1)
+	ImGuiMultiSelectFlags_NoRangeSelect         = ImGuiMultiSelectFlags(1 << 2)
+	ImGuiMultiSelectFlags_NoAutoSelect          = ImGuiMultiSelectFlags(1 << 3)
+	ImGuiMultiSelectFlags_NoAutoClear           = ImGuiMultiSelectFlags(1 << 4)
+	ImGuiMultiSelectFlags_NoAutoClearOnReselect = ImGuiMultiSelectFlags(1 << 5)
+	ImGuiMultiSelectFlags_BoxSelect1d           = ImGuiMultiSelectFlags(1 << 6)
+	ImGuiMultiSelectFlags_BoxSelect2d           = ImGuiMultiSelectFlags(1 << 7)
+	ImGuiMultiSelectFlags_BoxSelectNoScroll     = ImGuiMultiSelectFlags(1 << 8)
+	ImGuiMultiSelectFlags_ClearOnEscape         = ImGuiMultiSelectFlags(1 << 9)
+	ImGuiMultiSelectFlags_ClearOnClickVoid      = ImGuiMultiSelectFlags(1 << 10)
+	ImGuiMultiSelectFlags_ScopeWindow           = ImGuiMultiSelectFlags(1 << 11)
+	ImGuiMultiSelectFlags_ScopeRect             = ImGuiMultiSelectFlags(1 << 12)
+	ImGuiMultiSelectFlags_SelectOnClick         = ImGuiMultiSelectFlags(1 << 13)
+	ImGuiMultiSelectFlags_SelectOnClickRelease  = ImGuiMultiSelectFlags(1 << 14)
+	ImGuiMultiSelectFlags_NavWrapX              = ImGuiMultiSelectFlags(1 << 16)
+)
+
+type ImGuiSelectionRequestType int
+
+const (
+	ImGuiSelectionRequestType_None     = ImGuiSelectionRequestType(0)
+	ImGuiSelectionRequestType_SetAll   = iota
+	ImGuiSelectionRequestType_SetRange = iota
+)
+
 type ImDrawFlags int
 
 const (
@@ -853,14 +935,4 @@ const (
 	ImGuiViewportFlags_CanHostOtherWindows = ImGuiViewportFlags(1 << 11)
 	ImGuiViewportFlags_IsMinimized         = ImGuiViewportFlags(1 << 12)
 	ImGuiViewportFlags_IsFocused           = ImGuiViewportFlags(1 << 13)
-)
-
-type ImGuiModFlags int
-
-const (
-	ImGuiModFlags_None  = ImGuiModFlags(0)
-	ImGuiModFlags_Ctrl  = ImGuiModFlags(ImGuiMod_Ctrl)
-	ImGuiModFlags_Shift = ImGuiModFlags(ImGuiMod_Shift)
-	ImGuiModFlags_Alt   = ImGuiModFlags(ImGuiMod_Alt)
-	ImGuiModFlags_Super = ImGuiModFlags(ImGuiMod_Super)
 )

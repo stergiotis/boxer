@@ -83,8 +83,8 @@ func loadStyle(ptr ImGuiStyleForeignPtr, bs []bool, fs []float32, vec2s []float3
    }
 
    i = 0;
-   s->WindowMenuButtonPosition = dirs[i++];
-   s->ColorButtonPosition = dirs[i++];
+   s->WindowMenuButtonPosition = ImGuiDir(dirs[i++]);
+   s->ColorButtonPosition = ImGuiDir(dirs[i++]);
    
    i = 0;
    s->HoverFlagsForTooltipMouse = hovers[i++];

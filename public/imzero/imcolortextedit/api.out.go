@@ -9,7 +9,6 @@ import "github.com/stergiotis/boxer/public/fffi/runtime"
 // -- deactivated -- // import "github.com/stergiotis/boxer/public/imzero/imgui"
 
 func NewImColorEditorForeignPtr() (ptr ImColorEditorForeignPtr) {
-
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000007d0)
 	_err_ := _f.CallFunction()
@@ -22,11 +21,11 @@ func NewImColorEditorForeignPtr() (ptr ImColorEditorForeignPtr) {
 }
 
 func (foreignptr ImColorEditorForeignPtr) Destroy() {
-
 	_f := foreignptr.getFffi()
 	_f.AddProcedureId(0x000007d1)
 	runtime.AddUintptrArg(_f, foreignptr)
 	_f.CallProcedure()
+
 }
 
 func (foreignptr ImColorEditorForeignPtr) Render(title string) {
@@ -38,11 +37,12 @@ func (foreignptr ImColorEditorForeignPtr) Render(title string) {
 
 }
 
-func (foreignptr ImColorEditorForeignPtr) RenderV(title string, aSize imgui.ImVec2, aBorder bool) {
+func (foreignptr ImColorEditorForeignPtr) RenderV(title string, parentIsFocused bool, aSize imgui.ImVec2, aBorder bool) {
 	_f := foreignptr.getFffi()
 	_f.AddProcedureId(0x000007d3)
 	runtime.AddUintptrArg(_f, foreignptr)
 	runtime.AddStringArg(_f, title)
+	runtime.AddBoolArg(_f, parentIsFocused)
 	runtime.AddComplex64Arg(_f, aSize)
 	runtime.AddBoolArg(_f, aBorder)
 	_f.CallProcedure()
@@ -151,7 +151,7 @@ func (foreignptr ImColorEditorForeignPtr) IsReadOnly() (readonly bool) {
 	return
 }
 
-func (foreignptr ImColorEditorForeignPtr) IsChanged() (text bool, cursor bool) {
+func (foreignptr ImColorEditorForeignPtr) IsChanged() (textChanged bool) {
 	_f := foreignptr.getFffi()
 	_f.AddFunctionId(0x000007dc)
 	runtime.AddUintptrArg(_f, foreignptr)
@@ -160,15 +160,29 @@ func (foreignptr ImColorEditorForeignPtr) IsChanged() (text bool, cursor bool) {
 		foreignptr.handleError(_err_)
 		return
 	}
-	text = (runtime.GetBoolRetr[bool](_f))
-	cursor = (runtime.GetBoolRetr[bool](_f))
+	textChanged = (runtime.GetBoolRetr[bool](_f))
+
+	return
+}
+
+func (foreignptr ImColorEditorForeignPtr) GetCursorPosition() (line int, column int) {
+	_f := foreignptr.getFffi()
+	_f.AddFunctionId(0x000007dd)
+	runtime.AddUintptrArg(_f, foreignptr)
+	_err_ := _f.CallFunction()
+	if _err_ != nil {
+		foreignptr.handleError(_err_)
+		return
+	}
+	line = (runtime.GetIntRetr[int](_f))
+	column = (runtime.GetIntRetr[int](_f))
 
 	return
 }
 
 func (foreignptr ImColorEditorForeignPtr) IsColorizerEnabled() (enabled bool) {
 	_f := foreignptr.getFffi()
-	_f.AddFunctionId(0x000007dd)
+	_f.AddFunctionId(0x000007de)
 	runtime.AddUintptrArg(_f, foreignptr)
 	_err_ := _f.CallFunction()
 	if _err_ != nil {
@@ -182,7 +196,7 @@ func (foreignptr ImColorEditorForeignPtr) IsColorizerEnabled() (enabled bool) {
 
 func (foreignptr ImColorEditorForeignPtr) SetColorizerEnable(v bool) {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x000007de)
+	_f.AddProcedureId(0x000007df)
 	runtime.AddUintptrArg(_f, foreignptr)
 	runtime.AddBoolArg(_f, v)
 	_f.CallProcedure()
@@ -191,7 +205,7 @@ func (foreignptr ImColorEditorForeignPtr) SetColorizerEnable(v bool) {
 
 func (foreignptr ImColorEditorForeignPtr) SetHandleMouseInputs(v bool) {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x000007df)
+	_f.AddProcedureId(0x000007e0)
 	runtime.AddUintptrArg(_f, foreignptr)
 	runtime.AddBoolArg(_f, v)
 	_f.CallProcedure()
@@ -200,7 +214,7 @@ func (foreignptr ImColorEditorForeignPtr) SetHandleMouseInputs(v bool) {
 
 func (foreignptr ImColorEditorForeignPtr) IsHandleMouseInputsEnabled() (v bool) {
 	_f := foreignptr.getFffi()
-	_f.AddFunctionId(0x000007e0)
+	_f.AddFunctionId(0x000007e1)
 	runtime.AddUintptrArg(_f, foreignptr)
 	_err_ := _f.CallFunction()
 	if _err_ != nil {
@@ -214,7 +228,7 @@ func (foreignptr ImColorEditorForeignPtr) IsHandleMouseInputsEnabled() (v bool) 
 
 func (foreignptr ImColorEditorForeignPtr) SetHandleKeyboardInputs(v bool) {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x000007e1)
+	_f.AddProcedureId(0x000007e2)
 	runtime.AddUintptrArg(_f, foreignptr)
 	runtime.AddBoolArg(_f, v)
 	_f.CallProcedure()
@@ -223,7 +237,7 @@ func (foreignptr ImColorEditorForeignPtr) SetHandleKeyboardInputs(v bool) {
 
 func (foreignptr ImColorEditorForeignPtr) IsHandleKeyboardInputsEnabled() (v bool) {
 	_f := foreignptr.getFffi()
-	_f.AddFunctionId(0x000007e2)
+	_f.AddFunctionId(0x000007e3)
 	runtime.AddUintptrArg(_f, foreignptr)
 	_err_ := _f.CallFunction()
 	if _err_ != nil {
@@ -237,7 +251,7 @@ func (foreignptr ImColorEditorForeignPtr) IsHandleKeyboardInputsEnabled() (v boo
 
 func (foreignptr ImColorEditorForeignPtr) SetImGuiChildIgnored(v bool) {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x000007e3)
+	_f.AddProcedureId(0x000007e4)
 	runtime.AddUintptrArg(_f, foreignptr)
 	runtime.AddBoolArg(_f, v)
 	_f.CallProcedure()
@@ -246,7 +260,7 @@ func (foreignptr ImColorEditorForeignPtr) SetImGuiChildIgnored(v bool) {
 
 func (foreignptr ImColorEditorForeignPtr) IsImGuiChildIgnored() (v bool) {
 	_f := foreignptr.getFffi()
-	_f.AddFunctionId(0x000007e4)
+	_f.AddFunctionId(0x000007e5)
 	runtime.AddUintptrArg(_f, foreignptr)
 	_err_ := _f.CallFunction()
 	if _err_ != nil {
@@ -260,7 +274,7 @@ func (foreignptr ImColorEditorForeignPtr) IsImGuiChildIgnored() (v bool) {
 
 func (foreignptr ImColorEditorForeignPtr) SetShowWhitespaces(v bool) {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x000007e5)
+	_f.AddProcedureId(0x000007e6)
 	runtime.AddUintptrArg(_f, foreignptr)
 	runtime.AddBoolArg(_f, v)
 	_f.CallProcedure()
@@ -269,7 +283,7 @@ func (foreignptr ImColorEditorForeignPtr) SetShowWhitespaces(v bool) {
 
 func (foreignptr ImColorEditorForeignPtr) IsShowingWhitespaces() (v bool) {
 	_f := foreignptr.getFffi()
-	_f.AddFunctionId(0x000007e6)
+	_f.AddFunctionId(0x000007e7)
 	runtime.AddUintptrArg(_f, foreignptr)
 	_err_ := _f.CallFunction()
 	if _err_ != nil {
@@ -283,7 +297,7 @@ func (foreignptr ImColorEditorForeignPtr) IsShowingWhitespaces() (v bool) {
 
 func (foreignptr ImColorEditorForeignPtr) SetTabSize(v int) {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x000007e7)
+	_f.AddProcedureId(0x000007e8)
 	runtime.AddUintptrArg(_f, foreignptr)
 	runtime.AddIntArg(_f, v)
 	_f.CallProcedure()
@@ -292,7 +306,7 @@ func (foreignptr ImColorEditorForeignPtr) SetTabSize(v int) {
 
 func (foreignptr ImColorEditorForeignPtr) GetTabSize() (v int) {
 	_f := foreignptr.getFffi()
-	_f.AddFunctionId(0x000007e8)
+	_f.AddFunctionId(0x000007e9)
 	runtime.AddUintptrArg(_f, foreignptr)
 	_err_ := _f.CallFunction()
 	if _err_ != nil {
@@ -306,7 +320,7 @@ func (foreignptr ImColorEditorForeignPtr) GetTabSize() (v int) {
 
 func (foreignptr ImColorEditorForeignPtr) InsertText(text string) {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x000007e9)
+	_f.AddProcedureId(0x000007ea)
 	runtime.AddUintptrArg(_f, foreignptr)
 	runtime.AddStringArg(_f, text)
 	_f.CallProcedure()
@@ -315,7 +329,7 @@ func (foreignptr ImColorEditorForeignPtr) InsertText(text string) {
 
 func (foreignptr ImColorEditorForeignPtr) MoveUp() {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x000007ea)
+	_f.AddProcedureId(0x000007eb)
 	runtime.AddUintptrArg(_f, foreignptr)
 	_f.CallProcedure()
 
@@ -323,7 +337,7 @@ func (foreignptr ImColorEditorForeignPtr) MoveUp() {
 
 func (foreignptr ImColorEditorForeignPtr) MoveUpV(amount int, selectP bool) {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x000007eb)
+	_f.AddProcedureId(0x000007ec)
 	runtime.AddUintptrArg(_f, foreignptr)
 	runtime.AddIntArg(_f, amount)
 	runtime.AddBoolArg(_f, selectP)
@@ -333,7 +347,7 @@ func (foreignptr ImColorEditorForeignPtr) MoveUpV(amount int, selectP bool) {
 
 func (foreignptr ImColorEditorForeignPtr) MoveDown() {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x000007ec)
+	_f.AddProcedureId(0x000007ed)
 	runtime.AddUintptrArg(_f, foreignptr)
 	_f.CallProcedure()
 
@@ -341,7 +355,7 @@ func (foreignptr ImColorEditorForeignPtr) MoveDown() {
 
 func (foreignptr ImColorEditorForeignPtr) MoveDownV(amount int, selectP bool) {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x000007ed)
+	_f.AddProcedureId(0x000007ee)
 	runtime.AddUintptrArg(_f, foreignptr)
 	runtime.AddIntArg(_f, amount)
 	runtime.AddBoolArg(_f, selectP)
@@ -351,7 +365,7 @@ func (foreignptr ImColorEditorForeignPtr) MoveDownV(amount int, selectP bool) {
 
 func (foreignptr ImColorEditorForeignPtr) MoveLeft() {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x000007ee)
+	_f.AddProcedureId(0x000007ef)
 	runtime.AddUintptrArg(_f, foreignptr)
 	_f.CallProcedure()
 
@@ -359,7 +373,7 @@ func (foreignptr ImColorEditorForeignPtr) MoveLeft() {
 
 func (foreignptr ImColorEditorForeignPtr) MoveLeftV(amount int, selectP bool, wordMode bool) {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x000007ef)
+	_f.AddProcedureId(0x000007f0)
 	runtime.AddUintptrArg(_f, foreignptr)
 	runtime.AddIntArg(_f, amount)
 	runtime.AddBoolArg(_f, selectP)
@@ -370,7 +384,7 @@ func (foreignptr ImColorEditorForeignPtr) MoveLeftV(amount int, selectP bool, wo
 
 func (foreignptr ImColorEditorForeignPtr) MoveRight() {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x000007f0)
+	_f.AddProcedureId(0x000007f1)
 	runtime.AddUintptrArg(_f, foreignptr)
 	_f.CallProcedure()
 
@@ -378,7 +392,7 @@ func (foreignptr ImColorEditorForeignPtr) MoveRight() {
 
 func (foreignptr ImColorEditorForeignPtr) MoveRightV(amount int, selectP bool, wordMode bool) {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x000007f1)
+	_f.AddProcedureId(0x000007f2)
 	runtime.AddUintptrArg(_f, foreignptr)
 	runtime.AddIntArg(_f, amount)
 	runtime.AddBoolArg(_f, selectP)
@@ -389,7 +403,7 @@ func (foreignptr ImColorEditorForeignPtr) MoveRightV(amount int, selectP bool, w
 
 func (foreignptr ImColorEditorForeignPtr) MoveTop() {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x000007f2)
+	_f.AddProcedureId(0x000007f3)
 	runtime.AddUintptrArg(_f, foreignptr)
 	_f.CallProcedure()
 
@@ -397,7 +411,7 @@ func (foreignptr ImColorEditorForeignPtr) MoveTop() {
 
 func (foreignptr ImColorEditorForeignPtr) MoveTopV(selectP bool) {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x000007f3)
+	_f.AddProcedureId(0x000007f4)
 	runtime.AddUintptrArg(_f, foreignptr)
 	runtime.AddBoolArg(_f, selectP)
 	_f.CallProcedure()
@@ -406,7 +420,7 @@ func (foreignptr ImColorEditorForeignPtr) MoveTopV(selectP bool) {
 
 func (foreignptr ImColorEditorForeignPtr) MoveBottom() {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x000007f4)
+	_f.AddProcedureId(0x000007f5)
 	runtime.AddUintptrArg(_f, foreignptr)
 	_f.CallProcedure()
 
@@ -414,7 +428,7 @@ func (foreignptr ImColorEditorForeignPtr) MoveBottom() {
 
 func (foreignptr ImColorEditorForeignPtr) MoveBottomV(selectP bool) {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x000007f5)
+	_f.AddProcedureId(0x000007f6)
 	runtime.AddUintptrArg(_f, foreignptr)
 	runtime.AddBoolArg(_f, selectP)
 	_f.CallProcedure()
@@ -423,7 +437,7 @@ func (foreignptr ImColorEditorForeignPtr) MoveBottomV(selectP bool) {
 
 func (foreignptr ImColorEditorForeignPtr) MoveHome() {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x000007f6)
+	_f.AddProcedureId(0x000007f7)
 	runtime.AddUintptrArg(_f, foreignptr)
 	_f.CallProcedure()
 
@@ -431,7 +445,7 @@ func (foreignptr ImColorEditorForeignPtr) MoveHome() {
 
 func (foreignptr ImColorEditorForeignPtr) MoveHomeV(selectP bool) {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x000007f7)
+	_f.AddProcedureId(0x000007f8)
 	runtime.AddUintptrArg(_f, foreignptr)
 	runtime.AddBoolArg(_f, selectP)
 	_f.CallProcedure()
@@ -440,7 +454,7 @@ func (foreignptr ImColorEditorForeignPtr) MoveHomeV(selectP bool) {
 
 func (foreignptr ImColorEditorForeignPtr) MoveEnd() {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x000007f8)
+	_f.AddProcedureId(0x000007f9)
 	runtime.AddUintptrArg(_f, foreignptr)
 	_f.CallProcedure()
 
@@ -448,7 +462,7 @@ func (foreignptr ImColorEditorForeignPtr) MoveEnd() {
 
 func (foreignptr ImColorEditorForeignPtr) MoveEndV(selectP bool) {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x000007f9)
+	_f.AddProcedureId(0x000007fa)
 	runtime.AddUintptrArg(_f, foreignptr)
 	runtime.AddBoolArg(_f, selectP)
 	_f.CallProcedure()
@@ -457,7 +471,7 @@ func (foreignptr ImColorEditorForeignPtr) MoveEndV(selectP bool) {
 
 func (foreignptr ImColorEditorForeignPtr) SelectWordUnderCursor() {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x000007fa)
+	_f.AddProcedureId(0x000007fb)
 	runtime.AddUintptrArg(_f, foreignptr)
 	_f.CallProcedure()
 
@@ -465,7 +479,7 @@ func (foreignptr ImColorEditorForeignPtr) SelectWordUnderCursor() {
 
 func (foreignptr ImColorEditorForeignPtr) SelectAll() {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x000007fb)
+	_f.AddProcedureId(0x000007fc)
 	runtime.AddUintptrArg(_f, foreignptr)
 	_f.CallProcedure()
 
@@ -473,7 +487,7 @@ func (foreignptr ImColorEditorForeignPtr) SelectAll() {
 
 func (foreignptr ImColorEditorForeignPtr) HasSelection() (has bool) {
 	_f := foreignptr.getFffi()
-	_f.AddFunctionId(0x000007fc)
+	_f.AddFunctionId(0x000007fd)
 	runtime.AddUintptrArg(_f, foreignptr)
 	_err_ := _f.CallFunction()
 	if _err_ != nil {
@@ -487,7 +501,7 @@ func (foreignptr ImColorEditorForeignPtr) HasSelection() (has bool) {
 
 func (foreignptr ImColorEditorForeignPtr) Copy() {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x000007fd)
+	_f.AddProcedureId(0x000007fe)
 	runtime.AddUintptrArg(_f, foreignptr)
 	_f.CallProcedure()
 
@@ -495,7 +509,7 @@ func (foreignptr ImColorEditorForeignPtr) Copy() {
 
 func (foreignptr ImColorEditorForeignPtr) Cut() {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x000007fe)
+	_f.AddProcedureId(0x000007ff)
 	runtime.AddUintptrArg(_f, foreignptr)
 	_f.CallProcedure()
 
@@ -503,7 +517,7 @@ func (foreignptr ImColorEditorForeignPtr) Cut() {
 
 func (foreignptr ImColorEditorForeignPtr) Paste() {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x000007ff)
+	_f.AddProcedureId(0x00000800)
 	runtime.AddUintptrArg(_f, foreignptr)
 	_f.CallProcedure()
 
@@ -511,27 +525,13 @@ func (foreignptr ImColorEditorForeignPtr) Paste() {
 
 func (foreignptr ImColorEditorForeignPtr) Delete() {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x00000800)
+	_f.AddProcedureId(0x00000801)
 	runtime.AddUintptrArg(_f, foreignptr)
 	_f.CallProcedure()
 
 }
 
 func (foreignptr ImColorEditorForeignPtr) CanUndo() (can bool) {
-	_f := foreignptr.getFffi()
-	_f.AddFunctionId(0x00000801)
-	runtime.AddUintptrArg(_f, foreignptr)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		foreignptr.handleError(_err_)
-		return
-	}
-	can = (runtime.GetBoolRetr[bool](_f))
-
-	return
-}
-
-func (foreignptr ImColorEditorForeignPtr) CanRedo() (can bool) {
 	_f := foreignptr.getFffi()
 	_f.AddFunctionId(0x00000802)
 	runtime.AddUintptrArg(_f, foreignptr)
@@ -545,9 +545,23 @@ func (foreignptr ImColorEditorForeignPtr) CanRedo() (can bool) {
 	return
 }
 
+func (foreignptr ImColorEditorForeignPtr) CanRedo() (can bool) {
+	_f := foreignptr.getFffi()
+	_f.AddFunctionId(0x00000803)
+	runtime.AddUintptrArg(_f, foreignptr)
+	_err_ := _f.CallFunction()
+	if _err_ != nil {
+		foreignptr.handleError(_err_)
+		return
+	}
+	can = (runtime.GetBoolRetr[bool](_f))
+
+	return
+}
+
 func (foreignptr ImColorEditorForeignPtr) Undo() {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x00000803)
+	_f.AddProcedureId(0x00000804)
 	runtime.AddUintptrArg(_f, foreignptr)
 	_f.CallProcedure()
 
@@ -555,7 +569,7 @@ func (foreignptr ImColorEditorForeignPtr) Undo() {
 
 func (foreignptr ImColorEditorForeignPtr) UndoV(steps int) {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x00000804)
+	_f.AddProcedureId(0x00000805)
 	runtime.AddUintptrArg(_f, foreignptr)
 	runtime.AddIntArg(_f, steps)
 	_f.CallProcedure()
@@ -564,7 +578,7 @@ func (foreignptr ImColorEditorForeignPtr) UndoV(steps int) {
 
 func (foreignptr ImColorEditorForeignPtr) Redo() {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x00000805)
+	_f.AddProcedureId(0x00000806)
 	runtime.AddUintptrArg(_f, foreignptr)
 	_f.CallProcedure()
 
@@ -572,7 +586,7 @@ func (foreignptr ImColorEditorForeignPtr) Redo() {
 
 func (foreignptr ImColorEditorForeignPtr) RedoV(steps int) {
 	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x00000806)
+	_f.AddProcedureId(0x00000807)
 	runtime.AddUintptrArg(_f, foreignptr)
 	runtime.AddIntArg(_f, steps)
 	_f.CallProcedure()

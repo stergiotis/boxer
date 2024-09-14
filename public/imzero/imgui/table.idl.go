@@ -19,7 +19,7 @@ func TableGetSortSpecs() (sort bool, dirty bool, userIds []ImGuiID, columnIndice
             directions_len = userIds_len;
             userIds = (ImGuiID*)arenaMalloc(userIds_len*sizeof(ImGuiID));
             columnIndices = (int16_t*)arenaMalloc(userIds_len*sizeof(int16_t));
-            directions = (ImGuiSortDirection*)arenaMalloc(userIds_len*sizeof(ImGuiSortDirection));
+            directions = (uint8_t*)arenaMalloc(userIds_len*sizeof(ImGuiSortDirection));
             for(size_t i=0;i<userIds_len;i++) {
                auto s = spec->Specs[i];
                userIds[i] = s.ColumnUserID;
