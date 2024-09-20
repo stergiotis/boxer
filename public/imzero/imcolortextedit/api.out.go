@@ -593,5 +593,131 @@ func (foreignptr ImColorEditorForeignPtr) RedoV(steps int) {
 
 }
 
+func (foreignptr ImColorEditorForeignPtr) GetLanguageDefinitionName() (name string) {
+	_f := foreignptr.getFffi()
+	_f.AddFunctionId(0x00000808)
+	runtime.AddUintptrArg(_f, foreignptr)
+	_err_ := _f.CallFunction()
+	if _err_ != nil {
+		foreignptr.handleError(_err_)
+		return
+	}
+	name = (runtime.GetStringRetr[string](_f))
+
+	return
+}
+
+func (foreignptr ImColorEditorForeignPtr) ActivatePaletteMariana() {
+	_f := foreignptr.getFffi()
+	_f.AddProcedureId(0x00000809)
+	runtime.AddUintptrArg(_f, foreignptr)
+	_f.CallProcedure()
+
+}
+
+func (foreignptr ImColorEditorForeignPtr) ActivatePaletteDark() {
+	_f := foreignptr.getFffi()
+	_f.AddProcedureId(0x0000080a)
+	runtime.AddUintptrArg(_f, foreignptr)
+	_f.CallProcedure()
+
+}
+
+func (foreignptr ImColorEditorForeignPtr) ActivatePaletteLight() {
+	_f := foreignptr.getFffi()
+	_f.AddProcedureId(0x0000080b)
+	runtime.AddUintptrArg(_f, foreignptr)
+	_f.CallProcedure()
+
+}
+
+func (foreignptr ImColorEditorForeignPtr) ActivatePaletteRetroBlue() {
+	_f := foreignptr.getFffi()
+	_f.AddProcedureId(0x0000080c)
+	runtime.AddUintptrArg(_f, foreignptr)
+	_f.CallProcedure()
+
+}
+
+func (foreignptr ImColorEditorForeignPtr) ActivateLanguageCPlusPlus() {
+	_f := foreignptr.getFffi()
+	_f.AddProcedureId(0x0000080d)
+	runtime.AddUintptrArg(_f, foreignptr)
+	_f.CallProcedure()
+
+}
+
+func (foreignptr ImColorEditorForeignPtr) ActivateLanguageHLSL() {
+	_f := foreignptr.getFffi()
+	_f.AddProcedureId(0x0000080e)
+	runtime.AddUintptrArg(_f, foreignptr)
+	_f.CallProcedure()
+
+}
+
+func (foreignptr ImColorEditorForeignPtr) ActivateLanguageGLSL() {
+	_f := foreignptr.getFffi()
+	_f.AddProcedureId(0x0000080f)
+	runtime.AddUintptrArg(_f, foreignptr)
+	_f.CallProcedure()
+
+}
+
+func (foreignptr ImColorEditorForeignPtr) ActivateLanguagePython() {
+	_f := foreignptr.getFffi()
+	_f.AddProcedureId(0x00000810)
+	runtime.AddUintptrArg(_f, foreignptr)
+	_f.CallProcedure()
+
+}
+
+func (foreignptr ImColorEditorForeignPtr) ActivateLanguageC() {
+	_f := foreignptr.getFffi()
+	_f.AddProcedureId(0x00000811)
+	runtime.AddUintptrArg(_f, foreignptr)
+	_f.CallProcedure()
+
+}
+
+func (foreignptr ImColorEditorForeignPtr) ActivateLanguageSQL() {
+	_f := foreignptr.getFffi()
+	_f.AddProcedureId(0x00000812)
+	runtime.AddUintptrArg(_f, foreignptr)
+	_f.CallProcedure()
+
+}
+
+func (foreignptr ImColorEditorForeignPtr) ActivateLanguageAngelScript() {
+	_f := foreignptr.getFffi()
+	_f.AddProcedureId(0x00000813)
+	runtime.AddUintptrArg(_f, foreignptr)
+	_f.CallProcedure()
+
+}
+
+func (foreignptr ImColorEditorForeignPtr) ActivateLanguageLua() {
+	_f := foreignptr.getFffi()
+	_f.AddProcedureId(0x00000814)
+	runtime.AddUintptrArg(_f, foreignptr)
+	_f.CallProcedure()
+
+}
+
+func (foreignptr ImColorEditorForeignPtr) ActivateLanguageCSharp() {
+	_f := foreignptr.getFffi()
+	_f.AddProcedureId(0x00000815)
+	runtime.AddUintptrArg(_f, foreignptr)
+	_f.CallProcedure()
+
+}
+
+func (foreignptr ImColorEditorForeignPtr) ActivateLanguageJson() {
+	_f := foreignptr.getFffi()
+	_f.AddProcedureId(0x00000816)
+	runtime.AddUintptrArg(_f, foreignptr)
+	_f.CallProcedure()
+
+}
+
 /*
  */

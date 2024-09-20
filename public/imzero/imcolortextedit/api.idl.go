@@ -204,5 +204,77 @@ func (foreignptr ImColorEditorForeignPtr) RedoV(steps int) {
 	_ = `((TextEditor*)foreignptr)->Redo(steps)`
 }
 
+func (foreignptr ImColorEditorForeignPtr) GetLanguageDefinitionName() (name string) {
+	_ = `name = ((TextEditor*)foreignptr)->GetLanguageDefinitionName();`
+	return
+}
+
+func (foreignptr ImColorEditorForeignPtr) ActivatePaletteMariana() {
+	_ = `auto const u = ((TextEditor*)foreignptr);
+u->SetPalette(u->GetMarianaPalette());`
+}
+func (foreignptr ImColorEditorForeignPtr) ActivatePaletteDark() {
+	_ = `auto const u = ((TextEditor*)foreignptr);
+u->SetPalette(u->GetDarkPalette());`
+}
+func (foreignptr ImColorEditorForeignPtr) ActivatePaletteLight() {
+	_ = `auto const u = ((TextEditor*)foreignptr);
+u->SetPalette(u->GetLightPalette());`
+}
+func (foreignptr ImColorEditorForeignPtr) ActivatePaletteRetroBlue() {
+	_ = `auto const u = ((TextEditor*)foreignptr);
+u->SetPalette(u->GetRetroBluePalette());`
+}
+func (foreignptr ImColorEditorForeignPtr) ActivateLanguageCPlusPlus() {
+	_ = `auto const u = ((TextEditor*)foreignptr);
+u->SetLanguageDefinition(TextEditor::LanguageDefinition::CPlusPlus());
+`
+}
+func (foreignptr ImColorEditorForeignPtr) ActivateLanguageHLSL() {
+	_ = `auto const u = ((TextEditor*)foreignptr);
+u->SetLanguageDefinition(TextEditor::LanguageDefinition::HLSL());
+`
+}
+func (foreignptr ImColorEditorForeignPtr) ActivateLanguageGLSL() {
+	_ = `auto const u = ((TextEditor*)foreignptr);
+u->SetLanguageDefinition(TextEditor::LanguageDefinition::GLSL());
+`
+}
+func (foreignptr ImColorEditorForeignPtr) ActivateLanguagePython() {
+	_ = `auto const u = ((TextEditor*)foreignptr);
+u->SetLanguageDefinition(TextEditor::LanguageDefinition::Python());
+`
+}
+func (foreignptr ImColorEditorForeignPtr) ActivateLanguageC() {
+	_ = `auto const u = ((TextEditor*)foreignptr);
+u->SetLanguageDefinition(TextEditor::LanguageDefinition::C());
+`
+}
+func (foreignptr ImColorEditorForeignPtr) ActivateLanguageSQL() {
+	_ = `auto const u = ((TextEditor*)foreignptr);
+u->SetLanguageDefinition(TextEditor::LanguageDefinition::SQL());
+`
+}
+func (foreignptr ImColorEditorForeignPtr) ActivateLanguageAngelScript() {
+	_ = `auto const u = ((TextEditor*)foreignptr);
+u->SetLanguageDefinition(TextEditor::LanguageDefinition::AngelScript());
+`
+}
+func (foreignptr ImColorEditorForeignPtr) ActivateLanguageLua() {
+	_ = `auto const u = ((TextEditor*)foreignptr);
+u->SetLanguageDefinition(TextEditor::LanguageDefinition::Lua());
+`
+}
+func (foreignptr ImColorEditorForeignPtr) ActivateLanguageCSharp() {
+	_ = `auto const u = ((TextEditor*)foreignptr);
+u->SetLanguageDefinition(TextEditor::LanguageDefinition::CSharp());
+`
+}
+func (foreignptr ImColorEditorForeignPtr) ActivateLanguageJson() {
+	_ = `auto const u = ((TextEditor*)foreignptr);
+u->SetLanguageDefinition(TextEditor::LanguageDefinition::Json());
+`
+}
+
 /*
  */
