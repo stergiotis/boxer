@@ -4,7 +4,7 @@ package imgui
 
 import "github.com/stergiotis/boxer/public/imzero/dto"
 
-func PushIsParagraphText(val dto.IsPagraphText) {
+func PushIsParagraphText(val dto.IsParagraphText) {
 	_ = `ImGui::PushIsParagraphText(val)`
 }
 func PopIsParagraphText() {
