@@ -7,24 +7,24 @@ import "strconv"
 type TextAlignFlags byte
 
 const (
-	TextAlignFlagsleft    TextAlignFlags = 0
-	TextAlignFlagsright   TextAlignFlags = 1
-	TextAlignFlagscenter  TextAlignFlags = 2
-	TextAlignFlagsjustify TextAlignFlags = 3
+	TextAlignFlagsLeft    TextAlignFlags = 0
+	TextAlignFlagsRight   TextAlignFlags = 1
+	TextAlignFlagsCenter  TextAlignFlags = 2
+	TextAlignFlagsJustify TextAlignFlags = 3
 )
 
 var EnumNamesTextAlignFlags = map[TextAlignFlags]string{
-	TextAlignFlagsleft:    "left",
-	TextAlignFlagsright:   "right",
-	TextAlignFlagscenter:  "center",
-	TextAlignFlagsjustify: "justify",
+	TextAlignFlagsLeft:    "Left",
+	TextAlignFlagsRight:   "Right",
+	TextAlignFlagsCenter:  "Center",
+	TextAlignFlagsJustify: "Justify",
 }
 
 var EnumValuesTextAlignFlags = map[string]TextAlignFlags{
-	"left":    TextAlignFlagsleft,
-	"right":   TextAlignFlagsright,
-	"center":  TextAlignFlagscenter,
-	"justify": TextAlignFlagsjustify,
+	"Left":    TextAlignFlagsLeft,
+	"Right":   TextAlignFlagsRight,
+	"Center":  TextAlignFlagsCenter,
+	"Justify": TextAlignFlagsJustify,
 }
 
 func (v TextAlignFlags) String() string {

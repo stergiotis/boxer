@@ -7,21 +7,21 @@ import "strconv"
 type IsParagraphText byte
 
 const (
-	IsParagraphTextnever  IsParagraphText = 0
-	IsParagraphTextalways IsParagraphText = 1
-	IsParagraphTextauto   IsParagraphText = 2
+	IsParagraphTextNever  IsParagraphText = 0
+	IsParagraphTextAlways IsParagraphText = 1
+	IsParagraphTextAuto   IsParagraphText = 2
 )
 
 var EnumNamesIsParagraphText = map[IsParagraphText]string{
-	IsParagraphTextnever:  "never",
-	IsParagraphTextalways: "always",
-	IsParagraphTextauto:   "auto",
+	IsParagraphTextNever:  "Never",
+	IsParagraphTextAlways: "Always",
+	IsParagraphTextAuto:   "Auto",
 }
 
 var EnumValuesIsParagraphText = map[string]IsParagraphText{
-	"never":  IsParagraphTextnever,
-	"always": IsParagraphTextalways,
-	"auto":   IsParagraphTextauto,
+	"Never":  IsParagraphTextNever,
+	"Always": IsParagraphTextAlways,
+	"Auto":   IsParagraphTextAuto,
 }
 
 func (v IsParagraphText) String() string {

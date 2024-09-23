@@ -7,24 +7,24 @@ import "strconv"
 type PathFillType byte
 
 const (
-	PathFillTypewinding        PathFillType = 0
-	PathFillTypeevenOdd        PathFillType = 1
-	PathFillTypeinverseWinding PathFillType = 2
-	PathFillTypeinverseEvenOdd PathFillType = 3
+	PathFillTypeWinding        PathFillType = 0
+	PathFillTypeEvenOdd        PathFillType = 1
+	PathFillTypeInverseWinding PathFillType = 2
+	PathFillTypeInverseEvenOdd PathFillType = 3
 )
 
 var EnumNamesPathFillType = map[PathFillType]string{
-	PathFillTypewinding:        "winding",
-	PathFillTypeevenOdd:        "evenOdd",
-	PathFillTypeinverseWinding: "inverseWinding",
-	PathFillTypeinverseEvenOdd: "inverseEvenOdd",
+	PathFillTypeWinding:        "Winding",
+	PathFillTypeEvenOdd:        "EvenOdd",
+	PathFillTypeInverseWinding: "InverseWinding",
+	PathFillTypeInverseEvenOdd: "InverseEvenOdd",
 }
 
 var EnumValuesPathFillType = map[string]PathFillType{
-	"winding":        PathFillTypewinding,
-	"evenOdd":        PathFillTypeevenOdd,
-	"inverseWinding": PathFillTypeinverseWinding,
-	"inverseEvenOdd": PathFillTypeinverseEvenOdd,
+	"Winding":        PathFillTypeWinding,
+	"EvenOdd":        PathFillTypeEvenOdd,
+	"InverseWinding": PathFillTypeInverseWinding,
+	"InverseEvenOdd": PathFillTypeInverseEvenOdd,
 }
 
 func (v PathFillType) String() string {

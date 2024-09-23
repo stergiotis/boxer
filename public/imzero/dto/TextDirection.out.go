@@ -7,18 +7,18 @@ import "strconv"
 type TextDirection byte
 
 const (
-	TextDirectionltr TextDirection = 0
-	TextDirectionrtl TextDirection = 1
+	TextDirectionLtr TextDirection = 0
+	TextDirectionRtl TextDirection = 1
 )
 
 var EnumNamesTextDirection = map[TextDirection]string{
-	TextDirectionltr: "ltr",
-	TextDirectionrtl: "rtl",
+	TextDirectionLtr: "Ltr",
+	TextDirectionRtl: "Rtl",
 }
 
 var EnumValuesTextDirection = map[string]TextDirection{
-	"ltr": TextDirectionltr,
-	"rtl": TextDirectionrtl,
+	"Ltr": TextDirectionLtr,
+	"Rtl": TextDirectionRtl,
 }
 
 func (v TextDirection) String() string {

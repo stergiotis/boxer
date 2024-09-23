@@ -36,5 +36,6 @@ mkdir -p "$IMZERO_CPP_BINDING_DIR/imgui"
 ./main generateFffiCode --idlBuildTag fffi_idl_code \
 	                --idlPackagePattern github.com/stergiotis/boxer/public/imzero/imgui \
 	                --goOutputFile "$outfile" \
+			--goCodeProlog $'import "github.com/stergiotis/boxer/public/imzero/dto"\n' \
 			--runeCppType "ImWchar" \
 			--cppOutputFile "$IMZERO_CPP_BINDING_DIR/imgui/dispatch.h" 2>&1 | ./main cbor diag

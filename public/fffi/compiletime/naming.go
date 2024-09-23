@@ -123,6 +123,9 @@ func (inst *Namer) GoTypeNameToSendRecvFuncNameSuffix(name string) (r string, er
 	case "string", "bool", "uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64", "float32", "float64", "int", "complex64", "complex128", "uintptr", "rune", "uint":
 		r = inst.titleCase.String(name)
 		break
+	case "byte":
+		r = "Uint8"
+		break
 	case "[]byte":
 		r = "Bytes"
 		break

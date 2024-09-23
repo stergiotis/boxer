@@ -35,6 +35,9 @@ func menu(app *application.Application, beginMenu func(name string) bool, endMen
 		if menuItem(nerdfont.FaFontAwesome + " Nerdfont") {
 			render = MakeNerdfontDemo(app)
 		}
+		if menuItem(nerdfont.FaParagraph + " Paragraph") {
+			render = MakeParagraphDemo()
+		}
 		endMenu()
 	}
 	if beginMenu("Editor") {

@@ -7,33 +7,33 @@ import "strconv"
 type PathVerb byte
 
 const (
-	PathVerbmove  PathVerb = 0
-	PathVerbline  PathVerb = 1
-	PathVerbquad  PathVerb = 2
-	PathVerbconic PathVerb = 3
-	PathVerbcubic PathVerb = 4
-	PathVerbclose PathVerb = 5
-	PathVerbdone  PathVerb = 6
+	PathVerbMove  PathVerb = 0
+	PathVerbLine  PathVerb = 1
+	PathVerbQuad  PathVerb = 2
+	PathVerbConic PathVerb = 3
+	PathVerbCubic PathVerb = 4
+	PathVerbClose PathVerb = 5
+	PathVerbDone  PathVerb = 6
 )
 
 var EnumNamesPathVerb = map[PathVerb]string{
-	PathVerbmove:  "move",
-	PathVerbline:  "line",
-	PathVerbquad:  "quad",
-	PathVerbconic: "conic",
-	PathVerbcubic: "cubic",
-	PathVerbclose: "close",
-	PathVerbdone:  "done",
+	PathVerbMove:  "Move",
+	PathVerbLine:  "Line",
+	PathVerbQuad:  "Quad",
+	PathVerbConic: "Conic",
+	PathVerbCubic: "Cubic",
+	PathVerbClose: "Close",
+	PathVerbDone:  "Done",
 }
 
 var EnumValuesPathVerb = map[string]PathVerb{
-	"move":  PathVerbmove,
-	"line":  PathVerbline,
-	"quad":  PathVerbquad,
-	"conic": PathVerbconic,
-	"cubic": PathVerbcubic,
-	"close": PathVerbclose,
-	"done":  PathVerbdone,
+	"Move":  PathVerbMove,
+	"Line":  PathVerbLine,
+	"Quad":  PathVerbQuad,
+	"Conic": PathVerbConic,
+	"Cubic": PathVerbCubic,
+	"Close": PathVerbClose,
+	"Done":  PathVerbDone,
 }
 
 func (v PathVerb) String() string {

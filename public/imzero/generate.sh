@@ -13,7 +13,7 @@ if [ -z "${IMZERO_DOXYGEN}" ]; then
    exit 1
 fi
 
-find . -type f -name "*.out.go" -delete
+find . -type f -name "*.out.go" -not -path "./dto/*" -delete
 ./build.sh
 ./imgui/doxygen/generate.sh
 ./implot/doxygen/generate.sh
