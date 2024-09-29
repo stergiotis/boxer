@@ -78,15 +78,15 @@ func (rcv *EventMouseButton) MutateIsTouch(n bool) bool {
 	return rcv._tab.MutateBoolSlot(8, n)
 }
 
-func (rcv *EventMouseButton) Button() MouseButton {
+func (rcv *EventMouseButton) Buttons() MouseButtons {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(10))
 	if o != 0 {
-		return MouseButton(rcv._tab.GetByte(o + rcv._tab.Pos))
+		return MouseButtons(rcv._tab.GetByte(o + rcv._tab.Pos))
 	}
 	return 0
 }
 
-func (rcv *EventMouseButton) MutateButton(n MouseButton) bool {
+func (rcv *EventMouseButton) MutateButtons(n MouseButtons) bool {
 	return rcv._tab.MutateByteSlot(10, byte(n))
 }
 
@@ -114,8 +114,8 @@ func EventMouseButtonAddMouseId(builder *flatbuffers.Builder, mouseId uint32) {
 func EventMouseButtonAddIsTouch(builder *flatbuffers.Builder, isTouch bool) {
 	builder.PrependBoolSlot(2, isTouch, false)
 }
-func EventMouseButtonAddButton(builder *flatbuffers.Builder, button MouseButton) {
-	builder.PrependByteSlot(3, byte(button), 0)
+func EventMouseButtonAddButtons(builder *flatbuffers.Builder, buttons MouseButtons) {
+	builder.PrependByteSlot(3, byte(buttons), 0)
 }
 func EventMouseButtonAddType(builder *flatbuffers.Builder, type_ MouseButtonEventType) {
 	builder.PrependByteSlot(4, byte(type_), 0)

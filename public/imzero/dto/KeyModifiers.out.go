@@ -4,30 +4,51 @@ package dto
 
 import "strconv"
 
-type KeyModifiers byte
+type KeyModifiers uint16
 
 const (
-	KeyModifiersNone  KeyModifiers = 0
-	KeyModifiersCtrl  KeyModifiers = 1
-	KeyModifiersShift KeyModifiers = 2
-	KeyModifiersAlt   KeyModifiers = 4
-	KeyModifiersSuper KeyModifiers = 8
+	KeyModifiersLeftShift  KeyModifiers = 1
+	KeyModifiersRightShift KeyModifiers = 2
+	KeyModifiersLeftCtrl   KeyModifiers = 4
+	KeyModifiersRightCtrl  KeyModifiers = 8
+	KeyModifiersLeftAlt    KeyModifiers = 16
+	KeyModifiersRightAlt   KeyModifiers = 32
+	KeyModifiersLeftSuper  KeyModifiers = 64
+	KeyModifiersRightSuper KeyModifiers = 128
+	KeyModifiersNumLock    KeyModifiers = 256
+	KeyModifiersCapsLock   KeyModifiers = 512
+	KeyModifiersMode       KeyModifiers = 1024
+	KeyModifiersScrolLock  KeyModifiers = 2048
 )
 
 var EnumNamesKeyModifiers = map[KeyModifiers]string{
-	KeyModifiersNone:  "None",
-	KeyModifiersCtrl:  "Ctrl",
-	KeyModifiersShift: "Shift",
-	KeyModifiersAlt:   "Alt",
-	KeyModifiersSuper: "Super",
+	KeyModifiersLeftShift:  "LeftShift",
+	KeyModifiersRightShift: "RightShift",
+	KeyModifiersLeftCtrl:   "LeftCtrl",
+	KeyModifiersRightCtrl:  "RightCtrl",
+	KeyModifiersLeftAlt:    "LeftAlt",
+	KeyModifiersRightAlt:   "RightAlt",
+	KeyModifiersLeftSuper:  "LeftSuper",
+	KeyModifiersRightSuper: "RightSuper",
+	KeyModifiersNumLock:    "NumLock",
+	KeyModifiersCapsLock:   "CapsLock",
+	KeyModifiersMode:       "Mode",
+	KeyModifiersScrolLock:  "ScrolLock",
 }
 
 var EnumValuesKeyModifiers = map[string]KeyModifiers{
-	"None":  KeyModifiersNone,
-	"Ctrl":  KeyModifiersCtrl,
-	"Shift": KeyModifiersShift,
-	"Alt":   KeyModifiersAlt,
-	"Super": KeyModifiersSuper,
+	"LeftShift":  KeyModifiersLeftShift,
+	"RightShift": KeyModifiersRightShift,
+	"LeftCtrl":   KeyModifiersLeftCtrl,
+	"RightCtrl":  KeyModifiersRightCtrl,
+	"LeftAlt":    KeyModifiersLeftAlt,
+	"RightAlt":   KeyModifiersRightAlt,
+	"LeftSuper":  KeyModifiersLeftSuper,
+	"RightSuper": KeyModifiersRightSuper,
+	"NumLock":    KeyModifiersNumLock,
+	"CapsLock":   KeyModifiersCapsLock,
+	"Mode":       KeyModifiersMode,
+	"ScrolLock":  KeyModifiersScrolLock,
 }
 
 func (v KeyModifiers) String() string {

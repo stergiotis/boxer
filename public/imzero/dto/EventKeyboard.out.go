@@ -44,13 +44,13 @@ func (rcv *EventKeyboard) Table() flatbuffers.Table {
 func (rcv *EventKeyboard) Modifiers() KeyModifiers {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
 	if o != 0 {
-		return KeyModifiers(rcv._tab.GetByte(o + rcv._tab.Pos))
+		return KeyModifiers(rcv._tab.GetUint16(o + rcv._tab.Pos))
 	}
 	return 0
 }
 
 func (rcv *EventKeyboard) MutateModifiers(n KeyModifiers) bool {
-	return rcv._tab.MutateByteSlot(4, byte(n))
+	return rcv._tab.MutateUint16Slot(4, uint16(n))
 }
 
 func (rcv *EventKeyboard) Code() KeyCode {
@@ -105,7 +105,7 @@ func EventKeyboardStart(builder *flatbuffers.Builder) {
 	builder.StartObject(5)
 }
 func EventKeyboardAddModifiers(builder *flatbuffers.Builder, modifiers KeyModifiers) {
-	builder.PrependByteSlot(0, byte(modifiers), 0)
+	builder.PrependUint16Slot(0, uint16(modifiers), 0)
 }
 func EventKeyboardAddCode(builder *flatbuffers.Builder, code KeyCode) {
 	builder.PrependUint32Slot(1, uint32(code), 0)

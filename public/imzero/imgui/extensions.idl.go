@@ -16,3 +16,6 @@ func PushParagraphTextLayout(align dto.TextAlignFlags, dir dto.TextDirection) {
 func PopParagraphTextLayout() {
 	_ = `ImGui::PopParagraphTextLayout()`
 }
+func DrawSerializedImZeroFB(ptr ImDrawListPtr, buf []byte) {
+	_ = `ImGui::DrawSerializedImZeroFB(reinterpret_cast<ImDrawList*>(ptr),static_cast<const uint8_t*>(buf),getSliceLength(buf))`
+}

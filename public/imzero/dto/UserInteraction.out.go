@@ -7,30 +7,39 @@ import "strconv"
 type UserInteraction byte
 
 const (
-	UserInteractionNONE             UserInteraction = 0
-	UserInteractionEventMouseMotion UserInteraction = 1
-	UserInteractionEventMouseWheel  UserInteraction = 2
-	UserInteractionEventMouseButton UserInteraction = 3
-	UserInteractionEventTextInput   UserInteraction = 4
-	UserInteractionEventKeyboard    UserInteraction = 5
+	UserInteractionNONE                  UserInteraction = 0
+	UserInteractionEventClientConnect    UserInteraction = 1
+	UserInteractionEventClientDisconnect UserInteraction = 2
+	UserInteractionEventClientKeepAlive  UserInteraction = 3
+	UserInteractionEventMouseMotion      UserInteraction = 4
+	UserInteractionEventMouseWheel       UserInteraction = 5
+	UserInteractionEventMouseButton      UserInteraction = 6
+	UserInteractionEventTextInput        UserInteraction = 7
+	UserInteractionEventKeyboard         UserInteraction = 8
 )
 
 var EnumNamesUserInteraction = map[UserInteraction]string{
-	UserInteractionNONE:             "NONE",
-	UserInteractionEventMouseMotion: "EventMouseMotion",
-	UserInteractionEventMouseWheel:  "EventMouseWheel",
-	UserInteractionEventMouseButton: "EventMouseButton",
-	UserInteractionEventTextInput:   "EventTextInput",
-	UserInteractionEventKeyboard:    "EventKeyboard",
+	UserInteractionNONE:                  "NONE",
+	UserInteractionEventClientConnect:    "EventClientConnect",
+	UserInteractionEventClientDisconnect: "EventClientDisconnect",
+	UserInteractionEventClientKeepAlive:  "EventClientKeepAlive",
+	UserInteractionEventMouseMotion:      "EventMouseMotion",
+	UserInteractionEventMouseWheel:       "EventMouseWheel",
+	UserInteractionEventMouseButton:      "EventMouseButton",
+	UserInteractionEventTextInput:        "EventTextInput",
+	UserInteractionEventKeyboard:         "EventKeyboard",
 }
 
 var EnumValuesUserInteraction = map[string]UserInteraction{
-	"NONE":             UserInteractionNONE,
-	"EventMouseMotion": UserInteractionEventMouseMotion,
-	"EventMouseWheel":  UserInteractionEventMouseWheel,
-	"EventMouseButton": UserInteractionEventMouseButton,
-	"EventTextInput":   UserInteractionEventTextInput,
-	"EventKeyboard":    UserInteractionEventKeyboard,
+	"NONE":                  UserInteractionNONE,
+	"EventClientConnect":    UserInteractionEventClientConnect,
+	"EventClientDisconnect": UserInteractionEventClientDisconnect,
+	"EventClientKeepAlive":  UserInteractionEventClientKeepAlive,
+	"EventMouseMotion":      UserInteractionEventMouseMotion,
+	"EventMouseWheel":       UserInteractionEventMouseWheel,
+	"EventMouseButton":      UserInteractionEventMouseButton,
+	"EventTextInput":        UserInteractionEventTextInput,
+	"EventKeyboard":         UserInteractionEventKeyboard,
 }
 
 func (v UserInteraction) String() string {
