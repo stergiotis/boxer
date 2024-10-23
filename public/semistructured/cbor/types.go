@@ -1,6 +1,7 @@
 package cbor
 
 import (
+	"hash"
 	"time"
 )
 
@@ -17,4 +18,20 @@ type BasicEncoder interface {
 	EncodeArrayDefinite(len uint64) (int, error)
 	EncodeMapDefinite(len uint64) (int, error)
 	EncodeNil() (int, error)
+	Reset()
+	SetWriter(dest EncoderWriter)
+}
+type IndefiniteContainerEncoder interface {
+	EncodeMapIndefinite() (int, error)
+	EncodeArrayIndefinite() (int, error)
+	EncodeBreak() (int, error)
+}
+type HashingEncoder interface {
+	Hash(sum []byte) ([]byte, error)
+	SetHasher(hasher hash.Hash)
+}
+type FullEncoder interface {
+	BasicEncoder
+	IndefiniteContainerEncoder
+	HashingEncoder
 }

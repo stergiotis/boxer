@@ -37,13 +37,19 @@ type Encoder struct {
 }
 
 var _ BasicEncoder = (*Encoder)(nil)
+var _ IndefiniteContainerEncoder = (*Encoder)(nil)
+var _ HashingEncoder = (*Encoder)(nil)
 
 func NewEncoder(w EncoderWriter, hasher hash.Hash) *Encoder {
+	flushLimit := 512 / 8
+	if hasher != nil {
+		flushLimit = hasher.Size()
+	}
 	return &Encoder{
 		w:          w,
 		buf:        bytes.NewBuffer(make([]byte, 0, 128)),
 		hasher:     hasher,
-		flushLimit: hasher.BlockSize(),
+		flushLimit: flushLimit,
 		scratch8:   make([]byte, 8, 8),
 	}
 }
@@ -51,6 +57,14 @@ func NewEncoder(w EncoderWriter, hasher hash.Hash) *Encoder {
 func (inst *Encoder) Reset() {
 	inst.buf.Reset()
 	inst.hasher.Reset()
+}
+func (inst *Encoder) SetHasher(hasher hash.Hash) {
+	inst.hasher = hasher
+	inst.hasher.Reset()
+	inst.flushLimit = hasher.BlockSize()
+}
+func (inst *Encoder) SetWriter(w EncoderWriter) {
+	inst.w = w
 }
 
 func (inst *Encoder) EncodeUint(val uint64) (int, error) {
