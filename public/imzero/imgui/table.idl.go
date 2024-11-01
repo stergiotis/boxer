@@ -8,7 +8,7 @@ func TableGetSortSpecs() (sort bool, dirty bool, userIds []ImGuiID, columnIndice
 		size_t userIds_len = 0;
         size_t columnIndices_len = 0;
         size_t directions_len = 0;
-        if(spec == nullptr){
+        if(spec == nullptr) {
             sort = false;
             dirty = false;
         } else {
@@ -29,4 +29,10 @@ func TableGetSortSpecs() (sort bool, dirty bool, userIds []ImGuiID, columnIndice
         }
 `
 	return
+}
+func TableSetSortSpecsDirty(dirty bool) {
+	_ = `auto spec = ImGui::TableGetSortSpecs();
+        if(spec == nullptr){ return }
+        spec->SpecsDirty = dirt;
+`
 }

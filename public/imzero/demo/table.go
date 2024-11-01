@@ -122,12 +122,13 @@ func MakeRenderInteractiveTable() func() {
 					imgui.PopID()
 				}
 			}
+			if sortActive && dirty {
+				data.Sort(columnIndices, directions)
+				imgui.TableSetSortSpecsDirty(false)
+			}
 			imgui.EndTable()
 			if sortActive {
 				imgui.TextUnformatted(fmt.Sprintf("dirty=%v,userids=%q,columnIndices=%q,directions=%q", dirty, userIds, columnIndices, directions))
-			}
-			if sortActive && dirty {
-				data.Sort(columnIndices, directions)
 			}
 		}
 	}

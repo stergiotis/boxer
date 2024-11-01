@@ -9,6 +9,7 @@ import "github.com/stergiotis/boxer/public/fffi/runtime"
 // -- deactivated -- // import "github.com/stergiotis/boxer/public/imzero/imgui"
 
 func NewImColorEditorForeignPtr() (ptr ImColorEditorForeignPtr) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000007d0)
 	_err_ := _f.CallFunction()
@@ -21,11 +22,11 @@ func NewImColorEditorForeignPtr() (ptr ImColorEditorForeignPtr) {
 }
 
 func (foreignptr ImColorEditorForeignPtr) Destroy() {
+
 	_f := foreignptr.getFffi()
 	_f.AddProcedureId(0x000007d1)
 	runtime.AddUintptrArg(_f, foreignptr)
 	_f.CallProcedure()
-
 }
 
 func (foreignptr ImColorEditorForeignPtr) Render(title string) {

@@ -11947,6 +11947,14 @@ func TableGetSortSpecs() (sort bool, dirty bool, userIds []ImGuiID, columnIndice
 
 	return
 }
+
+func TableSetSortSpecsDirty(dirty bool) {
+	_f := currentFffiVar
+	_f.AddProcedureId(0x0000034c)
+	runtime.AddBoolArg(_f, dirty)
+	_f.CallProcedure()
+
+}
 // -- deactivated -- // //go:build fffi_idl_code
 
 // -- deactivated -- // package imgui
@@ -11977,7 +11985,7 @@ const (
 //  valR = val
 func Toggle(label string, val bool) (valR bool, changed bool) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x0000034c)
+	_f.AddFunctionId(0x0000034d)
 	runtime.AddStringArg(_f, label)
 	runtime.AddBoolArg(_f, val)
 	_err_ := _f.CallFunction()
@@ -12005,7 +12013,7 @@ func Toggle(label string, val bool) (valR bool, changed bool) {
 //  valR = val
 func ToggleV(label string, val bool, flags ImGuiTogglerFlags, animationDuration float32, frameRounding float32, knobRounding float32, size ImVec2) (valR bool, changed bool) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x0000034d)
+	_f.AddFunctionId(0x0000034e)
 	runtime.AddStringArg(_f, label)
 	runtime.AddBoolArg(_f, val)
 	runtime.AddIntArg(_f, flags)
@@ -12033,7 +12041,7 @@ func ToggleV(label string, val bool, flags ImGuiTogglerFlags, animationDuration 
 func InvisibleButtonP(str_id string, size ImVec2) {
 
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000034e)
+	_f.AddProcedureId(0x0000034f)
 	runtime.AddStringArg(_f, str_id)
 	runtime.AddComplex64Arg(_f, size)
 	_f.CallProcedure()
@@ -12045,7 +12053,7 @@ func InvisibleButtonP(str_id string, size ImVec2) {
 //  ImGui::InvisibleButton(str_id, size, flags)
 func InvisibleButtonVP(str_id string, size ImVec2, flags ImGuiButtonFlags /* = 0*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000034f)
+	_f.AddProcedureId(0x00000350)
 	runtime.AddStringArg(_f, str_id)
 	runtime.AddComplex64Arg(_f, size)
 	runtime.AddIntArg(_f, flags)
