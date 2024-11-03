@@ -11,6 +11,7 @@ type CanonicalTypeAwareEncoder interface {
 	EncodeInt16(val int16) (int, error)
 	EncodeInt32(val int32) (int, error)
 	EncodeInt64(val int64) (int, error)
+	EncodeStringRef(val string) (int, error)
 	EncodeTypedArrayUint8Definite(len uint64) (int, error)
 	EncodeTypedArrayUint16Definite(len uint64) (int, error)
 	EncodeTypedArrayUint32Definite(len uint64) (int, error)

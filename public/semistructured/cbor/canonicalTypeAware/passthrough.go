@@ -10,6 +10,10 @@ type PassthroughEncoder[T cbor.FullEncoder] struct {
 	delegate T
 }
 
+func (inst *PassthroughEncoder[T]) EncodeStringRef(val string) (int, error) {
+	return inst.delegate.EncodeString(val)
+}
+
 func (inst *PassthroughEncoder[T]) EncodeUint(val uint64) (int, error) {
 	return inst.delegate.EncodeUint(val)
 }
