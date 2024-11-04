@@ -32,7 +32,7 @@ func TableGetSortSpecs() (sort bool, dirty bool, userIds []ImGuiID, columnIndice
 }
 func TableSetSortSpecsDirty(dirty bool) {
 	_ = `auto spec = ImGui::TableGetSortSpecs();
-        if(spec == nullptr){ return }
-        spec->SpecsDirty = dirt;
+        if(spec == nullptr){ return; }
+        spec->SpecsDirty = dirty;
 `
 }
