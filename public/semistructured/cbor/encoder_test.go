@@ -143,7 +143,7 @@ func TestEncoderSmoke(t *testing.T) {
 	})
 	check(cbor.Tag{Number: uint64(TagEncodedCBORSequence), Content: []byte{0xf5}}, func(enc *Encoder) (n int, err error) {
 		var u int
-		u, err = enc.TagUint8(TagEncodedCBORSequence)
+		u, err = enc.EncodeTag8(TagEncodedCBORSequence)
 		if err != nil {
 			return
 		}

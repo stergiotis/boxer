@@ -290,6 +290,22 @@ func (inst *PassthroughEncoder[T]) EncodeNilByteSlice() (int, error) {
 	return inst.delegate.EncodeNil()
 }
 
+func (inst *PassthroughEncoder[T]) EncodeTagSmall(tagSmall cbor.TagSmall) (int, error) {
+	return inst.delegate.EncodeTagSmall(tagSmall)
+}
+func (inst *PassthroughEncoder[T]) EncodeTag8(tagUint8 cbor.TagUint8) (int, error) {
+	return inst.delegate.EncodeTag8(tagUint8)
+}
+func (inst *PassthroughEncoder[T]) EncodeTag16(tagUint16 cbor.TagUint16) (int, error) {
+	return inst.delegate.EncodeTag16(tagUint16)
+}
+func (inst *PassthroughEncoder[T]) EncodeTag32(tagUint32 cbor.TagUint32) (int, error) {
+	return inst.delegate.EncodeTag32(tagUint32)
+}
+func (inst *PassthroughEncoder[T]) EncodeTag64(tagUint64 cbor.TagUint64) (int, error) {
+	return inst.delegate.EncodeTag64(tagUint64)
+}
+
 var _ CanonicalTypeAwareEncoder = (*PassthroughEncoder[*cbor.Encoder])(nil)
 var _ FullEncoder = (*PassthroughEncoder[*cbor.Encoder])(nil)
 

@@ -363,7 +363,7 @@ func (inst *ErrorBuilder) RawCBOR(key string, b []byte) *ErrorBuilder {
 		return inst
 	}
 	_, _ = inst.encoder.EncodeString(key)
-	_, _ = inst.encoder.TagUint8(cbor.TagEncodedCBORSequence)
+	_, _ = inst.encoder.EncodeTag8(cbor.TagEncodedCBORSequence)
 	_, _ = inst.encoder.EncodeByteSlice(b)
 	return inst
 }

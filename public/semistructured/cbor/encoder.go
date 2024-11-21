@@ -164,7 +164,7 @@ func (inst *Encoder) EncodeNil() (n int, err error) {
 }
 
 func (inst *Encoder) EncodeCborPayload(val []byte) (n int, err error) {
-	n, err = inst.TagUint8(TagEncodedCBORSequence)
+	n, err = inst.EncodeTag8(TagEncodedCBORSequence)
 	if err != nil {
 		return
 	}
@@ -201,9 +201,9 @@ func (inst *Encoder) EncodeTimeUTC(val time.Time) (n int, err error) {
 
 func (inst *Encoder) EncodeIpAddr(val netip.Addr) (n int, err error) {
 	if val.Is4() {
-		n, err = inst.TagUint8(TagIPv4)
+		n, err = inst.EncodeTag8(TagIPv4)
 	} else {
-		n, err = inst.TagUint8(TagIPv6)
+		n, err = inst.EncodeTag8(TagIPv6)
 	}
 	if err != nil {
 		return
@@ -309,8 +309,17 @@ func (inst *Encoder) encodeHead8Bit(majorType MajorType, val uint8) (n int, err 
 
 	return inst.writeSingleByte(val, n)
 }
-func (inst *Encoder) TagUint8(val TagUint8) (int, error) {
+func (inst *Encoder) EncodeTag8(val TagUint8) (int, error) {
 	return inst.encodeHead8Bit(MajorTypeTag, uint8(val))
+}
+func (inst *Encoder) EncodeTag16(val TagUint16) (int, error) {
+	return inst.encodeHead16Bit(MajorTypeTag, uint16(val))
+}
+func (inst *Encoder) EncodeTag32(val TagUint32) (int, error) {
+	return inst.encodeHead32Bit(MajorTypeTag, uint32(val))
+}
+func (inst *Encoder) EncodeTag64(val TagUint64) (int, error) {
+	return inst.encodeHead64Bit(MajorTypeTag, uint64(val))
 }
 
 func (inst *Encoder) encodeHead16Bit(majorType MajorType, val uint16) (n int, err error) {

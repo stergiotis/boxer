@@ -26,6 +26,13 @@ type IndefiniteContainerEncoder interface {
 	EncodeArrayIndefinite() (int, error)
 	EncodeBreak() (int, error)
 }
+type TagEncoder interface {
+	EncodeTagSmall(tagSmall TagSmall) (int, error)
+	EncodeTag8(tagUint8 TagUint8) (int, error)
+	EncodeTag16(tagUint16 TagUint16) (int, error)
+	EncodeTag32(tagUint32 TagUint32) (int, error)
+	EncodeTag64(tagUint64 TagUint64) (int, error)
+}
 type HashingEncoder interface {
 	Hash(sum []byte) ([]byte, error)
 	SetHasher(hasher hash.Hash)
@@ -34,4 +41,5 @@ type FullEncoder interface {
 	BasicEncoder
 	IndefiniteContainerEncoder
 	HashingEncoder
+	TagEncoder
 }
