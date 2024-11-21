@@ -50,10 +50,13 @@ const (
 	TagTypedArrayFloat32LE        TagUint8 = 85
 	TagTypedArrayFloat64LE        TagUint8 = 86
 	TagTypedArrayFloat128LE       TagUint8 = 87
+	TagTextMimeMessage            TagUint8 = 36
 
+	TagBinaryMimeMessage        TagUint16 = 257
 	TagMathematicalFiniteSet    TagUint16 = 258
 	TagEmbeddedJSON             TagUint16 = 262
 	TagHexString                TagUint16 = 263
+	TagMapStringKeysOnly        TagUint16 = 275
 	TagMultiDimArrayColumnMajor TagUint16 = 1040
 	TagSelfDescribedCBOR        TagUint16 = 55799
 	TagFileContainsCBORSeq      TagUint16 = 55800
