@@ -1,6 +1,7 @@
 package cbor
 
 import (
+	"fmt"
 	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"io"
@@ -152,6 +153,12 @@ var TokenToString = [31]string{
 	"float32",
 	"float64",
 }
+
+func (inst TokenE) String() string {
+	return TokenToString[inst]
+}
+
+var _ fmt.Stringer = TokenE(0)
 
 func (inst *Tokenizer) processInitialBytesDefinite(additionalInfo uint8) (val uint64, bytesRead int, err error) {
 	if additionalInfo < 24 {
