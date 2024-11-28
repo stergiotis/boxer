@@ -56,7 +56,9 @@ func NewEncoder(w EncoderWriter, hasher hash.Hash) *Encoder {
 
 func (inst *Encoder) Reset() {
 	inst.buf.Reset()
-	inst.hasher.Reset()
+	if inst.hasher != nil {
+		inst.hasher.Reset()
+	}
 }
 func (inst *Encoder) SetHasher(hasher hash.Hash) {
 	inst.hasher = hasher
@@ -239,10 +241,12 @@ func (inst *Encoder) writeBytes(b []byte, bytesWrittenBefore int) (n int, err er
 	if err != nil {
 		return
 	}
-	_, err = inst.hasher.Write(b)
-	if err != nil {
-		err = eh.Errorf("unable to write byte to internal hashing buffer: %w", err)
-		return
+	if inst.hasher != nil {
+		_, err = inst.hasher.Write(b)
+		if err != nil {
+			err = eh.Errorf("unable to write byte to internal hashing buffer: %w", err)
+			return
+		}
 	}
 	n = bytesWrittenBefore
 	u, err = inst.w.Write(b)
@@ -272,6 +276,9 @@ func (inst *Encoder) writeString(s string, bytesWrittenBefore int) (n int, err e
 }
 
 func (inst *Encoder) flushHashBuffer(force bool) (err error) {
+	if inst.hasher == nil {
+		return
+	}
 	buf := inst.buf
 	if force == false && buf.Len() < inst.flushLimit {
 		return
