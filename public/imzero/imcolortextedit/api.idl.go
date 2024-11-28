@@ -23,15 +23,15 @@ func (foreignptr ImColorEditorForeignPtr) SetText(text string) {
 }
 
 func (foreignptr ImColorEditorForeignPtr) GetText() (text string) {
-	_ = `text = ((TextEditor*)foreignptr)->GetText().c_str()`
+	_ = `auto const text = ((TextEditor*)foreignptr)->GetText()`
 	return
 }
 func (foreignptr ImColorEditorForeignPtr) GetSelectedText() (text string) {
-	_ = `text = ((TextEditor*)foreignptr)->GetSelectedText().c_str()`
+	_ = `auto const text = ((TextEditor*)foreignptr)->GetSelectedText()`
 	return
 }
 func (foreignptr ImColorEditorForeignPtr) GetCurrentLineText() (text string) {
-	_ = `text = ((TextEditor*)foreignptr)->GetCurrentLineText().c_str()`
+	_ = `auto const text = ((TextEditor*)foreignptr)->GetCurrentLineText()`
 	return
 }
 func (foreignptr ImColorEditorForeignPtr) GetTotalLines() (lines int) {
