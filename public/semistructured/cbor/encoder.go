@@ -84,11 +84,11 @@ func (inst *Encoder) EncodeInt(val int64) (int, error) {
 func (inst *Encoder) encodeHead(majorType MajorType, val uint64) (int, error) {
 	if val < 24 {
 		return inst.encodeHeadSmall(majorType, uint8(val))
-	} else if 24 <= val && val <= 255 {
+	} else if val <= 255 {
 		return inst.encodeHead8Bit(majorType, uint8(val))
-	} else if 256 <= val && val <= 65535 {
+	} else if val <= 65535 {
 		return inst.encodeHead16Bit(majorType, uint16(val))
-	} else if 65536 <= val && val <= 4294967295 {
+	} else if val <= 4294967295 {
 		return inst.encodeHead32Bit(majorType, uint32(val))
 	} else {
 		return inst.encodeHead64Bit(majorType, val)
