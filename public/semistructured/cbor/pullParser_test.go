@@ -79,7 +79,7 @@ func BenchmarkCborConsumer(b *testing.B) {
 	buf := &bytes.Buffer{}
 	totalBytes := int64(0)
 	skipper := NewPullParser(nil)
-	gen := NewGenerator(buf, time.Now().UnixNano(), "abcdefghijklmnopqrstuvwxyz")
+	gen := NewGenerator(buf, time.Now().UnixNano())
 	b.ResetTimer()
 	tmp := &bytes.Buffer{}
 	for lap := 0; lap < b.N; lap++ {

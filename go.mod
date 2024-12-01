@@ -1,10 +1,11 @@
 module github.com/stergiotis/boxer
 
-go 1.21
+go 1.22
 
-toolchain go1.21.0
+toolchain go1.23.1
 
 require (
+	github.com/brianvoe/gofakeit/v7 v7.1.2
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/davecgh/go-spew v1.1.1
 	github.com/dustin/go-humanize v1.0.1
