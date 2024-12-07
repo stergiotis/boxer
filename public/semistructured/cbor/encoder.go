@@ -122,7 +122,7 @@ func (inst *Encoder) EncodeArrayDefinite(len uint64) (n int, err error) {
 }
 
 func (inst *Encoder) EncodeMapDefinite(len uint64) (n int, err error) {
-	return inst.encodeHead(MajorTypeMap, len)
+	return inst.encodeHead(MajorTypeMap, 2*len)
 }
 
 func (inst *Encoder) encodeTagUnchecked(val uint64) (int, error) {
