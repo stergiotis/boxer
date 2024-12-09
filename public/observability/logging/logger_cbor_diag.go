@@ -1,16 +1,13 @@
 package logging
 
 import (
-	"bytes"
-	ea2 "github.com/stergiotis/boxer/public/ea"
+	"github.com/fxamacker/cbor/v2"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/semistructured/cbor"
 	"io"
 )
 
 type CborDiagLogger struct {
-	Out  io.StringWriter
-	diag *cbor.Diagnostics
+	Out io.StringWriter
 }
 
 func (inst *CborDiagLogger) Write(p []byte) (n int, err error) {
@@ -19,18 +16,13 @@ func (inst *CborDiagLogger) Write(p []byte) (n int, err error) {
 		err = eh.Errorf("unable to convert to cbor: %w", err)
 		return
 	}
-
-	r := bytes.NewReader(p)
-	var rb ea2.ByteBlockDiscardReader
-	rb, err = ea2.NewByteBlockReaderDiscardReader(r)
+	var diag string
+	diag, err = cbor.Diagnose(p)
 	if err != nil {
-		err = eh.Errorf("unable to wrap reader: %w", err)
+		err = eh.Errorf("unable to convert to cbor diag: %w", err)
 		return
 	}
-	err = inst.diag.RunIndent(inst.Out, rb, "  ")
-	if err == nil {
-		n = len(p)
-	}
+	_, _ = inst.Out.WriteString(diag)
 	_, _ = inst.Out.WriteString("\n")
 	return
 }
@@ -38,5 +30,5 @@ func (inst *CborDiagLogger) Write(p []byte) (n int, err error) {
 var _ io.Writer = (*CborDiagLogger)(nil)
 
 func NewCborDiagLogger(out io.StringWriter) *CborDiagLogger {
-	return &CborDiagLogger{Out: out, diag: cbor.NewDiagnostics()}
+	return &CborDiagLogger{Out: out}
 }

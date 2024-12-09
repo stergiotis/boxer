@@ -1,8 +1,6 @@
 package main
 
 import (
-	"bufio"
-	"errors"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/fffi/compiletime"
 	"github.com/stergiotis/boxer/public/imzero/demo"
@@ -11,9 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/ph"
 	"github.com/stergiotis/boxer/public/observability/profiling"
 	"github.com/stergiotis/boxer/public/observability/vcs"
-	"github.com/stergiotis/boxer/public/semistructured/cbor"
 	"github.com/urfave/cli/v2"
-	"io"
 	"os"
 )
 
@@ -53,32 +49,6 @@ func main() {
 			{
 				Name:        "nerdfont",
 				Subcommands: []*cli.Command{generator.NewCommand()},
-			},
-			{
-				Name: "cbor",
-				Subcommands: []*cli.Command{
-					{
-						Name: "diag",
-						Action: func(context *cli.Context) error {
-							d := cbor.NewDiagnostics()
-							o := bufio.NewWriter(os.Stdout)
-							defer o.Flush()
-							r := bufio.NewReader(os.Stdin)
-							for {
-								err := d.RunIndent(o, r, "  ")
-								if err != nil {
-									if errors.Is(err, io.EOF) {
-										err = nil
-										break
-									} else {
-										return err
-									}
-								}
-							}
-							return nil
-						},
-					},
-				},
 			},
 		},
 		After: func(context *cli.Context) error {
