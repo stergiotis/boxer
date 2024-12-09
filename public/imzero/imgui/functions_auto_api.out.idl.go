@@ -88,41 +88,51 @@ func StyleColorsLight() {
 func StyleColorsClassic() {
 	_ = `ImGui::StyleColorsClassic()`
 }
+
 func Begin(name string) (r bool) {
 	_ = `auto r = ImGui::Begin(name)`
 	return
 }
+
 func BeginV(name string, flags ImGuiWindowFlags /* = 0*/) (r bool, p_open bool) {
 	_ = `p_open = true; /* see issue #5 */
 auto r = ImGui::Begin(name, &p_open, flags)`
 	return
 }
+
 func End() {
 	_ = `ImGui::End()`
 }
+
 func BeginChild(str_id string) (r bool) {
 	_ = `auto r = ImGui::BeginChild(str_id)`
 	return
 }
+
 func BeginChildV(str_id string, size ImVec2 /* = ImVec2(0, 0)*/, child_flags ImGuiChildFlags /* = 0*/, window_flags ImGuiWindowFlags /* = 0*/) (r bool) {
 	_ = `auto r = ImGui::BeginChild(str_id, size, child_flags, window_flags)`
 	return
 }
+
 func BeginChildID(id ImGuiID) (r bool) {
 	_ = `auto r = ImGui::BeginChild(id)`
 	return
 }
+
 func BeginChildVID(id ImGuiID, size ImVec2 /* = ImVec2(0, 0)*/, child_flags ImGuiChildFlags /* = 0*/, window_flags ImGuiWindowFlags /* = 0*/) (r bool) {
 	_ = `auto r = ImGui::BeginChild(id, size, child_flags, window_flags)`
 	return
 }
+
 func EndChild() {
 	_ = `ImGui::EndChild()`
 }
+
 func IsWindowAppearing() (r bool) {
 	_ = `auto r = ImGui::IsWindowAppearing()`
 	return
 }
+
 func IsWindowCollapsed() (r bool) {
 	_ = `auto r = ImGui::IsWindowCollapsed()`
 	return
@@ -369,6 +379,7 @@ func SetScrollFromPosY(local_y float32) {
 func SetScrollFromPosYV(local_y float32, center_y_ratio float32 /* = 0.5f*/) {
 	_ = `ImGui::SetScrollFromPosY(local_y, center_y_ratio)`
 }
+
 func PopFont() {
 	_ = `ImGui::PopFont()`
 }
@@ -377,12 +388,15 @@ func PopFont() {
 func PushStyleColor(idx ImGuiCol, col uint32) {
 	_ = `ImGui::PushStyleColor(idx, col)`
 }
+
 func PushStyleColorImVec4(idx ImGuiCol, col ImVec4) {
 	_ = `ImGui::PushStyleColor(idx, col)`
 }
+
 func PopStyleColor() {
 	_ = `ImGui::PopStyleColor()`
 }
+
 func PopStyleColorV(count int /* = 1*/) {
 	_ = `ImGui::PopStyleColor(count)`
 }
@@ -406,9 +420,11 @@ func PushStyleVarX(idx ImGuiStyleVar, val_x float32) {
 func PushStyleVarY(idx ImGuiStyleVar, val_y float32) {
 	_ = `ImGui::PushStyleVarY(idx, val_y)`
 }
+
 func PopStyleVar() {
 	_ = `ImGui::PopStyleVar()`
 }
+
 func PopStyleVarV(count int /* = 1*/) {
 	_ = `ImGui::PopStyleVar(count)`
 }
@@ -417,6 +433,7 @@ func PopStyleVarV(count int /* = 1*/) {
 func PushItemFlag(option ImGuiItemFlags, enabled bool) {
 	_ = `ImGui::PushItemFlag(option, enabled)`
 }
+
 func PopItemFlag() {
 	_ = `ImGui::PopItemFlag()`
 }
@@ -425,6 +442,7 @@ func PopItemFlag() {
 func PushItemWidth(item_width float32) {
 	_ = `ImGui::PushItemWidth(item_width)`
 }
+
 func PopItemWidth() {
 	_ = `ImGui::PopItemWidth()`
 }
@@ -450,6 +468,7 @@ func PushTextWrapPos() {
 func PushTextWrapPosV(wrap_local_pos_x float32 /* = 0.0f*/) {
 	_ = `ImGui::PushTextWrapPos(wrap_local_pos_x)`
 }
+
 func PopTextWrapPos() {
 	_ = `ImGui::PopTextWrapPos()`
 }
@@ -673,6 +692,7 @@ func GetID(str_id string) (r ImGuiID) {
 	_ = `auto r = ImGui::GetID(str_id)`
 	return
 }
+
 func GetIDInt(int_id int) (r ImGuiID) {
 	_ = `auto r = ImGui::GetID(int_id)`
 	return
@@ -726,9 +746,11 @@ func RadioButton(label string, active bool) (r bool) {
 	_ = `auto r = ImGui::RadioButton(label, active)`
 	return
 }
+
 func ProgressBar(fraction float32) {
 	_ = `ImGui::ProgressBar(fraction)`
 }
+
 func ProgressBarV(fraction float32, size_arg ImVec2 /* = ImVec2(-FLT_MIN, 0)*/, overlay string /* = NULL*/) {
 	_ = `ImGui::ProgressBar(fraction, size_arg, overlay)`
 }
@@ -754,24 +776,30 @@ func TextLinkOpenURL(label string) {
 func TextLinkOpenURLV(label string, url string /* = NULL*/) {
 	_ = `ImGui::TextLinkOpenURL(label, url)`
 }
+
 func Image(user_texture_id ImTextureID, image_size ImVec2) {
 	_ = `ImGui::Image(ImTextureID(user_texture_id), image_size)`
 }
+
 func ImageV(user_texture_id ImTextureID, image_size ImVec2, uv0 ImVec2 /* = ImVec2(0, 0)*/, uv1 ImVec2 /* = ImVec2(1, 1)*/, tint_col ImVec4 /* = ImVec4(1, 1, 1, 1)*/, border_col ImVec4 /* = ImVec4(0, 0, 0, 0)*/) {
 	_ = `ImGui::Image(ImTextureID(user_texture_id), image_size, uv0, uv1, tint_col, border_col)`
 }
+
 func ImageButton(str_id string, user_texture_id ImTextureID, image_size ImVec2) (r bool) {
 	_ = `auto r = ImGui::ImageButton(str_id, ImTextureID(user_texture_id), image_size)`
 	return
 }
+
 func ImageButtonV(str_id string, user_texture_id ImTextureID, image_size ImVec2, uv0 ImVec2 /* = ImVec2(0, 0)*/, uv1 ImVec2 /* = ImVec2(1, 1)*/, bg_col ImVec4 /* = ImVec4(0, 0, 0, 0)*/, tint_col ImVec4 /* = ImVec4(1, 1, 1, 1)*/) (r bool) {
 	_ = `auto r = ImGui::ImageButton(str_id, ImTextureID(user_texture_id), image_size, uv0, uv1, bg_col, tint_col)`
 	return
 }
+
 func BeginCombo(label string, preview_value string) (r bool) {
 	_ = `auto r = ImGui::BeginCombo(label, preview_value)`
 	return
 }
+
 func BeginComboV(label string, preview_value string, flags ImGuiComboFlags /* = 0*/) (r bool) {
 	_ = `auto r = ImGui::BeginCombo(label, preview_value, flags)`
 	return
@@ -800,14 +828,17 @@ func ColorButtonV(desc_id string, col ImVec4, flags ImGuiColorEditFlags /* = 0*/
 func SetColorEditOptions(flags ImGuiColorEditFlags) {
 	_ = `ImGui::SetColorEditOptions(flags)`
 }
+
 func TreeNode(label string) (r bool) {
 	_ = `auto r = ImGui::TreeNode(label)`
 	return
 }
+
 func TreeNodeEx(label string) (r bool) {
 	_ = `auto r = ImGui::TreeNodeEx(label)`
 	return
 }
+
 func TreeNodeExV(label string, flags ImGuiTreeNodeFlags /* = 0*/) (r bool) {
 	_ = `auto r = ImGui::TreeNodeEx(label, flags)`
 	return
@@ -1095,10 +1126,12 @@ func IsPopupOpenV(str_id string, flags ImGuiPopupFlags /* = 0*/) (r bool) {
 	_ = `auto r = ImGui::IsPopupOpen(str_id, flags)`
 	return
 }
+
 func BeginTable(str_id string, columns int) (r bool) {
 	_ = `auto r = ImGui::BeginTable(str_id, columns)`
 	return
 }
+
 func BeginTableV(str_id string, columns int, flags ImGuiTableFlags /* = 0*/, outer_size ImVec2 /* = ImVec2(0.0f, 0.0f)*/, inner_width float32 /* = 0.0f*/) (r bool) {
 	_ = `auto r = ImGui::BeginTable(str_id, columns, flags, outer_size, inner_width)`
 	return
@@ -1132,9 +1165,11 @@ func TableSetColumnIndex(column_n int) (r bool) {
 	_ = `auto r = ImGui::TableSetColumnIndex(column_n)`
 	return
 }
+
 func TableSetupColumn(label string) {
 	_ = `ImGui::TableSetupColumn(label)`
 }
+
 func TableSetupColumnV(label string, flags ImGuiTableColumnFlags /* = 0*/, init_width_or_weight float32 /* = 0.0f*/, user_id ImGuiID /* = 0*/) {
 	_ = `ImGui::TableSetupColumn(label, flags, init_width_or_weight, user_id)`
 }
@@ -1224,9 +1259,11 @@ func TableSetBgColor(target ImGuiTableBgTarget, color uint32) {
 func TableSetBgColorV(target ImGuiTableBgTarget, color uint32, column_n int /* = -1*/) {
 	_ = `ImGui::TableSetBgColor(target, color, column_n)`
 }
+
 func Columns() {
 	_ = `ImGui::Columns()`
 }
+
 func ColumnsV(count int /* = 1*/, id string /* = NULL*/, borders bool /* = true*/) {
 	_ = `ImGui::Columns(count, id, borders)`
 }
@@ -1277,6 +1314,7 @@ func GetColumnOffsetV(column_index int /* = -1*/) (r float32) {
 func SetColumnOffset(column_index int, offset_x float32) {
 	_ = `ImGui::SetColumnOffset(column_index, offset_x)`
 }
+
 func GetColumnsCount() (r int) {
 	_ = `auto r = ImGui::GetColumnsCount()`
 	return
@@ -1337,10 +1375,12 @@ func TabItemButtonV(label string, flags ImGuiTabItemFlags /* = 0*/) (r bool) {
 func SetTabItemClosed(tab_or_docked_window_label string) {
 	_ = `ImGui::SetTabItemClosed(tab_or_docked_window_label)`
 }
+
 func DockSpace(dockspace_id ImGuiID) (r ImGuiID) {
 	_ = `auto r = ImGui::DockSpace(dockspace_id)`
 	return
 }
+
 func DockSpaceOverViewport() (r ImGuiID) {
 	_ = `auto r = ImGui::DockSpaceOverViewport()`
 	return
@@ -1356,6 +1396,7 @@ func SetNextWindowDockID(dock_id ImGuiID) {
 func SetNextWindowDockIDV(dock_id ImGuiID, cond ImGuiCond /* = 0*/) {
 	_ = `ImGui::SetNextWindowDockID(dock_id, cond)`
 }
+
 func GetWindowDockID() (r ImGuiID) {
 	_ = `auto r = ImGui::GetWindowDockID()`
 	return
@@ -1439,18 +1480,23 @@ func BeginDragDropTarget() (r bool) {
 func EndDragDropTarget() {
 	_ = `ImGui::EndDragDropTarget()`
 }
+
 func BeginDisabled() {
 	_ = `ImGui::BeginDisabled()`
 }
+
 func BeginDisabledV(disabled bool /* = true*/) {
 	_ = `ImGui::BeginDisabled(disabled)`
 }
+
 func EndDisabled() {
 	_ = `ImGui::EndDisabled()`
 }
+
 func PushClipRect(clip_rect_min ImVec2, clip_rect_max ImVec2, intersect_with_current_clip_rect bool) {
 	_ = `ImGui::PushClipRect(clip_rect_min, clip_rect_max, intersect_with_current_clip_rect)`
 }
+
 func PopClipRect() {
 	_ = `ImGui::PopClipRect()`
 }
@@ -1633,10 +1679,12 @@ func GetStyleColorName(idx ImGuiCol) (r string) {
 	_ = `auto r = ImGui::GetStyleColorName(idx)`
 	return
 }
+
 func ColorConvertU32ToFloat4(in uint32) (r ImVec4) {
 	_ = `auto r = ImGui::ColorConvertU32ToFloat4(in)`
 	return
 }
+
 func ColorConvertFloat4ToU32(in ImVec4) (r uint32) {
 	_ = `auto r = ImGui::ColorConvertFloat4ToU32(in)`
 	return
@@ -1783,9 +1831,11 @@ func GetMouseDragDeltaV(button ImGuiMouseButton /* = 0*/, lock_threshold float32
 	_ = `auto r = ImGui::GetMouseDragDelta(button, lock_threshold)`
 	return
 }
+
 func ResetMouseDragDelta() {
 	_ = `ImGui::ResetMouseDragDelta()`
 }
+
 func ResetMouseDragDeltaV(button ImGuiMouseButton /* = 0*/) {
 	_ = `ImGui::ResetMouseDragDelta(button)`
 }
@@ -1805,10 +1855,12 @@ func SetMouseCursor(cursor_type ImGuiMouseCursor) {
 func SetNextFrameWantCaptureMouse(want_capture_mouse bool) {
 	_ = `ImGui::SetNextFrameWantCaptureMouse(want_capture_mouse)`
 }
+
 func GetClipboardText() (r string) {
 	_ = `auto r = ImGui::GetClipboardText()`
 	return
 }
+
 func SetClipboardText(text string) {
 	_ = `ImGui::SetClipboardText(text)`
 }
@@ -1839,12 +1891,15 @@ func SaveIniSettingsToMemory() (r string) {
 	_ = `auto r = ImGui::SaveIniSettingsToMemory()`
 	return
 }
+
 func DebugTextEncoding(text string) {
 	_ = `ImGui::DebugTextEncoding(text)`
 }
+
 func DebugFlashStyleColor(idx ImGuiCol) {
 	_ = `ImGui::DebugFlashStyleColor(idx)`
 }
+
 func DebugStartItemPicker() {
 	_ = `ImGui::DebugStartItemPicker()`
 }

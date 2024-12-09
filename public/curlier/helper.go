@@ -1,9 +1,10 @@
 package curlier
 
 import (
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"net/http"
 	"strings"
+
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 func IsTransientError(code int) bool {

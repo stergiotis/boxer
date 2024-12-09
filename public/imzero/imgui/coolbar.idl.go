@@ -6,13 +6,16 @@ func MakeImCoolBarConfig() (r ImCoolBarConfigForeignPtr) {
 	_ = `r = (uintptr_t)(new ImGui::ImCoolBarConfig())`
 	return
 }
+
 func MakeImCoolBarConfigV(anchor ImVec2, normalSize float32, hoveredSize float32, animStep float32, effectStrength float32) (r ImCoolBarConfigForeignPtr) {
 	_ = `r = (uintptr_t)(new ImGui::ImCoolBarConfig(anchor,normalSize,hoveredSize,animStep,effectStrength))`
 	return
 }
+
 func DestroyImCoolBarConfig(cfg ImCoolBarConfigForeignPtr) {
 	_ = `delete ((ImGui::ImCoolBarConfig*)cfg)`
 }
+
 func (foreignptr ImCoolBarConfigForeignPtr) Get() (anchor ImVec2, normalSize float32, hoveredSize float32, animStep float32, effectStrength float32) {
 	_ = `
 auto t = (ImGui::ImCoolBarConfig*)foreignptr;
@@ -24,6 +27,7 @@ effectStrength = t->effect_strength;
 `
 	return
 }
+
 func (foreignptr ImCoolBarConfigForeignPtr) Set(anchor ImVec2, normalSize float32, hoveredSize float32, animStep float32, effectStrength float32) {
 	_ = `
 auto t = (ImGui::ImCoolBarConfig*)foreignptr;
@@ -39,17 +43,21 @@ func BeginCoolBar(label string) (r bool) {
 	_ = `r = ImGui::BeginCoolBar(label)`
 	return
 }
+
 func BeginCoolBarV(label string, flags ImCoolBarFlags, cfg ImCoolBarConfigForeignPtr, windowFlags ImGuiWindowFlags) (r bool) {
 	_ = `r = ImGui::BeginCoolBar(label, flags, *((ImGui::ImCoolBarConfig*)cfg), windowFlags)`
 	return
 }
+
 func EndCoolBar() {
 	_ = `ImGui::EndCoolBar()`
 }
+
 func CoolBarItem() (r bool) {
 	_ = `r = ImGui::CoolBarItem()`
 	return
 }
+
 func CoolBarItemProperties() (width float32, scale float32) {
 	_ = `
 width = ImGui::GetCoolBarItemWidth();
@@ -57,6 +65,7 @@ scale = ImGui::GetCoolBarItemScale();
 `
 	return
 }
+
 func CoolBarButtons(fontPtr ImFontPtr, labels []string, tooltips []string) (clickedIndex int, hoveredIndex int) {
 	_ = `
 auto l = (int)std::min(getSliceLength(labels),getSliceLength(tooltips));

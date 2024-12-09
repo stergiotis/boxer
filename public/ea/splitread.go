@@ -1,9 +1,10 @@
 package ea
 
 import (
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"io"
 	"math/rand"
+
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // TransferDataWithSplitReadAndWrites copies nBytesToRead from r to dest by randomly using io.Reader and io.ByteReader interface. The number of bytes transferred by each method is roughly balanced.

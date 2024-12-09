@@ -1,16 +1,17 @@
 package config
 
 import (
+	"io"
+
+	"github.com/rs/zerolog/log"
+	cli "github.com/urfave/cli/v2"
+
 	"github.com/stergiotis/boxer/public/config"
 	"github.com/stergiotis/boxer/public/ea"
 	ea2 "github.com/stergiotis/boxer/public/fec/ea"
 	"github.com/stergiotis/boxer/public/fec/ea/golay24"
 	"github.com/stergiotis/boxer/public/fec/ea/passthrough"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"io"
-
-	"github.com/rs/zerolog/log"
-	cli "github.com/urfave/cli/v2"
 )
 
 type AlgorithmE uint16

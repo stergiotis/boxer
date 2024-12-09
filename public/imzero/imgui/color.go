@@ -8,6 +8,7 @@ func ColorU32(rgba uint32) (c uint32) {
 		uint8(rgba),
 	)
 }
+
 func ColorU32ToImVec(rgba uint32) (c ImVec4) {
 	r := uint8(rgba)
 	g := uint8(rgba >> 8)
@@ -19,6 +20,7 @@ func ColorU32ToImVec(rgba uint32) (c ImVec4) {
 		return ImVec4([4]float32{float32(r) / 255.0, float32(g) / 255.0, float32(b) / 255.0, float32(a) / 255.0})
 	}
 }
+
 func Color32U8(r uint8, g uint8, b uint8, a uint8) (c uint32) {
 	if ImguiUsesBGRAColorFormat {
 		c = uint32(a) << 24

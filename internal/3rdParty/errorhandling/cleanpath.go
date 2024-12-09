@@ -223,6 +223,8 @@ func RemoveGoPath(path string) string {
 
 type longestFirst []string
 
-func (strs longestFirst) Len() int           { return len(strs) }
+func (strs longestFirst) Len() int { return len(strs) }
+
 func (strs longestFirst) Less(i, j int) bool { return len(strs[i]) > len(strs[j]) }
-func (strs longestFirst) Swap(i, j int)      { strs[i], strs[j] = strs[j], strs[i] }
+
+func (strs longestFirst) Swap(i, j int) { strs[i], strs[j] = strs[j], strs[i] }

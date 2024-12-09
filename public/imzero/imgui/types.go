@@ -3,19 +3,33 @@ package imgui
 import "github.com/stergiotis/boxer/public/logical"
 
 type ImGuiID uint32
+
 type ImVec2 complex64
+
 type ImVec4 [4]float32
+
 type ImWchar16 uint16
+
 type ImWchar32 rune
+
 type ImWchar ImWchar32
+
 type ImRect [4]float32
+
 type Size_t uint64
+
 type ImTextureID uintptr
+
 type ImFontPtr uintptr
+
 type ImGuiStyleForeignPtr uintptr
+
 type ImDrawListPtr uintptr
+
 type ImHexEditorPtr uintptr
+
 type Tristate = logical.Tristate
+
 type ImU8 uint8
 
 // ImGuiStyle You may modify the ImGui::GetStyle() main instance during initialization and before NewFrame().

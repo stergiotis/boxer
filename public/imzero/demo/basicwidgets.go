@@ -4,6 +4,7 @@ package demo
 
 import (
 	"fmt"
+
 	"github.com/stergiotis/boxer/public/imzero/imgui"
 	"github.com/stergiotis/boxer/public/logical"
 )
@@ -17,6 +18,7 @@ var comboBoxS comboBoxState = comboBoxState{
 	items:    []string{"<none>", "option a", "option b", "option c"},
 	selected: 0,
 }
+
 var listS comboBoxState = comboBoxState{
 	items:    []string{"<none>", "option a", "option b", "option c"},
 	selected: 0,
@@ -80,6 +82,7 @@ func renderTooltip() {
 		}
 	}
 }
+
 func renderTree() {
 	if imgui.TreeNode("solar system") {
 		if imgui.TreeNode("sun") {
@@ -112,6 +115,7 @@ func renderTree() {
 		imgui.TreePop()
 	}
 }
+
 func renderCollapsingHeader() {
 	if imgui.CollapsingHeaderV("header 1", 0) {
 		imgui.TextUnformatted("content 1")
@@ -122,6 +126,7 @@ func renderCollapsingHeader() {
 }
 
 var toggle1 bool
+
 var toggle2 bool
 
 func RenderToggle() {
@@ -130,6 +135,7 @@ func RenderToggle() {
 }
 
 var knob = make([]float32, 8, 8)
+
 var knobVariants = []imgui.ImGuiKnobVariant{imgui.ImGuiKnobVariant_Tick,
 	imgui.ImGuiKnobVariant_Dot,
 	imgui.ImGuiKnobVariant_Wiper,
@@ -137,6 +143,7 @@ var knobVariants = []imgui.ImGuiKnobVariant{imgui.ImGuiKnobVariant_Tick,
 	imgui.ImGuiKnobVariant_WiperDot,
 	imgui.ImGuiKnobVariant_Stepped,
 	imgui.ImGuiKnobVariant_Space}
+
 var knobLabels = []string{
 	"my knob tick",
 	"my knob dot",
@@ -155,6 +162,7 @@ func RenderKnobs() {
 	}
 	imgui.EndGroup()
 }
+
 func RenderColoredButton() {
 	imgui.ColoredButtonV("hello colored!", 0, imgui.ColorU32(0x000000ff),
 		imgui.ColorU32(0x0F87FAFF),
@@ -203,6 +211,7 @@ func MakeRenderBasicWidgets() func() {
 		checkboxRenderer()
 	}
 }
+
 func MakeRenderInputText() func() {
 	text := ""
 	text2 := ""
@@ -214,6 +223,7 @@ func MakeRenderInputText() func() {
 		imgui.TextUnformatted(text2)
 	}
 }
+
 func MakeRenderCheckbox() func() {
 	checkboxState := logical.TriNil
 	return func() {

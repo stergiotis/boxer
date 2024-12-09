@@ -1,10 +1,11 @@
 package compiletime
 
 import (
-	"github.com/stergiotis/boxer/public/fffi/runtime"
 	"go/ast"
 	"go/token"
 	"io"
+
+	"github.com/stergiotis/boxer/public/fffi/runtime"
 )
 
 type Emitter interface {
@@ -30,9 +31,11 @@ type IDLDriver interface {
 	DriveBackend(generator CodeTransformerBackend) (err error)
 	DriveFrontend(generator CodeTransformerFrontend) (err error)
 }
+
 type TypeResolver interface {
 	ResolveBasicType(expr ast.Expr) (typeName string, castType string, err error)
 }
+
 type IdResolver interface {
 	FuncDeclToId(decl *ast.FuncDecl) runtime.FuncProcId
 }

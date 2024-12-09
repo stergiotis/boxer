@@ -2,15 +2,17 @@ package compiletime
 
 import (
 	"errors"
-	"github.com/stergiotis/boxer/public/config"
-	"github.com/stergiotis/boxer/public/fffi/runtime"
-	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/urfave/cli/v2"
 	"io"
 	"os"
 	"path/filepath"
 	"syscall"
+
+	cli "github.com/urfave/cli/v2"
+
+	"github.com/stergiotis/boxer/public/config"
+	"github.com/stergiotis/boxer/public/fffi/runtime"
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 func makeFileReadOnly(path string) error {
@@ -24,6 +26,7 @@ func makeFileReadOnly(path string) error {
 	}
 	return nil
 }
+
 func emitToFile(path string, emitter Emitter) (err error) {
 	_ = os.MkdirAll(filepath.Dir(path), 0o000)
 
@@ -52,6 +55,7 @@ func emitToFile(path string, emitter Emitter) (err error) {
 
 	return
 }
+
 func generateBackendCode(idlDriver IDLDriver, cfg *Config, namer *Namer) (err error) {
 	be := NewCodeTransformerBackendPresenterCpp(namer)
 	err = idlDriver.DriveBackend(be)
@@ -67,6 +71,7 @@ func generateBackendCode(idlDriver IDLDriver, cfg *Config, namer *Namer) (err er
 
 	return
 }
+
 func generateFrontendCode(idlDriver IDLDriver, cfg *Config, namer *Namer) (err error) {
 	fe := NewCodeTransformerFrontendGo(namer, cfg.GoCodeProlog)
 	err = idlDriver.DriveFrontend(fe)
@@ -105,6 +110,7 @@ func mainE(config *Config, namerCfg *NamerConfig) (err error) {
 	}
 	return
 }
+
 func NewCommand(cfg *Config, namerCfg *NamerConfig) *cli.Command {
 	if cfg == nil {
 		cfg = &Config{

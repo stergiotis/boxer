@@ -3,6 +3,10 @@
 package demo
 
 import (
+	"time"
+
+	cli "github.com/urfave/cli/v2"
+
 	"github.com/stergiotis/boxer/public/config"
 	"github.com/stergiotis/boxer/public/fffi/runtime"
 	"github.com/stergiotis/boxer/public/imzero/application"
@@ -12,8 +16,6 @@ import (
 	"github.com/stergiotis/boxer/public/imzero/widgets/gostats"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/urfave/cli/v2"
-	"time"
 )
 
 func NewCommand() *cli.Command {

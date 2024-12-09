@@ -50,9 +50,11 @@ func (inst *PassthroughReader) BytesPeeked() int {
 func (inst *PassthroughReader) MessageAccepted() (err error) {
 	return inst.baseReader.MessageAccepted()
 }
+
 func (inst *PassthroughReader) MessageRejected(reason error) (err error) {
 	return inst.baseReader.MessageRejected(reason)
 }
+
 func (inst *PassthroughReader) DetectedBitErrors() int {
 	return inst.baseReader.DetectedBitErrors()
 }

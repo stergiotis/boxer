@@ -1,15 +1,17 @@
 package compiletime
 
 import (
-	"github.com/davecgh/go-spew/spew"
-	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"io"
 	"strconv"
 	"strings"
+
+	"github.com/davecgh/go-spew/spew"
+
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 func emitBuilderWithProlog(out io.Writer, builder io.WriterTo, prolog string) (n int, err error) {
@@ -80,6 +82,7 @@ func splitIdlBody(body []ast.Stmt) (prolog []ast.Stmt, foreignCode string, epilo
 	err = eb.Build().Str("dump", spew.Sdump(body)).Errorf("unable to find foreign code in idl go ast: must have form _ = `r = foreignFunc(a,b,c)`")
 	return
 }
+
 func parseFunctionBodyCode(code string) (res []ast.Stmt, err error) {
 	var f *ast.File
 	fset := token.NewFileSet()
@@ -105,9 +108,11 @@ func parseFunctionBodyCode(code string) (res []ast.Stmt, err error) {
 	}
 	return
 }
+
 func isMethodDeclaration(decl *ast.FuncDecl) bool {
 	return decl != nil && decl.Recv != nil && decl.Recv.List != nil && len(decl.Recv.List) == 1
 }
+
 func sendReceiverAsArg(field *ast.Field) (send bool, err error) {
 	if field.Names == nil {
 		err = eh.Errorf("unnamed function receivers are not supported")
@@ -116,6 +121,7 @@ func sendReceiverAsArg(field *ast.Field) (send bool, err error) {
 	send = field.Names[0].Name == "foreignptr"
 	return
 }
+
 func getParamsAndResultTypes(decl *ast.FuncDecl, resolver TypeResolver) (paramNames []string, paramGoTypes []string, paramGoCast []bool, paramDeref []string, resultNames []string, resultGoTypes []string, resultGoCastTypes []string, resultDeref []string, explicitErrVarName string, err error) {
 	t := decl.Type
 	sendReceiver := false
@@ -222,6 +228,7 @@ func getParamsAndResultTypes(decl *ast.FuncDecl, resolver TypeResolver) (paramNa
 	}
 	return
 }
+
 func checkForBuildTag(a *ast.File, tag string) (outerIndex int, innerIndex int, err error) {
 	outerIndex = -1
 	innerIndex = -1

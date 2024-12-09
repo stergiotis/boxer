@@ -2,15 +2,17 @@ package compiletime
 
 import (
 	"fmt"
-	"github.com/davecgh/go-spew/spew"
-	"github.com/rs/zerolog/log"
-	"github.com/stergiotis/boxer/public/fffi/runtime"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"go/ast"
 	"go/token"
 	"go/types"
-	"golang.org/x/tools/go/packages"
 	"strings"
+
+	"github.com/davecgh/go-spew/spew"
+	"github.com/rs/zerolog/log"
+	"golang.org/x/tools/go/packages"
+
+	"github.com/stergiotis/boxer/public/fffi/runtime"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 type IDLDriverGoFile struct {
@@ -22,6 +24,7 @@ type IDLDriverGoFile struct {
 }
 
 var _ IDLDriver = (*IDLDriverGoFile)(nil)
+
 var _ TypeResolver = (*IDLDriverGoFile)(nil)
 
 func NewIDLDriverGoFile(idlBuildTag string, packagePattern string, idOffset runtime.FuncProcId) (inst *IDLDriverGoFile, err error) {
@@ -71,6 +74,7 @@ func NewIDLDriverGoFile(idlBuildTag string, packagePattern string, idOffset runt
 	}
 	return
 }
+
 func isErrorInterface(interf *types.Interface) bool {
 	n := interf.NumMethods()
 	for i := 0; i < n; i++ {
@@ -81,6 +85,7 @@ func isErrorInterface(interf *types.Interface) bool {
 	}
 	return false
 }
+
 func lexicalName(t *types.Named) (lex string) {
 	u := t.String()
 	idx := strings.LastIndex(u, ".")
@@ -93,6 +98,7 @@ func lexicalName(t *types.Named) (lex string) {
 	}
 	return
 }
+
 func (inst *IDLDriverGoFile) resolveBasicTypeType(t types.Type, castTypeP string) (typeName string, castType string, err error) {
 	castType = castTypeP
 	switch tt := t.(type) {
@@ -194,6 +200,7 @@ func (inst *IDLDriverGoFile) resolveBasicTypeType(t types.Type, castTypeP string
 		return
 	}
 }
+
 func (inst *IDLDriverGoFile) ResolveBasicType(expr ast.Expr) (typeName string, castType string, err error) {
 	lu := inst.typesLU
 	u := lu[expr]
@@ -222,6 +229,7 @@ func (inst *IDLDriverGoFile) DriveBackend(generator CodeTransformerBackend) (err
 	}
 	return
 }
+
 func (inst *IDLDriverGoFile) DriveFrontend(generator CodeTransformerFrontend) (err error) {
 	l := len(inst.asts)
 	for i, a := range inst.asts {
@@ -234,6 +242,7 @@ func (inst *IDLDriverGoFile) DriveFrontend(generator CodeTransformerFrontend) (e
 	}
 	return
 }
+
 func (inst *IDLDriverGoFile) FuncDeclToId(decl *ast.FuncDecl) runtime.FuncProcId {
 	id, has := inst.idLU[decl]
 	if has {

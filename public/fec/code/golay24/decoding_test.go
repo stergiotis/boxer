@@ -1,13 +1,14 @@
 package golay24
 
 import (
-	"github.com/stergiotis/boxer/public/unittest"
 	"math/rand"
 	"testing"
 
 	"github.com/rs/zerolog/log"
 	progressbar "github.com/schollz/progressbar/v3"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/stergiotis/boxer/public/unittest"
 )
 
 func TestDecodeSingle(t *testing.T) {

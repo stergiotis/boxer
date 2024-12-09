@@ -1,12 +1,13 @@
 package golay24
 
 import (
-	"github.com/stergiotis/boxer/public/fec/code/golay24"
-	ea2 "github.com/stergiotis/boxer/public/fec/ea"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"io"
 
 	"github.com/rs/zerolog/log"
+
+	"github.com/stergiotis/boxer/public/fec/code/golay24"
+	ea2 "github.com/stergiotis/boxer/public/fec/ea"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 type stateE int
@@ -98,6 +99,7 @@ func (inst *Golay24Reader) readSlow(p []byte) (n int, err error) {
 func (inst *Golay24Reader) Discard(nBytes int) (n int, err error) {
 	return inst.discardSlow(nBytes)
 }
+
 func (inst *Golay24Reader) discardSlow(nBytes int) (n int, err error) {
 	for i := 0; i < nBytes; i++ {
 		_, err = inst.ReadByte()
@@ -118,6 +120,7 @@ func (inst *Golay24Reader) MessageAccepted() (err error) {
 	inst.reset()
 	return inst.baseReader.MessageAccepted()
 }
+
 func (inst *Golay24Reader) MessageRejected(reason error) (err error) {
 	err = inst.skipTrailingBytes()
 	if err != nil {
@@ -127,6 +130,7 @@ func (inst *Golay24Reader) MessageRejected(reason error) (err error) {
 	inst.reset()
 	return inst.baseReader.MessageRejected(reason)
 }
+
 func (inst *Golay24Reader) skipTrailingBytes() (err error) {
 	switch inst.state {
 	case stateDecodeGolay24First:
@@ -141,6 +145,7 @@ func (inst *Golay24Reader) skipTrailingBytes() (err error) {
 	inst.state = stateDecodeGolay24First
 	return
 }
+
 func (inst *Golay24Reader) reset() {
 	inst.detectedBitErrors = 0
 }

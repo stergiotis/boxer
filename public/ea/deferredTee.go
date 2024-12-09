@@ -3,8 +3,9 @@ package ea
 import (
 	"bufio"
 	"bytes"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"io"
+
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 type DeferredTee struct {

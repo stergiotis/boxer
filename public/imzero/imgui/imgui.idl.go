@@ -26,6 +26,7 @@ func CalcTextWidth(text string) (r ImVec2) {
 	_ = `auto r = ImGui::CalcTextSize(text,text+getStringLength(text))`
 	return
 }
+
 func CalcTextWidthV(text string, hideTextAfterDoubleHash bool, floatWrapWidth float32) (r ImVec2) {
 	_ = `auto r = ImGui::CalcTextSize(text,text+getStringLength(text),hideTextAfterDoubleHash,floatWrapWidth)`
 	return

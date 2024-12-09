@@ -3,13 +3,16 @@
 package demo
 
 import (
+	"reflect"
+
 	"github.com/davecgh/go-spew/spew"
+
 	"github.com/stergiotis/boxer/public/imzero/imgui"
 	"github.com/stergiotis/boxer/public/imzero/implot"
-	"reflect"
 )
 
 var passColor = imgui.Color32U8(0, 255, 0, 255)
+
 var failColor = imgui.Color32U8(255, 0, 0, 255)
 
 func MakeRenderImGuiStyleDemo() func() {
@@ -41,6 +44,7 @@ func MakeRenderImGuiStyleDemo() func() {
 		imgui.TextUnformatted(s1)
 	}
 }
+
 func MakeRenderImPlotStyleDemo() func() {
 	style1 := &implot.ImPlotStyle{}
 	style2 := &implot.ImPlotStyle{}

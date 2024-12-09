@@ -1,8 +1,9 @@
 package ea
 
 import (
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"io"
+
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 type SplicingReader struct {
@@ -27,9 +28,11 @@ func (inst *SplicingReader) SpliceReader(r io.Reader) (err error) {
 	inst.secondary = r
 	return
 }
+
 func (inst *SplicingReader) IsSpliceReaderSet() bool {
 	return inst.secondary != nil
 }
+
 func (inst *SplicingReader) Reset() {
 	inst.secondary = nil
 }

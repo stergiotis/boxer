@@ -2,16 +2,18 @@ package compiletime
 
 import (
 	"fmt"
-	"github.com/rs/zerolog/log"
-	"github.com/stergiotis/boxer/public/config"
-	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/urfave/cli/v2"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/rs/zerolog/log"
+	cli "github.com/urfave/cli/v2"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
+
+	"github.com/stergiotis/boxer/public/config"
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 type Namer struct {
@@ -118,6 +120,7 @@ func (inst *Namer) GoTypeNameToCppTypeName(name string) (r string, err error) {
 	}
 	return
 }
+
 func (inst *Namer) GoTypeNameToSendRecvFuncNameSuffix(name string) (r string, err error) {
 	switch name {
 	case "string", "bool", "uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64", "float32", "float64", "int", "complex64", "complex128", "uintptr", "rune", "uint":
@@ -159,6 +162,7 @@ func (inst *Namer) GoTypeNameToSendRecvFuncNameSuffix(name string) (r string, er
 	}
 	return
 }
+
 func (inst *Namer) GoTypeNameToRecvExprCpp(name string) (r string, err error) {
 	switch name {
 	case "[]string":
@@ -166,9 +170,11 @@ func (inst *Namer) GoTypeNameToRecvExprCpp(name string) (r string, err error) {
 	}
 	return inst.goTypeNameToExprCpp(name, "", "receive", false)
 }
+
 func (inst *Namer) GoTypeNameToSendExprCpp(name string, varname string) (r string, err error) {
 	return inst.goTypeNameToExprCpp(name, varname, "send", true)
 }
+
 func (inst *Namer) goTypeNameToExprCpp(name string, varname string, prefix string, send bool) (r string, err error) {
 	if isStringType(name) {
 		r = fmt.Sprintf("%sString(%s)", prefix, varname)
@@ -235,12 +241,15 @@ func (inst *Namer) goTypeNameToExprCpp(name string, varname string, prefix strin
 	}
 	return
 }
+
 func isStringType(name string) bool {
 	return name == "string"
 }
+
 func isPointerType(name string) bool {
 	return name == "uintptr"
 }
+
 func isSupportedValueType(name string) bool {
 	switch name {
 	case "byte", "bool", "uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64", "float32", "float64", "int", "complex64", "complex128", "uintptr", "rune", "uint":
@@ -248,6 +257,7 @@ func isSupportedValueType(name string) bool {
 	}
 	return false
 }
+
 func isSupportedSliceType(name string) bool {
 	if !isSliceType(name) {
 		return false
@@ -261,6 +271,7 @@ func isSupportedSliceType(name string) bool {
 	}
 	return isSupportedValueType(rest) || rest == "string"
 }
+
 func isSupportedArrayType(name string) bool {
 	if !isArrayType(name) {
 		return false
@@ -274,12 +285,15 @@ func isSupportedArrayType(name string) bool {
 	}
 	return isSupportedValueType(rest)
 }
+
 func isArrayType(name string) bool {
 	return len(name) > 3 && name[0] == '[' && unicode.IsDigit(rune(name[1]))
 }
+
 func isSliceType(name string) bool {
 	return len(name) > 2 && name[0] == '[' && name[1] == ']'
 }
+
 func splitArrayOrSliceType(name string) (len int, rest string, err error) {
 	idx := strings.IndexByte(name, ']')
 	if idx < 0 {

@@ -2,15 +2,16 @@ package golay24
 
 import (
 	"bytes"
-	"github.com/stergiotis/boxer/public/anchor"
-	"github.com/stergiotis/boxer/public/ea"
-	"github.com/stergiotis/boxer/public/fec/code/golay24"
 	"math/rand"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/stergiotis/boxer/public/anchor"
+	"github.com/stergiotis/boxer/public/ea"
+	"github.com/stergiotis/boxer/public/fec/code/golay24"
 )
 
 func TestPebbleWriter24Padding4(t *testing.T) {

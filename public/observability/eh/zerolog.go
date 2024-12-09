@@ -435,8 +435,6 @@ func MarshalError(err error) interface{} {
 		return nil
 	}
 	g := newGatherFactsAndStacks()
-	if err != nil {
-		_ = g.addError(err, 0)
-	}
+	_ = g.addError(err, 0)
 	return g
 }

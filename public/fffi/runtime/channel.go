@@ -36,6 +36,7 @@ func (inst *InlineIoChannel) Unmarshaller() *Unmarshaller {
 }
 
 var DefaultErrorHandler = func(err error) {}
+
 var DefaultAllocater = func(l uint32) []byte { return make([]byte, int(l), int(l)) }
 
 func NewInlineChannel(in *bufio.Reader, out *bufio.Writer, bin binary.ByteOrder, errHandler func(err error), allocateBuffer func(l uint32) []byte) (inst *InlineIoChannel) {
@@ -57,6 +58,7 @@ func NewInlineChannel(in *bufio.Reader, out *bufio.Writer, bin binary.ByteOrder,
 	inst.SetInOut(in, out)
 	return
 }
+
 func (inst *InlineIoChannel) SetInOut(in *bufio.Reader, out *bufio.Writer) {
 	inst.in = in
 	inst.out = out
@@ -68,6 +70,7 @@ func (inst *InlineIoChannel) CallFunction() (err error) {
 	inst.Flush()
 	return
 }
+
 func (inst *InlineIoChannel) Flush() {
 	err := inst.out.Flush()
 	if err != nil {

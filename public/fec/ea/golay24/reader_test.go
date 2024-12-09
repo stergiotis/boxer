@@ -2,12 +2,13 @@ package golay24
 
 import (
 	"bytes"
-	"github.com/stergiotis/boxer/public/ea"
 	"math/rand"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/stergiotis/boxer/public/ea"
 )
 
 func TestPebbleReader24Fuzzing(t *testing.T) {

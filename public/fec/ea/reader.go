@@ -2,9 +2,10 @@ package ea
 
 import (
 	"bufio"
+	"io"
+
 	"github.com/stergiotis/boxer/public/anchor"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"io"
 )
 
 type BaseReader struct {
@@ -48,6 +49,7 @@ func (inst *BaseReader) PeekByte() (b byte, err error) {
 	inst.bytesPeeked = p + 1
 	return
 }
+
 func (inst *BaseReader) Bytes() (r []byte, err error) {
 	err = inst.EnsureSkippedPastAnchor()
 	if err != nil {
@@ -78,6 +80,7 @@ func (inst *BaseReader) DiscardPeeking(nBytes int) (n int, err error) {
 	n = nBytes
 	return
 }
+
 func (inst *BaseReader) InMessage() bool {
 	return inst.inMessage
 }
@@ -124,6 +127,7 @@ func (inst *BaseReader) MessageAccepted() (err error) {
 	}
 	return nil
 }
+
 func (inst *BaseReader) MessageRejected(reason error) (err error) {
 	//log.Trace().Bytes("bytes", inst.peeked[:100]).Str("reason", reason.Error()).Msg("rejecting message")
 	var n int
@@ -135,6 +139,7 @@ func (inst *BaseReader) MessageRejected(reason error) (err error) {
 	}
 	return
 }
+
 func (inst *BaseReader) reset() {
 	inst.inMessage = false
 	inst.detectedBitErrors = 0

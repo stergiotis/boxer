@@ -6,6 +6,7 @@ func GetItemStatus() (status ItemStatusE) {
 	_ = `status = GetItemStatus()`
 	return
 }
+
 func GetItemStatusV(primary ImGuiHoveredFlags, secondary ImGuiHoveredFlags) (status ItemStatusE) {
 	_ = `status = GetItemStatus(primary, secondary)`
 	return
@@ -15,6 +16,7 @@ func CurrentCursorPos() (r ImVec2) {
 	_ = `auto r = ImGui::GetCurrentWindow()->DC.CursorPos`
 	return
 }
+
 func BeginCustomWidget() (visible bool, currentWindowDrawList ImDrawListPtr, pos ImVec2, availableRegion ImVec2, keyboardNavActive bool, seed ImGuiID) {
 	_ = `ImVec2 pos;
          ImVec2 availableRegion;
@@ -22,6 +24,7 @@ func BeginCustomWidget() (visible bool, currentWindowDrawList ImDrawListPtr, pos
          `
 	return
 }
+
 func SetTooltip(str string) {
 	_ = `ImGui::SetTooltip("%.*s",(int)getStringLength(str),str)`
 }

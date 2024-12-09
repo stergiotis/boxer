@@ -1,8 +1,9 @@
 package ea
 
 import (
-	"github.com/stergiotis/boxer/public/ea"
 	"io"
+
+	"github.com/stergiotis/boxer/public/ea"
 )
 
 type MessageReader interface {

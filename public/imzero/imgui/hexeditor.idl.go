@@ -6,6 +6,7 @@ func NewHexEditor() (r ImHexEditorPtr) {
 	_ = `r = (uintptr_t)(new HexEditor())`
 	return
 }
+
 func (foreignptr ImHexEditorPtr) Destroy() {
 	_ = `delete((HexEditor*)foreignptr)`
 }
@@ -76,9 +77,11 @@ ASSIGN(highlightColor, t->HighlightColor);
 #undef ASSIGN
 `
 }
+
 func (foreignptr ImHexEditorPtr) GotoAddrAndHighlight(addrMin Size_t, addrMax Size_t) {
 	_ = `((HexEditor*)foreignptr)->memEditor->GotoAddrAndHighlight(addrMin,addrMax)`
 }
+
 func (foreignptr ImHexEditorPtr) DrawWindow(title string, data []byte) {
 	_ = `
 auto e = ((HexEditor*)foreignptr);
@@ -86,6 +89,7 @@ auto t = e->memEditor;
 t->DrawWindow(title,e->data,e->data_length);
 `
 }
+
 func (foreignptr ImHexEditorPtr) DrawWindowV(title string, baseDisplayAddr Size_t) {
 	_ = `
 auto e = ((HexEditor*)foreignptr);
@@ -93,6 +97,7 @@ auto t = e->memEditor;
 t->DrawWindow(title,e->data,e->data_length,baseDisplayAddr);
 `
 }
+
 func (foreignptr ImHexEditorPtr) DrawContents() {
 	_ = `
 auto e = ((HexEditor*)foreignptr);
@@ -100,6 +105,7 @@ auto t = e->memEditor;
 t->DrawContents(e->data,e->data_length);
 `
 }
+
 func (foreignptr ImHexEditorPtr) DrawContentV(baseDisplayAddr Size_t) {
 	_ = `
 auto e = ((HexEditor*)foreignptr);
@@ -107,6 +113,7 @@ auto t = e->memEditor;
 t->DrawContents(e->data,e->data_length,baseDisplayAddr);
 `
 }
+
 func (foreignptr ImHexEditorPtr) SetData(data []byte) {
 	_ = `
 auto e = ((HexEditor*)foreignptr);
@@ -124,6 +131,7 @@ if(sz != 0) {
 }
 `
 }
+
 func (foreignptr ImHexEditorPtr) GetData() (data []byte) {
 	_ = `
 auto e = ((HexEditor*)foreignptr);

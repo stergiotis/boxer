@@ -63,6 +63,7 @@ func MakeCoolbarDemoNonIdiomatic() func() {
 		}
 	}
 }
+
 func MakeCoolbarDemo(app *application.Application) func() {
 	var cfg imgui.ImCoolBarConfigForeignPtr
 	//var buttons = []string{"A", "B", "C", "D", "E", "F"}

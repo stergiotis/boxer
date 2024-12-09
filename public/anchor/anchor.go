@@ -32,6 +32,7 @@ func SkipPastAnchorConsecutive(reader io.ByteReader, nAnchorBytes int, maxHammin
 	nBytesRead += n
 	return
 }
+
 func SkipPastAnchorInitial(reader io.ByteReader, nAnchorBytes int, maxHammingDistPerByteIncl int) (nBytesRead uint64, dist int, err error) {
 	consecutiveSuccesses := 0
 

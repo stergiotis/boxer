@@ -7,6 +7,7 @@ import "github.com/stergiotis/boxer/public/imzero/imgui"
 func MakeImPlotRect(xmin float64, xmax float64, ymin float64, ymax float64) ImPlotRect {
 	return ImPlotRect{xmin, xmax, ymin, ymax}
 }
+
 func MakeImPlotPoint(x float64, y float64) ImPlotPoint {
 	return ImPlotPoint(complex(x, y))
 }
@@ -51,6 +52,7 @@ func (inst *ImPlotStyle) Load(style ImPlotStyleForeignPtr) {
 	inst.Use24HourClock = bs[2]
 	return
 }
+
 func (inst *ImPlotStyle) Dump(style ImPlotStyleForeignPtr) {
 	fs := make([]float32, 31, 31)
 	vec2s := make([]float32, 16*2, 16*2)

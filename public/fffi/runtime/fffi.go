@@ -10,9 +10,10 @@ package runtime
 */
 
 import (
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"io"
 	"math"
+
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 type FuncProcId uint32
@@ -40,10 +41,12 @@ func (inst *Fffi2) AddFunctionId(id FuncProcId) {
 	//log.Trace().Str("id", fmt.Sprintf("%08x", id)).Msg("calling function")
 	AddUint32Arg(inst, id)
 }
+
 func (inst *Fffi2) AddProcedureId(id FuncProcId) {
 	//log.Trace().Str("id", fmt.Sprintf("%08x", id)).Msg("calling procedure")
 	AddUint32Arg(inst, id)
 }
+
 func (inst *Fffi2) readError() (err error) {
 	s := GetStringRetr[string](inst)
 	if s != "" {
@@ -51,6 +54,7 @@ func (inst *Fffi2) readError() (err error) {
 	}
 	return
 }
+
 func (inst *Fffi2) CallFunction() (err error) {
 	err = inst.channel.CallFunction()
 	if err != nil {
@@ -59,11 +63,13 @@ func (inst *Fffi2) CallFunction() (err error) {
 	err = inst.readError()
 	return
 }
+
 func (inst *Fffi2) Flush() {
 	inst.AddProcedureId(FlushFuncProcId)
 	inst.CallProcedure()
 	inst.channel.Flush()
 }
+
 func (inst *Fffi2) CallProcedure() {
 	// no-op
 	inst.channel.Flush()

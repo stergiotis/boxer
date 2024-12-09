@@ -2,8 +2,9 @@ package ea
 
 import (
 	"bufio"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"io"
+
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 func NewByteBlockReaderDiscardReader(reader interface{}) (ByteBlockDiscardReader, error) {

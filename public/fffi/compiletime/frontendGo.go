@@ -4,16 +4,18 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"github.com/rs/zerolog/log"
-	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"go/ast"
 	"go/format"
 	"go/printer"
 	"go/token"
-	"golang.org/x/tools/go/ast/astutil"
 	"io"
 	"strings"
+
+	"github.com/rs/zerolog/log"
+	"golang.org/x/tools/go/ast/astutil"
+
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 type CodeTransformerFrontendGo struct {
@@ -89,6 +91,7 @@ func (inst *CodeTransformerFrontendGo) AddFile(fset *token.FileSet, file *ast.Fi
 	}
 	return
 }
+
 func (inst *CodeTransformerFrontendGo) generate(decl *ast.FuncDecl, id uint32, resolver TypeResolver) (r []ast.Stmt, extraComments []*ast.Comment, err error) {
 	var prolog, epilog []ast.Stmt
 	var foreignCode string

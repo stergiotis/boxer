@@ -4,10 +4,11 @@ package demo
 
 import (
 	"fmt"
-	"github.com/stergiotis/boxer/public/imzero/imgui"
 	"math/rand"
 	"sort"
 	"strings"
+
+	"github.com/stergiotis/boxer/public/imzero/imgui"
 )
 
 func RenderSimpleTable() {
@@ -45,12 +46,15 @@ func NewColumnSortableHomogenous[T any](nColumns int, nRows int, compareFuncs []
 		compareFuncs: compareFuncs,
 	}
 }
+
 func (inst *ColumnSortableHomogenous[T]) Set(col int, row int, val T) {
 	inst.Data[col][inst.indices[row]] = val
 }
+
 func (inst *ColumnSortableHomogenous[T]) Get(col int, row int) T {
 	return inst.Data[col][inst.indices[row]]
 }
+
 func (inst *ColumnSortableHomogenous[T]) Sort(columnIndices []int16, directions []imgui.ImGuiSortDirection) {
 	indices := inst.indices
 	comparseFuncts := inst.compareFuncs

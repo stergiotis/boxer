@@ -7,14 +7,17 @@ package imgui
 func PushFont(font ImFontPtr) {
 	_ = `ImGui::PushFont((ImFont*)font);`
 }
+
 func GetFont() (font ImFontPtr) {
 	_ = `font = (uintptr_t)ImGui::GetFont();`
 	return
 }
+
 func GetFontTexID() (tex ImTextureID) {
 	_ = `tex = (uintptr_t)ImGui::GetIO().Fonts->TexID`
 	return
 }
+
 func addFontFromMemoryTrueTypeFontV(name string, fontData []byte, sizeInPixels float32,
 	glyphRanges []ImWchar,
 	oversampleH int, oversampleV int,
@@ -92,6 +95,7 @@ if(dl == nullptr) {
 }
 ((ImFont*)foreignptr)->RenderChar(dl,size,pos,color,(ImWchar)charP)`
 }
+
 func (foreignptr ImFontPtr) FontRenderText(drawList ImDrawListPtr, size float32, pos ImVec2, color uint32, clipRect ImVec4, text string) {
 	_ = `
 auto dl = (ImDrawList*)drawList;
@@ -100,6 +104,7 @@ if(dl == nullptr) {
 }
 ((ImFont*)foreignptr)->RenderText(dl,size,pos,(ImU32)color,clipRect,text,text+getStringLength(text))`
 }
+
 func (foreignptr ImFontPtr) FontRenderTextV(drawList ImDrawListPtr, size float32, pos ImVec2, color uint32, clipRect ImVec4, text string, wrapWidth float32, cpuFineClip bool) {
 	_ = `
 auto dl = (ImDrawList*)drawList;

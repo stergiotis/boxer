@@ -1,8 +1,9 @@
 package config
 
 import (
-	"github.com/stergiotis/boxer/public/observability/eh"
 	cli "github.com/urfave/cli/v2"
+
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 type NameTransformFunc func(name string) (newName string)

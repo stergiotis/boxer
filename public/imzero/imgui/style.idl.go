@@ -92,6 +92,7 @@ func loadStyle(ptr ImGuiStyleForeignPtr, bs []bool, fs []float32, vec2s []float3
 `
 	return
 }
+
 func GetStyle() (r ImGuiStyleForeignPtr) {
 	_ = `r = (uintptr_t)&ImGui::GetStyle()`
 	return

@@ -3,9 +3,10 @@
 package demo
 
 import (
+	"math"
+
 	"github.com/stergiotis/boxer/public/imzero/implot"
 	"github.com/stergiotis/boxer/public/imzero/implot/porteddemo"
-	"math"
 )
 
 var values []float32

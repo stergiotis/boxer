@@ -2,10 +2,11 @@ package passthrough
 
 import (
 	"bufio"
+	"io"
+
 	"github.com/stergiotis/boxer/public/anchor"
 	"github.com/stergiotis/boxer/public/fec/ea"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"io"
 )
 
 type PassthroughWriter struct {

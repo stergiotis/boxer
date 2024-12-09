@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"crypto/tls"
 	"errors"
-	"github.com/stergiotis/boxer/public/config"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"io"
 	"math"
 	"net"
@@ -16,6 +14,9 @@ import (
 	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/rs/zerolog/log"
 	cli "github.com/urfave/cli/v2"
+
+	"github.com/stergiotis/boxer/public/config"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 type CurlierConfig struct {

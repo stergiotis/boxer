@@ -9,6 +9,7 @@ v = vP;
 `
 	return
 }
+
 func SliderUInt32V(label string, vP uint32, p_min uint32, p_max uint32, format string, flags ImGuiSliderFlags) (v uint32, r bool) {
 	_ = `
 r = ImGui::SliderScalar(label,ImGuiDataType_U32,(void*)&vP,(const void*)&p_min,(const void*)&p_max,format,flags);
@@ -16,6 +17,7 @@ v = vP;
 `
 	return
 }
+
 func SliderUInt32NV(label string, vP []uint32, v_min uint32, v_max uint32, format string, flags ImGuiSliderFlags) (v []uint32, r bool) {
 	_ = `
 size_t v_len = getSliceLength(vP);
@@ -24,6 +26,7 @@ v = vP;
 `
 	return
 }
+
 func SliderUInt32N(label string, vP []uint32, v_min uint32, v_max uint32) (v []uint32, r bool) {
 	_ = `
 size_t v_len = getSliceLength(vP);

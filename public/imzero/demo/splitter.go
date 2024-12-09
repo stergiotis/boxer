@@ -5,6 +5,7 @@ package demo
 import "github.com/stergiotis/boxer/public/imzero/imgui"
 
 var sz1 float32 = 300.0
+
 var sz2 float32 = 300.0
 
 func RenderSplitterDemo() {

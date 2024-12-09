@@ -4,8 +4,9 @@ package imgui
 
 import (
 	"fmt"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"math"
+
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 /*
@@ -81,11 +82,6 @@ func AddFont(cfg *FontConfig, sizeInPixels float32) (font ImFontPtr, err error) 
 		err = eb.Build().Str("name", cfg.Name).Errorf("unable to add font, imgui returned null pointer")
 		return
 	}
-	if err != nil {
-		font = 0
-		err = eb.Build().Str("name", cfg.Name).Float32("sizeInPixels", sizeInPixels).Errorf("unable to add font: %w", err)
-		return
-	}
 	t := &ConfiguredFont{
 		Config:       cfg,
 		SizeInPixels: sizeInPixels,
@@ -94,6 +90,7 @@ func AddFont(cfg *FontConfig, sizeInPixels float32) (font ImFontPtr, err error) 
 	ConfiguredFonts = append(ConfiguredFonts, t)
 	return
 }
+
 func ToggleFlags[T ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~int | ~int8 | ~int16 | ~int32 | ~int64](label string, flagsP T, val T) (flags T, changed bool) {
 	var v bool
 	v, changed = Toggle(label, flagsP&val != 0)
@@ -104,6 +101,7 @@ func ToggleFlags[T ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~int | ~int8 |
 	}
 	return
 }
+
 func RadioFlags[T ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~int | ~int8 | ~int16 | ~int32 | ~int64](label string, flagsP T, val T) (flags T) {
 	var active bool
 	active = RadioButton(label, flagsP&val != 0)
@@ -114,12 +112,15 @@ func RadioFlags[T ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~int | ~int8 | 
 	}
 	return
 }
+
 func MakeImVec2(x float32, y float32) ImVec2 {
 	return ImVec2(complex(x, y))
 }
+
 func MakeImVec4(x float32, y float32, z float32, w float32) ImVec4 {
 	return ImVec4([4]float32{x, y, z, w})
 }
+
 func MakeImVec4ImVec2(a ImVec2, b ImVec2) ImVec4 {
 	return ImVec4([4]float32{real(a), imag(a), real(b), imag(b)})
 }
@@ -183,6 +184,7 @@ func (inst *ImGuiStyle) Load(style ImGuiStyleForeignPtr) {
 	inst.HoverFlagsForTooltipNav = hovers[1]
 	return
 }
+
 func (inst *ImGuiStyle) Dump(style ImGuiStyleForeignPtr) {
 	bs := make([]bool, 3, 3)
 	fs := make([]float32, 29, 29)
@@ -260,6 +262,7 @@ func (inst *ImGuiStyle) Dump(style ImGuiStyleForeignPtr) {
 	loadStyle(style, bs, fs, vec2s, cols, dirs, hovers)
 	return
 }
+
 func ScaleImVec2[T ~float32](v ImVec2, f T) (vOut ImVec2) {
 	vOut = ImVec2(complex(real(v)*float32(f), imag(v)*float32(f)))
 	return

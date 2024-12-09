@@ -7,18 +7,20 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"io"
+	"os"
+	"os/exec"
+	"syscall"
+
 	"github.com/rs/zerolog/log"
+	"github.com/tetratelabs/wazero"
+
 	"github.com/stergiotis/boxer/public/fffi/runtime"
 	"github.com/stergiotis/boxer/public/imzero/imgui"
 	"github.com/stergiotis/boxer/public/imzero/nerdfont"
 	"github.com/stergiotis/boxer/public/imzero/wasm"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/tetratelabs/wazero"
-	"io"
-	"os"
-	"os/exec"
-	"syscall"
 )
 
 type Application struct {
@@ -218,6 +220,7 @@ func (inst *Application) Run() (err error) {
 	}
 	return
 }
+
 func (inst *Application) initializeFonts() (err error) {
 	cfg := inst.Config
 	if cfg.MainFontTTF != "" {
@@ -252,9 +255,11 @@ func (inst *Application) initializeFonts() (err error) {
 	}
 	return
 }
+
 func (inst *Application) shouldProceed() bool {
 	return !*inst.shutdown
 }
+
 func (inst *Application) handleNonNilError(err error) {
 	if errors.Is(err, io.EOF) {
 		*inst.shutdown = true

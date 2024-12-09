@@ -1,8 +1,9 @@
 package application
 
 import (
+	cli "github.com/urfave/cli/v2"
+
 	"github.com/stergiotis/boxer/public/config"
-	"github.com/urfave/cli/v2"
 )
 
 type Config struct {

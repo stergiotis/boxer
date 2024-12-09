@@ -17,8 +17,8 @@ type PrimitiveEncoder interface {
 	EncodeNil() (int, error)
 }
 type DefiniteContainerEncoder interface {
-	EncodeArrayDefinite(len uint64) (int, error)
-	EncodeMapDefinite(len uint64) (int, error)
+	EncodeArrayDefinite(length uint64) (int, error)
+	EncodeMapDefinite(length uint64) (int, error)
 }
 type ResetableEncoder interface {
 	Reset()

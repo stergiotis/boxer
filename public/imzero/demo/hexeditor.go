@@ -4,6 +4,7 @@ package demo
 
 import (
 	"crypto/rand"
+
 	"github.com/stergiotis/boxer/public/imzero/imgui"
 	"github.com/stergiotis/boxer/public/imzero/utils"
 )
