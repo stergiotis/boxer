@@ -30,7 +30,7 @@ type EncoderWriter interface {
 
 type Encoder struct {
 	w          EncoderWriter
-	buf        *bytes.Buffer
+	hashBuffer *bytes.Buffer
 	hasher     hash.Hash
 	flushLimit int
 	scratch8   []byte
@@ -47,7 +47,7 @@ func NewEncoder(w EncoderWriter, hasher hash.Hash) *Encoder {
 	}
 	return &Encoder{
 		w:          w,
-		buf:        bytes.NewBuffer(make([]byte, 0, 128)),
+		hashBuffer: bytes.NewBuffer(make([]byte, 0, 128)),
 		hasher:     hasher,
 		flushLimit: flushLimit,
 		scratch8:   make([]byte, 8, 8),
@@ -55,8 +55,8 @@ func NewEncoder(w EncoderWriter, hasher hash.Hash) *Encoder {
 }
 
 func (inst *Encoder) Reset() {
-	inst.buf.Reset()
 	if inst.hasher != nil {
+		inst.hashBuffer.Reset()
 		inst.hasher.Reset()
 	}
 }
@@ -117,12 +117,12 @@ func (inst *Encoder) EncodeString(str string) (n int, err error) {
 	return inst.writeString(str, n)
 }
 
-func (inst *Encoder) EncodeArrayDefinite(len uint64) (n int, err error) {
-	return inst.encodeHead(MajorTypeArray, len)
+func (inst *Encoder) EncodeArrayDefinite(length uint64) (n int, err error) {
+	return inst.encodeHead(MajorTypeArray, length)
 }
 
-func (inst *Encoder) EncodeMapDefinite(len uint64) (n int, err error) {
-	return inst.encodeHead(MajorTypeMap, 2*len)
+func (inst *Encoder) EncodeMapDefinite(length uint64) (n int, err error) {
+	return inst.encodeHead(MajorTypeMap, length)
 }
 
 func (inst *Encoder) encodeTagUnchecked(val uint64) (int, error) {
@@ -217,16 +217,18 @@ func (inst *Encoder) EncodeIpAddr(val netip.Addr) (n int, err error) {
 }
 
 func (inst *Encoder) writeSingleByte(b byte, bytesWrittenBefore int) (n int, err error) {
-	err = inst.buf.WriteByte(b)
-	if err != nil {
-		err = eh.Errorf("unable to write byte to internal hashing buffer: %w", err)
-		return
-	}
-	// TODO good practice? check bytesWrittenBefore? random?
-	err = inst.flushHashBuffer(false)
-	if err != nil {
-		err = eh.Errorf("unable to flush internal hashing buffer: %w", err)
-		return
+	if inst.hasher != nil {
+		err = inst.hashBuffer.WriteByte(b)
+		if err != nil {
+			err = eh.Errorf("unable to write byte to internal hashing buffer: %w", err)
+			return
+		}
+		// TODO good practice? check bytesWrittenBefore? random?
+		err = inst.flushHashBuffer(false)
+		if err != nil {
+			err = eh.Errorf("unable to flush internal hashing buffer: %w", err)
+			return
+		}
 	}
 	err = inst.w.WriteByte(b)
 	if err != nil {
@@ -236,18 +238,20 @@ func (inst *Encoder) writeSingleByte(b byte, bytesWrittenBefore int) (n int, err
 }
 
 func (inst *Encoder) writeBytes(b []byte, bytesWrittenBefore int) (n int, err error) {
-	var u int
-	err = inst.flushHashBuffer(true)
-	if err != nil {
-		return
-	}
 	if inst.hasher != nil {
-		_, err = inst.hasher.Write(b)
+		err = inst.flushHashBuffer(true)
 		if err != nil {
-			err = eh.Errorf("unable to write byte to internal hashing buffer: %w", err)
 			return
 		}
+		if inst.hasher != nil {
+			_, err = inst.hasher.Write(b)
+			if err != nil {
+				err = eh.Errorf("unable to write byte to internal hashing buffer: %w", err)
+				return
+			}
+		}
 	}
+	var u int
 	n = bytesWrittenBefore
 	u, err = inst.w.Write(b)
 	n += u
@@ -255,20 +259,22 @@ func (inst *Encoder) writeBytes(b []byte, bytesWrittenBefore int) (n int, err er
 }
 
 func (inst *Encoder) writeString(s string, bytesWrittenBefore int) (n int, err error) {
+	if inst.hasher != nil {
+		err = inst.flushHashBuffer(false)
+		if err != nil {
+			return
+		}
+		_, err = inst.hashBuffer.WriteString(s)
+		if err != nil {
+			err = eh.Errorf("unable to write byte to internal hashing buffer: %w", err)
+			return
+		}
+		err = inst.flushHashBuffer(false)
+		if err != nil {
+			return
+		}
+	}
 	var u int
-	err = inst.flushHashBuffer(false)
-	if err != nil {
-		return
-	}
-	_, err = inst.buf.WriteString(s)
-	if err != nil {
-		err = eh.Errorf("unable to write byte to internal hashing buffer: %w", err)
-		return
-	}
-	err = inst.flushHashBuffer(false)
-	if err != nil {
-		return
-	}
 	n = bytesWrittenBefore
 	u, err = inst.w.WriteString(s)
 	n += u
@@ -276,10 +282,7 @@ func (inst *Encoder) writeString(s string, bytesWrittenBefore int) (n int, err e
 }
 
 func (inst *Encoder) flushHashBuffer(force bool) (err error) {
-	if inst.hasher == nil {
-		return
-	}
-	buf := inst.buf
+	buf := inst.hashBuffer
 	if force == false && buf.Len() < inst.flushLimit {
 		return
 	}
@@ -291,7 +294,13 @@ func (inst *Encoder) flushHashBuffer(force bool) (err error) {
 	return nil
 }
 
+var ErrNoHasher = eh.Errorf("no hasher")
+
 func (inst *Encoder) Hash(b []byte) (hash []byte, err error) {
+	if inst.hasher == nil {
+		err = ErrNoHasher
+		return
+	}
 	err = inst.flushHashBuffer(true)
 	if err != nil {
 		err = eh.Errorf("unable to calculate hash: %w", err)
