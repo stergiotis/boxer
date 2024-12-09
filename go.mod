@@ -1,42 +1,42 @@
 module github.com/stergiotis/boxer
 
-go 1.22
+go 1.22.0
 
 toolchain go1.23.1
 
 require (
 	github.com/brianvoe/gofakeit/v7 v7.1.2
-	github.com/cenkalti/backoff/v4 v4.2.1
+	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/davecgh/go-spew v1.1.1
 	github.com/dustin/go-humanize v1.0.1
-	github.com/fxamacker/cbor/v2 v2.5.0
+	github.com/fxamacker/cbor/v2 v2.7.0
 	github.com/google/flatbuffers v24.3.25+incompatible
 	github.com/pkg/errors v0.9.1
-	github.com/rs/zerolog v1.30.0
-	github.com/scalalang2/golang-fifo v0.1.5
-	github.com/schollz/progressbar/v3 v3.13.1
-	github.com/stretchr/testify v1.8.4
-	github.com/tetratelabs/wazero v1.6.0
-	github.com/urfave/cli/v2 v2.25.7
+	github.com/rs/zerolog v1.33.0
+	github.com/scalalang2/golang-fifo v1.0.2
+	github.com/schollz/progressbar/v3 v3.17.1
+	github.com/stretchr/testify v1.9.0
+	github.com/tetratelabs/wazero v1.8.2
+	github.com/urfave/cli/v2 v2.27.5
 	github.com/zeebo/xxh3 v1.0.2
-	golang.org/x/sys v0.13.0
-	golang.org/x/text v0.13.0
-	golang.org/x/tools v0.14.0
+	golang.org/x/sys v0.28.0
+	golang.org/x/text v0.21.0
+	golang.org/x/tools v0.28.0
 )
 
 require (
-	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
-	github.com/klauspost/cpuid/v2 v2.0.9 // indirect
-	github.com/mattn/go-colorable v0.1.12 // indirect
-	github.com/mattn/go-isatty v0.0.17 // indirect
-	github.com/mattn/go-runewidth v0.0.14 // indirect
+	github.com/cpuguy83/go-md2man/v2 v2.0.5 // indirect
+	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
+	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/rivo/uniseg v0.2.0 // indirect
+	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
-	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect
-	golang.org/x/mod v0.13.0 // indirect
-	golang.org/x/term v0.6.0 // indirect
+	github.com/xrash/smetrics v0.0.0-20240521201337-686a1a2994c1 // indirect
+	golang.org/x/mod v0.22.0 // indirect
+	golang.org/x/sync v0.10.0 // indirect
+	golang.org/x/term v0.27.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
