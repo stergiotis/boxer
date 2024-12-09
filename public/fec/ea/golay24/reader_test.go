@@ -85,7 +85,7 @@ func TestPebbleReader24(t *testing.T) {
 		require.NoError(t, err)
 		switch paddingBits {
 		case 0:
-			require.EqualValues(t, data, v.Bytes())
+			require.EqualValues(t, data, v.Bytes()) // FIXME flaky test
 			break
 		case 4, 8:
 			l := len(data)
