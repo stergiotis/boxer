@@ -55,3 +55,10 @@ type FullEncoder interface {
 	HashingEncoder
 	TagEncoder
 }
+type PositionerI interface {
+	GetPosition() uint64
+}
+type CurrentBufferI interface {
+	PositionerI
+	Bytes() []byte
+}
