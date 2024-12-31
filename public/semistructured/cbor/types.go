@@ -61,4 +61,5 @@ type PositionerI interface {
 type CurrentBufferI interface {
 	PositionerI
 	GetTemporaryData(posBeginIncl uint64, posEndExcl uint64) (temporary []byte)
+	ResetBuffer()
 }
