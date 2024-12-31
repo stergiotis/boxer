@@ -60,5 +60,5 @@ type PositionerI interface {
 }
 type CurrentBufferI interface {
 	PositionerI
-	Bytes() []byte
+	GetTemporaryData(posBeginIncl uint64, posEndExcl uint64) (temporary []byte)
 }
