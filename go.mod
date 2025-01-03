@@ -20,6 +20,7 @@ require (
 	github.com/tetratelabs/wazero v1.8.2
 	github.com/urfave/cli/v2 v2.27.5
 	github.com/zeebo/xxh3 v1.0.2
+	golang.org/x/exp v0.0.0-20250103183323-7d7fa50e5329
 	golang.org/x/sys v0.28.0
 	golang.org/x/text v0.21.0
 	golang.org/x/tools v0.28.0

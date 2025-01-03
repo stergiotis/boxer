@@ -58,9 +58,11 @@ type FullEncoder interface {
 type PositionerI interface {
 	GetPosition() uint64
 }
+type CloneTemporaryI interface {
+	CloneTemporary(temporary []byte) []byte
+}
 type CurrentBufferI interface {
 	PositionerI
 	GetTemporaryData(posBeginIncl uint64, posEndExcl uint64) (temporary []byte)
 	InvalidateTemporary()
-	CloneTemporary(temporary []byte) []byte
 }

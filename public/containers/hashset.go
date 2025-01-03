@@ -1,5 +1,10 @@
 package containers
 
+import (
+	"golang.org/x/exp/maps"
+	"iter"
+)
+
 type HashSet[T comparable] struct {
 	data map[T]struct{}
 }
@@ -20,6 +25,15 @@ func (inst *HashSet[T]) Has(val T) bool {
 	_, h := inst.data[val]
 	return h
 }
+func (inst *HashSet[T]) All() iter.Seq[T] {
+	return func(yield func(T) bool) {
+		for m, _ := range inst.data {
+			if yield(m) {
+				return
+			}
+		}
+	}
+}
 
 func (inst *HashSet[T]) ForEach(handler func(v T)) {
 	for v, _ := range inst.data {
@@ -35,12 +49,20 @@ func (inst *HashSet[T]) Until(handler func(v T) bool) {
 	}
 }
 
+func (inst *HashSet[T]) Clear() {
+	maps.Clear(inst.data)
+}
 func (inst *HashSet[T]) Slice() []T {
-	r := make([]T, 0, inst.Size())
+	return inst.SliceEx(nil)
+}
+func (inst *HashSet[T]) SliceEx(in []T) (out []T) {
+	if in == nil || cap(in) < inst.Size() {
+		out = make([]T, 0, inst.Size())
+	}
 	inst.ForEach(func(v T) {
-		r = append(r, v)
+		out = append(out, v)
 	})
-	return r
+	return out
 }
 
 func (inst *HashSet[T]) Size() int {
