@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/dev"
 	"github.com/stergiotis/boxer/public/fffi/compiletime"
 	"github.com/stergiotis/boxer/public/imzero/demo"
 	"github.com/stergiotis/boxer/public/imzero/nerdfont/generator"
@@ -31,7 +32,7 @@ func main() {
 	defer ph.PanicHandler(2, nil, nil)
 	app := cli.App{
 		Name:                 "imzero",
-		Copyright:            "Copyright © 2023-2024 Panos Stergiotis",
+		Copyright:            "Copyright © 2023-2025 Panos Stergiotis",
 		HelpName:             "",
 		Usage:                "",
 		UsageText:            "",
@@ -40,9 +41,11 @@ func main() {
 		Description:          "",
 		DefaultCommand:       "",
 		EnableBashCompletion: false,
-		Flags: append(append([]cli.Flag{},
+		Flags: append(append(append(append([]cli.Flag{},
 			logging.LoggingFlags...),
 			profiling.ProfilingFlags...),
+			dev.DebuggerFlags...),
+			dev.IoOverrideFlags...),
 		Commands: []*cli.Command{
 			compiletime.NewCommand(nil, nil),
 			demo.NewCommand(),
