@@ -46,4 +46,4 @@ Boxer uses chained file extension (e.g. `file.docx.pdf.txt`):
 Currently, no third-party contributions are accepted.
 
 ## License
-The MIT License (MIT) 2023-2024 - [Panos Stergiotis](https://github.com/stergiotis/). See [LICENSE](LICENSE) for the full license text.
+The MIT License (MIT) 2023-2025 - [Panos Stergiotis](https://github.com/stergiotis/). See [LICENSE](LICENSE) for the full license text.
