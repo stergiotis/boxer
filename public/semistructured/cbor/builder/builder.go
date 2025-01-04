@@ -45,6 +45,7 @@ type CborKVBuilder[R any] interface {
 	Time(key string, t time.Time) R
 	Times(key string, t []time.Time) R
 	IPAddr(key string, ip net.IP) R
+	Type(key string, val any) R
 }
 
 var _ CborKVBuilder[*zerolog.Event] = (*zerolog.Event)(nil)

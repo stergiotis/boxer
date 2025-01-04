@@ -10,6 +10,7 @@ import (
 	"hash"
 	"net"
 	"net/netip"
+	"reflect"
 	"time"
 )
 
@@ -38,6 +39,9 @@ func (inst *ErrorBuilder) Reset() {
 	inst.structuredData.Reset()
 	inst.encoder.Reset()
 	inst.open = true
+}
+func (inst *ErrorBuilder) Type(key string, val any) *ErrorBuilder {
+	return inst.Str(key, reflect.TypeOf(val).String())
 }
 func (inst *ErrorBuilder) Str(key string, val string) *ErrorBuilder {
 	if !inst.open {
