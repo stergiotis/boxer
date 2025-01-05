@@ -9,6 +9,55 @@ import (
 	"iter"
 )
 
+type ParamBindEnv struct {
+	bind map[string]*chparser.SettingExprList
+}
+
+func NewParamBindEnv() *ParamBindEnv {
+	return &ParamBindEnv{
+		bind: make(map[string]*chparser.SettingExprList, 32),
+	}
+}
+func (inst *ParamBindEnv) Has(name string) (has bool) {
+	_, has = inst.bind[name]
+	return
+}
+
+var ErrParamAlreadyBound = eh.Errorf("parameter is already bound to a value")
+
+func (inst *ParamBindEnv) IsEmpty() bool {
+	return len(inst.bind) == 0
+}
+func (inst *ParamBindEnv) AddDistinct(p *chparser.SettingExprList) (err error) {
+	if p == nil {
+		return
+	}
+	name := p.Name.Name
+	if inst.Has(name) {
+		err = eb.Build().Str("param", name).Errorf("unable to add: %w", ErrParamAlreadyBound)
+		return
+	}
+	inst.bind[name] = p
+	return
+}
+func (inst *ParamBindEnv) Set(p *chparser.SettingExprList) {
+	if p == nil {
+		return
+	}
+	name := p.Name.Name
+	inst.bind[name] = p
+	return
+}
+func (inst *ParamBindEnv) IterSql() iter.Seq2[string, string] {
+	return func(yield func(string, string) bool) {
+		for _, p := range inst.bind {
+			if !yield(p.Name.String(), p.Expr.String()) {
+				return
+			}
+		}
+	}
+}
+
 type ParamSlotSet struct {
 	typesLu          map[string][]*chparser.QueryParam
 	paramOccurrences int

@@ -15,9 +15,11 @@ type ParsedDqlQuery struct {
 	inputSql string
 	ast      *chparser.SelectQuery
 
-	paramSet    *ParamSlotSet
-	paramSetErr error
-	noParams    bool
+	paramBindEnv *ParamBindEnv
+
+	paramSlotSet    *ParamSlotSet
+	paramSlotSetErr error
+	noParams        bool
 }
 
 func (inst *ParsedDqlQuery) String() string {
@@ -26,34 +28,44 @@ func (inst *ParsedDqlQuery) String() string {
 func (inst *ParsedDqlQuery) GetAst() *chparser.SelectQuery {
 	return inst.ast
 }
+func (inst *ParsedDqlQuery) GetParamBindEnv() (paramBindEnv *ParamBindEnv) {
+	if inst.paramBindEnv.IsEmpty() {
+		return nil
+	}
+	return inst.paramBindEnv
+}
 func (inst *ParsedDqlQuery) GetParamSlotSet() (paramSet *ParamSlotSet, err error) {
 	if inst.noParams {
 		return
 	}
-	if inst.paramSet == nil && inst.paramSetErr == nil {
+	if inst.paramSlotSet == nil && inst.paramSlotSetErr == nil {
 		ps := NewParamSlotsSet()
 		d := newParamSlotsDiscoverer()
 		err = d.discover(inst.ast, ps)
 		if err != nil {
 			err = eh.Errorf("error while discovering paramset: %w", err)
-			inst.paramSetErr = err
+			inst.paramSlotSetErr = err
 			return
 		}
 		if ps.IsEmpty() {
 			inst.noParams = true
 			ps = nil
 		}
-		inst.paramSet = ps
+		inst.paramSlotSet = ps
 	}
-	paramSet = inst.paramSet
-	err = inst.paramSetErr
+	paramSet = inst.paramSlotSet
+	err = inst.paramSlotSetErr
 	return
 }
 
 func NewParsedDqlQuery(sql string) (inst *ParsedDqlQuery, err error) {
 	inst = &ParsedDqlQuery{
-		inputSql: sql,
-		ast:      nil,
+		inputSql:        sql,
+		ast:             nil,
+		paramBindEnv:    NewParamBindEnv(),
+		paramSlotSet:    nil,
+		paramSlotSetErr: nil,
+		noParams:        false,
 	}
 	err = inst.parse()
 	if err != nil {
@@ -62,22 +74,33 @@ func NewParsedDqlQuery(sql string) (inst *ParsedDqlQuery, err error) {
 	}
 	return
 }
-func removeParamSettingsFromExprs(exprs []chparser.Expr) (exprsOut []chparser.Expr) {
+func (inst *ParsedDqlQuery) removeParamSettingsFromExprs(exprs []chparser.Expr) (exprsOut []chparser.Expr, err error) {
+	const paramPrefixName = "param_" // Note: param names are case-sensitive
+	bindEnv := inst.paramBindEnv
 	for _, expr := range exprs {
 		switch exprt := expr.(type) {
 		case *chparser.SetStmt:
-			items := slices.DeleteFunc(exprt.Settings.Items, func(list *chparser.SettingExprList) bool {
+			for _, list := range exprt.Settings.Items {
 				name := list.Name.Name
-				if strings.HasPrefix(list.Name.Name, "param_") {
-					log.Info().Str("name", name).Msg("removing set param value expression")
-					return true
+				if strings.HasPrefix(name, paramPrefixName) {
+					if bindEnv != nil {
+						err = bindEnv.AddDistinct(list)
+						if err != nil {
+							return
+						}
+					} else {
+						log.Info().Str("name", name).Msg("removing set param value expression")
+					}
 				}
-				return false
+			}
+			exprt.Settings.Items = slices.DeleteFunc(exprt.Settings.Items, func(list *chparser.SettingExprList) bool {
+				name := list.Name.Name
+				return strings.HasPrefix(name, paramPrefixName)
 			})
-			exprt.Settings.Items = items
 			break
 		}
 	}
+
 	exprsOut = slices.DeleteFunc(exprs, func(expr chparser.Expr) bool {
 		switch exprt := expr.(type) {
 		case *chparser.SetStmt:
@@ -96,7 +119,11 @@ func (inst *ParsedDqlQuery) parse() (err error) {
 		return
 	}
 
-	exprs = removeParamSettingsFromExprs(exprs)
+	exprs, err = inst.removeParamSettingsFromExprs(exprs)
+	if err != nil {
+		err = eh.Errorf("unable to remove param settings from expressions: %w", err)
+		return
+	}
 	if len(exprs) != 1 {
 		err = eb.Build().Int("nExprs", len(exprs)).Errorf("sql must contain exactly on expression")
 		return
