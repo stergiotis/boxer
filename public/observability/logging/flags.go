@@ -1,8 +1,9 @@
 package logging
 
 import (
-	"encoding/json"
+	"github.com/fxamacker/cbor/v2"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/yassinebenaid/godump"
 	"os"
 	"runtime/debug"
 	"strings"
@@ -82,8 +83,45 @@ var LoggingFlags = []cli.Flag{
 			switch s {
 			case "console":
 				log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
+				dumper := godump.Dumper{
+					Indentation:             "  ",
+					ShowPrimitiveNamedTypes: false,
+					HidePrivateFields:       false,
+					Theme:                   godump.DefaultTheme,
+				}
+				var cbordiagmode cbor.DiagMode
+				var cborencmode cbor.EncMode
+				var err error
+				if false {
+					cborencmode, err = cbor.CanonicalEncOptions().EncMode()
+					if err != nil {
+						log.Warn().Err(err).Msg("unable to create cbor encoder, skipping")
+						err = nil
+					}
+					cbordiagmode, err = cbor.DiagOptions{
+						ByteStringEncoding:      0,
+						ByteStringHexWhitespace: false,
+						ByteStringText:          false,
+						ByteStringEmbeddedCBOR:  false,
+						CBORSequence:            false,
+						FloatPrecisionIndicator: false,
+						MaxNestedLevels:         0,
+						MaxArrayElements:        0,
+						MaxMapPairs:             0,
+					}.DiagMode()
+				}
 				zerolog.InterfaceMarshalFunc = func(v any) ([]byte, error) {
-					return json.MarshalIndent(v, "", "  ")
+					if cborencmode != nil && cbordiagmode != nil {
+						c, err := cborencmode.Marshal(v)
+						if err == nil {
+							s, err = cbordiagmode.Diagnose(c)
+							if err == nil {
+								return []byte(s), nil
+							}
+						}
+					}
+					return []byte(dumper.Sprintln(v)), nil
+					//return json.MarshalIndent(v, "", "  ")
 				}
 				break
 			case "diag":

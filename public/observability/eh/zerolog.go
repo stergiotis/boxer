@@ -2,6 +2,7 @@ package eh
 
 import (
 	"fmt"
+	"github.com/fxamacker/cbor/v2"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -177,6 +178,10 @@ func (inst *errorFact) MarshalZerologObject(e *zerolog.Event) {
 	}
 	if inst.StructuredData != nil {
 		e.RawCBOR("data", inst.StructuredData)
+		diag, err := cbor.Diagnose(inst.StructuredData)
+		if err == nil {
+			e.Str("dataDiag", diag)
+		}
 	}
 
 	e.Uint64("id", inst.Id)

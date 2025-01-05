@@ -13,6 +13,7 @@ require (
 	github.com/dustin/go-humanize v1.0.1
 	github.com/fxamacker/cbor/v2 v2.7.0
 	github.com/google/flatbuffers v24.12.23+incompatible
+	github.com/matoous/go-nanoid/v2 v2.1.0
 	github.com/pkg/errors v0.9.1
 	github.com/rs/zerolog v1.33.0
 	github.com/scalalang2/golang-fifo v1.0.2
@@ -20,6 +21,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/tetratelabs/wazero v1.8.2
 	github.com/urfave/cli/v2 v2.27.5
+	github.com/yassinebenaid/godump v0.11.1
 	github.com/zeebo/xxh3 v1.0.2
 	golang.org/x/exp v0.0.0-20250103183323-7d7fa50e5329
 	golang.org/x/sys v0.28.0
@@ -35,7 +37,6 @@ require (
 	github.com/klauspost/compress v1.17.11 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
-	github.com/matoous/go-nanoid/v2 v2.1.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
