@@ -2,24 +2,28 @@ package dsl
 
 import (
 	chparser "github.com/AfterShip/clickhouse-sql-parser/parser"
+	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"golang.org/x/exp/maps"
 	"iter"
 )
 
-type ParamSet struct {
+type ParamSlotSet struct {
 	typesLu          map[string][]*chparser.QueryParam
 	paramOccurrences int
 }
 
-func NewParamSet() *ParamSet {
-	return &ParamSet{typesLu: nil}
+func NewParamSlotsSet() *ParamSlotSet {
+	return &ParamSlotSet{
+		typesLu:          nil,
+		paramOccurrences: 0,
+	}
 }
 
 var ErrIncompatibleParam = eh.Errorf("a param with an incompatible type is already contained in param set")
 
-func (inst *ParamSet) Add(param *chparser.QueryParam) (err error) {
+func (inst *ParamSlotSet) Add(param *chparser.QueryParam) (err error) {
 	if param == nil {
 		return
 	}
@@ -42,7 +46,7 @@ func (inst *ParamSet) Add(param *chparser.QueryParam) (err error) {
 	inst.paramOccurrences++
 	return
 }
-func (inst *ParamSet) UnionMod(other *ParamSet) (err error) {
+func (inst *ParamSlotSet) UnionMod(other *ParamSlotSet) (err error) {
 	for _, ps := range other.All() {
 		for _, p := range ps {
 			err = inst.Add(p)
@@ -54,16 +58,16 @@ func (inst *ParamSet) UnionMod(other *ParamSet) (err error) {
 	}
 	return
 }
-func (inst *ParamSet) TotalParamOccurrences() int {
+func (inst *ParamSlotSet) TotalParamOccurrences() int {
 	return inst.paramOccurrences
 }
-func (inst *ParamSet) TotalDistinctParams() int {
+func (inst *ParamSlotSet) TotalDistinctParams() int {
 	return len(inst.typesLu)
 }
-func (inst *ParamSet) IsEmpty() bool {
+func (inst *ParamSlotSet) IsEmpty() bool {
 	return len(inst.typesLu) == 0
 }
-func (inst *ParamSet) All() iter.Seq2[string, []*chparser.QueryParam] {
+func (inst *ParamSlotSet) All() iter.Seq2[string, []*chparser.QueryParam] {
 	return func(yield func(string, []*chparser.QueryParam) bool) {
 		for k, vs := range inst.typesLu {
 			if !yield(k, vs) {
@@ -72,7 +76,22 @@ func (inst *ParamSet) All() iter.Seq2[string, []*chparser.QueryParam] {
 		}
 	}
 }
-func (inst *ParamSet) Clear() {
+func (inst *ParamSlotSet) NamesAndTypes() iter.Seq2[string, *containers.HashSet[string]] {
+	return func(yield func(string, *containers.HashSet[string]) bool) {
+		types := containers.NewHashSet[string](32)
+		defer types.Clear()
+		for k, vs := range inst.typesLu {
+			for _, v := range vs {
+				types.Add(v.Type.String())
+			}
+			if !yield(k, types) {
+				return
+			}
+			types.Clear()
+		}
+	}
+}
+func (inst *ParamSlotSet) Clear() {
 	if len(inst.typesLu) > 0 {
 		maps.Clear(inst.typesLu)
 	}
@@ -82,21 +101,21 @@ func isParamTypeCompatible(t1 string, t2 string) (compatible bool) {
 	return t1 == t2
 }
 
-type paramsDiscoverer struct {
+type paramSlotsDiscoverer struct {
 	chparser.DefaultASTVisitor
-	params *ParamSet
+	params *ParamSlotSet
 }
 
-func newParamsDiscoverer() *paramsDiscoverer {
-	return &paramsDiscoverer{
+func newParamSlotsDiscoverer() *paramSlotsDiscoverer {
+	return &paramSlotsDiscoverer{
 		DefaultASTVisitor: chparser.DefaultASTVisitor{},
 		params:            nil,
 	}
 }
-func (inst *paramsDiscoverer) VisitQueryParam(expr *chparser.QueryParam) error {
+func (inst *paramSlotsDiscoverer) VisitQueryParam(expr *chparser.QueryParam) error {
 	return inst.params.Add(expr)
 }
-func (inst *paramsDiscoverer) discover(ast chparser.Expr, params *ParamSet) (err error) {
+func (inst *paramSlotsDiscoverer) discover(ast chparser.Expr, params *ParamSlotSet) (err error) {
 	if params == nil {
 		return eh.Errorf("paramset is nil")
 	}

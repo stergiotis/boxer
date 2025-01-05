@@ -1,6 +1,7 @@
 package logging
 
 import (
+	"encoding/json"
 	"github.com/fxamacker/cbor/v2"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/yassinebenaid/godump"
@@ -92,7 +93,7 @@ var LoggingFlags = []cli.Flag{
 				var cbordiagmode cbor.DiagMode
 				var cborencmode cbor.EncMode
 				var err error
-				if false {
+				if true {
 					cborencmode, err = cbor.CanonicalEncOptions().EncMode()
 					if err != nil {
 						log.Warn().Err(err).Msg("unable to create cbor encoder, skipping")
@@ -109,6 +110,10 @@ var LoggingFlags = []cli.Flag{
 						MaxArrayElements:        0,
 						MaxMapPairs:             0,
 					}.DiagMode()
+					if err != nil {
+						log.Warn().Err(err).Msg("unable to create cbor diagmode, skipping")
+						err = nil
+					}
 				}
 				zerolog.InterfaceMarshalFunc = func(v any) ([]byte, error) {
 					if cborencmode != nil && cbordiagmode != nil {
@@ -120,8 +125,12 @@ var LoggingFlags = []cli.Flag{
 							}
 						}
 					}
-					return []byte(dumper.Sprintln(v)), nil
-					//return json.MarshalIndent(v, "", "  ")
+					var js []byte
+					js, err = json.MarshalIndent(v, "", "  ")
+					if err != nil {
+						return []byte(dumper.Sprintln(v)), nil
+					}
+					return js, nil
 				}
 				break
 			case "diag":

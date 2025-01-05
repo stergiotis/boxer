@@ -29,6 +29,10 @@ func (inst *Dsl) Parse(sql string) (err error) {
 	}
 	return
 }
+func (inst *Dsl) LoadDql(dql *ParsedDqlQuery) (err error) {
+	inst.Exprs = []chparser.Expr{dql.GetAst()}
+	return
+}
 func (inst *Dsl) Transform() (err error) {
 	err = inst.checkParsed()
 	if err != nil {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl"
 	"github.com/stergiotis/boxer/public/dev"
 	"github.com/stergiotis/boxer/public/fffi/compiletime"
 	"github.com/stergiotis/boxer/public/imzero/demo"
@@ -47,6 +48,7 @@ func main() {
 			dev.DebuggerFlags...),
 			dev.IoOverrideFlags...),
 		Commands: []*cli.Command{
+			dsl.NewCommand(),
 			compiletime.NewCommand(nil, nil),
 			demo.NewCommand(),
 			{

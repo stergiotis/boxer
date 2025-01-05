@@ -79,14 +79,16 @@ func (inst *TableIdTransformer) Apply(ast chparser.Expr) (err error) {
 	}
 	switch astt := ast.(type) {
 	case *chparser.SelectQuery:
-		if astt.With == nil {
-			astt.With = &chparser.WithClause{
-				WithPos: 0,
-				EndPos:  0,
-				CTEs:    inst.ctes,
+		if len(inst.ctes) > 0 {
+			if astt.With == nil {
+				astt.With = &chparser.WithClause{
+					WithPos: 0,
+					EndPos:  0,
+					CTEs:    inst.ctes,
+				}
+			} else {
+				astt.With.CTEs = append(inst.ctes, astt.With.CTEs...)
 			}
-		} else {
-			astt.With.CTEs = append(inst.ctes, astt.With.CTEs...)
 		}
 		break
 	default:
