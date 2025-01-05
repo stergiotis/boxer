@@ -7,5 +7,5 @@ type TransfomerI interface {
 }
 type TableIdTransformerPluginI interface {
 	Name() string
-	Transform(db string, table string) (replacement *PreparedSql, isStaticReplacement bool, applicable bool, err error)
+	Transform(db string, table string) (replacement *ParsedDqlQuery, isStaticReplacement bool, applicable bool, err error)
 }

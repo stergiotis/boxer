@@ -21,8 +21,10 @@ type TableIdTransformer struct {
 
 func NewTableIdTransformer() *TableIdTransformer {
 	return &TableIdTransformer{
-		DefaultASTVisitor: chparser.DefaultASTVisitor{},
-		plugins:           make([]TableIdTransformerPluginI, 0, 64),
+		DefaultASTVisitor: chparser.DefaultASTVisitor{
+			Visit: nil,
+		},
+		plugins: make([]TableIdTransformerPluginI, 0, 64),
 
 		tableIdentifiers: make([]*chparser.TableIdentifier, 0, 128),
 		replacements:     make([]chparser.Expr, 0, 128),
@@ -134,7 +136,7 @@ func (inst *TableIdTransformer) transformTableIdentifier(t *chparser.TableIdenti
 	}
 	tbl := t.Table.Name
 	for _, p := range inst.plugins {
-		var repl *PreparedSql
+		var repl *ParsedDqlQuery
 		var isStaticReplacement bool
 		var appl bool
 		repl, isStaticReplacement, appl, err = p.Transform(db, tbl)
@@ -144,11 +146,13 @@ func (inst *TableIdTransformer) transformTableIdentifier(t *chparser.TableIdenti
 				log.Warn().Str("plugin", name).Msg("plugin returned nil for transformed expression, skipping")
 			} else {
 				if !isStaticReplacement {
-					replacement, err = deepCopyAst(repl.ast)
+					var other *ParsedDqlQuery
+					other, err = repl.DeepCopy()
 					if err != nil {
 						err = eh.Errorf("unable to deep copy non-static replacement: %w", err)
 						return
 					}
+					replacement = other.ast
 				}
 				log.Debug().Str("db", db).Str("tbl", tbl).Str("transformer", p.Name()).Bool("isStaticReplacement", isStaticReplacement).Msg("transforming table identifier")
 				// first applicable transformer wins
