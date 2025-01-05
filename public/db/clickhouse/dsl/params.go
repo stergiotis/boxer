@@ -10,7 +10,8 @@ import (
 )
 
 type ParamBindEnv struct {
-	bind map[string]*chparser.SettingExprList
+	bind     map[string]*chparser.SettingExprList
+	inputSql string
 }
 
 func NewParamBindEnv() *ParamBindEnv {
@@ -40,6 +41,10 @@ func (inst *ParamBindEnv) AddDistinct(p *chparser.SettingExprList) (err error) {
 	inst.bind[name] = p
 	return
 }
+func (inst *ParamBindEnv) Clear() {
+	clear(inst.bind)
+	inst.inputSql = ""
+}
 func (inst *ParamBindEnv) Set(p *chparser.SettingExprList) {
 	if p == nil {
 		return
@@ -51,6 +56,7 @@ func (inst *ParamBindEnv) Set(p *chparser.SettingExprList) {
 func (inst *ParamBindEnv) IterSql() iter.Seq2[string, string] {
 	return func(yield func(string, string) bool) {
 		for _, p := range inst.bind {
+			// FIXME use inputSql together with p.Expr.Pos for expression?
 			if !yield(p.Name.String(), p.Expr.String()) {
 				return
 			}

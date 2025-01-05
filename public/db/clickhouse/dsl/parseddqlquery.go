@@ -77,6 +77,8 @@ func NewParsedDqlQuery(sql string) (inst *ParsedDqlQuery, err error) {
 func (inst *ParsedDqlQuery) removeParamSettingsFromExprs(exprs []chparser.Expr) (exprsOut []chparser.Expr, err error) {
 	const paramPrefixName = "param_" // Note: param names are case-sensitive
 	bindEnv := inst.paramBindEnv
+	bindEnv.Clear()
+	bindEnv.inputSql = inst.inputSql
 	for _, expr := range exprs {
 		switch exprt := expr.(type) {
 		case *chparser.SetStmt:
