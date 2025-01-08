@@ -2,10 +2,10 @@ package text
 
 import (
 	"encoding/binary"
-	fifo "github.com/scalalang2/golang-fifo"
 	"github.com/scalalang2/golang-fifo/sieve"
 	"github.com/stergiotis/boxer/public/imzero/imgui"
 	"math"
+	"time"
 )
 
 type retrType struct {
@@ -14,11 +14,11 @@ type retrType struct {
 }
 
 type Cache struct {
-	fifo fifo.Cache[string, *retrType]
+	fifo *sieve.Sieve[string, *retrType]
 }
 
-func NewCache(size int) *Cache {
-	return &Cache{fifo: sieve.New[string, *retrType](size)}
+func NewCache(size int, ttl time.Duration) *Cache {
+	return &Cache{fifo: sieve.New[string, *retrType](size, ttl)}
 }
 
 func (inst *Cache) CalcTextSizeA(font imgui.ImFontPtr, size float32, maxWidth float32, wrapWidth float32, text string, pixelPerfect bool) (r imgui.ImVec2, remainingBytes imgui.Size_t, cacheHit bool) {
