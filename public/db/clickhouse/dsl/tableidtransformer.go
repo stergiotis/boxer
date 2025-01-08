@@ -173,12 +173,7 @@ func (inst *TableIdTransformer) VisitTableIdentifier(expr *chparser.TableIdentif
 	}
 
 	input := expr.Table
-	output := &chparser.Ident{
-		Name:      "asdadasd",
-		QuoteType: chparser.BackTicks,
-	}
-	expr.Table = output
-	log.Debug().Stringer("db", expr.Database).Stringer("input", input).Stringer("output", output).Msg("transforming table identifier")
+	log.Debug().Stringer("db", expr.Database).Stringer("input", input).Msg("transforming table identifier")
 	return nil
 }
 
