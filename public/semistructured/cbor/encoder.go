@@ -30,10 +30,10 @@ type EncoderWriter interface {
 
 type Encoder struct {
 	w          EncoderWriter
-	hashBuffer *bytes.Buffer
 	hasher     hash.Hash
-	flushLimit int
+	hashBuffer *bytes.Buffer
 	scratch8   []byte
+	flushLimit int
 }
 
 var _ BasicEncoder = (*Encoder)(nil)

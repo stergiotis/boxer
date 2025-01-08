@@ -20,14 +20,14 @@ import (
 )
 
 type CurlierConfig struct {
-	Request string   `json:"request"`
-	Url     string   `json:"url"`
+	header  *http.Header
+	Request string `json:"request"`
+	Url     string `json:"url"`
+
+	User    string   `json:"user"`
 	Headers []string `json:"headers"`
 
-	Insecure bool `json:"insecure"`
-
-	User  string `json:"user"`
-	Basic bool   `json:"basic"`
+	headerKeys []string
 
 	ConnectTimeout float64 `json:"connectionTimeout"`
 	MaxTime        float64 `json:"maxTime"`
@@ -38,11 +38,13 @@ type CurlierConfig struct {
 
 	Retry int `json:"retry"`
 
-	header     *http.Header
-	headerKeys []string
-
-	validated           bool
 	nValidationMessages int
+
+	Insecure bool `json:"insecure"`
+
+	Basic bool `json:"basic"`
+
+	validated bool
 }
 
 func (inst *CurlierConfig) ToCliFlags(nameTransf config.NameTransformFunc, envVarNameTransf config.NameTransformFunc) []cli.Flag {

@@ -7,14 +7,14 @@ import (
 )
 
 type Config struct {
-	MainFontTTF          string
-	MainFontSizeInPixels float32
-	ImGuiBinary          string
-	UseWasm              bool
-	MaxRelaunches        int
+	MainFontTTF   string
+	ImGuiBinary   string
+	MaxRelaunches int
 
-	nValidationMessages int
-	validated           bool
+	nValidationMessages  int
+	MainFontSizeInPixels float32
+	UseWasm              bool
+	validated            bool
 }
 
 func (inst *Config) ToCliFlags(nameTransf config.NameTransformFunc, envVarNameTransf config.NameTransformFunc) []cli.Flag {

@@ -30,21 +30,21 @@ func Text(format string, a ...any) {
 }*/
 
 type FontConfig struct {
+	Name               string
 	FontData           []byte    // TTF/OTF data
-	FontNo             int       // Index of font within TTF/OTF file
 	GlyphRanges        []ImWchar // List of unicode range (2 value per range, values are inclusive, zero-terminated list)
+	FontNo             int       // Index of font within TTF/OTF file
 	OversampleH        int       // Rasterize at higher quality for sub-pixel positioning. Note the difference between 2 and 3 is minimal. You can reduce this to 1 for large glyphs save memory. Read https://github.com/nothings/stb/blob/master/tests/oversample/README.md for details.
 	OversampleV        int       // Rasterize at higher quality for sub-pixel positioning. This is not really useful as we don't use sub-pixel positions on the Y axis.
-	PixelSnapH         bool      // Align every glyph to pixel boundary. Useful e.g. if you are merging a non-pixel aligned font with the default font. If enabled, you can set OversampleH/V to 1.
 	GlyphExtraSpacing  ImVec2    // Extra spacing (in pixels) between glyphs. Only X axis is supported for now
 	GlyphOffset        ImVec2    // Offset all glyphs from this font input
+	FontBuilderFlags   uint      // Settings for custom font builder. THIS IS BUILDER IMPLEMENTATION DEPENDENT. Leave as zero if unsure.
 	GlyphMinAdvanceX   float32   // Minimum AdvanceX for glyphs, set Min to align font icons, set both Min/Max to enforce mono-space font
 	GlyphMaxAdvanceX   float32   // Maximum AdvanceX for glyphs
-	MergeMode          bool      // Merge into previous ImFont, so you can combine multiple inputs font into one ImFont (e.g. ASCII font + icons + Japanese glyphs). You may want to use GlyphOffset.y when merge font of different heights.\endverbatim
-	FontBuilderFlags   uint      // Settings for custom font builder. THIS IS BUILDER IMPLEMENTATION DEPENDENT. Leave as zero if unsure.
 	RasterizerMultiply float32   // Brighten (>1.0f) or darken (<1.0f) font output. Brightening small fonts may be a good workaround to make them more readable.\endverbatim
 	EllipsisChar       ImWchar   // Explicitly specify unicode codepoint of ellipsis character. When fonts are being merged first specified ellipsis will be used.\endverbatim
-	Name               string
+	PixelSnapH         bool      // Align every glyph to pixel boundary. Useful e.g. if you are merging a non-pixel aligned font with the default font. If enabled, you can set OversampleH/V to 1.
+	MergeMode          bool      // Merge into previous ImFont, so you can combine multiple inputs font into one ImFont (e.g. ASCII font + icons + Japanese glyphs). You may want to use GlyphOffset.y when merge font of different heights.\endverbatim
 }
 
 func NewFontConfig() *FontConfig {

@@ -9,8 +9,8 @@ import (
 type Marshaller struct {
 	w          io.Writer
 	bin        binary.ByteOrder
-	buf        []byte
 	errHandler func(err error)
+	buf        []byte
 	written    int
 }
 

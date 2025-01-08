@@ -18,9 +18,9 @@ type ImZero struct {
 	ctx       context.Context
 	rt        wazero.Runtime
 	modConfig wazero.ModuleConfig
-	wasm      []byte
 	mod       api.Module
 	mem       api.Memory
+	wasm      []byte
 }
 
 func NewImZero(imguiWasm []byte, cfg wazero.RuntimeConfig, stdin io.Reader, stdout io.Writer, stderr io.Writer) (inst *ImZero, err error) {

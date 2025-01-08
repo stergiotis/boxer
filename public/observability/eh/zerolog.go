@@ -30,8 +30,8 @@ type frameContainer struct {
 }
 
 type state struct {
-	b     []byte
 	flags string
+	b     []byte
 }
 
 var _ fmt.State = (*state)(nil)
@@ -193,9 +193,9 @@ func (inst *errorFact) MarshalZerologObject(e *zerolog.Event) {
 var _ zerolog.LogObjectMarshaler = (*errorFact)(nil)
 
 type errorFactsLogger struct {
+	name   string
 	facts  []*errorFact
 	facts2 [][]*errorFact
-	name   string
 }
 
 func (inst *errorFactsLogger) MarshalZerologArray(a *zerolog.Array) {

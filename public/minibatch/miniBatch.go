@@ -11,22 +11,22 @@ import (
 type MessageValidationFunc func(msg []byte) error
 
 type MiniBatcher struct {
-	sizeCriteria          int
-	durationCriteria      time.Duration
-	countCriteria         int
+	startTime             time.Time
 	messageValidationFunc MessageValidationFunc
 
 	buf               *bytes.Buffer
+	sizeCriteria      int
+	durationCriteria  time.Duration
+	countCriteria     int
 	numberOfMessages  int
-	startTime         time.Time
-	inMessage         bool
 	lastMessageLength int
-
-	needsEmit bool
 
 	numberOfEmitsDueToSize     int
 	numberOfEmitsDueToDuration int
 	numberOfEmitsDueToCount    int
+	inMessage                  bool
+
+	needsEmit bool
 }
 
 var ErrWrongNestingState = errors.New("unable to execute operation: Nesting of messages detected")

@@ -8,10 +8,10 @@ import (
 )
 
 type shadedstate struct {
-	inited                     bool
+	r                          *rand.Rand
 	xs, ys, ys1, ys2, ys3, ys4 []float32
 	alpha                      float32
-	r                          *rand.Rand
+	inited                     bool
 }
 
 var shaded = shadedstate{

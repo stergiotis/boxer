@@ -25,8 +25,8 @@ type CodeTransformerFrontendGo struct {
 	builderSmall           *bytes.Buffer
 	namer                  *Namer
 	printerCfg             *printer.Config
-	needsAdditionalImports bool
 	goCodeProlog           string
+	needsAdditionalImports bool
 }
 
 func NewCodeTransformerFrontendGo(namer *Namer, goCodeProlog string) *CodeTransformerFrontendGo {

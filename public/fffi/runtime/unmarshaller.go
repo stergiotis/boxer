@@ -11,9 +11,9 @@ import (
 type Unmarshaller struct {
 	r              io.Reader
 	bin            binary.ByteOrder
-	buf            []byte
 	errHandler     func(err error)
 	allocateBuffer func(l uint32) []byte
+	buf            []byte
 }
 
 func NewUnmarshaller(r io.Reader, bin binary.ByteOrder, errHandler func(err error), allocateBuffer func(l uint32) []byte) *Unmarshaller {

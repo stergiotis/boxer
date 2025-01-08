@@ -14,13 +14,13 @@ import (
 )
 
 type LinearPieChartBuilder struct {
-	CutoffValue    float64
 	AnnotationFunc func(label string, val float64) string
 	Labels         implot.NullSeparatedStringArray
 	labelsBuilder  strings.Builder
 	Annotations    []string
 	Values         []float64
 	Positions      []float64
+	CutoffValue    float64
 	offset         float64
 }
 

@@ -9,17 +9,17 @@ import (
 )
 
 type BaseReader struct {
-	consecutiveAnchor         bool
 	r                         *bufio.Reader
-	nAnchorBytes              uint8
-	maxHammingDistPerByteIncl uint8
-	inMessage                 bool
+	peeked                    []byte
 	totalBytesRead            int
 	bytesPeeked               int
 	detectedBitErrors         int
-	buffered                  byte
-	peeked                    []byte
 	maxMessageSize            int
+	consecutiveAnchor         bool
+	nAnchorBytes              uint8
+	maxHammingDistPerByteIncl uint8
+	inMessage                 bool
+	buffered                  byte
 }
 
 var ErrTooFar = eh.Errorf("unable to peek byte, peeked more bytes than maxMessageSize")

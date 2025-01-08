@@ -21,10 +21,10 @@ const stateDecodeGolay24Second stateE = 2
 const stateDecodeGolay24Third stateE = 3
 
 type Golay24Reader struct {
-	state             stateE
 	baseReader        *ea2.BaseReader
-	bufferedByte      byte
+	state             stateE
 	detectedBitErrors int
+	bufferedByte      byte
 }
 
 func (inst *Golay24Reader) BytesRead() int {

@@ -10,16 +10,16 @@ import (
 )
 
 type Generator struct {
-	MaxNestingLevel    int
 	Hasher             hash.Hash64
 	Enc                *Encoder
-	MaxTotalPrimitives int
-	maxStringLength    int
 	rand               *rand.Rand
-	seed               int64
-	nPrimitives        int
 	faker              *gofakeit.Faker
 	stringGenerators   []func() string
+	MaxNestingLevel    int
+	MaxTotalPrimitives int
+	maxStringLength    int
+	seed               int64
+	nPrimitives        int
 }
 
 func NewGenerator(w EncoderWriter, randSeed int64) *Generator {

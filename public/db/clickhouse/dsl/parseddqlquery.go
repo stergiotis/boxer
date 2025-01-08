@@ -12,14 +12,14 @@ import (
 )
 
 type ParsedDqlQuery struct {
-	inputSql string
-	ast      *chparser.SelectQuery
+	paramSlotSetErr error
+	ast             *chparser.SelectQuery
 
 	paramBindEnv *ParamBindEnv
 
-	paramSlotSet    *ParamSlotSet
-	paramSlotSetErr error
-	noParams        bool
+	paramSlotSet *ParamSlotSet
+	inputSql     string
+	noParams     bool
 }
 
 func (inst *ParsedDqlQuery) String() string {

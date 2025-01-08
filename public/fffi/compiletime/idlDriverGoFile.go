@@ -17,9 +17,9 @@ import (
 
 type IDLDriverGoFile struct {
 	fset     *token.FileSet
-	asts     []*ast.File
 	typesLU  map[ast.Expr]types.TypeAndValue
 	idLU     map[*ast.FuncDecl]runtime.FuncProcId
+	asts     []*ast.File
 	idOffset runtime.FuncProcId
 }
 

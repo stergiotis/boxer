@@ -24,7 +24,7 @@ import (
 )
 
 type Application struct {
-	IconFont                    imgui.ImFontPtr
+	endianess                   binary.ByteOrder
 	channel                     *runtime.InlineIoChannel
 	fffi                        *runtime.Fffi2
 	FffiEstablishedHandler      func(fffi *runtime.Fffi2) error
@@ -34,9 +34,9 @@ type Application struct {
 	shutdown                    *bool
 	stdout                      *bufio.Writer
 	stdin                       *bufio.Reader
-	endianess                   binary.ByteOrder
-	relaunchable                bool
+	IconFont                    imgui.ImFontPtr
 	relaunches                  int
+	relaunchable                bool
 }
 
 func NewApplication(cfg *Config) (app *Application, err error) {
