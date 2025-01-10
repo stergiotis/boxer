@@ -1,7 +1,6 @@
 package dsl
 
 import (
-	"fmt"
 	chparser "github.com/AfterShip/clickhouse-sql-parser/parser"
 	"github.com/fxamacker/cbor/v2"
 	"github.com/rs/zerolog/log"
@@ -22,7 +21,7 @@ type ParsedDqlQuery struct {
 	noParams     bool
 }
 
-func (inst *ParsedDqlQuery) String() string {
+func (inst *ParsedDqlQuery) AstToString() string {
 	return inst.ast.String()
 }
 func (inst *ParsedDqlQuery) GetAst() *chparser.SelectQuery {
@@ -33,6 +32,12 @@ func (inst *ParsedDqlQuery) GetParamBindEnv() (paramBindEnv *ParamBindEnv) {
 		return nil
 	}
 	return inst.paramBindEnv
+}
+func (inst *ParsedDqlQuery) InputSqlSelect() (sql string) {
+	return inst.inputSql[int(inst.ast.Pos()):]
+}
+func (inst *ParsedDqlQuery) InputSqlBindEnv() (sql string) {
+	return inst.inputSql[:int(inst.ast.Pos())]
 }
 func (inst *ParsedDqlQuery) GetParamSlotSet() (paramSet *ParamSlotSet, err error) {
 	if inst.noParams {
@@ -153,5 +158,3 @@ func (inst *ParsedDqlQuery) DeepCopy() (other *ParsedDqlQuery, err error) {
 	}
 	return
 }
-
-var _ fmt.Stringer = (*ParsedDqlQuery)(nil)
