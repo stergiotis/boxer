@@ -7,3 +7,13 @@ const (
 	TriNil   Tristate = 0
 	TriTrue  Tristate = 1
 )
+
+func (inst Tristate) IsFalse() bool {
+	return inst == TriFalse
+}
+func (inst Tristate) IsTrue() bool {
+	return inst == TriTrue
+}
+func (inst Tristate) IsNil() bool {
+	return inst == TriNil
+}
