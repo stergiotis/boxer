@@ -8,7 +8,7 @@ options {
 
 // Top-level statements
 
-queryStmt: query (INTO OUTFILE STRING_LITERAL)? (FORMAT identifierOrNull)? (SEMICOLON)? EOF;
+queryStmt: (query (INTO OUTFILE STRING_LITERAL)? (FORMAT identifierOrNull)? (SEMICOLON)?) EOF;
 query
     :
     | selectUnionStmt
@@ -58,7 +58,9 @@ prewhereClause: PREWHERE columnExpr;
 whereClause: WHERE columnExpr;
 groupByClause: GROUP BY ((CUBE | ROLLUP) LPAREN columnExprList RPAREN | columnExprList);
 havingClause: HAVING columnExpr;
-orderByClause: ORDER BY orderExprList;
+interpolateExprs : (columnExpr (AS columnExpr)?) (COMMA columnExpr (AS columnExpr)?)*;
+orderByClause: ORDER BY orderExprList (WITH FILL (FROM columnExpr)? (TO columnExpr)? (STEP columnExpr)? (STALENESS columnExpr)?
+                                      (INTERPOLATE interpolateExprs)?)?;
 limitByClause: LIMIT limitExpr BY columnExprList;
 limitClause: LIMIT limitExpr (WITH TIES)?;
 settingsClause: SETTINGS settingExprList;
@@ -129,6 +131,7 @@ columnsExpr
 columnExpr
     : CASE columnExpr? (WHEN columnExpr THEN columnExpr)+ (ELSE columnExpr)? END          # ColumnExprCase
     | CAST LPAREN columnExpr AS columnTypeExpr RPAREN                                     # ColumnExprCast
+    | columnExpr DOUBLE_COLON columnTypeExpr                                              # ColumnExprCast
     | DATE STRING_LITERAL                                                                 # ColumnExprDate
     | EXTRACT LPAREN interval FROM columnExpr RPAREN                                      # ColumnExprExtract
     | INTERVAL columnExpr interval                                                        # ColumnExprInterval
@@ -139,6 +142,7 @@ columnExpr
     | identifier (LPAREN columnExprList? RPAREN) OVER identifier                          # ColumnExprWinFunctionTarget
     | identifier (LPAREN columnExprList? RPAREN)? LPAREN DISTINCT? columnArgList? RPAREN  # ColumnExprFunction
     | literal                                                                             # ColumnExprLiteral
+    | paramSlot                                                                           # ColumnExprParamSlot
 
     // FIXME(ilezhankin): this part looks very ugly, maybe there is another way to express it
     | columnExpr LBRACKET columnExpr RBRACKET                                             # ColumnExprArrayAccess
@@ -222,7 +226,6 @@ literal
     : numberLiteral
     | STRING_LITERAL
     | NULL_SQL
-    | paramSlot
     ;
 interval: SECOND | MINUTE | HOUR | DAY | WEEK | MONTH | QUARTER | YEAR;
 keyword
@@ -238,7 +241,8 @@ keyword
     | POPULATE | PRECEDING | PREWHERE | PRIMARY | RANGE | RELOAD | REMOVE | RENAME | REPLACE | REPLICA | REPLICATED | RIGHT | ROLLUP | ROW
     | ROWS | SAMPLE | SELECT | SEMI | SENDS | SET | SETTINGS | SHOW | SOURCE | START | STOP | SUBSTRING | SYNC | SYNTAX | SYSTEM | TABLE
     | TABLES | TEMPORARY | TEST | THEN | TIES | TIMEOUT | TIMESTAMP | TOTALS | TRAILING | TRIM | TRUNCATE | TO | TOP | TTL | TYPE
-    | UNBOUNDED | UNION | UPDATE | USE | USING | UUID | VALUES | VIEW | VOLUME | WATCH | WHEN | WHERE | WINDOW | WITH
+    | UNBOUNDED | UNION | UPDATE | USE | USING | UUID | VALUES | VIEW | VOLUME | WATCH | WHEN | WHERE | WINDOW | WITH | FILL | STEP
+    | STALENESS | INTERPOLATE
     ;
 keywordForAlias
     : AFTER | ALIAS | ALTER | ASCENDING | AST | ASYNC | ATTACH | BOTH | BY | CASE | CAST | CHECK | CLEAR | CLUSTER | CODEC | COLLATE

@@ -75,6 +75,10 @@ func (v *BaseClickHouseParserVisitor) VisitHavingClause(ctx *HavingClauseContext
 	return v.VisitChildren(ctx)
 }
 
+func (v *BaseClickHouseParserVisitor) VisitInterpolateExprs(ctx *InterpolateExprsContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
 func (v *BaseClickHouseParserVisitor) VisitOrderByClause(ctx *OrderByClauseContext) interface{} {
 	return v.VisitChildren(ctx)
 }
@@ -244,6 +248,10 @@ func (v *BaseClickHouseParserVisitor) VisitColumnExprSubquery(ctx *ColumnExprSub
 }
 
 func (v *BaseClickHouseParserVisitor) VisitColumnExprLiteral(ctx *ColumnExprLiteralContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseClickHouseParserVisitor) VisitColumnExprParamSlot(ctx *ColumnExprParamSlotContext) interface{} {
 	return v.VisitChildren(ctx)
 }
 

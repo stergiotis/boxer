@@ -58,6 +58,9 @@ type ClickHouseParserVisitor interface {
 	// Visit a parse tree produced by ClickHouseParser#havingClause.
 	VisitHavingClause(ctx *HavingClauseContext) interface{}
 
+	// Visit a parse tree produced by ClickHouseParser#interpolateExprs.
+	VisitInterpolateExprs(ctx *InterpolateExprsContext) interface{}
+
 	// Visit a parse tree produced by ClickHouseParser#orderByClause.
 	VisitOrderByClause(ctx *OrderByClauseContext) interface{}
 
@@ -186,6 +189,9 @@ type ClickHouseParserVisitor interface {
 
 	// Visit a parse tree produced by ClickHouseParser#ColumnExprLiteral.
 	VisitColumnExprLiteral(ctx *ColumnExprLiteralContext) interface{}
+
+	// Visit a parse tree produced by ClickHouseParser#ColumnExprParamSlot.
+	VisitColumnExprParamSlot(ctx *ColumnExprParamSlotContext) interface{}
 
 	// Visit a parse tree produced by ClickHouseParser#ColumnExprArray.
 	VisitColumnExprArray(ctx *ColumnExprArrayContext) interface{}

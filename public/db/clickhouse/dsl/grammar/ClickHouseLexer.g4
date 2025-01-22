@@ -195,6 +195,10 @@ WHERE: W H E R E;
 WINDOW: W I N D O W;
 WITH: W I T H;
 YEAR: Y E A R | Y Y Y Y;
+FILL: F I L L;
+STEP: S T E P;
+STALENESS: S T A L E N E S S;
+INTERPOLATE: I N T E R P O L A T E;
 
 JSON_FALSE: 'false';
 JSON_TRUE: 'true';
@@ -259,6 +263,7 @@ ASTERISK: '*';
 BACKQUOTE: '`';
 BACKSLASH: '\\';
 COLON: ':';
+DOUBLE_COLON: '::';
 COMMA: ',';
 CONCAT: '||';
 DASH: '-';
