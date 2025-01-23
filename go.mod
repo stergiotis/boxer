@@ -6,6 +6,7 @@ toolchain go1.23.1
 
 require (
 	github.com/AfterShip/clickhouse-sql-parser v0.4.1
+	github.com/antlr4-go/antlr/v4 v4.13.1
 	github.com/brianvoe/gofakeit/v7 v7.1.2
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/davecgh/go-spew v1.1.1
@@ -14,6 +15,7 @@ require (
 	github.com/fxamacker/cbor/v2 v2.7.0
 	github.com/google/flatbuffers v24.12.23+incompatible
 	github.com/matoous/go-nanoid/v2 v2.1.0
+	github.com/philip-peterson/go-mutablestring v1.0.7
 	github.com/pkg/errors v0.9.1
 	github.com/rs/zerolog v1.33.0
 	github.com/scalalang2/golang-fifo v1.0.2
@@ -40,7 +42,6 @@ require (
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
-	github.com/philip-peterson/go-mutablestring v1.0.7 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rogpeppe/go-internal v1.10.0 // indirect
