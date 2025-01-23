@@ -310,8 +310,8 @@ type ClickHouseParserVisitor interface {
 	// Visit a parse tree produced by ClickHouseParser#databaseIdentifier.
 	VisitDatabaseIdentifier(ctx *DatabaseIdentifierContext) interface{}
 
-	// Visit a parse tree produced by ClickHouseParser#paramSlot.
-	VisitParamSlot(ctx *ParamSlotContext) interface{}
+	// Visit a parse tree produced by ClickHouseParser#paramSlotExpr.
+	VisitParamSlotExpr(ctx *ParamSlotExprContext) interface{}
 
 	// Visit a parse tree produced by ClickHouseParser#floatingLiteral.
 	VisitFloatingLiteral(ctx *FloatingLiteralContext) interface{}

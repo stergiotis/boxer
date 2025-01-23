@@ -215,7 +215,7 @@ tableArgExpr
 databaseIdentifier: identifier;
 
 // Basics
-paramSlot: LBRACE identifier COLON columnTypeExpr RBRACE;
+paramSlot: (LBRACE identifier COLON columnTypeExpr RBRACE) #paramSlotExpr;
 floatingLiteral
     : FLOATING_LITERAL
     | DOT (DECIMAL_LITERAL | OCTAL_LITERAL)

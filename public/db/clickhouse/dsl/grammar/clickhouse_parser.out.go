@@ -15835,14 +15835,6 @@ type IParamSlotContext interface {
 
 	// GetParser returns the parser.
 	GetParser() antlr.Parser
-
-	// Getter signatures
-	LBRACE() antlr.TerminalNode
-	Identifier() IIdentifierContext
-	COLON() antlr.TerminalNode
-	ColumnTypeExpr() IColumnTypeExprContext
-	RBRACE() antlr.TerminalNode
-
 	// IsParamSlotContext differentiates from other interfaces.
 	IsParamSlotContext()
 }
@@ -15879,11 +15871,41 @@ func NewParamSlotContext(parser antlr.Parser, parent antlr.ParserRuleContext, in
 
 func (s *ParamSlotContext) GetParser() antlr.Parser { return s.parser }
 
-func (s *ParamSlotContext) LBRACE() antlr.TerminalNode {
+func (s *ParamSlotContext) CopyAll(ctx *ParamSlotContext) {
+	s.CopyFrom(&ctx.BaseParserRuleContext)
+}
+
+func (s *ParamSlotContext) GetRuleContext() antlr.RuleContext {
+	return s
+}
+
+func (s *ParamSlotContext) ToStringTree(ruleNames []string, recog antlr.Recognizer) string {
+	return antlr.TreesStringTree(s, ruleNames, recog)
+}
+
+type ParamSlotExprContext struct {
+	ParamSlotContext
+}
+
+func NewParamSlotExprContext(parser antlr.Parser, ctx antlr.ParserRuleContext) *ParamSlotExprContext {
+	var p = new(ParamSlotExprContext)
+
+	InitEmptyParamSlotContext(&p.ParamSlotContext)
+	p.parser = parser
+	p.CopyAll(ctx.(*ParamSlotContext))
+
+	return p
+}
+
+func (s *ParamSlotExprContext) GetRuleContext() antlr.RuleContext {
+	return s
+}
+
+func (s *ParamSlotExprContext) LBRACE() antlr.TerminalNode {
 	return s.GetToken(ClickHouseParserLBRACE, 0)
 }
 
-func (s *ParamSlotContext) Identifier() IIdentifierContext {
+func (s *ParamSlotExprContext) Identifier() IIdentifierContext {
 	var t antlr.RuleContext
 	for _, ctx := range s.GetChildren() {
 		if _, ok := ctx.(IIdentifierContext); ok {
@@ -15899,11 +15921,11 @@ func (s *ParamSlotContext) Identifier() IIdentifierContext {
 	return t.(IIdentifierContext)
 }
 
-func (s *ParamSlotContext) COLON() antlr.TerminalNode {
+func (s *ParamSlotExprContext) COLON() antlr.TerminalNode {
 	return s.GetToken(ClickHouseParserCOLON, 0)
 }
 
-func (s *ParamSlotContext) ColumnTypeExpr() IColumnTypeExprContext {
+func (s *ParamSlotExprContext) ColumnTypeExpr() IColumnTypeExprContext {
 	var t antlr.RuleContext
 	for _, ctx := range s.GetChildren() {
 		if _, ok := ctx.(IColumnTypeExprContext); ok {
@@ -15919,22 +15941,14 @@ func (s *ParamSlotContext) ColumnTypeExpr() IColumnTypeExprContext {
 	return t.(IColumnTypeExprContext)
 }
 
-func (s *ParamSlotContext) RBRACE() antlr.TerminalNode {
+func (s *ParamSlotExprContext) RBRACE() antlr.TerminalNode {
 	return s.GetToken(ClickHouseParserRBRACE, 0)
 }
 
-func (s *ParamSlotContext) GetRuleContext() antlr.RuleContext {
-	return s
-}
-
-func (s *ParamSlotContext) ToStringTree(ruleNames []string, recog antlr.Recognizer) string {
-	return antlr.TreesStringTree(s, ruleNames, recog)
-}
-
-func (s *ParamSlotContext) Accept(visitor antlr.ParseTreeVisitor) interface{} {
+func (s *ParamSlotExprContext) Accept(visitor antlr.ParseTreeVisitor) interface{} {
 	switch t := visitor.(type) {
 	case ClickHouseParserVisitor:
-		return t.VisitParamSlot(s)
+		return t.VisitParamSlotExpr(s)
 
 	default:
 		return t.VisitChildren(s)
@@ -15944,6 +15958,7 @@ func (s *ParamSlotContext) Accept(visitor antlr.ParseTreeVisitor) interface{} {
 func (p *ClickHouseParser) ParamSlot() (localctx IParamSlotContext) {
 	localctx = NewParamSlotContext(p, p.GetParserRuleContext(), p.GetState())
 	p.EnterRule(localctx, 110, ClickHouseParserRULE_paramSlot)
+	localctx = NewParamSlotExprContext(p, localctx)
 	p.EnterOuterAlt(localctx, 1)
 	{
 		p.SetState(922)

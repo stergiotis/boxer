@@ -411,7 +411,7 @@ func (v *BaseClickHouseParserVisitor) VisitDatabaseIdentifier(ctx *DatabaseIdent
 	return v.VisitChildren(ctx)
 }
 
-func (v *BaseClickHouseParserVisitor) VisitParamSlot(ctx *ParamSlotContext) interface{} {
+func (v *BaseClickHouseParserVisitor) VisitParamSlotExpr(ctx *ParamSlotExprContext) interface{} {
 	return v.VisitChildren(ctx)
 }
 
