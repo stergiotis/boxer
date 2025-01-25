@@ -1,5 +1,25 @@
 // Original: Copyright (c) 2016-2025 ClickHouse Inc see LICENSE
 // Modifications: Copyright (c) 2025 Panos Stergiotis, Apache 2.0
+
+/*
+    Important: Consumers visiting the resulting parse tree will rely on rules having a specific form.
+
+    Homogenous lists with terminal(s) between may be expressed as usual:
+    ```antlr4
+    columnAliases : LPAREN identifier (COMMA identifier)* RPAREN;
+    ```
+    Inhomogenous lists need to be re-written by putting the kleen star part in a separate rule:
+    ```antlr4
+    selectUnionStmt: selectStmtWithParens (UNION ( ALL | DISTINCT )? selectStmtWithParens)*;
+    ```
+    becomes
+    ```antlr4
+    selectUnionStmt: selectStmtWithParens selectUnionStmtItem*;
+    selectUnionStmtItem: (UNION ( ALL | DISTINCT )? selectStmtWithParens);
+    ```
+    The same as for kleen star applies for optional (?) and 1 to many (+) repetitions.
+*/
+
 parser grammar ClickHouseParser;
 
 options {
@@ -13,35 +33,37 @@ query
     :
     | selectUnionStmt
     | setStmt
-    | ctes? selectStmt
+    | ctes? selectUnionStmt
     ;
 
 // CTE statement
 ctes
-    : WITH namedQuery (',' namedQuery)*
+    : WITH namedQuery (COMMA namedQuery)*
     ;
 
 namedQuery
-    : name=identifier (columnAliases)? AS '(' query ')'
+    : name=identifier (columnAliases)? AS LPAREN query RPAREN
     ;
 
 columnAliases
-    : '(' identifier (',' identifier)* ')'
+    : LPAREN identifier (COMMA identifier)* RPAREN
     ;
 
 // SELECT statement
 
-selectUnionStmt: selectStmtWithParens (UNION ALL selectStmtWithParens)*;
-selectStmtWithParens: selectStmt | LPAREN selectUnionStmt RPAREN;
+selectUnionStmt: selectStmtWithParens selectUnionStmtItem*;
+selectUnionStmtItem: (( UNION | EXCEPT | INTERSECT ) ( ALL | DISTINCT )? selectStmtWithParens);
+selectStmtWithParens: selectStmt | (LPAREN selectUnionStmt RPAREN);
 selectStmt:
     withClause?
-    SELECT DISTINCT? topClause? columnExprList
+    projectionClause
     fromClause?
     arrayJoinClause?
     windowClause?
+    qualifyClause?
     prewhereClause?
     whereClause?
-    groupByClause? (WITH (CUBE | ROLLUP))? (WITH TOTALS)?
+    groupByClause?
     havingClause?
     orderByClause?
     limitByClause?
@@ -49,16 +71,18 @@ selectStmt:
     settingsClause?
     ;
 
+projectionClause : SELECT DISTINCT? topClause? columnExprList;
 withClause: WITH columnExprList;
 topClause: TOP DECIMAL_LITERAL (WITH TIES)?;
 fromClause: FROM joinExpr;
 arrayJoinClause: (LEFT | INNER)? ARRAY JOIN columnExprList;
 windowClause: WINDOW identifier AS LPAREN windowExpr RPAREN;
+qualifyClause: QUALIFY columnExpr;
 prewhereClause: PREWHERE columnExpr;
 whereClause: WHERE columnExpr;
-groupByClause: GROUP BY ((CUBE | ROLLUP) LPAREN columnExprList RPAREN | columnExprList);
+groupByClause: GROUP BY ((CUBE | ROLLUP) LPAREN columnExprList RPAREN | columnExprList) (WITH (CUBE | ROLLUP))? (WITH TOTALS)?;
 havingClause: HAVING columnExpr;
-interpolateExprs : (columnExpr (AS columnExpr)?) (COMMA columnExpr (AS columnExpr)?)*;
+interpolateExprs : (columnExpr (AS columnExpr)?) (COMMA columnExpr (AS columnExpr)?)*; // FIXME itemize kleen
 orderByClause: ORDER BY orderExprList (WITH FILL (FROM columnExpr)? (TO columnExpr)? (STEP columnExpr)? (STALENESS columnExpr)?
                                       (INTERPOLATE interpolateExprs)?)?;
 limitByClause: LIMIT limitExpr BY columnExprList;
@@ -116,7 +140,7 @@ setStmt: SET settingExprList;
 
 columnTypeExpr
     : identifier                                                                             # ColumnTypeExprSimple   // UInt64
-    | identifier LPAREN identifier columnTypeExpr (COMMA identifier columnTypeExpr)* RPAREN  # ColumnTypeExprNested   // Nested
+    | identifier LPAREN identifier columnTypeExpr (COMMA identifier columnTypeExpr)* RPAREN  # ColumnTypeExprNested   // Nested    // FIXME itemize kleen
     | identifier LPAREN enumValue (COMMA enumValue)* RPAREN                                  # ColumnTypeExprEnum     // Enum
     | identifier LPAREN columnTypeExpr (COMMA columnTypeExpr)* RPAREN                        # ColumnTypeExprComplex  // Array, Tuple
     | identifier LPAREN columnExprList? RPAREN                                               # ColumnTypeExprParam    // FixedString(N)
@@ -215,7 +239,7 @@ tableArgExpr
 databaseIdentifier: identifier;
 
 // Basics
-paramSlot: (LBRACE identifier COLON columnTypeExpr RBRACE) #paramSlotExpr;
+paramSlot: (LBRACE identifier COLON columnTypeExpr RBRACE);
 floatingLiteral
     : FLOATING_LITERAL
     | DOT (DECIMAL_LITERAL | OCTAL_LITERAL)

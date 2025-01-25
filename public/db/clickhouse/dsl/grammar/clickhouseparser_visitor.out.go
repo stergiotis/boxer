@@ -25,11 +25,17 @@ type ClickHouseParserVisitor interface {
 	// Visit a parse tree produced by ClickHouseParser#selectUnionStmt.
 	VisitSelectUnionStmt(ctx *SelectUnionStmtContext) interface{}
 
+	// Visit a parse tree produced by ClickHouseParser#selectUnionStmtItem.
+	VisitSelectUnionStmtItem(ctx *SelectUnionStmtItemContext) interface{}
+
 	// Visit a parse tree produced by ClickHouseParser#selectStmtWithParens.
 	VisitSelectStmtWithParens(ctx *SelectStmtWithParensContext) interface{}
 
 	// Visit a parse tree produced by ClickHouseParser#selectStmt.
 	VisitSelectStmt(ctx *SelectStmtContext) interface{}
+
+	// Visit a parse tree produced by ClickHouseParser#projectionClause.
+	VisitProjectionClause(ctx *ProjectionClauseContext) interface{}
 
 	// Visit a parse tree produced by ClickHouseParser#withClause.
 	VisitWithClause(ctx *WithClauseContext) interface{}
@@ -45,6 +51,9 @@ type ClickHouseParserVisitor interface {
 
 	// Visit a parse tree produced by ClickHouseParser#windowClause.
 	VisitWindowClause(ctx *WindowClauseContext) interface{}
+
+	// Visit a parse tree produced by ClickHouseParser#qualifyClause.
+	VisitQualifyClause(ctx *QualifyClauseContext) interface{}
 
 	// Visit a parse tree produced by ClickHouseParser#prewhereClause.
 	VisitPrewhereClause(ctx *PrewhereClauseContext) interface{}
@@ -310,8 +319,8 @@ type ClickHouseParserVisitor interface {
 	// Visit a parse tree produced by ClickHouseParser#databaseIdentifier.
 	VisitDatabaseIdentifier(ctx *DatabaseIdentifierContext) interface{}
 
-	// Visit a parse tree produced by ClickHouseParser#paramSlotExpr.
-	VisitParamSlotExpr(ctx *ParamSlotExprContext) interface{}
+	// Visit a parse tree produced by ClickHouseParser#paramSlot.
+	VisitParamSlot(ctx *ParamSlotContext) interface{}
 
 	// Visit a parse tree produced by ClickHouseParser#floatingLiteral.
 	VisitFloatingLiteral(ctx *FloatingLiteralContext) interface{}

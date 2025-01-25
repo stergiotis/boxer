@@ -31,11 +31,19 @@ func (v *BaseClickHouseParserVisitor) VisitSelectUnionStmt(ctx *SelectUnionStmtC
 	return v.VisitChildren(ctx)
 }
 
+func (v *BaseClickHouseParserVisitor) VisitSelectUnionStmtItem(ctx *SelectUnionStmtItemContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
 func (v *BaseClickHouseParserVisitor) VisitSelectStmtWithParens(ctx *SelectStmtWithParensContext) interface{} {
 	return v.VisitChildren(ctx)
 }
 
 func (v *BaseClickHouseParserVisitor) VisitSelectStmt(ctx *SelectStmtContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseClickHouseParserVisitor) VisitProjectionClause(ctx *ProjectionClauseContext) interface{} {
 	return v.VisitChildren(ctx)
 }
 
@@ -56,6 +64,10 @@ func (v *BaseClickHouseParserVisitor) VisitArrayJoinClause(ctx *ArrayJoinClauseC
 }
 
 func (v *BaseClickHouseParserVisitor) VisitWindowClause(ctx *WindowClauseContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseClickHouseParserVisitor) VisitQualifyClause(ctx *QualifyClauseContext) interface{} {
 	return v.VisitChildren(ctx)
 }
 
@@ -411,7 +423,7 @@ func (v *BaseClickHouseParserVisitor) VisitDatabaseIdentifier(ctx *DatabaseIdent
 	return v.VisitChildren(ctx)
 }
 
-func (v *BaseClickHouseParserVisitor) VisitParamSlotExpr(ctx *ParamSlotExprContext) interface{} {
+func (v *BaseClickHouseParserVisitor) VisitParamSlot(ctx *ParamSlotContext) interface{} {
 	return v.VisitChildren(ctx)
 }
 
