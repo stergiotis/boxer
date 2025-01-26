@@ -6,7 +6,29 @@ import (
 	"slices"
 )
 
-func IterateSliceGrouped[K any, V any](sortedSliceKeys []K, coSliceVals []V, cmpKey func(K, K) int) iter.Seq2[K, []V] {
+func IterateSliceGrouped[K comparable, V any](sortedSliceKeys []K, coSliceVals []V) iter.Seq2[K, []V] {
+	return func(yield func(K, []V) bool) {
+		if len(sortedSliceKeys) == 0 {
+			return
+		}
+		last := 0
+		lastK := sortedSliceKeys[0]
+		for i := 1; i < len(sortedSliceKeys); i++ {
+			k := sortedSliceKeys[i]
+			if k != lastK {
+				if !yield(lastK, coSliceVals[last:i]) {
+					return
+				}
+				last = i
+				lastK = k
+			}
+		}
+		if !yield(lastK, coSliceVals[last:]) {
+			return
+		}
+	}
+}
+func IterateSliceGroupedFunc[K any, V any](sortedSliceKeys []K, coSliceVals []V, cmpKey func(K, K) int) iter.Seq2[K, []V] {
 	return func(yield func(K, []V) bool) {
 		if len(sortedSliceKeys) == 0 {
 			return
