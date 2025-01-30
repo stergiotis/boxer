@@ -1,6 +1,6 @@
-package dsl
+//go:build disabled
 
-import chparser "github.com/AfterShip/clickhouse-sql-parser/parser"
+package dsl
 
 type TransfomerI interface {
 	Apply(ast chparser.Expr) (err error)

@@ -27,14 +27,8 @@ options {
 }
 
 // Top-level statements
-
-queryStmt: (query (INTO OUTFILE STRING_LITERAL)? (FORMAT identifierOrNull)? (SEMICOLON)?) EOF;
-query
-    :
-    | selectUnionStmt
-    | setStmt
-    | ctes? selectUnionStmt
-    ;
+queryStmt: query (INTO OUTFILE STRING_LITERAL)? (FORMAT identifierOrNull)? (SEMICOLON)? EOF;
+query: setStmt* ctes? selectUnionStmt;
 
 // CTE statement
 ctes
@@ -134,7 +128,7 @@ winFrameBound: (CURRENT ROW | UNBOUNDED PRECEDING | UNBOUNDED FOLLOWING | number
 
 // SET statement
 
-setStmt: SET settingExprList;
+setStmt: SET settingExprList SEMICOLON;
 
 // Columns
 

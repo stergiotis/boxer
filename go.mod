@@ -5,7 +5,6 @@ go 1.23.0
 toolchain go1.23.1
 
 require (
-	github.com/AfterShip/clickhouse-sql-parser v0.4.1
 	github.com/antlr4-go/antlr/v4 v4.13.1
 	github.com/brianvoe/gofakeit/v7 v7.1.2
 	github.com/cenkalti/backoff/v4 v4.3.0

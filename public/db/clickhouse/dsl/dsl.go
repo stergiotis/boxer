@@ -1,3 +1,5 @@
+//go:build disabled
+
 package dsl
 
 import (
@@ -24,13 +26,13 @@ func (inst *Dsl) Parse(sql string) (err error) {
 	p := chparser.NewParser(sql)
 	inst.Exprs, err = p.ParseStmts()
 	if err != nil {
-		err = eh.Errorf("unable to parse sql: %w", err)
+		err = eh.Errorf("unable to Parse sql: %w", err)
 		return
 	}
 	return
 }
 func (inst *Dsl) LoadDql(dql *ParsedDqlQuery) (err error) {
-	inst.Exprs = []chparser.Expr{dql.GetAst()}
+	inst.Exprs = []chparser.Expr{dql.GetInputParseTree()}
 	return
 }
 func (inst *Dsl) Transform() (err error) {
@@ -43,7 +45,7 @@ func (inst *Dsl) Transform() (err error) {
 		for i, expr := range inst.Exprs {
 			err = tr.Apply(expr)
 			if err != nil {
-				err = eb.Build().Int("exprIndex", i).Errorf("unable to apply ast visitor: %w", err)
+				err = eb.Build().Int("exprIndex", i).Errorf("unable to apply parseTree visitor: %w", err)
 				return
 			}
 		}
@@ -78,7 +80,7 @@ func (inst *Dsl) Apply(visitor chparser.ASTVisitor) (err error) {
 	for i, expr := range inst.Exprs {
 		err = expr.Accept(visitor)
 		if err != nil {
-			err = eb.Build().Int("exprIndex", i).Errorf("unable to apply ast visitor: %w", err)
+			err = eb.Build().Int("exprIndex", i).Errorf("unable to apply parseTree visitor: %w", err)
 			return
 		}
 	}

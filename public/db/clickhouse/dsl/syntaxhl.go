@@ -1,43 +1,46 @@
 package dsl
 
 import (
-	chparser "github.com/AfterShip/clickhouse-sql-parser/parser"
-	mutable_string "github.com/philip-peterson/go-mutablestring"
+	"github.com/antlr4-go/antlr/v4"
+	mutablestring "github.com/philip-peterson/go-mutablestring"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/yassinebenaid/godump"
 	"strings"
 	"unicode"
 )
 
-type hlFunc func(expr chparser.Expr) (before string, after string)
+type hlFunc func(node antlr.Tree) (before string, after string)
 
 type SyntaxHighlighter struct {
 	hl hlFunc
 }
 
-func AnsiHighlightFunc(expr chparser.Expr) (before string, after string) {
+func AnsiHighlightFunc(node antlr.Tree) (before string, after string) {
 	const placeholder = string(unicode.ReplacementChar)
 	d := godump.DefaultTheme
 	var c godump.Style
-	switch expr.(type) {
-	case *chparser.FunctionExpr:
+	switch node.(type) {
+	case *grammar.ColumnExprFunctionContext:
 		c = d.Func
 		break
-	case *chparser.Ident:
+	case *grammar.IdentifierContext:
 		c = d.Types
 		break
-	case *chparser.NumberLiteral:
+	case *grammar.NumberLiteralContext:
 		c = d.Number
 		break
-	case *chparser.StringLiteral:
+	case *grammar.LiteralContext:
 		c = d.String
 		break
-	case *chparser.ColumnIdentifier, *chparser.TableIdentifier:
+	case *grammar.ColumnIdentifierContext, *grammar.TableIdentifierContext:
 		c = d.Address
 		break
-	case *chparser.PlaceHolder:
+	case *grammar.ParamSlotContext:
 		c = d.Fields
 		break
+	case *grammar.KeywordContext, *grammar.KeywordForAliasContext:
+		c = d.Chan
 	default:
 		return
 	}
@@ -50,34 +53,55 @@ func NewSyntaxHighlighter(hl hlFunc) *SyntaxHighlighter {
 		hl: hl,
 	}
 }
-func (inst *SyntaxHighlighter) Highlite(sql string, ast []chparser.Expr) (sqlHighlighted string, err error) {
+func (inst *SyntaxHighlighter) Highlight(sql string, parseTree antlr.Tree) (sqlHighlighted string, err error) {
 	hl := inst.hl
-	m := mutable_string.NewMutableString(sql)
-	vis := &chparser.DefaultASTVisitor{
-		Visit: func(expr chparser.Expr) error {
-			b := expr.Pos()
-			e := expr.End()
-			before, after := hl(expr)
+	m := mutablestring.NewMutableString(sql)
+	for node := range IterateAll(parseTree) {
+		switch nodet := node.(type) {
+		case antlr.TerminalNode:
+			before, after := hl(node)
 			if before != "" {
-				err = m.Insert(int(b), before)
-				if err != nil {
-					return err
+				startToken := nodet.GetSymbol()
+				if startToken != nil {
+					start := startToken.GetStart()
+					err = m.Insert(start, before)
+					if err != nil {
+						return
+					}
 				}
 			}
 			if after != "" {
-				err = m.Insert(int(e), after)
-				if err != nil {
-					return err
+				stopToken := nodet.GetSymbol()
+				if stopToken != nil {
+					err = m.Insert(stopToken.GetStop()+1, after)
+					if err != nil {
+						return
+					}
 				}
 			}
-			return nil
-		},
-	}
-	for _, expr := range ast {
-		err = expr.Accept(vis)
-		if err != nil {
-			err = eh.Errorf("error while walking and highlighting ast: %w", err)
-			return
+			break
+		case antlr.ParserRuleContext:
+			before, after := hl(node)
+			if before != "" {
+				startToken := nodet.GetStart()
+				if startToken != nil {
+					start := startToken.GetStart()
+					err = m.Insert(start, before)
+					if err != nil {
+						return
+					}
+				}
+			}
+			if after != "" {
+				stopToken := nodet.GetStop()
+				if stopToken != nil {
+					err = m.Insert(stopToken.GetStop()+1, after)
+					if err != nil {
+						return
+					}
+				}
+			}
+			break
 		}
 	}
 	sqlHighlighted, err = m.Commit()

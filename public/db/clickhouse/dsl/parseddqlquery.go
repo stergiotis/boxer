@@ -1,31 +1,86 @@
 package dsl
 
 import (
-	chparser "github.com/AfterShip/clickhouse-sql-parser/parser"
-	"github.com/fxamacker/cbor/v2"
+	"github.com/antlr4-go/antlr/v4"
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/ast"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/ea"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"slices"
+	"io"
 	"strings"
 )
 
+type errListener struct {
+}
+
+func (inst *errListener) SyntaxError(recognizer antlr.Recognizer, offendingSymbol interface{}, line, column int, msg string, e antlr.RecognitionException) {
+	log.Debug().Interface("offendingSymbol", offendingSymbol).Int("line", line).Int("col", column).Str("msg", msg).Msg("syntax error")
+	recognizer.SetError(e)
+}
+
+func (inst *errListener) ReportAmbiguity(recognizer antlr.Parser, dfa *antlr.DFA, startIndex, stopIndex int, exact bool, ambigAlts *antlr.BitSet, configs *antlr.ATNConfigSet) {
+	log.Debug().Int("startIndex", startIndex).Int("stopIndex", stopIndex).Bool("exact", exact).Msg("ambiguity detected")
+}
+
+func (inst *errListener) ReportAttemptingFullContext(recognizer antlr.Parser, dfa *antlr.DFA, startIndex, stopIndex int, conflictingAlts *antlr.BitSet, configs *antlr.ATNConfigSet) {
+	log.Debug().Int("startIndex", startIndex).Int("stopIndex", stopIndex).Msg("conflicting ambiguity detected")
+}
+
+func (inst *errListener) ReportContextSensitivity(recognizer antlr.Parser, dfa *antlr.DFA, startIndex, stopIndex, prediction int, configs *antlr.ATNConfigSet) {
+	log.Debug().Int("startIndex", startIndex).Int("stopIndex", stopIndex).Msg("context sensitivity")
+}
+
+var _ antlr.ErrorListener = (*errListener)(nil)
+
+func parseSql(sql string, errL antlr.ErrorListener) (parser *grammar.ClickHouseParser, parseTree *grammar.QueryStmtContext, err error) {
+	inputStream := antlr.NewInputStream(sql)
+	if errL == nil {
+		errL = &errListener{}
+	}
+	lexer := grammar.NewClickHouseLexer(inputStream)
+	lexer.RemoveErrorListeners()
+	lexer.AddErrorListener(errL)
+	stream := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
+	parser = grammar.NewClickHouseParser(stream)
+	parser.RemoveErrorListeners()
+	parser.AddErrorListener(errL)
+
+	parseTreeI := parser.QueryStmt()
+	var ok bool
+	parseTree, ok = parseTreeI.(*grammar.QueryStmtContext)
+	if !ok {
+		err = eb.Build().Type("parseTreeI", parseTreeI).Errorf("unable to cast to QueryStmtContext")
+		return
+	}
+
+	if parser.HasError() {
+		pe := parser.GetError()
+		err = eh.Errorf("errors detected: %s (token=%s)", pe.GetMessage(), pe.GetOffendingToken().GetText())
+		return
+	}
+	return
+}
+
 type ParsedDqlQuery struct {
 	paramSlotSetErr error
-	ast             *chparser.SelectQuery
+	parseTree       *grammar.QueryStmtContext
 
 	paramBindEnv *ParamBindEnv
-
 	paramSlotSet *ParamSlotSet
-	inputSql     string
-	noParams     bool
+	paramExprs   []*grammar.SettingExprContext
+
+	inputSql string
+	noParams bool
 }
 
-func (inst *ParsedDqlQuery) AstToString() string {
-	return inst.ast.String()
+func (inst *ParsedDqlQuery) GetInputSql() (sql string) {
+	sql = inst.inputSql
+	return
 }
-func (inst *ParsedDqlQuery) GetAst() *chparser.SelectQuery {
-	return inst.ast
+func (inst *ParsedDqlQuery) GetInputParseTree() *grammar.QueryStmtContext {
+	return inst.parseTree
 }
 func (inst *ParsedDqlQuery) GetParamBindEnv() (paramBindEnv *ParamBindEnv) {
 	if inst.paramBindEnv.IsEmpty() {
@@ -34,10 +89,12 @@ func (inst *ParsedDqlQuery) GetParamBindEnv() (paramBindEnv *ParamBindEnv) {
 	return inst.paramBindEnv
 }
 func (inst *ParsedDqlQuery) InputSqlSelect() (sql string) {
-	return inst.inputSql[int(inst.ast.Pos()):]
+	log.Panic().Msg("not implemented")
+	return
 }
 func (inst *ParsedDqlQuery) InputSqlBindEnv() (sql string) {
-	return inst.inputSql[:int(inst.ast.Pos())]
+	log.Panic().Msg("not implemented")
+	return
 }
 func (inst *ParsedDqlQuery) GetParamSlotSet() (paramSet *ParamSlotSet, err error) {
 	if inst.noParams {
@@ -45,8 +102,7 @@ func (inst *ParsedDqlQuery) GetParamSlotSet() (paramSet *ParamSlotSet, err error
 	}
 	if inst.paramSlotSet == nil && inst.paramSlotSetErr == nil {
 		ps := NewParamSlotsSet()
-		d := newParamSlotsDiscoverer()
-		err = d.discover(inst.ast, ps)
+		err = ps.AddSlotsFromParseTree(inst.parseTree)
 		if err != nil {
 			err = eh.Errorf("error while discovering paramset: %w", err)
 			inst.paramSlotSetErr = err
@@ -63,98 +119,102 @@ func (inst *ParsedDqlQuery) GetParamSlotSet() (paramSet *ParamSlotSet, err error
 	return
 }
 
-func NewParsedDqlQuery(sql string) (inst *ParsedDqlQuery, err error) {
+func NewParsedDqlQuery() (inst *ParsedDqlQuery) {
 	inst = &ParsedDqlQuery{
-		inputSql:        sql,
-		ast:             nil,
-		paramBindEnv:    NewParamBindEnv(),
-		paramSlotSet:    nil,
 		paramSlotSetErr: nil,
+		parseTree:       nil,
+		paramBindEnv:    NewParamBindEnv(),
+		paramSlotSet:    NewParamSlotsSet(),
+		paramExprs:      make([]*grammar.SettingExprContext, 0, 64),
+		inputSql:        "",
 		noParams:        false,
-	}
-	err = inst.parse()
-	if err != nil {
-		err = eh.Errorf("unable to parse sql: %w", err)
-		return
 	}
 	return
 }
-func (inst *ParsedDqlQuery) removeParamSettingsFromExprs(exprs []chparser.Expr) (exprsOut []chparser.Expr, err error) {
+func (inst *ParsedDqlQuery) identifyParamBindEnvs() (err error) {
 	const paramPrefixName = "param_" // Note: param names are case-sensitive
+	var nonParam bool
+	clear(inst.paramExprs)
+	paramExprs := inst.paramExprs[:0]
+	for node := range IterateAllByType[*grammar.SettingExprContext](inst.parseTree) {
+		id := ast.Identifier{}
+		id.LoadContext(node.Identifier().(*grammar.IdentifierContext))
+		if strings.HasPrefix(id.Name, paramPrefixName) {
+			{ // TODO lift this limitations
+				if nonParam {
+					err = eh.Errorf("param settings must be first settings and not mixed with regular settings")
+					return
+				}
+				ok := false
+				switch pt := node.GetParent().(type) {
+				case *grammar.SettingExprListContext:
+					switch pt.GetParent().(type) {
+					case *grammar.SetStmtContext:
+						ok = true
+						break
+					}
+					break
+				}
+				if !ok {
+					err = eb.Build().Type("parent", node.GetParent()).Errorf("param settings must be defined using SET ... statement, not SETTINGS ... clause")
+					return
+				}
+			}
+			paramExprs = append(paramExprs, node)
+		} else {
+			nonParam = true
+		}
+	}
+	inst.paramExprs = paramExprs
+	return
+}
+func (inst *ParsedDqlQuery) populateBindEnv() (err error) {
 	bindEnv := inst.paramBindEnv
 	bindEnv.Clear()
 	bindEnv.inputSql = inst.inputSql
-	for _, expr := range exprs {
-		switch exprt := expr.(type) {
-		case *chparser.SetStmt:
-			for _, list := range exprt.Settings.Items {
-				name := list.Name.Name
-				if strings.HasPrefix(name, paramPrefixName) {
-					if bindEnv != nil {
-						err = bindEnv.AddDistinct(list)
-						if err != nil {
-							return
-						}
-					} else {
-						log.Info().Str("name", name).Msg("removing set param value expression")
-					}
-				}
-			}
-			exprt.Settings.Items = slices.DeleteFunc(exprt.Settings.Items, func(list *chparser.SettingExprList) bool {
-				name := list.Name.Name
-				return strings.HasPrefix(name, paramPrefixName)
-			})
-			break
+	err = inst.identifyParamBindEnvs()
+	if err != nil {
+		return
+	}
+	for _, ex := range inst.paramExprs {
+		err = bindEnv.AddDistinct(ex)
+		if err != nil {
+			err = eh.Errorf("unable to add param expression to binding environment: %w", err)
+			return
 		}
 	}
 
-	exprsOut = slices.DeleteFunc(exprs, func(expr chparser.Expr) bool {
-		switch exprt := expr.(type) {
-		case *chparser.SetStmt:
-			return len(exprt.Settings.Items) == 0
-		}
-		return false
-	})
 	return
 }
-func (inst *ParsedDqlQuery) parse() (err error) {
-	p := chparser.NewParser(inst.inputSql)
-	var exprs []chparser.Expr
-	exprs, err = p.ParseStmts()
+func (inst *ParsedDqlQuery) ParseFromReader(sql io.Reader) (err error) {
+	var s string
+	s, err = ea.ReadAllString(sql)
 	if err != nil {
-		err = eh.Errorf("unable to parse sql: %w", err)
+		inst.Reset()
+		err = eh.Errorf("unable to read sql from reader: %w", err)
 		return
 	}
-
-	exprs, err = inst.removeParamSettingsFromExprs(exprs)
-	if err != nil {
-		err = eh.Errorf("unable to remove param settings from expressions: %w", err)
-		return
-	}
-	if len(exprs) != 1 {
-		err = eb.Build().Int("nExprs", len(exprs)).Errorf("sql must contain exactly on expression")
-		return
-	}
-	q, ok := exprs[0].(*chparser.SelectQuery)
-	if !ok {
-		err = eb.Build().Type("expr", exprs[0]).Errorf("supplied query is not a data query language expression")
-		return
-	}
-	inst.ast = q
-	return
+	return inst.ParseFromString(s)
 }
-func (inst *ParsedDqlQuery) DeepCopy() (other *ParsedDqlQuery, err error) {
-	var b []byte
-	b, err = cbor.Marshal(inst.ast)
+func (inst *ParsedDqlQuery) ParseFromString(sql string) (err error) {
+	inst.Reset()
+	var parseTree *grammar.QueryStmtContext
+	_, parseTree, err = parseSql(sql, nil)
 	if err != nil {
-		err = eh.Errorf("unable to marshall ast: %w", err)
+		err = eh.Errorf("unable to parse sql as dql query: %w", err)
 		return
 	}
-	var astAny *chparser.SelectQuery
-	err = cbor.Unmarshal(b, &astAny)
-	if err != nil {
-		err = eh.Errorf("unable to unmarshall ast: %w", err)
-		return
-	}
-	return
+	inst.inputSql = sql
+	inst.parseTree = parseTree
+	return inst.populateBindEnv()
+}
+func (inst *ParsedDqlQuery) Reset() {
+	inst.noParams = false
+	inst.parseTree = nil
+	inst.paramSlotSet.Clear()
+	inst.paramSlotSetErr = nil
+	inst.paramBindEnv.Clear()
+	inst.inputSql = ""
+	clear(inst.paramExprs)
+	inst.paramExprs = inst.paramExprs[:0]
 }
