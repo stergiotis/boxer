@@ -2,15 +2,12 @@ package dsl
 
 import (
 	"fmt"
-	"github.com/antlr4-go/antlr/v4"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/urfave/cli/v2"
 	"github.com/yassinebenaid/godump"
 	"os"
-	"reflect"
-	"strings"
 )
 
 func parseCommand() *cli.Command {
@@ -44,23 +41,47 @@ func parseCommand() *cli.Command {
 			format := context.String("format")
 			switch format {
 			case "highlight", "hl":
-				var hl *SyntaxHighlighter
-				if true {
-					hl = NewSyntaxHighlighter(AnsiHighlightFunc)
-				} else {
-					hl = NewSyntaxHighlighter(func(node antlr.Tree) (before string, after string) {
-						_, t, _ := strings.Cut(reflect.TypeOf(node).String(), ".")
-						before = "<" + t + ">"
-						after = "</" + t + ">"
-						return
-					})
+				var a *AnsiHighlighter
+				a, err = NewAnsiHighlighter(&godump.DefaultTheme)
+				if err != nil {
+					return
 				}
+				var h *HtmlHighlighter
+				h = NewHtmlHighlighter()
+
+				_, err = os.Stdout.WriteString(`<html><head><link rel="stylesheet" href="styles.css"/><meta name="referrer" content="no-referrer" /></head><body><style>`)
+				if err != nil {
+					return err
+				}
+				{
+					var style []byte
+					style, err = os.ReadFile("style.css")
+					if err != nil {
+						return err
+					}
+					_, err = os.Stdout.Write(style)
+					if err != nil {
+						return
+					}
+					_, err = os.Stdout.WriteString("</style>")
+					if err != nil {
+						return
+					}
+				}
+
+				var _ = a
+				hl := NewSyntaxHighlighter(h)
 				var s string
 				s, err = hl.Highlight(dql.GetInputSql(), dql.GetInputParseTree())
 				if err != nil {
 					return err
 				}
 				_, err = os.Stdout.WriteString(s)
+				if err != nil {
+					return err
+				}
+				_, err = os.Stdout.WriteString(`</body></html>
+`)
 				if err != nil {
 					return err
 				}

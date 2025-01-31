@@ -13,6 +13,26 @@ import (
 )
 
 type errListener struct {
+	conflictsStart []int
+	conflictsStop  []int
+	ambStart       []int
+	ambStop        []int
+}
+
+func newErrListender(estConflicts int) *errListener {
+	return &errListener{
+		conflictsStart: make([]int, 0, estConflicts),
+		conflictsStop:  make([]int, 0, estConflicts),
+		ambStart:       make([]int, 0, estConflicts),
+		ambStop:        make([]int, 0, estConflicts),
+	}
+}
+
+func (inst *errListener) Reset() {
+	inst.conflictsStart = inst.conflictsStart[:0]
+	inst.conflictsStop = inst.conflictsStop[:0]
+	inst.ambStart = inst.ambStart[:0]
+	inst.ambStop = inst.ambStop[:0]
 }
 
 func (inst *errListener) SyntaxError(recognizer antlr.Recognizer, offendingSymbol interface{}, line, column int, msg string, e antlr.RecognitionException) {
@@ -21,11 +41,21 @@ func (inst *errListener) SyntaxError(recognizer antlr.Recognizer, offendingSymbo
 }
 
 func (inst *errListener) ReportAmbiguity(recognizer antlr.Parser, dfa *antlr.DFA, startIndex, stopIndex int, exact bool, ambigAlts *antlr.BitSet, configs *antlr.ATNConfigSet) {
-	log.Debug().Int("startIndex", startIndex).Int("stopIndex", stopIndex).Bool("exact", exact).Msg("ambiguity detected")
+	tokens := recognizer.GetTokenStream()
+	start := tokens.Get(startIndex).GetStart()
+	stop := tokens.Get(stopIndex).GetStop()
+	inst.ambStart = append(inst.ambStart, start)
+	inst.ambStop = append(inst.ambStop, stop)
+	log.Debug().Int("from", start).Int("to", stop).Int("startIndex", startIndex).Int("stopIndex", stopIndex).Bool("exact", exact).Msg("ambiguity detected")
 }
 
 func (inst *errListener) ReportAttemptingFullContext(recognizer antlr.Parser, dfa *antlr.DFA, startIndex, stopIndex int, conflictingAlts *antlr.BitSet, configs *antlr.ATNConfigSet) {
-	log.Debug().Int("startIndex", startIndex).Int("stopIndex", stopIndex).Msg("conflicting ambiguity detected")
+	tokens := recognizer.GetTokenStream()
+	start := tokens.Get(startIndex).GetStart()
+	stop := tokens.Get(stopIndex).GetStop()
+	inst.conflictsStart = append(inst.conflictsStart, start)
+	inst.conflictsStop = append(inst.conflictsStop, stop)
+	log.Debug().Int("from", start).Int("to", stop).Int("startIndex", startIndex).Int("stopIndex", stopIndex).Msg("conflicting ambiguity detected")
 }
 
 func (inst *errListener) ReportContextSensitivity(recognizer antlr.Parser, dfa *antlr.DFA, startIndex, stopIndex, prediction int, configs *antlr.ATNConfigSet) {
@@ -37,7 +67,7 @@ var _ antlr.ErrorListener = (*errListener)(nil)
 func parseSql(sql string, errL antlr.ErrorListener) (parser *grammar.ClickHouseParser, parseTree *grammar.QueryStmtContext, err error) {
 	inputStream := antlr.NewInputStream(sql)
 	if errL == nil {
-		errL = &errListener{}
+		errL = newErrListender(32)
 	}
 	lexer := grammar.NewClickHouseLexer(inputStream)
 	lexer.RemoveErrorListeners()
@@ -66,6 +96,8 @@ func parseSql(sql string, errL antlr.ErrorListener) (parser *grammar.ClickHouseP
 type ParsedDqlQuery struct {
 	paramSlotSetErr error
 	parseTree       *grammar.QueryStmtContext
+	parser          *grammar.ClickHouseParser
+	errL            *errListener
 
 	paramBindEnv *ParamBindEnv
 	paramSlotSet *ParamSlotSet
@@ -75,6 +107,9 @@ type ParsedDqlQuery struct {
 	noParams bool
 }
 
+func (inst *ParsedDqlQuery) GetParser() *grammar.ClickHouseParser {
+	return inst.parser
+}
 func (inst *ParsedDqlQuery) GetInputSql() (sql string) {
 	sql = inst.inputSql
 	return
@@ -123,6 +158,7 @@ func NewParsedDqlQuery() (inst *ParsedDqlQuery) {
 	inst = &ParsedDqlQuery{
 		paramSlotSetErr: nil,
 		parseTree:       nil,
+		errL:            newErrListender(32),
 		paramBindEnv:    NewParamBindEnv(),
 		paramSlotSet:    NewParamSlotsSet(),
 		paramExprs:      make([]*grammar.SettingExprContext, 0, 64),
@@ -199,13 +235,18 @@ func (inst *ParsedDqlQuery) ParseFromReader(sql io.Reader) (err error) {
 func (inst *ParsedDqlQuery) ParseFromString(sql string) (err error) {
 	inst.Reset()
 	var parseTree *grammar.QueryStmtContext
-	_, parseTree, err = parseSql(sql, nil)
+
+	errL := inst.errL
+	errL.Reset()
+	var parser *grammar.ClickHouseParser
+	parser, parseTree, err = parseSql(sql, errL)
 	if err != nil {
 		err = eh.Errorf("unable to parse sql as dql query: %w", err)
 		return
 	}
 	inst.inputSql = sql
 	inst.parseTree = parseTree
+	inst.parser = parser
 	return inst.populateBindEnv()
 }
 func (inst *ParsedDqlQuery) Reset() {
