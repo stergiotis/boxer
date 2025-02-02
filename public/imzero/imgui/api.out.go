@@ -65,6 +65,7 @@ func ColorEdit3(label string, colP [3]float32, flags ImGuiColorEditFlags) (col [
 }
 
 func ColorEdit4(label string, colP ImVec4, flags ImGuiColorEditFlags) (col ImVec4, changed bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000003)
 	runtime.AddStringArg(_f, label)
@@ -77,7 +78,6 @@ func ColorEdit4(label string, colP ImVec4, flags ImGuiColorEditFlags) (col ImVec
 	}
 	col = ImVec4(runtime.GetFloat32Array4Retr[float32](_f))
 	changed = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 // -- deactivated -- // //go:build fffi_idl_code
@@ -98,6 +98,7 @@ func GetItemStatus() (status ItemStatusE) {
 }
 
 func GetItemStatusV(primary ImGuiHoveredFlags, secondary ImGuiHoveredFlags) (status ItemStatusE) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000005)
 	runtime.AddIntArg(_f, primary)
@@ -108,11 +109,11 @@ func GetItemStatusV(primary ImGuiHoveredFlags, secondary ImGuiHoveredFlags) (sta
 		return
 	}
 	status = ItemStatusE(runtime.GetUint16Retr[uint16](_f))
-
 	return
 }
 
 func CurrentCursorPos() (r ImVec2) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000006)
 	_err_ := _f.CallFunction()
@@ -121,7 +122,6 @@ func CurrentCursorPos() (r ImVec2) {
 		return
 	}
 	r = ImVec2(runtime.GetComplex64Retr[complex64](_f))
-
 	return
 }
 
@@ -168,6 +168,7 @@ func MakeImCoolBarConfig() (r ImCoolBarConfigForeignPtr) {
 }
 
 func MakeImCoolBarConfigV(anchor ImVec2, normalSize float32, hoveredSize float32, animStep float32, effectStrength float32) (r ImCoolBarConfigForeignPtr) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000000a)
 	runtime.AddComplex64Arg(_f, anchor)
@@ -181,16 +182,15 @@ func MakeImCoolBarConfigV(anchor ImVec2, normalSize float32, hoveredSize float32
 		return
 	}
 	r = ImCoolBarConfigForeignPtr(runtime.GetUintptrRetr[uintptr](_f))
-
 	return
 }
 
 func DestroyImCoolBarConfig(cfg ImCoolBarConfigForeignPtr) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x0000000b)
 	runtime.AddUintptrArg(_f, cfg)
 	_f.CallProcedure()
-
 }
 
 func (foreignptr ImCoolBarConfigForeignPtr) Get() (anchor ImVec2, normalSize float32, hoveredSize float32, animStep float32, effectStrength float32) {
@@ -322,11 +322,11 @@ func DragFloat32(label string, vP float32) (v float32, r bool) {
 	}
 	v = (runtime.GetFloat32Retr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func DragFloat32V(label string, vP float32, v_speed float32, p_min float32, p_max float32, format string, flags ImGuiSliderFlags) (v float32, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000015)
 	runtime.AddStringArg(_f, label)
@@ -343,7 +343,6 @@ func DragFloat32V(label string, vP float32, v_speed float32, p_min float32, p_ma
 	}
 	v = (runtime.GetFloat32Retr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
@@ -400,11 +399,11 @@ func DragFloat64(label string, vP float64) (v float64, r bool) {
 	}
 	v = (runtime.GetFloat64Retr[float64](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func DragFloat64V(label string, vP float64, v_speed float32, p_min float64, p_max float64, format string, flags ImGuiSliderFlags) (v float64, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000019)
 	runtime.AddStringArg(_f, label)
@@ -421,7 +420,6 @@ func DragFloat64V(label string, vP float64, v_speed float32, p_min float64, p_ma
 	}
 	v = (runtime.GetFloat64Retr[float64](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
@@ -478,11 +476,11 @@ func DragInt(label string, vP int) (v int, r bool) {
 	}
 	v = (runtime.GetIntRetr[int](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func DragIntV(label string, vP int, v_speed float32, p_min int, p_max int, format string, flags ImGuiSliderFlags) (v int, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000001d)
 	runtime.AddStringArg(_f, label)
@@ -499,7 +497,6 @@ func DragIntV(label string, vP int, v_speed float32, p_min int, p_max int, forma
 	}
 	v = (runtime.GetIntRetr[int](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
@@ -556,11 +553,11 @@ func DragInt16(label string, vP int16) (v int16, r bool) {
 	}
 	v = (runtime.GetInt16Retr[int16](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func DragInt16V(label string, vP int16, v_speed float32, p_min int16, p_max int16, format string, flags ImGuiSliderFlags) (v int16, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000021)
 	runtime.AddStringArg(_f, label)
@@ -577,7 +574,6 @@ func DragInt16V(label string, vP int16, v_speed float32, p_min int16, p_max int1
 	}
 	v = (runtime.GetInt16Retr[int16](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
@@ -634,11 +630,11 @@ func DragInt32(label string, vP int32) (v int32, r bool) {
 	}
 	v = (runtime.GetInt32Retr[int32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func DragInt32V(label string, vP int32, v_speed float32, p_min int32, p_max int32, format string, flags ImGuiSliderFlags) (v int32, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000025)
 	runtime.AddStringArg(_f, label)
@@ -655,7 +651,6 @@ func DragInt32V(label string, vP int32, v_speed float32, p_min int32, p_max int3
 	}
 	v = (runtime.GetInt32Retr[int32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
@@ -712,11 +707,11 @@ func DragInt8(label string, vP int8) (v int8, r bool) {
 	}
 	v = (runtime.GetInt8Retr[int8](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func DragInt8V(label string, vP int8, v_speed float32, p_min int8, p_max int8, format string, flags ImGuiSliderFlags) (v int8, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000029)
 	runtime.AddStringArg(_f, label)
@@ -733,7 +728,6 @@ func DragInt8V(label string, vP int8, v_speed float32, p_min int8, p_max int8, f
 	}
 	v = (runtime.GetInt8Retr[int8](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
@@ -790,11 +784,11 @@ func DragUInt(label string, vP uint) (v uint, r bool) {
 	}
 	v = (runtime.GetUintRetr[uint](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func DragUIntV(label string, vP uint, v_speed float32, p_min uint, p_max uint, format string, flags ImGuiSliderFlags) (v uint, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000002d)
 	runtime.AddStringArg(_f, label)
@@ -811,7 +805,6 @@ func DragUIntV(label string, vP uint, v_speed float32, p_min uint, p_max uint, f
 	}
 	v = (runtime.GetUintRetr[uint](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
@@ -868,11 +861,11 @@ func DragUInt16(label string, vP uint16) (v uint16, r bool) {
 	}
 	v = (runtime.GetUint16Retr[uint16](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func DragUInt16V(label string, vP uint16, v_speed float32, p_min uint16, p_max uint16, format string, flags ImGuiSliderFlags) (v uint16, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000031)
 	runtime.AddStringArg(_f, label)
@@ -889,7 +882,6 @@ func DragUInt16V(label string, vP uint16, v_speed float32, p_min uint16, p_max u
 	}
 	v = (runtime.GetUint16Retr[uint16](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
@@ -946,11 +938,11 @@ func DragUInt32(label string, vP uint32) (v uint32, r bool) {
 	}
 	v = (runtime.GetUint32Retr[uint32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func DragUInt32V(label string, vP uint32, v_speed float32, p_min uint32, p_max uint32, format string, flags ImGuiSliderFlags) (v uint32, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000035)
 	runtime.AddStringArg(_f, label)
@@ -967,7 +959,6 @@ func DragUInt32V(label string, vP uint32, v_speed float32, p_min uint32, p_max u
 	}
 	v = (runtime.GetUint32Retr[uint32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
@@ -1024,11 +1015,11 @@ func DragUInt8(label string, vP uint8) (v uint8, r bool) {
 	}
 	v = (runtime.GetUint8Retr[uint8](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func DragUInt8V(label string, vP uint8, v_speed float32, p_min uint8, p_max uint8, format string, flags ImGuiSliderFlags) (v uint8, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000039)
 	runtime.AddStringArg(_f, label)
@@ -1045,7 +1036,6 @@ func DragUInt8V(label string, vP uint8, v_speed float32, p_min uint8, p_max uint
 	}
 	v = (runtime.GetUint8Retr[uint8](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
@@ -1106,6 +1096,7 @@ func DragFloat(label string, vP float32) (v float32, r bool) {
 }
 
 func DragFloatV(label string, vP float32, v_speed float32, v_min float32, v_max float32, format string, flags ImGuiSliderFlags) (v float32, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000003d)
 	runtime.AddStringArg(_f, label)
@@ -1122,7 +1113,6 @@ func DragFloatV(label string, vP float32, v_speed float32, v_min float32, v_max 
 	}
 	v = (runtime.GetFloat32Retr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
@@ -1634,6 +1624,7 @@ func (foreignptr ImDrawListPtr) PushClipRect(clip_rect_min ImVec2, clip_rect_max
 //foreign code:
 //  ((ImDrawList*)foreignptr)->PushClipRect(clip_rect_min, clip_rect_max, intersect_with_current_clip_rect)
 func (foreignptr ImDrawListPtr) PushClipRectV(clip_rect_min ImVec2, clip_rect_max ImVec2, intersect_with_current_clip_rect bool /* = false*/) {
+
 	_f := foreignptr.getFffi()
 	_f.AddProcedureId(0x00000059)
 	runtime.AddUintptrArg(_f, foreignptr)
@@ -1641,15 +1632,14 @@ func (foreignptr ImDrawListPtr) PushClipRectV(clip_rect_min ImVec2, clip_rect_ma
 	runtime.AddComplex64Arg(_f, clip_rect_max)
 	runtime.AddBoolArg(_f, intersect_with_current_clip_rect)
 	_f.CallProcedure()
-
 }
 
 func (foreignptr ImDrawListPtr) PushClipRectFullScreen() {
+
 	_f := foreignptr.getFffi()
 	_f.AddProcedureId(0x0000005a)
 	runtime.AddUintptrArg(_f, foreignptr)
 	_f.CallProcedure()
-
 }
 
 func (foreignptr ImDrawListPtr) PopClipRect() {
@@ -1657,7 +1647,6 @@ func (foreignptr ImDrawListPtr) PopClipRect() {
 	_f.AddProcedureId(0x0000005b)
 	runtime.AddUintptrArg(_f, foreignptr)
 	_f.CallProcedure()
-
 }
 
 func (foreignptr ImDrawListPtr) PushTextureID(texture_id ImTextureID) {
@@ -2529,6 +2518,7 @@ const (
 // -- deactivated -- // import "github.com/stergiotis/boxer/public/imzero/dto"
 
 func PushIsParagraphText(val dto.IsParagraphText) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x0000009d)
 	runtime.AddUint8Arg(_f, val)
@@ -2536,19 +2526,19 @@ func PushIsParagraphText(val dto.IsParagraphText) {
 }
 
 func PopIsParagraphText() {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x0000009e)
 	_f.CallProcedure()
-
 }
 
 func PushParagraphTextLayout(align dto.TextAlignFlags, dir dto.TextDirection) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x0000009f)
 	runtime.AddUint8Arg(_f, align)
 	runtime.AddUint8Arg(_f, dir)
 	_f.CallProcedure()
-
 }
 
 func PopParagraphTextLayout() {
@@ -2584,7 +2574,6 @@ func PlotFlameV(label string, starts []float32, stops []float32, levels []uint8,
 	runtime.AddFloat32Arg(_f, scaleMax)
 	runtime.AddComplex64Arg(_f, size)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 
@@ -2593,6 +2582,7 @@ func PlotFlameV(label string, starts []float32, stops []float32, levels []uint8,
 //import "github.com/stergiotis/boxer/public/imzero/utils"
 
 func PushFont(font ImFontPtr) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000000a3)
 	runtime.AddUintptrArg(_f, font)
@@ -2600,6 +2590,7 @@ func PushFont(font ImFontPtr) {
 }
 
 func GetFont() (font ImFontPtr) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000000a4)
 	_err_ := _f.CallFunction()
@@ -2608,7 +2599,6 @@ func GetFont() (font ImFontPtr) {
 		return
 	}
 	font = ImFontPtr(runtime.GetUintptrRetr[uintptr](_f))
-
 	return
 }
 
@@ -2621,7 +2611,6 @@ func GetFontTexID() (tex ImTextureID) {
 		return
 	}
 	tex = ImTextureID(runtime.GetUintptrRetr[uintptr](_f))
-
 	return
 }
 
@@ -2659,10 +2648,10 @@ func addFontFromMemoryTrueTypeFontV(name string, fontData []byte, sizeInPixels f
 		currentFffiErrorHandler(_err_)
 		return
 	}
-	font =
+	font = ImFontPtr(
 
 	//name = utils.TruncateDescriptiveNameLeft(name, 40-1, "…")
-	ImFontPtr(runtime.GetUintptrRetr[uintptr](_f))
+	runtime.GetUintptrRetr[uintptr](_f))
 
 	return
 }
@@ -2764,20 +2753,20 @@ func DestroyContext() {
 //foreign code:
 //  ImGui::NewFrame()
 func NewFrame() {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000000ac)
 	_f.CallProcedure()
-
 }
 
 // EndFrame ends the Dear ImGui frame. automatically called by Render(). If you don't need to render data (skipping rendering) you may call EndFrame() without Render()... but you'll have wasted CPU already! If you don't need to render, better to not create any windows and not call NewFrame() at all!
 //foreign code:
 //  ImGui::EndFrame()
 func EndFrame() {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000000ad)
 	_f.CallProcedure()
-
 }
 
 // Render ends the Dear ImGui frame, finalize the draw data. You can then get call GetDrawData().
@@ -7601,11 +7590,11 @@ func NewHexEditor() (r ImHexEditorPtr) {
 }
 
 func (foreignptr ImHexEditorPtr) Destroy() {
+
 	_f := foreignptr.getFffi()
 	_f.AddProcedureId(0x0000020a)
 	runtime.AddUintptrArg(_f, foreignptr)
 	_f.CallProcedure()
-
 }
 
 func (foreignptr ImHexEditorPtr) GetSettings() (readOnly bool, cols int, showOptions bool, showDataPreview bool, showHexII bool, showAscii bool, greyOutZeroes bool, upperCaseHex bool, midColsCount int, addrDigitsCount int, footerExtraHeight float32, highlightColor uint32) {
@@ -7772,12 +7761,12 @@ func TextUnformatted(text string) {
 //foreign code:
 //  ImGui::LabelText(label,"%.*s",(int)getStringLength(text),text)
 func LabelText(label string, text string) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000215)
 	runtime.AddStringArg(_f, label)
 	runtime.AddStringArg(_f, text)
 	_f.CallProcedure()
-
 }
 
 // BulletText
@@ -7788,7 +7777,6 @@ func BulletText(text string) {
 	_f.AddProcedureId(0x00000216)
 	runtime.AddStringArg(_f, text)
 	_f.CallProcedure()
-
 }
 
 func GetIoDeltaTime() (dt float32) {
@@ -7851,11 +7839,11 @@ func InputText(label string, textIn string, maxLength Size_t) (textOut string, c
 	}
 	textOut = (runtime.GetStringRetr[string](_f))
 	changed = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func InputTextV(label string, textIn string, maxLength Size_t, flags ImGuiInputTextFlags) (textOut string, changed bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000021b)
 	runtime.AddStringArg(_f, label)
@@ -7919,6 +7907,20 @@ func BringCurrentWindowToDisplayFront() {
 	_f.AddProcedureId(0x0000021e)
 	_f.CallProcedure()
 }
+
+func GetIdPreviousFrame() (hoveredId ImGuiID, activeId ImGuiID) {
+
+	_f := currentFffiVar
+	_f.AddFunctionId(0x0000021f)
+	_err_ := _f.CallFunction()
+	if _err_ != nil {
+		currentFffiErrorHandler(_err_)
+		return
+	}
+	hoveredId = ImGuiID(runtime.GetUint32Retr[uint32](_f))
+	activeId = ImGuiID(runtime.GetUint32Retr[uint32](_f))
+	return
+}
 // -- deactivated -- // //go:build fffi_idl_code
 
 // -- deactivated -- // package imgui
@@ -7926,7 +7928,7 @@ func BringCurrentWindowToDisplayFront() {
 func Knob(label string, valueP float32, v_min float32, v_max float32) (value float32, r bool) {
 
 	_f := currentFffiVar
-	_f.AddFunctionId(0x0000021f)
+	_f.AddFunctionId(0x00000220)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, valueP)
 	runtime.AddFloat32Arg(_f, v_min)
@@ -7943,8 +7945,9 @@ func Knob(label string, valueP float32, v_min float32, v_max float32) (value flo
 
 func KnobV(label string, valueP float32, v_min float32, v_max float32,
 	speed float32, format string, variant ImGuiKnobVariant, size float32, flags ImGuiKnobFlags, steps int) (value float32, r bool) {
+
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000220)
+	_f.AddFunctionId(0x00000221)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, valueP)
 	runtime.AddFloat32Arg(_f, v_min)
@@ -7962,13 +7965,12 @@ func KnobV(label string, valueP float32, v_min float32, v_max float32,
 	}
 	value = (runtime.GetFloat32Retr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func KnobInt(label string, valueP int, v_min int, v_max int) (value int, r bool) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000221)
+	_f.AddFunctionId(0x00000222)
 	runtime.AddStringArg(_f, label)
 	runtime.AddIntArg(_f, valueP)
 	runtime.AddIntArg(_f, v_min)
@@ -7987,7 +7989,7 @@ func KnobInt(label string, valueP int, v_min int, v_max int) (value int, r bool)
 func KnobIntV(label string, valueP int, v_min int, v_max int,
 	speed float32, format string, variant ImGuiKnobVariant, size float32, flags ImGuiKnobFlags, steps int) (value int, r bool) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000222)
+	_f.AddFunctionId(0x00000223)
 	runtime.AddStringArg(_f, label)
 	runtime.AddIntArg(_f, valueP)
 	runtime.AddIntArg(_f, v_min)
@@ -8015,7 +8017,7 @@ func KnobIntV(label string, valueP int, v_min int, v_max int,
 func BeginPiePopup(name string) (r bool) {
 
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000223)
+	_f.AddFunctionId(0x00000224)
 	runtime.AddStringArg(_f, name)
 	_err_ := _f.CallFunction()
 	if _err_ != nil {
@@ -8027,8 +8029,9 @@ func BeginPiePopup(name string) (r bool) {
 }
 
 func BeginPiePopupV(name string, iMouseButton int) (r bool) {
+
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000224)
+	_f.AddFunctionId(0x00000225)
 	runtime.AddStringArg(_f, name)
 	runtime.AddIntArg(_f, iMouseButton)
 	_err_ := _f.CallFunction()
@@ -8037,20 +8040,19 @@ func BeginPiePopupV(name string, iMouseButton int) (r bool) {
 		return
 	}
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func EndPiePopup() {
-	_f := currentFffiVar
-	_f.AddProcedureId(0x00000225)
-	_f.CallProcedure()
 
+	_f := currentFffiVar
+	_f.AddProcedureId(0x00000226)
+	_f.CallProcedure()
 }
 
 func PieMenuItem(name string) (r bool) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000226)
+	_f.AddFunctionId(0x00000227)
 	runtime.AddStringArg(_f, name)
 	_err_ := _f.CallFunction()
 	if _err_ != nil {
@@ -8064,7 +8066,7 @@ func PieMenuItem(name string) (r bool) {
 
 func PieMenuItemV(name string, bEnabled /* = true */ bool) (r bool) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000227)
+	_f.AddFunctionId(0x00000228)
 	runtime.AddStringArg(_f, name)
 	runtime.AddBoolArg(_f, bEnabled)
 	_err_ := _f.CallFunction()
@@ -8079,7 +8081,7 @@ func PieMenuItemV(name string, bEnabled /* = true */ bool) (r bool) {
 
 func BeginPieMenu(name string) (r bool) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000228)
+	_f.AddFunctionId(0x00000229)
 	runtime.AddStringArg(_f, name)
 	_err_ := _f.CallFunction()
 	if _err_ != nil {
@@ -8093,7 +8095,7 @@ func BeginPieMenu(name string) (r bool) {
 
 func BeginPieMenuV(name string, bEnabled /* = true */ bool) (r bool) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000229)
+	_f.AddFunctionId(0x0000022a)
 	runtime.AddStringArg(_f, name)
 	runtime.AddBoolArg(_f, bEnabled)
 	_err_ := _f.CallFunction()
@@ -8108,7 +8110,7 @@ func BeginPieMenuV(name string, bEnabled /* = true */ bool) (r bool) {
 
 func EndPieMenu() {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000022a)
+	_f.AddProcedureId(0x0000022b)
 	_f.CallProcedure()
 
 }
@@ -8119,7 +8121,7 @@ func EndPieMenu() {
 func SliderFloat32(label string, vP float32, p_min float32, p_max float32) (v float32, r bool) {
 
 	_f := currentFffiVar
-	_f.AddFunctionId(0x0000022b)
+	_f.AddFunctionId(0x0000022c)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, vP)
 	runtime.AddFloat32Arg(_f, p_min)
@@ -8131,13 +8133,13 @@ func SliderFloat32(label string, vP float32, p_min float32, p_max float32) (v fl
 	}
 	v = (runtime.GetFloat32Retr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func SliderFloat32V(label string, vP float32, p_min float32, p_max float32, format string, flags ImGuiSliderFlags) (v float32, r bool) {
+
 	_f := currentFffiVar
-	_f.AddFunctionId(0x0000022c)
+	_f.AddFunctionId(0x0000022d)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, vP)
 	runtime.AddFloat32Arg(_f, p_min)
@@ -8151,13 +8153,12 @@ func SliderFloat32V(label string, vP float32, p_min float32, p_max float32, form
 	}
 	v = (runtime.GetFloat32Retr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func SliderFloat32NV(label string, vP []float32, v_min float32, v_max float32, format string, flags ImGuiSliderFlags) (v []float32, r bool) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x0000022d)
+	_f.AddFunctionId(0x0000022e)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32SliceArg(_f, vP)
 	runtime.AddFloat32Arg(_f, v_min)
@@ -8177,7 +8178,7 @@ func SliderFloat32NV(label string, vP []float32, v_min float32, v_max float32, f
 
 func SliderFloat32N(label string, vP []float32, v_min float32, v_max float32) (v []float32, r bool) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x0000022e)
+	_f.AddFunctionId(0x0000022f)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32SliceArg(_f, vP)
 	runtime.AddFloat32Arg(_f, v_min)
@@ -8199,7 +8200,7 @@ func SliderFloat32N(label string, vP []float32, v_min float32, v_max float32) (v
 func SliderFloat64(label string, vP float64, p_min float64, p_max float64) (v float64, r bool) {
 
 	_f := currentFffiVar
-	_f.AddFunctionId(0x0000022f)
+	_f.AddFunctionId(0x00000230)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat64Arg(_f, vP)
 	runtime.AddFloat64Arg(_f, p_min)
@@ -8211,13 +8212,13 @@ func SliderFloat64(label string, vP float64, p_min float64, p_max float64) (v fl
 	}
 	v = (runtime.GetFloat64Retr[float64](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func SliderFloat64V(label string, vP float64, p_min float64, p_max float64, format string, flags ImGuiSliderFlags) (v float64, r bool) {
+
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000230)
+	_f.AddFunctionId(0x00000231)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat64Arg(_f, vP)
 	runtime.AddFloat64Arg(_f, p_min)
@@ -8231,13 +8232,12 @@ func SliderFloat64V(label string, vP float64, p_min float64, p_max float64, form
 	}
 	v = (runtime.GetFloat64Retr[float64](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func SliderFloat64NV(label string, vP []float64, v_min float64, v_max float64, format string, flags ImGuiSliderFlags) (v []float64, r bool) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000231)
+	_f.AddFunctionId(0x00000232)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat64SliceArg(_f, vP)
 	runtime.AddFloat64Arg(_f, v_min)
@@ -8257,7 +8257,7 @@ func SliderFloat64NV(label string, vP []float64, v_min float64, v_max float64, f
 
 func SliderFloat64N(label string, vP []float64, v_min float64, v_max float64) (v []float64, r bool) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000232)
+	_f.AddFunctionId(0x00000233)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat64SliceArg(_f, vP)
 	runtime.AddFloat64Arg(_f, v_min)
@@ -8279,7 +8279,7 @@ func SliderFloat64N(label string, vP []float64, v_min float64, v_max float64) (v
 func SliderInt(label string, vP int, p_min int, p_max int) (v int, r bool) {
 
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000233)
+	_f.AddFunctionId(0x00000234)
 	runtime.AddStringArg(_f, label)
 	runtime.AddIntArg(_f, vP)
 	runtime.AddIntArg(_f, p_min)
@@ -8291,13 +8291,13 @@ func SliderInt(label string, vP int, p_min int, p_max int) (v int, r bool) {
 	}
 	v = (runtime.GetIntRetr[int](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func SliderIntV(label string, vP int, p_min int, p_max int, format string, flags ImGuiSliderFlags) (v int, r bool) {
+
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000234)
+	_f.AddFunctionId(0x00000235)
 	runtime.AddStringArg(_f, label)
 	runtime.AddIntArg(_f, vP)
 	runtime.AddIntArg(_f, p_min)
@@ -8311,13 +8311,12 @@ func SliderIntV(label string, vP int, p_min int, p_max int, format string, flags
 	}
 	v = (runtime.GetIntRetr[int](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func SliderIntNV(label string, vP []int, v_min int, v_max int, format string, flags ImGuiSliderFlags) (v []int, r bool) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000235)
+	_f.AddFunctionId(0x00000236)
 	runtime.AddStringArg(_f, label)
 	runtime.AddIntSliceArg(_f, vP)
 	runtime.AddIntArg(_f, v_min)
@@ -8337,7 +8336,7 @@ func SliderIntNV(label string, vP []int, v_min int, v_max int, format string, fl
 
 func SliderIntN(label string, vP []int, v_min int, v_max int) (v []int, r bool) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000236)
+	_f.AddFunctionId(0x00000237)
 	runtime.AddStringArg(_f, label)
 	runtime.AddIntSliceArg(_f, vP)
 	runtime.AddIntArg(_f, v_min)
@@ -8359,7 +8358,7 @@ func SliderIntN(label string, vP []int, v_min int, v_max int) (v []int, r bool) 
 func SliderInt16(label string, vP int16, p_min int16, p_max int16) (v int16, r bool) {
 
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000237)
+	_f.AddFunctionId(0x00000238)
 	runtime.AddStringArg(_f, label)
 	runtime.AddInt16Arg(_f, vP)
 	runtime.AddInt16Arg(_f, p_min)
@@ -8371,13 +8370,13 @@ func SliderInt16(label string, vP int16, p_min int16, p_max int16) (v int16, r b
 	}
 	v = (runtime.GetInt16Retr[int16](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func SliderInt16V(label string, vP int16, p_min int16, p_max int16, format string, flags ImGuiSliderFlags) (v int16, r bool) {
+
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000238)
+	_f.AddFunctionId(0x00000239)
 	runtime.AddStringArg(_f, label)
 	runtime.AddInt16Arg(_f, vP)
 	runtime.AddInt16Arg(_f, p_min)
@@ -8391,13 +8390,12 @@ func SliderInt16V(label string, vP int16, p_min int16, p_max int16, format strin
 	}
 	v = (runtime.GetInt16Retr[int16](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func SliderInt16NV(label string, vP []int16, v_min int16, v_max int16, format string, flags ImGuiSliderFlags) (v []int16, r bool) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000239)
+	_f.AddFunctionId(0x0000023a)
 	runtime.AddStringArg(_f, label)
 	runtime.AddInt16SliceArg(_f, vP)
 	runtime.AddInt16Arg(_f, v_min)
@@ -8417,7 +8415,7 @@ func SliderInt16NV(label string, vP []int16, v_min int16, v_max int16, format st
 
 func SliderInt16N(label string, vP []int16, v_min int16, v_max int16) (v []int16, r bool) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x0000023a)
+	_f.AddFunctionId(0x0000023b)
 	runtime.AddStringArg(_f, label)
 	runtime.AddInt16SliceArg(_f, vP)
 	runtime.AddInt16Arg(_f, v_min)
@@ -8439,7 +8437,7 @@ func SliderInt16N(label string, vP []int16, v_min int16, v_max int16) (v []int16
 func SliderInt32(label string, vP int32, p_min int32, p_max int32) (v int32, r bool) {
 
 	_f := currentFffiVar
-	_f.AddFunctionId(0x0000023b)
+	_f.AddFunctionId(0x0000023c)
 	runtime.AddStringArg(_f, label)
 	runtime.AddInt32Arg(_f, vP)
 	runtime.AddInt32Arg(_f, p_min)
@@ -8451,13 +8449,13 @@ func SliderInt32(label string, vP int32, p_min int32, p_max int32) (v int32, r b
 	}
 	v = (runtime.GetInt32Retr[int32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func SliderInt32V(label string, vP int32, p_min int32, p_max int32, format string, flags ImGuiSliderFlags) (v int32, r bool) {
+
 	_f := currentFffiVar
-	_f.AddFunctionId(0x0000023c)
+	_f.AddFunctionId(0x0000023d)
 	runtime.AddStringArg(_f, label)
 	runtime.AddInt32Arg(_f, vP)
 	runtime.AddInt32Arg(_f, p_min)
@@ -8471,13 +8469,12 @@ func SliderInt32V(label string, vP int32, p_min int32, p_max int32, format strin
 	}
 	v = (runtime.GetInt32Retr[int32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func SliderInt32NV(label string, vP []int32, v_min int32, v_max int32, format string, flags ImGuiSliderFlags) (v []int32, r bool) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x0000023d)
+	_f.AddFunctionId(0x0000023e)
 	runtime.AddStringArg(_f, label)
 	runtime.AddInt32SliceArg(_f, vP)
 	runtime.AddInt32Arg(_f, v_min)
@@ -8497,7 +8494,7 @@ func SliderInt32NV(label string, vP []int32, v_min int32, v_max int32, format st
 
 func SliderInt32N(label string, vP []int32, v_min int32, v_max int32) (v []int32, r bool) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x0000023e)
+	_f.AddFunctionId(0x0000023f)
 	runtime.AddStringArg(_f, label)
 	runtime.AddInt32SliceArg(_f, vP)
 	runtime.AddInt32Arg(_f, v_min)
@@ -8519,7 +8516,7 @@ func SliderInt32N(label string, vP []int32, v_min int32, v_max int32) (v []int32
 func SliderInt8(label string, vP int8, p_min int8, p_max int8) (v int8, r bool) {
 
 	_f := currentFffiVar
-	_f.AddFunctionId(0x0000023f)
+	_f.AddFunctionId(0x00000240)
 	runtime.AddStringArg(_f, label)
 	runtime.AddInt8Arg(_f, vP)
 	runtime.AddInt8Arg(_f, p_min)
@@ -8531,13 +8528,13 @@ func SliderInt8(label string, vP int8, p_min int8, p_max int8) (v int8, r bool) 
 	}
 	v = (runtime.GetInt8Retr[int8](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func SliderInt8V(label string, vP int8, p_min int8, p_max int8, format string, flags ImGuiSliderFlags) (v int8, r bool) {
+
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000240)
+	_f.AddFunctionId(0x00000241)
 	runtime.AddStringArg(_f, label)
 	runtime.AddInt8Arg(_f, vP)
 	runtime.AddInt8Arg(_f, p_min)
@@ -8551,13 +8548,12 @@ func SliderInt8V(label string, vP int8, p_min int8, p_max int8, format string, f
 	}
 	v = (runtime.GetInt8Retr[int8](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func SliderInt8NV(label string, vP []int8, v_min int8, v_max int8, format string, flags ImGuiSliderFlags) (v []int8, r bool) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000241)
+	_f.AddFunctionId(0x00000242)
 	runtime.AddStringArg(_f, label)
 	runtime.AddInt8SliceArg(_f, vP)
 	runtime.AddInt8Arg(_f, v_min)
@@ -8577,7 +8573,7 @@ func SliderInt8NV(label string, vP []int8, v_min int8, v_max int8, format string
 
 func SliderInt8N(label string, vP []int8, v_min int8, v_max int8) (v []int8, r bool) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000242)
+	_f.AddFunctionId(0x00000243)
 	runtime.AddStringArg(_f, label)
 	runtime.AddInt8SliceArg(_f, vP)
 	runtime.AddInt8Arg(_f, v_min)
@@ -8599,7 +8595,7 @@ func SliderInt8N(label string, vP []int8, v_min int8, v_max int8) (v []int8, r b
 func SliderUInt(label string, vP uint, p_min uint, p_max uint) (v uint, r bool) {
 
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000243)
+	_f.AddFunctionId(0x00000244)
 	runtime.AddStringArg(_f, label)
 	runtime.AddUintArg(_f, vP)
 	runtime.AddUintArg(_f, p_min)
@@ -8611,13 +8607,13 @@ func SliderUInt(label string, vP uint, p_min uint, p_max uint) (v uint, r bool) 
 	}
 	v = (runtime.GetUintRetr[uint](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func SliderUIntV(label string, vP uint, p_min uint, p_max uint, format string, flags ImGuiSliderFlags) (v uint, r bool) {
+
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000244)
+	_f.AddFunctionId(0x00000245)
 	runtime.AddStringArg(_f, label)
 	runtime.AddUintArg(_f, vP)
 	runtime.AddUintArg(_f, p_min)
@@ -8631,13 +8627,12 @@ func SliderUIntV(label string, vP uint, p_min uint, p_max uint, format string, f
 	}
 	v = (runtime.GetUintRetr[uint](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func SliderUIntNV(label string, vP []uint, v_min uint, v_max uint, format string, flags ImGuiSliderFlags) (v []uint, r bool) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000245)
+	_f.AddFunctionId(0x00000246)
 	runtime.AddStringArg(_f, label)
 	runtime.AddUintSliceArg(_f, vP)
 	runtime.AddUintArg(_f, v_min)
@@ -8657,7 +8652,7 @@ func SliderUIntNV(label string, vP []uint, v_min uint, v_max uint, format string
 
 func SliderUIntN(label string, vP []uint, v_min uint, v_max uint) (v []uint, r bool) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000246)
+	_f.AddFunctionId(0x00000247)
 	runtime.AddStringArg(_f, label)
 	runtime.AddUintSliceArg(_f, vP)
 	runtime.AddUintArg(_f, v_min)
@@ -8679,7 +8674,7 @@ func SliderUIntN(label string, vP []uint, v_min uint, v_max uint) (v []uint, r b
 func SliderUInt16(label string, vP uint16, p_min uint16, p_max uint16) (v uint16, r bool) {
 
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000247)
+	_f.AddFunctionId(0x00000248)
 	runtime.AddStringArg(_f, label)
 	runtime.AddUint16Arg(_f, vP)
 	runtime.AddUint16Arg(_f, p_min)
@@ -8691,13 +8686,13 @@ func SliderUInt16(label string, vP uint16, p_min uint16, p_max uint16) (v uint16
 	}
 	v = (runtime.GetUint16Retr[uint16](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func SliderUInt16V(label string, vP uint16, p_min uint16, p_max uint16, format string, flags ImGuiSliderFlags) (v uint16, r bool) {
+
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000248)
+	_f.AddFunctionId(0x00000249)
 	runtime.AddStringArg(_f, label)
 	runtime.AddUint16Arg(_f, vP)
 	runtime.AddUint16Arg(_f, p_min)
@@ -8711,13 +8706,12 @@ func SliderUInt16V(label string, vP uint16, p_min uint16, p_max uint16, format s
 	}
 	v = (runtime.GetUint16Retr[uint16](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func SliderUInt16NV(label string, vP []uint16, v_min uint16, v_max uint16, format string, flags ImGuiSliderFlags) (v []uint16, r bool) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000249)
+	_f.AddFunctionId(0x0000024a)
 	runtime.AddStringArg(_f, label)
 	runtime.AddUint16SliceArg(_f, vP)
 	runtime.AddUint16Arg(_f, v_min)
@@ -8737,7 +8731,7 @@ func SliderUInt16NV(label string, vP []uint16, v_min uint16, v_max uint16, forma
 
 func SliderUInt16N(label string, vP []uint16, v_min uint16, v_max uint16) (v []uint16, r bool) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x0000024a)
+	_f.AddFunctionId(0x0000024b)
 	runtime.AddStringArg(_f, label)
 	runtime.AddUint16SliceArg(_f, vP)
 	runtime.AddUint16Arg(_f, v_min)
@@ -8759,7 +8753,7 @@ func SliderUInt16N(label string, vP []uint16, v_min uint16, v_max uint16) (v []u
 func SliderUInt32(label string, vP uint32, p_min uint32, p_max uint32) (v uint32, r bool) {
 
 	_f := currentFffiVar
-	_f.AddFunctionId(0x0000024b)
+	_f.AddFunctionId(0x0000024c)
 	runtime.AddStringArg(_f, label)
 	runtime.AddUint32Arg(_f, vP)
 	runtime.AddUint32Arg(_f, p_min)
@@ -8771,13 +8765,13 @@ func SliderUInt32(label string, vP uint32, p_min uint32, p_max uint32) (v uint32
 	}
 	v = (runtime.GetUint32Retr[uint32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func SliderUInt32V(label string, vP uint32, p_min uint32, p_max uint32, format string, flags ImGuiSliderFlags) (v uint32, r bool) {
+
 	_f := currentFffiVar
-	_f.AddFunctionId(0x0000024c)
+	_f.AddFunctionId(0x0000024d)
 	runtime.AddStringArg(_f, label)
 	runtime.AddUint32Arg(_f, vP)
 	runtime.AddUint32Arg(_f, p_min)
@@ -8791,13 +8785,12 @@ func SliderUInt32V(label string, vP uint32, p_min uint32, p_max uint32, format s
 	}
 	v = (runtime.GetUint32Retr[uint32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func SliderUInt32NV(label string, vP []uint32, v_min uint32, v_max uint32, format string, flags ImGuiSliderFlags) (v []uint32, r bool) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x0000024d)
+	_f.AddFunctionId(0x0000024e)
 	runtime.AddStringArg(_f, label)
 	runtime.AddUint32SliceArg(_f, vP)
 	runtime.AddUint32Arg(_f, v_min)
@@ -8817,7 +8810,7 @@ func SliderUInt32NV(label string, vP []uint32, v_min uint32, v_max uint32, forma
 
 func SliderUInt32N(label string, vP []uint32, v_min uint32, v_max uint32) (v []uint32, r bool) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x0000024e)
+	_f.AddFunctionId(0x0000024f)
 	runtime.AddStringArg(_f, label)
 	runtime.AddUint32SliceArg(_f, vP)
 	runtime.AddUint32Arg(_f, v_min)
@@ -8839,7 +8832,7 @@ func SliderUInt32N(label string, vP []uint32, v_min uint32, v_max uint32) (v []u
 func SliderUInt8(label string, vP uint8, p_min uint8, p_max uint8) (v uint8, r bool) {
 
 	_f := currentFffiVar
-	_f.AddFunctionId(0x0000024f)
+	_f.AddFunctionId(0x00000250)
 	runtime.AddStringArg(_f, label)
 	runtime.AddUint8Arg(_f, vP)
 	runtime.AddUint8Arg(_f, p_min)
@@ -8851,13 +8844,13 @@ func SliderUInt8(label string, vP uint8, p_min uint8, p_max uint8) (v uint8, r b
 	}
 	v = (runtime.GetUint8Retr[uint8](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func SliderUInt8V(label string, vP uint8, p_min uint8, p_max uint8, format string, flags ImGuiSliderFlags) (v uint8, r bool) {
+
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000250)
+	_f.AddFunctionId(0x00000251)
 	runtime.AddStringArg(_f, label)
 	runtime.AddUint8Arg(_f, vP)
 	runtime.AddUint8Arg(_f, p_min)
@@ -8871,13 +8864,12 @@ func SliderUInt8V(label string, vP uint8, p_min uint8, p_max uint8, format strin
 	}
 	v = (runtime.GetUint8Retr[uint8](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
 func SliderUInt8NV(label string, vP []uint8, v_min uint8, v_max uint8, format string, flags ImGuiSliderFlags) (v []uint8, r bool) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000251)
+	_f.AddFunctionId(0x00000252)
 	runtime.AddStringArg(_f, label)
 	runtime.AddUint8SliceArg(_f, vP)
 	runtime.AddUint8Arg(_f, v_min)
@@ -8897,7 +8889,7 @@ func SliderUInt8NV(label string, vP []uint8, v_min uint8, v_max uint8, format st
 
 func SliderUInt8N(label string, vP []uint8, v_min uint8, v_max uint8) (v []uint8, r bool) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000252)
+	_f.AddFunctionId(0x00000253)
 	runtime.AddStringArg(_f, label)
 	runtime.AddUint8SliceArg(_f, vP)
 	runtime.AddUint8Arg(_f, v_min)
@@ -8919,7 +8911,7 @@ func SliderUInt8N(label string, vP []uint8, v_min uint8, v_max uint8) (v []uint8
 func SpinnerDots(label string, nextdotP float32, radius float32, thickness float32) (nextdot float32) {
 
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000253)
+	_f.AddFunctionId(0x00000254)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, nextdotP)
 	runtime.AddFloat32Arg(_f, radius)
@@ -8934,8 +8926,9 @@ func SpinnerDots(label string, nextdotP float32, radius float32, thickness float
 }
 
 func SpinnerDotsV(label string, nextdotP float32, radius float32, thickness float32, color uint32, speed float32, dots Size_t, minth float32) (nextdot float32) {
+
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000254)
+	_f.AddFunctionId(0x00000255)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, nextdotP)
 	runtime.AddFloat32Arg(_f, radius)
@@ -8950,13 +8943,12 @@ func SpinnerDotsV(label string, nextdotP float32, radius float32, thickness floa
 		return
 	}
 	nextdot = (runtime.GetFloat32Retr[float32](_f))
-
 	return
 }
 
 func SpinnerDemos() {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000255)
+	_f.AddProcedureId(0x00000256)
 	_f.CallProcedure()
 
 }
@@ -8966,7 +8958,7 @@ func SpinnerDemos() {
 func SpinnerRainbow(label string, radius float32, thickness float32, color uint32, speed float32) {
 
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000256)
+	_f.AddProcedureId(0x00000257)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -8976,8 +8968,9 @@ func SpinnerRainbow(label string, radius float32, thickness float32, color uint3
 }
 
 func SpinnerRainbowV(label string, radius float32, thickness float32, color uint32, speed float32, ang_min float32 /* = 0.f*/, ang_max float32 /* = PI_2*/, arcs int /* = 1*/) {
+
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000257)
+	_f.AddProcedureId(0x00000258)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -8990,20 +8983,21 @@ func SpinnerRainbowV(label string, radius float32, thickness float32, color uint
 }
 
 func SpinnerRainbowMix(label string, radius float32, thickness float32, color uint32, speed float32) {
+
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000258)
+	_f.AddProcedureId(0x00000259)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
 	runtime.AddUint32Arg(_f, color)
 	runtime.AddFloat32Arg(_f, speed)
 	_f.CallProcedure()
-
 }
 
 func SpinnerRainbowMixV(label string, radius float32, thickness float32, color uint32, speed float32, ang_min float32 /* = 0.f*/, ang_max float32 /* = PI_2*/, arcs int /* = 1*/, mode int /* = 0*/) {
+
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000259)
+	_f.AddProcedureId(0x0000025a)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9014,24 +9008,22 @@ func SpinnerRainbowMixV(label string, radius float32, thickness float32, color u
 	runtime.AddIntArg(_f, arcs)
 	runtime.AddIntArg(_f, mode)
 	_f.CallProcedure()
-
 }
 
 func SpinnerRotatingHeart(label string, radius float32, thickness float32, color uint32, speed float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000025a)
+	_f.AddProcedureId(0x0000025b)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
 	runtime.AddUint32Arg(_f, color)
 	runtime.AddFloat32Arg(_f, speed)
 	_f.CallProcedure()
-
 }
 
 func SpinnerRotatingHeartV(label string, radius float32, thickness float32, color uint32, speed float32, ang_min float32 /* = 0.f*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000025b)
+	_f.AddProcedureId(0x0000025c)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9044,7 +9036,7 @@ func SpinnerRotatingHeartV(label string, radius float32, thickness float32, colo
 
 func SpinnerAng(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000025c)
+	_f.AddProcedureId(0x0000025d)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9054,7 +9046,7 @@ func SpinnerAng(label string, radius float32, thickness float32) {
 
 func SpinnerAngV(label string, radius float32, thickness float32, color uint32 /* = white*/, bg uint32 /* = white*/, speed float32 /* = 2.8f*/, angle float32 /* = IM_PI*/, mode int /* = 0*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000025d)
+	_f.AddProcedureId(0x0000025e)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9069,7 +9061,7 @@ func SpinnerAngV(label string, radius float32, thickness float32, color uint32 /
 
 func SpinnerAngMix(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000025e)
+	_f.AddProcedureId(0x0000025f)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9079,7 +9071,7 @@ func SpinnerAngMix(label string, radius float32, thickness float32) {
 
 func SpinnerAngMixV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, angle float32 /* = IM_PI*/, arcs int /* = 4*/, mode int /* = 0*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000025f)
+	_f.AddProcedureId(0x00000260)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9094,7 +9086,7 @@ func SpinnerAngMixV(label string, radius float32, thickness float32, color uint3
 
 func SpinnerLoadingRing(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000260)
+	_f.AddProcedureId(0x00000261)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9104,7 +9096,7 @@ func SpinnerLoadingRing(label string, radius float32, thickness float32) {
 
 func SpinnerLoadingRingV(label string, radius float32, thickness float32, color uint32 /* = white*/, bg uint32 /* = half_white*/, speed float32 /* = 2.8f*/, segments int /* = 5*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000261)
+	_f.AddProcedureId(0x00000262)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9118,7 +9110,7 @@ func SpinnerLoadingRingV(label string, radius float32, thickness float32, color 
 
 func SpinnerClock(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000262)
+	_f.AddProcedureId(0x00000263)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9128,7 +9120,7 @@ func SpinnerClock(label string, radius float32, thickness float32) {
 
 func SpinnerClockV(label string, radius float32, thickness float32, color uint32 /* = white*/, bg uint32 /* = half_white*/, speed float32 /* = 2.8f*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000263)
+	_f.AddProcedureId(0x00000264)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9141,7 +9133,7 @@ func SpinnerClockV(label string, radius float32, thickness float32, color uint32
 
 func SpinnerPulsar(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000264)
+	_f.AddProcedureId(0x00000265)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9151,7 +9143,7 @@ func SpinnerPulsar(label string, radius float32, thickness float32) {
 
 func SpinnerPulsarV(label string, radius float32, thickness float32, bg uint32 /* = half_white*/, speed float32 /* = 2.8f*/, sequence bool /* = true*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000265)
+	_f.AddProcedureId(0x00000266)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9164,7 +9156,7 @@ func SpinnerPulsarV(label string, radius float32, thickness float32, bg uint32 /
 
 func SpinnerTwinPulsar(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000266)
+	_f.AddProcedureId(0x00000267)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9174,7 +9166,7 @@ func SpinnerTwinPulsar(label string, radius float32, thickness float32) {
 
 func SpinnerTwinPulsarV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, rings int /* = 2*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000267)
+	_f.AddProcedureId(0x00000268)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9187,7 +9179,7 @@ func SpinnerTwinPulsarV(label string, radius float32, thickness float32, color u
 
 func SpinnerFadePulsar(label string, radius float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000268)
+	_f.AddProcedureId(0x00000269)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	_f.CallProcedure()
@@ -9196,7 +9188,7 @@ func SpinnerFadePulsar(label string, radius float32) {
 
 func SpinnerFadePulsarV(label string, radius float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, rings int /* = 2*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000269)
+	_f.AddProcedureId(0x0000026a)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddUint32Arg(_f, color)
@@ -9208,7 +9200,7 @@ func SpinnerFadePulsarV(label string, radius float32, color uint32 /* = white*/,
 
 func SpinnerCircularLines(label string, radius float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000026a)
+	_f.AddProcedureId(0x0000026b)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	_f.CallProcedure()
@@ -9217,7 +9209,7 @@ func SpinnerCircularLines(label string, radius float32) {
 
 func SpinnerCircularLinesV(label string, radius float32, color uint32 /* = white*/, speed float32 /* = 1.8f*/, lines int /* = 8*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000026b)
+	_f.AddProcedureId(0x0000026c)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddUint32Arg(_f, color)
@@ -9229,7 +9221,7 @@ func SpinnerCircularLinesV(label string, radius float32, color uint32 /* = white
 
 func SpinnerVDots(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000026c)
+	_f.AddProcedureId(0x0000026d)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9239,7 +9231,7 @@ func SpinnerVDots(label string, radius float32, thickness float32) {
 
 func SpinnerVDotsV(label string, radius float32, thickness float32, color uint32 /* = white*/, bgcolor uint32 /* = white*/, speed float32 /* = 2.8f*/, dots Size_t /* = 12*/, mdots Size_t /* = 6*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000026d)
+	_f.AddProcedureId(0x0000026e)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9254,7 +9246,7 @@ func SpinnerVDotsV(label string, radius float32, thickness float32, color uint32
 
 func SpinnerBounceDots(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000026e)
+	_f.AddProcedureId(0x0000026f)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9264,7 +9256,7 @@ func SpinnerBounceDots(label string, radius float32, thickness float32) {
 
 func SpinnerBounceDotsV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, dots Size_t /* = 3*/, mode int /* = 0*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000026f)
+	_f.AddProcedureId(0x00000270)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9278,7 +9270,7 @@ func SpinnerBounceDotsV(label string, radius float32, thickness float32, color u
 
 func SpinnerZipDots(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000270)
+	_f.AddProcedureId(0x00000271)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9288,7 +9280,7 @@ func SpinnerZipDots(label string, radius float32, thickness float32) {
 
 func SpinnerZipDotsV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, dots Size_t /* = 5*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000271)
+	_f.AddProcedureId(0x00000272)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9301,7 +9293,7 @@ func SpinnerZipDotsV(label string, radius float32, thickness float32, color uint
 
 func SpinnerDotsToPoints(label string, radius float32, thickness float32, offset_k float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000272)
+	_f.AddProcedureId(0x00000273)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9312,7 +9304,7 @@ func SpinnerDotsToPoints(label string, radius float32, thickness float32, offset
 
 func SpinnerDotsToPointsV(label string, radius float32, thickness float32, offset_k float32, color uint32 /* = white*/, speed float32 /* = 1.8f*/, dots Size_t /* = 5*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000273)
+	_f.AddProcedureId(0x00000274)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9326,7 +9318,7 @@ func SpinnerDotsToPointsV(label string, radius float32, thickness float32, offse
 
 func SpinnerDotsToBar(label string, radius float32, thickness float32, offset_k float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000274)
+	_f.AddProcedureId(0x00000275)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9337,7 +9329,7 @@ func SpinnerDotsToBar(label string, radius float32, thickness float32, offset_k 
 
 func SpinnerDotsToBarV(label string, radius float32, thickness float32, offset_k float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, dots Size_t /* = 5*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000275)
+	_f.AddProcedureId(0x00000276)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9351,7 +9343,7 @@ func SpinnerDotsToBarV(label string, radius float32, thickness float32, offset_k
 
 func SpinnerWaveDots(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000276)
+	_f.AddProcedureId(0x00000277)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9361,7 +9353,7 @@ func SpinnerWaveDots(label string, radius float32, thickness float32) {
 
 func SpinnerWaveDotsV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, lt int /* = 8*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000277)
+	_f.AddProcedureId(0x00000278)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9374,7 +9366,7 @@ func SpinnerWaveDotsV(label string, radius float32, thickness float32, color uin
 
 func SpinnerFadeDots(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000278)
+	_f.AddProcedureId(0x00000279)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9384,7 +9376,7 @@ func SpinnerFadeDots(label string, radius float32, thickness float32) {
 
 func SpinnerFadeDotsV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, lt int /* = 8*/, mode int /* = 0*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000279)
+	_f.AddProcedureId(0x0000027a)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9398,7 +9390,7 @@ func SpinnerFadeDotsV(label string, radius float32, thickness float32, color uin
 
 func SpinnerThreeDots(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000027a)
+	_f.AddProcedureId(0x0000027b)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9408,7 +9400,7 @@ func SpinnerThreeDots(label string, radius float32, thickness float32) {
 
 func SpinnerThreeDotsV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, lt int /* = 8*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000027b)
+	_f.AddProcedureId(0x0000027c)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9421,7 +9413,7 @@ func SpinnerThreeDotsV(label string, radius float32, thickness float32, color ui
 
 func SpinnerFiveDots(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000027c)
+	_f.AddProcedureId(0x0000027d)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9431,7 +9423,7 @@ func SpinnerFiveDots(label string, radius float32, thickness float32) {
 
 func SpinnerFiveDotsV(label string, radius float32, thickness float32, color uint32 /* = 0xffffffff*/, speed float32 /* = 2.8f*/, lt int /* = 8*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000027d)
+	_f.AddProcedureId(0x0000027e)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9444,7 +9436,7 @@ func SpinnerFiveDotsV(label string, radius float32, thickness float32, color uin
 
 func Spinner4Caleidospcope(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000027e)
+	_f.AddProcedureId(0x0000027f)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9454,7 +9446,7 @@ func Spinner4Caleidospcope(label string, radius float32, thickness float32) {
 
 func Spinner4CaleidospcopeV(label string, radius float32, thickness float32, color uint32 /* = 0xffffffff*/, speed float32 /* = 2.8f*/, lt int /* = 8*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000027f)
+	_f.AddProcedureId(0x00000280)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9467,7 +9459,7 @@ func Spinner4CaleidospcopeV(label string, radius float32, thickness float32, col
 
 func SpinnerMultiFadeDots(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000280)
+	_f.AddProcedureId(0x00000281)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9477,7 +9469,7 @@ func SpinnerMultiFadeDots(label string, radius float32, thickness float32) {
 
 func SpinnerMultiFadeDotsV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, lt int /* = 8*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000281)
+	_f.AddProcedureId(0x00000282)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9490,7 +9482,7 @@ func SpinnerMultiFadeDotsV(label string, radius float32, thickness float32, colo
 
 func SpinnerScaleDots(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000282)
+	_f.AddProcedureId(0x00000283)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9500,7 +9492,7 @@ func SpinnerScaleDots(label string, radius float32, thickness float32) {
 
 func SpinnerScaleDotsV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, lt int /* = 8*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000283)
+	_f.AddProcedureId(0x00000284)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9513,7 +9505,7 @@ func SpinnerScaleDotsV(label string, radius float32, thickness float32, color ui
 
 func SpinnerSquareSpins(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000284)
+	_f.AddProcedureId(0x00000285)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9523,7 +9515,7 @@ func SpinnerSquareSpins(label string, radius float32, thickness float32) {
 
 func SpinnerSquareSpinsV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000285)
+	_f.AddProcedureId(0x00000286)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9535,7 +9527,7 @@ func SpinnerSquareSpinsV(label string, radius float32, thickness float32, color 
 
 func SpinnerMovingDots(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000286)
+	_f.AddProcedureId(0x00000287)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9545,7 +9537,7 @@ func SpinnerMovingDots(label string, radius float32, thickness float32) {
 
 func SpinnerMovingDotsV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, dots Size_t /* = 3*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000287)
+	_f.AddProcedureId(0x00000288)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9558,7 +9550,7 @@ func SpinnerMovingDotsV(label string, radius float32, thickness float32, color u
 
 func SpinnerRotateDots(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000288)
+	_f.AddProcedureId(0x00000289)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9568,7 +9560,7 @@ func SpinnerRotateDots(label string, radius float32, thickness float32) {
 
 func SpinnerRotateDotsV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, dots int /* = 2*/, mode int /* = 0*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000289)
+	_f.AddProcedureId(0x0000028a)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9582,7 +9574,7 @@ func SpinnerRotateDotsV(label string, radius float32, thickness float32, color u
 
 func SpinnerOrionDots(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000028a)
+	_f.AddProcedureId(0x0000028b)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9592,7 +9584,7 @@ func SpinnerOrionDots(label string, radius float32, thickness float32) {
 
 func SpinnerOrionDotsV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, arcs int /* = 4*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000028b)
+	_f.AddProcedureId(0x0000028c)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9605,7 +9597,7 @@ func SpinnerOrionDotsV(label string, radius float32, thickness float32, color ui
 
 func SpinnerGalaxyDots(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000028c)
+	_f.AddProcedureId(0x0000028d)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9615,7 +9607,7 @@ func SpinnerGalaxyDots(label string, radius float32, thickness float32) {
 
 func SpinnerGalaxyDotsV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, arcs int /* = 4*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000028d)
+	_f.AddProcedureId(0x0000028e)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9628,7 +9620,7 @@ func SpinnerGalaxyDotsV(label string, radius float32, thickness float32, color u
 
 func SpinnerTwinAng(label string, radius1 float32, radius2 float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000028e)
+	_f.AddProcedureId(0x0000028f)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius1)
 	runtime.AddFloat32Arg(_f, radius2)
@@ -9639,7 +9631,7 @@ func SpinnerTwinAng(label string, radius1 float32, radius2 float32, thickness fl
 
 func SpinnerTwinAngV(label string, radius1 float32, radius2 float32, thickness float32, color1 uint32 /* = white*/, color2 uint32 /* = red*/, speed float32 /* = 2.8f*/, angle float32 /* = IM_PI*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000028f)
+	_f.AddProcedureId(0x00000290)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius1)
 	runtime.AddFloat32Arg(_f, radius2)
@@ -9654,7 +9646,7 @@ func SpinnerTwinAngV(label string, radius1 float32, radius2 float32, thickness f
 
 func SpinnerFilling(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000290)
+	_f.AddProcedureId(0x00000291)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9664,7 +9656,7 @@ func SpinnerFilling(label string, radius float32, thickness float32) {
 
 func SpinnerFillingV(label string, radius float32, thickness float32, color1 uint32 /* = white*/, color2 uint32 /* = red*/, speed float32 /* = 2.8f*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000291)
+	_f.AddProcedureId(0x00000292)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9677,7 +9669,7 @@ func SpinnerFillingV(label string, radius float32, thickness float32, color1 uin
 
 func SpinnerTopup(label string, radius1 float32, radius2 float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000292)
+	_f.AddProcedureId(0x00000293)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius1)
 	runtime.AddFloat32Arg(_f, radius2)
@@ -9687,7 +9679,7 @@ func SpinnerTopup(label string, radius1 float32, radius2 float32) {
 
 func SpinnerTopupV(label string, radius1 float32, radius2 float32, color uint32 /* = red*/, fg uint32 /* = white*/, bg uint32 /* = white*/, speed float32 /* = 2.8f*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000293)
+	_f.AddProcedureId(0x00000294)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius1)
 	runtime.AddFloat32Arg(_f, radius2)
@@ -9701,7 +9693,7 @@ func SpinnerTopupV(label string, radius1 float32, radius2 float32, color uint32 
 
 func SpinnerTwinAng180(label string, radius1 float32, radius2 float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000294)
+	_f.AddProcedureId(0x00000295)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius1)
 	runtime.AddFloat32Arg(_f, radius2)
@@ -9712,7 +9704,7 @@ func SpinnerTwinAng180(label string, radius1 float32, radius2 float32, thickness
 
 func SpinnerTwinAng180V(label string, radius1 float32, radius2 float32, thickness float32, color1 uint32 /* = white*/, color2 uint32 /* = red*/, speed float32 /* = 2.8f*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000295)
+	_f.AddProcedureId(0x00000296)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius1)
 	runtime.AddFloat32Arg(_f, radius2)
@@ -9726,7 +9718,7 @@ func SpinnerTwinAng180V(label string, radius1 float32, radius2 float32, thicknes
 
 func SpinnerTwinAng360(label string, radius1 float32, radius2 float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000296)
+	_f.AddProcedureId(0x00000297)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius1)
 	runtime.AddFloat32Arg(_f, radius2)
@@ -9737,7 +9729,7 @@ func SpinnerTwinAng360(label string, radius1 float32, radius2 float32, thickness
 
 func SpinnerTwinAng360V(label string, radius1 float32, radius2 float32, thickness float32, color1 uint32 /* = white*/, color2 uint32 /* = red*/, speed1 float32 /* = 2.8f*/, speed2 float32 /* = 2.5f*/, mode int /* = 0*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000297)
+	_f.AddProcedureId(0x00000298)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius1)
 	runtime.AddFloat32Arg(_f, radius2)
@@ -9753,7 +9745,7 @@ func SpinnerTwinAng360V(label string, radius1 float32, radius2 float32, thicknes
 
 func SpinnerIncDots(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000298)
+	_f.AddProcedureId(0x00000299)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9763,7 +9755,7 @@ func SpinnerIncDots(label string, radius float32, thickness float32) {
 
 func SpinnerIncDotsV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, dots Size_t /* = 6*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000299)
+	_f.AddProcedureId(0x0000029a)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9776,7 +9768,7 @@ func SpinnerIncDotsV(label string, radius float32, thickness float32, color uint
 
 func SpinnerIncFullDots(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000029a)
+	_f.AddProcedureId(0x0000029b)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9786,7 +9778,7 @@ func SpinnerIncFullDots(label string, radius float32, thickness float32) {
 
 func SpinnerIncFullDotsV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, dots Size_t /* = 4*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000029b)
+	_f.AddProcedureId(0x0000029c)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9799,7 +9791,7 @@ func SpinnerIncFullDotsV(label string, radius float32, thickness float32, color 
 
 func SpinnerFadeBars(label string, w float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000029c)
+	_f.AddProcedureId(0x0000029d)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, w)
 	_f.CallProcedure()
@@ -9808,7 +9800,7 @@ func SpinnerFadeBars(label string, w float32) {
 
 func SpinnerFadeBarsV(label string, w float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, bars Size_t /* = 3*/, scale bool /* = false*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000029d)
+	_f.AddProcedureId(0x0000029e)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, w)
 	runtime.AddUint32Arg(_f, color)
@@ -9821,7 +9813,7 @@ func SpinnerFadeBarsV(label string, w float32, color uint32 /* = white*/, speed 
 
 func SpinnerFadeTris(label string, radius float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000029e)
+	_f.AddProcedureId(0x0000029f)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	_f.CallProcedure()
@@ -9830,7 +9822,7 @@ func SpinnerFadeTris(label string, radius float32) {
 
 func SpinnerFadeTrisV(label string, radius float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, dim Size_t /* = 2*/, scale bool /* = false*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000029f)
+	_f.AddProcedureId(0x000002a0)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddUint32Arg(_f, color)
@@ -9843,7 +9835,7 @@ func SpinnerFadeTrisV(label string, radius float32, color uint32 /* = white*/, s
 
 func SpinnerBarsRotateFade(label string, rmin float32, rmax float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002a0)
+	_f.AddProcedureId(0x000002a1)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, rmin)
 	runtime.AddFloat32Arg(_f, rmax)
@@ -9854,7 +9846,7 @@ func SpinnerBarsRotateFade(label string, rmin float32, rmax float32, thickness f
 
 func SpinnerBarsRotateFadeV(label string, rmin float32, rmax float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, bars Size_t /* = 6*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002a1)
+	_f.AddProcedureId(0x000002a2)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, rmin)
 	runtime.AddFloat32Arg(_f, rmax)
@@ -9868,7 +9860,7 @@ func SpinnerBarsRotateFadeV(label string, rmin float32, rmax float32, thickness 
 
 func SpinnerBarsScaleMiddle(label string, w float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002a2)
+	_f.AddProcedureId(0x000002a3)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, w)
 	_f.CallProcedure()
@@ -9877,7 +9869,7 @@ func SpinnerBarsScaleMiddle(label string, w float32) {
 
 func SpinnerBarsScaleMiddleV(label string, w float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, bars Size_t /* = 3*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002a3)
+	_f.AddProcedureId(0x000002a4)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, w)
 	runtime.AddUint32Arg(_f, color)
@@ -9889,7 +9881,7 @@ func SpinnerBarsScaleMiddleV(label string, w float32, color uint32 /* = white*/,
 
 func SpinnerAngTwin(label string, radius1 float32, radius2 float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002a4)
+	_f.AddProcedureId(0x000002a5)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius1)
 	runtime.AddFloat32Arg(_f, radius2)
@@ -9900,7 +9892,7 @@ func SpinnerAngTwin(label string, radius1 float32, radius2 float32, thickness fl
 
 func SpinnerAngTwinV(label string, radius1 float32, radius2 float32, thickness float32, color uint32 /* = white*/, bg uint32 /* = half_white*/, speed float32 /* = 2.8f*/, angle float32 /* = IM_PI*/, arcs Size_t /* = 1*/, mode int /* = 0*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002a5)
+	_f.AddProcedureId(0x000002a6)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius1)
 	runtime.AddFloat32Arg(_f, radius2)
@@ -9917,7 +9909,7 @@ func SpinnerAngTwinV(label string, radius1 float32, radius2 float32, thickness f
 
 func SpinnerArcRotation(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002a6)
+	_f.AddProcedureId(0x000002a7)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9927,7 +9919,7 @@ func SpinnerArcRotation(label string, radius float32, thickness float32) {
 
 func SpinnerArcRotationV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, arcs Size_t /* = 4*/, mode int /* = 0*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002a7)
+	_f.AddProcedureId(0x000002a8)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9941,7 +9933,7 @@ func SpinnerArcRotationV(label string, radius float32, thickness float32, color 
 
 func SpinnerArcFade(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002a8)
+	_f.AddProcedureId(0x000002a9)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9951,7 +9943,7 @@ func SpinnerArcFade(label string, radius float32, thickness float32) {
 
 func SpinnerArcFadeV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, arcs Size_t /* = 4*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002a9)
+	_f.AddProcedureId(0x000002aa)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9964,7 +9956,7 @@ func SpinnerArcFadeV(label string, radius float32, thickness float32, color uint
 
 func SpinnerSimpleArcFade(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002aa)
+	_f.AddProcedureId(0x000002ab)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9974,7 +9966,7 @@ func SpinnerSimpleArcFade(label string, radius float32, thickness float32) {
 
 func SpinnerSimpleArcFadeV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002ab)
+	_f.AddProcedureId(0x000002ac)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9986,7 +9978,7 @@ func SpinnerSimpleArcFadeV(label string, radius float32, thickness float32, colo
 
 func SpinnerSquareStrokeFade(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002ac)
+	_f.AddProcedureId(0x000002ad)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -9996,7 +9988,7 @@ func SpinnerSquareStrokeFade(label string, radius float32, thickness float32) {
 
 func SpinnerSquareStrokeFadeV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002ad)
+	_f.AddProcedureId(0x000002ae)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10008,7 +10000,7 @@ func SpinnerSquareStrokeFadeV(label string, radius float32, thickness float32, c
 
 func SpinnerAsciiSymbolPoints(label string, text string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002ae)
+	_f.AddProcedureId(0x000002af)
 	runtime.AddStringArg(_f, label)
 	runtime.AddStringArg(_f, text)
 	runtime.AddFloat32Arg(_f, radius)
@@ -10019,7 +10011,7 @@ func SpinnerAsciiSymbolPoints(label string, text string, radius float32, thickne
 
 func SpinnerAsciiSymbolPointsV(label string, text string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002af)
+	_f.AddProcedureId(0x000002b0)
 	runtime.AddStringArg(_f, label)
 	runtime.AddStringArg(_f, text)
 	runtime.AddFloat32Arg(_f, radius)
@@ -10032,7 +10024,7 @@ func SpinnerAsciiSymbolPointsV(label string, text string, radius float32, thickn
 
 func SpinnerTextFading(label string, text string, radius float32, fsize float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002b0)
+	_f.AddProcedureId(0x000002b1)
 	runtime.AddStringArg(_f, label)
 	runtime.AddStringArg(_f, text)
 	runtime.AddFloat32Arg(_f, radius)
@@ -10043,7 +10035,7 @@ func SpinnerTextFading(label string, text string, radius float32, fsize float32)
 
 func SpinnerTextFadingV(label string, text string, radius float32, fsize float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002b1)
+	_f.AddProcedureId(0x000002b2)
 	runtime.AddStringArg(_f, label)
 	runtime.AddStringArg(_f, text)
 	runtime.AddFloat32Arg(_f, radius)
@@ -10056,7 +10048,7 @@ func SpinnerTextFadingV(label string, text string, radius float32, fsize float32
 
 func SpinnerSevenSegments(label string, text string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002b2)
+	_f.AddProcedureId(0x000002b3)
 	runtime.AddStringArg(_f, label)
 	runtime.AddStringArg(_f, text)
 	runtime.AddFloat32Arg(_f, radius)
@@ -10067,7 +10059,7 @@ func SpinnerSevenSegments(label string, text string, radius float32, thickness f
 
 func SpinnerSevenSegmentsV(label string, text string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002b3)
+	_f.AddProcedureId(0x000002b4)
 	runtime.AddStringArg(_f, label)
 	runtime.AddStringArg(_f, text)
 	runtime.AddFloat32Arg(_f, radius)
@@ -10080,7 +10072,7 @@ func SpinnerSevenSegmentsV(label string, text string, radius float32, thickness 
 
 func SpinnerSquareStrokeFill(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002b4)
+	_f.AddProcedureId(0x000002b5)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10090,7 +10082,7 @@ func SpinnerSquareStrokeFill(label string, radius float32, thickness float32) {
 
 func SpinnerSquareStrokeFillV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002b5)
+	_f.AddProcedureId(0x000002b6)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10102,7 +10094,7 @@ func SpinnerSquareStrokeFillV(label string, radius float32, thickness float32, c
 
 func SpinnerSquareStrokeLoading(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002b6)
+	_f.AddProcedureId(0x000002b7)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10112,7 +10104,7 @@ func SpinnerSquareStrokeLoading(label string, radius float32, thickness float32)
 
 func SpinnerSquareStrokeLoadingV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002b7)
+	_f.AddProcedureId(0x000002b8)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10124,7 +10116,7 @@ func SpinnerSquareStrokeLoadingV(label string, radius float32, thickness float32
 
 func SpinnerSquareLoading(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002b8)
+	_f.AddProcedureId(0x000002b9)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10134,7 +10126,7 @@ func SpinnerSquareLoading(label string, radius float32, thickness float32) {
 
 func SpinnerSquareLoadingV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002b9)
+	_f.AddProcedureId(0x000002ba)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10146,7 +10138,7 @@ func SpinnerSquareLoadingV(label string, radius float32, thickness float32, colo
 
 func SpinnerFilledArcFade(label string, radius float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002ba)
+	_f.AddProcedureId(0x000002bb)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	_f.CallProcedure()
@@ -10155,7 +10147,7 @@ func SpinnerFilledArcFade(label string, radius float32) {
 
 func SpinnerFilledArcFadeV(label string, radius float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, arcs Size_t /* = 4*/, mode int /* = 0*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002bb)
+	_f.AddProcedureId(0x000002bc)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddUint32Arg(_f, color)
@@ -10168,7 +10160,7 @@ func SpinnerFilledArcFadeV(label string, radius float32, color uint32 /* = white
 
 func SpinnerPointsArcBounce(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002bc)
+	_f.AddProcedureId(0x000002bd)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10178,7 +10170,7 @@ func SpinnerPointsArcBounce(label string, radius float32, thickness float32) {
 
 func SpinnerPointsArcBounceV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, points Size_t /* = 4*/, circles int /* = 2*/, rspeed float32 /* = 0.f*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002bd)
+	_f.AddProcedureId(0x000002be)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10193,7 +10185,7 @@ func SpinnerPointsArcBounceV(label string, radius float32, thickness float32, co
 
 func SpinnerFilledArcColor(label string, radius float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002be)
+	_f.AddProcedureId(0x000002bf)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	_f.CallProcedure()
@@ -10202,7 +10194,7 @@ func SpinnerFilledArcColor(label string, radius float32) {
 
 func SpinnerFilledArcColorV(label string, radius float32, color uint32 /* = red*/, bg uint32 /* = white*/, speed float32 /* = 2.8f*/, arcs Size_t /* = 4*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002bf)
+	_f.AddProcedureId(0x000002c0)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddUint32Arg(_f, color)
@@ -10215,7 +10207,7 @@ func SpinnerFilledArcColorV(label string, radius float32, color uint32 /* = red*
 
 func SpinnerFilledArcRing(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002c0)
+	_f.AddProcedureId(0x000002c1)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10225,7 +10217,7 @@ func SpinnerFilledArcRing(label string, radius float32, thickness float32) {
 
 func SpinnerFilledArcRingV(label string, radius float32, thickness float32, color uint32 /* = red*/, bg uint32 /* = white*/, speed float32 /* = 2.8f*/, arcs Size_t /* = 4*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002c1)
+	_f.AddProcedureId(0x000002c2)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10239,7 +10231,7 @@ func SpinnerFilledArcRingV(label string, radius float32, thickness float32, colo
 
 func SpinnerArcWedges(label string, radius float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002c2)
+	_f.AddProcedureId(0x000002c3)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	_f.CallProcedure()
@@ -10248,7 +10240,7 @@ func SpinnerArcWedges(label string, radius float32) {
 
 func SpinnerArcWedgesV(label string, radius float32, color uint32 /* = red*/, speed float32 /* = 2.8f*/, arcs Size_t /* = 4*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002c3)
+	_f.AddProcedureId(0x000002c4)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddUint32Arg(_f, color)
@@ -10260,7 +10252,7 @@ func SpinnerArcWedgesV(label string, radius float32, color uint32 /* = red*/, sp
 
 func SpinnerTwinBall(label string, radius1 float32, radius2 float32, thickness float32, b_thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002c4)
+	_f.AddProcedureId(0x000002c5)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius1)
 	runtime.AddFloat32Arg(_f, radius2)
@@ -10272,7 +10264,7 @@ func SpinnerTwinBall(label string, radius1 float32, radius2 float32, thickness f
 
 func SpinnerTwinBallV(label string, radius1 float32, radius2 float32, thickness float32, b_thickness float32, ball uint32 /* = white*/, bg uint32 /* = half_white*/, speed float32 /* = 2.8f*/, balls Size_t /* = 2*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002c5)
+	_f.AddProcedureId(0x000002c6)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius1)
 	runtime.AddFloat32Arg(_f, radius2)
@@ -10288,7 +10280,7 @@ func SpinnerTwinBallV(label string, radius1 float32, radius2 float32, thickness 
 
 func SpinnerSolarBalls(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002c6)
+	_f.AddProcedureId(0x000002c7)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10298,7 +10290,7 @@ func SpinnerSolarBalls(label string, radius float32, thickness float32) {
 
 func SpinnerSolarBallsV(label string, radius float32, thickness float32, ball uint32 /* = white*/, bg uint32 /* = half_white*/, speed float32 /* = 2.8f*/, balls Size_t /* = 4*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002c7)
+	_f.AddProcedureId(0x000002c8)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10312,7 +10304,7 @@ func SpinnerSolarBallsV(label string, radius float32, thickness float32, ball ui
 
 func SpinnerSolarScaleBalls(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002c8)
+	_f.AddProcedureId(0x000002c9)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10322,7 +10314,7 @@ func SpinnerSolarScaleBalls(label string, radius float32, thickness float32) {
 
 func SpinnerSolarScaleBallsV(label string, radius float32, thickness float32, ball uint32 /* = white*/, speed float32 /* = 2.8f*/, balls Size_t /* = 4*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002c9)
+	_f.AddProcedureId(0x000002ca)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10335,7 +10327,7 @@ func SpinnerSolarScaleBallsV(label string, radius float32, thickness float32, ba
 
 func SpinnerSolarArcs(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002ca)
+	_f.AddProcedureId(0x000002cb)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10345,7 +10337,7 @@ func SpinnerSolarArcs(label string, radius float32, thickness float32) {
 
 func SpinnerSolarArcsV(label string, radius float32, thickness float32, ball uint32 /* = white*/, bg uint32 /* = half_white*/, speed float32 /* = 2.8f*/, balls Size_t /* = 4*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002cb)
+	_f.AddProcedureId(0x000002cc)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10359,7 +10351,7 @@ func SpinnerSolarArcsV(label string, radius float32, thickness float32, ball uin
 
 func SpinnerMovingArcs(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002cc)
+	_f.AddProcedureId(0x000002cd)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10369,7 +10361,7 @@ func SpinnerMovingArcs(label string, radius float32, thickness float32) {
 
 func SpinnerMovingArcsV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, arcs Size_t /* = 4*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002cd)
+	_f.AddProcedureId(0x000002ce)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10382,7 +10374,7 @@ func SpinnerMovingArcsV(label string, radius float32, thickness float32, color u
 
 func SpinnerRainbowCircle(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002ce)
+	_f.AddProcedureId(0x000002cf)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10392,7 +10384,7 @@ func SpinnerRainbowCircle(label string, radius float32, thickness float32) {
 
 func SpinnerRainbowCircleV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, arcs Size_t /* = 4*/, mode float32 /* = 1*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002cf)
+	_f.AddProcedureId(0x000002d0)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10406,7 +10398,7 @@ func SpinnerRainbowCircleV(label string, radius float32, thickness float32, colo
 
 func SpinnerBounceBall(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002d0)
+	_f.AddProcedureId(0x000002d1)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10416,7 +10408,7 @@ func SpinnerBounceBall(label string, radius float32, thickness float32) {
 
 func SpinnerBounceBallV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, dots int /* = 1*/, shadow bool /* = false*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002d1)
+	_f.AddProcedureId(0x000002d2)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10430,7 +10422,7 @@ func SpinnerBounceBallV(label string, radius float32, thickness float32, color u
 
 func SpinnerPulsarBall(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002d2)
+	_f.AddProcedureId(0x000002d3)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10440,7 +10432,7 @@ func SpinnerPulsarBall(label string, radius float32, thickness float32) {
 
 func SpinnerPulsarBallV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, shadow bool /* = false*/, mode int /* = 0*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002d3)
+	_f.AddProcedureId(0x000002d4)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10454,7 +10446,7 @@ func SpinnerPulsarBallV(label string, radius float32, thickness float32, color u
 
 func SpinnerIncScaleDots(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002d4)
+	_f.AddProcedureId(0x000002d5)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10464,7 +10456,7 @@ func SpinnerIncScaleDots(label string, radius float32, thickness float32) {
 
 func SpinnerIncScaleDotsV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, dots Size_t /* = 6*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002d5)
+	_f.AddProcedureId(0x000002d6)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10477,7 +10469,7 @@ func SpinnerIncScaleDotsV(label string, radius float32, thickness float32, color
 
 func SpinnerSomeScaleDots(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002d6)
+	_f.AddProcedureId(0x000002d7)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10487,7 +10479,7 @@ func SpinnerSomeScaleDots(label string, radius float32, thickness float32) {
 
 func SpinnerSomeScaleDotsV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, dots Size_t /* = 6*/, mode int /* = 0*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002d7)
+	_f.AddProcedureId(0x000002d8)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10501,7 +10493,7 @@ func SpinnerSomeScaleDotsV(label string, radius float32, thickness float32, colo
 
 func SpinnerAngTriple(label string, radius1 float32, radius2 float32, radius3 float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002d8)
+	_f.AddProcedureId(0x000002d9)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius1)
 	runtime.AddFloat32Arg(_f, radius2)
@@ -10513,7 +10505,7 @@ func SpinnerAngTriple(label string, radius1 float32, radius2 float32, radius3 fl
 
 func SpinnerAngTripleV(label string, radius1 float32, radius2 float32, radius3 float32, thickness float32, c1 uint32 /* = white*/, c2 uint32 /* = half_white*/, c3 uint32 /* = white*/, speed float32 /* = 2.8f*/, angle float32 /* = IM_PI*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002d9)
+	_f.AddProcedureId(0x000002da)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius1)
 	runtime.AddFloat32Arg(_f, radius2)
@@ -10530,7 +10522,7 @@ func SpinnerAngTripleV(label string, radius1 float32, radius2 float32, radius3 f
 
 func SpinnerAngEclipse(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002da)
+	_f.AddProcedureId(0x000002db)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10540,7 +10532,7 @@ func SpinnerAngEclipse(label string, radius float32, thickness float32) {
 
 func SpinnerAngEclipseV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, angle float32 /* = IM_PI*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002db)
+	_f.AddProcedureId(0x000002dc)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10553,7 +10545,7 @@ func SpinnerAngEclipseV(label string, radius float32, thickness float32, color u
 
 func SpinnerIngYang(label string, radius float32, thickness float32, reverse bool, yang_detlta_r float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002dc)
+	_f.AddProcedureId(0x000002dd)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10565,7 +10557,7 @@ func SpinnerIngYang(label string, radius float32, thickness float32, reverse boo
 
 func SpinnerIngYangV(label string, radius float32, thickness float32, reverse bool, yang_detlta_r float32, colorI uint32 /* = white*/, colorY uint32 /* = white*/, speed float32 /* = 2.8f*/, angle float32 /* = IM_PI *0.7f*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002dd)
+	_f.AddProcedureId(0x000002de)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10581,7 +10573,7 @@ func SpinnerIngYangV(label string, radius float32, thickness float32, reverse bo
 
 func SpinnerGooeyBalls(label string, radius float32, color uint32, speed float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002de)
+	_f.AddProcedureId(0x000002df)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddUint32Arg(_f, color)
@@ -10592,7 +10584,7 @@ func SpinnerGooeyBalls(label string, radius float32, color uint32, speed float32
 
 func SpinnerGooeyBallsV(label string, radius float32, color uint32, speed float32, mode int /* = 0*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002df)
+	_f.AddProcedureId(0x000002e0)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddUint32Arg(_f, color)
@@ -10604,7 +10596,7 @@ func SpinnerGooeyBallsV(label string, radius float32, color uint32, speed float3
 
 func SpinnerDotsLoading(label string, radius float32, thickness float32, color uint32, bg uint32, speed float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002e0)
+	_f.AddProcedureId(0x000002e1)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10617,7 +10609,7 @@ func SpinnerDotsLoading(label string, radius float32, thickness float32, color u
 
 func SpinnerRotateGooeyBalls(label string, radius float32, thickness float32, color uint32, speed float32, balls int) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002e1)
+	_f.AddProcedureId(0x000002e2)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10630,7 +10622,7 @@ func SpinnerRotateGooeyBalls(label string, radius float32, thickness float32, co
 
 func SpinnerHerbertBalls(label string, radius float32, thickness float32, color uint32, speed float32, balls int) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002e2)
+	_f.AddProcedureId(0x000002e3)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10643,7 +10635,7 @@ func SpinnerHerbertBalls(label string, radius float32, thickness float32, color 
 
 func SpinnerHerbertBalls3D(label string, radius float32, thickness float32, color uint32, speed float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002e3)
+	_f.AddProcedureId(0x000002e4)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10655,7 +10647,7 @@ func SpinnerHerbertBalls3D(label string, radius float32, thickness float32, colo
 
 func SpinnerRotateTriangles(label string, radius float32, thickness float32, color uint32, speed float32, tris int) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002e4)
+	_f.AddProcedureId(0x000002e5)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10668,7 +10660,7 @@ func SpinnerRotateTriangles(label string, radius float32, thickness float32, col
 
 func SpinnerRotateShapes(label string, radius float32, thickness float32, color uint32, speed float32, shapes int, pnt int) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002e5)
+	_f.AddProcedureId(0x000002e6)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10682,7 +10674,7 @@ func SpinnerRotateShapes(label string, radius float32, thickness float32, color 
 
 func SpinnerSinSquares(label string, radius float32, thickness float32, color uint32, speed float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002e6)
+	_f.AddProcedureId(0x000002e7)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10694,7 +10686,7 @@ func SpinnerSinSquares(label string, radius float32, thickness float32, color ui
 
 func SpinnerMoonLine(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002e7)
+	_f.AddProcedureId(0x000002e8)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10704,7 +10696,7 @@ func SpinnerMoonLine(label string, radius float32, thickness float32) {
 
 func SpinnerMoonLineV(label string, radius float32, thickness float32, color uint32 /* = white*/, bg uint32 /* = red*/, speed float32 /* = 2.8f*/, angle float32 /* = IM_PI*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002e8)
+	_f.AddProcedureId(0x000002e9)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10718,7 +10710,7 @@ func SpinnerMoonLineV(label string, radius float32, thickness float32, color uin
 
 func SpinnerCircleDrop(label string, radius float32, thickness float32, thickness_drop float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002e9)
+	_f.AddProcedureId(0x000002ea)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10729,7 +10721,7 @@ func SpinnerCircleDrop(label string, radius float32, thickness float32, thicknes
 
 func SpinnerCircleDropV(label string, radius float32, thickness float32, thickness_drop float32, color uint32 /* = white*/, bg uint32 /* = half_white*/, speed float32 /* = 2.8f*/, angle float32 /* = IM_PI*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002ea)
+	_f.AddProcedureId(0x000002eb)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10744,7 +10736,7 @@ func SpinnerCircleDropV(label string, radius float32, thickness float32, thickne
 
 func SpinnerSurroundedIndicator(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002eb)
+	_f.AddProcedureId(0x000002ec)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10754,7 +10746,7 @@ func SpinnerSurroundedIndicator(label string, radius float32, thickness float32)
 
 func SpinnerSurroundedIndicatorV(label string, radius float32, thickness float32, color uint32 /* = white*/, bg uint32 /* = half_white*/, speed float32 /* = 2.8f*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002ec)
+	_f.AddProcedureId(0x000002ed)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10767,7 +10759,7 @@ func SpinnerSurroundedIndicatorV(label string, radius float32, thickness float32
 
 func SpinnerWifiIndicator(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002ed)
+	_f.AddProcedureId(0x000002ee)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10777,7 +10769,7 @@ func SpinnerWifiIndicator(label string, radius float32, thickness float32) {
 
 func SpinnerWifiIndicatorV(label string, radius float32, thickness float32, color uint32 /* = red*/, bg uint32 /* = half_white*/, speed float32 /* = 2.8f*/, cangle float32 /* = 0.f*/, dots int /* = 3*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002ee)
+	_f.AddProcedureId(0x000002ef)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10792,7 +10784,7 @@ func SpinnerWifiIndicatorV(label string, radius float32, thickness float32, colo
 
 func SpinnerTrianglesSelector(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002ef)
+	_f.AddProcedureId(0x000002f0)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10802,7 +10794,7 @@ func SpinnerTrianglesSelector(label string, radius float32, thickness float32) {
 
 func SpinnerTrianglesSelectorV(label string, radius float32, thickness float32, color uint32 /* = white*/, bg uint32 /* = half_white*/, speed float32 /* = 2.8f*/, bars Size_t /* = 8*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002f0)
+	_f.AddProcedureId(0x000002f1)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10816,7 +10808,7 @@ func SpinnerTrianglesSelectorV(label string, radius float32, thickness float32, 
 
 func SpinnerFlowingGradient(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002f1)
+	_f.AddProcedureId(0x000002f2)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10826,7 +10818,7 @@ func SpinnerFlowingGradient(label string, radius float32, thickness float32) {
 
 func SpinnerFlowingGradientV(label string, radius float32, thickness float32, color uint32 /* = white*/, bg uint32 /* = red*/, speed float32 /* = 2.8f*/, angle float32 /* = IM_PI*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002f2)
+	_f.AddProcedureId(0x000002f3)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10840,7 +10832,7 @@ func SpinnerFlowingGradientV(label string, radius float32, thickness float32, co
 
 func SpinnerRotateSegments(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002f3)
+	_f.AddProcedureId(0x000002f4)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10850,7 +10842,7 @@ func SpinnerRotateSegments(label string, radius float32, thickness float32) {
 
 func SpinnerRotateSegmentsV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, arcs Size_t /* = 4*/, layers Size_t /* = 1*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002f4)
+	_f.AddProcedureId(0x000002f5)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10864,7 +10856,7 @@ func SpinnerRotateSegmentsV(label string, radius float32, thickness float32, col
 
 func SpinnerLemniscate(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002f5)
+	_f.AddProcedureId(0x000002f6)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10874,7 +10866,7 @@ func SpinnerLemniscate(label string, radius float32, thickness float32) {
 
 func SpinnerLemniscateV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, angle float32 /* = IM_PI/2.0f*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002f6)
+	_f.AddProcedureId(0x000002f7)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10887,7 +10879,7 @@ func SpinnerLemniscateV(label string, radius float32, thickness float32, color u
 
 func SpinnerRotateGear(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002f7)
+	_f.AddProcedureId(0x000002f8)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10897,7 +10889,7 @@ func SpinnerRotateGear(label string, radius float32, thickness float32) {
 
 func SpinnerRotateGearV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, pins Size_t /* = 12*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002f8)
+	_f.AddProcedureId(0x000002f9)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10910,7 +10902,7 @@ func SpinnerRotateGearV(label string, radius float32, thickness float32, color u
 
 func SpinnerRotateWheel(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002f9)
+	_f.AddProcedureId(0x000002fa)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10920,7 +10912,7 @@ func SpinnerRotateWheel(label string, radius float32, thickness float32) {
 
 func SpinnerRotateWheelV(label string, radius float32, thickness float32, bg_color uint32 /* = white*/, color uint32 /* = white*/, speed float32 /* = 2.8f*/, pins Size_t /* = 12*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002fa)
+	_f.AddProcedureId(0x000002fb)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10934,7 +10926,7 @@ func SpinnerRotateWheelV(label string, radius float32, thickness float32, bg_col
 
 func SpinnerAtom(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002fb)
+	_f.AddProcedureId(0x000002fc)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10944,7 +10936,7 @@ func SpinnerAtom(label string, radius float32, thickness float32) {
 
 func SpinnerAtomV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, elipses int /* = 3*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002fc)
+	_f.AddProcedureId(0x000002fd)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10957,7 +10949,7 @@ func SpinnerAtomV(label string, radius float32, thickness float32, color uint32 
 
 func SpinnerPatternRings(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002fd)
+	_f.AddProcedureId(0x000002fe)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10967,7 +10959,7 @@ func SpinnerPatternRings(label string, radius float32, thickness float32) {
 
 func SpinnerPatternRingsV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, elipses int /* = 3*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002fe)
+	_f.AddProcedureId(0x000002ff)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10980,7 +10972,7 @@ func SpinnerPatternRingsV(label string, radius float32, thickness float32, color
 
 func SpinnerPatternEclipse(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x000002ff)
+	_f.AddProcedureId(0x00000300)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -10990,7 +10982,7 @@ func SpinnerPatternEclipse(label string, radius float32, thickness float32) {
 
 func SpinnerPatternEclipseV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, elipses int /* = 3*/, delta_a float32 /* = 2.f*/, delta_y float32 /* = 0.f*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000300)
+	_f.AddProcedureId(0x00000301)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11005,7 +10997,7 @@ func SpinnerPatternEclipseV(label string, radius float32, thickness float32, col
 
 func SpinnerPatternSphere(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000301)
+	_f.AddProcedureId(0x00000302)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11015,7 +11007,7 @@ func SpinnerPatternSphere(label string, radius float32, thickness float32) {
 
 func SpinnerPatternSphereV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, elipses int /* = 3*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000302)
+	_f.AddProcedureId(0x00000303)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11028,7 +11020,7 @@ func SpinnerPatternSphereV(label string, radius float32, thickness float32, colo
 
 func SpinnerRingSynchronous(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000303)
+	_f.AddProcedureId(0x00000304)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11038,7 +11030,7 @@ func SpinnerRingSynchronous(label string, radius float32, thickness float32) {
 
 func SpinnerRingSynchronousV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, elipses int /* = 3*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000304)
+	_f.AddProcedureId(0x00000305)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11051,7 +11043,7 @@ func SpinnerRingSynchronousV(label string, radius float32, thickness float32, co
 
 func SpinnerRingWatermarks(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000305)
+	_f.AddProcedureId(0x00000306)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11061,7 +11053,7 @@ func SpinnerRingWatermarks(label string, radius float32, thickness float32) {
 
 func SpinnerRingWatermarksV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, elipses int /* = 3*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000306)
+	_f.AddProcedureId(0x00000307)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11074,7 +11066,7 @@ func SpinnerRingWatermarksV(label string, radius float32, thickness float32, col
 
 func SpinnerRotatedAtom(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000307)
+	_f.AddProcedureId(0x00000308)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11084,7 +11076,7 @@ func SpinnerRotatedAtom(label string, radius float32, thickness float32) {
 
 func SpinnerRotatedAtomV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, elipses int /* = 3*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000308)
+	_f.AddProcedureId(0x00000309)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11097,7 +11089,7 @@ func SpinnerRotatedAtomV(label string, radius float32, thickness float32, color 
 
 func SpinnerRainbowBalls(label string, radius float32, thickness float32, color uint32, speed float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000309)
+	_f.AddProcedureId(0x0000030a)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11109,7 +11101,7 @@ func SpinnerRainbowBalls(label string, radius float32, thickness float32, color 
 
 func SpinnerRainbowBallsV(label string, radius float32, thickness float32, color uint32, speed float32, balls int /* = 5*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000030a)
+	_f.AddProcedureId(0x0000030b)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11122,7 +11114,7 @@ func SpinnerRainbowBallsV(label string, radius float32, thickness float32, color
 
 func SpinnerRainbowShot(label string, radius float32, thickness float32, color uint32, speed float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000030b)
+	_f.AddProcedureId(0x0000030c)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11134,7 +11126,7 @@ func SpinnerRainbowShot(label string, radius float32, thickness float32, color u
 
 func SpinnerRainbowShotV(label string, radius float32, thickness float32, color uint32, speed float32, balls int /* = 5*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000030c)
+	_f.AddProcedureId(0x0000030d)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11147,7 +11139,7 @@ func SpinnerRainbowShotV(label string, radius float32, thickness float32, color 
 
 func SpinnerSpiral(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000030d)
+	_f.AddProcedureId(0x0000030e)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11157,7 +11149,7 @@ func SpinnerSpiral(label string, radius float32, thickness float32) {
 
 func SpinnerSpiralV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, arcs Size_t /* = 4*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000030e)
+	_f.AddProcedureId(0x0000030f)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11170,7 +11162,7 @@ func SpinnerSpiralV(label string, radius float32, thickness float32, color uint3
 
 func SpinnerSpiralEye(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000030f)
+	_f.AddProcedureId(0x00000310)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11179,18 +11171,6 @@ func SpinnerSpiralEye(label string, radius float32, thickness float32) {
 }
 
 func SpinnerSpiralEyeV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/) {
-	_f := currentFffiVar
-	_f.AddProcedureId(0x00000310)
-	runtime.AddStringArg(_f, label)
-	runtime.AddFloat32Arg(_f, radius)
-	runtime.AddFloat32Arg(_f, thickness)
-	runtime.AddUint32Arg(_f, color)
-	runtime.AddFloat32Arg(_f, speed)
-	_f.CallProcedure()
-
-}
-
-func SpinnerBarChartSine(label string, radius float32, thickness float32, color uint32, speed float32) {
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000311)
 	runtime.AddStringArg(_f, label)
@@ -11202,9 +11182,21 @@ func SpinnerBarChartSine(label string, radius float32, thickness float32, color 
 
 }
 
-func SpinnerBarChartSineV(label string, radius float32, thickness float32, color uint32, speed float32, bars int /* = 5*/, mode int /* = 0*/) {
+func SpinnerBarChartSine(label string, radius float32, thickness float32, color uint32, speed float32) {
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000312)
+	runtime.AddStringArg(_f, label)
+	runtime.AddFloat32Arg(_f, radius)
+	runtime.AddFloat32Arg(_f, thickness)
+	runtime.AddUint32Arg(_f, color)
+	runtime.AddFloat32Arg(_f, speed)
+	_f.CallProcedure()
+
+}
+
+func SpinnerBarChartSineV(label string, radius float32, thickness float32, color uint32, speed float32, bars int /* = 5*/, mode int /* = 0*/) {
+	_f := currentFffiVar
+	_f.AddProcedureId(0x00000313)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11218,7 +11210,7 @@ func SpinnerBarChartSineV(label string, radius float32, thickness float32, color
 
 func SpinnerBarChartAdvSine(label string, radius float32, thickness float32, color uint32, speed float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000313)
+	_f.AddProcedureId(0x00000314)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11230,7 +11222,7 @@ func SpinnerBarChartAdvSine(label string, radius float32, thickness float32, col
 
 func SpinnerBarChartAdvSineV(label string, radius float32, thickness float32, color uint32, speed float32, mode int /* = 0*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000314)
+	_f.AddProcedureId(0x00000315)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11243,7 +11235,7 @@ func SpinnerBarChartAdvSineV(label string, radius float32, thickness float32, co
 
 func SpinnerBarChartAdvSineFade(label string, radius float32, thickness float32, color uint32, speed float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000315)
+	_f.AddProcedureId(0x00000316)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11255,7 +11247,7 @@ func SpinnerBarChartAdvSineFade(label string, radius float32, thickness float32,
 
 func SpinnerBarChartAdvSineFadeV(label string, radius float32, thickness float32, color uint32, speed float32, mode int /* = 0*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000316)
+	_f.AddProcedureId(0x00000317)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11268,7 +11260,7 @@ func SpinnerBarChartAdvSineFadeV(label string, radius float32, thickness float32
 
 func SpinnerBarChartRainbow(label string, radius float32, thickness float32, color uint32, speed float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000317)
+	_f.AddProcedureId(0x00000318)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11280,7 +11272,7 @@ func SpinnerBarChartRainbow(label string, radius float32, thickness float32, col
 
 func SpinnerBarChartRainbowV(label string, radius float32, thickness float32, color uint32, speed float32, bars int /* = 5*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000318)
+	_f.AddProcedureId(0x00000319)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11293,7 +11285,7 @@ func SpinnerBarChartRainbowV(label string, radius float32, thickness float32, co
 
 func SpinnerBlocks(label string, radius float32, thickness float32, bg uint32, color uint32, speed float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000319)
+	_f.AddProcedureId(0x0000031a)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11306,7 +11298,7 @@ func SpinnerBlocks(label string, radius float32, thickness float32, bg uint32, c
 
 func SpinnerTwinBlocks(label string, radius float32, thickness float32, bg uint32, color uint32, speed float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000031a)
+	_f.AddProcedureId(0x0000031b)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11319,7 +11311,7 @@ func SpinnerTwinBlocks(label string, radius float32, thickness float32, bg uint3
 
 func SpinnerSquareRandomDots(label string, radius float32, thickness float32, bg uint32, color uint32, speed float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000031b)
+	_f.AddProcedureId(0x0000031c)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11332,7 +11324,7 @@ func SpinnerSquareRandomDots(label string, radius float32, thickness float32, bg
 
 func SpinnerScaleBlocks(label string, radius float32, thickness float32, color uint32, speed float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000031c)
+	_f.AddProcedureId(0x0000031d)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11344,7 +11336,7 @@ func SpinnerScaleBlocks(label string, radius float32, thickness float32, color u
 
 func SpinnerScaleBlocksV(label string, radius float32, thickness float32, color uint32, speed float32, mode int /* = 0*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000031d)
+	_f.AddProcedureId(0x0000031e)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11357,7 +11349,7 @@ func SpinnerScaleBlocksV(label string, radius float32, thickness float32, color 
 
 func SpinnerScaleSquares(label string, radius float32, thikness float32, color uint32, speed float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000031e)
+	_f.AddProcedureId(0x0000031f)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thikness)
@@ -11369,7 +11361,7 @@ func SpinnerScaleSquares(label string, radius float32, thikness float32, color u
 
 func SpinnerSquishSquare(label string, radius float32, color uint32, speed float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000031f)
+	_f.AddProcedureId(0x00000320)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddUint32Arg(_f, color)
@@ -11380,7 +11372,7 @@ func SpinnerSquishSquare(label string, radius float32, color uint32, speed float
 
 func SpinnerFluid(label string, radius float32, color uint32, speed float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000320)
+	_f.AddProcedureId(0x00000321)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddUint32Arg(_f, color)
@@ -11391,7 +11383,7 @@ func SpinnerFluid(label string, radius float32, color uint32, speed float32) {
 
 func SpinnerFluidV(label string, radius float32, color uint32, speed float32, bars int /* = 3*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000321)
+	_f.AddProcedureId(0x00000322)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddUint32Arg(_f, color)
@@ -11403,7 +11395,7 @@ func SpinnerFluidV(label string, radius float32, color uint32, speed float32, ba
 
 func SpinnerFluidPoints(label string, radius float32, thickness float32, color uint32, speed float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000322)
+	_f.AddProcedureId(0x00000323)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11415,7 +11407,7 @@ func SpinnerFluidPoints(label string, radius float32, thickness float32, color u
 
 func SpinnerFluidPointsV(label string, radius float32, thickness float32, color uint32, speed float32, dots Size_t /* = 6*/, delta float32 /* = 0.35f*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000323)
+	_f.AddProcedureId(0x00000324)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11429,7 +11421,7 @@ func SpinnerFluidPointsV(label string, radius float32, thickness float32, color 
 
 func SpinnerArcPolarFade(label string, radius float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000324)
+	_f.AddProcedureId(0x00000325)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	_f.CallProcedure()
@@ -11438,7 +11430,7 @@ func SpinnerArcPolarFade(label string, radius float32) {
 
 func SpinnerArcPolarFadeV(label string, radius float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, arcs Size_t /* = 4*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000325)
+	_f.AddProcedureId(0x00000326)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddUint32Arg(_f, color)
@@ -11450,7 +11442,7 @@ func SpinnerArcPolarFadeV(label string, radius float32, color uint32 /* = white*
 
 func SpinnerArcPolarRadius(label string, radius float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000326)
+	_f.AddProcedureId(0x00000327)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	_f.CallProcedure()
@@ -11459,7 +11451,7 @@ func SpinnerArcPolarRadius(label string, radius float32) {
 
 func SpinnerArcPolarRadiusV(label string, radius float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, arcs Size_t /* = 4*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000327)
+	_f.AddProcedureId(0x00000328)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddUint32Arg(_f, color)
@@ -11471,7 +11463,7 @@ func SpinnerArcPolarRadiusV(label string, radius float32, color uint32 /* = whit
 
 func SpinnerCaleidoscope(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000328)
+	_f.AddProcedureId(0x00000329)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11481,7 +11473,7 @@ func SpinnerCaleidoscope(label string, radius float32, thickness float32) {
 
 func SpinnerCaleidoscopeV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, arcs Size_t /* = 6*/, mode int /* = 0*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000329)
+	_f.AddProcedureId(0x0000032a)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11495,7 +11487,7 @@ func SpinnerCaleidoscopeV(label string, radius float32, thickness float32, color
 
 func SpinnerHboDots(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000032a)
+	_f.AddProcedureId(0x0000032b)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11505,7 +11497,7 @@ func SpinnerHboDots(label string, radius float32, thickness float32) {
 
 func SpinnerHboDotsV(label string, radius float32, thickness float32, color uint32 /* = white*/, minfade float32 /* = 0.0f*/, ryk float32 /* = 0.f*/, speed float32 /* = 1.1f*/, dots Size_t /* = 6*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000032b)
+	_f.AddProcedureId(0x0000032c)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11520,7 +11512,7 @@ func SpinnerHboDotsV(label string, radius float32, thickness float32, color uint
 
 func SpinnerMoonDots(label string, radius float32, thickness float32, first uint32, second uint32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000032c)
+	_f.AddProcedureId(0x0000032d)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11532,7 +11524,7 @@ func SpinnerMoonDots(label string, radius float32, thickness float32, first uint
 
 func SpinnerMoonDotsV(label string, radius float32, thickness float32, first uint32, second uint32, speed float32 /* = 1.1f*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000032d)
+	_f.AddProcedureId(0x0000032e)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11545,7 +11537,7 @@ func SpinnerMoonDotsV(label string, radius float32, thickness float32, first uin
 
 func SpinnerTwinHboDots(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000032e)
+	_f.AddProcedureId(0x0000032f)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11555,7 +11547,7 @@ func SpinnerTwinHboDots(label string, radius float32, thickness float32) {
 
 func SpinnerTwinHboDotsV(label string, radius float32, thickness float32, color uint32 /* = white*/, minfade float32 /* = 0.0f*/, ryk float32 /* = 0.f*/, speed float32 /* = 1.1f*/, dots Size_t /* = 6*/, delta float32 /* = 0.f*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000032f)
+	_f.AddProcedureId(0x00000330)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11571,7 +11563,7 @@ func SpinnerTwinHboDotsV(label string, radius float32, thickness float32, color 
 
 func SpinnerThreeDotsStar(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000330)
+	_f.AddProcedureId(0x00000331)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11581,7 +11573,7 @@ func SpinnerThreeDotsStar(label string, radius float32, thickness float32) {
 
 func SpinnerThreeDotsStarV(label string, radius float32, thickness float32, color uint32 /* = white*/, minfade float32 /* = 0.0f*/, ryk float32 /* = 0.f*/, speed float32 /* = 1.1f*/, delta float32 /* = 0.f*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000331)
+	_f.AddProcedureId(0x00000332)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11596,7 +11588,7 @@ func SpinnerThreeDotsStarV(label string, radius float32, thickness float32, colo
 
 func SpinnerSineArcs(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000332)
+	_f.AddProcedureId(0x00000333)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11606,7 +11598,7 @@ func SpinnerSineArcs(label string, radius float32, thickness float32) {
 
 func SpinnerSineArcsV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000333)
+	_f.AddProcedureId(0x00000334)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11618,7 +11610,7 @@ func SpinnerSineArcsV(label string, radius float32, thickness float32, color uin
 
 func SpinnerTrianglesShift(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000334)
+	_f.AddProcedureId(0x00000335)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11628,7 +11620,7 @@ func SpinnerTrianglesShift(label string, radius float32, thickness float32) {
 
 func SpinnerTrianglesShiftV(label string, radius float32, thickness float32, color uint32 /* = white*/, bg uint32 /* = half_white*/, speed float32 /* = 2.8f*/, bars Size_t /* = 8*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000335)
+	_f.AddProcedureId(0x00000336)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11642,7 +11634,7 @@ func SpinnerTrianglesShiftV(label string, radius float32, thickness float32, col
 
 func SpinnerPointsShift(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000336)
+	_f.AddProcedureId(0x00000337)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11652,7 +11644,7 @@ func SpinnerPointsShift(label string, radius float32, thickness float32) {
 
 func SpinnerPointsShiftV(label string, radius float32, thickness float32, color uint32 /* = white*/, bg uint32 /* = half_white*/, speed float32 /* = 2.8f*/, bars Size_t /* = 8*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000337)
+	_f.AddProcedureId(0x00000338)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11666,7 +11658,7 @@ func SpinnerPointsShiftV(label string, radius float32, thickness float32, color 
 
 func SpinnerSwingDots(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000338)
+	_f.AddProcedureId(0x00000339)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11676,7 +11668,7 @@ func SpinnerSwingDots(label string, radius float32, thickness float32) {
 
 func SpinnerSwingDotsV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000339)
+	_f.AddProcedureId(0x0000033a)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11688,7 +11680,7 @@ func SpinnerSwingDotsV(label string, radius float32, thickness float32, color ui
 
 func SpinnerCircularPoints(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000033a)
+	_f.AddProcedureId(0x0000033b)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11698,7 +11690,7 @@ func SpinnerCircularPoints(label string, radius float32, thickness float32) {
 
 func SpinnerCircularPointsV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 1.8f*/, lines int /* = 8*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000033b)
+	_f.AddProcedureId(0x0000033c)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11711,7 +11703,7 @@ func SpinnerCircularPointsV(label string, radius float32, thickness float32, col
 
 func SpinnerCurvedCircle(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000033c)
+	_f.AddProcedureId(0x0000033d)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11721,7 +11713,7 @@ func SpinnerCurvedCircle(label string, radius float32, thickness float32) {
 
 func SpinnerCurvedCircleV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, circles Size_t /* = 1*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000033d)
+	_f.AddProcedureId(0x0000033e)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11734,7 +11726,7 @@ func SpinnerCurvedCircleV(label string, radius float32, thickness float32, color
 
 func SpinnerModCircle(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000033e)
+	_f.AddProcedureId(0x0000033f)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11744,7 +11736,7 @@ func SpinnerModCircle(label string, radius float32, thickness float32) {
 
 func SpinnerModCircleV(label string, radius float32, thickness float32, color uint32 /* = white*/, ang_min float32 /* = 1.f*/, ang_max float32 /* = 1.f*/, speed float32 /* = 2.8f*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000033f)
+	_f.AddProcedureId(0x00000340)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11758,7 +11750,7 @@ func SpinnerModCircleV(label string, radius float32, thickness float32, color ui
 
 func SpinnerDnaDots(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000340)
+	_f.AddProcedureId(0x00000341)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11768,7 +11760,7 @@ func SpinnerDnaDots(label string, radius float32, thickness float32) {
 
 func SpinnerDnaDotsV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, lt int /* = 8*/, delta float32 /* = 0.5f*/, mode bool /* = 0*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000341)
+	_f.AddProcedureId(0x00000342)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11783,7 +11775,7 @@ func SpinnerDnaDotsV(label string, radius float32, thickness float32, color uint
 
 func Spinner3SmuggleDots(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000342)
+	_f.AddProcedureId(0x00000343)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11793,7 +11785,7 @@ func Spinner3SmuggleDots(label string, radius float32, thickness float32) {
 
 func Spinner3SmuggleDotsV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 4.8f*/, lt int /* = 8*/, delta float32 /* = 0.5f*/, mode bool /* = 0*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000343)
+	_f.AddProcedureId(0x00000344)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11808,7 +11800,7 @@ func Spinner3SmuggleDotsV(label string, radius float32, thickness float32, color
 
 func SpinnerRotateSegmentsPulsar(label string, radius float32, thickness float32) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000344)
+	_f.AddProcedureId(0x00000345)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11818,7 +11810,7 @@ func SpinnerRotateSegmentsPulsar(label string, radius float32, thickness float32
 
 func SpinnerRotateSegmentsPulsarV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, arcs Size_t /* = 4*/, layers Size_t /* = 1*/) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000345)
+	_f.AddProcedureId(0x00000346)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
@@ -11836,7 +11828,7 @@ func SpinnerRotateSegmentsPulsarV(label string, radius float32, thickness float3
 func Splitter(split_vertically bool, thickness float32, size1P float32, size2P float32, min_size1 float32, min_size2 float32) (r bool, size1 float32, size2 float32) {
 
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000346)
+	_f.AddFunctionId(0x00000347)
 	runtime.AddBoolArg(_f, split_vertically)
 	runtime.AddFloat32Arg(_f, thickness)
 	runtime.AddFloat32Arg(_f, size1P)
@@ -11855,8 +11847,9 @@ func Splitter(split_vertically bool, thickness float32, size1P float32, size2P f
 }
 
 func SplitterV(split_vertically bool, thickness float32, size1P float32, size2P float32, min_size1 float32, min_size2 float32, splitter_long_axis float32) (r bool, size1 float32, size2 float32) {
+
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000347)
+	_f.AddFunctionId(0x00000348)
 	runtime.AddBoolArg(_f, split_vertically)
 	runtime.AddFloat32Arg(_f, thickness)
 	runtime.AddFloat32Arg(_f, size1P)
@@ -11872,7 +11865,6 @@ func SplitterV(split_vertically bool, thickness float32, size1P float32, size2P 
 	r = (runtime.GetBoolRetr[bool](_f))
 	size1 = (runtime.GetFloat32Retr[float32](_f))
 	size2 = (runtime.GetFloat32Retr[float32](_f))
-
 	return
 }
 // -- deactivated -- // //go:build fffi_idl_code
@@ -11882,7 +11874,7 @@ func SplitterV(split_vertically bool, thickness float32, size1P float32, size2P 
 func loadStyle(ptr ImGuiStyleForeignPtr, bs []bool, fs []float32, vec2s []float32, cols []float32, dirs []ImGuiDir, hovers []ImGuiHoveredFlags) {
 
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000348)
+	_f.AddProcedureId(0x00000349)
 	runtime.AddUintptrArg(_f, ptr)
 	runtime.AddBoolSliceArg(_f, bs)
 	runtime.AddFloat32SliceArg(_f, fs)
@@ -11897,7 +11889,7 @@ func loadStyle(ptr ImGuiStyleForeignPtr, bs []bool, fs []float32, vec2s []float3
 
 func GetStyle() (r ImGuiStyleForeignPtr) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x00000349)
+	_f.AddFunctionId(0x0000034a)
 	_err_ := _f.CallFunction()
 	if _err_ != nil {
 		currentFffiErrorHandler(_err_)
@@ -11910,7 +11902,7 @@ func GetStyle() (r ImGuiStyleForeignPtr) {
 
 func dumpStyle(ptr ImGuiStyleForeignPtr) (bs []bool, fs []float32, vec2s []float32, cols []float32, dirs []ImGuiDir, hovers []ImGuiHoveredFlags) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x0000034a)
+	_f.AddFunctionId(0x0000034b)
 	runtime.AddUintptrArg(_f, ptr)
 	_err_ := _f.CallFunction()
 	if _err_ != nil {
@@ -11933,7 +11925,7 @@ func dumpStyle(ptr ImGuiStyleForeignPtr) (bs []bool, fs []float32, vec2s []float
 func TableGetSortSpecs() (sort bool, dirty bool, userIds []ImGuiID, columnIndices []int16, directions []ImGuiSortDirection) {
 
 	_f := currentFffiVar
-	_f.AddFunctionId(0x0000034b)
+	_f.AddFunctionId(0x0000034c)
 	_err_ := _f.CallFunction()
 	if _err_ != nil {
 		currentFffiErrorHandler(_err_)
@@ -11950,7 +11942,7 @@ func TableGetSortSpecs() (sort bool, dirty bool, userIds []ImGuiID, columnIndice
 
 func TableSetSortSpecsDirty(dirty bool) {
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000034c)
+	_f.AddProcedureId(0x0000034d)
 	runtime.AddBoolArg(_f, dirty)
 	_f.CallProcedure()
 
@@ -11985,7 +11977,7 @@ const (
 //  valR = val
 func Toggle(label string, val bool) (valR bool, changed bool) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x0000034d)
+	_f.AddFunctionId(0x0000034e)
 	runtime.AddStringArg(_f, label)
 	runtime.AddBoolArg(_f, val)
 	_err_ := _f.CallFunction()
@@ -12013,7 +12005,7 @@ func Toggle(label string, val bool) (valR bool, changed bool) {
 //  valR = val
 func ToggleV(label string, val bool, flags ImGuiTogglerFlags, animationDuration float32, frameRounding float32, knobRounding float32, size ImVec2) (valR bool, changed bool) {
 	_f := currentFffiVar
-	_f.AddFunctionId(0x0000034e)
+	_f.AddFunctionId(0x0000034f)
 	runtime.AddStringArg(_f, label)
 	runtime.AddBoolArg(_f, val)
 	runtime.AddIntArg(_f, flags)
@@ -12041,7 +12033,7 @@ func ToggleV(label string, val bool, flags ImGuiTogglerFlags, animationDuration 
 func InvisibleButtonP(str_id string, size ImVec2) {
 
 	_f := currentFffiVar
-	_f.AddProcedureId(0x0000034f)
+	_f.AddProcedureId(0x00000350)
 	runtime.AddStringArg(_f, str_id)
 	runtime.AddComplex64Arg(_f, size)
 	_f.CallProcedure()
@@ -12052,11 +12044,11 @@ func InvisibleButtonP(str_id string, size ImVec2) {
 //foreign code:
 //  ImGui::InvisibleButton(str_id, size, flags)
 func InvisibleButtonVP(str_id string, size ImVec2, flags ImGuiButtonFlags /* = 0*/) {
+
 	_f := currentFffiVar
-	_f.AddProcedureId(0x00000350)
+	_f.AddProcedureId(0x00000351)
 	runtime.AddStringArg(_f, str_id)
 	runtime.AddComplex64Arg(_f, size)
 	runtime.AddIntArg(_f, flags)
 	_f.CallProcedure()
-
 }
