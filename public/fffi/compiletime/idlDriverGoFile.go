@@ -86,7 +86,7 @@ func isErrorInterface(interf *types.Interface) bool {
 	return false
 }
 
-func lexicalName(t *types.Named) (lex string) {
+func lexicalName(t fmt.Stringer) (lex string) {
 	u := t.String()
 	idx := strings.LastIndex(u, ".")
 	idxB := strings.LastIndex(u, "]")
@@ -108,7 +108,7 @@ func (inst *IDLDriverGoFile) resolveBasicTypeType(t types.Type, castTypeP string
 	case *types.Named:
 		return inst.resolveBasicTypeType(tt.Underlying(), lexicalName(tt))
 	case *types.Alias:
-		return inst.resolveBasicTypeType(tt.Underlying(), "")
+		return inst.resolveBasicTypeType(tt.Underlying(), lexicalName(tt))
 	case *types.Interface:
 		if tt.IsMethodSet() {
 			if isErrorInterface(tt) {
