@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/ph"
 	"github.com/stergiotis/boxer/public/observability/profiling"
 	"github.com/stergiotis/boxer/public/observability/vcs"
+	"github.com/stergiotis/boxer/public/semistructured/cbor"
 	"github.com/urfave/cli/v2"
 	"os"
 )
@@ -49,6 +50,7 @@ func main() {
 			dev.IoOverrideFlags...),
 		Commands: []*cli.Command{
 			dsl.NewCommand(),
+			cbor.NewCommand(),
 			compiletime.NewCommand(nil, nil),
 			demo.NewCommand(),
 			{
