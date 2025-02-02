@@ -107,6 +107,8 @@ func (inst *IDLDriverGoFile) resolveBasicTypeType(t types.Type, castTypeP string
 		return
 	case *types.Named:
 		return inst.resolveBasicTypeType(tt.Underlying(), lexicalName(tt))
+	case *types.Alias:
+		return inst.resolveBasicTypeType(tt.Underlying(), "")
 	case *types.Interface:
 		if tt.IsMethodSet() {
 			if isErrorInterface(tt) {
