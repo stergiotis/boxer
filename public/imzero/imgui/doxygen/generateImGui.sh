@@ -80,6 +80,37 @@ sed -i "s.ImageButtonV(user_texture_id ImTextureID.ImageButtonVOld(user_texture_
 sed -i "s.ImageButton(user_texture_id ImTextureID.ImageButtonOld(user_texture_id ImTextureID.g" functions_auto_api.out.idl.go
 sed -i "s.GetID(int_id int).GetIDInt(int_id int).g" functions_auto_api.out.idl.go
 
+sed -i "s.func IsPopupOpen(.func IsPopupOpenIdI(.g" functions_auto_internal.out.idl.go
+sed -i "s.func IsKeyDown(.func IsKeyDownI(.g" functions_auto_internal.out.idl.go
+sed -i "s.func IsKeyPressed(.func IsKeyPressedI(.g" functions_auto_internal.out.idl.go
+sed -i "s.func IsKeyPressedV(.func IsKeyPressedVI(.g" functions_auto_internal.out.idl.go
+sed -i "s.func IsKeyReleased(.func IsKeyReleasedI(.g" functions_auto_internal.out.idl.go
+sed -i "s.func SetItemKeyOwner(.func SetItemKeyOwnerI(.g" functions_auto_internal.out.idl.go
+sed -i "s.func IsMouseDown(.func IsMouseDownI(.g" functions_auto_internal.out.idl.go
+sed -i "s.func IsMouseUp(.func IsMouseUpI(.g" functions_auto_internal.out.idl.go
+sed -i "s.func IsMouseClicked(.func IsMouseClickedI(.g" functions_auto_internal.out.idl.go
+sed -i "s.func IsMouseClickedV(.func IsMouseClickedVI(.g" functions_auto_internal.out.idl.go
+sed -i "s.func IsMouseReleased(.func IsMouseReleasedI(.g" functions_auto_internal.out.idl.go
+sed -i "s.func IsMouseDoubleClicked(.func IsMouseDoubleClickedI(.g" functions_auto_internal.out.idl.go
+sed -i "s.::RenderColorRectWithAlphaCheckerboard(draw_list.::RenderColorRectWithAlphaCheckerboard((ImDrawList *)draw_list.g" functions_auto_internal.out.idl.go
+sed -i "s.::RenderArrow(draw_list.::RenderArrow((ImDrawList *)draw_list.g" functions_auto_internal.out.idl.go
+sed -i "s.::RenderBullet(draw_list.::RenderBullet((ImDrawList *)draw_list.g" functions_auto_internal.out.idl.go
+sed -i "s.::RenderCheckMark(draw_list.::RenderCheckMark((ImDrawList *)draw_list.g" functions_auto_internal.out.idl.go
+sed -i "s.::RenderArrowPointingAt(draw_list.::RenderArrowPointingAt((ImDrawList *)draw_list.g" functions_auto_internal.out.idl.go
+sed -i "s.::RenderArrowDockMenu(draw_list.::RenderArrowDockMenu((ImDrawList *)draw_list.g" functions_auto_internal.out.idl.go
+sed -i "s.::ShadeVertsLinearColorGradientKeepAlpha(draw_list.::ShadeVertsLinearColorGradientKeepAlpha((ImDrawList *)draw_list.g" functions_auto_internal.out.idl.go
+sed -i "s.::ShadeVertsLinearUV(draw_list.::ShadeVertsLinearUV((ImDrawList *)draw_list.g" functions_auto_internal.out.idl.go
+sed -i "s.::ShadeVertsTransformPos(draw_list.::ShadeVertsTransformPos((ImDrawList *)draw_list.g" functions_auto_internal.out.idl.go
+sed -i "s.::DebugRenderKeyboardPreview(draw_list.::DebugRenderKeyboardPreview((ImDrawList *)draw_list.g" functions_auto_internal.out.idl.go
+sed -i "s.::TableSetColumnSortDirection(column_n, sort_direction.::TableSetColumnSortDirection(column_n, (ImGuiSortDirection)sort_direction.g" functions_auto_internal.out.idl.go
+
+sed -i "s/^type ImGuiInputFlagsPrivate .*$/type ImGuiInputFlagsPrivate = ImGuiInputFlags/" enums_internal.out.go
+sed -i "s/^type ImGuiHoveredFlagsPrivate .*$/type ImGuiHoveredFlagsPrivate = ImGuiHoveredFlags/" enums_internal.out.go
+sed -i "s/^type ImGuiDockNodeFlagsPrivate .*$/type ImGuiDockNodeFlagsPrivate = ImGuiDockNodeFlags/" enums_internal.out.go
+sed -i "s/^type ImGuiDockNodeFlagsPrivate .*$/type ImGuiDockNodeFlagsPrivate = ImGuiDockNodeFlags/" enums_internal.out.go
+sed -i "s/~/^/g" enums_internal.out.go
+sed -i "s/(int)//g" enums_internal.out.go
+
 function count_functions() {
 	echo -n "$1: " >> stat.txt
 	cat "$1" | grep "func (inst " | wc -l >> stat.txt
@@ -91,8 +122,7 @@ count_functions "functions_manual_api.out.idl.go"
 count_functions "functions_manual_internal.out.idl.go"
 
 cp functions_auto_api.out.idl.go "$dest_dir/"
-#cp functions_auto_internal.out.idl.go "$dest_dir/"
+cp functions_auto_internal.out.idl.go "$dest_dir/"
 cp enums_api.out.go "$dest_dir/"
-#cp enums_internal.out.go "$dest_dir/"
-rm -f enums_internal.out.go
+cp enums_internal.out.go "$dest_dir/"
 cp drawlist_auto_api.out.idl.go "$dest_dir/"

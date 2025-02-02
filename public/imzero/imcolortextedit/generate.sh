@@ -13,6 +13,6 @@ mkdir -p "$IMZERO_CPP_BINDING_DIR/imcolortextedit"
 ./main generateFffiCode --idlBuildTag fffi_idl_code \
 	                --idlPackagePattern github.com/stergiotis/boxer/public/imzero/imcolortextedit \
 	                --goOutputFile "$outfile" \
-	                --funcProcIdOffset 2000 \
+	                --funcProcIdOffset 3000 \
 			--goCodeProlog $'import "github.com/stergiotis/boxer/public/imzero/imgui"\n' \
 			--cppOutputFile "$IMZERO_CPP_BINDING_DIR/imcolortextedit/dispatch.h" 2>&1 | ./main cbor diag
