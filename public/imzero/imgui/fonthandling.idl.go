@@ -17,6 +17,15 @@ func GetFontTexID() (tex ImTextureID) {
 	_ = `tex = (uintptr_t)ImGui::GetIO().Fonts->TexID`
 	return
 }
+func SetFontGlobalScale(scale float32) {
+	//_ = `ImGui::GetIO().FontGlobalScale = scale;`
+	_ = `ImGui::SetWindowFontScale(scale);`
+}
+func GetFontGlobalScale() (scale float32) {
+	_ = `scale = ImGui::GetIO().FontGlobalScale;`
+	//_ = `ImGui::GetWindowFontScale(scale);`
+	return
+}
 
 func addFontFromMemoryTrueTypeFontV(name string, fontData []byte, sizeInPixels float32,
 	glyphRanges []ImWchar,
