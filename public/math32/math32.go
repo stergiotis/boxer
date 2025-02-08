@@ -26,3 +26,7 @@ func Clamp(a float32, low float32, high float32) float32 {
 func Trunc(a float32) float32 {
 	return float32(math.Trunc(float64(a)))
 }
+
+func Abs(x float32) float32 {
+	return math.Float32frombits(math.Float32bits(x) &^ (1 << 31))
+}
