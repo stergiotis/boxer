@@ -37,3 +37,7 @@ func TableSetSortSpecsDirty(dirty bool) {
         spec->SpecsDirty = dirty;
 `
 }
+func TableNextColumnP() {
+	_ = `ImGui::TableNextColumn()`
+	return
+}

@@ -4,6 +4,7 @@ package demo
 
 import (
 	"fmt"
+	"github.com/stergiotis/boxer/public/logical"
 	"math/rand"
 	"sort"
 	"strings"
@@ -13,12 +14,14 @@ import (
 
 func RenderSimpleTable() {
 	imgui.TextUnformatted("Basic")
-	if imgui.BeginTableV("mytable", 4, imgui.ImGuiTableFlags_None, 0, 0.0) {
+	if imgui.BeginTableV("mytable", 4, imgui.ImGuiTableFlags_None|imgui.ImGuiTableFlags_Hideable, 0, 0.0) {
 		for row := 0; row < 8; row++ {
+			var colVisState [8]logical.Tristate
 			imgui.TableNextRow()
 			for col := 0; col < 4; col++ {
-				imgui.TableNextColumn()
-				imgui.TextUnformatted(fmt.Sprintf("row %d, col %d", row, col))
+				if imgui.TableNextColumnS(&colVisState[col]) {
+					imgui.TextUnformatted(fmt.Sprintf("row %d, col %d", row, col))
+				}
 			}
 		}
 		imgui.EndTable()
@@ -109,6 +112,7 @@ func MakeRenderInteractiveTable() func() {
 			imgui.ImGuiTableFlags_NoBordersInBody | imgui.ImGuiTableFlags_ScrollY | imgui.ImGuiTableFlags_SizingStretchProp | imgui.ImGuiTableFlags_NoHostExtendY
 		h := 12.0 * imgui.GetTextLineHeightWithSpacing()
 		if imgui.BeginTableV("mytable2", 4, flags, imgui.ImVec2(complex(0.0, h)), 0.0) {
+			var colVisState [4]logical.Tristate
 			imgui.TableSetupColumnV("column a", imgui.ImGuiTableColumnFlags_None, 0, 0)
 			imgui.TableSetupColumnV("column b", imgui.ImGuiTableColumnFlags_None, 0, 1)
 			imgui.TableSetupColumnV("column c", imgui.ImGuiTableColumnFlags_None, 0, 2)
@@ -119,11 +123,12 @@ func MakeRenderInteractiveTable() func() {
 			for row := 0; row < rowCount; row++ {
 				imgui.TableNextRow()
 				for col := 0; col < columnCount; col++ {
-					imgui.TableNextColumn()
-					s := data.Get(col, row)
-					imgui.PushIDInt(col*1000 + row)
-					imgui.TextUnformatted(s)
-					imgui.PopID()
+					if imgui.TableNextColumnS(&colVisState[col]) {
+						s := data.Get(col, row)
+						imgui.PushIDInt(col*1000 + row)
+						imgui.TextUnformatted(s)
+						imgui.PopID()
+					}
 				}
 			}
 			if sortActive && dirty {
