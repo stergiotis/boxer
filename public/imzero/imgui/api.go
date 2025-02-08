@@ -55,7 +55,6 @@ func NewFontConfig() *FontConfig {
 		OversampleH:        2,
 		OversampleV:        1,
 		PixelSnapH:         false,
-		GlyphExtraSpacing:  complex(0.0, 0.0),
 		GlyphOffset:        complex(0.0, 0.0),
 		GlyphMinAdvanceX:   0,
 		GlyphMaxAdvanceX:   math.MaxFloat32,
@@ -76,8 +75,7 @@ type ConfiguredFont struct {
 var ConfiguredFonts = make([]*ConfiguredFont, 0, 16)
 
 func AddFont(cfg *FontConfig, sizeInPixels float32) (font ImFontPtr, err error) {
-	font = addFontFromMemoryTrueTypeFontV(cfg.Name, cfg.FontData, sizeInPixels, cfg.GlyphRanges, cfg.OversampleH, cfg.OversampleV, cfg.PixelSnapH,
-		cfg.GlyphExtraSpacing, cfg.GlyphOffset, cfg.GlyphMinAdvanceX, cfg.GlyphMaxAdvanceX, cfg.MergeMode, cfg.FontBuilderFlags, cfg.RasterizerMultiply, cfg.EllipsisChar)
+	font = addFontFromMemoryTrueTypeFontV(cfg.Name, cfg.FontData, sizeInPixels, cfg.GlyphRanges, cfg.OversampleH, cfg.OversampleV, cfg.PixelSnapH, cfg.GlyphOffset, cfg.GlyphMinAdvanceX, cfg.GlyphMaxAdvanceX, cfg.MergeMode, cfg.FontBuilderFlags, cfg.RasterizerMultiply, cfg.EllipsisChar)
 	if font == 0 {
 		err = eb.Build().Str("name", cfg.Name).Errorf("unable to add font, imgui returned null pointer")
 		return

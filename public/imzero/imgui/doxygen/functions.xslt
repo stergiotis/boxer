@@ -295,6 +295,11 @@
                     <xsl:when test="contains($c,'FIXME')">
                         <xsl:if test="$mode='manual'"><xsl:value-of select="$c"/></xsl:if>
                     </xsl:when>
+                    <xsl:when test="contains(name,'~')">
+                        <xsl:message>
+                            <xsl:value-of select="concat('skipping function: deconstructor',name)"/>
+                        </xsl:message>
+                    </xsl:when>
                     <xsl:when test="contains($c,'OBSOLETE') or contains($c,'not recommended')">
                         <xsl:message>
                             <xsl:value-of select="concat('skipping function: deprecation or recommendation found ',name)"/>

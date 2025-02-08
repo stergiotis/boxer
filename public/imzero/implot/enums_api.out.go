@@ -216,7 +216,8 @@ type ImPlotPieChartFlags int
 const (
 	ImPlotPieChartFlags_None                             = ImPlotPieChartFlags(0)       // default
 	ImPlotPieChartFlags_Normalize                        = ImPlotPieChartFlags(1 << 10) // force normalization of pie chart values (i.e. always make a full circle if sum < 0)
-	ImPlotPieChartFlags_IgnoreHidden                     = ImPlotPieChartFlags(1 << 11)
+	ImPlotPieChartFlags_IgnoreHidden                     = ImPlotPieChartFlags(1 << 11) // ignore hidden slices when drawing the pie chart (as if they were not there)
+	ImPlotPieChartFlags_Exploding                        = ImPlotPieChartFlags(1 << 12)
 	ImPlotPieChartFlags_AUTO         ImPlotPieChartFlags = -1 // auto value
 )
 

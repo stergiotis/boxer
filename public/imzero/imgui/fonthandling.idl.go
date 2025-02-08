@@ -31,7 +31,6 @@ func addFontFromMemoryTrueTypeFontV(name string, fontData []byte, sizeInPixels f
 	glyphRanges []ImWchar,
 	oversampleH int, oversampleV int,
 	pixelSnapH bool,
-	glyphExtraSpacing ImVec2,
 	glyphOffset ImVec2,
 	glyphMinAdvanceX float32, glyphMaxAdvanceX float32,
 	mergeMode bool,
@@ -59,7 +58,6 @@ func addFontFromMemoryTrueTypeFontV(name string, fontData []byte, sizeInPixels f
   cfg.OversampleH = oversampleH;
   cfg.OversampleV = oversampleV;
   cfg.PixelSnapH = pixelSnapH;
-  cfg.GlyphExtraSpacing = ImVec2(glyphExtraSpacing);
   cfg.GlyphOffset = ImVec2(glyphOffset);
   cfg.GlyphMinAdvanceX = glyphMinAdvanceX;
   cfg.GlyphMaxAdvanceX = glyphMaxAdvanceX;

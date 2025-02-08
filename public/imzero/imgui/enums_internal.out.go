@@ -3,8 +3,7 @@ package imgui
 type ImGuiDataTypePrivate int
 
 const (
-	ImGuiDataType_String  = ImGuiDataTypePrivate(ImGuiDataType_COUNT + 1)
-	ImGuiDataType_Pointer = iota
+	ImGuiDataType_Pointer = ImGuiDataTypePrivate(ImGuiDataType_COUNT + 1)
 	ImGuiDataType_ID      = iota
 )
 
@@ -16,6 +15,8 @@ const (
 	ImGuiItemFlags_MixedValue             = ImGuiItemFlagsPrivate(1 << 12)
 	ImGuiItemFlags_NoWindowHoverableCheck = ImGuiItemFlagsPrivate(1 << 13)
 	ImGuiItemFlags_AllowOverlap           = ImGuiItemFlagsPrivate(1 << 14)
+	ImGuiItemFlags_NoNavDisableMouseHover = ImGuiItemFlagsPrivate(1 << 15)
+	ImGuiItemFlags_NoMarkEdited           = ImGuiItemFlagsPrivate(1 << 16)
 	ImGuiItemFlags_Inputable              = ImGuiItemFlagsPrivate(1 << 20)
 	ImGuiItemFlags_HasSelectionUserData   = ImGuiItemFlagsPrivate(1 << 21)
 	ImGuiItemFlags_IsMultiSelect          = ImGuiItemFlagsPrivate(1 << 22)
@@ -51,9 +52,8 @@ type ImGuiInputTextFlagsPrivate int
 
 const (
 	ImGuiInputTextFlags_Multiline            = ImGuiInputTextFlagsPrivate(1 << 26)
-	ImGuiInputTextFlags_NoMarkEdited         = ImGuiInputTextFlagsPrivate(1 << 27)
-	ImGuiInputTextFlags_MergedItem           = ImGuiInputTextFlagsPrivate(1 << 28)
-	ImGuiInputTextFlags_LocalizeDecimalPoint = ImGuiInputTextFlagsPrivate(1 << 29)
+	ImGuiInputTextFlags_MergedItem           = ImGuiInputTextFlagsPrivate(1 << 27)
+	ImGuiInputTextFlags_LocalizeDecimalPoint = ImGuiInputTextFlagsPrivate(1 << 28)
 )
 
 type ImGuiButtonFlagsPrivate int
@@ -65,12 +65,10 @@ const (
 	ImGuiButtonFlags_PressedOnRelease              = ImGuiButtonFlagsPrivate(1 << 7)
 	ImGuiButtonFlags_PressedOnDoubleClick          = ImGuiButtonFlagsPrivate(1 << 8)
 	ImGuiButtonFlags_PressedOnDragDropHold         = ImGuiButtonFlagsPrivate(1 << 9)
-	ImGuiButtonFlags_Repeat                        = ImGuiButtonFlagsPrivate(1 << 10)
 	ImGuiButtonFlags_FlattenChildren               = ImGuiButtonFlagsPrivate(1 << 11)
 	ImGuiButtonFlags_AllowOverlap                  = ImGuiButtonFlagsPrivate(1 << 12)
-	ImGuiButtonFlags_DontClosePopups               = ImGuiButtonFlagsPrivate(1 << 13)
 	ImGuiButtonFlags_AlignTextBaseLine             = ImGuiButtonFlagsPrivate(1 << 15)
-	ImGuiButtonFlags_NoKeyModifiers                = ImGuiButtonFlagsPrivate(1 << 16)
+	ImGuiButtonFlags_NoKeyModsAllowed              = ImGuiButtonFlagsPrivate(1 << 16)
 	ImGuiButtonFlags_NoHoldingActiveId             = ImGuiButtonFlagsPrivate(1 << 17)
 	ImGuiButtonFlags_NoNavFocus                    = ImGuiButtonFlagsPrivate(1 << 18)
 	ImGuiButtonFlags_NoHoveredOnFocus              = ImGuiButtonFlagsPrivate(1 << 19)
@@ -152,14 +150,15 @@ const (
 	ImGuiLayoutType_Vertical   = ImGuiLayoutType(1)
 )
 
-type ImGuiLogType int
+type ImGuiLogFlags int
 
 const (
-	ImGuiLogType_None      = ImGuiLogType(0)
-	ImGuiLogType_TTY       = iota
-	ImGuiLogType_File      = iota
-	ImGuiLogType_Buffer    = iota
-	ImGuiLogType_Clipboard = iota
+	ImGuiLogFlags_None            = ImGuiLogFlags(0)
+	ImGuiLogFlags_OutputTTY       = ImGuiLogFlags(1 << 0)
+	ImGuiLogFlags_OutputFile      = ImGuiLogFlags(1 << 1)
+	ImGuiLogFlags_OutputBuffer    = ImGuiLogFlags(1 << 2)
+	ImGuiLogFlags_OutputClipboard = ImGuiLogFlags(1 << 3)
+	ImGuiLogFlags_OutputMask_     = ImGuiLogFlags(ImGuiLogFlags_OutputTTY | ImGuiLogFlags_OutputFile | ImGuiLogFlags_OutputBuffer | ImGuiLogFlags_OutputClipboard)
 )
 
 type ImGuiAxis int
@@ -303,36 +302,40 @@ const (
 	ImGuiScrollFlags_MaskY_             = ImGuiScrollFlags(ImGuiScrollFlags_KeepVisibleEdgeY | ImGuiScrollFlags_KeepVisibleCenterY | ImGuiScrollFlags_AlwaysCenterY)
 )
 
-type ImGuiNavHighlightFlags int
+type ImGuiNavRenderCursorFlags int
 
 const (
-	ImGuiNavHighlightFlags_None       = ImGuiNavHighlightFlags(0)
-	ImGuiNavHighlightFlags_Compact    = ImGuiNavHighlightFlags(1 << 1)
-	ImGuiNavHighlightFlags_AlwaysDraw = ImGuiNavHighlightFlags(1 << 2)
-	ImGuiNavHighlightFlags_NoRounding = ImGuiNavHighlightFlags(1 << 3)
+	ImGuiNavRenderCursorFlags_None       = ImGuiNavRenderCursorFlags(0)
+	ImGuiNavRenderCursorFlags_Compact    = ImGuiNavRenderCursorFlags(1 << 1)
+	ImGuiNavRenderCursorFlags_AlwaysDraw = ImGuiNavRenderCursorFlags(1 << 2)
+	ImGuiNavRenderCursorFlags_NoRounding = ImGuiNavRenderCursorFlags(1 << 3)
+	ImGuiNavHighlightFlags_None          = ImGuiNavRenderCursorFlags(ImGuiNavRenderCursorFlags_None)
+	ImGuiNavHighlightFlags_Compact       = ImGuiNavRenderCursorFlags(ImGuiNavRenderCursorFlags_Compact)
+	ImGuiNavHighlightFlags_AlwaysDraw    = ImGuiNavRenderCursorFlags(ImGuiNavRenderCursorFlags_AlwaysDraw)
+	ImGuiNavHighlightFlags_NoRounding    = ImGuiNavRenderCursorFlags(ImGuiNavRenderCursorFlags_NoRounding)
 )
 
 type ImGuiNavMoveFlags int
 
 const (
-	ImGuiNavMoveFlags_None                = ImGuiNavMoveFlags(0)
-	ImGuiNavMoveFlags_LoopX               = ImGuiNavMoveFlags(1 << 0)
-	ImGuiNavMoveFlags_LoopY               = ImGuiNavMoveFlags(1 << 1)
-	ImGuiNavMoveFlags_WrapX               = ImGuiNavMoveFlags(1 << 2)
-	ImGuiNavMoveFlags_WrapY               = ImGuiNavMoveFlags(1 << 3)
-	ImGuiNavMoveFlags_WrapMask_           = ImGuiNavMoveFlags(ImGuiNavMoveFlags_LoopX | ImGuiNavMoveFlags_LoopY | ImGuiNavMoveFlags_WrapX | ImGuiNavMoveFlags_WrapY)
-	ImGuiNavMoveFlags_AllowCurrentNavId   = ImGuiNavMoveFlags(1 << 4)
-	ImGuiNavMoveFlags_AlsoScoreVisibleSet = ImGuiNavMoveFlags(1 << 5)
-	ImGuiNavMoveFlags_ScrollToEdgeY       = ImGuiNavMoveFlags(1 << 6)
-	ImGuiNavMoveFlags_Forwarded           = ImGuiNavMoveFlags(1 << 7)
-	ImGuiNavMoveFlags_DebugNoResult       = ImGuiNavMoveFlags(1 << 8)
-	ImGuiNavMoveFlags_FocusApi            = ImGuiNavMoveFlags(1 << 9)
-	ImGuiNavMoveFlags_IsTabbing           = ImGuiNavMoveFlags(1 << 10)
-	ImGuiNavMoveFlags_IsPageMove          = ImGuiNavMoveFlags(1 << 11)
-	ImGuiNavMoveFlags_Activate            = ImGuiNavMoveFlags(1 << 12)
-	ImGuiNavMoveFlags_NoSelect            = ImGuiNavMoveFlags(1 << 13)
-	ImGuiNavMoveFlags_NoSetNavHighlight   = ImGuiNavMoveFlags(1 << 14)
-	ImGuiNavMoveFlags_NoClearActiveId     = ImGuiNavMoveFlags(1 << 15)
+	ImGuiNavMoveFlags_None                  = ImGuiNavMoveFlags(0)
+	ImGuiNavMoveFlags_LoopX                 = ImGuiNavMoveFlags(1 << 0)
+	ImGuiNavMoveFlags_LoopY                 = ImGuiNavMoveFlags(1 << 1)
+	ImGuiNavMoveFlags_WrapX                 = ImGuiNavMoveFlags(1 << 2)
+	ImGuiNavMoveFlags_WrapY                 = ImGuiNavMoveFlags(1 << 3)
+	ImGuiNavMoveFlags_WrapMask_             = ImGuiNavMoveFlags(ImGuiNavMoveFlags_LoopX | ImGuiNavMoveFlags_LoopY | ImGuiNavMoveFlags_WrapX | ImGuiNavMoveFlags_WrapY)
+	ImGuiNavMoveFlags_AllowCurrentNavId     = ImGuiNavMoveFlags(1 << 4)
+	ImGuiNavMoveFlags_AlsoScoreVisibleSet   = ImGuiNavMoveFlags(1 << 5)
+	ImGuiNavMoveFlags_ScrollToEdgeY         = ImGuiNavMoveFlags(1 << 6)
+	ImGuiNavMoveFlags_Forwarded             = ImGuiNavMoveFlags(1 << 7)
+	ImGuiNavMoveFlags_DebugNoResult         = ImGuiNavMoveFlags(1 << 8)
+	ImGuiNavMoveFlags_FocusApi              = ImGuiNavMoveFlags(1 << 9)
+	ImGuiNavMoveFlags_IsTabbing             = ImGuiNavMoveFlags(1 << 10)
+	ImGuiNavMoveFlags_IsPageMove            = ImGuiNavMoveFlags(1 << 11)
+	ImGuiNavMoveFlags_Activate              = ImGuiNavMoveFlags(1 << 12)
+	ImGuiNavMoveFlags_NoSelect              = ImGuiNavMoveFlags(1 << 13)
+	ImGuiNavMoveFlags_NoSetNavCursorVisible = ImGuiNavMoveFlags(1 << 14)
+	ImGuiNavMoveFlags_NoClearActiveId       = ImGuiNavMoveFlags(1 << 15)
 )
 
 type ImGuiNavLayer int
@@ -439,17 +442,19 @@ type ImGuiDebugLogFlags int
 
 const (
 	ImGuiDebugLogFlags_None               = ImGuiDebugLogFlags(0)
-	ImGuiDebugLogFlags_EventActiveId      = ImGuiDebugLogFlags(1 << 0)
-	ImGuiDebugLogFlags_EventFocus         = ImGuiDebugLogFlags(1 << 1)
-	ImGuiDebugLogFlags_EventPopup         = ImGuiDebugLogFlags(1 << 2)
-	ImGuiDebugLogFlags_EventNav           = ImGuiDebugLogFlags(1 << 3)
-	ImGuiDebugLogFlags_EventClipper       = ImGuiDebugLogFlags(1 << 4)
-	ImGuiDebugLogFlags_EventSelection     = ImGuiDebugLogFlags(1 << 5)
-	ImGuiDebugLogFlags_EventIO            = ImGuiDebugLogFlags(1 << 6)
-	ImGuiDebugLogFlags_EventInputRouting  = ImGuiDebugLogFlags(1 << 7)
-	ImGuiDebugLogFlags_EventDocking       = ImGuiDebugLogFlags(1 << 8)
-	ImGuiDebugLogFlags_EventViewport      = ImGuiDebugLogFlags(1 << 9)
-	ImGuiDebugLogFlags_EventMask_         = ImGuiDebugLogFlags(ImGuiDebugLogFlags_EventActiveId | ImGuiDebugLogFlags_EventFocus | ImGuiDebugLogFlags_EventPopup | ImGuiDebugLogFlags_EventNav | ImGuiDebugLogFlags_EventClipper | ImGuiDebugLogFlags_EventSelection | ImGuiDebugLogFlags_EventIO | ImGuiDebugLogFlags_EventInputRouting | ImGuiDebugLogFlags_EventDocking | ImGuiDebugLogFlags_EventViewport)
+	ImGuiDebugLogFlags_EventError         = ImGuiDebugLogFlags(1 << 0)
+	ImGuiDebugLogFlags_EventActiveId      = ImGuiDebugLogFlags(1 << 1)
+	ImGuiDebugLogFlags_EventFocus         = ImGuiDebugLogFlags(1 << 2)
+	ImGuiDebugLogFlags_EventPopup         = ImGuiDebugLogFlags(1 << 3)
+	ImGuiDebugLogFlags_EventNav           = ImGuiDebugLogFlags(1 << 4)
+	ImGuiDebugLogFlags_EventClipper       = ImGuiDebugLogFlags(1 << 5)
+	ImGuiDebugLogFlags_EventSelection     = ImGuiDebugLogFlags(1 << 6)
+	ImGuiDebugLogFlags_EventIO            = ImGuiDebugLogFlags(1 << 7)
+	ImGuiDebugLogFlags_EventFont          = ImGuiDebugLogFlags(1 << 8)
+	ImGuiDebugLogFlags_EventInputRouting  = ImGuiDebugLogFlags(1 << 9)
+	ImGuiDebugLogFlags_EventDocking       = ImGuiDebugLogFlags(1 << 10)
+	ImGuiDebugLogFlags_EventViewport      = ImGuiDebugLogFlags(1 << 11)
+	ImGuiDebugLogFlags_EventMask_         = ImGuiDebugLogFlags(ImGuiDebugLogFlags_EventError | ImGuiDebugLogFlags_EventActiveId | ImGuiDebugLogFlags_EventFocus | ImGuiDebugLogFlags_EventPopup | ImGuiDebugLogFlags_EventNav | ImGuiDebugLogFlags_EventClipper | ImGuiDebugLogFlags_EventSelection | ImGuiDebugLogFlags_EventIO | ImGuiDebugLogFlags_EventFont | ImGuiDebugLogFlags_EventInputRouting | ImGuiDebugLogFlags_EventDocking | ImGuiDebugLogFlags_EventViewport)
 	ImGuiDebugLogFlags_OutputToTTY        = ImGuiDebugLogFlags(1 << 20)
 	ImGuiDebugLogFlags_OutputToTestEngine = ImGuiDebugLogFlags(1 << 21)
 )
@@ -481,5 +486,6 @@ const (
 	ImGuiTabItemFlags_SectionMask_  = ImGuiTabItemFlagsPrivate(ImGuiTabItemFlags_Leading | ImGuiTabItemFlags_Trailing)
 	ImGuiTabItemFlags_NoCloseButton = ImGuiTabItemFlagsPrivate(1 << 20)
 	ImGuiTabItemFlags_Button        = ImGuiTabItemFlagsPrivate(1 << 21)
-	ImGuiTabItemFlags_Unsorted      = ImGuiTabItemFlagsPrivate(1 << 22)
+	ImGuiTabItemFlags_Invisible     = ImGuiTabItemFlagsPrivate(1 << 22)
+	ImGuiTabItemFlags_Unsorted      = ImGuiTabItemFlagsPrivate(1 << 23)
 )

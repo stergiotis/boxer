@@ -163,18 +163,6 @@ func RenderKnobs() {
 	imgui.EndGroup()
 }
 
-func RenderColoredButton() {
-	imgui.ColoredButtonV("hello colored!", 0, imgui.ColorU32(0x000000ff),
-		imgui.ColorU32(0x0F87FAFF),
-		imgui.ColorU32(0x23436CFF),
-	)
-	imgui.SameLine()
-	imgui.ColoredButtonV("hello colored 2!", 0, imgui.ColorU32(0x000000ff),
-		imgui.ColorU32(0xC9D6FFff),
-		imgui.ColorU32(0xe2e2e2ff),
-	)
-}
-
 func MakeRenderBasicWidgets() func() {
 	inputText := MakeRenderInputText()
 	checkboxRenderer := MakeRenderCheckbox()
@@ -203,9 +191,6 @@ func MakeRenderBasicWidgets() func() {
 
 		imgui.SeparatorText("knob")
 		RenderKnobs()
-
-		imgui.SeparatorText("colored button")
-		RenderColoredButton()
 
 		imgui.SeparatorText("checkbox")
 		checkboxRenderer()

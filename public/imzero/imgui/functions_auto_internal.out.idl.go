@@ -5,6 +5,9 @@ package imgui
 func SetNextWindowRefreshPolicy(flags ImGuiWindowRefreshFlags) {
 	_ = `ImGui::SetNextWindowRefreshPolicy(flags)`
 }
+func PushPasswordFont() {
+	_ = `ImGui::PushPasswordFont()`
+}
 func Initialize() {
 	_ = `ImGui::Initialize()`
 }
@@ -87,6 +90,11 @@ func BeginDisabledOverrideReenable() {
 }
 func EndDisabledOverrideReenable() {
 	_ = `ImGui::EndDisabledOverrideReenable()`
+}
+
+// LogBegin -> BeginCapture() when we design v2 api, for now stay under the radar by using the old name.
+func LogBegin(flags ImGuiLogFlags, auto_open_depth int) {
+	_ = `ImGui::LogBegin(flags, auto_open_depth)`
 }
 
 // LogToBuffer Start logging/capturing to internal buffer
@@ -179,8 +187,8 @@ func NavMoveRequestApplyResult() {
 func NavHighlightActivated(id ImGuiID) {
 	_ = `ImGui::NavHighlightActivated(id)`
 }
-func NavRestoreHighlightAfterMove() {
-	_ = `ImGui::NavRestoreHighlightAfterMove()`
+func SetNavCursorVisibleAfterMove() {
+	_ = `ImGui::SetNavCursorVisibleAfterMove()`
 }
 func NavUpdateCurrentWindowIsScrollPushableX() {
 	_ = `ImGui::NavUpdateCurrentWindowIsScrollPushableX()`
@@ -416,6 +424,9 @@ func TableGcCompactSettings() {
 func TableSettingsAddSettingsHandler() {
 	_ = `ImGui::TableSettingsAddSettingsHandler()`
 }
+func TabItemSpacing(str_id string, flags ImGuiTabItemFlags, width float32) {
+	_ = `ImGui::TabItemSpacing(str_id, flags, width)`
+}
 func TabItemCalcSize(label string, has_close_button_or_unsaved_marker bool) (r ImVec2) {
 	_ = `auto r = ImGui::TabItemCalcSize(label, has_close_button_or_unsaved_marker)`
 	return
@@ -475,12 +486,12 @@ func ArrowButtonExV(str_id string, dir ImGuiDir, size_arg ImVec2, flags ImGuiBut
 	_ = `auto r = ImGui::ArrowButtonEx(str_id, ImGuiDir(dir), size_arg, flags)`
 	return
 }
-func ImageButtonEx(id ImGuiID, texture_id ImTextureID, image_size ImVec2, uv0 ImVec2, uv1 ImVec2, bg_col ImVec4, tint_col ImVec4) (r bool) {
-	_ = `auto r = ImGui::ImageButtonEx(id, ImTextureID(texture_id), image_size, uv0, uv1, bg_col, tint_col)`
+func ImageButtonEx(id ImGuiID, user_texture_id ImTextureID, image_size ImVec2, uv0 ImVec2, uv1 ImVec2, bg_col ImVec4, tint_col ImVec4) (r bool) {
+	_ = `auto r = ImGui::ImageButtonEx(id, ImTextureID(user_texture_id), image_size, uv0, uv1, bg_col, tint_col)`
 	return
 }
-func ImageButtonExV(id ImGuiID, texture_id ImTextureID, image_size ImVec2, uv0 ImVec2, uv1 ImVec2, bg_col ImVec4, tint_col ImVec4, flags ImGuiButtonFlags /* = 0*/) (r bool) {
-	_ = `auto r = ImGui::ImageButtonEx(id, ImTextureID(texture_id), image_size, uv0, uv1, bg_col, tint_col, flags)`
+func ImageButtonExV(id ImGuiID, user_texture_id ImTextureID, image_size ImVec2, uv0 ImVec2, uv1 ImVec2, bg_col ImVec4, tint_col ImVec4, flags ImGuiButtonFlags /* = 0*/) (r bool) {
+	_ = `auto r = ImGui::ImageButtonEx(id, ImTextureID(user_texture_id), image_size, uv0, uv1, bg_col, tint_col, flags)`
 	return
 }
 func SeparatorEx(flags ImGuiSeparatorFlags) {
@@ -524,8 +535,22 @@ func ShadeVertsTransformPos(draw_list ImDrawListPtr, vert_start_idx int, vert_en
 func GcCompactTransientMiscBuffers() {
 	_ = `ImGui::GcCompactTransientMiscBuffers()`
 }
+func ErrorLog(msg string) (r bool) {
+	_ = `auto r = ImGui::ErrorLog(msg)`
+	return
+}
 func ErrorCheckUsingSetCursorPosToExtendParentBoundaries() {
 	_ = `ImGui::ErrorCheckUsingSetCursorPosToExtendParentBoundaries()`
+}
+func ErrorCheckEndFrameFinalizeErrorTooltip() {
+	_ = `ImGui::ErrorCheckEndFrameFinalizeErrorTooltip()`
+}
+func BeginErrorTooltip() (r bool) {
+	_ = `auto r = ImGui::BeginErrorTooltip()`
+	return
+}
+func EndErrorTooltip() {
+	_ = `ImGui::EndErrorTooltip()`
 }
 func DebugDrawCursorPos() {
 	_ = `ImGui::DebugDrawCursorPos()`

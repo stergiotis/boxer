@@ -1455,7 +1455,7 @@ func PopClipRect() {
 	_ = `ImGui::PopClipRect()`
 }
 
-// SetItemDefaultFocus make last item the default focused item of a window.
+// SetItemDefaultFocus make last item the default focused item of of a newly appearing window.
 func SetItemDefaultFocus() {
 	_ = `ImGui::SetItemDefaultFocus()`
 }
@@ -1469,6 +1469,11 @@ func SetKeyboardFocusHere() {
 // * offset int = 0
 func SetKeyboardFocusHereV(offset int /* = 0*/) {
 	_ = `ImGui::SetKeyboardFocusHere(offset)`
+}
+
+// SetNavCursorVisible alter visibility of keyboard/gamepad cursor. by default: show when using an arrow key, hide when clicking with mouse.
+func SetNavCursorVisible(visible bool) {
+	_ = `ImGui::SetNavCursorVisible(visible)`
 }
 
 // SetNextItemAllowOverlap allow next item to be overlapped by a subsequent item. Useful with invisible buttons, selectable, treenode covering an area where subsequent items may need to be added. Note that both Selectable() and TreeNode() have dedicated flags doing this.
@@ -1720,6 +1725,12 @@ func IsMouseDoubleClicked(button ImGuiMouseButton) (r bool) {
 	return
 }
 
+// IsMouseReleasedWithDelay delayed mouse release (use very sparingly!). Generally used with 'delay >= io.MouseDoubleClickTime' + combined with a 'io.MouseClickedLastCount==1' test. This is a very rarely used UI idiom, but some apps use this: e.g. MS Explorer single click on an icon to rename.
+func IsMouseReleasedWithDelay(button ImGuiMouseButton, delay float32) (r bool) {
+	_ = `auto r = ImGui::IsMouseReleasedWithDelay(button, delay)`
+	return
+}
+
 // GetMouseClickedCount return the number of successive mouse-clicks at the time where a click happen (otherwise 0).
 func GetMouseClickedCount(button ImGuiMouseButton) (r int) {
 	_ = `auto r = ImGui::GetMouseClickedCount(button)`
@@ -1891,10 +1902,4 @@ func GetWindowContentRegionMax() (r ImVec2) {
 // SetItemAllowOverlap Use SetNextItemAllowOverlap() before item.
 func SetItemAllowOverlap() {
 	_ = `ImGui::SetItemAllowOverlap()`
-}
-
-// GetKeyIndex Map ImGuiKey_* values into legacy native key index. == io.KeyMap[key]. When using a 1.87+ backend using io.AddKeyEvent(), calling GetKeyIndex() with ANY ImGuiKey_XXXX values will return the same value!
-func GetKeyIndex(key ImGuiKey) (r ImGuiKey) {
-	_ = `auto r = ImGui::GetKeyIndex(ImGuiKey(key))`
-	return
 }

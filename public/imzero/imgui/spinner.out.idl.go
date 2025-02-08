@@ -5,8 +5,8 @@ package imgui
 func SpinnerRainbow(label string, radius float32, thickness float32, color uint32, speed float32) {
 	_ = `ImSpinner::SpinnerRainbow(label, radius, thickness, color, speed)`
 }
-func SpinnerRainbowV(label string, radius float32, thickness float32, color uint32, speed float32, ang_min float32 /* = 0.f*/, ang_max float32 /* = PI_2*/, arcs int /* = 1*/) {
-	_ = `ImSpinner::SpinnerRainbow(label, radius, thickness, color, speed, ang_min, ang_max, arcs)`
+func SpinnerRainbowV(label string, radius float32, thickness float32, color uint32, speed float32, ang_min float32 /* = 0.f*/, ang_max float32 /* = PI_2*/, arcs int /* = 1*/, mode int /* = 0*/) {
+	_ = `ImSpinner::SpinnerRainbow(label, radius, thickness, color, speed, ang_min, ang_max, arcs, mode)`
 }
 func SpinnerRainbowMix(label string, radius float32, thickness float32, color uint32, speed float32) {
 	_ = `ImSpinner::SpinnerRainbowMix(label, radius, thickness, color, speed)`
@@ -25,6 +25,12 @@ func SpinnerAng(label string, radius float32, thickness float32) {
 }
 func SpinnerAngV(label string, radius float32, thickness float32, color uint32 /* = white*/, bg uint32 /* = white*/, speed float32 /* = 2.8f*/, angle float32 /* = IM_PI*/, mode int /* = 0*/) {
 	_ = `ImSpinner::SpinnerAng(label, radius, thickness, color, bg, speed, angle, mode)`
+}
+func SpinnerAng8(label string, radius float32, thickness float32) {
+	_ = `ImSpinner::SpinnerAng8(label, radius, thickness)`
+}
+func SpinnerAng8V(label string, radius float32, thickness float32, color uint32 /* = white*/, bg uint32 /* = white*/, speed float32 /* = 2.8f*/, angle float32 /* = IM_PI*/, mode int /* = 0*/, rkoef float32 /* = 0.5f*/) {
+	_ = `ImSpinner::SpinnerAng8(label, radius, thickness, color, bg, speed, angle, mode, rkoef)`
 }
 func SpinnerAngMix(label string, radius float32, thickness float32) {
 	_ = `ImSpinner::SpinnerAngMix(label, radius, thickness)`
@@ -47,32 +53,38 @@ func SpinnerClockV(label string, radius float32, thickness float32, color uint32
 func SpinnerPulsar(label string, radius float32, thickness float32) {
 	_ = `ImSpinner::SpinnerPulsar(label, radius, thickness)`
 }
-func SpinnerPulsarV(label string, radius float32, thickness float32, bg uint32 /* = half_white*/, speed float32 /* = 2.8f*/, sequence bool /* = true*/) {
-	_ = `ImSpinner::SpinnerPulsar(label, radius, thickness, bg, speed, sequence)`
+func SpinnerPulsarV(label string, radius float32, thickness float32, bg uint32 /* = half_white*/, speed float32 /* = 2.8f*/, sequence bool /* = true*/, angle float32 /* = 0.f*/, mode int /* = 0*/) {
+	_ = `ImSpinner::SpinnerPulsar(label, radius, thickness, bg, speed, sequence, angle, mode)`
 }
 func SpinnerTwinPulsar(label string, radius float32, thickness float32) {
 	_ = `ImSpinner::SpinnerTwinPulsar(label, radius, thickness)`
 }
-func SpinnerTwinPulsarV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, rings int /* = 2*/) {
-	_ = `ImSpinner::SpinnerTwinPulsar(label, radius, thickness, color, speed, rings)`
+func SpinnerTwinPulsarV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, rings int /* = 2*/, mode int /* = 0*/) {
+	_ = `ImSpinner::SpinnerTwinPulsar(label, radius, thickness, color, speed, rings, mode)`
 }
 func SpinnerFadePulsar(label string, radius float32) {
 	_ = `ImSpinner::SpinnerFadePulsar(label, radius)`
 }
-func SpinnerFadePulsarV(label string, radius float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, rings int /* = 2*/) {
-	_ = `ImSpinner::SpinnerFadePulsar(label, radius, color, speed, rings)`
+func SpinnerFadePulsarV(label string, radius float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, rings int /* = 2*/, mode int /* = 0*/) {
+	_ = `ImSpinner::SpinnerFadePulsar(label, radius, color, speed, rings, mode)`
+}
+func SpinnerFadePulsarSquare(label string, radius float32) {
+	_ = `ImSpinner::SpinnerFadePulsarSquare(label, radius)`
+}
+func SpinnerFadePulsarSquareV(label string, radius float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, rings int /* = 2*/, mode int /* = 0*/) {
+	_ = `ImSpinner::SpinnerFadePulsarSquare(label, radius, color, speed, rings, mode)`
 }
 func SpinnerCircularLines(label string, radius float32) {
 	_ = `ImSpinner::SpinnerCircularLines(label, radius)`
 }
-func SpinnerCircularLinesV(label string, radius float32, color uint32 /* = white*/, speed float32 /* = 1.8f*/, lines int /* = 8*/) {
-	_ = `ImSpinner::SpinnerCircularLines(label, radius, color, speed, lines)`
+func SpinnerCircularLinesV(label string, radius float32, color uint32 /* = white*/, speed float32 /* = 1.8f*/, lines int /* = 8*/, mode int /* = 0*/) {
+	_ = `ImSpinner::SpinnerCircularLines(label, radius, color, speed, lines, mode)`
 }
 func SpinnerVDots(label string, radius float32, thickness float32) {
 	_ = `ImSpinner::SpinnerVDots(label, radius, thickness)`
 }
-func SpinnerVDotsV(label string, radius float32, thickness float32, color uint32 /* = white*/, bgcolor uint32 /* = white*/, speed float32 /* = 2.8f*/, dots Size_t /* = 12*/, mdots Size_t /* = 6*/) {
-	_ = `ImSpinner::SpinnerVDots(label, radius, thickness, color, bgcolor, speed, dots, mdots)`
+func SpinnerVDotsV(label string, radius float32, thickness float32, color uint32 /* = white*/, bgcolor uint32 /* = white*/, speed float32 /* = 2.8f*/, dots Size_t /* = 12*/, mdots Size_t /* = 6*/, mode int /* = 0*/) {
+	_ = `ImSpinner::SpinnerVDots(label, radius, thickness, color, bgcolor, speed, dots, mdots, mode)`
 }
 func SpinnerBounceDots(label string, radius float32, thickness float32) {
 	_ = `ImSpinner::SpinnerBounceDots(label, radius, thickness)`
@@ -134,6 +146,12 @@ func SpinnerMultiFadeDots(label string, radius float32, thickness float32) {
 func SpinnerMultiFadeDotsV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, lt int /* = 8*/) {
 	_ = `ImSpinner::SpinnerMultiFadeDots(label, radius, thickness, color, speed, lt)`
 }
+func SpinnerThickToSin(label string, radius float32, thickness float32) {
+	_ = `ImSpinner::SpinnerThickToSin(label, radius, thickness)`
+}
+func SpinnerThickToSinV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, lt int /* = 8*/, mode int /* = 0*/) {
+	_ = `ImSpinner::SpinnerThickToSin(label, radius, thickness, color, speed, lt, mode)`
+}
 func SpinnerScaleDots(label string, radius float32, thickness float32) {
 	_ = `ImSpinner::SpinnerScaleDots(label, radius, thickness)`
 }
@@ -173,8 +191,8 @@ func SpinnerGalaxyDotsV(label string, radius float32, thickness float32, color u
 func SpinnerTwinAng(label string, radius1 float32, radius2 float32, thickness float32) {
 	_ = `ImSpinner::SpinnerTwinAng(label, radius1, radius2, thickness)`
 }
-func SpinnerTwinAngV(label string, radius1 float32, radius2 float32, thickness float32, color1 uint32 /* = white*/, color2 uint32 /* = red*/, speed float32 /* = 2.8f*/, angle float32 /* = IM_PI*/) {
-	_ = `ImSpinner::SpinnerTwinAng(label, radius1, radius2, thickness, color1, color2, speed, angle)`
+func SpinnerTwinAngV(label string, radius1 float32, radius2 float32, thickness float32, color1 uint32 /* = white*/, color2 uint32 /* = red*/, speed float32 /* = 2.8f*/, angle float32 /* = IM_PI*/, mode int /* = 0*/) {
+	_ = `ImSpinner::SpinnerTwinAng(label, radius1, radius2, thickness, color1, color2, speed, angle, mode)`
 }
 func SpinnerFilling(label string, radius float32, thickness float32) {
 	_ = `ImSpinner::SpinnerFilling(label, radius, thickness)`
@@ -191,8 +209,8 @@ func SpinnerTopupV(label string, radius1 float32, radius2 float32, color uint32 
 func SpinnerTwinAng180(label string, radius1 float32, radius2 float32, thickness float32) {
 	_ = `ImSpinner::SpinnerTwinAng180(label, radius1, radius2, thickness)`
 }
-func SpinnerTwinAng180V(label string, radius1 float32, radius2 float32, thickness float32, color1 uint32 /* = white*/, color2 uint32 /* = red*/, speed float32 /* = 2.8f*/) {
-	_ = `ImSpinner::SpinnerTwinAng180(label, radius1, radius2, thickness, color1, color2, speed)`
+func SpinnerTwinAng180V(label string, radius1 float32, radius2 float32, thickness float32, color1 uint32 /* = white*/, color2 uint32 /* = red*/, speed float32 /* = 2.8f*/, angle float32 /* = PI_DIV_4*/, mode int /* = 0*/) {
+	_ = `ImSpinner::SpinnerTwinAng180(label, radius1, radius2, thickness, color1, color2, speed, angle, mode)`
 }
 func SpinnerTwinAng360(label string, radius1 float32, radius2 float32, thickness float32) {
 	_ = `ImSpinner::SpinnerTwinAng360(label, radius1, radius2, thickness)`
@@ -221,8 +239,8 @@ func SpinnerFadeBarsV(label string, w float32, color uint32 /* = white*/, speed 
 func SpinnerFadeTris(label string, radius float32) {
 	_ = `ImSpinner::SpinnerFadeTris(label, radius)`
 }
-func SpinnerFadeTrisV(label string, radius float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, dim Size_t /* = 2*/, scale bool /* = false*/) {
-	_ = `ImSpinner::SpinnerFadeTris(label, radius, color, speed, dim, scale)`
+func SpinnerFadeTrisV(label string, radius float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, dim Size_t /* = 2*/, scale bool /* = false*/, mode int /* = 0*/) {
+	_ = `ImSpinner::SpinnerFadeTris(label, radius, color, speed, dim, scale, mode)`
 }
 func SpinnerBarsRotateFade(label string, rmin float32, rmax float32, thickness float32) {
 	_ = `ImSpinner::SpinnerBarsRotateFade(label, rmin, rmax, thickness)`
@@ -251,8 +269,8 @@ func SpinnerArcRotationV(label string, radius float32, thickness float32, color 
 func SpinnerArcFade(label string, radius float32, thickness float32) {
 	_ = `ImSpinner::SpinnerArcFade(label, radius, thickness)`
 }
-func SpinnerArcFadeV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, arcs Size_t /* = 4*/) {
-	_ = `ImSpinner::SpinnerArcFade(label, radius, thickness, color, speed, arcs)`
+func SpinnerArcFadeV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, arcs Size_t /* = 4*/, mode int /* = 0*/) {
+	_ = `ImSpinner::SpinnerArcFade(label, radius, thickness, color, speed, arcs, mode)`
 }
 func SpinnerSimpleArcFade(label string, radius float32, thickness float32) {
 	_ = `ImSpinner::SpinnerSimpleArcFade(label, radius, thickness)`
@@ -308,6 +326,12 @@ func SpinnerFilledArcFade(label string, radius float32) {
 func SpinnerFilledArcFadeV(label string, radius float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, arcs Size_t /* = 4*/, mode int /* = 0*/) {
 	_ = `ImSpinner::SpinnerFilledArcFade(label, radius, color, speed, arcs, mode)`
 }
+func SpinnerPointsRoller(label string, radius float32, thickness float32) {
+	_ = `ImSpinner::SpinnerPointsRoller(label, radius, thickness)`
+}
+func SpinnerPointsRollerV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, points Size_t /* = 8*/, circles int /* = 2*/, rspeed float32 /* = 1.f*/) {
+	_ = `ImSpinner::SpinnerPointsRoller(label, radius, thickness, color, speed, points, circles, rspeed)`
+}
 func SpinnerPointsArcBounce(label string, radius float32, thickness float32) {
 	_ = `ImSpinner::SpinnerPointsArcBounce(label, radius, thickness)`
 }
@@ -329,14 +353,14 @@ func SpinnerFilledArcRingV(label string, radius float32, thickness float32, colo
 func SpinnerArcWedges(label string, radius float32) {
 	_ = `ImSpinner::SpinnerArcWedges(label, radius)`
 }
-func SpinnerArcWedgesV(label string, radius float32, color uint32 /* = red*/, speed float32 /* = 2.8f*/, arcs Size_t /* = 4*/) {
-	_ = `ImSpinner::SpinnerArcWedges(label, radius, color, speed, arcs)`
+func SpinnerArcWedgesV(label string, radius float32, color uint32 /* = red*/, speed float32 /* = 2.8f*/, arcs Size_t /* = 4*/, mode int /* = 0*/) {
+	_ = `ImSpinner::SpinnerArcWedges(label, radius, color, speed, arcs, mode)`
 }
 func SpinnerTwinBall(label string, radius1 float32, radius2 float32, thickness float32, b_thickness float32) {
 	_ = `ImSpinner::SpinnerTwinBall(label, radius1, radius2, thickness, b_thickness)`
 }
-func SpinnerTwinBallV(label string, radius1 float32, radius2 float32, thickness float32, b_thickness float32, ball uint32 /* = white*/, bg uint32 /* = half_white*/, speed float32 /* = 2.8f*/, balls Size_t /* = 2*/) {
-	_ = `ImSpinner::SpinnerTwinBall(label, radius1, radius2, thickness, b_thickness, ball, bg, speed, balls)`
+func SpinnerTwinBallV(label string, radius1 float32, radius2 float32, thickness float32, b_thickness float32, ball uint32 /* = white*/, bg uint32 /* = half_white*/, speed float32 /* = 2.8f*/, balls Size_t /* = 2*/, mode int /* = 0*/) {
+	_ = `ImSpinner::SpinnerTwinBall(label, radius1, radius2, thickness, b_thickness, ball, bg, speed, balls, mode)`
 }
 func SpinnerSolarBalls(label string, radius float32, thickness float32) {
 	_ = `ImSpinner::SpinnerSolarBalls(label, radius, thickness)`
@@ -383,8 +407,8 @@ func SpinnerPulsarBallV(label string, radius float32, thickness float32, color u
 func SpinnerIncScaleDots(label string, radius float32, thickness float32) {
 	_ = `ImSpinner::SpinnerIncScaleDots(label, radius, thickness)`
 }
-func SpinnerIncScaleDotsV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, dots Size_t /* = 6*/) {
-	_ = `ImSpinner::SpinnerIncScaleDots(label, radius, thickness, color, speed, dots)`
+func SpinnerIncScaleDotsV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, dots Size_t /* = 6*/, angle float32 /* = 0.f*/, mode int /* = 0*/) {
+	_ = `ImSpinner::SpinnerIncScaleDots(label, radius, thickness, color, speed, dots, angle, mode)`
 }
 func SpinnerSomeScaleDots(label string, radius float32, thickness float32) {
 	_ = `ImSpinner::SpinnerSomeScaleDots(label, radius, thickness)`
@@ -407,8 +431,8 @@ func SpinnerAngEclipseV(label string, radius float32, thickness float32, color u
 func SpinnerIngYang(label string, radius float32, thickness float32, reverse bool, yang_detlta_r float32) {
 	_ = `ImSpinner::SpinnerIngYang(label, radius, thickness, reverse, yang_detlta_r)`
 }
-func SpinnerIngYangV(label string, radius float32, thickness float32, reverse bool, yang_detlta_r float32, colorI uint32 /* = white*/, colorY uint32 /* = white*/, speed float32 /* = 2.8f*/, angle float32 /* = IM_PI *0.7f*/) {
-	_ = `ImSpinner::SpinnerIngYang(label, radius, thickness, reverse, yang_detlta_r, colorI, colorY, speed, angle)`
+func SpinnerIngYangV(label string, radius float32, thickness float32, reverse bool, yang_detlta_r float32, colorI uint32 /* = white*/, colorY uint32 /* = white*/, speed float32 /* = 2.8f*/, angle float32 /* = IM_PI *0.7f*/, mode int /* = 0*/) {
+	_ = `ImSpinner::SpinnerIngYang(label, radius, thickness, reverse, yang_detlta_r, colorI, colorY, speed, angle, mode)`
 }
 func SpinnerGooeyBalls(label string, radius float32, color uint32, speed float32) {
 	_ = `ImSpinner::SpinnerGooeyBalls(label, radius, color, speed)`
@@ -422,6 +446,9 @@ func SpinnerDotsLoading(label string, radius float32, thickness float32, color u
 func SpinnerRotateGooeyBalls(label string, radius float32, thickness float32, color uint32, speed float32, balls int) {
 	_ = `ImSpinner::SpinnerRotateGooeyBalls(label, radius, thickness, color, speed, balls)`
 }
+func SpinnerRotateGooeyBallsV(label string, radius float32, thickness float32, color uint32, speed float32, balls int, mode int /* = 0*/) {
+	_ = `ImSpinner::SpinnerRotateGooeyBalls(label, radius, thickness, color, speed, balls, mode)`
+}
 func SpinnerHerbertBalls(label string, radius float32, thickness float32, color uint32, speed float32, balls int) {
 	_ = `ImSpinner::SpinnerHerbertBalls(label, radius, thickness, color, speed, balls)`
 }
@@ -431,11 +458,17 @@ func SpinnerHerbertBalls3D(label string, radius float32, thickness float32, colo
 func SpinnerRotateTriangles(label string, radius float32, thickness float32, color uint32, speed float32, tris int) {
 	_ = `ImSpinner::SpinnerRotateTriangles(label, radius, thickness, color, speed, tris)`
 }
+func SpinnerRotateTrianglesV(label string, radius float32, thickness float32, color uint32, speed float32, tris int, mode int /* = 0*/) {
+	_ = `ImSpinner::SpinnerRotateTriangles(label, radius, thickness, color, speed, tris, mode)`
+}
 func SpinnerRotateShapes(label string, radius float32, thickness float32, color uint32, speed float32, shapes int, pnt int) {
 	_ = `ImSpinner::SpinnerRotateShapes(label, radius, thickness, color, speed, shapes, pnt)`
 }
 func SpinnerSinSquares(label string, radius float32, thickness float32, color uint32, speed float32) {
 	_ = `ImSpinner::SpinnerSinSquares(label, radius, thickness, color, speed)`
+}
+func SpinnerSinSquaresV(label string, radius float32, thickness float32, color uint32, speed float32, mode int /* = 0*/) {
+	_ = `ImSpinner::SpinnerSinSquares(label, radius, thickness, color, speed, mode)`
 }
 func SpinnerMoonLine(label string, radius float32, thickness float32) {
 	_ = `ImSpinner::SpinnerMoonLine(label, radius, thickness)`
@@ -476,8 +509,8 @@ func SpinnerFlowingGradientV(label string, radius float32, thickness float32, co
 func SpinnerRotateSegments(label string, radius float32, thickness float32) {
 	_ = `ImSpinner::SpinnerRotateSegments(label, radius, thickness)`
 }
-func SpinnerRotateSegmentsV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, arcs Size_t /* = 4*/, layers Size_t /* = 1*/) {
-	_ = `ImSpinner::SpinnerRotateSegments(label, radius, thickness, color, speed, arcs, layers)`
+func SpinnerRotateSegmentsV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, arcs Size_t /* = 4*/, layers Size_t /* = 1*/, mode int /* = 0*/) {
+	_ = `ImSpinner::SpinnerRotateSegments(label, radius, thickness, color, speed, arcs, layers, mode)`
 }
 func SpinnerLemniscate(label string, radius float32, thickness float32) {
 	_ = `ImSpinner::SpinnerLemniscate(label, radius, thickness)`
@@ -536,14 +569,14 @@ func SpinnerRingWatermarksV(label string, radius float32, thickness float32, col
 func SpinnerRotatedAtom(label string, radius float32, thickness float32) {
 	_ = `ImSpinner::SpinnerRotatedAtom(label, radius, thickness)`
 }
-func SpinnerRotatedAtomV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, elipses int /* = 3*/) {
-	_ = `ImSpinner::SpinnerRotatedAtom(label, radius, thickness, color, speed, elipses)`
+func SpinnerRotatedAtomV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, elipses int /* = 3*/, mode int /* = 0*/) {
+	_ = `ImSpinner::SpinnerRotatedAtom(label, radius, thickness, color, speed, elipses, mode)`
 }
 func SpinnerRainbowBalls(label string, radius float32, thickness float32, color uint32, speed float32) {
 	_ = `ImSpinner::SpinnerRainbowBalls(label, radius, thickness, color, speed)`
 }
-func SpinnerRainbowBallsV(label string, radius float32, thickness float32, color uint32, speed float32, balls int /* = 5*/) {
-	_ = `ImSpinner::SpinnerRainbowBalls(label, radius, thickness, color, speed, balls)`
+func SpinnerRainbowBallsV(label string, radius float32, thickness float32, color uint32, speed float32, balls int /* = 5*/, mode int /* = 0*/) {
+	_ = `ImSpinner::SpinnerRainbowBalls(label, radius, thickness, color, speed, balls, mode)`
 }
 func SpinnerRainbowShot(label string, radius float32, thickness float32, color uint32, speed float32) {
 	_ = `ImSpinner::SpinnerRainbowShot(label, radius, thickness, color, speed)`
@@ -584,8 +617,8 @@ func SpinnerBarChartAdvSineFadeV(label string, radius float32, thickness float32
 func SpinnerBarChartRainbow(label string, radius float32, thickness float32, color uint32, speed float32) {
 	_ = `ImSpinner::SpinnerBarChartRainbow(label, radius, thickness, color, speed)`
 }
-func SpinnerBarChartRainbowV(label string, radius float32, thickness float32, color uint32, speed float32, bars int /* = 5*/) {
-	_ = `ImSpinner::SpinnerBarChartRainbow(label, radius, thickness, color, speed, bars)`
+func SpinnerBarChartRainbowV(label string, radius float32, thickness float32, color uint32, speed float32, bars int /* = 5*/, mode int /* = 0*/) {
+	_ = `ImSpinner::SpinnerBarChartRainbow(label, radius, thickness, color, speed, bars, mode)`
 }
 func SpinnerBlocks(label string, radius float32, thickness float32, bg uint32, color uint32, speed float32) {
 	_ = `ImSpinner::SpinnerBlocks(label, radius, thickness, bg, color, speed)`
@@ -623,14 +656,14 @@ func SpinnerFluidPointsV(label string, radius float32, thickness float32, color 
 func SpinnerArcPolarFade(label string, radius float32) {
 	_ = `ImSpinner::SpinnerArcPolarFade(label, radius)`
 }
-func SpinnerArcPolarFadeV(label string, radius float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, arcs Size_t /* = 4*/) {
-	_ = `ImSpinner::SpinnerArcPolarFade(label, radius, color, speed, arcs)`
+func SpinnerArcPolarFadeV(label string, radius float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, arcs Size_t /* = 4*/, mode int /* = 0*/) {
+	_ = `ImSpinner::SpinnerArcPolarFade(label, radius, color, speed, arcs, mode)`
 }
 func SpinnerArcPolarRadius(label string, radius float32) {
 	_ = `ImSpinner::SpinnerArcPolarRadius(label, radius)`
 }
-func SpinnerArcPolarRadiusV(label string, radius float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, arcs Size_t /* = 4*/) {
-	_ = `ImSpinner::SpinnerArcPolarRadius(label, radius, color, speed, arcs)`
+func SpinnerArcPolarRadiusV(label string, radius float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, arcs Size_t /* = 4*/, mode int /* = 0*/) {
+	_ = `ImSpinner::SpinnerArcPolarRadius(label, radius, color, speed, arcs, mode)`
 }
 func SpinnerCaleidoscope(label string, radius float32, thickness float32) {
 	_ = `ImSpinner::SpinnerCaleidoscope(label, radius, thickness)`
@@ -641,8 +674,8 @@ func SpinnerCaleidoscopeV(label string, radius float32, thickness float32, color
 func SpinnerHboDots(label string, radius float32, thickness float32) {
 	_ = `ImSpinner::SpinnerHboDots(label, radius, thickness)`
 }
-func SpinnerHboDotsV(label string, radius float32, thickness float32, color uint32 /* = white*/, minfade float32 /* = 0.0f*/, ryk float32 /* = 0.f*/, speed float32 /* = 1.1f*/, dots Size_t /* = 6*/) {
-	_ = `ImSpinner::SpinnerHboDots(label, radius, thickness, color, minfade, ryk, speed, dots)`
+func SpinnerHboDotsV(label string, radius float32, thickness float32, color uint32 /* = white*/, minfade float32 /* = 0.0f*/, ryk float32 /* = 0.f*/, speed float32 /* = 1.1f*/, dots Size_t /* = 6*/, mode int /* = 0*/) {
+	_ = `ImSpinner::SpinnerHboDots(label, radius, thickness, color, minfade, ryk, speed, dots, mode)`
 }
 func SpinnerMoonDots(label string, radius float32, thickness float32, first uint32, second uint32) {
 	_ = `ImSpinner::SpinnerMoonDots(label, radius, thickness, first, second)`
@@ -721,4 +754,10 @@ func SpinnerRotateSegmentsPulsar(label string, radius float32, thickness float32
 }
 func SpinnerRotateSegmentsPulsarV(label string, radius float32, thickness float32, color uint32 /* = white*/, speed float32 /* = 2.8f*/, arcs Size_t /* = 4*/, layers Size_t /* = 1*/) {
 	_ = `ImSpinner::SpinnerRotateSegmentsPulsar(label, radius, thickness, color, speed, arcs, layers)`
+}
+func SpinnerSplineAng(label string, radius float32, thickness float32) {
+	_ = `ImSpinner::SpinnerSplineAng(label, radius, thickness)`
+}
+func SpinnerSplineAngV(label string, radius float32, thickness float32, color uint32 /* = white*/, bg uint32 /* = white*/, speed float32 /* = 2.8f*/, angle float32 /* = IM_PI*/, mode int /* = 0*/) {
+	_ = `ImSpinner::SpinnerSplineAng(label, radius, thickness, color, bg, speed, angle, mode)`
 }
