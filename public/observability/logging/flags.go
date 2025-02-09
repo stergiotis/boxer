@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"github.com/fxamacker/cbor/v2"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/yassinebenaid/godump"
 	"os"
 	"runtime/debug"
@@ -30,15 +31,24 @@ func checkZeroLogCborBuild() {
 		panic("unable to read build info: can not verify that cbor logging is available")
 	}
 	tags := getBuildTags(info)
-	for _, t := range tags {
-		if t == "binary_log" {
-			return
+	for _, ts := range tags {
+		u := strings.Split(ts, ",")
+		for _, t := range u {
+			if strings.Trim(t, " \t\n\r") == "binary_log" {
+				return
+			}
 		}
 	}
 	panic("cbor logging unavailable, build did not include the `binary_log` build tag")
 }
 
 var LoggingFlags = []cli.Flag{
+	&cli.StringFlag{
+		Name:     "logFile",
+		Category: "logging",
+		EnvVars:  []string{"BOXER_LOG_FILE"},
+		Value:    "",
+	},
 	&cli.StringFlag{
 		Name:        "logLevel",
 		Category:    "logging",
@@ -81,9 +91,21 @@ var LoggingFlags = []cli.Flag{
 		DefaultText: "json",
 		EnvVars:     []string{"BOXER_LOG_FORMAT"},
 		Action: func(context *cli.Context, s string) error {
+			logFile := context.String("logFile")
+			var w *os.File
+			if logFile == "" || logFile == "-" {
+				w = os.Stderr
+			} else {
+				var err error
+				w, err = os.OpenFile(logFile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o666)
+				if err != nil {
+					return eb.Build().Str("logFile", logFile).Errorf("unable to open log file: %w", err)
+				}
+			}
+
 			switch s {
 			case "console":
-				log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
+				log.Logger = log.Output(zerolog.ConsoleWriter{Out: w, TimeFormat: time.RFC3339})
 				dumper := godump.Dumper{
 					Indentation:             "  ",
 					ShowPrimitiveNamedTypes: false,
@@ -134,17 +156,17 @@ var LoggingFlags = []cli.Flag{
 				}
 				break
 			case "diag":
-				log.Logger = log.Output(NewCborDiagLogger(os.Stderr))
+				log.Logger = log.Output(NewCborDiagLogger(w))
 				break
 			case "spew":
-				log.Logger = log.Output(NewCborSpewLogger(os.Stderr))
+				log.Logger = log.Output(NewCborSpewLogger(w))
 				break
 			case "json":
-				log.Logger = log.Output(NewJsonIndentLogger(os.Stderr))
+				log.Logger = log.Output(NewJsonIndentLogger(w))
 				break
 			case "cbor":
 				checkZeroLogCborBuild()
-				log.Logger = log.Output(os.Stderr)
+				log.Logger = log.Output(w)
 				break
 			default:
 				return eh.Errorf("unhandled log format %s", s)
