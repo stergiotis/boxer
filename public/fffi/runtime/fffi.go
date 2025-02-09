@@ -1,3 +1,5 @@
+//go:build !fffi_debug
+
 package runtime
 
 /*
@@ -10,23 +12,13 @@ package runtime
 */
 
 import (
-	"io"
-	"math"
-
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-type FuncProcId uint32
-
-const FlushFuncProcId = FuncProcId(math.MaxUint32)
-
 type Fffi2 struct {
-	bin          ByteOrder
 	channel      Channel
 	marshaller   *Marshaller
 	unmarshaller *Unmarshaller
-	signalOut    io.ByteWriter
-	signalIn     io.ByteReader
 }
 
 func NewFffi2(channel Channel) *Fffi2 {
