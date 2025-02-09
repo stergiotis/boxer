@@ -88,22 +88,22 @@ func generateFrontendCode(idlDriver IDLDriver, cfg *Config, namer *Namer) (err e
 	return
 }
 
-func mainE(config *Config, namerCfg *NamerConfig) (err error) {
+func mainE(cfg *Config, namerCfg *NamerConfig) (err error) {
 	namer := NewNamer(namerCfg)
-	_ = os.Remove(config.GoOutputFile)
-	_ = os.Remove(config.CppOutputFile)
+	_ = os.Remove(cfg.GoOutputFile)
+	_ = os.Remove(cfg.CppOutputFile)
 	var idlDriver *IDLDriverGoFile
-	idlDriver, err = NewIDLDriverGoFile(config.IdlBuildTag, config.IdlPackagePattern, runtime.FuncProcId(config.FuncProcIdOffset))
+	idlDriver, err = NewIDLDriverGoFile(cfg.IdlBuildTag, cfg.IdlPackagePattern, runtime.FuncProcId(cfg.FuncProcIdOffset))
 	if err != nil {
 		err = eh.Errorf("unable to process IDL file: %w", err)
 		return
 	}
-	err = generateBackendCode(idlDriver, config, namer)
+	err = generateBackendCode(idlDriver, cfg, namer)
 	if err != nil {
 		err = eh.Errorf("unable to generate backend code: %w", err)
 		return
 	}
-	err = generateFrontendCode(idlDriver, config, namer)
+	err = generateFrontendCode(idlDriver, cfg, namer)
 	if err != nil {
 		err = eh.Errorf("unable to generate frontend code: %w", err)
 		return

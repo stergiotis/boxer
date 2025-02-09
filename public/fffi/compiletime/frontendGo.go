@@ -37,13 +37,14 @@ func NewCodeTransformerFrontendGo(namer *Namer, goCodeProlog string) *CodeTransf
 		Indent:   0,
 	}
 	return &CodeTransformerFrontendGo{
-		fset:         nil,
-		file:         nil,
-		builder:      builder,
-		builderSmall: &bytes.Buffer{},
-		namer:        namer,
-		printerCfg:   cfg,
-		goCodeProlog: goCodeProlog,
+		fset:                   nil,
+		file:                   nil,
+		builder:                builder,
+		builderSmall:           &bytes.Buffer{},
+		namer:                  namer,
+		printerCfg:             cfg,
+		goCodeProlog:           goCodeProlog,
+		needsAdditionalImports: false,
 	}
 }
 
@@ -115,7 +116,7 @@ func (inst *CodeTransformerFrontendGo) generate(decl *ast.FuncDecl, id uint32, r
 		} else {
 			_, _ = b.WriteString("_f :=  ")
 			_, _ = b.WriteString(currentFffiVarName)
-			_, _ = b.WriteRune('\n')
+			_ = b.WriteByte('\n')
 		}
 	}
 
@@ -125,7 +126,7 @@ func (inst *CodeTransformerFrontendGo) generate(decl *ast.FuncDecl, id uint32, r
 		} else {
 			_, _ = b.WriteString("_f.AddProcedureId(")
 		}
-		_, _ = b.WriteString(fmt.Sprintf("0x%08x", id))
+		_, _ = fmt.Fprintf(b, "0x%08x", id)
 		_, _ = b.WriteString(")\n")
 	}
 	var paramNames, paramGoTypes, resultNames, resultGoTypes, paramDeref, resultDeref, resultGoCastTypes []string
@@ -345,7 +346,7 @@ func (inst *CodeTransformerFrontendGo) Reset() {
 }
 
 func (inst *CodeTransformerFrontendGo) NextFuncProcIdOffset() uint32 {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 

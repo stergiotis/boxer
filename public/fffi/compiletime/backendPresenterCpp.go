@@ -34,7 +34,7 @@ func (inst *CodeTransformerBackendPresenterCpp) AddFunction(decl *ast.FuncDecl, 
 
 	b := inst.builder
 	_, _ = b.WriteString("case ")
-	_, _ = b.WriteString(fmt.Sprintf("0x%08x", id))
+	_, _ = fmt.Fprintf(b, "0x%08x", id)
 	_, _ = b.WriteString(":\n")
 	_, _ = b.WriteString("  {\n")
 	_, _ = b.WriteString("    FFFI_FUNCTION_INVOCATION(\"")

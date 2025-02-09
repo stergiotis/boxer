@@ -179,7 +179,7 @@ func (inst *IDLDriverGoFile) resolveBasicTypeType(t types.Type, castTypeP string
 		return
 	case *types.TypeParam:
 		constraint := tt.Constraint().String()
-		if len(constraint) > 0 && constraint[0] == '~' && !strings.Contains(constraint[1:], "~") { // FIXME remove this check (see union type and interface type)
+		if constraint != "" && constraint[0] == '~' && !strings.Contains(constraint[1:], "~") { // FIXME remove this check (see union type and interface type)
 			var u string
 			castType, u, err = inst.resolveBasicTypeType(tt.Constraint(), "")
 			if err != nil {
@@ -249,9 +249,8 @@ func (inst *IDLDriverGoFile) FuncDeclToId(decl *ast.FuncDecl) runtime.FuncProcId
 	id, has := inst.idLU[decl]
 	if has {
 		return id
-	} else {
-		id = runtime.FuncProcId(int(inst.idOffset) + len(inst.idLU))
-		inst.idLU[decl] = id
-		return id
 	}
+	id = runtime.FuncProcId(int(inst.idOffset) + len(inst.idLU))
+	inst.idLU[decl] = id
+	return id
 }

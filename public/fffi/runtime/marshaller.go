@@ -20,6 +20,7 @@ func NewMarshaller(w io.Writer, bin binary.ByteOrder, errHandler func(err error)
 		bin:        bin,
 		buf:        make([]byte, 8, 8),
 		errHandler: errHandler,
+		written:    0,
 	}
 }
 
