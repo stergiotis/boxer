@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl"
 	"github.com/stergiotis/boxer/public/dev"
@@ -13,7 +15,6 @@ import (
 	"github.com/stergiotis/boxer/public/observability/vcs"
 	"github.com/stergiotis/boxer/public/semistructured/cbor"
 	"github.com/urfave/cli/v2"
-	"os"
 )
 
 func writeIndefArrayBegin() {
@@ -69,4 +70,5 @@ func main() {
 		exitCode = 1
 		log.Error().Stack().Err(err).Msg("an error occurred")
 	}
+	os.Exit(exitCode)
 }

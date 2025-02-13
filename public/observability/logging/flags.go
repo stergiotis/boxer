@@ -1,7 +1,7 @@
 package logging
 
 import (
-	"encoding/json"
+	"fmt"
 	"github.com/fxamacker/cbor/v2"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -40,6 +40,104 @@ func checkZeroLogCborBuild() {
 		}
 	}
 	panic("cbor logging unavailable, build did not include the `binary_log` build tag")
+}
+
+type cborConsolePrinter struct {
+	decMode   cbor.DecMode
+	diagMode  cbor.DiagMode
+	dumper    *godump.Dumper
+	treshhold int
+}
+
+func newCborConsolePrinter(threshold int) (inst *cborConsolePrinter, err error) {
+	var diagMode cbor.DiagMode
+	var decMode cbor.DecMode
+	decMode, err = cbor.DecOptions{}.DecMode()
+	if err != nil {
+		err = eh.Errorf("unable to create cbor decoding mode: %w", err)
+		return
+	}
+	diagMode, err = cbor.DiagOptions{
+		ByteStringEncoding:      0,
+		ByteStringHexWhitespace: false,
+		ByteStringText:          false,
+		ByteStringEmbeddedCBOR:  false,
+		CBORSequence:            false,
+		FloatPrecisionIndicator: false,
+		MaxNestedLevels:         0,
+		MaxArrayElements:        0,
+		MaxMapPairs:             0,
+	}.DiagMode()
+	if err != nil {
+		err = eh.Errorf("unable to create cbor diag mode: %w", err)
+		return
+	}
+	dumper := &godump.Dumper{
+		Indentation:             "  ",
+		ShowPrimitiveNamedTypes: false,
+		HidePrivateFields:       false,
+		Theme:                   godump.DefaultTheme,
+	}
+	inst = &cborConsolePrinter{
+		decMode:   decMode,
+		diagMode:  diagMode,
+		dumper:    dumper,
+		treshhold: threshold,
+	}
+	return
+}
+
+func (inst *cborConsolePrinter) prettyPrintToString(cbor []byte) (s string, err error) {
+	s, err = inst.diagMode.Diagnose(cbor)
+	if err != nil {
+		return
+	}
+	if inst.treshhold > 0 && len(s) > inst.treshhold {
+		var a any
+		err = inst.decMode.Unmarshal(cbor, &a)
+		if err != nil {
+			return
+		}
+		s = inst.dumper.Sprint(a)
+		return
+	}
+	return
+}
+func formatFieldValue(i any, pp *cborConsolePrinter) (s string) {
+	var err error
+	switch it := i.(type) {
+	case []byte:
+		ss := string(it)
+		if containsEmbeddedCborJson(ss) {
+			var b []byte
+			b, err = unpackEmbeddedCborJson(ss)
+			if err != nil {
+				break
+			}
+			s, err = pp.prettyPrintToString(b)
+			if err != nil {
+				break
+			}
+			return s
+		}
+		break
+	case string:
+		if containsEmbeddedCbor(it) {
+			var b []byte
+			b, err = unpackEmbeddedCbor(it)
+			if err != nil {
+				return it
+			}
+			s, err = pp.prettyPrintToString(b)
+			if err != nil {
+				return it
+			}
+			return s
+		}
+		return it
+	}
+
+	return fmt.Sprintf("%s", i)
 }
 
 var LoggingFlags = []cli.Flag{
@@ -105,54 +203,34 @@ var LoggingFlags = []cli.Flag{
 
 			switch s {
 			case "console":
-				log.Logger = log.Output(zerolog.ConsoleWriter{Out: w, TimeFormat: time.RFC3339})
-				dumper := godump.Dumper{
-					Indentation:             "  ",
-					ShowPrimitiveNamedTypes: false,
-					HidePrivateFields:       false,
-					Theme:                   godump.DefaultTheme,
-				}
-				var cbordiagmode cbor.DiagMode
-				var cborencmode cbor.EncMode
+				var cborEncMode cbor.EncMode
 				var err error
-				if true {
-					cborencmode, err = cbor.CanonicalEncOptions().EncMode()
-					if err != nil {
-						log.Warn().Err(err).Msg("unable to create cbor encoder, skipping")
-						err = nil
-					}
-					cbordiagmode, err = cbor.DiagOptions{
-						ByteStringEncoding:      0,
-						ByteStringHexWhitespace: false,
-						ByteStringText:          false,
-						ByteStringEmbeddedCBOR:  false,
-						CBORSequence:            false,
-						FloatPrecisionIndicator: false,
-						MaxNestedLevels:         0,
-						MaxArrayElements:        0,
-						MaxMapPairs:             0,
-					}.DiagMode()
-					if err != nil {
-						log.Warn().Err(err).Msg("unable to create cbor diagmode, skipping")
-						err = nil
-					}
+				cborEncMode, err = cbor.CanonicalEncOptions().EncMode()
+				if err != nil {
+					return eh.Errorf("unable to create cbor encoding mode: %w", err)
 				}
-				zerolog.InterfaceMarshalFunc = func(v any) ([]byte, error) {
-					if cborencmode != nil && cbordiagmode != nil {
-						c, err := cborencmode.Marshal(v)
-						if err == nil {
-							s, err = cbordiagmode.Diagnose(c)
-							if err == nil {
-								return []byte(s), nil
-							}
-						}
-					}
-					var js []byte
-					js, err = json.MarshalIndent(v, "", "  ")
+				const threshhold = 70
+				var pp *cborConsolePrinter
+				pp, err = newCborConsolePrinter(threshhold)
+				if err != nil {
+					return eh.Errorf("unable to create cbor console printer: %w", err)
+				}
+				log.Logger = log.Output(zerolog.ConsoleWriter{
+					Out: w,
+					FormatFieldValue: func(i interface{}) string {
+						return formatFieldValue(i, pp)
+					},
+					FormatErrFieldValue: func(i interface{}) string {
+						return formatFieldValue(i, pp)
+					},
+					TimeFormat: time.RFC3339})
+				zerolog.InterfaceMarshalFunc = func(v any) (b []byte, err error) {
+					var se string
+					se, err = embeddAsCbor(cborEncMode, v)
 					if err != nil {
-						return []byte(dumper.Sprintln(v)), nil
+						return nil, err
 					}
-					return js, nil
+					return []byte(se), nil
 				}
 				break
 			case "diag":
