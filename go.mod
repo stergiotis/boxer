@@ -5,6 +5,7 @@ go 1.23.0
 toolchain go1.23.1
 
 require (
+	github.com/AfterShip/clickhouse-sql-parser v0.4.2
 	github.com/antlr4-go/antlr/v4 v4.13.1
 	github.com/brianvoe/gofakeit/v7 v7.1.2
 	github.com/cenkalti/backoff/v4 v4.3.0
@@ -12,6 +13,7 @@ require (
 	github.com/dgraph-io/badger/v4 v4.5.0
 	github.com/dustin/go-humanize v1.0.1
 	github.com/fxamacker/cbor/v2 v2.7.0
+	github.com/go-json-experiment/json v0.0.0-20250129011340-4e0381018ad6
 	github.com/google/flatbuffers v24.12.23+incompatible
 	github.com/matoous/go-nanoid/v2 v2.1.0
 	github.com/philip-peterson/go-mutablestring v1.0.7
