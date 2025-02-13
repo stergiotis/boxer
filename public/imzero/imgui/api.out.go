@@ -12,11 +12,7 @@ func Checkbox(label string, state Tristate) (checked Tristate, clicked bool) {
 	_f.AddFunctionId(0x00000000)
 	runtime.AddStringArg(_f, label)
 	runtime.AddInt8Arg(_f, state)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	checked = Tristate(runtime.GetInt8Retr[int8](_f))
 	clicked = (runtime.GetBoolRetr[bool](_f))
 
@@ -33,11 +29,7 @@ func ColorEdit3(label string, colP [3]float32, flags ImGuiColorEditFlags) (col [
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Array3Arg(_f, colP)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	col = (runtime.GetFloat32Array3Retr[float32](_f))
 	changed = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -50,11 +42,7 @@ func ColorEdit4(label string, colP ImVec4, flags ImGuiColorEditFlags) (col ImVec
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Array4Arg(_f, colP)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	col = ImVec4(runtime.GetFloat32Array4Retr[float32](_f))
 	changed = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -67,11 +55,7 @@ func GetItemStatus() (status ItemStatusE) {
 
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000003)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	status = ItemStatusE(runtime.GetUint16Retr[uint16](_f))
 	return
 }
@@ -82,11 +66,7 @@ func GetItemStatusV(primary ImGuiHoveredFlags, secondary ImGuiHoveredFlags) (sta
 	_f.AddFunctionId(0x00000004)
 	runtime.AddIntArg(_f, primary)
 	runtime.AddIntArg(_f, secondary)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	status = ItemStatusE(runtime.GetUint16Retr[uint16](_f))
 	return
 }
@@ -95,11 +75,7 @@ func CurrentCursorPos() (r ImVec2) {
 
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000005)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImVec2(runtime.GetComplex64Retr[complex64](_f))
 	return
 }
@@ -107,11 +83,7 @@ func CurrentCursorPos() (r ImVec2) {
 func BeginCustomWidget() (visible bool, currentWindowDrawList ImDrawListPtr, pos ImVec2, availableRegion ImVec2, keyboardNavActive bool, seed ImGuiID) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000006)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	visible = (runtime.GetBoolRetr[bool](_f))
 	currentWindowDrawList = ImDrawListPtr(runtime.GetUintptrRetr[uintptr](_f))
 	pos = ImVec2(runtime.GetComplex64Retr[complex64](_f))
@@ -137,11 +109,7 @@ func MakeImCoolBarConfig() (r ImCoolBarConfigForeignPtr) {
 
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000008)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImCoolBarConfigForeignPtr(runtime.GetUintptrRetr[uintptr](_f))
 	return
 }
@@ -155,11 +123,7 @@ func MakeImCoolBarConfigV(anchor ImVec2, normalSize float32, hoveredSize float32
 	runtime.AddFloat32Arg(_f, hoveredSize)
 	runtime.AddFloat32Arg(_f, animStep)
 	runtime.AddFloat32Arg(_f, effectStrength)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImCoolBarConfigForeignPtr(runtime.GetUintptrRetr[uintptr](_f))
 	return
 }
@@ -176,11 +140,7 @@ func (foreignptr ImCoolBarConfigForeignPtr) Get() (anchor ImVec2, normalSize flo
 	_f := foreignptr.getFffi()
 	_f.AddFunctionId(0x0000000b)
 	runtime.AddUintptrArg(_f, foreignptr)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		foreignptr.handleError(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	anchor = ImVec2(runtime.GetComplex64Retr[complex64](_f))
 	normalSize = (runtime.GetFloat32Retr[float32](_f))
 	hoveredSize = (runtime.GetFloat32Retr[float32](_f))
@@ -207,11 +167,7 @@ func BeginCoolBar(label string) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000000d)
 	runtime.AddStringArg(_f, label)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -224,11 +180,7 @@ func BeginCoolBarV(label string, flags ImCoolBarFlags, cfg ImCoolBarConfigForeig
 	runtime.AddIntArg(_f, flags)
 	runtime.AddUintptrArg(_f, cfg)
 	runtime.AddIntArg(_f, windowFlags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -244,11 +196,7 @@ func EndCoolBar() {
 func CoolBarItem() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000010)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -257,11 +205,7 @@ func CoolBarItem() (r bool) {
 func CoolBarItemProperties() (width float32, scale float32) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000011)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	width = (runtime.GetFloat32Retr[float32](_f))
 	scale = (runtime.GetFloat32Retr[float32](_f))
 
@@ -274,11 +218,7 @@ func CoolBarButtons(fontPtr ImFontPtr, labels []string, tooltips []string) (clic
 	runtime.AddUintptrArg(_f, fontPtr)
 	runtime.AddStringsArg(_f, labels)
 	runtime.AddStringsArg(_f, tooltips)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	clickedIndex = (runtime.GetIntRetr[int](_f))
 	hoveredIndex = (runtime.GetIntRetr[int](_f))
 
@@ -294,11 +234,7 @@ func DragFloat32(label string, vP float32) (v float32, r bool) {
 	_f.AddFunctionId(0x00000013)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, vP)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat32Retr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -315,11 +251,7 @@ func DragFloat32V(label string, vP float32, v_speed float32, p_min float32, p_ma
 	runtime.AddFloat32Arg(_f, p_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat32Retr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -335,11 +267,7 @@ func DragFloat32NV(label string, vP []float32, v_speed float32, v_min float32, v
 	runtime.AddFloat32Arg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat32SliceRetr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -351,11 +279,7 @@ func DragFloat32N(label string, vP []float32) (v []float32, r bool) {
 	_f.AddFunctionId(0x00000016)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32SliceArg(_f, vP)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat32SliceRetr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -371,11 +295,7 @@ func DragFloat64(label string, vP float64) (v float64, r bool) {
 	_f.AddFunctionId(0x00000017)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat64Arg(_f, vP)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat64Retr[float64](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -392,11 +312,7 @@ func DragFloat64V(label string, vP float64, v_speed float32, p_min float64, p_ma
 	runtime.AddFloat64Arg(_f, p_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat64Retr[float64](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -412,11 +328,7 @@ func DragFloat64NV(label string, vP []float64, v_speed float32, v_min float64, v
 	runtime.AddFloat64Arg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat64SliceRetr[float64](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -428,11 +340,7 @@ func DragFloat64N(label string, vP []float64) (v []float64, r bool) {
 	_f.AddFunctionId(0x0000001a)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat64SliceArg(_f, vP)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat64SliceRetr[float64](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -448,11 +356,7 @@ func DragInt(label string, vP int) (v int, r bool) {
 	_f.AddFunctionId(0x0000001b)
 	runtime.AddStringArg(_f, label)
 	runtime.AddIntArg(_f, vP)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetIntRetr[int](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -469,11 +373,7 @@ func DragIntV(label string, vP int, v_speed float32, p_min int, p_max int, forma
 	runtime.AddIntArg(_f, p_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetIntRetr[int](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -489,11 +389,7 @@ func DragIntNV(label string, vP []int, v_speed float32, v_min int, v_max int, fo
 	runtime.AddIntArg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetIntSliceRetr[int](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -505,11 +401,7 @@ func DragIntN(label string, vP []int) (v []int, r bool) {
 	_f.AddFunctionId(0x0000001e)
 	runtime.AddStringArg(_f, label)
 	runtime.AddIntSliceArg(_f, vP)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetIntSliceRetr[int](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -525,11 +417,7 @@ func DragInt16(label string, vP int16) (v int16, r bool) {
 	_f.AddFunctionId(0x0000001f)
 	runtime.AddStringArg(_f, label)
 	runtime.AddInt16Arg(_f, vP)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetInt16Retr[int16](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -546,11 +434,7 @@ func DragInt16V(label string, vP int16, v_speed float32, p_min int16, p_max int1
 	runtime.AddInt16Arg(_f, p_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetInt16Retr[int16](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -566,11 +450,7 @@ func DragInt16NV(label string, vP []int16, v_speed float32, v_min int16, v_max i
 	runtime.AddInt16Arg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetInt16SliceRetr[int16](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -582,11 +462,7 @@ func DragInt16N(label string, vP []int16) (v []int16, r bool) {
 	_f.AddFunctionId(0x00000022)
 	runtime.AddStringArg(_f, label)
 	runtime.AddInt16SliceArg(_f, vP)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetInt16SliceRetr[int16](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -602,11 +478,7 @@ func DragInt32(label string, vP int32) (v int32, r bool) {
 	_f.AddFunctionId(0x00000023)
 	runtime.AddStringArg(_f, label)
 	runtime.AddInt32Arg(_f, vP)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetInt32Retr[int32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -623,11 +495,7 @@ func DragInt32V(label string, vP int32, v_speed float32, p_min int32, p_max int3
 	runtime.AddInt32Arg(_f, p_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetInt32Retr[int32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -643,11 +511,7 @@ func DragInt32NV(label string, vP []int32, v_speed float32, v_min int32, v_max i
 	runtime.AddInt32Arg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetInt32SliceRetr[int32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -659,11 +523,7 @@ func DragInt32N(label string, vP []int32) (v []int32, r bool) {
 	_f.AddFunctionId(0x00000026)
 	runtime.AddStringArg(_f, label)
 	runtime.AddInt32SliceArg(_f, vP)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetInt32SliceRetr[int32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -679,11 +539,7 @@ func DragInt8(label string, vP int8) (v int8, r bool) {
 	_f.AddFunctionId(0x00000027)
 	runtime.AddStringArg(_f, label)
 	runtime.AddInt8Arg(_f, vP)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetInt8Retr[int8](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -700,11 +556,7 @@ func DragInt8V(label string, vP int8, v_speed float32, p_min int8, p_max int8, f
 	runtime.AddInt8Arg(_f, p_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetInt8Retr[int8](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -720,11 +572,7 @@ func DragInt8NV(label string, vP []int8, v_speed float32, v_min int8, v_max int8
 	runtime.AddInt8Arg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetInt8SliceRetr[int8](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -736,11 +584,7 @@ func DragInt8N(label string, vP []int8) (v []int8, r bool) {
 	_f.AddFunctionId(0x0000002a)
 	runtime.AddStringArg(_f, label)
 	runtime.AddInt8SliceArg(_f, vP)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetInt8SliceRetr[int8](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -756,11 +600,7 @@ func DragUInt(label string, vP uint) (v uint, r bool) {
 	_f.AddFunctionId(0x0000002b)
 	runtime.AddStringArg(_f, label)
 	runtime.AddUintArg(_f, vP)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUintRetr[uint](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -777,11 +617,7 @@ func DragUIntV(label string, vP uint, v_speed float32, p_min uint, p_max uint, f
 	runtime.AddUintArg(_f, p_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUintRetr[uint](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -797,11 +633,7 @@ func DragUIntNV(label string, vP []uint, v_speed float32, v_min uint, v_max uint
 	runtime.AddUintArg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUintSliceRetr[uint](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -813,11 +645,7 @@ func DragUIntN(label string, vP []uint) (v []uint, r bool) {
 	_f.AddFunctionId(0x0000002e)
 	runtime.AddStringArg(_f, label)
 	runtime.AddUintSliceArg(_f, vP)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUintSliceRetr[uint](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -833,11 +661,7 @@ func DragUInt16(label string, vP uint16) (v uint16, r bool) {
 	_f.AddFunctionId(0x0000002f)
 	runtime.AddStringArg(_f, label)
 	runtime.AddUint16Arg(_f, vP)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUint16Retr[uint16](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -854,11 +678,7 @@ func DragUInt16V(label string, vP uint16, v_speed float32, p_min uint16, p_max u
 	runtime.AddUint16Arg(_f, p_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUint16Retr[uint16](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -874,11 +694,7 @@ func DragUInt16NV(label string, vP []uint16, v_speed float32, v_min uint16, v_ma
 	runtime.AddUint16Arg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUint16SliceRetr[uint16](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -890,11 +706,7 @@ func DragUInt16N(label string, vP []uint16) (v []uint16, r bool) {
 	_f.AddFunctionId(0x00000032)
 	runtime.AddStringArg(_f, label)
 	runtime.AddUint16SliceArg(_f, vP)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUint16SliceRetr[uint16](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -910,11 +722,7 @@ func DragUInt32(label string, vP uint32) (v uint32, r bool) {
 	_f.AddFunctionId(0x00000033)
 	runtime.AddStringArg(_f, label)
 	runtime.AddUint32Arg(_f, vP)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUint32Retr[uint32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -931,11 +739,7 @@ func DragUInt32V(label string, vP uint32, v_speed float32, p_min uint32, p_max u
 	runtime.AddUint32Arg(_f, p_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUint32Retr[uint32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -951,11 +755,7 @@ func DragUInt32NV(label string, vP []uint32, v_speed float32, v_min uint32, v_ma
 	runtime.AddUint32Arg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUint32SliceRetr[uint32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -967,11 +767,7 @@ func DragUInt32N(label string, vP []uint32) (v []uint32, r bool) {
 	_f.AddFunctionId(0x00000036)
 	runtime.AddStringArg(_f, label)
 	runtime.AddUint32SliceArg(_f, vP)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUint32SliceRetr[uint32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -987,11 +783,7 @@ func DragUInt8(label string, vP uint8) (v uint8, r bool) {
 	_f.AddFunctionId(0x00000037)
 	runtime.AddStringArg(_f, label)
 	runtime.AddUint8Arg(_f, vP)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUint8Retr[uint8](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -1008,11 +800,7 @@ func DragUInt8V(label string, vP uint8, v_speed float32, p_min uint8, p_max uint
 	runtime.AddUint8Arg(_f, p_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUint8Retr[uint8](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -1028,11 +816,7 @@ func DragUInt8NV(label string, vP []uint8, v_speed float32, v_min uint8, v_max u
 	runtime.AddUint8Arg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUint8SliceRetr[uint8](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -1044,11 +828,7 @@ func DragUInt8N(label string, vP []uint8) (v []uint8, r bool) {
 	_f.AddFunctionId(0x0000003a)
 	runtime.AddStringArg(_f, label)
 	runtime.AddUint8SliceArg(_f, vP)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUint8SliceRetr[uint8](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -1064,11 +844,7 @@ func DragFloat(label string, vP float32) (v float32, r bool) {
 	_f.AddFunctionId(0x0000003b)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Arg(_f, vP)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat32Retr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -1085,11 +861,7 @@ func DragFloatV(label string, vP float32, v_speed float32, v_min float32, v_max 
 	runtime.AddFloat32Arg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat32Retr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -1100,11 +872,7 @@ func DragFloat2(label string, vP [2]float32) (v [2]float32, r bool) {
 	_f.AddFunctionId(0x0000003d)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Array2Arg(_f, vP)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat32Array2Retr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -1121,11 +889,7 @@ func DragFloat2V(label string, vP [2]float32, v_speed float32, v_min float32, v_
 	runtime.AddFloat32Arg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat32Array2Retr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -1137,11 +901,7 @@ func DragFloat3(label string, vP [3]float32) (v [2]float32, r bool) {
 	_f.AddFunctionId(0x0000003f)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Array3Arg(_f, vP)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat32Array2Retr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -1158,11 +918,7 @@ func DragFloat3V(label string, vP [3]float32, v_speed float32, v_min float32, v_
 	runtime.AddFloat32Arg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat32Array4Retr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -1174,11 +930,7 @@ func DragFloat4(label string, vP [4]float32) (v [4]float32, r bool) {
 	_f.AddFunctionId(0x00000041)
 	runtime.AddStringArg(_f, label)
 	runtime.AddFloat32Array4Arg(_f, vP)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat32Array4Retr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -1195,11 +947,7 @@ func DragFloat4V(label string, vP [4]float32, v_speed float32, v_min float32, v_
 	runtime.AddFloat32Arg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat32Array4Retr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -1211,11 +959,7 @@ func DragInt2(label string, vP [2]int) (v [2]int, r bool) {
 	_f.AddFunctionId(0x00000043)
 	runtime.AddStringArg(_f, label)
 	runtime.AddIntArray2Arg(_f, vP)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetIntArray2Retr[int](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -1232,11 +976,7 @@ func DragInt2V(label string, vP [2]int, v_speed float32, v_min int, v_max int, f
 	runtime.AddIntArg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetIntArray2Retr[int](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -1248,11 +988,7 @@ func DragInt3(label string, vP [3]int) (v [2]int, r bool) {
 	_f.AddFunctionId(0x00000045)
 	runtime.AddStringArg(_f, label)
 	runtime.AddIntArray3Arg(_f, vP)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetIntArray2Retr[int](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -1269,11 +1005,7 @@ func DragInt3V(label string, vP [3]int, v_speed float32, v_min int, v_max int, f
 	runtime.AddIntArg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetIntArray4Retr[int](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -1285,11 +1017,7 @@ func DragInt4(label string, vP [4]int) (v [4]int, r bool) {
 	_f.AddFunctionId(0x00000047)
 	runtime.AddStringArg(_f, label)
 	runtime.AddIntArray4Arg(_f, vP)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetIntArray4Retr[int](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -1306,11 +1034,7 @@ func DragInt4V(label string, vP [4]int, v_speed float32, v_min int, v_max int, f
 	runtime.AddIntArg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetIntArray4Retr[int](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -1324,11 +1048,7 @@ func SliderFloat(label string, vP float32, v_min float32, v_max float32) (v floa
 	runtime.AddFloat32Arg(_f, vP)
 	runtime.AddFloat32Arg(_f, v_min)
 	runtime.AddFloat32Arg(_f, v_max)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat32Retr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -1344,11 +1064,7 @@ func SliderFloatV(label string, vP float32, v_min float32, v_max float32, format
 	runtime.AddFloat32Arg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat32Retr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -1362,11 +1078,7 @@ func SliderFloat2(label string, vP [2]float32, v_min float32, v_max float32) (v 
 	runtime.AddFloat32Array2Arg(_f, vP)
 	runtime.AddFloat32Arg(_f, v_min)
 	runtime.AddFloat32Arg(_f, v_max)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat32Array2Retr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -1382,11 +1094,7 @@ func SliderFloat2V(label string, vP [2]float32, v_min float32, v_max float32, fo
 	runtime.AddFloat32Arg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat32Array2Retr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -1400,11 +1108,7 @@ func SliderFloat3(label string, vP [3]float32, v_min float32, v_max float32) (v 
 	runtime.AddFloat32Array3Arg(_f, vP)
 	runtime.AddFloat32Arg(_f, v_min)
 	runtime.AddFloat32Arg(_f, v_max)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat32Array2Retr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -1420,11 +1124,7 @@ func SliderFloat3V(label string, vP [3]float32, v_min float32, v_max float32, fo
 	runtime.AddFloat32Arg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat32Array4Retr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -1438,11 +1138,7 @@ func SliderFloat4(label string, vP [4]float32, v_min float32, v_max float32) (v 
 	runtime.AddFloat32Array4Arg(_f, vP)
 	runtime.AddFloat32Arg(_f, v_min)
 	runtime.AddFloat32Arg(_f, v_max)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat32Array4Retr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -1458,11 +1154,7 @@ func SliderFloat4V(label string, vP [4]float32, v_min float32, v_max float32, fo
 	runtime.AddFloat32Arg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat32Array4Retr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -1476,11 +1168,7 @@ func SliderInt2(label string, vP [2]int, v_min int, v_max int) (v [2]int, r bool
 	runtime.AddIntArray2Arg(_f, vP)
 	runtime.AddIntArg(_f, v_min)
 	runtime.AddIntArg(_f, v_max)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetIntArray2Retr[int](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -1496,11 +1184,7 @@ func SliderInt2V(label string, vP [2]int, v_min int, v_max int, format string, f
 	runtime.AddIntArg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetIntArray2Retr[int](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -1514,11 +1198,7 @@ func SliderInt3(label string, vP [3]int, v_min int, v_max int) (v [2]int, r bool
 	runtime.AddIntArray3Arg(_f, vP)
 	runtime.AddIntArg(_f, v_min)
 	runtime.AddIntArg(_f, v_max)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetIntArray2Retr[int](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -1534,11 +1214,7 @@ func SliderInt3V(label string, vP [3]int, v_min int, v_max int, format string, f
 	runtime.AddIntArg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetIntArray4Retr[int](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -1552,11 +1228,7 @@ func SliderInt4(label string, vP [4]int, v_min int, v_max int) (v [4]int, r bool
 	runtime.AddIntArray4Arg(_f, vP)
 	runtime.AddIntArg(_f, v_min)
 	runtime.AddIntArg(_f, v_max)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetIntArray4Retr[int](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -1572,11 +1244,7 @@ func SliderInt4V(label string, vP [4]int, v_min int, v_max int, format string, f
 	runtime.AddIntArg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetIntArray4Retr[int](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -2287,11 +1955,7 @@ func (foreignptr ImDrawListPtr) CloneOutput() (r ImDrawListPtr) {
 	_f := foreignptr.getFffi()
 	_f.AddFunctionId(0x0000008b)
 	runtime.AddUintptrArg(_f, foreignptr)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		foreignptr.handleError(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImDrawListPtr(runtime.GetUintptrRetr[uintptr](_f))
 
 	return
@@ -2431,11 +2095,7 @@ func (foreignptr ImDrawListPtr) _CalcCircleAutoSegmentCount(radius float32) (r i
 	_f.AddFunctionId(0x00000099)
 	runtime.AddUintptrArg(_f, foreignptr)
 	runtime.AddFloat32Arg(_f, radius)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		foreignptr.handleError(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetIntRetr[int](_f))
 
 	return
@@ -2572,11 +2232,7 @@ func GetFont() (font ImFontPtr) {
 
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000000a3)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	font = ImFontPtr(runtime.GetUintptrRetr[uintptr](_f))
 	return
 }
@@ -2584,11 +2240,7 @@ func GetFont() (font ImFontPtr) {
 func GetFontTexID() (tex ImTextureID) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000000a4)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	tex = ImTextureID(runtime.GetUintptrRetr[uintptr](_f))
 	return
 }
@@ -2606,11 +2258,7 @@ func SetFontGlobalScale(scale float32) {
 func GetFontGlobalScale() (scale float32) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000000a6)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	scale = (runtime.GetFloat32Retr[float32](_f))
 
 	//_ = `ImGui::GetWindowFontScale(scale);`
@@ -2644,11 +2292,7 @@ func addFontFromMemoryTrueTypeFontV(name string, fontData []byte, sizeInPixels f
 	runtime.AddUintArg(_f, fontBuilderFlags)
 	runtime.AddFloat32Arg(_f, rasterizerMultiply)
 	runtime.AddRuneArg(_f, ellipsisChar)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	font = ImFontPtr(runtime.GetUintptrRetr[uintptr](_f))
 
 	//name = utils.TruncateDescriptiveNameLeft(name, 40-1, "…")
@@ -2726,11 +2370,7 @@ func (foreignptr ImFontPtr) CalcTextSizeA(size float32, max_width float32, wrap_
 	runtime.AddFloat32Arg(_f, wrap_width)
 	runtime.AddStringArg(_f, text)
 	runtime.AddBoolArg(_f, pixel_perfect)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		foreignptr.handleError(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImVec2(runtime.GetComplex64Retr[complex64](_f))
 	remainingBytes = Size_t(runtime.GetUint64Retr[uint64](_f))
 
@@ -2846,11 +2486,7 @@ func ShowStyleSelector(label string) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000000b6)
 	runtime.AddStringArg(_f, label)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -2883,11 +2519,7 @@ func ShowUserGuide() {
 func GetVersion() (r string) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000000b9)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetStringRetr[string](_f))
 
 	return
@@ -2927,11 +2559,7 @@ func Begin(name string) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000000bd)
 	runtime.AddStringArg(_f, name)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -2942,11 +2570,7 @@ func BeginV(name string, flags ImGuiWindowFlags /* = 0*/) (r bool, p_open bool) 
 	_f.AddFunctionId(0x000000be)
 	runtime.AddStringArg(_f, name)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 	p_open = (runtime.GetBoolRetr[bool](_f))
 
@@ -2964,11 +2588,7 @@ func BeginChild(str_id string) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000000c0)
 	runtime.AddStringArg(_f, str_id)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -2981,11 +2601,7 @@ func BeginChildV(str_id string, size ImVec2 /* = ImVec2(0, 0)*/, child_flags ImG
 	runtime.AddComplex64Arg(_f, size)
 	runtime.AddIntArg(_f, child_flags)
 	runtime.AddIntArg(_f, window_flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -2995,11 +2611,7 @@ func BeginChildID(id ImGuiID) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000000c2)
 	runtime.AddUint32Arg(_f, id)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -3012,11 +2624,7 @@ func BeginChildVID(id ImGuiID, size ImVec2 /* = ImVec2(0, 0)*/, child_flags ImGu
 	runtime.AddComplex64Arg(_f, size)
 	runtime.AddIntArg(_f, child_flags)
 	runtime.AddIntArg(_f, window_flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -3032,11 +2640,7 @@ func EndChild() {
 func IsWindowAppearing() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000000c5)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -3045,11 +2649,7 @@ func IsWindowAppearing() (r bool) {
 func IsWindowCollapsed() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000000c6)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -3061,11 +2661,7 @@ func IsWindowCollapsed() (r bool) {
 func IsWindowFocused() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000000c7)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -3079,11 +2675,7 @@ func IsWindowFocusedV(flags ImGuiFocusedFlags /* = 0*/) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000000c8)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -3095,11 +2687,7 @@ func IsWindowFocusedV(flags ImGuiFocusedFlags /* = 0*/) (r bool) {
 func IsWindowHovered() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000000c9)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -3113,11 +2701,7 @@ func IsWindowHoveredV(flags ImGuiHoveredFlags /* = 0*/) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000000ca)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -3129,11 +2713,7 @@ func IsWindowHoveredV(flags ImGuiHoveredFlags /* = 0*/) (r bool) {
 func GetWindowDrawList() (r ImDrawListPtr) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000000cb)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImDrawListPtr(runtime.GetUintptrRetr[uintptr](_f))
 
 	return
@@ -3145,11 +2725,7 @@ func GetWindowDrawList() (r ImDrawListPtr) {
 func GetWindowDpiScale() (r float32) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000000cc)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetFloat32Retr[float32](_f))
 
 	return
@@ -3161,11 +2737,7 @@ func GetWindowDpiScale() (r float32) {
 func GetWindowPos() (r ImVec2) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000000cd)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImVec2(runtime.GetComplex64Retr[complex64](_f))
 
 	return
@@ -3177,11 +2749,7 @@ func GetWindowPos() (r ImVec2) {
 func GetWindowSize() (r ImVec2) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000000ce)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImVec2(runtime.GetComplex64Retr[complex64](_f))
 
 	return
@@ -3193,11 +2761,7 @@ func GetWindowSize() (r ImVec2) {
 func GetWindowWidth() (r float32) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000000cf)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetFloat32Retr[float32](_f))
 
 	return
@@ -3209,11 +2773,7 @@ func GetWindowWidth() (r float32) {
 func GetWindowHeight() (r float32) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000000d0)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetFloat32Retr[float32](_f))
 
 	return
@@ -3454,11 +3014,7 @@ func SetWindowFocus(name string) {
 func GetScrollX() (r float32) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000000e4)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetFloat32Retr[float32](_f))
 
 	return
@@ -3470,11 +3026,7 @@ func GetScrollX() (r float32) {
 func GetScrollY() (r float32) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000000e5)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetFloat32Retr[float32](_f))
 
 	return
@@ -3508,11 +3060,7 @@ func SetScrollY(scroll_y float32) {
 func GetScrollMaxX() (r float32) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000000e8)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetFloat32Retr[float32](_f))
 
 	return
@@ -3524,11 +3072,7 @@ func GetScrollMaxX() (r float32) {
 func GetScrollMaxY() (r float32) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000000e9)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetFloat32Retr[float32](_f))
 
 	return
@@ -3786,11 +3330,7 @@ func SetNextItemWidth(item_width float32) {
 func CalcItemWidth() (r float32) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000102)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetFloat32Retr[float32](_f))
 
 	return
@@ -3831,11 +3371,7 @@ func PopTextWrapPos() {
 func GetFontSize() (r float32) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000106)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetFloat32Retr[float32](_f))
 
 	return
@@ -3847,11 +3383,7 @@ func GetFontSize() (r float32) {
 func GetFontTexUvWhitePixel() (r ImVec2) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000107)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImVec2(runtime.GetComplex64Retr[complex64](_f))
 
 	return
@@ -3864,11 +3396,7 @@ func GetColorU32ImGuiCol(idx ImGuiCol) (r uint32) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000108)
 	runtime.AddIntArg(_f, idx)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetUint32Retr[uint32](_f))
 
 	return
@@ -3883,11 +3411,7 @@ func GetColorU32ImGuiColV(idx ImGuiCol, alpha_mul float32 /* = 1.0f*/) (r uint32
 	_f.AddFunctionId(0x00000109)
 	runtime.AddIntArg(_f, idx)
 	runtime.AddFloat32Arg(_f, alpha_mul)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetUint32Retr[uint32](_f))
 
 	return
@@ -3900,11 +3424,7 @@ func GetColorU32ImVec4(col ImVec4) (r uint32) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000010a)
 	runtime.AddFloat32Array4Arg(_f, col)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetUint32Retr[uint32](_f))
 
 	return
@@ -3917,11 +3437,7 @@ func GetColorU32(col uint32) (r uint32) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000010b)
 	runtime.AddUint32Arg(_f, col)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetUint32Retr[uint32](_f))
 
 	return
@@ -3936,11 +3452,7 @@ func GetColorU32V(col uint32, alpha_mul float32 /* = 1.0f*/) (r uint32) {
 	_f.AddFunctionId(0x0000010c)
 	runtime.AddUint32Arg(_f, col)
 	runtime.AddFloat32Arg(_f, alpha_mul)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetUint32Retr[uint32](_f))
 
 	return
@@ -3953,11 +3465,7 @@ func GetStyleColorVec4(idx ImGuiCol) (r ImVec4) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000010d)
 	runtime.AddIntArg(_f, idx)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImVec4(runtime.GetFloat32Array4Retr[float32](_f))
 
 	return
@@ -3969,11 +3477,7 @@ func GetStyleColorVec4(idx ImGuiCol) (r ImVec4) {
 func GetCursorScreenPos() (r ImVec2) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000010e)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImVec2(runtime.GetComplex64Retr[complex64](_f))
 
 	return
@@ -3996,11 +3500,7 @@ func SetCursorScreenPos(pos ImVec2) {
 func GetContentRegionAvail() (r ImVec2) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000110)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImVec2(runtime.GetComplex64Retr[complex64](_f))
 
 	return
@@ -4012,11 +3512,7 @@ func GetContentRegionAvail() (r ImVec2) {
 func GetCursorPos() (r ImVec2) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000111)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImVec2(runtime.GetComplex64Retr[complex64](_f))
 
 	return
@@ -4028,11 +3524,7 @@ func GetCursorPos() (r ImVec2) {
 func GetCursorPosX() (r float32) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000112)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetFloat32Retr[float32](_f))
 
 	return
@@ -4044,11 +3536,7 @@ func GetCursorPosX() (r float32) {
 func GetCursorPosY() (r float32) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000113)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetFloat32Retr[float32](_f))
 
 	return
@@ -4093,11 +3581,7 @@ func SetCursorPosY(local_y float32) {
 func GetCursorStartPos() (r ImVec2) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000117)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImVec2(runtime.GetComplex64Retr[complex64](_f))
 
 	return
@@ -4248,11 +3732,7 @@ func AlignTextToFramePadding() {
 func GetTextLineHeight() (r float32) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000125)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetFloat32Retr[float32](_f))
 
 	return
@@ -4264,11 +3744,7 @@ func GetTextLineHeight() (r float32) {
 func GetTextLineHeightWithSpacing() (r float32) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000126)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetFloat32Retr[float32](_f))
 
 	return
@@ -4280,11 +3756,7 @@ func GetTextLineHeightWithSpacing() (r float32) {
 func GetFrameHeight() (r float32) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000127)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetFloat32Retr[float32](_f))
 
 	return
@@ -4296,11 +3768,7 @@ func GetFrameHeight() (r float32) {
 func GetFrameHeightWithSpacing() (r float32) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000128)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetFloat32Retr[float32](_f))
 
 	return
@@ -4345,11 +3813,7 @@ func GetID(str_id string) (r ImGuiID) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000012c)
 	runtime.AddStringArg(_f, str_id)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImGuiID(runtime.GetUint32Retr[uint32](_f))
 
 	return
@@ -4359,11 +3823,7 @@ func GetIDInt(int_id int) (r ImGuiID) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000012d)
 	runtime.AddIntArg(_f, int_id)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImGuiID(runtime.GetUint32Retr[uint32](_f))
 
 	return
@@ -4387,11 +3847,7 @@ func Button(label string) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000012f)
 	runtime.AddStringArg(_f, label)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -4406,11 +3862,7 @@ func ButtonV(label string, size ImVec2 /* = ImVec2(0, 0)*/) (r bool) {
 	_f.AddFunctionId(0x00000130)
 	runtime.AddStringArg(_f, label)
 	runtime.AddComplex64Arg(_f, size)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -4423,11 +3875,7 @@ func SmallButton(label string) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000131)
 	runtime.AddStringArg(_f, label)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -4441,11 +3889,7 @@ func InvisibleButton(str_id string, size ImVec2) (r bool) {
 	_f.AddFunctionId(0x00000132)
 	runtime.AddStringArg(_f, str_id)
 	runtime.AddComplex64Arg(_f, size)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -4461,11 +3905,7 @@ func InvisibleButtonV(str_id string, size ImVec2, flags ImGuiButtonFlags /* = 0*
 	runtime.AddStringArg(_f, str_id)
 	runtime.AddComplex64Arg(_f, size)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -4479,11 +3919,7 @@ func ArrowButton(str_id string, dir ImGuiDir) (r bool) {
 	_f.AddFunctionId(0x00000134)
 	runtime.AddStringArg(_f, str_id)
 	runtime.AddIntArg(_f, dir)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -4497,11 +3933,7 @@ func RadioButton(label string, active bool) (r bool) {
 	_f.AddFunctionId(0x00000135)
 	runtime.AddStringArg(_f, label)
 	runtime.AddBoolArg(_f, active)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -4542,11 +3974,7 @@ func TextLink(label string) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000139)
 	runtime.AddStringArg(_f, label)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -4604,11 +4032,7 @@ func ImageButton(str_id string, user_texture_id ImTextureID, image_size ImVec2) 
 	runtime.AddStringArg(_f, str_id)
 	runtime.AddUintptrArg(_f, user_texture_id)
 	runtime.AddComplex64Arg(_f, image_size)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -4624,11 +4048,7 @@ func ImageButtonV(str_id string, user_texture_id ImTextureID, image_size ImVec2,
 	runtime.AddComplex64Arg(_f, uv1)
 	runtime.AddFloat32Array4Arg(_f, bg_col)
 	runtime.AddFloat32Array4Arg(_f, tint_col)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -4639,11 +4059,7 @@ func BeginCombo(label string, preview_value string) (r bool) {
 	_f.AddFunctionId(0x00000140)
 	runtime.AddStringArg(_f, label)
 	runtime.AddStringArg(_f, preview_value)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -4655,11 +4071,7 @@ func BeginComboV(label string, preview_value string, flags ImGuiComboFlags /* = 
 	runtime.AddStringArg(_f, label)
 	runtime.AddStringArg(_f, preview_value)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -4683,11 +4095,7 @@ func ColorButton(desc_id string, col ImVec4) (r bool) {
 	_f.AddFunctionId(0x00000143)
 	runtime.AddStringArg(_f, desc_id)
 	runtime.AddFloat32Array4Arg(_f, col)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -4705,11 +4113,7 @@ func ColorButtonV(desc_id string, col ImVec4, flags ImGuiColorEditFlags /* = 0*/
 	runtime.AddFloat32Array4Arg(_f, col)
 	runtime.AddIntArg(_f, flags)
 	runtime.AddComplex64Arg(_f, size)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -4730,11 +4134,7 @@ func TreeNode(label string) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000146)
 	runtime.AddStringArg(_f, label)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -4744,11 +4144,7 @@ func TreeNodeEx(label string) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000147)
 	runtime.AddStringArg(_f, label)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -4759,11 +4155,7 @@ func TreeNodeExV(label string, flags ImGuiTreeNodeFlags /* = 0*/) (r bool) {
 	_f.AddFunctionId(0x00000148)
 	runtime.AddStringArg(_f, label)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -4796,11 +4188,7 @@ func TreePop() {
 func GetTreeNodeToLabelSpacing() (r float32) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000014b)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetFloat32Retr[float32](_f))
 
 	return
@@ -4813,11 +4201,7 @@ func CollapsingHeader(label string) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000014c)
 	runtime.AddStringArg(_f, label)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -4832,11 +4216,7 @@ func CollapsingHeaderV(label string, flags ImGuiTreeNodeFlags /* = 0*/) (r bool)
 	_f.AddFunctionId(0x0000014d)
 	runtime.AddStringArg(_f, label)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -4884,11 +4264,7 @@ func Selectable(label string) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000151)
 	runtime.AddStringArg(_f, label)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -4907,11 +4283,7 @@ func SelectableV(label string, selected bool /* = false*/, flags ImGuiSelectable
 	runtime.AddBoolArg(_f, selected)
 	runtime.AddIntArg(_f, flags)
 	runtime.AddComplex64Arg(_f, size)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -4923,11 +4295,7 @@ func SelectableV(label string, selected bool /* = false*/, flags ImGuiSelectable
 func IsItemToggledSelection() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000153)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -4940,11 +4308,7 @@ func BeginListBox(label string) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000154)
 	runtime.AddStringArg(_f, label)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -4959,11 +4323,7 @@ func BeginListBoxV(label string, size ImVec2 /* = ImVec2(0, 0)*/) (r bool) {
 	_f.AddFunctionId(0x00000155)
 	runtime.AddStringArg(_f, label)
 	runtime.AddComplex64Arg(_f, size)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -4985,11 +4345,7 @@ func EndListBox() {
 func BeginMenuBar() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000157)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -5011,11 +4367,7 @@ func EndMenuBar() {
 func BeginMainMenuBar() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000159)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -5038,11 +4390,7 @@ func BeginMenu(label string) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000015b)
 	runtime.AddStringArg(_f, label)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -5057,11 +4405,7 @@ func BeginMenuV(label string, enabled bool /* = true*/) (r bool) {
 	_f.AddFunctionId(0x0000015c)
 	runtime.AddStringArg(_f, label)
 	runtime.AddBoolArg(_f, enabled)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -5084,11 +4428,7 @@ func MenuItem(label string) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000015e)
 	runtime.AddStringArg(_f, label)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -5107,11 +4447,7 @@ func MenuItemV(label string, shortcut string /* = NULL*/, selected bool /* = fal
 	runtime.AddStringArg(_f, shortcut)
 	runtime.AddBoolArg(_f, selected)
 	runtime.AddBoolArg(_f, enabled)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -5123,11 +4459,7 @@ func MenuItemV(label string, shortcut string /* = NULL*/, selected bool /* = fal
 func BeginTooltip() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000160)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -5149,11 +4481,7 @@ func EndTooltip() {
 func BeginItemTooltip() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000162)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -5166,11 +4494,7 @@ func BeginPopup(str_id string) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000163)
 	runtime.AddStringArg(_f, str_id)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -5185,11 +4509,7 @@ func BeginPopupV(str_id string, flags ImGuiWindowFlags /* = 0*/) (r bool) {
 	_f.AddFunctionId(0x00000164)
 	runtime.AddStringArg(_f, str_id)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -5202,11 +4522,7 @@ func BeginPopupModal(name string) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000165)
 	runtime.AddStringArg(_f, name)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -5223,11 +4539,7 @@ func BeginPopupModalV(name string, flags ImGuiWindowFlags /* = 0*/) (r bool, p_o
 	_f.AddFunctionId(0x00000166)
 	runtime.AddStringArg(_f, name)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 	p_open = (runtime.GetBoolRetr[bool](_f))
 
@@ -5332,11 +4644,7 @@ func CloseCurrentPopup() {
 func BeginPopupContextItem() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000016f)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -5352,11 +4660,7 @@ func BeginPopupContextItemV(str_id string /* = NULL*/, popup_flags ImGuiPopupFla
 	_f.AddFunctionId(0x00000170)
 	runtime.AddStringArg(_f, str_id)
 	runtime.AddIntArg(_f, popup_flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -5368,11 +4672,7 @@ func BeginPopupContextItemV(str_id string /* = NULL*/, popup_flags ImGuiPopupFla
 func BeginPopupContextWindow() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000171)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -5388,11 +4688,7 @@ func BeginPopupContextWindowV(str_id string /* = NULL*/, popup_flags ImGuiPopupF
 	_f.AddFunctionId(0x00000172)
 	runtime.AddStringArg(_f, str_id)
 	runtime.AddIntArg(_f, popup_flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -5404,11 +4700,7 @@ func BeginPopupContextWindowV(str_id string /* = NULL*/, popup_flags ImGuiPopupF
 func BeginPopupContextVoid() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000173)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -5424,11 +4716,7 @@ func BeginPopupContextVoidV(str_id string /* = NULL*/, popup_flags ImGuiPopupFla
 	_f.AddFunctionId(0x00000174)
 	runtime.AddStringArg(_f, str_id)
 	runtime.AddIntArg(_f, popup_flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -5441,11 +4729,7 @@ func IsPopupOpen(str_id string) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000175)
 	runtime.AddStringArg(_f, str_id)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -5460,11 +4744,7 @@ func IsPopupOpenV(str_id string, flags ImGuiPopupFlags /* = 0*/) (r bool) {
 	_f.AddFunctionId(0x00000176)
 	runtime.AddStringArg(_f, str_id)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -5475,11 +4755,7 @@ func BeginTable(str_id string, columns int) (r bool) {
 	_f.AddFunctionId(0x00000177)
 	runtime.AddStringArg(_f, str_id)
 	runtime.AddIntArg(_f, columns)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -5493,11 +4769,7 @@ func BeginTableV(str_id string, columns int, flags ImGuiTableFlags /* = 0*/, out
 	runtime.AddIntArg(_f, flags)
 	runtime.AddComplex64Arg(_f, outer_size)
 	runtime.AddFloat32Arg(_f, inner_width)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -5543,11 +4815,7 @@ func TableNextRowV(row_flags ImGuiTableRowFlags /* = 0*/, min_row_height float32
 func TableNextColumn() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000017c)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -5560,11 +4828,7 @@ func TableSetColumnIndex(column_n int) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000017d)
 	runtime.AddIntArg(_f, column_n)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -5638,11 +4902,7 @@ func TableAngledHeadersRow() {
 func TableGetColumnCount() (r int) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000184)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetIntRetr[int](_f))
 
 	return
@@ -5654,11 +4914,7 @@ func TableGetColumnCount() (r int) {
 func TableGetColumnIndex() (r int) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000185)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetIntRetr[int](_f))
 
 	return
@@ -5670,11 +4926,7 @@ func TableGetColumnIndex() (r int) {
 func TableGetRowIndex() (r int) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000186)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetIntRetr[int](_f))
 
 	return
@@ -5686,11 +4938,7 @@ func TableGetRowIndex() (r int) {
 func TableGetColumnName() (r string) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000187)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetStringRetr[string](_f))
 
 	return
@@ -5704,11 +4952,7 @@ func TableGetColumnNameV(column_n int /* = -1*/) (r string) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000188)
 	runtime.AddIntArg(_f, column_n)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetStringRetr[string](_f))
 
 	return
@@ -5720,11 +4964,7 @@ func TableGetColumnNameV(column_n int /* = -1*/) (r string) {
 func TableGetColumnFlags() (r ImGuiTableColumnFlags) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000189)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImGuiTableColumnFlags(runtime.GetIntRetr[int](_f))
 
 	return
@@ -5738,11 +4978,7 @@ func TableGetColumnFlagsV(column_n int /* = -1*/) (r ImGuiTableColumnFlags) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000018a)
 	runtime.AddIntArg(_f, column_n)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImGuiTableColumnFlags(runtime.GetIntRetr[int](_f))
 
 	return
@@ -5766,11 +5002,7 @@ func TableSetColumnEnabled(column_n int, v bool) {
 func TableGetHoveredColumn() (r int) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000018c)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetIntRetr[int](_f))
 
 	return
@@ -5835,11 +5067,7 @@ func NextColumn() {
 func GetColumnIndex() (r int) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000192)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetIntRetr[int](_f))
 
 	return
@@ -5851,11 +5079,7 @@ func GetColumnIndex() (r int) {
 func GetColumnWidth() (r float32) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000193)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetFloat32Retr[float32](_f))
 
 	return
@@ -5869,11 +5093,7 @@ func GetColumnWidthV(column_index int /* = -1*/) (r float32) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000194)
 	runtime.AddIntArg(_f, column_index)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetFloat32Retr[float32](_f))
 
 	return
@@ -5897,11 +5117,7 @@ func SetColumnWidth(column_index int, width float32) {
 func GetColumnOffset() (r float32) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000196)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetFloat32Retr[float32](_f))
 
 	return
@@ -5915,11 +5131,7 @@ func GetColumnOffsetV(column_index int /* = -1*/) (r float32) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000197)
 	runtime.AddIntArg(_f, column_index)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetFloat32Retr[float32](_f))
 
 	return
@@ -5940,11 +5152,7 @@ func SetColumnOffset(column_index int, offset_x float32) {
 func GetColumnsCount() (r int) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000199)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetIntRetr[int](_f))
 
 	return
@@ -5957,11 +5165,7 @@ func BeginTabBar(str_id string) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000019a)
 	runtime.AddStringArg(_f, str_id)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -5976,11 +5180,7 @@ func BeginTabBarV(str_id string, flags ImGuiTabBarFlags /* = 0*/) (r bool) {
 	_f.AddFunctionId(0x0000019b)
 	runtime.AddStringArg(_f, str_id)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -6003,11 +5203,7 @@ func BeginTabItem(label string) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000019d)
 	runtime.AddStringArg(_f, label)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -6024,11 +5220,7 @@ func BeginTabItemV(label string, flags ImGuiTabItemFlags /* = 0*/) (r bool, p_op
 	_f.AddFunctionId(0x0000019e)
 	runtime.AddStringArg(_f, label)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 	p_open = (runtime.GetBoolRetr[bool](_f))
 
@@ -6052,11 +5244,7 @@ func TabItemButton(label string) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001a0)
 	runtime.AddStringArg(_f, label)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -6071,11 +5259,7 @@ func TabItemButtonV(label string, flags ImGuiTabItemFlags /* = 0*/) (r bool) {
 	_f.AddFunctionId(0x000001a1)
 	runtime.AddStringArg(_f, label)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -6096,11 +5280,7 @@ func DockSpace(dockspace_id ImGuiID) (r ImGuiID) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001a3)
 	runtime.AddUint32Arg(_f, dockspace_id)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImGuiID(runtime.GetUint32Retr[uint32](_f))
 
 	return
@@ -6109,11 +5289,7 @@ func DockSpace(dockspace_id ImGuiID) (r ImGuiID) {
 func DockSpaceOverViewport() (r ImGuiID) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001a4)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImGuiID(runtime.GetUint32Retr[uint32](_f))
 
 	return
@@ -6146,11 +5322,7 @@ func SetNextWindowDockIDV(dock_id ImGuiID, cond ImGuiCond /* = 0*/) {
 func GetWindowDockID() (r ImGuiID) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001a7)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImGuiID(runtime.GetUint32Retr[uint32](_f))
 
 	return
@@ -6162,11 +5334,7 @@ func GetWindowDockID() (r ImGuiID) {
 func IsWindowDocked() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001a8)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -6266,11 +5434,7 @@ func LogButtons() {
 func BeginDragDropSource() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001b1)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -6284,11 +5448,7 @@ func BeginDragDropSourceV(flags ImGuiDragDropFlags /* = 0*/) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001b2)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -6310,11 +5470,7 @@ func EndDragDropSource() {
 func BeginDragDropTarget() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001b4)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -6428,11 +5584,7 @@ func SetNextItemAllowOverlap() {
 func IsItemHovered() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001c0)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -6446,11 +5598,7 @@ func IsItemHoveredV(flags ImGuiHoveredFlags /* = 0*/) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001c1)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -6462,11 +5610,7 @@ func IsItemHoveredV(flags ImGuiHoveredFlags /* = 0*/) (r bool) {
 func IsItemActive() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001c2)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -6478,11 +5622,7 @@ func IsItemActive() (r bool) {
 func IsItemFocused() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001c3)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -6494,11 +5634,7 @@ func IsItemFocused() (r bool) {
 func IsItemClicked() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001c4)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -6512,11 +5648,7 @@ func IsItemClickedV(mouse_button ImGuiMouseButton /* = 0*/) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001c5)
 	runtime.AddIntArg(_f, mouse_button)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -6528,11 +5660,7 @@ func IsItemClickedV(mouse_button ImGuiMouseButton /* = 0*/) (r bool) {
 func IsItemVisible() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001c6)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -6544,11 +5672,7 @@ func IsItemVisible() (r bool) {
 func IsItemEdited() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001c7)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -6560,11 +5684,7 @@ func IsItemEdited() (r bool) {
 func IsItemActivated() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001c8)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -6576,11 +5696,7 @@ func IsItemActivated() (r bool) {
 func IsItemDeactivated() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001c9)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -6592,11 +5708,7 @@ func IsItemDeactivated() (r bool) {
 func IsItemDeactivatedAfterEdit() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001ca)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -6608,11 +5720,7 @@ func IsItemDeactivatedAfterEdit() (r bool) {
 func IsItemToggledOpen() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001cb)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -6624,11 +5732,7 @@ func IsItemToggledOpen() (r bool) {
 func IsAnyItemHovered() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001cc)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -6640,11 +5744,7 @@ func IsAnyItemHovered() (r bool) {
 func IsAnyItemActive() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001cd)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -6656,11 +5756,7 @@ func IsAnyItemActive() (r bool) {
 func IsAnyItemFocused() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001ce)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -6672,11 +5768,7 @@ func IsAnyItemFocused() (r bool) {
 func GetItemID() (r ImGuiID) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001cf)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImGuiID(runtime.GetUint32Retr[uint32](_f))
 
 	return
@@ -6688,11 +5780,7 @@ func GetItemID() (r ImGuiID) {
 func GetItemRectMin() (r ImVec2) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001d0)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImVec2(runtime.GetComplex64Retr[complex64](_f))
 
 	return
@@ -6704,11 +5792,7 @@ func GetItemRectMin() (r ImVec2) {
 func GetItemRectMax() (r ImVec2) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001d1)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImVec2(runtime.GetComplex64Retr[complex64](_f))
 
 	return
@@ -6720,11 +5804,7 @@ func GetItemRectMax() (r ImVec2) {
 func GetItemRectSize() (r ImVec2) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001d2)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImVec2(runtime.GetComplex64Retr[complex64](_f))
 
 	return
@@ -6736,11 +5816,7 @@ func GetItemRectSize() (r ImVec2) {
 func GetBackgroundDrawList() (r ImDrawListPtr) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001d3)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImDrawListPtr(runtime.GetUintptrRetr[uintptr](_f))
 
 	return
@@ -6752,11 +5828,7 @@ func GetBackgroundDrawList() (r ImDrawListPtr) {
 func GetForegroundDrawList() (r ImDrawListPtr) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001d4)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImDrawListPtr(runtime.GetUintptrRetr[uintptr](_f))
 
 	return
@@ -6769,11 +5841,7 @@ func IsRectVisible(size ImVec2) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001d5)
 	runtime.AddComplex64Arg(_f, size)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -6787,11 +5855,7 @@ func IsRectVisible2(rect_min ImVec2, rect_max ImVec2) (r bool) {
 	_f.AddFunctionId(0x000001d6)
 	runtime.AddComplex64Arg(_f, rect_min)
 	runtime.AddComplex64Arg(_f, rect_max)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -6803,11 +5867,7 @@ func IsRectVisible2(rect_min ImVec2, rect_max ImVec2) (r bool) {
 func GetTime() (r float64) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001d7)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetFloat64Retr[float64](_f))
 
 	return
@@ -6819,11 +5879,7 @@ func GetTime() (r float64) {
 func GetFrameCount() (r int) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001d8)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetIntRetr[int](_f))
 
 	return
@@ -6836,11 +5892,7 @@ func GetStyleColorName(idx ImGuiCol) (r string) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001d9)
 	runtime.AddIntArg(_f, idx)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetStringRetr[string](_f))
 
 	return
@@ -6850,11 +5902,7 @@ func ColorConvertU32ToFloat4(in uint32) (r ImVec4) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001da)
 	runtime.AddUint32Arg(_f, in)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImVec4(runtime.GetFloat32Array4Retr[float32](_f))
 
 	return
@@ -6864,11 +5912,7 @@ func ColorConvertFloat4ToU32(in ImVec4) (r uint32) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001db)
 	runtime.AddFloat32Array4Arg(_f, in)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetUint32Retr[uint32](_f))
 
 	return
@@ -6881,11 +5925,7 @@ func IsKeyDown(key ImGuiKey) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001dc)
 	runtime.AddIntArg(_f, key)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -6898,11 +5938,7 @@ func IsKeyPressed(key ImGuiKey) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001dd)
 	runtime.AddIntArg(_f, key)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -6917,11 +5953,7 @@ func IsKeyPressedV(key ImGuiKey, repeat bool /* = true*/) (r bool) {
 	_f.AddFunctionId(0x000001de)
 	runtime.AddIntArg(_f, key)
 	runtime.AddBoolArg(_f, repeat)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -6934,11 +5966,7 @@ func IsKeyReleased(key ImGuiKey) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001df)
 	runtime.AddIntArg(_f, key)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -6953,11 +5981,7 @@ func GetKeyPressedAmount(key ImGuiKey, repeat_delay float32, rate float32) (r in
 	runtime.AddIntArg(_f, key)
 	runtime.AddFloat32Arg(_f, repeat_delay)
 	runtime.AddFloat32Arg(_f, rate)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetIntRetr[int](_f))
 
 	return
@@ -6970,11 +5994,7 @@ func GetKeyName(key ImGuiKey) (r string) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001e1)
 	runtime.AddIntArg(_f, key)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetStringRetr[string](_f))
 
 	return
@@ -7009,11 +6029,7 @@ func IsMouseDown(button ImGuiMouseButton) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001e4)
 	runtime.AddIntArg(_f, button)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -7026,11 +6042,7 @@ func IsMouseClicked(button ImGuiMouseButton) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001e5)
 	runtime.AddIntArg(_f, button)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -7045,11 +6057,7 @@ func IsMouseClickedV(button ImGuiMouseButton, repeat bool /* = false*/) (r bool)
 	_f.AddFunctionId(0x000001e6)
 	runtime.AddIntArg(_f, button)
 	runtime.AddBoolArg(_f, repeat)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -7062,11 +6070,7 @@ func IsMouseReleased(button ImGuiMouseButton) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001e7)
 	runtime.AddIntArg(_f, button)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -7079,11 +6083,7 @@ func IsMouseDoubleClicked(button ImGuiMouseButton) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001e8)
 	runtime.AddIntArg(_f, button)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -7097,11 +6097,7 @@ func IsMouseReleasedWithDelay(button ImGuiMouseButton, delay float32) (r bool) {
 	_f.AddFunctionId(0x000001e9)
 	runtime.AddIntArg(_f, button)
 	runtime.AddFloat32Arg(_f, delay)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -7114,11 +6110,7 @@ func GetMouseClickedCount(button ImGuiMouseButton) (r int) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001ea)
 	runtime.AddIntArg(_f, button)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetIntRetr[int](_f))
 
 	return
@@ -7132,11 +6124,7 @@ func IsMouseHoveringRect(r_min ImVec2, r_max ImVec2) (r bool) {
 	_f.AddFunctionId(0x000001eb)
 	runtime.AddComplex64Arg(_f, r_min)
 	runtime.AddComplex64Arg(_f, r_max)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -7152,11 +6140,7 @@ func IsMouseHoveringRectV(r_min ImVec2, r_max ImVec2, clip bool /* = true*/) (r 
 	runtime.AddComplex64Arg(_f, r_min)
 	runtime.AddComplex64Arg(_f, r_max)
 	runtime.AddBoolArg(_f, clip)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -7168,11 +6152,7 @@ func IsMouseHoveringRectV(r_min ImVec2, r_max ImVec2, clip bool /* = true*/) (r 
 func IsMousePosValid() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001ed)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -7184,11 +6164,7 @@ func IsMousePosValid() (r bool) {
 func GetMousePos() (r ImVec2) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001ee)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImVec2(runtime.GetComplex64Retr[complex64](_f))
 
 	return
@@ -7200,11 +6176,7 @@ func GetMousePos() (r ImVec2) {
 func GetMousePosOnOpeningCurrentPopup() (r ImVec2) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001ef)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImVec2(runtime.GetComplex64Retr[complex64](_f))
 
 	return
@@ -7217,11 +6189,7 @@ func IsMouseDragging(button ImGuiMouseButton) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001f0)
 	runtime.AddIntArg(_f, button)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -7236,11 +6204,7 @@ func IsMouseDraggingV(button ImGuiMouseButton, lock_threshold float32 /* = -1.0f
 	_f.AddFunctionId(0x000001f1)
 	runtime.AddIntArg(_f, button)
 	runtime.AddFloat32Arg(_f, lock_threshold)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -7252,11 +6216,7 @@ func IsMouseDraggingV(button ImGuiMouseButton, lock_threshold float32 /* = -1.0f
 func GetMouseDragDelta() (r ImVec2) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001f2)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImVec2(runtime.GetComplex64Retr[complex64](_f))
 
 	return
@@ -7272,11 +6232,7 @@ func GetMouseDragDeltaV(button ImGuiMouseButton /* = 0*/, lock_threshold float32
 	_f.AddFunctionId(0x000001f3)
 	runtime.AddIntArg(_f, button)
 	runtime.AddFloat32Arg(_f, lock_threshold)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImVec2(runtime.GetComplex64Retr[complex64](_f))
 
 	return
@@ -7303,11 +6259,7 @@ func ResetMouseDragDeltaV(button ImGuiMouseButton /* = 0*/) {
 func GetMouseCursor() (r ImGuiMouseCursor) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001f6)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImGuiMouseCursor(runtime.GetIntRetr[int](_f))
 
 	return
@@ -7338,11 +6290,7 @@ func SetNextFrameWantCaptureMouse(want_capture_mouse bool) {
 func GetClipboardText() (r string) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001f9)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetStringRetr[string](_f))
 
 	return
@@ -7408,11 +6356,7 @@ func SaveIniSettingsToDisk(ini_filename string) {
 func SaveIniSettingsToMemory() (r string) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000001ff)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetStringRetr[string](_f))
 
 	return
@@ -7454,11 +6398,7 @@ func DebugCheckVersionAndDataLayout(version_str string, sz_io Size_t, sz_style S
 	runtime.AddUint64Arg(_f, sz_vec4)
 	runtime.AddUint64Arg(_f, sz_drawvert)
 	runtime.AddUint64Arg(_f, sz_drawidx)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -7500,11 +6440,7 @@ func DestroyPlatformWindows() {
 func GetContentRegionMax() (r ImVec2) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000207)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImVec2(runtime.GetComplex64Retr[complex64](_f))
 
 	return
@@ -7516,11 +6452,7 @@ func GetContentRegionMax() (r ImVec2) {
 func GetWindowContentRegionMin() (r ImVec2) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000208)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImVec2(runtime.GetComplex64Retr[complex64](_f))
 
 	return
@@ -7532,11 +6464,7 @@ func GetWindowContentRegionMin() (r ImVec2) {
 func GetWindowContentRegionMax() (r ImVec2) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000209)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImVec2(runtime.GetComplex64Retr[complex64](_f))
 
 	return
@@ -7659,11 +6587,7 @@ func ClearActiveID() {
 func GetHoveredID() (r ImGuiID) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000219)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImGuiID(runtime.GetUint32Retr[uint32](_f))
 
 	return
@@ -7712,11 +6636,7 @@ func GetIDWithSeed(n int, seed ImGuiID) (r ImGuiID) {
 	_f.AddFunctionId(0x0000021e)
 	runtime.AddIntArg(_f, n)
 	runtime.AddUint32Arg(_f, seed)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImGuiID(runtime.GetUint32Retr[uint32](_f))
 
 	return
@@ -7745,11 +6665,7 @@ func CalcItemSize(size ImVec2, default_w float32, default_h float32) (r ImVec2) 
 	runtime.AddComplex64Arg(_f, size)
 	runtime.AddFloat32Arg(_f, default_w)
 	runtime.AddFloat32Arg(_f, default_h)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImVec2(runtime.GetComplex64Retr[complex64](_f))
 
 	return
@@ -7760,11 +6676,7 @@ func CalcWrapWidthForPos(pos ImVec2, wrap_pos_x float32) (r float32) {
 	_f.AddFunctionId(0x00000222)
 	runtime.AddComplex64Arg(_f, pos)
 	runtime.AddFloat32Arg(_f, wrap_pos_x)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetFloat32Retr[float32](_f))
 
 	return
@@ -7844,11 +6756,7 @@ func BeginChildEx(name string, id ImGuiID, size_arg ImVec2, child_flags ImGuiChi
 	runtime.AddComplex64Arg(_f, size_arg)
 	runtime.AddIntArg(_f, child_flags)
 	runtime.AddIntArg(_f, window_flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -7859,11 +6767,7 @@ func BeginPopupEx(id ImGuiID, extra_window_flags ImGuiWindowFlags) (r bool) {
 	_f.AddFunctionId(0x0000022b)
 	runtime.AddUint32Arg(_f, id)
 	runtime.AddIntArg(_f, extra_window_flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -7907,11 +6811,7 @@ func IsPopupOpenIdI(id ImGuiID, popup_flags ImGuiPopupFlags) (r bool) {
 	_f.AddFunctionId(0x00000230)
 	runtime.AddUint32Arg(_f, id)
 	runtime.AddIntArg(_f, popup_flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -7922,11 +6822,7 @@ func BeginTooltipEx(tooltip_flags ImGuiTooltipFlags, extra_window_flags ImGuiWin
 	_f.AddFunctionId(0x00000231)
 	runtime.AddIntArg(_f, tooltip_flags)
 	runtime.AddIntArg(_f, extra_window_flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -7935,11 +6831,7 @@ func BeginTooltipEx(tooltip_flags ImGuiTooltipFlags, extra_window_flags ImGuiWin
 func BeginTooltipHidden() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000232)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -7950,11 +6842,7 @@ func BeginMenuEx(label string, icon string) (r bool) {
 	_f.AddFunctionId(0x00000233)
 	runtime.AddStringArg(_f, label)
 	runtime.AddStringArg(_f, icon)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -7966,11 +6854,7 @@ func BeginMenuExV(label string, icon string, enabled bool /* = true*/) (r bool) 
 	runtime.AddStringArg(_f, label)
 	runtime.AddStringArg(_f, icon)
 	runtime.AddBoolArg(_f, enabled)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -7981,11 +6865,7 @@ func MenuItemEx(label string, icon string) (r bool) {
 	_f.AddFunctionId(0x00000235)
 	runtime.AddStringArg(_f, label)
 	runtime.AddStringArg(_f, icon)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -7999,11 +6879,7 @@ func MenuItemExV(label string, icon string, shortcut string /* = NULL*/, selecte
 	runtime.AddStringArg(_f, shortcut)
 	runtime.AddBoolArg(_f, selected)
 	runtime.AddBoolArg(_f, enabled)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -8012,11 +6888,7 @@ func MenuItemExV(label string, icon string, shortcut string /* = NULL*/, selecte
 func BeginComboPreview() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000237)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -8039,11 +6911,7 @@ func NavInitRequestApplyResult() {
 func NavMoveRequestButNoResultYet() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000023a)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -8140,11 +7008,7 @@ func IsMouseDragPastThreshold(button ImGuiMouseButton) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000245)
 	runtime.AddIntArg(_f, button)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -8155,11 +7019,7 @@ func IsMouseDragPastThresholdV(button ImGuiMouseButton, lock_threshold float32 /
 	_f.AddFunctionId(0x00000246)
 	runtime.AddIntArg(_f, button)
 	runtime.AddFloat32Arg(_f, lock_threshold)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -8172,11 +7032,7 @@ func GetKeyMagnitude2d(key_left ImGuiKey, key_right ImGuiKey, key_up ImGuiKey, k
 	runtime.AddIntArg(_f, key_right)
 	runtime.AddIntArg(_f, key_up)
 	runtime.AddIntArg(_f, key_down)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImVec2(runtime.GetComplex64Retr[complex64](_f))
 
 	return
@@ -8189,11 +7045,7 @@ func CalcTypematicRepeatAmount(t0 float32, t1 float32, repeat_delay float32, rep
 	runtime.AddFloat32Arg(_f, t1)
 	runtime.AddFloat32Arg(_f, repeat_delay)
 	runtime.AddFloat32Arg(_f, repeat_rate)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetIntRetr[int](_f))
 
 	return
@@ -8218,11 +7070,7 @@ func GetKeyOwner(key ImGuiKey) (r ImGuiID) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000024b)
 	runtime.AddIntArg(_f, key)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImGuiID(runtime.GetUint32Retr[uint32](_f))
 
 	return
@@ -8267,11 +7115,7 @@ func TestKeyOwner(key ImGuiKey, owner_id ImGuiID) (r bool) {
 	_f.AddFunctionId(0x0000024f)
 	runtime.AddIntArg(_f, key)
 	runtime.AddUint32Arg(_f, owner_id)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -8282,11 +7126,7 @@ func IsKeyDownI(key ImGuiKey, owner_id ImGuiID) (r bool) {
 	_f.AddFunctionId(0x00000250)
 	runtime.AddIntArg(_f, key)
 	runtime.AddUint32Arg(_f, owner_id)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -8300,11 +7140,7 @@ func IsKeyPressedI(key ImGuiKey, flags ImGuiInputFlags) (r bool) {
 	_f.AddFunctionId(0x00000251)
 	runtime.AddIntArg(_f, key)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -8320,11 +7156,7 @@ func IsKeyPressedVI(key ImGuiKey, flags ImGuiInputFlags, owner_id ImGuiID /* = 0
 	runtime.AddIntArg(_f, key)
 	runtime.AddIntArg(_f, flags)
 	runtime.AddUint32Arg(_f, owner_id)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -8335,11 +7167,7 @@ func IsKeyReleasedI(key ImGuiKey, owner_id ImGuiID) (r bool) {
 	_f.AddFunctionId(0x00000253)
 	runtime.AddIntArg(_f, key)
 	runtime.AddUint32Arg(_f, owner_id)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -8350,11 +7178,7 @@ func IsMouseDownI(button ImGuiMouseButton, owner_id ImGuiID) (r bool) {
 	_f.AddFunctionId(0x00000254)
 	runtime.AddIntArg(_f, button)
 	runtime.AddUint32Arg(_f, owner_id)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -8365,11 +7189,7 @@ func IsMouseClickedI(button ImGuiMouseButton, flags ImGuiInputFlags) (r bool) {
 	_f.AddFunctionId(0x00000255)
 	runtime.AddIntArg(_f, button)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -8381,11 +7201,7 @@ func IsMouseClickedVI(button ImGuiMouseButton, flags ImGuiInputFlags, owner_id I
 	runtime.AddIntArg(_f, button)
 	runtime.AddIntArg(_f, flags)
 	runtime.AddUint32Arg(_f, owner_id)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -8396,11 +7212,7 @@ func IsMouseReleasedI(button ImGuiMouseButton, owner_id ImGuiID) (r bool) {
 	_f.AddFunctionId(0x00000257)
 	runtime.AddIntArg(_f, button)
 	runtime.AddUint32Arg(_f, owner_id)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -8411,11 +7223,7 @@ func IsMouseDoubleClickedI(button ImGuiMouseButton, owner_id ImGuiID) (r bool) {
 	_f.AddFunctionId(0x00000258)
 	runtime.AddIntArg(_f, button)
 	runtime.AddUint32Arg(_f, owner_id)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -8440,11 +7248,7 @@ func DockBuilderDockWindow(window_name string, node_id ImGuiID) {
 func DockBuilderAddNode() (r ImGuiID) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000025b)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImGuiID(runtime.GetUint32Retr[uint32](_f))
 
 	return
@@ -8455,11 +7259,7 @@ func DockBuilderAddNodeV(node_id ImGuiID /* = 0*/, flags ImGuiDockNodeFlags /* =
 	_f.AddFunctionId(0x0000025c)
 	runtime.AddUint32Arg(_f, node_id)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImGuiID(runtime.GetUint32Retr[uint32](_f))
 
 	return
@@ -8557,11 +7357,7 @@ func PopFocusScope() {
 func IsDragDropActive() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000267)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -8577,11 +7373,7 @@ func ClearDragDrop() {
 func IsDragDropPayloadBeingAccepted() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000269)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -8650,11 +7442,7 @@ func GetColumnsID(str_id string, count int) (r ImGuiID) {
 	_f.AddFunctionId(0x00000270)
 	runtime.AddStringArg(_f, str_id)
 	runtime.AddIntArg(_f, count)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImGuiID(runtime.GetUint32Retr[uint32](_f))
 
 	return
@@ -8700,11 +7488,7 @@ func TableSetColumnSortDirection(column_n int, sort_direction ImGuiSortDirection
 func TableGetHoveredRow() (r int) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000275)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetIntRetr[int](_f))
 
 	return
@@ -8713,11 +7497,7 @@ func TableGetHoveredRow() (r int) {
 func TableGetHeaderRowHeight() (r float32) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000276)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetFloat32Retr[float32](_f))
 
 	return
@@ -8726,11 +7506,7 @@ func TableGetHeaderRowHeight() (r float32) {
 func TableGetHeaderAngledMaxLabelWidth() (r float32) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000277)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetFloat32Retr[float32](_f))
 
 	return
@@ -8756,11 +7532,7 @@ func BeginTableEx(name string, id ImGuiID, columns_count int) (r bool) {
 	runtime.AddStringArg(_f, name)
 	runtime.AddUint32Arg(_f, id)
 	runtime.AddIntArg(_f, columns_count)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -8775,11 +7547,7 @@ func BeginTableExV(name string, id ImGuiID, columns_count int, flags ImGuiTableF
 	runtime.AddIntArg(_f, flags)
 	runtime.AddComplex64Arg(_f, outer_size)
 	runtime.AddFloat32Arg(_f, inner_width)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -8814,11 +7582,7 @@ func TabItemCalcSize(label string, has_close_button_or_unsaved_marker bool) (r I
 	_f.AddFunctionId(0x0000027f)
 	runtime.AddStringArg(_f, label)
 	runtime.AddBoolArg(_f, has_close_button_or_unsaved_marker)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImVec2(runtime.GetComplex64Retr[complex64](_f))
 
 	return
@@ -8977,11 +7741,7 @@ func ButtonEx(label string) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000028d)
 	runtime.AddStringArg(_f, label)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -8993,11 +7753,7 @@ func ButtonExV(label string, size_arg ImVec2 /* = ImVec2(0, 0)*/, flags ImGuiBut
 	runtime.AddStringArg(_f, label)
 	runtime.AddComplex64Arg(_f, size_arg)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -9009,11 +7765,7 @@ func ArrowButtonEx(str_id string, dir ImGuiDir, size_arg ImVec2) (r bool) {
 	runtime.AddStringArg(_f, str_id)
 	runtime.AddIntArg(_f, dir)
 	runtime.AddComplex64Arg(_f, size_arg)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -9026,11 +7778,7 @@ func ArrowButtonExV(str_id string, dir ImGuiDir, size_arg ImVec2, flags ImGuiBut
 	runtime.AddIntArg(_f, dir)
 	runtime.AddComplex64Arg(_f, size_arg)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -9046,11 +7794,7 @@ func ImageButtonEx(id ImGuiID, user_texture_id ImTextureID, image_size ImVec2, u
 	runtime.AddComplex64Arg(_f, uv1)
 	runtime.AddFloat32Array4Arg(_f, bg_col)
 	runtime.AddFloat32Array4Arg(_f, tint_col)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -9067,11 +7811,7 @@ func ImageButtonExV(id ImGuiID, user_texture_id ImTextureID, image_size ImVec2, 
 	runtime.AddFloat32Array4Arg(_f, bg_col)
 	runtime.AddFloat32Array4Arg(_f, tint_col)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -9099,11 +7839,7 @@ func CloseButton(id ImGuiID, pos ImVec2) (r bool) {
 	_f.AddFunctionId(0x00000295)
 	runtime.AddUint32Arg(_f, id)
 	runtime.AddComplex64Arg(_f, pos)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -9121,11 +7857,7 @@ func TreeNodeGetOpen(storage_id ImGuiID) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000297)
 	runtime.AddUint32Arg(_f, storage_id)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -9148,11 +7880,7 @@ func TreeNodeUpdateNextOpen(storage_id ImGuiID, flags ImGuiTreeNodeFlags) (r boo
 	_f.AddFunctionId(0x00000299)
 	runtime.AddUint32Arg(_f, storage_id)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -9220,11 +7948,7 @@ func ErrorLog(msg string) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000029f)
 	runtime.AddStringArg(_f, msg)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -9247,11 +7971,7 @@ func ErrorCheckEndFrameFinalizeErrorTooltip() {
 func BeginErrorTooltip() (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000002a2)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -9350,11 +8070,7 @@ func DebugBreakButton(label string, description_of_location string) (r bool) {
 	_f.AddFunctionId(0x000002ae)
 	runtime.AddStringArg(_f, label)
 	runtime.AddStringArg(_f, description_of_location)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -9384,26 +8100,32 @@ func NewHexEditor() (r ImHexEditorPtr) {
 
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000002b1)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
-	r = ImHexEditorPtr(runtime.GetUintptrRetr[uintptr](
+	_f.CallFunctionNoThrow()
+	r = ImHexEditorPtr(runtime.GetUintptrRetr[uintptr](_f))
+	return
+}
 
-	// readOnly           disable any editing.
-	// cols               number of columns to display.
-	// showOptions        display options button/context menu. when disabled, options will be locked unless you provide your own UI for them.
-	// showDataPreview    display a footer previewing the decimal/binary/hex/float representation of the currently selected bytes.
-	// showHexII          display values in HexII representation instead of regular hexadecimal: hide null/zero bytes, ascii values as ".X".
-	// showAscii          display ASCII representation on the right side.
-	// greyOutZeroes      display null/zero bytes using the TextDisabled color.
-	// upperCaseHex       display hexadecimal values as "FF" instead of "ff".
-	// midColsCount       set to 0 to disable extra spacing between every mid-cols.
-	// addrDigitsCount    number of addr digits to display (default calculated based on maximum displayed addr).
-	// footerExtraHeight  space to reserve at the bottom of the widget to add custom widgets
-	// highlightColor     background color of highlighted bytes.
-	//foreign code:
+func (foreignptr ImHexEditorPtr) Destroy() {
+
+	_f := foreignptr.getFffi()
+	_f.AddProcedureId(0x000002b2)
+	runtime.AddUintptrArg(_f, foreignptr)
+	_f.CallProcedure()
+}
+
+// readOnly           disable any editing.
+// cols               number of columns to display.
+// showOptions        display options button/context menu. when disabled, options will be locked unless you provide your own UI for them.
+// showDataPreview    display a footer previewing the decimal/binary/hex/float representation of the currently selected bytes.
+// showHexII          display values in HexII representation instead of regular hexadecimal: hide null/zero bytes, ascii values as ".X".
+// showAscii          display ASCII representation on the right side.
+// greyOutZeroes      display null/zero bytes using the TextDisabled color.
+// upperCaseHex       display hexadecimal values as "FF" instead of "ff".
+// midColsCount       set to 0 to disable extra spacing between every mid-cols.
+// addrDigitsCount    number of addr digits to display (default calculated based on maximum displayed addr).
+// footerExtraHeight  space to reserve at the bottom of the widget to add custom widgets
+// highlightColor     background color of highlighted bytes.
+//foreign code:
 //  
 //  auto e = ((HexEditor*)foreignptr);
 //  auto t = e->memEditor;
@@ -9422,27 +8144,11 @@ func NewHexEditor() (r ImHexEditorPtr) {
 //  ASSIGN(highlightColor, t->HighlightColor);
 //  #undef ASSIGN
 //
-	_f))
-	return
-}
-
-func (foreignptr ImHexEditorPtr) Destroy() {
-
-	_f := foreignptr.getFffi()
-	_f.AddProcedureId(0x000002b2)
-	runtime.AddUintptrArg(_f, foreignptr)
-	_f.CallProcedure()
-}
-
 func (foreignptr ImHexEditorPtr) GetSettings() (readOnly bool, cols int, showOptions bool, showDataPreview bool, showHexII bool, showAscii bool, greyOutZeroes bool, upperCaseHex bool, midColsCount int, addrDigitsCount int, footerExtraHeight float32, highlightColor uint32) {
 	_f := foreignptr.getFffi()
 	_f.AddFunctionId(0x000002b3)
 	runtime.AddUintptrArg(_f, foreignptr)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		foreignptr.handleError(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	readOnly = (runtime.GetBoolRetr[bool](_f))
 	cols = (runtime.GetIntRetr[int](_f))
 	showOptions = (runtime.GetBoolRetr[bool](_f))
@@ -9570,11 +8276,7 @@ func (foreignptr ImHexEditorPtr) GetData() (data []byte) {
 	_f := foreignptr.getFffi()
 	_f.AddFunctionId(0x000002bb)
 	runtime.AddUintptrArg(_f, foreignptr)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		foreignptr.handleError(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	data = (runtime.GetBytesRetr[byte](_f))
 
 	return
@@ -9619,11 +8321,7 @@ func BulletText(text string) {
 func GetIoDeltaTime() (dt float32) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000002bf)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	dt = (runtime.GetFloat32Retr[float32](_f))
 
 	return
@@ -9633,11 +8331,7 @@ func CalcTextWidth(text string) (r ImVec2) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000002c0)
 	runtime.AddStringArg(_f, text)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImVec2(runtime.GetComplex64Retr[complex64](_f))
 
 	return
@@ -9649,11 +8343,7 @@ func CalcTextWidthV(text string, hideTextAfterDoubleHash bool, floatWrapWidth fl
 	runtime.AddStringArg(_f, text)
 	runtime.AddBoolArg(_f, hideTextAfterDoubleHash)
 	runtime.AddFloat32Arg(_f, floatWrapWidth)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImVec2(runtime.GetComplex64Retr[complex64](_f))
 
 	return
@@ -9669,11 +8359,7 @@ func InputText(label string, textIn string, maxLength Size_t) (textOut string, c
 	runtime.AddStringArg(_f, label)
 	runtime.AddStringArg(_f, textIn)
 	runtime.AddUint64Arg(_f, maxLength)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	textOut = (runtime.GetStringRetr[string](_f))
 	changed = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -9687,11 +8373,7 @@ func InputTextV(label string, textIn string, maxLength Size_t, flags ImGuiInputT
 	runtime.AddStringArg(_f, textIn)
 	runtime.AddUint64Arg(_f, maxLength)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	textOut = (runtime.GetStringRetr[string](_f))
 	changed = (runtime.GetBoolRetr[bool](_f))
 
@@ -9705,11 +8387,7 @@ func InputTextWithHint(label string, hint string, textIn string, maxLength Size_
 	runtime.AddStringArg(_f, hint)
 	runtime.AddStringArg(_f, textIn)
 	runtime.AddUint64Arg(_f, maxLength)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	textOut = (runtime.GetStringRetr[string](_f))
 	changed = (runtime.GetBoolRetr[bool](_f))
 
@@ -9724,11 +8402,7 @@ func InputTextWithHintV(label string, hint string, textIn string, maxLength Size
 	runtime.AddStringArg(_f, textIn)
 	runtime.AddUint64Arg(_f, maxLength)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	textOut = (runtime.GetStringRetr[string](_f))
 	changed = (runtime.GetBoolRetr[bool](_f))
 
@@ -9749,11 +8423,7 @@ func GetIdPreviousFrame() (hoveredId ImGuiID, activeId ImGuiID) {
 
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000002c7)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	hoveredId = ImGuiID(runtime.GetUint32Retr[uint32](_f))
 	activeId = ImGuiID(runtime.GetUint32Retr[uint32](_f))
 	return
@@ -9770,11 +8440,7 @@ func Knob(label string, valueP float32, v_min float32, v_max float32) (value flo
 	runtime.AddFloat32Arg(_f, valueP)
 	runtime.AddFloat32Arg(_f, v_min)
 	runtime.AddFloat32Arg(_f, v_max)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	value = (runtime.GetFloat32Retr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -9795,11 +8461,7 @@ func KnobV(label string, valueP float32, v_min float32, v_max float32,
 	runtime.AddFloat32Arg(_f, size)
 	runtime.AddIntArg(_f, flags)
 	runtime.AddIntArg(_f, steps)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	value = (runtime.GetFloat32Retr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -9812,11 +8474,7 @@ func KnobInt(label string, valueP int, v_min int, v_max int) (value int, r bool)
 	runtime.AddIntArg(_f, valueP)
 	runtime.AddIntArg(_f, v_min)
 	runtime.AddIntArg(_f, v_max)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	value = (runtime.GetIntRetr[int](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -9837,11 +8495,7 @@ func KnobIntV(label string, valueP int, v_min int, v_max int,
 	runtime.AddFloat32Arg(_f, size)
 	runtime.AddIntArg(_f, flags)
 	runtime.AddIntArg(_f, steps)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	value = (runtime.GetIntRetr[int](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -9856,11 +8510,7 @@ func BeginPiePopup(name string) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000002cc)
 	runtime.AddStringArg(_f, name)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
 }
@@ -9871,11 +8521,7 @@ func BeginPiePopupV(name string, iMouseButton int) (r bool) {
 	_f.AddFunctionId(0x000002cd)
 	runtime.AddStringArg(_f, name)
 	runtime.AddIntArg(_f, iMouseButton)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
 }
@@ -9891,11 +8537,7 @@ func PieMenuItem(name string) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000002cf)
 	runtime.AddStringArg(_f, name)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -9906,11 +8548,7 @@ func PieMenuItemV(name string, bEnabled /* = true */ bool) (r bool) {
 	_f.AddFunctionId(0x000002d0)
 	runtime.AddStringArg(_f, name)
 	runtime.AddBoolArg(_f, bEnabled)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -9920,11 +8558,7 @@ func BeginPieMenu(name string) (r bool) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000002d1)
 	runtime.AddStringArg(_f, name)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -9935,11 +8569,7 @@ func BeginPieMenuV(name string, bEnabled /* = true */ bool) (r bool) {
 	_f.AddFunctionId(0x000002d2)
 	runtime.AddStringArg(_f, name)
 	runtime.AddBoolArg(_f, bEnabled)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 
 	return
@@ -9963,11 +8593,7 @@ func SliderFloat32(label string, vP float32, p_min float32, p_max float32) (v fl
 	runtime.AddFloat32Arg(_f, vP)
 	runtime.AddFloat32Arg(_f, p_min)
 	runtime.AddFloat32Arg(_f, p_max)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat32Retr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -9983,11 +8609,7 @@ func SliderFloat32V(label string, vP float32, p_min float32, p_max float32, form
 	runtime.AddFloat32Arg(_f, p_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat32Retr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -10002,11 +8624,7 @@ func SliderFloat32NV(label string, vP []float32, v_min float32, v_max float32, f
 	runtime.AddFloat32Arg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat32SliceRetr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -10020,11 +8638,7 @@ func SliderFloat32N(label string, vP []float32, v_min float32, v_max float32) (v
 	runtime.AddFloat32SliceArg(_f, vP)
 	runtime.AddFloat32Arg(_f, v_min)
 	runtime.AddFloat32Arg(_f, v_max)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat32SliceRetr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -10042,11 +8656,7 @@ func SliderFloat64(label string, vP float64, p_min float64, p_max float64) (v fl
 	runtime.AddFloat64Arg(_f, vP)
 	runtime.AddFloat64Arg(_f, p_min)
 	runtime.AddFloat64Arg(_f, p_max)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat64Retr[float64](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -10062,11 +8672,7 @@ func SliderFloat64V(label string, vP float64, p_min float64, p_max float64, form
 	runtime.AddFloat64Arg(_f, p_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat64Retr[float64](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -10081,11 +8687,7 @@ func SliderFloat64NV(label string, vP []float64, v_min float64, v_max float64, f
 	runtime.AddFloat64Arg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat64SliceRetr[float64](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -10099,11 +8701,7 @@ func SliderFloat64N(label string, vP []float64, v_min float64, v_max float64) (v
 	runtime.AddFloat64SliceArg(_f, vP)
 	runtime.AddFloat64Arg(_f, v_min)
 	runtime.AddFloat64Arg(_f, v_max)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat64SliceRetr[float64](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -10121,11 +8719,7 @@ func SliderInt(label string, vP int, p_min int, p_max int) (v int, r bool) {
 	runtime.AddIntArg(_f, vP)
 	runtime.AddIntArg(_f, p_min)
 	runtime.AddIntArg(_f, p_max)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetIntRetr[int](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -10141,11 +8735,7 @@ func SliderIntV(label string, vP int, p_min int, p_max int, format string, flags
 	runtime.AddIntArg(_f, p_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetIntRetr[int](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -10160,11 +8750,7 @@ func SliderIntNV(label string, vP []int, v_min int, v_max int, format string, fl
 	runtime.AddIntArg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetIntSliceRetr[int](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -10178,11 +8764,7 @@ func SliderIntN(label string, vP []int, v_min int, v_max int) (v []int, r bool) 
 	runtime.AddIntSliceArg(_f, vP)
 	runtime.AddIntArg(_f, v_min)
 	runtime.AddIntArg(_f, v_max)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetIntSliceRetr[int](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -10200,11 +8782,7 @@ func SliderInt16(label string, vP int16, p_min int16, p_max int16) (v int16, r b
 	runtime.AddInt16Arg(_f, vP)
 	runtime.AddInt16Arg(_f, p_min)
 	runtime.AddInt16Arg(_f, p_max)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetInt16Retr[int16](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -10220,11 +8798,7 @@ func SliderInt16V(label string, vP int16, p_min int16, p_max int16, format strin
 	runtime.AddInt16Arg(_f, p_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetInt16Retr[int16](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -10239,11 +8813,7 @@ func SliderInt16NV(label string, vP []int16, v_min int16, v_max int16, format st
 	runtime.AddInt16Arg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetInt16SliceRetr[int16](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -10257,11 +8827,7 @@ func SliderInt16N(label string, vP []int16, v_min int16, v_max int16) (v []int16
 	runtime.AddInt16SliceArg(_f, vP)
 	runtime.AddInt16Arg(_f, v_min)
 	runtime.AddInt16Arg(_f, v_max)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetInt16SliceRetr[int16](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -10279,11 +8845,7 @@ func SliderInt32(label string, vP int32, p_min int32, p_max int32) (v int32, r b
 	runtime.AddInt32Arg(_f, vP)
 	runtime.AddInt32Arg(_f, p_min)
 	runtime.AddInt32Arg(_f, p_max)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetInt32Retr[int32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -10299,11 +8861,7 @@ func SliderInt32V(label string, vP int32, p_min int32, p_max int32, format strin
 	runtime.AddInt32Arg(_f, p_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetInt32Retr[int32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -10318,11 +8876,7 @@ func SliderInt32NV(label string, vP []int32, v_min int32, v_max int32, format st
 	runtime.AddInt32Arg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetInt32SliceRetr[int32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -10336,11 +8890,7 @@ func SliderInt32N(label string, vP []int32, v_min int32, v_max int32) (v []int32
 	runtime.AddInt32SliceArg(_f, vP)
 	runtime.AddInt32Arg(_f, v_min)
 	runtime.AddInt32Arg(_f, v_max)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetInt32SliceRetr[int32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -10358,11 +8908,7 @@ func SliderInt8(label string, vP int8, p_min int8, p_max int8) (v int8, r bool) 
 	runtime.AddInt8Arg(_f, vP)
 	runtime.AddInt8Arg(_f, p_min)
 	runtime.AddInt8Arg(_f, p_max)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetInt8Retr[int8](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -10378,11 +8924,7 @@ func SliderInt8V(label string, vP int8, p_min int8, p_max int8, format string, f
 	runtime.AddInt8Arg(_f, p_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetInt8Retr[int8](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -10397,11 +8939,7 @@ func SliderInt8NV(label string, vP []int8, v_min int8, v_max int8, format string
 	runtime.AddInt8Arg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetInt8SliceRetr[int8](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -10415,11 +8953,7 @@ func SliderInt8N(label string, vP []int8, v_min int8, v_max int8) (v []int8, r b
 	runtime.AddInt8SliceArg(_f, vP)
 	runtime.AddInt8Arg(_f, v_min)
 	runtime.AddInt8Arg(_f, v_max)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetInt8SliceRetr[int8](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -10437,11 +8971,7 @@ func SliderUInt(label string, vP uint, p_min uint, p_max uint) (v uint, r bool) 
 	runtime.AddUintArg(_f, vP)
 	runtime.AddUintArg(_f, p_min)
 	runtime.AddUintArg(_f, p_max)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUintRetr[uint](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -10457,11 +8987,7 @@ func SliderUIntV(label string, vP uint, p_min uint, p_max uint, format string, f
 	runtime.AddUintArg(_f, p_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUintRetr[uint](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -10476,11 +9002,7 @@ func SliderUIntNV(label string, vP []uint, v_min uint, v_max uint, format string
 	runtime.AddUintArg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUintSliceRetr[uint](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -10494,11 +9016,7 @@ func SliderUIntN(label string, vP []uint, v_min uint, v_max uint) (v []uint, r b
 	runtime.AddUintSliceArg(_f, vP)
 	runtime.AddUintArg(_f, v_min)
 	runtime.AddUintArg(_f, v_max)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUintSliceRetr[uint](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -10516,11 +9034,7 @@ func SliderUInt16(label string, vP uint16, p_min uint16, p_max uint16) (v uint16
 	runtime.AddUint16Arg(_f, vP)
 	runtime.AddUint16Arg(_f, p_min)
 	runtime.AddUint16Arg(_f, p_max)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUint16Retr[uint16](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -10536,11 +9050,7 @@ func SliderUInt16V(label string, vP uint16, p_min uint16, p_max uint16, format s
 	runtime.AddUint16Arg(_f, p_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUint16Retr[uint16](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -10555,11 +9065,7 @@ func SliderUInt16NV(label string, vP []uint16, v_min uint16, v_max uint16, forma
 	runtime.AddUint16Arg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUint16SliceRetr[uint16](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -10573,11 +9079,7 @@ func SliderUInt16N(label string, vP []uint16, v_min uint16, v_max uint16) (v []u
 	runtime.AddUint16SliceArg(_f, vP)
 	runtime.AddUint16Arg(_f, v_min)
 	runtime.AddUint16Arg(_f, v_max)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUint16SliceRetr[uint16](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -10595,11 +9097,7 @@ func SliderUInt32(label string, vP uint32, p_min uint32, p_max uint32) (v uint32
 	runtime.AddUint32Arg(_f, vP)
 	runtime.AddUint32Arg(_f, p_min)
 	runtime.AddUint32Arg(_f, p_max)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUint32Retr[uint32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -10615,11 +9113,7 @@ func SliderUInt32V(label string, vP uint32, p_min uint32, p_max uint32, format s
 	runtime.AddUint32Arg(_f, p_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUint32Retr[uint32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -10634,11 +9128,7 @@ func SliderUInt32NV(label string, vP []uint32, v_min uint32, v_max uint32, forma
 	runtime.AddUint32Arg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUint32SliceRetr[uint32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -10652,11 +9142,7 @@ func SliderUInt32N(label string, vP []uint32, v_min uint32, v_max uint32) (v []u
 	runtime.AddUint32SliceArg(_f, vP)
 	runtime.AddUint32Arg(_f, v_min)
 	runtime.AddUint32Arg(_f, v_max)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUint32SliceRetr[uint32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -10674,11 +9160,7 @@ func SliderUInt8(label string, vP uint8, p_min uint8, p_max uint8) (v uint8, r b
 	runtime.AddUint8Arg(_f, vP)
 	runtime.AddUint8Arg(_f, p_min)
 	runtime.AddUint8Arg(_f, p_max)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUint8Retr[uint8](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -10694,11 +9176,7 @@ func SliderUInt8V(label string, vP uint8, p_min uint8, p_max uint8, format strin
 	runtime.AddUint8Arg(_f, p_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUint8Retr[uint8](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 	return
@@ -10713,11 +9191,7 @@ func SliderUInt8NV(label string, vP []uint8, v_min uint8, v_max uint8, format st
 	runtime.AddUint8Arg(_f, v_max)
 	runtime.AddStringArg(_f, format)
 	runtime.AddIntArg(_f, flags)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUint8SliceRetr[uint8](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -10731,11 +9205,7 @@ func SliderUInt8N(label string, vP []uint8, v_min uint8, v_max uint8) (v []uint8
 	runtime.AddUint8SliceArg(_f, vP)
 	runtime.AddUint8Arg(_f, v_min)
 	runtime.AddUint8Arg(_f, v_max)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	v = (runtime.GetUint8SliceRetr[uint8](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
 
@@ -10753,11 +9223,7 @@ func SpinnerDots(label string, nextdotP float32, radius float32, thickness float
 	runtime.AddFloat32Arg(_f, nextdotP)
 	runtime.AddFloat32Arg(_f, radius)
 	runtime.AddFloat32Arg(_f, thickness)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	nextdot = (runtime.GetFloat32Retr[float32](_f))
 	return
 }
@@ -10774,11 +9240,7 @@ func SpinnerDotsV(label string, nextdotP float32, radius float32, thickness floa
 	runtime.AddFloat32Arg(_f, speed)
 	runtime.AddUint64Arg(_f, dots)
 	runtime.AddFloat32Arg(_f, minth)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	nextdot = (runtime.GetFloat32Retr[float32](_f))
 	return
 }
@@ -13859,11 +12321,7 @@ func Splitter(split_vertically bool, thickness float32, size1P float32, size2P f
 	runtime.AddFloat32Arg(_f, size2P)
 	runtime.AddFloat32Arg(_f, min_size1)
 	runtime.AddFloat32Arg(_f, min_size2)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 	size1 = (runtime.GetFloat32Retr[float32](_f))
 	size2 = (runtime.GetFloat32Retr[float32](_f))
@@ -13881,11 +12339,7 @@ func SplitterV(split_vertically bool, thickness float32, size1P float32, size2P 
 	runtime.AddFloat32Arg(_f, min_size1)
 	runtime.AddFloat32Arg(_f, min_size2)
 	runtime.AddFloat32Arg(_f, splitter_long_axis)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
 	size1 = (runtime.GetFloat32Retr[float32](_f))
 	size2 = (runtime.GetFloat32Retr[float32](_f))
@@ -13914,11 +12368,7 @@ func loadStyle(ptr ImGuiStyleForeignPtr, bs []bool, fs []float32, vec2s []float3
 func GetStyle() (r ImGuiStyleForeignPtr) {
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000003ff)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	r = ImGuiStyleForeignPtr(runtime.GetUintptrRetr[uintptr](_f))
 
 	return
@@ -13928,11 +12378,7 @@ func dumpStyle(ptr ImGuiStyleForeignPtr) (bs []bool, fs []float32, vec2s []float
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000400)
 	runtime.AddUintptrArg(_f, ptr)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	bs = (runtime.GetBoolSliceRetr[bool](_f))
 	fs = (runtime.GetFloat32SliceRetr[float32](_f))
 	vec2s = (runtime.GetFloat32SliceRetr[float32](_f))
@@ -13950,11 +12396,7 @@ func TableGetSortSpecs() (sort bool, dirty bool, userIds []ImGuiID, columnIndice
 
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000401)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	sort = (runtime.GetBoolRetr[bool](_f))
 	dirty = (runtime.GetBoolRetr[bool](_f))
 	userIds = runtime.GetUint32SliceRetr[ImGuiID](_f)
@@ -14012,11 +12454,7 @@ func Toggle(label string, val bool) (valR bool, changed bool) {
 	_f.AddFunctionId(0x00000404)
 	runtime.AddStringArg(_f, label)
 	runtime.AddBoolArg(_f, val)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	valR = (runtime.GetBoolRetr[bool](_f))
 	changed = (runtime.GetBoolRetr[bool](_f))
 
@@ -14045,11 +12483,7 @@ func ToggleV(label string, val bool, flags ImGuiTogglerFlags, animationDuration 
 	runtime.AddFloat32Arg(_f, frameRounding)
 	runtime.AddFloat32Arg(_f, knobRounding)
 	runtime.AddComplex64Arg(_f, size)
-	_err_ := _f.CallFunction()
-	if _err_ != nil {
-		currentFffiErrorHandler(_err_)
-		return
-	}
+	_f.CallFunctionNoThrow()
 	valR = (runtime.GetBoolRetr[bool](_f))
 	changed = (runtime.GetBoolRetr[bool](_f))
 

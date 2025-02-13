@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -ev
 set -o pipefail
 here=$(dirname "$(readlink -f "$BASH_SOURCE")")
 cd "$here"
@@ -33,9 +33,10 @@ rm -f main
 rm -f "$outfile"
 ./build.sh
 mkdir -p "$IMZERO_CPP_BINDING_DIR/imgui"
-./main generateFffiCode --idlBuildTag fffi_idl_code \
+./main -logFormat console -logLevel debug generateFffiCode --idlBuildTag fffi_idl_code \
 	                --idlPackagePattern github.com/stergiotis/boxer/public/imzero/imgui \
 	                --goOutputFile "$outfile" \
+	                --noThrow \
 			--goCodeProlog $'import "github.com/stergiotis/boxer/public/imzero/dto"\n' \
 			--runeCppType "ImWchar" \
-			--cppOutputFile "$IMZERO_CPP_BINDING_DIR/imgui/dispatch.h" 2>&1 | ./main cbor diag
+			--cppOutputFile "$IMZERO_CPP_BINDING_DIR/imgui/dispatch.h"

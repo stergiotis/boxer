@@ -14,6 +14,7 @@ type Channel interface {
 	Marshaller() *Marshaller
 	Unmarshaller() *Unmarshaller
 	CallFunction() (err error)
+	CallFunctionNoThrow()
 	Flush()
 }
 
@@ -67,6 +68,11 @@ func (inst *InlineIoChannel) SetInOut(in *bufio.Reader, out *bufio.Writer) {
 }
 
 func (inst *InlineIoChannel) CallFunction() (err error) {
+	// err is always nil for this type of channel
+	inst.Flush()
+	return
+}
+func (inst *InlineIoChannel) CallFunctionNoThrow() {
 	inst.Flush()
 	return
 }

@@ -48,7 +48,7 @@ func NewCodeTransformerFrontendGo(namer *Namer, goCodeProlog string) *CodeTransf
 	}
 }
 
-func (inst *CodeTransformerFrontendGo) AddFile(fset *token.FileSet, file *ast.File, resolver TypeResolver, i int, nFiles int, idResolver IdResolver) (err error) {
+func (inst *CodeTransformerFrontendGo) AddFile(fset *token.FileSet, file *ast.File, resolver TypeResolver, i int, nFiles int, idResolver IdResolver, nothrow bool) (err error) {
 	var file2 *ast.File
 	file2 = file
 	inst.fset = fset
@@ -58,7 +58,7 @@ func (inst *CodeTransformerFrontendGo) AddFile(fset *token.FileSet, file *ast.Fi
 		case *ast.FuncDecl:
 			var lst []ast.Stmt
 			var extraComments []*ast.Comment
-			lst, extraComments, err = inst.generate(nt, uint32(idResolver.FuncDeclToId(nt)), resolver)
+			lst, extraComments, err = inst.generate(nt, uint32(idResolver.FuncDeclToId(nt)), resolver, nothrow)
 			if err != nil {
 				err = eh.Errorf("unable to generate code: %w", err)
 				return false
@@ -93,7 +93,7 @@ func (inst *CodeTransformerFrontendGo) AddFile(fset *token.FileSet, file *ast.Fi
 	return
 }
 
-func (inst *CodeTransformerFrontendGo) generate(decl *ast.FuncDecl, id uint32, resolver TypeResolver) (r []ast.Stmt, extraComments []*ast.Comment, err error) {
+func (inst *CodeTransformerFrontendGo) generate(decl *ast.FuncDecl, id uint32, resolver TypeResolver, nothrow bool) (r []ast.Stmt, extraComments []*ast.Comment, err error) {
 	var prolog, epilog []ast.Stmt
 	var foreignCode string
 	prolog, foreignCode, epilog, err = splitIdlBody(decl.Body.List)
@@ -156,6 +156,10 @@ func (inst *CodeTransformerFrontendGo) generate(decl *ast.FuncDecl, id uint32, r
 
 	if isFunction {
 		if explicitErrVarName != "" {
+			if nothrow {
+				err = eh.Errorf("combination of noThrow with explictErrVarName is not implemented (cpp code gen is missing)")
+				return
+			}
 			_, _ = b.WriteString(explicitErrVarName)
 			_, _ = b.WriteString(" = _f.CallFunction()\nif ")
 			_, _ = b.WriteString(explicitErrVarName)
@@ -163,18 +167,22 @@ func (inst *CodeTransformerFrontendGo) generate(decl *ast.FuncDecl, id uint32, r
 			_, _ = b.WriteString("  return\n")
 			_, _ = b.WriteString("}\n")
 		} else {
-			_, _ = b.WriteString("_err_ := _f.CallFunction()\n")
-			_, _ = b.WriteString("if _err_ != nil {\n")
-			_, _ = b.WriteString("  ")
-			if isMethod {
-				_, _ = b.WriteString(instvar)
-				_, _ = b.WriteString(".handleError")
+			if nothrow {
+				_, _ = b.WriteString("_f.CallFunctionNoThrow()\n")
 			} else {
-				_, _ = b.WriteString(currentFffiErrHandler)
+				_, _ = b.WriteString("_err_ := _f.CallFunction()\n")
+				_, _ = b.WriteString("if _err_ != nil {\n")
+				_, _ = b.WriteString("  ")
+				if isMethod {
+					_, _ = b.WriteString(instvar)
+					_, _ = b.WriteString(".handleError")
+				} else {
+					_, _ = b.WriteString(currentFffiErrHandler)
+				}
+				_, _ = b.WriteString("(_err_)\n")
+				_, _ = b.WriteString("  return\n")
+				_, _ = b.WriteString("}\n")
 			}
-			_, _ = b.WriteString("(_err_)\n")
-			_, _ = b.WriteString("  return\n")
-			_, _ = b.WriteString("}\n")
 		}
 	} else {
 		_, _ = b.WriteString("_f.CallProcedure()\n")

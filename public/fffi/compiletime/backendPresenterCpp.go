@@ -25,7 +25,7 @@ func NewCodeTransformerBackendPresenterCpp(namer *Namer) *CodeTransformerBackend
 	}
 }
 
-func (inst *CodeTransformerBackendPresenterCpp) AddFunction(decl *ast.FuncDecl, resolver TypeResolver, id runtime.FuncProcId) (err error) {
+func (inst *CodeTransformerBackendPresenterCpp) AddFunction(decl *ast.FuncDecl, resolver TypeResolver, id runtime.FuncProcId, nothrow bool) (err error) {
 	var paramNames, paramGoTypes, resultNames, resultGoTypes []string
 	paramNames, paramGoTypes, _, _, resultNames, resultGoTypes, _, _, _, err = getParamsAndResultTypes(decl, resolver)
 	if err != nil {
@@ -91,7 +91,9 @@ func (inst *CodeTransformerBackendPresenterCpp) AddFunction(decl *ast.FuncDecl, 
 	_, _ = b.WriteString(";\n")
 
 	if len(resultNames) != 0 {
-		_, _ = b.WriteString("    sendEmptyString();\n") // FIXME error handling/nothrow
+		if !nothrow {
+			_, _ = b.WriteString("    sendEmptyString();\n")
+		}
 		for i, n := range resultNames {
 			var expr string
 			expr, err = inst.namer.GoTypeNameToSendExprCpp(resultGoTypes[i], n)

@@ -1,7 +1,7 @@
 package compiletime
 
 import (
-	cli "github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v2"
 
 	"github.com/stergiotis/boxer/public/config"
 )
@@ -13,6 +13,7 @@ type Config struct {
 	GoOutputFile        string
 	CppOutputFile       string
 	FuncProcIdOffset    uint32
+	NoThrow             bool
 	validated           bool
 	nValidationMessages int
 }
@@ -48,6 +49,10 @@ func (inst *Config) ToCliFlags(nameTransf config.NameTransformFunc, envVarNameTr
 			Name:  "funcProcIdOffset",
 			Value: uint(inst.FuncProcIdOffset),
 		},
+		&cli.BoolFlag{
+			Name:  nameTransf("noThrow"),
+			Value: inst.NoThrow,
+		},
 	}
 }
 
@@ -58,6 +63,7 @@ func (inst *Config) FromContext(nameTransf config.NameTransformFunc, ctx *cli.Co
 	inst.CppOutputFile = ctx.String(nameTransf("cppOutputFile"))
 	inst.FuncProcIdOffset = uint32(ctx.Uint(nameTransf("funcProcIdOffset")))
 	inst.GoCodeProlog = ctx.String(nameTransf("goCodeProlog"))
+	inst.NoThrow = ctx.Bool(nameTransf("noThrow"))
 	nMessages = inst.Validate(true)
 	return
 }

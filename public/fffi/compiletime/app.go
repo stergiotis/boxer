@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"syscall"
 
-	cli "github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v2"
 
 	"github.com/stergiotis/boxer/public/config"
 	"github.com/stergiotis/boxer/public/fffi/runtime"
@@ -58,7 +58,7 @@ func emitToFile(path string, emitter Emitter) (err error) {
 
 func generateBackendCode(idlDriver IDLDriver, cfg *Config, namer *Namer) (err error) {
 	be := NewCodeTransformerBackendPresenterCpp(namer)
-	err = idlDriver.DriveBackend(be)
+	err = idlDriver.DriveBackend(be, cfg.NoThrow)
 	if err != nil {
 		err = eh.Errorf("unable to generate code: %w", err)
 		return
@@ -74,7 +74,7 @@ func generateBackendCode(idlDriver IDLDriver, cfg *Config, namer *Namer) (err er
 
 func generateFrontendCode(idlDriver IDLDriver, cfg *Config, namer *Namer) (err error) {
 	fe := NewCodeTransformerFrontendGo(namer, cfg.GoCodeProlog)
-	err = idlDriver.DriveFrontend(fe)
+	err = idlDriver.DriveFrontend(fe, cfg.NoThrow)
 	if err != nil {
 		err = eh.Errorf("unable to generate code: %w", err)
 		return

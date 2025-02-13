@@ -209,7 +209,7 @@ func (inst *IDLDriverGoFile) ResolveBasicType(expr ast.Expr) (typeName string, c
 	return inst.resolveBasicTypeType(u.Type, "")
 }
 
-func (inst *IDLDriverGoFile) DriveBackend(generator CodeTransformerBackend) (err error) {
+func (inst *IDLDriverGoFile) DriveBackend(generator CodeTransformerBackend, nothrow bool) (err error) {
 	fset := inst.fset
 	for _, a := range inst.asts {
 		ast.Inspect(a, func(node ast.Node) bool {
@@ -218,7 +218,7 @@ func (inst *IDLDriverGoFile) DriveBackend(generator CodeTransformerBackend) (err
 			}
 			switch decl := node.(type) {
 			case *ast.FuncDecl:
-				err = generator.AddFunction(decl, inst, inst.FuncDeclToId(decl))
+				err = generator.AddFunction(decl, inst, inst.FuncDeclToId(decl), nothrow)
 				if err != nil {
 					position := fset.Position(decl.Pos())
 					err = eb.Build().Str("file", position.Filename).Int("line", position.Line).Str("name", decl.Name.Name).Errorf("unable to handle function declaration: %w", err)
@@ -232,10 +232,10 @@ func (inst *IDLDriverGoFile) DriveBackend(generator CodeTransformerBackend) (err
 	return
 }
 
-func (inst *IDLDriverGoFile) DriveFrontend(generator CodeTransformerFrontend) (err error) {
+func (inst *IDLDriverGoFile) DriveFrontend(generator CodeTransformerFrontend, nothrow bool) (err error) {
 	l := len(inst.asts)
 	for i, a := range inst.asts {
-		err = generator.AddFile(inst.fset, a, inst, i, l, inst)
+		err = generator.AddFile(inst.fset, a, inst, i, l, inst, nothrow)
 		if err != nil {
 			position := inst.fset.Position(a.Pos())
 			err = eb.Build().Str("file", position.Filename).Int("line", position.Line).Errorf("unable to handle function declaration: %w", err)
