@@ -4,6 +4,8 @@ import (
 	"encoding/binary"
 	"io"
 	"math"
+
+	"github.com/stergiotis/boxer/public/unsafeperf"
 )
 
 type Marshaller struct {
@@ -149,7 +151,7 @@ func (inst *Marshaller) handleError(err error) {
 
 func (inst *Marshaller) WriteString(v string) {
 	inst.WriteSliceLength(len(v))
-	n, err := inst.w.Write([]byte(v))
+	n, err := inst.w.Write(unsafeperf.UnsafeStringToByte(v))
 	inst.written += 4 + n
 	inst.handleError(err)
 }
