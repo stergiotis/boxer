@@ -5,7 +5,8 @@ import (
 	"errors"
 	"io"
 	"math"
-	"unsafe"
+
+	"github.com/stergiotis/boxer/public/unsafeperf"
 )
 
 type Unmarshaller struct {
@@ -36,6 +37,16 @@ func (inst *Unmarshaller) ReadUInt8() (v uint8) {
 func (inst *Unmarshaller) ReadUInt16() (v uint16) {
 	if inst.readBuf(2) {
 		v = inst.bin.Uint16(inst.buf)
+	}
+	return
+}
+func (inst *Unmarshaller) ReadUInt32MostLikelyZero() (v uint32) {
+	if inst.readBuf(4) {
+		b := inst.buf
+		if b[3] == 0 && b[2] == 0 && b[1] == 0 && b[0] == 0 {
+			return
+		}
+		v = inst.bin.Uint32(b)
 	}
 	return
 }
@@ -165,27 +176,40 @@ func (inst *Unmarshaller) ReadString() (v string) {
 		return ""
 	}
 
-	//v = string(b)
-	v = unsafe.String(&b[0], len(b))
+	v = unsafeperf.UnsafeBytesToString(b)
+	return
+}
+func (inst *Unmarshaller) ReadStringMostLikelyEmpty() (v string) {
+	l := inst.ReadUInt32MostLikelyZero()
+	if l == 0 {
+		// fast path
+		return ""
+	}
+
+	v = unsafeperf.UnsafeBytesToString(inst.readBytesNonEmpty(l))
 	return
 }
 
+func (inst *Unmarshaller) readBytesNonEmpty(l uint32) (v []byte) {
+	v = inst.allocateBuffer(l)
+	if len(v) != int(l) {
+		inst.handleError(StringAllocationError)
+		return
+	}
+	_, err := io.ReadFull(inst.r, v)
+	if err != nil {
+		inst.handleError(err)
+		return
+	}
+	return
+}
 func (inst *Unmarshaller) ReadBytes() (v []byte) {
 	l := inst.ReadUInt32()
 	if l == 0 {
 		// TODO
 		v = inst.allocateBuffer(0)
 	} else {
-		v = inst.allocateBuffer(l)
-		if len(v) != int(l) {
-			inst.handleError(StringAllocationError)
-			return
-		}
-		_, err := io.ReadFull(inst.r, v)
-		if err != nil {
-			inst.handleError(err)
-			return
-		}
+		return inst.readBytesNonEmpty(l)
 	}
 	return
 }

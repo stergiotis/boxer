@@ -13,10 +13,11 @@ package runtime
 
 import (
 	"fmt"
-	"github.com/rs/zerolog/log"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"runtime"
 	"strings"
+
+	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 type Fffi2 struct {
@@ -58,7 +59,7 @@ func (inst *Fffi2) recordCallId(id FuncProcId) {
 		buf := inst.stackBuf
 		n := runtime.Stack(buf, false)
 		buf = buf[:n]
-		log.Info().Str("funcProcId", fmt.Sprintf("0x%08x", id)).Strs("stack", strings.Split(string(buf), "\n")).Msg("fffi call")
+		log.Trace().Str("funcProcId", fmt.Sprintf("0x%08x", id)).Strs("stack2", strings.Split(string(buf), "\n")).Msg("fffi call")
 	}
 }
 
@@ -73,7 +74,7 @@ func (inst *Fffi2) AddProcedureId(id FuncProcId) {
 }
 
 func (inst *Fffi2) readError() (err error) {
-	s := GetStringRetr[string](inst)
+	s := GetStringRetrMostLikelyEmpty[string](inst)
 	if s != "" {
 		err = eh.New(s)
 	}

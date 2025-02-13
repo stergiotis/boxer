@@ -40,7 +40,7 @@ func (inst *Fffi2) AddProcedureId(id FuncProcId) {
 }
 
 func (inst *Fffi2) readError() (err error) {
-	s := GetStringRetr[string](inst)
+	s := GetStringRetrMostLikelyEmpty[string](inst)
 	if s != "" {
 		err = eh.New(s)
 	}
@@ -55,6 +55,10 @@ func (inst *Fffi2) CallFunction() (err error) {
 	err = inst.readError()
 	return
 }
+func (inst *Fffi2) CallFunctionNoThrow() {
+	inst.channel.CallFunctionNoThrow()
+	return
+}
 
 func (inst *Fffi2) Flush() {
 	inst.AddProcedureId(FlushFuncProcId)
@@ -63,6 +67,10 @@ func (inst *Fffi2) Flush() {
 }
 
 func (inst *Fffi2) CallProcedure() {
+	// no-op
+	inst.channel.Flush()
+}
+func (inst *Fffi2) CallProcedureNoThrow() {
 	// no-op
 	inst.channel.Flush()
 }

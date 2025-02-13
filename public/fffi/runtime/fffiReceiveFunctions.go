@@ -29,6 +29,10 @@ func GetStringRetr[T ~string](inst *Fffi2) (r T) {
 	r = T(inst.unmarshaller.ReadString())
 	return
 }
+func GetStringRetrMostLikelyEmpty[T ~string](inst *Fffi2) (r T) {
+	r = T(inst.unmarshaller.ReadStringMostLikelyEmpty())
+	return
+}
 
 func GetIntRetr[T ~int](inst *Fffi2) (r T) {
 	r = T(inst.unmarshaller.ReadInt())
