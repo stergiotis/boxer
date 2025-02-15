@@ -16,6 +16,7 @@ const (
 	UserInteractionEventMouseButton      UserInteraction = 6
 	UserInteractionEventTextInput        UserInteraction = 7
 	UserInteractionEventKeyboard         UserInteraction = 8
+	UserInteractionEventKeepAlive        UserInteraction = 9
 )
 
 var EnumNamesUserInteraction = map[UserInteraction]string{
@@ -28,6 +29,7 @@ var EnumNamesUserInteraction = map[UserInteraction]string{
 	UserInteractionEventMouseButton:      "EventMouseButton",
 	UserInteractionEventTextInput:        "EventTextInput",
 	UserInteractionEventKeyboard:         "EventKeyboard",
+	UserInteractionEventKeepAlive:        "EventKeepAlive",
 }
 
 var EnumValuesUserInteraction = map[string]UserInteraction{
@@ -40,6 +42,7 @@ var EnumValuesUserInteraction = map[string]UserInteraction{
 	"EventMouseButton":      UserInteractionEventMouseButton,
 	"EventTextInput":        UserInteractionEventTextInput,
 	"EventKeyboard":         UserInteractionEventKeyboard,
+	"EventKeepAlive":        UserInteractionEventKeepAlive,
 }
 
 func (v UserInteraction) String() string {

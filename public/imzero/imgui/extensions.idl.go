@@ -23,3 +23,11 @@ func PopParagraphTextLayout() {
 func DrawSerializedImZeroFB(ptr ImDrawListPtr, buf []byte) {
 	_ = `ImGui::DrawSerializedImZeroFB(reinterpret_cast<ImDrawList*>(ptr),static_cast<const uint8_t*>(buf),getSliceLength(buf))`
 }
+
+func PushTextMeasureMode(modeX dto.TextMeasureModeX, modeY dto.TextMeasureModeY) {
+	_ = `ImGui::PushTextMeasureMode(static_cast<ImZeroFB::TextMeasureModeX>(modeX),static_cast<ImZeroFB::TextMeasureModeY>(modeY))`
+}
+
+func PopTextMeasureMode() {
+	_ = `ImGui::PopTextMeasureMode()`
+}

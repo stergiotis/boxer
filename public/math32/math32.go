@@ -30,3 +30,7 @@ func Trunc(a float32) float32 {
 func Abs(x float32) float32 {
 	return math.Float32frombits(math.Float32bits(x) &^ (1 << 31))
 }
+
+func IsNaN(x float32) bool {
+	return x != x
+}
