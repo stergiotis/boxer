@@ -13,7 +13,6 @@ require (
 	github.com/dgraph-io/badger/v4 v4.5.0
 	github.com/dustin/go-humanize v1.0.1
 	github.com/fxamacker/cbor/v2 v2.7.0
-	github.com/go-json-experiment/json v0.0.0-20250129011340-4e0381018ad6
 	github.com/google/flatbuffers v24.12.23+incompatible
 	github.com/matoous/go-nanoid/v2 v2.1.0
 	github.com/philip-peterson/go-mutablestring v1.0.7
