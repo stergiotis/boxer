@@ -21,6 +21,8 @@ func ColorU32ToImVec(rgba uint32) (c ImVec4) {
 	}
 }
 
+// FIXME use IM_COL32_A_SHIFT, IM_COL32_R_SHIFT, ...
+
 func Color32U8(r uint8, g uint8, b uint8, a uint8) (c uint32) {
 	if ImguiUsesBGRAColorFormat {
 		c = uint32(a) << 24
@@ -35,19 +37,33 @@ func Color32U8(r uint8, g uint8, b uint8, a uint8) (c uint32) {
 	}
 	return
 }
+func Color32ToU8(c uint32) (r, g, b, a uint8) {
+	if ImguiUsesBGRAColorFormat {
+		a = uint8(c >> 24)
+		r = uint8((c >> 16) & 0xff)
+		g = uint8((c >> 8) & 0xff)
+		b = uint8(c & 0xff)
+	} else {
+		a = uint8(c >> 24)
+		b = uint8((c >> 16) & 0xff)
+		g = uint8((c >> 8) & 0xff)
+		r = uint8(c & 0xff)
+	}
+	return
+}
 
 // ToColorU32 see ColorConvertFloat4ToU32
 func (inst ImVec4) ToColorU32() uint32 {
 	var r, g, b, a float32
 	if ImguiUsesBGRAColorFormat {
-		b = inst[0]
-		g = inst[1]
-		r = inst[2]
-		a = inst[3]
-	} else {
 		r = inst[0]
 		g = inst[1]
 		b = inst[2]
+		a = inst[3]
+	} else {
+		b = inst[0]
+		g = inst[1]
+		r = inst[2]
 		a = inst[3]
 	}
 	if r < 0.0 {

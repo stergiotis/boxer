@@ -2,4 +2,4 @@
 
 package imgui
 
-const ImguiUsesBGRAColorFormat = true
+const ImguiUsesBGRAColorFormat = false
