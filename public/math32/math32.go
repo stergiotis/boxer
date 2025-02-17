@@ -34,3 +34,9 @@ func Abs(x float32) float32 {
 func IsNaN(x float32) bool {
 	return x != x
 }
+func NaN() float32 {
+	return float32(math.NaN())
+}
+func Inf(sign int) float32 {
+	return float32(math.Inf(sign))
+}
