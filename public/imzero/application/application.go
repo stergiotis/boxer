@@ -23,6 +23,16 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
+var CurrentApplication *Application
+
+func resetCurrenApplication() { CurrentApplication = nil }
+
+type PerFrameValues struct {
+	DyFontFudge   float32
+	LastActiveId  imgui.ImGuiID
+	LastHoveredId imgui.ImGuiID
+}
+
 type Application struct {
 	endianess                   binary.ByteOrder
 	channel                     *runtime.InlineIoChannel
@@ -37,6 +47,7 @@ type Application struct {
 	IconFont                    imgui.ImFontPtr
 	relaunches                  int
 	relaunchable                bool
+	PerFrameValues              PerFrameValues
 }
 
 func NewApplication(cfg *Config) (app *Application, err error) {
@@ -205,7 +216,9 @@ func (inst *Application) Run() (err error) {
 	if inst.RenderLoopHandler == nil {
 		inst.RenderLoopHandler = defaultRenderLoopHandler
 	}
+	defer resetCurrenApplication()
 	for !imgui.HasErrors() && inst.shouldProceed() {
+		CurrentApplication = inst
 		marshaller.ResetWrittenBytes()
 		err = inst.RenderLoopHandler(marshaller)
 		if err != nil {
@@ -213,12 +226,17 @@ func (inst *Application) Run() (err error) {
 			//imgui.ShowDemoWindow()
 		}
 		fffi.Flush()
+		inst.populatePerFrameValues()
 	}
 	if imgui.HasErrors() {
 		err = imgui.Errors()[0]
 		return
 	}
 	return
+}
+func (inst *Application) populatePerFrameValues() {
+	inst.PerFrameValues.DyFontFudge = imgui.GetSkiaFontDyFudge()
+	inst.PerFrameValues.LastHoveredId, inst.PerFrameValues.LastActiveId = imgui.GetIdPreviousFrame()
 }
 
 func (inst *Application) initializeFonts() (err error) {
