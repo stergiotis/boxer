@@ -17,3 +17,10 @@ func (inst Tristate) IsTrue() bool {
 func (inst Tristate) IsNil() bool {
 	return inst == TriNil
 }
+
+func TriFromBool(b bool) Tristate {
+	if b {
+		return TriTrue
+	}
+	return TriFalse
+}
