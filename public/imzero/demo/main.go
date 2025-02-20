@@ -5,7 +5,7 @@ package demo
 import (
 	"time"
 
-	cli "github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v2"
 
 	"github.com/stergiotis/boxer/public/config"
 	"github.com/stergiotis/boxer/public/fffi/runtime"
