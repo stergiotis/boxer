@@ -13,6 +13,9 @@ var render func()
 var coolbar func()
 
 func menu(app *application.Application, beginMenu func(name string) bool, endMenu func(), menuItem func(name string) bool) {
+	if render == nil {
+		render = MakeRenderBasicWidgets()
+	}
 	if beginMenu("Widgets") {
 		if menuItem(nerdfont.FaPieChart + " PieMenu") {
 			render = RenderPieMenuDemo
@@ -65,6 +68,9 @@ func menu(app *application.Application, beginMenu func(name string) bool, endMen
 		endMenu()
 	}
 	if beginMenu("Development") {
+		if menuItem(nerdfont.FaFileText + " Text") {
+			render = RenderTextDemo
+		}
 		if menuItem(nerdfont.FaBomb + " Assertions") {
 			render = RenderAssertDemo
 		}
