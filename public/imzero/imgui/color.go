@@ -56,14 +56,14 @@ func Color32ToU8(c uint32) (r, g, b, a uint8) {
 func (inst ImVec4) ToColorU32() uint32 {
 	var r, g, b, a float32
 	if ImguiUsesBGRAColorFormat {
-		r = inst[0]
-		g = inst[1]
-		b = inst[2]
-		a = inst[3]
-	} else {
 		b = inst[0]
 		g = inst[1]
 		r = inst[2]
+		a = inst[3]
+	} else {
+		r = inst[0]
+		g = inst[1]
+		b = inst[2]
 		a = inst[3]
 	}
 	if r < 0.0 {
