@@ -1,3 +1,5 @@
+//go:build !bootstrap
+
 package imgui
 
 import (
