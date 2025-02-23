@@ -12,6 +12,7 @@ type Config struct {
 	IdlPackagePattern   string
 	GoOutputFile        string
 	CppOutputFile       string
+	InterfaceOutputFile string
 	FuncProcIdOffset    uint32
 	NoThrow             bool
 	validated           bool
@@ -41,6 +42,11 @@ func (inst *Config) ToCliFlags(nameTransf config.NameTransformFunc, envVarNameTr
 			Value:    inst.CppOutputFile,
 		},
 		&cli.StringFlag{
+			Name:     nameTransf("interfaceOutputFile"),
+			Required: false,
+			Value:    inst.InterfaceOutputFile,
+		},
+		&cli.StringFlag{
 			Name:     nameTransf("goCodeProlog"),
 			Required: false,
 			Value:    inst.GoCodeProlog,
@@ -61,6 +67,7 @@ func (inst *Config) FromContext(nameTransf config.NameTransformFunc, ctx *cli.Co
 	inst.IdlPackagePattern = ctx.String(nameTransf("idlPackagePattern"))
 	inst.GoOutputFile = ctx.String(nameTransf("goOutputFile"))
 	inst.CppOutputFile = ctx.String(nameTransf("cppOutputFile"))
+	inst.InterfaceOutputFile = ctx.String(nameTransf("interfaceOutputFile"))
 	inst.FuncProcIdOffset = uint32(ctx.Uint(nameTransf("funcProcIdOffset")))
 	inst.GoCodeProlog = ctx.String(nameTransf("goCodeProlog"))
 	inst.NoThrow = ctx.Bool(nameTransf("noThrow"))

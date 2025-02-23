@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/rs/zerolog/log"
+	cbor2 "github.com/stergiotis/boxer/public/semistructured/cbor"
 	"github.com/urfave/cli/v2"
 
 	"github.com/stergiotis/boxer/public/config"
@@ -15,7 +17,14 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-func makeFileReadOnly(path string) error {
+type generatorApp struct {
+}
+
+func newGeneratorApp() *generatorApp {
+	return &generatorApp{}
+}
+
+func (inst *generatorApp) makeFileReadOnly(path string) error {
 	s, err := os.Stat(path)
 	if err != nil {
 		return eb.Build().Str("path", path).Errorf("unable to stat file: %w", err)
@@ -27,7 +36,7 @@ func makeFileReadOnly(path string) error {
 	return nil
 }
 
-func emitToFile(path string, emitter Emitter) (err error) {
+func (inst *generatorApp) emitToFile(path string, emitter Emitter) (err error) {
 	_ = os.MkdirAll(filepath.Dir(path), 0o000)
 
 	var w io.WriteCloser
@@ -47,7 +56,7 @@ func emitToFile(path string, emitter Emitter) (err error) {
 		err = eb.Build().Str("path", path).Errorf("unable to populate file: %w", err)
 		return
 	}
-	err = makeFileReadOnly(path)
+	err = inst.makeFileReadOnly(path)
 	if err != nil {
 		err = eb.Build().Str("path", path).Errorf("unable to make file read-only: %w", err)
 		return
@@ -56,14 +65,30 @@ func emitToFile(path string, emitter Emitter) (err error) {
 	return
 }
 
-func generateBackendCode(idlDriver IDLDriver, cfg *Config, namer *Namer) (err error) {
+func (inst *generatorApp) generateBackendCode(idlDriver IDLDriver, cfg *Config, namer *Namer) (err error) {
+	exporter := NewBackendInterfaceExporter(cbor2.NewEncoder(nil, nil), namer)
+	err = idlDriver.DriveBackend(exporter, cfg.NoThrow)
+	if err != nil {
+		err = eh.Errorf("unable to export interface description: %w", err)
+		return
+	}
+	if cfg.InterfaceOutputFile != "" {
+		err = inst.emitToFile(cfg.InterfaceOutputFile, exporter)
+		if err != nil {
+			err = eh.Errorf("unable to generate interface description file: %w", err)
+			return
+		}
+	}
+	compat := exporter.GetCompatibilityRecord()
+	log.Info().Interface("compatibilityRecord", compat).Msg("derived compatibility record from idl description")
+
 	be := NewCodeTransformerBackendPresenterCpp(namer)
 	err = idlDriver.DriveBackend(be, cfg.NoThrow)
 	if err != nil {
 		err = eh.Errorf("unable to generate code: %w", err)
 		return
 	}
-	err = emitToFile(cfg.CppOutputFile, be)
+	err = inst.emitToFile(cfg.CppOutputFile, be)
 	if err != nil {
 		err = eh.Errorf("unable to generate cpp file: %w", err)
 		return
@@ -72,14 +97,14 @@ func generateBackendCode(idlDriver IDLDriver, cfg *Config, namer *Namer) (err er
 	return
 }
 
-func generateFrontendCode(idlDriver IDLDriver, cfg *Config, namer *Namer) (err error) {
+func (inst *generatorApp) generateFrontendCode(idlDriver IDLDriver, cfg *Config, namer *Namer) (err error) {
 	fe := NewCodeTransformerFrontendGo(namer, cfg.GoCodeProlog)
 	err = idlDriver.DriveFrontend(fe, cfg.NoThrow)
 	if err != nil {
 		err = eh.Errorf("unable to generate code: %w", err)
 		return
 	}
-	err = emitToFile(cfg.GoOutputFile, fe)
+	err = inst.emitToFile(cfg.GoOutputFile, fe)
 	if err != nil {
 		err = eh.Errorf("unable to generate go file: %w", err)
 		return
@@ -98,12 +123,13 @@ func mainE(cfg *Config, namerCfg *NamerConfig) (err error) {
 		err = eh.Errorf("unable to process IDL file: %w", err)
 		return
 	}
-	err = generateBackendCode(idlDriver, cfg, namer)
+	app := newGeneratorApp()
+	err = app.generateBackendCode(idlDriver, cfg, namer)
 	if err != nil {
 		err = eh.Errorf("unable to generate backend code: %w", err)
 		return
 	}
-	err = generateFrontendCode(idlDriver, cfg, namer)
+	err = app.generateFrontendCode(idlDriver, cfg, namer)
 	if err != nil {
 		err = eh.Errorf("unable to generate frontend code: %w", err)
 		return
