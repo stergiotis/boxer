@@ -115,8 +115,15 @@ func (inst *generatorApp) generateFrontendCode(idlDriver IDLDriver, cfg *Config,
 
 func mainE(cfg *Config, namerCfg *NamerConfig) (err error) {
 	namer := NewNamer(namerCfg)
-	_ = os.Remove(cfg.GoOutputFile)
-	_ = os.Remove(cfg.CppOutputFile)
+	if cfg.GoOutputFile != "" {
+		_ = os.Remove(cfg.GoOutputFile)
+	}
+	if cfg.CppOutputFile != "" {
+		_ = os.Remove(cfg.CppOutputFile)
+	}
+	if cfg.InterfaceOutputFile != "" {
+		_ = os.Remove(cfg.InterfaceOutputFile)
+	}
 	var idlDriver *IDLDriverGoFile
 	idlDriver, err = NewIDLDriverGoFile(cfg.IdlBuildTag, cfg.IdlPackagePattern, runtime.FuncProcId(cfg.FuncProcIdOffset))
 	if err != nil {
