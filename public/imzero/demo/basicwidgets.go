@@ -156,8 +156,14 @@ var knobLabels = []string{
 
 func RenderKnobs() {
 	imgui.BeginGroup()
+	var m float32
+	for _, l := range knobLabels {
+		t := imgui.CalcTextWidth(l)
+		m = max(real(t), m)
+	}
 	for i, v := range knobVariants {
-		knob[i], _ = imgui.KnobV(knobLabels[i], knob[i], 0.0, 100.0, 0.0, "%.3f", v, 0, 0, 10)
+		l := knobLabels[i]
+		knob[i], _ = imgui.KnobV(l, knob[i], 0.0, 100.0, 0.0, "%.3f", v, m, 0, 10)
 		imgui.SameLine()
 	}
 	imgui.EndGroup()
