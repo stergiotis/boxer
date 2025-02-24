@@ -1,6 +1,7 @@
 package compiletime
 
 import (
+	"bufio"
 	"bytes"
 	"go/ast"
 	"hash"
@@ -13,12 +14,12 @@ import (
 )
 
 type BackendInterfaceExporter struct {
-	buf          *bytes.Buffer
-	enc          cbor.FullEncoder
-	hasher       hash.Hash
-	cppNamer     *Namer
-	intermediate bool
-	compatRecord *CompatibilityRecord
+	bufSignature   *bytes.Buffer
+	bufDescription *bytes.Buffer
+	enc            cbor.FullEncoder
+	hasher         hash.Hash
+	cppNamer       *Namer
+	compatRecord   *CompatibilityRecord
 }
 
 type CompatibilityRecord struct {
@@ -121,12 +122,12 @@ func NewBackendInterfaceExporter(enc cbor.FullEncoder, cppNamer *Namer) *Backend
 	buf := bytes.NewBuffer(make([]byte, 0, 4096*4))
 	hasher := blake3.New(hashSize, nil)
 	inst := &BackendInterfaceExporter{
-		buf:          buf,
-		enc:          enc,
-		hasher:       hasher,
-		cppNamer:     cppNamer,
-		intermediate: false,
-		compatRecord: NewCompatibilityRecord(),
+		bufSignature:   buf,
+		bufDescription: bytes.NewBuffer(make([]byte, 0, 4096*4)),
+		enc:            enc,
+		hasher:         hasher,
+		cppNamer:       cppNamer,
+		compatRecord:   NewCompatibilityRecord(),
 	}
 	inst.Reset()
 	return inst
@@ -200,35 +201,115 @@ func (inst *BackendInterfaceExporter) encodeNamesAndTypes(names []string, goType
 	}
 	return
 }
+func (inst *BackendInterfaceExporter) encodeTypes(goTypes []string) (err error) {
+	enc := inst.enc
+	_, err = enc.EncodeString("types")
+	if err != nil {
+		return
+	}
+	_, err = enc.EncodeMapDefinite(1)
+	if err != nil {
+		return
+	}
+	_, err = enc.EncodeString("go")
+	if err != nil {
+		return
+	}
+	err = inst.encodeUtf8StringSlice(goTypes)
+	if err != nil {
+		return
+	}
+	return
+}
 
 func (inst *BackendInterfaceExporter) AddFunction(decl *ast.FuncDecl, resolver TypeResolver, id runtime.FuncProcId, nothrow bool) (err error) {
 	inst.compatRecord.Add(id, nothrow)
+	enc := inst.enc
+	enc.SetWriter(inst.bufSignature)
+	err = inst.addFunctionSignature(decl, resolver, id, nothrow)
+	if err != nil {
+		return err
+	}
+	enc.SetWriter(inst.bufDescription)
+	err = inst.addFunctionDescription(decl, resolver, id, nothrow)
+	if err != nil {
+		return err
+	}
+	return
+}
+func (inst *BackendInterfaceExporter) addFunctionSignature(decl *ast.FuncDecl, resolver TypeResolver, id runtime.FuncProcId, nothrow bool) (err error) {
+	var paramGoTypes, resultGoTypes []string
+	_, paramGoTypes, _, _, _, resultGoTypes, _, _, _, err = getParamsAndResultTypes(decl, resolver)
+	if err != nil {
+		return err
+	}
+	enc := inst.enc
+
+	_, err = enc.EncodeMapDefinite(4)
+	if err != nil {
+		return
+	}
+	{ // 0
+		_, err = enc.EncodeString("name")
+		if err != nil {
+			return
+		}
+		_, err = enc.EncodeString(decl.Name.Name)
+		if err != nil {
+			return
+		}
+
+	}
+	{ // 1
+		_, err = enc.EncodeString("id")
+		if err != nil {
+			return
+		}
+		_, err = enc.EncodeUint(uint64(id))
+		if err != nil {
+			return
+		}
+	}
+	{ // 2
+		_, err = enc.EncodeString("parameters")
+		if err != nil {
+			return
+		}
+		_, err = enc.EncodeMapDefinite(1)
+		if err != nil {
+			return
+		}
+		err = inst.encodeTypes(paramGoTypes)
+		if err != nil {
+			return
+		}
+	}
+	{ // 3
+		_, err = enc.EncodeString("results")
+		if err != nil {
+			return
+		}
+		_, err = enc.EncodeMapDefinite(1)
+		if err != nil {
+			return
+		}
+		err = inst.encodeTypes(resultGoTypes)
+		if err != nil {
+			return
+		}
+	}
+	return
+}
+func (inst *BackendInterfaceExporter) addFunctionDescription(decl *ast.FuncDecl, resolver TypeResolver, id runtime.FuncProcId, nothrow bool) (err error) {
 	var paramNames, paramGoTypes, resultNames, resultGoTypes []string
 	var explicitErrVarName string
 	paramNames, paramGoTypes, _, _, resultNames, resultGoTypes, _, _, explicitErrVarName, err = getParamsAndResultTypes(decl, resolver)
 	if err != nil {
 		return err
 	}
-	if !inst.intermediate {
-		enc := inst.enc
-		_, err = enc.EncodeMapIndefinite()
-		if err != nil {
-			return
-		}
-		_, err = enc.EncodeString("interface")
-		if err != nil {
-			return
-		}
-		_, err = enc.EncodeArrayIndefinite()
-		if err != nil {
-			return
-		}
-
-		inst.intermediate = true
-	}
-
 	enc := inst.enc
-	_, err = enc.EncodeMapDefinite(6)
+
+	_, err = enc.EncodeMapDefinite(7)
 	if err != nil {
 		return
 	}
@@ -305,22 +386,91 @@ func (inst *BackendInterfaceExporter) AddFunction(decl *ast.FuncDecl, resolver T
 			return
 		}
 	}
+	{ // 6
+		_, err = enc.EncodeString("comment")
+		if err != nil {
+			return
+		}
+		if decl.Doc == nil {
+			_, err = enc.EncodeNil()
+		} else {
+			_, err = enc.EncodeString(decl.Doc.Text())
+		}
+		if err != nil {
+			return
+		}
+	}
 	return
 }
 
 func (inst *BackendInterfaceExporter) Reset() {
-	inst.buf.Reset()
+	inst.bufSignature.Reset()
 	inst.enc.Reset()
-	inst.enc.SetWriter(inst.buf)
+	inst.enc.SetWriter(inst.bufSignature)
 	inst.hasher.Reset()
 	inst.compatRecord.Reset()
 }
 
 func (inst *BackendInterfaceExporter) Emit(out io.Writer) (n int, err error) {
 	enc := inst.enc
-	_, err = enc.EncodeBreak()
+	b := bufio.NewWriter(out)
+	defer b.Flush()
+	enc.SetWriter(b)
+	_, err = enc.EncodeMapIndefinite()
 	if err != nil {
 		return
+	}
+	_, err = enc.EncodeString("interface")
+	if err != nil {
+		return
+	}
+	_, err = enc.EncodeMapDefinite(2)
+	if err != nil {
+		return
+	}
+	{ // 0
+		_, err = enc.EncodeString("signature")
+		if err != nil {
+			return
+		}
+		_, err = enc.EncodeArrayIndefinite()
+		if err != nil {
+			return
+		}
+		err = b.Flush()
+		if err != nil {
+			return
+		}
+		_, err = inst.bufSignature.WriteTo(b)
+		if err != nil {
+			return
+		}
+		_, err = enc.EncodeBreak()
+		if err != nil {
+			return
+		}
+	}
+	{ // 1
+		_, err = enc.EncodeString("description")
+		if err != nil {
+			return
+		}
+		_, err = enc.EncodeArrayIndefinite()
+		if err != nil {
+			return
+		}
+		err = b.Flush()
+		if err != nil {
+			return
+		}
+		_, err = inst.bufDescription.WriteTo(b)
+		if err != nil {
+			return
+		}
+		_, err = enc.EncodeBreak()
+		if err != nil {
+			return
+		}
 	}
 
 	_, err = enc.EncodeString("compatibility")
@@ -339,7 +489,7 @@ func (inst *BackendInterfaceExporter) Emit(out io.Writer) (n int, err error) {
 	}
 
 	var n2 int64
-	n2, err = inst.buf.WriteTo(out)
+	n2, err = inst.bufSignature.WriteTo(out)
 	n = int(n2)
 	inst.Reset()
 	return
