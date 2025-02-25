@@ -5,6 +5,7 @@ package imcolortextedit
 import "github.com/stergiotis/boxer/public/imzero/imgui"
 
 import "github.com/stergiotis/boxer/public/fffi/runtime"
+const fffiCompatibilityRecord = "pGhmZWF0dXJlc6Jrbm9UaHJvd1RydWX0bG5vVGhyb3dGYWxzZfRlbWluSWQa_____2VtYXhJZABkaGFzaNdA";
 
 // -- deactivated -- // import "github.com/stergiotis/boxer/public/imzero/imgui"
 
@@ -30,6 +31,7 @@ func (foreignptr ImColorEditorForeignPtr) Destroy() {
 }
 
 func (foreignptr ImColorEditorForeignPtr) Render(title string) {
+
 	_f := foreignptr.getFffi()
 	_f.AddProcedureId(0x00000bba)
 	runtime.AddUintptrArg(_f, foreignptr)
@@ -46,7 +48,6 @@ func (foreignptr ImColorEditorForeignPtr) RenderV(title string, parentIsFocused 
 	runtime.AddComplex64Arg(_f, aSize)
 	runtime.AddBoolArg(_f, aBorder)
 	_f.CallProcedure()
-
 }
 
 func (foreignptr ImColorEditorForeignPtr) SetText(text string) {

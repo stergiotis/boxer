@@ -2,6 +2,7 @@ package compiletime
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -36,7 +37,7 @@ func (inst *generatorApp) makeFileReadOnly(path string) error {
 	return nil
 }
 
-func (inst *generatorApp) emitToFile(path string, emitter Emitter) (err error) {
+func (inst *generatorApp) emitToFile(path string, emitter Emitter, preamble []byte) (err error) {
 	_ = os.MkdirAll(filepath.Dir(path), 0o000)
 
 	var w io.WriteCloser
@@ -50,7 +51,7 @@ func (inst *generatorApp) emitToFile(path string, emitter Emitter) (err error) {
 		err = eb.Build().Str("path", path).Errorf("unable to create file: %w", err)
 		return
 	}
-	_, err = emitter.Emit(w)
+	_, err = emitter.Emit(w, preamble)
 	_ = w.Close()
 	if err != nil {
 		err = eb.Build().Str("path", path).Errorf("unable to populate file: %w", err)
@@ -64,8 +65,7 @@ func (inst *generatorApp) emitToFile(path string, emitter Emitter) (err error) {
 
 	return
 }
-
-func (inst *generatorApp) generateBackendCode(idlDriver IDLDriver, cfg *Config, namer *Namer) (err error) {
+func (inst *generatorApp) handleInterfaceExport(idlDriver IDLDriver, cfg *Config, namer *Namer) (compat *CompatibilityRecord, err error) {
 	exporter := NewBackendInterfaceExporter(cbor2.NewEncoder(nil, nil), namer)
 	err = idlDriver.DriveBackend(exporter, cfg.NoThrow)
 	if err != nil {
@@ -73,22 +73,38 @@ func (inst *generatorApp) generateBackendCode(idlDriver IDLDriver, cfg *Config, 
 		return
 	}
 	if cfg.InterfaceOutputFile != "" {
-		err = inst.emitToFile(cfg.InterfaceOutputFile, exporter)
+		err = inst.emitToFile(cfg.InterfaceOutputFile, exporter, nil)
 		if err != nil {
 			err = eh.Errorf("unable to generate interface description file: %w", err)
 			return
 		}
 	}
-	compat := exporter.GetCompatibilityRecord()
+	compat = exporter.GetCompatibilityRecord()
 	log.Info().Interface("compatibilityRecord", compat).Msg("derived compatibility record from idl description")
+	return
+}
 
+func (inst *generatorApp) generateBackendCode(idlDriver IDLDriver, cfg *Config, namer *Namer) (err error) {
+	var compat *CompatibilityRecord
+	compat, err = inst.handleInterfaceExport(idlDriver, cfg, namer)
+	if err != nil {
+		err = eh.Errorf("unable to generate interface exports: %w", err)
+		return
+	}
 	be := NewCodeTransformerBackendPresenterCpp(namer)
 	err = idlDriver.DriveBackend(be, cfg.NoThrow)
 	if err != nil {
 		err = eh.Errorf("unable to generate code: %w", err)
 		return
 	}
-	err = inst.emitToFile(cfg.CppOutputFile, be)
+	var b64 string
+	b64, err = compat.ToBase64()
+	if err != nil {
+		err = eh.Errorf("unable to generate compatibility record: %w", err)
+		return
+	}
+	preamble := []byte(fmt.Sprintf("#define FFFI_COMPATIBILITY_RECORD \"%s\";\n", b64))
+	err = inst.emitToFile(cfg.CppOutputFile, be, preamble)
 	if err != nil {
 		err = eh.Errorf("unable to generate cpp file: %w", err)
 		return
@@ -98,13 +114,26 @@ func (inst *generatorApp) generateBackendCode(idlDriver IDLDriver, cfg *Config, 
 }
 
 func (inst *generatorApp) generateFrontendCode(idlDriver IDLDriver, cfg *Config, namer *Namer) (err error) {
+	var compat *CompatibilityRecord
+	compat, err = inst.handleInterfaceExport(idlDriver, cfg, namer)
+	if err != nil {
+		err = eh.Errorf("unable to generate interface exports: %w", err)
+		return
+	}
 	fe := NewCodeTransformerFrontendGo(namer, cfg.GoCodeProlog)
 	err = idlDriver.DriveFrontend(fe, cfg.NoThrow)
 	if err != nil {
 		err = eh.Errorf("unable to generate code: %w", err)
 		return
 	}
-	err = inst.emitToFile(cfg.GoOutputFile, fe)
+	var b64 string
+	b64, err = compat.ToBase64()
+	if err != nil {
+		err = eh.Errorf("unable to generate compatibility record: %w", err)
+		return
+	}
+	preamble := []byte(fmt.Sprintf("const fffiCompatibilityRecord = \"%s\";\n", b64))
+	err = inst.emitToFile(cfg.GoOutputFile, fe, preamble)
 	if err != nil {
 		err = eh.Errorf("unable to generate go file: %w", err)
 		return

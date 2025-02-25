@@ -5,6 +5,7 @@ package imgui
 import "github.com/stergiotis/boxer/public/imzero/dto"
 
 import "github.com/stergiotis/boxer/public/fffi/runtime"
+const fffiCompatibilityRecord = "pGhmZWF0dXJlc6Jrbm9UaHJvd1RydWX0bG5vVGhyb3dGYWxzZfRlbWluSWQa_____2VtYXhJZABkaGFzaNdA";
 
 func Checkbox(label string, state Tristate) (checked Tristate, clicked bool) {
 
@@ -15,7 +16,6 @@ func Checkbox(label string, state Tristate) (checked Tristate, clicked bool) {
 	_f.CallFunctionNoThrow()
 	checked = Tristate(runtime.GetInt8Retr[int8](_f))
 	clicked = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 // -- deactivated -- // //go:build fffi_idl_code
@@ -137,6 +137,7 @@ func DestroyImCoolBarConfig(cfg ImCoolBarConfigForeignPtr) {
 }
 
 func (foreignptr ImCoolBarConfigForeignPtr) Get() (anchor ImVec2, normalSize float32, hoveredSize float32, animStep float32, effectStrength float32) {
+
 	_f := foreignptr.getFffi()
 	_f.AddFunctionId(0x0000000b)
 	runtime.AddUintptrArg(_f, foreignptr)
@@ -258,6 +259,7 @@ func DragFloat32V(label string, vP float32, v_speed float32, p_min float32, p_ma
 }
 
 func DragFloat32NV(label string, vP []float32, v_speed float32, v_min float32, v_max float32, format string, flags ImGuiSliderFlags) (v []float32, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000015)
 	runtime.AddStringArg(_f, label)
@@ -319,6 +321,7 @@ func DragFloat64V(label string, vP float64, v_speed float32, p_min float64, p_ma
 }
 
 func DragFloat64NV(label string, vP []float64, v_speed float32, v_min float64, v_max float64, format string, flags ImGuiSliderFlags) (v []float64, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000019)
 	runtime.AddStringArg(_f, label)
@@ -380,6 +383,7 @@ func DragIntV(label string, vP int, v_speed float32, p_min int, p_max int, forma
 }
 
 func DragIntNV(label string, vP []int, v_speed float32, v_min int, v_max int, format string, flags ImGuiSliderFlags) (v []int, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000001d)
 	runtime.AddStringArg(_f, label)
@@ -441,6 +445,7 @@ func DragInt16V(label string, vP int16, v_speed float32, p_min int16, p_max int1
 }
 
 func DragInt16NV(label string, vP []int16, v_speed float32, v_min int16, v_max int16, format string, flags ImGuiSliderFlags) (v []int16, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000021)
 	runtime.AddStringArg(_f, label)
@@ -502,6 +507,7 @@ func DragInt32V(label string, vP int32, v_speed float32, p_min int32, p_max int3
 }
 
 func DragInt32NV(label string, vP []int32, v_speed float32, v_min int32, v_max int32, format string, flags ImGuiSliderFlags) (v []int32, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000025)
 	runtime.AddStringArg(_f, label)
@@ -563,6 +569,7 @@ func DragInt8V(label string, vP int8, v_speed float32, p_min int8, p_max int8, f
 }
 
 func DragInt8NV(label string, vP []int8, v_speed float32, v_min int8, v_max int8, format string, flags ImGuiSliderFlags) (v []int8, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000029)
 	runtime.AddStringArg(_f, label)
@@ -624,6 +631,7 @@ func DragUIntV(label string, vP uint, v_speed float32, p_min uint, p_max uint, f
 }
 
 func DragUIntNV(label string, vP []uint, v_speed float32, v_min uint, v_max uint, format string, flags ImGuiSliderFlags) (v []uint, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000002d)
 	runtime.AddStringArg(_f, label)
@@ -685,6 +693,7 @@ func DragUInt16V(label string, vP uint16, v_speed float32, p_min uint16, p_max u
 }
 
 func DragUInt16NV(label string, vP []uint16, v_speed float32, v_min uint16, v_max uint16, format string, flags ImGuiSliderFlags) (v []uint16, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000031)
 	runtime.AddStringArg(_f, label)
@@ -746,6 +755,7 @@ func DragUInt32V(label string, vP uint32, v_speed float32, p_min uint32, p_max u
 }
 
 func DragUInt32NV(label string, vP []uint32, v_speed float32, v_min uint32, v_max uint32, format string, flags ImGuiSliderFlags) (v []uint32, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000035)
 	runtime.AddStringArg(_f, label)
@@ -807,6 +817,7 @@ func DragUInt8V(label string, vP uint8, v_speed float32, p_min uint8, p_max uint
 }
 
 func DragUInt8NV(label string, vP []uint8, v_speed float32, v_min uint8, v_max uint8, format string, flags ImGuiSliderFlags) (v []uint8, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x00000039)
 	runtime.AddStringArg(_f, label)
@@ -868,6 +879,7 @@ func DragFloatV(label string, vP float32, v_speed float32, v_min float32, v_max 
 }
 
 func DragFloat2(label string, vP [2]float32) (v [2]float32, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x0000003d)
 	runtime.AddStringArg(_f, label)
@@ -875,7 +887,6 @@ func DragFloat2(label string, vP [2]float32) (v [2]float32, r bool) {
 	_f.CallFunctionNoThrow()
 	v = (runtime.GetFloat32Array2Retr[float32](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
@@ -1290,6 +1301,7 @@ func (foreignptr ImDrawListPtr) PushClipRectFullScreen() {
 }
 
 func (foreignptr ImDrawListPtr) PopClipRect() {
+
 	_f := foreignptr.getFffi()
 	_f.AddProcedureId(0x0000005a)
 	runtime.AddUintptrArg(_f, foreignptr)
@@ -1297,12 +1309,12 @@ func (foreignptr ImDrawListPtr) PopClipRect() {
 }
 
 func (foreignptr ImDrawListPtr) PushTextureID(texture_id ImTextureID) {
+
 	_f := foreignptr.getFffi()
 	_f.AddProcedureId(0x0000005b)
 	runtime.AddUintptrArg(_f, foreignptr)
 	runtime.AddUintptrArg(_f, texture_id)
 	_f.CallProcedure()
-
 }
 
 func (foreignptr ImDrawListPtr) PopTextureID() {
@@ -2181,10 +2193,10 @@ func PushParagraphTextLayout(align dto.TextAlignFlags, dir dto.TextDirection) {
 }
 
 func PopParagraphTextLayout() {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x0000009f)
 	_f.CallProcedure()
-
 }
 
 func DrawSerializedImZeroFB(ptr ImDrawListPtr, buf []byte) {
@@ -2254,6 +2266,7 @@ func GetFont() (font ImFontPtr) {
 }
 
 func GetFontTexID() (tex ImTextureID) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000000a6)
 	_f.CallFunctionNoThrow()
@@ -2429,10 +2442,10 @@ func EndFrame() {
 //foreign code:
 //  ImGui::Render()
 func Render() {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000000b1)
 	_f.CallProcedure()
-
 }
 
 // ShowDemoWindow create Demo window. demonstrate most ImGui features. call this to learn about the library! try to make it always available in your application!
@@ -6529,16 +6542,17 @@ func UpdateInputEvents(trickle_fast_inputs bool) {
 }
 
 func UpdateHoveredWindowAndCaptureFlags() {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000211)
 	_f.CallProcedure()
 }
 
 func UpdateMouseMovingWindowNewFrame() {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000212)
 	_f.CallProcedure()
-
 }
 
 func UpdateMouseMovingWindowEndFrame() {
@@ -8328,6 +8342,7 @@ func LabelText(label string, text string) {
 //foreign code:
 //  ImGui::BulletText("%.*s",(int)getStringLength(text),text)
 func BulletText(text string) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000002c0)
 	runtime.AddStringArg(_f, text)
@@ -8339,7 +8354,6 @@ func GetIoDeltaTime() (dt float32) {
 	_f.AddFunctionId(0x000002c1)
 	_f.CallFunctionNoThrow()
 	dt = (runtime.GetFloat32Retr[float32](_f))
-
 	return
 }
 
@@ -8392,7 +8406,6 @@ func InputTextV(label string, textIn string, maxLength Size_t, flags ImGuiInputT
 	_f.CallFunctionNoThrow()
 	textOut = (runtime.GetStringRetr[string](_f))
 	changed = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
@@ -8484,6 +8497,7 @@ func KnobV(label string, valueP float32, v_min float32, v_max float32,
 }
 
 func KnobInt(label string, valueP int, v_min int, v_max int) (value int, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000002cc)
 	runtime.AddStringArg(_f, label)
@@ -8493,7 +8507,6 @@ func KnobInt(label string, valueP int, v_min int, v_max int) (value int, r bool)
 	_f.CallFunctionNoThrow()
 	value = (runtime.GetIntRetr[int](_f))
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
@@ -8550,12 +8563,12 @@ func EndPiePopup() {
 }
 
 func PieMenuItem(name string) (r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000002d1)
 	runtime.AddStringArg(_f, name)
 	_f.CallFunctionNoThrow()
 	r = (runtime.GetBoolRetr[bool](_f))
-
 	return
 }
 
@@ -8653,6 +8666,7 @@ func SliderFloat32V(label string, vP float32, p_min float32, p_max float32, form
 }
 
 func SliderFloat32NV(label string, vP []float32, v_min float32, v_max float32, format string, flags ImGuiSliderFlags) (v []float32, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000002da)
 	runtime.AddStringArg(_f, label)
@@ -8716,6 +8730,7 @@ func SliderFloat64V(label string, vP float64, p_min float64, p_max float64, form
 }
 
 func SliderFloat64NV(label string, vP []float64, v_min float64, v_max float64, format string, flags ImGuiSliderFlags) (v []float64, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000002de)
 	runtime.AddStringArg(_f, label)
@@ -8779,6 +8794,7 @@ func SliderIntV(label string, vP int, p_min int, p_max int, format string, flags
 }
 
 func SliderIntNV(label string, vP []int, v_min int, v_max int, format string, flags ImGuiSliderFlags) (v []int, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000002e2)
 	runtime.AddStringArg(_f, label)
@@ -8842,6 +8858,7 @@ func SliderInt16V(label string, vP int16, p_min int16, p_max int16, format strin
 }
 
 func SliderInt16NV(label string, vP []int16, v_min int16, v_max int16, format string, flags ImGuiSliderFlags) (v []int16, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000002e6)
 	runtime.AddStringArg(_f, label)
@@ -8905,6 +8922,7 @@ func SliderInt32V(label string, vP int32, p_min int32, p_max int32, format strin
 }
 
 func SliderInt32NV(label string, vP []int32, v_min int32, v_max int32, format string, flags ImGuiSliderFlags) (v []int32, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000002ea)
 	runtime.AddStringArg(_f, label)
@@ -8968,6 +8986,7 @@ func SliderInt8V(label string, vP int8, p_min int8, p_max int8, format string, f
 }
 
 func SliderInt8NV(label string, vP []int8, v_min int8, v_max int8, format string, flags ImGuiSliderFlags) (v []int8, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000002ee)
 	runtime.AddStringArg(_f, label)
@@ -9031,6 +9050,7 @@ func SliderUIntV(label string, vP uint, p_min uint, p_max uint, format string, f
 }
 
 func SliderUIntNV(label string, vP []uint, v_min uint, v_max uint, format string, flags ImGuiSliderFlags) (v []uint, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000002f2)
 	runtime.AddStringArg(_f, label)
@@ -9094,6 +9114,7 @@ func SliderUInt16V(label string, vP uint16, p_min uint16, p_max uint16, format s
 }
 
 func SliderUInt16NV(label string, vP []uint16, v_min uint16, v_max uint16, format string, flags ImGuiSliderFlags) (v []uint16, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000002f6)
 	runtime.AddStringArg(_f, label)
@@ -9157,6 +9178,7 @@ func SliderUInt32V(label string, vP uint32, p_min uint32, p_max uint32, format s
 }
 
 func SliderUInt32NV(label string, vP []uint32, v_min uint32, v_max uint32, format string, flags ImGuiSliderFlags) (v []uint32, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000002fa)
 	runtime.AddStringArg(_f, label)
@@ -9220,6 +9242,7 @@ func SliderUInt8V(label string, vP uint8, p_min uint8, p_max uint8, format strin
 }
 
 func SliderUInt8NV(label string, vP []uint8, v_min uint8, v_max uint8, format string, flags ImGuiSliderFlags) (v []uint8, r bool) {
+
 	_f := currentFffiVar
 	_f.AddFunctionId(0x000002fe)
 	runtime.AddStringArg(_f, label)
@@ -9283,10 +9306,10 @@ func SpinnerDotsV(label string, nextdotP float32, radius float32, thickness floa
 }
 
 func SpinnerDemos() {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000302)
 	_f.CallProcedure()
-
 }
 // -- deactivated -- // //go:build fffi_idl_code
 // -- deactivated -- // package imgui
@@ -9348,6 +9371,7 @@ func SpinnerRainbowMixV(label string, radius float32, thickness float32, color u
 }
 
 func SpinnerRotatingHeart(label string, radius float32, thickness float32, color uint32, speed float32) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000307)
 	runtime.AddStringArg(_f, label)
@@ -9359,6 +9383,7 @@ func SpinnerRotatingHeart(label string, radius float32, thickness float32, color
 }
 
 func SpinnerRotatingHeartV(label string, radius float32, thickness float32, color uint32, speed float32, ang_min float32 /* = 0.f*/) {
+
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000308)
 	runtime.AddStringArg(_f, label)
@@ -9368,7 +9393,6 @@ func SpinnerRotatingHeartV(label string, radius float32, thickness float32, colo
 	runtime.AddFloat32Arg(_f, speed)
 	runtime.AddFloat32Arg(_f, ang_min)
 	_f.CallProcedure()
-
 }
 
 func SpinnerAng(label string, radius float32, thickness float32) {

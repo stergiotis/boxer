@@ -3,12 +3,14 @@ package compiletime
 import (
 	"bufio"
 	"bytes"
+	"encoding/base64"
 	"go/ast"
 	"hash"
 	"io"
 	"math"
 
 	"github.com/stergiotis/boxer/public/fffi/runtime"
+	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/cbor"
 	"lukechampine.com/blake3"
 )
@@ -55,6 +57,19 @@ func (inst *CompatibilityRecord) Reset() {
 	inst.MaxId = 0
 	inst.FeatureNoThrowFalse = false
 	inst.FeatureNoThrowTrue = false
+}
+func (inst *CompatibilityRecord) ToBase64() (s string, err error) {
+	buf := bytes.NewBuffer(make([]byte, 0, 4096*4))
+	{
+		err = inst.Encode(cbor.NewEncoder(buf, nil))
+		if err != nil {
+			err = eh.Errorf("unable to encode compatibility record: %w", err)
+			return
+		}
+	}
+
+	s = base64.RawURLEncoding.EncodeToString(buf.Bytes())
+	return
 }
 func (inst *CompatibilityRecord) Encode(enc cbor.FullEncoder) (err error) {
 	_, err = enc.EncodeMapDefinite(4)
@@ -407,11 +422,14 @@ func (inst *BackendInterfaceExporter) Reset() {
 	inst.bufSignature.Reset()
 	inst.enc.Reset()
 	inst.enc.SetWriter(inst.bufSignature)
-	inst.hasher.Reset()
 	inst.compatRecord.Reset()
 }
 
-func (inst *BackendInterfaceExporter) Emit(out io.Writer) (n int, err error) {
+func (inst *BackendInterfaceExporter) Emit(out io.Writer, preamble []byte) (n int, err error) {
+	if len(preamble) > 0 {
+		err = eh.Errorf("preamble is not supported")
+		return
+	}
 	enc := inst.enc
 	b := bufio.NewWriter(out)
 	defer b.Flush()
@@ -428,6 +446,8 @@ func (inst *BackendInterfaceExporter) Emit(out io.Writer) (n int, err error) {
 	if err != nil {
 		return
 	}
+	hasher := inst.hasher
+	hasher.Reset()
 	{ // 0
 		_, err = enc.EncodeString("signature")
 		if err != nil {
@@ -441,7 +461,12 @@ func (inst *BackendInterfaceExporter) Emit(out io.Writer) (n int, err error) {
 		if err != nil {
 			return
 		}
-		_, err = inst.bufSignature.WriteTo(b)
+		_, err = hasher.Write(inst.bufSignature.Bytes())
+		if err != nil {
+			err = eh.Errorf("unable to write buffered signature cbor to hasher: %w", err)
+			return
+		}
+		_, err = b.Write(inst.bufSignature.Bytes())
 		if err != nil {
 			return
 		}
@@ -463,7 +488,7 @@ func (inst *BackendInterfaceExporter) Emit(out io.Writer) (n int, err error) {
 		if err != nil {
 			return
 		}
-		_, err = inst.bufDescription.WriteTo(b)
+		_, err = b.Write(inst.bufDescription.Bytes())
 		if err != nil {
 			return
 		}
@@ -477,7 +502,7 @@ func (inst *BackendInterfaceExporter) Emit(out io.Writer) (n int, err error) {
 	if err != nil {
 		return
 	}
-	inst.compatRecord.Hash = inst.hasher.Sum(inst.compatRecord.Hash[:0])
+	inst.compatRecord.Hash = hasher.Sum(inst.compatRecord.Hash[:0])
 	err = inst.compatRecord.Encode(enc)
 	if err != nil {
 		return

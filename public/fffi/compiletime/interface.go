@@ -9,7 +9,7 @@ import (
 )
 
 type Emitter interface {
-	Emit(out io.Writer) (n int, err error)
+	Emit(out io.Writer, preamble []byte) (n int, err error)
 }
 
 // CodeTransformerBackend generate code for the backend i.e. the library executing the foreign function body (in the foreign programming language)
