@@ -5,7 +5,8 @@ package imgui
 import "github.com/stergiotis/boxer/public/imzero/dto"
 
 import "github.com/stergiotis/boxer/public/fffi/runtime"
-const fffiCompatibilityRecord = "pGhmZWF0dXJlc6Jrbm9UaHJvd1RydWX0bG5vVGhyb3dGYWxzZfRlbWluSWQa_____2VtYXhJZABkaGFzaNdA";
+/* ffiCompatibilityRecord diag={"features": {"noThrowTrue": true, "noThrowFalse": false}, "minId": 0, "maxId": 1035, "hash": 23(h'26fbee22f7e5cb61bc0b27d4ef64d773')} */
+const fffiCompatibilityRecord = "pGhmZWF0dXJlc6Jrbm9UaHJvd1RydWX1bG5vVGhyb3dGYWxzZfRlbWluSWQAZW1heElkGQQLZGhhc2jXUCb77iL35cthvAsn1O9k13M";
 
 func Checkbox(label string, state Tristate) (checked Tristate, clicked bool) {
 

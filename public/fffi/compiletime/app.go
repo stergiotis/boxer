@@ -98,12 +98,13 @@ func (inst *generatorApp) generateBackendCode(idlDriver IDLDriver, cfg *Config, 
 		return
 	}
 	var b64 string
-	b64, err = compat.ToBase64()
+	var diag string
+	b64, diag, err = compat.ToBase64()
 	if err != nil {
 		err = eh.Errorf("unable to generate compatibility record: %w", err)
 		return
 	}
-	preamble := []byte(fmt.Sprintf("#define FFFI_COMPATIBILITY_RECORD \"%s\";\n", b64))
+	preamble := []byte(fmt.Sprintf("/* %s */\n#define FFFI_COMPATIBILITY_RECORD \"%s\";\n", diag, b64))
 	err = inst.emitToFile(cfg.CppOutputFile, be, preamble)
 	if err != nil {
 		err = eh.Errorf("unable to generate cpp file: %w", err)
@@ -126,13 +127,13 @@ func (inst *generatorApp) generateFrontendCode(idlDriver IDLDriver, cfg *Config,
 		err = eh.Errorf("unable to generate code: %w", err)
 		return
 	}
-	var b64 string
-	b64, err = compat.ToBase64()
+	var b64, diag string
+	b64, diag, err = compat.ToBase64()
 	if err != nil {
 		err = eh.Errorf("unable to generate compatibility record: %w", err)
 		return
 	}
-	preamble := []byte(fmt.Sprintf("const fffiCompatibilityRecord = \"%s\";\n", b64))
+	preamble := []byte(fmt.Sprintf("/* ffiCompatibilityRecord diag=%s */\nconst fffiCompatibilityRecord = \"%s\";\n", diag, b64))
 	err = inst.emitToFile(cfg.GoOutputFile, fe, preamble)
 	if err != nil {
 		err = eh.Errorf("unable to generate go file: %w", err)

@@ -9,6 +9,7 @@ import (
 	"io"
 	"math"
 
+	cbor2 "github.com/fxamacker/cbor/v2"
 	"github.com/stergiotis/boxer/public/fffi/runtime"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/cbor"
@@ -58,7 +59,7 @@ func (inst *CompatibilityRecord) Reset() {
 	inst.FeatureNoThrowFalse = false
 	inst.FeatureNoThrowTrue = false
 }
-func (inst *CompatibilityRecord) ToBase64() (s string, err error) {
+func (inst *CompatibilityRecord) ToBase64() (s string, diag string, err error) {
 	buf := bytes.NewBuffer(make([]byte, 0, 4096*4))
 	{
 		err = inst.Encode(cbor.NewEncoder(buf, nil))
@@ -66,6 +67,11 @@ func (inst *CompatibilityRecord) ToBase64() (s string, err error) {
 			err = eh.Errorf("unable to encode compatibility record: %w", err)
 			return
 		}
+	}
+	diag, err = cbor2.Diagnose(buf.Bytes())
+	if err != nil {
+		err = eh.Errorf("unable to diag cbor: %w", err)
+		return
 	}
 
 	s = base64.RawURLEncoding.EncodeToString(buf.Bytes())
@@ -516,7 +522,6 @@ func (inst *BackendInterfaceExporter) Emit(out io.Writer, preamble []byte) (n in
 	var n2 int64
 	n2, err = inst.bufSignature.WriteTo(out)
 	n = int(n2)
-	inst.Reset()
 	return
 }
 func (inst *BackendInterfaceExporter) GetCompatibilityRecord() *CompatibilityRecord {

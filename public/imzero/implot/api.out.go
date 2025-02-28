@@ -5,7 +5,8 @@ package implot
 import "github.com/stergiotis/boxer/public/imzero/imgui"
 
 import "github.com/stergiotis/boxer/public/fffi/runtime"
-const fffiCompatibilityRecord = "pGhmZWF0dXJlc6Jrbm9UaHJvd1RydWX0bG5vVGhyb3dGYWxzZfRlbWluSWQa_____2VtYXhJZABkaGFzaNdA";
+/* ffiCompatibilityRecord diag={"features": {"noThrowTrue": false, "noThrowFalse": true}, "minId": 2000, "maxId": 2564, "hash": 23(h'1c6fa094f5d9487b6c838d2468248ea7')} */
+const fffiCompatibilityRecord = "pGhmZWF0dXJlc6Jrbm9UaHJvd1RydWX0bG5vVGhyb3dGYWxzZfVlbWluSWQZB9BlbWF4SWQZCgRkaGFzaNdQHG-glPXZSHtsg40kaCSOpw";
 
 // -- deactivated -- // import . "github.com/stergiotis/boxer/public/imzero/imgui"
 
