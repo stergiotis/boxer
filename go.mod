@@ -29,6 +29,7 @@ require (
 	golang.org/x/sys v0.28.0
 	golang.org/x/text v0.21.0
 	golang.org/x/tools v0.28.0
+	lukechampine.com/blake3 v1.4.0
 )
 
 require (
