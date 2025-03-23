@@ -20,6 +20,7 @@ require (
 	github.com/rs/zerolog v1.33.0
 	github.com/scalalang2/golang-fifo v1.0.2
 	github.com/schollz/progressbar/v3 v3.17.1
+	github.com/stoewer/go-strcase v1.3.0
 	github.com/stretchr/testify v1.10.0
 	github.com/tetratelabs/wazero v1.8.2
 	github.com/urfave/cli/v2 v2.27.5
