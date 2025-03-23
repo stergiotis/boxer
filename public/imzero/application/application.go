@@ -13,12 +13,10 @@ import (
 	"syscall"
 
 	"github.com/rs/zerolog/log"
-	"github.com/tetratelabs/wazero"
 
 	"github.com/stergiotis/boxer/public/fffi/runtime"
 	"github.com/stergiotis/boxer/public/imzero/imgui"
 	"github.com/stergiotis/boxer/public/imzero/nerdfont"
-	"github.com/stergiotis/boxer/public/imzero/wasm"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -93,6 +91,7 @@ func (inst *Application) Launch() (err error) {
 		inst.endianess = binary.LittleEndian // wasm uses little endian byte order
 		inst.relaunchable = true
 		var imguiWasm []byte
+		var _ = imguiWasm
 
 		if cfg.ImGuiBinary == "" {
 			// FIXME
@@ -103,7 +102,7 @@ func (inst *Application) Launch() (err error) {
 				return eh.Errorf("unable to read wasm file: %w", err)
 			}
 		}
-		imzConfig := wazero.NewRuntimeConfigCompiler()
+		/*imzConfig := wazero.NewRuntimeConfigCompiler()
 		var imz *wasm.ImZero
 		imz, err = wasm.NewImZero(imguiWasm, imzConfig, inst.stdin, inst.stdout, os.Stderr)
 		if err != nil {
@@ -115,7 +114,7 @@ func (inst *Application) Launch() (err error) {
 				log.Error().Err(e).Msg("error while running main loop in webassembly binary")
 			}
 			*inst.shutdown = true
-		}()
+		}()*/
 	} else {
 		inst.endianess = binary.NativeEndian
 
