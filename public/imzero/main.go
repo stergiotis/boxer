@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"slices"
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl"
@@ -44,11 +45,11 @@ func main() {
 		Description:          "",
 		DefaultCommand:       "",
 		EnableBashCompletion: false,
-		Flags: append(append(append(append([]cli.Flag{},
-			logging.LoggingFlags...),
-			profiling.ProfilingFlags...),
-			dev.DebuggerFlags...),
-			dev.IoOverrideFlags...),
+		Flags: slices.Concat(
+			logging.LoggingFlags,
+			profiling.ProfilingFlags,
+			dev.DebuggerFlags,
+			dev.IoOverrideFlags),
 		Commands: []*cli.Command{
 			dsl.NewCommand(),
 			cbor.NewCommand(),
