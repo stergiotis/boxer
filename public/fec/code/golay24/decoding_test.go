@@ -6,8 +6,6 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/assert"
-
-	"github.com/stergiotis/boxer/public/unittest"
 )
 
 func TestDecodeSingle(t *testing.T) {
@@ -19,7 +17,6 @@ func TestDecodeSingle(t *testing.T) {
 		assert.Equal(t, uint16(o), DecodeSingle(e))
 		assert.Equal(t, uint8(0), NumberOfBitErrors(e))
 	}
-	unittest.NewProgressBar(int64(len(Encoding)))
 	for o, g24 := range Encoding {
 		assert.Equal(t, uint16(o), DecodeSingle(g24))
 		assert.Equal(t, uint8(0), NumberOfBitErrors(g24))
