@@ -13,12 +13,10 @@ import (
 	"syscall"
 
 	"github.com/rs/zerolog/log"
-	"github.com/tetratelabs/wazero"
 
 	"github.com/stergiotis/boxer/public/fffi/runtime"
 	"github.com/stergiotis/boxer/public/imzero/imgui"
 	"github.com/stergiotis/boxer/public/imzero/nerdfont"
-	"github.com/stergiotis/boxer/public/imzero/wasm"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -93,6 +91,7 @@ func (inst *Application) Launch() (err error) {
 		inst.endianess = binary.LittleEndian // wasm uses little endian byte order
 		inst.relaunchable = true
 		var imguiWasm []byte
+		var _ = imguiWasm
 
 		if cfg.ImGuiBinary == "" {
 			// FIXME
@@ -103,7 +102,7 @@ func (inst *Application) Launch() (err error) {
 				return eh.Errorf("unable to read wasm file: %w", err)
 			}
 		}
-		imzConfig := wazero.NewRuntimeConfigCompiler()
+		/*imzConfig := wazero.NewRuntimeConfigCompiler()
 		var imz *wasm.ImZero
 		imz, err = wasm.NewImZero(imguiWasm, imzConfig, inst.stdin, inst.stdout, os.Stderr)
 		if err != nil {
@@ -115,7 +114,7 @@ func (inst *Application) Launch() (err error) {
 				log.Error().Err(e).Msg("error while running main loop in webassembly binary")
 			}
 			*inst.shutdown = true
-		}()
+		}()*/
 	} else {
 		inst.endianess = binary.NativeEndian
 
@@ -125,7 +124,13 @@ func (inst *Application) Launch() (err error) {
 			inst.relaunchable = false
 		} else {
 			inst.relaunchable = true
-			cmd := exec.Command(cfg.ImGuiBinary)
+			args := make([]string, 0, 32)
+			args = append(args, "-fffiInterpreter", "on")
+			if inst.Config.ImZeroSkiaClientConfig != nil {
+				args = inst.Config.ImZeroSkiaClientConfig.PassthroughArgs(args)
+			}
+			log.Info().Strs("args", args).Str("binary", cfg.ImGuiBinary).Msg("launching imzero client")
+			cmd := exec.Command(cfg.ImGuiBinary, args...)
 			var si io.WriteCloser
 			var so io.ReadCloser
 			//var se io.ReadCloser
@@ -137,6 +142,7 @@ func (inst *Application) Launch() (err error) {
 			if err != nil {
 				return eb.Build().Str("path", cfg.ImGuiBinary).Errorf("error while getting stdout pipeline: %w", err)
 			}
+			cmd.Stderr = os.Stderr // FIXME log forwarding
 			/*se, err = cmd.StderrPipe()
 			if err != nil {
 				return eb.Build().Str("path",cfg.ImGuiBinary).Errorf("error while getting stderr pipeline: %w", err)
