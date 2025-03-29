@@ -7,7 +7,6 @@ import (
 	"go/types"
 	"strings"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/tools/go/packages"
 
@@ -54,7 +53,7 @@ func NewIDLDriverGoFile(idlBuildTag string, packagePattern string, idOffset runt
 			s := s // FIXME
 			s.Comments[outerIdx].List[innerIdx].Text = string(deactivated) + s.Comments[outerIdx].List[innerIdx].Text
 			/*if s.Unresolved != nil && len(s.Unresolved) > 0 {
-				err = eb.Build().Str("unresolved", spew.Sdump(s.Unresolved)).Str("package", packagePattern).Str("buildTag", idlBuildTag).Str("file", file).Errorf("all identifiers need to be resolved")
+				err = eb.Build().Stringer("unresolved", s.Unresolved).Str("package", packagePattern).Str("buildTag", idlBuildTag).Str("file", file).Errorf("all identifiers need to be resolved")
 				return
 			}*/
 			a = append(a, s)
@@ -114,7 +113,7 @@ func (inst *IDLDriverGoFile) resolveBasicTypeType(t types.Type, castTypeP string
 			if isErrorInterface(tt) {
 				return "error", tt.String(), nil
 			} else {
-				err = eb.Build().Str("type", spew.Sdump(t)).Errorf("interface types other than error are not implemented")
+				err = eb.Build().Stringer("type", t).Errorf("interface types other than error are not implemented")
 				return
 			}
 		} else {
@@ -123,7 +122,7 @@ func (inst *IDLDriverGoFile) resolveBasicTypeType(t types.Type, castTypeP string
 			case 1:
 				return inst.resolveBasicTypeType(tt.EmbeddedType(0), castType)
 			default:
-				err = eb.Build().Str("type", spew.Sdump(t)).Errorf("unable to handle interface with multiple embedded types: are you using more than one constraint type in generic type param?")
+				err = eb.Build().Stringer("type", t).Errorf("unable to handle interface with multiple embedded types: are you using more than one constraint type in generic type param?")
 				return
 			}
 		}
@@ -132,8 +131,8 @@ func (inst *IDLDriverGoFile) resolveBasicTypeType(t types.Type, castTypeP string
 		elem, castType, err = inst.resolveBasicTypeType(tt.Elem(), castTypeP)
 		if err != nil {
 			err = eb.Build().
-				Str("type", spew.Sdump(tt)).
-				Str("underlying", spew.Sdump(tt.Underlying())).
+				Stringer("type", tt).
+				Stringer("underlying", tt.Underlying()).
 				Int64("len", tt.Len()).
 				Errorf("error while resolving element type of array type: %w", err)
 		}
@@ -153,8 +152,8 @@ func (inst *IDLDriverGoFile) resolveBasicTypeType(t types.Type, castTypeP string
 		elem, castType, err = inst.resolveBasicTypeType(tt.Elem(), castTypeP)
 		if err != nil {
 			err = eb.Build().
-				Str("type", spew.Sdump(tt)).
-				Str("underlying", spew.Sdump(tt.Underlying())).
+				Stringer("type", tt).
+				Stringer("underlying", tt.Underlying()).
 				Errorf("error while resolving element type of array type: %w", err)
 		}
 		typeName = "[]" + elem
@@ -175,7 +174,7 @@ func (inst *IDLDriverGoFile) resolveBasicTypeType(t types.Type, castTypeP string
 		}
 		return
 	case *types.Pointer:
-		err = eb.Build().Str("type", spew.Sdump(t)).Errorf("unable to resolve type: pointers are not supported")
+		err = eb.Build().Stringer("type", t).Errorf("unable to resolve type: pointers are not supported")
 		return
 	case *types.TypeParam:
 		constraint := tt.Constraint().String()
@@ -198,7 +197,7 @@ func (inst *IDLDriverGoFile) resolveBasicTypeType(t types.Type, castTypeP string
 		}
 		return
 	default:
-		err = eb.Build().Str("type", spew.Sdump(t)).Errorf("unable to resolve type")
+		err = eb.Build().Stringer("type", t).Errorf("unable to resolve type")
 		return
 	}
 }

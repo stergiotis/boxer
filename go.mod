@@ -9,7 +9,6 @@ require (
 	github.com/antlr4-go/antlr/v4 v4.13.1
 	github.com/brianvoe/gofakeit/v7 v7.1.2
 	github.com/cenkalti/backoff/v4 v4.3.0
-	github.com/davecgh/go-spew v1.1.1
 	github.com/dgraph-io/badger/v4 v4.5.0
 	github.com/dustin/go-humanize v1.0.1
 	github.com/fxamacker/cbor/v2 v2.7.0
@@ -19,7 +18,6 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/rs/zerolog v1.33.0
 	github.com/scalalang2/golang-fifo v1.0.2
-	github.com/schollz/progressbar/v3 v3.17.1
 	github.com/stretchr/testify v1.10.0
 	github.com/tetratelabs/wazero v1.8.2
 	github.com/urfave/cli/v2 v2.27.5

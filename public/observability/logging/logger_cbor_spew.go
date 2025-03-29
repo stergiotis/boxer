@@ -1,14 +1,16 @@
 package logging
 
 import (
-	"github.com/davecgh/go-spew/spew"
+	"io"
+
 	cbor2 "github.com/fxamacker/cbor/v2"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"io"
+	"github.com/yassinebenaid/godump"
 )
 
 type CborSpewLogger struct {
-	Out io.Writer
+	Out    io.Writer
+	dumper *godump.Dumper
 }
 
 func (inst *CborSpewLogger) Write(p []byte) (n int, err error) {
@@ -23,12 +25,18 @@ func (inst *CborSpewLogger) Write(p []byte) (n int, err error) {
 		err = eh.Errorf("unable to unmarshall cbor: %w", err)
 	}
 
-	spew.Fdump(inst.Out, v)
+	err = inst.dumper.Fprint(inst.Out, v)
 	return
 }
 
 var _ io.Writer = (*CborSpewLogger)(nil)
 
-func NewCborSpewLogger(out io.Writer) *CborSpewLogger {
-	return &CborSpewLogger{Out: out}
+func NewCborGodumpLogger(out io.Writer) *CborSpewLogger {
+	dumper := &godump.Dumper{
+		Indentation:             "  ",
+		ShowPrimitiveNamedTypes: false,
+		HidePrivateFields:       false,
+		Theme:                   godump.DefaultTheme,
+	}
+	return &CborSpewLogger{Out: out, dumper: dumper}
 }

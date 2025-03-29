@@ -1,14 +1,13 @@
 package compiletime
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"io"
 	"strconv"
 	"strings"
-
-	"github.com/davecgh/go-spew/spew"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -79,7 +78,7 @@ func splitIdlBody(body []ast.Stmt) (prolog []ast.Stmt, foreignCode string, epilo
 		}
 		return
 	}
-	err = eb.Build().Str("dump", spew.Sdump(body)).Errorf("unable to find foreign code in idl go ast: must have form _ = `r = foreignFunc(a,b,c)`")
+	err = eh.Errorf("unable to find foreign code in idl go ast: must have form _ = `r = foreignFunc(a,b,c)`")
 	return
 }
 
@@ -128,7 +127,7 @@ func getParamsAndResultTypes(decl *ast.FuncDecl, resolver TypeResolver) (paramNa
 	if isMethodDeclaration(decl) {
 		sendReceiver, err = sendReceiverAsArg(decl.Recv.List[0])
 		if err != nil {
-			err = eb.Build().Str("decl", spew.Sdump(decl)).Errorf("error while handling receiver variable: %w", err)
+			err = eb.Build().Str("decl", fmt.Sprintf("%+v", decl)).Errorf("error while handling receiver variable: %w", err)
 			return
 		}
 	}
@@ -167,7 +166,7 @@ func getParamsAndResultTypes(decl *ast.FuncDecl, resolver TypeResolver) (paramNa
 			var castType string
 			basicType, castType, err = resolver.ResolveBasicType(f.Type)
 			if err != nil {
-				err = eb.Build().Str("type", spew.Sdump(f.Type)).Errorf("unable to resolve basic type: %w", err)
+				err = eb.Build().Str("type", fmt.Sprint("%+v", f.Type)).Errorf("unable to resolve basic type: %w", err)
 				return
 			}
 
@@ -203,7 +202,7 @@ func getParamsAndResultTypes(decl *ast.FuncDecl, resolver TypeResolver) (paramNa
 			var castType string
 			basicType, castType, err = resolver.ResolveBasicType(f.Type)
 			if err != nil {
-				err = eb.Build().Str("type", spew.Sdump(f.Type)).Errorf("unable to resolve basic type: %w", err)
+				err = eb.Build().Str("type", fmt.Sprintf("%+v", f.Type)).Errorf("unable to resolve basic type: %w", err)
 				return
 			}
 

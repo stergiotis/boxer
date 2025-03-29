@@ -5,10 +5,9 @@ package demo
 import (
 	"reflect"
 
-	"github.com/davecgh/go-spew/spew"
-
 	"github.com/stergiotis/boxer/public/imzero/imgui"
 	"github.com/stergiotis/boxer/public/imzero/implot"
+	"github.com/yassinebenaid/godump"
 )
 
 var passColor = imgui.Color32U8(0, 255, 0, 255)
@@ -20,10 +19,16 @@ func MakeRenderImGuiStyleDemo() func() {
 	style2 := &imgui.ImGuiStyle{}
 	tested := false
 	passed := false
+	dumper := godump.Dumper{
+		Indentation:             "  ",
+		ShowPrimitiveNamedTypes: false,
+		HidePrivateFields:       false,
+		Theme:                   godump.Theme{},
+	}
 	return func() {
 		ptr := imgui.GetStyle()
 		style1.Load(ptr)
-		s1 := spew.Sdump(style1)
+		s1 := dumper.Sprint(style1)
 		if !tested && imgui.Button("Test Load/Dump") {
 			style1.Dump(ptr)
 			style2.Load(ptr)
@@ -50,10 +55,17 @@ func MakeRenderImPlotStyleDemo() func() {
 	style2 := &implot.ImPlotStyle{}
 	tested := false
 	passed := false
+	dumper := godump.Dumper{
+		Indentation:             "  ",
+		ShowPrimitiveNamedTypes: false,
+		HidePrivateFields:       false,
+		Theme:                   godump.Theme{},
+	}
 	return func() {
 		ptr := implot.GetStyle()
 		style1.Load(ptr)
-		s1 := spew.Sdump(style1)
+
+		s1 := dumper.Sprint(style1)
 		if !tested && imgui.Button("Test Load/Dump") {
 			style1.Dump(ptr)
 			style2.Load(ptr)

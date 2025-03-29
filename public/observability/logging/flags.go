@@ -185,6 +185,7 @@ var LoggingFlags = []cli.Flag{
 	},
 	&cli.StringFlag{
 		Name:        "logFormat",
+		Usage:       "one of the following: \"default\", \"console\", \"diag\", \"godump\", \"json-indent\", \"cbor\"",
 		Category:    "logging",
 		DefaultText: "json",
 		EnvVars:     []string{"BOXER_LOG_FORMAT"},
@@ -202,6 +203,8 @@ var LoggingFlags = []cli.Flag{
 			}
 
 			switch s {
+			case "default":
+				break
 			case "console":
 				var cborEncMode cbor.EncMode
 				var err error
@@ -209,9 +212,9 @@ var LoggingFlags = []cli.Flag{
 				if err != nil {
 					return eh.Errorf("unable to create cbor encoding mode: %w", err)
 				}
-				const threshhold = 70
+				const threshold = 70
 				var pp *cborConsolePrinter
-				pp, err = newCborConsolePrinter(threshhold)
+				pp, err = newCborConsolePrinter(threshold)
 				if err != nil {
 					return eh.Errorf("unable to create cbor console printer: %w", err)
 				}
@@ -236,10 +239,10 @@ var LoggingFlags = []cli.Flag{
 			case "diag":
 				log.Logger = log.Output(NewCborDiagLogger(w))
 				break
-			case "spew":
-				log.Logger = log.Output(NewCborSpewLogger(w))
+			case "godump":
+				log.Logger = log.Output(NewCborGodumpLogger(w))
 				break
-			case "json":
+			case "json-indent":
 				log.Logger = log.Output(NewJsonIndentLogger(w))
 				break
 			case "cbor":

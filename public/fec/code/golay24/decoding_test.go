@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/rs/zerolog/log"
-	progressbar "github.com/schollz/progressbar/v3"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/stergiotis/boxer/public/unittest"
@@ -21,12 +20,9 @@ func TestDecodeSingle(t *testing.T) {
 		assert.Equal(t, uint8(0), NumberOfBitErrors(e))
 	}
 	unittest.NewProgressBar(int64(len(Encoding)))
-	bar := progressbar.NewOptions(len(Encoding),
-		progressbar.OptionSetDescription("exhaustive test with 0,1,2,3 error bits"))
 	for o, g24 := range Encoding {
 		assert.Equal(t, uint16(o), DecodeSingle(g24))
 		assert.Equal(t, uint8(0), NumberOfBitErrors(g24))
-		_ = bar.Add(1)
 		GenerateBitErrors(g24, 1, 3, func(code uint32, nErrors uint8) {
 			assert.Equal(t, uint16(o), DecodeSingle(code))
 			assert.Equal(t, nErrors, NumberOfBitErrors(code))
