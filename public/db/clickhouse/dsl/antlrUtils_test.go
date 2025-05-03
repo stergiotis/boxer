@@ -1,13 +1,14 @@
 package dsl
 
 import (
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestIterateAll(t *testing.T) {
-	_, tree, err := parseSql("SELECT 1 FROM db.tbl;", nil)
+	_, tree, err := parseSql("SELECT 1 FROM db.tbl;", nil, nil)
 	require.NoError(t, err)
 	i := 0
 	for range IterateAll(tree) {

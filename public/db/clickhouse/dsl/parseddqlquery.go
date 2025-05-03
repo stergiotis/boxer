@@ -1,6 +1,9 @@
 package dsl
 
 import (
+	"io"
+	"strings"
+
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/ast"
@@ -8,66 +11,12 @@ import (
 	"github.com/stergiotis/boxer/public/ea"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"io"
-	"strings"
 )
 
-type errListener struct {
-	conflictsStart []int
-	conflictsStop  []int
-	ambStart       []int
-	ambStop        []int
-}
-
-func newErrListender(estConflicts int) *errListener {
-	return &errListener{
-		conflictsStart: make([]int, 0, estConflicts),
-		conflictsStop:  make([]int, 0, estConflicts),
-		ambStart:       make([]int, 0, estConflicts),
-		ambStop:        make([]int, 0, estConflicts),
-	}
-}
-
-func (inst *errListener) Reset() {
-	inst.conflictsStart = inst.conflictsStart[:0]
-	inst.conflictsStop = inst.conflictsStop[:0]
-	inst.ambStart = inst.ambStart[:0]
-	inst.ambStop = inst.ambStop[:0]
-}
-
-func (inst *errListener) SyntaxError(recognizer antlr.Recognizer, offendingSymbol interface{}, line, column int, msg string, e antlr.RecognitionException) {
-	log.Debug().Interface("offendingSymbol", offendingSymbol).Int("line", line).Int("col", column).Str("msg", msg).Msg("syntax error")
-	recognizer.SetError(e)
-}
-
-func (inst *errListener) ReportAmbiguity(recognizer antlr.Parser, dfa *antlr.DFA, startIndex, stopIndex int, exact bool, ambigAlts *antlr.BitSet, configs *antlr.ATNConfigSet) {
-	tokens := recognizer.GetTokenStream()
-	start := tokens.Get(startIndex).GetStart()
-	stop := tokens.Get(stopIndex).GetStop()
-	inst.ambStart = append(inst.ambStart, start)
-	inst.ambStop = append(inst.ambStop, stop)
-	log.Debug().Int("from", start).Int("to", stop).Int("startIndex", startIndex).Int("stopIndex", stopIndex).Bool("exact", exact).Msg("ambiguity detected")
-}
-
-func (inst *errListener) ReportAttemptingFullContext(recognizer antlr.Parser, dfa *antlr.DFA, startIndex, stopIndex int, conflictingAlts *antlr.BitSet, configs *antlr.ATNConfigSet) {
-	tokens := recognizer.GetTokenStream()
-	start := tokens.Get(startIndex).GetStart()
-	stop := tokens.Get(stopIndex).GetStop()
-	inst.conflictsStart = append(inst.conflictsStart, start)
-	inst.conflictsStop = append(inst.conflictsStop, stop)
-	log.Debug().Int("from", start).Int("to", stop).Int("startIndex", startIndex).Int("stopIndex", stopIndex).Msg("conflicting ambiguity detected")
-}
-
-func (inst *errListener) ReportContextSensitivity(recognizer antlr.Parser, dfa *antlr.DFA, startIndex, stopIndex, prediction int, configs *antlr.ATNConfigSet) {
-	log.Debug().Int("startIndex", startIndex).Int("stopIndex", stopIndex).Msg("context sensitivity")
-}
-
-var _ antlr.ErrorListener = (*errListener)(nil)
-
-func parseSql(sql string, errL antlr.ErrorListener) (parser *grammar.ClickHouseParser, parseTree *grammar.QueryStmtContext, err error) {
+func parseSql(sql string, errL antlr.ErrorListener, errStrategy antlr.ErrorStrategy) (parser *grammar.ClickHouseParser, parseTree *grammar.QueryStmtContext, err error) {
 	inputStream := antlr.NewInputStream(sql)
 	if errL == nil {
-		errL = newErrListender(32)
+		errL = NewStoringErrListener(32, 16, 16, 16)
 	}
 	lexer := grammar.NewClickHouseLexer(inputStream)
 	lexer.RemoveErrorListeners()
@@ -76,28 +25,48 @@ func parseSql(sql string, errL antlr.ErrorListener) (parser *grammar.ClickHouseP
 	parser = grammar.NewClickHouseParser(stream)
 	parser.RemoveErrorListeners()
 	parser.AddErrorListener(errL)
+	if errStrategy != nil {
+		parser.SetErrorHandler(errStrategy)
+	}
 
 	parseTreeI := parser.QueryStmt()
+
 	var ok bool
 	parseTree, ok = parseTreeI.(*grammar.QueryStmtContext)
 	if !ok {
 		err = eb.Build().Type("parseTreeI", parseTreeI).Errorf("unable to cast to QueryStmtContext")
 		return
 	}
-
-	if parser.HasError() {
-		pe := parser.GetError()
-		err = eh.Errorf("errors detected: %s (token=%s)", pe.GetMessage(), pe.GetOffendingToken().GetText())
+	parseError := parser.GetError()
+	if parseError != nil {
+		var s SyntaxErrorSynthesizerI
+		s, ok = errL.(SyntaxErrorSynthesizerI)
+		if ok {
+			err = s.GetSynthSyntaxError(128, true)
+			return
+		} else {
+			token := parseError.GetOffendingToken()
+			err = eb.Build().Str("message", parseError.GetMessage()).
+				Int("start", token.GetStart()).
+				Int("stop", token.GetStop()).
+				Int("line", token.GetLine()).
+				Int("column", token.GetColumn()).
+				Type("tokenType", token).
+				Str("message", parseError.GetMessage()).
+				Errorf("syntax errors detected")
+		}
 		return
 	}
 	return
 }
 
 type ParsedDqlQuery struct {
-	paramSlotSetErr error
-	parseTree       *grammar.QueryStmtContext
-	parser          *grammar.ClickHouseParser
-	errL            *errListener
+	paramSlotSetErr    error
+	parseTree          *grammar.QueryStmtContext
+	parser             *grammar.ClickHouseParser
+	errL               *StoringErrListener
+	errS               antlr.ErrorStrategy
+	recoverParseErrors bool
 
 	paramBindEnv *ParamBindEnv
 	paramSlotSet *ParamSlotSet
@@ -105,6 +74,19 @@ type ParsedDqlQuery struct {
 
 	inputSql string
 	noParams bool
+}
+
+func (inst *ParsedDqlQuery) GetErrorListener() *StoringErrListener {
+	return inst.errL
+}
+func (inst *ParsedDqlQuery) SetRecoverFromParseErrors(recover bool) {
+	inst.recoverParseErrors = recover
+	//	FIXME: BailErrorStrategy is not properly implemented (FIXME panic)
+	//if recover {
+	//	inst.errS = antlr.NewDefaultErrorStrategy()
+	//} else {
+	//	inst.errS = antlr.NewBailErrorStrategy()
+	//}
 }
 
 func (inst *ParsedDqlQuery) GetParser() *grammar.ClickHouseParser {
@@ -158,7 +140,8 @@ func NewParsedDqlQuery() (inst *ParsedDqlQuery) {
 	inst = &ParsedDqlQuery{
 		paramSlotSetErr: nil,
 		parseTree:       nil,
-		errL:            newErrListender(32),
+		errL:            NewStoringErrListener(32, 16, 16, 16),
+		errS:            antlr.NewDefaultErrorStrategy(),
 		paramBindEnv:    NewParamBindEnv(),
 		paramSlotSet:    NewParamSlotsSet(),
 		paramExprs:      make([]*grammar.SettingExprContext, 0, 64),
@@ -239,7 +222,10 @@ func (inst *ParsedDqlQuery) ParseFromString(sql string) (err error) {
 	errL := inst.errL
 	errL.Reset()
 	var parser *grammar.ClickHouseParser
-	parser, parseTree, err = parseSql(sql, errL)
+	parser, parseTree, err = parseSql(sql, errL, inst.errS)
+	if err == nil && !inst.recoverParseErrors {
+		err = errL.GetSynthSyntaxError(32, false)
+	}
 	if err != nil {
 		err = eh.Errorf("unable to parse sql as dql query: %w", err)
 		return
