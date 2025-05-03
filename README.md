@@ -15,7 +15,8 @@ go get github.com/stergiotis/boxer
 ``
 
 ## Maturity
-Unstable, alpha, API may still change heavily.
+Alpha, incomplete test coverage, unstable, API may still change heavily.
+
 
 ## Glossary
 <dl>
