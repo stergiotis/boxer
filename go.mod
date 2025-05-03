@@ -5,7 +5,7 @@ go 1.23.0
 toolchain go1.23.1
 
 require (
-	github.com/AfterShip/clickhouse-sql-parser v0.4.6
+	github.com/AfterShip/clickhouse-sql-parser v0.4.8
 	github.com/antlr4-go/antlr/v4 v4.13.1
 	github.com/brianvoe/gofakeit/v7 v7.2.1
 	github.com/cenkalti/backoff/v4 v4.3.0
@@ -34,7 +34,7 @@ require (
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/cpuguy83/go-md2man/v2 v2.0.6 // indirect
+	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgraph-io/ristretto/v2 v2.2.0 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
