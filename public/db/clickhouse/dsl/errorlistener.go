@@ -25,18 +25,19 @@ type StoringErrListener struct {
 
 func NewStoringErrListener(estConflicts int, maxConflictsToRecord int, maxAmbToRecord int, maxErrorsToRecord int) *StoringErrListener {
 	return &StoringErrListener{
-		ConflictsStart:       make([]int, 0, estConflicts),
-		ConflictsStop:        make([]int, 0, estConflicts),
-		AmbStart:             make([]int, 0, estConflicts),
-		AmbStop:              make([]int, 0, estConflicts),
-		SyntaxErrorsLine:     make([]int, 0, 4),
-		SyntaxErrorsColumn:   make([]int, 0, 4),
-		SyntaxErrorsStart:    make([]int, 0, 4),
-		SyntaxErrorsStop:     make([]int, 0, 4),
-		SyntaxErrorsMessage:  make([]string, 0, 4),
-		MaxConflictsToRecord: maxConflictsToRecord,
-		MaxAmbToRecord:       maxAmbToRecord,
-		MaxErrorsToRecord:    maxErrorsToRecord,
+		ConflictsStart:        make([]int, 0, estConflicts),
+		ConflictsStop:         make([]int, 0, estConflicts),
+		AmbStart:              make([]int, 0, estConflicts),
+		AmbStop:               make([]int, 0, estConflicts),
+		SyntaxErrorsLine:      make([]int, 0, 4),
+		SyntaxErrorsColumn:    make([]int, 0, 4),
+		SyntaxErrorsStart:     make([]int, 0, 4),
+		SyntaxErrorsStop:      make([]int, 0, 4),
+		SyntaxErrorsMessage:   make([]string, 0, 4),
+		SyntaxErrorsRecovered: make([]bool, 0, 4),
+		MaxConflictsToRecord:  maxConflictsToRecord,
+		MaxAmbToRecord:        maxAmbToRecord,
+		MaxErrorsToRecord:     maxErrorsToRecord,
 	}
 }
 func (inst *StoringErrListener) composeError(i int, skipRecovered bool) (err error) {
@@ -79,6 +80,7 @@ func (inst *StoringErrListener) Reset() {
 	inst.SyntaxErrorsStart = inst.SyntaxErrorsStart[:0]
 	inst.SyntaxErrorsStop = inst.SyntaxErrorsStop[:0]
 	inst.SyntaxErrorsMessage = inst.SyntaxErrorsMessage[:0]
+	inst.SyntaxErrorsRecovered = inst.SyntaxErrorsRecovered[:0]
 }
 
 func (inst *StoringErrListener) SyntaxError(recognizer antlr.Recognizer, offendingSymbol interface{}, line, column int, msg string, e antlr.RecognitionException) {

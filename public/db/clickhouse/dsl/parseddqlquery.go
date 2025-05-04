@@ -226,13 +226,14 @@ func (inst *ParsedDqlQuery) ParseFromString(sql string) (err error) {
 	if err == nil && !inst.recoverParseErrors {
 		err = errL.GetSynthSyntaxError(32, false)
 	}
-	if err != nil {
-		err = eh.Errorf("unable to parse sql as dql query: %w", err)
-		return
-	}
 	inst.inputSql = sql
 	inst.parseTree = parseTree
 	inst.parser = parser
+	if err != nil {
+		inst.paramBindEnv.Clear()
+		err = eh.Errorf("unable to parse sql as dql query: %w", err)
+		return
+	}
 	return inst.populateBindEnv()
 }
 func (inst *ParsedDqlQuery) Reset() {
