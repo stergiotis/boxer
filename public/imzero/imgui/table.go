@@ -9,6 +9,7 @@ func TableNextColumnS(isVisibleStore *logical.Tristate) (visible bool) {
 	if isVisibleStore.IsNil() {
 		if TableNextColumn() {
 			*isVisibleStore = logical.TriTrue
+			visible = true
 		} else {
 			*isVisibleStore = logical.TriFalse
 		}
