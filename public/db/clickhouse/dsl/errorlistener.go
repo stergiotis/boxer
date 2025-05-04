@@ -88,7 +88,12 @@ func (inst *StoringErrListener) SyntaxError(recognizer antlr.Recognizer, offendi
 		inst.SyntaxErrorsLine = append(inst.SyntaxErrorsLine, line)
 		inst.SyntaxErrorsColumn = append(inst.SyntaxErrorsColumn, column)
 		if e != nil {
-			inst.SyntaxErrorsMessage = append(inst.SyntaxErrorsMessage, e.GetMessage())
+			if msg == "" {
+				msg = e.GetMessage()
+			} else if msg != e.GetMessage() {
+				msg = msg + e.GetMessage()
+			}
+			inst.SyntaxErrorsMessage = append(inst.SyntaxErrorsMessage, msg)
 			token := e.GetOffendingToken()
 			if token != nil {
 				inst.SyntaxErrorsStart = append(inst.SyntaxErrorsStart, token.GetStart())
