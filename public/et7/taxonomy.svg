@@ -23,9 +23,9 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
-     inkscape:zoom="1.0873115"
-     inkscape:cx="751.85445"
-     inkscape:cy="416.16409"
+     inkscape:zoom="0.76884534"
+     inkscape:cx="507.90449"
+     inkscape:cy="416.85887"
      inkscape:window-width="1920"
      inkscape:window-height="1118"
      inkscape:window-x="0"
@@ -52,7 +52,110 @@
        visible="true" />
   </sodipodi:namedview>
   <defs
-     id="defs1" />
+     id="defs1">
+    <rect
+       x="542.03148"
+       y="359.05514"
+       width="75.590574"
+       height="37.795287"
+       id="rect32" />
+    <rect
+       x="542.03148"
+       y="359.05514"
+       width="75.590574"
+       height="37.795287"
+       id="rect21" />
+    <rect
+       x="542.03148"
+       y="359.05514"
+       width="75.590574"
+       height="37.795287"
+       id="rect26" />
+    <rect
+       x="542.03148"
+       y="359.05514"
+       width="75.590574"
+       height="37.795287"
+       id="rect27" />
+    <rect
+       x="542.03148"
+       y="359.05514"
+       width="75.590574"
+       height="37.795287"
+       id="rect28" />
+    <rect
+       x="542.03148"
+       y="359.05514"
+       width="75.590574"
+       height="37.795287"
+       id="rect29" />
+    <rect
+       x="542.03148"
+       y="359.05514"
+       width="95.283563"
+       height="29.757359"
+       id="rect31" />
+    <rect
+       x="542.03148"
+       y="359.05514"
+       width="75.590574"
+       height="37.795287"
+       id="rect33" />
+    <rect
+       x="542.03148"
+       y="359.05514"
+       width="75.590574"
+       height="37.795287"
+       id="rect41" />
+    <rect
+       x="542.03148"
+       y="359.05514"
+       width="75.590574"
+       height="37.795287"
+       id="rect46" />
+    <rect
+       x="542.03148"
+       y="359.05514"
+       width="75.590574"
+       height="37.795287"
+       id="rect63" />
+    <rect
+       x="542.03148"
+       y="359.05514"
+       width="75.590574"
+       height="37.795287"
+       id="rect67" />
+    <rect
+       x="542.03148"
+       y="359.05514"
+       width="85.855901"
+       height="150.10217"
+       id="rect72" />
+    <rect
+       x="542.03148"
+       y="359.05514"
+       width="272.33252"
+       height="174.28779"
+       id="rect73" />
+    <rect
+       x="542.03148"
+       y="359.05514"
+       width="85.855901"
+       height="86.306894"
+       id="rect74" />
+    <rect
+       x="542.03148"
+       y="359.05514"
+       width="272.33252"
+       height="121.31311"
+       id="rect75" />
+    <rect
+       x="542.03148"
+       y="359.05514"
+       width="272.33252"
+       height="121.31311"
+       id="rect76" />
+  </defs>
   <g
      inkscape:label="Layer 1"
      inkscape:groupmode="layer"
@@ -88,52 +191,77 @@
          x="41.392323"
          y="171.04338"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:17.3333px;font-family:Monospace;-inkscape-font-specification:Monospace"
-         id="tspan53">Entity-Attribute-Value EAV_r</tspan><tspan
+         id="tspan4" /><tspan
          sodipodi:role="line"
          x="41.392323"
          y="192.71001"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:17.3333px;font-family:Monospace;-inkscape-font-specification:Monospace"
-         id="tspan54" /><tspan
+         id="tspan5" /><tspan
          sodipodi:role="line"
          x="41.392323"
          y="214.37663"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:17.3333px;font-family:Monospace;-inkscape-font-specification:Monospace"
-         id="tspan55" /><tspan
+         id="tspan53">Entity-Attribute-Value EAV_r</tspan><tspan
          sodipodi:role="line"
          x="41.392323"
          y="236.04326"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:17.3333px;font-family:Monospace;-inkscape-font-specification:Monospace"
-         id="tspan56" /><tspan
+         id="tspan54" /><tspan
          sodipodi:role="line"
          x="41.392323"
          y="257.70987"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:17.3333px;font-family:Monospace;-inkscape-font-specification:Monospace"
-         id="tspan57">Entity-Attribute-Value-Transaction EAVT_r</tspan><tspan
+         id="tspan55" /><tspan
          sodipodi:role="line"
          x="41.392323"
          y="279.3765"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:17.3333px;font-family:Monospace;-inkscape-font-specification:Monospace"
-         id="tspan62">  Pioneered by DAtomic</tspan><tspan
+         id="tspan56" /><tspan
          sodipodi:role="line"
          x="41.392323"
          y="301.04312"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:17.3333px;font-family:Monospace;-inkscape-font-specification:Monospace"
-         id="tspan58" /><tspan
+         id="tspan57">Entity-Attribute-Value-Transaction EAVT_r</tspan><tspan
          sodipodi:role="line"
          x="41.392323"
          y="322.70975"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:17.3333px;font-family:Monospace;-inkscape-font-specification:Monospace"
-         id="tspan59" /><tspan
+         id="tspan62">  Pioneered by DAtomic</tspan><tspan
          sodipodi:role="line"
          x="41.392323"
          y="344.37637"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:17.3333px;font-family:Monospace;-inkscape-font-specification:Monospace"
-         id="tspan60" /><tspan
+         id="tspan58" /><tspan
          sodipodi:role="line"
          x="41.392323"
          y="366.043"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:17.3333px;font-family:Monospace;-inkscape-font-specification:Monospace"
-         id="tspan61">Columnar Entity-Attribute-Value EAV_c</tspan></text>
+         id="tspan59" /><tspan
+         sodipodi:role="line"
+         x="41.392323"
+         y="387.70963"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:17.3333px;font-family:Monospace;-inkscape-font-specification:Monospace"
+         id="tspan60" /><tspan
+         sodipodi:role="line"
+         x="41.392323"
+         y="409.37625"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:17.3333px;font-family:Monospace;-inkscape-font-specification:Monospace"
+         id="tspan61">Columnar Entity-Attribute-Value EAV_c</tspan><tspan
+         sodipodi:role="line"
+         x="41.392323"
+         y="431.04288"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:17.3333px;font-family:Monospace;-inkscape-font-specification:Monospace"
+         id="tspan7" /><tspan
+         sodipodi:role="line"
+         x="41.392323"
+         y="452.7095"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:17.3333px;font-family:Monospace;-inkscape-font-specification:Monospace"
+         id="tspan13" /><tspan
+         sodipodi:role="line"
+         x="41.392323"
+         y="474.37613"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:17.3333px;font-family:Monospace;-inkscape-font-specification:Monospace"
+         id="tspan14" /></text>
     <text
        xml:space="preserve"
        style="font-size:17.3333px;fill:#000000"
@@ -149,60 +277,45 @@
          x="546.7995"
          y="149.37675"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:17.3333px;font-family:Monospace;-inkscape-font-specification:Monospace"
-         id="tspan63" /><tspan
+         id="tspan64" /><tspan
          sodipodi:role="line"
          x="546.7995"
          y="171.04338"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:17.3333px;font-family:Monospace;-inkscape-font-specification:Monospace"
-         id="tspan64" /><tspan
+         id="tspan65">Columnar One-Big-Table EAVM_co</tspan><tspan
          sodipodi:role="line"
          x="546.7995"
          y="192.71001"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:17.3333px;font-family:Monospace;-inkscape-font-specification:Monospace"
-         id="tspan65">Columnar One-Big-Table EAVM_co</tspan><tspan
+         id="tspan66" /><tspan
          sodipodi:role="line"
          x="546.7995"
          y="214.37663"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:17.3333px;font-family:Monospace;-inkscape-font-specification:Monospace"
-         id="tspan66" /><tspan
+         id="tspan68">Columnar One-Big-Table EAVMT_co</tspan><tspan
          sodipodi:role="line"
          x="546.7995"
          y="236.04326"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:17.3333px;font-family:Monospace;-inkscape-font-specification:Monospace"
-         id="tspan68">Columnar One-Big-Table EAVMT_co</tspan><tspan
+         id="tspan69" /><tspan
          sodipodi:role="line"
          x="546.7995"
          y="257.70987"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:17.3333px;font-family:Monospace;-inkscape-font-specification:Monospace"
-         id="tspan69" /><tspan
+         id="tspan70" /><tspan
          sodipodi:role="line"
          x="546.7995"
          y="279.3765"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:17.3333px;font-family:Monospace;-inkscape-font-specification:Monospace"
-         id="tspan70" /><tspan
+         id="tspan71" /><tspan
          sodipodi:role="line"
          x="546.7995"
          y="301.04312"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:17.3333px;font-family:Monospace;-inkscape-font-specification:Monospace"
-         id="tspan71" /><tspan
-         sodipodi:role="line"
-         x="546.7995"
-         y="322.70975"
-         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:17.3333px;font-family:Monospace;-inkscape-font-specification:Monospace"
-         id="tspan72" /><tspan
-         sodipodi:role="line"
-         x="546.7995"
-         y="344.37637"
-         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:17.3333px;font-family:Monospace;-inkscape-font-specification:Monospace"
-         id="tspan73" /><tspan
-         sodipodi:role="line"
-         x="546.7995"
-         y="366.043"
-         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:17.3333px;font-family:Monospace;-inkscape-font-specification:Monospace"
-         id="tspan67">Columnar One-Big-Table Value-Membership EVMT_co</tspan></text>
+         id="tspan3">Columnar One-Big-Table Value-Membership EVMT_co</tspan></text>
     <g
        id="g51"
-       transform="translate(17.900727,6.271822)">
+       transform="translate(17.900727,48.271822)">
       <text
          xml:space="preserve"
          style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:17.3333px;font-family:Monospace;-inkscape-font-specification:'Monospace Bold';fill:#000000"
@@ -330,19 +443,19 @@
     </g>
     <path
        id="rect45"
-       style="fill:none;stroke:#000000;stroke-width:0.994489"
-       d="M 177.52393,94.485435 H 509.61247 V 454.66122 H 19.521379 V 94.485435 h 40.828853"
+       style="fill:none;stroke:#000000;stroke-width:1.51181106;stroke-dasharray:none;stroke-linejoin:round"
+       d="M 177.52604,94.491377 H 509.60653 V 538.6589 H 19.527321 V 94.491377 h 40.827863"
        sodipodi:nodetypes="cccccc" />
     <text
        xml:space="preserve"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:24px;font-family:Monospace;-inkscape-font-specification:Monospace;fill:#ffcc00;stroke:#ffcc00;stroke-opacity:1"
-       x="682.92487"
-       y="413.43802"
+       x="684.31836"
+       y="327.14569"
        id="text47"><tspan
          sodipodi:role="line"
          id="tspan47"
-         x="682.92487"
-         y="413.43802"
+         x="684.31836"
+         y="327.14569"
          style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:24px;font-family:Monospace;-inkscape-font-specification:'Monospace Bold';fill:#ffcc00;stroke:#ffcc00">ET7({λ,δ,α,μ,ϰ,φ})</tspan></text>
     <text
        xml:space="preserve"
@@ -357,8 +470,8 @@
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:Monospace;-inkscape-font-specification:Monospace;fill:#000000;fill-opacity:1;font-size:17.33333374px">Prior Art</tspan></text>
     <path
        id="path48"
-       style="fill:none;stroke:#000000;stroke-width:0.814582"
-       d="M 958.02008,94.488193 H 1096.063 V 302.36222 H 526.34689 V 94.488193 h 47.4623"
+       style="fill:none;stroke:#000000;stroke-width:1.51181106;stroke-dasharray:none;stroke-linejoin:round"
+       d="M 958.05113,94.427948 H 1096.1232 V 245.32226 H 526.28665 V 94.427948 h 47.47233"
        sodipodi:nodetypes="cccccc" />
     <text
        xml:space="preserve"
@@ -373,19 +486,19 @@
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:17.3333px;font-family:Monospace;-inkscape-font-specification:Monospace;fill:#000000;fill-opacity:1">Personal Experience (in Production)</tspan></text>
     <path
        id="path49"
-       style="fill:none;stroke:#000000;stroke-width:0.650127"
-       d="M 736.00065,321.25986 H 1096.1506 V 453.63092 H 526.2593 V 321.25986 h 47.47689"
+       style="fill:none;stroke:#000000;stroke-width:1.51181106;stroke-dasharray:none;stroke-linejoin:round"
+       d="M 737.40529,264.60923 H 1097.5018 V 538.74332 H 527.69507 V 264.60923 h 47.46985"
        sodipodi:nodetypes="cccccc" />
     <text
        xml:space="preserve"
        style="font-size:17.3333px;fill:#000000;fill-opacity:1"
-       x="584.53638"
-       y="327.31979"
+       x="585.03906"
+       y="273.02747"
        id="text50"><tspan
          sodipodi:role="line"
          id="tspan50"
-         x="584.53638"
-         y="327.31979"
+         x="585.03906"
+         y="273.02747"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:17.3333px;font-family:Monospace;-inkscape-font-specification:Monospace;fill:#000000;fill-opacity:1">Consolidation</tspan></text>
     <text
        xml:space="preserve"
@@ -398,5 +511,230 @@
          x="559.78583"
          y="755.90552"
          style="text-align:center;text-anchor:middle">Source: http://github.com/stergiotis/boxer/public/et7/taxonomy.svg</tspan></text>
+    <rect
+       style="fill:#cccccc;stroke:none"
+       id="rect15"
+       width="75.590553"
+       height="37.795277"
+       x="542.03149"
+       y="337.05515" />
+    <rect
+       style="fill:#666666;stroke:none"
+       id="rect16"
+       width="75.590553"
+       height="37.795277"
+       x="635.10278"
+       y="337.05511" />
+    <rect
+       style="fill:#666666;stroke:none"
+       id="rect17"
+       width="75.590553"
+       height="37.795277"
+       x="728.17407"
+       y="337.05511" />
+    <rect
+       style="fill:#666666;stroke:none"
+       id="rect18"
+       width="75.590553"
+       height="37.795277"
+       x="821.2453"
+       y="337.05511" />
+    <rect
+       style="fill:#1a1a1a;stroke:none"
+       id="rect19"
+       width="75.590553"
+       height="37.795277"
+       x="914.31659"
+       y="337.05511" />
+    <rect
+       style="fill:#b3b3b3;stroke:none"
+       id="rect20"
+       width="75.590553"
+       height="37.795277"
+       x="1007.3879"
+       y="337.05511" />
+    <text
+       xml:space="preserve"
+       id="text31"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:13.3333px;font-family:Monospace;-inkscape-font-specification:'Monospace Bold';text-align:center;white-space:pre;shape-inside:url(#rect32);display:inline;fill:#666666;stroke:none"
+       transform="translate(-4.2653278,-10.498816)"><tspan
+         x="555.82622"
+         y="371.18633"
+         id="tspan15">Entity</tspan></text>
+    <text
+       xml:space="preserve"
+       id="text33"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:13.3333px;font-family:Monospace;-inkscape-font-specification:'Monospace Bold';text-align:center;white-space:pre;shape-inside:url(#rect33);display:inline;fill:#666666;stroke:none"
+       transform="translate(463.94816,-17.678799)"><tspan
+         x="555.82622"
+         y="371.18633"
+         id="tspan16">Trans-</tspan><tspan
+         x="555.82622"
+         y="387.85295"
+         id="tspan18">action</tspan></text>
+    <text
+       xml:space="preserve"
+       id="text41"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:13.3333px;font-family:Monospace;-inkscape-font-specification:'Monospace Bold';text-align:center;white-space:pre;shape-inside:url(#rect41);display:inline;fill:#f2f2f2;stroke:none"
+       transform="translate(372.15303,-10.798815)"><tspan
+         x="555.82622"
+         y="371.18633"
+         id="tspan19">Opaque</tspan></text>
+    <text
+       xml:space="preserve"
+       id="text46"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:13.3333px;font-family:Monospace;-inkscape-font-specification:'Monospace Bold';text-align:center;white-space:pre;shape-inside:url(#rect46);display:inline;fill:#f2f2f2;stroke:none"
+       transform="translate(94.773937,-9.2788191)"><tspan
+         x="559.82621"
+         y="371.18633"
+         id="tspan20">VM&lt;1&gt;</tspan></text>
+    <text
+       xml:space="preserve"
+       id="text63"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:13.3333px;font-family:Monospace;-inkscape-font-specification:'Monospace Bold';text-align:center;white-space:pre;shape-inside:url(#rect63);display:inline;fill:#f2f2f2;stroke:none"
+       transform="translate(278.51242,-9.2788191)"><tspan
+         x="559.82621"
+         y="371.18633"
+         id="tspan25">VM&lt;n&gt;</tspan></text>
+    <text
+       xml:space="preserve"
+       id="text67"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:13.3333px;font-family:Monospace;-inkscape-font-specification:'Monospace Bold';text-align:center;white-space:pre;shape-inside:url(#rect67);display:inline;fill:#f2f2f2;stroke:none"
+       transform="translate(183.0651,-8.8654871)"><tspan
+         x="559.82621"
+         y="371.18633"
+         id="tspan26">VM&lt;i&gt;</tspan></text>
+    <text
+       xml:space="preserve"
+       id="text72"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:13.3333px;font-family:Monospace;-inkscape-font-specification:'Monospace Bold';text-align:center;white-space:pre;shape-inside:url(#rect72);display:inline;fill:#666666;stroke:none"
+       transform="translate(-4.2653278,19.976571)"><tspan
+         x="544.95906"
+         y="371.18633"
+         id="tspan27">Canon.Typ.
+</tspan><tspan
+         x="568.95901"
+         y="387.85295"
+         id="tspan28">Name
+</tspan><tspan
+         x="584.95898"
+         y="404.51958"
+         id="tspan29">
+</tspan><tspan
+         x="584.95898"
+         y="421.1862"
+         id="tspan31">
+</tspan><tspan
+         x="552.95904"
+         y="437.85283"
+         id="tspan32">Identity
+</tspan><tspan
+         x="548.95905"
+         y="454.51946"
+         id="tspan33">Timestamp
+</tspan><tspan
+         x="556.95904"
+         y="471.18608"
+         id="tspan41">Routing
+</tspan><tspan
+         x="548.95905"
+         y="487.85271"
+         id="tspan46">Lifecycle</tspan></text>
+    <text
+       xml:space="preserve"
+       id="text73"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:13.3333px;font-family:Monospace;-inkscape-font-specification:'Monospace Bold';text-align:center;white-space:pre;shape-inside:url(#rect73);display:inline;fill:#666666;stroke:none"
+       transform="translate(87.734672,19.976571)"><tspan
+         x="622.19737"
+         y="371.18633"
+         id="tspan63">Canonical Type
+</tspan><tspan
+         x="650.19732"
+         y="387.85295"
+         id="tspan67">Aspects
+</tspan><tspan
+         x="662.1973"
+         y="404.51958"
+         id="tspan72">Name
+</tspan><tspan
+         x="678.19727"
+         y="421.1862"
+         id="tspan76">
+</tspan><tspan
+         x="626.19736"
+         y="437.85283"
+         id="tspan77">Membership HC
+</tspan><tspan
+         x="626.19736"
+         y="454.51946"
+         id="tspan78">Membership LC
+</tspan><tspan
+         x="574.19746"
+         y="471.18608"
+         id="tspan79">Parametrized Membership HC
+</tspan><tspan
+         x="574.19746"
+         y="487.85271"
+         id="tspan80">Parametrized Membership LC
+</tspan><tspan
+         x="658.1973"
+         y="504.51933"
+         id="tspan81">Value</tspan></text>
+    <text
+       xml:space="preserve"
+       id="text74"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:13.3333px;font-family:Monospace;-inkscape-font-specification:'Monospace Bold';text-align:center;white-space:pre;shape-inside:url(#rect75);display:inline;fill:#666666;stroke:none"
+       transform="translate(273.91527,20.049662)"><tspan
+         x="634.19735"
+         y="371.18633"
+         id="tspan82">Canon. Type
+</tspan><tspan
+         x="650.19732"
+         y="387.85295"
+         id="tspan83">Aspects
+</tspan><tspan
+         x="662.1973"
+         y="404.51958"
+         id="tspan84">Name
+</tspan><tspan
+         x="678.19727"
+         y="421.1862"
+         id="tspan85">
+</tspan><tspan
+         x="658.1973"
+         y="437.85283"
+         id="tspan86">Value</tspan></text>
+    <text
+       xml:space="preserve"
+       id="text75"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:13.3333px;font-family:Monospace;-inkscape-font-specification:'Monospace Bold';text-align:center;white-space:pre;shape-inside:url(#rect76);display:inline;fill:#666666;stroke:none"
+       transform="translate(369.91527,20.049662)"><tspan
+         x="634.19735"
+         y="371.18633"
+         id="tspan87">Canon. Typ.
+</tspan><tspan
+         x="662.1973"
+         y="387.85295"
+         id="tspan88">Name
+</tspan><tspan
+         x="678.19727"
+         y="404.51958"
+         id="tspan89">
+</tspan><tspan
+         x="678.19727"
+         y="421.1862"
+         id="tspan90">
+</tspan><tspan
+         x="634.19735"
+         y="437.85283"
+         id="tspan91">Transaction</tspan></text>
+    <path
+       style="fill:#666666;stroke:none"
+       d="M 536.55278,419.80925 H 1097.5101"
+       id="path76" />
+    <path
+       style="fill:#666666;stroke:#8b8b8b;stroke-width:0.982677;stroke-dasharray:3.93071, 0.982677;stroke-dashoffset:0;stroke-opacity:1"
+       d="M 539.62215,433.90677 H 1081.1654"
+       id="path77" />
   </g>
 </svg>
