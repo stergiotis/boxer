@@ -5,15 +5,15 @@
     Important: Consumers visiting the resulting parse tree will rely on rules having a specific form.
 
     Homogenous lists with terminal(s) between may be expressed as usual:
-    ```antlr4
+    ```antlr4utils
     columnAliases : LPAREN identifier (COMMA identifier)* RPAREN;
     ```
     Inhomogenous lists need to be re-written by putting the kleen star part in a separate rule:
-    ```antlr4
+    ```antlr4utils
     selectUnionStmt: selectStmtWithParens (UNION ( ALL | DISTINCT )? selectStmtWithParens)*;
     ```
     becomes
-    ```antlr4
+    ```antlr4utils
     selectUnionStmt: selectStmtWithParens selectUnionStmtItem*;
     selectUnionStmtItem: (UNION ( ALL | DISTINCT )? selectStmtWithParens);
     ```

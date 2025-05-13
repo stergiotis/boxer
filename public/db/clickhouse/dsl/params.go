@@ -1,14 +1,16 @@
 package dsl
 
 import (
+	"iter"
+
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/ast"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/parsing/antlr4utils"
 	"golang.org/x/exp/maps"
-	"iter"
 )
 
 type ParamBindEnv struct {
@@ -170,7 +172,7 @@ func (inst *ParamSlotSet) Clear() {
 }
 
 func (inst *ParamSlotSet) AddSlotsFromParseTree(ast antlr.Tree) (err error) {
-	for slot := range IterateAllByType[*grammar.ParamSlotContext](ast) {
+	for slot := range antlr4utils.IterateAllByType[*grammar.ParamSlotContext](ast) {
 		err = inst.Add(slot)
 		if err != nil {
 			err = eh.Errorf("error while adding param slot: %w", err)

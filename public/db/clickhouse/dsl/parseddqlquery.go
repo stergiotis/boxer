@@ -11,12 +11,13 @@ import (
 	"github.com/stergiotis/boxer/public/ea"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/parsing/antlr4utils"
 )
 
 func parseSql(sql string, errL antlr.ErrorListener, errStrategy antlr.ErrorStrategy) (parser *grammar.ClickHouseParser, parseTree *grammar.QueryStmtContext, err error) {
 	inputStream := antlr.NewInputStream(sql)
 	if errL == nil {
-		errL = NewStoringErrListener(32, 16, 16, 16)
+		errL = antlr4utils.NewStoringErrListener(32, 16, 16, 16)
 	}
 	lexer := grammar.NewClickHouseLexer(inputStream)
 	lexer.RemoveErrorListeners()
@@ -39,10 +40,10 @@ func parseSql(sql string, errL antlr.ErrorListener, errStrategy antlr.ErrorStrat
 	}
 	parseError := parser.GetError()
 	if parseError != nil {
-		var s SyntaxErrorSynthesizerI
-		s, ok = errL.(SyntaxErrorSynthesizerI)
+		var s antlr4utils.SyntaxErrorSynthesizerI
+		s, ok = errL.(antlr4utils.SyntaxErrorSynthesizerI)
 		if ok {
-			err = s.GetSynthSyntaxError(128, true)
+			err = s.GetSyntheticSyntaxError(128, true)
 			return
 		} else {
 			token := parseError.GetOffendingToken()
@@ -64,7 +65,7 @@ type ParsedDqlQuery struct {
 	paramSlotSetErr    error
 	parseTree          *grammar.QueryStmtContext
 	parser             *grammar.ClickHouseParser
-	errL               *StoringErrListener
+	errL               *antlr4utils.StoringErrListener
 	errS               antlr.ErrorStrategy
 	recoverParseErrors bool
 
@@ -76,7 +77,7 @@ type ParsedDqlQuery struct {
 	noParams bool
 }
 
-func (inst *ParsedDqlQuery) GetErrorListener() *StoringErrListener {
+func (inst *ParsedDqlQuery) GetErrorListener() *antlr4utils.StoringErrListener {
 	return inst.errL
 }
 func (inst *ParsedDqlQuery) SetRecoverFromParseErrors(recover bool) {
@@ -140,7 +141,7 @@ func NewParsedDqlQuery() (inst *ParsedDqlQuery) {
 	inst = &ParsedDqlQuery{
 		paramSlotSetErr: nil,
 		parseTree:       nil,
-		errL:            NewStoringErrListener(32, 16, 16, 16),
+		errL:            antlr4utils.NewStoringErrListener(32, 16, 16, 16),
 		errS:            antlr.NewDefaultErrorStrategy(),
 		paramBindEnv:    NewParamBindEnv(),
 		paramSlotSet:    NewParamSlotsSet(),
@@ -155,7 +156,7 @@ func (inst *ParsedDqlQuery) identifyParamBindEnvs() (err error) {
 	var nonParam bool
 	clear(inst.paramExprs)
 	paramExprs := inst.paramExprs[:0]
-	for node := range IterateAllByType[*grammar.SettingExprContext](inst.parseTree) {
+	for node := range antlr4utils.IterateAllByType[*grammar.SettingExprContext](inst.parseTree) {
 		id := ast.Identifier{}
 		id.LoadContext(node.Identifier().(*grammar.IdentifierContext))
 		if strings.HasPrefix(id.Name, paramPrefixName) {
@@ -224,7 +225,7 @@ func (inst *ParsedDqlQuery) ParseFromString(sql string) (err error) {
 	var parser *grammar.ClickHouseParser
 	parser, parseTree, err = parseSql(sql, errL, inst.errS)
 	if err == nil && !inst.recoverParseErrors {
-		err = errL.GetSynthSyntaxError(32, false)
+		err = errL.GetSyntheticSyntaxError(32, false)
 	}
 	inst.inputSql = sql
 	inst.parseTree = parseTree

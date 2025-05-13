@@ -1,4 +1,4 @@
-package dsl
+package antlr4utils
 
 import (
 	"errors"
@@ -53,7 +53,7 @@ func (inst *StoringErrListener) composeError(i int, skipRecovered bool) (err err
 		Str("message", inst.SyntaxErrorsMessage[i]).Errorf("syntax error")
 	return
 }
-func (inst *StoringErrListener) GetSynthSyntaxError(maxErrorsToJoin int, skipRecovered bool) (err error) {
+func (inst *StoringErrListener) GetSyntheticSyntaxError(maxErrorsToJoin int, skipRecovered bool) (err error) {
 	l := len(inst.SyntaxErrorsColumn)
 	if l == 0 {
 		return
@@ -140,5 +140,5 @@ var _ antlr.ErrorListener = (*StoringErrListener)(nil)
 var _ SyntaxErrorSynthesizerI = (*StoringErrListener)(nil)
 
 type SyntaxErrorSynthesizerI interface {
-	GetSynthSyntaxError(maxErrorsToJoin int, skipRecovered bool) (err error)
+	GetSyntheticSyntaxError(maxErrorsToJoin int, skipRecovered bool) (err error)
 }

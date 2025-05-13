@@ -1,15 +1,17 @@
 package dsl
 
 import (
-	"github.com/antlr4-go/antlr/v4"
-	mutablestring "github.com/philip-peterson/go-mutablestring"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
-	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/yassinebenaid/godump"
 	"html"
 	"reflect"
 	"strings"
 	"unicode"
+
+	"github.com/antlr4-go/antlr/v4"
+	mutablestring "github.com/philip-peterson/go-mutablestring"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/parsing/antlr4utils"
+	"github.com/yassinebenaid/godump"
 )
 
 type SyntaxHighlighter[H HighlighterI] struct {
@@ -154,7 +156,7 @@ func NewSyntaxHighlighter[H HighlighterI](hl H) *SyntaxHighlighter[H] {
 func (inst *SyntaxHighlighter[H]) Highlight(sql string, parseTree antlr.Tree) (sqlHighlighted string, err error) {
 	hl := inst.hl
 	m := mutablestring.NewMutableString(sql)
-	for node := range IterateAll(parseTree) {
+	for node := range antlr4utils.IterateAll(parseTree) {
 		var startPos int
 		var stopPos int
 		var before string

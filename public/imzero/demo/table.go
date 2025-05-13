@@ -4,10 +4,11 @@ package demo
 
 import (
 	"fmt"
-	"github.com/stergiotis/boxer/public/logical"
 	"math/rand"
 	"sort"
 	"strings"
+
+	"github.com/stergiotis/boxer/public/logical"
 
 	"github.com/stergiotis/boxer/public/imzero/imgui"
 )

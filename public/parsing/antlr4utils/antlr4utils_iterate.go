@@ -1,8 +1,9 @@
-package dsl
+package antlr4utils
 
 import (
-	"github.com/antlr4-go/antlr/v4"
 	"iter"
+
+	"github.com/antlr4-go/antlr/v4"
 )
 
 func IterateAllByType[T antlr.Tree](tree antlr.Tree) iter.Seq[T] {
