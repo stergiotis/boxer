@@ -72,6 +72,17 @@ func TestCanonicalEt7AspectCoder(t *testing.T) {
 			} else {
 				require.EqualValues(t, 1, n)
 			}
+
+			{
+				var enc1, enc2, encU EncodedEt7AspectSet
+				enc1, err = encoder.Encode(i)
+				require.NoError(t, err)
+				enc2, err = encoder.Encode(j)
+				require.NoError(t, err)
+				encU, err = encoder.UnionAspects(enc1, enc2)
+				require.NoError(t, err)
+				require.EqualValues(t, enc, encU)
+			}
 		}
 	}
 	require.True(t, encoder.IsEmpty(EmptyAspectSet))

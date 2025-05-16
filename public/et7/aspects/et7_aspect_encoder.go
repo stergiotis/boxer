@@ -29,6 +29,12 @@ func decode(encoded EncodedEt7AspectSet) (num uint64, valid bool) {
 	valid = num == 0 || maxEncodedAspect(num).IsValid()
 	return
 }
+func encode(num uint64) (encoded EncodedEt7AspectSet) {
+	var enc big.Int
+	enc.SetUint64(num)
+	encoded = EncodedEt7AspectSet(enc.Text(62))
+	return
+}
 
 func (inst EncodedEt7AspectSet) String() string {
 	return string(inst)
@@ -41,6 +47,9 @@ func (inst EncodedEt7AspectSet) IsValid() bool {
 	_, valid := decode(inst)
 	return valid
 }
+func (inst EncodedEt7AspectSet) IsEmptySet() bool {
+	return inst == EmptyAspectSet
+}
 
 var ErrInvalidEncoding = eh.Errorf("encoding is wrong")
 var ErrEmptySet = eh.Errorf("encoding contains empty set")
@@ -49,17 +58,15 @@ func NewCanonicalEt7AspectCoder() *CanonicalEt7AspectCoder {
 	return &CanonicalEt7AspectCoder{}
 }
 func (inst *CanonicalEt7AspectCoder) Encode(aspects ...DataAspectE) (encoded EncodedEt7AspectSet, err error) {
-	var t uint64
+	var num uint64
 	for i, a := range aspects {
 		if !a.IsValid() {
 			err = eb.Build().Uint8("aspect", uint8(a)).Int("index", i).Errorf("found invalid aspect in supplied arguments")
 			return
 		}
-		t |= uint64(1) << a
+		num |= uint64(1) << a
 	}
-	var enc big.Int
-	enc.SetUint64(t)
-	encoded = EncodedEt7AspectSet(enc.Text(62))
+	encoded = encode(num)
 	return
 }
 func (inst *CanonicalEt7AspectCoder) IsEmpty(encoded EncodedEt7AspectSet) bool {
@@ -104,4 +111,18 @@ func (inst *CanonicalEt7AspectCoder) IterateAspects(encoded EncodedEt7AspectSet)
 			}
 		}
 	}
+}
+func (inst *CanonicalEt7AspectCoder) UnionAspects(asp1 EncodedEt7AspectSet, asp2 EncodedEt7AspectSet) (res EncodedEt7AspectSet, err error) {
+	num1, valid1 := decode(asp1)
+	if !valid1 {
+		err = ErrInvalidEncoding
+		return
+	}
+	num2, valid2 := decode(asp2)
+	if !valid2 {
+		err = ErrInvalidEncoding
+		return
+	}
+	res = encode(num1 | num2)
+	return
 }
