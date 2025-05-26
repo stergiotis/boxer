@@ -3,7 +3,7 @@ package cli
 import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/config"
-	"github.com/stergiotis/boxer/public/et7/aspects"
+	"github.com/stergiotis/boxer/public/et7/useaspects"
 	cli2 "github.com/stergiotis/boxer/public/hmi/cli"
 	"github.com/urfave/cli/v2"
 )
@@ -23,8 +23,8 @@ func NewCommand() *cli.Command {
 						Name:  "list",
 						Flags: f.ToCliFlags(),
 						Action: func(context *cli.Context) error {
-							strs := make([]string, 0, len(aspects.AllDataAspects))
-							for _, a := range aspects.AllDataAspects {
+							strs := make([]string, 0, len(useaspects.AllDataAspects))
+							for _, a := range useaspects.AllDataAspects {
 								strs = append(strs, a.String())
 							}
 							return f.FormatValue(context, strs)

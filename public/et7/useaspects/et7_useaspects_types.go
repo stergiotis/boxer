@@ -1,4 +1,4 @@
-package aspects
+package useaspects
 
 import "fmt"
 
