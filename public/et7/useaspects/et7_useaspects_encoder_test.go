@@ -10,9 +10,9 @@ import (
 )
 
 func TestCanonicalEt7AspectEnum(t *testing.T) {
-	require.EqualValues(t, len(AllDataAspects), MaxDataAspectExcl)
-	m := make([]string, 0, len(AllDataAspects))
-	for i := DataAspectE(0); i < MaxDataAspectExcl; i++ {
+	require.EqualValues(t, len(AllAspects), MaxAspectExcl)
+	m := make([]string, 0, len(AllAspects))
+	for i := AspectE(0); i < MaxAspectExcl; i++ {
 		require.False(t, slices.Contains(m, i.String()))
 		m = append(m, i.String())
 	}
@@ -20,17 +20,17 @@ func TestCanonicalEt7AspectEnum(t *testing.T) {
 func TestCanonicalEt7AspectCoder(t *testing.T) {
 	rgx := regexp.MustCompile("[^a-zA-Z0-9]")
 	{
-		_, err := EncodeAspects(MaxDataAspectExcl)
+		_, err := EncodeAspects(MaxAspectExcl)
 		require.Error(t, err)
 	}
-	for i := DataAspectE(0); i < MaxDataAspectExcl; i++ {
+	for i := AspectE(0); i < MaxAspectExcl; i++ {
 		enc, err := EncodeAspects(i)
 		require.NoError(t, err)
 		for k, a := range IterateAspects(enc) {
 			require.Equal(t, k, 0)
 			require.Equal(t, a, i)
 		}
-		require.EqualValues(t, i, slices.Index(AllDataAspects, i))
+		require.EqualValues(t, i, slices.Index(AllAspects, i))
 		require.False(t, enc.IsEmptySet())
 
 		var n int
@@ -38,8 +38,8 @@ func TestCanonicalEt7AspectCoder(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, 1, n)
 	}
-	for i := DataAspectE(0); i < MaxDataAspectExcl; i++ {
-		for j := DataAspectE(0); j < MaxDataAspectExcl; j++ {
+	for i := AspectE(0); i < MaxAspectExcl; i++ {
+		for j := AspectE(0); j < MaxAspectExcl; j++ {
 			enc, err := EncodeAspects(i, j)
 			require.NoError(t, err)
 			outer := false
@@ -57,7 +57,7 @@ func TestCanonicalEt7AspectCoder(t *testing.T) {
 			}
 			require.False(t, enc.IsEmptySet())
 
-			var me DataAspectE
+			var me AspectE
 			me, err = MaxEncodedAspect(enc)
 			require.NoError(t, err)
 			require.EqualValues(t, max(i, j), me)
@@ -74,7 +74,7 @@ func TestCanonicalEt7AspectCoder(t *testing.T) {
 			}
 
 			{
-				var enc1, enc2, encU EncodedEt7AspectSet
+				var enc1, enc2, encU AspectSet
 				enc1, err = EncodeAspects(i)
 				require.NoError(t, err)
 				enc2, err = EncodeAspects(j)

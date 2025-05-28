@@ -2,10 +2,10 @@ package encodingaspects
 
 import "fmt"
 
-type EncodedEt7AspectSet string
+type AspectSet string
 
-var _ fmt.Stringer = EncodedEt7AspectSet("")
+var _ fmt.Stringer = AspectSet("")
 
-type DataAspectE uint8
+type AspectE uint8
 
-var _ fmt.Stringer = DataAspectE(0)
+var _ fmt.Stringer = AspectE(0)

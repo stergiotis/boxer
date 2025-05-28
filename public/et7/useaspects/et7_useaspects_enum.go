@@ -3,175 +3,175 @@ package useaspects
 import "slices"
 
 const (
-	DataAspectIndefinite         DataAspectE = 0
-	DataAspectCompliance         DataAspectE = 1
-	DataAspectRisk               DataAspectE = 2
-	DataAspectPrivacy            DataAspectE = 3
-	DataAspectProvenanceEntity   DataAspectE = 4 // see https://www.w3.org/TR/prov-overview/
-	DataAspectProvenanceActivity DataAspectE = 5 // see https://www.w3.org/TR/prov-overview/
-	DataAspectProvenanceAgent    DataAspectE = 6 // see https://www.w3.org/TR/prov-overview/
-	DataAspectProvenanceRelation DataAspectE = 7 // see https://www.w3.org/TR/prov-overview/
-	DataAspectLineage            DataAspectE = 8
-	DataAspectCatalog            DataAspectE = 9
-	DataAspectSecurity           DataAspectE = 10
-	DataAspectAuthorization      DataAspectE = 11
-	DataAspectAccess             DataAspectE = 12
-	DataAspectAudit              DataAspectE = 13
-	DataAspectQuality            DataAspectE = 14
-	DataAspectPolicy             DataAspectE = 15
-	DataAspectOwnership          DataAspectE = 16
-	DataAspectMetrics            DataAspectE = 17
-	DataAspectLog                DataAspectE = 18
-	DataAspectCollaboration      DataAspectE = 19
-	DataAspectInterop            DataAspectE = 20
-	DataAspectEvolution          DataAspectE = 21
-	DataAspectClassification     DataAspectE = 22
-	DataAspectTaxonomy           DataAspectE = 23
-	DataAspectUnit               DataAspectE = 24 // e.g. SI unit
-	DataAspectProfile            DataAspectE = 25 // i.e. performance profiling data
-	DataAspectSpatial            DataAspectE = 26
-	DataAspectOrgUnit            DataAspectE = 27
-	DataAspectOrgRole            DataAspectE = 28
-	DataAspectOrgProcess         DataAspectE = 29
-	DataAspectOrgFinance         DataAspectE = 30
-	DataAspectBusinessAsset      DataAspectE = 31
-	DataAspectBusinessPartner    DataAspectE = 32
-	DataAspectBusinessActivity   DataAspectE = 33
-	DataAspectBusinessChannel    DataAspectE = 34
-	DataAspectWorkflow           DataAspectE = 35
-	DataAspectLinking            DataAspectE = 36 // i.e. references, hyperlinks, graph edges, hyper edges ...
-	DataAspectTesting            DataAspectE = 37
-	DataAspectDevice             DataAspectE = 38
+	AspectIndefinite         AspectE = 0
+	AspectCompliance         AspectE = 1
+	AspectRisk               AspectE = 2
+	AspectPrivacy            AspectE = 3
+	AspectProvenanceEntity   AspectE = 4 // see https://www.w3.org/TR/prov-overview/
+	AspectProvenanceActivity AspectE = 5 // see https://www.w3.org/TR/prov-overview/
+	AspectProvenanceAgent    AspectE = 6 // see https://www.w3.org/TR/prov-overview/
+	AspectProvenanceRelation AspectE = 7 // see https://www.w3.org/TR/prov-overview/
+	AspectLineage            AspectE = 8
+	AspectCatalog            AspectE = 9
+	AspectSecurity           AspectE = 10
+	AspectAuthorization      AspectE = 11
+	AspectAccess             AspectE = 12
+	AspectAudit              AspectE = 13
+	AspectQuality            AspectE = 14
+	AspectPolicy             AspectE = 15
+	AspectOwnership          AspectE = 16
+	AspectMetrics            AspectE = 17
+	AspectLog                AspectE = 18
+	AspectCollaboration      AspectE = 19
+	AspectInterop            AspectE = 20
+	AspectEvolution          AspectE = 21
+	AspectClassification     AspectE = 22
+	AspectTaxonomy           AspectE = 23
+	AspectUnit               AspectE = 24 // e.g. SI unit
+	AspectProfile            AspectE = 25 // i.e. performance profiling data
+	AspectSpatial            AspectE = 26
+	AspectOrgUnit            AspectE = 27
+	AspectOrgRole            AspectE = 28
+	AspectOrgProcess         AspectE = 29
+	AspectOrgFinance         AspectE = 30
+	AspectBusinessAsset      AspectE = 31
+	AspectBusinessPartner    AspectE = 32
+	AspectBusinessActivity   AspectE = 33
+	AspectBusinessChannel    AspectE = 34
+	AspectWorkflow           AspectE = 35
+	AspectLinking            AspectE = 36 // i.e. references, hyperlinks, graph edges, hyper edges ...
+	AspectTesting            AspectE = 37
+	AspectDevice             AspectE = 38
 )
 
-var MaxDataAspectExcl = slices.Max(AllDataAspects) + 1
+var MaxAspectExcl = slices.Max(AllAspects) + 1
 
-var AllDataAspects = []DataAspectE{
-	DataAspectIndefinite,
-	DataAspectCompliance,
-	DataAspectRisk,
-	DataAspectPrivacy,
-	DataAspectProvenanceEntity,
-	DataAspectProvenanceActivity,
-	DataAspectProvenanceAgent,
-	DataAspectProvenanceRelation,
-	DataAspectLineage,
-	DataAspectCatalog,
-	DataAspectSecurity,
-	DataAspectAuthorization,
-	DataAspectAccess,
-	DataAspectAudit,
-	DataAspectQuality,
-	DataAspectPolicy,
-	DataAspectOwnership,
-	DataAspectMetrics,
-	DataAspectLog,
-	DataAspectCollaboration,
-	DataAspectInterop,
-	DataAspectEvolution,
-	DataAspectClassification,
-	DataAspectTaxonomy,
-	DataAspectUnit,
-	DataAspectProfile,
-	DataAspectSpatial,
-	DataAspectOrgUnit,
-	DataAspectOrgRole,
-	DataAspectOrgProcess,
-	DataAspectOrgFinance,
-	DataAspectBusinessAsset,
-	DataAspectBusinessPartner,
-	DataAspectBusinessActivity,
-	DataAspectBusinessChannel,
-	DataAspectWorkflow,
-	DataAspectLinking,
-	DataAspectTesting,
-	DataAspectDevice,
+var AllAspects = []AspectE{
+	AspectIndefinite,
+	AspectCompliance,
+	AspectRisk,
+	AspectPrivacy,
+	AspectProvenanceEntity,
+	AspectProvenanceActivity,
+	AspectProvenanceAgent,
+	AspectProvenanceRelation,
+	AspectLineage,
+	AspectCatalog,
+	AspectSecurity,
+	AspectAuthorization,
+	AspectAccess,
+	AspectAudit,
+	AspectQuality,
+	AspectPolicy,
+	AspectOwnership,
+	AspectMetrics,
+	AspectLog,
+	AspectCollaboration,
+	AspectInterop,
+	AspectEvolution,
+	AspectClassification,
+	AspectTaxonomy,
+	AspectUnit,
+	AspectProfile,
+	AspectSpatial,
+	AspectOrgUnit,
+	AspectOrgRole,
+	AspectOrgProcess,
+	AspectOrgFinance,
+	AspectBusinessAsset,
+	AspectBusinessPartner,
+	AspectBusinessActivity,
+	AspectBusinessChannel,
+	AspectWorkflow,
+	AspectLinking,
+	AspectTesting,
+	AspectDevice,
 }
 
-const InvalidAspectEnumValueString = "<invalid DataAspectE>"
+const InvalidAspectEnumValueString = "<invalid AspectE>"
 
-func (inst DataAspectE) IsValid() bool {
-	return inst < MaxDataAspectExcl
+func (inst AspectE) IsValid() bool {
+	return inst < MaxAspectExcl
 }
-func (inst DataAspectE) String() string {
+func (inst AspectE) String() string {
 	switch inst {
-	case DataAspectIndefinite:
+	case AspectIndefinite:
 		return "indefinite"
-	case DataAspectCompliance:
+	case AspectCompliance:
 		return "compliance"
-	case DataAspectRisk:
+	case AspectRisk:
 		return "risk"
-	case DataAspectPrivacy:
+	case AspectPrivacy:
 		return "privacy"
-	case DataAspectProvenanceEntity:
+	case AspectProvenanceEntity:
 		return "provenance-entity"
-	case DataAspectProvenanceActivity:
+	case AspectProvenanceActivity:
 		return "provenance-activity"
-	case DataAspectProvenanceAgent:
+	case AspectProvenanceAgent:
 		return "provenance-agent"
-	case DataAspectProvenanceRelation:
+	case AspectProvenanceRelation:
 		return "provenance-relation"
-	case DataAspectLineage:
+	case AspectLineage:
 		return "lineage"
-	case DataAspectCatalog:
+	case AspectCatalog:
 		return "catalog"
-	case DataAspectSecurity:
+	case AspectSecurity:
 		return "security"
-	case DataAspectAuthorization:
+	case AspectAuthorization:
 		return "authorization"
-	case DataAspectAccess:
+	case AspectAccess:
 		return "access"
-	case DataAspectAudit:
+	case AspectAudit:
 		return "audit"
-	case DataAspectQuality:
+	case AspectQuality:
 		return "quality"
-	case DataAspectPolicy:
+	case AspectPolicy:
 		return "policy"
-	case DataAspectOwnership:
+	case AspectOwnership:
 		return "ownership"
-	case DataAspectMetrics:
+	case AspectMetrics:
 		return "metrics"
-	case DataAspectLog:
+	case AspectLog:
 		return "log"
-	case DataAspectCollaboration:
+	case AspectCollaboration:
 		return "collaboration"
-	case DataAspectInterop:
+	case AspectInterop:
 		return "interop"
-	case DataAspectEvolution:
+	case AspectEvolution:
 		return "change-evolution"
-	case DataAspectClassification:
+	case AspectClassification:
 		return "classification"
-	case DataAspectTaxonomy:
+	case AspectTaxonomy:
 		return "taxonomy"
-	case DataAspectUnit:
+	case AspectUnit:
 		return "unit"
-	case DataAspectProfile:
+	case AspectProfile:
 		return "profile"
-	case DataAspectSpatial:
+	case AspectSpatial:
 		return "spatial"
-	case DataAspectOrgUnit:
+	case AspectOrgUnit:
 		return "organization-unit"
-	case DataAspectOrgRole:
+	case AspectOrgRole:
 		return "organization-role"
-	case DataAspectOrgProcess:
+	case AspectOrgProcess:
 		return "organization-process"
-	case DataAspectOrgFinance:
+	case AspectOrgFinance:
 		return "organization-finance"
-	case DataAspectBusinessAsset:
+	case AspectBusinessAsset:
 		return "business-asset"
-	case DataAspectBusinessPartner:
+	case AspectBusinessPartner:
 		return "business-partner"
-	case DataAspectBusinessActivity:
+	case AspectBusinessActivity:
 		return "business-activity"
-	case DataAspectBusinessChannel:
+	case AspectBusinessChannel:
 		return "business-channel"
-	case DataAspectLinking:
+	case AspectLinking:
 		return "linking"
-	case DataAspectTesting:
+	case AspectTesting:
 		return "testing"
-	case DataAspectWorkflow:
+	case AspectWorkflow:
 		return "workflow"
-	case DataAspectDevice:
+	case AspectDevice:
 		return "device"
 	}
 	return InvalidAspectEnumValueString

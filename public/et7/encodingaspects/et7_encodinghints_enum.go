@@ -3,56 +3,80 @@ package encodingaspects
 import "slices"
 
 const (
-	DataAspectNone                         DataAspectE = 0
-	DataAspectIntraRecordLowCardinality    DataAspectE = 1
-	DataAspectInterRecordLowCardinality    DataAspectE = 2
-	DataAspectUltraLightGeneralCompression DataAspectE = 3
-	DataAspectLightGeneralCompression      DataAspectE = 4
-	DataAspectHeavyGeneralCompression      DataAspectE = 5
-	DataAspectUltraHeavyGeneralCompression DataAspectE = 6
-	DataAspectDeltaEncoding                DataAspectE = 7
-	DataAspectDoubleDeltaEncoding          DataAspectE = 8
+	AspectNone                          AspectE = 0
+	AspectIntraRecordLowCardinality     AspectE = 1
+	AspectInterRecordLowCardinality     AspectE = 2
+	AspectUltraLightGeneralCompression  AspectE = 3
+	AspectLightGeneralCompression       AspectE = 4
+	AspectHeavyGeneralCompression       AspectE = 5
+	AspectUltraHeavyGeneralCompression  AspectE = 6
+	AspectDeltaEncoding                 AspectE = 7
+	AspectDoubleDeltaEncoding           AspectE = 8
+	AspectUltraLightSlowlyChangingFloat AspectE = 9
+	AspectLightSlowlyChangingFloat      AspectE = 10
+	AspectHeavySlowlyChangingFloat      AspectE = 11
+	AspectUltraHeavySlowlyChangingFloat AspectE = 12
+	AspectLightBiasedSmallInteger       AspectE = 13
+	AspectHeavyBiasedSmallInteger       AspectE = 14
 )
 
-var MaxDataAspectExcl = slices.Max(AllDataAspects) + 1
+var MaxAspectExcl = slices.Max(AllAspects) + 1
 
-var AllDataAspects = []DataAspectE{
-	DataAspectNone,
-	DataAspectIntraRecordLowCardinality,
-	DataAspectInterRecordLowCardinality,
-	DataAspectUltraLightGeneralCompression,
-	DataAspectLightGeneralCompression,
-	DataAspectHeavyGeneralCompression,
-	DataAspectUltraHeavyGeneralCompression,
-	DataAspectDeltaEncoding,
-	DataAspectDoubleDeltaEncoding,
+var AllAspects = []AspectE{
+	AspectNone,
+	AspectIntraRecordLowCardinality,
+	AspectInterRecordLowCardinality,
+	AspectUltraLightGeneralCompression,
+	AspectLightGeneralCompression,
+	AspectHeavyGeneralCompression,
+	AspectUltraHeavyGeneralCompression,
+	AspectDeltaEncoding,
+	AspectDoubleDeltaEncoding,
+	AspectUltraLightSlowlyChangingFloat,
+	AspectLightSlowlyChangingFloat,
+	AspectHeavySlowlyChangingFloat,
+	AspectUltraHeavySlowlyChangingFloat,
+	AspectLightBiasedSmallInteger,
+	AspectHeavyBiasedSmallInteger,
 }
 
-const InvalidDataAspectEnumValueString = "<invalid DataAspectE>"
+const InvalidAspectEnumValueString = "<invalid AspectE>"
 
-func (inst DataAspectE) IsValid() bool {
-	return inst < MaxDataAspectExcl
+func (inst AspectE) IsValid() bool {
+	return inst < MaxAspectExcl
 }
-func (inst DataAspectE) String() string {
+func (inst AspectE) String() string {
 	switch inst {
-	case DataAspectNone:
+	case AspectNone:
 		return "none"
-	case DataAspectIntraRecordLowCardinality:
+	case AspectIntraRecordLowCardinality:
 		return "intra-record-low-cardinality"
-	case DataAspectInterRecordLowCardinality:
+	case AspectInterRecordLowCardinality:
 		return "inter-record-low-cardinality"
-	case DataAspectUltraLightGeneralCompression:
+	case AspectUltraLightGeneralCompression:
 		return "ultra-light-general-compression"
-	case DataAspectLightGeneralCompression:
+	case AspectLightGeneralCompression:
 		return "light-general-compression"
-	case DataAspectHeavyGeneralCompression:
+	case AspectHeavyGeneralCompression:
 		return "heavy-general-compression"
-	case DataAspectUltraHeavyGeneralCompression:
+	case AspectUltraHeavyGeneralCompression:
 		return "ultra-heavy-general-compression"
-	case DataAspectDeltaEncoding:
+	case AspectDeltaEncoding:
 		return "delta-encoding"
-	case DataAspectDoubleDeltaEncoding:
+	case AspectDoubleDeltaEncoding:
 		return "double-delta-encoding"
+	case AspectUltraLightSlowlyChangingFloat:
+		return "ultra-light-slowly-changing-float"
+	case AspectLightSlowlyChangingFloat:
+		return "light-slowly-changing-float"
+	case AspectHeavySlowlyChangingFloat:
+		return "heavy-slowly-changing-float"
+	case AspectUltraHeavySlowlyChangingFloat:
+		return "ultra-heavy-slowly-changing-float"
+	case AspectLightBiasedSmallInteger:
+		return "light-biased-small-integer"
+	case AspectHeavyBiasedSmallInteger:
+		return "heavy-biased-small-integer"
 	}
-	return InvalidDataAspectEnumValueString
+	return InvalidAspectEnumValueString
 }
