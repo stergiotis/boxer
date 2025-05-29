@@ -38,21 +38,6 @@ func encode(num uint64) (encoded AspectSet) {
 	return
 }
 
-func (inst AspectSet) String() string {
-	return string(inst)
-}
-
-func (inst AspectSet) IsValid() bool {
-	if inst == "" {
-		return false
-	}
-	_, valid := decode(inst)
-	return valid
-}
-func (inst AspectSet) IsEmptySet() bool {
-	return inst == EmptyAspectSet
-}
-
 var ErrInvalidEncoding = eh.Errorf("encoding is wrong")
 var ErrEmptySet = eh.Errorf("encoding contains empty set")
 
@@ -145,4 +130,33 @@ func UnionAspectsIgnoreInvalid(asp1 AspectSet, asp2 AspectSet) (res AspectSet) {
 		res = EmptyAspectSet
 	}
 	return
+}
+func (inst AspectSet) String() string {
+	return string(inst)
+}
+
+func (inst AspectSet) IsValid() bool {
+	if inst == "" {
+		return false
+	}
+	_, valid := decode(inst)
+	return valid
+}
+func (inst AspectSet) IsEmptySet() bool {
+	return inst == EmptyAspectSet
+}
+func (inst AspectSet) UnionAspectsIgnoreInvalid(asp2 AspectSet) (res AspectSet) {
+	return UnionAspectsIgnoreInvalid(inst, asp2)
+}
+func (inst AspectSet) UnionAspects(asp2 AspectSet) (res AspectSet, err error) {
+	return UnionAspects(inst, asp2)
+}
+func (inst AspectSet) IterateAspects() iter.Seq2[int, AspectE] {
+	return IterateAspects(inst)
+}
+func (inst AspectSet) CountEncodedAspects() (n int, err error) {
+	return CountEncodedAspects(inst)
+}
+func (inst AspectSet) MaxEncodedAspect() (aspect AspectE, err error) {
+	return MaxEncodedAspect(inst)
 }
