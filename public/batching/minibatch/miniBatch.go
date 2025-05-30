@@ -3,9 +3,10 @@ package minibatch
 import (
 	"bytes"
 	"errors"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"io"
 	"time"
+
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 type MessageValidationFunc func(msg []byte) error

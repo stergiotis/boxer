@@ -3,7 +3,7 @@ package golay24
 import (
 	"io"
 
-	"github.com/stergiotis/boxer/public/anchor"
+	"github.com/stergiotis/boxer/public/fec/anchor"
 	"github.com/stergiotis/boxer/public/fec/code/golay24"
 	"github.com/stergiotis/boxer/public/fec/ea"
 	"github.com/stergiotis/boxer/public/observability/eh"

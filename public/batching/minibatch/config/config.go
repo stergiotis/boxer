@@ -1,11 +1,12 @@
 package config
 
 import (
-	"github.com/stergiotis/boxer/public/config"
-	"github.com/stergiotis/boxer/public/minibatch"
 	"time"
 
-	cli "github.com/urfave/cli/v2"
+	"github.com/stergiotis/boxer/public/batching/minibatch"
+	"github.com/stergiotis/boxer/public/config"
+
+	"github.com/urfave/cli/v2"
 )
 
 type MiniBatchConfig struct {

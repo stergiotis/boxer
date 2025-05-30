@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stergiotis/boxer/public/fec/anchor"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/stergiotis/boxer/public/anchor"
 	"github.com/stergiotis/boxer/public/ea"
 	"github.com/stergiotis/boxer/public/fec/code/golay24"
 )

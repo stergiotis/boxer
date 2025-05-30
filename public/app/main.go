@@ -7,13 +7,13 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl"
 	"github.com/stergiotis/boxer/public/dev"
-	et7 "github.com/stergiotis/boxer/public/et7/cli"
 	"github.com/stergiotis/boxer/public/fffi/compiletime"
 	"github.com/stergiotis/boxer/public/observability/logging"
 	"github.com/stergiotis/boxer/public/observability/ph"
 	"github.com/stergiotis/boxer/public/observability/profiling"
 	"github.com/stergiotis/boxer/public/observability/vcs"
 	"github.com/stergiotis/boxer/public/semistructured/cbor"
+	et7 "github.com/stergiotis/boxer/public/semistructured/et7/cli"
 	"github.com/urfave/cli/v2"
 )
 
