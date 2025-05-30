@@ -19,7 +19,7 @@ import (
 type BackendInterfaceExporter struct {
 	bufSignature   *bytes.Buffer
 	bufDescription *bytes.Buffer
-	enc            cbor.FullEncoder
+	enc            cbor.FullEncoderI
 	hasher         hash.Hash
 	cppNamer       *Namer
 	compatRecord   *CompatibilityRecord
@@ -77,7 +77,7 @@ func (inst *CompatibilityRecord) ToBase64() (s string, diag string, err error) {
 	s = base64.RawURLEncoding.EncodeToString(buf.Bytes())
 	return
 }
-func (inst *CompatibilityRecord) Encode(enc cbor.FullEncoder) (err error) {
+func (inst *CompatibilityRecord) Encode(enc cbor.FullEncoderI) (err error) {
 	_, err = enc.EncodeMapDefinite(4)
 	_, err = enc.EncodeString("features")
 	if err != nil {
@@ -139,7 +139,7 @@ func (inst *CompatibilityRecord) Encode(enc cbor.FullEncoder) (err error) {
 
 const hashSize = 128 / 8
 
-func NewBackendInterfaceExporter(enc cbor.FullEncoder, cppNamer *Namer) *BackendInterfaceExporter {
+func NewBackendInterfaceExporter(enc cbor.FullEncoderI, cppNamer *Namer) *BackendInterfaceExporter {
 	buf := bytes.NewBuffer(make([]byte, 0, 4096*4))
 	hasher := blake3.New(hashSize, nil)
 	inst := &BackendInterfaceExporter{

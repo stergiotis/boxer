@@ -1,12 +1,13 @@
 package canonicalTypeAware
 
 import (
-	"github.com/stergiotis/boxer/public/semistructured/cbor"
 	"hash"
 	"time"
+
+	"github.com/stergiotis/boxer/public/semistructured/cbor"
 )
 
-type PassthroughEncoder[T cbor.FullEncoder] struct {
+type PassthroughEncoder[T cbor.FullEncoderI] struct {
 	delegate T
 }
 
@@ -306,10 +307,10 @@ func (inst *PassthroughEncoder[T]) EncodeTag64(tagUint64 cbor.TagUint64) (int, e
 	return inst.delegate.EncodeTag64(tagUint64)
 }
 
-var _ CanonicalTypeAwareEncoder = (*PassthroughEncoder[*cbor.Encoder])(nil)
-var _ FullEncoder = (*PassthroughEncoder[*cbor.Encoder])(nil)
+var _ EncoderI = (*PassthroughEncoder[*cbor.Encoder])(nil)
+var _ FullEncoderI = (*PassthroughEncoder[*cbor.Encoder])(nil)
 
-func NewPassthroughEncoder[T cbor.FullEncoder](delegate T) *PassthroughEncoder[T] {
+func NewPassthroughEncoder[T cbor.FullEncoderI](delegate T) *PassthroughEncoder[T] {
 	return &PassthroughEncoder[T]{
 		delegate: delegate,
 	}

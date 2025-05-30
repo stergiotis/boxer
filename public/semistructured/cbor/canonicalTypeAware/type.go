@@ -2,7 +2,7 @@ package canonicalTypeAware
 
 import "github.com/stergiotis/boxer/public/semistructured/cbor"
 
-type CanonicalTypeAwareEncoder interface {
+type EncoderI interface {
 	EncodeUint8(val uint8) (int, error)
 	EncodeUint16(val uint16) (int, error)
 	EncodeUint32(val uint32) (int, error)
@@ -55,7 +55,7 @@ type CanonicalTypeAwareEncoder interface {
 	EncodeNilString() (int, error)
 	EncodeNilByteSlice() (int, error)
 }
-type FullEncoder interface {
-	cbor.FullEncoder
-	CanonicalTypeAwareEncoder
+type FullEncoderI interface {
+	cbor.FullEncoderI
+	EncoderI
 }

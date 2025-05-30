@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-type PrimitiveEncoder interface {
+type PrimitiveEncoderI interface {
 	EncodeUint(val uint64) (int, error)
 	EncodeInt(val int64) (int, error)
 	EncodeByteSlice(val []byte) (int, error)
@@ -16,44 +16,44 @@ type PrimitiveEncoder interface {
 	EncodeTimeUTC(val time.Time) (int, error)
 	EncodeNil() (int, error)
 }
-type DefiniteContainerEncoder interface {
+type DefiniteContainerEncoderI interface {
 	EncodeArrayDefinite(length uint64) (int, error)
 	EncodeMapDefinite(length uint64) (int, error)
 }
-type ResetableEncoder interface {
+type ResetableEncoderI interface {
 	Reset()
 	SetWriter(dest EncoderWriter)
 }
-type CborPayloadEncoder interface {
+type CborPayloadEncoderI interface {
 	EncodeCborPayload(val []byte) (int, error)
 }
-type BasicEncoder interface {
-	PrimitiveEncoder
-	DefiniteContainerEncoder
-	ResetableEncoder
-	CborPayloadEncoder
+type BasicEncoderI interface {
+	PrimitiveEncoderI
+	DefiniteContainerEncoderI
+	ResetableEncoderI
+	CborPayloadEncoderI
 }
-type IndefiniteContainerEncoder interface {
+type IndefiniteContainerEncoderI interface {
 	EncodeMapIndefinite() (int, error)
 	EncodeArrayIndefinite() (int, error)
 	EncodeBreak() (int, error)
 }
-type TagEncoder interface {
+type TagEncoderI interface {
 	EncodeTagSmall(tagSmall TagSmall) (int, error)
 	EncodeTag8(tagUint8 TagUint8) (int, error)
 	EncodeTag16(tagUint16 TagUint16) (int, error)
 	EncodeTag32(tagUint32 TagUint32) (int, error)
 	EncodeTag64(tagUint64 TagUint64) (int, error)
 }
-type HashingEncoder interface {
+type HashingEncoderI interface {
 	Hash(sum []byte) ([]byte, error)
 	SetHasher(hasher hash.Hash)
 }
-type FullEncoder interface {
-	BasicEncoder
-	IndefiniteContainerEncoder
-	HashingEncoder
-	TagEncoder
+type FullEncoderI interface {
+	BasicEncoderI
+	IndefiniteContainerEncoderI
+	HashingEncoderI
+	TagEncoderI
 }
 type PositionerI interface {
 	GetPosition() uint64

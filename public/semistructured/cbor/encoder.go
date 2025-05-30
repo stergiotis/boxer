@@ -3,12 +3,13 @@ package cbor
 import (
 	"bytes"
 	"encoding/binary"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"hash"
 	"io"
 	"math"
 	"net/netip"
 	"time"
+
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 type MajorType uint8
@@ -36,9 +37,9 @@ type Encoder struct {
 	flushLimit int
 }
 
-var _ BasicEncoder = (*Encoder)(nil)
-var _ IndefiniteContainerEncoder = (*Encoder)(nil)
-var _ HashingEncoder = (*Encoder)(nil)
+var _ BasicEncoderI = (*Encoder)(nil)
+var _ IndefiniteContainerEncoderI = (*Encoder)(nil)
+var _ HashingEncoderI = (*Encoder)(nil)
 
 func NewEncoder(w EncoderWriter, hasher hash.Hash) *Encoder {
 	flushLimit := 512 / 8
