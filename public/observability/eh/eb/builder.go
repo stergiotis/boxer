@@ -3,15 +3,16 @@ package eb
 import (
 	"bytes"
 	"fmt"
-	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/semistructured/cbor"
-	"github.com/stergiotis/boxer/public/semistructured/cbor/builder"
-	"github.com/zeebo/xxh3"
 	"hash"
 	"net"
 	"net/netip"
 	"reflect"
 	"time"
+
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/semistructured/cbor"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/builder"
+	"github.com/zeebo/xxh3"
 )
 
 type ErrorBuilder struct {
@@ -19,6 +20,7 @@ type ErrorBuilder struct {
 	encoder        *cbor.Encoder
 	hasher         hash.Hash
 	open           bool
+	withoutStack   bool
 }
 
 var _ builder.CborKVBuilder[*ErrorBuilder] = (*ErrorBuilder)(nil)
@@ -33,12 +35,22 @@ func Build() *ErrorBuilder {
 		encoder:        enc,
 		hasher:         hasher,
 		open:           true,
+		withoutStack:   false,
 	}
 }
 func (inst *ErrorBuilder) Reset() {
 	inst.structuredData.Reset()
 	inst.encoder.Reset()
 	inst.open = true
+	inst.withoutStack = false
+}
+func (inst *ErrorBuilder) WithoutStack() *ErrorBuilder {
+	inst.withoutStack = true
+	return inst
+}
+func (inst *ErrorBuilder) WithStack() *ErrorBuilder {
+	inst.withoutStack = false
+	return inst
 }
 func (inst *ErrorBuilder) Type(key string, val any) *ErrorBuilder {
 	return inst.Str(key, reflect.TypeOf(val).String())
@@ -416,5 +428,9 @@ func (inst *ErrorBuilder) Errorf(format string, a ...any) error {
 	_, _ = inst.encoder.EncodeBreak()
 	buf := make([]byte, inst.structuredData.Len())
 	copy(buf, inst.structuredData.Bytes())
-	return eh.ErrorfWithData(buf, format, a...)
+	if inst.withoutStack {
+		return eh.ErrorfWithDataWithoutStack(buf, format, a...)
+	} else {
+		return eh.ErrorfWithData(buf, format, a...)
+	}
 }

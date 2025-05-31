@@ -2,8 +2,9 @@ package eh
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
 	"runtime"
+
+	"github.com/pkg/errors"
 )
 
 type singleWrappedWithStack struct {
@@ -96,6 +97,9 @@ func (inst *withStack) Error() string {
 
 func (inst *withStack) StackTrace() errors.StackTrace {
 	s := inst.stack
+	if s == nil {
+		return nil
+	}
 	f := make([]errors.Frame, len(*s))
 	for i := 0; i < len(f); i++ {
 		f[i] = errors.Frame((*s)[i])
@@ -127,6 +131,28 @@ func ErrorfWithData(cborData []byte, format string, a ...any) error {
 	return &withStack{
 		err:      err,
 		stack:    s,
+		cborData: cborData,
+	}
+}
+func ErrorfWithDataWithoutStack(cborData []byte, format string, a ...any) error {
+	err := fmt.Errorf(format, a...)
+	switch e := err.(type) {
+	case unwrapableMulti:
+		return &multiWrappedWithStack{
+			wrappedErr: e,
+			stack:      nil,
+			cborData:   cborData,
+		}
+	case unwrapableSingle:
+		return &singleWrappedWithStack{
+			wrappedErr: e,
+			stack:      nil,
+			cborData:   cborData,
+		}
+	}
+	return &withStack{
+		err:      err,
+		stack:    nil,
 		cborData: cborData,
 	}
 }
