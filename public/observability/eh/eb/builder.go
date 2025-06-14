@@ -53,7 +53,12 @@ func (inst *ErrorBuilder) WithStack() *ErrorBuilder {
 	return inst
 }
 func (inst *ErrorBuilder) Type(key string, val any) *ErrorBuilder {
-	return inst.Str(key, reflect.TypeOf(val).String())
+	t := reflect.TypeOf(val)
+	if t == nil {
+		return inst.Str(key, "<unknown>")
+	} else {
+		return inst.Str(key, reflect.TypeOf(val).String())
+	}
 }
 func (inst *ErrorBuilder) Str(key string, val string) *ErrorBuilder {
 	if !inst.open {
