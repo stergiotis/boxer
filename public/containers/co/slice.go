@@ -180,3 +180,65 @@ func InsertSliceSorted[K cmp.Ordered, V any](sortedSliceReadIn []K, coSliceWrite
 	}
 	return
 }
+func CoIterateFilter[K comparable, V any](s1 []K, v K, s2 []V) iter.Seq2[int, V] {
+	return func(yield func(int, V) bool) {
+		n := 0
+		for i, u := range s1 {
+			if u == v {
+				if !yield(n, s2[i]) {
+					return
+				}
+				n++
+			}
+		}
+	}
+}
+func CoIterateFilterFunc[K any, V any](s1 []K, filterFunc func(a K) (keep bool), s2 []V) iter.Seq2[int, V] {
+	return func(yield func(int, V) bool) {
+		n := 0
+		for i, u := range s1 {
+			if filterFunc(u) {
+				if !yield(n, s2[i]) {
+					return
+				}
+				n++
+			}
+		}
+	}
+}
+func StripIter2Key[K, V any](iter2 iter.Seq2[K, V]) iter.Seq[V] {
+	return func(yield func(V) bool) {
+		for _, v := range iter2 {
+			if !yield(v) {
+				return
+			}
+		}
+	}
+}
+func StripIter2Value[K, V any](iter2 iter.Seq2[K, V]) iter.Seq[K] {
+	return func(yield func(K) bool) {
+		for k, _ := range iter2 {
+			if !yield(k) {
+				return
+			}
+		}
+	}
+}
+func MakeIter2FromIter1[K, V any](iter1 iter.Seq[V], k K) iter.Seq2[K, V] {
+	return func(yield func(K, V) bool) {
+		for v := range iter1 {
+			if !yield(k, v) {
+				return
+			}
+		}
+	}
+}
+func MakeIter2FromIter1Func[K, V any](iter1 iter.Seq[V], f func(v V) (k K)) iter.Seq2[K, V] {
+	return func(yield func(K, V) bool) {
+		for v := range iter1 {
+			if !yield(f(v), v) {
+				return
+			}
+		}
+	}
+}
