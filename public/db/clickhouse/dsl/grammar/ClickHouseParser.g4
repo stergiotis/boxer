@@ -65,7 +65,13 @@ selectStmt:
     settingsClause?
     ;
 
-projectionClause : SELECT DISTINCT? topClause? columnExprList;
+projectionClause : SELECT DISTINCT? topClause? columnExprList projectionExceptClause?;
+projectionExceptClause : EXCEPT staticOrDynamicColumnSelection;
+staticOrDynamicColumnSelection
+    : identifier (COMMA identifier)*       # StaticColumnList
+    | dynamicColumnSelection               # DynamicColumnList;
+dynamicColumnSelection
+    : COLUMNS LPAREN STRING_LITERAL RPAREN;
 withClause: WITH columnExprList;
 topClause: TOP DECIMAL_LITERAL (WITH TIES)?;
 fromClause: FROM joinExpr;
@@ -199,6 +205,7 @@ columnExpr
     | LPAREN columnExprList RPAREN                                                        # ColumnExprTuple
     | LBRACKET columnExprList? RBRACKET                                                   # ColumnExprArray
     | columnIdentifier                                                                    # ColumnExprIdentifier
+    | dynamicColumnSelection                                                              # ColumnExprDynamic
     ;
 columnArgList: columnArgExpr (COMMA columnArgExpr)*;
 columnArgExpr: columnLambdaExpr | columnExpr;

@@ -44,3 +44,30 @@ func TestParsedDqlQuery_Smoke(t *testing.T) {
 	require.Equal(t, "SELECT12<EOF>", dql.GetInputParseTree().GetText())
 	require.NoError(t, err)
 }
+func TestParsedDqlQueryTdd01(t *testing.T) {
+	dql := NewParsedDqlQuery()
+	dql.Reset()
+
+	err := dql.ParseFromString("SELECT a,b EXCEPT c FROM tbl")
+	require.NoError(t, err)
+	require.Equal(t, "SELECTa,bEXCEPTcFROMtbl<EOF>", dql.GetInputParseTree().GetText())
+
+	err = dql.ParseFromString("SELECT a,b EXCEPT c,d FROM tbl")
+	require.NoError(t, err)
+	require.Equal(t, "SELECTa,bEXCEPTc,dFROMtbl<EOF>", dql.GetInputParseTree().GetText())
+
+	err = dql.ParseFromString("SELECT a,b EXCEPT FROM tbl")
+	require.Error(t, err)
+
+	err = dql.ParseFromString("SELECT a,b EXCEPT columns('a.*') FROM tbl")
+	require.NoError(t, err)
+	require.Equal(t, "SELECTa,bEXCEPTcolumns('a.*')FROMtbl<EOF>", dql.GetInputParseTree().GetText())
+
+	err = dql.ParseFromString("SELECT columns('a.*') FROM tbl")
+	require.NoError(t, err)
+	require.Equal(t, "SELECTcolumns('a.*')FROMtbl<EOF>", dql.GetInputParseTree().GetText())
+
+	err = dql.ParseFromString("SELECT u,v FROM tbl WHERE a > 1\n  // a comment\n AND b > 1")
+	require.NoError(t, err)
+	require.Equal(t, "SELECTu,vFROMtblWHEREa>1ANDb>1<EOF>", dql.GetInputParseTree().GetText())
+}

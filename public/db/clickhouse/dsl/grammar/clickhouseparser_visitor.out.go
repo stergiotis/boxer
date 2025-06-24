@@ -1,4 +1,4 @@
-// Code generated from ClickHouseParser.g4 by ANTLR 4.13.2. DO NOT EDIT.
+// Code generated from ClickHouseParser.g4 by ANTLR 4.13.1. DO NOT EDIT.
 
 package grammar // ClickHouseParser
 import "github.com/antlr4-go/antlr/v4"
@@ -36,6 +36,18 @@ type ClickHouseParserVisitor interface {
 
 	// Visit a parse tree produced by ClickHouseParser#projectionClause.
 	VisitProjectionClause(ctx *ProjectionClauseContext) interface{}
+
+	// Visit a parse tree produced by ClickHouseParser#projectionExceptClause.
+	VisitProjectionExceptClause(ctx *ProjectionExceptClauseContext) interface{}
+
+	// Visit a parse tree produced by ClickHouseParser#StaticColumnList.
+	VisitStaticColumnList(ctx *StaticColumnListContext) interface{}
+
+	// Visit a parse tree produced by ClickHouseParser#DynamicColumnList.
+	VisitDynamicColumnList(ctx *DynamicColumnListContext) interface{}
+
+	// Visit a parse tree produced by ClickHouseParser#dynamicColumnSelection.
+	VisitDynamicColumnSelection(ctx *DynamicColumnSelectionContext) interface{}
 
 	// Visit a parse tree produced by ClickHouseParser#withClause.
 	VisitWithClause(ctx *WithClauseContext) interface{}
@@ -213,6 +225,9 @@ type ClickHouseParserVisitor interface {
 
 	// Visit a parse tree produced by ClickHouseParser#ColumnExprOr.
 	VisitColumnExprOr(ctx *ColumnExprOrContext) interface{}
+
+	// Visit a parse tree produced by ClickHouseParser#ColumnExprDynamic.
+	VisitColumnExprDynamic(ctx *ColumnExprDynamicContext) interface{}
 
 	// Visit a parse tree produced by ClickHouseParser#ColumnExprPrecedence1.
 	VisitColumnExprPrecedence1(ctx *ColumnExprPrecedence1Context) interface{}

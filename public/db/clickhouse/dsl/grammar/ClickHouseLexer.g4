@@ -32,6 +32,7 @@ CLUSTER: C L U S T E R;
 CODEC: C O D E C;
 COLLATE: C O L L A T E;
 COLUMN: C O L U M N;
+COLUMNS: C O L U M N S;
 COMMENT: C O M M E N T;
 CONSTRAINT: C O N S T R A I N T;
 CREATE: C R E A T E;
@@ -297,5 +298,5 @@ DOLLAR: '$';
 // Comments and whitespace
 
 MULTI_LINE_COMMENT: '/*' .*? '*/' -> skip;
-SINGLE_LINE_COMMENT: '--' ~('\n'|'\r')* ('\n' | '\r' | EOF) -> skip;
+SINGLE_LINE_COMMENT: ('--' | '//') ~('\n'|'\r')* ('\n' | '\r' | EOF) -> skip;
 WHITESPACE: [ \u000B\u000C\t\r\n] -> skip;  // '\n' can be part of multiline single query

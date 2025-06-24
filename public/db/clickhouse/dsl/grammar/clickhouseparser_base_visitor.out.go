@@ -1,4 +1,4 @@
-// Code generated from ClickHouseParser.g4 by ANTLR 4.13.2. DO NOT EDIT.
+// Code generated from ClickHouseParser.g4 by ANTLR 4.13.1. DO NOT EDIT.
 
 package grammar // ClickHouseParser
 import "github.com/antlr4-go/antlr/v4"
@@ -44,6 +44,22 @@ func (v *BaseClickHouseParserVisitor) VisitSelectStmt(ctx *SelectStmtContext) in
 }
 
 func (v *BaseClickHouseParserVisitor) VisitProjectionClause(ctx *ProjectionClauseContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseClickHouseParserVisitor) VisitProjectionExceptClause(ctx *ProjectionExceptClauseContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseClickHouseParserVisitor) VisitStaticColumnList(ctx *StaticColumnListContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseClickHouseParserVisitor) VisitDynamicColumnList(ctx *DynamicColumnListContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseClickHouseParserVisitor) VisitDynamicColumnSelection(ctx *DynamicColumnSelectionContext) interface{} {
 	return v.VisitChildren(ctx)
 }
 
@@ -280,6 +296,10 @@ func (v *BaseClickHouseParserVisitor) VisitColumnExprCast(ctx *ColumnExprCastCon
 }
 
 func (v *BaseClickHouseParserVisitor) VisitColumnExprOr(ctx *ColumnExprOrContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseClickHouseParserVisitor) VisitColumnExprDynamic(ctx *ColumnExprDynamicContext) interface{} {
 	return v.VisitChildren(ctx)
 }
 
