@@ -6,7 +6,7 @@ cd "$here"
 ../build.sh
 ../main --logFormat console nerdfont generate --glyphJson ./glyphnames.json \
 	--staticGlyphsGoPackage "nerdfont" \
-	--staticGlyphsGoFile "./staticGlyphs.go" \
+	--staticGlyphsGoFile "./staticGlyphs.out.go" \
 	--dynamicGlyphsGoPackage "nerdfont" \
-	--dynamicGlyphsGoFile "./dynamicGlyphs.go"
+	--dynamicGlyphsGoFile "./dynamicGlyphs.out.go"
 gofmt -l -w .
