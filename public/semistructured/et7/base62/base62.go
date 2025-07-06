@@ -1,8 +1,17 @@
 package base62
 
-import "math/big"
+import (
+	"fmt"
+	"math/big"
+)
 
 type Base62Num string
+
+func (inst Base62Num) String() string {
+	return string(inst)
+}
+
+var _ fmt.Stringer = Base62Num("")
 
 func (inst Base62Num) Decode() (num uint64, valid bool) {
 	return Decode(inst)
