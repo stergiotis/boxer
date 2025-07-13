@@ -23,8 +23,8 @@ func main() {
 	var _ = exitCode
 	defer ph.PanicHandler(2, nil, nil)
 	app := cli.App{
-		Name:                 "boxer",
-		Copyright:            "Copyright © 2023-2025 Panos Stergiotis",
+		Name:                 vcs.ModuleInfo(),
+		Copyright:            vcs.CopyrightInfo(),
 		HelpName:             "",
 		Usage:                "",
 		UsageText:            "",

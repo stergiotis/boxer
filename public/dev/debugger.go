@@ -2,13 +2,14 @@ package dev
 
 import (
 	"fmt"
-	"github.com/rs/zerolog/log"
-	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/urfave/cli/v2"
 	"io"
 	"os"
 	"runtime"
 	"time"
+
+	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/urfave/cli/v2"
 )
 
 // getTracerPidLinux Credits: https://stackoverflow.com/questions/47879070/how-can-i-see-if-the-goland-debugger-is-running-in-the-program
@@ -40,8 +41,9 @@ func init() {
 	switch runtime.GOOS {
 	case "linux":
 		DebuggerFlags = []cli.Flag{&cli.BoolFlag{
-			Name:  "waitForDebugger",
-			Usage: "execution of program waits until an attached debugger is detected",
+			Category: "development",
+			Name:     "waitForDebugger",
+			Usage:    "execution of program waits until an attached debugger is detected",
 			Action: func(context *cli.Context, b bool) error {
 				for {
 					log.Info().Msg("waiting for debugger to attach")

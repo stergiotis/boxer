@@ -6,7 +6,7 @@ import (
 
 var ProfilingFlags = []cli.Flag{
 	&cli.StringFlag{
-		Name:        "cpuProfileFile",
+		Name:        "pprofCpuOutputFile",
 		Category:    "profiling",
 		DefaultText: "",
 		FilePath:    "",
@@ -18,7 +18,7 @@ var ProfilingFlags = []cli.Flag{
 		Action:      cpuProfileFileAction,
 	},
 	&cli.StringFlag{
-		Name:     "httpServerAddress",
+		Name:     "pprofHttpListenAddress",
 		Category: "profiling",
 		Action:   httpServerAddressAction,
 	},

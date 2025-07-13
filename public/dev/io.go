@@ -1,16 +1,18 @@
 package dev
 
 import (
+	"os"
+
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/urfave/cli/v2"
-	"os"
 )
 
 var IoOverrideFlags = []cli.Flag{
 	&cli.StringFlag{
-		Name:  "stdinFromFile",
-		Value: "",
+		Category: "override",
+		Name:     "stdinFromFile",
+		Value:    "",
 		Action: func(context *cli.Context, s string) error {
 			if s != "" {
 				f, err := os.OpenFile(s, os.O_RDONLY, os.ModePerm)
@@ -24,8 +26,9 @@ var IoOverrideFlags = []cli.Flag{
 		},
 	},
 	&cli.StringFlag{
-		Name:  "stdoutToFile",
-		Value: "",
+		Category: "override",
+		Name:     "stdoutToFile",
+		Value:    "",
 		Action: func(context *cli.Context, s string) error {
 			if s != "" {
 				f, err := os.OpenFile(s, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, os.ModePerm)
@@ -39,8 +42,9 @@ var IoOverrideFlags = []cli.Flag{
 		},
 	},
 	&cli.StringFlag{
-		Name:  "stderrToFile",
-		Value: "",
+		Category: "override",
+		Name:     "stderrToFile",
+		Value:    "",
 		Action: func(context *cli.Context, s string) error {
 			if s != "" {
 				f, err := os.OpenFile(s, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, os.ModePerm)

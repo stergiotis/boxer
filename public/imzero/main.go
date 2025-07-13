@@ -35,8 +35,8 @@ func main() {
 	//defer ph.PanicHandler(2, nil, writeIndefArrayEnd)
 	defer ph.PanicHandler(2, nil, nil)
 	app := cli.App{
-		Name:                 "imzero",
-		Copyright:            "Copyright © 2023-2025 Panos Stergiotis",
+		Name:                 vcs.ModuleInfo(),
+		Copyright:            vcs.CopyrightInfo(),
 		HelpName:             "",
 		Usage:                "",
 		UsageText:            "",
