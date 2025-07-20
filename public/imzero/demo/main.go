@@ -59,7 +59,7 @@ func mainE(app *application.Application) (err error) {
 	app.RenderLoopHandler = func(marshaller *runtime.Marshaller) error {
 		marshaller.ResetWrittenBytes()
 		t0 := time.Now()
-		imgui.ShowDemoWindow()
+		//imgui.ShowDemoWindow()
 		RenderDemo(app)
 		renderStats(dt, writtenBytes)
 		dt = time.Since(t0)

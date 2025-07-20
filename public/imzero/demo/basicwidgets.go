@@ -206,12 +206,16 @@ func MakeRenderBasicWidgets() func() {
 func MakeRenderInputText() func() {
 	text := ""
 	text2 := ""
+	text3 := ""
 	return func() {
-		text, _ = imgui.InputText("a label", text, 32)
+		text, _ = imgui.InputTextV("a label", text, 8, imgui.ImGuiInputTextFlags_EnterReturnsTrue)
 		imgui.TextUnformatted(text)
 
 		text2, _ = imgui.InputTextWithHint("another label", "a hint", text2, 32)
 		imgui.TextUnformatted(text2)
+
+		text3, _ = imgui.InputTextV("password entry", text3, 128, imgui.ImGuiInputTextFlags_Password)
+		imgui.TextUnformatted(text3)
 	}
 }
 
