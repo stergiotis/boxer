@@ -1,8 +1,9 @@
 package containers
 
 import (
-	"golang.org/x/exp/maps"
 	"iter"
+
+	"golang.org/x/exp/maps"
 )
 
 type HashSet[T comparable] struct {
@@ -13,8 +14,35 @@ func NewHashSet[T comparable](estimatedCard int) *HashSet[T] {
 	return &HashSet[T]{data: make(map[T]struct{}, estimatedCard)}
 }
 
+func (inst *HashSet[T]) AddEx(val T) (existed bool) {
+	if inst.Has(val) {
+		existed = true
+		return
+	}
+	inst.Add(val)
+	return
+}
 func (inst *HashSet[T]) Add(val T) {
 	inst.data[val] = struct{}{}
+}
+func (inst *HashSet[T]) AddMany(vals iter.Seq[T]) (added int) {
+	for v := range vals {
+		inst.data[v] = struct{}{}
+		added++
+	}
+	return
+}
+func (inst *HashSet[T]) AddExMany(vals iter.Seq[T]) (existing int, nonExisting int) {
+	for v := range vals {
+		_, has := inst.data[v]
+		if has {
+			existing++
+		} else {
+			inst.data[v] = struct{}{}
+			nonExisting++
+		}
+	}
+	return
 }
 
 func (inst *HashSet[T]) Remove(val T) {
