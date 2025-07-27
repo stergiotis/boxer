@@ -56,7 +56,7 @@ func (inst *HashSet[T]) Has(val T) bool {
 func (inst *HashSet[T]) All() iter.Seq[T] {
 	return func(yield func(T) bool) {
 		for m, _ := range inst.data {
-			if yield(m) {
+			if !yield(m) {
 				return
 			}
 		}
