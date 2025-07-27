@@ -13,6 +13,9 @@ type ClickHouseParserVisitor interface {
 	// Visit a parse tree produced by ClickHouseParser#query.
 	VisitQuery(ctx *QueryContext) interface{}
 
+	// Visit a parse tree produced by ClickHouseParser#multiQuery.
+	VisitMultiQuery(ctx *MultiQueryContext) interface{}
+
 	// Visit a parse tree produced by ClickHouseParser#ctes.
 	VisitCtes(ctx *CtesContext) interface{}
 

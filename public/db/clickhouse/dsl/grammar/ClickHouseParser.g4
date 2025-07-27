@@ -29,6 +29,7 @@ options {
 // Top-level statements
 queryStmt: query (INTO OUTFILE STRING_LITERAL)? (FORMAT identifierOrNull)? (SEMICOLON)? EOF;
 query: setStmt* ctes? selectUnionStmt;
+multiQuery: query+ EOF;
 
 // CTE statement
 ctes

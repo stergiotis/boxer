@@ -15,6 +15,10 @@ func (v *BaseClickHouseParserVisitor) VisitQuery(ctx *QueryContext) interface{} 
 	return v.VisitChildren(ctx)
 }
 
+func (v *BaseClickHouseParserVisitor) VisitMultiQuery(ctx *MultiQueryContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
 func (v *BaseClickHouseParserVisitor) VisitCtes(ctx *CtesContext) interface{} {
 	return v.VisitChildren(ctx)
 }
