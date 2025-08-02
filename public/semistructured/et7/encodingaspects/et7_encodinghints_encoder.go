@@ -45,6 +45,16 @@ func EncodeAspects(aspects ...AspectE) (encoded AspectSet, err error) {
 	encoded = encode(num)
 	return
 }
+func EncodeAspectsIgnoreInvalid(aspects ...AspectE) (encoded AspectSet) {
+	var num uint64
+	for _, a := range aspects {
+		if a.IsValid() {
+			num |= uint64(1) << a
+		}
+	}
+	encoded = encode(num)
+	return
+}
 func EncodeAspectsMustValidate(aspects ...AspectE) (encoded AspectSet) {
 	var num uint64
 	for i, a := range aspects {
