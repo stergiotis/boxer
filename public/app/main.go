@@ -7,6 +7,8 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl"
 	"github.com/stergiotis/boxer/public/dev"
+	"github.com/stergiotis/boxer/public/doc"
+	"github.com/stergiotis/boxer/public/docgen"
 	"github.com/stergiotis/boxer/public/fffi/compiletime"
 	"github.com/stergiotis/boxer/public/observability/logging"
 	"github.com/stergiotis/boxer/public/observability/ph"
@@ -36,6 +38,7 @@ func main() {
 		Flags: slices.Concat(
 			logging.LoggingFlags,
 			profiling.ProfilingFlags,
+			docgen.DocFlags,
 			dev.DebuggerFlags,
 			dev.IoOverrideFlags),
 		Commands: []*cli.Command{
