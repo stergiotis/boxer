@@ -11,5 +11,5 @@ func TranslateEmpty[T comparable](s T, replacement T) (r T) {
 type InterfaceIsReferentialTransparentType bool
 
 type PromiseReferentialTransparentI interface {
-	PromiseToBeReferentialTransparency() (_ InterfaceIsReferentialTransparentType)
+	PromiseToBeReferentialTransparent() (_ InterfaceIsReferentialTransparentType)
 }
