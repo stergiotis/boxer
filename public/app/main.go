@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/logging"
 	"github.com/stergiotis/boxer/public/observability/ph"
 	"github.com/stergiotis/boxer/public/observability/profiling"
+	"github.com/stergiotis/boxer/public/observability/tracing"
 	"github.com/stergiotis/boxer/public/observability/vcs"
 	"github.com/stergiotis/boxer/public/semistructured/cbor"
 	et7 "github.com/stergiotis/boxer/public/semistructured/et7/cli"
@@ -46,6 +47,7 @@ func main() {
 			cbor.NewCommand(),
 			compiletime.NewCommand(nil, nil),
 			et7.NewCommand(),
+			tracing.NewCliCommand(),
 		},
 		After: func(context *cli.Context) error {
 			profiling.ProfilingHandleExit(context)

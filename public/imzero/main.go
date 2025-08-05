@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/logging"
 	"github.com/stergiotis/boxer/public/observability/ph"
 	"github.com/stergiotis/boxer/public/observability/profiling"
+	"github.com/stergiotis/boxer/public/observability/tracing"
 	"github.com/stergiotis/boxer/public/observability/vcs"
 	"github.com/stergiotis/boxer/public/semistructured/cbor"
 	"github.com/urfave/cli/v2"
@@ -59,6 +60,7 @@ func main() {
 				Name:        "nerdfont",
 				Subcommands: []*cli.Command{generator.NewCommand()},
 			},
+			tracing.NewCliCommand(),
 		},
 		After: func(context *cli.Context) error {
 			profiling.ProfilingHandleExit(context)
