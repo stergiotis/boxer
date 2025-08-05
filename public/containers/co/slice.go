@@ -51,6 +51,33 @@ func (inst *coSorterReverse[T]) Swap(i, j int) {
 
 var _ sort.Interface = (*coSorterReverse[int])(nil)
 
+type sorter struct {
+	n    int
+	less func(i, j int) bool
+	swap func(i, j int)
+}
+
+func (inst sorter) Len() int {
+	return inst.n
+}
+
+func (inst sorter) Less(i, j int) bool {
+	return inst.less(i, j)
+}
+
+func (inst sorter) Swap(i, j int) {
+	inst.swap(i, j)
+}
+
+var _ sort.Interface = sorter{}
+
+func SortUnstable(n int, less func(i, j int) bool, swap func(i, j int)) {
+	sort.Sort(sorter{
+		n:    n,
+		less: less,
+		swap: swap,
+	})
+}
 func CoSortSlices[K cmp.Ordered](slice []K, swap func(i int, j int)) {
 	switch len(slice) {
 	case 0, 1:
