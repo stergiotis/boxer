@@ -54,14 +54,13 @@ const (
 	AspectUnitVolumeSI            AspectE = 43
 	AspectUnitTorqueSI            AspectE = 44
 
-	AspectVectorValue        AspectE = 64
-	AspectCanonicalizedValue AspectE = 65
+	AspectVectorValue        AspectE = 45
+	AspectCanonicalizedValue AspectE = 46
 )
 
 var MaxAspectExcl = slices.Max(AllAspects) + 1
 
 var AllAspects = []AspectE{
-	AspectNone,
 	AspectNone,
 	AspectScaleOfMeasurementNominal,
 	AspectScaleOfMeasurementOrdinal,
@@ -207,9 +206,9 @@ func (inst AspectE) String() string {
 	case AspectUnitFlowSI:
 		return "unit-flow-si"
 	case AspectUnitRotationalSpeedSI:
-		return "unit-rotation-si"
+		return "unit-rotation-speed-si"
 	case AspectUnitVelocitySI:
-		return "unit-rotation-si"
+		return "unit-velocity-si"
 	case AspectUnitVolumeSI:
 		return "unit-volume-si"
 	case AspectUnitTorqueSI:

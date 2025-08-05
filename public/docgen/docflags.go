@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	md "github.com/nao1215/markdown"
+	cli2 "github.com/stergiotis/boxer/public/hmi/cli"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/pebble2impl/public/boxerstaging/cliutils"
 	"github.com/urfave/cli/v2"
 )
 
@@ -39,7 +39,7 @@ var DocFlags = []cli.Flag{
 }
 
 func NewDocCli() *cli.Command {
-	syntaxHighlightFlag, syntaxHighlightFunc := cliutils.BuildEnumStringFlag([]md.SyntaxHighlight{
+	syntaxHighlightFlag, syntaxHighlightFunc := cli2.BuildEnumStringFlagStr([]md.SyntaxHighlight{
 		md.SyntaxHighlightNone,
 		md.SyntaxHighlightText,
 		md.SyntaxHighlightAPIBlueprint,

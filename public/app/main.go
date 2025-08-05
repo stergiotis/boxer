@@ -7,7 +7,6 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl"
 	"github.com/stergiotis/boxer/public/dev"
-	"github.com/stergiotis/boxer/public/doc"
 	"github.com/stergiotis/boxer/public/docgen"
 	"github.com/stergiotis/boxer/public/fffi/compiletime"
 	"github.com/stergiotis/boxer/public/observability/logging"
@@ -48,6 +47,7 @@ func main() {
 			compiletime.NewCommand(nil, nil),
 			et7.NewCommand(),
 			tracing.NewCliCommand(),
+			docgen.NewDocCli(),
 		},
 		After: func(context *cli.Context) error {
 			profiling.ProfilingHandleExit(context)

@@ -166,7 +166,7 @@ func getParamsAndResultTypes(decl *ast.FuncDecl, resolver TypeResolver) (paramNa
 			var castType string
 			basicType, castType, err = resolver.ResolveBasicType(f.Type)
 			if err != nil {
-				err = eb.Build().Str("type", fmt.Sprint("%+v", f.Type)).Errorf("unable to resolve basic type: %w", err)
+				err = eb.Build().Str("type", fmt.Sprintf("%+v", f.Type)).Errorf("unable to resolve basic type: %w", err)
 				return
 			}
 

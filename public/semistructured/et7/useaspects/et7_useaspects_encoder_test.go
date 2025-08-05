@@ -10,7 +10,7 @@ import (
 )
 
 func TestCanonicalEt7AspectEnum(t *testing.T) {
-	require.EqualValues(t, len(AllAspects), MaxAspectExcl)
+	require.EqualValues(t, len(AllAspects), int(MaxAspectExcl))
 	m := make([]string, 0, len(AllAspects))
 	for i := AspectE(0); i < MaxAspectExcl; i++ {
 		require.False(t, slices.Contains(m, i.String()))
