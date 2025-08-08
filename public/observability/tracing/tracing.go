@@ -11,19 +11,13 @@ import (
 )
 
 type TraceUtils struct {
-	dedupCodeLocations *containers.HashSet[string]
 }
 
-func NewTraceUtils(estLinesOfCode int) *TraceUtils {
-	return &TraceUtils{
-		dedupCodeLocations: containers.NewHashSet[string](estLinesOfCode),
-	}
+func NewTraceUtils() *TraceUtils {
+	return &TraceUtils{}
 }
-func (inst *TraceUtils) IterateCodeLocations(tr io.Reader) iter.Seq2[string, uint64] {
+func (inst *TraceUtils) IterateCodeLocations(tr io.Reader, dedup *containers.HashSet[string]) iter.Seq2[string, uint64] {
 	return func(yield func(string, uint64) bool) {
-		dedup := inst.dedupCodeLocations
-		dedup.Clear()
-		defer dedup.Clear()
 		for ev := range inst.IterateEvents(tr) {
 			for frame := range ev.Stack().Frames() {
 				file := frame.File

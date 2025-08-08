@@ -8,6 +8,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/config"
+	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/containers/co"
 	cli2 "github.com/stergiotis/boxer/public/hmi/cli"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -51,10 +52,12 @@ func NewCliCommand() *cli.Command {
 							},
 						}),
 						Action: func(context *cli.Context) error {
-							u := NewTraceUtils(int(context.Uint64("estimatedLOC")))
-							files := make([]string, 0, 4096)
-							lines := make([]uint64, 0, 4096)
-							for file, line := range u.IterateCodeLocations(os.Stdin) {
+							estLoc := int(context.Uint64("estimatedLOC"))
+							u := NewTraceUtils()
+							files := make([]string, 0, estLoc)
+							lines := make([]uint64, 0, estLoc)
+							dedup := containers.NewHashSet[string](estLoc)
+							for file, line := range u.IterateCodeLocations(os.Stdin, dedup) {
 								files = append(files, file)
 								lines = append(lines, line)
 							}
