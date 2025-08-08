@@ -16,5 +16,5 @@ jobs:
           cache-dependency-path: 'go.sum'
       - name: Setup
         run: ./scripts/ci/install.sh
-      - name: Run Tests
+      - name: Check for Vulnerabilities
         run: ./scripts/ci/govuln.sh
