@@ -19,21 +19,8 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-func writeIndefArrayBegin() {
-	_, _ = os.Stderr.Write([]byte{0x9f})
-}
-func writeIndefArrayEnd() {
-	_, _ = os.Stderr.Write([]byte{0xff})
-}
-
-func main() {
-	exitCode := 0
+func mainC() (exitCode int) {
 	logging.SetupZeroLog()
-	//defer func() {
-	//	os.Exit(exitCode)
-	//}()
-	var _ = exitCode
-	//defer ph.PanicHandler(2, nil, writeIndefArrayEnd)
 	defer ph.PanicHandler(2, nil, nil)
 	app := cli.App{
 		Name:                 vcs.ModuleInfo(),
@@ -67,11 +54,16 @@ func main() {
 			return nil
 		},
 	}
-	//writeIndefArrayBegin()
 	err := app.Run(os.Args)
 	if err != nil {
 		exitCode = 1
 		log.Error().Stack().Err(err).Msg("an error occurred")
 	}
-	os.Exit(exitCode)
+	return
+}
+func main() {
+	exitCode := mainC()
+	if exitCode != 0 {
+		os.Exit(exitCode)
+	}
 }

@@ -8,6 +8,27 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+func NewCliCommand() *cli.Command {
+	return &cli.Command{
+		Name: "dev",
+		Subcommands: []*cli.Command{
+			{
+				Name: "panic",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:  "message",
+						Value: "default panic message",
+					},
+				},
+				Action: func(context *cli.Context) error {
+					log.Panic().Str("str", "strval").Uint64("uint64", 0xdeadbeef).Msg(context.String("message"))
+					return nil
+				},
+			},
+		},
+	}
+}
+
 var IoOverrideFlags = []cli.Flag{
 	&cli.StringFlag{
 		Category: "override",

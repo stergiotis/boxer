@@ -19,10 +19,8 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-func main() {
-	exitCode := 0
+func mainC() (exitCode int) {
 	logging.SetupZeroLog()
-	var _ = exitCode
 	defer ph.PanicHandler(2, nil, nil)
 	app := cli.App{
 		Name:                 vcs.ModuleInfo(),
@@ -48,6 +46,7 @@ func main() {
 			et7.NewCommand(),
 			tracing.NewCliCommand(),
 			docgen.NewDocCli(),
+			dev.NewCliCommand(),
 		},
 		After: func(context *cli.Context) error {
 			profiling.ProfilingHandleExit(context)
@@ -59,5 +58,11 @@ func main() {
 		exitCode = 1
 		log.Error().Stack().Err(err).Msg("an error occurred")
 	}
-	os.Exit(exitCode)
+	return
+}
+func main() {
+	exitCode := mainC()
+	if exitCode != 0 {
+		os.Exit(exitCode)
+	}
 }
