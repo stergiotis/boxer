@@ -12,10 +12,10 @@ import (
 )
 
 type IdStack struct {
-	instanceId ImGuiID
-	seed0      ImGuiID
 	stack      *containers.Stack[ImGuiID]
 	DebugStack *containers.Stack[string]
+	instanceId ImGuiID
+	seed0      ImGuiID
 }
 
 func NewIdStack(enableDebug bool) *IdStack {

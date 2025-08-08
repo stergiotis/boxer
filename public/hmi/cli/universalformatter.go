@@ -18,12 +18,12 @@ import (
 )
 
 type UniversalCliFormatter struct {
-	flags        []cli.Flag
-	dumper       *godump.Dumper
 	cborEncMode  cbor.EncMode
 	cborDiagMode cbor.DiagMode
-	markdown     bool
+	dumper       *godump.Dumper
 	nametransf   config.NameTransformFunc
+	flags        []cli.Flag
+	markdown     bool
 }
 
 func NewUniversalCliFormatter(nametransf config.NameTransformFunc) (inst *UniversalCliFormatter, err error) {

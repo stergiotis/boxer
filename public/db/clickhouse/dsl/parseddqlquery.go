@@ -62,18 +62,20 @@ func parseSql(sql string, errL antlr.ErrorListener, errStrategy antlr.ErrorStrat
 }
 
 type ParsedDqlQuery struct {
-	paramSlotSetErr    error
-	parseTree          *grammar.QueryStmtContext
-	parser             *grammar.ClickHouseParser
-	errL               *antlr4utils.StoringErrListener
-	errS               antlr.ErrorStrategy
-	recoverParseErrors bool
+	paramSlotSetErr error
+	errS            antlr.ErrorStrategy
+	parseTree       *grammar.QueryStmtContext
+	parser          *grammar.ClickHouseParser
+	errL            *antlr4utils.StoringErrListener
 
 	paramBindEnv *ParamBindEnv
 	paramSlotSet *ParamSlotSet
-	paramExprs   []*grammar.SettingExprContext
 
-	inputSql string
+	inputSql   string
+	paramExprs []*grammar.SettingExprContext
+
+	recoverParseErrors bool
+
 	noParams bool
 }
 

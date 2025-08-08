@@ -52,9 +52,9 @@ func (inst *coSorterReverse[T]) Swap(i, j int) {
 var _ sort.Interface = (*coSorterReverse[int])(nil)
 
 type sorter struct {
-	n    int
 	less func(i, j int) bool
 	swap func(i, j int)
+	n    int
 }
 
 func (inst sorter) Len() int {

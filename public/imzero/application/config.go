@@ -160,15 +160,16 @@ func (inst *ImZeroSkiaClientConfig) Validate(force bool) (nMessages int) {
 var _ config.Configer = (*ImZeroSkiaClientConfig)(nil)
 
 type Config struct {
-	MainFontTTF            string
-	ImGuiBinary            string
-	MaxRelaunches          int
-	MainFontSizeInPixels   float32
-	UseWasm                bool
 	ImZeroSkiaClientConfig *ImZeroSkiaClientConfig
 
-	nValidationMessages int
-	validated           bool
+	MainFontTTF   string
+	ImGuiBinary   string
+	MaxRelaunches int
+
+	nValidationMessages  int
+	MainFontSizeInPixels float32
+	UseWasm              bool
+	validated            bool
 }
 
 func (inst *Config) ToCliFlags(nameTransf config.NameTransformFunc, envVarNameTransf config.NameTransformFunc) []cli.Flag {

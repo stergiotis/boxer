@@ -6,10 +6,10 @@ import (
 )
 
 type Identifier struct {
+	ParseNode   *grammar.IdentifierContext
 	Name        string
 	Backtick    bool
 	DoubleQuote bool
-	ParseNode   *grammar.IdentifierContext
 }
 
 func (inst *Identifier) LoadContext(ctx *grammar.IdentifierContext) {
@@ -39,8 +39,8 @@ func (inst *Identifier) LoadContext(ctx *grammar.IdentifierContext) {
 }
 
 type ColumnType struct {
-	Sql       string
 	ParseNode *grammar.ColumnTypeExprContext
+	Sql       string
 }
 
 func (inst *ColumnType) LoadContext(ctx *grammar.ColumnTypeExprContext) {

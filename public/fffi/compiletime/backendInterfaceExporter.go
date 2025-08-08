@@ -26,11 +26,11 @@ type BackendInterfaceExporter struct {
 }
 
 type CompatibilityRecord struct {
-	FeatureNoThrowTrue  bool               `cbor:"noThrowTrue"`
-	FeatureNoThrowFalse bool               `cbor:"noThrowFalse"`
+	Hash                []byte             `cbor:"hash"`
 	MinId               runtime.FuncProcId `cbor:"minId"`
 	MaxId               runtime.FuncProcId `cbor:"maxId"`
-	Hash                []byte             `cbor:"hash"`
+	FeatureNoThrowTrue  bool               `cbor:"noThrowTrue"`
+	FeatureNoThrowFalse bool               `cbor:"noThrowFalse"`
 }
 
 func NewCompatibilityRecord() *CompatibilityRecord {
