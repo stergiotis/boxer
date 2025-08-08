@@ -6,7 +6,7 @@ import "github.com/stergiotis/boxer/public/imzero/imgui"
 
 type ImPlotPoint complex128
 
-// NullSeparatedStringArray A string containing multiple substrings seperated by the null character. No null termination is needed.
+// NullSeparatedStringArray A string containing multiple substrings separated by the null character. No null termination is needed.
 type NullSeparatedStringArray string
 
 type ImPlotRange complex128

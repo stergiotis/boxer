@@ -296,7 +296,7 @@ func (inst *Application) handleNonNilError(err error) {
 				log.Error().Err(err).Msg("imzero binary exited, unable to re-Launch")
 				*inst.shutdown = true
 			}
-			log.Warn().Err(err).Msg("imzero binary exited, sucessfully re-launched")
+			log.Warn().Err(err).Msg("imzero binary exited, successfully re-launched")
 		} else {
 			log.Error().Err(err).Msg("imzero binary exited")
 			*inst.shutdown = true
