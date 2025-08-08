@@ -1,11 +1,12 @@
 package ph
 
 import (
-	"github.com/rs/zerolog/log"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"os"
 	"runtime/debug"
 	"strings"
+
+	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 func ConvertPanicToError(panicErr any) error {
@@ -14,15 +15,15 @@ func ConvertPanicToError(panicErr any) error {
 	trace := strings.Split(string(debug.Stack()), "\n")
 	if ok {
 		// TODO attach regular stack trace to e
-		return eb.Build().Strs("stacktrace", trace).Errorf("recovering from panic: %w", e)
+		return eb.Build().WithoutStack().Strs("stacktrace", trace).Errorf("recovering from panic: %w", e)
 	} else {
-		return eb.Build().Strs("stacktrace", trace).Errorf("recovering from panic: %+v", panicErr)
+		return eb.Build().WithoutStack().Strs("stacktrace", trace).Errorf("recovering from panic: %+v", panicErr)
 	}
 }
 func PanicHandler(exitCode int, afterPanic func(), ensure func()) {
 	if err := recover(); err != nil {
 		e := ConvertPanicToError(err)
-		log.Error().Stack().Err(e).Msg("program panicked")
+		log.Error().Err(e).Msg("program panicked")
 		if ensure != nil {
 			ensure()
 		}
