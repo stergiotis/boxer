@@ -235,7 +235,7 @@ func checkForBuildTag(a *ast.File, tag string) (outerIndex int, innerIndex int, 
 		return
 	}
 	for i, cg := range a.Comments {
-		if cg.List != nil && len(cg.List) > 0 {
+		if len(cg.List) > 0 {
 			for j, c := range cg.List {
 				t := strings.Trim(c.Text, " \t\n")
 				if strings.HasPrefix(t, "//go:build") {

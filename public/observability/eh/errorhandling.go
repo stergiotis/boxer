@@ -7,25 +7,25 @@ import (
 	"github.com/pkg/errors"
 )
 
-type singleWrappedWithStack struct {
+type singleWrappedWithStackError struct {
 	wrappedErr unwrapableSingle
 	stack      *stack
 	cborData   []byte
 }
 
-func (inst *singleWrappedWithStack) SetCBORStructuredData(p []byte) {
+func (inst *singleWrappedWithStackError) SetCBORStructuredData(p []byte) {
 	inst.cborData = p
 }
 
-func (inst *singleWrappedWithStack) GetCBORStructuredData() []byte {
+func (inst *singleWrappedWithStackError) GetCBORStructuredData() []byte {
 	return inst.cborData
 }
 
-func (inst *singleWrappedWithStack) Error() string {
+func (inst *singleWrappedWithStackError) Error() string {
 	return inst.wrappedErr.Error()
 }
 
-func (inst *singleWrappedWithStack) StackTrace() errors.StackTrace {
+func (inst *singleWrappedWithStackError) StackTrace() errors.StackTrace {
 	s := inst.stack
 	f := make([]errors.Frame, len(*s))
 	for i := 0; i < len(f); i++ {
@@ -34,33 +34,33 @@ func (inst *singleWrappedWithStack) StackTrace() errors.StackTrace {
 	return f
 }
 
-func (inst *singleWrappedWithStack) Unwrap() error {
+func (inst *singleWrappedWithStackError) Unwrap() error {
 	return inst.wrappedErr.Unwrap()
 }
 
-var _ unwrapableSingle = (*singleWrappedWithStack)(nil)
-var _ stackTracer = (*singleWrappedWithStack)(nil)
-var _ ErrorWithStructuredData = (*singleWrappedWithStack)(nil)
+var _ unwrapableSingle = (*singleWrappedWithStackError)(nil)
+var _ stackTracer = (*singleWrappedWithStackError)(nil)
+var _ ErrorWithStructuredData = (*singleWrappedWithStackError)(nil)
 
-type multiWrappedWithStack struct {
+type multiWrappedWithStackError struct {
 	wrappedErr unwrapableMulti
 	stack      *stack
 	cborData   []byte
 }
 
-func (inst *multiWrappedWithStack) SetCBORStructuredData(p []byte) {
+func (inst *multiWrappedWithStackError) SetCBORStructuredData(p []byte) {
 	inst.cborData = p
 }
 
-func (inst *multiWrappedWithStack) GetCBORStructuredData() []byte {
+func (inst *multiWrappedWithStackError) GetCBORStructuredData() []byte {
 	return inst.cborData
 }
 
-func (inst *multiWrappedWithStack) Error() string {
+func (inst *multiWrappedWithStackError) Error() string {
 	return inst.wrappedErr.Error()
 }
 
-func (inst *multiWrappedWithStack) StackTrace() errors.StackTrace {
+func (inst *multiWrappedWithStackError) StackTrace() errors.StackTrace {
 	s := inst.stack
 	f := make([]errors.Frame, len(*s))
 	for i := 0; i < len(f); i++ {
@@ -69,33 +69,33 @@ func (inst *multiWrappedWithStack) StackTrace() errors.StackTrace {
 	return f
 }
 
-func (inst *multiWrappedWithStack) Unwrap() []error {
+func (inst *multiWrappedWithStackError) Unwrap() []error {
 	return inst.wrappedErr.Unwrap()
 }
 
-var _ unwrapableMulti = (*multiWrappedWithStack)(nil)
-var _ stackTracer = (*multiWrappedWithStack)(nil)
-var _ ErrorWithStructuredData = (*multiWrappedWithStack)(nil)
+var _ unwrapableMulti = (*multiWrappedWithStackError)(nil)
+var _ stackTracer = (*multiWrappedWithStackError)(nil)
+var _ ErrorWithStructuredData = (*multiWrappedWithStackError)(nil)
 
-type withStack struct {
+type withStackError struct {
 	err      error
 	stack    *stack
 	cborData []byte
 }
 
-func (inst *withStack) SetCBORStructuredData(p []byte) {
+func (inst *withStackError) SetCBORStructuredData(p []byte) {
 	inst.cborData = p
 }
 
-func (inst *withStack) GetCBORStructuredData() []byte {
+func (inst *withStackError) GetCBORStructuredData() []byte {
 	return inst.cborData
 }
 
-func (inst *withStack) Error() string {
+func (inst *withStackError) Error() string {
 	return inst.err.Error()
 }
 
-func (inst *withStack) StackTrace() errors.StackTrace {
+func (inst *withStackError) StackTrace() errors.StackTrace {
 	s := inst.stack
 	if s == nil {
 		return nil
@@ -107,28 +107,28 @@ func (inst *withStack) StackTrace() errors.StackTrace {
 	return f
 }
 
-var _ error = (*withStack)(nil)
-var _ stackTracer = (*withStack)(nil)
-var _ ErrorWithStructuredData = (*withStack)(nil)
+var _ error = (*withStackError)(nil)
+var _ stackTracer = (*withStackError)(nil)
+var _ ErrorWithStructuredData = (*withStackError)(nil)
 
 func ErrorfWithData(cborData []byte, format string, a ...any) error {
 	err := fmt.Errorf(format, a...)
 	s := callers(4)
 	switch e := err.(type) {
 	case unwrapableMulti:
-		return &multiWrappedWithStack{
+		return &multiWrappedWithStackError{
 			wrappedErr: e,
 			stack:      s,
 			cborData:   cborData,
 		}
 	case unwrapableSingle:
-		return &singleWrappedWithStack{
+		return &singleWrappedWithStackError{
 			wrappedErr: e,
 			stack:      s,
 			cborData:   cborData,
 		}
 	}
-	return &withStack{
+	return &withStackError{
 		err:      err,
 		stack:    s,
 		cborData: cborData,
@@ -138,19 +138,19 @@ func ErrorfWithDataWithoutStack(cborData []byte, format string, a ...any) error 
 	err := fmt.Errorf(format, a...)
 	switch e := err.(type) {
 	case unwrapableMulti:
-		return &multiWrappedWithStack{
+		return &multiWrappedWithStackError{
 			wrappedErr: e,
 			stack:      nil,
 			cborData:   cborData,
 		}
 	case unwrapableSingle:
-		return &singleWrappedWithStack{
+		return &singleWrappedWithStackError{
 			wrappedErr: e,
 			stack:      nil,
 			cborData:   cborData,
 		}
 	}
-	return &withStack{
+	return &withStackError{
 		err:      err,
 		stack:    nil,
 		cborData: cborData,

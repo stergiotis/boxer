@@ -165,7 +165,7 @@ func (inst *ParamSlotSet) NamesAndTypes() iter.Seq2[string, *containers.HashSet[
 	}
 }
 func (inst *ParamSlotSet) Clear() {
-	if inst.typesLu != nil && len(inst.typesLu) > 0 {
+	if len(inst.typesLu) > 0 {
 		maps.Clear(inst.typesLu)
 	}
 	inst.paramOccurrences = 0

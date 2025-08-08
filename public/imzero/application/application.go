@@ -68,8 +68,6 @@ func NewApplication(cfg *Config) (app *Application, err error) {
 	return
 }
 
-var MaximumNumberOfRelaunches = eh.Errorf("maximum number of re-launches reached")
-
 func (inst *Application) Launch() (err error) {
 	inst.relaunches++
 	cfg := inst.Config
@@ -79,7 +77,7 @@ func (inst *Application) Launch() (err error) {
 			log.Info().Int("relaunches", inst.relaunches).Msg("maximum number of re-launches reached")
 			inst.relaunchable = false
 			*inst.shutdown = true
-			return MaximumNumberOfRelaunches
+			return ErrMaximumNumberOfRelaunches
 		} else {
 			log.Info().Int("relaunches", inst.relaunches).Int("max", cfg.MaxRelaunches).Msg("re-launching")
 		}
@@ -179,7 +177,8 @@ func (inst *Application) Launch() (err error) {
 	return
 }
 
-var ErrorNeedsToBeLaunchedBeforeRun = eh.Errorf("application needs to be launched before run")
+var ErrNeedsToBeLaunchedBeforeRun = eh.Errorf("application needs to be launched before run")
+var ErrMaximumNumberOfRelaunches = eh.Errorf("maximum number of re-launches reached")
 
 func defaultRenderLoopHandler(marshaller *runtime.Marshaller) error {
 	if imgui.Begin("default render loop handler") {
@@ -191,7 +190,7 @@ func defaultRenderLoopHandler(marshaller *runtime.Marshaller) error {
 
 func (inst *Application) Run() (err error) {
 	if inst.relaunches == 0 {
-		return ErrorNeedsToBeLaunchedBeforeRun
+		return ErrNeedsToBeLaunchedBeforeRun
 	}
 	if inst.FffiEstablishedHandler != nil {
 		err = inst.FffiEstablishedHandler(inst.fffi)

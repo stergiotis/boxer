@@ -32,7 +32,7 @@ func MakeRenderImGuiStyleDemo() func() {
 		if !tested && imgui.Button("Test Load/Dump") {
 			style1.Dump(ptr)
 			style2.Load(ptr)
-			passed = reflect.DeepEqual(style1, style1)
+			passed = reflect.DeepEqual(style1, style2)
 			tested = true
 		}
 		if tested {
@@ -69,7 +69,7 @@ func MakeRenderImPlotStyleDemo() func() {
 		if !tested && imgui.Button("Test Load/Dump") {
 			style1.Dump(ptr)
 			style2.Load(ptr)
-			passed = reflect.DeepEqual(style1, style1)
+			passed = reflect.DeepEqual(style1, style2)
 			tested = true
 		}
 		if tested {

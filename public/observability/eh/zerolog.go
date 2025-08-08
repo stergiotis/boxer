@@ -2,14 +2,15 @@ package eh
 
 import (
 	"fmt"
+	"os"
+	"runtime"
+	"strings"
+
 	"github.com/fxamacker/cbor/v2"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/internal/3rdParty/errorhandling"
-	"os"
-	"runtime"
-	"strings"
 )
 
 type FrameTypeE uint8
@@ -343,7 +344,7 @@ func (inst *gatherFactsAndStacks) addError(err error, parentId uint64) error {
 	switch et := err.(type) {
 	case stackTracer:
 		st := et.StackTrace()
-		if st != nil && len(st) > 0 {
+		if len(st) > 0 {
 			stackIndex, inStackPos = inst.findStack(st)
 			frame = st[0]
 		}
@@ -365,7 +366,7 @@ func (inst *gatherFactsAndStacks) addError(err error, parentId uint64) error {
 	switch et := err.(type) {
 	case ErrorWithStructuredData:
 		data := et.GetCBORStructuredData()
-		if data != nil && len(data) > 0 {
+		if len(data) > 0 {
 			facts = append(facts, &errorFact{
 				StructuredData:    data,
 				Id:                id,
