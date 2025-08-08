@@ -2,18 +2,19 @@ package logging
 
 import (
 	"fmt"
-	"github.com/fxamacker/cbor/v2"
-	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/yassinebenaid/godump"
 	"os"
 	"runtime/debug"
 	"strings"
 	"time"
 
+	"github.com/fxamacker/cbor/v2"
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/yassinebenaid/godump"
+
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	cli "github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v2"
 )
 
 func getBuildTags(info *debug.BuildInfo) []string {
@@ -242,8 +243,21 @@ var LoggingFlags = []cli.Flag{
 			case "godump":
 				log.Logger = log.Output(NewCborGodumpLogger(w))
 				break
+			case "json":
+				{
+					l := NewJsonIndentLogger(w)
+					l.Indent = ""
+					l.Prefix = ""
+					log.Logger = log.Output(l)
+				}
+				break
 			case "json-indent":
-				log.Logger = log.Output(NewJsonIndentLogger(w))
+				{
+					l := NewJsonIndentLogger(w)
+					l.Indent = "  "
+					l.Prefix = ""
+					log.Logger = log.Output(l)
+				}
 				break
 			case "cbor":
 				checkZeroLogCborBuild()

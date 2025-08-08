@@ -4,17 +4,18 @@ package logging
 
 import (
 	"bytes"
-	"encoding/json"
+
 	"github.com/fxamacker/cbor/v2"
+	"github.com/go-json-experiment/json"
+	"github.com/go-json-experiment/json/jsontext"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 func unmarshallZerologMsg(msg []byte) (v interface{}, err error) {
-	//err = json.Unmarshal(msg, &v)
-	dec := json.NewDecoder(bytes.NewReader(msg))
-	dec.UseNumber()
-	err = dec.Decode(&v)
+	err = json.UnmarshalDecode(jsontext.NewDecoder(bytes.NewReader(msg)),
+		&v,
+		json.DefaultOptionsV2())
 	if err != nil {
 		err = eb.Build().Bytes("msg", msg).Errorf("unable to unmarshall json zerolog msg: %w", err)
 		return

@@ -3,9 +3,11 @@ package logging
 import (
 	"bytes"
 	"encoding/base64"
-	"encoding/json"
-	"github.com/fxamacker/cbor/v2"
 	"strings"
+
+	"github.com/fxamacker/cbor/v2"
+	"github.com/go-json-experiment/json"
+	"github.com/go-json-experiment/json/jsontext"
 )
 
 const embeddedCborPrfixStr = "\"data:application/cbor;base64,"
@@ -31,9 +33,11 @@ func embeddAsCbor(cborEncMode cbor.EncMode, v any) (s string, err error) {
 		return string(r), nil
 	}
 	buf.Reset()
-	enc := json.NewEncoder(buf)
-	enc.SetEscapeHTML(false)
-	err = enc.Encode(v)
+	err = json.MarshalEncode(jsontext.NewEncoder(buf,
+		jsontext.EscapeForHTML(false),
+		jsontext.EscapeForJS(false),
+	), v,
+		json.DefaultOptionsV2())
 	if err != nil {
 		return
 	}

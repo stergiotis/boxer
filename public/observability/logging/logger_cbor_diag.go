@@ -1,9 +1,10 @@
 package logging
 
 import (
+	"io"
+
 	"github.com/fxamacker/cbor/v2"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"io"
 )
 
 type CborDiagLogger struct {
