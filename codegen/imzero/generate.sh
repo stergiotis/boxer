@@ -22,4 +22,4 @@ rm -f "$here/main"
 
 cd "$here"
 
-find . -name "*.go" -perm /200 -not -name "*manual*" -exec gofmt -w {} \;
+find ../../public/imzero -name "*.go" -perm /200 -not -name "*manual*" -exec gofmt -w {} \;

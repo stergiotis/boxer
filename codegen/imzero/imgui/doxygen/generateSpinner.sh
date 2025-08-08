@@ -40,5 +40,5 @@ xsltproc --stringparam apidefine "IMGUI_API" transform.xslt namespaceImSpinner.x
 xsltproc --stringparam file imspinner.h --stringparam package $package --stringparam tags fffi_idl_code --stringparam mode auto functions.xslt namespaceImSpinner2.xml > spinner.out.idl.go
 #xsltproc --stringparam file imspinner.h --stringparam package $package --stringparam tags fffi_idl_code --stringparam mode manual functions.xslt namespaceImSpinner2.xml > spinner_manual.out.idl.go
 
-cp spinner.out.idl.go "$dest_dir/"
+mv spinner.out.idl.go "$dest_dir/"
 #cp spinner_manual.out.idl.go "$dest_dir/"

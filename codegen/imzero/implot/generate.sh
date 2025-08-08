@@ -58,3 +58,9 @@ sed -i "s/ ImRect/ imgui.ImRect/g" "$outfile"
 sed -i "s/ ImTextureID/ imgui.ImTextureID/g" "$outfile"
 sed -i "s/ ImGui/ imgui.ImGui/g" "$outfile"
 sed -i "s/ImGuiCond_/imgui.ImGuiCond_/g" "$outfile"
+
+cd "$here"
+rm -f ../../../public/imzero/implot/*.out.go
+rm -f ../../../public/imzero/implot/*.out.idl.go
+mv -v ./*.out.go ../../../public/imzero/implot/ || true
+mv -v ./*.out.idl.go ../../../public/imzero/implot/ || true

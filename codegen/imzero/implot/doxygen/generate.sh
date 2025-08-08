@@ -89,9 +89,9 @@ count_functions "functions_manual_internal.out.idl.go"
 count_functions_header "$implot_dir/implot.h" "IMPLOT_API"
 count_functions_header "$implot_dir/implot.h" "IMPLOT_TMP"
 
-cp functions_auto_api.out.idl.go "$dest_dir/"
+mv functions_auto_api.out.idl.go "$dest_dir/"
 #cp functions_auto_internal.out.idl.go "$dest_dir/"
-cp enums_api.out.go "$dest_dir/"
+mv enums_api.out.go "$dest_dir/"
 #cp enums_internal.out.go "$dest_dir/"
 rm -f enums_internal.out.go
 "$dest_dir/generate.sh"

@@ -17,3 +17,8 @@ mkdir -p "$IMZERO_CPP_BINDING_DIR/imcolortextedit"
 	                --funcProcIdOffset 3000 \
 			            --goCodeProlog $'import "github.com/stergiotis/boxer/public/imzero/imgui"\n' \
 			            --cppOutputFile "$IMZERO_CPP_BINDING_DIR/imcolortextedit/dispatch.h" 2>&1 | ./main cbor diag
+cd "$here"
+rm -f ../../../public/imzero/imcolortextedit/*.out.go
+rm -f ../../../public/imzero/imcolortextedit/*.out.idl.go
+mv -v ./*.out.go ../../../public/imzero/imcolortextedit/ || true
+mv -v ./*.out.idl.go ../../../public/imzero/imcolortextedit/ || true

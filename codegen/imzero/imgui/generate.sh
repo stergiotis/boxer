@@ -41,3 +41,8 @@ mkdir -p "$IMZERO_CPP_BINDING_DIR/imgui"
                   --goCodeProlog $'import "github.com/stergiotis/boxer/public/imzero/dto"\n' \
 			            --runeCppType "ImWchar" \
 			            --cppOutputFile "$IMZERO_CPP_BINDING_DIR/imgui/dispatch.h"
+cd "$here"
+rm -f ../../../public/imzero/imgui/*.out.go
+rm -f ../../../public/imzero/imgui/*.out.idl.go
+mv -v ./*.out.go ../../../public/imzero/imgui/ || true
+mv -v ./*.out.idl.go ../../../public/imzero/imgui/ || true

@@ -24,6 +24,7 @@ func NewImColorEditorForeignPtr() (ptr ImColorEditorForeignPtr) {
 }
 
 func (foreignptr ImColorEditorForeignPtr) Destroy() {
+
 	_f := foreignptr.getFffi()
 	_f.AddProcedureId(0x00000bb9)
 	runtime.AddUintptrArg(_f, foreignptr)
@@ -31,12 +32,12 @@ func (foreignptr ImColorEditorForeignPtr) Destroy() {
 }
 
 func (foreignptr ImColorEditorForeignPtr) Render(title string) {
+
 	_f := foreignptr.getFffi()
 	_f.AddProcedureId(0x00000bba)
 	runtime.AddUintptrArg(_f, foreignptr)
 	runtime.AddStringArg(_f, title)
 	_f.CallProcedure()
-
 }
 
 func (foreignptr ImColorEditorForeignPtr) RenderV(title string, parentIsFocused bool, aSize imgui.ImVec2, aBorder bool) {
@@ -48,7 +49,6 @@ func (foreignptr ImColorEditorForeignPtr) RenderV(title string, parentIsFocused 
 	runtime.AddComplex64Arg(_f, aSize)
 	runtime.AddBoolArg(_f, aBorder)
 	_f.CallProcedure()
-
 }
 
 func (foreignptr ImColorEditorForeignPtr) SetText(text string) {
