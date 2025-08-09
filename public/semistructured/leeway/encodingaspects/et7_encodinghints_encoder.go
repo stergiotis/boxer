@@ -8,7 +8,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/stergiotis/boxer/public/semistructured/et7/base62"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/base62"
 )
 
 const EmptyAspectSet = AspectSet("0")

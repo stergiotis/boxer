@@ -15,7 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/tracing"
 	"github.com/stergiotis/boxer/public/observability/vcs"
 	"github.com/stergiotis/boxer/public/semistructured/cbor"
-	et7 "github.com/stergiotis/boxer/public/semistructured/et7/cli"
+	et7 "github.com/stergiotis/boxer/public/semistructured/leeway/cli"
 	"github.com/urfave/cli/v2"
 )
 

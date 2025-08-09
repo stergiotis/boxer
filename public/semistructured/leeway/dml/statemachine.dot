@@ -1,0 +1,20 @@
+digraph StateMachine {
+    rankdir=LR;
+    Initial [shape = doublecircle];
+    Initial -> InEntity [label="BeginEntity"];
+    InEntity -> Initial [label="EndEntity"];
+    InEntity -> InEntity [label="SetId"];
+    InEntity -> InEntity [label="SetTimestamp"];
+    InEntity -> InEntity [label="SetRouting"];
+    InEntity -> InEntity [label="SetLifecycle"];
+    InEntity -> InEntity [label="SetTransaction"];
+    InEntity -> InSection [label="BeginSectionXYZ"];
+    InEntity -> InEntity [label="FlushEntity"];
+    InSection -> InEntity [label="EndSection"];
+    InSection -> InAttribute [label="BeginAttribute(<fixed>)"];
+    InAttribute -> InAttribute [label="AddMembershipXYZ"];
+    InAttribute -> InAttribute [label="AddToCoContainers"];
+    InAttribute -> InAttribute [label="AddToContainer"];
+    InAttribute -> InSection [label="EndAttribute"];
+    InAttribute -> InEntity [label="EndSection"];
+}
