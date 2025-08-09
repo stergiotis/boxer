@@ -19,16 +19,23 @@ Alpha, incomplete test coverage, unstable, API may still change heavily.
 
 
 ## Glossary
+### Modules
 <dl>
+<dt>leeway</dt><dd>A code-driven entity-attribute-value data model.</dd>
+<dt>imzero</dt><dd>A CGO-free immediate mode GUI library based on <a href="https://github.com/ocornut/imgui">DearImGui</a>. Client applications are available in <a href="https://github.com/stergiotis/imzero_client_cpp">imzero_client_cpp</a>.</dd>
+<dt>fffi</dt><dd>Frame oriented Foreign Function Interface</dd>
 <dt>curlier</dt><dd>Go code mimicking <a href="https://curl.se/">cUrl</a>.</dd>
+<dt>eb</dt><dd>Structured error building.</dd>
+<dt>eh</dt><dd>Error handling.</dd>
+</dl>
+
+### Terms
+<dl>
 <dt>e2e</dt><dd>End-to-end.</dd>
 <dt>ea</dt><dd>Means input-output (german abbreviation to distinguish from core packages).</dd>
-<dt>eb</dt><dd>Error building.</dd>
-<dt>eh</dt><dd>Error handling.</dd>
 <dt>fec</dt><dd>Forward error correction.</dd>
 <dt>inst</dt><dd>Instance (similar to self, this).</dd>
-<dt>fffi</dt><dd>Frame oriented Foreign Function Interface</dd>
-<dt>imzero</dt><dd>A CGO-free immediate mode GUI library based on <a href="https://github.com/ocornut/imgui">DearImGui</a>. Client applications are available in <a href="https://github.com/stergiotis/imzero_client_cpp">imzero_client_cpp</a>.</dd>
+<dt>vcs</dt><dd>Version control system (e.g. git, svn, hg, perforce).</dd>
 </dl>
 
 ## Style Conventions
