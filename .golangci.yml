@@ -56,6 +56,10 @@ linters-settings:
         deny:
           - pkg: "github.com/pkg/errors"
             desc: Should be replaced by standard lib errors package
+          - pkg: "math/rand"
+            desc: Should be replaced by math/rand/v2
+          - pkg: "encoding/json"
+            desc: Should be replaced by encoding/json/v2
   gocritic:
     enabled-tags:
       - diagnostic

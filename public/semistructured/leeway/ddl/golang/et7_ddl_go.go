@@ -1,11 +1,13 @@
 package golang
 
 import (
+	"bytes"
 	"io"
 	"strings"
 
 	"github.com/ettle/strcase"
-	"github.com/go-json-experiment/json/v1"
+	"github.com/go-json-experiment/json"
+	"github.com/go-json-experiment/json/jsontext"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	canonicalTypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes"
@@ -13,7 +15,6 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	ddl2 "github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
 	encodingaspects2 "github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
-	"github.com/stergiotis/boxer/public/unsafeperf"
 )
 
 type TechnologySpecificCodeGenerator struct {
@@ -83,13 +84,25 @@ type Et7GoStructTag struct {
 }
 
 func (inst Et7GoStructTag) Marshall(w io.Writer) (err error) {
-	var b []byte
-	b, err = json.Marshal(&inst)
+	s := bytes.NewBuffer(make([]byte, 0, 4096))
+	enc1 := jsontext.NewEncoder(s,
+		jsontext.EscapeForHTML(false),
+		jsontext.EscapeForJS(false))
+	err = json.MarshalEncode(enc1,
+		&inst,
+		json.DefaultOptionsV2())
 	if err != nil {
+		err = eh.Errorf("unable to encode instance to json: %w", err)
 		return
 	}
-	err = json.NewEncoder(w).Encode(unsafeperf.UnsafeBytesToString(b))
+	enc := jsontext.NewEncoder(w,
+		jsontext.EscapeForHTML(false),
+		jsontext.EscapeForJS(false))
+	err = json.MarshalEncode(enc,
+		s.String(),
+		json.DefaultOptionsV2())
 	if err != nil {
+		err = eh.Errorf("unable to escape json string: %w", err)
 		return
 	}
 	return

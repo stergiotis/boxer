@@ -7,7 +7,8 @@ import (
 	"os"
 
 	"github.com/fxamacker/cbor/v2"
-	"github.com/go-json-experiment/json/v1"
+	"github.com/go-json-experiment/json"
+	"github.com/go-json-experiment/json/jsontext"
 	md "github.com/nao1215/markdown"
 	"github.com/stergiotis/boxer/public/config"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -104,17 +105,25 @@ func (inst *UniversalCliFormatter) FormatValue(context *cli.Context, v any) (err
 		_, err = fmt.Fprintf(out, "%q\n", v)
 	case "json":
 		syntax = md.SyntaxHighlightJSON
-		w := json.NewEncoder(out)
-		w.SetIndent("", "")
-		w.SetEscapeHTML(false)
-		err = w.Encode(v)
+		enc := jsontext.NewEncoder(out,
+			jsontext.EscapeForJS(false),
+			jsontext.EscapeForHTML(false))
+		err = json.MarshalEncode(enc,
+			v,
+			json.DefaultOptionsV2())
 		break
 	case "json-indent":
 		syntax = md.SyntaxHighlightJSON
-		w := json.NewEncoder(out)
-		w.SetIndent("", "  ")
-		w.SetEscapeHTML(false)
-		err = w.Encode(v)
+		enc := jsontext.NewEncoder(out,
+			jsontext.EscapeForJS(false),
+			jsontext.EscapeForHTML(false),
+			jsontext.Multiline(true),
+			jsontext.WithIndentPrefix(""),
+			jsontext.WithIndent("  "),
+		)
+		err = json.MarshalEncode(enc,
+			v,
+			json.DefaultOptionsV2())
 		break
 	case "cbor":
 		err = inst.cborEncMode.NewEncoder(out).Encode(v)

@@ -1,20 +1,21 @@
 package generator
 
 import (
-	"encoding/json"
 	"fmt"
-	"github.com/rs/zerolog/log"
-	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/urfave/cli/v2"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/go-json-experiment/json"
+	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/urfave/cli/v2"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 type NerdFontJsonMetaData struct {
