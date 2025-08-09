@@ -2,7 +2,7 @@ package ea
 
 import (
 	"io"
-	"math/rand"
+	"math/rand/v2"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
@@ -17,10 +17,10 @@ func TransferDataWithSplitReadAndWrites(dest ByteBlockWriter, nBytesToRead int, 
 	avgBytesReadBlock := maxConsecutiveBytesToRead / 2
 	for n < nBytesToRead {
 		// half probability: read block or read byte
-		if ra.Intn(avgBytesReadBlock+1) == 0 {
+		if ra.IntN(avgBytesReadBlock+1) == 0 {
 			// read block
 			blockReads++
-			l := ra.Intn(maxConsecutiveBytesToRead-1) + 1
+			l := ra.IntN(maxConsecutiveBytesToRead-1) + 1
 			t := tmp[:l]
 			var u int
 			u, err = io.ReadFull(r, t)

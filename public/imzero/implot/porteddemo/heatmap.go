@@ -3,11 +3,10 @@ package porteddemo
 import (
 	"github.com/stergiotis/boxer/public/imzero/imgui"
 	"github.com/stergiotis/boxer/public/imzero/implot"
-	"math/rand"
-	"time"
+	"math/rand/v2"
 )
 
-func MakeHeatmapsDemo() (r demofunc) {
+func MakeHeatmapsDemo() (r Demofunc) {
 	values1 := []float32{
 		0.8, 2.4, 2.5, 3.9, 0.0, 4.0, 0.0,
 		2.4, 0.0, 4.0, 1.0, 2.7, 0.0, 0.0,
@@ -24,7 +23,7 @@ func MakeHeatmapsDemo() (r demofunc) {
 	hm_flags := implot.ImPlotHeatmapFlags_None
 	axes_flags := implot.ImPlotAxisFlags_Lock | implot.ImPlotAxisFlags_NoGridLines | implot.ImPlotAxisFlags_NoTickMarks
 
-	ra := rand.New(rand.NewSource(time.Now().UnixNano()))
+	ra := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	const size = 80
 	values2 := make([]float32, size*size, size*size)
 	r = func() {

@@ -2,7 +2,7 @@ package porteddemo
 
 import "github.com/stergiotis/boxer/public/imzero/implot"
 
-func MakeInfLinesDemo() (r demofunc) {
+func MakeInfLinesDemo() (r Demofunc) {
 	vals := []float32{0.25, 0.5, 0.75}
 	r = func() {
 		if implot.BeginPlot("##Infinite") {

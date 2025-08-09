@@ -46,7 +46,7 @@ func ternary[T comparable](c bool, a T, b T) T {
 	}
 	return b
 }
-func MakeDigitalDemo() (r demofunc) {
+func MakeDigitalDemo() (r Demofunc) {
 	paused := false
 	dataDigitalX := []*RingBuffer[float64]{NewRingBuffer[float64](2000), NewRingBuffer[float64](2000)}
 	dataDigitalY := []*RingBuffer[float64]{NewRingBuffer[float64](2000), NewRingBuffer[float64](2000)}

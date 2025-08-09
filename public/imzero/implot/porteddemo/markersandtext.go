@@ -5,7 +5,7 @@ import (
 	"github.com/stergiotis/boxer/public/imzero/implot"
 )
 
-func MakeMarkersAndTextDemo() (r demofunc) {
+func MakeMarkersAndTextDemo() (r Demofunc) {
 	var mk_size float32
 	var mk_weight float32
 	r = func() {

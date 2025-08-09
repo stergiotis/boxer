@@ -4,7 +4,7 @@ package demo
 
 import (
 	"fmt"
-	"math/rand"
+	"math/rand/v2"
 	"sort"
 	"strings"
 
@@ -103,7 +103,7 @@ func MakeRenderInteractiveTable() func() {
 				data.Set(2, row, fmt.Sprintf("%02d", row))
 			}
 			for row := 0; row < rowCount; row++ {
-				data.Set(3, row, fmt.Sprintf("%03d", rand.Int31()%100))
+				data.Set(3, row, fmt.Sprintf("%03d", rand.Int32()%100))
 			}
 		}
 

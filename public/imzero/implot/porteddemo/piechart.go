@@ -5,7 +5,7 @@ import (
 	"github.com/stergiotis/boxer/public/imzero/implot"
 )
 
-func MakePieChartDemo() (r demofunc) {
+func MakePieChartDemo() (r Demofunc) {
 	labels1 := implot.MakeNullSeparatedStringArray("Frogs", "Hogs", "Dogs", "Logs")
 	labels2 := implot.MakeNullSeparatedStringArray("A", "B", "C", "D", "E")
 	data1 := []float32{0.15, 0.30, 0.2, 0.05}

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
-	"math/rand"
+	"math/rand/v2"
 	"net/netip"
 	"reflect"
 	"testing"

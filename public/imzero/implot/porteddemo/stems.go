@@ -5,7 +5,7 @@ import (
 	"math"
 )
 
-func MakeStemDemo() (r demofunc) {
+func MakeStemDemo() (r Demofunc) {
 	xs := make([]float32, 51, 51)
 	ys1 := make([]float32, 51, 51)
 	ys2 := make([]float32, 51, 51)

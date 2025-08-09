@@ -1,7 +1,7 @@
 package golay24
 
 import (
-	"math/rand"
+	"math/rand/v2"
 	"testing"
 
 	"github.com/rs/zerolog/log"

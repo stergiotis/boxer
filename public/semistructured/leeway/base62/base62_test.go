@@ -1,15 +1,14 @@
 package base62
 
 import (
-	"math/rand"
+	"math/rand/v2"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 )
 
 func TestRoundtrip(t *testing.T) {
-	rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
+	rnd := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	for i := 0; i < 1000; i++ {
 		n := rnd.Uint64()
 		n2, valid := Encode(n).Decode()

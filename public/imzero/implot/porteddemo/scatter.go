@@ -2,11 +2,11 @@ package porteddemo
 
 import (
 	"github.com/stergiotis/boxer/public/imzero/implot"
-	"math/rand"
+	"math/rand/v2"
 )
 
-func MakeScatterDemo() (r demofunc) {
-	ra := rand.New(rand.NewSource(0))
+func MakeScatterDemo() (r Demofunc) {
+	ra := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 
 	var xs1, ys1 []float32
 	xs1 = make([]float32, 100, 100)

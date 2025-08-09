@@ -5,7 +5,7 @@ import (
 	"github.com/stergiotis/boxer/public/imzero/implot"
 )
 
-func MakeImageDemo() (r demofunc) {
+func MakeImageDemo() (r Demofunc) {
 	bmin := []float64{0, 0}
 	bmax := []float64{1, 1}
 	uv0 := []float32{0, 0}

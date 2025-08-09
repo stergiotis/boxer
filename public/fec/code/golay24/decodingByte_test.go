@@ -2,9 +2,8 @@ package golay24
 
 import (
 	"encoding/binary"
-	"math/rand"
+	"math/rand/v2"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -14,7 +13,7 @@ func TestDecodeLowLevel(t *testing.T) {
 	input := make([]byte, sz, sz)
 	encoded := make([]byte, 0, sz*2)
 	decoded := make([]byte, sz, sz)
-	prng := rand.New(rand.NewSource(int64(time.Now().Nanosecond())))
+	prng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	for i := 0; i < len(input)/4; i++ {
 		binary.BigEndian.PutUint32(input[i*4:], prng.Uint32())
 	}
@@ -32,7 +31,7 @@ func BenchmarkDecodeLowLevel(b *testing.B) {
 	input := make([]byte, sz, sz)
 	encoded := make([]byte, 0, sz*2)
 	decoded := make([]byte, sz, sz)
-	prng := rand.New(rand.NewSource(int64(time.Now().Nanosecond())))
+	prng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	for i := 0; i < len(input)/4; i++ {
 		binary.BigEndian.PutUint32(input[i*4:], prng.Uint32())
 	}

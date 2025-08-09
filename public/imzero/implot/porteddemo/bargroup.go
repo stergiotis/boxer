@@ -5,7 +5,7 @@ import (
 	"github.com/stergiotis/boxer/public/imzero/implot"
 )
 
-func MakeDemoBarGroupsDemo() (r demofunc) {
+func MakeDemoBarGroupsDemo() (r Demofunc) {
 	data := []int8{83, 67, 23, 89, 83, 78, 91, 82, 85, 90, // midterm
 		80, 62, 56, 99, 55, 78, 88, 78, 90, 100, // final
 		80, 69, 52, 92, 72, 78, 75, 76, 89, 95} // course

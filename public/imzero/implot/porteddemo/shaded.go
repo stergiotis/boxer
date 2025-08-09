@@ -4,7 +4,7 @@ import (
 	"github.com/stergiotis/boxer/public/imzero/imgui"
 	"github.com/stergiotis/boxer/public/imzero/implot"
 	"math"
-	"math/rand"
+	"math/rand/v2"
 )
 
 type shadedstate struct {
@@ -23,7 +23,7 @@ var shaded = shadedstate{
 	ys3:    make([]float32, 1001, 1001),
 	ys4:    make([]float32, 1001, 1001),
 	alpha:  0.75,
-	r:      rand.New(rand.NewSource(0)),
+	r:      rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64())),
 }
 
 func DemoShadedPlot() {

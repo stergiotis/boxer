@@ -4,7 +4,7 @@ import (
 	"github.com/stergiotis/boxer/public/imzero/implot"
 )
 
-func MakeErrorbarDemo() (r demofunc) {
+func MakeErrorbarDemo() (r Demofunc) {
 	xs := []float32{1, 2, 3, 4, 5}
 	bar := []float32{1, 2, 5, 3, 4}
 	lin1 := []float32{8, 8, 9, 7, 8}

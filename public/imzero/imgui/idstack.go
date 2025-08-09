@@ -7,7 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/unsafeperf"
 	"hash/crc32"
-	"math/rand"
+	"math/rand/v2"
 	"strconv"
 )
 

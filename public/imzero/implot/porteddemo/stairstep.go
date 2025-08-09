@@ -6,7 +6,7 @@ import (
 	"math"
 )
 
-func MakeStairstepDemo() (r demofunc) {
+func MakeStairstepDemo() (r Demofunc) {
 	ys1 := make([]float32, 21, 21)
 	ys2 := make([]float32, 21, 21)
 	for i := 0; i < 21; i++ {

@@ -3,10 +3,10 @@ package porteddemo
 import (
 	"github.com/stergiotis/boxer/public/imzero/imgui"
 	"github.com/stergiotis/boxer/public/imzero/implot"
-	"math/rand"
+	"math/rand/v2"
 )
 
-func MakeHistogram2DDemo() (r demofunc) {
+func MakeHistogram2DDemo() (r Demofunc) {
 	count := 50000
 	xybins := []int{100, 100}
 	histFlags := implot.ImPlotHistogramFlags_None
@@ -14,7 +14,7 @@ func MakeHistogram2DDemo() (r demofunc) {
 	dist1 := make([]float32, 100000, 100000)
 	dist2 := make([]float32, 100000, 100000)
 
-	ra := rand.New(rand.NewSource(0))
+	ra := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	maxCount := 0.0
 	flags := implot.ImPlotAxisFlags_AutoFit | implot.ImPlotAxisFlags_Foreground
 	rect := implot.MakeImPlotRect(-6.0, 6.0, -6.0, 6.0)

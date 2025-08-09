@@ -4,7 +4,7 @@ import (
 	"github.com/stergiotis/boxer/public/imzero/imgui"
 	"github.com/stergiotis/boxer/public/imzero/implot"
 	"math"
-	"math/rand"
+	"math/rand/v2"
 )
 
 func populateWithNormalDistribution(ra *rand.Rand, n int, mu float32, sigma float32, dest []float32) {
@@ -12,14 +12,14 @@ func populateWithNormalDistribution(ra *rand.Rand, n int, mu float32, sigma floa
 		dest[i] = float32(ra.NormFloat64()*float64(sigma) + float64(mu))
 	}
 }
-func MakeHistogramDemo() (r demofunc) {
+func MakeHistogramDemo() (r Demofunc) {
 	hist_flags := implot.ImPlotHistogramFlags_Density
 	bins := implot.ImPlotBin(50)
 	mu := 5.0
 	sigma := 2.0
 	rangeP := false
 	rr := implot.ImPlotRange(complex(-3.0, 13.0))
-	ra := rand.New(rand.NewSource(0))
+	ra := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	dist := make([]float32, 10000, 10000)
 	populateWithNormalDistribution(ra, len(dist), float32(mu), float32(sigma), dist)
 	x := make([]float32, 100, 100)

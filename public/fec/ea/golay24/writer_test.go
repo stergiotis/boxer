@@ -2,9 +2,8 @@ package golay24
 
 import (
 	"bytes"
-	"math/rand"
+	"math/rand/v2"
 	"testing"
-	"time"
 
 	"github.com/stergiotis/boxer/public/fec/anchor"
 	"github.com/stretchr/testify/assert"
@@ -56,7 +55,7 @@ func TestPebbleWriter24Padding8(t *testing.T) {
 }
 
 func TestPebbleWriter24Regular(t *testing.T) {
-	ra := rand.New(rand.NewSource(time.Now().UnixNano()))
+	ra := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	check := func(m uint16, nAnchorBytes uint8, split bool) {
 		//log.Debug().Uint16("m", m).Int("nAnchorBytes", nAnchorBytes).Bool("split", split).Msg("executing check")
 		buf := &bytes.Buffer{}

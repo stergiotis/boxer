@@ -3,7 +3,7 @@ package minibatch
 import (
 	"bytes"
 	"io"
-	"math/rand"
+	"math/rand/v2"
 	"testing"
 	"time"
 
@@ -27,16 +27,22 @@ func TestNewMiniBatcher(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, batcher.SetMessageValidationFunc(msgVal))
 	require.False(t, batcher.NeedsEmit())
-	ra := rand.New(rand.NewSource(time.Now().UnixNano()))
+	src := rand.NewChaCha8([32]byte{
+		byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()),
+		byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()),
+		byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()),
+		byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()),
+	})
+	ra := rand.New(src)
 
 	totallyWrittenBytes := 0
 	emittedBytes := 0
 	n := 0
 	emits := 0
-	for i := 0; i < ra.Intn(10000)+200; i++ {
-		l := ra.Intn(sizeCriteria / 100)
+	for i := 0; i < ra.IntN(10000)+200; i++ {
+		l := ra.IntN(sizeCriteria / 100)
 		b := make([]byte, l, l)
-		_, err = io.ReadFull(ra, b)
+		_, err = io.ReadFull(src, b)
 		require.NoError(t, err)
 		n, err = direct.Write(b)
 		require.NoError(t, err)

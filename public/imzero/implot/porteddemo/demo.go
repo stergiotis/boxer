@@ -4,16 +4,16 @@ import (
 	"github.com/stergiotis/boxer/public/imzero/imgui"
 )
 
-type demofunc func()
+type Demofunc func()
 
-func demoHeader(label string, demo demofunc) {
+func demoHeader(label string, demo Demofunc) {
 	if imgui.TreeNodeEx(label) {
 		demo()
 		imgui.TreePop()
 	}
 }
 
-func MakeRenderPortedDemo() demofunc {
+func MakeRenderPortedDemo() Demofunc {
 	var bargroup = MakeDemoBarGroupsDemo()
 	var stairstep = MakeStairstepDemo()
 	var scatter = MakeScatterDemo()
@@ -27,7 +27,7 @@ func MakeRenderPortedDemo() demofunc {
 	var digital = MakeDigitalDemo()
 	var image = MakeImageDemo()
 	var markers = MakeMarkersAndTextDemo()
-	var r demofunc = func() {
+	var r Demofunc = func() {
 		demoHeader("Lines Plot", DemoLinePlot)
 		demoHeader("Shaded Plot", DemoShadedPlot)
 		demoHeader("Bars Plot", DemoBarPlot)

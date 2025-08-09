@@ -2,9 +2,8 @@ package golay24
 
 import (
 	"bytes"
-	"math/rand"
+	"math/rand/v2"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -15,7 +14,7 @@ func TestPebbleReader24Fuzzing(t *testing.T) {
 	buf := &bytes.Buffer{}
 	v := &bytes.Buffer{}
 	data := &bytes.Buffer{}
-	ra := rand.New(rand.NewSource(time.Now().UnixNano()))
+	ra := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 
 	laps := 1000
 	if testing.Short() {
@@ -26,22 +25,22 @@ func TestPebbleReader24Fuzzing(t *testing.T) {
 		v.Reset()
 		data.Reset()
 
-		nAnchorBytes := uint8(ra.Intn(12) + 2)
+		nAnchorBytes := uint8(ra.IntN(12) + 2)
 		w := NewWriter(buf, nAnchorBytes)
 		var err error
 		{ // garbage
-			nBytes := ra.Intn(4096)
+			nBytes := ra.IntN(4096)
 			for i := 0; i < nBytes; i++ {
-				buf.WriteByte(byte(ra.Intn(0xff + 1)))
+				buf.WriteByte(byte(ra.IntN(0xff + 1)))
 			}
 		}
 		_, err = w.BeginMessage()
 		require.NoError(t, err)
 
-		nBytes := ra.Intn(4 * 4096)
+		nBytes := ra.IntN(4 * 4096)
 		data.Grow(nBytes)
 		for i := 0; i < nBytes; i++ {
-			err = data.WriteByte(byte(ra.Intn(0xff + 1)))
+			err = data.WriteByte(byte(ra.IntN(0xff + 1)))
 			require.NoError(t, err)
 		}
 		_, _, _, _, err = ea.TransferDataWithSplitReadAndWrites(w, nBytes, data, 100, ra)
@@ -58,9 +57,10 @@ func TestPebbleReader24Fuzzing(t *testing.T) {
 }
 
 func TestPebbleReader24(t *testing.T) {
+	v := &bytes.Buffer{}
 	check := func(ra *rand.Rand) {
 		buf := &bytes.Buffer{}
-		nAnchorBytes := uint8(ra.Intn(13))
+		nAnchorBytes := uint8(ra.IntN(13))
 		w := NewWriter(buf, nAnchorBytes)
 		var err error
 		var n int
@@ -68,10 +68,10 @@ func TestPebbleReader24(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, nAnchorBytes, n)
 
-		nBytes := ra.Intn(4096)
+		nBytes := ra.IntN(4096)
 		data := make([]byte, 0, nBytes)
 		for i := 0; i < nBytes; i++ {
-			data = append(data, byte(ra.Intn(0xff+1)))
+			data = append(data, byte(ra.IntN(0xff+1)))
 		}
 		_, err = w.Write(data)
 		require.NoError(t, err)
@@ -79,8 +79,8 @@ func TestPebbleReader24(t *testing.T) {
 		paddingBits, err = w.EndMessage()
 		require.NoError(t, err)
 
-		v := &bytes.Buffer{}
 		r := NewGolay24Reader(buf, nAnchorBytes, 0, uint32(2*nBytes+3))
+		v.Reset()
 		_, _, _, _, err = ea.TransferDataWithSplitReadAndWrites(v, nBytes, r, 100, ra)
 		require.NoError(t, err)
 		switch paddingBits {
@@ -95,7 +95,9 @@ func TestPebbleReader24(t *testing.T) {
 			require.Fail(t, "invalid number of padding bits")
 		}
 	}
-	ra := rand.New(rand.NewSource(time.Now().UnixNano()))
+	v.WriteRune(0)
+	v.Reset()
+	ra := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	for i := 0; i < 100; i++ {
 		check(ra)
 	}
