@@ -10,10 +10,11 @@ import (
 	"github.com/stergiotis/boxer/public/fffi/compiletime"
 	"github.com/stergiotis/boxer/public/imzero/demo"
 	"github.com/stergiotis/boxer/public/imzero/nerdfont/generator"
+	"github.com/stergiotis/boxer/public/observability"
+	"github.com/stergiotis/boxer/public/observability/coverage"
 	"github.com/stergiotis/boxer/public/observability/logging"
 	"github.com/stergiotis/boxer/public/observability/ph"
 	"github.com/stergiotis/boxer/public/observability/profiling"
-	"github.com/stergiotis/boxer/public/observability/tracing"
 	"github.com/stergiotis/boxer/public/observability/vcs"
 	"github.com/stergiotis/boxer/public/semistructured/cbor"
 	"github.com/urfave/cli/v2"
@@ -37,7 +38,8 @@ func mainC() (exitCode int) {
 			logging.LoggingFlags,
 			profiling.ProfilingFlags,
 			dev.DebuggerFlags,
-			dev.IoOverrideFlags),
+			dev.IoOverrideFlags,
+			coverage.CoverageFlags),
 		Commands: []*cli.Command{
 			dsl.NewCommand(),
 			cbor.NewCommand(),
@@ -47,7 +49,7 @@ func mainC() (exitCode int) {
 				Name:        "nerdfont",
 				Subcommands: []*cli.Command{generator.NewCommand()},
 			},
-			tracing.NewCliCommand(),
+			observability.NewCliCommand(),
 		},
 		After: func(context *cli.Context) error {
 			profiling.ProfilingHandleExit(context)

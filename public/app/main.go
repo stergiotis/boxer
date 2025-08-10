@@ -9,10 +9,11 @@ import (
 	"github.com/stergiotis/boxer/public/dev"
 	"github.com/stergiotis/boxer/public/docgen"
 	"github.com/stergiotis/boxer/public/fffi/compiletime"
+	"github.com/stergiotis/boxer/public/observability"
+	"github.com/stergiotis/boxer/public/observability/coverage"
 	"github.com/stergiotis/boxer/public/observability/logging"
 	"github.com/stergiotis/boxer/public/observability/ph"
 	"github.com/stergiotis/boxer/public/observability/profiling"
-	"github.com/stergiotis/boxer/public/observability/tracing"
 	"github.com/stergiotis/boxer/public/observability/vcs"
 	"github.com/stergiotis/boxer/public/semistructured/cbor"
 	et7 "github.com/stergiotis/boxer/public/semistructured/leeway/cli"
@@ -38,13 +39,14 @@ func mainC() (exitCode int) {
 			profiling.ProfilingFlags,
 			docgen.DocFlags,
 			dev.DebuggerFlags,
-			dev.IoOverrideFlags),
+			dev.IoOverrideFlags,
+			coverage.CoverageFlags),
 		Commands: []*cli.Command{
 			dsl.NewCommand(),
 			cbor.NewCommand(),
 			compiletime.NewCommand(nil, nil),
 			et7.NewCommand(),
-			tracing.NewCliCommand(),
+			observability.NewCliCommand(),
 			docgen.NewDocCli(),
 			dev.NewCliCommand(),
 		},
