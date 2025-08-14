@@ -27,11 +27,14 @@ func (inst *singleWrappedWithStackError) Error() string {
 
 func (inst *singleWrappedWithStackError) StackTrace() errors.StackTrace {
 	s := inst.stack
-	f := make([]errors.Frame, len(*s))
-	for i := 0; i < len(f); i++ {
-		f[i] = errors.Frame((*s)[i])
+	if s != nil {
+		f := make([]errors.Frame, len(*s))
+		for i := 0; i < len(f); i++ {
+			f[i] = errors.Frame((*s)[i])
+		}
+		return f
 	}
-	return f
+	return nil
 }
 
 func (inst *singleWrappedWithStackError) Unwrap() error {
