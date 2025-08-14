@@ -25,6 +25,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/base62"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/dml"
 	"github.com/urfave/cli/v2"
 	"lukechampine.com/blake3"
 )
@@ -198,39 +199,6 @@ var outputFormatFlag = &cli.StringFlag{
 		}
 		return nil
 	},
-}
-
-func writeArrowRecords(ent *InEntityJson, records []arrow.Record, w *ipc.FileWriter, w2 *pqarrow.FileWriter) (err error) {
-	records, err = ent.TransferRecords(records)
-	if err != nil {
-		err = eh.Errorf("unable to transfer records: %w", err)
-		return
-	}
-	if w != nil {
-		for _, r := range records {
-			err = w.Write(r)
-			if err != nil {
-				err = eh.Errorf("unable to write record to arrow ipc file writer: %w", err)
-				return
-			}
-		}
-	} else if w2 != nil {
-		for _, r := range records {
-			err = w2.WriteBuffered(r)
-			if err != nil {
-				err = eh.Errorf("unable to write record to parquet file writer: %w", err)
-				return
-			}
-		}
-	}
-	var rows int64
-	for _, r := range records {
-		rows += r.NumRows()
-		r.Release()
-	}
-	log.Trace().Int("records", len(records)).Int64("rows", rows).Msg("wrote records")
-	clear(records)
-	return
 }
 
 func NewCliCommand() *cli.Command {
@@ -429,7 +397,7 @@ func NewCliCommand() *cli.Command {
 									return
 								}
 								if i > 0 && i%batchSize == 0 {
-									err = writeArrowRecords(ent, records, w, w2)
+									records, err = dml.WriteArrowRecords(ent, records, w, w2)
 									if err != nil {
 										err = eh.Errorf("unable to write arrow records: %w", err)
 										return
@@ -456,7 +424,7 @@ func NewCliCommand() *cli.Command {
 									return
 								}
 								if i > 0 && i%batchSize == 0 {
-									err = writeArrowRecords(ent, records, w, w2)
+									records, err = dml.WriteArrowRecords(ent, records, w, w2)
 									if err != nil {
 										err = eh.Errorf("unable to write arrow records: %w", err)
 										return
@@ -465,7 +433,7 @@ func NewCliCommand() *cli.Command {
 								i++
 							}
 						}
-						err = writeArrowRecords(ent, records, w, w2)
+						records, err = dml.WriteArrowRecords(ent, records, w, w2)
 						if err != nil {
 							err = eh.Errorf("unable to write arrow records: %w", err)
 							return

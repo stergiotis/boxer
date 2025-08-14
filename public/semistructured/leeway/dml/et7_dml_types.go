@@ -4,6 +4,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/stergiotis/boxer/public/functional"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
@@ -45,3 +46,7 @@ type ArrowValueAdder struct {
 }
 
 var _ common.CodeBuilderHolderI = (*ArrowValueAdder)(nil)
+
+type TransferRecordsI interface {
+	TransferRecords(recordsIn []arrow.Record) (recordsOut []arrow.Record, err error)
+}
