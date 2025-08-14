@@ -18,6 +18,7 @@ const (
 	AspectUltraHeavySlowlyChangingFloat AspectE = 12
 	AspectLightBiasSmallInteger         AspectE = 13
 	AspectHeavyBiasSmallInteger         AspectE = 14
+	AspectSparse                        AspectE = 15
 )
 
 var MaxAspectExcl = slices.Max(AllAspects) + 1
@@ -38,6 +39,7 @@ var AllAspects = []AspectE{
 	AspectUltraHeavySlowlyChangingFloat,
 	AspectLightBiasSmallInteger,
 	AspectHeavyBiasSmallInteger,
+	AspectSparse,
 }
 
 const InvalidAspectEnumValueString = "<invalid AspectE>"
@@ -77,6 +79,8 @@ func (inst AspectE) String() string {
 		return "light-bias-small-integer"
 	case AspectHeavyBiasSmallInteger:
 		return "heavy-bias-small-integer"
+	case AspectSparse:
+		return "sparse"
 	}
 	return InvalidAspectEnumValueString
 }
