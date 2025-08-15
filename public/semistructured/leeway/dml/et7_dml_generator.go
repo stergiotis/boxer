@@ -243,8 +243,14 @@ func (inst *GoClassBuilder) composeFieldRelatedCode(op structFieldOperationE, cc
 	%sListBuilder%03d *array.ListBuilder
 `, prefix, idx, arrowBuilderClassName, prefix, idx)
 			} else {
-				_, err = fmt.Fprintf(b, `	%sFieldBuilder%03d *array.%sBuilder
+				if ct.IsScalar() {
+					_, err = fmt.Fprintf(b, `	%sFieldBuilder%03d *array.%sBuilder
 `, prefix, idx, arrowBuilderClassName)
+				} else {
+					_, err = fmt.Fprintf(b, `	%sFieldBuilder%03d *array.%sBuilder
+	%sListBuilder%03d *array.ListBuilder
+`, prefix, idx, arrowBuilderClassName, prefix, idx)
+				}
 			}
 			break
 		default:
@@ -265,8 +271,14 @@ func (inst *GoClassBuilder) composeFieldRelatedCode(op structFieldOperationE, cc
 	inst.%sListBuilder%03d = builder.Field(%d).(*array.ListBuilder)
 `, prefix, idx, idx, arrowBuilderClassName, prefix, idx, idx)
 			} else {
-				_, err = fmt.Fprintf(b, `	inst.%sFieldBuilder%03d = builder.Field(%d).(*array.%sBuilder)
+				if ct.IsScalar() {
+					_, err = fmt.Fprintf(b, `	inst.%sFieldBuilder%03d = builder.Field(%d).(*array.%sBuilder)
 `, prefix, idx, idx, arrowBuilderClassName)
+				} else {
+					_, err = fmt.Fprintf(b, `	inst.%sFieldBuilder%03d = builder.Field(%d).(*array.ListBuilder).ValueBuilder().(*array.%sBuilder)
+	inst.%sListBuilder%03d = builder.Field(%d).(*array.ListBuilder)
+`, prefix, idx, idx, arrowBuilderClassName, prefix, idx, idx)
+				}
 			}
 			break
 		default:
@@ -319,8 +331,17 @@ func (inst *GoClassBuilder) composeFieldRelatedCode(op structFieldOperationE, cc
 `, plainFieldName, argName)
 		break
 	case structFieldOperationPlainAppend:
-		_, err = fmt.Fprintf(b, `	inst.%sFieldBuilder%03d.Append(%sinst.%s%s)
+		if ct.IsScalar() {
+			_, err = fmt.Fprintf(b, `	inst.%sFieldBuilder%03d.Append(%sinst.%s%s)
 `, prefix, idx, arrowConversionPrefix, plainFieldName, arrowConversionSuffix)
+		} else {
+			_, err = fmt.Fprintf(b, `	inst.%sListBuilder%03d.Append(true)
+`, prefix, idx)
+			_, err = fmt.Fprintf(b, `	for _, v := range inst.%s {
+			inst.%sFieldBuilder%03d.Append(%sv%s)
+	}
+`, plainFieldName, prefix, idx, arrowConversionPrefix, arrowConversionSuffix)
+		}
 		break
 	case structFieldOperationPlainReset:
 		var zeroValueLiteral string
