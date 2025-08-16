@@ -207,6 +207,15 @@ func (inst *TechnologySpecificCodeGenerator) GenerateColumnCode(idx int, phy com
 		err = common.ErrNoCodebuilder
 		return
 	}
+	if idx > 0 {
+		_, err = b.WriteString(",\n\t")
+	} else {
+		_, err = b.WriteRune('\t')
+	}
+	if err != nil {
+		return
+	}
+
 	_, err = b.WriteRune('"')
 	if err != nil {
 		return
@@ -275,10 +284,7 @@ func (inst *TechnologySpecificCodeGenerator) GenerateColumnCode(idx int, phy com
 			return
 		}
 	}
-	_, err = b.WriteString(",\n")
-	if err != nil {
-		return
-	}
+
 	return
 }
 
