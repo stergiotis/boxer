@@ -41,27 +41,28 @@ var membershipVerbatimType = canonicalTypes.StringAstNode{
 }
 
 type CanonicalColumnarRepresentation struct {
-	aspectFilterFunc func(aspect encodingaspects2.AspectE) (keep bool)
+	aspectFilterFunc func(aspect encodingaspects2.AspectE) (keep bool, msg string)
 }
 
-func NewCanonicalColumnarRepresentation(aspectFilterFunc func(aspect encodingaspects2.AspectE) (keep bool)) *CanonicalColumnarRepresentation {
+func NewCanonicalColumnarRepresentation(aspectFilterFunc func(aspect encodingaspects2.AspectE) (keep bool, msg string)) *CanonicalColumnarRepresentation {
 	return &CanonicalColumnarRepresentation{
 		aspectFilterFunc: aspectFilterFunc,
 	}
 }
 
-func FilterEncodingAspect(filterFunc func(aspect encodingaspects2.AspectE) (keep bool), a ...encodingaspects2.AspectE) []encodingaspects2.AspectE {
+func FilterEncodingAspect(filterFunc func(aspect encodingaspects2.AspectE) (keep bool, msg string), a ...encodingaspects2.AspectE) []encodingaspects2.AspectE {
 	if filterFunc == nil {
 		return a
 	}
 	return slices.DeleteFunc(a, func(aspect encodingaspects2.AspectE) bool {
-		return !filterFunc(aspect)
+		keep, _ := filterFunc(aspect)
+		return !keep
 	})
 }
-func EncodingAspectFilterFuncFromTechnology(tech common.TechnologySpecificGeneratorI, minImplementationStatusIncl common.ImplementationStatusE) func(aspect encodingaspects2.AspectE) (keep bool) {
-	return func(aspect encodingaspects2.AspectE) (keep bool) {
+func EncodingAspectFilterFuncFromTechnology(tech common.TechnologySpecificGeneratorI, minImplementationStatusIncl common.ImplementationStatusE) func(aspect encodingaspects2.AspectE) (keep bool, msg string) {
+	return func(aspect encodingaspects2.AspectE) (keep bool, msg string) {
 		status, _ := tech.GetEncodingHintImplementationStatus(aspect)
-		return status >= minImplementationStatusIncl
+		return status >= minImplementationStatusIncl, ""
 	}
 }
 
