@@ -194,6 +194,9 @@ func (inst StylableName) String() string {
 	// NOTE: does _not_ enforce a style
 	return string(inst)
 }
+func (inst StylableName) Bytes() []byte {
+	return []byte(inst)
+}
 func (inst Key) String() string {
 	return string(inst)
 }
