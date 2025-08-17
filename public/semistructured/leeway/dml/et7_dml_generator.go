@@ -36,19 +36,22 @@ type structFieldOperationE uint8
 type sectionOperationE uint8
 
 const (
-	structFieldOperationDeclaration           structFieldOperationE = 0
-	structFieldOperationInitialization        structFieldOperationE = 1
-	structFieldOperationAppendScalar          structFieldOperationE = 2
-	structFieldOperationAppendContainer       structFieldOperationE = 3
-	structFieldOperationArgUse                structFieldOperationE = 4
-	structFieldOperationArgDeclaration        structFieldOperationE = 5
-	structFieldOperationArgDeclarationDemoted structFieldOperationE = 6
-	structFieldOperationStoreContainerLength  structFieldOperationE = 7
-	structFieldOperationAppendContainerLength structFieldOperationE = 8
-	structFieldOperationPlainDeclaration      structFieldOperationE = 9
-	structFieldOperationPlainAssignArg        structFieldOperationE = 10
-	structFieldOperationPlainAppend           structFieldOperationE = 11
-	structFieldOperationPlainReset            structFieldOperationE = 12
+	structFieldOperationDeclaration              structFieldOperationE = 0
+	structFieldOperationInitialization           structFieldOperationE = 1
+	structFieldOperationAppendScalar             structFieldOperationE = 2
+	structFieldOperationAppendContainer          structFieldOperationE = 3
+	structFieldOperationArgUse                   structFieldOperationE = 4
+	structFieldOperationArgDeclaration           structFieldOperationE = 5
+	structFieldOperationArgDeclarationDemoted    structFieldOperationE = 6
+	structFieldOperationStoreContainerLength     structFieldOperationE = 7
+	structFieldOperationAppendContainerLength    structFieldOperationE = 8
+	structFieldOperationPlainDeclaration         structFieldOperationE = 9
+	structFieldOperationPlainAssignArg           structFieldOperationE = 10
+	structFieldOperationPlainAppend              structFieldOperationE = 11
+	structFieldOperationPlainReset               structFieldOperationE = 12
+	structFieldOperationIncrementContainerLength structFieldOperationE = 13
+	structFieldOperationDeclareContainerLength   structFieldOperationE = 14
+	structFieldOperationResetContainerLength     structFieldOperationE = 15
 )
 const (
 	sectionOperationA sectionOperationE = 0
@@ -242,6 +245,9 @@ func (inst *GoClassBuilder) composeFieldRelatedCode(op structFieldOperationE, cc
 				_, err = fmt.Fprintf(b, `	%sFieldBuilder%03d *array.%sBuilder
 	%sListBuilder%03d *array.ListBuilder
 `, prefix, idx, arrowBuilderClassName, prefix, idx)
+				if err != nil {
+					return
+				}
 			} else {
 				if ct.IsScalar() {
 					_, err = fmt.Fprintf(b, `	%sFieldBuilder%03d *array.%sBuilder
@@ -297,15 +303,40 @@ func (inst *GoClassBuilder) composeFieldRelatedCode(op structFieldOperationE, cc
 		} else {
 			_, err = fmt.Fprintf(b, `	inst.%sFieldBuilder%03d.Append(%s%s%s)
 `, prefix, idx, arrowConversionPrefix, argName, arrowConversionSuffix)
+			if !ct.IsScalar() {
+				_, err = fmt.Fprintf(b, `	inst.%sContainerLength%03d++
+`, prefix, idx)
+			}
 		}
 		break
-	case structFieldOperationAppendContainer:
-		_, err = fmt.Fprintf(b, `	inst.%sListBuilder%03d.Append(true)
+	case structFieldOperationDeclareContainerLength:
+		_, err = fmt.Fprintf(b, `	
+%sContainerLength%03d int
+`, prefix, idx)
+	case structFieldOperationIncrementContainerLength:
+		_, err = fmt.Fprintf(b, `	inst.%sContainerLength%03d++
+`, prefix, idx)
+		break
+	case structFieldOperationResetContainerLength:
+		_, err = fmt.Fprintf(b, `	inst.%sContainerLength%03d = 0
 `, prefix, idx)
 		break
 	case structFieldOperationStoreContainerLength:
-		_, err = fmt.Fprintf(b, `	l = inst.%sListBuilder%03d.Len()
+		_, err = fmt.Fprintf(b, `	l = inst.%sContainerLength%03d
+	inst.%sContainerLength%03d = 0
+`, prefix, idx, prefix, idx)
+		break
+	case structFieldOperationAppendContainer:
+		if cc.PlainItemType == common.PlainItemTypeNone {
+			_, err = fmt.Fprintf(b, `	inst.%sListBuilder%03d.Append(true)
 `, prefix, idx)
+			if err != nil {
+				return
+			}
+		} else {
+			_, err = fmt.Fprintf(b, `	inst.%sListBuilder%03d.Append(true)
+`, prefix, idx)
+		}
 		break
 	case structFieldOperationAppendContainerLength:
 		// FIXME implement cast to uint64
@@ -369,6 +400,11 @@ func (inst *GoClassBuilder) composeAttributeClassAndFactoryCode(sectionIRH *comm
 		return
 	}
 	err = inst.composeFieldRelatedCodeAll(structFieldOperationDeclaration, sectionIRH.IterateColumnProps(), "")
+	if err != nil {
+		return
+	}
+	membershipIRH := sectionIRH.DeriveSubHolder(deriveSubHolderSelectMembership)
+	err = inst.composeFieldRelatedCodeAll(structFieldOperationDeclareContainerLength, membershipIRH.IterateColumnProps(), "")
 	if err != nil {
 		return
 	}
@@ -634,6 +670,10 @@ func (inst *GoClassBuilder) composeAttributeCode(sectionIRH *common.Intermediate
 		if err != nil {
 			return
 		}
+		err = inst.composeFieldRelatedCodeAll(structFieldOperationResetContainerLength, common.IterateColumnPropsMultiIntermediatePairHolders(nonScalarIRH, membershipIRH), "")
+		if err != nil {
+			return
+		}
 		// FIXME tableRowConfig
 		err = inst.composeFieldRelatedCodeAll(structFieldOperationAppendContainer, scalarIRH.IterateColumnProps(), "")
 		if err != nil {
@@ -695,6 +735,10 @@ func (inst *GoClassBuilder) composeAttributeCode(sectionIRH *common.Intermediate
 			}
 
 			err = inst.composeFieldRelatedCodeAll(structFieldOperationAppendScalar, nonScalarIRH.IterateColumnProps(), "")
+			if err != nil {
+				return
+			}
+			err = inst.composeFieldRelatedCodeAll(structFieldOperationIncrementContainerLength, nonScalarIRH.IterateColumnProps(), "")
 			if err != nil {
 				return
 			}
@@ -801,6 +845,14 @@ func (inst *GoClassBuilder) composeAttributeCode(sectionIRH *common.Intermediate
 							return
 						}
 						err = inst.composeFieldRelatedCode(structFieldOperationAppendScalar, mixedParamsCc[mixed], mixedParamsCp[mixed], mixedParamsIdx[mixed])
+						if err != nil {
+							return
+						}
+						err = inst.composeFieldRelatedCode(structFieldOperationIncrementContainerLength, cc, cp, i)
+						if err != nil {
+							return
+						}
+						err = inst.composeFieldRelatedCode(structFieldOperationIncrementContainerLength, mixedParamsCc[mixed], mixedParamsCp[mixed], mixedParamsIdx[mixed])
 					} else {
 						_, err = fmt.Fprintf(b, "func (inst *%s) %s(", inst.clsNames.inAttributeClassName, funcName)
 						if err != nil {
@@ -819,6 +871,10 @@ func (inst *GoClassBuilder) composeAttributeCode(sectionIRH *common.Intermediate
 							return
 						}
 						err = inst.composeFieldRelatedCode(structFieldOperationAppendScalar, cc, cp, i)
+						if err != nil {
+							return
+						}
+						err = inst.composeFieldRelatedCode(structFieldOperationIncrementContainerLength, cc, cp, i)
 					}
 					if err != nil {
 						return
@@ -843,7 +899,6 @@ func (inst *GoClassBuilder) composeAttributeCode(sectionIRH *common.Intermediate
 		if err != nil {
 			return
 		}
-		membershipSupportIRH := sectionIRH.DeriveSubHolder(deriveSubHolderSelectMembershipSupport)
 
 		for cc, cp := range membershipSupportIRH.IterateColumnProps() {
 			for i := 0; i < cp.Length(); i++ {
@@ -1149,17 +1204,13 @@ func (inst *GoClassBuilder) composeEntityClassAndFactoryCode(tableName common.St
 			return
 		}
 	}
-	plainIRH := entityIRH.DeriveSubHolder(deriveSubHolderSelectPlainValues)
-	taggedIRH := entityIRH.DeriveSubHolder(deriveSubHolderSelectTaggedValues)
-	err = inst.composeFieldRelatedCodeAll(structFieldOperationDeclaration, taggedIRH.IterateColumnProps(), "\n")
+	plainIRH := entityIRH.DeriveSubHolder(deriveSubHolderSelectPlainValues).DeriveSubHolder(deriveSubHolderSelectScalar)
+	plainScalarIRH := plainIRH.DeriveSubHolder(deriveSubHolderSelectScalar)
+	err = inst.composeFieldRelatedCodeAll(structFieldOperationPlainDeclaration, plainScalarIRH.IterateColumnProps(), "\n")
 	if err != nil {
 		return
 	}
-	err = inst.composeFieldRelatedCodeAll(structFieldOperationPlainDeclaration, plainIRH.IterateColumnProps(), "\n")
-	if err != nil {
-		return
-	}
-	err = inst.composeFieldRelatedCodeAll(structFieldOperationDeclaration, plainIRH.IterateColumnProps(), "\n")
+	err = inst.composeFieldRelatedCodeAll(structFieldOperationDeclaration, plainScalarIRH.IterateColumnProps(), "\n")
 	if err != nil {
 		return
 	}
