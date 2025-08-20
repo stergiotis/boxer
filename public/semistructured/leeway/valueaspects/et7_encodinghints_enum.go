@@ -56,6 +56,17 @@ const (
 
 	AspectVectorValue        AspectE = 45
 	AspectCanonicalizedValue AspectE = 46
+
+	AspectApplicationLevelEncrypted AspectE = 47
+
+	AspectHumanReadable   AspectE = 48
+	AspectMachineReadable AspectE = 49
+
+	AspectUltraShortLifespan AspectE = 50
+	AspectShortLifespan      AspectE = 51
+	AspectMediumLifespan     AspectE = 52
+	AspectLongLifespan       AspectE = 53
+	AspectUltraLongLifespan  AspectE = 54
 )
 
 var MaxAspectExcl = slices.Max(AllAspects) + 1
@@ -112,6 +123,14 @@ var AllAspects = []AspectE{
 
 	AspectVectorValue,
 	AspectCanonicalizedValue,
+
+	AspectApplicationLevelEncrypted,
+
+	AspectUltraShortLifespan,
+	AspectShortLifespan,
+	AspectMediumLifespan,
+	AspectLongLifespan,
+	AspectUltraLongLifespan,
 }
 
 const InvalidAspectEnumValueString = "<invalid AspectE>"
@@ -185,7 +204,7 @@ func (inst AspectE) String() string {
 	case AspectUnitRadioactiveActivitySI:
 		return "unit-radioactive-activity-si"
 	case AspectUnitAbsorbedDoseSI:
-		return "unit-absorved-dose-si"
+		return "unit-absorbed-dose-si"
 	case AspectUnitDoseEquivalentSI:
 		return "unit-dose-equivalent-si"
 	case AspectUnitCatalyticActivitySI:
@@ -218,6 +237,22 @@ func (inst AspectE) String() string {
 		return "vector-value"
 	case AspectCanonicalizedValue:
 		return "canonicalized-value"
+	case AspectApplicationLevelEncrypted:
+		return "application-level-encrypted"
+	case AspectHumanReadable:
+		return "human-readable"
+	case AspectMachineReadable:
+		return "machine-readable"
+	case AspectUltraShortLifespan:
+		return "ultra-short-lifespan"
+	case AspectShortLifespan:
+		return "short-lifespan"
+	case AspectMediumLifespan:
+		return "medium-lifespan"
+	case AspectLongLifespan:
+		return "long-lifespan"
+	case AspectUltraLongLifespan:
+		return "ultra-long-lifespan"
 	}
 	return InvalidAspectEnumValueString
 }
