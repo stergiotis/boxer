@@ -126,6 +126,9 @@ var AllAspects = []AspectE{
 
 	AspectApplicationLevelEncrypted,
 
+	AspectHumanReadable,
+	AspectMachineReadable,
+
 	AspectUltraShortLifespan,
 	AspectShortLifespan,
 	AspectMediumLifespan,
