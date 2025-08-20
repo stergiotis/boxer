@@ -11,6 +11,6 @@ cleanup() {
 }
 trap 'cleanup' EXIT
 cd "public/app"
-go build -v -buildvcs=true -tags $(cat "$here/tags" | tr -d "\n") ./main.go  -o "$appfile"
-cd -
+go build -v -buildvcs=true -tags $(cat "$here/tags" | tr -d "\n") ./main.go  -o "$appfile" 1>&2
+cd - > /dev/null
 "$appfile" --logFormat console "$@"

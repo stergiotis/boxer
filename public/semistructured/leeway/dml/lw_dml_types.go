@@ -8,13 +8,14 @@ import (
 	"github.com/stergiotis/boxer/public/functional"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
 
 type GoClassNamerI interface {
-	ComposeSchemaFactoryName(tableName common.StylableName) (functionName string, err error)
-	ComposeEntityClassName(tableName common.StylableName) (fullClassName string, err error)
-	ComposeSectionClassName(tableName common.StylableName, sectionName common.StylableName, sectionIndex int, sectionCount int) (fullClassName string, err error)
-	ComposeAttributeClassName(tableName common.StylableName, sectionName common.StylableName, sectionIndex int, sectionCount int) (fullClassName string, err error)
+	ComposeSchemaFactoryName(tableName naming.StylableName) (functionName string, err error)
+	ComposeEntityClassName(tableName naming.StylableName) (fullClassName string, err error)
+	ComposeSectionClassName(tableName naming.StylableName, sectionName naming.StylableName, sectionIndex int, sectionCount int) (fullClassName string, err error)
+	ComposeAttributeClassName(tableName naming.StylableName, sectionName naming.StylableName, sectionIndex int, sectionCount int) (fullClassName string, err error)
 	functional.PromiseReferentialTransparentI
 }
 

@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mapping"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
 	"github.com/stretchr/testify/require"
@@ -105,13 +106,13 @@ func TestSmoke(t *testing.T) {
 	manip.AddPlainValueItem(common2.PlainItemTypeEntityId, "a", ct1, encodingaspects.EmptyAspectSet, valueaspects.EmptyAspectSet)
 	manip.AddPlainValueItem(common2.PlainItemTypeEntityId, "b", ct2, encodingaspects.EmptyAspectSet, valueaspects.EmptyAspectSet)
 
-	manip.MergeTaggedValueColumn("sec0", "u", ct1, encodingaspects.EmptyAspectSet, valueaspects.EmptyAspectSet, useaspects.EmptyAspectSet, common2.MembershipSpecHighCardRef, common2.Key("coSectionGroup1"), common2.Key("streamingGroup1"))
-	manip.MergeTaggedValueColumn("sec0", "v", ct2, encodingaspects.EmptyAspectSet, valueaspects.EmptyAspectSet, useaspects.EmptyAspectSet, common2.MembershipSpecHighCardRef, common2.Key("coSectionGroup2"), common2.Key("streamingGroup2"))
-	manip.MergeTaggedValueColumn("sec0", "w", ct3, encodingaspects.EmptyAspectSet, valueaspects.EmptyAspectSet, useaspects.EmptyAspectSet, common2.MembershipSpecHighCardRef, common2.Key("coSectionGroup3"), common2.Key("streamingGroup3"))
-	manip.MergeTaggedValueColumn("sec1", "u", ct1, encodingaspects.EmptyAspectSet, valueaspects.EmptyAspectSet, useaspects.EmptyAspectSet, common2.MembershipSpecMixedLowCardRefHighCardParameters, common2.Key("coSectionGroup4"), common2.Key("streamingGroup4"))
+	manip.MergeTaggedValueColumn("sec0", "u", ct1, encodingaspects.EmptyAspectSet, valueaspects.EmptyAspectSet, useaspects.EmptyAspectSet, common2.MembershipSpecHighCardRef, naming.Key("coSectionGroup1"), naming.Key("streamingGroup1"))
+	manip.MergeTaggedValueColumn("sec0", "v", ct2, encodingaspects.EmptyAspectSet, valueaspects.EmptyAspectSet, useaspects.EmptyAspectSet, common2.MembershipSpecHighCardRef, naming.Key("coSectionGroup2"), naming.Key("streamingGroup2"))
+	manip.MergeTaggedValueColumn("sec0", "w", ct3, encodingaspects.EmptyAspectSet, valueaspects.EmptyAspectSet, useaspects.EmptyAspectSet, common2.MembershipSpecHighCardRef, naming.Key("coSectionGroup3"), naming.Key("streamingGroup3"))
+	manip.MergeTaggedValueColumn("sec1", "u", ct1, encodingaspects.EmptyAspectSet, valueaspects.EmptyAspectSet, useaspects.EmptyAspectSet, common2.MembershipSpecMixedLowCardRefHighCardParameters, naming.Key("coSectionGroup4"), naming.Key("streamingGroup4"))
 	manip.SetOpaqueColumnStreamingGroup("opaqueStreamingGroupKey")
 
-	normalizer := common2.NewTableNormalizer(common2.DefaultNamingStyle)
+	normalizer := common2.NewTableNormalizer(naming.DefaultNamingStyle)
 	ir := common2.NewIntermediateTableRepresentation()
 	var tblDesc1, tblDesc2 common2.TableDesc
 	tblDesc1, err = manip.BuildTableDesc()
@@ -161,7 +162,7 @@ func TestTableOpsRoundtrip(t *testing.T) {
 		return
 	}
 	tblOp, err := common2.NewTableOperations()
-	tblNormalizer := common2.NewTableNormalizer(common2.DefaultNamingStyle)
+	tblNormalizer := common2.NewTableNormalizer(naming.DefaultNamingStyle)
 	require.NoError(t, err)
 	var validator *common2.TableValidator
 	validator = common2.NewTableValidator()
@@ -209,7 +210,7 @@ func TestIntermediateRoundtrip(t *testing.T) {
 		ok = status != common2.ImplementationStatusNotImplemented
 		return
 	}
-	tblNormalizer := common2.NewTableNormalizer(common2.DefaultNamingStyle)
+	tblNormalizer := common2.NewTableNormalizer(naming.DefaultNamingStyle)
 	var validator *common2.TableValidator
 	validator = common2.NewTableValidator()
 	ir := common2.NewIntermediateTableRepresentation()
@@ -261,7 +262,7 @@ func TestNamingConventionRoundtrip(t *testing.T) {
 		return
 	}
 	tblOp, err := common2.NewTableOperations()
-	tblNormalizer := common2.NewTableNormalizer(common2.DefaultNamingStyle)
+	tblNormalizer := common2.NewTableNormalizer(naming.DefaultNamingStyle)
 	require.NoError(t, err)
 	var validator *common2.TableValidator
 	validator = common2.NewTableValidator()

@@ -4,11 +4,12 @@ import (
 	"math/rand/v2"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stretchr/testify/require"
 )
 
 func TestNormalizer(t *testing.T) {
-	normalizer := NewTableNormalizer(DefaultNamingStyle)
+	normalizer := NewTableNormalizer(naming.DefaultNamingStyle)
 	ops, err := NewTableOperations()
 	require.NoError(t, err)
 	rnd := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))

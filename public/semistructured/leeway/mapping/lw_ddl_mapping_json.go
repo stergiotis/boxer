@@ -8,8 +8,7 @@ import (
 )
 
 func LoadJsonMapping(manip common.TableManipulatorFluidI) {
-	manip.PlainValueColumn(common.PlainItemTypeEntityId, "blake3hash").
-		SetColumnCanonicalType(canonicalTypes2.StringAstNode{BaseType: canonicalTypes2.BaseTypeStringBytes}).
+	manip.PlainValueColumn(common.PlainItemTypeEntityId, "blake3hash", canonicalTypes2.StringAstNode{BaseType: canonicalTypes2.BaseTypeStringBytes}).
 		AddColumnEncodingHints(encodingaspects2.AspectLightGeneralCompression)
 	manip.TaggedValueSection("bool").
 		AddSectionMembership(common.MembershipSpecMixedLowCardVerbatimHighCardParameters).

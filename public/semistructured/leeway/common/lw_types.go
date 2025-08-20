@@ -11,13 +11,10 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
 )
-
-type NamingStyleE uint8
-
-var _ fmt.Stringer = NamingStyleE(0)
 
 type IntermediateColumnScopeE string
 type IntermediateColumnSubTypeE string
@@ -28,23 +25,23 @@ type IntermediateColumnContext struct {
 	PlainItemType PlainItemTypeE
 	IndexOffset   uint32
 
-	StreamingGroup Key
+	StreamingGroup naming.Key
 
-	SectionName    StylableName
+	SectionName    naming.StylableName
 	UseAspects     useaspects.AspectSet
-	CoSectionGroup Key
+	CoSectionGroup naming.Key
 }
 
 type IntermediateColumnProps struct {
-	Names []StylableName `cbor:"names"`
-	Roles []ColumnRoleE  `cbor:"roles"`
+	Names []naming.StylableName `cbor:"names"`
+	Roles []ColumnRoleE         `cbor:"roles"`
 	// original canonical type, for membership columns: scalar type
 	CanonicalType  []canonicalTypes.PrimitiveAstNodeI `cbor:"canonicalType"`
 	EncodingHints  []encodingaspects.AspectSet        `cbor:"encodingHints"`
 	ValueSemantics []valueaspects.AspectSet           `cbor:"valueSemantics"`
 }
 type IntermediateTaggedValuesDesc struct {
-	SectionName                     StylableName             `cbor:"sectionName"`
+	SectionName                     naming.StylableName      `cbor:"sectionName"`
 	UseAspects                      useaspects.AspectSet     `cbor:"useAspects"`
 	Scalar                          *IntermediateColumnProps `cbor:"scalar"`
 	NonScalarHomogenousArray        *IntermediateColumnProps `cbor:"nonScalarHomogenousArray"`
@@ -53,8 +50,8 @@ type IntermediateTaggedValuesDesc struct {
 	NonScalarSetSupport             *IntermediateColumnProps `cbor:"nonScalarSetSupport"`
 	Membership                      *IntermediateColumnProps `cbor:"membership"`
 	MembershipSupport               *IntermediateColumnProps `cbor:"membershipSupport"`
-	CoSectionGroup                  Key                      `cbor:"coSectionGroup"`
-	StreamingGroup                  Key                      `cbor:"streamingGroup"`
+	CoSectionGroup                  naming.Key               `cbor:"coSectionGroup"`
+	StreamingGroup                  naming.Key               `cbor:"streamingGroup"`
 }
 type IntermediatePlainValuesDesc struct {
 	ItemType                        PlainItemTypeE           `cbor:"itemType"`
@@ -63,7 +60,7 @@ type IntermediatePlainValuesDesc struct {
 	NonScalarHomogenousArraySupport *IntermediateColumnProps `cbor:"nonScalarHomogenousArraySupport"`
 	NonScalarSet                    *IntermediateColumnProps `cbor:"nonScalarSet"`
 	NonScalarSetSupport             *IntermediateColumnProps `cbor:"nonScalarSetSupport"`
-	StreamingGroup                  Key                      `cbor:"streamingGroup"`
+	StreamingGroup                  naming.Key               `cbor:"streamingGroup"`
 }
 type IntermediateColumnIterator = iter.Seq2[IntermediateColumnContext, *IntermediateColumnProps]
 type IntermediateTableRepresentation struct {
@@ -104,18 +101,18 @@ var _ fmt.Stringer = PlainItemTypeE(0)
 var ErrNoCodebuilder = eh.Errorf("no codebuilder set")
 
 type TableDictionaryEntryDescDto struct {
-	Name    StylableName
+	Name    naming.StylableName
 	Comment string
 }
 type TableDesc struct {
 	DictionaryEntry TableDictionaryEntryDescDto
 
-	PlainValuesNames          []StylableName
+	PlainValuesNames          []naming.StylableName
 	PlainValuesTypes          []canonicalTypes.PrimitiveAstNodeI
 	PlainValuesEncodingHints  []encodingaspects.AspectSet
 	PlainValuesItemTypes      []PlainItemTypeE
 	PlainValuesValueSemantics []valueaspects.AspectSet
-	OpaqueStreamingGroup      Key
+	OpaqueStreamingGroup      naming.Key
 
 	TaggedValuesSections []TaggedValuesSection
 }
@@ -123,60 +120,60 @@ type TableDesc struct {
 type TableDescDto struct {
 	DictionaryEntry TableDictionaryEntryDescDto `cbor:"dictionaryEntry" json:"dictionaryEntry"`
 
-	EntityIdNames                 [] /*i*/ StylableName              `cbor:"entityIdNames" json:"entityIdNames"`
+	EntityIdNames                 [] /*i*/ naming.StylableName       `cbor:"entityIdNames" json:"entityIdNames"`
 	EntityIdTypes                 [] /*i*/ string                    `cbor:"entityIdTypes" json:"entityIdTypes"`
 	EntityIdEncodingHints         [] /*i*/ encodingaspects.AspectSet `cbor:"entityIdEncodingHints" json:"entityIdEncodingHints"`
 	EntityIdValueSemantics        [] /*i*/ valueaspects.AspectSet    `cbor:"entityIdValueSemantics" json:"entityIdValueSemantics"`
-	EntityTimestampNames          [] /*j*/ StylableName              `cbor:"entityTimestampNames" json:"entityTimestampNames"`
+	EntityTimestampNames          [] /*j*/ naming.StylableName       `cbor:"entityTimestampNames" json:"entityTimestampNames"`
 	EntityTimestampTypes          [] /*j*/ string                    `cbor:"entityTimestampTypes" json:"entityTimestampTypes"`
 	EntityTimestampEncodingHints  [] /*j*/ encodingaspects.AspectSet `cbor:"entityTimestampEncodingHints" json:"entityTimestampEncodingHints"`
 	EntityTimestampValueSemantics [] /*i*/ valueaspects.AspectSet    `cbor:"entityTimestampValueSemantics" json:"entityTimestampValueSemantics"`
-	EntityRoutingNames            [] /*k*/ StylableName              `cbor:"entityRoutingNames" json:"entityRoutingNames"`
+	EntityRoutingNames            [] /*k*/ naming.StylableName       `cbor:"entityRoutingNames" json:"entityRoutingNames"`
 	EntityRoutingTypes            [] /*k*/ string                    `cbor:"entityRoutingTypes" json:"entityRoutingTypes"`
 	EntityRoutingEncodingHints    [] /*k*/ encodingaspects.AspectSet `cbor:"entityRoutingEncodingHints" json:"entityRoutingEncodingHints"`
 	EntityRoutingValueSemantics   [] /*i*/ valueaspects.AspectSet    `cbor:"entityRoutingValueSemantics" json:"entityRoutingValueSemantics"`
-	EntityLifecycleNames          [] /*l*/ StylableName              `cbor:"entityLifecycleNames" json:"entityLifecycleNames"`
+	EntityLifecycleNames          [] /*l*/ naming.StylableName       `cbor:"entityLifecycleNames" json:"entityLifecycleNames"`
 	EntityLifecycleTypes          [] /*l*/ string                    `cbor:"entityLifecycleTypes" json:"entityLifecycleTypes"`
 	EntityLifecycleEncodingHints  [] /*l*/ encodingaspects.AspectSet `cbor:"entityLifecycleEncodingHints" json:"entityLifecycleEncodingHints"`
 	EntityLifecycleValueSemantics [] /*i*/ valueaspects.AspectSet    `cbor:"entityLifecycleValueSemantics" json:"entityLifecycleValueSemantics"`
 
 	TaggedValuesSections []TaggedValuesSectionDto `cbor:"taggedValuesSections" json:"TaggedValuesSections"`
 
-	TransactionNames          [] /*m*/ StylableName              `cbor:"transactionNames" json:"transactionNames"`
+	TransactionNames          [] /*m*/ naming.StylableName       `cbor:"transactionNames" json:"transactionNames"`
 	TransactionTypes          [] /*m*/ string                    `cbor:"transactionTypes" json:"transactionTypes"`
 	TransactionEncodingHints  [] /*m*/ encodingaspects.AspectSet `cbor:"transactionEncodingHints" json:"transactionEncodingHints"`
 	TransactionValueSemantics [] /*i*/ valueaspects.AspectSet    `cbor:"transactionValueSemantics" json:"transactionValueSemantics"`
 
-	OpaqueColumnNames          [] /*n*/ StylableName              `cbor:"opaqueColumnNames" json:"opaqueColumnNames"`
+	OpaqueColumnNames          [] /*n*/ naming.StylableName       `cbor:"opaqueColumnNames" json:"opaqueColumnNames"`
 	OpaqueColumnTypes          [] /*n*/ string                    `cbor:"opaqueColumnTypes" json:"opaqueColumnTypes"`
 	OpaqueColumnEncodingHints  [] /*n*/ encodingaspects.AspectSet `cbor:"opaqueColumnEncodingHints" json:"opaqueColumnEncodingHints"`
 	OpaqueColumnValueSemantics [] /*i*/ valueaspects.AspectSet    `cbor:"opaqueColumnValueSemantics" json:"opaqueColumnValueSemantics"`
-	OpaqueColumnStreamingGroup Key                                `cbor:"opaqueColumnStreamingGroup" json:"opaqueColumnStreamingGroup"`
+	OpaqueColumnStreamingGroup naming.Key                         `cbor:"opaqueColumnStreamingGroup" json:"opaqueColumnStreamingGroup"`
 }
 
 type TaggedValuesSectionDto struct {
-	Name                     StylableName                       `cbor:"name" json:"name"`
+	Name                     naming.StylableName                `cbor:"name" json:"name"`
 	MembershipSpec           MembershipSpecE                    `cbor:"membershipSpec" json:"membershipSpec"`
-	ValueColumnNames         [] /*i*/ StylableName              `cbor:"valueColumnNames" json:"valueColumnNames"`
+	ValueColumnNames         [] /*i*/ naming.StylableName       `cbor:"valueColumnNames" json:"valueColumnNames"`
 	ValueColumnTypes         [] /*i*/ string                    `cbor:"valueColumnTypes" json:"valueColumnTypes"`
 	ValueColumnEncodingHints [] /*i*/ encodingaspects.AspectSet `cbor:"valueColumnEncodingHints" json:"valueColumnEncodingHints"`
 	ValueSemantics           [] /*i*/ valueaspects.AspectSet    `cbor:"valueSemantics" json:"ValueSemantics"`
 	UseAspects               useaspects.AspectSet               `cbor:"useAspects" json:"useAspects"`
-	CoSectionGroup           Key                                `cbor:"coSectionGroup" json:"coSectionGroup"`
-	StreamingGroup           Key                                `cbor:"streamingGroup" json:"streamingGroup"`
+	CoSectionGroup           naming.Key                         `cbor:"coSectionGroup" json:"coSectionGroup"`
+	StreamingGroup           naming.Key                         `cbor:"streamingGroup" json:"streamingGroup"`
 }
 
 // TaggedValuesSection Note: If multiple, non-scalar columns are given they must have the same length and have co-array semantics
 type TaggedValuesSection struct {
-	Name               StylableName
+	Name               naming.StylableName
 	MembershipSpec     MembershipSpecE
-	ValueColumnNames   [] /*i*/ StylableName
+	ValueColumnNames   [] /*i*/ naming.StylableName
 	ValueColumnTypes   [] /*i*/ canonicalTypes.PrimitiveAstNodeI
 	ValueEncodingHints [] /*i*/ encodingaspects.AspectSet
 	ValueSemantics     [] /*i*/ valueaspects.AspectSet
 	UseAspects         useaspects.AspectSet
-	CoSectionGroup     Key
-	StreamingGroup     Key
+	CoSectionGroup     naming.Key
+	StreamingGroup     naming.Key
 }
 type PhysicalColumnDesc struct {
 	NameComponents             []string `cbor:"nameComponents"`
@@ -259,10 +256,10 @@ type TableManipulator struct {
 var _ TableManipulatorFluidI = (*TableManipulator)(nil)
 
 type TableManipulatorFluidI interface {
-	//SetTableName(name StylableName) TableManipulatorFluidI
+	//SetTableName(name naming.StylableName) TableManipulatorFluidI
 	//SetTableComment(comment string) TableManipulatorFluidI
-	TaggedValueSection(sectionName StylableName) TaggedValueSectionMerger
-	PlainValueColumn(itemType PlainItemTypeE, name StylableName) PlainValueColumnMerger
+	TaggedValueSection(sectionName naming.StylableName) TaggedValueSectionMerger
+	PlainValueColumn(itemType PlainItemTypeE, name naming.StylableName, canonicalType canonicalTypes.PrimitiveAstNodeI) PlainValueColumnMerger
 	Reset()
 }
 
@@ -285,12 +282,3 @@ type PlainValueColumnMerger struct {
 	table       *TableDesc
 	columnIndex int
 }
-
-// StylableName a name that can be transformed to other naming styles without loosing is descriptive, referencing and uniqueness properties
-type StylableName string
-
-var _ fmt.Stringer = StylableName("")
-
-type Key string
-
-var _ fmt.Stringer = Key("")

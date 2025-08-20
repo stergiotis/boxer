@@ -7,12 +7,13 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	canonicalTypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
 
 func NewTableValidator() *TableValidator {
 	return &TableValidator{
 		duplicatedNames:  containers.NewHashSet[string](128),
-		usedNamingStyles: make([]uint32, len(AllNamingStyles)),
+		usedNamingStyles: make([]uint32, len(naming.AllNamingStyles)),
 		possibleNames:    make([]string, 0, 128),
 		errors:           make([]error, 0, 128),
 	}
@@ -25,13 +26,13 @@ func (inst *TableValidator) Reset() {
 	inst.possibleNames = inst.possibleNames[:0]
 }
 
-func (inst *TableValidator) validateSectionName(name StylableName) (err error) {
+func (inst *TableValidator) validateSectionName(name naming.StylableName) (err error) {
 	return name.Validate()
 }
-func (inst *TableValidator) validateColumnName(name StylableName) (err error) {
+func (inst *TableValidator) validateColumnName(name naming.StylableName) (err error) {
 	return name.Validate()
 }
-func (inst *TableValidator) validateNames(names []StylableName, nameType string) (err error) {
+func (inst *TableValidator) validateNames(names []naming.StylableName, nameType string) (err error) {
 	d := inst.duplicatedNames
 	d.Clear()
 	u := inst.usedNamingStyles
@@ -43,8 +44,8 @@ func (inst *TableValidator) validateNames(names []StylableName, nameType string)
 		}
 		matchesNamingStyle := false
 		possibleNames := inst.possibleNames[:0]
-		for _, s := range AllNamingStyles {
-			name2 := ConvertNameStyle(name, s)
+		for _, s := range naming.AllNamingStyles {
+			name2 := naming.ConvertNameStyle(name, s)
 			possibleNames = append(possibleNames, string(name2))
 			if name == name2 {
 				u[s]++
@@ -56,8 +57,8 @@ func (inst *TableValidator) validateNames(names []StylableName, nameType string)
 				return
 			}
 		}
-		for _, s := range AllNamingStyles {
-			d.Add(string(ConvertNameStyle(name, s)))
+		for _, s := range naming.AllNamingStyles {
+			d.Add(string(naming.ConvertNameStyle(name, s)))
 		}
 		if !matchesNamingStyle {
 			err = eb.Build().Stringer("column", name).Strs("possibleNames", possibleNames).Errorf("found %s name that does not follow any of the supported naming conventions", nameType)
@@ -79,7 +80,7 @@ func (inst *TableValidator) validateNames(names []StylableName, nameType string)
 	}
 	return
 }
-func (inst *TableValidator) validateNamesTypes(names []StylableName, types []canonicalTypes2.PrimitiveAstNodeI) (err error) {
+func (inst *TableValidator) validateNamesTypes(names []naming.StylableName, types []canonicalTypes2.PrimitiveAstNodeI) (err error) {
 	if len(names) != len(types) {
 		err = eb.Build().Int("names", len(names)).Int("types", len(types)).Errorf("names and types do not have the same length")
 		return
@@ -151,7 +152,7 @@ func (inst *TableValidator) ValidateSection(section TaggedValuesSection) (err er
 }
 func (inst *TableValidator) ValidateTable(table *TableDesc) (err error) {
 	inst.validateTable(table)
-	sectionNames := make([]StylableName, 0, len(table.TaggedValuesSections))
+	sectionNames := make([]naming.StylableName, 0, len(table.TaggedValuesSections))
 	for _, section := range table.TaggedValuesSections {
 		sectionNames = append(sectionNames, section.Name)
 		inst.validateSection(section)

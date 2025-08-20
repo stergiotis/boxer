@@ -8,6 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mapping"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stretchr/testify/require"
 )
 
@@ -24,7 +25,7 @@ func TestGenerate(t *testing.T) {
 	var sourceCode []byte
 	tableRowConfig := common2.TableRowConfigMultiAttributesPerRow
 	namingStyle := NewMultiTablePerPackageGoClassNamer()
-	sourceCode, _, err = driver.GenerateGoClasses("example", common2.MustBeValidStylableName("json"), tblDesc, tableRowConfig, namingStyle)
+	sourceCode, _, err = driver.GenerateGoClasses("example", naming.MustBeValidStylableName("json"), tblDesc, tableRowConfig, namingStyle)
 	require.NoError(t, err)
 	checkCodeInvariants(sourceCode, t)
 

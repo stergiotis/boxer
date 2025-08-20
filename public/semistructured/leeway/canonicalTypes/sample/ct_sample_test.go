@@ -50,6 +50,7 @@ func TestGenerateSampleType(t *testing.T) {
 		HidePrivateFields:       false,
 		Theme:                   godump.Theme{},
 	}
+
 	for n := uint64(0); n < SampleTypeMaxExcl; n++ {
 		typ := GenerateSampleType(n)
 		if !typ.IsValid() {

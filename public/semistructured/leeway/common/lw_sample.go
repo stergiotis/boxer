@@ -9,6 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes/sample"
 	encodingaspects2 "github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	useaspects2 "github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
 )
@@ -104,7 +105,7 @@ func PopulateManipulator(manipulator *TableManipulator, rnd *rand.Rand, acceptCa
 		for i := 0; i < n; i++ {
 			hints := GenerateSampleEncodingAspectEx(rnd.IntN(3)+1, rnd, acceptEncodingAspect)
 			valueSemantics := GenerateSampleValueSemantics(rnd.IntN(3)+1, rnd)
-			manipulator.AddPlainValueItem(t, StylableName(fmt.Sprintf("%s%d", pfx, i)), sample.GenerateSamplePrimitiveType(rnd, acceptCanonicalType), hints, valueSemantics)
+			manipulator.AddPlainValueItem(t, naming.StylableName(fmt.Sprintf("%s%d", pfx, i)), sample.GenerateSamplePrimitiveType(rnd, acceptCanonicalType), hints, valueSemantics)
 		}
 	}
 
@@ -116,8 +117,8 @@ func PopulateManipulator(manipulator *TableManipulator, rnd *rand.Rand, acceptCa
 			mem := generateExampleMembershipSpec(rnd)
 			hints := GenerateSampleEncodingAspectEx(rnd.IntN(2)+1, rnd, acceptEncodingAspect)
 			valueSemantics := GenerateSampleValueSemantics(rnd.IntN(2)+1, rnd)
-			manipulator.MergeTaggedValueColumn(StylableName(fmt.Sprintf("section%d", i)),
-				StylableName(fmt.Sprintf("vm%d", j)),
+			manipulator.MergeTaggedValueColumn(naming.StylableName(fmt.Sprintf("section%d", i)),
+				naming.StylableName(fmt.Sprintf("vm%d", j)),
 				sample.GenerateSamplePrimitiveType(rnd, acceptCanonicalType),
 				hints,
 				valueSemantics,

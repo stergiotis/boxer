@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	encodingaspects2 "github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	useaspects2 "github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
 )
@@ -318,7 +319,7 @@ func (inst *HumanReadableNamingConvention) MapIntermediateToPhysicalColumns(cc c
 	}
 	return
 }
-func (inst *HumanReadableNamingConvention) composePlainValueColumn(prefix string, name string, ct canonicalTypes.PrimitiveAstNodeI, hints encodingaspects2.AspectSet, valueSemantics valueaspects.AspectSet, tableRowConfig common.TableRowConfigE, streamingGroup common.Key) (column common.PhysicalColumnDesc, err error) {
+func (inst *HumanReadableNamingConvention) composePlainValueColumn(prefix string, name string, ct canonicalTypes.PrimitiveAstNodeI, hints encodingaspects2.AspectSet, valueSemantics valueaspects.AspectSet, tableRowConfig common.TableRowConfigE, streamingGroup naming.Key) (column common.PhysicalColumnDesc, err error) {
 	err = inst.checkNameComponent(name)
 	if err != nil {
 		err = eh.Errorf("column name is for the given naming convention: %w", err)
@@ -348,7 +349,7 @@ func (inst *HumanReadableNamingConvention) composePlainValueColumn(prefix string
 	column.NameComponentsExplanation = ColumnsComponentsExplanation13
 	return
 }
-func (inst *HumanReadableNamingConvention) composeTaggedValuesColumn(sectionName string, useAspects useaspects2.AspectSet, name string, ct canonicalTypes.AstNodeI, hints encodingaspects2.AspectSet, valueSemantics valueaspects.AspectSet, role common.ColumnRoleE, tableRowConfig common.TableRowConfigE, coSectionGroup common.Key, streamingGroup common.Key) (column common.PhysicalColumnDesc, err error) {
+func (inst *HumanReadableNamingConvention) composeTaggedValuesColumn(sectionName string, useAspects useaspects2.AspectSet, name string, ct canonicalTypes.AstNodeI, hints encodingaspects2.AspectSet, valueSemantics valueaspects.AspectSet, role common.ColumnRoleE, tableRowConfig common.TableRowConfigE, coSectionGroup naming.Key, streamingGroup naming.Key) (column common.PhysicalColumnDesc, err error) {
 	err = inst.checkNameComponent(sectionName)
 	if err != nil {
 		return
@@ -460,15 +461,15 @@ func (inst *HumanReadableNamingConvention) discoverTableFromSortedPhysicalColumn
 				return
 			}
 			name := components[parseStructure13.columnNameIndex]
-			var nameS common.StylableName
-			nameS, err = common.MakeStylableName(name)
+			var nameS naming.StylableName
+			nameS, err = naming.MakeStylableName(name)
 			if err != nil {
 				err = eb.Build().Stringer("physicalColumn", phy).Str("component", components[parseStructure13.columnNameIndex]).Errorf("column name is not a valid stylable name: %w", err)
 				return
 			}
-			var streamingGroupK common.Key
+			var streamingGroupK naming.Key
 			streamingGroup := components[parseStructure13.streamingGroupIndex]
-			streamingGroupK, err = common.MakeKey(streamingGroup)
+			streamingGroupK, err = naming.MakeKey(streamingGroup)
 			if err != nil {
 				err = eb.Build().Stringer("physicalColumn", phy).Str("component", components[parseStructure13.streamingGroupIndex]).Errorf("co section group is not a valid key: %w", err)
 				return
@@ -513,21 +514,21 @@ func (inst *HumanReadableNamingConvention) discoverTableFromSortedPhysicalColumn
 				}
 				sectionName := components[parseStructure21.sectionNameIndex]
 				role := common.ColumnRoleE(components[parseStructure21.roleIndex])
-				var sectionNameS common.StylableName
-				sectionNameS, err = common.MakeStylableName(sectionName)
+				var sectionNameS naming.StylableName
+				sectionNameS, err = naming.MakeStylableName(sectionName)
 				if err != nil {
 					err = eb.Build().Stringer("physicalColumn", phy).Str("component", components[parseStructure21.sectionNameIndex]).Errorf("section name is not a valid stylable name: %w", err)
 					return
 				}
-				var coSectionGroupK, streamingGroupK common.Key
+				var coSectionGroupK, streamingGroupK naming.Key
 				coSectionGroup := components[parseStructure21.coSectionGroupIndex]
 				streamingGroup := components[parseStructure21.streamingGroupIndex]
-				coSectionGroupK, err = common.MakeKey(coSectionGroup)
+				coSectionGroupK, err = naming.MakeKey(coSectionGroup)
 				if err != nil {
 					err = eb.Build().Stringer("physicalColumn", phy).Str("component", components[parseStructure21.coSectionGroupIndex]).Errorf("co section group is not a valid key: %w", err)
 					return
 				}
-				streamingGroupK, err = common.MakeKey(streamingGroup)
+				streamingGroupK, err = naming.MakeKey(streamingGroup)
 				if err != nil {
 					err = eb.Build().Stringer("physicalColumn", phy).Str("component", components[parseStructure21.streamingGroupIndex]).Errorf("streaming group index is not a valid key: %w", err)
 					return
@@ -535,8 +536,8 @@ func (inst *HumanReadableNamingConvention) discoverTableFromSortedPhysicalColumn
 
 				if role == common.ColumnRoleValue {
 					name := components[parseStructure21.columnNameIndex]
-					var nameS common.StylableName
-					nameS, err = common.MakeStylableName(name)
+					var nameS naming.StylableName
+					nameS, err = naming.MakeStylableName(name)
 					if err != nil {
 						err = eb.Build().Stringer("physicalColumn", phy).Str("component", components[parseStructure13.columnNameIndex]).Errorf("column name is not a valid stylable name: %w", err)
 						return

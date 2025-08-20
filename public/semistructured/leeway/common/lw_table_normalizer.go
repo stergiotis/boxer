@@ -7,14 +7,15 @@ import (
 
 	"github.com/stergiotis/boxer/public/containers/co"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
 
 type TableNormalizer struct {
-	namingStyle NamingStyleE
+	namingStyle naming.NamingStyleE
 	validator   *TableValidator
 }
 
-func NewTableNormalizer(namingStyle NamingStyleE) *TableNormalizer {
+func NewTableNormalizer(namingStyle naming.NamingStyleE) *TableNormalizer {
 	return &TableNormalizer{
 		namingStyle: namingStyle,
 		validator:   NewTableValidator(),
@@ -98,18 +99,18 @@ func (inst *TableNormalizer) scrambleOrder(table *TableDesc, rnd *rand.Rand) {
 func (inst *TableNormalizer) normalizeNames(table *TableDesc) (changes bool) {
 	ns := inst.namingStyle
 	for i, name := range table.PlainValuesNames {
-		newName := ConvertNameStyle(name, ns)
+		newName := naming.ConvertNameStyle(name, ns)
 		changes = changes || newName != name
 		table.PlainValuesNames[i] = newName
 	}
 	for i, sec := range table.TaggedValuesSections {
 		{
-			newName := ConvertNameStyle(sec.Name, ns)
+			newName := naming.ConvertNameStyle(sec.Name, ns)
 			changes = changes || newName != sec.Name
 			sec.Name = newName
 		}
 		for j, name := range sec.ValueColumnNames {
-			newName := ConvertNameStyle(name, ns)
+			newName := naming.ConvertNameStyle(name, ns)
 			changes = changes || newName != name
 			sec.ValueColumnNames[j] = newName
 		}
@@ -118,21 +119,21 @@ func (inst *TableNormalizer) normalizeNames(table *TableDesc) (changes bool) {
 	return
 }
 func (inst *TableNormalizer) scrambleNames(table *TableDesc, rnd *rand.Rand) {
-	l := len(AllNamingStyles)
+	l := len(naming.AllNamingStyles)
 	for i, name := range table.PlainValuesNames {
-		ns := AllNamingStyles[rnd.IntN(l)]
-		newName := ConvertNameStyle(name, ns)
+		ns := naming.AllNamingStyles[rnd.IntN(l)]
+		newName := naming.ConvertNameStyle(name, ns)
 		table.PlainValuesNames[i] = newName
 	}
 	for i, sec := range table.TaggedValuesSections {
 		{
-			ns := AllNamingStyles[rnd.IntN(l)]
-			newName := ConvertNameStyle(sec.Name, ns)
+			ns := naming.AllNamingStyles[rnd.IntN(l)]
+			newName := naming.ConvertNameStyle(sec.Name, ns)
 			sec.Name = newName
 		}
 		for j, name := range sec.ValueColumnNames {
-			ns := AllNamingStyles[rnd.IntN(l)]
-			newName := ConvertNameStyle(name, ns)
+			ns := naming.AllNamingStyles[rnd.IntN(l)]
+			newName := naming.ConvertNameStyle(name, ns)
 			sec.ValueColumnNames[j] = newName
 		}
 		table.TaggedValuesSections[i] = sec

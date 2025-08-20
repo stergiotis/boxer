@@ -43,6 +43,7 @@ const (
 	AspectTesting            AspectE = 37
 	AspectDevice             AspectE = 38
 	AspectDocumentation      AspectE = 39
+	AspectObservability      AspectE = 40
 )
 
 var MaxAspectExcl = slices.Max(AllAspects) + 1
@@ -88,6 +89,7 @@ var AllAspects = []AspectE{
 	AspectTesting,
 	AspectDevice,
 	AspectDocumentation,
+	AspectObservability,
 }
 
 const InvalidAspectEnumValueString = "<invalid AspectE>"
@@ -177,6 +179,8 @@ func (inst AspectE) String() string {
 		return "device"
 	case AspectDocumentation:
 		return "documentation"
+	case AspectObservability:
+		return "observability"
 	}
 	return InvalidAspectEnumValueString
 }

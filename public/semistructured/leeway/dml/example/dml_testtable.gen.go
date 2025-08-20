@@ -1,4 +1,4 @@
-// Code generated; ET7 DML (github.com/stergiotis/boxer/public/semistructured/leeway/dml.test) DO NOT EDIT.
+// Code generated; Leeway DML (github.com/stergiotis/boxer/public/semistructured/leeway/dml.test) DO NOT EDIT.
 
 package example
 
@@ -44,76 +44,20 @@ func createRecordBuilderTesttable(allocator memory.Allocator) (builder *array.Re
 }
 
 type InEntityTesttable struct {
-	errs                  []error
-	state                 runtime.EntityStateE
-	allocator             memory.Allocator
-	builder               *array.RecordBuilder
-	records               []arrow.Record
-	section00Inst         *InEntityTesttableSectionBool
-	section00State        runtime.EntityStateE
-	section01Inst         *InEntityTesttableSectionFloat64
-	section01State        runtime.EntityStateE
-	section02Inst         *InEntityTesttableSectionSpecial
-	section02State        runtime.EntityStateE
-	section03Inst         *InEntityTesttableSectionString
-	section03State        runtime.EntityStateE
-	scalarFieldBuilder002 *array.BooleanBuilder
-	scalarListBuilder002  *array.ListBuilder
-
-	membershipFieldBuilder003 *array.BinaryBuilder
-	membershipListBuilder003  *array.ListBuilder
-
-	membershipFieldBuilder004 *array.BinaryBuilder
-	membershipListBuilder004  *array.ListBuilder
-
-	membershipSupportFieldBuilder005 *array.Uint64Builder
-	membershipSupportListBuilder005  *array.ListBuilder
-
-	scalarFieldBuilder006 *array.StringBuilder
-	scalarListBuilder006  *array.ListBuilder
-
-	membershipFieldBuilder007 *array.BinaryBuilder
-	membershipListBuilder007  *array.ListBuilder
-
-	membershipFieldBuilder008 *array.BinaryBuilder
-	membershipListBuilder008  *array.ListBuilder
-
-	membershipSupportFieldBuilder009 *array.Uint64Builder
-	membershipSupportListBuilder009  *array.ListBuilder
-
-	scalarFieldBuilder010 *array.Float64Builder
-	scalarListBuilder010  *array.ListBuilder
-
-	membershipFieldBuilder011 *array.BinaryBuilder
-	membershipListBuilder011  *array.ListBuilder
-
-	membershipFieldBuilder012 *array.BinaryBuilder
-	membershipListBuilder012  *array.ListBuilder
-
-	membershipSupportFieldBuilder013 *array.Uint64Builder
-	membershipSupportListBuilder013  *array.ListBuilder
-
-	scalarFieldBuilder014 *array.StringBuilder
-	scalarListBuilder014  *array.ListBuilder
-
-	homogenousArrayFieldBuilder015 *array.Uint32Builder
-	homogenousArrayListBuilder015  *array.ListBuilder
-
-	homogenousArrayFieldBuilder016 *array.Uint32Builder
-	homogenousArrayListBuilder016  *array.ListBuilder
-
-	membershipFieldBuilder017 *array.Uint64Builder
-	membershipListBuilder017  *array.ListBuilder
-
-	membershipFieldBuilder018 *array.BinaryBuilder
-	membershipListBuilder018  *array.ListBuilder
-
-	homogenousArraySupportFieldBuilder019 *array.Uint64Builder
-	homogenousArraySupportListBuilder019  *array.ListBuilder
-
-	membershipSupportFieldBuilder020 *array.Uint64Builder
-	membershipSupportListBuilder020  *array.ListBuilder
-	plainId0                         uint64
+	errs           []error
+	state          runtime.EntityStateE
+	allocator      memory.Allocator
+	builder        *array.RecordBuilder
+	records        []arrow.Record
+	section00Inst  *InEntityTesttableSectionBool
+	section00State runtime.EntityStateE
+	section01Inst  *InEntityTesttableSectionFloat64
+	section01State runtime.EntityStateE
+	section02Inst  *InEntityTesttableSectionSpecial
+	section02State runtime.EntityStateE
+	section03Inst  *InEntityTesttableSectionString
+	section03State runtime.EntityStateE
+	plainId0       uint64
 
 	plainTs1              time.Time
 	scalarFieldBuilder000 *array.Uint64Builder
@@ -406,6 +350,10 @@ type InEntityTesttableSectionBoolInAttr struct {
 	membershipListBuilder004         *array.ListBuilder
 	membershipSupportFieldBuilder005 *array.Uint64Builder
 	membershipSupportListBuilder005  *array.ListBuilder
+
+	membershipContainerLength003 int
+
+	membershipContainerLength004 int
 }
 
 func NewInEntityTesttableSectionBoolInAttr(builder *array.RecordBuilder, parent *InEntityTesttableSectionBool) (inst *InEntityTesttableSectionBoolInAttr) {
@@ -427,6 +375,8 @@ func NewInEntityTesttableSectionBoolInAttr(builder *array.RecordBuilder, parent 
 func (inst *InEntityTesttableSectionBoolInAttr) beginAttribute() {
 	inst.membershipListBuilder003.Append(true)
 	inst.membershipListBuilder004.Append(true)
+	inst.membershipContainerLength003 = 0
+	inst.membershipContainerLength004 = 0
 	inst.scalarListBuilder002.Append(true)
 	inst.membershipSupportListBuilder005.Append(true)
 	inst.state = runtime.EntityStateInSection
@@ -439,13 +389,16 @@ func (inst *InEntityTesttableSectionBoolInAttr) AddMembershipMixedLowCardVerbati
 	}
 	inst.membershipFieldBuilder003.Append(lmv3)
 	inst.membershipFieldBuilder004.Append(mvhp4)
+	inst.membershipContainerLength003++
+	inst.membershipContainerLength004++
 
 	return inst
 }
 func (inst *InEntityTesttableSectionBoolInAttr) handleMembershipSupportColumns() {
 	var l int
 	var _ = l
-	l = inst.membershipListBuilder003.Len()
+	l = inst.membershipContainerLength003
+	inst.membershipContainerLength003 = 0
 	inst.membershipSupportFieldBuilder005.Append(uint64(l))
 }
 func (inst *InEntityTesttableSectionBoolInAttr) handleNonScalarSupportColumns() {
@@ -604,6 +557,10 @@ type InEntityTesttableSectionFloat64InAttr struct {
 	membershipListBuilder012         *array.ListBuilder
 	membershipSupportFieldBuilder013 *array.Uint64Builder
 	membershipSupportListBuilder013  *array.ListBuilder
+
+	membershipContainerLength011 int
+
+	membershipContainerLength012 int
 }
 
 func NewInEntityTesttableSectionFloat64InAttr(builder *array.RecordBuilder, parent *InEntityTesttableSectionFloat64) (inst *InEntityTesttableSectionFloat64InAttr) {
@@ -625,6 +582,8 @@ func NewInEntityTesttableSectionFloat64InAttr(builder *array.RecordBuilder, pare
 func (inst *InEntityTesttableSectionFloat64InAttr) beginAttribute() {
 	inst.membershipListBuilder011.Append(true)
 	inst.membershipListBuilder012.Append(true)
+	inst.membershipContainerLength011 = 0
+	inst.membershipContainerLength012 = 0
 	inst.scalarListBuilder010.Append(true)
 	inst.membershipSupportListBuilder013.Append(true)
 	inst.state = runtime.EntityStateInSection
@@ -637,13 +596,16 @@ func (inst *InEntityTesttableSectionFloat64InAttr) AddMembershipMixedLowCardVerb
 	}
 	inst.membershipFieldBuilder011.Append(lmv11)
 	inst.membershipFieldBuilder012.Append(mvhp12)
+	inst.membershipContainerLength011++
+	inst.membershipContainerLength012++
 
 	return inst
 }
 func (inst *InEntityTesttableSectionFloat64InAttr) handleMembershipSupportColumns() {
 	var l int
 	var _ = l
-	l = inst.membershipListBuilder011.Len()
+	l = inst.membershipContainerLength011
+	inst.membershipContainerLength011 = 0
 	inst.membershipSupportFieldBuilder013.Append(uint64(l))
 }
 func (inst *InEntityTesttableSectionFloat64InAttr) handleNonScalarSupportColumns() {
@@ -818,6 +780,10 @@ type InEntityTesttableSectionSpecialInAttr struct {
 	homogenousArraySupportListBuilder019  *array.ListBuilder
 	membershipSupportFieldBuilder020      *array.Uint64Builder
 	membershipSupportListBuilder020       *array.ListBuilder
+
+	membershipContainerLength017 int
+
+	membershipContainerLength018 int
 }
 
 func NewInEntityTesttableSectionSpecialInAttr(builder *array.RecordBuilder, parent *InEntityTesttableSectionSpecial) (inst *InEntityTesttableSectionSpecialInAttr) {
@@ -847,6 +813,10 @@ func (inst *InEntityTesttableSectionSpecialInAttr) beginAttribute() {
 	inst.homogenousArrayListBuilder016.Append(true)
 	inst.membershipListBuilder017.Append(true)
 	inst.membershipListBuilder018.Append(true)
+	inst.homogenousArrayContainerLength015 = 0
+	inst.homogenousArrayContainerLength016 = 0
+	inst.membershipContainerLength017 = 0
+	inst.membershipContainerLength018 = 0
 	inst.scalarListBuilder014.Append(true)
 	inst.homogenousArraySupportListBuilder019.Append(true)
 	inst.membershipSupportListBuilder020.Append(true)
@@ -859,7 +829,11 @@ func (inst *InEntityTesttableSectionSpecialInAttr) AddToCoContainers(ary115 uint
 		return inst
 	}
 	inst.homogenousArrayFieldBuilder015.Append(ary115)
+	inst.homogenousArrayContainerLength015++
 	inst.homogenousArrayFieldBuilder016.Append(ary216)
+	inst.homogenousArrayContainerLength016++
+	inst.homogenousArrayContainerLength015++
+	inst.homogenousArrayContainerLength016++
 	return inst
 }
 func (inst *InEntityTesttableSectionSpecialInAttr) AddMembershipMixedLowCardRef(lmr17 uint64, mrhp18 []byte) *InEntityTesttableSectionSpecialInAttr {
@@ -869,19 +843,23 @@ func (inst *InEntityTesttableSectionSpecialInAttr) AddMembershipMixedLowCardRef(
 	}
 	inst.membershipFieldBuilder017.Append(lmr17)
 	inst.membershipFieldBuilder018.Append(mrhp18)
+	inst.membershipContainerLength017++
+	inst.membershipContainerLength018++
 
 	return inst
 }
 func (inst *InEntityTesttableSectionSpecialInAttr) handleMembershipSupportColumns() {
 	var l int
 	var _ = l
-	l = inst.membershipListBuilder017.Len()
+	l = inst.membershipContainerLength017
+	inst.membershipContainerLength017 = 0
 	inst.membershipSupportFieldBuilder020.Append(uint64(l))
 }
 func (inst *InEntityTesttableSectionSpecialInAttr) handleNonScalarSupportColumns() {
 	var l int
 	var _ = l
-	l = inst.homogenousArrayListBuilder015.Len()
+	l = inst.homogenousArrayContainerLength015
+	inst.homogenousArrayContainerLength015 = 0
 	inst.homogenousArraySupportFieldBuilder019.Append(uint64(l))
 }
 func (inst *InEntityTesttableSectionSpecialInAttr) completeAttribute() {
@@ -1036,6 +1014,10 @@ type InEntityTesttableSectionStringInAttr struct {
 	membershipListBuilder008         *array.ListBuilder
 	membershipSupportFieldBuilder009 *array.Uint64Builder
 	membershipSupportListBuilder009  *array.ListBuilder
+
+	membershipContainerLength007 int
+
+	membershipContainerLength008 int
 }
 
 func NewInEntityTesttableSectionStringInAttr(builder *array.RecordBuilder, parent *InEntityTesttableSectionString) (inst *InEntityTesttableSectionStringInAttr) {
@@ -1057,6 +1039,8 @@ func NewInEntityTesttableSectionStringInAttr(builder *array.RecordBuilder, paren
 func (inst *InEntityTesttableSectionStringInAttr) beginAttribute() {
 	inst.membershipListBuilder007.Append(true)
 	inst.membershipListBuilder008.Append(true)
+	inst.membershipContainerLength007 = 0
+	inst.membershipContainerLength008 = 0
 	inst.scalarListBuilder006.Append(true)
 	inst.membershipSupportListBuilder009.Append(true)
 	inst.state = runtime.EntityStateInSection
@@ -1069,13 +1053,16 @@ func (inst *InEntityTesttableSectionStringInAttr) AddMembershipMixedLowCardVerba
 	}
 	inst.membershipFieldBuilder007.Append(lmv7)
 	inst.membershipFieldBuilder008.Append(mvhp8)
+	inst.membershipContainerLength007++
+	inst.membershipContainerLength008++
 
 	return inst
 }
 func (inst *InEntityTesttableSectionStringInAttr) handleMembershipSupportColumns() {
 	var l int
 	var _ = l
-	l = inst.membershipListBuilder007.Len()
+	l = inst.membershipContainerLength007
+	inst.membershipContainerLength007 = 0
 	inst.membershipSupportFieldBuilder009.Append(uint64(l))
 }
 func (inst *InEntityTesttableSectionStringInAttr) handleNonScalarSupportColumns() {

@@ -21,9 +21,10 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/golang"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
 	encodingaspects2 "github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
 
-var CodeGeneratorName = "ET7 DML (" + vcs.ModuleInfo() + ")"
+var CodeGeneratorName = "Leeway DML (" + vcs.ModuleInfo() + ")"
 
 type codeBuildModeE uint8
 
@@ -100,7 +101,7 @@ func (inst *GoClassBuilder) ResetCodeBuilder() {
 		b.Reset()
 	}
 }
-func (inst *GoClassBuilder) composeNamingConventionDependentCode(tableName common.StylableName, ir *common.IntermediateTableRepresentation, namingConvention common.NamingConventionI, tableRowConfig common.TableRowConfigE, clsNamer GoClassNamerI) (err error) {
+func (inst *GoClassBuilder) composeNamingConventionDependentCode(tableName naming.StylableName, ir *common.IntermediateTableRepresentation, namingConvention common.NamingConventionI, tableRowConfig common.TableRowConfigE, clsNamer GoClassNamerI) (err error) {
 	b := inst.builder
 	arrowTech := arrow.NewTechnologySpecificCodeGenerator()
 	arrowTech.SetCodeBuilder(b)
@@ -185,9 +186,9 @@ func (inst *GoClassBuilder) composeFieldRelatedCode(op structFieldOperationE, cc
 		return
 	}
 	idx := cc.IndexOffset + uint32(i)
-	argName := cp.Names[i].Convert(common.NamingStyleLowerCamelCase).String()
+	argName := cp.Names[i].Convert(naming.NamingStyleLowerCamelCase).String()
 	argName += strconv.FormatUint(uint64(idx), 10)
-	plainFieldName := "plain" + cp.Names[i].Convert(common.NamingStyleUpperCamelCase).String()
+	plainFieldName := "plain" + cp.Names[i].Convert(naming.NamingStyleUpperCamelCase).String()
 	plainFieldName += strconv.FormatUint(uint64(idx), 10)
 
 	switch cc.SubType {
@@ -1181,7 +1182,7 @@ func itemTypeToSetterName(itemType common.PlainItemTypeE) (setterName string) {
 	}
 	return
 }
-func (inst *GoClassBuilder) composeEntityClassAndFactoryCode(tableName common.StylableName, sectionNames []common.StylableName, ir *common.IntermediateTableRepresentation, tableRowConfig common.TableRowConfigE, clsNamer GoClassNamerI, entityIRH *common.IntermediatePairHolder) (err error) {
+func (inst *GoClassBuilder) composeEntityClassAndFactoryCode(tableName naming.StylableName, sectionNames []naming.StylableName, ir *common.IntermediateTableRepresentation, tableRowConfig common.TableRowConfigE, clsNamer GoClassNamerI, entityIRH *common.IntermediatePairHolder) (err error) {
 	b := inst.builder
 	inst.populateClsNames(tableName, "", 0, 0)
 	_, err = fmt.Fprintf(b, `type %s struct {
@@ -1259,7 +1260,7 @@ func New%s(allocator memory.Allocator, estimatedNumberOfRecords int) (inst *%s) 
 	}
 	return
 }
-func (inst *GoClassBuilder) composeEntityCode(tableName common.StylableName, sectionNames []common.StylableName, ir *common.IntermediateTableRepresentation, tableRowConfig common.TableRowConfigE, entityIRH *common.IntermediatePairHolder) (err error) {
+func (inst *GoClassBuilder) composeEntityCode(tableName naming.StylableName, sectionNames []naming.StylableName, ir *common.IntermediateTableRepresentation, tableRowConfig common.TableRowConfigE, entityIRH *common.IntermediatePairHolder) (err error) {
 	plainIRH := entityIRH.DeriveSubHolder(deriveSubHolderSelectPlainValues)
 	//taggedIRH := entityIRH.DeriveSubHolder(deriveSubHolderSelectTaggedValues)
 	plainSetterIRH := plainIRH.DeriveSubHolder(func(cc common.IntermediateColumnContext) (keep bool) {
@@ -1433,7 +1434,7 @@ func (inst *GoClassBuilder) composeEntityCode(tableName common.StylableName, sec
 			_, err = fmt.Fprintf(b, `func (inst *%s) GetSection%s() *%s {
 	return inst.section%02dInst
 }
-`, inst.clsNames.inEntityClassName, secName.Convert(common.NamingStyleUpperCamelCase).String(), inst.clsNames.inSectionClassName, i)
+`, inst.clsNames.inEntityClassName, secName.Convert(naming.NamingStyleUpperCamelCase).String(), inst.clsNames.inSectionClassName, i)
 		}
 	}
 	{ // BeginEntity
@@ -1553,7 +1554,7 @@ func (inst *%s) GetSchema() (schema *arrow.Schema) {
 	}
 	return
 }
-func (inst *GoClassBuilder) populateClsNames(tableName common.StylableName, sectionName common.StylableName, sectionIndex int, totalSections int) {
+func (inst *GoClassBuilder) populateClsNames(tableName naming.StylableName, sectionName naming.StylableName, sectionIndex int, totalSections int) {
 	var err error
 	inst.clsNames.inEntityClassName, err = inst.classNamer.ComposeEntityClassName(tableName)
 	if err != nil {
@@ -1610,7 +1611,7 @@ func (inst *GoClassBuilder) ComposeGoImports(ir *common.IntermediateTableReprese
 	}
 	return
 }
-func (inst *GoClassBuilder) ComposeCode(tableName common.StylableName, ir *common.IntermediateTableRepresentation, conv common.NamingConventionI, tableRowConfig common.TableRowConfigE, clsNamer GoClassNamerI) (err error) {
+func (inst *GoClassBuilder) ComposeCode(tableName naming.StylableName, ir *common.IntermediateTableRepresentation, conv common.NamingConventionI, tableRowConfig common.TableRowConfigE, clsNamer GoClassNamerI) (err error) {
 	b := inst.builder
 	if b == nil {
 		err = common.ErrNoBuilder
@@ -1630,7 +1631,7 @@ func (inst *GoClassBuilder) ComposeCode(tableName common.StylableName, ir *commo
 		entityIRH.Add(cc, cp)
 	}
 
-	sectionNames := make([]common.StylableName, 0, 32)
+	sectionNames := make([]naming.StylableName, 0, 32)
 	maxColumnsPerSection := 0
 	for _, t := range ir.TaggedValueDesc {
 		secName := t.SectionName
@@ -1699,20 +1700,20 @@ func NewDefaultGoClassNamer() *DefaultGoClassNamer {
 	return &DefaultGoClassNamer{}
 }
 
-func (inst *DefaultGoClassNamer) ComposeSchemaFactoryName(tableName common.StylableName) (functionName string, err error) {
+func (inst *DefaultGoClassNamer) ComposeSchemaFactoryName(tableName naming.StylableName) (functionName string, err error) {
 	return "createRecordBuilder", nil
 }
 
-func (inst *DefaultGoClassNamer) ComposeEntityClassName(tableName common.StylableName) (fullClassName string, err error) {
+func (inst *DefaultGoClassNamer) ComposeEntityClassName(tableName naming.StylableName) (fullClassName string, err error) {
 	return "InEntity", nil
 }
 
-func (inst *DefaultGoClassNamer) ComposeSectionClassName(tableName common.StylableName, sectionName common.StylableName, sectionIndex int, sectionCount int) (fullClassName string, err error) {
-	return "InEntity" + sectionName.Convert(common.NamingStyleUpperCamelCase).String(), nil
+func (inst *DefaultGoClassNamer) ComposeSectionClassName(tableName naming.StylableName, sectionName naming.StylableName, sectionIndex int, sectionCount int) (fullClassName string, err error) {
+	return "InEntity" + sectionName.Convert(naming.NamingStyleUpperCamelCase).String(), nil
 }
 
-func (inst *DefaultGoClassNamer) ComposeAttributeClassName(tableName common.StylableName, sectionName common.StylableName, sectionIndex int, sectionCount int) (fullClassName string, err error) {
-	return "InEntity" + sectionName.Convert(common.NamingStyleUpperCamelCase).String() + "InAttr", nil
+func (inst *DefaultGoClassNamer) ComposeAttributeClassName(tableName naming.StylableName, sectionName naming.StylableName, sectionIndex int, sectionCount int) (fullClassName string, err error) {
+	return "InEntity" + sectionName.Convert(naming.NamingStyleUpperCamelCase).String() + "InAttr", nil
 }
 
 func (inst *DefaultGoClassNamer) PromiseToBeReferentialTransparent() (_ functional.InterfaceIsReferentialTransparentType) {
@@ -1723,20 +1724,20 @@ func NewMultiTablePerPackageGoClassNamer() *MultiTablePerPackageClassNamer {
 	return &MultiTablePerPackageClassNamer{}
 }
 
-func (inst *MultiTablePerPackageClassNamer) ComposeSchemaFactoryName(tableName common.StylableName) (functionName string, err error) {
-	return "createRecordBuilder" + tableName.Convert(common.NamingStyleUpperCamelCase).String(), nil
+func (inst *MultiTablePerPackageClassNamer) ComposeSchemaFactoryName(tableName naming.StylableName) (functionName string, err error) {
+	return "createRecordBuilder" + tableName.Convert(naming.NamingStyleUpperCamelCase).String(), nil
 }
 
-func (inst *MultiTablePerPackageClassNamer) ComposeEntityClassName(tableName common.StylableName) (fullClassName string, err error) {
-	return "InEntity" + tableName.Convert(common.NamingStyleUpperCamelCase).String(), nil
+func (inst *MultiTablePerPackageClassNamer) ComposeEntityClassName(tableName naming.StylableName) (fullClassName string, err error) {
+	return "InEntity" + tableName.Convert(naming.NamingStyleUpperCamelCase).String(), nil
 }
 
-func (inst *MultiTablePerPackageClassNamer) ComposeSectionClassName(tableName common.StylableName, sectionName common.StylableName, sectionIndex int, sectionCount int) (fullClassName string, err error) {
-	return "InEntity" + tableName.Convert(common.NamingStyleUpperCamelCase).String() + "Section" + sectionName.Convert(common.NamingStyleUpperCamelCase).String(), nil
+func (inst *MultiTablePerPackageClassNamer) ComposeSectionClassName(tableName naming.StylableName, sectionName naming.StylableName, sectionIndex int, sectionCount int) (fullClassName string, err error) {
+	return "InEntity" + tableName.Convert(naming.NamingStyleUpperCamelCase).String() + "Section" + sectionName.Convert(naming.NamingStyleUpperCamelCase).String(), nil
 }
 
-func (inst *MultiTablePerPackageClassNamer) ComposeAttributeClassName(tableName common.StylableName, sectionName common.StylableName, sectionIndex int, sectionCount int) (fullClassName string, err error) {
-	return "InEntity" + tableName.Convert(common.NamingStyleUpperCamelCase).String() + "Section" + sectionName.Convert(common.NamingStyleUpperCamelCase).String() + "InAttr", nil
+func (inst *MultiTablePerPackageClassNamer) ComposeAttributeClassName(tableName naming.StylableName, sectionName naming.StylableName, sectionIndex int, sectionCount int) (fullClassName string, err error) {
+	return "InEntity" + tableName.Convert(naming.NamingStyleUpperCamelCase).String() + "Section" + sectionName.Convert(naming.NamingStyleUpperCamelCase).String() + "InAttr", nil
 }
 
 func (inst *MultiTablePerPackageClassNamer) PromiseToBeReferentialTransparent() (_ functional.InterfaceIsReferentialTransparentType) {

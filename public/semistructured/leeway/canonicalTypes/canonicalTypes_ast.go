@@ -1,6 +1,8 @@
 package canonicalTypes
 
 import (
+	"fmt"
+	"io"
 	"iter"
 	"strconv"
 	"strings"
@@ -8,6 +10,14 @@ import (
 	"github.com/fxamacker/cbor/v2"
 	"golang.org/x/exp/constraints"
 )
+
+func formatGoRune[R ~rune](val R) string {
+	if val == 0 {
+		return "0"
+	} else {
+		return "'" + string(val) + "'"
+	}
+}
 
 func addIfNonzero[R ~rune](s *strings.Builder, r R) {
 	if r != 0 {
@@ -67,6 +77,12 @@ func (inst StringAstNode) MarshalCBOR() (data []byte, err error) {
 	return cbor.Marshal(inst.String())
 }
 
+func (inst StringAstNode) GenerateGoCode(w io.Writer) (err error) {
+	_, err = fmt.Fprintf(w, "StringAstNode{BaseType: %s,WidthModifier: %s, Width: %d, ScalarModifier: %s}",
+		formatGoRune(inst.BaseType), formatGoRune(inst.WidthModifier), inst.Width, formatGoRune(inst.ScalarModifier))
+	return
+}
+
 func (inst TemporalTypeAstNode) IsStringNode() bool {
 	return false
 }
@@ -88,6 +104,11 @@ func (inst TemporalTypeAstNode) String() string {
 	addNumber(s, inst.Width)
 	addIfNonzero(s, inst.ScalarModifier)
 	return s.String()
+}
+func (inst TemporalTypeAstNode) GenerateGoCode(w io.Writer) (err error) {
+	_, err = fmt.Fprintf(w, "TemporalTypeAstNode{BaseType: %s, Width: %d, ScalarModifier: %s}",
+		formatGoRune(inst.BaseType), inst.Width, formatGoRune(inst.ScalarModifier))
+	return
 }
 func (inst TemporalTypeAstNode) IsValid() bool {
 	return true
@@ -135,6 +156,11 @@ func (inst MachineNumericTypeAstNode) String() string {
 	addIfNonzero(s, inst.ByteOrderModifier)
 	addIfNonzero(s, inst.ScalarModifier)
 	return s.String()
+}
+func (inst MachineNumericTypeAstNode) GenerateGoCode(w io.Writer) (err error) {
+	_, err = fmt.Fprintf(w, "MachineNumericTypeAstNode{BaseType: %s, Width: %d, ByteOrderModifier: %s, ScalarModifier: %s}",
+		formatGoRune(inst.BaseType), inst.Width, formatGoRune(inst.ByteOrderModifier), formatGoRune(inst.ScalarModifier))
+	return
 }
 func (inst MachineNumericTypeAstNode) IsScalar() bool {
 	return inst.ScalarModifier == ScalarModifierNone

@@ -3,6 +3,7 @@ package common
 import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
 )
 
@@ -23,7 +24,7 @@ func (inst *TableDescDto) GetPlainItemCount(itemType PlainItemTypeE) (n int) {
 	}
 	return 0
 }
-func (inst *TableDescDto) AddPlainItemNames(itemType PlainItemTypeE, names []StylableName) {
+func (inst *TableDescDto) AddPlainItemNames(itemType PlainItemTypeE, names []naming.StylableName) {
 	switch itemType {
 	case PlainItemTypeEntityId:
 		inst.EntityIdNames = append(inst.EntityIdNames, names...)
@@ -87,7 +88,7 @@ func (inst *TableDescDto) AddPlainItemValueSemantics(itemType PlainItemTypeE, va
 		inst.OpaqueColumnValueSemantics = append(inst.OpaqueColumnValueSemantics, valueSemantics...)
 	}
 }
-func (inst *TableDescDto) GetPlainItemNames(itemType PlainItemTypeE) []StylableName {
+func (inst *TableDescDto) GetPlainItemNames(itemType PlainItemTypeE) []naming.StylableName {
 	switch itemType {
 	case PlainItemTypeEntityId:
 		return inst.EntityIdNames

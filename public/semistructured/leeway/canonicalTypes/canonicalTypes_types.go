@@ -2,6 +2,7 @@ package canonicalTypes
 
 import (
 	"fmt"
+	"io"
 	"iter"
 
 	"github.com/antlr4-go/antlr/v4"
@@ -43,6 +44,7 @@ type PrimitiveAstNodeI interface {
 	IsTemporalNode() bool
 	IsMachineNumericNode() bool
 	IsScalar() bool
+	GenerateGoCode(w io.Writer) (err error)
 	AstNodeI
 }
 type AstNodeI interface {

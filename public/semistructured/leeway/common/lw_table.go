@@ -8,6 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	canonicalTypes3 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
 )
 
@@ -41,7 +42,7 @@ func (inst *TableDesc) Reset() {
 	clear(inst.TaggedValuesSections)
 	inst.TaggedValuesSections = initSlice(inst.TaggedValuesSections, taggedSecEst)
 }
-func (inst *TableDesc) AddPlainColumns(itemType PlainItemTypeE, names []StylableName, canonicalTypes []string, encodingHints []encodingaspects.AspectSet, valueSemantics []valueaspects.AspectSet) (err error) {
+func (inst *TableDesc) AddPlainColumns(itemType PlainItemTypeE, names []naming.StylableName, canonicalTypes []string, encodingHints []encodingaspects.AspectSet, valueSemantics []valueaspects.AspectSet) (err error) {
 	l := len(names)
 	if l != len(encodingHints) || l != len(encodingHints) || l != len(canonicalTypes) || l != len(valueSemantics) {
 		err = eh.Errorf("invalid arguments: all slices must be co-slices")
@@ -111,7 +112,7 @@ func (inst *TableDesc) LoadFrom(dto *TableDescDto) (err error) {
 	}
 	return
 }
-func (inst *TableDesc) GetPlainItemNames(itemType PlainItemTypeE, in []StylableName) (out []StylableName) {
+func (inst *TableDesc) GetPlainItemNames(itemType PlainItemTypeE, in []naming.StylableName) (out []naming.StylableName) {
 	out = inst.copyPlainItemNames(itemType, in)
 	return
 }
@@ -136,7 +137,7 @@ func (inst *TableDesc) LoadTo(dto *TableDescDto) (err error) {
 	tmp := make([]string, 0, 10)
 	tmp2 := make([]encodingaspects.AspectSet, 0, 10)
 	tmp3 := make([]valueaspects.AspectSet, 0, 10)
-	tmp4 := make([]StylableName, 0, 10)
+	tmp4 := make([]naming.StylableName, 0, 10)
 	for _, t := range AllPlainItemTypes {
 		if t == PlainItemTypeNone {
 			continue
@@ -194,7 +195,7 @@ func (inst *TableDesc) serializeAndCopyStructuredTypes(itemType PlainItemTypeE, 
 	}
 	return
 }
-func (inst *TableDesc) copyPlainItemNames(itemType PlainItemTypeE, in []StylableName) (out []StylableName) {
+func (inst *TableDesc) copyPlainItemNames(itemType PlainItemTypeE, in []naming.StylableName) (out []naming.StylableName) {
 	out = in
 	for _, n := range co.CoIterateFilter(inst.PlainValuesItemTypes, itemType, inst.PlainValuesNames) {
 		out = append(out, n)

@@ -7,6 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	canonicalTypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
 )
@@ -30,7 +31,7 @@ func extractScalarModifier(ct canonicalTypes2.PrimitiveAstNodeI) (scalarModifier
 }
 func addHomogenousArraySupportColumn(dest *IntermediateColumnProps) (err error) {
 	hints := encodingaspects.EncodeAspectsMustValidate(encodingaspects.AspectLightGeneralCompression, encodingaspects.AspectLightBiasSmallInteger)
-	dest.Add(MustBeValidStylableName(ColumnRoleLength.String()), ColumnRoleLength, canonicalTypes2.MachineNumericTypeAstNode{
+	dest.Add(naming.MustBeValidStylableName(ColumnRoleLength.String()), ColumnRoleLength, canonicalTypes2.MachineNumericTypeAstNode{
 		BaseType:          canonicalTypes2.BaseTypeMachineNumericUnsigned,
 		Width:             64,
 		ByteOrderModifier: canonicalTypes2.ByteOrderModifierNone,
@@ -40,7 +41,7 @@ func addHomogenousArraySupportColumn(dest *IntermediateColumnProps) (err error) 
 }
 func addSetSupportColumn(dest *IntermediateColumnProps, role ColumnRoleE) (err error) {
 	hints := encodingaspects.EncodeAspectsMustValidate(encodingaspects.AspectLightGeneralCompression, encodingaspects.AspectHeavyBiasSmallInteger)
-	dest.Add(MustBeValidStylableName(role.String()), role, canonicalTypes2.MachineNumericTypeAstNode{
+	dest.Add(naming.MustBeValidStylableName(role.String()), role, canonicalTypes2.MachineNumericTypeAstNode{
 		BaseType:          canonicalTypes2.BaseTypeMachineNumericUnsigned,
 		Width:             64,
 		ByteOrderModifier: canonicalTypes2.ByteOrderModifierNone,
@@ -67,7 +68,7 @@ func (inst *IntermediateColumnProps) Reserve(n int) {
 	inst.EncodingHints = slices.Grow(inst.EncodingHints, n)
 	inst.ValueSemantics = slices.Grow(inst.ValueSemantics, n)
 }
-func (inst *IntermediateColumnProps) Add(name StylableName, role ColumnRoleE, ct canonicalTypes2.PrimitiveAstNodeI, hints encodingaspects.AspectSet, valueSemantics valueaspects.AspectSet) {
+func (inst *IntermediateColumnProps) Add(name naming.StylableName, role ColumnRoleE, ct canonicalTypes2.PrimitiveAstNodeI, hints encodingaspects.AspectSet, valueSemantics valueaspects.AspectSet) {
 	inst.Names = append(inst.Names, name)
 	inst.Roles = append(inst.Roles, role)
 	inst.CanonicalType = append(inst.CanonicalType, ct)
@@ -136,9 +137,9 @@ func (inst *IntermediateTaggedValuesDesc) loadSectionMembership(sec *TaggedValue
 			err = eb.Build().Stringer("sectionName", sec.Name).Stringer("membership", m).Errorf("currently only scalar membership values are possible")
 			return
 		}
-		inst.Membership.Add(StylableName(role1.String()), role1, ct1, hints1, valueaspects.EmptyAspectSet)
+		inst.Membership.Add(naming.StylableName(role1.String()), role1, ct1, hints1, valueaspects.EmptyAspectSet)
 		if m.ContainsMixed() {
-			inst.Membership.Add(StylableName(role2.String()), role2, ct2, hints2, valueaspects.EmptyAspectSet)
+			inst.Membership.Add(naming.StylableName(role2.String()), role2, ct2, hints2, valueaspects.EmptyAspectSet)
 		}
 	}
 	for m := range sec.MembershipSpec.Iterate() {
@@ -246,7 +247,7 @@ func (inst *IntermediatePlainValuesDesc) Reset() {
 	inst.NonScalarSetSupport.Reset()
 	inst.StreamingGroup = ""
 }
-func (inst *IntermediatePlainValuesDesc) Load(names []StylableName, ctss []canonicalTypes2.AstNodeI, hintss []encodingaspects.AspectSet, ss []valueaspects.AspectSet, streamingGroup Key) (err error) {
+func (inst *IntermediatePlainValuesDesc) Load(names []naming.StylableName, ctss []canonicalTypes2.AstNodeI, hintss []encodingaspects.AspectSet, ss []valueaspects.AspectSet, streamingGroup naming.Key) (err error) {
 	inst.StreamingGroup = streamingGroup
 	for i, attrName := range names {
 		cts := ctss[i]
@@ -278,7 +279,7 @@ func (inst *IntermediatePlainValuesDesc) Load(names []StylableName, ctss []canon
 	}
 	return
 }
-func (inst *IntermediatePlainValuesDesc) LoadSingle(name StylableName, ct canonicalTypes2.PrimitiveAstNodeI, hints encodingaspects.AspectSet, vs valueaspects.AspectSet, streamingGroup Key) (err error) {
+func (inst *IntermediatePlainValuesDesc) LoadSingle(name naming.StylableName, ct canonicalTypes2.PrimitiveAstNodeI, hints encodingaspects.AspectSet, vs valueaspects.AspectSet, streamingGroup naming.Key) (err error) {
 	inst.StreamingGroup = streamingGroup
 	var scalarModifier canonicalTypes2.ScalarModifierE
 	scalarModifier, err = extractScalarModifier(ct)
@@ -350,7 +351,7 @@ func (inst *IntermediateTableRepresentation) plainValueDescByItemType(itemType P
 func (inst *IntermediateTableRepresentation) LoadFromTable(table *TableDesc, tech TechnologySpecificMembershipSetGenI) (err error) {
 	for i, itemType := range table.PlainValuesItemTypes {
 		dest := inst.plainValueDescByItemType(itemType)
-		var streamingGroup Key
+		var streamingGroup naming.Key
 		switch itemType {
 		case PlainItemTypeOpaque:
 			streamingGroup = table.OpaqueStreamingGroup
@@ -419,7 +420,7 @@ func (inst *IntermediateTaggedValuesDesc) Length() int {
 		inst.MembershipSupport.Length()
 }
 
-func (inst *IntermediateTaggedValuesDesc) IterateColumnProps(sectionName StylableName, asp useaspects.AspectSet, indexOffset uint32) IntermediateColumnIterator {
+func (inst *IntermediateTaggedValuesDesc) IterateColumnProps(sectionName naming.StylableName, asp useaspects.AspectSet, indexOffset uint32) IntermediateColumnIterator {
 	return func(yield func(IntermediateColumnContext, *IntermediateColumnProps) bool) {
 		cc := IntermediateColumnContext{
 			Scope:          IntermediateColumnScopeTagged,

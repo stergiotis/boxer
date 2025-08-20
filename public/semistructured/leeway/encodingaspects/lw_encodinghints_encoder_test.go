@@ -6,6 +6,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stretchr/testify/require"
 )
 
@@ -15,6 +16,7 @@ func TestCanonicalEt7AspectEnum(t *testing.T) {
 	for i := AspectE(0); i < MaxAspectExcl; i++ {
 		require.False(t, slices.Contains(m, i.String()))
 		m = append(m, i.String())
+		require.True(t,naming.StylableName(i.String()).IsValid(), i.String())
 	}
 }
 func TestCanonicalEt7AspectCoder(t *testing.T) {

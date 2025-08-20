@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
 )
 
@@ -27,7 +28,7 @@ var SchemaTableArrowSchema = arrow.NewSchema([]arrow.Field{
 	{Name: "EncodingHints", Type: arrow.ListOfNonNullable(arrow.BinaryTypes.String), Nullable: false},
 }, nil)
 
-func (inst *IntermediateTableRepresentation) LoadInArrowBuilder(id StylableName, builder *array.RecordBuilder) (err error) {
+func (inst *IntermediateTableRepresentation) LoadInArrowBuilder(id naming.StylableName, builder *array.RecordBuilder) (err error) {
 	idCol := builder.Field(0).(*array.StringBuilder)
 	scopeCol := builder.Field(1).(*array.BinaryDictionaryBuilder)
 	itemTypeCol := builder.Field(2).(*array.BinaryDictionaryBuilder)
@@ -41,7 +42,7 @@ func (inst *IntermediateTableRepresentation) LoadInArrowBuilder(id StylableName,
 	encodingHintsColList := builder.Field(12).(*array.ListBuilder)
 	encodingHintsColValue := builder.Field(12).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
 	addRow := func(scope IntermediateColumnScopeE, itemType PlainItemTypeE, section string, name string, role ColumnRoleE, subType IntermediateColumnSubTypeE, useAspect useaspects.AspectSet, canonicalType canonicalTypes.PrimitiveAstNodeI, encodingHints encodingaspects.AspectSet) (err error) {
-		idCol.AppendString(id.Convert(DefaultNamingStyle).String())
+		idCol.AppendString(id.Convert(naming.DefaultNamingStyle).String())
 		err = scopeCol.AppendString(scope.String())
 		if err != nil {
 			return
@@ -103,7 +104,7 @@ func (inst *IntermediateTableRepresentation) LoadInArrowBuilder(id StylableName,
 	}
 	return
 }
-func (inst *IntermediateTableRepresentation) ToSchemaTable(id StylableName, out io.Writer) (err error) {
+func (inst *IntermediateTableRepresentation) ToSchemaTable(id naming.StylableName, out io.Writer) (err error) {
 	builder := array.NewRecordBuilder(memory.DefaultAllocator, SchemaTableArrowSchema)
 	defer builder.Release()
 

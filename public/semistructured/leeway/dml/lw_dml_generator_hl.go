@@ -7,6 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/codegen/golang"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/unsafeperf"
 )
 
@@ -26,7 +27,7 @@ func NewGoCodeGeneratorDriver(namingConvention common.NamingConventionI, tech co
 		tech:             tech,
 	}
 }
-func (inst *GeneratorDriver) GenerateGoClasses(packageName string, tableName common.StylableName, tblDesc common.TableDesc, tableRowConfig common.TableRowConfigE, namingStyle GoClassNamerI) (sourceCode []byte, wellFormed bool, err error) {
+func (inst *GeneratorDriver) GenerateGoClasses(packageName string, tableName naming.StylableName, tblDesc common.TableDesc, tableRowConfig common.TableRowConfigE, namingStyle GoClassNamerI) (sourceCode []byte, wellFormed bool, err error) {
 	s := &strings.Builder{}
 	_, err = golang.AddCodeGenComment(s, CodeGeneratorName)
 	if err != nil {

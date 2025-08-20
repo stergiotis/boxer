@@ -7,6 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	canonicalTypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes"
 	encodingaspects2 "github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
 )
@@ -33,7 +34,7 @@ func NewTableOperations() (inst *TableOperations, err error) {
 	}
 	inst = &TableOperations{
 		manip:      manip,
-		normalizer: NewTableNormalizer(DefaultNamingStyle),
+		normalizer: NewTableNormalizer(naming.DefaultNamingStyle),
 		marshaller: marshaller,
 		buf:        nil,
 	}

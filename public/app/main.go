@@ -16,7 +16,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/profiling"
 	"github.com/stergiotis/boxer/public/observability/vcs"
 	"github.com/stergiotis/boxer/public/semistructured/cbor"
-	et7 "github.com/stergiotis/boxer/public/semistructured/leeway/cli"
+	lw "github.com/stergiotis/boxer/public/semistructured/leeway/cli"
 	"github.com/urfave/cli/v2"
 )
 
@@ -45,7 +45,7 @@ func mainC() (exitCode int) {
 			dsl.NewCommand(),
 			cbor.NewCommand(),
 			compiletime.NewCommand(nil, nil),
-			et7.NewCommand(),
+			lw.NewCliCommand(),
 			observability.NewCliCommand(),
 			docgen.NewDocCli(),
 			dev.NewCliCommand(),

@@ -5,10 +5,13 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/observability/vcs"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 )
+
+var CodeGeneratorName = "Leeway CT (" + vcs.ModuleInfo() + ")"
 
 var ErrNotImplemented = eh.Errorf("go code generation not implemtented for given canonical type")
 

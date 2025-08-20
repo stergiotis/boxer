@@ -7,6 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
 	"github.com/stretchr/testify/require"
@@ -28,7 +29,7 @@ func TestNewTableNormalizer(t *testing.T) {
 	manip.AddPlainValueItem(common.PlainItemTypeEntityId, "my_id", ctp.MustParsePrimitiveTypeAst("s"), encodingaspects.EmptyAspectSet, valueaspects.EmptyAspectSet)
 	manip.AddPlainValueItem(common.PlainItemTypeEntityId, "my_id_two", ctp.MustParsePrimitiveTypeAst("u64"), encodingaspects.EmptyAspectSet, valueaspects.EmptyAspectSet)
 	manip.AddPlainValueItem(common.PlainItemTypeTransaction, "my_transaction", ctp.MustParsePrimitiveTypeAst("s"), encodingaspects.EmptyAspectSet, valueaspects.EmptyAspectSet)
-	manip.MergeTaggedValueColumn("my_section", "col1", ctp.MustParsePrimitiveTypeAst("u32"), encodingaspects.EmptyAspectSet, valueaspects.EmptyAspectSet, useaspects.EmptyAspectSet, common.MembershipSpecE(0).AddLowCardVerbatim(), common.MustBeValidKey("coSectionKey1"), common.MustBeValidKey("streamingGroup1"))
+	manip.MergeTaggedValueColumn("my_section", "col1", ctp.MustParsePrimitiveTypeAst("u32"), encodingaspects.EmptyAspectSet, valueaspects.EmptyAspectSet, useaspects.EmptyAspectSet, common.MembershipSpecE(0).AddLowCardVerbatim(), naming.MustBeValidKey("coSectionKey1"), naming.MustBeValidKey("streamingGroup1"))
 	manip.MergeTaggedValueColumn("my_section", "col2", ctp.MustParsePrimitiveTypeAst("u8"), encodingaspects.EmptyAspectSet, valueaspects.EmptyAspectSet, useaspects.EmptyAspectSet, common.MembershipSpecE(0).AddLowCardVerbatim(), "", "")
 	manip.MergeTaggedValueColumn("my_section_two", "col3", ctp.MustParsePrimitiveTypeAst("u16"), encodingaspects.EmptyAspectSet, valueaspects.EmptyAspectSet, useaspects.EmptyAspectSet, common.MembershipSpecE(0).AddLowCardVerbatim(), "", "")
 	tbl1, err = manip.BuildTableDesc()

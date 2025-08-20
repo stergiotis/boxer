@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
 	encodingaspects2 "github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
 	"github.com/stretchr/testify/require"
@@ -108,7 +109,7 @@ func TestGoClassBuilder(t *testing.T) {
 	tableRowConfig := common.TableRowConfigMultiAttributesPerRow
 	var sourceCode []byte
 	namingStyle := NewMultiTablePerPackageGoClassNamer()
-	sourceCode, _, err = driver.GenerateGoClasses("example", common.MustBeValidStylableName("testtable"), tblDesc, tableRowConfig, namingStyle)
+	sourceCode, _, err = driver.GenerateGoClasses("example", naming.MustBeValidStylableName("testtable"), tblDesc, tableRowConfig, namingStyle)
 	require.NoError(t, err)
 	checkCodeInvariants(sourceCode, t)
 
