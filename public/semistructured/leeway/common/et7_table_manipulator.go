@@ -98,8 +98,8 @@ func (inst *TableManipulator) TaggedValueSection(sectionName StylableName) Tagge
 		sectionIndex: idx,
 	}
 }
-func (inst TaggedValueSectionMerger) TaggedValueColumn(name StylableName) TaggedValueColumnMerger {
-	sectionIdx, columnIdx := inst.manip.mergeTaggedValueColumn(inst.table.TaggedValuesSections[inst.sectionIndex].Name, name, nil, encodingaspects2.EmptyAspectSet, valueaspects.EmptyAspectSet, useaspects2.EmptyAspectSet, MembershipSpecNone, "", "")
+func (inst TaggedValueSectionMerger) TaggedValueColumn(name StylableName, canonicalType canonicalTypes2.PrimitiveAstNodeI) TaggedValueColumnMerger {
+	sectionIdx, columnIdx := inst.manip.mergeTaggedValueColumn(inst.table.TaggedValuesSections[inst.sectionIndex].Name, name, canonicalType, encodingaspects2.EmptyAspectSet, valueaspects.EmptyAspectSet, useaspects2.EmptyAspectSet, MembershipSpecNone, "", "")
 	if sectionIdx != inst.sectionIndex {
 		log.Panic().Stringer("name", name).Int("sectionIdx1", sectionIdx).Int("sectionIdx2", inst.sectionIndex).Msg("section index do not match, something is fundamentally wrong")
 	}
@@ -381,11 +381,11 @@ func (inst TaggedValueColumnMerger) Section() TaggedValueSectionMerger {
 		sectionIndex: inst.sectionIndex,
 	}
 }
-func (inst TaggedValueColumnMerger) ColumnName(columnName StylableName) TaggedValueColumnMerger {
+func (inst TaggedValueColumnMerger) SetColumnName(columnName StylableName) TaggedValueColumnMerger {
 	inst.table.TaggedValuesSections[inst.sectionIndex].ValueColumnNames[inst.columnIndex] = columnName
 	return inst
 }
-func (inst TaggedValueColumnMerger) ColumnCanonicalType(ct canonicalTypes2.PrimitiveAstNodeI) TaggedValueColumnMerger {
+func (inst TaggedValueColumnMerger) SetColumnCanonicalType(ct canonicalTypes2.PrimitiveAstNodeI) TaggedValueColumnMerger {
 	inst.table.TaggedValuesSections[inst.sectionIndex].ValueColumnTypes[inst.columnIndex] = ct
 	return inst
 }
@@ -410,11 +410,11 @@ func (inst TaggedValueColumnMerger) AddColumnValueSemantics(semantics ...valueas
 	return inst
 }
 
-func (inst PlainValueColumnMerger) ColumnName(columnName StylableName) PlainValueColumnMerger {
+func (inst PlainValueColumnMerger) SetColumnName(columnName StylableName) PlainValueColumnMerger {
 	inst.table.PlainValuesNames[inst.columnIndex] = columnName
 	return inst
 }
-func (inst PlainValueColumnMerger) ColumnCanonicalType(ct canonicalTypes2.PrimitiveAstNodeI) PlainValueColumnMerger {
+func (inst PlainValueColumnMerger) SetColumnCanonicalType(ct canonicalTypes2.PrimitiveAstNodeI) PlainValueColumnMerger {
 	inst.table.PlainValuesTypes[inst.columnIndex] = ct
 	return inst
 }
