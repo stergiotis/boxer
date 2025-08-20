@@ -32,7 +32,7 @@ var SampleMachineNumericMaxExcl = sliceProd(sampleMachineNumericTypeRadixii)
 
 var SampleStringTypeBaseType = []canonicalTypes2.BaseTypeStringE{canonicalTypes2.BaseTypeStringBool, canonicalTypes2.BaseTypeStringBytes, canonicalTypes2.BaseTypeStringUtf8}
 var SampleStringTypeWidthModifier = []canonicalTypes2.WidthModifierE{canonicalTypes2.WidthModifierNone, canonicalTypes2.WidthModifierFixed}
-var SampleStringTypeWidth = []canonicalTypes2.Width{128, 145, 192}
+var SampleStringTypeWidth = []canonicalTypes2.Width{0, 128, 145, 192}
 var sampleStringTypeRadixii = []uint64{uint64(len(SampleStringTypeBaseType)), uint64(len(SampleStringTypeWidthModifier)), uint64(len(SampleStringTypeWidth)), uint64(len(SampleScalarModifier))}
 var SampleStringTypeMaxExcl = sliceProd(sampleStringTypeRadixii)
 
