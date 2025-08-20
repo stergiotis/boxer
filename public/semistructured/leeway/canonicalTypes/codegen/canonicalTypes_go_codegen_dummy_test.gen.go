@@ -226,6 +226,42 @@ func TestGeneratedGoCodeOutput(t *testing.T) {
 		require.Equal(t, f64nm, []float64(nil))
 	}
 	{
+		var b bool
+		require.Equal(t, b, false)
+	}
+	{
+		var y []byte
+		require.Equal(t, y, []byte(nil))
+	}
+	{
+		var s string
+		require.Equal(t, s, "")
+	}
+	{
+		var bh []bool
+		require.Equal(t, bh, []bool(nil))
+	}
+	{
+		var yh [][]byte
+		require.Equal(t, yh, [][]byte(nil))
+	}
+	{
+		var sh []string
+		require.Equal(t, sh, []string(nil))
+	}
+	{
+		var bm []bool
+		require.Equal(t, bm, []bool(nil))
+	}
+	{
+		var ym [][]byte
+		require.Equal(t, ym, [][]byte(nil))
+	}
+	{
+		var sm []string
+		require.Equal(t, sm, []string(nil))
+	}
+	{
 		var z32 time.Time
 		require.Equal(t, z32, time.Time{})
 	}
