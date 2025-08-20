@@ -409,7 +409,11 @@ func (inst *GoClassBuilder) composeAttributeClassAndFactoryCode(sectionIRH *comm
 	if err != nil {
 		return
 	}
-
+	nonScalarIRH := sectionIRH.DeriveSubHolder(deriveSubHolderSelectNonScalar)
+	err = inst.composeFieldRelatedCodeAll(structFieldOperationDeclareContainerLength, nonScalarIRH.IterateColumnProps(), "")
+	if err != nil {
+		return
+	}
 	_, err = fmt.Fprintf(b, `}
 
 func New%s(builder *array.RecordBuilder, parent *%s) (inst *%s) {

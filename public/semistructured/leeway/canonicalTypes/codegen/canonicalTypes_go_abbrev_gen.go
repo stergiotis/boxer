@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/codegen/golang"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes/sample"
@@ -29,6 +30,7 @@ func GenerateGoAbbrev(packageName string, imp string, astPackage string, w io.Wr
 	for n := uint64(0); n < sample.SampleTypeMaxExcl; n++ {
 		typ := sample.GenerateSampleType(n)
 		if !typ.IsValid() {
+			log.Debug().Str("debug", fmt.Sprintf("%#v", typ)).Stringer("typ", typ).Msg("skipping invalid type")
 			continue
 		}
 		if typ.IsStringNode() && strings.ContainsAny(typ.String(), "012345678910") {
@@ -48,6 +50,8 @@ func GenerateGoAbbrev(packageName string, imp string, astPackage string, w io.Wr
 			if err != nil {
 				return
 			}
+		} else {
+			log.Info().Stringer("type", typ).Msg("skipping type")
 		}
 	}
 	return

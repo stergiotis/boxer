@@ -4,6 +4,9 @@ package example
 
 import (
 	"errors"
+	"slices"
+	"time"
+
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	_ "github.com/apache/arrow-go/v18/arrow/ipc"
@@ -11,8 +14,6 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
-	"slices"
-	"time"
 )
 
 func createRecordBuilderTesttable(allocator memory.Allocator) (builder *array.RecordBuilder) {
@@ -784,6 +785,10 @@ type InEntityTesttableSectionSpecialInAttr struct {
 	membershipContainerLength017 int
 
 	membershipContainerLength018 int
+
+	homogenousArrayContainerLength015 int
+
+	homogenousArrayContainerLength016 int
 }
 
 func NewInEntityTesttableSectionSpecialInAttr(builder *array.RecordBuilder, parent *InEntityTesttableSectionSpecial) (inst *InEntityTesttableSectionSpecialInAttr) {
