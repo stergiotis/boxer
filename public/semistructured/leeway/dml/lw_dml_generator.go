@@ -908,8 +908,13 @@ func (inst *GoClassBuilder) composeAttributeCode(sectionIRH *common.Intermediate
 		for cc, cp := range membershipSupportIRH.IterateColumnProps() {
 			for i := 0; i < cp.Length(); i++ {
 				var cardinalitySrcRole common.ColumnRoleE
-				cardinalitySrcRole, err = common.GetCardinalityRoleByMembershipRole(cp.Roles[i])
+				role := cp.Roles[i]
+				if !role.IsCardinalityRole() {
+					continue
+				}
+				cardinalitySrcRole, err = common.GetCardinalityRoleByMembershipRole(role)
 				if err != nil {
+					err = eb.Build().Stringer("role", role).Errorf("unable to resolve cardinality role: %w", err)
 					return
 				}
 				err = inst.findFirstMatchingColumnAndGenerateCode(membershipIRH, common.IntermediateColumnsSubTypeMembership, cardinalitySrcRole, structFieldOperationStoreContainerLength)

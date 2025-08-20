@@ -15,6 +15,20 @@ func (inst PhysicalColumnDesc) GetName() string {
 
 var ErrUnhandledRole = eh.Errorf("unhandled role")
 
+func (inst ColumnRoleE) IsCardinalityRole() bool {
+	switch inst {
+	case ColumnRoleHighCardRefCardinality,
+		ColumnRoleHighCardRefParametrizedCardinality,
+		ColumnRoleHighCardVerbatimCardinality,
+		ColumnRoleLowCardRefCardinality,
+		ColumnRoleLowCardRefParametrizedCardinality,
+		ColumnRoleLowCardVerbatimCardinality,
+		ColumnRoleMixedLowCardRefCardinality,
+		ColumnRoleMixedLowCardVerbatimCardinality:
+		return true
+	}
+	return false
+}
 func GetCardinalityRoleByMembershipRole(membershipCardinalityRole ColumnRoleE) (cardinalitySrcRole ColumnRoleE, err error) {
 	switch membershipCardinalityRole {
 	case ColumnRoleHighCardRefCardinality:

@@ -35,7 +35,7 @@ func generateExampleMembershipSpec(rnd *rand.Rand) (r MembershipSpecE) {
 	}
 	return r
 }
-func GenerateSampleTableDesc(rnd *rand.Rand, acceptCanonicalType func(ct canonicalTypes.PrimitiveAstNodeI) (ok bool), acceptEncodingAspect func(asp encodingaspects2.AspectE) (ok bool)) (tbl TableDesc, err error) {
+func GenerateSampleTableDesc(rnd *rand.Rand, acceptCanonicalType func(ct canonicalTypes.PrimitiveAstNodeI) (ok bool, msg string), acceptEncodingAspect func(asp encodingaspects2.AspectE) (ok bool, msg string)) (tbl TableDesc, err error) {
 	var gen *TableManipulator
 	gen, err = NewTableManipulator()
 	if err != nil {
@@ -50,7 +50,7 @@ func GenerateSampleTableDesc(rnd *rand.Rand, acceptCanonicalType func(ct canonic
 	tbl, err = gen.BuildTableDesc()
 	return
 }
-func GenerateSampleTableDescDto(rnd *rand.Rand, acceptCanonicalType func(ct canonicalTypes.PrimitiveAstNodeI) (ok bool), acceptEncodingAspect func(asp encodingaspects2.AspectE) (ok bool)) (dto TableDescDto, err error) {
+func GenerateSampleTableDescDto(rnd *rand.Rand, acceptCanonicalType func(ct canonicalTypes.PrimitiveAstNodeI) (ok bool, msg string), acceptEncodingAspect func(asp encodingaspects2.AspectE) (ok bool, msg string)) (dto TableDescDto, err error) {
 	var gen *TableManipulator
 	gen, err = NewTableManipulator()
 	if err != nil {
@@ -66,7 +66,7 @@ func GenerateSampleTableDescDto(rnd *rand.Rand, acceptCanonicalType func(ct cano
 	dto, err = gen.BuildTableDescDto()
 	return
 }
-func GenerateSampleEncodingAspectEx(nMembers int, r *rand.Rand, accept func(aspect encodingaspects2.AspectE) (ok bool)) (sample encodingaspects2.AspectSet) {
+func GenerateSampleEncodingAspectEx(nMembers int, r *rand.Rand, accept func(aspect encodingaspects2.AspectE) (ok bool, msg string)) (sample encodingaspects2.AspectSet) {
 	if nMembers < 0 {
 		log.Panic().Int("nMembers", nMembers).Msg("nMembers is negative")
 		return
@@ -76,8 +76,13 @@ func GenerateSampleEncodingAspectEx(nMembers int, r *rand.Rand, accept func(aspe
 		var m encodingaspects2.AspectE
 		for {
 			m = encodingaspects2.AllAspects[r.IntN(len(encodingaspects2.AllAspects))]
-			if accept == nil || accept(m) {
+			if accept == nil {
 				break
+			} else {
+				ok, _ := accept(m)
+				if ok {
+					break
+				}
 			}
 		}
 		members = append(members, m)
@@ -95,7 +100,7 @@ func GenerateSampleValueSemantics(nMembers int, rnd *rand.Rand) (valueSemantics 
 	}
 	return valueaspects.EncodeAspectsMustValidate(members...)
 }
-func PopulateManipulator(manipulator *TableManipulator, rnd *rand.Rand, acceptCanonicalType func(ct canonicalTypes.PrimitiveAstNodeI) (ok bool), acceptEncodingAspect func(aspect encodingaspects2.AspectE) (ok bool)) (err error) {
+func PopulateManipulator(manipulator *TableManipulator, rnd *rand.Rand, acceptCanonicalType func(ct canonicalTypes.PrimitiveAstNodeI) (ok bool, msg string), acceptEncodingAspect func(aspect encodingaspects2.AspectE) (ok bool, msg string)) (err error) {
 	for _, t := range AllPlainItemTypes {
 		if t == PlainItemTypeNone {
 			continue

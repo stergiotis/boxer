@@ -152,15 +152,8 @@ func TestSmoke(t *testing.T) {
 func TestTableOpsRoundtrip(t *testing.T) {
 	rnd := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	tech := clickhouse.NewTechnologySpecificCodeGenerator()
-	acceptCanonicalType := func(ct canonicalTypes2.PrimitiveAstNodeI) (ok bool) {
-		ok, _ = tech.CheckTypeCompatibility(ct)
-		return
-	}
-	acceptEncodingAspect := func(hint encodingaspects.AspectE) (ok bool) {
-		status, _ := tech.GetEncodingHintImplementationStatus(hint)
-		ok = status != common2.ImplementationStatusNotImplemented
-		return
-	}
+	acceptCanonicalType := tech.CheckTypeCompatibility
+	acceptEncodingAspect := ddl.EncodingAspectFilterFuncFromTechnology(tech, common2.ImplementationStatusPartial)
 	tblOp, err := common2.NewTableOperations()
 	tblNormalizer := common2.NewTableNormalizer(naming.DefaultNamingStyle)
 	require.NoError(t, err)
@@ -201,15 +194,8 @@ func TestTableOpsRoundtrip(t *testing.T) {
 func TestIntermediateRoundtrip(t *testing.T) {
 	rnd := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	tech := clickhouse.NewTechnologySpecificCodeGenerator()
-	acceptCanonicalType := func(ct canonicalTypes2.PrimitiveAstNodeI) (ok bool) {
-		ok, _ = tech.CheckTypeCompatibility(ct)
-		return
-	}
-	acceptEncodingAspect := func(hint encodingaspects.AspectE) (ok bool) {
-		status, _ := tech.GetEncodingHintImplementationStatus(hint)
-		ok = status != common2.ImplementationStatusNotImplemented
-		return
-	}
+	acceptCanonicalType := tech.CheckTypeCompatibility
+	acceptEncodingAspect := ddl.EncodingAspectFilterFuncFromTechnology(tech, common2.ImplementationStatusPartial)
 	tblNormalizer := common2.NewTableNormalizer(naming.DefaultNamingStyle)
 	var validator *common2.TableValidator
 	validator = common2.NewTableValidator()
@@ -252,15 +238,8 @@ func TestIntermediateRoundtrip(t *testing.T) {
 func TestNamingConventionRoundtrip(t *testing.T) {
 	rnd := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	tech := clickhouse.NewTechnologySpecificCodeGenerator()
-	acceptCanonicalType := func(ct canonicalTypes2.PrimitiveAstNodeI) (ok bool) {
-		ok, _ = tech.CheckTypeCompatibility(ct)
-		return
-	}
-	acceptEncodingAspect := func(hint encodingaspects.AspectE) (ok bool) {
-		status, _ := tech.GetEncodingHintImplementationStatus(hint)
-		ok = status != common2.ImplementationStatusNotImplemented
-		return
-	}
+	acceptCanonicalType := tech.CheckTypeCompatibility
+	acceptEncodingAspect := ddl.EncodingAspectFilterFuncFromTechnology(tech, common2.ImplementationStatusPartial)
 	tblOp, err := common2.NewTableOperations()
 	tblNormalizer := common2.NewTableNormalizer(naming.DefaultNamingStyle)
 	require.NoError(t, err)

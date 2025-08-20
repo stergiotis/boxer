@@ -1,6 +1,7 @@
 package dml
 
 import (
+	"math/rand/v2"
 	"os"
 	"testing"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
+	"github.com/stergiotis/boxer/public/unittest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -115,4 +117,38 @@ func TestGoClassBuilder(t *testing.T) {
 
 	err = os.WriteFile("example/dml_testtable.gen.go", sourceCode, os.ModePerm)
 	require.NoError(t, err)
+}
+func TestGoClassBuilderSample(t *testing.T) {
+	rnd := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
+	manip, err := common.NewTableManipulator()
+	require.NoError(t, err)
+
+	var conv *ddl.HumanReadableNamingConvention
+	tech := clickhouse.NewTechnologySpecificCodeGenerator()
+	conv, err = ddl.NewHumanReadableNamingConvention(":")
+	require.NoError(t, err)
+	driver := NewGoCodeGeneratorDriver(conv, tech)
+
+	tableRowConfig := common.TableRowConfigMultiAttributesPerRow
+	var sourceCode []byte
+	namingStyle := NewMultiTablePerPackageGoClassNamer()
+	acceptCanonicalType := tech.CheckTypeCompatibility
+	acceptEncodingAspect := ddl.EncodingAspectFilterFuncFromTechnology(tech, common.ImplementationStatusFull)
+	n := 1000
+	if testing.Short() {
+		n = 10
+	}
+	for i := 0; i < n; i++ {
+		manip.Reset()
+		err = common.PopulateManipulator(manip, rnd, acceptCanonicalType, acceptEncodingAspect)
+		require.NoError(t, err)
+		manip.SetTableName("sample")
+		var tblDesc common.TableDesc
+		tblDesc, err = manip.BuildTableDesc()
+		var wellFormed bool
+		sourceCode, wellFormed, err = driver.GenerateGoClasses("example", naming.MustBeValidStylableName("testtable"), tblDesc, tableRowConfig, namingStyle)
+		unittest.NoError(t, err)
+		require.True(t, wellFormed)
+		checkCodeInvariants(sourceCode, t)
+	}
 }

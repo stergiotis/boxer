@@ -61,15 +61,22 @@ func GenerateSampleType(n uint64) (sample canonicalTypes2.PrimitiveAstNodeI) {
 	}
 	return
 }
-func GenerateSamplePrimitiveType(rnd *rand.Rand, accept func(ct canonicalTypes2.PrimitiveAstNodeI) (ok bool)) (sample canonicalTypes2.PrimitiveAstNodeI) {
+func GenerateSamplePrimitiveType(rnd *rand.Rand, accept func(ct canonicalTypes2.PrimitiveAstNodeI) (ok bool, msg string)) (sample canonicalTypes2.PrimitiveAstNodeI) {
 	for {
 		sample = GenerateSampleType(rnd.Uint64())
-		if sample.IsValid() && (accept == nil || accept(sample)) {
-			return
+		if sample.IsValid() {
+			if accept != nil {
+				ok, _ := accept(sample)
+				if ok {
+					return
+				}
+			} else {
+				return
+			}
 		}
 	}
 }
-func GenerateSampleGroup(nMembers int, rnd *rand.Rand, accept func(ct canonicalTypes2.PrimitiveAstNodeI) (ok bool)) (sample canonicalTypes2.GroupAstNode) {
+func GenerateSampleGroup(nMembers int, rnd *rand.Rand, accept func(ct canonicalTypes2.PrimitiveAstNodeI) (ok bool, msg string)) (sample canonicalTypes2.GroupAstNode) {
 	if nMembers < 0 {
 		log.Panic().Int("nMembers", nMembers).Msg("nMembers is negative")
 		return
@@ -79,8 +86,15 @@ func GenerateSampleGroup(nMembers int, rnd *rand.Rand, accept func(ct canonicalT
 		var ct canonicalTypes2.PrimitiveAstNodeI
 		for {
 			ct = GenerateSampleType(rnd.Uint64())
-			if ct.IsValid() && (accept == nil || accept(ct)) {
-				break
+			if ct.IsValid() {
+				if accept != nil {
+					ok, _ := accept(ct)
+					if ok {
+						break
+					}
+				} else {
+					break
+				}
 			}
 		}
 		members = append(members, ct)
