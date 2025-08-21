@@ -2,38 +2,37 @@ package mapping
 
 import (
 	"github.com/stergiotis/boxer/public/observability/eh"
-	canonicalTypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes/ctabb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
-	encodingaspects2 "github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
+	enchint "github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 )
 
 func LoadJsonMapping(manip common.TableManipulatorFluidI) {
-	manip.PlainValueColumn(common.PlainItemTypeEntityId, "blake3hash", canonicalTypes2.StringAstNode{BaseType: canonicalTypes2.BaseTypeStringBytes}).
-		AddColumnEncodingHints(encodingaspects2.AspectLightGeneralCompression)
+	manip.PlainValueColumn(common.PlainItemTypeEntityId, "blake3hash", ctabb.Y).
+		AddColumnEncodingHints(enchint.AspectLightGeneralCompression)
 	manip.TaggedValueSection("bool").
 		AddSectionMembership(common.MembershipSpecMixedLowCardVerbatimHighCardParameters).
-		TaggedValueColumn("value",
-			canonicalTypes2.StringAstNode{BaseType: canonicalTypes2.BaseTypeStringBool})
+		TaggedValueColumn("value", ctabb.B)
 	manip.TaggedValueSection("undefined").
 		AddSectionMembership(common.MembershipSpecMixedLowCardVerbatimHighCardParameters)
 	manip.TaggedValueSection("null").
 		AddSectionMembership(common.MembershipSpecMixedLowCardVerbatimHighCardParameters)
 	manip.TaggedValueSection("string").
 		AddSectionMembership(common.MembershipSpecMixedLowCardVerbatimHighCardParameters).
-		TaggedValueColumn("value", canonicalTypes2.StringAstNode{BaseType: canonicalTypes2.BaseTypeStringUtf8}).
-		AddColumnEncodingHints(encodingaspects2.AspectLightGeneralCompression)
+		TaggedValueColumn("value", ctabb.S).
+		AddColumnEncodingHints(enchint.AspectLightGeneralCompression)
 	manip.TaggedValueSection("symbol").
 		AddSectionMembership(common.MembershipSpecMixedLowCardVerbatimHighCardParameters).
-		TaggedValueColumn("value", canonicalTypes2.StringAstNode{BaseType: canonicalTypes2.BaseTypeStringUtf8}).
-		AddColumnEncodingHints(encodingaspects2.AspectLightGeneralCompression,
-			encodingaspects2.AspectInterRecordLowCardinality,
-			encodingaspects2.AspectIntraRecordLowCardinality)
+		TaggedValueColumn("value", ctabb.S).
+		AddColumnEncodingHints(enchint.AspectLightGeneralCompression,
+			enchint.AspectInterRecordLowCardinality,
+			enchint.AspectIntraRecordLowCardinality)
 	manip.TaggedValueSection("float64").
 		AddSectionMembership(common.MembershipSpecMixedLowCardVerbatimHighCardParameters).
-		TaggedValueColumn("value", canonicalTypes2.MachineNumericTypeAstNode{BaseType: canonicalTypes2.BaseTypeMachineNumericFloat, Width: 64})
+		TaggedValueColumn("value", ctabb.F64)
 	manip.TaggedValueSection("int64").
 		AddSectionMembership(common.MembershipSpecMixedLowCardVerbatimHighCardParameters).
-		TaggedValueColumn("value", canonicalTypes2.MachineNumericTypeAstNode{BaseType: canonicalTypes2.BaseTypeMachineNumericSigned, Width: 64})
+		TaggedValueColumn("value", ctabb.I64)
 }
 func LoadJsonMappingLossless(manip common.TableManipulatorFluidI) {
 	LoadJsonMapping(manip)
