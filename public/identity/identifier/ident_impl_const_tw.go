@@ -19,7 +19,7 @@ func (inst TagValue) GetTag() (tag IdTag) {
 
 func (inst UntaggedId) AddTag(t IdTag) TaggedId {
 	if compiletimeflags.ExtraChecks {
-		if uint64(t)^uint64(inst) != 0 {
+		if uint64(t)&uint64(inst) != 0 {
 			log.Panic().Uint64("t", uint64(t)).Uint64("untagged", uint64(inst)).Msg("tag and untagged id overlap")
 		}
 	}
@@ -92,7 +92,7 @@ func (inst TaggedId) IsValid() bool {
 	return inst != 0
 }
 
-func (inst TaggedId) Valid() bool {
+func (inst UntaggedId) IsValid() bool {
 	return inst != 0
 }
 func (inst TaggedId) Value() uint64 {
