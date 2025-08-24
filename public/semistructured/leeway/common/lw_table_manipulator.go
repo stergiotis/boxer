@@ -353,14 +353,18 @@ func (inst TaggedValueSectionMerger) ResetSectionUseAspects() TaggedValueSection
 	inst.table.TaggedValuesSections[inst.sectionIndex].UseAspects = useaspects2.EmptyAspectSet
 	return inst
 }
-func (inst TaggedValueSectionMerger) AddSectionMembership(membership MembershipSpecE) TaggedValueSectionMerger {
-	inst.table.TaggedValuesSections[inst.sectionIndex].MembershipSpec =
-		inst.table.TaggedValuesSections[inst.sectionIndex].MembershipSpec | membership
+func (inst TaggedValueSectionMerger) AddSectionMembership(memberships ...MembershipSpecE) TaggedValueSectionMerger {
+	for _, membership := range memberships {
+		inst.table.TaggedValuesSections[inst.sectionIndex].MembershipSpec =
+			inst.table.TaggedValuesSections[inst.sectionIndex].MembershipSpec | membership
+	}
 	return inst
 }
-func (inst TaggedValueSectionMerger) ClearSectionMembership(membership MembershipSpecE) TaggedValueSectionMerger {
-	inst.table.TaggedValuesSections[inst.sectionIndex].MembershipSpec =
-		inst.table.TaggedValuesSections[inst.sectionIndex].MembershipSpec.ClearLowCardVerbatim() & ^membership
+func (inst TaggedValueSectionMerger) ClearSectionMembership(memberships ...MembershipSpecE) TaggedValueSectionMerger {
+	for _, membership := range memberships {
+		inst.table.TaggedValuesSections[inst.sectionIndex].MembershipSpec =
+			inst.table.TaggedValuesSections[inst.sectionIndex].MembershipSpec & ^membership
+	}
 	return inst
 }
 func (inst TaggedValueSectionMerger) ResetSectionMembership() TaggedValueSectionMerger {
