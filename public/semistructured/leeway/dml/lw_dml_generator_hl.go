@@ -4,7 +4,7 @@ import (
 	"go/format"
 	"strings"
 
-	"github.com/stergiotis/boxer/public/codegen/golang"
+	"github.com/stergiotis/boxer/public/code/synthesis/golang"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
