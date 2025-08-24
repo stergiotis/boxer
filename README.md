@@ -17,7 +17,6 @@ go get github.com/stergiotis/boxer
 ## Maturity
 Alpha, incomplete test coverage, unstable, API may still change heavily.
 
-
 ## Glossary
 ### Modules
 <dl>
@@ -50,8 +49,21 @@ Boxer uses chained file extension (e.g. `file.docx.pdf.txt`):
 <dd>A (Framed) Foreign Function Interface (FFI) Interface Defintion Language (IDL) file. A subset of go language.
 </dl>
 
+### Folders
+The path of files gets more specific with depth.
+
+Example: `./fec/ea/golay24`
+`fec` means Forward-Error-Correction. A well known technical term (see e.g. [Wikipedia](https://simple.wikipedia.org/wiki/Forward_error_correction)).
+`ea` means Eingabe-Ausgabe (engl. Input-Output). German is used to not confuse the package with go stdlib's `io`.
+`golay24` is the name of a very specific algorithm of forward error correction.
+
+Ideally the package name (innermost folder) is discriminative enough to facilitate autocompletion in IDEs.
+
 ## Contributing
 Currently, no third-party contributions are accepted.
+
+## AI Codegen Declaration
+All code and documentation in this repository is human generated, [boxer](https://github.com/stergiotis/boxer) does not contain LLM generated code or documentation.
 
 ## License
 The MIT License (MIT) 2023-2025 - [Panos Stergiotis](https://github.com/stergiotis/). See [LICENSE](LICENSE) for the full license text.
