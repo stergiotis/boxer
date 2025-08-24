@@ -283,28 +283,28 @@ type PlainValueColumnMerger struct {
 	table       *TableDesc
 	columnIndex int
 }
-type InAttributeMembershipHighCardRef[A any] interface {
+type InAttributeMembershipHighCardRefI[A any] interface {
 	AddMembershipHighCardRef(highCardRef uint64) A
 }
-type InAttributeMembershipHighCardRefParametrized[A any] interface {
+type InAttributeMembershipHighCardRefParametrizedI[A any] interface {
 	AddMembershipHighCardRef(highCardRefParametrized []byte) A
 }
-type InAttributeMembershipHighCardVerbatim[A any] interface {
+type InAttributeMembershipHighCardVerbatimI[A any] interface {
 	AddMembershipHighCardRef(highCardVerbatim []byte) A
 }
-type InAttributeMembershipLowCardRef[A any] interface {
+type InAttributeMembershipLowCardRefI[A any] interface {
 	AddMembershipLowCardRef(lowCardRef uint64) A
 }
-type InAttributeMembershipLowCardRefParametrized[A any] interface {
+type InAttributeMembershipLowCardRefParametrizedI[A any] interface {
 	AddMembershipLowCardRef(lowCardRefParametrized []byte) A
 }
-type InAttributeMembershipLowCardVerbatim[A any] interface {
+type InAttributeMembershipLowCardVerbatimI[A any] interface {
 	AddMembershipLowCardRef(lowCardVerbatim []byte) A
 }
 type InAttributeMembershipMixedLowCardRefI[A any] interface {
 	AddMembershipMixedLowCardRef(lowCardRef uint64, params []byte) A
 }
-type InAttributeMembershipMixedLowCardVerbatim[A any] interface {
+type InAttributeMembershipMixedLowCardVerbatimI[A any] interface {
 	AddMembershipMixedLowCardRef(lowCardVerbatim uint64, params []byte) A
 }
 type ErrorHandlingI interface {
