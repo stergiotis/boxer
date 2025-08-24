@@ -6,6 +6,7 @@ import (
 	"iter"
 	"strings"
 
+	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/fxamacker/cbor/v2"
 	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -281,4 +282,53 @@ type TaggedValueColumnMerger struct {
 type PlainValueColumnMerger struct {
 	table       *TableDesc
 	columnIndex int
+}
+type InAttributeMembershipHighCardRef[A any] interface {
+	AddMembershipHighCardRef(highCardRef uint64) A
+}
+type InAttributeMembershipHighCardRefParametrized[A any] interface {
+	AddMembershipHighCardRef(highCardRefParametrized []byte) A
+}
+type InAttributeMembershipHighCardVerbatim[A any] interface {
+	AddMembershipHighCardRef(highCardVerbatim []byte) A
+}
+type InAttributeMembershipLowCardRef[A any] interface {
+	AddMembershipLowCardRef(lowCardRef uint64) A
+}
+type InAttributeMembershipLowCardRefParametrized[A any] interface {
+	AddMembershipLowCardRef(lowCardRefParametrized []byte) A
+}
+type InAttributeMembershipLowCardVerbatim[A any] interface {
+	AddMembershipLowCardRef(lowCardVerbatim []byte) A
+}
+type InAttributeMembershipMixedLowCardRefI[A any] interface {
+	AddMembershipMixedLowCardRef(lowCardRef uint64, params []byte) A
+}
+type InAttributeMembershipMixedLowCardVerbatim[A any] interface {
+	AddMembershipMixedLowCardRef(lowCardVerbatim uint64, params []byte) A
+}
+type ErrorHandlingI interface {
+	AppendError(err error)
+	CheckErrors() (err error)
+}
+
+type InAttributeI[E any, S any, A any] interface {
+	ErrorHandlingI
+
+	EndAttribute() S
+	EndSection() E
+}
+type InSectionI[E any, S any] interface {
+	ErrorHandlingI
+
+	EndSection() E
+}
+type InEntity[E any] interface {
+	ErrorHandlingI
+
+	CommitEntity() error
+	RollbackEntity() error
+
+	TransferRecords(recordsIn []arrow.Record) (recordsOut []arrow.Record, err error)
+	GetSchema() (schema *arrow.Schema)
 }

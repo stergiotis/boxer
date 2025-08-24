@@ -1754,26 +1754,3 @@ func (inst *MultiTablePerPackageClassNamer) PromiseToBeReferentialTransparent() 
 }
 
 var _ TechnologySpecificBuilderI = (*GoClassBuilder)(nil)
-
-type InEntityI interface {
-	BeginEntity() InEntityI
-	SetTransaction() InEntityI
-	SetId() InEntityI
-	BeginSectionXYZ() InSectionI
-	CommitEntity() (err error)
-	RollbackEntity() (err error)
-	CheckErrors() (err error)
-}
-type InSectionI interface {
-	BeginAttribute(x, y, z int) InAttributeI
-	EndSection() InEntityI
-	CheckErrors() (err error)
-}
-type InAttributeI interface {
-	AddToContainer(x float32) InAttributeI
-	AddToCoContainer(x float32, y float32) InAttributeI
-	AddMembershipM1() InAttributeI
-	EndAttribute() InSectionI
-	EndSection() InEntityI
-	CheckErrors() (err error)
-}
