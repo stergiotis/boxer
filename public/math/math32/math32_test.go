@@ -1,9 +1,10 @@
 package math32
 
 import (
-	"github.com/stretchr/testify/require"
 	"math"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestAbs(t *testing.T) {
