@@ -18,6 +18,35 @@ type BinarySearchGrowingKV[K any, V any] struct {
 	compacted bool
 }
 
+func (inst *BinarySearchGrowingKV[K, V]) IterateKeys() iter.Seq[K] {
+	return func(yield func(K) bool) {
+		for _, k := range inst.keys {
+			if !yield(k) {
+				return
+			}
+		}
+	}
+}
+func (inst *BinarySearchGrowingKV[K, V]) IterateValues() iter.Seq[V] {
+	return func(yield func(V) bool) {
+		for _, v := range inst.vals {
+			if !yield(v) {
+				return
+			}
+		}
+	}
+}
+func (inst *BinarySearchGrowingKV[K, V]) Iterate() iter.Seq2[K, V] {
+	return func(yield func(K, V) bool) {
+		vals := inst.vals
+		for i, k := range inst.keys {
+			if !yield(k, vals[i]) {
+				return
+			}
+		}
+	}
+}
+
 func (inst *BinarySearchGrowingKV[K, V]) Len() int {
 	return len(inst.keys)
 }

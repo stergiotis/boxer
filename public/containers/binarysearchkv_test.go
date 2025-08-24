@@ -2,6 +2,7 @@ package containers
 
 import (
 	"bytes"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -40,4 +41,7 @@ func TestNewBinarySearchGrowingKV(t *testing.T) {
 	require.Equal(t, "v2b", dict.GetDefault([]byte("k2"), ""))
 	require.Equal(t, "v3", dict.GetDefault([]byte("k3"), ""))
 	require.Equal(t, "v4", dict.GetDefault([]byte("k4"), ""))
+
+	require.EqualValues(t, slices.Collect(dict.IterateKeys()), [][]byte{[]byte("k0"), []byte("k1"), []byte("k2"), []byte("k3"), []byte("k4")})
+	require.EqualValues(t, slices.Collect(dict.IterateValues()), []string{"v0", "v1", "v2b", "v3", "v4"})
 }
