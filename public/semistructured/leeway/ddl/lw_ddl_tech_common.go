@@ -74,7 +74,7 @@ func (inst *CanonicalColumnarRepresentation) GetMembershipSetCanonicalType(s com
 	filterFunc := inst.aspectFilterFunc
 	if s.HasHighCardRefOnly() {
 		ct1 = membershipRefType
-		hint1 = encodingaspects2.EncodeAspectsMustValidate(FilterEncodingAspect(filterFunc, encodingaspects2.AspectDeltaEncoding)...)
+		hint1 = encodingaspects2.EncodeAspectsMustValidate(FilterEncodingAspect(filterFunc, encodingaspects2.AspectDeltaEncoding, encodingaspects2.AspectLightGeneralCompression)...)
 		colRole1 = common.ColumnRoleHighCardRef
 		return
 	}
