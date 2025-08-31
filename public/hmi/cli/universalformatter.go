@@ -145,7 +145,7 @@ func (inst *UniversalCliFormatter) FormatValue(context *cli.Context, v any) (err
 		}
 		break
 	case "godump":
-		err = inst.dumper.Fprint(out, v)
+		err = inst.dumper.Fprintln(out, v)
 	default:
 		err = eb.Build().Str("format", f).Errorf("unhandled format")
 		return
