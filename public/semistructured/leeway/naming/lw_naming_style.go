@@ -171,6 +171,9 @@ func (inst StylableName) Validate() (err error) {
 	}
 	return
 }
+func (inst StylableName) IsEmpty() (empty bool) {
+	return inst == ""
+}
 func (inst StylableName) IsValid() (valid bool) {
 	if inst == "" {
 		return
