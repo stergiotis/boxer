@@ -313,8 +313,6 @@ type ErrorHandlingI interface {
 }
 
 type InAttributeI[E any, S any, A any] interface {
-	ErrorHandlingI
-
 	EndAttribute() S
 	EndSection() E
 }
