@@ -8,7 +8,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	canonicalTypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+	canonicaltypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	encodingaspects2 "github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	useaspects2 "github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
@@ -99,7 +99,7 @@ func (inst *TableManipulator) TaggedValueSection(sectionName naming.StylableName
 		sectionIndex: idx,
 	}
 }
-func (inst TaggedValueSectionMerger) TaggedValueColumn(name naming.StylableName, canonicalType canonicalTypes2.PrimitiveAstNodeI) TaggedValueColumnMerger {
+func (inst TaggedValueSectionMerger) TaggedValueColumn(name naming.StylableName, canonicalType canonicaltypes2.PrimitiveAstNodeI) TaggedValueColumnMerger {
 	sectionIdx, columnIdx := inst.manip.mergeTaggedValueColumn(inst.table.TaggedValuesSections[inst.sectionIndex].Name, name, canonicalType, encodingaspects2.EmptyAspectSet, valueaspects.EmptyAspectSet, useaspects2.EmptyAspectSet, MembershipSpecNone, "", "")
 	if sectionIdx != inst.sectionIndex {
 		log.Panic().Stringer("name", name).Int("sectionIdx1", sectionIdx).Int("sectionIdx2", inst.sectionIndex).Msg("section index do not match, something is fundamentally wrong")
@@ -111,18 +111,18 @@ func (inst TaggedValueSectionMerger) TaggedValueColumn(name naming.StylableName,
 	}
 }
 
-func (inst *TableManipulator) PlainValueColumn(itemType PlainItemTypeE, name naming.StylableName, canonicalType canonicalTypes2.PrimitiveAstNodeI) PlainValueColumnMerger {
+func (inst *TableManipulator) PlainValueColumn(itemType PlainItemTypeE, name naming.StylableName, canonicalType canonicaltypes2.PrimitiveAstNodeI) PlainValueColumnMerger {
 	idx := inst.addPlainValueItem(itemType, name, canonicalType, encodingaspects2.EmptyAspectSet, valueaspects.EmptyAspectSet)
 	return PlainValueColumnMerger{
 		table:       inst.table,
 		columnIndex: idx,
 	}
 }
-func (inst *TableManipulator) AddPlainValueItem(itemType PlainItemTypeE, name naming.StylableName, ct canonicalTypes2.PrimitiveAstNodeI, hints encodingaspects2.AspectSet, valueSemantics valueaspects.AspectSet) *TableManipulator {
+func (inst *TableManipulator) AddPlainValueItem(itemType PlainItemTypeE, name naming.StylableName, ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspects2.AspectSet, valueSemantics valueaspects.AspectSet) *TableManipulator {
 	_ = inst.addPlainValueItem(itemType, name, ct, hints, valueSemantics)
 	return inst
 }
-func (inst *TableManipulator) addPlainValueItem(itemType PlainItemTypeE, name naming.StylableName, ct canonicalTypes2.PrimitiveAstNodeI, hints encodingaspects2.AspectSet, valueSemantics valueaspects.AspectSet) (idx int) {
+func (inst *TableManipulator) addPlainValueItem(itemType PlainItemTypeE, name naming.StylableName, ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspects2.AspectSet, valueSemantics valueaspects.AspectSet) (idx int) {
 	lu := inst.plainValueItemNameToIndex[itemType]
 	var has bool
 	idx, has = lu[string(name)]
@@ -166,7 +166,7 @@ func (inst *TableManipulator) mergeTaggedValueSection(sectionName naming.Stylabl
 			Name:               sectionName,
 			MembershipSpec:     membership,
 			ValueColumnNames:   make([]naming.StylableName, 0, estColumns),
-			ValueColumnTypes:   make([]canonicalTypes2.PrimitiveAstNodeI, 0, estColumns),
+			ValueColumnTypes:   make([]canonicaltypes2.PrimitiveAstNodeI, 0, estColumns),
 			ValueEncodingHints: make([]encodingaspects2.AspectSet, 0, estColumns),
 			ValueSemantics:     make([]valueaspects.AspectSet, 0, estColumns),
 			UseAspects:         aspectSet,
@@ -180,11 +180,11 @@ func (inst *TableManipulator) SetOpaqueColumnStreamingGroup(streamingGroup namin
 	inst.table.OpaqueStreamingGroup = streamingGroup
 	return inst
 }
-func (inst *TableManipulator) MergeTaggedValueColumn(sectionName naming.StylableName, columnName naming.StylableName, ct canonicalTypes2.PrimitiveAstNodeI, hints encodingaspects2.AspectSet, valueSemantics valueaspects.AspectSet, aspectSet useaspects2.AspectSet, membership MembershipSpecE, coSectionGroup naming.Key, streamingGroup naming.Key) *TableManipulator {
+func (inst *TableManipulator) MergeTaggedValueColumn(sectionName naming.StylableName, columnName naming.StylableName, ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspects2.AspectSet, valueSemantics valueaspects.AspectSet, aspectSet useaspects2.AspectSet, membership MembershipSpecE, coSectionGroup naming.Key, streamingGroup naming.Key) *TableManipulator {
 	_, _ = inst.mergeTaggedValueColumn(sectionName, columnName, ct, hints, valueSemantics, aspectSet, membership, coSectionGroup, streamingGroup)
 	return inst
 }
-func (inst *TableManipulator) mergeTaggedValueColumn(sectionName naming.StylableName, columnName naming.StylableName, ct canonicalTypes2.PrimitiveAstNodeI, hints encodingaspects2.AspectSet, valueSemantics valueaspects.AspectSet, aspectSet useaspects2.AspectSet, membership MembershipSpecE, coSectionGroup naming.Key, streamingGroup naming.Key) (sectionIdx int, columnIdx int) {
+func (inst *TableManipulator) mergeTaggedValueColumn(sectionName naming.StylableName, columnName naming.StylableName, ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspects2.AspectSet, valueSemantics valueaspects.AspectSet, aspectSet useaspects2.AspectSet, membership MembershipSpecE, coSectionGroup naming.Key, streamingGroup naming.Key) (sectionIdx int, columnIdx int) {
 	sectionIdx = inst.mergeTaggedValueSection(sectionName, aspectSet, membership, coSectionGroup, streamingGroup)
 	columnIdx = slices.Index(inst.table.TaggedValuesSections[sectionIdx].ValueColumnNames, columnName)
 	if columnIdx >= 0 {
@@ -390,7 +390,7 @@ func (inst TaggedValueColumnMerger) SetColumnName(columnName naming.StylableName
 	inst.table.TaggedValuesSections[inst.sectionIndex].ValueColumnNames[inst.columnIndex] = columnName
 	return inst
 }
-func (inst TaggedValueColumnMerger) SetColumnCanonicalType(ct canonicalTypes2.PrimitiveAstNodeI) TaggedValueColumnMerger {
+func (inst TaggedValueColumnMerger) SetColumnCanonicalType(ct canonicaltypes2.PrimitiveAstNodeI) TaggedValueColumnMerger {
 	inst.table.TaggedValuesSections[inst.sectionIndex].ValueColumnTypes[inst.columnIndex] = ct
 	return inst
 }
@@ -419,7 +419,7 @@ func (inst PlainValueColumnMerger) SetColumnName(columnName naming.StylableName)
 	inst.table.PlainValuesNames[inst.columnIndex] = columnName
 	return inst
 }
-func (inst PlainValueColumnMerger) SetColumnCanonicalType(ct canonicalTypes2.PrimitiveAstNodeI) PlainValueColumnMerger {
+func (inst PlainValueColumnMerger) SetColumnCanonicalType(ct canonicaltypes2.PrimitiveAstNodeI) PlainValueColumnMerger {
 	inst.table.PlainValuesTypes[inst.columnIndex] = ct
 	return inst
 }
@@ -450,7 +450,7 @@ type intermediateTmpState struct {
 	coSectionGroup naming.Key
 	streamingGroup naming.Key
 	names          []naming.StylableName
-	cts            []canonicalTypes2.PrimitiveAstNodeI
+	cts            []canonicaltypes2.PrimitiveAstNodeI
 	hints          []encodingaspects2.AspectSet
 	valueSemantics []valueaspects.AspectSet
 }

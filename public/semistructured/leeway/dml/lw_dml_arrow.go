@@ -6,7 +6,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	canonicalTypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+	canonicaltypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 )
@@ -16,11 +16,11 @@ func NewArrowValueAdder() *ArrowValueAdder {
 		s: nil,
 	}
 }
-func GoTypeToArrowType(ct canonicalTypes2.PrimitiveAstNodeI, hints encodingaspects.AspectSet) (prefix string, suffix string, err error) {
+func GoTypeToArrowType(ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspects.AspectSet) (prefix string, suffix string, err error) {
 	switch ctt := ct.(type) {
-	case canonicalTypes2.StringAstNode:
+	case canonicaltypes2.StringAstNode:
 		switch ctt.BaseType {
-		case canonicalTypes2.BaseTypeStringUtf8:
+		case canonicaltypes2.BaseTypeStringUtf8:
 			var builderCls string
 			builderCls, _, err = CanonicalTypeToArrowBuilderClassName(ct, hints)
 			if err != nil {
@@ -32,46 +32,46 @@ func GoTypeToArrowType(ct canonicalTypes2.PrimitiveAstNodeI, hints encodingaspec
 				suffix = ")"
 			}
 			break
-		case canonicalTypes2.BaseTypeStringBytes:
+		case canonicaltypes2.BaseTypeStringBytes:
 			break
-		case canonicalTypes2.BaseTypeStringBool:
+		case canonicaltypes2.BaseTypeStringBool:
 			break
 		default:
 			err = eb.Build().Stringer("baseType", ctt.BaseType).Errorf("unhandled base type")
 			return
 		}
 		switch ctt.WidthModifier {
-		case canonicalTypes2.WidthModifierNone:
+		case canonicaltypes2.WidthModifierNone:
 			break
-		case canonicalTypes2.WidthModifierFixed:
+		case canonicaltypes2.WidthModifierFixed:
 			suffix += "[:]"
 			break
 		}
 		break
-	case canonicalTypes2.MachineNumericTypeAstNode:
+	case canonicaltypes2.MachineNumericTypeAstNode:
 		switch ctt.BaseType {
-		case canonicalTypes2.BaseTypeMachineNumericUnsigned:
+		case canonicaltypes2.BaseTypeMachineNumericUnsigned:
 			break
-		case canonicalTypes2.BaseTypeMachineNumericSigned:
+		case canonicaltypes2.BaseTypeMachineNumericSigned:
 			break
-		case canonicalTypes2.BaseTypeMachineNumericFloat:
+		case canonicaltypes2.BaseTypeMachineNumericFloat:
 			break
 		default:
 			err = eb.Build().Stringer("baseType", ctt.BaseType).Errorf("unhandled base type")
 			return
 		}
 		break
-	case canonicalTypes2.TemporalTypeAstNode:
+	case canonicaltypes2.TemporalTypeAstNode:
 		switch ctt.BaseType {
-		case canonicalTypes2.BaseTypeTemporalUtcDatetime:
+		case canonicaltypes2.BaseTypeTemporalUtcDatetime:
 			prefix = "arrow.Date32FromTime("
 			suffix = ")"
 			break
-		case canonicalTypes2.BaseTypeTemporalZonedDatetime:
+		case canonicaltypes2.BaseTypeTemporalZonedDatetime:
 			prefix = "arrow.Date32FromTime("
 			suffix = ")"
 			break
-		case canonicalTypes2.BaseTypeTemporalZonedTime:
+		case canonicaltypes2.BaseTypeTemporalZonedTime:
 			err = common.ErrNotImplemented
 			break
 		default:
@@ -85,17 +85,17 @@ func GoTypeToArrowType(ct canonicalTypes2.PrimitiveAstNodeI, hints encodingaspec
 	}
 	return
 }
-func CanonicalTypeToArrowBuilderClassName(ct canonicalTypes2.PrimitiveAstNodeI, encodingHints encodingaspects.AspectSet) (name string, mayError bool, err error) {
+func CanonicalTypeToArrowBuilderClassName(ct canonicaltypes2.PrimitiveAstNodeI, encodingHints encodingaspects.AspectSet) (name string, mayError bool, err error) {
 	switch ctt := ct.(type) {
-	case canonicalTypes2.StringAstNode:
+	case canonicaltypes2.StringAstNode:
 		switch ctt.BaseType {
-		case canonicalTypes2.BaseTypeStringUtf8:
+		case canonicaltypes2.BaseTypeStringUtf8:
 			name = "String"
 			break
-		case canonicalTypes2.BaseTypeStringBytes:
+		case canonicaltypes2.BaseTypeStringBytes:
 			name = "Binary"
 			break
-		case canonicalTypes2.BaseTypeStringBool:
+		case canonicaltypes2.BaseTypeStringBool:
 			name = "Boolean"
 			break
 		default:
@@ -103,22 +103,22 @@ func CanonicalTypeToArrowBuilderClassName(ct canonicalTypes2.PrimitiveAstNodeI, 
 			return
 		}
 		switch ctt.WidthModifier {
-		case canonicalTypes2.WidthModifierNone:
+		case canonicaltypes2.WidthModifierNone:
 			break
-		case canonicalTypes2.WidthModifierFixed:
+		case canonicaltypes2.WidthModifierFixed:
 			name = "FixedSize" + name
 			break
 		}
 		break
-	case canonicalTypes2.MachineNumericTypeAstNode:
+	case canonicaltypes2.MachineNumericTypeAstNode:
 		switch ctt.BaseType {
-		case canonicalTypes2.BaseTypeMachineNumericUnsigned:
+		case canonicaltypes2.BaseTypeMachineNumericUnsigned:
 			name = fmt.Sprintf("Uint%d", ctt.Width)
 			break
-		case canonicalTypes2.BaseTypeMachineNumericSigned:
+		case canonicaltypes2.BaseTypeMachineNumericSigned:
 			name = fmt.Sprintf("Int%d", ctt.Width)
 			break
-		case canonicalTypes2.BaseTypeMachineNumericFloat:
+		case canonicaltypes2.BaseTypeMachineNumericFloat:
 			name = fmt.Sprintf("Float%d", ctt.Width)
 			break
 		default:
@@ -126,15 +126,15 @@ func CanonicalTypeToArrowBuilderClassName(ct canonicalTypes2.PrimitiveAstNodeI, 
 			return
 		}
 		break
-	case canonicalTypes2.TemporalTypeAstNode:
+	case canonicaltypes2.TemporalTypeAstNode:
 		switch ctt.BaseType {
-		case canonicalTypes2.BaseTypeTemporalUtcDatetime:
+		case canonicaltypes2.BaseTypeTemporalUtcDatetime:
 			name = fmt.Sprintf("Date%d", ctt.Width)
 			break
-		case canonicalTypes2.BaseTypeTemporalZonedDatetime:
+		case canonicaltypes2.BaseTypeTemporalZonedDatetime:
 			name = fmt.Sprintf("Date%d", ctt.Width)
 			break
-		case canonicalTypes2.BaseTypeTemporalZonedTime:
+		case canonicaltypes2.BaseTypeTemporalZonedTime:
 			name = fmt.Sprintf("Time%d", ctt.Width)
 			break
 		default:

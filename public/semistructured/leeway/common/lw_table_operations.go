@@ -5,7 +5,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	canonicalTypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+	canonicaltypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	encodingaspects2 "github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
@@ -69,8 +69,8 @@ const (
 )
 
 type TableSubsetPredicateI interface {
-	ShouldKeepTagged(sectionName string, columnName string, ct canonicalTypes2.PrimitiveAstNodeI, hints encodingaspects2.AspectSet, valueSemantics valueaspects.AspectSet, aspectSet useaspects.AspectSet, membership MembershipSpecE) bool
-	ShouldKeepPlain(sectionName string, columnName string, ct canonicalTypes2.PrimitiveAstNodeI, hints encodingaspects2.AspectSet, valueSemantics valueaspects.AspectSet, aspectSet useaspects.AspectSet, membership MembershipSpecE) bool
+	ShouldKeepTagged(sectionName string, columnName string, ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspects2.AspectSet, valueSemantics valueaspects.AspectSet, aspectSet useaspects.AspectSet, membership MembershipSpecE) bool
+	ShouldKeepPlain(sectionName string, columnName string, ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspects2.AspectSet, valueSemantics valueaspects.AspectSet, aspectSet useaspects.AspectSet, membership MembershipSpecE) bool
 }
 
 type TableSubsetSectionByNamePredicate struct {

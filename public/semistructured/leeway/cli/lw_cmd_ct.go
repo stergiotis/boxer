@@ -16,7 +16,7 @@ func NewCliCommandCanonicalTypes() *cli.Command {
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:  "packageName",
-						Value: "canonicalTypes",
+						Value: "canonicaltypes",
 					},
 					&cli.StringFlag{
 						Name:  "import",

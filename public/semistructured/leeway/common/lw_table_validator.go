@@ -6,7 +6,7 @@ import (
 	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	canonicalTypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+	canonicaltypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
 
@@ -80,7 +80,7 @@ func (inst *TableValidator) validateNames(names []naming.StylableName, nameType 
 	}
 	return
 }
-func (inst *TableValidator) validateNamesTypes(names []naming.StylableName, types []canonicalTypes2.PrimitiveAstNodeI) (err error) {
+func (inst *TableValidator) validateNamesTypes(names []naming.StylableName, types []canonicaltypes2.PrimitiveAstNodeI) (err error) {
 	if len(names) != len(types) {
 		err = eb.Build().Int("names", len(names)).Int("types", len(types)).Errorf("names and types do not have the same length")
 		return

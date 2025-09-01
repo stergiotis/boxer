@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	canonicalTypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+	canonicaltypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	common2 "github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
@@ -98,7 +98,7 @@ func TestSmoke(t *testing.T) {
 	tech := clickhouse.NewTechnologySpecificCodeGenerator()
 	manip, err := common2.NewTableManipulator()
 	require.NoError(t, err)
-	ctp := canonicalTypes2.NewParser()
+	ctp := canonicaltypes2.NewParser()
 	ct1 := ctp.MustParsePrimitiveTypeAst("bh")
 	ct2 := ctp.MustParsePrimitiveTypeAst("s")
 	ct3 := ctp.MustParsePrimitiveTypeAst("sx1024")

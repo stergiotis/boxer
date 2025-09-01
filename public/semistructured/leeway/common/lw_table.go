@@ -6,7 +6,7 @@ import (
 	"github.com/stergiotis/boxer/public/containers/co"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	canonicalTypes3 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+	canonicaltypes3 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
@@ -53,7 +53,7 @@ func (inst *TableDesc) AddPlainColumns(itemType PlainItemTypeE, names []naming.S
 	}
 	inst.PlainValuesNames = append(inst.PlainValuesNames, names...)
 	inst.PlainValuesEncodingHints = append(inst.PlainValuesEncodingHints, encodingHints...)
-	p := canonicalTypes3.NewParser()
+	p := canonicaltypes3.NewParser()
 	inst.PlainValuesTypes, err = parseAndCopyTypes(p, inst.PlainValuesTypes, canonicalTypes)
 	if err != nil {
 		err = eh.Errorf("unable to parse canonical types: %w", err)
@@ -68,10 +68,10 @@ func (inst *TableDesc) AddPlainColumns(itemType PlainItemTypeE, names []naming.S
 	return
 }
 func (inst *TableDesc) AddTaggedValuesSections(secs []TaggedValuesSectionDto) (err error) {
-	p := canonicalTypes3.NewParser()
+	p := canonicaltypes3.NewParser()
 	inst.TaggedValuesSections = slices.Grow(inst.TaggedValuesSections, len(secs))
 	for _, sec := range secs {
-		var types []canonicalTypes3.PrimitiveAstNodeI
+		var types []canonicaltypes3.PrimitiveAstNodeI
 		types, err = parseAndCopyTypes(p, nil, sec.ValueColumnTypes)
 		if err != nil {
 			err = eh.Errorf("unable to copy entity id types: %w", err)
@@ -120,7 +120,7 @@ func (inst *TableDesc) GetPlainItemTypesStr(itemType PlainItemTypeE, in []string
 	out, err = inst.serializeAndCopyStructuredTypes(itemType, in)
 	return
 }
-func (inst *TableDesc) GetPlainItemTypes(itemType PlainItemTypeE, in []canonicalTypes3.AstNodeI) (out []canonicalTypes3.AstNodeI) {
+func (inst *TableDesc) GetPlainItemTypes(itemType PlainItemTypeE, in []canonicaltypes3.AstNodeI) (out []canonicaltypes3.AstNodeI) {
 	out = inst.copyPlainItemTypes(itemType, in)
 	return
 }
@@ -216,21 +216,21 @@ func (inst *TableDesc) copyPlainItemValueSemantics(itemType PlainItemTypeE, in [
 	}
 	return
 }
-func (inst *TableDesc) copyPlainItemTypes(itemType PlainItemTypeE, in []canonicalTypes3.AstNodeI) (out []canonicalTypes3.AstNodeI) {
+func (inst *TableDesc) copyPlainItemTypes(itemType PlainItemTypeE, in []canonicaltypes3.AstNodeI) (out []canonicaltypes3.AstNodeI) {
 	out = in
 	for _, n := range co.CoIterateFilter(inst.PlainValuesItemTypes, itemType, inst.PlainValuesTypes) {
 		out = append(out, n)
 	}
 	return
 }
-func parseAndCopyTypes(p *canonicalTypes3.Parser, in []canonicalTypes3.PrimitiveAstNodeI, types []string) (out []canonicalTypes3.PrimitiveAstNodeI, err error) {
+func parseAndCopyTypes(p *canonicaltypes3.Parser, in []canonicaltypes3.PrimitiveAstNodeI, types []string) (out []canonicaltypes3.PrimitiveAstNodeI, err error) {
 	if len(types) == 0 {
-		out = []canonicalTypes3.PrimitiveAstNodeI{}
+		out = []canonicaltypes3.PrimitiveAstNodeI{}
 		return
 	}
 	out = slices.Grow(in, len(types))
 	for _, t := range types {
-		var a canonicalTypes3.PrimitiveAstNodeI
+		var a canonicaltypes3.PrimitiveAstNodeI
 		a, err = p.ParsePrimitiveTypeAst(t)
 		if err != nil {
 			err = eh.Errorf("%w: %w", ErrInvalidType, err)

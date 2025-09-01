@@ -10,7 +10,7 @@ import (
 	"github.com/go-json-experiment/json/jsontext"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	canonicalTypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+	canonicaltypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/codegen"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	ddl2 "github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
@@ -30,7 +30,7 @@ func (inst *TechnologySpecificCodeGenerator) GetEncodingHintImplementationStatus
 	}
 	return common.ImplementationStatusNotImplemented, ""
 }
-func (inst *TechnologySpecificCodeGenerator) CheckTypeCompatibility(canonicalType canonicalTypes2.PrimitiveAstNodeI) (compatible bool, msg string) {
+func (inst *TechnologySpecificCodeGenerator) CheckTypeCompatibility(canonicalType canonicaltypes2.PrimitiveAstNodeI) (compatible bool, msg string) {
 	b := inst.codeBuilder
 	inst.codeBuilder = &strings.Builder{}
 	u := inst.GenerateType(canonicalType)
@@ -42,11 +42,11 @@ func (inst *TechnologySpecificCodeGenerator) CheckTypeCompatibility(canonicalTyp
 	return
 }
 
-func (inst *TechnologySpecificCodeGenerator) GetMembershipSetCanonicalType(s common.MembershipSpecE) (ct1 canonicalTypes2.PrimitiveAstNodeI, hint1 encodingaspects2.AspectSet, colRole1 common.ColumnRoleE, ct2 canonicalTypes2.PrimitiveAstNodeI, hint2 encodingaspects2.AspectSet, colRole2 common.ColumnRoleE, err error) {
+func (inst *TechnologySpecificCodeGenerator) GetMembershipSetCanonicalType(s common.MembershipSpecE) (ct1 canonicaltypes2.PrimitiveAstNodeI, hint1 encodingaspects2.AspectSet, colRole1 common.ColumnRoleE, ct2 canonicaltypes2.PrimitiveAstNodeI, hint2 encodingaspects2.AspectSet, colRole2 common.ColumnRoleE, err error) {
 	return inst.membershipRepresentation.GetMembershipSetCanonicalType(s)
 }
 
-func (inst *TechnologySpecificCodeGenerator) GenerateType(canonicalType canonicalTypes2.PrimitiveAstNodeI) (err error) {
+func (inst *TechnologySpecificCodeGenerator) GenerateType(canonicalType canonicaltypes2.PrimitiveAstNodeI) (err error) {
 	b := inst.codeBuilder
 	if b == nil {
 		err = common.ErrNoCodebuilder
@@ -61,7 +61,7 @@ func (inst *TechnologySpecificCodeGenerator) GenerateType(canonicalType canonica
 	_, err = b.WriteString(typeCode)
 	return
 }
-func (inst *TechnologySpecificCodeGenerator) generateTypeAndCodec(canonicalType canonicalTypes2.PrimitiveAstNodeI, hints encodingaspects2.AspectSet) (err error) {
+func (inst *TechnologySpecificCodeGenerator) generateTypeAndCodec(canonicalType canonicaltypes2.PrimitiveAstNodeI, hints encodingaspects2.AspectSet) (err error) {
 	for _, hint := range encodingaspects2.IterateAspects(hints) {
 		switch hint {
 		case encodingaspects2.AspectInterRecordLowCardinality, encodingaspects2.AspectIntraRecordLowCardinality:
@@ -127,7 +127,7 @@ func (inst *TechnologySpecificCodeGenerator) GenerateColumnCode(idx int, phy com
 	if err != nil {
 		return
 	}
-	var ct canonicalTypes2.PrimitiveAstNodeI
+	var ct canonicaltypes2.PrimitiveAstNodeI
 	ct, err = phy.GetCanonicalType()
 	if err != nil {
 		err = eb.Build().Stringer("column", phy).Errorf("unable to get canonical type from physical column: %w", err)

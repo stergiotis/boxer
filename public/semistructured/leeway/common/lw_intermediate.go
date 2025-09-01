@@ -5,22 +5,22 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	canonicalTypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+	canonicaltypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
 )
 
-func extractScalarModifier(ct canonicalTypes2.PrimitiveAstNodeI) (scalarModifier canonicalTypes2.ScalarModifierE, err error) {
+func extractScalarModifier(ct canonicaltypes2.PrimitiveAstNodeI) (scalarModifier canonicaltypes2.ScalarModifierE, err error) {
 	switch ctt := ct.(type) {
-	case canonicalTypes2.StringAstNode:
+	case canonicaltypes2.StringAstNode:
 		scalarModifier = ctt.ScalarModifier
 		break
-	case canonicalTypes2.MachineNumericTypeAstNode:
+	case canonicaltypes2.MachineNumericTypeAstNode:
 		scalarModifier = ctt.ScalarModifier
 		break
-	case canonicalTypes2.TemporalTypeAstNode:
+	case canonicaltypes2.TemporalTypeAstNode:
 		scalarModifier = ctt.ScalarModifier
 		break
 	default:
@@ -31,21 +31,21 @@ func extractScalarModifier(ct canonicalTypes2.PrimitiveAstNodeI) (scalarModifier
 }
 func addHomogenousArraySupportColumn(dest *IntermediateColumnProps) (err error) {
 	hints := encodingaspects.EncodeAspectsMustValidate(encodingaspects.AspectLightGeneralCompression, encodingaspects.AspectLightBiasSmallInteger)
-	dest.Add(naming.MustBeValidStylableName(ColumnRoleLength.String()), ColumnRoleLength, canonicalTypes2.MachineNumericTypeAstNode{
-		BaseType:          canonicalTypes2.BaseTypeMachineNumericUnsigned,
+	dest.Add(naming.MustBeValidStylableName(ColumnRoleLength.String()), ColumnRoleLength, canonicaltypes2.MachineNumericTypeAstNode{
+		BaseType:          canonicaltypes2.BaseTypeMachineNumericUnsigned,
 		Width:             64,
-		ByteOrderModifier: canonicalTypes2.ByteOrderModifierNone,
-		ScalarModifier:    canonicalTypes2.ScalarModifierNone,
+		ByteOrderModifier: canonicaltypes2.ByteOrderModifierNone,
+		ScalarModifier:    canonicaltypes2.ScalarModifierNone,
 	}, hints, valueaspects.EmptyAspectSet)
 	return
 }
 func addSetSupportColumn(dest *IntermediateColumnProps, role ColumnRoleE) (err error) {
 	hints := encodingaspects.EncodeAspectsMustValidate(encodingaspects.AspectLightGeneralCompression, encodingaspects.AspectHeavyBiasSmallInteger)
-	dest.Add(naming.MustBeValidStylableName(role.String()), role, canonicalTypes2.MachineNumericTypeAstNode{
-		BaseType:          canonicalTypes2.BaseTypeMachineNumericUnsigned,
+	dest.Add(naming.MustBeValidStylableName(role.String()), role, canonicaltypes2.MachineNumericTypeAstNode{
+		BaseType:          canonicaltypes2.BaseTypeMachineNumericUnsigned,
 		Width:             64,
-		ByteOrderModifier: canonicalTypes2.ByteOrderModifierNone,
-		ScalarModifier:    canonicalTypes2.ScalarModifierNone,
+		ByteOrderModifier: canonicaltypes2.ByteOrderModifierNone,
+		ScalarModifier:    canonicaltypes2.ScalarModifierNone,
 	}, hints, valueaspects.EmptyAspectSet)
 	return
 }
@@ -68,7 +68,7 @@ func (inst *IntermediateColumnProps) Reserve(n int) {
 	inst.EncodingHints = slices.Grow(inst.EncodingHints, n)
 	inst.ValueSemantics = slices.Grow(inst.ValueSemantics, n)
 }
-func (inst *IntermediateColumnProps) Add(name naming.StylableName, role ColumnRoleE, ct canonicalTypes2.PrimitiveAstNodeI, hints encodingaspects.AspectSet, valueSemantics valueaspects.AspectSet) {
+func (inst *IntermediateColumnProps) Add(name naming.StylableName, role ColumnRoleE, ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspects.AspectSet, valueSemantics valueaspects.AspectSet) {
 	inst.Names = append(inst.Names, name)
 	inst.Roles = append(inst.Roles, role)
 	inst.CanonicalType = append(inst.CanonicalType, ct)
@@ -125,7 +125,7 @@ var ErrUnhandledMembershipSpec = eh.Errorf("unhandled membership specification")
 func (inst *IntermediateTaggedValuesDesc) loadSectionMembership(sec *TaggedValuesSection, tech TechnologySpecificMembershipSetGenI) (err error) {
 	inst.Membership.Reserve(sec.MembershipSpec.Count() + 2)
 	for m := range sec.MembershipSpec.Iterate() {
-		var ct1, ct2 canonicalTypes2.PrimitiveAstNodeI
+		var ct1, ct2 canonicaltypes2.PrimitiveAstNodeI
 		var hints1, hints2 encodingaspects.AspectSet
 		var role1, role2 ColumnRoleE
 		ct1, hints1, role1, ct2, hints2, role2, err = tech.GetMembershipSetCanonicalType(m)
@@ -188,20 +188,20 @@ func (inst *IntermediateTaggedValuesDesc) loadSectionValue(sec *TaggedValuesSect
 		cts := sec.ValueColumnTypes[i]
 		hints := sec.ValueEncodingHints[i]
 		for ct := range cts.IterateMembers() {
-			var scalarModifier canonicalTypes2.ScalarModifierE
+			var scalarModifier canonicaltypes2.ScalarModifierE
 			scalarModifier, err = extractScalarModifier(ct)
 			if err != nil {
 				return
 			}
 			valueSemantics := sec.ValueSemantics[i]
 			switch scalarModifier {
-			case canonicalTypes2.ScalarModifierNone:
+			case canonicaltypes2.ScalarModifierNone:
 				inst.Scalar.Add(name, ColumnRoleValue, ct, hints, valueSemantics)
 				break
-			case canonicalTypes2.ScalarModifierHomogenousArray:
+			case canonicaltypes2.ScalarModifierHomogenousArray:
 				inst.NonScalarHomogenousArray.Add(name, ColumnRoleValue, ct, hints, valueSemantics)
 				break
-			case canonicalTypes2.ScalarModifierSet:
+			case canonicaltypes2.ScalarModifierSet:
 				inst.NonScalarSet.Add(name, ColumnRoleValue, ct, hints, valueSemantics)
 				break
 			default:
@@ -247,25 +247,25 @@ func (inst *IntermediatePlainValuesDesc) Reset() {
 	inst.NonScalarSetSupport.Reset()
 	inst.StreamingGroup = ""
 }
-func (inst *IntermediatePlainValuesDesc) Load(names []naming.StylableName, ctss []canonicalTypes2.AstNodeI, hintss []encodingaspects.AspectSet, ss []valueaspects.AspectSet, streamingGroup naming.Key) (err error) {
+func (inst *IntermediatePlainValuesDesc) Load(names []naming.StylableName, ctss []canonicaltypes2.AstNodeI, hintss []encodingaspects.AspectSet, ss []valueaspects.AspectSet, streamingGroup naming.Key) (err error) {
 	inst.StreamingGroup = streamingGroup
 	for i, attrName := range names {
 		cts := ctss[i]
 		hints := hintss[i]
 		for ct := range cts.IterateMembers() {
-			var scalarModifier canonicalTypes2.ScalarModifierE
+			var scalarModifier canonicaltypes2.ScalarModifierE
 			scalarModifier, err = extractScalarModifier(ct)
 			if err != nil {
 				return
 			}
 			switch scalarModifier {
-			case canonicalTypes2.ScalarModifierNone:
+			case canonicaltypes2.ScalarModifierNone:
 				inst.Scalar.Add(attrName, ColumnRoleValue, ct, hints, ss[i])
 				break
-			case canonicalTypes2.ScalarModifierHomogenousArray:
+			case canonicaltypes2.ScalarModifierHomogenousArray:
 				inst.NonScalarHomogenousArray.Add(attrName, ColumnRoleValue, ct, hints, ss[i])
 				break
-			case canonicalTypes2.ScalarModifierSet:
+			case canonicaltypes2.ScalarModifierSet:
 				inst.NonScalarSet.Add(attrName, ColumnRoleValue, ct, hints, ss[i])
 				break
 			default:
@@ -279,21 +279,21 @@ func (inst *IntermediatePlainValuesDesc) Load(names []naming.StylableName, ctss 
 	}
 	return
 }
-func (inst *IntermediatePlainValuesDesc) LoadSingle(name naming.StylableName, ct canonicalTypes2.PrimitiveAstNodeI, hints encodingaspects.AspectSet, vs valueaspects.AspectSet, streamingGroup naming.Key) (err error) {
+func (inst *IntermediatePlainValuesDesc) LoadSingle(name naming.StylableName, ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspects.AspectSet, vs valueaspects.AspectSet, streamingGroup naming.Key) (err error) {
 	inst.StreamingGroup = streamingGroup
-	var scalarModifier canonicalTypes2.ScalarModifierE
+	var scalarModifier canonicaltypes2.ScalarModifierE
 	scalarModifier, err = extractScalarModifier(ct)
 	if err != nil {
 		return
 	}
 	switch scalarModifier {
-	case canonicalTypes2.ScalarModifierNone:
+	case canonicaltypes2.ScalarModifierNone:
 		inst.Scalar.Add(name, ColumnRoleValue, ct, hints, vs)
 		break
-	case canonicalTypes2.ScalarModifierHomogenousArray:
+	case canonicaltypes2.ScalarModifierHomogenousArray:
 		inst.NonScalarHomogenousArray.Add(name, ColumnRoleValue, ct, hints, vs)
 		break
-	case canonicalTypes2.ScalarModifierSet:
+	case canonicaltypes2.ScalarModifierSet:
 		inst.NonScalarSet.Add(name, ColumnRoleValue, ct, hints, vs)
 		break
 	default:

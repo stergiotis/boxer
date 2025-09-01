@@ -13,7 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/vcs"
-	canonicalTypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+	canonicaltypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/codegen"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
@@ -227,8 +227,8 @@ func (inst *GoClassBuilder) composeFieldRelatedCode(op structFieldOperationE, cc
 		if err != nil {
 			return
 		}
-		cts, _, _ := canonicalTypes2.DemoteToScalars(cp.CanonicalType[i])
-		err = inst.tech.GenerateType(cts.(canonicalTypes2.PrimitiveAstNodeI))
+		cts, _, _ := canonicaltypes2.DemoteToScalars(cp.CanonicalType[i])
+		err = inst.tech.GenerateType(cts.(canonicaltypes2.PrimitiveAstNodeI))
 		if err != nil {
 			return
 		}

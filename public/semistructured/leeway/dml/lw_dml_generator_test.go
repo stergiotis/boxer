@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
-	canonicalTypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+	canonicaltypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
@@ -47,52 +47,52 @@ func sampleTableDesc() (tbl common.TableDesc, err error) {
 		err = eh.Errorf("unable to encode hints: %w", err)
 		return
 	}
-	manip.AddPlainValueItem(common.PlainItemTypeEntityId, "id", canonicalTypes2.MachineNumericTypeAstNode{
-		BaseType:          canonicalTypes2.BaseTypeMachineNumericUnsigned,
+	manip.AddPlainValueItem(common.PlainItemTypeEntityId, "id", canonicaltypes2.MachineNumericTypeAstNode{
+		BaseType:          canonicaltypes2.BaseTypeMachineNumericUnsigned,
 		Width:             64,
 		ByteOrderModifier: 0,
 		ScalarModifier:    0,
 	}, hintsId, valueaspects.EmptyAspectSet)
-	manip.AddPlainValueItem(common.PlainItemTypeEntityTimestamp, "ts", canonicalTypes2.TemporalTypeAstNode{
-		BaseType:       canonicalTypes2.BaseTypeTemporalUtcDatetime,
+	manip.AddPlainValueItem(common.PlainItemTypeEntityTimestamp, "ts", canonicaltypes2.TemporalTypeAstNode{
+		BaseType:       canonicaltypes2.BaseTypeTemporalUtcDatetime,
 		Width:          32,
 		ScalarModifier: 0,
 	}, hintsTs, valueaspects.EmptyAspectSet)
 	manip.MergeTaggedValueColumn("bool",
 		"value",
-		canonicalTypes2.StringAstNode{BaseType: canonicalTypes2.BaseTypeStringBool},
+		canonicaltypes2.StringAstNode{BaseType: canonicaltypes2.BaseTypeStringBool},
 		encodingaspects2.EmptyAspectSet, valueaspects.EmptyAspectSet,
 		useaspects.EmptyAspectSet, pathMembershipSpec, "", "")
 	manip.MergeTaggedValueColumn("string",
 		"value",
-		canonicalTypes2.StringAstNode{BaseType: canonicalTypes2.BaseTypeStringUtf8},
+		canonicaltypes2.StringAstNode{BaseType: canonicaltypes2.BaseTypeStringUtf8},
 		hintsString, valueaspects.EmptyAspectSet,
 		useaspects.EmptyAspectSet, pathMembershipSpec, "", "")
 	manip.MergeTaggedValueColumn("float64",
 		"value",
-		canonicalTypes2.MachineNumericTypeAstNode{BaseType: canonicalTypes2.BaseTypeMachineNumericFloat, Width: 64},
+		canonicaltypes2.MachineNumericTypeAstNode{BaseType: canonicaltypes2.BaseTypeMachineNumericFloat, Width: 64},
 		hintsFloat64, valueaspects.EmptyAspectSet,
 		useaspects.EmptyAspectSet,
 		pathMembershipSpec, "", "")
-	manip.MergeTaggedValueColumn("special", "ary1", canonicalTypes2.MachineNumericTypeAstNode{
-		BaseType:          canonicalTypes2.BaseTypeMachineNumericUnsigned,
+	manip.MergeTaggedValueColumn("special", "ary1", canonicaltypes2.MachineNumericTypeAstNode{
+		BaseType:          canonicaltypes2.BaseTypeMachineNumericUnsigned,
 		Width:             32,
-		ByteOrderModifier: canonicalTypes2.ByteOrderModifierNone,
-		ScalarModifier:    canonicalTypes2.ScalarModifierHomogenousArray,
+		ByteOrderModifier: canonicaltypes2.ByteOrderModifierNone,
+		ScalarModifier:    canonicaltypes2.ScalarModifierHomogenousArray,
 	}, encodingaspects2.EmptyAspectSet, valueaspects.EmptyAspectSet, useaspects.EmptyAspectSet,
 		common.MembershipSpecMixedLowCardRefHighCardParameters, "", "")
-	manip.MergeTaggedValueColumn("special", "ary2", canonicalTypes2.MachineNumericTypeAstNode{
-		BaseType:          canonicalTypes2.BaseTypeMachineNumericUnsigned,
+	manip.MergeTaggedValueColumn("special", "ary2", canonicaltypes2.MachineNumericTypeAstNode{
+		BaseType:          canonicaltypes2.BaseTypeMachineNumericUnsigned,
 		Width:             32,
-		ByteOrderModifier: canonicalTypes2.ByteOrderModifierNone,
-		ScalarModifier:    canonicalTypes2.ScalarModifierHomogenousArray,
+		ByteOrderModifier: canonicaltypes2.ByteOrderModifierNone,
+		ScalarModifier:    canonicaltypes2.ScalarModifierHomogenousArray,
 	}, encodingaspects2.EmptyAspectSet, valueaspects.EmptyAspectSet, useaspects.EmptyAspectSet,
 		common.MembershipSpecMixedLowCardRefHighCardParameters, "", "")
-	manip.MergeTaggedValueColumn("special", "spc", canonicalTypes2.StringAstNode{
-		BaseType:       canonicalTypes2.BaseTypeStringUtf8,
-		WidthModifier:  canonicalTypes2.WidthModifierNone,
+	manip.MergeTaggedValueColumn("special", "spc", canonicaltypes2.StringAstNode{
+		BaseType:       canonicaltypes2.BaseTypeStringUtf8,
+		WidthModifier:  canonicaltypes2.WidthModifierNone,
 		Width:          0,
-		ScalarModifier: canonicalTypes2.ScalarModifierNone,
+		ScalarModifier: canonicaltypes2.ScalarModifierNone,
 	}, encodingaspects2.EmptyAspectSet, valueaspects.EmptyAspectSet, useaspects.EmptyAspectSet,
 		common.MembershipSpecMixedLowCardRefHighCardParameters, "", "")
 	return manip.BuildTableDesc()

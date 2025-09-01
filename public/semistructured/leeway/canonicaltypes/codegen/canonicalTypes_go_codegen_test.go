@@ -10,14 +10,14 @@ import (
 	"testing"
 
 	"github.com/rs/zerolog/log"
-	canonicalTypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+	canonicaltypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/sample"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 	"github.com/stretchr/testify/require"
 )
 
-func iterateTypes() iter.Seq[canonicalTypes2.PrimitiveAstNodeI] {
-	return func(yield func(canonicalTypes2.PrimitiveAstNodeI) bool) {
+func iterateTypes() iter.Seq[canonicaltypes2.PrimitiveAstNodeI] {
+	return func(yield func(canonicaltypes2.PrimitiveAstNodeI) bool) {
 		for i := uint64(0); i < sample.SampleMachineNumericMaxExcl; i++ {
 			ct := sample.GenerateSampleMachineNumericType(i)
 			if ct.IsValid() {
@@ -28,7 +28,7 @@ func iterateTypes() iter.Seq[canonicalTypes2.PrimitiveAstNodeI] {
 		}
 		for i := uint64(0); i < sample.SampleStringTypeMaxExcl; i++ {
 			ct := sample.GenerateSampleStringType(i)
-			if ct.WidthModifier == canonicalTypes2.WidthModifierNone && ct.IsValid() {
+			if ct.WidthModifier == canonicaltypes2.WidthModifierNone && ct.IsValid() {
 				if !yield(ct) {
 					return
 				}
@@ -48,7 +48,7 @@ func TestGenerateGoCode(t *testing.T) {
 	home, err := os.UserHomeDir()
 	require.NoError(t, err)
 	// FIXME
-	dest := path.Join(home, "repo", "boxer", "public", "semistructured", "leeway", "canonicalTypes", "codegen", "canonicalTypes_go_codegen_dummy_test.gen.go")
+	dest := path.Join(home, "repo", "boxer", "public", "semistructured", "leeway", "canonicaltypes", "codegen", "canonicalTypes_go_codegen_dummy_test.gen.go")
 	_ = os.Remove(dest)
 
 	s := &strings.Builder{}

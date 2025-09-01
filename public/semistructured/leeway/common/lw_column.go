@@ -1,7 +1,7 @@
 package common
 
 import (
-	canonicalTypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+	canonicaltypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 )
 
@@ -26,18 +26,18 @@ func (inst TaggedValuesSection) IsValid() bool {
 	}
 	return v
 }
-func (inst TaggedValuesSection) CountScalarModifiers(s canonicalTypes2.ScalarModifierE) (r int) {
+func (inst TaggedValuesSection) CountScalarModifiers(s canonicaltypes2.ScalarModifierE) (r int) {
 	for _, t := range inst.ValueColumnTypes {
 		if !t.IsScalar() {
-			mod := canonicalTypes2.ScalarModifierNone
+			mod := canonicaltypes2.ScalarModifierNone
 			switch tt := t.(type) {
-			case *canonicalTypes2.MachineNumericTypeAstNode:
+			case *canonicaltypes2.MachineNumericTypeAstNode:
 				mod = tt.ScalarModifier
 				break
-			case *canonicalTypes2.TemporalTypeAstNode:
+			case *canonicaltypes2.TemporalTypeAstNode:
 				mod = tt.ScalarModifier
 				break
-			case *canonicalTypes2.StringAstNode:
+			case *canonicaltypes2.StringAstNode:
 				mod = tt.ScalarModifier
 				break
 			default:
@@ -50,7 +50,7 @@ func (inst TaggedValuesSection) CountScalarModifiers(s canonicalTypes2.ScalarMod
 	return
 }
 
-func (inst PhysicalColumnDesc) GetCanonicalType() (ct canonicalTypes2.PrimitiveAstNodeI, err error) {
+func (inst PhysicalColumnDesc) GetCanonicalType() (ct canonicaltypes2.PrimitiveAstNodeI, err error) {
 	return inst.GeneratingNamingConvention.ExtractCanonicalType(inst)
 }
 func (inst PhysicalColumnDesc) GetEncodingHints() (hints encodingaspects.AspectSet, err error) {
