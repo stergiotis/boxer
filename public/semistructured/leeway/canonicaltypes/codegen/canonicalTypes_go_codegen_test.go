@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	canonicaltypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/sample"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
@@ -44,11 +45,32 @@ func iterateTypes() iter.Seq[canonicaltypes2.PrimitiveAstNodeI] {
 		}
 	}
 }
+func findGoModRootDir(p string) (r string, err error) {
+	start := p
+	for {
+		var s os.FileInfo
+		s, err = os.Stat(path.Join(p, "go.mod"))
+		if err == nil && !s.IsDir() {
+			r = p
+			return
+		}
+		pNext := path.Dir(p)
+		if pNext == p {
+			err = eb.Build().Str("start", start).Errorf("unable to find go.mod file")
+			return
+		}
+		p = pNext
+	}
+}
 func TestGenerateGoCode(t *testing.T) {
-	home, err := os.UserHomeDir()
+	exe, err := os.Executable()
 	require.NoError(t, err)
-	// FIXME
-	dest := path.Join(home, "repo", "boxer", "public", "semistructured", "leeway", "canonicaltypes", "codegen", "canonicalTypes_go_codegen_dummy_test.gen.go")
+	var root string
+	root, err = findGoModRootDir(path.Dir(exe))
+	if err != nil {
+		t.Skip(err.Error())
+	}
+	dest := path.Join(root, "public", "semistructured", "leeway", "canonicaltypes", "codegen", "canonicalTypes_go_codegen_dummy_test.gen.go")
 	_ = os.Remove(dest)
 
 	s := &strings.Builder{}

@@ -18,5 +18,11 @@ func GetClickHouseBinaryPath() (path string, err error) {
 		return
 	}
 	err = eh.Errorf("unable to locate clickhouse binary")
+
+	_, err = os.Stat(path)
+	if err != nil {
+		err = eh.Errorf("unable to locate clickhouse binary: %w", err)
+		return
+	}
 	return
 }
