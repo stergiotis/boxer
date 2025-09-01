@@ -3,12 +3,10 @@
 package grammar
 
 import (
-
-"fmt"
-"sync"
-"unicode"
-
-"github.com/antlr4-go/antlr/v4"
+	"fmt"
+	"github.com/antlr4-go/antlr/v4"
+	"sync"
+	"unicode"
 )
 
 // Suppress unused import error
