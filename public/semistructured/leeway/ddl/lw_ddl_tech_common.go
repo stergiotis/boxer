@@ -4,37 +4,37 @@ import (
 	"slices"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	encodingaspects2 "github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 )
 
-var homogenousArrayLenType = canonicalTypes.MachineNumericTypeAstNode{
-	BaseType:          canonicalTypes.BaseTypeMachineNumericUnsigned,
+var homogenousArrayLenType = canonicaltypes.MachineNumericTypeAstNode{
+	BaseType:          canonicaltypes.BaseTypeMachineNumericUnsigned,
 	Width:             64,
 	ByteOrderModifier: 0,
 	ScalarModifier:    0,
 }
-var setCardinalityType = canonicalTypes.MachineNumericTypeAstNode{
-	BaseType:          canonicalTypes.BaseTypeMachineNumericUnsigned,
+var setCardinalityType = canonicaltypes.MachineNumericTypeAstNode{
+	BaseType:          canonicaltypes.BaseTypeMachineNumericUnsigned,
 	Width:             64,
 	ByteOrderModifier: 0,
 	ScalarModifier:    0,
 }
-var membershipRefType = canonicalTypes.MachineNumericTypeAstNode{
-	BaseType:          canonicalTypes.BaseTypeMachineNumericUnsigned,
+var membershipRefType = canonicaltypes.MachineNumericTypeAstNode{
+	BaseType:          canonicaltypes.BaseTypeMachineNumericUnsigned,
 	Width:             64,
 	ByteOrderModifier: 0,
 	ScalarModifier:    0,
 }
-var membershipSerializedType = canonicalTypes.StringAstNode{
-	BaseType:       canonicalTypes.BaseTypeStringBytes,
+var membershipSerializedType = canonicaltypes.StringAstNode{
+	BaseType:       canonicaltypes.BaseTypeStringBytes,
 	WidthModifier:  0,
 	Width:          0,
 	ScalarModifier: 0,
 }
-var membershipVerbatimType = canonicalTypes.StringAstNode{
-	BaseType:       canonicalTypes.BaseTypeStringBytes,
+var membershipVerbatimType = canonicaltypes.StringAstNode{
+	BaseType:       canonicaltypes.BaseTypeStringBytes,
 	WidthModifier:  0,
 	Width:          0,
 	ScalarModifier: 0,
@@ -66,7 +66,7 @@ func EncodingAspectFilterFuncFromTechnology(tech common.TechnologySpecificGenera
 	}
 }
 
-func (inst *CanonicalColumnarRepresentation) GetMembershipSetCanonicalType(s common.MembershipSpecE) (ct1 canonicalTypes.PrimitiveAstNodeI, hint1 encodingaspects2.AspectSet, colRole1 common.ColumnRoleE, ct2 canonicalTypes.PrimitiveAstNodeI, hint2 encodingaspects2.AspectSet, colRole2 common.ColumnRoleE, err error) {
+func (inst *CanonicalColumnarRepresentation) GetMembershipSetCanonicalType(s common.MembershipSpecE) (ct1 canonicaltypes.PrimitiveAstNodeI, hint1 encodingaspects2.AspectSet, colRole1 common.ColumnRoleE, ct2 canonicaltypes.PrimitiveAstNodeI, hint2 encodingaspects2.AspectSet, colRole2 common.ColumnRoleE, err error) {
 	if s.Count() != 1 {
 		err = eb.Build().Int("bitsSet", s.Count()).Errorf("expecting exactly one bit set: %w", common.ErrInvalidMembershipSpec)
 		return

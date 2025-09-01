@@ -6,7 +6,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	ddl2 "github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
 	encodingaspects2 "github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
@@ -35,7 +35,7 @@ func (inst *TechnologySpecificCodeGenerator) GetEncodingHintImplementationStatus
 	}
 	return common.ImplementationStatusNotImplemented, ""
 }
-func (inst *TechnologySpecificCodeGenerator) CheckTypeCompatibility(canonicalType canonicalTypes.PrimitiveAstNodeI) (compatible bool, msg string) {
+func (inst *TechnologySpecificCodeGenerator) CheckTypeCompatibility(canonicalType canonicaltypes.PrimitiveAstNodeI) (compatible bool, msg string) {
 	b := inst.codeBuilder
 	inst.codeBuilder = &strings.Builder{}
 	u := inst.GenerateType(canonicalType)
@@ -47,19 +47,19 @@ func (inst *TechnologySpecificCodeGenerator) CheckTypeCompatibility(canonicalTyp
 	return
 }
 
-func (inst *TechnologySpecificCodeGenerator) GetMembershipSetCanonicalType(s common.MembershipSpecE) (ct1 canonicalTypes.PrimitiveAstNodeI, hint1 encodingaspects2.AspectSet, colRole1 common.ColumnRoleE, ct2 canonicalTypes.PrimitiveAstNodeI, hint2 encodingaspects2.AspectSet, colRole2 common.ColumnRoleE, err error) {
+func (inst *TechnologySpecificCodeGenerator) GetMembershipSetCanonicalType(s common.MembershipSpecE) (ct1 canonicaltypes.PrimitiveAstNodeI, hint1 encodingaspects2.AspectSet, colRole1 common.ColumnRoleE, ct2 canonicaltypes.PrimitiveAstNodeI, hint2 encodingaspects2.AspectSet, colRole2 common.ColumnRoleE, err error) {
 	return inst.membershipRepresentation.GetMembershipSetCanonicalType(s)
 }
 
-func (inst *TechnologySpecificCodeGenerator) GenerateType(canonicalType canonicalTypes.PrimitiveAstNodeI) (err error) {
+func (inst *TechnologySpecificCodeGenerator) GenerateType(canonicalType canonicaltypes.PrimitiveAstNodeI) (err error) {
 	switch ct := canonicalType.(type) {
-	case canonicalTypes.MachineNumericTypeAstNode:
+	case canonicaltypes.MachineNumericTypeAstNode:
 		err = inst.generateMachineNumericType(ct.BaseType, ct.Width, ct.ByteOrderModifier, ct.ScalarModifier)
 		break
-	case canonicalTypes.StringAstNode:
+	case canonicaltypes.StringAstNode:
 		err = inst.generateStringType(ct.BaseType, ct.WidthModifier, ct.Width, ct.ScalarModifier)
 		break
-	case canonicalTypes.TemporalTypeAstNode:
+	case canonicaltypes.TemporalTypeAstNode:
 		err = inst.generateTemporalType(ct.BaseType, ct.Width, ct.ScalarModifier)
 		break
 	default:
@@ -67,7 +67,7 @@ func (inst *TechnologySpecificCodeGenerator) GenerateType(canonicalType canonica
 	}
 	return
 }
-func (inst *TechnologySpecificCodeGenerator) generateTypeAndCodec(canonicalType canonicalTypes.PrimitiveAstNodeI, hints encodingaspects2.AspectSet, list bool) (err error) {
+func (inst *TechnologySpecificCodeGenerator) generateTypeAndCodec(canonicalType canonicaltypes.PrimitiveAstNodeI, hints encodingaspects2.AspectSet, list bool) (err error) {
 	lowCard := false
 	compr := 0
 	delta := 0
@@ -232,7 +232,7 @@ func (inst *TechnologySpecificCodeGenerator) GenerateColumnCode(idx int, phy com
 	if err != nil {
 		return
 	}
-	var ct canonicalTypes.PrimitiveAstNodeI
+	var ct canonicaltypes.PrimitiveAstNodeI
 	ct, err = phy.GetCanonicalType()
 	if err != nil {
 		err = eb.Build().Stringer("column", phy).Errorf("unable to get canonical type from physical column: %w", err)
@@ -327,7 +327,7 @@ func (inst *TechnologySpecificCodeGenerator) SetCodeBuilder(s *strings.Builder) 
 	inst.codeBuilder = s
 }
 
-func (inst *TechnologySpecificCodeGenerator) generateStringType(baseType canonicalTypes.BaseTypeStringE, widthModifier canonicalTypes.WidthModifierE, width canonicalTypes.Width, scalarModifier canonicalTypes.ScalarModifierE) (err error) {
+func (inst *TechnologySpecificCodeGenerator) generateStringType(baseType canonicaltypes.BaseTypeStringE, widthModifier canonicaltypes.WidthModifierE, width canonicaltypes.Width, scalarModifier canonicaltypes.ScalarModifierE) (err error) {
 	b := inst.codeBuilder
 	if b == nil {
 		err = common.ErrNoBuilder
@@ -335,10 +335,10 @@ func (inst *TechnologySpecificCodeGenerator) generateStringType(baseType canonic
 	}
 
 	switch baseType {
-	case canonicalTypes.BaseTypeStringBool:
+	case canonicaltypes.BaseTypeStringBool:
 		code := "Bool"
 		switch widthModifier {
-		case canonicalTypes.WidthModifierNone:
+		case canonicaltypes.WidthModifierNone:
 			break
 		default:
 			err = common.ErrNotImplemented
@@ -346,9 +346,9 @@ func (inst *TechnologySpecificCodeGenerator) generateStringType(baseType canonic
 		if err == nil {
 			code = inst.typeProlog + code + inst.typeEpilog
 			switch scalarModifier {
-			case canonicalTypes.ScalarModifierNone:
+			case canonicaltypes.ScalarModifierNone:
 				break
-			case canonicalTypes.ScalarModifierHomogenousArray, canonicalTypes.ScalarModifierSet:
+			case canonicaltypes.ScalarModifierHomogenousArray, canonicaltypes.ScalarModifierSet:
 				code = fmt.Sprintf("Array(%s)", code)
 				break
 			default:
@@ -363,12 +363,12 @@ func (inst *TechnologySpecificCodeGenerator) generateStringType(baseType canonic
 			}
 		}
 		break
-	case canonicalTypes.BaseTypeStringBytes, canonicalTypes.BaseTypeStringUtf8:
+	case canonicaltypes.BaseTypeStringBytes, canonicaltypes.BaseTypeStringUtf8:
 		code := "String"
 		switch widthModifier {
-		case canonicalTypes.WidthModifierNone:
+		case canonicaltypes.WidthModifierNone:
 			break
-		case canonicalTypes.WidthModifierFixed:
+		case canonicaltypes.WidthModifierFixed:
 			code = fmt.Sprintf("FixedString(%d)", width)
 			break
 		default:
@@ -377,9 +377,9 @@ func (inst *TechnologySpecificCodeGenerator) generateStringType(baseType canonic
 		if err == nil {
 			code = inst.typeProlog + code + inst.typeEpilog
 			switch scalarModifier {
-			case canonicalTypes.ScalarModifierNone:
+			case canonicaltypes.ScalarModifierNone:
 				break
-			case canonicalTypes.ScalarModifierHomogenousArray, canonicalTypes.ScalarModifierSet:
+			case canonicaltypes.ScalarModifierHomogenousArray, canonicaltypes.ScalarModifierSet:
 				code = fmt.Sprintf("Array(%s)", code)
 				break
 			default:
@@ -403,7 +403,7 @@ func (inst *TechnologySpecificCodeGenerator) generateStringType(baseType canonic
 	return
 }
 
-func (inst *TechnologySpecificCodeGenerator) generateTemporalType(baseTemporal canonicalTypes.BaseTypeTemporalE, width canonicalTypes.Width, scalarModifier canonicalTypes.ScalarModifierE) (err error) {
+func (inst *TechnologySpecificCodeGenerator) generateTemporalType(baseTemporal canonicaltypes.BaseTypeTemporalE, width canonicaltypes.Width, scalarModifier canonicaltypes.ScalarModifierE) (err error) {
 	b := inst.codeBuilder
 	if b == nil {
 		err = common.ErrNoBuilder
@@ -411,7 +411,7 @@ func (inst *TechnologySpecificCodeGenerator) generateTemporalType(baseTemporal c
 	}
 	var code string
 	switch baseTemporal {
-	case canonicalTypes.BaseTypeTemporalUtcDatetime:
+	case canonicaltypes.BaseTypeTemporalUtcDatetime:
 		switch width {
 		case 32:
 			code = "DateTime('UTC')"
@@ -423,10 +423,10 @@ func (inst *TechnologySpecificCodeGenerator) generateTemporalType(baseTemporal c
 			err = common.ErrNotImplemented
 		}
 		break
-	case canonicalTypes.BaseTypeTemporalZonedDatetime:
+	case canonicaltypes.BaseTypeTemporalZonedDatetime:
 		err = common.ErrNotImplemented
 		break
-	case canonicalTypes.BaseTypeTemporalZonedTime:
+	case canonicaltypes.BaseTypeTemporalZonedTime:
 		err = common.ErrNotImplemented
 		break
 	default:
@@ -435,9 +435,9 @@ func (inst *TechnologySpecificCodeGenerator) generateTemporalType(baseTemporal c
 	if err == nil {
 		code = inst.typeProlog + code + inst.typeEpilog
 		switch scalarModifier {
-		case canonicalTypes.ScalarModifierNone:
+		case canonicaltypes.ScalarModifierNone:
 			break
-		case canonicalTypes.ScalarModifierHomogenousArray, canonicalTypes.ScalarModifierSet:
+		case canonicaltypes.ScalarModifierHomogenousArray, canonicaltypes.ScalarModifierSet:
 			code = fmt.Sprintf("Array(%s)", code)
 			break
 		default:
@@ -456,7 +456,7 @@ func (inst *TechnologySpecificCodeGenerator) generateTemporalType(baseTemporal c
 	return
 }
 
-func (inst *TechnologySpecificCodeGenerator) generateMachineNumericType(baseMachineNumber canonicalTypes.BaseTypeMachineNumericE, width canonicalTypes.Width, byteOrderModifier canonicalTypes.ByteOrderModifierE, scalarModifier canonicalTypes.ScalarModifierE) (err error) {
+func (inst *TechnologySpecificCodeGenerator) generateMachineNumericType(baseMachineNumber canonicaltypes.BaseTypeMachineNumericE, width canonicaltypes.Width, byteOrderModifier canonicaltypes.ByteOrderModifierE, scalarModifier canonicaltypes.ScalarModifierE) (err error) {
 	b := inst.codeBuilder
 	if b == nil {
 		err = common.ErrNoBuilder
@@ -464,8 +464,8 @@ func (inst *TechnologySpecificCodeGenerator) generateMachineNumericType(baseMach
 	}
 	var code string
 	switch baseMachineNumber {
-	case canonicalTypes.BaseTypeMachineNumericUnsigned, canonicalTypes.BaseTypeMachineNumericSigned:
-		if baseMachineNumber == canonicalTypes.BaseTypeMachineNumericUnsigned {
+	case canonicaltypes.BaseTypeMachineNumericUnsigned, canonicaltypes.BaseTypeMachineNumericSigned:
+		if baseMachineNumber == canonicaltypes.BaseTypeMachineNumericUnsigned {
 			code = "UInt"
 		} else {
 			code = "Int"
@@ -479,16 +479,16 @@ func (inst *TechnologySpecificCodeGenerator) generateMachineNumericType(baseMach
 		}
 		code = inst.typeProlog + code + inst.typeEpilog
 		switch scalarModifier {
-		case canonicalTypes.ScalarModifierNone:
+		case canonicaltypes.ScalarModifierNone:
 			break
-		case canonicalTypes.ScalarModifierHomogenousArray, canonicalTypes.ScalarModifierSet:
+		case canonicaltypes.ScalarModifierHomogenousArray, canonicaltypes.ScalarModifierSet:
 			code = fmt.Sprintf("Array(%s)", code)
 			break
 		default:
 			err = common.ErrNotImplemented
 		}
 		break
-	case canonicalTypes.BaseTypeMachineNumericFloat:
+	case canonicaltypes.BaseTypeMachineNumericFloat:
 		code = "Float"
 		switch width {
 		case 32, 64:
@@ -499,9 +499,9 @@ func (inst *TechnologySpecificCodeGenerator) generateMachineNumericType(baseMach
 		}
 		code = inst.typeProlog + code + inst.typeEpilog
 		switch scalarModifier {
-		case canonicalTypes.ScalarModifierNone:
+		case canonicaltypes.ScalarModifierNone:
 			break
-		case canonicalTypes.ScalarModifierHomogenousArray, canonicalTypes.ScalarModifierSet:
+		case canonicaltypes.ScalarModifierHomogenousArray, canonicaltypes.ScalarModifierSet:
 			code = fmt.Sprintf("Array(%s)", code)
 			break
 		default:

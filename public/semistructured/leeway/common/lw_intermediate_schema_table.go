@@ -8,7 +8,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
@@ -41,7 +41,7 @@ func (inst *IntermediateTableRepresentation) LoadInArrowBuilder(id naming.Stylab
 	canonicalTypeCol := builder.Field(11).(*array.StringBuilder)
 	encodingHintsColList := builder.Field(12).(*array.ListBuilder)
 	encodingHintsColValue := builder.Field(12).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	addRow := func(scope IntermediateColumnScopeE, itemType PlainItemTypeE, section string, name string, role ColumnRoleE, subType IntermediateColumnSubTypeE, useAspect useaspects.AspectSet, canonicalType canonicalTypes.PrimitiveAstNodeI, encodingHints encodingaspects.AspectSet) (err error) {
+	addRow := func(scope IntermediateColumnScopeE, itemType PlainItemTypeE, section string, name string, role ColumnRoleE, subType IntermediateColumnSubTypeE, useAspect useaspects.AspectSet, canonicalType canonicaltypes.PrimitiveAstNodeI, encodingHints encodingaspects.AspectSet) (err error) {
 		idCol.AppendString(id.Convert(naming.DefaultNamingStyle).String())
 		err = scopeCol.AppendString(scope.String())
 		if err != nil {

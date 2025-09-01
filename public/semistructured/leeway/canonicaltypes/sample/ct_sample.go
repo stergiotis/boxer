@@ -4,7 +4,7 @@ import (
 	"math/rand/v2"
 
 	"github.com/rs/zerolog/log"
-	canonicalTypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes"
+	canonicalTypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/statespace/mixedradix"
 )
 

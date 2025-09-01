@@ -19,6 +19,15 @@ const (
 	AspectLightBiasSmallInteger         AspectE = 13
 	AspectHeavyBiasSmallInteger         AspectE = 14
 	AspectSparse                        AspectE = 15
+
+	AspectJsonScalar AspectE = 16
+	AspectJsonArray  AspectE = 17
+	AspectJsonObject AspectE = 18
+	AspectJson       AspectE = 19
+	AspectCborScalar AspectE = 20
+	AspectCborArray  AspectE = 21
+	AspectCborMap    AspectE = 22
+	AspectCbor       AspectE = 23
 )
 
 var MaxAspectExcl = slices.Max(AllAspects) + 1
@@ -40,12 +49,23 @@ var AllAspects = []AspectE{
 	AspectLightBiasSmallInteger,
 	AspectHeavyBiasSmallInteger,
 	AspectSparse,
+	AspectJsonScalar,
+	AspectJsonArray,
+	AspectJsonObject,
+	AspectJson,
+	AspectCborScalar,
+	AspectCborArray,
+	AspectCborMap,
+	AspectCbor,
 }
 
 const InvalidAspectEnumValueString = "<invalid AspectE>"
 
 func (inst AspectE) IsValid() bool {
 	return inst < MaxAspectExcl
+}
+func (inst AspectE) Value() uint8 {
+	return uint8(inst)
 }
 func (inst AspectE) String() string {
 	switch inst {
@@ -81,6 +101,22 @@ func (inst AspectE) String() string {
 		return "heavy-bias-small-integer"
 	case AspectSparse:
 		return "sparse"
+	case AspectJsonScalar:
+		return "json-scalar"
+	case AspectJsonArray:
+		return "json-array"
+	case AspectJsonObject:
+		return "json-object"
+	case AspectJson:
+		return "json"
+	case AspectCborScalar:
+		return "cbor-scalar"
+	case AspectCborArray:
+		return "cbor-array"
+	case AspectCborMap:
+		return "cbor-map"
+	case AspectCbor:
+		return "cbor"
 	}
 	return InvalidAspectEnumValueString
 }

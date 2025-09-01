@@ -6,7 +6,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/vcs"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 )
@@ -67,7 +67,7 @@ func (inst *GeneratorDriver) GenerateColumnsCode(iter common.IntermediateColumnI
 			}
 		}
 		{ // check canonical type
-			var ct canonicalTypes.PrimitiveAstNodeI
+			var ct canonicaltypes.PrimitiveAstNodeI
 			ct, err = p.GetCanonicalType()
 			if err != nil {
 				err = eb.Build().Stringer("physicalColumn", p).Errorf("unable to get canonical type: %w", err)

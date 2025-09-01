@@ -8,7 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/base62"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	encodingaspects2 "github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
@@ -29,7 +29,7 @@ const SeparatorExplanation = "separator"
 type HumanReadableNamingConvention struct {
 	tableManipulator    *common.TableManipulator
 	separator           string
-	canonicalTypeParser *canonicalTypes.Parser
+	canonicalTypeParser *canonicaltypes.Parser
 	aspectCoder         *useaspects2.CanonicalEt7AspectCoder
 }
 
@@ -187,7 +187,7 @@ func NewHumanReadableNamingConvention(separator string) (inst *HumanReadableNami
 	inst = &HumanReadableNamingConvention{
 		tableManipulator:    tableManipulator,
 		separator:           separator,
-		canonicalTypeParser: canonicalTypes.NewParser(),
+		canonicalTypeParser: canonicaltypes.NewParser(),
 	}
 	return
 }
@@ -267,14 +267,14 @@ func (inst *HumanReadableNamingConvention) ExtractEncodingHints(column common.Ph
 	}
 	return
 }
-func (inst *HumanReadableNamingConvention) ExtractCanonicalType(column common.PhysicalColumnDesc) (ct canonicalTypes.PrimitiveAstNodeI, err error) {
+func (inst *HumanReadableNamingConvention) ExtractCanonicalType(column common.PhysicalColumnDesc) (ct canonicaltypes.PrimitiveAstNodeI, err error) {
 	var p positionData
 	p, err = getParseStructure(len(column.NameComponents))
 	if err != nil {
 		err = eb.Build().Strs("components", column.NameComponents).Errorf("unable to extract canonical type: %w", err)
 		return
 	}
-	var cto canonicalTypes.AstNodeI
+	var cto canonicaltypes.AstNodeI
 	cts := column.NameComponents[p.canonicalTypeIndex]
 	cto, err = inst.canonicalTypeParser.ParsePrimitiveTypeOrGroupAst(cts)
 	if err != nil {
@@ -282,7 +282,7 @@ func (inst *HumanReadableNamingConvention) ExtractCanonicalType(column common.Ph
 		return
 	}
 	var ok bool
-	ct, ok = cto.(canonicalTypes.PrimitiveAstNodeI)
+	ct, ok = cto.(canonicaltypes.PrimitiveAstNodeI)
 	if !ok {
 		err = eb.Build().Strs("components", column.NameComponents).Stringer("canonicalType", cto).Errorf("unable to extract primitive canonical type: type is not primitive")
 		return
@@ -319,7 +319,7 @@ func (inst *HumanReadableNamingConvention) MapIntermediateToPhysicalColumns(cc c
 	}
 	return
 }
-func (inst *HumanReadableNamingConvention) composePlainValueColumn(prefix string, name string, ct canonicalTypes.PrimitiveAstNodeI, hints encodingaspects2.AspectSet, valueSemantics valueaspects.AspectSet, tableRowConfig common.TableRowConfigE, streamingGroup naming.Key) (column common.PhysicalColumnDesc, err error) {
+func (inst *HumanReadableNamingConvention) composePlainValueColumn(prefix string, name string, ct canonicaltypes.PrimitiveAstNodeI, hints encodingaspects2.AspectSet, valueSemantics valueaspects.AspectSet, tableRowConfig common.TableRowConfigE, streamingGroup naming.Key) (column common.PhysicalColumnDesc, err error) {
 	err = inst.checkNameComponent(name)
 	if err != nil {
 		err = eh.Errorf("column name is for the given naming convention: %w", err)
@@ -349,7 +349,7 @@ func (inst *HumanReadableNamingConvention) composePlainValueColumn(prefix string
 	column.NameComponentsExplanation = ColumnsComponentsExplanation13
 	return
 }
-func (inst *HumanReadableNamingConvention) composeTaggedValuesColumn(sectionName string, useAspects useaspects2.AspectSet, name string, ct canonicalTypes.AstNodeI, hints encodingaspects2.AspectSet, valueSemantics valueaspects.AspectSet, role common.ColumnRoleE, tableRowConfig common.TableRowConfigE, coSectionGroup naming.Key, streamingGroup naming.Key) (column common.PhysicalColumnDesc, err error) {
+func (inst *HumanReadableNamingConvention) composeTaggedValuesColumn(sectionName string, useAspects useaspects2.AspectSet, name string, ct canonicaltypes.AstNodeI, hints encodingaspects2.AspectSet, valueSemantics valueaspects.AspectSet, role common.ColumnRoleE, tableRowConfig common.TableRowConfigE, coSectionGroup naming.Key, streamingGroup naming.Key) (column common.PhysicalColumnDesc, err error) {
 	err = inst.checkNameComponent(sectionName)
 	if err != nil {
 		return
@@ -443,7 +443,7 @@ func (inst *HumanReadableNamingConvention) discoverTableFromSortedPhysicalColumn
 				err = eb.Build().Stringer("physicalColumn", phy).Str("component", components[parseStructure13.encodingHintsIndex]).Errorf("unable to parse encoding aspects (hints): %w", err)
 				return
 			}
-			var ct canonicalTypes.PrimitiveAstNodeI
+			var ct canonicaltypes.PrimitiveAstNodeI
 			ct, err = inst.canonicalTypeParser.ParsePrimitiveTypeAst(components[parseStructure13.canonicalTypeIndex])
 			if err != nil {
 				err = eb.Build().Stringer("physicalColumn", phy).Str("component", components[parseStructure13.canonicalTypeIndex]).Errorf("unable to parse canonical type: %w", err)
@@ -491,7 +491,7 @@ func (inst *HumanReadableNamingConvention) discoverTableFromSortedPhysicalColumn
 		case 21:
 			switch components[parseStructure21.prefixIndex] {
 			case TaggedValuePrefix:
-				var ct canonicalTypes.PrimitiveAstNodeI
+				var ct canonicaltypes.PrimitiveAstNodeI
 				ct, err = inst.canonicalTypeParser.ParsePrimitiveTypeAst(components[parseStructure21.canonicalTypeIndex])
 				if err != nil {
 					err = eb.Build().Stringer("physicalColumn", phy).Str("component", components[parseStructure21.canonicalTypeIndex]).Errorf("unable to parse canonical type: %w", err)

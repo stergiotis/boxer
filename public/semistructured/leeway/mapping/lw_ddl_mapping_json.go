@@ -2,7 +2,7 @@ package mapping
 
 import (
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes/ctabb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	enchint "github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 )

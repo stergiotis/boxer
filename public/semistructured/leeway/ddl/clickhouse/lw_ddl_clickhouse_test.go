@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes/sample"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/sample"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	ddl2 "github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
 	"github.com/stretchr/testify/assert"

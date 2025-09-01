@@ -3,7 +3,7 @@ package cli
 import (
 	"os"
 
-	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes/codegen"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/codegen"
 	"github.com/urfave/cli/v2"
 )
 

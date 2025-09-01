@@ -1,4 +1,4 @@
-package canonicalTypeAware
+package canonicaltypeaware
 
 import (
 	"hash"

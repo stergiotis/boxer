@@ -10,7 +10,7 @@ import (
 	"github.com/fxamacker/cbor/v2"
 	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
@@ -37,7 +37,7 @@ type IntermediateColumnProps struct {
 	Names []naming.StylableName `cbor:"names"`
 	Roles []ColumnRoleE         `cbor:"roles"`
 	// original canonical type, for membership columns: scalar type
-	CanonicalType  []canonicalTypes.PrimitiveAstNodeI `cbor:"canonicalType"`
+	CanonicalType  []canonicaltypes.PrimitiveAstNodeI `cbor:"canonicalType"`
 	EncodingHints  []encodingaspects.AspectSet        `cbor:"encodingHints"`
 	ValueSemantics []valueaspects.AspectSet           `cbor:"valueSemantics"`
 }
@@ -109,7 +109,7 @@ type TableDesc struct {
 	DictionaryEntry TableDictionaryEntryDescDto
 
 	PlainValuesNames          []naming.StylableName
-	PlainValuesTypes          []canonicalTypes.PrimitiveAstNodeI
+	PlainValuesTypes          []canonicaltypes.PrimitiveAstNodeI
 	PlainValuesEncodingHints  []encodingaspects.AspectSet
 	PlainValuesItemTypes      []PlainItemTypeE
 	PlainValuesValueSemantics []valueaspects.AspectSet
@@ -169,7 +169,7 @@ type TaggedValuesSection struct {
 	Name               naming.StylableName
 	MembershipSpec     MembershipSpecE
 	ValueColumnNames   [] /*i*/ naming.StylableName
-	ValueColumnTypes   [] /*i*/ canonicalTypes.PrimitiveAstNodeI
+	ValueColumnTypes   [] /*i*/ canonicaltypes.PrimitiveAstNodeI
 	ValueEncodingHints [] /*i*/ encodingaspects.AspectSet
 	ValueSemantics     [] /*i*/ valueaspects.AspectSet
 	UseAspects         useaspects.AspectSet
@@ -186,14 +186,14 @@ type PhysicalColumnDesc struct {
 var _ fmt.Stringer = PhysicalColumnDesc{}
 
 type TechnologySpecificMembershipSetGenI interface {
-	GetMembershipSetCanonicalType(s MembershipSpecE) (ct1 canonicalTypes.PrimitiveAstNodeI, hint1 encodingaspects.AspectSet, colRole1 ColumnRoleE, ct2 canonicalTypes.PrimitiveAstNodeI, hint2 encodingaspects.AspectSet, colRole2 ColumnRoleE, err error)
+	GetMembershipSetCanonicalType(s MembershipSpecE) (ct1 canonicaltypes.PrimitiveAstNodeI, hint1 encodingaspects.AspectSet, colRole1 ColumnRoleE, ct2 canonicaltypes.PrimitiveAstNodeI, hint2 encodingaspects.AspectSet, colRole2 ColumnRoleE, err error)
 }
 type TechnologySpecificCodeGeneratorFwdI interface {
 	GenerateColumnCode(idx int, phy PhysicalColumnDesc) (err error)
-	GenerateType(canonicalType canonicalTypes.PrimitiveAstNodeI) (err error)
+	GenerateType(canonicalType canonicaltypes.PrimitiveAstNodeI) (err error)
 }
 type TechnologySpecificCompatibilityI interface {
-	CheckTypeCompatibility(canonicalType canonicalTypes.PrimitiveAstNodeI) (compatible bool, msg string)
+	CheckTypeCompatibility(canonicalType canonicaltypes.PrimitiveAstNodeI) (compatible bool, msg string)
 	GetEncodingHintImplementationStatus(hint encodingaspects.AspectE) (status ImplementationStatusE, msg string)
 }
 
@@ -217,7 +217,7 @@ type NamingConventionFwdI interface {
 	MapIntermediateToPhysicalColumns(cc IntermediateColumnContext, cp IntermediateColumnProps, in []PhysicalColumnDesc, tableRowConfig TableRowConfigE) (out []PhysicalColumnDesc, err error)
 }
 type NamingConventionBwdI interface {
-	ExtractCanonicalType(column PhysicalColumnDesc) (ct canonicalTypes.PrimitiveAstNodeI, err error)
+	ExtractCanonicalType(column PhysicalColumnDesc) (ct canonicaltypes.PrimitiveAstNodeI, err error)
 	ExtractEncodingHints(column PhysicalColumnDesc) (hints encodingaspects.AspectSet, err error)
 	ExtractValueSemantics(column PhysicalColumnDesc) (semantics valueaspects.AspectSet, err error)
 	ExtractTableRowConfig(column PhysicalColumnDesc) (tableRowConfig TableRowConfigE, err error)
@@ -260,7 +260,7 @@ type TableManipulatorFluidI interface {
 	//SetTableName(name naming.StylableName) TableManipulatorFluidI
 	//SetTableComment(comment string) TableManipulatorFluidI
 	TaggedValueSection(sectionName naming.StylableName) TaggedValueSectionMerger
-	PlainValueColumn(itemType PlainItemTypeE, name naming.StylableName, canonicalType canonicalTypes.PrimitiveAstNodeI) PlainValueColumnMerger
+	PlainValueColumn(itemType PlainItemTypeE, name naming.StylableName, canonicalType canonicaltypes.PrimitiveAstNodeI) PlainValueColumnMerger
 	Reset()
 }
 

@@ -1,4 +1,4 @@
-package canonicalTypes
+package canonicaltypes
 
 import (
 	"strconv"
@@ -7,7 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/parsing/antlr4utils"
-	grammar2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes/grammar"
+	grammar2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/grammar"
 )
 
 type resetableLexerI interface {

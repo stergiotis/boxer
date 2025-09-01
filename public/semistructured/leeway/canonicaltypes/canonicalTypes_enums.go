@@ -1,4 +1,4 @@
-package canonicalTypes
+package canonicaltypes
 
 const GroupSeparator = "-"
 const SignatureSeparator = "_"

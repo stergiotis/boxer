@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/rs/zerolog/log"
-	canonicalTypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes/sample"
+	canonicalTypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/sample"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 	"github.com/stretchr/testify/require"
 )

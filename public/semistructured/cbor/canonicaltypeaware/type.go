@@ -1,4 +1,4 @@
-package canonicalTypeAware
+package canonicaltypeaware
 
 import "github.com/stergiotis/boxer/public/semistructured/cbor"
 

@@ -7,12 +7,12 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/code/synthesis/golang"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes/sample"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/sample"
 	"github.com/stoewer/go-strcase"
 )
 
-func GenerateGoAbbrev(packageName string, imp string, astPackage string, w io.Writer, accept func(ct canonicalTypes.PrimitiveAstNodeI) (keep bool)) (err error) {
+func GenerateGoAbbrev(packageName string, imp string, astPackage string, w io.Writer, accept func(ct canonicaltypes.PrimitiveAstNodeI) (keep bool)) (err error) {
 	_, err = golang.AddCodeGenComment(w, CodeGeneratorName)
 	if err != nil {
 		return

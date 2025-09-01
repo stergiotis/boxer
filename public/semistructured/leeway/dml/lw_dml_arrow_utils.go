@@ -47,7 +47,7 @@ func WriteArrowRecords[E TransferRecordsI](ent E, records []arrow.Record, w *ipc
 		rows += r.NumRows()
 		r.Release()
 	}
-	log.Trace().Int("records", len(recordsOut)).Int64("rows", rows).Msg("wrote records")
+	log.Info().Int("records", len(recordsOut)).Int64("rows", rows).Msg("wrote records")
 	clear(recordsOut)
 	recordsOut = recordsOut[:0]
 	return

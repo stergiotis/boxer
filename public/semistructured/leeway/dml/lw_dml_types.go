@@ -6,7 +6,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/stergiotis/boxer/public/functional"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
@@ -39,7 +39,7 @@ type BufferingSerializerI interface {
 }
 
 type CanonicalTypeSerializerI interface {
-	GetSerializer(canonicalType canonicalTypes.PrimitiveAstNodeI) (bufser BufferingSerializerI, err error)
+	GetSerializer(canonicalType canonicaltypes.PrimitiveAstNodeI) (bufser BufferingSerializerI, err error)
 }
 
 type ArrowValueAdder struct {

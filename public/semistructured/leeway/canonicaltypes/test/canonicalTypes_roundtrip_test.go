@@ -4,14 +4,14 @@ import (
 	"math/rand/v2"
 	"testing"
 
-	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes/sample"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/sample"
 	"github.com/stretchr/testify/require"
 )
 
 func TestCanonicalTypes_Roundtrip(t *testing.T) {
 	rnd := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
-	p := canonicalTypes.NewParser()
+	p := canonicaltypes.NewParser()
 	for i := 0; i < 1000; i++ {
 		ct := sample.GenerateSamplePrimitiveType(rnd, nil)
 		ct2, err := p.ParsePrimitiveTypeAst(ct.String())

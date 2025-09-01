@@ -6,7 +6,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/vcs"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 )
@@ -15,15 +15,15 @@ var CodeGeneratorName = "Leeway CT (" + vcs.ModuleInfo() + ")"
 
 var ErrNotImplemented = eh.Errorf("go code generation not implemtented for given canonical type")
 
-func GenerateGoCode(canonicalType canonicalTypes.PrimitiveAstNodeI, hints encodingaspects.AspectSet) (typeCode string, zeroValueLiteral string, imports []string, err error) {
+func GenerateGoCode(canonicalType canonicaltypes.PrimitiveAstNodeI, hints encodingaspects.AspectSet) (typeCode string, zeroValueLiteral string, imports []string, err error) {
 	switch ct := canonicalType.(type) {
-	case canonicalTypes.MachineNumericTypeAstNode:
+	case canonicaltypes.MachineNumericTypeAstNode:
 		typeCode, zeroValueLiteral, imports, err = generateMachineNumericType(ct.BaseType, ct.Width, ct.ByteOrderModifier, ct.ScalarModifier, hints)
 		return
-	case canonicalTypes.StringAstNode:
+	case canonicaltypes.StringAstNode:
 		typeCode, zeroValueLiteral, imports, err = generateStringType(ct.BaseType, ct.WidthModifier, ct.Width, ct.ScalarModifier, hints)
 		return
-	case canonicalTypes.TemporalTypeAstNode:
+	case canonicaltypes.TemporalTypeAstNode:
 		typeCode, zeroValueLiteral, imports, err = generateTemporalType(ct.BaseType, ct.Width, ct.ScalarModifier, hints)
 		return
 	default:
@@ -32,22 +32,22 @@ func GenerateGoCode(canonicalType canonicalTypes.PrimitiveAstNodeI, hints encodi
 	}
 }
 
-func generateStringType(baseType canonicalTypes.BaseTypeStringE, widthModifier canonicalTypes.WidthModifierE, width canonicalTypes.Width, scalarModifier canonicalTypes.ScalarModifierE, hints encodingaspects.AspectSet) (code string, zeroValueLiteral string, imports []string, err error) {
+func generateStringType(baseType canonicaltypes.BaseTypeStringE, widthModifier canonicaltypes.WidthModifierE, width canonicaltypes.Width, scalarModifier canonicaltypes.ScalarModifierE, hints encodingaspects.AspectSet) (code string, zeroValueLiteral string, imports []string, err error) {
 	switch baseType {
-	case canonicalTypes.BaseTypeStringBool:
+	case canonicaltypes.BaseTypeStringBool:
 		code = "bool"
 		zeroValueLiteral = "false"
 		switch widthModifier {
-		case canonicalTypes.WidthModifierNone:
+		case canonicaltypes.WidthModifierNone:
 			break
 		default:
 			err = common.ErrNotImplemented
 		}
 		if err == nil {
 			switch scalarModifier {
-			case canonicalTypes.ScalarModifierNone:
+			case canonicaltypes.ScalarModifierNone:
 				break
-			case canonicalTypes.ScalarModifierHomogenousArray, canonicalTypes.ScalarModifierSet:
+			case canonicaltypes.ScalarModifierHomogenousArray, canonicaltypes.ScalarModifierSet:
 				code = "[]" + code
 				zeroValueLiteral = code + "(nil)"
 				break
@@ -56,8 +56,8 @@ func generateStringType(baseType canonicalTypes.BaseTypeStringE, widthModifier c
 			}
 		}
 		break
-	case canonicalTypes.BaseTypeStringBytes, canonicalTypes.BaseTypeStringUtf8:
-		if baseType == canonicalTypes.BaseTypeStringUtf8 {
+	case canonicaltypes.BaseTypeStringBytes, canonicaltypes.BaseTypeStringUtf8:
+		if baseType == canonicaltypes.BaseTypeStringUtf8 {
 			code = "string"
 			zeroValueLiteral = "\"\""
 		} else {
@@ -76,10 +76,10 @@ func generateStringType(baseType canonicalTypes.BaseTypeStringE, widthModifier c
 			}
 		}
 		switch widthModifier {
-		case canonicalTypes.WidthModifierNone:
+		case canonicaltypes.WidthModifierNone:
 			break
-		case canonicalTypes.WidthModifierFixed:
-			if baseType == canonicalTypes.BaseTypeStringBytes {
+		case canonicaltypes.WidthModifierFixed:
+			if baseType == canonicaltypes.BaseTypeStringBytes {
 				code = fmt.Sprintf("[%d]byte", width)
 				zeroValueLiteral = fmt.Sprintf("[%d]byte{}", width)
 			}
@@ -89,9 +89,9 @@ func generateStringType(baseType canonicalTypes.BaseTypeStringE, widthModifier c
 		}
 		if err == nil {
 			switch scalarModifier {
-			case canonicalTypes.ScalarModifierNone:
+			case canonicaltypes.ScalarModifierNone:
 				break
-			case canonicalTypes.ScalarModifierHomogenousArray, canonicalTypes.ScalarModifierSet:
+			case canonicaltypes.ScalarModifierHomogenousArray, canonicaltypes.ScalarModifierSet:
 				code = "[]" + code
 				zeroValueLiteral = code + "(nil)"
 				break
@@ -109,10 +109,10 @@ func generateStringType(baseType canonicalTypes.BaseTypeStringE, widthModifier c
 	return
 }
 
-func generateTemporalType(baseTemporal canonicalTypes.BaseTypeTemporalE, width canonicalTypes.Width, scalarModifier canonicalTypes.ScalarModifierE, hints encodingaspects.AspectSet) (code string, zeroValueLiteral string, imports []string, err error) {
+func generateTemporalType(baseTemporal canonicaltypes.BaseTypeTemporalE, width canonicaltypes.Width, scalarModifier canonicaltypes.ScalarModifierE, hints encodingaspects.AspectSet) (code string, zeroValueLiteral string, imports []string, err error) {
 	imports = []string{"time"}
 	switch baseTemporal {
-	case canonicalTypes.BaseTypeTemporalUtcDatetime:
+	case canonicaltypes.BaseTypeTemporalUtcDatetime:
 		switch width {
 		case 32:
 			code = "time.Time"
@@ -126,10 +126,10 @@ func generateTemporalType(baseTemporal canonicalTypes.BaseTypeTemporalE, width c
 			err = common.ErrNotImplemented
 		}
 		break
-	case canonicalTypes.BaseTypeTemporalZonedDatetime:
+	case canonicaltypes.BaseTypeTemporalZonedDatetime:
 		err = common.ErrNotImplemented
 		break
-	case canonicalTypes.BaseTypeTemporalZonedTime:
+	case canonicaltypes.BaseTypeTemporalZonedTime:
 		err = common.ErrNotImplemented
 		break
 	default:
@@ -137,9 +137,9 @@ func generateTemporalType(baseTemporal canonicalTypes.BaseTypeTemporalE, width c
 	}
 	if err == nil {
 		switch scalarModifier {
-		case canonicalTypes.ScalarModifierNone:
+		case canonicaltypes.ScalarModifierNone:
 			break
-		case canonicalTypes.ScalarModifierHomogenousArray, canonicalTypes.ScalarModifierSet:
+		case canonicaltypes.ScalarModifierHomogenousArray, canonicaltypes.ScalarModifierSet:
 			code = "[]" + code
 			zeroValueLiteral = code + "(nil)"
 			break
@@ -154,10 +154,10 @@ func generateTemporalType(baseTemporal canonicalTypes.BaseTypeTemporalE, width c
 	return
 }
 
-func generateMachineNumericType(baseMachineNumber canonicalTypes.BaseTypeMachineNumericE, width canonicalTypes.Width, byteOrderModifier canonicalTypes.ByteOrderModifierE, scalarModifier canonicalTypes.ScalarModifierE, hints encodingaspects.AspectSet) (code string, zeroValueLiteral string, imports []string, err error) {
+func generateMachineNumericType(baseMachineNumber canonicaltypes.BaseTypeMachineNumericE, width canonicaltypes.Width, byteOrderModifier canonicaltypes.ByteOrderModifierE, scalarModifier canonicaltypes.ScalarModifierE, hints encodingaspects.AspectSet) (code string, zeroValueLiteral string, imports []string, err error) {
 	switch baseMachineNumber {
-	case canonicalTypes.BaseTypeMachineNumericUnsigned, canonicalTypes.BaseTypeMachineNumericSigned:
-		if baseMachineNumber == canonicalTypes.BaseTypeMachineNumericUnsigned {
+	case canonicaltypes.BaseTypeMachineNumericUnsigned, canonicaltypes.BaseTypeMachineNumericSigned:
+		if baseMachineNumber == canonicaltypes.BaseTypeMachineNumericUnsigned {
 			code = "uint"
 		} else {
 			code = "int"
@@ -171,9 +171,9 @@ func generateMachineNumericType(baseMachineNumber canonicalTypes.BaseTypeMachine
 			err = common.ErrNotImplemented
 		}
 		switch scalarModifier {
-		case canonicalTypes.ScalarModifierNone:
+		case canonicaltypes.ScalarModifierNone:
 			break
-		case canonicalTypes.ScalarModifierHomogenousArray, canonicalTypes.ScalarModifierSet:
+		case canonicaltypes.ScalarModifierHomogenousArray, canonicaltypes.ScalarModifierSet:
 			code = "[]" + code
 			zeroValueLiteral = code + "(nil)"
 			break
@@ -181,7 +181,7 @@ func generateMachineNumericType(baseMachineNumber canonicalTypes.BaseTypeMachine
 			err = common.ErrNotImplemented
 		}
 		break
-	case canonicalTypes.BaseTypeMachineNumericFloat:
+	case canonicaltypes.BaseTypeMachineNumericFloat:
 		code = "float"
 		switch width {
 		case 32, 64:
@@ -192,9 +192,9 @@ func generateMachineNumericType(baseMachineNumber canonicalTypes.BaseTypeMachine
 			err = common.ErrNotImplemented
 		}
 		switch scalarModifier {
-		case canonicalTypes.ScalarModifierNone:
+		case canonicaltypes.ScalarModifierNone:
 			break
-		case canonicalTypes.ScalarModifierHomogenousArray, canonicalTypes.ScalarModifierSet:
+		case canonicaltypes.ScalarModifierHomogenousArray, canonicaltypes.ScalarModifierSet:
 			code = "[]" + code
 			zeroValueLiteral = code + "(nil)"
 			break

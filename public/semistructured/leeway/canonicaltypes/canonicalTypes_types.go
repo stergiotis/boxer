@@ -1,4 +1,4 @@
-package canonicalTypes
+package canonicaltypes
 
 import (
 	"fmt"

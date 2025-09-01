@@ -44,6 +44,19 @@ const (
 	AspectDevice             AspectE = 38
 	AspectDocumentation      AspectE = 39
 	AspectObservability      AspectE = 40
+
+	AspectCodeSourceOfTruth                       AspectE = 41
+	AspectDataSourceOfTruth                       AspectE = 42
+	AspectExternalSourceOfTruth                   AspectE = 43
+	AspectMiniDimension                           AspectE = 44
+	AspectSlowlyChangingDimensionRetainOriginal   AspectE = 45 // i.e. type 0, see https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/type-0/
+	AspectSlowlyChangingDimensionOverwrite        AspectE = 46 // i.e. type 1, see https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/type-1/
+	AspectSlowlyChangingDimensionAddNewRecord     AspectE = 47 // i.e. type 2, add new row, see https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/type-2/
+	AspectSlowlyChangingDimensionAddNewAttribute  AspectE = 48 // i.e. type 3, add new attribute, see https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/type-3/
+	AspectSlowlyChangingDimensionAddMiniDimension AspectE = 49 // i.e. type 4, add mini dimension, see https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/type-4-mini-dimension/
+	AspectSlowlyChangingDimensionType5            AspectE = 50 // i.e. type 5, add mini and type 1 outrigger, see https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/type-5/
+	AspectSlowlyChangingDimensionType6            AspectE = 51 // i.e. type 6, add type 1 attributes to type 2 dimension, see https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/type-6/
+	AspectSlowlyChangingDimensionType7            AspectE = 52 // i.e. type 7, dual type 1 and type 2 dimension, see https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/type-7/
 )
 
 var MaxAspectExcl = slices.Max(AllAspects) + 1
@@ -183,4 +196,7 @@ func (inst AspectE) String() string {
 		return "observability"
 	}
 	return InvalidAspectEnumValueString
+}
+func (inst AspectE) Value() uint8 {
+	return uint8(inst)
 }

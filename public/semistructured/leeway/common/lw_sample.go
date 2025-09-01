@@ -6,8 +6,8 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes/sample"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/sample"
 	encodingaspects2 "github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	useaspects2 "github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
@@ -35,7 +35,7 @@ func generateExampleMembershipSpec(rnd *rand.Rand) (r MembershipSpecE) {
 	}
 	return r
 }
-func GenerateSampleTableDesc(rnd *rand.Rand, acceptCanonicalType func(ct canonicalTypes.PrimitiveAstNodeI) (ok bool, msg string), acceptEncodingAspect func(asp encodingaspects2.AspectE) (ok bool, msg string)) (tbl TableDesc, err error) {
+func GenerateSampleTableDesc(rnd *rand.Rand, acceptCanonicalType func(ct canonicaltypes.PrimitiveAstNodeI) (ok bool, msg string), acceptEncodingAspect func(asp encodingaspects2.AspectE) (ok bool, msg string)) (tbl TableDesc, err error) {
 	var gen *TableManipulator
 	gen, err = NewTableManipulator()
 	if err != nil {
@@ -50,7 +50,7 @@ func GenerateSampleTableDesc(rnd *rand.Rand, acceptCanonicalType func(ct canonic
 	tbl, err = gen.BuildTableDesc()
 	return
 }
-func GenerateSampleTableDescDto(rnd *rand.Rand, acceptCanonicalType func(ct canonicalTypes.PrimitiveAstNodeI) (ok bool, msg string), acceptEncodingAspect func(asp encodingaspects2.AspectE) (ok bool, msg string)) (dto TableDescDto, err error) {
+func GenerateSampleTableDescDto(rnd *rand.Rand, acceptCanonicalType func(ct canonicaltypes.PrimitiveAstNodeI) (ok bool, msg string), acceptEncodingAspect func(asp encodingaspects2.AspectE) (ok bool, msg string)) (dto TableDescDto, err error) {
 	var gen *TableManipulator
 	gen, err = NewTableManipulator()
 	if err != nil {
@@ -100,7 +100,7 @@ func GenerateSampleValueSemantics(nMembers int, rnd *rand.Rand) (valueSemantics 
 	}
 	return valueaspects.EncodeAspectsMustValidate(members...)
 }
-func PopulateManipulator(manipulator *TableManipulator, rnd *rand.Rand, acceptCanonicalType func(ct canonicalTypes.PrimitiveAstNodeI) (ok bool, msg string), acceptEncodingAspect func(aspect encodingaspects2.AspectE) (ok bool, msg string)) (err error) {
+func PopulateManipulator(manipulator *TableManipulator, rnd *rand.Rand, acceptCanonicalType func(ct canonicaltypes.PrimitiveAstNodeI) (ok bool, msg string), acceptEncodingAspect func(aspect encodingaspects2.AspectE) (ok bool, msg string)) (err error) {
 	for _, t := range AllPlainItemTypes {
 		if t == PlainItemTypeNone {
 			continue

@@ -4,13 +4,13 @@ import (
 	"math/rand/v2"
 	"testing"
 
-	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes/sample"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/sample"
 )
 
 func BenchmarkCanonicalTypes_Parse(b *testing.B) {
 	rnd := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
-	p := canonicalTypes.NewParser()
+	p := canonicaltypes.NewParser()
 	for b.Loop() {
 		ct := sample.GenerateSamplePrimitiveType(rnd, nil)
 		ct2, err := p.ParsePrimitiveTypeAst(ct.String())

@@ -67,6 +67,31 @@ const (
 	AspectMediumLifespan     AspectE = 52
 	AspectLongLifespan       AspectE = 53
 	AspectUltraLongLifespan  AspectE = 54
+
+	AspectJsonScalar AspectE = 55
+	AspectJsonArray  AspectE = 56
+	AspectJsonObject AspectE = 57
+	AspectJson       AspectE = 58
+	AspectCborScalar AspectE = 59
+	AspectCborArray  AspectE = 60
+	AspectCborMap    AspectE = 61
+	AspectCbor       AspectE = 62
+
+	AspectUrl AspectE = 63 // follow the WHATWG recommendation to forget URI and use URL (see https://url.spec.whatwg.org/#goals)
+
+	//AspectFeature                   AspectE = 64
+	//AspectFeatureOneHot             AspectE = 65
+	//AspectFeatureScalingStandardN01 AspectE = 66
+	//AspectFeatureScalingMinMax01    AspectE = 67
+	//AspectFeatureScalingRobust01    AspectE = 68
+	//AspectFeatureBinarized          AspectE = 69
+	//AspectFeatureOrdinal            AspectE = 71
+	//AspectFeatureLabel              AspectE = 72
+
+	//AspectIdNaturalKey AspectE = 73
+	//AspectIdSurrogateKey AspectE = 74
+	//AspectIdDurableSuperNaturalKey AspectE = 75
+	//AspectIdContentAddressableKey AspectE = 76
 )
 
 var MaxAspectExcl = slices.Max(AllAspects) + 1
@@ -134,6 +159,17 @@ var AllAspects = []AspectE{
 	AspectMediumLifespan,
 	AspectLongLifespan,
 	AspectUltraLongLifespan,
+
+	AspectJsonScalar,
+	AspectJsonArray,
+	AspectJsonObject,
+	AspectJson,
+	AspectCborScalar,
+	AspectCborArray,
+	AspectCborMap,
+	AspectCbor,
+
+	AspectUrl,
 }
 
 const InvalidAspectEnumValueString = "<invalid AspectE>"
@@ -256,6 +292,27 @@ func (inst AspectE) String() string {
 		return "long-lifespan"
 	case AspectUltraLongLifespan:
 		return "ultra-long-lifespan"
+	case AspectJsonScalar:
+		return "json-scalar"
+	case AspectJsonArray:
+		return "json-array"
+	case AspectJsonObject:
+		return "json-object"
+	case AspectJson:
+		return "json"
+	case AspectCborScalar:
+		return "cbor-scalar"
+	case AspectCborArray:
+		return "cbor-array"
+	case AspectCborMap:
+		return "cbor-map"
+	case AspectCbor:
+		return "cbor"
+	case AspectUrl:
+		return "url"
 	}
 	return InvalidAspectEnumValueString
+}
+func (inst AspectE) Value() uint8 {
+	return uint8(inst)
 }

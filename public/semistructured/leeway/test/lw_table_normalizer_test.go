@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicalTypes"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
@@ -23,7 +23,7 @@ func TestNewTableNormalizer(t *testing.T) {
 
 	var tbl1, tbl2 common.TableDesc
 	var manip *common.TableManipulator
-	ctp := canonicalTypes.NewParser()
+	ctp := canonicaltypes.NewParser()
 	manip, err = common.NewTableManipulator()
 	require.NoError(t, err)
 	manip.AddPlainValueItem(common.PlainItemTypeEntityId, "my_id", ctp.MustParsePrimitiveTypeAst("s"), encodingaspects.EmptyAspectSet, valueaspects.EmptyAspectSet)
