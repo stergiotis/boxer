@@ -92,6 +92,19 @@ const (
 	//AspectIdSurrogateKey AspectE = 74
 	//AspectIdDurableSuperNaturalKey AspectE = 75
 	//AspectIdContentAddressableKey AspectE = 76
+
+	//AspectTextUnicodeNfd        AspectE = 77 // Normalization Form Canonical Decomposition
+	//AspectTextUnicodeNfc        AspectE = 78 // Normalization Form Canonical Composition
+	//AspectTextUnicodeNfkd       AspectE = 79 // Normalization Form Compatibility Decomposition
+	//AspectTextUnicodeNfkc       AspectE = 80 // Normalization Form Compatibility Composition
+	//AspectTextUnicodeCaseFolded AspectE = 81 // Normalization Form Compatibility Composition
+
+	//AspectTextUnicodeCaseInsensitive AspectE = 83
+	//AspectTextUnicodeLocaleSensitive AspectE = 84
+	//AspectTextUnicodeMayBeBidi AspectE = 85
+
+	//AspectHumanGenerated  AspectE = 86
+	//AspectMachineGenerate AspectE = 87
 )
 
 var MaxAspectExcl = slices.Max(AllAspects) + 1
