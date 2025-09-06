@@ -820,74 +820,89 @@ func (inst *GoClassBuilder) composeAttributeCode(sectionIRH *common.Intermediate
 				}
 
 				if funcName != "" {
-					if mixed >= 0 {
-						_, err = fmt.Fprintf(b, "func (inst *%s) %s(", inst.clsNames.inAttributeClassName, funcName)
+					f := func(funcName string, retrType string, instRetrExpr string) (err error) {
+						if mixed >= 0 {
+							_, err = fmt.Fprintf(b, "func (inst *%s) %s(", inst.clsNames.inAttributeClassName, funcName)
+							if err != nil {
+								return
+							}
+							err = inst.composeFieldRelatedCode(structFieldOperationArgDeclaration, cc, cp, i)
+							if err != nil {
+								return
+							}
+							_, err = b.WriteString(", ")
+							if err != nil {
+								return
+							}
+							err = inst.composeFieldRelatedCode(structFieldOperationArgDeclaration, mixedParamsCc[mixed], mixedParamsCp[mixed], mixedParamsIdx[mixed])
+							if err != nil {
+								return
+							}
+							_, err = fmt.Fprintf(b, ") %s {\n", retrType)
+							if err != nil {
+								return
+							}
+							err = inst.composeStateVerificationCode([]runtime.EntityStateE{runtime.EntityStateInAttribute}, false, instRetrExpr)
+							if err != nil {
+								return
+							}
+							err = inst.composeFieldRelatedCode(structFieldOperationAppendScalar, cc, cp, i)
+							if err != nil {
+								return
+							}
+							err = inst.composeFieldRelatedCode(structFieldOperationAppendScalar, mixedParamsCc[mixed], mixedParamsCp[mixed], mixedParamsIdx[mixed])
+							if err != nil {
+								return
+							}
+							err = inst.composeFieldRelatedCode(structFieldOperationIncrementContainerLength, cc, cp, i)
+							if err != nil {
+								return
+							}
+							err = inst.composeFieldRelatedCode(structFieldOperationIncrementContainerLength, mixedParamsCc[mixed], mixedParamsCp[mixed], mixedParamsIdx[mixed])
+						} else {
+							_, err = fmt.Fprintf(b, "func (inst *%s) %s(", inst.clsNames.inAttributeClassName, funcName)
+							if err != nil {
+								return
+							}
+							err = inst.composeFieldRelatedCode(structFieldOperationArgDeclaration, cc, cp, i)
+							if err != nil {
+								return
+							}
+							_, err = fmt.Fprintf(b, ") %s {\n", retrType)
+							if err != nil {
+								return
+							}
+							err = inst.composeStateVerificationCode([]runtime.EntityStateE{runtime.EntityStateInAttribute}, false, instRetrExpr)
+							if err != nil {
+								return
+							}
+							err = inst.composeFieldRelatedCode(structFieldOperationAppendScalar, cc, cp, i)
+							if err != nil {
+								return
+							}
+							err = inst.composeFieldRelatedCode(structFieldOperationIncrementContainerLength, cc, cp, i)
+						}
 						if err != nil {
 							return
 						}
-						err = inst.composeFieldRelatedCode(structFieldOperationArgDeclaration, cc, cp, i)
+						_, err = b.WriteString("\treturn")
 						if err != nil {
 							return
 						}
-						_, err = b.WriteString(", ")
+						if instRetrExpr != "" {
+							_, err = b.WriteString(" " + instRetrExpr)
+						}
+						_, err = b.WriteString("\n}\n")
 						if err != nil {
 							return
 						}
-						err = inst.composeFieldRelatedCode(structFieldOperationArgDeclaration, mixedParamsCc[mixed], mixedParamsCp[mixed], mixedParamsIdx[mixed])
-						if err != nil {
-							return
-						}
-						_, err = fmt.Fprintf(b, ") *%s {\n", inst.clsNames.inAttributeClassName)
-						if err != nil {
-							return
-						}
-						err = inst.composeStateVerificationCode([]runtime.EntityStateE{runtime.EntityStateInAttribute}, false, "inst")
-						if err != nil {
-							return
-						}
-						err = inst.composeFieldRelatedCode(structFieldOperationAppendScalar, cc, cp, i)
-						if err != nil {
-							return
-						}
-						err = inst.composeFieldRelatedCode(structFieldOperationAppendScalar, mixedParamsCc[mixed], mixedParamsCp[mixed], mixedParamsIdx[mixed])
-						if err != nil {
-							return
-						}
-						err = inst.composeFieldRelatedCode(structFieldOperationIncrementContainerLength, cc, cp, i)
-						if err != nil {
-							return
-						}
-						err = inst.composeFieldRelatedCode(structFieldOperationIncrementContainerLength, mixedParamsCc[mixed], mixedParamsCp[mixed], mixedParamsIdx[mixed])
-					} else {
-						_, err = fmt.Fprintf(b, "func (inst *%s) %s(", inst.clsNames.inAttributeClassName, funcName)
-						if err != nil {
-							return
-						}
-						err = inst.composeFieldRelatedCode(structFieldOperationArgDeclaration, cc, cp, i)
-						if err != nil {
-							return
-						}
-						_, err = fmt.Fprintf(b, ") *%s {\n", inst.clsNames.inAttributeClassName)
-						if err != nil {
-							return
-						}
-						err = inst.composeStateVerificationCode([]runtime.EntityStateE{runtime.EntityStateInAttribute}, false, "inst")
-						if err != nil {
-							return
-						}
-						err = inst.composeFieldRelatedCode(structFieldOperationAppendScalar, cc, cp, i)
-						if err != nil {
-							return
-						}
-						err = inst.composeFieldRelatedCode(structFieldOperationIncrementContainerLength, cc, cp, i)
+						return
 					}
+					err = f(funcName, "*"+inst.clsNames.inAttributeClassName, "inst")
 					if err != nil {
 						return
 					}
-					_, err = b.WriteString(`
-	return inst
-}
-`)
+					err = f(funcName+"P", "", "")
 					if err != nil {
 						return
 					}

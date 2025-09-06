@@ -283,11 +283,36 @@ type PlainValueColumnMerger struct {
 	table       *TableDesc
 	columnIndex int
 }
+type InAttributeMembershipHighCardRefPI interface {
+	AddMembershipHighCardRefP(highCardRef uint64)
+}
+type InAttributeMembershipHighCardRefParametrizedPI interface {
+	AddMembershipHighCardRefParametrizedP(highCardRefParametrized []byte)
+}
+type InAttributeMembershipHighCardVerbatimPI interface {
+	AddMembershipHighCardVerbatimP(highCardVerbatim []byte)
+}
+type InAttributeMembershipLowCardRefPI interface {
+	AddMembershipLowCardRefP(lowCardRef uint64)
+}
+type InAttributeMembershipLowCardRefParametrizedPI interface {
+	AddMembershipLowCardRefParametrizedP(lowCardRefParametrized []byte)
+}
+type InAttributeMembershipLowCardVerbatimPI interface {
+	AddMembershipLowCardVerbatimP(lowCardVerbatim []byte)
+}
+type InAttributeMembershipMixedLowCardRefPI interface {
+	AddMembershipMixedLowCardRefP(lowCardRef uint64, params []byte)
+}
+type InAttributeMembershipMixedLowCardVerbatimPI interface {
+	AddMembershipMixedLowCardVerbatimP(lowCardVerbatim uint64, params []byte)
+}
+
 type InAttributeMembershipHighCardRefI[A any] interface {
 	AddMembershipHighCardRef(highCardRef uint64) A
 }
 type InAttributeMembershipHighCardRefParametrizedI[A any] interface {
-	AddMembershipHighCardRef(highCardRefParametrized []byte) A
+	AddMembershipHighCardRefParametrized(highCardRefParametrized []byte) A
 }
 type InAttributeMembershipHighCardVerbatimI[A any] interface {
 	AddMembershipHighCardRef(highCardVerbatim []byte) A
@@ -296,16 +321,16 @@ type InAttributeMembershipLowCardRefI[A any] interface {
 	AddMembershipLowCardRef(lowCardRef uint64) A
 }
 type InAttributeMembershipLowCardRefParametrizedI[A any] interface {
-	AddMembershipLowCardRef(lowCardRefParametrized []byte) A
+	AddMembershipLowCardRefParametrized(lowCardRefParametrized []byte) A
 }
 type InAttributeMembershipLowCardVerbatimI[A any] interface {
-	AddMembershipLowCardRef(lowCardVerbatim []byte) A
+	AddMembershipLowCardVerbatim(lowCardVerbatim []byte) A
 }
 type InAttributeMembershipMixedLowCardRefI[A any] interface {
 	AddMembershipMixedLowCardRef(lowCardRef uint64, params []byte) A
 }
 type InAttributeMembershipMixedLowCardVerbatimI[A any] interface {
-	AddMembershipMixedLowCardRef(lowCardVerbatim uint64, params []byte) A
+	AddMembershipMixedLowCardVerbatim(lowCardVerbatim uint64, params []byte) A
 }
 type ErrorHandlingI interface {
 	AppendError(err error)
