@@ -1,4 +1,4 @@
-//go:build identifier_tag_fixed_20
+//go:build identifier_tag_fixed20
 
 package identifier
 

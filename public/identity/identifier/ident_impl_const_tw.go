@@ -1,4 +1,4 @@
-//go:build identifier_tag_fixed_4 || identifier_tag_fixed_8 || identifier_tag_fixed_12 || identifier_tag_fixed_16 || identifier_tag_fixed_20 || identifier_tag_fixed_24 || identifier_tag_fixed_28 || identifier_tag_fixed_32
+//go:build identifier_tag_fixed4 || identifier_tag_fixed8 || identifier_tag_fixed12 || identifier_tag_fixed16 || identifier_tag_fixed20 || identifier_tag_fixed24 || identifier_tag_fixed28 || identifier_tag_fixed32
 
 package identifier
 
