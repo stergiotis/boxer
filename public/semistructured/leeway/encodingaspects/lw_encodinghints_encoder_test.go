@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCanonicalEt7AspectEnum(t *testing.T) {
+func TestCanonicalAspectEnum(t *testing.T) {
 	require.EqualValues(t, len(AllAspects), MaxAspectExcl)
 	m := make([]string, 0, len(AllAspects))
 	for i := AspectE(0); i < MaxAspectExcl; i++ {
@@ -19,7 +19,7 @@ func TestCanonicalEt7AspectEnum(t *testing.T) {
 		require.True(t,naming.StylableName(i.String()).IsValid(), i.String())
 	}
 }
-func TestCanonicalEt7AspectCoder(t *testing.T) {
+func TestCanonicalAspectCoder(t *testing.T) {
 	rgx := regexp.MustCompile("[^a-zA-Z0-9]")
 	{
 		_, err := EncodeAspects(MaxAspectExcl)
