@@ -332,9 +332,15 @@ type InAttributeMembershipMixedLowCardRefI[A any] interface {
 type InAttributeMembershipMixedLowCardVerbatimI[A any] interface {
 	AddMembershipMixedLowCardVerbatim(lowCardVerbatim uint64, params []byte) A
 }
-type ErrorHandlingI interface {
+type ErrorAppenderI interface {
 	AppendError(err error)
+}
+type ErrorCheckerI interface {
 	CheckErrors() (err error)
+}
+type ErrorHandlingI interface {
+	ErrorAppenderI
+	ErrorCheckerI
 }
 
 type InAttributeI[E any, S any, A any] interface {
