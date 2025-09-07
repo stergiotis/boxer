@@ -17,7 +17,11 @@ import (
 const SnakeCaseSeparator = '_'
 const SpinalCaseSeparator = '-'
 const InvalidComponentRune = unicode.ReplacementChar
-const DefaultNamingStyle = NamingStyleSpinalCase
+const (
+	ShortestNamingStyle     = NamingStyleLowerCamelCase
+	BestReadableNamingStyle = NamingStyleSpinalCase
+	DefaultNamingStyle      = BestReadableNamingStyle
+)
 
 func ConvertNameStyle[S ~string](name S, targetStyle NamingStyleE) (naming S) {
 	switch targetStyle {
