@@ -2,7 +2,6 @@ package dml
 
 import (
 	"io"
-	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/stergiotis/boxer/public/functional"
@@ -41,12 +40,6 @@ type BufferingSerializerI interface {
 type CanonicalTypeSerializerI interface {
 	GetSerializer(canonicalType canonicaltypes.PrimitiveAstNodeI) (bufser BufferingSerializerI, err error)
 }
-
-type ArrowValueAdder struct {
-	s *strings.Builder
-}
-
-var _ common.CodeBuilderHolderI = (*ArrowValueAdder)(nil)
 
 type TransferRecordsI interface {
 	TransferRecords(recordsIn []arrow.Record) (recordsOut []arrow.Record, err error)

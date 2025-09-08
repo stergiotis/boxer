@@ -219,6 +219,40 @@ func (inst *HumanReadableNamingConvention) ExtractValueSemantics(column common.P
 	return
 }
 
+func (inst *HumanReadableNamingConvention) ExtractSectionName(column common.PhysicalColumnDesc) (sectionName naming.StylableName, err error) {
+	var p positionData
+	p, err = getParseStructure(len(column.NameComponents))
+	if err != nil {
+		err = eb.Build().Strs("components", column.NameComponents).Errorf("unable to extract plain item type: %w", err)
+		return
+	}
+	var plainItemType common.PlainItemTypeE
+	plainItemType, err = prefixToPlainItemType(column.NameComponents[p.prefixIndex])
+	if err != nil {
+		err = eb.Build().Strs("components", column.NameComponents).Errorf("unable to extract plain item type: %w", err)
+		return
+	}
+	if plainItemType != common.PlainItemTypeNone {
+		sectionName = naming.StylableName(column.NameComponents[p.sectionNameIndex])
+		if !sectionName.IsValid() {
+			err = eb.Build().Str("sectionName", string(sectionName)).Strs("physicalColumn", column.NameComponents).Strs("explanation", column.NameComponentsExplanation).Errorf("extracted section name is not a valid stylable name")
+		}
+	}
+	return
+}
+func (inst *HumanReadableNamingConvention) ExtractLeewayColumnName(column common.PhysicalColumnDesc) (columnName naming.StylableName, err error) {
+	var p positionData
+	p, err = getParseStructure(len(column.NameComponents))
+	if err != nil {
+		err = eb.Build().Strs("components", column.NameComponents).Errorf("unable to extract plain item type: %w", err)
+		return
+	}
+	columnName = naming.StylableName(column.NameComponents[p.columnNameIndex])
+	if !columnName.IsValid() {
+		err = eb.Build().Str("columnName", string(columnName)).Strs("physicalColumn", column.NameComponents).Strs("explanation", column.NameComponentsExplanation).Errorf("extracted section name is not a valid stylable name")
+	}
+	return
+}
 func (inst *HumanReadableNamingConvention) ExtractPlainItemType(column common.PhysicalColumnDesc) (plainItemType common.PlainItemTypeE, err error) {
 	var p positionData
 	p, err = getParseStructure(len(column.NameComponents))

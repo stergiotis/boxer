@@ -24,3 +24,8 @@ func CheckErrors(errs []error) (err error) {
 	}
 	return
 }
+func ClearErrors(errsIn []error) (errsOut []error) {
+	clear(errsIn)
+	errsOut = errsIn[:0]
+	return
+}

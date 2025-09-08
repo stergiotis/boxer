@@ -214,6 +214,7 @@ type ImplementationStatusE uint8
 var _ fmt.Stringer = ImplementationStatusE(0)
 
 type NamingConventionFwdI interface {
+	// MapIntermediateToPhysicalColumns mapping has to be 1:1 (i.e. len(cp.Names) == len(out))
 	MapIntermediateToPhysicalColumns(cc IntermediateColumnContext, cp IntermediateColumnProps, in []PhysicalColumnDesc, tableRowConfig TableRowConfigE) (out []PhysicalColumnDesc, err error)
 }
 type NamingConventionBwdI interface {
@@ -222,6 +223,8 @@ type NamingConventionBwdI interface {
 	ExtractValueSemantics(column PhysicalColumnDesc) (semantics valueaspects.AspectSet, err error)
 	ExtractTableRowConfig(column PhysicalColumnDesc) (tableRowConfig TableRowConfigE, err error)
 	ExtractPlainItemType(column PhysicalColumnDesc) (plainItemType PlainItemTypeE, err error)
+	ExtractSectionName(column PhysicalColumnDesc) (sectionName naming.StylableName, err error)
+	ExtractLeewayColumnName(column PhysicalColumnDesc) (columName naming.StylableName, err error)
 	ParseColumn(fullColumnName string) (column PhysicalColumnDesc, err error)
 
 	DiscoverTableFromPhysicalColumns(phys []PhysicalColumnDesc) (table TableDesc, tableRowConfig TableRowConfigE, err error)

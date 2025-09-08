@@ -2,7 +2,6 @@ package dml
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -11,11 +10,6 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 )
 
-func NewArrowValueAdder() *ArrowValueAdder {
-	return &ArrowValueAdder{
-		s: nil,
-	}
-}
 func GoTypeToArrowType(ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspects.AspectSet) (prefix string, suffix string, err error) {
 	switch ctt := ct.(type) {
 	case canonicaltypes2.StringAstNode:
@@ -166,25 +160,4 @@ func CanonicalTypeToArrowBuilderClassName(ct canonicaltypes2.PrimitiveAstNodeI, 
 		}
 	}
 	return
-}
-
-func (inst *ArrowValueAdder) SetCodeBuilder(s *strings.Builder) {
-	inst.s = s
-}
-
-func (inst *ArrowValueAdder) GetCode() (code string, err error) {
-	s := inst.s
-	if s != nil {
-		code = s.String()
-	} else {
-		err = common.ErrNoCodebuilder
-	}
-	return
-}
-
-func (inst *ArrowValueAdder) ResetCodeBuilder() {
-	s := inst.s
-	if s != nil {
-		s.Reset()
-	}
 }

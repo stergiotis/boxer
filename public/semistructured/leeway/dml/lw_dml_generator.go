@@ -62,7 +62,6 @@ type GoClassBuilder struct {
 	builder         *strings.Builder
 	classNamer      GoClassNamerI
 	tech            *golang.TechnologySpecificCodeGenerator
-	arrowValueAdder *ArrowValueAdder
 	clsNames        classNames
 }
 
@@ -70,7 +69,6 @@ func NewGoClassBuilder() *GoClassBuilder {
 	return &GoClassBuilder{
 		builder:         nil,
 		tech:            golang.NewTechnologySpecificCodeGenerator(),
-		arrowValueAdder: NewArrowValueAdder(),
 		clsNames: classNames{
 			inEntityClassName:    "",
 			inSectionClassName:   "",
@@ -81,7 +79,6 @@ func NewGoClassBuilder() *GoClassBuilder {
 
 func (inst *GoClassBuilder) SetCodeBuilder(s *strings.Builder) {
 	inst.builder = s
-	inst.arrowValueAdder.SetCodeBuilder(s)
 	inst.tech.SetCodeBuilder(s)
 }
 
@@ -296,9 +293,7 @@ func (inst *GoClassBuilder) composeFieldRelatedCode(op structFieldOperationE, cc
 		if mayError {
 			_, err = fmt.Fprintf(b, `	{
 		err := inst.%sFieldBuilder%03d.Append(%s%s%s)
-		if err != nil {
-			inst.AppendError(err)
-		}
+		inst.AppendError(err)
 	}
 `, prefix, idx, arrowConversionPrefix, argName, arrowConversionSuffix)
 		} else {
@@ -592,18 +587,10 @@ func (inst *GoClassBuilder) composeErrorHandlingCode(className string) (err erro
 	b := inst.builder
 	_, err = fmt.Fprintf(b, `
 func (inst *%s) AppendError(err error) {
-	l := len(inst.errs)
-	if l == 0 {
-		inst.errs = append(inst.errs, err)
-		return
-	}
-	if inst.errs[l-1] != err {
-		inst.errs = append(inst.errs, err)
-	}
+	inst.errs = eh.AppendError(inst.errs,err)
 }
 func (inst *%s) clearErrors() {
-	clear(inst.errs)
-	inst.errs = inst.errs[:0]
+	inst.errs = eh.ClearErrors(inst.errs)
 }
 `, className, className)
 	return
@@ -1115,11 +1102,7 @@ func (inst *GoClassBuilder) composeSectionCode(sectionIRH *common.IntermediatePa
 	}
 	{ // CheckErrors
 		_, err = fmt.Fprintf(b, `func (inst *%s) CheckErrors() (err error) {
-	if len(inst.errs) > 0 || len(inst.inAttr.errs) > 0 {
-		err = errors.Join(inst.errs...)
-		err = errors.Join(err, errors.Join(inst.inAttr.errs...))
-		return
-	}
+	err = eh.CheckErrors(slices.Concat(inst.errs,inst.inAttr.errs))
 	return
 }
 `, inst.clsNames.inSectionClassName)
@@ -1425,9 +1408,7 @@ func (inst *GoClassBuilder) composeEntityCode(tableName naming.StylableName, sec
 	}
 	{ // CheckErrors
 		_, err = fmt.Fprintf(b, `func (inst *%s) CheckErrors() (err error) {
-	if len(inst.errs) > 0 {
-		err = errors.Join(inst.errs...)
-	}
+	err = eh.CheckErrors(inst.errs)
 `, inst.clsNames.inEntityClassName)
 		if err != nil {
 			return

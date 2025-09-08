@@ -88,7 +88,7 @@ func (inst *TechnologySpecificCodeGenerator) GenerateColumnCode(idx int, phy com
 		err = common.ErrNoCodebuilder
 		return
 	}
-	_, err = fmt.Fprintf(b, "\t\t/* %03d */ arrow.Field{Name: %q, Nullable: false, Type: ", idx, phy.GetName())
+	_, err = fmt.Fprintf(b, "\t\t/* %03d */ arrow.Field{Name: %q, Nullable: false, Type: ", idx, phy.String())
 	if err != nil {
 		return
 	}

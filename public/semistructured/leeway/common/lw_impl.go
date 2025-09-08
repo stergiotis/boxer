@@ -1,17 +1,8 @@
 package common
 
 import (
-	"strings"
-
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
-
-func (inst PhysicalColumnDesc) String() string {
-	return inst.GetName()
-}
-func (inst PhysicalColumnDesc) GetName() string {
-	return strings.Join(inst.NameComponents, "")
-}
 
 var ErrUnhandledRole = eh.Errorf("unhandled role")
 

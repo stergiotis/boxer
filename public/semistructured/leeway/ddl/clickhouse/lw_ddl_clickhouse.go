@@ -220,7 +220,7 @@ func (inst *TechnologySpecificCodeGenerator) GenerateColumnCode(idx int, phy com
 	if err != nil {
 		return
 	}
-	_, err = b.WriteString(phy.GetName()) // FIXME escaping
+	_, err = b.WriteString(phy.String()) // FIXME escaping
 	if err != nil {
 		return
 	}

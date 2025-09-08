@@ -77,13 +77,13 @@ func (inst *TechnologySpecificCodeGenerator) generateTypeAndCodec(canonicalType 
 	return
 }
 
-type Et7GoStructTag struct {
+type LeewayGoStructTag struct {
 	ColumnNameComponents            []string `json:"columnNameComponents,omitempty"`
 	ColumnNameComponentsExplanation []string `json:"columnNameComponentsExplanation,omitempty"`
 	Comment                         string   `json:"comment,omitempty"`
 }
 
-func (inst Et7GoStructTag) Marshall(w io.Writer) (err error) {
+func (inst LeewayGoStructTag) Marshall(w io.Writer) (err error) {
 	s := bytes.NewBuffer(make([]byte, 0, 4096))
 	enc1 := jsontext.NewEncoder(s,
 		jsontext.EscapeForHTML(false),
@@ -118,7 +118,8 @@ func (inst *TechnologySpecificCodeGenerator) GenerateColumnCode(idx int, phy com
 	if err != nil {
 		return
 	}
-	name := strcase.ToPascal(phy.GetName())
+	//name := strcase.ToPascal(phy.GetName())
+	name := strings.ToUpper(phy.String()[0:1]) + phy.String()[1:]
 	_, err = b.WriteString(name)
 	if err != nil {
 		return
@@ -184,18 +185,24 @@ func (inst *TechnologySpecificCodeGenerator) GenerateColumnCode(idx int, phy com
 		if err != nil {
 			return
 		}
-		_, err = b.WriteString("\",et7:")
+		_, err = b.WriteRune('"')
 		if err != nil {
 			return
 		}
-		tag := Et7GoStructTag{
-			ColumnNameComponents:            phy.NameComponents,
-			ColumnNameComponentsExplanation: phy.NameComponentsExplanation,
-			Comment:                         phy.Comment,
-		}
-		err = tag.Marshall(b)
-		if err != nil {
-			return
+		if true {
+			_, err = b.WriteString(",leeway:")
+			if err != nil {
+				return
+			}
+			tag := LeewayGoStructTag{
+				ColumnNameComponents:            phy.NameComponents,
+				ColumnNameComponentsExplanation: phy.NameComponentsExplanation,
+				Comment:                         phy.Comment,
+			}
+			err = tag.Marshall(b)
+			if err != nil {
+				return
+			}
 		}
 		_, err = b.WriteRune('`')
 		if err != nil {
