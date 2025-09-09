@@ -14,8 +14,8 @@ import (
 	"slices"
 )
 
-func createRecordBuilderJson(allocator memory.Allocator) (builder *array.RecordBuilder) {
-	schema := arrow.NewSchema([]arrow.Field{
+func CreateSchemaJson() (schema *arrow.Schema) {
+	schema = arrow.NewSchema([]arrow.Field{
 		/* 000 */ arrow.Field{Name: "id:blake3hash:y:g:0:0:", Nullable: false, Type: &arrow.BinaryType{}},
 		/* 001 */ arrow.Field{Name: "tv:bool:value:val:b:0:0:0:0::", Nullable: false, Type: arrow.ListOf(&arrow.BooleanType{})},
 		/* 002 */ arrow.Field{Name: "tv:bool:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOf(&arrow.BinaryType{})},
@@ -44,7 +44,6 @@ func createRecordBuilderJson(allocator memory.Allocator) (builder *array.RecordB
 		/* 025 */ arrow.Field{Name: "tv:int64:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOf(&arrow.BinaryType{})},
 		/* 026 */ arrow.Field{Name: "tv:int64:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOf(arrow.PrimitiveTypes.Uint64)},
 	}, nil)
-	builder = array.NewRecordBuilder(allocator, schema)
 	return
 }
 
@@ -78,7 +77,8 @@ func NewInEntityJson(allocator memory.Allocator, estimatedNumberOfRecords int) (
 	inst.state = runtime.EntityStateInitial
 	inst.allocator = allocator
 	inst.records = make([]arrow.Record, 0, estimatedNumberOfRecords)
-	builder := createRecordBuilderJson(allocator)
+	schema := CreateSchemaJson()
+	builder := array.NewRecordBuilder(allocator, schema)
 	inst.builder = builder
 	inst.initSections(builder)
 	inst.scalarFieldBuilder000 = builder.Field(0).(*array.BinaryBuilder)
@@ -128,9 +128,7 @@ func (inst *InEntityJson) resetSections() {
 	inst.section06Inst.resetSection()
 }
 func (inst *InEntityJson) CheckErrors() (err error) {
-	if len(inst.errs) > 0 {
-		err = errors.Join(inst.errs...)
-	}
+	err = eh.CheckErrors(inst.errs)
 	err = errors.Join(err, inst.section00Inst.CheckErrors())
 	err = errors.Join(err, inst.section01Inst.CheckErrors())
 	err = errors.Join(err, inst.section02Inst.CheckErrors())
@@ -246,18 +244,10 @@ func (inst *InEntityJson) GetSchema() (schema *arrow.Schema) {
 }
 
 func (inst *InEntityJson) AppendError(err error) {
-	l := len(inst.errs)
-	if l == 0 {
-		inst.errs = append(inst.errs, err)
-		return
-	}
-	if inst.errs[l-1] != err {
-		inst.errs = append(inst.errs, err)
-	}
+	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityJson) clearErrors() {
-	clear(inst.errs)
-	inst.errs = inst.errs[:0]
+	inst.errs = eh.ClearErrors(inst.errs)
 }
 
 type InEntityJsonSectionBool struct {
@@ -306,11 +296,7 @@ func (inst *InEntityJsonSectionBool) BeginAttribute(value1 bool) *InEntityJsonSe
 	return inst.inAttr
 }
 func (inst *InEntityJsonSectionBool) CheckErrors() (err error) {
-	if len(inst.errs) > 0 || len(inst.inAttr.errs) > 0 {
-		err = errors.Join(inst.errs...)
-		err = errors.Join(err, errors.Join(inst.inAttr.errs...))
-		return
-	}
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
 }
 func (inst *InEntityJsonSectionBool) EndSection() *InEntityJson {
@@ -338,18 +324,10 @@ func (inst *InEntityJsonSectionBool) resetSection() {
 }
 
 func (inst *InEntityJsonSectionBool) AppendError(err error) {
-	l := len(inst.errs)
-	if l == 0 {
-		inst.errs = append(inst.errs, err)
-		return
-	}
-	if inst.errs[l-1] != err {
-		inst.errs = append(inst.errs, err)
-	}
+	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityJsonSectionBool) clearErrors() {
-	clear(inst.errs)
-	inst.errs = inst.errs[:0]
+	inst.errs = eh.ClearErrors(inst.errs)
 }
 
 type InEntityJsonSectionBoolInAttr struct {
@@ -405,8 +383,18 @@ func (inst *InEntityJsonSectionBoolInAttr) AddMembershipMixedLowCardVerbatim(lmv
 	inst.membershipFieldBuilder003.Append(mvhp3)
 	inst.membershipContainerLength002++
 	inst.membershipContainerLength003++
-
 	return inst
+}
+func (inst *InEntityJsonSectionBoolInAttr) AddMembershipMixedLowCardVerbatimP(lmv2 []byte, mvhp3 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder002.Append(lmv2)
+	inst.membershipFieldBuilder003.Append(mvhp3)
+	inst.membershipContainerLength002++
+	inst.membershipContainerLength003++
+	return
 }
 func (inst *InEntityJsonSectionBoolInAttr) handleMembershipSupportColumns() {
 	var l int
@@ -453,18 +441,10 @@ func (inst *InEntityJsonSectionBoolInAttr) EndAttribute() *InEntityJsonSectionBo
 }
 
 func (inst *InEntityJsonSectionBoolInAttr) AppendError(err error) {
-	l := len(inst.errs)
-	if l == 0 {
-		inst.errs = append(inst.errs, err)
-		return
-	}
-	if inst.errs[l-1] != err {
-		inst.errs = append(inst.errs, err)
-	}
+	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityJsonSectionBoolInAttr) clearErrors() {
-	clear(inst.errs)
-	inst.errs = inst.errs[:0]
+	inst.errs = eh.ClearErrors(inst.errs)
 }
 
 type InEntityJsonSectionFloat64 struct {
@@ -513,11 +493,7 @@ func (inst *InEntityJsonSectionFloat64) BeginAttribute(value19 float64) *InEntit
 	return inst.inAttr
 }
 func (inst *InEntityJsonSectionFloat64) CheckErrors() (err error) {
-	if len(inst.errs) > 0 || len(inst.inAttr.errs) > 0 {
-		err = errors.Join(inst.errs...)
-		err = errors.Join(err, errors.Join(inst.inAttr.errs...))
-		return
-	}
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
 }
 func (inst *InEntityJsonSectionFloat64) EndSection() *InEntityJson {
@@ -545,18 +521,10 @@ func (inst *InEntityJsonSectionFloat64) resetSection() {
 }
 
 func (inst *InEntityJsonSectionFloat64) AppendError(err error) {
-	l := len(inst.errs)
-	if l == 0 {
-		inst.errs = append(inst.errs, err)
-		return
-	}
-	if inst.errs[l-1] != err {
-		inst.errs = append(inst.errs, err)
-	}
+	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityJsonSectionFloat64) clearErrors() {
-	clear(inst.errs)
-	inst.errs = inst.errs[:0]
+	inst.errs = eh.ClearErrors(inst.errs)
 }
 
 type InEntityJsonSectionFloat64InAttr struct {
@@ -612,8 +580,18 @@ func (inst *InEntityJsonSectionFloat64InAttr) AddMembershipMixedLowCardVerbatim(
 	inst.membershipFieldBuilder021.Append(mvhp21)
 	inst.membershipContainerLength020++
 	inst.membershipContainerLength021++
-
 	return inst
+}
+func (inst *InEntityJsonSectionFloat64InAttr) AddMembershipMixedLowCardVerbatimP(lmv20 []byte, mvhp21 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder020.Append(lmv20)
+	inst.membershipFieldBuilder021.Append(mvhp21)
+	inst.membershipContainerLength020++
+	inst.membershipContainerLength021++
+	return
 }
 func (inst *InEntityJsonSectionFloat64InAttr) handleMembershipSupportColumns() {
 	var l int
@@ -660,18 +638,10 @@ func (inst *InEntityJsonSectionFloat64InAttr) EndAttribute() *InEntityJsonSectio
 }
 
 func (inst *InEntityJsonSectionFloat64InAttr) AppendError(err error) {
-	l := len(inst.errs)
-	if l == 0 {
-		inst.errs = append(inst.errs, err)
-		return
-	}
-	if inst.errs[l-1] != err {
-		inst.errs = append(inst.errs, err)
-	}
+	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityJsonSectionFloat64InAttr) clearErrors() {
-	clear(inst.errs)
-	inst.errs = inst.errs[:0]
+	inst.errs = eh.ClearErrors(inst.errs)
 }
 
 type InEntityJsonSectionInt64 struct {
@@ -720,11 +690,7 @@ func (inst *InEntityJsonSectionInt64) BeginAttribute(value23 int64) *InEntityJso
 	return inst.inAttr
 }
 func (inst *InEntityJsonSectionInt64) CheckErrors() (err error) {
-	if len(inst.errs) > 0 || len(inst.inAttr.errs) > 0 {
-		err = errors.Join(inst.errs...)
-		err = errors.Join(err, errors.Join(inst.inAttr.errs...))
-		return
-	}
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
 }
 func (inst *InEntityJsonSectionInt64) EndSection() *InEntityJson {
@@ -752,18 +718,10 @@ func (inst *InEntityJsonSectionInt64) resetSection() {
 }
 
 func (inst *InEntityJsonSectionInt64) AppendError(err error) {
-	l := len(inst.errs)
-	if l == 0 {
-		inst.errs = append(inst.errs, err)
-		return
-	}
-	if inst.errs[l-1] != err {
-		inst.errs = append(inst.errs, err)
-	}
+	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityJsonSectionInt64) clearErrors() {
-	clear(inst.errs)
-	inst.errs = inst.errs[:0]
+	inst.errs = eh.ClearErrors(inst.errs)
 }
 
 type InEntityJsonSectionInt64InAttr struct {
@@ -819,8 +777,18 @@ func (inst *InEntityJsonSectionInt64InAttr) AddMembershipMixedLowCardVerbatim(lm
 	inst.membershipFieldBuilder025.Append(mvhp25)
 	inst.membershipContainerLength024++
 	inst.membershipContainerLength025++
-
 	return inst
+}
+func (inst *InEntityJsonSectionInt64InAttr) AddMembershipMixedLowCardVerbatimP(lmv24 []byte, mvhp25 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder024.Append(lmv24)
+	inst.membershipFieldBuilder025.Append(mvhp25)
+	inst.membershipContainerLength024++
+	inst.membershipContainerLength025++
+	return
 }
 func (inst *InEntityJsonSectionInt64InAttr) handleMembershipSupportColumns() {
 	var l int
@@ -867,18 +835,10 @@ func (inst *InEntityJsonSectionInt64InAttr) EndAttribute() *InEntityJsonSectionI
 }
 
 func (inst *InEntityJsonSectionInt64InAttr) AppendError(err error) {
-	l := len(inst.errs)
-	if l == 0 {
-		inst.errs = append(inst.errs, err)
-		return
-	}
-	if inst.errs[l-1] != err {
-		inst.errs = append(inst.errs, err)
-	}
+	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityJsonSectionInt64InAttr) clearErrors() {
-	clear(inst.errs)
-	inst.errs = inst.errs[:0]
+	inst.errs = eh.ClearErrors(inst.errs)
 }
 
 type InEntityJsonSectionNull struct {
@@ -922,11 +882,7 @@ func (inst *InEntityJsonSectionNull) BeginAttribute() *InEntityJsonSectionNullIn
 	return inst.inAttr
 }
 func (inst *InEntityJsonSectionNull) CheckErrors() (err error) {
-	if len(inst.errs) > 0 || len(inst.inAttr.errs) > 0 {
-		err = errors.Join(inst.errs...)
-		err = errors.Join(err, errors.Join(inst.inAttr.errs...))
-		return
-	}
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
 }
 func (inst *InEntityJsonSectionNull) EndSection() *InEntityJson {
@@ -954,18 +910,10 @@ func (inst *InEntityJsonSectionNull) resetSection() {
 }
 
 func (inst *InEntityJsonSectionNull) AppendError(err error) {
-	l := len(inst.errs)
-	if l == 0 {
-		inst.errs = append(inst.errs, err)
-		return
-	}
-	if inst.errs[l-1] != err {
-		inst.errs = append(inst.errs, err)
-	}
+	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityJsonSectionNull) clearErrors() {
-	clear(inst.errs)
-	inst.errs = inst.errs[:0]
+	inst.errs = eh.ClearErrors(inst.errs)
 }
 
 type InEntityJsonSectionNullInAttr struct {
@@ -1016,8 +964,18 @@ func (inst *InEntityJsonSectionNullInAttr) AddMembershipMixedLowCardVerbatim(lmv
 	inst.membershipFieldBuilder009.Append(mvhp9)
 	inst.membershipContainerLength008++
 	inst.membershipContainerLength009++
-
 	return inst
+}
+func (inst *InEntityJsonSectionNullInAttr) AddMembershipMixedLowCardVerbatimP(lmv8 []byte, mvhp9 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder008.Append(lmv8)
+	inst.membershipFieldBuilder009.Append(mvhp9)
+	inst.membershipContainerLength008++
+	inst.membershipContainerLength009++
+	return
 }
 func (inst *InEntityJsonSectionNullInAttr) handleMembershipSupportColumns() {
 	var l int
@@ -1064,18 +1022,10 @@ func (inst *InEntityJsonSectionNullInAttr) EndAttribute() *InEntityJsonSectionNu
 }
 
 func (inst *InEntityJsonSectionNullInAttr) AppendError(err error) {
-	l := len(inst.errs)
-	if l == 0 {
-		inst.errs = append(inst.errs, err)
-		return
-	}
-	if inst.errs[l-1] != err {
-		inst.errs = append(inst.errs, err)
-	}
+	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityJsonSectionNullInAttr) clearErrors() {
-	clear(inst.errs)
-	inst.errs = inst.errs[:0]
+	inst.errs = eh.ClearErrors(inst.errs)
 }
 
 type InEntityJsonSectionString struct {
@@ -1124,11 +1074,7 @@ func (inst *InEntityJsonSectionString) BeginAttribute(value11 string) *InEntityJ
 	return inst.inAttr
 }
 func (inst *InEntityJsonSectionString) CheckErrors() (err error) {
-	if len(inst.errs) > 0 || len(inst.inAttr.errs) > 0 {
-		err = errors.Join(inst.errs...)
-		err = errors.Join(err, errors.Join(inst.inAttr.errs...))
-		return
-	}
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
 }
 func (inst *InEntityJsonSectionString) EndSection() *InEntityJson {
@@ -1156,18 +1102,10 @@ func (inst *InEntityJsonSectionString) resetSection() {
 }
 
 func (inst *InEntityJsonSectionString) AppendError(err error) {
-	l := len(inst.errs)
-	if l == 0 {
-		inst.errs = append(inst.errs, err)
-		return
-	}
-	if inst.errs[l-1] != err {
-		inst.errs = append(inst.errs, err)
-	}
+	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityJsonSectionString) clearErrors() {
-	clear(inst.errs)
-	inst.errs = inst.errs[:0]
+	inst.errs = eh.ClearErrors(inst.errs)
 }
 
 type InEntityJsonSectionStringInAttr struct {
@@ -1223,8 +1161,18 @@ func (inst *InEntityJsonSectionStringInAttr) AddMembershipMixedLowCardVerbatim(l
 	inst.membershipFieldBuilder013.Append(mvhp13)
 	inst.membershipContainerLength012++
 	inst.membershipContainerLength013++
-
 	return inst
+}
+func (inst *InEntityJsonSectionStringInAttr) AddMembershipMixedLowCardVerbatimP(lmv12 []byte, mvhp13 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder012.Append(lmv12)
+	inst.membershipFieldBuilder013.Append(mvhp13)
+	inst.membershipContainerLength012++
+	inst.membershipContainerLength013++
+	return
 }
 func (inst *InEntityJsonSectionStringInAttr) handleMembershipSupportColumns() {
 	var l int
@@ -1271,18 +1219,10 @@ func (inst *InEntityJsonSectionStringInAttr) EndAttribute() *InEntityJsonSection
 }
 
 func (inst *InEntityJsonSectionStringInAttr) AppendError(err error) {
-	l := len(inst.errs)
-	if l == 0 {
-		inst.errs = append(inst.errs, err)
-		return
-	}
-	if inst.errs[l-1] != err {
-		inst.errs = append(inst.errs, err)
-	}
+	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityJsonSectionStringInAttr) clearErrors() {
-	clear(inst.errs)
-	inst.errs = inst.errs[:0]
+	inst.errs = eh.ClearErrors(inst.errs)
 }
 
 type InEntityJsonSectionSymbol struct {
@@ -1331,11 +1271,7 @@ func (inst *InEntityJsonSectionSymbol) BeginAttribute(value15 string) *InEntityJ
 	return inst.inAttr
 }
 func (inst *InEntityJsonSectionSymbol) CheckErrors() (err error) {
-	if len(inst.errs) > 0 || len(inst.inAttr.errs) > 0 {
-		err = errors.Join(inst.errs...)
-		err = errors.Join(err, errors.Join(inst.inAttr.errs...))
-		return
-	}
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
 }
 func (inst *InEntityJsonSectionSymbol) EndSection() *InEntityJson {
@@ -1363,18 +1299,10 @@ func (inst *InEntityJsonSectionSymbol) resetSection() {
 }
 
 func (inst *InEntityJsonSectionSymbol) AppendError(err error) {
-	l := len(inst.errs)
-	if l == 0 {
-		inst.errs = append(inst.errs, err)
-		return
-	}
-	if inst.errs[l-1] != err {
-		inst.errs = append(inst.errs, err)
-	}
+	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityJsonSectionSymbol) clearErrors() {
-	clear(inst.errs)
-	inst.errs = inst.errs[:0]
+	inst.errs = eh.ClearErrors(inst.errs)
 }
 
 type InEntityJsonSectionSymbolInAttr struct {
@@ -1430,8 +1358,18 @@ func (inst *InEntityJsonSectionSymbolInAttr) AddMembershipMixedLowCardVerbatim(l
 	inst.membershipFieldBuilder017.Append(mvhp17)
 	inst.membershipContainerLength016++
 	inst.membershipContainerLength017++
-
 	return inst
+}
+func (inst *InEntityJsonSectionSymbolInAttr) AddMembershipMixedLowCardVerbatimP(lmv16 []byte, mvhp17 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder016.Append(lmv16)
+	inst.membershipFieldBuilder017.Append(mvhp17)
+	inst.membershipContainerLength016++
+	inst.membershipContainerLength017++
+	return
 }
 func (inst *InEntityJsonSectionSymbolInAttr) handleMembershipSupportColumns() {
 	var l int
@@ -1478,18 +1416,10 @@ func (inst *InEntityJsonSectionSymbolInAttr) EndAttribute() *InEntityJsonSection
 }
 
 func (inst *InEntityJsonSectionSymbolInAttr) AppendError(err error) {
-	l := len(inst.errs)
-	if l == 0 {
-		inst.errs = append(inst.errs, err)
-		return
-	}
-	if inst.errs[l-1] != err {
-		inst.errs = append(inst.errs, err)
-	}
+	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityJsonSectionSymbolInAttr) clearErrors() {
-	clear(inst.errs)
-	inst.errs = inst.errs[:0]
+	inst.errs = eh.ClearErrors(inst.errs)
 }
 
 type InEntityJsonSectionUndefined struct {
@@ -1533,11 +1463,7 @@ func (inst *InEntityJsonSectionUndefined) BeginAttribute() *InEntityJsonSectionU
 	return inst.inAttr
 }
 func (inst *InEntityJsonSectionUndefined) CheckErrors() (err error) {
-	if len(inst.errs) > 0 || len(inst.inAttr.errs) > 0 {
-		err = errors.Join(inst.errs...)
-		err = errors.Join(err, errors.Join(inst.inAttr.errs...))
-		return
-	}
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
 }
 func (inst *InEntityJsonSectionUndefined) EndSection() *InEntityJson {
@@ -1565,18 +1491,10 @@ func (inst *InEntityJsonSectionUndefined) resetSection() {
 }
 
 func (inst *InEntityJsonSectionUndefined) AppendError(err error) {
-	l := len(inst.errs)
-	if l == 0 {
-		inst.errs = append(inst.errs, err)
-		return
-	}
-	if inst.errs[l-1] != err {
-		inst.errs = append(inst.errs, err)
-	}
+	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityJsonSectionUndefined) clearErrors() {
-	clear(inst.errs)
-	inst.errs = inst.errs[:0]
+	inst.errs = eh.ClearErrors(inst.errs)
 }
 
 type InEntityJsonSectionUndefinedInAttr struct {
@@ -1627,8 +1545,18 @@ func (inst *InEntityJsonSectionUndefinedInAttr) AddMembershipMixedLowCardVerbati
 	inst.membershipFieldBuilder006.Append(mvhp6)
 	inst.membershipContainerLength005++
 	inst.membershipContainerLength006++
-
 	return inst
+}
+func (inst *InEntityJsonSectionUndefinedInAttr) AddMembershipMixedLowCardVerbatimP(lmv5 []byte, mvhp6 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder005.Append(lmv5)
+	inst.membershipFieldBuilder006.Append(mvhp6)
+	inst.membershipContainerLength005++
+	inst.membershipContainerLength006++
+	return
 }
 func (inst *InEntityJsonSectionUndefinedInAttr) handleMembershipSupportColumns() {
 	var l int
@@ -1675,16 +1603,8 @@ func (inst *InEntityJsonSectionUndefinedInAttr) EndAttribute() *InEntityJsonSect
 }
 
 func (inst *InEntityJsonSectionUndefinedInAttr) AppendError(err error) {
-	l := len(inst.errs)
-	if l == 0 {
-		inst.errs = append(inst.errs, err)
-		return
-	}
-	if inst.errs[l-1] != err {
-		inst.errs = append(inst.errs, err)
-	}
+	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityJsonSectionUndefinedInAttr) clearErrors() {
-	clear(inst.errs)
-	inst.errs = inst.errs[:0]
+	inst.errs = eh.ClearErrors(inst.errs)
 }

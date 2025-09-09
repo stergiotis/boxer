@@ -15,8 +15,8 @@ import (
 	"time"
 )
 
-func createRecordBuilderTesttable(allocator memory.Allocator) (builder *array.RecordBuilder) {
-	schema := arrow.NewSchema([]arrow.Field{
+func CreateSchemaTesttable() (schema *arrow.Schema) {
+	schema = arrow.NewSchema([]arrow.Field{
 		/* 000 */ arrow.Field{Name: "id:id:u64:2k:0:0:", Nullable: false, Type: arrow.PrimitiveTypes.Uint64},
 		/* 001 */ arrow.Field{Name: "ts:ts:z32:2k:0:0:", Nullable: false, Type: &arrow.Date32Type{}},
 		/* 002 */ arrow.Field{Name: "tv:bool:value:val:b:0:0:0:0::", Nullable: false, Type: arrow.ListOf(&arrow.BooleanType{})},
@@ -39,7 +39,6 @@ func createRecordBuilderTesttable(allocator memory.Allocator) (builder *array.Re
 		/* 019 */ arrow.Field{Name: "tv:special:len:len:u64:28o:0:0:0::", Nullable: false, Type: arrow.ListOf(arrow.PrimitiveTypes.Uint64)},
 		/* 020 */ arrow.Field{Name: "tv:special:lmrcard:lmrcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOf(arrow.PrimitiveTypes.Uint64)},
 	}, nil)
-	builder = array.NewRecordBuilder(allocator, schema)
 	return
 }
 
@@ -71,7 +70,8 @@ func NewInEntityTesttable(allocator memory.Allocator, estimatedNumberOfRecords i
 	inst.state = runtime.EntityStateInitial
 	inst.allocator = allocator
 	inst.records = make([]arrow.Record, 0, estimatedNumberOfRecords)
-	builder := createRecordBuilderTesttable(allocator)
+	schema := CreateSchemaTesttable()
+	builder := array.NewRecordBuilder(allocator, schema)
 	inst.builder = builder
 	inst.initSections(builder)
 	inst.scalarFieldBuilder000 = builder.Field(0).(*array.Uint64Builder)
@@ -126,9 +126,7 @@ func (inst *InEntityTesttable) resetSections() {
 	inst.section03Inst.resetSection()
 }
 func (inst *InEntityTesttable) CheckErrors() (err error) {
-	if len(inst.errs) > 0 {
-		err = errors.Join(inst.errs...)
-	}
+	err = eh.CheckErrors(inst.errs)
 	err = errors.Join(err, inst.section00Inst.CheckErrors())
 	err = errors.Join(err, inst.section01Inst.CheckErrors())
 	err = errors.Join(err, inst.section02Inst.CheckErrors())
@@ -232,18 +230,10 @@ func (inst *InEntityTesttable) GetSchema() (schema *arrow.Schema) {
 }
 
 func (inst *InEntityTesttable) AppendError(err error) {
-	l := len(inst.errs)
-	if l == 0 {
-		inst.errs = append(inst.errs, err)
-		return
-	}
-	if inst.errs[l-1] != err {
-		inst.errs = append(inst.errs, err)
-	}
+	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityTesttable) clearErrors() {
-	clear(inst.errs)
-	inst.errs = inst.errs[:0]
+	inst.errs = eh.ClearErrors(inst.errs)
 }
 
 type InEntityTesttableSectionBool struct {
@@ -292,11 +282,7 @@ func (inst *InEntityTesttableSectionBool) BeginAttribute(value2 bool) *InEntityT
 	return inst.inAttr
 }
 func (inst *InEntityTesttableSectionBool) CheckErrors() (err error) {
-	if len(inst.errs) > 0 || len(inst.inAttr.errs) > 0 {
-		err = errors.Join(inst.errs...)
-		err = errors.Join(err, errors.Join(inst.inAttr.errs...))
-		return
-	}
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
 }
 func (inst *InEntityTesttableSectionBool) EndSection() *InEntityTesttable {
@@ -324,18 +310,10 @@ func (inst *InEntityTesttableSectionBool) resetSection() {
 }
 
 func (inst *InEntityTesttableSectionBool) AppendError(err error) {
-	l := len(inst.errs)
-	if l == 0 {
-		inst.errs = append(inst.errs, err)
-		return
-	}
-	if inst.errs[l-1] != err {
-		inst.errs = append(inst.errs, err)
-	}
+	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityTesttableSectionBool) clearErrors() {
-	clear(inst.errs)
-	inst.errs = inst.errs[:0]
+	inst.errs = eh.ClearErrors(inst.errs)
 }
 
 type InEntityTesttableSectionBoolInAttr struct {
@@ -391,8 +369,18 @@ func (inst *InEntityTesttableSectionBoolInAttr) AddMembershipMixedLowCardVerbati
 	inst.membershipFieldBuilder004.Append(mvhp4)
 	inst.membershipContainerLength003++
 	inst.membershipContainerLength004++
-
 	return inst
+}
+func (inst *InEntityTesttableSectionBoolInAttr) AddMembershipMixedLowCardVerbatimP(lmv3 []byte, mvhp4 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder003.Append(lmv3)
+	inst.membershipFieldBuilder004.Append(mvhp4)
+	inst.membershipContainerLength003++
+	inst.membershipContainerLength004++
+	return
 }
 func (inst *InEntityTesttableSectionBoolInAttr) handleMembershipSupportColumns() {
 	var l int
@@ -439,18 +427,10 @@ func (inst *InEntityTesttableSectionBoolInAttr) EndAttribute() *InEntityTesttabl
 }
 
 func (inst *InEntityTesttableSectionBoolInAttr) AppendError(err error) {
-	l := len(inst.errs)
-	if l == 0 {
-		inst.errs = append(inst.errs, err)
-		return
-	}
-	if inst.errs[l-1] != err {
-		inst.errs = append(inst.errs, err)
-	}
+	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityTesttableSectionBoolInAttr) clearErrors() {
-	clear(inst.errs)
-	inst.errs = inst.errs[:0]
+	inst.errs = eh.ClearErrors(inst.errs)
 }
 
 type InEntityTesttableSectionFloat64 struct {
@@ -499,11 +479,7 @@ func (inst *InEntityTesttableSectionFloat64) BeginAttribute(value10 float64) *In
 	return inst.inAttr
 }
 func (inst *InEntityTesttableSectionFloat64) CheckErrors() (err error) {
-	if len(inst.errs) > 0 || len(inst.inAttr.errs) > 0 {
-		err = errors.Join(inst.errs...)
-		err = errors.Join(err, errors.Join(inst.inAttr.errs...))
-		return
-	}
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
 }
 func (inst *InEntityTesttableSectionFloat64) EndSection() *InEntityTesttable {
@@ -531,18 +507,10 @@ func (inst *InEntityTesttableSectionFloat64) resetSection() {
 }
 
 func (inst *InEntityTesttableSectionFloat64) AppendError(err error) {
-	l := len(inst.errs)
-	if l == 0 {
-		inst.errs = append(inst.errs, err)
-		return
-	}
-	if inst.errs[l-1] != err {
-		inst.errs = append(inst.errs, err)
-	}
+	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityTesttableSectionFloat64) clearErrors() {
-	clear(inst.errs)
-	inst.errs = inst.errs[:0]
+	inst.errs = eh.ClearErrors(inst.errs)
 }
 
 type InEntityTesttableSectionFloat64InAttr struct {
@@ -598,8 +566,18 @@ func (inst *InEntityTesttableSectionFloat64InAttr) AddMembershipMixedLowCardVerb
 	inst.membershipFieldBuilder012.Append(mvhp12)
 	inst.membershipContainerLength011++
 	inst.membershipContainerLength012++
-
 	return inst
+}
+func (inst *InEntityTesttableSectionFloat64InAttr) AddMembershipMixedLowCardVerbatimP(lmv11 []byte, mvhp12 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder011.Append(lmv11)
+	inst.membershipFieldBuilder012.Append(mvhp12)
+	inst.membershipContainerLength011++
+	inst.membershipContainerLength012++
+	return
 }
 func (inst *InEntityTesttableSectionFloat64InAttr) handleMembershipSupportColumns() {
 	var l int
@@ -646,18 +624,10 @@ func (inst *InEntityTesttableSectionFloat64InAttr) EndAttribute() *InEntityTestt
 }
 
 func (inst *InEntityTesttableSectionFloat64InAttr) AppendError(err error) {
-	l := len(inst.errs)
-	if l == 0 {
-		inst.errs = append(inst.errs, err)
-		return
-	}
-	if inst.errs[l-1] != err {
-		inst.errs = append(inst.errs, err)
-	}
+	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityTesttableSectionFloat64InAttr) clearErrors() {
-	clear(inst.errs)
-	inst.errs = inst.errs[:0]
+	inst.errs = eh.ClearErrors(inst.errs)
 }
 
 type InEntityTesttableSectionSpecial struct {
@@ -714,11 +684,7 @@ func (inst *InEntityTesttableSectionSpecial) BeginAttribute(spc14 string) *InEnt
 	return inst.inAttr
 }
 func (inst *InEntityTesttableSectionSpecial) CheckErrors() (err error) {
-	if len(inst.errs) > 0 || len(inst.inAttr.errs) > 0 {
-		err = errors.Join(inst.errs...)
-		err = errors.Join(err, errors.Join(inst.inAttr.errs...))
-		return
-	}
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
 }
 func (inst *InEntityTesttableSectionSpecial) EndSection() *InEntityTesttable {
@@ -748,18 +714,10 @@ func (inst *InEntityTesttableSectionSpecial) resetSection() {
 }
 
 func (inst *InEntityTesttableSectionSpecial) AppendError(err error) {
-	l := len(inst.errs)
-	if l == 0 {
-		inst.errs = append(inst.errs, err)
-		return
-	}
-	if inst.errs[l-1] != err {
-		inst.errs = append(inst.errs, err)
-	}
+	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityTesttableSectionSpecial) clearErrors() {
-	clear(inst.errs)
-	inst.errs = inst.errs[:0]
+	inst.errs = eh.ClearErrors(inst.errs)
 }
 
 type InEntityTesttableSectionSpecialInAttr struct {
@@ -849,8 +807,18 @@ func (inst *InEntityTesttableSectionSpecialInAttr) AddMembershipMixedLowCardRef(
 	inst.membershipFieldBuilder018.Append(mrhp18)
 	inst.membershipContainerLength017++
 	inst.membershipContainerLength018++
-
 	return inst
+}
+func (inst *InEntityTesttableSectionSpecialInAttr) AddMembershipMixedLowCardRefP(lmr17 uint64, mrhp18 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder017.Append(lmr17)
+	inst.membershipFieldBuilder018.Append(mrhp18)
+	inst.membershipContainerLength017++
+	inst.membershipContainerLength018++
+	return
 }
 func (inst *InEntityTesttableSectionSpecialInAttr) handleMembershipSupportColumns() {
 	var l int
@@ -900,18 +868,10 @@ func (inst *InEntityTesttableSectionSpecialInAttr) EndAttribute() *InEntityTestt
 }
 
 func (inst *InEntityTesttableSectionSpecialInAttr) AppendError(err error) {
-	l := len(inst.errs)
-	if l == 0 {
-		inst.errs = append(inst.errs, err)
-		return
-	}
-	if inst.errs[l-1] != err {
-		inst.errs = append(inst.errs, err)
-	}
+	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityTesttableSectionSpecialInAttr) clearErrors() {
-	clear(inst.errs)
-	inst.errs = inst.errs[:0]
+	inst.errs = eh.ClearErrors(inst.errs)
 }
 
 type InEntityTesttableSectionString struct {
@@ -960,11 +920,7 @@ func (inst *InEntityTesttableSectionString) BeginAttribute(value6 string) *InEnt
 	return inst.inAttr
 }
 func (inst *InEntityTesttableSectionString) CheckErrors() (err error) {
-	if len(inst.errs) > 0 || len(inst.inAttr.errs) > 0 {
-		err = errors.Join(inst.errs...)
-		err = errors.Join(err, errors.Join(inst.inAttr.errs...))
-		return
-	}
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
 }
 func (inst *InEntityTesttableSectionString) EndSection() *InEntityTesttable {
@@ -992,18 +948,10 @@ func (inst *InEntityTesttableSectionString) resetSection() {
 }
 
 func (inst *InEntityTesttableSectionString) AppendError(err error) {
-	l := len(inst.errs)
-	if l == 0 {
-		inst.errs = append(inst.errs, err)
-		return
-	}
-	if inst.errs[l-1] != err {
-		inst.errs = append(inst.errs, err)
-	}
+	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityTesttableSectionString) clearErrors() {
-	clear(inst.errs)
-	inst.errs = inst.errs[:0]
+	inst.errs = eh.ClearErrors(inst.errs)
 }
 
 type InEntityTesttableSectionStringInAttr struct {
@@ -1059,8 +1007,18 @@ func (inst *InEntityTesttableSectionStringInAttr) AddMembershipMixedLowCardVerba
 	inst.membershipFieldBuilder008.Append(mvhp8)
 	inst.membershipContainerLength007++
 	inst.membershipContainerLength008++
-
 	return inst
+}
+func (inst *InEntityTesttableSectionStringInAttr) AddMembershipMixedLowCardVerbatimP(lmv7 []byte, mvhp8 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder007.Append(lmv7)
+	inst.membershipFieldBuilder008.Append(mvhp8)
+	inst.membershipContainerLength007++
+	inst.membershipContainerLength008++
+	return
 }
 func (inst *InEntityTesttableSectionStringInAttr) handleMembershipSupportColumns() {
 	var l int
@@ -1107,16 +1065,8 @@ func (inst *InEntityTesttableSectionStringInAttr) EndAttribute() *InEntityTestta
 }
 
 func (inst *InEntityTesttableSectionStringInAttr) AppendError(err error) {
-	l := len(inst.errs)
-	if l == 0 {
-		inst.errs = append(inst.errs, err)
-		return
-	}
-	if inst.errs[l-1] != err {
-		inst.errs = append(inst.errs, err)
-	}
+	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityTesttableSectionStringInAttr) clearErrors() {
-	clear(inst.errs)
-	inst.errs = inst.errs[:0]
+	inst.errs = eh.ClearErrors(inst.errs)
 }
