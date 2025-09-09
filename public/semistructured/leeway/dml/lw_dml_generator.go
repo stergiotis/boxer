@@ -9,18 +9,15 @@ import (
 	"github.com/ettle/strcase"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/containers"
-	"github.com/stergiotis/boxer/public/functional"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/vcs"
 	canonicaltypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/codegen"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/arrow"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/golang"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
-	encodingaspects2 "github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/gocodegen"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
 
@@ -59,16 +56,16 @@ const (
 )
 
 type GoClassBuilder struct {
-	builder         *strings.Builder
-	classNamer      GoClassNamerI
-	tech            *golang.TechnologySpecificCodeGenerator
-	clsNames        classNames
+	builder    *strings.Builder
+	classNamer gocodegen.GoClassNamerI
+	tech       *golang.TechnologySpecificCodeGenerator
+	clsNames   classNames
 }
 
 func NewGoClassBuilder() *GoClassBuilder {
 	return &GoClassBuilder{
-		builder:         nil,
-		tech:            golang.NewTechnologySpecificCodeGenerator(),
+		builder: nil,
+		tech:    golang.NewTechnologySpecificCodeGenerator(),
 		clsNames: classNames{
 			inEntityClassName:    "",
 			inSectionClassName:   "",
@@ -98,43 +95,11 @@ func (inst *GoClassBuilder) ResetCodeBuilder() {
 		b.Reset()
 	}
 }
-func (inst *GoClassBuilder) composeNamingConventionDependentCode(tableName naming.StylableName, ir *common.IntermediateTableRepresentation, namingConvention common.NamingConventionI, tableRowConfig common.TableRowConfigE, clsNamer GoClassNamerI) (err error) {
+func (inst *GoClassBuilder) composeNamingConventionDependentCode(tableName naming.StylableName, ir *common.IntermediateTableRepresentation, namingConvention common.NamingConventionI, tableRowConfig common.TableRowConfigE, clsNamer gocodegen.GoClassNamerI) (err error) {
 	b := inst.builder
-	arrowTech := arrow.NewTechnologySpecificCodeGenerator()
-	arrowTech.SetCodeBuilder(b)
-	ddlGenerator := ddl.NewGeneratorDriver()
-	{ // schema factory
-		var factoryName string
-		factoryName, err = clsNamer.ComposeSchemaFactoryName(tableName)
-		if err != nil {
-			return
-		}
-		_, err = fmt.Fprintf(b, `func %s(allocator memory.Allocator) (builder *array.RecordBuilder) {
-		schema := arrow.NewSchema([]arrow.Field{
-`, factoryName)
-		if err != nil {
-			return
-		}
-
-		err = ddlGenerator.GenerateColumnsCode(ir.IterateColumnProps(),
-			tableRowConfig,
-			namingConvention,
-			arrowTech,
-			func(hint encodingaspects2.AspectE) (ok bool, msg string) {
-				return true, ""
-			})
-		if err != nil {
-			return
-		}
-		_, err = b.WriteString(
-			`		}, nil)
-		builder = array.NewRecordBuilder(allocator, schema)
-		return
-}
-`)
-		if err != nil {
-			return
-		}
+	err = gocodegen.GenerateArrowSchemaFactory(b, tableName, ir, namingConvention, tableRowConfig, clsNamer)
+	if err != nil {
+		err = eh.Errorf("unable to generate schema factory: %w", err)
 	}
 	return
 }
@@ -1189,7 +1154,7 @@ func itemTypeToSetterName(itemType common.PlainItemTypeE) (setterName string) {
 	}
 	return
 }
-func (inst *GoClassBuilder) composeEntityClassAndFactoryCode(tableName naming.StylableName, sectionNames []naming.StylableName, ir *common.IntermediateTableRepresentation, tableRowConfig common.TableRowConfigE, clsNamer GoClassNamerI, entityIRH *common.IntermediatePairHolder) (err error) {
+func (inst *GoClassBuilder) composeEntityClassAndFactoryCode(tableName naming.StylableName, sectionNames []naming.StylableName, ir *common.IntermediateTableRepresentation, tableRowConfig common.TableRowConfigE, clsNamer gocodegen.GoClassNamerI, entityIRH *common.IntermediatePairHolder) (err error) {
 	b := inst.builder
 	inst.populateClsNames(tableName, "", 0, 0)
 	_, err = fmt.Fprintf(b, `type %s struct {
@@ -1236,7 +1201,8 @@ func New%s(allocator memory.Allocator, estimatedNumberOfRecords int) (inst *%s) 
 	inst.state = runtime.EntityStateInitial
 	inst.allocator = allocator
 	inst.records = make([]arrow.Record,0,estimatedNumberOfRecords)
-	builder := %s(allocator)
+	schema := %s()
+	builder := array.NewRecordBuilder(allocator, schema)
 	inst.builder = builder
 	inst.initSections(builder)
 `,
@@ -1616,7 +1582,7 @@ func (inst *GoClassBuilder) ComposeGoImports(ir *common.IntermediateTableReprese
 	}
 	return
 }
-func (inst *GoClassBuilder) ComposeCode(tableName naming.StylableName, ir *common.IntermediateTableRepresentation, conv common.NamingConventionI, tableRowConfig common.TableRowConfigE, clsNamer GoClassNamerI) (err error) {
+func (inst *GoClassBuilder) ComposeCode(tableName naming.StylableName, ir *common.IntermediateTableRepresentation, conv common.NamingConventionI, tableRowConfig common.TableRowConfigE, clsNamer gocodegen.GoClassNamerI) (err error) {
 	b := inst.builder
 	if b == nil {
 		err = common.ErrNoBuilder
@@ -1698,54 +1664,6 @@ func (inst *GoClassBuilder) ComposeCode(tableName naming.StylableName, ir *commo
 		}
 	}
 
-	return
-}
-
-func NewDefaultGoClassNamer() *DefaultGoClassNamer {
-	return &DefaultGoClassNamer{}
-}
-
-func (inst *DefaultGoClassNamer) ComposeSchemaFactoryName(tableName naming.StylableName) (functionName string, err error) {
-	return "createRecordBuilder", nil
-}
-
-func (inst *DefaultGoClassNamer) ComposeEntityClassName(tableName naming.StylableName) (fullClassName string, err error) {
-	return "InEntity", nil
-}
-
-func (inst *DefaultGoClassNamer) ComposeSectionClassName(tableName naming.StylableName, sectionName naming.StylableName, sectionIndex int, sectionCount int) (fullClassName string, err error) {
-	return "InEntity" + sectionName.Convert(naming.NamingStyleUpperCamelCase).String(), nil
-}
-
-func (inst *DefaultGoClassNamer) ComposeAttributeClassName(tableName naming.StylableName, sectionName naming.StylableName, sectionIndex int, sectionCount int) (fullClassName string, err error) {
-	return "InEntity" + sectionName.Convert(naming.NamingStyleUpperCamelCase).String() + "InAttr", nil
-}
-
-func (inst *DefaultGoClassNamer) PromiseToBeReferentialTransparent() (_ functional.InterfaceIsReferentialTransparentType) {
-	return
-}
-
-func NewMultiTablePerPackageGoClassNamer() *MultiTablePerPackageClassNamer {
-	return &MultiTablePerPackageClassNamer{}
-}
-
-func (inst *MultiTablePerPackageClassNamer) ComposeSchemaFactoryName(tableName naming.StylableName) (functionName string, err error) {
-	return "createRecordBuilder" + tableName.Convert(naming.NamingStyleUpperCamelCase).String(), nil
-}
-
-func (inst *MultiTablePerPackageClassNamer) ComposeEntityClassName(tableName naming.StylableName) (fullClassName string, err error) {
-	return "InEntity" + tableName.Convert(naming.NamingStyleUpperCamelCase).String(), nil
-}
-
-func (inst *MultiTablePerPackageClassNamer) ComposeSectionClassName(tableName naming.StylableName, sectionName naming.StylableName, sectionIndex int, sectionCount int) (fullClassName string, err error) {
-	return "InEntity" + tableName.Convert(naming.NamingStyleUpperCamelCase).String() + "Section" + sectionName.Convert(naming.NamingStyleUpperCamelCase).String(), nil
-}
-
-func (inst *MultiTablePerPackageClassNamer) ComposeAttributeClassName(tableName naming.StylableName, sectionName naming.StylableName, sectionIndex int, sectionCount int) (fullClassName string, err error) {
-	return "InEntity" + tableName.Convert(naming.NamingStyleUpperCamelCase).String() + "Section" + sectionName.Convert(naming.NamingStyleUpperCamelCase).String() + "InAttr", nil
-}
-
-func (inst *MultiTablePerPackageClassNamer) PromiseToBeReferentialTransparent() (_ functional.InterfaceIsReferentialTransparentType) {
 	return
 }
 
