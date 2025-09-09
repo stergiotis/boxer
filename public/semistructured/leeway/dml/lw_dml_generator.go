@@ -2,12 +2,10 @@ package dml
 
 import (
 	"fmt"
-	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/ettle/strcase"
-	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -56,21 +54,14 @@ const (
 )
 
 type GoClassBuilder struct {
-	builder    *strings.Builder
-	classNamer gocodegen.GoClassNamerI
-	tech       *golang.TechnologySpecificCodeGenerator
-	clsNames   classNames
+	builder *strings.Builder
+	tech    *golang.TechnologySpecificCodeGenerator
 }
 
 func NewGoClassBuilder() *GoClassBuilder {
 	return &GoClassBuilder{
 		builder: nil,
 		tech:    golang.NewTechnologySpecificCodeGenerator(),
-		clsNames: classNames{
-			inEntityClassName:    "",
-			inSectionClassName:   "",
-			inAttributeClassName: "",
-		},
 	}
 }
 
@@ -95,7 +86,7 @@ func (inst *GoClassBuilder) ResetCodeBuilder() {
 		b.Reset()
 	}
 }
-func (inst *GoClassBuilder) composeNamingConventionDependentCode(tableName naming.StylableName, ir *common.IntermediateTableRepresentation, namingConvention common.NamingConventionI, tableRowConfig common.TableRowConfigE, clsNamer gocodegen.GoClassNamerI) (err error) {
+func (inst *GoClassBuilder) ComposeNamingConventionDependentCode(tableName naming.StylableName, ir *common.IntermediateTableRepresentation, namingConvention common.NamingConventionI, tableRowConfig common.TableRowConfigE, clsNamer gocodegen.GoClassNamerI) (err error) {
 	b := inst.builder
 	err = gocodegen.GenerateArrowSchemaFactory(b, tableName, ir, namingConvention, tableRowConfig, clsNamer)
 	if err != nil {
@@ -349,14 +340,20 @@ func (inst *GoClassBuilder) composeFieldRelatedCode(op structFieldOperationE, cc
 
 	return
 }
-func (inst *GoClassBuilder) composeAttributeClassAndFactoryCode(sectionIRH *common.IntermediatePairHolder, tableRowConfig common.TableRowConfigE) (err error) {
+func (inst *GoClassBuilder) ComposeAttributeClassAndFactoryCode(clsNamer gocodegen.GoClassNamerI, tableName naming.StylableName, sectionName naming.StylableName, sectionIdx int, totalSections int, sectionIRH *common.IntermediatePairHolder, tableRowConfig common.TableRowConfigE) (err error) {
 	b := inst.builder
+	var clsNames gocodegen.ClassNames
+	clsNames, err = gocodegen.NewClassNames(clsNamer, tableName, sectionName, sectionIdx, totalSections)
+	if err != nil {
+		err = eh.Errorf("unable to generate class names: %w", err)
+		return
+	}
 
 	_, err = fmt.Fprintf(b, `type %s struct {
 	errs []error
 	state runtime.EntityStateE
     parent *%s
-`, inst.clsNames.inAttributeClassName, inst.clsNames.inSectionClassName)
+`, clsNames.InAttributeClassName, clsNames.InSectionClassName)
 	if err != nil {
 		return
 	}
@@ -381,10 +378,10 @@ func New%s(builder *array.RecordBuilder, parent *%s) (inst *%s) {
 	inst.errs = make([]error,0,8)
 	inst.state = runtime.EntityStateInitial
 	inst.parent = parent
-`, inst.clsNames.inAttributeClassName,
-		inst.clsNames.inSectionClassName,
-		inst.clsNames.inAttributeClassName,
-		inst.clsNames.inAttributeClassName)
+`, clsNames.InAttributeClassName,
+		clsNames.InSectionClassName,
+		clsNames.InAttributeClassName,
+		clsNames.InAttributeClassName)
 	if err != nil {
 		return
 	}
@@ -403,21 +400,23 @@ func New%s(builder *array.RecordBuilder, parent *%s) (inst *%s) {
 	return
 }
 
-type classNames struct {
-	inEntityClassName    string
-	inSectionClassName   string
-	inAttributeClassName string
-}
-
-func (inst *GoClassBuilder) composeSectionClassAndFactoryCode(sectionIRH *common.IntermediatePairHolder, tableRowConfig common.TableRowConfigE, scalarIRH *common.IntermediatePairHolder, nonScalarIRH *common.IntermediatePairHolder) (err error) {
+func (inst *GoClassBuilder) ComposeSectionClassAndFactoryCode(clsNamer gocodegen.GoClassNamerI, tableName naming.StylableName, sectionName naming.StylableName, sectionIdx int, totalSections int, sectionIRH *common.IntermediatePairHolder, tableRowConfig common.TableRowConfigE) (err error) {
 	b := inst.builder
+	var clsNames gocodegen.ClassNames
+	clsNames, err = gocodegen.NewClassNames(clsNamer, tableName, sectionName, sectionIdx, totalSections)
+	if err != nil {
+		err = eh.Errorf("unable to generate class names: %w", err)
+		return
+	}
+	nonScalarIRH := sectionIRH.DeriveSubHolder(deriveSubHolderSelectNonScalar)
+	scalarIRH := sectionIRH.DeriveSubHolder(deriveSubHolderSelectScalar)
 
 	_, err = fmt.Fprintf(b, `type %s struct {
 	errs []error
     inAttr *%s
 	state runtime.EntityStateE
     parent *%s
-`, inst.clsNames.inSectionClassName, inst.clsNames.inAttributeClassName, inst.clsNames.inEntityClassName)
+`, clsNames.InSectionClassName, clsNames.InAttributeClassName, clsNames.InEntityClassName)
 	if err != nil {
 		return
 	}
@@ -440,11 +439,11 @@ func New%s(builder *array.RecordBuilder, parent *%s) (inst *%s) {
 	inst.inAttr = inAttr
 	inst.parent = parent
 `,
-		inst.clsNames.inSectionClassName,
-		inst.clsNames.inEntityClassName,
-		inst.clsNames.inSectionClassName,
-		inst.clsNames.inSectionClassName,
-		inst.clsNames.inAttributeClassName)
+		clsNames.InSectionClassName,
+		clsNames.InEntityClassName,
+		clsNames.InSectionClassName,
+		clsNames.InSectionClassName,
+		clsNames.InAttributeClassName)
 	if err != nil {
 		return
 	}
@@ -609,8 +608,14 @@ func deriveSubHolderSelectTaggedValues(cc common.IntermediateColumnContext) (kee
 func deriveSubHolderSelectPlainValues(cc common.IntermediateColumnContext) (keep bool) {
 	return cc.PlainItemType != common.PlainItemTypeNone
 }
-func (inst *GoClassBuilder) composeAttributeCode(sectionIRH *common.IntermediatePairHolder, tableRowConfig common.TableRowConfigE) (err error) {
+func (inst *GoClassBuilder) ComposeAttributeCode(clsNamer gocodegen.GoClassNamerI, tableName naming.StylableName, sectionName naming.StylableName, sectionIdx int, totalSections int, sectionIRH *common.IntermediatePairHolder, tableRowConfig common.TableRowConfigE) (err error) {
 	b := inst.builder
+	var clsNames gocodegen.ClassNames
+	clsNames, err = gocodegen.NewClassNames(clsNamer, tableName, sectionName, sectionIdx, totalSections)
+	if err != nil {
+		err = eh.Errorf("unable to generate class names: %w", err)
+		return
+	}
 
 	nonScalarIRH := sectionIRH.DeriveSubHolder(deriveSubHolderSelectNonScalar)
 	nonScalarSupportIRH := sectionIRH.DeriveSubHolder(deriveSubHolderSelectNonScalarSupport)
@@ -619,7 +624,7 @@ func (inst *GoClassBuilder) composeAttributeCode(sectionIRH *common.Intermediate
 	membershipSupportIRH := sectionIRH.DeriveSubHolder(deriveSubHolderSelectMembershipSupport)
 
 	{ // beginAttribute
-		_, err = fmt.Fprintf(b, "func (inst *%s) beginAttribute() {\n", inst.clsNames.inAttributeClassName)
+		_, err = fmt.Fprintf(b, "func (inst *%s) beginAttribute() {\n", clsNames.InAttributeClassName)
 		if err != nil {
 			return
 		}
@@ -655,10 +660,10 @@ func (inst *GoClassBuilder) composeAttributeCode(sectionIRH *common.Intermediate
 		case 0:
 			break
 		case 1:
-			_, err = fmt.Fprintf(b, "func (inst *%s) AddToContainer(", inst.clsNames.inAttributeClassName)
+			_, err = fmt.Fprintf(b, "func (inst *%s) AddToContainer(", clsNames.InAttributeClassName)
 			break
 		default:
-			_, err = fmt.Fprintf(b, "func (inst *%s) AddToCoContainers(", inst.clsNames.inAttributeClassName)
+			_, err = fmt.Fprintf(b, "func (inst *%s) AddToCoContainers(", clsNames.InAttributeClassName)
 			break
 		}
 		if err != nil {
@@ -682,7 +687,7 @@ func (inst *GoClassBuilder) composeAttributeCode(sectionIRH *common.Intermediate
 			}
 		}
 		if nonScalarIRH.CountColumns() > 0 {
-			_, err = fmt.Fprintf(b, ") *%s {\n", inst.clsNames.inAttributeClassName)
+			_, err = fmt.Fprintf(b, ") *%s {\n", clsNames.InAttributeClassName)
 			if err != nil {
 				return
 			}
@@ -774,7 +779,7 @@ func (inst *GoClassBuilder) composeAttributeCode(sectionIRH *common.Intermediate
 				if funcName != "" {
 					f := func(funcName string, retrType string, instRetrExpr string) (err error) {
 						if mixed >= 0 {
-							_, err = fmt.Fprintf(b, "func (inst *%s) %s(", inst.clsNames.inAttributeClassName, funcName)
+							_, err = fmt.Fprintf(b, "func (inst *%s) %s(", clsNames.InAttributeClassName, funcName)
 							if err != nil {
 								return
 							}
@@ -812,7 +817,7 @@ func (inst *GoClassBuilder) composeAttributeCode(sectionIRH *common.Intermediate
 							}
 							err = inst.composeFieldRelatedCode(structFieldOperationIncrementContainerLength, mixedParamsCc[mixed], mixedParamsCp[mixed], mixedParamsIdx[mixed])
 						} else {
-							_, err = fmt.Fprintf(b, "func (inst *%s) %s(", inst.clsNames.inAttributeClassName, funcName)
+							_, err = fmt.Fprintf(b, "func (inst *%s) %s(", clsNames.InAttributeClassName, funcName)
 							if err != nil {
 								return
 							}
@@ -850,7 +855,7 @@ func (inst *GoClassBuilder) composeAttributeCode(sectionIRH *common.Intermediate
 						}
 						return
 					}
-					err = f(funcName, "*"+inst.clsNames.inAttributeClassName, "inst")
+					err = f(funcName, "*"+clsNames.InAttributeClassName, "inst")
 					if err != nil {
 						return
 					}
@@ -867,7 +872,7 @@ func (inst *GoClassBuilder) composeAttributeCode(sectionIRH *common.Intermediate
 		_, err = fmt.Fprintf(b, `func (inst *%s) handleMembershipSupportColumns() {
 	var l int
 	var _ = l
-`, inst.clsNames.inAttributeClassName)
+`, clsNames.InAttributeClassName)
 		if err != nil {
 			return
 		}
@@ -906,7 +911,7 @@ func (inst *GoClassBuilder) composeAttributeCode(sectionIRH *common.Intermediate
 	var l int
 	var _ = l
 `,
-			inst.clsNames.inAttributeClassName)
+			clsNames.InAttributeClassName)
 		if err != nil {
 			return
 		}
@@ -960,7 +965,7 @@ func (inst *GoClassBuilder) composeAttributeCode(sectionIRH *common.Intermediate
 	inst.handleNonScalarSupportColumns()
 }
 `,
-			inst.clsNames.inAttributeClassName)
+			clsNames.InAttributeClassName)
 		if err != nil {
 			return
 		}
@@ -968,7 +973,7 @@ func (inst *GoClassBuilder) composeAttributeCode(sectionIRH *common.Intermediate
 	{ // EndSection
 		_, err = fmt.Fprintf(b, `func (inst *%s) EndSection() *%s {
 `,
-			inst.clsNames.inAttributeClassName, inst.clsNames.inEntityClassName)
+			clsNames.InAttributeClassName, clsNames.InEntityClassName)
 		if err != nil {
 			return
 		}
@@ -990,7 +995,7 @@ func (inst *GoClassBuilder) composeAttributeCode(sectionIRH *common.Intermediate
 	{ // EndAttribute
 		_, err = fmt.Fprintf(b, `func (inst *%s) EndAttribute() *%s {
 `,
-			inst.clsNames.inAttributeClassName, inst.clsNames.inSectionClassName)
+			clsNames.InAttributeClassName, clsNames.InSectionClassName)
 		if err != nil {
 			return
 		}
@@ -1009,7 +1014,7 @@ func (inst *GoClassBuilder) composeAttributeCode(sectionIRH *common.Intermediate
 		}
 	}
 
-	err = inst.composeErrorHandlingCode(inst.clsNames.inAttributeClassName)
+	err = inst.composeErrorHandlingCode(clsNames.InAttributeClassName)
 	if err != nil {
 		return
 	}
@@ -1017,12 +1022,20 @@ func (inst *GoClassBuilder) composeAttributeCode(sectionIRH *common.Intermediate
 	return
 }
 
-func (inst *GoClassBuilder) composeSectionCode(sectionIRH *common.IntermediatePairHolder, tableRowConfig common.TableRowConfigE, scalarIRH *common.IntermediatePairHolder, nonScalarIRH *common.IntermediatePairHolder) (err error) {
+func (inst *GoClassBuilder) ComposeSectionCode(clsNamer gocodegen.GoClassNamerI, tableName naming.StylableName, sectionName naming.StylableName, sectionIdx int, totalSections int, sectionIRH *common.IntermediatePairHolder, tableRowConfig common.TableRowConfigE) (err error) {
 	b := inst.builder
+	var clsNames gocodegen.ClassNames
+	clsNames, err = gocodegen.NewClassNames(clsNamer, tableName, sectionName, sectionIdx, totalSections)
+	if err != nil {
+		err = eh.Errorf("unable to generate class names: %w", err)
+		return
+	}
+	scalarIRH := sectionIRH.DeriveSubHolder(deriveSubHolderSelectScalar)
+	nonScalarIRH := sectionIRH.DeriveSubHolder(deriveSubHolderSelectNonScalar)
 
 	{ // endAttribute
 		_, err = fmt.Fprintf(b, `func (inst *%s) endAttribute() {
-`, inst.clsNames.inSectionClassName)
+`, clsNames.InSectionClassName)
 		if err != nil {
 			return
 		}
@@ -1034,7 +1047,7 @@ func (inst *GoClassBuilder) composeSectionCode(sectionIRH *common.IntermediatePa
 		}
 	}
 	{ // BeginAttribute
-		_, err = fmt.Fprintf(b, `func (inst *%s) BeginAttribute(`, inst.clsNames.inSectionClassName)
+		_, err = fmt.Fprintf(b, `func (inst *%s) BeginAttribute(`, clsNames.InSectionClassName)
 		if err != nil {
 			return
 		}
@@ -1044,7 +1057,7 @@ func (inst *GoClassBuilder) composeSectionCode(sectionIRH *common.IntermediatePa
 			return
 		}
 		_, err = fmt.Fprintf(b, `) *%s {
-`, inst.clsNames.inAttributeClassName)
+`, clsNames.InAttributeClassName)
 		if err != nil {
 			return
 		}
@@ -1070,18 +1083,18 @@ func (inst *GoClassBuilder) composeSectionCode(sectionIRH *common.IntermediatePa
 	err = eh.CheckErrors(slices.Concat(inst.errs,inst.inAttr.errs))
 	return
 }
-`, inst.clsNames.inSectionClassName)
+`, clsNames.InSectionClassName)
 		if err != nil {
 			return
 		}
 	}
-	err = inst.composeSharedMethods(inst.clsNames.inSectionClassName)
+	err = inst.composeSharedMethods(clsNames.InSectionClassName)
 	if err != nil {
 		return
 	}
 	{ // EndSection
 		_, err = fmt.Fprintf(b, `func (inst *%s) EndSection() *%s {
-`, inst.clsNames.inSectionClassName, inst.clsNames.inEntityClassName)
+`, clsNames.InSectionClassName, clsNames.InEntityClassName)
 		if err != nil {
 			return
 		}
@@ -1103,7 +1116,7 @@ func (inst *GoClassBuilder) composeSectionCode(sectionIRH *common.IntermediatePa
 func (inst *%s) beginSection() {
 	inst.state = runtime.EntityStateInSection
 	inst.inAttr.beginAttribute()
-`, inst.clsNames.inSectionClassName)
+`, clsNames.InSectionClassName)
 		if err != nil {
 			return
 		}
@@ -1124,13 +1137,13 @@ func (inst *%s) resetSection() {
 	inst.clearErrors()
 	inst.state = runtime.EntityStateInitial
 }
-`, inst.clsNames.inSectionClassName)
+`, clsNames.InSectionClassName)
 		if err != nil {
 			return
 		}
 	}
 
-	err = inst.composeErrorHandlingCode(inst.clsNames.inSectionClassName)
+	err = inst.composeErrorHandlingCode(clsNames.InSectionClassName)
 	if err != nil {
 		return
 	}
@@ -1154,25 +1167,35 @@ func itemTypeToSetterName(itemType common.PlainItemTypeE) (setterName string) {
 	}
 	return
 }
-func (inst *GoClassBuilder) composeEntityClassAndFactoryCode(tableName naming.StylableName, sectionNames []naming.StylableName, ir *common.IntermediateTableRepresentation, tableRowConfig common.TableRowConfigE, clsNamer gocodegen.GoClassNamerI, entityIRH *common.IntermediatePairHolder) (err error) {
+func (inst *GoClassBuilder) ComposeEntityClassAndFactoryCode(clsNamer gocodegen.GoClassNamerI, tableName naming.StylableName, sectionNames []naming.StylableName, ir *common.IntermediateTableRepresentation, tableRowConfig common.TableRowConfigE, entityIRH *common.IntermediatePairHolder) (err error) {
 	b := inst.builder
-	inst.populateClsNames(tableName, "", 0, 0)
+	var clsNames gocodegen.ClassNames
+	clsNames, err = gocodegen.NewClassNamesEntityOnly(clsNamer, tableName)
+	if err != nil {
+		err = eh.Errorf("unable to generate class names: %w", err)
+		return
+	}
+
 	_, err = fmt.Fprintf(b, `type %s struct {
 	errs []error
 	state runtime.EntityStateE
 	allocator memory.Allocator
 	builder *array.RecordBuilder
 	records []arrow.Record
-`, inst.clsNames.inEntityClassName)
+`, clsNames.InEntityClassName)
 	if err != nil {
 		return
 	}
 	for i, sectionName := range sectionNames {
-		inst.populateClsNames(tableName, sectionName, i, len(sectionNames))
+		clsNames, err = gocodegen.NewClassNames(clsNamer, tableName, sectionName, i, len(sectionNames))
+		if err != nil {
+			err = eh.Errorf("unable to create class names: %w", err)
+			return
+		}
 		_, err = fmt.Fprintf(b, `	section%02dInst *%s
 	section%02dState runtime.EntityStateE
 `,
-			i, inst.clsNames.inSectionClassName, i)
+			i, clsNames.InSectionClassName, i)
 		if err != nil {
 			return
 		}
@@ -1206,9 +1229,9 @@ func New%s(allocator memory.Allocator, estimatedNumberOfRecords int) (inst *%s) 
 	inst.builder = builder
 	inst.initSections(builder)
 `,
-		inst.clsNames.inEntityClassName,
-		inst.clsNames.inEntityClassName,
-		inst.clsNames.inEntityClassName,
+		clsNames.InEntityClassName,
+		clsNames.InEntityClassName,
+		clsNames.InEntityClassName,
 		schemaFactoryName)
 	if err != nil {
 		return
@@ -1233,19 +1256,25 @@ func New%s(allocator memory.Allocator, estimatedNumberOfRecords int) (inst *%s) 
 	}
 	return
 }
-func (inst *GoClassBuilder) composeEntityCode(tableName naming.StylableName, sectionNames []naming.StylableName, ir *common.IntermediateTableRepresentation, tableRowConfig common.TableRowConfigE, entityIRH *common.IntermediatePairHolder) (err error) {
+func (inst *GoClassBuilder) ComposeEntityCode(clsNamer gocodegen.GoClassNamerI, tableName naming.StylableName, sectionNames []naming.StylableName, ir *common.IntermediateTableRepresentation, tableRowConfig common.TableRowConfigE, entityIRH *common.IntermediatePairHolder) (err error) {
 	plainIRH := entityIRH.DeriveSubHolder(deriveSubHolderSelectPlainValues)
 	//taggedIRH := entityIRH.DeriveSubHolder(deriveSubHolderSelectTaggedValues)
 	plainSetterIRH := plainIRH.DeriveSubHolder(func(cc common.IntermediateColumnContext) (keep bool) {
 		keep = itemTypeToSetterName(cc.PlainItemType) != ""
 		return
 	})
+	var clsNames gocodegen.ClassNames
+	clsNames, err = gocodegen.NewClassNamesEntityOnly(clsNamer, tableName)
+	if err != nil {
+		err = eh.Errorf("unable to generate class names: %w", err)
+		return
+	}
 
 	b := inst.builder
 	{ // setter
 		for cc, cp := range plainSetterIRH.IterateColumnProps() {
 			setterName := itemTypeToSetterName(cc.PlainItemType)
-			_, err = fmt.Fprintf(b, `func (inst *%s) %s(`, inst.clsNames.inEntityClassName, setterName)
+			_, err = fmt.Fprintf(b, `func (inst *%s) %s(`, clsNames.InEntityClassName, setterName)
 			if err != nil {
 				return
 			}
@@ -1264,7 +1293,7 @@ func (inst *GoClassBuilder) composeEntityCode(tableName naming.StylableName, sec
 				}
 			}
 			_, err = fmt.Fprintf(b, `) *%s {
-`, inst.clsNames.inEntityClassName)
+`, clsNames.InEntityClassName)
 			if err != nil {
 				return
 			}
@@ -1289,7 +1318,7 @@ func (inst *GoClassBuilder) composeEntityCode(tableName naming.StylableName, sec
 	}
 	{ // appendPlainValues
 		_, err = fmt.Fprintf(b, `func (inst *%s) appendPlainValues() {
-`, inst.clsNames.inEntityClassName)
+`, clsNames.InEntityClassName)
 		if err != nil {
 			return
 		}
@@ -1305,7 +1334,7 @@ func (inst *GoClassBuilder) composeEntityCode(tableName naming.StylableName, sec
 	}
 	{ // resetPlainValues
 		_, err = fmt.Fprintf(b, `func (inst *%s) resetPlainValues() {
-`, inst.clsNames.inEntityClassName)
+`, clsNames.InEntityClassName)
 		if err != nil {
 			return
 		}
@@ -1320,15 +1349,19 @@ func (inst *GoClassBuilder) composeEntityCode(tableName naming.StylableName, sec
 		}
 	}
 	{ // reset sections
-		_, err = fmt.Fprintf(b, `func (inst *%s) initSections(builder *array.RecordBuilder) {`, inst.clsNames.inEntityClassName)
+		_, err = fmt.Fprintf(b, `func (inst *%s) initSections(builder *array.RecordBuilder) {`, clsNames.InEntityClassName)
 		if err != nil {
 			return
 		}
 		for i, sectionName := range sectionNames {
-			inst.populateClsNames(tableName, sectionName, i, len(sectionNames))
+			clsNames, err = gocodegen.NewClassNames(clsNamer, tableName, sectionName, i, len(sectionNames))
+			if err != nil {
+				err = eh.Errorf("unable to generate class names: %w", err)
+				return
+			}
 			_, err = fmt.Fprintf(b, `
 	inst.section%02dInst = New%s(builder, inst)`,
-				i, inst.clsNames.inSectionClassName)
+				i, clsNames.InSectionClassName)
 			if err != nil {
 				return
 			}
@@ -1342,7 +1375,7 @@ func (inst *GoClassBuilder) composeEntityCode(tableName naming.StylableName, sec
 	}
 	{ // beginSections
 		_, err = fmt.Fprintf(b, `func (inst *%s) beginSections() {
-`, inst.clsNames.inEntityClassName)
+`, clsNames.InEntityClassName)
 		for i, _ := range sectionNames {
 			_, err = fmt.Fprintf(b, `	inst.section%02dInst.beginSection()
 `, i)
@@ -1358,7 +1391,7 @@ func (inst *GoClassBuilder) composeEntityCode(tableName naming.StylableName, sec
 	}
 	{ // resetSections
 		_, err = fmt.Fprintf(b, `func (inst *%s) resetSections() {
-`, inst.clsNames.inEntityClassName)
+`, clsNames.InEntityClassName)
 		for i, _ := range sectionNames {
 			_, err = fmt.Fprintf(b, `	inst.section%02dInst.resetSection()
 `, i)
@@ -1375,7 +1408,7 @@ func (inst *GoClassBuilder) composeEntityCode(tableName naming.StylableName, sec
 	{ // CheckErrors
 		_, err = fmt.Fprintf(b, `func (inst *%s) CheckErrors() (err error) {
 	err = eh.CheckErrors(inst.errs)
-`, inst.clsNames.inEntityClassName)
+`, clsNames.InEntityClassName)
 		if err != nil {
 			return
 		}
@@ -1394,23 +1427,27 @@ func (inst *GoClassBuilder) composeEntityCode(tableName naming.StylableName, sec
 			return
 		}
 	}
-	err = inst.composeSharedMethods(inst.clsNames.inEntityClassName)
+	err = inst.composeSharedMethods(clsNames.InEntityClassName)
 	if err != nil {
 		return
 	}
 
 	{ // section getter
 		for i, secName := range sectionNames {
-			inst.populateClsNames(tableName, secName, i, len(sectionNames))
+			clsNames, err = gocodegen.NewClassNames(clsNamer, tableName, secName, i, len(sectionNames))
+			if err != nil {
+				err = eh.Errorf("unable to generate class names: %w", err)
+				return
+			}
 			_, err = fmt.Fprintf(b, `func (inst *%s) GetSection%s() *%s {
 	return inst.section%02dInst
 }
-`, inst.clsNames.inEntityClassName, secName.Convert(naming.NamingStyleUpperCamelCase).String(), inst.clsNames.inSectionClassName, i)
+`, clsNames.InEntityClassName, secName.Convert(naming.NamingStyleUpperCamelCase).String(), clsNames.InSectionClassName, i)
 		}
 	}
 	{ // BeginEntity
 		_, err = fmt.Fprintf(b, `func (inst *%s) BeginEntity() *%s {
-`, inst.clsNames.inEntityClassName, inst.clsNames.inEntityClassName)
+`, clsNames.InEntityClassName, clsNames.InEntityClassName)
 		err = inst.composeStateTransitionCode([]runtime.EntityStateE{runtime.EntityStateInitial}, runtime.EntityStateInEntity, false, "inst")
 		if err != nil {
 			return
@@ -1429,7 +1466,7 @@ func (inst *GoClassBuilder) composeEntityCode(tableName naming.StylableName, sec
 	// FIXME check coSectionGroup consistency
 	return
 }
-`, inst.clsNames.inEntityClassName)
+`, clsNames.InEntityClassName)
 		if err != nil {
 			return
 		}
@@ -1442,7 +1479,7 @@ func (inst *GoClassBuilder) composeEntityCode(tableName naming.StylableName, sec
 		err = eh.Errorf("unable to commit entity, found errors: %%w", err)
 		return
 	}
-`, inst.clsNames.inEntityClassName)
+`, clsNames.InEntityClassName)
 		err = inst.composeStateTransitionCode([]runtime.EntityStateE{runtime.EntityStateInEntity}, runtime.EntityStateInitial, true, "inst")
 		if err != nil {
 			return
@@ -1460,7 +1497,7 @@ func (inst *GoClassBuilder) composeEntityCode(tableName naming.StylableName, sec
 	}
 	{ // RollbackEntity
 		_, err = fmt.Fprintf(b, `func (inst *%s) RollbackEntity() (err error) {
-`, inst.clsNames.inEntityClassName)
+`, clsNames.InEntityClassName)
 		err = inst.composeStateTransitionCode([]runtime.EntityStateE{runtime.EntityStateInEntity}, runtime.EntityStateInitial, true, "inst")
 		if err != nil {
 			return
@@ -1487,7 +1524,7 @@ func (inst *GoClassBuilder) composeEntityCode(tableName naming.StylableName, sec
 		_, err = fmt.Fprintf(b, `
 // TransferRecords The returned Records must be Release()'d after use.
 func (inst *%s) TransferRecords(recordsIn []arrow.Record) (recordsOut []arrow.Record, err error) {
-`, inst.clsNames.inEntityClassName)
+`, clsNames.InEntityClassName)
 		err = inst.composeStateVerificationCode([]runtime.EntityStateE{runtime.EntityStateInitial}, true, "inst")
 		if err != nil {
 			return
@@ -1513,34 +1550,17 @@ func (inst *%s) TransferRecords(recordsIn []arrow.Record) (recordsOut []arrow.Re
 func (inst *%s) GetSchema() (schema *arrow.Schema) {
 	return inst.builder.Schema()
 }
-`, inst.clsNames.inEntityClassName)
+`, clsNames.InEntityClassName)
 		if err != nil {
 			return
 		}
 	}
 
-	err = inst.composeErrorHandlingCode(inst.clsNames.inEntityClassName)
+	err = inst.composeErrorHandlingCode(clsNames.InEntityClassName)
 	if err != nil {
 		return
 	}
 	return
-}
-func (inst *GoClassBuilder) populateClsNames(tableName naming.StylableName, sectionName naming.StylableName, sectionIndex int, totalSections int) {
-	var err error
-	inst.clsNames.inEntityClassName, err = inst.classNamer.ComposeEntityClassName(tableName)
-	if err != nil {
-		log.Panic().Err(err).Msg("unable to generate entity class name")
-	}
-	if sectionName != "" {
-		inst.clsNames.inSectionClassName, err = inst.classNamer.ComposeSectionClassName(tableName, sectionName, sectionIndex, totalSections)
-		if err != nil {
-			log.Panic().Err(err).Msg("unable to generate entity class name")
-		}
-		inst.clsNames.inAttributeClassName, err = inst.classNamer.ComposeAttributeClassName(tableName, sectionName, sectionIndex, totalSections)
-		if err != nil {
-			log.Panic().Err(err).Msg("unable to generate entity class name")
-		}
-	}
 }
 func (inst *GoClassBuilder) ComposeGoImports(ir *common.IntermediateTableRepresentation, tableRowConfig common.TableRowConfigE) (err error) {
 	b := inst.builder
@@ -1582,89 +1602,6 @@ func (inst *GoClassBuilder) ComposeGoImports(ir *common.IntermediateTableReprese
 	}
 	return
 }
-func (inst *GoClassBuilder) ComposeCode(tableName naming.StylableName, ir *common.IntermediateTableRepresentation, conv common.NamingConventionI, tableRowConfig common.TableRowConfigE, clsNamer gocodegen.GoClassNamerI) (err error) {
-	b := inst.builder
-	if b == nil {
-		err = common.ErrNoBuilder
-		return
-	}
-	inst.classNamer = clsNamer
 
-	if conv != nil {
-		err = inst.composeNamingConventionDependentCode(tableName, ir, conv, tableRowConfig, clsNamer)
-		if err != nil {
-			err = eb.Build().Stringer("tableName", tableName).Errorf("unable to compose naming convention dependent code: %w", err)
-			return
-		}
-	}
-	entityIRH := common.NewIntermediatePairHolder(ir.TotalLength())
-	for cc, cp := range ir.IterateColumnProps() {
-		entityIRH.Add(cc, cp)
-	}
-
-	sectionNames := make([]naming.StylableName, 0, 32)
-	maxColumnsPerSection := 0
-	for _, t := range ir.TaggedValueDesc {
-		secName := t.SectionName
-		sectionNames = append(sectionNames, secName)
-		maxColumnsPerSection = max(maxColumnsPerSection, t.Length())
-	}
-	slices.Sort(sectionNames)
-	sectionNames = slices.Compact(sectionNames)
-
-	err = inst.composeEntityClassAndFactoryCode(tableName, sectionNames, ir, tableRowConfig, clsNamer, entityIRH)
-	if err != nil {
-		err = eb.Build().Stringer("tableName", tableName).Errorf("unable to compose entity class and factory code: %w", err)
-		return
-	}
-	err = inst.composeEntityCode(tableName, sectionNames, ir, tableRowConfig, entityIRH)
-	if err != nil {
-		err = eb.Build().Stringer("tableName", tableName).Errorf("unable to compose entity code: %w", err)
-		return
-	}
-
-	sectionIRH := common.NewIntermediatePairHolder(maxColumnsPerSection)
-	for i, sectionName := range sectionNames {
-		inst.populateClsNames(tableName, sectionName, i, len(sectionNames))
-		sectionIRH.Reset()
-		for cc, cp := range ir.IterateColumnProps() {
-			if cc.SectionName == sectionName && cc.PlainItemType == common.PlainItemTypeNone {
-				sectionIRH.Add(cc, cp)
-			}
-		}
-
-		baseErr := eb.Build().Stringer("sectionName", sectionName).Stringer("tableName", tableName)
-
-		{
-			scalarIRH := sectionIRH.DeriveSubHolder(deriveSubHolderSelectScalar)
-			nonScalarIRH := sectionIRH.DeriveSubHolder(deriveSubHolderSelectNonScalar)
-			err = inst.composeSectionClassAndFactoryCode(sectionIRH, tableRowConfig, scalarIRH, nonScalarIRH)
-			if err != nil {
-				err = baseErr.Errorf("unable to compose section class and factory code: %w", err)
-				return
-			}
-			err = inst.composeSectionCode(sectionIRH, tableRowConfig, scalarIRH, nonScalarIRH)
-			if err != nil {
-				err = baseErr.Errorf("unable to compose section code: %w", err)
-				return
-			}
-		}
-
-		{
-			err = inst.composeAttributeClassAndFactoryCode(sectionIRH, tableRowConfig)
-			if err != nil {
-				err = baseErr.Errorf("unable to compose attribute class and factoy code: %w", err)
-				return
-			}
-			err = inst.composeAttributeCode(sectionIRH, tableRowConfig)
-			if err != nil {
-				err = baseErr.Errorf("unable to compose attribute code: %w", err)
-				return
-			}
-		}
-	}
-
-	return
-}
-
+var _ gocodegen.CodeComposerI = (*GoClassBuilder)(nil)
 var _ TechnologySpecificBuilderI = (*GoClassBuilder)(nil)

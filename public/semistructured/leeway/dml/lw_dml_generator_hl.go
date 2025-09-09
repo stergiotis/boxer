@@ -28,7 +28,7 @@ func NewGoCodeGeneratorDriver(namingConvention common.NamingConventionI, tech co
 		tech:             tech,
 	}
 }
-func (inst *GeneratorDriver) GenerateGoClasses(packageName string, tableName naming.StylableName, tblDesc common.TableDesc, tableRowConfig common.TableRowConfigE, namingStyle gocodegen.GoClassNamerI) (sourceCode []byte, wellFormed bool, err error) {
+func (inst *GeneratorDriver) GenerateGoClasses(packageName string, tableName naming.StylableName, tblDesc common.TableDesc, tableRowConfig common.TableRowConfigE, clsNamer gocodegen.GoClassNamerI) (sourceCode []byte, wellFormed bool, err error) {
 	s := &strings.Builder{}
 	_, err = golang.AddCodeGenComment(s, CodeGeneratorName)
 	if err != nil {
@@ -78,7 +78,7 @@ import (
 		return
 	}
 
-	err = builder.ComposeCode(tableName, ir, inst.namingConvention, tableRowConfig, namingStyle)
+	err = gocodegen.ComposeCode(builder, s, tableName, ir, inst.namingConvention, tableRowConfig, clsNamer)
 	if err != nil {
 		err = eh.Errorf("unable to compose go code: %w", err)
 		return

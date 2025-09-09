@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
 	encodingaspects2 "github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/gocodegen"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
@@ -110,12 +111,12 @@ func TestGoClassBuilder(t *testing.T) {
 
 	tableRowConfig := common.TableRowConfigMultiAttributesPerRow
 	var sourceCode []byte
-	namingStyle := NewMultiTablePerPackageGoClassNamer()
+	namingStyle := gocodegen.NewMultiTablePerPackageGoClassNamer()
 	sourceCode, _, err = driver.GenerateGoClasses("example", naming.MustBeValidStylableName("testtable"), tblDesc, tableRowConfig, namingStyle)
 	require.NoError(t, err)
 	checkCodeInvariants(sourceCode, t)
 
-	err = os.WriteFile("example/dml_testtable.gen.go", sourceCode, os.ModePerm)
+	err = os.WriteFile("example/dml_testtable.out.go", sourceCode, os.ModePerm)
 	require.NoError(t, err)
 }
 func TestGoClassBuilderSample(t *testing.T) {
@@ -131,7 +132,7 @@ func TestGoClassBuilderSample(t *testing.T) {
 
 	tableRowConfig := common.TableRowConfigMultiAttributesPerRow
 	var sourceCode []byte
-	namingStyle := NewMultiTablePerPackageGoClassNamer()
+	namingStyle := gocodegen.NewMultiTablePerPackageGoClassNamer()
 	acceptCanonicalType := tech.CheckTypeCompatibility
 	acceptEncodingAspect := ddl.EncodingAspectFilterFuncFromTechnology(tech, common.ImplementationStatusFull)
 	n := 1000
