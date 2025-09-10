@@ -7,10 +7,12 @@ import (
 )
 
 func TestConvertNameStyle_HappyCase(t *testing.T) {
-	require.Equal(t, "äV€ryTrickyCase1", ConvertNameStyle("äV€ryTrickyCase1", NamingStyleLowerCamelCase))
-	require.Equal(t, "ÄV€ryTrickyCase1", ConvertNameStyle("äV€ryTrickyCase1", NamingStyleUpperCamelCase))
-	require.Equal(t, "ä_v€ry_tricky_case1", ConvertNameStyle("äV€ryTrickyCase1", NamingStyleSnakeCase))
-	require.Equal(t, "ä-v€ry-tricky-case1", ConvertNameStyle("äV€ryTrickyCase1", NamingStyleSpinalCase))
+	require.Equal(t, "äV€ryTrickyCase1", ConvertNameStyle("äV€ryTrickyCase1", LowerCamelCase))
+	require.Equal(t, "ÄV€ryTrickyCase1", ConvertNameStyle("äV€ryTrickyCase1", UpperCamelCase))
+	require.Equal(t, "ä_v€ry_tricky_case1", ConvertNameStyle("äV€ryTrickyCase1", LowerSnakeCase))
+	require.Equal(t, "Ä_V€RY_TRICKY_CASE1", ConvertNameStyle("äV€ryTrickyCase1", UpperSnakeCase))
+	require.Equal(t, "ä-v€ry-tricky-case1", ConvertNameStyle("äV€ryTrickyCase1", LowerSpinalCase))
+	require.Equal(t, "Ä-V€RY-TRICKY-CASE1", ConvertNameStyle("äV€ryTrickyCase1", UpperSpinalCase))
 }
 func TestJoinComponents(t *testing.T) {
 	name, err := JoinComponents("ä", "Very", "tricky", "case")

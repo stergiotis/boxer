@@ -14,8 +14,8 @@ import (
 )
 
 func TestNewTableNormalizer(t *testing.T) {
-	normalizer1 := common.NewTableNormalizer(naming.NamingStyleLowerCamelCase)
-	normalizer2 := common.NewTableNormalizer(naming.NamingStyleSnakeCase)
+	normalizer1 := common.NewTableNormalizer(naming.LowerCamelCase)
+	normalizer2 := common.NewTableNormalizer(naming.LowerSnakeCase)
 	require.False(t, normalizer1.Equal(normalizer2))
 	require.True(t, normalizer1.Equal(normalizer1))
 	marshaller, err := common.NewTableMarshaller()

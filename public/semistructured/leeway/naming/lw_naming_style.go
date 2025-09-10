@@ -18,21 +18,25 @@ const SnakeCaseSeparator = '_'
 const SpinalCaseSeparator = '-'
 const InvalidComponentRune = unicode.ReplacementChar
 const (
-	ShortestNamingStyle     = NamingStyleLowerCamelCase
-	BestReadableNamingStyle = NamingStyleSpinalCase
+	ShortestNamingStyle     = LowerCamelCase
+	BestReadableNamingStyle = LowerSpinalCase
 	DefaultNamingStyle      = BestReadableNamingStyle
 )
 
 func ConvertNameStyle[S ~string](name S, targetStyle NamingStyleE) (naming S) {
 	switch targetStyle {
-	case NamingStyleLowerCamelCase:
+	case LowerCamelCase:
 		return S(strcase.ToCamel(string(name)))
-	case NamingStyleUpperCamelCase:
+	case UpperCamelCase:
 		return S(strcase.ToPascal(string(name)))
-	case NamingStyleSnakeCase:
+	case LowerSnakeCase:
 		return S(strcase.ToSnake(string(name)))
-	case NamingStyleSpinalCase:
+	case UpperSnakeCase:
+		return S(strcase.ToSNAKE(string(name)))
+	case LowerSpinalCase:
 		return S(strcase.ToKebab(string(name)))
+	case UpperSpinalCase:
+		return S(strcase.ToKEBAB(string(name)))
 	default:
 		log.Panic().Uint8("targetStyle", uint8(targetStyle)).Msg("unhandled target naming style")
 	}
@@ -148,7 +152,7 @@ func JoinComponents[S ~string](components ...S) (name StylableName, err error) {
 }
 func (inst StylableName) IterateComponents() iter.Seq[StylableName] {
 	return func(yield func(StylableName) bool) {
-		for component := range strings.SplitSeq(string(ConvertNameStyle(inst, NamingStyleSpinalCase)), string(SpinalCaseSeparator)) {
+		for component := range strings.SplitSeq(string(ConvertNameStyle(inst, LowerSpinalCase)), string(SpinalCaseSeparator)) {
 			if !yield(StylableName(component)) {
 				return
 			}

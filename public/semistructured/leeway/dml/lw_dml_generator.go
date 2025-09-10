@@ -53,11 +53,6 @@ const (
 	sectionOperationA sectionOperationE = 0
 )
 
-type GoClassBuilder struct {
-	builder *strings.Builder
-	tech    *golang.TechnologySpecificCodeGenerator
-}
-
 func NewGoClassBuilder() *GoClassBuilder {
 	return &GoClassBuilder{
 		builder: nil,
@@ -129,19 +124,19 @@ func (inst *GoClassBuilder) composeFieldRelatedCode(op structFieldOperationE, cc
 	encodingHints := cp.EncodingHints[i]
 	var arrowBuilderClassName string
 	var mayError bool
-	arrowBuilderClassName, mayError, err = CanonicalTypeToArrowBuilderClassName(ct, encodingHints)
+	arrowBuilderClassName, mayError, err = gocodegen.CanonicalTypeToArrowBaseClassName(ct, encodingHints, common.UseArrowDictionaryEncoding)
 	if err != nil {
 		return
 	}
 	var arrowConversionPrefix, arrowConversionSuffix string
-	arrowConversionPrefix, arrowConversionSuffix, err = GoTypeToArrowType(ct, encodingHints)
+	arrowConversionPrefix, arrowConversionSuffix, err = gocodegen.GoTypeToArrowType(ct, encodingHints, common.UseArrowDictionaryEncoding)
 	if err != nil {
 		return
 	}
 	idx := cc.IndexOffset + uint32(i)
-	argName := cp.Names[i].Convert(naming.NamingStyleLowerCamelCase).String()
+	argName := cp.Names[i].Convert(naming.LowerCamelCase).String()
 	argName += strconv.FormatUint(uint64(idx), 10)
-	plainFieldName := "plain" + cp.Names[i].Convert(naming.NamingStyleUpperCamelCase).String()
+	plainFieldName := "plain" + cp.Names[i].Convert(naming.UpperCamelCase).String()
 	plainFieldName += strconv.FormatUint(uint64(idx), 10)
 
 	switch cc.SubType {
@@ -1442,7 +1437,7 @@ func (inst *GoClassBuilder) ComposeEntityCode(clsNamer gocodegen.GoClassNamerI, 
 			_, err = fmt.Fprintf(b, `func (inst *%s) GetSection%s() *%s {
 	return inst.section%02dInst
 }
-`, clsNames.InEntityClassName, secName.Convert(naming.NamingStyleUpperCamelCase).String(), clsNames.InSectionClassName, i)
+`, clsNames.InEntityClassName, secName.Convert(naming.UpperCamelCase).String(), clsNames.InSectionClassName, i)
 		}
 	}
 	{ // BeginEntity

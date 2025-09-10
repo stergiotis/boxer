@@ -2,29 +2,37 @@ package naming
 
 const InvalidEnumValueString = "<invalid>"
 const (
-	NamingStyleLowerCamelCase NamingStyleE = 0
-	NamingStyleUpperCamelCase NamingStyleE = 1
-	NamingStyleSnakeCase      NamingStyleE = 2
-	NamingStyleSpinalCase     NamingStyleE = 3
+	LowerCamelCase  NamingStyleE = 0
+	UpperCamelCase  NamingStyleE = 1
+	LowerSnakeCase  NamingStyleE = 2
+	UpperSnakeCase  NamingStyleE = 3
+	LowerSpinalCase NamingStyleE = 4
+	UpperSpinalCase NamingStyleE = 5
 )
 
 var AllNamingStyles = []NamingStyleE{
-	NamingStyleLowerCamelCase,
-	NamingStyleUpperCamelCase,
-	NamingStyleSnakeCase,
-	NamingStyleSpinalCase,
+	LowerCamelCase,
+	UpperCamelCase,
+	LowerSnakeCase,
+	UpperSnakeCase,
+	LowerSpinalCase,
+	UpperSpinalCase,
 }
 
 func (inst NamingStyleE) String() string {
 	switch inst {
-	case NamingStyleLowerCamelCase:
+	case LowerCamelCase:
 		return "lowerCamelCase"
-	case NamingStyleUpperCamelCase:
+	case UpperCamelCase:
 		return "UpperCamelCase"
-	case NamingStyleSnakeCase:
-		return "snake_case"
-	case NamingStyleSpinalCase:
-		return "spinal-case"
+	case LowerSnakeCase:
+		return "lower_snake_case"
+	case UpperSnakeCase:
+		return "UPPER_SNAKE_CASE"
+	case LowerSpinalCase:
+		return "lower-spinal-case"
+	case UpperSpinalCase:
+		return "UPPER-SPINAL-CASE"
 	}
 	return InvalidEnumValueString
 }

@@ -1,4 +1,4 @@
-package dml
+package gocodegen
 
 import (
 	"fmt"
@@ -10,13 +10,13 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 )
 
-func GoTypeToArrowType(ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspects.AspectSet) (prefix string, suffix string, err error) {
+func GoTypeToArrowType(ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspects.AspectSet, useDictionaryEncoding bool) (prefix string, suffix string, err error) {
 	switch ctt := ct.(type) {
 	case canonicaltypes2.StringAstNode:
 		switch ctt.BaseType {
 		case canonicaltypes2.BaseTypeStringUtf8:
 			var builderCls string
-			builderCls, _, err = CanonicalTypeToArrowBuilderClassName(ct, hints)
+			builderCls, _, err = CanonicalTypeToArrowBaseClassName(ct, hints, useDictionaryEncoding)
 			if err != nil {
 				err = eh.Errorf("unable to get arrow builder class name: %w", err)
 				return
@@ -79,7 +79,7 @@ func GoTypeToArrowType(ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspec
 	}
 	return
 }
-func CanonicalTypeToArrowBuilderClassName(ct canonicaltypes2.PrimitiveAstNodeI, encodingHints encodingaspects.AspectSet) (name string, mayError bool, err error) {
+func CanonicalTypeToArrowBaseClassName(ct canonicaltypes2.PrimitiveAstNodeI, encodingHints encodingaspects.AspectSet, useDictionaryEncoding bool) (name string, mayError bool, err error) {
 	switch ctt := ct.(type) {
 	case canonicaltypes2.StringAstNode:
 		switch ctt.BaseType {
@@ -149,7 +149,7 @@ func CanonicalTypeToArrowBuilderClassName(ct canonicaltypes2.PrimitiveAstNodeI, 
 			break
 		}
 	}
-	if dictEncoding && common.UseArrowDictionaryEncoding {
+	if dictEncoding && useDictionaryEncoding {
 		mayError = true
 		switch name {
 		case "String":
@@ -160,4 +160,5 @@ func CanonicalTypeToArrowBuilderClassName(ct canonicaltypes2.PrimitiveAstNodeI, 
 		}
 	}
 	return
+
 }
