@@ -17,11 +17,6 @@ import (
 
 var CodeGeneratorName = "Leeway readaccess (" + vcs.ModuleInfo() + ")"
 
-type GoClassBuilder struct {
-	builder *strings.Builder
-	tech    *golang.TechnologySpecificCodeGenerator
-}
-
 func NewGoClassBuilder() *GoClassBuilder {
 	return &GoClassBuilder{
 		builder: nil,

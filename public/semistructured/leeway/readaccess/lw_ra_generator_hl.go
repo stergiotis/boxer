@@ -12,12 +12,6 @@ import (
 	"github.com/stergiotis/boxer/public/unsafeperf"
 )
 
-type GeneratorDriver struct {
-	builder          *GoClassBuilder
-	validator        *common.TableValidator
-	namingConvention common.NamingConventionI
-	tech             common.TechnologySpecificGeneratorI
-}
 
 func NewGoCodeGeneratorDriver(namingConvention common.NamingConventionI, tech common.TechnologySpecificGeneratorI) *GeneratorDriver {
 	builder := NewGoClassBuilder()
