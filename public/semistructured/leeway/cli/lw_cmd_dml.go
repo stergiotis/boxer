@@ -9,6 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/dml"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/gocodegen"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/urfave/cli/v2"
 )
@@ -59,7 +60,7 @@ func NewCliCommandDml() *cli.Command {
 									packageName := context.String("packageName")
 									var wellFormed bool
 									var sourceCode []byte
-									namingStyle := dml.NewDefaultGoClassNamer()
+									namingStyle := gocodegen.NewDefaultGoClassNamer()
 									sourceCode, wellFormed, err = driver.GenerateGoClasses(packageName, naming.MustBeValidStylableName(tableName), tblDesc, tableRowConfig, namingStyle)
 									if err != nil {
 										return eh.Errorf("unable to generate go classes: %w", err)
