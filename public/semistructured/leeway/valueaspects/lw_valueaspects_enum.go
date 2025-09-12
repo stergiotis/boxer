@@ -51,6 +51,12 @@ const (
 	AspectTextUnicodeMayBeBidi             AspectE = 43
 	AspectHumanGenerated                   AspectE = 44
 	AspectMachineGenerate                  AspectE = 45
+	AspectBinaryCodedDecimal               AspectE = 46 // BCD see https://en.wikipedia.org/wiki/Binary-coded_decimal, note that there are many incompatible encodings
+	AspectReflectedBinaryCode              AspectE = 47 // see https://en.wikipedia.org/wiki/Gray_code
+	AspectTrinaryLogic                     AspectE = 48 // see https://en.wikipedia.org/wiki/Three-valued_logic
+	AspectGraphVertex                      AspectE = 49
+	AspectGraphEdge                        AspectE = 50
+	AspectHyperGraphEdge                   AspectE = 51
 )
 
 var MaxAspectExcl = slices.Max(AllAspects) + 1
@@ -102,6 +108,12 @@ var AllAspects = []AspectE{
 	AspectTextUnicodeMayBeBidi,
 	AspectHumanGenerated,
 	AspectMachineGenerate,
+	AspectBinaryCodedDecimal,
+	AspectReflectedBinaryCode,
+	AspectTrinaryLogic,
+	AspectGraphVertex,
+	AspectGraphEdge,
+	AspectHyperGraphEdge,
 }
 
 const InvalidAspectEnumValueString = "<invalid AspectE>"
@@ -203,6 +215,18 @@ func (inst AspectE) String() string {
 		return "human-generated"
 	case AspectMachineGenerate:
 		return "machine-generated"
+	case AspectBinaryCodedDecimal:
+		return "binary-coded-decimal"
+	case AspectReflectedBinaryCode:
+		return "reflected-binary-code"
+	case AspectTrinaryLogic:
+		return "trinary-logic"
+	case AspectGraphVertex:
+		return "graph-vertex"
+	case AspectGraphEdge:
+		return "graph-edge"
+	case AspectHyperGraphEdge:
+		return "hyper-graph-edge"
 	}
 	return InvalidAspectEnumValueString
 }
