@@ -114,6 +114,59 @@ func (inst ColumnRoleE) String() string {
 	}
 	return InvalidEnumValueString
 }
+func (inst ColumnRoleE) LongString() string {
+	switch inst {
+	case ColumnRoleUnspecific:
+		return ""
+	case ColumnRoleHighCardRef:
+		return "high-card-ref"
+	case ColumnRoleHighCardRefParametrized:
+		return "high-card-ref-parametrized"
+	case ColumnRoleHighCardVerbatim:
+		return "high-card-verbatim"
+	case ColumnRoleLowCardRef:
+		return "low-card-ref"
+	case ColumnRoleLowCardRefParametrized:
+		return "low-card-ref-parametrized"
+	case ColumnRoleLowCardVerbatim:
+		return "low-card-verbatim"
+	case ColumnRoleMixedLowCardRef:
+		return "mixed-low-card-ref"
+	case ColumnRoleMixedVerbatimHighCardParameters:
+		return "mixed-verbatim-high-card-parameters"
+	case ColumnRoleMixedRefHighCardParameters:
+		return "mixed-ref-high-card-parameters"
+	case ColumnRoleMixedLowCardVerbatim:
+		return "mixed-low-card-verbatim"
+	case ColumnRoleValue:
+		return "value"
+	case ColumnRoleLength:
+		return "length"
+	case ColumnRoleHighCardRefCardinality:
+		return "high-card-ref-cardinality"
+	case ColumnRoleHighCardRefParametrizedCardinality:
+		return "high-card-ref-parametrized-cardinality"
+	case ColumnRoleHighCardVerbatimCardinality:
+		return "high-card-verbatim-cardinality"
+	case ColumnRoleLowCardRefCardinality:
+		return "low-card-ref-cardinality"
+	case ColumnRoleLowCardRefParametrizedCardinality:
+		return "low-card-ref-parametrized-cardinality"
+	case ColumnRoleLowCardVerbatimCardinality:
+		return "low-card-verbatim-cardinality"
+	case ColumnRoleMixedLowCardRefCardinality:
+		return "mixed-low-card-ref-cardinality"
+	case ColumnRoleMixedLowCardVerbatimCardinality:
+		return "mixed-low-card-verbatim-cardinality"
+	case ColumnRoleCardinality:
+		return "cardinality"
+	case ColumnRoleCusumLength:
+		return "cusum-length"
+	case ColumnRoleCusumCardinality:
+		return "cusum-cardinality"
+	}
+	return InvalidEnumValueString
+}
 
 const (
 	MembershipSpecNone                                   MembershipSpecE = 0b0000_0000
@@ -444,4 +497,3 @@ func (inst PlainItemTypeE) GetIntermediateColumnScope() IntermediateColumnScopeE
 	log.Panic().Uint8("value", uint8(inst)).Msg("unhandled plain item type")
 	return IntermediateColumnScopeE("")
 }
-
