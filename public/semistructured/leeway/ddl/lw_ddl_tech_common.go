@@ -66,34 +66,39 @@ func EncodingAspectFilterFuncFromTechnology(tech common.TechnologySpecificGenera
 	}
 }
 
-func (inst *CanonicalColumnarRepresentation) GetMembershipSetCanonicalType(s common.MembershipSpecE) (ct1 canonicaltypes.PrimitiveAstNodeI, hint1 encodingaspects2.AspectSet, colRole1 common.ColumnRoleE, ct2 canonicaltypes.PrimitiveAstNodeI, hint2 encodingaspects2.AspectSet, colRole2 common.ColumnRoleE, err error) {
+func (inst *CanonicalColumnarRepresentation) ResolveMembership(s common.MembershipSpecE) (ct1 canonicaltypes.PrimitiveAstNodeI, hint1 encodingaspects2.AspectSet, colRole1 common.ColumnRoleE, ct2 canonicaltypes.PrimitiveAstNodeI, hint2 encodingaspects2.AspectSet, colRole2 common.ColumnRoleE, cardRole common.ColumnRoleE, err error) {
 	if s.Count() != 1 {
 		err = eb.Build().Int("bitsSet", s.Count()).Errorf("expecting exactly one bit set: %w", common.ErrInvalidMembershipSpec)
 		return
 	}
+
 	filterFunc := inst.aspectFilterFunc
 	if s.HasHighCardRefOnly() {
 		ct1 = membershipRefType
 		hint1 = encodingaspects2.EncodeAspectsMustValidate(FilterEncodingAspect(filterFunc, encodingaspects2.AspectDeltaEncoding, encodingaspects2.AspectLightGeneralCompression)...)
 		colRole1 = common.ColumnRoleHighCardRef
+		cardRole = common.ColumnRoleHighCardRefCardinality
 		return
 	}
 	if s.HasHighCardRefParametrized() {
 		ct1 = membershipSerializedType
 		hint1 = encodingaspects2.EncodeAspectsMustValidate(FilterEncodingAspect(filterFunc, encodingaspects2.AspectLightGeneralCompression)...)
 		colRole1 = common.ColumnRoleHighCardRefParametrized
+		cardRole = common.ColumnRoleHighCardRefParametrizedCardinality
 		return
 	}
 	if s.HasHighCardVerbatim() {
 		ct1 = membershipVerbatimType
 		hint1 = encodingaspects2.EncodeAspectsMustValidate(FilterEncodingAspect(filterFunc, encodingaspects2.AspectLightGeneralCompression)...)
 		colRole1 = common.ColumnRoleHighCardVerbatim
+		cardRole = common.ColumnRoleHighCardVerbatimCardinality
 		return
 	}
 	if s.HasLowCardRefOnly() {
 		ct1 = membershipRefType
 		hint1 = encodingaspects2.EncodeAspectsMustValidate(FilterEncodingAspect(filterFunc, encodingaspects2.AspectInterRecordLowCardinality, encodingaspects2.AspectIntraRecordLowCardinality, encodingaspects2.AspectLightGeneralCompression, encodingaspects2.AspectDeltaEncoding)...)
 		colRole1 = common.ColumnRoleLowCardRef
+		cardRole = common.ColumnRoleLowCardRefCardinality
 		return
 	}
 	if s.HasLowCardRefParametrized() {
@@ -101,12 +106,14 @@ func (inst *CanonicalColumnarRepresentation) GetMembershipSetCanonicalType(s com
 		// NOTE: is high cardinality (parametrization is always high-card, even when the ref is low-card)
 		hint1 = encodingaspects2.EncodeAspectsMustValidate(FilterEncodingAspect(filterFunc, encodingaspects2.AspectLightGeneralCompression)...)
 		colRole1 = common.ColumnRoleLowCardRefParametrized
+		cardRole = common.ColumnRoleLowCardRefParametrizedCardinality
 		return
 	}
 	if s.HasLowCardVerbatim() {
 		ct1 = membershipVerbatimType
 		hint1 = encodingaspects2.EncodeAspectsMustValidate(FilterEncodingAspect(filterFunc, encodingaspects2.AspectInterRecordLowCardinality, encodingaspects2.AspectIntraRecordLowCardinality, encodingaspects2.AspectLightGeneralCompression)...)
 		colRole1 = common.ColumnRoleLowCardVerbatim
+		cardRole = common.ColumnRoleLowCardVerbatimCardinality
 		return
 	}
 	if s.HasMixedLowCardRefHighCardParameters() {
@@ -116,6 +123,7 @@ func (inst *CanonicalColumnarRepresentation) GetMembershipSetCanonicalType(s com
 		ct2 = membershipSerializedType
 		hint2 = encodingaspects2.EncodeAspectsMustValidate(FilterEncodingAspect(filterFunc, encodingaspects2.AspectLightGeneralCompression)...)
 		colRole2 = common.ColumnRoleMixedRefHighCardParameters
+		cardRole = common.ColumnRoleMixedLowCardRefCardinality
 		return
 	}
 	if s.HasMixedLowCardVerbatimHighCardParameters() {
@@ -125,6 +133,7 @@ func (inst *CanonicalColumnarRepresentation) GetMembershipSetCanonicalType(s com
 		ct2 = membershipSerializedType
 		hint2 = encodingaspects2.EncodeAspectsMustValidate(FilterEncodingAspect(filterFunc, encodingaspects2.AspectLightGeneralCompression)...)
 		colRole2 = common.ColumnRoleMixedVerbatimHighCardParameters
+		cardRole = common.ColumnRoleMixedLowCardVerbatimCardinality
 		return
 	}
 	return

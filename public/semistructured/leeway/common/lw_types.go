@@ -186,7 +186,7 @@ type PhysicalColumnDesc struct {
 var _ fmt.Stringer = PhysicalColumnDesc{}
 
 type TechnologySpecificMembershipSetGenI interface {
-	GetMembershipSetCanonicalType(s MembershipSpecE) (ct1 canonicaltypes.PrimitiveAstNodeI, hint1 encodingaspects.AspectSet, colRole1 ColumnRoleE, ct2 canonicaltypes.PrimitiveAstNodeI, hint2 encodingaspects.AspectSet, colRole2 ColumnRoleE, err error)
+	ResolveMembership(s MembershipSpecE) (ct1 canonicaltypes.PrimitiveAstNodeI, hint1 encodingaspects.AspectSet, colRole1 ColumnRoleE, ct2 canonicaltypes.PrimitiveAstNodeI, hint2 encodingaspects.AspectSet, colRole2 ColumnRoleE, cardRole ColumnRoleE, err error)
 }
 type TechnologySpecificCodeGeneratorFwdI interface {
 	GenerateColumnCode(idx int, phy PhysicalColumnDesc) (err error)

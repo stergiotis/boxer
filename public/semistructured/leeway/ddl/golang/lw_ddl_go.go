@@ -42,8 +42,8 @@ func (inst *TechnologySpecificCodeGenerator) CheckTypeCompatibility(canonicalTyp
 	return
 }
 
-func (inst *TechnologySpecificCodeGenerator) GetMembershipSetCanonicalType(s common.MembershipSpecE) (ct1 canonicaltypes2.PrimitiveAstNodeI, hint1 encodingaspects2.AspectSet, colRole1 common.ColumnRoleE, ct2 canonicaltypes2.PrimitiveAstNodeI, hint2 encodingaspects2.AspectSet, colRole2 common.ColumnRoleE, err error) {
-	return inst.membershipRepresentation.GetMembershipSetCanonicalType(s)
+func (inst *TechnologySpecificCodeGenerator) ResolveMembership(s common.MembershipSpecE) (ct1 canonicaltypes2.PrimitiveAstNodeI, hint1 encodingaspects2.AspectSet, colRole1 common.ColumnRoleE, ct2 canonicaltypes2.PrimitiveAstNodeI, hint2 encodingaspects2.AspectSet, colRole2 common.ColumnRoleE, cardRole common.ColumnRoleE, err error) {
+	return inst.membershipRepresentation.ResolveMembership(s)
 }
 
 func (inst *TechnologySpecificCodeGenerator) GenerateType(canonicalType canonicaltypes2.PrimitiveAstNodeI) (err error) {

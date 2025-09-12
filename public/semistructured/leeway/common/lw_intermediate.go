@@ -127,8 +127,8 @@ func (inst *IntermediateTaggedValuesDesc) loadSectionMembership(sec *TaggedValue
 	for m := range sec.MembershipSpec.Iterate() {
 		var ct1, ct2 canonicaltypes2.PrimitiveAstNodeI
 		var hints1, hints2 encodingaspects.AspectSet
-		var role1, role2 ColumnRoleE
-		ct1, hints1, role1, ct2, hints2, role2, err = tech.GetMembershipSetCanonicalType(m)
+		var role1, role2, cardRole ColumnRoleE
+		ct1, hints1, role1, ct2, hints2, role2, cardRole, err = tech.ResolveMembership(m)
 		if err != nil {
 			err = eh.Errorf("unable to get membership column canonical type: %w", err)
 			return
@@ -141,39 +141,7 @@ func (inst *IntermediateTaggedValuesDesc) loadSectionMembership(sec *TaggedValue
 		if m.ContainsMixed() {
 			inst.Membership.Add(naming.StylableName(role2.String()), role2, ct2, hints2, valueaspects.EmptyAspectSet)
 		}
-	}
-	for m := range sec.MembershipSpec.Iterate() {
-		var role ColumnRoleE
-		switch m {
-		case MembershipSpecHighCardRef:
-			role = ColumnRoleHighCardRefCardinality
-			break
-		case MembershipSpecHighCardVerbatim:
-			role = ColumnRoleHighCardVerbatimCardinality
-			break
-		case MembershipSpecHighCardRefParametrized:
-			role = ColumnRoleHighCardRefParametrized
-			break
-		case MembershipSpecLowCardRef:
-			role = ColumnRoleLowCardRefCardinality
-			break
-		case MembershipSpecLowCardVerbatim:
-			role = ColumnRoleLowCardVerbatimCardinality
-			break
-		case MembershipSpecLowCardRefParametrized:
-			role = ColumnRoleLowCardRefParametrizedCardinality
-			break
-		case MembershipSpecMixedLowCardRefHighCardParameters:
-			role = ColumnRoleMixedLowCardRefCardinality
-			break
-		case MembershipSpecMixedLowCardVerbatimHighCardParameters:
-			role = ColumnRoleMixedLowCardVerbatimCardinality
-			break
-		default:
-			err = eb.Build().Stringer("membershipSpec", m).Errorf("unable to map to column role: %w", ErrUnhandledMembershipSpec)
-			return
-		}
-		err = addSetSupportColumn(inst.MembershipSupport, role)
+		err = addSetSupportColumn(inst.MembershipSupport, cardRole)
 		if err != nil {
 			err = eh.Errorf("unable to add support column: %w", err)
 			return
