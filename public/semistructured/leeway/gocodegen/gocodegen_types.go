@@ -9,6 +9,10 @@ import (
 type GoClassNamerReadAccessI interface {
 	ComposeSectionMembershipPackClassName(tableName naming.StylableName, sectionName naming.StylableName) (className string, err error)
 	ComposeSharedMembershipPackClassName(tableName naming.StylableName, membershipSpec common.MembershipSpecE, i int, total int) (className string, err error)
+
+	ComposeValueField(fieldNameIn string) (fieldNameOut string)
+	ComposeColumnIndexFieldName(fieldNameIn string) (fieldNameOut string)
+	ComposeAccelFieldName(fieldNameIn string) (fieldNameOut string)
 }
 type GoClassNamerDmlI interface {
 	ComposeSchemaFactoryName(tableName naming.StylableName) (functionName string, err error)

@@ -34,6 +34,18 @@ func (inst *DefaultGoClassNamer) ComposeSharedMembershipPackClassName(tableName 
 	className = fmt.Sprintf(fmt.Sprintf("MembershipPack%%sShared%%0%dd", numDigits(total)), tableName.Convert(naming.UpperCamelCase), i)
 	return
 }
+func (inst *DefaultGoClassNamer) ComposeValueField(fieldNameIn string) (fieldNameOut string) {
+	fieldNameOut = "Value" + fieldNameIn
+	return
+}
+func (inst *DefaultGoClassNamer) ComposeColumnIndexFieldName(fieldNameIn string) (fieldNameOut string) {
+	fieldNameOut = "ColumnIndex" + fieldNameIn
+	return
+}
+func (inst *DefaultGoClassNamer) ComposeAccelFieldName(fieldNameIn string) (fieldNameOut string) {
+	fieldNameOut = "Accel" + fieldNameIn
+	return
+}
 func (inst *MultiTablePerPackageClassNamer) ComposeSectionMembershipPackClassName(tableName naming.StylableName, sectionName naming.StylableName) (className string, err error) {
 	if !tableName.IsValid() {
 		err = eb.Build().Stringer("tableName", tableName).Errorf("tableName is invalid")
@@ -52,5 +64,17 @@ func (inst *MultiTablePerPackageClassNamer) ComposeSharedMembershipPackClassName
 		return
 	}
 	className = fmt.Sprintf(fmt.Sprintf("MembershipPack%%sShared%%0%dd", numDigits(total)), tableName.Convert(naming.UpperCamelCase), i)
+	return
+}
+func (inst *MultiTablePerPackageClassNamer) ComposeValueField(fieldNameIn string) (fieldNameOut string) {
+	fieldNameOut = "Value" + fieldNameIn
+	return
+}
+func (inst *MultiTablePerPackageClassNamer) ComposeColumnIndexFieldName(fieldNameIn string) (fieldNameOut string) {
+	fieldNameOut = "ColumnIndex" + fieldNameIn
+	return
+}
+func (inst *MultiTablePerPackageClassNamer) ComposeAccelFieldName(fieldNameIn string) (fieldNameOut string) {
+	fieldNameOut = "Accel" + fieldNameIn
 	return
 }

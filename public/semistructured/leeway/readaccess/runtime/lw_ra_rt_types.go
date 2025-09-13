@@ -1,11 +1,13 @@
 package runtime
 
 import (
+	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
+	"github.com/stergiotis/pebble2impl/public/boxerstaging/leeway/readaccess/runtime"
 	"golang.org/x/exp/constraints"
 )
 
@@ -40,7 +42,8 @@ type PhysicalColumnLineage struct {
 }
 
 type AttributeIdx int
-type NonScalarIdx int
+type HomogenousArrayIdx int
+type SetIdx int
 type MembershipHighCardRefIdx int
 type MembershipHighCardRefParameterizedIdx int
 type MembershipHighCardVerbatimIdx int
@@ -48,32 +51,38 @@ type MembershipLowCardRefIdx int
 type MembershipLowCardRefParameterizedIdx int
 type MembershipLowCardVerbatimIdx int
 type MembershipMixedLowCardRefIdx int
+type MembershipMixedRefHighCardParametersIdx int
 type MembershipMixedLowCardVerbatimIdx int
+type MembershipMixedVerbatimHighCardParametersIdx int
 
-type MembershipRandomAccesAccels struct {
-	AccelMembHighCardRef             *RandomAccessLookupAccel[MembershipHighCardRefIdx, AttributeIdx]
-	AccelMembHighCardRefParametrized *RandomAccessLookupAccel[MembershipHighCardRefParameterizedIdx, AttributeIdx]
-	AccelMembHighCardVerbatim        *RandomAccessLookupAccel[MembershipHighCardVerbatimIdx, AttributeIdx]
-	AccelMembLowCardRef              *RandomAccessLookupAccel[MembershipLowCardRefIdx, AttributeIdx]
-	AccelMembLowCardRefParametrized  *RandomAccessLookupAccel[MembershipLowCardRefParameterizedIdx, AttributeIdx]
-	AccelMembLowCardVerbatim         *RandomAccessLookupAccel[MembershipLowCardVerbatimIdx, AttributeIdx]
-	AccelMembMixedLowCardRef         *RandomAccessLookupAccel[MembershipMixedLowCardRefIdx, AttributeIdx]
-	AccelMembMixedHighCardRef        *RandomAccessLookupAccel[MembershipMixedLowCardVerbatimIdx, AttributeIdx]
-}
 type CoValuePackI interface {
 }
-type SourceOrientedScalarValue[T CoValuePackI] struct {
-	Values          T
-	Lineage         PhysicalColumnLineage
-	MembAccels      *MembershipRandomAccesAccels
-	NonScalarsAccel *RandomAccessLookupAccel[AttributeIdx, NonScalarIdx]
+type SourceOrientedValue[T arrow.Array] struct {
+	Values                T
+	LineagePhysicalColumn runtime.PhysicalColumnLineage
 }
-type SourceOrientedNonScalarValue[T CoValuePackI] struct {
-	Values          T
-	Cardinality     *array.Uint64
-	Lineage         PhysicalColumnLineage
-	MembAccels      *MembershipRandomAccesAccels
-	AccelNonScalars *RandomAccessLookupAccel[AttributeIdx, NonScalarIdx]
+
+type SourceOrientedScalarValues[T CoValuePackI] struct {
+	Values  T
+	Lineage PhysicalColumnLineage
+	//MembAccels      *MembershipRandomAccessAccels
+	NonScalarsAccel *RandomAccessLookupAccel[AttributeIdx, HomogenousArrayIdx]
+}
+type SourceOrientedNonScalarValues[N CoValuePackI] struct {
+	Values      N
+	Cardinality *array.Uint64
+	Lineage     PhysicalColumnLineage
+	//MembAccels      *MembershipRandomAccessAccels
+	AccelNonScalars *RandomAccessLookupAccel[AttributeIdx, HomogenousArrayIdx]
+}
+type TaggedValueSection[S CoValuePackI, N CoValuePackI] struct {
+	ScalarValues    SourceOrientedScalarValues[S]
+	NonScalarValues SourceOrientedScalarValues[N]
+
+	SectionName    naming.StylableName
+	EncodingHints  encodingaspects.AspectSet
+	StreamingGroup naming.Key
+	CoSectionGroup naming.Key
 }
 type IndexConstraintI interface {
 	constraints.Integer | constraints.Unsigned
