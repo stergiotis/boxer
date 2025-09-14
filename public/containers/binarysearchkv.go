@@ -7,7 +7,6 @@ import (
 	"slices"
 
 	"github.com/stergiotis/boxer/public/containers/co"
-	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 type BinarySearchGrowingKV[K any, V any] struct {
@@ -63,13 +62,7 @@ func (inst *BinarySearchGrowingKV[K, V]) Swap(i, j int) {
 	vals[j], vals[i] = vals[i], vals[j]
 }
 
-var ErrCmpKeyIsNil = eh.Errorf("cmpKey function is nil")
-
-func NewBinarySearchGrowingKV[K any, V any](estSize int, cmpKey func(a K, b K) int) (inst *BinarySearchGrowingKV[K, V], err error) {
-	if cmpKey == nil {
-		err = ErrCmpKeyIsNil
-		return
-	}
+func NewBinarySearchGrowingKV[K any, V any](estSize int, cmpKey func(a K, b K) int) (inst *BinarySearchGrowingKV[K, V]) {
 	inst = &BinarySearchGrowingKV[K, V]{
 		keys:      make([]K, 0, estSize),
 		vals:      make([]V, 0, estSize),

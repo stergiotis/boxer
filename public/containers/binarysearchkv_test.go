@@ -9,8 +9,7 @@ import (
 )
 
 func TestNewBinarySearchGrowingKV(t *testing.T) {
-	dict, err := NewBinarySearchGrowingKV[[]byte, string](128, bytes.Compare)
-	require.NoError(t, err)
+	dict := NewBinarySearchGrowingKV[[]byte, string](128, bytes.Compare)
 	require.Equal(t, 0, dict.Len())
 	require.False(t, dict.Has([]byte("k1")))
 	dict.UpsertSingle([]byte("k1"), "v1")
