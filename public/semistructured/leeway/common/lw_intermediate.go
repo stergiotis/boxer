@@ -68,6 +68,16 @@ func (inst *IntermediateColumnProps) Reserve(n int) {
 	inst.EncodingHints = slices.Grow(inst.EncodingHints, n)
 	inst.ValueSemantics = slices.Grow(inst.ValueSemantics, n)
 }
+func (inst *IntermediateColumnProps) Slice(beginIncl int, endExcl int) (sliced IntermediateColumnProps) {
+	sliced = IntermediateColumnProps{
+		Names:          inst.Names[beginIncl:endExcl],
+		Roles:          inst.Roles[beginIncl:endExcl],
+		CanonicalType:  inst.CanonicalType[beginIncl:endExcl],
+		EncodingHints:  inst.EncodingHints[beginIncl:endExcl],
+		ValueSemantics: inst.ValueSemantics[beginIncl:endExcl],
+	}
+	return
+}
 func (inst *IntermediateColumnProps) Add(name naming.StylableName, role ColumnRoleE, ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspects.AspectSet, valueSemantics valueaspects.AspectSet) {
 	inst.Names = append(inst.Names, name)
 	inst.Roles = append(inst.Roles, role)
