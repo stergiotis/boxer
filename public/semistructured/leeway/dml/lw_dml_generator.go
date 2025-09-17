@@ -879,7 +879,7 @@ func (inst *GoClassBuilder) ComposeAttributeCode(clsNamer gocodegen.GoClassNamer
 				if !role.IsCardinalityRole() {
 					continue
 				}
-				cardinalitySrcRole, err = common.GetCardinalityRoleByMembershipRole(role)
+				cardinalitySrcRole, err = common.GetMembershipRoleByCardinalityRole(role)
 				if err != nil {
 					err = eb.Build().Stringer("role", role).Errorf("unable to resolve cardinality role: %w", err)
 					return

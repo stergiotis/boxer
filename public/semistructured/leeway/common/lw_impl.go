@@ -20,31 +20,62 @@ func (inst ColumnRoleE) IsCardinalityRole() bool {
 	}
 	return false
 }
-func GetCardinalityRoleByMembershipRole(membershipCardinalityRole ColumnRoleE) (cardinalitySrcRole ColumnRoleE, err error) {
+func GetMembershipRoleByCardinalityRole(membershipCardinalityRole ColumnRoleE) (membershipRole ColumnRoleE, err error) {
 	switch membershipCardinalityRole {
 	case ColumnRoleHighCardRefCardinality:
-		cardinalitySrcRole = ColumnRoleHighCardRef
+		membershipRole = ColumnRoleHighCardRef
 		break
 	case ColumnRoleHighCardRefParametrizedCardinality:
-		cardinalitySrcRole = ColumnRoleHighCardRefParametrized
+		membershipRole = ColumnRoleHighCardRefParametrized
 		break
 	case ColumnRoleHighCardVerbatimCardinality:
-		cardinalitySrcRole = ColumnRoleHighCardVerbatim
+		membershipRole = ColumnRoleHighCardVerbatim
 		break
 	case ColumnRoleLowCardRefCardinality:
-		cardinalitySrcRole = ColumnRoleLowCardRef
+		membershipRole = ColumnRoleLowCardRef
 		break
 	case ColumnRoleLowCardRefParametrizedCardinality:
-		cardinalitySrcRole = ColumnRoleLowCardRefParametrized
+		membershipRole = ColumnRoleLowCardRefParametrized
 		break
 	case ColumnRoleLowCardVerbatimCardinality:
-		cardinalitySrcRole = ColumnRoleLowCardVerbatim
+		membershipRole = ColumnRoleLowCardVerbatim
 		break
 	case ColumnRoleMixedLowCardRefCardinality:
-		cardinalitySrcRole = ColumnRoleMixedLowCardRef
+		membershipRole = ColumnRoleMixedLowCardRef
 		break
 	case ColumnRoleMixedLowCardVerbatimCardinality:
-		cardinalitySrcRole = ColumnRoleMixedLowCardVerbatim
+		membershipRole = ColumnRoleMixedLowCardVerbatim
+		break
+	default:
+		err = ErrUnhandledRole
+	}
+	return
+}
+func GetCardinalityRoleByMembershipRole(membershipRole ColumnRoleE) (cardinalityRole ColumnRoleE, err error) {
+	switch membershipRole {
+	case ColumnRoleHighCardRef:
+		cardinalityRole = ColumnRoleHighCardRefCardinality
+		break
+	case ColumnRoleHighCardRefParametrized:
+		cardinalityRole = ColumnRoleHighCardRefParametrizedCardinality
+		break
+	case ColumnRoleHighCardVerbatim:
+		cardinalityRole = ColumnRoleHighCardVerbatimCardinality
+		break
+	case ColumnRoleLowCardRef:
+		cardinalityRole = ColumnRoleLowCardRefCardinality
+		break
+	case ColumnRoleLowCardRefParametrized:
+		cardinalityRole = ColumnRoleLowCardRefParametrizedCardinality
+		break
+	case ColumnRoleLowCardVerbatim:
+		cardinalityRole = ColumnRoleLowCardVerbatimCardinality
+		break
+	case ColumnRoleMixedLowCardRef, ColumnRoleMixedRefHighCardParameters:
+		cardinalityRole = ColumnRoleMixedLowCardRefCardinality
+		break
+	case ColumnRoleMixedLowCardVerbatim, ColumnRoleMixedVerbatimHighCardParameters:
+		cardinalityRole = ColumnRoleMixedLowCardVerbatimCardinality
 		break
 	default:
 		err = ErrUnhandledRole
