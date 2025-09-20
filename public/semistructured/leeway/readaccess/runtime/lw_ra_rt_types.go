@@ -111,3 +111,9 @@ type RangeI[T IndexConstraintI] interface {
 
 var _ RangeI[int] = IndexedRange[int, uint]{}
 var _ RangeI[int] = Range[int]{}
+
+type ColumnIndexHandlingI interface {
+	SetColumnIndices(indices []uint32)
+	GetColumnIndices() (columnIndices []uint32)
+	GetColumnIndexFieldNames() (columnIndexFieldNames []string)
+}
