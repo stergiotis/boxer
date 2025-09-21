@@ -56,6 +56,7 @@ func ComposeCode(impl CodeComposerI, b *strings.Builder, tableName naming.Stylab
 		err = common.ErrNoBuilder
 		return
 	}
+	impl.PrepareCodeComposition()
 
 	if conv != nil {
 		err = impl.ComposeNamingConventionDependentCode(tableName, ir, conv, tableRowConfig, clsNamer)

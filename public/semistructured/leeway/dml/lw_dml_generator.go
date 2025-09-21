@@ -1597,6 +1597,8 @@ func (inst *GoClassBuilder) ComposeGoImports(ir *common.IntermediateTableReprese
 	}
 	return
 }
+func (inst *GoClassBuilder) PrepareCodeComposition() {
+}
 
 var _ gocodegen.CodeComposerI = (*GoClassBuilder)(nil)
 var _ TechnologySpecificBuilderI = (*GoClassBuilder)(nil)
