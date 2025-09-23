@@ -75,6 +75,10 @@ func MakeStylableName[S ~string](name S) (r StylableName, err error) {
 	return
 }
 func Compare[S ~string](a, b S) int {
+	if a == b {
+		// fast path
+		return 0
+	}
 	return strings.Compare(string(StylableName(a).Convert(DefaultNamingStyle)), string(StylableName(b).Convert(DefaultNamingStyle)))
 }
 func (inst StylableName) Compare(other StylableName) int {
