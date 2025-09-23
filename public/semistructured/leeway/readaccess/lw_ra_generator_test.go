@@ -6,14 +6,13 @@ import (
 	"testing"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
-	canonicaltypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
 	encodingaspects2 "github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/gocodegen"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
 	"github.com/stergiotis/boxer/public/unittest"
 	"github.com/stretchr/testify/require"
@@ -26,18 +25,7 @@ func sampleTableDesc() (tbl common.TableDesc, err error) {
 		err = eh.Errorf("unable to create table manipulator")
 		return
 	}
-	const pathMembershipSpec = common.MembershipSpecMixedLowCardVerbatimHighCardParameters
-	var hintsString, hintsFloat64, hintsId, hintsTs encodingaspects2.AspectSet
-	hintsString, err = encodingaspects2.EncodeAspects(encodingaspects2.AspectLightGeneralCompression)
-	if err != nil {
-		err = eh.Errorf("unable to encode hints: %w", err)
-		return
-	}
-	hintsFloat64, err = encodingaspects2.EncodeAspects(encodingaspects2.AspectNone)
-	if err != nil {
-		err = eh.Errorf("unable to encode hints: %w", err)
-		return
-	}
+	var hintsId, hintsTs, hintsProc encodingaspects2.AspectSet
 	hintsId, err = encodingaspects2.EncodeAspects(encodingaspects2.AspectDeltaEncoding, encodingaspects2.AspectLightGeneralCompression)
 	if err != nil {
 		err = eh.Errorf("unable to encode hints: %w", err)
@@ -48,54 +36,31 @@ func sampleTableDesc() (tbl common.TableDesc, err error) {
 		err = eh.Errorf("unable to encode hints: %w", err)
 		return
 	}
-	manip.AddPlainValueItem(common.PlainItemTypeEntityId, "id", canonicaltypes2.MachineNumericTypeAstNode{
-		BaseType:          canonicaltypes2.BaseTypeMachineNumericUnsigned,
-		Width:             64,
-		ByteOrderModifier: 0,
-		ScalarModifier:    0,
-	}, hintsId, valueaspects.EmptyAspectSet)
-	manip.AddPlainValueItem(common.PlainItemTypeEntityTimestamp, "ts", canonicaltypes2.TemporalTypeAstNode{
-		BaseType:       canonicaltypes2.BaseTypeTemporalUtcDatetime,
-		Width:          32,
-		ScalarModifier: 0,
-	}, hintsTs, valueaspects.EmptyAspectSet)
-	manip.MergeTaggedValueColumn("bool",
-		"value",
-		canonicaltypes2.StringAstNode{BaseType: canonicaltypes2.BaseTypeStringBool},
-		encodingaspects2.EmptyAspectSet, valueaspects.EmptyAspectSet,
-		useaspects.EmptyAspectSet, pathMembershipSpec, "", "")
-	manip.MergeTaggedValueColumn("string",
-		"value",
-		canonicaltypes2.StringAstNode{BaseType: canonicaltypes2.BaseTypeStringUtf8},
-		hintsString, valueaspects.EmptyAspectSet,
-		useaspects.EmptyAspectSet, pathMembershipSpec, "", "")
-	manip.MergeTaggedValueColumn("float64",
-		"value",
-		canonicaltypes2.MachineNumericTypeAstNode{BaseType: canonicaltypes2.BaseTypeMachineNumericFloat, Width: 64},
-		hintsFloat64, valueaspects.EmptyAspectSet,
-		useaspects.EmptyAspectSet,
-		pathMembershipSpec, "", "")
-	manip.MergeTaggedValueColumn("special", "ary1", canonicaltypes2.MachineNumericTypeAstNode{
-		BaseType:          canonicaltypes2.BaseTypeMachineNumericUnsigned,
-		Width:             32,
-		ByteOrderModifier: canonicaltypes2.ByteOrderModifierNone,
-		ScalarModifier:    canonicaltypes2.ScalarModifierHomogenousArray,
-	}, encodingaspects2.EmptyAspectSet, valueaspects.EmptyAspectSet, useaspects.EmptyAspectSet,
-		common.MembershipSpecMixedLowCardRefHighCardParameters, "", "")
-	manip.MergeTaggedValueColumn("special", "ary2", canonicaltypes2.MachineNumericTypeAstNode{
-		BaseType:          canonicaltypes2.BaseTypeMachineNumericUnsigned,
-		Width:             32,
-		ByteOrderModifier: canonicaltypes2.ByteOrderModifierNone,
-		ScalarModifier:    canonicaltypes2.ScalarModifierHomogenousArray,
-	}, encodingaspects2.EmptyAspectSet, valueaspects.EmptyAspectSet, useaspects.EmptyAspectSet,
-		common.MembershipSpecMixedLowCardRefHighCardParameters, "", "")
-	manip.MergeTaggedValueColumn("special", "spc", canonicaltypes2.StringAstNode{
-		BaseType:       canonicaltypes2.BaseTypeStringUtf8,
-		WidthModifier:  canonicaltypes2.WidthModifierNone,
-		Width:          0,
-		ScalarModifier: canonicaltypes2.ScalarModifierNone,
-	}, encodingaspects2.EmptyAspectSet, valueaspects.EmptyAspectSet, useaspects.EmptyAspectSet,
-		common.MembershipSpecMixedLowCardRefHighCardParameters, "", "")
+	hintsProc, err = encodingaspects2.EncodeAspects(encodingaspects2.AspectLightGeneralCompression)
+	if err != nil {
+		err = eh.Errorf("unable to encode hints: %w", err)
+		return
+	}
+	manip.AddPlainValueItem(common.PlainItemTypeEntityId, "id", ctabb.U64, hintsId, valueaspects.EmptyAspectSet)
+	manip.AddPlainValueItem(common.PlainItemTypeEntityTimestamp, "ts", ctabb.Z32, hintsTs, valueaspects.EmptyAspectSet)
+	manip.AddPlainValueItem(common.PlainItemTypeEntityTimestamp, "proc", ctabb.Z32h, hintsProc, valueaspects.EmptyAspectSet)
+	{
+		sec := manip.TaggedValueSection("geo").
+			AddSectionMembership(common.MembershipSpecLowCardRef).
+			AddSectionMembership(common.MembershipSpecMixedLowCardVerbatimHighCardParameters)
+		sec.TaggedValueColumn("lat", ctabb.F32)
+		sec.TaggedValueColumn("lng", ctabb.F32)
+		sec.TaggedValueColumn("h3_res1", ctabb.U64)
+		sec.TaggedValueColumn("h3_res2", ctabb.U64)
+	}
+	{
+		sec := manip.TaggedValueSection("text").
+			AddSectionMembership(common.MembershipSpecLowCardRef).
+			AddSectionMembership(common.MembershipSpecMixedLowCardVerbatimHighCardParameters)
+		sec.TaggedValueColumn("text", ctabb.S)
+		sec.TaggedValueColumn("words", ctabb.Sh)
+		sec.TaggedValueColumn("bag_of_words", ctabb.Sm)
+	}
 	return manip.BuildTableDesc()
 }
 
@@ -111,8 +76,8 @@ func TestGoClassBuilder(t *testing.T) {
 
 	tableRowConfig := common.TableRowConfigMultiAttributesPerRow
 	var sourceCode []byte
-	namingStyle := gocodegen.NewMultiTablePerPackageGoClassNamer()
-	sourceCode, _, err = driver.GenerateGoClasses("example", naming.MustBeValidStylableName("testtable"), tblDesc, tableRowConfig, namingStyle)
+	namingConvention := gocodegen.NewMultiTablePerPackageGoClassNamer()
+	sourceCode, _, err = driver.GenerateGoClasses("example", naming.MustBeValidStylableName("test_table"), tblDesc, tableRowConfig, namingConvention)
 	require.NoError(t, err)
 
 	err = os.WriteFile("example/readaccess_testtable.out.go", sourceCode, os.ModePerm)
@@ -131,7 +96,7 @@ func TestGoClassBuilderSample(t *testing.T) {
 
 	tableRowConfig := common.TableRowConfigMultiAttributesPerRow
 	var sourceCode []byte
-	namingStyle := gocodegen.NewMultiTablePerPackageGoClassNamer()
+	namingConvention := gocodegen.NewMultiTablePerPackageGoClassNamer()
 	acceptCanonicalType := tech.CheckTypeCompatibility
 	acceptEncodingAspect := ddl.EncodingAspectFilterFuncFromTechnology(tech, common.ImplementationStatusFull)
 	n := 1000
@@ -146,9 +111,57 @@ func TestGoClassBuilderSample(t *testing.T) {
 		var tblDesc common.TableDesc
 		tblDesc, err = manip.BuildTableDesc()
 		var wellFormed bool
-		sourceCode, wellFormed, err = driver.GenerateGoClasses("example", naming.MustBeValidStylableName("testtable"), tblDesc, tableRowConfig, namingStyle)
+		sourceCode, wellFormed, err = driver.GenerateGoClasses("example", naming.MustBeValidStylableName("testtable"), tblDesc, tableRowConfig, namingConvention)
 		var _ = sourceCode
 		unittest.NoError(t, err)
 		require.True(t, wellFormed)
 	}
+}
+
+func TestComposeMembershipPackInfo(t *testing.T) {
+	manip, err := common.NewTableManipulator()
+	require.NoError(t, err)
+	{
+		sec := manip.TaggedValueSection("secA").AddSectionMembership(common.MembershipSpecHighCardRef)
+		sec.TaggedValueColumn("colA", ctabb.S)
+	}
+	{
+		sec := manip.TaggedValueSection("secB").AddSectionMembership(common.MembershipSpecHighCardRef)
+		sec.TaggedValueColumn("colB", ctabb.S)
+	}
+	{
+		sec := manip.TaggedValueSection("secC").AddSectionMembership(common.MembershipSpecHighCardRef, common.MembershipSpecLowCardRef)
+		sec.TaggedValueColumn("colC", ctabb.S)
+	}
+	{
+		sec := manip.TaggedValueSection("secD").AddSectionMembership(common.MembershipSpecHighCardRef, common.MembershipSpecLowCardRef)
+		sec.TaggedValueColumn("colD", ctabb.S)
+	}
+	{
+		sec := manip.TaggedValueSection("secE").AddSectionMembership(common.MembershipSpecLowCardRef)
+		sec.TaggedValueColumn("colE", ctabb.S)
+	}
+	{
+		sec := manip.TaggedValueSection("secF").AddSectionMembership(common.MembershipSpecHighCardVerbatim)
+		sec.TaggedValueColumn("colF", ctabb.S)
+	}
+	var tblDesc common.TableDesc
+	tblDesc, err = manip.BuildTableDesc()
+	require.NoError(t, err)
+	tblDesc.DictionaryEntry.Name = "tableXyz"
+	require.NoError(t, err)
+	namer := gocodegen.NewMultiTablePerPackageGoClassNamer()
+	var membershipSpecs []common.MembershipSpecE
+	var classNames []string
+	var sectionToClassNames []string
+	membershipSpecs, classNames, sectionToClassNames, err = ComposeMembershipPackInfo(tblDesc, namer)
+	require.NoError(t, err)
+	require.EqualValues(t, []common.MembershipSpecE{
+		common.MembershipSpecHighCardRef,
+		common.MembershipSpecHighCardVerbatim,
+		common.MembershipSpecLowCardRef,
+		common.MembershipSpecHighCardRef.AddLowCardRefOnly(),
+	}, membershipSpecs)
+	require.EqualValues(t, []string{"MembershipPackTableXyzShared1", "MembershipPackTableXyzSecF", "MembershipPackTableXyzSecE", "MembershipPackTableXyzShared2"}, classNames)
+	require.EqualValues(t, []string{"MembershipPackTableXyzShared1", "MembershipPackTableXyzShared1", "MembershipPackTableXyzShared2", "MembershipPackTableXyzShared2", "MembershipPackTableXyzSecE", "MembershipPackTableXyzSecF"}, sectionToClassNames)
 }

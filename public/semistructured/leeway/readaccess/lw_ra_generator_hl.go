@@ -5,13 +5,13 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/code/synthesis/golang"
+	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/gocodegen"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/unsafeperf"
 )
-
 
 func NewGoCodeGeneratorDriver(namingConvention common.NamingConventionI, tech common.TechnologySpecificGeneratorI) *GeneratorDriver {
 	builder := NewGoClassBuilder()
@@ -49,20 +49,26 @@ func (inst *GeneratorDriver) GenerateGoClasses(packageName string, tableName nam
 		err = eh.Errorf("unable to write package name %w", err)
 		return
 	}
+	_, err = s.WriteString("import (")
+	if err != nil {
+		err = eh.Errorf("unable to write imports %w", err)
+		return
+	}
+	gocodegen.EmitGeneratingCodeLocation(s)
 	_, err = s.WriteString(`
-import (
+	"slices"
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
-	_ "github.com/apache/arrow-go/v18/arrow/ipc"
-	_ "github.com/apache/arrow-go/v18/arrow/math"
-	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 `)
 	if err != nil {
 		err = eh.Errorf("unable to write imports %w", err)
 		return
 	}
-	err = builder.ComposeGoImports(ir, tableRowConfig)
+	suppressedImports := containers.NewHashSet[string](1)
+	suppressedImports.Add("time")
+	err = builder.ComposeGoImports(ir, tableRowConfig, suppressedImports)
 	if err != nil {
 		err = eh.Errorf("unable to compose go imports: %w", err)
 		return

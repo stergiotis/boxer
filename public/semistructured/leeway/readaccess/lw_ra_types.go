@@ -8,8 +8,9 @@ import (
 )
 
 type GoClassBuilder struct {
-	builder *strings.Builder
-	tech    *golang.TechnologySpecificCodeGenerator
+	builder         *strings.Builder
+	tech            *golang.TechnologySpecificCodeGenerator
+	physicalColumns []common.PhysicalColumnDesc
 }
 type GeneratorDriver struct {
 	builder          *GoClassBuilder

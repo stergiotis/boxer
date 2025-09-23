@@ -113,7 +113,11 @@ var _ RangeI[int] = IndexedRange[int, uint]{}
 var _ RangeI[int] = Range[int]{}
 
 type ColumnIndexHandlingI interface {
-	SetColumnIndices(indices []uint32)
+	SetColumnIndices(indices []uint32) (restIndices []uint32)
 	GetColumnIndices() (columnIndices []uint32)
 	GetColumnIndexFieldNames() (columnIndexFieldNames []string)
+}
+type ColumnIndexHandlingNameBasedI interface {
+	SetColumnIndexByPhysicalNames(schemaPhysicalColumnNames []string) (err error)
+	GetColumnIndexPhysicalNames() (physicalColumnNames []string)
 }
