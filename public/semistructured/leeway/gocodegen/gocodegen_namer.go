@@ -20,18 +20,23 @@ func NewClassNamesEntityOnly(classNamer GoClassNamerI, tableName naming.Stylable
 	return NewClassNames(classNamer, tableName, "", -1, -1)
 }
 func NewClassNames(classNamer GoClassNamerI, tableName naming.StylableName, sectionName naming.StylableName, sectionIndex int, totalSections int) (clsNames ClassNames, err error) {
-	clsNames.InEntityClassName, err = classNamer.ComposeEntityClassName(tableName)
+	clsNames.ReadAccessEntityClassName, err = classNamer.ComposeEntityReadAccessClassName(tableName)
+	if err != nil {
+		err = eh.Errorf("unable to generate entity read access class name: %w", err)
+		return
+	}
+	clsNames.InEntityClassName, err = classNamer.ComposeEntityDmlClassName(tableName)
 	if err != nil {
 		err = eh.Errorf("unable to generate entity class name: %w", err)
 		return
 	}
 	if sectionName != "" {
-		clsNames.InSectionClassName, err = classNamer.ComposeSectionClassName(tableName, sectionName, sectionIndex, totalSections)
+		clsNames.InSectionClassName, err = classNamer.ComposeSectionDmlClassName(tableName, sectionName, sectionIndex, totalSections)
 		if err != nil {
 			err = eh.Errorf("unable to generate section class name: %w", err)
 			return
 		}
-		clsNames.InAttributeClassName, err = classNamer.ComposeAttributeClassName(tableName, sectionName, sectionIndex, totalSections)
+		clsNames.InAttributeClassName, err = classNamer.ComposeAttributeDmlClassName(tableName, sectionName, sectionIndex, totalSections)
 		if err != nil {
 			err = eh.Errorf("unable to generate attribute class name: %w", err)
 			return

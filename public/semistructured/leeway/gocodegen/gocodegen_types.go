@@ -7,6 +7,9 @@ import (
 )
 
 type GoClassNamerReadAccessI interface {
+	ComposeEntityReadAccessClassName(tableName naming.StylableName) (className string, err error)
+	ComposeSectionReadAccessOuterClassName(tableName naming.StylableName, itemType common.PlainItemTypeE, sectionName naming.StylableName) (className string, err error)
+	ComposeSectionReadAccessInnerClassName(tableName naming.StylableName, itemType common.PlainItemTypeE, sectionName naming.StylableName, subType common.IntermediateColumnSubTypeE) (className string, err error)
 	ComposeSectionMembershipPackClassName(tableName naming.StylableName, sectionName naming.StylableName) (className string, err error)
 	ComposeSharedMembershipPackClassName(tableName naming.StylableName, membershipSpec common.MembershipSpecE, i int, total int) (className string, err error)
 
@@ -16,9 +19,9 @@ type GoClassNamerReadAccessI interface {
 }
 type GoClassNamerDmlI interface {
 	ComposeSchemaFactoryName(tableName naming.StylableName) (functionName string, err error)
-	ComposeEntityClassName(tableName naming.StylableName) (fullClassName string, err error)
-	ComposeSectionClassName(tableName naming.StylableName, sectionName naming.StylableName, sectionIndex int, sectionCount int) (fullClassName string, err error)
-	ComposeAttributeClassName(tableName naming.StylableName, sectionName naming.StylableName, sectionIndex int, sectionCount int) (fullClassName string, err error)
+	ComposeEntityDmlClassName(tableName naming.StylableName) (fullClassName string, err error)
+	ComposeSectionDmlClassName(tableName naming.StylableName, sectionName naming.StylableName, sectionIndex int, sectionCount int) (fullClassName string, err error)
+	ComposeAttributeDmlClassName(tableName naming.StylableName, sectionName naming.StylableName, sectionIndex int, sectionCount int) (fullClassName string, err error)
 }
 
 type GoClassNamerI interface {
@@ -38,9 +41,10 @@ type MultiTablePerPackageClassNamer struct {
 var _ GoClassNamerI = (*MultiTablePerPackageClassNamer)(nil)
 
 type ClassNames struct {
-	InEntityClassName    string
-	InSectionClassName   string
-	InAttributeClassName string
+	ReadAccessEntityClassName string
+	InEntityClassName         string
+	InSectionClassName        string
+	InAttributeClassName      string
 }
 
 type CodeComposerI interface {
