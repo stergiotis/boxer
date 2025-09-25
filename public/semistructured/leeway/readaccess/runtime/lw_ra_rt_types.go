@@ -1,13 +1,10 @@
 package runtime
 
 import (
-	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
-	"github.com/stergiotis/pebble2impl/public/boxerstaging/leeway/readaccess/runtime"
 	"golang.org/x/exp/constraints"
 )
 
@@ -55,35 +52,6 @@ type MembershipMixedRefHighCardParametersIdx int
 type MembershipMixedLowCardVerbatimIdx int
 type MembershipMixedVerbatimHighCardParametersIdx int
 
-type CoValuePackI interface {
-}
-type SourceOrientedValue[T arrow.Array] struct {
-	Values                T
-	LineagePhysicalColumn runtime.PhysicalColumnLineage
-}
-
-type SourceOrientedScalarValues[T CoValuePackI] struct {
-	Values  T
-	Lineage PhysicalColumnLineage
-	//MembAccels      *MembershipRandomAccessAccels
-	NonScalarsAccel *RandomAccessLookupAccel[AttributeIdx, HomogenousArrayIdx]
-}
-type SourceOrientedNonScalarValues[N CoValuePackI] struct {
-	Values      N
-	Cardinality *array.Uint64
-	Lineage     PhysicalColumnLineage
-	//MembAccels      *MembershipRandomAccessAccels
-	AccelNonScalars *RandomAccessLookupAccel[AttributeIdx, HomogenousArrayIdx]
-}
-type TaggedValueSection[S CoValuePackI, N CoValuePackI] struct {
-	ScalarValues    SourceOrientedScalarValues[S]
-	NonScalarValues SourceOrientedScalarValues[N]
-
-	SectionName    naming.StylableName
-	EncodingHints  encodingaspects.AspectSet
-	StreamingGroup naming.Key
-	CoSectionGroup naming.Key
-}
 type IndexConstraintI interface {
 	constraints.Integer | constraints.Unsigned
 }
@@ -116,8 +84,4 @@ type ColumnIndexHandlingI interface {
 	SetColumnIndices(indices []uint32) (restIndices []uint32)
 	GetColumnIndices() (columnIndices []uint32)
 	GetColumnIndexFieldNames() (columnIndexFieldNames []string)
-}
-type ColumnIndexHandlingNameBasedI interface {
-	SetColumnIndexByPhysicalNames(schemaPhysicalColumnNames []string) (err error)
-	GetColumnIndexPhysicalNames() (physicalColumnNames []string)
 }
