@@ -1097,6 +1097,46 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 				}
 			}
 		}
+		{ // factory
+			for pt, subTypeSlice := range kv.Iterate() {
+				sectionName := naming.MustBeValidStylableName(pt.String())
+				var outerClsName string
+				outerClsName, err = clsNamer.ComposeSectionReadAccessOuterClassName(tableName, pt, sectionName)
+				if err != nil {
+					err = eh.Errorf("unable to generate outer class name: %w", err)
+					return
+				}
+				_, err = fmt.Fprintf(b, "func New%s() (inst *%s) {\n\tinst = &%s{}\n",
+					outerClsName,
+					outerClsName,
+					outerClsName)
+				if err != nil {
+					return
+				}
+				for _, st := range subTypeSlice {
+					var innerClsName string
+					innerClsName, err = clsNamer.ComposeSectionReadAccessInnerClassName(tableName, pt, sectionName, st)
+					if err != nil {
+						err = eh.Errorf("unable to compose read access inner class name: %w", err)
+						return
+					}
+					var fieldName string
+					fieldName, err = composeFieldName(st)
+					if err != nil {
+						err = eh.Errorf("unable to compose field name prefix: %w", err)
+						return
+					}
+					_, err = fmt.Fprintf(b, "\tinst.%s = New%s()\n", fieldName, innerClsName)
+					if err != nil {
+						return
+					}
+				}
+				_, err = fmt.Fprint(b, "\treturn\n}\n\n")
+				if err != nil {
+					return
+				}
+			}
+		}
 
 		{ // .SetColumnIndices(indices []uint32) (restIndices []uint32)
 			for pt, subTypeSlice := range kv.Iterate() {
@@ -1307,6 +1347,61 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 					}
 				}
 				_, err = fmt.Fprint(b, "}\n\n")
+				if err != nil {
+					return
+				}
+			}
+		}
+		{ // factory
+			for i, s := range tblDesc.TaggedValuesSections {
+				const pt = common.PlainItemTypeNone
+				var outerClsName string
+				outerClsName, err = clsNamer.ComposeSectionReadAccessOuterClassName(tableName, pt, s.Name)
+				if err != nil {
+					err = eh.Errorf("unable to compose read access outer class name: %w", err)
+					return
+				}
+				_, err = fmt.Fprintf(b, "func New%s() (inst *%s) {\n\tinst = &%s{}\n",
+					outerClsName,
+					outerClsName,
+					outerClsName,
+				)
+				if err != nil {
+					return
+				}
+				for _, st := range subTypes {
+					var innerClsName string
+					innerClsName, err = clsNamer.ComposeSectionReadAccessInnerClassName(tableName, pt, s.Name, st)
+					if err != nil {
+						err = eh.Errorf("unable to compose read access inner class name: %w", err)
+						return
+					}
+					if attrClassesKv.Has(innerClsName) {
+						var fieldName string
+						fieldName, err = composeFieldName(st)
+						if err != nil {
+							err = eh.Errorf("unable to compose field name prefix: %w", err)
+							return
+						}
+						_, err = fmt.Fprintf(b, "\tinst.%s = New%s()\n", fieldName, innerClsName)
+						if err != nil {
+							return
+						}
+					}
+				}
+				{
+					membPackClsName := sectionToClassNames[i]
+					if membPackClsName != "" {
+						_, err = fmt.Fprintf(b, "\tinst.Membership = New%s%s()\n",
+							membPackClsName,
+							s.Name.Convert(naming.UpperCamelCase),
+						)
+						if err != nil {
+							return
+						}
+					}
+				}
+				_, err = fmt.Fprint(b, "\treturn\n}\n\n")
 				if err != nil {
 					return
 				}
