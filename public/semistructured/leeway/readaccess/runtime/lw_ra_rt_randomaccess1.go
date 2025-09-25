@@ -5,29 +5,6 @@ import (
 	"slices"
 )
 
-func (inst Range[T]) ToRange() (r Range[T]) {
-	r = inst
-	return
-}
-func (inst IndexedRange[R, I]) ToRange() (r Range[R]) {
-	r.BeginIncl = inst.BeginIncl
-	r.EndExcl = inst.EndExcl
-	return
-}
-func (inst Range[T]) IsEmpty() bool {
-	return inst.EndExcl == inst.BeginIncl
-}
-func (inst IndexedRange[R, I]) IsEmpty() bool {
-	return inst.EndExcl == inst.BeginIncl
-}
-func (inst Range[T]) CalcCardinality() (card uint64) {
-	card = uint64(inst.EndExcl - inst.BeginIncl)
-	return
-}
-func (inst IndexedRange[R, I]) CalcCardinality() (card uint64) {
-	card = uint64(inst.EndExcl - inst.BeginIncl)
-	return
-}
 
 func NewRandomAccessLookupAccel[F IndexConstraintI, B IndexConstraintI](estLength int) *RandomAccessLookupAccel[F, B] {
 	return &RandomAccessLookupAccel[F, B]{
@@ -38,9 +15,6 @@ func NewRandomAccessLookupAccel[F IndexConstraintI, B IndexConstraintI](estLengt
 	}
 }
 
-//	func (inst *RandomAccessLookupAccel[F, B]) Invert() (r *RandomAccessLookupAccel[B, F]) {
-//		r = NewRandomAccessLookupAccel[B, F](max(inst.len, 8))
-//	}
 func (inst *RandomAccessLookupAccel[F, B]) LookupForward(i B) (beginIncl F, endExcl F) {
 	beginIncl = inst.forwardBeginIncl[i]
 	endExcl = inst.forwardEndExcl[i]

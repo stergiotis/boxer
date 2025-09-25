@@ -3,8 +3,6 @@ package readaccess
 import (
 	"fmt"
 	"io"
-
-	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 )
 
 type ColumnIndexCodeGenerator struct {
@@ -25,19 +23,6 @@ func (inst *ColumnIndexCodeGenerator) AddField(name string, columnIndex uint32) 
 func (inst *ColumnIndexCodeGenerator) GenerateInstInit(w io.Writer) (err error) {
 	for j, columnIndex := range inst.indices {
 		_, err = fmt.Fprintf(w, "\tinst.%s = %d\n", inst.fieldNames[j], columnIndex)
-		if err != nil {
-			return
-		}
-	}
-	return
-}
-func (inst *ColumnIndexCodeGenerator) generatePhysicalColumnNamesVar(w io.Writer, phys []common.PhysicalColumnDesc) (err error) {
-	_, err = fmt.Fprint(w, "\tphysicalColumnNamesSchema := []string{\n")
-	if err != nil {
-		return
-	}
-	for _, phy := range phys {
-		_, err = fmt.Fprintf(w, "\t\t%q,\n", phy.String())
 		if err != nil {
 			return
 		}
