@@ -332,6 +332,11 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 				if s.ContainsMixed() {
 					var idx2, idx2Accel int
 					name2 := naming.MustBeValidStylableName(role2.LongString()).Convert(naming.UpperCamelCase).String()
+					idx2, err = inst.getColumnIndexBySectionAndRole(ir, sec.Name, role2)
+					if err != nil {
+						err = eh.Errorf("unable to find column: %w", err)
+						return
+					}
 					var cardRole2 common.ColumnRoleE
 					cardRole2, err = common.GetCardinalityRoleByMembershipRole(role2)
 					if err != nil {
