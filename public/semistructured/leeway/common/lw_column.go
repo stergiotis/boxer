@@ -9,17 +9,6 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
 
-func CountMembershipColumns(memb MembershipSpecE) (r int) {
-	r = memb.Count()
-	if memb.HasMixedLowCardRefHighCardParameters() {
-		r++
-	}
-	if memb.HasMixedLowCardVerbatimHighCardParameters() {
-		r++
-	}
-	return
-}
-
 func (inst TaggedValuesSection) IsValid() bool {
 	if len(inst.ValueColumnNames) != len(inst.ValueColumnTypes) || len(inst.ValueColumnNames) == 0 {
 		return false
