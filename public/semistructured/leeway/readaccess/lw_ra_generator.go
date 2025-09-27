@@ -279,7 +279,11 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 		commonEmitted := containers.NewHashSet[string](32)
 		for i, sec := range tblDesc.TaggedValuesSections {
 			clsName := sectionToClassName[i]
-			spec := membershipSpecs[slices.Index(classNames, clsName)]
+			idx := slices.Index(classNames, clsName)
+			if idx < 0 {
+				continue
+			}
+			spec := membershipSpecs[idx]
 			colIdxGen.Reset()
 			_, err = fmt.Fprintf(b, `func New%s%s() (inst *%s) {
 	inst = &%s{}
@@ -474,43 +478,22 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 				}
 				name1 := naming.MustBeValidStylableName(role1.LongString()).Convert(naming.UpperCamelCase).String()
 				const tmpl = `	{
-		idx := int(inst.%s)
-		c := rec.Column(idx)
-		if c.DataType().ID() != arrow.LIST {
-			err = eb.Build().Int("columnIndex",idx).Stringer("effective", c.DataType()).Str("expected","List").Errorf("unexpected data type: %%w", runtime.ErrUnexpectedArrowDataType)
+		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.%s),arrow.%s,rec,&inst.%s)
+		if err != nil {
 			return
 		}
-		d := array.NewListData(c.Data())
-		if d.ListValues().DataType().ID() != arrow.%s {
-			err = eb.Build().Stringer("effective", c.DataType()).Str("expected",%q).Errorf("unexpected data type: %%w", runtime.ErrUnexpectedArrowDataType)
-			return
-		}
-		inst.%s = d
 	}
 	{
-		idx := int(inst.%sAccel)
-		c := rec.Column(idx)
-		if c.DataType().ID() != arrow.LIST {
-			err = eb.Build().Int("columnIndex",idx).Stringer("effective", c.DataType()).Str("expected","List").Errorf("unexpected data type: %%w", runtime.ErrUnexpectedArrowDataType)
+		err = runtime.LoadAccelFieldFromRecord(int(inst.%sAccel),rec,inst.%s)
+		if err != nil {
 			return
 		}
-		d := array.NewListData(c.Data())
-		if d.ListValues().DataType().ID() != arrow.UINT64 {
-			err = eb.Build().Int("columnIndex",idx).Stringer("effective", c.DataType()).Str("expected","UINT64").Errorf("unexpected data type: %%w", runtime.ErrUnexpectedArrowDataType)
-			return
-		}
-		e := array.NewUint64Data(d.ListValues().Data())
-		accel := inst.%s
-		accel.LoadCardinalities(e.Values())
-		accel.SetRanger(d)
-		//inst.releasable = append(inst.releasable, d, e)
 	}
 `
 				columnIndexFieldName1 := clsNamer.ComposeColumnIndexFieldName(name1)
 				_, err = fmt.Fprintf(b, tmpl,
 					columnIndexFieldName1,
 					naming.MustBeValidStylableName(typeName1).Convert(naming.UpperSnakeCase),
-					typeName1,
 					clsNamer.ComposeValueField(name1),
 					columnIndexFieldName1,
 					clsNamer.ComposeAccelFieldName(name1),
@@ -530,7 +513,6 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 					_, err = fmt.Fprintf(b, tmpl,
 						columnIndexFieldName2,
 						naming.MustBeValidStylableName(typeName2).Convert(naming.UpperSnakeCase),
-						typeName2,
 						clsNamer.ComposeValueField(name2),
 						columnIndexFieldName1,
 						clsNamer.ComposeAccelFieldName(name2),
@@ -541,6 +523,73 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 				}
 			}
 			_, err = fmt.Fprint(b, "\treturn\n}\n\n")
+			if err != nil {
+				return
+			}
+		}
+	}
+
+	{ // Row
+		for i, spec := range membershipSpecs {
+			clsName := classNames[i]
+			_, err = fmt.Fprintf(b, `type %sRow struct {
+`, clsName)
+			if err != nil {
+				return
+			}
+			for s := range spec.Iterate() {
+				var role1, role2 common.ColumnRoleE
+				var ct1, ct2 canonicaltypes.PrimitiveAstNodeI
+				var hints1, hints2 encodingaspects.AspectSet
+				var goType1, goType2 string
+				ct1, hints1, role1, ct2, hints2, role2, _, err = arrowTech.ResolveMembership(s)
+				if err != nil {
+					err = eh.Errorf("unable to get membership column canonical type: %w", err)
+					return
+				}
+				name1 := naming.MustBeValidStylableName(role1.LongString()).Convert(naming.UpperCamelCase).String()
+				goType1, _, _, err = codegen.GenerateGoCode(ct1, hints1)
+				if err != nil {
+					err = eh.Errorf("unable to generate go code: %w", err)
+					return
+				}
+				var indexHint string
+				switch s {
+				case common.MembershipSpecMixedLowCardRefHighCardParameters:
+					indexHint = "/* i */"
+					break
+				case common.MembershipSpecMixedLowCardVerbatimHighCardParameters:
+					indexHint = "/* j */"
+					break
+				}
+				_, err = fmt.Fprintf(b, "\t%s [] %s %s\n",
+					clsNamer.ComposeValueField(name1),
+					indexHint,
+					goType1,
+				)
+				if err != nil {
+					return
+				}
+				if s.ContainsMixed() {
+					goType2, _, _, err = codegen.GenerateGoCode(ct2, hints2)
+					if err != nil {
+						err = eh.Errorf("unable to generate go code: %w", err)
+						return
+					}
+					name2 := naming.MustBeValidStylableName(role2.LongString()).Convert(naming.UpperCamelCase).String()
+					_, err = fmt.Fprintf(b, "\t%s [] %s %s\n",
+						clsNamer.ComposeValueField(name2),
+						indexHint,
+						goType2,
+					)
+					if err != nil {
+						return
+					}
+				}
+			}
+			_, err = fmt.Fprint(b, `
+}
+`)
 			if err != nil {
 				return
 			}
@@ -706,7 +755,7 @@ func (inst *GoClassBuilder) composeSectionInnerClasses(attrClassesKv *containers
 						break
 					case common.ColumnRoleLength:
 						colIdxGen.AddField(emptyColumnIndexFieldName, cc.IndexOffset+uint32(i))
-						_, err = fmt.Fprintf(bc, "\tinst%s = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.AttributeIdx,runtime.HomogenousArrayIdx,int,int64](128)\n",
+						_, err = fmt.Fprintf(bc, "\tinst.%s = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.AttributeIdx,runtime.HomogenousArrayIdx,int,int64](128)\n",
 							emptyAccelFieldName)
 						if err != nil {
 							return
@@ -933,41 +982,28 @@ func (inst *%s) Release() {
 								cc.SubType == common.IntermediateColumnsSubTypeScalar {
 								fieldName := colName.Convert(naming.UpperCamelCase).String()
 								_, err = fmt.Fprintf(bc, `	{
-		idx := int(inst.%s)
-		c := rec.Column(idx)
-		if c.DataType().ID() != arrow.%s {
-			err = eb.Build().Int("columnIndex",idx).Stringer("effective", c.DataType()).Str("expected",%q).Errorf("unexpected data type: %%w", runtime.ErrUnexpectedArrowDataType)
+		err = runtime.LoadScalarValueFieldFromRecord(int(inst.%s),arrow.%s,rec,&inst.%s,array.New%sData)
+		if err != nil {
 			return
 		}
-		inst.%s = array.New%sData(c.Data())
 	}
 `,
 									clsNamer.ComposeColumnIndexFieldName(fieldName),
 									strings.ToUpper(typeName),
-									typeName,
 									clsNamer.ComposeValueField(fieldName),
 									naming.MustBeValidStylableName(typeName).Convert(naming.UpperCamelCase),
 								)
 							} else {
 								fieldName := colName.Convert(naming.UpperCamelCase).String()
 								_, err = fmt.Fprintf(bc, `	{
-		idx := int(inst.%s)
-		c := rec.Column(idx)
-		if c.DataType().ID() != arrow.LIST {
-			err = eb.Build().Int("columnIndex",idx).Stringer("effective", c.DataType()).Str("expected","List").Errorf("unexpected data type: %%w", runtime.ErrUnexpectedArrowDataType)
+		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.%s),arrow.%s,rec,&inst.%s)
+		if err != nil {
 			return
 		}
-		d := array.NewListData(c.Data())
-		if d.ListValues().DataType().ID() != arrow.%s {
-			err = eb.Build().Int("columnIndex",idx).Stringer("effective", c.DataType()).Str("expected",%q).Errorf("unexpected data type: %%w", runtime.ErrUnexpectedArrowDataType)
-			return
-		}
-		inst.%s = d
 	}
 `,
 									clsNamer.ComposeColumnIndexFieldName(fieldName),
 									strings.ToUpper(typeName),
-									typeName,
 									clsNamer.ComposeValueField(fieldName),
 								)
 							}
@@ -986,20 +1022,12 @@ func (inst *%s) Release() {
 				for _, role := range cp.Roles {
 					switch role {
 					case common.ColumnRoleCardinality, common.ColumnRoleLength:
-						_, err = fmt.Fprint(bc, `	c := rec.Column(int(inst.ColumnIndex))
-	if c.DataType().ID() != arrow.LIST {
-		err = eb.Build().Int("columnIndex",int(inst.ColumnIndex)).Stringer("effective", c.DataType()).Str("expected","List").Errorf("unexpected data type: %%w", runtime.ErrUnexpectedArrowDataType)
-		return
+						_, err = fmt.Fprint(bc, `	{
+		err = runtime.LoadAccelFieldFromRecord(int(inst.ColumnIndex),rec,inst.Accel)
+		if err != nil {
+			return
+		}
 	}
-	d := array.NewListData(c.Data())
-	if d.ListValues().DataType().ID() != arrow.UINT64 {
-		err = eb.Build().Int("columnIndex",int(inst.ColumnIndex)).Stringer("effective", c.DataType()).Str("expected","UINT64").Errorf("unexpected data type: %%w", runtime.ErrUnexpectedArrowDataType)
-		return
-	}
-	e := array.NewUint64Data(d.ListValues().Data())
-	inst.Accel.LoadCardinalities(e.Values())
-	inst.Accel.SetRanger(d)
-	//inst.releasable = append(inst.releasable, d, e)
 `)
 						if err != nil {
 							return
@@ -1470,6 +1498,49 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 					}
 				}
 				_, err = fmt.Fprint(b, "\treturn\n}\n\n")
+				if err != nil {
+					return
+				}
+			}
+		}
+		{ // Row
+			for i, s := range tblDesc.TaggedValuesSections {
+				const pt = common.PlainItemTypeNone
+				var outerClsName string
+				outerClsName, err = clsNamer.ComposeSectionReadAccessOuterRowClassName(tableName, pt, s.Name)
+				if err != nil {
+					err = eh.Errorf("unable to compose read access outer class name: %w", err)
+					return
+				}
+				_, err = fmt.Fprintf(b, "type %s struct {\n", outerClsName)
+				if err != nil {
+					return
+				}
+				for j, colName := range s.ValueColumnNames {
+					fieldName := colName.Convert(naming.UpperCamelCase).String()
+					var goType string
+					goType, _, _, err = codegen.GenerateGoCode(s.ValueColumnTypes[j], s.ValueEncodingHints[j])
+					if err != nil {
+						err = eh.Errorf("unable to generate go code for canonical type: %w", err)
+						return
+					}
+					_, err = fmt.Fprintf(b, "\t%s %s\n",
+						clsNamer.ComposeValueField(fieldName),
+						goType,
+					)
+				}
+				{
+					membPackClsName := sectionToClassNames[i]
+					if membPackClsName != "" {
+						_, err = fmt.Fprintf(b, "\tMembership  *%sRow\n",
+							membPackClsName,
+						)
+						if err != nil {
+							return
+						}
+					}
+				}
+				_, err = fmt.Fprint(b, "}\n\n")
 				if err != nil {
 					return
 				}

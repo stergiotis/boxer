@@ -1,12 +1,15 @@
 package readaccess
 
 import (
+	"fmt"
 	"go/format"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/code/synthesis/golang"
 	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/codegen"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/gocodegen"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
@@ -54,20 +57,55 @@ func (inst *GeneratorDriver) GenerateGoClasses(packageName string, tableName nam
 		err = eh.Errorf("unable to write imports %w", err)
 		return
 	}
-	gocodegen.EmitGeneratingCodeLocation(s)
-	_, err = s.WriteString(`
-	"slices"
-	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/apache/arrow-go/v18/arrow/array"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
-`)
-	if err != nil {
-		err = eh.Errorf("unable to write imports %w", err)
+	suppressedImports := containers.NewHashSet[string](1)
+	addImport := func(imp string) (err error) {
+		if !suppressedImports.AddEx(imp) {
+			_, err = fmt.Fprintf(s, "%q\n", imp)
+		}
 		return
 	}
-	suppressedImports := containers.NewHashSet[string](1)
-	suppressedImports.Add("time")
+	gocodegen.EmitGeneratingCodeLocation(s)
+	for _, imp := range []string{
+		"slices",
+		"github.com/apache/arrow-go/v18/arrow",
+		"github.com/apache/arrow-go/v18/arrow/array",
+		"github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime",
+		"github.com/stergiotis/boxer/public/observability/eh/eb",
+	} {
+		err = addImport(imp)
+		if err != nil {
+			err = eh.Errorf("unable to write imports %w", err)
+			return
+		}
+	}
+
+	if false { // needed for row classes which uses materialized go field values
+		// FIXME generate with arrow tech encoding hints
+		gocodegen.EmitGeneratingCodeLocation(s)
+		for _, cp := range ir.IterateColumnProps() {
+			for i, role := range cp.Roles {
+				switch role {
+				case common.ColumnRoleValue:
+					var imps []string
+					_, _, imps, err = codegen.GenerateGoCode(cp.CanonicalType[i], cp.EncodingHints[i])
+					if err != nil {
+						err = eb.Build().Errorf("unable to generate go code for canonical type: %w", err)
+						return
+					}
+					for _, imp := range imps {
+						err = addImport(imp)
+						if err != nil {
+							err = eh.Errorf("unable to add import: %w", err)
+							return
+						}
+					}
+					break
+				}
+			}
+		}
+	}
+
+	gocodegen.EmitGeneratingCodeLocation(s)
 	err = builder.ComposeGoImports(ir, tableRowConfig, suppressedImports)
 	if err != nil {
 		err = eh.Errorf("unable to compose go imports: %w", err)

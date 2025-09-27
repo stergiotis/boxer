@@ -64,7 +64,7 @@ func sampleTableDesc() (tbl common.TableDesc, err error) {
 	return manip.BuildTableDesc()
 }
 
-func TestGoClassBuilder(t *testing.T) {
+func TestReadAccessGoClassBuilder(t *testing.T) {
 	tblDesc, err := sampleTableDesc()
 	require.NoError(t, err)
 
@@ -114,6 +114,9 @@ func TestGoClassBuilderSample(t *testing.T) {
 		sourceCode, wellFormed, err = driver.GenerateGoClasses("example", naming.MustBeValidStylableName("testtable"), tblDesc, tableRowConfig, namingConvention)
 		var _ = sourceCode
 		unittest.NoError(t, err)
+		if !wellFormed {
+			_ = os.WriteFile("tmp.out.go", sourceCode, os.ModePerm)
+		}
 		require.True(t, wellFormed)
 	}
 }

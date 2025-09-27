@@ -24,6 +24,8 @@ type (
 	MembershipMixedRefHighCardParametersIdx      int
 	MembershipMixedLowCardVerbatimIdx            int
 	MembershipMixedVerbatimHighCardParametersIdx int
+
+	ValueIdx int
 )
 
 type IndexConstraintI interface {

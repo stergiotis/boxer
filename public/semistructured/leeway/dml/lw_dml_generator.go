@@ -1267,39 +1267,47 @@ func (inst *GoClassBuilder) ComposeEntityCode(clsNamer gocodegen.GoClassNamerI, 
 
 	b := inst.builder
 	{ // setter
-		for cc, cp := range plainSetterIRH.IterateColumnProps() {
-			setterName := itemTypeToSetterName(cc.PlainItemType)
+		for _, pt := range common.AllPlainItemTypes {
+			setterName := itemTypeToSetterName(pt)
+			irh := plainSetterIRH.DeriveSubHolder(func(cc common.IntermediateColumnContext) (keep bool) {
+				return cc.PlainItemType == pt
+			})
+			if irh.Length() == 0 {
+				continue
+			}
 			_, err = fmt.Fprintf(b, `func (inst *%s) %s(`, clsNames.InEntityClassName, setterName)
 			if err != nil {
 				return
 			}
-			first := true
-			for j := 0; j < cp.Length(); j++ {
-				if !first {
-					_, err = b.WriteString(", ")
+			for cc, cp := range irh.IterateColumnProps() {
+				first := true
+				for j := 0; j < cp.Length(); j++ {
+					if !first {
+						_, err = b.WriteString(", ")
+						if err != nil {
+							return
+						}
+					}
+					first = false
+					err = inst.composeFieldRelatedCode(structFieldOperationArgDeclaration, cc, cp, j)
 					if err != nil {
 						return
 					}
 				}
-				first = false
-				err = inst.composeFieldRelatedCode(structFieldOperationArgDeclaration, cc, cp, j)
+				_, err = fmt.Fprintf(b, `) *%s {
+`, clsNames.InEntityClassName)
 				if err != nil {
 					return
 				}
-			}
-			_, err = fmt.Fprintf(b, `) *%s {
-`, clsNames.InEntityClassName)
-			if err != nil {
-				return
-			}
-			err = inst.composeStateVerificationCode([]runtime.EntityStateE{runtime.EntityStateInEntity}, false, "inst")
-			if err != nil {
-				return
-			}
-			for j := 0; j < cp.Length(); j++ {
-				err = inst.composeFieldRelatedCode(structFieldOperationPlainAssignArg, cc, cp, j)
+				err = inst.composeStateVerificationCode([]runtime.EntityStateE{runtime.EntityStateInEntity}, false, "inst")
 				if err != nil {
 					return
+				}
+				for j := 0; j < cp.Length(); j++ {
+					err = inst.composeFieldRelatedCode(structFieldOperationPlainAssignArg, cc, cp, j)
+					if err != nil {
+						return
+					}
 				}
 			}
 			_, err = fmt.Fprintf(b, `

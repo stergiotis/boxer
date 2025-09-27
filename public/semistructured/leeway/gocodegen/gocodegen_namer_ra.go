@@ -18,6 +18,14 @@ func (inst *DefaultGoClassNamer) ComposeEntityReadAccessClassName(tableName nami
 	className = "ReadAccess" + tableName.Convert(naming.UpperCamelCase).String()
 	return
 }
+func (inst *DefaultGoClassNamer) ComposeSectionReadAccessOuterRowClassName(tableName naming.StylableName, itemType common.PlainItemTypeE, sectionName naming.StylableName) (className string, err error) {
+	className, err = inst.ComposeSectionReadAccessOuterClassName(tableName, itemType, sectionName)
+	if err != nil {
+		return
+	}
+	className += "Row"
+	return
+}
 func (inst *DefaultGoClassNamer) ComposeSectionReadAccessInnerClassName(tableName naming.StylableName, itemType common.PlainItemTypeE, sectionName naming.StylableName, subType common.IntermediateColumnSubTypeE) (className string, err error) {
 	className, err = inst.ComposeSectionReadAccessOuterClassName(tableName, itemType, sectionName)
 	if err != nil {
@@ -71,6 +79,14 @@ func (inst *DefaultGoClassNamer) ComposeAccelFieldName(fieldNameIn string) (fiel
 	return
 }
 
+func (inst *MultiTablePerPackageClassNamer) ComposeSectionReadAccessOuterRowClassName(tableName naming.StylableName, itemType common.PlainItemTypeE, sectionName naming.StylableName) (className string, err error) {
+	className, err = inst.ComposeSectionReadAccessOuterClassName(tableName, itemType, sectionName)
+	if err != nil {
+		return
+	}
+	className += "Row"
+	return
+}
 func (inst *MultiTablePerPackageClassNamer) ComposeSectionReadAccessInnerClassName(tableName naming.StylableName, itemType common.PlainItemTypeE, sectionName naming.StylableName, subType common.IntermediateColumnSubTypeE) (className string, err error) {
 	className, err = inst.ComposeSectionReadAccessOuterClassName(tableName, itemType, sectionName)
 	if err != nil {
