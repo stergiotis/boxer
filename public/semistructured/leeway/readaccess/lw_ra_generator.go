@@ -414,13 +414,20 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 					return
 				}
 				name1 := naming.MustBeValidStylableName(role1.LongString()).Convert(naming.UpperCamelCase).String()
-				_, err = fmt.Fprintf(b, "\truntime.ReleaseIfNotNil(inst.%s)\n", clsNamer.ComposeValueField(name1))
+				const tmpl = "\truntime.ReleaseIfNotNil(inst.%s)\n\truntime.ReleaseIfNotNil(inst.%s)\n"
+				_, err = fmt.Fprintf(b, tmpl,
+					clsNamer.ComposeValueField(name1),
+					clsNamer.ComposeValueFieldElementAccessor(name1),
+				)
 				if err != nil {
 					return
 				}
 				if s.ContainsMixed() {
 					name2 := naming.MustBeValidStylableName(role2.LongString()).Convert(naming.UpperCamelCase).String()
-					_, err = fmt.Fprintf(b, "\truntime.ReleaseIfNotNil(inst.%s)\n", clsNamer.ComposeValueField(name2))
+					_, err = fmt.Fprintf(b, tmpl,
+						clsNamer.ComposeValueField(name2),
+						clsNamer.ComposeValueFieldElementAccessor(name2),
+					)
 					if err != nil {
 						return
 					}
@@ -865,6 +872,17 @@ func (inst *GoClassBuilder) composeSectionInnerClasses(attrClassesKv *containers
 							if err != nil {
 								return
 							}
+							var elementAccessor bool
+							elementAccessor, err = isElementAccessorNeeded(cc, role, tableRowConfig)
+							if err != nil {
+								return
+							}
+							if elementAccessor {
+								_, err = fmt.Fprintf(bc, "\truntime.ReleaseIfNotNil(inst.%s)\n", clsNamer.ComposeValueFieldElementAccessor(fieldName))
+								if err != nil {
+									return
+								}
+							}
 							break
 						default:
 							err = eb.Build().Stringer("role", role).Stringer("subtype", cc.SubType).Errorf("unhandled role")
@@ -1107,15 +1125,10 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 		}
 		composeFieldName := func(st common.IntermediateColumnSubTypeE) (fieldNamePrefix string, err error) {
 			switch st {
-			case common.IntermediateColumnsSubTypeScalar:
-				fieldNamePrefix = "ValueScalar"
+			case common.IntermediateColumnsSubTypeScalar, common.IntermediateColumnsSubTypeHomogenousArray, common.IntermediateColumnsSubTypeSet:
+				t := naming.MustBeValidStylableName(st.String()).Convert(naming.UpperCamelCase).String()
+				fieldNamePrefix = clsNamer.ComposeValueField(t)
 				return
-			case common.IntermediateColumnsSubTypeHomogenousArray:
-				fieldNamePrefix = "ValueHomogenousArray"
-				return
-			case common.IntermediateColumnsSubTypeSet:
-				fieldNamePrefix = "ValueSet"
-				break
 			case common.IntermediateColumnsSubTypeHomogenousArraySupport:
 				fieldNamePrefix = "SupportHomogenousArray"
 				break

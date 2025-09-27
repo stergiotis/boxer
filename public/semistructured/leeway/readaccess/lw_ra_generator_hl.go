@@ -8,8 +8,6 @@ import (
 	"github.com/stergiotis/boxer/public/code/synthesis/golang"
 	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/codegen"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/gocodegen"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
@@ -58,6 +56,8 @@ func (inst *GeneratorDriver) GenerateGoClasses(packageName string, tableName nam
 		return
 	}
 	suppressedImports := containers.NewHashSet[string](1)
+	suppressedImports.Add("time")
+
 	addImport := func(imp string) (err error) {
 		if !suppressedImports.AddEx(imp) {
 			_, err = fmt.Fprintf(s, "%q\n", imp)
@@ -76,32 +76,6 @@ func (inst *GeneratorDriver) GenerateGoClasses(packageName string, tableName nam
 		if err != nil {
 			err = eh.Errorf("unable to write imports %w", err)
 			return
-		}
-	}
-
-	if false { // needed for row classes which uses materialized go field values
-		// FIXME generate with arrow tech encoding hints
-		gocodegen.EmitGeneratingCodeLocation(s)
-		for _, cp := range ir.IterateColumnProps() {
-			for i, role := range cp.Roles {
-				switch role {
-				case common.ColumnRoleValue:
-					var imps []string
-					_, _, imps, err = codegen.GenerateGoCode(cp.CanonicalType[i], cp.EncodingHints[i])
-					if err != nil {
-						err = eb.Build().Errorf("unable to generate go code for canonical type: %w", err)
-						return
-					}
-					for _, imp := range imps {
-						err = addImport(imp)
-						if err != nil {
-							err = eh.Errorf("unable to add import: %w", err)
-							return
-						}
-					}
-					break
-				}
-			}
 		}
 	}
 

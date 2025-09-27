@@ -8,23 +8,16 @@ import (
 	// readaccess.(*GeneratorDriver).GenerateGoClasses
 	// ./public/semistructured/leeway/readaccess/lw_ra_generator_hl.go:67
 
+	"slices"
+
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
-	"slices"
-
 	///////////////////////////////////////////////////////////////////
 	// code generator
 	// readaccess.(*GeneratorDriver).GenerateGoClasses
-	// ./public/semistructured/leeway/readaccess/lw_ra_generator_hl.go:108
-
-	///////////////////////////////////////////////////////////////////
-	// code generator
-	// readaccess.(*GoClassBuilder).ComposeGoImports-range1
-	// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2104
-
-	"time"
+	// ./public/semistructured/leeway/readaccess/lw_ra_generator_hl.go:82
 )
 
 ///////////////////////////////////////////////////////////////////
@@ -118,8 +111,11 @@ func NewMembershipPackTestTableShared1Text() (inst *MembershipPackTestTableShare
 
 func (inst *MembershipPackTestTableShared1) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueLowCardRef)
+	runtime.ReleaseIfNotNil(inst.ValueLowCardRefElements)
 	runtime.ReleaseIfNotNil(inst.ValueMixedLowCardVerbatim)
+	runtime.ReleaseIfNotNil(inst.ValueMixedLowCardVerbatimElements)
 	runtime.ReleaseIfNotNil(inst.ValueMixedVerbatimHighCardParameters)
+	runtime.ReleaseIfNotNil(inst.ValueMixedVerbatimHighCardParametersElements)
 }
 
 func (inst *MembershipPackTestTableShared1) Reset() {
@@ -175,7 +171,7 @@ func (inst *MembershipPackTestTableShared1) LoadFromRecord(rec arrow.Record) (er
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionInnerClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:572
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:579
 
 type ReadAccessTestTablePlainEntityIdScalar struct {
 	ValueId       *array.Uint64
@@ -514,7 +510,7 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedTextSetSupport)(
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionInnerClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:791
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:798
 
 func (inst *ReadAccessTestTablePlainEntityIdScalar) Reset() {
 	inst.ValueId = nil
@@ -558,7 +554,7 @@ func (inst *ReadAccessTestTableTaggedTextSet) Reset() {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionInnerClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:849
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:856
 
 var _ runtime.ReleasableI = (*ReadAccessTestTablePlainEntityIdScalar)(nil)
 
@@ -570,6 +566,7 @@ var _ runtime.ReleasableI = (*ReadAccessTestTablePlainEntityTimestampHomogenousA
 
 func (inst *ReadAccessTestTablePlainEntityTimestampHomogenousArray) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueProc)
+	runtime.ReleaseIfNotNil(inst.ValueProcElements)
 }
 
 var _ runtime.ReleasableI = (*ReadAccessTestTablePlainEntityTimestampScalar)(nil)
@@ -582,15 +579,20 @@ var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedGeoScalar)(nil)
 
 func (inst *ReadAccessTestTableTaggedGeoScalar) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueLat)
+	runtime.ReleaseIfNotNil(inst.ValueLatElements)
 	runtime.ReleaseIfNotNil(inst.ValueLng)
+	runtime.ReleaseIfNotNil(inst.ValueLngElements)
 	runtime.ReleaseIfNotNil(inst.ValueH3Res1)
+	runtime.ReleaseIfNotNil(inst.ValueH3Res1Elements)
 	runtime.ReleaseIfNotNil(inst.ValueH3Res2)
+	runtime.ReleaseIfNotNil(inst.ValueH3Res2Elements)
 }
 
 var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedTextHomogenousArray)(nil)
 
 func (inst *ReadAccessTestTableTaggedTextHomogenousArray) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueWords)
+	runtime.ReleaseIfNotNil(inst.ValueWordsElements)
 }
 
 var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedTextHomogenousArraySupport)(nil)
@@ -603,12 +605,14 @@ var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedTextScalar)(nil)
 
 func (inst *ReadAccessTestTableTaggedTextScalar) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueText)
+	runtime.ReleaseIfNotNil(inst.ValueTextElements)
 }
 
 var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedTextSet)(nil)
 
 func (inst *ReadAccessTestTableTaggedTextSet) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueBagOfWords)
+	runtime.ReleaseIfNotNil(inst.ValueBagOfWordsElements)
 }
 
 var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedTextSetSupport)(nil)
@@ -645,7 +649,7 @@ func (inst *ReadAccessTestTableTaggedTextScalar) Len() (l int) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionInnerClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:956
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:974
 
 func (inst *ReadAccessTestTablePlainEntityIdScalar) LoadFromRecord(rec arrow.Record) (err error) {
 	{
@@ -758,7 +762,7 @@ func (inst *ReadAccessTestTableTaggedTextSetSupport) LoadFromRecord(rec arrow.Re
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1094
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1112
 
 type ReadAccessTestTablePlainEntityId struct {
 	ValueScalar *ReadAccessTestTablePlainEntityIdScalar
@@ -1052,7 +1056,7 @@ func (inst *ReadAccessTestTableTaggedText) LoadFromRecord(rec arrow.Record) (err
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1793
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1806
 
 type ReadAccessTestTable struct {
 	EntityId        *ReadAccessTestTablePlainEntityId
