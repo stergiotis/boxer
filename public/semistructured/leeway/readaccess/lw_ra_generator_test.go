@@ -114,7 +114,7 @@ func TestGoClassBuilderSample(t *testing.T) {
 		sourceCode, wellFormed, err = driver.GenerateGoClasses("example", naming.MustBeValidStylableName("testtable"), tblDesc, tableRowConfig, namingConvention)
 		var _ = sourceCode
 		unittest.NoError(t, err)
-		if !wellFormed {
+		if !wellFormed && testing.Verbose() {
 			_ = os.WriteFile("tmp.out.go", sourceCode, os.ModePerm)
 		}
 		require.True(t, wellFormed)

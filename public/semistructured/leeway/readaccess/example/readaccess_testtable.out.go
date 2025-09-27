@@ -8,12 +8,11 @@ import (
 	// readaccess.(*GeneratorDriver).GenerateGoClasses
 	// ./public/semistructured/leeway/readaccess/lw_ra_generator_hl.go:67
 
-	"slices"
-
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
+	"slices"
 
 	///////////////////////////////////////////////////////////////////
 	// code generator
@@ -23,8 +22,9 @@ import (
 	///////////////////////////////////////////////////////////////////
 	// code generator
 	// readaccess.(*GoClassBuilder).ComposeGoImports-range1
-	// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2145
+	// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2104
 
+	"time"
 )
 
 ///////////////////////////////////////////////////////////////////
@@ -34,14 +34,17 @@ import (
 
 type MembershipPackTestTableShared1 struct {
 	ValueLowCardRef                                 *array.List
+	ValueLowCardRefElements                         *array.Uint64
 	AccelLowCardRef                                 *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64]
 	ColumnIndexLowCardRef                           uint32
 	ColumnIndexLowCardRefAccel                      uint32
 	ValueMixedLowCardVerbatim                       *array.List
+	ValueMixedLowCardVerbatimElements               *array.Binary
 	AccelMixedLowCardVerbatim                       *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64]
 	ColumnIndexMixedLowCardVerbatim                 uint32
 	ColumnIndexMixedLowCardVerbatimAccel            uint32
 	ValueMixedVerbatimHighCardParameters            *array.List
+	ValueMixedVerbatimHighCardParametersElements    *array.Binary
 	AccelMixedVerbatimHighCardParameters            *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64]
 	ColumnIndexMixedVerbatimHighCardParameters      uint32
 	ColumnIndexMixedVerbatimHighCardParametersAccel uint32
@@ -122,13 +125,16 @@ func (inst *MembershipPackTestTableShared1) Release() {
 func (inst *MembershipPackTestTableShared1) Reset() {
 	//inst.Release()
 	inst.ValueLowCardRef = nil
+	inst.ValueLowCardRefElements = nil
 	inst.ValueMixedLowCardVerbatim = nil
+	inst.ValueMixedLowCardVerbatimElements = nil
 	inst.ValueMixedVerbatimHighCardParameters = nil
+	inst.ValueMixedVerbatimHighCardParametersElements = nil
 }
 
 func (inst *MembershipPackTestTableShared1) LoadFromRecord(rec arrow.Record) (err error) {
 	{
-		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexLowCardRef), arrow.UINT64, rec, &inst.ValueLowCardRef)
+		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexLowCardRef), arrow.UINT64, rec, &inst.ValueLowCardRef, &inst.ValueLowCardRefElements, array.NewUint64Data)
 		if err != nil {
 			return
 		}
@@ -140,7 +146,7 @@ func (inst *MembershipPackTestTableShared1) LoadFromRecord(rec arrow.Record) (er
 		}
 	}
 	{
-		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexMixedLowCardVerbatim), arrow.BINARY, rec, &inst.ValueMixedLowCardVerbatim)
+		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexMixedLowCardVerbatim), arrow.BINARY, rec, &inst.ValueMixedLowCardVerbatim, &inst.ValueMixedLowCardVerbatimElements, array.NewBinaryData)
 		if err != nil {
 			return
 		}
@@ -152,7 +158,7 @@ func (inst *MembershipPackTestTableShared1) LoadFromRecord(rec arrow.Record) (er
 		}
 	}
 	{
-		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexMixedVerbatimHighCardParameters), arrow.BINARY, rec, &inst.ValueMixedVerbatimHighCardParameters)
+		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexMixedVerbatimHighCardParameters), arrow.BINARY, rec, &inst.ValueMixedVerbatimHighCardParameters, &inst.ValueMixedVerbatimHighCardParametersElements, array.NewBinaryData)
 		if err != nil {
 			return
 		}
@@ -166,16 +172,10 @@ func (inst *MembershipPackTestTableShared1) LoadFromRecord(rec arrow.Record) (er
 	return
 }
 
-type MembershipPackTestTableShared1Row struct {
-	ValueLowCardRef                      []uint64
-	ValueMixedLowCardVerbatim            [] /* j */ []byte
-	ValueMixedVerbatimHighCardParameters [] /* j */ []byte
-}
-
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionInnerClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:602
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:572
 
 type ReadAccessTestTablePlainEntityIdScalar struct {
 	ValueId       *array.Uint64
@@ -183,8 +183,9 @@ type ReadAccessTestTablePlainEntityIdScalar struct {
 }
 
 type ReadAccessTestTablePlainEntityTimestampHomogenousArray struct {
-	ValueProc       *array.List
-	ColumnIndexProc uint32
+	ValueProc         *array.List
+	ColumnIndexProc   uint32
+	ValueProcElements *array.Date32
 }
 
 type ReadAccessTestTablePlainEntityTimestampScalar struct {
@@ -193,19 +194,24 @@ type ReadAccessTestTablePlainEntityTimestampScalar struct {
 }
 
 type ReadAccessTestTableTaggedGeoScalar struct {
-	ValueLat          *array.List
-	ColumnIndexLat    uint32
-	ValueLng          *array.List
-	ColumnIndexLng    uint32
-	ValueH3Res1       *array.List
-	ColumnIndexH3Res1 uint32
-	ValueH3Res2       *array.List
-	ColumnIndexH3Res2 uint32
+	ValueLat            *array.List
+	ColumnIndexLat      uint32
+	ValueLatElements    *array.Float32
+	ValueLng            *array.List
+	ColumnIndexLng      uint32
+	ValueLngElements    *array.Float32
+	ValueH3Res1         *array.List
+	ColumnIndexH3Res1   uint32
+	ValueH3Res1Elements *array.Uint64
+	ValueH3Res2         *array.List
+	ColumnIndexH3Res2   uint32
+	ValueH3Res2Elements *array.Uint64
 }
 
 type ReadAccessTestTableTaggedTextHomogenousArray struct {
-	ValueWords       *array.List
-	ColumnIndexWords uint32
+	ValueWords         *array.List
+	ColumnIndexWords   uint32
+	ValueWordsElements *array.String
 }
 
 type ReadAccessTestTableTaggedTextHomogenousArraySupport struct {
@@ -214,13 +220,15 @@ type ReadAccessTestTableTaggedTextHomogenousArraySupport struct {
 }
 
 type ReadAccessTestTableTaggedTextScalar struct {
-	ValueText       *array.List
-	ColumnIndexText uint32
+	ValueText         *array.List
+	ColumnIndexText   uint32
+	ValueTextElements *array.String
 }
 
 type ReadAccessTestTableTaggedTextSet struct {
-	ValueBagOfWords       *array.List
-	ColumnIndexBagOfWords uint32
+	ValueBagOfWords         *array.List
+	ColumnIndexBagOfWords   uint32
+	ValueBagOfWordsElements *array.String
 }
 
 type ReadAccessTestTableTaggedTextSetSupport struct {
@@ -506,7 +514,7 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedTextSetSupport)(
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionInnerClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:806
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:791
 
 func (inst *ReadAccessTestTablePlainEntityIdScalar) Reset() {
 	inst.ValueId = nil
@@ -514,6 +522,7 @@ func (inst *ReadAccessTestTablePlainEntityIdScalar) Reset() {
 
 func (inst *ReadAccessTestTablePlainEntityTimestampHomogenousArray) Reset() {
 	inst.ValueProc = nil
+	inst.ValueProcElements = nil
 }
 
 func (inst *ReadAccessTestTablePlainEntityTimestampScalar) Reset() {
@@ -522,27 +531,34 @@ func (inst *ReadAccessTestTablePlainEntityTimestampScalar) Reset() {
 
 func (inst *ReadAccessTestTableTaggedGeoScalar) Reset() {
 	inst.ValueLat = nil
+	inst.ValueLatElements = nil
 	inst.ValueLng = nil
+	inst.ValueLngElements = nil
 	inst.ValueH3Res1 = nil
+	inst.ValueH3Res1Elements = nil
 	inst.ValueH3Res2 = nil
+	inst.ValueH3Res2Elements = nil
 }
 
 func (inst *ReadAccessTestTableTaggedTextHomogenousArray) Reset() {
 	inst.ValueWords = nil
+	inst.ValueWordsElements = nil
 }
 
 func (inst *ReadAccessTestTableTaggedTextScalar) Reset() {
 	inst.ValueText = nil
+	inst.ValueTextElements = nil
 }
 
 func (inst *ReadAccessTestTableTaggedTextSet) Reset() {
 	inst.ValueBagOfWords = nil
+	inst.ValueBagOfWordsElements = nil
 }
 
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionInnerClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:853
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:849
 
 var _ runtime.ReleasableI = (*ReadAccessTestTablePlainEntityIdScalar)(nil)
 
@@ -629,7 +645,7 @@ func (inst *ReadAccessTestTableTaggedTextScalar) Len() (l int) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionInnerClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:960
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:956
 
 func (inst *ReadAccessTestTablePlainEntityIdScalar) LoadFromRecord(rec arrow.Record) (err error) {
 	{
@@ -643,7 +659,7 @@ func (inst *ReadAccessTestTablePlainEntityIdScalar) LoadFromRecord(rec arrow.Rec
 
 func (inst *ReadAccessTestTablePlainEntityTimestampHomogenousArray) LoadFromRecord(rec arrow.Record) (err error) {
 	{
-		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexProc), arrow.DATE32, rec, &inst.ValueProc)
+		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexProc), arrow.DATE32, rec, &inst.ValueProc, &inst.ValueProcElements, array.NewDate32Data)
 		if err != nil {
 			return
 		}
@@ -663,25 +679,25 @@ func (inst *ReadAccessTestTablePlainEntityTimestampScalar) LoadFromRecord(rec ar
 
 func (inst *ReadAccessTestTableTaggedGeoScalar) LoadFromRecord(rec arrow.Record) (err error) {
 	{
-		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexLat), arrow.FLOAT32, rec, &inst.ValueLat)
+		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexLat), arrow.FLOAT32, rec, &inst.ValueLat, &inst.ValueLatElements, array.NewFloat32Data)
 		if err != nil {
 			return
 		}
 	}
 	{
-		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexLng), arrow.FLOAT32, rec, &inst.ValueLng)
+		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexLng), arrow.FLOAT32, rec, &inst.ValueLng, &inst.ValueLngElements, array.NewFloat32Data)
 		if err != nil {
 			return
 		}
 	}
 	{
-		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexH3Res1), arrow.UINT64, rec, &inst.ValueH3Res1)
+		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexH3Res1), arrow.UINT64, rec, &inst.ValueH3Res1, &inst.ValueH3Res1Elements, array.NewUint64Data)
 		if err != nil {
 			return
 		}
 	}
 	{
-		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexH3Res2), arrow.UINT64, rec, &inst.ValueH3Res2)
+		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexH3Res2), arrow.UINT64, rec, &inst.ValueH3Res2, &inst.ValueH3Res2Elements, array.NewUint64Data)
 		if err != nil {
 			return
 		}
@@ -691,7 +707,7 @@ func (inst *ReadAccessTestTableTaggedGeoScalar) LoadFromRecord(rec arrow.Record)
 
 func (inst *ReadAccessTestTableTaggedTextHomogenousArray) LoadFromRecord(rec arrow.Record) (err error) {
 	{
-		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexWords), arrow.STRING, rec, &inst.ValueWords)
+		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexWords), arrow.STRING, rec, &inst.ValueWords, &inst.ValueWordsElements, array.NewStringData)
 		if err != nil {
 			return
 		}
@@ -711,7 +727,7 @@ func (inst *ReadAccessTestTableTaggedTextHomogenousArraySupport) LoadFromRecord(
 
 func (inst *ReadAccessTestTableTaggedTextScalar) LoadFromRecord(rec arrow.Record) (err error) {
 	{
-		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexText), arrow.STRING, rec, &inst.ValueText)
+		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexText), arrow.STRING, rec, &inst.ValueText, &inst.ValueTextElements, array.NewStringData)
 		if err != nil {
 			return
 		}
@@ -721,7 +737,7 @@ func (inst *ReadAccessTestTableTaggedTextScalar) LoadFromRecord(rec arrow.Record
 
 func (inst *ReadAccessTestTableTaggedTextSet) LoadFromRecord(rec arrow.Record) (err error) {
 	{
-		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexBagOfWords), arrow.STRING, rec, &inst.ValueBagOfWords)
+		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexBagOfWords), arrow.STRING, rec, &inst.ValueBagOfWords, &inst.ValueBagOfWordsElements, array.NewStringData)
 		if err != nil {
 			return
 		}
@@ -742,7 +758,7 @@ func (inst *ReadAccessTestTableTaggedTextSetSupport) LoadFromRecord(rec arrow.Re
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1092
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1094
 
 type ReadAccessTestTablePlainEntityId struct {
 	ValueScalar *ReadAccessTestTablePlainEntityIdScalar
@@ -867,21 +883,6 @@ func NewReadAccessTestTableTaggedText() (inst *ReadAccessTestTableTaggedText) {
 	inst.SupportSet = NewReadAccessTestTableTaggedTextSetSupport()
 	inst.Membership = NewMembershipPackTestTableShared1Text()
 	return
-}
-
-type ReadAccessTestTableTaggedGeoRow struct {
-	ValueLat    float32
-	ValueLng    float32
-	ValueH3Res1 uint64
-	ValueH3Res2 uint64
-	Membership  *MembershipPackTestTableShared1Row
-}
-
-type ReadAccessTestTableTaggedTextRow struct {
-	ValueText       string
-	ValueWords      []string
-	ValueBagOfWords []string
-	Membership      *MembershipPackTestTableShared1Row
 }
 
 func (inst *ReadAccessTestTableTaggedGeo) SetColumnIndices(indices []uint32) (restIndices []uint32) {
@@ -1051,7 +1052,7 @@ func (inst *ReadAccessTestTableTaggedText) LoadFromRecord(rec arrow.Record) (err
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1834
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1793
 
 type ReadAccessTestTable struct {
 	EntityId        *ReadAccessTestTablePlainEntityId

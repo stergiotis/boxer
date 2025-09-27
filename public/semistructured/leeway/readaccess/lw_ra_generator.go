@@ -224,20 +224,32 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 				return
 			}
 			for s := range spec.Iterate() {
+				var ct1, ct2 canonicaltypes.PrimitiveAstNodeI
+				var hints1, hints2 encodingaspects.AspectSet
 				var role1, role2 common.ColumnRoleE
-				_, _, role1, _, _, role2, _, err = arrowTech.ResolveMembership(s)
+				ct1, hints1, role1, ct2, hints2, role2, _, err = arrowTech.ResolveMembership(s)
 				if err != nil {
 					err = eh.Errorf("unable to get membership column canonical type: %w", err)
 					return
 				}
+				var typeName1 string
+				typeName1, _, err = gocodegen.CanonicalTypeToArrowBaseClassName(ct1, hints1, useDictEncoding)
+				if err != nil {
+					err = eh.Errorf("unable to get arrow class name for canonical type: %w", err)
+					return
+				}
 				name1 := naming.MustBeValidStylableName(role1.LongString()).Convert(naming.UpperCamelCase).String()
 				columnIndexFieldName1 := clsNamer.ComposeColumnIndexFieldName(name1)
-				_, err = fmt.Fprintf(b, `	%s *array.List
+				const tmpl = `	%s *array.List
+	%s *array.%s
 	%s *runtime.RandomAccessTwoLevelLookupAccel[runtime.Membership%sIdx,runtime.AttributeIdx,int,int64]
 	%s uint32
 	%sAccel uint32
-`,
+`
+				_, err = fmt.Fprintf(b, tmpl,
 					clsNamer.ComposeValueField(name1),
+					clsNamer.ComposeValueFieldElementAccessor(name1),
+					typeName1,
 					clsNamer.ComposeAccelFieldName(name1),
 					name1,
 					columnIndexFieldName1,
@@ -247,14 +259,18 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 					return
 				}
 				if s.ContainsMixed() {
+					var typeName2 string
+					typeName2, _, err = gocodegen.CanonicalTypeToArrowBaseClassName(ct2, hints2, useDictEncoding)
+					if err != nil {
+						err = eh.Errorf("unable to get arrow class name for canonical type: %w", err)
+						return
+					}
 					name2 := naming.MustBeValidStylableName(role2.LongString()).Convert(naming.UpperCamelCase).String()
 					columnIndexFieldName2 := clsNamer.ComposeColumnIndexFieldName(name2)
-					_, err = fmt.Fprintf(b, `	%s *array.List
-	%s *runtime.RandomAccessTwoLevelLookupAccel[runtime.Membership%sIdx,runtime.AttributeIdx,int,int64]
-	%s uint32
-	%sAccel uint32
-`,
+					_, err = fmt.Fprintf(b, tmpl,
 						clsNamer.ComposeValueField(name2),
+						clsNamer.ComposeValueFieldElementAccessor(name2),
+						typeName2,
 						clsNamer.ComposeAccelFieldName(name2),
 						name2,
 						columnIndexFieldName2,
@@ -434,13 +450,19 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 					return
 				}
 				name1 := naming.MustBeValidStylableName(role1.LongString()).Convert(naming.UpperCamelCase).String()
-				_, err = fmt.Fprintf(b, "\tinst.%s = nil\n", clsNamer.ComposeValueField(name1))
+				_, err = fmt.Fprintf(b, "\tinst.%s = nil\n\tinst.%s = nil\n",
+					clsNamer.ComposeValueField(name1),
+					clsNamer.ComposeValueFieldElementAccessor(name1),
+				)
 				if err != nil {
 					return
 				}
 				if s.ContainsMixed() {
 					name2 := naming.MustBeValidStylableName(role2.LongString()).Convert(naming.UpperCamelCase).String()
-					_, err = fmt.Fprintf(b, "\tinst.%s = nil\n", clsNamer.ComposeValueField(name2))
+					_, err = fmt.Fprintf(b, "\tinst.%s = nil\n\tinst.%s = nil\n",
+						clsNamer.ComposeValueField(name2),
+						clsNamer.ComposeValueFieldElementAccessor(name2),
+					)
 					if err != nil {
 						return
 					}
@@ -478,7 +500,7 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 				}
 				name1 := naming.MustBeValidStylableName(role1.LongString()).Convert(naming.UpperCamelCase).String()
 				const tmpl = `	{
-		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.%s),arrow.%s,rec,&inst.%s)
+		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.%s),arrow.%s,rec,&inst.%s,&inst.%s,array.New%sData)
 		if err != nil {
 			return
 		}
@@ -495,6 +517,9 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 					columnIndexFieldName1,
 					naming.MustBeValidStylableName(typeName1).Convert(naming.UpperSnakeCase),
 					clsNamer.ComposeValueField(name1),
+					clsNamer.ComposeValueFieldElementAccessor(name1),
+					typeName1,
+
 					columnIndexFieldName1,
 					clsNamer.ComposeAccelFieldName(name1),
 				)
@@ -514,6 +539,9 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 						columnIndexFieldName2,
 						naming.MustBeValidStylableName(typeName2).Convert(naming.UpperSnakeCase),
 						clsNamer.ComposeValueField(name2),
+						clsNamer.ComposeValueFieldElementAccessor(name2),
+						typeName2,
+
 						columnIndexFieldName1,
 						clsNamer.ComposeAccelFieldName(name2),
 					)
@@ -529,72 +557,14 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 		}
 	}
 
-	{ // Row
-		for i, spec := range membershipSpecs {
-			clsName := classNames[i]
-			_, err = fmt.Fprintf(b, `type %sRow struct {
-`, clsName)
-			if err != nil {
-				return
-			}
-			for s := range spec.Iterate() {
-				var role1, role2 common.ColumnRoleE
-				var ct1, ct2 canonicaltypes.PrimitiveAstNodeI
-				var hints1, hints2 encodingaspects.AspectSet
-				var goType1, goType2 string
-				ct1, hints1, role1, ct2, hints2, role2, _, err = arrowTech.ResolveMembership(s)
-				if err != nil {
-					err = eh.Errorf("unable to get membership column canonical type: %w", err)
-					return
-				}
-				name1 := naming.MustBeValidStylableName(role1.LongString()).Convert(naming.UpperCamelCase).String()
-				goType1, _, _, err = codegen.GenerateGoCode(ct1, hints1)
-				if err != nil {
-					err = eh.Errorf("unable to generate go code: %w", err)
-					return
-				}
-				var indexHint string
-				switch s {
-				case common.MembershipSpecMixedLowCardRefHighCardParameters:
-					indexHint = "/* i */"
-					break
-				case common.MembershipSpecMixedLowCardVerbatimHighCardParameters:
-					indexHint = "/* j */"
-					break
-				}
-				_, err = fmt.Fprintf(b, "\t%s [] %s %s\n",
-					clsNamer.ComposeValueField(name1),
-					indexHint,
-					goType1,
-				)
-				if err != nil {
-					return
-				}
-				if s.ContainsMixed() {
-					goType2, _, _, err = codegen.GenerateGoCode(ct2, hints2)
-					if err != nil {
-						err = eh.Errorf("unable to generate go code: %w", err)
-						return
-					}
-					name2 := naming.MustBeValidStylableName(role2.LongString()).Convert(naming.UpperCamelCase).String()
-					_, err = fmt.Fprintf(b, "\t%s [] %s %s\n",
-						clsNamer.ComposeValueField(name2),
-						indexHint,
-						goType2,
-					)
-					if err != nil {
-						return
-					}
-				}
-			}
-			_, err = fmt.Fprint(b, `
+	return
 }
-`)
-			if err != nil {
-				return
-			}
-		}
+func isElementAccessorNeeded(cc common.IntermediateColumnContext, role common.ColumnRoleE, tableRowConfig common.TableRowConfigE) (needed bool, err error) {
+	if role != common.ColumnRoleValue {
+		err = eb.Build().Stringer("role", role).Errorf("unhandled role")
+		return
 	}
+	needed = !(cc.PlainItemType != common.PlainItemTypeNone && cc.SubType == common.IntermediateColumnsSubTypeScalar)
 	return
 }
 func (inst *GoClassBuilder) composeSectionInnerClasses(attrClassesKv *containers.BinarySearchGrowingKV[string, *strings.Builder], clsNamer gocodegen.GoClassNamerI, tableName naming.StylableName, sectionNames []naming.StylableName, ir *common.IntermediateTableRepresentation, tableRowConfig common.TableRowConfigE) (err error) {
@@ -649,15 +619,21 @@ func (inst *GoClassBuilder) composeSectionInnerClasses(attrClassesKv *containers
 						switch role {
 						case common.ColumnRoleValue:
 							var typeName string
-							if cc.PlainItemType != common.PlainItemTypeNone &&
-								cc.SubType == common.IntermediateColumnsSubTypeScalar {
-								typeName, _, err = gocodegen.CanonicalTypeToArrowBaseClassName(ct, cp.EncodingHints[i], common.UseArrowDictionaryEncoding)
-								if err != nil {
-									err = eh.Errorf("unable to get arrow class name for canonical type: %w", err)
-									return
-								}
-							} else {
+							var scalarTypeName string
+							var elementAccessor bool
+							elementAccessor, err = isElementAccessorNeeded(cc, role, tableRowConfig)
+							if err != nil {
+								return
+							}
+							scalarTypeName, _, err = gocodegen.CanonicalTypeToArrowBaseClassName(ct, cp.EncodingHints[i], common.UseArrowDictionaryEncoding)
+							if err != nil {
+								err = eh.Errorf("unable to get arrow class name for canonical type: %w", err)
+								return
+							}
+							if elementAccessor {
 								typeName = "List"
+							} else {
+								typeName = scalarTypeName
 							}
 							fieldName := colName.Convert(naming.UpperCamelCase).String()
 							_, err = fmt.Fprintf(bc, "\t%s *array.%s\n\t%s uint32\n",
@@ -667,6 +643,15 @@ func (inst *GoClassBuilder) composeSectionInnerClasses(attrClassesKv *containers
 							)
 							if err != nil {
 								return
+							}
+							if elementAccessor {
+								_, err = fmt.Fprintf(bc, "\t%s *array.%s\n",
+									clsNamer.ComposeValueFieldElementAccessor(fieldName),
+									scalarTypeName,
+								)
+								if err != nil {
+									return
+								}
 							}
 							break
 						default:
@@ -821,6 +806,17 @@ func (inst *GoClassBuilder) composeSectionInnerClasses(attrClassesKv *containers
 							_, err = fmt.Fprintf(bc, "\tinst.%s = nil\n", clsNamer.ComposeValueField(fieldName))
 							if err != nil {
 								return
+							}
+							var elementAccessor bool
+							elementAccessor, err = isElementAccessorNeeded(cc, role, tableRowConfig)
+							if err != nil {
+								return
+							}
+							if elementAccessor {
+								_, err = fmt.Fprintf(bc, "\tinst.%s = nil\n", clsNamer.ComposeValueFieldElementAccessor(fieldName))
+								if err != nil {
+									return
+								}
 							}
 							break
 						default:
@@ -978,8 +974,27 @@ func (inst *%s) Release() {
 								err = eh.Errorf("unable to get arrow class name for canonical type: %w", err)
 								return
 							}
-							if cc.PlainItemType != common.PlainItemTypeNone &&
-								cc.SubType == common.IntermediateColumnsSubTypeScalar {
+							var elementAccessor bool
+							elementAccessor, err = isElementAccessorNeeded(cc, role, tableRowConfig)
+							if err != nil {
+								return
+							}
+							if elementAccessor {
+								fieldName := colName.Convert(naming.UpperCamelCase).String()
+								_, err = fmt.Fprintf(bc, `	{
+		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.%s),arrow.%s,rec,&inst.%s,&inst.%s,array.New%sData)
+		if err != nil {
+			return
+		}
+	}
+`,
+									clsNamer.ComposeColumnIndexFieldName(fieldName),
+									strings.ToUpper(typeName),
+									clsNamer.ComposeValueField(fieldName),
+									clsNamer.ComposeValueFieldElementAccessor(fieldName),
+									typeName,
+								)
+							} else {
 								fieldName := colName.Convert(naming.UpperCamelCase).String()
 								_, err = fmt.Fprintf(bc, `	{
 		err = runtime.LoadScalarValueFieldFromRecord(int(inst.%s),arrow.%s,rec,&inst.%s,array.New%sData)
@@ -992,19 +1007,6 @@ func (inst *%s) Release() {
 									strings.ToUpper(typeName),
 									clsNamer.ComposeValueField(fieldName),
 									naming.MustBeValidStylableName(typeName).Convert(naming.UpperCamelCase),
-								)
-							} else {
-								fieldName := colName.Convert(naming.UpperCamelCase).String()
-								_, err = fmt.Fprintf(bc, `	{
-		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.%s),arrow.%s,rec,&inst.%s)
-		if err != nil {
-			return
-		}
-	}
-`,
-									clsNamer.ComposeColumnIndexFieldName(fieldName),
-									strings.ToUpper(typeName),
-									clsNamer.ComposeValueField(fieldName),
 								)
 							}
 							if err != nil {
@@ -1498,49 +1500,6 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 					}
 				}
 				_, err = fmt.Fprint(b, "\treturn\n}\n\n")
-				if err != nil {
-					return
-				}
-			}
-		}
-		{ // Row
-			for i, s := range tblDesc.TaggedValuesSections {
-				const pt = common.PlainItemTypeNone
-				var outerClsName string
-				outerClsName, err = clsNamer.ComposeSectionReadAccessOuterRowClassName(tableName, pt, s.Name)
-				if err != nil {
-					err = eh.Errorf("unable to compose read access outer class name: %w", err)
-					return
-				}
-				_, err = fmt.Fprintf(b, "type %s struct {\n", outerClsName)
-				if err != nil {
-					return
-				}
-				for j, colName := range s.ValueColumnNames {
-					fieldName := colName.Convert(naming.UpperCamelCase).String()
-					var goType string
-					goType, _, _, err = codegen.GenerateGoCode(s.ValueColumnTypes[j], s.ValueEncodingHints[j])
-					if err != nil {
-						err = eh.Errorf("unable to generate go code for canonical type: %w", err)
-						return
-					}
-					_, err = fmt.Fprintf(b, "\t%s %s\n",
-						clsNamer.ComposeValueField(fieldName),
-						goType,
-					)
-				}
-				{
-					membPackClsName := sectionToClassNames[i]
-					if membPackClsName != "" {
-						_, err = fmt.Fprintf(b, "\tMembership  *%sRow\n",
-							membPackClsName,
-						)
-						if err != nil {
-							return
-						}
-					}
-				}
-				_, err = fmt.Fprint(b, "}\n\n")
 				if err != nil {
 					return
 				}
@@ -2161,35 +2120,3 @@ func (inst *GoClassBuilder) ComposeGoImports(ir *common.IntermediateTableReprese
 
 var _ gocodegen.CodeComposerI = (*GoClassBuilder)(nil)
 var _ common.CodeBuilderHolderI = (*GoClassBuilder)(nil)
-
-func deriveSubHolderSelectNonScalar(cc common.IntermediateColumnContext) (keep bool) {
-	switch cc.SubType {
-	case common.IntermediateColumnsSubTypeHomogenousArray,
-		common.IntermediateColumnsSubTypeSet:
-		return true
-	}
-	return false
-}
-func deriveSubHolderSelectNonScalarSupport(cc common.IntermediateColumnContext) (keep bool) {
-	switch cc.SubType {
-	case common.IntermediateColumnsSubTypeHomogenousArraySupport,
-		common.IntermediateColumnsSubTypeSetSupport:
-		return true
-	}
-	return false
-}
-func deriveSubHolderSelectMembership(cc common.IntermediateColumnContext) (keep bool) {
-	return cc.SubType == common.IntermediateColumnsSubTypeMembership
-}
-func deriveSubHolderSelectMembershipSupport(cc common.IntermediateColumnContext) (keep bool) {
-	return cc.SubType == common.IntermediateColumnsSubTypeMembershipSupport
-}
-func deriveSubHolderSelectScalar(cc common.IntermediateColumnContext) (keep bool) {
-	return cc.SubType == common.IntermediateColumnsSubTypeScalar
-}
-func deriveSubHolderSelectTaggedValues(cc common.IntermediateColumnContext) (keep bool) {
-	return cc.PlainItemType == common.PlainItemTypeNone
-}
-func deriveSubHolderSelectPlainValues(cc common.IntermediateColumnContext) (keep bool) {
-	return cc.PlainItemType != common.PlainItemTypeNone
-}

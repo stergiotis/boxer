@@ -18,7 +18,7 @@ func (inst *DefaultGoClassNamer) ComposeEntityReadAccessClassName(tableName nami
 	className = "ReadAccess" + tableName.Convert(naming.UpperCamelCase).String()
 	return
 }
-func (inst *DefaultGoClassNamer) ComposeSectionReadAccessOuterRowClassName(tableName naming.StylableName, itemType common.PlainItemTypeE, sectionName naming.StylableName) (className string, err error) {
+func (inst *DefaultGoClassNamer) ComposeSectionReadAccessOuterSingleAttributeClassName(tableName naming.StylableName, itemType common.PlainItemTypeE, sectionName naming.StylableName) (className string, err error) {
 	className, err = inst.ComposeSectionReadAccessOuterClassName(tableName, itemType, sectionName)
 	if err != nil {
 		return
@@ -70,6 +70,10 @@ func (inst *DefaultGoClassNamer) ComposeValueField(fieldNameIn string) (fieldNam
 	fieldNameOut = "Value" + fieldNameIn
 	return
 }
+func (inst *DefaultGoClassNamer) ComposeValueFieldElementAccessor(fieldNameIn string) (fieldNameOut string) {
+	fieldNameOut = "Value" + fieldNameIn + "Elements"
+	return
+}
 func (inst *DefaultGoClassNamer) ComposeColumnIndexFieldName(fieldNameIn string) (fieldNameOut string) {
 	fieldNameOut = "ColumnIndex" + fieldNameIn
 	return
@@ -79,14 +83,6 @@ func (inst *DefaultGoClassNamer) ComposeAccelFieldName(fieldNameIn string) (fiel
 	return
 }
 
-func (inst *MultiTablePerPackageClassNamer) ComposeSectionReadAccessOuterRowClassName(tableName naming.StylableName, itemType common.PlainItemTypeE, sectionName naming.StylableName) (className string, err error) {
-	className, err = inst.ComposeSectionReadAccessOuterClassName(tableName, itemType, sectionName)
-	if err != nil {
-		return
-	}
-	className += "Row"
-	return
-}
 func (inst *MultiTablePerPackageClassNamer) ComposeSectionReadAccessInnerClassName(tableName naming.StylableName, itemType common.PlainItemTypeE, sectionName naming.StylableName, subType common.IntermediateColumnSubTypeE) (className string, err error) {
 	className, err = inst.ComposeSectionReadAccessOuterClassName(tableName, itemType, sectionName)
 	if err != nil {
@@ -132,6 +128,10 @@ func (inst *MultiTablePerPackageClassNamer) ComposeSharedMembershipPackClassName
 }
 func (inst *MultiTablePerPackageClassNamer) ComposeValueField(fieldNameIn string) (fieldNameOut string) {
 	fieldNameOut = "Value" + fieldNameIn
+	return
+}
+func (inst *MultiTablePerPackageClassNamer) ComposeValueFieldElementAccessor(fieldNameIn string) (fieldNameOut string) {
+	fieldNameOut = "Value" + fieldNameIn + "Elements"
 	return
 }
 func (inst *MultiTablePerPackageClassNamer) ComposeColumnIndexFieldName(fieldNameIn string) (fieldNameOut string) {

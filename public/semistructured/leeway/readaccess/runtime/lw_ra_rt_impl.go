@@ -41,7 +41,7 @@ func LoadScalarValueFieldFromRecord[S any](idx int, expectedDatatype arrow.Type,
 	*dest = ctor(c.Data())
 	return
 }
-func LoadNonScalarValueFieldFromRecord(idx int, expectedDatatype arrow.Type, rec arrow.Record, dest **array.List) (err error) {
+func LoadNonScalarValueFieldFromRecord[S any](idx int, expectedDatatype arrow.Type, rec arrow.Record, dest **array.List, destElementAccess **S, ctorElementAccess func(data arrow.ArrayData) *S) (err error) {
 	c := rec.Column(idx)
 	if c.DataType().ID() != arrow.LIST {
 		err = eb.Build().Int("columnIndex", idx).Stringer("effective", c.DataType()).Stringer("expected", arrow.LIST).Errorf("unexpected data type: %w", ErrUnexpectedArrowDataType)
@@ -53,5 +53,6 @@ func LoadNonScalarValueFieldFromRecord(idx int, expectedDatatype arrow.Type, rec
 		return
 	}
 	*dest = d
+	*destElementAccess = ctorElementAccess(d.ListValues().Data())
 	return
 }

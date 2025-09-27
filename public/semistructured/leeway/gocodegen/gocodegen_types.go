@@ -12,9 +12,9 @@ type GoClassNamerReadAccessI interface {
 	ComposeSectionReadAccessInnerClassName(tableName naming.StylableName, itemType common.PlainItemTypeE, sectionName naming.StylableName, subType common.IntermediateColumnSubTypeE) (className string, err error)
 	ComposeSectionMembershipPackClassName(tableName naming.StylableName, sectionName naming.StylableName) (className string, err error)
 	ComposeSharedMembershipPackClassName(tableName naming.StylableName, membershipSpec common.MembershipSpecE, i int, total int) (className string, err error)
-	ComposeSectionReadAccessOuterRowClassName(tableName naming.StylableName, itemType common.PlainItemTypeE, sectionName naming.StylableName) (className string, err error)
 
 	ComposeValueField(fieldNameIn string) (fieldNameOut string)
+	ComposeValueFieldElementAccessor(fieldNameIn string) (fieldNameOut string)
 	ComposeColumnIndexFieldName(fieldNameIn string) (fieldNameOut string)
 	ComposeAccelFieldName(fieldNameIn string) (fieldNameOut string)
 }
