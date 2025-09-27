@@ -102,10 +102,8 @@ func ComposeMembershipPackInfo(tblDesc common.TableDesc, namer gocodegen.GoClass
 		}
 		return 0
 	})
-	nSections := 0
 	for i, s := range tblDesc.TaggedValuesSections {
 		if s.MembershipSpec != 0 {
-			nSections++
 			kv.MergeValue(s.MembershipSpec, i, func(old int, new int) int {
 				if old < 0 {
 					return old - 1
@@ -124,7 +122,7 @@ func ComposeMembershipPackInfo(tblDesc common.TableDesc, namer gocodegen.GoClass
 	sharedIndex := 0
 	membershipSpecs = make([]common.MembershipSpecE, 0, kv.Len())
 	classNames = make([]string, 0, kv.Len())
-	sectionToClassName = make([]string, nSections)
+	sectionToClassName = make([]string, len(tblDesc.TaggedValuesSections))
 	for spec, n := range kv.Iterate() {
 		var clsName string
 		if n < 0 {
