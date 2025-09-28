@@ -8,12 +8,11 @@ import (
 	// readaccess.(*GeneratorDriver).GenerateGoClasses
 	// ./public/semistructured/leeway/readaccess/lw_ra_generator_hl.go:67
 
-	"slices"
-
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
+	"slices"
 	///////////////////////////////////////////////////////////////////
 	// code generator
 	// readaccess.(*GeneratorDriver).GenerateGoClasses
@@ -1083,18 +1082,23 @@ func (inst *ReadAccessTestTableTaggedText) LoadFromRecord(rec arrow.Record) (err
 	return
 }
 
-func (inst *ReadAccessTestTablePlainEntityId) Len() (nEntities int) {
-	return inst.ValueScalar.Len()
+func (inst *ReadAccessTestTablePlainEntityId) GetNumberOfEntities() (nEntities int) {
+	if inst.ValueScalar != nil {
+		nEntities = inst.ValueScalar.Len()
+	}
+	return
 }
-
-func (inst *ReadAccessTestTablePlainEntityTimestamp) Len() (nEntities int) {
-	return inst.ValueHomogenousArray.Len()
+func (inst *ReadAccessTestTablePlainEntityTimestamp) GetNumberOfEntities() (nEntities int) {
+	if inst.ValueHomogenousArray != nil {
+		nEntities = inst.ValueHomogenousArray.Len()
+	}
+	return
 }
 
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeEntityClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1851
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1848
 
 type ReadAccessTestTable struct {
 	EntityId        *ReadAccessTestTablePlainEntityId
@@ -1203,5 +1207,8 @@ func (inst *ReadAccessTestTable) GetColumnIndexFieldNames() (fieldNames []string
 var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTable)(nil)
 
 func (inst *ReadAccessTestTable) GetNumberOfEntities() (nEntities int) {
-	return inst.EntityId.Len()
+	if inst.EntityId != nil {
+		nEntities = inst.EntityId.Len()
+	}
+	return
 }

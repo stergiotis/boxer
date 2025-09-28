@@ -1808,33 +1808,30 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 				err = eh.Errorf("unable to generate outer class name: %w", err)
 				return
 			}
-			_, err = fmt.Fprintf(b, "func (inst *%s) Len() (nEntities int) {\n", outerClsName)
-			if err != nil {
-				return
-			}
-			ok := false
+			fieldName := ""
 			for _, st := range subTypeSlice {
-				var fieldName string
 				fieldName, err = composeFieldName(st)
 				if err != nil {
 					err = eh.Errorf("unable to compose field name prefix: %w", err)
 					return
 				}
-				_, err = fmt.Fprintf(b, "\treturn inst.%s.Len()\n", fieldName)
-				if err != nil {
-					return
-				}
-				ok = true
 				break
 			}
-			if !ok {
+			if fieldName == "" {
 				err = eb.Build().Stringer("sectionName", sectionName).Errorf("no field for length termination found")
 				return
 			}
-			_, err = fmt.Fprint(b, "}\n\n")
-			if err != nil {
-				return
-			}
+			_, err = fmt.Fprintf(b, `func (inst *%s) GetNumberOfEntities() (nEntities int) {
+	if inst.%s != nil {
+		nEntities = inst.%s.Len()
+	}
+	return
+}
+`,
+				outerClsName,
+				fieldName,
+				fieldName,
+			)
 		}
 	}
 	return
@@ -2123,41 +2120,33 @@ func (inst *GoClassBuilder) composeEntityClasses(clsNamer gocodegen.GoClassNamer
 		}
 	}
 	{ // .GetNumberOfEntities()
-		_, err = fmt.Fprintf(b, "func (inst *%s) GetNumberOfEntities() (nEntities int) {\n", entityClsName)
-		if err != nil {
-			return
-		}
-		ok := false
+		fieldName := ""
 		for pt := range outerClassKv.IterateKeys() {
-			sectionName := naming.MustBeValidStylableName(pt.String())
-			_, err = fmt.Fprintf(b, "\treturn inst.%s.Len()\n",
-				sectionName.Convert(naming.UpperCamelCase),
-			)
-			if err != nil {
-				return
-			}
-			ok = true
+			fieldName = naming.MustBeValidStylableName(pt.String()).Convert(naming.UpperCamelCase).String()
 			break
 		}
 
-		if !ok {
+		if fieldName == "" {
 			for _, s := range tblDesc.TaggedValuesSections {
-				const pt = common.PlainItemTypeNone
-				_, err = fmt.Fprintf(b, "\treturn inst.%s.Len()\n",
-					s.Name.Convert(naming.UpperCamelCase),
-				)
-				if err != nil {
-					return
-				}
-				ok = true
+				fieldName = s.Name.Convert(naming.UpperCamelCase).String()
 				break
 			}
 		}
-		if !ok {
+		if fieldName == "" {
 			err = eh.Errorf("no plain and no tagged section")
 			return
 		}
-		_, err = fmt.Fprint(b, "}\n\n")
+		_, err = fmt.Fprintf(b, `func (inst *%s) GetNumberOfEntities() (nEntities int) {
+	if inst.%s != nil {
+		nEntities = inst.%s.Len()
+	}
+	return
+}
+`,
+			entityClsName,
+			fieldName,
+			fieldName,
+		)
 		if err != nil {
 			return
 		}
