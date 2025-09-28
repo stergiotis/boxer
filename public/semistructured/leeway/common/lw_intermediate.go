@@ -12,7 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
 )
 
-func extractScalarModifier(ct canonicaltypes2.PrimitiveAstNodeI) (scalarModifier canonicaltypes2.ScalarModifierE, err error) {
+func ExtractScalarModifier(ct canonicaltypes2.PrimitiveAstNodeI) (scalarModifier canonicaltypes2.ScalarModifierE, err error) {
 	switch ctt := ct.(type) {
 	case canonicaltypes2.StringAstNode:
 		scalarModifier = ctt.ScalarModifier
@@ -167,7 +167,7 @@ func (inst *IntermediateTaggedValuesDesc) loadSectionValue(sec *TaggedValuesSect
 		hints := sec.ValueEncodingHints[i]
 		for ct := range cts.IterateMembers() {
 			var scalarModifier canonicaltypes2.ScalarModifierE
-			scalarModifier, err = extractScalarModifier(ct)
+			scalarModifier, err = ExtractScalarModifier(ct)
 			if err != nil {
 				return
 			}
@@ -232,7 +232,7 @@ func (inst *IntermediatePlainValuesDesc) Load(names []naming.StylableName, ctss 
 		hints := hintss[i]
 		for ct := range cts.IterateMembers() {
 			var scalarModifier canonicaltypes2.ScalarModifierE
-			scalarModifier, err = extractScalarModifier(ct)
+			scalarModifier, err = ExtractScalarModifier(ct)
 			if err != nil {
 				return
 			}
@@ -260,7 +260,7 @@ func (inst *IntermediatePlainValuesDesc) Load(names []naming.StylableName, ctss 
 func (inst *IntermediatePlainValuesDesc) LoadSingle(name naming.StylableName, ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspects.AspectSet, vs valueaspects.AspectSet, streamingGroup naming.Key) (err error) {
 	inst.StreamingGroup = streamingGroup
 	var scalarModifier canonicaltypes2.ScalarModifierE
-	scalarModifier, err = extractScalarModifier(ct)
+	scalarModifier, err = ExtractScalarModifier(ct)
 	if err != nil {
 		return
 	}

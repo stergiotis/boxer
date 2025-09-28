@@ -71,6 +71,7 @@ func (inst *GeneratorDriver) GenerateGoClasses(packageName string, tableName nam
 		"github.com/apache/arrow-go/v18/arrow/array",
 		"github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime",
 		"github.com/stergiotis/boxer/public/observability/eh/eb",
+		"github.com/rs/zerolog/log",
 	} {
 		err = addImport(imp)
 		if err != nil {

@@ -25,7 +25,8 @@ type (
 	MembershipMixedLowCardVerbatimIdx            int
 	MembershipMixedVerbatimHighCardParametersIdx int
 
-	ValueIdx int
+	EntityIdx    int
+	AttributeIdx int
 )
 
 type IndexConstraintI interface {
@@ -41,10 +42,11 @@ type ValueOffsetI[I IndexConstraintI, I2 IndexConstraintI] interface {
 	ValueOffsets(i I) (beginIncl I2, endExcl I2)
 }
 type RandomAccessTwoLevelLookupAccel[F IndexConstraintI, B IndexConstraintI, I IndexConstraintI, I2 IndexConstraintI] struct {
-	accel  *RandomAccessLookupAccel[F, B]
-	row    I
-	cards  []uint64
-	ranger ValueOffsetI[I, I2]
+	accel   *RandomAccessLookupAccel[F, B]
+	row     I
+	cards   []uint64
+	ranger  ValueOffsetI[I, I2]
+	relaser ReleasableI
 }
 type RowIdx int
 type RandomAccessLookupAccelI[F IndexConstraintI, B IndexConstraintI] interface {
@@ -57,6 +59,8 @@ type RandomAccessLookupAccelI[F IndexConstraintI, B IndexConstraintI] interface 
 	IterateAllFwdRange() iter.Seq[Range[F]]
 	LoadCardinalities(cards []uint64)
 	Len() int
+	ReleasableI
+	Reset()
 }
 
 var _ RandomAccessLookupAccelI[int, uint] = (*RandomAccessTwoLevelLookupAccel[int, uint, RowIdx, int64])(nil)

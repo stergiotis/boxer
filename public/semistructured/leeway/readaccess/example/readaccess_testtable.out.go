@@ -10,19 +10,18 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
-	"slices"
 	///////////////////////////////////////////////////////////////////
 	// code generator
 	// readaccess.(*GeneratorDriver).GenerateGoClasses
-	// ./public/semistructured/leeway/readaccess/lw_ra_generator_hl.go:82
+	// ./public/semistructured/leeway/readaccess/lw_ra_generator_hl.go:83
 )
 
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeMembershipPacks
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:208
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:207
 
 type MembershipPackTestTableShared1 struct {
 	ValueLowCardRef                                 *array.List
@@ -44,9 +43,9 @@ type MembershipPackTestTableShared1 struct {
 
 func NewMembershipPackTestTableShared1Geo() (inst *MembershipPackTestTableShared1) {
 	inst = &MembershipPackTestTableShared1{}
-	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](128)
-	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](128)
-	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](128)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.ColumnIndexLowCardRef = 7
 	inst.ColumnIndexLowCardRefAccel = 10
 	inst.ColumnIndexMixedLowCardVerbatim = 8
@@ -96,9 +95,9 @@ var _ runtime.ColumnIndexHandlingI = (*MembershipPackTestTableShared1)(nil)
 
 func NewMembershipPackTestTableShared1Text() (inst *MembershipPackTestTableShared1) {
 	inst = &MembershipPackTestTableShared1{}
-	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](128)
-	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](128)
-	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](128)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.ColumnIndexLowCardRef = 15
 	inst.ColumnIndexLowCardRefAccel = 20
 	inst.ColumnIndexMixedLowCardVerbatim = 16
@@ -128,67 +127,52 @@ func (inst *MembershipPackTestTableShared1) Reset() {
 }
 
 func (inst *MembershipPackTestTableShared1) LoadFromRecord(rec arrow.Record) (err error) {
-	{
-		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexLowCardRef), arrow.UINT64, rec, &inst.ValueLowCardRef, &inst.ValueLowCardRefElements, array.NewUint64Data)
-		if err != nil {
-			return
-		}
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexLowCardRef, arrow.UINT64, rec, &inst.ValueLowCardRef, &inst.ValueLowCardRefElements, array.NewUint64Data)
+	if err != nil {
+		return
 	}
-	{
-		err = runtime.LoadAccelFieldFromRecord(int(inst.ColumnIndexLowCardRefAccel), rec, inst.AccelLowCardRef)
-		if err != nil {
-			return
-		}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexLowCardRefAccel, rec, inst.AccelLowCardRef)
+	if err != nil {
+		return
 	}
-	{
-		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexMixedLowCardVerbatim), arrow.BINARY, rec, &inst.ValueMixedLowCardVerbatim, &inst.ValueMixedLowCardVerbatimElements, array.NewBinaryData)
-		if err != nil {
-			return
-		}
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexMixedLowCardVerbatim, arrow.BINARY, rec, &inst.ValueMixedLowCardVerbatim, &inst.ValueMixedLowCardVerbatimElements, array.NewBinaryData)
+	if err != nil {
+		return
 	}
-	{
-		err = runtime.LoadAccelFieldFromRecord(int(inst.ColumnIndexMixedLowCardVerbatimAccel), rec, inst.AccelMixedLowCardVerbatim)
-		if err != nil {
-			return
-		}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexMixedLowCardVerbatimAccel, rec, inst.AccelMixedLowCardVerbatim)
+	if err != nil {
+		return
 	}
-	{
-		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexMixedVerbatimHighCardParameters), arrow.BINARY, rec, &inst.ValueMixedVerbatimHighCardParameters, &inst.ValueMixedVerbatimHighCardParametersElements, array.NewBinaryData)
-		if err != nil {
-			return
-		}
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexMixedVerbatimHighCardParameters, arrow.BINARY, rec, &inst.ValueMixedVerbatimHighCardParameters, &inst.ValueMixedVerbatimHighCardParametersElements, array.NewBinaryData)
+	if err != nil {
+		return
 	}
-	{
-		err = runtime.LoadAccelFieldFromRecord(int(inst.ColumnIndexMixedLowCardVerbatimAccel), rec, inst.AccelMixedVerbatimHighCardParameters)
-		if err != nil {
-			return
-		}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexMixedLowCardVerbatimAccel, rec, inst.AccelMixedVerbatimHighCardParameters)
+	if err != nil {
+		return
 	}
 	return
 }
 
 ///////////////////////////////////////////////////////////////////
 // code generator
-// readaccess.(*GoClassBuilder).composeSectionInnerClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:579
+// readaccess.(*GoClassBuilder).composeSectionAttributeClasses
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:582
 
-type ReadAccessTestTablePlainEntityIdScalar struct {
+type ReadAccessTestTablePlainEntityIdAttributes struct {
 	ValueId       *array.Uint64
 	ColumnIndexId uint32
 }
 
-type ReadAccessTestTablePlainEntityTimestampHomogenousArray struct {
+type ReadAccessTestTablePlainEntityTimestampAttributes struct {
+	ValueTs           *array.Date32
+	ColumnIndexTs     uint32
 	ValueProc         *array.List
 	ColumnIndexProc   uint32
 	ValueProcElements *array.Date32
 }
 
-type ReadAccessTestTablePlainEntityTimestampScalar struct {
-	ValueTs       *array.Date32
-	ColumnIndexTs uint32
-}
-
-type ReadAccessTestTableTaggedGeoScalar struct {
+type ReadAccessTestTableTaggedGeoAttributes struct {
 	ValueLat            *array.List
 	ColumnIndexLat      uint32
 	ValueLatElements    *array.Float32
@@ -203,123 +187,86 @@ type ReadAccessTestTableTaggedGeoScalar struct {
 	ValueH3Res2Elements *array.Uint64
 }
 
-type ReadAccessTestTableTaggedTextHomogenousArray struct {
-	ValueWords         *array.List
-	ColumnIndexWords   uint32
-	ValueWordsElements *array.String
+type ReadAccessTestTableTaggedTextAttributes struct {
+	ValueText                  *array.List
+	ColumnIndexText            uint32
+	ValueTextElements          *array.String
+	ValueWords                 *array.List
+	ColumnIndexWords           uint32
+	ValueWordsElements         *array.String
+	ValueBagOfWords            *array.List
+	ColumnIndexBagOfWords      uint32
+	ValueBagOfWordsElements    *array.String
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.AttributeIdx, runtime.SetIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
+	AccelSet                   *runtime.RandomAccessTwoLevelLookupAccel[runtime.AttributeIdx, runtime.SetIdx, int, int64]
+	ColumnIndexSet             uint32
 }
 
-type ReadAccessTestTableTaggedTextHomogenousArraySupport struct {
-	Accel       *runtime.RandomAccessTwoLevelLookupAccel[runtime.AttributeIdx, runtime.HomogenousArrayIdx, int, int64]
-	ColumnIndex uint32
-}
-
-type ReadAccessTestTableTaggedTextScalar struct {
-	ValueText         *array.List
-	ColumnIndexText   uint32
-	ValueTextElements *array.String
-}
-
-type ReadAccessTestTableTaggedTextSet struct {
-	ValueBagOfWords         *array.List
-	ColumnIndexBagOfWords   uint32
-	ValueBagOfWordsElements *array.String
-}
-
-type ReadAccessTestTableTaggedTextSetSupport struct {
-	Accel       *runtime.RandomAccessTwoLevelLookupAccel[runtime.AttributeIdx, runtime.SetIdx, int, int64]
-	ColumnIndex uint32
-}
-
-func NewReadAccessTestTablePlainEntityIdScalar() (inst *ReadAccessTestTablePlainEntityIdScalar) {
-	inst = &ReadAccessTestTablePlainEntityIdScalar{}
+func NewReadAccessTestTablePlainEntityIdAttributes() (inst *ReadAccessTestTablePlainEntityIdAttributes) {
+	inst = &ReadAccessTestTablePlainEntityIdAttributes{}
 	inst.ColumnIndexId = 0
 	return
 }
 
-func (inst *ReadAccessTestTablePlainEntityIdScalar) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessTestTablePlainEntityIdAttributes) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = []uint32{
 		inst.ColumnIndexId,
 	}
 	return
 }
 
-func (inst *ReadAccessTestTablePlainEntityIdScalar) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessTestTablePlainEntityIdAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = []string{
-		"ReadAccessTestTablePlainEntityIdScalar.ColumnIndexId",
+		"ReadAccessTestTablePlainEntityIdAttributes.ColumnIndexId",
 	}
 	return
 }
 
-func (inst *ReadAccessTestTablePlainEntityIdScalar) SetColumnIndices(indices []uint32) (rest []uint32) {
+func (inst *ReadAccessTestTablePlainEntityIdAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
 	inst.ColumnIndexId = indices[0]
 
 	rest = indices[1:]
 	return
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTablePlainEntityIdScalar)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTablePlainEntityIdAttributes)(nil)
 
-func NewReadAccessTestTablePlainEntityTimestampHomogenousArray() (inst *ReadAccessTestTablePlainEntityTimestampHomogenousArray) {
-	inst = &ReadAccessTestTablePlainEntityTimestampHomogenousArray{}
+func NewReadAccessTestTablePlainEntityTimestampAttributes() (inst *ReadAccessTestTablePlainEntityTimestampAttributes) {
+	inst = &ReadAccessTestTablePlainEntityTimestampAttributes{}
+	inst.ColumnIndexTs = 1
 	inst.ColumnIndexProc = 2
 	return
 }
 
-func (inst *ReadAccessTestTablePlainEntityTimestampHomogenousArray) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessTestTablePlainEntityTimestampAttributes) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = []uint32{
+		inst.ColumnIndexTs,
 		inst.ColumnIndexProc,
 	}
 	return
 }
 
-func (inst *ReadAccessTestTablePlainEntityTimestampHomogenousArray) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessTestTablePlainEntityTimestampAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = []string{
-		"ReadAccessTestTablePlainEntityTimestampHomogenousArray.ColumnIndexProc",
+		"ReadAccessTestTablePlainEntityTimestampAttributes.ColumnIndexTs",
+		"ReadAccessTestTablePlainEntityTimestampAttributes.ColumnIndexProc",
 	}
 	return
 }
 
-func (inst *ReadAccessTestTablePlainEntityTimestampHomogenousArray) SetColumnIndices(indices []uint32) (rest []uint32) {
-	inst.ColumnIndexProc = indices[0]
-
-	rest = indices[1:]
-	return
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTablePlainEntityTimestampHomogenousArray)(nil)
-
-func NewReadAccessTestTablePlainEntityTimestampScalar() (inst *ReadAccessTestTablePlainEntityTimestampScalar) {
-	inst = &ReadAccessTestTablePlainEntityTimestampScalar{}
-	inst.ColumnIndexTs = 1
-	return
-}
-
-func (inst *ReadAccessTestTablePlainEntityTimestampScalar) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = []uint32{
-		inst.ColumnIndexTs,
-	}
-	return
-}
-
-func (inst *ReadAccessTestTablePlainEntityTimestampScalar) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = []string{
-		"ReadAccessTestTablePlainEntityTimestampScalar.ColumnIndexTs",
-	}
-	return
-}
-
-func (inst *ReadAccessTestTablePlainEntityTimestampScalar) SetColumnIndices(indices []uint32) (rest []uint32) {
+func (inst *ReadAccessTestTablePlainEntityTimestampAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
 	inst.ColumnIndexTs = indices[0]
+	inst.ColumnIndexProc = indices[1]
 
-	rest = indices[1:]
+	rest = indices[2:]
 	return
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTablePlainEntityTimestampScalar)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTablePlainEntityTimestampAttributes)(nil)
 
-func NewReadAccessTestTableTaggedGeoScalar() (inst *ReadAccessTestTableTaggedGeoScalar) {
-	inst = &ReadAccessTestTableTaggedGeoScalar{}
+func NewReadAccessTestTableTaggedGeoAttributes() (inst *ReadAccessTestTableTaggedGeoAttributes) {
+	inst = &ReadAccessTestTableTaggedGeoAttributes{}
 	inst.ColumnIndexLat = 3
 	inst.ColumnIndexLng = 4
 	inst.ColumnIndexH3Res1 = 5
@@ -327,7 +274,7 @@ func NewReadAccessTestTableTaggedGeoScalar() (inst *ReadAccessTestTableTaggedGeo
 	return
 }
 
-func (inst *ReadAccessTestTableTaggedGeoScalar) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessTestTableTaggedGeoAttributes) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = []uint32{
 		inst.ColumnIndexLat,
 		inst.ColumnIndexLng,
@@ -337,17 +284,17 @@ func (inst *ReadAccessTestTableTaggedGeoScalar) GetColumnIndices() (columnIndice
 	return
 }
 
-func (inst *ReadAccessTestTableTaggedGeoScalar) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessTestTableTaggedGeoAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = []string{
-		"ReadAccessTestTableTaggedGeoScalar.ColumnIndexLat",
-		"ReadAccessTestTableTaggedGeoScalar.ColumnIndexLng",
-		"ReadAccessTestTableTaggedGeoScalar.ColumnIndexH3Res1",
-		"ReadAccessTestTableTaggedGeoScalar.ColumnIndexH3Res2",
+		"ReadAccessTestTableTaggedGeoAttributes.ColumnIndexLat",
+		"ReadAccessTestTableTaggedGeoAttributes.ColumnIndexLng",
+		"ReadAccessTestTableTaggedGeoAttributes.ColumnIndexH3Res1",
+		"ReadAccessTestTableTaggedGeoAttributes.ColumnIndexH3Res2",
 	}
 	return
 }
 
-func (inst *ReadAccessTestTableTaggedGeoScalar) SetColumnIndices(indices []uint32) (rest []uint32) {
+func (inst *ReadAccessTestTableTaggedGeoAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
 	inst.ColumnIndexLat = indices[0]
 	inst.ColumnIndexLng = indices[1]
 	inst.ColumnIndexH3Res1 = indices[2]
@@ -357,174 +304,71 @@ func (inst *ReadAccessTestTableTaggedGeoScalar) SetColumnIndices(indices []uint3
 	return
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedGeoScalar)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedGeoAttributes)(nil)
 
-func NewReadAccessTestTableTaggedTextHomogenousArray() (inst *ReadAccessTestTableTaggedTextHomogenousArray) {
-	inst = &ReadAccessTestTableTaggedTextHomogenousArray{}
-	inst.ColumnIndexWords = 13
-	return
-}
-
-func (inst *ReadAccessTestTableTaggedTextHomogenousArray) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = []uint32{
-		inst.ColumnIndexWords,
-	}
-	return
-}
-
-func (inst *ReadAccessTestTableTaggedTextHomogenousArray) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = []string{
-		"ReadAccessTestTableTaggedTextHomogenousArray.ColumnIndexWords",
-	}
-	return
-}
-
-func (inst *ReadAccessTestTableTaggedTextHomogenousArray) SetColumnIndices(indices []uint32) (rest []uint32) {
-	inst.ColumnIndexWords = indices[0]
-
-	rest = indices[1:]
-	return
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedTextHomogenousArray)(nil)
-
-func NewReadAccessTestTableTaggedTextHomogenousArraySupport() (inst *ReadAccessTestTableTaggedTextHomogenousArraySupport) {
-	inst = &ReadAccessTestTableTaggedTextHomogenousArraySupport{}
-	inst.ColumnIndex = 18
-	inst.Accel = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.AttributeIdx, runtime.HomogenousArrayIdx, int, int64](128)
-	return
-}
-
-func (inst *ReadAccessTestTableTaggedTextHomogenousArraySupport) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = []uint32{
-		inst.ColumnIndex,
-	}
-	return
-}
-
-func (inst *ReadAccessTestTableTaggedTextHomogenousArraySupport) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = []string{
-		"ReadAccessTestTableTaggedTextHomogenousArraySupport.ColumnIndex",
-	}
-	return
-}
-
-func (inst *ReadAccessTestTableTaggedTextHomogenousArraySupport) SetColumnIndices(indices []uint32) (rest []uint32) {
-	inst.ColumnIndex = indices[0]
-
-	rest = indices[1:]
-	return
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedTextHomogenousArraySupport)(nil)
-
-func NewReadAccessTestTableTaggedTextScalar() (inst *ReadAccessTestTableTaggedTextScalar) {
-	inst = &ReadAccessTestTableTaggedTextScalar{}
+func NewReadAccessTestTableTaggedTextAttributes() (inst *ReadAccessTestTableTaggedTextAttributes) {
+	inst = &ReadAccessTestTableTaggedTextAttributes{}
 	inst.ColumnIndexText = 12
+	inst.ColumnIndexWords = 13
+	inst.ColumnIndexBagOfWords = 14
+	inst.ColumnIndexHomogenousArray = 18
+	inst.ColumnIndexSet = 19
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.AttributeIdx, runtime.SetIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelSet = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.AttributeIdx, runtime.SetIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	return
 }
 
-func (inst *ReadAccessTestTableTaggedTextScalar) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessTestTableTaggedTextAttributes) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = []uint32{
 		inst.ColumnIndexText,
-	}
-	return
-}
-
-func (inst *ReadAccessTestTableTaggedTextScalar) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = []string{
-		"ReadAccessTestTableTaggedTextScalar.ColumnIndexText",
-	}
-	return
-}
-
-func (inst *ReadAccessTestTableTaggedTextScalar) SetColumnIndices(indices []uint32) (rest []uint32) {
-	inst.ColumnIndexText = indices[0]
-
-	rest = indices[1:]
-	return
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedTextScalar)(nil)
-
-func NewReadAccessTestTableTaggedTextSet() (inst *ReadAccessTestTableTaggedTextSet) {
-	inst = &ReadAccessTestTableTaggedTextSet{}
-	inst.ColumnIndexBagOfWords = 14
-	return
-}
-
-func (inst *ReadAccessTestTableTaggedTextSet) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = []uint32{
+		inst.ColumnIndexWords,
 		inst.ColumnIndexBagOfWords,
+		inst.ColumnIndexHomogenousArray,
+		inst.ColumnIndexSet,
 	}
 	return
 }
 
-func (inst *ReadAccessTestTableTaggedTextSet) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessTestTableTaggedTextAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = []string{
-		"ReadAccessTestTableTaggedTextSet.ColumnIndexBagOfWords",
+		"ReadAccessTestTableTaggedTextAttributes.ColumnIndexText",
+		"ReadAccessTestTableTaggedTextAttributes.ColumnIndexWords",
+		"ReadAccessTestTableTaggedTextAttributes.ColumnIndexBagOfWords",
+		"ReadAccessTestTableTaggedTextAttributes.ColumnIndexHomogenousArray",
+		"ReadAccessTestTableTaggedTextAttributes.ColumnIndexSet",
 	}
 	return
 }
 
-func (inst *ReadAccessTestTableTaggedTextSet) SetColumnIndices(indices []uint32) (rest []uint32) {
-	inst.ColumnIndexBagOfWords = indices[0]
+func (inst *ReadAccessTestTableTaggedTextAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexText = indices[0]
+	inst.ColumnIndexWords = indices[1]
+	inst.ColumnIndexBagOfWords = indices[2]
+	inst.ColumnIndexHomogenousArray = indices[3]
+	inst.ColumnIndexSet = indices[4]
 
-	rest = indices[1:]
+	rest = indices[5:]
 	return
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedTextSet)(nil)
-
-func NewReadAccessTestTableTaggedTextSetSupport() (inst *ReadAccessTestTableTaggedTextSetSupport) {
-	inst = &ReadAccessTestTableTaggedTextSetSupport{}
-	inst.ColumnIndex = 19
-	inst.Accel = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.AttributeIdx, runtime.SetIdx, int, int64](128)
-	return
-}
-
-func (inst *ReadAccessTestTableTaggedTextSetSupport) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = []uint32{
-		inst.ColumnIndex,
-	}
-	return
-}
-
-func (inst *ReadAccessTestTableTaggedTextSetSupport) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = []string{
-		"ReadAccessTestTableTaggedTextSetSupport.ColumnIndex",
-	}
-	return
-}
-
-func (inst *ReadAccessTestTableTaggedTextSetSupport) SetColumnIndices(indices []uint32) (rest []uint32) {
-	inst.ColumnIndex = indices[0]
-
-	rest = indices[1:]
-	return
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedTextSetSupport)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedTextAttributes)(nil)
 
 ///////////////////////////////////////////////////////////////////
 // code generator
-// readaccess.(*GoClassBuilder).composeSectionInnerClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:798
+// readaccess.(*GoClassBuilder).composeSectionAttributeClasses
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:800
 
-func (inst *ReadAccessTestTablePlainEntityIdScalar) Reset() {
+func (inst *ReadAccessTestTablePlainEntityIdAttributes) Reset() {
 	inst.ValueId = nil
 }
 
-func (inst *ReadAccessTestTablePlainEntityTimestampHomogenousArray) Reset() {
+func (inst *ReadAccessTestTablePlainEntityTimestampAttributes) Reset() {
+	inst.ValueTs = nil
 	inst.ValueProc = nil
 	inst.ValueProcElements = nil
 }
 
-func (inst *ReadAccessTestTablePlainEntityTimestampScalar) Reset() {
-	inst.ValueTs = nil
-}
-
-func (inst *ReadAccessTestTableTaggedGeoScalar) Reset() {
+func (inst *ReadAccessTestTableTaggedGeoAttributes) Reset() {
 	inst.ValueLat = nil
 	inst.ValueLatElements = nil
 	inst.ValueLng = nil
@@ -535,48 +379,43 @@ func (inst *ReadAccessTestTableTaggedGeoScalar) Reset() {
 	inst.ValueH3Res2Elements = nil
 }
 
-func (inst *ReadAccessTestTableTaggedTextHomogenousArray) Reset() {
-	inst.ValueWords = nil
-	inst.ValueWordsElements = nil
-}
-
-func (inst *ReadAccessTestTableTaggedTextScalar) Reset() {
+func (inst *ReadAccessTestTableTaggedTextAttributes) Reset() {
 	inst.ValueText = nil
 	inst.ValueTextElements = nil
-}
-
-func (inst *ReadAccessTestTableTaggedTextSet) Reset() {
+	inst.ValueWords = nil
+	inst.ValueWordsElements = nil
 	inst.ValueBagOfWords = nil
 	inst.ValueBagOfWordsElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
+	if inst.AccelSet != nil {
+		inst.AccelSet.Reset()
+	}
 }
 
 ///////////////////////////////////////////////////////////////////
 // code generator
-// readaccess.(*GoClassBuilder).composeSectionInnerClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:856
+// readaccess.(*GoClassBuilder).composeSectionAttributeClasses
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:879
 
-var _ runtime.ReleasableI = (*ReadAccessTestTablePlainEntityIdScalar)(nil)
+var _ runtime.ReleasableI = (*ReadAccessTestTablePlainEntityIdAttributes)(nil)
 
-func (inst *ReadAccessTestTablePlainEntityIdScalar) Release() {
+func (inst *ReadAccessTestTablePlainEntityIdAttributes) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueId)
 }
 
-var _ runtime.ReleasableI = (*ReadAccessTestTablePlainEntityTimestampHomogenousArray)(nil)
+var _ runtime.ReleasableI = (*ReadAccessTestTablePlainEntityTimestampAttributes)(nil)
 
-func (inst *ReadAccessTestTablePlainEntityTimestampHomogenousArray) Release() {
+func (inst *ReadAccessTestTablePlainEntityTimestampAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueTs)
 	runtime.ReleaseIfNotNil(inst.ValueProc)
 	runtime.ReleaseIfNotNil(inst.ValueProcElements)
 }
 
-var _ runtime.ReleasableI = (*ReadAccessTestTablePlainEntityTimestampScalar)(nil)
+var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedGeoAttributes)(nil)
 
-func (inst *ReadAccessTestTablePlainEntityTimestampScalar) Release() {
-	runtime.ReleaseIfNotNil(inst.ValueTs)
-}
-
-var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedGeoScalar)(nil)
-
-func (inst *ReadAccessTestTableTaggedGeoScalar) Release() {
+func (inst *ReadAccessTestTableTaggedGeoAttributes) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueLat)
 	runtime.ReleaseIfNotNil(inst.ValueLatElements)
 	runtime.ReleaseIfNotNil(inst.ValueLng)
@@ -587,628 +426,167 @@ func (inst *ReadAccessTestTableTaggedGeoScalar) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueH3Res2Elements)
 }
 
-var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedTextHomogenousArray)(nil)
+var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedTextAttributes)(nil)
 
-func (inst *ReadAccessTestTableTaggedTextHomogenousArray) Release() {
-	runtime.ReleaseIfNotNil(inst.ValueWords)
-	runtime.ReleaseIfNotNil(inst.ValueWordsElements)
-}
-
-var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedTextHomogenousArraySupport)(nil)
-
-func (inst *ReadAccessTestTableTaggedTextHomogenousArraySupport) Release() {
-	// nothing to release
-}
-
-var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedTextScalar)(nil)
-
-func (inst *ReadAccessTestTableTaggedTextScalar) Release() {
+func (inst *ReadAccessTestTableTaggedTextAttributes) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueText)
 	runtime.ReleaseIfNotNil(inst.ValueTextElements)
-}
-
-var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedTextSet)(nil)
-
-func (inst *ReadAccessTestTableTaggedTextSet) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueWords)
+	runtime.ReleaseIfNotNil(inst.ValueWordsElements)
 	runtime.ReleaseIfNotNil(inst.ValueBagOfWords)
 	runtime.ReleaseIfNotNil(inst.ValueBagOfWordsElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
+	runtime.ReleaseIfNotNil(inst.AccelSet)
 }
 
-var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedTextSetSupport)(nil)
+///////////////////////////////////////////////////////////////////
+// code generator
+// readaccess.(*GoClassBuilder).composeSectionAttributeClasses
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:961
 
-func (inst *ReadAccessTestTableTaggedTextSetSupport) Release() {
-	// nothing to release
-}
-
-func (inst *ReadAccessTestTablePlainEntityIdScalar) Len() (nEntities int) {
+func (inst *ReadAccessTestTablePlainEntityIdAttributes) Len() (nEntities int) {
 	if inst.ValueId != nil {
 		nEntities = inst.ValueId.Len()
 	}
 	return
 }
-func (inst *ReadAccessTestTablePlainEntityTimestampScalar) Len() (nEntities int) {
+
+func (inst *ReadAccessTestTablePlainEntityTimestampAttributes) Len() (nEntities int) {
 	if inst.ValueTs != nil {
 		nEntities = inst.ValueTs.Len()
 	}
 	return
 }
-func (inst *ReadAccessTestTablePlainEntityTimestampHomogenousArray) Len() (nEntities int) {
-	if inst.ValueProc != nil {
-		nEntities = inst.ValueProc.Len()
-	}
-	return
-}
-func (inst *ReadAccessTestTableTaggedGeoScalar) Len() (nEntities int) {
+
+func (inst *ReadAccessTestTableTaggedGeoAttributes) Len() (nEntities int) {
 	if inst.ValueLat != nil {
 		nEntities = inst.ValueLat.Len()
 	}
 	return
 }
-func (inst *ReadAccessTestTableTaggedTextScalar) Len() (nEntities int) {
+
+func (inst *ReadAccessTestTableTaggedTextAttributes) Len() (nEntities int) {
 	if inst.ValueText != nil {
 		nEntities = inst.ValueText.Len()
 	}
 	return
 }
-func (inst *ReadAccessTestTableTaggedTextHomogenousArray) Len() (nEntities int) {
-	if inst.ValueWords != nil {
-		nEntities = inst.ValueWords.Len()
-	}
-	return
-}
-func (inst *ReadAccessTestTableTaggedTextSet) Len() (nEntities int) {
-	if inst.ValueBagOfWords != nil {
-		nEntities = inst.ValueBagOfWords.Len()
-	}
-	return
-}
-func (inst *ReadAccessTestTableTaggedTextHomogenousArraySupport) Len() (nEntities int) {
-	if inst.Accel != nil {
-		nEntities = inst.Accel.Len()
-	}
-	return
-}
-func (inst *ReadAccessTestTableTaggedTextSetSupport) Len() (nEntities int) {
-	if inst.Accel != nil {
-		nEntities = inst.Accel.Len()
-	}
-	return
-}
 
 ///////////////////////////////////////////////////////////////////
 // code generator
-// readaccess.(*GoClassBuilder).composeSectionInnerClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:971
+// readaccess.(*GoClassBuilder).composeSectionAttributeClasses
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1015
 
-func (inst *ReadAccessTestTablePlainEntityIdScalar) LoadFromRecord(rec arrow.Record) (err error) {
-	{
-		err = runtime.LoadScalarValueFieldFromRecord(int(inst.ColumnIndexId), arrow.UINT64, rec, &inst.ValueId, array.NewUint64Data)
-		if err != nil {
-			return
-		}
-	}
-	return
-}
-
-func (inst *ReadAccessTestTablePlainEntityTimestampHomogenousArray) LoadFromRecord(rec arrow.Record) (err error) {
-	{
-		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexProc), arrow.DATE32, rec, &inst.ValueProc, &inst.ValueProcElements, array.NewDate32Data)
-		if err != nil {
-			return
-		}
-	}
-	return
-}
-
-func (inst *ReadAccessTestTablePlainEntityTimestampScalar) LoadFromRecord(rec arrow.Record) (err error) {
-	{
-		err = runtime.LoadScalarValueFieldFromRecord(int(inst.ColumnIndexTs), arrow.DATE32, rec, &inst.ValueTs, array.NewDate32Data)
-		if err != nil {
-			return
-		}
-	}
-	return
-}
-
-func (inst *ReadAccessTestTableTaggedGeoScalar) LoadFromRecord(rec arrow.Record) (err error) {
-	{
-		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexLat), arrow.FLOAT32, rec, &inst.ValueLat, &inst.ValueLatElements, array.NewFloat32Data)
-		if err != nil {
-			return
-		}
-	}
-	{
-		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexLng), arrow.FLOAT32, rec, &inst.ValueLng, &inst.ValueLngElements, array.NewFloat32Data)
-		if err != nil {
-			return
-		}
-	}
-	{
-		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexH3Res1), arrow.UINT64, rec, &inst.ValueH3Res1, &inst.ValueH3Res1Elements, array.NewUint64Data)
-		if err != nil {
-			return
-		}
-	}
-	{
-		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexH3Res2), arrow.UINT64, rec, &inst.ValueH3Res2, &inst.ValueH3Res2Elements, array.NewUint64Data)
-		if err != nil {
-			return
-		}
-	}
-	return
-}
-
-func (inst *ReadAccessTestTableTaggedTextHomogenousArray) LoadFromRecord(rec arrow.Record) (err error) {
-	{
-		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexWords), arrow.STRING, rec, &inst.ValueWords, &inst.ValueWordsElements, array.NewStringData)
-		if err != nil {
-			return
-		}
-	}
-	return
-}
-
-func (inst *ReadAccessTestTableTaggedTextHomogenousArraySupport) LoadFromRecord(rec arrow.Record) (err error) {
-	{
-		err = runtime.LoadAccelFieldFromRecord(int(inst.ColumnIndex), rec, inst.Accel)
-		if err != nil {
-			return
-		}
-	}
-	return
-}
-
-func (inst *ReadAccessTestTableTaggedTextScalar) LoadFromRecord(rec arrow.Record) (err error) {
-	{
-		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexText), arrow.STRING, rec, &inst.ValueText, &inst.ValueTextElements, array.NewStringData)
-		if err != nil {
-			return
-		}
-	}
-	return
-}
-
-func (inst *ReadAccessTestTableTaggedTextSet) LoadFromRecord(rec arrow.Record) (err error) {
-	{
-		err = runtime.LoadNonScalarValueFieldFromRecord(int(inst.ColumnIndexBagOfWords), arrow.STRING, rec, &inst.ValueBagOfWords, &inst.ValueBagOfWordsElements, array.NewStringData)
-		if err != nil {
-			return
-		}
-	}
-	return
-}
-
-func (inst *ReadAccessTestTableTaggedTextSetSupport) LoadFromRecord(rec arrow.Record) (err error) {
-	{
-		err = runtime.LoadAccelFieldFromRecord(int(inst.ColumnIndex), rec, inst.Accel)
-		if err != nil {
-			return
-		}
-	}
-	return
-}
-
-///////////////////////////////////////////////////////////////////
-// code generator
-// readaccess.(*GoClassBuilder).composeSectionClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1126
-
-type ReadAccessTestTablePlainEntityId struct {
-	ValueScalar *ReadAccessTestTablePlainEntityIdScalar
-}
-
-type ReadAccessTestTablePlainEntityTimestamp struct {
-	ValueHomogenousArray *ReadAccessTestTablePlainEntityTimestampHomogenousArray
-	ValueScalar          *ReadAccessTestTablePlainEntityTimestampScalar
-}
-
-func NewReadAccessTestTablePlainEntityId() (inst *ReadAccessTestTablePlainEntityId) {
-	inst = &ReadAccessTestTablePlainEntityId{}
-	inst.ValueScalar = NewReadAccessTestTablePlainEntityIdScalar()
-	return
-}
-
-func NewReadAccessTestTablePlainEntityTimestamp() (inst *ReadAccessTestTablePlainEntityTimestamp) {
-	inst = &ReadAccessTestTablePlainEntityTimestamp{}
-	inst.ValueHomogenousArray = NewReadAccessTestTablePlainEntityTimestampHomogenousArray()
-	inst.ValueScalar = NewReadAccessTestTablePlainEntityTimestampScalar()
-	return
-}
-
-func (inst *ReadAccessTestTablePlainEntityId) SetColumnIndices(indices []uint32) (restIndices []uint32) {
-	restIndices = indices
-	restIndices = slices.Concat(restIndices, inst.ValueScalar.SetColumnIndices(restIndices))
-	return
-}
-
-func (inst *ReadAccessTestTablePlainEntityTimestamp) SetColumnIndices(indices []uint32) (restIndices []uint32) {
-	restIndices = indices
-	restIndices = slices.Concat(restIndices, inst.ValueHomogenousArray.SetColumnIndices(restIndices))
-	restIndices = slices.Concat(restIndices, inst.ValueScalar.SetColumnIndices(restIndices))
-	return
-}
-
-func (inst *ReadAccessTestTablePlainEntityId) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = slices.Concat(columnIndices, inst.ValueScalar.GetColumnIndices())
-	return
-}
-
-func (inst *ReadAccessTestTablePlainEntityTimestamp) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = slices.Concat(columnIndices, inst.ValueHomogenousArray.GetColumnIndices())
-	columnIndices = slices.Concat(columnIndices, inst.ValueScalar.GetColumnIndices())
-	return
-}
-
-func (inst *ReadAccessTestTablePlainEntityId) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = slices.Concat(fieldNames, inst.ValueScalar.GetColumnIndexFieldNames())
-	return
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTablePlainEntityId)(nil)
-
-func (inst *ReadAccessTestTablePlainEntityTimestamp) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = slices.Concat(fieldNames, inst.ValueHomogenousArray.GetColumnIndexFieldNames())
-	fieldNames = slices.Concat(fieldNames, inst.ValueScalar.GetColumnIndexFieldNames())
-	return
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTablePlainEntityTimestamp)(nil)
-
-func (inst *ReadAccessTestTablePlainEntityId) Release() {
-	runtime.ReleaseIfNotNil(inst.ValueScalar)
-}
-
-func (inst *ReadAccessTestTablePlainEntityTimestamp) Release() {
-	runtime.ReleaseIfNotNil(inst.ValueHomogenousArray)
-	runtime.ReleaseIfNotNil(inst.ValueScalar)
-}
-
-func (inst *ReadAccessTestTablePlainEntityId) LoadFromRecord(rec arrow.Record) (err error) {
-	err = inst.ValueScalar.LoadFromRecord(rec)
+func (inst *ReadAccessTestTablePlainEntityIdAttributes) LoadFromRecord(rec arrow.Record) (err error) {
+	err = runtime.LoadScalarValueFieldFromRecord(inst.ColumnIndexId, arrow.UINT64, rec, &inst.ValueId, array.NewUint64Data)
 	if err != nil {
-		err = eb.Build().Str("fieldName", "ValueScalar").Errorf("unable to load from record: %w", err)
 		return
 	}
 	return
 }
 
-func (inst *ReadAccessTestTablePlainEntityTimestamp) LoadFromRecord(rec arrow.Record) (err error) {
-	err = inst.ValueHomogenousArray.LoadFromRecord(rec)
+func (inst *ReadAccessTestTablePlainEntityTimestampAttributes) LoadFromRecord(rec arrow.Record) (err error) {
+	err = runtime.LoadScalarValueFieldFromRecord(inst.ColumnIndexTs, arrow.DATE32, rec, &inst.ValueTs, array.NewDate32Data)
 	if err != nil {
-		err = eb.Build().Str("fieldName", "ValueHomogenousArray").Errorf("unable to load from record: %w", err)
 		return
 	}
-	err = inst.ValueScalar.LoadFromRecord(rec)
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexProc, arrow.DATE32, rec, &inst.ValueProc, &inst.ValueProcElements, array.NewDate32Data)
 	if err != nil {
-		err = eb.Build().Str("fieldName", "ValueScalar").Errorf("unable to load from record: %w", err)
-		return
-	}
-	return
-}
-
-type ReadAccessTestTableTaggedGeo struct {
-	ValueScalar *ReadAccessTestTableTaggedGeoScalar
-	Membership  *MembershipPackTestTableShared1
-}
-
-type ReadAccessTestTableTaggedText struct {
-	ValueScalar            *ReadAccessTestTableTaggedTextScalar
-	ValueHomogenousArray   *ReadAccessTestTableTaggedTextHomogenousArray
-	ValueSet               *ReadAccessTestTableTaggedTextSet
-	SupportHomogenousArray *ReadAccessTestTableTaggedTextHomogenousArraySupport
-	SupportSet             *ReadAccessTestTableTaggedTextSetSupport
-	Membership             *MembershipPackTestTableShared1
-}
-
-func NewReadAccessTestTableTaggedGeo() (inst *ReadAccessTestTableTaggedGeo) {
-	inst = &ReadAccessTestTableTaggedGeo{}
-	inst.ValueScalar = NewReadAccessTestTableTaggedGeoScalar()
-	inst.Membership = NewMembershipPackTestTableShared1Geo()
-	return
-}
-
-func NewReadAccessTestTableTaggedText() (inst *ReadAccessTestTableTaggedText) {
-	inst = &ReadAccessTestTableTaggedText{}
-	inst.ValueScalar = NewReadAccessTestTableTaggedTextScalar()
-	inst.ValueHomogenousArray = NewReadAccessTestTableTaggedTextHomogenousArray()
-	inst.ValueSet = NewReadAccessTestTableTaggedTextSet()
-	inst.SupportHomogenousArray = NewReadAccessTestTableTaggedTextHomogenousArraySupport()
-	inst.SupportSet = NewReadAccessTestTableTaggedTextSetSupport()
-	inst.Membership = NewMembershipPackTestTableShared1Text()
-	return
-}
-
-func (inst *ReadAccessTestTableTaggedGeo) SetColumnIndices(indices []uint32) (restIndices []uint32) {
-	restIndices = indices
-	if inst.ValueScalar != nil {
-		restIndices = inst.ValueScalar.SetColumnIndices(restIndices)
-	}
-	if inst.Membership != nil {
-		restIndices = inst.Membership.SetColumnIndices(restIndices)
-	}
-	return
-}
-
-func (inst *ReadAccessTestTableTaggedText) SetColumnIndices(indices []uint32) (restIndices []uint32) {
-	restIndices = indices
-	if inst.ValueScalar != nil {
-		restIndices = inst.ValueScalar.SetColumnIndices(restIndices)
-	}
-	if inst.ValueHomogenousArray != nil {
-		restIndices = inst.ValueHomogenousArray.SetColumnIndices(restIndices)
-	}
-	if inst.ValueSet != nil {
-		restIndices = inst.ValueSet.SetColumnIndices(restIndices)
-	}
-	if inst.SupportHomogenousArray != nil {
-		restIndices = inst.SupportHomogenousArray.SetColumnIndices(restIndices)
-	}
-	if inst.SupportSet != nil {
-		restIndices = inst.SupportSet.SetColumnIndices(restIndices)
-	}
-	if inst.Membership != nil {
-		restIndices = inst.Membership.SetColumnIndices(restIndices)
-	}
-	return
-}
-
-func (inst *ReadAccessTestTableTaggedGeo) GetColumnIndices() (columnIndices []uint32) {
-	if inst.ValueScalar != nil {
-		columnIndices = slices.Concat(columnIndices, inst.ValueScalar.GetColumnIndices())
-	}
-	if inst.Membership != nil {
-		columnIndices = slices.Concat(columnIndices, inst.Membership.GetColumnIndices())
-	}
-	return
-}
-
-func (inst *ReadAccessTestTableTaggedText) GetColumnIndices() (columnIndices []uint32) {
-	if inst.ValueScalar != nil {
-		columnIndices = slices.Concat(columnIndices, inst.ValueScalar.GetColumnIndices())
-	}
-	if inst.ValueHomogenousArray != nil {
-		columnIndices = slices.Concat(columnIndices, inst.ValueHomogenousArray.GetColumnIndices())
-	}
-	if inst.ValueSet != nil {
-		columnIndices = slices.Concat(columnIndices, inst.ValueSet.GetColumnIndices())
-	}
-	if inst.SupportHomogenousArray != nil {
-		columnIndices = slices.Concat(columnIndices, inst.SupportHomogenousArray.GetColumnIndices())
-	}
-	if inst.SupportSet != nil {
-		columnIndices = slices.Concat(columnIndices, inst.SupportSet.GetColumnIndices())
-	}
-	if inst.Membership != nil {
-		columnIndices = slices.Concat(columnIndices, inst.Membership.GetColumnIndices())
-	}
-	return
-}
-
-func (inst *ReadAccessTestTableTaggedGeo) GetColumnIndexFieldNames() (columnIndexFieldNames []string) {
-	if inst.ValueScalar != nil {
-		columnIndexFieldNames = slices.Concat(columnIndexFieldNames, inst.ValueScalar.GetColumnIndexFieldNames())
-	}
-	if inst.Membership != nil {
-		columnIndexFieldNames = slices.Concat(columnIndexFieldNames, inst.Membership.GetColumnIndexFieldNames())
-	}
-	return
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedGeo)(nil)
-
-func (inst *ReadAccessTestTableTaggedText) GetColumnIndexFieldNames() (columnIndexFieldNames []string) {
-	if inst.ValueScalar != nil {
-		columnIndexFieldNames = slices.Concat(columnIndexFieldNames, inst.ValueScalar.GetColumnIndexFieldNames())
-	}
-	if inst.ValueHomogenousArray != nil {
-		columnIndexFieldNames = slices.Concat(columnIndexFieldNames, inst.ValueHomogenousArray.GetColumnIndexFieldNames())
-	}
-	if inst.ValueSet != nil {
-		columnIndexFieldNames = slices.Concat(columnIndexFieldNames, inst.ValueSet.GetColumnIndexFieldNames())
-	}
-	if inst.SupportHomogenousArray != nil {
-		columnIndexFieldNames = slices.Concat(columnIndexFieldNames, inst.SupportHomogenousArray.GetColumnIndexFieldNames())
-	}
-	if inst.SupportSet != nil {
-		columnIndexFieldNames = slices.Concat(columnIndexFieldNames, inst.SupportSet.GetColumnIndexFieldNames())
-	}
-	if inst.Membership != nil {
-		columnIndexFieldNames = slices.Concat(columnIndexFieldNames, inst.Membership.GetColumnIndexFieldNames())
-	}
-	return
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedText)(nil)
-
-func (inst *ReadAccessTestTableTaggedGeo) Release() {
-	runtime.ReleaseIfNotNil(inst.ValueScalar)
-	runtime.ReleaseIfNotNil(inst.Membership)
-}
-
-func (inst *ReadAccessTestTableTaggedText) Release() {
-	runtime.ReleaseIfNotNil(inst.ValueScalar)
-	runtime.ReleaseIfNotNil(inst.ValueHomogenousArray)
-	runtime.ReleaseIfNotNil(inst.ValueSet)
-	runtime.ReleaseIfNotNil(inst.SupportHomogenousArray)
-	runtime.ReleaseIfNotNil(inst.SupportSet)
-	runtime.ReleaseIfNotNil(inst.Membership)
-}
-
-func (inst *ReadAccessTestTableTaggedGeo) LoadFromRecord(rec arrow.Record) (err error) {
-	err = inst.ValueScalar.LoadFromRecord(rec)
-	if err != nil {
-		err = eb.Build().Str("innerClassName", "ReadAccessTestTableTaggedGeoScalar").Errorf("unable to load from record: %w", err)
-		return
-	}
-	err = inst.Membership.LoadFromRecord(rec)
-	if err != nil {
-		err = eb.Build().Str("innerClassName", "MembershipPackTestTableShared1").Errorf("unable to load from record: %w", err)
 		return
 	}
 	return
 }
 
-func (inst *ReadAccessTestTableTaggedText) LoadFromRecord(rec arrow.Record) (err error) {
-	err = inst.ValueScalar.LoadFromRecord(rec)
+func (inst *ReadAccessTestTableTaggedGeoAttributes) LoadFromRecord(rec arrow.Record) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexLat, arrow.FLOAT32, rec, &inst.ValueLat, &inst.ValueLatElements, array.NewFloat32Data)
 	if err != nil {
-		err = eb.Build().Str("innerClassName", "ReadAccessTestTableTaggedTextScalar").Errorf("unable to load from record: %w", err)
 		return
 	}
-	err = inst.ValueHomogenousArray.LoadFromRecord(rec)
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexLng, arrow.FLOAT32, rec, &inst.ValueLng, &inst.ValueLngElements, array.NewFloat32Data)
 	if err != nil {
-		err = eb.Build().Str("innerClassName", "ReadAccessTestTableTaggedTextHomogenousArray").Errorf("unable to load from record: %w", err)
 		return
 	}
-	err = inst.ValueSet.LoadFromRecord(rec)
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexH3Res1, arrow.UINT64, rec, &inst.ValueH3Res1, &inst.ValueH3Res1Elements, array.NewUint64Data)
 	if err != nil {
-		err = eb.Build().Str("innerClassName", "ReadAccessTestTableTaggedTextSet").Errorf("unable to load from record: %w", err)
 		return
 	}
-	err = inst.SupportHomogenousArray.LoadFromRecord(rec)
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexH3Res2, arrow.UINT64, rec, &inst.ValueH3Res2, &inst.ValueH3Res2Elements, array.NewUint64Data)
 	if err != nil {
-		err = eb.Build().Str("innerClassName", "ReadAccessTestTableTaggedTextHomogenousArraySupport").Errorf("unable to load from record: %w", err)
-		return
-	}
-	err = inst.SupportSet.LoadFromRecord(rec)
-	if err != nil {
-		err = eb.Build().Str("innerClassName", "ReadAccessTestTableTaggedTextSetSupport").Errorf("unable to load from record: %w", err)
-		return
-	}
-	err = inst.Membership.LoadFromRecord(rec)
-	if err != nil {
-		err = eb.Build().Str("innerClassName", "MembershipPackTestTableShared1").Errorf("unable to load from record: %w", err)
 		return
 	}
 	return
 }
 
-func (inst *ReadAccessTestTablePlainEntityId) Len() (nEntities int) {
-	if inst.ValueScalar != nil {
-		nEntities = inst.ValueScalar.Len()
+func (inst *ReadAccessTestTableTaggedTextAttributes) LoadFromRecord(rec arrow.Record) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexText, arrow.STRING, rec, &inst.ValueText, &inst.ValueTextElements, array.NewStringData)
+	if err != nil {
+		return
 	}
-	return
-}
-func (inst *ReadAccessTestTablePlainEntityTimestamp) Len() (nEntities int) {
-	if inst.ValueHomogenousArray != nil {
-		nEntities = inst.ValueHomogenousArray.Len()
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexWords, arrow.STRING, rec, &inst.ValueWords, &inst.ValueWordsElements, array.NewStringData)
+	if err != nil {
+		return
 	}
-	return
-}
-
-///////////////////////////////////////////////////////////////////
-// code generator
-// readaccess.(*GoClassBuilder).composeEntityClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1848
-
-type ReadAccessTestTable struct {
-	EntityId        *ReadAccessTestTablePlainEntityId
-	EntityTimestamp *ReadAccessTestTablePlainEntityTimestamp
-	Geo             *ReadAccessTestTableTaggedGeo
-	Text            *ReadAccessTestTableTaggedText
-}
-
-func NewReadAccessTestTable() (inst *ReadAccessTestTable) {
-	inst = &ReadAccessTestTable{}
-	inst.EntityId = NewReadAccessTestTablePlainEntityId()
-	inst.EntityTimestamp = NewReadAccessTestTablePlainEntityTimestamp()
-	inst.Geo = NewReadAccessTestTableTaggedGeo()
-	inst.Text = NewReadAccessTestTableTaggedText()
-	return
-}
-
-func (inst *ReadAccessTestTable) Release() {
-	runtime.ReleaseIfNotNil(inst.EntityId)
-	runtime.ReleaseIfNotNil(inst.EntityTimestamp)
-	runtime.ReleaseIfNotNil(inst.Geo)
-	runtime.ReleaseIfNotNil(inst.Text)
-}
-
-func (inst *ReadAccessTestTable) LoadFromRecord(rec arrow.Record) (err error) {
-	if inst.EntityId != nil {
-		err = inst.EntityId.LoadFromRecord(rec)
-		if err != nil {
-			err = eb.Build().Str("tableName", "test-table").Str("fieldName", "EntityId").Errorf("unable to load from record: %w", err)
-			return
-		}
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexBagOfWords, arrow.STRING, rec, &inst.ValueBagOfWords, &inst.ValueBagOfWordsElements, array.NewStringData)
+	if err != nil {
+		return
 	}
-	if inst.EntityTimestamp != nil {
-		err = inst.EntityTimestamp.LoadFromRecord(rec)
-		if err != nil {
-			err = eb.Build().Str("tableName", "test-table").Str("fieldName", "EntityTimestamp").Errorf("unable to load from record: %w", err)
-			return
-		}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
+	if err != nil {
+		return
 	}
-	if inst.Geo != nil {
-		err = inst.Geo.LoadFromRecord(rec)
-		if err != nil {
-			err = eb.Build().Str("tableName", "test-table").Str("fieldName", "Geo").Errorf("unable to load from record: %w", err)
-			return
-		}
-	}
-	if inst.Text != nil {
-		err = inst.Text.LoadFromRecord(rec)
-		if err != nil {
-			err = eb.Build().Str("tableName", "test-table").Str("fieldName", "Text").Errorf("unable to load from record: %w", err)
-			return
-		}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexSet, rec, inst.AccelSet)
+	if err != nil {
+		return
 	}
 	return
 }
 
-func (inst *ReadAccessTestTable) SetColumnIndices(indices []uint32) (rest []uint32) {
-	rest = indices
-	if inst.EntityId != nil {
-		rest = inst.EntityId.SetColumnIndices(rest)
+/* XXXXXXXXXXXXXXXXXXXXXX */
+func (inst *ReadAccessTestTableTaggedGeoAttributes) GetAttrValueLat(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue float32) {
+	b, e := inst.ValueLat.ValueOffsets(int(entityIdx))
+	if int64(attrIdx) > (e - b) {
+		log.Panic().Str("attribute", "Lat").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
-	if inst.EntityTimestamp != nil {
-		rest = inst.EntityTimestamp.SetColumnIndices(rest)
-	}
-	if inst.Geo != nil {
-		rest = inst.Geo.SetColumnIndices(rest)
-	}
-	if inst.Text != nil {
-		rest = inst.Text.SetColumnIndices(rest)
-	}
+	scalarAttrValue = inst.ValueLatElements.Value(int(b) + int(attrIdx))
 	return
 }
 
-func (inst *ReadAccessTestTable) GetColumnIndices() (columnIndices []uint32) {
-	if inst.EntityId != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntityId.GetColumnIndices())
+/* XXXXXXXXXXXXXXXXXXXXXX */
+func (inst *ReadAccessTestTableTaggedGeoAttributes) GetAttrValueLng(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue float32) {
+	b, e := inst.ValueLng.ValueOffsets(int(entityIdx))
+	if int64(attrIdx) > (e - b) {
+		log.Panic().Str("attribute", "Lng").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
-	if inst.EntityTimestamp != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntityTimestamp.GetColumnIndices())
-	}
-	if inst.Geo != nil {
-		columnIndices = slices.Concat(columnIndices, inst.Geo.GetColumnIndices())
-	}
-	if inst.Text != nil {
-		columnIndices = slices.Concat(columnIndices, inst.Text.GetColumnIndices())
-	}
+	scalarAttrValue = inst.ValueLngElements.Value(int(b) + int(attrIdx))
 	return
 }
 
-func (inst *ReadAccessTestTable) GetColumnIndexFieldNames() (fieldNames []string) {
-	if inst.EntityId != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntityId.GetColumnIndexFieldNames())
+/* XXXXXXXXXXXXXXXXXXXXXX */
+func (inst *ReadAccessTestTableTaggedGeoAttributes) GetAttrValueH3Res1(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue uint64) {
+	b, e := inst.ValueH3Res1.ValueOffsets(int(entityIdx))
+	if int64(attrIdx) > (e - b) {
+		log.Panic().Str("attribute", "H3Res1").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
-	if inst.EntityTimestamp != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntityTimestamp.GetColumnIndexFieldNames())
-	}
-	if inst.Geo != nil {
-		fieldNames = slices.Concat(fieldNames, inst.Geo.GetColumnIndexFieldNames())
-	}
-	if inst.Text != nil {
-		fieldNames = slices.Concat(fieldNames, inst.Text.GetColumnIndexFieldNames())
-	}
+	scalarAttrValue = inst.ValueH3Res1Elements.Value(int(b) + int(attrIdx))
 	return
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTable)(nil)
-
-func (inst *ReadAccessTestTable) GetNumberOfEntities() (nEntities int) {
-	if inst.EntityId != nil {
-		nEntities = inst.EntityId.Len()
+/* XXXXXXXXXXXXXXXXXXXXXX */
+func (inst *ReadAccessTestTableTaggedGeoAttributes) GetAttrValueH3Res2(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue uint64) {
+	b, e := inst.ValueH3Res2.ValueOffsets(int(entityIdx))
+	if int64(attrIdx) > (e - b) {
+		log.Panic().Str("attribute", "H3Res2").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
+	scalarAttrValue = inst.ValueH3Res2Elements.Value(int(b) + int(attrIdx))
+	return
+}
+
+/* XXXXXXXXXXXXXXXXXXXXXX */
+func (inst *ReadAccessTestTableTaggedTextAttributes) GetAttrValueText(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
+	b, e := inst.ValueText.ValueOffsets(int(entityIdx))
+	if int64(attrIdx) > (e - b) {
+		log.Panic().Str("attribute", "Text").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	}
+	scalarAttrValue = inst.ValueTextElements.Value(int(b) + int(attrIdx))
 	return
 }

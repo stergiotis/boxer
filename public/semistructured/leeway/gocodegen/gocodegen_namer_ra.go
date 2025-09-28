@@ -18,21 +18,13 @@ func (inst *DefaultGoClassNamer) ComposeEntityReadAccessClassName(tableName nami
 	className = "ReadAccess" + tableName.Convert(naming.UpperCamelCase).String()
 	return
 }
-func (inst *DefaultGoClassNamer) ComposeSectionReadAccessOuterSingleAttributeClassName(tableName naming.StylableName, itemType common.PlainItemTypeE, sectionName naming.StylableName) (className string, err error) {
-	className, err = inst.ComposeSectionReadAccessOuterClassName(tableName, itemType, sectionName)
-	if err != nil {
-		return
-	}
-	className += "Row"
-	return
-}
-func (inst *DefaultGoClassNamer) ComposeSectionReadAccessInnerClassName(tableName naming.StylableName, itemType common.PlainItemTypeE, sectionName naming.StylableName, subType common.IntermediateColumnSubTypeE) (className string, err error) {
+func (inst *DefaultGoClassNamer) ComposeSectionReadAccessAttributeClassName(tableName naming.StylableName, itemType common.PlainItemTypeE, sectionName naming.StylableName) (className string, err error) {
 	className, err = inst.ComposeSectionReadAccessOuterClassName(tableName, itemType, sectionName)
 	if err != nil {
 		err = eh.Errorf("unable to generate outer class name: %w", err)
 		return
 	}
-	className += naming.MustBeValidStylableName(subType.String()).Convert(naming.UpperCamelCase).String()
+	className += "Attributes"
 	return
 }
 func (inst *DefaultGoClassNamer) ComposeSectionReadAccessOuterClassName(tableName naming.StylableName, itemType common.PlainItemTypeE, sectionName naming.StylableName) (className string, err error) {
@@ -83,13 +75,13 @@ func (inst *DefaultGoClassNamer) ComposeAccelFieldName(fieldNameIn string) (fiel
 	return
 }
 
-func (inst *MultiTablePerPackageClassNamer) ComposeSectionReadAccessInnerClassName(tableName naming.StylableName, itemType common.PlainItemTypeE, sectionName naming.StylableName, subType common.IntermediateColumnSubTypeE) (className string, err error) {
+func (inst *MultiTablePerPackageClassNamer) ComposeSectionReadAccessAttributeClassName(tableName naming.StylableName, itemType common.PlainItemTypeE, sectionName naming.StylableName) (className string, err error) {
 	className, err = inst.ComposeSectionReadAccessOuterClassName(tableName, itemType, sectionName)
 	if err != nil {
 		err = eh.Errorf("unable to generate outer class name: %w", err)
 		return
 	}
-	className += naming.MustBeValidStylableName(subType.String()).Convert(naming.UpperCamelCase).String()
+	className += "Attributes"
 	return
 }
 func (inst *MultiTablePerPackageClassNamer) ComposeSectionReadAccessOuterClassName(tableName naming.StylableName, itemType common.PlainItemTypeE, sectionName naming.StylableName) (className string, err error) {

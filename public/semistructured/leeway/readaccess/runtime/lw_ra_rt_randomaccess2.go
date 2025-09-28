@@ -17,6 +17,9 @@ func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) SetCurrentRow(row I) {
 	b, e := inst.ranger.ValueOffsets(row)
 	inst.accel.LoadCardinalities(inst.cards[b:e])
 }
+func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) SetReleaser(releaser ReleasableI) {
+	inst.relaser = releaser
+}
 func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) SetRanger(ranger ValueOffsetI[I, I2]) {
 	inst.ranger = ranger
 }
@@ -47,4 +50,15 @@ func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) IterateAllFwdRange() i
 }
 func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) Len() int {
 	return len(inst.cards)
+}
+func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) Release() {
+	if inst.relaser != nil {
+		inst.relaser.Release()
+	}
+}
+func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) Reset() {
+	inst.accel.Reset()
+	inst.cards = inst.cards[:0]
+	inst.ranger = nil
+	inst.relaser = nil
 }

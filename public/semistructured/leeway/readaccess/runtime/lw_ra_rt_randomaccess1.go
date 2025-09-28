@@ -96,3 +96,12 @@ func (inst *RandomAccessLookupAccel[F, B]) LoadCardinalities(cards []uint64) {
 func (inst *RandomAccessLookupAccel[F, B]) Len() int {
 	return inst.len
 }
+func (inst *RandomAccessLookupAccel[F, B]) Release() {
+	// nothing to do
+}
+func (inst *RandomAccessLookupAccel[F, B]) Reset() {
+	inst.backward = inst.backward[:0]
+	inst.len = 0
+	inst.forwardBeginIncl = inst.forwardBeginIncl[:0]
+	inst.forwardEndExcl = inst.forwardEndExcl[:0]
+}

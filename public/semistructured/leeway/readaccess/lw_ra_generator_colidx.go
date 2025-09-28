@@ -3,6 +3,7 @@ package readaccess
 import (
 	"fmt"
 	"io"
+	"iter"
 )
 
 type ColumnIndexCodeGenerator struct {
@@ -14,6 +15,15 @@ func NewColumnIndexCodeGenerator() *ColumnIndexCodeGenerator {
 	return &ColumnIndexCodeGenerator{
 		indices:    make([]uint32, 0, 128),
 		fieldNames: make([]string, 0, 128),
+	}
+}
+func (inst *ColumnIndexCodeGenerator) IterateAll() iter.Seq2[uint32, string] {
+	return func(yield func(uint32, string) bool) {
+		for i, idx := range inst.indices {
+			if !yield(idx, inst.fieldNames[i]) {
+				break
+			}
+		}
 	}
 }
 func (inst *ColumnIndexCodeGenerator) AddField(name string, columnIndex uint32) {

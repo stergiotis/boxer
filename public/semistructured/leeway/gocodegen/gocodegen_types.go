@@ -9,7 +9,7 @@ import (
 type GoClassNamerReadAccessI interface {
 	ComposeEntityReadAccessClassName(tableName naming.StylableName) (className string, err error)
 	ComposeSectionReadAccessOuterClassName(tableName naming.StylableName, itemType common.PlainItemTypeE, sectionName naming.StylableName) (className string, err error)
-	ComposeSectionReadAccessInnerClassName(tableName naming.StylableName, itemType common.PlainItemTypeE, sectionName naming.StylableName, subType common.IntermediateColumnSubTypeE) (className string, err error)
+	ComposeSectionReadAccessAttributeClassName(tableName naming.StylableName, itemType common.PlainItemTypeE, sectionName naming.StylableName) (className string, err error)
 	ComposeSectionMembershipPackClassName(tableName naming.StylableName, sectionName naming.StylableName) (className string, err error)
 	ComposeSharedMembershipPackClassName(tableName naming.StylableName, membershipSpec common.MembershipSpecE, i int, total int) (className string, err error)
 
