@@ -1080,7 +1080,7 @@ func (inst *%s) Release() {
 	}
 	return
 }
-func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassNamerI, tableName naming.StylableName, sectionNames []naming.StylableName, ir *common.IntermediateTableRepresentation, tableRowConfig common.TableRowConfigE, entityIRH *common.IntermediatePairHolder) (err error) {
+func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassNamerI, tableName naming.StylableName, sectionNames []naming.StylableName, ir *common.IntermediateTableRepresentation, tableRowConfig common.TableRowConfigE, entityIRH *common.IntermediatePairHolder) (err error, kv *containers.BinarySearchGrowingKV[common.PlainItemTypeE, []common.IntermediateColumnSubTypeE]) {
 	b := inst.builder
 	var tblDesc common.TableDesc
 	tblDesc, err = tableDescFromIr(ir, tableName)
@@ -1107,7 +1107,6 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 		}
 	}
 
-	var kv *containers.BinarySearchGrowingKV[common.PlainItemTypeE, []common.IntermediateColumnSubTypeE]
 	{ // section class: struct
 		gocodegen.EmitGeneratingCodeLocation(b)
 		var sectionToClassNames []string
@@ -1802,6 +1801,17 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 			}
 		}
 	}
+	return
+}
+func (inst *GoClassBuilder) composeEntityClasses(clsNamer gocodegen.GoClassNamerI, tableName naming.StylableName, sectionNames []naming.StylableName, ir *common.IntermediateTableRepresentation, tableRowConfig common.TableRowConfigE, entityIRH *common.IntermediatePairHolder, outerClassKv *containers.BinarySearchGrowingKV[common.PlainItemTypeE, []common.IntermediateColumnSubTypeE]) (err error) {
+	b := inst.builder
+	var tblDesc common.TableDesc
+	tblDesc, err = tableDescFromIr(ir, tableName)
+	if err != nil {
+		err = eh.Errorf("unable to get table desc: %w", err)
+		return
+	}
+
 	{
 		gocodegen.EmitGeneratingCodeLocation(b)
 		var entityClsName string
@@ -1815,7 +1825,7 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 			if err != nil {
 				return
 			}
-			for pt := range kv.IterateKeys() {
+			for pt := range outerClassKv.IterateKeys() {
 				sectionName := naming.MustBeValidStylableName(pt.String())
 				var outerClsName string
 				outerClsName, err = clsNamer.ComposeSectionReadAccessOuterClassName(tableName, pt, sectionName)
@@ -1859,7 +1869,7 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 			if err != nil {
 				return
 			}
-			for pt := range kv.IterateKeys() {
+			for pt := range outerClassKv.IterateKeys() {
 				sectionName := naming.MustBeValidStylableName(pt.String())
 				var outerClsName string
 				outerClsName, err = clsNamer.ComposeSectionReadAccessOuterClassName(tableName, pt, sectionName)
@@ -1900,7 +1910,7 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 			if err != nil {
 				return
 			}
-			for pt := range kv.IterateKeys() {
+			for pt := range outerClassKv.IterateKeys() {
 				sectionName := naming.MustBeValidStylableName(pt.String())
 				_, err = fmt.Fprintf(b, "\truntime.ReleaseIfNotNil(inst.%s)\n",
 					sectionName.Convert(naming.UpperCamelCase))
@@ -1934,7 +1944,7 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 		}
 	}
 `
-			for pt := range kv.IterateKeys() {
+			for pt := range outerClassKv.IterateKeys() {
 				sectionName := naming.MustBeValidStylableName(pt.String()).Convert(naming.UpperCamelCase)
 				_, err = fmt.Fprintf(b,
 					tmpl,
@@ -1975,7 +1985,7 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 		rest = inst.%s.SetColumnIndices(rest)
 	}
 `
-			for pt := range kv.IterateKeys() {
+			for pt := range outerClassKv.IterateKeys() {
 				sectionName := naming.MustBeValidStylableName(pt.String()).Convert(naming.UpperCamelCase)
 				_, err = fmt.Fprintf(b,
 					tmpl,
@@ -2012,7 +2022,7 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 		columnIndices = slices.Concat(columnIndices, inst.%s.GetColumnIndices())
 	}
 `
-			for pt := range kv.IterateKeys() {
+			for pt := range outerClassKv.IterateKeys() {
 				sectionName := naming.MustBeValidStylableName(pt.String()).Convert(naming.UpperCamelCase)
 				_, err = fmt.Fprintf(b,
 					tmpl,
@@ -2049,7 +2059,7 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 		fieldNames = slices.Concat(fieldNames, inst.%s.GetColumnIndexFieldNames())
 	}
 `
-			for pt := range kv.IterateKeys() {
+			for pt := range outerClassKv.IterateKeys() {
 				sectionName := naming.MustBeValidStylableName(pt.String()).Convert(naming.UpperCamelCase)
 				_, err = fmt.Fprintf(b,
 					tmpl,
@@ -2082,9 +2092,15 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 	return
 }
 func (inst *GoClassBuilder) ComposeEntityClassAndFactoryCode(clsNamer gocodegen.GoClassNamerI, tableName naming.StylableName, sectionNames []naming.StylableName, ir *common.IntermediateTableRepresentation, tableRowConfig common.TableRowConfigE, entityIRH *common.IntermediatePairHolder) (err error) {
-	err = inst.composeSectionClasses(clsNamer, tableName, sectionNames, ir, tableRowConfig, entityIRH)
+	var kv *containers.BinarySearchGrowingKV[common.PlainItemTypeE, []common.IntermediateColumnSubTypeE]
+	err, kv = inst.composeSectionClasses(clsNamer, tableName, sectionNames, ir, tableRowConfig, entityIRH)
 	if err != nil {
 		err = eh.Errorf("unable to compose section classes: %w", err)
+		return
+	}
+	err = inst.composeEntityClasses(clsNamer, tableName, sectionNames, ir, tableRowConfig, entityIRH, kv)
+	if err != nil {
+		err = eh.Errorf("unable to compose entity classes: %w", err)
 		return
 	}
 
