@@ -8,9 +8,13 @@ import (
 	// readaccess.(*GeneratorDriver).GenerateGoClasses
 	// ./public/semistructured/leeway/readaccess/lw_ra_generator_hl.go:67
 
+	"iter"
+	"slices"
+
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 	///////////////////////////////////////////////////////////////////
 	// code generator
@@ -21,7 +25,7 @@ import (
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeMembershipPacks
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:207
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:208
 
 type MembershipPackTestTableShared1 struct {
 	ValueLowCardRef                                 *array.List
@@ -157,7 +161,7 @@ func (inst *MembershipPackTestTableShared1) LoadFromRecord(rec arrow.Record) (er
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:582
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:579
 
 type ReadAccessTestTablePlainEntityIdAttributes struct {
 	ValueId       *array.Uint64
@@ -197,9 +201,9 @@ type ReadAccessTestTableTaggedTextAttributes struct {
 	ValueBagOfWords            *array.List
 	ColumnIndexBagOfWords      uint32
 	ValueBagOfWordsElements    *array.String
-	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.AttributeIdx, runtime.SetIdx, int, int64]
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
 	ColumnIndexHomogenousArray uint32
-	AccelSet                   *runtime.RandomAccessTwoLevelLookupAccel[runtime.AttributeIdx, runtime.SetIdx, int, int64]
+	AccelSet                   *runtime.RandomAccessTwoLevelLookupAccel[runtime.SetIdx, runtime.AttributeIdx, int, int64]
 	ColumnIndexSet             uint32
 }
 
@@ -313,8 +317,8 @@ func NewReadAccessTestTableTaggedTextAttributes() (inst *ReadAccessTestTableTagg
 	inst.ColumnIndexBagOfWords = 14
 	inst.ColumnIndexHomogenousArray = 18
 	inst.ColumnIndexSet = 19
-	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.AttributeIdx, runtime.SetIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelSet = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.AttributeIdx, runtime.SetIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelSet = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.SetIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	return
 }
 
@@ -356,7 +360,7 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedTextAttributes)(
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:800
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:803
 
 func (inst *ReadAccessTestTablePlainEntityIdAttributes) Reset() {
 	inst.ValueId = nil
@@ -397,7 +401,7 @@ func (inst *ReadAccessTestTableTaggedTextAttributes) Reset() {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:879
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:882
 
 var _ runtime.ReleasableI = (*ReadAccessTestTablePlainEntityIdAttributes)(nil)
 
@@ -442,7 +446,7 @@ func (inst *ReadAccessTestTableTaggedTextAttributes) Release() {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:961
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:964
 
 func (inst *ReadAccessTestTablePlainEntityIdAttributes) Len() (nEntities int) {
 	if inst.ValueId != nil {
@@ -475,7 +479,7 @@ func (inst *ReadAccessTestTableTaggedTextAttributes) Len() (nEntities int) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1015
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1018
 
 func (inst *ReadAccessTestTablePlainEntityIdAttributes) LoadFromRecord(rec arrow.Record) (err error) {
 	err = runtime.LoadScalarValueFieldFromRecord(inst.ColumnIndexId, arrow.UINT64, rec, &inst.ValueId, array.NewUint64Data)
@@ -541,7 +545,6 @@ func (inst *ReadAccessTestTableTaggedTextAttributes) LoadFromRecord(rec arrow.Re
 	return
 }
 
-/* XXXXXXXXXXXXXXXXXXXXXX */
 func (inst *ReadAccessTestTableTaggedGeoAttributes) GetAttrValueLat(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue float32) {
 	b, e := inst.ValueLat.ValueOffsets(int(entityIdx))
 	if int64(attrIdx) > (e - b) {
@@ -550,8 +553,6 @@ func (inst *ReadAccessTestTableTaggedGeoAttributes) GetAttrValueLat(entityIdx ru
 	scalarAttrValue = inst.ValueLatElements.Value(int(b) + int(attrIdx))
 	return
 }
-
-/* XXXXXXXXXXXXXXXXXXXXXX */
 func (inst *ReadAccessTestTableTaggedGeoAttributes) GetAttrValueLng(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue float32) {
 	b, e := inst.ValueLng.ValueOffsets(int(entityIdx))
 	if int64(attrIdx) > (e - b) {
@@ -560,8 +561,6 @@ func (inst *ReadAccessTestTableTaggedGeoAttributes) GetAttrValueLng(entityIdx ru
 	scalarAttrValue = inst.ValueLngElements.Value(int(b) + int(attrIdx))
 	return
 }
-
-/* XXXXXXXXXXXXXXXXXXXXXX */
 func (inst *ReadAccessTestTableTaggedGeoAttributes) GetAttrValueH3Res1(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue uint64) {
 	b, e := inst.ValueH3Res1.ValueOffsets(int(entityIdx))
 	if int64(attrIdx) > (e - b) {
@@ -570,8 +569,6 @@ func (inst *ReadAccessTestTableTaggedGeoAttributes) GetAttrValueH3Res1(entityIdx
 	scalarAttrValue = inst.ValueH3Res1Elements.Value(int(b) + int(attrIdx))
 	return
 }
-
-/* XXXXXXXXXXXXXXXXXXXXXX */
 func (inst *ReadAccessTestTableTaggedGeoAttributes) GetAttrValueH3Res2(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue uint64) {
 	b, e := inst.ValueH3Res2.ValueOffsets(int(entityIdx))
 	if int64(attrIdx) > (e - b) {
@@ -580,13 +577,161 @@ func (inst *ReadAccessTestTableTaggedGeoAttributes) GetAttrValueH3Res2(entityIdx
 	scalarAttrValue = inst.ValueH3Res2Elements.Value(int(b) + int(attrIdx))
 	return
 }
-
-/* XXXXXXXXXXXXXXXXXXXXXX */
 func (inst *ReadAccessTestTableTaggedTextAttributes) GetAttrValueText(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
 	b, e := inst.ValueText.ValueOffsets(int(entityIdx))
 	if int64(attrIdx) > (e - b) {
 		log.Panic().Str("attribute", "Text").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
 	scalarAttrValue = inst.ValueTextElements.Value(int(b) + int(attrIdx))
+	return
+}
+func (inst *ReadAccessTestTableTaggedTextAttributes) GetAttrValueWords(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[string] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	if !r.IsEmpty() {
+		return func(yield func(string) bool) {
+			vs := inst.ValueWordsElements
+			for i := r.BeginIncl; i < r.EndExcl; i++ {
+				if !yield(vs.Value(int(i))) {
+					break
+				}
+			}
+		}
+	}
+	return nil
+}
+func (inst *ReadAccessTestTableTaggedTextAttributes) GetAttrValueBagOfWords(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[string] {
+	accel := inst.AccelSet
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	if !r.IsEmpty() {
+		return func(yield func(string) bool) {
+			vs := inst.ValueBagOfWordsElements
+			for i := r.BeginIncl; i < r.EndExcl; i++ {
+				if !yield(vs.Value(int(i))) {
+					break
+				}
+			}
+		}
+	}
+	return nil
+}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// readaccess.(*GoClassBuilder).composeEntityClasses
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1987
+
+type ReadAccessTestTable struct {
+	EntityId        *ReadAccessTestTablePlainEntityIdAttributes
+	EntityTimestamp *ReadAccessTestTablePlainEntityTimestampAttributes
+	Geo             *ReadAccessTestTableTaggedGeoAttributes
+	Text            *ReadAccessTestTableTaggedTextAttributes
+}
+
+func NewReadAccessTestTable() (inst *ReadAccessTestTable) {
+	inst = &ReadAccessTestTable{}
+	inst.EntityId = NewReadAccessTestTablePlainEntityIdAttributes()
+	inst.EntityTimestamp = NewReadAccessTestTablePlainEntityTimestampAttributes()
+	inst.Geo = NewReadAccessTestTableTaggedGeoAttributes()
+	inst.Text = NewReadAccessTestTableTaggedTextAttributes()
+	return
+}
+
+func (inst *ReadAccessTestTable) Release() {
+	runtime.ReleaseIfNotNil(inst.EntityId)
+	runtime.ReleaseIfNotNil(inst.EntityTimestamp)
+	runtime.ReleaseIfNotNil(inst.Geo)
+	runtime.ReleaseIfNotNil(inst.Text)
+}
+
+func (inst *ReadAccessTestTable) LoadFromRecord(rec arrow.Record) (err error) {
+	if inst.EntityId != nil {
+		err = inst.EntityId.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "test-table").Str("fieldName", "EntityId").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.EntityTimestamp != nil {
+		err = inst.EntityTimestamp.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "test-table").Str("fieldName", "EntityTimestamp").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.Geo != nil {
+		err = inst.Geo.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "test-table").Str("fieldName", "Geo").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.Text != nil {
+		err = inst.Text.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "test-table").Str("fieldName", "Text").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	return
+}
+
+func (inst *ReadAccessTestTable) SetColumnIndices(indices []uint32) (rest []uint32) {
+	rest = indices
+	if inst.EntityId != nil {
+		rest = inst.EntityId.SetColumnIndices(rest)
+	}
+	if inst.EntityTimestamp != nil {
+		rest = inst.EntityTimestamp.SetColumnIndices(rest)
+	}
+	if inst.Geo != nil {
+		rest = inst.Geo.SetColumnIndices(rest)
+	}
+	if inst.Text != nil {
+		rest = inst.Text.SetColumnIndices(rest)
+	}
+	return
+}
+
+func (inst *ReadAccessTestTable) GetColumnIndices() (columnIndices []uint32) {
+	if inst.EntityId != nil {
+		columnIndices = slices.Concat(columnIndices, inst.EntityId.GetColumnIndices())
+	}
+	if inst.EntityTimestamp != nil {
+		columnIndices = slices.Concat(columnIndices, inst.EntityTimestamp.GetColumnIndices())
+	}
+	if inst.Geo != nil {
+		columnIndices = slices.Concat(columnIndices, inst.Geo.GetColumnIndices())
+	}
+	if inst.Text != nil {
+		columnIndices = slices.Concat(columnIndices, inst.Text.GetColumnIndices())
+	}
+	return
+}
+
+func (inst *ReadAccessTestTable) GetColumnIndexFieldNames() (fieldNames []string) {
+	if inst.EntityId != nil {
+		fieldNames = slices.Concat(fieldNames, inst.EntityId.GetColumnIndexFieldNames())
+	}
+	if inst.EntityTimestamp != nil {
+		fieldNames = slices.Concat(fieldNames, inst.EntityTimestamp.GetColumnIndexFieldNames())
+	}
+	if inst.Geo != nil {
+		fieldNames = slices.Concat(fieldNames, inst.Geo.GetColumnIndexFieldNames())
+	}
+	if inst.Text != nil {
+		fieldNames = slices.Concat(fieldNames, inst.Text.GetColumnIndexFieldNames())
+	}
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTable)(nil)
+
+func (inst *ReadAccessTestTable) GetNumberOfEntities() (nEntities int) {
+	if inst.EntityId != nil {
+		nEntities = inst.EntityId.Len()
+	}
 	return
 }

@@ -25,8 +25,7 @@ type (
 	MembershipMixedLowCardVerbatimIdx            int
 	MembershipMixedVerbatimHighCardParametersIdx int
 
-	EntityIdx    int
-	AttributeIdx int
+	EntityIdx int
 )
 
 type IndexConstraintI interface {

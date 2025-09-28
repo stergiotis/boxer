@@ -12,7 +12,7 @@ func NewRandomAccessTwoLevelLookupAccel[F IndexConstraintI, B IndexConstraintI, 
 		ranger: nil,
 	}
 }
-func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) SetCurrentRow(row I) {
+func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) SetCurrentEntityIdx(row I) {
 	inst.row = row
 	b, e := inst.ranger.ValueOffsets(row)
 	inst.accel.LoadCardinalities(inst.cards[b:e])

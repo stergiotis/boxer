@@ -82,6 +82,7 @@ func (inst *MultiTablePerPackageClassNamer) ComposeSectionReadAccessAttributeCla
 		return
 	}
 	className += "Attributes"
+	//className += naming.MustBeValidStylableName(subType.String()).Convert(naming.UpperCamelCase).String()
 	return
 }
 func (inst *MultiTablePerPackageClassNamer) ComposeSectionReadAccessOuterClassName(tableName naming.StylableName, itemType common.PlainItemTypeE, sectionName naming.StylableName) (className string, err error) {
