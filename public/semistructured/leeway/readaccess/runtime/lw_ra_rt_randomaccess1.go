@@ -5,7 +5,6 @@ import (
 	"slices"
 )
 
-
 func NewRandomAccessLookupAccel[F IndexConstraintI, B IndexConstraintI](estLength int) *RandomAccessLookupAccel[F, B] {
 	return &RandomAccessLookupAccel[F, B]{
 		forwardBeginIncl: make([]F, 0, estLength),
@@ -93,4 +92,7 @@ func (inst *RandomAccessLookupAccel[F, B]) LoadCardinalities(cards []uint64) {
 		inst.backward = bwd
 	}
 	inst.len = l
+}
+func (inst *RandomAccessLookupAccel[F, B]) Len() int {
+	return inst.len
 }

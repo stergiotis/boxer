@@ -633,6 +633,12 @@ func (inst *ReadAccessTestTablePlainEntityTimestampScalar) Len() (l int) {
 	}
 	return
 }
+func (inst *ReadAccessTestTablePlainEntityTimestampHomogenousArray) Len() (l int) {
+	if inst.ValueProc != nil {
+		l = inst.ValueProc.Len()
+	}
+	return
+}
 func (inst *ReadAccessTestTableTaggedGeoScalar) Len() (l int) {
 	if inst.ValueLat != nil {
 		l = inst.ValueLat.Len()
@@ -645,11 +651,35 @@ func (inst *ReadAccessTestTableTaggedTextScalar) Len() (l int) {
 	}
 	return
 }
+func (inst *ReadAccessTestTableTaggedTextHomogenousArray) Len() (l int) {
+	if inst.ValueWords != nil {
+		l = inst.ValueWords.Len()
+	}
+	return
+}
+func (inst *ReadAccessTestTableTaggedTextSet) Len() (l int) {
+	if inst.ValueBagOfWords != nil {
+		l = inst.ValueBagOfWords.Len()
+	}
+	return
+}
+func (inst *ReadAccessTestTableTaggedTextHomogenousArraySupport) Len() (l int) {
+	if inst.Accel != nil {
+		l = inst.Accel.Len()
+	}
+	return
+}
+func (inst *ReadAccessTestTableTaggedTextSetSupport) Len() (l int) {
+	if inst.Accel != nil {
+		l = inst.Accel.Len()
+	}
+	return
+}
 
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionInnerClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:974
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:971
 
 func (inst *ReadAccessTestTablePlainEntityIdScalar) LoadFromRecord(rec arrow.Record) (err error) {
 	{
@@ -762,7 +792,7 @@ func (inst *ReadAccessTestTableTaggedTextSetSupport) LoadFromRecord(rec arrow.Re
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1112
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1126
 
 type ReadAccessTestTablePlainEntityId struct {
 	ValueScalar *ReadAccessTestTablePlainEntityIdScalar
@@ -1053,10 +1083,18 @@ func (inst *ReadAccessTestTableTaggedText) LoadFromRecord(rec arrow.Record) (err
 	return
 }
 
+func (inst *ReadAccessTestTablePlainEntityId) Len() (nEntities int) {
+	return inst.ValueScalar.Len()
+}
+
+func (inst *ReadAccessTestTablePlainEntityTimestamp) Len() (nEntities int) {
+	return inst.ValueHomogenousArray.Len()
+}
+
 ///////////////////////////////////////////////////////////////////
 // code generator
-// readaccess.(*GoClassBuilder).composeSectionClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1806
+// readaccess.(*GoClassBuilder).composeEntityClasses
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1851
 
 type ReadAccessTestTable struct {
 	EntityId        *ReadAccessTestTablePlainEntityId
@@ -1163,3 +1201,7 @@ func (inst *ReadAccessTestTable) GetColumnIndexFieldNames() (fieldNames []string
 }
 
 var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTable)(nil)
+
+func (inst *ReadAccessTestTable) GetNumberOfEntities() (nEntities int) {
+	return inst.EntityId.Len()
+}

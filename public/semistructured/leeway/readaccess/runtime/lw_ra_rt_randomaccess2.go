@@ -45,3 +45,6 @@ func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) IterateAllFwdIndexedRa
 func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) IterateAllFwdRange() iter.Seq[Range[F]] {
 	return inst.accel.IterateAllFwdRange()
 }
+func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) Len() int {
+	return len(inst.cards)
+}

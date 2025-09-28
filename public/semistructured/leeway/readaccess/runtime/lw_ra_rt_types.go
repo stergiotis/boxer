@@ -56,6 +56,7 @@ type RandomAccessLookupAccelI[F IndexConstraintI, B IndexConstraintI] interface 
 	IterateAllFwdIndexedRange() iter.Seq[IndexedRange[F, B]]
 	IterateAllFwdRange() iter.Seq[Range[F]]
 	LoadCardinalities(cards []uint64)
+	Len() int
 }
 
 var _ RandomAccessLookupAccelI[int, uint] = (*RandomAccessTwoLevelLookupAccel[int, uint, RowIdx, int64])(nil)

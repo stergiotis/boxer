@@ -928,45 +928,42 @@ func (inst *%s) Release() {
 		for cc, cp := range ir.IterateColumnProps() {
 			key := cc.PlainItemType.String() + "|" + cc.SectionName.String()
 			if handledSections.Has(key) {
-				continue
+				//continue
 			}
+			var clsName string
+			clsName, err = clsNamer.ComposeSectionReadAccessInnerClassName(tableName, cc.PlainItemType, cc.SectionName, cc.SubType)
+			if err != nil {
+				err = eh.Errorf("unable to compose read access inner class name: %w", err)
+				return
+			}
+
+			var f string
 			switch cc.SubType {
+			case common.IntermediateColumnsSubTypeHomogenousArraySupport, common.IntermediateColumnsSubTypeSetSupport:
+				f = emptyAccelFieldName
+				break
 			case common.IntermediateColumnsSubTypeScalar, common.IntermediateColumnsSubTypeHomogenousArray, common.IntermediateColumnsSubTypeSet:
-				{
-					var clsName string
-					clsName, err = clsNamer.ComposeSectionReadAccessInnerClassName(tableName, cc.PlainItemType, cc.SectionName, cc.SubType)
-					if err != nil {
-						err = eh.Errorf("unable to compose read access inner class name: %w", err)
-						return
-					}
-					for i, colName := range cp.Names {
-						role := cp.Roles[i]
-						switch role {
-						case common.ColumnRoleValue:
-							f := clsNamer.ComposeValueField(colName.Convert(naming.UpperCamelCase).String())
-							_, err = fmt.Fprintf(b, `func (inst *%s) Len() (l int) {
+				for _, colName := range cp.Names {
+					f = clsNamer.ComposeValueField(colName.Convert(naming.UpperCamelCase).String())
+					//handledSections.Add(key)
+					break
+				}
+				break
+			}
+			if f != "" {
+				_, err = fmt.Fprintf(b, `func (inst *%s) Len() (l int) {
 	if inst.%s != nil {
 		l = inst.%s.Len()
 	}
 	return
 }
 `,
-								clsName,
-								f,
-								f)
-							if err != nil {
-								return
-							}
-							handledSections.Add(key)
-							goto skipCp
-						default:
-							err = eb.Build().Stringer("role", role).Stringer("subtype", cc.SubType).Errorf("unhandled role")
-							return
-						}
-					}
-				skipCp:
+					clsName,
+					f,
+					f)
+				if err != nil {
+					return
 				}
-				break
 			}
 		}
 	}
@@ -1098,6 +1095,24 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 	}
 
 	attrClassesKv := containers.NewBinarySearchGrowingKV[string, *strings.Builder](len(sectionNames)+len(common.AllPlainItemTypes), strings.Compare)
+	composeFieldName := func(st common.IntermediateColumnSubTypeE) (fieldNamePrefix string, err error) {
+		switch st {
+		case common.IntermediateColumnsSubTypeScalar, common.IntermediateColumnsSubTypeHomogenousArray, common.IntermediateColumnsSubTypeSet:
+			t := naming.MustBeValidStylableName(st.String()).Convert(naming.UpperCamelCase).String()
+			fieldNamePrefix = clsNamer.ComposeValueField(t)
+			return
+		case common.IntermediateColumnsSubTypeHomogenousArraySupport:
+			fieldNamePrefix = "SupportHomogenousArray"
+			break
+		case common.IntermediateColumnsSubTypeSetSupport:
+			fieldNamePrefix = "SupportSet"
+			break
+		default:
+			err = eb.Build().Stringer("subType", st).Errorf("unhandled sub type")
+			return
+		}
+		return
+	}
 
 	{ // inner section classes
 		err = inst.composeSectionInnerClasses(attrClassesKv, clsNamer, tableName, sectionNames, ir, tableRowConfig)
@@ -1121,24 +1136,6 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 			common.IntermediateColumnsSubTypeSet,
 			common.IntermediateColumnsSubTypeHomogenousArraySupport,
 			common.IntermediateColumnsSubTypeSetSupport,
-		}
-		composeFieldName := func(st common.IntermediateColumnSubTypeE) (fieldNamePrefix string, err error) {
-			switch st {
-			case common.IntermediateColumnsSubTypeScalar, common.IntermediateColumnsSubTypeHomogenousArray, common.IntermediateColumnsSubTypeSet:
-				t := naming.MustBeValidStylableName(st.String()).Convert(naming.UpperCamelCase).String()
-				fieldNamePrefix = clsNamer.ComposeValueField(t)
-				return
-			case common.IntermediateColumnsSubTypeHomogenousArraySupport:
-				fieldNamePrefix = "SupportHomogenousArray"
-				break
-			case common.IntermediateColumnsSubTypeSetSupport:
-				fieldNamePrefix = "SupportSet"
-				break
-			default:
-				err = eb.Build().Stringer("subType", st).Errorf("unhandled sub type")
-				return
-			}
-			return
 		}
 
 		kv = containers.NewBinarySearchGrowingKV[common.PlainItemTypeE, []common.IntermediateColumnSubTypeE](len(common.AllPlainItemTypes), cmp.Compare)
@@ -1801,6 +1798,45 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 			}
 		}
 	}
+
+	{ // .Len()
+		for pt, subTypeSlice := range kv.Iterate() {
+			sectionName := naming.MustBeValidStylableName(pt.String())
+			var outerClsName string
+			outerClsName, err = clsNamer.ComposeSectionReadAccessOuterClassName(tableName, pt, sectionName)
+			if err != nil {
+				err = eh.Errorf("unable to generate outer class name: %w", err)
+				return
+			}
+			_, err = fmt.Fprintf(b, "func (inst *%s) Len() (nEntities int) {\n", outerClsName)
+			if err != nil {
+				return
+			}
+			ok := false
+			for _, st := range subTypeSlice {
+				var fieldName string
+				fieldName, err = composeFieldName(st)
+				if err != nil {
+					err = eh.Errorf("unable to compose field name prefix: %w", err)
+					return
+				}
+				_, err = fmt.Fprintf(b, "\treturn inst.%s.Len()\n", fieldName)
+				if err != nil {
+					return
+				}
+				ok = true
+				break
+			}
+			if !ok {
+				err = eb.Build().Stringer("sectionName", sectionName).Errorf("no field for length termination found")
+				return
+			}
+			_, err = fmt.Fprint(b, "}\n\n")
+			if err != nil {
+				return
+			}
+		}
+	}
 	return
 }
 func (inst *GoClassBuilder) composeEntityClasses(clsNamer gocodegen.GoClassNamerI, tableName naming.StylableName, sectionNames []naming.StylableName, ir *common.IntermediateTableRepresentation, tableRowConfig common.TableRowConfigE, entityIRH *common.IntermediatePairHolder, outerClassKv *containers.BinarySearchGrowingKV[common.PlainItemTypeE, []common.IntermediateColumnSubTypeE]) (err error) {
@@ -1812,131 +1848,130 @@ func (inst *GoClassBuilder) composeEntityClasses(clsNamer gocodegen.GoClassNamer
 		return
 	}
 
-	{
-		gocodegen.EmitGeneratingCodeLocation(b)
-		var entityClsName string
-		entityClsName, err = clsNamer.ComposeEntityReadAccessClassName(tableName)
+	gocodegen.EmitGeneratingCodeLocation(b)
+	var entityClsName string
+	entityClsName, err = clsNamer.ComposeEntityReadAccessClassName(tableName)
+	if err != nil {
+		err = eh.Errorf("unable to compose entity class name: %w", err)
+		return
+	}
+	{ // entity struct
+		_, err = fmt.Fprintf(b, "type %s struct {\n", entityClsName)
 		if err != nil {
-			err = eh.Errorf("unable to compose entity class name: %w", err)
 			return
 		}
-		{ // entity struct
-			_, err = fmt.Fprintf(b, "type %s struct {\n", entityClsName)
+		for pt := range outerClassKv.IterateKeys() {
+			sectionName := naming.MustBeValidStylableName(pt.String())
+			var outerClsName string
+			outerClsName, err = clsNamer.ComposeSectionReadAccessOuterClassName(tableName, pt, sectionName)
 			if err != nil {
+				err = eh.Errorf("unable to compose read access outer class name: %w", err)
 				return
 			}
-			for pt := range outerClassKv.IterateKeys() {
-				sectionName := naming.MustBeValidStylableName(pt.String())
-				var outerClsName string
-				outerClsName, err = clsNamer.ComposeSectionReadAccessOuterClassName(tableName, pt, sectionName)
-				if err != nil {
-					err = eh.Errorf("unable to compose read access outer class name: %w", err)
-					return
-				}
-				_, err = fmt.Fprintf(b, "\t%s *%s\n",
-					sectionName.Convert(naming.UpperCamelCase),
-					outerClsName)
-				if err != nil {
-					return
-				}
-			}
-
-			for _, s := range tblDesc.TaggedValuesSections {
-				const pt = common.PlainItemTypeNone
-				var outerClsName string
-				outerClsName, err = clsNamer.ComposeSectionReadAccessOuterClassName(tableName, pt, s.Name)
-				if err != nil {
-					err = eh.Errorf("unable to compose read access outer class name: %w", err)
-					return
-				}
-				_, err = fmt.Fprintf(b, "\t%s *%s\n",
-					s.Name.Convert(naming.UpperCamelCase),
-					outerClsName)
-				if err != nil {
-					return
-				}
-			}
-			_, err = fmt.Fprint(b, "}\n\n")
+			_, err = fmt.Fprintf(b, "\t%s *%s\n",
+				sectionName.Convert(naming.UpperCamelCase),
+				outerClsName)
 			if err != nil {
 				return
 			}
 		}
-		{ // factory
-			_, err = fmt.Fprintf(b, "func New%s() (inst *%s) {\n\tinst = &%s{}\n",
-				entityClsName,
-				entityClsName,
-				entityClsName)
+
+		for _, s := range tblDesc.TaggedValuesSections {
+			const pt = common.PlainItemTypeNone
+			var outerClsName string
+			outerClsName, err = clsNamer.ComposeSectionReadAccessOuterClassName(tableName, pt, s.Name)
 			if err != nil {
+				err = eh.Errorf("unable to compose read access outer class name: %w", err)
 				return
 			}
-			for pt := range outerClassKv.IterateKeys() {
-				sectionName := naming.MustBeValidStylableName(pt.String())
-				var outerClsName string
-				outerClsName, err = clsNamer.ComposeSectionReadAccessOuterClassName(tableName, pt, sectionName)
-				if err != nil {
-					err = eh.Errorf("unable to compose read access outer class name: %w", err)
-					return
-				}
-				_, err = fmt.Fprintf(b, "\tinst.%s = New%s()\n",
-					sectionName.Convert(naming.UpperCamelCase),
-					outerClsName)
-				if err != nil {
-					return
-				}
-			}
-
-			for _, s := range tblDesc.TaggedValuesSections {
-				const pt = common.PlainItemTypeNone
-				var outerClsName string
-				outerClsName, err = clsNamer.ComposeSectionReadAccessOuterClassName(tableName, pt, s.Name)
-				if err != nil {
-					err = eh.Errorf("unable to compose read access outer class name: %w", err)
-					return
-				}
-				_, err = fmt.Fprintf(b, "\tinst.%s = New%s()\n",
-					s.Name.Convert(naming.UpperCamelCase),
-					outerClsName)
-				if err != nil {
-					return
-				}
-			}
-			_, err = fmt.Fprint(b, "\treturn\n}\n\n")
+			_, err = fmt.Fprintf(b, "\t%s *%s\n",
+				s.Name.Convert(naming.UpperCamelCase),
+				outerClsName)
 			if err != nil {
 				return
 			}
 		}
-		{ // .Release()
-			_, err = fmt.Fprintf(b, "func (inst *%s) Release() {\n", entityClsName)
+		_, err = fmt.Fprint(b, "}\n\n")
+		if err != nil {
+			return
+		}
+	}
+	{ // factory
+		_, err = fmt.Fprintf(b, "func New%s() (inst *%s) {\n\tinst = &%s{}\n",
+			entityClsName,
+			entityClsName,
+			entityClsName)
+		if err != nil {
+			return
+		}
+		for pt := range outerClassKv.IterateKeys() {
+			sectionName := naming.MustBeValidStylableName(pt.String())
+			var outerClsName string
+			outerClsName, err = clsNamer.ComposeSectionReadAccessOuterClassName(tableName, pt, sectionName)
 			if err != nil {
+				err = eh.Errorf("unable to compose read access outer class name: %w", err)
 				return
 			}
-			for pt := range outerClassKv.IterateKeys() {
-				sectionName := naming.MustBeValidStylableName(pt.String())
-				_, err = fmt.Fprintf(b, "\truntime.ReleaseIfNotNil(inst.%s)\n",
-					sectionName.Convert(naming.UpperCamelCase))
-				if err != nil {
-					return
-				}
-			}
-
-			for _, s := range tblDesc.TaggedValuesSections {
-				_, err = fmt.Fprintf(b, "\truntime.ReleaseIfNotNil(inst.%s)\n",
-					s.Name.Convert(naming.UpperCamelCase))
-				if err != nil {
-					return
-				}
-			}
-			_, err = fmt.Fprint(b, "}\n\n")
+			_, err = fmt.Fprintf(b, "\tinst.%s = New%s()\n",
+				sectionName.Convert(naming.UpperCamelCase),
+				outerClsName)
 			if err != nil {
 				return
 			}
 		}
-		{ // .LoadFromRecord(rec arrow.Record) (err error)
-			_, err = fmt.Fprintf(b, "func (inst *%s) LoadFromRecord(rec arrow.Record) (err error) {\n", entityClsName)
+
+		for _, s := range tblDesc.TaggedValuesSections {
+			const pt = common.PlainItemTypeNone
+			var outerClsName string
+			outerClsName, err = clsNamer.ComposeSectionReadAccessOuterClassName(tableName, pt, s.Name)
+			if err != nil {
+				err = eh.Errorf("unable to compose read access outer class name: %w", err)
+				return
+			}
+			_, err = fmt.Fprintf(b, "\tinst.%s = New%s()\n",
+				s.Name.Convert(naming.UpperCamelCase),
+				outerClsName)
 			if err != nil {
 				return
 			}
-			const tmpl = `	if inst.%s != nil {
+		}
+		_, err = fmt.Fprint(b, "\treturn\n}\n\n")
+		if err != nil {
+			return
+		}
+	}
+	{ // .Release()
+		_, err = fmt.Fprintf(b, "func (inst *%s) Release() {\n", entityClsName)
+		if err != nil {
+			return
+		}
+		for pt := range outerClassKv.IterateKeys() {
+			sectionName := naming.MustBeValidStylableName(pt.String())
+			_, err = fmt.Fprintf(b, "\truntime.ReleaseIfNotNil(inst.%s)\n",
+				sectionName.Convert(naming.UpperCamelCase))
+			if err != nil {
+				return
+			}
+		}
+
+		for _, s := range tblDesc.TaggedValuesSections {
+			_, err = fmt.Fprintf(b, "\truntime.ReleaseIfNotNil(inst.%s)\n",
+				s.Name.Convert(naming.UpperCamelCase))
+			if err != nil {
+				return
+			}
+		}
+		_, err = fmt.Fprint(b, "}\n\n")
+		if err != nil {
+			return
+		}
+	}
+	{ // .LoadFromRecord(rec arrow.Record) (err error)
+		_, err = fmt.Fprintf(b, "func (inst *%s) LoadFromRecord(rec arrow.Record) (err error) {\n", entityClsName)
+		if err != nil {
+			return
+		}
+		const tmpl = `	if inst.%s != nil {
 		err = inst.%s.LoadFromRecord(rec)
 		if err != nil {
 			err = eb.Build().Str("tableName",%q).Str("fieldName",%q).Errorf("unable to load from record: %%w", err)
@@ -1944,148 +1979,187 @@ func (inst *GoClassBuilder) composeEntityClasses(clsNamer gocodegen.GoClassNamer
 		}
 	}
 `
-			for pt := range outerClassKv.IterateKeys() {
-				sectionName := naming.MustBeValidStylableName(pt.String()).Convert(naming.UpperCamelCase)
-				_, err = fmt.Fprintf(b,
-					tmpl,
-					sectionName,
-					sectionName,
-					tableName,
-					sectionName,
-				)
-				if err != nil {
-					return
-				}
-			}
-
-			for _, s := range tblDesc.TaggedValuesSections {
-				sectionName := s.Name.Convert(naming.UpperCamelCase)
-				_, err = fmt.Fprintf(b,
-					tmpl,
-					sectionName,
-					sectionName,
-					tableName,
-					sectionName,
-				)
-				if err != nil {
-					return
-				}
-			}
-			_, err = fmt.Fprint(b, "\treturn\n}\n\n")
+		for pt := range outerClassKv.IterateKeys() {
+			sectionName := naming.MustBeValidStylableName(pt.String()).Convert(naming.UpperCamelCase)
+			_, err = fmt.Fprintf(b,
+				tmpl,
+				sectionName,
+				sectionName,
+				tableName,
+				sectionName,
+			)
 			if err != nil {
 				return
 			}
 		}
-		{ // .SetColumnIndices(indices []uint32)
-			_, err = fmt.Fprintf(b, "func (inst *%s) SetColumnIndices(indices []uint32) (rest []uint32) {\n\trest = indices\n", entityClsName)
+
+		for _, s := range tblDesc.TaggedValuesSections {
+			sectionName := s.Name.Convert(naming.UpperCamelCase)
+			_, err = fmt.Fprintf(b,
+				tmpl,
+				sectionName,
+				sectionName,
+				tableName,
+				sectionName,
+			)
 			if err != nil {
 				return
 			}
-			const tmpl = `	if inst.%s != nil {
+		}
+		_, err = fmt.Fprint(b, "\treturn\n}\n\n")
+		if err != nil {
+			return
+		}
+	}
+	{ // .SetColumnIndices(indices []uint32)
+		_, err = fmt.Fprintf(b, "func (inst *%s) SetColumnIndices(indices []uint32) (rest []uint32) {\n\trest = indices\n", entityClsName)
+		if err != nil {
+			return
+		}
+		const tmpl = `	if inst.%s != nil {
 		rest = inst.%s.SetColumnIndices(rest)
 	}
 `
-			for pt := range outerClassKv.IterateKeys() {
-				sectionName := naming.MustBeValidStylableName(pt.String()).Convert(naming.UpperCamelCase)
-				_, err = fmt.Fprintf(b,
-					tmpl,
-					sectionName,
-					sectionName,
-				)
-				if err != nil {
-					return
-				}
-			}
-
-			for _, s := range tblDesc.TaggedValuesSections {
-				sectionName := s.Name.Convert(naming.UpperCamelCase)
-				_, err = fmt.Fprintf(b,
-					tmpl,
-					sectionName,
-					sectionName,
-				)
-				if err != nil {
-					return
-				}
-			}
-			_, err = fmt.Fprint(b, "\treturn\n}\n\n")
+		for pt := range outerClassKv.IterateKeys() {
+			sectionName := naming.MustBeValidStylableName(pt.String()).Convert(naming.UpperCamelCase)
+			_, err = fmt.Fprintf(b,
+				tmpl,
+				sectionName,
+				sectionName,
+			)
 			if err != nil {
 				return
 			}
 		}
-		{ // .GetColumnIndices() (columnIndices []uint32)
-			_, err = fmt.Fprintf(b, "func (inst *%s) GetColumnIndices() (columnIndices []uint32) {\n", entityClsName)
+
+		for _, s := range tblDesc.TaggedValuesSections {
+			sectionName := s.Name.Convert(naming.UpperCamelCase)
+			_, err = fmt.Fprintf(b,
+				tmpl,
+				sectionName,
+				sectionName,
+			)
 			if err != nil {
 				return
 			}
-			const tmpl = `	if inst.%s != nil {
+		}
+		_, err = fmt.Fprint(b, "\treturn\n}\n\n")
+		if err != nil {
+			return
+		}
+	}
+	{ // .GetColumnIndices() (columnIndices []uint32)
+		_, err = fmt.Fprintf(b, "func (inst *%s) GetColumnIndices() (columnIndices []uint32) {\n", entityClsName)
+		if err != nil {
+			return
+		}
+		const tmpl = `	if inst.%s != nil {
 		columnIndices = slices.Concat(columnIndices, inst.%s.GetColumnIndices())
 	}
 `
-			for pt := range outerClassKv.IterateKeys() {
-				sectionName := naming.MustBeValidStylableName(pt.String()).Convert(naming.UpperCamelCase)
-				_, err = fmt.Fprintf(b,
-					tmpl,
-					sectionName,
-					sectionName,
-				)
-				if err != nil {
-					return
-				}
-			}
-
-			for _, s := range tblDesc.TaggedValuesSections {
-				sectionName := s.Name.Convert(naming.UpperCamelCase)
-				_, err = fmt.Fprintf(b,
-					tmpl,
-					sectionName,
-					sectionName,
-				)
-				if err != nil {
-					return
-				}
-			}
-			_, err = fmt.Fprint(b, "\treturn\n}\n\n")
+		for pt := range outerClassKv.IterateKeys() {
+			sectionName := naming.MustBeValidStylableName(pt.String()).Convert(naming.UpperCamelCase)
+			_, err = fmt.Fprintf(b,
+				tmpl,
+				sectionName,
+				sectionName,
+			)
 			if err != nil {
 				return
 			}
 		}
-		{ // .GetColumnIndexFieldNames() (fieldNames []string)
-			_, err = fmt.Fprintf(b, "func (inst *%s) GetColumnIndexFieldNames() (fieldNames []string) {\n", entityClsName)
+
+		for _, s := range tblDesc.TaggedValuesSections {
+			sectionName := s.Name.Convert(naming.UpperCamelCase)
+			_, err = fmt.Fprintf(b,
+				tmpl,
+				sectionName,
+				sectionName,
+			)
 			if err != nil {
 				return
 			}
-			const tmpl = `	if inst.%s != nil {
+		}
+		_, err = fmt.Fprint(b, "\treturn\n}\n\n")
+		if err != nil {
+			return
+		}
+	}
+	{ // .GetColumnIndexFieldNames() (fieldNames []string)
+		_, err = fmt.Fprintf(b, "func (inst *%s) GetColumnIndexFieldNames() (fieldNames []string) {\n", entityClsName)
+		if err != nil {
+			return
+		}
+		const tmpl = `	if inst.%s != nil {
 		fieldNames = slices.Concat(fieldNames, inst.%s.GetColumnIndexFieldNames())
 	}
 `
-			for pt := range outerClassKv.IterateKeys() {
-				sectionName := naming.MustBeValidStylableName(pt.String()).Convert(naming.UpperCamelCase)
-				_, err = fmt.Fprintf(b,
-					tmpl,
-					sectionName,
-					sectionName,
-				)
-				if err != nil {
-					return
-				}
-			}
-
-			for _, s := range tblDesc.TaggedValuesSections {
-				sectionName := s.Name.Convert(naming.UpperCamelCase)
-				_, err = fmt.Fprintf(b,
-					tmpl,
-					sectionName,
-					sectionName,
-				)
-				if err != nil {
-					return
-				}
-			}
-			_, err = fmt.Fprintf(b, "\treturn\n}\n\nvar _ runtime.ColumnIndexHandlingI = (*%s)(nil)\n\n", entityClsName)
+		for pt := range outerClassKv.IterateKeys() {
+			sectionName := naming.MustBeValidStylableName(pt.String()).Convert(naming.UpperCamelCase)
+			_, err = fmt.Fprintf(b,
+				tmpl,
+				sectionName,
+				sectionName,
+			)
 			if err != nil {
 				return
 			}
+		}
+
+		for _, s := range tblDesc.TaggedValuesSections {
+			sectionName := s.Name.Convert(naming.UpperCamelCase)
+			_, err = fmt.Fprintf(b,
+				tmpl,
+				sectionName,
+				sectionName,
+			)
+			if err != nil {
+				return
+			}
+		}
+		_, err = fmt.Fprintf(b, "\treturn\n}\n\nvar _ runtime.ColumnIndexHandlingI = (*%s)(nil)\n\n", entityClsName)
+		if err != nil {
+			return
+		}
+	}
+	{ // .GetNumberOfEntities()
+		_, err = fmt.Fprintf(b, "func (inst *%s) GetNumberOfEntities() (nEntities int) {\n", entityClsName)
+		if err != nil {
+			return
+		}
+		ok := false
+		for pt := range outerClassKv.IterateKeys() {
+			sectionName := naming.MustBeValidStylableName(pt.String())
+			_, err = fmt.Fprintf(b, "\treturn inst.%s.Len()\n",
+				sectionName.Convert(naming.UpperCamelCase),
+			)
+			if err != nil {
+				return
+			}
+			ok = true
+			break
+		}
+
+		if !ok {
+			for _, s := range tblDesc.TaggedValuesSections {
+				const pt = common.PlainItemTypeNone
+				_, err = fmt.Fprintf(b, "\treturn inst.%s.Len()\n",
+					s.Name.Convert(naming.UpperCamelCase),
+				)
+				if err != nil {
+					return
+				}
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			err = eh.Errorf("no plain and no tagged section")
+			return
+		}
+		_, err = fmt.Fprint(b, "}\n\n")
+		if err != nil {
+			return
 		}
 	}
 
