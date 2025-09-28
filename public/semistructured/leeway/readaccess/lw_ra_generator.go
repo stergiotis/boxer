@@ -951,9 +951,9 @@ func (inst *%s) Release() {
 				break
 			}
 			if f != "" {
-				_, err = fmt.Fprintf(b, `func (inst *%s) Len() (l int) {
+				_, err = fmt.Fprintf(b, `func (inst *%s) Len() (nEntities int) {
 	if inst.%s != nil {
-		l = inst.%s.Len()
+		nEntities = inst.%s.Len()
 	}
 	return
 }
@@ -1821,7 +1821,7 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 				err = eb.Build().Stringer("sectionName", sectionName).Errorf("no field for length termination found")
 				return
 			}
-			_, err = fmt.Fprintf(b, `func (inst *%s) GetNumberOfEntities() (nEntities int) {
+			_, err = fmt.Fprintf(b, `func (inst *%s) Len() (nEntities int) {
 	if inst.%s != nil {
 		nEntities = inst.%s.Len()
 	}

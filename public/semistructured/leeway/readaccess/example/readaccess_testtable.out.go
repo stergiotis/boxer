@@ -620,57 +620,57 @@ func (inst *ReadAccessTestTableTaggedTextSetSupport) Release() {
 	// nothing to release
 }
 
-func (inst *ReadAccessTestTablePlainEntityIdScalar) Len() (l int) {
+func (inst *ReadAccessTestTablePlainEntityIdScalar) Len() (nEntities int) {
 	if inst.ValueId != nil {
-		l = inst.ValueId.Len()
+		nEntities = inst.ValueId.Len()
 	}
 	return
 }
-func (inst *ReadAccessTestTablePlainEntityTimestampScalar) Len() (l int) {
+func (inst *ReadAccessTestTablePlainEntityTimestampScalar) Len() (nEntities int) {
 	if inst.ValueTs != nil {
-		l = inst.ValueTs.Len()
+		nEntities = inst.ValueTs.Len()
 	}
 	return
 }
-func (inst *ReadAccessTestTablePlainEntityTimestampHomogenousArray) Len() (l int) {
+func (inst *ReadAccessTestTablePlainEntityTimestampHomogenousArray) Len() (nEntities int) {
 	if inst.ValueProc != nil {
-		l = inst.ValueProc.Len()
+		nEntities = inst.ValueProc.Len()
 	}
 	return
 }
-func (inst *ReadAccessTestTableTaggedGeoScalar) Len() (l int) {
+func (inst *ReadAccessTestTableTaggedGeoScalar) Len() (nEntities int) {
 	if inst.ValueLat != nil {
-		l = inst.ValueLat.Len()
+		nEntities = inst.ValueLat.Len()
 	}
 	return
 }
-func (inst *ReadAccessTestTableTaggedTextScalar) Len() (l int) {
+func (inst *ReadAccessTestTableTaggedTextScalar) Len() (nEntities int) {
 	if inst.ValueText != nil {
-		l = inst.ValueText.Len()
+		nEntities = inst.ValueText.Len()
 	}
 	return
 }
-func (inst *ReadAccessTestTableTaggedTextHomogenousArray) Len() (l int) {
+func (inst *ReadAccessTestTableTaggedTextHomogenousArray) Len() (nEntities int) {
 	if inst.ValueWords != nil {
-		l = inst.ValueWords.Len()
+		nEntities = inst.ValueWords.Len()
 	}
 	return
 }
-func (inst *ReadAccessTestTableTaggedTextSet) Len() (l int) {
+func (inst *ReadAccessTestTableTaggedTextSet) Len() (nEntities int) {
 	if inst.ValueBagOfWords != nil {
-		l = inst.ValueBagOfWords.Len()
+		nEntities = inst.ValueBagOfWords.Len()
 	}
 	return
 }
-func (inst *ReadAccessTestTableTaggedTextHomogenousArraySupport) Len() (l int) {
+func (inst *ReadAccessTestTableTaggedTextHomogenousArraySupport) Len() (nEntities int) {
 	if inst.Accel != nil {
-		l = inst.Accel.Len()
+		nEntities = inst.Accel.Len()
 	}
 	return
 }
-func (inst *ReadAccessTestTableTaggedTextSetSupport) Len() (l int) {
+func (inst *ReadAccessTestTableTaggedTextSetSupport) Len() (nEntities int) {
 	if inst.Accel != nil {
-		l = inst.Accel.Len()
+		nEntities = inst.Accel.Len()
 	}
 	return
 }
@@ -1082,13 +1082,13 @@ func (inst *ReadAccessTestTableTaggedText) LoadFromRecord(rec arrow.Record) (err
 	return
 }
 
-func (inst *ReadAccessTestTablePlainEntityId) GetNumberOfEntities() (nEntities int) {
+func (inst *ReadAccessTestTablePlainEntityId) Len() (nEntities int) {
 	if inst.ValueScalar != nil {
 		nEntities = inst.ValueScalar.Len()
 	}
 	return
 }
-func (inst *ReadAccessTestTablePlainEntityTimestamp) GetNumberOfEntities() (nEntities int) {
+func (inst *ReadAccessTestTablePlainEntityTimestamp) Len() (nEntities int) {
 	if inst.ValueHomogenousArray != nil {
 		nEntities = inst.ValueHomogenousArray.Len()
 	}
