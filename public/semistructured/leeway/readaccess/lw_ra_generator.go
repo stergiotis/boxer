@@ -1,7 +1,6 @@
 package readaccess
 
 import (
-	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -1272,9 +1271,6 @@ func (inst *%s) Len() (nEntities int) {
 	return
 }
 func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassNamerI, tableName naming.StylableName, sectionNames []naming.StylableName, ir *common.IntermediateTableRepresentation, tableRowConfig common.TableRowConfigE, entityIRH *common.IntermediatePairHolder) (err error) {
-	kv := containers.NewBinarySearchGrowingKV[common.PlainItemTypeE, []common.IntermediateColumnSubTypeE](len(common.AllPlainItemTypes), cmp.Compare)
-	var _ = kv
-
 	var tblDesc common.TableDesc
 	tblDesc, err = tableDescFromIr(ir, tableName)
 	if err != nil {
@@ -1306,12 +1302,11 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 		err = eh.Errorf("unable to compose membership pack info: %w", err)
 		return
 	}
-	var _ = sectionToClassNames
 
 	composeCode := func(o func(sec common.TaggedValuesSection, outerClsName string) (err error),
 		a func(sec common.TaggedValuesSection, attrClsName string) (err error),
 		m func(sec common.TaggedValuesSection, membClsName string) (err error),
-		s func(sec common.TaggedValuesSection) (err error)) {
+		s func(sec common.TaggedValuesSection, outerClsName string) (err error)) {
 		for i, sec := range tblDesc.TaggedValuesSections {
 			const pt = common.PlainItemTypeNone
 			var outerClsName string
@@ -1343,7 +1338,7 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 					return
 				}
 			}
-			err = s(sec)
+			err = s(sec, outerClsName)
 			if err != nil {
 				return
 			}
@@ -1360,8 +1355,8 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 		}, func(sec common.TaggedValuesSection, membClsName string) (err error) {
 			_, err = fmt.Fprintf(b, "\tMemberships *%s\n", membClsName)
 			return
-		}, func(sec common.TaggedValuesSection) (err error) {
-			_, err = fmt.Fprint(b, "}\n\n")
+		}, func(sec common.TaggedValuesSection, outerClsName string) (err error) {
+			_, err = fmt.Fprintf(b, "}\n\nvar _ runtime.ColumnIndexHandlingI = (*%s)(nil)\n", outerClsName)
 			return
 		})
 	}
@@ -1382,7 +1377,7 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 				sec.Name.Convert(naming.UpperCamelCase),
 			)
 			return
-		}, func(sec common.TaggedValuesSection) (err error) {
+		}, func(sec common.TaggedValuesSection, outerClsName string) (err error) {
 			_, err = fmt.Fprint(b, "\treturn\n}\n\n")
 			return
 		})
@@ -1413,7 +1408,7 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 				afterFunc,
 			)
 			return
-		}, func(sec common.TaggedValuesSection) (err error) {
+		}, func(sec common.TaggedValuesSection, outerClsName string) (err error) {
 			_, err = fmt.Fprintf(b, "%s\treturn\n}\n\n",
 				epilog)
 			return
@@ -1464,7 +1459,7 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 		}, func(sec common.TaggedValuesSection, membClsName string) (err error) {
 			_, err = fmt.Fprint(b, "\truntime.ReleaseIfNotNil(inst.Memberships)\n")
 			return
-		}, func(sec common.TaggedValuesSection) (err error) {
+		}, func(sec common.TaggedValuesSection, outerClsName string) (err error) {
 			_, err = fmt.Fprint(b, "}\n\n")
 			return
 		})
@@ -1494,7 +1489,7 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 		}, func(sec common.TaggedValuesSection, membClsName string) (err error) {
 			_, err = fmt.Fprint(b, "\tnEntities = inst.Memberships.Len()\n")
 			return
-		}, func(sec common.TaggedValuesSection) (err error) {
+		}, func(sec common.TaggedValuesSection, outerClsName string) (err error) {
 			_, err = fmt.Fprint(b, "\treturn\n}\n\n")
 			return
 		})
