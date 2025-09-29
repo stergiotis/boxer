@@ -66,6 +66,7 @@ func (inst *GeneratorDriver) GenerateGoClasses(packageName string, tableName nam
 	}
 	gocodegen.EmitGeneratingCodeLocation(s)
 	for _, imp := range []string{
+		"iter",
 		"slices",
 		"github.com/apache/arrow-go/v18/arrow",
 		"github.com/apache/arrow-go/v18/arrow/array",
