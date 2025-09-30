@@ -695,10 +695,6 @@ func (inst *GoClassBuilder) ComposeAttributeCode(clsNamer gocodegen.GoClassNamer
 			if err != nil {
 				return
 			}
-			err = inst.composeFieldRelatedCodeAll(structFieldOperationIncrementContainerLength, nonScalarIRH.IterateColumnProps(), "")
-			if err != nil {
-				return
-			}
 			_, err = b.WriteString("\treturn inst\n}\n")
 			if err != nil {
 				return
