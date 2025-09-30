@@ -1171,6 +1171,7 @@ func (inst *GoClassBuilder) ComposeEntityClassAndFactoryCode(clsNamer gocodegen.
 		return
 	}
 
+	gocodegen.EmitGeneratingCodeLocation(b)
 	_, err = fmt.Fprintf(b, `type %s struct {
 	errs []error
 	state runtime.EntityStateE
@@ -1195,13 +1196,22 @@ func (inst *GoClassBuilder) ComposeEntityClassAndFactoryCode(clsNamer gocodegen.
 			return
 		}
 	}
-	plainIRH := entityIRH.DeriveSubHolder(deriveSubHolderSelectPlainValues).DeriveSubHolder(deriveSubHolderSelectScalar)
+	plainIRH := entityIRH.DeriveSubHolder(deriveSubHolderSelectPlainValues)
 	plainScalarIRH := plainIRH.DeriveSubHolder(deriveSubHolderSelectScalar)
+	plainNonScalarIRH := plainIRH.DeriveSubHolder(deriveSubHolderSelectNonScalar)
 	err = inst.composeFieldRelatedCodeAll(structFieldOperationPlainDeclaration, plainScalarIRH.IterateColumnProps(), "\n")
 	if err != nil {
 		return
 	}
+	err = inst.composeFieldRelatedCodeAll(structFieldOperationPlainDeclaration, plainNonScalarIRH.IterateColumnProps(), "\n")
+	if err != nil {
+		return
+	}
 	err = inst.composeFieldRelatedCodeAll(structFieldOperationDeclaration, plainScalarIRH.IterateColumnProps(), "\n")
+	if err != nil {
+		return
+	}
+	err = inst.composeFieldRelatedCodeAll(structFieldOperationDeclaration, plainNonScalarIRH.IterateColumnProps(), "\n")
 	if err != nil {
 		return
 	}
@@ -1275,12 +1285,13 @@ func (inst *GoClassBuilder) ComposeEntityCode(clsNamer gocodegen.GoClassNamerI, 
 			if irh.Length() == 0 {
 				continue
 			}
+			gocodegen.EmitGeneratingCodeLocation(b)
 			_, err = fmt.Fprintf(b, `func (inst *%s) %s(`, clsNames.InEntityClassName, setterName)
 			if err != nil {
 				return
 			}
+			first := true
 			for cc, cp := range irh.IterateColumnProps() {
-				first := true
 				for j := 0; j < cp.Length(); j++ {
 					if !first {
 						_, err = b.WriteString(", ")
@@ -1294,15 +1305,19 @@ func (inst *GoClassBuilder) ComposeEntityCode(clsNamer gocodegen.GoClassNamerI, 
 						return
 					}
 				}
-				_, err = fmt.Fprintf(b, `) *%s {
+			}
+			_, err = fmt.Fprintf(b, `) *%s {
 `, clsNames.InEntityClassName)
-				if err != nil {
-					return
-				}
-				err = inst.composeStateVerificationCode([]runtime.EntityStateE{runtime.EntityStateInEntity}, false, "inst")
-				if err != nil {
-					return
-				}
+			if err != nil {
+				return
+			}
+
+			err = inst.composeStateVerificationCode([]runtime.EntityStateE{runtime.EntityStateInEntity}, false, "inst")
+			if err != nil {
+				return
+			}
+
+			for cc, cp := range irh.IterateColumnProps() {
 				for j := 0; j < cp.Length(); j++ {
 					err = inst.composeFieldRelatedCode(structFieldOperationPlainAssignArg, cc, cp, j)
 					if err != nil {
