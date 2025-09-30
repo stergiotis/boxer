@@ -114,7 +114,7 @@ func (inst *TechnologySpecificCodeGenerator) GenerateColumnCode(idx int, phy com
 		return
 	}
 	if list {
-		_, err = b.WriteString("arrow.ListOf(")
+		_, err = b.WriteString("arrow.ListOfNonNullable(")
 		if err != nil {
 			return
 		}
@@ -132,7 +132,12 @@ func (inst *TechnologySpecificCodeGenerator) GenerateColumnCode(idx int, phy com
 		err = eb.Build().Stringer("column", phy).Errorf("unable to get encoding hints from physical column: %w", err)
 		return
 	}
-	err = inst.generateTypeAndCodec(ct, hints)
+	if list {
+		ctScalar := canonicaltypes.DemoteToScalar(ct)
+		err = inst.generateTypeAndCodec(ctScalar, hints)
+	} else {
+		err = inst.generateTypeAndCodec(ct, hints)
+	}
 	if err != nil {
 		err = eh.Errorf("unable to generate type: %w", err)
 		return

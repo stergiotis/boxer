@@ -30,7 +30,7 @@ func promoteScalarPrim(s PrimitiveAstNodeI, scalarModifier ScalarModifierE) (out
 	}
 	return
 }
-func demoteScalarPrim(s PrimitiveAstNodeI) (out PrimitiveAstNodeI) {
+func DemoteToScalar(s PrimitiveAstNodeI) (out PrimitiveAstNodeI) {
 	if !s.IsScalar() {
 		out = s
 		switch ct := s.(type) {
@@ -90,7 +90,7 @@ func DemoteToScalars(in AstNodeI) (out AstNodeI, modified int, unmodified int) {
 	if isPrim {
 		if !p.IsScalar() {
 			modified = 1
-			out = demoteScalarPrim(p)
+			out = DemoteToScalar(p)
 		} else {
 			unmodified = 1
 			out = in
@@ -108,7 +108,7 @@ func DemoteToScalars(in AstNodeI) (out AstNodeI, modified int, unmodified int) {
 	if modified > 0 {
 		members := make([]PrimitiveAstNodeI, 0, modified+unmodified)
 		for c := range in.IterateMembers() {
-			members = append(members, demoteScalarPrim(c))
+			members = append(members, DemoteToScalar(c))
 		}
 		out = NewGroupAstNode(members)
 	} else {

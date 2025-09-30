@@ -125,7 +125,12 @@ func (inst *TechnologySpecificCodeGenerator) generateTypeAndCodec(canonicalType 
 		inst.typeProlog += "LowCardinality("
 		inst.typeEpilog += ")"
 	}
-	err = inst.GenerateType(canonicalType)
+	if list {
+		canonicalTypeScalar := canonicaltypes.DemoteToScalar(canonicalType)
+		err = inst.GenerateType(canonicalTypeScalar)
+	} else {
+		err = inst.GenerateType(canonicalType)
+	}
 	inst.typeProlog = ""
 	inst.typeEpilog = ""
 	if err != nil {
