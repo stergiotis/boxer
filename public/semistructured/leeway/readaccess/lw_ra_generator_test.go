@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/dml"
 	encodingaspects2 "github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/gocodegen"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
@@ -58,8 +59,8 @@ func sampleTableDesc() (tbl common.TableDesc, err error) {
 			AddSectionMembership(common.MembershipSpecLowCardRef).
 			AddSectionMembership(common.MembershipSpecMixedLowCardVerbatimHighCardParameters)
 		sec.TaggedValueColumn("text", ctabb.S)
+		sec.TaggedValueColumn("word_length", ctabb.U32h)
 		sec.TaggedValueColumn("words", ctabb.Sh)
-		sec.TaggedValueColumn("bag_of_words", ctabb.Sm)
 	}
 	return manip.BuildTableDesc()
 }
@@ -80,7 +81,7 @@ func TestReadAccessGoClassBuilder(t *testing.T) {
 	sourceCode, _, err = driver.GenerateGoClasses("example", naming.MustBeValidStylableName("test_table"), tblDesc, tableRowConfig, namingConvention)
 	require.NoError(t, err)
 
-	err = os.WriteFile("example/readaccess_testtable.out.go", sourceCode, os.ModePerm)
+	err = os.WriteFile("example/readaccess_testtable_ra.out.go", sourceCode, os.ModePerm)
 	require.NoError(t, err)
 }
 func TestGoClassBuilderSample(t *testing.T) {
@@ -119,6 +120,27 @@ func TestGoClassBuilderSample(t *testing.T) {
 		}
 		require.True(t, wellFormed)
 	}
+}
+func TestDmlSample(t *testing.T) {
+	tblDesc, err := sampleTableDesc()
+	require.NoError(t, err)
+
+	var conv *ddl.HumanReadableNamingConvention
+	conv, err = ddl.NewHumanReadableNamingConvention(":")
+	require.NoError(t, err)
+	chTech := clickhouse.NewTechnologySpecificCodeGenerator()
+	driver := dml.NewGoCodeGeneratorDriver(conv, chTech)
+
+	var sourceCode []byte
+	tableRowConfig := common.TableRowConfigMultiAttributesPerRow
+	namingStyle := gocodegen.NewMultiTablePerPackageGoClassNamer()
+	sourceCode, _, err = driver.GenerateGoClasses("example", naming.MustBeValidStylableName("test_table"), tblDesc, tableRowConfig, namingStyle)
+	require.NoError(t, err)
+
+	p := "./example/readaccess_testtable_dml.out.go"
+	_ = os.Remove(p)
+	err = os.WriteFile(p, sourceCode, os.ModePerm)
+	require.NoError(t, err)
 }
 
 func TestComposeMembershipPackInfo(t *testing.T) {

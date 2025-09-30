@@ -23,6 +23,7 @@ func GenerateArrowSchemaFactory(b *strings.Builder, tableName naming.StylableNam
 		if err != nil {
 			return
 		}
+		EmitGeneratingCodeLocation(b)
 		_, err = fmt.Fprintf(b, `func %s() (schema *arrow.Schema) {
 		schema = arrow.NewSchema([]arrow.Field{
 `, factoryName)
