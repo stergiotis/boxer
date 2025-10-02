@@ -1022,7 +1022,6 @@ func (inst *GoClassBuilder) ComposeSectionCode(clsNamer gocodegen.GoClassNamerI,
 		return
 	}
 	scalarIRH := sectionIRH.DeriveSubHolder(deriveSubHolderSelectScalar)
-	nonScalarIRH := sectionIRH.DeriveSubHolder(deriveSubHolderSelectNonScalar)
 
 	{ // endAttribute
 		_, err = fmt.Fprintf(b, `func (inst *%s) endAttribute() {
@@ -1107,17 +1106,8 @@ func (inst *GoClassBuilder) ComposeSectionCode(clsNamer gocodegen.GoClassNamerI,
 func (inst *%s) beginSection() {
 	inst.state = runtime.EntityStateInSection
 	inst.inAttr.beginAttribute()
-`, clsNames.InSectionClassName)
-		if err != nil {
-			return
-		}
-		err = inst.composeFieldRelatedCodeAll(structFieldOperationAppendContainer, nonScalarIRH.IterateColumnProps(), "")
-		if err != nil {
-			return
-		}
-		_, err = b.WriteString(`
 }
-`)
+`, clsNames.InSectionClassName)
 		if err != nil {
 			return
 		}
