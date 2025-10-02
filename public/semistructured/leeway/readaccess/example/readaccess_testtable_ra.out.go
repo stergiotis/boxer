@@ -102,11 +102,11 @@ func NewMembershipPackTestTableShared1Text() (inst *MembershipPackTestTableShare
 	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.ColumnIndexLowCardRef = 15
-	inst.ColumnIndexLowCardRefAccel = 20
+	inst.ColumnIndexLowCardRefAccel = 19
 	inst.ColumnIndexMixedLowCardVerbatim = 16
-	inst.ColumnIndexMixedLowCardVerbatimAccel = 21
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 20
 	inst.ColumnIndexMixedVerbatimHighCardParameters = 17
-	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 21
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 20
 	return
 }
 
@@ -200,16 +200,14 @@ type ReadAccessTestTableTaggedTextAttributes struct {
 	ValueText                  *array.List
 	ColumnIndexText            uint32
 	ValueTextElements          *array.String
+	ValueWordLength            *array.List
+	ColumnIndexWordLength      uint32
+	ValueWordLengthElements    *array.Uint32
 	ValueWords                 *array.List
 	ColumnIndexWords           uint32
 	ValueWordsElements         *array.String
-	ValueBagOfWords            *array.List
-	ColumnIndexBagOfWords      uint32
-	ValueBagOfWordsElements    *array.String
 	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
 	ColumnIndexHomogenousArray uint32
-	AccelSet                   *runtime.RandomAccessTwoLevelLookupAccel[runtime.SetIdx, runtime.AttributeIdx, int, int64]
-	ColumnIndexSet             uint32
 }
 
 func NewReadAccessTestTablePlainEntityIdAttributes() (inst *ReadAccessTestTablePlainEntityIdAttributes) {
@@ -318,22 +316,19 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedGeoAttributes)(n
 func NewReadAccessTestTableTaggedTextAttributes() (inst *ReadAccessTestTableTaggedTextAttributes) {
 	inst = &ReadAccessTestTableTaggedTextAttributes{}
 	inst.ColumnIndexText = 12
-	inst.ColumnIndexWords = 13
-	inst.ColumnIndexBagOfWords = 14
+	inst.ColumnIndexWordLength = 13
+	inst.ColumnIndexWords = 14
 	inst.ColumnIndexHomogenousArray = 18
-	inst.ColumnIndexSet = 19
 	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelSet = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.SetIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	return
 }
 
 func (inst *ReadAccessTestTableTaggedTextAttributes) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = []uint32{
 		inst.ColumnIndexText,
+		inst.ColumnIndexWordLength,
 		inst.ColumnIndexWords,
-		inst.ColumnIndexBagOfWords,
 		inst.ColumnIndexHomogenousArray,
-		inst.ColumnIndexSet,
 	}
 	return
 }
@@ -341,22 +336,20 @@ func (inst *ReadAccessTestTableTaggedTextAttributes) GetColumnIndices() (columnI
 func (inst *ReadAccessTestTableTaggedTextAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = []string{
 		"ReadAccessTestTableTaggedTextAttributes.ColumnIndexText",
+		"ReadAccessTestTableTaggedTextAttributes.ColumnIndexWordLength",
 		"ReadAccessTestTableTaggedTextAttributes.ColumnIndexWords",
-		"ReadAccessTestTableTaggedTextAttributes.ColumnIndexBagOfWords",
 		"ReadAccessTestTableTaggedTextAttributes.ColumnIndexHomogenousArray",
-		"ReadAccessTestTableTaggedTextAttributes.ColumnIndexSet",
 	}
 	return
 }
 
 func (inst *ReadAccessTestTableTaggedTextAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
 	inst.ColumnIndexText = indices[0]
-	inst.ColumnIndexWords = indices[1]
-	inst.ColumnIndexBagOfWords = indices[2]
+	inst.ColumnIndexWordLength = indices[1]
+	inst.ColumnIndexWords = indices[2]
 	inst.ColumnIndexHomogenousArray = indices[3]
-	inst.ColumnIndexSet = indices[4]
 
-	rest = indices[5:]
+	rest = indices[4:]
 	return
 }
 
@@ -391,15 +384,12 @@ func (inst *ReadAccessTestTableTaggedGeoAttributes) Reset() {
 func (inst *ReadAccessTestTableTaggedTextAttributes) Reset() {
 	inst.ValueText = nil
 	inst.ValueTextElements = nil
+	inst.ValueWordLength = nil
+	inst.ValueWordLengthElements = nil
 	inst.ValueWords = nil
 	inst.ValueWordsElements = nil
-	inst.ValueBagOfWords = nil
-	inst.ValueBagOfWordsElements = nil
 	if inst.AccelHomogenousArray != nil {
 		inst.AccelHomogenousArray.Reset()
-	}
-	if inst.AccelSet != nil {
-		inst.AccelSet.Reset()
 	}
 }
 
@@ -440,12 +430,11 @@ var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedTextAttributes)(nil)
 func (inst *ReadAccessTestTableTaggedTextAttributes) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueText)
 	runtime.ReleaseIfNotNil(inst.ValueTextElements)
+	runtime.ReleaseIfNotNil(inst.ValueWordLength)
+	runtime.ReleaseIfNotNil(inst.ValueWordLengthElements)
 	runtime.ReleaseIfNotNil(inst.ValueWords)
 	runtime.ReleaseIfNotNil(inst.ValueWordsElements)
-	runtime.ReleaseIfNotNil(inst.ValueBagOfWords)
-	runtime.ReleaseIfNotNil(inst.ValueBagOfWordsElements)
 	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
-	runtime.ReleaseIfNotNil(inst.AccelSet)
 }
 
 ///////////////////////////////////////////////////////////////////
@@ -531,19 +520,15 @@ func (inst *ReadAccessTestTableTaggedTextAttributes) LoadFromRecord(rec arrow.Re
 	if err != nil {
 		return
 	}
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexWordLength, arrow.UINT32, rec, &inst.ValueWordLength, &inst.ValueWordLengthElements, array.NewUint32Data)
+	if err != nil {
+		return
+	}
 	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexWords, arrow.STRING, rec, &inst.ValueWords, &inst.ValueWordsElements, array.NewStringData)
 	if err != nil {
 		return
 	}
-	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexBagOfWords, arrow.STRING, rec, &inst.ValueBagOfWords, &inst.ValueBagOfWordsElements, array.NewStringData)
-	if err != nil {
-		return
-	}
 	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
-	if err != nil {
-		return
-	}
-	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexSet, rec, inst.AccelSet)
 	if err != nil {
 		return
 	}
@@ -590,13 +575,13 @@ func (inst *ReadAccessTestTableTaggedTextAttributes) GetAttrValueText(entityIdx 
 	scalarAttrValue = inst.ValueTextElements.Value(int(b) + int(attrIdx))
 	return
 }
-func (inst *ReadAccessTestTableTaggedTextAttributes) GetAttrValueWords(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[string] {
+func (inst *ReadAccessTestTableTaggedTextAttributes) GetAttrValueWordLength(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[uint32] {
 	accel := inst.AccelHomogenousArray
 	accel.SetCurrentEntityIdx(int(entityIdx))
 	r := accel.LookupForwardRange(attrIdx)
 	if !r.IsEmpty() {
-		return func(yield func(string) bool) {
-			vs := inst.ValueWordsElements
+		return func(yield func(uint32) bool) {
+			vs := inst.ValueWordLengthElements
 			for i := r.BeginIncl; i < r.EndExcl; i++ {
 				if !yield(vs.Value(int(i))) {
 					break
@@ -606,13 +591,13 @@ func (inst *ReadAccessTestTableTaggedTextAttributes) GetAttrValueWords(entityIdx
 	}
 	return nil
 }
-func (inst *ReadAccessTestTableTaggedTextAttributes) GetAttrValueBagOfWords(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[string] {
-	accel := inst.AccelSet
+func (inst *ReadAccessTestTableTaggedTextAttributes) GetAttrValueWords(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[string] {
+	accel := inst.AccelHomogenousArray
 	accel.SetCurrentEntityIdx(int(entityIdx))
 	r := accel.LookupForwardRange(attrIdx)
 	if !r.IsEmpty() {
 		return func(yield func(string) bool) {
-			vs := inst.ValueBagOfWordsElements
+			vs := inst.ValueWordsElements
 			for i := r.BeginIncl; i < r.EndExcl; i++ {
 				if !yield(vs.Value(int(i))) {
 					break

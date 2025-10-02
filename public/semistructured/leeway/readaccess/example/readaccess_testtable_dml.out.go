@@ -51,7 +51,7 @@ func CreateSchemaTestTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1174
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1160
 
 type InEntityTestTable struct {
 	errs           []error
@@ -95,7 +95,7 @@ func NewInEntityTestTable(allocator memory.Allocator, estimatedNumberOfRecords i
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1288
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1274
 
 func (inst *InEntityTestTable) SetId(id0 uint64) *InEntityTestTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -110,7 +110,7 @@ func (inst *InEntityTestTable) SetId(id0 uint64) *InEntityTestTable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1288
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1274
 
 func (inst *InEntityTestTable) SetTimestamp(ts1 time.Time, proc2 []time.Time) *InEntityTestTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -334,7 +334,6 @@ func (inst *InEntityTestTableSectionGeo) EndSection() *InEntityTestTable {
 func (inst *InEntityTestTableSectionGeo) beginSection() {
 	inst.state = runtime.EntityStateInSection
 	inst.inAttr.beginAttribute()
-
 }
 
 func (inst *InEntityTestTableSectionGeo) resetSection() {
@@ -588,9 +587,6 @@ func (inst *InEntityTestTableSectionText) EndSection() *InEntityTestTable {
 func (inst *InEntityTestTableSectionText) beginSection() {
 	inst.state = runtime.EntityStateInSection
 	inst.inAttr.beginAttribute()
-	inst.homogenousArrayListBuilder013.Append(true)
-	inst.homogenousArrayListBuilder014.Append(true)
-
 }
 
 func (inst *InEntityTestTableSectionText) resetSection() {
