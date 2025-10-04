@@ -201,6 +201,32 @@ func (inst *GoClassBuilder) getColumnIndexBySectionAndRole(ir *common.Intermedia
 	err = eb.Build().Stringer("sectionName", sectionName).Stringer("role", role).Errorf("unable to find columen")
 	return
 }
+func getElementGoTypeName(ct canonicaltypes.PrimitiveAstNodeI, hints encodingaspects.AspectSet) (typeName string, err error) {
+	var scalarModifier1 canonicaltypes.ScalarModifierE
+	scalarModifier1, err = common.ExtractScalarModifier(ct)
+	if err != nil {
+		return
+	}
+	typeName, _, _, err = codegen.GenerateGoCode(ct, hints)
+	if err != nil {
+		err = eh.Errorf("unable to get go type for canonical type: %w", err)
+		return
+	}
+	switch scalarModifier1 {
+	case canonicaltypes.ScalarModifierNone:
+		break
+	case canonicaltypes.ScalarModifierSet:
+		typeName = strings.TrimPrefix(typeName, "[]") // FIXME encoding hints vs demoted canonical type
+		break
+	case canonicaltypes.ScalarModifierHomogenousArray:
+		typeName = strings.TrimPrefix(typeName, "[]") // FIXME encoding hints vs demoted canonical type
+		break
+	default:
+		err = eb.Build().Stringer("scalarModifier", scalarModifier1).Stringer("ct", ct).Errorf("unhandled scalar modifier")
+		return
+	}
+	return
+}
 
 func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableRepresentation, tblDesc common.TableDesc, clsNamer gocodegen.GoClassNamerReadAccessI, tableRowConfig common.TableRowConfigE, useDictEncoding bool) (err error) {
 	b := inst.builder
@@ -582,6 +608,116 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 			_, err = fmt.Fprint(b, "\treturn\n}\n\n")
 			if err != nil {
 				return
+			}
+		}
+	}
+	{ // .GetNumberOfMemberItemsXXX() (nItems int64)
+		for i, spec := range membershipSpecs {
+			clsName := classNames[i]
+			for s := range spec.Iterate() {
+				var role1 common.ColumnRoleE
+				_, _, role1, _, _, _, _, err = arrowTech.ResolveMembership(s)
+				if err != nil {
+					err = eh.Errorf("unable to get membership column canonical type: %w", err)
+					return
+				}
+				name1 := naming.MustBeValidStylableName(role1.LongString()).Convert(naming.UpperCamelCase).String()
+				f1 := clsNamer.ComposeValueField(name1)
+				const tmpl = `func (inst *%s) GetNumberOfMemberItem%s(entityIdx runtime.EntityIdx) (nItems int64) {
+	if inst.%s != nil {
+		b, e := inst.%s.ValueOffsets(int(entityIdx))
+		nItems = e - b
+	}
+	return
+}
+`
+				_, err = fmt.Fprintf(b, tmpl,
+					clsName,
+					name1,
+					f1,
+					f1,
+				)
+				if err != nil {
+					return
+				}
+			}
+		}
+	}
+	{ // .GetMembValueXXX(entityIdx runtime.EntityIdx,membIdx runtime.MemberIdx) (iter.Seq[XXX])
+		for i, spec := range membershipSpecs {
+			clsName := classNames[i]
+			for s := range spec.Iterate() {
+				var role1, role2 common.ColumnRoleE
+				var ct1, ct2 canonicaltypes.PrimitiveAstNodeI
+				var hint1, hint2 encodingaspects.AspectSet
+				ct1, hint1, role1, ct2, hint2, role2, _, err = arrowTech.ResolveMembership(s)
+				if err != nil {
+					err = eh.Errorf("unable to get membership column canonical type: %w", err)
+					return
+				}
+
+				var typeName1 string
+				typeName1, err = getElementGoTypeName(ct1, hint1)
+				if err != nil {
+					err = eh.Errorf("unable to get element go type name: %w", err)
+					return
+				}
+				name1 := naming.MustBeValidStylableName(role1.LongString()).Convert(naming.UpperCamelCase).String()
+				const tmpl = `func (inst *%s) GetMembValue%s(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[%s] {
+	accel := inst.%s
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	if !r.IsEmpty() {
+		b, _ := inst.%s.ValueOffsets(int(entityIdx))	
+		return func(yield func(%s) bool) {
+			vs := inst.%s
+			for i := r.BeginIncl; i < r.EndExcl; i++ {
+				if !yield(vs.Value(int(b)+int(i))) {
+					break
+				}
+			}
+		}
+	}
+	return nil
+}
+`
+				_, err = fmt.Fprintf(b, tmpl,
+					clsName,
+					name1,
+					typeName1,
+					clsNamer.ComposeAccelFieldName(name1),
+
+					clsNamer.ComposeValueField(name1),
+
+					typeName1,
+					clsNamer.ComposeValueFieldElementAccessor(name1),
+				)
+				if err != nil {
+					return
+				}
+				if s.ContainsMixed() {
+					var typeName2 string
+					typeName2, err = getElementGoTypeName(ct2, hint2)
+					if err != nil {
+						err = eh.Errorf("unable to get element go type name: %w", err)
+						return
+					}
+					name2 := naming.MustBeValidStylableName(role2.LongString()).Convert(naming.UpperCamelCase).String()
+					_, err = fmt.Fprintf(b, tmpl,
+						clsName,
+						name2,
+						typeName2,
+						clsNamer.ComposeAccelFieldName(name2),
+
+						clsNamer.ComposeValueField(name2),
+
+						typeName2,
+						clsNamer.ComposeValueFieldElementAccessor(name2),
+					)
+					if err != nil {
+						return
+					}
+				}
 			}
 		}
 	}
@@ -1161,6 +1297,9 @@ func (inst *%s) Len() (nEntities int) {
 				ct := s.ValueColumnTypes[i]
 				var scalarModifier canonicaltypes.ScalarModifierE
 				scalarModifier, err = common.ExtractScalarModifier(ct)
+				if err != nil {
+					return
+				}
 				var typeName string
 				typeName, _, _, err = codegen.GenerateGoCode(ct, s.ValueEncodingHints[i])
 				if err != nil {
@@ -1254,6 +1393,43 @@ func (inst *%s) Len() (nEntities int) {
 				if err != nil {
 					return
 				}
+			}
+
+			/*{
+				membPackClsName := sectionToClassNames[i]
+				if membPackClsName != "" {
+					_, err = fmt.Fprintf(b, "\tMembership *%s\n", membPackClsName)
+					if err != nil {
+						return
+					}
+				}
+			}*/
+		}
+	}
+
+	{ // .GetNumberOfAttributes(i runtime.EntityIdx) (nAttributes int)
+		gocodegen.EmitGeneratingCodeLocation(b)
+
+		for _, s := range tblDesc.TaggedValuesSections {
+			attrName := s.ValueColumnNames[0]
+			var clsName string
+			clsName, err = clsNamer.ComposeSectionReadAccessAttributeClassName(tableName, common.PlainItemTypeNone, s.Name)
+			if err != nil {
+				err = eh.Errorf("unable to compose read access inner class name: %w", err)
+				return
+			}
+			attrNameS := attrName.Convert(naming.UpperCamelCase).String()
+			_, err = fmt.Fprintf(b, `func (inst *%s) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	b, e := inst.%s.ValueOffsets(int(entityIdx))
+	nAttributes = e-b
+	return
+}
+`,
+				clsName,
+				clsNamer.ComposeValueField(attrNameS),
+			)
+			if err != nil {
+				return
 			}
 
 			/*{

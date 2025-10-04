@@ -12,51 +12,60 @@ const (
 	AspectScaleOfMeasurementMetricRatio    AspectE = 4
 	AspectVectorValue                      AspectE = 5
 	AspectCanonicalizedValue               AspectE = 6
-	AspectApplicationLevelEncrypted        AspectE = 7
-	AspectHumanReadable                    AspectE = 8
-	AspectMachineReadable                  AspectE = 9
-	AspectUltraShortLifespan               AspectE = 10
-	AspectShortLifespan                    AspectE = 11
-	AspectMediumLifespan                   AspectE = 12
-	AspectLongLifespan                     AspectE = 13
-	AspectUltraLongLifespan                AspectE = 14
-	AspectJsonScalar                       AspectE = 15
-	AspectJsonArray                        AspectE = 16
-	AspectJsonObject                       AspectE = 17
-	AspectJson                             AspectE = 18
-	AspectCborScalar                       AspectE = 19
-	AspectCborArray                        AspectE = 20
-	AspectCborMap                          AspectE = 21
-	AspectCbor                             AspectE = 22
-	AspectUrl                              AspectE = 23 // follow the WHATWG recommendation to forget URI and use URL (see https://url.spec.whatwg.org/#goals)
-	AspectFeature                          AspectE = 24
-	AspectFeatureOneHot                    AspectE = 25
-	AspectFeatureScalingStandardN01        AspectE = 26
-	AspectFeatureScalingMinMax01           AspectE = 27
-	AspectFeatureScalingRobust01           AspectE = 28
-	AspectFeatureBinarized                 AspectE = 29
-	AspectFeatureOrdinal                   AspectE = 30
-	AspectFeatureLabel                     AspectE = 31
-	AspectIdNaturalKey                     AspectE = 32
-	AspectIdSurrogateKey                   AspectE = 33
-	AspectIdDurableSuperNaturalKey         AspectE = 34
-	AspectIdContentAddressableKey          AspectE = 35
-	AspectTextUnicodeNormalizedNfd         AspectE = 36 // Normalization Form Canonical Decomposition
-	AspectTextUnicodeNormalizedNfc         AspectE = 37 // Normalization Form Canonical Composition
-	AspectTextUnicodeNormalizedNfkd        AspectE = 38 // Normalization Form Compatibility Decomposition
-	AspectTextUnicodeNormalizedNfkc        AspectE = 39 // Normalization Form Compatibility Composition
-	AspectTextUnicodeCaseFolded            AspectE = 40 // Normalization Form Compatibility Composition
-	AspectTextUnicodeCaseInsensitive       AspectE = 41
-	AspectTextUnicodeLocaleSensitive       AspectE = 42
-	AspectTextUnicodeMayBeBidi             AspectE = 43
-	AspectHumanGenerated                   AspectE = 44
-	AspectMachineGenerate                  AspectE = 45
-	AspectBinaryCodedDecimal               AspectE = 46 // BCD see https://en.wikipedia.org/wiki/Binary-coded_decimal, note that there are many incompatible encodings
-	AspectReflectedBinaryCode              AspectE = 47 // see https://en.wikipedia.org/wiki/Gray_code
-	AspectTrinaryLogic                     AspectE = 48 // see https://en.wikipedia.org/wiki/Three-valued_logic
-	AspectGraphVertex                      AspectE = 49
-	AspectGraphEdge                        AspectE = 50
-	AspectHyperGraphEdge                   AspectE = 51
+	AspectApplicationLevelEncryption       AspectE = 7
+	AspectApplicationLevelCompression      AspectE = 8
+	AspectHumanReadable                    AspectE = 9
+	AspectMachineReadable                  AspectE = 10
+	AspectUltraShortLifespan               AspectE = 11
+	AspectShortLifespan                    AspectE = 12
+	AspectMediumLifespan                   AspectE = 13
+	AspectLongLifespan                     AspectE = 14
+	AspectUltraLongLifespan                AspectE = 15
+	AspectJsonScalar                       AspectE = 16
+	AspectJsonArray                        AspectE = 17
+	AspectJsonObject                       AspectE = 18
+	AspectJson                             AspectE = 19
+	AspectCborScalar                       AspectE = 20
+	AspectCborArray                        AspectE = 21
+	AspectCborMap                          AspectE = 22
+	AspectCbor                             AspectE = 23
+	AspectUrl                              AspectE = 24 // follow the WHATWG recommendation to forget URI and use URL (see https://url.spec.whatwg.org/#goals)
+	AspectFeature                          AspectE = 25
+	AspectFeatureOneHot                    AspectE = 26
+	AspectFeatureScalingStandardN01        AspectE = 27
+	AspectFeatureScalingMinMax01           AspectE = 28
+	AspectFeatureScalingRobust01           AspectE = 29
+	AspectFeatureBinarized                 AspectE = 30
+	AspectFeatureOrdinal                   AspectE = 31
+	AspectFeatureLabel                     AspectE = 32
+	AspectMachineLearningEmbedding         AspectE = 33
+	AspectIdNaturalKey                     AspectE = 34
+	AspectIdSurrogateKey                   AspectE = 35
+	AspectIdDurableSuperNaturalKey         AspectE = 36
+	AspectIdContentAddressableKey          AspectE = 37
+	AspectTextUnicodeNormalizedNfd         AspectE = 38 // Normalization Form Canonical Decomposition
+	AspectTextUnicodeNormalizedNfc         AspectE = 39 // Normalization Form Canonical Composition
+	AspectTextUnicodeNormalizedNfkd        AspectE = 40 // Normalization Form Compatibility Decomposition
+	AspectTextUnicodeNormalizedNfkc        AspectE = 41 // Normalization Form Compatibility Composition
+	AspectTextUnicodeCaseFolded            AspectE = 42 // Normalization Form Compatibility Composition
+	AspectTextUnicodeCaseInsensitive       AspectE = 43
+	AspectTextUnicodeLocaleSensitive       AspectE = 44
+	AspectTextUnicodeMayBeBidi             AspectE = 45
+	AspectHumanGenerated                   AspectE = 46
+	AspectMachineGenerate                  AspectE = 47
+	AspectBinaryCodedDecimal               AspectE = 48 // BCD see https://en.wikipedia.org/wiki/Binary-coded_decimal, note that there are many incompatible encodings
+	AspectReflectedBinaryCode              AspectE = 49 // see https://en.wikipedia.org/wiki/Gray_code
+	AspectTrinaryLogic                     AspectE = 50 // see https://en.wikipedia.org/wiki/Three-valued_logic
+	AspectGraphVertex                      AspectE = 51
+	AspectGraphEdge                        AspectE = 52
+	AspectHyperGraphEdge                   AspectE = 53
+	AspectAnonymized                       AspectE = 54
+	AspectMandatory                        AspectE = 55
+	AspectOptional                         AspectE = 56
+	AspectEmulatedMembershipVerbatim       AspectE = 57
+	AspectEmulatedMembershipRef            AspectE = 58
+	AspectEmulatedMembershipParams         AspectE = 59
+	AspectEmulatedMembershipRefWithParams  AspectE = 60
 )
 
 var MaxAspectExcl = slices.Max(AllAspects) + 1
@@ -69,7 +78,8 @@ var AllAspects = []AspectE{
 	AspectScaleOfMeasurementMetricRatio,
 	AspectVectorValue,
 	AspectCanonicalizedValue,
-	AspectApplicationLevelEncrypted,
+	AspectApplicationLevelEncryption,
+	AspectApplicationLevelCompression,
 	AspectHumanReadable,
 	AspectMachineReadable,
 	AspectUltraShortLifespan,
@@ -94,6 +104,7 @@ var AllAspects = []AspectE{
 	AspectFeatureBinarized,
 	AspectFeatureOrdinal,
 	AspectFeatureLabel,
+	AspectMachineLearningEmbedding,
 	AspectIdNaturalKey,
 	AspectIdSurrogateKey,
 	AspectIdDurableSuperNaturalKey,
@@ -114,6 +125,13 @@ var AllAspects = []AspectE{
 	AspectGraphVertex,
 	AspectGraphEdge,
 	AspectHyperGraphEdge,
+	AspectAnonymized,
+	AspectMandatory,
+	AspectOptional,
+	AspectEmulatedMembershipVerbatim,
+	AspectEmulatedMembershipRef,
+	AspectEmulatedMembershipParams,
+	AspectEmulatedMembershipRefWithParams,
 }
 
 const InvalidAspectEnumValueString = "<invalid AspectE>"
@@ -137,8 +155,10 @@ func (inst AspectE) String() string {
 		return "vector-value"
 	case AspectCanonicalizedValue:
 		return "canonicalized-value"
-	case AspectApplicationLevelEncrypted:
-		return "application-level-encrypted"
+	case AspectApplicationLevelEncryption:
+		return "application-level-encryption"
+	case AspectApplicationLevelCompression:
+		return "application-level-compression"
 	case AspectHumanReadable:
 		return "human-readable"
 	case AspectMachineReadable:
@@ -187,6 +207,8 @@ func (inst AspectE) String() string {
 		return "feature-ordinal"
 	case AspectFeatureLabel:
 		return "feature-label"
+	case AspectMachineLearningEmbedding:
+		return "machine-learning-embedding"
 	case AspectIdNaturalKey:
 		return "id-natural-key"
 	case AspectIdSurrogateKey:
@@ -227,6 +249,20 @@ func (inst AspectE) String() string {
 		return "graph-edge"
 	case AspectHyperGraphEdge:
 		return "hyper-graph-edge"
+	case AspectAnonymized:
+		return "anonymized"
+	case AspectMandatory:
+		return "mandatory"
+	case AspectOptional:
+		return "optional"
+	case AspectEmulatedMembershipVerbatim:
+		return "emulated-membership-verbatim"
+	case AspectEmulatedMembershipRef:
+		return "emulated-membership-ref"
+	case AspectEmulatedMembershipParams:
+		return "emulated-membership-params"
+	case AspectEmulatedMembershipRefWithParams:
+		return "emulated-membership-ref-with-params"
 	}
 	return InvalidAspectEnumValueString
 }

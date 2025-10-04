@@ -6,19 +6,24 @@ import (
 
 func NewRandomAccessTwoLevelLookupAccel[F IndexConstraintI, B IndexConstraintI, I, I2 IndexConstraintI](estLength int) *RandomAccessTwoLevelLookupAccel[F, B, I, I2] {
 	return &RandomAccessTwoLevelLookupAccel[F, B, I, I2]{
-		accel:  NewRandomAccessLookupAccel[F, B](estLength),
-		row:    0,
-		cards:  nil,
-		ranger: nil,
+		accel:   NewRandomAccessLookupAccel[F, B](estLength),
+		current: 0,
+		cards:   nil,
+		ranger:  nil,
+		loaded:  false,
 	}
 }
-func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) SetCurrentEntityIdx(row I) {
-	inst.row = row
-	b, e := inst.ranger.ValueOffsets(row)
+func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) SetCurrentEntityIdx(current I) {
+	if inst.current == current && inst.loaded {
+		return
+	}
+	inst.current = current
+	b, e := inst.ranger.ValueOffsets(current)
 	inst.accel.LoadCardinalities(inst.cards[b:e])
+	inst.loaded = true
 }
 func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) SetReleaser(releaser ReleasableI) {
-	inst.relaser = releaser
+	inst.releaser = releaser
 }
 func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) SetRanger(ranger ValueOffsetI[I, I2]) {
 	inst.ranger = ranger
@@ -52,13 +57,14 @@ func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) Len() int {
 	return len(inst.cards)
 }
 func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) Release() {
-	if inst.relaser != nil {
-		inst.relaser.Release()
+	if inst.releaser != nil {
+		inst.releaser.Release()
 	}
 }
 func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) Reset() {
 	inst.accel.Reset()
 	inst.cards = inst.cards[:0]
 	inst.ranger = nil
-	inst.relaser = nil
+	inst.releaser = nil
+	inst.loaded = false
 }

@@ -57,6 +57,9 @@ const (
 	AspectSlowlyChangingDimensionType5            AspectE = 50 // i.e. type 5, add mini and type 1 outrigger, see https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/type-5/
 	AspectSlowlyChangingDimensionType6            AspectE = 51 // i.e. type 6, add type 1 attributes to type 2 dimension, see https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/type-6/
 	AspectSlowlyChangingDimensionType7            AspectE = 52 // i.e. type 7, dual type 1 and type 2 dimension, see https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/type-7/
+	AspectQualityStaging                          AspectE = 53 // i.e. Bronze in medaillon architecture
+	AspectQualityCore                             AspectE = 54 // i.e. Silver in medaillon architecture
+	AspectQualitySemantical                       AspectE = 55 // i.e. Gold in medaillon architecture
 )
 
 var MaxAspectExcl = slices.Max(AllAspects) + 1

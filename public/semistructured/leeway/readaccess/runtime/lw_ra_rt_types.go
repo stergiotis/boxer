@@ -41,11 +41,12 @@ type ValueOffsetI[I IndexConstraintI, I2 IndexConstraintI] interface {
 	ValueOffsets(i I) (beginIncl I2, endExcl I2)
 }
 type RandomAccessTwoLevelLookupAccel[F IndexConstraintI, B IndexConstraintI, I IndexConstraintI, I2 IndexConstraintI] struct {
-	accel   *RandomAccessLookupAccel[F, B]
-	row     I
-	cards   []uint64
-	ranger  ValueOffsetI[I, I2]
-	relaser ReleasableI
+	accel    *RandomAccessLookupAccel[F, B]
+	current  I
+	cards    []uint64
+	ranger   ValueOffsetI[I, I2]
+	releaser ReleasableI
+	loaded   bool
 }
 type RowIdx int
 type RandomAccessLookupAccelI[F IndexConstraintI, B IndexConstraintI] interface {
