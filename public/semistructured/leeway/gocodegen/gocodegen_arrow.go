@@ -10,6 +10,29 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 )
 
+func ArrowTypeToGoType(ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspects.AspectSet, useDictionaryEncoding bool) (prefix string, suffix string, err error) {
+	switch ctt := ct.(type) {
+	case canonicaltypes2.TemporalTypeAstNode:
+		switch ctt.BaseType {
+		case canonicaltypes2.BaseTypeTemporalUtcDatetime:
+			prefix = ""
+			suffix = ".ToTime()"
+			break
+		case canonicaltypes2.BaseTypeTemporalZonedDatetime:
+			prefix = ""
+			suffix = ".ToTime()"
+			break
+		case canonicaltypes2.BaseTypeTemporalZonedTime:
+			err = common.ErrNotImplemented
+			break
+		default:
+			err = eb.Build().Stringer("baseType", ctt.BaseType).Errorf("unhandled base type")
+			return
+		}
+		break
+	}
+	return
+}
 func GoTypeToArrowType(ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspects.AspectSet, useDictionaryEncoding bool) (prefix string, suffix string, err error) {
 	switch ctt := ct.(type) {
 	case canonicaltypes2.StringAstNode:

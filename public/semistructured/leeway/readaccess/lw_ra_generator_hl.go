@@ -56,7 +56,6 @@ func (inst *GeneratorDriver) GenerateGoClasses(packageName string, tableName nam
 		return
 	}
 	suppressedImports := containers.NewHashSet[string](1)
-	suppressedImports.Add("time")
 
 	addImport := func(imp string) (err error) {
 		if !suppressedImports.AddEx(imp) {
@@ -87,7 +86,7 @@ func (inst *GeneratorDriver) GenerateGoClasses(packageName string, tableName nam
 		err = eh.Errorf("unable to compose go imports: %w", err)
 		return
 	}
-	_, err = s.WriteString("\n)\n")
+	_, err = s.WriteString("\n)\nvar _ = time.Time{}")
 	if err != nil {
 		return
 	}
@@ -98,8 +97,8 @@ func (inst *GeneratorDriver) GenerateGoClasses(packageName string, tableName nam
 		return
 	}
 
-	sourceCode = unsafeperf.UnsafeStringToByte(s.String()) // s is not reachable anymore
-	{                                                      // try formatting source code
+	sourceCode = unsafeperf.UnsafeStringToByte(s.String())
+	{ // try formatting source code
 		var formatted []byte
 		formatted, err = format.Source(sourceCode)
 		if err != nil {

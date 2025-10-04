@@ -6,7 +6,7 @@ import (
 	///////////////////////////////////////////////////////////////////
 	// code generator
 	// readaccess.(*GeneratorDriver).GenerateGoClasses
-	// ./public/semistructured/leeway/readaccess/lw_ra_generator_hl.go:67
+	// ./public/semistructured/leeway/readaccess/lw_ra_generator_hl.go:66
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -15,16 +15,26 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 	"iter"
 	"slices"
+
 	///////////////////////////////////////////////////////////////////
 	// code generator
 	// readaccess.(*GeneratorDriver).GenerateGoClasses
-	// ./public/semistructured/leeway/readaccess/lw_ra_generator_hl.go:84
+	// ./public/semistructured/leeway/readaccess/lw_ra_generator_hl.go:83
+
+	///////////////////////////////////////////////////////////////////
+	// code generator
+	// readaccess.(*GoClassBuilder).ComposeGoImports-range1
+	// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2077
+
+	"time"
 )
+
+var _ = time.Time{}
 
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeMembershipPacks
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:233
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:232
 
 type MembershipPackTestTableShared1 struct {
 	ValueLowCardRef                                 *array.List
@@ -232,7 +242,7 @@ func (inst *MembershipPackTestTableShared1) GetMembValueMixedVerbatimHighCardPar
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:745
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:744
 
 type ReadAccessTestTablePlainEntityIdAttributes struct {
 	ValueId       *array.Uint64
@@ -424,7 +434,7 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedTextAttributes)(
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:969
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:968
 
 func (inst *ReadAccessTestTablePlainEntityIdAttributes) Reset() {
 	inst.ValueId = nil
@@ -462,7 +472,7 @@ func (inst *ReadAccessTestTableTaggedTextAttributes) Reset() {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1048
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1047
 
 var _ runtime.ReleasableI = (*ReadAccessTestTablePlainEntityIdAttributes)(nil)
 
@@ -506,7 +516,7 @@ func (inst *ReadAccessTestTableTaggedTextAttributes) Release() {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1130
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1129
 
 func (inst *ReadAccessTestTablePlainEntityIdAttributes) Len() (nEntities int) {
 	if inst.ValueId != nil {
@@ -539,7 +549,7 @@ func (inst *ReadAccessTestTableTaggedTextAttributes) Len() (nEntities int) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1184
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1183
 
 func (inst *ReadAccessTestTablePlainEntityIdAttributes) LoadFromRecord(rec arrow.Record) (err error) {
 	err = runtime.LoadScalarValueFieldFromRecord(inst.ColumnIndexId, arrow.UINT64, rec, &inst.ValueId, array.NewUint64Data)
@@ -673,11 +683,30 @@ func (inst *ReadAccessTestTableTaggedTextAttributes) GetAttrValueWords(entityIdx
 	}
 	return nil
 }
+func (inst *ReadAccessTestTablePlainEntityIdAttributes) GetAttrValueId(entityIdx runtime.EntityIdx) (scalarAttrValue uint64) {
+	scalarAttrValue = inst.ValueId.Value(int(entityIdx))
+	return
+}
+func (inst *ReadAccessTestTablePlainEntityTimestampAttributes) GetAttrValueTs(entityIdx runtime.EntityIdx) (scalarAttrValue time.Time) {
+	scalarAttrValue = inst.ValueTs.Value(int(entityIdx)).ToTime()
+	return
+}
+func (inst *ReadAccessTestTablePlainEntityTimestampAttributes) GetAttrValueProc(entityIdx runtime.EntityIdx) iter.Seq[time.Time] {
+	return func(yield func(time.Time) bool) {
+		b, e := inst.ValueProc.ValueOffsets(int(entityIdx))
+		vs := inst.ValueProcElements
+		for i := b; i < e; i++ {
+			if !yield(vs.Value(int(i)).ToTime()) {
+				break
+			}
+		}
+	}
+}
 
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1411
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1454
 
 func (inst *ReadAccessTestTableTaggedGeoAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
 	b, e := inst.ValueLat.ValueOffsets(int(entityIdx))
@@ -693,7 +722,7 @@ func (inst *ReadAccessTestTableTaggedTextAttributes) GetNumberOfAttributes(entit
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1474
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1507
 
 type ReadAccessTestTableTaggedGeo struct {
 	Attributes  *ReadAccessTestTableTaggedGeoAttributes
@@ -812,7 +841,7 @@ func (inst *ReadAccessTestTableTaggedText) Len() (nEntities int) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeEntityClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1695
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1728
 
 type ReadAccessTestTable struct {
 	EntityId        *ReadAccessTestTablePlainEntityIdAttributes

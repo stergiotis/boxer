@@ -13,13 +13,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func randomTimestamp(rnd rand.Source) time.Time {
-	return time.Unix(int64(rnd.Uint64()), 0)
+func randomTimestamp(rnd *rand.Rand) time.Time {
+	return time.Now().Add(time.Second * time.Duration(rnd.Int32N(24*60*60*7)))
 }
 
 func TestRoundtrip(t *testing.T) {
 	dml := NewInEntityTestTable(memory.DefaultAllocator, 128)
-	rnd := rand.NewPCG(rand.Uint64(), rand.Uint64())
+	rnd := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	ts := []time.Time{
 		randomTimestamp(rnd),
 		randomTimestamp(rnd),
@@ -78,8 +78,9 @@ func TestRoundtrip(t *testing.T) {
 		secGeo := ra.Geo
 		for entityIdx := runtime.EntityIdx(0); entityIdx < nRows; entityIdx++ {
 			{
-				require.EqualValues(t, entityIdx, ra.EntityId.ValueId.Value(int(entityIdx)))
-				//require.EqualValues(t, ts[0], ra.EntityTimestamp.ValueTs.Value(i))
+				require.EqualValues(t, entityIdx, ra.EntityId.GetAttrValueId(entityIdx))
+				//require.EqualValues(t, ts[0], ra.EntityTimestamp.GetAttrValueTs(entityIdx))
+				require.EqualValues(t, ts[1:3], slices.Collect(ra.EntityTimestamp.GetAttrValueProc(entityIdx)))
 			}
 			{
 				require.EqualValues(t, 2, secText.Attributes.GetNumberOfAttributes(entityIdx))

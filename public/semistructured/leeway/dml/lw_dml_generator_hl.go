@@ -73,7 +73,7 @@ import (
 		err = eh.Errorf("unable to compose go imports: %w", err)
 		return
 	}
-	_, err = s.WriteString("\n)\n")
+	_, err = s.WriteString("\n)\nvar _ = time.Time{}")
 	if err != nil {
 		return
 	}
@@ -84,8 +84,8 @@ import (
 		return
 	}
 
-	sourceCode = unsafeperf.UnsafeStringToByte(s.String()) // s is not reachable anymore
-	{                                                      // try formatting source code
+	sourceCode = unsafeperf.UnsafeStringToByte(s.String())
+	{ // try formatting source code
 		var formatted []byte
 		formatted, err = format.Source(sourceCode)
 		if err != nil {

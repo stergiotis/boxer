@@ -1,7 +1,9 @@
 package common
 
 import (
+	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 )
 
 var ErrUnhandledRole = eh.Errorf("unhandled role")
@@ -79,6 +81,22 @@ func GetCardinalityRoleByMembershipRole(membershipRole ColumnRoleE) (cardinality
 		break
 	default:
 		err = ErrUnhandledRole
+	}
+	return
+}
+func GetSubTypeByScalarModifier(scalarModifier canonicaltypes.ScalarModifierE) (subType IntermediateColumnSubTypeE) {
+	switch scalarModifier {
+	case canonicaltypes.ScalarModifierNone:
+		subType = IntermediateColumnsSubTypeScalar
+		break
+	case canonicaltypes.ScalarModifierSet:
+		subType = IntermediateColumnsSubTypeSet
+		break
+	case canonicaltypes.ScalarModifierHomogenousArray:
+		subType = IntermediateColumnsSubTypeHomogenousArray
+		break
+	default:
+		log.Panic().Stringer("scalarModifier", scalarModifier).Msg("encountered unimplemented scalar modifier")
 	}
 	return
 }

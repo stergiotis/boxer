@@ -26,10 +26,13 @@ type IntermediateColumnContext struct {
 	PlainItemType PlainItemTypeE
 	IndexOffset   uint32
 
+	// StreamingGroup empty for all plain sections but opaque
 	StreamingGroup naming.Key
 
-	SectionName    naming.StylableName
-	UseAspects     useaspects.AspectSet
+	// SectionName empty for plain sections
+	SectionName naming.StylableName
+	UseAspects  useaspects.AspectSet
+	// CoSectionGroup empty for plain sections
 	CoSectionGroup naming.Key
 }
 

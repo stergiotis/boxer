@@ -19,29 +19,6 @@ func (inst TaggedValuesSection) IsValid() bool {
 	}
 	return v
 }
-func (inst TaggedValuesSection) CountScalarModifiers(s canonicaltypes2.ScalarModifierE) (r int) {
-	for _, t := range inst.ValueColumnTypes {
-		if !t.IsScalar() {
-			mod := canonicaltypes2.ScalarModifierNone
-			switch tt := t.(type) {
-			case *canonicaltypes2.MachineNumericTypeAstNode:
-				mod = tt.ScalarModifier
-				break
-			case *canonicaltypes2.TemporalTypeAstNode:
-				mod = tt.ScalarModifier
-				break
-			case *canonicaltypes2.StringAstNode:
-				mod = tt.ScalarModifier
-				break
-			default:
-			}
-			if mod == s {
-				r++
-			}
-		}
-	}
-	return
-}
 
 func (inst PhysicalColumnDesc) GetCanonicalType() (ct canonicaltypes2.PrimitiveAstNodeI, err error) {
 	return inst.GeneratingNamingConvention.ExtractCanonicalType(inst)
