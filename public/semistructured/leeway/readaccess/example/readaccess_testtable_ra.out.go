@@ -250,11 +250,11 @@ type ReadAccessTestTablePlainEntityIdAttributes struct {
 }
 
 type ReadAccessTestTablePlainEntityTimestampAttributes struct {
-	ValueTs           *array.Date32
+	ValueTs           *array.Timestamp
 	ColumnIndexTs     uint32
 	ValueProc         *array.List
 	ColumnIndexProc   uint32
-	ValueProcElements *array.Date32
+	ValueProcElements *array.Timestamp
 }
 
 type ReadAccessTestTableTaggedGeoAttributes struct {
@@ -560,11 +560,11 @@ func (inst *ReadAccessTestTablePlainEntityIdAttributes) LoadFromRecord(rec arrow
 }
 
 func (inst *ReadAccessTestTablePlainEntityTimestampAttributes) LoadFromRecord(rec arrow.Record) (err error) {
-	err = runtime.LoadScalarValueFieldFromRecord(inst.ColumnIndexTs, arrow.DATE32, rec, &inst.ValueTs, array.NewDate32Data)
+	err = runtime.LoadScalarValueFieldFromRecord(inst.ColumnIndexTs, arrow.TIMESTAMP, rec, &inst.ValueTs, array.NewTimestampData)
 	if err != nil {
 		return
 	}
-	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexProc, arrow.DATE32, rec, &inst.ValueProc, &inst.ValueProcElements, array.NewDate32Data)
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexProc, arrow.TIMESTAMP, rec, &inst.ValueProc, &inst.ValueProcElements, array.NewTimestampData)
 	if err != nil {
 		return
 	}
@@ -688,7 +688,7 @@ func (inst *ReadAccessTestTablePlainEntityIdAttributes) GetAttrValueId(entityIdx
 	return
 }
 func (inst *ReadAccessTestTablePlainEntityTimestampAttributes) GetAttrValueTs(entityIdx runtime.EntityIdx) (scalarAttrValue time.Time) {
-	scalarAttrValue = inst.ValueTs.Value(int(entityIdx)).ToTime()
+	scalarAttrValue = inst.ValueTs.Value(int(entityIdx)).ToTime(arrow.Millisecond)
 	return
 }
 func (inst *ReadAccessTestTablePlainEntityTimestampAttributes) GetAttrValueProc(entityIdx runtime.EntityIdx) iter.Seq[time.Time] {
@@ -696,7 +696,7 @@ func (inst *ReadAccessTestTablePlainEntityTimestampAttributes) GetAttrValueProc(
 		b, e := inst.ValueProc.ValueOffsets(int(entityIdx))
 		vs := inst.ValueProcElements
 		for i := b; i < e; i++ {
-			if !yield(vs.Value(int(i)).ToTime()) {
+			if !yield(vs.Value(int(i)).ToTime(arrow.Millisecond)) {
 				break
 			}
 		}

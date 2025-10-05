@@ -292,10 +292,10 @@ func (inst *TechnologySpecificCodeGenerator) generateTemporalType(baseTemporal c
 	case canonicaltypes.BaseTypeTemporalUtcDatetime:
 		switch width {
 		case 32:
-			code = "&arrow.Date32Type{}"
+			code = "&arrow.TimestampType{Unit: arrow.Millisecond}"
 			break
 		case 64:
-			code = "&arrow.Date64Type{}"
+			code = "&arrow.TimestampType{Unit: arrow.Nanosecond}"
 			break
 		default:
 			err = common.ErrNotImplemented

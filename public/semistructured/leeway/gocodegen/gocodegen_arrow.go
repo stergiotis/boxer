@@ -13,14 +13,26 @@ import (
 func ArrowTypeToGoType(ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspects.AspectSet, useDictionaryEncoding bool) (prefix string, suffix string, err error) {
 	switch ctt := ct.(type) {
 	case canonicaltypes2.TemporalTypeAstNode:
+		var unit string
+		switch ctt.Width {
+		case 32:
+			unit = "Millisecond"
+			break
+		case 64:
+			unit = "Nanosecond"
+			break
+		default:
+			err = eb.Build().Int("width", int(ctt.Width)).Errorf("unhandled temporal width: %w", common.ErrNotImplemented)
+			return
+		}
 		switch ctt.BaseType {
 		case canonicaltypes2.BaseTypeTemporalUtcDatetime:
 			prefix = ""
-			suffix = ".ToTime()"
+			suffix = ".ToTime(arrow." + unit + ")"
 			break
 		case canonicaltypes2.BaseTypeTemporalZonedDatetime:
 			prefix = ""
-			suffix = ".ToTime()"
+			suffix = ".ToTime(arrow." + unit + ")"
 			break
 		case canonicaltypes2.BaseTypeTemporalZonedTime:
 			err = common.ErrNotImplemented
@@ -79,14 +91,26 @@ func GoTypeToArrowType(ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspec
 		}
 		break
 	case canonicaltypes2.TemporalTypeAstNode:
+		var unit string
+		switch ctt.Width {
+		case 32:
+			unit = ".UnixMilli()"
+			break
+		case 64:
+			unit = ".UnixNano()"
+			break
+		default:
+			err = eb.Build().Int("width", int(ctt.Width)).Errorf("unhandled temporal width: %w", common.ErrNotImplemented)
+			return
+		}
 		switch ctt.BaseType {
 		case canonicaltypes2.BaseTypeTemporalUtcDatetime:
-			prefix = "arrow.Date32FromTime("
-			suffix = ")"
+			prefix = "arrow.Timestamp("
+			suffix = unit + ")"
 			break
 		case canonicaltypes2.BaseTypeTemporalZonedDatetime:
-			prefix = "arrow.Date32FromTime("
-			suffix = ")"
+			prefix = "arrow.Timestamp("
+			suffix = unit + ")"
 			break
 		case canonicaltypes2.BaseTypeTemporalZonedTime:
 			err = common.ErrNotImplemented
@@ -146,13 +170,13 @@ func CanonicalTypeToArrowBaseClassName(ct canonicaltypes2.PrimitiveAstNodeI, enc
 	case canonicaltypes2.TemporalTypeAstNode:
 		switch ctt.BaseType {
 		case canonicaltypes2.BaseTypeTemporalUtcDatetime:
-			name = fmt.Sprintf("Date%d", ctt.Width)
+			name = "Timestamp"
 			break
 		case canonicaltypes2.BaseTypeTemporalZonedDatetime:
-			name = fmt.Sprintf("Date%d", ctt.Width)
+			name = "Timestamp"
 			break
 		case canonicaltypes2.BaseTypeTemporalZonedTime:
-			name = fmt.Sprintf("Time%d", ctt.Width)
+			name = "Timestamp"
 			break
 		default:
 			err = eb.Build().Stringer("baseType", ctt.BaseType).Errorf("unhandled base type")

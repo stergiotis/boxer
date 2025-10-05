@@ -13,17 +13,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func randomTimestamp(rnd *rand.Rand) time.Time {
-	return time.Now().Add(time.Second * time.Duration(rnd.Int32N(24*60*60*7)))
+func randomTimestamp64(rnd *rand.Rand) time.Time {
+	return time.Now().UTC().Add(time.Second * time.Duration(rnd.Int32N(24*60*60*7)))
+}
+func randomTimestamp32(rnd *rand.Rand) time.Time {
+	return time.UnixMilli(randomTimestamp64(rnd).UnixMilli()).UTC()
 }
 
 func TestRoundtrip(t *testing.T) {
 	dml := NewInEntityTestTable(memory.DefaultAllocator, 128)
 	rnd := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	ts := []time.Time{
-		randomTimestamp(rnd),
-		randomTimestamp(rnd),
-		randomTimestamp(rnd),
+		randomTimestamp32(rnd),
+		randomTimestamp32(rnd),
+		randomTimestamp32(rnd),
 	}
 	const lrBase uint64 = 0
 	var err error

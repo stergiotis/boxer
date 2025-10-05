@@ -4,9 +4,6 @@ package example
 
 import (
 	"errors"
-	"slices"
-	"time"
-
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	_ "github.com/apache/arrow-go/v18/arrow/ipc"
@@ -14,7 +11,11 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
+	"slices"
+	"time"
 )
+
+var _ = time.Time{}
 
 ///////////////////////////////////////////////////////////////////
 // code generator
@@ -24,8 +25,8 @@ import (
 func CreateSchemaTestTable() (schema *arrow.Schema) {
 	schema = arrow.NewSchema([]arrow.Field{
 		/* 000 */ arrow.Field{Name: "id:id:u64:2k:0:0:", Nullable: false, Type: arrow.PrimitiveTypes.Uint64},
-		/* 001 */ arrow.Field{Name: "ts:ts:z32:2k:0:0:", Nullable: false, Type: &arrow.Date32Type{}},
-		/* 002 */ arrow.Field{Name: "ts:proc:z32h:g:0:0:", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.Date32Type{})},
+		/* 001 */ arrow.Field{Name: "ts:ts:z32:2k:0:0:", Nullable: false, Type: &arrow.TimestampType{Unit: arrow.Millisecond}},
+		/* 002 */ arrow.Field{Name: "ts:proc:z32h:g:0:0:", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.TimestampType{Unit: arrow.Millisecond})},
 		/* 003 */ arrow.Field{Name: "tv:geo:lat:val:f32:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Float32)},
 		/* 004 */ arrow.Field{Name: "tv:geo:lng:val:f32:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Float32)},
 		/* 005 */ arrow.Field{Name: "tv:geo:h3_res1:val:u64:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
@@ -69,8 +70,8 @@ type InEntityTestTable struct {
 	plainProc2            []time.Time
 	scalarFieldBuilder000 *array.Uint64Builder
 
-	scalarFieldBuilder001          *array.Date32Builder
-	homogenousArrayFieldBuilder002 *array.Date32Builder
+	scalarFieldBuilder001          *array.TimestampBuilder
+	homogenousArrayFieldBuilder002 *array.TimestampBuilder
 	homogenousArrayListBuilder002  *array.ListBuilder
 }
 
@@ -85,8 +86,8 @@ func NewInEntityTestTable(allocator memory.Allocator, estimatedNumberOfRecords i
 	inst.builder = builder
 	inst.initSections(builder)
 	inst.scalarFieldBuilder000 = builder.Field(0).(*array.Uint64Builder)
-	inst.scalarFieldBuilder001 = builder.Field(1).(*array.Date32Builder)
-	inst.homogenousArrayFieldBuilder002 = builder.Field(2).(*array.ListBuilder).ValueBuilder().(*array.Date32Builder)
+	inst.scalarFieldBuilder001 = builder.Field(1).(*array.TimestampBuilder)
+	inst.homogenousArrayFieldBuilder002 = builder.Field(2).(*array.ListBuilder).ValueBuilder().(*array.TimestampBuilder)
 	inst.homogenousArrayListBuilder002 = builder.Field(2).(*array.ListBuilder)
 
 	return inst
@@ -125,11 +126,11 @@ func (inst *InEntityTestTable) SetTimestamp(ts1 time.Time, proc2 []time.Time) *I
 func (inst *InEntityTestTable) appendPlainValues() {
 	inst.scalarFieldBuilder000.Append(inst.plainId0)
 
-	inst.scalarFieldBuilder001.Append(arrow.Date32FromTime(inst.plainTs1))
+	inst.scalarFieldBuilder001.Append(arrow.Timestamp(inst.plainTs1.UnixMilli()))
 
 	inst.homogenousArrayListBuilder002.Append(true)
 	for _, v := range inst.plainProc2 {
-		inst.homogenousArrayFieldBuilder002.Append(arrow.Date32FromTime(v))
+		inst.homogenousArrayFieldBuilder002.Append(arrow.Timestamp(v.UnixMilli()))
 	}
 }
 func (inst *InEntityTestTable) resetPlainValues() {
