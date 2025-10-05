@@ -667,18 +667,15 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 	accel := inst.%s
 	accel.SetCurrentEntityIdx(int(entityIdx))
 	r := accel.LookupForwardRange(attrIdx)
-	if !r.IsEmpty() {
-		b, _ := inst.%s.ValueOffsets(int(entityIdx))	
-		return func(yield func(%s) bool) {
-			vs := inst.%s
-			for i := r.BeginIncl; i < r.EndExcl; i++ {
-				if !yield(vs.Value(int(b)+int(i))) {
-					break
-				}
+	b, _ := inst.%s.ValueOffsets(int(entityIdx))
+	return func(yield func(%s) bool) {
+		vs := inst.%s
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b)+int(i))) {
+				break
 			}
 		}
 	}
-	return nil
 }
 `
 				_, err = fmt.Fprintf(b, tmpl,
@@ -717,6 +714,37 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 					if err != nil {
 						return
 					}
+					const tmpl2 = `func (inst *%s) GetMembValue%s(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq2[%s,%s] {
+	accel := inst.%s
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.%s.ValueOffsets(int(entityIdx))
+	return func(yield func(%s,%s) bool) {
+		vs1 := inst.%s
+		vs2 := inst.%s
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			idx := int(b)+int(i)
+			if !yield(vs1.Value(idx),vs2.Value(idx)) {
+				break
+			}
+		}
+	}
+}
+`
+					_, err = fmt.Fprintf(b, tmpl2,
+						clsName,
+						naming.MustBeValidStylableName(s.String()).Convert(naming.UpperCamelCase),
+						typeName1,
+						typeName2,
+						clsNamer.ComposeAccelFieldName(name1),
+
+						clsNamer.ComposeValueField(name1),
+
+						typeName1,
+						typeName2,
+						clsNamer.ComposeValueFieldElementAccessor(name1),
+						clsNamer.ComposeValueFieldElementAccessor(name2),
+					)
 				}
 			}
 		}
@@ -1345,17 +1373,14 @@ func (inst *%s) Len() (nEntities int) {
 	accel := inst.%s
 	accel.SetCurrentEntityIdx(int(entityIdx))
 	r := accel.LookupForwardRange(attrIdx)
-	if !r.IsEmpty() {
-		return func(yield func(%s) bool) {
-			vs := inst.%s
-			for i := r.BeginIncl; i < r.EndExcl; i++ {
-				if !yield(vs.Value(int(i))) {
-					break
-				}
+	return func(yield func(%s) bool) {
+		vs := inst.%s
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(i))) {
+				break
 			}
 		}
 	}
-	return nil
 }
 `,
 						clsName,
@@ -1421,7 +1446,7 @@ func (inst *%s) Len() (nEntities int) {
 			case common.IntermediateColumnsSubTypeSet, common.IntermediateColumnsSubTypeHomogenousArray:
 				_, err = fmt.Fprintf(b, `func (inst *%s) GetAttrValue%s(entityIdx runtime.EntityIdx) iter.Seq[%s] {
 		return func(yield func(%s) bool) {
-			b, e := inst.%s.ValueOffsets(int(entityIdx))	
+			b, e := inst.%s.ValueOffsets(int(entityIdx))
 			vs := inst.%s
 			for i := b; i < e; i++ {
 				if !yield(%svs.Value(int(i))%s) {

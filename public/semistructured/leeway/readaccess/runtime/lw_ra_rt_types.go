@@ -91,6 +91,16 @@ type ColumnIndexHandlingI interface {
 	GetColumnIndexFieldNames() (columnIndexFieldNames []string)
 }
 type SectionMethodsI interface {
+	ColumnIndexHandlingI
+	ReleasableI
+	Reset()
+	Len() (nEntities int)
+}
+type PlainSectionMethodsI interface {
+	SectionMethodsI
+}
+type TaggedSectionMethodsI interface {
+	SectionMethodsI
 	GetNumberOfAttributes(entityIdx EntityIdx) (nAttributes int64)
 }
 type InAttributeMembershipHighCardRefI interface {
@@ -124,4 +134,14 @@ type InAttributeMembershipMixedVerbatimHighCardParametersI interface {
 }
 type InAttributeMembershipMixedRefHighCardParametersI interface {
 	GetMembValueMixedRefHighCardParameters(entityIdx EntityIdx, attrIdx AttributeIdx) iter.Seq[[]byte]
+}
+type InAttributeMembershipMixedValueLowCardRefHighCardParamsI interface {
+	InAttributeMembershipMixedLowCardRefI
+	InAttributeMembershipMixedRefHighCardParametersI
+	GetMembValueLowCardRefHighCardParams(entityIdx EntityIdx, attrIdx AttributeIdx) iter.Seq2[uint64, []byte]
+}
+type InAttributeMembershipMixedValueLowCardVerbatimHighCardParamsI interface {
+	InAttributeMembershipMixedLowCardRefI
+	InAttributeMembershipMixedVerbatimHighCardParametersI
+	GetMembValueLowCardVerbatimHighCardParams(entityIdx EntityIdx, attrIdx AttributeIdx) iter.Seq2[[]byte, []byte]
 }

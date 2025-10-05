@@ -20,6 +20,13 @@ func randomTimestamp32(rnd *rand.Rand) time.Time {
 	return time.UnixMilli(randomTimestamp64(rnd).UnixMilli()).UTC()
 }
 
+var _ runtime.InAttributeMembershipMixedVerbatimHighCardParametersI = (*MembershipPackTestTableShared1)(nil)
+var _ runtime.InAttributeMembershipLowCardRefI = (*MembershipPackTestTableShared1)(nil)
+var _ runtime.SectionMethodsI = (*ReadAccessTestTableTaggedGeoAttributes)(nil)
+var _ runtime.SectionMethodsI = (*ReadAccessTestTableTaggedTextAttributes)(nil)
+var _ runtime.SectionMethodsI = (*ReadAccessTestTablePlainEntityIdAttributes)(nil)
+var _ runtime.SectionMethodsI = (*ReadAccessTestTablePlainEntityTimestampAttributes)(nil)
+
 func TestRoundtrip(t *testing.T) {
 	dml := NewInEntityTestTable(memory.DefaultAllocator, 128)
 	rnd := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
