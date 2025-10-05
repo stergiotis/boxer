@@ -73,7 +73,7 @@ import (
 		err = eh.Errorf("unable to compose go imports: %w", err)
 		return
 	}
-	_, err = s.WriteString("\n)\nvar _ = time.Time{}")
+	_, err = s.WriteString("\n)\n")
 	if err != nil {
 		return
 	}

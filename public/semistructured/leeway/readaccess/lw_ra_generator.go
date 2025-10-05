@@ -22,10 +22,11 @@ import (
 
 var CodeGeneratorName = "Leeway readaccess (" + vcs.ModuleInfo() + ")"
 
-func NewGoClassBuilder() *GoClassBuilder {
+func NewGoClassBuilder(fatRuntime bool) *GoClassBuilder {
 	return &GoClassBuilder{
-		builder: nil,
-		tech:    golang.NewTechnologySpecificCodeGenerator(),
+		builder:    nil,
+		tech:       golang.NewTechnologySpecificCodeGenerator(),
+		fatRuntime: fatRuntime,
 	}
 }
 
@@ -1702,6 +1703,115 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 			_, err = fmt.Fprint(b, "\treturn\n}\n\n")
 			return
 		})
+	}
+	{ // Getters for public Attributes to enable generic programming (interfaces)
+		composeCode(func(sec common.TaggedValuesSection, outerClsName string) (err error) {
+			_, err = fmt.Fprintf(b, "func (inst *%s) GetAttributes() *", outerClsName)
+			return
+		}, func(sec common.TaggedValuesSection, attrClsName string) (err error) {
+			_, err = fmt.Fprintf(b, "%s {\n\treturn inst.Attributes\n", attrClsName)
+			return
+		}, func(sec common.TaggedValuesSection, membClsName string) (err error) {
+			return
+		}, func(sec common.TaggedValuesSection, outerClsName string) (err error) {
+			_, err = fmt.Fprint(b, "}\n\n")
+			return
+		})
+		composeCode(func(sec common.TaggedValuesSection, outerClsName string) (err error) {
+			_, err = fmt.Fprintf(b, "func (inst *%s) GetMemberships() *", outerClsName)
+			return
+		}, func(sec common.TaggedValuesSection, attrClsName string) (err error) {
+			return
+		}, func(sec common.TaggedValuesSection, membClsName string) (err error) {
+			_, err = fmt.Fprintf(b, "%s {\n\treturn inst.Memberships\n", membClsName)
+			return
+		}, func(sec common.TaggedValuesSection, outerClsName string) (err error) {
+			_, err = fmt.Fprint(b, "}\n\n")
+			return
+		})
+	}
+	if inst.fatRuntime {
+		// section introspection
+		{ // .GetSectionName() naming.StylableName
+			composeCode(func(sec common.TaggedValuesSection, outerClsName string) (err error) {
+				_, err = fmt.Fprintf(b, "func (inst *%s) GetSectionName() naming.StylableName {\n",
+					outerClsName,
+				)
+				return
+			}, func(sec common.TaggedValuesSection, attrClsName string) (err error) {
+				_, err = fmt.Fprintf(b, "\treturn %q\n", sec.Name.Convert(naming.DefaultNamingStyle))
+				return
+			}, func(sec common.TaggedValuesSection, membClsName string) (err error) {
+				return
+			}, func(sec common.TaggedValuesSection, outerClsName string) (err error) {
+				_, err = fmt.Fprintf(b, "}\n\nvar _ fatruntime.SectionIntrospectionI = (*%s)(nil)\n\n", outerClsName)
+				return
+			})
+		}
+		{ // .GetSectionUseAspects() useaspects.AspectSet
+			composeCode(func(sec common.TaggedValuesSection, outerClsName string) (err error) {
+				_, err = fmt.Fprintf(b, "func (inst *%s) GetSectionUseAspects() useaspects.AspectSet {\n",
+					outerClsName,
+				)
+				return
+			}, func(sec common.TaggedValuesSection, attrClsName string) (err error) {
+				_, err = fmt.Fprintf(b, "\treturn %q\n", sec.UseAspects.String())
+				return
+			}, func(sec common.TaggedValuesSection, membClsName string) (err error) {
+				return
+			}, func(sec common.TaggedValuesSection, outerClsName string) (err error) {
+				_, err = fmt.Fprint(b, "}\n\n")
+				return
+			})
+		}
+		{ // .GetSectionStreamingGroup() naming.Key
+			composeCode(func(sec common.TaggedValuesSection, outerClsName string) (err error) {
+				_, err = fmt.Fprintf(b, "func (inst *%s) GetSectionStreamingGroup() naming.Key {\n",
+					outerClsName,
+				)
+				return
+			}, func(sec common.TaggedValuesSection, attrClsName string) (err error) {
+				_, err = fmt.Fprintf(b, "\treturn %q\n", sec.StreamingGroup)
+				return
+			}, func(sec common.TaggedValuesSection, membClsName string) (err error) {
+				return
+			}, func(sec common.TaggedValuesSection, outerClsName string) (err error) {
+				_, err = fmt.Fprint(b, "}\n\n")
+				return
+			})
+		}
+		{ // .GetSectionCoSectionGroup() naming.Key
+			composeCode(func(sec common.TaggedValuesSection, outerClsName string) (err error) {
+				_, err = fmt.Fprintf(b, "func (inst *%s) GetSectionCoSectionGroup() naming.Key {\n",
+					outerClsName,
+				)
+				return
+			}, func(sec common.TaggedValuesSection, attrClsName string) (err error) {
+				_, err = fmt.Fprintf(b, "\treturn %q\n", sec.CoSectionGroup)
+				return
+			}, func(sec common.TaggedValuesSection, membClsName string) (err error) {
+				return
+			}, func(sec common.TaggedValuesSection, outerClsName string) (err error) {
+				_, err = fmt.Fprint(b, "}\n\n")
+				return
+			})
+		}
+		{ // .GetSectionMembershipSpec() common.MembershipSpecE
+			composeCode(func(sec common.TaggedValuesSection, outerClsName string) (err error) {
+				_, err = fmt.Fprintf(b, "func (inst *%s) GetSectionMembershipSpec() common.MembershipSpecE {\n",
+					outerClsName,
+				)
+				return
+			}, func(sec common.TaggedValuesSection, attrClsName string) (err error) {
+				_, err = fmt.Fprintf(b, "\treturn 0b%b\n", sec.MembershipSpec)
+				return
+			}, func(sec common.TaggedValuesSection, membClsName string) (err error) {
+				return
+			}, func(sec common.TaggedValuesSection, outerClsName string) (err error) {
+				_, err = fmt.Fprint(b, "}\n\n")
+				return
+			})
+		}
 	}
 
 	return

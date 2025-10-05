@@ -73,7 +73,7 @@ func TestReadAccessGoClassBuilder(t *testing.T) {
 	chTech := clickhouse.NewTechnologySpecificCodeGenerator()
 	conv, err = ddl.NewHumanReadableNamingConvention(":")
 	require.NoError(t, err)
-	driver := NewGoCodeGeneratorDriver(conv, chTech)
+	driver := NewGoCodeGeneratorDriver(conv, chTech, true)
 
 	tableRowConfig := common.TableRowConfigMultiAttributesPerRow
 	var sourceCode []byte
@@ -93,7 +93,7 @@ func TestGoClassBuilderSample(t *testing.T) {
 	tech := clickhouse.NewTechnologySpecificCodeGenerator()
 	conv, err = ddl.NewHumanReadableNamingConvention(":")
 	require.NoError(t, err)
-	driver := NewGoCodeGeneratorDriver(conv, tech)
+	driver := NewGoCodeGeneratorDriver(conv, tech, true)
 
 	tableRowConfig := common.TableRowConfigMultiAttributesPerRow
 	var sourceCode []byte

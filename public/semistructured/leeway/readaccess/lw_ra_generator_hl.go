@@ -14,13 +14,14 @@ import (
 	"github.com/stergiotis/boxer/public/unsafeperf"
 )
 
-func NewGoCodeGeneratorDriver(namingConvention common.NamingConventionI, tech common.TechnologySpecificGeneratorI) *GeneratorDriver {
-	builder := NewGoClassBuilder()
+func NewGoCodeGeneratorDriver(namingConvention common.NamingConventionI, tech common.TechnologySpecificGeneratorI, fatRuntime bool) *GeneratorDriver {
+	builder := NewGoClassBuilder(fatRuntime)
 	return &GeneratorDriver{
 		builder:          builder,
 		validator:        common.NewTableValidator(),
 		namingConvention: namingConvention,
 		tech:             tech,
+		fatRuntime:       fatRuntime,
 	}
 }
 func (inst *GeneratorDriver) GenerateGoClasses(packageName string, tableName naming.StylableName, tblDesc common.TableDesc, tableRowConfig common.TableRowConfigE, clsNamer gocodegen.GoClassNamerI) (sourceCode []byte, wellFormed bool, err error) {
@@ -67,9 +68,11 @@ func (inst *GeneratorDriver) GenerateGoClasses(packageName string, tableName nam
 	for _, imp := range []string{
 		"iter",
 		"slices",
+		"time", // FIXME
 		"github.com/apache/arrow-go/v18/arrow",
 		"github.com/apache/arrow-go/v18/arrow/array",
 		"github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime",
+		"github.com/stergiotis/boxer/public/semistructured/leeway/naming",
 		"github.com/stergiotis/boxer/public/observability/eh/eb",
 		"github.com/rs/zerolog/log",
 	} {
@@ -77,6 +80,21 @@ func (inst *GeneratorDriver) GenerateGoClasses(packageName string, tableName nam
 		if err != nil {
 			err = eh.Errorf("unable to write imports %w", err)
 			return
+		}
+	}
+
+	if inst.fatRuntime {
+		for _, imp := range []string{
+			"github.com/stergiotis/boxer/public/semistructured/leeway/common",
+			"github.com/stergiotis/boxer/public/semistructured/leeway/naming",
+			"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects",
+			"github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/fatruntime",
+		} {
+			err = addImport(imp)
+			if err != nil {
+				err = eh.Errorf("unable to write imports %w", err)
+				return
+			}
 		}
 	}
 

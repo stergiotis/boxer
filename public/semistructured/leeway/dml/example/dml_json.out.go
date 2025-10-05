@@ -14,38 +14,48 @@ import (
 	"slices"
 )
 
+///////////////////////////////////////////////////////////////////
+// code generator
+// gocodegen.GenerateArrowSchemaFactory
+// ./public/semistructured/leeway/gocodegen/gocodegen_common.go:26
+
 func CreateSchemaJson() (schema *arrow.Schema) {
 	schema = arrow.NewSchema([]arrow.Field{
 		/* 000 */ arrow.Field{Name: "id:blake3hash:y:g:0:0:", Nullable: false, Type: &arrow.BinaryType{}},
-		/* 001 */ arrow.Field{Name: "tv:bool:value:val:b:0:0:0:0::", Nullable: false, Type: arrow.ListOf(&arrow.BooleanType{})},
-		/* 002 */ arrow.Field{Name: "tv:bool:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOf(&arrow.BinaryType{})},
-		/* 003 */ arrow.Field{Name: "tv:bool:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOf(&arrow.BinaryType{})},
-		/* 004 */ arrow.Field{Name: "tv:bool:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOf(arrow.PrimitiveTypes.Uint64)},
-		/* 005 */ arrow.Field{Name: "tv:undefined:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOf(&arrow.BinaryType{})},
-		/* 006 */ arrow.Field{Name: "tv:undefined:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOf(&arrow.BinaryType{})},
-		/* 007 */ arrow.Field{Name: "tv:undefined:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOf(arrow.PrimitiveTypes.Uint64)},
-		/* 008 */ arrow.Field{Name: "tv:null:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOf(&arrow.BinaryType{})},
-		/* 009 */ arrow.Field{Name: "tv:null:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOf(&arrow.BinaryType{})},
-		/* 010 */ arrow.Field{Name: "tv:null:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOf(arrow.PrimitiveTypes.Uint64)},
-		/* 011 */ arrow.Field{Name: "tv:string:value:val:s:g:0:0:0::", Nullable: false, Type: arrow.ListOf(&arrow.StringType{})},
-		/* 012 */ arrow.Field{Name: "tv:string:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOf(&arrow.BinaryType{})},
-		/* 013 */ arrow.Field{Name: "tv:string:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOf(&arrow.BinaryType{})},
-		/* 014 */ arrow.Field{Name: "tv:string:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOf(arrow.PrimitiveTypes.Uint64)},
-		/* 015 */ arrow.Field{Name: "tv:symbol:value:val:s:m:0:0:0::", Nullable: false, Type: arrow.ListOf(&arrow.StringType{})},
-		/* 016 */ arrow.Field{Name: "tv:symbol:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOf(&arrow.BinaryType{})},
-		/* 017 */ arrow.Field{Name: "tv:symbol:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOf(&arrow.BinaryType{})},
-		/* 018 */ arrow.Field{Name: "tv:symbol:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOf(arrow.PrimitiveTypes.Uint64)},
-		/* 019 */ arrow.Field{Name: "tv:float64:value:val:f64:0:0:0:0::", Nullable: false, Type: arrow.ListOf(arrow.PrimitiveTypes.Float64)},
-		/* 020 */ arrow.Field{Name: "tv:float64:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOf(&arrow.BinaryType{})},
-		/* 021 */ arrow.Field{Name: "tv:float64:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOf(&arrow.BinaryType{})},
-		/* 022 */ arrow.Field{Name: "tv:float64:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOf(arrow.PrimitiveTypes.Uint64)},
-		/* 023 */ arrow.Field{Name: "tv:int64:value:val:i64:0:0:0:0::", Nullable: false, Type: arrow.ListOf(arrow.PrimitiveTypes.Int64)},
-		/* 024 */ arrow.Field{Name: "tv:int64:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOf(&arrow.BinaryType{})},
-		/* 025 */ arrow.Field{Name: "tv:int64:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOf(&arrow.BinaryType{})},
-		/* 026 */ arrow.Field{Name: "tv:int64:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOf(arrow.PrimitiveTypes.Uint64)},
+		/* 001 */ arrow.Field{Name: "tv:bool:value:val:b:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BooleanType{})},
+		/* 002 */ arrow.Field{Name: "tv:bool:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 003 */ arrow.Field{Name: "tv:bool:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 004 */ arrow.Field{Name: "tv:bool:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 005 */ arrow.Field{Name: "tv:undefined:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 006 */ arrow.Field{Name: "tv:undefined:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 007 */ arrow.Field{Name: "tv:undefined:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 008 */ arrow.Field{Name: "tv:null:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 009 */ arrow.Field{Name: "tv:null:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 010 */ arrow.Field{Name: "tv:null:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 011 */ arrow.Field{Name: "tv:string:value:val:s:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
+		/* 012 */ arrow.Field{Name: "tv:string:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 013 */ arrow.Field{Name: "tv:string:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 014 */ arrow.Field{Name: "tv:string:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 015 */ arrow.Field{Name: "tv:symbol:value:val:s:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
+		/* 016 */ arrow.Field{Name: "tv:symbol:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 017 */ arrow.Field{Name: "tv:symbol:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 018 */ arrow.Field{Name: "tv:symbol:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 019 */ arrow.Field{Name: "tv:float64:value:val:f64:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Float64)},
+		/* 020 */ arrow.Field{Name: "tv:float64:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 021 */ arrow.Field{Name: "tv:float64:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 022 */ arrow.Field{Name: "tv:float64:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 023 */ arrow.Field{Name: "tv:int64:value:val:i64:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Int64)},
+		/* 024 */ arrow.Field{Name: "tv:int64:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 025 */ arrow.Field{Name: "tv:int64:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 026 */ arrow.Field{Name: "tv:int64:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 	}, nil)
 	return
 }
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1160
 
 type InEntityJson struct {
 	errs                  []error
@@ -85,6 +95,12 @@ func NewInEntityJson(allocator memory.Allocator, estimatedNumberOfRecords int) (
 
 	return inst
 }
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).ComposeEntityCode
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1274
+
 func (inst *InEntityJson) SetId(blake3hash0 []byte) *InEntityJson {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -315,7 +331,6 @@ func (inst *InEntityJsonSectionBool) EndSection() *InEntityJson {
 func (inst *InEntityJsonSectionBool) beginSection() {
 	inst.state = runtime.EntityStateInSection
 	inst.inAttr.beginAttribute()
-
 }
 
 func (inst *InEntityJsonSectionBool) resetSection() {
@@ -512,7 +527,6 @@ func (inst *InEntityJsonSectionFloat64) EndSection() *InEntityJson {
 func (inst *InEntityJsonSectionFloat64) beginSection() {
 	inst.state = runtime.EntityStateInSection
 	inst.inAttr.beginAttribute()
-
 }
 
 func (inst *InEntityJsonSectionFloat64) resetSection() {
@@ -709,7 +723,6 @@ func (inst *InEntityJsonSectionInt64) EndSection() *InEntityJson {
 func (inst *InEntityJsonSectionInt64) beginSection() {
 	inst.state = runtime.EntityStateInSection
 	inst.inAttr.beginAttribute()
-
 }
 
 func (inst *InEntityJsonSectionInt64) resetSection() {
@@ -901,7 +914,6 @@ func (inst *InEntityJsonSectionNull) EndSection() *InEntityJson {
 func (inst *InEntityJsonSectionNull) beginSection() {
 	inst.state = runtime.EntityStateInSection
 	inst.inAttr.beginAttribute()
-
 }
 
 func (inst *InEntityJsonSectionNull) resetSection() {
@@ -1093,7 +1105,6 @@ func (inst *InEntityJsonSectionString) EndSection() *InEntityJson {
 func (inst *InEntityJsonSectionString) beginSection() {
 	inst.state = runtime.EntityStateInSection
 	inst.inAttr.beginAttribute()
-
 }
 
 func (inst *InEntityJsonSectionString) resetSection() {
@@ -1290,7 +1301,6 @@ func (inst *InEntityJsonSectionSymbol) EndSection() *InEntityJson {
 func (inst *InEntityJsonSectionSymbol) beginSection() {
 	inst.state = runtime.EntityStateInSection
 	inst.inAttr.beginAttribute()
-
 }
 
 func (inst *InEntityJsonSectionSymbol) resetSection() {
@@ -1482,7 +1492,6 @@ func (inst *InEntityJsonSectionUndefined) EndSection() *InEntityJson {
 func (inst *InEntityJsonSectionUndefined) beginSection() {
 	inst.state = runtime.EntityStateInSection
 	inst.inAttr.beginAttribute()
-
 }
 
 func (inst *InEntityJsonSectionUndefined) resetSection() {

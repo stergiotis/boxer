@@ -90,3 +90,38 @@ type ColumnIndexHandlingI interface {
 	GetColumnIndices() (columnIndices []uint32)
 	GetColumnIndexFieldNames() (columnIndexFieldNames []string)
 }
+type SectionMethodsI interface {
+	GetNumberOfAttributes(entityIdx EntityIdx) (nAttributes int64)
+}
+type InAttributeMembershipHighCardRefI interface {
+	GetMembValueHighCardRef(entityIdx EntityIdx, attrIdx AttributeIdx) iter.Seq[uint64]
+}
+type InAttributeMembershipHighCardRefParametrizedI interface {
+	GetMembValueHighCardRefParametrized(entityIdx EntityIdx, attrIdx AttributeIdx) iter.Seq[[]byte]
+}
+type InAttributeMembershipHighCardVerbatimI interface {
+	GetMembValueHighCardVerbatim(entityIdx EntityIdx, attrIdx AttributeIdx) iter.Seq[[]byte]
+}
+
+type InAttributeMembershipLowCardRefI interface {
+	GetMembValueLowCardRef(entityIdx EntityIdx, attrIdx AttributeIdx) iter.Seq[uint64]
+}
+type InAttributeMembershipLowCardRefParametrizedI interface {
+	GetMembValueLowCardRefParametrized(entityIdx EntityIdx, attrIdx AttributeIdx) iter.Seq[[]byte]
+}
+type InAttributeMembershipLowCardVerbatimI interface {
+	GetMembValueLowCardVerbatim(entityIdx EntityIdx, attrIdx AttributeIdx) iter.Seq[[]byte]
+}
+
+type InAttributeMembershipMixedLowCardRefI interface {
+	GetMembValueMixedLowCardRef(entityIdx EntityIdx, attrIdx AttributeIdx) iter.Seq[uint64]
+}
+type InAttributeMembershipMixedLowCardVerbatimI interface {
+	GetMembValueMixedLowCardVerbatim(entityIdx EntityIdx, attrIdx AttributeIdx) iter.Seq[[]byte]
+}
+type InAttributeMembershipMixedVerbatimHighCardParametersI interface {
+	GetMembValueMixedVerbatimHighCardParameters(entityIdx EntityIdx, attrIdx AttributeIdx) iter.Seq[[]byte]
+}
+type InAttributeMembershipMixedRefHighCardParametersI interface {
+	GetMembValueMixedRefHighCardParameters(entityIdx EntityIdx, attrIdx AttributeIdx) iter.Seq[[]byte]
+}

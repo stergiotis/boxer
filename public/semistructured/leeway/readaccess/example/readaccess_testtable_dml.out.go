@@ -15,8 +15,6 @@ import (
 	"time"
 )
 
-var _ = time.Time{}
-
 ///////////////////////////////////////////////////////////////////
 // code generator
 // gocodegen.GenerateArrowSchemaFactory
