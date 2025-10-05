@@ -220,15 +220,17 @@ func (inst MembershipSpecE) String() string {
 			return "low-card-ref-high-card-params"
 		case MembershipSpecMixedLowCardVerbatimHighCardParameters:
 			return "low-card-verbatim-high-card-params"
+		default:
+			break
 		}
 	}
 	s := strings.Builder{}
 	i := 0
 	for m := range inst.Iterate() {
-		_, _ = s.WriteString(m.String())
 		if i > 0 {
 			_, _ = s.WriteString(" | ")
 		}
+		_, _ = s.WriteString(m.String())
 		i++
 	}
 	return s.String()
