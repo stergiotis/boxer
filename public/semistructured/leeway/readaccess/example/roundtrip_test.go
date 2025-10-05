@@ -30,11 +30,11 @@ func TestRoundtrip(t *testing.T) {
 	}
 	const lrBase uint64 = 0
 	var err error
-	const nRows = 3
+	const nEntities = 3
 	{ // dml write
 		secText := dml.GetSectionText()
 		secGeo := dml.GetSectionGeo()
-		for i := 0; i < nRows; i++ {
+		for i := 0; i < nEntities; i++ {
 			ent := dml.BeginEntity()
 			ent.SetId(uint64(i))
 			ent.SetTimestamp(ts[0], ts[1:3])
@@ -45,13 +45,15 @@ func TestRoundtrip(t *testing.T) {
 				AddMembershipLowCardRef(lrBase+uint64(i)*5+1).
 				AddMembershipMixedLowCardVerbatim([]byte("verbatim1"), []byte("params1")).
 				EndAttribute()
-			secText.BeginAttribute(fmt.Sprintf("hallo welt! %d", i)).
-				AddToCoContainers(uint32(len("hallo")), "hallo").
-				AddToCoContainers(uint32(len("welt")), "welt").
-				AddMembershipLowCardRef(lrBase+uint64(i)*5+2).
-				AddMembershipLowCardRef(lrBase+uint64(i)*5+3).
-				AddMembershipMixedLowCardVerbatim([]byte("wortwörtlich1"), []byte("parameter1")).
-				EndAttribute()
+			if i%2 == 0 {
+				secText.BeginAttribute(fmt.Sprintf("hallo welt! %d", i)).
+					AddToCoContainers(uint32(len("hallo")), "hallo").
+					AddToCoContainers(uint32(len("welt")), "welt").
+					AddMembershipLowCardRef(lrBase+uint64(i)*5+2).
+					AddMembershipLowCardRef(lrBase+uint64(i)*5+3).
+					AddMembershipMixedLowCardVerbatim([]byte("wortwörtlich1"), []byte("parameter1")).
+					EndAttribute()
+			}
 			secGeo.BeginAttribute(12.0, -3.5, 0x45494, 0x45454543).
 				AddMembershipMixedLowCardVerbatim([]byte("verbatim2"), []byte("params2")).
 				AddMembershipLowCardRef(lrBase + uint64(i)*5 + 4).
@@ -70,7 +72,7 @@ func TestRoundtrip(t *testing.T) {
 			records, err = dml.TransferRecords(nil)
 			require.NoError(t, err)
 			require.Len(t, records, 1)
-			require.EqualValues(t, nRows, records[0].NumRows())
+			require.EqualValues(t, nEntities, records[0].NumRows())
 		}
 		err = ra.LoadFromRecord(records[0])
 		require.NoError(t, err)
@@ -79,14 +81,18 @@ func TestRoundtrip(t *testing.T) {
 	{ // read access
 		secText := ra.Text
 		secGeo := ra.Geo
-		for entityIdx := runtime.EntityIdx(0); entityIdx < nRows; entityIdx++ {
+		for entityIdx := runtime.EntityIdx(0); entityIdx < nEntities; entityIdx++ {
 			{
 				require.EqualValues(t, entityIdx, ra.EntityId.GetAttrValueId(entityIdx))
-				//require.EqualValues(t, ts[0], ra.EntityTimestamp.GetAttrValueTs(entityIdx))
+				require.EqualValues(t, ts[0], ra.EntityTimestamp.GetAttrValueTs(entityIdx))
 				require.EqualValues(t, ts[1:3], slices.Collect(ra.EntityTimestamp.GetAttrValueProc(entityIdx)))
 			}
 			{
-				require.EqualValues(t, 2, secText.Attributes.GetNumberOfAttributes(entityIdx))
+				nAttrTextExpected := 1
+				if entityIdx%2 == 0 {
+					nAttrTextExpected++
+				}
+				require.EqualValues(t, nAttrTextExpected, secText.Attributes.GetNumberOfAttributes(entityIdx))
 				attrIdx := runtime.AttributeIdx(0)
 				{
 					require.EqualValues(t, fmt.Sprintf("hello world! %d", entityIdx), secText.Attributes.GetAttrValueText(entityIdx, attrIdx))
@@ -99,7 +105,7 @@ func TestRoundtrip(t *testing.T) {
 					require.EqualValues(t, [][]byte{[]byte("params1")}, slices.Collect(secText.Memberships.GetMembValueMixedVerbatimHighCardParameters(entityIdx, attrIdx)))
 				}
 				attrIdx++
-				{
+				if nAttrTextExpected > int(attrIdx) {
 					require.EqualValues(t, fmt.Sprintf("hallo welt! %d", entityIdx), secText.Attributes.GetAttrValueText(entityIdx, attrIdx))
 					require.EqualValues(t, []string{"hallo", "welt"}, slices.Collect(secText.Attributes.GetAttrValueWords(entityIdx, attrIdx)))
 					require.EqualValues(t, []uint64{
