@@ -8,10 +8,6 @@ import (
 	// readaccess.(*GeneratorDriver).GenerateGoClasses
 	// ./public/semistructured/leeway/readaccess/lw_ra_generator_hl.go:67
 
-	"iter"
-	"slices"
-	"time"
-
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/rs/zerolog/log"
@@ -21,6 +17,9 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/fatruntime"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
+	"iter"
+	"slices"
+	"time"
 	///////////////////////////////////////////////////////////////////
 	// code generator
 	// readaccess.(*GeneratorDriver).GenerateGoClasses
@@ -171,6 +170,12 @@ func (inst *MembershipPackTestTableShared1) Len() (nEntities int) {
 	return
 }
 
+func (inst *MembershipPackTestTableShared1) GetTotalNumberOfMemberItems(entityIdx runtime.EntityIdx) (nItems int64) {
+	nItems += inst.GetNumberOfMemberItemLowCardRef(entityIdx)
+	nItems += inst.GetNumberOfMemberItemMixedLowCardVerbatim(entityIdx)
+	return
+}
+
 func (inst *MembershipPackTestTableShared1) GetNumberOfMemberItemLowCardRef(entityIdx runtime.EntityIdx) (nItems int64) {
 	if inst.ValueLowCardRef != nil {
 		b, e := inst.ValueLowCardRef.ValueOffsets(int(entityIdx))
@@ -189,77 +194,65 @@ func (inst *MembershipPackTestTableShared1) GetMembValueLowCardRef(entityIdx run
 	accel := inst.AccelLowCardRef
 	accel.SetCurrentEntityIdx(int(entityIdx))
 	r := accel.LookupForwardRange(attrIdx)
-	if !r.IsEmpty() {
-		b, _ := inst.ValueLowCardRef.ValueOffsets(int(entityIdx))
-		return func(yield func(uint64) bool) {
-			vs := inst.ValueLowCardRefElements
-			for i := r.BeginIncl; i < r.EndExcl; i++ {
-				if !yield(vs.Value(int(b) + int(i))) {
-					break
-				}
+	b, _ := inst.ValueLowCardRef.ValueOffsets(int(entityIdx))
+	return func(yield func(uint64) bool) {
+		vs := inst.ValueLowCardRefElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
 			}
 		}
 	}
-	return nil
 }
 func (inst *MembershipPackTestTableShared1) GetMembValueMixedLowCardVerbatim(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[[]byte] {
 	accel := inst.AccelMixedLowCardVerbatim
 	accel.SetCurrentEntityIdx(int(entityIdx))
 	r := accel.LookupForwardRange(attrIdx)
-	if !r.IsEmpty() {
-		b, _ := inst.ValueMixedLowCardVerbatim.ValueOffsets(int(entityIdx))
-		return func(yield func([]byte) bool) {
-			vs := inst.ValueMixedLowCardVerbatimElements
-			for i := r.BeginIncl; i < r.EndExcl; i++ {
-				if !yield(vs.Value(int(b) + int(i))) {
-					break
-				}
+	b, _ := inst.ValueMixedLowCardVerbatim.ValueOffsets(int(entityIdx))
+	return func(yield func([]byte) bool) {
+		vs := inst.ValueMixedLowCardVerbatimElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
 			}
 		}
 	}
-	return nil
 }
 func (inst *MembershipPackTestTableShared1) GetMembValueMixedVerbatimHighCardParameters(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[[]byte] {
 	accel := inst.AccelMixedVerbatimHighCardParameters
 	accel.SetCurrentEntityIdx(int(entityIdx))
 	r := accel.LookupForwardRange(attrIdx)
-	if !r.IsEmpty() {
-		b, _ := inst.ValueMixedVerbatimHighCardParameters.ValueOffsets(int(entityIdx))
-		return func(yield func([]byte) bool) {
-			vs := inst.ValueMixedVerbatimHighCardParametersElements
-			for i := r.BeginIncl; i < r.EndExcl; i++ {
-				if !yield(vs.Value(int(b) + int(i))) {
-					break
-				}
+	b, _ := inst.ValueMixedVerbatimHighCardParameters.ValueOffsets(int(entityIdx))
+	return func(yield func([]byte) bool) {
+		vs := inst.ValueMixedVerbatimHighCardParametersElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
 			}
 		}
 	}
-	return nil
 }
 func (inst *MembershipPackTestTableShared1) GetMembValueLowCardVerbatimHighCardParams(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq2[[]byte, []byte] {
 	accel := inst.AccelMixedLowCardVerbatim
 	accel.SetCurrentEntityIdx(int(entityIdx))
 	r := accel.LookupForwardRange(attrIdx)
-	if !r.IsEmpty() {
-		b, _ := inst.ValueMixedLowCardVerbatim.ValueOffsets(int(entityIdx))
-		return func(yield func([]byte, []byte) bool) {
-			vs1 := inst.ValueMixedLowCardVerbatimElements
-			vs2 := inst.ValueMixedVerbatimHighCardParametersElements
-			for i := r.BeginIncl; i < r.EndExcl; i++ {
-				idx := int(b) + int(i)
-				if !yield(vs1.Value(idx), vs2.Value(idx)) {
-					break
-				}
+	b, _ := inst.ValueMixedLowCardVerbatim.ValueOffsets(int(entityIdx))
+	return func(yield func([]byte, []byte) bool) {
+		vs1 := inst.ValueMixedLowCardVerbatimElements
+		vs2 := inst.ValueMixedVerbatimHighCardParametersElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			idx := int(b) + int(i)
+			if !yield(vs1.Value(idx), vs2.Value(idx)) {
+				break
 			}
 		}
 	}
-	return nil
 }
 
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:779
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:800
 
 type ReadAccessTestTablePlainEntityIdAttributes struct {
 	ValueId       *array.Uint64
@@ -451,7 +444,7 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedTextAttributes)(
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1003
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1024
 
 func (inst *ReadAccessTestTablePlainEntityIdAttributes) Reset() {
 	inst.ValueId = nil
@@ -489,7 +482,7 @@ func (inst *ReadAccessTestTableTaggedTextAttributes) Reset() {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1082
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1103
 
 var _ runtime.ReleasableI = (*ReadAccessTestTablePlainEntityIdAttributes)(nil)
 
@@ -533,7 +526,7 @@ func (inst *ReadAccessTestTableTaggedTextAttributes) Release() {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1164
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1185
 
 func (inst *ReadAccessTestTablePlainEntityIdAttributes) Len() (nEntities int) {
 	if inst.ValueId != nil {
@@ -566,7 +559,7 @@ func (inst *ReadAccessTestTableTaggedTextAttributes) Len() (nEntities int) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1218
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1239
 
 func (inst *ReadAccessTestTablePlainEntityIdAttributes) LoadFromRecord(rec arrow.Record) (err error) {
 	err = runtime.LoadScalarValueFieldFromRecord(inst.ColumnIndexId, arrow.UINT64, rec, &inst.ValueId, array.NewUint64Data)
@@ -672,33 +665,27 @@ func (inst *ReadAccessTestTableTaggedTextAttributes) GetAttrValueWordLength(enti
 	accel := inst.AccelHomogenousArray
 	accel.SetCurrentEntityIdx(int(entityIdx))
 	r := accel.LookupForwardRange(attrIdx)
-	if !r.IsEmpty() {
-		return func(yield func(uint32) bool) {
-			vs := inst.ValueWordLengthElements
-			for i := r.BeginIncl; i < r.EndExcl; i++ {
-				if !yield(vs.Value(int(i))) {
-					break
-				}
+	return func(yield func(uint32) bool) {
+		vs := inst.ValueWordLengthElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(i))) {
+				break
 			}
 		}
 	}
-	return nil
 }
 func (inst *ReadAccessTestTableTaggedTextAttributes) GetAttrValueWords(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[string] {
 	accel := inst.AccelHomogenousArray
 	accel.SetCurrentEntityIdx(int(entityIdx))
 	r := accel.LookupForwardRange(attrIdx)
-	if !r.IsEmpty() {
-		return func(yield func(string) bool) {
-			vs := inst.ValueWordsElements
-			for i := r.BeginIncl; i < r.EndExcl; i++ {
-				if !yield(vs.Value(int(i))) {
-					break
-				}
+	return func(yield func(string) bool) {
+		vs := inst.ValueWordsElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(i))) {
+				break
 			}
 		}
 	}
-	return nil
 }
 func (inst *ReadAccessTestTablePlainEntityIdAttributes) GetAttrValueId(entityIdx runtime.EntityIdx) (scalarAttrValue uint64) {
 	scalarAttrValue = inst.ValueId.Value(int(entityIdx))
@@ -723,7 +710,7 @@ func (inst *ReadAccessTestTablePlainEntityTimestampAttributes) GetAttrValueProc(
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1489
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1507
 
 func (inst *ReadAccessTestTableTaggedGeoAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
 	b, e := inst.ValueLat.ValueOffsets(int(entityIdx))
@@ -739,7 +726,7 @@ func (inst *ReadAccessTestTableTaggedTextAttributes) GetNumberOfAttributes(entit
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1542
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1560
 
 type ReadAccessTestTableTaggedGeo struct {
 	Attributes  *ReadAccessTestTableTaggedGeoAttributes
@@ -918,7 +905,7 @@ func (inst *ReadAccessTestTableTaggedText) GetSectionMembershipSpec() common.Mem
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeEntityClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1872
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1890
 
 type ReadAccessTestTable struct {
 	EntityId        *ReadAccessTestTablePlainEntityIdAttributes

@@ -611,6 +611,33 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 			}
 		}
 	}
+	{ // .GetTotalNumberOfMemberItems() (nItems int64)
+		for i, spec := range membershipSpecs {
+			clsName := classNames[i]
+			_, err = fmt.Fprintf(b, "func (inst *%s) GetTotalNumberOfMemberItems(entityIdx runtime.EntityIdx) (nItems int64) {\n", clsName)
+			if err != nil {
+				return
+			}
+			for s := range spec.Iterate() {
+				var role1 common.ColumnRoleE
+				_, _, role1, _, _, _, _, err = arrowTech.ResolveMembership(s)
+				if err != nil {
+					err = eh.Errorf("unable to get membership column canonical type: %w", err)
+					return
+				}
+				name1 := naming.MustBeValidStylableName(role1.LongString()).Convert(naming.UpperCamelCase).String()
+				const tmpl = "\tnItems += inst.GetNumberOfMemberItem%s(entityIdx)\n"
+				_, err = fmt.Fprintf(b, tmpl, name1)
+				if err != nil {
+					return
+				}
+			}
+			_, err = fmt.Fprint(b, "\treturn\n}\n\n")
+			if err != nil {
+				return
+			}
+		}
+	}
 	{ // .GetNumberOfMemberItemsXXX() (nItems int64)
 		for i, spec := range membershipSpecs {
 			clsName := classNames[i]
