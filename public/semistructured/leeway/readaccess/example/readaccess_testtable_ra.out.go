@@ -8,6 +8,10 @@ import (
 	// readaccess.(*GeneratorDriver).GenerateGoClasses
 	// ./public/semistructured/leeway/readaccess/lw_ra_generator_hl.go:67
 
+	"iter"
+	"slices"
+	"time"
+
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/rs/zerolog/log"
@@ -17,9 +21,6 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/fatruntime"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
-	"iter"
-	"slices"
-	"time"
 	///////////////////////////////////////////////////////////////////
 	// code generator
 	// readaccess.(*GeneratorDriver).GenerateGoClasses
@@ -135,7 +136,7 @@ func (inst *MembershipPackTestTableShared1) Reset() {
 	inst.ValueMixedVerbatimHighCardParametersElements = nil
 }
 
-func (inst *MembershipPackTestTableShared1) LoadFromRecord(rec arrow.Record) (err error) {
+func (inst *MembershipPackTestTableShared1) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexLowCardRef, arrow.UINT64, rec, &inst.ValueLowCardRef, &inst.ValueLowCardRefElements, array.NewUint64Data)
 	if err != nil {
 		return
@@ -171,19 +172,19 @@ func (inst *MembershipPackTestTableShared1) Len() (nEntities int) {
 }
 
 func (inst *MembershipPackTestTableShared1) GetTotalNumberOfMemberItems(entityIdx runtime.EntityIdx) (nItems int64) {
-	nItems += inst.GetNumberOfMemberItemLowCardRef(entityIdx)
-	nItems += inst.GetNumberOfMemberItemMixedLowCardVerbatim(entityIdx)
+	nItems += inst.GetNumberOfMemberItemsLowCardRef(entityIdx)
+	nItems += inst.GetNumberOfMemberItemsMixedLowCardVerbatim(entityIdx)
 	return
 }
 
-func (inst *MembershipPackTestTableShared1) GetNumberOfMemberItemLowCardRef(entityIdx runtime.EntityIdx) (nItems int64) {
+func (inst *MembershipPackTestTableShared1) GetNumberOfMemberItemsLowCardRef(entityIdx runtime.EntityIdx) (nItems int64) {
 	if inst.ValueLowCardRef != nil {
 		b, e := inst.ValueLowCardRef.ValueOffsets(int(entityIdx))
 		nItems = e - b
 	}
 	return
 }
-func (inst *MembershipPackTestTableShared1) GetNumberOfMemberItemMixedLowCardVerbatim(entityIdx runtime.EntityIdx) (nItems int64) {
+func (inst *MembershipPackTestTableShared1) GetNumberOfMemberItemsMixedLowCardVerbatim(entityIdx runtime.EntityIdx) (nItems int64) {
 	if inst.ValueMixedLowCardVerbatim != nil {
 		b, e := inst.ValueMixedLowCardVerbatim.ValueOffsets(int(entityIdx))
 		nItems = e - b
@@ -248,11 +249,23 @@ func (inst *MembershipPackTestTableShared1) GetMembValueLowCardVerbatimHighCardP
 		}
 	}
 }
+func (inst *MembershipPackTestTableShared1) GetNumberOfMemberItemsByAttrLowCardRef(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (nItems int) {
+	accel := inst.AccelLowCardRef
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	nItems = int(accel.LookupForwardRange(attrIdx).CalcCardinality())
+	return
+}
+func (inst *MembershipPackTestTableShared1) GetNumberOfMemberItemsByAttrLowCardVerbatimHighCardParams(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (nItems int) {
+	accel := inst.AccelMixedLowCardVerbatim
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	nItems = int(accel.LookupForwardRange(attrIdx).CalcCardinality())
+	return
+}
 
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:800
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:844
 
 type ReadAccessTestTablePlainEntityIdAttributes struct {
 	ValueId       *array.Uint64
@@ -444,7 +457,7 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedTextAttributes)(
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1024
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1071
 
 func (inst *ReadAccessTestTablePlainEntityIdAttributes) Reset() {
 	inst.ValueId = nil
@@ -482,7 +495,7 @@ func (inst *ReadAccessTestTableTaggedTextAttributes) Reset() {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1103
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1150
 
 var _ runtime.ReleasableI = (*ReadAccessTestTablePlainEntityIdAttributes)(nil)
 
@@ -526,7 +539,7 @@ func (inst *ReadAccessTestTableTaggedTextAttributes) Release() {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1185
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1234
 
 func (inst *ReadAccessTestTablePlainEntityIdAttributes) Len() (nEntities int) {
 	if inst.ValueId != nil {
@@ -559,9 +572,9 @@ func (inst *ReadAccessTestTableTaggedTextAttributes) Len() (nEntities int) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1239
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1288
 
-func (inst *ReadAccessTestTablePlainEntityIdAttributes) LoadFromRecord(rec arrow.Record) (err error) {
+func (inst *ReadAccessTestTablePlainEntityIdAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = runtime.LoadScalarValueFieldFromRecord(inst.ColumnIndexId, arrow.UINT64, rec, &inst.ValueId, array.NewUint64Data)
 	if err != nil {
 		return
@@ -569,7 +582,7 @@ func (inst *ReadAccessTestTablePlainEntityIdAttributes) LoadFromRecord(rec arrow
 	return
 }
 
-func (inst *ReadAccessTestTablePlainEntityTimestampAttributes) LoadFromRecord(rec arrow.Record) (err error) {
+func (inst *ReadAccessTestTablePlainEntityTimestampAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = runtime.LoadScalarValueFieldFromRecord(inst.ColumnIndexTs, arrow.TIMESTAMP, rec, &inst.ValueTs, array.NewTimestampData)
 	if err != nil {
 		return
@@ -581,7 +594,7 @@ func (inst *ReadAccessTestTablePlainEntityTimestampAttributes) LoadFromRecord(re
 	return
 }
 
-func (inst *ReadAccessTestTableTaggedGeoAttributes) LoadFromRecord(rec arrow.Record) (err error) {
+func (inst *ReadAccessTestTableTaggedGeoAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexLat, arrow.FLOAT32, rec, &inst.ValueLat, &inst.ValueLatElements, array.NewFloat32Data)
 	if err != nil {
 		return
@@ -601,7 +614,7 @@ func (inst *ReadAccessTestTableTaggedGeoAttributes) LoadFromRecord(rec arrow.Rec
 	return
 }
 
-func (inst *ReadAccessTestTableTaggedTextAttributes) LoadFromRecord(rec arrow.Record) (err error) {
+func (inst *ReadAccessTestTableTaggedTextAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexText, arrow.STRING, rec, &inst.ValueText, &inst.ValueTextElements, array.NewStringData)
 	if err != nil {
 		return
@@ -710,7 +723,7 @@ func (inst *ReadAccessTestTablePlainEntityTimestampAttributes) GetAttrValueProc(
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1507
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1560
 
 func (inst *ReadAccessTestTableTaggedGeoAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
 	b, e := inst.ValueLat.ValueOffsets(int(entityIdx))
@@ -726,7 +739,7 @@ func (inst *ReadAccessTestTableTaggedTextAttributes) GetNumberOfAttributes(entit
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1560
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1614
 
 type ReadAccessTestTableTaggedGeo struct {
 	Attributes  *ReadAccessTestTableTaggedGeoAttributes
@@ -804,7 +817,7 @@ func (inst *ReadAccessTestTableTaggedText) Release() {
 	runtime.ReleaseIfNotNil(inst.Memberships)
 }
 
-func (inst *ReadAccessTestTableTaggedGeo) LoadFromRecord(rec arrow.Record) (err error) {
+func (inst *ReadAccessTestTableTaggedGeo) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = inst.Attributes.LoadFromRecord(rec)
 	if err != nil {
 		err = eb.Build().Errorf("unable to load from record: %w", err)
@@ -818,7 +831,7 @@ func (inst *ReadAccessTestTableTaggedGeo) LoadFromRecord(rec arrow.Record) (err 
 	return
 }
 
-func (inst *ReadAccessTestTableTaggedText) LoadFromRecord(rec arrow.Record) (err error) {
+func (inst *ReadAccessTestTableTaggedText) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = inst.Attributes.LoadFromRecord(rec)
 	if err != nil {
 		err = eb.Build().Errorf("unable to load from record: %w", err)
@@ -905,7 +918,7 @@ func (inst *ReadAccessTestTableTaggedText) GetSectionMembershipSpec() common.Mem
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeEntityClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1890
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1956
 
 type ReadAccessTestTable struct {
 	EntityId        *ReadAccessTestTablePlainEntityIdAttributes
@@ -930,7 +943,7 @@ func (inst *ReadAccessTestTable) Release() {
 	runtime.ReleaseIfNotNil(inst.Text)
 }
 
-func (inst *ReadAccessTestTable) LoadFromRecord(rec arrow.Record) (err error) {
+func (inst *ReadAccessTestTable) LoadFromRecord(rec runtime.RecordI) (err error) {
 	if inst.EntityId != nil {
 		err = inst.EntityId.LoadFromRecord(rec)
 		if err != nil {

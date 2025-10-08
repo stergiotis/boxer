@@ -6,6 +6,11 @@ import (
 	"golang.org/x/exp/constraints"
 )
 
+type ReferenceCountingI interface {
+	ReleasableI
+	Retain()
+}
+
 type ReleasableI interface {
 	Release()
 }

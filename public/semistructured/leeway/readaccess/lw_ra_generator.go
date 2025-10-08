@@ -243,8 +243,8 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 	{ // struct
 		for i, spec := range membershipSpecs {
 			clsName := classNames[i]
-			_, err = fmt.Fprintf(b, `type %s struct {
-`, clsName)
+			_, err = fmt.Fprintf(b, `type %s%s struct {
+`, clsName, genericTypeParamsDecl)
 			if err != nil {
 				return
 			}
@@ -326,13 +326,16 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 			}
 			spec := membershipSpecs[idx]
 			colIdxGen.Reset()
-			_, err = fmt.Fprintf(b, `func New%s%s() (inst *%s) {
-	inst = &%s{}
+			_, err = fmt.Fprintf(b, `func New%s%s%s() (inst *%s%s) {
+	inst = &%s%s{}
 `,
 				clsName,
 				sec.Name.Convert(naming.UpperCamelCase),
+				genericTypeParamsDecl,
 				clsName,
-				clsName)
+				genericTypeParamsUse,
+				clsName,
+				genericTypeParamsUse)
 			if err != nil {
 				return
 			}
@@ -422,8 +425,8 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 	{ // .Release()
 		for i, spec := range membershipSpecs {
 			clsName := classNames[i]
-			_, err = fmt.Fprintf(b, `func (inst *%s) Release() {
-`, clsName)
+			_, err = fmt.Fprintf(b, `func (inst *%s%s) Release() {
+`, clsName, genericTypeParamsUse)
 			if err != nil {
 				return
 			}
@@ -464,8 +467,8 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 	{ // .Reset()
 		for i, spec := range membershipSpecs {
 			clsName := classNames[i]
-			_, err = fmt.Fprintf(b, `func (inst *%s) Reset() {
-`, clsName)
+			_, err = fmt.Fprintf(b, `func (inst *%s%s) Reset() {
+`, clsName, genericTypeParamsUse)
 			if err != nil {
 				return
 			}
@@ -502,11 +505,11 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 		}
 	}
 
-	{ // .LoadFromRecord(rec arrow.Record) (err error)
+	{ // .LoadFromRecord(rec runtime.RecordI[C,D]) (err error)
 		for i, spec := range membershipSpecs {
 			clsName := classNames[i]
-			_, err = fmt.Fprintf(b, `func (inst *%s) LoadFromRecord(rec arrow.Record) (err error) {
-`, clsName)
+			_, err = fmt.Fprintf(b, `func (inst *%s%s) LoadFromRecord(rec runtime.RecordI%s) (err error) {
+`, clsName, genericTypeParamsUse, genericTypeParamsUse)
 			if err != nil {
 				return
 			}
@@ -582,8 +585,8 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 	{ // .Len() (nEntities int)
 		for i, spec := range membershipSpecs {
 			clsName := classNames[i]
-			_, err = fmt.Fprintf(b, `func (inst *%s) Len() (nEntities int) {
-`, clsName)
+			_, err = fmt.Fprintf(b, `func (inst *%s%s) Len() (nEntities int) {
+`, clsName, genericTypeParamsUse)
 			if err != nil {
 				return
 			}
@@ -614,7 +617,7 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 	{ // .GetTotalNumberOfMemberItems() (nItems int64)
 		for i, spec := range membershipSpecs {
 			clsName := classNames[i]
-			_, err = fmt.Fprintf(b, "func (inst *%s) GetTotalNumberOfMemberItems(entityIdx runtime.EntityIdx) (nItems int64) {\n", clsName)
+			_, err = fmt.Fprintf(b, "func (inst *%s%s) GetTotalNumberOfMemberItems(entityIdx runtime.EntityIdx) (nItems int64) {\n", clsName, genericTypeParamsUse)
 			if err != nil {
 				return
 			}
@@ -626,7 +629,7 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 					return
 				}
 				name1 := naming.MustBeValidStylableName(role1.LongString()).Convert(naming.UpperCamelCase).String()
-				const tmpl = "\tnItems += inst.GetNumberOfMemberItem%s(entityIdx)\n"
+				const tmpl = "\tnItems += inst.GetNumberOfMemberItems%s(entityIdx)\n"
 				_, err = fmt.Fprintf(b, tmpl, name1)
 				if err != nil {
 					return
@@ -650,7 +653,7 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 				}
 				name1 := naming.MustBeValidStylableName(role1.LongString()).Convert(naming.UpperCamelCase).String()
 				f1 := clsNamer.ComposeValueField(name1)
-				const tmpl = `func (inst *%s) GetNumberOfMemberItem%s(entityIdx runtime.EntityIdx) (nItems int64) {
+				const tmpl = `func (inst *%s%s) GetNumberOfMemberItems%s(entityIdx runtime.EntityIdx) (nItems int64) {
 	if inst.%s != nil {
 		b, e := inst.%s.ValueOffsets(int(entityIdx))
 		nItems = e - b
@@ -660,6 +663,7 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 `
 				_, err = fmt.Fprintf(b, tmpl,
 					clsName,
+					genericTypeParamsUse,
 					name1,
 					f1,
 					f1,
@@ -690,7 +694,7 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 					return
 				}
 				name1 := naming.MustBeValidStylableName(role1.LongString()).Convert(naming.UpperCamelCase).String()
-				const tmpl = `func (inst *%s) GetMembValue%s(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[%s] {
+				const tmpl = `func (inst *%s%s) GetMembValue%s(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[%s] {
 	accel := inst.%s
 	accel.SetCurrentEntityIdx(int(entityIdx))
 	r := accel.LookupForwardRange(attrIdx)
@@ -707,6 +711,7 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 `
 				_, err = fmt.Fprintf(b, tmpl,
 					clsName,
+					genericTypeParamsUse,
 					name1,
 					typeName1,
 					clsNamer.ComposeAccelFieldName(name1),
@@ -729,6 +734,7 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 					name2 := naming.MustBeValidStylableName(role2.LongString()).Convert(naming.UpperCamelCase).String()
 					_, err = fmt.Fprintf(b, tmpl,
 						clsName,
+						genericTypeParamsUse,
 						name2,
 						typeName2,
 						clsNamer.ComposeAccelFieldName(name2),
@@ -741,7 +747,7 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 					if err != nil {
 						return
 					}
-					const tmpl2 = `func (inst *%s) GetMembValue%s(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq2[%s,%s] {
+					const tmpl2 = `func (inst *%s%s) GetMembValue%s(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq2[%s,%s] {
 	accel := inst.%s
 	accel.SetCurrentEntityIdx(int(entityIdx))
 	r := accel.LookupForwardRange(attrIdx)
@@ -760,6 +766,7 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 `
 					_, err = fmt.Fprintf(b, tmpl2,
 						clsName,
+						genericTypeParamsUse,
 						naming.MustBeValidStylableName(s.String()).Convert(naming.UpperCamelCase),
 						typeName1,
 						typeName2,
@@ -772,6 +779,43 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 						clsNamer.ComposeValueFieldElementAccessor(name1),
 						clsNamer.ComposeValueFieldElementAccessor(name2),
 					)
+				}
+			}
+		}
+	}
+	{ // .GetNumberOfMemberItemsByAttr(entityIdx runtime.EntityIdx,membIdx runtime.MemberIdx) (nItems int)
+		for i, spec := range membershipSpecs {
+			clsName := classNames[i]
+			for s := range spec.Iterate() {
+				var role1, _ common.ColumnRoleE
+				_, _, role1, _, _, _, _, err = arrowTech.ResolveMembership(s)
+				if err != nil {
+					err = eh.Errorf("unable to get membership column canonical type: %w", err)
+					return
+				}
+
+				name1 := naming.MustBeValidStylableName(role1.LongString()).Convert(naming.UpperCamelCase).String()
+				const tmpl = `func (inst *%s%s) GetNumberOfMemberItemsByAttr%s(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (nItems int) {
+	accel := inst.%s
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	nItems = int(accel.LookupForwardRange(attrIdx).CalcCardinality())
+	return
+}
+`
+				var name string
+				if s.ContainsMixed() {
+					name = naming.MustBeValidStylableName(s.String()).Convert(naming.UpperCamelCase).String()
+				} else {
+					name = name1
+				}
+				_, err = fmt.Fprintf(b, tmpl,
+					clsName,
+					genericTypeParamsUse,
+					name,
+					clsNamer.ComposeAccelFieldName(name1),
+				)
+				if err != nil {
+					return
 				}
 			}
 		}
@@ -922,7 +966,7 @@ func (inst *GoClassBuilder) composeSectionAttributeClasses(clsNamer gocodegen.Go
 		}
 		for clsName, bc := range attrClassesKv.Iterate() {
 			if bc.Len() > 0 {
-				_, err = fmt.Fprintf(b, "type %s struct {\n", clsName)
+				_, err = fmt.Fprintf(b, "type %s%s struct {\n", clsName, genericTypeParamsDecl)
 				if err != nil {
 					return
 				}
@@ -989,10 +1033,13 @@ func (inst *GoClassBuilder) composeSectionAttributeClasses(clsNamer gocodegen.Go
 		}
 		for clsName, gen := range colIdxGenerators.Iterate() {
 			if gen.Length() > 0 {
-				_, err = fmt.Fprintf(b, "func New%s() (inst *%s) {\n\tinst = &%s{}\n",
+				_, err = fmt.Fprintf(b, "func New%s%s() (inst *%s%s) {\n\tinst = &%s%s{}\n",
 					clsName,
+					genericTypeParamsDecl,
 					clsName,
-					clsName)
+					genericTypeParamsUse,
+					clsName,
+					genericTypeParamsUse)
 				if err != nil {
 					return
 				}
@@ -1084,7 +1131,7 @@ func (inst *GoClassBuilder) composeSectionAttributeClasses(clsNamer gocodegen.Go
 		}
 		for clsName, bc := range attrClassesKv.Iterate() {
 			if bc.Len() > 0 {
-				_, err = fmt.Fprintf(b, "func (inst *%s) Reset() {\n", clsName)
+				_, err = fmt.Fprintf(b, "func (inst *%s%s) Reset() {\n", clsName, genericTypeParamsUse)
 				if err != nil {
 					return
 				}
@@ -1161,12 +1208,14 @@ func (inst *GoClassBuilder) composeSectionAttributeClasses(clsNamer gocodegen.Go
 		for clsName, bc := range attrClassesKv.Iterate() {
 			if bc.Len() > 0 {
 				_, err = fmt.Fprintf(b, `
-var _ runtime.ReleasableI = (*%s)(nil)
+var _ runtime.ReleasableI = (*%s%s)(nil)
 
-func (inst *%s) Release() {
+func (inst *%s%s) Release() {
 `,
 					clsName,
-					clsName)
+					genericInstantiation,
+					clsName,
+					genericTypeParamsUse)
 				if err != nil {
 					return
 				}
@@ -1217,9 +1266,9 @@ func (inst *%s) Release() {
 		for clsName, bc := range attrClassesKv.Iterate() {
 			if bc.Len() > 0 {
 				_, err = fmt.Fprintf(b, `
-func (inst *%s) Len() (nEntities int) {
+func (inst *%s%s) Len() (nEntities int) {
 `,
-					clsName)
+					clsName, genericTypeParamsUse)
 				if err != nil {
 					return
 				}
@@ -1235,7 +1284,7 @@ func (inst *%s) Len() (nEntities int) {
 		}
 	}
 
-	{ // .LoadFromRecord(rec arrow.Record) (err error)
+	{ // .LoadFromRecord(rec runtime.RecordI[C,D]) (err error)
 		gocodegen.EmitGeneratingCodeLocation(b)
 		for bc := range attrClassesKv.Values() {
 			bc.Reset()
@@ -1329,7 +1378,7 @@ func (inst *%s) Len() (nEntities int) {
 		}
 		for clsName, bc := range attrClassesKv.Iterate() {
 			if bc.Len() > 0 {
-				_, err = fmt.Fprintf(b, "func (inst *%s)  LoadFromRecord(rec arrow.Record) (err error) {\n", clsName)
+				_, err = fmt.Fprintf(b, "func (inst *%s%s) LoadFromRecord(rec runtime.RecordI%s) (err error) {\n", clsName, genericTypeParamsUse, genericTypeParamsUse)
 				if err != nil {
 					return
 				}
@@ -1368,7 +1417,7 @@ func (inst *%s) Len() (nEntities int) {
 				attrNameS := attrName.Convert(naming.UpperCamelCase).String()
 				switch subType {
 				case common.IntermediateColumnsSubTypeScalar:
-					_, err = fmt.Fprintf(b, `func (inst *%s) GetAttrValue%s(entityIdx runtime.EntityIdx,attrIdx runtime.AttributeIdx) (scalarAttrValue %s) {
+					_, err = fmt.Fprintf(b, `func (inst *%s%s) GetAttrValue%s(entityIdx runtime.EntityIdx,attrIdx runtime.AttributeIdx) (scalarAttrValue %s) {
 	b, e := inst.%s.ValueOffsets(int(entityIdx))
 	if int64(attrIdx) > (e-b) {
 		log.Panic().Str("attribute",%q).Int("beginIncl",int(b)).Int("endExcl",int(e)).Int("attrIdx",int(attrIdx)).Msg("attribute index is out of range")
@@ -1378,6 +1427,7 @@ func (inst *%s) Len() (nEntities int) {
 }
 `,
 						clsName,
+						genericTypeParamsUse,
 						attrNameS,
 						typeName,
 						clsNamer.ComposeValueField(attrNameS),
@@ -1396,7 +1446,7 @@ func (inst *%s) Len() (nEntities int) {
 						f = homogenousArrayAccelFieldName
 						break
 					}
-					_, err = fmt.Fprintf(b, `func (inst *%s) GetAttrValue%s(entityIdx runtime.EntityIdx,attrIdx runtime.AttributeIdx) iter.Seq[%s] {
+					_, err = fmt.Fprintf(b, `func (inst *%s%s) GetAttrValue%s(entityIdx runtime.EntityIdx,attrIdx runtime.AttributeIdx) iter.Seq[%s] {
 	accel := inst.%s
 	accel.SetCurrentEntityIdx(int(entityIdx))
 	r := accel.LookupForwardRange(attrIdx)
@@ -1411,6 +1461,7 @@ func (inst *%s) Len() (nEntities int) {
 }
 `,
 						clsName,
+						genericTypeParamsUse,
 						attrNameS,
 						typeName,
 
@@ -1457,12 +1508,13 @@ func (inst *%s) Len() (nEntities int) {
 			attrNameS := attrName.Convert(naming.UpperCamelCase).String()
 			switch subType {
 			case common.IntermediateColumnsSubTypeScalar:
-				_, err = fmt.Fprintf(b, `func (inst *%s) GetAttrValue%s(entityIdx runtime.EntityIdx) (scalarAttrValue %s) {
+				_, err = fmt.Fprintf(b, `func (inst *%s%s) GetAttrValue%s(entityIdx runtime.EntityIdx) (scalarAttrValue %s) {
 	scalarAttrValue = %sinst.%s.Value(int(entityIdx))%s
 	return
 }
 `,
 					clsName,
+					genericTypeParamsUse,
 					attrNameS,
 					typeName,
 					typeConvPrefix,
@@ -1471,7 +1523,7 @@ func (inst *%s) Len() (nEntities int) {
 				)
 				break
 			case common.IntermediateColumnsSubTypeSet, common.IntermediateColumnsSubTypeHomogenousArray:
-				_, err = fmt.Fprintf(b, `func (inst *%s) GetAttrValue%s(entityIdx runtime.EntityIdx) iter.Seq[%s] {
+				_, err = fmt.Fprintf(b, `func (inst *%s%s) GetAttrValue%s(entityIdx runtime.EntityIdx) iter.Seq[%s] {
 		return func(yield func(%s) bool) {
 			b, e := inst.%s.ValueOffsets(int(entityIdx))
 			vs := inst.%s
@@ -1484,6 +1536,7 @@ func (inst *%s) Len() (nEntities int) {
 }
 `,
 					clsName,
+					genericTypeParamsUse,
 					attrNameS,
 					typeName,
 					typeName,
@@ -1515,13 +1568,14 @@ func (inst *%s) Len() (nEntities int) {
 				return
 			}
 			attrNameS := attrName.Convert(naming.UpperCamelCase).String()
-			_, err = fmt.Fprintf(b, `func (inst *%s) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+			_, err = fmt.Fprintf(b, `func (inst *%s%s) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
 	b, e := inst.%s.ValueOffsets(int(entityIdx))
 	nAttributes = e-b
 	return
 }
 `,
 				clsName,
+				genericTypeParamsUse,
 				clsNamer.ComposeValueField(attrNameS),
 			)
 			if err != nil {
@@ -1609,34 +1663,38 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 
 	{ // struct
 		composeCode(func(sec common.TaggedValuesSection, outerClsName string) (err error) {
-			_, err = fmt.Fprintf(b, "type %s struct {\n", outerClsName)
+			_, err = fmt.Fprintf(b, "type %s%s struct {\n", outerClsName, genericTypeParamsDecl)
 			return
 		}, func(sec common.TaggedValuesSection, attrClsName string) (err error) {
-			_, err = fmt.Fprintf(b, "\tAttributes *%s\n", attrClsName)
+			_, err = fmt.Fprintf(b, "\tAttributes *%s%s\n", attrClsName, genericTypeParamsUse)
 			return
 		}, func(sec common.TaggedValuesSection, membClsName string) (err error) {
-			_, err = fmt.Fprintf(b, "\tMemberships *%s\n", membClsName)
+			_, err = fmt.Fprintf(b, "\tMemberships *%s%s\n", membClsName, genericTypeParamsUse)
 			return
 		}, func(sec common.TaggedValuesSection, outerClsName string) (err error) {
-			_, err = fmt.Fprintf(b, "}\n\nvar _ runtime.ColumnIndexHandlingI = (*%s)(nil)\n", outerClsName)
+			_, err = fmt.Fprintf(b, "}\n\nvar _ runtime.ColumnIndexHandlingI = (*%s%s)(nil)\n", outerClsName, genericInstantiation)
 			return
 		})
 	}
 	{ // factory
 		composeCode(func(sec common.TaggedValuesSection, outerClsName string) (err error) {
-			_, err = fmt.Fprintf(b, "func New%s() (inst *%s) {\n\tinst = &%s{}\n",
+			_, err = fmt.Fprintf(b, "func New%s%s() (inst *%s%s) {\n\tinst = &%s%s{}\n",
 				outerClsName,
+				genericTypeParamsDecl,
 				outerClsName,
+				genericTypeParamsUse,
 				outerClsName,
+				genericTypeParamsUse,
 			)
 			return
 		}, func(sec common.TaggedValuesSection, attrClsName string) (err error) {
-			_, err = fmt.Fprintf(b, "\tinst.Attributes = New%s()\n", attrClsName)
+			_, err = fmt.Fprintf(b, "\tinst.Attributes = New%s%s()\n", attrClsName, genericTypeParamsUse)
 			return
 		}, func(sec common.TaggedValuesSection, membClsName string) (err error) {
-			_, err = fmt.Fprintf(b, "\tinst.Memberships = New%s%s()\n",
+			_, err = fmt.Fprintf(b, "\tinst.Memberships = New%s%s%s()\n",
 				membClsName,
 				sec.Name.Convert(naming.UpperCamelCase),
+				genericTypeParamsUse,
 			)
 			return
 		}, func(sec common.TaggedValuesSection, outerClsName string) (err error) {
@@ -1646,8 +1704,9 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 	}
 	composeDelegate := func(funcName string, argsDecl string, retrDecl string, retrAssign string, afterFunc string, prolog string, args string, epilog string) {
 		composeCode(func(sec common.TaggedValuesSection, outerClsName string) (err error) {
-			_, err = fmt.Fprintf(b, "func (inst *%s) %s(%s) %s {\n%s",
+			_, err = fmt.Fprintf(b, "func (inst *%s%s) %s(%s) %s {\n%s",
 				outerClsName,
+				genericTypeParamsUse,
 				funcName,
 				argsDecl,
 				retrDecl,
@@ -1711,8 +1770,9 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 	}
 	{ // .Release()
 		composeCode(func(sec common.TaggedValuesSection, outerClsName string) (err error) {
-			_, err = fmt.Fprintf(b, "func (inst *%s) Release() {\n",
+			_, err = fmt.Fprintf(b, "func (inst *%s%s) Release() {\n",
 				outerClsName,
+				genericTypeParamsUse,
 			)
 			return
 		}, func(sec common.TaggedValuesSection, attrClsName string) (err error) {
@@ -1726,9 +1786,9 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 			return
 		})
 	}
-	{ // .LoadFromRecord(rec arrow.Record) (err error)
+	{ // .LoadFromRecord(rec runtime.RecordI[C,D]) (err error)
 		composeDelegate("LoadFromRecord",
-			"rec arrow.Record",
+			"rec runtime.RecordI"+genericTypeParamsUse,
 			"(err error)",
 			"err = ",
 			"\nif err != nil {\n\terr = eb.Build().Errorf(\"unable to load from record: %w\", err)\n\treturn\n}",
@@ -1739,8 +1799,9 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 	}
 	{ // .Len() (nEntities int)
 		composeCode(func(sec common.TaggedValuesSection, outerClsName string) (err error) {
-			_, err = fmt.Fprintf(b, "func (inst *%s) Len() (nEntities int) {\n",
+			_, err = fmt.Fprintf(b, "func (inst *%s%s) Len() (nEntities int) {\n",
 				outerClsName,
+				genericTypeParamsUse,
 			)
 			return
 		}, func(sec common.TaggedValuesSection, attrClsName string) (err error) {
@@ -1758,10 +1819,10 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 	}
 	{ // Getters for public Attributes to enable generic programming (interfaces)
 		composeCode(func(sec common.TaggedValuesSection, outerClsName string) (err error) {
-			_, err = fmt.Fprintf(b, "func (inst *%s) GetAttributes() *", outerClsName)
+			_, err = fmt.Fprintf(b, "func (inst *%s%s) GetAttributes() *", outerClsName, genericTypeParamsUse)
 			return
 		}, func(sec common.TaggedValuesSection, attrClsName string) (err error) {
-			_, err = fmt.Fprintf(b, "%s {\n\treturn inst.Attributes\n", attrClsName)
+			_, err = fmt.Fprintf(b, "%s%s {\n\treturn inst.Attributes\n", attrClsName, genericTypeParamsUse)
 			return
 		}, func(sec common.TaggedValuesSection, membClsName string) (err error) {
 			return
@@ -1770,12 +1831,12 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 			return
 		})
 		composeCode(func(sec common.TaggedValuesSection, outerClsName string) (err error) {
-			_, err = fmt.Fprintf(b, "func (inst *%s) GetMemberships() *", outerClsName)
+			_, err = fmt.Fprintf(b, "func (inst *%s%s) GetMemberships() *", outerClsName, genericTypeParamsUse)
 			return
 		}, func(sec common.TaggedValuesSection, attrClsName string) (err error) {
 			return
 		}, func(sec common.TaggedValuesSection, membClsName string) (err error) {
-			_, err = fmt.Fprintf(b, "%s {\n\treturn inst.Memberships\n", membClsName)
+			_, err = fmt.Fprintf(b, "%s%s {\n\treturn inst.Memberships\n", membClsName, genericTypeParamsUse)
 			return
 		}, func(sec common.TaggedValuesSection, outerClsName string) (err error) {
 			_, err = fmt.Fprint(b, "}\n\n")
@@ -1786,8 +1847,9 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 		// section introspection
 		{ // .GetSectionName() naming.StylableName
 			composeCode(func(sec common.TaggedValuesSection, outerClsName string) (err error) {
-				_, err = fmt.Fprintf(b, "func (inst *%s) GetSectionName() naming.StylableName {\n",
+				_, err = fmt.Fprintf(b, "func (inst *%s%s) GetSectionName() naming.StylableName {\n",
 					outerClsName,
+					genericTypeParamsUse,
 				)
 				return
 			}, func(sec common.TaggedValuesSection, attrClsName string) (err error) {
@@ -1796,14 +1858,15 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 			}, func(sec common.TaggedValuesSection, membClsName string) (err error) {
 				return
 			}, func(sec common.TaggedValuesSection, outerClsName string) (err error) {
-				_, err = fmt.Fprintf(b, "}\n\nvar _ fatruntime.SectionIntrospectionI = (*%s)(nil)\n\n", outerClsName)
+				_, err = fmt.Fprintf(b, "}\n\nvar _ fatruntime.SectionIntrospectionI = (*%s%s)(nil)\n\n", outerClsName, genericInstantiation)
 				return
 			})
 		}
 		{ // .GetSectionUseAspects() useaspects.AspectSet
 			composeCode(func(sec common.TaggedValuesSection, outerClsName string) (err error) {
-				_, err = fmt.Fprintf(b, "func (inst *%s) GetSectionUseAspects() useaspects.AspectSet {\n",
+				_, err = fmt.Fprintf(b, "func (inst *%s%s) GetSectionUseAspects() useaspects.AspectSet {\n",
 					outerClsName,
+					genericTypeParamsUse,
 				)
 				return
 			}, func(sec common.TaggedValuesSection, attrClsName string) (err error) {
@@ -1818,8 +1881,9 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 		}
 		{ // .GetSectionStreamingGroup() naming.Key
 			composeCode(func(sec common.TaggedValuesSection, outerClsName string) (err error) {
-				_, err = fmt.Fprintf(b, "func (inst *%s) GetSectionStreamingGroup() naming.Key {\n",
+				_, err = fmt.Fprintf(b, "func (inst *%s%s) GetSectionStreamingGroup() naming.Key {\n",
 					outerClsName,
+					genericTypeParamsUse,
 				)
 				return
 			}, func(sec common.TaggedValuesSection, attrClsName string) (err error) {
@@ -1834,8 +1898,9 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 		}
 		{ // .GetSectionCoSectionGroup() naming.Key
 			composeCode(func(sec common.TaggedValuesSection, outerClsName string) (err error) {
-				_, err = fmt.Fprintf(b, "func (inst *%s) GetSectionCoSectionGroup() naming.Key {\n",
+				_, err = fmt.Fprintf(b, "func (inst *%s%s) GetSectionCoSectionGroup() naming.Key {\n",
 					outerClsName,
+					genericTypeParamsUse,
 				)
 				return
 			}, func(sec common.TaggedValuesSection, attrClsName string) (err error) {
@@ -1850,8 +1915,9 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 		}
 		{ // .GetSectionMembershipSpec() common.MembershipSpecE
 			composeCode(func(sec common.TaggedValuesSection, outerClsName string) (err error) {
-				_, err = fmt.Fprintf(b, "func (inst *%s) GetSectionMembershipSpec() common.MembershipSpecE {\n",
+				_, err = fmt.Fprintf(b, "func (inst *%s%s) GetSectionMembershipSpec() common.MembershipSpecE {\n",
 					outerClsName,
+					genericTypeParamsUse,
 				)
 				return
 			}, func(sec common.TaggedValuesSection, attrClsName string) (err error) {
@@ -1897,7 +1963,7 @@ func (inst *GoClassBuilder) composeEntityClasses(clsNamer gocodegen.GoClassNamer
 	}
 	ptsEff := extractEffectivePlainItemTypes(tblDesc)
 	{ // entity struct
-		_, err = fmt.Fprintf(b, "type %s struct {\n", entityClsName)
+		_, err = fmt.Fprintf(b, "type %s%s struct {\n", entityClsName, genericTypeParamsDecl)
 		if err != nil {
 			return
 		}
@@ -1909,9 +1975,10 @@ func (inst *GoClassBuilder) composeEntityClasses(clsNamer gocodegen.GoClassNamer
 				err = eh.Errorf("unable to compose read access outer class name: %w", err)
 				return
 			}
-			_, err = fmt.Fprintf(b, "\t%s *%s\n",
+			_, err = fmt.Fprintf(b, "\t%s *%s%s\n",
 				sectionName.Convert(naming.UpperCamelCase),
-				outerClsName)
+				outerClsName,
+				genericTypeParamsUse)
 			if err != nil {
 				return
 			}
@@ -1925,9 +1992,10 @@ func (inst *GoClassBuilder) composeEntityClasses(clsNamer gocodegen.GoClassNamer
 				err = eh.Errorf("unable to compose read access outer class name: %w", err)
 				return
 			}
-			_, err = fmt.Fprintf(b, "\t%s *%s\n",
+			_, err = fmt.Fprintf(b, "\t%s *%s%s\n",
 				s.Name.Convert(naming.UpperCamelCase),
-				outerClsName)
+				outerClsName,
+				genericTypeParamsUse)
 			if err != nil {
 				return
 			}
@@ -1938,10 +2006,13 @@ func (inst *GoClassBuilder) composeEntityClasses(clsNamer gocodegen.GoClassNamer
 		}
 	}
 	{ // factory
-		_, err = fmt.Fprintf(b, "func New%s() (inst *%s) {\n\tinst = &%s{}\n",
+		_, err = fmt.Fprintf(b, "func New%s%s() (inst *%s%s) {\n\tinst = &%s%s{}\n",
 			entityClsName,
+			genericTypeParamsDecl,
 			entityClsName,
-			entityClsName)
+			genericTypeParamsUse,
+			entityClsName,
+			genericTypeParamsUse)
 		if err != nil {
 			return
 		}
@@ -1953,9 +2024,10 @@ func (inst *GoClassBuilder) composeEntityClasses(clsNamer gocodegen.GoClassNamer
 				err = eh.Errorf("unable to compose read access outer class name: %w", err)
 				return
 			}
-			_, err = fmt.Fprintf(b, "\tinst.%s = New%s()\n",
+			_, err = fmt.Fprintf(b, "\tinst.%s = New%s%s()\n",
 				sectionName.Convert(naming.UpperCamelCase),
-				outerClsName)
+				outerClsName,
+				genericTypeParamsUse)
 			if err != nil {
 				return
 			}
@@ -1969,9 +2041,10 @@ func (inst *GoClassBuilder) composeEntityClasses(clsNamer gocodegen.GoClassNamer
 				err = eh.Errorf("unable to compose read access outer class name: %w", err)
 				return
 			}
-			_, err = fmt.Fprintf(b, "\tinst.%s = New%s()\n",
+			_, err = fmt.Fprintf(b, "\tinst.%s = New%s%s()\n",
 				s.Name.Convert(naming.UpperCamelCase),
-				outerClsName)
+				outerClsName,
+				genericTypeParamsUse)
 			if err != nil {
 				return
 			}
@@ -1982,7 +2055,7 @@ func (inst *GoClassBuilder) composeEntityClasses(clsNamer gocodegen.GoClassNamer
 		}
 	}
 	{ // .Release()
-		_, err = fmt.Fprintf(b, "func (inst *%s) Release() {\n", entityClsName)
+		_, err = fmt.Fprintf(b, "func (inst *%s%s) Release() {\n", entityClsName, genericTypeParamsUse)
 		if err != nil {
 			return
 		}
@@ -2007,8 +2080,8 @@ func (inst *GoClassBuilder) composeEntityClasses(clsNamer gocodegen.GoClassNamer
 			return
 		}
 	}
-	{ // .LoadFromRecord(rec arrow.Record) (err error)
-		_, err = fmt.Fprintf(b, "func (inst *%s) LoadFromRecord(rec arrow.Record) (err error) {\n", entityClsName)
+	{ // .LoadFromRecord(rec runtime.RecordI[C,D]) (err error)
+		_, err = fmt.Fprintf(b, "func (inst *%s%s) LoadFromRecord(rec runtime.RecordI%s) (err error) {\n", entityClsName, genericTypeParamsUse, genericTypeParamsUse)
 		if err != nil {
 			return
 		}
@@ -2053,7 +2126,7 @@ func (inst *GoClassBuilder) composeEntityClasses(clsNamer gocodegen.GoClassNamer
 		}
 	}
 	{ // .SetColumnIndices(indices []uint32)
-		_, err = fmt.Fprintf(b, "func (inst *%s) SetColumnIndices(indices []uint32) (rest []uint32) {\n\trest = indices\n", entityClsName)
+		_, err = fmt.Fprintf(b, "func (inst *%s%s) SetColumnIndices(indices []uint32) (rest []uint32) {\n\trest = indices\n", entityClsName, genericTypeParamsUse)
 		if err != nil {
 			return
 		}
@@ -2090,7 +2163,7 @@ func (inst *GoClassBuilder) composeEntityClasses(clsNamer gocodegen.GoClassNamer
 		}
 	}
 	{ // .GetColumnIndices() (columnIndices []uint32)
-		_, err = fmt.Fprintf(b, "func (inst *%s) GetColumnIndices() (columnIndices []uint32) {\n", entityClsName)
+		_, err = fmt.Fprintf(b, "func (inst *%s%s) GetColumnIndices() (columnIndices []uint32) {\n", entityClsName, genericTypeParamsUse)
 		if err != nil {
 			return
 		}
@@ -2127,7 +2200,7 @@ func (inst *GoClassBuilder) composeEntityClasses(clsNamer gocodegen.GoClassNamer
 		}
 	}
 	{ // .GetColumnIndexFieldNames() (fieldNames []string)
-		_, err = fmt.Fprintf(b, "func (inst *%s) GetColumnIndexFieldNames() (fieldNames []string) {\n", entityClsName)
+		_, err = fmt.Fprintf(b, "func (inst *%s%s) GetColumnIndexFieldNames() (fieldNames []string) {\n", entityClsName, genericTypeParamsUse)
 		if err != nil {
 			return
 		}
@@ -2158,7 +2231,7 @@ func (inst *GoClassBuilder) composeEntityClasses(clsNamer gocodegen.GoClassNamer
 				return
 			}
 		}
-		_, err = fmt.Fprintf(b, "\treturn\n}\n\nvar _ runtime.ColumnIndexHandlingI = (*%s)(nil)\n\n", entityClsName)
+		_, err = fmt.Fprintf(b, "\treturn\n}\n\nvar _ runtime.ColumnIndexHandlingI = (*%s%s)(nil)\n\n", entityClsName, genericInstantiation)
 		if err != nil {
 			return
 		}
@@ -2180,7 +2253,7 @@ func (inst *GoClassBuilder) composeEntityClasses(clsNamer gocodegen.GoClassNamer
 			err = eh.Errorf("no plain and no tagged section")
 			return
 		}
-		_, err = fmt.Fprintf(b, `func (inst *%s) GetNumberOfEntities() (nEntities int) {
+		_, err = fmt.Fprintf(b, `func (inst *%s%s) GetNumberOfEntities() (nEntities int) {
 	if inst.%s != nil {
 		nEntities = inst.%s.Len()
 	}
@@ -2188,6 +2261,7 @@ func (inst *GoClassBuilder) composeEntityClasses(clsNamer gocodegen.GoClassNamer
 }
 `,
 			entityClsName,
+			genericTypeParamsUse,
 			fieldName,
 			fieldName,
 		)

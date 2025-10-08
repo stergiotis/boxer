@@ -44,9 +44,9 @@ func (inst *ColumnIndexCodeGenerator) Length() int {
 }
 func (inst *ColumnIndexCodeGenerator) GenerateCommon(w io.Writer, instClassType string) (err error) {
 	{
-		_, err = fmt.Fprintf(w, `func (inst *%s) GetColumnIndices() (columnIndices []uint32) {
+		_, err = fmt.Fprintf(w, `func (inst *%s%s) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = []uint32{
-`, instClassType)
+`, instClassType, genericTypeParamsUse)
 		if err != nil {
 			return
 		}
@@ -62,9 +62,9 @@ func (inst *ColumnIndexCodeGenerator) GenerateCommon(w io.Writer, instClassType 
 		}
 	}
 	{
-		_, err = fmt.Fprintf(w, `func (inst *%s) GetColumnIndexFieldNames() (fieldNames []string) {
+		_, err = fmt.Fprintf(w, `func (inst *%s%s) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = []string{
-`, instClassType)
+`, instClassType, genericTypeParamsUse)
 		if err != nil {
 			return
 		}
@@ -80,8 +80,8 @@ func (inst *ColumnIndexCodeGenerator) GenerateCommon(w io.Writer, instClassType 
 		}
 	}
 	{
-		_, err = fmt.Fprintf(w, `func (inst *%s) SetColumnIndices(indices []uint32) (rest []uint32) {
-`, instClassType)
+		_, err = fmt.Fprintf(w, `func (inst *%s%s) SetColumnIndices(indices []uint32) (rest []uint32) {
+`, instClassType, genericTypeParamsUse)
 		if err != nil {
 			return
 		}
@@ -97,7 +97,7 @@ func (inst *ColumnIndexCodeGenerator) GenerateCommon(w io.Writer, instClassType 
 		}
 	}
 
-	_, err = fmt.Fprintf(w, "var _ runtime.ColumnIndexHandlingI = (*%s)(nil)\n", instClassType)
+	_, err = fmt.Fprintf(w, "var _ runtime.ColumnIndexHandlingI = (*%s%s)(nil)\n", instClassType, genericInstantiation)
 	return
 }
 func (inst *ColumnIndexCodeGenerator) Reset() {
