@@ -8,8 +8,8 @@ import (
 )
 
 type GoClassBuilder struct {
-	builder *strings.Builder
-	tech    *golang.TechnologySpecificCodeGenerator
+	builder    *strings.Builder
+	tech       *golang.TechnologySpecificCodeGenerator
 	fatRuntime bool
 }
 type GeneratorDriver struct {
@@ -19,4 +19,3 @@ type GeneratorDriver struct {
 	tech             common.TechnologySpecificGeneratorI
 	fatRuntime       bool
 }
-
