@@ -202,7 +202,7 @@ func (inst *GoClassBuilder) getColumnIndexBySectionAndRole(ir *common.Intermedia
 	err = eb.Build().Stringer("sectionName", sectionName).Stringer("role", role).Errorf("unable to find columen")
 	return
 }
-func getElementGoTypeName(ct canonicaltypes.PrimitiveAstNodeI, hints encodingaspects.AspectSet) (typeName string, scalarModifier canonicaltypes.ScalarModifierE, err error) {
+func getElementGoTypeName(ct canonicaltypes.PrimitiveAstNodeI, hints encodingaspects.AspectSet) (typeName string, scalarModifier canonicaltypes.ScalarModifierE, typeConvPrefix string, typeConvSuffix string, err error) {
 	scalarModifier, err = common.ExtractScalarModifier(ct)
 	if err != nil {
 		return
@@ -223,6 +223,11 @@ func getElementGoTypeName(ct canonicaltypes.PrimitiveAstNodeI, hints encodingasp
 		break
 	default:
 		err = eb.Build().Stringer("scalarModifier", scalarModifier).Stringer("ct", ct).Errorf("unhandled scalar modifier")
+		return
+	}
+	typeConvPrefix, typeConvSuffix, err = gocodegen.ArrowTypeToGoType(canonicaltypes.DemoteToScalar(ct), hints, common.UseArrowDictionaryEncoding)
+	if err != nil {
+		err = eb.Build().Stringer("ct", ct).Errorf("unable to get arrow to go type conversion: %w", err)
 		return
 	}
 	return
@@ -688,7 +693,7 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 				}
 
 				var typeName1 string
-				typeName1, _, err = getElementGoTypeName(ct1, hint1)
+				typeName1, _, _, _, err = getElementGoTypeName(ct1, hint1)
 				if err != nil {
 					err = eh.Errorf("unable to get element go type name: %w", err)
 					return
@@ -726,7 +731,7 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 				}
 				if s.ContainsMixed() {
 					var typeName2 string
-					typeName2, _, err = getElementGoTypeName(ct2, hint2)
+					typeName2, _, _, _, err = getElementGoTypeName(ct2, hint2)
 					if err != nil {
 						err = eh.Errorf("unable to get element go type name: %w", err)
 						return
@@ -1401,12 +1406,17 @@ func (inst *%s%s) Len() (nEntities int) {
 				ct := s.ValueColumnTypes[i]
 				var scalarModifier canonicaltypes.ScalarModifierE
 				var typeName string
-				typeName, scalarModifier, err = getElementGoTypeName(ct, s.ValueEncodingHints[i])
+				var typeConvPrefix, typeConvSuffix string
+				typeName, scalarModifier, typeConvPrefix, typeConvSuffix, err = getElementGoTypeName(ct, s.ValueEncodingHints[i])
 				if err != nil {
 					err = eh.Errorf("unable to get element go type name: %w", err)
 					return
 				}
 				subType := common.GetSubTypeByScalarModifier(scalarModifier)
+				if err != nil {
+					err = eh.Errorf("unable to get arrow to go type conversion info: %w", err)
+					return
+				}
 
 				var clsName string
 				clsName, err = clsNamer.ComposeSectionReadAccessAttributeClassName(tableName, pt, s.Name)
@@ -1422,7 +1432,7 @@ func (inst *%s%s) Len() (nEntities int) {
 	if int64(attrIdx) > (e-b) {
 		log.Panic().Str("attribute",%q).Int("beginIncl",int(b)).Int("endExcl",int(e)).Int("attrIdx",int(attrIdx)).Msg("attribute index is out of range")
 	}
-	scalarAttrValue = inst.%s.Value(int(b) + int(attrIdx))
+	scalarAttrValue = %sinst.%s.Value(int(b) + int(attrIdx))%s
 	return
 }
 `,
@@ -1433,7 +1443,9 @@ func (inst *%s%s) Len() (nEntities int) {
 						clsNamer.ComposeValueField(attrNameS),
 
 						attrNameS,
+						typeConvPrefix,
 						clsNamer.ComposeValueFieldElementAccessor(attrNameS),
+						typeConvSuffix,
 					)
 					break
 				case common.IntermediateColumnsSubTypeSet, common.IntermediateColumnsSubTypeHomogenousArray:
@@ -1453,7 +1465,7 @@ func (inst *%s%s) Len() (nEntities int) {
 	return func(yield func(%s) bool) {
 		vs := inst.%s
 		for i := r.BeginIncl; i < r.EndExcl; i++ {
-			if !yield(vs.Value(int(i))) {
+			if !yield(%svs.Value(int(i))%s) {
 				break
 			}
 		}
@@ -1468,6 +1480,8 @@ func (inst *%s%s) Len() (nEntities int) {
 						f,
 						typeName,
 						clsNamer.ComposeValueFieldElementAccessor(attrNameS),
+						typeConvPrefix,
+						typeConvSuffix,
 					)
 					if err != nil {
 						return
@@ -1485,7 +1499,8 @@ func (inst *%s%s) Len() (nEntities int) {
 			hints := tblDesc.PlainValuesEncodingHints[i]
 			var scalarModifier canonicaltypes.ScalarModifierE
 			var typeName string
-			typeName, scalarModifier, err = getElementGoTypeName(ct, hints)
+			var typeConvPrefix, typeConvSuffix string
+			typeName, scalarModifier, typeConvPrefix, typeConvSuffix, err = getElementGoTypeName(ct, hints)
 			if err != nil {
 				err = eh.Errorf("unable to get element go type name: %w", err)
 				return
@@ -1496,12 +1511,6 @@ func (inst *%s%s) Len() (nEntities int) {
 			clsName, err = clsNamer.ComposeSectionReadAccessAttributeClassName(tableName, pt, "")
 			if err != nil {
 				err = eh.Errorf("unable to compose read access inner class name: %w", err)
-				return
-			}
-			var typeConvPrefix, typeConvSuffix string
-			typeConvPrefix, typeConvSuffix, err = gocodegen.ArrowTypeToGoType(ct, hints, common.UseArrowDictionaryEncoding)
-			if err != nil {
-				err = eh.Errorf("unable to get arrow to go type conversion info: %w", err)
 				return
 			}
 			attrName := tblDesc.PlainValuesNames[i]
@@ -1819,7 +1828,9 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 	}
 	{ // Getters for public Attributes to enable generic programming (interfaces)
 		composeCode(func(sec common.TaggedValuesSection, outerClsName string) (err error) {
-			_, err = fmt.Fprintf(b, "func (inst *%s%s) GetAttributes() *", outerClsName, genericTypeParamsUse)
+			if len(sec.ValueColumnNames) > 0 {
+				_, err = fmt.Fprintf(b, "func (inst *%s%s) GetAttributes() *", outerClsName, genericTypeParamsUse)
+			}
 			return
 		}, func(sec common.TaggedValuesSection, attrClsName string) (err error) {
 			_, err = fmt.Fprintf(b, "%s%s {\n\treturn inst.Attributes\n", attrClsName, genericTypeParamsUse)
@@ -1827,11 +1838,15 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 		}, func(sec common.TaggedValuesSection, membClsName string) (err error) {
 			return
 		}, func(sec common.TaggedValuesSection, outerClsName string) (err error) {
-			_, err = fmt.Fprint(b, "}\n\n")
+			if len(sec.ValueColumnNames) > 0 {
+				_, err = fmt.Fprint(b, "}\n\n")
+			}
 			return
 		})
 		composeCode(func(sec common.TaggedValuesSection, outerClsName string) (err error) {
-			_, err = fmt.Fprintf(b, "func (inst *%s%s) GetMemberships() *", outerClsName, genericTypeParamsUse)
+			if sec.MembershipSpec != common.MembershipSpecNone {
+				_, err = fmt.Fprintf(b, "func (inst *%s%s) GetMemberships() *", outerClsName, genericTypeParamsUse)
+			}
 			return
 		}, func(sec common.TaggedValuesSection, attrClsName string) (err error) {
 			return
@@ -1839,7 +1854,9 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 			_, err = fmt.Fprintf(b, "%s%s {\n\treturn inst.Memberships\n", membClsName, genericTypeParamsUse)
 			return
 		}, func(sec common.TaggedValuesSection, outerClsName string) (err error) {
-			_, err = fmt.Fprint(b, "}\n\n")
+			if sec.MembershipSpec != common.MembershipSpecNone {
+				_, err = fmt.Fprint(b, "}\n\n")
+			}
 			return
 		})
 	}
