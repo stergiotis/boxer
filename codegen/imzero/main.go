@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/logging"
 	"github.com/stergiotis/boxer/public/observability/ph"
 	"github.com/stergiotis/boxer/public/observability/profiling"
+	"github.com/stergiotis/boxer/public/observability/tracing"
 	"github.com/stergiotis/boxer/public/observability/vcs"
 	"github.com/stergiotis/boxer/public/semistructured/cbor"
 	"github.com/urfave/cli/v2"
@@ -37,6 +38,7 @@ func mainC() (exitCode int) {
 		Flags: slices.Concat(
 			logging.LoggingFlags,
 			profiling.ProfilingFlags,
+			tracing.TracingFlags,
 			dev.DebuggerFlags,
 			dev.IoOverrideFlags,
 			coverage.CoverageFlags),
@@ -53,6 +55,7 @@ func mainC() (exitCode int) {
 		},
 		After: func(context *cli.Context) error {
 			profiling.ProfilingHandleExit(context)
+			tracing.TracingHandleExit(context)
 			return nil
 		},
 	}

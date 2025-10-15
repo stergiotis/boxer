@@ -14,6 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/logging"
 	"github.com/stergiotis/boxer/public/observability/ph"
 	"github.com/stergiotis/boxer/public/observability/profiling"
+	"github.com/stergiotis/boxer/public/observability/tracing"
 	"github.com/stergiotis/boxer/public/observability/vcs"
 	"github.com/stergiotis/boxer/public/semistructured/cbor"
 	lw "github.com/stergiotis/boxer/public/semistructured/leeway/cli"
@@ -37,6 +38,7 @@ func mainC() (exitCode int) {
 		Flags: slices.Concat(
 			logging.LoggingFlags,
 			profiling.ProfilingFlags,
+			tracing.TracingFlags,
 			docgen.DocFlags,
 			dev.DebuggerFlags,
 			dev.IoOverrideFlags,
@@ -52,6 +54,7 @@ func mainC() (exitCode int) {
 		},
 		After: func(context *cli.Context) error {
 			profiling.ProfilingHandleExit(context)
+			tracing.TracingHandleExit(context)
 			return nil
 		},
 	}
