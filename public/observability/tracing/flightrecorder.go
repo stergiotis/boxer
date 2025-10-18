@@ -117,5 +117,4 @@ func TracingHandleExit(context *cli.Context) {
 		return
 	}
 	writeFlightRecorderTrace(flightRecorderOutputFile)
-	flightRecorder.Stop()
 }
