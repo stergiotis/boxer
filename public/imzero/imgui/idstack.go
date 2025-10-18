@@ -3,12 +3,14 @@
 package imgui
 
 import (
+	"hash/crc32"
+	"iter"
+	"math/rand/v2"
+	"strconv"
+
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/unsafeperf"
-	"hash/crc32"
-	"math/rand/v2"
-	"strconv"
 )
 
 type IdStack struct {
@@ -102,4 +104,32 @@ func (inst *IdStack) RemoveID() *IdStack {
 func (inst *IdStack) PopID() *IdStack {
 	PopID()
 	return inst.RemoveID()
+}
+func (inst *IdStack) PushIDStringR(id string) iter.Seq[string] {
+	return func(yield func(string) bool) {
+		inst.PushIDString(id)
+		defer inst.PopID()
+		yield(id)
+	}
+}
+func (inst *IdStack) PushIDIntR(id int) iter.Seq[int] {
+	return func(yield func(int) bool) {
+		inst.PushIDInt(id)
+		defer inst.PopID()
+		yield(id)
+	}
+}
+func (inst *IdStack) AddIDStringR(id string) iter.Seq[string] {
+	return func(yield func(string) bool) {
+		inst.AddIDString(id)
+		defer inst.RemoveID()
+		yield(id)
+	}
+}
+func (inst *IdStack) AddIDIntR(id int) iter.Seq[int] {
+	return func(yield func(int) bool) {
+		inst.AddIDInt(id)
+		defer inst.RemoveID()
+		yield(id)
+	}
 }
