@@ -25,7 +25,7 @@ func sliceSum(nums []uint64) (r uint64) {
 }
 
 var SampleMachineNumericTypeBaseType = []canonicaltypes2.BaseTypeMachineNumericE{canonicaltypes2.BaseTypeMachineNumericUnsigned, canonicaltypes2.BaseTypeMachineNumericSigned, canonicaltypes2.BaseTypeMachineNumericFloat}
-var SampleMachineNumericTypeWidth = []canonicaltypes2.Width{32, 64}
+var SampleMachineNumericTypeWidth = []canonicaltypes2.Width{8, 16, 32, 64}
 var SampleMachineNumericTypeByteOrder = []canonicaltypes2.ByteOrderModifierE{canonicaltypes2.ByteOrderModifierNone, canonicaltypes2.ByteOrderModifierLittleEndian, canonicaltypes2.ByteOrderModifierBigEndian}
 var sampleMachineNumericTypeRadixii = []uint64{uint64(len(SampleMachineNumericTypeBaseType)), uint64(len(SampleMachineNumericTypeWidth)), uint64(len(SampleMachineNumericTypeByteOrder)), uint64(len(SampleScalarModifier))}
 var SampleMachineNumericMaxExcl = sliceProd(sampleMachineNumericTypeRadixii)
