@@ -192,6 +192,11 @@ var AllMembershipSpecs = []MembershipSpecE{
 	MembershipSpecMixedLowCardVerbatimHighCardParameters,
 }
 
+// GetIndex returns -1 if .Count() > 1
+func (inst MembershipSpecE) GetIndex() int {
+	return slices.Index(AllMembershipSpecs, inst)
+}
+
 func (inst MembershipSpecE) ContainsMixed() (mixed bool) {
 	mixed = inst.HasMixedLowCardVerbatimHighCardParameters() || inst.HasMixedLowCardRefHighCardParameters()
 	return
