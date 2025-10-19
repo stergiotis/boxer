@@ -22,7 +22,7 @@ func TestTechnologySpecificCodeGenerator_Coverage(t *testing.T) {
 	assert.Greater(t, coverage.CoverageTypeString, 0.75)
 	assert.Greater(t, coverage.CoverageTypeMachineNumeric, 0.75)
 	assert.Greater(t, coverage.CoverageTypeTemporal, 0.30)
-	assert.Equal(t, []string{"d32", "t32", "d64", "t64", "d32h", "t32h", "d64h", "t64h", "d32m", "t32m", "d64m", "t64m", "bx0", "bx128", "bx145", "bx192", "bx0h", "bx128h", "bx145h", "bx192h", "bx0m", "bx128m", "bx145m", "bx192m"}, coverage.NotCovered)
+	assert.Equal(t, []string{"f8", "f16", "f8l", "f16l", "f8n", "f16n", "f8h", "f16h", "f8lh", "f16lh", "f8nh", "f16nh", "f8m", "f16m", "f8lm", "f16lm", "f8nm", "f16nm", "d32", "t32", "d64", "t64", "d32h", "t32h", "d64h", "t64h", "d32m", "t32m", "d64m", "t64m", "bx0", "bx128", "bx145", "bx192", "bx0h", "bx128h", "bx145h", "bx192h", "bx0m", "bx128m", "bx145m", "bx192m"}, coverage.NotCovered)
 	require.Greater(t, coverage.CoverageTypeTotal, 0.50)
 }
 func TestTechnologySpecificCodeGenerator_GeneratedCode(t *testing.T) {
