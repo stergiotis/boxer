@@ -1,8 +1,8 @@
 module github.com/stergiotis/boxer
 
-go 1.24
+go 1.25
 
-toolchain go1.24.5
+toolchain go1.25.3
 
 require (
 	github.com/AfterShip/clickhouse-sql-parser v0.4.10
