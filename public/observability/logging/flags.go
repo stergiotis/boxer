@@ -241,7 +241,7 @@ var LoggingFlags = []cli.Flag{
 		Value:    false,
 	},
 	&cli.StringFlag{
-		Name:     "logRunInstanceId",
+		Name:     "logCorrelationId",
 		Usage:    "If the supplied argument is empty, a nanoid(21) will be used.",
 		Category: "logging",
 		EnvVars:  []string{"BOXER_LOG_RUN_INSTANCE_ID"},
@@ -336,12 +336,12 @@ var LoggingFlags = []cli.Flag{
 				d := zerolog.Dict()
 				b := false
 
-				if context.IsSet("logRunInstanceId") {
-					runInstanceId := context.String("logRunInstanceId")
+				if context.IsSet("logCorrelationId") {
+					runInstanceId := context.String("logCorrelationId")
 					if runInstanceId == "" {
 						runInstanceId = gonanoid.Must(21)
 					}
-					d = d.Str("runInstanceId", runInstanceId)
+					d = d.Str("correlationId", runInstanceId)
 					b = true
 				}
 				if b {
