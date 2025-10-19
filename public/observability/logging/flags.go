@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"github.com/fxamacker/cbor/v2"
+	gonanoid "github.com/matoous/go-nanoid/v2"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/observability/vcs"
 	"github.com/yassinebenaid/godump"
 
 	"github.com/rs/zerolog"
@@ -202,6 +204,49 @@ var LoggingFlags = []cli.Flag{
 		EnvVars:  []string{"BOXER_LOG_FILE"},
 		Value:    "",
 	},
+	&cli.BoolFlag{
+		Name:     "logCaller",
+		Category: "logging",
+		EnvVars:  []string{"BOXER_LOG_CALLER"},
+		Value:    false,
+	},
+	&cli.BoolFlag{
+		Name:     "logOsHostOnStart",
+		Category: "logging",
+		EnvVars:  []string{"BOXER_LOG_OS_HOST_ON_START"},
+		Value:    false,
+	},
+	&cli.BoolFlag{
+		Name:     "logOsArgsOnStart",
+		Category: "logging",
+		EnvVars:  []string{"BOXER_LOG_OS_ARGS_ON_START"},
+		Value:    false,
+	},
+	&cli.BoolFlag{
+		Name:     "logOsPidOnStart",
+		Category: "logging",
+		EnvVars:  []string{"BOXER_LOG_OS_PID_ON_START"},
+		Value:    false,
+	},
+	&cli.BoolFlag{
+		Name:     "logVcsRevisionOnStart",
+		Category: "logging",
+		EnvVars:  []string{"BOXER_LOG_VCS_REVISION_ON_START"},
+		Value:    false,
+	},
+	&cli.BoolFlag{
+		Name:     "logModuleInfoOnStart",
+		Category: "logging",
+		EnvVars:  []string{"BOXER_LOG_MODULE_INFO_IN_START"},
+		Value:    false,
+	},
+	&cli.StringFlag{
+		Name:     "logRunInstanceId",
+		Usage:    "If the supplied argument is empty, a nanoid(21) will be used.",
+		Category: "logging",
+		EnvVars:  []string{"BOXER_LOG_RUN_INSTANCE_ID"},
+		Value:    "",
+	},
 	&cli.StringFlag{
 		Name:        "logLevel",
 		Category:    "logging",
@@ -282,6 +327,67 @@ var LoggingFlags = []cli.Flag{
 				break
 			default:
 				return eh.Errorf("unhandled log format %s", s)
+			}
+			if context.Bool("logCaller") {
+				log.Logger = log.Logger.With().Caller().Logger()
+			}
+
+			{
+				d := zerolog.Dict()
+				b := false
+
+				if context.IsSet("logRunInstanceId") {
+					runInstanceId := context.String("logRunInstanceId")
+					if runInstanceId == "" {
+						runInstanceId = gonanoid.Must(21)
+					}
+					d = d.Str("runInstanceId", runInstanceId)
+					b = true
+				}
+				if b {
+					log.Logger = log.Logger.With().Dict("boxer", d).Logger()
+				}
+			}
+			{
+				o := zerolog.Dict()
+				b := false
+				if context.Bool("logOsHostOnStart") {
+					var host string
+					host, err = os.Hostname()
+					if err != nil {
+						log.Panic().Err(err).Msg("unable to use -logOsHostOnStart: unable to get os host")
+					}
+					o = o.Str("host", host)
+					b = true
+				}
+				if context.Bool("logOsPidOnStart") {
+					pid := os.Getpid()
+					o = o.Int("pid", pid)
+					b = true
+				}
+				if context.Bool("logOsArgsOnStart") {
+					o = o.Strs("args", os.Args)
+					b = true
+				}
+				if context.Bool("logVcsRevisionOnStart") {
+					var rev string
+					var mod bool
+					rev, mod, err = vcs.GetVcsRevision()
+					if err != nil {
+						log.Panic().Err(err).Msg("unable to use -logVcsRevisionOnStart: unable to get vcs revision")
+					}
+					o = o.Str("vcsRevision", rev).Bool("vcsModified", mod)
+				}
+				if context.Bool("logModuleInfoOnStart") {
+					mod := vcs.ModuleInfo()
+					if mod == vcs.NoBuildInfo {
+						log.Panic().Msg("unable to use -logModuleInfoOnStartup: no build information available")
+					}
+					o = o.Str("moduleInfo", mod)
+				}
+				if b {
+					log.Info().Dict("boxer", zerolog.Dict().Dict("startup", o)).Msg("application startup")
+				}
 			}
 			if err != nil {
 				return eb.Build().Str("logger", s).Errorf("unable to setup logger: %w", err)

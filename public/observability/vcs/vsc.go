@@ -7,7 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-const noBuildInfo = "<no-build-info-available>"
+const NoBuildInfo = "<no-build-info-available>"
 
 func GetVcsRevision() (revision string, modified bool, err error) {
 	info, ok := debug.ReadBuildInfo()
@@ -41,7 +41,7 @@ func GetVcsRevision() (revision string, modified bool, err error) {
 func BuildVersionInfo() string {
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
-		return noBuildInfo
+		return NoBuildInfo
 	}
 	strs := make([]string, 0, 16)
 	for _, setting := range info.Settings {
@@ -54,7 +54,7 @@ func BuildVersionInfo() string {
 func ModuleInfo() string {
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
-		return noBuildInfo
+		return NoBuildInfo
 	}
 	return info.Path
 }
