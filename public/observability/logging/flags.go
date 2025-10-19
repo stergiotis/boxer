@@ -244,7 +244,7 @@ var LoggingFlags = []cli.Flag{
 		Name:     "logCorrelationId",
 		Usage:    "If the supplied argument is empty, a nanoid(21) will be used.",
 		Category: "logging",
-		EnvVars:  []string{"BOXER_LOG_RUN_INSTANCE_ID"},
+		EnvVars:  []string{"BOXER_LOG_CORRELATION_ID"},
 		Value:    "",
 	},
 	&cli.StringFlag{
