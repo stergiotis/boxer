@@ -18,6 +18,7 @@ type BinarySearchGrowingKV[K any, V any] struct {
 }
 
 func (inst *BinarySearchGrowingKV[K, V]) IterateKeys() iter.Seq[K] {
+	inst.ensureSorted()
 	return func(yield func(K) bool) {
 		for _, k := range inst.keys {
 			if !yield(k) {
@@ -27,6 +28,7 @@ func (inst *BinarySearchGrowingKV[K, V]) IterateKeys() iter.Seq[K] {
 	}
 }
 func (inst *BinarySearchGrowingKV[K, V]) IterateValues() iter.Seq[V] {
+	inst.ensureSorted()
 	return func(yield func(V) bool) {
 		for _, v := range inst.vals {
 			if !yield(v) {
@@ -35,7 +37,8 @@ func (inst *BinarySearchGrowingKV[K, V]) IterateValues() iter.Seq[V] {
 		}
 	}
 }
-func (inst *BinarySearchGrowingKV[K, V]) Iterate() iter.Seq2[K, V] {
+func (inst *BinarySearchGrowingKV[K, V]) IteratePairs() iter.Seq2[K, V] {
+	inst.ensureSorted()
 	return func(yield func(K, V) bool) {
 		vals := inst.vals
 		for i, k := range inst.keys {
@@ -174,42 +177,6 @@ func (inst *BinarySearchGrowingKV[K, V]) UpsertBatch(key K, val V) {
 	inst.sorted = false
 }
 
-func (inst *BinarySearchGrowingKV[K, V]) Pairs() iter.Seq2[K, V] {
-	inst.ensureSorted()
-	return func(yield func(K, V) bool) {
-		keys := inst.keys
-		vals := inst.vals
-		for i, k := range keys {
-			if !yield(k, vals[i]) {
-				return
-			}
-		}
-	}
-}
-
-func (inst *BinarySearchGrowingKV[K, V]) Keys() iter.Seq[K] {
-	inst.ensureSorted()
-	return func(yield func(K) bool) {
-		keys := inst.keys
-		for _, k := range keys {
-			if !yield(k) {
-				return
-			}
-		}
-	}
-}
-
-func (inst *BinarySearchGrowingKV[K, V]) Values() iter.Seq[V] {
-	inst.ensureSorted()
-	return func(yield func(V) bool) {
-		vals := inst.vals
-		for _, v := range vals {
-			if !yield(v) {
-				return
-			}
-		}
-	}
-}
 
 func (inst *BinarySearchGrowingKV[K, V]) Reset() {
 	inst.sorted = true

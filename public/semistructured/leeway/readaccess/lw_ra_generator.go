@@ -123,7 +123,7 @@ func ComposeMembershipPackInfo(tblDesc common.TableDesc, namer gocodegen.GoClass
 	membershipSpecs = make([]common.MembershipSpecE, 0, kv.Len())
 	classNames = make([]string, 0, kv.Len())
 	sectionToClassName = make([]string, len(tblDesc.TaggedValuesSections))
-	for spec, n := range kv.Iterate() {
+	for spec, n := range kv.IteratePairs() {
 		var clsName string
 		if n < 0 {
 			sharedIndex++
@@ -969,7 +969,7 @@ func (inst *GoClassBuilder) composeSectionAttributeClasses(clsNamer gocodegen.Go
 				break
 			}
 		}
-		for clsName, bc := range attrClassesKv.Iterate() {
+		for clsName, bc := range attrClassesKv.IteratePairs() {
 			if bc.Len() > 0 {
 				_, err = fmt.Fprintf(b, "type %s%s struct {\n", clsName, genericTypeParamsDecl)
 				if err != nil {
@@ -1036,7 +1036,7 @@ func (inst *GoClassBuilder) composeSectionAttributeClasses(clsNamer gocodegen.Go
 				break
 			}
 		}
-		for clsName, gen := range colIdxGenerators.Iterate() {
+		for clsName, gen := range colIdxGenerators.IteratePairs() {
 			if gen.Length() > 0 {
 				_, err = fmt.Fprintf(b, "func New%s%s() (inst *%s%s) {\n\tinst = &%s%s{}\n",
 					clsName,
@@ -1134,7 +1134,7 @@ func (inst *GoClassBuilder) composeSectionAttributeClasses(clsNamer gocodegen.Go
 				break
 			}
 		}
-		for clsName, bc := range attrClassesKv.Iterate() {
+		for clsName, bc := range attrClassesKv.IteratePairs() {
 			if bc.Len() > 0 {
 				_, err = fmt.Fprintf(b, "func (inst *%s%s) Reset() {\n", clsName, genericTypeParamsUse)
 				if err != nil {
@@ -1210,7 +1210,7 @@ func (inst *GoClassBuilder) composeSectionAttributeClasses(clsNamer gocodegen.Go
 				break
 			}
 		}
-		for clsName, bc := range attrClassesKv.Iterate() {
+		for clsName, bc := range attrClassesKv.IteratePairs() {
 			if bc.Len() > 0 {
 				_, err = fmt.Fprintf(b, `
 var _ runtime.ReleasableI = (*%s%s)(nil)
@@ -1268,7 +1268,7 @@ func (inst *%s%s) Release() {
 				break
 			}
 		}
-		for clsName, bc := range attrClassesKv.Iterate() {
+		for clsName, bc := range attrClassesKv.IteratePairs() {
 			if bc.Len() > 0 {
 				_, err = fmt.Fprintf(b, `
 func (inst *%s%s) Len() (nEntities int) {
@@ -1291,7 +1291,7 @@ func (inst *%s%s) Len() (nEntities int) {
 
 	{ // .LoadFromRecord(rec runtime.RecordI[C,D]) (err error)
 		gocodegen.EmitGeneratingCodeLocation(b)
-		for bc := range attrClassesKv.Values() {
+		for bc := range attrClassesKv.IterateValues() {
 			bc.Reset()
 		}
 
@@ -1381,7 +1381,7 @@ func (inst *%s%s) Len() (nEntities int) {
 				break
 			}
 		}
-		for clsName, bc := range attrClassesKv.Iterate() {
+		for clsName, bc := range attrClassesKv.IteratePairs() {
 			if bc.Len() > 0 {
 				_, err = fmt.Fprintf(b, "func (inst *%s%s) LoadFromRecord(rec runtime.RecordI%s) (err error) {\n", clsName, genericTypeParamsUse, genericTypeParamsUse)
 				if err != nil {
