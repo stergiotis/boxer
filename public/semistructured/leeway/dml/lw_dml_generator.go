@@ -603,6 +603,41 @@ func deriveSubHolderSelectTaggedValues(cc common.IntermediateColumnContext) (kee
 func deriveSubHolderSelectPlainValues(cc common.IntermediateColumnContext) (keep bool) {
 	return cc.PlainItemType != common.PlainItemTypeNone
 }
+func GetMembershipAddFunctionName(role common.ColumnRoleE) (funcName string, err error) {
+	switch role {
+	case common.ColumnRoleHighCardRef:
+		funcName = "AddMembershipHighCardRef"
+		break
+	case common.ColumnRoleHighCardRefParametrized:
+		funcName = "AddMembershipHighCardRefParametrized"
+		break
+	case common.ColumnRoleHighCardVerbatim:
+		funcName = "AddMembershipHighCardVerbatim"
+		break
+	case common.ColumnRoleLowCardRef:
+		funcName = "AddMembershipLowCardRef"
+		break
+	case common.ColumnRoleLowCardRefParametrized:
+		funcName = "AddMembershipLowCardRefParametrized"
+		break
+	case common.ColumnRoleLowCardVerbatim:
+		funcName = "AddMembershipLowCardVerbatim"
+		break
+	case common.ColumnRoleMixedLowCardRef:
+		funcName = "AddMembershipMixedLowCardRef"
+		break
+	case common.ColumnRoleMixedLowCardVerbatim:
+		funcName = "AddMembershipMixedLowCardVerbatim"
+		break
+	case common.ColumnRoleMixedRefHighCardParameters, common.ColumnRoleMixedVerbatimHighCardParameters:
+		// mixed, trigger on other
+		break
+	default:
+		err = ErrUnhandledRole
+		return
+	}
+	return
+}
 func (inst *GoClassBuilder) ComposeAttributeCode(clsNamer gocodegen.GoClassNamerI, tableName naming.StylableName, sectionName naming.StylableName, sectionIdx int, totalSections int, sectionIRH *common.IntermediatePairHolder, tableRowConfig common.TableRowConfigE) (err error) {
 	b := inst.builder
 	var clsNames gocodegen.ClassNames
@@ -728,38 +763,18 @@ func (inst *GoClassBuilder) ComposeAttributeCode(clsNamer gocodegen.GoClassNamer
 			for i := 0; i < cp.Length(); i++ {
 				var funcName string
 				mixed := -1
-				switch cp.Roles[i] {
-				case common.ColumnRoleHighCardRef:
-					funcName = "AddMembershipHighCardRef"
-					break
-				case common.ColumnRoleHighCardRefParametrized:
-					funcName = "AddMembershipHighCardRefParametrized"
-					break
-				case common.ColumnRoleHighCardVerbatim:
-					funcName = "AddMembershipHighCardVerbatim"
-					break
-				case common.ColumnRoleLowCardRef:
-					funcName = "AddMembershipLowCardRef"
-					break
-				case common.ColumnRoleLowCardRefParametrized:
-					funcName = "AddMembershipLowCardRefParametrized"
-					break
-				case common.ColumnRoleLowCardVerbatim:
-					funcName = "AddMembershipLowCardRefVerbatim"
-					break
+				role := cp.Roles[i]
+				switch role {
 				case common.ColumnRoleMixedLowCardRef:
-					funcName = "AddMembershipMixedLowCardRef"
 					mixed = 0
 					break
 				case common.ColumnRoleMixedLowCardVerbatim:
-					funcName = "AddMembershipMixedLowCardVerbatim"
 					mixed = 1
 					break
-				case common.ColumnRoleMixedRefHighCardParameters, common.ColumnRoleMixedVerbatimHighCardParameters:
-					// mixed, trigger on other
-					break
-				default:
-					err = ErrUnhandledRole
+				}
+				funcName, err = GetMembershipAddFunctionName(role)
+				if err != nil {
+					err = eh.Errorf("unable to get membership add function name: %w", err)
 					return
 				}
 				if mixed >= 0 && mixedParamsIdx[mixed] < 0 {
