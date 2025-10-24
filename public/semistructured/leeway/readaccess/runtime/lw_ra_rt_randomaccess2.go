@@ -11,6 +11,7 @@ func NewRandomAccessTwoLevelLookupAccel[F IndexConstraintI, B IndexConstraintI, 
 		cards:   nil,
 		ranger:  nil,
 		loaded:  false,
+		empty:   false,
 	}
 }
 func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) SetCurrentEntityIdx(current I) {
@@ -19,6 +20,7 @@ func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) SetCurrentEntityIdx(cu
 	}
 	inst.current = current
 	b, e := inst.ranger.ValueOffsets(current)
+	inst.empty = b == e
 	inst.accel.LoadCardinalities(inst.cards[b:e])
 	inst.loaded = true
 }
@@ -33,24 +35,47 @@ func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) LoadCardinalities(card
 	inst.cards = cards
 }
 func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) LookupForward(i B) (beginIncl F, endExcl F) {
+	if inst.empty {
+		return
+	}
 	return inst.accel.LookupForward(i)
 }
 func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) LookupForwardRange(i B) (r Range[F]) {
+	if inst.empty {
+		return
+	}
 	return inst.accel.LookupForwardRange(i)
 }
 func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) LookupForwardIndexedRange(i B) (r IndexedRange[F, B]) {
+	if inst.empty {
+		return
+	}
 	return inst.accel.LookupForwardIndexedRange(i)
 }
 func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) LookupBackward(i F) (index B) {
+	if inst.empty {
+		return
+	}
 	return inst.accel.LookupBackward(i)
 }
 func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) GetCardinality(i B) (card uint64) {
+	if inst.empty {
+		return
+	}
 	return inst.accel.GetCardinality(i)
 }
 func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) IterateAllFwdIndexedRange() iter.Seq[IndexedRange[F, B]] {
+	if inst.empty {
+		return func(yield func(IndexedRange[F, B]) bool) {
+		}
+	}
 	return inst.accel.IterateAllFwdIndexedRange()
 }
 func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) IterateAllFwdRange() iter.Seq[Range[F]] {
+	if inst.empty {
+		return func(yield func(Range[F]) bool) {
+		}
+	}
 	return inst.accel.IterateAllFwdRange()
 }
 func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) Len() int {
@@ -67,4 +92,5 @@ func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) Reset() {
 	inst.ranger = nil
 	inst.releaser = nil
 	inst.loaded = false
+	inst.empty = false
 }

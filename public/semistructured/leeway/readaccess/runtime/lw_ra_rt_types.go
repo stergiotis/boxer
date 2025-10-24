@@ -52,6 +52,7 @@ type RandomAccessTwoLevelLookupAccel[F IndexConstraintI, B IndexConstraintI, I I
 	ranger   ValueOffsetI[I, I2]
 	releaser ReleasableI
 	loaded   bool
+	empty    bool
 }
 type RowIdx int
 type RandomAccessLookupAccelI[F IndexConstraintI, B IndexConstraintI] interface {
