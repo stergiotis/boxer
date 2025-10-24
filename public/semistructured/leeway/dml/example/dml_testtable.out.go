@@ -10,37 +10,48 @@ import (
 	_ "github.com/apache/arrow-go/v18/arrow/math"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
 	"slices"
 	"time"
 )
 
+///////////////////////////////////////////////////////////////////
+// code generator
+// gocodegen.GenerateArrowSchemaFactory
+// ./public/semistructured/leeway/gocodegen/gocodegen_common.go:26
+
 func CreateSchemaTesttable() (schema *arrow.Schema) {
 	schema = arrow.NewSchema([]arrow.Field{
 		/* 000 */ arrow.Field{Name: "id:id:u64:2k:0:0:", Nullable: false, Type: arrow.PrimitiveTypes.Uint64},
-		/* 001 */ arrow.Field{Name: "ts:ts:z32:2k:0:0:", Nullable: false, Type: &arrow.Date32Type{}},
-		/* 002 */ arrow.Field{Name: "tv:bool:value:val:b:0:0:0:0::", Nullable: false, Type: arrow.ListOf(&arrow.BooleanType{})},
-		/* 003 */ arrow.Field{Name: "tv:bool:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOf(&arrow.BinaryType{})},
-		/* 004 */ arrow.Field{Name: "tv:bool:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOf(&arrow.BinaryType{})},
-		/* 005 */ arrow.Field{Name: "tv:bool:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOf(arrow.PrimitiveTypes.Uint64)},
-		/* 006 */ arrow.Field{Name: "tv:string:value:val:s:g:0:0:0::", Nullable: false, Type: arrow.ListOf(&arrow.StringType{})},
-		/* 007 */ arrow.Field{Name: "tv:string:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOf(&arrow.BinaryType{})},
-		/* 008 */ arrow.Field{Name: "tv:string:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOf(&arrow.BinaryType{})},
-		/* 009 */ arrow.Field{Name: "tv:string:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOf(arrow.PrimitiveTypes.Uint64)},
-		/* 010 */ arrow.Field{Name: "tv:float64:value:val:f64:1:0:0:0::", Nullable: false, Type: arrow.ListOf(arrow.PrimitiveTypes.Float64)},
-		/* 011 */ arrow.Field{Name: "tv:float64:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOf(&arrow.BinaryType{})},
-		/* 012 */ arrow.Field{Name: "tv:float64:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOf(&arrow.BinaryType{})},
-		/* 013 */ arrow.Field{Name: "tv:float64:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOf(arrow.PrimitiveTypes.Uint64)},
-		/* 014 */ arrow.Field{Name: "tv:special:spc:val:s:0:0:0:0::", Nullable: false, Type: arrow.ListOf(&arrow.StringType{})},
-		/* 015 */ arrow.Field{Name: "tv:special:ary1:val:u32h:0:0:0:0::", Nullable: false, Type: arrow.ListOf(arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint32))},
-		/* 016 */ arrow.Field{Name: "tv:special:ary2:val:u32h:0:0:0:0::", Nullable: false, Type: arrow.ListOf(arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint32))},
-		/* 017 */ arrow.Field{Name: "tv:special:lmr:lmr:u64:2q:0:0:0::", Nullable: false, Type: arrow.ListOf(arrow.PrimitiveTypes.Uint64)},
-		/* 018 */ arrow.Field{Name: "tv:special:mrhp:mrhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOf(&arrow.BinaryType{})},
-		/* 019 */ arrow.Field{Name: "tv:special:len:len:u64:28o:0:0:0::", Nullable: false, Type: arrow.ListOf(arrow.PrimitiveTypes.Uint64)},
-		/* 020 */ arrow.Field{Name: "tv:special:lmrcard:lmrcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOf(arrow.PrimitiveTypes.Uint64)},
+		/* 001 */ arrow.Field{Name: "ts:ts:z32:2k:0:0:", Nullable: false, Type: &arrow.TimestampType{Unit: arrow.Millisecond}},
+		/* 002 */ arrow.Field{Name: "tv:bool:value:val:b:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BooleanType{})},
+		/* 003 */ arrow.Field{Name: "tv:bool:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 004 */ arrow.Field{Name: "tv:bool:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 005 */ arrow.Field{Name: "tv:bool:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 006 */ arrow.Field{Name: "tv:string:value:val:s:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
+		/* 007 */ arrow.Field{Name: "tv:string:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 008 */ arrow.Field{Name: "tv:string:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 009 */ arrow.Field{Name: "tv:string:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 010 */ arrow.Field{Name: "tv:float64:value:val:f64:1:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Float64)},
+		/* 011 */ arrow.Field{Name: "tv:float64:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 012 */ arrow.Field{Name: "tv:float64:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 013 */ arrow.Field{Name: "tv:float64:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 014 */ arrow.Field{Name: "tv:special:spc:val:s:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
+		/* 015 */ arrow.Field{Name: "tv:special:ary1:val:u32h:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint32)},
+		/* 016 */ arrow.Field{Name: "tv:special:ary2:val:u32h:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint32)},
+		/* 017 */ arrow.Field{Name: "tv:special:lmr:lmr:u64:2q:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 018 */ arrow.Field{Name: "tv:special:mrhp:mrhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 019 */ arrow.Field{Name: "tv:special:len:len:u64:28o:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 020 */ arrow.Field{Name: "tv:special:lmrcard:lmrcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 	}, nil)
 	return
 }
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1175
 
 type InEntityTesttable struct {
 	errs           []error
@@ -61,7 +72,7 @@ type InEntityTesttable struct {
 	plainTs1              time.Time
 	scalarFieldBuilder000 *array.Uint64Builder
 
-	scalarFieldBuilder001 *array.Date32Builder
+	scalarFieldBuilder001 *array.TimestampBuilder
 }
 
 func NewInEntityTesttable(allocator memory.Allocator, estimatedNumberOfRecords int) (inst *InEntityTesttable) {
@@ -75,10 +86,16 @@ func NewInEntityTesttable(allocator memory.Allocator, estimatedNumberOfRecords i
 	inst.builder = builder
 	inst.initSections(builder)
 	inst.scalarFieldBuilder000 = builder.Field(0).(*array.Uint64Builder)
-	inst.scalarFieldBuilder001 = builder.Field(1).(*array.Date32Builder)
+	inst.scalarFieldBuilder001 = builder.Field(1).(*array.TimestampBuilder)
 
 	return inst
 }
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).ComposeEntityCode
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1289
+
 func (inst *InEntityTesttable) SetId(id0 uint64) *InEntityTesttable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -88,6 +105,12 @@ func (inst *InEntityTesttable) SetId(id0 uint64) *InEntityTesttable {
 
 	return inst
 }
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).ComposeEntityCode
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1289
+
 func (inst *InEntityTesttable) SetTimestamp(ts1 time.Time) *InEntityTesttable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -100,7 +123,7 @@ func (inst *InEntityTesttable) SetTimestamp(ts1 time.Time) *InEntityTesttable {
 func (inst *InEntityTesttable) appendPlainValues() {
 	inst.scalarFieldBuilder000.Append(inst.plainId0)
 
-	inst.scalarFieldBuilder001.Append(arrow.Date32FromTime(inst.plainTs1))
+	inst.scalarFieldBuilder001.Append(arrow.Timestamp(inst.plainTs1.UnixMilli()))
 }
 func (inst *InEntityTesttable) resetPlainValues() {
 	inst.plainId0 = uint64(0)
@@ -160,6 +183,43 @@ func (inst *InEntityTesttable) BeginEntity() *InEntityTesttable {
 	return inst
 }
 func (inst *InEntityTesttable) validateEntity() {
+	{
+		state := inst.section00Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "bool").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section01Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "float64").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section02Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "special").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section03Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "string").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.AppendError(eb.Build().Stringer("state", inst.state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+		break
+	}
 	// FIXME check coSectionGroup consistency
 	return
 }
@@ -301,7 +361,6 @@ func (inst *InEntityTesttableSectionBool) EndSection() *InEntityTesttable {
 func (inst *InEntityTesttableSectionBool) beginSection() {
 	inst.state = runtime.EntityStateInSection
 	inst.inAttr.beginAttribute()
-
 }
 
 func (inst *InEntityTesttableSectionBool) resetSection() {
@@ -498,7 +557,6 @@ func (inst *InEntityTesttableSectionFloat64) EndSection() *InEntityTesttable {
 func (inst *InEntityTesttableSectionFloat64) beginSection() {
 	inst.state = runtime.EntityStateInSection
 	inst.inAttr.beginAttribute()
-
 }
 
 func (inst *InEntityTesttableSectionFloat64) resetSection() {
@@ -703,9 +761,6 @@ func (inst *InEntityTesttableSectionSpecial) EndSection() *InEntityTesttable {
 func (inst *InEntityTesttableSectionSpecial) beginSection() {
 	inst.state = runtime.EntityStateInSection
 	inst.inAttr.beginAttribute()
-	inst.homogenousArrayListBuilder015.Append(true)
-	inst.homogenousArrayListBuilder016.Append(true)
-
 }
 
 func (inst *InEntityTesttableSectionSpecial) resetSection() {
@@ -793,8 +848,6 @@ func (inst *InEntityTesttableSectionSpecialInAttr) AddToCoContainers(ary115 uint
 	inst.homogenousArrayFieldBuilder015.Append(ary115)
 	inst.homogenousArrayContainerLength015++
 	inst.homogenousArrayFieldBuilder016.Append(ary216)
-	inst.homogenousArrayContainerLength016++
-	inst.homogenousArrayContainerLength015++
 	inst.homogenousArrayContainerLength016++
 	return inst
 }
@@ -939,7 +992,6 @@ func (inst *InEntityTesttableSectionString) EndSection() *InEntityTesttable {
 func (inst *InEntityTesttableSectionString) beginSection() {
 	inst.state = runtime.EntityStateInSection
 	inst.inAttr.beginAttribute()
-
 }
 
 func (inst *InEntityTesttableSectionString) resetSection() {

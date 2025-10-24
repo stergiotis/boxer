@@ -1482,10 +1482,29 @@ func (inst *GoClassBuilder) ComposeEntityCode(clsNamer gocodegen.GoClassNamerI, 
 	}
 	{ // validateEntity
 		_, err = fmt.Fprintf(b, `func (inst *%s) validateEntity() {
+`, clsNames.InEntityClassName)
+		if err != nil {
+			return
+		}
+		for i, sectionName := range sectionNames {
+			_, err = fmt.Fprintf(b, `	{
+		state := inst.section%02dInst.state
+		switch state {
+			case runtime.EntityStateInAttribute:
+				inst.AppendError(eb.Build().Str("section",%q).Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+				break
+		}
+	}
+`, i, sectionName)
+			if err != nil {
+				return
+			}
+		}
+		_, err = fmt.Fprint(b, `
 	// FIXME check coSectionGroup consistency
 	return
 }
-`, clsNames.InEntityClassName)
+`)
 		if err != nil {
 			return
 		}

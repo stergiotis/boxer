@@ -62,6 +62,7 @@ import (
 	_ "github.com/apache/arrow-go/v18/arrow/ipc"
 	_ "github.com/apache/arrow-go/v18/arrow/math"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
 `)
 	if err != nil {

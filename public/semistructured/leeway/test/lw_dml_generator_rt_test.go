@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRuntime(t *testing.T) {
+func TestRuntimeSmoke(t *testing.T) {
 	ent := example.NewInEntityJson(memory.DefaultAllocator, 128)
 	require.NoError(t, ent.CheckErrors())
 	ent.BeginEntity()
@@ -62,4 +62,35 @@ func TestRuntime(t *testing.T) {
 		require.Contains(t, s, "0")
 		require.Contains(t, s, "1")
 	}
+}
+func TestStateChecks(t *testing.T) {
+	ent := example.NewInEntityJson(memory.DefaultAllocator, 128)
+	require.NoError(t, ent.CheckErrors())
+	ent.BeginEntity()
+	require.NoError(t, ent.CheckErrors())
+	ent.SetId([]byte{0, 1, 2, 4, 5, 6})
+	require.NoError(t, ent.CheckErrors())
+
+	boolSec := ent.GetSectionBool()
+	float64Sec := ent.GetSectionFloat64()
+	int64Sec := ent.GetSectionInt64()
+	nullSec := ent.GetSectionNull()
+	stringSec := ent.GetSectionString()
+	undefinedSec := ent.GetSectionUndefined()
+	symbolSec := ent.GetSectionSymbol()
+	var _ = boolSec
+	var _ = float64Sec
+	var _ = int64Sec
+	var _ = nullSec
+	var _ = stringSec
+	var _ = undefinedSec
+	var _ = symbolSec
+
+	stringSec.BeginAttribute("hello").AddMembershipMixedLowCardVerbatim([]byte("/a/_"), []byte("0")).EndAttribute()
+	require.NoError(t, stringSec.CheckErrors())
+	stringSec.BeginAttribute(", world!").AddMembershipMixedLowCardVerbatim([]byte("/b/_"), []byte("1")) //.EndAttribute()
+	require.NoError(t, stringSec.CheckErrors())
+
+	err := ent.CommitEntity()
+	require.ErrorContains(t, err, "wrong state")
 }

@@ -10,6 +10,7 @@ import (
 	_ "github.com/apache/arrow-go/v18/arrow/math"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
 	"slices"
 )
@@ -55,7 +56,7 @@ func CreateSchemaJson() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1160
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1175
 
 type InEntityJson struct {
 	errs                  []error
@@ -99,7 +100,7 @@ func NewInEntityJson(allocator memory.Allocator, estimatedNumberOfRecords int) (
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1274
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1289
 
 func (inst *InEntityJson) SetId(blake3hash0 []byte) *InEntityJson {
 	if inst.state != runtime.EntityStateInEntity {
@@ -190,6 +191,67 @@ func (inst *InEntityJson) BeginEntity() *InEntityJson {
 	return inst
 }
 func (inst *InEntityJson) validateEntity() {
+	{
+		state := inst.section00Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "bool").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section01Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "float64").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section02Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "int64").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section03Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "null").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section04Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "string").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section05Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "symbol").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section06Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "undefined").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.AppendError(eb.Build().Stringer("state", inst.state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+		break
+	}
 	// FIXME check coSectionGroup consistency
 	return
 }

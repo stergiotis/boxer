@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
 	encodingaspects2 "github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/gocodegen"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/mapping"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
@@ -99,7 +100,11 @@ func sampleTableDesc() (tbl common.TableDesc, err error) {
 	return manip.BuildTableDesc()
 }
 
-func TestGoClassBuilder(t *testing.T) {
+func TestGenerateDml(t *testing.T) {
+	TestGenerateDmlSample(t)
+	TestGenerateDmlJsonMapping(t)
+}
+func TestGenerateDmlSample(t *testing.T) {
 	tblDesc, err := sampleTableDesc()
 	require.NoError(t, err)
 
@@ -117,6 +122,28 @@ func TestGoClassBuilder(t *testing.T) {
 	checkCodeInvariants(sourceCode, t)
 
 	err = os.WriteFile("example/dml_testtable.out.go", sourceCode, os.ModePerm)
+	require.NoError(t, err)
+}
+func TestGenerateDmlJsonMapping(t *testing.T) {
+	tblDesc, err := mapping.NewJsonMapping()
+	require.NoError(t, err)
+
+	var conv *ddl.HumanReadableNamingConvention
+	conv, err = ddl.NewHumanReadableNamingConvention(":")
+	require.NoError(t, err)
+	chTech := clickhouse.NewTechnologySpecificCodeGenerator()
+	driver := NewGoCodeGeneratorDriver(conv, chTech)
+
+	var sourceCode []byte
+	const tableRowConfig = common.TableRowConfigMultiAttributesPerRow
+	namingStyle := gocodegen.NewMultiTablePerPackageGoClassNamer()
+	sourceCode, _, err = driver.GenerateGoClasses("example", naming.MustBeValidStylableName("json"), tblDesc, tableRowConfig, namingStyle)
+	require.NoError(t, err)
+	checkCodeInvariants(sourceCode, t)
+
+	p := "./example/dml_json.out.go"
+	_ = os.Remove(p)
+	err = os.WriteFile(p, sourceCode, os.ModePerm)
 	require.NoError(t, err)
 }
 func TestGoClassBuilderSample(t *testing.T) {
