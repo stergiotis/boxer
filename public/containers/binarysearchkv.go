@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/stergiotis/boxer/public/containers/co"
+	"golang.org/x/exp/constraints"
 )
 
 type BinarySearchGrowingKV[K any, V any] struct {
@@ -177,7 +178,6 @@ func (inst *BinarySearchGrowingKV[K, V]) UpsertBatch(key K, val V) {
 	inst.sorted = false
 }
 
-
 func (inst *BinarySearchGrowingKV[K, V]) Reset() {
 	inst.sorted = true
 	inst.compacted = true
@@ -188,3 +188,39 @@ func (inst *BinarySearchGrowingKV[K, V]) Reset() {
 }
 
 var _ sort.Interface = (*BinarySearchGrowingKV[any, any])(nil)
+
+func IterateSortedUniqueOrderedUnique[T constraints.Ordered](s1 []T, s2 []T) iter.Seq[T] {
+	return func(yield func(T) bool) {
+		i := 0
+		j := 0
+		for i < len(s1) && j < len(s2) {
+			if s1[i] < s2[j] {
+				if !yield(s1[i]) {
+					return
+				}
+				i++
+			} else if s1[i] == s2[j] {
+				j++
+			} else {
+				if !yield(s2[j]) {
+					return
+				}
+				j++
+			}
+		}
+
+		for i < len(s1) {
+			if !yield(s1[i]) {
+				return
+			}
+			i++
+		}
+
+		for j < len(s2) {
+			if !yield(s2[j]) {
+				return
+			}
+			j++
+		}
+	}
+}
