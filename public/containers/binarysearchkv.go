@@ -1,6 +1,7 @@
 package containers
 
 import (
+	"cmp"
 	"sort"
 
 	"iter"
@@ -186,20 +187,29 @@ func (inst *BinarySearchGrowingKV[K, V]) Reset() {
 	inst.keys = inst.keys[:0]
 	inst.vals = inst.vals[:0]
 }
+func IterateMergedBinarySearchGrowingKVKeys[K any, V any, W any](a *BinarySearchGrowingKV[K, V], b *BinarySearchGrowingKV[K, W]) iter.Seq[K] {
+	a.ensureSorted()
+	b.ensureSorted()
+	return IterateSortedUniqueFuncUnique(a.keys, b.keys, a.cmpKey)
+}
 
 var _ sort.Interface = (*BinarySearchGrowingKV[any, any])(nil)
 
 func IterateSortedUniqueOrderedUnique[T constraints.Ordered](s1 []T, s2 []T) iter.Seq[T] {
+	return IterateSortedUniqueFuncUnique(s1, s2, cmp.Compare)
+}
+func IterateSortedUniqueFuncUnique[T any](s1 []T, s2 []T, compare func(a, b T) int) iter.Seq[T] {
 	return func(yield func(T) bool) {
 		i := 0
 		j := 0
 		for i < len(s1) && j < len(s2) {
-			if s1[i] < s2[j] {
+			c := compare(s1[i], s2[j])
+			if c < 0 {
 				if !yield(s1[i]) {
 					return
 				}
 				i++
-			} else if s1[i] == s2[j] {
+			} else if c == 0 {
 				j++
 			} else {
 				if !yield(s2[j]) {
