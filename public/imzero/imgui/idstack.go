@@ -26,7 +26,7 @@ func NewIdStack(enableDebug bool) *IdStack {
 		debugStack = containers.NewStackSize[string](32)
 	}
 	return &IdStack{
-		instanceId: ImGuiID(rand.Uint32()), //nolint:gosec
+		instanceId: ImGuiID(rand.Uint32()),
 		seed0:      0,
 		stack:      containers.NewStackSize[ImGuiID](32),
 		DebugStack: debugStack,
@@ -67,12 +67,19 @@ func (inst *IdStack) GetSeed() ImGuiID {
 func (inst *IdStack) GetCurrent() ImGuiID {
 	return inst.stack.PeekDefault(inst.seed0)
 }
+
+var imguiCrc32Table = crc32.MakeTable(crc32.Castagnoli) // SSE4.2 compatible
+
+func calculateImGuiSeededId(seed ImGuiID, strId string) (id ImGuiID) {
+	id = ImGuiID(crc32.Update(uint32(seed), imguiCrc32Table, unsafeperf.UnsafeStringToByte(strId)))
+	return
+}
 func (inst *IdStack) AddIDString(str string) *IdStack {
 	ds := inst.DebugStack
 	if ds != nil {
 		ds.Push(str)
 	}
-	inst.stack.Push(ImGuiID(crc32.Update(uint32(inst.GetCurrent()), crc32.IEEETable, unsafeperf.UnsafeStringToByte(str))))
+	inst.stack.Push(calculateImGuiSeededId(inst.GetCurrent(), str))
 	return inst
 }
 func (inst *IdStack) PushIDString(str string) *IdStack {
