@@ -4,6 +4,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/functional"
 	"github.com/stretchr/testify/require"
 )
 
@@ -113,14 +114,14 @@ func TestCoIterateFilter(t *testing.T) {
 	a := []int{0, 1, 2, 3, 4, 5, 5}
 	b := []string{"zero", "one", "two", "three", "four", "five", "five-too"}
 	for i, _ := range a[:5] {
-		require.EqualValues(t, []string{b[i]}, slices.Collect(StripIter2Key(CoIterateFilter(a, a[i], b))))
+		require.EqualValues(t, []string{b[i]}, slices.Collect(functional.IterRightOnly(CoIterateFilter(a, a[i], b))))
 	}
-	require.EqualValues(t, []string{"five", "five-too"}, slices.Collect(StripIter2Key(CoIterateFilter(a, 5, b))))
+	require.EqualValues(t, []string{"five", "five-too"}, slices.Collect(functional.IterRightOnly(CoIterateFilter(a, 5, b))))
 }
 func TestCoIterateFilterFunc(t *testing.T) {
 	a := []int{0, 1, 2, 3, 4, 5, 5}
 	b := []string{"zero", "one", "two", "three", "four", "five", "five-too"}
-	require.EqualValues(t, []string{"zero", "two", "four"}, slices.Collect(StripIter2Key(CoIterateFilterFunc(a, func(a int) (keep bool) {
+	require.EqualValues(t, []string{"zero", "two", "four"}, slices.Collect(functional.IterRightOnly(CoIterateFilterFunc(a, func(a int) (keep bool) {
 		keep = a%2 == 0
 		return
 	}, b))))

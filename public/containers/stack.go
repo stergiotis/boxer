@@ -12,7 +12,7 @@ func NewStack[T any]() *Stack[T] {
 	return &Stack[T]{Items: make([]T, 0, 16)}
 }
 
-func NewStackSize[T any](n int) *Stack[T] {
+func NewStackSized[T any](n int) *Stack[T] {
 	return &Stack[T]{Items: make([]T, 0, n)}
 }
 

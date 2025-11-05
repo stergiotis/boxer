@@ -2,6 +2,7 @@ package containers
 
 import (
 	"iter"
+	"slices"
 
 	"golang.org/x/exp/maps"
 )
@@ -48,31 +49,22 @@ func (inst *HashSet[T]) AddExMany(vals iter.Seq[T]) (existing int, nonExisting i
 func (inst *HashSet[T]) Remove(val T) {
 	delete(inst.data, val)
 }
+func (inst *HashSet[T]) RemoveEx(val T) (had bool) {
+	had = inst.Has(val)
+	delete(inst.data, val)
+	return
+}
 
 func (inst *HashSet[T]) Has(val T) bool {
 	_, h := inst.data[val]
 	return h
 }
-func (inst *HashSet[T]) All() iter.Seq[T] {
+func (inst *HashSet[T]) IterateAll() iter.Seq[T] {
 	return func(yield func(T) bool) {
 		for m, _ := range inst.data {
 			if !yield(m) {
 				return
 			}
-		}
-	}
-}
-
-func (inst *HashSet[T]) ForEach(handler func(v T)) {
-	for v, _ := range inst.data {
-		handler(v)
-	}
-}
-
-func (inst *HashSet[T]) Until(handler func(v T) bool) {
-	for v, _ := range inst.data {
-		if handler(v) {
-			return
 		}
 	}
 }
@@ -84,13 +76,11 @@ func (inst *HashSet[T]) Slice() []T {
 	return inst.SliceEx(nil)
 }
 func (inst *HashSet[T]) SliceEx(in []T) (out []T) {
-	if in == nil || cap(in) < inst.Size() {
-		out = make([]T, 0, inst.Size())
+	out = slices.Grow(in, len(inst.data))
+	for k, _ := range inst.data {
+		out = append(out, k)
 	}
-	inst.ForEach(func(v T) {
-		out = append(out, v)
-	})
-	return out
+	return
 }
 
 func (inst *HashSet[T]) Size() int {
@@ -98,24 +88,22 @@ func (inst *HashSet[T]) Size() int {
 }
 
 func (inst *HashSet[T]) UnionMod(other *HashSet[T]) {
-	other.ForEach(func(v T) {
-		inst.Add(v)
-	})
+	maps.Copy(inst.data, other.data)
 }
 
 func (inst *HashSet[T]) DifferenceMod(other *HashSet[T]) {
-	other.ForEach(func(v T) {
+	for v := range other.IterateAll() {
 		inst.Remove(v)
-	})
+	}
 }
 
 func (inst *HashSet[T]) IntersectMod(other *HashSet[T]) {
 	n := make(map[T]struct{}, len(inst.data))
-	other.ForEach(func(v T) {
+	for v := range other.IterateAll() {
 		if inst.Has(v) {
 			n[v] = struct{}{}
 		}
-	})
+	}
 	inst.data = n
 }
 
@@ -123,15 +111,7 @@ func (inst *HashSet[T]) Equal(other HashSet[T]) bool {
 	sa := inst.Size()
 	sb := other.Size()
 	if sa == sb {
-		l := 0
-		other.Until(func(v T) bool {
-			if inst.Has(v) {
-				l++
-				return false
-			}
-			return true
-		})
-		return l == sa
+		return maps.Equal(inst.data, other.data)
 	}
 	return false
 }

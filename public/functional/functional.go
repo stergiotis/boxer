@@ -43,3 +43,21 @@ func IterInterchanged[L, R any](seq iter.Seq2[L, R]) iter.Seq2[R, L] {
 		}
 	}
 }
+func MakeIter2FromIter1[K, V any](iter1 iter.Seq[V], k K) iter.Seq2[K, V] {
+	return func(yield func(K, V) bool) {
+		for v := range iter1 {
+			if !yield(k, v) {
+				return
+			}
+		}
+	}
+}
+func MakeIter2FromIter1Func[K, V any](iter1 iter.Seq[V], f func(v V) (k K)) iter.Seq2[K, V] {
+	return func(yield func(K, V) bool) {
+		for v := range iter1 {
+			if !yield(f(v), v) {
+				return
+			}
+		}
+	}
+}

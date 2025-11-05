@@ -23,12 +23,12 @@ type IdStack struct {
 func NewIdStack(enableDebug bool) *IdStack {
 	var debugStack *containers.Stack[string]
 	if enableDebug {
-		debugStack = containers.NewStackSize[string](32)
+		debugStack = containers.NewStackSized[string](32)
 	}
 	return &IdStack{
 		instanceId: ImGuiID(rand.Uint32()),
 		seed0:      0,
-		stack:      containers.NewStackSize[ImGuiID](32),
+		stack:      containers.NewStackSized[ImGuiID](32),
 		DebugStack: debugStack,
 	}
 }
