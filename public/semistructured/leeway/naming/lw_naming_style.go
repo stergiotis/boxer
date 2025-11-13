@@ -212,6 +212,10 @@ func (inst StylableName) String() string {
 func (inst StylableName) Bytes() []byte {
 	return []byte(inst)
 }
+
+func (inst Key) IsEmpty() (empty bool) {
+	return inst == ""
+}
 func (inst Key) String() string {
 	return string(inst)
 }
