@@ -68,7 +68,7 @@ var TracingFlags = []cli.Flag{
 					// for a discussion
 					switch sig {
 					case syscall.SIGINT, syscall.SIGTERM, syscall.SIGPIPE:
-						log.Info().Str("signal",sig.String()).Msg("caught signal, exiting with exit code 1")
+						log.Info().Str("signal", sig.String()).Msg("caught signal, exiting with exit code 1")
 						os.Exit(1)
 					}
 				}
@@ -92,8 +92,10 @@ func writeFlightRecorderTrace(d string) {
 	if flightRecorderOutputMtx.TryLock() {
 		defer flightRecorderOutputMtx.Unlock()
 	} else {
+		// already writing, do nothing
 		return
 	}
+
 	if flightRecorder == nil || !flightRecorder.Enabled() {
 		return
 	}

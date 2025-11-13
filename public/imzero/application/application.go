@@ -150,7 +150,7 @@ func (inst *Application) Launch() (err error) {
 			inst.stdin = bufio.NewReader(in)
 			inst.relaunchable = false
 		} else {
-			inst.relaunchable = true
+			inst.relaunchable = cfg.MaxRelaunches > 0
 			args := make([]string, 0, 32)
 			args = append(args, "-fffiInterpreter", "on")
 			args = append(args, "-ttfFilePath", cfg.MainFontTTF)
@@ -331,13 +331,16 @@ func (inst *Application) handleNonNilError(err error) {
 			if err2 != nil {
 				log.Error().Err(err).Msg("imzero binary exited, unable to re-Launch")
 				*inst.shutdown = true
+			} else {
+				log.Warn().Err(err).Msg("imzero binary exited, successfully re-launched")
 			}
-			log.Warn().Err(err).Msg("imzero binary exited, successfully re-launched")
 		} else {
 			log.Error().Err(err).Msg("imzero binary exited")
 			*inst.shutdown = true
 		}
 	} else {
-		log.Error().Err(err).Msg("error while communicating through inline channel")
+		if *inst.shutdown == false {
+			log.Error().Err(err).Msg("error while communicating through inline channel")
+		}
 	}
 }

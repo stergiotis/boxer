@@ -20,8 +20,8 @@ import (
 
 func NewCommand() *cli.Command {
 	cfg := &application.Config{
-		MainFontTTF: "",
-		ImZeroSkiaClientConfig: &application.ImZeroSkiaClientConfig{}
+		MainFontTTF:            "",
+		ImZeroSkiaClientConfig: &application.ImZeroSkiaClientConfig{},
 	}
 	return &cli.Command{
 		Name:  "demo",
