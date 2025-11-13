@@ -131,25 +131,44 @@ func (inst *BoundedFsWatcher) Close() (err error) {
 }
 
 // AddDirRecursive uses fs.WalkDir and therefore does not follow symlinks
-func (inst *BoundedFsWatcher) AddDirRecursive(root fs.FS, ignoreErrors bool) (err error) {
+func (inst *BoundedFsWatcher) AddDirRecursive(root fs.FS, ignoreErrors bool, predicate func(path string, d fs.DirEntry) (prefixForLog string, add bool)) (err error) {
 	open := inst.open
 	watcher := inst.watcher
+	statistics := make(map[string]uint64, 128)
 	err = fs.WalkDir(root, ".", func(path string, d fs.DirEntry, err error) error {
-		if d.IsDir() {
-			log.Debug().Str("path", path).Msg("adding path to watcher")
-			e := watcher.Add(path)
-			if e != nil {
-				if ignoreErrors {
-					log.Info().Err(e).Msg("unable to watch directory, skipping")
-				} else {
-					return e
-				}
+		if err != nil {
+			if ignoreErrors {
+				log.Info().Err(err).Str("path", path).Msg("error while walking directory, skipping")
 			} else {
-				open = true
+				return err
+			}
+			return nil
+		}
+		if d.IsDir() {
+			var b string
+			add := true
+			if predicate != nil {
+				b, add = predicate(path, d)
+			}
+			if add {
+				statistics[b] = statistics[b] + 1
+				e := watcher.Add(path)
+				if e != nil {
+					if ignoreErrors {
+						log.Info().Err(e).Msg("unable to watch directory, skipping")
+					} else {
+						return e
+					}
+				} else {
+					open = true
+				}
 			}
 		}
 		return nil
 	})
+	if len(statistics) > 0 {
+		log.Debug().Interface("statistics", statistics).Msg("added path(s) to watcher")
+	}
 	inst.open = open
 	if err != nil {
 		err = eh.Errorf("unable to walk director: %w", err)
