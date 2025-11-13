@@ -1,6 +1,7 @@
 package common
 
 import (
+	"iter"
 	"slices"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -87,6 +88,16 @@ func (inst *IntermediateColumnProps) Add(name naming.StylableName, role ColumnRo
 }
 func (inst *IntermediateColumnProps) Length() int {
 	return len(inst.Names)
+}
+func (inst *IntermediateColumnProps) IterateColumnIndex() iter.Seq[int] {
+	return func(yield func(int) bool) {
+		l := inst.Length()
+		for i := 0; i < l; i++ {
+			if !yield(i) {
+				return
+			}
+		}
+	}
 }
 func (inst *IntermediateColumnProps) IsEmpty() (empty bool) {
 	return len(inst.Names) == 0
