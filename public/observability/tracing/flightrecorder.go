@@ -62,8 +62,15 @@ var TracingFlags = []cli.Flag{
 
 			go func() {
 				for {
-					_ = <-sigChan
+					sig := <-sigChan
 					writeFlightRecorderTrace(flightRecorderOutputFile)
+					// see https://stackoverflow.com/questions/61487783/how-can-you-avoid-races-in-overriding-gos-default-signal-handlers
+					// for a discussion
+					switch sig {
+					case syscall.SIGINT, syscall.SIGTERM, syscall.SIGPIPE:
+						log.Info().Str("signal",sig.String()).Msg("caught signal, exiting with exit code 1")
+						os.Exit(1)
+					}
 				}
 			}()
 			return nil

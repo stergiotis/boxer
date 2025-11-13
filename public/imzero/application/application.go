@@ -46,6 +46,7 @@ type Application struct {
 	relaunches                  int
 	relaunchable                bool
 	PerFrameValues              PerFrameValues
+	closers                     []io.Closer
 }
 
 func NewApplication(cfg *Config) (app *Application, err error) {
@@ -64,10 +65,10 @@ func NewApplication(cfg *Config) (app *Application, err error) {
 		endianess:                   nil,
 		relaunchable:                false,
 		relaunches:                  0,
+		closers:                     nil,
 	}
 	return
 }
-
 func (inst *Application) Launch() (err error) {
 	inst.relaunches++
 	cfg := inst.Config
@@ -91,11 +92,11 @@ func (inst *Application) Launch() (err error) {
 		var imguiWasm []byte
 		var _ = imguiWasm
 
-		if cfg.ImGuiBinary == "" {
+		if cfg.ClientBinary == "" {
 			// FIXME
 			return eh.Errorf("unable to Launch application: no wasm binary given")
 		} else {
-			imguiWasm, err = os.ReadFile(cfg.ImGuiBinary)
+			imguiWasm, err = os.ReadFile(cfg.ClientBinary)
 			if err != nil {
 				return eh.Errorf("unable to read wasm file: %w", err)
 			}
@@ -116,29 +117,58 @@ func (inst *Application) Launch() (err error) {
 	} else {
 		inst.endianess = binary.NativeEndian
 
-		if cfg.ImGuiBinary == "" {
-			inst.stdout = bufio.NewWriter(os.Stdout)
-			inst.stdin = bufio.NewReader(os.Stdin)
+		if cfg.ClientBinary == "" {
+			var in io.Reader
+			var out io.Writer
+			if cfg.ImZeroCmdInFile != "" {
+				var f *os.File
+				f, err = os.OpenFile(cfg.ImZeroCmdInFile, os.O_RDONLY, os.ModePerm)
+				if err != nil {
+					err = eb.Build().Str("path", cfg.ImZeroCmdInFile).Errorf("unable to open imZeroCmdInFile for reading: %w", err)
+					return
+				}
+				inst.closers = append(inst.closers, f)
+				in = f
+				log.Info().Str("imZeroCmdInFile", cfg.ImZeroCmdInFile).Msg("using file for imzero ipc")
+			} else {
+				in = os.Stdin
+			}
+			if cfg.ImZeroCmdOutFile != "" {
+				var f *os.File
+				f, err = os.OpenFile(cfg.ImZeroCmdOutFile, os.O_WRONLY, os.ModePerm)
+				if err != nil {
+					err = eb.Build().Str("path", cfg.ImZeroCmdOutFile).Errorf("unable to open imZeroCmdOutFile for writing: %w", err)
+					return
+				}
+				inst.closers = append(inst.closers, f)
+				out = f
+				log.Info().Str("imZeroCmdOutFile", cfg.ImZeroCmdInFile).Msg("using file for imzero ipc")
+			} else {
+				out = os.Stdout
+			}
+			inst.stdout = bufio.NewWriter(out)
+			inst.stdin = bufio.NewReader(in)
 			inst.relaunchable = false
 		} else {
 			inst.relaunchable = true
 			args := make([]string, 0, 32)
 			args = append(args, "-fffiInterpreter", "on")
+			args = append(args, "-ttfFilePath", cfg.MainFontTTF)
 			if inst.Config.ImZeroSkiaClientConfig != nil {
 				args = inst.Config.ImZeroSkiaClientConfig.PassthroughArgs(args)
 			}
-			log.Info().Strs("args", args).Str("binary", cfg.ImGuiBinary).Msg("launching imzero client")
-			cmd := exec.Command(cfg.ImGuiBinary, args...)
+			log.Info().Strs("args", args).Str("binary", cfg.ClientBinary).Msg("launching imzero client")
+			cmd := exec.Command(cfg.ClientBinary, args...)
 			var si io.WriteCloser
 			var so io.ReadCloser
 			//var se io.ReadCloser
 			si, err = cmd.StdinPipe()
 			if err != nil {
-				return eb.Build().Str("path", cfg.ImGuiBinary).Errorf("error while getting stdin pipeline: %w", err)
+				return eb.Build().Str("path", cfg.ClientBinary).Errorf("error while getting stdin pipeline: %w", err)
 			}
 			so, err = cmd.StdoutPipe()
 			if err != nil {
-				return eb.Build().Str("path", cfg.ImGuiBinary).Errorf("error while getting stdout pipeline: %w", err)
+				return eb.Build().Str("path", cfg.ClientBinary).Errorf("error while getting stdout pipeline: %w", err)
 			}
 			cmd.Stderr = os.Stderr // FIXME log forwarding
 			/*se, err = cmd.StderrPipe()
@@ -149,13 +179,13 @@ func (inst *Application) Launch() (err error) {
 			inst.stdin = bufio.NewReader(so)
 			err = cmd.Start()
 			if err != nil {
-				return eb.Build().Str("path", cfg.ImGuiBinary).Errorf("error while running main loop in external binary: %w", err)
+				return eb.Build().Str("path", cfg.ClientBinary).Errorf("error while running main loop in external binary: %w", err)
 			}
 			go func() {
 				e := cmd.Wait()
 
 				if e != nil {
-					log.Error().Err(e).Str("path", cfg.ImGuiBinary).Msg("error while running main loop in external binary")
+					log.Error().Err(e).Str("path", cfg.ClientBinary).Msg("error while running main loop in external binary")
 				}
 				*inst.shutdown = true
 			}()
@@ -199,6 +229,11 @@ func (inst *Application) Run() (err error) {
 			return
 		}
 	}
+	defer func() {
+		for _, c := range inst.closers {
+			_ = c.Close()
+		}
+	}()
 	err = inst.initializeFonts()
 	if err != nil {
 		err = eh.Errorf("InitializeFonts returned an error: %w", err)
@@ -228,6 +263,7 @@ func (inst *Application) Run() (err error) {
 		err = inst.RenderLoopHandler(marshaller)
 		if err != nil {
 			inst.handleNonNilError(err)
+			err = nil
 			//imgui.ShowDemoWindow()
 		}
 		fffi.Flush()
@@ -286,6 +322,7 @@ func (inst *Application) shouldProceed() bool {
 func (inst *Application) handleNonNilError(err error) {
 	if errors.Is(err, io.EOF) {
 		*inst.shutdown = true
+		err = nil
 		return
 	}
 	if errors.Is(err, syscall.EPIPE) {

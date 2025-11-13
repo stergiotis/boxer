@@ -1,11 +1,12 @@
 package application
 
 import (
-	cli "github.com/urfave/cli/v2"
 	"slices"
+	"strings"
+
+	"github.com/urfave/cli/v2"
 
 	"github.com/stergiotis/boxer/public/config"
-	"github.com/stoewer/go-strcase"
 )
 
 type ImZeroSkiaClientConfig struct {
@@ -18,16 +19,16 @@ type ImZeroSkiaClientConfig struct {
 	Vsync                   string `json:"vsync"`
 	BackgroundColorRGBA     string `json:"backgroundColorRGBA"`
 	BackdropFilter          string `json:"backdropFilter"`
-	SkiaBackendType         string `json:"backendType"`
 	SketchFilter            string `json:"sketchFilter"`
 	VectorCmd               string `json:"vectorCmd"`
 	ImguiNavKeyboard        string `json:"imguiNavKeyboard"`
 	ImguiNavGamepad         string `json:"imguiNavGamepad"`
 	ImguiDocking            string `json:"imguiDocking"`
 	FontDyFudge             string `json:"fontDyFudge"`
+	FontScaleOverride       string `json:"fontScaleOverride"`
 	FontManager             string `json:"fontManager"`
 	FontManagerArg          string `json:"fontManagerArg"`
-	TtfFilePath             string `json:"ttfFilePath"`
+	CoreDump                string `json:"coreDump"`
 
 	nValidationMessages int
 	validated           bool
@@ -40,87 +41,129 @@ func (inst *ImZeroSkiaClientConfig) PassthroughArgs(args []string) (argsOut []st
 			argsOut = append(argsOut, "-"+name, val)
 		}
 	}
+	// general
 	add("appTitle", inst.AppTitle)
 	add("fullscreen", inst.Fullscreen)
 	add("initialMainWindowWidth", inst.InitialMainWindowWidth)
 	add("initialMainWindowHeight", inst.InitialMainWindowHeight)
 	add("allowMainWindowResize", inst.AllowMainWindowResize)
 	add("exportBasePath", inst.ExportBasePath)
+	// graphics
 	add("vsync", inst.Vsync)
 	add("backgroundColorRGBA", inst.BackgroundColorRGBA)
 	add("backdropFilter", inst.BackdropFilter)
-	add("skiaBackendType", inst.SkiaBackendType)
 	add("sketchFilter", inst.SketchFilter)
 	add("vectorCmd", inst.VectorCmd)
+	//imgui
 	add("imguiNavKeyboard", inst.ImguiNavKeyboard)
 	add("imguiNavGamepad", inst.ImguiNavGamepad)
 	add("imguiDocking", inst.ImguiDocking)
+	//font
 	add("fontDyFudge", inst.FontDyFudge)
+	add("fontScaleOverride", inst.FontScaleOverride)
 	add("fontManager", inst.FontManager)
 	add("fontManagerArg", inst.FontManagerArg)
-	add("ttfFilePath", inst.TtfFilePath)
+	//debug
+	add("coreDump", inst.CoreDump)
 	return
 }
 
 func (inst *ImZeroSkiaClientConfig) ToCliFlags(nameTransf config.NameTransformFunc, envVarNameTransf config.NameTransformFunc) []cli.Flag {
 	return []cli.Flag{
 		&cli.StringFlag{
-			Name:  nameTransf("appTitle"),
-			Value: "",
+			Category: "general",
+			Name:     nameTransf("appTitle"),
+			Value:    inst.AppTitle,
 		},
 		&cli.StringFlag{
-			Name: nameTransf("fullscreen"),
+			Category: "general",
+			Name:     nameTransf("fullscreen"),
+			Value:    inst.Fullscreen,
 		},
 		&cli.StringFlag{
-			Name: nameTransf("initialMainWindowWidth"),
+			Category: "general",
+			Name:     nameTransf("initialMainWindowWidth"),
+			Value:    inst.InitialMainWindowWidth,
 		},
 		&cli.StringFlag{
-			Name: nameTransf("initialMainWindowHeight"),
+			Category: "general",
+			Name:     nameTransf("initialMainWindowHeight"),
+			Value:    inst.InitialMainWindowHeight,
 		},
 		&cli.StringFlag{
-			Name: nameTransf("allowMainWindowResize"),
+			Category: "general",
+			Name:     nameTransf("allowMainWindowResize"),
+			Value:    inst.AllowMainWindowResize,
 		},
 		&cli.StringFlag{
-			Name: nameTransf("exportBasePath"),
+			Category: "general",
+			Name:     nameTransf("exportBasePath"),
+			Value:    inst.ExportBasePath,
 		},
 		&cli.StringFlag{
-			Name: nameTransf("vsync"),
+			Category: "graphics",
+			Name:     nameTransf("vsync"),
+			Value:    inst.Vsync,
 		},
 		&cli.StringFlag{
-			Name: nameTransf("backgroundColorRGBA"),
+			Category: "graphics",
+			Name:     nameTransf("backgroundColorRGBA"),
+			Value:    inst.BackgroundColorRGBA,
 		},
 		&cli.StringFlag{
-			Name: nameTransf("backdropFilter"),
+			Category: "graphics",
+			Name:     nameTransf("backdropFilter"),
+			Value:    inst.BackdropFilter,
 		},
 		&cli.StringFlag{
-			Name: nameTransf("sketchFilter"),
+			Category: "graphics",
+			Name:     nameTransf("sketchFilter"),
+			Value:    inst.SketchFilter,
 		},
 		&cli.StringFlag{
-			Name: nameTransf("skiaBackendType"),
+			Category: "graphics",
+			Name:     nameTransf("vectorCmd"),
+			Value:    inst.VectorCmd,
 		},
 		&cli.StringFlag{
-			Name: nameTransf("vectorCmd"),
+			Category: "imgui",
+			Name:     nameTransf("imguiNavKeyboard"),
+			Value:    inst.ImguiNavKeyboard,
 		},
 		&cli.StringFlag{
-			Name: nameTransf("imguiNavKeyboard"),
+			Category: "imgui",
+			Name:     nameTransf("imguiNavGamepad"),
+			Value:    inst.ImguiNavGamepad,
 		},
 		&cli.StringFlag{
-			Name: nameTransf("imguiNavGamepad"),
+			Category: "imgui",
+			Name:     nameTransf("imguiDocking"),
+			Value:    inst.ImguiDocking,
 		},
 		&cli.StringFlag{
-			Name: nameTransf("imguiDocking"),
+			Category: "font",
+			Name:     nameTransf("fontDyFudge"),
+			Value:    inst.FontDyFudge,
 		},
 		&cli.StringFlag{
-			Name: nameTransf("fontDyFudge"),
+			Category: "font",
+			Name:     nameTransf("fontScaleOverride"),
+			Value:    inst.FontScaleOverride,
 		},
 		&cli.StringFlag{
-			Name: nameTransf("fontManager"),
+			Category: "font",
+			Name:     nameTransf("fontManager"),
+			Value:    inst.FontManager,
 		},
 		&cli.StringFlag{
-			Name: nameTransf("fontManagerArg"),
+			Category: "font",
+			Name:     nameTransf("fontManagerArg"),
+			Value:    inst.FontManagerArg,
 		},
 		&cli.StringFlag{
-			Name: nameTransf("ttfFilePath"),
+			Category: "debug",
+			Name:     nameTransf("coreDump"),
+			Value:    inst.CoreDump,
 		},
 	}
 }
@@ -136,15 +179,14 @@ func (inst *ImZeroSkiaClientConfig) FromContext(nameTransf config.NameTransformF
 	inst.BackgroundColorRGBA = ctx.String(nameTransf("backgroundColorRGBA"))
 	inst.BackdropFilter = ctx.String(nameTransf("backdropFilter"))
 	inst.SketchFilter = ctx.String(nameTransf("sketchFilter"))
-	inst.SkiaBackendType = ctx.String(nameTransf("skiaBackendType"))
 	inst.VectorCmd = ctx.String(nameTransf("vectorCmd"))
 	inst.ImguiNavKeyboard = ctx.String(nameTransf("imguiNavKeyboard"))
 	inst.ImguiNavGamepad = ctx.String(nameTransf("imguiNavGamepad"))
 	inst.ImguiDocking = ctx.String(nameTransf("imguiDocking"))
 	inst.FontDyFudge = ctx.String(nameTransf("fontDyFudge"))
+	inst.FontScaleOverride = ctx.String(nameTransf("fontScaleOverride"))
 	inst.FontManager = ctx.String(nameTransf("fontManager"))
 	inst.FontManagerArg = ctx.String(nameTransf("fontManagerArg"))
-	inst.TtfFilePath = ctx.String(nameTransf("ttfFilePath"))
 	return inst.Validate(true)
 }
 
@@ -162,9 +204,11 @@ var _ config.Configer = (*ImZeroSkiaClientConfig)(nil)
 type Config struct {
 	ImZeroSkiaClientConfig *ImZeroSkiaClientConfig
 
-	MainFontTTF   string
-	ImGuiBinary   string
-	MaxRelaunches int
+	MainFontTTF      string
+	ClientBinary     string
+	ImZeroCmdOutFile string
+	ImZeroCmdInFile  string
+	MaxRelaunches    int
 
 	nValidationMessages  int
 	MainFontSizeInPixels float32
@@ -183,8 +227,18 @@ func (inst *Config) ToCliFlags(nameTransf config.NameTransformFunc, envVarNameTr
 			Value: float64(inst.MainFontSizeInPixels),
 		},
 		&cli.StringFlag{
-			Name:     nameTransf("imGuiBinary"),
-			Value:    inst.ImGuiBinary,
+			Name:     nameTransf("clientBinary"),
+			Value:    inst.ClientBinary,
+			Required: false,
+		},
+		&cli.StringFlag{
+			Name:     nameTransf("imZeroCmdOutFile"),
+			Value:    inst.ImZeroCmdOutFile,
+			Required: false,
+		},
+		&cli.StringFlag{
+			Name:     nameTransf("imZeroCmdInFile"),
+			Value:    inst.ImZeroCmdInFile,
 			Required: false,
 		},
 		&cli.BoolFlag{
@@ -204,21 +258,24 @@ func (inst *Config) ToCliFlags(nameTransf config.NameTransformFunc, envVarNameTr
 	}, inst.ImZeroSkiaClientConfig.ToCliFlags(clientPrefixNameTransf, clientPrefixNameTransf))
 }
 func clientPrefixNameTransf(name string) (newName string) {
-	return "client" + strcase.UpperCamelCase(name)
+	return "client" + strings.ToUpper(string(name[0])) + name[1:]
 }
 
 func (inst *Config) FromContext(nameTransf config.NameTransformFunc, ctx *cli.Context) (nMessages int) {
 	inst.MainFontTTF = ctx.String(nameTransf("mainFontTTF"))
 	inst.MainFontSizeInPixels = float32(ctx.Float64(nameTransf("mainFontSizeInPixels")))
-	inst.ImGuiBinary = ctx.String(nameTransf("imGuiBinary"))
+	inst.ClientBinary = ctx.String(nameTransf("clientBinary"))
 	inst.UseWasm = ctx.Bool(nameTransf("useWasm"))
 	inst.MaxRelaunches = ctx.Int(nameTransf("maxRelaunches"))
-	switch ctx.String("clientType") {
-	case "skia":
-		inst.ImZeroSkiaClientConfig = &ImZeroSkiaClientConfig{}
-		inst.ImZeroSkiaClientConfig.FromContext(clientPrefixNameTransf, ctx)
+	inst.ImZeroCmdInFile = ctx.String(nameTransf("imZeroCmdInFile"))
+	inst.ImZeroCmdOutFile = ctx.String(nameTransf("imZeroCmdOutFile"))
+	if inst.ImZeroSkiaClientConfig != nil {
+		nMessages = inst.ImZeroSkiaClientConfig.FromContext(func(name string) (newName string) {
+			return clientPrefixNameTransf(nameTransf(name))
+		}, ctx)
 	}
-	return inst.Validate(true)
+	nMessages += inst.Validate(true)
+	return
 }
 
 func (inst *Config) Validate(force bool) (nMessages int) {
