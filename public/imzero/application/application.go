@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"slices"
 	"syscall"
 
 	"github.com/rs/zerolog/log"
@@ -158,7 +159,38 @@ func (inst *Application) Launch() (err error) {
 				args = inst.Config.ImZeroSkiaClientConfig.PassthroughArgs(args)
 			}
 			log.Info().Strs("args", args).Str("binary", cfg.ClientBinary).Msg("launching imzero client")
-			cmd := exec.Command(cfg.ClientBinary, args...)
+			var cmd *exec.Cmd
+			debugMode := os.Getenv("BOXER_IMZERO_DEBUG_MODE")
+			switch debugMode {
+			case "":
+				cmd = exec.Command(cfg.ClientBinary, args...)
+				break
+			case "memcheck":
+				args = slices.Concat([]string{
+					"--leak-check=full",
+					"--",
+					cfg.ClientBinary}, args)
+				log.Info().Strs("args", args).Msg("starting imgui client executable with valgrind memcheck")
+				cmd = exec.Command("valgrind", args...)
+				break
+			case "massif":
+				args = slices.Concat([]string{
+					"--tool=massif",
+					"--threshold=0.1",
+					"--",
+					cfg.ClientBinary}, args)
+				log.Info().Strs("args", args).Msg("starting imgui client executable with valgrind massif")
+				cmd = exec.Command("valgrind", args...)
+				break
+			case "heaptrack":
+				args = slices.Concat([]string{cfg.ClientBinary}, args)
+				log.Info().Strs("args", args).Msg("starting imgui client executable with heaptrack")
+				cmd = exec.Command("heaptrack", args...)
+				break
+			default:
+				err = eb.Build().Str("debugMode",debugMode).Strs("possible",[]string{"memcheck","massif","heaptrack"}).Errorf("unhandled debug mode BOXER_IMZERO_DEBUG_MODE")
+				return
+			}
 			var si io.WriteCloser
 			var so io.ReadCloser
 			//var se io.ReadCloser
