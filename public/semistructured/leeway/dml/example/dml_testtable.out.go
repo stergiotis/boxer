@@ -215,11 +215,7 @@ func (inst *InEntityTesttable) validateEntity() {
 			break
 		}
 	}
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.AppendError(eb.Build().Stringer("state", inst.state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
-		break
-	}
+
 	// FIXME check coSectionGroup consistency
 	return
 }
