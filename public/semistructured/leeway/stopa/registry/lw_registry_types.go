@@ -50,6 +50,8 @@ type RegisteredNaturalKey struct {
 	allowedColumnsSectionMembership []common.MembershipSpecE
 	allowedCardinality              []CardinalitySpecE
 	flags                           RegisteredValueFlagsE
+
+	register func(key RegisteredNaturalKey) RegisteredNaturalKey
 }
 type RegisteredNaturalKeyVirtual struct {
 	w RegisteredNaturalKey
@@ -71,6 +73,7 @@ type RegisteredTagValue struct {
 	moduleInfo string
 	naturalKey naming.StylableName
 	flags      RegisteredValueFlagsE
+	register   func(r RegisteredTagValue) RegisteredTagValue
 }
 
 var _ RegisteredItemDmlUseI = RegisteredTagValue{}

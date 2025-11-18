@@ -54,9 +54,9 @@ func (inst *HumanReadableNaturalKeyRegistry[C]) IterateAll() iter.Seq[Registered
 	return inst.lookup.IterateValues()
 }
 
-func (inst *HumanReadableNaturalKeyRegistry[C]) MustRegister(nk naming.StylableName, parents ...RegisteredNaturalKey) (r RegisteredNaturalKey) {
+func (inst *HumanReadableNaturalKeyRegistry[C]) MustRegister(nk naming.StylableName) (r RegisteredNaturalKey) {
 	var err error
-	r, err = inst.Register(nk, parents...)
+	r, err = inst.Register(nk)
 	if err != nil {
 		log.Panic().Err(err).Msg("unable to register natural key")
 	}
@@ -80,7 +80,7 @@ func (inst *HumanReadableNaturalKeyRegistry[C]) GetTagValue() identifier.TagValu
 	return inst.tv
 }
 
-func (inst *HumanReadableNaturalKeyRegistry[C]) Register(nk naming.StylableName, parents ...RegisteredNaturalKey) (r RegisteredNaturalKey, err error) {
+func (inst *HumanReadableNaturalKeyRegistry[C]) Register(nk naming.StylableName) (r RegisteredNaturalKey, err error) {
 	if nk.IsValid() {
 		nk = nk.Convert(inst.namingStyle)
 	}
@@ -90,33 +90,6 @@ func (inst *HumanReadableNaturalKeyRegistry[C]) Register(nk naming.StylableName,
 		return
 	}
 	lu := inst.lookup
-	var parentsId []identifier.TaggedId
-	var parentsNk []naming.StylableName
-	if len(parents) > 0 {
-		parentsId = make([]identifier.TaggedId, 0, len(parents))
-		parentsNk = make([]naming.StylableName, 0, len(parents))
-		for _, parent := range parents {
-			flags := parent.GetFlags()
-			if flags.HasFinal() {
-				err = eb.Build().Stringer("nk", nk).Stringer("parent", parent.naturalKey).Errorf("can not inherit from final parent")
-				return
-			}
-			parentNk := parent.GetNaturalKey()
-			parentRecord, hasParent := lu.Get(parentNk)
-			if !hasParent {
-				err = eb.Build().Stringer("parentNk", parentNk).Errorf("parent natural key does not yet seem to be registered in this registry")
-				return
-			}
-			id := parentRecord.GetId()
-			if slices.Contains(parentsId, id) {
-				err = eb.Build().Stringer("parentNk", parentNk).Errorf("multiple parents resolved to the same id")
-				return
-			}
-			parentsId = append(parentsId, parentRecord.GetId())
-			parentsNk = append(parentsNk, parentRecord.GetNaturalKey())
-		}
-	}
-
 	origin := getOrigin()
 	var has bool
 	r, has = lu.Get(nk)
@@ -127,12 +100,20 @@ func (inst *HumanReadableNaturalKeyRegistry[C]) Register(nk naming.StylableName,
 		}
 	}
 	r = RegisteredNaturalKey{
-		id:                inst.tag.ComposeId(inst.untaggedOffset + identifier.UntaggedId(lu.Len())),
-		origin:            origin,
-		moduleInfo:        vcs.ModuleInfo(),
-		naturalKey:        nk,
-		parentsNaturalKey: parentsNk,
-		parentsId:         parentsId,
+		id:                              inst.tag.ComposeId(inst.untaggedOffset + identifier.UntaggedId(lu.Len())),
+		origin:                          origin,
+		moduleInfo:                      vcs.ModuleInfo(),
+		naturalKey:                      nk,
+		parentsNaturalKey:               nil,
+		parentsId:                       nil,
+		allowedColumnsSectionNames:      nil,
+		allowedColumnsSectionMembership: nil,
+		allowedCardinality:              nil,
+		flags:                           0,
+		register: func(t RegisteredNaturalKey) RegisteredNaturalKey {
+			lu.UpsertSingle(nk, t)
+			return t
+		},
 	}
 	lu.UpsertSingle(nk, r)
 	return
@@ -140,13 +121,17 @@ func (inst *HumanReadableNaturalKeyRegistry[C]) Register(nk naming.StylableName,
 func (inst RegisteredNaturalKey) MustAddParents(parents ...RegisteredNaturalKey) (r RegisteredNaturalKey) {
 	var err error
 	r, err = inst.AddParents(parents...)
-	log.Panic().Err(err).Msg("unable to add parents")
+	if err != nil {
+		log.Panic().Err(err).Msg("unable to add parents")
+	}
 	return
 }
 func (inst RegisteredNaturalKey) MustAddParentsVirtual(parents ...RegisteredNaturalKeyVirtual) (r RegisteredNaturalKey) {
 	var err error
 	r, err = inst.AddParentsVirtual(parents...)
-	log.Panic().Err(err).Msg("unable to add virtual parents")
+	if err != nil {
+		log.Panic().Err(err).Msg("unable to add virtual parents")
+	}
 	return
 }
 func (inst RegisteredNaturalKey) AddParents(parents ...RegisteredNaturalKey) (r RegisteredNaturalKey, err error) {
@@ -172,6 +157,7 @@ func (inst RegisteredNaturalKey) AddParents(parents ...RegisteredNaturalKey) (r 
 	}
 	r.parentsId = parentsId
 	r.parentsNaturalKey = parentsNk
+	r = r.register(r)
 	return
 }
 func (inst RegisteredNaturalKey) AddParentsVirtual(parents ...RegisteredNaturalKeyVirtual) (r RegisteredNaturalKey, err error) {
@@ -197,6 +183,7 @@ func (inst RegisteredNaturalKey) AddParentsVirtual(parents ...RegisteredNaturalK
 	}
 	r.parentsId = parentsId
 	r.parentsNaturalKey = parentsNk
+	r = r.register(r)
 	return
 }
 func (inst RegisteredNaturalKey) MustAddRestriction(sectionName string, membershipSpec common.MembershipSpecE, cardinality CardinalitySpecE) RegisteredNaturalKey {
@@ -211,7 +198,7 @@ func (inst RegisteredNaturalKey) MustAddRestriction(sectionName string, membersh
 		}
 	}
 	inst.allowedCardinality = append(inst.allowedCardinality, cardinality)
-	return inst
+	return inst.register(inst)
 }
 func (inst RegisteredNaturalKey) GetModuleInfo() string {
 	return inst.moduleInfo
@@ -266,7 +253,7 @@ func (inst RegisteredNaturalKey) SetVirtual() RegisteredNaturalKeyVirtual {
 func (inst RegisteredNaturalKeyVirtual) ClearVirtual() RegisteredNaturalKey {
 	r := inst.w
 	r.flags = r.flags.ClearVirtual()
-	return r
+	return r.register(r)
 }
 func (inst RegisteredNaturalKey) SetFinal() RegisteredNaturalKeyFinal {
 	inst.flags = inst.flags.SetFinal()
@@ -277,15 +264,15 @@ func (inst RegisteredNaturalKey) SetFinal() RegisteredNaturalKeyFinal {
 func (inst RegisteredNaturalKeyFinal) ClearFinal() RegisteredNaturalKey {
 	r := inst.w
 	r.flags = r.flags.ClearVirtual()
-	return r
+	return r.register(r)
 }
 func (inst RegisteredNaturalKey) SetDeprecated() RegisteredNaturalKey {
 	inst.flags = inst.flags.SetDeprecated()
-	return inst
+	return inst.register(inst)
 }
 func (inst RegisteredNaturalKey) ClearDeprecated() RegisteredNaturalKey {
 	inst.flags = inst.flags.ClearDeprecated()
-	return inst
+	return inst.register(inst)
 }
 func (inst RegisteredNaturalKey) GetFlags() RegisteredValueFlagsE {
 	return inst.flags

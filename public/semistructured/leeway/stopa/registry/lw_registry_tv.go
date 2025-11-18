@@ -41,27 +41,27 @@ func (inst RegisteredTagValue) GetModuleInfo() string {
 }
 func (inst RegisteredTagValue) SetVirtual() RegisteredTagValue {
 	inst.flags = inst.flags.SetVirtual()
-	return inst
+	return inst.register(inst)
 }
 func (inst RegisteredTagValue) ClearVirtual() RegisteredTagValue {
 	inst.flags = inst.flags.ClearVirtual()
-	return inst
+	return inst.register(inst)
 }
 func (inst RegisteredTagValue) SetFinal() RegisteredTagValue {
 	inst.flags = inst.flags.SetFinal()
-	return inst
+	return inst.register(inst)
 }
 func (inst RegisteredTagValue) ClearFinal() RegisteredTagValue {
 	inst.flags = inst.flags.ClearVirtual()
-	return inst
+	return inst.register(inst)
 }
 func (inst RegisteredTagValue) SetDeprecated() RegisteredTagValue {
 	inst.flags = inst.flags.SetDeprecated()
-	return inst
+	return inst.register(inst)
 }
 func (inst RegisteredTagValue) ClearDeprecated() RegisteredTagValue {
 	inst.flags = inst.flags.ClearDeprecated()
-	return inst
+	return inst.register(inst)
 }
 func (inst RegisteredTagValue) GetNaturalKey() naming.StylableName {
 	return inst.naturalKey
@@ -134,6 +134,11 @@ func (inst *MembershipValueRegistry[C]) Register(nk naming.StylableName, tv iden
 		moduleInfo: getModuleInfo(2),
 		naturalKey: nk,
 		flags:      MembershipValueNone,
+		register: func(r RegisteredTagValue) RegisteredTagValue {
+			inst.lookupTg.UpsertSingle(tg, r)
+			inst.lookupNk.UpsertSingle(nk, r)
+			return r
+		},
 	}
 	existed := inst.lookupTg.UpsertSingle(tg, r)
 	if existed {
