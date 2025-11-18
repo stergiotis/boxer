@@ -1,0 +1,100 @@
+package registry
+
+import (
+	"fmt"
+	"iter"
+
+	"github.com/stergiotis/boxer/public/containers"
+	"github.com/stergiotis/boxer/public/identity/identifier"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/stopa/contract"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/stopa/naturalkey"
+)
+
+type RegisteredItemDdlUseI interface {
+	GetModuleInfo() string
+	GetOrigin() string
+}
+type RegisteredItemRestrictionsI interface {
+	GetNumberOfRestrictions() (n int)
+	IterateRestrictionIndices() iter.Seq[int]
+	GetRestrictionCardinality(idx int) CardinalitySpecE
+	GetRestrictionSectionName(idx int) string
+	GetRestrictionSectionMembership(idx int) common.MembershipSpecE
+}
+type RegisteredItemDmlUseI interface {
+	RegisteredItemDdlUseI
+	GetTagValue() identifier.TagValue
+	GetNaturalKey() naming.StylableName
+}
+
+type CardinalitySpecE uint8
+
+const (
+	CardinalityZeroToOne  CardinalitySpecE = 0
+	CardinalityExactlyOne CardinalitySpecE = 1
+	CardinalityOneOrMore  CardinalitySpecE = 2
+	CardinalityArbitrary  CardinalitySpecE = 3
+)
+
+type RegisteredNaturalKey struct {
+	id                identifier.TaggedId
+	origin            string
+	moduleInfo        string
+	naturalKey        naming.StylableName
+	parentsNaturalKey []naming.StylableName
+	parentsId         []identifier.TaggedId
+
+	allowedColumnsSectionNames      []string
+	allowedColumnsSectionMembership []common.MembershipSpecE
+	allowedCardinality              []CardinalitySpecE
+	flags                           RegisteredValueFlagsE
+}
+type RegisteredNaturalKeyVirtual struct {
+	w RegisteredNaturalKey
+}
+type RegisteredNaturalKeyFinal struct {
+	w RegisteredNaturalKey
+}
+
+var _ RegisteredItemDmlUseI = RegisteredNaturalKey{}
+var _ RegisteredItemRestrictionsI = RegisteredNaturalKey{}
+var _ RegisteredItemDdlUseI = RegisteredNaturalKeyVirtual{}
+var _ RegisteredItemRestrictionsI = RegisteredNaturalKeyVirtual{}
+var _ RegisteredItemDdlUseI = RegisteredNaturalKeyFinal{}
+var _ RegisteredItemRestrictionsI = RegisteredNaturalKeyFinal{}
+
+type RegisteredTagValue struct {
+	tv         identifier.TagValue
+	origin     string
+	moduleInfo string
+	naturalKey naming.StylableName
+	flags      RegisteredValueFlagsE
+}
+
+var _ RegisteredItemDmlUseI = RegisteredTagValue{}
+
+type HumanReadableNaturalKeyRegistry[C contract.ContractI] struct {
+	tv             identifier.TagValue
+	tag            identifier.IdTag
+	untaggedOffset identifier.UntaggedId
+	lookup         *containers.BinarySearchGrowingKV[naming.StylableName, RegisteredNaturalKey]
+	namingStyle    naming.NamingStyleE
+	contr          C
+	memEnc         *naturalkey.Encoder
+	format         naturalkey.SerializationFormatE
+}
+type RegisteredValueFlagsE uint8
+
+var _ fmt.Stringer = RegisteredValueFlagsE(0)
+
+type MembershipValueRegistry[C contract.ContractI] struct {
+	offset      identifier.TagValue
+	lookupTg    *containers.BinarySearchGrowingKV[identifier.IdTag, RegisteredTagValue]
+	lookupNk    *containers.BinarySearchGrowingKV[naming.StylableName, RegisteredTagValue]
+	namingStyle naming.NamingStyleE
+	contr       C
+	memEnc      *naturalkey.Encoder
+	format      naturalkey.SerializationFormatE
+}
