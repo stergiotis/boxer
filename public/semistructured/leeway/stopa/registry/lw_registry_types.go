@@ -32,6 +32,8 @@ type RegisteredItemI interface {
 	RegisteredItemLineageI
 	RegisteredItemRestrictionsI
 	RegisteredItemIdentifierI
+	IterateAllParents() iter.Seq2[identifier.TaggedId, RegisteredNaturalKey]
+	IterateAllChildren() iter.Seq2[identifier.TaggedId, RegisteredNaturalKey]
 }
 type RegisteredItemDmlUseI[R1 any, R2 any] interface {
 	MustAddParents(parents ...RegisteredNaturalKey) R1
@@ -72,15 +74,28 @@ type RegisteredNaturalKey struct {
 
 	register func(key RegisteredNaturalKey) RegisteredNaturalKey
 }
+
+var _ RegisteredItemI = RegisteredNaturalKey{}
+
+type RegisteredNaturalKeyConcrete struct {
+	w RegisteredNaturalKey
+}
+
+var _ RegisteredItemI = RegisteredNaturalKeyConcrete{}
+
 type RegisteredNaturalKeyVirtual struct {
 	w RegisteredNaturalKey
 }
 
-var _ RegisteredItemDmlUseI[RegisteredNaturalKeyDml, RegisteredNaturalKey] = RegisteredNaturalKeyDml{}
+var _ RegisteredItemI = RegisteredNaturalKeyVirtual{}
 
 type RegisteredNaturalKeyFinal struct {
 	w RegisteredNaturalKey
 }
+
+var _ RegisteredItemI = RegisteredNaturalKeyFinal{}
+
+var _ RegisteredItemDmlUseI[RegisteredNaturalKeyDml, RegisteredNaturalKey] = RegisteredNaturalKeyDml{}
 
 var _ RegisteredItemDmlUseI[RegisteredNaturalKeyFinalDml, RegisteredNaturalKeyFinal] = RegisteredNaturalKeyFinalDml{}
 
@@ -102,8 +117,6 @@ type RegisteredNaturalKeyFinalDml struct {
 
 var _ RegisteredItemDmlUseI[RegisteredNaturalKeyFinalDml, RegisteredNaturalKeyFinal] = RegisteredNaturalKeyFinalDml{}
 
-var _ RegisteredItemI = RegisteredNaturalKey{}
-
 type RegisteredTagValue struct {
 	tv         identifier.TagValue
 	origin     string
@@ -121,10 +134,10 @@ type HumanReadableNaturalKeyRegistry[C contract.ContractI] struct {
 	tag            identifier.IdTag
 	untaggedOffset identifier.UntaggedId
 	lookup         *containers.BinarySearchGrowingKV[naming.StylableName, RegisteredNaturalKey]
+	roots          *containers.BinarySearchGrowingKV[naming.StylableName, RegisteredNaturalKey]
 	namingStyle    naming.NamingStyleE
 	contr          C
 	memEnc         *naturalkey.Encoder
-	format         naturalkey.SerializationFormatE
 }
 type RegisteredValueFlagsE uint8
 
