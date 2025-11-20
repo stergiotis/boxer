@@ -39,12 +39,14 @@ const (
 )
 
 type RegisteredNaturalKey struct {
-	id                identifier.TaggedId
-	origin            string
-	moduleInfo        string
-	naturalKey        naming.StylableName
-	parentsNaturalKey []naming.StylableName
-	parentsId         []identifier.TaggedId
+	id              identifier.TaggedId
+	origin          string
+	moduleInfo      string
+	naturalKey      naming.StylableName
+	parents         *containers.BinarySearchGrowingKV[identifier.TaggedId, RegisteredNaturalKey]
+	parentsVirtual  *containers.BinarySearchGrowingKV[identifier.TaggedId, RegisteredNaturalKeyVirtual]
+	children        *containers.BinarySearchGrowingKV[identifier.TaggedId, RegisteredNaturalKey]
+	childrenVirtual *containers.BinarySearchGrowingKV[identifier.TaggedId, RegisteredNaturalKeyVirtual]
 
 	allowedColumnsSectionNames      []string
 	allowedColumnsSectionMembership []common.MembershipSpecE

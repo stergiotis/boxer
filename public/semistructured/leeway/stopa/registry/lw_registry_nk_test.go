@@ -4,6 +4,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/functional"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/stopa/contract"
@@ -33,7 +34,7 @@ func TestNewNaturalKeyRegistry(t *testing.T) {
 	require.Equal(t, false, nkF1.GetFlags().HasVirtual())
 	require.Equal(t, true, nkF1.GetFlags().HasFinal())
 	require.Equal(t, false, nkF1.GetFlags().HasDeprecated())
-	s := nkF1.GetParentsId()
+	s := slices.Collect(functional.IterLeftOnly(nkF1.IterateParentsVirtual()))
 	e := []identifier.TaggedId{nkV1.w.id, nkV2.w.id}
 	slices.Sort(s)
 	slices.Sort(e)

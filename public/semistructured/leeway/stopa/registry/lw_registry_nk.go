@@ -2,10 +2,10 @@ package registry
 
 import (
 	"iter"
-	"slices"
 	"strings"
 
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/compiletimeflags"
 	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -104,8 +104,10 @@ func (inst *HumanReadableNaturalKeyRegistry[C]) Register(nk naming.StylableName)
 		origin:                          origin,
 		moduleInfo:                      vcs.ModuleInfo(),
 		naturalKey:                      nk,
-		parentsNaturalKey:               nil,
-		parentsId:                       nil,
+		parents:                         containers.NewBinarySearchGrowingKVOrdered[identifier.TaggedId, RegisteredNaturalKey](1),
+		parentsVirtual:                  containers.NewBinarySearchGrowingKVOrdered[identifier.TaggedId, RegisteredNaturalKeyVirtual](1),
+		children:                        containers.NewBinarySearchGrowingKVOrdered[identifier.TaggedId, RegisteredNaturalKey](1),
+		childrenVirtual:                 containers.NewBinarySearchGrowingKVOrdered[identifier.TaggedId, RegisteredNaturalKeyVirtual](1),
 		allowedColumnsSectionNames:      nil,
 		allowedColumnsSectionMembership: nil,
 		allowedCardinality:              nil,
@@ -140,23 +142,17 @@ func (inst RegisteredNaturalKey) AddParents(parents ...RegisteredNaturalKey) (r 
 	if l == 0 {
 		return
 	}
-	parentsId := slices.Grow(inst.parentsId, l)
-	parentsNk := slices.Grow(inst.parentsNaturalKey, l)
+	ps := inst.parents
+	ps.Grow(len(parents))
 	for _, parent := range parents {
 		flags := parent.GetFlags()
-		if flags.HasFinal() {
+		if compiletimeflags.ExtraChecks && flags.HasFinal() {
 			err = eb.Build().Stringer("nk", inst.naturalKey).Stringer("parent", parent.naturalKey).Errorf("can not inherit from final parent")
 			return
 		}
-		if slices.Contains(parentsId, parent.id) {
-			err = eb.Build().Stringer("nk", inst.naturalKey).Stringer("parentNk", parent.naturalKey).Errorf("multiple parents resolved to the same id")
-			return
-		}
-		parentsId = append(parentsId, parent.id)
-		parentsNk = append(parentsNk, parent.naturalKey)
+		ps.UpsertBatch(parent.id, parent)
+		parent.children.UpsertBatch(inst.id, inst)
 	}
-	r.parentsId = parentsId
-	r.parentsNaturalKey = parentsNk
 	r = r.register(r)
 	return
 }
@@ -166,23 +162,16 @@ func (inst RegisteredNaturalKey) AddParentsVirtual(parents ...RegisteredNaturalK
 	if l == 0 {
 		return
 	}
-	parentsId := slices.Grow(inst.parentsId, l)
-	parentsNk := slices.Grow(inst.parentsNaturalKey, l)
+	ps := inst.parentsVirtual
 	for _, parent := range parents {
 		flags := parent.GetFlags()
-		if flags.HasFinal() {
+		if compiletimeflags.ExtraChecks && flags.HasFinal() {
 			err = eb.Build().Stringer("nk", inst.naturalKey).Stringer("parent", parent.w.naturalKey).Errorf("can not inherit from final parent")
 			return
 		}
-		if slices.Contains(parentsId, parent.w.id) {
-			err = eb.Build().Stringer("nk", inst.naturalKey).Stringer("parentNk", parent.w.naturalKey).Errorf("multiple parents resolved to the same id")
-			return
-		}
-		parentsId = append(parentsId, parent.w.id)
-		parentsNk = append(parentsNk, parent.w.naturalKey)
+		ps.UpsertBatch(parent.w.id, parent)
+		parent.w.children.UpsertBatch(inst.id, inst)
 	}
-	r.parentsId = parentsId
-	r.parentsNaturalKey = parentsNk
 	r = r.register(r)
 	return
 }
@@ -216,11 +205,17 @@ func (inst RegisteredNaturalKey) GetId() identifier.TaggedId {
 func (inst RegisteredNaturalKey) GetOrigin() string {
 	return inst.origin
 }
-func (inst RegisteredNaturalKey) GetParentsId() []identifier.TaggedId {
-	return inst.parentsId
+func (inst RegisteredNaturalKey) IterateParents() iter.Seq2[identifier.TaggedId, RegisteredNaturalKey] {
+	return inst.parents.IteratePairs()
 }
-func (inst RegisteredNaturalKey) GetParentsNaturalKey() []naming.StylableName {
-	return inst.parentsNaturalKey
+func (inst RegisteredNaturalKey) IterateParentsVirtual() iter.Seq2[identifier.TaggedId, RegisteredNaturalKeyVirtual] {
+	return inst.parentsVirtual.IteratePairs()
+}
+func (inst RegisteredNaturalKey) IterateChildren() iter.Seq2[identifier.TaggedId, RegisteredNaturalKey] {
+	return inst.children.IteratePairs()
+}
+func (inst RegisteredNaturalKey) IterateChildrenVirtual() iter.Seq2[identifier.TaggedId, RegisteredNaturalKeyVirtual] {
+	return inst.childrenVirtual.IteratePairs()
 }
 func (inst RegisteredNaturalKey) GetNumberOfRestrictions() (n int) {
 	return len(inst.allowedCardinality)
@@ -305,11 +300,18 @@ func (inst RegisteredNaturalKeyVirtual) GetNaturalKey() naming.StylableName {
 func (inst RegisteredNaturalKeyVirtual) GetOrigin() string {
 	return inst.w.origin
 }
-func (inst RegisteredNaturalKeyVirtual) GetParentsId() []identifier.TaggedId {
-	return inst.w.parentsId
+
+func (inst RegisteredNaturalKeyVirtual) IterateParents() iter.Seq2[identifier.TaggedId, RegisteredNaturalKey] {
+	return inst.w.parents.IteratePairs()
 }
-func (inst RegisteredNaturalKeyVirtual) GetParentsNaturalKey() []naming.StylableName {
-	return inst.w.parentsNaturalKey
+func (inst RegisteredNaturalKeyVirtual) IterateParentsVirtual() iter.Seq2[identifier.TaggedId, RegisteredNaturalKeyVirtual] {
+	return inst.w.parentsVirtual.IteratePairs()
+}
+func (inst RegisteredNaturalKeyVirtual) IterateChildren() iter.Seq2[identifier.TaggedId, RegisteredNaturalKey] {
+	return inst.w.children.IteratePairs()
+}
+func (inst RegisteredNaturalKeyVirtual) IterateChildrenVirtual() iter.Seq2[identifier.TaggedId, RegisteredNaturalKeyVirtual] {
+	return inst.w.childrenVirtual.IteratePairs()
 }
 func (inst RegisteredNaturalKeyFinal) GetNumberOfRestrictions() (n int) {
 	return inst.w.GetNumberOfRestrictions()
@@ -338,9 +340,9 @@ func (inst RegisteredNaturalKeyFinal) GetNaturalKey() naming.StylableName {
 func (inst RegisteredNaturalKeyFinal) GetOrigin() string {
 	return inst.w.origin
 }
-func (inst RegisteredNaturalKeyFinal) GetParentsId() []identifier.TaggedId {
-	return inst.w.parentsId
+func (inst RegisteredNaturalKeyFinal) IterateParents() iter.Seq2[identifier.TaggedId, RegisteredNaturalKey] {
+	return inst.w.parents.IteratePairs()
 }
-func (inst RegisteredNaturalKeyFinal) GetParentsNaturalKey() []naming.StylableName {
-	return inst.w.parentsNaturalKey
+func (inst RegisteredNaturalKeyFinal) IterateParentsVirtual() iter.Seq2[identifier.TaggedId, RegisteredNaturalKeyVirtual] {
+	return inst.w.parentsVirtual.IteratePairs()
 }
