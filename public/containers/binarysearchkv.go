@@ -50,7 +50,9 @@ func (inst *BinarySearchGrowingKV[K, V]) IteratePairs() iter.Seq2[K, V] {
 		}
 	}
 }
-
+func (inst *BinarySearchGrowingKV[K, V]) IsEmpty() bool {
+	return len(inst.keys) == 0
+}
 func (inst *BinarySearchGrowingKV[K, V]) Len() int {
 	return len(inst.keys)
 }
