@@ -63,7 +63,7 @@ func (inst RegisteredNaturalKeyDml) AddParentsVirtual(parents ...RegisteredNatur
 	r.w.register(r.w)
 	return
 }
-func (inst RegisteredNaturalKeyDml) MustAddRestriction(sectionName naming.StylableName, membershipSpec common.MembershipSpecE, cardinality CardinalitySpecE) RegisteredNaturalKey {
+func (inst RegisteredNaturalKeyDml) MustAddRestriction(sectionName naming.StylableName, membershipSpec common.MembershipSpecE, cardinality CardinalitySpecE) RegisteredNaturalKeyDml {
 	inst.w.allowedColumnsSectionNames = append(inst.w.allowedColumnsSectionNames, sectionName)
 	inst.w.allowedColumnsSectionMembership = append(inst.w.allowedColumnsSectionMembership, membershipSpec)
 	for m := range membershipSpec.Iterate() {
@@ -75,7 +75,8 @@ func (inst RegisteredNaturalKeyDml) MustAddRestriction(sectionName naming.Stylab
 		}
 	}
 	inst.w.allowedCardinality = append(inst.w.allowedCardinality, cardinality)
-	return inst.w.register(inst.w)
+	inst.w.register(inst.w)
+	return inst
 }
 func (inst RegisteredNaturalKeyDml) SetVirtual() RegisteredNaturalKeyVirtualDml {
 	inst.w.flags = inst.w.flags.SetVirtual()

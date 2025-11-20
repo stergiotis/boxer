@@ -39,7 +39,7 @@ type RegisteredItemDmlUseI[R1 any, R2 any] interface {
 	AddParents(parents ...RegisteredNaturalKey) (R1, error)
 	AddParentsVirtual(parents ...RegisteredNaturalKeyVirtual) (R1, error)
 
-	MustAddRestriction(sectionName naming.StylableName, membershipSpec common.MembershipSpecE, card CardinalitySpecE) RegisteredNaturalKey
+	MustAddRestriction(sectionName naming.StylableName, membershipSpec common.MembershipSpecE, card CardinalitySpecE) R1
 	SetDeprecated() R1
 	ClearDeprecated() R1
 
@@ -112,6 +112,9 @@ type RegisteredTagValue struct {
 	flags      RegisteredValueFlagsE
 	register   func(r RegisteredTagValue) RegisteredTagValue
 }
+type RegisteredTagValueDml struct {
+	w RegisteredTagValue
+}
 
 type HumanReadableNaturalKeyRegistry[C contract.ContractI] struct {
 	tv             identifier.TagValue
@@ -127,7 +130,7 @@ type RegisteredValueFlagsE uint8
 
 var _ fmt.Stringer = RegisteredValueFlagsE(0)
 
-type MembershipValueRegistry[C contract.ContractI] struct {
+type MembershipTagValueRegistry[C contract.ContractI] struct {
 	offset      identifier.TagValue
 	lookupTg    *containers.BinarySearchGrowingKV[identifier.IdTag, RegisteredTagValue]
 	lookupNk    *containers.BinarySearchGrowingKV[naming.StylableName, RegisteredTagValue]
