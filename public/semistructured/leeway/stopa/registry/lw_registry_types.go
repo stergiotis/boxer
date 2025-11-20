@@ -34,6 +34,10 @@ type RegisteredItemI interface {
 	RegisteredItemIdentifierI
 	IterateAllParents() iter.Seq2[identifier.TaggedId, RegisteredNaturalKey]
 	IterateAllChildren() iter.Seq2[identifier.TaggedId, RegisteredNaturalKey]
+	GetParentsCount() int
+	GetChildrenCount() int
+	IsRoot() bool
+	IsLeaf() bool
 }
 type RegisteredItemDmlUseI[R1 any, R2 any] interface {
 	MustAddParents(parents ...RegisteredNaturalKey) R1

@@ -196,6 +196,15 @@ func (inst RegisteredNaturalKey) GetFlags() RegisteredValueFlagsE {
 func (inst RegisteredNaturalKey) IsRoot() bool {
 	return inst.parents.IsEmpty() && inst.parentsVirtual.IsEmpty()
 }
+func (inst RegisteredNaturalKey) IsLeaf() bool {
+	return inst.children.IsEmpty() && inst.childrenVirtual.IsEmpty()
+}
+func (inst RegisteredNaturalKey) GetParentsCount() int {
+	return inst.parents.Len() + inst.parentsVirtual.Len()
+}
+func (inst RegisteredNaturalKey) GetChildrenCount() int {
+	return inst.children.Len() + inst.childrenVirtual.Len()
+}
 
 func (inst RegisteredNaturalKeyVirtual) GetNumberOfRestrictions() (n int) {
 	return inst.w.GetNumberOfRestrictions()
@@ -216,7 +225,16 @@ func (inst RegisteredNaturalKeyVirtual) GetFlags() RegisteredValueFlagsE {
 	return inst.w.flags
 }
 func (inst RegisteredNaturalKeyVirtual) IsRoot() bool {
-	return inst.w.parents.IsEmpty() && inst.w.parentsVirtual.IsEmpty()
+	return inst.w.IsRoot()
+}
+func (inst RegisteredNaturalKeyVirtual) IsLeaf() bool {
+	return inst.w.IsLeaf()
+}
+func (inst RegisteredNaturalKeyVirtual) GetParentsCount() int {
+	return inst.w.GetParentsCount()
+}
+func (inst RegisteredNaturalKeyVirtual) GetChildrenCount() int {
+	return inst.w.GetChildrenCount()
 }
 func (inst RegisteredNaturalKeyVirtual) GetModuleInfo() string {
 	return inst.w.moduleInfo
@@ -281,7 +299,16 @@ func (inst RegisteredNaturalKeyFinal) GetFlags() RegisteredValueFlagsE {
 	return inst.w.flags
 }
 func (inst RegisteredNaturalKeyFinal) IsRoot() bool {
-	return inst.w.parents.IsEmpty() && inst.w.parentsVirtual.IsEmpty()
+	return inst.w.IsRoot()
+}
+func (inst RegisteredNaturalKeyFinal) IsLeaf() bool {
+	return inst.w.IsLeaf()
+}
+func (inst RegisteredNaturalKeyFinal) GetParentsCount() int {
+	return inst.w.GetParentsCount()
+}
+func (inst RegisteredNaturalKeyFinal) GetChildrenCount() int {
+	return inst.w.GetChildrenCount()
 }
 func (inst RegisteredNaturalKeyFinal) GetModuleInfo() string {
 	return inst.w.moduleInfo
@@ -344,11 +371,21 @@ func (inst RegisteredNaturalKeyConcrete) GetRestrictionSectionMembership(idx int
 	return inst.w.GetRestrictionSectionMembership(idx)
 }
 func (inst RegisteredNaturalKeyConcrete) GetFlags() RegisteredValueFlagsE {
-	return inst.w.flags
+	return inst.w.GetFlags()
 }
 func (inst RegisteredNaturalKeyConcrete) IsRoot() bool {
-	return inst.w.parents.IsEmpty() && inst.w.parentsVirtual.IsEmpty()
+	return inst.w.IsRoot()
 }
+func (inst RegisteredNaturalKeyConcrete) IsLeaf() bool {
+	return inst.w.IsLeaf()
+}
+func (inst RegisteredNaturalKeyConcrete) GetParentsCount() int {
+	return inst.w.GetParentsCount()
+}
+func (inst RegisteredNaturalKeyConcrete) GetChildrenCount() int {
+	return inst.w.GetChildrenCount()
+}
+
 func (inst RegisteredNaturalKeyConcrete) GetModuleInfo() string {
 	return inst.w.moduleInfo
 }
