@@ -2,10 +2,8 @@ package registry
 
 import (
 	"iter"
-	"strings"
 
 	"github.com/rs/zerolog/log"
-	"github.com/stergiotis/boxer/public/compiletimeflags"
 	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -17,12 +15,8 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/stopa/naturalkey"
 )
 
-func compareNaturalKey(a naming.StylableName, b naming.StylableName) int {
-	return strings.Compare(string(a), string(b))
-}
-
 func NewNaturalKeyRegistry[C contract.ContractI](tagValue identifier.TagValue, estSize int, namingStyle naming.NamingStyleE, untaggedOffset identifier.UntaggedId, contr C) (inst *HumanReadableNaturalKeyRegistry[C], err error) {
-	lookup := containers.NewBinarySearchGrowingKV[naming.StylableName, RegisteredNaturalKey](estSize, compareNaturalKey)
+	lookup := containers.NewBinarySearchGrowingKVOrdered[naming.StylableName, RegisteredNaturalKey](estSize)
 	inst = &HumanReadableNaturalKeyRegistry[C]{
 		tv:             tagValue,
 		tag:            tagValue.GetTag(),
@@ -54,9 +48,9 @@ func (inst *HumanReadableNaturalKeyRegistry[C]) IterateAll() iter.Seq[Registered
 	return inst.lookup.IterateValues()
 }
 
-func (inst *HumanReadableNaturalKeyRegistry[C]) MustRegister(nk naming.StylableName) (r RegisteredNaturalKey) {
+func (inst *HumanReadableNaturalKeyRegistry[C]) MustBegin(nk naming.StylableName) (r RegisteredNaturalKeyDml) {
 	var err error
-	r, err = inst.Register(nk)
+	r, err = inst.Begin(nk)
 	if err != nil {
 		log.Panic().Err(err).Msg("unable to register natural key")
 	}
@@ -80,7 +74,7 @@ func (inst *HumanReadableNaturalKeyRegistry[C]) GetTagValue() identifier.TagValu
 	return inst.tv
 }
 
-func (inst *HumanReadableNaturalKeyRegistry[C]) Register(nk naming.StylableName) (r RegisteredNaturalKey, err error) {
+func (inst *HumanReadableNaturalKeyRegistry[C]) Begin(nk naming.StylableName) (r RegisteredNaturalKeyDml, err error) {
 	if nk.IsValid() {
 		nk = nk.Convert(inst.namingStyle)
 	}
@@ -92,14 +86,15 @@ func (inst *HumanReadableNaturalKeyRegistry[C]) Register(nk naming.StylableName)
 	lu := inst.lookup
 	origin := getOrigin()
 	var has bool
-	r, has = lu.Get(nk)
+	var w RegisteredNaturalKey
+	w, has = lu.Get(nk)
 	if has {
-		if r.origin != origin {
-			err = eb.Build().Str("origin1", r.origin).Str("origin2", origin).Stringer("nk", nk).Errorf("two different code locations register the same tag value")
+		if w.origin != origin {
+			err = eb.Build().Str("origin1", w.origin).Str("origin2", origin).Stringer("nk", nk).Errorf("two different code locations register the same natural key value")
 			return
 		}
 	}
-	r = RegisteredNaturalKey{
+	w = RegisteredNaturalKey{
 		id:                              inst.tag.ComposeId(inst.untaggedOffset + identifier.UntaggedId(lu.Len())),
 		origin:                          origin,
 		moduleInfo:                      vcs.ModuleInfo(),
@@ -117,77 +112,11 @@ func (inst *HumanReadableNaturalKeyRegistry[C]) Register(nk naming.StylableName)
 			return t
 		},
 	}
-	lu.UpsertSingle(nk, r)
-	return
-}
-func (inst RegisteredNaturalKey) MustAddParents(parents ...RegisteredNaturalKey) (r RegisteredNaturalKey) {
-	var err error
-	r, err = inst.AddParents(parents...)
-	if err != nil {
-		log.Panic().Err(err).Msg("unable to add parents")
+	lu.UpsertSingle(nk, w)
+	r = RegisteredNaturalKeyDml{
+		w: w,
 	}
 	return
-}
-func (inst RegisteredNaturalKey) MustAddParentsVirtual(parents ...RegisteredNaturalKeyVirtual) (r RegisteredNaturalKey) {
-	var err error
-	r, err = inst.AddParentsVirtual(parents...)
-	if err != nil {
-		log.Panic().Err(err).Msg("unable to add virtual parents")
-	}
-	return
-}
-func (inst RegisteredNaturalKey) AddParents(parents ...RegisteredNaturalKey) (r RegisteredNaturalKey, err error) {
-	r = inst
-	l := len(parents)
-	if l == 0 {
-		return
-	}
-	ps := inst.parents
-	ps.Grow(len(parents))
-	for _, parent := range parents {
-		flags := parent.GetFlags()
-		if compiletimeflags.ExtraChecks && flags.HasFinal() {
-			err = eb.Build().Stringer("nk", inst.naturalKey).Stringer("parent", parent.naturalKey).Errorf("can not inherit from final parent")
-			return
-		}
-		ps.UpsertBatch(parent.id, parent)
-		parent.children.UpsertBatch(inst.id, inst)
-	}
-	r = r.register(r)
-	return
-}
-func (inst RegisteredNaturalKey) AddParentsVirtual(parents ...RegisteredNaturalKeyVirtual) (r RegisteredNaturalKey, err error) {
-	r = inst
-	l := len(parents)
-	if l == 0 {
-		return
-	}
-	ps := inst.parentsVirtual
-	for _, parent := range parents {
-		flags := parent.GetFlags()
-		if compiletimeflags.ExtraChecks && flags.HasFinal() {
-			err = eb.Build().Stringer("nk", inst.naturalKey).Stringer("parent", parent.w.naturalKey).Errorf("can not inherit from final parent")
-			return
-		}
-		ps.UpsertBatch(parent.w.id, parent)
-		parent.w.children.UpsertBatch(inst.id, inst)
-	}
-	r = r.register(r)
-	return
-}
-func (inst RegisteredNaturalKey) MustAddRestriction(sectionName string, membershipSpec common.MembershipSpecE, cardinality CardinalitySpecE) RegisteredNaturalKey {
-	inst.allowedColumnsSectionNames = append(inst.allowedColumnsSectionNames, sectionName)
-	inst.allowedColumnsSectionMembership = append(inst.allowedColumnsSectionMembership, membershipSpec)
-	for m := range membershipSpec.Iterate() {
-		switch m {
-		case common.MembershipSpecLowCardRef, common.MembershipSpecHighCardRef, common.MembershipSpecMixedLowCardRefHighCardParameters, common.MembershipSpecLowCardRefParametrized, common.MembershipSpecHighCardRefParametrized:
-			break
-		default:
-			log.Panic().Stringer("m", m).Msg("found disallowed membership spec for natural key vdd")
-		}
-	}
-	inst.allowedCardinality = append(inst.allowedCardinality, cardinality)
-	return inst.register(inst)
 }
 func (inst RegisteredNaturalKey) GetModuleInfo() string {
 	return inst.moduleInfo
@@ -233,41 +162,11 @@ func (inst RegisteredNaturalKey) IterateRestrictionIndices() iter.Seq[int] {
 func (inst RegisteredNaturalKey) GetRestrictionCardinality(idx int) CardinalitySpecE {
 	return inst.allowedCardinality[idx]
 }
-func (inst RegisteredNaturalKey) GetRestrictionSectionName(idx int) string {
+func (inst RegisteredNaturalKey) GetRestrictionSectionName(idx int) naming.StylableName {
 	return inst.allowedColumnsSectionNames[idx]
 }
 func (inst RegisteredNaturalKey) GetRestrictionSectionMembership(idx int) common.MembershipSpecE {
 	return inst.allowedColumnsSectionMembership[idx]
-}
-func (inst RegisteredNaturalKey) SetVirtual() RegisteredNaturalKeyVirtual {
-	inst.flags = inst.flags.SetVirtual()
-	return RegisteredNaturalKeyVirtual{
-		w: inst,
-	}
-}
-func (inst RegisteredNaturalKeyVirtual) ClearVirtual() RegisteredNaturalKey {
-	r := inst.w
-	r.flags = r.flags.ClearVirtual()
-	return r.register(r)
-}
-func (inst RegisteredNaturalKey) SetFinal() RegisteredNaturalKeyFinal {
-	inst.flags = inst.flags.SetFinal()
-	return RegisteredNaturalKeyFinal{
-		w: inst,
-	}
-}
-func (inst RegisteredNaturalKeyFinal) ClearFinal() RegisteredNaturalKey {
-	r := inst.w
-	r.flags = r.flags.ClearVirtual()
-	return r.register(r)
-}
-func (inst RegisteredNaturalKey) SetDeprecated() RegisteredNaturalKey {
-	inst.flags = inst.flags.SetDeprecated()
-	return inst.register(inst)
-}
-func (inst RegisteredNaturalKey) ClearDeprecated() RegisteredNaturalKey {
-	inst.flags = inst.flags.ClearDeprecated()
-	return inst.register(inst)
 }
 func (inst RegisteredNaturalKey) GetFlags() RegisteredValueFlagsE {
 	return inst.flags
@@ -282,7 +181,7 @@ func (inst RegisteredNaturalKeyVirtual) IterateRestrictionIndices() iter.Seq[int
 func (inst RegisteredNaturalKeyVirtual) GetRestrictionCardinality(idx int) CardinalitySpecE {
 	return inst.w.GetRestrictionCardinality(idx)
 }
-func (inst RegisteredNaturalKeyVirtual) GetRestrictionSectionName(idx int) string {
+func (inst RegisteredNaturalKeyVirtual) GetRestrictionSectionName(idx int) naming.StylableName {
 	return inst.w.GetRestrictionSectionName(idx)
 }
 func (inst RegisteredNaturalKeyVirtual) GetRestrictionSectionMembership(idx int) common.MembershipSpecE {
@@ -322,7 +221,7 @@ func (inst RegisteredNaturalKeyFinal) IterateRestrictionIndices() iter.Seq[int] 
 func (inst RegisteredNaturalKeyFinal) GetRestrictionCardinality(idx int) CardinalitySpecE {
 	return inst.w.GetRestrictionCardinality(idx)
 }
-func (inst RegisteredNaturalKeyFinal) GetRestrictionSectionName(idx int) string {
+func (inst RegisteredNaturalKeyFinal) GetRestrictionSectionName(idx int) naming.StylableName {
 	return inst.w.GetRestrictionSectionName(idx)
 }
 func (inst RegisteredNaturalKeyFinal) GetRestrictionSectionMembership(idx int) common.MembershipSpecE {

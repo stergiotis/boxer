@@ -12,7 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/stopa/naturalkey"
 )
 
-type RegisteredItemDdlUseI interface {
+type RegisteredItemLineageI interface {
 	GetModuleInfo() string
 	GetOrigin() string
 }
@@ -20,13 +20,30 @@ type RegisteredItemRestrictionsI interface {
 	GetNumberOfRestrictions() (n int)
 	IterateRestrictionIndices() iter.Seq[int]
 	GetRestrictionCardinality(idx int) CardinalitySpecE
-	GetRestrictionSectionName(idx int) string
+	GetRestrictionSectionName(idx int) naming.StylableName
 	GetRestrictionSectionMembership(idx int) common.MembershipSpecE
 }
-type RegisteredItemDmlUseI interface {
-	RegisteredItemDdlUseI
+type RegisteredItemIdentifierI interface {
+	GetId() identifier.TaggedId
 	GetTagValue() identifier.TagValue
 	GetNaturalKey() naming.StylableName
+}
+type RegisteredItemI interface {
+	RegisteredItemLineageI
+	RegisteredItemRestrictionsI
+	RegisteredItemIdentifierI
+}
+type RegisteredItemDmlUseI[R1 any, R2 any] interface {
+	MustAddParents(parents ...RegisteredNaturalKey) R1
+	MustAddParentsVirtual(parents ...RegisteredNaturalKeyVirtual) R1
+	AddParents(parents ...RegisteredNaturalKey) (R1, error)
+	AddParentsVirtual(parents ...RegisteredNaturalKeyVirtual) (R1, error)
+
+	MustAddRestriction(sectionName naming.StylableName, membershipSpec common.MembershipSpecE, card CardinalitySpecE) RegisteredNaturalKey
+	SetDeprecated() R1
+	ClearDeprecated() R1
+
+	End() R2
 }
 
 type CardinalitySpecE uint8
@@ -48,7 +65,7 @@ type RegisteredNaturalKey struct {
 	children        *containers.BinarySearchGrowingKV[identifier.TaggedId, RegisteredNaturalKey]
 	childrenVirtual *containers.BinarySearchGrowingKV[identifier.TaggedId, RegisteredNaturalKeyVirtual]
 
-	allowedColumnsSectionNames      []string
+	allowedColumnsSectionNames      []naming.StylableName
 	allowedColumnsSectionMembership []common.MembershipSpecE
 	allowedCardinality              []CardinalitySpecE
 	flags                           RegisteredValueFlagsE
@@ -58,16 +75,34 @@ type RegisteredNaturalKey struct {
 type RegisteredNaturalKeyVirtual struct {
 	w RegisteredNaturalKey
 }
+
+var _ RegisteredItemDmlUseI[RegisteredNaturalKeyDml, RegisteredNaturalKey] = RegisteredNaturalKeyDml{}
+
 type RegisteredNaturalKeyFinal struct {
 	w RegisteredNaturalKey
 }
 
-var _ RegisteredItemDmlUseI = RegisteredNaturalKey{}
-var _ RegisteredItemRestrictionsI = RegisteredNaturalKey{}
-var _ RegisteredItemDdlUseI = RegisteredNaturalKeyVirtual{}
-var _ RegisteredItemRestrictionsI = RegisteredNaturalKeyVirtual{}
-var _ RegisteredItemDdlUseI = RegisteredNaturalKeyFinal{}
-var _ RegisteredItemRestrictionsI = RegisteredNaturalKeyFinal{}
+var _ RegisteredItemDmlUseI[RegisteredNaturalKeyFinalDml, RegisteredNaturalKeyFinal] = RegisteredNaturalKeyFinalDml{}
+
+type RegisteredNaturalKeyDml struct {
+	w RegisteredNaturalKey
+}
+
+var _ RegisteredItemDmlUseI[RegisteredNaturalKeyDml, RegisteredNaturalKey] = RegisteredNaturalKeyDml{}
+
+type RegisteredNaturalKeyVirtualDml struct {
+	w RegisteredNaturalKey
+}
+
+var _ RegisteredItemDmlUseI[RegisteredNaturalKeyVirtualDml, RegisteredNaturalKeyVirtual] = RegisteredNaturalKeyVirtualDml{}
+
+type RegisteredNaturalKeyFinalDml struct {
+	w RegisteredNaturalKey
+}
+
+var _ RegisteredItemDmlUseI[RegisteredNaturalKeyFinalDml, RegisteredNaturalKeyFinal] = RegisteredNaturalKeyFinalDml{}
+
+var _ RegisteredItemI = RegisteredNaturalKey{}
 
 type RegisteredTagValue struct {
 	tv         identifier.TagValue
@@ -77,8 +112,6 @@ type RegisteredTagValue struct {
 	flags      RegisteredValueFlagsE
 	register   func(r RegisteredTagValue) RegisteredTagValue
 }
-
-var _ RegisteredItemDmlUseI = RegisteredTagValue{}
 
 type HumanReadableNaturalKeyRegistry[C contract.ContractI] struct {
 	tv             identifier.TagValue
