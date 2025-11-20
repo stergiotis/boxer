@@ -77,6 +77,16 @@ func NewBinarySearchGrowingKV[K any, V any](estSize int, cmpKey func(a K, b K) i
 	}
 	return
 }
+func NewBinarySearchGrowingKVOrdered[K constraints.Ordered, V any](estSize int) (inst *BinarySearchGrowingKV[K, V]) {
+	inst = &BinarySearchGrowingKV[K, V]{
+		keys:      make([]K, 0, estSize),
+		vals:      make([]V, 0, estSize),
+		cmpKey:    cmp.Compare[K],
+		sorted:    true,
+		compacted: true,
+	}
+	return
+}
 
 func (inst *BinarySearchGrowingKV[K, V]) ensureSorted() {
 	if !inst.sorted {
@@ -101,16 +111,16 @@ func (inst *BinarySearchGrowingKV[K, V]) compactOldestWins() {
 	if len(keys) < 2 {
 		return
 	}
-	cmp := inst.cmpKey
+	c := inst.cmpKey
 	for k := 1; k < len(keys); k++ {
-		if cmp(keys[k], keys[k-1]) != 0 {
+		if c(keys[k], keys[k-1]) != 0 {
 			continue
 		}
 
 		keys2 := keys[k:]
 		vals2 := vals[k:]
 		for k2 := 1; k2 < len(keys2); k2++ {
-			if cmp(keys2[k2], keys2[k2-1]) != 0 {
+			if c(keys2[k2], keys2[k2-1]) != 0 {
 				keys[k] = keys2[k2]
 				vals[k] = vals2[k2] // Stable sorted, keeps last value
 				k++
@@ -169,6 +179,10 @@ func (inst *BinarySearchGrowingKV[K, V]) UpsertSingle(key K, val V) (existed boo
 	inst.ensureSorted()
 	_, existed, inst.keys, inst.vals = co.InsertSliceSortedFunc(inst.keys, inst.vals, key, val, inst.cmpKey)
 	return
+}
+func (inst *BinarySearchGrowingKV[K, V]) Grow(n int) {
+	inst.keys = slices.Grow(inst.keys, n)
+	inst.vals = slices.Grow(inst.vals, n)
 }
 
 // UpsertBatch last write wins
