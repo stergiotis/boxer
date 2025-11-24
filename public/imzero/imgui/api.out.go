@@ -5,8 +5,8 @@ package imgui
 import "github.com/stergiotis/boxer/public/imzero/dto"
 
 import "github.com/stergiotis/boxer/public/fffi/runtime"
-/* ffiCompatibilityRecord diag={"features": {"noThrowTrue": true, "noThrowFalse": false}, "minId": 0, "maxId": 1035, "hash": 23(h'26fbee22f7e5cb61bc0b27d4ef64d773')} */
-const fffiCompatibilityRecord = "pGhmZWF0dXJlc6Jrbm9UaHJvd1RydWX1bG5vVGhyb3dGYWxzZfRlbWluSWQAZW1heElkGQQLZGhhc2jXUCb77iL35cthvAsn1O9k13M";
+/* ffiCompatibilityRecord diag={"features": {"noThrowTrue": true, "noThrowFalse": false}, "minId": 0, "maxId": 1040, "hash": 23(h'6e38385af6c984c436b88a134331c7fb')} */
+const fffiCompatibilityRecord = "pGhmZWF0dXJlc6Jrbm9UaHJvd1RydWX1bG5vVGhyb3dGYWxzZfRlbWluSWQAZW1heElkGQQQZGhhc2jXUG44OFr2yYTENriKE0Mxx_s";
 
 func Checkbox(label string, state Tristate) (checked Tristate, clicked bool) {
 
@@ -1263,6 +1263,7 @@ func SliderInt4V(label string, vP [4]int, v_min int, v_max int, format string, f
 	return
 }
 // -- deactivated -- // //go:build fffi_idl_code
+
 // -- deactivated -- // package imgui
 
 // PushClipRect Render-level scissoring. This is passed down to your render function but not used for CPU-side coarse clipping. Prefer using higher-level ImGui::PushClipRect() to affect logic (hit-testing and widget culling)
@@ -1310,12 +1311,12 @@ func (foreignptr ImDrawListPtr) PopClipRect() {
 }
 
 func (foreignptr ImDrawListPtr) PushTextureID(texture_id ImTextureID) {
-
 	_f := foreignptr.getFffi()
 	_f.AddProcedureId(0x0000005b)
 	runtime.AddUintptrArg(_f, foreignptr)
 	runtime.AddUintptrArg(_f, texture_id)
 	_f.CallProcedure()
+
 }
 
 func (foreignptr ImDrawListPtr) PopTextureID() {
@@ -2407,6 +2408,7 @@ func (foreignptr ImFontPtr) CalcTextSizeA(size float32, max_width float32, wrap_
 	return
 }
 // -- deactivated -- // //go:build fffi_idl_code
+
 // -- deactivated -- // package imgui
 
 // DestroyContext NULL = destroy current context
@@ -2443,10 +2445,10 @@ func EndFrame() {
 //foreign code:
 //  ImGui::Render()
 func Render() {
-
 	_f := currentFffiVar
 	_f.AddProcedureId(0x000000b1)
 	_f.CallProcedure()
+
 }
 
 // ShowDemoWindow create Demo window. demonstrate most ImGui features. call this to learn about the library! try to make it always available in your application!
@@ -6510,6 +6512,7 @@ func SetItemAllowOverlap() {
 
 }
 // -- deactivated -- // //go:build fffi_idl_code
+
 // -- deactivated -- // package imgui
 
 func SetNextWindowRefreshPolicy(flags ImGuiWindowRefreshFlags) {
@@ -6550,7 +6553,6 @@ func UpdateHoveredWindowAndCaptureFlags() {
 }
 
 func UpdateMouseMovingWindowNewFrame() {
-
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000212)
 	_f.CallProcedure()
@@ -9313,6 +9315,7 @@ func SpinnerDemos() {
 	_f.CallProcedure()
 }
 // -- deactivated -- // //go:build fffi_idl_code
+
 // -- deactivated -- // package imgui
 
 func SpinnerRainbow(label string, radius float32, thickness float32, color uint32, speed float32) {
@@ -9384,7 +9387,6 @@ func SpinnerRotatingHeart(label string, radius float32, thickness float32, color
 }
 
 func SpinnerRotatingHeartV(label string, radius float32, thickness float32, color uint32, speed float32, ang_min float32 /* = 0.f*/) {
-
 	_f := currentFffiVar
 	_f.AddProcedureId(0x00000308)
 	runtime.AddStringArg(_f, label)
@@ -12579,4 +12581,72 @@ func InvisibleButtonVP(str_id string, size ImVec2, flags ImGuiButtonFlags /* = 0
 	runtime.AddComplex64Arg(_f, size)
 	runtime.AddIntArg(_f, flags)
 	_f.CallProcedure()
+}
+
+// Selectable "bool selected" carry the selection state (read-only). Selectable() is clicked is returns true so you can modify your selection state. size.x==0.0: use remaining width, size.x>0.0: specify width. size.y==0.0: use label height, size.y>0.0: specify height
+//foreign code:
+//  ImGui::Selectable(label)
+func SelectableP(label string) {
+
+	_f := currentFffiVar
+	_f.AddProcedureId(0x0000040c)
+	runtime.AddStringArg(_f, label)
+	_f.CallProcedure()
+	return
+}
+
+// SelectableV "bool selected" carry the selection state (read-only). Selectable() is clicked is returns true so you can modify your selection state. size.x==0.0: use remaining width, size.x>0.0: specify width. size.y==0.0: use label height, size.y>0.0: specify height
+// * selected bool = false
+// * flags ImGuiSelectableFlags = 0
+// * size const ImVec2 & = ImVec2(0, 0)
+//foreign code:
+//  ImGui::Selectable(label, selected, flags, size)
+func SelectableVP(label string, selected bool /* = false*/, flags ImGuiSelectableFlags /* = 0*/, size ImVec2 /* = ImVec2(0, 0)*/) {
+	_f := currentFffiVar
+	_f.AddProcedureId(0x0000040d)
+	runtime.AddStringArg(_f, label)
+	runtime.AddBoolArg(_f, selected)
+	runtime.AddIntArg(_f, flags)
+	runtime.AddComplex64Arg(_f, size)
+	_f.CallProcedure()
+
+	return
+}
+
+// Button button
+//foreign code:
+//  ImGui::Button(label)
+func ButtonP(label string) {
+	_f := currentFffiVar
+	_f.AddProcedureId(0x0000040e)
+	runtime.AddStringArg(_f, label)
+	_f.CallProcedure()
+
+	return
+}
+
+// ButtonV button
+// * size const ImVec2 & = ImVec2(0, 0)
+//foreign code:
+//  ImGui::Button(label, size)
+func ButtonVP(label string, size ImVec2 /* = ImVec2(0, 0)*/) {
+	_f := currentFffiVar
+	_f.AddProcedureId(0x0000040f)
+	runtime.AddStringArg(_f, label)
+	runtime.AddComplex64Arg(_f, size)
+	_f.CallProcedure()
+
+	return
+}
+
+// SmallButton button with (FramePadding.y == 0) to easily embed within text
+//foreign code:
+//  ImGui::SmallButton(label)
+func SmallButtonP(label string) {
+	_f := currentFffiVar
+	_f.AddProcedureId(0x00000410)
+	runtime.AddStringArg(_f, label)
+	_f.CallProcedure()
+
+	return
 }
