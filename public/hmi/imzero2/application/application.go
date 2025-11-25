@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -232,8 +233,14 @@ func (inst *Application) Launch() (err error) {
 var ErrNeedsToBeLaunchedBeforeRun = eh.Errorf("application needs to be launched before run")
 var ErrMaximumNumberOfRelaunches = eh.Errorf("maximum number of re-launches reached")
 
+var n = 0
+
 func defaultRenderLoopHandler(marshaller *runtime.Marshaller) error {
 	egui.Label(time.Now().GoString())
+	if egui.Button("okay?") {
+		n++
+	}
+	egui.Label(fmt.Sprintf("%d", n))
 	return nil
 }
 
