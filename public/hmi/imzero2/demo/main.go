@@ -3,14 +3,12 @@
 package demo
 
 import (
+	"github.com/stergiotis/boxer/public/hmi/imzero2/egui"
 	"github.com/urfave/cli/v2"
 
 	"github.com/stergiotis/boxer/public/config"
 	"github.com/stergiotis/boxer/public/fffi/runtime"
-	"github.com/stergiotis/boxer/public/imzero/application"
-	"github.com/stergiotis/boxer/public/imzero/imcolortextedit"
-	"github.com/stergiotis/boxer/public/imzero/imgui"
-	"github.com/stergiotis/boxer/public/imzero/implot"
+	"github.com/stergiotis/boxer/public/hmi/imzero2/application"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -18,7 +16,7 @@ import (
 func NewCommand() *cli.Command {
 	cfg := &application.Config{
 		MainFontTTF:            "",
-		ImZeroSkiaClientConfig: &application.ImZeroSkiaClientConfig{},
+		ImZeroSkiaClientConfig: &application.ImZeroClientConfig{},
 	}
 	return &cli.Command{
 		Name:  "demo",
@@ -42,16 +40,10 @@ func NewCommand() *cli.Command {
 
 func mainE(app *application.Application) (err error) {
 	app.FffiEstablishedHandler = func(fffi *runtime.Fffi2) error {
-		implot.SetCurrentFffiVar(fffi)
-		imgui.SetCurrentFffiVar(fffi)
-		imcolortextedit.SetCurrentFffiVar(fffi)
+		egui.SetCurrentFffiVar(fffi)
 		return nil
 	}
 	app.BeforeFirstFrameInitHandler = func() error {
-		return nil
-	}
-	app.RenderLoopHandler = func(marshaller *runtime.Marshaller) error {
-		marshaller.ResetWrittenBytes()
 		return nil
 	}
 	err = app.Launch()
