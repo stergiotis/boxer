@@ -4,6 +4,7 @@ package demo
 
 import (
 	"github.com/stergiotis/boxer/public/hmi/imzero2/egui"
+	"github.com/stergiotis/boxer/public/hmi/imzero2/egui/hl"
 	"github.com/urfave/cli/v2"
 
 	"github.com/stergiotis/boxer/public/config"
@@ -46,6 +47,7 @@ func mainE(app *application.Application) (err error) {
 	app.BeforeFirstFrameInitHandler = func() error {
 		return nil
 	}
+	app.RenderLoopHandler = hl.RenderLoopHandler
 	err = app.Launch()
 	if err != nil {
 		err = eh.Errorf("unable to launch application: %w", err)
