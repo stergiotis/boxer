@@ -5,16 +5,46 @@ import "github.com/stergiotis/boxer/public/fffi/runtime"
 type FuncProcId = runtime.FuncProcId
 
 const (
-	FuncProcIdWidgetLabel  FuncProcId = 0
-	FuncProcIdWidgetButton FuncProcId = 1
+	FuncProcIdGetCompatibilityRecord FuncProcId = 0
 
-	FuncProcIdBeginHorizontal FuncProcId = 2
-	FuncProcIdEnd             FuncProcId = 3
+	FuncProcIdWidgetLabel     FuncProcId = 1
+	FuncProcIdWidgetButton    FuncProcId = 2
+	FuncProcIdWidgetTree      FuncProcId = 3
+	FuncProcIdWidgetSeparator FuncProcId = 4
 
-	FuncProcIdR0AtomPush     FuncProcId = 4
-	FuncProcIdR1Get          FuncProcId = 5
-	FuncProcIdR2FromR1Masked FuncProcId = 6
-	FuncProcIdR2Get          FuncProcId = 7
+	FuncProcIdEnd             FuncProcId = 30
+	FuncProcIdBeginHorizontal FuncProcId = 31
+
+	ManipSense FuncProcId = 40
+
+	FuncProcIdR0AtomPush       FuncProcId = 50
+	FuncProcIdR1Get            FuncProcId = 51
+	FuncProcIdR2FromR1Masked   FuncProcId = 52
+	FuncProcIdR2Get            FuncProcId = 53
+	FuncProcIdNodeDirPush      FuncProcId = 54
+	FuncProcIdNodeLeafPush     FuncProcId = 55
+	FuncProcIdNodeDirClosePush FuncProcId = 56
+)
+
+type ButtonBuilderMethodId = runtime.FuncProcId
+
+const (
+	ButtonBuilderMethodIdBuild ButtonBuilderMethodId = 0
+	ButtonBuilderMethodFrame   ButtonBuilderMethodId = 1
+)
+
+type LabelBuilderMethodId = runtime.FuncProcId
+
+const (
+	LabelBuilderMethodIdBuild      LabelBuilderMethodId = 0
+	LabelBuilderMethodIdSelectable LabelBuilderMethodId = 1
+)
+
+type TreeNodeBuilderMethodId = runtime.FuncProcId
+
+const (
+	TreeNodeBuilderId          TreeNodeBuilderMethodId = 0
+	TreeNodeBuilderIdLabelText LabelBuilderMethodId    = 1
 )
 
 type ResponseFlags uint32

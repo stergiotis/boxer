@@ -15,8 +15,14 @@ func LayoutHorizontal() iter.Seq[functional.NilIteratorValueType] {
 	}
 }
 func Button(label string) (flags egui.ResponseFlags) {
-	egui.R0AtomPushText(label)
-	egui.WidgetButton()
+	//egui.R0AtomPushText(label)
+	egui.WidgetButton(label).Build()
+	flags = egui.R1Get()
+	return
+}
+func Label(label string) (flags egui.ResponseFlags) {
+	//egui.R0AtomPushText(label)
+	egui.WidgetButton(label).Build()
 	flags = egui.R1Get()
 	return
 }

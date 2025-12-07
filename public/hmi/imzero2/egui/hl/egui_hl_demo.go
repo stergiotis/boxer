@@ -11,18 +11,19 @@ import (
 var n = 0
 
 func RenderLoopHandler(marshaller *runtime.Marshaller) error {
-	egui.WidgetLabel(time.Now().GoString())
-	r := Button("okay?")
+	egui.WidgetLabel(time.Now().GoString()).Build()
+	r := egui.WidgetButton("okay?").Build().Get()
 	if r.HasPrimaryClicked() {
 		n++
 	} else if r.HasSecondaryClicked() {
 		n--
 	}
-	egui.WidgetLabel(fmt.Sprintf("%d", n))
+	egui.WidgetLabel(fmt.Sprintf("%d", n)).Selectable(false).Build()
 	for range LayoutHorizontal() {
-		egui.WidgetLabel("a")
-		egui.WidgetLabel("b")
-		egui.WidgetLabel("c")
+		egui.WidgetLabel("a").Build()
+		egui.WidgetLabel("b").Build()
+		egui.WidgetLabel("c").Build()
 	}
+	//egui.WidgetTree()
 	return nil
 }
