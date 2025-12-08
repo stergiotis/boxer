@@ -22,11 +22,31 @@ func R0AtomPushText(text string) {
 	_f := currentFffiVar
 	_f.AddFunctionId(FuncProcIdR0AtomPush)
 	runtime.AddStringArg(_f, text)
-	_f.CallFunctionNoThrow()
+	_f.CallProcedureNoThrow()
 }
 func R2FromR1Masked(mask ResponseFlags) {
 	_f := currentFffiVar
-	_f.AddFunctionId(FuncProcIdR2FromR1Masked)
+	_f.AddProcedureId(FuncProcIdR2FromR1Masked)
 	runtime.AddUint32Arg(_f, mask)
 	_f.CallFunctionNoThrow()
+}
+func R3NodeDirPush(id uint64) TreeNodeBuilder {
+	_f := currentFffiVar
+	_f.AddProcedureId(FuncProcIdR3NodeDirPush)
+	runtime.AddUint64Arg(_f, id)
+	_f.CallProcedureNoThrow()
+	return TreeNodeBuilder{}
+}
+func R3NodeLeafPush(id uint64) TreeNodeBuilder {
+	_f := currentFffiVar
+	_f.AddProcedureId(FuncProcIdR3NodeLeafPush)
+	runtime.AddUint64Arg(_f, id)
+	_f.CallProcedureNoThrow()
+	return TreeNodeBuilder{}
+}
+func R3NodeDirClosePush(n uint64) {
+	_f := currentFffiVar
+	_f.AddProcedureId(FuncProcIdR3NodeDirClosePush)
+	runtime.AddUint64Arg(_f, n)
+	_f.CallProcedureNoThrow()
 }

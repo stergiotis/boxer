@@ -17,13 +17,13 @@ const (
 
 	ManipSense FuncProcId = 40
 
-	FuncProcIdR0AtomPush       FuncProcId = 50
-	FuncProcIdR1Get            FuncProcId = 51
-	FuncProcIdR2FromR1Masked   FuncProcId = 52
-	FuncProcIdR2Get            FuncProcId = 53
-	FuncProcIdNodeDirPush      FuncProcId = 54
-	FuncProcIdNodeLeafPush     FuncProcId = 55
-	FuncProcIdNodeDirClosePush FuncProcId = 56
+	FuncProcIdR0AtomPush         FuncProcId = 50
+	FuncProcIdR1Get              FuncProcId = 51
+	FuncProcIdR2FromR1Masked     FuncProcId = 52
+	FuncProcIdR2Get              FuncProcId = 53
+	FuncProcIdR3NodeDirPush      FuncProcId = 54
+	FuncProcIdR3NodeLeafPush     FuncProcId = 55
+	FuncProcIdR3NodeDirClosePush FuncProcId = 56
 )
 
 type ButtonBuilderMethodId = runtime.FuncProcId
@@ -43,7 +43,7 @@ const (
 type TreeNodeBuilderMethodId = runtime.FuncProcId
 
 const (
-	TreeNodeBuilderId          TreeNodeBuilderMethodId = 0
+	TreeNodeBuilderIdBuild          TreeNodeBuilderMethodId = 0
 	TreeNodeBuilderIdLabelText LabelBuilderMethodId    = 1
 )
 
