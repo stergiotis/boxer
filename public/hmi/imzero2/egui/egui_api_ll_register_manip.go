@@ -14,7 +14,7 @@ func R1Get() (flags ResponseFlags) {
 func R2Get() (flags ResponseFlags) {
 	_f := currentFffiVar
 	_f.AddFunctionId(FuncProcIdR2Get)
-	_f.CallProcedureNoThrow()
+	_f.CallFunctionNoThrow()
 	flags = runtime.GetUint32Retr[ResponseFlags](_f)
 	return
 }
@@ -49,4 +49,11 @@ func R3NodeDirClosePush(n uint64) {
 	_f.AddProcedureId(FuncProcIdR3NodeDirClosePush)
 	runtime.AddUint64Arg(_f, n)
 	_f.CallProcedureNoThrow()
+}
+func R5GetAndClear() (roaring64 []byte) {
+	_f := currentFffiVar
+	_f.AddProcedureId(FuncProcIdR5GetAnClear)
+	_f.CallFunctionNoThrow()
+	roaring64 = runtime.GetBytesRetr(_f)
+	return
 }

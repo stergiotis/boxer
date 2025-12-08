@@ -24,6 +24,9 @@ const (
 	FuncProcIdR3NodeDirPush      FuncProcId = 54
 	FuncProcIdR3NodeLeafPush     FuncProcId = 55
 	FuncProcIdR3NodeDirClosePush FuncProcId = 56
+	FuncProcIdR5GetAnClear       FuncProcId = 57
+	FuncProcIdR5Clear            FuncProcId = 58
+	FuncProcIdR5AddR1Id          FuncProcId = 59
 )
 
 type ButtonBuilderMethodId = runtime.FuncProcId
@@ -43,7 +46,7 @@ const (
 type TreeNodeBuilderMethodId = runtime.FuncProcId
 
 const (
-	TreeNodeBuilderIdBuild          TreeNodeBuilderMethodId = 0
+	TreeNodeBuilderIdBuild     TreeNodeBuilderMethodId = 0
 	TreeNodeBuilderIdLabelText LabelBuilderMethodId    = 1
 )
 

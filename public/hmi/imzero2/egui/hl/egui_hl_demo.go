@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/RoaringBitmap/roaring/roaring64"
+	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/fffi/runtime"
 	"github.com/stergiotis/boxer/public/hmi/imzero2/egui"
 )
@@ -12,19 +14,21 @@ var n = 0
 
 func RenderLoopHandler(marshaller *runtime.Marshaller) error {
 	egui.WidgetLabel(time.Now().GoString()).Build()
-	r := egui.WidgetButton("okay?").Build().Get()
-	if r.HasPrimaryClicked() {
-		n++
-	} else if r.HasSecondaryClicked() {
-		n--
+	{
+		r := egui.WidgetButton("okay?").Build().Get()
+		if r.HasPrimaryClicked() {
+			n++
+		} else if r.HasSecondaryClicked() {
+			n--
+		}
 	}
+
 	egui.WidgetLabel(fmt.Sprintf("%d", n)).Selectable(false).Build()
 	for range LayoutHorizontal() {
 		egui.WidgetLabel("a").Build()
 		egui.WidgetLabel("b").Build()
 		egui.WidgetLabel("c").Build()
 	}
-	//egui.WidgetTree()
 	{
 		for range egui.R3NodeDirPush(0).Label("dir 0").BuildAndClose() {
 			for range egui.R3NodeDirPush(1).Label("dir 1").BuildAndClose() {
@@ -38,6 +42,16 @@ func RenderLoopHandler(marshaller *runtime.Marshaller) error {
 			}
 		}
 		egui.WidgetTree()
+		{
+			r64Bv := egui.R5GetAndClear()
+			r := roaring64.New()
+			_, err := r.FromUnsafeBytes(r64Bv)
+			if err != nil {
+				log.Warn().Err(err).Msg("unable to unserialize roaring64 bitmap")
+			} else {
+				egui.WidgetLabel(r.String()).Build()
+			}
+		}
 	}
 	return nil
 }
