@@ -67,7 +67,44 @@ func (inst TreeNodeBuilder) Build() {
 func (inst TreeNodeBuilder) BuildAndClose() iter.Seq[functional.NilIteratorValueType] {
 	return func(yield func(functional.NilIteratorValueType) bool) {
 		inst.Build()
+		defer R3NodeDirClosePush(0)
 		yield(functional.NilIteratorValue)
-		R3NodeDirClosePush(0)
+	}
+}
+
+type ScrollAreaBuilder struct {
+}
+
+func (inst ScrollAreaBuilder) Build() {
+	_f := currentFffiVar
+	_f.AddFunctionId(ScrollAreaBuilderIdBuild)
+	_f.CallProcedureNoThrow()
+}
+func (inst ScrollAreaBuilder) HorizontalScroll(v bool) ScrollAreaBuilder {
+	_f := currentFffiVar
+	_f.AddFunctionId(ScrollAreaBuilderIdHorizontalScroll)
+	runtime.AddBoolArg(_f,v)
+	_f.CallProcedureNoThrow()
+	return inst
+}
+func (inst ScrollAreaBuilder) VerticalScroll(v bool) ScrollAreaBuilder {
+	_f := currentFffiVar
+	_f.AddFunctionId(ScrollAreaBuilderIdVerticalScroll)
+	runtime.AddBoolArg(_f,v)
+	_f.CallProcedureNoThrow()
+	return inst
+}
+func (inst ScrollAreaBuilder) Animate(v bool) ScrollAreaBuilder {
+	_f := currentFffiVar
+	_f.AddFunctionId(ScrollAreaBuilderIdAnimate)
+	runtime.AddBoolArg(_f,v)
+	_f.CallProcedureNoThrow()
+	return inst
+}
+func (inst ScrollAreaBuilder) BuildAndEnd() iter.Seq[functional.NilIteratorValueType] {
+	return func(yield func(functional.NilIteratorValueType) bool) {
+		inst.Build()
+		defer End()
+		yield(functional.NilIteratorValue)
 	}
 }

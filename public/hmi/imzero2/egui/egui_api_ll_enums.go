@@ -14,6 +14,7 @@ const (
 
 	FuncProcIdEnd             FuncProcId = 30
 	FuncProcIdBeginHorizontal FuncProcId = 31
+	FuncProcIdBeginScrollArea FuncProcId = 32
 
 	ManipSense FuncProcId = 40
 
@@ -48,6 +49,15 @@ type TreeNodeBuilderMethodId = runtime.FuncProcId
 const (
 	TreeNodeBuilderIdBuild     TreeNodeBuilderMethodId = 0
 	TreeNodeBuilderIdLabelText LabelBuilderMethodId    = 1
+)
+
+type ScrollAreaBuilderMethodId = runtime.FuncProcId
+
+const (
+	ScrollAreaBuilderIdBuild            ScrollAreaBuilderMethodId = 0
+	ScrollAreaBuilderIdHorizontalScroll ScrollAreaBuilderMethodId = 1
+	ScrollAreaBuilderIdVerticalScroll   ScrollAreaBuilderMethodId = 2
+	ScrollAreaBuilderIdAnimate          ScrollAreaBuilderMethodId = 3
 )
 
 type ResponseFlags uint32

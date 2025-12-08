@@ -41,15 +41,17 @@ func RenderLoopHandler(marshaller *runtime.Marshaller) error {
 				egui.R3NodeLeafPush(7).Label("leaf 3").Build()
 			}
 		}
-		egui.WidgetTree()
-		{
-			r64Bv := egui.R5GetAndClear()
-			r := roaring64.New()
-			_, err := r.FromUnsafeBytes(r64Bv)
-			if err != nil {
-				log.Warn().Err(err).Msg("unable to unserialize roaring64 bitmap")
-			} else {
-				egui.WidgetLabel(r.String()).Build()
+		for range egui.BeginScrollArea().VerticalScroll(true).Animate(true).BuildAndEnd() {
+			egui.WidgetTree()
+			{
+				r64Bv := egui.R5GetAndClear()
+				r := roaring64.New()
+				_, err := r.FromUnsafeBytes(r64Bv)
+				if err != nil {
+					log.Warn().Err(err).Msg("unable to unserialize roaring64 bitmap")
+				} else {
+					egui.WidgetLabel(r.String()).Build()
+				}
 			}
 		}
 	}
