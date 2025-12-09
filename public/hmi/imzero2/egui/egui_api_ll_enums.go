@@ -12,9 +12,10 @@ const (
 	FuncProcIdWidgetTree      FuncProcId = 3
 	FuncProcIdWidgetSeparator FuncProcId = 4
 
-	FuncProcIdEnd             FuncProcId = 30
-	FuncProcIdBeginHorizontal FuncProcId = 31
-	FuncProcIdBeginScrollArea FuncProcId = 32
+	FuncProcIdEnd                   FuncProcId = 30
+	FuncProcIdBeginHorizontal       FuncProcId = 31
+	FuncProcIdBeginScrollArea       FuncProcId = 32
+	FuncProcIdBeginCollapsingHeader FuncProcId = 33
 
 	ManipSense FuncProcId = 40
 
@@ -58,6 +59,21 @@ const (
 	ScrollAreaBuilderIdHorizontalScroll ScrollAreaBuilderMethodId = 1
 	ScrollAreaBuilderIdVerticalScroll   ScrollAreaBuilderMethodId = 2
 	ScrollAreaBuilderIdAnimate          ScrollAreaBuilderMethodId = 3
+)
+
+type SeparatorBuilderMethodId = runtime.FuncProcId
+
+const (
+	SeparatorBuilderIdBuild      SeparatorBuilderMethodId = 0
+	SeparatorBuilderIdHorizontal SeparatorBuilderMethodId = 1
+	SeparatorBuilderIdVertical   SeparatorBuilderMethodId = 2
+)
+
+type CollapsingHeaderBuilderMethodId = runtime.FuncProcId
+
+const (
+	CollapsingHeaderBuilderIdBuild       CollapsingHeaderBuilderMethodId = 0
+	CollapsingHeaderBuilderIdDefaultOpen CollapsingHeaderBuilderMethodId = 1
 )
 
 type ResponseFlags uint32

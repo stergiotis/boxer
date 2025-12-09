@@ -24,3 +24,9 @@ func WidgetTree() {
 	_f.CallFunctionNoThrow()
 }
 
+func WidgetSeparator() SeparatorBuilder {
+	_f := currentFffiVar
+	_f.AddFunctionId(FuncProcIdWidgetSeparator)
+	_f.CallFunctionNoThrow()
+	return SeparatorBuilder{}
+}

@@ -83,25 +83,69 @@ func (inst ScrollAreaBuilder) Build() {
 func (inst ScrollAreaBuilder) HorizontalScroll(v bool) ScrollAreaBuilder {
 	_f := currentFffiVar
 	_f.AddFunctionId(ScrollAreaBuilderIdHorizontalScroll)
-	runtime.AddBoolArg(_f,v)
+	runtime.AddBoolArg(_f, v)
 	_f.CallProcedureNoThrow()
 	return inst
 }
 func (inst ScrollAreaBuilder) VerticalScroll(v bool) ScrollAreaBuilder {
 	_f := currentFffiVar
 	_f.AddFunctionId(ScrollAreaBuilderIdVerticalScroll)
-	runtime.AddBoolArg(_f,v)
+	runtime.AddBoolArg(_f, v)
 	_f.CallProcedureNoThrow()
 	return inst
 }
 func (inst ScrollAreaBuilder) Animate(v bool) ScrollAreaBuilder {
 	_f := currentFffiVar
 	_f.AddFunctionId(ScrollAreaBuilderIdAnimate)
-	runtime.AddBoolArg(_f,v)
+	runtime.AddBoolArg(_f, v)
 	_f.CallProcedureNoThrow()
 	return inst
 }
 func (inst ScrollAreaBuilder) BuildAndEnd() iter.Seq[functional.NilIteratorValueType] {
+	return func(yield func(functional.NilIteratorValueType) bool) {
+		inst.Build()
+		defer End()
+		yield(functional.NilIteratorValue)
+	}
+}
+
+type SeparatorBuilder struct {
+}
+
+func (inst SeparatorBuilder) Build() {
+	_f := currentFffiVar
+	_f.AddFunctionId(SeparatorBuilderIdBuild)
+	_f.CallProcedureNoThrow()
+}
+func (inst SeparatorBuilder) Horizontal() SeparatorBuilder {
+	_f := currentFffiVar
+	_f.AddFunctionId(SeparatorBuilderIdHorizontal)
+	_f.CallProcedureNoThrow()
+	return inst
+}
+func (inst SeparatorBuilder) Vertical() SeparatorBuilder {
+	_f := currentFffiVar
+	_f.AddFunctionId(SeparatorBuilderIdVertical)
+	_f.CallProcedureNoThrow()
+	return inst
+}
+
+type CollapsingHeaderBuilder struct {
+}
+
+func (inst CollapsingHeaderBuilder) Build() {
+	_f := currentFffiVar
+	_f.AddFunctionId(CollapsingHeaderBuilderIdBuild)
+	_f.CallProcedureNoThrow()
+}
+func (inst CollapsingHeaderBuilder) DefaultOpen(open bool) CollapsingHeaderBuilder {
+	_f := currentFffiVar
+	_f.AddFunctionId(CollapsingHeaderBuilderIdDefaultOpen)
+	runtime.AddBoolArg(_f, open)
+	_f.CallProcedureNoThrow()
+	return inst
+}
+func (inst CollapsingHeaderBuilder) BuildAndEnd() iter.Seq[functional.NilIteratorValueType] {
 	return func(yield func(functional.NilIteratorValueType) bool) {
 		inst.Build()
 		defer End()

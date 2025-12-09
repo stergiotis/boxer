@@ -24,11 +24,13 @@ func RenderLoopHandler(marshaller *runtime.Marshaller) error {
 	}
 
 	egui.WidgetLabel(fmt.Sprintf("%d", n)).Selectable(false).Build()
+	egui.WidgetSeparator().Build()
 	for range LayoutHorizontal() {
 		egui.WidgetLabel("a").Build()
 		egui.WidgetLabel("b").Build()
 		egui.WidgetLabel("c").Build()
 	}
+	//for range egui.BeginCollapsingHeader("tree").DefaultOpen(false).BuildAndEnd()
 	{
 		for range egui.R3NodeDirPush(0).Label("dir 0").BuildAndClose() {
 			for range egui.R3NodeDirPush(1).Label("dir 1").BuildAndClose() {
