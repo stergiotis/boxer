@@ -30,8 +30,7 @@ func RenderLoopHandler(marshaller *runtime.Marshaller) error {
 		egui.WidgetLabel("b").Build()
 		egui.WidgetLabel("c").Build()
 	}
-	//for range egui.BeginCollapsingHeader("tree").DefaultOpen(false).BuildAndEnd()
-	{
+	for range egui.BeginCollapsingHeader("tree").CallSiteCull().DefaultOpen(false).BuildAndEnd() {
 		for range egui.R3NodeDirPush(0).Label("dir 0").BuildAndClose() {
 			for range egui.R3NodeDirPush(1).Label("dir 1").BuildAndClose() {
 				egui.R3NodeLeafPush(2).Label("leaf 0").Build()

@@ -72,8 +72,11 @@ const (
 type CollapsingHeaderBuilderMethodId = runtime.FuncProcId
 
 const (
-	CollapsingHeaderBuilderIdBuild       CollapsingHeaderBuilderMethodId = 0
-	CollapsingHeaderBuilderIdDefaultOpen CollapsingHeaderBuilderMethodId = 1
+	CollapsingHeaderBuilderIdBuild        CollapsingHeaderBuilderMethodId = 0
+	CollapsingHeaderBuilderIdDefaultOpen  CollapsingHeaderBuilderMethodId = 1
+	CollapsingHeaderBuilderIdOpen         CollapsingHeaderBuilderMethodId = 2
+	CollapsingHeaderBuilderIdClose        CollapsingHeaderBuilderMethodId = 3
+	CollapsingHeaderBuilderIdCallSiteCull CollapsingHeaderBuilderMethodId = 4
 )
 
 type ResponseFlags uint32
