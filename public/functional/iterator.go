@@ -1,6 +1,8 @@
 package functional
 
-import "iter"
+import (
+	"iter"
+)
 
 func IterLeftOnly[L, R any](seq iter.Seq2[L, R]) iter.Seq[L] {
 	return func(yield func(L) bool) {
@@ -62,3 +64,33 @@ func MakeIter2FromIter1Indexed[V any](iter1 iter.Seq[V]) iter.Seq2[int, V] {
 type NilIteratorValueType struct{}
 
 var NilIteratorValue = struct{}{}
+
+func MakeSingleValueIterator1[T any](val T) iter.Seq[T] {
+	return func(yield func(T) bool) {
+		yield(val)
+	}
+}
+func MakeSingleValueIterator2[K, V any](key K, val V) iter.Seq2[K, V] {
+	return func(yield func(K, V) bool) {
+		yield(key, val)
+	}
+}
+func MakeIter2FromAlternatedValue[T any](alternatedValues ...T) iter.Seq2[T, T] {
+	return func(yield func(T, T) bool) {
+		l := len(alternatedValues)
+		for i := 0; i < l/2; i++ {
+			if !yield(alternatedValues[2*i], alternatedValues[2*i+1]) {
+				return
+			}
+		}
+	}
+}
+func AppendSeqIter2[K any, V any](ks []K, vs []V, it iter.Seq2[K, V]) (ksOut []K, vsOut []V) {
+	ksOut = ks
+	vsOut = vs
+	for k, v := range it {
+		ksOut = append(ksOut, k)
+		vsOut = append(vsOut, v)
+	}
+	return
+}
