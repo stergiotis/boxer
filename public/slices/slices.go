@@ -33,3 +33,15 @@ func CopySliceString[U ~string, V ~string](src []U, dest []V) (retr []V) {
 	}
 	return
 }
+func CopySliceInterfaceCastable[U any, I any](src []U, dest []I) (retr []I) {
+	retr = slices.Grow(dest, len(src))
+	for i := range src {
+		var u any
+		u = src[i]
+		ut, ok := u.(I)
+		if ok {
+			retr = append(retr, ut)
+		}
+	}
+	return
+}
