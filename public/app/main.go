@@ -2,13 +2,14 @@ package main
 
 import (
 	"os"
-	"slices"
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl"
 	"github.com/stergiotis/boxer/public/dev"
 	"github.com/stergiotis/boxer/public/docgen"
 	"github.com/stergiotis/boxer/public/fffi/compiletime"
+	"github.com/stergiotis/boxer/public/gov"
+	cli2 "github.com/stergiotis/boxer/public/hmi/cli"
 	"github.com/stergiotis/boxer/public/observability"
 	"github.com/stergiotis/boxer/public/observability/coverage"
 	"github.com/stergiotis/boxer/public/observability/logging"
@@ -35,7 +36,7 @@ func mainC() (exitCode int) {
 		Description:          "",
 		DefaultCommand:       "",
 		EnableBashCompletion: false,
-		Flags: slices.Concat(
+		Flags: cli2.FlagsNilRemoved(
 			logging.LoggingFlags,
 			profiling.ProfilingFlags,
 			tracing.TracingFlags,
@@ -43,7 +44,7 @@ func mainC() (exitCode int) {
 			dev.DebuggerFlags,
 			dev.IoOverrideFlags,
 			coverage.CoverageFlags),
-		Commands: []*cli.Command{
+		Commands: cli2.CommandsNilRemoved(
 			dsl.NewCommand(),
 			cbor.NewCommand(),
 			compiletime.NewCommand(nil, nil),
@@ -51,7 +52,8 @@ func mainC() (exitCode int) {
 			observability.NewCliCommand(),
 			docgen.NewDocCli(),
 			dev.NewCliCommand(),
-		},
+			gov.NewCliCommand(),
+		),
 		After: func(context *cli.Context) error {
 			profiling.ProfilingHandleExit(context)
 			tracing.TracingHandleExit(context)

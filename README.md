@@ -63,7 +63,9 @@ Ideally the package name (innermost folder) is discriminative enough to facilita
 Currently, no third-party contributions are accepted.
 
 ## AI Codegen Declaration
-All code and documentation in this repository is human generated, [boxer](https://github.com/stergiotis/boxer) does not contain LLM generated code or documentation.
+Code and documentation until commit https://github.com/stergiotis/boxer/commit/aa78183adc2de0b0266d34f476b543d122af04a7 is 100% human generated.
+Later, code with substantial contributions by LLMs has a build flag to disable in AI free builds.
+LLM generated code is subject to the same coding standards as human generated code.
 
 ## License
 The MIT License (MIT) 2023-2025 - [Panos Stergiotis](https://github.com/stergiotis/). See [LICENSE](LICENSE) for the full license text.
