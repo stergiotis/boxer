@@ -51,6 +51,7 @@ import (
 type I interface { M() }
 type S struct {}
 func (s S) M() {}
+type U uint64
 
 func Mono() {}
 func GenFunc[T any](t T) {}
@@ -161,4 +162,138 @@ func TestAnalyzerService_ErrorPropagation(t *testing.T) {
 		}
 	}
 	assert.Greater(t, errorCount, 0, "expected at least one package load error")
+}
+func TestAnalyzerService_Run_Generics_Detailed(t *testing.T) {
+	// Setup isolated test environment
+	dir := setupTestDir(t)
+
+	// Define code with various generic instantiation scenarios
+	code := `package main
+
+type St struct { val int }
+type I interface { M() }
+
+// Single type parameter
+func Gen[T any](t T) {}
+
+// Multiple type parameters
+func Gen2[A any, B any](a A, b B) {}
+
+func main() {
+	// --- Optimized Cases (Stenciled) ---
+	
+	// 1. Primitives
+	Gen(10)         // int
+	Gen(3.14)       // float64
+	Gen("string")   // string
+
+	// 2. Slices of Primitives
+	Gen([]int{1, 2})
+	
+	// 3. Functions (Explicitly defined as "Optimized" in our logic)
+	f := func() {}
+	Gen(f)
+
+	// 4. Multi-param: All Optimized
+	Gen2(1, "s")
+
+
+	// --- Dictionary/Generic Cases (GCShape shared) ---
+
+	// 5. Pointers (to primitives and structs)
+	i := 10
+	Gen(&i)
+	s := St{}
+	Gen(&s)
+
+	// 6. Structs (Non-primitive)
+	Gen(s)
+
+	// 7. Interfaces
+	var iface I
+	// Instantiation T=I (interface type)
+	Gen(iface)
+
+	// 8. Arrays 
+	// (Arrays are typically not stenciled if treated as memory blocks, 
+	// our logic defaults them to Generic/Dictionary)
+	arr := [2]int{1, 2}
+	Gen(arr)
+
+	// 9. Multi-param: Mixed (One optimized, one dictionary)
+	// Should result in Dictionary dispatch for the whole call
+	Gen2(1, &i)
+}
+`
+	err := os.WriteFile(filepath.Join(dir, "main.go"), []byte(code), 0644)
+	require.NoError(t, err)
+
+	svc := &AnalyzerService{Pattern: dir}
+
+	// Run analysis
+	var results []CallSite
+	for site, err := range svc.Run(context.Background()) {
+		require.NoError(t, err)
+		results = append(results, site)
+	}
+
+	// Helper to filter results by function name
+	findSites := func(callee string) []CallSite {
+		var out []CallSite
+		for _, r := range results {
+			if r.Func == callee {
+				out = append(out, r)
+			}
+		}
+		return out
+	}
+
+	// Helper to count subtypes
+	countSubtype := func(sites []CallSite, sub StaticPolySubtypeE) int {
+		c := 0
+		for _, s := range sites {
+			if s.Type == CallTypeStaticPolymorphic && s.StaticSubtype == sub {
+				c++
+			}
+		}
+		return c
+	}
+
+	// --- Assertions for Gen() ---
+	genCalls := findSites("Gen")
+
+	// We expect 10 calls to Gen in total.
+	assert.Equal(t, 10, len(genCalls))
+
+	// Expected Optimized calls (5):
+	// 1. int
+	// 2. float
+	// 3. string
+	// 4. []int
+	// 5. func()
+	assert.Equal(t, 5, countSubtype(genCalls, StaticPolyOptimized),
+		"Expected 5 Optimized calls (primitives, slices, funcs)")
+
+	// Expected Dictionary calls (5):
+	// 1. *int
+	// 2. *St
+	// 3. St (Struct)
+	// 4. I (Interface)
+	// 5. [2]int (Array)
+	assert.Equal(t, 5, countSubtype(genCalls, StaticPolyGeneric),
+		"Expected 5 Dictionary calls (pointers, structs, interfaces, arrays)")
+
+	// --- Assertions for Gen2() ---
+	gen2Calls := findSites("Gen2")
+
+	// We expect 2 calls to Gen2.
+	assert.Equal(t, 2, len(gen2Calls))
+
+	// Case 1: Gen2(1, "s") -> Both Optimized -> Result Optimized
+	assert.Equal(t, 1, countSubtype(gen2Calls, StaticPolyOptimized),
+		"Multi-param with all primitives should be Optimized")
+
+	// Case 2: Gen2(1, &i) -> Mixed -> Result Dictionary
+	assert.Equal(t, 1, countSubtype(gen2Calls, StaticPolyGeneric),
+		"Multi-param with mixed types should be Dictionary")
 }

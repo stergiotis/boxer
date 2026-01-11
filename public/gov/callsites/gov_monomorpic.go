@@ -16,6 +16,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
+// CallTypeE defines the nature of the call site.
 type CallTypeE uint8
 
 const (
@@ -37,6 +38,27 @@ func (inst CallTypeE) String() string {
 	}
 }
 
+// StaticPolySubtypeE refines the StaticPolymorphic case.
+type StaticPolySubtypeE uint8
+
+const (
+	StaticPolyNone      StaticPolySubtypeE = 0
+	StaticPolyOptimized StaticPolySubtypeE = 1 // Primitives, Strings, Slices of Primitives (Stenciled)
+	StaticPolyGeneric   StaticPolySubtypeE = 2 // Pointers, Interfaces, Complex Structs (Likely Dictionary/Shape)
+)
+
+func (inst StaticPolySubtypeE) String() string {
+	switch inst {
+	case StaticPolyOptimized:
+		return "Optimized"
+	case StaticPolyGeneric:
+		return "Dictionary"
+	default:
+		return ""
+	}
+}
+
+// OriginE defines where the callee lives.
 type OriginE uint8
 
 const (
@@ -59,12 +81,12 @@ func (inst OriginE) String() string {
 }
 
 type CallSite struct {
-	File   string
-	Line   int
-	Func   string
-	Type   CallTypeE
-	Origin OriginE
-	Code   string
+	File          string
+	Line          int
+	Func          string
+	Type          CallTypeE
+	StaticSubtype StaticPolySubtypeE // Only populated if Type == StaticPoly
+	Origin        OriginE
 }
 
 // AnalyzerService controls the analysis logic.
@@ -79,20 +101,14 @@ func (inst *AnalyzerService) Run(ctx context.Context) iter.Seq2[CallSite, error]
 		var err error
 		var loadPattern string
 
-		// Convention: Scoping block for config
 		{
 			cfg = &packages.Config{
 				Mode:    packages.NeedName | packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo | packages.NeedImports,
 				Context: ctx,
 			}
-
-			// FIX: Check if the pattern is a directory.
-			// If it is, run the 'go' command from inside that directory to support
-			// external modules and absolute paths.
-			// Use os.Stat to check if it's a directory.
 			if info, errStat := os.Stat(inst.Pattern); errStat == nil && info.IsDir() {
 				cfg.Dir = inst.Pattern
-				loadPattern = "." // Analyze the root of that directory
+				loadPattern = "."
 			} else {
 				loadPattern = inst.Pattern
 			}
@@ -104,7 +120,6 @@ func (inst *AnalyzerService) Run(ctx context.Context) iter.Seq2[CallSite, error]
 			return
 		}
 
-		// Convention: Iterate packages
 		for pkg, errIter := range inst.iteratePackages(pkgs) {
 			if errIter != nil {
 				if !yield(CallSite{}, eh.Errorf("package load error: %w", errIter)) {
@@ -113,15 +128,11 @@ func (inst *AnalyzerService) Run(ctx context.Context) iter.Seq2[CallSite, error]
 				continue
 			}
 
-			// Convention: Iterate Call Sites inside the package
 			for site, errAnalysis := range inst.scanPackage(pkg) {
 				if errAnalysis != nil {
-					if !yield(CallSite{}, eh.Errorf("analysis error: %w", errAnalysis)) {
-						return
-					}
+					// Convention: We swallow analysis errors for individual nodes but could log them.
 					continue
 				}
-
 				if !yield(site, nil) {
 					return
 				}
@@ -130,7 +141,6 @@ func (inst *AnalyzerService) Run(ctx context.Context) iter.Seq2[CallSite, error]
 	}
 }
 
-// iteratePackages yields valid packages.
 func (inst *AnalyzerService) iteratePackages(pkgs []*packages.Package) iter.Seq2[*packages.Package, error] {
 	return func(yield func(*packages.Package, error) bool) {
 		for _, pkg := range pkgs {
@@ -149,34 +159,21 @@ func (inst *AnalyzerService) iteratePackages(pkgs []*packages.Package) iter.Seq2
 	}
 }
 
-// scanPackage yields every call site found in the package body.
 func (inst *AnalyzerService) scanPackage(pkg *packages.Package) iter.Seq2[CallSite, error] {
 	return func(yield func(CallSite, error) bool) {
-		var fset *token.FileSet
-		var info *types.Info
-
-		fset = pkg.Fset
-		info = pkg.TypesInfo
+		fset := pkg.Fset
+		info := pkg.TypesInfo
 
 		for _, file := range pkg.Syntax {
-			// Traverse AST
 			ast.Inspect(file, func(n ast.Node) bool {
 				if n == nil {
 					return true
 				}
-
 				if call, ok := n.(*ast.CallExpr); ok {
-					var site CallSite
-					var errAnalyze error
-
-					site, errAnalyze = inst.analyzeCall(call, fset, info, pkg.Types)
-					if errAnalyze != nil {
-						// In strict analysis, we might want to yield this error.
-						// For this tool, we assume some nodes are not analyzable,
-						// but strictly we should check.
+					site, err := inst.analyzeCall(call, fset, info, pkg.Types)
+					if err != nil {
 						return true
 					}
-
 					if !yield(site, nil) {
 						return false
 					}
@@ -200,58 +197,51 @@ func (inst *AnalyzerService) analyzeCall(call *ast.CallExpr, fset *token.FileSet
 		Line: pos.Line,
 	}
 
-	// Case 1: Method Call (x.Method())
-	if selExpr, ok := fun.(*ast.SelectorExpr); ok {
-		var selection *types.Selection
-		var okSel bool
+	// ---------------------------------------------
+	// Helper: Determine Identifier for Lookup
+	// ---------------------------------------------
+	var callIdent *ast.Ident
 
-		// Retrieve the Selection object from type info
-		selection, okSel = info.Selections[selExpr]
-		if okSel {
-			site.Func = selection.Obj().Name()
-			site.Origin = inst.determineOrigin(selection.Obj().Pkg(), currentPkg)
-
-			// Check if the receiver (the 'x' in x.Method) is an interface.
-			// If it is, the dispatch happens at runtime (itab lookup).
-			if types.IsInterface(selection.Recv()) {
-				site.Type = CallTypeDynamicPolymorphic
-				return
-			}
-
-			// Check for Generic Types (Statically Polymorphic)
-			// e.g. Receiver is a Type Param or instantiated generic type
-			if inst.isGenericType(selection.Recv()) {
-				site.Type = CallTypeStaticPolymorphic
-				return
-			}
-
-			// Otherwise, it's a concrete struct method -> Monomorphic
-			site.Type = CallTypeMonomorphic
-			return
-		}
-	}
-
-	// Case 2: Function Call (Function(), funcVar(), or GenericFunc())
-	var ident *ast.Ident
 	switch t := fun.(type) {
 	case *ast.Ident:
-		ident = t
+		callIdent = t
 	case *ast.SelectorExpr:
-		ident = t.Sel
+		callIdent = t.Sel
+	case *ast.IndexExpr: // Explicit generic: Func[T](...)
+		if ident, ok := t.X.(*ast.Ident); ok {
+			callIdent = ident
+		} else if sel, ok := t.X.(*ast.SelectorExpr); ok {
+			callIdent = sel.Sel
+		}
+	case *ast.IndexListExpr: // Explicit generic multi-param: Func[T, U](...)
+		if ident, ok := t.X.(*ast.Ident); ok {
+			callIdent = ident
+		} else if sel, ok := t.X.(*ast.SelectorExpr); ok {
+			callIdent = sel.Sel
+		}
 	default:
-		// Indirect calls: (func(){})(), slice[0](), etc.
+		// Indirect/Closure call
 		site.Func = "indirect"
 		site.Type = CallTypeDynamicPolymorphic
 		site.Origin = OriginLocal
 		return
 	}
 
-	var obj types.Object
-	obj = info.Uses[ident]
+	// ---------------------------------------------
+	// Resolution
+	// ---------------------------------------------
+	if callIdent == nil {
+		// Should have been caught by default case, but safety first
+		site.Func = "unknown"
+		site.Type = CallTypeDynamicPolymorphic
+		return
+	}
 
+	// Look up the object
+	obj := info.Uses[callIdent]
 	if obj == nil {
-		// Builtins (len, cap, etc.) are Monomorphic
-		site.Func = ident.Name
+		// Builtins (len, make, etc.)
+		site.Func = callIdent.Name
 		site.Type = CallTypeMonomorphic
 		site.Origin = OriginStdLib
 		return
@@ -260,31 +250,94 @@ func (inst *AnalyzerService) analyzeCall(call *ast.CallExpr, fset *token.FileSet
 	site.Func = obj.Name()
 	site.Origin = inst.determineOrigin(obj.Pkg(), currentPkg)
 
-	// If the object is not a function (e.g., it's a var of type func), it's Dynamic.
+	// Check 1: Is it a variable of type func? (Dynamic)
 	if _, isFunc := obj.(*types.Func); !isFunc {
 		site.Type = CallTypeDynamicPolymorphic
 		return
 	}
 
-	// If the function has Type Parameters, it is Statically Polymorphic.
-	if inst.isGenericFunc(obj) {
+	// Check 2: Method Call via Interface?
+	if selExpr, ok := fun.(*ast.SelectorExpr); ok {
+		if sel, ok := info.Selections[selExpr]; ok {
+			if types.IsInterface(sel.Recv()) {
+				site.Type = CallTypeDynamicPolymorphic
+				return
+			}
+		}
+	}
+
+	// Check 3: Is it a Generic Instantiation? (Static Polymorphic)
+	// info.Instances contains data if the call uses Type Parameters (explicit or inferred)
+	if instance, isInstance := info.Instances[callIdent]; isInstance {
 		site.Type = CallTypeStaticPolymorphic
+		site.StaticSubtype = inst.classifyTypeArgs(instance.TypeArgs)
 		return
 	}
 
-	// Standard function call
+	// Check 4: Is the receiver generic? (Method on generic type)
+	// e.g., func (t T) Method()
+	// This is also static polymorphism (dictionary dispatch on receiver).
+	if selExpr, ok := fun.(*ast.SelectorExpr); ok {
+		if sel, ok := info.Selections[selExpr]; ok {
+			if inst.isGenericType(sel.Recv()) {
+				site.Type = CallTypeStaticPolymorphic
+				// For receivers, we treat it as Generic/Dictionary usually,
+				// unless we analyzed the receiver's instantiation type deeply.
+				// For simplicity, we flag as Generic (Dictionary) unless we inspect the variable's type.
+				site.StaticSubtype = StaticPolyGeneric
+				return
+			}
+		}
+	}
+
+	// Otherwise: Standard Monomorphic
 	site.Type = CallTypeMonomorphic
 	return
 }
 
-func (inst *AnalyzerService) isGenericFunc(obj types.Object) bool {
-	var sig *types.Signature
-	var ok bool
-	sig, ok = obj.Type().(*types.Signature)
-	if !ok {
+// classifyTypeArgs checks if all type arguments are "Optimized" (Primitives, etc.)
+func (inst *AnalyzerService) classifyTypeArgs(args *types.TypeList) StaticPolySubtypeE {
+	n := args.Len()
+	for i := 0; i < n; i++ {
+		t := args.At(i)
+		if !inst.isOptimizedType(t) {
+			// If ANY arg is complex/pointer/interface, the whole call likely uses dictionary/shape
+			return StaticPolyGeneric
+		}
+	}
+	return StaticPolyOptimized
+}
+
+// isOptimizedType checks if the type is Primitive, String, Slice of Primitive, or Function.
+func (inst *AnalyzerService) isOptimizedType(t types.Type) bool {
+	// Unwrap names (e.g., type MyInt int)
+	if named, ok := t.(*types.Named); ok {
+		t = named.Underlying()
+	}
+
+	switch u := t.(type) {
+	case *types.Basic:
+		// Primitives + String
+		// Bool, Int..., Uint..., Float..., Complex..., String
+		// UnsafePointer is usually BasicKind too, but let's stick to safe primitives + string
+		kind := u.Kind()
+		if kind == types.String || (kind >= types.Bool && kind <= types.Complex128) {
+			return true
+		}
+		return false
+
+	case *types.Slice:
+		// Recursive check: Slice of Primitive
+		return inst.isOptimizedType(u.Elem())
+
+	case *types.Signature:
+		// User specifically listed "functions" as allowed optimized types.
+		return true
+
+	default:
+		// Pointers (*T), Structs, Interfaces, Maps, Channels, Arrays (unless primitive?)
 		return false
 	}
-	return sig.TypeParams().Len() > 0
 }
 
 func (inst *AnalyzerService) isGenericType(tp types.Type) bool {
@@ -314,53 +367,3 @@ func (inst *AnalyzerService) determineOrigin(pkg *types.Package, current *types.
 	}
 	return OriginStdLib
 }
-
-//func main() {
-//	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
-//
-//	cmd := &cli.Command{
-//		Name:  "go-call-check",
-//		Usage: "Categorizes all call sites (Mono/StaticPoly/DynamicPoly)",
-//		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
-//			var pattern string
-//			if cmd.NArg() > 0 {
-//				pattern = cmd.Args().Get(0)
-//			} else {
-//				pattern = "."
-//			}
-//
-//			svc := &AnalyzerService{Pattern: pattern}
-//
-//			// Convention: Iterate the results and handle logging here (The Consumer)
-//			for site, errIter := range svc.Run(ctx) {
-//				if errIter != nil {
-//					// We log the error but continue if possible, or abort depending on severity.
-//					// For this CLI, we log and continue.
-//					log.Error().Err(errIter).Msg("analysis error")
-//					continue
-//				}
-//
-//				// Logging Logic moved here
-//				var event *zerolog.Event
-//				if site.Type == CallTypeDynamicPolymorphic {
-//					event = log.Warn()
-//				} else {
-//					event = log.Info()
-//				}
-//
-//				event.
-//					Str("file", site.File).
-//					Int("line", site.Line).
-//					Str("callee", site.Func).
-//					Str("type", site.Type.String()).
-//					Str("origin", site.Origin.String()).
-//					Msg("call site detected")
-//			}
-//			return
-//		},
-//	}
-//
-//	if err := cmd.Run(context.Background(), os.Args); err != nil {
-//		log.Fatal().Err(err).Msg("fatal error")
-//	}
-//}
