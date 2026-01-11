@@ -83,3 +83,24 @@ func BuildEnumStringFlagStr[V ~string](allValues []V, defaultValue V, name strin
 	}
 	return
 }
+func removeNil[S ~[]E, E comparable](s S) S {
+	return slices.DeleteFunc(s, func(e E) bool {
+		return e == nil
+	})
+}
+func CommandsNilRemoved(s ...*cli.Command) []*cli.Command {
+	return removeNil(s)
+}
+func FlagsNilRemoved(s ...[]cli.Flag) (r []cli.Flag) {
+	r = make([]cli.Flag, len(s)*2)
+	for _, f := range s {
+		if len(f) > 0 {
+			for _, f2 := range f {
+				if f2 != nil {
+					r = append(r, f2)
+				}
+			}
+		}
+	}
+	return
+}
