@@ -70,8 +70,10 @@ func (inst *Renamer) walkGoFiles(root string) iter.Seq2[string, error] {
 			return nil
 		})
 
-		log.Warn().Err(err).Msg("error while processing path, skipping")
-		err = nil
+		if err != nil {
+			log.Warn().Err(err).Msg("error while processing path, skipping")
+			err = nil
+		}
 	}
 }
 
