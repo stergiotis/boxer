@@ -38,24 +38,70 @@ func (inst CallTypeE) String() string {
 	}
 }
 
-// StaticPolySubtypeE refines the StaticPolymorphic case.
+// StaticPolySubtypeE refines the StaticPolymorphic case with granular types.
 type StaticPolySubtypeE uint8
 
 const (
-	StaticPolyNone      StaticPolySubtypeE = 0
-	StaticPolyOptimized StaticPolySubtypeE = 1 // Primitives, Strings, Slices of Primitives (Stenciled)
-	StaticPolyGeneric   StaticPolySubtypeE = 2 // Pointers, Interfaces, Complex Structs (Likely Dictionary/Shape)
+	SubtypeNone StaticPolySubtypeE = 0
+
+	// --- Stenciled / "Good" Cases ---
+	SubtypeBasic      StaticPolySubtypeE = 1 // int, float, bool, complex
+	SubtypeString     StaticPolySubtypeE = 2 // string
+	SubtypeSliceBasic StaticPolySubtypeE = 3 // []int, []string, etc.
+	SubtypeFunc       StaticPolySubtypeE = 4 // func() (User defined as "good")
+
+	// --- Shape / Dictionary Cases ---
+	SubtypePointer      StaticPolySubtypeE = 5  // *T
+	SubtypeStruct       StaticPolySubtypeE = 6  // struct { ... }
+	SubtypeInterface    StaticPolySubtypeE = 7  // interface { ... }
+	SubtypeMap          StaticPolySubtypeE = 8  // map[K]V
+	SubtypeChan         StaticPolySubtypeE = 9  // chan T
+	SubtypeArray        StaticPolySubtypeE = 10 // [N]T
+	SubtypeSliceGeneric StaticPolySubtypeE = 11 // []interface{}, []*T
+	SubtypeTypeParam    StaticPolySubtypeE = 12 // T (Unresolved inside generic func)
 )
 
 func (inst StaticPolySubtypeE) String() string {
 	switch inst {
-	case StaticPolyOptimized:
-		return "Optimized"
-	case StaticPolyGeneric:
-		return "Dictionary"
+	case SubtypeBasic:
+		return "Basic"
+	case SubtypeString:
+		return "String"
+	case SubtypeSliceBasic:
+		return "SliceBasic"
+	case SubtypeFunc:
+		return "Func"
+	case SubtypePointer:
+		return "Pointer"
+	case SubtypeStruct:
+		return "Struct"
+	case SubtypeInterface:
+		return "Interface"
+	case SubtypeMap:
+		return "Map"
+	case SubtypeChan:
+		return "Chan"
+	case SubtypeArray:
+		return "Array"
+	case SubtypeSliceGeneric:
+		return "SliceGeneric"
+	case SubtypeTypeParam:
+		return "TypeParam"
 	default:
-		return ""
+		return "Unknown"
 	}
+}
+
+type CallSite struct {
+	File   string
+	Line   int
+	Func   string
+	Type   CallTypeE
+	Origin OriginE
+
+	// TypeArgs contains the classification of every type argument.
+	// Populated only if Type == CallTypeStaticPolymorphic.
+	TypeArgs []StaticPolySubtypeE
 }
 
 // OriginE defines where the callee lives.
@@ -78,15 +124,6 @@ func (inst OriginE) String() string {
 	default:
 		return "Unknown"
 	}
-}
-
-type CallSite struct {
-	File          string
-	Line          int
-	Func          string
-	Type          CallTypeE
-	StaticSubtype StaticPolySubtypeE // Only populated if Type == StaticPoly
-	Origin        OriginE
 }
 
 // AnalyzerService controls the analysis logic.
@@ -197,50 +234,41 @@ func (inst *AnalyzerService) analyzeCall(call *ast.CallExpr, fset *token.FileSet
 		Line: pos.Line,
 	}
 
-	// ---------------------------------------------
-	// Helper: Determine Identifier for Lookup
-	// ---------------------------------------------
+	// 1. Identify the Call Identifier
 	var callIdent *ast.Ident
-
 	switch t := fun.(type) {
 	case *ast.Ident:
 		callIdent = t
 	case *ast.SelectorExpr:
 		callIdent = t.Sel
-	case *ast.IndexExpr: // Explicit generic: Func[T](...)
+	case *ast.IndexExpr: // Func[T]
 		if ident, ok := t.X.(*ast.Ident); ok {
 			callIdent = ident
 		} else if sel, ok := t.X.(*ast.SelectorExpr); ok {
 			callIdent = sel.Sel
 		}
-	case *ast.IndexListExpr: // Explicit generic multi-param: Func[T, U](...)
+	case *ast.IndexListExpr: // Func[A, B]
 		if ident, ok := t.X.(*ast.Ident); ok {
 			callIdent = ident
 		} else if sel, ok := t.X.(*ast.SelectorExpr); ok {
 			callIdent = sel.Sel
 		}
 	default:
-		// Indirect/Closure call
 		site.Func = "indirect"
 		site.Type = CallTypeDynamicPolymorphic
 		site.Origin = OriginLocal
 		return
 	}
 
-	// ---------------------------------------------
-	// Resolution
-	// ---------------------------------------------
 	if callIdent == nil {
-		// Should have been caught by default case, but safety first
 		site.Func = "unknown"
 		site.Type = CallTypeDynamicPolymorphic
 		return
 	}
 
-	// Look up the object
+	// 2. Resolve Object
 	obj := info.Uses[callIdent]
 	if obj == nil {
-		// Builtins (len, make, etc.)
 		site.Func = callIdent.Name
 		site.Type = CallTypeMonomorphic
 		site.Origin = OriginStdLib
@@ -250,13 +278,13 @@ func (inst *AnalyzerService) analyzeCall(call *ast.CallExpr, fset *token.FileSet
 	site.Func = obj.Name()
 	site.Origin = inst.determineOrigin(obj.Pkg(), currentPkg)
 
-	// Check 1: Is it a variable of type func? (Dynamic)
+	// Check: Dynamic (Func Variable)
 	if _, isFunc := obj.(*types.Func); !isFunc {
 		site.Type = CallTypeDynamicPolymorphic
 		return
 	}
 
-	// Check 2: Method Call via Interface?
+	// Check: Dynamic (Interface Method)
 	if selExpr, ok := fun.(*ast.SelectorExpr); ok {
 		if sel, ok := info.Selections[selExpr]; ok {
 			if types.IsInterface(sel.Recv()) {
@@ -266,46 +294,115 @@ func (inst *AnalyzerService) analyzeCall(call *ast.CallExpr, fset *token.FileSet
 		}
 	}
 
-	// Check 3: Is it a Generic Instantiation? (Static Polymorphic)
-	// info.Instances contains data if the call uses Type Parameters (explicit or inferred)
+	// 3. Check for Static Polymorphism (Generics)
+
+	// Case A: Generic Function Instantiation (Explicit or Inferred)
+	// info.Instances contains the TypeArgs for the call
 	if instance, isInstance := info.Instances[callIdent]; isInstance {
 		site.Type = CallTypeStaticPolymorphic
-		site.StaticSubtype = inst.classifyTypeArgs(instance.TypeArgs)
+		site.TypeArgs = inst.classifyTypeArgs(instance.TypeArgs)
 		return
 	}
 
-	// Check 4: Is the receiver generic? (Method on generic type)
-	// e.g., func (t T) Method()
-	// This is also static polymorphism (dictionary dispatch on receiver).
+	// Case B: Method on Generic Receiver
+	// e.g. func (g G[T]) Method() called as g.Method()
 	if selExpr, ok := fun.(*ast.SelectorExpr); ok {
 		if sel, ok := info.Selections[selExpr]; ok {
-			if inst.isGenericType(sel.Recv()) {
+			// We check if the receiver type is a Named type with type arguments
+			if named, ok := sel.Recv().(*types.Named); ok && named.TypeArgs().Len() > 0 {
 				site.Type = CallTypeStaticPolymorphic
-				// For receivers, we treat it as Generic/Dictionary usually,
-				// unless we analyzed the receiver's instantiation type deeply.
-				// For simplicity, we flag as Generic (Dictionary) unless we inspect the variable's type.
-				site.StaticSubtype = StaticPolyGeneric
+				site.TypeArgs = inst.classifyTypeArgs(named.TypeArgs())
+				return
+			}
+			// Special case: Receiver is a TypeParam itself (t.Method())
+			if _, ok := sel.Recv().(*types.TypeParam); ok {
+				site.Type = CallTypeStaticPolymorphic
+				site.TypeArgs = []StaticPolySubtypeE{SubtypeTypeParam}
 				return
 			}
 		}
 	}
 
-	// Otherwise: Standard Monomorphic
 	site.Type = CallTypeMonomorphic
 	return
 }
 
-// classifyTypeArgs checks if all type arguments are "Optimized" (Primitives, etc.)
-func (inst *AnalyzerService) classifyTypeArgs(args *types.TypeList) StaticPolySubtypeE {
+// classifyTypeArgs maps a list of Go types to our granular Subtype enum.
+func (inst *AnalyzerService) classifyTypeArgs(args *types.TypeList) []StaticPolySubtypeE {
+	var out []StaticPolySubtypeE
 	n := args.Len()
+
+	out = make([]StaticPolySubtypeE, 0, n)
+
 	for i := 0; i < n; i++ {
 		t := args.At(i)
-		if !inst.isOptimizedType(t) {
-			// If ANY arg is complex/pointer/interface, the whole call likely uses dictionary/shape
-			return StaticPolyGeneric
-		}
+		out = append(out, inst.classifyType(t))
 	}
-	return StaticPolyOptimized
+	return out
+}
+
+// classifyType inspects a single type and returns its specific Subtype category.
+func (inst *AnalyzerService) classifyType(t types.Type) StaticPolySubtypeE {
+	// Unwrap Named types to get underlying structure for shape analysis
+	// (unless it's a TypeParam)
+	if _, isParam := t.(*types.TypeParam); isParam {
+		return SubtypeTypeParam
+	}
+	if named, ok := t.(*types.Named); ok {
+		t = named.Underlying()
+	}
+
+	switch u := t.(type) {
+	case *types.Basic:
+		kind := u.Kind()
+		if kind == types.String {
+			return SubtypeString
+		}
+		if kind >= types.Bool && kind <= types.Complex128 {
+			return SubtypeBasic // Int, Float, Bool, Complex
+		}
+		// UnsafePointer etc. fall here, treated as Basic or Pointer?
+		// UnsafePointer is kind=26. Let's treat as Pointer conceptually for safety.
+		if kind == types.UnsafePointer {
+			return SubtypePointer
+		}
+		return SubtypeBasic
+
+	case *types.Slice:
+		// Check element type for "Slice of Primitives" optimization
+		elemSub := inst.classifyType(u.Elem())
+		if elemSub == SubtypeBasic || elemSub == SubtypeString {
+			return SubtypeSliceBasic
+		}
+		return SubtypeSliceGeneric
+
+	case *types.Pointer:
+		return SubtypePointer
+
+	case *types.Struct:
+		return SubtypeStruct
+
+	case *types.Interface:
+		return SubtypeInterface
+
+	case *types.Map:
+		return SubtypeMap
+
+	case *types.Chan:
+		return SubtypeChan
+
+	case *types.Array:
+		return SubtypeArray
+
+	case *types.Signature:
+		return SubtypeFunc
+
+	case *types.TypeParam:
+		return SubtypeTypeParam
+
+	default:
+		return SubtypeNone
+	}
 }
 
 // isOptimizedType checks if the type is Primitive, String, Slice of Primitive, or Function.

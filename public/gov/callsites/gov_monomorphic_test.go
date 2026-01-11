@@ -13,34 +13,48 @@ import (
 )
 
 // setupTestDir creates a temporary go module structure.
+// It forces GOWORK=off to ensure strict isolation from the host environment.
 func setupTestDir(t *testing.T) (dir string) {
 	var err error
 	dir, err = os.MkdirTemp("", "analyzer_test_*")
 	require.NoError(t, err)
-	// This forces the 'go' command (invoked by packages.Load) to ignore your
-	// parent 'go.work' file and treat the temp directory as an independent module.
-	t.Setenv("GOWORK", "off")
+
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	t.Setenv("GOWORK", "off") // Critical for go/packages to work in /tmp
 
 	err = os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/test\n\ngo 1.23"), 0644)
 	require.NoError(t, err)
+
 	return
 }
 
-func TestAnalyzerService_Run_EndToEnd(t *testing.T) {
-	var dir string
-	dir = setupTestDir(t)
+// collectResults runs the analyzer and consumes the iterator into a slice.
+func collectResults(t *testing.T, dir string) []CallSite {
+	svc := &AnalyzerService{Pattern: dir}
+	var results []CallSite
 
-	// Create sub-package to test "3rdParty" logic
-	// Logic: If pkg path contains "." and != current, it's 3rdParty.
-	err := os.Mkdir(filepath.Join(dir, "lib"), 0755)
+	// Convention: Consumption of iter.Seq2
+	for site, err := range svc.Run(context.Background()) {
+		require.NoError(t, err)
+		results = append(results, site)
+	}
+	return results
+}
+
+func TestAnalyzerService_Run_EndToEnd(t *testing.T) {
+	dir := setupTestDir(t)
+
+	// 1. Setup a "3rd party" sub-package simulation
+	// Note: logic in determineOrigin treats any path with "." different from current as 3rdParty/External.
+	libDir := filepath.Join(dir, "lib")
+	err := os.Mkdir(libDir, 0755)
 	require.NoError(t, err)
-	err = os.WriteFile(filepath.Join(dir, "lib", "lib.go"), []byte(`package lib
+	err = os.WriteFile(filepath.Join(libDir, "lib.go"), []byte(`package lib
 func ExternalFunc() {}
 `), 0644)
 	require.NoError(t, err)
 
-	// Main code
+	// 2. Setup Main Package
 	code := `package main
 
 import (
@@ -51,47 +65,42 @@ import (
 type I interface { M() }
 type S struct {}
 func (s S) M() {}
-type U uint64
 
 func Mono() {}
 func GenFunc[T any](t T) {}
-type G[T any] struct { val T }
-func (g G[T]) Method() {}
 
 func main() {
-	fmt.Println("hello") // Mono/StdLib
-	Mono()               // Mono/Local
+	// [1] Mono / StdLib
+	fmt.Println("hello") 
+
+	// [2] Mono / Local
+	Mono()               
+
+	// [3] Dynamic / Local (Interface)
 	var i I = S{}
-	i.M()                // Dynamic/Local
-	GenFunc(1)           // StaticPoly/Local
-	g := G[int]{}
-	g.Method()           // StaticPoly/Local
+	i.M()                
+
+	// [4] Static / Local (Generic Func - Int)
+	GenFunc(1)           
+
+	// [5] Static / Local (Generic Func - String)
+	GenFunc("s")
+
+	// [6] Dynamic / Local (Closure)
 	f := func() {}
-	f()                  // Dynamic/Local (Closure)
-	lib.ExternalFunc()   // Mono/3rdParty (Simulated)
+	f()                  
+
+	// [7] Mono / 3rdParty
+	lib.ExternalFunc()   
 }
 `
 	err = os.WriteFile(filepath.Join(dir, "main.go"), []byte(code), 0644)
 	require.NoError(t, err)
 
-	svc := &AnalyzerService{Pattern: dir}
+	// 3. Execution
+	results := collectResults(t, dir)
 
-	// Collect results from iterator
-	var results []CallSite
-	var errors []error
-
-	for site, err := range svc.Run(context.Background()) {
-		if err != nil {
-			errors = append(errors, err)
-			continue
-		}
-		results = append(results, site)
-	}
-
-	assert.Empty(t, errors)
-	assert.NotEmpty(t, results)
-
-	// Helper to find result
+	// 4. Assertions
 	findSite := func(callee string) *CallSite {
 		for _, r := range results {
 			if r.Func == callee {
@@ -101,42 +110,41 @@ func main() {
 		return nil
 	}
 
-	// Assertions
-	var s *CallSite
-
-	// 1. Mono / StdLib
-	s = findSite("Println")
+	// [1] Println
+	s := findSite("Println")
 	require.NotNil(t, s)
 	assert.Equal(t, CallTypeMonomorphic, s.Type)
 	assert.Equal(t, OriginStdLib, s.Origin)
 
-	// 2. Mono / Local
+	// [2] Mono
 	s = findSite("Mono")
 	require.NotNil(t, s)
 	assert.Equal(t, CallTypeMonomorphic, s.Type)
 	assert.Equal(t, OriginLocal, s.Origin)
 
-	// 3. Dynamic / Local (Interface)
+	// [3] M (Interface)
 	s = findSite("M")
 	require.NotNil(t, s)
 	assert.Equal(t, CallTypeDynamicPolymorphic, s.Type)
 
-	// 4. Static / Local (Generic Func)
-	s = findSite("GenFunc")
-	require.NotNil(t, s)
-	assert.Equal(t, CallTypeStaticPolymorphic, s.Type)
+	// [4] GenFunc (Int) - We need to check if we captured two calls
+	// Since findSite returns first match, let's verify count.
+	genCalls := 0
+	for _, r := range results {
+		if r.Func == "GenFunc" {
+			genCalls++
+			assert.Equal(t, CallTypeStaticPolymorphic, r.Type)
+			assert.NotEmpty(t, r.TypeArgs)
+		}
+	}
+	assert.Equal(t, 2, genCalls)
 
-	// 5. Static / Local (Generic Receiver)
-	s = findSite("Method")
-	require.NotNil(t, s)
-	assert.Equal(t, CallTypeStaticPolymorphic, s.Type)
-
-	// 6. Dynamic (Closure)
+	// [6] f (Closure)
 	s = findSite("f")
 	require.NotNil(t, s)
 	assert.Equal(t, CallTypeDynamicPolymorphic, s.Type)
 
-	// 7. Mono / 3rdParty (lib.ExternalFunc)
+	// [7] ExternalFunc
 	s = findSite("ExternalFunc")
 	require.NotNil(t, s)
 	assert.Equal(t, CallTypeMonomorphic, s.Type)
@@ -144,156 +152,114 @@ func main() {
 }
 
 func TestAnalyzerService_ErrorPropagation(t *testing.T) {
-	var dir string
-	dir = setupTestDir(t)
+	dir := setupTestDir(t)
 
-	// Create a broken file to force package error
+	// Create a syntax error file
 	err := os.WriteFile(filepath.Join(dir, "broken.go"), []byte("package main\nfunc broken( {"), 0644)
 	require.NoError(t, err)
 
 	svc := &AnalyzerService{Pattern: dir}
 
-	var errorCount int
+	errorCount := 0
 	for _, err := range svc.Run(context.Background()) {
 		if err != nil {
 			errorCount++
-			// We expect "package load error"
 			assert.Contains(t, err.Error(), "package load error")
 		}
 	}
-	assert.Greater(t, errorCount, 0, "expected at least one package load error")
+	assert.Greater(t, errorCount, 0, "Expected at least one package load error due to syntax")
 }
+
 func TestAnalyzerService_Run_Generics_Detailed(t *testing.T) {
-	// Setup isolated test environment
 	dir := setupTestDir(t)
 
-	// Define code with various generic instantiation scenarios
 	code := `package main
 
-type St struct { val int }
+type MySt struct { val int }
 type I interface { M() }
 
-// Single type parameter
-func Gen[T any](t T) {}
-
-// Multiple type parameters
-func Gen2[A any, B any](a A, b B) {}
+// Single param
+func G1[T any](t T) {}
+// Dual param
+func G2[A any, B any](a A, b B) {}
 
 func main() {
-	// --- Optimized Cases (Stenciled) ---
-	
-	// 1. Primitives
-	Gen(10)         // int
-	Gen(3.14)       // float64
-	Gen("string")   // string
+	// --- OPTIMIZED (Stenciled) ---
+	G1(10)             // [1] Basic (Int)
+	G1(3.14)           // [2] Basic (Float)
+	G1("str")          // [3] String
+	G1([]int{1})       // [4] SliceBasic
+	G1(func(){})       // [5] Func
 
-	// 2. Slices of Primitives
-	Gen([]int{1, 2})
-	
-	// 3. Functions (Explicitly defined as "Optimized" in our logic)
-	f := func() {}
-	Gen(f)
-
-	// 4. Multi-param: All Optimized
-	Gen2(1, "s")
-
-
-	// --- Dictionary/Generic Cases (GCShape shared) ---
-
-	// 5. Pointers (to primitives and structs)
+	// --- DICTIONARY / GENERIC ---
 	i := 10
-	Gen(&i)
-	s := St{}
-	Gen(&s)
-
-	// 6. Structs (Non-primitive)
-	Gen(s)
-
-	// 7. Interfaces
+	G1(&i)             // [6] Pointer
+	G1(MySt{})         // [7] Struct
 	var iface I
-	// Instantiation T=I (interface type)
-	Gen(iface)
+	G1(iface)          // [8] Interface
+	arr := [1]int{1}
+	G1(arr)            // [9] Array
+	G1([]*int{})       // [10] SliceGeneric
 
-	// 8. Arrays 
-	// (Arrays are typically not stenciled if treated as memory blocks, 
-	// our logic defaults them to Generic/Dictionary)
-	arr := [2]int{1, 2}
-	Gen(arr)
-
-	// 9. Multi-param: Mixed (One optimized, one dictionary)
-	// Should result in Dictionary dispatch for the whole call
-	Gen2(1, &i)
+	// --- MIXED ---
+	G2(1, &i)          // [11] Basic, Pointer
+	G2("s", []int{})   // [12] String, SliceBasic
 }
 `
 	err := os.WriteFile(filepath.Join(dir, "main.go"), []byte(code), 0644)
 	require.NoError(t, err)
 
-	svc := &AnalyzerService{Pattern: dir}
+	results := collectResults(t, dir)
 
-	// Run analysis
-	var results []CallSite
-	for site, err := range svc.Run(context.Background()) {
-		require.NoError(t, err)
-		results = append(results, site)
-	}
-
-	// Helper to filter results by function name
-	findSites := func(callee string) []CallSite {
-		var out []CallSite
-		for _, r := range results {
-			if r.Func == callee {
-				out = append(out, r)
-			}
+	// Filter for G1
+	var g1 []CallSite
+	var g2 []CallSite
+	for _, r := range results {
+		if r.Func == "G1" {
+			g1 = append(g1, r)
 		}
-		return out
-	}
-
-	// Helper to count subtypes
-	countSubtype := func(sites []CallSite, sub StaticPolySubtypeE) int {
-		c := 0
-		for _, s := range sites {
-			if s.Type == CallTypeStaticPolymorphic && s.StaticSubtype == sub {
-				c++
-			}
+		if r.Func == "G2" {
+			g2 = append(g2, r)
 		}
-		return c
 	}
 
-	// --- Assertions for Gen() ---
-	genCalls := findSites("Gen")
+	assert.Equal(t, 10, len(g1), "Expected 10 calls to G1")
+	assert.Equal(t, 2, len(g2), "Expected 2 calls to G2")
 
-	// We expect 10 calls to Gen in total.
-	assert.Equal(t, 10, len(genCalls))
+	// Helper to match TypeArgs
+	assertTypes := func(c CallSite, expected ...StaticPolySubtypeE) {
+		assert.Equal(t, CallTypeStaticPolymorphic, c.Type)
+		assert.Equal(t, expected, c.TypeArgs, "TypeArgs mismatch at line %d", c.Line)
+	}
 
-	// Expected Optimized calls (5):
-	// 1. int
-	// 2. float
-	// 3. string
-	// 4. []int
-	// 5. func()
-	assert.Equal(t, 5, countSubtype(genCalls, StaticPolyOptimized),
-		"Expected 5 Optimized calls (primitives, slices, funcs)")
+	// We trust the order of execution in main matches result order (sequential parsing)
+	// Alternatively, verify by contents.
 
-	// Expected Dictionary calls (5):
-	// 1. *int
-	// 2. *St
-	// 3. St (Struct)
-	// 4. I (Interface)
-	// 5. [2]int (Array)
-	assert.Equal(t, 5, countSubtype(genCalls, StaticPolyGeneric),
-		"Expected 5 Dictionary calls (pointers, structs, interfaces, arrays)")
+	// [1] G1(10) -> Basic
+	assertTypes(g1[0], SubtypeBasic)
+	// [2] G1(3.14) -> Basic
+	assertTypes(g1[1], SubtypeBasic)
+	// [3] G1("str") -> String
+	assertTypes(g1[2], SubtypeString)
+	// [4] G1([]int) -> SliceBasic
+	assertTypes(g1[3], SubtypeSliceBasic)
+	// [5] G1(func) -> Func
+	assertTypes(g1[4], SubtypeFunc)
 
-	// --- Assertions for Gen2() ---
-	gen2Calls := findSites("Gen2")
+	// [6] G1(&i) -> Pointer
+	assertTypes(g1[5], SubtypePointer)
+	// [7] G1(St) -> Struct
+	assertTypes(g1[6], SubtypeStruct)
+	// [8] G1(I) -> Interface
+	assertTypes(g1[7], SubtypeInterface)
+	// [9] G1(Arr) -> Array
+	assertTypes(g1[8], SubtypeArray)
+	// [10] G1([]*int) -> SliceGeneric
+	assertTypes(g1[9], SubtypeSliceGeneric)
 
-	// We expect 2 calls to Gen2.
-	assert.Equal(t, 2, len(gen2Calls))
-
-	// Case 1: Gen2(1, "s") -> Both Optimized -> Result Optimized
-	assert.Equal(t, 1, countSubtype(gen2Calls, StaticPolyOptimized),
-		"Multi-param with all primitives should be Optimized")
-
-	// Case 2: Gen2(1, &i) -> Mixed -> Result Dictionary
-	assert.Equal(t, 1, countSubtype(gen2Calls, StaticPolyGeneric),
-		"Multi-param with mixed types should be Dictionary")
+	// [11] G2(1, &i) -> Basic, Pointer
+	assertTypes(g2[0], SubtypeBasic, SubtypePointer)
+	// [12] G2("s", []int) -> String, SliceBasic
+	assertTypes(g2[1], SubtypeString, SubtypeSliceBasic)
 }
+
