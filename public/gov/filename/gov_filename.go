@@ -85,17 +85,25 @@ func (inst *Renamer) processPath(oldPath string) (err error) {
 
 	dir, filename = filepath.Split(oldPath)
 
-	var name naming.StylableName
-	name, err = naming.MakeStylableName(filepath.Base(filename))
+	prefix, suffix, dot := strings.Cut(filename, ".")
+	if dot {
+		suffix = "." + suffix
+	}
+
+	var prefix2 naming.StylableName
+	prefix2, err = naming.MakeStylableName(prefix)
 	if err != nil {
 		err = eb.Build().Str("filename", filename).Errorf("found non-convertable file name")
 		return
 	}
-	ext := filepath.Ext(filename)
-
-	newFilename = name.Convert(naming.LowerSnakeCase).String() + ext
+	newFilename = prefix2.Convert(naming.LowerSnakeCase).String() + suffix
 
 	if filename == newFilename {
+		return
+	}
+
+	if strings.Contains(suffix, ".out.") || strings.Contains(suffix, ".gen.") {
+		log.Info().Str("old", filename).Str("new", newFilename).Msg("skipping generated file")
 		return
 	}
 
