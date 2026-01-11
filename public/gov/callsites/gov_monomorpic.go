@@ -8,7 +8,7 @@ import (
 	"go/token"
 	"go/types"
 	"iter"
-	"os"
+	"slices"
 	"strings"
 
 	"golang.org/x/tools/go/packages"
@@ -128,7 +128,9 @@ func (inst OriginE) String() string {
 
 // AnalyzerService controls the analysis logic.
 type AnalyzerService struct {
-	Pattern string
+	Pattern    string
+	BuildTags  []string
+	BuildFlags []string
 }
 
 func (inst *AnalyzerService) Run(ctx context.Context) iter.Seq2[CallSite, error] {
@@ -140,15 +142,18 @@ func (inst *AnalyzerService) Run(ctx context.Context) iter.Seq2[CallSite, error]
 
 		{
 			cfg = &packages.Config{
-				Mode:    packages.NeedName | packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo | packages.NeedImports,
-				Context: ctx,
+				Mode:       packages.NeedName | packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo | packages.NeedImports,
+				Context:    ctx,
+				BuildFlags: slices.Concat([]string{"-tags=" + strings.Join(inst.BuildTags, ",")}, inst.BuildFlags),
+				Tests:      false,
 			}
-			if info, errStat := os.Stat(inst.Pattern); errStat == nil && info.IsDir() {
-				cfg.Dir = inst.Pattern
-				loadPattern = "."
-			} else {
-				loadPattern = inst.Pattern
-			}
+			//if info, errStat := os.Stat(inst.Pattern); errStat == nil && info.IsDir() {
+			//	cfg.Dir = inst.Pattern
+			//	loadPattern = "."
+			//} else {
+			//	loadPattern = inst.Pattern
+			//}
+			loadPattern = "./..."
 		}
 
 		pkgs, err = packages.Load(cfg, loadPattern)
@@ -269,6 +274,7 @@ func (inst *AnalyzerService) analyzeCall(call *ast.CallExpr, fset *token.FileSet
 	// 2. Resolve Object
 	obj := info.Uses[callIdent]
 	if obj == nil {
+		// Fallback for some builtins if Uses returns nil (older go versions or specific edge cases)
 		site.Func = callIdent.Name
 		site.Type = CallTypeMonomorphic
 		site.Origin = OriginStdLib
@@ -277,6 +283,25 @@ func (inst *AnalyzerService) analyzeCall(call *ast.CallExpr, fset *token.FileSet
 
 	site.Func = obj.Name()
 	site.Origin = inst.determineOrigin(obj.Pkg(), currentPkg)
+
+	// Check for Builtins (panic, new, make, etc.) -> Monomorphic
+	if _, isBuiltin := obj.(*types.Builtin); isBuiltin {
+		site.Type = CallTypeMonomorphic
+		site.Origin = OriginStdLib
+		return
+	}
+
+	// Check for Type Conversions (int(x), MyType(y)) -> Monomorphic
+	if _, isTypeName := obj.(*types.TypeName); isTypeName {
+		site.Type = CallTypeMonomorphic
+		return
+	}
+
+	// Check: Dynamic (Func Variable)
+	if _, isFunc := obj.(*types.Func); !isFunc {
+		site.Type = CallTypeDynamicPolymorphic
+		return
+	}
 
 	// Check: Dynamic (Func Variable)
 	if _, isFunc := obj.(*types.Func); !isFunc {

@@ -68,30 +68,26 @@ func (s S) M() {}
 
 func Mono() {}
 func GenFunc[T any](t T) {}
+func GetVariadicFunc[T any](t ...T) {}
 
 func main() {
-	// [1] Mono / StdLib
-	fmt.Println("hello") 
+	fmt.Println("hello")
 
-	// [2] Mono / Local
-	Mono()               
+	Mono()        
 
-	// [3] Dynamic / Local (Interface)
 	var i I = S{}
-	i.M()                
+	i.M()           
 
-	// [4] Static / Local (Generic Func - Int)
-	GenFunc(1)           
+	GenFunc(1)       
 
-	// [5] Static / Local (Generic Func - String)
 	GenFunc("s")
 
-	// [6] Dynamic / Local (Closure)
 	f := func() {}
-	f()                  
+	f()   
 
-	// [7] Mono / 3rdParty
-	lib.ExternalFunc()   
+	lib.ExternalFunc()
+
+	GetVariadicFunc(1,2,3)
 }
 `
 	err = os.WriteFile(filepath.Join(dir, "main.go"), []byte(code), 0644)
@@ -149,6 +145,12 @@ func main() {
 	require.NotNil(t, s)
 	assert.Equal(t, CallTypeMonomorphic, s.Type)
 	assert.Equal(t, Origin3rdParty, s.Origin)
+
+	// [8] ExternalFunc
+	s = findSite("GetVariadicFunc")
+	require.NotNil(t, s)
+	assert.Equal(t, CallTypeStaticPolymorphic, s.Type)
+	assert.Equal(t, OriginLocal, s.Origin)
 }
 
 func TestAnalyzerService_ErrorPropagation(t *testing.T) {
@@ -262,4 +264,3 @@ func main() {
 	// [12] G2("s", []int) -> String, SliceBasic
 	assertTypes(g2[1], SubtypeString, SubtypeSliceBasic)
 }
-

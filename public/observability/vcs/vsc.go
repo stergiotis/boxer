@@ -60,7 +60,7 @@ func ModuleInfo() string {
 }
 
 const author = "Panos Stergiotis"
-const copyrightYears = "2023, 2024, 2025"
+const copyrightYears = "2023, 2024, 2025, 2026"
 
 func CopyrightInfo() string {
 	return "Copyright © " + copyrightYears + " " + author

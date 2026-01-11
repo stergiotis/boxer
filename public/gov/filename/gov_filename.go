@@ -154,7 +154,7 @@ func NewCliCommand() *cli.Command {
 				renamer.RenameOp = RenameOpDryRun
 			}
 
-			return renamer.Run(context.Background(), c.String("root"))
+			return renamer.Run(c.Context, c.String("root"))
 		},
 	}
 }
