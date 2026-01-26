@@ -233,6 +233,9 @@ func (inst *ParsedDqlQuery) ParseFromString(sql string) (err error) {
 	inst.parseTree = parseTree
 	inst.parser = parser
 	if err != nil {
+		if !inst.recoverParseErrors {
+			inst.parseTree = nil
+		}
 		inst.paramBindEnv.Clear()
 		err = eh.Errorf("unable to parse sql as dql query: %w", err)
 		return
