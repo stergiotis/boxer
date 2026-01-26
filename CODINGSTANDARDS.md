@@ -10,18 +10,18 @@ In these roles go is not the only language to master and is important to lower t
 Target the most recent stable go version available.
 
 ## Packages to Use
-Use `lukechampine.com/blake3` as cryptographic hash function.
-Use `encoding/json/v2` as json package.
-Use `github.com/RoaringBitmap/roaring` for serializable uint32 and uint64 compressed bitsets.
-Use `github.com/matoous/go-nanoid/v2` in place of uuids.
-Use `github.com/rs/zerolog` for structured logging.
-Use `github.com/stretchr/testify` for unittest assertions.
-Use `github.com/zeebo/xxh3` as 64-bit non-cryptographic hash function.
-Use `github.com/stergiotis/boxer/public/observability/eh` for error construction and wrapping.
-Use `github.com/stergiotis/boxer/public/observability/eh/eb` for structural error construction and wrapping.
-Use `github.com/stergiotis/boxer/semistructured/leeway/canonicaltypes` for defining RPC or FFI interface descriptions.
-Use `github.com/stergiotis/boxer/semistructured/leeway/naming` for conversions between naming schemes (e.g. snake_case to camelCase).
-Use `github.com/urfave/cli/v3` for cli commands and flags handling.
+* Use `lukechampine.com/blake3` as cryptographic hash function.
+* Use `encoding/json/v2` as json package.
+* Use `github.com/RoaringBitmap/roaring` for serializable uint32 and uint64 compressed bitsets.
+* Use `github.com/matoous/go-nanoid/v2` in place of uuids.
+* Use `github.com/rs/zerolog` for structured logging.
+* Use `github.com/stretchr/testify` for unittest assertions.
+* Use `github.com/zeebo/xxh3` as 64-bit non-cryptographic hash function.
+* Use `github.com/stergiotis/boxer/public/observability/eh` for error construction and wrapping.
+* Use `github.com/stergiotis/boxer/public/observability/eh/eb` for structural error construction and wrapping.
+* Use `github.com/stergiotis/boxer/semistructured/leeway/canonicaltypes` for defining RPC or FFI interface descriptions.
+* Use `github.com/stergiotis/boxer/semistructured/leeway/naming` for conversions between naming schemes (e.g. snake_case to camelCase).
+* Use `github.com/urfave/cli/v3` for cli commands and flags handling.
 
 ## Error Handling & Flow Control
 
