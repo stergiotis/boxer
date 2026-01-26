@@ -1,8 +1,9 @@
 package ast
 
 import (
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
 	"strings"
+
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
 )
 
 type Identifier struct {
@@ -12,6 +13,34 @@ type Identifier struct {
 	DoubleQuote bool
 }
 
+func (inst *Identifier) LoadRawText(raw string) {
+	backtick := raw[0] == '`'
+	doubleQuote := raw[0] == '"'
+	name := raw
+	if backtick {
+		name = strings.ReplaceAll(raw[1:len(raw)-1], "\\`", "'")
+	} else if doubleQuote {
+		name = strings.ReplaceAll(raw[1:len(raw)-1], "\\\"", "\"")
+	}
+	inst.Name = name
+	inst.Backtick = backtick
+	inst.DoubleQuote = doubleQuote
+	inst.ParseNode = nil
+}
+func (inst *Identifier) LoadIdentifier(ctx *grammar.IdentifierContext) {
+	inst.Name = ""
+	inst.Backtick = false
+	inst.DoubleQuote = false
+	inst.ParseNode = ctx
+	if ctx == nil {
+		return
+	}
+	raw := ctx.IDENTIFIER().GetText()
+	if raw == "" {
+		return
+	}
+	inst.ParseNode = ctx
+}
 func (inst *Identifier) LoadContext(ctx *grammar.IdentifierContext) {
 	inst.Name = ""
 	inst.Backtick = false
@@ -24,17 +53,6 @@ func (inst *Identifier) LoadContext(ctx *grammar.IdentifierContext) {
 	if raw == "" {
 		return
 	}
-	backtick := raw[0] == '`'
-	doubleQuote := raw[0] == '"'
-	name := raw
-	if backtick {
-		name = strings.ReplaceAll(raw[1:len(raw)-1], "\\`", "'")
-	} else if doubleQuote {
-		name = strings.ReplaceAll(raw[1:len(raw)-1], "\\\"", "\"")
-	}
-	inst.Name = name
-	inst.Backtick = backtick
-	inst.DoubleQuote = doubleQuote
 	inst.ParseNode = ctx
 }
 
