@@ -22,7 +22,7 @@ func TestIterate2(t *testing.T) {
 		var got []Pair[int, string]
 
 		// Using the standard range loop over the iterator (Go 1.23+)
-		for a, b := range Iterate2(s1, s2) {
+		for a, b := range Zip2(s1, s2) {
 			got = append(got, Pair[int, string]{Val1: a, Val2: b})
 		}
 
@@ -40,7 +40,7 @@ func TestIterate2(t *testing.T) {
 
 		var got []Pair[int, string]
 
-		for a, b := range Iterate2(s1, s2) {
+		for a, b := range Zip2(s1, s2) {
 			got = append(got, Pair[int, string]{a, b})
 		}
 
@@ -58,7 +58,7 @@ func TestIterate2(t *testing.T) {
 
 		var got []Pair[int, string]
 
-		for a, b := range Iterate2(s1, s2) {
+		for a, b := range Zip2(s1, s2) {
 			got = append(got, Pair[int, string]{a, b})
 		}
 
@@ -75,7 +75,7 @@ func TestIterate2(t *testing.T) {
 		s2 := []string{"exist"}
 
 		count := 0
-		for range Iterate2(s1, s2) {
+		for range Zip2(s1, s2) {
 			count++
 		}
 
@@ -88,7 +88,7 @@ func TestIterate2(t *testing.T) {
 		s2 := []float64{3.14, 1.59}
 
 		var got []Pair[bool, float64]
-		for a, b := range Iterate2(s1, s2) {
+		for a, b := range Zip2(s1, s2) {
 			got = append(got, Pair[bool, float64]{a, b})
 		}
 
@@ -106,7 +106,7 @@ func TestIterate2(t *testing.T) {
 
 		itemsVisited := 0
 
-		for a, _ := range Iterate2(s1, s2) {
+		for a, _ := range Zip2(s1, s2) {
 			itemsVisited++
 			// Simulate a "break" statement in a loop
 			if a == 2 {

@@ -86,6 +86,9 @@ func (inst *HashSet[T]) SliceEx(in []T) (out []T) {
 func (inst *HashSet[T]) Size() int {
 	return len(inst.data)
 }
+func (inst *HashSet[T]) IsEmpty() bool {
+	return len(inst.data) == 0
+}
 
 func (inst *HashSet[T]) UnionMod(other *HashSet[T]) {
 	maps.Copy(inst.data, other.data)
