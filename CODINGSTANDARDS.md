@@ -26,7 +26,7 @@ Target the most recent stable go version available.
 ## Error Handling & Flow Control
 
 ### Return Signature
-Named return values are **mandatory** for all functions and methods that return errors.
+Named return values are **mandatory** for all functions and methods.
 ```go
 func (inst *Type) DoWork() (n int, err error) { ... }
 ```
@@ -116,17 +116,6 @@ func (inst *Worker) Process() (err error) {
     ```go
     var _ InterfaceName = (*Type)(nil)
     ```
-    
-### Monomorphism
-Generic Arguments: Prefer generic constraints over interface arguments for performance-critical functions. This avoids interface allocation (boxing) and enables aggressive compiler inlining.
-```go
-// GOOD: T is flattened, no allocation, inlining possible
-func Process[T ReaderI](r T) { ... }
-
-// BAD: r is boxed, heap allocation likely, inlining blocked
-func Process(r ReaderI) { ... }
-```
-
 ## Naming & Style
 
 ### Receiver Name
@@ -149,7 +138,9 @@ const (
     WeekdayMonday    WeekdayE = 1<<0
     WeekdayTuesday   WeekdayE = 1<<1
     WeekdayWednesday WeekdayE = 1<<2
+    ...
 )
+var AllWeekdays = []WeekdayE{WeekdayMonday,WeekdayTuesday,WeekdayWednesday,...}
 ```
 
 ## Documentation
