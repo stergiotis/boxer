@@ -94,3 +94,11 @@ func AppendSeqIter2[K any, V any](ks []K, vs []V, it iter.Seq2[K, V]) (ksOut []K
 	}
 	return
 }
+func ConsumeIterator[T any](it iter.Seq[T]) {
+	for _ = range it {
+	}
+}
+func ConsumeIterator2[K, V any](it iter.Seq2[K, V]) {
+	for _, _ = range it {
+	}
+}
