@@ -162,7 +162,7 @@ func (inst *Unmarshaller) handleError(err error) {
 }
 
 func (inst *Unmarshaller) readBuf(n int) (success bool) {
-	_, err := inst.r.Read(inst.buf[:n])
+	_, err := io.ReadFull(inst.r, inst.buf[:n])
 	inst.handleError(err)
 	success = err == nil
 	return
