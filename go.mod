@@ -5,7 +5,6 @@ go 1.25
 toolchain go1.25.3
 
 require (
-	github.com/AfterShip/clickhouse-sql-parser v0.4.10
 	github.com/antlr4-go/antlr/v4 v4.13.1
 	github.com/apache/arrow-go/v18 v18.4.0
 	github.com/brianvoe/gofakeit/v7 v7.3.0
@@ -16,6 +15,7 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/fxamacker/cbor/v2 v2.9.0
 	github.com/go-json-experiment/json v0.0.0-20250725192818-e39067aee2d2
+	github.com/go-text/typesetting v0.3.3
 	github.com/google/flatbuffers v25.2.10+incompatible
 	github.com/matoous/go-nanoid/v2 v2.1.0
 	github.com/nao1215/markdown v0.8.0
@@ -249,9 +249,11 @@ require (
 	go.uber.org/nilaway v0.0.0-20251021214447-34f56b8c16b9 // indirect
 	go.uber.org/zap v1.24.0 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20250210185358-939b2ce775ac // indirect
+	golang.org/x/image v0.23.0 // indirect
 	golang.org/x/mod v0.29.0 // indirect
 	golang.org/x/net v0.46.0 // indirect
 	golang.org/x/sync v0.17.0 // indirect
+	golang.org/x/telemetry v0.0.0-20251008203120-078029d740a8 // indirect
 	golang.org/x/term v0.36.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250425173222-7b384671a197 // indirect
