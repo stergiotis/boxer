@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/fffi/compiletime"
 	"github.com/stergiotis/boxer/public/gov"
 	cli2 "github.com/stergiotis/boxer/public/hmi/cli"
+	"github.com/stergiotis/boxer/public/math/numerical"
 	"github.com/stergiotis/boxer/public/observability"
 	"github.com/stergiotis/boxer/public/observability/coverage"
 	"github.com/stergiotis/boxer/public/observability/logging"
@@ -53,6 +54,7 @@ func mainC() (exitCode int) {
 			docgen.NewDocCli(),
 			dev.NewCliCommand(),
 			gov.NewCliCommand(),
+			numerical.NewCliCommand(),
 		),
 		After: func(context *cli.Context) error {
 			profiling.ProfilingHandleExit(context)

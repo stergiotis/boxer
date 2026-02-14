@@ -2,7 +2,9 @@
 
 package numerical
 
-import "math"
+import (
+	"math"
+)
 
 /* Ported by Gemini 3 Pro from https://cran.r-project.org/web/packages/labeling/index.html
 Original licence:

@@ -30,9 +30,9 @@ require (
 	github.com/yassinebenaid/godump v0.11.1
 	github.com/zeebo/xxh3 v1.0.2
 	golang.org/x/exp v0.0.0-20250808145144-a408d31f581a
-	golang.org/x/sys v0.37.0
-	golang.org/x/text v0.30.0
-	golang.org/x/tools v0.38.0
+	golang.org/x/sys v0.40.0
+	golang.org/x/text v0.34.0
+	golang.org/x/tools v0.41.0
 	lukechampine.com/blake3 v1.4.1
 )
 
@@ -90,6 +90,7 @@ require (
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/fatih/structtag v1.2.0 // indirect
 	github.com/firefart/nonamedreturns v1.0.5 // indirect
+	github.com/fogleman/gg v1.3.0 // indirect
 	github.com/fzipp/gocyclo v0.6.0 // indirect
 	github.com/ghostiam/protogetter v0.3.9 // indirect
 	github.com/go-critic/go-critic v0.12.0 // indirect
@@ -107,6 +108,7 @@ require (
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/gofrs/flock v0.12.1 // indirect
+	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/golang/snappy v1.0.0 // indirect
 	github.com/golangci/dupl v0.0.0-20250308024227-f665c8d69b32 // indirect
@@ -249,12 +251,12 @@ require (
 	go.uber.org/nilaway v0.0.0-20251021214447-34f56b8c16b9 // indirect
 	go.uber.org/zap v1.24.0 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20250210185358-939b2ce775ac // indirect
-	golang.org/x/image v0.23.0 // indirect
-	golang.org/x/mod v0.29.0 // indirect
-	golang.org/x/net v0.46.0 // indirect
-	golang.org/x/sync v0.17.0 // indirect
-	golang.org/x/telemetry v0.0.0-20251008203120-078029d740a8 // indirect
-	golang.org/x/term v0.36.0 // indirect
+	golang.org/x/image v0.36.0 // indirect
+	golang.org/x/mod v0.32.0 // indirect
+	golang.org/x/net v0.49.0 // indirect
+	golang.org/x/sync v0.19.0 // indirect
+	golang.org/x/telemetry v0.0.0-20260109210033-bd525da824e2 // indirect
+	golang.org/x/term v0.39.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250425173222-7b384671a197 // indirect
 	google.golang.org/grpc v1.73.0 // indirect
