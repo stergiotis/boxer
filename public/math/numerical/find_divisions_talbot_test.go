@@ -25,7 +25,7 @@ func TestExtended(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res := Extended(tt.dmin, tt.dmax, tt.m, nil, tt.loose, DefaultWeights, NoOpLegibility{})
+			res := Extended(tt.dmin, tt.dmax, tt.m, nil, tt.loose, DefaultWeights, SimpleLegibilityScorer{})
 
 			if len(res.Ticks) == 0 {
 				t.Fatal("No ticks generated")

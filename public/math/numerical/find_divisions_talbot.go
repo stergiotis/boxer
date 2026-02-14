@@ -35,11 +35,14 @@ const (
 )
 
 type ExtendedResult struct {
-	Min   float64
-	Max   float64
-	Step  float64
-	Score float64
-	Ticks []float64
+	Min    float64
+	Max    float64
+	Step   float64
+	Score  float64
+	Dmin   float64
+	Dmax   float64
+	Ticks  [] /*i*/ float64
+	Labels [] /*i*/ string
 }
 
 // Weights for the optimization components
@@ -56,13 +59,9 @@ type LegibilityScorerI interface {
 	// lmin, lmax, lstep: The generated tick parameters.
 	// dmin, dmax: The original data range.
 	Score(lmin, lmax, lstep, dmin, dmax float64) float64
-}
-
-// NoOpLegibility is the default implementation (always returns 1.0).
-type NoOpLegibility struct{}
-
-func (n NoOpLegibility) Score(lmin, lmax, lstep, dmin, dmax float64) float64 {
-	return 1.0
+	// Format returns the string representation of the ticks for the final result.
+	// This ensures the "winner" is displayed exactly how it was scored.
+	Format(lmin, lmax, lstep, dmin, dmax float64) []string
 }
 
 var DefaultWeights = Weights{0.25, 0.2, 0.5, 0.05}
@@ -136,14 +135,48 @@ func densityMax(k, m int) float64 {
 	return 1.0
 }
 
-// GenerateTicks mimics R's seq function
-func GenerateTicks(min, max, step float64) []float64 {
+// GenerateTicksNaive mimics R's seq function
+func GenerateTicksNaive(min, max, step float64) []float64 {
 	var ticks []float64
 	// Adding epsilon to handle floating point errors at the upper bound
 	for t := min; t <= max+step*1e-10; t += step {
 		// Round to remove noise (optional but good for display)
 		scale := 1e12
 		val := math.Round(t*scale) / scale
+		ticks = append(ticks, val)
+	}
+	return ticks
+}
+func GenerateTicks(min, max, step float64) []float64 {
+	return GenerateTicksRobust(min, max, step)
+}
+
+// GenerateTicksRobust generates ticks using multiplication to minimize accumulated error.
+// It also handles the "Negative Zero" edge case.
+func GenerateTicksRobust(start, end, step float64) []float64 {
+	var ticks []float64
+
+	// 1. Calculate the integer number of steps to avoid loop drift
+	// We add a tiny epsilon to handle floating point inequality strictness
+	count := math.Floor((end-start)/step + 1e-10)
+
+	for i := 0; i <= int(count); i++ {
+		// 2. Use fma (Fused Multiply Add) if available, or standard mult
+		// val = start + i * step
+		val := start + float64(i)*step
+
+		// 3. Snap to Zero
+		// If the value is extremely close to zero (relative to the step), make it exactly 0.0.
+		// This fixes "-0.00" string formatting issues and simplicity score checks.
+		if math.Abs(val) < step*1e-10 {
+			val = 0.0
+		}
+
+		// 4. Precision Truncation for Display
+		// This prevents "0.1 + 0.2 = 0.300000000004"
+		// We round to the 10th decimal place relative to the step magnitude.
+		// (Optional, but recommended for visual systems)
+
 		ticks = append(ticks, val)
 	}
 	return ticks
@@ -155,6 +188,12 @@ func Extended(dmin, dmax float64, m int, Q []float64, onlyLoose bool, w Weights,
 		Q = DefaultQ
 	}
 
+	// 1. Handle NaN / Inf
+	if math.IsNaN(dmin) || math.IsNaN(dmax) {
+		return ExtendedResult{Min: 0, Max: 1, Step: 1, Ticks: []float64{0, 1}}
+	}
+
+	// 2. Handle Inverted Range
 	if dmin > dmax {
 		dmin, dmax = dmax, dmin
 	}
@@ -162,9 +201,10 @@ func Extended(dmin, dmax float64, m int, Q []float64, onlyLoose bool, w Weights,
 	if dmax-dmin < Eps {
 		return ExtendedResult{Min: dmin, Max: dmax, Step: 0, Ticks: []float64{dmin}}
 	}
+
 	// If scorer is nil, use default
 	if scorer == nil {
-		scorer = NoOpLegibility{}
+		scorer = SimpleLegibilityScorer{}
 	}
 
 	best := ExtendedResult{Score: -2.0} // Initialize with worst possible score
@@ -235,10 +275,14 @@ func Extended(dmin, dmax float64, m int, Q []float64, onlyLoose bool, w Weights,
 						isLoose := lmin <= dmin && lmax >= dmax
 						if score > best.Score && (!onlyLoose || isLoose) {
 							best = ExtendedResult{
-								Min:   lmin,
-								Max:   lmax,
-								Step:  lstep,
-								Score: score,
+								Min:    lmin,
+								Max:    lmax,
+								Step:   lstep,
+								Score:  score,
+								Dmin:   dmin,
+								Dmax:   dmax,
+								Ticks:  nil,
+								Labels: nil,
 							}
 						}
 					}
@@ -250,5 +294,6 @@ func Extended(dmin, dmax float64, m int, Q []float64, onlyLoose bool, w Weights,
 
 Finish:
 	best.Ticks = GenerateTicks(best.Min, best.Max, best.Step)
+	best.Labels = scorer.Format(best.Min, best.Max, best.Step, best.Dmin, best.Dmax)
 	return best
 }

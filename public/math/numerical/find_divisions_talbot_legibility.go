@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 
 	"github.com/go-text/typesetting/di"
@@ -14,6 +15,45 @@ import (
 	"github.com/go-text/typesetting/shaping"
 	"golang.org/x/image/math/fixed"
 )
+
+// SimpleLegibilityScorer implements the "Original" algorithm behavior.
+// It ignores font size/overlap (always returns score 1.0) and uses standard formatting.
+type SimpleLegibilityScorer struct{}
+
+func (s SimpleLegibilityScorer) Score(lmin, lmax, lstep, dmin, dmax float64) float64 {
+	// The original algorithm does not penalize based on legibility.
+	return 1.0
+}
+
+func (s SimpleLegibilityScorer) Format(lmin, lmax, lstep, dmin, dmax float64) []string {
+	ticks := GenerateTicks(lmin, lmax, lstep)
+	labels := make([]string, len(ticks))
+
+	// Basic heuristic: check magnitude to decide format
+	useSci := false
+	maxVal := 0.0
+	for _, t := range ticks {
+		absT := math.Abs(t)
+		if absT > maxVal {
+			maxVal = absT
+		}
+	}
+	// Use scientific for very large or very small numbers
+	if maxVal > 0 && (maxVal >= 1e7 || maxVal <= 1e-5) {
+		useSci = true
+	}
+
+	for i, t := range ticks {
+		if useSci {
+			labels[i] = strconv.FormatFloat(t, 'e', 2, 64)
+		} else {
+			// standard formatting, remove trailing zeros
+			s := strconv.FormatFloat(t, 'f', -1, 64)
+			labels[i] = s
+		}
+	}
+	return labels
+}
 
 /* see https://github.com/jtalbot/Labeling/blob/master/Layout/Formatters/QuantitativeFormatter.cs for the original implementation
 The Labeling code is released under the BSD 2-clause license.
@@ -77,26 +117,139 @@ func (inst *TypesettingScorer) Score(lmin, lmax, lstep, dmin, dmax float64) floa
 		return 1.0
 	}
 
-	labels, fmtScore := inst.formatLabels(ticks)
+	// 1. Get Labels using the internal shared logic
+	labels, fmtScore := inst.generateLabelsAndScore(ticks)
 
-	// Font Size Score (Fixed logic)
+	// 2. Font Size Check
 	fsScore := 1.0
 	if inst.fontSize < 7.0 {
 		return math.Inf(-1)
 	}
 
-	// Orientation Score
+	// 3. Orientation Check
 	orientScore := 1.0
 	if !inst.horizontal {
 		orientScore = -0.5
 	}
 
-	// Overlap Score
+	// 4. Overlap Check
 	overlapScore := inst.calculateOverlap(ticks, labels, dmin, dmax)
 
 	return (fmtScore + fsScore + orientScore + overlapScore) / 4.0
 }
 
+// Format satisfies the interface. It generates the labels exactly as Score did.
+func (inst *TypesettingScorer) Format(lmin, lmax, lstep, dmin, dmax float64) []string {
+	ticks := GenerateTicks(lmin, lmax, lstep)
+	labels, _ := inst.generateLabelsAndScore(ticks)
+	return labels
+}
+
+// generateLabelsAndScore is the internal logic shared by Score and Format
+func (inst *TypesettingScorer) generateLabelsAndScore(ticks []float64) ([]string, float64) {
+	labels := make([]string, len(ticks))
+	useScientific := false
+	maxVal := 0.0
+
+	for _, t := range ticks {
+		if math.Abs(t) > maxVal {
+			maxVal = math.Abs(t)
+		}
+	}
+
+	// Heuristic thresholds
+	if maxVal > 1e6 || (maxVal > 0 && maxVal < 1e-4) {
+		useScientific = true
+	}
+
+	for i, t := range ticks {
+		if useScientific {
+			labels[i] = fmt.Sprintf("%.2e", t)
+		} else {
+			s := fmt.Sprintf("%.4f", t)
+			if strings.Contains(s, ".") {
+				s = strings.TrimRight(s, "0")
+				s = strings.TrimRight(s, ".")
+			}
+			labels[i] = s
+		}
+	}
+
+	// Penalty for scientific notation (from C# paper implementation)
+	score := 1.0
+	if useScientific {
+		score = 0.25
+	}
+	return labels, score
+}
+
+func calculateOverlap(ticks []float64, widths []float64, dmin, dmax, scale, emPx float64, horizontal bool) float64 {
+	dataRange := dmax - dmin
+	if dataRange == 0 {
+		dataRange = 1.0
+	}
+
+	positions := make([]float64, len(ticks))
+	for i, t := range ticks {
+		positions[i] = (t - dmin) * scale
+	}
+	// Determine font height (approximate from EM size)
+	// In many fonts, line height is ~1.2 * EM
+	fontHeightPx := emPx * 1.2
+
+	minOverlapScore := 1.0
+
+	for i := 0; i < len(ticks)-1; i++ {
+		score := 1.0
+		dist := 0.0
+		if horizontal {
+			// Center alignment assumption
+			rightEdgeI := positions[i] + widths[i]/2.0
+			leftEdgeJ := positions[i+1] - widths[i+1]/2.0
+
+			dist = leftEdgeJ - rightEdgeI
+			safeDist := math.Max(0, dist)
+
+			if safeDist < 1e-5 {
+				score = math.Inf(-1)
+			} else {
+				// C# Formula: Min(1, 2 - (1.5 * em) / distance)
+				score = math.Min(1.0, 2.0-(1.5*emPx)/safeDist)
+			}
+		} else {
+			// Y-AXIS Logic (Vertical collision)
+			// Here, "positions" represents the vertical Y coordinate (usually bottom-up).
+			// We compare the Top of I vs Bottom of J (or vice versa depending on coord system).
+
+			// Assuming positions[i] is lower on screen (higher value) than positions[i+1]??
+			// Actually, let's just look at the absolute distance between tick centers.
+			centerDist := math.Abs(positions[i] - positions[i+1])
+
+			// If centers are closer than font height, they overlap.
+			// We want at least 1.5 EM padding? Or just non-overlap?
+			// The paper uses "1.5em" as the generic padding metric.
+
+			// Available space between centers needs to accommodate the text height.
+			// Space = centerDist
+			// Required = fontHeightPx
+
+			// Effectively, the "whitespace" is:
+			verticalWhitespace := centerDist - fontHeightPx
+
+			if verticalWhitespace < 0 {
+				score = math.Inf(-1)
+			} else {
+				// Use paper's formula but applied to vertical gap
+				score = math.Min(1.0, 2.0-(1.5*emPx)/centerDist)
+			}
+		}
+		if score < minOverlapScore {
+			minOverlapScore = score
+		}
+	}
+
+	return minOverlapScore
+}
 func (inst *TypesettingScorer) calculateOverlap(ticks []float64, labels []string, dmin, dmax float64) float64 {
 	// Calculate EM size in pixels: Points * (DPI / 72)
 	emPx := inst.fontSize * inst.dpi / 72.0
@@ -111,38 +264,7 @@ func (inst *TypesettingScorer) calculateOverlap(ticks []float64, labels []string
 		dataRange = 1.0
 	}
 	scale := inst.axisLenPx / dataRange
-
-	positions := make([]float64, len(ticks))
-	for i, t := range ticks {
-		positions[i] = (t - dmin) * scale
-	}
-
-	minOverlapScore := 1.0
-
-	for i := 0; i < len(ticks)-1; i++ {
-		// Assuming center alignment:
-		// Right edge of current label
-		rightEdgeI := positions[i] + widths[i]/2.0
-		// Left edge of next label
-		leftEdgeJ := positions[i+1] - widths[i+1]/2.0
-
-		dist := leftEdgeJ - rightEdgeI
-		safeDist := math.Max(0, dist)
-
-		score := 1.0
-		if safeDist < 1e-5 {
-			score = math.Inf(-1)
-		} else {
-			// C# Formula: Min(1, 2 - (1.5 * em) / distance)
-			score = math.Min(1.0, 2.0-(1.5*emPx)/safeDist)
-		}
-
-		if score < minOverlapScore {
-			minOverlapScore = score
-		}
-	}
-
-	return minOverlapScore
+	return calculateOverlap(ticks, widths, dmin, dmax, scale, emPx, inst.horizontal)
 }
 
 func (inst *TypesettingScorer) measureString(text string) float64 {
@@ -175,40 +297,4 @@ func (inst *TypesettingScorer) measureString(text string) float64 {
 	widthPx := widthPts * inst.dpi / 72.0
 
 	return widthPx
-}
-
-func (inst *TypesettingScorer) formatLabels(ticks []float64) ([]string, float64) {
-	labels := make([]string, len(ticks))
-	useScientific := false
-
-	maxVal := 0.0
-	for _, t := range ticks {
-		if math.Abs(t) > maxVal {
-			maxVal = math.Abs(t)
-		}
-	}
-
-	// Thresholds for switching to scientific notation
-	if maxVal > 1e6 || (maxVal > 0 && maxVal < 1e-4) {
-		useScientific = true
-	}
-
-	for i, t := range ticks {
-		if useScientific {
-			labels[i] = fmt.Sprintf("%.2e", t)
-		} else {
-			s := fmt.Sprintf("%.4f", t)
-			// Simple trim for clean display
-			if strings.Contains(s, ".") {
-				s = strings.TrimRight(s, "0")
-				s = strings.TrimRight(s, ".")
-			}
-			labels[i] = s
-		}
-	}
-
-	if useScientific {
-		return labels, 0.25
-	}
-	return labels, 1.0
 }
