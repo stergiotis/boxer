@@ -8,7 +8,6 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl"
 	"github.com/stergiotis/boxer/public/dev"
 	"github.com/stergiotis/boxer/public/fffi/compiletime"
-	demo2 "github.com/stergiotis/boxer/public/hmi/imzero2/demo"
 	"github.com/stergiotis/boxer/public/imzero/demo"
 	"github.com/stergiotis/boxer/public/imzero/nerdfont/generator"
 	"github.com/stergiotis/boxer/public/observability"
@@ -48,12 +47,6 @@ func mainC() (exitCode int) {
 			cbor.NewCommand(),
 			compiletime.NewCommand(nil, nil),
 			demo.NewCommand(),
-			{
-				Name: "imzero2",
-				Subcommands: []*cli.Command{
-					demo2.NewCommand(),
-				},
-			},
 			{
 				Name:        "nerdfont",
 				Subcommands: []*cli.Command{generator.NewCommand()},
