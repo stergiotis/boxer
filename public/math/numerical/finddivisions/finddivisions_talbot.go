@@ -191,6 +191,8 @@ func Talbot(dmin, dmax float64, m int, opts TalbotOptions, scorer LegibilityScor
 	if opts.FastMode {
 		maxJ = 2 // like original Wilkinson algorithm
 	}
+	maxK := 100
+	maxZ := 50
 
 	// Outer loop: j (Simplicity / Skipping)
 	// Theoretically infinite, but usually terminates quickly. Safety cap at maxJ.
@@ -208,7 +210,7 @@ func Talbot(dmin, dmax float64, m int, opts TalbotOptions, scorer LegibilityScor
 
 			// Middle loop: k (Density / Tick Count)
 			// Starts at 2 ticks. Safety cap at 1000.
-			for k := 2; k < 1000; k++ {
+			for k := 2; k < maxK; k++ {
 				dm := densityMax(k, m)
 
 				// Pruning 2
@@ -221,7 +223,7 @@ func Talbot(dmin, dmax float64, m int, opts TalbotOptions, scorer LegibilityScor
 
 				// Inner loop: z (Coverage / Zoom level)
 				// Safety cap.
-				for zLoop := 0; zLoop < 100; zLoop++ {
+				for zLoop := 0; zLoop < maxZ; zLoop++ {
 					step := float64(j) * q * math.Pow(10, z)
 
 					// Calculate span for k ticks
