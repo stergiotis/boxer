@@ -3,8 +3,9 @@
 package finddivisions
 
 import (
-	"fmt"
 	"math"
+
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 /*
@@ -63,7 +64,7 @@ func nicenum(x float64, round bool) float64 {
 // Heckbert generates nice graph labels.
 func Heckbert(min, max float64, desiredTicks int) (AxisLayout, error) {
 	if desiredTicks < 2 {
-		return AxisLayout{}, fmt.Errorf("desiredTicks must be at least 2")
+		return AxisLayout{}, eh.Errorf("desiredTicks must be at least 2")
 	}
 	if min > max {
 		min, max = max, min

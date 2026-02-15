@@ -133,7 +133,6 @@ func densityMax(k, m int) float64 {
 	return 1.0
 }
 
-
 // Talbot implements the Extended Wilkinson Algorithm
 func Talbot(dmin, dmax float64, m int, opts TalbotOptions, scorer LegibilityScorerI) AxisLayout {
 	w := opts.Weights
@@ -177,6 +176,7 @@ func Talbot(dmin, dmax float64, m int, opts TalbotOptions, scorer LegibilityScor
 			Step:       0,
 			TickValues: []float64{dmin},
 			TickLabels: []string{""},
+			Algorithm:  "Talbot",
 		}
 	}
 
@@ -276,6 +276,7 @@ func Talbot(dmin, dmax float64, m int, opts TalbotOptions, scorer LegibilityScor
 	}
 
 Finish:
+	best.Algorithm = "Talbot"
 	best.TickValues = GenerateTicks(best.ViewMin, best.ViewMax, best.Step)
 	best.TickLabels = scorer.Format(best.ViewMin, best.ViewMax, best.Step, best.DataMin, best.DataMax)
 	return best

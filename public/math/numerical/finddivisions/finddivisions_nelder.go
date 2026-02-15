@@ -13,40 +13,43 @@ Translated from Chez Scheme to go: Gemini 3 Pro Preview
 
 ```scheme
 (define-exported find-divisions/nelder
-  (case-lambda
-    ((fmin fmax n) (find-divisions/nelder fmin fmax n '#(1 12/10 16/10 2 25/10 3 4 5 6 8 10)))
-    ((fmin fmax n Q)
-                (%find-divisions-in-contract fmin fmax n)
-                (let* ((exact (and (exact? fmin) (exact? fmax) (exact? n)))
-                         (nq (vector-length Q))
-                         (fmax (inexact->exact fmax))
-                         (fmin (inexact->exact fmin))
-                         (n (inexact->exact n))
-                         (rn (- n 1))
-                         (step (/ (- fmax fmin) rn))
-                         ;; calculate step
-                         (s (let loop ((s step))
-                              (cond
-                                ((<= s 1) (loop (* s 10)))
-                                ((< 10 s) (loop (/ s 10)))
-                                (else s)))))
-                    (let-values (((valmin valmax step)
-                                  (let* ((q (let loop ((i 0)) (cond ((<= s (vector-ref Q i)) (vector-ref Q i)) (else (loop (fx+ i 1))))))
-                                         (step (/ (* step q) s))
-                                         (range (* step rn))
-                                         ;; make first estimate of valmin
-                                         (x (* 1/2 (+ 1 (/ (+ fmin fmax (- range)) step))))
-                                         (j (if (negative? x) (- (truncate x) 1) (truncate x)))
-                                         (valmin (if (and (>= fmin 0) (>= range fmax)) 0 (* step j))))
-                                    (if (or (> fmax 0) (< range (- fmin)))
-                                      ;; goto 200
-                                      (values valmin (+ valmin range) step)
-                                      (values (- range) 0 step)))))
-                                (if exact
-                                  (values (- valmin (/ step 2)) (+ valmax (/ step 2)) step)
-                                  (values (exact->inexact (- valmin (/ step 2))) (exact->inexact (+ valmax (/ step 2))) (exact->inexact step))))))))
+
+	(case-lambda
+	  ((fmin fmax n) (find-divisions/nelder fmin fmax n '#(1 12/10 16/10 2 25/10 3 4 5 6 8 10)))
+	  ((fmin fmax n Q)
+	              (%find-divisions-in-contract fmin fmax n)
+	              (let* ((exact (and (exact? fmin) (exact? fmax) (exact? n)))
+	                       (nq (vector-length Q))
+	                       (fmax (inexact->exact fmax))
+	                       (fmin (inexact->exact fmin))
+	                       (n (inexact->exact n))
+	                       (rn (- n 1))
+	                       (step (/ (- fmax fmin) rn))
+	                       ;; calculate step
+	                       (s (let loop ((s step))
+	                            (cond
+	                              ((<= s 1) (loop (* s 10)))
+	                              ((< 10 s) (loop (/ s 10)))
+	                              (else s)))))
+	                  (let-values (((valmin valmax step)
+	                                (let* ((q (let loop ((i 0)) (cond ((<= s (vector-ref Q i)) (vector-ref Q i)) (else (loop (fx+ i 1))))))
+	                                       (step (/ (* step q) s))
+	                                       (range (* step rn))
+	                                       ;; make first estimate of valmin
+	                                       (x (* 1/2 (+ 1 (/ (+ fmin fmax (- range)) step))))
+	                                       (j (if (negative? x) (- (truncate x) 1) (truncate x)))
+	                                       (valmin (if (and (>= fmin 0) (>= range fmax)) 0 (* step j))))
+	                                  (if (or (> fmax 0) (< range (- fmin)))
+	                                    ;; goto 200
+	                                    (values valmin (+ valmin range) step)
+	                                    (values (- range) 0 step)))))
+	                              (if exact
+	                                (values (- valmin (/ step 2)) (+ valmax (/ step 2)) step)
+	                                (values (exact->inexact (- valmin (/ step 2))) (exact->inexact (+ valmax (/ step 2))) (exact->inexact step))))))))
+
 ```
 */
+var NelderDefaultQs = []float64{1.0, 1.2, 1.6, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0}
 
 // Nelder implements J.A. Nelder's 1976 scaling algorithm.
 // fmin, fmax: data range
@@ -54,8 +57,8 @@ Translated from Chez Scheme to go: Gemini 3 Pro Preview
 // Q: optional list of "nice" steps (normalized 1-10). Pass nil for default.
 func Nelder(fmin, fmax float64, n int, Q []float64) AxisLayout {
 	// Default Q from the Scheme code
-	if Q == nil {
-		Q = []float64{1.0, 1.2, 1.6, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0}
+	if len(Q) == 0 {
+		Q = NelderDefaultQs
 	}
 
 	if fmin > fmax {
