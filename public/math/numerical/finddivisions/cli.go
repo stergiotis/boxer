@@ -3,6 +3,7 @@
 package finddivisions
 
 import (
+	"bytes"
 	"fmt"
 	"image/png"
 	"math"
@@ -10,6 +11,7 @@ import (
 	"os"
 
 	"github.com/fogleman/gg"
+	"github.com/go-text/typesetting/font"
 	"github.com/golang/freetype/truetype"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/urfave/cli/v2"
@@ -51,6 +53,10 @@ func NewCliCommand() *cli.Command {
 								Name:     "fastMode",
 								Category: "algorithm",
 							},
+							&cli.BoolFlag{
+								Name:     "nonuniformDecimals",
+								Category: "scorer",
+							},
 							&cli.Float64Flag{
 								Name:     "axisWidth",
 								Value:    400.0,
@@ -78,6 +84,11 @@ func NewCliCommand() *cli.Command {
 								Name:     "desiredTicks",
 								Category: "data",
 							},
+							&cli.IntFlag{
+								Name:     "measurerCacheSize",
+								Category: "measurer",
+								Value:    4096,
+							},
 						},
 						Action: func(context *cli.Context) error {
 							fontSize := context.Float64("fontSize")
@@ -86,10 +97,13 @@ func NewCliCommand() *cli.Command {
 							rowHeight := context.Int("rowHeight")
 							W := context.Int("canvasWidth")
 
-							scorer, err := NewExhaustiveScorer(goregular.TTF, fontSize, dpi, axisWidth, true)
+							face, err := font.ParseTTF(bytes.NewReader(goregular.TTF))
 							if err != nil {
-								return eh.Errorf("unable to create scorer: %w", err)
+								return eh.Errorf("unable to parse ttf: %w", err)
 							}
+							textMeasurer := NewTextMeasurerGoHarfbuzz(face)
+							cachingMeasurer := NewCachingTextMeasurer(textMeasurer, context.Int("measurerCacheSize"))
+							scorer := NewExhaustiveScorer(fontSize, dpi, axisWidth, !context.Bool("nonuniformDecimals"), cachingMeasurer)
 
 							// 2. Define Test Cases
 							cases := []TestCase{
@@ -148,12 +162,13 @@ func NewCliCommand() *cli.Command {
 							for i, tc := range cases {
 								offsetY := float64(i * rowHeight)
 
+								cachingMeasurer.Reset()
 								// Run Algorithm
 								res := Talbot(tc.Min, tc.Max, tc.DesiredTicks, opts, scorer)
 
 								// Draw Title
 								dc.SetRGB(0, 0, 0)
-								dc.DrawStringAnchored(fmt.Sprintf("%s (Request: %d, Score: %.2f)", tc.Name, tc.DesiredTicks, res.Score), 10, offsetY+20, 0, 0)
+								dc.DrawStringAnchored(fmt.Sprintf("%s (Request: %d, Score: %.2f, (Cache Hits: %d, Misses: %d))", tc.Name, tc.DesiredTicks, res.Score, cachingMeasurer.Hits, cachingMeasurer.Misses), 10, offsetY+20, 0, 0)
 
 								// Draw The Axis
 								drawAxisVisual(dc, 50, offsetY+80, axisWidth, tc, res)

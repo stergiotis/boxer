@@ -3,17 +3,10 @@
 package finddivisions
 
 import (
-	"bytes"
 	"fmt"
 	"math"
 	"strconv"
 	"strings"
-
-	"github.com/go-text/typesetting/di"
-	"github.com/go-text/typesetting/font"
-	"github.com/go-text/typesetting/language" // Required for Script
-	"github.com/go-text/typesetting/shaping"
-	"golang.org/x/image/math/fixed"
 )
 
 // SimpleLegibilityScorer implements the "Original" algorithm behavior.
@@ -84,29 +77,20 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // TypesettingScorer implements LegibilityScorer using the typesetting engine.
 type TypesettingScorer struct {
-	face       *font.Face
-	shaper     shaping.HarfbuzzShaper
-	fontSize   float64 // Points (pt)
-	dpi        float64
-	axisLenPx  float64
-	horizontal bool
+	textMeasurer TextMeasurerI
+	fontSizePt   float64 // Points (pt)
+	dpi          float64
+	axisLenPx    float64
+	horizontal   bool
 }
 
-// NewTypesettingScorer creates a scorer with a loaded font.
-func NewTypesettingScorer(fontData []byte, fontSizePt, dpi, axisLengthPx float64) (*TypesettingScorer, error) {
-	// ParseTTF parses the font data
-	f, err := font.ParseTTF(bytes.NewReader(fontData))
-	if err != nil {
-		return nil, err
-	}
-
+func NewTypesettingScorer(fontSizePt, dpi, axisLengthPx float64, textMeasurer TextMeasurerI) (*TypesettingScorer, error) {
 	return &TypesettingScorer{
-		face:       f,
-		shaper:     shaping.HarfbuzzShaper{},
-		fontSize:   fontSizePt,
-		dpi:        dpi,
-		axisLenPx:  axisLengthPx,
-		horizontal: true,
+		textMeasurer: textMeasurer,
+		fontSizePt:   fontSizePt,
+		dpi:          dpi,
+		axisLenPx:    axisLengthPx,
+		horizontal:   true,
 	}, nil
 }
 
@@ -122,7 +106,7 @@ func (inst *TypesettingScorer) Score(lmin, lmax, lstep, dmin, dmax float64) floa
 
 	// 2. Font Size Check
 	fsScore := 1.0
-	if inst.fontSize < 7.0 {
+	if inst.fontSizePt < 7.0 {
 		return math.Inf(-1)
 	}
 
@@ -252,7 +236,7 @@ func calculateOverlap(ticks []float64, widths []float64, dmin, dmax, scale, emPx
 }
 func (inst *TypesettingScorer) calculateOverlap(ticks []float64, labels []string, dmin, dmax float64) float64 {
 	// Calculate EM size in pixels: Points * (DPI / 72)
-	emPx := inst.fontSize * inst.dpi / 72.0
+	emPx := inst.fontSizePt * inst.dpi / 72.0
 
 	widths := make([]float64, len(labels))
 	for i, txt := range labels {
@@ -268,33 +252,5 @@ func (inst *TypesettingScorer) calculateOverlap(ticks []float64, labels []string
 }
 
 func (inst *TypesettingScorer) measureString(text string) float64 {
-	runes := []rune(text)
-
-	// FIX: Explicitly convert font size to Fixed 26.6 format
-	// 1 unit = 1/64th of a point.
-	fixedSize := fixed.Int26_6(inst.fontSize * 64)
-
-	input := shaping.Input{
-		Text:      runes,
-		RunStart:  0,
-		RunEnd:    len(runes),
-		Direction: di.DirectionLTR,
-		Face:      inst.face,
-		Size:      fixedSize,
-		Script:    language.Latin,
-	}
-
-	output := inst.shaper.Shape(input)
-
-	var totalAdvance fixed.Int26_6
-	for _, glyph := range output.Glyphs {
-		totalAdvance += glyph.Advance
-	}
-
-	// Convert 26.6 fixed point back to float pixels
-	// (Value / 64) gives points, then scale by DPI
-	widthPts := float64(totalAdvance) / 64.0
-	widthPx := widthPts * inst.dpi / 72.0
-
-	return widthPx
+	return inst.textMeasurer.MeasureSingleLine(text, inst.fontSizePt, inst.dpi)
 }

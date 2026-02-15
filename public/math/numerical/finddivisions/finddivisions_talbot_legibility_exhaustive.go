@@ -3,16 +3,9 @@
 package finddivisions
 
 import (
-	"bytes"
 	"fmt"
 	"math"
 	"strings"
-
-	"github.com/go-text/typesetting/di"
-	"github.com/go-text/typesetting/font"
-	"github.com/go-text/typesetting/language"
-	"github.com/go-text/typesetting/shaping"
-	"golang.org/x/image/math/fixed"
 )
 
 /* see https://github.com/jtalbot/Labeling/blob/master/Layout/Formatters/QuantitativeFormatter.cs for the original implementation
@@ -140,27 +133,20 @@ func (m MSuffixStrategy) Score(val float64) float64 {
 }
 
 type ExhaustiveTypesettingScorer struct {
+	textMeasurer    TextMeasurerI
 	uniformDecimals bool
-	face            *font.Face
-	shaper          shaping.HarfbuzzShaper
-	fontSize        float64
+	fontSizePt      float64
 	dpi             float64
 	axisLenPx       float64
 	horizontal      bool
 	strategies      []LabelStrategy
 }
 
-func NewExhaustiveScorer(fontData []byte, fontSizePt, dpi, axisLengthPx float64, uniformDecimals bool) (*ExhaustiveTypesettingScorer, error) {
-	f, err := font.ParseTTF(bytes.NewReader(fontData))
-	if err != nil {
-		return nil, err
-	}
-
+func NewExhaustiveScorer(fontSizePt, dpi, axisLengthPx float64, uniformDecimals bool, textMeasurer TextMeasurerI) *ExhaustiveTypesettingScorer {
 	return &ExhaustiveTypesettingScorer{
+		textMeasurer:    textMeasurer,
 		uniformDecimals: uniformDecimals,
-		face:            f,
-		shaper:          shaping.HarfbuzzShaper{},
-		fontSize:        fontSizePt,
+		fontSizePt:      fontSizePt,
 		dpi:             dpi,
 		axisLenPx:       axisLengthPx,
 		horizontal:      true,
@@ -171,7 +157,7 @@ func NewExhaustiveScorer(fontData []byte, fontSizePt, dpi, axisLengthPx float64,
 			KSuffixStrategy{},
 			MSuffixStrategy{},
 		},
-	}, nil
+	}
 }
 
 // calculateBestConfiguration finds the best strategy and its score for the given ticks
@@ -187,7 +173,7 @@ func (inst *ExhaustiveTypesettingScorer) calculateBestConfiguration(lmin, lmax, 
 	// Pre-calculate invariant scores
 	// 1. Font Size (C# logic: 0.2 weight, penalty if < 7pt)
 	fsScore := 1.0
-	if inst.fontSize < 7.0 {
+	if inst.fontSizePt < 7.0 {
 		// Hard constraint in paper
 		fsScore = math.Inf(-1)
 	} else {
@@ -204,7 +190,7 @@ func (inst *ExhaustiveTypesettingScorer) calculateBestConfiguration(lmin, lmax, 
 	}
 
 	// Convert EM to pixels for overlap calculation
-	emPx := inst.fontSize * inst.dpi / 72.0
+	emPx := inst.fontSizePt * inst.dpi / 72.0
 
 	// Iterate over ALL strategies (Decimal, Scientific, K, M)
 	for _, strat := range inst.strategies {
@@ -320,33 +306,5 @@ func (inst *ExhaustiveTypesettingScorer) calculateOverlap(ticks []float64, label
 }
 
 func (inst *ExhaustiveTypesettingScorer) measureString(text string) float64 {
-	runes := []rune(text)
-
-	// Explicitly convert font size to Fixed 26.6 format
-	// 1 unit = 1/64th of a point.
-	fixedSize := fixed.Int26_6(inst.fontSize * 64)
-
-	input := shaping.Input{
-		Text:      runes,
-		RunStart:  0,
-		RunEnd:    len(runes),
-		Direction: di.DirectionLTR,
-		Face:      inst.face,
-		Size:      fixedSize,
-		Script:    language.Latin,
-	}
-
-	output := inst.shaper.Shape(input)
-
-	var totalAdvance fixed.Int26_6
-	for _, glyph := range output.Glyphs {
-		totalAdvance += glyph.Advance
-	}
-
-	// Convert 26.6 fixed point back to float pixels
-	// (Value / 64) gives points, then scale by DPI
-	widthPts := float64(totalAdvance) / 64.0
-	widthPx := widthPts * inst.dpi / 72.0
-
-	return widthPx
+	return inst.textMeasurer.MeasureSingleLine(text, inst.fontSizePt, inst.dpi)
 }
