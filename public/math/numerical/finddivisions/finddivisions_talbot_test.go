@@ -23,10 +23,17 @@ func TestExtended(t *testing.T) {
 		{"Small Numbers", 0.0, 0.1, 5, false, 0.02},
 		{"Loose Constraint", 0.1, 0.9, 5, true, 0.2},
 	}
+	opts := TalbotOptions{
+		Weights:   DefaultWeights,
+		OnlyLoose: false,
+		FastMode:  false,
+		Qs:        DefaultQ,
+	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res := Talbot(tt.dmin, tt.dmax, tt.m, nil, tt.loose, DefaultWeights, SimpleLegibilityScorer{})
+			opts.OnlyLoose = tt.loose
+			res := Talbot(tt.dmin, tt.dmax, tt.m, opts, SimpleLegibilityScorer{})
 
 			if len(res.Ticks) == 0 {
 				t.Fatal("No ticks generated")
