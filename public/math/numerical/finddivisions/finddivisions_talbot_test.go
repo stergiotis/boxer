@@ -1,5 +1,6 @@
 //go:build llm_generated_gemini3pro
-package numerical
+
+package finddivisions
 
 import (
 	"math"
@@ -25,7 +26,7 @@ func TestExtended(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res := Extended(tt.dmin, tt.dmax, tt.m, nil, tt.loose, DefaultWeights, SimpleLegibilityScorer{})
+			res := Talbot(tt.dmin, tt.dmax, tt.m, nil, tt.loose, DefaultWeights, SimpleLegibilityScorer{})
 
 			if len(res.Ticks) == 0 {
 				t.Fatal("No ticks generated")

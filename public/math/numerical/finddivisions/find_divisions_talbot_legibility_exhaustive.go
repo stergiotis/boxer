@@ -1,6 +1,6 @@
 //go:build llm_generated_gemini3pro
 
-package numerical
+package finddivisions
 
 import (
 	"bytes"
@@ -316,7 +316,7 @@ func (inst *ExhaustiveTypesettingScorer) calculateOverlap(ticks []float64, label
 	// Scale: how many pixels per unit of data
 	scale := inst.axisLenPx / dataRange
 
-	return calculateOverlap(ticks,widths,dmin,dmax,scale,emPx, inst.horizontal)
+	return calculateOverlap(ticks, widths, dmin, dmax, scale, emPx, inst.horizontal)
 }
 
 func (inst *ExhaustiveTypesettingScorer) measureString(text string) float64 {

@@ -1,6 +1,6 @@
 //go:build llm_generated_gemini3pro
 
-package numerical
+package finddivisions
 
 import (
 	"math"
@@ -36,7 +36,7 @@ const (
 	Eps       = DoubleEps * 100.0
 )
 
-type ExtendedResult struct {
+type TalbotResult struct {
 	Min    float64
 	Max    float64
 	Step   float64
@@ -54,6 +54,12 @@ type Weights struct {
 	Density    float64
 	Legibility float64
 }
+type TalbotOptions struct {
+	Weights   Weights
+	OnlyLoose bool
+	FastMode bool
+	Qs       []float64
+}
 
 // LegibilityScorerI defines how to evaluate the visual quality of a tick set.
 type LegibilityScorerI interface {
@@ -68,6 +74,7 @@ type LegibilityScorerI interface {
 
 var DefaultWeights = Weights{0.25, 0.2, 0.5, 0.05}
 var DefaultQ = []float64{1, 5, 2, 2.5, 4, 3}
+var WilkinsonQ = []float64{1, 5, 2, 2.5, 3, 4, 1.5, 7, 6, 8, 9}
 
 // simplicity calculates the simplicity score (how "nice" the numbers are)
 func simplicity(q float64, Q []float64, j int, lmin, lmax, lstep float64) float64 {
@@ -184,15 +191,25 @@ func GenerateTicksRobust(start, end, step float64) []float64 {
 	return ticks
 }
 
-// Extended implements the Extended Wilkinson Algorithm
-func Extended(dmin, dmax float64, m int, Q []float64, onlyLoose bool, w Weights, scorer LegibilityScorerI) ExtendedResult {
-	if Q == nil {
-		Q = DefaultQ
+// Talbot implements the Extended Wilkinson Algorithm
+func Talbot(dmin, dmax float64, m int, opts TalbotOptions, scorer LegibilityScorerI) TalbotResult {
+	w := opts.Weights
+	onlyLoose := opts.OnlyLoose
+
+	qs := opts.Qs
+	if opts.FastMode {
+		if len(qs) == 0 {
+			qs = WilkinsonQ
+		}
+	} else {
+		if len(qs) == 0 {
+			qs = DefaultQ
+		}
 	}
 
 	// 1. Handle NaN / Inf
 	if math.IsNaN(dmin) || math.IsNaN(dmax) {
-		return ExtendedResult{Min: 0, Max: 1, Step: 1, Ticks: []float64{0, 1}}
+		return TalbotResult{Min: 0, Max: 1, Step: 1, Ticks: []float64{0, 1}}
 	}
 
 	// 2. Handle Inverted Range
@@ -201,7 +218,7 @@ func Extended(dmin, dmax float64, m int, Q []float64, onlyLoose bool, w Weights,
 	}
 
 	if dmax-dmin < Eps {
-		return ExtendedResult{Min: dmin, Max: dmax, Step: 0, Ticks: []float64{dmin}}
+		return TalbotResult{Min: dmin, Max: dmax, Step: 0, Ticks: []float64{dmin}}
 	}
 
 	// If scorer is nil, use default
@@ -209,13 +226,18 @@ func Extended(dmin, dmax float64, m int, Q []float64, onlyLoose bool, w Weights,
 		scorer = SimpleLegibilityScorer{}
 	}
 
-	best := ExtendedResult{Score: -2.0} // Initialize with worst possible score
+	best := TalbotResult{Score: -2.0} // Initialize with the worst possible score
+
+	maxJ := 1000
+	if opts.FastMode {
+		maxJ = 2 // like original Wilkinson algorithm
+	}
 
 	// Outer loop: j (Simplicity / Skipping)
-	// Theoretically infinite, but usually terminates quickly. Safety cap at 1000.
-	for j := 1; j < 1000; j++ {
-		for _, q := range Q {
-			sm := simplicityMax(q, Q, j)
+	// Theoretically infinite, but usually terminates quickly. Safety cap at maxJ.
+	for j := 1; j < maxJ; j++ {
+		for _, q := range qs {
+			sm := simplicityMax(q, qs, j)
 
 			// Pruning 1
 			if (w.Simplicity*sm + w.Coverage + w.Density + w.Legibility) < best.Score {
@@ -266,7 +288,7 @@ func Extended(dmin, dmax float64, m int, Q []float64, onlyLoose bool, w Weights,
 						lmax := lmin + step*float64(k-1)
 						lstep := step
 
-						s := simplicity(q, Q, j, lmin, lmax, lstep)
+						s := simplicity(q, qs, j, lmin, lmax, lstep)
 						c := coverage(dmin, dmax, lmin, lmax)
 						g := density(k, m, dmin, dmax, lmin, lmax)
 						l := scorer.Score(lmin, lmax, lstep, dmin, dmax)
@@ -276,7 +298,7 @@ func Extended(dmin, dmax float64, m int, Q []float64, onlyLoose bool, w Weights,
 						// Constraints
 						isLoose := lmin <= dmin && lmax >= dmax
 						if score > best.Score && (!onlyLoose || isLoose) {
-							best = ExtendedResult{
+							best = TalbotResult{
 								Min:    lmin,
 								Max:    lmax,
 								Step:   lstep,

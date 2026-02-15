@@ -1,4 +1,4 @@
-package numerical
+package finddivisions
 
 import (
 	"math"

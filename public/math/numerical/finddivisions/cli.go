@@ -1,6 +1,6 @@
 //go:build llm_generated_gemini3pro
 
-package numerical
+package finddivisions
 
 import (
 	"fmt"
@@ -34,33 +34,49 @@ func NewCliCommand() *cli.Command {
 						Name: "generate",
 						Flags: []cli.Flag{
 							&cli.Float64Flag{
-								Name:  "fontSize",
-								Value: 12.0,
+								Name:     "fontSize",
+								Value:    12.0,
+								Category: "drawing",
 							},
 							&cli.Float64Flag{
-								Name:  "dpi",
-								Value: 96.0,
+								Name:     "dpi",
+								Value:    96.0,
+								Category: "drawing",
+							},
+							&cli.BoolFlag{
+								Name:     "onlyLoose",
+								Category: "algorithm",
+							},
+							&cli.BoolFlag{
+								Name:     "fastMode",
+								Category: "algorithm",
 							},
 							&cli.Float64Flag{
-								Name:  "axisWidth",
-								Value: 400.0,
+								Name:     "axisWidth",
+								Value:    400.0,
+								Category: "harness",
 							},
 							&cli.IntFlag{
-								Name:  "rowHeight",
-								Value: 150.0,
+								Name:     "rowHeight",
+								Value:    150.0,
+								Category: "harness",
 							},
 							&cli.IntFlag{
-								Name:  "canvasWidth",
-								Value: 600,
+								Name:     "canvasWidth",
+								Value:    600,
+								Category: "harness",
 							},
 							&cli.Float64Flag{
-								Name: "min",
+								Name:     "min",
+								Category: "data",
 							},
 							&cli.Float64Flag{
-								Name: "max",
+								Name:     "max",
+								Category: "data",
 							},
 							&cli.IntFlag{
-								Name: "desiredTicks",
+								Name:     "desiredTicks",
+								Category: "data",
 							},
 						},
 						Action: func(context *cli.Context) error {
@@ -121,13 +137,19 @@ func NewCliCommand() *cli.Command {
 								SubPixelsY:        0,
 							})
 							dc.SetFontFace(fontFace)
+							opts := TalbotOptions{
+								Weights:   DefaultWeights,
+								OnlyLoose: context.Bool("onlyLoose"),
+								FastMode:  context.Bool("fastMode"),
+								Qs:        nil,
+							}
 
 							// 4. Render Loop
 							for i, tc := range cases {
 								offsetY := float64(i * rowHeight)
 
 								// Run Algorithm
-								res := Extended(tc.Min, tc.Max, tc.DesiredTicks, nil, false, DefaultWeights, scorer)
+								res := Talbot(tc.Min, tc.Max, tc.DesiredTicks, opts, scorer)
 
 								// Draw Title
 								dc.SetRGB(0, 0, 0)
@@ -146,7 +168,7 @@ func NewCliCommand() *cli.Command {
 	}
 }
 
-func drawAxisVisual(dc *gg.Context, x, y, width float64, tc TestCase, res ExtendedResult) {
+func drawAxisVisual(dc *gg.Context, x, y, width float64, tc TestCase, res TalbotResult) {
 	// Determine the "World View"
 	// We want to show slightly more than the ticks to see margins
 	viewMin := math.Min(tc.Min, res.Min)
