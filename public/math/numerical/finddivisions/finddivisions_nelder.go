@@ -48,33 +48,11 @@ Translated from Chez Scheme to go: Gemini 3 Pro Preview
 ```
 */
 
-// NelderResult holds the calculated graph bounds and step size.
-type NelderResult struct {
-	Min  float64
-	Max  float64
-	Step float64
-}
-
-// GenerateTicks creates the actual slice of tick values from the result.
-func (inst NelderResult) GenerateTicks() []float64 {
-	var ticks []float64
-	// Add epsilon to handle floating point inaccuracies during loop comparison
-	epsilon := inst.Step * 1e-10
-	for t := inst.Min + inst.Step/2; t <= inst.Max-inst.Step/2+epsilon; t += inst.Step {
-		// Round to remove machine epsilon noise (e.g. 0.300000004 -> 0.3)
-		// This is a simple precision fix for display
-		scale := math.Pow(10, 10) // reasonable precision
-		val := math.Round(t*scale) / scale
-		ticks = append(ticks, val)
-	}
-	return ticks
-}
-
-// FindDivisionsNelder implements J.A. Nelder's 1976 scaling algorithm.
+// Nelder implements J.A. Nelder's 1976 scaling algorithm.
 // fmin, fmax: data range
 // n: desired number of ticks (must be > 1)
 // Q: optional list of "nice" steps (normalized 1-10). Pass nil for default.
-func FindDivisionsNelder(fmin, fmax float64, n int, Q []float64) NelderResult {
+func Nelder(fmin, fmax float64, n int, Q []float64) AxisLayout {
 	// Default Q from the Scheme code
 	if Q == nil {
 		Q = []float64{1.0, 1.2, 1.6, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0}
@@ -169,9 +147,16 @@ func FindDivisionsNelder(fmin, fmax float64, n int, Q []float64) NelderResult {
 
 	// The Scheme code returns: values (- valmin (/ step 2)) ...
 	// This adds a half-step padding to the graph bounds.
-	return NelderResult{
-		Min:  finalMin - step/2.0,
-		Max:  finalMax + step/2.0,
-		Step: step,
+	r := AxisLayout{
+		DataMin:    fmin,
+		DataMax:    fmax,
+		ViewMin:    finalMin - step/2.0,
+		ViewMax:    finalMax + step/2.0,
+		Step:       step,
+		TickLabels: nil,
+		Score:      0,
+		Algorithm:  "Nelder",
 	}
+	r.TickValues = GenerateTicks(r.ViewMin, r.ViewMax, r.Step)
+	return r
 }

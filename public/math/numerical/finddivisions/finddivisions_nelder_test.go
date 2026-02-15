@@ -21,7 +21,7 @@ func TestFindDivisionsNelder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res := FindDivisionsNelder(tt.min, tt.max, tt.n, nil)
+			res := Nelder(tt.min, tt.max, tt.n, nil)
 
 			// Basic Validation
 			if res.Step <= 0 {
@@ -29,7 +29,7 @@ func TestFindDivisionsNelder(t *testing.T) {
 			}
 
 			// Calculate actual tick positions
-			ticks := res.GenerateTicks()
+			ticks := res.GenerateTicksNelder()
 
 			// Check if ticks cover the data
 			firstTick := ticks[0]
@@ -56,14 +56,14 @@ func TestFindDivisionsNelder(t *testing.T) {
 func TestEdgeCasesGo(t *testing.T) {
 	// Test the specific Q logic (using 1.2 or 1.6)
 	// Range 0 to 1.2, 2 ticks requested -> Raw step 1.2. Should match exactly.
-	res := FindDivisionsNelder(0, 1.2, 2, nil)
+	res := Nelder(0, 1.2, 2, nil)
 	// Raw step = 1.2. Normalized = 1.2. Matches 1.2 in Q.
 	if math.Abs(res.Step-1.2) > 1e-9 {
 		t.Errorf("Expected step 1.2, got %v", res.Step)
 	}
 
 	// Zero Range
-	res = FindDivisionsNelder(5, 5, 5, nil)
+	res = Nelder(5, 5, 5, nil)
 	if res.Step == 0 {
 		t.Error("Zero range should produce non-zero step")
 	}

@@ -36,17 +36,6 @@ const (
 	Eps       = DoubleEps * 100.0
 )
 
-type TalbotResult struct {
-	Min    float64
-	Max    float64
-	Step   float64
-	Score  float64
-	Dmin   float64
-	Dmax   float64
-	Ticks  [] /*i*/ float64
-	Labels [] /*i*/ string
-}
-
 // Weights for the optimization components
 type Weights struct {
 	Simplicity float64
@@ -57,8 +46,8 @@ type Weights struct {
 type TalbotOptions struct {
 	Weights   Weights
 	OnlyLoose bool
-	FastMode bool
-	Qs       []float64
+	FastMode  bool
+	Qs        []float64
 }
 
 // LegibilityScorerI defines how to evaluate the visual quality of a tick set.
@@ -144,55 +133,9 @@ func densityMax(k, m int) float64 {
 	return 1.0
 }
 
-// GenerateTicksNaive mimics R's seq function
-func GenerateTicksNaive(min, max, step float64) []float64 {
-	var ticks []float64
-	// Adding epsilon to handle floating point errors at the upper bound
-	for t := min; t <= max+step*1e-10; t += step {
-		// Round to remove noise (optional but good for display)
-		scale := 1e12
-		val := math.Round(t*scale) / scale
-		ticks = append(ticks, val)
-	}
-	return ticks
-}
-func GenerateTicks(min, max, step float64) []float64 {
-	return GenerateTicksRobust(min, max, step)
-}
-
-// GenerateTicksRobust generates ticks using multiplication to minimize accumulated error.
-// It also handles the "Negative Zero" edge case.
-func GenerateTicksRobust(start, end, step float64) []float64 {
-	var ticks []float64
-
-	// 1. Calculate the integer number of steps to avoid loop drift
-	// We add a tiny epsilon to handle floating point inequality strictness
-	count := math.Floor((end-start)/step + 1e-10)
-
-	for i := 0; i <= int(count); i++ {
-		// 2. Use fma (Fused Multiply Add) if available, or standard mult
-		// val = start + i * step
-		val := start + float64(i)*step
-
-		// 3. Snap to Zero
-		// If the value is extremely close to zero (relative to the step), make it exactly 0.0.
-		// This fixes "-0.00" string formatting issues and simplicity score checks.
-		if math.Abs(val) < step*1e-10 {
-			val = 0.0
-		}
-
-		// 4. Precision Truncation for Display
-		// This prevents "0.1 + 0.2 = 0.300000000004"
-		// We round to the 10th decimal place relative to the step magnitude.
-		// (Optional, but recommended for visual systems)
-
-		ticks = append(ticks, val)
-	}
-	return ticks
-}
 
 // Talbot implements the Extended Wilkinson Algorithm
-func Talbot(dmin, dmax float64, m int, opts TalbotOptions, scorer LegibilityScorerI) TalbotResult {
+func Talbot(dmin, dmax float64, m int, opts TalbotOptions, scorer LegibilityScorerI) AxisLayout {
 	w := opts.Weights
 	onlyLoose := opts.OnlyLoose
 
@@ -209,7 +152,15 @@ func Talbot(dmin, dmax float64, m int, opts TalbotOptions, scorer LegibilityScor
 
 	// 1. Handle NaN / Inf
 	if math.IsNaN(dmin) || math.IsNaN(dmax) {
-		return TalbotResult{Min: 0, Max: 1, Step: 1, Ticks: []float64{0, 1}}
+		return AxisLayout{
+			DataMin:    dmin,
+			DataMax:    dmax,
+			ViewMin:    0,
+			ViewMax:    1,
+			Step:       1,
+			TickValues: []float64{0, 1},
+			TickLabels: []string{"0", "1"},
+		}
 	}
 
 	// 2. Handle Inverted Range
@@ -218,7 +169,15 @@ func Talbot(dmin, dmax float64, m int, opts TalbotOptions, scorer LegibilityScor
 	}
 
 	if dmax-dmin < Eps {
-		return TalbotResult{Min: dmin, Max: dmax, Step: 0, Ticks: []float64{dmin}}
+		return AxisLayout{
+			DataMin:    dmin,
+			DataMax:    dmax,
+			ViewMin:    dmin,
+			ViewMax:    dmax,
+			Step:       0,
+			TickValues: []float64{dmin},
+			TickLabels: []string{""},
+		}
 	}
 
 	// If scorer is nil, use default
@@ -226,7 +185,7 @@ func Talbot(dmin, dmax float64, m int, opts TalbotOptions, scorer LegibilityScor
 		scorer = SimpleLegibilityScorer{}
 	}
 
-	best := TalbotResult{Score: -2.0} // Initialize with the worst possible score
+	best := AxisLayout{Score: -2.0} // Initialize with the worst possible score
 
 	maxJ := 1000
 	if opts.FastMode {
@@ -298,15 +257,15 @@ func Talbot(dmin, dmax float64, m int, opts TalbotOptions, scorer LegibilityScor
 						// Constraints
 						isLoose := lmin <= dmin && lmax >= dmax
 						if score > best.Score && (!onlyLoose || isLoose) {
-							best = TalbotResult{
-								Min:    lmin,
-								Max:    lmax,
-								Step:   lstep,
-								Score:  score,
-								Dmin:   dmin,
-								Dmax:   dmax,
-								Ticks:  nil,
-								Labels: nil,
+							best = AxisLayout{
+								DataMin:    dmin,
+								DataMax:    dmax,
+								ViewMin:    lmin,
+								ViewMax:    lmax,
+								Step:       lstep,
+								TickValues: nil,
+								TickLabels: nil,
+								Score:      score,
 							}
 						}
 					}
@@ -317,7 +276,7 @@ func Talbot(dmin, dmax float64, m int, opts TalbotOptions, scorer LegibilityScor
 	}
 
 Finish:
-	best.Ticks = GenerateTicks(best.Min, best.Max, best.Step)
-	best.Labels = scorer.Format(best.Min, best.Max, best.Step, best.Dmin, best.Dmax)
+	best.TickValues = GenerateTicks(best.ViewMin, best.ViewMax, best.Step)
+	best.TickLabels = scorer.Format(best.ViewMin, best.ViewMax, best.Step, best.DataMin, best.DataMax)
 	return best
 }

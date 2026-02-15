@@ -20,7 +20,7 @@ func TestCalculateTicks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := CalculateTicks(tt.min, tt.max, tt.desiredTicks)
+			got, err := Heckbert(tt.min, tt.max, tt.desiredTicks)
 			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}
@@ -41,7 +41,7 @@ func TestCalculateTicks(t *testing.T) {
 
 func TestEdgeCases(t *testing.T) {
 	// Case: Min equals Max
-	res, err := CalculateTicks(10, 10, 5)
+	res, err := Heckbert(10, 10, 5)
 	if err != nil {
 		t.Fatalf("Error on equal min/max: %v", err)
 	}
@@ -50,7 +50,7 @@ func TestEdgeCases(t *testing.T) {
 	}
 
 	// Case: Desired ticks too low
-	_, err = CalculateTicks(0, 100, 1)
+	_, err = Heckbert(0, 100, 1)
 	if err == nil {
 		t.Error("Should error if desiredTicks < 2")
 	}

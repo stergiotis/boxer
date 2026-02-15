@@ -60,40 +60,43 @@ func nicenum(x float64, round bool) float64 {
 	return nf * math.Pow(10, exp)
 }
 
-// CalculateTicks generates nice graph labels.
-func CalculateTicks(min, max float64, desiredTicks int) (TickResult, error) {
+// Heckbert generates nice graph labels.
+func Heckbert(min, max float64, desiredTicks int) (AxisLayout, error) {
 	if desiredTicks < 2 {
-		return TickResult{}, fmt.Errorf("desiredTicks must be at least 2")
-	}
-	if min == max {
-		return TickResult{Min: min, Max: max, Spacing: 0, Ticks: []float64{min}}, nil
+		return AxisLayout{}, fmt.Errorf("desiredTicks must be at least 2")
 	}
 	if min > max {
 		min, max = max, min
+	}
+	if min == max {
+		return AxisLayout{
+			DataMin:    min,
+			DataMax:    max,
+			ViewMin:    min,
+			ViewMax:    max,
+			Step:       0,
+			TickValues: nil,
+			TickLabels: nil,
+			Score:      0,
+			Algorithm:  "Heckbert",
+		}, nil
 	}
 
 	rangeVal := nicenum(max-min, false)
 	d := nicenum(rangeVal/float64(desiredTicks-1), true)
 
-	graphMin := math.Floor(min/d) * d
-	graphMax := math.Ceil(max/d) * d
+	viewMin := math.Floor(min/d) * d
+	viewMax := math.Ceil(max/d) * d
 
-	// Handle floating point precision issues for the loop
-	var ticks []float64
-	// We use a small epsilon to ensure the last tick is included despite float errors
-	epsilon := d * 1e-10
-
-	for val := graphMin; val <= graphMax+epsilon; val += d {
-		// Clean up floating point noise (e.g. 0.3000000000004)
-		// This is a simple way to truncate precision errors for display
-		cleanVal := math.Round(val/d) * d
-		ticks = append(ticks, cleanVal)
-	}
-
-	return TickResult{
-		Min:     graphMin,
-		Max:     graphMax,
-		Spacing: d,
-		Ticks:   ticks,
+	return AxisLayout{
+		DataMin:    min,
+		DataMax:    max,
+		ViewMin:    viewMin,
+		ViewMax:    viewMax,
+		Step:       d,
+		TickValues: GenerateTicks(viewMin, viewMax, d),
+		TickLabels: nil,
+		Score:      0,
+		Algorithm:  "Heckbert",
 	}, nil
 }
