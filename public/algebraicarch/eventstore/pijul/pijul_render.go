@@ -14,6 +14,20 @@ import (
 var GlobalIDs = c.NewWidgetIdStack()
 
 func RenderWindow(store *DemoStore) {
+	// 1. Process Pending Overrides SYNCHRONOUSLY within the frame!
+	store.mu.Lock()
+	if len(store.PendingOverrides) > 0 {
+		for ptr, val := range store.PendingOverrides {
+			*ptr = val
+			// This is now safe because we are inside the active UI frame!
+			c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(ptr)
+		}
+		// Clear the queue
+		store.PendingOverrides = make(map[*string]string)
+	}
+	store.mu.Unlock()
+
+	// 2. Standard Render Pass
 	store.mu.RLock()
 	defer store.mu.RUnlock()
 

@@ -21,11 +21,12 @@ var BaseDir = filepath.Join(os.TempDir(), "pijul-demo")
 type DemoStore struct {
 	mu sync.RWMutex
 
-	Actors         map[string]*ActorState
-	Server         *ActorState
-	Inbox          []PatchEnvelope
-	EditInputs     map[string]*string // e.g., "Alice_/contact/email" -> "jane@example.com"
-	ChecklistState map[string]*bool
+	Actors           map[string]*ActorState
+	Server           *ActorState
+	Inbox            []PatchEnvelope
+	EditInputs       map[string]*string // e.g., "Alice_/contact/email" -> "jane@example.com"
+	ChecklistState   map[string]*bool
+	PendingOverrides map[*string]string
 
 	// Global Queue to keep UI thread unblocked
 	TaskQueue    chan Task
@@ -93,10 +94,11 @@ type Task struct {
 
 func NewDemoStore() *DemoStore {
 	store := &DemoStore{
-		Actors:         make(map[string]*ActorState),
-		EditInputs:     make(map[string]*string),
-		ChecklistState: make(map[string]*bool),
-		TaskQueue:      make(chan Task, 100),
+		Actors:           make(map[string]*ActorState),
+		EditInputs:       make(map[string]*string),
+		ChecklistState:   make(map[string]*bool),
+		PendingOverrides: make(map[*string]string),
+		TaskQueue:        make(chan Task, 100),
 	}
 
 	for _, name := range []string{"Server", "Alice", "Bob", "Charlie"} {
@@ -120,6 +122,7 @@ func NewDemoStore() *DemoStore {
 
 	return store
 }
+
 func (s *DemoStore) WorkerLoop() {
 	for task := range s.TaskQueue {
 		// 1. Lock UI
@@ -131,25 +134,30 @@ func (s *DemoStore) WorkerLoop() {
 		err := task.Action()
 
 		// 3. ARTIFICIAL DELAY: Prevent the 1-frame "flash"
-		// This makes the Interactive(false) lock visible as a deliberate state
 		time.Sleep(300 * time.Millisecond)
 
 		// 4. Clean up and Unlock
 		s.mu.Lock()
 		task.OnDone(err)
 
+		// Re-read files from disk
 		s.ReloadAllActors()
 
-		// 5. Data Sync: After reloading, we must clear the old EditInputs pointers
-		// so that the text boxes fetch the newly pulled strings from the file.
+		// 5. Data Sync: Safely push external changes to the UI
 		for _, state := range s.Actors {
 			for _, line := range state.Lines {
-				inputKey := state.Name + "_" + line.Path
-
-				// Only overwrite the UI text if they aren't actively resolving a conflict
-				if line.Conflict == nil {
-					newVal := line.Value
-					s.EditInputs[inputKey] = &newVal
+				if line.Conflict == nil { // Only sync if no conflict
+					inputKey := state.Name + "_" + line.Path
+					if valPtr, ok := s.EditInputs[inputKey]; ok {
+						// If the file changed from behind the UI's back
+						if *valPtr != line.Value {
+							// Queue the pointer for a synchronous override!
+							s.PendingOverrides[valPtr] = line.Value
+						}
+					} else {
+						newVal := line.Value
+						s.EditInputs[inputKey] = &newVal
+					}
 				}
 			}
 		}
@@ -174,16 +182,14 @@ func runCmd(dir string, name string, args ...string) (string, error) {
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf
 	err := cmd.Run()
+	//log.Info().Str("stdout", outBuf.String()).Str("stderr", errBuf.String()).Strs("args", args).Err(err).Msg("ran command")
 	if err != nil {
 		return "", fmt.Errorf("CMD Error: %v\nStderr: %s", err, errBuf.String())
 	}
 	return outBuf.String(), nil
 }
 func (s *DemoStore) InitSystem() error {
-	// Clean slate
 	_ = os.RemoveAll(BaseDir)
-
-	// Create the Server directory (which also creates BaseDir)
 	if err := os.MkdirAll(s.Server.Path, 0755); err != nil {
 		return fmt.Errorf("mkdir server: %v", err)
 	}
@@ -192,10 +198,15 @@ func (s *DemoStore) InitSystem() error {
 		return fmt.Errorf("pijul init failed: %v\nOutput: %s", err, out)
 	}
 
-	baseText := `/id "CUST-100"
-/contact/email "jane@example.com"
-/account/status "Active"
-/company/name "Acme Corp"`
+	// ADDED: Extra context lines to prevent mathematical graph ambiguity!
+	baseText := "/id \"CUST-100\"\n" +
+		"/contact/name \"Jane Doe\"\n" +
+		"/contact/email \"jane@example.com\"\n" +
+		"/contact/phone \"555-0000\"\n" +
+		"/account/status \"Active\"\n" +
+		"/account/created \"2023-01-01\"\n" +
+		"/company/name \"Acme Corp\"\n" +
+		"/company/address \"123 Main St\"\n"
 
 	if err := os.WriteFile(filepath.Join(s.Server.Path, "customer.txt"), []byte(baseText), 0644); err != nil {
 		return fmt.Errorf("write base file failed: %v", err)
@@ -206,13 +217,10 @@ func (s *DemoStore) InitSystem() error {
 	}
 
 	if out, err := runCmd(s.Server.Path, "pijul", "record", "-am", "Init Base Record"); err != nil {
-		return fmt.Errorf("pijul record failed (Are you missing a Pijul identity?): %v\nOutput: %s", err, out)
+		return fmt.Errorf("pijul record failed: %v\nOutput: %s", err, out)
 	}
 
-	// Clone to Actors
 	for _, actor := range []string{"Alice", "Bob", "Charlie"} {
-		// Pijul clone expects the target directory to NOT exist yet.
-		// It will create /tmp/pijul-demo/{actor} itself.
 		if out, err := runCmd(BaseDir, "pijul", "clone", s.Server.Path, strings.ToLower(actor)); err != nil {
 			return fmt.Errorf("pijul clone %s failed: %v\nOutput: %s", actor, err, out)
 		}
@@ -263,7 +271,7 @@ func (s *DemoStore) SaveEdit(actor string, pathKey string, value string) error {
 
 func (s *DemoStore) PushPull(actor, action string) error {
 	state := s.Actors[actor]
-	_, err := runCmd(state.Path, "pijul", action, s.Server.Path)
+	_, err := runCmd(state.Path, "pijul", action, "--all", s.Server.Path)
 	return err
 }
 
@@ -273,28 +281,46 @@ func (s *DemoStore) ResolveConflict(actor, pathKey, winningValue string) error {
 
 func (s *DemoStore) EmailPatch(actor string) error {
 	state := s.Actors[actor]
-	logOut, err := runCmd(state.Path, "pijul", "log", "--hash-only")
-	if err != nil {
-		return err
-	}
 
-	hashes := strings.Split(strings.TrimSpace(logOut), "\n")
-	if len(hashes) == 0 {
+	// 1. Find the newest binary patch file in .pijul/changes
+	changeDir := filepath.Join(state.Path, ".pijul", "changes")
+	var srcFile string
+	var maxTime time.Time
+
+	err := filepath.Walk(changeDir, func(p string, info os.FileInfo, e error) error {
+		if e == nil && !info.IsDir() {
+			if info.ModTime().After(maxTime) {
+				maxTime = info.ModTime()
+				srcFile = p
+			}
+		}
 		return nil
-	}
-	latestHash := hashes[0]
+	})
 
+	if err != nil || srcFile == "" {
+		return fmt.Errorf("could not find binary patch file in %s", changeDir)
+	}
+
+	// 2. Get the hash for the UI label
+	logOut, _ := runCmd(state.Path, "pijul", "log", "--hash-only")
+	hashes := strings.Split(strings.TrimSpace(logOut), "\n")
+	latestHash := "unknown"
+	if len(hashes) > 0 && hashes[0] != "" {
+		latestHash = strings.TrimSpace(hashes[0])
+	}
+
+	// 3. Copy the raw binary file to our inbox
 	inboxDir := filepath.Join(BaseDir, "inbox")
 	_ = os.MkdirAll(inboxDir, 0755)
 	patchPath := filepath.Join(inboxDir, latestHash+".patch")
 
-	// Export Patch
-	cmd := exec.Command("pijul", "change", latestHash)
-	cmd.Dir = state.Path
-	outFile, _ := os.Create(patchPath)
-	cmd.Stdout = outFile
-	_ = cmd.Run()
-	outFile.Close()
+	data, err := os.ReadFile(srcFile)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(patchPath, data, 0644); err != nil {
+		return err
+	}
 
 	s.Inbox = append(s.Inbox, PatchEnvelope{
 		FromActor: actor,
@@ -327,7 +353,6 @@ func (s *DemoStore) ReloadAllActors() {
 		state.Logs = strings.Split(logOut, "\n\n")
 	}
 }
-
 func ParsePijulFile(content string) ([]KVLine, bool) {
 	var lines []KVLine
 	hasConflict := false
@@ -343,26 +368,27 @@ func ParsePijulFile(content string) ([]KVLine, bool) {
 			continue
 		}
 
-		if strings.HasPrefix(line, ">>>>>>>>") {
+		// Matches >>>>>>> and >>>>>>>>
+		if strings.HasPrefix(line, ">>>>>>>") {
 			inConflict = true
 			hasConflict = true
-			hash := strings.TrimSpace(strings.TrimPrefix(line, ">>>>>>>>"))
+			hash := strings.TrimSpace(strings.TrimLeft(line, ">"))
 			cd = &ConflictData{AliceHash: hash}
 			continue
 		}
 		if inConflict {
 			if cd == nil {
 				cd = &ConflictData{}
-			} // failsafe init
+			}
 
-			if strings.HasPrefix(line, "========") {
+			if strings.HasPrefix(line, "=======") {
 				continue
 			}
-			if strings.HasPrefix(line, "<<<<<<<<") {
-				cd.BobHash = strings.TrimSpace(strings.TrimPrefix(line, "<<<<<<<<"))
+			if strings.HasPrefix(line, "<<<<<<<") {
+				hash := strings.TrimSpace(strings.TrimLeft(line, "<"))
+				cd.BobHash = hash
 				lines = append(lines, KVLine{Path: conflictPath, Conflict: cd})
 
-				// Reset state machine for subsequent keys
 				inConflict = false
 				cd = nil
 				conflictPath = ""
@@ -371,7 +397,7 @@ func ParsePijulFile(content string) ([]KVLine, bool) {
 
 			// Extract KVs within the conflict block
 			parts := strings.SplitN(line, " ", 2)
-			if len(parts) == 2 {
+			if len(parts) >= 2 {
 				val := strings.Trim(parts[1], `"`)
 				if conflictPath == "" {
 					conflictPath = parts[0]
@@ -384,7 +410,7 @@ func ParsePijulFile(content string) ([]KVLine, bool) {
 			}
 		} else {
 			parts := strings.SplitN(line, " ", 2)
-			if len(parts) == 2 {
+			if len(parts) >= 2 {
 				lines = append(lines, KVLine{Path: parts[0], Value: strings.Trim(parts[1], `"`)})
 			}
 		}
