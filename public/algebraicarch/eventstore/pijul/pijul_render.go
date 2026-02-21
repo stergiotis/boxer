@@ -37,6 +37,13 @@ func RenderWindow(store *DemoStore) {
 			renderServerWindow(store, GlobalIDs)
 		}
 	}
+
+	// 3. Draw Storyboard Window
+	for range c.IdScope(GlobalIDs.PrepareStr("scope_storyboard")) {
+		for range c.Window(GlobalIDs.PrepareStr("window"), c.WidgetText().Text("Demo Storyboard").Keep()).DefaultOpen(true).KeepIter() {
+			renderStoryboardWindow(store, GlobalIDs)
+		}
+	}
 }
 
 func renderActorWindow(store *DemoStore, ids *c.WidgetIdStack, actorName string) {
@@ -205,5 +212,42 @@ func renderActionButton(store *DemoStore, ids *c.WidgetIdStack, actor, label str
 				store.Actors[actor].LastError = ""
 			}
 		})
+	}
+}
+func renderStoryboardWindow(store *DemoStore, ids *c.WidgetIdStack) {
+	for range c.Vertical().KeepIter() {
+		c.Label("Use this assistant to walk through the Event Sourcing capabilities.").Send()
+		c.Separator().Horizontal().Send()
+
+		renderPlaybook(store, ids, "Playbook 1: Commutative Field Merging & Conflict Trapping", Playbook1)
+
+		c.Separator().Horizontal().Send()
+
+		renderPlaybook(store, ids, "Playbook 2: Decentralized USB/Email Sync", Playbook2)
+	}
+}
+
+func renderPlaybook(store *DemoStore, ids *c.WidgetIdStack, title string, steps []string) {
+	for range c.IdScope(ids.PrepareStr(title)) {
+		c.Label("=== " + title + " ===").Send()
+
+		for i, step := range steps {
+			for range c.IdScope(ids.PrepareStr(fmt.Sprintf("step_%d", i))) {
+
+				// 1. Get or create a STABLE boolean pointer
+				key := fmt.Sprintf("%s_%d", title, i)
+				valPtr, ok := store.ChecklistState[key]
+				if !ok {
+					v := false
+					valPtr = &v
+					store.ChecklistState[key] = valPtr
+				}
+
+				// 2. Render Checkbox and bind the stable pointer
+				// The API signature is Checkbox(id, initial_bool, text)
+				cb := c.Checkbox(ids.PrepareStr("cb"), *valPtr, step)
+				cb.SendRespVal(valPtr)
+			}
+		}
 	}
 }

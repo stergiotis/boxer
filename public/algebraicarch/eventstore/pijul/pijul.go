@@ -21,14 +21,37 @@ var BaseDir = filepath.Join(os.TempDir(), "pijul-demo")
 type DemoStore struct {
 	mu sync.RWMutex
 
-	Actors     map[string]*ActorState
-	Server     *ActorState
-	Inbox      []PatchEnvelope
-	EditInputs map[string]*string // e.g., "Alice_/contact/email" -> "jane@example.com"
+	Actors         map[string]*ActorState
+	Server         *ActorState
+	Inbox          []PatchEnvelope
+	EditInputs     map[string]*string // e.g., "Alice_/contact/email" -> "jane@example.com"
+	ChecklistState map[string]*bool
 
 	// Global Queue to keep UI thread unblocked
 	TaskQueue    chan Task
 	IsProcessing bool
+}
+
+var Playbook1 = []string{
+	"1. Alice edits /contact/email and clicks [Save].",
+	"2. Bob edits /company/name and clicks [Save].",
+	"3. Alice clicks [Push] to origin.",
+	"4. Bob clicks [Pull] from origin.",
+	"5. Verify: Bob sees Alice's email change without overwriting his company name (Commutative patch).",
+	"6. Both edit /account/status to different values. Both push/pull.",
+	"7. Verify: UI natively parses the injected file markers.",
+	"8. Click [Keep Alice] or [Keep Bob] to safely resolve the conflict.",
+}
+
+var Playbook2 = []string{
+	"1. Bob modifies /company/name -> [Save].",
+	"2. Bob clicks [Email Patch].",
+	"3. Verify: Patch appears in the center column Inbox.",
+	"4. Alice clicks [Apply to Alice].",
+	"5. Verify: Alice receives the update strictly peer-to-peer.",
+	"6. Charlie edits Bob's exact line, clicks [Save] and [Email Patch].",
+	"7. Alice clicks [Apply to Alice] on Charlie's patch BEFORE Bob's.",
+	"8. Verify: Pijul captures structural dependency error and blocks the merge.",
 }
 
 type ActorState struct {
@@ -70,9 +93,10 @@ type Task struct {
 
 func NewDemoStore() *DemoStore {
 	store := &DemoStore{
-		Actors:     make(map[string]*ActorState),
-		EditInputs: make(map[string]*string),
-		TaskQueue:  make(chan Task, 100),
+		Actors:         make(map[string]*ActorState),
+		EditInputs:     make(map[string]*string),
+		ChecklistState: make(map[string]*bool),
+		TaskQueue:      make(chan Task, 100),
 	}
 
 	for _, name := range []string{"Server", "Alice", "Bob", "Charlie"} {
