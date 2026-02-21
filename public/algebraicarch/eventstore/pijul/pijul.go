@@ -17,13 +17,15 @@ import (
 // 1. Data Models & Store
 // ---------------------------------------------------------------------------
 
+var BaseDir = filepath.Join(os.TempDir(), "pijul-demo")
+
 type DemoStore struct {
 	mu sync.RWMutex
 
 	Actors     map[string]*ActorState
 	Server     *ActorState
 	Inbox      []PatchEnvelope
-	EditInputs map[string]string // e.g., "Alice_/contact/email" -> "jane@example.com"
+	EditInputs map[string]*string // e.g., "Alice_/contact/email" -> "jane@example.com"
 
 	// Global Queue to keep UI thread unblocked
 	TaskQueue    chan Task
@@ -70,14 +72,14 @@ type Task struct {
 func NewDemoStore() *DemoStore {
 	store := &DemoStore{
 		Actors:     make(map[string]*ActorState),
-		EditInputs: make(map[string]string),
+		EditInputs: make(map[string]*string),
 		TaskQueue:  make(chan Task, 100),
 	}
 
 	for _, name := range []string{"Server", "Alice", "Bob", "Charlie"} {
 		store.Actors[name] = &ActorState{
 			Name: name,
-			Path: filepath.Join("/tmp/pijul-demo", strings.ToLower(name)),
+			Path: filepath.Join(BaseDir, strings.ToLower(name)),
 		}
 	}
 	store.Server = store.Actors["Server"]
@@ -88,7 +90,8 @@ func NewDemoStore() *DemoStore {
 	// Enqueue Initial System Setup
 	store.EnqueueTask(store.InitSystem, func(err error) {
 		if err != nil {
-			fmt.Println("Init Error:", err)
+			fmt.Printf("Init Error: %v\n", err)
+			store.Server.LastError = fmt.Sprintf("Init Error:\n%v", err)
 		}
 	})
 
@@ -132,14 +135,17 @@ func runCmd(dir string, name string, args ...string) (string, error) {
 	}
 	return outBuf.String(), nil
 }
-
 func (s *DemoStore) InitSystem() error {
-	_ = os.RemoveAll("/tmp/pijul-demo")
-	_ = os.MkdirAll("/tmp/pijul-demo/server", 0755)
+	// Clean slate
+	_ = os.RemoveAll(BaseDir)
 
-	// Init Server
-	if _, err := runCmd(s.Server.Path, "pijul", "init"); err != nil {
-		return err
+	// Create the Server directory (which also creates BaseDir)
+	if err := os.MkdirAll(s.Server.Path, 0755); err != nil {
+		return fmt.Errorf("mkdir server: %v", err)
+	}
+
+	if out, err := runCmd(s.Server.Path, "pijul", "init"); err != nil {
+		return fmt.Errorf("pijul init failed: %v\nOutput: %s", err, out)
 	}
 
 	baseText := `/id "CUST-100"
@@ -147,36 +153,65 @@ func (s *DemoStore) InitSystem() error {
 /account/status "Active"
 /company/name "Acme Corp"`
 
-	_ = os.WriteFile(filepath.Join(s.Server.Path, "customer.txt"), []byte(baseText), 0644)
+	if err := os.WriteFile(filepath.Join(s.Server.Path, "customer.txt"), []byte(baseText), 0644); err != nil {
+		return fmt.Errorf("write base file failed: %v", err)
+	}
 
-	runCmd(s.Server.Path, "pijul", "add", "customer.txt")
-	runCmd(s.Server.Path, "pijul", "record", "-am", "Init Base Record")
+	if out, err := runCmd(s.Server.Path, "pijul", "add", "customer.txt"); err != nil {
+		return fmt.Errorf("pijul add failed: %v\nOutput: %s", err, out)
+	}
+
+	if out, err := runCmd(s.Server.Path, "pijul", "record", "-am", "Init Base Record"); err != nil {
+		return fmt.Errorf("pijul record failed (Are you missing a Pijul identity?): %v\nOutput: %s", err, out)
+	}
 
 	// Clone to Actors
 	for _, actor := range []string{"Alice", "Bob", "Charlie"} {
-		path := s.Actors[actor].Path
-		_ = os.MkdirAll(path, 0755)
-		if _, err := runCmd("/tmp/pijul-demo", "pijul", "clone", s.Server.Path, strings.ToLower(actor)); err != nil {
-			return err
+		// Pijul clone expects the target directory to NOT exist yet.
+		// It will create /tmp/pijul-demo/{actor} itself.
+		if out, err := runCmd(BaseDir, "pijul", "clone", s.Server.Path, strings.ToLower(actor)); err != nil {
+			return fmt.Errorf("pijul clone %s failed: %v\nOutput: %s", actor, err, out)
 		}
 	}
 	return nil
 }
 
-func (s *DemoStore) SaveEdit(actor string, pathKey string, value string) error {
+// Safely rebuilds customer.txt from internal parsed state so we don't accidentally mangle injected conflict lines
+func (s *DemoStore) SaveStateToFile(actor string) error {
 	state := s.Actors[actor]
 	file := filepath.Join(state.Path, "customer.txt")
+	var out []string
 
-	// Poor-man's flat KV updater (assuming no active conflict markers here)
-	content, _ := os.ReadFile(file)
-	lines := strings.Split(string(content), "\n")
-	for i, l := range lines {
-		if strings.HasPrefix(l, pathKey+" ") {
-			lines[i] = fmt.Sprintf(`%s "%s"`, pathKey, value)
+	for _, l := range state.Lines {
+		if l.Conflict != nil {
+			out = append(out, ">>>>>>>> "+l.Conflict.AliceHash)
+			out = append(out, fmt.Sprintf(`%s "%s"`, l.Path, l.Conflict.AliceValue))
+			out = append(out, "========")
+			out = append(out, fmt.Sprintf(`%s "%s"`, l.Path, l.Conflict.BobValue))
+			out = append(out, "<<<<<<<< "+l.Conflict.BobHash)
+		} else {
+			out = append(out, fmt.Sprintf(`%s "%s"`, l.Path, l.Value))
+		}
+	}
+	// append trailing newline
+	return os.WriteFile(file, []byte(strings.Join(out, "\n")+"\n"), 0644)
+}
+
+func (s *DemoStore) SaveEdit(actor string, pathKey string, value string) error {
+	state := s.Actors[actor]
+
+	// Update memory state
+	for i, l := range state.Lines {
+		if l.Path == pathKey {
+			state.Lines[i].Value = value
+			state.Lines[i].Conflict = nil // Force resolution if user just edits it
 			break
 		}
 	}
-	_ = os.WriteFile(file, []byte(strings.Join(lines, "\n")), 0644)
+
+	if err := s.SaveStateToFile(actor); err != nil {
+		return err
+	}
 
 	_, err := runCmd(state.Path, "pijul", "record", "-am", fmt.Sprintf("Updated %s", pathKey))
 	return err
@@ -189,9 +224,7 @@ func (s *DemoStore) PushPull(actor, action string) error {
 }
 
 func (s *DemoStore) ResolveConflict(actor, pathKey, winningValue string) error {
-	// Simple resolution: forces the file back to clean state for that key
-	s.SaveEdit(actor, pathKey, winningValue)
-	return nil
+	return s.SaveEdit(actor, pathKey, winningValue)
 }
 
 func (s *DemoStore) EmailPatch(actor string) error {
@@ -207,8 +240,9 @@ func (s *DemoStore) EmailPatch(actor string) error {
 	}
 	latestHash := hashes[0]
 
-	_ = os.MkdirAll("/tmp/pijul-demo/inbox", 0755)
-	patchPath := filepath.Join("/tmp/pijul-demo/inbox", latestHash+".patch")
+	inboxDir := filepath.Join(BaseDir, "inbox")
+	_ = os.MkdirAll(inboxDir, 0755)
+	patchPath := filepath.Join(inboxDir, latestHash+".patch")
 
 	// Export Patch
 	cmd := exec.Command("pijul", "change", latestHash)
@@ -229,7 +263,7 @@ func (s *DemoStore) EmailPatch(actor string) error {
 func (s *DemoStore) ApplyPatch(actor string, patchPath string) error {
 	state := s.Actors[actor]
 	_, err := runCmd(state.Path, "pijul", "apply", patchPath)
-	return err // We intentionally return this so the UI can catch dependency errors
+	return err
 }
 
 // ---------------------------------------------------------------------------
@@ -246,7 +280,7 @@ func (s *DemoStore) ReloadAllActors() {
 		state.Lines, state.HasConflict = ParsePijulFile(string(content))
 
 		logOut, _ := runCmd(state.Path, "pijul", "log", "--description")
-		state.Logs = strings.Split(logOut, "\n\n") // rough block separation
+		state.Logs = strings.Split(logOut, "\n\n")
 	}
 }
 
@@ -268,21 +302,30 @@ func ParsePijulFile(content string) ([]KVLine, bool) {
 		if strings.HasPrefix(line, ">>>>>>>>") {
 			inConflict = true
 			hasConflict = true
-			cd = &ConflictData{AliceHash: strings.TrimSpace(strings.TrimPrefix(line, ">>>>>>>>"))}
+			hash := strings.TrimSpace(strings.TrimPrefix(line, ">>>>>>>>"))
+			cd = &ConflictData{AliceHash: hash}
 			continue
 		}
 		if inConflict {
+			if cd == nil {
+				cd = &ConflictData{}
+			} // failsafe init
+
 			if strings.HasPrefix(line, "========") {
 				continue
 			}
 			if strings.HasPrefix(line, "<<<<<<<<") {
 				cd.BobHash = strings.TrimSpace(strings.TrimPrefix(line, "<<<<<<<<"))
 				lines = append(lines, KVLine{Path: conflictPath, Conflict: cd})
+
+				// Reset state machine for subsequent keys
 				inConflict = false
 				cd = nil
+				conflictPath = ""
 				continue
 			}
-			// Parse KV during conflict block
+
+			// Extract KVs within the conflict block
 			parts := strings.SplitN(line, " ", 2)
 			if len(parts) == 2 {
 				val := strings.Trim(parts[1], `"`)
@@ -291,7 +334,7 @@ func ParsePijulFile(content string) ([]KVLine, bool) {
 				}
 				if cd.AliceValue == "" {
 					cd.AliceValue = val
-				} else if cd.BobValue == "" {
+				} else if cd.BobValue == "" && cd.AliceValue != "" {
 					cd.BobValue = val
 				}
 			}
@@ -309,11 +352,11 @@ func ParsePijulFile(content string) ([]KVLine, bool) {
 // 5. ImZero2 UI View Architecture
 // ---------------------------------------------------------------------------
 
-var ids = c.NewWidgetIdStack()
-
 func RenderWindow(store *DemoStore) {
 	store.mu.RLock()
 	defer store.mu.RUnlock()
+
+	ids := c.NewWidgetIdStack()
 
 	// 1. Draw Actor Windows
 	actors := []string{"Alice", "Bob", "Charlie"}
@@ -323,7 +366,7 @@ func RenderWindow(store *DemoStore) {
 		}
 	}
 
-	// 2. Draw Server & Inbox Window
+	// 2. Draw Server Window
 	for range c.Window(ids.PrepareStr("win_server"), c.WidgetText().Text("Server & Global Inbox").Keep()).DefaultOpen(true).KeepIter() {
 		renderServerWindow(store, ids)
 	}
@@ -350,11 +393,11 @@ func renderActorWindow(store *DemoStore, ids *c.WidgetIdStack, actorName string)
 				for range c.Vertical().KeepIter() {
 					c.Label("⚠️ CONFLICT ON: " + line.Path).Send()
 					for range c.Horizontal().KeepIter() {
-						if c.Button(ids.PrepareStr(actorName+"_keep_a"), c.Atoms().Text("Keep Alice's: "+line.Conflict.AliceValue).Keep()).SendResp().HasPrimaryClicked() {
+						if c.Button(ids.PrepareStr(actorName+"_keep_a_"+line.Path), c.Atoms().Text("Keep: "+line.Conflict.AliceValue).Keep()).SendResp().HasPrimaryClicked() {
 							val := line.Conflict.AliceValue
 							store.EnqueueTask(func() error { return store.ResolveConflict(actorName, line.Path, val) }, func(err error) {})
 						}
-						if c.Button(ids.PrepareStr(actorName+"_keep_b"), c.Atoms().Text("Keep Bob's: "+line.Conflict.BobValue).Keep()).SendResp().HasPrimaryClicked() {
+						if c.Button(ids.PrepareStr(actorName+"_keep_b_"+line.Path), c.Atoms().Text("Keep: "+line.Conflict.BobValue).Keep()).SendResp().HasPrimaryClicked() {
 							val := line.Conflict.BobValue
 							store.EnqueueTask(func() error { return store.ResolveConflict(actorName, line.Path, val) }, func(err error) {})
 						}
@@ -366,27 +409,34 @@ func renderActorWindow(store *DemoStore, ids *c.WidgetIdStack, actorName string)
 					c.Label(line.Path).Send()
 
 					inputKey := actorName + "_" + line.Path
-					val, ok := store.EditInputs[inputKey]
+
+					// 1. Get or create a STABLE pointer for this input
+					valPtr, ok := store.EditInputs[inputKey]
 					if !ok {
-						val = line.Value // Default to file state
+						newVal := line.Value // Copy string from file state
+						valPtr = &newVal     // Create a stable heap pointer
+						store.EditInputs[inputKey] = valPtr
 					}
 
-					edit := c.TextEdit(ids.PrepareStr("edit_"+inputKey), val)
+					// 2. Dereference for the initial text value
+					edit := c.TextEdit(ids.PrepareStr("edit_"+inputKey), *valPtr).DesiredWidth(200)
 					if store.IsProcessing {
-						edit = edit.Interactive(false) // Lock text edit during disk io
+						edit = edit.Interactive(false)
 					}
 
-					if edit.SendRespVal(&val).HasChanged() {
-						store.EditInputs[inputKey] = val
-					}
+					// 3. Pass the stable pointer.
+					// The framework will mutate *valPtr directly in the background!
+					edit.SendRespVal(valPtr)
 
 					// Save Button
 					btn := c.Button(ids.PrepareStr("btn_save_"+inputKey), c.Atoms().Text("Save").Keep())
 					if !store.IsProcessing && btn.SendResp().HasPrimaryClicked() {
-						// Pass captures safely
-						capturedVal := val
+						// Dereference the stable pointer to get the latest updated value
+						capturedVal := *valPtr
 						capturedPath := line.Path
-						store.EnqueueTask(func() error { return store.SaveEdit(actorName, capturedPath, capturedVal) }, func(err error) {})
+						store.EnqueueTask(func() error {
+							return store.SaveEdit(actorName, capturedPath, capturedVal)
+						}, func(err error) {})
 					}
 				}
 			}
@@ -394,15 +444,14 @@ func renderActorWindow(store *DemoStore, ids *c.WidgetIdStack, actorName string)
 
 		c.Separator().Horizontal().Send()
 
-		// 3. Error Display (Playbook 2 Step 8)
+		// 3. Error Display
 		if state.LastError != "" {
-			c.Label("🔴 Pijul Error:").Send()
+			c.Label("🔴 Pijul Output/Error:").Send()
 			for range c.ScrollArea().KeepIter() {
 				c.Label(state.LastError).Send()
 			}
+			c.Separator().Horizontal().Send()
 		}
-
-		c.Separator().Horizontal().Send()
 
 		// 4. Pijul History
 		c.Label("Local Pijul History:").Send()
@@ -418,6 +467,11 @@ func renderActorWindow(store *DemoStore, ids *c.WidgetIdStack, actorName string)
 func renderServerWindow(store *DemoStore, ids *c.WidgetIdStack) {
 	state := store.Server
 
+	if state.LastError != "" {
+		c.Label("🔴 Server Fatal Error: " + state.LastError).Send()
+		c.Separator().Horizontal().Send()
+	}
+
 	for range c.Vertical().KeepIter() {
 		c.Label("=== Central Origin State ===").Send()
 		for _, line := range state.Lines {
@@ -431,11 +485,11 @@ func renderServerWindow(store *DemoStore, ids *c.WidgetIdStack) {
 			for range c.Horizontal().KeepIter() {
 				c.Label(fmt.Sprintf("Patch from %s (%s)", patch.FromActor, patch.Hash[:8])).Send()
 
-				// Buttons to apply patch manually to peers (Playbook 2, peer-to-peer sync)
+				// Buttons to apply patch manually
 				for _, peer := range []string{"Alice", "Bob", "Charlie"} {
 					if peer == patch.FromActor {
 						continue
-					} // Can't apply to self
+					}
 
 					btnID := fmt.Sprintf("btn_apply_%d_%s", i, peer)
 					btn := c.Button(ids.PrepareStr(btnID), c.Atoms().Text("Apply to "+peer).Keep())
@@ -447,7 +501,6 @@ func renderServerWindow(store *DemoStore, ids *c.WidgetIdStack) {
 							return store.ApplyPatch(capturedPeer, capturedPatch)
 						}, func(err error) {
 							if err != nil {
-								// Feed the stderr text to the target actor's window directly
 								store.Actors[capturedPeer].LastError = err.Error()
 							} else {
 								store.Actors[capturedPeer].LastError = ""
