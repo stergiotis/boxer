@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 // ---------------------------------------------------------------------------
@@ -95,19 +96,40 @@ func NewDemoStore() *DemoStore {
 
 	return store
 }
-
 func (s *DemoStore) WorkerLoop() {
 	for task := range s.TaskQueue {
-		// Lock to indicate UI processing
+		// 1. Lock UI
 		s.mu.Lock()
 		s.IsProcessing = true
 		s.mu.Unlock()
 
+		// 2. Execute Pijul Task
 		err := task.Action()
 
+		// 3. ARTIFICIAL DELAY: Prevent the 1-frame "flash"
+		// This makes the Interactive(false) lock visible as a deliberate state
+		time.Sleep(300 * time.Millisecond)
+
+		// 4. Clean up and Unlock
 		s.mu.Lock()
 		task.OnDone(err)
+
 		s.ReloadAllActors()
+
+		// 5. Data Sync: After reloading, we must clear the old EditInputs pointers
+		// so that the text boxes fetch the newly pulled strings from the file.
+		for _, state := range s.Actors {
+			for _, line := range state.Lines {
+				inputKey := state.Name + "_" + line.Path
+
+				// Only overwrite the UI text if they aren't actively resolving a conflict
+				if line.Conflict == nil {
+					newVal := line.Value
+					s.EditInputs[inputKey] = &newVal
+				}
+			}
+		}
+
 		s.IsProcessing = false
 		s.mu.Unlock()
 	}
