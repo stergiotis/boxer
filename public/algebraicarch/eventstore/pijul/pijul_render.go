@@ -19,7 +19,7 @@ func RenderWindow(store *DemoStore) {
 	if len(store.PendingOverrides) > 0 {
 		for ptr, val := range store.PendingOverrides {
 			*ptr = val
-			// This is now safe because we are inside the active UI frame!
+			// This is now safe because we are inside the active UI frame lifecycle!
 			c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(ptr)
 		}
 		// Clear the queue
@@ -31,28 +31,24 @@ func RenderWindow(store *DemoStore) {
 	store.mu.RLock()
 	defer store.mu.RUnlock()
 
-	// 1. Draw Actor Windows
+	// A. Draw Actor Windows
 	actors := []string{"Alice", "Bob", "Charlie"}
 	for _, name := range actors {
-		// Prepare an ID for the scope
 		for range c.IdScope(GlobalIDs.PrepareStr("scope_win_" + name)) {
-			// Prepare a NEW ID specifically for the Window widget itself
 			for range c.Window(GlobalIDs.PrepareStr("window"), c.WidgetText().Text(name+" Node").Keep()).DefaultOpen(true).KeepIter() {
 				renderActorWindow(store, GlobalIDs, name)
 			}
 		}
 	}
 
-	// 2. Draw Server Window
-	// Prepare an ID for the scope
+	// B. Draw Server Window
 	for range c.IdScope(GlobalIDs.PrepareStr("scope_server")) {
-		// Prepare a NEW ID for the Server Window
 		for range c.Window(GlobalIDs.PrepareStr("window"), c.WidgetText().Text("Server & Global Inbox").Keep()).DefaultOpen(true).KeepIter() {
 			renderServerWindow(store, GlobalIDs)
 		}
 	}
 
-	// 3. Draw Storyboard Window
+	// C. Draw Storyboard Window
 	for range c.IdScope(GlobalIDs.PrepareStr("scope_storyboard")) {
 		for range c.Window(GlobalIDs.PrepareStr("window"), c.WidgetText().Text("Demo Storyboard").Keep()).DefaultOpen(true).KeepIter() {
 			renderStoryboardWindow(store, GlobalIDs)
@@ -68,9 +64,9 @@ func renderActorWindow(store *DemoStore, ids *c.WidgetIdStack, actorName string)
 		// 1. Toolbar
 		for range c.IdScope(ids.PrepareStr("toolbar")) {
 			for range c.Horizontal().KeepIter() {
-				renderActionButton(store, ids, actorName, "Push", func() error { return store.PushPull(actorName, "push") })
-				renderActionButton(store, ids, actorName, "Pull", func() error { return store.PushPull(actorName, "pull") })
-				renderActionButton(store, ids, actorName, "Email Patch", func() error { return store.EmailPatch(actorName) })
+				renderActionButton(store, ids, actorName, "Push", func() ([]string, error) { return store.PushPull(actorName, "push") })
+				renderActionButton(store, ids, actorName, "Pull", func() ([]string, error) { return store.PushPull(actorName, "pull") })
+				renderActionButton(store, ids, actorName, "Email Patch", func() ([]string, error) { return store.EmailPatch(actorName) })
 			}
 		}
 		c.Separator().Horizontal().Send()
@@ -90,13 +86,17 @@ func renderActorWindow(store *DemoStore, ids *c.WidgetIdStack, actorName string)
 							btnA := c.Button(ids.PrepareStr("keep_a"), c.Atoms().Text("Keep: "+line.Conflict.AliceValue).Keep())
 							if btnA.SendResp().HasPrimaryClicked() && !store.IsProcessing {
 								val := line.Conflict.AliceValue
-								store.EnqueueTask(func() error { return store.ResolveConflict(actorName, line.Path, val) }, func(err error) {})
+								store.EnqueueTask(func() ([]string, error) {
+									return store.ResolveConflict(actorName, line.Path, val)
+								}, func(err error) {})
 							}
 
 							btnB := c.Button(ids.PrepareStr("keep_b"), c.Atoms().Text("Keep: "+line.Conflict.BobValue).Keep())
 							if btnB.SendResp().HasPrimaryClicked() && !store.IsProcessing {
 								val := line.Conflict.BobValue
-								store.EnqueueTask(func() error { return store.ResolveConflict(actorName, line.Path, val) }, func(err error) {})
+								store.EnqueueTask(func() ([]string, error) {
+									return store.ResolveConflict(actorName, line.Path, val)
+								}, func(err error) {})
 							}
 						}
 					}
@@ -120,11 +120,13 @@ func renderActorWindow(store *DemoStore, ids *c.WidgetIdStack, actorName string)
 						edit.SendRespVal(valPtr)
 
 						btn := c.Button(ids.PrepareStr("btn_save"), c.Atoms().Text("Save").Keep())
-						// Evaluate SendResp FIRST so the button never vanishes
+						// Evaluate SendResp FIRST so the button never vanishes due to short-circuiting
 						if btn.SendResp().HasPrimaryClicked() && !store.IsProcessing {
 							capturedVal := *valPtr
 							capturedPath := line.Path
-							store.EnqueueTask(func() error { return store.SaveEdit(actorName, capturedPath, capturedVal) }, func(err error) {})
+							store.EnqueueTask(func() ([]string, error) {
+								return store.SaveEdit(actorName, capturedPath, capturedVal)
+							}, func(err error) {})
 						}
 					}
 				}
@@ -133,10 +135,10 @@ func renderActorWindow(store *DemoStore, ids *c.WidgetIdStack, actorName string)
 
 		c.Separator().Horizontal().Send()
 
-		// 3. Error Display (Scoped so it doesn't drift the History block when it appears)
+		// 3. Error Display (Scoped so it doesn't drift the blocks below)
 		if state.LastError != "" {
 			for range c.IdScope(ids.PrepareStr("error_block")) {
-				c.Label("🔴 Pijul Output/Error:").Send()
+				c.Label("🔴 Fatal Error:").Send()
 				for range c.ScrollArea().KeepIter() {
 					c.Label(state.LastError).Send()
 				}
@@ -144,7 +146,19 @@ func renderActorWindow(store *DemoStore, ids *c.WidgetIdStack, actorName string)
 			}
 		}
 
-		// 4. Pijul History
+		// 4. CLI Observability Log (New!)
+		for range c.IdScope(ids.PrepareStr("cli_logs")) {
+			c.Label("CLI Operations Log:").Send()
+			for range c.ScrollArea().KeepIter() {
+				// Iterate backwards to show newest commands at the top
+				for i := len(state.CliLogs) - 1; i >= 0; i-- {
+					c.Label(state.CliLogs[i]).Send()
+					c.Separator().Horizontal().Send()
+				}
+			}
+		}
+
+		// 5. Pijul History
 		for range c.IdScope(ids.PrepareStr("history_block")) {
 			c.Label("Local Pijul History:").Send()
 			for range c.ScrollArea().KeepIter() {
@@ -168,6 +182,7 @@ func renderServerWindow(store *DemoStore, ids *c.WidgetIdStack) {
 	}
 
 	for range c.Vertical().KeepIter() {
+		// 1. Origin State
 		for range c.IdScope(ids.PrepareStr("origin_state")) {
 			c.Label("=== Central Origin State ===").Send()
 			for _, line := range state.Lines {
@@ -176,6 +191,7 @@ func renderServerWindow(store *DemoStore, ids *c.WidgetIdStack) {
 			c.Separator().Horizontal().Send()
 		}
 
+		// 2. Inbox
 		for range c.IdScope(ids.PrepareStr("inbox_block")) {
 			c.Label("=== Patch Inbox ===").Send()
 			for i, patch := range store.Inbox {
@@ -194,7 +210,7 @@ func renderServerWindow(store *DemoStore, ids *c.WidgetIdStack) {
 							if btn.SendResp().HasPrimaryClicked() && !store.IsProcessing {
 								capturedPeer := peer
 								capturedPatch := patch.PatchPath
-								store.EnqueueTask(func() error {
+								store.EnqueueTask(func() ([]string, error) {
 									return store.ApplyPatch(capturedPeer, capturedPatch)
 								}, func(err error) {
 									if err != nil {
@@ -208,26 +224,22 @@ func renderServerWindow(store *DemoStore, ids *c.WidgetIdStack) {
 					}
 				}
 			}
+			c.Separator().Horizontal().Send()
+		}
+
+		// 3. CLI Observability Log for Server Operations
+		for range c.IdScope(ids.PrepareStr("cli_logs")) {
+			c.Label("Server CLI Operations Log:").Send()
+			for range c.ScrollArea().KeepIter() {
+				for i := len(state.CliLogs) - 1; i >= 0; i-- {
+					c.Label(state.CliLogs[i]).Send()
+					c.Separator().Horizontal().Send()
+				}
+			}
 		}
 	}
 }
 
-// ---------------------------------------------------------------------------
-// 6. Helpers
-// ---------------------------------------------------------------------------
-
-func renderActionButton(store *DemoStore, ids *c.WidgetIdStack, actor, label string, action func() error) {
-	btn := c.Button(ids.PrepareStr("btn_"+label), c.Atoms().Text(label).Keep())
-	if btn.SendResp().HasPrimaryClicked() && !store.IsProcessing {
-		store.EnqueueTask(action, func(err error) {
-			if err != nil {
-				store.Actors[actor].LastError = err.Error()
-			} else {
-				store.Actors[actor].LastError = ""
-			}
-		})
-	}
-}
 func renderStoryboardWindow(store *DemoStore, ids *c.WidgetIdStack) {
 	for range c.Vertical().KeepIter() {
 		c.Label("Use this assistant to walk through the Event Sourcing capabilities.").Send()
@@ -242,7 +254,7 @@ func renderStoryboardWindow(store *DemoStore, ids *c.WidgetIdStack) {
 }
 
 func renderPlaybook(store *DemoStore, ids *c.WidgetIdStack, title string, steps []string) {
-	for range c.IdScope(ids.PrepareStr(title)) {
+	for range c.IdScope(ids.PrepareStr("playbook_" + title)) {
 		c.Label("=== " + title + " ===").Send()
 
 		for i, step := range steps {
@@ -258,10 +270,26 @@ func renderPlaybook(store *DemoStore, ids *c.WidgetIdStack, title string, steps 
 				}
 
 				// 2. Render Checkbox and bind the stable pointer
-				// The API signature is Checkbox(id, initial_bool, text)
 				cb := c.Checkbox(ids.PrepareStr("cb"), *valPtr, step)
 				cb.SendRespVal(valPtr)
 			}
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 6. Helpers
+// ---------------------------------------------------------------------------
+
+func renderActionButton(store *DemoStore, ids *c.WidgetIdStack, actor, label string, action func() ([]string, error)) {
+	btn := c.Button(ids.PrepareStr("btn_"+label), c.Atoms().Text(label).Keep())
+	if btn.SendResp().HasPrimaryClicked() && !store.IsProcessing {
+		store.EnqueueTask(action, func(err error) {
+			if err != nil {
+				store.Actors[actor].LastError = err.Error()
+			} else {
+				store.Actors[actor].LastError = ""
+			}
+		})
 	}
 }
