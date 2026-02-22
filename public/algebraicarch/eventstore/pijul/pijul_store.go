@@ -34,7 +34,6 @@ type DemoStore struct {
 	IsProcessing bool
 }
 
-
 type ActorState struct {
 	Name        string
 	Path        string
@@ -157,6 +156,7 @@ func (s *DemoStore) EnqueueTask(action func() ([]string, error), onDone func(err
 func (s *DemoStore) InitSystem() ([]string, error) {
 	_ = os.RemoveAll(BaseDir)
 	_ = os.MkdirAll(s.Server.Path, 0755)
+	// In InitSystem(), update the record command:
 
 	_, err := s.runCmd("Server", s.Server.Path, "pijul", "init")
 	if err != nil {
@@ -167,7 +167,7 @@ func (s *DemoStore) InitSystem() ([]string, error) {
 	_ = os.WriteFile(filepath.Join(s.Server.Path, "customer.txt"), []byte(baseText), 0644)
 
 	_, _ = s.runCmd("Server", s.Server.Path, "pijul", "add", "customer.txt")
-	_, _ = s.runCmd("Server", s.Server.Path, "pijul", "record", "-am", "Init Base Record")
+	_, _ = s.runCmd("Server", s.Server.Path, "pijul", "record", "--author", "System", "-am", "Init Base Record")
 
 	for _, actor := range []string{"Alice", "Bob", "Charlie"} {
 		_, err := s.runCmd(actor, BaseDir, "pijul", "clone", s.Server.Path, strings.ToLower(actor))
@@ -197,7 +197,7 @@ func (s *DemoStore) SaveEdit(actor string, pathKey string, value string) ([]stri
 	}
 
 	// 2. Execute the CLI command (this acquires its own lock internally)
-	_, err = s.runCmd(actor, state.Path, "pijul", "record", "-am", fmt.Sprintf("Updated %s", pathKey))
+	_, err = s.runCmd(actor, state.Path, "pijul", "record", "--author", actor, "-am", fmt.Sprintf("Updated %s", pathKey))
 
 	return []string{actor}, err
 }
@@ -226,7 +226,6 @@ func (s *DemoStore) ApplyPatch(actor string, patchPath string) ([]string, error)
 // ---------------------------------------------------------------------------
 // 4. File Parsing & Conflict State Machine
 // ---------------------------------------------------------------------------
-
 func (s *DemoStore) ReloadAllActors() {
 	for _, state := range s.Actors {
 		content, err := os.ReadFile(filepath.Join(state.Path, "customer.txt"))
@@ -236,13 +235,82 @@ func (s *DemoStore) ReloadAllActors() {
 
 		state.Lines, state.HasConflict = ParsePijulFile(string(content))
 
-		// Use native exec.Command instead of s.runCmd!
-		// This avoids the double-lock Deadlock and prevents spamming the visual CLI log.
-		cmd := exec.Command("pijul", "log", "--description")
-		cmd.Dir = state.Path
-		out, _ := cmd.Output()
-		state.Logs = strings.Split(string(out), "\n\n")
+		// 1. Get Log and build Hash -> Author mapping
+		cmdLog := exec.Command("pijul", "log")
+		cmdLog.Dir = state.Path
+		outLog, _ := cmdLog.Output()
+
+		hashToAuthor := make(map[string]string)
+		state.Logs = parsePijulLog(string(outLog), hashToAuthor)
+
+		// 2. Get Credit (Blame) and apply to lines
+		// (We skip credit parsing if there's a structural conflict to avoid parsing errors)
+		if !state.HasConflict {
+			cmdCredit := exec.Command("pijul", "credit", "customer.txt")
+			cmdCredit.Dir = state.Path
+			outCredit, _ := cmdCredit.Output()
+
+			state.Lines = applyCreditToLines(string(outCredit), state.Lines, hashToAuthor)
+		}
 	}
+}
+
+// Helper: Parses standard `pijul log` into blocks and extracts authors
+func parsePijulLog(logOut string, hashToAuthor map[string]string) []string {
+	blocks := strings.Split(logOut, "Change ")
+	var logs []string
+	for _, block := range blocks {
+		block = strings.TrimSpace(block)
+		if block == "" {
+			continue
+		}
+
+		lines := strings.Split(block, "\n")
+		if len(lines) > 0 {
+			hash := strings.TrimSpace(lines[0])
+			author := "Unknown"
+			for _, l := range lines {
+				if strings.HasPrefix(strings.TrimSpace(l), "Author:") {
+					author = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(l), "Author:"))
+				}
+			}
+			hashToAuthor[hash] = author
+		}
+		logs = append(logs, "Change "+block)
+	}
+	return logs
+}
+
+// Helper: Maps `pijul credit` output to our parsed KV structs
+func applyCreditToLines(creditOut string, lines []KVLine, hashToAuthor map[string]string) []KVLine {
+	creditLines := strings.Split(creditOut, "\n")
+
+	contentToHash := make(map[string]string)
+	for _, cl := range creditLines {
+		parts := strings.SplitN(cl, ": ", 2)
+		if len(parts) == 2 {
+			hash := strings.TrimSpace(parts[0])
+			content := strings.TrimSpace(parts[1])
+			contentToHash[content] = hash
+		}
+	}
+
+	for i, line := range lines {
+		if line.Conflict != nil {
+			continue
+		}
+
+		expectedContent := fmt.Sprintf(`%s "%s"`, line.Path, line.Value)
+		if hash, ok := contentToHash[expectedContent]; ok {
+			lines[i].CreditHash = hash
+			if author, ok2 := hashToAuthor[hash]; ok2 {
+				lines[i].CreditAuthor = author
+			} else {
+				lines[i].CreditAuthor = "System"
+			}
+		}
+	}
+	return lines
 }
 func ParsePijulFile(content string) ([]KVLine, bool) {
 	var lines []KVLine

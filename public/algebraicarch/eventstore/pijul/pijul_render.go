@@ -128,6 +128,15 @@ func renderActorWindow(store *DemoStore, ids *c.WidgetIdStack, actorName string)
 								return store.SaveEdit(actorName, capturedPath, capturedVal)
 							}, func(err error) {})
 						}
+
+						// NEW: Cell-Level Provenance Label!
+						if line.CreditHash != "" {
+							shortHash := line.CreditHash
+							if len(shortHash) > 8 {
+								shortHash = shortHash[:8]
+							}
+							c.Label(fmt.Sprintf("  (by %s | %s)", line.CreditAuthor, shortHash)).Send()
+						}
 					}
 				}
 			}
@@ -248,7 +257,6 @@ func renderStoryboardWindow(store *DemoStore, ids *c.WidgetIdStack) {
 		renderPlaybook(store, ids)
 	}
 }
-
 
 // ---------------------------------------------------------------------------
 // 6. Helpers
