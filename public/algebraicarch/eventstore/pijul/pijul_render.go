@@ -245,37 +245,10 @@ func renderStoryboardWindow(store *DemoStore, ids *c.WidgetIdStack) {
 		c.Label("Use this assistant to walk through the Event Sourcing capabilities.").Send()
 		c.Separator().Horizontal().Send()
 
-		renderPlaybook(store, ids, "Playbook 1: Commutative Field Merging & Conflict Trapping", Playbook1)
-
-		c.Separator().Horizontal().Send()
-
-		renderPlaybook(store, ids, "Playbook 2: Decentralized USB/Email Sync", Playbook2)
+		renderPlaybook(store, ids)
 	}
 }
 
-func renderPlaybook(store *DemoStore, ids *c.WidgetIdStack, title string, steps []string) {
-	for range c.IdScope(ids.PrepareStr("playbook_" + title)) {
-		c.Label("=== " + title + " ===").Send()
-
-		for i, step := range steps {
-			for range c.IdScope(ids.PrepareStr(fmt.Sprintf("step_%d", i))) {
-
-				// 1. Get or create a STABLE boolean pointer
-				key := fmt.Sprintf("%s_%d", title, i)
-				valPtr, ok := store.ChecklistState[key]
-				if !ok {
-					v := false
-					valPtr = &v
-					store.ChecklistState[key] = valPtr
-				}
-
-				// 2. Render Checkbox and bind the stable pointer
-				cb := c.Checkbox(ids.PrepareStr("cb"), *valPtr, step)
-				cb.SendRespVal(valPtr)
-			}
-		}
-	}
-}
 
 // ---------------------------------------------------------------------------
 // 6. Helpers

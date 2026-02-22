@@ -34,27 +34,6 @@ type DemoStore struct {
 	IsProcessing bool
 }
 
-var Playbook1 = []string{
-	"1. Alice edits /contact/email and clicks [Save].",
-	"2. Bob edits /company/name and clicks [Save].",
-	"3. Alice clicks [Push] to origin.",
-	"4. Bob clicks [Pull] from origin.",
-	"5. Verify: Bob sees Alice's email change without overwriting his company name (Commutative patch).",
-	"6. Both edit /account/status to different values. Both push/pull.",
-	"7. Verify: UI natively parses the injected file markers.",
-	"8. Click [Keep Alice] or [Keep Bob] to safely resolve the conflict.",
-}
-
-var Playbook2 = []string{
-	"1. Bob modifies /company/name -> [Save].",
-	"2. Bob clicks [Email Patch].",
-	"3. Verify: Patch appears in the center column Inbox.",
-	"4. Alice clicks [Apply to Alice].",
-	"5. Verify: Alice receives the update strictly peer-to-peer.",
-	"6. Charlie edits Bob's exact line, clicks [Save] and [Email Patch].",
-	"7. Alice clicks [Apply to Alice] on Charlie's patch BEFORE Bob's.",
-	"8. Verify: Pijul captures structural dependency error and blocks the merge.",
-}
 
 type ActorState struct {
 	Name        string
@@ -67,9 +46,11 @@ type ActorState struct {
 }
 
 type KVLine struct {
-	Path     string
-	Value    string
-	Conflict *ConflictData
+	Path         string
+	Value        string
+	Conflict     *ConflictData
+	CreditHash   string // NEW: Cell-level provenance hash
+	CreditAuthor string // NEW: Cell-level provenance author
 }
 
 type ConflictData struct {
