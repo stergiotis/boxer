@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	c "github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/components"
 )
 
 // ---------------------------------------------------------------------------
@@ -118,43 +120,61 @@ func NewDemoStore() *DemoStore {
 }
 func (s *DemoStore) WorkerLoop() {
 	for task := range s.TaskQueue {
+		s.processTask(task)
+	}
+}
+
+func (s *DemoStore) processTask(task Task) {
+	// 1. Lock UI
+	s.mu.Lock()
+	s.IsProcessing = true
+	s.mu.Unlock()
+
+	// 2. GUARANTEE: The UI will always unlock, no matter what!
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("WorkerLoop PANIC: %v\n", r)
+		}
 		s.mu.Lock()
-		s.IsProcessing = true
+		s.IsProcessing = false
 		s.mu.Unlock()
+		// Wake the UI thread to remove the grayed-out "disabled" styling
+		c.RequestRepaint()
+	}()
 
-		// 1. Execute and get targets
-		affectedActors, err := task.Action()
+	// 3. Execute Task Action
+	affectedActors, err := task.Action()
 
-		time.Sleep(300 * time.Millisecond)
+	// 4. Artificial delay for visual feedback
+	time.Sleep(300 * time.Millisecond)
 
-		s.mu.Lock()
-		task.OnDone(err)
+	s.mu.Lock()
+	task.OnDone(err)
+	s.mu.Unlock()
 
-		s.ReloadAllActors() // Parse disk for everyone, strictly safe.
+	// 5. Reload (Now has internal timeouts and handles its own locks)
+	s.ReloadAllActors()
 
-		// 2. Targeted Cache Override (Fixes the State Bleed!)
-		for _, actorName := range affectedActors {
-			if state, ok := s.Actors[actorName]; ok {
-				for _, line := range state.Lines {
-					if line.Conflict == nil {
-						inputKey := state.Name + "_" + line.Path
-						if valPtr, exists := s.EditInputs[inputKey]; exists {
-							if *valPtr != line.Value {
-								// Queue the pointer for a synchronous override
-								s.PendingOverrides[valPtr] = line.Value
-							}
-						} else {
-							newVal := line.Value
-							s.EditInputs[inputKey] = &newVal
+	// 6. Targeted Cache Overrides
+	s.mu.Lock()
+	for _, actorName := range affectedActors {
+		if state, ok := s.Actors[actorName]; ok {
+			for _, line := range state.Lines {
+				if line.Conflict == nil {
+					inputKey := state.Name + "_" + line.Path
+					if valPtr, exists := s.EditInputs[inputKey]; exists {
+						if *valPtr != line.Value {
+							s.PendingOverrides[valPtr] = line.Value
 						}
+					} else {
+						newVal := line.Value
+						s.EditInputs[inputKey] = &newVal
 					}
 				}
 			}
 		}
-
-		s.IsProcessing = false
-		s.mu.Unlock()
 	}
+	s.mu.Unlock()
 }
 
 func (s *DemoStore) EnqueueTask(action func() ([]string, error), onDone func(err error)) {
@@ -239,28 +259,83 @@ func (s *DemoStore) ApplyPatch(actor string, patchPath string) ([]string, error)
 // 4. File Parsing & Conflict State Machine
 // ---------------------------------------------------------------------------
 func (s *DemoStore) ReloadAllActors() {
-	for _, state := range s.Actors {
-		content, err := os.ReadFile(filepath.Join(state.Path, "customer.txt"))
+	// We iterate over keys to avoid holding a lock on the map while doing I/O
+	for _, actorName := range []string{"Server", "Alice", "Bob", "Charlie"} {
+		s.mu.RLock()
+		state, ok := s.Actors[actorName]
+		if !ok {
+			s.mu.RUnlock()
+			continue
+		}
+		actorPath := state.Path
+		s.mu.RUnlock()
+
+		content, err := os.ReadFile(filepath.Join(actorPath, "customer.txt"))
 		if err != nil {
 			continue
 		}
 
-		state.Lines, state.HasConflict = ParsePijulFile(string(content))
+		parsedLines, hasConflict := ParsePijulFile(string(content))
 
-		cmdLog := exec.Command("pijul", "log", "--output-format", "json")
-		cmdLog.Dir = state.Path
-		outLog, _ := cmdLog.Output()
+		// 1. Enforce a 5-second timeout on background parsers!
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 
+		var parserError string
+		var parsedLogs []string
 		logMap := make(map[string]PijulLogEntry)
-		state.Logs = parsePijulLogJSON(outLog, logMap)
 
-		if !state.HasConflict {
-			cmdCredit := exec.Command("pijul", "credit", "customer.txt")
-			cmdCredit.Dir = state.Path
-			outCredit, _ := cmdCredit.Output()
+		// 2. Safely execute 'pijul log'
+		cmdLog := exec.CommandContext(ctx, "pijul", "log", "--output-format", "json")
+		cmdLog.Dir = actorPath
+		var logErrBuf bytes.Buffer
+		cmdLog.Stderr = &logErrBuf
 
-			state.Lines = applyCreditToLines(string(outCredit), state.Lines, logMap)
+		outLog, errLog := cmdLog.Output()
+		if errLog != nil {
+			if ctx.Err() == context.DeadlineExceeded {
+				parserError = "Timeout (5s) executing 'pijul log'"
+			} else {
+				parserError = fmt.Sprintf("pijul log error: %v\n%s", errLog, logErrBuf.String())
+			}
+		} else {
+			parsedLogs = parsePijulLogJSON(outLog, logMap)
 		}
+
+		// 3. Safely execute 'pijul credit' (only if log succeeded and no conflicts)
+		if !hasConflict && errLog == nil {
+			cmdCredit := exec.CommandContext(ctx, "pijul", "credit", "customer.txt")
+			cmdCredit.Dir = actorPath
+			var credErrBuf bytes.Buffer
+			cmdCredit.Stderr = &credErrBuf
+
+			outCredit, errCred := cmdCredit.Output()
+			if errCred != nil {
+				if ctx.Err() == context.DeadlineExceeded {
+					parserError = "Timeout (5s) executing 'pijul credit'"
+				} else {
+					parserError = fmt.Sprintf("pijul credit error: %v\n%s", errCred, credErrBuf.String())
+				}
+			} else {
+				parsedLines = applyCreditToLines(string(outCredit), parsedLines, logMap)
+			}
+		}
+
+		cancel() // Clean up context resources immediately
+
+		// 4. Safely acquire the lock to assign the final data
+		s.mu.Lock()
+		if stateToUpdate, exists := s.Actors[actorName]; exists {
+			stateToUpdate.Lines = parsedLines
+			stateToUpdate.HasConflict = hasConflict
+			if parsedLogs != nil {
+				stateToUpdate.Logs = parsedLogs
+			}
+			// If a background parser failed, surface it instantly to the red error block!
+			if parserError != "" {
+				stateToUpdate.LastError = parserError
+			}
+		}
+		s.mu.Unlock()
 	}
 }
 
