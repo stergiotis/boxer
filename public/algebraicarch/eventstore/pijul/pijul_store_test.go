@@ -1,3 +1,5 @@
+//go:build llm_generated_gemini3pro
+
 package pijul
 
 import (
@@ -8,7 +10,10 @@ import (
 	"testing"
 )
 
-// Helper to get a specific KV value from an actor's parsed state
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
 func getKV(state *ActorState, pathKey string) string {
 	for _, l := range state.Lines {
 		if l.Path == pathKey {
@@ -18,7 +23,6 @@ func getKV(state *ActorState, pathKey string) string {
 	return ""
 }
 
-// Helper to get conflict data from an actor's parsed state
 func getConflict(state *ActorState, pathKey string) *ConflictData {
 	for _, l := range state.Lines {
 		if l.Path == pathKey && l.Conflict != nil {
@@ -28,14 +32,11 @@ func getConflict(state *ActorState, pathKey string) *ConflictData {
 	return nil
 }
 
-// Synchronous setup for testing (bypasses the async queue)
 func setupTestStore(t *testing.T, testName string) *DemoStore {
-	// Skip test if Pijul isn't installed on the testing machine
 	if _, err := exec.LookPath("pijul"); err != nil {
 		t.Skip("Pijul CLI not found in PATH. Skipping test.")
 	}
 
-	// Use an isolated temp directory for tests
 	BaseDir = filepath.Join(os.TempDir(), "pijul-test-"+testName)
 
 	store := &DemoStore{
@@ -51,33 +52,38 @@ func setupTestStore(t *testing.T, testName string) *DemoStore {
 	}
 	store.Server = store.Actors["Server"]
 
-	if err := store.InitSystem(); err != nil {
+	if _, err := store.InitSystem(); err != nil {
 		t.Fatalf("InitSystem failed: %v", err)
 	}
 
 	store.ReloadAllActors()
 	return store
 }
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
 func TestPlaybook1_CommutativeMergeAndConflicts(t *testing.T) {
 	store := setupTestStore(t, "playbook1")
 	defer os.RemoveAll(BaseDir)
 
 	t.Log("Step 1: Alice edits email, Bob edits company name")
-	err := store.SaveEdit("Alice", "/contact/email", "alice@example.com")
+	_, err := store.SaveEdit("Alice", "/contact/email", "alice@example.com")
 	if err != nil {
 		t.Fatalf("Alice SaveEdit failed: %v", err)
 	}
 
-	err = store.SaveEdit("Bob", "/company/name", "Bob Corp")
+	_, err = store.SaveEdit("Bob", "/company/name", "Bob Corp")
 	if err != nil {
 		t.Fatalf("Bob SaveEdit failed: %v", err)
 	}
 
 	t.Log("Step 2: Alice Pushes, Bob Pulls")
-	if err := store.PushPull("Alice", "push"); err != nil {
+	if _, err := store.PushPull("Alice", "push"); err != nil {
 		t.Fatalf("Alice Push failed: %v", err)
 	}
-	if err := store.PushPull("Bob", "pull"); err != nil {
+	if _, err := store.PushPull("Bob", "pull"); err != nil {
 		t.Fatalf("Bob Pull failed: %v", err)
 	}
 
@@ -86,7 +92,6 @@ func TestPlaybook1_CommutativeMergeAndConflicts(t *testing.T) {
 	t.Log("Step 3: Verify Commutative Merge")
 	bobState := store.Actors["Bob"]
 	if bobState.HasConflict {
-		// DUMP FILE CONTENTS FOR DEBUGGING!
 		content, _ := os.ReadFile(filepath.Join(bobState.Path, "customer.txt"))
 		t.Fatalf("Bob should NOT have a conflict! The edits were spaced far apart.\n--- File contents:\n%s\n---", string(content))
 	}
@@ -98,22 +103,22 @@ func TestPlaybook1_CommutativeMergeAndConflicts(t *testing.T) {
 	}
 
 	t.Log("Step 4: Both edit the EXACT same key to trigger a conflict")
-	err = store.SaveEdit("Alice", "/account/status", "Suspended")
+	_, err = store.SaveEdit("Alice", "/account/status", "Suspended")
 	if err != nil {
 		t.Fatalf("Alice Save 4 failed: %v", err)
 	}
-	err = store.SaveEdit("Bob", "/account/status", "Pending Approval")
+	_, err = store.SaveEdit("Bob", "/account/status", "Pending Approval")
 	if err != nil {
 		t.Fatalf("Bob Save 4 failed: %v", err)
 	}
 
-	err = store.PushPull("Alice", "push")
+	_, err = store.PushPull("Alice", "push")
 	if err != nil {
 		t.Fatalf("Alice Push 4 failed: %v", err)
 	}
 
 	// Pijul exits with status 1 when conflicts are found! We ignore the error here.
-	_ = store.PushPull("Bob", "pull")
+	_, _ = store.PushPull("Bob", "pull")
 
 	store.ReloadAllActors()
 
@@ -144,15 +149,15 @@ func TestPlaybook2_DecentralizedSyncAndDependencies(t *testing.T) {
 	defer os.RemoveAll(BaseDir)
 
 	t.Log("Step 1: Bob edits and exports an email patch")
-	_ = store.SaveEdit("Bob", "/company/name", "Bob Global")
-	err := store.EmailPatch("Bob")
+	_, _ = store.SaveEdit("Bob", "/company/name", "Bob Global")
+	_, err := store.EmailPatch("Bob")
 	if err != nil || len(store.Inbox) == 0 {
-		t.Fatalf("Failed to export Bob's patch")
+		t.Fatalf("Failed to export Bob's patch: %v", err)
 	}
 	bobPatchPath := store.Inbox[0].PatchPath
 
 	t.Log("Step 2: Alice applies Bob's patch (P2P Sync)")
-	err = store.ApplyPatch("Alice", bobPatchPath)
+	_, err = store.ApplyPatch("Alice", bobPatchPath)
 	if err != nil {
 		t.Fatalf("Alice failed to apply Bob's patch: %v", err)
 	}
@@ -162,9 +167,9 @@ func TestPlaybook2_DecentralizedSyncAndDependencies(t *testing.T) {
 	}
 
 	t.Log("Step 3: Charlie applies Bob's patch, edits the SAME line, and exports")
-	_ = store.ApplyPatch("Charlie", bobPatchPath) // Get Bob's context first
-	_ = store.SaveEdit("Charlie", "/company/name", "Charlie Megacorp")
-	_ = store.EmailPatch("Charlie")
+	_, _ = store.ApplyPatch("Charlie", bobPatchPath)
+	_, _ = store.SaveEdit("Charlie", "/company/name", "Charlie Megacorp")
+	_, _ = store.EmailPatch("Charlie")
 
 	if len(store.Inbox) < 2 {
 		t.Fatalf("Failed to export Charlie's patch")
@@ -172,16 +177,71 @@ func TestPlaybook2_DecentralizedSyncAndDependencies(t *testing.T) {
 	charliePatchPath := store.Inbox[1].PatchPath
 
 	t.Log("Step 4: Server attempts to apply Charlie's patch BEFORE Bob's patch")
-	// The Server hasn't received anything yet (nobody pushed).
-	// If it tries to apply Charlie's patch, it should fail because Charlie's
-	// patch mathematically depends on Bob's patch!
-	err = store.ApplyPatch("Server", charliePatchPath)
+	_, err = store.ApplyPatch("Server", charliePatchPath)
 
 	if err == nil {
-		t.Fatal("CRITICAL FAILURE: Pijul applied a patch without its prerequisites! Event sourcing property violated.")
+		t.Fatal("CRITICAL FAILURE: Pijul applied a patch without its prerequisites!")
 	} else {
 		t.Logf("Success! Pijul blocked the invalid merge. Error caught: %v", err)
 	}
 
 	t.Log("Playbook 2 Passed!")
+}
+func TestCreditParserGraphResolution(t *testing.T) {
+	// 1. Mock JSON output: Base Patch (Old) and Context Patch (New)
+	mockJSONLog := []byte(`[
+	  {
+		"hash": "EYPWGEPXCHFDYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY",
+		"authors": ["Alice"],
+		"timestamp": "2026-02-22T17:00:00.000000000Z",
+		"message": "Added Context Edge"
+	  },
+	  {
+		"hash": "JYS6SYSP25ASXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+		"authors": ["System"],
+		"timestamp": "2026-02-22T16:00:00.000000000Z",
+		"message": "Init Base Record"
+	  }
+	]`)
+
+	// 2. Mock exactly the output the user provided
+	mockCreditOut := `EYPWGEPXCHFD
+
+EYPWGEPXCHFD, JYS6SYSP25AS
+> /id "CUST-100"
+
+JYS6SYSP25AS
+> /contact/name "Jane Doe AAAA"
+
+EYPWGEPXCHFD, JYS6SYSP25AS
+> /contact/email "jane@example.com"
+`
+
+	// 3. The lines we expect to map to
+	lines := []KVLine{
+		{Path: "/id", Value: "CUST-100"},
+		{Path: "/contact/name", Value: "Jane Doe AAAA"},
+		{Path: "/contact/email", Value: "jane@example.com"},
+	}
+
+	logMap := make(map[string]PijulLogEntry)
+	_ = parsePijulLogJSON(mockJSONLog, logMap)
+
+	processedLines := applyCreditToLines(mockCreditOut, lines, logMap)
+
+	// 4. Verify the OLDEST hash (JYS6SYSP25AS / System) won out on the multi-edge lines!
+	idLine := processedLines[0]
+	if idLine.CreditAuthor != "System" {
+		t.Errorf("Expected True Author to be 'System', Got: '%s'. Failed to resolve oldest edge.", idLine.CreditAuthor)
+	}
+
+	nameLine := processedLines[1]
+	if nameLine.CreditAuthor != "System" {
+		t.Errorf("Expected True Author to be 'System', Got: '%s'", nameLine.CreditAuthor)
+	}
+
+	emailLine := processedLines[2]
+	if emailLine.CreditAuthor != "System" {
+		t.Errorf("Expected True Author to be 'System', Got: '%s'. Failed to resolve oldest edge.", emailLine.CreditAuthor)
+	}
 }

@@ -1,9 +1,12 @@
+//go:build llm_generated_gemini3pro
+
 package pijul
 
 import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json/v2"
 	"fmt"
 	"os"
 	"os/exec"
@@ -68,6 +71,15 @@ type PatchEnvelope struct {
 type Task struct {
 	Action func() (actors []string, err error)
 	OnDone func(err error)
+}
+
+// PijulLogEntry maps the output of `pijul log --output-format json`
+type PijulLogEntry struct {
+	Hash       string    `json:"hash"`
+	Authors    []string  `json:"authors"`
+	Timestamp  string    `json:"timestamp"`
+	Message    string    `json:"message"`
+	ParsedTime time.Time // Used to calculate the true original author
 }
 
 // ---------------------------------------------------------------------------
@@ -235,83 +247,110 @@ func (s *DemoStore) ReloadAllActors() {
 
 		state.Lines, state.HasConflict = ParsePijulFile(string(content))
 
-		// 1. Get Log and build Hash -> Author mapping
-		cmdLog := exec.Command("pijul", "log")
+		cmdLog := exec.Command("pijul", "log", "--output-format", "json")
 		cmdLog.Dir = state.Path
 		outLog, _ := cmdLog.Output()
 
-		hashToAuthor := make(map[string]string)
-		state.Logs = parsePijulLog(string(outLog), hashToAuthor)
+		logMap := make(map[string]PijulLogEntry)
+		state.Logs = parsePijulLogJSON(outLog, logMap)
 
-		// 2. Get Credit (Blame) and apply to lines
-		// (We skip credit parsing if there's a structural conflict to avoid parsing errors)
 		if !state.HasConflict {
 			cmdCredit := exec.Command("pijul", "credit", "customer.txt")
 			cmdCredit.Dir = state.Path
 			outCredit, _ := cmdCredit.Output()
 
-			state.Lines = applyCreditToLines(string(outCredit), state.Lines, hashToAuthor)
+			state.Lines = applyCreditToLines(string(outCredit), state.Lines, logMap)
 		}
 	}
 }
 
-// Helper: Parses standard `pijul log` into blocks and extracts authors
-func parsePijulLog(logOut string, hashToAuthor map[string]string) []string {
-	blocks := strings.Split(logOut, "Change ")
-	var logs []string
-	for _, block := range blocks {
-		block = strings.TrimSpace(block)
-		if block == "" {
+func parsePijulLogJSON(logOut []byte, logMap map[string]PijulLogEntry) []string {
+	if len(logOut) == 0 {
+		return nil
+	}
+
+	var entries []PijulLogEntry
+	if err := json.Unmarshal(logOut, &entries); err != nil {
+		return []string{fmt.Sprintf("[Error parsing Pijul JSON log: %v]", err)}
+	}
+
+	var formattedLogs []string
+	for i, entry := range entries {
+		// Default Author
+		if len(entry.Authors) == 0 || entry.Authors[0] == "" {
+			entries[i].Authors = []string{"System"}
+		}
+
+		// Parse Time
+		t, err := time.Parse(time.RFC3339Nano, entry.Timestamp)
+		if err == nil {
+			entries[i].ParsedTime = t
+		}
+
+		logMap[entry.Hash] = entries[i]
+
+		block := fmt.Sprintf("Change %s\nAuthor: %s\nDate: %s\n\n    %s",
+			entry.Hash, entries[i].Authors[0], t.Local().Format("2006-01-02 15:04:05 (MST)"), entry.Message)
+		formattedLogs = append(formattedLogs, block)
+	}
+	return formattedLogs
+}
+
+// Maps block-based `pijul credit` output using graph-theory age resolution
+func applyCreditToLines(creditOut string, lines []KVLine, logMap map[string]PijulLogEntry) []KVLine {
+	contentToEntry := make(map[string]PijulLogEntry)
+	var currentHashes []string
+
+	scanner := bufio.NewScanner(strings.NewReader(creditOut))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
 			continue
 		}
 
-		lines := strings.Split(block, "\n")
-		if len(lines) > 0 {
-			hash := strings.TrimSpace(lines[0])
-			author := "Unknown"
-			for _, l := range lines {
-				if strings.HasPrefix(strings.TrimSpace(l), "Author:") {
-					author = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(l), "Author:"))
+		if strings.HasPrefix(line, "> ") {
+			content := strings.TrimSpace(strings.TrimPrefix(line, "> "))
+
+			// Find the OLDEST patch among the introducing edges
+			var oldestEntry PijulLogEntry
+			found := false
+
+			for _, shortHash := range currentHashes {
+				shortHash = strings.TrimSpace(shortHash)
+				for fullHash, entry := range logMap {
+					// Pijul Rust source confirmed: credit outputs exactly the first 12 chars
+					if strings.HasPrefix(fullHash, shortHash) {
+						if !found || entry.ParsedTime.Before(oldestEntry.ParsedTime) {
+							oldestEntry = entry
+							found = true
+						}
+					}
 				}
 			}
-			hashToAuthor[hash] = author
-		}
-		logs = append(logs, "Change "+block)
-	}
-	return logs
-}
 
-// Helper: Maps `pijul credit` output to our parsed KV structs
-func applyCreditToLines(creditOut string, lines []KVLine, hashToAuthor map[string]string) []KVLine {
-	creditLines := strings.Split(creditOut, "\n")
-
-	contentToHash := make(map[string]string)
-	for _, cl := range creditLines {
-		parts := strings.SplitN(cl, ": ", 2)
-		if len(parts) == 2 {
-			hash := strings.TrimSpace(parts[0])
-			content := strings.TrimSpace(parts[1])
-			contentToHash[content] = hash
+			if found {
+				contentToEntry[content] = oldestEntry
+			}
+		} else {
+			// It's a header block: "EYPWGEPXCHFD, JYS6SYSP25AS"
+			currentHashes = strings.Split(line, ",")
 		}
 	}
 
-	for i, line := range lines {
-		if line.Conflict != nil {
+	for i, l := range lines {
+		if l.Conflict != nil {
 			continue
 		}
 
-		expectedContent := fmt.Sprintf(`%s "%s"`, line.Path, line.Value)
-		if hash, ok := contentToHash[expectedContent]; ok {
-			lines[i].CreditHash = hash
-			if author, ok2 := hashToAuthor[hash]; ok2 {
-				lines[i].CreditAuthor = author
-			} else {
-				lines[i].CreditAuthor = "System"
-			}
+		expectedContent := fmt.Sprintf(`%s "%s"`, l.Path, l.Value)
+		if entry, ok := contentToEntry[expectedContent]; ok {
+			lines[i].CreditHash = entry.Hash[:8] // Short UI hash
+			lines[i].CreditAuthor = entry.Authors[0]
 		}
 	}
 	return lines
 }
+
 func ParsePijulFile(content string) ([]KVLine, bool) {
 	var lines []KVLine
 	hasConflict := false
