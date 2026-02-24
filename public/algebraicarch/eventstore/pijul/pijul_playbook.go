@@ -74,7 +74,7 @@ var AllPlaybooks = []Playbook{
 
 func renderPlaybook(store *DemoStore, ids *c.WidgetIdStack) {
 	for i, playbook := range AllPlaybooks {
-		for range c.CollapsingHeader(ids.Prepare(uint64(i+1)), c.WidgetText().Text(playbook.Title).Keep()).KeepIter() {
+		for range c.CollapsingHeader(ids.PrepareSeq(uint64(i+1)), c.WidgetText().Text(playbook.Title).Keep()).KeepIter() {
 			for j, step := range playbook.Steps {
 				// 1. Get or create a STABLE boolean pointer
 				key := fmt.Sprintf("%d_%d", i, j)
