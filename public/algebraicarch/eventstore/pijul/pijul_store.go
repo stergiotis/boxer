@@ -14,8 +14,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	c "github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/components"
 )
 
 // ---------------------------------------------------------------------------
@@ -138,8 +136,6 @@ func (s *DemoStore) processTask(task Task) {
 		s.mu.Lock()
 		s.IsProcessing = false
 		s.mu.Unlock()
-		// Wake the UI thread to remove the grayed-out "disabled" styling
-		c.RequestRepaint()
 	}()
 
 	// 3. Execute Task Action
