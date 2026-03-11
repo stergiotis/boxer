@@ -43,6 +43,7 @@ func init() {
 		DebuggerFlags = []cli.Flag{&cli.BoolFlag{
 			Category: "development",
 			Name:     "waitForDebugger",
+			EnvVars:  []string{"BOXER_WAIT_FOR_DEBUGGER"},
 			Usage:    "execution of program waits until an attached debugger is detected",
 			Action: func(context *cli.Context, b bool) error {
 				for {
