@@ -30,6 +30,17 @@ func promoteScalarPrim(s PrimitiveAstNodeI, scalarModifier ScalarModifierE) (out
 	}
 	return
 }
+func GetScalarModifier(s PrimitiveAstNodeI) (mod ScalarModifierE, notSupported bool) {
+	switch ct := s.(type) {
+	case MachineNumericTypeAstNode:
+		mod = ct.ScalarModifier
+	case StringAstNode:
+		mod = ct.ScalarModifier
+	case TemporalTypeAstNode:
+		mod = ct.ScalarModifier
+	}
+	return
+}
 func DemoteToScalar(s PrimitiveAstNodeI) (out PrimitiveAstNodeI) {
 	if !s.IsScalar() {
 		out = s
