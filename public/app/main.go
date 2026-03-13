@@ -4,6 +4,7 @@ import (
 	"os"
 
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/code"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl"
 	"github.com/stergiotis/boxer/public/dev"
 	"github.com/stergiotis/boxer/public/docgen"
@@ -55,6 +56,7 @@ func mainC() (exitCode int) {
 			dev.NewCliCommand(),
 			gov.NewCliCommand(),
 			finddivisions.NewCliCommand(),
+			code.NewCliCommand(),
 		),
 		After: func(context *cli.Context) error {
 			profiling.ProfilingHandleExit(context)
