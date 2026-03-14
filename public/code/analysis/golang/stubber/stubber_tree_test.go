@@ -86,7 +86,7 @@ func TestTreeProcessor_ProcessTree(t *testing.T) {
 			return
 		}
 
-		err := tp.ProcessTree(context.Background(), srcFS, "pkg/b", writer, nil, nil)
+		err := tp.ProcessTree(context.Background(), srcFS, "pkg/b", nil, nil, writer, nil, nil)
 		require.NoError(t, err)
 
 		require.Contains(t, output, "pkg/b/b.go")
