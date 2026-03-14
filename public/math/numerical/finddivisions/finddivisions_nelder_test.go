@@ -1,3 +1,5 @@
+//go:build llm_generated_gemini3pro
+
 package finddivisions
 
 import (
@@ -28,12 +30,9 @@ func TestFindDivisionsNelder(t *testing.T) {
 				t.Errorf("Step must be positive, got %v", res.Step)
 			}
 
-			// Calculate actual tick positions
-			ticks := res.GenerateTicksNelder()
-
 			// Check if ticks cover the data
-			firstTick := ticks[0]
-			lastTick := ticks[len(ticks)-1]
+			firstTick := res.TickValues[0]
+			lastTick := res.TickValues[len(res.TickValues)-1]
 
 			// Allow slight float error
 			if firstTick > tt.min+1e-9 {
@@ -46,8 +45,8 @@ func TestFindDivisionsNelder(t *testing.T) {
 			// Check if we got roughly the requested number of ticks
 			// Nelder's algorithm is strict on Step size, but loose on exact count.
 			// It ensures we have *at least* N ticks usually, or close to it.
-			if len(ticks) < tt.n-2 || len(ticks) > tt.n+2 {
-				t.Logf("Notice: requested %d ticks, got %d. (This is normal for Nelder's constraint)", tt.n, len(ticks))
+			if len(res.TickValues) < tt.n-2 || len(res.TickValues) > tt.n+2 {
+				t.Logf("Notice: requested %d ticks, got %d. (This is normal for Nelder's constraint)", tt.n, len(res.TickValues))
 			}
 		})
 	}

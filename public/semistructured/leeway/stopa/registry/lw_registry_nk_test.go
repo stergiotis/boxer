@@ -34,7 +34,7 @@ func TestNewNaturalKeyRegistry(t *testing.T) {
 	require.Equal(t, false, nkF1.GetFlags().HasVirtual())
 	require.Equal(t, true, nkF1.GetFlags().HasFinal())
 	require.Equal(t, false, nkF1.GetFlags().HasDeprecated())
-	s := slices.Collect(functional.IterLeftOnly(nkF1.IterateParentsVirtual()))
+	s := slices.Collect(functional.IterLeftOnly(nkF1.IterateAllParents()))
 	e := []identifier.TaggedId{nkV1.w.id, nkV2.w.id}
 	slices.Sort(s)
 	slices.Sort(e)

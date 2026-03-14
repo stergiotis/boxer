@@ -26,14 +26,14 @@ func TestCalculateTicks(t *testing.T) {
 			}
 
 			// Basic sanity checks
-			if len(got.Ticks) < 2 {
-				t.Errorf("Too few ticks generated: %d", len(got.Ticks))
+			if len(got.TickValues) < 2 {
+				t.Errorf("Too few ticks generated: %d", len(got.TickValues))
 			}
-			if got.Ticks[0] > tt.min {
-				t.Errorf("First tick %f is greater than min %f", got.Ticks[0], tt.min)
+			if got.TickValues[0] > tt.min {
+				t.Errorf("First tick %f is greater than min %f", got.TickValues[0], tt.min)
 			}
-			if got.Ticks[len(got.Ticks)-1] < tt.max {
-				t.Errorf("Last tick %f is less than max %f", got.Ticks[len(got.Ticks)-1], tt.max)
+			if got.TickValues[len(got.TickValues)-1] < tt.max {
+				t.Errorf("Last tick %f is less than max %f", got.TickValues[len(got.TickValues)-1], tt.max)
 			}
 		})
 	}
@@ -45,7 +45,7 @@ func TestEdgeCases(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error on equal min/max: %v", err)
 	}
-	if len(res.Ticks) != 1 || res.Ticks[0] != 10 {
+	if len(res.TickValues) != 1 || res.TickValues[0] != 10 {
 		t.Error("Should return single tick for equal min/max")
 	}
 

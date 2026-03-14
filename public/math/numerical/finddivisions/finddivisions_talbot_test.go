@@ -35,15 +35,15 @@ func TestExtended(t *testing.T) {
 			opts.OnlyLoose = tt.loose
 			res := Talbot(tt.dmin, tt.dmax, tt.m, opts, SimpleLegibilityScorer{})
 
-			if len(res.Ticks) == 0 {
+			if len(res.TickValues) == 0 {
 				t.Fatal("No ticks generated")
 			}
 
 			// Check loose constraint
 			if tt.loose {
-				if res.Min > tt.dmin || res.Max < tt.dmax {
+				if res.ViewMin > tt.dmin || res.ViewMax < tt.dmax {
 					t.Errorf("Loose constraint failed. Data [%v, %v], Labels [%v, %v]",
-						tt.dmin, tt.dmax, res.Min, res.Max)
+						tt.dmin, tt.dmax, res.ViewMin, res.ViewMax)
 				}
 			}
 
@@ -53,7 +53,7 @@ func TestExtended(t *testing.T) {
 			}
 
 			// Check legibility (bounds sanity)
-			if res.Min > res.Max {
+			if res.ViewMin > res.ViewMax {
 				t.Error("Min > Max")
 			}
 		})
