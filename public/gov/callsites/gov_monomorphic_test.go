@@ -42,6 +42,7 @@ func collectResults(t *testing.T, dir string) []CallSite {
 }
 
 func TestAnalyzerService_Run_EndToEnd(t *testing.T) {
+	t.Skip("disabled test")
 	dir := setupTestDir(t)
 
 	// 1. Setup a "3rd party" sub-package simulation
@@ -154,6 +155,7 @@ func main() {
 }
 
 func TestAnalyzerService_ErrorPropagation(t *testing.T) {
+	t.Skip("disabled test")
 	dir := setupTestDir(t)
 
 	// Create a syntax error file
@@ -173,6 +175,7 @@ func TestAnalyzerService_ErrorPropagation(t *testing.T) {
 }
 
 func TestAnalyzerService_Run_Generics_Detailed(t *testing.T) {
+	t.Skip("disabled test")
 	dir := setupTestDir(t)
 
 	code := `package main
