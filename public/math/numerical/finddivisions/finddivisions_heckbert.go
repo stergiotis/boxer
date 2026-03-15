@@ -76,7 +76,7 @@ func Heckbert(min, max float64, desiredTicks int) (AxisLayout, error) {
 			ViewMin:    min,
 			ViewMax:    max,
 			Step:       0,
-			TickValues: nil,
+			TickValues: []float64{min},
 			TickLabels: nil,
 			Score:      0,
 			Algorithm:  "Heckbert",
