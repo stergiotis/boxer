@@ -138,7 +138,7 @@ func MakeRenderInteractiveTable() func() {
 			}
 			imgui.EndTable()
 			if sortActive {
-				imgui.TextUnformatted(fmt.Sprintf("dirty=%v,userids=%q,columnIndices=%q,directions=%q", dirty, userIds, columnIndices, directions))
+				imgui.TextUnformatted(fmt.Sprintf("dirty=%v,userids=%v,columnIndices=%q,directions=%q", dirty, userIds, columnIndices, directions))
 			}
 		}
 	}

@@ -44,7 +44,7 @@ func (inst *TableDesc) Reset() {
 }
 func (inst *TableDesc) AddPlainColumns(itemType PlainItemTypeE, names []naming.StylableName, canonicalTypes []string, encodingHints []encodingaspects.AspectSet, valueSemantics []valueaspects.AspectSet) (err error) {
 	l := len(names)
-	if l != len(encodingHints) || l != len(encodingHints) || l != len(canonicalTypes) || l != len(valueSemantics) {
+	if l != len(canonicalTypes) || l != len(encodingHints) || l != len(valueSemantics) {
 		err = eh.Errorf("invalid arguments: all slices must be co-slices")
 		return
 	}
