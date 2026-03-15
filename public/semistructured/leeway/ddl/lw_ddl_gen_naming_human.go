@@ -136,7 +136,6 @@ var ErrInvalidCanonicalType = eh.Errorf("invalid canonical type")
 var ErrInvalidAspects = eh.Errorf("invalid useaspects")
 
 var _ common.NamingConventionI = (*HumanReadableNamingConvention)(nil)
-var _ common.NamingConventionFwdI = (*HumanReadableNamingConvention)(nil)
 
 func plainItemTypeToPrefix(plainItemType common.PlainItemTypeE) (pfx string) {
 	switch plainItemType {
