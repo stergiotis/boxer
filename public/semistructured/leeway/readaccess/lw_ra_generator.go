@@ -529,6 +529,9 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 				}
 				var typeName1 string
 				typeName1, _, err = gocodegen.CanonicalTypeToArrowBaseClassName(ct1, hints1, useDictEncoding)
+				if typeName1 == "Boolean" {
+					typeName1 = "Bool" // FIXME inconsistency in arrow: arrow.BOOLEAN but arrow.BooleanType{}
+				}
 				if err != nil {
 					err = eh.Errorf("unable to get arrow class name for canonical type: %w", err)
 					return
