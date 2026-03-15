@@ -281,10 +281,12 @@ type TaggedValueSectionMerger struct {
 }
 type TaggedValueColumnMerger struct {
 	table        *TableDesc
+	manip        *TableManipulator
 	sectionIndex int
 	columnIndex  int
 }
 type PlainValueColumnMerger struct {
 	table       *TableDesc
+	manip        *TableManipulator
 	columnIndex int
 }

@@ -32,6 +32,7 @@ func NewTableManipulator() (inst *TableManipulator, err error) {
 	inst = &TableManipulator{
 		marshaller:                marshaller,
 		buffer:                    bytes.NewBuffer(make([]byte, 0, 4096*4)),
+		validator:                 nil,
 		receivedInvalidAspects:    false,
 		upsertedCount:             0,
 		plainValueItemNameToIndex: plu,
@@ -105,6 +106,7 @@ func (inst TaggedValueSectionMerger) TaggedValueColumn(name naming.StylableName,
 		log.Panic().Stringer("name", name).Int("sectionIdx1", sectionIdx).Int("sectionIdx2", inst.sectionIndex).Msg("section index do not match, something is fundamentally wrong")
 	}
 	return TaggedValueColumnMerger{
+		manip:        inst.manip,
 		table:        inst.table,
 		sectionIndex: sectionIdx,
 		columnIndex:  columnIdx,
@@ -115,6 +117,7 @@ func (inst *TableManipulator) PlainValueColumn(itemType PlainItemTypeE, name nam
 	idx := inst.addPlainValueItem(itemType, name, canonicalType, encodingaspects2.EmptyAspectSet, valueaspects.EmptyAspectSet)
 	return PlainValueColumnMerger{
 		table:       inst.table,
+		manip:       inst,
 		columnIndex: idx,
 	}
 }
@@ -383,6 +386,7 @@ func (inst TaggedValueSectionMerger) SectionStreamingGroup(streamingGroup naming
 func (inst TaggedValueColumnMerger) Section() TaggedValueSectionMerger {
 	return TaggedValueSectionMerger{
 		table:        inst.table,
+		manip:        inst.manip,
 		sectionIndex: inst.sectionIndex,
 	}
 }
