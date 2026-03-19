@@ -77,6 +77,7 @@ var AllAspects = []AspectE{
 	AspectScaleOfMeasurementOrdinal,
 	AspectScaleOfMeasurementMetricInterval,
 	AspectScaleOfMeasurementMetricRatio,
+	AspectScaleOfMeasurementCategorial,
 	AspectVectorValue,
 	AspectCanonicalizedValue,
 	AspectApplicationLevelEncryption,
@@ -152,6 +153,8 @@ func (inst AspectE) String() string {
 		return "scale-of-measurement-metric-interval"
 	case AspectScaleOfMeasurementMetricRatio:
 		return "scale-of-measurement-metric-ratio"
+	case AspectScaleOfMeasurementCategorial:
+		return "scale-of-measurement-categorial"
 	case AspectVectorValue:
 		return "vector-value"
 	case AspectCanonicalizedValue:
