@@ -31,7 +31,7 @@ func Shannon(p iter.Seq[float64]) float64 {
 // ShannonNats computes the Shannon entropy in nats (using natural log).
 func ShannonNats(p iter.Seq[float64]) float64 {
 	var sum, comp float64
-	for  pi := range p {
+	for pi := range p {
 		if pi <= 0 {
 			continue
 		}
