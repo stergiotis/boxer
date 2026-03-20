@@ -257,8 +257,8 @@ func (inst *TypstCardEmitter) EndTaggedSections() (err error) {
 // --- Co-section group ---
 
 func (inst *TypstCardEmitter) BeginCoSectionGroup(name naming.Key) {
-	inst.writef("#box(stroke: (dash: \"dashed\", paint: luma(75%)), radius: 3pt, inset: 4pt)[\n")
-	inst.writef("#text(size: 6pt, fill: luma(55%), font: \"IBM Plex Mono\")[CO: %s]\n", typstEscape(string(name)))
+	inst.writef("#box(stroke: (dash: \"dashed\", paint: luma(75%%)), radius: 3pt, inset: 4pt)[\n")
+	inst.writef("#text(size: 6pt, fill: luma(55%%), font: \"IBM Plex Mono\")[CO: %s]\n", typstEscape(string(name)))
 }
 
 func (inst *TypstCardEmitter) EndCoSectionGroup() (err error) {
