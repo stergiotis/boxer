@@ -10,6 +10,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cockroachdb/pebble v1.1.5
 	github.com/dgraph-io/badger/v4 v4.9.1
+	github.com/dim13/colormap v1.1.0
 	github.com/dustin/go-humanize v1.0.1
 	github.com/ettle/strcase v0.2.0
 	github.com/fogleman/gg v1.3.0
@@ -19,6 +20,7 @@ require (
 	github.com/go-text/typesetting v0.3.3
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
 	github.com/google/flatbuffers v25.12.19+incompatible
+	github.com/klauspost/compress v1.18.4
 	github.com/matoous/go-nanoid/v2 v2.1.0
 	github.com/nao1215/markdown v0.8.0
 	github.com/philip-peterson/go-mutablestring v1.0.7
@@ -156,7 +158,6 @@ require (
 	github.com/kisielk/errcheck v1.9.0 // indirect
 	github.com/kkHAIKE/contextcheck v1.1.6 // indirect
 	github.com/klauspost/asmfmt v1.3.2 // indirect
-	github.com/klauspost/compress v1.18.4 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
@@ -276,7 +277,7 @@ require (
 	golang.org/x/term v0.41.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
-	google.golang.org/grpc v1.79.1 // indirect
+	google.golang.org/grpc v1.79.3 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
