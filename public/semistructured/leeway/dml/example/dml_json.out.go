@@ -23,32 +23,38 @@ import (
 func CreateSchemaJson() (schema *arrow.Schema) {
 	schema = arrow.NewSchema([]arrow.Field{
 		/* 000 */ arrow.Field{Name: "id:blake3hash:y:g:0:0:", Nullable: false, Type: &arrow.BinaryType{}},
-		/* 001 */ arrow.Field{Name: "tv:bool:value:val:b:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BooleanType{})},
-		/* 002 */ arrow.Field{Name: "tv:bool:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 003 */ arrow.Field{Name: "tv:bool:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 004 */ arrow.Field{Name: "tv:bool:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 005 */ arrow.Field{Name: "tv:undefined:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 006 */ arrow.Field{Name: "tv:undefined:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 007 */ arrow.Field{Name: "tv:undefined:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 008 */ arrow.Field{Name: "tv:null:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 009 */ arrow.Field{Name: "tv:null:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 010 */ arrow.Field{Name: "tv:null:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 011 */ arrow.Field{Name: "tv:string:value:val:s:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
-		/* 012 */ arrow.Field{Name: "tv:string:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 013 */ arrow.Field{Name: "tv:string:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 014 */ arrow.Field{Name: "tv:string:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 015 */ arrow.Field{Name: "tv:symbol:value:val:s:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
-		/* 016 */ arrow.Field{Name: "tv:symbol:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 017 */ arrow.Field{Name: "tv:symbol:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 018 */ arrow.Field{Name: "tv:symbol:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 019 */ arrow.Field{Name: "tv:float64:value:val:f64:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Float64)},
-		/* 020 */ arrow.Field{Name: "tv:float64:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 021 */ arrow.Field{Name: "tv:float64:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 022 */ arrow.Field{Name: "tv:float64:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 023 */ arrow.Field{Name: "tv:int64:value:val:i64:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Int64)},
-		/* 024 */ arrow.Field{Name: "tv:int64:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 025 */ arrow.Field{Name: "tv:int64:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 026 */ arrow.Field{Name: "tv:int64:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 001 */ arrow.Field{Name: "tv:strings:semantic-type:val:s:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
+		/* 002 */ arrow.Field{Name: "tv:strings:short:val:s:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
+		/* 003 */ arrow.Field{Name: "tv:strings:long:val:s:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
+		/* 004 */ arrow.Field{Name: "tv:strings:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 005 */ arrow.Field{Name: "tv:strings:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 006 */ arrow.Field{Name: "tv:strings:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 007 */ arrow.Field{Name: "tv:bool:value:val:b:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BooleanType{})},
+		/* 008 */ arrow.Field{Name: "tv:bool:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 009 */ arrow.Field{Name: "tv:bool:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 010 */ arrow.Field{Name: "tv:bool:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 011 */ arrow.Field{Name: "tv:undefined:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 012 */ arrow.Field{Name: "tv:undefined:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 013 */ arrow.Field{Name: "tv:undefined:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 014 */ arrow.Field{Name: "tv:null:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 015 */ arrow.Field{Name: "tv:null:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 016 */ arrow.Field{Name: "tv:null:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 017 */ arrow.Field{Name: "tv:string:value:val:s:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
+		/* 018 */ arrow.Field{Name: "tv:string:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 019 */ arrow.Field{Name: "tv:string:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 020 */ arrow.Field{Name: "tv:string:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 021 */ arrow.Field{Name: "tv:symbol:value:val:s:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
+		/* 022 */ arrow.Field{Name: "tv:symbol:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 023 */ arrow.Field{Name: "tv:symbol:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 024 */ arrow.Field{Name: "tv:symbol:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 025 */ arrow.Field{Name: "tv:float64:value:val:f64:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Float64)},
+		/* 026 */ arrow.Field{Name: "tv:float64:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 027 */ arrow.Field{Name: "tv:float64:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 028 */ arrow.Field{Name: "tv:float64:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 029 */ arrow.Field{Name: "tv:int64:value:val:i64:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Int64)},
+		/* 030 */ arrow.Field{Name: "tv:int64:lmv:lmv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 031 */ arrow.Field{Name: "tv:int64:mvhp:mvhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 032 */ arrow.Field{Name: "tv:int64:lmvcard:lmvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 	}, nil)
 	return
 }
@@ -74,10 +80,12 @@ type InEntityJson struct {
 	section03State        runtime.EntityStateE
 	section04Inst         *InEntityJsonSectionString
 	section04State        runtime.EntityStateE
-	section05Inst         *InEntityJsonSectionSymbol
+	section05Inst         *InEntityJsonSectionStrings
 	section05State        runtime.EntityStateE
-	section06Inst         *InEntityJsonSectionUndefined
+	section06Inst         *InEntityJsonSectionSymbol
 	section06State        runtime.EntityStateE
+	section07Inst         *InEntityJsonSectionUndefined
+	section07State        runtime.EntityStateE
 	plainBlake3hash0      []byte
 	scalarFieldBuilder000 *array.BinaryBuilder
 }
@@ -123,8 +131,9 @@ func (inst *InEntityJson) initSections(builder *array.RecordBuilder) {
 	inst.section02Inst = NewInEntityJsonSectionInt64(builder, inst)
 	inst.section03Inst = NewInEntityJsonSectionNull(builder, inst)
 	inst.section04Inst = NewInEntityJsonSectionString(builder, inst)
-	inst.section05Inst = NewInEntityJsonSectionSymbol(builder, inst)
-	inst.section06Inst = NewInEntityJsonSectionUndefined(builder, inst)
+	inst.section05Inst = NewInEntityJsonSectionStrings(builder, inst)
+	inst.section06Inst = NewInEntityJsonSectionSymbol(builder, inst)
+	inst.section07Inst = NewInEntityJsonSectionUndefined(builder, inst)
 }
 func (inst *InEntityJson) beginSections() {
 	inst.section00Inst.beginSection()
@@ -134,6 +143,7 @@ func (inst *InEntityJson) beginSections() {
 	inst.section04Inst.beginSection()
 	inst.section05Inst.beginSection()
 	inst.section06Inst.beginSection()
+	inst.section07Inst.beginSection()
 }
 func (inst *InEntityJson) resetSections() {
 	inst.section00Inst.resetSection()
@@ -143,6 +153,7 @@ func (inst *InEntityJson) resetSections() {
 	inst.section04Inst.resetSection()
 	inst.section05Inst.resetSection()
 	inst.section06Inst.resetSection()
+	inst.section07Inst.resetSection()
 }
 func (inst *InEntityJson) CheckErrors() (err error) {
 	err = eh.CheckErrors(inst.errs)
@@ -153,6 +164,7 @@ func (inst *InEntityJson) CheckErrors() (err error) {
 	err = errors.Join(err, inst.section04Inst.CheckErrors())
 	err = errors.Join(err, inst.section05Inst.CheckErrors())
 	err = errors.Join(err, inst.section06Inst.CheckErrors())
+	err = errors.Join(err, inst.section07Inst.CheckErrors())
 
 	return
 }
@@ -171,11 +183,14 @@ func (inst *InEntityJson) GetSectionNull() *InEntityJsonSectionNull {
 func (inst *InEntityJson) GetSectionString() *InEntityJsonSectionString {
 	return inst.section04Inst
 }
-func (inst *InEntityJson) GetSectionSymbol() *InEntityJsonSectionSymbol {
+func (inst *InEntityJson) GetSectionStrings() *InEntityJsonSectionStrings {
 	return inst.section05Inst
 }
-func (inst *InEntityJson) GetSectionUndefined() *InEntityJsonSectionUndefined {
+func (inst *InEntityJson) GetSectionSymbol() *InEntityJsonSectionSymbol {
 	return inst.section06Inst
+}
+func (inst *InEntityJson) GetSectionUndefined() *InEntityJsonSectionUndefined {
+	return inst.section07Inst
 }
 func (inst *InEntityJson) BeginEntity() *InEntityJson {
 	switch inst.state {
@@ -235,12 +250,20 @@ func (inst *InEntityJson) validateEntity() {
 		state := inst.section05Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "symbol").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "strings").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
 	{
 		state := inst.section06Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "symbol").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section07Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
 			inst.AppendError(eb.Build().Str("section", "undefined").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
@@ -329,8 +352,8 @@ type InEntityJsonSectionBool struct {
 	inAttr                *InEntityJsonSectionBoolInAttr
 	state                 runtime.EntityStateE
 	parent                *InEntityJson
-	scalarFieldBuilder001 *array.BooleanBuilder
-	scalarListBuilder001  *array.ListBuilder
+	scalarFieldBuilder007 *array.BooleanBuilder
+	scalarListBuilder007  *array.ListBuilder
 }
 
 func NewInEntityJsonSectionBool(builder *array.RecordBuilder, parent *InEntityJson) (inst *InEntityJsonSectionBool) {
@@ -340,8 +363,8 @@ func NewInEntityJsonSectionBool(builder *array.RecordBuilder, parent *InEntityJs
 	inst.state = runtime.EntityStateInitial
 	inst.inAttr = inAttr
 	inst.parent = parent
-	inst.scalarFieldBuilder001 = builder.Field(1).(*array.ListBuilder).ValueBuilder().(*array.BooleanBuilder)
-	inst.scalarListBuilder001 = builder.Field(1).(*array.ListBuilder)
+	inst.scalarFieldBuilder007 = builder.Field(7).(*array.ListBuilder).ValueBuilder().(*array.BooleanBuilder)
+	inst.scalarListBuilder007 = builder.Field(7).(*array.ListBuilder)
 
 	return inst
 }
@@ -355,7 +378,7 @@ func (inst *InEntityJsonSectionBool) endAttribute() {
 		return
 	}
 }
-func (inst *InEntityJsonSectionBool) BeginAttribute(value1 bool) *InEntityJsonSectionBoolInAttr {
+func (inst *InEntityJsonSectionBool) BeginAttribute(value7 bool) *InEntityJsonSectionBoolInAttr {
 	switch inst.state {
 	case runtime.EntityStateInSection:
 		inst.state = runtime.EntityStateInAttribute
@@ -364,7 +387,7 @@ func (inst *InEntityJsonSectionBool) BeginAttribute(value1 bool) *InEntityJsonSe
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst.inAttr
 	}
-	inst.scalarFieldBuilder001.Append(value1)
+	inst.scalarFieldBuilder007.Append(value7)
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -407,18 +430,18 @@ type InEntityJsonSectionBoolInAttr struct {
 	errs                             []error
 	state                            runtime.EntityStateE
 	parent                           *InEntityJsonSectionBool
-	scalarFieldBuilder001            *array.BooleanBuilder
-	scalarListBuilder001             *array.ListBuilder
-	membershipFieldBuilder002        *array.BinaryBuilder
-	membershipListBuilder002         *array.ListBuilder
-	membershipFieldBuilder003        *array.BinaryBuilder
-	membershipListBuilder003         *array.ListBuilder
-	membershipSupportFieldBuilder004 *array.Uint64Builder
-	membershipSupportListBuilder004  *array.ListBuilder
+	scalarFieldBuilder007            *array.BooleanBuilder
+	scalarListBuilder007             *array.ListBuilder
+	membershipFieldBuilder008        *array.BinaryBuilder
+	membershipListBuilder008         *array.ListBuilder
+	membershipFieldBuilder009        *array.BinaryBuilder
+	membershipListBuilder009         *array.ListBuilder
+	membershipSupportFieldBuilder010 *array.Uint64Builder
+	membershipSupportListBuilder010  *array.ListBuilder
 
-	membershipContainerLength002 int
+	membershipContainerLength008 int
 
-	membershipContainerLength003 int
+	membershipContainerLength009 int
 }
 
 func NewInEntityJsonSectionBoolInAttr(builder *array.RecordBuilder, parent *InEntityJsonSectionBool) (inst *InEntityJsonSectionBoolInAttr) {
@@ -426,55 +449,55 @@ func NewInEntityJsonSectionBoolInAttr(builder *array.RecordBuilder, parent *InEn
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.parent = parent
-	inst.scalarFieldBuilder001 = builder.Field(1).(*array.ListBuilder).ValueBuilder().(*array.BooleanBuilder)
-	inst.scalarListBuilder001 = builder.Field(1).(*array.ListBuilder)
-	inst.membershipFieldBuilder002 = builder.Field(2).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder002 = builder.Field(2).(*array.ListBuilder)
-	inst.membershipFieldBuilder003 = builder.Field(3).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder003 = builder.Field(3).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder004 = builder.Field(4).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder004 = builder.Field(4).(*array.ListBuilder)
+	inst.scalarFieldBuilder007 = builder.Field(7).(*array.ListBuilder).ValueBuilder().(*array.BooleanBuilder)
+	inst.scalarListBuilder007 = builder.Field(7).(*array.ListBuilder)
+	inst.membershipFieldBuilder008 = builder.Field(8).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder008 = builder.Field(8).(*array.ListBuilder)
+	inst.membershipFieldBuilder009 = builder.Field(9).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder009 = builder.Field(9).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder010 = builder.Field(10).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder010 = builder.Field(10).(*array.ListBuilder)
 
 	return inst
 }
 func (inst *InEntityJsonSectionBoolInAttr) beginAttribute() {
-	inst.membershipListBuilder002.Append(true)
-	inst.membershipListBuilder003.Append(true)
-	inst.membershipContainerLength002 = 0
-	inst.membershipContainerLength003 = 0
-	inst.scalarListBuilder001.Append(true)
-	inst.membershipSupportListBuilder004.Append(true)
+	inst.membershipListBuilder008.Append(true)
+	inst.membershipListBuilder009.Append(true)
+	inst.membershipContainerLength008 = 0
+	inst.membershipContainerLength009 = 0
+	inst.scalarListBuilder007.Append(true)
+	inst.membershipSupportListBuilder010.Append(true)
 	inst.state = runtime.EntityStateInSection
 	inst.clearErrors()
 }
-func (inst *InEntityJsonSectionBoolInAttr) AddMembershipMixedLowCardVerbatim(lmv2 []byte, mvhp3 []byte) *InEntityJsonSectionBoolInAttr {
+func (inst *InEntityJsonSectionBoolInAttr) AddMembershipMixedLowCardVerbatim(lmv8 []byte, mvhp9 []byte) *InEntityJsonSectionBoolInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder002.Append(lmv2)
-	inst.membershipFieldBuilder003.Append(mvhp3)
-	inst.membershipContainerLength002++
-	inst.membershipContainerLength003++
+	inst.membershipFieldBuilder008.Append(lmv8)
+	inst.membershipFieldBuilder009.Append(mvhp9)
+	inst.membershipContainerLength008++
+	inst.membershipContainerLength009++
 	return inst
 }
-func (inst *InEntityJsonSectionBoolInAttr) AddMembershipMixedLowCardVerbatimP(lmv2 []byte, mvhp3 []byte) {
+func (inst *InEntityJsonSectionBoolInAttr) AddMembershipMixedLowCardVerbatimP(lmv8 []byte, mvhp9 []byte) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder002.Append(lmv2)
-	inst.membershipFieldBuilder003.Append(mvhp3)
-	inst.membershipContainerLength002++
-	inst.membershipContainerLength003++
+	inst.membershipFieldBuilder008.Append(lmv8)
+	inst.membershipFieldBuilder009.Append(mvhp9)
+	inst.membershipContainerLength008++
+	inst.membershipContainerLength009++
 	return
 }
 func (inst *InEntityJsonSectionBoolInAttr) handleMembershipSupportColumns() {
 	var l int
 	var _ = l
-	l = inst.membershipContainerLength002
-	inst.membershipContainerLength002 = 0
-	inst.membershipSupportFieldBuilder004.Append(uint64(l))
+	l = inst.membershipContainerLength008
+	inst.membershipContainerLength008 = 0
+	inst.membershipSupportFieldBuilder010.Append(uint64(l))
 }
 func (inst *InEntityJsonSectionBoolInAttr) handleNonScalarSupportColumns() {
 	var l int
@@ -525,8 +548,8 @@ type InEntityJsonSectionFloat64 struct {
 	inAttr                *InEntityJsonSectionFloat64InAttr
 	state                 runtime.EntityStateE
 	parent                *InEntityJson
-	scalarFieldBuilder019 *array.Float64Builder
-	scalarListBuilder019  *array.ListBuilder
+	scalarFieldBuilder025 *array.Float64Builder
+	scalarListBuilder025  *array.ListBuilder
 }
 
 func NewInEntityJsonSectionFloat64(builder *array.RecordBuilder, parent *InEntityJson) (inst *InEntityJsonSectionFloat64) {
@@ -536,8 +559,8 @@ func NewInEntityJsonSectionFloat64(builder *array.RecordBuilder, parent *InEntit
 	inst.state = runtime.EntityStateInitial
 	inst.inAttr = inAttr
 	inst.parent = parent
-	inst.scalarFieldBuilder019 = builder.Field(19).(*array.ListBuilder).ValueBuilder().(*array.Float64Builder)
-	inst.scalarListBuilder019 = builder.Field(19).(*array.ListBuilder)
+	inst.scalarFieldBuilder025 = builder.Field(25).(*array.ListBuilder).ValueBuilder().(*array.Float64Builder)
+	inst.scalarListBuilder025 = builder.Field(25).(*array.ListBuilder)
 
 	return inst
 }
@@ -551,7 +574,7 @@ func (inst *InEntityJsonSectionFloat64) endAttribute() {
 		return
 	}
 }
-func (inst *InEntityJsonSectionFloat64) BeginAttribute(value19 float64) *InEntityJsonSectionFloat64InAttr {
+func (inst *InEntityJsonSectionFloat64) BeginAttribute(value25 float64) *InEntityJsonSectionFloat64InAttr {
 	switch inst.state {
 	case runtime.EntityStateInSection:
 		inst.state = runtime.EntityStateInAttribute
@@ -560,7 +583,7 @@ func (inst *InEntityJsonSectionFloat64) BeginAttribute(value19 float64) *InEntit
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst.inAttr
 	}
-	inst.scalarFieldBuilder019.Append(value19)
+	inst.scalarFieldBuilder025.Append(value25)
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -603,18 +626,18 @@ type InEntityJsonSectionFloat64InAttr struct {
 	errs                             []error
 	state                            runtime.EntityStateE
 	parent                           *InEntityJsonSectionFloat64
-	scalarFieldBuilder019            *array.Float64Builder
-	scalarListBuilder019             *array.ListBuilder
-	membershipFieldBuilder020        *array.BinaryBuilder
-	membershipListBuilder020         *array.ListBuilder
-	membershipFieldBuilder021        *array.BinaryBuilder
-	membershipListBuilder021         *array.ListBuilder
-	membershipSupportFieldBuilder022 *array.Uint64Builder
-	membershipSupportListBuilder022  *array.ListBuilder
+	scalarFieldBuilder025            *array.Float64Builder
+	scalarListBuilder025             *array.ListBuilder
+	membershipFieldBuilder026        *array.BinaryBuilder
+	membershipListBuilder026         *array.ListBuilder
+	membershipFieldBuilder027        *array.BinaryBuilder
+	membershipListBuilder027         *array.ListBuilder
+	membershipSupportFieldBuilder028 *array.Uint64Builder
+	membershipSupportListBuilder028  *array.ListBuilder
 
-	membershipContainerLength020 int
+	membershipContainerLength026 int
 
-	membershipContainerLength021 int
+	membershipContainerLength027 int
 }
 
 func NewInEntityJsonSectionFloat64InAttr(builder *array.RecordBuilder, parent *InEntityJsonSectionFloat64) (inst *InEntityJsonSectionFloat64InAttr) {
@@ -622,55 +645,55 @@ func NewInEntityJsonSectionFloat64InAttr(builder *array.RecordBuilder, parent *I
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.parent = parent
-	inst.scalarFieldBuilder019 = builder.Field(19).(*array.ListBuilder).ValueBuilder().(*array.Float64Builder)
-	inst.scalarListBuilder019 = builder.Field(19).(*array.ListBuilder)
-	inst.membershipFieldBuilder020 = builder.Field(20).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder020 = builder.Field(20).(*array.ListBuilder)
-	inst.membershipFieldBuilder021 = builder.Field(21).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder021 = builder.Field(21).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder022 = builder.Field(22).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder022 = builder.Field(22).(*array.ListBuilder)
+	inst.scalarFieldBuilder025 = builder.Field(25).(*array.ListBuilder).ValueBuilder().(*array.Float64Builder)
+	inst.scalarListBuilder025 = builder.Field(25).(*array.ListBuilder)
+	inst.membershipFieldBuilder026 = builder.Field(26).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder026 = builder.Field(26).(*array.ListBuilder)
+	inst.membershipFieldBuilder027 = builder.Field(27).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder027 = builder.Field(27).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder028 = builder.Field(28).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder028 = builder.Field(28).(*array.ListBuilder)
 
 	return inst
 }
 func (inst *InEntityJsonSectionFloat64InAttr) beginAttribute() {
-	inst.membershipListBuilder020.Append(true)
-	inst.membershipListBuilder021.Append(true)
-	inst.membershipContainerLength020 = 0
-	inst.membershipContainerLength021 = 0
-	inst.scalarListBuilder019.Append(true)
-	inst.membershipSupportListBuilder022.Append(true)
+	inst.membershipListBuilder026.Append(true)
+	inst.membershipListBuilder027.Append(true)
+	inst.membershipContainerLength026 = 0
+	inst.membershipContainerLength027 = 0
+	inst.scalarListBuilder025.Append(true)
+	inst.membershipSupportListBuilder028.Append(true)
 	inst.state = runtime.EntityStateInSection
 	inst.clearErrors()
 }
-func (inst *InEntityJsonSectionFloat64InAttr) AddMembershipMixedLowCardVerbatim(lmv20 []byte, mvhp21 []byte) *InEntityJsonSectionFloat64InAttr {
+func (inst *InEntityJsonSectionFloat64InAttr) AddMembershipMixedLowCardVerbatim(lmv26 []byte, mvhp27 []byte) *InEntityJsonSectionFloat64InAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder020.Append(lmv20)
-	inst.membershipFieldBuilder021.Append(mvhp21)
-	inst.membershipContainerLength020++
-	inst.membershipContainerLength021++
+	inst.membershipFieldBuilder026.Append(lmv26)
+	inst.membershipFieldBuilder027.Append(mvhp27)
+	inst.membershipContainerLength026++
+	inst.membershipContainerLength027++
 	return inst
 }
-func (inst *InEntityJsonSectionFloat64InAttr) AddMembershipMixedLowCardVerbatimP(lmv20 []byte, mvhp21 []byte) {
+func (inst *InEntityJsonSectionFloat64InAttr) AddMembershipMixedLowCardVerbatimP(lmv26 []byte, mvhp27 []byte) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder020.Append(lmv20)
-	inst.membershipFieldBuilder021.Append(mvhp21)
-	inst.membershipContainerLength020++
-	inst.membershipContainerLength021++
+	inst.membershipFieldBuilder026.Append(lmv26)
+	inst.membershipFieldBuilder027.Append(mvhp27)
+	inst.membershipContainerLength026++
+	inst.membershipContainerLength027++
 	return
 }
 func (inst *InEntityJsonSectionFloat64InAttr) handleMembershipSupportColumns() {
 	var l int
 	var _ = l
-	l = inst.membershipContainerLength020
-	inst.membershipContainerLength020 = 0
-	inst.membershipSupportFieldBuilder022.Append(uint64(l))
+	l = inst.membershipContainerLength026
+	inst.membershipContainerLength026 = 0
+	inst.membershipSupportFieldBuilder028.Append(uint64(l))
 }
 func (inst *InEntityJsonSectionFloat64InAttr) handleNonScalarSupportColumns() {
 	var l int
@@ -721,8 +744,8 @@ type InEntityJsonSectionInt64 struct {
 	inAttr                *InEntityJsonSectionInt64InAttr
 	state                 runtime.EntityStateE
 	parent                *InEntityJson
-	scalarFieldBuilder023 *array.Int64Builder
-	scalarListBuilder023  *array.ListBuilder
+	scalarFieldBuilder029 *array.Int64Builder
+	scalarListBuilder029  *array.ListBuilder
 }
 
 func NewInEntityJsonSectionInt64(builder *array.RecordBuilder, parent *InEntityJson) (inst *InEntityJsonSectionInt64) {
@@ -732,8 +755,8 @@ func NewInEntityJsonSectionInt64(builder *array.RecordBuilder, parent *InEntityJ
 	inst.state = runtime.EntityStateInitial
 	inst.inAttr = inAttr
 	inst.parent = parent
-	inst.scalarFieldBuilder023 = builder.Field(23).(*array.ListBuilder).ValueBuilder().(*array.Int64Builder)
-	inst.scalarListBuilder023 = builder.Field(23).(*array.ListBuilder)
+	inst.scalarFieldBuilder029 = builder.Field(29).(*array.ListBuilder).ValueBuilder().(*array.Int64Builder)
+	inst.scalarListBuilder029 = builder.Field(29).(*array.ListBuilder)
 
 	return inst
 }
@@ -747,7 +770,7 @@ func (inst *InEntityJsonSectionInt64) endAttribute() {
 		return
 	}
 }
-func (inst *InEntityJsonSectionInt64) BeginAttribute(value23 int64) *InEntityJsonSectionInt64InAttr {
+func (inst *InEntityJsonSectionInt64) BeginAttribute(value29 int64) *InEntityJsonSectionInt64InAttr {
 	switch inst.state {
 	case runtime.EntityStateInSection:
 		inst.state = runtime.EntityStateInAttribute
@@ -756,7 +779,7 @@ func (inst *InEntityJsonSectionInt64) BeginAttribute(value23 int64) *InEntityJso
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst.inAttr
 	}
-	inst.scalarFieldBuilder023.Append(value23)
+	inst.scalarFieldBuilder029.Append(value29)
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -799,18 +822,18 @@ type InEntityJsonSectionInt64InAttr struct {
 	errs                             []error
 	state                            runtime.EntityStateE
 	parent                           *InEntityJsonSectionInt64
-	scalarFieldBuilder023            *array.Int64Builder
-	scalarListBuilder023             *array.ListBuilder
-	membershipFieldBuilder024        *array.BinaryBuilder
-	membershipListBuilder024         *array.ListBuilder
-	membershipFieldBuilder025        *array.BinaryBuilder
-	membershipListBuilder025         *array.ListBuilder
-	membershipSupportFieldBuilder026 *array.Uint64Builder
-	membershipSupportListBuilder026  *array.ListBuilder
+	scalarFieldBuilder029            *array.Int64Builder
+	scalarListBuilder029             *array.ListBuilder
+	membershipFieldBuilder030        *array.BinaryBuilder
+	membershipListBuilder030         *array.ListBuilder
+	membershipFieldBuilder031        *array.BinaryBuilder
+	membershipListBuilder031         *array.ListBuilder
+	membershipSupportFieldBuilder032 *array.Uint64Builder
+	membershipSupportListBuilder032  *array.ListBuilder
 
-	membershipContainerLength024 int
+	membershipContainerLength030 int
 
-	membershipContainerLength025 int
+	membershipContainerLength031 int
 }
 
 func NewInEntityJsonSectionInt64InAttr(builder *array.RecordBuilder, parent *InEntityJsonSectionInt64) (inst *InEntityJsonSectionInt64InAttr) {
@@ -818,55 +841,55 @@ func NewInEntityJsonSectionInt64InAttr(builder *array.RecordBuilder, parent *InE
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.parent = parent
-	inst.scalarFieldBuilder023 = builder.Field(23).(*array.ListBuilder).ValueBuilder().(*array.Int64Builder)
-	inst.scalarListBuilder023 = builder.Field(23).(*array.ListBuilder)
-	inst.membershipFieldBuilder024 = builder.Field(24).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder024 = builder.Field(24).(*array.ListBuilder)
-	inst.membershipFieldBuilder025 = builder.Field(25).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder025 = builder.Field(25).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder026 = builder.Field(26).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder026 = builder.Field(26).(*array.ListBuilder)
+	inst.scalarFieldBuilder029 = builder.Field(29).(*array.ListBuilder).ValueBuilder().(*array.Int64Builder)
+	inst.scalarListBuilder029 = builder.Field(29).(*array.ListBuilder)
+	inst.membershipFieldBuilder030 = builder.Field(30).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder030 = builder.Field(30).(*array.ListBuilder)
+	inst.membershipFieldBuilder031 = builder.Field(31).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder031 = builder.Field(31).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder032 = builder.Field(32).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder032 = builder.Field(32).(*array.ListBuilder)
 
 	return inst
 }
 func (inst *InEntityJsonSectionInt64InAttr) beginAttribute() {
-	inst.membershipListBuilder024.Append(true)
-	inst.membershipListBuilder025.Append(true)
-	inst.membershipContainerLength024 = 0
-	inst.membershipContainerLength025 = 0
-	inst.scalarListBuilder023.Append(true)
-	inst.membershipSupportListBuilder026.Append(true)
+	inst.membershipListBuilder030.Append(true)
+	inst.membershipListBuilder031.Append(true)
+	inst.membershipContainerLength030 = 0
+	inst.membershipContainerLength031 = 0
+	inst.scalarListBuilder029.Append(true)
+	inst.membershipSupportListBuilder032.Append(true)
 	inst.state = runtime.EntityStateInSection
 	inst.clearErrors()
 }
-func (inst *InEntityJsonSectionInt64InAttr) AddMembershipMixedLowCardVerbatim(lmv24 []byte, mvhp25 []byte) *InEntityJsonSectionInt64InAttr {
+func (inst *InEntityJsonSectionInt64InAttr) AddMembershipMixedLowCardVerbatim(lmv30 []byte, mvhp31 []byte) *InEntityJsonSectionInt64InAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder024.Append(lmv24)
-	inst.membershipFieldBuilder025.Append(mvhp25)
-	inst.membershipContainerLength024++
-	inst.membershipContainerLength025++
+	inst.membershipFieldBuilder030.Append(lmv30)
+	inst.membershipFieldBuilder031.Append(mvhp31)
+	inst.membershipContainerLength030++
+	inst.membershipContainerLength031++
 	return inst
 }
-func (inst *InEntityJsonSectionInt64InAttr) AddMembershipMixedLowCardVerbatimP(lmv24 []byte, mvhp25 []byte) {
+func (inst *InEntityJsonSectionInt64InAttr) AddMembershipMixedLowCardVerbatimP(lmv30 []byte, mvhp31 []byte) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder024.Append(lmv24)
-	inst.membershipFieldBuilder025.Append(mvhp25)
-	inst.membershipContainerLength024++
-	inst.membershipContainerLength025++
+	inst.membershipFieldBuilder030.Append(lmv30)
+	inst.membershipFieldBuilder031.Append(mvhp31)
+	inst.membershipContainerLength030++
+	inst.membershipContainerLength031++
 	return
 }
 func (inst *InEntityJsonSectionInt64InAttr) handleMembershipSupportColumns() {
 	var l int
 	var _ = l
-	l = inst.membershipContainerLength024
-	inst.membershipContainerLength024 = 0
-	inst.membershipSupportFieldBuilder026.Append(uint64(l))
+	l = inst.membershipContainerLength030
+	inst.membershipContainerLength030 = 0
+	inst.membershipSupportFieldBuilder032.Append(uint64(l))
 }
 func (inst *InEntityJsonSectionInt64InAttr) handleNonScalarSupportColumns() {
 	var l int
@@ -990,16 +1013,16 @@ type InEntityJsonSectionNullInAttr struct {
 	errs                             []error
 	state                            runtime.EntityStateE
 	parent                           *InEntityJsonSectionNull
-	membershipFieldBuilder008        *array.BinaryBuilder
-	membershipListBuilder008         *array.ListBuilder
-	membershipFieldBuilder009        *array.BinaryBuilder
-	membershipListBuilder009         *array.ListBuilder
-	membershipSupportFieldBuilder010 *array.Uint64Builder
-	membershipSupportListBuilder010  *array.ListBuilder
+	membershipFieldBuilder014        *array.BinaryBuilder
+	membershipListBuilder014         *array.ListBuilder
+	membershipFieldBuilder015        *array.BinaryBuilder
+	membershipListBuilder015         *array.ListBuilder
+	membershipSupportFieldBuilder016 *array.Uint64Builder
+	membershipSupportListBuilder016  *array.ListBuilder
 
-	membershipContainerLength008 int
+	membershipContainerLength014 int
 
-	membershipContainerLength009 int
+	membershipContainerLength015 int
 }
 
 func NewInEntityJsonSectionNullInAttr(builder *array.RecordBuilder, parent *InEntityJsonSectionNull) (inst *InEntityJsonSectionNullInAttr) {
@@ -1007,52 +1030,52 @@ func NewInEntityJsonSectionNullInAttr(builder *array.RecordBuilder, parent *InEn
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.parent = parent
-	inst.membershipFieldBuilder008 = builder.Field(8).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder008 = builder.Field(8).(*array.ListBuilder)
-	inst.membershipFieldBuilder009 = builder.Field(9).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder009 = builder.Field(9).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder010 = builder.Field(10).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder010 = builder.Field(10).(*array.ListBuilder)
+	inst.membershipFieldBuilder014 = builder.Field(14).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder014 = builder.Field(14).(*array.ListBuilder)
+	inst.membershipFieldBuilder015 = builder.Field(15).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder015 = builder.Field(15).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder016 = builder.Field(16).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder016 = builder.Field(16).(*array.ListBuilder)
 
 	return inst
 }
 func (inst *InEntityJsonSectionNullInAttr) beginAttribute() {
-	inst.membershipListBuilder008.Append(true)
-	inst.membershipListBuilder009.Append(true)
-	inst.membershipContainerLength008 = 0
-	inst.membershipContainerLength009 = 0
-	inst.membershipSupportListBuilder010.Append(true)
+	inst.membershipListBuilder014.Append(true)
+	inst.membershipListBuilder015.Append(true)
+	inst.membershipContainerLength014 = 0
+	inst.membershipContainerLength015 = 0
+	inst.membershipSupportListBuilder016.Append(true)
 	inst.state = runtime.EntityStateInSection
 	inst.clearErrors()
 }
-func (inst *InEntityJsonSectionNullInAttr) AddMembershipMixedLowCardVerbatim(lmv8 []byte, mvhp9 []byte) *InEntityJsonSectionNullInAttr {
+func (inst *InEntityJsonSectionNullInAttr) AddMembershipMixedLowCardVerbatim(lmv14 []byte, mvhp15 []byte) *InEntityJsonSectionNullInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder008.Append(lmv8)
-	inst.membershipFieldBuilder009.Append(mvhp9)
-	inst.membershipContainerLength008++
-	inst.membershipContainerLength009++
+	inst.membershipFieldBuilder014.Append(lmv14)
+	inst.membershipFieldBuilder015.Append(mvhp15)
+	inst.membershipContainerLength014++
+	inst.membershipContainerLength015++
 	return inst
 }
-func (inst *InEntityJsonSectionNullInAttr) AddMembershipMixedLowCardVerbatimP(lmv8 []byte, mvhp9 []byte) {
+func (inst *InEntityJsonSectionNullInAttr) AddMembershipMixedLowCardVerbatimP(lmv14 []byte, mvhp15 []byte) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder008.Append(lmv8)
-	inst.membershipFieldBuilder009.Append(mvhp9)
-	inst.membershipContainerLength008++
-	inst.membershipContainerLength009++
+	inst.membershipFieldBuilder014.Append(lmv14)
+	inst.membershipFieldBuilder015.Append(mvhp15)
+	inst.membershipContainerLength014++
+	inst.membershipContainerLength015++
 	return
 }
 func (inst *InEntityJsonSectionNullInAttr) handleMembershipSupportColumns() {
 	var l int
 	var _ = l
-	l = inst.membershipContainerLength008
-	inst.membershipContainerLength008 = 0
-	inst.membershipSupportFieldBuilder010.Append(uint64(l))
+	l = inst.membershipContainerLength014
+	inst.membershipContainerLength014 = 0
+	inst.membershipSupportFieldBuilder016.Append(uint64(l))
 }
 func (inst *InEntityJsonSectionNullInAttr) handleNonScalarSupportColumns() {
 	var l int
@@ -1103,8 +1126,8 @@ type InEntityJsonSectionString struct {
 	inAttr                *InEntityJsonSectionStringInAttr
 	state                 runtime.EntityStateE
 	parent                *InEntityJson
-	scalarFieldBuilder011 *array.StringBuilder
-	scalarListBuilder011  *array.ListBuilder
+	scalarFieldBuilder017 *array.StringBuilder
+	scalarListBuilder017  *array.ListBuilder
 }
 
 func NewInEntityJsonSectionString(builder *array.RecordBuilder, parent *InEntityJson) (inst *InEntityJsonSectionString) {
@@ -1114,8 +1137,8 @@ func NewInEntityJsonSectionString(builder *array.RecordBuilder, parent *InEntity
 	inst.state = runtime.EntityStateInitial
 	inst.inAttr = inAttr
 	inst.parent = parent
-	inst.scalarFieldBuilder011 = builder.Field(11).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder011 = builder.Field(11).(*array.ListBuilder)
+	inst.scalarFieldBuilder017 = builder.Field(17).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.scalarListBuilder017 = builder.Field(17).(*array.ListBuilder)
 
 	return inst
 }
@@ -1129,7 +1152,7 @@ func (inst *InEntityJsonSectionString) endAttribute() {
 		return
 	}
 }
-func (inst *InEntityJsonSectionString) BeginAttribute(value11 string) *InEntityJsonSectionStringInAttr {
+func (inst *InEntityJsonSectionString) BeginAttribute(value17 string) *InEntityJsonSectionStringInAttr {
 	switch inst.state {
 	case runtime.EntityStateInSection:
 		inst.state = runtime.EntityStateInAttribute
@@ -1138,7 +1161,7 @@ func (inst *InEntityJsonSectionString) BeginAttribute(value11 string) *InEntityJ
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst.inAttr
 	}
-	inst.scalarFieldBuilder011.Append(value11)
+	inst.scalarFieldBuilder017.Append(value17)
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -1181,18 +1204,18 @@ type InEntityJsonSectionStringInAttr struct {
 	errs                             []error
 	state                            runtime.EntityStateE
 	parent                           *InEntityJsonSectionString
-	scalarFieldBuilder011            *array.StringBuilder
-	scalarListBuilder011             *array.ListBuilder
-	membershipFieldBuilder012        *array.BinaryBuilder
-	membershipListBuilder012         *array.ListBuilder
-	membershipFieldBuilder013        *array.BinaryBuilder
-	membershipListBuilder013         *array.ListBuilder
-	membershipSupportFieldBuilder014 *array.Uint64Builder
-	membershipSupportListBuilder014  *array.ListBuilder
+	scalarFieldBuilder017            *array.StringBuilder
+	scalarListBuilder017             *array.ListBuilder
+	membershipFieldBuilder018        *array.BinaryBuilder
+	membershipListBuilder018         *array.ListBuilder
+	membershipFieldBuilder019        *array.BinaryBuilder
+	membershipListBuilder019         *array.ListBuilder
+	membershipSupportFieldBuilder020 *array.Uint64Builder
+	membershipSupportListBuilder020  *array.ListBuilder
 
-	membershipContainerLength012 int
+	membershipContainerLength018 int
 
-	membershipContainerLength013 int
+	membershipContainerLength019 int
 }
 
 func NewInEntityJsonSectionStringInAttr(builder *array.RecordBuilder, parent *InEntityJsonSectionString) (inst *InEntityJsonSectionStringInAttr) {
@@ -1200,55 +1223,55 @@ func NewInEntityJsonSectionStringInAttr(builder *array.RecordBuilder, parent *In
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.parent = parent
-	inst.scalarFieldBuilder011 = builder.Field(11).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder011 = builder.Field(11).(*array.ListBuilder)
-	inst.membershipFieldBuilder012 = builder.Field(12).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder012 = builder.Field(12).(*array.ListBuilder)
-	inst.membershipFieldBuilder013 = builder.Field(13).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder013 = builder.Field(13).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder014 = builder.Field(14).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder014 = builder.Field(14).(*array.ListBuilder)
+	inst.scalarFieldBuilder017 = builder.Field(17).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.scalarListBuilder017 = builder.Field(17).(*array.ListBuilder)
+	inst.membershipFieldBuilder018 = builder.Field(18).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder018 = builder.Field(18).(*array.ListBuilder)
+	inst.membershipFieldBuilder019 = builder.Field(19).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder019 = builder.Field(19).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder020 = builder.Field(20).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder020 = builder.Field(20).(*array.ListBuilder)
 
 	return inst
 }
 func (inst *InEntityJsonSectionStringInAttr) beginAttribute() {
-	inst.membershipListBuilder012.Append(true)
-	inst.membershipListBuilder013.Append(true)
-	inst.membershipContainerLength012 = 0
-	inst.membershipContainerLength013 = 0
-	inst.scalarListBuilder011.Append(true)
-	inst.membershipSupportListBuilder014.Append(true)
+	inst.membershipListBuilder018.Append(true)
+	inst.membershipListBuilder019.Append(true)
+	inst.membershipContainerLength018 = 0
+	inst.membershipContainerLength019 = 0
+	inst.scalarListBuilder017.Append(true)
+	inst.membershipSupportListBuilder020.Append(true)
 	inst.state = runtime.EntityStateInSection
 	inst.clearErrors()
 }
-func (inst *InEntityJsonSectionStringInAttr) AddMembershipMixedLowCardVerbatim(lmv12 []byte, mvhp13 []byte) *InEntityJsonSectionStringInAttr {
+func (inst *InEntityJsonSectionStringInAttr) AddMembershipMixedLowCardVerbatim(lmv18 []byte, mvhp19 []byte) *InEntityJsonSectionStringInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder012.Append(lmv12)
-	inst.membershipFieldBuilder013.Append(mvhp13)
-	inst.membershipContainerLength012++
-	inst.membershipContainerLength013++
+	inst.membershipFieldBuilder018.Append(lmv18)
+	inst.membershipFieldBuilder019.Append(mvhp19)
+	inst.membershipContainerLength018++
+	inst.membershipContainerLength019++
 	return inst
 }
-func (inst *InEntityJsonSectionStringInAttr) AddMembershipMixedLowCardVerbatimP(lmv12 []byte, mvhp13 []byte) {
+func (inst *InEntityJsonSectionStringInAttr) AddMembershipMixedLowCardVerbatimP(lmv18 []byte, mvhp19 []byte) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder012.Append(lmv12)
-	inst.membershipFieldBuilder013.Append(mvhp13)
-	inst.membershipContainerLength012++
-	inst.membershipContainerLength013++
+	inst.membershipFieldBuilder018.Append(lmv18)
+	inst.membershipFieldBuilder019.Append(mvhp19)
+	inst.membershipContainerLength018++
+	inst.membershipContainerLength019++
 	return
 }
 func (inst *InEntityJsonSectionStringInAttr) handleMembershipSupportColumns() {
 	var l int
 	var _ = l
-	l = inst.membershipContainerLength012
-	inst.membershipContainerLength012 = 0
-	inst.membershipSupportFieldBuilder014.Append(uint64(l))
+	l = inst.membershipContainerLength018
+	inst.membershipContainerLength018 = 0
+	inst.membershipSupportFieldBuilder020.Append(uint64(l))
 }
 func (inst *InEntityJsonSectionStringInAttr) handleNonScalarSupportColumns() {
 	var l int
@@ -1294,13 +1317,229 @@ func (inst *InEntityJsonSectionStringInAttr) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 
+type InEntityJsonSectionStrings struct {
+	errs                  []error
+	inAttr                *InEntityJsonSectionStringsInAttr
+	state                 runtime.EntityStateE
+	parent                *InEntityJson
+	scalarFieldBuilder001 *array.StringBuilder
+	scalarListBuilder001  *array.ListBuilder
+	scalarFieldBuilder002 *array.StringBuilder
+	scalarListBuilder002  *array.ListBuilder
+	scalarFieldBuilder003 *array.StringBuilder
+	scalarListBuilder003  *array.ListBuilder
+}
+
+func NewInEntityJsonSectionStrings(builder *array.RecordBuilder, parent *InEntityJson) (inst *InEntityJsonSectionStrings) {
+	inst = &InEntityJsonSectionStrings{}
+	inAttr := NewInEntityJsonSectionStringsInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.scalarFieldBuilder001 = builder.Field(1).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.scalarListBuilder001 = builder.Field(1).(*array.ListBuilder)
+	inst.scalarFieldBuilder002 = builder.Field(2).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.scalarListBuilder002 = builder.Field(2).(*array.ListBuilder)
+	inst.scalarFieldBuilder003 = builder.Field(3).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.scalarListBuilder003 = builder.Field(3).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityJsonSectionStrings) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityJsonSectionStrings) BeginAttribute(semanticType1 string, short2 string, long3 string) *InEntityJsonSectionStringsInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+	inst.scalarFieldBuilder001.Append(semanticType1)
+	inst.scalarFieldBuilder002.Append(short2)
+	inst.scalarFieldBuilder003.Append(long3)
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityJsonSectionStrings) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityJsonSectionStrings) EndSection() *InEntityJson {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityJsonSectionStrings) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityJsonSectionStrings) resetSection() {
+	inst.clearErrors()
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityJsonSectionStrings) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityJsonSectionStrings) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityJsonSectionStringsInAttr struct {
+	errs                             []error
+	state                            runtime.EntityStateE
+	parent                           *InEntityJsonSectionStrings
+	scalarFieldBuilder001            *array.StringBuilder
+	scalarListBuilder001             *array.ListBuilder
+	scalarFieldBuilder002            *array.StringBuilder
+	scalarListBuilder002             *array.ListBuilder
+	scalarFieldBuilder003            *array.StringBuilder
+	scalarListBuilder003             *array.ListBuilder
+	membershipFieldBuilder004        *array.BinaryBuilder
+	membershipListBuilder004         *array.ListBuilder
+	membershipFieldBuilder005        *array.BinaryBuilder
+	membershipListBuilder005         *array.ListBuilder
+	membershipSupportFieldBuilder006 *array.Uint64Builder
+	membershipSupportListBuilder006  *array.ListBuilder
+
+	membershipContainerLength004 int
+
+	membershipContainerLength005 int
+}
+
+func NewInEntityJsonSectionStringsInAttr(builder *array.RecordBuilder, parent *InEntityJsonSectionStrings) (inst *InEntityJsonSectionStringsInAttr) {
+	inst = &InEntityJsonSectionStringsInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.scalarFieldBuilder001 = builder.Field(1).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.scalarListBuilder001 = builder.Field(1).(*array.ListBuilder)
+	inst.scalarFieldBuilder002 = builder.Field(2).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.scalarListBuilder002 = builder.Field(2).(*array.ListBuilder)
+	inst.scalarFieldBuilder003 = builder.Field(3).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.scalarListBuilder003 = builder.Field(3).(*array.ListBuilder)
+	inst.membershipFieldBuilder004 = builder.Field(4).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder004 = builder.Field(4).(*array.ListBuilder)
+	inst.membershipFieldBuilder005 = builder.Field(5).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder005 = builder.Field(5).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder006 = builder.Field(6).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder006 = builder.Field(6).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityJsonSectionStringsInAttr) beginAttribute() {
+	inst.membershipListBuilder004.Append(true)
+	inst.membershipListBuilder005.Append(true)
+	inst.membershipContainerLength004 = 0
+	inst.membershipContainerLength005 = 0
+	inst.scalarListBuilder001.Append(true)
+	inst.scalarListBuilder002.Append(true)
+	inst.scalarListBuilder003.Append(true)
+	inst.membershipSupportListBuilder006.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityJsonSectionStringsInAttr) AddMembershipMixedLowCardVerbatim(lmv4 []byte, mvhp5 []byte) *InEntityJsonSectionStringsInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder004.Append(lmv4)
+	inst.membershipFieldBuilder005.Append(mvhp5)
+	inst.membershipContainerLength004++
+	inst.membershipContainerLength005++
+	return inst
+}
+func (inst *InEntityJsonSectionStringsInAttr) AddMembershipMixedLowCardVerbatimP(lmv4 []byte, mvhp5 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder004.Append(lmv4)
+	inst.membershipFieldBuilder005.Append(mvhp5)
+	inst.membershipContainerLength004++
+	inst.membershipContainerLength005++
+	return
+}
+func (inst *InEntityJsonSectionStringsInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength004
+	inst.membershipContainerLength004 = 0
+	inst.membershipSupportFieldBuilder006.Append(uint64(l))
+}
+func (inst *InEntityJsonSectionStringsInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+}
+func (inst *InEntityJsonSectionStringsInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityJsonSectionStringsInAttr) EndSection() *InEntityJson {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityJsonSectionStringsInAttr) EndAttribute() *InEntityJsonSectionStrings {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+
+func (inst *InEntityJsonSectionStringsInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityJsonSectionStringsInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
 type InEntityJsonSectionSymbol struct {
 	errs                  []error
 	inAttr                *InEntityJsonSectionSymbolInAttr
 	state                 runtime.EntityStateE
 	parent                *InEntityJson
-	scalarFieldBuilder015 *array.StringBuilder
-	scalarListBuilder015  *array.ListBuilder
+	scalarFieldBuilder021 *array.StringBuilder
+	scalarListBuilder021  *array.ListBuilder
 }
 
 func NewInEntityJsonSectionSymbol(builder *array.RecordBuilder, parent *InEntityJson) (inst *InEntityJsonSectionSymbol) {
@@ -1310,8 +1549,8 @@ func NewInEntityJsonSectionSymbol(builder *array.RecordBuilder, parent *InEntity
 	inst.state = runtime.EntityStateInitial
 	inst.inAttr = inAttr
 	inst.parent = parent
-	inst.scalarFieldBuilder015 = builder.Field(15).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder015 = builder.Field(15).(*array.ListBuilder)
+	inst.scalarFieldBuilder021 = builder.Field(21).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.scalarListBuilder021 = builder.Field(21).(*array.ListBuilder)
 
 	return inst
 }
@@ -1325,7 +1564,7 @@ func (inst *InEntityJsonSectionSymbol) endAttribute() {
 		return
 	}
 }
-func (inst *InEntityJsonSectionSymbol) BeginAttribute(value15 string) *InEntityJsonSectionSymbolInAttr {
+func (inst *InEntityJsonSectionSymbol) BeginAttribute(value21 string) *InEntityJsonSectionSymbolInAttr {
 	switch inst.state {
 	case runtime.EntityStateInSection:
 		inst.state = runtime.EntityStateInAttribute
@@ -1334,7 +1573,7 @@ func (inst *InEntityJsonSectionSymbol) BeginAttribute(value15 string) *InEntityJ
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst.inAttr
 	}
-	inst.scalarFieldBuilder015.Append(value15)
+	inst.scalarFieldBuilder021.Append(value21)
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -1377,18 +1616,18 @@ type InEntityJsonSectionSymbolInAttr struct {
 	errs                             []error
 	state                            runtime.EntityStateE
 	parent                           *InEntityJsonSectionSymbol
-	scalarFieldBuilder015            *array.StringBuilder
-	scalarListBuilder015             *array.ListBuilder
-	membershipFieldBuilder016        *array.BinaryBuilder
-	membershipListBuilder016         *array.ListBuilder
-	membershipFieldBuilder017        *array.BinaryBuilder
-	membershipListBuilder017         *array.ListBuilder
-	membershipSupportFieldBuilder018 *array.Uint64Builder
-	membershipSupportListBuilder018  *array.ListBuilder
+	scalarFieldBuilder021            *array.StringBuilder
+	scalarListBuilder021             *array.ListBuilder
+	membershipFieldBuilder022        *array.BinaryBuilder
+	membershipListBuilder022         *array.ListBuilder
+	membershipFieldBuilder023        *array.BinaryBuilder
+	membershipListBuilder023         *array.ListBuilder
+	membershipSupportFieldBuilder024 *array.Uint64Builder
+	membershipSupportListBuilder024  *array.ListBuilder
 
-	membershipContainerLength016 int
+	membershipContainerLength022 int
 
-	membershipContainerLength017 int
+	membershipContainerLength023 int
 }
 
 func NewInEntityJsonSectionSymbolInAttr(builder *array.RecordBuilder, parent *InEntityJsonSectionSymbol) (inst *InEntityJsonSectionSymbolInAttr) {
@@ -1396,55 +1635,55 @@ func NewInEntityJsonSectionSymbolInAttr(builder *array.RecordBuilder, parent *In
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.parent = parent
-	inst.scalarFieldBuilder015 = builder.Field(15).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder015 = builder.Field(15).(*array.ListBuilder)
-	inst.membershipFieldBuilder016 = builder.Field(16).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder016 = builder.Field(16).(*array.ListBuilder)
-	inst.membershipFieldBuilder017 = builder.Field(17).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder017 = builder.Field(17).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder018 = builder.Field(18).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder018 = builder.Field(18).(*array.ListBuilder)
+	inst.scalarFieldBuilder021 = builder.Field(21).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.scalarListBuilder021 = builder.Field(21).(*array.ListBuilder)
+	inst.membershipFieldBuilder022 = builder.Field(22).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder022 = builder.Field(22).(*array.ListBuilder)
+	inst.membershipFieldBuilder023 = builder.Field(23).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder023 = builder.Field(23).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder024 = builder.Field(24).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder024 = builder.Field(24).(*array.ListBuilder)
 
 	return inst
 }
 func (inst *InEntityJsonSectionSymbolInAttr) beginAttribute() {
-	inst.membershipListBuilder016.Append(true)
-	inst.membershipListBuilder017.Append(true)
-	inst.membershipContainerLength016 = 0
-	inst.membershipContainerLength017 = 0
-	inst.scalarListBuilder015.Append(true)
-	inst.membershipSupportListBuilder018.Append(true)
+	inst.membershipListBuilder022.Append(true)
+	inst.membershipListBuilder023.Append(true)
+	inst.membershipContainerLength022 = 0
+	inst.membershipContainerLength023 = 0
+	inst.scalarListBuilder021.Append(true)
+	inst.membershipSupportListBuilder024.Append(true)
 	inst.state = runtime.EntityStateInSection
 	inst.clearErrors()
 }
-func (inst *InEntityJsonSectionSymbolInAttr) AddMembershipMixedLowCardVerbatim(lmv16 []byte, mvhp17 []byte) *InEntityJsonSectionSymbolInAttr {
+func (inst *InEntityJsonSectionSymbolInAttr) AddMembershipMixedLowCardVerbatim(lmv22 []byte, mvhp23 []byte) *InEntityJsonSectionSymbolInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder016.Append(lmv16)
-	inst.membershipFieldBuilder017.Append(mvhp17)
-	inst.membershipContainerLength016++
-	inst.membershipContainerLength017++
+	inst.membershipFieldBuilder022.Append(lmv22)
+	inst.membershipFieldBuilder023.Append(mvhp23)
+	inst.membershipContainerLength022++
+	inst.membershipContainerLength023++
 	return inst
 }
-func (inst *InEntityJsonSectionSymbolInAttr) AddMembershipMixedLowCardVerbatimP(lmv16 []byte, mvhp17 []byte) {
+func (inst *InEntityJsonSectionSymbolInAttr) AddMembershipMixedLowCardVerbatimP(lmv22 []byte, mvhp23 []byte) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder016.Append(lmv16)
-	inst.membershipFieldBuilder017.Append(mvhp17)
-	inst.membershipContainerLength016++
-	inst.membershipContainerLength017++
+	inst.membershipFieldBuilder022.Append(lmv22)
+	inst.membershipFieldBuilder023.Append(mvhp23)
+	inst.membershipContainerLength022++
+	inst.membershipContainerLength023++
 	return
 }
 func (inst *InEntityJsonSectionSymbolInAttr) handleMembershipSupportColumns() {
 	var l int
 	var _ = l
-	l = inst.membershipContainerLength016
-	inst.membershipContainerLength016 = 0
-	inst.membershipSupportFieldBuilder018.Append(uint64(l))
+	l = inst.membershipContainerLength022
+	inst.membershipContainerLength022 = 0
+	inst.membershipSupportFieldBuilder024.Append(uint64(l))
 }
 func (inst *InEntityJsonSectionSymbolInAttr) handleNonScalarSupportColumns() {
 	var l int
@@ -1568,16 +1807,16 @@ type InEntityJsonSectionUndefinedInAttr struct {
 	errs                             []error
 	state                            runtime.EntityStateE
 	parent                           *InEntityJsonSectionUndefined
-	membershipFieldBuilder005        *array.BinaryBuilder
-	membershipListBuilder005         *array.ListBuilder
-	membershipFieldBuilder006        *array.BinaryBuilder
-	membershipListBuilder006         *array.ListBuilder
-	membershipSupportFieldBuilder007 *array.Uint64Builder
-	membershipSupportListBuilder007  *array.ListBuilder
+	membershipFieldBuilder011        *array.BinaryBuilder
+	membershipListBuilder011         *array.ListBuilder
+	membershipFieldBuilder012        *array.BinaryBuilder
+	membershipListBuilder012         *array.ListBuilder
+	membershipSupportFieldBuilder013 *array.Uint64Builder
+	membershipSupportListBuilder013  *array.ListBuilder
 
-	membershipContainerLength005 int
+	membershipContainerLength011 int
 
-	membershipContainerLength006 int
+	membershipContainerLength012 int
 }
 
 func NewInEntityJsonSectionUndefinedInAttr(builder *array.RecordBuilder, parent *InEntityJsonSectionUndefined) (inst *InEntityJsonSectionUndefinedInAttr) {
@@ -1585,52 +1824,52 @@ func NewInEntityJsonSectionUndefinedInAttr(builder *array.RecordBuilder, parent 
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.parent = parent
-	inst.membershipFieldBuilder005 = builder.Field(5).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder005 = builder.Field(5).(*array.ListBuilder)
-	inst.membershipFieldBuilder006 = builder.Field(6).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder006 = builder.Field(6).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder007 = builder.Field(7).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder007 = builder.Field(7).(*array.ListBuilder)
+	inst.membershipFieldBuilder011 = builder.Field(11).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder011 = builder.Field(11).(*array.ListBuilder)
+	inst.membershipFieldBuilder012 = builder.Field(12).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder012 = builder.Field(12).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder013 = builder.Field(13).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder013 = builder.Field(13).(*array.ListBuilder)
 
 	return inst
 }
 func (inst *InEntityJsonSectionUndefinedInAttr) beginAttribute() {
-	inst.membershipListBuilder005.Append(true)
-	inst.membershipListBuilder006.Append(true)
-	inst.membershipContainerLength005 = 0
-	inst.membershipContainerLength006 = 0
-	inst.membershipSupportListBuilder007.Append(true)
+	inst.membershipListBuilder011.Append(true)
+	inst.membershipListBuilder012.Append(true)
+	inst.membershipContainerLength011 = 0
+	inst.membershipContainerLength012 = 0
+	inst.membershipSupportListBuilder013.Append(true)
 	inst.state = runtime.EntityStateInSection
 	inst.clearErrors()
 }
-func (inst *InEntityJsonSectionUndefinedInAttr) AddMembershipMixedLowCardVerbatim(lmv5 []byte, mvhp6 []byte) *InEntityJsonSectionUndefinedInAttr {
+func (inst *InEntityJsonSectionUndefinedInAttr) AddMembershipMixedLowCardVerbatim(lmv11 []byte, mvhp12 []byte) *InEntityJsonSectionUndefinedInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder005.Append(lmv5)
-	inst.membershipFieldBuilder006.Append(mvhp6)
-	inst.membershipContainerLength005++
-	inst.membershipContainerLength006++
+	inst.membershipFieldBuilder011.Append(lmv11)
+	inst.membershipFieldBuilder012.Append(mvhp12)
+	inst.membershipContainerLength011++
+	inst.membershipContainerLength012++
 	return inst
 }
-func (inst *InEntityJsonSectionUndefinedInAttr) AddMembershipMixedLowCardVerbatimP(lmv5 []byte, mvhp6 []byte) {
+func (inst *InEntityJsonSectionUndefinedInAttr) AddMembershipMixedLowCardVerbatimP(lmv11 []byte, mvhp12 []byte) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder005.Append(lmv5)
-	inst.membershipFieldBuilder006.Append(mvhp6)
-	inst.membershipContainerLength005++
-	inst.membershipContainerLength006++
+	inst.membershipFieldBuilder011.Append(lmv11)
+	inst.membershipFieldBuilder012.Append(mvhp12)
+	inst.membershipContainerLength011++
+	inst.membershipContainerLength012++
 	return
 }
 func (inst *InEntityJsonSectionUndefinedInAttr) handleMembershipSupportColumns() {
 	var l int
 	var _ = l
-	l = inst.membershipContainerLength005
-	inst.membershipContainerLength005 = 0
-	inst.membershipSupportFieldBuilder007.Append(uint64(l))
+	l = inst.membershipContainerLength011
+	inst.membershipContainerLength011 = 0
+	inst.membershipSupportFieldBuilder013.Append(uint64(l))
 }
 func (inst *InEntityJsonSectionUndefinedInAttr) handleNonScalarSupportColumns() {
 	var l int

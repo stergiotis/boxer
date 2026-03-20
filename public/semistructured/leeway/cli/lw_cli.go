@@ -10,6 +10,7 @@ import (
 	cli2 "github.com/stergiotis/boxer/public/hmi/cli"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/utils/card"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
 	"github.com/urfave/cli/v2"
 )
@@ -87,6 +88,7 @@ func NewCliCommand() *cli.Command {
 			[]*cli.Command{
 				NewCliCommandDdl(),
 				NewCliCommandDml(),
+				card.NewCliCommandCard(),
 			},
 		),
 	}
