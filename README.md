@@ -68,4 +68,4 @@ Later, code with substantial contributions by LLMs has a build flag to disable i
 LLM generated code is subject to the same coding standards as human generated code.
 
 ## License
-The MIT License (MIT) 2023-2025 - [Panos Stergiotis](https://github.com/stergiotis/). See [LICENSE](LICENSE) for the full license text.
+The MIT License (MIT) 2023-2026 - [Panos Stergiotis](https://github.com/stergiotis/). See [LICENSE](LICENSE) for the full license text.
