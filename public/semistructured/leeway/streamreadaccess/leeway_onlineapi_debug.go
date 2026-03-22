@@ -225,4 +225,4 @@ func (inst *DebugSink) AddMembershipMixedLowCardVerbatimHighCardParam(verbatim s
 	inst.check()
 }
 
-var _ OnlineApiSinkI = (*DebugSink)(nil)
+var _ SinkI = (*DebugSink)(nil)
