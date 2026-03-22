@@ -296,7 +296,6 @@ UNDERSCORE: '_';
 DOLLAR: '$';
 
 // Comments and whitespace
-
-MULTI_LINE_COMMENT: '/*' .*? '*/' -> skip;
-SINGLE_LINE_COMMENT: ('--' | '//') ~('\n'|'\r')* ('\n' | '\r' | EOF) -> skip;
-WHITESPACE: [ \u000B\u000C\t\r\n] -> skip;  // '\n' can be part of multiline single query
+MULTI_LINE_COMMENT: '/*' .*? '*/' -> channel(HIDDEN);
+SINGLE_LINE_COMMENT: ('--' | '//') ~[\r\n]* ('\r'? '\n' | EOF) -> channel(HIDDEN);
+WHITESPACE: [ \t\r\n]+ -> channel(HIDDEN);

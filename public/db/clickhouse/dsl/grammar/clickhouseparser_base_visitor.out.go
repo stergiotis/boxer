@@ -1,4 +1,4 @@
-// Code generated from ClickHouseParser.g4 by ANTLR 4.13.1. DO NOT EDIT.
+// Code generated from ClickHouseParser.g4 by ANTLR 4.13.2. DO NOT EDIT.
 
 package grammar // ClickHouseParser
 import "github.com/antlr4-go/antlr/v4"
