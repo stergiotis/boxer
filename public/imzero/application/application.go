@@ -43,11 +43,11 @@ type Application struct {
 	shutdown                    *bool
 	stdout                      *bufio.Writer
 	stdin                       *bufio.Reader
+	closers                     []io.Closer
 	IconFont                    imgui.ImFontPtr
 	relaunches                  int
-	relaunchable                bool
 	PerFrameValues              PerFrameValues
-	closers                     []io.Closer
+	relaunchable                bool
 }
 
 func NewApplication(cfg *Config) (app *Application, err error) {
@@ -188,7 +188,7 @@ func (inst *Application) Launch() (err error) {
 				cmd = exec.Command("heaptrack", args...)
 				break
 			default:
-				err = eb.Build().Str("debugMode",debugMode).Strs("possible",[]string{"memcheck","massif","heaptrack"}).Errorf("unhandled debug mode BOXER_IMZERO_DEBUG_MODE")
+				err = eb.Build().Str("debugMode", debugMode).Strs("possible", []string{"memcheck", "massif", "heaptrack"}).Errorf("unhandled debug mode BOXER_IMZERO_DEBUG_MODE")
 				return
 			}
 			var si io.WriteCloser

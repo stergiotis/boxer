@@ -19,14 +19,14 @@ type CanonicalTypeSignatureParser struct {
 }
 
 var CanonicalTypeSignatureParserParserStaticData struct {
-	once                   sync.Once
+	PredictionContextCache *antlr.PredictionContextCache
+	atn                    *antlr.ATN
 	serializedATN          []int32
 	LiteralNames           []string
 	SymbolicNames          []string
 	RuleNames              []string
-	PredictionContextCache *antlr.PredictionContextCache
-	atn                    *antlr.ATN
 	decisionToDFA          []*antlr.DFA
+	once                   sync.Once
 }
 
 func canonicaltypesignatureparserParserInit() {
@@ -184,8 +184,8 @@ type IBaseStringContext interface {
 }
 
 type BaseStringContext struct {
-	antlr.BaseParserRuleContext
 	parser antlr.Parser
+	antlr.BaseParserRuleContext
 }
 
 func NewEmptyBaseStringContext() *BaseStringContext {
@@ -293,8 +293,8 @@ type IBaseMachineNumericContext interface {
 }
 
 type BaseMachineNumericContext struct {
-	antlr.BaseParserRuleContext
 	parser antlr.Parser
+	antlr.BaseParserRuleContext
 }
 
 func NewEmptyBaseMachineNumericContext() *BaseMachineNumericContext {
@@ -402,8 +402,8 @@ type IBaseTemporalContext interface {
 }
 
 type BaseTemporalContext struct {
-	antlr.BaseParserRuleContext
 	parser antlr.Parser
+	antlr.BaseParserRuleContext
 }
 
 func NewEmptyBaseTemporalContext() *BaseTemporalContext {
@@ -510,8 +510,8 @@ type IScalarModifierContext interface {
 }
 
 type ScalarModifierContext struct {
-	antlr.BaseParserRuleContext
 	parser antlr.Parser
+	antlr.BaseParserRuleContext
 }
 
 func NewEmptyScalarModifierContext() *ScalarModifierContext {
@@ -614,8 +614,8 @@ type IByteOrderModifierContext interface {
 }
 
 type ByteOrderModifierContext struct {
-	antlr.BaseParserRuleContext
 	parser antlr.Parser
+	antlr.BaseParserRuleContext
 }
 
 func NewEmptyByteOrderModifierContext() *ByteOrderModifierContext {
@@ -718,8 +718,8 @@ type IWidthModifierContext interface {
 }
 
 type WidthModifierContext struct {
-	antlr.BaseParserRuleContext
 	parser antlr.Parser
+	antlr.BaseParserRuleContext
 }
 
 func NewEmptyWidthModifierContext() *WidthModifierContext {
@@ -820,8 +820,8 @@ type ICanonicalTypeContext interface {
 }
 
 type CanonicalTypeContext struct {
-	antlr.BaseParserRuleContext
 	parser antlr.Parser
+	antlr.BaseParserRuleContext
 }
 
 func NewEmptyCanonicalTypeContext() *CanonicalTypeContext {
@@ -1241,8 +1241,8 @@ type ICanonicalTypeSequenceContext interface {
 }
 
 type CanonicalTypeSequenceContext struct {
-	antlr.BaseParserRuleContext
 	parser antlr.Parser
+	antlr.BaseParserRuleContext
 }
 
 func NewEmptyCanonicalTypeSequenceContext() *CanonicalTypeSequenceContext {
@@ -1409,8 +1409,8 @@ type ICanonicalTypeGroupContext interface {
 }
 
 type CanonicalTypeGroupContext struct {
-	antlr.BaseParserRuleContext
 	parser antlr.Parser
+	antlr.BaseParserRuleContext
 }
 
 func NewEmptyCanonicalTypeGroupContext() *CanonicalTypeGroupContext {
@@ -1575,8 +1575,8 @@ type ICanonicalTypeOrGroupContext interface {
 }
 
 type CanonicalTypeOrGroupContext struct {
-	antlr.BaseParserRuleContext
 	parser antlr.Parser
+	antlr.BaseParserRuleContext
 }
 
 func NewEmptyCanonicalTypeOrGroupContext() *CanonicalTypeOrGroupContext {
@@ -1715,8 +1715,8 @@ type ICanonicalTypeOrGroupSequenceContext interface {
 }
 
 type CanonicalTypeOrGroupSequenceContext struct {
-	antlr.BaseParserRuleContext
 	parser antlr.Parser
+	antlr.BaseParserRuleContext
 }
 
 func NewEmptyCanonicalTypeOrGroupSequenceContext() *CanonicalTypeOrGroupSequenceContext {
@@ -1881,8 +1881,8 @@ type ICanonicalTypeSignatureContext interface {
 }
 
 type CanonicalTypeSignatureContext struct {
-	antlr.BaseParserRuleContext
 	parser antlr.Parser
+	antlr.BaseParserRuleContext
 }
 
 func NewEmptyCanonicalTypeSignatureContext() *CanonicalTypeSignatureContext {
@@ -1996,8 +1996,8 @@ type ISingleCanonicalTypeContext interface {
 }
 
 type SingleCanonicalTypeContext struct {
-	antlr.BaseParserRuleContext
 	parser antlr.Parser
+	antlr.BaseParserRuleContext
 }
 
 func NewEmptySingleCanonicalTypeContext() *SingleCanonicalTypeContext {
@@ -2111,8 +2111,8 @@ type ISingleCanonicalTypeOrGroupContext interface {
 }
 
 type SingleCanonicalTypeOrGroupContext struct {
-	antlr.BaseParserRuleContext
 	parser antlr.Parser
+	antlr.BaseParserRuleContext
 }
 
 func NewEmptySingleCanonicalTypeOrGroupContext() *SingleCanonicalTypeOrGroupContext {
@@ -2226,8 +2226,8 @@ type ISingleCanonicalGroupContext interface {
 }
 
 type SingleCanonicalGroupContext struct {
-	antlr.BaseParserRuleContext
 	parser antlr.Parser
+	antlr.BaseParserRuleContext
 }
 
 func NewEmptySingleCanonicalGroupContext() *SingleCanonicalGroupContext {

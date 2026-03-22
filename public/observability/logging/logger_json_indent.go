@@ -11,10 +11,10 @@ import (
 
 type JsonIndentLogger struct {
 	Out    io.Writer
-	Prefix string
-	Indent string
 	enc    *jsontext.Encoder
 	szW    *ea.SizeMeasureWriter
+	Prefix string
+	Indent string
 }
 
 func (inst *JsonIndentLogger) Write(p []byte) (n int, err error) {

@@ -37,16 +37,16 @@ type MembershipPackTestTableShared1 struct {
 	ValueLowCardRef                                 *array.List
 	ValueLowCardRefElements                         *array.Uint64
 	AccelLowCardRef                                 *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64]
-	ColumnIndexLowCardRef                           uint32
-	ColumnIndexLowCardRefAccel                      uint32
 	ValueMixedLowCardVerbatim                       *array.List
 	ValueMixedLowCardVerbatimElements               *array.Binary
 	AccelMixedLowCardVerbatim                       *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64]
-	ColumnIndexMixedLowCardVerbatim                 uint32
-	ColumnIndexMixedLowCardVerbatimAccel            uint32
 	ValueMixedVerbatimHighCardParameters            *array.List
 	ValueMixedVerbatimHighCardParametersElements    *array.Binary
 	AccelMixedVerbatimHighCardParameters            *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexLowCardRef                           uint32
+	ColumnIndexLowCardRefAccel                      uint32
+	ColumnIndexMixedLowCardVerbatim                 uint32
+	ColumnIndexMixedLowCardVerbatimAccel            uint32
 	ColumnIndexMixedVerbatimHighCardParameters      uint32
 	ColumnIndexMixedVerbatimHighCardParametersAccel uint32
 }
@@ -273,38 +273,38 @@ type ReadAccessTestTablePlainEntityIdAttributes struct {
 
 type ReadAccessTestTablePlainEntityTimestampAttributes struct {
 	ValueTs           *array.Timestamp
-	ColumnIndexTs     uint32
 	ValueProc         *array.List
-	ColumnIndexProc   uint32
 	ValueProcElements *array.Timestamp
+	ColumnIndexTs     uint32
+	ColumnIndexProc   uint32
 }
 
 type ReadAccessTestTableTaggedGeoAttributes struct {
 	ValueLat            *array.List
-	ColumnIndexLat      uint32
 	ValueLatElements    *array.Float32
 	ValueLng            *array.List
-	ColumnIndexLng      uint32
 	ValueLngElements    *array.Float32
 	ValueH3Res1         *array.List
-	ColumnIndexH3Res1   uint32
 	ValueH3Res1Elements *array.Uint64
 	ValueH3Res2         *array.List
-	ColumnIndexH3Res2   uint32
 	ValueH3Res2Elements *array.Uint64
+	ColumnIndexLat      uint32
+	ColumnIndexLng      uint32
+	ColumnIndexH3Res1   uint32
+	ColumnIndexH3Res2   uint32
 }
 
 type ReadAccessTestTableTaggedTextAttributes struct {
 	ValueText                  *array.List
-	ColumnIndexText            uint32
 	ValueTextElements          *array.String
 	ValueWordLength            *array.List
-	ColumnIndexWordLength      uint32
 	ValueWordLengthElements    *array.Uint32
 	ValueWords                 *array.List
-	ColumnIndexWords           uint32
 	ValueWordsElements         *array.String
 	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexText            uint32
+	ColumnIndexWordLength      uint32
+	ColumnIndexWords           uint32
 	ColumnIndexHomogenousArray uint32
 }
 

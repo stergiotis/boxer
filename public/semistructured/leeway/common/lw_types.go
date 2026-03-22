@@ -20,10 +20,8 @@ type IntermediateColumnScopeE string
 type IntermediateColumnSubTypeE string
 
 type IntermediateColumnContext struct {
-	Scope         IntermediateColumnScopeE
-	SubType       IntermediateColumnSubTypeE
-	PlainItemType PlainItemTypeE
-	IndexOffset   uint32
+	Scope   IntermediateColumnScopeE
+	SubType IntermediateColumnSubTypeE
 
 	// StreamingGroup empty for all plain sections but opaque
 	StreamingGroup naming.Key
@@ -33,6 +31,9 @@ type IntermediateColumnContext struct {
 	UseAspects  useaspects.AspectSet
 	// CoSectionGroup empty for plain sections
 	CoSectionGroup naming.Key
+	IndexOffset    uint32
+
+	PlainItemType PlainItemTypeE
 }
 
 type IntermediateColumnProps struct {
@@ -57,13 +58,13 @@ type IntermediateTaggedValuesDesc struct {
 	StreamingGroup                  naming.Key               `cbor:"streamingGroup"`
 }
 type IntermediatePlainValuesDesc struct {
-	ItemType                        PlainItemTypeE           `cbor:"itemType"`
 	Scalar                          *IntermediateColumnProps `cbor:"scalar"`
 	NonScalarHomogenousArray        *IntermediateColumnProps `cbor:"nonScalarHomogenousArray"`
 	NonScalarHomogenousArraySupport *IntermediateColumnProps `cbor:"nonScalarHomogenousArraySupport"`
 	NonScalarSet                    *IntermediateColumnProps `cbor:"nonScalarSet"`
 	NonScalarSetSupport             *IntermediateColumnProps `cbor:"nonScalarSetSupport"`
 	StreamingGroup                  naming.Key               `cbor:"streamingGroup"`
+	ItemType                        PlainItemTypeE           `cbor:"itemType"`
 }
 type IntermediateColumnIterator = iter.Seq2[IntermediateColumnContext, *IntermediateColumnProps]
 type IntermediateTableRepresentation struct {
@@ -123,6 +124,8 @@ type TableDesc struct {
 type TableDescDto struct {
 	DictionaryEntry TableDictionaryEntryDescDto `cbor:"dictionaryEntry" json:"dictionaryEntry"`
 
+	OpaqueColumnStreamingGroup naming.Key `cbor:"opaqueColumnStreamingGroup" json:"opaqueColumnStreamingGroup"`
+
 	EntityIdNames                 [] /*i*/ naming.StylableName       `cbor:"entityIdNames" json:"entityIdNames"`
 	EntityIdTypes                 [] /*i*/ string                    `cbor:"entityIdTypes" json:"entityIdTypes"`
 	EntityIdEncodingHints         [] /*i*/ encodingaspects.AspectSet `cbor:"entityIdEncodingHints" json:"entityIdEncodingHints"`
@@ -151,38 +154,37 @@ type TableDescDto struct {
 	OpaqueColumnTypes          [] /*n*/ string                    `cbor:"opaqueColumnTypes" json:"opaqueColumnTypes"`
 	OpaqueColumnEncodingHints  [] /*n*/ encodingaspects.AspectSet `cbor:"opaqueColumnEncodingHints" json:"opaqueColumnEncodingHints"`
 	OpaqueColumnValueSemantics [] /*i*/ valueaspects.AspectSet    `cbor:"opaqueColumnValueSemantics" json:"opaqueColumnValueSemantics"`
-	OpaqueColumnStreamingGroup naming.Key                         `cbor:"opaqueColumnStreamingGroup" json:"opaqueColumnStreamingGroup"`
 }
 
 type TaggedValuesSectionDto struct {
 	Name                     naming.StylableName                `cbor:"name" json:"name"`
-	MembershipSpec           MembershipSpecE                    `cbor:"membershipSpec" json:"membershipSpec"`
+	UseAspects               useaspects.AspectSet               `cbor:"useAspects" json:"useAspects"`
+	CoSectionGroup           naming.Key                         `cbor:"coSectionGroup" json:"coSectionGroup"`
+	StreamingGroup           naming.Key                         `cbor:"streamingGroup" json:"streamingGroup"`
 	ValueColumnNames         [] /*i*/ naming.StylableName       `cbor:"valueColumnNames" json:"valueColumnNames"`
 	ValueColumnTypes         [] /*i*/ string                    `cbor:"valueColumnTypes" json:"valueColumnTypes"`
 	ValueColumnEncodingHints [] /*i*/ encodingaspects.AspectSet `cbor:"valueColumnEncodingHints" json:"valueColumnEncodingHints"`
 	ValueSemantics           [] /*i*/ valueaspects.AspectSet    `cbor:"valueSemantics" json:"ValueSemantics"`
-	UseAspects               useaspects.AspectSet               `cbor:"useAspects" json:"useAspects"`
-	CoSectionGroup           naming.Key                         `cbor:"coSectionGroup" json:"coSectionGroup"`
-	StreamingGroup           naming.Key                         `cbor:"streamingGroup" json:"streamingGroup"`
+	MembershipSpec           MembershipSpecE                    `cbor:"membershipSpec" json:"membershipSpec"`
 }
 
 // TaggedValuesSection Note: If multiple, non-scalar columns are given they must have the same length and have co-array semantics
 type TaggedValuesSection struct {
 	Name               naming.StylableName
-	MembershipSpec     MembershipSpecE
+	UseAspects         useaspects.AspectSet
+	CoSectionGroup     naming.Key
+	StreamingGroup     naming.Key
 	ValueColumnNames   [] /*i*/ naming.StylableName
 	ValueColumnTypes   [] /*i*/ canonicaltypes.PrimitiveAstNodeI
 	ValueEncodingHints [] /*i*/ encodingaspects.AspectSet
 	ValueSemantics     [] /*i*/ valueaspects.AspectSet
-	UseAspects         useaspects.AspectSet
-	CoSectionGroup     naming.Key
-	StreamingGroup     naming.Key
+	MembershipSpec     MembershipSpecE
 }
 type PhysicalColumnDesc struct {
+	GeneratingNamingConvention NamingConventionI
+	Comment                    string   `cbor:"comment"`
 	NameComponents             []string `cbor:"nameComponents"`
 	NameComponentsExplanation  []string `cbor:"nameComponentsExplanation"`
-	Comment                    string   `cbor:"comment"`
-	GeneratingNamingConvention NamingConventionI
 }
 
 var _ fmt.Stringer = PhysicalColumnDesc{}
@@ -252,11 +254,11 @@ type TableManipulator struct {
 	marshaller                *TableMarshaller
 	buffer                    *bytes.Buffer
 	validator                 *TableValidator
-	receivedInvalidAspects    bool
-	upsertedCount             int
-	plainValueItemNameToIndex []map[string]int
 	sectionNameToIndex        map[string]int
 	table                     *TableDesc
+	plainValueItemNameToIndex []map[string]int
+	upsertedCount             int
+	receivedInvalidAspects    bool
 }
 
 var _ TableManipulatorFluidI = (*TableManipulator)(nil)
@@ -287,6 +289,6 @@ type TaggedValueColumnMerger struct {
 }
 type PlainValueColumnMerger struct {
 	table       *TableDesc
-	manip        *TableManipulator
+	manip       *TableManipulator
 	columnIndex int
 }

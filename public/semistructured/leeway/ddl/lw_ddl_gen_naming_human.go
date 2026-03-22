@@ -28,9 +28,9 @@ const SeparatorExplanation = "separator"
 
 type HumanReadableNamingConvention struct {
 	tableManipulator    *common.TableManipulator
-	separator           string
 	canonicalTypeParser *canonicaltypes.Parser
 	aspectCoder         *useaspects2.CanonicalEt7AspectCoder
+	separator           string
 }
 
 var parseStructure13 positionData

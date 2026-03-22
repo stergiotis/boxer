@@ -78,9 +78,9 @@ func (inst *TechnologySpecificCodeGenerator) generateTypeAndCodec(canonicalType 
 }
 
 type LeewayGoStructTag struct {
+	Comment                         string   `json:"comment,omitempty"`
 	ColumnNameComponents            []string `json:"columnNameComponents,omitempty"`
 	ColumnNameComponentsExplanation []string `json:"columnNameComponentsExplanation,omitempty"`
-	Comment                         string   `json:"comment,omitempty"`
 }
 
 func (inst LeewayGoStructTag) Marshall(w io.Writer) (err error) {

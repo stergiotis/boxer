@@ -12,9 +12,9 @@ import (
 )
 
 type BinarySearchGrowingKV[K any, V any] struct {
+	cmpKey    func(a K, b K) int
 	keys      []K
 	vals      []V
-	cmpKey    func(a K, b K) int
 	sorted    bool
 	compacted bool
 }

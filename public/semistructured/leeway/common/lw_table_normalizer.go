@@ -11,8 +11,8 @@ import (
 )
 
 type TableNormalizer struct {
-	namingStyle naming.NamingStyleE
 	validator   *TableValidator
+	namingStyle naming.NamingStyleE
 }
 
 func NewTableNormalizer(namingStyle naming.NamingStyleE) *TableNormalizer {

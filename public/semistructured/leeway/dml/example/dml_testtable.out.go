@@ -54,25 +54,25 @@ func CreateSchemaTesttable() (schema *arrow.Schema) {
 // ./public/semistructured/leeway/dml/lw_dml_generator.go:1175
 
 type InEntityTesttable struct {
-	errs           []error
-	state          runtime.EntityStateE
-	allocator      memory.Allocator
-	builder        *array.RecordBuilder
-	records        []arrow.Record
-	section00Inst  *InEntityTesttableSectionBool
-	section00State runtime.EntityStateE
-	section01Inst  *InEntityTesttableSectionFloat64
-	section01State runtime.EntityStateE
-	section02Inst  *InEntityTesttableSectionSpecial
-	section02State runtime.EntityStateE
-	section03Inst  *InEntityTesttableSectionString
-	section03State runtime.EntityStateE
-	plainId0       uint64
-
 	plainTs1              time.Time
+	allocator             memory.Allocator
+	builder               *array.RecordBuilder
+	section00Inst         *InEntityTesttableSectionBool
+	section01Inst         *InEntityTesttableSectionFloat64
+	section02Inst         *InEntityTesttableSectionSpecial
+	section03Inst         *InEntityTesttableSectionString
 	scalarFieldBuilder000 *array.Uint64Builder
 
 	scalarFieldBuilder001 *array.TimestampBuilder
+	errs                  []error
+	records               []arrow.Record
+	plainId0              uint64
+
+	state          runtime.EntityStateE
+	section00State runtime.EntityStateE
+	section01State runtime.EntityStateE
+	section02State runtime.EntityStateE
+	section03State runtime.EntityStateE
 }
 
 func NewInEntityTesttable(allocator memory.Allocator, estimatedNumberOfRecords int) (inst *InEntityTesttable) {
@@ -293,12 +293,12 @@ func (inst *InEntityTesttable) clearErrors() {
 }
 
 type InEntityTesttableSectionBool struct {
-	errs                  []error
 	inAttr                *InEntityTesttableSectionBoolInAttr
-	state                 runtime.EntityStateE
 	parent                *InEntityTesttable
 	scalarFieldBuilder002 *array.BooleanBuilder
 	scalarListBuilder002  *array.ListBuilder
+	errs                  []error
+	state                 runtime.EntityStateE
 }
 
 func NewInEntityTesttableSectionBool(builder *array.RecordBuilder, parent *InEntityTesttable) (inst *InEntityTesttableSectionBool) {
@@ -372,8 +372,6 @@ func (inst *InEntityTesttableSectionBool) clearErrors() {
 }
 
 type InEntityTesttableSectionBoolInAttr struct {
-	errs                             []error
-	state                            runtime.EntityStateE
 	parent                           *InEntityTesttableSectionBool
 	scalarFieldBuilder002            *array.BooleanBuilder
 	scalarListBuilder002             *array.ListBuilder
@@ -384,9 +382,12 @@ type InEntityTesttableSectionBoolInAttr struct {
 	membershipSupportFieldBuilder005 *array.Uint64Builder
 	membershipSupportListBuilder005  *array.ListBuilder
 
+	errs []error
+
 	membershipContainerLength003 int
 
 	membershipContainerLength004 int
+	state                        runtime.EntityStateE
 }
 
 func NewInEntityTesttableSectionBoolInAttr(builder *array.RecordBuilder, parent *InEntityTesttableSectionBool) (inst *InEntityTesttableSectionBoolInAttr) {
@@ -489,12 +490,12 @@ func (inst *InEntityTesttableSectionBoolInAttr) clearErrors() {
 }
 
 type InEntityTesttableSectionFloat64 struct {
-	errs                  []error
 	inAttr                *InEntityTesttableSectionFloat64InAttr
-	state                 runtime.EntityStateE
 	parent                *InEntityTesttable
 	scalarFieldBuilder010 *array.Float64Builder
 	scalarListBuilder010  *array.ListBuilder
+	errs                  []error
+	state                 runtime.EntityStateE
 }
 
 func NewInEntityTesttableSectionFloat64(builder *array.RecordBuilder, parent *InEntityTesttable) (inst *InEntityTesttableSectionFloat64) {
@@ -568,8 +569,6 @@ func (inst *InEntityTesttableSectionFloat64) clearErrors() {
 }
 
 type InEntityTesttableSectionFloat64InAttr struct {
-	errs                             []error
-	state                            runtime.EntityStateE
 	parent                           *InEntityTesttableSectionFloat64
 	scalarFieldBuilder010            *array.Float64Builder
 	scalarListBuilder010             *array.ListBuilder
@@ -580,9 +579,12 @@ type InEntityTesttableSectionFloat64InAttr struct {
 	membershipSupportFieldBuilder013 *array.Uint64Builder
 	membershipSupportListBuilder013  *array.ListBuilder
 
+	errs []error
+
 	membershipContainerLength011 int
 
 	membershipContainerLength012 int
+	state                        runtime.EntityStateE
 }
 
 func NewInEntityTesttableSectionFloat64InAttr(builder *array.RecordBuilder, parent *InEntityTesttableSectionFloat64) (inst *InEntityTesttableSectionFloat64InAttr) {
@@ -685,9 +687,7 @@ func (inst *InEntityTesttableSectionFloat64InAttr) clearErrors() {
 }
 
 type InEntityTesttableSectionSpecial struct {
-	errs                           []error
 	inAttr                         *InEntityTesttableSectionSpecialInAttr
-	state                          runtime.EntityStateE
 	parent                         *InEntityTesttable
 	scalarFieldBuilder014          *array.StringBuilder
 	scalarListBuilder014           *array.ListBuilder
@@ -695,6 +695,8 @@ type InEntityTesttableSectionSpecial struct {
 	homogenousArrayListBuilder015  *array.ListBuilder
 	homogenousArrayFieldBuilder016 *array.Uint32Builder
 	homogenousArrayListBuilder016  *array.ListBuilder
+	errs                           []error
+	state                          runtime.EntityStateE
 }
 
 func NewInEntityTesttableSectionSpecial(builder *array.RecordBuilder, parent *InEntityTesttable) (inst *InEntityTesttableSectionSpecial) {
@@ -772,8 +774,6 @@ func (inst *InEntityTesttableSectionSpecial) clearErrors() {
 }
 
 type InEntityTesttableSectionSpecialInAttr struct {
-	errs                                  []error
-	state                                 runtime.EntityStateE
 	parent                                *InEntityTesttableSectionSpecial
 	scalarFieldBuilder014                 *array.StringBuilder
 	scalarListBuilder014                  *array.ListBuilder
@@ -790,6 +790,8 @@ type InEntityTesttableSectionSpecialInAttr struct {
 	membershipSupportFieldBuilder020      *array.Uint64Builder
 	membershipSupportListBuilder020       *array.ListBuilder
 
+	errs []error
+
 	membershipContainerLength017 int
 
 	membershipContainerLength018 int
@@ -797,6 +799,7 @@ type InEntityTesttableSectionSpecialInAttr struct {
 	homogenousArrayContainerLength015 int
 
 	homogenousArrayContainerLength016 int
+	state                             runtime.EntityStateE
 }
 
 func NewInEntityTesttableSectionSpecialInAttr(builder *array.RecordBuilder, parent *InEntityTesttableSectionSpecial) (inst *InEntityTesttableSectionSpecialInAttr) {
@@ -924,12 +927,12 @@ func (inst *InEntityTesttableSectionSpecialInAttr) clearErrors() {
 }
 
 type InEntityTesttableSectionString struct {
-	errs                  []error
 	inAttr                *InEntityTesttableSectionStringInAttr
-	state                 runtime.EntityStateE
 	parent                *InEntityTesttable
 	scalarFieldBuilder006 *array.StringBuilder
 	scalarListBuilder006  *array.ListBuilder
+	errs                  []error
+	state                 runtime.EntityStateE
 }
 
 func NewInEntityTesttableSectionString(builder *array.RecordBuilder, parent *InEntityTesttable) (inst *InEntityTesttableSectionString) {
@@ -1003,8 +1006,6 @@ func (inst *InEntityTesttableSectionString) clearErrors() {
 }
 
 type InEntityTesttableSectionStringInAttr struct {
-	errs                             []error
-	state                            runtime.EntityStateE
 	parent                           *InEntityTesttableSectionString
 	scalarFieldBuilder006            *array.StringBuilder
 	scalarListBuilder006             *array.ListBuilder
@@ -1015,9 +1016,12 @@ type InEntityTesttableSectionStringInAttr struct {
 	membershipSupportFieldBuilder009 *array.Uint64Builder
 	membershipSupportListBuilder009  *array.ListBuilder
 
+	errs []error
+
 	membershipContainerLength007 int
 
 	membershipContainerLength008 int
+	state                        runtime.EntityStateE
 }
 
 func NewInEntityTesttableSectionStringInAttr(builder *array.RecordBuilder, parent *InEntityTesttableSectionString) (inst *InEntityTesttableSectionStringInAttr) {

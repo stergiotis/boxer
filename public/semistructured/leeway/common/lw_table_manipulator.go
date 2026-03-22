@@ -450,11 +450,11 @@ func (inst PlainValueColumnMerger) AddColumnValueSemantics(semantics ...valueasp
 
 type intermediateTmpState struct {
 	aspects        useaspects2.AspectSet
-	membership     MembershipSpecE
 	coSectionGroup naming.Key
 	streamingGroup naming.Key
 	names          []naming.StylableName
 	cts            []canonicaltypes2.PrimitiveAstNodeI
 	hints          []encodingaspects2.AspectSet
 	valueSemantics []valueaspects.AspectSet
+	membership     MembershipSpecE
 }

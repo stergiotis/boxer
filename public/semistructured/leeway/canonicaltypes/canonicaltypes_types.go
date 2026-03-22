@@ -56,15 +56,15 @@ type AstNodeI interface {
 	fmt.Stringer
 }
 type SignatureAstNode struct {
-	members []AstNodeI
 	str     string
+	members []AstNodeI
 }
 
 var _ AstNodeI = SignatureAstNode{}
 
 type GroupAstNode struct {
-	members []PrimitiveAstNodeI
 	str     string
+	members []PrimitiveAstNodeI
 }
 
 var _ AstNodeI = GroupAstNode{}

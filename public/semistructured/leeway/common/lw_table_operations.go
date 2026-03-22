@@ -74,12 +74,12 @@ type TableSubsetPredicateI interface {
 }
 
 type TableSubsetSectionByNamePredicate struct {
-	Type         CriteriaOperationTypeE
 	SectionNames []string
+	Type         CriteriaOperationTypeE
 }
 type TableSubsetSectionByUseCriteriaPredicate struct {
-	Type        CriteriaOperationTypeE
 	UseCriteria useaspects.AspectSet
+	Type        CriteriaOperationTypeE
 }
 type TableSubsetCriteria struct {
 	KeepSectionByName []string

@@ -13,10 +13,10 @@ import (
 )
 
 type TechnologySpecificCodeGenerator struct {
+	membershipRepresentation common.TechnologySpecificMembershipSetGenI
 	codeBuilder              *strings.Builder
 	typeProlog               string
 	typeEpilog               string
-	membershipRepresentation common.TechnologySpecificMembershipSetGenI
 }
 
 func (inst *TechnologySpecificCodeGenerator) GetEncodingHintImplementationStatus(hint encodingaspects2.AspectE) (status common.ImplementationStatusE, msg string) {
