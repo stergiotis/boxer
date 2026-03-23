@@ -117,7 +117,7 @@ func (inst *IntermediateTableRepresentation) ToSchemaTable(id naming.StylableNam
 	rec := builder.NewRecord()
 	defer rec.Release()
 
-	tbl := array.NewTableFromRecords(SchemaTableArrowSchema, []arrow.Record{rec})
+	tbl := array.NewTableFromRecords(SchemaTableArrowSchema, []arrow.RecordBatch{rec})
 	defer tbl.Release()
 	var w *ipc.FileWriter
 	w, err = ipc.NewFileWriter(out, ipc.WithZstd(), ipc.WithAllocator(memory.DefaultAllocator), ipc.WithSchema(tbl.Schema()))

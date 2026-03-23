@@ -54,24 +54,24 @@ func CreateSchemaTestTable() (schema *arrow.Schema) {
 // ./public/semistructured/leeway/dml/lw_dml_generator.go:1175
 
 type InEntityTestTable struct {
+	errs           []error
+	state          runtime.EntityStateE
+	allocator      memory.Allocator
+	builder        *array.RecordBuilder
+	records        []arrow.RecordBatch
+	section00Inst  *InEntityTestTableSectionGeo
+	section00State runtime.EntityStateE
+	section01Inst  *InEntityTestTableSectionText
+	section01State runtime.EntityStateE
+	plainId0       uint64
+
 	plainTs1              time.Time
-	allocator             memory.Allocator
-	builder               *array.RecordBuilder
-	section00Inst         *InEntityTestTableSectionGeo
-	section01Inst         *InEntityTestTableSectionText
+	plainProc2            []time.Time
 	scalarFieldBuilder000 *array.Uint64Builder
 
 	scalarFieldBuilder001          *array.TimestampBuilder
 	homogenousArrayFieldBuilder002 *array.TimestampBuilder
 	homogenousArrayListBuilder002  *array.ListBuilder
-	errs                           []error
-	records                        []arrow.Record
-	plainProc2                     []time.Time
-	plainId0                       uint64
-
-	state          runtime.EntityStateE
-	section00State runtime.EntityStateE
-	section01State runtime.EntityStateE
 }
 
 func NewInEntityTestTable(allocator memory.Allocator, estimatedNumberOfRecords int) (inst *InEntityTestTable) {
@@ -79,7 +79,7 @@ func NewInEntityTestTable(allocator memory.Allocator, estimatedNumberOfRecords i
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.allocator = allocator
-	inst.records = make([]arrow.Record, 0, estimatedNumberOfRecords)
+	inst.records = make([]arrow.RecordBatch, 0, estimatedNumberOfRecords)
 	schema := CreateSchemaTestTable()
 	builder := array.NewRecordBuilder(allocator, schema)
 	inst.builder = builder
@@ -243,7 +243,7 @@ func (inst *InEntityTestTable) RollbackEntity() (err error) {
 }
 
 // TransferRecords The returned Records must be Release()'d after use.
-func (inst *InEntityTestTable) TransferRecords(recordsIn []arrow.Record) (recordsOut []arrow.Record, err error) {
+func (inst *InEntityTestTable) TransferRecords(recordsIn []arrow.RecordBatch) (recordsOut []arrow.RecordBatch, err error) {
 	if inst.state != runtime.EntityStateInitial {
 		err = runtime.ErrInvalidStateTransition
 		return
@@ -272,7 +272,9 @@ func (inst *InEntityTestTable) clearErrors() {
 }
 
 type InEntityTestTableSectionGeo struct {
+	errs                  []error
 	inAttr                *InEntityTestTableSectionGeoInAttr
+	state                 runtime.EntityStateE
 	parent                *InEntityTestTable
 	scalarFieldBuilder003 *array.Float32Builder
 	scalarListBuilder003  *array.ListBuilder
@@ -282,8 +284,6 @@ type InEntityTestTableSectionGeo struct {
 	scalarListBuilder005  *array.ListBuilder
 	scalarFieldBuilder006 *array.Uint64Builder
 	scalarListBuilder006  *array.ListBuilder
-	errs                  []error
-	state                 runtime.EntityStateE
 }
 
 func NewInEntityTestTableSectionGeo(builder *array.RecordBuilder, parent *InEntityTestTable) (inst *InEntityTestTableSectionGeo) {
@@ -366,6 +366,8 @@ func (inst *InEntityTestTableSectionGeo) clearErrors() {
 }
 
 type InEntityTestTableSectionGeoInAttr struct {
+	errs                             []error
+	state                            runtime.EntityStateE
 	parent                           *InEntityTestTableSectionGeo
 	scalarFieldBuilder003            *array.Float32Builder
 	scalarListBuilder003             *array.ListBuilder
@@ -386,14 +388,11 @@ type InEntityTestTableSectionGeoInAttr struct {
 	membershipSupportFieldBuilder011 *array.Uint64Builder
 	membershipSupportListBuilder011  *array.ListBuilder
 
-	errs []error
-
 	membershipContainerLength007 int
 
 	membershipContainerLength008 int
 
 	membershipContainerLength009 int
-	state                        runtime.EntityStateE
 }
 
 func NewInEntityTestTableSectionGeoInAttr(builder *array.RecordBuilder, parent *InEntityTestTableSectionGeo) (inst *InEntityTestTableSectionGeoInAttr) {
@@ -533,7 +532,9 @@ func (inst *InEntityTestTableSectionGeoInAttr) clearErrors() {
 }
 
 type InEntityTestTableSectionText struct {
+	errs                           []error
 	inAttr                         *InEntityTestTableSectionTextInAttr
+	state                          runtime.EntityStateE
 	parent                         *InEntityTestTable
 	scalarFieldBuilder012          *array.StringBuilder
 	scalarListBuilder012           *array.ListBuilder
@@ -541,8 +542,6 @@ type InEntityTestTableSectionText struct {
 	homogenousArrayListBuilder013  *array.ListBuilder
 	homogenousArrayFieldBuilder014 *array.StringBuilder
 	homogenousArrayListBuilder014  *array.ListBuilder
-	errs                           []error
-	state                          runtime.EntityStateE
 }
 
 func NewInEntityTestTableSectionText(builder *array.RecordBuilder, parent *InEntityTestTable) (inst *InEntityTestTableSectionText) {
@@ -620,6 +619,8 @@ func (inst *InEntityTestTableSectionText) clearErrors() {
 }
 
 type InEntityTestTableSectionTextInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
 	parent                                *InEntityTestTableSectionText
 	scalarFieldBuilder012                 *array.StringBuilder
 	scalarListBuilder012                  *array.ListBuilder
@@ -640,8 +641,6 @@ type InEntityTestTableSectionTextInAttr struct {
 	membershipSupportFieldBuilder020      *array.Uint64Builder
 	membershipSupportListBuilder020       *array.ListBuilder
 
-	errs []error
-
 	membershipContainerLength015 int
 
 	membershipContainerLength016 int
@@ -651,7 +650,6 @@ type InEntityTestTableSectionTextInAttr struct {
 	homogenousArrayContainerLength013 int
 
 	homogenousArrayContainerLength014 int
-	state                             runtime.EntityStateE
 }
 
 func NewInEntityTestTableSectionTextInAttr(builder *array.RecordBuilder, parent *InEntityTestTableSectionText) (inst *InEntityTestTableSectionTextInAttr) {

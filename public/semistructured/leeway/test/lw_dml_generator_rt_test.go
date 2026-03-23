@@ -41,7 +41,7 @@ func TestRuntimeSmoke(t *testing.T) {
 
 	err := ent.CommitEntity()
 	require.NoError(t, err)
-	var records []arrow.Record
+	var records []arrow.RecordBatch
 	records, err = ent.TransferRecords(nil)
 	require.NoError(t, err)
 	require.Len(t, records, 1)

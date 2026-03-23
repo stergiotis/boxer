@@ -366,7 +366,7 @@ func NewCliCommand() *cli.Command {
 						defer w2.Close()
 						break
 					}
-					records := make([]arrow.Record, 0, 1)
+					records := make([]arrow.RecordBatch, 0, 1)
 					lc := bytes.NewBuffer(make([]byte, 0, 4*4096))
 					hc := bytes.NewBuffer(make([]byte, 0, 4*4096))
 					tmp := containers.NewHashSet[string](2048)

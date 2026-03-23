@@ -59,27 +59,27 @@ func CreateSchemaJson() (schema *arrow.Schema) {
 // ./public/semistructured/leeway/dml/lw_dml_generator.go:1175
 
 type InEntityJson struct {
+	errs                  []error
+	state                 runtime.EntityStateE
 	allocator             memory.Allocator
 	builder               *array.RecordBuilder
+	records               []arrow.RecordBatch
 	section00Inst         *InEntityJsonSectionBool
-	section01Inst         *InEntityJsonSectionFloat64
-	section02Inst         *InEntityJsonSectionInt64
-	section03Inst         *InEntityJsonSectionNull
-	section04Inst         *InEntityJsonSectionString
-	section05Inst         *InEntityJsonSectionSymbol
-	section06Inst         *InEntityJsonSectionUndefined
-	scalarFieldBuilder000 *array.BinaryBuilder
-	errs                  []error
-	records               []arrow.Record
-	plainBlake3hash0      []byte
-	state                 runtime.EntityStateE
 	section00State        runtime.EntityStateE
+	section01Inst         *InEntityJsonSectionFloat64
 	section01State        runtime.EntityStateE
+	section02Inst         *InEntityJsonSectionInt64
 	section02State        runtime.EntityStateE
+	section03Inst         *InEntityJsonSectionNull
 	section03State        runtime.EntityStateE
+	section04Inst         *InEntityJsonSectionString
 	section04State        runtime.EntityStateE
+	section05Inst         *InEntityJsonSectionSymbol
 	section05State        runtime.EntityStateE
+	section06Inst         *InEntityJsonSectionUndefined
 	section06State        runtime.EntityStateE
+	plainBlake3hash0      []byte
+	scalarFieldBuilder000 *array.BinaryBuilder
 }
 
 func NewInEntityJson(allocator memory.Allocator, estimatedNumberOfRecords int) (inst *InEntityJson) {
@@ -87,7 +87,7 @@ func NewInEntityJson(allocator memory.Allocator, estimatedNumberOfRecords int) (
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.allocator = allocator
-	inst.records = make([]arrow.Record, 0, estimatedNumberOfRecords)
+	inst.records = make([]arrow.RecordBatch, 0, estimatedNumberOfRecords)
 	schema := CreateSchemaJson()
 	builder := array.NewRecordBuilder(allocator, schema)
 	inst.builder = builder
@@ -296,7 +296,7 @@ func (inst *InEntityJson) RollbackEntity() (err error) {
 }
 
 // TransferRecords The returned Records must be Release()'d after use.
-func (inst *InEntityJson) TransferRecords(recordsIn []arrow.Record) (recordsOut []arrow.Record, err error) {
+func (inst *InEntityJson) TransferRecords(recordsIn []arrow.RecordBatch) (recordsOut []arrow.RecordBatch, err error) {
 	if inst.state != runtime.EntityStateInitial {
 		err = runtime.ErrInvalidStateTransition
 		return
@@ -325,12 +325,12 @@ func (inst *InEntityJson) clearErrors() {
 }
 
 type InEntityJsonSectionBool struct {
+	errs                  []error
 	inAttr                *InEntityJsonSectionBoolInAttr
+	state                 runtime.EntityStateE
 	parent                *InEntityJson
 	scalarFieldBuilder001 *array.BooleanBuilder
 	scalarListBuilder001  *array.ListBuilder
-	errs                  []error
-	state                 runtime.EntityStateE
 }
 
 func NewInEntityJsonSectionBool(builder *array.RecordBuilder, parent *InEntityJson) (inst *InEntityJsonSectionBool) {
@@ -404,6 +404,8 @@ func (inst *InEntityJsonSectionBool) clearErrors() {
 }
 
 type InEntityJsonSectionBoolInAttr struct {
+	errs                             []error
+	state                            runtime.EntityStateE
 	parent                           *InEntityJsonSectionBool
 	scalarFieldBuilder001            *array.BooleanBuilder
 	scalarListBuilder001             *array.ListBuilder
@@ -414,12 +416,9 @@ type InEntityJsonSectionBoolInAttr struct {
 	membershipSupportFieldBuilder004 *array.Uint64Builder
 	membershipSupportListBuilder004  *array.ListBuilder
 
-	errs []error
-
 	membershipContainerLength002 int
 
 	membershipContainerLength003 int
-	state                        runtime.EntityStateE
 }
 
 func NewInEntityJsonSectionBoolInAttr(builder *array.RecordBuilder, parent *InEntityJsonSectionBool) (inst *InEntityJsonSectionBoolInAttr) {
@@ -522,12 +521,12 @@ func (inst *InEntityJsonSectionBoolInAttr) clearErrors() {
 }
 
 type InEntityJsonSectionFloat64 struct {
+	errs                  []error
 	inAttr                *InEntityJsonSectionFloat64InAttr
+	state                 runtime.EntityStateE
 	parent                *InEntityJson
 	scalarFieldBuilder019 *array.Float64Builder
 	scalarListBuilder019  *array.ListBuilder
-	errs                  []error
-	state                 runtime.EntityStateE
 }
 
 func NewInEntityJsonSectionFloat64(builder *array.RecordBuilder, parent *InEntityJson) (inst *InEntityJsonSectionFloat64) {
@@ -601,6 +600,8 @@ func (inst *InEntityJsonSectionFloat64) clearErrors() {
 }
 
 type InEntityJsonSectionFloat64InAttr struct {
+	errs                             []error
+	state                            runtime.EntityStateE
 	parent                           *InEntityJsonSectionFloat64
 	scalarFieldBuilder019            *array.Float64Builder
 	scalarListBuilder019             *array.ListBuilder
@@ -611,12 +612,9 @@ type InEntityJsonSectionFloat64InAttr struct {
 	membershipSupportFieldBuilder022 *array.Uint64Builder
 	membershipSupportListBuilder022  *array.ListBuilder
 
-	errs []error
-
 	membershipContainerLength020 int
 
 	membershipContainerLength021 int
-	state                        runtime.EntityStateE
 }
 
 func NewInEntityJsonSectionFloat64InAttr(builder *array.RecordBuilder, parent *InEntityJsonSectionFloat64) (inst *InEntityJsonSectionFloat64InAttr) {
@@ -719,12 +717,12 @@ func (inst *InEntityJsonSectionFloat64InAttr) clearErrors() {
 }
 
 type InEntityJsonSectionInt64 struct {
+	errs                  []error
 	inAttr                *InEntityJsonSectionInt64InAttr
+	state                 runtime.EntityStateE
 	parent                *InEntityJson
 	scalarFieldBuilder023 *array.Int64Builder
 	scalarListBuilder023  *array.ListBuilder
-	errs                  []error
-	state                 runtime.EntityStateE
 }
 
 func NewInEntityJsonSectionInt64(builder *array.RecordBuilder, parent *InEntityJson) (inst *InEntityJsonSectionInt64) {
@@ -798,6 +796,8 @@ func (inst *InEntityJsonSectionInt64) clearErrors() {
 }
 
 type InEntityJsonSectionInt64InAttr struct {
+	errs                             []error
+	state                            runtime.EntityStateE
 	parent                           *InEntityJsonSectionInt64
 	scalarFieldBuilder023            *array.Int64Builder
 	scalarListBuilder023             *array.ListBuilder
@@ -808,12 +808,9 @@ type InEntityJsonSectionInt64InAttr struct {
 	membershipSupportFieldBuilder026 *array.Uint64Builder
 	membershipSupportListBuilder026  *array.ListBuilder
 
-	errs []error
-
 	membershipContainerLength024 int
 
 	membershipContainerLength025 int
-	state                        runtime.EntityStateE
 }
 
 func NewInEntityJsonSectionInt64InAttr(builder *array.RecordBuilder, parent *InEntityJsonSectionInt64) (inst *InEntityJsonSectionInt64InAttr) {
@@ -916,10 +913,10 @@ func (inst *InEntityJsonSectionInt64InAttr) clearErrors() {
 }
 
 type InEntityJsonSectionNull struct {
-	inAttr *InEntityJsonSectionNullInAttr
-	parent *InEntityJson
 	errs   []error
+	inAttr *InEntityJsonSectionNullInAttr
 	state  runtime.EntityStateE
+	parent *InEntityJson
 }
 
 func NewInEntityJsonSectionNull(builder *array.RecordBuilder, parent *InEntityJson) (inst *InEntityJsonSectionNull) {
@@ -990,6 +987,8 @@ func (inst *InEntityJsonSectionNull) clearErrors() {
 }
 
 type InEntityJsonSectionNullInAttr struct {
+	errs                             []error
+	state                            runtime.EntityStateE
 	parent                           *InEntityJsonSectionNull
 	membershipFieldBuilder008        *array.BinaryBuilder
 	membershipListBuilder008         *array.ListBuilder
@@ -998,12 +997,9 @@ type InEntityJsonSectionNullInAttr struct {
 	membershipSupportFieldBuilder010 *array.Uint64Builder
 	membershipSupportListBuilder010  *array.ListBuilder
 
-	errs []error
-
 	membershipContainerLength008 int
 
 	membershipContainerLength009 int
-	state                        runtime.EntityStateE
 }
 
 func NewInEntityJsonSectionNullInAttr(builder *array.RecordBuilder, parent *InEntityJsonSectionNull) (inst *InEntityJsonSectionNullInAttr) {
@@ -1103,12 +1099,12 @@ func (inst *InEntityJsonSectionNullInAttr) clearErrors() {
 }
 
 type InEntityJsonSectionString struct {
+	errs                  []error
 	inAttr                *InEntityJsonSectionStringInAttr
+	state                 runtime.EntityStateE
 	parent                *InEntityJson
 	scalarFieldBuilder011 *array.StringBuilder
 	scalarListBuilder011  *array.ListBuilder
-	errs                  []error
-	state                 runtime.EntityStateE
 }
 
 func NewInEntityJsonSectionString(builder *array.RecordBuilder, parent *InEntityJson) (inst *InEntityJsonSectionString) {
@@ -1182,6 +1178,8 @@ func (inst *InEntityJsonSectionString) clearErrors() {
 }
 
 type InEntityJsonSectionStringInAttr struct {
+	errs                             []error
+	state                            runtime.EntityStateE
 	parent                           *InEntityJsonSectionString
 	scalarFieldBuilder011            *array.StringBuilder
 	scalarListBuilder011             *array.ListBuilder
@@ -1192,12 +1190,9 @@ type InEntityJsonSectionStringInAttr struct {
 	membershipSupportFieldBuilder014 *array.Uint64Builder
 	membershipSupportListBuilder014  *array.ListBuilder
 
-	errs []error
-
 	membershipContainerLength012 int
 
 	membershipContainerLength013 int
-	state                        runtime.EntityStateE
 }
 
 func NewInEntityJsonSectionStringInAttr(builder *array.RecordBuilder, parent *InEntityJsonSectionString) (inst *InEntityJsonSectionStringInAttr) {
@@ -1300,12 +1295,12 @@ func (inst *InEntityJsonSectionStringInAttr) clearErrors() {
 }
 
 type InEntityJsonSectionSymbol struct {
+	errs                  []error
 	inAttr                *InEntityJsonSectionSymbolInAttr
+	state                 runtime.EntityStateE
 	parent                *InEntityJson
 	scalarFieldBuilder015 *array.StringBuilder
 	scalarListBuilder015  *array.ListBuilder
-	errs                  []error
-	state                 runtime.EntityStateE
 }
 
 func NewInEntityJsonSectionSymbol(builder *array.RecordBuilder, parent *InEntityJson) (inst *InEntityJsonSectionSymbol) {
@@ -1379,6 +1374,8 @@ func (inst *InEntityJsonSectionSymbol) clearErrors() {
 }
 
 type InEntityJsonSectionSymbolInAttr struct {
+	errs                             []error
+	state                            runtime.EntityStateE
 	parent                           *InEntityJsonSectionSymbol
 	scalarFieldBuilder015            *array.StringBuilder
 	scalarListBuilder015             *array.ListBuilder
@@ -1389,12 +1386,9 @@ type InEntityJsonSectionSymbolInAttr struct {
 	membershipSupportFieldBuilder018 *array.Uint64Builder
 	membershipSupportListBuilder018  *array.ListBuilder
 
-	errs []error
-
 	membershipContainerLength016 int
 
 	membershipContainerLength017 int
-	state                        runtime.EntityStateE
 }
 
 func NewInEntityJsonSectionSymbolInAttr(builder *array.RecordBuilder, parent *InEntityJsonSectionSymbol) (inst *InEntityJsonSectionSymbolInAttr) {
@@ -1497,10 +1491,10 @@ func (inst *InEntityJsonSectionSymbolInAttr) clearErrors() {
 }
 
 type InEntityJsonSectionUndefined struct {
-	inAttr *InEntityJsonSectionUndefinedInAttr
-	parent *InEntityJson
 	errs   []error
+	inAttr *InEntityJsonSectionUndefinedInAttr
 	state  runtime.EntityStateE
+	parent *InEntityJson
 }
 
 func NewInEntityJsonSectionUndefined(builder *array.RecordBuilder, parent *InEntityJson) (inst *InEntityJsonSectionUndefined) {
@@ -1571,6 +1565,8 @@ func (inst *InEntityJsonSectionUndefined) clearErrors() {
 }
 
 type InEntityJsonSectionUndefinedInAttr struct {
+	errs                             []error
+	state                            runtime.EntityStateE
 	parent                           *InEntityJsonSectionUndefined
 	membershipFieldBuilder005        *array.BinaryBuilder
 	membershipListBuilder005         *array.ListBuilder
@@ -1579,12 +1575,9 @@ type InEntityJsonSectionUndefinedInAttr struct {
 	membershipSupportFieldBuilder007 *array.Uint64Builder
 	membershipSupportListBuilder007  *array.ListBuilder
 
-	errs []error
-
 	membershipContainerLength005 int
 
 	membershipContainerLength006 int
-	state                        runtime.EntityStateE
 }
 
 func NewInEntityJsonSectionUndefinedInAttr(builder *array.RecordBuilder, parent *InEntityJsonSectionUndefined) (inst *InEntityJsonSectionUndefinedInAttr) {

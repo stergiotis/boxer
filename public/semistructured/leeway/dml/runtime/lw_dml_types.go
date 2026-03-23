@@ -85,6 +85,6 @@ type InEntity[E any] interface {
 	CommitEntity() error
 	RollbackEntity() error
 
-	TransferRecords(recordsIn []arrow.Record) (recordsOut []arrow.Record, err error)
+	TransferRecords(recordsIn []arrow.RecordBatch) (recordsOut []arrow.RecordBatch, err error)
 	GetSchema() (schema *arrow.Schema)
 }

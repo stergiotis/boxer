@@ -13,7 +13,7 @@ type TechnologySpecificBuilderI interface {
 }
 
 type TransferRecordsI interface {
-	TransferRecords(recordsIn []arrow.Record) (recordsOut []arrow.Record, err error)
+	TransferRecords(recordsIn []arrow.RecordBatch) (recordsOut []arrow.RecordBatch, err error)
 }
 type GoClassBuilder struct {
 	builder *strings.Builder

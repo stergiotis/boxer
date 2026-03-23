@@ -74,7 +74,7 @@ func TestRoundtrip(t *testing.T) {
 	ra := NewReadAccessTestTable()
 
 	{ // transfer
-		var records []arrow.Record
+		var records []arrow.RecordBatch
 		{
 			records, err = dml.TransferRecords(nil)
 			require.NoError(t, err)

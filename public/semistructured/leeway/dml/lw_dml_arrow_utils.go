@@ -8,7 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-func WriteArrowRecords[E TransferRecordsI](ent E, records []arrow.Record, w *ipc.FileWriter, w2 *pqarrow.FileWriter) (recordsOut []arrow.Record, err error) {
+func WriteArrowRecords[E TransferRecordsI](ent E, records []arrow.RecordBatch, w *ipc.FileWriter, w2 *pqarrow.FileWriter) (recordsOut []arrow.RecordBatch, err error) {
 	recordsOut, err = ent.TransferRecords(records)
 	if err != nil {
 		err = eh.Errorf("unable to transfer records: %w", err)

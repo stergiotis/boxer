@@ -1178,7 +1178,7 @@ func (inst *GoClassBuilder) ComposeEntityClassAndFactoryCode(clsNamer gocodegen.
 	state runtime.EntityStateE
 	allocator memory.Allocator
 	builder *array.RecordBuilder
-	records []arrow.Record
+	records []arrow.RecordBatch
 `, clsNames.InEntityClassName)
 	if err != nil {
 		return
@@ -1229,7 +1229,7 @@ func New%s(allocator memory.Allocator, estimatedNumberOfRecords int) (inst *%s) 
 	inst.errs = make([]error,0,8)
 	inst.state = runtime.EntityStateInitial
 	inst.allocator = allocator
-	inst.records = make([]arrow.Record,0,estimatedNumberOfRecords)
+	inst.records = make([]arrow.RecordBatch,0,estimatedNumberOfRecords)
 	schema := %s()
 	builder := array.NewRecordBuilder(allocator, schema)
 	inst.builder = builder
@@ -1561,7 +1561,7 @@ func (inst *GoClassBuilder) ComposeEntityCode(clsNamer gocodegen.GoClassNamerI, 
 	{ // TransferRecords
 		_, err = fmt.Fprintf(b, `
 // TransferRecords The returned Records must be Release()'d after use.
-func (inst *%s) TransferRecords(recordsIn []arrow.Record) (recordsOut []arrow.Record, err error) {
+func (inst *%s) TransferRecords(recordsIn []arrow.RecordBatch) (recordsOut []arrow.RecordBatch, err error) {
 `, clsNames.InEntityClassName)
 		err = inst.composeStateVerificationCode([]runtime.EntityStateE{runtime.EntityStateInitial}, true, "inst")
 		if err != nil {
