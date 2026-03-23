@@ -1,0 +1,1 @@
+SELECT a, b FROM t ORDER BY b LIMIT 1 BY a

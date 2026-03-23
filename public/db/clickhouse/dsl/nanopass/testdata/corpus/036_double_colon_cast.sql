@@ -1,0 +1,1 @@
+SELECT a::UInt64 FROM t

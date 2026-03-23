@@ -1,0 +1,1 @@
+SELECT CAST(a AS UInt64) FROM t

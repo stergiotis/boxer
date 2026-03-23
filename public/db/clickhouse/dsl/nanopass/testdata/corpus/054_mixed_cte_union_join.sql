@@ -1,0 +1,6 @@
+WITH b AS (SELECT c2 FROM db.tblB)
+SELECT c2 FROM b
+UNION ALL
+SELECT 1 as c2
+UNION ALL
+SELECT c2 FROM db.tblD AS l JOIN (SELECT * FROM (SELECT * FROM db.tblE)) AS r ON l.id=r.id

@@ -1,0 +1,1 @@
+SELECT a, x FROM t ARRAY JOIN arr AS x

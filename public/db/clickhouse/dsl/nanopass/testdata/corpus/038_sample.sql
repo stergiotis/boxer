@@ -1,0 +1,1 @@
+SELECT a FROM t SAMPLE 0.1

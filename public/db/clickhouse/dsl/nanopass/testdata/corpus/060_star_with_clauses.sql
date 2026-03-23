@@ -1,0 +1,1 @@
+SELECT * FROM orders WHERE amount > 100 ORDER BY created DESC LIMIT 10

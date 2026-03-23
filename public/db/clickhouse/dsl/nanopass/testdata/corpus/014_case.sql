@@ -1,0 +1,1 @@
+SELECT CASE WHEN a > 1 THEN 'yes' ELSE 'no' END FROM t

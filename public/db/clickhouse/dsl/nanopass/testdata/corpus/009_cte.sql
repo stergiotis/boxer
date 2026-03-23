@@ -1,0 +1,1 @@
+WITH cte AS (SELECT 1 AS x) SELECT x FROM cte

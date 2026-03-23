@@ -1,0 +1,1 @@
+SELECT a FROM t PREWHERE a > 0 WHERE b < 10

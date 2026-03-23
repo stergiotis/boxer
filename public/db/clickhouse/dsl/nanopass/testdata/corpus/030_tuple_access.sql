@@ -1,0 +1,1 @@
+SELECT t.1 FROM (SELECT (1, 2) AS t)

@@ -1,0 +1,1 @@
+SELECT a FROM t WHERE a NOT IN (1, 2)
