@@ -24,6 +24,16 @@ const TransactionPrefix string = "tx"
 const OpaquePrefix string = "oq"
 const TaggedValuePrefix string = "tv"
 
+var AllPrefixes = []string{
+	IdPrefix,
+	TimestampPrefix,
+	RoutingPrefix,
+	LifecyclePrefix,
+	TransactionPrefix,
+	OpaquePrefix,
+	TaggedValuePrefix,
+}
+
 const SeparatorExplanation = "separator"
 
 type HumanReadableNamingConvention struct {

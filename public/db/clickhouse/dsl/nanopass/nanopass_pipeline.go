@@ -3,8 +3,11 @@
 package nanopass
 
 import (
+	"iter"
+	"slices"
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Pass is a SQL-to-SQL transformation.
@@ -14,13 +17,19 @@ type Pass func(sql string) (string, error)
 
 // Pipeline chains passes sequentially. Each pass receives the output of the previous.
 func Pipeline(sql string, passes ...Pass) (result string, err error) {
+	return PipelineIter(sql, slices.Values(passes))
+}
+// Pipeline chains passes sequentially. Each pass receives the output of the previous.
+func PipelineIter(sql string, passes iter.Seq[Pass]) (result string, err error) {
 	result = sql
-	for i, pass := range passes {
+	i := 0
+	for pass := range passes {
 		result, err = pass(result)
 		if err != nil {
-			err = eh.Errorf("pass %d failed: %w", i, err)
+			err = eb.Build().Int("i",i).Errorf("pass failed: %w", err)
 			return
 		}
+		i++
 	}
 	return
 }

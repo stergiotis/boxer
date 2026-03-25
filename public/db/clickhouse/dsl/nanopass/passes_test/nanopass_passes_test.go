@@ -3,6 +3,8 @@
 package passes_test
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/antlr4-go/antlr/v4"
@@ -106,6 +108,33 @@ func TestDebugNegateParens(t *testing.T) {
 				t.Logf("  Found ColumnExprParens: %s", c.GetText())
 			case *grammar.ColumnExprFunctionContext:
 				t.Logf("  Found ColumnExprFunction: %s (ident=%s)", c.GetText(), c.Identifier().GetText())
+			}
+			return true
+		})
+	}
+}
+
+func TestDebugFormat(t *testing.T) {
+	sqls := []string{
+		"SELECT 1 FORMAT JSON",
+		"SELECT 1 FORMAT TabSeparated",
+		"SELECT 1",
+		"SELECT 1 FORMAT JSONEachRow",
+	}
+	for _, sql := range sqls {
+		t.Logf("--- SQL: %s", sql)
+		pr, err := nanopass.Parse(sql)
+		if err != nil {
+			t.Logf("  PARSE ERROR: %v", err)
+			continue
+		}
+		nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
+			typeName := fmt.Sprintf("%T", ctx)
+			if strings.Contains(typeName, "ormat") || strings.Contains(typeName, "Query") || strings.Contains(typeName, "query") {
+				t.Logf("  %T text=%q", ctx, ctx.GetText())
+				for i := 0; i < ctx.GetChildCount(); i++ {
+					t.Logf("    child[%d]: %T text=%q", i, ctx.GetChild(i), ctx.GetChild(i))
+				}
 			}
 			return true
 		})
