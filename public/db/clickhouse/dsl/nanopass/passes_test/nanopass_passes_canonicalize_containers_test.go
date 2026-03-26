@@ -443,3 +443,236 @@ func TestCanonicalizeOutputValidity(t *testing.T) {
 		}
 	}
 }
+
+// --- Settings: ToLiteral ---
+
+func TestCanonicalizeSettingsToLiteral(t *testing.T) {
+	pass := passes.CanonicalizeConstructors(passes.ConstructorFormLiteral)
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "array_function_in_settings",
+			input:    "SELECT 1 SETTINGS a = array(1, 2, 3)",
+			expected: "SELECT 1 SETTINGS a = [1, 2, 3]",
+		},
+		{
+			name:     "tuple_function_in_settings",
+			input:    "SELECT 1 SETTINGS a = tuple(1, 2)",
+			expected: "SELECT 1 SETTINGS a = (1, 2)",
+		},
+		{
+			name:     "empty_array_function_in_settings",
+			input:    "SELECT 1 SETTINGS a = array()",
+			expected: "SELECT 1 SETTINGS a = []",
+		},
+		{
+			name:     "already_literal_array",
+			input:    "SELECT 1 SETTINGS a = [1, 2, 3]",
+			expected: "SELECT 1 SETTINGS a = [1, 2, 3]",
+		},
+		{
+			name:     "already_literal_tuple",
+			input:    "SELECT 1 SETTINGS a = (1, 2)",
+			expected: "SELECT 1 SETTINGS a = (1, 2)",
+		},
+		{
+			name:     "scalar_setting_untouched",
+			input:    "SELECT 1 SETTINGS max_threads = 4",
+			expected: "SELECT 1 SETTINGS max_threads = 4",
+		},
+		{
+			name:     "string_setting_untouched",
+			input:    "SELECT 1 SETTINGS a = 'hello'",
+			expected: "SELECT 1 SETTINGS a = 'hello'",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := pass(tt.input)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, got)
+
+			_, err = nanopass.Parse(got)
+			require.NoError(t, err, "produced invalid SQL: %s", got)
+		})
+	}
+}
+
+// --- Settings: ToFunction ---
+
+func TestCanonicalizeSettingsToFunction(t *testing.T) {
+	pass := passes.CanonicalizeConstructors(passes.ConstructorFormFunction)
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "array_literal_in_settings",
+			input:    "SELECT 1 SETTINGS a = [1, 2, 3]",
+			expected: "SELECT 1 SETTINGS a = array(1, 2, 3)",
+		},
+		{
+			name:     "tuple_literal_in_settings",
+			input:    "SELECT 1 SETTINGS a = (1, 2)",
+			expected: "SELECT 1 SETTINGS a = tuple(1, 2)",
+		},
+		{
+			name:     "empty_array_in_settings",
+			input:    "SELECT 1 SETTINGS a = []",
+			expected: "SELECT 1 SETTINGS a = array()",
+		},
+		{
+			name:     "already_function_array",
+			input:    "SELECT 1 SETTINGS a = array(1, 2, 3)",
+			expected: "SELECT 1 SETTINGS a = array(1, 2, 3)",
+		},
+		{
+			name:     "already_function_tuple",
+			input:    "SELECT 1 SETTINGS a = tuple(1, 2)",
+			expected: "SELECT 1 SETTINGS a = tuple(1, 2)",
+		},
+		{
+			name:     "scalar_setting_untouched",
+			input:    "SELECT 1 SETTINGS max_threads = 4",
+			expected: "SELECT 1 SETTINGS max_threads = 4",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := pass(tt.input)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, got)
+
+			_, err = nanopass.Parse(got)
+			require.NoError(t, err, "produced invalid SQL: %s", got)
+		})
+	}
+}
+
+// --- Settings: Nested ---
+
+func TestCanonicalizeSettingsNested(t *testing.T) {
+	pass := passes.CanonicalizeConstructors(passes.ConstructorFormLiteral)
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "nested_array_in_tuple",
+			input:    "SELECT 1 SETTINGS a = tuple(array(1, 2), array(3, 4))",
+			expected: "SELECT 1 SETTINGS a = ([1, 2], [3, 4])",
+		},
+		{
+			name:     "nested_tuple_in_array",
+			input:    "SELECT 1 SETTINGS a = array(tuple(1, 2), tuple(3, 4))",
+			expected: "SELECT 1 SETTINGS a = [(1, 2), (3, 4)]",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Nested requires fixed-point since inner nodes are replaced first
+			fp := nanopass.FixedPoint(pass, 5)
+			got, err := fp(tt.input)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, got)
+
+			_, err = nanopass.Parse(got)
+			require.NoError(t, err, "produced invalid SQL: %s", got)
+		})
+	}
+}
+
+// --- Settings: Round-trip ---
+
+func TestCanonicalizeSettingsRoundTrip(t *testing.T) {
+	sqls := []string{
+		"SELECT 1 SETTINGS a = [1, 2, 3]",
+		"SELECT 1 SETTINGS a = (1, 2)",
+		"SELECT 1 SETTINGS a = array(1, 2, 3)",
+		"SELECT 1 SETTINGS a = tuple(1, 2)",
+		"SELECT 1 SETTINGS a = []",
+		"SELECT 1 SETTINGS a = array()",
+	}
+
+	toLit := passes.CanonicalizeConstructors(passes.ConstructorFormLiteral)
+	toFunc := passes.CanonicalizeConstructors(passes.ConstructorFormFunction)
+
+	for i, sql := range sqls {
+		t.Run(fmt.Sprintf("settings_roundtrip_%d", i), func(t *testing.T) {
+			lit, err := toLit(sql)
+			require.NoError(t, err)
+			backToFunc, err := toFunc(lit)
+			require.NoError(t, err)
+			backToLit, err := toLit(backToFunc)
+			require.NoError(t, err)
+			assert.Equal(t, lit, backToLit, "round-trip failed")
+		})
+	}
+}
+
+// --- Settings: Idempotency ---
+
+func TestCanonicalizeSettingsIdempotent(t *testing.T) {
+	sqls := []string{
+		"SELECT 1 SETTINGS a = array(1, 2)",
+		"SELECT 1 SETTINGS a = [1, 2]",
+		"SELECT 1 SETTINGS a = tuple(1, 2)",
+		"SELECT 1 SETTINGS a = (1, 2)",
+		"SELECT 1 SETTINGS a = []",
+		"SELECT 1 SETTINGS a = array()",
+	}
+
+	forms := []struct {
+		name string
+		form passes.ConstructorFormE
+	}{
+		{"literal", passes.ConstructorFormLiteral},
+		{"function", passes.ConstructorFormFunction},
+	}
+
+	for _, f := range forms {
+		pass := passes.CanonicalizeConstructors(f.form)
+		for i, sql := range sqls {
+			t.Run(fmt.Sprintf("%s_settings_%d", f.name, i), func(t *testing.T) {
+				pass1, err := pass(sql)
+				require.NoError(t, err)
+				pass2, err := pass(pass1)
+				require.NoError(t, err)
+				assert.Equal(t, pass1, pass2, "not idempotent")
+			})
+		}
+	}
+}
+
+// --- Settings: Mixed with query expressions ---
+
+func TestCanonicalizeSettingsAndExpressions(t *testing.T) {
+	toLit := passes.CanonicalizeConstructors(passes.ConstructorFormLiteral)
+
+	// Both query expressions and settings should be canonicalized
+	got, err := toLit("SELECT tuple(1, 2), array(3, 4) FROM t SETTINGS a = array(5, 6)")
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT (1, 2), [3, 4] FROM t SETTINGS a = [5, 6]", got)
+
+	_, err = nanopass.Parse(got)
+	require.NoError(t, err)
+}
+
+func TestCanonicalizeSettingsMultiple(t *testing.T) {
+	toLit := passes.CanonicalizeConstructors(passes.ConstructorFormLiteral)
+
+	got, err := toLit("SELECT 1 SETTINGS a = array(1, 2), b = tuple(3, 4)")
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT 1 SETTINGS a = [1, 2], b = (3, 4)", got)
+
+	_, err = nanopass.Parse(got)
+	require.NoError(t, err)
+}

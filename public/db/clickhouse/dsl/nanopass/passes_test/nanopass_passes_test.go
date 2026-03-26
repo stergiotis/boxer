@@ -177,15 +177,15 @@ func TestDebugTupleArray(t *testing.T) {
 		})
 	}
 }
-func TestDebugSettings(t *testing.T) {
+func TestDebugSettingValue(t *testing.T) {
 	sqls := []string{
-		"SELECT 1 SETTINGS max_threads = 1",
-		"SELECT 1 SETTINGS my_setting = [1, 2, 3]",
-		"SELECT 1 SETTINGS my_setting = (1, 2, 3)",
-		"SET max_threads = 1",
-		"SET my_setting = [1, 2, 3]",
-		"SET my_setting = (1, 2, 3)",
-		"SELECT 1 SETTINGS my_setting = 't'",
+		"SELECT 1 SETTINGS a = 1",
+		"SELECT 1 SETTINGS a = [1, 2, 3]",
+		"SELECT 1 SETTINGS a = (1, 2)",
+		"SELECT 1 SETTINGS a = array(1, 2, 3)",
+		"SELECT 1 SETTINGS a = tuple(1, 2)",
+		"SELECT 1 SETTINGS a = []",
+		"SELECT 1 SETTINGS a = array()",
 	}
 	for _, sql := range sqls {
 		t.Logf("--- SQL: %s", sql)
@@ -196,8 +196,7 @@ func TestDebugSettings(t *testing.T) {
 		}
 		nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
 			typeName := fmt.Sprintf("%T", ctx)
-			if strings.Contains(typeName, "etting") || strings.Contains(typeName, "Literal") ||
-				strings.Contains(typeName, "Array") || strings.Contains(typeName, "Tuple") {
+			if strings.Contains(typeName, "etting") {
 				t.Logf("  %T text=%q", ctx, ctx.GetText())
 				for i := 0; i < ctx.GetChildCount(); i++ {
 					t.Logf("    child[%d]: %T text=%q", i, ctx.GetChild(i), ctx.GetChild(i))

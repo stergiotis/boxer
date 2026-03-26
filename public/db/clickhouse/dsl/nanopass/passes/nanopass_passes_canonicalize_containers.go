@@ -44,8 +44,10 @@ func CanonicalizeConstructors(form ConstructorFormE) nanopass.Pass {
 		switch form {
 		case ConstructorFormLiteral:
 			canonicalizeToLiteral(pr, rw)
+			canonicalizeSettingsToLiteral(pr, rw)
 		case ConstructorFormFunction:
 			canonicalizeToFunction(pr, rw)
+			canonicalizeSettingsToFunction(pr, rw)
 		default:
 			err = eh.Errorf("CanonicalizeConstructors: unknown form %d", form)
 			return
@@ -238,4 +240,127 @@ func extractFunctionArgs(pr *nanopass.ParseResult, funcExpr *grammar.ColumnExprF
 		args = append(args, nanopass.NodeText(pr, argExpr))
 	}
 	return
+}
+
+// --- Settings canonicalization ---
+
+func canonicalizeSettingsToLiteral(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter) {
+	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
+		switch c := ctx.(type) {
+		case *grammar.SettingFunctionContext:
+			rewriteSettingFunctionToLiteral(pr, rw, c)
+			return false
+		case *grammar.SettingFunctionEmptyContext:
+			rewriteSettingFunctionEmptyToLiteral(pr, rw, c)
+			return false
+		}
+		return true
+	})
+}
+
+func canonicalizeSettingsToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter) {
+	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
+		switch c := ctx.(type) {
+		case *grammar.SettingArrayContext:
+			rewriteSettingArrayToFunction(pr, rw, c)
+			return false
+		case *grammar.SettingTupleContext:
+			rewriteSettingTupleToFunction(pr, rw, c)
+			return false
+		case *grammar.SettingEmptyArrayContext:
+			nanopass.ReplaceNode(rw, c, "array()")
+			return false
+		}
+		return true
+	})
+}
+
+func rewriteSettingFunctionToLiteral(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, ctx *grammar.SettingFunctionContext) {
+	// Get the function name from the first IdentifierContext child
+	funcName := ""
+	for i := 0; i < ctx.GetChildCount(); i++ {
+		if ident, ok := ctx.GetChild(i).(*grammar.IdentifierContext); ok {
+			funcName = strings.ToLower(ident.GetText())
+			break
+		}
+	}
+
+	// Collect setting value texts (skip identifier, parens, commas)
+	var values []string
+	for i := 0; i < ctx.GetChildCount(); i++ {
+		child := ctx.GetChild(i)
+		if sv, ok := child.(antlr.ParserRuleContext); ok {
+			if isSettingValueNode(sv) {
+				values = append(values, nanopass.NodeText(pr, sv))
+			}
+		}
+	}
+
+	valuesText := strings.Join(values, ", ")
+
+	switch funcName {
+	case "array":
+		nanopass.ReplaceNode(rw, ctx, "["+valuesText+"]")
+	case "tuple":
+		nanopass.ReplaceNode(rw, ctx, "("+valuesText+")")
+	}
+}
+
+func rewriteSettingFunctionEmptyToLiteral(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, ctx *grammar.SettingFunctionEmptyContext) {
+	funcName := ""
+	for i := 0; i < ctx.GetChildCount(); i++ {
+		if ident, ok := ctx.GetChild(i).(*grammar.IdentifierContext); ok {
+			funcName = strings.ToLower(ident.GetText())
+			break
+		}
+	}
+
+	switch funcName {
+	case "array":
+		nanopass.ReplaceNode(rw, ctx, "[]")
+	}
+	// tuple() with 0 args is not valid as a literal — leave as-is
+}
+
+func rewriteSettingArrayToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, ctx *grammar.SettingArrayContext) {
+	// Collect inner setting values (skip brackets and commas)
+	var values []string
+	for i := 0; i < ctx.GetChildCount(); i++ {
+		child := ctx.GetChild(i)
+		if sv, ok := child.(antlr.ParserRuleContext); ok {
+			if isSettingValueNode(sv) {
+				values = append(values, nanopass.NodeText(pr, sv))
+			}
+		}
+	}
+	valuesText := strings.Join(values, ", ")
+	nanopass.ReplaceNode(rw, ctx, "array("+valuesText+")")
+}
+
+func rewriteSettingTupleToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, ctx *grammar.SettingTupleContext) {
+	var values []string
+	for i := 0; i < ctx.GetChildCount(); i++ {
+		child := ctx.GetChild(i)
+		if sv, ok := child.(antlr.ParserRuleContext); ok {
+			if isSettingValueNode(sv) {
+				values = append(values, nanopass.NodeText(pr, sv))
+			}
+		}
+	}
+	valuesText := strings.Join(values, ", ")
+	nanopass.ReplaceNode(rw, ctx, "tuple("+valuesText+")")
+}
+
+// isSettingValueNode returns true if the node is a settingValue alternative.
+func isSettingValueNode(ctx antlr.ParserRuleContext) bool {
+	switch ctx.(type) {
+	case *grammar.SettingLiteralContext,
+		*grammar.SettingArrayContext,
+		*grammar.SettingTupleContext,
+		*grammar.SettingEmptyArrayContext,
+		*grammar.SettingFunctionContext,
+		*grammar.SettingFunctionEmptyContext:
+		return true
+	}
+	return false
 }
