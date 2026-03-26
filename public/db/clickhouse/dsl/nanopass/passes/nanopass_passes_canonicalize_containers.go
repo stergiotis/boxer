@@ -1,0 +1,241 @@
+//go:build llm_generated_opus46
+
+package passes
+
+import (
+	"strings"
+
+	"github.com/antlr4-go/antlr/v4"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
+	"github.com/stergiotis/boxer/public/observability/eh"
+)
+
+// ConstructorFormE controls the canonical direction.
+type ConstructorFormE int8
+
+const (
+	// ConstructorFormLiteral canonicalizes to syntax form:
+	//   tuple(1,2) → (1,2)
+	//   array(1,2) → [1,2]
+	//   tupleElement(t,1) → t.1
+	//   arrayElement(arr,1) → arr[1]
+	ConstructorFormLiteral ConstructorFormE = 1
+
+	// ConstructorFormFunction canonicalizes to function form:
+	//   (1,2) → tuple(1,2)
+	//   [1,2] → array(1,2)
+	//   t.1 → tupleElement(t,1)
+	//   arr[1] → arrayElement(arr,1)
+	ConstructorFormFunction ConstructorFormE = 2
+)
+
+// CanonicalizeConstructors returns a Pass that normalizes tuple and array
+// construction and access syntax to the chosen canonical form.
+func CanonicalizeConstructors(form ConstructorFormE) nanopass.Pass {
+	return func(sql string) (result string, err error) {
+		pr, err := nanopass.Parse(sql)
+		if err != nil {
+			err = eh.Errorf("CanonicalizeConstructors: %w", err)
+			return
+		}
+		rw := nanopass.NewRewriter(pr)
+
+		switch form {
+		case ConstructorFormLiteral:
+			canonicalizeToLiteral(pr, rw)
+		case ConstructorFormFunction:
+			canonicalizeToFunction(pr, rw)
+		default:
+			err = eh.Errorf("CanonicalizeConstructors: unknown form %d", form)
+			return
+		}
+
+		result = nanopass.GetText(rw)
+		return
+	}
+}
+
+// --- ToLiteral direction: function → syntax ---
+
+func canonicalizeToLiteral(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter) {
+	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
+		funcExpr, ok := ctx.(*grammar.ColumnExprFunctionContext)
+		if !ok {
+			return true
+		}
+
+		name := strings.ToLower(funcExpr.Identifier().GetText())
+		switch name {
+		case "tuple":
+			rewriteTupleToLiteral(pr, rw, funcExpr)
+			return false
+		case "array":
+			rewriteArrayToLiteral(pr, rw, funcExpr)
+			return false
+		case "tupleelement":
+			rewriteTupleElementToAccess(pr, rw, funcExpr)
+			return false
+		case "arrayelement":
+			rewriteArrayElementToAccess(pr, rw, funcExpr)
+			return false
+		}
+		return true
+	})
+}
+
+func rewriteTupleToLiteral(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, funcExpr *grammar.ColumnExprFunctionContext) {
+	argList := funcExpr.ColumnArgList()
+	if argList == nil {
+		nanopass.ReplaceNode(rw, funcExpr, "()")
+		return
+	}
+	argsText := nanopass.NodeText(pr, argList.(antlr.ParserRuleContext))
+	nanopass.ReplaceNode(rw, funcExpr, "("+argsText+")")
+}
+
+func rewriteArrayToLiteral(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, funcExpr *grammar.ColumnExprFunctionContext) {
+	argList := funcExpr.ColumnArgList()
+	if argList == nil {
+		nanopass.ReplaceNode(rw, funcExpr, "[]")
+		return
+	}
+	argsText := nanopass.NodeText(pr, argList.(antlr.ParserRuleContext))
+	nanopass.ReplaceNode(rw, funcExpr, "["+argsText+"]")
+}
+
+func rewriteTupleElementToAccess(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, funcExpr *grammar.ColumnExprFunctionContext) {
+	args := extractFunctionArgs(pr, funcExpr)
+	if len(args) != 2 {
+		return // not a simple tupleElement(expr, index)
+	}
+	nanopass.ReplaceNode(rw, funcExpr, args[0]+"."+args[1])
+}
+
+func rewriteArrayElementToAccess(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, funcExpr *grammar.ColumnExprFunctionContext) {
+	args := extractFunctionArgs(pr, funcExpr)
+	if len(args) != 2 {
+		return // not a simple arrayElement(expr, index)
+	}
+	nanopass.ReplaceNode(rw, funcExpr, args[0]+"["+args[1]+"]")
+}
+
+// --- ToFunction direction: syntax → function ---
+
+func canonicalizeToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter) {
+	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
+		switch c := ctx.(type) {
+		case *grammar.ColumnExprTupleContext:
+			rewriteTupleToFunction(pr, rw, c)
+			return false
+		case *grammar.ColumnExprArrayContext:
+			rewriteArrayToFunction(pr, rw, c)
+			return false
+		case *grammar.ColumnExprTupleAccessContext:
+			rewriteTupleAccessToFunction(pr, rw, c)
+			return false
+		case *grammar.ColumnExprArrayAccessContext:
+			rewriteArrayAccessToFunction(pr, rw, c)
+			return false
+		}
+		return true
+	})
+}
+
+func rewriteTupleToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, ctx *grammar.ColumnExprTupleContext) {
+	// ColumnExprTuple: ( ColumnExprList )
+	// Extract the inner expression list text
+	var innerText string
+	for i := 0; i < ctx.GetChildCount(); i++ {
+		if list, ok := ctx.GetChild(i).(*grammar.ColumnExprListContext); ok {
+			innerText = nanopass.NodeText(pr, list)
+			break
+		}
+	}
+	nanopass.ReplaceNode(rw, ctx, "tuple("+innerText+")")
+}
+
+func rewriteArrayToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, ctx *grammar.ColumnExprArrayContext) {
+	// ColumnExprArray: [ ColumnExprList ]
+	var innerText string
+	for i := 0; i < ctx.GetChildCount(); i++ {
+		if list, ok := ctx.GetChild(i).(*grammar.ColumnExprListContext); ok {
+			innerText = nanopass.NodeText(pr, list)
+			break
+		}
+	}
+	nanopass.ReplaceNode(rw, ctx, "array("+innerText+")")
+}
+
+func rewriteTupleAccessToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, ctx *grammar.ColumnExprTupleAccessContext) {
+	// ColumnExprTupleAccess: columnExpr . DECIMAL_LITERAL
+	// Children: ColumnExprIdentifier, ".", "1"
+	if ctx.GetChildCount() < 3 {
+		return
+	}
+
+	// First child is the expression
+	exprChild := ctx.GetChild(0)
+	exprCtx, ok := exprChild.(antlr.ParserRuleContext)
+	if !ok {
+		return
+	}
+	exprText := nanopass.NodeText(pr, exprCtx)
+
+	// Last child is the index (DECIMAL_LITERAL terminal)
+	indexChild := ctx.GetChild(ctx.GetChildCount() - 1)
+	indexTn, ok := indexChild.(antlr.TerminalNode)
+	if !ok {
+		return
+	}
+	indexText := indexTn.GetText()
+
+	nanopass.ReplaceNode(rw, ctx, "tupleElement("+exprText+", "+indexText+")")
+}
+
+func rewriteArrayAccessToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, ctx *grammar.ColumnExprArrayAccessContext) {
+	// ColumnExprArrayAccess: columnExpr [ columnExpr ]
+	// Children: ColumnExprIdentifier, "[", ColumnExprLiteral, "]"
+	if ctx.GetChildCount() < 4 {
+		return
+	}
+
+	// First child is the array expression
+	arrChild := ctx.GetChild(0)
+	arrCtx, ok := arrChild.(antlr.ParserRuleContext)
+	if !ok {
+		return
+	}
+	arrText := nanopass.NodeText(pr, arrCtx)
+
+	// Third child is the index expression (between [ and ])
+	idxChild := ctx.GetChild(2)
+	idxCtx, ok := idxChild.(antlr.ParserRuleContext)
+	if !ok {
+		return
+	}
+	idxText := nanopass.NodeText(pr, idxCtx)
+
+	nanopass.ReplaceNode(rw, ctx, "arrayElement("+arrText+", "+idxText+")")
+}
+
+// --- Helpers ---
+
+// extractFunctionArgs extracts the text of each argument from a ColumnExprFunctionContext.
+func extractFunctionArgs(pr *nanopass.ParseResult, funcExpr *grammar.ColumnExprFunctionContext) (args []string) {
+	argList := funcExpr.ColumnArgList()
+	if argList == nil {
+		return
+	}
+	argListCtx := argList.(*grammar.ColumnArgListContext)
+
+	for i := 0; i < argListCtx.GetChildCount(); i++ {
+		child := argListCtx.GetChild(i)
+		argExpr, ok := child.(*grammar.ColumnArgExprContext)
+		if !ok {
+			continue // skip commas
+		}
+		args = append(args, nanopass.NodeText(pr, argExpr))
+	}
+	return
+}
