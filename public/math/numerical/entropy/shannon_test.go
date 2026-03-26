@@ -182,7 +182,7 @@ func TestShannonNonNegativity(t *testing.T) {
 		{0.1, 0.2, 0.3, 0.4},
 	}
 	for i, p := range distributions {
-		h := Shannon(p)
+		h := Shannon(slices.Values(p))
 		if h < -tol {
 			t.Errorf("distribution %d: H=%.15f is negative", i, h)
 		}
@@ -213,6 +213,6 @@ func BenchmarkShannon1M(b *testing.B) {
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		Shannon(p)
+		Shannon(slices.Values(p))
 	}
 }
