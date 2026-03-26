@@ -191,6 +191,30 @@ func (v *BaseClickHouseParserVisitor) VisitSettingExpr(ctx *SettingExprContext) 
 	return v.VisitChildren(ctx)
 }
 
+func (v *BaseClickHouseParserVisitor) VisitSettingLiteral(ctx *SettingLiteralContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseClickHouseParserVisitor) VisitSettingEmptyArray(ctx *SettingEmptyArrayContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseClickHouseParserVisitor) VisitSettingArray(ctx *SettingArrayContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseClickHouseParserVisitor) VisitSettingTuple(ctx *SettingTupleContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseClickHouseParserVisitor) VisitSettingFunctionEmpty(ctx *SettingFunctionEmptyContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseClickHouseParserVisitor) VisitSettingFunction(ctx *SettingFunctionContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
 func (v *BaseClickHouseParserVisitor) VisitWindowExpr(ctx *WindowExprContext) interface{} {
 	return v.VisitChildren(ctx)
 }

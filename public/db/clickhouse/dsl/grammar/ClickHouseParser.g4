@@ -119,7 +119,16 @@ orderExprList: orderExpr (COMMA orderExpr)*;
 orderExpr: columnExpr (ASCENDING | DESCENDING | DESC)? (NULLS (FIRST | LAST))? (COLLATE STRING_LITERAL)?;
 ratioExpr: numberLiteral (SLASH numberLiteral)?;
 settingExprList: settingExpr (COMMA settingExpr)*;
-settingExpr: identifier EQ_SINGLE literal;
+settingExpr: identifier EQ_SINGLE settingValue;
+
+settingValue
+    : literal                                                              # SettingLiteral
+    | LBRACKET RBRACKET                                                    # SettingEmptyArray
+    | LBRACKET settingValue (COMMA settingValue)* RBRACKET                 # SettingArray
+    | LPAREN settingValue COMMA settingValue (COMMA settingValue)* RPAREN  # SettingTuple
+    | identifier LPAREN RPAREN                                             # SettingFunctionEmpty
+    | identifier LPAREN settingValue (COMMA settingValue)* RPAREN          # SettingFunction
+    ;
 
 windowExpr: winPartitionByClause? winOrderByClause? winFrameClause?;
 winPartitionByClause: PARTITION BY columnExprList;

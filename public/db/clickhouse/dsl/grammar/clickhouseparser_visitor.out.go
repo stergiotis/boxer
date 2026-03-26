@@ -145,6 +145,24 @@ type ClickHouseParserVisitor interface {
 	// Visit a parse tree produced by ClickHouseParser#settingExpr.
 	VisitSettingExpr(ctx *SettingExprContext) interface{}
 
+	// Visit a parse tree produced by ClickHouseParser#SettingLiteral.
+	VisitSettingLiteral(ctx *SettingLiteralContext) interface{}
+
+	// Visit a parse tree produced by ClickHouseParser#SettingEmptyArray.
+	VisitSettingEmptyArray(ctx *SettingEmptyArrayContext) interface{}
+
+	// Visit a parse tree produced by ClickHouseParser#SettingArray.
+	VisitSettingArray(ctx *SettingArrayContext) interface{}
+
+	// Visit a parse tree produced by ClickHouseParser#SettingTuple.
+	VisitSettingTuple(ctx *SettingTupleContext) interface{}
+
+	// Visit a parse tree produced by ClickHouseParser#SettingFunctionEmpty.
+	VisitSettingFunctionEmpty(ctx *SettingFunctionEmptyContext) interface{}
+
+	// Visit a parse tree produced by ClickHouseParser#SettingFunction.
+	VisitSettingFunction(ctx *SettingFunctionContext) interface{}
+
 	// Visit a parse tree produced by ClickHouseParser#windowExpr.
 	VisitWindowExpr(ctx *WindowExprContext) interface{}
 

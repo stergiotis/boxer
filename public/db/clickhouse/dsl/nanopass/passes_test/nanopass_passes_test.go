@@ -177,3 +177,33 @@ func TestDebugTupleArray(t *testing.T) {
 		})
 	}
 }
+func TestDebugSettings(t *testing.T) {
+	sqls := []string{
+		"SELECT 1 SETTINGS max_threads = 1",
+		"SELECT 1 SETTINGS my_setting = [1, 2, 3]",
+		"SELECT 1 SETTINGS my_setting = (1, 2, 3)",
+		"SET max_threads = 1",
+		"SET my_setting = [1, 2, 3]",
+		"SET my_setting = (1, 2, 3)",
+		"SELECT 1 SETTINGS my_setting = 't'",
+	}
+	for _, sql := range sqls {
+		t.Logf("--- SQL: %s", sql)
+		pr, err := nanopass.Parse(sql)
+		if err != nil {
+			t.Logf("  PARSE ERROR: %v", err)
+			continue
+		}
+		nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
+			typeName := fmt.Sprintf("%T", ctx)
+			if strings.Contains(typeName, "etting") || strings.Contains(typeName, "Literal") ||
+				strings.Contains(typeName, "Array") || strings.Contains(typeName, "Tuple") {
+				t.Logf("  %T text=%q", ctx, ctx.GetText())
+				for i := 0; i < ctx.GetChildCount(); i++ {
+					t.Logf("    child[%d]: %T text=%q", i, ctx.GetChild(i), ctx.GetChild(i))
+				}
+			}
+			return true
+		})
+	}
+}
