@@ -4,7 +4,6 @@ package passes
 
 import (
 	"regexp"
-	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
@@ -80,8 +79,8 @@ func wrapColumnsInScope(rw *antlr.TokenStreamRewriter, scope *nanopass.SelectSco
 		}
 
 		// Replace the entire ColumnsExprColumn with COLUMNS('^colName$')
-		escaped := escapeRegexLiteral(colName)
-		nanopass.ReplaceNode(rw, colsExpr, "COLUMNS('^"+escaped+"$')")
+		escaped := regexp.QuoteMeta(colName)
+		nanopass.ReplaceNode(rw, colsExpr, "COLUMNS('^"+escaped+"')")
 
 		return false
 	})
@@ -143,19 +142,4 @@ func extractBareColumnName(colsExpr *grammar.ColumnsExprColumnContext) (name str
 		return
 	}
 	return
-}
-
-// escapeRegexLiteral escapes regex metacharacters in a column name so that
-// COLUMNS('^name$') matches the literal name.
-func escapeRegexLiteral(s string) string {
-	var sb strings.Builder
-	sb.Grow(len(s) + 4)
-	for _, c := range s {
-		switch c {
-		case '.', '*', '+', '?', '(', ')', '[', ']', '{', '}', '\\', '^', '$', '|':
-			sb.WriteByte('\\')
-		}
-		sb.WriteRune(c)
-	}
-	return sb.String()
 }
