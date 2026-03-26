@@ -24,6 +24,10 @@ func PipelineIter(sql string, passes iter.Seq[Pass]) (result string, err error) 
 	result = sql
 	i := 0
 	for pass := range passes {
+		if pass == nil {
+			i++
+			continue
+		}
 		result, err = pass(result)
 		if err != nil {
 			err = eb.Build().Int("i",i).Errorf("pass failed: %w", err)
