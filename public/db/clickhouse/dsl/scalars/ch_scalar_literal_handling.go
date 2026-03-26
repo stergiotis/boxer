@@ -14,7 +14,7 @@
 //   - NULL_SQL:              NULL, null
 //   - JSON_TRUE / JSON_FALSE: true, false
 //   - numberLiteral:         optional +/- sign followed by any numeric literal, INF, or NAN
-package grammar
+package scalars
 
 import (
 	"fmt"
