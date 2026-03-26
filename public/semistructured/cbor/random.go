@@ -226,7 +226,7 @@ func (inst *Generator) SetMaxStringLength(n int) {
 		add(f.Dog)
 		add(f.Bird)
 		add(f.Emoji)
-		add(f.EmojiDescription)
+		//add(f.EmojiDescription)
 		add(f.EmojiCategory)
 		add(f.EmojiAlias)
 		add(f.EmojiTag)
