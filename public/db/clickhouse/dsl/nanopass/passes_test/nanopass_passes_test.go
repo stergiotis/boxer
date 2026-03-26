@@ -115,6 +115,7 @@ func TestDebugNegateParens(t *testing.T) {
 }
 
 func TestDebugFormat(t *testing.T) {
+	t.Skip("diagnostic only")
 	sqls := []string{
 		"SELECT 1 FORMAT JSON",
 		"SELECT 1 FORMAT TabSeparated",
@@ -131,6 +132,42 @@ func TestDebugFormat(t *testing.T) {
 		nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
 			typeName := fmt.Sprintf("%T", ctx)
 			if strings.Contains(typeName, "ormat") || strings.Contains(typeName, "Query") || strings.Contains(typeName, "query") {
+				t.Logf("  %T text=%q", ctx, ctx.GetText())
+				for i := 0; i < ctx.GetChildCount(); i++ {
+					t.Logf("    child[%d]: %T text=%q", i, ctx.GetChild(i), ctx.GetChild(i))
+				}
+			}
+			return true
+		})
+	}
+}
+func TestDebugTupleArray(t *testing.T) {
+	t.Skip("diagnostic only")
+	sqls := []string{
+		// Tuple construction
+		"SELECT (1, 2, 3)",
+		"SELECT tuple(1, 2, 3)",
+		// Tuple access
+		"SELECT t.1 FROM (SELECT (1, 2) AS t)",
+		"SELECT tupleElement(t, 1) FROM (SELECT (1, 2) AS t)",
+		// Array construction
+		"SELECT [1, 2, 3]",
+		"SELECT array(1, 2, 3)",
+		// Array access
+		"SELECT arr[1] FROM t",
+		"SELECT arrayElement(arr, 1) FROM t",
+	}
+	for _, sql := range sqls {
+		t.Logf("--- SQL: %s", sql)
+		pr, err := nanopass.Parse(sql)
+		if err != nil {
+			t.Logf("  PARSE ERROR: %v", err)
+			continue
+		}
+		nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
+			typeName := fmt.Sprintf("%T", ctx)
+			if strings.Contains(typeName, "Tuple") || strings.Contains(typeName, "Array") ||
+				strings.Contains(typeName, "Function") || strings.Contains(typeName, "ColumnExprList") {
 				t.Logf("  %T text=%q", ctx, ctx.GetText())
 				for i := 0; i < ctx.GetChildCount(); i++ {
 					t.Logf("    child[%d]: %T text=%q", i, ctx.GetChild(i), ctx.GetChild(i))
