@@ -16,14 +16,14 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/fxamacker/cbor/v2 v2.9.0
 	github.com/go-json-experiment/json v0.0.0-20260214004413-d219187c3433
-	github.com/go-text/typesetting v0.3.3
+	github.com/go-text/typesetting v0.3.4
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
 	github.com/google/flatbuffers v25.12.19+incompatible
 	github.com/matoous/go-nanoid/v2 v2.1.0
-	github.com/nao1215/markdown v0.8.0
+	github.com/nao1215/markdown v0.13.0
 	github.com/philip-peterson/go-mutablestring v1.0.7
 	github.com/pkg/errors v0.9.1
-	github.com/rs/zerolog v1.34.0
+	github.com/rs/zerolog v1.35.0
 	github.com/scalalang2/golang-fifo v1.2.0
 	github.com/stoewer/go-strcase v1.3.1
 	github.com/stretchr/testify v1.11.1
@@ -32,7 +32,7 @@ require (
 	github.com/yassinebenaid/godump v0.11.1
 	github.com/zeebo/xxh3 v1.1.0
 	golang.org/x/exp v0.0.0-20260312153236-7ab1446f8b90
-	golang.org/x/image v0.37.0
+	golang.org/x/image v0.38.0
 	golang.org/x/sys v0.42.0
 	golang.org/x/text v0.35.0
 	golang.org/x/tools v0.43.0
@@ -104,7 +104,7 @@ require (
 	github.com/fatih/structtag v1.2.0 // indirect
 	github.com/firefart/nonamedreturns v1.0.5 // indirect
 	github.com/fzipp/gocyclo v0.6.0 // indirect
-	github.com/getsentry/sentry-go v0.43.0 // indirect
+	github.com/getsentry/sentry-go v0.44.1 // indirect
 	github.com/ghostiam/protogetter v0.3.9 // indirect
 	github.com/go-critic/go-critic v0.12.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
@@ -193,7 +193,7 @@ require (
 	github.com/nunnatsa/ginkgolinter v0.19.1 // indirect
 	github.com/olekukonko/cat v0.0.0-20250911104152-50322a0618f6 // indirect
 	github.com/olekukonko/errors v1.2.0 // indirect
-	github.com/olekukonko/ll v0.1.7 // indirect
+	github.com/olekukonko/ll v0.1.8 // indirect
 	github.com/olekukonko/tablewriter v1.1.4 // indirect
 	github.com/onsi/ginkgo/v2 v2.25.3 // indirect
 	github.com/onsi/gomega v1.38.2 // indirect
