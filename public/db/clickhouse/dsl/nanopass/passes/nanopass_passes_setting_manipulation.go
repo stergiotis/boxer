@@ -226,14 +226,14 @@ func deserializeLiteral(ctx *grammar.SettingLiteralContext) (val any, err error)
 	// SettingLiteral → LiteralContext
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		if lit, ok := ctx.GetChild(i).(*grammar.LiteralContext); ok {
-			return deserializeLiteralContext(lit)
+			return DeserializeLiteralContext(lit)
 		}
 	}
 	err = eh.Errorf("empty SettingLiteral")
 	return
 }
 
-func deserializeLiteralContext(lit *grammar.LiteralContext) (val any, err error) {
+func DeserializeLiteralContext(lit *grammar.LiteralContext) (val any, err error) {
 	if lit.NULL_SQL() != nil {
 		val = nil
 		return

@@ -149,6 +149,22 @@ func canRemoveParens(inner antlr.ParserRuleContext, parent antlr.ParserRuleConte
 		return false
 	}
 
+	// Guard against creating "--" comment syntax or ambiguous operator sequences.
+	// If the parent is unary minus and the inner starts with minus, keep parens: -(-x), -(-1)
+	if _, isParentNegate := parent.(*grammar.ColumnExprNegateContext); isParentNegate {
+		if innerStartsWithMinus(inner) {
+			return false
+		}
+	}
+
+	// If the inner is unary minus and it's NOT the left operand of a binary operator,
+	// keep parens to avoid ambiguous sequences like "a + -b" or "a * -b"
+	if _, isInnerNegate := inner.(*grammar.ColumnExprNegateContext); isInnerNegate {
+		if !isLeftOperand(parenNode, parent) {
+			return false
+		}
+	}
+
 	innerPrec := exprPrecedence(inner)
 	parentPrec := exprPrecedence(parent)
 
@@ -164,6 +180,13 @@ func canRemoveParens(inner antlr.ParserRuleContext, parent antlr.ParserRuleConte
 	}
 
 	return false
+}
+
+// innerStartsWithMinus returns true if the first token of the expression is a minus sign.
+// This covers both ColumnExprNegate (-expr) and negative literals (-1).
+func innerStartsWithMinus(ctx antlr.ParserRuleContext) bool {
+	startTok := ctx.GetStart()
+	return startTok.GetText() == "-"
 }
 
 // RemoveRedundantParens removes parentheses that are unnecessary given operator precedence.

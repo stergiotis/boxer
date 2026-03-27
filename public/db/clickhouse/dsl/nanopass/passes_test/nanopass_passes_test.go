@@ -251,3 +251,29 @@ func TestDebugAliases(t *testing.T) {
 		})
 	}
 }
+func TestDebugTryEvalDirect(t *testing.T) {
+	eval := newTestEvaluator()
+
+	sql := "SELECT myAdd(myAdd(1, 2), 3)"
+	pr, err := nanopass.Parse(sql)
+	require.NoError(t, err)
+
+	// Find outer myAdd
+	var outerFunc *grammar.ColumnExprFunctionContext
+	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
+		funcExpr, ok := ctx.(*grammar.ColumnExprFunctionContext)
+		if !ok {
+			return true
+		}
+		if outerFunc == nil {
+			outerFunc = funcExpr
+		}
+		return true
+	})
+
+	require.NotNil(t, outerFunc)
+	t.Logf("outer func text: %q", outerFunc.GetText())
+
+	val, evaluated, evalErr := eval.TryEval(pr, outerFunc)
+	t.Logf("val=%v (type %T) evaluated=%v err=%v", val, val, evaluated, evalErr)
+}

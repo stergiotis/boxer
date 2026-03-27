@@ -138,6 +138,48 @@ func TestRemoveRedundantParens(t *testing.T) {
 			input:    "SELECT a ? b : (c ? d : e) FROM t",
 			expected: "SELECT a ? b : (c ? d : e) FROM t",
 		},
+		// --- Unary minus cases ---
+
+		// Unary minus with lower-precedence inner — parens needed
+		{
+			input:    "SELECT -(a + b) FROM t",
+			expected: "SELECT -(a + b) FROM t",
+		},
+		// Unary minus with multiplication — parens needed (mul binds looser than negate)
+		{
+			input:    "SELECT -(a * b) FROM t",
+			expected: "SELECT -(a * b) FROM t",
+		},
+		// Unary minus with atom — parens redundant
+		{
+			input:    "SELECT -(a) FROM t",
+			expected: "SELECT -a FROM t",
+		},
+		// Unary minus with function call — parens redundant
+		{
+			input:    "SELECT -(count(*)) FROM t",
+			expected: "SELECT -count(*) FROM t",
+		},
+		// Double negation — parens MUST stay (removing creates -- comment syntax)
+		{
+			input:    "SELECT -(-a) FROM t",
+			expected: "SELECT -(-a) FROM t",
+		},
+		// Double negation with literal — parens MUST stay
+		{
+			input:    "SELECT -(-1) FROM t",
+			expected: "SELECT -(-1) FROM t",
+		},
+		// Negation inside addition — inner parens needed for negation
+		{
+			input:    "SELECT a + (-b) FROM t",
+			expected: "SELECT a + (-b) FROM t",
+		},
+		// Negation of OR — parens needed (OR is much lower precedence)
+		{
+			input:    "SELECT -(a OR b) FROM t",
+			expected: "SELECT -(a OR b) FROM t",
+		},
 	}
 	for i, tt := range tests {
 		t.Run(fmt.Sprintf("case_%d", i), func(t *testing.T) {
