@@ -4,8 +4,6 @@ package passes_test
 
 import (
 	"fmt"
-	"iter"
-	"slices"
 	"strings"
 	"testing"
 
@@ -225,63 +223,31 @@ func TestDebugMultipleSettings(t *testing.T) {
 		return true
 	})
 }
-
-type Tuple struct {
-	slotNames  []string
-	slotValues []any
-}
-
-func NewTuple(slotNames []string) *Tuple {
-	return &Tuple{
-		slotNames:  slotNames,
-		slotValues: make([]any, len(slotNames)),
+func TestDebugAliases(t *testing.T) {
+	t.Skip("diagnostic only")
+	sqls := []string{
+		"SELECT a AS alias1 FROM t",
+		"SELECT sum(a) AS total FROM t",
+		"SELECT a alias1 FROM t", // implicit alias (no AS)
+		"SELECT a AS \"quoted alias\" FROM t",
+		"SELECT a AS `backtick` FROM t",
 	}
-}
-func (inst *Tuple) SetByName(slotName string, val any) (found bool) {
-	idx := slices.Index(inst.slotNames, slotName)
-	found = idx != -1
-	if found {
-		inst.slotValues[idx] = val
-	}
-	return
-}
-func (inst *Tuple) SetByIndex(zeroBasedIdx int, val any) (found bool) {
-	found = zeroBasedIdx < len(inst.slotValues) && zeroBasedIdx > 0
-	if found {
-		inst.slotValues[zeroBasedIdx] = val
-	}
-	return
-}
-func (inst *Tuple) GetByIndex(zeroBasedIdx int) (val any, found bool) {
-	found = zeroBasedIdx < len(inst.slotValues) && zeroBasedIdx > 0
-	if found {
-		val = inst.slotValues[zeroBasedIdx]
-	}
-	return
-}
-func (inst *Tuple) GetByName(slotName string) (val any, found bool) {
-	idx := slices.Index(inst.slotNames, slotName)
-	found = idx != -1
-	if found {
-		val = inst.slotValues[idx]
-	}
-	return
-}
-func (inst *Tuple) IterateAll() iter.Seq2[int, any] {
-	return func(yield func(int, any) bool) {
-		for i, val := range inst.slotValues {
-			if !yield(i, val) {
-				return
-			}
+	for _, sql := range sqls {
+		t.Logf("--- SQL: %s", sql)
+		pr, err := nanopass.Parse(sql)
+		if err != nil {
+			t.Logf("  PARSE ERROR: %v", err)
+			continue
 		}
-	}
-}
-func (inst *Tuple) IterateAllWithNames() iter.Seq2[string, any] {
-	return func(yield func(string, any) bool) {
-		for i, val := range inst.slotValues {
-			if !yield(inst.slotNames[i], val) {
-				return
+		nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
+			typeName := fmt.Sprintf("%T", ctx)
+			if strings.Contains(typeName, "Alias") {
+				t.Logf("  %T text=%q", ctx, ctx.GetText())
+				for i := 0; i < ctx.GetChildCount(); i++ {
+					t.Logf("    child[%d]: %T text=%q", i, ctx.GetChild(i), ctx.GetChild(i))
+				}
 			}
-		}
+			return true
+		})
 	}
 }
