@@ -563,3 +563,115 @@ func TestBuildScopesAllScopesDeep(t *testing.T) {
 	assert.Contains(t, allTables, "t2")
 	assert.Contains(t, allTables, "t3")
 }
+func TestBuildScopesDefaultDatabase(t *testing.T) {
+	sql := "SELECT a FROM t"
+	pr, err := nanopass.Parse(sql)
+	require.NoError(t, err)
+
+	scopes := nanopass.BuildScopes(pr, "mydb")
+	require.Len(t, scopes, 1)
+
+	scope := scopes[0]
+	assert.Equal(t, "mydb", scope.DefaultDatabase)
+
+	require.Len(t, scope.Tables, 1)
+	assert.Equal(t, "", scope.Tables[0].Database) // not explicitly qualified
+	assert.Equal(t, "mydb", scope.Tables[0].ResolvedDatabase(scope))
+}
+
+func TestBuildScopesExplicitDatabaseOverridesDefault(t *testing.T) {
+	sql := "SELECT a FROM otherdb.t"
+	pr, err := nanopass.Parse(sql)
+	require.NoError(t, err)
+
+	scopes := nanopass.BuildScopes(pr, "mydb")
+	require.Len(t, scopes, 1)
+
+	require.Len(t, scopes[0].Tables, 1)
+	assert.Equal(t, "otherdb", scopes[0].Tables[0].Database)
+	assert.Equal(t, "otherdb", scopes[0].Tables[0].ResolvedDatabase(scopes[0]))
+}
+
+func TestBuildScopesDefaultDatabasePropagates(t *testing.T) {
+	sql := "WITH cte AS (SELECT a FROM t_inner) SELECT * FROM cte"
+	pr, err := nanopass.Parse(sql)
+	require.NoError(t, err)
+
+	scopes := nanopass.BuildScopes(pr, "mydb")
+	require.Len(t, scopes, 1)
+
+	// Outer scope has default database
+	assert.Equal(t, "mydb", scopes[0].DefaultDatabase)
+
+	// CTE body scope inherits default database
+	require.Len(t, scopes[0].CTEDefs, 1)
+	cteScope := scopes[0].CTEDefs[0].Scope
+	require.NotNil(t, cteScope)
+	assert.Equal(t, "mydb", cteScope.DefaultDatabase)
+
+	// Unqualified table in CTE resolves to default database
+	require.Len(t, cteScope.Tables, 1)
+	assert.Equal(t, "mydb", cteScope.Tables[0].ResolvedDatabase(cteScope))
+}
+
+func TestBuildScopesDefaultDatabaseInSubquery(t *testing.T) {
+	sql := "SELECT * FROM (SELECT a FROM t)"
+	pr, err := nanopass.Parse(sql)
+	require.NoError(t, err)
+
+	scopes := nanopass.BuildScopes(pr, "mydb")
+	require.Len(t, scopes, 1)
+
+	require.Len(t, scopes[0].Tables, 1)
+	require.NotNil(t, scopes[0].Tables[0].Scope)
+
+	innerScope := scopes[0].Tables[0].Scope
+	assert.Equal(t, "mydb", innerScope.DefaultDatabase)
+	require.Len(t, innerScope.Tables, 1)
+	assert.Equal(t, "mydb", innerScope.Tables[0].ResolvedDatabase(innerScope))
+}
+
+func TestBuildScopesDefaultDatabaseUnionAll(t *testing.T) {
+	sql := "SELECT a FROM t1 UNION ALL SELECT b FROM db2.t2"
+	pr, err := nanopass.Parse(sql)
+	require.NoError(t, err)
+
+	scopes := nanopass.BuildScopes(pr, "mydb")
+	require.Len(t, scopes, 2)
+
+	// First branch: unqualified → resolves to default
+	assert.Equal(t, "mydb", scopes[0].DefaultDatabase)
+	assert.Equal(t, "mydb", scopes[0].Tables[0].ResolvedDatabase(scopes[0]))
+
+	// Second branch: explicitly qualified → explicit wins
+	assert.Equal(t, "mydb", scopes[1].DefaultDatabase)
+	assert.Equal(t, "db2", scopes[1].Tables[0].ResolvedDatabase(scopes[1]))
+}
+
+func TestBuildScopesNoDefaultDatabase(t *testing.T) {
+	sql := "SELECT a FROM t"
+	pr, err := nanopass.Parse(sql)
+	require.NoError(t, err)
+
+	// No default database — backward compatible
+	scopes := nanopass.BuildScopes(pr)
+	require.Len(t, scopes, 1)
+
+	assert.Equal(t, "", scopes[0].DefaultDatabase)
+	assert.Equal(t, "", scopes[0].Tables[0].ResolvedDatabase(scopes[0]))
+}
+
+func TestBuildScopesMixedDatabases(t *testing.T) {
+	sql := "SELECT * FROM t1 JOIN db2.t2 ON t1.id = t2.id"
+	pr, err := nanopass.Parse(sql)
+	require.NoError(t, err)
+
+	scopes := nanopass.BuildScopes(pr, "mydb")
+	require.Len(t, scopes, 1)
+
+	require.Len(t, scopes[0].Tables, 2)
+	// t1 is unqualified → resolves to default
+	assert.Equal(t, "mydb", scopes[0].Tables[0].ResolvedDatabase(scopes[0]))
+	// db2.t2 is qualified → uses explicit
+	assert.Equal(t, "db2", scopes[0].Tables[1].ResolvedDatabase(scopes[0]))
+}
