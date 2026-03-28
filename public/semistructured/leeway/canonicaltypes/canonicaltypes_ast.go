@@ -14,9 +14,8 @@ import (
 func formatGoRune[R ~rune](val R) string {
 	if val == 0 {
 		return "0"
-	} else {
-		return "'" + string(val) + "'"
 	}
+	return strconv.QuoteRune(rune(val))
 }
 
 func addIfNonzero[R ~rune](s *strings.Builder, r R) {
@@ -218,19 +217,15 @@ func (inst GroupAstNode) String() string {
 		return "<invalid:empty>"
 	}
 
-	if inst.str == "" {
-		s := strings.Builder{}
-		s.Grow(l * 6) // estimate size
-		for i, m := range inst.members {
-			s.WriteString(m.String())
-			if i < l-1 {
-				s.WriteString(GroupSeparator)
-			}
+	s := strings.Builder{}
+	s.Grow(l * 6) // estimate size
+	for i, m := range inst.members {
+		s.WriteString(m.String())
+		if i < l-1 {
+			s.WriteString(GroupSeparator)
 		}
-		// cache, note that ASTs are "immutable" (as far as easily possible in go *sigh*)
-		inst.str = s.String()
 	}
-	return inst.str
+	return s.String()
 }
 func (inst GroupAstNode) MarshalCBOR() (data []byte, err error) {
 	return cbor.Marshal(inst.String())
@@ -270,10 +265,8 @@ func (inst SignatureAstNode) IterateMembers() iter.Seq[PrimitiveAstNodeI] {
 func (inst SignatureAstNode) IterateGroupMembers() iter.Seq[AstNodeI] {
 	return func(yield func(i AstNodeI) bool) {
 		for _, m := range inst.members {
-			for mm := range m.IterateMembers() {
-				if !yield(mm) {
-					return
-				}
+			if !yield(m) {
+				return
 			}
 		}
 	}
@@ -285,19 +278,15 @@ func (inst SignatureAstNode) String() string {
 		return "<invalid:empty>"
 	}
 
-	if inst.str == "" {
-		s := strings.Builder{}
-		s.Grow(l * 6) // estimate size
-		for i, m := range inst.members {
-			s.WriteString(m.String())
-			if i < l-1 {
-				s.WriteString(SignatureSeparator)
-			}
+	s := strings.Builder{}
+	s.Grow(l * 6) // estimate size
+	for i, m := range inst.members {
+		s.WriteString(m.String())
+		if i < l-1 {
+			s.WriteString(SignatureSeparator)
 		}
-		// cache, note that ASTs are "immutable" (as far as easily possible in go *sigh*)
-		inst.str = s.String()
 	}
-	return inst.str
+	return s.String()
 }
 func (inst SignatureAstNode) MarshalCBOR() (data []byte, err error) {
 	return cbor.Marshal(inst.String())
@@ -306,6 +295,10 @@ func (inst SignatureAstNode) MarshalCBOR() (data []byte, err error) {
 func NewGroupAstNode(members []PrimitiveAstNodeI) GroupAstNode {
 	return GroupAstNode{
 		members: members,
-		str:     "",
+	}
+}
+func NewSignatureAstNode(members []AstNodeI) SignatureAstNode {
+	return SignatureAstNode{
+		members: members,
 	}
 }

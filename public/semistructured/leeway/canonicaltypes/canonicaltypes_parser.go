@@ -195,7 +195,6 @@ func (inst *Parser) antlrTreeCanonicalTypeOrGroupToAst(context *grammar2.Canonic
 	}
 	node = GroupAstNode{
 		members: members,
-		str:     "",
 	}
 
 	return

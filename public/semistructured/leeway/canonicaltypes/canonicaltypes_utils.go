@@ -6,30 +6,6 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-func promoteScalarPrim(s PrimitiveAstNodeI, scalarModifier ScalarModifierE) (out PrimitiveAstNodeI) {
-	if s.IsScalar() {
-		out = s
-		switch ct := out.(type) {
-		case MachineNumericTypeAstNode:
-			ct.ScalarModifier = scalarModifier
-			out = ct
-			break
-		case StringAstNode:
-			ct.ScalarModifier = scalarModifier
-			out = ct
-			break
-		case TemporalTypeAstNode:
-			ct.ScalarModifier = scalarModifier
-			out = ct
-			break
-		default:
-			log.Panic().Type("type", s).Msg("unable to promote unknown canonical type ast node")
-		}
-	} else {
-		out = s
-	}
-	return
-}
 func GetScalarModifier(s PrimitiveAstNodeI) (mod ScalarModifierE, notSupported bool) {
 	switch ct := s.(type) {
 	case MachineNumericTypeAstNode:
@@ -66,66 +42,97 @@ func DemoteToScalar(s PrimitiveAstNodeI) (out PrimitiveAstNodeI) {
 	return
 }
 func PromoteScalars(in AstNodeI, scalarModifier ScalarModifierE) (out AstNodeI, modified int, unmodified int) {
-	p, isPrim := in.(PrimitiveAstNodeI)
-	if isPrim {
-		if p.IsScalar() {
-			modified = 1
-			out = promoteScalarPrim(p, scalarModifier)
-		} else {
-			unmodified = 1
-			out = in
+	switch typedIn := in.(type) {
+	case PrimitiveAstNodeI:
+		if typedIn.IsScalar() {
+			return promoteScalarPrim(typedIn, scalarModifier), 1, 0
 		}
-		return
-	}
+		return in, 0, 1
 
-	for c := range in.IterateMembers() {
-		if c.IsScalar() {
-			modified++
-		} else {
-			unmodified++
+	case *GroupAstNode:
+		newMembers := make([]PrimitiveAstNodeI, 0, len(typedIn.members))
+		for _, m := range typedIn.members {
+			res, mod, unmod := PromoteScalars(m, scalarModifier)
+			newMembers = append(newMembers, res.(PrimitiveAstNodeI))
+			modified += mod
+			unmodified += unmod
 		}
-	}
-	if modified > 0 {
-		members := make([]PrimitiveAstNodeI, 0, modified+unmodified)
-		for c := range in.IterateMembers() {
-			members = append(members, promoteScalarPrim(c, scalarModifier))
+		if modified > 0 {
+			return NewGroupAstNode(newMembers), modified, unmodified
 		}
-		out = NewGroupAstNode(members)
-	} else {
-		out = in
+		return in, 0, unmodified
+
+	case *SignatureAstNode:
+		newMembers := make([]AstNodeI, 0, len(typedIn.members))
+		for _, m := range typedIn.members {
+			res, mod, unmod := PromoteScalars(m, scalarModifier)
+			newMembers = append(newMembers, res)
+			modified += mod
+			unmodified += unmod
+		}
+		if modified > 0 {
+			return NewSignatureAstNode(newMembers), modified, unmodified
+		}
+		return in, 0, unmodified
 	}
-	return
+	return in, 0, 0
 }
-func DemoteToScalars(in AstNodeI) (out AstNodeI, modified int, unmodified int) {
-	p, isPrim := in.(PrimitiveAstNodeI)
-	if isPrim {
-		if !p.IsScalar() {
-			modified = 1
-			out = DemoteToScalar(p)
-		} else {
-			unmodified = 1
-			out = in
-		}
-		return
-	}
 
-	for c := range in.IterateMembers() {
-		if c.IsScalar() {
-			unmodified++
-		} else {
-			modified++
+func DemoteToScalars(in AstNodeI) (out AstNodeI, modified int, unmodified int) {
+	switch typedIn := in.(type) {
+	case PrimitiveAstNodeI:
+		if !typedIn.IsScalar() {
+			return DemoteToScalar(typedIn), 1, 0
 		}
-	}
-	if modified > 0 {
-		members := make([]PrimitiveAstNodeI, 0, modified+unmodified)
-		for c := range in.IterateMembers() {
-			members = append(members, DemoteToScalar(c))
+		return in, 0, 1
+
+	case *GroupAstNode:
+		newMembers := make([]PrimitiveAstNodeI, 0, len(typedIn.members))
+		for _, m := range typedIn.members {
+			res, mod, unmod := DemoteToScalars(m)
+			newMembers = append(newMembers, res.(PrimitiveAstNodeI))
+			modified += mod
+			unmodified += unmod
 		}
-		out = NewGroupAstNode(members)
-	} else {
-		out = in
+		if modified > 0 {
+			return NewGroupAstNode(newMembers), modified, unmodified
+		}
+		return in, 0, unmodified
+
+	case *SignatureAstNode:
+		newMembers := make([]AstNodeI, 0, len(typedIn.members))
+		for _, m := range typedIn.members {
+			res, mod, unmod := DemoteToScalars(m)
+			newMembers = append(newMembers, res)
+			modified += mod
+			unmodified += unmod
+		}
+		if modified > 0 {
+			return NewSignatureAstNode(newMembers), modified, unmodified
+		}
+		return in, 0, unmodified
 	}
-	return
+	return in, 0, 0
+}
+
+func promoteScalarPrim(s PrimitiveAstNodeI, scalarModifier ScalarModifierE) (out PrimitiveAstNodeI) {
+	if !s.IsScalar() {
+		return s
+	}
+	switch ct := s.(type) {
+	case MachineNumericTypeAstNode:
+		ct.ScalarModifier = scalarModifier
+		return ct
+	case StringAstNode:
+		ct.ScalarModifier = scalarModifier
+		return ct
+	case TemporalTypeAstNode:
+		ct.ScalarModifier = scalarModifier
+		return ct
+	default:
+		log.Panic().Type("type", s).Msg("unable to promote unknown canonical type ast node")
+		return s
+	}
 }
 func MergeGroup(l AstNodeI, r AstNodeI) (g GroupAstNode) {
 	m := make([]PrimitiveAstNodeI, 0, CountMembers(l)+CountMembers(r))
@@ -138,7 +145,6 @@ func MergeGroup(l AstNodeI, r AstNodeI) (g GroupAstNode) {
 
 	g = GroupAstNode{
 		members: m,
-		str:     "",
 	}
 	return
 }
