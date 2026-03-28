@@ -84,11 +84,11 @@ func (inst *ExtractedParamInfo) String() string {
 // and yields ExtractedParamInfo for each parameter whose name matches the naming convention.
 func IterateExtractedParams(extracted string, prefix string) iter.Seq2[int, ExtractedParamInfo] {
 	if prefix == "" {
-		prefix = "param"
+		prefix = ParamPrefixExtracted
 	}
 
 	return func(yield func(int, ExtractedParamInfo) bool) {
-		sets, _ := ParseExtractedQuery(extracted)
+		sets, _ := ParseExtractedQuery(extracted, prefix)
 		idx := 0
 		for _, set := range sets {
 			info, parseErr := parseSetStatementToInfo(set, prefix)

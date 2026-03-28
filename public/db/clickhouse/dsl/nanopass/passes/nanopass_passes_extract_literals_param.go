@@ -86,6 +86,9 @@ func BuildParamName(prefix string, contextName string, meta *ParamMetadata) (nam
 // ParseParamName extracts the context name and metadata from a parameter name.
 // Format: <prefix>_<context>_<hex(cbor(metadata))>
 func ParseParamName(name string, prefix string) (contextName string, meta ParamMetadata, err error) {
+	if prefix == "" {
+		prefix = ParamPrefixExtracted
+	}
 	if !strings.HasPrefix(name, prefix+"_") {
 		err = eh.Errorf("ParseParamName: name %q does not start with prefix %q", name, prefix)
 		return

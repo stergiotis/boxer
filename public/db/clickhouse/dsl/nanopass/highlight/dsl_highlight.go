@@ -371,13 +371,6 @@ func refineCTEReferences(pr *nanopass.ParseResult, spans []Span, tokenToSpan map
 	})
 }
 
-func scopeAll(scopes []*nanopass.SelectScope) (all []*nanopass.SelectScope) {
-	for _, s := range scopes {
-		all = append(all, s.AllScopes()...)
-	}
-	return
-}
-
 func isTableContext(tid *grammar.TableIdentifierContext) bool {
 	// Walk up to check if this TableIdentifier is inside a TableExpr (FROM/JOIN)
 	// rather than inside a ColumnIdentifier (column qualifier)

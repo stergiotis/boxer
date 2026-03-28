@@ -30,12 +30,14 @@ type ExtractLiteralsConfig struct {
 	mapTypeToCanonical MapClickHouseTypeToCanonicalI
 }
 
+const ParamPrefixExtracted = "param_x"
+
 // NewExtractLiteralsConfig creates a config with sensible defaults.
 func NewExtractLiteralsConfig(minLength int) (inst *ExtractLiteralsConfig) {
 	inst = &ExtractLiteralsConfig{
 		minLength:     minLength,
 		funcPolicy:    make(map[string]bool),
-		prefix:        "param",
+		prefix:        ParamPrefixExtracted,
 		minINListSize: 3,
 	}
 	return
@@ -1007,11 +1009,24 @@ func (inst *ExtractionInfo) String() string {
 // --- Convenience ---
 
 // ParseExtractedQuery splits the output of ExtractLiterals into SET lines and the query.
-func ParseExtractedQuery(extracted string) (sets []string, query string) {
+func ParseExtractedQuery(extracted string, prefix string) (sets []string, query string) {
 	lines := strings.Split(extracted, "\n")
+	if prefix == "" {
+		prefix = ParamPrefixExtracted
+	}
 	for i, line := range lines {
 		if strings.HasPrefix(line, "SET ") {
-			sets = append(sets, strings.TrimSuffix(line, ";"))
+			parts := strings.SplitN(line, " = ", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			name := strings.TrimPrefix(parts[0], "SET ")
+			name = strings.TrimSpace(name)
+
+			_, _, parseErr := ParseParamName(name, prefix)
+			if parseErr == nil {
+				sets = append(sets, strings.TrimSuffix(line, ";"))
+			}
 		} else {
 			query = strings.Join(lines[i:], "\n")
 			break
@@ -1033,7 +1048,10 @@ func CountExtractableParams(sql string, config *ExtractLiteralsConfig) (count in
 // InjectParams is the inverse of ExtractLiterals — it takes SET param = value
 // lines and a query with {param: Type} slots and produces a single query with
 // literals inlined. Does NOT reconstruct casts — use InjectParamsWithCasts for that.
-func InjectParams(sets []string, query string) (result string, err error) {
+func InjectParams(sets []string, prefix string, query string) (result string, err error) {
+	if prefix == "" {
+		prefix = ParamPrefixExtracted
+	}
 	paramMap := make(map[string]string, len(sets))
 	for _, set := range sets {
 		parts := strings.SplitN(set, " = ", 2)
@@ -1043,7 +1061,11 @@ func InjectParams(sets []string, query string) (result string, err error) {
 		name := strings.TrimPrefix(parts[0], "SET ")
 		name = strings.TrimSpace(name)
 		value := strings.TrimSpace(parts[1])
-		paramMap[name] = value
+
+		_, _, parseErr := ParseParamName(name, prefix)
+		if parseErr == nil {
+			paramMap[name] = value
+		}
 	}
 
 	result = query
@@ -1075,7 +1097,7 @@ func InjectParams(sets []string, query string) (result string, err error) {
 // If nil, behaves like InjectParams (no cast reconstruction).
 func InjectParamsWithCasts(sets []string, query string, prefix string, mapCanonicalToClickHouse func(canonical string) (string, error)) (result string, err error) {
 	if prefix == "" {
-		prefix = "param"
+		prefix = ParamPrefixExtracted
 	}
 
 	type paramEntry struct {
