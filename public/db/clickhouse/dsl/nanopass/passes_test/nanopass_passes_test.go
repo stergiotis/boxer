@@ -277,3 +277,52 @@ func TestDebugTryEvalDirect(t *testing.T) {
 	val, evaluated, evalErr := eval.TryEval(pr, outerFunc)
 	t.Logf("val=%v (type %T) evaluated=%v err=%v", val, val, evaluated, evalErr)
 }
+func TestDebugOperatorContext(t *testing.T) {
+	t.Skip("diagnostic only")
+	sqls := []string{
+		"SELECT a FROM t WHERE name = 'hello'",
+		"SELECT a FROM t WHERE x > 100",
+		"SELECT a FROM t WHERE b IN ('a', 'b', 'c')",
+	}
+	for _, sql := range sqls {
+		t.Logf("--- SQL: %s", sql)
+		pr, err := nanopass.Parse(sql)
+		if err != nil {
+			t.Logf("  PARSE ERROR: %v", err)
+			continue
+		}
+		nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
+			typeName := fmt.Sprintf("%T", ctx)
+			if strings.Contains(typeName, "Literal") && !strings.Contains(typeName, "Number") {
+				parent := ctx.GetParent()
+				grandparent := parent.(antlr.RuleNode).GetParent()
+				t.Logf("  %T text=%q parent=%T grandparent=%T", ctx, ctx.GetText(), parent, grandparent)
+			}
+			return true
+		})
+	}
+}
+func TestDebugFuncArgContext(t *testing.T) {
+	t.Skip("diagnostic only")
+	sql := "SELECT myFunc('a', 'b', 'c')"
+	pr, err := nanopass.Parse(sql)
+	require.NoError(t, err)
+
+	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
+		if lit, ok := ctx.(*grammar.ColumnExprLiteralContext); ok {
+			parent := lit.GetParent()
+			t.Logf("literal=%q parent=%T", lit.GetText(), parent)
+			if argExpr, ok := parent.(*grammar.ColumnArgExprContext); ok {
+				argList := argExpr.GetParent()
+				t.Logf("  argList=%T childCount=%d", argList, argList.GetChildCount())
+				// Find index
+				for i := 0; i < argList.GetChildCount(); i++ {
+					if argList.GetChild(i) == argExpr {
+						t.Logf("  argIndex (raw child)=%d", i)
+					}
+				}
+			}
+		}
+		return true
+	})
+}
