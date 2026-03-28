@@ -73,8 +73,8 @@ func (inst *ExtractLiteralsConfig) MinINListSize() int {
 	return inst.minINListSize
 }
 
-// SetUseSequentialNames enables sequential naming (param_eq_<cbor with s=0>, s=1, ...)
-// instead of content-hash based naming. Useful for deterministic tests.
+// SetUseSequentialNames enables sequential naming instead of content-hash based naming.
+// Useful for deterministic tests.
 func (inst *ExtractLiteralsConfig) SetUseSequentialNames(use bool) {
 	inst.useSequentialNames = use
 }
@@ -279,7 +279,7 @@ func collectINListCandidates(pr *nanopass.ParseResult, config *ExtractLiteralsCo
 		// Check if the tuple (or prec3) is inside a cast
 		var castNode *grammar.ColumnExprCastContext
 		var castType canonicaltypes.PrimitiveAstNodeI
-		if castCtx, ok := prec3.GetParent().(*grammar.ColumnExprCastContext); ok && config.mapTypeToCanonical != nil {
+		if castCtx, isCast := prec3.GetParent().(*grammar.ColumnExprCastContext); isCast && config.mapTypeToCanonical != nil {
 			castTypeText := extractCastTypeText(castCtx)
 			if castTypeText != "" {
 				ct, mapErr := config.mapTypeToCanonical(castTypeText)
@@ -432,7 +432,7 @@ func collectLiteralCandidates(pr *nanopass.ParseResult, config *ExtractLiteralsC
 				if mapErr == nil && ct != nil {
 					castNode = castCtx
 					castType = ct
-					typeName = castTypeText // use the cast type for the {param: Type} slot
+					typeName = castTypeText
 				}
 			}
 		}
@@ -496,13 +496,16 @@ func inferClickHouseType(lit *grammar.LiteralContext) string {
 		return "String"
 	}
 	if lit.NULL_SQL() != nil {
-		return "Nullable(Nothing)"
+		return "String"
 	}
 	if lit.NumberLiteral() != nil {
 		text := lit.NumberLiteral().GetText()
-		scalar, err := scalars.UnmarshalScalarLiteral(text)
-		if err != nil {
+		scalar, parseErr := scalars.UnmarshalScalarLiteral(text)
+		if parseErr != nil {
 			return "Int64"
+		}
+		if scalar.Null {
+			return "String"
 		}
 		if scalar.Type != nil {
 			switch scalar.Type.String() {
@@ -512,6 +515,8 @@ func inferClickHouseType(lit *grammar.LiteralContext) string {
 				return "Int64"
 			case "f64":
 				return "Float64"
+			case "b":
+				return "Bool"
 			}
 		}
 		return "Int64"
@@ -526,7 +531,7 @@ func resolveContext(litExpr *grammar.ColumnExprLiteralContext) (contextName stri
 	if parent == nil {
 		return "expr", 0
 	}
-	return resolveContextFromNode(parent)
+	return resolveContextFromNodeWithChild(parent, litExpr)
 }
 
 func resolveContextFromParent(node antlr.ParserRuleContext) (contextName string, argIndex int) {
@@ -534,23 +539,23 @@ func resolveContextFromParent(node antlr.ParserRuleContext) (contextName string,
 	if parent == nil {
 		return "expr", 0
 	}
-	return resolveContextFromNode(parent)
+	return resolveContextFromNodeWithChild(parent, node)
 }
 
-func resolveContextFromNode(parent antlr.Tree) (contextName string, argIndex int) {
+func resolveContextFromNodeWithChild(parent antlr.Tree, child antlr.ParserRuleContext) (contextName string, argIndex int) {
 	switch p := parent.(type) {
 	case *grammar.ColumnArgExprContext:
 		return resolveFuncArgContext(p)
 	case *grammar.ColumnExprPrecedence1Context:
-		return resolveOperatorContextGeneric(p)
+		return resolveOperatorContextWithChild(p, child)
 	case *grammar.ColumnExprPrecedence2Context:
-		return resolveOperatorContextGeneric(p)
+		return resolveOperatorContextWithChild(p, child)
 	case *grammar.ColumnExprPrecedence3Context:
-		return resolveOperatorContextGeneric(p)
+		return resolveOperatorContextWithChild(p, child)
 	case *grammar.ColumnsExprColumnContext:
 		return resolveColumnsExprContextGeneric(p)
 	case *grammar.ColumnExprBetweenContext:
-		return resolveBetweenContextGeneric(p)
+		return resolveBetweenContextWithChild(p, child)
 	default:
 		return "expr", 0
 	}
@@ -597,11 +602,16 @@ func resolveFuncArgContext(argExpr *grammar.ColumnArgExprContext) (contextName s
 	return
 }
 
-func resolveOperatorContextGeneric(parent antlr.ParserRuleContext) (contextName string, argIndex int) {
+func resolveOperatorContextWithChild(parent antlr.ParserRuleContext, targetChild antlr.ParserRuleContext) (contextName string, argIndex int) {
 	opName := "op"
+	litIdx := -1
+	exprIdx := 0
 
 	for i := 0; i < parent.GetChildCount(); i++ {
 		child := parent.GetChild(i)
+		if child == targetChild {
+			litIdx = exprIdx
+		}
 		if term, ok := child.(*antlr.TerminalNodeImpl); ok {
 			tok := term.GetSymbol()
 			switch tok.GetTokenType() {
@@ -637,21 +647,15 @@ func resolveOperatorContextGeneric(parent antlr.ParserRuleContext) (contextName 
 				opName = "in"
 			}
 		}
-	}
-
-	// Determine arg index: count expr children before the target
-	// For now, assume the literal/cast is the last expr child (right operand = index 1)
-	exprCount := 0
-	for i := 0; i < parent.GetChildCount(); i++ {
-		if _, isExpr := parent.GetChild(i).(antlr.ParserRuleContext); isExpr {
-			exprCount++
+		if _, isExpr := child.(antlr.ParserRuleContext); isExpr {
+			exprIdx++
 		}
 	}
-	if exprCount >= 2 {
-		argIndex = 1
-	}
 
-	return opName, argIndex
+	if litIdx < 0 {
+		litIdx = 0
+	}
+	return opName, litIdx
 }
 
 func resolveColumnsExprContextGeneric(parent *grammar.ColumnsExprColumnContext) (contextName string, argIndex int) {
@@ -692,12 +696,20 @@ func resolveColumnsExprContextGeneric(parent *grammar.ColumnsExprColumnContext) 
 	return "select", argIndex
 }
 
-func resolveBetweenContextGeneric(parent *grammar.ColumnExprBetweenContext) (contextName string, argIndex int) {
+func resolveBetweenContextWithChild(parent *grammar.ColumnExprBetweenContext, targetChild antlr.ParserRuleContext) (contextName string, argIndex int) {
 	contextName = "between"
-	// BETWEEN has 3 expr children: value, low, high
-	// We can't easily determine which one is the literal without the original node ref
-	// Default to argIndex 1 (low bound)
-	argIndex = 1
+	argIndex = 0
+	exprIdx := 0
+	for i := 0; i < parent.GetChildCount(); i++ {
+		child := parent.GetChild(i)
+		if child == targetChild {
+			argIndex = exprIdx
+			break
+		}
+		if _, isExpr := child.(antlr.ParserRuleContext); isExpr {
+			exprIdx++
+		}
+	}
 	return
 }
 
@@ -833,12 +845,8 @@ func assignINListParamNames(candidates []inListCandidate, config *ExtractLiteral
 		}
 
 		typeName := fmt.Sprintf("Array(%s)", c.elementType)
-		if c.castType != nil {
-			// Use the cast type text for the slot
-			castTypeText := ""
-			if c.castNode != nil {
-				castTypeText = extractCastTypeText(c.castNode)
-			}
+		if c.castNode != nil {
+			castTypeText := extractCastTypeText(c.castNode)
 			if castTypeText != "" {
 				typeName = castTypeText
 			}
@@ -1040,9 +1048,9 @@ func InjectParams(sets []string, query string) (result string, err error) {
 
 	result = query
 	for name, value := range paramMap {
-		prefix := "{" + name + ":"
+		pfx := "{" + name + ":"
 		for {
-			idx := strings.Index(result, prefix)
+			idx := strings.Index(result, pfx)
 			if idx < 0 {
 				break
 			}
@@ -1052,6 +1060,77 @@ func InjectParams(sets []string, query string) (result string, err error) {
 			}
 			endIdx += idx
 			result = result[:idx] + value + result[endIdx+1:]
+		}
+	}
+	return
+}
+
+// InjectParamsWithCasts is the inverse of ExtractLiterals with cast reconstruction.
+// It takes SET param = value lines and a query with {param: Type} slots and produces
+// a single query with literals inlined. When a parameter has a cast type in its
+// metadata, the value is wrapped in a cast: value → value::ClickHouseType.
+//
+// mapCanonicalToClickHouse maps canonical type strings (e.g. "u64") to ClickHouse
+// type names (e.g. "UInt64"). Required for reconstructing casts.
+// If nil, behaves like InjectParams (no cast reconstruction).
+func InjectParamsWithCasts(sets []string, query string, prefix string, mapCanonicalToClickHouse func(canonical string) (string, error)) (result string, err error) {
+	if prefix == "" {
+		prefix = "param"
+	}
+
+	type paramEntry struct {
+		value         string
+		castCanonical string
+	}
+
+	paramMap := make(map[string]paramEntry, len(sets))
+	for _, set := range sets {
+		line := strings.TrimPrefix(set, "SET ")
+		line = strings.TrimSpace(line)
+
+		eqIdx := strings.Index(line, " = ")
+		if eqIdx < 0 {
+			continue
+		}
+
+		name := line[:eqIdx]
+		value := line[eqIdx+3:]
+
+		castCanonical := ""
+		_, meta, parseErr := ParseParamName(name, prefix)
+		if parseErr == nil {
+			castCanonical = meta.CastTypeCanonical
+		}
+
+		paramMap[name] = paramEntry{
+			value:         value,
+			castCanonical: castCanonical,
+		}
+	}
+
+	result = query
+	for name, entry := range paramMap {
+		pfx := "{" + name + ":"
+		for {
+			idx := strings.Index(result, pfx)
+			if idx < 0 {
+				break
+			}
+			endIdx := strings.Index(result[idx:], "}")
+			if endIdx < 0 {
+				break
+			}
+			endIdx += idx
+
+			replacement := entry.value
+			if entry.castCanonical != "" && mapCanonicalToClickHouse != nil {
+				chType, mapErr := mapCanonicalToClickHouse(entry.castCanonical)
+				if mapErr == nil && chType != "" {
+					replacement = entry.value + "::" + chType
+				}
+			}
+
+			result = result[:idx] + replacement + result[endIdx+1:]
 		}
 	}
 	return

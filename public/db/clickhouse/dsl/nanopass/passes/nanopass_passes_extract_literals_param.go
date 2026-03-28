@@ -1,4 +1,5 @@
 //go:build llm_generated_opus46
+
 package passes
 
 import (
@@ -9,6 +10,17 @@ import (
 	"github.com/fxamacker/cbor/v2"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
+
+// cborEncMode is a pinned canonical CBOR encoding mode for deterministic output.
+var cborEncMode cbor.EncMode
+
+func init() {
+	var initErr error
+	cborEncMode, initErr = cbor.CanonicalEncOptions().EncMode()
+	if initErr != nil {
+		panic(fmt.Sprintf("passes: failed to create CBOR encoder: %v", initErr))
+	}
+}
 
 // ParamMetadata holds the structured metadata encoded into parameter names.
 // It is serialized as CBOR and hex-encoded into the parameter name suffix.
@@ -35,7 +47,7 @@ type ParamMetadata struct {
 
 // EncodeParamMetadata serializes ParamMetadata to a hex string suitable for use in parameter names.
 func EncodeParamMetadata(meta *ParamMetadata) (encoded string, err error) {
-	data, marshalErr := cbor.Marshal(meta)
+	data, marshalErr := cborEncMode.Marshal(meta)
 	if marshalErr != nil {
 		err = eh.Errorf("EncodeParamMetadata: %w", marshalErr)
 		return

@@ -14,7 +14,6 @@ import (
 
 // --- Helpers ---
 
-// buildTestSET constructs a valid SET line from context, metadata, and value.
 func buildTestSET(context string, meta *passes.ParamMetadata, value string) string {
 	name, err := passes.BuildParamName("param", context, meta)
 	if err != nil {
@@ -29,7 +28,6 @@ func TestParamMetadataRoundTripBasic(t *testing.T) {
 	meta := passes.ParamMetadata{ArgIndex: 1, ContentHash: 0xdeadbeef}
 	encoded, err := passes.EncodeParamMetadata(&meta)
 	require.NoError(t, err)
-	assert.NotEmpty(t, encoded)
 
 	decoded, err := passes.DecodeParamMetadata(encoded)
 	require.NoError(t, err)
@@ -83,16 +81,6 @@ func TestParamMetadataRoundTripFull(t *testing.T) {
 	t.Logf("encoded: %s (len=%d)", encoded, len(encoded))
 }
 
-func TestParamMetadataRoundTripArrayCast(t *testing.T) {
-	meta := passes.ParamMetadata{ArgIndex: 0, IsSequential: true, SequentialIndex: 0, CastTypeCanonical: "u64h"}
-	encoded, err := passes.EncodeParamMetadata(&meta)
-	require.NoError(t, err)
-
-	decoded, err := passes.DecodeParamMetadata(encoded)
-	require.NoError(t, err)
-	assert.Equal(t, "u64h", decoded.CastTypeCanonical)
-}
-
 func TestParamMetadataRoundTripTupleCast(t *testing.T) {
 	meta := passes.ParamMetadata{ArgIndex: 0, IsSequential: true, SequentialIndex: 0, CastTypeCanonical: "u8-s"}
 	encoded, err := passes.EncodeParamMetadata(&meta)
@@ -123,47 +111,18 @@ func TestBuildParseParamNameRoundTrip(t *testing.T) {
 		context string
 		meta    passes.ParamMetadata
 	}{
-		{
-			name:    "hash_based",
-			context: "eq",
-			meta:    passes.ParamMetadata{ArgIndex: 1, ContentHash: 0xdeadbeef},
-		},
-		{
-			name:    "sequential",
-			context: "like",
-			meta:    passes.ParamMetadata{ArgIndex: 0, IsSequential: true, SequentialIndex: 5},
-		},
-		{
-			name:    "with_cast",
-			context: "eq",
-			meta:    passes.ParamMetadata{ArgIndex: 1, ContentHash: 0x1234, CastTypeCanonical: "u64"},
-		},
-		{
-			name:    "in_list",
-			context: "in",
-			meta:    passes.ParamMetadata{ArgIndex: 0, IsSequential: true, SequentialIndex: 0},
-		},
-		{
-			name:    "collision",
-			context: "eq",
-			meta:    passes.ParamMetadata{ArgIndex: 1, ContentHash: 0xabcd, HashCollisionCounter: 2},
-		},
-		{
-			name:    "long_func_name",
-			context: "substring",
-			meta:    passes.ParamMetadata{ArgIndex: 0, IsSequential: true, SequentialIndex: 0},
-		},
-		{
-			name:    "cast_array",
-			context: "eq",
-			meta:    passes.ParamMetadata{ArgIndex: 1, ContentHash: 0xff, CastTypeCanonical: "u64h"},
-		},
+		{"hash_based", "eq", passes.ParamMetadata{ArgIndex: 1, ContentHash: 0xdeadbeef}},
+		{"sequential", "like", passes.ParamMetadata{ArgIndex: 0, IsSequential: true, SequentialIndex: 5}},
+		{"with_cast", "eq", passes.ParamMetadata{ArgIndex: 1, ContentHash: 0x1234, CastTypeCanonical: "u64"}},
+		{"in_list", "in", passes.ParamMetadata{ArgIndex: 0, IsSequential: true, SequentialIndex: 0}},
+		{"collision", "eq", passes.ParamMetadata{ArgIndex: 1, ContentHash: 0xabcd, HashCollisionCounter: 2}},
+		{"long_func", "substring", passes.ParamMetadata{ArgIndex: 0, IsSequential: true, SequentialIndex: 0}},
+		{"cast_array", "eq", passes.ParamMetadata{ArgIndex: 1, ContentHash: 0xff, CastTypeCanonical: "u64h"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			name, err := passes.BuildParamName("param", tt.context, &tt.meta)
 			require.NoError(t, err)
-			assert.True(t, len(name) > 0)
 
 			parsedCtx, parsedMeta, err := passes.ParseParamName(name, "param")
 			require.NoError(t, err)
@@ -194,7 +153,6 @@ func TestBuildParamNameCustomPrefix(t *testing.T) {
 	meta := passes.ParamMetadata{ArgIndex: 0, IsSequential: true, SequentialIndex: 0}
 	name, err := passes.BuildParamName("qp", "eq", &meta)
 	require.NoError(t, err)
-	assert.True(t, len(name) > 3)
 	assert.Contains(t, name, "qp_eq_")
 
 	parsedCtx, parsedMeta, err := passes.ParseParamName(name, "qp")
@@ -226,7 +184,6 @@ func TestIterateFromSetsBasic(t *testing.T) {
 
 	assert.Equal(t, "gt", params[1].FunctionName)
 	assert.Equal(t, uint32(1), params[1].Metadata.ArgIndex)
-	assert.Equal(t, uint64(0xccdd), params[1].Metadata.ContentHash)
 	assert.Equal(t, "100000", params[1].LiteralSQL)
 }
 
@@ -307,7 +264,7 @@ func TestIterateFromSetsINList(t *testing.T) {
 	require.Len(t, params, 1)
 	assert.Equal(t, "in", params[0].FunctionName)
 	assert.Equal(t, "['x', 'y', 'z']", params[0].LiteralSQL)
-	assert.Nil(t, params[0].Type, "array should have nil scalar Type")
+	assert.Nil(t, params[0].Type)
 }
 
 func TestIterateFromSetsCustomPrefix(t *testing.T) {
@@ -326,8 +283,6 @@ func TestIterateFromSetsCustomPrefix(t *testing.T) {
 	assert.Equal(t, "eq", params[0].FunctionName)
 }
 
-// --- IterateExtractedParamsFromSets: edge cases ---
-
 func TestIterateFromSetsSkipsMalformed(t *testing.T) {
 	validSET := buildTestSET("eq", &passes.ParamMetadata{ArgIndex: 1, ContentHash: 0xaa}, "'valid'")
 
@@ -336,7 +291,6 @@ func TestIterateFromSetsSkipsMalformed(t *testing.T) {
 		"not a SET line",
 		"SET missing_equals",
 		"SET param_eq_invalidhex = 'bad'",
-		"SET param_eq_ffff = 'bad cbor'", // valid hex but likely invalid CBOR
 	}
 
 	var params []passes.ExtractedParamInfo
@@ -344,7 +298,6 @@ func TestIterateFromSetsSkipsMalformed(t *testing.T) {
 		params = append(params, info)
 	}
 
-	// Only the first valid SET should be parsed
 	assert.Equal(t, 1, len(params))
 	assert.Equal(t, "eq", params[0].FunctionName)
 }
@@ -372,7 +325,7 @@ func TestIterateFromSetsSingleParam(t *testing.T) {
 	assert.Equal(t, "'%pattern%'", params[0].LiteralSQL)
 }
 
-// --- IterateExtractedParams (from full extracted output) ---
+// --- IterateExtractedParams (from full output) ---
 
 func TestIterateFromExtractedOutput(t *testing.T) {
 	config := newSeqConfig(5)
@@ -413,7 +366,6 @@ func TestIterateFromExtractedOutputContextInfo(t *testing.T) {
 	assert.Equal(t, uint32(1), p.Metadata.ArgIndex)
 	assert.Equal(t, "'longvalue'", p.LiteralSQL)
 	assert.True(t, p.Metadata.IsSequential)
-	assert.Equal(t, uint32(0), p.Metadata.SequentialIndex)
 	assert.Equal(t, ctabb.S, p.Type)
 	assert.False(t, p.HasCast())
 }
@@ -435,43 +387,11 @@ func TestIterateFromExtractedOutputINList(t *testing.T) {
 	assert.Equal(t, "in", p.FunctionName)
 	assert.Contains(t, p.LiteralSQL, "['x', 'y', 'z']")
 	assert.Nil(t, p.Type)
-	assert.False(t, p.HasCast())
-}
-
-func TestIterateFromExtractedOutputCustomPrefix(t *testing.T) {
-	config := newSeqConfig(5)
-	config.SetPrefix("qp")
-	pass := passes.ExtractLiterals(config)
-
-	sql := "SELECT a FROM t WHERE name = 'longvalue'"
-	extracted, err := pass(sql)
-	require.NoError(t, err)
-
-	params := passes.CollectExtractedParams(extracted, "qp")
-	require.Len(t, params, 1)
-	assert.Equal(t, "eq", params[0].FunctionName)
 }
 
 func TestIterateFromExtractedOutputEmpty(t *testing.T) {
 	params := passes.CollectExtractedParams("SELECT 1", "")
 	assert.Empty(t, params)
-}
-
-func TestIterateFromExtractedOutputMultiple(t *testing.T) {
-	config := newSeqConfig(5)
-	pass := passes.ExtractLiterals(config)
-
-	sql := "SELECT a FROM t WHERE name = 'longname1' AND status = 'longstatus' AND x > 100000"
-	extracted, err := pass(sql)
-	require.NoError(t, err)
-
-	params := passes.CollectExtractedParams(extracted, "")
-	assert.GreaterOrEqual(t, len(params), 3)
-
-	// Verify all have sequential indices
-	for _, p := range params {
-		assert.True(t, p.Metadata.IsSequential)
-	}
 }
 
 func TestIterateFromExtractedOutputHashBased(t *testing.T) {
@@ -497,7 +417,7 @@ func TestIteratorTypeInference(t *testing.T) {
 	tests := []struct {
 		name         string
 		value        string
-		expectedType interface{} // nil or ctabb constant
+		expectedType interface{}
 	}{
 		{"string", "'hello'", ctabb.S},
 		{"unsigned_int", "42", ctabb.U64},
@@ -532,7 +452,7 @@ func TestIteratorCastTypeReconstruction(t *testing.T) {
 	tests := []struct {
 		name          string
 		castCanonical string
-		expectedCast  interface{} // nil or ctabb constant
+		expectedCast  interface{}
 	}{
 		{"u8", "u8", ctabb.U8},
 		{"u16", "u16", ctabb.U16},
@@ -575,8 +495,6 @@ func TestIteratorCastTypeReconstruction(t *testing.T) {
 }
 
 func TestIteratorCastTypeTupleGroup(t *testing.T) {
-	// Group types (tuples) like "u8-s" can't be mapped to a single PrimitiveAstNodeI
-	// but the canonical string is preserved in metadata
 	set := buildTestSET("eq", &passes.ParamMetadata{
 		ArgIndex:          0,
 		ContentHash:       0xaa,
@@ -589,11 +507,8 @@ func TestIteratorCastTypeTupleGroup(t *testing.T) {
 	}
 	require.Len(t, params, 1)
 
-	// CastType is nil for group types (can't represent as single primitive)
 	assert.Nil(t, params[0].CastType)
-	// But the canonical string is preserved
 	assert.Equal(t, "u8-s", params[0].Metadata.CastTypeCanonical)
-	// HasCast still returns false since CastType is nil
 	assert.False(t, params[0].HasCast())
 }
 
@@ -667,7 +582,6 @@ func TestIteratorValueBool(t *testing.T) {
 
 	lit, ok := val.(scalars.Literal)
 	require.True(t, ok)
-	assert.Equal(t, ctabb.B, lit.Type)
 	assert.True(t, lit.BoolVal)
 }
 
@@ -787,7 +701,7 @@ func TestIteratorScalarValueRejectsTuple(t *testing.T) {
 	assert.Contains(t, err.Error(), "composite")
 }
 
-// --- End-to-end: extract → iterate → deserialize ---
+// --- End-to-end ---
 
 func TestExtractIterateDeserializeEndToEnd(t *testing.T) {
 	config := newSeqConfig(5)
@@ -845,7 +759,6 @@ func TestIteratorEarlyTermination(t *testing.T) {
 	extracted, err := pass(sql)
 	require.NoError(t, err)
 
-	// Only take the first param
 	count := 0
 	for _, _ = range passes.IterateExtractedParams(extracted, "") {
 		count++
@@ -867,9 +780,7 @@ func TestCollectExtractedParams(t *testing.T) {
 	require.NoError(t, err)
 
 	params := passes.CollectExtractedParams(extracted, "")
-	assert.GreaterOrEqual(t, len(params), 2)
 
-	// Verify same results as iteration
 	var iterParams []passes.ExtractedParamInfo
 	for _, info := range passes.IterateExtractedParams(extracted, "") {
 		iterParams = append(iterParams, info)

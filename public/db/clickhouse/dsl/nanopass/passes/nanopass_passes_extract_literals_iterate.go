@@ -15,16 +15,16 @@ import (
 
 // ExtractedParamInfo holds parsed information about an extracted parameter.
 type ExtractedParamInfo struct {
-	// FullName is the complete parameter name (e.g. "param_eq_<hex>")
+	// FullName is the complete parameter name.
 	FullName string
 
-	// FunctionName is the context function/operator name (e.g. "eq", "like", "substring")
+	// FunctionName is the context function/operator name (e.g. "eq", "like", "substring").
 	FunctionName string
 
 	// Metadata is the decoded ParamMetadata from the name suffix.
 	Metadata ParamMetadata
 
-	// LiteralSQL is the raw SQL value text (e.g. "'hello'", "42", "['a', 'b', 'c']")
+	// LiteralSQL is the raw SQL value text (e.g. "'hello'", "42", "['a', 'b', 'c']").
 	LiteralSQL string
 
 	// Type is the canonical primitive type inferred from the literal value, or nil for composites.
@@ -194,20 +194,24 @@ func inferScalarType(sql string) canonicaltypes.PrimitiveAstNodeI {
 	return lit.Type
 }
 
+// parseCanonicalType parses a canonical type string (e.g. "u64", "u64h", "u8-s")
+// back into a PrimitiveAstNodeI. Returns nil for group types (tuples) and
+// unrecognized types — the canonical string is preserved in Metadata.CastTypeCanonical.
 func parseCanonicalType(canonical string) canonicaltypes.PrimitiveAstNodeI {
 	if canonical == "" {
 		return nil
 	}
-	// For group types (tuples with "-"), return nil — preserved in metadata string
+	// Group types (tuples like "u8-s") cannot be represented as a single PrimitiveAstNodeI
 	if strings.ContainsAny(canonical, "-_") {
 		return nil
 	}
-	// Map well-known canonical strings to ctabb constants
 	return ctabbFromString(canonical)
 }
 
+// ctabbFromString maps well-known canonical type strings to ctabb constants.
 func ctabbFromString(s string) canonicaltypes.PrimitiveAstNodeI {
 	switch s {
+	// Scalar numeric
 	case "u8":
 		return ctabb.U8
 	case "u16":
@@ -228,13 +232,16 @@ func ctabbFromString(s string) canonicaltypes.PrimitiveAstNodeI {
 		return ctabb.F32
 	case "f64":
 		return ctabb.F64
+
+	// Scalar string-class
 	case "s":
 		return ctabb.S
 	case "y":
 		return ctabb.Y
 	case "b":
 		return ctabb.B
-	// Homogenous arrays
+
+	// Homogenous arrays (h modifier)
 	case "u8h":
 		return ctabb.U8h
 	case "u16h":
@@ -257,30 +264,16 @@ func ctabbFromString(s string) canonicaltypes.PrimitiveAstNodeI {
 		return ctabb.F64h
 	case "sh":
 		return ctabb.Sh
+
+	// Temporal
+	case "z32":
+		return ctabb.Z32
+	case "z64":
+		return ctabb.Z64
+
 	default:
 		return nil
 	}
-}
-
-// parseSingleCanonicalPrimitive parses a single canonical primitive type string.
-// Returns nil if the string is not a recognized primitive.
-func parseSingleCanonicalPrimitive(s string) canonicaltypes.PrimitiveAstNodeI {
-	// This is intentionally kept simple. Complex parsing should use the
-	// canonical type ANTLR4 parser. For the common cases in ClickHouse:
-	//
-	// Numeric: u8, u16, u32, u64, i8, i16, i32, i64, f32, f64
-	// With byte order: u64l, i32n, etc.
-	// String: s, y, b
-	// With scalar modifier: u64h (array), sh (array of strings)
-	// Temporal: z32, z64, d32, t32
-
-	// For now, delegate to the scalars package for well-known types.
-	// This works because PrimitiveAstNodeI implements String() which returns
-	// the canonical representation.
-	//
-	// If this is insufficient, the caller should use the canonical type parser directly.
-	_ = s
-	return nil
 }
 
 // --- Deserialization ---

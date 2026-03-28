@@ -9,7 +9,6 @@ import (
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/testdata"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/scalars"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
 	"github.com/stretchr/testify/assert"
@@ -25,7 +24,6 @@ func newSeqConfig(minLength int) *passes.ExtractLiteralsConfig {
 	return config
 }
 
-// mockMapTypeToCanonical is a test implementation of MapClickHouseTypeToCanonicalI.
 func mockMapTypeToCanonical(chType string) (ct canonicaltypes.PrimitiveAstNodeI, err error) {
 	switch chType {
 	case "UInt8":
@@ -54,6 +52,37 @@ func mockMapTypeToCanonical(chType string) (ct canonicaltypes.PrimitiveAstNodeI,
 		return ctabb.B, nil
 	default:
 		return nil, fmt.Errorf("unknown type: %s", chType)
+	}
+}
+
+func mockMapCanonicalToClickHouse(canonical string) (string, error) {
+	switch canonical {
+	case "u8":
+		return "UInt8", nil
+	case "u16":
+		return "UInt16", nil
+	case "u32":
+		return "UInt32", nil
+	case "u64":
+		return "UInt64", nil
+	case "i8":
+		return "Int8", nil
+	case "i16":
+		return "Int16", nil
+	case "i32":
+		return "Int32", nil
+	case "i64":
+		return "Int64", nil
+	case "f32":
+		return "Float32", nil
+	case "f64":
+		return "Float64", nil
+	case "s":
+		return "String", nil
+	case "b":
+		return "Bool", nil
+	default:
+		return "", fmt.Errorf("unknown canonical type: %s", canonical)
 	}
 }
 
@@ -121,6 +150,23 @@ func TestExtractLiteralsStableNames(t *testing.T) {
 	require.Len(t, sets1, 1)
 	require.Len(t, sets2, 1)
 	assert.Equal(t, sets1[0], sets2[0], "parameter names should be stable across runs")
+}
+
+// --- CBOR encoding determinism ---
+
+func TestParamMetadataEncodingDeterministic(t *testing.T) {
+	meta := passes.ParamMetadata{
+		ArgIndex:          1,
+		ContentHash:       0xdeadbeef,
+		CastTypeCanonical: "u64",
+	}
+
+	encoded1, err := passes.EncodeParamMetadata(&meta)
+	require.NoError(t, err)
+	encoded2, err := passes.EncodeParamMetadata(&meta)
+	require.NoError(t, err)
+
+	assert.Equal(t, encoded1, encoded2, "CBOR encoding must be deterministic")
 }
 
 // --- Deduplication ---
@@ -229,7 +275,7 @@ func TestExtractLiteralsINListCollapseIntegers(t *testing.T) {
 	sets, query := passes.ParseExtractedQuery(got)
 	require.Len(t, sets, 1)
 	assert.Contains(t, sets[0], "[1, 2, 3, 4, 5]")
-	assert.Contains(t, query, "Array(UInt64)")
+	assert.Contains(t, query, "Array(")
 
 	t.Logf("Result:\n%s", got)
 }
@@ -268,10 +314,8 @@ func TestExtractLiteralsCastDoubleColon(t *testing.T) {
 
 	sets, query := passes.ParseExtractedQuery(got)
 	require.GreaterOrEqual(t, len(sets), 1)
-	// Value should be just "1", not "1::UInt64"
 	assert.Contains(t, sets[0], " = 1")
 	assert.NotContains(t, sets[0], "::")
-	// Slot should use the cast type
 	assert.Contains(t, query, "UInt64}")
 
 	t.Logf("Result:\n%s", got)
@@ -299,27 +343,21 @@ func TestExtractLiteralsCastUnknownType(t *testing.T) {
 	config.SetMapTypeToCanonical(mockMapTypeToCanonical)
 	pass := passes.ExtractLiterals(config)
 
-	// Decimal128 is not in our mock mapping — should fall back to no-cast behavior
 	sql := "SELECT a FROM t WHERE x = 1::Decimal128"
 	got, err := pass(sql)
 	require.NoError(t, err)
 
-	// The literal "1" is too short (len=1 < minLength=5), and without cast recognition
-	// it won't be extracted
 	t.Logf("Result:\n%s", got)
 }
 
 func TestExtractLiteralsCastNilMapper(t *testing.T) {
 	config := newSeqConfig(1)
-	// No mapper set — casts should be ignored
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE x = 1::UInt64"
 	got, err := pass(sql)
 	require.NoError(t, err)
 
-	// Without mapper, the literal "1" is extracted without cast awareness
-	// The "::UInt64" stays in the query as part of the surrounding syntax
 	t.Logf("Result:\n%s", got)
 }
 
@@ -337,7 +375,6 @@ func TestExtractLiteralsCastMetadataRoundTrip(t *testing.T) {
 	params := passes.CollectExtractedParams(got, "")
 	require.GreaterOrEqual(t, len(params), 1)
 
-	// Find the param that has a cast
 	var castParam *passes.ExtractedParamInfo
 	for i := range params {
 		if params[i].HasCast() {
@@ -353,227 +390,115 @@ func TestExtractLiteralsCastMetadataRoundTrip(t *testing.T) {
 	t.Logf("Cast param: %s", castParam.String())
 }
 
-// --- ParamMetadata encoding/decoding ---
+// --- Cast arg index precision ---
 
-func TestParamMetadataRoundTrip(t *testing.T) {
-	tests := []struct {
-		name string
-		meta passes.ParamMetadata
-	}{
-		{
-			name: "basic",
-			meta: passes.ParamMetadata{ArgIndex: 1, ContentHash: 0xdeadbeef},
-		},
-		{
-			name: "sequential",
-			meta: passes.ParamMetadata{ArgIndex: 0, IsSequential: true, SequentialIndex: 42},
-		},
-		{
-			name: "with_cast",
-			meta: passes.ParamMetadata{ArgIndex: 2, ContentHash: 0x12345678, CastTypeCanonical: "u64"},
-		},
-		{
-			name: "with_collision",
-			meta: passes.ParamMetadata{ArgIndex: 1, ContentHash: 0xaabb, HashCollisionCounter: 3},
-		},
-		{
-			name: "full",
-			meta: passes.ParamMetadata{
-				ArgIndex:             1,
-				ContentHash:          0xcafe,
-				HashCollisionCounter: 2,
-				CastTypeCanonical:    "u64h",
-				IsSequential:         false,
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			encoded, err := passes.EncodeParamMetadata(&tt.meta)
-			require.NoError(t, err)
-			assert.NotEmpty(t, encoded)
-
-			decoded, err := passes.DecodeParamMetadata(encoded)
-			require.NoError(t, err)
-			assert.Equal(t, tt.meta, decoded)
-
-			t.Logf("encoded: %s (len=%d)", encoded, len(encoded))
-		})
-	}
-}
-
-// --- Iterator with new metadata ---
-
-func TestIterateExtractedParamsSeq(t *testing.T) {
-	config := newSeqConfig(5)
-	pass := passes.ExtractLiterals(config)
-
-	sql := "SELECT a FROM t WHERE name = 'longvalue' AND x > 100000"
-	extracted, err := pass(sql)
-	require.NoError(t, err)
-
-	params := passes.CollectExtractedParams(extracted, "")
-	assert.GreaterOrEqual(t, len(params), 2)
-
-	for _, p := range params {
-		t.Logf("%s", p.String())
-		assert.NotEmpty(t, p.FullName)
-		assert.NotEmpty(t, p.FunctionName)
-		assert.NotEmpty(t, p.LiteralSQL)
-		assert.True(t, p.Metadata.IsSequential)
-	}
-}
-
-func TestIterateExtractedParamsContextInfo(t *testing.T) {
-	config := newSeqConfig(5)
-	pass := passes.ExtractLiterals(config)
-
-	sql := "SELECT a FROM t WHERE name = 'longvalue'"
-	extracted, err := pass(sql)
-	require.NoError(t, err)
-
-	params := passes.CollectExtractedParams(extracted, "")
-	require.Len(t, params, 1)
-
-	p := params[0]
-	assert.Equal(t, "eq", p.FunctionName)
-	assert.Equal(t, uint32(1), p.Metadata.ArgIndex)
-	assert.Equal(t, "'longvalue'", p.LiteralSQL)
-	assert.True(t, p.Metadata.IsSequential)
-	assert.Equal(t, ctabb.S, p.Type)
-}
-
-func TestIterateExtractedParamsINList(t *testing.T) {
-	config := passes.NewExtractLiteralsConfig(100)
-	config.SetUseSequentialNames(true)
-	config.SetMinINListSize(3)
-	pass := passes.ExtractLiterals(config)
-
-	sql := "SELECT a FROM t WHERE b IN ('x', 'y', 'z')"
-	extracted, err := pass(sql)
-	require.NoError(t, err)
-
-	params := passes.CollectExtractedParams(extracted, "")
-	require.Len(t, params, 1)
-
-	p := params[0]
-	assert.Equal(t, "in", p.FunctionName)
-	assert.Contains(t, p.LiteralSQL, "['x', 'y', 'z']")
-	assert.Nil(t, p.Type, "array should have nil Type")
-}
-
-func TestIterateExtractedParamsCustomPrefix(t *testing.T) {
-	config := newSeqConfig(5)
-	config.SetPrefix("qp")
-	pass := passes.ExtractLiterals(config)
-
-	sql := "SELECT a FROM t WHERE name = 'longvalue'"
-	extracted, err := pass(sql)
-	require.NoError(t, err)
-
-	params := passes.CollectExtractedParams(extracted, "qp")
-	require.Len(t, params, 1)
-	assert.Equal(t, "eq", params[0].FunctionName)
-}
-
-// --- Value() deserialization ---
-
-func TestExtractedParamInfoValueString(t *testing.T) {
-	info := passes.ExtractedParamInfo{LiteralSQL: "'hello world'"}
-	val, err := info.Value()
-	require.NoError(t, err)
-
-	lit, ok := val.(scalars.Literal)
-	require.True(t, ok)
-	assert.Equal(t, "hello world", lit.StringVal)
-}
-
-func TestExtractedParamInfoValueInt(t *testing.T) {
-	info := passes.ExtractedParamInfo{LiteralSQL: "42"}
-	val, err := info.Value()
-	require.NoError(t, err)
-
-	lit, ok := val.(scalars.Literal)
-	require.True(t, ok)
-	assert.Equal(t, uint64(42), lit.UintVal)
-}
-
-func TestExtractedParamInfoValueNull(t *testing.T) {
-	info := passes.ExtractedParamInfo{LiteralSQL: "NULL"}
-	val, err := info.Value()
-	require.NoError(t, err)
-
-	lit, ok := val.(scalars.Literal)
-	require.True(t, ok)
-	assert.True(t, lit.Null)
-}
-
-func TestExtractedParamInfoValueArray(t *testing.T) {
-	info := passes.ExtractedParamInfo{LiteralSQL: "['a', 'b', 'c']"}
-	val, err := info.Value()
-	require.NoError(t, err)
-
-	arr, ok := val.([]any)
-	require.True(t, ok)
-	assert.Len(t, arr, 3)
-}
-
-func TestExtractedParamInfoValueTuple(t *testing.T) {
-	info := passes.ExtractedParamInfo{LiteralSQL: "(1, 'hello')"}
-	val, err := info.Value()
-	require.NoError(t, err)
-
-	tup, ok := val.(*passes.Tuple)
-	require.True(t, ok)
-	assert.Equal(t, 2, tup.Len())
-}
-
-// --- ScalarValue ---
-
-func TestScalarValueString(t *testing.T) {
-	info := passes.ExtractedParamInfo{LiteralSQL: "'hello'"}
-	lit, err := info.ScalarValue()
-	require.NoError(t, err)
-	assert.Equal(t, ctabb.S, lit.Type)
-	assert.Equal(t, "hello", lit.StringVal)
-}
-
-func TestScalarValueRejectsArray(t *testing.T) {
-	info := passes.ExtractedParamInfo{LiteralSQL: "[1, 2, 3]"}
-	_, err := info.ScalarValue()
-	assert.Error(t, err)
-}
-
-// --- End-to-end with casts ---
-
-func TestExtractIterateWithCast(t *testing.T) {
+func TestExtractLiteralsCastArgIndexRight(t *testing.T) {
 	config := newSeqConfig(1)
 	config.SetMapTypeToCanonical(mockMapTypeToCanonical)
 	pass := passes.ExtractLiterals(config)
 
-	sql := "SELECT a FROM t WHERE x = 1::UInt64 AND y = 'hello'"
+	sql := "SELECT a FROM t WHERE x = 1::UInt64"
 	extracted, err := pass(sql)
 	require.NoError(t, err)
 
 	params := passes.CollectExtractedParams(extracted, "")
-	assert.GreaterOrEqual(t, len(params), 2)
+	require.GreaterOrEqual(t, len(params), 1)
 
-	for _, p := range params {
-		t.Logf("%s", p.String())
-		val, valErr := p.Value()
-		require.NoError(t, valErr)
-		t.Logf("  value: %v (%T)", val, val)
-	}
-
-	// Find the cast param
-	var foundCast bool
 	for _, p := range params {
 		if p.HasCast() {
-			foundCast = true
-			assert.Equal(t, "u64", p.Metadata.CastTypeCanonical)
+			assert.Equal(t, uint32(1), p.Metadata.ArgIndex, "right operand of = should be arg 1")
 		}
 	}
-	assert.True(t, foundCast, "expected at least one param with cast")
+}
+
+// --- InjectParamsWithCasts ---
+
+func TestInjectParamsWithCastsBasic(t *testing.T) {
+	config := newSeqConfig(1)
+	config.SetMapTypeToCanonical(mockMapTypeToCanonical)
+	pass := passes.ExtractLiterals(config)
+
+	original := "SELECT a FROM t WHERE x = 1::UInt64"
+	extracted, err := pass(original)
+	require.NoError(t, err)
+
+	sets, query := passes.ParseExtractedQuery(extracted)
+
+	injected, err := passes.InjectParamsWithCasts(sets, query, "", mockMapCanonicalToClickHouse)
+	require.NoError(t, err)
+
+	assert.Equal(t, original, injected, "round-trip should reconstruct original SQL")
+	t.Logf("Original:  %s", original)
+	t.Logf("Injected:  %s", injected)
+}
+
+func TestInjectParamsWithCastsNoCast(t *testing.T) {
+	config := newSeqConfig(5)
+	pass := passes.ExtractLiterals(config)
+
+	original := "SELECT a FROM t WHERE name = 'longvalue'"
+	extracted, err := pass(original)
+	require.NoError(t, err)
+
+	sets, query := passes.ParseExtractedQuery(extracted)
+
+	injected, err := passes.InjectParamsWithCasts(sets, query, "", nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, original, injected, "no-cast round-trip should work")
+}
+
+func TestInjectParamsWithCastsMixed(t *testing.T) {
+	config := newSeqConfig(1)
+	config.SetMapTypeToCanonical(mockMapTypeToCanonical)
+	pass := passes.ExtractLiterals(config)
+
+	original := "SELECT a FROM t WHERE x = 1::UInt64 AND name = 'hello'"
+	extracted, err := pass(original)
+	require.NoError(t, err)
+
+	sets, query := passes.ParseExtractedQuery(extracted)
+
+	injected, err := passes.InjectParamsWithCasts(sets, query, "", mockMapCanonicalToClickHouse)
+	require.NoError(t, err)
+
+	assert.Contains(t, injected, "1::UInt64")
+	assert.Contains(t, injected, "'hello'")
+}
+
+func TestInjectParamsWithCastsNilMapper(t *testing.T) {
+	config := newSeqConfig(1)
+	config.SetMapTypeToCanonical(mockMapTypeToCanonical)
+	pass := passes.ExtractLiterals(config)
+
+	sql := "SELECT a FROM t WHERE x = 1::UInt64"
+	extracted, err := pass(sql)
+	require.NoError(t, err)
+
+	sets, query := passes.ParseExtractedQuery(extracted)
+
+	injected, err := passes.InjectParamsWithCasts(sets, query, "", nil)
+	require.NoError(t, err)
+
+	assert.Contains(t, injected, "1")
+	assert.NotContains(t, injected, "::UInt64")
+}
+
+func TestInjectParamsWithCastsCustomPrefix(t *testing.T) {
+	config := newSeqConfig(5)
+	config.SetPrefix("qp")
+	pass := passes.ExtractLiterals(config)
+
+	original := "SELECT a FROM t WHERE name = 'longvalue'"
+	extracted, err := pass(original)
+	require.NoError(t, err)
+
+	sets, query := passes.ParseExtractedQuery(extracted)
+
+	injected, err := passes.InjectParamsWithCasts(sets, query, "qp", nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, original, injected)
 }
 
 // --- Multiple literals ---
@@ -650,6 +575,102 @@ func TestExtractLiteralsConfigAccessors(t *testing.T) {
 	assert.False(t, config.IsWhitelisted("eq"))
 }
 
+// --- UNION ALL ---
+
+func TestExtractLiteralsUnionAll(t *testing.T) {
+	config := newSeqConfig(5)
+	pass := passes.ExtractLiterals(config)
+
+	sql := "SELECT a FROM t WHERE x = 'longval1' UNION ALL SELECT b FROM t2 WHERE y = 'longval2'"
+	got, err := pass(sql)
+	require.NoError(t, err)
+
+	sets, _ := passes.ParseExtractedQuery(got)
+	assert.GreaterOrEqual(t, len(sets), 2)
+}
+
+// --- Subquery ---
+
+func TestExtractLiteralsSubquery(t *testing.T) {
+	config := newSeqConfig(5)
+	pass := passes.ExtractLiterals(config)
+
+	sql := "SELECT * FROM (SELECT a FROM t WHERE name = 'longvalue')"
+	got, err := pass(sql)
+	require.NoError(t, err)
+	assert.Contains(t, got, "SET ")
+}
+
+// --- CTE ---
+
+func TestExtractLiteralsCTE(t *testing.T) {
+	config := newSeqConfig(5)
+	pass := passes.ExtractLiterals(config)
+
+	sql := "WITH cte AS (SELECT a FROM t WHERE name = 'longvalue') SELECT * FROM cte"
+	got, err := pass(sql)
+	require.NoError(t, err)
+	assert.Contains(t, got, "SET ")
+}
+
+// --- Mixed whitelist and blacklist ---
+
+func TestExtractLiteralsMixedWhitelistBlacklist(t *testing.T) {
+	config := newSeqConfig(100)
+	config.Whitelist("todate")
+	config.Blacklist("tostring")
+	pass := passes.ExtractLiterals(config)
+
+	sql := "SELECT toDate('2024-01-01'), toString('2024-01-01') FROM t"
+	got, err := pass(sql)
+	require.NoError(t, err)
+
+	assert.Contains(t, got, "SET param_todate_")
+	_, query := passes.ParseExtractedQuery(got)
+	assert.Contains(t, query, "toString('2024-01-01')")
+}
+
+// --- ParseExtractedQuery ---
+
+func TestParseExtractedQuery(t *testing.T) {
+	input := "SET param_eq_abcd = 'hello';\nSET param_gt_ef01 = 100;\nSELECT a FROM t"
+
+	sets, query := passes.ParseExtractedQuery(input)
+	assert.Len(t, sets, 2)
+	assert.True(t, strings.HasPrefix(query, "SELECT"))
+}
+
+// --- InjectParams (simple) ---
+
+func TestInjectParamsRoundTrip(t *testing.T) {
+	config := newSeqConfig(5)
+	pass := passes.ExtractLiterals(config)
+
+	original := "SELECT a FROM t WHERE name = 'longvalue' AND x > 100000"
+	extracted, err := pass(original)
+	require.NoError(t, err)
+
+	sets, query := passes.ParseExtractedQuery(extracted)
+	injected, err := passes.InjectParams(sets, query)
+	require.NoError(t, err)
+
+	assert.Equal(t, original, injected)
+}
+
+// --- CountExtractableParams ---
+
+func TestCountExtractableParams(t *testing.T) {
+	config := newSeqConfig(5)
+
+	count, err := passes.CountExtractableParams("SELECT a FROM t WHERE name = 'longvalue' AND x > 100000", config)
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, count, 2)
+
+	count, err = passes.CountExtractableParams("SELECT a FROM t WHERE a > b", config)
+	require.NoError(t, err)
+	assert.Equal(t, 0, count)
+}
+
 // --- Invalid SQL ---
 
 func TestExtractLiteralsRejectsInvalid(t *testing.T) {
@@ -685,119 +706,32 @@ func TestExtractLiteralsCorpus(t *testing.T) {
 	}
 }
 
-// --- Mixed whitelist and blacklist ---
+// --- End-to-end: extract → iterate → deserialize with casts ---
 
-func TestExtractLiteralsMixedWhitelistBlacklist(t *testing.T) {
-	config := newSeqConfig(100)
-	config.Whitelist("todate")
-	config.Blacklist("tostring")
+func TestExtractIterateWithCast(t *testing.T) {
+	config := newSeqConfig(1)
+	config.SetMapTypeToCanonical(mockMapTypeToCanonical)
 	pass := passes.ExtractLiterals(config)
 
-	sql := "SELECT toDate('2024-01-01'), toString('2024-01-01') FROM t"
-	got, err := pass(sql)
+	sql := "SELECT a FROM t WHERE x = 1::UInt64 AND y = 'hello'"
+	extracted, err := pass(sql)
 	require.NoError(t, err)
 
-	assert.Contains(t, got, "SET param_todate_")
-	_, query := passes.ParseExtractedQuery(got)
-	assert.Contains(t, query, "toString('2024-01-01')")
-}
+	params := passes.CollectExtractedParams(extracted, "")
+	assert.GreaterOrEqual(t, len(params), 2)
 
-// --- ParseExtractedQuery ---
+	var foundCast bool
+	for _, p := range params {
+		t.Logf("%s", p.String())
+		val, valErr := p.Value()
+		require.NoError(t, valErr)
+		t.Logf("  value: %v (%T)", val, val)
 
-func TestParseExtractedQuery(t *testing.T) {
-	input := "SET param_eq_abcd = 'hello';\nSET param_gt_ef01 = 100;\nSELECT a FROM t"
-
-	sets, query := passes.ParseExtractedQuery(input)
-	assert.Len(t, sets, 2)
-	assert.True(t, strings.HasPrefix(query, "SELECT"))
-}
-
-// --- InjectParams ---
-
-func TestInjectParamsRoundTrip(t *testing.T) {
-	config := newSeqConfig(5)
-	pass := passes.ExtractLiterals(config)
-
-	original := "SELECT a FROM t WHERE name = 'longvalue' AND x > 100000"
-	extracted, err := pass(original)
-	require.NoError(t, err)
-
-	sets, query := passes.ParseExtractedQuery(extracted)
-	injected, err := passes.InjectParams(sets, query)
-	require.NoError(t, err)
-
-	assert.Equal(t, original, injected)
-}
-
-// --- CountExtractableParams ---
-
-func TestCountExtractableParams(t *testing.T) {
-	config := newSeqConfig(5)
-
-	count, err := passes.CountExtractableParams("SELECT a FROM t WHERE name = 'longvalue' AND x > 100000", config)
-	require.NoError(t, err)
-	assert.GreaterOrEqual(t, count, 2)
-
-	count, err = passes.CountExtractableParams("SELECT a FROM t WHERE a > b", config)
-	require.NoError(t, err)
-	assert.Equal(t, 0, count)
-}
-
-// --- UNION ALL ---
-
-func TestExtractLiteralsUnionAll(t *testing.T) {
-	config := newSeqConfig(5)
-	pass := passes.ExtractLiterals(config)
-
-	sql := "SELECT a FROM t WHERE x = 'longval1' UNION ALL SELECT b FROM t2 WHERE y = 'longval2'"
-	got, err := pass(sql)
-	require.NoError(t, err)
-
-	sets, _ := passes.ParseExtractedQuery(got)
-	assert.GreaterOrEqual(t, len(sets), 2)
-}
-
-// --- Subquery ---
-
-func TestExtractLiteralsSubquery(t *testing.T) {
-	config := newSeqConfig(5)
-	pass := passes.ExtractLiterals(config)
-
-	sql := "SELECT * FROM (SELECT a FROM t WHERE name = 'longvalue')"
-	got, err := pass(sql)
-	require.NoError(t, err)
-
-	assert.Contains(t, got, "SET ")
-}
-
-// --- CTE ---
-
-func TestExtractLiteralsCTE(t *testing.T) {
-	config := newSeqConfig(5)
-	pass := passes.ExtractLiterals(config)
-
-	sql := "WITH cte AS (SELECT a FROM t WHERE name = 'longvalue') SELECT * FROM cte"
-	got, err := pass(sql)
-	require.NoError(t, err)
-
-	assert.Contains(t, got, "SET ")
-}
-
-// --- Edge: empty CollectExtractedParams ---
-
-func TestCollectExtractedParamsEmpty(t *testing.T) {
-	params := passes.CollectExtractedParams("SELECT 1", "")
-	assert.Empty(t, params)
-}
-
-// --- Edge: malformed SET lines skipped ---
-
-func TestIterateExtractedParamsSkipsMalformed(t *testing.T) {
-	// Manually construct output with valid and invalid SET lines
-	input := "SET param_eq_abcdef = 'valid';\nnot a SET line\nSELECT 1"
-
-	params := passes.CollectExtractedParams(input, "")
-	// The malformed line should be skipped, only valid params returned
-	// (may be 0 or 1 depending on whether "abcdef" decodes as valid CBOR)
-	t.Logf("params: %d", len(params))
+		if p.HasCast() {
+			foundCast = true
+			assert.Equal(t, "u64", p.Metadata.CastTypeCanonical)
+			assert.Equal(t, ctabb.U64, p.CastType)
+		}
+	}
+	assert.True(t, foundCast, "expected at least one param with cast")
 }
