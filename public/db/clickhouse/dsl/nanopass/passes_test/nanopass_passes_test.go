@@ -326,3 +326,52 @@ func TestDebugFuncArgContext(t *testing.T) {
 		return true
 	})
 }
+func TestDebugINList(t *testing.T) {
+	sqls := []string{
+		"SELECT a FROM t WHERE b IN ('x', 'y', 'z')",
+		"SELECT a FROM t WHERE b IN (1, 2, 3)",
+	}
+	for _, sql := range sqls {
+		t.Logf("--- SQL: %s", sql)
+		pr, err := nanopass.Parse(sql)
+		require.NoError(t, err)
+		nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
+			typeName := fmt.Sprintf("%T", ctx)
+			if strings.Contains(typeName, "Precedence3") || strings.Contains(typeName, "ExprList") {
+				t.Logf("  %T text=%q", ctx, ctx.GetText())
+				for i := 0; i < ctx.GetChildCount(); i++ {
+					t.Logf("    child[%d]: %T text=%q", i, ctx.GetChild(i), ctx.GetChild(i))
+				}
+			}
+			return true
+		})
+	}
+}
+func TestDebugCasts(t *testing.T) {
+	t.Skip("diagnostic only")
+	sqls := []string{
+		"SELECT 1::UInt64",
+		"SELECT [0]::Array(UInt64)",
+		"SELECT CAST(1, 'UInt64')",
+		"SELECT CAST([0], 'Array(UInt64)')",
+		"SELECT CAST(1 AS UInt64)",
+	}
+	for _, sql := range sqls {
+		t.Logf("--- SQL: %s", sql)
+		pr, err := nanopass.Parse(sql)
+		if err != nil {
+			t.Logf("  PARSE ERROR: %v", err)
+			continue
+		}
+		nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
+			typeName := fmt.Sprintf("%T", ctx)
+			if strings.Contains(typeName, "Cast") || strings.Contains(typeName, "TypeExpr") || strings.Contains(typeName, "Literal") {
+				t.Logf("  %T text=%q", ctx, ctx.GetText())
+				for i := 0; i < ctx.GetChildCount(); i++ {
+					t.Logf("    child[%d]: %T text=%q", i, ctx.GetChild(i), ctx.GetChild(i))
+				}
+			}
+			return true
+		})
+	}
+}

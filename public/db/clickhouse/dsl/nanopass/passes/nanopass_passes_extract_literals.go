@@ -9,30 +9,34 @@ import (
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/scalars"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+	"github.com/zeebo/xxh3"
 )
+
+// MapClickHouseTypeToCanonicalI is a function that maps a ClickHouse type name
+// (e.g. "UInt64", "Array(String)") to a canonical type.
+// Return nil if the type cannot be represented.
+type MapClickHouseTypeToCanonicalI func(chType string) (ct canonicaltypes.PrimitiveAstNodeI, err error)
 
 // ExtractLiteralsConfig configures the literal extraction pass.
 type ExtractLiteralsConfig struct {
-	// minLength is the minimum character length of a literal to trigger extraction.
-	// Literals shorter than this are left inline unless the parent function is whitelisted.
-	minLength int
-
-	// funcPolicy maps normalized function/operator names to extraction policy.
-	// true = blacklisted (never extract), false = whitelisted (always extract).
-	// Functions not in the map follow the minLength threshold.
-	funcPolicy map[string]bool
-
-	// prefix is the prefix for generated parameter names. Default: "param".
-	prefix string
+	minLength          int
+	funcPolicy         map[string]bool
+	prefix             string
+	minINListSize      int
+	useSequentialNames bool
+	mapTypeToCanonical MapClickHouseTypeToCanonicalI
 }
 
 // NewExtractLiteralsConfig creates a config with sensible defaults.
 func NewExtractLiteralsConfig(minLength int) (inst *ExtractLiteralsConfig) {
 	inst = &ExtractLiteralsConfig{
-		minLength:  minLength,
-		funcPolicy: make(map[string]bool),
-		prefix:     "param",
+		minLength:     minLength,
+		funcPolicy:    make(map[string]bool),
+		prefix:        "param",
+		minINListSize: 3,
 	}
 	return
 }
@@ -57,15 +61,41 @@ func (inst *ExtractLiteralsConfig) Prefix() string {
 	return inst.prefix
 }
 
-// Whitelist marks a function/operator so its literal arguments are ALWAYS extracted,
-// regardless of MinLength. The name is normalized (lowercased, trimmed).
+// SetMinINListSize sets the minimum number of literal elements in an IN list
+// for the list to be collapsed into a single Array parameter.
+// Set to 0 to disable IN-list collapsing.
+func (inst *ExtractLiteralsConfig) SetMinINListSize(size int) {
+	inst.minINListSize = size
+}
+
+// MinINListSize returns the minimum IN-list size for collapsing.
+func (inst *ExtractLiteralsConfig) MinINListSize() int {
+	return inst.minINListSize
+}
+
+// SetUseSequentialNames enables sequential naming (param_eq_<cbor with s=0>, s=1, ...)
+// instead of content-hash based naming. Useful for deterministic tests.
+func (inst *ExtractLiteralsConfig) SetUseSequentialNames(use bool) {
+	inst.useSequentialNames = use
+}
+
+// UseSequentialNames returns whether sequential naming is enabled.
+func (inst *ExtractLiteralsConfig) UseSequentialNames() bool {
+	return inst.useSequentialNames
+}
+
+// SetMapTypeToCanonical sets the function used to map ClickHouse type names to canonical types.
+// Required for cast-aware type inference. If nil, casts are ignored.
+func (inst *ExtractLiteralsConfig) SetMapTypeToCanonical(fn MapClickHouseTypeToCanonicalI) {
+	inst.mapTypeToCanonical = fn
+}
+
+// Whitelist marks a function/operator so its literal arguments are ALWAYS extracted.
 func (inst *ExtractLiteralsConfig) Whitelist(name string) {
 	inst.funcPolicy[normalizeFunctionName(name)] = false
 }
 
 // Blacklist marks a function/operator so its literal arguments are NEVER extracted.
-// Blacklist takes priority over Whitelist — calling Blacklist after Whitelist on the
-// same name will override the whitelist entry.
 func (inst *ExtractLiteralsConfig) Blacklist(name string) {
 	inst.funcPolicy[normalizeFunctionName(name)] = true
 }
@@ -87,40 +117,55 @@ func (inst *ExtractLiteralsConfig) IsWhitelisted(name string) bool {
 	return found && !blocked
 }
 
-// normalizeFunctionName normalizes a function/operator name for policy lookup.
-// Lowercases and trims whitespace.
 func normalizeFunctionName(name string) string {
 	return strings.ToLower(strings.TrimSpace(name))
 }
 
-// extractedParam represents a literal that has been extracted into a query parameter.
+// --- Internal types ---
+
 type extractedParam struct {
-	name       string // param name (e.g. "param_eq_0")
-	value      string // literal text as it appears in SQL (e.g. "'hello'")
-	typeName   string // ClickHouse type (e.g. "String", "Int64", "Float64")
-	contextKey string // dedup key: contextName + argIndex + literalText
+	name     string
+	value    string
+	typeName string
+	castType canonicaltypes.PrimitiveAstNodeI
+	meta     ParamMetadata
 }
 
-// literalCandidate represents a literal found during CST walking.
 type literalCandidate struct {
 	node        *grammar.ColumnExprLiteralContext
-	contextName string // function or operator name
-	argIndex    int    // argument position
-	literalText string // raw SQL text of the literal
-	typeName    string // inferred ClickHouse type
+	castNode    *grammar.ColumnExprCastContext
+	contextName string
+	argIndex    int
+	literalText string
+	typeName    string
+	castType    canonicaltypes.PrimitiveAstNodeI
 	blacklisted bool
 	whitelisted bool
 }
+
+type inListCandidate struct {
+	tupleNode    *grammar.ColumnExprTupleContext
+	castNode     *grammar.ColumnExprCastContext
+	literalTexts []string
+	elementType  string
+	castType     canonicaltypes.PrimitiveAstNodeI
+	blacklisted  bool
+	whitelisted  bool
+}
+
+// --- ExtractLiterals Pass ---
 
 // ExtractLiterals returns a Pass that extracts long string/number literals
 // into SET param_xxx = ... statements, replacing them with {param_xxx: Type}
 // parameter slot syntax.
 //
-// Deduplication: identical literals in the same context (same function/operator
-// and argument position) share a single parameter. The parameter name encodes
-// the context: param_<func>_<argIndex>.
+// Parameter names encode structured metadata (arg index, content hash or sequential
+// index, and optional canonical cast type) as hex-encoded CBOR in the name suffix.
+// Format: <prefix>_<context>_<hex(cbor(ParamMetadata))>
 //
-// The pass prepends SET statements to the query. Each SET is on its own line.
+// When a literal has an explicit cast (e.g. 1::UInt64), the cast type is mapped
+// to a canonical type and stored in the parameter metadata. The entire cast expression
+// is replaced, and the ClickHouse type from the cast is used in the parameter slot.
 func ExtractLiterals(config *ExtractLiteralsConfig) nanopass.Pass {
 	return func(sql string) (result string, err error) {
 		pr, err := nanopass.Parse(sql)
@@ -129,37 +174,69 @@ func ExtractLiterals(config *ExtractLiteralsConfig) nanopass.Pass {
 			return
 		}
 
-		// Phase 1: Collect candidates
-		candidates := collectLiteralCandidates(pr, config)
-		if len(candidates) == 0 {
-			result = sql
-			return
+		// Phase 1a: Collect IN-list candidates
+		inListCandidates := collectINListCandidates(pr, config)
+
+		// Build exclusion set for literals inside collapsed IN lists
+		inListNodes := make(map[*grammar.ColumnExprLiteralContext]bool)
+		for _, ilc := range inListCandidates {
+			for _, litNode := range collectLiteralNodesInTuple(ilc.tupleNode) {
+				inListNodes[litNode] = true
+			}
 		}
 
-		// Phase 2: Filter by length/whitelist/blacklist
+		// Phase 1b: Collect individual literal candidates
+		candidates := collectLiteralCandidates(pr, config, inListNodes)
+
+		// Phase 2: Filter
 		filtered := filterCandidates(candidates, config)
-		if len(filtered) == 0 {
+		filteredINLists := filterINListCandidates(inListCandidates, config)
+
+		if len(filtered) == 0 && len(filteredINLists) == 0 {
 			result = sql
 			return
 		}
 
-		// Phase 3: Assign parameter names with deduplication
-		params, paramByNode := assignParamNames(filtered, config.prefix)
-
-		// Phase 4: Rewrite the SQL
+		// Phase 3: Assign parameter names
+		var allParams []extractedParam
 		rw := nanopass.NewRewriter(pr)
-		for _, cand := range filtered {
-			p := paramByNode[cand.node]
-			slotText := fmt.Sprintf("{%s: %s}", p.name, p.typeName)
-			nanopass.ReplaceNode(rw, cand.node, slotText)
+
+		if len(filtered) > 0 {
+			params, paramByNode := assignParamNames(filtered, config)
+			allParams = append(allParams, params...)
+
+			for _, cand := range filtered {
+				p := paramByNode[cand.node]
+				slotText := fmt.Sprintf("{%s: %s}", p.name, p.typeName)
+				if cand.castNode != nil {
+					nanopass.ReplaceNode(rw, cand.castNode, slotText)
+				} else {
+					nanopass.ReplaceNode(rw, cand.node, slotText)
+				}
+			}
+		}
+
+		if len(filteredINLists) > 0 {
+			inParams := assignINListParamNames(filteredINLists, config)
+			allParams = append(allParams, inParams...)
+
+			for i, ilc := range filteredINLists {
+				p := &inParams[i]
+				slotText := fmt.Sprintf("{%s: %s}", p.name, p.typeName)
+				if ilc.castNode != nil {
+					nanopass.ReplaceNode(rw, ilc.castNode, slotText)
+				} else {
+					nanopass.ReplaceNode(rw, ilc.tupleNode, slotText)
+				}
+			}
 		}
 
 		rewritten := nanopass.GetText(rw)
 
 		// Phase 5: Prepend SET statements
 		var sb strings.Builder
-		sb.Grow(len(rewritten) + len(params)*40)
-		for _, p := range params {
+		sb.Grow(len(rewritten) + len(allParams)*50)
+		for _, p := range allParams {
 			sb.WriteString("SET ")
 			sb.WriteString(p.name)
 			sb.WriteString(" = ")
@@ -173,16 +250,167 @@ func ExtractLiterals(config *ExtractLiteralsConfig) nanopass.Pass {
 	}
 }
 
-// --- Phase 1: Collect candidates ---
+// --- Phase 1a: IN-list collection ---
 
-func collectLiteralCandidates(pr *nanopass.ParseResult, config *ExtractLiteralsConfig) (candidates []literalCandidate) {
+func collectINListCandidates(pr *nanopass.ParseResult, config *ExtractLiteralsConfig) (candidates []inListCandidate) {
+	if config.minINListSize <= 0 {
+		return
+	}
+
+	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
+		prec3, ok := ctx.(*grammar.ColumnExprPrecedence3Context)
+		if !ok {
+			return true
+		}
+
+		if !isINExpression(prec3) {
+			return true
+		}
+
+		if config.IsBlacklisted("in") {
+			return true
+		}
+
+		tupleNode := findTupleInPrecedence3(prec3)
+		if tupleNode == nil {
+			return true
+		}
+
+		// Check if the tuple (or prec3) is inside a cast
+		var castNode *grammar.ColumnExprCastContext
+		var castType canonicaltypes.PrimitiveAstNodeI
+		if castCtx, ok := prec3.GetParent().(*grammar.ColumnExprCastContext); ok && config.mapTypeToCanonical != nil {
+			castTypeText := extractCastTypeText(castCtx)
+			if castTypeText != "" {
+				ct, mapErr := config.mapTypeToCanonical(castTypeText)
+				if mapErr == nil && ct != nil {
+					castNode = castCtx
+					castType = ct
+				}
+			}
+		}
+
+		literalTexts, elementType, allLiterals := extractTupleLiterals(pr, tupleNode)
+		if !allLiterals {
+			return true
+		}
+
+		if len(literalTexts) < config.minINListSize {
+			return true
+		}
+
+		candidates = append(candidates, inListCandidate{
+			tupleNode:    tupleNode,
+			castNode:     castNode,
+			literalTexts: literalTexts,
+			elementType:  elementType,
+			castType:     castType,
+			whitelisted:  config.IsWhitelisted("in"),
+		})
+
+		return true
+	})
+	return
+}
+
+func isINExpression(prec3 *grammar.ColumnExprPrecedence3Context) bool {
+	for i := 0; i < prec3.GetChildCount(); i++ {
+		if term, ok := prec3.GetChild(i).(*antlr.TerminalNodeImpl); ok {
+			if term.GetSymbol().GetTokenType() == grammar.ClickHouseLexerIN {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func findTupleInPrecedence3(prec3 *grammar.ColumnExprPrecedence3Context) *grammar.ColumnExprTupleContext {
+	for i := 0; i < prec3.GetChildCount(); i++ {
+		if tuple, ok := prec3.GetChild(i).(*grammar.ColumnExprTupleContext); ok {
+			return tuple
+		}
+	}
+	return nil
+}
+
+func extractTupleLiterals(pr *nanopass.ParseResult, tuple *grammar.ColumnExprTupleContext) (texts []string, elementType string, allLiterals bool) {
+	var exprList *grammar.ColumnExprListContext
+	for i := 0; i < tuple.GetChildCount(); i++ {
+		if el, ok := tuple.GetChild(i).(*grammar.ColumnExprListContext); ok {
+			exprList = el
+			break
+		}
+	}
+	if exprList == nil {
+		return nil, "", false
+	}
+
+	texts = make([]string, 0, exprList.GetChildCount())
+	allLiterals = true
+	elementType = ""
+
+	for i := 0; i < exprList.GetChildCount(); i++ {
+		colsExpr, ok := exprList.GetChild(i).(*grammar.ColumnsExprColumnContext)
+		if !ok {
+			continue
+		}
+
+		if colsExpr.GetChildCount() == 0 {
+			allLiterals = false
+			return
+		}
+
+		litExpr, ok := colsExpr.GetChild(0).(*grammar.ColumnExprLiteralContext)
+		if !ok {
+			allLiterals = false
+			return
+		}
+
+		litCtx := findLiteralChild(litExpr)
+		if litCtx == nil || litCtx.NULL_SQL() != nil {
+			allLiterals = false
+			return
+		}
+
+		thisType := inferClickHouseType(litCtx)
+		if elementType == "" {
+			elementType = thisType
+		} else if elementType != thisType {
+			elementType = "String"
+		}
+
+		texts = append(texts, nanopass.NodeText(pr, litExpr))
+	}
+
+	if len(texts) == 0 {
+		allLiterals = false
+	}
+	return
+}
+
+func collectLiteralNodesInTuple(tuple *grammar.ColumnExprTupleContext) (nodes []*grammar.ColumnExprLiteralContext) {
+	nanopass.WalkCST(tuple, func(ctx antlr.ParserRuleContext) bool {
+		if litExpr, ok := ctx.(*grammar.ColumnExprLiteralContext); ok {
+			nodes = append(nodes, litExpr)
+		}
+		return true
+	})
+	return
+}
+
+// --- Phase 1b: Individual literal collection ---
+
+func collectLiteralCandidates(pr *nanopass.ParseResult, config *ExtractLiteralsConfig, excludeNodes map[*grammar.ColumnExprLiteralContext]bool) (candidates []literalCandidate) {
 	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
 		litExpr, ok := ctx.(*grammar.ColumnExprLiteralContext)
 		if !ok {
 			return true
 		}
 
-		// Skip NULL — not useful to parameterize
+		if excludeNodes[litExpr] {
+			return true
+		}
+
 		litCtx := findLiteralChild(litExpr)
 		if litCtx == nil {
 			return true
@@ -193,15 +421,41 @@ func collectLiteralCandidates(pr *nanopass.ParseResult, config *ExtractLiteralsC
 
 		literalText := nanopass.NodeText(pr, litExpr)
 		typeName := inferClickHouseType(litCtx)
-		contextName, argIndex := resolveContext(litExpr)
+
+		// Check for cast context
+		var castNode *grammar.ColumnExprCastContext
+		var castType canonicaltypes.PrimitiveAstNodeI
+		if castCtx, isCast := litExpr.GetParent().(*grammar.ColumnExprCastContext); isCast && config.mapTypeToCanonical != nil {
+			castTypeText := extractCastTypeText(castCtx)
+			if castTypeText != "" {
+				ct, mapErr := config.mapTypeToCanonical(castTypeText)
+				if mapErr == nil && ct != nil {
+					castNode = castCtx
+					castType = ct
+					typeName = castTypeText // use the cast type for the {param: Type} slot
+				}
+			}
+		}
+
+		// Resolve context — use cast's parent if inside a cast
+		var contextName string
+		var argIndex int
+		if castNode != nil {
+			contextName, argIndex = resolveContextFromParent(castNode)
+		} else {
+			contextName, argIndex = resolveContext(litExpr)
+		}
+
 		normalizedCtx := normalizeFunctionName(contextName)
 
 		candidates = append(candidates, literalCandidate{
 			node:        litExpr,
+			castNode:    castNode,
 			contextName: contextName,
 			argIndex:    argIndex,
 			literalText: literalText,
 			typeName:    typeName,
+			castType:    castType,
 			blacklisted: config.IsBlacklisted(normalizedCtx),
 			whitelisted: config.IsWhitelisted(normalizedCtx),
 		})
@@ -210,6 +464,23 @@ func collectLiteralCandidates(pr *nanopass.ParseResult, config *ExtractLiteralsC
 	})
 	return
 }
+
+// --- Cast type extraction ---
+
+func extractCastTypeText(castCtx *grammar.ColumnExprCastContext) string {
+	for i := 0; i < castCtx.GetChildCount(); i++ {
+		child := castCtx.GetChild(i)
+		switch c := child.(type) {
+		case *grammar.ColumnTypeExprSimpleContext:
+			return c.GetText()
+		case *grammar.ColumnTypeExprComplexContext:
+			return c.GetText()
+		}
+	}
+	return ""
+}
+
+// --- Helpers ---
 
 func findLiteralChild(litExpr *grammar.ColumnExprLiteralContext) *grammar.LiteralContext {
 	for i := 0; i < litExpr.GetChildCount(); i++ {
@@ -224,49 +495,62 @@ func inferClickHouseType(lit *grammar.LiteralContext) string {
 	if lit.STRING_LITERAL() != nil {
 		return "String"
 	}
+	if lit.NULL_SQL() != nil {
+		return "Nullable(Nothing)"
+	}
 	if lit.NumberLiteral() != nil {
 		text := lit.NumberLiteral().GetText()
-		if strings.Contains(text, ".") {
-			return "Float64"
-		}
-		if strings.HasPrefix(text, "0x") || strings.HasPrefix(text, "0X") {
-			return "UInt64"
-		}
-		if strings.HasPrefix(text, "-") {
+		scalar, err := scalars.UnmarshalScalarLiteral(text)
+		if err != nil {
 			return "Int64"
+		}
+		if scalar.Type != nil {
+			switch scalar.Type.String() {
+			case "u64":
+				return "UInt64"
+			case "i64":
+				return "Int64"
+			case "f64":
+				return "Float64"
+			}
 		}
 		return "Int64"
 	}
 	return "String"
 }
 
-// resolveContext determines the function/operator context and argument position
-// of a literal expression.
+// --- Context resolution ---
+
 func resolveContext(litExpr *grammar.ColumnExprLiteralContext) (contextName string, argIndex int) {
 	parent := litExpr.GetParent()
 	if parent == nil {
 		return "expr", 0
 	}
+	return resolveContextFromNode(parent)
+}
 
+func resolveContextFromParent(node antlr.ParserRuleContext) (contextName string, argIndex int) {
+	parent := node.GetParent()
+	if parent == nil {
+		return "expr", 0
+	}
+	return resolveContextFromNode(parent)
+}
+
+func resolveContextFromNode(parent antlr.Tree) (contextName string, argIndex int) {
 	switch p := parent.(type) {
 	case *grammar.ColumnArgExprContext:
 		return resolveFuncArgContext(p)
-
 	case *grammar.ColumnExprPrecedence1Context:
-		return resolveOperatorContext(p, litExpr)
-
+		return resolveOperatorContextGeneric(p)
 	case *grammar.ColumnExprPrecedence2Context:
-		return resolveOperatorContext(p, litExpr)
-
+		return resolveOperatorContextGeneric(p)
 	case *grammar.ColumnExprPrecedence3Context:
-		return resolveOperatorContext(p, litExpr)
-
+		return resolveOperatorContextGeneric(p)
 	case *grammar.ColumnsExprColumnContext:
-		return resolveColumnsExprContext(p, litExpr)
-
+		return resolveColumnsExprContextGeneric(p)
 	case *grammar.ColumnExprBetweenContext:
-		return resolveBetweenContext(p, litExpr)
-
+		return resolveBetweenContextGeneric(p)
 	default:
 		return "expr", 0
 	}
@@ -278,7 +562,6 @@ func resolveFuncArgContext(argExpr *grammar.ColumnArgExprContext) (contextName s
 		return "func", 0
 	}
 
-	// Find the argument index (skipping commas)
 	argIndex = 0
 	for i := 0; i < argList.GetChildCount(); i++ {
 		child := argList.GetChild(i)
@@ -290,7 +573,6 @@ func resolveFuncArgContext(argExpr *grammar.ColumnArgExprContext) (contextName s
 		}
 	}
 
-	// Find the function name — argList's parent should be ColumnExprFunctionContext
 	funcParent := argList.(antlr.RuleNode).GetParent()
 	if funcParent == nil {
 		return "func", argIndex
@@ -315,16 +597,11 @@ func resolveFuncArgContext(argExpr *grammar.ColumnArgExprContext) (contextName s
 	return
 }
 
-func resolveOperatorContext(parent antlr.ParserRuleContext, litExpr *grammar.ColumnExprLiteralContext) (contextName string, argIndex int) {
+func resolveOperatorContextGeneric(parent antlr.ParserRuleContext) (contextName string, argIndex int) {
 	opName := "op"
-	litIdx := -1
 
-	exprIdx := 0
 	for i := 0; i < parent.GetChildCount(); i++ {
 		child := parent.GetChild(i)
-		if child == litExpr {
-			litIdx = exprIdx
-		}
 		if term, ok := child.(*antlr.TerminalNodeImpl); ok {
 			tok := term.GetSymbol()
 			switch tok.GetTokenType() {
@@ -360,24 +637,29 @@ func resolveOperatorContext(parent antlr.ParserRuleContext, litExpr *grammar.Col
 				opName = "in"
 			}
 		}
-		if _, isExpr := child.(antlr.ParserRuleContext); isExpr {
-			exprIdx++
+	}
+
+	// Determine arg index: count expr children before the target
+	// For now, assume the literal/cast is the last expr child (right operand = index 1)
+	exprCount := 0
+	for i := 0; i < parent.GetChildCount(); i++ {
+		if _, isExpr := parent.GetChild(i).(antlr.ParserRuleContext); isExpr {
+			exprCount++
 		}
 	}
-
-	if litIdx < 0 {
-		litIdx = 0
+	if exprCount >= 2 {
+		argIndex = 1
 	}
-	return opName, litIdx
+
+	return opName, argIndex
 }
 
-func resolveColumnsExprContext(parent *grammar.ColumnsExprColumnContext, litExpr *grammar.ColumnExprLiteralContext) (contextName string, argIndex int) {
+func resolveColumnsExprContextGeneric(parent *grammar.ColumnsExprColumnContext) (contextName string, argIndex int) {
 	gp := parent.GetParent()
 	if gp == nil {
 		return "select", 0
 	}
 
-	// If grandparent is ColumnExprListContext whose parent is Precedence3 (IN), it's an IN list
 	if exprList, ok := gp.(*grammar.ColumnExprListContext); ok {
 		ggp := exprList.GetParent()
 		if _, isParen := ggp.(*grammar.ColumnExprPrecedence3Context); isParen {
@@ -395,7 +677,6 @@ func resolveColumnsExprContext(parent *grammar.ColumnsExprColumnContext, litExpr
 		}
 	}
 
-	// Otherwise it's a SELECT list item
 	if exprList, ok := gp.(*grammar.ColumnExprListContext); ok {
 		argIndex = 0
 		for i := 0; i < exprList.GetChildCount(); i++ {
@@ -411,20 +692,12 @@ func resolveColumnsExprContext(parent *grammar.ColumnsExprColumnContext, litExpr
 	return "select", argIndex
 }
 
-func resolveBetweenContext(parent *grammar.ColumnExprBetweenContext, litExpr *grammar.ColumnExprLiteralContext) (contextName string, argIndex int) {
+func resolveBetweenContextGeneric(parent *grammar.ColumnExprBetweenContext) (contextName string, argIndex int) {
 	contextName = "between"
-	argIndex = 0
-	exprIdx := 0
-	for i := 0; i < parent.GetChildCount(); i++ {
-		child := parent.GetChild(i)
-		if child == litExpr {
-			argIndex = exprIdx
-			break
-		}
-		if _, isExpr := child.(antlr.ParserRuleContext); isExpr {
-			exprIdx++
-		}
-	}
+	// BETWEEN has 3 expr children: value, low, high
+	// We can't easily determine which one is the literal without the original node ref
+	// Default to argIndex 1 (low bound)
+	argIndex = 1
 	return
 }
 
@@ -443,29 +716,51 @@ func filterCandidates(candidates []literalCandidate, config *ExtractLiteralsConf
 	return
 }
 
-// --- Phase 3: Assign names with deduplication ---
+func filterINListCandidates(candidates []inListCandidate, config *ExtractLiteralsConfig) (filtered []inListCandidate) {
+	filtered = make([]inListCandidate, 0, len(candidates))
+	for _, c := range candidates {
+		if c.blacklisted {
+			continue
+		}
+		filtered = append(filtered, c)
+	}
+	return
+}
 
-func assignParamNames(candidates []literalCandidate, prefix string) (params []extractedParam, paramByNode map[*grammar.ColumnExprLiteralContext]*extractedParam) {
+// --- Phase 3: Assign names ---
+
+func literalHash(literalText string) uint64 {
+	h := xxh3.HashString128(literalText)
+	return h.Lo
+}
+
+func assignParamNames(candidates []literalCandidate, config *ExtractLiteralsConfig) (params []extractedParam, paramByNode map[*grammar.ColumnExprLiteralContext]*extractedParam) {
 	paramByNode = make(map[*grammar.ColumnExprLiteralContext]*extractedParam, len(candidates))
 
 	type dedupKey struct {
 		contextName string
 		argIndex    int
 		literalText string
+		castCanon   string
 	}
 	dedupMap := make(map[dedupKey]*extractedParam)
-
-	// Track base names to detect collisions
-	baseNameUsed := make(map[string]*extractedParam)
-
+	usedNames := make(map[string]bool)
 	params = make([]extractedParam, 0, len(candidates))
+	seqCounter := uint32(0)
 
 	for i := range candidates {
 		c := &candidates[i]
+
+		castCanon := ""
+		if c.castType != nil {
+			castCanon = c.castType.String()
+		}
+
 		key := dedupKey{
 			contextName: c.contextName,
 			argIndex:    c.argIndex,
 			literalText: c.literalText,
+			castCanon:   castCanon,
 		}
 
 		if existing, found := dedupMap[key]; found {
@@ -473,34 +768,124 @@ func assignParamNames(candidates []literalCandidate, prefix string) (params []ex
 			continue
 		}
 
-		baseName := fmt.Sprintf("%s_%s_%d", prefix, sanitizeName(c.contextName), c.argIndex)
-		finalName := baseName
+		meta := ParamMetadata{
+			ArgIndex:          uint32(c.argIndex),
+			CastTypeCanonical: castCanon,
+		}
 
-		if prev, used := baseNameUsed[baseName]; used {
-			if prev.value != c.literalText {
-				counter := 2
-				for {
-					finalName = fmt.Sprintf("%s_%d", baseName, counter)
-					if _, exists := baseNameUsed[finalName]; !exists {
-						break
-					}
-					counter++
+		if config.useSequentialNames {
+			meta.IsSequential = true
+			meta.SequentialIndex = seqCounter
+			seqCounter++
+		} else {
+			meta.ContentHash = literalHash(c.literalText)
+		}
+
+		name, buildErr := BuildParamName(config.prefix, c.contextName, &meta)
+		if buildErr != nil {
+			continue
+		}
+
+		// Handle name collisions
+		if usedNames[name] {
+			meta.HashCollisionCounter = 2
+			for {
+				name, buildErr = BuildParamName(config.prefix, c.contextName, &meta)
+				if buildErr != nil {
+					break
 				}
+				if !usedNames[name] {
+					break
+				}
+				meta.HashCollisionCounter++
 			}
 		}
 
 		p := extractedParam{
-			name:       finalName,
-			value:      c.literalText,
-			typeName:   c.typeName,
-			contextKey: fmt.Sprintf("%s_%d_%s", c.contextName, c.argIndex, c.literalText),
+			name:     name,
+			value:    c.literalText,
+			typeName: c.typeName,
+			castType: c.castType,
+			meta:     meta,
 		}
 
 		params = append(params, p)
 		paramPtr := &params[len(params)-1]
 		dedupMap[key] = paramPtr
-		baseNameUsed[finalName] = paramPtr
+		usedNames[name] = true
 		paramByNode[c.node] = paramPtr
+	}
+
+	return
+}
+
+func assignINListParamNames(candidates []inListCandidate, config *ExtractLiteralsConfig) (params []extractedParam) {
+	usedNames := make(map[string]bool)
+	params = make([]extractedParam, 0, len(candidates))
+	seqCounter := uint32(0)
+
+	for _, c := range candidates {
+		arrayValue := "[" + strings.Join(c.literalTexts, ", ") + "]"
+
+		castCanon := ""
+		if c.castType != nil {
+			castCanon = c.castType.String()
+		}
+
+		typeName := fmt.Sprintf("Array(%s)", c.elementType)
+		if c.castType != nil {
+			// Use the cast type text for the slot
+			castTypeText := ""
+			if c.castNode != nil {
+				castTypeText = extractCastTypeText(c.castNode)
+			}
+			if castTypeText != "" {
+				typeName = castTypeText
+			}
+		}
+
+		meta := ParamMetadata{
+			ArgIndex:          0,
+			CastTypeCanonical: castCanon,
+		}
+
+		if config.useSequentialNames {
+			meta.IsSequential = true
+			meta.SequentialIndex = seqCounter
+			seqCounter++
+		} else {
+			meta.ContentHash = literalHash(arrayValue)
+		}
+
+		name, buildErr := BuildParamName(config.prefix, "in", &meta)
+		if buildErr != nil {
+			continue
+		}
+
+		if usedNames[name] {
+			meta.HashCollisionCounter = 2
+			for {
+				name, buildErr = BuildParamName(config.prefix, "in", &meta)
+				if buildErr != nil {
+					break
+				}
+				if !usedNames[name] {
+					break
+				}
+				meta.HashCollisionCounter++
+			}
+		}
+
+		p := extractedParam{
+			name:     name,
+			value:    arrayValue,
+			typeName: typeName,
+			castType: c.castType,
+			meta:     meta,
+		}
+
+		params = append(params, p)
+		usedNames[name] = true
 	}
 
 	return
@@ -526,7 +911,7 @@ func sanitizeName(name string) string {
 // --- Analysis ---
 
 // AnalyzeExtractions returns the parameter extractions that would be performed
-// without modifying the SQL. Useful for dry-run / preview.
+// without modifying the SQL.
 func AnalyzeExtractions(sql string, config *ExtractLiteralsConfig) (extractions []ExtractionInfo, err error) {
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
@@ -534,32 +919,59 @@ func AnalyzeExtractions(sql string, config *ExtractLiteralsConfig) (extractions 
 		return
 	}
 
-	candidates := collectLiteralCandidates(pr, config)
-	filtered := filterCandidates(candidates, config)
-	if len(filtered) == 0 {
-		return
-	}
-
-	_, paramByNode := assignParamNames(filtered, config.prefix)
-
-	seen := make(map[string]bool)
-	extractions = make([]ExtractionInfo, 0, len(filtered))
-	for _, c := range filtered {
-		p := paramByNode[c.node]
-		if seen[p.name] {
-			continue
+	inListCandidates := collectINListCandidates(pr, config)
+	inListNodes := make(map[*grammar.ColumnExprLiteralContext]bool)
+	for _, ilc := range inListCandidates {
+		for _, litNode := range collectLiteralNodesInTuple(ilc.tupleNode) {
+			inListNodes[litNode] = true
 		}
-		seen[p.name] = true
-		extractions = append(extractions, ExtractionInfo{
-			ParamName:   p.name,
-			Value:       p.value,
-			TypeName:    p.typeName,
-			ContextName: c.contextName,
-			ArgIndex:    c.argIndex,
-			Line:        c.node.GetStart().GetLine(),
-			Column:      c.node.GetStart().GetColumn(),
-		})
 	}
+
+	candidates := collectLiteralCandidates(pr, config, inListNodes)
+	filtered := filterCandidates(candidates, config)
+	filteredINLists := filterINListCandidates(inListCandidates, config)
+
+	extractions = make([]ExtractionInfo, 0, len(filtered)+len(filteredINLists))
+
+	if len(filtered) > 0 {
+		_, paramByNode := assignParamNames(filtered, config)
+		seen := make(map[string]bool)
+		for _, c := range filtered {
+			p := paramByNode[c.node]
+			if seen[p.name] {
+				continue
+			}
+			seen[p.name] = true
+			extractions = append(extractions, ExtractionInfo{
+				ParamName:   p.name,
+				Value:       p.value,
+				TypeName:    p.typeName,
+				ContextName: c.contextName,
+				ArgIndex:    c.argIndex,
+				Line:        c.node.GetStart().GetLine(),
+				Column:      c.node.GetStart().GetColumn(),
+				CastType:    c.castType,
+			})
+		}
+	}
+
+	if len(filteredINLists) > 0 {
+		inParams := assignINListParamNames(filteredINLists, config)
+		for i, ilc := range filteredINLists {
+			p := &inParams[i]
+			extractions = append(extractions, ExtractionInfo{
+				ParamName:   p.name,
+				Value:       p.value,
+				TypeName:    p.typeName,
+				ContextName: "in",
+				ArgIndex:    0,
+				Line:        ilc.tupleNode.GetStart().GetLine(),
+				Column:      ilc.tupleNode.GetStart().GetColumn(),
+				CastType:    ilc.castType,
+			})
+		}
+	}
+
 	return
 }
 
@@ -572,11 +984,16 @@ type ExtractionInfo struct {
 	ArgIndex    int
 	Line        int
 	Column      int
+	CastType    canonicaltypes.PrimitiveAstNodeI
 }
 
 func (inst *ExtractionInfo) String() string {
-	return fmt.Sprintf("SET %s = %s; -- %s arg %d at line %d:%d (type %s)",
-		inst.ParamName, inst.Value, inst.ContextName, inst.ArgIndex, inst.Line, inst.Column, inst.TypeName)
+	castStr := ""
+	if inst.CastType != nil {
+		castStr = fmt.Sprintf(" cast=%s", inst.CastType.String())
+	}
+	return fmt.Sprintf("SET %s = %s; -- %s arg %d at line %d:%d (type %s%s)",
+		inst.ParamName, inst.Value, inst.ContextName, inst.ArgIndex, inst.Line, inst.Column, inst.TypeName, castStr)
 }
 
 // --- Convenience ---
@@ -595,8 +1012,7 @@ func ParseExtractedQuery(extracted string) (sets []string, query string) {
 	return
 }
 
-// CountExtractableParams returns the number of unique parameters that would be
-// extracted from the query.
+// CountExtractableParams returns the number of unique parameters that would be extracted.
 func CountExtractableParams(sql string, config *ExtractLiteralsConfig) (count int, err error) {
 	extractions, err := AnalyzeExtractions(sql, config)
 	if err != nil {
@@ -608,7 +1024,7 @@ func CountExtractableParams(sql string, config *ExtractLiteralsConfig) (count in
 
 // InjectParams is the inverse of ExtractLiterals — it takes SET param = value
 // lines and a query with {param: Type} slots and produces a single query with
-// literals inlined.
+// literals inlined. Does NOT reconstruct casts — use InjectParamsWithCasts for that.
 func InjectParams(sets []string, query string) (result string, err error) {
 	paramMap := make(map[string]string, len(sets))
 	for _, set := range sets {
