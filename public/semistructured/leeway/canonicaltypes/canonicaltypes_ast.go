@@ -27,6 +27,12 @@ func addNumber[N constraints.Unsigned](s *strings.Builder, num N) {
 	ns := strconv.FormatUint(uint64(num), 10)
 	s.WriteString(ns)
 }
+func addIfNonzeroNumber[N constraints.Unsigned](s *strings.Builder, num N) {
+	if num > 0 {
+		ns := strconv.FormatUint(uint64(num), 10)
+		s.WriteString(ns)
+	}
+}
 func addIfNonzeroNumber2[R ~rune, N constraints.Unsigned](s *strings.Builder, r R, num N) {
 	if r != 0 {
 		s.WriteRune(rune(r))
@@ -57,6 +63,9 @@ func (inst StringAstNode) IsSignature() bool {
 	return false
 }
 
+func (inst StringAstNode) IsNetworkNode() bool {
+	return false
+}
 func (inst StringAstNode) String() string {
 	s := &strings.Builder{}
 	addIfNonzero(s, inst.BaseType)
@@ -95,6 +104,9 @@ func (inst TemporalTypeAstNode) IsMachineNumericNode() bool {
 }
 func (inst TemporalTypeAstNode) IsPrimitive() bool {
 	return true
+}
+func (inst TemporalTypeAstNode) IsNetworkNode() bool {
+	return false
 }
 
 func (inst TemporalTypeAstNode) String() string {
@@ -146,6 +158,9 @@ func (inst MachineNumericTypeAstNode) IsValid() bool {
 	return true
 }
 func (inst MachineNumericTypeAstNode) IsSignature() bool {
+	return false
+}
+func (inst MachineNumericTypeAstNode) IsNetworkNode() bool {
 	return false
 }
 func (inst MachineNumericTypeAstNode) String() string {
@@ -301,4 +316,74 @@ func NewSignatureAstNode(members []AstNodeI) SignatureAstNode {
 	return SignatureAstNode{
 		members: members,
 	}
+}
+
+func (inst NetworkTypeAstNode) IsNetworkNode() bool {
+	return true
+}
+func (inst NetworkTypeAstNode) IsStringNode() bool {
+	return false
+}
+
+func (inst NetworkTypeAstNode) IsTemporalNode() bool {
+	return false
+}
+
+func (inst NetworkTypeAstNode) IsMachineNumericNode() bool {
+	return false
+}
+
+func (inst NetworkTypeAstNode) IsScalar() bool {
+	return inst.ScalarModifier == ScalarModifierNone
+}
+
+func (inst NetworkTypeAstNode) IsSignature() bool {
+	return false
+}
+
+func (inst NetworkTypeAstNode) IsPrimitive() bool {
+	return true
+}
+
+func (inst NetworkTypeAstNode) IsValid() bool {
+	switch inst.BaseType {
+	case BaseTypeNetworkIPv4:
+		if inst.CIDRWidth > 32 {
+			return false
+		}
+	case BaseTypeNetworkIPv6:
+		if inst.CIDRWidth > 128 {
+			return false
+		}
+	default:
+		return false
+	}
+	switch inst.ScalarModifier {
+	case ScalarModifierNone, ScalarModifierSet, ScalarModifierHomogenousArray:
+	default:
+		return false
+	}
+	return true
+}
+
+func (inst NetworkTypeAstNode) String() string {
+	s := &strings.Builder{}
+	addIfNonzero(s, inst.BaseType)
+	addIfNonzeroNumber(s, inst.CIDRWidth)
+	addIfNonzero(s, inst.ScalarModifier)
+	return s.String()
+}
+func (inst NetworkTypeAstNode) IterateMembers() iter.Seq[PrimitiveAstNodeI] {
+	return func(yield func(PrimitiveAstNodeI) bool) {
+		yield(inst)
+	}
+}
+func (inst NetworkTypeAstNode) MarshalCBOR() (data []byte, err error) {
+	return cbor.Marshal(inst.String())
+}
+
+func (inst NetworkTypeAstNode) GenerateGoCode(w io.Writer) (err error) {
+	_, err = fmt.Fprintf(w, "NetworkTypeAstNode{BaseType: %s,CIDRWidth: %d, ScalarModifier: %s}",
+		formatGoRune(inst.BaseType), inst.CIDRWidth, formatGoRune(inst.ScalarModifier))
+	return
 }

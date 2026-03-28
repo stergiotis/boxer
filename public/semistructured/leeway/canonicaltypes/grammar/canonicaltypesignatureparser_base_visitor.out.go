@@ -1,4 +1,4 @@
-// Code generated from CanonicalTypeSignatureParser.g4 by ANTLR 4.13.1. DO NOT EDIT.
+// Code generated from CanonicalTypeSignatureParser.g4 by ANTLR 4.13.2. DO NOT EDIT.
 
 package grammar // CanonicalTypeSignatureParser
 import "github.com/antlr4-go/antlr/v4"
@@ -16,6 +16,10 @@ func (v *BaseCanonicalTypeSignatureParserVisitor) VisitBaseMachineNumeric(ctx *B
 }
 
 func (v *BaseCanonicalTypeSignatureParserVisitor) VisitBaseTemporal(ctx *BaseTemporalContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseCanonicalTypeSignatureParserVisitor) VisitBaseNetwork(ctx *BaseNetworkContext) interface{} {
 	return v.VisitChildren(ctx)
 }
 
@@ -40,6 +44,10 @@ func (v *BaseCanonicalTypeSignatureParserVisitor) VisitCanonicalTypeTemporal(ctx
 }
 
 func (v *BaseCanonicalTypeSignatureParserVisitor) VisitCanonicalTypeMachineNumeric(ctx *CanonicalTypeMachineNumericContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseCanonicalTypeSignatureParserVisitor) VisitCanonicalTypeNetwork(ctx *CanonicalTypeNetworkContext) interface{} {
 	return v.VisitChildren(ctx)
 }
 

@@ -88,3 +88,25 @@ func (inst WidthModifierE) String() string {
 	}
 	return string(inst)
 }
+
+type BaseTypeNetworkE rune
+
+const (
+	BaseTypeNetworkNone BaseTypeNetworkE = 0
+	BaseTypeNetworkIPv4 BaseTypeNetworkE = 'v'
+	BaseTypeNetworkIPv6 BaseTypeNetworkE = 'w'
+)
+
+func (inst BaseTypeNetworkE) String() string {
+	switch inst {
+	case BaseTypeNetworkNone:
+		return "<none>"
+	case BaseTypeNetworkIPv4:
+		return "ipv4"
+	case BaseTypeNetworkIPv6:
+		return "ipv6"
+	}
+	return string(inst)
+}
+
+const CIDRModifier rune = 'c'

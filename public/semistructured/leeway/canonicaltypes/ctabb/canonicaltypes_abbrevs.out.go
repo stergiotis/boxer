@@ -1,9 +1,8 @@
+/home/spx/repo/boxer/public/semistructured/leeway/canonicaltypes/ctabb
 // Code generated; Leeway CT (github.com/stergiotis/boxer/public/app) DO NOT EDIT.
 
 package ctabb
-
 import "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
-
 var U8 = canonicaltypes.MachineNumericTypeAstNode{BaseType: 'u', Width: 8, ByteOrderModifier: 0, ScalarModifier: 0}
 var I8 = canonicaltypes.MachineNumericTypeAstNode{BaseType: 'i', Width: 8, ByteOrderModifier: 0, ScalarModifier: 0}
 var F8 = canonicaltypes.MachineNumericTypeAstNode{BaseType: 'f', Width: 8, ByteOrderModifier: 0, ScalarModifier: 0}
@@ -112,15 +111,15 @@ var F32nm = canonicaltypes.MachineNumericTypeAstNode{BaseType: 'f', Width: 32, B
 var U64nm = canonicaltypes.MachineNumericTypeAstNode{BaseType: 'u', Width: 64, ByteOrderModifier: 'n', ScalarModifier: 'm'}
 var I64nm = canonicaltypes.MachineNumericTypeAstNode{BaseType: 'i', Width: 64, ByteOrderModifier: 'n', ScalarModifier: 'm'}
 var F64nm = canonicaltypes.MachineNumericTypeAstNode{BaseType: 'f', Width: 64, ByteOrderModifier: 'n', ScalarModifier: 'm'}
-var B = canonicaltypes.StringAstNode{BaseType: 'b', WidthModifier: 0, Width: 0, ScalarModifier: 0}
-var Y = canonicaltypes.StringAstNode{BaseType: 'y', WidthModifier: 0, Width: 0, ScalarModifier: 0}
-var S = canonicaltypes.StringAstNode{BaseType: 's', WidthModifier: 0, Width: 0, ScalarModifier: 0}
-var Bh = canonicaltypes.StringAstNode{BaseType: 'b', WidthModifier: 0, Width: 0, ScalarModifier: 'h'}
-var Yh = canonicaltypes.StringAstNode{BaseType: 'y', WidthModifier: 0, Width: 0, ScalarModifier: 'h'}
-var Sh = canonicaltypes.StringAstNode{BaseType: 's', WidthModifier: 0, Width: 0, ScalarModifier: 'h'}
-var Bm = canonicaltypes.StringAstNode{BaseType: 'b', WidthModifier: 0, Width: 0, ScalarModifier: 'm'}
-var Ym = canonicaltypes.StringAstNode{BaseType: 'y', WidthModifier: 0, Width: 0, ScalarModifier: 'm'}
-var Sm = canonicaltypes.StringAstNode{BaseType: 's', WidthModifier: 0, Width: 0, ScalarModifier: 'm'}
+var B = canonicaltypes.StringAstNode{BaseType: 'b',WidthModifier: 0, Width: 0, ScalarModifier: 0}
+var Y = canonicaltypes.StringAstNode{BaseType: 'y',WidthModifier: 0, Width: 0, ScalarModifier: 0}
+var S = canonicaltypes.StringAstNode{BaseType: 's',WidthModifier: 0, Width: 0, ScalarModifier: 0}
+var Bh = canonicaltypes.StringAstNode{BaseType: 'b',WidthModifier: 0, Width: 0, ScalarModifier: 'h'}
+var Yh = canonicaltypes.StringAstNode{BaseType: 'y',WidthModifier: 0, Width: 0, ScalarModifier: 'h'}
+var Sh = canonicaltypes.StringAstNode{BaseType: 's',WidthModifier: 0, Width: 0, ScalarModifier: 'h'}
+var Bm = canonicaltypes.StringAstNode{BaseType: 'b',WidthModifier: 0, Width: 0, ScalarModifier: 'm'}
+var Ym = canonicaltypes.StringAstNode{BaseType: 'y',WidthModifier: 0, Width: 0, ScalarModifier: 'm'}
+var Sm = canonicaltypes.StringAstNode{BaseType: 's',WidthModifier: 0, Width: 0, ScalarModifier: 'm'}
 var Z32 = canonicaltypes.TemporalTypeAstNode{BaseType: 'z', Width: 32, ScalarModifier: 0}
 var D32 = canonicaltypes.TemporalTypeAstNode{BaseType: 'd', Width: 32, ScalarModifier: 0}
 var T32 = canonicaltypes.TemporalTypeAstNode{BaseType: 't', Width: 32, ScalarModifier: 0}
@@ -139,3 +138,42 @@ var T32m = canonicaltypes.TemporalTypeAstNode{BaseType: 't', Width: 32, ScalarMo
 var Z64m = canonicaltypes.TemporalTypeAstNode{BaseType: 'z', Width: 64, ScalarModifier: 'm'}
 var D64m = canonicaltypes.TemporalTypeAstNode{BaseType: 'd', Width: 64, ScalarModifier: 'm'}
 var T64m = canonicaltypes.TemporalTypeAstNode{BaseType: 't', Width: 64, ScalarModifier: 'm'}
+var V = canonicaltypes.NetworkTypeAstNode{BaseType: 'v',CIDRWidth: 0, ScalarModifier: 0}
+var W = canonicaltypes.NetworkTypeAstNode{BaseType: 'w',CIDRWidth: 0, ScalarModifier: 0}
+var V8 = canonicaltypes.NetworkTypeAstNode{BaseType: 'v',CIDRWidth: 8, ScalarModifier: 0}
+var W8 = canonicaltypes.NetworkTypeAstNode{BaseType: 'w',CIDRWidth: 8, ScalarModifier: 0}
+var V16 = canonicaltypes.NetworkTypeAstNode{BaseType: 'v',CIDRWidth: 16, ScalarModifier: 0}
+var W16 = canonicaltypes.NetworkTypeAstNode{BaseType: 'w',CIDRWidth: 16, ScalarModifier: 0}
+var V24 = canonicaltypes.NetworkTypeAstNode{BaseType: 'v',CIDRWidth: 24, ScalarModifier: 0}
+var W24 = canonicaltypes.NetworkTypeAstNode{BaseType: 'w',CIDRWidth: 24, ScalarModifier: 0}
+var V32 = canonicaltypes.NetworkTypeAstNode{BaseType: 'v',CIDRWidth: 32, ScalarModifier: 0}
+var W32 = canonicaltypes.NetworkTypeAstNode{BaseType: 'w',CIDRWidth: 32, ScalarModifier: 0}
+var W48 = canonicaltypes.NetworkTypeAstNode{BaseType: 'w',CIDRWidth: 48, ScalarModifier: 0}
+var W64 = canonicaltypes.NetworkTypeAstNode{BaseType: 'w',CIDRWidth: 64, ScalarModifier: 0}
+var W128 = canonicaltypes.NetworkTypeAstNode{BaseType: 'w',CIDRWidth: 128, ScalarModifier: 0}
+var Vh = canonicaltypes.NetworkTypeAstNode{BaseType: 'v',CIDRWidth: 0, ScalarModifier: 'h'}
+var Wh = canonicaltypes.NetworkTypeAstNode{BaseType: 'w',CIDRWidth: 0, ScalarModifier: 'h'}
+var V8h = canonicaltypes.NetworkTypeAstNode{BaseType: 'v',CIDRWidth: 8, ScalarModifier: 'h'}
+var W8h = canonicaltypes.NetworkTypeAstNode{BaseType: 'w',CIDRWidth: 8, ScalarModifier: 'h'}
+var V16h = canonicaltypes.NetworkTypeAstNode{BaseType: 'v',CIDRWidth: 16, ScalarModifier: 'h'}
+var W16h = canonicaltypes.NetworkTypeAstNode{BaseType: 'w',CIDRWidth: 16, ScalarModifier: 'h'}
+var V24h = canonicaltypes.NetworkTypeAstNode{BaseType: 'v',CIDRWidth: 24, ScalarModifier: 'h'}
+var W24h = canonicaltypes.NetworkTypeAstNode{BaseType: 'w',CIDRWidth: 24, ScalarModifier: 'h'}
+var V32h = canonicaltypes.NetworkTypeAstNode{BaseType: 'v',CIDRWidth: 32, ScalarModifier: 'h'}
+var W32h = canonicaltypes.NetworkTypeAstNode{BaseType: 'w',CIDRWidth: 32, ScalarModifier: 'h'}
+var W48h = canonicaltypes.NetworkTypeAstNode{BaseType: 'w',CIDRWidth: 48, ScalarModifier: 'h'}
+var W64h = canonicaltypes.NetworkTypeAstNode{BaseType: 'w',CIDRWidth: 64, ScalarModifier: 'h'}
+var W128h = canonicaltypes.NetworkTypeAstNode{BaseType: 'w',CIDRWidth: 128, ScalarModifier: 'h'}
+var Vm = canonicaltypes.NetworkTypeAstNode{BaseType: 'v',CIDRWidth: 0, ScalarModifier: 'm'}
+var Wm = canonicaltypes.NetworkTypeAstNode{BaseType: 'w',CIDRWidth: 0, ScalarModifier: 'm'}
+var V8m = canonicaltypes.NetworkTypeAstNode{BaseType: 'v',CIDRWidth: 8, ScalarModifier: 'm'}
+var W8m = canonicaltypes.NetworkTypeAstNode{BaseType: 'w',CIDRWidth: 8, ScalarModifier: 'm'}
+var V16m = canonicaltypes.NetworkTypeAstNode{BaseType: 'v',CIDRWidth: 16, ScalarModifier: 'm'}
+var W16m = canonicaltypes.NetworkTypeAstNode{BaseType: 'w',CIDRWidth: 16, ScalarModifier: 'm'}
+var V24m = canonicaltypes.NetworkTypeAstNode{BaseType: 'v',CIDRWidth: 24, ScalarModifier: 'm'}
+var W24m = canonicaltypes.NetworkTypeAstNode{BaseType: 'w',CIDRWidth: 24, ScalarModifier: 'm'}
+var V32m = canonicaltypes.NetworkTypeAstNode{BaseType: 'v',CIDRWidth: 32, ScalarModifier: 'm'}
+var W32m = canonicaltypes.NetworkTypeAstNode{BaseType: 'w',CIDRWidth: 32, ScalarModifier: 'm'}
+var W48m = canonicaltypes.NetworkTypeAstNode{BaseType: 'w',CIDRWidth: 48, ScalarModifier: 'm'}
+var W64m = canonicaltypes.NetworkTypeAstNode{BaseType: 'w',CIDRWidth: 64, ScalarModifier: 'm'}
+var W128m = canonicaltypes.NetworkTypeAstNode{BaseType: 'w',CIDRWidth: 128, ScalarModifier: 'm'}

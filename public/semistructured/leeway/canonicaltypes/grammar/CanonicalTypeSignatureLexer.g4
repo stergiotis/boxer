@@ -17,6 +17,8 @@ SET : 'm'; // m for german "menge"
 LITTLE_ENDIAN : 'l';
 BIG_ENDIAN : 'n'; // network byte order
 FIXED_MODIFIER : 'x';
+IPV4 : 'v';
+IPV6 : 'w';
 
 /*NONZERO_DIGIT : '1'..'9';
 DIGITS : '0'..'9'+;

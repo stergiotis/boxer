@@ -23,6 +23,10 @@ baseTemporal
     | ZONED_DATETIME
     | ZONED_TIME;
 
+baseNetwork
+    : IPV4
+    | IPV6;
+
 scalarModifier
    : HOMOGENOUS_ARRAY
    | SET
@@ -40,6 +44,7 @@ canonicalType
     : baseString widthModifier? scalarModifier?                      # CanonicalTypeString
     | baseTemporal NUMBER scalarModifier?                            # CanonicalTypeTemporal
     | baseMachineNumeric NUMBER byteOrderModifier? scalarModifier?   # CanonicalTypeMachineNumeric
+    | baseNetwork NUMBER? scalarModifier?                            # CanonicalTypeNetwork
     ;
 
 canonicalTypeSequence

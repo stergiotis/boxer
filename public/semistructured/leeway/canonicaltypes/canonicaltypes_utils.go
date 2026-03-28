@@ -33,6 +33,10 @@ func DemoteToScalar(s PrimitiveAstNodeI) (out PrimitiveAstNodeI) {
 			ct.ScalarModifier = ScalarModifierNone
 			out = ct
 			break
+		case NetworkTypeAstNode:
+			ct.ScalarModifier = ScalarModifierNone
+			out = ct
+			break
 		default:
 			log.Panic().Type("type", s).Msg("unable to demote unknown canonical type ast node")
 		}
@@ -49,7 +53,7 @@ func PromoteScalars(in AstNodeI, scalarModifier ScalarModifierE) (out AstNodeI, 
 		}
 		return in, 0, 1
 
-	case *GroupAstNode:
+	case GroupAstNode:
 		newMembers := make([]PrimitiveAstNodeI, 0, len(typedIn.members))
 		for _, m := range typedIn.members {
 			res, mod, unmod := PromoteScalars(m, scalarModifier)
@@ -62,7 +66,7 @@ func PromoteScalars(in AstNodeI, scalarModifier ScalarModifierE) (out AstNodeI, 
 		}
 		return in, 0, unmodified
 
-	case *SignatureAstNode:
+	case SignatureAstNode:
 		newMembers := make([]AstNodeI, 0, len(typedIn.members))
 		for _, m := range typedIn.members {
 			res, mod, unmod := PromoteScalars(m, scalarModifier)
@@ -86,7 +90,7 @@ func DemoteToScalars(in AstNodeI) (out AstNodeI, modified int, unmodified int) {
 		}
 		return in, 0, 1
 
-	case *GroupAstNode:
+	case GroupAstNode:
 		newMembers := make([]PrimitiveAstNodeI, 0, len(typedIn.members))
 		for _, m := range typedIn.members {
 			res, mod, unmod := DemoteToScalars(m)
@@ -99,7 +103,7 @@ func DemoteToScalars(in AstNodeI) (out AstNodeI, modified int, unmodified int) {
 		}
 		return in, 0, unmodified
 
-	case *SignatureAstNode:
+	case SignatureAstNode:
 		newMembers := make([]AstNodeI, 0, len(typedIn.members))
 		for _, m := range typedIn.members {
 			res, mod, unmod := DemoteToScalars(m)
@@ -127,6 +131,9 @@ func promoteScalarPrim(s PrimitiveAstNodeI, scalarModifier ScalarModifierE) (out
 		ct.ScalarModifier = scalarModifier
 		return ct
 	case TemporalTypeAstNode:
+		ct.ScalarModifier = scalarModifier
+		return ct
+	case NetworkTypeAstNode:
 		ct.ScalarModifier = scalarModifier
 		return ct
 	default:
@@ -205,28 +212,47 @@ func IteratePrimitiveTypesMulti(ts []AstNodeI) iter.Seq2[int, PrimitiveAstNodeI]
 		}
 	}
 }
+
+type typeKey struct {
+	base   rune
+	width  uint32
+	mod1   rune
+	mod2   rune
+	scalar rune
+}
+
+func getLeafKey(p PrimitiveAstNodeI) typeKey {
+	switch v := p.(type) {
+	case MachineNumericTypeAstNode:
+		return typeKey{rune(v.BaseType), uint32(v.Width), rune(v.ByteOrderModifier), 0, rune(v.ScalarModifier)}
+	case StringAstNode:
+		return typeKey{rune(v.BaseType), uint32(v.Width), rune(v.WidthModifier), 0, rune(v.ScalarModifier)}
+	case TemporalTypeAstNode:
+		return typeKey{rune(v.BaseType), uint32(v.Width), 0, 0, rune(v.ScalarModifier)}
+	case NetworkTypeAstNode:
+		return typeKey{rune(v.BaseType), uint32(v.CIDRWidth), 0, 0, rune(v.ScalarModifier)}
+	default:
+		return typeKey{}
+	}
+}
+
 func IterateGroupIndexedByOccurrence(t AstNodeI, uniqTypeIndex int) iter.Seq2[int, PrimitiveAstNodeI] {
 	return func(yield func(int, PrimitiveAstNodeI) bool) {
-		if t.IsPrimitive() {
-			yield(uniqTypeIndex, t.(PrimitiveAstNodeI))
-			return
-		}
-		m1 := make(map[string]int, CountGroupTypeMembers(t))
+		// Use the struct as a key: No string allocations!
+		counts := make(map[typeKey]int)
 		for u := range t.IterateMembers() {
-			s := u.String()
-			n := m1[s]
-			m1[s] = n + 1
+			counts[getLeafKey(u)]++
 		}
-		m2 := make(map[string]int, len(m1))
+
+		currentIdx := make(map[typeKey]int)
 		for u := range t.IterateMembers() {
-			s := u.String()
-			nTotal := m1[s]
-			if nTotal > 1 {
-				nIdx := m2[s]
-				if !yield(nIdx, u) {
+			key := getLeafKey(u)
+			if counts[key] > 1 {
+				idx := currentIdx[key]
+				if !yield(idx, u) {
 					return
 				}
-				m2[s] = nIdx + 1
+				currentIdx[key] = idx + 1
 			} else {
 				if !yield(uniqTypeIndex, u) {
 					return

@@ -1,4 +1,4 @@
-// Code generated from CanonicalTypeSignatureParser.g4 by ANTLR 4.13.1. DO NOT EDIT.
+// Code generated from CanonicalTypeSignatureParser.g4 by ANTLR 4.13.2. DO NOT EDIT.
 
 package grammar // CanonicalTypeSignatureParser
 import (
@@ -19,30 +19,30 @@ type CanonicalTypeSignatureParser struct {
 }
 
 var CanonicalTypeSignatureParserParserStaticData struct {
-	PredictionContextCache *antlr.PredictionContextCache
-	atn                    *antlr.ATN
+	once                   sync.Once
 	serializedATN          []int32
 	LiteralNames           []string
 	SymbolicNames          []string
 	RuleNames              []string
+	PredictionContextCache *antlr.PredictionContextCache
+	atn                    *antlr.ATN
 	decisionToDFA          []*antlr.DFA
-	once                   sync.Once
 }
 
 func canonicaltypesignatureparserParserInit() {
 	staticData := &CanonicalTypeSignatureParserParserStaticData
 	staticData.LiteralNames = []string{
 		"", "", "'-'", "'s'", "'y'", "'b'", "'u'", "'i'", "'f'", "'z'", "'d'",
-		"'t'", "'h'", "'m'", "'l'", "'n'", "'x'",
+		"'t'", "'h'", "'m'", "'l'", "'n'", "'x'", "'v'", "'w'",
 	}
 	staticData.SymbolicNames = []string{
 		"", "SEPARATOR", "GROUP_SEPARATOR", "UTF8_STRING", "BYTE_STRING", "BOOL",
 		"UNSIGNED", "SIGNED", "FLOAT", "UTC_DATETIME", "ZONED_DATETIME", "ZONED_TIME",
 		"HOMOGENOUS_ARRAY", "SET", "LITTLE_ENDIAN", "BIG_ENDIAN", "FIXED_MODIFIER",
-		"NUMBER",
+		"IPV4", "IPV6", "NUMBER",
 	}
 	staticData.RuleNames = []string{
-		"baseString", "baseMachineNumeric", "baseTemporal", "scalarModifier",
+		"baseString", "baseMachineNumeric", "baseTemporal", "baseNetwork", "scalarModifier",
 		"byteOrderModifier", "widthModifier", "canonicalType", "canonicalTypeSequence",
 		"canonicalTypeGroup", "canonicalTypeOrGroup", "canonicalTypeOrGroupSequence",
 		"canonicalTypeSignature", "singleCanonicalType", "singleCanonicalTypeOrGroup",
@@ -50,47 +50,53 @@ func canonicaltypesignatureparserParserInit() {
 	}
 	staticData.PredictionContextCache = antlr.NewPredictionContextCache()
 	staticData.serializedATN = []int32{
-		4, 1, 17, 106, 2, 0, 7, 0, 2, 1, 7, 1, 2, 2, 7, 2, 2, 3, 7, 3, 2, 4, 7,
+		4, 1, 19, 117, 2, 0, 7, 0, 2, 1, 7, 1, 2, 2, 7, 2, 2, 3, 7, 3, 2, 4, 7,
 		4, 2, 5, 7, 5, 2, 6, 7, 6, 2, 7, 7, 7, 2, 8, 7, 8, 2, 9, 7, 9, 2, 10, 7,
-		10, 2, 11, 7, 11, 2, 12, 7, 12, 2, 13, 7, 13, 2, 14, 7, 14, 1, 0, 1, 0,
-		1, 1, 1, 1, 1, 2, 1, 2, 1, 3, 1, 3, 1, 4, 1, 4, 1, 5, 1, 5, 1, 5, 1, 6,
-		1, 6, 3, 6, 46, 8, 6, 1, 6, 3, 6, 49, 8, 6, 1, 6, 1, 6, 1, 6, 3, 6, 54,
-		8, 6, 1, 6, 1, 6, 1, 6, 3, 6, 59, 8, 6, 1, 6, 3, 6, 62, 8, 6, 3, 6, 64,
-		8, 6, 1, 7, 1, 7, 1, 7, 5, 7, 69, 8, 7, 10, 7, 12, 7, 72, 9, 7, 1, 8, 1,
-		8, 1, 8, 5, 8, 77, 8, 8, 10, 8, 12, 8, 80, 9, 8, 1, 9, 1, 9, 3, 9, 84,
-		8, 9, 1, 10, 1, 10, 1, 10, 5, 10, 89, 8, 10, 10, 10, 12, 10, 92, 9, 10,
-		1, 11, 1, 11, 1, 11, 1, 12, 1, 12, 1, 12, 1, 13, 1, 13, 1, 13, 1, 14, 1,
-		14, 1, 14, 1, 14, 0, 0, 15, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22,
-		24, 26, 28, 0, 5, 1, 0, 3, 5, 1, 0, 6, 8, 1, 0, 9, 11, 1, 0, 12, 13, 1,
-		0, 14, 15, 101, 0, 30, 1, 0, 0, 0, 2, 32, 1, 0, 0, 0, 4, 34, 1, 0, 0, 0,
-		6, 36, 1, 0, 0, 0, 8, 38, 1, 0, 0, 0, 10, 40, 1, 0, 0, 0, 12, 63, 1, 0,
-		0, 0, 14, 65, 1, 0, 0, 0, 16, 73, 1, 0, 0, 0, 18, 83, 1, 0, 0, 0, 20, 85,
-		1, 0, 0, 0, 22, 93, 1, 0, 0, 0, 24, 96, 1, 0, 0, 0, 26, 99, 1, 0, 0, 0,
-		28, 102, 1, 0, 0, 0, 30, 31, 7, 0, 0, 0, 31, 1, 1, 0, 0, 0, 32, 33, 7,
-		1, 0, 0, 33, 3, 1, 0, 0, 0, 34, 35, 7, 2, 0, 0, 35, 5, 1, 0, 0, 0, 36,
-		37, 7, 3, 0, 0, 37, 7, 1, 0, 0, 0, 38, 39, 7, 4, 0, 0, 39, 9, 1, 0, 0,
-		0, 40, 41, 5, 16, 0, 0, 41, 42, 5, 17, 0, 0, 42, 11, 1, 0, 0, 0, 43, 45,
-		3, 0, 0, 0, 44, 46, 3, 10, 5, 0, 45, 44, 1, 0, 0, 0, 45, 46, 1, 0, 0, 0,
-		46, 48, 1, 0, 0, 0, 47, 49, 3, 6, 3, 0, 48, 47, 1, 0, 0, 0, 48, 49, 1,
-		0, 0, 0, 49, 64, 1, 0, 0, 0, 50, 51, 3, 4, 2, 0, 51, 53, 5, 17, 0, 0, 52,
-		54, 3, 6, 3, 0, 53, 52, 1, 0, 0, 0, 53, 54, 1, 0, 0, 0, 54, 64, 1, 0, 0,
-		0, 55, 56, 3, 2, 1, 0, 56, 58, 5, 17, 0, 0, 57, 59, 3, 8, 4, 0, 58, 57,
-		1, 0, 0, 0, 58, 59, 1, 0, 0, 0, 59, 61, 1, 0, 0, 0, 60, 62, 3, 6, 3, 0,
-		61, 60, 1, 0, 0, 0, 61, 62, 1, 0, 0, 0, 62, 64, 1, 0, 0, 0, 63, 43, 1,
-		0, 0, 0, 63, 50, 1, 0, 0, 0, 63, 55, 1, 0, 0, 0, 64, 13, 1, 0, 0, 0, 65,
-		70, 3, 12, 6, 0, 66, 67, 5, 1, 0, 0, 67, 69, 3, 12, 6, 0, 68, 66, 1, 0,
-		0, 0, 69, 72, 1, 0, 0, 0, 70, 68, 1, 0, 0, 0, 70, 71, 1, 0, 0, 0, 71, 15,
-		1, 0, 0, 0, 72, 70, 1, 0, 0, 0, 73, 78, 3, 12, 6, 0, 74, 75, 5, 2, 0, 0,
-		75, 77, 3, 12, 6, 0, 76, 74, 1, 0, 0, 0, 77, 80, 1, 0, 0, 0, 78, 76, 1,
-		0, 0, 0, 78, 79, 1, 0, 0, 0, 79, 17, 1, 0, 0, 0, 80, 78, 1, 0, 0, 0, 81,
-		84, 3, 12, 6, 0, 82, 84, 3, 16, 8, 0, 83, 81, 1, 0, 0, 0, 83, 82, 1, 0,
-		0, 0, 84, 19, 1, 0, 0, 0, 85, 90, 3, 18, 9, 0, 86, 87, 5, 1, 0, 0, 87,
-		89, 3, 18, 9, 0, 88, 86, 1, 0, 0, 0, 89, 92, 1, 0, 0, 0, 90, 88, 1, 0,
-		0, 0, 90, 91, 1, 0, 0, 0, 91, 21, 1, 0, 0, 0, 92, 90, 1, 0, 0, 0, 93, 94,
-		3, 20, 10, 0, 94, 95, 5, 0, 0, 1, 95, 23, 1, 0, 0, 0, 96, 97, 3, 12, 6,
-		0, 97, 98, 5, 0, 0, 1, 98, 25, 1, 0, 0, 0, 99, 100, 3, 18, 9, 0, 100, 101,
-		5, 0, 0, 1, 101, 27, 1, 0, 0, 0, 102, 103, 3, 16, 8, 0, 103, 104, 5, 0,
-		0, 1, 104, 29, 1, 0, 0, 0, 10, 45, 48, 53, 58, 61, 63, 70, 78, 83, 90,
+		10, 2, 11, 7, 11, 2, 12, 7, 12, 2, 13, 7, 13, 2, 14, 7, 14, 2, 15, 7, 15,
+		1, 0, 1, 0, 1, 1, 1, 1, 1, 2, 1, 2, 1, 3, 1, 3, 1, 4, 1, 4, 1, 5, 1, 5,
+		1, 6, 1, 6, 1, 6, 1, 7, 1, 7, 3, 7, 50, 8, 7, 1, 7, 3, 7, 53, 8, 7, 1,
+		7, 1, 7, 1, 7, 3, 7, 58, 8, 7, 1, 7, 1, 7, 1, 7, 3, 7, 63, 8, 7, 1, 7,
+		3, 7, 66, 8, 7, 1, 7, 1, 7, 3, 7, 70, 8, 7, 1, 7, 3, 7, 73, 8, 7, 3, 7,
+		75, 8, 7, 1, 8, 1, 8, 1, 8, 5, 8, 80, 8, 8, 10, 8, 12, 8, 83, 9, 8, 1,
+		9, 1, 9, 1, 9, 5, 9, 88, 8, 9, 10, 9, 12, 9, 91, 9, 9, 1, 10, 1, 10, 3,
+		10, 95, 8, 10, 1, 11, 1, 11, 1, 11, 5, 11, 100, 8, 11, 10, 11, 12, 11,
+		103, 9, 11, 1, 12, 1, 12, 1, 12, 1, 13, 1, 13, 1, 13, 1, 14, 1, 14, 1,
+		14, 1, 15, 1, 15, 1, 15, 1, 15, 0, 0, 16, 0, 2, 4, 6, 8, 10, 12, 14, 16,
+		18, 20, 22, 24, 26, 28, 30, 0, 6, 1, 0, 3, 5, 1, 0, 6, 8, 1, 0, 9, 11,
+		1, 0, 17, 18, 1, 0, 12, 13, 1, 0, 14, 15, 114, 0, 32, 1, 0, 0, 0, 2, 34,
+		1, 0, 0, 0, 4, 36, 1, 0, 0, 0, 6, 38, 1, 0, 0, 0, 8, 40, 1, 0, 0, 0, 10,
+		42, 1, 0, 0, 0, 12, 44, 1, 0, 0, 0, 14, 74, 1, 0, 0, 0, 16, 76, 1, 0, 0,
+		0, 18, 84, 1, 0, 0, 0, 20, 94, 1, 0, 0, 0, 22, 96, 1, 0, 0, 0, 24, 104,
+		1, 0, 0, 0, 26, 107, 1, 0, 0, 0, 28, 110, 1, 0, 0, 0, 30, 113, 1, 0, 0,
+		0, 32, 33, 7, 0, 0, 0, 33, 1, 1, 0, 0, 0, 34, 35, 7, 1, 0, 0, 35, 3, 1,
+		0, 0, 0, 36, 37, 7, 2, 0, 0, 37, 5, 1, 0, 0, 0, 38, 39, 7, 3, 0, 0, 39,
+		7, 1, 0, 0, 0, 40, 41, 7, 4, 0, 0, 41, 9, 1, 0, 0, 0, 42, 43, 7, 5, 0,
+		0, 43, 11, 1, 0, 0, 0, 44, 45, 5, 16, 0, 0, 45, 46, 5, 19, 0, 0, 46, 13,
+		1, 0, 0, 0, 47, 49, 3, 0, 0, 0, 48, 50, 3, 12, 6, 0, 49, 48, 1, 0, 0, 0,
+		49, 50, 1, 0, 0, 0, 50, 52, 1, 0, 0, 0, 51, 53, 3, 8, 4, 0, 52, 51, 1,
+		0, 0, 0, 52, 53, 1, 0, 0, 0, 53, 75, 1, 0, 0, 0, 54, 55, 3, 4, 2, 0, 55,
+		57, 5, 19, 0, 0, 56, 58, 3, 8, 4, 0, 57, 56, 1, 0, 0, 0, 57, 58, 1, 0,
+		0, 0, 58, 75, 1, 0, 0, 0, 59, 60, 3, 2, 1, 0, 60, 62, 5, 19, 0, 0, 61,
+		63, 3, 10, 5, 0, 62, 61, 1, 0, 0, 0, 62, 63, 1, 0, 0, 0, 63, 65, 1, 0,
+		0, 0, 64, 66, 3, 8, 4, 0, 65, 64, 1, 0, 0, 0, 65, 66, 1, 0, 0, 0, 66, 75,
+		1, 0, 0, 0, 67, 69, 3, 6, 3, 0, 68, 70, 5, 19, 0, 0, 69, 68, 1, 0, 0, 0,
+		69, 70, 1, 0, 0, 0, 70, 72, 1, 0, 0, 0, 71, 73, 3, 8, 4, 0, 72, 71, 1,
+		0, 0, 0, 72, 73, 1, 0, 0, 0, 73, 75, 1, 0, 0, 0, 74, 47, 1, 0, 0, 0, 74,
+		54, 1, 0, 0, 0, 74, 59, 1, 0, 0, 0, 74, 67, 1, 0, 0, 0, 75, 15, 1, 0, 0,
+		0, 76, 81, 3, 14, 7, 0, 77, 78, 5, 1, 0, 0, 78, 80, 3, 14, 7, 0, 79, 77,
+		1, 0, 0, 0, 80, 83, 1, 0, 0, 0, 81, 79, 1, 0, 0, 0, 81, 82, 1, 0, 0, 0,
+		82, 17, 1, 0, 0, 0, 83, 81, 1, 0, 0, 0, 84, 89, 3, 14, 7, 0, 85, 86, 5,
+		2, 0, 0, 86, 88, 3, 14, 7, 0, 87, 85, 1, 0, 0, 0, 88, 91, 1, 0, 0, 0, 89,
+		87, 1, 0, 0, 0, 89, 90, 1, 0, 0, 0, 90, 19, 1, 0, 0, 0, 91, 89, 1, 0, 0,
+		0, 92, 95, 3, 14, 7, 0, 93, 95, 3, 18, 9, 0, 94, 92, 1, 0, 0, 0, 94, 93,
+		1, 0, 0, 0, 95, 21, 1, 0, 0, 0, 96, 101, 3, 20, 10, 0, 97, 98, 5, 1, 0,
+		0, 98, 100, 3, 20, 10, 0, 99, 97, 1, 0, 0, 0, 100, 103, 1, 0, 0, 0, 101,
+		99, 1, 0, 0, 0, 101, 102, 1, 0, 0, 0, 102, 23, 1, 0, 0, 0, 103, 101, 1,
+		0, 0, 0, 104, 105, 3, 22, 11, 0, 105, 106, 5, 0, 0, 1, 106, 25, 1, 0, 0,
+		0, 107, 108, 3, 14, 7, 0, 108, 109, 5, 0, 0, 1, 109, 27, 1, 0, 0, 0, 110,
+		111, 3, 20, 10, 0, 111, 112, 5, 0, 0, 1, 112, 29, 1, 0, 0, 0, 113, 114,
+		3, 18, 9, 0, 114, 115, 5, 0, 0, 1, 115, 31, 1, 0, 0, 0, 12, 49, 52, 57,
+		62, 65, 69, 72, 74, 81, 89, 94, 101,
 	}
 	deserializer := antlr.NewATNDeserializer(nil)
 	staticData.atn = deserializer.Deserialize(staticData.serializedATN)
@@ -145,7 +151,9 @@ const (
 	CanonicalTypeSignatureParserLITTLE_ENDIAN    = 14
 	CanonicalTypeSignatureParserBIG_ENDIAN       = 15
 	CanonicalTypeSignatureParserFIXED_MODIFIER   = 16
-	CanonicalTypeSignatureParserNUMBER           = 17
+	CanonicalTypeSignatureParserIPV4             = 17
+	CanonicalTypeSignatureParserIPV6             = 18
+	CanonicalTypeSignatureParserNUMBER           = 19
 )
 
 // CanonicalTypeSignatureParser rules.
@@ -153,18 +161,19 @@ const (
 	CanonicalTypeSignatureParserRULE_baseString                   = 0
 	CanonicalTypeSignatureParserRULE_baseMachineNumeric           = 1
 	CanonicalTypeSignatureParserRULE_baseTemporal                 = 2
-	CanonicalTypeSignatureParserRULE_scalarModifier               = 3
-	CanonicalTypeSignatureParserRULE_byteOrderModifier            = 4
-	CanonicalTypeSignatureParserRULE_widthModifier                = 5
-	CanonicalTypeSignatureParserRULE_canonicalType                = 6
-	CanonicalTypeSignatureParserRULE_canonicalTypeSequence        = 7
-	CanonicalTypeSignatureParserRULE_canonicalTypeGroup           = 8
-	CanonicalTypeSignatureParserRULE_canonicalTypeOrGroup         = 9
-	CanonicalTypeSignatureParserRULE_canonicalTypeOrGroupSequence = 10
-	CanonicalTypeSignatureParserRULE_canonicalTypeSignature       = 11
-	CanonicalTypeSignatureParserRULE_singleCanonicalType          = 12
-	CanonicalTypeSignatureParserRULE_singleCanonicalTypeOrGroup   = 13
-	CanonicalTypeSignatureParserRULE_singleCanonicalGroup         = 14
+	CanonicalTypeSignatureParserRULE_baseNetwork                  = 3
+	CanonicalTypeSignatureParserRULE_scalarModifier               = 4
+	CanonicalTypeSignatureParserRULE_byteOrderModifier            = 5
+	CanonicalTypeSignatureParserRULE_widthModifier                = 6
+	CanonicalTypeSignatureParserRULE_canonicalType                = 7
+	CanonicalTypeSignatureParserRULE_canonicalTypeSequence        = 8
+	CanonicalTypeSignatureParserRULE_canonicalTypeGroup           = 9
+	CanonicalTypeSignatureParserRULE_canonicalTypeOrGroup         = 10
+	CanonicalTypeSignatureParserRULE_canonicalTypeOrGroupSequence = 11
+	CanonicalTypeSignatureParserRULE_canonicalTypeSignature       = 12
+	CanonicalTypeSignatureParserRULE_singleCanonicalType          = 13
+	CanonicalTypeSignatureParserRULE_singleCanonicalTypeOrGroup   = 14
+	CanonicalTypeSignatureParserRULE_singleCanonicalGroup         = 15
 )
 
 // IBaseStringContext is an interface to support dynamic dispatch.
@@ -184,8 +193,8 @@ type IBaseStringContext interface {
 }
 
 type BaseStringContext struct {
-	parser antlr.Parser
 	antlr.BaseParserRuleContext
+	parser antlr.Parser
 }
 
 func NewEmptyBaseStringContext() *BaseStringContext {
@@ -252,7 +261,7 @@ func (p *CanonicalTypeSignatureParser) BaseString() (localctx IBaseStringContext
 
 	p.EnterOuterAlt(localctx, 1)
 	{
-		p.SetState(30)
+		p.SetState(32)
 		_la = p.GetTokenStream().LA(1)
 
 		if !((int64(_la) & ^0x3f) == 0 && ((int64(1)<<_la)&56) != 0) {
@@ -293,8 +302,8 @@ type IBaseMachineNumericContext interface {
 }
 
 type BaseMachineNumericContext struct {
-	parser antlr.Parser
 	antlr.BaseParserRuleContext
+	parser antlr.Parser
 }
 
 func NewEmptyBaseMachineNumericContext() *BaseMachineNumericContext {
@@ -361,7 +370,7 @@ func (p *CanonicalTypeSignatureParser) BaseMachineNumeric() (localctx IBaseMachi
 
 	p.EnterOuterAlt(localctx, 1)
 	{
-		p.SetState(32)
+		p.SetState(34)
 		_la = p.GetTokenStream().LA(1)
 
 		if !((int64(_la) & ^0x3f) == 0 && ((int64(1)<<_la)&448) != 0) {
@@ -402,8 +411,8 @@ type IBaseTemporalContext interface {
 }
 
 type BaseTemporalContext struct {
-	parser antlr.Parser
 	antlr.BaseParserRuleContext
+	parser antlr.Parser
 }
 
 func NewEmptyBaseTemporalContext() *BaseTemporalContext {
@@ -470,10 +479,114 @@ func (p *CanonicalTypeSignatureParser) BaseTemporal() (localctx IBaseTemporalCon
 
 	p.EnterOuterAlt(localctx, 1)
 	{
-		p.SetState(34)
+		p.SetState(36)
 		_la = p.GetTokenStream().LA(1)
 
 		if !((int64(_la) & ^0x3f) == 0 && ((int64(1)<<_la)&3584) != 0) {
+			p.GetErrorHandler().RecoverInline(p)
+		} else {
+			p.GetErrorHandler().ReportMatch(p)
+			p.Consume()
+		}
+	}
+
+errorExit:
+	if p.HasError() {
+		v := p.GetError()
+		localctx.SetException(v)
+		p.GetErrorHandler().ReportError(p, v)
+		p.GetErrorHandler().Recover(p, v)
+		p.SetError(nil)
+	}
+	p.ExitRule()
+	return localctx
+	goto errorExit // Trick to prevent compiler error if the label is not used
+}
+
+// IBaseNetworkContext is an interface to support dynamic dispatch.
+type IBaseNetworkContext interface {
+	antlr.ParserRuleContext
+
+	// GetParser returns the parser.
+	GetParser() antlr.Parser
+
+	// Getter signatures
+	IPV4() antlr.TerminalNode
+	IPV6() antlr.TerminalNode
+
+	// IsBaseNetworkContext differentiates from other interfaces.
+	IsBaseNetworkContext()
+}
+
+type BaseNetworkContext struct {
+	antlr.BaseParserRuleContext
+	parser antlr.Parser
+}
+
+func NewEmptyBaseNetworkContext() *BaseNetworkContext {
+	var p = new(BaseNetworkContext)
+	antlr.InitBaseParserRuleContext(&p.BaseParserRuleContext, nil, -1)
+	p.RuleIndex = CanonicalTypeSignatureParserRULE_baseNetwork
+	return p
+}
+
+func InitEmptyBaseNetworkContext(p *BaseNetworkContext) {
+	antlr.InitBaseParserRuleContext(&p.BaseParserRuleContext, nil, -1)
+	p.RuleIndex = CanonicalTypeSignatureParserRULE_baseNetwork
+}
+
+func (*BaseNetworkContext) IsBaseNetworkContext() {}
+
+func NewBaseNetworkContext(parser antlr.Parser, parent antlr.ParserRuleContext, invokingState int) *BaseNetworkContext {
+	var p = new(BaseNetworkContext)
+
+	antlr.InitBaseParserRuleContext(&p.BaseParserRuleContext, parent, invokingState)
+
+	p.parser = parser
+	p.RuleIndex = CanonicalTypeSignatureParserRULE_baseNetwork
+
+	return p
+}
+
+func (s *BaseNetworkContext) GetParser() antlr.Parser { return s.parser }
+
+func (s *BaseNetworkContext) IPV4() antlr.TerminalNode {
+	return s.GetToken(CanonicalTypeSignatureParserIPV4, 0)
+}
+
+func (s *BaseNetworkContext) IPV6() antlr.TerminalNode {
+	return s.GetToken(CanonicalTypeSignatureParserIPV6, 0)
+}
+
+func (s *BaseNetworkContext) GetRuleContext() antlr.RuleContext {
+	return s
+}
+
+func (s *BaseNetworkContext) ToStringTree(ruleNames []string, recog antlr.Recognizer) string {
+	return antlr.TreesStringTree(s, ruleNames, recog)
+}
+
+func (s *BaseNetworkContext) Accept(visitor antlr.ParseTreeVisitor) interface{} {
+	switch t := visitor.(type) {
+	case CanonicalTypeSignatureParserVisitor:
+		return t.VisitBaseNetwork(s)
+
+	default:
+		return t.VisitChildren(s)
+	}
+}
+
+func (p *CanonicalTypeSignatureParser) BaseNetwork() (localctx IBaseNetworkContext) {
+	localctx = NewBaseNetworkContext(p, p.GetParserRuleContext(), p.GetState())
+	p.EnterRule(localctx, 6, CanonicalTypeSignatureParserRULE_baseNetwork)
+	var _la int
+
+	p.EnterOuterAlt(localctx, 1)
+	{
+		p.SetState(38)
+		_la = p.GetTokenStream().LA(1)
+
+		if !(_la == CanonicalTypeSignatureParserIPV4 || _la == CanonicalTypeSignatureParserIPV6) {
 			p.GetErrorHandler().RecoverInline(p)
 		} else {
 			p.GetErrorHandler().ReportMatch(p)
@@ -510,8 +623,8 @@ type IScalarModifierContext interface {
 }
 
 type ScalarModifierContext struct {
-	parser antlr.Parser
 	antlr.BaseParserRuleContext
+	parser antlr.Parser
 }
 
 func NewEmptyScalarModifierContext() *ScalarModifierContext {
@@ -569,12 +682,12 @@ func (s *ScalarModifierContext) Accept(visitor antlr.ParseTreeVisitor) interface
 
 func (p *CanonicalTypeSignatureParser) ScalarModifier() (localctx IScalarModifierContext) {
 	localctx = NewScalarModifierContext(p, p.GetParserRuleContext(), p.GetState())
-	p.EnterRule(localctx, 6, CanonicalTypeSignatureParserRULE_scalarModifier)
+	p.EnterRule(localctx, 8, CanonicalTypeSignatureParserRULE_scalarModifier)
 	var _la int
 
 	p.EnterOuterAlt(localctx, 1)
 	{
-		p.SetState(36)
+		p.SetState(40)
 		_la = p.GetTokenStream().LA(1)
 
 		if !(_la == CanonicalTypeSignatureParserHOMOGENOUS_ARRAY || _la == CanonicalTypeSignatureParserSET) {
@@ -614,8 +727,8 @@ type IByteOrderModifierContext interface {
 }
 
 type ByteOrderModifierContext struct {
-	parser antlr.Parser
 	antlr.BaseParserRuleContext
+	parser antlr.Parser
 }
 
 func NewEmptyByteOrderModifierContext() *ByteOrderModifierContext {
@@ -673,12 +786,12 @@ func (s *ByteOrderModifierContext) Accept(visitor antlr.ParseTreeVisitor) interf
 
 func (p *CanonicalTypeSignatureParser) ByteOrderModifier() (localctx IByteOrderModifierContext) {
 	localctx = NewByteOrderModifierContext(p, p.GetParserRuleContext(), p.GetState())
-	p.EnterRule(localctx, 8, CanonicalTypeSignatureParserRULE_byteOrderModifier)
+	p.EnterRule(localctx, 10, CanonicalTypeSignatureParserRULE_byteOrderModifier)
 	var _la int
 
 	p.EnterOuterAlt(localctx, 1)
 	{
-		p.SetState(38)
+		p.SetState(42)
 		_la = p.GetTokenStream().LA(1)
 
 		if !(_la == CanonicalTypeSignatureParserLITTLE_ENDIAN || _la == CanonicalTypeSignatureParserBIG_ENDIAN) {
@@ -718,8 +831,8 @@ type IWidthModifierContext interface {
 }
 
 type WidthModifierContext struct {
-	parser antlr.Parser
 	antlr.BaseParserRuleContext
+	parser antlr.Parser
 }
 
 func NewEmptyWidthModifierContext() *WidthModifierContext {
@@ -777,10 +890,10 @@ func (s *WidthModifierContext) Accept(visitor antlr.ParseTreeVisitor) interface{
 
 func (p *CanonicalTypeSignatureParser) WidthModifier() (localctx IWidthModifierContext) {
 	localctx = NewWidthModifierContext(p, p.GetParserRuleContext(), p.GetState())
-	p.EnterRule(localctx, 10, CanonicalTypeSignatureParserRULE_widthModifier)
+	p.EnterRule(localctx, 12, CanonicalTypeSignatureParserRULE_widthModifier)
 	p.EnterOuterAlt(localctx, 1)
 	{
-		p.SetState(40)
+		p.SetState(44)
 		p.Match(CanonicalTypeSignatureParserFIXED_MODIFIER)
 		if p.HasError() {
 			// Recognition error - abort rule
@@ -788,7 +901,7 @@ func (p *CanonicalTypeSignatureParser) WidthModifier() (localctx IWidthModifierC
 		}
 	}
 	{
-		p.SetState(41)
+		p.SetState(45)
 		p.Match(CanonicalTypeSignatureParserNUMBER)
 		if p.HasError() {
 			// Recognition error - abort rule
@@ -820,8 +933,8 @@ type ICanonicalTypeContext interface {
 }
 
 type CanonicalTypeContext struct {
-	parser antlr.Parser
 	antlr.BaseParserRuleContext
+	parser antlr.Parser
 }
 
 func NewEmptyCanonicalTypeContext() *CanonicalTypeContext {
@@ -1083,12 +1196,76 @@ func (s *CanonicalTypeStringContext) Accept(visitor antlr.ParseTreeVisitor) inte
 	}
 }
 
+type CanonicalTypeNetworkContext struct {
+	CanonicalTypeContext
+}
+
+func NewCanonicalTypeNetworkContext(parser antlr.Parser, ctx antlr.ParserRuleContext) *CanonicalTypeNetworkContext {
+	var p = new(CanonicalTypeNetworkContext)
+
+	InitEmptyCanonicalTypeContext(&p.CanonicalTypeContext)
+	p.parser = parser
+	p.CopyAll(ctx.(*CanonicalTypeContext))
+
+	return p
+}
+
+func (s *CanonicalTypeNetworkContext) GetRuleContext() antlr.RuleContext {
+	return s
+}
+
+func (s *CanonicalTypeNetworkContext) BaseNetwork() IBaseNetworkContext {
+	var t antlr.RuleContext
+	for _, ctx := range s.GetChildren() {
+		if _, ok := ctx.(IBaseNetworkContext); ok {
+			t = ctx.(antlr.RuleContext)
+			break
+		}
+	}
+
+	if t == nil {
+		return nil
+	}
+
+	return t.(IBaseNetworkContext)
+}
+
+func (s *CanonicalTypeNetworkContext) NUMBER() antlr.TerminalNode {
+	return s.GetToken(CanonicalTypeSignatureParserNUMBER, 0)
+}
+
+func (s *CanonicalTypeNetworkContext) ScalarModifier() IScalarModifierContext {
+	var t antlr.RuleContext
+	for _, ctx := range s.GetChildren() {
+		if _, ok := ctx.(IScalarModifierContext); ok {
+			t = ctx.(antlr.RuleContext)
+			break
+		}
+	}
+
+	if t == nil {
+		return nil
+	}
+
+	return t.(IScalarModifierContext)
+}
+
+func (s *CanonicalTypeNetworkContext) Accept(visitor antlr.ParseTreeVisitor) interface{} {
+	switch t := visitor.(type) {
+	case CanonicalTypeSignatureParserVisitor:
+		return t.VisitCanonicalTypeNetwork(s)
+
+	default:
+		return t.VisitChildren(s)
+	}
+}
+
 func (p *CanonicalTypeSignatureParser) CanonicalType() (localctx ICanonicalTypeContext) {
 	localctx = NewCanonicalTypeContext(p, p.GetParserRuleContext(), p.GetState())
-	p.EnterRule(localctx, 12, CanonicalTypeSignatureParserRULE_canonicalType)
+	p.EnterRule(localctx, 14, CanonicalTypeSignatureParserRULE_canonicalType)
 	var _la int
 
-	p.SetState(63)
+	p.SetState(74)
 	p.GetErrorHandler().Sync(p)
 	if p.HasError() {
 		goto errorExit
@@ -1099,10 +1276,10 @@ func (p *CanonicalTypeSignatureParser) CanonicalType() (localctx ICanonicalTypeC
 		localctx = NewCanonicalTypeStringContext(p, localctx)
 		p.EnterOuterAlt(localctx, 1)
 		{
-			p.SetState(43)
+			p.SetState(47)
 			p.BaseString()
 		}
-		p.SetState(45)
+		p.SetState(49)
 		p.GetErrorHandler().Sync(p)
 		if p.HasError() {
 			goto errorExit
@@ -1111,12 +1288,12 @@ func (p *CanonicalTypeSignatureParser) CanonicalType() (localctx ICanonicalTypeC
 
 		if _la == CanonicalTypeSignatureParserFIXED_MODIFIER {
 			{
-				p.SetState(44)
+				p.SetState(48)
 				p.WidthModifier()
 			}
 
 		}
-		p.SetState(48)
+		p.SetState(52)
 		p.GetErrorHandler().Sync(p)
 		if p.HasError() {
 			goto errorExit
@@ -1125,7 +1302,7 @@ func (p *CanonicalTypeSignatureParser) CanonicalType() (localctx ICanonicalTypeC
 
 		if _la == CanonicalTypeSignatureParserHOMOGENOUS_ARRAY || _la == CanonicalTypeSignatureParserSET {
 			{
-				p.SetState(47)
+				p.SetState(51)
 				p.ScalarModifier()
 			}
 
@@ -1135,18 +1312,18 @@ func (p *CanonicalTypeSignatureParser) CanonicalType() (localctx ICanonicalTypeC
 		localctx = NewCanonicalTypeTemporalContext(p, localctx)
 		p.EnterOuterAlt(localctx, 2)
 		{
-			p.SetState(50)
+			p.SetState(54)
 			p.BaseTemporal()
 		}
 		{
-			p.SetState(51)
+			p.SetState(55)
 			p.Match(CanonicalTypeSignatureParserNUMBER)
 			if p.HasError() {
 				// Recognition error - abort rule
 				goto errorExit
 			}
 		}
-		p.SetState(53)
+		p.SetState(57)
 		p.GetErrorHandler().Sync(p)
 		if p.HasError() {
 			goto errorExit
@@ -1155,7 +1332,7 @@ func (p *CanonicalTypeSignatureParser) CanonicalType() (localctx ICanonicalTypeC
 
 		if _la == CanonicalTypeSignatureParserHOMOGENOUS_ARRAY || _la == CanonicalTypeSignatureParserSET {
 			{
-				p.SetState(52)
+				p.SetState(56)
 				p.ScalarModifier()
 			}
 
@@ -1165,18 +1342,18 @@ func (p *CanonicalTypeSignatureParser) CanonicalType() (localctx ICanonicalTypeC
 		localctx = NewCanonicalTypeMachineNumericContext(p, localctx)
 		p.EnterOuterAlt(localctx, 3)
 		{
-			p.SetState(55)
+			p.SetState(59)
 			p.BaseMachineNumeric()
 		}
 		{
-			p.SetState(56)
+			p.SetState(60)
 			p.Match(CanonicalTypeSignatureParserNUMBER)
 			if p.HasError() {
 				// Recognition error - abort rule
 				goto errorExit
 			}
 		}
-		p.SetState(58)
+		p.SetState(62)
 		p.GetErrorHandler().Sync(p)
 		if p.HasError() {
 			goto errorExit
@@ -1185,12 +1362,12 @@ func (p *CanonicalTypeSignatureParser) CanonicalType() (localctx ICanonicalTypeC
 
 		if _la == CanonicalTypeSignatureParserLITTLE_ENDIAN || _la == CanonicalTypeSignatureParserBIG_ENDIAN {
 			{
-				p.SetState(57)
+				p.SetState(61)
 				p.ByteOrderModifier()
 			}
 
 		}
-		p.SetState(61)
+		p.SetState(65)
 		p.GetErrorHandler().Sync(p)
 		if p.HasError() {
 			goto errorExit
@@ -1199,7 +1376,47 @@ func (p *CanonicalTypeSignatureParser) CanonicalType() (localctx ICanonicalTypeC
 
 		if _la == CanonicalTypeSignatureParserHOMOGENOUS_ARRAY || _la == CanonicalTypeSignatureParserSET {
 			{
-				p.SetState(60)
+				p.SetState(64)
+				p.ScalarModifier()
+			}
+
+		}
+
+	case CanonicalTypeSignatureParserIPV4, CanonicalTypeSignatureParserIPV6:
+		localctx = NewCanonicalTypeNetworkContext(p, localctx)
+		p.EnterOuterAlt(localctx, 4)
+		{
+			p.SetState(67)
+			p.BaseNetwork()
+		}
+		p.SetState(69)
+		p.GetErrorHandler().Sync(p)
+		if p.HasError() {
+			goto errorExit
+		}
+		_la = p.GetTokenStream().LA(1)
+
+		if _la == CanonicalTypeSignatureParserNUMBER {
+			{
+				p.SetState(68)
+				p.Match(CanonicalTypeSignatureParserNUMBER)
+				if p.HasError() {
+					// Recognition error - abort rule
+					goto errorExit
+				}
+			}
+
+		}
+		p.SetState(72)
+		p.GetErrorHandler().Sync(p)
+		if p.HasError() {
+			goto errorExit
+		}
+		_la = p.GetTokenStream().LA(1)
+
+		if _la == CanonicalTypeSignatureParserHOMOGENOUS_ARRAY || _la == CanonicalTypeSignatureParserSET {
+			{
+				p.SetState(71)
 				p.ScalarModifier()
 			}
 
@@ -1241,8 +1458,8 @@ type ICanonicalTypeSequenceContext interface {
 }
 
 type CanonicalTypeSequenceContext struct {
-	parser antlr.Parser
 	antlr.BaseParserRuleContext
+	parser antlr.Parser
 }
 
 func NewEmptyCanonicalTypeSequenceContext() *CanonicalTypeSequenceContext {
@@ -1341,15 +1558,15 @@ func (s *CanonicalTypeSequenceContext) Accept(visitor antlr.ParseTreeVisitor) in
 
 func (p *CanonicalTypeSignatureParser) CanonicalTypeSequence() (localctx ICanonicalTypeSequenceContext) {
 	localctx = NewCanonicalTypeSequenceContext(p, p.GetParserRuleContext(), p.GetState())
-	p.EnterRule(localctx, 14, CanonicalTypeSignatureParserRULE_canonicalTypeSequence)
+	p.EnterRule(localctx, 16, CanonicalTypeSignatureParserRULE_canonicalTypeSequence)
 	var _la int
 
 	p.EnterOuterAlt(localctx, 1)
 	{
-		p.SetState(65)
+		p.SetState(76)
 		p.CanonicalType()
 	}
-	p.SetState(70)
+	p.SetState(81)
 	p.GetErrorHandler().Sync(p)
 	if p.HasError() {
 		goto errorExit
@@ -1358,7 +1575,7 @@ func (p *CanonicalTypeSignatureParser) CanonicalTypeSequence() (localctx ICanoni
 
 	for _la == CanonicalTypeSignatureParserSEPARATOR {
 		{
-			p.SetState(66)
+			p.SetState(77)
 			p.Match(CanonicalTypeSignatureParserSEPARATOR)
 			if p.HasError() {
 				// Recognition error - abort rule
@@ -1366,11 +1583,11 @@ func (p *CanonicalTypeSignatureParser) CanonicalTypeSequence() (localctx ICanoni
 			}
 		}
 		{
-			p.SetState(67)
+			p.SetState(78)
 			p.CanonicalType()
 		}
 
-		p.SetState(72)
+		p.SetState(83)
 		p.GetErrorHandler().Sync(p)
 		if p.HasError() {
 			goto errorExit
@@ -1409,8 +1626,8 @@ type ICanonicalTypeGroupContext interface {
 }
 
 type CanonicalTypeGroupContext struct {
-	parser antlr.Parser
 	antlr.BaseParserRuleContext
+	parser antlr.Parser
 }
 
 func NewEmptyCanonicalTypeGroupContext() *CanonicalTypeGroupContext {
@@ -1509,15 +1726,15 @@ func (s *CanonicalTypeGroupContext) Accept(visitor antlr.ParseTreeVisitor) inter
 
 func (p *CanonicalTypeSignatureParser) CanonicalTypeGroup() (localctx ICanonicalTypeGroupContext) {
 	localctx = NewCanonicalTypeGroupContext(p, p.GetParserRuleContext(), p.GetState())
-	p.EnterRule(localctx, 16, CanonicalTypeSignatureParserRULE_canonicalTypeGroup)
+	p.EnterRule(localctx, 18, CanonicalTypeSignatureParserRULE_canonicalTypeGroup)
 	var _la int
 
 	p.EnterOuterAlt(localctx, 1)
 	{
-		p.SetState(73)
+		p.SetState(84)
 		p.CanonicalType()
 	}
-	p.SetState(78)
+	p.SetState(89)
 	p.GetErrorHandler().Sync(p)
 	if p.HasError() {
 		goto errorExit
@@ -1526,7 +1743,7 @@ func (p *CanonicalTypeSignatureParser) CanonicalTypeGroup() (localctx ICanonical
 
 	for _la == CanonicalTypeSignatureParserGROUP_SEPARATOR {
 		{
-			p.SetState(74)
+			p.SetState(85)
 			p.Match(CanonicalTypeSignatureParserGROUP_SEPARATOR)
 			if p.HasError() {
 				// Recognition error - abort rule
@@ -1534,11 +1751,11 @@ func (p *CanonicalTypeSignatureParser) CanonicalTypeGroup() (localctx ICanonical
 			}
 		}
 		{
-			p.SetState(75)
+			p.SetState(86)
 			p.CanonicalType()
 		}
 
-		p.SetState(80)
+		p.SetState(91)
 		p.GetErrorHandler().Sync(p)
 		if p.HasError() {
 			goto errorExit
@@ -1575,8 +1792,8 @@ type ICanonicalTypeOrGroupContext interface {
 }
 
 type CanonicalTypeOrGroupContext struct {
-	parser antlr.Parser
 	antlr.BaseParserRuleContext
+	parser antlr.Parser
 }
 
 func NewEmptyCanonicalTypeOrGroupContext() *CanonicalTypeOrGroupContext {
@@ -1658,25 +1875,25 @@ func (s *CanonicalTypeOrGroupContext) Accept(visitor antlr.ParseTreeVisitor) int
 
 func (p *CanonicalTypeSignatureParser) CanonicalTypeOrGroup() (localctx ICanonicalTypeOrGroupContext) {
 	localctx = NewCanonicalTypeOrGroupContext(p, p.GetParserRuleContext(), p.GetState())
-	p.EnterRule(localctx, 18, CanonicalTypeSignatureParserRULE_canonicalTypeOrGroup)
-	p.SetState(83)
+	p.EnterRule(localctx, 20, CanonicalTypeSignatureParserRULE_canonicalTypeOrGroup)
+	p.SetState(94)
 	p.GetErrorHandler().Sync(p)
 	if p.HasError() {
 		goto errorExit
 	}
 
-	switch p.GetInterpreter().AdaptivePredict(p.BaseParser, p.GetTokenStream(), 8, p.GetParserRuleContext()) {
+	switch p.GetInterpreter().AdaptivePredict(p.BaseParser, p.GetTokenStream(), 10, p.GetParserRuleContext()) {
 	case 1:
 		p.EnterOuterAlt(localctx, 1)
 		{
-			p.SetState(81)
+			p.SetState(92)
 			p.CanonicalType()
 		}
 
 	case 2:
 		p.EnterOuterAlt(localctx, 2)
 		{
-			p.SetState(82)
+			p.SetState(93)
 			p.CanonicalTypeGroup()
 		}
 
@@ -1715,8 +1932,8 @@ type ICanonicalTypeOrGroupSequenceContext interface {
 }
 
 type CanonicalTypeOrGroupSequenceContext struct {
-	parser antlr.Parser
 	antlr.BaseParserRuleContext
+	parser antlr.Parser
 }
 
 func NewEmptyCanonicalTypeOrGroupSequenceContext() *CanonicalTypeOrGroupSequenceContext {
@@ -1815,15 +2032,15 @@ func (s *CanonicalTypeOrGroupSequenceContext) Accept(visitor antlr.ParseTreeVisi
 
 func (p *CanonicalTypeSignatureParser) CanonicalTypeOrGroupSequence() (localctx ICanonicalTypeOrGroupSequenceContext) {
 	localctx = NewCanonicalTypeOrGroupSequenceContext(p, p.GetParserRuleContext(), p.GetState())
-	p.EnterRule(localctx, 20, CanonicalTypeSignatureParserRULE_canonicalTypeOrGroupSequence)
+	p.EnterRule(localctx, 22, CanonicalTypeSignatureParserRULE_canonicalTypeOrGroupSequence)
 	var _la int
 
 	p.EnterOuterAlt(localctx, 1)
 	{
-		p.SetState(85)
+		p.SetState(96)
 		p.CanonicalTypeOrGroup()
 	}
-	p.SetState(90)
+	p.SetState(101)
 	p.GetErrorHandler().Sync(p)
 	if p.HasError() {
 		goto errorExit
@@ -1832,7 +2049,7 @@ func (p *CanonicalTypeSignatureParser) CanonicalTypeOrGroupSequence() (localctx 
 
 	for _la == CanonicalTypeSignatureParserSEPARATOR {
 		{
-			p.SetState(86)
+			p.SetState(97)
 			p.Match(CanonicalTypeSignatureParserSEPARATOR)
 			if p.HasError() {
 				// Recognition error - abort rule
@@ -1840,11 +2057,11 @@ func (p *CanonicalTypeSignatureParser) CanonicalTypeOrGroupSequence() (localctx 
 			}
 		}
 		{
-			p.SetState(87)
+			p.SetState(98)
 			p.CanonicalTypeOrGroup()
 		}
 
-		p.SetState(92)
+		p.SetState(103)
 		p.GetErrorHandler().Sync(p)
 		if p.HasError() {
 			goto errorExit
@@ -1881,8 +2098,8 @@ type ICanonicalTypeSignatureContext interface {
 }
 
 type CanonicalTypeSignatureContext struct {
-	parser antlr.Parser
 	antlr.BaseParserRuleContext
+	parser antlr.Parser
 }
 
 func NewEmptyCanonicalTypeSignatureContext() *CanonicalTypeSignatureContext {
@@ -1952,14 +2169,14 @@ func (s *CanonicalTypeSignatureContext) Accept(visitor antlr.ParseTreeVisitor) i
 
 func (p *CanonicalTypeSignatureParser) CanonicalTypeSignature() (localctx ICanonicalTypeSignatureContext) {
 	localctx = NewCanonicalTypeSignatureContext(p, p.GetParserRuleContext(), p.GetState())
-	p.EnterRule(localctx, 22, CanonicalTypeSignatureParserRULE_canonicalTypeSignature)
+	p.EnterRule(localctx, 24, CanonicalTypeSignatureParserRULE_canonicalTypeSignature)
 	p.EnterOuterAlt(localctx, 1)
 	{
-		p.SetState(93)
+		p.SetState(104)
 		p.CanonicalTypeOrGroupSequence()
 	}
 	{
-		p.SetState(94)
+		p.SetState(105)
 		p.Match(CanonicalTypeSignatureParserEOF)
 		if p.HasError() {
 			// Recognition error - abort rule
@@ -1996,8 +2213,8 @@ type ISingleCanonicalTypeContext interface {
 }
 
 type SingleCanonicalTypeContext struct {
-	parser antlr.Parser
 	antlr.BaseParserRuleContext
+	parser antlr.Parser
 }
 
 func NewEmptySingleCanonicalTypeContext() *SingleCanonicalTypeContext {
@@ -2067,14 +2284,14 @@ func (s *SingleCanonicalTypeContext) Accept(visitor antlr.ParseTreeVisitor) inte
 
 func (p *CanonicalTypeSignatureParser) SingleCanonicalType() (localctx ISingleCanonicalTypeContext) {
 	localctx = NewSingleCanonicalTypeContext(p, p.GetParserRuleContext(), p.GetState())
-	p.EnterRule(localctx, 24, CanonicalTypeSignatureParserRULE_singleCanonicalType)
+	p.EnterRule(localctx, 26, CanonicalTypeSignatureParserRULE_singleCanonicalType)
 	p.EnterOuterAlt(localctx, 1)
 	{
-		p.SetState(96)
+		p.SetState(107)
 		p.CanonicalType()
 	}
 	{
-		p.SetState(97)
+		p.SetState(108)
 		p.Match(CanonicalTypeSignatureParserEOF)
 		if p.HasError() {
 			// Recognition error - abort rule
@@ -2111,8 +2328,8 @@ type ISingleCanonicalTypeOrGroupContext interface {
 }
 
 type SingleCanonicalTypeOrGroupContext struct {
-	parser antlr.Parser
 	antlr.BaseParserRuleContext
+	parser antlr.Parser
 }
 
 func NewEmptySingleCanonicalTypeOrGroupContext() *SingleCanonicalTypeOrGroupContext {
@@ -2182,14 +2399,14 @@ func (s *SingleCanonicalTypeOrGroupContext) Accept(visitor antlr.ParseTreeVisito
 
 func (p *CanonicalTypeSignatureParser) SingleCanonicalTypeOrGroup() (localctx ISingleCanonicalTypeOrGroupContext) {
 	localctx = NewSingleCanonicalTypeOrGroupContext(p, p.GetParserRuleContext(), p.GetState())
-	p.EnterRule(localctx, 26, CanonicalTypeSignatureParserRULE_singleCanonicalTypeOrGroup)
+	p.EnterRule(localctx, 28, CanonicalTypeSignatureParserRULE_singleCanonicalTypeOrGroup)
 	p.EnterOuterAlt(localctx, 1)
 	{
-		p.SetState(99)
+		p.SetState(110)
 		p.CanonicalTypeOrGroup()
 	}
 	{
-		p.SetState(100)
+		p.SetState(111)
 		p.Match(CanonicalTypeSignatureParserEOF)
 		if p.HasError() {
 			// Recognition error - abort rule
@@ -2226,8 +2443,8 @@ type ISingleCanonicalGroupContext interface {
 }
 
 type SingleCanonicalGroupContext struct {
-	parser antlr.Parser
 	antlr.BaseParserRuleContext
+	parser antlr.Parser
 }
 
 func NewEmptySingleCanonicalGroupContext() *SingleCanonicalGroupContext {
@@ -2297,14 +2514,14 @@ func (s *SingleCanonicalGroupContext) Accept(visitor antlr.ParseTreeVisitor) int
 
 func (p *CanonicalTypeSignatureParser) SingleCanonicalGroup() (localctx ISingleCanonicalGroupContext) {
 	localctx = NewSingleCanonicalGroupContext(p, p.GetParserRuleContext(), p.GetState())
-	p.EnterRule(localctx, 28, CanonicalTypeSignatureParserRULE_singleCanonicalGroup)
+	p.EnterRule(localctx, 30, CanonicalTypeSignatureParserRULE_singleCanonicalGroup)
 	p.EnterOuterAlt(localctx, 1)
 	{
-		p.SetState(102)
+		p.SetState(113)
 		p.CanonicalTypeGroup()
 	}
 	{
-		p.SetState(103)
+		p.SetState(114)
 		p.Match(CanonicalTypeSignatureParserEOF)
 		if p.HasError() {
 			// Recognition error - abort rule

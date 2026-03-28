@@ -43,6 +43,7 @@ type PrimitiveAstNodeI interface {
 	IsStringNode() bool
 	IsTemporalNode() bool
 	IsMachineNumericNode() bool
+	IsNetworkNode() bool
 	IsScalar() bool
 	GenerateGoCode(w io.Writer) (err error)
 	AstNodeI
@@ -99,3 +100,10 @@ type Parser struct {
 	lex         resetableLexerI
 	tokenStream *antlr.CommonTokenStream
 }
+type NetworkTypeAstNode struct {
+	BaseType       BaseTypeNetworkE
+	CIDRWidth      uint8
+	ScalarModifier ScalarModifierE
+}
+
+var _ PrimitiveAstNodeI = NetworkTypeAstNode{}

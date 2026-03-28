@@ -1,4 +1,4 @@
-// Code generated from CanonicalTypeSignatureParser.g4 by ANTLR 4.13.1. DO NOT EDIT.
+// Code generated from CanonicalTypeSignatureParser.g4 by ANTLR 4.13.2. DO NOT EDIT.
 
 package grammar // CanonicalTypeSignatureParser
 import "github.com/antlr4-go/antlr/v4"
@@ -15,6 +15,9 @@ type CanonicalTypeSignatureParserVisitor interface {
 
 	// Visit a parse tree produced by CanonicalTypeSignatureParser#baseTemporal.
 	VisitBaseTemporal(ctx *BaseTemporalContext) interface{}
+
+	// Visit a parse tree produced by CanonicalTypeSignatureParser#baseNetwork.
+	VisitBaseNetwork(ctx *BaseNetworkContext) interface{}
 
 	// Visit a parse tree produced by CanonicalTypeSignatureParser#scalarModifier.
 	VisitScalarModifier(ctx *ScalarModifierContext) interface{}
@@ -33,6 +36,9 @@ type CanonicalTypeSignatureParserVisitor interface {
 
 	// Visit a parse tree produced by CanonicalTypeSignatureParser#CanonicalTypeMachineNumeric.
 	VisitCanonicalTypeMachineNumeric(ctx *CanonicalTypeMachineNumericContext) interface{}
+
+	// Visit a parse tree produced by CanonicalTypeSignatureParser#CanonicalTypeNetwork.
+	VisitCanonicalTypeNetwork(ctx *CanonicalTypeNetworkContext) interface{}
 
 	// Visit a parse tree produced by CanonicalTypeSignatureParser#canonicalTypeSequence.
 	VisitCanonicalTypeSequence(ctx *CanonicalTypeSequenceContext) interface{}
