@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
+	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -20,26 +21,48 @@ type ExtractLiteralsConfig struct {
 
 	// Whitelist contains function names (case-insensitive) whose literal arguments
 	// are ALWAYS extracted, regardless of MinLength.
-	Whitelist map[string]bool
+	Whitelist *containers.HashSet[string]
 
 	// Blacklist contains function names (case-insensitive) whose literal arguments
 	// are NEVER extracted, regardless of MinLength or Whitelist.
 	// Blacklist takes priority over Whitelist.
-	Blacklist map[string]bool
+	Blacklist *containers.HashSet[string]
 
 	// Prefix is the prefix for generated parameter names. Default: "param".
 	Prefix string
+}
+
+func normalizeFunctionName(name string) string {
+	return strings.ToLower(name)
 }
 
 // NewExtractLiteralsConfig creates a config with sensible defaults.
 func NewExtractLiteralsConfig(minLength int) (inst *ExtractLiteralsConfig) {
 	inst = &ExtractLiteralsConfig{
 		MinLength: minLength,
-		Whitelist: make(map[string]bool),
-		Blacklist: make(map[string]bool),
+		Whitelist: containers.NewHashSet[string](128),
+		Blacklist: containers.NewHashSet[string](128),
 		Prefix:    "param",
 	}
 	return
+}
+func (inst *ExtractLiteralsConfig) AddFuncNameToWhitelist(name string) {
+	inst.Whitelist.Add(normalizeFunctionName(name))
+}
+func (inst *ExtractLiteralsConfig) AddFuncNameToBlacklist(name string) {
+	inst.Blacklist.Add(normalizeFunctionName(name))
+}
+func (inst *ExtractLiteralsConfig) RemoveFuncNameFromWhitelist(name string) {
+	inst.Whitelist.Remove(normalizeFunctionName(name))
+}
+func (inst *ExtractLiteralsConfig) RemoveFuncNameFromBlacklist(name string) {
+	inst.Blacklist.Remove(normalizeFunctionName(name))
+}
+func (inst *ExtractLiteralsConfig) IsFunctionNameWhitelisted(name string) bool {
+	return inst.Whitelist.Has(normalizeFunctionName(name))
+}
+func (inst *ExtractLiteralsConfig) IsFunctionNameBlacklisted(name string) bool {
+	return inst.Blacklist.Has(normalizeFunctionName(name))
 }
 
 // extractedParam represents a literal that has been extracted into a query parameter.
@@ -143,8 +166,8 @@ func collectLiteralCandidates(pr *nanopass.ParseResult, config *ExtractLiteralsC
 		literalText := nanopass.NodeText(pr, litExpr)
 		typeName := inferClickHouseType(litCtx)
 		contextName, argIndex := resolveContext(litExpr)
-		blacklisted := config.Blacklist[strings.ToLower(contextName)]
-		whitelisted := config.Whitelist[strings.ToLower(contextName)]
+		blacklisted := config.IsFunctionNameBlacklisted(contextName)
+		whitelisted := config.IsFunctionNameWhitelisted(contextName)
 
 		candidates = append(candidates, literalCandidate{
 			node:        litExpr,

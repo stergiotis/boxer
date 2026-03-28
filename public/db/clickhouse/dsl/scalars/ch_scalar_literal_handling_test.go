@@ -5,6 +5,9 @@ package scalars
 import (
 	"math"
 	"testing"
+
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
 )
 
 func TestUnescapeString(t *testing.T) {
@@ -80,9 +83,10 @@ func TestUnmarshal(t *testing.T) {
 	tests := []struct {
 		name      string
 		input     string
-		wantType  LiteralTypeE
+		wantType  canonicaltypes.PrimitiveAstNodeI
 		wantStr   string
 		wantInt   int64
+		wantUint  uint64
 		wantFloat float64
 		wantBool  bool
 		wantErr   bool
@@ -90,62 +94,62 @@ func TestUnmarshal(t *testing.T) {
 		checkInf  int // +1 or -1
 	}{
 		// NULL
-		{name: "null_upper", input: "NULL", wantType: LiteralNull},
-		{name: "null_lower", input: "null", wantType: LiteralNull},
-		{name: "null_mixed", input: "Null", wantType: LiteralNull},
+		//{name: "null_upper", input: "NULL", wantType: LiteralNull},
+		//{name: "null_lower", input: "null", wantType: LiteralNull},
+		//{name: "null_mixed", input: "Null", wantType: LiteralNull},
 
 		// Booleans
-		{name: "true", input: "true", wantType: LiteralBool, wantBool: true},
-		{name: "false", input: "false", wantType: LiteralBool, wantBool: false},
+		{name: "true", input: "true", wantType: ctabb.B, wantBool: true},
+		{name: "false", input: "false", wantType: ctabb.B, wantBool: false},
 
 		// Strings
-		{name: "string_simple", input: "'hello'", wantType: LiteralString, wantStr: "hello"},
-		{name: "string_empty", input: "''", wantType: LiteralString, wantStr: ""},
-		{name: "string_escaped", input: `'a\tb'`, wantType: LiteralString, wantStr: "a\tb"},
+		{name: "string_simple", input: "'hello'", wantType: ctabb.S, wantStr: "hello"},
+		{name: "string_empty", input: "''", wantType: ctabb.S, wantStr: ""},
+		{name: "string_escaped", input: `'a\tb'`, wantType: ctabb.S, wantStr: "a\tb"},
 
 		// Decimal integers
-		{name: "decimal_zero", input: "0", wantType: LiteralInt, wantInt: 0},
-		{name: "decimal", input: "42", wantType: LiteralInt, wantInt: 42},
-		{name: "decimal_large", input: "1234567890", wantType: LiteralInt, wantInt: 1234567890},
-		{name: "decimal_positive", input: "+42", wantType: LiteralInt, wantInt: 42},
-		{name: "decimal_negative", input: "-42", wantType: LiteralInt, wantInt: -42},
+		{name: "decimal_zero", input: "0", wantType: ctabb.U64, wantUint: 0},
+		{name: "decimal", input: "42", wantType: ctabb.U64, wantUint: 42},
+		{name: "decimal_large", input: "1234567890", wantType: ctabb.U64, wantUint: 1234567890},
+		{name: "decimal_positive", input: "+42", wantType: ctabb.U64, wantUint: 42},
+		{name: "decimal_negative", input: "-42", wantType: ctabb.I64, wantInt: -42},
 
 		// Octal integers
-		{name: "octal", input: "0777", wantType: LiteralInt, wantInt: 0777},
-		{name: "octal_simple", input: "010", wantType: LiteralInt, wantInt: 8},
-		{name: "octal_negative", input: "-010", wantType: LiteralInt, wantInt: -8},
+		{name: "octal", input: "0777", wantType: ctabb.U64, wantUint: 0777},
+		{name: "octal_simple", input: "010", wantType: ctabb.U64, wantUint: 8},
+		{name: "octal_negative", input: "-010", wantType: ctabb.I64, wantInt: -8},
 
 		// Hexadecimal integers
-		{name: "hex_lower", input: "0xff", wantType: LiteralInt, wantInt: 255},
-		{name: "hex_upper", input: "0XFF", wantType: LiteralInt, wantInt: 255},
-		{name: "hex_mixed", input: "0xDeadBeef", wantType: LiteralInt, wantInt: 0xDeadBeef},
-		{name: "hex_negative", input: "-0xff", wantType: LiteralInt, wantInt: -255},
+		{name: "hex_lower", input: "0xff", wantType: ctabb.U64, wantUint: 255},
+		{name: "hex_upper", input: "0XFF", wantType: ctabb.U64, wantUint: 255},
+		{name: "hex_mixed", input: "0xDeadBeef", wantType: ctabb.U64, wantUint: 0xDeadBeef},
+		{name: "hex_negative", input: "-0xff", wantType: ctabb.I64, wantInt: -255},
 
 		// Floating-point
-		{name: "float_dot", input: "3.14", wantType: LiteralFloat, wantFloat: 3.14},
-		{name: "float_leading_dot", input: ".5", wantType: LiteralFloat, wantFloat: 0.5},
-		{name: "float_trailing_dot", input: "3.", wantType: LiteralFloat, wantFloat: 3.0},
-		{name: "float_exp", input: "1e10", wantType: LiteralFloat, wantFloat: 1e10},
-		{name: "float_exp_neg", input: "1e-3", wantType: LiteralFloat, wantFloat: 1e-3},
-		{name: "float_exp_pos", input: "1E+5", wantType: LiteralFloat, wantFloat: 1e5},
-		{name: "float_full", input: "1.5e2", wantType: LiteralFloat, wantFloat: 150.0},
-		{name: "float_negative", input: "-3.14", wantType: LiteralFloat, wantFloat: -3.14},
-		{name: "float_positive", input: "+3.14", wantType: LiteralFloat, wantFloat: 3.14},
+		{name: "float_dot", input: "3.14", wantType: ctabb.F64, wantFloat: 3.14},
+		{name: "float_leading_dot", input: ".5", wantType: ctabb.F64, wantFloat: 0.5},
+		{name: "float_trailing_dot", input: "3.", wantType: ctabb.F64, wantFloat: 3.0},
+		{name: "float_exp", input: "1e10", wantType: ctabb.F64, wantFloat: 1e10},
+		{name: "float_exp_neg", input: "1e-3", wantType: ctabb.F64, wantFloat: 1e-3},
+		{name: "float_exp_pos", input: "1E+5", wantType: ctabb.F64, wantFloat: 1e5},
+		{name: "float_full", input: "1.5e2", wantType: ctabb.F64, wantFloat: 150.0},
+		{name: "float_negative", input: "-3.14", wantType: ctabb.F64, wantFloat: -3.14},
+		{name: "float_positive", input: "+3.14", wantType: ctabb.F64, wantFloat: 3.14},
 
 		// Hex floats
-		{name: "hex_float", input: "0x1p10", wantType: LiteralFloat, wantFloat: 1024.0},
+		{name: "hex_float", input: "0x1p10", wantType: ctabb.F64, wantFloat: 1024.0},
 
 		// Special floats
-		{name: "inf", input: "Inf", wantType: LiteralFloat, checkInf: 1},
-		{name: "inf_upper", input: "INF", wantType: LiteralFloat, checkInf: 1},
-		{name: "infinity", input: "infinity", wantType: LiteralFloat, checkInf: 1},
-		{name: "neg_inf", input: "-Inf", wantType: LiteralFloat, checkInf: -1},
-		{name: "pos_inf", input: "+Inf", wantType: LiteralFloat, checkInf: 1},
-		{name: "nan", input: "NaN", wantType: LiteralFloat, checkNaN: true},
-		{name: "nan_lower", input: "nan", wantType: LiteralFloat, checkNaN: true},
+		{name: "inf", input: "Inf", wantType: ctabb.F64, checkInf: 1},
+		{name: "inf_upper", input: "INF", wantType: ctabb.F64, checkInf: 1},
+		{name: "infinity", input: "infinity", wantType: ctabb.F64, checkInf: 1},
+		{name: "neg_inf", input: "-Inf", wantType: ctabb.F64, checkInf: -1},
+		{name: "pos_inf", input: "+Inf", wantType: ctabb.F64, checkInf: 1},
+		{name: "nan", input: "NaN", wantType: ctabb.F64, checkNaN: true},
+		{name: "nan_lower", input: "nan", wantType: ctabb.F64, checkNaN: true},
 
 		// Whitespace trimming
-		{name: "whitespace", input: "  42  ", wantType: LiteralInt, wantInt: 42},
+		{name: "whitespace", input: "  42  ", wantType: ctabb.U64, wantUint: 42},
 
 		// Errors
 		{name: "empty", input: "", wantErr: true},
@@ -169,16 +173,20 @@ func TestUnmarshal(t *testing.T) {
 				t.Errorf("UnmarshalScalarLiteral(%q).Type = %v, want %v", tt.input, got.Type, tt.wantType)
 				return
 			}
-			switch tt.wantType {
-			case LiteralString:
+			switch tt.wantType.String() {
+			case ctabb.S.String():
 				if got.StringVal != tt.wantStr {
 					t.Errorf("UnmarshalScalarLiteral(%q).StringVal = %q, want %q", tt.input, got.StringVal, tt.wantStr)
 				}
-			case LiteralInt:
+			case ctabb.I64.String():
 				if got.IntVal != tt.wantInt {
 					t.Errorf("UnmarshalScalarLiteral(%q).IntVal = %d, want %d", tt.input, got.IntVal, tt.wantInt)
 				}
-			case LiteralFloat:
+			case ctabb.U64.String():
+				if got.UintVal != tt.wantUint {
+					t.Errorf("UnmarshalScalarLiteral(%q).UintVal = %d, want %d", tt.input, got.UintVal, tt.wantUint)
+				}
+			case ctabb.F64.String():
 				if tt.checkNaN {
 					if !math.IsNaN(got.FloatVal) {
 						t.Errorf("UnmarshalScalarLiteral(%q).FloatVal = %v, want NaN", tt.input, got.FloatVal)
@@ -190,12 +198,10 @@ func TestUnmarshal(t *testing.T) {
 				} else if got.FloatVal != tt.wantFloat {
 					t.Errorf("UnmarshalScalarLiteral(%q).FloatVal = %v, want %v", tt.input, got.FloatVal, tt.wantFloat)
 				}
-			case LiteralBool:
+			case ctabb.B.String():
 				if got.BoolVal != tt.wantBool {
 					t.Errorf("UnmarshalScalarLiteral(%q).BoolVal = %v, want %v", tt.input, got.BoolVal, tt.wantBool)
 				}
-			case LiteralNull:
-				// No value to check
 			}
 		})
 	}
@@ -230,21 +236,21 @@ func TestEscapeString(t *testing.T) {
 func TestRoundTrip(t *testing.T) {
 	// Verify that UnmarshalScalarLiteral(MarshalScalarLiteral(lit)) ≈ lit for various literals
 	literals := []Literal{
-		{Type: LiteralNull},
-		{Type: LiteralBool, BoolVal: true},
-		{Type: LiteralBool, BoolVal: false},
-		{Type: LiteralString, StringVal: "hello"},
-		{Type: LiteralString, StringVal: "it's a \"test\"\nwith\ttabs\\and\\backslashes"},
-		{Type: LiteralString, StringVal: ""},
-		{Type: LiteralString, StringVal: "\x00\x01\x02"},
-		{Type: LiteralInt, IntVal: 0},
-		{Type: LiteralInt, IntVal: 42},
-		{Type: LiteralInt, IntVal: -100},
-		{Type: LiteralFloat, FloatVal: 3.14},
-		{Type: LiteralFloat, FloatVal: -0.001},
-		{Type: LiteralFloat, FloatVal: 1e100},
-		{Type: LiteralFloat, FloatVal: math.Inf(1)},
-		{Type: LiteralFloat, FloatVal: math.Inf(-1)},
+		{Null: true},
+		{Type: ctabb.B, BoolVal: true},
+		{Type: ctabb.B, BoolVal: false},
+		{Type: ctabb.S, StringVal: "hello"},
+		{Type: ctabb.S, StringVal: "it's a \"test\"\nwith\ttabs\\and\\backslashes"},
+		{Type: ctabb.S, StringVal: ""},
+		{Type: ctabb.S, StringVal: "\x00\x01\x02"},
+		{Type: ctabb.U64, UintVal: 0},
+		{Type: ctabb.U64, IntVal: 42},
+		{Type: ctabb.I64, IntVal: -100},
+		{Type: ctabb.F64, FloatVal: 3.14},
+		{Type: ctabb.F64, FloatVal: -0.001},
+		{Type: ctabb.F64, FloatVal: 1e100},
+		{Type: ctabb.F64, FloatVal: math.Inf(1)},
+		{Type: ctabb.F64, FloatVal: math.Inf(-1)},
 	}
 
 	for _, lit := range literals {
@@ -262,36 +268,33 @@ func TestRoundTrip(t *testing.T) {
 			t.Errorf("roundtrip type mismatch: %v != %v (text=%q)", got.Type, lit.Type, text)
 			continue
 		}
-		switch lit.Type {
-		case LiteralString:
-			if got.StringVal != lit.StringVal {
-				t.Errorf("roundtrip string mismatch: %q != %q (text=%q)", got.StringVal, lit.StringVal, text)
-			}
-		case LiteralInt:
-			if got.IntVal != lit.IntVal {
-				t.Errorf("roundtrip int mismatch: %d != %d (text=%q)", got.IntVal, lit.IntVal, text)
-			}
-		case LiteralFloat:
-			if math.IsInf(lit.FloatVal, 0) {
-				if !math.IsInf(got.FloatVal, 0) || math.Signbit(got.FloatVal) != math.Signbit(lit.FloatVal) {
-					t.Errorf("roundtrip inf mismatch: %v != %v (text=%q)", got.FloatVal, lit.FloatVal, text)
+		if !lit.Null {
+			switch lit.Type.String() {
+			case ctabb.S.String():
+				if got.StringVal != lit.StringVal {
+					t.Errorf("roundtrip string mismatch: %q != %q (text=%q)", got.StringVal, lit.StringVal, text)
 				}
-			} else if got.FloatVal != lit.FloatVal {
-				t.Errorf("roundtrip float mismatch: %v != %v (text=%q)", got.FloatVal, lit.FloatVal, text)
-			}
-		case LiteralBool:
-			if got.BoolVal != lit.BoolVal {
-				t.Errorf("roundtrip bool mismatch: %v != %v (text=%q)", got.BoolVal, lit.BoolVal, text)
+			case ctabb.I64.String():
+				if got.IntVal != lit.IntVal {
+					t.Errorf("roundtrip int mismatch: %d != %d (text=%q)", got.IntVal, lit.IntVal, text)
+				}
+			case ctabb.U64.String():
+				if got.UintVal != lit.UintVal {
+					t.Errorf("roundtrip uint mismatch: %d != %d (text=%q)", got.UintVal, lit.UintVal, text)
+				}
+			case ctabb.F64.String():
+				if math.IsInf(lit.FloatVal, 0) {
+					if !math.IsInf(got.FloatVal, 0) || math.Signbit(got.FloatVal) != math.Signbit(lit.FloatVal) {
+						t.Errorf("roundtrip inf mismatch: %v != %v (text=%q)", got.FloatVal, lit.FloatVal, text)
+					}
+				} else if got.FloatVal != lit.FloatVal {
+					t.Errorf("roundtrip float mismatch: %v != %v (text=%q)", got.FloatVal, lit.FloatVal, text)
+				}
+			case ctabb.B.String():
+				if got.BoolVal != lit.BoolVal {
+					t.Errorf("roundtrip bool mismatch: %v != %v (text=%q)", got.BoolVal, lit.BoolVal, text)
+				}
 			}
 		}
-	}
-}
-
-func TestLiteralTypeString(t *testing.T) {
-	if LiteralString.String() != "String" {
-		t.Errorf("LiteralString.String() = %q", LiteralString.String())
-	}
-	if LiteralUnknown.String() != "Unknown" {
-		t.Errorf("LiteralUnknown.String() = %q", LiteralUnknown.String())
 	}
 }

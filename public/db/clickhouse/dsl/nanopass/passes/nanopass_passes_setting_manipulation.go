@@ -16,6 +16,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/scalars"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
 )
 
 // Tuple represents a ClickHouse tuple value with optional named slots.
@@ -496,17 +497,22 @@ func SerializeSettingValue(val any) (sql string, err error) {
 	switch v := val.(type) {
 	case int64:
 		sql, err = scalars.MarshalScalarLiteral(scalars.Literal{
-			Type:   scalars.LiteralInt,
+			Type:   ctabb.I64,
 			IntVal: v,
 		})
 	case int:
 		sql, err = scalars.MarshalScalarLiteral(scalars.Literal{
-			Type:   scalars.LiteralInt,
+			Type:   ctabb.I64,
 			IntVal: int64(v),
+		})
+	case uint64:
+		sql, err = scalars.MarshalScalarLiteral(scalars.Literal{
+			Type:    ctabb.U64,
+			UintVal: v,
 		})
 	case float64:
 		sql, err = scalars.MarshalScalarLiteral(scalars.Literal{
-			Type:     scalars.LiteralFloat,
+			Type:     ctabb.F64,
 			FloatVal: v,
 		})
 	case string:

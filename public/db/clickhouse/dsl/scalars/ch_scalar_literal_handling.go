@@ -22,49 +22,22 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
 )
-
-// LiteralTypeE enumerates the kinds of ClickHouse SQL literals.
-type LiteralTypeE int
-
-const (
-	LiteralString  LiteralTypeE = iota // single-quoted string
-	LiteralInt                         // integer (decimal, octal, hex)
-	LiteralFloat                       // floating-point, Inf, NaN
-	LiteralBool                        // true / false
-	LiteralNull                        // NULL
-	LiteralUnknown                     // unrecognised input
-)
-
-func (inst LiteralTypeE) String() string {
-	switch inst {
-	case LiteralString:
-		return "String"
-	case LiteralInt:
-		return "Int"
-	case LiteralFloat:
-		return "Float"
-	case LiteralBool:
-		return "Bool"
-	case LiteralNull:
-		return "Null"
-	default:
-		return "Unknown"
-	}
-}
 
 // Literal is the result of unmarshalling a ClickHouse SQL literal token.
 type Literal struct {
-	Type LiteralTypeE
+	Null    bool
+	Unknown bool
+	Type    canonicaltypes.PrimitiveAstNodeI
 
-	// Populated fields depend on Type:
-	//   LiteralString → StringVal
-	//   LiteralInt    → IntVal
-	//   LiteralFloat  → FloatVal
-	//   LiteralBool   → BoolVal
-	//   LiteralNull   → (no value)
+	// Populated fields depend on Type
 	StringVal string
 	IntVal    int64
+	UintVal   uint64
 	FloatVal  float64
 	BoolVal   bool
 }
@@ -226,26 +199,27 @@ func UnmarshalScalarLiteral(token string) (result Literal, err error) {
 
 	// NULL (case-insensitive)
 	if strings.EqualFold(token, "NULL") {
-		result.Type = LiteralNull
+		result.Null = true
 		return
 	}
 
 	// Boolean
 	if token == "true" {
-		result.Type = LiteralBool
+		result.Type = ctabb.B
 		result.BoolVal = true
 		return
 	}
 	if token == "false" {
-		result.Type = LiteralBool
+		result.Type = ctabb.B
 		result.BoolVal = false
 		return
 	}
 
 	// String literal
 	if len(token) >= 2 && token[0] == '\'' {
-		result.Type = LiteralString
+		result.Type = ctabb.S
 		result.StringVal, err = UnescapeString(token)
+		// TODO check utf8
 		if err != nil {
 			err = fmt.Errorf("chliteral.UnmarshalScalarLiteral: %w", err)
 		}
@@ -271,14 +245,14 @@ func UnmarshalScalarLiteral(token string) (result Literal, err error) {
 	// INF / INFINITY (case-insensitive)
 	upper := strings.ToUpper(numPart)
 	if upper == "INF" || upper == "INFINITY" {
-		result.Type = LiteralFloat
+		result.Type = ctabb.F64
 		result.FloatVal = signF * math.Inf(1)
 		return
 	}
 
 	// NaN (case-insensitive)
 	if upper == "NAN" {
-		result.Type = LiteralFloat
+		result.Type = ctabb.F64
 		result.FloatVal = math.NaN()
 		return
 	}
@@ -287,7 +261,7 @@ func UnmarshalScalarLiteral(token string) (result Literal, err error) {
 	if len(numPart) > 2 && numPart[0] == '0' && (numPart[1] == 'x' || numPart[1] == 'X') {
 		// Check if it's a hex float (has 'p'/'P' or '.')
 		if containsAnyByte(numPart, "pP.") {
-			result.Type = LiteralFloat
+			result.Type = ctabb.F64
 			result.FloatVal, err = parseHexFloat(numPart)
 			if err != nil {
 				err = fmt.Errorf("chliteral.UnmarshalScalarLiteral: invalid hex float %q: %w", token, err)
@@ -302,8 +276,13 @@ func UnmarshalScalarLiteral(token string) (result Literal, err error) {
 			err = fmt.Errorf("chliteral.UnmarshalScalarLiteral: invalid hex literal %q: %w", token, err)
 			return
 		}
-		result.Type = LiteralInt
-		result.IntVal = sign * int64(val)
+		if sign >= 0 {
+			result.Type = ctabb.U64
+			result.UintVal = val
+		} else {
+			result.Type = ctabb.I64
+			result.IntVal = -int64(val)
+		}
 		return
 	}
 
@@ -315,14 +294,19 @@ func UnmarshalScalarLiteral(token string) (result Literal, err error) {
 			err = fmt.Errorf("chliteral.UnmarshalScalarLiteral: invalid octal literal %q: %w", token, err)
 			return
 		}
-		result.Type = LiteralInt
-		result.IntVal = sign * int64(val)
+		if sign >= 0 {
+			result.Type = ctabb.U64
+			result.UintVal = val
+		} else {
+			result.Type = ctabb.I64
+			result.IntVal = -int64(val)
+		}
 		return
 	}
 
 	// Floating-point: contains '.', 'e', or 'E'
 	if containsAnyByte(numPart, ".eE") {
-		result.Type = LiteralFloat
+		result.Type = ctabb.F64
 		result.FloatVal, err = strconv.ParseFloat(numPart, 64)
 		if err != nil {
 			err = fmt.Errorf("chliteral.UnmarshalScalarLiteral: invalid float literal %q: %w", token, err)
@@ -338,11 +322,16 @@ func UnmarshalScalarLiteral(token string) (result Literal, err error) {
 		val, err = strconv.ParseUint(numPart, 10, 64)
 		if err != nil {
 			err = fmt.Errorf("chliteral.UnmarshalScalarLiteral: unrecognised literal %q: %w", token, err)
-			result.Type = LiteralUnknown
+			result.Unknown = true
 			return
 		}
-		result.Type = LiteralInt
-		result.IntVal = sign * int64(val)
+		if sign >= 0 {
+			result.Type = ctabb.U64
+			result.UintVal = val
+		} else {
+			result.Type = ctabb.I64
+			result.IntVal = -int64(val)
+		}
 		return
 	}
 }
@@ -378,20 +367,23 @@ func EscapeString(s string) string {
 
 // MarshalScalarLiteral converts a Literal back into its ClickHouse SQL text representation.
 func MarshalScalarLiteral(lit Literal) (result string, err error) {
-	switch lit.Type {
-	case LiteralNull:
-		result = "NULL"
-	case LiteralBool:
+	if lit.Null {
+		return "NULL", nil
+	}
+	switch lit.Type.String() {
+	case "b":
 		if lit.BoolVal {
 			result = "true"
 		} else {
 			result = "false"
 		}
-	case LiteralString:
+	case "s":
 		result = EscapeString(lit.StringVal)
-	case LiteralInt:
+	case "i64":
 		result = strconv.FormatInt(lit.IntVal, 10)
-	case LiteralFloat:
+	case "u64":
+		result = "0x" + strconv.FormatUint(lit.UintVal, 16)
+	case "f64":
 		if math.IsInf(lit.FloatVal, 1) {
 			result = "Inf"
 		} else if math.IsInf(lit.FloatVal, -1) {
@@ -402,7 +394,7 @@ func MarshalScalarLiteral(lit Literal) (result string, err error) {
 			result = strconv.FormatFloat(lit.FloatVal, 'g', -1, 64)
 		}
 	default:
-		err = fmt.Errorf("chliteral.MarshalScalarLiteral: unknown literal type %v", lit.Type)
+		err = eb.Build().Stringer("type", lit.Type).Errorf("chliteral.MarshalScalarLiteral: unknown literal type")
 	}
 	return
 }
