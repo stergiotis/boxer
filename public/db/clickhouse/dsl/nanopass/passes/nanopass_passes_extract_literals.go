@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -15,54 +14,83 @@ import (
 
 // ExtractLiteralsConfig configures the literal extraction pass.
 type ExtractLiteralsConfig struct {
-	// MinLength is the minimum character length of a literal to trigger extraction.
+	// minLength is the minimum character length of a literal to trigger extraction.
 	// Literals shorter than this are left inline unless the parent function is whitelisted.
-	MinLength int
+	minLength int
 
-	// Whitelist contains function names (case-insensitive) whose literal arguments
-	// are ALWAYS extracted, regardless of MinLength.
-	Whitelist *containers.HashSet[string]
+	// funcPolicy maps normalized function/operator names to extraction policy.
+	// true = blacklisted (never extract), false = whitelisted (always extract).
+	// Functions not in the map follow the minLength threshold.
+	funcPolicy map[string]bool
 
-	// Blacklist contains function names (case-insensitive) whose literal arguments
-	// are NEVER extracted, regardless of MinLength or Whitelist.
-	// Blacklist takes priority over Whitelist.
-	Blacklist *containers.HashSet[string]
-
-	// Prefix is the prefix for generated parameter names. Default: "param".
-	Prefix string
-}
-
-func normalizeFunctionName(name string) string {
-	return strings.ToLower(name)
+	// prefix is the prefix for generated parameter names. Default: "param".
+	prefix string
 }
 
 // NewExtractLiteralsConfig creates a config with sensible defaults.
 func NewExtractLiteralsConfig(minLength int) (inst *ExtractLiteralsConfig) {
 	inst = &ExtractLiteralsConfig{
-		MinLength: minLength,
-		Whitelist: containers.NewHashSet[string](128),
-		Blacklist: containers.NewHashSet[string](128),
-		Prefix:    "param",
+		minLength:  minLength,
+		funcPolicy: make(map[string]bool),
+		prefix:     "param",
 	}
 	return
 }
-func (inst *ExtractLiteralsConfig) AddFuncNameToWhitelist(name string) {
-	inst.Whitelist.Add(normalizeFunctionName(name))
+
+// SetMinLength sets the minimum literal length for extraction.
+func (inst *ExtractLiteralsConfig) SetMinLength(minLength int) {
+	inst.minLength = minLength
 }
-func (inst *ExtractLiteralsConfig) AddFuncNameToBlacklist(name string) {
-	inst.Blacklist.Add(normalizeFunctionName(name))
+
+// MinLength returns the minimum literal length for extraction.
+func (inst *ExtractLiteralsConfig) MinLength() int {
+	return inst.minLength
 }
-func (inst *ExtractLiteralsConfig) RemoveFuncNameFromWhitelist(name string) {
-	inst.Whitelist.Remove(normalizeFunctionName(name))
+
+// SetPrefix sets the parameter name prefix.
+func (inst *ExtractLiteralsConfig) SetPrefix(prefix string) {
+	inst.prefix = prefix
 }
-func (inst *ExtractLiteralsConfig) RemoveFuncNameFromBlacklist(name string) {
-	inst.Blacklist.Remove(normalizeFunctionName(name))
+
+// Prefix returns the parameter name prefix.
+func (inst *ExtractLiteralsConfig) Prefix() string {
+	return inst.prefix
 }
-func (inst *ExtractLiteralsConfig) IsFunctionNameWhitelisted(name string) bool {
-	return inst.Whitelist.Has(normalizeFunctionName(name))
+
+// Whitelist marks a function/operator so its literal arguments are ALWAYS extracted,
+// regardless of MinLength. The name is normalized (lowercased, trimmed).
+func (inst *ExtractLiteralsConfig) Whitelist(name string) {
+	inst.funcPolicy[normalizeFunctionName(name)] = false
 }
-func (inst *ExtractLiteralsConfig) IsFunctionNameBlacklisted(name string) bool {
-	return inst.Blacklist.Has(normalizeFunctionName(name))
+
+// Blacklist marks a function/operator so its literal arguments are NEVER extracted.
+// Blacklist takes priority over Whitelist — calling Blacklist after Whitelist on the
+// same name will override the whitelist entry.
+func (inst *ExtractLiteralsConfig) Blacklist(name string) {
+	inst.funcPolicy[normalizeFunctionName(name)] = true
+}
+
+// RemovePolicy removes any whitelist/blacklist entry for the given function/operator.
+func (inst *ExtractLiteralsConfig) RemovePolicy(name string) {
+	delete(inst.funcPolicy, normalizeFunctionName(name))
+}
+
+// IsBlacklisted returns true if the function/operator is blacklisted.
+func (inst *ExtractLiteralsConfig) IsBlacklisted(name string) bool {
+	blocked, found := inst.funcPolicy[normalizeFunctionName(name)]
+	return found && blocked
+}
+
+// IsWhitelisted returns true if the function/operator is whitelisted.
+func (inst *ExtractLiteralsConfig) IsWhitelisted(name string) bool {
+	blocked, found := inst.funcPolicy[normalizeFunctionName(name)]
+	return found && !blocked
+}
+
+// normalizeFunctionName normalizes a function/operator name for policy lookup.
+// Lowercases and trims whitespace.
+func normalizeFunctionName(name string) string {
+	return strings.ToLower(strings.TrimSpace(name))
 }
 
 // extractedParam represents a literal that has been extracted into a query parameter.
@@ -116,7 +144,7 @@ func ExtractLiterals(config *ExtractLiteralsConfig) nanopass.Pass {
 		}
 
 		// Phase 3: Assign parameter names with deduplication
-		params, paramByNode := assignParamNames(filtered, config.Prefix)
+		params, paramByNode := assignParamNames(filtered, config.prefix)
 
 		// Phase 4: Rewrite the SQL
 		rw := nanopass.NewRewriter(pr)
@@ -166,8 +194,7 @@ func collectLiteralCandidates(pr *nanopass.ParseResult, config *ExtractLiteralsC
 		literalText := nanopass.NodeText(pr, litExpr)
 		typeName := inferClickHouseType(litCtx)
 		contextName, argIndex := resolveContext(litExpr)
-		blacklisted := config.IsFunctionNameBlacklisted(contextName)
-		whitelisted := config.IsFunctionNameWhitelisted(contextName)
+		normalizedCtx := normalizeFunctionName(contextName)
 
 		candidates = append(candidates, literalCandidate{
 			node:        litExpr,
@@ -175,8 +202,8 @@ func collectLiteralCandidates(pr *nanopass.ParseResult, config *ExtractLiteralsC
 			argIndex:    argIndex,
 			literalText: literalText,
 			typeName:    typeName,
-			blacklisted: blacklisted,
-			whitelisted: whitelisted,
+			blacklisted: config.IsBlacklisted(normalizedCtx),
+			whitelisted: config.IsWhitelisted(normalizedCtx),
 		})
 
 		return true
@@ -205,7 +232,6 @@ func inferClickHouseType(lit *grammar.LiteralContext) string {
 		if strings.HasPrefix(text, "0x") || strings.HasPrefix(text, "0X") {
 			return "UInt64"
 		}
-		// Check if negative
 		if strings.HasPrefix(text, "-") {
 			return "Int64"
 		}
@@ -224,23 +250,18 @@ func resolveContext(litExpr *grammar.ColumnExprLiteralContext) (contextName stri
 
 	switch p := parent.(type) {
 	case *grammar.ColumnArgExprContext:
-		// Inside a function call argument list
 		return resolveFuncArgContext(p)
 
 	case *grammar.ColumnExprPrecedence1Context:
-		// *, /, %
 		return resolveOperatorContext(p, litExpr)
 
 	case *grammar.ColumnExprPrecedence2Context:
-		// +, -, ||
 		return resolveOperatorContext(p, litExpr)
 
 	case *grammar.ColumnExprPrecedence3Context:
-		// =, !=, <, >, <=, >=, IN, LIKE, etc.
 		return resolveOperatorContext(p, litExpr)
 
 	case *grammar.ColumnsExprColumnContext:
-		// Top-level SELECT list item or IN list element
 		return resolveColumnsExprContext(p, litExpr)
 
 	case *grammar.ColumnExprBetweenContext:
@@ -278,13 +299,13 @@ func resolveFuncArgContext(argExpr *grammar.ColumnArgExprContext) (contextName s
 	switch fp := funcParent.(type) {
 	case *grammar.ColumnExprFunctionContext:
 		if fp.Identifier() != nil {
-			contextName = strings.ToLower(fp.Identifier().GetText())
+			contextName = normalizeFunctionName(fp.Identifier().GetText())
 		} else {
 			contextName = "func"
 		}
 	case *grammar.ColumnExprWinFunctionContext:
 		if fp.Identifier() != nil {
-			contextName = strings.ToLower(fp.Identifier().GetText())
+			contextName = normalizeFunctionName(fp.Identifier().GetText())
 		} else {
 			contextName = "winfunc"
 		}
@@ -295,7 +316,6 @@ func resolveFuncArgContext(argExpr *grammar.ColumnArgExprContext) (contextName s
 }
 
 func resolveOperatorContext(parent antlr.ParserRuleContext, litExpr *grammar.ColumnExprLiteralContext) (contextName string, argIndex int) {
-	// Find the operator token and the position of the literal
 	opName := "op"
 	litIdx := -1
 
@@ -352,7 +372,6 @@ func resolveOperatorContext(parent antlr.ParserRuleContext, litExpr *grammar.Col
 }
 
 func resolveColumnsExprContext(parent *grammar.ColumnsExprColumnContext, litExpr *grammar.ColumnExprLiteralContext) (contextName string, argIndex int) {
-	// Check grandparent to determine if this is IN list or SELECT list
 	gp := parent.GetParent()
 	if gp == nil {
 		return "select", 0
@@ -362,7 +381,6 @@ func resolveColumnsExprContext(parent *grammar.ColumnsExprColumnContext, litExpr
 	if exprList, ok := gp.(*grammar.ColumnExprListContext); ok {
 		ggp := exprList.GetParent()
 		if _, isParen := ggp.(*grammar.ColumnExprPrecedence3Context); isParen {
-			// IN list — find index
 			argIndex = 0
 			for i := 0; i < exprList.GetChildCount(); i++ {
 				child := exprList.GetChild(i)
@@ -418,7 +436,7 @@ func filterCandidates(candidates []literalCandidate, config *ExtractLiteralsConf
 		if c.blacklisted {
 			continue
 		}
-		if c.whitelisted || len(c.literalText) >= config.MinLength {
+		if c.whitelisted || len(c.literalText) >= config.minLength {
 			filtered = append(filtered, c)
 		}
 	}
@@ -430,7 +448,6 @@ func filterCandidates(candidates []literalCandidate, config *ExtractLiteralsConf
 func assignParamNames(candidates []literalCandidate, prefix string) (params []extractedParam, paramByNode map[*grammar.ColumnExprLiteralContext]*extractedParam) {
 	paramByNode = make(map[*grammar.ColumnExprLiteralContext]*extractedParam, len(candidates))
 
-	// Dedup key: contextName + argIndex + literalText → param
 	type dedupKey struct {
 		contextName string
 		argIndex    int
@@ -439,7 +456,7 @@ func assignParamNames(candidates []literalCandidate, prefix string) (params []ex
 	dedupMap := make(map[dedupKey]*extractedParam)
 
 	// Track base names to detect collisions
-	baseNameUsed := make(map[string]*extractedParam) // baseName → first param using it
+	baseNameUsed := make(map[string]*extractedParam)
 
 	params = make([]extractedParam, 0, len(candidates))
 
@@ -452,7 +469,6 @@ func assignParamNames(candidates []literalCandidate, prefix string) (params []ex
 		}
 
 		if existing, found := dedupMap[key]; found {
-			// Reuse existing parameter
 			paramByNode[c.node] = existing
 			continue
 		}
@@ -460,10 +476,8 @@ func assignParamNames(candidates []literalCandidate, prefix string) (params []ex
 		baseName := fmt.Sprintf("%s_%s_%d", prefix, sanitizeName(c.contextName), c.argIndex)
 		finalName := baseName
 
-		// Check for collision: same baseName but different literal value
 		if prev, used := baseNameUsed[baseName]; used {
 			if prev.value != c.literalText {
-				// Collision — add counter suffix
 				counter := 2
 				for {
 					finalName = fmt.Sprintf("%s_%d", baseName, counter)
@@ -473,7 +487,6 @@ func assignParamNames(candidates []literalCandidate, prefix string) (params []ex
 					counter++
 				}
 			}
-			// If same value, we'd have caught it in dedupMap — should not happen
 		}
 
 		p := extractedParam{
@@ -502,7 +515,6 @@ func sanitizeName(name string) string {
 		} else if c >= 'A' && c <= 'Z' {
 			sb.WriteRune(c - 'A' + 'a')
 		}
-		// Skip other characters
 	}
 	s := sb.String()
 	if s == "" {
@@ -511,7 +523,7 @@ func sanitizeName(name string) string {
 	return s
 }
 
-// --- Analysis: ExtractedParams returns the parameters that would be extracted ---
+// --- Analysis ---
 
 // AnalyzeExtractions returns the parameter extractions that would be performed
 // without modifying the SQL. Useful for dry-run / preview.
@@ -528,8 +540,7 @@ func AnalyzeExtractions(sql string, config *ExtractLiteralsConfig) (extractions 
 		return
 	}
 
-	params, paramByNode := assignParamNames(filtered, config.Prefix)
-	_ = params
+	_, paramByNode := assignParamNames(filtered, config.prefix)
 
 	seen := make(map[string]bool)
 	extractions = make([]ExtractionInfo, 0, len(filtered))
@@ -568,7 +579,7 @@ func (inst *ExtractionInfo) String() string {
 		inst.ParamName, inst.Value, inst.ContextName, inst.ArgIndex, inst.Line, inst.Column, inst.TypeName)
 }
 
-// --- Convenience: ParseExtractedQuery splits the output back into SET statements and query ---
+// --- Convenience ---
 
 // ParseExtractedQuery splits the output of ExtractLiterals into SET lines and the query.
 func ParseExtractedQuery(extracted string) (sets []string, query string) {
@@ -584,8 +595,8 @@ func ParseExtractedQuery(extracted string) (sets []string, query string) {
 	return
 }
 
-// --- Convenience: CountExtractableParams counts how many literals would be extracted ---
-
+// CountExtractableParams returns the number of unique parameters that would be
+// extracted from the query.
 func CountExtractableParams(sql string, config *ExtractLiteralsConfig) (count int, err error) {
 	extractions, err := AnalyzeExtractions(sql, config)
 	if err != nil {
@@ -595,32 +606,10 @@ func CountExtractableParams(sql string, config *ExtractLiteralsConfig) (count in
 	return
 }
 
-// inferParamType returns the ClickHouse type string for a Go value.
-// Used when constructing SET statements programmatically.
-func inferParamType(val any) string {
-	switch val.(type) {
-	case int64, int:
-		return "Int64"
-	case float64:
-		return "Float64"
-	case string:
-		return "String"
-	case bool:
-		return "UInt8"
-	case []any:
-		return "Array(String)"
-	case *Tuple:
-		return "Tuple(String)"
-	default:
-		return "String"
-	}
-}
-
 // InjectParams is the inverse of ExtractLiterals — it takes SET param = value
 // lines and a query with {param: Type} slots and produces a single query with
-// literals inlined. This uses the FunctionEvaluator or simple string replacement.
+// literals inlined.
 func InjectParams(sets []string, query string) (result string, err error) {
-	// Parse SET lines into param → value map
 	paramMap := make(map[string]string, len(sets))
 	for _, set := range sets {
 		parts := strings.SplitN(set, " = ", 2)
@@ -633,10 +622,8 @@ func InjectParams(sets []string, query string) (result string, err error) {
 		paramMap[name] = value
 	}
 
-	// Replace {param: Type} with the value
 	result = query
 	for name, value := range paramMap {
-		// Match {name: ...} pattern
 		prefix := "{" + name + ":"
 		for {
 			idx := strings.Index(result, prefix)

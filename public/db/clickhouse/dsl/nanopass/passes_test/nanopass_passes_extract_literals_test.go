@@ -23,11 +23,9 @@ func TestExtractLiteralsLongString(t *testing.T) {
 	got, err := pass(sql)
 	require.NoError(t, err)
 
-	// Should have a SET statement
 	assert.Contains(t, got, "SET param_eq_1 = 'this is a long string value';")
-	// Should have a parameter slot
 	assert.Contains(t, got, "{param_eq_1: String}")
-	// Should NOT contain the original literal inline
+
 	lines := strings.Split(got, "\n")
 	lastLine := lines[len(lines)-1]
 	assert.NotContains(t, lastLine, "'this is a long string value'")
@@ -43,7 +41,6 @@ func TestExtractLiteralsShortStringSkipped(t *testing.T) {
 	got, err := pass(sql)
 	require.NoError(t, err)
 
-	// Short literal should NOT be extracted
 	assert.Equal(t, sql, got)
 }
 
@@ -103,7 +100,7 @@ func TestExtractLiteralsContextNaming(t *testing.T) {
 		},
 		{
 			name:          "function_arg",
-			input:         "SELECT substring('a]very long string value', 1, 5)",
+			input:         "SELECT substring('a very long string value', 1, 5)",
 			expectedParam: "param_substring_0",
 			expectedType:  "String",
 		},
@@ -125,16 +122,13 @@ func TestExtractLiteralsDeduplication(t *testing.T) {
 	config := passes.NewExtractLiteralsConfig(5)
 	pass := passes.ExtractLiterals(config)
 
-	// Same literal in same context (eq, arg 1) should be deduplicated
 	sql := "SELECT a FROM t WHERE name = 'longvalue1' AND name = 'longvalue1'"
 	got, err := pass(sql)
 	require.NoError(t, err)
 
-	// Should have only ONE SET statement for this literal
 	setCount := strings.Count(got, "SET param_eq_1")
 	assert.Equal(t, 1, setCount, "expected exactly 1 SET for deduplicated literal")
 
-	// Both references should use the same parameter
 	slotCount := strings.Count(got, "{param_eq_1: String}")
 	assert.Equal(t, 2, slotCount, "expected 2 references to the same parameter")
 
@@ -145,14 +139,12 @@ func TestExtractLiteralsDistinctValues(t *testing.T) {
 	config := passes.NewExtractLiteralsConfig(5)
 	pass := passes.ExtractLiterals(config)
 
-	// Different literals in same context position → different params with counter
 	sql := "SELECT a FROM t WHERE name = 'value_one_long' OR name = 'value_two_long'"
 	got, err := pass(sql)
 	require.NoError(t, err)
 
-	// Should have two SET statements
-	assert.True(t, strings.Contains(got, "value_one_long"), "should contain first value")
-	assert.True(t, strings.Contains(got, "value_two_long"), "should contain second value")
+	assert.Contains(t, got, "value_one_long")
+	assert.Contains(t, got, "value_two_long")
 
 	sets, _ := passes.ParseExtractedQuery(got)
 	assert.GreaterOrEqual(t, len(sets), 2, "expected at least 2 SET statements")
@@ -164,16 +156,13 @@ func TestExtractLiteralsDistinctValues(t *testing.T) {
 
 func TestExtractLiteralsWhitelist(t *testing.T) {
 	config := passes.NewExtractLiteralsConfig(100) // very high threshold
-	config.Whitelist["equals"] = true
-	config.Whitelist["eq"] = true
+	config.Whitelist("eq")
 	pass := passes.ExtractLiterals(config)
 
-	// Short literal, but in whitelisted context
 	sql := "SELECT a FROM t WHERE name = 'hi'"
 	got, err := pass(sql)
 	require.NoError(t, err)
 
-	// Should be extracted despite being short
 	assert.Contains(t, got, "SET param_eq_1")
 	assert.Contains(t, got, "{param_eq_1: String}")
 
@@ -182,7 +171,7 @@ func TestExtractLiteralsWhitelist(t *testing.T) {
 
 func TestExtractLiteralsWhitelistFunction(t *testing.T) {
 	config := passes.NewExtractLiteralsConfig(100)
-	config.Whitelist["like"] = true
+	config.Whitelist("like")
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE name LIKE '%x%'"
@@ -198,31 +187,60 @@ func TestExtractLiteralsWhitelistFunction(t *testing.T) {
 
 func TestExtractLiteralsBlacklist(t *testing.T) {
 	config := passes.NewExtractLiteralsConfig(5)
-	config.Blacklist["eq"] = true
+	config.Blacklist("eq")
 	pass := passes.ExtractLiterals(config)
 
-	// Long literal, but in blacklisted context
 	sql := "SELECT a FROM t WHERE name = 'this is a very long string value'"
 	got, err := pass(sql)
 	require.NoError(t, err)
 
-	// Should NOT be extracted
 	assert.NotContains(t, got, "SET ")
 	assert.Equal(t, sql, got)
 }
 
 func TestExtractLiteralsBlacklistOverridesWhitelist(t *testing.T) {
 	config := passes.NewExtractLiteralsConfig(5)
-	config.Whitelist["eq"] = true
-	config.Blacklist["eq"] = true
+	config.Whitelist("eq")
+	config.Blacklist("eq") // blacklist after whitelist → blacklist wins
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE name = 'longvalue'"
 	got, err := pass(sql)
 	require.NoError(t, err)
 
-	// Blacklist wins
 	assert.NotContains(t, got, "SET ")
+}
+
+// --- Policy accessors ---
+
+func TestExtractLiteralsConfigAccessors(t *testing.T) {
+	config := passes.NewExtractLiteralsConfig(32)
+
+	assert.Equal(t, 32, config.MinLength())
+	assert.Equal(t, "param", config.Prefix())
+
+	config.SetMinLength(64)
+	assert.Equal(t, 64, config.MinLength())
+
+	config.SetPrefix("qp")
+	assert.Equal(t, "qp", config.Prefix())
+
+	// Whitelist
+	config.Whitelist("eq")
+	assert.True(t, config.IsWhitelisted("eq"))
+	assert.False(t, config.IsBlacklisted("eq"))
+	assert.True(t, config.IsWhitelisted("EQ"))   // case-insensitive
+	assert.True(t, config.IsWhitelisted(" eq ")) // trimmed
+
+	// Blacklist overrides
+	config.Blacklist("eq")
+	assert.True(t, config.IsBlacklisted("eq"))
+	assert.False(t, config.IsWhitelisted("eq"))
+
+	// RemovePolicy
+	config.RemovePolicy("eq")
+	assert.False(t, config.IsBlacklisted("eq"))
+	assert.False(t, config.IsWhitelisted("eq"))
 }
 
 // --- Multiple literals ---
@@ -324,9 +342,24 @@ func TestExtractLiteralsINList(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Contains(t, got, "SET ")
-	// Each IN element should be a separate param
 	sets, _ := passes.ParseExtractedQuery(got)
 	assert.GreaterOrEqual(t, len(sets), 3)
+
+	t.Logf("Result:\n%s", got)
+}
+
+// --- BETWEEN ---
+
+func TestExtractLiteralsBetween(t *testing.T) {
+	config := passes.NewExtractLiteralsConfig(5)
+	pass := passes.ExtractLiterals(config)
+
+	sql := "SELECT a FROM t WHERE x BETWEEN 100000 AND 999999"
+	got, err := pass(sql)
+	require.NoError(t, err)
+
+	assert.Contains(t, got, "SET ")
+	assert.Contains(t, got, "between")
 
 	t.Logf("Result:\n%s", got)
 }
@@ -357,7 +390,6 @@ func TestInjectParamsRoundTrip(t *testing.T) {
 	injected, err := passes.InjectParams(sets, query)
 	require.NoError(t, err)
 
-	// Should recover the original query
 	assert.Equal(t, original, injected)
 }
 
@@ -390,6 +422,40 @@ func TestCountExtractableParams(t *testing.T) {
 	assert.Equal(t, 0, count)
 }
 
+// --- Mixed whitelist and blacklist ---
+
+func TestExtractLiteralsMixedWhitelistBlacklist(t *testing.T) {
+	config := passes.NewExtractLiteralsConfig(100) // high threshold
+	config.Whitelist("todate")                     // always extract toDate args
+	config.Blacklist("tostring")                   // never extract toString args
+	pass := passes.ExtractLiterals(config)
+
+	sql := "SELECT toDate('2024-01-01'), toString('2024-01-01') FROM t"
+	got, err := pass(sql)
+	require.NoError(t, err)
+
+	assert.Contains(t, got, "SET param_todate_0")
+	_, query := passes.ParseExtractedQuery(got)
+	assert.Contains(t, query, "toString('2024-01-01')")
+
+	t.Logf("Result:\n%s", got)
+}
+
+// --- Custom prefix ---
+
+func TestExtractLiteralsCustomPrefix(t *testing.T) {
+	config := passes.NewExtractLiteralsConfig(5)
+	config.SetPrefix("qp")
+	pass := passes.ExtractLiterals(config)
+
+	sql := "SELECT a FROM t WHERE name = 'longvalue'"
+	got, err := pass(sql)
+	require.NoError(t, err)
+
+	assert.Contains(t, got, "SET qp_eq_1")
+	assert.Contains(t, got, "{qp_eq_1: String}")
+}
+
 // --- Invalid SQL ---
 
 func TestExtractLiteralsRejectsInvalid(t *testing.T) {
@@ -420,61 +486,46 @@ func TestExtractLiteralsCorpus(t *testing.T) {
 			if err != nil {
 				t.Skipf("pass failed: %v", err)
 			}
-			// The output includes SET statements followed by the query
-			// Just check it doesn't panic and produces non-empty output
 			assert.NotEmpty(t, got)
 		})
 	}
 }
 
-// --- Mixed whitelist and blacklist with multiple functions ---
+// --- RemovePolicy ---
 
-func TestExtractLiteralsMixedWhitelistBlacklist(t *testing.T) {
-	config := passes.NewExtractLiteralsConfig(100) // high threshold
-	config.Whitelist["todate"] = true              // always extract toDate args
-	config.Blacklist["tostring"] = true            // never extract toString args
-	pass := passes.ExtractLiterals(config)
-
-	sql := "SELECT toDate('2024-01-01'), toString('2024-01-01') FROM t"
-	got, err := pass(sql)
-	require.NoError(t, err)
-
-	// toDate arg should be extracted (whitelisted)
-	assert.Contains(t, got, "SET param_todate_0")
-	// toString arg should NOT be extracted (blacklisted)
-	_, query := passes.ParseExtractedQuery(got)
-	assert.Contains(t, query, "toString('2024-01-01')")
-
-	t.Logf("Result:\n%s", got)
-}
-
-// --- BETWEEN ---
-
-func TestExtractLiteralsBetween(t *testing.T) {
+func TestExtractLiteralsRemovePolicy(t *testing.T) {
 	config := passes.NewExtractLiteralsConfig(5)
+	config.Blacklist("eq")
+
+	// With blacklist: no extraction
 	pass := passes.ExtractLiterals(config)
-
-	sql := "SELECT a FROM t WHERE x BETWEEN 100000 AND 999999"
-	got, err := pass(sql)
+	got, err := pass("SELECT a FROM t WHERE name = 'longvalue'")
 	require.NoError(t, err)
+	assert.NotContains(t, got, "SET ")
 
+	// Remove policy: extraction resumes
+	config.RemovePolicy("eq")
+	pass = passes.ExtractLiterals(config)
+	got, err = pass("SELECT a FROM t WHERE name = 'longvalue'")
+	require.NoError(t, err)
 	assert.Contains(t, got, "SET ")
-	assert.Contains(t, got, "between")
-
-	t.Logf("Result:\n%s", got)
 }
 
-// --- Prefix customization ---
+// --- Case insensitivity ---
 
-func TestExtractLiteralsCustomPrefix(t *testing.T) {
-	config := passes.NewExtractLiteralsConfig(5)
-	config.Prefix = "qp"
+func TestExtractLiteralsCaseInsensitivePolicy(t *testing.T) {
+	config := passes.NewExtractLiteralsConfig(100)
+	config.Whitelist("EQ")   // uppercase
+	config.Blacklist("LIKE") // uppercase
 	pass := passes.ExtractLiterals(config)
 
-	sql := "SELECT a FROM t WHERE name = 'longvalue'"
+	sql := "SELECT a FROM t WHERE name = 'hi' AND title LIKE '%longpattern%'"
 	got, err := pass(sql)
 	require.NoError(t, err)
 
-	assert.Contains(t, got, "SET qp_eq_1")
-	assert.Contains(t, got, "{qp_eq_1: String}")
+	// eq should be extracted (whitelisted via "EQ")
+	assert.Contains(t, got, "SET param_eq_1")
+	// like should NOT be extracted (blacklisted via "LIKE")
+	_, query := passes.ParseExtractedQuery(got)
+	assert.Contains(t, query, "'%longpattern%'")
 }
