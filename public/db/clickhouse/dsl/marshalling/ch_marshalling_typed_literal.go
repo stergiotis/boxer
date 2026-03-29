@@ -343,7 +343,7 @@ func (t TypedLiteral) TryHomogeneous() (result TypedLiteral, ok bool) {
 //   - KindHeterogeneousArray        → []any (elements recursively converted)
 //   - KindTuple                     → *Tuple (elements recursively converted)
 //
-// CastTypeCanonical is NOT preserved in the output — use MarshalTypedLiteralToSQL
+// CastTypeCanonical is NOT preserved in the output — use MarshalTypedLiteralToSQLEx
 // or MarshalGoValueToSQLWithOptions for cast-preserving serialization.
 func (t TypedLiteral) ToAny() (val any, err error) {
 	switch t.Kind {

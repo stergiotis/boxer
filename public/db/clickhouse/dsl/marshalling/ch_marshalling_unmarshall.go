@@ -16,7 +16,7 @@ func UnmarshalCompositeLiteral(sql string) (result TypedLiteral, err error) {
 	return UnmarshalCompositeLiteralEx(sql, MapClickHouseToCanonicalType)
 }
 
-// UnmarshalCompositeLiteral parses a SQL literal string into a TypedLiteral,
+// UnmarshalCompositeLiteralEx parses a SQL literal string into a TypedLiteral,
 // preserving CAST information. Automatically detects homogeneous arrays and
 // stores them in SoA layout.
 //

@@ -809,7 +809,7 @@ func TestIteratorValueArrayMarshalRoundTrip(t *testing.T) {
 	val, err := info.Value()
 	require.NoError(t, err)
 
-	sql, err := marshalling.MarshalTypedLiteralToSQL(val, nil)
+	sql, err := marshalling.MarshalTypedLiteralToSQLEx(val, nil)
 	require.NoError(t, err)
 	t.Logf("[1, 2, 3] → %s", sql)
 

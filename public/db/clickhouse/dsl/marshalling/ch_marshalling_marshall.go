@@ -331,9 +331,15 @@ func MarshalScalarToSQL(lit TypedLiteral) (result string, err error) {
 // --- Marshal composite (TypedLiteral → SQL) ---
 
 // MarshalTypedLiteralToSQL serializes a TypedLiteral to SQL text.
+// Cast annotations are serialized as CAST(expr, 'Type') using MapCanonicalToClickHouse.
+func MarshalTypedLiteralToSQL(lit TypedLiteral) (sql string, err error) {
+	return MarshalTypedLiteralToSQLEx(lit, MapCanonicalToClickHouseTypeStr)
+}
+
+// MarshalTypedLiteralToSQLEx serializes a TypedLiteral to SQL text.
 // Cast annotations are serialized as CAST(expr, 'Type') using mapCanonicalToClickHouse.
 // If mapCanonicalToClickHouse is nil, casts are silently dropped.
-func MarshalTypedLiteralToSQL(lit TypedLiteral, mapCanonicalToClickHouse func(string) (string, error)) (sql string, err error) {
+func MarshalTypedLiteralToSQLEx(lit TypedLiteral, mapCanonicalToClickHouse func(string) (string, error)) (sql string, err error) {
 	innerSQL, innerErr := marshalTypedLiteralInner(lit, mapCanonicalToClickHouse)
 	if innerErr != nil {
 		err = innerErr
@@ -368,11 +374,11 @@ func marshalTypedLiteralInner(lit TypedLiteral, mapFunc func(string) (string, er
 
 func marshalHomogeneousArrayToSQL(a *HomogeneousArray) (sql string, err error) {
 	if a == nil || a.Len() == 0 {
-		sql = "[]"
+		sql = "array()"
 		return
 	}
 	var sb strings.Builder
-	sb.WriteByte('[')
+	sb.WriteString("array(")
 	n := a.Len()
 	for i := 0; i < n; i++ {
 		if i > 0 {
@@ -390,7 +396,7 @@ func marshalHomogeneousArrayToSQL(a *HomogeneousArray) (sql string, err error) {
 		}
 		sb.WriteString(elemSQL)
 	}
-	sb.WriteByte(']')
+	sb.WriteByte(')')
 	sql = sb.String()
 	return
 }
@@ -402,7 +408,7 @@ func marshalHeterogeneousArrayToSQL(elems []TypedLiteral, mapFunc func(string) (
 		if i > 0 {
 			sb.WriteString(", ")
 		}
-		elemSQL, elemErr := MarshalTypedLiteralToSQL(elem, mapFunc)
+		elemSQL, elemErr := MarshalTypedLiteralToSQLEx(elem, mapFunc)
 		if elemErr != nil {
 			err = eh.Errorf("marshalHeterogeneousArrayToSQL: element %d: %w", i, elemErr)
 			return
@@ -421,7 +427,7 @@ func marshalTupleTypedLiteralToSQL(elems []TypedLiteral, mapFunc func(string) (s
 		if i > 0 {
 			sb.WriteString(", ")
 		}
-		elemSQL, elemErr := MarshalTypedLiteralToSQL(elem, mapFunc)
+		elemSQL, elemErr := MarshalTypedLiteralToSQLEx(elem, mapFunc)
 		if elemErr != nil {
 			err = eh.Errorf("marshalTupleTypedLiteralToSQL: element %d: %w", i, elemErr)
 			return
@@ -459,7 +465,7 @@ func MarshalGoValueToSQLWithOptions(val any, opts MarshalOptions) (sql string, e
 	}
 	switch v := val.(type) {
 	case TypedLiteral:
-		sql, err = MarshalTypedLiteralToSQL(v, opts.MapCanonicalToClickHouse)
+		sql, err = MarshalTypedLiteralToSQLEx(v, opts.MapCanonicalToClickHouse)
 		if err != nil {
 			err = eh.Errorf("MarshalGoValueToSQLWithOptions: %w", err)
 		}
@@ -469,7 +475,7 @@ func MarshalGoValueToSQLWithOptions(val any, opts MarshalOptions) (sql string, e
 			sql = "NULL"
 			return
 		}
-		sql, err = MarshalTypedLiteralToSQL(*v, opts.MapCanonicalToClickHouse)
+		sql, err = MarshalTypedLiteralToSQLEx(*v, opts.MapCanonicalToClickHouse)
 		if err != nil {
 			err = eh.Errorf("MarshalGoValueToSQLWithOptions: %w", err)
 		}
@@ -547,7 +553,7 @@ func MarshalGoValueToSQLWithOptions(val any, opts MarshalOptions) (sql string, e
 		return
 	case []TypedLiteral:
 		lit := NewHeterogeneousArray(v...)
-		sql, err = MarshalTypedLiteralToSQL(lit, opts.MapCanonicalToClickHouse)
+		sql, err = MarshalTypedLiteralToSQLEx(lit, opts.MapCanonicalToClickHouse)
 		if err != nil {
 			err = eh.Errorf("MarshalGoValueToSQLWithOptions: %w", err)
 		}
