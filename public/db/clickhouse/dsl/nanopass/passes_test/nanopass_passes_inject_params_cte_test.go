@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/testdata"
 	"github.com/stretchr/testify/assert"
@@ -47,13 +48,13 @@ func extractAndInjectAsCTEWithCasts(t *testing.T, sql string, predicate func(pas
 	config := passes.NewExtractLiteralsConfig(1)
 	config.SetUseSequentialNames(true)
 	config.SetMinINListSize(0)
-	config.SetMapTypeToCanonical(mockMapTypeToCanonical)
+	config.SetMapTypeToCanonical(marshalling.MapClickHouseToCanonicalType)
 	pass := passes.ExtractLiterals(config)
 
 	extracted, err := pass(sql)
 	require.NoError(t, err)
 
-	ctePass := passes.InjectParamsAsCTE("", predicate, mockMapCanonicalToClickHouse)
+	ctePass := passes.InjectParamsAsCTE("", predicate, marshalling.MapCanonicalToClickHouseType)
 	result, err := ctePass(extracted)
 	require.NoError(t, err)
 
@@ -178,7 +179,7 @@ func TestInjectParamsAsCTENilMapperWithCast(t *testing.T) {
 	config := passes.NewExtractLiteralsConfig(1)
 	config.SetUseSequentialNames(true)
 	config.SetMinINListSize(0)
-	config.SetMapTypeToCanonical(mockMapTypeToCanonical)
+	config.SetMapTypeToCanonical(marshalling.MapClickHouseToCanonicalType)
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE x = 1::UInt64"

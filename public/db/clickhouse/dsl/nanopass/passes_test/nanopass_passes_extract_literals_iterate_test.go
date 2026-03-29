@@ -5,8 +5,8 @@ package passes_test
 import (
 	"testing"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/scalars"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,7 +15,7 @@ import (
 // --- Helpers ---
 
 func buildTestSET(context string, meta *passes.ParamMetadata, value string) string {
-	name, err := passes.BuildParamName("param", context, meta)
+	name, err := passes.BuildParamName(passes.ParamPrefixExtracted, context, meta)
 	if err != nil {
 		panic(err)
 	}
@@ -121,10 +121,10 @@ func TestBuildParseParamNameRoundTrip(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			name, err := passes.BuildParamName("param", tt.context, &tt.meta)
+			name, err := passes.BuildParamName(passes.ParamPrefixExtracted, tt.context, &tt.meta)
 			require.NoError(t, err)
 
-			parsedCtx, parsedMeta, err := passes.ParseParamName(name, "param")
+			parsedCtx, parsedMeta, err := passes.ParseParamName(name, passes.ParamPrefixExtracted)
 			require.NoError(t, err)
 
 			assert.Equal(t, tt.context, parsedCtx)
@@ -137,7 +137,7 @@ func TestBuildParseParamNameRoundTrip(t *testing.T) {
 
 func TestParseParamNameWrongPrefix(t *testing.T) {
 	meta := passes.ParamMetadata{ArgIndex: 1}
-	name, err := passes.BuildParamName("param", "eq", &meta)
+	name, err := passes.BuildParamName(passes.ParamPrefixExtracted, "eq", &meta)
 	require.NoError(t, err)
 
 	_, _, err = passes.ParseParamName(name, "wrongprefix")
@@ -145,7 +145,7 @@ func TestParseParamNameWrongPrefix(t *testing.T) {
 }
 
 func TestParseParamNameMalformed(t *testing.T) {
-	_, _, err := passes.ParseParamName("param_eq", "param")
+	_, _, err := passes.ParseParamName("param_x_eq", passes.ParamPrefixExtracted)
 	assert.Error(t, err)
 }
 
@@ -518,173 +518,159 @@ func TestIteratorValueString(t *testing.T) {
 	info := passes.ExtractedParamInfo{LiteralSQL: "'hello world'"}
 	val, err := info.Value()
 	require.NoError(t, err)
-
-	lit, ok := val.(scalars.Literal)
-	require.True(t, ok)
-	assert.Equal(t, "hello world", lit.StringVal)
-	assert.Equal(t, ctabb.S, lit.Type)
+	assert.True(t, val.IsScalar())
+	assert.Equal(t, ctabb.S, val.ScalarType)
+	assert.Equal(t, "hello world", val.StringVal)
 }
 
 func TestIteratorValueStringEscaped(t *testing.T) {
 	info := passes.ExtractedParamInfo{LiteralSQL: "'it\\'s a test'"}
 	val, err := info.Value()
 	require.NoError(t, err)
-
-	lit, ok := val.(scalars.Literal)
-	require.True(t, ok)
-	assert.Equal(t, "it's a test", lit.StringVal)
+	assert.True(t, val.IsScalar())
+	assert.Equal(t, "it's a test", val.StringVal)
 }
 
 func TestIteratorValueInt(t *testing.T) {
 	info := passes.ExtractedParamInfo{LiteralSQL: "42"}
 	val, err := info.Value()
 	require.NoError(t, err)
-
-	lit, ok := val.(scalars.Literal)
-	require.True(t, ok)
-	assert.Equal(t, uint64(42), lit.UintVal)
+	assert.True(t, val.IsScalar())
+	assert.Equal(t, ctabb.U64, val.ScalarType)
+	assert.Equal(t, uint64(42), val.UintVal)
 }
 
 func TestIteratorValueNegativeInt(t *testing.T) {
 	info := passes.ExtractedParamInfo{LiteralSQL: "-99"}
 	val, err := info.Value()
 	require.NoError(t, err)
-
-	lit, ok := val.(scalars.Literal)
-	require.True(t, ok)
-	assert.Equal(t, int64(-99), lit.IntVal)
+	assert.True(t, val.IsScalar())
+	assert.Equal(t, ctabb.I64, val.ScalarType)
+	assert.Equal(t, int64(-99), val.IntVal)
 }
 
 func TestIteratorValueFloat(t *testing.T) {
 	info := passes.ExtractedParamInfo{LiteralSQL: "3.14"}
 	val, err := info.Value()
 	require.NoError(t, err)
-
-	lit, ok := val.(scalars.Literal)
-	require.True(t, ok)
-	assert.Equal(t, 3.14, lit.FloatVal)
+	assert.True(t, val.IsScalar())
+	assert.Equal(t, ctabb.F64, val.ScalarType)
+	assert.Equal(t, 3.14, val.FloatVal)
 }
 
 func TestIteratorValueNull(t *testing.T) {
 	info := passes.ExtractedParamInfo{LiteralSQL: "NULL"}
 	val, err := info.Value()
 	require.NoError(t, err)
-
-	lit, ok := val.(scalars.Literal)
-	require.True(t, ok)
-	assert.True(t, lit.Null)
+	assert.True(t, val.IsNull())
 }
 
 func TestIteratorValueBool(t *testing.T) {
 	info := passes.ExtractedParamInfo{LiteralSQL: "true"}
 	val, err := info.Value()
 	require.NoError(t, err)
-
-	lit, ok := val.(scalars.Literal)
-	require.True(t, ok)
-	assert.True(t, lit.BoolVal)
+	assert.True(t, val.IsScalar())
+	assert.Equal(t, ctabb.B, val.ScalarType)
+	assert.True(t, val.BoolVal)
 }
 
 func TestIteratorValueHex(t *testing.T) {
 	info := passes.ExtractedParamInfo{LiteralSQL: "0xFF"}
 	val, err := info.Value()
 	require.NoError(t, err)
-
-	lit, ok := val.(scalars.Literal)
-	require.True(t, ok)
-	assert.Equal(t, uint64(255), lit.UintVal)
+	assert.True(t, val.IsScalar())
+	assert.Equal(t, ctabb.U64, val.ScalarType)
+	assert.Equal(t, uint64(255), val.UintVal)
 }
 
 func TestIteratorValueArray(t *testing.T) {
 	info := passes.ExtractedParamInfo{LiteralSQL: "['a', 'b', 'c']"}
 	val, err := info.Value()
 	require.NoError(t, err)
+	assert.True(t, val.IsArray())
 
-	arr, ok := val.([]any)
-	require.True(t, ok)
-	assert.Len(t, arr, 3)
-
-	lit0, ok := arr[0].(scalars.Literal)
-	require.True(t, ok)
-	assert.Equal(t, "a", lit0.StringVal)
+	// Homogeneous string array
+	if val.IsHomogeneousArray() {
+		assert.Equal(t, 3, val.HomArray.Len())
+		assert.Equal(t, ctabb.S, val.HomArray.ElementType)
+		assert.Equal(t, []string{"a", "b", "c"}, val.HomArray.StringVals)
+	} else {
+		assert.Equal(t, 3, len(val.Elements))
+	}
 }
 
 func TestIteratorValueIntArray(t *testing.T) {
 	info := passes.ExtractedParamInfo{LiteralSQL: "[1, 2, 3]"}
 	val, err := info.Value()
 	require.NoError(t, err)
+	assert.True(t, val.IsArray())
 
-	arr, ok := val.([]any)
-	require.True(t, ok)
-	assert.Len(t, arr, 3)
-
-	lit0, ok := arr[0].(scalars.Literal)
-	require.True(t, ok)
-	assert.Equal(t, uint64(1), lit0.UintVal)
+	if val.IsHomogeneousArray() {
+		assert.Equal(t, 3, val.HomArray.Len())
+		assert.Equal(t, ctabb.U64, val.HomArray.ElementType)
+		assert.Equal(t, []uint64{1, 2, 3}, val.HomArray.UintVals)
+	} else {
+		assert.Equal(t, 3, len(val.Elements))
+	}
 }
 
 func TestIteratorValueEmptyArray(t *testing.T) {
 	info := passes.ExtractedParamInfo{LiteralSQL: "[]"}
 	val, err := info.Value()
 	require.NoError(t, err)
-
-	arr, ok := val.([]any)
-	require.True(t, ok)
-	assert.Empty(t, arr)
+	assert.True(t, val.IsArray())
+	assert.Equal(t, 0, val.ArrayLen())
 }
 
 func TestIteratorValueNestedArray(t *testing.T) {
 	info := passes.ExtractedParamInfo{LiteralSQL: "[[1, 2], [3, 4]]"}
 	val, err := info.Value()
 	require.NoError(t, err)
-
-	arr, ok := val.([]any)
-	require.True(t, ok)
-	assert.Len(t, arr, 2)
-
-	inner0, ok := arr[0].([]any)
-	require.True(t, ok)
-	assert.Len(t, inner0, 2)
+	assert.True(t, val.IsHeterogeneousArray(), "nested arrays should be heterogeneous")
+	assert.Equal(t, 2, len(val.Elements))
+	assert.True(t, val.Elements[0].IsArray())
+	assert.True(t, val.Elements[1].IsArray())
 }
 
 func TestIteratorValueTuple(t *testing.T) {
 	info := passes.ExtractedParamInfo{LiteralSQL: "(1, 'hello')"}
 	val, err := info.Value()
 	require.NoError(t, err)
+	assert.True(t, val.IsTuple())
+	assert.Equal(t, 2, len(val.Elements))
 
-	tup, ok := val.(*passes.Tuple)
-	require.True(t, ok)
-	assert.Equal(t, 2, tup.Len())
+	assert.True(t, val.Elements[0].IsScalar())
+	assert.Equal(t, uint64(1), val.Elements[0].UintVal)
 
-	v0, found := tup.GetByIndex(0)
-	assert.True(t, found)
-	lit0, ok := v0.(scalars.Literal)
-	require.True(t, ok)
-	assert.Equal(t, uint64(1), lit0.UintVal)
+	assert.True(t, val.Elements[1].IsScalar())
+	assert.Equal(t, "hello", val.Elements[1].StringVal)
 }
 
 func TestIteratorValueStringWithComma(t *testing.T) {
 	info := passes.ExtractedParamInfo{LiteralSQL: "['a,b', 'c,d']"}
 	val, err := info.Value()
 	require.NoError(t, err)
+	assert.True(t, val.IsArray())
 
-	arr, ok := val.([]any)
-	require.True(t, ok)
-	assert.Len(t, arr, 2)
-
-	lit0, ok := arr[0].(scalars.Literal)
-	require.True(t, ok)
-	assert.Equal(t, "a,b", lit0.StringVal)
+	if val.IsHomogeneousArray() {
+		assert.Equal(t, 2, val.HomArray.Len())
+		assert.Equal(t, "a,b", val.HomArray.StringVals[0])
+		assert.Equal(t, "c,d", val.HomArray.StringVals[1])
+	} else {
+		assert.Equal(t, 2, len(val.Elements))
+		assert.Equal(t, "a,b", val.Elements[0].StringVal)
+	}
 }
 
 // --- ScalarValue ---
 
 func TestIteratorScalarValueString(t *testing.T) {
 	info := passes.ExtractedParamInfo{LiteralSQL: "'hello'"}
-	lit, err := info.ScalarValue()
+	val, err := info.ScalarValue()
 	require.NoError(t, err)
-	assert.Equal(t, ctabb.S, lit.Type)
-	assert.Equal(t, "hello", lit.StringVal)
+	assert.True(t, val.IsScalar())
+	assert.Equal(t, ctabb.S, val.ScalarType)
+	assert.Equal(t, "hello", val.StringVal)
 }
 
 func TestIteratorScalarValueRejectsArray(t *testing.T) {
@@ -718,13 +704,13 @@ func TestExtractIterateDeserializeEndToEnd(t *testing.T) {
 	for _, p := range params {
 		val, valErr := p.Value()
 		require.NoError(t, valErr, "failed to deserialize %q", p.LiteralSQL)
-		t.Logf("%s → %v (%T)", p.String(), val, val)
+		t.Logf("%s → %s (%T)", p.String(), val.Kind, val)
 	}
 }
 
 func TestExtractIterateDeserializeWithCast(t *testing.T) {
 	config := newSeqConfig(1)
-	config.SetMapTypeToCanonical(mockMapTypeToCanonical)
+	config.SetMapTypeToCanonical(marshalling.MapClickHouseToCanonicalType)
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE x = 1::UInt64 AND y = 'hello'"
@@ -738,7 +724,7 @@ func TestExtractIterateDeserializeWithCast(t *testing.T) {
 	for _, p := range params {
 		val, valErr := p.Value()
 		require.NoError(t, valErr)
-		t.Logf("%s → %v (%T)", p.String(), val, val)
+		t.Logf("%s → %s (%T)", p.String(), val.Kind, val)
 
 		if p.HasCast() {
 			foundCast = true
@@ -786,4 +772,47 @@ func TestCollectExtractedParams(t *testing.T) {
 		iterParams = append(iterParams, info)
 	}
 	assert.Equal(t, len(params), len(iterParams))
+}
+
+// --- Value() serialization round-trip via marshalling ---
+
+func TestIteratorValueMarshalRoundTrip(t *testing.T) {
+	inputs := []string{
+		"'hello'",
+		"42",
+		"-99",
+		"3.14",
+		"true",
+		"NULL",
+	}
+	for _, input := range inputs {
+		t.Run(input, func(t *testing.T) {
+			info := passes.ExtractedParamInfo{LiteralSQL: input}
+			val, err := info.Value()
+			require.NoError(t, err)
+
+			sql, err := marshalling.MarshalScalarToSQL(val)
+			require.NoError(t, err)
+
+			val2, err := marshalling.UnmarshalScalarLiteral(sql)
+			require.NoError(t, err)
+
+			assert.Equal(t, val.ScalarType, val2.ScalarType, "type mismatch for %s → %s", input, sql)
+		})
+	}
+}
+
+// --- Value() array marshal round-trip ---
+
+func TestIteratorValueArrayMarshalRoundTrip(t *testing.T) {
+	info := passes.ExtractedParamInfo{LiteralSQL: "[1, 2, 3]"}
+	val, err := info.Value()
+	require.NoError(t, err)
+
+	sql, err := marshalling.MarshalTypedLiteralToSQL(val, nil)
+	require.NoError(t, err)
+	t.Logf("[1, 2, 3] → %s", sql)
+
+	assert.Contains(t, sql, "[")
+	assert.Contains(t, sql, "]")
 }

@@ -7,29 +7,10 @@ import (
 	"testing"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// --- Helpers ---
-
-func mockMapChToCanonical(chType string) (string, error) {
-	ct, err := marshalling.MapClickHouseToCanonicalType(chType)
-	if err != nil {
-		return "", err
-	}
-	return ct.String(), nil
-}
-
-func mockMapCanonicalToCh(canonical string) (string, error) {
-	ct, err := canonicaltypes.NewParser().ParsePrimitiveTypeAst(canonical)
-	if err != nil {
-		return "", err
-	}
-	return marshalling.MapCanonicalToClickHouseType(ct)
-}
 
 // --- EscapeString / UnescapeString ---
 
@@ -541,7 +522,7 @@ func TestMarshalTypedScalar(t *testing.T) {
 
 func TestMarshalTypedScalarWithCast(t *testing.T) {
 	lit := marshalling.NewScalarUint64(1).WithCast("u64")
-	sql, err := marshalling.MarshalTypedLiteralToSQL(lit, mockMapCanonicalToCh)
+	sql, err := marshalling.MarshalTypedLiteralToSQL(lit, marshalling.MapCanonicalToClickHouseTypeStr)
 	require.NoError(t, err)
 	assert.Equal(t, "CAST(1, 'UInt64')", sql)
 }
@@ -555,7 +536,7 @@ func TestMarshalTypedScalarWithCastNilMapper(t *testing.T) {
 
 func TestMarshalTypedHomogeneousArray(t *testing.T) {
 	lit := marshalling.NewHomogeneousUint64Array([]uint64{1, 2, 3})
-	sql, err := marshalling.MarshalTypedLiteralToSQL(lit, nil)
+	sql, err := marshalling.MarshalTypedLiteralToSQL(lit, marshalling.MapCanonicalToClickHouseTypeStr)
 	require.NoError(t, err)
 	assert.Equal(t, "[1, 2, 3]", sql)
 }
@@ -576,7 +557,7 @@ func TestMarshalTypedHomogeneousArrayEmpty(t *testing.T) {
 
 func TestMarshalTypedHomogeneousArrayWithCast(t *testing.T) {
 	lit := marshalling.NewHomogeneousUint64Array([]uint64{1, 2}).WithCast("u64h")
-	sql, err := marshalling.MarshalTypedLiteralToSQL(lit, mockMapCanonicalToCh)
+	sql, err := marshalling.MarshalTypedLiteralToSQL(lit, marshalling.MapCanonicalToClickHouseTypeStr)
 	require.NoError(t, err)
 	// Note: u64h doesn't map in our mock — cast is dropped
 	// If it mapped, we'd get CAST([1, 2], 'Array(UInt64)')
@@ -598,7 +579,7 @@ func TestMarshalTypedHeterogeneousArrayWithElementCasts(t *testing.T) {
 		marshalling.NewScalarUint64(1).WithCast("u64"),
 		marshalling.NewScalarUint64(2).WithCast("u64"),
 	)
-	sql, err := marshalling.MarshalTypedLiteralToSQL(lit, mockMapCanonicalToCh)
+	sql, err := marshalling.MarshalTypedLiteralToSQL(lit, marshalling.MapCanonicalToClickHouseTypeStr)
 	require.NoError(t, err)
 	assert.Equal(t, "[CAST(1, 'UInt64'), CAST(2, 'UInt64')]", sql)
 }
@@ -625,7 +606,7 @@ func TestMarshalTypedTupleWithCasts(t *testing.T) {
 		marshalling.NewScalarUint64(1).WithCast("u64"),
 		marshalling.NewScalarBool(true),
 	)
-	sql, err := marshalling.MarshalTypedLiteralToSQL(lit, mockMapCanonicalToCh)
+	sql, err := marshalling.MarshalTypedLiteralToSQL(lit, marshalling.MapCanonicalToClickHouseTypeStr)
 	require.NoError(t, err)
 	assert.Equal(t, "tuple(CAST(1, 'UInt64'), true)", sql)
 }
@@ -633,32 +614,32 @@ func TestMarshalTypedTupleWithCasts(t *testing.T) {
 // --- UnmarshalCompositeLiteral ---
 
 func TestUnmarshalCompositeScalar(t *testing.T) {
-	lit, err := marshalling.UnmarshalCompositeLiteral("42", nil)
+	lit, err := marshalling.UnmarshalCompositeLiteral("42")
 	require.NoError(t, err)
 	assert.True(t, lit.IsScalar())
 	assert.Equal(t, uint64(42), lit.UintVal)
 }
 
 func TestUnmarshalCompositeString(t *testing.T) {
-	lit, err := marshalling.UnmarshalCompositeLiteral("'hello'", nil)
+	lit, err := marshalling.UnmarshalCompositeLiteral("'hello'")
 	require.NoError(t, err)
 	assert.Equal(t, "hello", lit.StringVal)
 }
 
 func TestUnmarshalCompositeBoolTrue(t *testing.T) {
-	lit, err := marshalling.UnmarshalCompositeLiteral("true", nil)
+	lit, err := marshalling.UnmarshalCompositeLiteral("true")
 	require.NoError(t, err)
 	assert.True(t, lit.BoolVal)
 }
 
 func TestUnmarshalCompositeNull(t *testing.T) {
-	lit, err := marshalling.UnmarshalCompositeLiteral("NULL", nil)
+	lit, err := marshalling.UnmarshalCompositeLiteral("NULL")
 	require.NoError(t, err)
 	assert.True(t, lit.IsNull())
 }
 
 func TestUnmarshalCompositeArrayHomogeneous(t *testing.T) {
-	lit, err := marshalling.UnmarshalCompositeLiteral("[1, 2, 3]", nil)
+	lit, err := marshalling.UnmarshalCompositeLiteral("[1, 2, 3]")
 	require.NoError(t, err)
 	assert.True(t, lit.IsHomogeneousArray(), "uniform scalar array should be homogeneous")
 	assert.Equal(t, 3, lit.ArrayLen())
@@ -667,28 +648,28 @@ func TestUnmarshalCompositeArrayHomogeneous(t *testing.T) {
 }
 
 func TestUnmarshalCompositeArrayHomogeneousStrings(t *testing.T) {
-	lit, err := marshalling.UnmarshalCompositeLiteral("['a', 'b', 'c']", nil)
+	lit, err := marshalling.UnmarshalCompositeLiteral("['a', 'b', 'c']")
 	require.NoError(t, err)
 	assert.True(t, lit.IsHomogeneousArray())
 	assert.Equal(t, []string{"a", "b", "c"}, lit.HomArray.StringVals)
 }
 
 func TestUnmarshalCompositeArrayHeterogeneous(t *testing.T) {
-	lit, err := marshalling.UnmarshalCompositeLiteral("[1, 'hello']", nil)
+	lit, err := marshalling.UnmarshalCompositeLiteral("[1, 'hello']")
 	require.NoError(t, err)
 	assert.True(t, lit.IsHeterogeneousArray(), "mixed-type array should be heterogeneous")
 	assert.Equal(t, 2, lit.ArrayLen())
 }
 
 func TestUnmarshalCompositeArrayEmpty(t *testing.T) {
-	lit, err := marshalling.UnmarshalCompositeLiteral("[]", nil)
+	lit, err := marshalling.UnmarshalCompositeLiteral("[]")
 	require.NoError(t, err)
 	assert.True(t, lit.IsArray())
 	assert.Equal(t, 0, lit.ArrayLen())
 }
 
 func TestUnmarshalCompositeArrayNested(t *testing.T) {
-	lit, err := marshalling.UnmarshalCompositeLiteral("[[1, 2], [3, 4]]", nil)
+	lit, err := marshalling.UnmarshalCompositeLiteral("[[1, 2], [3, 4]]")
 	require.NoError(t, err)
 	assert.True(t, lit.IsHeterogeneousArray(), "nested array should be heterogeneous")
 	assert.Equal(t, 2, lit.ArrayLen())
@@ -696,7 +677,7 @@ func TestUnmarshalCompositeArrayNested(t *testing.T) {
 }
 
 func TestUnmarshalCompositeArrayWithCasts(t *testing.T) {
-	lit, err := marshalling.UnmarshalCompositeLiteral("[CAST(1, 'UInt64'), CAST(2, 'UInt64')]", mockMapChToCanonical)
+	lit, err := marshalling.UnmarshalCompositeLiteral("[CAST(1, 'UInt64'), CAST(2, 'UInt64')]")
 	require.NoError(t, err)
 	// Elements have casts → heterogeneous
 	assert.True(t, lit.IsHeterogeneousArray())
@@ -704,21 +685,21 @@ func TestUnmarshalCompositeArrayWithCasts(t *testing.T) {
 }
 
 func TestUnmarshalCompositeTuple(t *testing.T) {
-	lit, err := marshalling.UnmarshalCompositeLiteral("tuple(1, 'hello')", nil)
+	lit, err := marshalling.UnmarshalCompositeLiteral("tuple(1, 'hello')")
 	require.NoError(t, err)
 	assert.True(t, lit.IsTuple())
 	assert.Equal(t, 2, len(lit.Elements))
 }
 
 func TestUnmarshalCompositeTupleEmpty(t *testing.T) {
-	lit, err := marshalling.UnmarshalCompositeLiteral("tuple()", nil)
+	lit, err := marshalling.UnmarshalCompositeLiteral("tuple()")
 	require.NoError(t, err)
 	assert.True(t, lit.IsTuple())
 	assert.Empty(t, lit.Elements)
 }
 
 func TestUnmarshalCompositeTupleWithCasts(t *testing.T) {
-	lit, err := marshalling.UnmarshalCompositeLiteral("tuple(CAST(1, 'UInt64'), true)", mockMapChToCanonical)
+	lit, err := marshalling.UnmarshalCompositeLiteral("tuple(CAST(1, 'UInt64'), true)")
 	require.NoError(t, err)
 	assert.True(t, lit.IsTuple())
 	assert.Equal(t, "u64", lit.Elements[0].CastTypeCanonical)
@@ -726,27 +707,27 @@ func TestUnmarshalCompositeTupleWithCasts(t *testing.T) {
 }
 
 func TestUnmarshalCompositeCastDoubleColon(t *testing.T) {
-	lit, err := marshalling.UnmarshalCompositeLiteral("1::UInt64", mockMapChToCanonical)
+	lit, err := marshalling.UnmarshalCompositeLiteral("1::UInt64")
 	require.NoError(t, err)
 	assert.True(t, lit.IsScalar())
 	assert.Equal(t, "u64", lit.CastTypeCanonical)
 }
 
 func TestUnmarshalCompositeCastFunction(t *testing.T) {
-	lit, err := marshalling.UnmarshalCompositeLiteral("CAST(1, 'UInt64')", mockMapChToCanonical)
+	lit, err := marshalling.UnmarshalCompositeLiteral("CAST(1, 'UInt64')")
 	require.NoError(t, err)
 	assert.True(t, lit.IsScalar())
 	assert.Equal(t, "u64", lit.CastTypeCanonical)
 }
 
 func TestUnmarshalCompositeCastNilMapper(t *testing.T) {
-	lit, err := marshalling.UnmarshalCompositeLiteral("CAST(1, 'UInt64')", nil)
+	lit, err := marshalling.UnmarshalCompositeLiteralEx("CAST(1, 'UInt64')", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "", lit.CastTypeCanonical, "nil mapper should not set cast")
 }
 
 func TestUnmarshalCompositeEmpty(t *testing.T) {
-	_, err := marshalling.UnmarshalCompositeLiteral("", nil)
+	_, err := marshalling.UnmarshalCompositeLiteral("")
 	assert.Error(t, err)
 }
 
@@ -773,13 +754,13 @@ func TestCompositeRoundTrip(t *testing.T) {
 	}
 	for _, tt := range inputs {
 		t.Run(tt.name, func(t *testing.T) {
-			lit, err := marshalling.UnmarshalCompositeLiteral(tt.sql, mockMapChToCanonical)
+			lit, err := marshalling.UnmarshalCompositeLiteral(tt.sql)
 			require.NoError(t, err)
 
-			sql, err := marshalling.MarshalTypedLiteralToSQL(lit, mockMapCanonicalToCh)
+			sql, err := marshalling.MarshalTypedLiteralToSQL(lit, marshalling.MapCanonicalToClickHouseTypeStr)
 			require.NoError(t, err)
 
-			lit2, err := marshalling.UnmarshalCompositeLiteral(sql, mockMapChToCanonical)
+			lit2, err := marshalling.UnmarshalCompositeLiteral(sql)
 			require.NoError(t, err)
 
 			assertTypedLiteralEqual(t, lit, lit2)
@@ -850,19 +831,19 @@ func TestMarshalGoValueTypedLiteralPtrNil(t *testing.T) {
 func TestMarshalGoValueSliceAny(t *testing.T) {
 	sql, err := marshalling.MarshalGoValueToSQL([]any{int64(1), int64(2)})
 	require.NoError(t, err)
-	assert.Equal(t, "[1, 2]", sql)
+	assert.Equal(t, "array(1, 2)", sql)
 }
 
 func TestMarshalGoValueSliceString(t *testing.T) {
 	sql, err := marshalling.MarshalGoValueToSQL([]string{"a", "b"})
 	require.NoError(t, err)
-	assert.Equal(t, "['a', 'b']", sql)
+	assert.Equal(t, "array('a', 'b')", sql)
 }
 
 func TestMarshalGoValueSliceEmpty(t *testing.T) {
 	sql, err := marshalling.MarshalGoValueToSQL([]any{})
 	require.NoError(t, err)
-	assert.Equal(t, "[]", sql)
+	assert.Equal(t, "array()", sql)
 }
 
 func TestMarshalGoValueTuple(t *testing.T) {
@@ -1054,7 +1035,7 @@ func assertTypedLiteralEqual(t *testing.T, a, b marshalling.TypedLiteral) {
 
 func TestUnmarshalTupleExprBasic(t *testing.T) {
 	// (1, 2, 3) parses as ColumnExprTupleContext
-	lit, err := marshalling.UnmarshalCompositeLiteral("(1, 2, 3)", nil)
+	lit, err := marshalling.UnmarshalCompositeLiteral("(1, 2, 3)")
 	require.NoError(t, err)
 	assert.True(t, lit.IsTuple())
 	assert.Equal(t, 3, len(lit.Elements))
@@ -1064,7 +1045,7 @@ func TestUnmarshalTupleExprBasic(t *testing.T) {
 }
 
 func TestUnmarshalTupleExprMixedTypes(t *testing.T) {
-	lit, err := marshalling.UnmarshalCompositeLiteral("(1, 'hello', true)", nil)
+	lit, err := marshalling.UnmarshalCompositeLiteral("(1, 'hello', true)")
 	require.NoError(t, err)
 	assert.True(t, lit.IsTuple())
 	assert.Equal(t, 3, len(lit.Elements))
@@ -1076,14 +1057,14 @@ func TestUnmarshalTupleExprMixedTypes(t *testing.T) {
 func TestUnmarshalTupleExprSingleElement(t *testing.T) {
 	// Note: (1) in SQL is just parenthesization, not a tuple.
 	// (1, 2) is the minimum tuple — but let's test what the parser produces for (1,2)
-	lit, err := marshalling.UnmarshalCompositeLiteral("(1, 2)", nil)
+	lit, err := marshalling.UnmarshalCompositeLiteral("(1, 2)")
 	require.NoError(t, err)
 	assert.True(t, lit.IsTuple())
 	assert.Equal(t, 2, len(lit.Elements))
 }
 
 func TestUnmarshalTupleExprWithCasts(t *testing.T) {
-	lit, err := marshalling.UnmarshalCompositeLiteral("(CAST(1, 'UInt64'), CAST(2, 'Int32'))", mockMapChToCanonical)
+	lit, err := marshalling.UnmarshalCompositeLiteral("(CAST(1, 'UInt64'), CAST(2, 'Int32'))")
 	require.NoError(t, err)
 	assert.True(t, lit.IsTuple())
 	assert.Equal(t, 2, len(lit.Elements))
@@ -1092,14 +1073,14 @@ func TestUnmarshalTupleExprWithCasts(t *testing.T) {
 }
 
 func TestUnmarshalTupleExprWithCastsNilMapper(t *testing.T) {
-	lit, err := marshalling.UnmarshalCompositeLiteral("(CAST(1, 'UInt64'), 'hello')", nil)
+	lit, err := marshalling.UnmarshalCompositeLiteralEx("(CAST(1, 'UInt64'), 'hello')", nil)
 	require.NoError(t, err)
 	assert.True(t, lit.IsTuple())
 	assert.Equal(t, "", lit.Elements[0].CastTypeCanonical, "nil mapper should not set cast")
 }
 
 func TestUnmarshalTupleExprNestedArray(t *testing.T) {
-	lit, err := marshalling.UnmarshalCompositeLiteral("([1, 2], [3, 4])", nil)
+	lit, err := marshalling.UnmarshalCompositeLiteral("([1, 2], [3, 4])")
 	require.NoError(t, err)
 	assert.True(t, lit.IsTuple())
 	assert.Equal(t, 2, len(lit.Elements))
@@ -1108,7 +1089,7 @@ func TestUnmarshalTupleExprNestedArray(t *testing.T) {
 }
 
 func TestUnmarshalTupleExprNestedTuple(t *testing.T) {
-	lit, err := marshalling.UnmarshalCompositeLiteral("((1, 2), (3, 4))", nil)
+	lit, err := marshalling.UnmarshalCompositeLiteral("((1, 2), (3, 4))")
 	require.NoError(t, err)
 	assert.True(t, lit.IsTuple())
 	assert.Equal(t, 2, len(lit.Elements))
@@ -1117,7 +1098,7 @@ func TestUnmarshalTupleExprNestedTuple(t *testing.T) {
 }
 
 func TestUnmarshalTupleExprWithNull(t *testing.T) {
-	lit, err := marshalling.UnmarshalCompositeLiteral("(1, NULL, 'hello')", nil)
+	lit, err := marshalling.UnmarshalCompositeLiteral("(1, NULL, 'hello')")
 	require.NoError(t, err)
 	assert.True(t, lit.IsTuple())
 	assert.Equal(t, 3, len(lit.Elements))
@@ -1125,7 +1106,7 @@ func TestUnmarshalTupleExprWithNull(t *testing.T) {
 }
 
 func TestUnmarshalTupleExprStringElements(t *testing.T) {
-	lit, err := marshalling.UnmarshalCompositeLiteral("('a', 'b', 'c')", nil)
+	lit, err := marshalling.UnmarshalCompositeLiteral("('a', 'b', 'c')")
 	require.NoError(t, err)
 	assert.True(t, lit.IsTuple())
 	assert.Equal(t, 3, len(lit.Elements))
@@ -1135,7 +1116,7 @@ func TestUnmarshalTupleExprStringElements(t *testing.T) {
 }
 
 func TestUnmarshalTupleExprFloats(t *testing.T) {
-	lit, err := marshalling.UnmarshalCompositeLiteral("(1.1, 2.2, 3.3)", nil)
+	lit, err := marshalling.UnmarshalCompositeLiteral("(1.1, 2.2, 3.3)")
 	require.NoError(t, err)
 	assert.True(t, lit.IsTuple())
 	assert.Equal(t, 3, len(lit.Elements))
@@ -1144,7 +1125,7 @@ func TestUnmarshalTupleExprFloats(t *testing.T) {
 }
 
 func TestUnmarshalTupleExprWithDoubleColonCast(t *testing.T) {
-	lit, err := marshalling.UnmarshalCompositeLiteral("(1::UInt64, 'hello')", mockMapChToCanonical)
+	lit, err := marshalling.UnmarshalCompositeLiteral("(1::UInt64, 'hello')")
 	require.NoError(t, err)
 	assert.True(t, lit.IsTuple())
 	assert.Equal(t, 2, len(lit.Elements))
@@ -1153,7 +1134,7 @@ func TestUnmarshalTupleExprWithDoubleColonCast(t *testing.T) {
 }
 
 func TestUnmarshalTupleExprWithOuterCast(t *testing.T) {
-	lit, err := marshalling.UnmarshalCompositeLiteral("CAST((1, 'hello'), 'Tuple(UInt64, String)')", mockMapChToCanonical)
+	lit, err := marshalling.UnmarshalCompositeLiteral("CAST((1, 'hello'), 'Tuple(UInt64, String)')")
 	require.NoError(t, err)
 	assert.True(t, lit.IsTuple())
 	assert.Equal(t, 2, len(lit.Elements))
@@ -1175,7 +1156,7 @@ func TestTupleExprRoundTrip(t *testing.T) {
 	}
 	for _, input := range inputs {
 		t.Run(input, func(t *testing.T) {
-			lit, err := marshalling.UnmarshalCompositeLiteral(input, nil)
+			lit, err := marshalling.UnmarshalCompositeLiteral(input)
 			require.NoError(t, err)
 
 			// Marshal as tuple(...) form
@@ -1183,7 +1164,7 @@ func TestTupleExprRoundTrip(t *testing.T) {
 			require.NoError(t, err)
 
 			// Re-unmarshal (now as tuple() function form)
-			lit2, err := marshalling.UnmarshalCompositeLiteral(sql, nil)
+			lit2, err := marshalling.UnmarshalCompositeLiteral(sql)
 			require.NoError(t, err)
 
 			assert.Equal(t, lit.Kind, lit2.Kind)
@@ -1204,13 +1185,13 @@ func TestTupleExprWithCastsRoundTrip(t *testing.T) {
 	}
 	for _, input := range inputs {
 		t.Run(input, func(t *testing.T) {
-			lit, err := marshalling.UnmarshalCompositeLiteral(input, mockMapChToCanonical)
+			lit, err := marshalling.UnmarshalCompositeLiteral(input)
 			require.NoError(t, err)
 
-			sql, err := marshalling.MarshalTypedLiteralToSQL(lit, mockMapCanonicalToCh)
+			sql, err := marshalling.MarshalTypedLiteralToSQL(lit, marshalling.MapCanonicalToClickHouseTypeStr)
 			require.NoError(t, err)
 
-			lit2, err := marshalling.UnmarshalCompositeLiteral(sql, mockMapChToCanonical)
+			lit2, err := marshalling.UnmarshalCompositeLiteral(sql)
 			require.NoError(t, err)
 
 			assert.Equal(t, len(lit.Elements), len(lit2.Elements))
@@ -1521,5 +1502,5 @@ func TestToAnyArrayMarshalRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	t.Logf("sql: %s", sql)
 
-	assert.Contains(t, sql, "[")
+	assert.Contains(t, sql, "array(")
 }

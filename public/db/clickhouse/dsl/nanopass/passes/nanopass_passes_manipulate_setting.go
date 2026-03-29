@@ -3,108 +3,16 @@
 package passes
 
 import (
-	"fmt"
-	"math"
-	"strconv"
 	"strings"
 
-	"iter"
 	"slices"
 
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/scalars"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
 )
-
-// Tuple represents a ClickHouse tuple value with optional named slots.
-type Tuple struct {
-	slotNames  []string
-	slotValues []any
-}
-
-// NewTuple creates a new Tuple with named slots.
-func NewTuple(slotNames []string) (inst *Tuple) {
-	inst = &Tuple{
-		slotNames:  slotNames,
-		slotValues: make([]any, len(slotNames)),
-	}
-	return
-}
-
-// NewUnnamedTuple creates a Tuple with positional-only slots.
-func NewUnnamedTuple(values ...any) (inst *Tuple) {
-	names := make([]string, len(values))
-	for i := range names {
-		names[i] = fmt.Sprintf("_%d", i)
-	}
-	inst = &Tuple{
-		slotNames:  names,
-		slotValues: make([]any, len(values)),
-	}
-	copy(inst.slotValues, values)
-	return
-}
-
-func (inst *Tuple) Len() int {
-	return len(inst.slotValues)
-}
-
-func (inst *Tuple) SetByName(slotName string, val any) (found bool) {
-	idx := slices.Index(inst.slotNames, slotName)
-	found = idx != -1
-	if found {
-		inst.slotValues[idx] = val
-	}
-	return
-}
-
-func (inst *Tuple) SetByIndex(zeroBasedIdx int, val any) (found bool) {
-	found = zeroBasedIdx >= 0 && zeroBasedIdx < len(inst.slotValues)
-	if found {
-		inst.slotValues[zeroBasedIdx] = val
-	}
-	return
-}
-
-func (inst *Tuple) GetByIndex(zeroBasedIdx int) (val any, found bool) {
-	found = zeroBasedIdx >= 0 && zeroBasedIdx < len(inst.slotValues)
-	if found {
-		val = inst.slotValues[zeroBasedIdx]
-	}
-	return
-}
-
-func (inst *Tuple) GetByName(slotName string) (val any, found bool) {
-	idx := slices.Index(inst.slotNames, slotName)
-	found = idx != -1
-	if found {
-		val = inst.slotValues[idx]
-	}
-	return
-}
-
-func (inst *Tuple) IterateAll() iter.Seq2[int, any] {
-	return func(yield func(int, any) bool) {
-		for i, val := range inst.slotValues {
-			if !yield(i, val) {
-				return
-			}
-		}
-	}
-}
-
-func (inst *Tuple) IterateAllWithNames() iter.Seq2[string, any] {
-	return func(yield func(string, any) bool) {
-		for i, val := range inst.slotValues {
-			if !yield(inst.slotNames[i], val) {
-				return
-			}
-		}
-	}
-}
 
 // --- ReadSettings: CST → Go ---
 
@@ -187,6 +95,15 @@ func extractSettingExpr(expr *grammar.SettingExprContext) (name string, val any,
 }
 
 func deserializeSettingValue(ctx antlr.ParserRuleContext) (val any, err error) {
+	lit, litErr := deserializeSettingValueTyped(ctx)
+	if litErr != nil {
+		err = litErr
+		return
+	}
+	return lit.ToAny()
+}
+
+func deserializeSettingValueTyped(ctx antlr.ParserRuleContext) (val marshalling.TypedLiteral, err error) {
 	switch c := ctx.(type) {
 	case *grammar.SettingLiteralContext:
 		return deserializeLiteral(c)
@@ -198,20 +115,19 @@ func deserializeSettingValue(ctx antlr.ParserRuleContext) (val any, err error) {
 		return deserializeSettingTuple(c)
 
 	case *grammar.SettingEmptyArrayContext:
-		val = make([]any, 0)
+		val = marshalling.NewHeterogeneousArray()
 		return
 
 	case *grammar.SettingFunctionContext:
 		return deserializeSettingFunction(c)
 
 	case *grammar.SettingFunctionEmptyContext:
-		// array() → empty slice, tuple() → empty tuple
 		funcName := getSettingFunctionName(c)
 		switch strings.ToLower(funcName) {
 		case "array":
-			val = make([]any, 0)
+			val = marshalling.NewHeterogeneousArray()
 		case "tuple":
-			val = NewUnnamedTuple()
+			val = marshalling.NewTupleTyped()
 		default:
 			err = eh.Errorf("unknown setting function: %s", funcName)
 		}
@@ -223,114 +139,64 @@ func deserializeSettingValue(ctx antlr.ParserRuleContext) (val any, err error) {
 	}
 }
 
-func deserializeLiteral(ctx *grammar.SettingLiteralContext) (val any, err error) {
-	// SettingLiteral → LiteralContext
+func deserializeLiteral(ctx *grammar.SettingLiteralContext) (val marshalling.TypedLiteral, err error) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		if lit, ok := ctx.GetChild(i).(*grammar.LiteralContext); ok {
-			return DeserializeLiteralContext(lit)
+			return marshalling.UnmarshalScalarLiteral(lit.GetText())
 		}
 	}
 	err = eh.Errorf("empty SettingLiteral")
 	return
 }
 
-func DeserializeLiteralContext(lit *grammar.LiteralContext) (val any, err error) {
-	if lit.NULL_SQL() != nil {
-		val = nil
-		return
-	}
-	if lit.STRING_LITERAL() != nil {
-		text := lit.STRING_LITERAL().GetText()
-		// Remove surrounding quotes
-		if len(text) >= 2 {
-			val = text[1 : len(text)-1]
-		} else {
-			val = ""
-		}
-		return
-	}
-	if lit.NumberLiteral() != nil {
-		return deserializeNumberLiteral(lit.NumberLiteral().(*grammar.NumberLiteralContext))
-	}
-	err = eh.Errorf("unrecognized literal")
-	return
+func DeserializeLiteralContext(lit *grammar.LiteralContext) (val marshalling.TypedLiteral, err error) {
+	return marshalling.UnmarshalScalarLiteral(lit.GetText())
 }
 
-func deserializeNumberLiteral(num *grammar.NumberLiteralContext) (val any, err error) {
-	text := num.GetText()
-
-	// Try integer first
-	if i, parseErr := strconv.ParseInt(text, 0, 64); parseErr == nil {
-		val = i
-		return
-	}
-
-	// Try float
-	if f, parseErr := strconv.ParseFloat(text, 64); parseErr == nil {
-		val = f
-		return
-	}
-
-	// Special values
-	lower := strings.ToLower(text)
-	switch lower {
-	case "inf", "+inf":
-		val = math.Inf(1)
-		return
-	case "-inf":
-		val = math.Inf(-1)
-		return
-	case "nan":
-		val = math.NaN()
-		return
-	}
-
-	err = eh.Errorf("cannot parse number: %s", text)
-	return
-}
-
-func deserializeSettingArray(ctx *grammar.SettingArrayContext) (val any, err error) {
-	var elements []any
+func deserializeSettingArray(ctx *grammar.SettingArrayContext) (val marshalling.TypedLiteral, err error) {
+	elems := make([]marshalling.TypedLiteral, 0)
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
 		if prc, ok := child.(antlr.ParserRuleContext); ok {
 			if isSettingValueNode(prc) {
-				var elem any
-				elem, err = deserializeSettingValue(prc)
+				var elem marshalling.TypedLiteral
+				elem, err = deserializeSettingValueTyped(prc)
 				if err != nil {
 					return
 				}
-				elements = append(elements, elem)
+				elems = append(elems, elem)
 			}
 		}
 	}
-	if elements == nil {
-		elements = make([]any, 0)
+	het := marshalling.NewHeterogeneousArray(elems...)
+	if hom, ok := het.TryHomogeneous(); ok {
+		val = hom
+	} else {
+		val = het
 	}
-	val = elements
 	return
 }
 
-func deserializeSettingTuple(ctx *grammar.SettingTupleContext) (val any, err error) {
-	var elements []any
+func deserializeSettingTuple(ctx *grammar.SettingTupleContext) (val marshalling.TypedLiteral, err error) {
+	elems := make([]marshalling.TypedLiteral, 0)
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
 		if prc, ok := child.(antlr.ParserRuleContext); ok {
 			if isSettingValueNode(prc) {
-				var elem any
-				elem, err = deserializeSettingValue(prc)
+				var elem marshalling.TypedLiteral
+				elem, err = deserializeSettingValueTyped(prc)
 				if err != nil {
 					return
 				}
-				elements = append(elements, elem)
+				elems = append(elems, elem)
 			}
 		}
 	}
-	val = NewUnnamedTuple(elements...)
+	val = marshalling.NewTupleTyped(elems...)
 	return
 }
 
-func deserializeSettingFunction(ctx *grammar.SettingFunctionContext) (val any, err error) {
+func deserializeSettingFunction(ctx *grammar.SettingFunctionContext) (val marshalling.TypedLiteral, err error) {
 	funcName := ""
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		if ident, ok := ctx.GetChild(i).(*grammar.IdentifierContext); ok {
@@ -339,35 +205,36 @@ func deserializeSettingFunction(ctx *grammar.SettingFunctionContext) (val any, e
 		}
 	}
 
-	var elements []any
+	elems := make([]marshalling.TypedLiteral, 0)
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
 		if prc, ok := child.(antlr.ParserRuleContext); ok {
 			if isSettingValueNode(prc) {
-				var elem any
-				elem, err = deserializeSettingValue(prc)
+				var elem marshalling.TypedLiteral
+				elem, err = deserializeSettingValueTyped(prc)
 				if err != nil {
 					return
 				}
-				elements = append(elements, elem)
+				elems = append(elems, elem)
 			}
 		}
 	}
 
 	switch funcName {
 	case "array":
-		if elements == nil {
-			elements = make([]any, 0)
+		het := marshalling.NewHeterogeneousArray(elems...)
+		if hom, ok := het.TryHomogeneous(); ok {
+			val = hom
+		} else {
+			val = het
 		}
-		val = elements
 	case "tuple":
-		val = NewUnnamedTuple(elements...)
+		val = marshalling.NewTupleTyped(elems...)
 	default:
 		err = eh.Errorf("unknown setting function: %s", funcName)
 	}
 	return
 }
-
 func getSettingFunctionName(ctx antlr.ParserRuleContext) string {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		if ident, ok := ctx.GetChild(i).(*grammar.IdentifierContext); ok {
@@ -475,7 +342,7 @@ func serializeSettingsMap(settings map[string]any) (sql string, err error) {
 	parts := make([]string, 0, len(keys))
 	for _, k := range keys {
 		var valSQL string
-		valSQL, err = SerializeSettingValue(settings[k])
+		valSQL, err = marshalling.MarshalGoValueToSQL(settings[k])
 		if err != nil {
 			err = eh.Errorf("setting %q: %w", k, err)
 			return
@@ -483,89 +350,6 @@ func serializeSettingsMap(settings map[string]any) (sql string, err error) {
 		parts = append(parts, k+" = "+valSQL)
 	}
 	sql = strings.Join(parts, ", ")
-	return
-}
-
-// SerializeSettingValue converts a Go value to its SQL representation.
-// Supported types: int64, int, float64, string, nil, bool, []any, *Tuple.
-func SerializeSettingValue(val any) (sql string, err error) {
-	if val == nil {
-		sql = "NULL"
-		return
-	}
-
-	switch v := val.(type) {
-	case int64:
-		sql, err = scalars.MarshalScalarLiteral(scalars.Literal{
-			Type:   ctabb.I64,
-			IntVal: v,
-		})
-	case int:
-		sql, err = scalars.MarshalScalarLiteral(scalars.Literal{
-			Type:   ctabb.I64,
-			IntVal: int64(v),
-		})
-	case uint64:
-		sql, err = scalars.MarshalScalarLiteral(scalars.Literal{
-			Type:    ctabb.U64,
-			UintVal: v,
-		})
-	case float64:
-		sql, err = scalars.MarshalScalarLiteral(scalars.Literal{
-			Type:     ctabb.F64,
-			FloatVal: v,
-		})
-	case string:
-		sql = scalars.EscapeString(v)
-	case bool:
-		if v {
-			sql = "1"
-		} else {
-			sql = "0"
-		}
-	case []any:
-		sql, err = serializeArray(v)
-	case *Tuple:
-		sql, err = serializeTuple(v)
-	default:
-		err = eh.Errorf("unsupported setting value type: %T", val)
-	}
-	return
-}
-
-func serializeArray(arr []any) (sql string, err error) {
-	if len(arr) == 0 {
-		sql = "[]"
-		return
-	}
-	parts := make([]string, 0, len(arr))
-	for _, elem := range arr {
-		var elemSQL string
-		elemSQL, err = SerializeSettingValue(elem)
-		if err != nil {
-			return
-		}
-		parts = append(parts, elemSQL)
-	}
-	sql = "[" + strings.Join(parts, ", ") + "]"
-	return
-}
-
-func serializeTuple(t *Tuple) (sql string, err error) {
-	if t.Len() == 0 {
-		sql = "tuple()"
-		return
-	}
-	parts := make([]string, 0, t.Len())
-	for _, val := range t.IterateAll() {
-		var elemSQL string
-		elemSQL, err = SerializeSettingValue(val)
-		if err != nil {
-			return
-		}
-		parts = append(parts, elemSQL)
-	}
-	sql = "(" + strings.Join(parts, ", ") + ")"
 	return
 }
 

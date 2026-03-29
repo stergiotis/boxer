@@ -433,3 +433,31 @@ func TestDebugCastFunction(t *testing.T) {
 		})
 	}
 }
+func TestDebugTupleCast(t *testing.T) {
+	sqls := []string{
+		"SELECT tuple(CAST(1,'UInt64'),true)",
+		"SELECT CAST(1,'UInt64')",
+		"SELECT [CAST(1,'UInt64'), CAST(2,'UInt64')]",
+	}
+	for _, sql := range sqls {
+		t.Logf("--- SQL: %s", sql)
+		pr, err := nanopass.Parse(sql)
+		require.NoError(t, err)
+		nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
+			typeName := fmt.Sprintf("%T", ctx)
+			if strings.Contains(typeName, "Function") || strings.Contains(typeName, "ArgExpr") || strings.Contains(typeName, "Tuple") || strings.Contains(typeName, "Array") {
+				t.Logf("  %T start=%d", ctx, ctx.GetStart().GetTokenIndex())
+				for i := 0; i < ctx.GetChildCount(); i++ {
+					child := ctx.GetChild(i)
+					switch c := child.(type) {
+					case antlr.ParserRuleContext:
+						t.Logf("    child[%d]: %T text=%q", i, c, c.GetText())
+					case *antlr.TerminalNodeImpl:
+						t.Logf("    child[%d]: TerminalNode text=%q", i, c.GetText())
+					}
+				}
+			}
+			return true
+		})
+	}
+}

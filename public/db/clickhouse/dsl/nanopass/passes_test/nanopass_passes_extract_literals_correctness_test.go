@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/testdata"
 	"github.com/stretchr/testify/assert"
@@ -312,7 +313,7 @@ func TestExtractInjectWithCastsHandcraftedRoundTrips(t *testing.T) {
 	config := passes.NewExtractLiteralsConfig(1)
 	config.SetUseSequentialNames(true)
 	config.SetMinINListSize(0)
-	config.SetMapTypeToCanonical(mockMapTypeToCanonical)
+	config.SetMapTypeToCanonical(marshalling.MapClickHouseToCanonicalType)
 	pass := passes.ExtractLiterals(config)
 
 	queries := []string{
@@ -331,7 +332,7 @@ func TestExtractInjectWithCastsHandcraftedRoundTrips(t *testing.T) {
 			require.NoError(t, err)
 
 			sets, sets2, query := passes.ParseExtractedQuery(extracted, "")
-			injected, err := passes.InjectParamsWithCasts(sets, query, "", mockMapCanonicalToClickHouse)
+			injected, err := passes.InjectParamsWithCasts(sets, query, "", marshalling.MapCanonicalToClickHouseTypeStr)
 			require.NoError(t, err)
 			injected = prependVanillaSets(sets2, injected)
 

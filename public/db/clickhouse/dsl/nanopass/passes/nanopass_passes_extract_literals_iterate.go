@@ -7,7 +7,7 @@ import (
 	"iter"
 	"strings"
 
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/scalars"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
@@ -36,25 +36,26 @@ type ExtractedParamInfo struct {
 	CastType canonicaltypes.PrimitiveAstNodeI
 }
 
-// Value deserializes the LiteralSQL into a Go value.
+// Value deserializes the LiteralSQL into a marshalling.TypedLiteral.
+// For scalars, returns a TypedLiteral with Kind == KindScalar.
+// For arrays, returns a TypedLiteral with Kind == KindHomogeneousArray or KindHeterogeneousArray.
+// For tuples, returns a TypedLiteral with Kind == KindTuple.
 //
-// Return types:
-//   - scalars.Literal for scalar values (string, int, float, bool, null)
-//   - []any for array values (elements are scalars.Literal or nested []any / *Tuple)
-//   - *Tuple for tuple values
-func (inst *ExtractedParamInfo) Value() (val any, err error) {
+// Note: this performs string-based deserialization without CST context.
+// For cast-aware deserialization, use marshalling.UnmarshalCompositeLiteral directly.
+func (inst *ExtractedParamInfo) Value() (val marshalling.TypedLiteral, err error) {
 	return deserializeParamLiteral(inst.LiteralSQL)
 }
 
-// ScalarValue deserializes the LiteralSQL as a scalar literal.
+// ScalarValue deserializes the LiteralSQL as a scalar TypedLiteral.
 // Returns an error if the value is an array or tuple.
-func (inst *ExtractedParamInfo) ScalarValue() (val scalars.Literal, err error) {
+func (inst *ExtractedParamInfo) ScalarValue() (val marshalling.TypedLiteral, err error) {
 	sql := strings.TrimSpace(inst.LiteralSQL)
 	if len(sql) > 0 && (sql[0] == '[' || sql[0] == '(') {
 		err = eh.Errorf("ScalarValue: value %q is a composite, not a scalar", sql)
 		return
 	}
-	val, err = scalars.UnmarshalScalarLiteral(sql)
+	val, err = marshalling.UnmarshalScalarLiteral(sql)
 	if err != nil {
 		err = eh.Errorf("ScalarValue: %w", err)
 	}
@@ -106,7 +107,7 @@ func IterateExtractedParams(extracted string, prefix string) iter.Seq2[int, Extr
 // IterateExtractedParamsFromSets parses pre-split SET lines and yields ExtractedParamInfo.
 func IterateExtractedParamsFromSets(sets []string, prefix string) iter.Seq2[int, ExtractedParamInfo] {
 	if prefix == "" {
-		prefix = "param"
+		prefix = ParamPrefixExtracted
 	}
 
 	return func(yield func(int, ExtractedParamInfo) bool) {
@@ -151,7 +152,6 @@ func parseSetStatementToInfo(set string, prefix string) (info ExtractedParamInfo
 	info.FullName = name
 	info.LiteralSQL = value
 
-	// Parse the structured name
 	contextName, meta, parseErr := ParseParamName(name, prefix)
 	if parseErr != nil {
 		err = eh.Errorf("parseSetStatementToInfo: %w", parseErr)
@@ -179,39 +179,33 @@ func inferScalarType(sql string) canonicaltypes.PrimitiveAstNodeI {
 	if len(sql) == 0 {
 		return nil
 	}
-
 	if sql[0] == '[' || sql[0] == '(' {
 		return nil
 	}
-
-	lit, err := scalars.UnmarshalScalarLiteral(sql)
+	lit, err := marshalling.UnmarshalScalarLiteral(sql)
 	if err != nil {
 		return nil
 	}
-	if lit.Null {
+	if lit.IsNull() {
 		return nil
 	}
-	return lit.Type
+	return lit.ScalarType
 }
 
-// parseCanonicalType parses a canonical type string (e.g. "u64", "u64h", "u8-s")
-// back into a PrimitiveAstNodeI. Returns nil for group types (tuples) and
-// unrecognized types — the canonical string is preserved in Metadata.CastTypeCanonical.
+// parseCanonicalType parses a canonical type string back into a PrimitiveAstNodeI.
+// Returns nil for group types (tuples) and unrecognized types.
 func parseCanonicalType(canonical string) canonicaltypes.PrimitiveAstNodeI {
 	if canonical == "" {
 		return nil
 	}
-	// Group types (tuples like "u8-s") cannot be represented as a single PrimitiveAstNodeI
 	if strings.ContainsAny(canonical, "-_") {
 		return nil
 	}
 	return ctabbFromString(canonical)
 }
 
-// ctabbFromString maps well-known canonical type strings to ctabb constants.
 func ctabbFromString(s string) canonicaltypes.PrimitiveAstNodeI {
 	switch s {
-	// Scalar numeric
 	case "u8":
 		return ctabb.U8
 	case "u16":
@@ -232,16 +226,12 @@ func ctabbFromString(s string) canonicaltypes.PrimitiveAstNodeI {
 		return ctabb.F32
 	case "f64":
 		return ctabb.F64
-
-	// Scalar string-class
 	case "s":
 		return ctabb.S
 	case "y":
 		return ctabb.Y
 	case "b":
 		return ctabb.B
-
-	// Homogenous arrays (h modifier)
 	case "u8h":
 		return ctabb.U8h
 	case "u16h":
@@ -264,13 +254,10 @@ func ctabbFromString(s string) canonicaltypes.PrimitiveAstNodeI {
 		return ctabb.F64h
 	case "sh":
 		return ctabb.Sh
-
-	// Temporal
 	case "z32":
 		return ctabb.Z32
 	case "z64":
 		return ctabb.Z64
-
 	default:
 		return nil
 	}
@@ -278,7 +265,7 @@ func ctabbFromString(s string) canonicaltypes.PrimitiveAstNodeI {
 
 // --- Deserialization ---
 
-func deserializeParamLiteral(sql string) (val any, err error) {
+func deserializeParamLiteral(sql string) (val marshalling.TypedLiteral, err error) {
 	sql = strings.TrimSpace(sql)
 	if len(sql) == 0 {
 		err = eh.Errorf("empty literal")
@@ -295,21 +282,19 @@ func deserializeParamLiteral(sql string) (val any, err error) {
 		return deserializeTupleLiteral(sql)
 	}
 
-	// Scalar: delegate to scalars package
-	lit, parseErr := scalars.UnmarshalScalarLiteral(sql)
-	if parseErr != nil {
-		err = eh.Errorf("deserializeParamLiteral: %w", parseErr)
-		return
+	// Scalar
+	val, err = marshalling.UnmarshalScalarLiteral(sql)
+	if err != nil {
+		err = eh.Errorf("deserializeParamLiteral: %w", err)
 	}
-	val = lit
 	return
 }
 
-func deserializeArrayLiteral(sql string) (val any, err error) {
+func deserializeArrayLiteral(sql string) (val marshalling.TypedLiteral, err error) {
 	inner := sql[1 : len(sql)-1]
 	inner = strings.TrimSpace(inner)
 	if inner == "" {
-		val = make([]any, 0)
+		val = marshalling.NewHeterogeneousArray()
 		return
 	}
 
@@ -319,24 +304,31 @@ func deserializeArrayLiteral(sql string) (val any, err error) {
 		return
 	}
 
-	result := make([]any, 0, len(elements))
+	elems := make([]marshalling.TypedLiteral, 0, len(elements))
 	for _, elem := range elements {
 		elemVal, elemErr := deserializeParamLiteral(strings.TrimSpace(elem))
 		if elemErr != nil {
 			err = eh.Errorf("array element: %w", elemErr)
 			return
 		}
-		result = append(result, elemVal)
+		elems = append(elems, elemVal)
 	}
-	val = result
+
+	// Try to promote to homogeneous
+	het := marshalling.NewHeterogeneousArray(elems...)
+	if hom, ok := het.TryHomogeneous(); ok {
+		val = hom
+	} else {
+		val = het
+	}
 	return
 }
 
-func deserializeTupleLiteral(sql string) (val any, err error) {
+func deserializeTupleLiteral(sql string) (val marshalling.TypedLiteral, err error) {
 	inner := sql[1 : len(sql)-1]
 	inner = strings.TrimSpace(inner)
 	if inner == "" {
-		val = NewUnnamedTuple()
+		val = marshalling.NewTupleTyped()
 		return
 	}
 
@@ -346,16 +338,16 @@ func deserializeTupleLiteral(sql string) (val any, err error) {
 		return
 	}
 
-	values := make([]any, 0, len(elements))
+	elems := make([]marshalling.TypedLiteral, 0, len(elements))
 	for _, elem := range elements {
 		elemVal, elemErr := deserializeParamLiteral(strings.TrimSpace(elem))
 		if elemErr != nil {
 			err = eh.Errorf("tuple element: %w", elemErr)
 			return
 		}
-		values = append(values, elemVal)
+		elems = append(elems, elemVal)
 	}
-	val = NewUnnamedTuple(values...)
+	val = marshalling.NewTupleTyped(elems...)
 	return
 }
 
@@ -367,7 +359,6 @@ func splitTopLevelCommas(s string) (parts []string, err error) {
 
 	for i := 0; i < len(s); i++ {
 		c := s[i]
-
 		if inString {
 			if c == '\\' && i+1 < len(s) {
 				i++
@@ -378,7 +369,6 @@ func splitTopLevelCommas(s string) (parts []string, err error) {
 			}
 			continue
 		}
-
 		switch c {
 		case '\'':
 			inString = true
@@ -397,7 +387,6 @@ func splitTopLevelCommas(s string) (parts []string, err error) {
 			}
 		}
 	}
-
 	if inString {
 		err = eh.Errorf("unterminated string literal")
 		return
@@ -406,7 +395,6 @@ func splitTopLevelCommas(s string) (parts []string, err error) {
 		err = eh.Errorf("unbalanced brackets/parens")
 		return
 	}
-
 	parts = append(parts, s[start:])
 	return
 }

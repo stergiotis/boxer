@@ -39,7 +39,10 @@ func MapClickHouseToCanonicalType(chType string) (ct canonicaltypes.PrimitiveAst
 }
 
 func MapCanonicalToClickHouseType(ct canonicaltypes.PrimitiveAstNodeI) (chType string, err error) {
-	switch ct.String() {
+	return MapCanonicalToClickHouseTypeStr(ct.String())
+}
+func MapCanonicalToClickHouseTypeStr(ct string) (chType string, err error) {
+	switch ct {
 	case "u8":
 		return "UInt8", nil
 	case "u16":
@@ -65,7 +68,7 @@ func MapCanonicalToClickHouseType(ct canonicaltypes.PrimitiveAstNodeI) (chType s
 	case "b":
 		return "Bool", nil
 	default:
-		err = eb.Build().Stringer("ct", ct).Errorf("unknown canonical type")
+		err = eb.Build().Str("ct", ct).Errorf("unknown canonical type")
 		return
 	}
 }

@@ -10,6 +10,8 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 )
 
 // InjectParamsAsCTE returns a Pass that takes the output of ExtractLiterals
@@ -32,12 +34,13 @@ import (
 func InjectParamsAsCTE(
 	prefix string,
 	predicate func(info ExtractedParamInfo) bool,
-	mapCanonicalToClickHouse func(canonical string) (string, error),
+	mapCanonicalToClickHouse func(ct canonicaltypes.PrimitiveAstNodeI) (string, error),
 ) nanopass.Pass {
 	if prefix == "" {
 		prefix = ParamPrefixExtracted
 	}
 
+	ctParser := canonicaltypes.NewParser()
 	return func(sql string) (result string, err error) {
 		// Phase 1: Split into SET lines and query
 		sets, _, query := ParseExtractedQuery(sql, prefix)
@@ -64,7 +67,13 @@ func InjectParamsAsCTE(
 			// Build the CTE value — reconstruct cast if present
 			cteValue := info.LiteralSQL
 			if info.Metadata.CastTypeCanonical != "" && mapCanonicalToClickHouse != nil {
-				chType, mapErr := mapCanonicalToClickHouse(info.Metadata.CastTypeCanonical)
+				var ct canonicaltypes.PrimitiveAstNodeI
+				ct, err = ctParser.ParsePrimitiveTypeAst(info.Metadata.CastTypeCanonical)
+				if err != nil {
+					err = eb.Build().Str("info", info.String()).Errorf("error parsing canonical type (cast): %w", err)
+					return
+				}
+				chType, mapErr := mapCanonicalToClickHouse(ct)
 				if mapErr == nil && chType != "" {
 					cteValue = info.LiteralSQL + "::" + chType
 				}

@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/testdata"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,68 +22,6 @@ func newSeqConfig(minLength int) *passes.ExtractLiteralsConfig {
 	config.SetUseSequentialNames(true)
 	config.SetMinINListSize(0)
 	return config
-}
-
-func mockMapTypeToCanonical(chType string) (ct canonicaltypes.PrimitiveAstNodeI, err error) {
-	switch chType {
-	case "UInt8":
-		return ctabb.U8, nil
-	case "UInt16":
-		return ctabb.U16, nil
-	case "UInt32":
-		return ctabb.U32, nil
-	case "UInt64":
-		return ctabb.U64, nil
-	case "Int8":
-		return ctabb.I8, nil
-	case "Int16":
-		return ctabb.I16, nil
-	case "Int32":
-		return ctabb.I32, nil
-	case "Int64":
-		return ctabb.I64, nil
-	case "Float32":
-		return ctabb.F32, nil
-	case "Float64":
-		return ctabb.F64, nil
-	case "String":
-		return ctabb.S, nil
-	case "Bool":
-		return ctabb.B, nil
-	default:
-		return nil, fmt.Errorf("unknown type: %s", chType)
-	}
-}
-
-func mockMapCanonicalToClickHouse(canonical string) (string, error) {
-	switch canonical {
-	case "u8":
-		return "UInt8", nil
-	case "u16":
-		return "UInt16", nil
-	case "u32":
-		return "UInt32", nil
-	case "u64":
-		return "UInt64", nil
-	case "i8":
-		return "Int8", nil
-	case "i16":
-		return "Int16", nil
-	case "i32":
-		return "Int32", nil
-	case "i64":
-		return "Int64", nil
-	case "f32":
-		return "Float32", nil
-	case "f64":
-		return "Float64", nil
-	case "s":
-		return "String", nil
-	case "b":
-		return "Bool", nil
-	default:
-		return "", fmt.Errorf("unknown canonical type: %s", canonical)
-	}
 }
 
 // --- Basic extraction with sequential names ---
@@ -305,7 +243,7 @@ func TestExtractLiteralsINListDisabled(t *testing.T) {
 
 func TestExtractLiteralsCastDoubleColon(t *testing.T) {
 	config := newSeqConfig(1)
-	config.SetMapTypeToCanonical(mockMapTypeToCanonical)
+	config.SetMapTypeToCanonical(marshalling.MapClickHouseToCanonicalType)
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE x = 1::UInt64"
@@ -323,7 +261,7 @@ func TestExtractLiteralsCastDoubleColon(t *testing.T) {
 
 func TestExtractLiteralsCastAS(t *testing.T) {
 	config := newSeqConfig(1)
-	config.SetMapTypeToCanonical(mockMapTypeToCanonical)
+	config.SetMapTypeToCanonical(marshalling.MapClickHouseToCanonicalType)
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT CAST(1 AS UInt64)"
@@ -340,7 +278,7 @@ func TestExtractLiteralsCastAS(t *testing.T) {
 
 func TestExtractLiteralsCastUnknownType(t *testing.T) {
 	config := newSeqConfig(5)
-	config.SetMapTypeToCanonical(mockMapTypeToCanonical)
+	config.SetMapTypeToCanonical(marshalling.MapClickHouseToCanonicalType)
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE x = 1::Decimal128"
@@ -365,7 +303,7 @@ func TestExtractLiteralsCastNilMapper(t *testing.T) {
 
 func TestExtractLiteralsCastMetadataRoundTrip(t *testing.T) {
 	config := newSeqConfig(1)
-	config.SetMapTypeToCanonical(mockMapTypeToCanonical)
+	config.SetMapTypeToCanonical(marshalling.MapClickHouseToCanonicalType)
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE x = 1::UInt64"
@@ -394,7 +332,7 @@ func TestExtractLiteralsCastMetadataRoundTrip(t *testing.T) {
 
 func TestExtractLiteralsCastArgIndexRight(t *testing.T) {
 	config := newSeqConfig(1)
-	config.SetMapTypeToCanonical(mockMapTypeToCanonical)
+	config.SetMapTypeToCanonical(marshalling.MapClickHouseToCanonicalType)
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE x = 1::UInt64"
@@ -415,7 +353,7 @@ func TestExtractLiteralsCastArgIndexRight(t *testing.T) {
 
 func TestInjectParamsWithCastsBasic(t *testing.T) {
 	config := newSeqConfig(1)
-	config.SetMapTypeToCanonical(mockMapTypeToCanonical)
+	config.SetMapTypeToCanonical(marshalling.MapClickHouseToCanonicalType)
 	pass := passes.ExtractLiterals(config)
 
 	original := "SELECT a FROM t WHERE x = 1::UInt64"
@@ -424,7 +362,7 @@ func TestInjectParamsWithCastsBasic(t *testing.T) {
 
 	sets, _, query := passes.ParseExtractedQuery(extracted, "")
 
-	injected, err := passes.InjectParamsWithCasts(sets, query, "", mockMapCanonicalToClickHouse)
+	injected, err := passes.InjectParamsWithCasts(sets, query, "", marshalling.MapCanonicalToClickHouseTypeStr)
 	require.NoError(t, err)
 
 	assert.Equal(t, original, injected, "round-trip should reconstruct original SQL")
@@ -450,7 +388,7 @@ func TestInjectParamsWithCastsNoCast(t *testing.T) {
 
 func TestInjectParamsWithCastsMixed(t *testing.T) {
 	config := newSeqConfig(1)
-	config.SetMapTypeToCanonical(mockMapTypeToCanonical)
+	config.SetMapTypeToCanonical(marshalling.MapClickHouseToCanonicalType)
 	pass := passes.ExtractLiterals(config)
 
 	original := "SELECT a FROM t WHERE x = 1::UInt64 AND name = 'hello'"
@@ -459,7 +397,7 @@ func TestInjectParamsWithCastsMixed(t *testing.T) {
 
 	sets, _, query := passes.ParseExtractedQuery(extracted, "")
 
-	injected, err := passes.InjectParamsWithCasts(sets, query, "", mockMapCanonicalToClickHouse)
+	injected, err := passes.InjectParamsWithCasts(sets, query, "", marshalling.MapCanonicalToClickHouseTypeStr)
 	require.NoError(t, err)
 
 	assert.Contains(t, injected, "1::UInt64")
@@ -468,7 +406,7 @@ func TestInjectParamsWithCastsMixed(t *testing.T) {
 
 func TestInjectParamsWithCastsNilMapper(t *testing.T) {
 	config := newSeqConfig(1)
-	config.SetMapTypeToCanonical(mockMapTypeToCanonical)
+	config.SetMapTypeToCanonical(marshalling.MapClickHouseToCanonicalType)
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE x = 1::UInt64"
@@ -710,7 +648,7 @@ func TestExtractLiteralsCorpus(t *testing.T) {
 
 func TestExtractIterateWithCast(t *testing.T) {
 	config := newSeqConfig(1)
-	config.SetMapTypeToCanonical(mockMapTypeToCanonical)
+	config.SetMapTypeToCanonical(marshalling.MapClickHouseToCanonicalType)
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE x = 1::UInt64 AND y = 'hello'"

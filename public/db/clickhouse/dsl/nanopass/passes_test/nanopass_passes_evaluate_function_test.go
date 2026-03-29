@@ -7,9 +7,11 @@ import (
 	"math"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/testdata"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -33,7 +35,7 @@ func newTestEvaluator() *passes.FunctionEvaluator {
 			return int64(result), nil
 		}
 		return result, nil
-	})
+	}, false)
 
 	// myMul(a, b) → a * b
 	eval.Register("myMul", func(args []any) (any, error) {
@@ -50,7 +52,7 @@ func newTestEvaluator() *passes.FunctionEvaluator {
 			return int64(result), nil
 		}
 		return result, nil
-	})
+	}, true)
 
 	// myConcat(a, b, ...) → concatenated string
 	eval.Register("myConcat", func(args []any) (any, error) {
@@ -59,15 +61,45 @@ func newTestEvaluator() *passes.FunctionEvaluator {
 			sb += fmt.Sprintf("%v", arg)
 		}
 		return sb, nil
-	})
+	}, true)
 
 	// myConst(v) → v (identity, for testing)
 	eval.Register("myConst", func(args []any) (any, error) {
 		if len(args) != 1 {
 			return nil, fmt.Errorf("myConst expects 1 arg")
 		}
+		switch t := args[0].(type) {
+		case string:
+			return t, nil
+		case int64:
+			return t, nil
+		case uint64:
+			return t, nil
+		case float64:
+			return t, nil
+		case bool:
+			return t, nil
+		case marshalling.TypedLiteral:
+			if t.Null {
+				return nil, nil
+			}
+			if t.IsScalar() {
+				switch t.ScalarType.String() {
+				case "i8", "i16", "i32", "i64":
+					return t.IntVal, nil
+				case "u8", "u16", "u32", "u64":
+					return t.UintVal, nil
+				case "b":
+					return t.BoolVal, nil
+				case "s":
+					return t.StringVal, nil
+				default:
+					return nil, eb.Build().Stringer("scalarType", t.ScalarType).Errorf("unhandled scalar type")
+				}
+			}
+		}
 		return args[0], nil
-	})
+	}, true)
 
 	return eval
 }
@@ -80,6 +112,20 @@ func toFloat64(v any) (float64, bool) {
 		return float64(n), true
 	case float64:
 		return n, true
+	case uint64:
+		return float64(n), true
+	case marshalling.TypedLiteral:
+		if n.IsScalar() {
+			switch n.ScalarType.String() {
+			case "i8", "i16", "i32", "i64":
+				return float64(n.IntVal), true
+			case "u8", "u16", "u32", "u64":
+				return float64(n.UintVal), true
+			case "f32", "f64":
+				return n.FloatVal, true
+			}
+		}
+		return 0, false
 	default:
 		return 0, false
 	}
@@ -192,22 +238,22 @@ func TestEvalFunctionsArrayTuple(t *testing.T) {
 		{
 			name:     "array_literal",
 			input:    "SELECT array(1, 2, 3)",
-			expected: "SELECT [1, 2, 3]",
+			expected: "SELECT array(1, 2, 3)",
 		},
 		{
 			name:     "tuple_literal",
 			input:    "SELECT tuple(1, 2)",
-			expected: "SELECT (1, 2)",
+			expected: "SELECT tuple(1, 2)",
 		},
 		{
 			name:     "array_of_computed",
 			input:    "SELECT array(myAdd(1, 2), myMul(3, 4))",
-			expected: "SELECT [3, 12]",
+			expected: "SELECT array(3, 12)",
 		},
 		{
 			name:     "empty_array",
 			input:    "SELECT array()",
-			expected: "SELECT []",
+			expected: "SELECT array()",
 		},
 	}
 	for _, tt := range tests {
@@ -305,7 +351,7 @@ func TestEvalFunctionsFloat(t *testing.T) {
 		a, _ := toFloat64(args[0])
 		b, _ := toFloat64(args[1])
 		return a / b, nil
-	})
+	}, true)
 	pass := eval.Pass()
 
 	got, err := pass("SELECT myDiv(7, 2)")
@@ -322,7 +368,7 @@ func TestEvalFunctionsEvalError(t *testing.T) {
 	eval := passes.NewFunctionEvaluator()
 	eval.Register("myFail", func(args []any) (any, error) {
 		return nil, fmt.Errorf("intentional failure")
-	})
+	}, true)
 	pass := eval.Pass()
 
 	got, err := pass("SELECT myFail(1)")
@@ -343,16 +389,16 @@ func TestEvalFunctionsBoolResult(t *testing.T) {
 			return nil, fmt.Errorf("expects numeric arg")
 		}
 		return v > 0, nil
-	})
+	}, true)
 	pass := eval.Pass()
 
 	got, err := pass("SELECT myIsPositive(42)")
 	require.NoError(t, err)
-	assert.Equal(t, "SELECT 1", got) // bool true → 1
+	assert.Equal(t, "SELECT true", got) // bool true → 1
 
 	got, err = pass("SELECT myIsPositive(-1)")
 	require.NoError(t, err)
-	assert.Equal(t, "SELECT 0", got) // bool false → 0
+	assert.Equal(t, "SELECT false", got) // bool false → 0
 }
 
 // --- String result with escaping ---
@@ -368,7 +414,7 @@ func TestEvalFunctionsStringEscaping(t *testing.T) {
 			return nil, fmt.Errorf("expects string arg")
 		}
 		return "'" + s + "'", nil
-	})
+	}, true)
 	pass := eval.Pass()
 
 	got, err := pass("SELECT myQuote('hello')")
@@ -385,7 +431,7 @@ func TestEvalFunctionsNestedArrays(t *testing.T) {
 
 	got, err := pass("SELECT array(array(1, 2), array(3, 4))")
 	require.NoError(t, err)
-	assert.Equal(t, "SELECT [[1, 2], [3, 4]]", got)
+	assert.Equal(t, "SELECT array(array(1, 2), array(3, 4))", got)
 
 	_, err = nanopass.Parse(got)
 	require.NoError(t, err)
@@ -399,7 +445,7 @@ func TestEvalFunctionsNestedTupleArray(t *testing.T) {
 
 	got, err := pass("SELECT tuple(array(1, 2), array(3, 4))")
 	require.NoError(t, err)
-	assert.Equal(t, "SELECT ([1, 2], [3, 4])", got)
+	assert.Equal(t, "SELECT tuple(array(1, 2), array(3, 4))", got)
 
 	_, err = nanopass.Parse(got)
 	require.NoError(t, err)
@@ -537,7 +583,7 @@ func TestEvalFunctionsPipelineWithCanonicalize(t *testing.T) {
 		nanopass.Validate,
 	)
 	require.NoError(t, err)
-	assert.Equal(t, "SELECT [3, 12]", result)
+	assert.Equal(t, "SELECT array(3, 12)", result)
 }
 
 // --- Custom domain function ---
@@ -551,8 +597,8 @@ func TestEvalFunctionsDomainSpecific(t *testing.T) {
 		if len(args) != 2 {
 			return nil, fmt.Errorf("daysInMonth expects 2 args")
 		}
-		year, ok1 := args[0].(int64)
-		month, ok2 := args[1].(int64)
+		year, ok1 := args[0].(uint64)
+		month, ok2 := args[1].(uint64)
 		if !ok1 || !ok2 {
 			return nil, fmt.Errorf("daysInMonth expects integer args")
 		}
@@ -565,7 +611,7 @@ func TestEvalFunctionsDomainSpecific(t *testing.T) {
 			d = 29
 		}
 		return d, nil
-	})
+	}, true)
 
 	pass := eval.Pass()
 
@@ -590,6 +636,8 @@ func TestEvalFunctionsDomainConditional(t *testing.T) {
 		switch v := args[0].(type) {
 		case int64:
 			cond = v != 0
+		case uint64:
+			cond = v != 0
 		case bool:
 			cond = v
 		case string:
@@ -601,7 +649,7 @@ func TestEvalFunctionsDomainConditional(t *testing.T) {
 			return args[1], nil
 		}
 		return args[2], nil
-	})
+	}, true)
 
 	pass := eval.Pass()
 
@@ -843,7 +891,7 @@ func TestEvalFunctionsZeroArgs(t *testing.T) {
 			return nil, fmt.Errorf("myPi takes no args")
 		}
 		return 3.14159, nil
-	})
+	}, true)
 	pass := eval.Pass()
 
 	got, err := pass("SELECT myPi()")

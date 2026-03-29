@@ -64,14 +64,6 @@ func TestValidateAliasesOriginalExample(t *testing.T) {
 	assert.Contains(t, err.Error(), "_a")
 }
 
-func TestValidateAliasesExcludeOriginalExample(t *testing.T) {
-	pass := passes.ValidateColumnNamesExclude(`^_`)
-
-	_, err := pass(`SELECT sum(a) AS "_a" FROM t`)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "_a")
-}
-
 func TestValidateAliasesQuoted(t *testing.T) {
 	pass := passes.ValidateColumnNames(`^[a-z]`)
 

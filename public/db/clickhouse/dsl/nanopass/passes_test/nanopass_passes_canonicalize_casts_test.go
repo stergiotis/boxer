@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/testdata"
 	"github.com/stretchr/testify/assert"
@@ -314,7 +315,7 @@ func TestCanonicalizeCastsThenExtractLiterals(t *testing.T) {
 	config := passes.NewExtractLiteralsConfig(1)
 	config.SetUseSequentialNames(true)
 	config.SetMinINListSize(0)
-	config.SetMapTypeToCanonical(mockMapTypeToCanonical)
+	config.SetMapTypeToCanonical(marshalling.MapClickHouseToCanonicalType)
 	extractPass := passes.ExtractLiterals(config)
 
 	sqls := []string{
@@ -352,9 +353,9 @@ func TestFullPipelineCanonicalizeCastsExtractCTE(t *testing.T) {
 	config := passes.NewExtractLiteralsConfig(1)
 	config.SetUseSequentialNames(true)
 	config.SetMinINListSize(0)
-	config.SetMapTypeToCanonical(mockMapTypeToCanonical)
+	config.SetMapTypeToCanonical(marshalling.MapClickHouseToCanonicalType)
 	extractPass := passes.ExtractLiterals(config)
-	ctePass := passes.InjectParamsAsCTE("", acceptAll, mockMapCanonicalToClickHouse)
+	ctePass := passes.InjectParamsAsCTE("", acceptAll, marshalling.MapCanonicalToClickHouseType)
 
 	sqls := []string{
 		"SELECT CAST(1 AS UInt64)",

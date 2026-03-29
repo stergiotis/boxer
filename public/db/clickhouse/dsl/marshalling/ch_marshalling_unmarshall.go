@@ -9,7 +9,12 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 )
+
+func UnmarshalCompositeLiteral(sql string) (result TypedLiteral, err error) {
+	return UnmarshalCompositeLiteralEx(sql, MapClickHouseToCanonicalType)
+}
 
 // UnmarshalCompositeLiteral parses a SQL literal string into a TypedLiteral,
 // preserving CAST information. Automatically detects homogeneous arrays and
@@ -17,7 +22,7 @@ import (
 //
 // mapClickHouseTypeToCanonical maps ClickHouse type names (e.g. "UInt64") to
 // canonical type strings (e.g. "u64"). If nil, cast types are not preserved.
-func UnmarshalCompositeLiteral(sql string, mapClickHouseTypeToCanonical func(string) (string, error)) (result TypedLiteral, err error) {
+func UnmarshalCompositeLiteralEx(sql string, mapClickHouseTypeToCanonical func(string) (canonicaltypes.PrimitiveAstNodeI, error)) (result TypedLiteral, err error) {
 	sql = strings.TrimSpace(sql)
 	if len(sql) == 0 {
 		err = eh.Errorf("UnmarshalCompositeLiteral: empty input")
@@ -71,7 +76,7 @@ func UnmarshalCompositeLiteral(sql string, mapClickHouseTypeToCanonical func(str
 //
 // mapClickHouseTypeToCanonical maps ClickHouse type names to canonical type strings.
 // If nil, cast types are not preserved.
-func UnmarshalCSTToTypedLiteral(pr *nanopass.ParseResult, node antlr.ParserRuleContext, mapType func(string) (string, error)) (result TypedLiteral, err error) {
+func UnmarshalCSTToTypedLiteral(pr *nanopass.ParseResult, node antlr.ParserRuleContext, mapType func(string) (canonicaltypes.PrimitiveAstNodeI, error)) (result TypedLiteral, err error) {
 	switch ctx := node.(type) {
 	case *grammar.ColumnExprLiteralContext:
 		return unmarshalScalarCST(pr, ctx)
@@ -131,7 +136,7 @@ func unmarshalIdentifierCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprIde
 
 // --- Function: CAST(expr, 'Type') or tuple(...) ---
 
-func unmarshalFunctionCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprFunctionContext, mapType func(string) (string, error)) (result TypedLiteral, err error) {
+func unmarshalFunctionCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprFunctionContext, mapType func(string) (canonicaltypes.PrimitiveAstNodeI, error)) (result TypedLiteral, err error) {
 	ident := ctx.Identifier()
 	if ident == nil {
 		err = eh.Errorf("unmarshalFunctionCST: no identifier")
@@ -149,7 +154,7 @@ func unmarshalFunctionCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprFunct
 	}
 }
 
-func unmarshalCastFunctionCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprFunctionContext, mapType func(string) (string, error)) (result TypedLiteral, err error) {
+func unmarshalCastFunctionCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprFunctionContext, mapType func(string) (canonicaltypes.PrimitiveAstNodeI, error)) (result TypedLiteral, err error) {
 	var argList *grammar.ColumnArgListContext
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		if al, ok := ctx.GetChild(i).(*grammar.ColumnArgListContext); ok {
@@ -200,7 +205,7 @@ func unmarshalCastFunctionCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprF
 	return
 }
 
-func unmarshalTupleFunctionCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprFunctionContext, mapType func(string) (string, error)) (result TypedLiteral, err error) {
+func unmarshalTupleFunctionCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprFunctionContext, mapType func(string) (canonicaltypes.PrimitiveAstNodeI, error)) (result TypedLiteral, err error) {
 	var argList *grammar.ColumnArgListContext
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		if al, ok := ctx.GetChild(i).(*grammar.ColumnArgListContext); ok {
@@ -230,7 +235,7 @@ func unmarshalTupleFunctionCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExpr
 
 // --- Array: [elem1, elem2, ...] ---
 
-func unmarshalArrayCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprArrayContext, mapType func(string) (string, error)) (result TypedLiteral, err error) {
+func unmarshalArrayCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprArrayContext, mapType func(string) (canonicaltypes.PrimitiveAstNodeI, error)) (result TypedLiteral, err error) {
 	var exprList *grammar.ColumnExprListContext
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		if el, ok := ctx.GetChild(i).(*grammar.ColumnExprListContext); ok {
@@ -275,7 +280,7 @@ func unmarshalArrayCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprArrayCon
 
 // --- Cast expr: expr::Type or CAST(expr AS Type) ---
 
-func unmarshalCastExprCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprCastContext, mapType func(string) (string, error)) (result TypedLiteral, err error) {
+func unmarshalCastExprCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprCastContext, mapType func(string) (canonicaltypes.PrimitiveAstNodeI, error)) (result TypedLiteral, err error) {
 	var chType string
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
@@ -316,7 +321,7 @@ func unmarshalCastExprCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprCastC
 
 // --- Tuple expr: (elem1, elem2, ...) ---
 
-func unmarshalTupleExprCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprTupleContext, mapType func(string) (string, error)) (result TypedLiteral, err error) {
+func unmarshalTupleExprCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprTupleContext, mapType func(string) (canonicaltypes.PrimitiveAstNodeI, error)) (result TypedLiteral, err error) {
 	result.Kind = KindTuple
 	result.Elements = make([]TypedLiteral, 0)
 
@@ -355,7 +360,7 @@ func unmarshalTupleExprCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprTupl
 
 // --- Helpers ---
 
-func mapChTypeToCanonical(chType string, mapFunc func(string) (string, error)) string {
+func mapChTypeToCanonical(chType string, mapFunc func(string) (canonicaltypes.PrimitiveAstNodeI, error)) string {
 	if mapFunc == nil || chType == "" {
 		return ""
 	}
@@ -363,5 +368,5 @@ func mapChTypeToCanonical(chType string, mapFunc func(string) (string, error)) s
 	if err != nil {
 		return ""
 	}
-	return canonical
+	return canonical.String()
 }

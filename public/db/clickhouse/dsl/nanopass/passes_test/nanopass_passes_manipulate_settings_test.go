@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stretchr/testify/assert"
@@ -17,8 +18,8 @@ import (
 func TestReadSettingsScalars(t *testing.T) {
 	settings, err := passes.ReadSettings("SELECT 1 SETTINGS max_threads = 4, timeout = 30")
 	require.NoError(t, err)
-	assert.Equal(t, int64(4), settings["max_threads"])
-	assert.Equal(t, int64(30), settings["timeout"])
+	assert.Equal(t, uint64(4), settings["max_threads"])
+	assert.Equal(t, uint64(30), settings["timeout"])
 }
 
 func TestReadSettingsString(t *testing.T) {
@@ -42,16 +43,16 @@ func TestReadSettingsFloat(t *testing.T) {
 func TestReadSettingsArray(t *testing.T) {
 	settings, err := passes.ReadSettings("SELECT 1 SETTINGS ids = [1, 2, 3]")
 	require.NoError(t, err)
-	arr, ok := settings["ids"].([]any)
+	arr, ok := settings["ids"].([]uint64)
 	require.True(t, ok)
 	assert.Len(t, arr, 3)
-	assert.Equal(t, int64(1), arr[0])
-	assert.Equal(t, int64(2), arr[1])
-	assert.Equal(t, int64(3), arr[2])
+	assert.Equal(t, uint64(1), arr[0])
+	assert.Equal(t, uint64(2), arr[1])
+	assert.Equal(t, uint64(3), arr[2])
 }
 
 func TestReadSettingsEmptyArray(t *testing.T) {
-	settings, err := passes.ReadSettings("SELECT 1 SETTINGS ids = []")
+	settings, err := passes.ReadSettings("SELECT 1 SETTINGS ids = array()")
 	require.NoError(t, err)
 	arr, ok := settings["ids"].([]any)
 	require.True(t, ok)
@@ -59,23 +60,23 @@ func TestReadSettingsEmptyArray(t *testing.T) {
 }
 
 func TestReadSettingsTuple(t *testing.T) {
-	settings, err := passes.ReadSettings("SELECT 1 SETTINGS bounds = (1, 100)")
+	settings, err := passes.ReadSettings("SELECT 1 SETTINGS bounds = tuple(1, 100)")
 	require.NoError(t, err)
-	tup, ok := settings["bounds"].(*passes.Tuple)
+	tup, ok := settings["bounds"].(*marshalling.Tuple)
 	require.True(t, ok)
 	assert.Equal(t, 2, tup.Len())
 	v0, found := tup.GetByIndex(0)
 	assert.True(t, found)
-	assert.Equal(t, int64(1), v0)
+	assert.Equal(t, uint64(1), v0)
 	v1, found := tup.GetByIndex(1)
 	assert.True(t, found)
-	assert.Equal(t, int64(100), v1)
+	assert.Equal(t, uint64(100), v1)
 }
 
 func TestReadSettingsArrayFunction(t *testing.T) {
 	settings, err := passes.ReadSettings("SELECT 1 SETTINGS ids = array(1, 2, 3)")
 	require.NoError(t, err)
-	arr, ok := settings["ids"].([]any)
+	arr, ok := settings["ids"].([]uint64)
 	require.True(t, ok)
 	assert.Len(t, arr, 3)
 }
@@ -83,21 +84,21 @@ func TestReadSettingsArrayFunction(t *testing.T) {
 func TestReadSettingsTupleFunction(t *testing.T) {
 	settings, err := passes.ReadSettings("SELECT 1 SETTINGS bounds = tuple(1, 100)")
 	require.NoError(t, err)
-	tup, ok := settings["bounds"].(*passes.Tuple)
+	tup, ok := settings["bounds"].(*marshalling.Tuple)
 	require.True(t, ok)
 	assert.Equal(t, 2, tup.Len())
 }
 
 func TestReadSettingsNested(t *testing.T) {
-	settings, err := passes.ReadSettings("SELECT 1 SETTINGS a = [(1, 2), (3, 4)]")
+	settings, err := passes.ReadSettings("SELECT 1 SETTINGS a = array(tuple(1, 2), tuple(3, 4))")
 	require.NoError(t, err)
 	arr, ok := settings["a"].([]any)
 	require.True(t, ok)
 	assert.Len(t, arr, 2)
-	tup0, ok := arr[0].(*passes.Tuple)
+	tup0, ok := arr[0].(*marshalling.Tuple)
 	require.True(t, ok)
 	v, _ := tup0.GetByIndex(0)
-	assert.Equal(t, int64(1), v)
+	assert.Equal(t, uint64(1), v)
 }
 
 func TestReadSettingsNoSettings(t *testing.T) {
@@ -149,7 +150,7 @@ func TestWriteSettingsArray(t *testing.T) {
 	})
 	got, err := pass("SELECT 1")
 	require.NoError(t, err)
-	assert.Contains(t, got, "SETTINGS ids = [1, 2, 3]")
+	assert.Contains(t, got, "SETTINGS ids = array(1, 2, 3)")
 
 	_, err = nanopass.Parse(got)
 	require.NoError(t, err)
@@ -157,11 +158,11 @@ func TestWriteSettingsArray(t *testing.T) {
 
 func TestWriteSettingsTuple(t *testing.T) {
 	pass := passes.WriteSettings(map[string]any{
-		"bounds": passes.NewUnnamedTuple(int64(0), int64(100)),
+		"bounds": marshalling.NewUnnamedTuple(int64(0), int64(100)),
 	})
 	got, err := pass("SELECT 1")
 	require.NoError(t, err)
-	assert.Contains(t, got, "SETTINGS bounds = (0, 100)")
+	assert.Contains(t, got, "SETTINGS bounds = tuple(0, 100)")
 
 	_, err = nanopass.Parse(got)
 	require.NoError(t, err)
@@ -206,7 +207,7 @@ func TestWriteSettingsBool(t *testing.T) {
 	})
 	got, err := pass("SELECT 1")
 	require.NoError(t, err)
-	assert.Contains(t, got, "flag = 1")
+	assert.Contains(t, got, "flag = true")
 }
 
 func TestWriteSettingsEmptyArray(t *testing.T) {
@@ -215,7 +216,7 @@ func TestWriteSettingsEmptyArray(t *testing.T) {
 	})
 	got, err := pass("SELECT 1")
 	require.NoError(t, err)
-	assert.Contains(t, got, "ids = []")
+	assert.Contains(t, got, "ids = array()")
 
 	_, err = nanopass.Parse(got)
 	require.NoError(t, err)
@@ -224,13 +225,13 @@ func TestWriteSettingsEmptyArray(t *testing.T) {
 func TestWriteSettingsNested(t *testing.T) {
 	pass := passes.WriteSettings(map[string]any{
 		"matrix": []any{
-			[]any{int64(1), int64(2)},
-			[]any{int64(3), int64(4)},
+			[]int64{1, 2},
+			[]int64{3, 4},
 		},
 	})
 	got, err := pass("SELECT 1")
 	require.NoError(t, err)
-	assert.Contains(t, got, "matrix = [[1, 2], [3, 4]]")
+	assert.Contains(t, got, "matrix = array(array(1, 2), array(3, 4))")
 
 	_, err = nanopass.Parse(got)
 	require.NoError(t, err)
@@ -240,14 +241,14 @@ func TestWriteSettingsMultiple(t *testing.T) {
 	pass := passes.WriteSettings(map[string]any{
 		"a": int64(1),
 		"b": "hello",
-		"c": []any{int64(1), int64(2)},
+		"c": []uint8{1, 2},
 	})
 	got, err := pass("SELECT 1")
 	require.NoError(t, err)
 	// Keys are sorted alphabetically
 	assert.Contains(t, got, "a = 1")
 	assert.Contains(t, got, "b = 'hello'")
-	assert.Contains(t, got, "c = [1, 2]")
+	assert.Contains(t, got, "c = array(1, 2)")
 
 	_, err = nanopass.Parse(got)
 	require.NoError(t, err)
@@ -288,7 +289,7 @@ func TestModifySettingsDeleteKey(t *testing.T) {
 func TestModifySettingsUpdateValue(t *testing.T) {
 	pass := passes.ModifySettings(func(settings map[string]any) error {
 		if v, ok := settings["max_threads"]; ok {
-			settings["max_threads"] = v.(int64) * 2
+			settings["max_threads"] = v.(uint64) * 2
 		}
 		return nil
 	})
@@ -303,15 +304,15 @@ func TestModifySettingsUpdateValue(t *testing.T) {
 
 func TestModifySettingsArrayManipulation(t *testing.T) {
 	pass := passes.ModifySettings(func(settings map[string]any) error {
-		arr := settings["ids"].([]any)
-		arr = append(arr, int64(4))
+		arr := settings["ids"].([]uint64)
+		arr = append(arr, uint64(4))
 		settings["ids"] = arr
 		return nil
 	})
 
 	got, err := pass("SELECT 1 SETTINGS ids = [1, 2, 3]")
 	require.NoError(t, err)
-	assert.Contains(t, got, "ids = [1, 2, 3, 4]")
+	assert.Contains(t, got, "ids = array(1, 2, 3, 4)")
 
 	_, err = nanopass.Parse(got)
 	require.NoError(t, err)
@@ -319,14 +320,14 @@ func TestModifySettingsArrayManipulation(t *testing.T) {
 
 func TestModifySettingsTupleManipulation(t *testing.T) {
 	pass := passes.ModifySettings(func(settings map[string]any) error {
-		tup := settings["bounds"].(*passes.Tuple)
+		tup := settings["bounds"].(*marshalling.Tuple)
 		tup.SetByIndex(1, int64(200))
 		return nil
 	})
 
-	got, err := pass("SELECT 1 SETTINGS bounds = (0, 100)")
+	got, err := pass("SELECT 1 SETTINGS bounds = tuple(0, 100)")
 	require.NoError(t, err)
-	assert.Contains(t, got, "bounds = (0, 200)")
+	assert.Contains(t, got, "bounds = tuple(0, 200)")
 
 	_, err = nanopass.Parse(got)
 	require.NoError(t, err)
@@ -426,23 +427,23 @@ func TestSerializeSettingValue(t *testing.T) {
 		expected string
 	}{
 		{"int64", int64(42), "42"},
-		{"int", 42, "42"},
+		{"uint64", uint64(42), "42"},
 		{"float64", 3.14, "3.14"},
 		{"string", "hello", "'hello'"},
 		{"string_escape", "it's", "'it\\'s'"},
 		{"nil", nil, "NULL"},
-		{"bool_true", true, "1"},
-		{"bool_false", false, "0"},
-		{"empty_array", []any{}, "[]"},
-		{"int_array", []any{int64(1), int64(2)}, "[1, 2]"},
-		{"string_array", []any{"a", "b"}, "['a', 'b']"},
-		{"nested_array", []any{[]any{int64(1)}, []any{int64(2)}}, "[[1], [2]]"},
-		{"tuple", passes.NewUnnamedTuple(int64(1), int64(2)), "(1, 2)"},
-		{"empty_tuple", passes.NewUnnamedTuple(), "tuple()"},
+		{"bool_true", true, "true"},
+		{"bool_false", false, "false"},
+		{"empty_array", []any{}, "array()"},
+		{"int_array", []any{int64(1), int64(2)}, "array(1, 2)"},
+		{"string_array", []any{"a", "b"}, "array('a', 'b')"},
+		{"nested_array", []any{[]any{int64(1)}, []any{int64(2)}}, "array(array(1), array(2))"},
+		{"tuple", marshalling.NewUnnamedTuple(int64(1), int64(2)), "tuple(1, 2)"},
+		{"empty_tuple", marshalling.NewUnnamedTuple(), "tuple()"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := passes.SerializeSettingValue(tt.val)
+			got, err := marshalling.MarshalGoValueToSQL(tt.val)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 		})

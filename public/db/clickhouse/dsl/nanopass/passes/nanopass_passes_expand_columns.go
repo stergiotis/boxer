@@ -27,7 +27,7 @@ type StaticSchemaProvider struct {
 	unqualified map[string][]string // "table" → columns (legacy/fallback)
 }
 
-// NewSchemaProvider creates a SchemaProvider from a table→columns map.
+// NewStaticSchemaProvider creates a SchemaProvider from a table→columns map.
 // Keys can be "table" or "db.table". Table and database names are normalized to lowercase.
 func NewStaticSchemaProvider(tables map[string][]string) (inst *StaticSchemaProvider) {
 	inst = &StaticSchemaProvider{

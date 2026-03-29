@@ -10,12 +10,13 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/slices"
 )
 
 // EvalFuncI is the signature for a Go-side function evaluator.
 // It receives deserialized arguments and returns a Go value that will be
 // serialized back to SQL.
-// Supported return types: int64, int, float64, string, bool, nil, []any, *Tuple.
+// Supported return types: int64, int, float64, string, bool, nil, []any, *Tuple, TypedLiteral.
 type EvalFuncI func(args []any) (any, error)
 
 // FunctionEvaluator holds a registry of Go-evaluable functions and provides a Pass.
@@ -31,33 +32,100 @@ type EvalFuncI func(args []any) (any, error)
 // For cases where partial evaluation makes a previously non-evaluable outer call
 // fully evaluable, use FixedPoint(eval.Pass(), maxIterations).
 type FunctionEvaluator struct {
-	funcs map[string]EvalFuncI
+	funcs map[string]struct {
+		f      EvalFuncI
+		useAny bool
+	}
 }
 
 // NewFunctionEvaluator creates a new FunctionEvaluator.
 func NewFunctionEvaluator() (inst *FunctionEvaluator) {
 	inst = &FunctionEvaluator{
-		funcs: make(map[string]EvalFuncI, 16),
+		funcs: make(map[string]struct {
+			f      EvalFuncI
+			useAny bool
+		}, 16),
 	}
 	return
 }
 
 // Register adds a function evaluator. Name matching is case-insensitive.
-func (inst *FunctionEvaluator) Register(name string, fn EvalFuncI) {
-	inst.funcs[strings.ToLower(name)] = fn
+func (inst *FunctionEvaluator) Register(name string, fn EvalFuncI, useAny bool) {
+	inst.funcs[strings.ToLower(name)] = struct {
+		f      EvalFuncI
+		useAny bool
+	}{f: fn, useAny: useAny}
+}
+
+func checkHomogenous[T any](args []any) bool {
+	for _, arg := range args {
+		_, ok := arg.(T)
+		if !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // RegisterBuiltins registers the built-in array() and tuple() constructors
 // so that literal array/tuple construction can participate in evaluation.
 func (inst *FunctionEvaluator) RegisterBuiltins() {
 	inst.Register("array", func(args []any) (any, error) {
+		if checkHomogenous[string](args) {
+			result := make([]string, 0, len(args))
+			return slices.CopySliceInterfaceCastable(args, result), nil
+		}
+		if checkHomogenous[uint64](args) {
+			result := make([]uint64, 0, len(args))
+			return slices.CopySliceInterfaceCastable(args, result), nil
+		}
+		if checkHomogenous[uint32](args) {
+			result := make([]uint32, 0, len(args))
+			return slices.CopySliceInterfaceCastable(args, result), nil
+		}
+		if checkHomogenous[uint16](args) {
+			result := make([]uint16, 0, len(args))
+			return slices.CopySliceInterfaceCastable(args, result), nil
+		}
+		if checkHomogenous[uint8](args) {
+			result := make([]uint8, 0, len(args))
+			return slices.CopySliceInterfaceCastable(args, result), nil
+		}
+		if checkHomogenous[int64](args) {
+			result := make([]int64, 0, len(args))
+			return slices.CopySliceInterfaceCastable(args, result), nil
+		}
+		if checkHomogenous[int32](args) {
+			result := make([]int32, 0, len(args))
+			return slices.CopySliceInterfaceCastable(args, result), nil
+		}
+		if checkHomogenous[int16](args) {
+			result := make([]int16, 0, len(args))
+			return slices.CopySliceInterfaceCastable(args, result), nil
+		}
+		if checkHomogenous[int8](args) {
+			result := make([]int8, 0, len(args))
+			return slices.CopySliceInterfaceCastable(args, result), nil
+		}
+		if checkHomogenous[float64](args) {
+			result := make([]float64, 0, len(args))
+			return slices.CopySliceInterfaceCastable(args, result), nil
+		}
+		if checkHomogenous[float32](args) {
+			result := make([]float32, 0, len(args))
+			return slices.CopySliceInterfaceCastable(args, result), nil
+		}
+		if checkHomogenous[bool](args) {
+			result := make([]bool, 0, len(args))
+			return slices.CopySliceInterfaceCastable(args, result), nil
+		}
 		result := make([]any, len(args))
 		copy(result, args)
 		return result, nil
-	})
+	}, true)
 	inst.Register("tuple", func(args []any) (any, error) {
 		return marshalling.NewUnnamedTuple(args...), nil
-	})
+	}, true)
 }
 
 // Pass returns a nanopass Pass that evaluates all registered functions
@@ -128,12 +196,12 @@ func (inst *FunctionEvaluator) tryEval(pr *nanopass.ParseResult, funcExpr *gramm
 		return
 	}
 
-	args, ok := inst.extractEvalArgs(pr, funcExpr)
+	args, ok := inst.extractEvalArgs(pr, funcExpr, fn.useAny)
 	if !ok {
 		return
 	}
 
-	val, err = fn(args)
+	val, err = fn.f(args)
 	if err != nil {
 		err = eh.Errorf("evaluating %s: %w", name, err)
 		return
@@ -144,7 +212,7 @@ func (inst *FunctionEvaluator) tryEval(pr *nanopass.ParseResult, funcExpr *gramm
 
 // extractEvalArgs extracts arguments, recursively evaluating nested function calls.
 // Returns (args, true) if all args are evaluable, (nil, false) otherwise.
-func (inst *FunctionEvaluator) extractEvalArgs(pr *nanopass.ParseResult, funcExpr *grammar.ColumnExprFunctionContext) (args []any, ok bool) {
+func (inst *FunctionEvaluator) extractEvalArgs(pr *nanopass.ParseResult, funcExpr *grammar.ColumnExprFunctionContext, useAny bool) (args []any, ok bool) {
 	argList := funcExpr.ColumnArgList()
 	if argList == nil {
 		args = make([]any, 0)
@@ -166,7 +234,20 @@ func (inst *FunctionEvaluator) extractEvalArgs(pr *nanopass.ParseResult, funcExp
 		if !evalOk {
 			return nil, false
 		}
-		args = append(args, val)
+		if useAny {
+			switch t := val.(type) {
+			case marshalling.TypedLiteral:
+				a, err := t.ToAny()
+				if err != nil {
+					return nil, false
+				}
+				args = append(args, a)
+			default:
+				args = append(args, val)
+			}
+		} else {
+			args = append(args, val)
+		}
 	}
 
 	ok = true

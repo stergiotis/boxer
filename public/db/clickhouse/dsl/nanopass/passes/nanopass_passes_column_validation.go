@@ -22,6 +22,7 @@ type ColumnNameViolation struct {
 	IsAlias    bool   // true if the name comes from an explicit alias
 	Line       int
 	Column     int
+	Err        error
 }
 
 func (inst *ColumnNameViolation) String() string {
@@ -101,7 +102,7 @@ func ValidateColumnNames(pattern string) nanopass.Pass {
 			return
 		}
 
-		violations := collectColumnNameViolations(pr, re, false)
+		violations := collectColumnNameViolations(pr, ValidatorFromRegexp(re))
 
 		if len(violations) > 0 {
 			err = &ColumnNameValidationError{
@@ -116,40 +117,18 @@ func ValidateColumnNames(pattern string) nanopass.Pass {
 		return
 	}
 }
-
-// ValidateColumnNamesExclude returns a Pass that checks no resulting column name
-// matches the given "forbidden" regex pattern.
-func ValidateColumnNamesExclude(forbiddenPattern string) nanopass.Pass {
-	return func(sql string) (result string, err error) {
-		re, compileErr := regexp.Compile(forbiddenPattern)
-		if compileErr != nil {
-			err = eh.Errorf("ValidateColumnNamesExclude: invalid regex %q: %w", forbiddenPattern, compileErr)
-			return
+func ValidatorFromRegexp(pattern *regexp.Regexp) ColumnNameValidator {
+	return func(unquotedColName string, isAlias bool) (err error) {
+		if !pattern.MatchString(unquotedColName) {
+			err = fmt.Errorf("invalid column name: %q (alias=%v)", unquotedColName, isAlias)
 		}
-
-		pr, err := nanopass.Parse(sql)
-		if err != nil {
-			err = eh.Errorf("ValidateColumnNamesExclude: %w", err)
-			return
-		}
-
-		violations := collectColumnNameViolations(pr, re, true)
-
-		if len(violations) > 0 {
-			err = &ColumnNameValidationError{
-				Pattern:    forbiddenPattern,
-				Violations: violations,
-				IsForbid:   true,
-			}
-			return
-		}
-
-		result = sql
 		return
 	}
 }
 
-func collectColumnNameViolations(pr *nanopass.ParseResult, re *regexp.Regexp, isForbid bool) (violations []ColumnNameViolation) {
+type ColumnNameValidator func(unquotedColName string, isAlias bool) (err error)
+
+func collectColumnNameViolations(pr *nanopass.ParseResult, validator ColumnNameValidator) (violations []ColumnNameViolation) {
 	// Walk the projection clauses in all SELECT statements
 	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
 		projClause, ok := ctx.(*grammar.ProjectionClauseContext)
@@ -170,7 +149,7 @@ func collectColumnNameViolations(pr *nanopass.ParseResult, re *regexp.Regexp, is
 
 				switch c := child.(type) {
 				case *grammar.ColumnsExprColumnContext:
-					v := validateColumnsExprColumn(pr, c, re, isForbid)
+					v := validateColumnsExprColumn(pr, c, validator)
 					if v != nil {
 						violations = append(violations, *v)
 					}
@@ -185,7 +164,7 @@ func collectColumnNameViolations(pr *nanopass.ParseResult, re *regexp.Regexp, is
 	return
 }
 
-func validateColumnsExprColumn(pr *nanopass.ParseResult, colExpr *grammar.ColumnsExprColumnContext, re *regexp.Regexp, isForbid bool) (violation *ColumnNameViolation) {
+func validateColumnsExprColumn(pr *nanopass.ParseResult, colExpr *grammar.ColumnsExprColumnContext, validator ColumnNameValidator) (violation *ColumnNameViolation) {
 	if colExpr.GetChildCount() == 0 {
 		return
 	}
@@ -204,8 +183,8 @@ func validateColumnsExprColumn(pr *nanopass.ParseResult, colExpr *grammar.Column
 			return
 		}
 		exprText := extractAliasedExpression(pr, c)
-		matched := re.MatchString(unquotedAlias)
-		if (isForbid && matched) || (!isForbid && !matched) {
+		e := validator(unquotedAlias, true)
+		if e != nil {
 			violation = &ColumnNameViolation{
 				Name:       unquotedAlias,
 				RawName:    rawAlias,
@@ -213,6 +192,7 @@ func validateColumnsExprColumn(pr *nanopass.ParseResult, colExpr *grammar.Column
 				IsAlias:    true,
 				Line:       aliasLine,
 				Column:     aliasCol,
+				Err:        e,
 			}
 		}
 
@@ -229,8 +209,8 @@ func validateColumnsExprColumn(pr *nanopass.ParseResult, colExpr *grammar.Column
 		exprText := nanopass.NodeText(pr, innerCtx)
 		tok := innerCtx.GetStart()
 
-		matched := re.MatchString(unquoted)
-		if (isForbid && matched) || (!isForbid && !matched) {
+		e := validator(unquoted, false)
+		if e != nil {
 			violation = &ColumnNameViolation{
 				Name:       unquoted,
 				RawName:    inferredName,
@@ -238,6 +218,7 @@ func validateColumnsExprColumn(pr *nanopass.ParseResult, colExpr *grammar.Column
 				IsAlias:    false,
 				Line:       tok.GetLine(),
 				Column:     tok.GetColumn(),
+				Err:        e,
 			}
 		}
 	}

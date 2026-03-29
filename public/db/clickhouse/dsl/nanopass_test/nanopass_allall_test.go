@@ -5,6 +5,7 @@ package nanopass
 import (
 	"testing"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/testdata"
@@ -23,7 +24,12 @@ func TestAllPassesAllCorpus(t *testing.T) {
 		{"RemoveRedundantParens", passes.RemoveRedundantParens},
 		{"StripComments", passes.StripComments},
 		{"NormalizeWhitespace", passes.NormalizeWhitespaceSingleLine},
+		{"CanonicalizeConstructors", passes.CanonicalizeConstructors(passes.ConstructorFormFunction)},
 		{"QualifyTables", passes.QualifyTables("default")},
+		{"ExtractLiterals", passes.ExtractLiterals(passes.NewExtractLiteralsConfig(0))},
+		{"InjectParamsAsCTE", passes.InjectParamsAsCTE(passes.ParamPrefixExtracted, func(info passes.ExtractedParamInfo) bool {
+			return true
+		}, marshalling.MapCanonicalToClickHouseType)},
 	}
 
 	for _, entry := range entries {
