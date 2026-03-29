@@ -3,11 +3,11 @@
 package passes
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
@@ -56,7 +56,7 @@ func (inst *FunctionEvaluator) RegisterBuiltins() {
 		return result, nil
 	})
 	inst.Register("tuple", func(args []any) (any, error) {
-		return NewUnnamedTuple(args...), nil
+		return marshalling.NewUnnamedTuple(args...), nil
 	})
 }
 
@@ -94,7 +94,7 @@ func (inst *FunctionEvaluator) walkAndEval(pr *nanopass.ParseResult, rw *antlr.T
 			// Try full recursive evaluation
 			val, evaluated, _ := inst.tryEval(pr, funcExpr)
 			if evaluated {
-				serialized, serErr := SerializeSettingValue(val)
+				serialized, serErr := marshalling.MarshalGoValueToSQL(val)
 				if serErr == nil {
 					nanopass.ReplaceNode(rw, funcExpr, serialized)
 					return // entire subtree replaced — don't descend
@@ -249,12 +249,4 @@ func negateValue(val any) (result any, ok bool) {
 	default:
 		return nil, false
 	}
-}
-
-// FormatEvalResult is a helper that formats a Go value for display in error messages.
-func FormatEvalResult(val any) string {
-	if val == nil {
-		return "NULL"
-	}
-	return fmt.Sprintf("%v", val)
 }
