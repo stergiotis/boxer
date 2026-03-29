@@ -813,6 +813,5 @@ func TestIteratorValueArrayMarshalRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	t.Logf("[1, 2, 3] → %s", sql)
 
-	assert.Contains(t, sql, "[")
-	assert.Contains(t, sql, "]")
+	assert.Contains(t, sql, "array(")
 }

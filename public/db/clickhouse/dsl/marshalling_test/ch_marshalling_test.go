@@ -538,21 +538,21 @@ func TestMarshalTypedHomogeneousArray(t *testing.T) {
 	lit := marshalling.NewHomogeneousUint64Array([]uint64{1, 2, 3})
 	sql, err := marshalling.MarshalTypedLiteralToSQLEx(lit, marshalling.MapCanonicalToClickHouseTypeStr)
 	require.NoError(t, err)
-	assert.Equal(t, "[1, 2, 3]", sql)
+	assert.Equal(t, "array(1, 2, 3)", sql)
 }
 
 func TestMarshalTypedHomogeneousArrayStrings(t *testing.T) {
 	lit := marshalling.NewHomogeneousStringArray([]string{"a", "b", "c"})
 	sql, err := marshalling.MarshalTypedLiteralToSQLEx(lit, nil)
 	require.NoError(t, err)
-	assert.Equal(t, "['a', 'b', 'c']", sql)
+	assert.Equal(t, "array('a', 'b', 'c')", sql)
 }
 
 func TestMarshalTypedHomogeneousArrayEmpty(t *testing.T) {
 	lit := marshalling.NewHomogeneousUint64Array(nil)
 	sql, err := marshalling.MarshalTypedLiteralToSQLEx(lit, nil)
 	require.NoError(t, err)
-	assert.Equal(t, "[]", sql)
+	assert.Equal(t, "array()", sql)
 }
 
 func TestMarshalTypedHomogeneousArrayWithCast(t *testing.T) {
@@ -561,7 +561,7 @@ func TestMarshalTypedHomogeneousArrayWithCast(t *testing.T) {
 	require.NoError(t, err)
 	// Note: u64h doesn't map in our mock — cast is dropped
 	// If it mapped, we'd get CAST([1, 2], 'Array(UInt64)')
-	assert.Equal(t, "[1, 2]", sql)
+	assert.Equal(t, "array(1, 2)", sql)
 }
 
 func TestMarshalTypedHeterogeneousArray(t *testing.T) {
@@ -743,13 +743,13 @@ func TestCompositeRoundTrip(t *testing.T) {
 		{"scalar_bool", "true"},
 		{"scalar_null", "NULL"},
 		{"scalar_float", "3.14"},
-		{"array_ints", "[1, 2, 3]"},
-		{"array_strings", "['a', 'b']"},
-		{"array_empty", "[]"},
+		{"array_ints", "array(1, 2, 3)"},
+		{"array_strings", "array('a', 'b')"},
+		{"array_empty", "array()"},
 		{"tuple_mixed", "tuple(1, 'hello')"},
 		{"tuple_empty", "tuple()"},
 		{"cast_func", "CAST(1, 'UInt64')"},
-		{"cast_array_elem", "[CAST(1, 'UInt64'), CAST(2, 'UInt64')]"},
+		{"cast_array_elem", "array(CAST(1, 'UInt64'), CAST(2, 'UInt64'))"},
 		{"tuple_with_cast", "tuple(CAST(1, 'UInt64'), true)"},
 	}
 	for _, tt := range inputs {
