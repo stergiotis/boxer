@@ -144,6 +144,8 @@ func unmarshalFunctionCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprFunct
 	}
 	funcName := strings.ToLower(ident.GetText())
 	switch funcName {
+	case "array":
+		return unmarshalArrayFunctionCST(pr, ctx, mapType)
 	case "cast":
 		return unmarshalCastFunctionCST(pr, ctx, mapType)
 	case "tuple":
@@ -152,6 +154,39 @@ func unmarshalFunctionCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprFunct
 		err = eh.Errorf("unmarshalFunctionCST: unsupported function %q (expected CAST or tuple)", funcName)
 		return
 	}
+}
+func unmarshalArrayFunctionCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprFunctionContext, mapType func(string) (canonicaltypes.PrimitiveAstNodeI, error)) (result TypedLiteral, err error) {
+	var argList *grammar.ColumnArgListContext
+	for i := 0; i < ctx.GetChildCount(); i++ {
+		if al, ok := ctx.GetChild(i).(*grammar.ColumnArgListContext); ok {
+			argList = al
+			break
+		}
+	}
+
+	elems := make([]TypedLiteral, 0)
+	if argList != nil {
+		for i := 0; i < argList.GetChildCount(); i++ {
+			arg, ok := argList.GetChild(i).(*grammar.ColumnArgExprContext)
+			if !ok {
+				continue
+			}
+			elem, elemErr := UnmarshalCSTToTypedLiteral(pr, arg, mapType)
+			if elemErr != nil {
+				err = eh.Errorf("unmarshalArrayFunctionCST: element %d: %w", len(elems), elemErr)
+				return
+			}
+			elems = append(elems, elem)
+		}
+	}
+
+	het := NewHeterogeneousArray(elems...)
+	if hom, ok := het.TryHomogeneous(); ok {
+		result = hom
+	} else {
+		result = het
+	}
+	return
 }
 
 func unmarshalCastFunctionCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprFunctionContext, mapType func(string) (canonicaltypes.PrimitiveAstNodeI, error)) (result TypedLiteral, err error) {
