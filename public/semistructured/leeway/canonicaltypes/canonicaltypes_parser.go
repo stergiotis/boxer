@@ -88,7 +88,6 @@ func (inst *Parser) antlrTreeCanonicalTypeToAst(context grammar2.ICanonicalTypeC
 			}
 		}
 		node = p
-		break
 	case *grammar2.CanonicalTypeMachineNumericContext:
 		p := MachineNumericTypeAstNode{
 			BaseType:          0,
@@ -133,7 +132,6 @@ func (inst *Parser) antlrTreeCanonicalTypeToAst(context grammar2.ICanonicalTypeC
 			p.Width = Width(w)
 		}
 		node = p
-		break
 	case *grammar2.CanonicalTypeTemporalContext:
 		p := TemporalTypeAstNode{
 			BaseType:       0,
@@ -169,7 +167,39 @@ func (inst *Parser) antlrTreeCanonicalTypeToAst(context grammar2.ICanonicalTypeC
 			}
 		}
 		node = p
-		break
+	case *grammar2.CanonicalTypeNetworkContext:
+		p := NetworkTypeAstNode{
+			BaseType:       0,
+			CIDRWidth:      0,
+			ScalarModifier: 0,
+		}
+		baseNetwork := ct.BaseNetwork()
+		if baseNetwork != nil {
+			if baseNetwork.IPV4() != nil {
+				p.BaseType = BaseTypeNetworkIPv4
+			} else if baseNetwork.IPV6() != nil {
+				p.BaseType = BaseTypeNetworkIPv6
+			}
+		}
+		number := ct.NUMBER()
+		if number != nil {
+			var w uint64
+			w, err = strconv.ParseUint(number.GetText(), 10, 32)
+			if err != nil {
+				err = eb.Build().Str("text", number.GetText()).Errorf("unable to parse NUMBER literal: %w", err)
+				return
+			}
+			p.CIDRWidth = uint8(w)
+		}
+		scalarMod := ct.ScalarModifier()
+		if scalarMod != nil {
+			if scalarMod.SET() != nil {
+				p.ScalarModifier = ScalarModifierSet
+			} else if scalarMod.HOMOGENOUS_ARRAY() != nil {
+				p.ScalarModifier = ScalarModifierHomogenousArray
+			}
+		}
+		node = p
 	default:
 		err = eb.Build().Type("context", context).Errorf("unimplemented canonical type context: %w", ErrInternalParserError)
 	}
