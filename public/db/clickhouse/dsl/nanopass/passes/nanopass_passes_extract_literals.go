@@ -1009,7 +1009,7 @@ func (inst *ExtractionInfo) String() string {
 // --- Convenience ---
 
 // ParseExtractedQuery splits the output of ExtractLiterals into SET lines and the query.
-func ParseExtractedQuery(extracted string, prefix string) (sets []string, query string) {
+func ParseExtractedQuery(extracted string, prefix string) (setsExtracted []string, sets []string, query string) {
 	lines := strings.Split(extracted, "\n")
 	if prefix == "" {
 		prefix = ParamPrefixExtracted
@@ -1025,6 +1025,8 @@ func ParseExtractedQuery(extracted string, prefix string) (sets []string, query 
 
 			_, _, parseErr := ParseParamName(name, prefix)
 			if parseErr == nil {
+				setsExtracted = append(setsExtracted, strings.TrimSuffix(line, ";"))
+			} else {
 				sets = append(sets, strings.TrimSuffix(line, ";"))
 			}
 		} else {

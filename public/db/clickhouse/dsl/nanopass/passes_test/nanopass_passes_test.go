@@ -375,3 +375,61 @@ func TestDebugCasts(t *testing.T) {
 		})
 	}
 }
+func TestDebugWithClause(t *testing.T) {
+	t.Skip("diagnostic only")
+	sqls := []string{
+		"SELECT a FROM t",
+		"WITH 1 AS x SELECT x",
+		"WITH 1 AS x, 2 AS y SELECT x, y",
+	}
+	for _, sql := range sqls {
+		t.Logf("--- SQL: %s", sql)
+		pr, err := nanopass.Parse(sql)
+		require.NoError(t, err)
+		nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
+			typeName := fmt.Sprintf("%T", ctx)
+			if strings.Contains(typeName, "With") || strings.Contains(typeName, "Select") || strings.Contains(typeName, "Projection") {
+				t.Logf("  %T start=%d", ctx, ctx.GetStart().GetTokenIndex())
+				for i := 0; i < ctx.GetChildCount(); i++ {
+					child := ctx.GetChild(i)
+					switch c := child.(type) {
+					case antlr.ParserRuleContext:
+						t.Logf("    child[%d]: %T text=%q", i, c, c.GetText())
+					case *antlr.TerminalNodeImpl:
+						t.Logf("    child[%d]: TerminalNode text=%q", i, c.GetText())
+					default:
+						t.Logf("    child[%d]: %T", i, c)
+					}
+				}
+			}
+			return true
+		})
+	}
+}
+func TestDebugCastFunction(t *testing.T) {
+	sqls := []string{
+		"SELECT CAST(1, 'UInt64')",
+		"SELECT CAST([0], 'Array(UInt64)')",
+	}
+	for _, sql := range sqls {
+		t.Logf("--- SQL: %s", sql)
+		pr, err := nanopass.Parse(sql)
+		require.NoError(t, err)
+		nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
+			typeName := fmt.Sprintf("%T", ctx)
+			if strings.Contains(typeName, "Function") || strings.Contains(typeName, "ArgExpr") || strings.Contains(typeName, "ArgList") {
+				t.Logf("  %T start=%d", ctx, ctx.GetStart().GetTokenIndex())
+				for i := 0; i < ctx.GetChildCount(); i++ {
+					child := ctx.GetChild(i)
+					switch c := child.(type) {
+					case antlr.ParserRuleContext:
+						t.Logf("    child[%d]: %T text=%q", i, c, c.GetText())
+					case *antlr.TerminalNodeImpl:
+						t.Logf("    child[%d]: TerminalNode text=%q", i, c.GetText())
+					}
+				}
+			}
+			return true
+		})
+	}
+}

@@ -88,7 +88,7 @@ func IterateExtractedParams(extracted string, prefix string) iter.Seq2[int, Extr
 	}
 
 	return func(yield func(int, ExtractedParamInfo) bool) {
-		sets, _ := ParseExtractedQuery(extracted, prefix)
+		sets, _, _ := ParseExtractedQuery(extracted, prefix)
 		idx := 0
 		for _, set := range sets {
 			info, parseErr := parseSetStatementToInfo(set, prefix)

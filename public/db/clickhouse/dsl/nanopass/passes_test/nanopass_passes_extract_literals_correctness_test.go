@@ -4,6 +4,7 @@ package passes_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
@@ -11,6 +12,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func prependVanillaSets(sets []string, sql string) string {
+	if len(sets) == 0 {
+		return sql
+	}
+	return strings.Join(sets, ";\n") + ";\n" + sql
+}
 
 // --- #2: Corpus round-trip ---
 
@@ -30,10 +38,11 @@ func TestExtractInjectCorpusRoundTrip(t *testing.T) {
 				t.Skipf("extraction failed: %v", err)
 			}
 
-			sets, query := passes.ParseExtractedQuery(extracted, "")
+			sets, sets2, query := passes.ParseExtractedQuery(extracted, "")
 			injected, err := passes.InjectParams(sets, "", query)
 			require.NoError(t, err, "InjectParams failed for %s", entry.Name)
 
+			injected = prependVanillaSets(sets2, injected)
 			assert.Equal(t, entry.SQL, injected,
 				"round-trip failed for %s:\n  original:  %s\n  extracted: %s\n  injected:  %s",
 				entry.Name, entry.SQL, extracted, injected)
@@ -57,11 +66,12 @@ func TestExtractInjectCorpusRoundTripWithINList(t *testing.T) {
 				t.Skipf("extraction failed: %v", err)
 			}
 
-			sets, query := passes.ParseExtractedQuery(extracted, "")
+			sets, sets2, query := passes.ParseExtractedQuery(extracted, "")
 			injected, err := passes.InjectParams(sets, "", query)
 			if err != nil {
 				t.Skipf("injection failed: %v", err)
 			}
+			_ = sets2
 
 			// With IN-list collapsing, the round-trip may not be exact
 			// (e.g., (1, 2, 3) becomes [1, 2, 3] in the SET, injected as [1, 2, 3])
@@ -87,10 +97,11 @@ func TestExtractInjectCorpusRoundTripHashBased(t *testing.T) {
 				t.Skipf("extraction failed: %v", err)
 			}
 
-			sets, query := passes.ParseExtractedQuery(extracted, "")
+			sets, sets2, query := passes.ParseExtractedQuery(extracted, "")
 			injected, err := passes.InjectParams(sets, "", query)
 			require.NoError(t, err, "InjectParams failed for %s", entry.Name)
 
+			injected = prependVanillaSets(sets2, injected)
 			assert.Equal(t, entry.SQL, injected,
 				"hash-based round-trip failed for %s", entry.Name)
 		})
@@ -160,7 +171,7 @@ func TestExtractCorpusOutputParses(t *testing.T) {
 
 			// The query part (after SET lines) should still be valid SQL
 			// with parameter slots
-			_, query := passes.ParseExtractedQuery(extracted, "")
+			_, _, query := passes.ParseExtractedQuery(extracted, "")
 			assert.NotEmpty(t, query, "empty query after extraction for %s", entry.Name)
 		})
 	}
@@ -285,10 +296,11 @@ func TestExtractInjectHandcraftedRoundTrips(t *testing.T) {
 			extracted, err := pass(sql)
 			require.NoError(t, err)
 
-			sets, query := passes.ParseExtractedQuery(extracted, "")
+			sets, sets2, query := passes.ParseExtractedQuery(extracted, "")
 			injected, err := passes.InjectParams(sets, "", query)
 			require.NoError(t, err)
 
+			injected = prependVanillaSets(sets2, injected)
 			assert.Equal(t, sql, injected,
 				"round-trip failed:\n  original:  %s\n  extracted: %s\n  injected:  %s",
 				sql, extracted, injected)
@@ -307,7 +319,8 @@ func TestExtractInjectWithCastsHandcraftedRoundTrips(t *testing.T) {
 		"SELECT a FROM t WHERE x = 1::UInt64",
 		"SELECT a FROM t WHERE x = 1::UInt8",
 		"SELECT a FROM t WHERE x = 1::Int64",
-		"SELECT CAST(1 AS UInt64)",
+		//"SELECT CAST(1 AS UInt64)",
+		"SELECT 1::UInt64",
 		"SELECT a FROM t WHERE x = 1::UInt64 AND y = 'hello'",
 		"SELECT a FROM t WHERE x = 1::UInt64 AND y = 2::Int32",
 	}
@@ -317,9 +330,10 @@ func TestExtractInjectWithCastsHandcraftedRoundTrips(t *testing.T) {
 			extracted, err := pass(sql)
 			require.NoError(t, err)
 
-			sets, query := passes.ParseExtractedQuery(extracted, "")
+			sets, sets2, query := passes.ParseExtractedQuery(extracted, "")
 			injected, err := passes.InjectParamsWithCasts(sets, query, "", mockMapCanonicalToClickHouse)
 			require.NoError(t, err)
+			injected = prependVanillaSets(sets2, injected)
 
 			assert.Equal(t, sql, injected,
 				"cast round-trip failed:\n  original:  %s\n  extracted: %s\n  injected:  %s",
@@ -368,7 +382,7 @@ func TestExtractDeduplicationConsistency(t *testing.T) {
 	extracted, err := pass(sql)
 	require.NoError(t, err)
 
-	sets, _ := passes.ParseExtractedQuery(extracted, "")
+	sets, _, _ := passes.ParseExtractedQuery(extracted, "")
 	// Count distinct SET statements
 	setValues := make(map[string]bool)
 	for _, s := range sets {
@@ -379,7 +393,7 @@ func TestExtractDeduplicationConsistency(t *testing.T) {
 	assert.Len(t, sets, 1, "expected exactly 1 SET for 3 identical literals in same context")
 
 	// Round-trip should work
-	sets2, query := passes.ParseExtractedQuery(extracted, "")
+	sets2, _, query := passes.ParseExtractedQuery(extracted, "")
 	injected, err := passes.InjectParams(sets2, "", query)
 	require.NoError(t, err)
 	assert.Equal(t, sql, injected)

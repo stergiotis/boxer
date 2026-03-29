@@ -96,7 +96,7 @@ func TestExtractLiteralsSeqLongString(t *testing.T) {
 	got, err := pass(sql)
 	require.NoError(t, err)
 
-	sets, query := passes.ParseExtractedQuery(got, "")
+	sets, _, query := passes.ParseExtractedQuery(got, "")
 	require.Len(t, sets, 1)
 	assert.Contains(t, sets[0], "'this is a long string value'")
 	assert.NotContains(t, query, "'this is a long string value'")
@@ -123,7 +123,7 @@ func TestExtractLiteralsSeqNumber(t *testing.T) {
 	got, err := pass(sql)
 	require.NoError(t, err)
 
-	sets, query := passes.ParseExtractedQuery(got, "")
+	sets, _, query := passes.ParseExtractedQuery(got, "")
 	require.Len(t, sets, 1)
 	assert.Contains(t, sets[0], "123456789")
 	assert.NotContains(t, query, "123456789")
@@ -145,8 +145,8 @@ func TestExtractLiteralsStableNames(t *testing.T) {
 	got2, err := pass(sql)
 	require.NoError(t, err)
 
-	sets1, _ := passes.ParseExtractedQuery(got1, "")
-	sets2, _ := passes.ParseExtractedQuery(got2, "")
+	sets1, _, _ := passes.ParseExtractedQuery(got1, "")
+	sets2, _, _ := passes.ParseExtractedQuery(got2, "")
 	require.Len(t, sets1, 1)
 	require.Len(t, sets2, 1)
 	assert.Equal(t, sets1[0], sets2[0], "parameter names should be stable across runs")
@@ -179,7 +179,7 @@ func TestExtractLiteralsSeqDedup(t *testing.T) {
 	got, err := pass(sql)
 	require.NoError(t, err)
 
-	sets, _ := passes.ParseExtractedQuery(got, "")
+	sets, _, _ := passes.ParseExtractedQuery(got, "")
 	assert.Len(t, sets, 1, "expected exactly 1 SET for deduplicated literal")
 
 	t.Logf("Result:\n%s", got)
@@ -193,7 +193,7 @@ func TestExtractLiteralsSeqDistinctValues(t *testing.T) {
 	got, err := pass(sql)
 	require.NoError(t, err)
 
-	sets, _ := passes.ParseExtractedQuery(got, "")
+	sets, _, _ := passes.ParseExtractedQuery(got, "")
 	assert.GreaterOrEqual(t, len(sets), 2)
 
 	t.Logf("Result:\n%s", got)
@@ -254,7 +254,7 @@ func TestExtractLiteralsINListCollapse(t *testing.T) {
 	got, err := pass(sql)
 	require.NoError(t, err)
 
-	sets, query := passes.ParseExtractedQuery(got, "")
+	sets, _, query := passes.ParseExtractedQuery(got, "")
 	require.Len(t, sets, 1)
 	assert.Contains(t, sets[0], "['longval1', 'longval2', 'longval3']")
 	assert.Contains(t, query, "Array(String)")
@@ -272,7 +272,7 @@ func TestExtractLiteralsINListCollapseIntegers(t *testing.T) {
 	got, err := pass(sql)
 	require.NoError(t, err)
 
-	sets, query := passes.ParseExtractedQuery(got, "")
+	sets, _, query := passes.ParseExtractedQuery(got, "")
 	require.Len(t, sets, 1)
 	assert.Contains(t, sets[0], "[1, 2, 3, 4, 5]")
 	assert.Contains(t, query, "Array(")
@@ -312,7 +312,7 @@ func TestExtractLiteralsCastDoubleColon(t *testing.T) {
 	got, err := pass(sql)
 	require.NoError(t, err)
 
-	sets, query := passes.ParseExtractedQuery(got, "")
+	sets, _, query := passes.ParseExtractedQuery(got, "")
 	require.GreaterOrEqual(t, len(sets), 1)
 	assert.Contains(t, sets[0], " = 1")
 	assert.NotContains(t, sets[0], "::")
@@ -330,7 +330,7 @@ func TestExtractLiteralsCastAS(t *testing.T) {
 	got, err := pass(sql)
 	require.NoError(t, err)
 
-	sets, query := passes.ParseExtractedQuery(got, "")
+	sets, _, query := passes.ParseExtractedQuery(got, "")
 	require.GreaterOrEqual(t, len(sets), 1)
 	assert.Contains(t, sets[0], " = 1")
 	assert.Contains(t, query, "UInt64}")
@@ -422,7 +422,7 @@ func TestInjectParamsWithCastsBasic(t *testing.T) {
 	extracted, err := pass(original)
 	require.NoError(t, err)
 
-	sets, query := passes.ParseExtractedQuery(extracted, "")
+	sets, _, query := passes.ParseExtractedQuery(extracted, "")
 
 	injected, err := passes.InjectParamsWithCasts(sets, query, "", mockMapCanonicalToClickHouse)
 	require.NoError(t, err)
@@ -440,7 +440,7 @@ func TestInjectParamsWithCastsNoCast(t *testing.T) {
 	extracted, err := pass(original)
 	require.NoError(t, err)
 
-	sets, query := passes.ParseExtractedQuery(extracted, "")
+	sets, _, query := passes.ParseExtractedQuery(extracted, "")
 
 	injected, err := passes.InjectParamsWithCasts(sets, query, "", nil)
 	require.NoError(t, err)
@@ -457,7 +457,7 @@ func TestInjectParamsWithCastsMixed(t *testing.T) {
 	extracted, err := pass(original)
 	require.NoError(t, err)
 
-	sets, query := passes.ParseExtractedQuery(extracted, "")
+	sets, _, query := passes.ParseExtractedQuery(extracted, "")
 
 	injected, err := passes.InjectParamsWithCasts(sets, query, "", mockMapCanonicalToClickHouse)
 	require.NoError(t, err)
@@ -475,7 +475,7 @@ func TestInjectParamsWithCastsNilMapper(t *testing.T) {
 	extracted, err := pass(sql)
 	require.NoError(t, err)
 
-	sets, query := passes.ParseExtractedQuery(extracted, "")
+	sets, _, query := passes.ParseExtractedQuery(extracted, "")
 
 	injected, err := passes.InjectParamsWithCasts(sets, query, "", nil)
 	require.NoError(t, err)
@@ -493,7 +493,7 @@ func TestInjectParamsWithCastsCustomPrefix(t *testing.T) {
 	extracted, err := pass(original)
 	require.NoError(t, err)
 
-	sets, query := passes.ParseExtractedQuery(extracted, "qp")
+	sets, _, query := passes.ParseExtractedQuery(extracted, "qp")
 
 	injected, err := passes.InjectParamsWithCasts(sets, query, "qp", nil)
 	require.NoError(t, err)
@@ -511,7 +511,7 @@ func TestExtractLiteralsSeqMultiple(t *testing.T) {
 	got, err := pass(sql)
 	require.NoError(t, err)
 
-	sets, query := passes.ParseExtractedQuery(got, "")
+	sets, _, query := passes.ParseExtractedQuery(got, "")
 	assert.GreaterOrEqual(t, len(sets), 2)
 	assert.NotContains(t, query, "'longname1'")
 	assert.NotContains(t, query, "'longstatus'")
@@ -585,7 +585,7 @@ func TestExtractLiteralsUnionAll(t *testing.T) {
 	got, err := pass(sql)
 	require.NoError(t, err)
 
-	sets, _ := passes.ParseExtractedQuery(got, "")
+	sets, _, _ := passes.ParseExtractedQuery(got, "")
 	assert.GreaterOrEqual(t, len(sets), 2)
 }
 
@@ -626,7 +626,7 @@ func TestExtractLiteralsMixedWhitelistBlacklist(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Contains(t, got, "SET param_x_todate_")
-	_, query := passes.ParseExtractedQuery(got, "")
+	_, _, query := passes.ParseExtractedQuery(got, "")
 	assert.Contains(t, query, "toString('2024-01-01')")
 }
 
@@ -635,7 +635,7 @@ func TestExtractLiteralsMixedWhitelistBlacklist(t *testing.T) {
 func TestParseExtractedQuery(t *testing.T) {
 	input := "SET param_eq_abcd = 'hello';\nSET param_gt_ef01 = 100;\nSELECT a FROM t"
 
-	sets, query := passes.ParseExtractedQuery(input, "")
+	sets, _, query := passes.ParseExtractedQuery(input, "")
 	assert.Len(t, sets, 0)
 	assert.True(t, strings.HasPrefix(query, "SELECT"))
 }
@@ -650,7 +650,7 @@ func TestInjectParamsRoundTrip(t *testing.T) {
 	extracted, err := pass(original)
 	require.NoError(t, err)
 
-	sets, query := passes.ParseExtractedQuery(extracted, "")
+	sets, _, query := passes.ParseExtractedQuery(extracted, "")
 	injected, err := passes.InjectParams(sets, "", query)
 	require.NoError(t, err)
 
