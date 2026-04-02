@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -156,9 +156,9 @@ func insertCTEDefinitions(query string, accepted []acceptedParam) (result string
 	}
 
 	// Find the first SelectStmtContext
-	var selectStmt *grammar.SelectStmtContext
+	var selectStmt *grammar1.SelectStmtContext
 	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-		if ss, ok := ctx.(*grammar.SelectStmtContext); ok && selectStmt == nil {
+		if ss, ok := ctx.(*grammar1.SelectStmtContext); ok && selectStmt == nil {
 			selectStmt = ss
 			return false
 		}
@@ -174,9 +174,9 @@ func insertCTEDefinitions(query string, accepted []acceptedParam) (result string
 	rw := nanopass.NewRewriter(pr)
 
 	// Check if there's an existing WITH clause
-	var withClause *grammar.WithClauseContext
+	var withClause *grammar1.WithClauseContext
 	for i := 0; i < selectStmt.GetChildCount(); i++ {
-		if wc, ok := selectStmt.GetChild(i).(*grammar.WithClauseContext); ok {
+		if wc, ok := selectStmt.GetChild(i).(*grammar1.WithClauseContext); ok {
 			withClause = wc
 			break
 		}
@@ -184,9 +184,9 @@ func insertCTEDefinitions(query string, accepted []acceptedParam) (result string
 
 	if withClause != nil {
 		// Existing WITH clause — find the ColumnExprListContext and prepend
-		var exprList *grammar.ColumnExprListContext
+		var exprList *grammar1.ColumnExprListContext
 		for i := 0; i < withClause.GetChildCount(); i++ {
-			if el, ok := withClause.GetChild(i).(*grammar.ColumnExprListContext); ok {
+			if el, ok := withClause.GetChild(i).(*grammar1.ColumnExprListContext); ok {
 				exprList = el
 				break
 			}
@@ -198,9 +198,9 @@ func insertCTEDefinitions(query string, accepted []acceptedParam) (result string
 		}
 	} else {
 		// No WITH clause — find ProjectionClauseContext and insert WITH before it
-		var projectionClause *grammar.ProjectionClauseContext
+		var projectionClause *grammar1.ProjectionClauseContext
 		for i := 0; i < selectStmt.GetChildCount(); i++ {
-			if pc, ok := selectStmt.GetChild(i).(*grammar.ProjectionClauseContext); ok {
+			if pc, ok := selectStmt.GetChild(i).(*grammar1.ProjectionClauseContext); ok {
 				projectionClause = pc
 				break
 			}

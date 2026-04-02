@@ -8,7 +8,7 @@ import (
 	"slices"
 
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -35,14 +35,14 @@ func ReadSettings(sql string) (settings map[string]any, err error) {
 
 	// Find SettingExprListContext
 	for i := 0; i < settingsClause.GetChildCount(); i++ {
-		exprList, ok := settingsClause.GetChild(i).(*grammar.SettingExprListContext)
+		exprList, ok := settingsClause.GetChild(i).(*grammar1.SettingExprListContext)
 		if !ok {
 			continue
 		}
 
 		// Iterate SettingExprContext children
 		for j := 0; j < exprList.GetChildCount(); j++ {
-			expr, ok := exprList.GetChild(j).(*grammar.SettingExprContext)
+			expr, ok := exprList.GetChild(j).(*grammar1.SettingExprContext)
 			if !ok {
 				continue
 			}
@@ -58,10 +58,10 @@ func ReadSettings(sql string) (settings map[string]any, err error) {
 	return
 }
 
-func findSettingsClause(pr *nanopass.ParseResult) *grammar.SettingsClauseContext {
-	var result *grammar.SettingsClauseContext
+func findSettingsClause(pr *nanopass.ParseResult) *grammar1.SettingsClauseContext {
+	var result *grammar1.SettingsClauseContext
 	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-		if sc, ok := ctx.(*grammar.SettingsClauseContext); ok {
+		if sc, ok := ctx.(*grammar1.SettingsClauseContext); ok {
 			result = sc
 			return false
 		}
@@ -70,10 +70,10 @@ func findSettingsClause(pr *nanopass.ParseResult) *grammar.SettingsClauseContext
 	return result
 }
 
-func extractSettingExpr(expr *grammar.SettingExprContext) (name string, val any, err error) {
+func extractSettingExpr(expr *grammar1.SettingExprContext) (name string, val any, err error) {
 	// child[0] = IdentifierContext, child[1] = "=", child[2] = settingValue
 	for i := 0; i < expr.GetChildCount(); i++ {
-		if ident, ok := expr.GetChild(i).(*grammar.IdentifierContext); ok {
+		if ident, ok := expr.GetChild(i).(*grammar1.IdentifierContext); ok {
 			name = ident.GetText()
 			break
 		}
@@ -105,23 +105,23 @@ func deserializeSettingValue(ctx antlr.ParserRuleContext) (val any, err error) {
 
 func deserializeSettingValueTyped(ctx antlr.ParserRuleContext) (val marshalling.TypedLiteral, err error) {
 	switch c := ctx.(type) {
-	case *grammar.SettingLiteralContext:
+	case *grammar1.SettingLiteralContext:
 		return deserializeLiteral(c)
 
-	case *grammar.SettingArrayContext:
+	case *grammar1.SettingArrayContext:
 		return deserializeSettingArray(c)
 
-	case *grammar.SettingTupleContext:
+	case *grammar1.SettingTupleContext:
 		return deserializeSettingTuple(c)
 
-	case *grammar.SettingEmptyArrayContext:
+	case *grammar1.SettingEmptyArrayContext:
 		val = marshalling.NewHeterogeneousArray()
 		return
 
-	case *grammar.SettingFunctionContext:
+	case *grammar1.SettingFunctionContext:
 		return deserializeSettingFunction(c)
 
-	case *grammar.SettingFunctionEmptyContext:
+	case *grammar1.SettingFunctionEmptyContext:
 		funcName := getSettingFunctionName(c)
 		switch strings.ToLower(funcName) {
 		case "array":
@@ -139,9 +139,9 @@ func deserializeSettingValueTyped(ctx antlr.ParserRuleContext) (val marshalling.
 	}
 }
 
-func deserializeLiteral(ctx *grammar.SettingLiteralContext) (val marshalling.TypedLiteral, err error) {
+func deserializeLiteral(ctx *grammar1.SettingLiteralContext) (val marshalling.TypedLiteral, err error) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if lit, ok := ctx.GetChild(i).(*grammar.LiteralContext); ok {
+		if lit, ok := ctx.GetChild(i).(*grammar1.LiteralContext); ok {
 			return marshalling.UnmarshalScalarLiteral(lit.GetText())
 		}
 	}
@@ -149,11 +149,11 @@ func deserializeLiteral(ctx *grammar.SettingLiteralContext) (val marshalling.Typ
 	return
 }
 
-func DeserializeLiteralContext(lit *grammar.LiteralContext) (val marshalling.TypedLiteral, err error) {
+func DeserializeLiteralContext(lit *grammar1.LiteralContext) (val marshalling.TypedLiteral, err error) {
 	return marshalling.UnmarshalScalarLiteral(lit.GetText())
 }
 
-func deserializeSettingArray(ctx *grammar.SettingArrayContext) (val marshalling.TypedLiteral, err error) {
+func deserializeSettingArray(ctx *grammar1.SettingArrayContext) (val marshalling.TypedLiteral, err error) {
 	elems := make([]marshalling.TypedLiteral, 0)
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
@@ -177,7 +177,7 @@ func deserializeSettingArray(ctx *grammar.SettingArrayContext) (val marshalling.
 	return
 }
 
-func deserializeSettingTuple(ctx *grammar.SettingTupleContext) (val marshalling.TypedLiteral, err error) {
+func deserializeSettingTuple(ctx *grammar1.SettingTupleContext) (val marshalling.TypedLiteral, err error) {
 	elems := make([]marshalling.TypedLiteral, 0)
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
@@ -196,10 +196,10 @@ func deserializeSettingTuple(ctx *grammar.SettingTupleContext) (val marshalling.
 	return
 }
 
-func deserializeSettingFunction(ctx *grammar.SettingFunctionContext) (val marshalling.TypedLiteral, err error) {
+func deserializeSettingFunction(ctx *grammar1.SettingFunctionContext) (val marshalling.TypedLiteral, err error) {
 	funcName := ""
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if ident, ok := ctx.GetChild(i).(*grammar.IdentifierContext); ok {
+		if ident, ok := ctx.GetChild(i).(*grammar1.IdentifierContext); ok {
 			funcName = strings.ToLower(ident.GetText())
 			break
 		}
@@ -237,7 +237,7 @@ func deserializeSettingFunction(ctx *grammar.SettingFunctionContext) (val marsha
 }
 func getSettingFunctionName(ctx antlr.ParserRuleContext) string {
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if ident, ok := ctx.GetChild(i).(*grammar.IdentifierContext); ok {
+		if ident, ok := ctx.GetChild(i).(*grammar1.IdentifierContext); ok {
 			return ident.GetText()
 		}
 	}
@@ -269,7 +269,7 @@ func WriteSettings(settings map[string]any) nanopass.Pass {
 				// Include preceding whitespace
 				if start > 0 {
 					prevTok := pr.TokenStream.Get(start - 1)
-					if prevTok.GetTokenType() == grammar.ClickHouseLexerWHITESPACE {
+					if prevTok.GetTokenType() == grammar1.ClickHouseLexerWHITESPACE {
 						start = prevTok.GetTokenIndex()
 					}
 				}
@@ -354,19 +354,19 @@ func serializeSettingsMap(settings map[string]any) (sql string, err error) {
 }
 
 // findOutermostSelectStmt finds the first (outermost) selectStmt in the parse tree.
-func findOutermostSelectStmt(pr *nanopass.ParseResult) *grammar.SelectStmtContext {
+func findOutermostSelectStmt(pr *nanopass.ParseResult) *grammar1.SelectStmtContext {
 	node := nanopass.FindFirst(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-		_, ok := ctx.(*grammar.SelectStmtContext)
+		_, ok := ctx.(*grammar1.SelectStmtContext)
 		return ok
 	})
 	if node == nil {
 		return nil
 	}
-	return node.(*grammar.SelectStmtContext)
+	return node.(*grammar1.SelectStmtContext)
 }
 
 // findLastSelectStmtClause returns the last clause present in the selectStmt.
-func findLastSelectStmtClause(stmt *grammar.SelectStmtContext) antlr.ParserRuleContext {
+func findLastSelectStmtClause(stmt *grammar1.SelectStmtContext) antlr.ParserRuleContext {
 	if stmt.LimitClause() != nil {
 		return stmt.LimitClause().(antlr.ParserRuleContext)
 	}

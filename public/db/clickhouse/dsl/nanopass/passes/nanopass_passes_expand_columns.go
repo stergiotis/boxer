@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
@@ -163,14 +163,14 @@ func expandColumnsInScope(rw *antlr.TokenStreamRewriter, scope *nanopass.SelectS
 	// Walk the projection clause looking for expandable expressions
 	nanopass.WalkCST(projClause.(antlr.ParserRuleContext), func(ctx antlr.ParserRuleContext) bool {
 		switch c := ctx.(type) {
-		case *grammar.ColumnsExprAsteriskContext:
+		case *grammar1.ColumnsExprAsteriskContext:
 			expanded := expandAsterisk(c, scope, schema)
 			if expanded != "" {
 				nanopass.ReplaceNode(rw, c, expanded)
 			}
 			return false
 
-		case *grammar.ColumnExprDynamicContext:
+		case *grammar1.ColumnExprDynamicContext:
 			expanded := expandDynamic(c, scope, schema)
 			if expanded != "" {
 				// Replace the parent ColumnsExprColumn, not just the dynamic expr,
@@ -217,11 +217,11 @@ func expandColumnsInScope(rw *antlr.TokenStreamRewriter, scope *nanopass.SelectS
 }
 
 // expandAsterisk expands `*` or `table.*` into a comma-separated column list.
-func expandAsterisk(ctx *grammar.ColumnsExprAsteriskContext, scope *nanopass.SelectScope, schema SchemaProviderI) (expanded string) {
+func expandAsterisk(ctx *grammar1.ColumnsExprAsteriskContext, scope *nanopass.SelectScope, schema SchemaProviderI) (expanded string) {
 	// Check if it's `table.*` or bare `*`
-	var tableIdCtx *grammar.TableIdentifierContext
+	var tableIdCtx *grammar1.TableIdentifierContext
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if tid, ok := ctx.GetChild(i).(*grammar.TableIdentifierContext); ok {
+		if tid, ok := ctx.GetChild(i).(*grammar1.TableIdentifierContext); ok {
 			tableIdCtx = tid
 			break
 		}
@@ -240,7 +240,7 @@ func expandAsterisk(ctx *grammar.ColumnsExprAsteriskContext, scope *nanopass.Sel
 
 // extractStringLiteralFromDynamic extracts the regex pattern from a DynamicColumnSelectionContext.
 // The structure is: COLUMNS ( 'pattern' )
-func extractStringLiteralFromDynamic(ctx *grammar.DynamicColumnSelectionContext) (pattern string) {
+func extractStringLiteralFromDynamic(ctx *grammar1.DynamicColumnSelectionContext) (pattern string) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
 		tn, ok := child.(antlr.TerminalNode)
@@ -308,10 +308,10 @@ func expandForAllTables(scope *nanopass.SelectScope, schema SchemaProviderI) (ex
 	return
 }
 
-func expandDynamic(ctx *grammar.ColumnExprDynamicContext, scope *nanopass.SelectScope, schema SchemaProviderI) (expanded string) {
-	var dynCtx *grammar.DynamicColumnSelectionContext
+func expandDynamic(ctx *grammar1.ColumnExprDynamicContext, scope *nanopass.SelectScope, schema SchemaProviderI) (expanded string) {
+	var dynCtx *grammar1.DynamicColumnSelectionContext
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if d, ok := ctx.GetChild(i).(*grammar.DynamicColumnSelectionContext); ok {
+		if d, ok := ctx.GetChild(i).(*grammar1.DynamicColumnSelectionContext); ok {
 			dynCtx = d
 			break
 		}

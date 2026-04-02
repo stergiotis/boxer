@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
@@ -55,7 +55,7 @@ func canonicalizeCastsOnce(sql string) (result string, err error) {
 	changed := false
 
 	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-		if castCtx, ok := ctx.(*grammar.ColumnExprCastContext); ok {
+		if castCtx, ok := ctx.(*grammar1.ColumnExprCastContext); ok {
 			if containsNonCanonicalCastChild(castCtx) {
 				return true
 			}
@@ -80,12 +80,12 @@ func canonicalizeCastsOnce(sql string) (result string, err error) {
 // rewritten, causing overlapping writes.
 // The CAST(expr, 'Type') function form is already canonical and won't be rewritten by this pass,
 // so it's safe to process the outer cast even if the child is a CAST function call.
-func containsNonCanonicalCastChild(castCtx *grammar.ColumnExprCastContext) bool {
+func containsNonCanonicalCastChild(castCtx *grammar1.ColumnExprCastContext) bool {
 	for i := 0; i < castCtx.GetChildCount(); i++ {
 		child := castCtx.GetChild(i)
 		// Any ColumnExprCastContext child is non-canonical (either :: or CAST AS form)
 		// — both would be rewritten by this pass
-		if _, isCast := child.(*grammar.ColumnExprCastContext); isCast {
+		if _, isCast := child.(*grammar1.ColumnExprCastContext); isCast {
 			return true
 		}
 	}
@@ -98,7 +98,7 @@ func containsNonCanonicalCastChild(castCtx *grammar.ColumnExprCastContext) bool 
 //
 // Both are rewritten to CAST(expr, 'Type').
 // Returns true if a rewrite was performed.
-func canonicalizeCastExpr(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, castCtx *grammar.ColumnExprCastContext) bool {
+func canonicalizeCastExpr(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, castCtx *grammar1.ColumnExprCastContext) bool {
 	if castCtx.GetChildCount() == 0 {
 		return false
 	}
@@ -119,14 +119,14 @@ func canonicalizeCastExpr(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewrite
 			for i := 0; i < castCtx.GetChildCount(); i++ {
 				child := castCtx.GetChild(i)
 				switch child.(type) {
-				case *grammar.ColumnTypeExprSimpleContext:
-					typeText = child.(*grammar.ColumnTypeExprSimpleContext).GetText()
-				case *grammar.ColumnTypeExprComplexContext:
-					typeText = child.(*grammar.ColumnTypeExprComplexContext).GetText()
+				case *grammar1.ColumnTypeExprSimpleContext:
+					typeText = child.(*grammar1.ColumnTypeExprSimpleContext).GetText()
+				case *grammar1.ColumnTypeExprComplexContext:
+					typeText = child.(*grammar1.ColumnTypeExprComplexContext).GetText()
 				case antlr.ParserRuleContext:
 					if exprNode == nil {
-						_, isSimple := child.(*grammar.ColumnTypeExprSimpleContext)
-						_, isComplex := child.(*grammar.ColumnTypeExprComplexContext)
+						_, isSimple := child.(*grammar1.ColumnTypeExprSimpleContext)
+						_, isComplex := child.(*grammar1.ColumnTypeExprComplexContext)
 						if !isSimple && !isComplex {
 							exprNode = child.(antlr.ParserRuleContext)
 						}
@@ -143,14 +143,14 @@ func canonicalizeCastExpr(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewrite
 		for i := 0; i < castCtx.GetChildCount(); i++ {
 			child := castCtx.GetChild(i)
 			switch child.(type) {
-			case *grammar.ColumnTypeExprSimpleContext:
-				typeText = child.(*grammar.ColumnTypeExprSimpleContext).GetText()
-			case *grammar.ColumnTypeExprComplexContext:
-				typeText = child.(*grammar.ColumnTypeExprComplexContext).GetText()
+			case *grammar1.ColumnTypeExprSimpleContext:
+				typeText = child.(*grammar1.ColumnTypeExprSimpleContext).GetText()
+			case *grammar1.ColumnTypeExprComplexContext:
+				typeText = child.(*grammar1.ColumnTypeExprComplexContext).GetText()
 			case antlr.ParserRuleContext:
 				if exprNode == nil {
-					_, isSimple := child.(*grammar.ColumnTypeExprSimpleContext)
-					_, isComplex := child.(*grammar.ColumnTypeExprComplexContext)
+					_, isSimple := child.(*grammar1.ColumnTypeExprSimpleContext)
+					_, isComplex := child.(*grammar1.ColumnTypeExprComplexContext)
 					if !isSimple && !isComplex {
 						exprNode = child.(antlr.ParserRuleContext)
 					}

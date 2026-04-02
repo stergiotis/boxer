@@ -8,7 +8,7 @@ import (
 
 	"github.com/antlr4-go/antlr/v4"
 	mutablestring "github.com/philip-peterson/go-mutablestring"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/parsing/antlr4utils"
 	"github.com/yassinebenaid/godump"
@@ -67,25 +67,25 @@ func (inst *AnsiHighlighter) HighlightTerminal(node antlr.TerminalNode) (before 
 func (inst *AnsiHighlighter) HighlightRule(node antlr.ParserRuleContext) (before string, after string, highlight bool) {
 	i := -1
 	switch node.(type) {
-	case *grammar.ColumnExprFunctionContext:
+	case *grammar0.ColumnExprFunctionContext:
 		i = 0
 		break
-	case *grammar.IdentifierContext:
+	case *grammar0.IdentifierContext:
 		i = 1
 		break
-	case *grammar.NumberLiteralContext:
+	case *grammar0.NumberLiteralContext:
 		i = 2
 		break
-	case *grammar.LiteralContext:
+	case *grammar0.LiteralContext:
 		i = 3
 		break
-	case *grammar.ColumnIdentifierContext, *grammar.TableIdentifierContext:
+	case *grammar0.ColumnIdentifierContext, *grammar0.TableIdentifierContext:
 		i = 4
 		break
-	case *grammar.ParamSlotContext:
+	case *grammar0.ParamSlotContext:
 		i = 5
 		break
-	case *grammar.KeywordContext, *grammar.KeywordForAliasContext:
+	case *grammar0.KeywordContext, *grammar0.KeywordForAliasContext:
 		i = 6
 		break
 	default:

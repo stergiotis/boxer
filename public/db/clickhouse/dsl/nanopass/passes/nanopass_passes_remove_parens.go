@@ -4,7 +4,7 @@ package passes
 
 import (
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
@@ -25,49 +25,49 @@ const (
 
 func exprPrecedence(ctx antlr.ParserRuleContext) int32 {
 	switch ctx.(type) {
-	case *grammar.ColumnExprOrContext:
+	case *grammar1.ColumnExprOrContext:
 		return precOr
-	case *grammar.ColumnExprAndContext:
+	case *grammar1.ColumnExprAndContext:
 		return precAnd
-	case *grammar.ColumnExprNotContext:
+	case *grammar1.ColumnExprNotContext:
 		return precNot
-	case *grammar.ColumnExprIsNullContext:
+	case *grammar1.ColumnExprIsNullContext:
 		return precIsNull
-	case *grammar.ColumnExprPrecedence3Context:
+	case *grammar1.ColumnExprPrecedence3Context:
 		return precComparison
-	case *grammar.ColumnExprBetweenContext:
+	case *grammar1.ColumnExprBetweenContext:
 		return precBetween
-	case *grammar.ColumnExprPrecedence2Context:
+	case *grammar1.ColumnExprPrecedence2Context:
 		return precAddSub
-	case *grammar.ColumnExprPrecedence1Context:
+	case *grammar1.ColumnExprPrecedence1Context:
 		return precMulDiv
-	case *grammar.ColumnExprNegateContext:
+	case *grammar1.ColumnExprNegateContext:
 		return precNegate
-	case *grammar.ColumnExprTernaryOpContext:
+	case *grammar1.ColumnExprTernaryOpContext:
 		return precTernary
-	case *grammar.ColumnExprLiteralContext,
-		*grammar.ColumnExprIdentifierContext,
-		*grammar.ColumnExprFunctionContext,
-		*grammar.ColumnExprAsteriskContext,
-		*grammar.ColumnExprSubqueryContext,
-		*grammar.ColumnExprCaseContext,
-		*grammar.ColumnExprCastContext,
-		*grammar.ColumnExprDateContext,
-		*grammar.ColumnExprTimestampContext,
-		*grammar.ColumnExprExtractContext,
-		*grammar.ColumnExprIntervalContext,
-		*grammar.ColumnExprSubstringContext,
-		*grammar.ColumnExprTrimContext,
-		*grammar.ColumnExprArrayContext,
-		*grammar.ColumnExprTupleContext,
-		*grammar.ColumnExprArrayAccessContext,
-		*grammar.ColumnExprTupleAccessContext,
-		*grammar.ColumnExprParamSlotContext,
-		*grammar.ColumnExprWinFunctionContext,
-		*grammar.ColumnExprWinFunctionTargetContext,
-		*grammar.ColumnExprDynamicContext,
-		*grammar.ColumnExprAliasContext,
-		*grammar.ColumnExprParensContext:
+	case *grammar1.ColumnExprLiteralContext,
+		*grammar1.ColumnExprIdentifierContext,
+		*grammar1.ColumnExprFunctionContext,
+		*grammar1.ColumnExprAsteriskContext,
+		*grammar1.ColumnExprSubqueryContext,
+		*grammar1.ColumnExprCaseContext,
+		*grammar1.ColumnExprCastContext,
+		*grammar1.ColumnExprDateContext,
+		*grammar1.ColumnExprTimestampContext,
+		*grammar1.ColumnExprExtractContext,
+		*grammar1.ColumnExprIntervalContext,
+		*grammar1.ColumnExprSubstringContext,
+		*grammar1.ColumnExprTrimContext,
+		*grammar1.ColumnExprArrayContext,
+		*grammar1.ColumnExprTupleContext,
+		*grammar1.ColumnExprArrayAccessContext,
+		*grammar1.ColumnExprTupleAccessContext,
+		*grammar1.ColumnExprParamSlotContext,
+		*grammar1.ColumnExprWinFunctionContext,
+		*grammar1.ColumnExprWinFunctionTargetContext,
+		*grammar1.ColumnExprDynamicContext,
+		*grammar1.ColumnExprAliasContext,
+		*grammar1.ColumnExprParensContext:
 		return precAtom
 	}
 	return precAtom
@@ -81,8 +81,8 @@ func findColumnExprParent(node antlr.ParserRuleContext) antlr.ParserRuleContext 
 			break
 		}
 		switch ctx.GetRuleIndex() {
-		case grammar.ClickHouseParserRULE_columnExpr:
-			if _, isParens := ctx.(*grammar.ColumnExprParensContext); !isParens {
+		case grammar1.ClickHouseParserGrammar1RULE_columnExpr:
+			if _, isParens := ctx.(*grammar1.ColumnExprParensContext); !isParens {
 				return ctx
 			}
 		default:
@@ -103,7 +103,7 @@ func isLeftOperand(parenNode antlr.ParserRuleContext, parent antlr.ParserRuleCon
 		if !ok {
 			continue
 		}
-		if rctx.GetRuleIndex() == grammar.ClickHouseParserRULE_columnExpr {
+		if rctx.GetRuleIndex() == grammar1.ClickHouseParserGrammar1RULE_columnExpr {
 			return rctx == parenNode
 		}
 	}
@@ -111,7 +111,7 @@ func isLeftOperand(parenNode antlr.ParserRuleContext, parent antlr.ParserRuleCon
 }
 
 func isINRightOperand(parenNode antlr.ParserRuleContext, parent antlr.ParserRuleContext) bool {
-	cmp, ok := parent.(*grammar.ColumnExprPrecedence3Context)
+	cmp, ok := parent.(*grammar1.ColumnExprPrecedence3Context)
 	if !ok {
 		return false
 	}
@@ -124,7 +124,7 @@ func isINRightOperand(parenNode antlr.ParserRuleContext, parent antlr.ParserRule
 			if !ok {
 				continue
 			}
-			if tn.GetSymbol().GetTokenType() == grammar.ClickHouseParserIN {
+			if tn.GetSymbol().GetTokenType() == grammar1.ClickHouseParserGrammar1IN {
 				hasIN = true
 				break
 			}
@@ -151,7 +151,7 @@ func canRemoveParens(inner antlr.ParserRuleContext, parent antlr.ParserRuleConte
 
 	// Guard against creating "--" comment syntax or ambiguous operator sequences.
 	// If the parent is unary minus and the inner starts with minus, keep parens: -(-x), -(-1)
-	if _, isParentNegate := parent.(*grammar.ColumnExprNegateContext); isParentNegate {
+	if _, isParentNegate := parent.(*grammar1.ColumnExprNegateContext); isParentNegate {
 		if innerStartsWithMinus(inner) {
 			return false
 		}
@@ -159,7 +159,7 @@ func canRemoveParens(inner antlr.ParserRuleContext, parent antlr.ParserRuleConte
 
 	// If the inner is unary minus and it's NOT the left operand of a binary operator,
 	// keep parens to avoid ambiguous sequences like "a + -b" or "a * -b"
-	if _, isInnerNegate := inner.(*grammar.ColumnExprNegateContext); isInnerNegate {
+	if _, isInnerNegate := inner.(*grammar1.ColumnExprNegateContext); isInnerNegate {
 		if !isLeftOperand(parenNode, parent) {
 			return false
 		}
@@ -173,7 +173,7 @@ func canRemoveParens(inner antlr.ParserRuleContext, parent antlr.ParserRuleConte
 	}
 
 	if innerPrec == parentPrec {
-		if _, isTernary := parent.(*grammar.ColumnExprTernaryOpContext); isTernary {
+		if _, isTernary := parent.(*grammar1.ColumnExprTernaryOpContext); isTernary {
 			return false
 		}
 		return isLeftOperand(parenNode, parent)
@@ -199,7 +199,7 @@ func RemoveRedundantParens(sql string) (result string, err error) {
 	rw := nanopass.NewRewriter(pr)
 
 	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-		paren, ok := ctx.(*grammar.ColumnExprParensContext)
+		paren, ok := ctx.(*grammar1.ColumnExprParensContext)
 		if !ok {
 			return true
 		}
@@ -231,7 +231,7 @@ func RemoveRedundantParens(sql string) (result string, err error) {
 	return
 }
 
-func removeSurroundingParens(rw *antlr.TokenStreamRewriter, paren *grammar.ColumnExprParensContext) {
+func removeSurroundingParens(rw *antlr.TokenStreamRewriter, paren *grammar1.ColumnExprParensContext) {
 	lparen := paren.LPAREN()
 	rparen := paren.RPAREN()
 	if lparen == nil || rparen == nil {

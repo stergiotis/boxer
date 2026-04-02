@@ -4,12 +4,12 @@ package nanopass
 
 import (
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 )
 
 // SelectScope represents the lexical context of one SELECT statement.
 type SelectScope struct {
-	Node            *grammar.SelectStmtContext
+	Node            *grammar1.SelectStmtContext
 	Tables          []TableSource
 	Parent          *SelectScope
 	CTEDefs         []CTEDef
@@ -116,7 +116,7 @@ func BuildScopes(pr *ParseResult, defaultDatabase ...string) (scopes []*SelectSc
 	if queryStmt.GetChildCount() == 0 {
 		return
 	}
-	query, ok := queryStmt.GetChild(0).(*grammar.QueryContext)
+	query, ok := queryStmt.GetChild(0).(*grammar1.QueryContext)
 	if !ok {
 		return
 	}
@@ -124,16 +124,16 @@ func BuildScopes(pr *ParseResult, defaultDatabase ...string) (scopes []*SelectSc
 	// Gather CTE definitions from the query-level ctes rule
 	var cteDefs []CTEDef
 	for i := 0; i < query.GetChildCount(); i++ {
-		if ctes, ok := query.GetChild(i).(*grammar.CtesContext); ok {
+		if ctes, ok := query.GetChild(i).(*grammar1.CtesContext); ok {
 			cteDefs = buildCTEDefs(ctes, nil, db)
 			break
 		}
 	}
 
 	// Find the selectUnionStmt
-	var unionStmt *grammar.SelectUnionStmtContext
+	var unionStmt *grammar1.SelectUnionStmtContext
 	for i := 0; i < query.GetChildCount(); i++ {
-		if u, ok := query.GetChild(i).(*grammar.SelectUnionStmtContext); ok {
+		if u, ok := query.GetChild(i).(*grammar1.SelectUnionStmtContext); ok {
 			unionStmt = u
 			break
 		}
@@ -146,20 +146,20 @@ func BuildScopes(pr *ParseResult, defaultDatabase ...string) (scopes []*SelectSc
 	return
 }
 
-func buildUnionScopes(union *grammar.SelectUnionStmtContext, parent *SelectScope, cteDefs []CTEDef, defaultDB string) (scopes []*SelectScope) {
+func buildUnionScopes(union *grammar1.SelectUnionStmtContext, parent *SelectScope, cteDefs []CTEDef, defaultDB string) (scopes []*SelectScope) {
 	scopes = make([]*SelectScope, 0, union.GetChildCount())
 
 	for i := 0; i < union.GetChildCount(); i++ {
 		child := union.GetChild(i)
 		switch c := child.(type) {
-		case *grammar.SelectStmtWithParensContext:
+		case *grammar1.SelectStmtWithParensContext:
 			scope := buildSelectScope(c, parent, cteDefs, defaultDB)
 			if scope != nil {
 				scopes = append(scopes, scope)
 			}
-		case *grammar.SelectUnionStmtItemContext:
+		case *grammar1.SelectUnionStmtItemContext:
 			for j := 0; j < c.GetChildCount(); j++ {
-				if swp, ok := c.GetChild(j).(*grammar.SelectStmtWithParensContext); ok {
+				if swp, ok := c.GetChild(j).(*grammar1.SelectStmtWithParensContext); ok {
 					scope := buildSelectScope(swp, parent, cteDefs, defaultDB)
 					if scope != nil {
 						scopes = append(scopes, scope)
@@ -176,16 +176,16 @@ func buildUnionScopes(union *grammar.SelectUnionStmtContext, parent *SelectScope
 	return
 }
 
-func buildSelectScope(node *grammar.SelectStmtWithParensContext, parent *SelectScope, cteDefs []CTEDef, defaultDB string) (scope *SelectScope) {
+func buildSelectScope(node *grammar1.SelectStmtWithParensContext, parent *SelectScope, cteDefs []CTEDef, defaultDB string) (scope *SelectScope) {
 	for i := 0; i < node.GetChildCount(); i++ {
-		if stmt, ok := node.GetChild(i).(*grammar.SelectStmtContext); ok {
+		if stmt, ok := node.GetChild(i).(*grammar1.SelectStmtContext); ok {
 			scope = buildScopeFromSelectStmt(stmt, parent, cteDefs, defaultDB)
 			return
 		}
 	}
 
 	for i := 0; i < node.GetChildCount(); i++ {
-		if u, ok := node.GetChild(i).(*grammar.SelectUnionStmtContext); ok {
+		if u, ok := node.GetChild(i).(*grammar1.SelectUnionStmtContext); ok {
 			innerScopes := buildUnionScopes(u, parent, cteDefs, defaultDB)
 			if len(innerScopes) > 0 {
 				scope = innerScopes[0]
@@ -196,7 +196,7 @@ func buildSelectScope(node *grammar.SelectStmtWithParensContext, parent *SelectS
 	return
 }
 
-func buildScopeFromSelectStmt(stmt *grammar.SelectStmtContext, parent *SelectScope, cteDefs []CTEDef, defaultDB string) (scope *SelectScope) {
+func buildScopeFromSelectStmt(stmt *grammar1.SelectStmtContext, parent *SelectScope, cteDefs []CTEDef, defaultDB string) (scope *SelectScope) {
 	scope = &SelectScope{
 		Node:            stmt,
 		Parent:          parent,
@@ -207,7 +207,7 @@ func buildScopeFromSelectStmt(stmt *grammar.SelectStmtContext, parent *SelectSco
 	// Extract table sources from FROM/JOIN
 	fromClause := stmt.FromClause()
 	if fromClause != nil {
-		scope.Tables = extractTableSources(fromClause.(*grammar.FromClauseContext), scope)
+		scope.Tables = extractTableSources(fromClause.(*grammar1.FromClauseContext), scope)
 	}
 
 	// Mark CTE references
@@ -227,7 +227,7 @@ func buildScopeFromSelectStmt(stmt *grammar.SelectStmtContext, parent *SelectSco
 	return
 }
 
-func findSubqueryScopes(stmt *grammar.SelectStmtContext, parent *SelectScope, defaultDB string) (subqueries []*SelectScope) {
+func findSubqueryScopes(stmt *grammar1.SelectStmtContext, parent *SelectScope, defaultDB string) (subqueries []*SelectScope) {
 	fromSubqueryNodes := make(map[antlr.ParserRuleContext]bool, len(parent.Tables))
 	for _, ts := range parent.Tables {
 		if ts.IsSubquery && ts.Node != nil {
@@ -236,12 +236,12 @@ func findSubqueryScopes(stmt *grammar.SelectStmtContext, parent *SelectScope, de
 	}
 
 	WalkCST(stmt, func(ctx antlr.ParserRuleContext) bool {
-		if _, ok := ctx.(*grammar.SelectStmtContext); ok && ctx != stmt {
+		if _, ok := ctx.(*grammar1.SelectStmtContext); ok && ctx != stmt {
 			return false
 		}
 
 		switch c := ctx.(type) {
-		case *grammar.TableExprSubqueryContext:
+		case *grammar1.TableExprSubqueryContext:
 			if fromSubqueryNodes[c] {
 				return false
 			}
@@ -251,7 +251,7 @@ func findSubqueryScopes(stmt *grammar.SelectStmtContext, parent *SelectScope, de
 			}
 			return false
 
-		case *grammar.ColumnExprSubqueryContext:
+		case *grammar1.ColumnExprSubqueryContext:
 			subScope := buildSubqueryFromColumnExpr(c, parent, defaultDB)
 			if subScope != nil {
 				subqueries = append(subqueries, subScope)
@@ -263,9 +263,9 @@ func findSubqueryScopes(stmt *grammar.SelectStmtContext, parent *SelectScope, de
 	return
 }
 
-func buildSubqueryFromTableExpr(expr *grammar.TableExprSubqueryContext, parent *SelectScope, defaultDB string) (scope *SelectScope) {
+func buildSubqueryFromTableExpr(expr *grammar1.TableExprSubqueryContext, parent *SelectScope, defaultDB string) (scope *SelectScope) {
 	for i := 0; i < expr.GetChildCount(); i++ {
-		if u, ok := expr.GetChild(i).(*grammar.SelectUnionStmtContext); ok {
+		if u, ok := expr.GetChild(i).(*grammar1.SelectUnionStmtContext); ok {
 			innerScopes := buildUnionScopes(u, parent, nil, defaultDB)
 			if len(innerScopes) > 0 {
 				scope = innerScopes[0]
@@ -276,9 +276,9 @@ func buildSubqueryFromTableExpr(expr *grammar.TableExprSubqueryContext, parent *
 	return
 }
 
-func buildSubqueryFromColumnExpr(expr *grammar.ColumnExprSubqueryContext, parent *SelectScope, defaultDB string) (scope *SelectScope) {
+func buildSubqueryFromColumnExpr(expr *grammar1.ColumnExprSubqueryContext, parent *SelectScope, defaultDB string) (scope *SelectScope) {
 	for i := 0; i < expr.GetChildCount(); i++ {
-		if u, ok := expr.GetChild(i).(*grammar.SelectUnionStmtContext); ok {
+		if u, ok := expr.GetChild(i).(*grammar1.SelectUnionStmtContext); ok {
 			innerScopes := buildUnionScopes(u, parent, nil, defaultDB)
 			if len(innerScopes) > 0 {
 				scope = innerScopes[0]
@@ -287,9 +287,9 @@ func buildSubqueryFromColumnExpr(expr *grammar.ColumnExprSubqueryContext, parent
 		}
 	}
 	for i := 0; i < expr.GetChildCount(); i++ {
-		if q, ok := expr.GetChild(i).(*grammar.QueryContext); ok {
+		if q, ok := expr.GetChild(i).(*grammar1.QueryContext); ok {
 			for j := 0; j < q.GetChildCount(); j++ {
-				if u, ok := q.GetChild(j).(*grammar.SelectUnionStmtContext); ok {
+				if u, ok := q.GetChild(j).(*grammar1.SelectUnionStmtContext); ok {
 					innerScopes := buildUnionScopes(u, parent, nil, defaultDB)
 					if len(innerScopes) > 0 {
 						scope = innerScopes[0]
@@ -302,26 +302,26 @@ func buildSubqueryFromColumnExpr(expr *grammar.ColumnExprSubqueryContext, parent
 	return
 }
 
-func extractTableSources(from *grammar.FromClauseContext, parentScope *SelectScope) (sources []TableSource) {
+func extractTableSources(from *grammar1.FromClauseContext, parentScope *SelectScope) (sources []TableSource) {
 	sources = make([]TableSource, 0, 4)
 
 	WalkCST(from, func(ctx antlr.ParserRuleContext) bool {
 		switch c := ctx.(type) {
-		case *grammar.TableExprAliasContext:
+		case *grammar1.TableExprAliasContext:
 			ts := extractFromAliasExpr(c, parentScope)
 			if ts != nil {
 				sources = append(sources, *ts)
 			}
 			return false
 
-		case *grammar.TableExprIdentifierContext:
+		case *grammar1.TableExprIdentifierContext:
 			ts := tableSourceFromIdentifier(c)
 			if ts != nil {
 				sources = append(sources, *ts)
 			}
 			return false
 
-		case *grammar.TableExprSubqueryContext:
+		case *grammar1.TableExprSubqueryContext:
 			ts := &TableSource{
 				Node:       c,
 				IsSubquery: true,
@@ -330,7 +330,7 @@ func extractTableSources(from *grammar.FromClauseContext, parentScope *SelectSco
 			sources = append(sources, *ts)
 			return false
 
-		case *grammar.TableExprFunctionContext:
+		case *grammar1.TableExprFunctionContext:
 			return false
 		}
 		return true
@@ -339,11 +339,11 @@ func extractTableSources(from *grammar.FromClauseContext, parentScope *SelectSco
 	return
 }
 
-func extractFromAliasExpr(aliasExpr *grammar.TableExprAliasContext, parentScope *SelectScope) (ts *TableSource) {
+func extractFromAliasExpr(aliasExpr *grammar1.TableExprAliasContext, parentScope *SelectScope) (ts *TableSource) {
 	var alias string
 	for i := 0; i < aliasExpr.GetChildCount(); i++ {
 		child := aliasExpr.GetChild(i)
-		if identCtx, ok := child.(*grammar.IdentifierContext); ok {
+		if identCtx, ok := child.(*grammar1.IdentifierContext); ok {
 			alias = identCtx.GetText()
 			break
 		}
@@ -352,13 +352,13 @@ func extractFromAliasExpr(aliasExpr *grammar.TableExprAliasContext, parentScope 
 	for i := 0; i < aliasExpr.GetChildCount(); i++ {
 		child := aliasExpr.GetChild(i)
 		switch c := child.(type) {
-		case *grammar.TableExprIdentifierContext:
+		case *grammar1.TableExprIdentifierContext:
 			ts = tableSourceFromIdentifier(c)
 			if ts != nil {
 				ts.Alias = alias
 			}
 			return
-		case *grammar.TableExprSubqueryContext:
+		case *grammar1.TableExprSubqueryContext:
 			ts = &TableSource{
 				Node:       c,
 				Alias:      alias,
@@ -366,17 +366,17 @@ func extractFromAliasExpr(aliasExpr *grammar.TableExprAliasContext, parentScope 
 			}
 			ts.Scope = buildSubqueryFromTableExpr(c, parentScope, parentScope.DefaultDatabase)
 			return
-		case *grammar.TableExprFunctionContext:
+		case *grammar1.TableExprFunctionContext:
 			return nil
 		}
 	}
 	return nil
 }
 
-func tableSourceFromIdentifier(expr *grammar.TableExprIdentifierContext) (ts *TableSource) {
+func tableSourceFromIdentifier(expr *grammar1.TableExprIdentifierContext) (ts *TableSource) {
 	for i := 0; i < expr.GetChildCount(); i++ {
 		child := expr.GetChild(i)
-		tid, ok := child.(*grammar.TableIdentifierContext)
+		tid, ok := child.(*grammar1.TableIdentifierContext)
 		if !ok {
 			continue
 		}
@@ -392,10 +392,10 @@ func tableSourceFromIdentifier(expr *grammar.TableExprIdentifierContext) (ts *Ta
 	return nil
 }
 
-func buildCTEDefs(ctes *grammar.CtesContext, parent *SelectScope, defaultDB string) (defs []CTEDef) {
+func buildCTEDefs(ctes *grammar1.CtesContext, parent *SelectScope, defaultDB string) (defs []CTEDef) {
 	defs = make([]CTEDef, 0, ctes.GetChildCount())
 	for i := 0; i < ctes.GetChildCount(); i++ {
-		nqCtx, ok := ctes.GetChild(i).(*grammar.NamedQueryContext)
+		nqCtx, ok := ctes.GetChild(i).(*grammar1.NamedQueryContext)
 		if !ok {
 			continue
 		}
@@ -405,9 +405,9 @@ func buildCTEDefs(ctes *grammar.CtesContext, parent *SelectScope, defaultDB stri
 			Node: nqCtx,
 		}
 		for j := 0; j < nqCtx.GetChildCount(); j++ {
-			if qCtx, ok := nqCtx.GetChild(j).(*grammar.QueryContext); ok {
+			if qCtx, ok := nqCtx.GetChild(j).(*grammar1.QueryContext); ok {
 				for k := 0; k < qCtx.GetChildCount(); k++ {
-					if unionStmt, ok := qCtx.GetChild(k).(*grammar.SelectUnionStmtContext); ok {
+					if unionStmt, ok := qCtx.GetChild(k).(*grammar1.SelectUnionStmtContext); ok {
 						innerScopes := buildUnionScopes(unionStmt, parent, nil, defaultDB)
 						if len(innerScopes) > 0 {
 							def.Scope = innerScopes[0]

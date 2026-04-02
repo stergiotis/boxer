@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
@@ -38,22 +38,22 @@ func UnmarshalCompositeLiteralEx(sql string, mapClickHouseTypeToCanonical func(s
 
 	var exprNode antlr.ParserRuleContext
 	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-		if _, ok := ctx.(*grammar.ProjectionClauseContext); ok {
+		if _, ok := ctx.(*grammar1.ProjectionClauseContext); ok {
 			return true
 		}
-		if _, ok := ctx.(*grammar.ColumnExprListContext); ok {
+		if _, ok := ctx.(*grammar1.ColumnExprListContext); ok {
 			return true
 		}
-		if _, ok := ctx.(*grammar.ColumnsExprColumnContext); ok {
+		if _, ok := ctx.(*grammar1.ColumnsExprColumnContext); ok {
 			return true
 		}
 		switch ctx.(type) {
-		case *grammar.ColumnExprLiteralContext,
-			*grammar.ColumnExprFunctionContext,
-			*grammar.ColumnExprArrayContext,
-			*grammar.ColumnExprIdentifierContext,
-			*grammar.ColumnExprCastContext,
-			*grammar.ColumnExprTupleContext:
+		case *grammar1.ColumnExprLiteralContext,
+			*grammar1.ColumnExprFunctionContext,
+			*grammar1.ColumnExprArrayContext,
+			*grammar1.ColumnExprIdentifierContext,
+			*grammar1.ColumnExprCastContext,
+			*grammar1.ColumnExprTupleContext:
 			if exprNode == nil {
 				exprNode = ctx
 			}
@@ -78,19 +78,19 @@ func UnmarshalCompositeLiteralEx(sql string, mapClickHouseTypeToCanonical func(s
 // If nil, cast types are not preserved.
 func UnmarshalCSTToTypedLiteral(pr *nanopass.ParseResult, node antlr.ParserRuleContext, mapType func(string) (canonicaltypes.PrimitiveAstNodeI, error)) (result TypedLiteral, err error) {
 	switch ctx := node.(type) {
-	case *grammar.ColumnExprLiteralContext:
+	case *grammar1.ColumnExprLiteralContext:
 		return unmarshalScalarCST(pr, ctx)
-	case *grammar.ColumnExprIdentifierContext:
+	case *grammar1.ColumnExprIdentifierContext:
 		return unmarshalIdentifierCST(pr, ctx)
-	case *grammar.ColumnExprFunctionContext:
+	case *grammar1.ColumnExprFunctionContext:
 		return unmarshalFunctionCST(pr, ctx, mapType)
-	case *grammar.ColumnExprArrayContext:
+	case *grammar1.ColumnExprArrayContext:
 		return unmarshalArrayCST(pr, ctx, mapType)
-	case *grammar.ColumnExprCastContext:
+	case *grammar1.ColumnExprCastContext:
 		return unmarshalCastExprCST(pr, ctx, mapType)
-	case *grammar.ColumnExprTupleContext:
+	case *grammar1.ColumnExprTupleContext:
 		return unmarshalTupleExprCST(pr, ctx, mapType)
-	case *grammar.ColumnArgExprContext:
+	case *grammar1.ColumnArgExprContext:
 		if ctx.GetChildCount() > 0 {
 			if innerCtx, ok := ctx.GetChild(0).(antlr.ParserRuleContext); ok {
 				return UnmarshalCSTToTypedLiteral(pr, innerCtx, mapType)
@@ -106,7 +106,7 @@ func UnmarshalCSTToTypedLiteral(pr *nanopass.ParseResult, node antlr.ParserRuleC
 
 // --- Scalar ---
 
-func unmarshalScalarCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprLiteralContext) (result TypedLiteral, err error) {
+func unmarshalScalarCST(pr *nanopass.ParseResult, ctx *grammar1.ColumnExprLiteralContext) (result TypedLiteral, err error) {
 	text := nanopass.NodeText(pr, ctx)
 	result, err = UnmarshalScalarLiteral(text)
 	if err != nil {
@@ -117,7 +117,7 @@ func unmarshalScalarCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprLiteral
 
 // --- Identifier (true/false/null) ---
 
-func unmarshalIdentifierCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprIdentifierContext) (result TypedLiteral, err error) {
+func unmarshalIdentifierCST(pr *nanopass.ParseResult, ctx *grammar1.ColumnExprIdentifierContext) (result TypedLiteral, err error) {
 	text := nanopass.NodeText(pr, ctx)
 	text = strings.TrimSpace(text)
 	switch strings.ToLower(text) {
@@ -136,7 +136,7 @@ func unmarshalIdentifierCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprIde
 
 // --- Function: CAST(expr, 'Type') or tuple(...) ---
 
-func unmarshalFunctionCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprFunctionContext, mapType func(string) (canonicaltypes.PrimitiveAstNodeI, error)) (result TypedLiteral, err error) {
+func unmarshalFunctionCST(pr *nanopass.ParseResult, ctx *grammar1.ColumnExprFunctionContext, mapType func(string) (canonicaltypes.PrimitiveAstNodeI, error)) (result TypedLiteral, err error) {
 	ident := ctx.Identifier()
 	if ident == nil {
 		err = eh.Errorf("unmarshalFunctionCST: no identifier")
@@ -155,10 +155,10 @@ func unmarshalFunctionCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprFunct
 		return
 	}
 }
-func unmarshalArrayFunctionCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprFunctionContext, mapType func(string) (canonicaltypes.PrimitiveAstNodeI, error)) (result TypedLiteral, err error) {
-	var argList *grammar.ColumnArgListContext
+func unmarshalArrayFunctionCST(pr *nanopass.ParseResult, ctx *grammar1.ColumnExprFunctionContext, mapType func(string) (canonicaltypes.PrimitiveAstNodeI, error)) (result TypedLiteral, err error) {
+	var argList *grammar1.ColumnArgListContext
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if al, ok := ctx.GetChild(i).(*grammar.ColumnArgListContext); ok {
+		if al, ok := ctx.GetChild(i).(*grammar1.ColumnArgListContext); ok {
 			argList = al
 			break
 		}
@@ -167,7 +167,7 @@ func unmarshalArrayFunctionCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExpr
 	elems := make([]TypedLiteral, 0)
 	if argList != nil {
 		for i := 0; i < argList.GetChildCount(); i++ {
-			arg, ok := argList.GetChild(i).(*grammar.ColumnArgExprContext)
+			arg, ok := argList.GetChild(i).(*grammar1.ColumnArgExprContext)
 			if !ok {
 				continue
 			}
@@ -189,10 +189,10 @@ func unmarshalArrayFunctionCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExpr
 	return
 }
 
-func unmarshalCastFunctionCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprFunctionContext, mapType func(string) (canonicaltypes.PrimitiveAstNodeI, error)) (result TypedLiteral, err error) {
-	var argList *grammar.ColumnArgListContext
+func unmarshalCastFunctionCST(pr *nanopass.ParseResult, ctx *grammar1.ColumnExprFunctionContext, mapType func(string) (canonicaltypes.PrimitiveAstNodeI, error)) (result TypedLiteral, err error) {
+	var argList *grammar1.ColumnArgListContext
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if al, ok := ctx.GetChild(i).(*grammar.ColumnArgListContext); ok {
+		if al, ok := ctx.GetChild(i).(*grammar1.ColumnArgListContext); ok {
 			argList = al
 			break
 		}
@@ -202,9 +202,9 @@ func unmarshalCastFunctionCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprF
 		return
 	}
 
-	var args []*grammar.ColumnArgExprContext
+	var args []*grammar1.ColumnArgExprContext
 	for i := 0; i < argList.GetChildCount(); i++ {
-		if arg, ok := argList.GetChild(i).(*grammar.ColumnArgExprContext); ok {
+		if arg, ok := argList.GetChild(i).(*grammar1.ColumnArgExprContext); ok {
 			args = append(args, arg)
 		}
 	}
@@ -240,10 +240,10 @@ func unmarshalCastFunctionCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprF
 	return
 }
 
-func unmarshalTupleFunctionCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprFunctionContext, mapType func(string) (canonicaltypes.PrimitiveAstNodeI, error)) (result TypedLiteral, err error) {
-	var argList *grammar.ColumnArgListContext
+func unmarshalTupleFunctionCST(pr *nanopass.ParseResult, ctx *grammar1.ColumnExprFunctionContext, mapType func(string) (canonicaltypes.PrimitiveAstNodeI, error)) (result TypedLiteral, err error) {
+	var argList *grammar1.ColumnArgListContext
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if al, ok := ctx.GetChild(i).(*grammar.ColumnArgListContext); ok {
+		if al, ok := ctx.GetChild(i).(*grammar1.ColumnArgListContext); ok {
 			argList = al
 			break
 		}
@@ -254,7 +254,7 @@ func unmarshalTupleFunctionCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExpr
 		return
 	}
 	for i := 0; i < argList.GetChildCount(); i++ {
-		arg, ok := argList.GetChild(i).(*grammar.ColumnArgExprContext)
+		arg, ok := argList.GetChild(i).(*grammar1.ColumnArgExprContext)
 		if !ok {
 			continue
 		}
@@ -270,10 +270,10 @@ func unmarshalTupleFunctionCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExpr
 
 // --- Array: [elem1, elem2, ...] ---
 
-func unmarshalArrayCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprArrayContext, mapType func(string) (canonicaltypes.PrimitiveAstNodeI, error)) (result TypedLiteral, err error) {
-	var exprList *grammar.ColumnExprListContext
+func unmarshalArrayCST(pr *nanopass.ParseResult, ctx *grammar1.ColumnExprArrayContext, mapType func(string) (canonicaltypes.PrimitiveAstNodeI, error)) (result TypedLiteral, err error) {
+	var exprList *grammar1.ColumnExprListContext
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if el, ok := ctx.GetChild(i).(*grammar.ColumnExprListContext); ok {
+		if el, ok := ctx.GetChild(i).(*grammar1.ColumnExprListContext); ok {
 			exprList = el
 			break
 		}
@@ -283,7 +283,7 @@ func unmarshalArrayCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprArrayCon
 	elems := make([]TypedLiteral, 0)
 	if exprList != nil {
 		for i := 0; i < exprList.GetChildCount(); i++ {
-			colsExpr, ok := exprList.GetChild(i).(*grammar.ColumnsExprColumnContext)
+			colsExpr, ok := exprList.GetChild(i).(*grammar1.ColumnsExprColumnContext)
 			if !ok {
 				continue
 			}
@@ -315,14 +315,14 @@ func unmarshalArrayCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprArrayCon
 
 // --- Cast expr: expr::Type or CAST(expr AS Type) ---
 
-func unmarshalCastExprCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprCastContext, mapType func(string) (canonicaltypes.PrimitiveAstNodeI, error)) (result TypedLiteral, err error) {
+func unmarshalCastExprCST(pr *nanopass.ParseResult, ctx *grammar1.ColumnExprCastContext, mapType func(string) (canonicaltypes.PrimitiveAstNodeI, error)) (result TypedLiteral, err error) {
 	var chType string
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
 		switch c := child.(type) {
-		case *grammar.ColumnTypeExprSimpleContext:
+		case *grammar1.ColumnTypeExprSimpleContext:
 			chType = c.GetText()
-		case *grammar.ColumnTypeExprComplexContext:
+		case *grammar1.ColumnTypeExprComplexContext:
 			chType = c.GetText()
 		}
 	}
@@ -331,8 +331,8 @@ func unmarshalCastExprCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprCastC
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
 		if ruleCtx, ok := child.(antlr.ParserRuleContext); ok {
-			_, isSimple := child.(*grammar.ColumnTypeExprSimpleContext)
-			_, isComplex := child.(*grammar.ColumnTypeExprComplexContext)
+			_, isSimple := child.(*grammar1.ColumnTypeExprSimpleContext)
+			_, isComplex := child.(*grammar1.ColumnTypeExprComplexContext)
 			if !isSimple && !isComplex {
 				exprNode = ruleCtx
 				break
@@ -356,13 +356,13 @@ func unmarshalCastExprCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprCastC
 
 // --- Tuple expr: (elem1, elem2, ...) ---
 
-func unmarshalTupleExprCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprTupleContext, mapType func(string) (canonicaltypes.PrimitiveAstNodeI, error)) (result TypedLiteral, err error) {
+func unmarshalTupleExprCST(pr *nanopass.ParseResult, ctx *grammar1.ColumnExprTupleContext, mapType func(string) (canonicaltypes.PrimitiveAstNodeI, error)) (result TypedLiteral, err error) {
 	result.Kind = KindTuple
 	result.Elements = make([]TypedLiteral, 0)
 
-	var exprList *grammar.ColumnExprListContext
+	var exprList *grammar1.ColumnExprListContext
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if el, ok := ctx.GetChild(i).(*grammar.ColumnExprListContext); ok {
+		if el, ok := ctx.GetChild(i).(*grammar1.ColumnExprListContext); ok {
 			exprList = el
 			break
 		}
@@ -372,7 +372,7 @@ func unmarshalTupleExprCST(pr *nanopass.ParseResult, ctx *grammar.ColumnExprTupl
 	}
 
 	for i := 0; i < exprList.GetChildCount(); i++ {
-		colsExpr, ok := exprList.GetChild(i).(*grammar.ColumnsExprColumnContext)
+		colsExpr, ok := exprList.GetChild(i).(*grammar1.ColumnsExprColumnContext)
 		if !ok {
 			continue
 		}

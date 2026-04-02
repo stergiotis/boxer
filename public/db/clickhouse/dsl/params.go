@@ -6,7 +6,7 @@ import (
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/ast"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/parsing/antlr4utils"
@@ -14,13 +14,13 @@ import (
 )
 
 type ParamBindEnv struct {
-	bind     map[string]*grammar.SettingExprContext
+	bind     map[string]*grammar0.SettingExprContext
 	inputSql string
 }
 
 func NewParamBindEnv() *ParamBindEnv {
 	return &ParamBindEnv{
-		bind: make(map[string]*grammar.SettingExprContext, 32),
+		bind: make(map[string]*grammar0.SettingExprContext, 32),
 	}
 }
 func (inst *ParamBindEnv) Has(name string) (has bool) {
@@ -33,12 +33,12 @@ var ErrParamAlreadyBound = eh.Errorf("parameter is already bound to a value")
 func (inst *ParamBindEnv) IsEmpty() bool {
 	return len(inst.bind) == 0
 }
-func (inst *ParamBindEnv) AddDistinct(p *grammar.SettingExprContext) (err error) {
+func (inst *ParamBindEnv) AddDistinct(p *grammar0.SettingExprContext) (err error) {
 	if p == nil {
 		return
 	}
 	id := ast.Identifier{}
-	id.LoadContext(p.Identifier().(*grammar.IdentifierContext))
+	id.LoadContext(p.Identifier().(*grammar0.IdentifierContext))
 	name := id.Name
 	if inst.Has(name) {
 		err = eb.Build().Str("param", name).Errorf("unable to add: %w", ErrParamAlreadyBound)
@@ -51,12 +51,12 @@ func (inst *ParamBindEnv) Clear() {
 	clear(inst.bind)
 	inst.inputSql = ""
 }
-func (inst *ParamBindEnv) Set(p *grammar.SettingExprContext) {
+func (inst *ParamBindEnv) Set(p *grammar0.SettingExprContext) {
 	if p == nil {
 		return
 	}
 	id := ast.Identifier{}
-	id.LoadContext(p.Identifier().(*grammar.IdentifierContext))
+	id.LoadContext(p.Identifier().(*grammar0.IdentifierContext))
 	name := id.Name
 	inst.bind[name] = p
 	return
@@ -108,14 +108,14 @@ func (inst *ParamSlotSet) add2(id string, ct *ast.ColumnType) (err error) {
 	inst.paramOccurrences++
 	return
 }
-func (inst *ParamSlotSet) Add(param *grammar.ParamSlotContext) (err error) {
+func (inst *ParamSlotSet) Add(param *grammar0.ParamSlotContext) (err error) {
 	if param == nil {
 		return
 	}
 	id := ast.Identifier{}
-	id.LoadContext(param.Identifier().(*grammar.IdentifierContext))
+	id.LoadContext(param.Identifier().(*grammar0.IdentifierContext))
 	ct := ast.ColumnType{}
-	ct.LoadContext(param.ColumnTypeExpr().(*grammar.ColumnTypeExprContext))
+	ct.LoadContext(param.ColumnTypeExpr().(*grammar0.ColumnTypeExprContext))
 	return inst.Add2(&id, &ct)
 }
 func (inst *ParamSlotSet) UnionMod(other *ParamSlotSet) (err error) {
@@ -172,7 +172,7 @@ func (inst *ParamSlotSet) Clear() {
 }
 
 func (inst *ParamSlotSet) AddSlotsFromParseTree(ast antlr.Tree) (err error) {
-	for slot := range antlr4utils.IterateAllByType[*grammar.ParamSlotContext](ast) {
+	for slot := range antlr4utils.IterateAllByType[*grammar0.ParamSlotContext](ast) {
 		err = inst.Add(slot)
 		if err != nil {
 			err = eh.Errorf("error while adding param slot: %w", err)

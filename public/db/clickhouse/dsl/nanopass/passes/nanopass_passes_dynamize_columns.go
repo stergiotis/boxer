@@ -6,7 +6,7 @@ import (
 	"regexp"
 
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
@@ -60,7 +60,7 @@ func wrapColumnsInScope(rw *antlr.TokenStreamRewriter, scope *nanopass.SelectSco
 	// Walk the projection clause looking for ColumnsExprColumn nodes.
 	// Each ColumnsExprColumn wraps a single column expression in the SELECT list.
 	nanopass.WalkCST(projClause.(antlr.ParserRuleContext), func(ctx antlr.ParserRuleContext) bool {
-		colsExpr, ok := ctx.(*grammar.ColumnsExprColumnContext)
+		colsExpr, ok := ctx.(*grammar1.ColumnsExprColumnContext)
 		if !ok {
 			return true
 		}
@@ -108,7 +108,7 @@ func wrapColumnsInScope(rw *antlr.TokenStreamRewriter, scope *nanopass.SelectSco
 // extractBareColumnName checks if a ColumnsExprColumn contains a bare (unqualified,
 // unaliased) column identifier and returns its name.
 // Returns ("", false) for qualified columns, aliased expressions, function calls, etc.
-func extractBareColumnName(colsExpr *grammar.ColumnsExprColumnContext) (name string, ok bool) {
+func extractBareColumnName(colsExpr *grammar1.ColumnsExprColumnContext) (name string, ok bool) {
 	// ColumnsExprColumn has exactly one child: a columnExpr
 	if colsExpr.GetChildCount() == 0 {
 		return
@@ -116,7 +116,7 @@ func extractBareColumnName(colsExpr *grammar.ColumnsExprColumnContext) (name str
 
 	// The child must be a ColumnExprIdentifier (bare column reference)
 	child := colsExpr.GetChild(0)
-	identExpr, isIdent := child.(*grammar.ColumnExprIdentifierContext)
+	identExpr, isIdent := child.(*grammar1.ColumnExprIdentifierContext)
 	if !isIdent {
 		return
 	}
@@ -124,7 +124,7 @@ func extractBareColumnName(colsExpr *grammar.ColumnsExprColumnContext) (name str
 	// ColumnExprIdentifier → ColumnIdentifier
 	// ColumnIdentifier may have a TableIdentifier (qualified) or just a NestedIdentifier
 	for i := 0; i < identExpr.GetChildCount(); i++ {
-		colId, isColId := identExpr.GetChild(i).(*grammar.ColumnIdentifierContext)
+		colId, isColId := identExpr.GetChild(i).(*grammar1.ColumnIdentifierContext)
 		if !isColId {
 			continue
 		}

@@ -5,29 +5,29 @@ package nanopass
 import (
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/rs/zerolog"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // ParseResult holds the CST and token stream for a pass to operate on.
 type ParseResult struct {
-	Tree        *grammar.QueryStmtContext
+	Tree        *grammar1.QueryStmtContext
 	TokenStream *antlr.CommonTokenStream
-	Lexer       *grammar.ClickHouseLexer
-	Parser      *grammar.ClickHouseParser
+	Lexer       *grammar1.ClickHouseLexer
+	Parser      *grammar1.ClickHouseParserGrammar1
 }
 
 // Parse parses a ClickHouse SELECT statement into a CST.
 // Any syntax error is fatal — partial/error-recovering parses are not allowed.
 func Parse(sql string) (result *ParseResult, err error) {
 	input := antlr.NewInputStream(sql)
-	lexer := grammar.NewClickHouseLexer(input)
+	lexer := grammar1.NewClickHouseLexer(input)
 
 	// Use TokenDefaultChannel for the parser's filtered view.
 	// The underlying BufferedTokenStream stores all tokens regardless.
 	stream := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
 
-	p := grammar.NewClickHouseParser(stream)
+	p := grammar1.NewClickHouseParserGrammar1(stream)
 
 	collector := &errorCollector{}
 	p.RemoveErrorListeners()
@@ -43,7 +43,7 @@ func Parse(sql string) (result *ParseResult, err error) {
 	}
 
 	result = &ParseResult{
-		Tree:        tree.(*grammar.QueryStmtContext),
+		Tree:        tree.(*grammar1.QueryStmtContext),
 		TokenStream: stream,
 		Lexer:       lexer,
 		Parser:      p,

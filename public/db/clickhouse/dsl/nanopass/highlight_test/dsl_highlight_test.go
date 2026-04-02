@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/highlight"
 	"github.com/stretchr/testify/assert"
@@ -509,7 +509,7 @@ func TestDebugCTERef(t *testing.T) {
 	require.NoError(t, err)
 
 	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-		if tid, ok := ctx.(*grammar.TableIdentifierContext); ok {
+		if tid, ok := ctx.(*grammar1.TableIdentifierContext); ok {
 			parent := tid.GetParent()
 			t.Logf("TableIdentifierContext text=%q parent=%T", tid.GetText(), parent)
 			if parent != nil {

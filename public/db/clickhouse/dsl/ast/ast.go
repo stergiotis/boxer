@@ -3,11 +3,11 @@ package ast
 import (
 	"strings"
 
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 )
 
 type Identifier struct {
-	ParseNode   *grammar.IdentifierContext
+	ParseNode   *grammar0.IdentifierContext
 	Name        string
 	Backtick    bool
 	DoubleQuote bool
@@ -27,7 +27,7 @@ func (inst *Identifier) LoadRawText(raw string) {
 	inst.DoubleQuote = doubleQuote
 	inst.ParseNode = nil
 }
-func (inst *Identifier) LoadIdentifier(ctx *grammar.IdentifierContext) {
+func (inst *Identifier) LoadIdentifier(ctx *grammar0.IdentifierContext) {
 	inst.Name = ""
 	inst.Backtick = false
 	inst.DoubleQuote = false
@@ -41,7 +41,7 @@ func (inst *Identifier) LoadIdentifier(ctx *grammar.IdentifierContext) {
 	}
 	inst.ParseNode = ctx
 }
-func (inst *Identifier) LoadContext(ctx *grammar.IdentifierContext) {
+func (inst *Identifier) LoadContext(ctx *grammar0.IdentifierContext) {
 	inst.Name = ""
 	inst.Backtick = false
 	inst.DoubleQuote = false
@@ -57,11 +57,11 @@ func (inst *Identifier) LoadContext(ctx *grammar.IdentifierContext) {
 }
 
 type ColumnType struct {
-	ParseNode *grammar.ColumnTypeExprContext
+	ParseNode *grammar0.ColumnTypeExprContext
 	Sql       string
 }
 
-func (inst *ColumnType) LoadContext(ctx *grammar.ColumnTypeExprContext) {
+func (inst *ColumnType) LoadContext(ctx *grammar0.ColumnTypeExprContext) {
 	inst.Sql = ctx.GetText()
 	inst.ParseNode = ctx
 }

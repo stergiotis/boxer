@@ -1,9 +1,10 @@
 //go:build llm_generated_opus46
+
 package analysis
 
 import (
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 )
 
@@ -16,12 +17,12 @@ type ColumnRef struct {
 // ExtractColumns walks the CST and returns all column references found in ColumnIdentifier nodes.
 func ExtractColumns(pr *nanopass.ParseResult) (refs []ColumnRef) {
 	nodes := nanopass.FindAll(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-		_, ok := ctx.(*grammar.ColumnIdentifierContext)
+		_, ok := ctx.(*grammar1.ColumnIdentifierContext)
 		return ok
 	})
 	refs = make([]ColumnRef, 0, len(nodes))
 	for _, n := range nodes {
-		cid := n.(*grammar.ColumnIdentifierContext)
+		cid := n.(*grammar1.ColumnIdentifierContext)
 		ref := ColumnRef{}
 		if cid.TableIdentifier() != nil {
 			ref.Table = cid.TableIdentifier().GetText()

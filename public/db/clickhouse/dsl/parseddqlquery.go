@@ -7,23 +7,23 @@ import (
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/ast"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/ea"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/parsing/antlr4utils"
 )
 
-func parseSql(sql string, errL antlr.ErrorListener, errStrategy antlr.ErrorStrategy) (parser *grammar.ClickHouseParser, parseTree *grammar.QueryStmtContext, err error) {
+func parseSql(sql string, errL antlr.ErrorListener, errStrategy antlr.ErrorStrategy) (parser *grammar0.ClickHouseParser, parseTree *grammar0.QueryStmtContext, err error) {
 	inputStream := antlr.NewInputStream(sql)
 	if errL == nil {
 		errL = antlr4utils.NewStoringErrListener(32, 16, 16, 16)
 	}
-	lexer := grammar.NewClickHouseLexer(inputStream)
+	lexer := grammar0.NewClickHouseLexer(inputStream)
 	lexer.RemoveErrorListeners()
 	lexer.AddErrorListener(errL)
 	stream := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
-	parser = grammar.NewClickHouseParser(stream)
+	parser = grammar0.NewClickHouseParser(stream)
 	parser.RemoveErrorListeners()
 	parser.AddErrorListener(errL)
 	if errStrategy != nil {
@@ -33,7 +33,7 @@ func parseSql(sql string, errL antlr.ErrorListener, errStrategy antlr.ErrorStrat
 	parseTreeI := parser.QueryStmt()
 
 	var ok bool
-	parseTree, ok = parseTreeI.(*grammar.QueryStmtContext)
+	parseTree, ok = parseTreeI.(*grammar0.QueryStmtContext)
 	if !ok {
 		err = eb.Build().Type("parseTreeI", parseTreeI).Errorf("unable to cast to QueryStmtContext")
 		return
@@ -64,15 +64,15 @@ func parseSql(sql string, errL antlr.ErrorListener, errStrategy antlr.ErrorStrat
 type ParsedDqlQuery struct {
 	paramSlotSetErr error
 	errS            antlr.ErrorStrategy
-	parseTree       *grammar.QueryStmtContext
-	parser          *grammar.ClickHouseParser
+	parseTree       *grammar0.QueryStmtContext
+	parser          *grammar0.ClickHouseParser
 	errL            *antlr4utils.StoringErrListener
 
 	paramBindEnv *ParamBindEnv
 	paramSlotSet *ParamSlotSet
 
 	inputSql   string
-	paramExprs []*grammar.SettingExprContext
+	paramExprs []*grammar0.SettingExprContext
 
 	recoverParseErrors bool
 
@@ -92,14 +92,14 @@ func (inst *ParsedDqlQuery) SetRecoverFromParseErrors(recover bool) {
 	//}
 }
 
-func (inst *ParsedDqlQuery) GetParser() *grammar.ClickHouseParser {
+func (inst *ParsedDqlQuery) GetParser() *grammar0.ClickHouseParser {
 	return inst.parser
 }
 func (inst *ParsedDqlQuery) GetInputSql() (sql string) {
 	sql = inst.inputSql
 	return
 }
-func (inst *ParsedDqlQuery) GetInputParseTree() *grammar.QueryStmtContext {
+func (inst *ParsedDqlQuery) GetInputParseTree() *grammar0.QueryStmtContext {
 	return inst.parseTree
 }
 func (inst *ParsedDqlQuery) GetParamBindEnv() (paramBindEnv *ParamBindEnv) {
@@ -147,7 +147,7 @@ func NewParsedDqlQuery() (inst *ParsedDqlQuery) {
 		errS:            antlr.NewDefaultErrorStrategy(),
 		paramBindEnv:    NewParamBindEnv(),
 		paramSlotSet:    NewParamSlotsSet(),
-		paramExprs:      make([]*grammar.SettingExprContext, 0, 64),
+		paramExprs:      make([]*grammar0.SettingExprContext, 0, 64),
 		inputSql:        "",
 		noParams:        false,
 	}
@@ -158,9 +158,9 @@ func (inst *ParsedDqlQuery) identifyParamBindEnvs() (err error) {
 	var nonParam bool
 	clear(inst.paramExprs)
 	paramExprs := inst.paramExprs[:0]
-	for node := range antlr4utils.IterateAllByType[*grammar.SettingExprContext](inst.parseTree) {
+	for node := range antlr4utils.IterateAllByType[*grammar0.SettingExprContext](inst.parseTree) {
 		id := ast.Identifier{}
-		id.LoadContext(node.Identifier().(*grammar.IdentifierContext))
+		id.LoadContext(node.Identifier().(*grammar0.IdentifierContext))
 		if strings.HasPrefix(id.Name, paramPrefixName) {
 			{ // TODO lift this limitations
 				if nonParam {
@@ -169,9 +169,9 @@ func (inst *ParsedDqlQuery) identifyParamBindEnvs() (err error) {
 				}
 				ok := false
 				switch pt := node.GetParent().(type) {
-				case *grammar.SettingExprListContext:
+				case *grammar0.SettingExprListContext:
 					switch pt.GetParent().(type) {
-					case *grammar.SetStmtContext:
+					case *grammar0.SetStmtContext:
 						ok = true
 						break
 					}
@@ -220,11 +220,11 @@ func (inst *ParsedDqlQuery) ParseFromReader(sql io.Reader) (err error) {
 }
 func (inst *ParsedDqlQuery) ParseFromString(sql string) (err error) {
 	inst.Reset()
-	var parseTree *grammar.QueryStmtContext
+	var parseTree *grammar0.QueryStmtContext
 
 	errL := inst.errL
 	errL.Reset()
-	var parser *grammar.ClickHouseParser
+	var parser *grammar0.ClickHouseParser
 	parser, parseTree, err = parseSql(sql, errL, inst.errS)
 	if err == nil && !inst.recoverParseErrors {
 		err = errL.GetSyntheticSyntaxError(32, false)

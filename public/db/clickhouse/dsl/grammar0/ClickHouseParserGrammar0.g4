@@ -20,7 +20,7 @@
     The same as for kleen star applies for optional (?) and 1 to many (+) repetitions.
 */
 
-parser grammar ClickHouseParser;
+parser grammar ClickHouseParserGrammar0;
 
 options {
     tokenVocab = ClickHouseLexer;

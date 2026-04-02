@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
@@ -131,14 +131,14 @@ type ColumnNameValidator func(unquotedColName string, isAlias bool) (err error)
 func collectColumnNameViolations(pr *nanopass.ParseResult, validator ColumnNameValidator) (violations []ColumnNameViolation) {
 	// Walk the projection clauses in all SELECT statements
 	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-		projClause, ok := ctx.(*grammar.ProjectionClauseContext)
+		projClause, ok := ctx.(*grammar1.ProjectionClauseContext)
 		if !ok {
 			return true
 		}
 
 		// Find the ColumnExprListContext inside the projection clause
 		for i := 0; i < projClause.GetChildCount(); i++ {
-			exprList, ok := projClause.GetChild(i).(*grammar.ColumnExprListContext)
+			exprList, ok := projClause.GetChild(i).(*grammar1.ColumnExprListContext)
 			if !ok {
 				continue
 			}
@@ -148,12 +148,12 @@ func collectColumnNameViolations(pr *nanopass.ParseResult, validator ColumnNameV
 				child := exprList.GetChild(j)
 
 				switch c := child.(type) {
-				case *grammar.ColumnsExprColumnContext:
+				case *grammar1.ColumnsExprColumnContext:
 					v := validateColumnsExprColumn(pr, c, validator)
 					if v != nil {
 						violations = append(violations, *v)
 					}
-				case *grammar.ColumnsExprAsteriskContext:
+				case *grammar1.ColumnsExprAsteriskContext:
 					// Skip * and table.* — can't validate without schema
 				}
 			}
@@ -164,7 +164,7 @@ func collectColumnNameViolations(pr *nanopass.ParseResult, validator ColumnNameV
 	return
 }
 
-func validateColumnsExprColumn(pr *nanopass.ParseResult, colExpr *grammar.ColumnsExprColumnContext, validator ColumnNameValidator) (violation *ColumnNameViolation) {
+func validateColumnsExprColumn(pr *nanopass.ParseResult, colExpr *grammar1.ColumnsExprColumnContext, validator ColumnNameValidator) (violation *ColumnNameViolation) {
 	if colExpr.GetChildCount() == 0 {
 		return
 	}
@@ -176,7 +176,7 @@ func validateColumnsExprColumn(pr *nanopass.ParseResult, colExpr *grammar.Column
 	}
 
 	switch c := innerCtx.(type) {
-	case *grammar.ColumnExprAliasContext:
+	case *grammar1.ColumnExprAliasContext:
 		// Has an alias — validate the alias name
 		rawAlias, unquotedAlias, aliasLine, aliasCol := extractAliasInfo(c)
 		if rawAlias == "" {
@@ -196,7 +196,7 @@ func validateColumnsExprColumn(pr *nanopass.ParseResult, colExpr *grammar.Column
 			}
 		}
 
-	case *grammar.ColumnExprDynamicContext:
+	case *grammar1.ColumnExprDynamicContext:
 		// COLUMNS('...') — skip, can't validate without schema
 
 	default:
@@ -229,10 +229,10 @@ func validateColumnsExprColumn(pr *nanopass.ParseResult, colExpr *grammar.Column
 // inferColumnName determines the resulting column name for an unaliased expression.
 func inferColumnName(pr *nanopass.ParseResult, ctx antlr.ParserRuleContext) (name string) {
 	switch c := ctx.(type) {
-	case *grammar.ColumnExprIdentifierContext:
+	case *grammar1.ColumnExprIdentifierContext:
 		// Bare or qualified identifier — extract just the column name
 		for i := 0; i < c.GetChildCount(); i++ {
-			if colId, ok := c.GetChild(i).(*grammar.ColumnIdentifierContext); ok {
+			if colId, ok := c.GetChild(i).(*grammar1.ColumnIdentifierContext); ok {
 				if colId.NestedIdentifier() != nil {
 					name = colId.NestedIdentifier().GetText()
 				}
@@ -240,11 +240,11 @@ func inferColumnName(pr *nanopass.ParseResult, ctx antlr.ParserRuleContext) (nam
 			}
 		}
 
-	case *grammar.ColumnExprLiteralContext:
+	case *grammar1.ColumnExprLiteralContext:
 		// Literal — the text is the column name
 		name = nanopass.NodeText(pr, c)
 
-	case *grammar.ColumnExprFunctionContext:
+	case *grammar1.ColumnExprFunctionContext:
 		// Function call — full expression is the column name
 		name = nanopass.NodeText(pr, c)
 
@@ -257,11 +257,11 @@ func inferColumnName(pr *nanopass.ParseResult, ctx antlr.ParserRuleContext) (nam
 
 // --- shared helpers (also used by validateColumnsExprColumn) ---
 
-func extractAliasInfo(ctx *grammar.ColumnExprAliasContext) (raw string, unquoted string, line int, col int) {
+func extractAliasInfo(ctx *grammar1.ColumnExprAliasContext) (raw string, unquoted string, line int, col int) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
 
-		if ident, ok := child.(*grammar.IdentifierContext); ok {
+		if ident, ok := child.(*grammar1.IdentifierContext); ok {
 			tok := ident.GetStart()
 			raw = ident.GetText()
 			unquoted = unquoteAlias(raw)
@@ -270,7 +270,7 @@ func extractAliasInfo(ctx *grammar.ColumnExprAliasContext) (raw string, unquoted
 			return
 		}
 
-		if alias, ok := child.(*grammar.AliasContext); ok {
+		if alias, ok := child.(*grammar1.AliasContext); ok {
 			tok := alias.GetStart()
 			raw = alias.GetText()
 			unquoted = unquoteAlias(raw)
@@ -282,11 +282,11 @@ func extractAliasInfo(ctx *grammar.ColumnExprAliasContext) (raw string, unquoted
 	return
 }
 
-func extractAliasedExpression(pr *nanopass.ParseResult, ctx *grammar.ColumnExprAliasContext) string {
+func extractAliasedExpression(pr *nanopass.ParseResult, ctx *grammar1.ColumnExprAliasContext) string {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
 		if prc, ok := child.(antlr.ParserRuleContext); ok {
-			if prc.GetRuleIndex() == grammar.ClickHouseParserRULE_columnExpr {
+			if prc.GetRuleIndex() == grammar1.ClickHouseParserGrammar1RULE_columnExpr {
 				return nanopass.NodeText(pr, prc)
 			}
 		}

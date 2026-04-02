@@ -1,10 +1,12 @@
+//go:build llm_generated_opus46
+
 package nanopass
 
 import (
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
@@ -68,7 +70,7 @@ func (inst *MacroExpander) Pass() Pass {
 		var replacements []replacement
 
 		WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-			funcExpr, ok := ctx.(*grammar.ColumnExprFunctionContext)
+			funcExpr, ok := ctx.(*grammar1.ColumnExprFunctionContext)
 			if !ok {
 				return true
 			}
@@ -115,18 +117,18 @@ func (inst *MacroExpander) Pass() Pass {
 
 // ExtractLiteralArgs extracts all arguments from a ColumnExprFunctionContext.
 // Returns an error if any argument is not a constant literal.
-func ExtractLiteralArgs(funcExpr *grammar.ColumnExprFunctionContext) (args []LiteralArg, err error) {
+func ExtractLiteralArgs(funcExpr *grammar1.ColumnExprFunctionContext) (args []LiteralArg, err error) {
 	argList := funcExpr.ColumnArgList()
 	if argList == nil {
 		// No arguments: func()
 		return
 	}
 
-	argExprs := argList.(*grammar.ColumnArgListContext).AllColumnArgExpr()
+	argExprs := argList.(*grammar1.ColumnArgListContext).AllColumnArgExpr()
 	args = make([]LiteralArg, 0, len(argExprs))
 
 	for _, argExpr := range argExprs {
-		ae := argExpr.(*grammar.ColumnArgExprContext)
+		ae := argExpr.(*grammar1.ColumnArgExprContext)
 		colExpr := ae.ColumnExpr()
 		if colExpr == nil {
 			err = eh.Errorf("argument is not an expression")
@@ -142,16 +144,16 @@ func ExtractLiteralArgs(funcExpr *grammar.ColumnExprFunctionContext) (args []Lit
 	return
 }
 
-func extractLiteralFromExpr(expr grammar.IColumnExprContext) (arg LiteralArg, err error) {
+func extractLiteralFromExpr(expr grammar1.IColumnExprContext) (arg LiteralArg, err error) {
 	switch c := expr.(type) {
-	case *grammar.ColumnExprLiteralContext:
+	case *grammar1.ColumnExprLiteralContext:
 		literal := c.Literal()
 		if literal == nil {
 			err = eh.Errorf("empty literal")
 			return
 		}
-		return classifyLiteral(literal.(*grammar.LiteralContext))
-	case *grammar.ColumnExprNegateContext:
+		return classifyLiteral(literal.(*grammar1.LiteralContext))
+	case *grammar1.ColumnExprNegateContext:
 		// Handle negative numbers: -(literal)
 		inner := c.ColumnExpr()
 		innerArg, innerErr := extractLiteralFromExpr(inner)
@@ -168,7 +170,7 @@ func extractLiteralFromExpr(expr grammar.IColumnExprContext) (arg LiteralArg, er
 		}
 		err = eh.Errorf("cannot negate non-numeric literal")
 		return
-	case *grammar.ColumnExprParensContext:
+	case *grammar1.ColumnExprParensContext:
 		// Unwrap parentheses
 		return extractLiteralFromExpr(c.ColumnExpr())
 	default:
@@ -177,7 +179,7 @@ func extractLiteralFromExpr(expr grammar.IColumnExprContext) (arg LiteralArg, er
 	}
 }
 
-func classifyLiteral(lit *grammar.LiteralContext) (arg LiteralArg, err error) {
+func classifyLiteral(lit *grammar1.LiteralContext) (arg LiteralArg, err error) {
 	if lit.NULL_SQL() != nil {
 		arg = LiteralArg{Type: LiteralTypeNull, Value: "NULL"}
 		return
@@ -187,13 +189,13 @@ func classifyLiteral(lit *grammar.LiteralContext) (arg LiteralArg, err error) {
 		return
 	}
 	if lit.NumberLiteral() != nil {
-		return classifyNumberLiteral(lit.NumberLiteral().(*grammar.NumberLiteralContext))
+		return classifyNumberLiteral(lit.NumberLiteral().(*grammar1.NumberLiteralContext))
 	}
 	err = eh.Errorf("unrecognized literal type")
 	return
 }
 
-func classifyNumberLiteral(num *grammar.NumberLiteralContext) (arg LiteralArg, err error) {
+func classifyNumberLiteral(num *grammar1.NumberLiteralContext) (arg LiteralArg, err error) {
 	// Build the sign prefix
 	sign := ""
 	if num.DASH() != nil {

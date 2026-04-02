@@ -4,7 +4,7 @@ package analysis
 
 import (
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 )
 
@@ -19,11 +19,11 @@ type FunctionRef struct {
 func ExtractFunctions(pr *nanopass.ParseResult) (refs []FunctionRef) {
 	nodes := nanopass.FindAll(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
 		switch ctx.(type) {
-		case *grammar.ColumnExprFunctionContext:
+		case *grammar1.ColumnExprFunctionContext:
 			return true
-		case *grammar.ColumnExprWinFunctionContext:
+		case *grammar1.ColumnExprWinFunctionContext:
 			return true
-		case *grammar.ColumnExprWinFunctionTargetContext:
+		case *grammar1.ColumnExprWinFunctionTargetContext:
 			return true
 		}
 		return false
@@ -31,7 +31,7 @@ func ExtractFunctions(pr *nanopass.ParseResult) (refs []FunctionRef) {
 	refs = make([]FunctionRef, 0, len(nodes))
 	for _, n := range nodes {
 		switch ctx := n.(type) {
-		case *grammar.ColumnExprFunctionContext:
+		case *grammar1.ColumnExprFunctionContext:
 			ref := FunctionRef{
 				Name: ctx.Identifier().GetText(),
 			}
@@ -40,13 +40,13 @@ func ExtractFunctions(pr *nanopass.ParseResult) (refs []FunctionRef) {
 				ref.IsParametric = len(lparens) >= 2
 			}
 			refs = append(refs, ref)
-		case *grammar.ColumnExprWinFunctionContext:
+		case *grammar1.ColumnExprWinFunctionContext:
 			ref := FunctionRef{
 				Name:     ctx.Identifier().GetText(),
 				IsWindow: true,
 			}
 			refs = append(refs, ref)
-		case *grammar.ColumnExprWinFunctionTargetContext:
+		case *grammar1.ColumnExprWinFunctionTargetContext:
 			identifiers := ctx.AllIdentifier()
 			if len(identifiers) > 0 {
 				ref := FunctionRef{

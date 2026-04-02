@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 )
 
@@ -71,7 +71,7 @@ func Highlight(sql string) (spans []Span) {
 // --- Phase 1: Lexical highlighting ---
 
 func lexHighlight(sql string) (spans []Span) {
-	lexer := grammar.NewClickHouseLexer(antlr.NewInputStream(sql))
+	lexer := grammar1.NewClickHouseLexer(antlr.NewInputStream(sql))
 	lexer.RemoveErrorListeners()
 
 	spans = make([]Span, 0, 64)
@@ -100,9 +100,9 @@ func lexHighlight(sql string) (spans []Span) {
 func classifyTokenType(tokenType int, channel int) CategoryE {
 	if channel == antlr.LexerHidden {
 		switch tokenType {
-		case grammar.ClickHouseLexerWHITESPACE:
+		case grammar1.ClickHouseLexerWHITESPACE:
 			return CatWhitespace
-		case grammar.ClickHouseLexerSINGLE_LINE_COMMENT, grammar.ClickHouseLexerMULTI_LINE_COMMENT:
+		case grammar1.ClickHouseLexerSINGLE_LINE_COMMENT, grammar1.ClickHouseLexerMULTI_LINE_COMMENT:
 			return CatComment
 		default:
 			return CatWhitespace
@@ -110,64 +110,64 @@ func classifyTokenType(tokenType int, channel int) CategoryE {
 	}
 
 	switch tokenType {
-	case grammar.ClickHouseLexerIDENTIFIER:
+	case grammar1.ClickHouseLexerIDENTIFIER:
 		return CatIdentifier
 
-	case grammar.ClickHouseLexerSTRING_LITERAL:
+	case grammar1.ClickHouseLexerSTRING_LITERAL:
 		return CatStringLit
 
-	case grammar.ClickHouseLexerDECIMAL_LITERAL,
-		grammar.ClickHouseLexerHEXADECIMAL_LITERAL,
-		grammar.ClickHouseLexerOCTAL_LITERAL,
-		grammar.ClickHouseLexerFLOATING_LITERAL:
+	case grammar1.ClickHouseLexerDECIMAL_LITERAL,
+		grammar1.ClickHouseLexerHEXADECIMAL_LITERAL,
+		grammar1.ClickHouseLexerOCTAL_LITERAL,
+		grammar1.ClickHouseLexerFLOATING_LITERAL:
 		return CatNumberLit
 
-	case grammar.ClickHouseLexerLPAREN,
-		grammar.ClickHouseLexerRPAREN,
-		grammar.ClickHouseLexerLBRACKET,
-		grammar.ClickHouseLexerRBRACKET,
-		grammar.ClickHouseLexerLBRACE,
-		grammar.ClickHouseLexerRBRACE,
-		grammar.ClickHouseLexerCOMMA,
-		grammar.ClickHouseLexerDOT,
-		grammar.ClickHouseLexerSEMICOLON,
-		grammar.ClickHouseLexerCOLON:
+	case grammar1.ClickHouseLexerLPAREN,
+		grammar1.ClickHouseLexerRPAREN,
+		grammar1.ClickHouseLexerLBRACKET,
+		grammar1.ClickHouseLexerRBRACKET,
+		grammar1.ClickHouseLexerLBRACE,
+		grammar1.ClickHouseLexerRBRACE,
+		grammar1.ClickHouseLexerCOMMA,
+		grammar1.ClickHouseLexerDOT,
+		grammar1.ClickHouseLexerSEMICOLON,
+		grammar1.ClickHouseLexerCOLON:
 		return CatPunctuation
 
-	case grammar.ClickHouseLexerPLUS,
-		grammar.ClickHouseLexerDASH,
-		grammar.ClickHouseLexerASTERISK,
-		grammar.ClickHouseLexerSLASH,
-		grammar.ClickHouseLexerPERCENT,
-		grammar.ClickHouseLexerEQ_DOUBLE,
-		grammar.ClickHouseLexerEQ_SINGLE,
-		grammar.ClickHouseLexerNOT_EQ,
-		grammar.ClickHouseLexerLE,
-		grammar.ClickHouseLexerGE,
-		grammar.ClickHouseLexerLT,
-		grammar.ClickHouseLexerGT,
-		grammar.ClickHouseLexerCONCAT,
-		grammar.ClickHouseLexerARROW:
+	case grammar1.ClickHouseLexerPLUS,
+		grammar1.ClickHouseLexerDASH,
+		grammar1.ClickHouseLexerASTERISK,
+		grammar1.ClickHouseLexerSLASH,
+		grammar1.ClickHouseLexerPERCENT,
+		grammar1.ClickHouseLexerEQ_DOUBLE,
+		grammar1.ClickHouseLexerEQ_SINGLE,
+		grammar1.ClickHouseLexerNOT_EQ,
+		grammar1.ClickHouseLexerLE,
+		grammar1.ClickHouseLexerGE,
+		grammar1.ClickHouseLexerLT,
+		grammar1.ClickHouseLexerGT,
+		grammar1.ClickHouseLexerCONCAT,
+		grammar1.ClickHouseLexerARROW:
 		//grammar.ClickHouseLexerQUESTION:
 		return CatPunctuation
 
-	case grammar.ClickHouseLexerAND, grammar.ClickHouseLexerOR, grammar.ClickHouseLexerNOT,
-		grammar.ClickHouseLexerIN, grammar.ClickHouseLexerLIKE, grammar.ClickHouseLexerILIKE,
-		grammar.ClickHouseLexerBETWEEN, grammar.ClickHouseLexerIS, grammar.ClickHouseLexerGLOBAL:
+	case grammar1.ClickHouseLexerAND, grammar1.ClickHouseLexerOR, grammar1.ClickHouseLexerNOT,
+		grammar1.ClickHouseLexerIN, grammar1.ClickHouseLexerLIKE, grammar1.ClickHouseLexerILIKE,
+		grammar1.ClickHouseLexerBETWEEN, grammar1.ClickHouseLexerIS, grammar1.ClickHouseLexerGLOBAL:
 		return CatOperator
 
-	case grammar.ClickHouseLexerINF, grammar.ClickHouseLexerNAN_SQL:
+	case grammar1.ClickHouseLexerINF, grammar1.ClickHouseLexerNAN_SQL:
 		return CatNumberLit
 
-	case grammar.ClickHouseLexerNULL_SQL:
+	case grammar1.ClickHouseLexerNULL_SQL:
 		return CatKeyword
 
-	case grammar.ClickHouseLexerJSON_FALSE, grammar.ClickHouseLexerJSON_TRUE:
+	case grammar1.ClickHouseLexerJSON_FALSE, grammar1.ClickHouseLexerJSON_TRUE:
 		return CatNumberLit
 
 	default:
 		// All remaining keyword tokens (1-199 range)
-		if tokenType >= 1 && tokenType < grammar.ClickHouseLexerIDENTIFIER {
+		if tokenType >= 1 && tokenType < grammar1.ClickHouseLexerIDENTIFIER {
 			return CatKeyword
 		}
 		return CatPlain
@@ -199,25 +199,25 @@ func semanticRefine(pr *nanopass.ParseResult, spans []Span, tokenToSpan map[int]
 		switch c := ctx.(type) {
 
 		// --- Function names ---
-		case *grammar.ColumnExprFunctionContext:
+		case *grammar1.ColumnExprFunctionContext:
 			if ident := c.Identifier(); ident != nil {
 				refineIdentifier(ident, spans, tokenToSpan, CatFunctionName)
 			}
 
 		// --- Window function names ---
-		case *grammar.ColumnExprWinFunctionContext:
+		case *grammar1.ColumnExprWinFunctionContext:
 			if ident := c.Identifier(); ident != nil {
 				refineIdentifier(ident, spans, tokenToSpan, CatFunctionName)
 			}
 
 		// --- Table identifiers in FROM/JOIN ---
-		case *grammar.TableIdentifierContext:
+		case *grammar1.TableIdentifierContext:
 			if isTableContext(c) {
 				if c.Identifier() != nil {
 					refineIdentifier(c.Identifier(), spans, tokenToSpan, CatTableName)
 				}
 				if c.DatabaseIdentifier() != nil {
-					dbIdent := c.DatabaseIdentifier().(*grammar.DatabaseIdentifierContext)
+					dbIdent := c.DatabaseIdentifier().(*grammar1.DatabaseIdentifierContext)
 					if dbIdent.Identifier() != nil {
 						refineIdentifier(dbIdent.Identifier(), spans, tokenToSpan, CatDatabaseName)
 					}
@@ -225,43 +225,43 @@ func semanticRefine(pr *nanopass.ParseResult, spans []Span, tokenToSpan map[int]
 			}
 
 		// --- Table aliases ---
-		case *grammar.TableExprAliasContext:
+		case *grammar1.TableExprAliasContext:
 			for i := 0; i < c.GetChildCount(); i++ {
 				child := c.GetChild(i)
-				if ident, ok := child.(*grammar.IdentifierContext); ok {
+				if ident, ok := child.(*grammar1.IdentifierContext); ok {
 					refineIdentifier(ident, spans, tokenToSpan, CatTableAlias)
 				}
-				if alias, ok := child.(*grammar.AliasContext); ok {
+				if alias, ok := child.(*grammar1.AliasContext); ok {
 					refineLeafTokens(alias, spans, tokenToSpan, CatTableAlias)
 				}
 			}
 
 		// --- Column aliases ---
-		case *grammar.ColumnExprAliasContext:
+		case *grammar1.ColumnExprAliasContext:
 			for i := 0; i < c.GetChildCount(); i++ {
 				child := c.GetChild(i)
-				if ident, ok := child.(*grammar.IdentifierContext); ok {
+				if ident, ok := child.(*grammar1.IdentifierContext); ok {
 					refineIdentifier(ident, spans, tokenToSpan, CatColumnAlias)
 				}
-				if alias, ok := child.(*grammar.AliasContext); ok {
+				if alias, ok := child.(*grammar1.AliasContext); ok {
 					refineLeafTokens(alias, spans, tokenToSpan, CatColumnAlias)
 				}
 			}
 
 		// --- CTE names ---
-		case *grammar.NamedQueryContext:
+		case *grammar1.NamedQueryContext:
 			if c.Identifier() != nil {
 				refineIdentifier(c.Identifier(), spans, tokenToSpan, CatCTEName)
 			}
 
 		// --- Column identifiers ---
-		case *grammar.ColumnIdentifierContext:
+		case *grammar1.ColumnIdentifierContext:
 			if ni := c.NestedIdentifier(); ni != nil {
-				refineNestedIdentifier(ni.(*grammar.NestedIdentifierContext), spans, tokenToSpan)
+				refineNestedIdentifier(ni.(*grammar1.NestedIdentifierContext), spans, tokenToSpan)
 			}
 
 		// --- Parameter slots {name: Type} ---
-		case *grammar.ColumnExprParamSlotContext:
+		case *grammar1.ColumnExprParamSlotContext:
 			refineAllTokens(c, spans, tokenToSpan, CatParamSlot)
 		}
 
@@ -312,13 +312,13 @@ func refineAllTokens(ctx antlr.ParserRuleContext, spans []Span, tokenToSpan map[
 	}
 }
 
-func refineNestedIdentifier(ni *grammar.NestedIdentifierContext, spans []Span, tokenToSpan map[int]int) {
+func refineNestedIdentifier(ni *grammar1.NestedIdentifierContext, spans []Span, tokenToSpan map[int]int) {
 	// NestedIdentifier can be:
 	// - identifier (bare column)
 	// - identifier DOT identifier (table.column)
 	children := make([]antlr.ParserRuleContext, 0, 2)
 	for i := 0; i < ni.GetChildCount(); i++ {
-		if ident, ok := ni.GetChild(i).(*grammar.IdentifierContext); ok {
+		if ident, ok := ni.GetChild(i).(*grammar1.IdentifierContext); ok {
 			children = append(children, ident)
 		}
 	}
@@ -337,7 +337,7 @@ func refineCTEReferences(pr *nanopass.ParseResult, spans []Span, tokenToSpan map
 	// Collect CTE names from NamedQueryContext nodes
 	cteNames := make(map[string]bool)
 	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-		if nq, ok := ctx.(*grammar.NamedQueryContext); ok {
+		if nq, ok := ctx.(*grammar1.NamedQueryContext); ok {
 			if nq.Identifier() != nil {
 				cteNames[nq.Identifier().GetText()] = true
 			}
@@ -351,7 +351,7 @@ func refineCTEReferences(pr *nanopass.ParseResult, spans []Span, tokenToSpan map
 
 	// Walk all TableIdentifier nodes and refine CTE references
 	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-		tid, ok := ctx.(*grammar.TableIdentifierContext)
+		tid, ok := ctx.(*grammar1.TableIdentifierContext)
 		if !ok {
 			return true
 		}
@@ -371,7 +371,7 @@ func refineCTEReferences(pr *nanopass.ParseResult, spans []Span, tokenToSpan map
 	})
 }
 
-func isTableContext(tid *grammar.TableIdentifierContext) bool {
+func isTableContext(tid *grammar1.TableIdentifierContext) bool {
 	// Walk up to check if this TableIdentifier is inside a TableExpr (FROM/JOIN)
 	// rather than inside a ColumnIdentifier (column qualifier)
 	parent := tid.GetParent()
@@ -379,18 +379,18 @@ func isTableContext(tid *grammar.TableIdentifierContext) bool {
 		return false
 	}
 	switch parent.(type) {
-	case *grammar.TableExprIdentifierContext:
+	case *grammar1.TableExprIdentifierContext:
 		return true
-	case *grammar.TableExprAliasContext:
+	case *grammar1.TableExprAliasContext:
 		return true
 	default:
 		// Could be nested — check grandparent
 		if gp := parent.(antlr.Tree); gp != nil {
 			if gpCtx, ok := gp.(antlr.ParserRuleContext); ok {
 				switch gpCtx.(type) {
-				case *grammar.TableExprIdentifierContext:
+				case *grammar1.TableExprIdentifierContext:
 					return true
-				case *grammar.TableExprAliasContext:
+				case *grammar1.TableExprAliasContext:
 					return true
 				}
 			}

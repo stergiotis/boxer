@@ -5,7 +5,7 @@ package passes
 import (
 	"strings"
 
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
@@ -33,6 +33,6 @@ func NormalizeKeywordCase(sql string) (result string, err error) {
 
 // isKeywordToken returns true if the token type corresponds to a SQL keyword.
 func isKeywordToken(tokenType int) bool {
-	return tokenType >= grammar.ClickHouseLexerADD &&
-		tokenType <= grammar.ClickHouseLexerJSON_TRUE
+	return tokenType >= grammar1.ClickHouseLexerADD &&
+		tokenType <= grammar1.ClickHouseLexerJSON_TRUE
 }

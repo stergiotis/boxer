@@ -53,9 +53,9 @@ The following normalizations are applied during CST → AST conversion:
 ```
 Between
 Date
-CASE as multiIf
-
+CASE as caseWithExpression
 INTERVAL 1 DAY ?
+Ternary Operator
 
 // col.nested_field → columnIdentifier(tableIdentifier(col) DOT nestedIdentifier(nested_field))
 // The parser treats "col" as a table qualifier, "nested_field" as the column.

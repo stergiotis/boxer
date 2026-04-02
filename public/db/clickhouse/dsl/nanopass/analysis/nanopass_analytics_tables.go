@@ -4,7 +4,7 @@ package analysis
 
 import (
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 )
 
@@ -18,7 +18,7 @@ type TableRef struct {
 // It excludes TableIdentifier nodes that appear as column qualifiers inside ColumnIdentifier.
 func ExtractTables(pr *nanopass.ParseResult) (refs []TableRef) {
 	nodes := nanopass.FindAll(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-		_, ok := ctx.(*grammar.TableIdentifierContext)
+		_, ok := ctx.(*grammar1.TableIdentifierContext)
 		if !ok {
 			return false
 		}
@@ -26,7 +26,7 @@ func ExtractTables(pr *nanopass.ParseResult) (refs []TableRef) {
 		// those are column qualifiers (e.g. "t1" in "t1.id"), not table references.
 		parent := ctx.GetParent()
 		if parent != nil {
-			if _, isColId := parent.(*grammar.ColumnIdentifierContext); isColId {
+			if _, isColId := parent.(*grammar1.ColumnIdentifierContext); isColId {
 				return false
 			}
 		}
@@ -34,7 +34,7 @@ func ExtractTables(pr *nanopass.ParseResult) (refs []TableRef) {
 	})
 	refs = make([]TableRef, 0, len(nodes))
 	for _, n := range nodes {
-		tid := n.(*grammar.TableIdentifierContext)
+		tid := n.(*grammar1.TableIdentifierContext)
 		ref := TableRef{Table: tid.Identifier().GetText()}
 		if tid.DatabaseIdentifier() != nil {
 			ref.Database = tid.DatabaseIdentifier().GetText()

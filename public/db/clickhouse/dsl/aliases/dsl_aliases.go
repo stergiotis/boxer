@@ -4,11 +4,11 @@ import (
 	"iter"
 	"strings"
 
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/parsing/antlr4utils"
 )
 
-func ExtractColumnExprAlias(node *grammar.ColumnExprAliasContext) (funcName string, aliasName string, hasExplicitAlias bool) {
+func ExtractColumnExprAlias(node *grammar0.ColumnExprAliasContext) (funcName string, aliasName string, hasExplicitAlias bool) {
 	if node.Identifier() != nil {
 		rawAlias := node.Identifier().GetText()
 		aliasName = unquoteIdentifier(rawAlias)
@@ -18,7 +18,7 @@ func ExtractColumnExprAlias(node *grammar.ColumnExprAliasContext) (funcName stri
 		hasExplicitAlias = true
 	} else {
 		colExpr := node.ColumnExpr()
-		id, ok := colExpr.(*grammar.ColumnExprIdentifierContext)
+		id, ok := colExpr.(*grammar0.ColumnExprIdentifierContext)
 		if ok {
 			aliasName = unquoteIdentifier(id.GetText())
 			hasExplicitAlias = true
@@ -30,7 +30,7 @@ func ExtractColumnExprAlias(node *grammar.ColumnExprAliasContext) (funcName stri
 	}
 
 	colExpr := node.ColumnExpr()
-	fun, ok := colExpr.(*grammar.ColumnExprFunctionContext)
+	fun, ok := colExpr.(*grammar0.ColumnExprFunctionContext)
 	if ok {
 		if fun.Identifier() != nil {
 			funcName = unquoteIdentifier(fun.Identifier().GetText())
@@ -38,9 +38,9 @@ func ExtractColumnExprAlias(node *grammar.ColumnExprAliasContext) (funcName stri
 	}
 	return
 }
-func IterateAllAliases(tree *grammar.QueryStmtContext) iter.Seq2[ /*function*/ string /*alias*/, string] {
+func IterateAllAliases(tree *grammar0.QueryStmtContext) iter.Seq2[ /*function*/ string /*alias*/, string] {
 	return func(yield func(string, string) bool) {
-		for node := range antlr4utils.IterateAllByType[*grammar.ColumnExprAliasContext](tree) {
+		for node := range antlr4utils.IterateAllByType[*grammar0.ColumnExprAliasContext](tree) {
 			funcName, aliasName, _ := ExtractColumnExprAlias(node)
 			if !yield(funcName, aliasName) {
 				return

@@ -4,7 +4,7 @@ package passes
 
 import (
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
@@ -32,11 +32,11 @@ func SetFormat(format string) nanopass.Pass {
 		for i := 0; i < root.GetChildCount(); i++ {
 			child := root.GetChild(i)
 			if tn, ok := child.(antlr.TerminalNode); ok {
-				if tn.GetSymbol().GetTokenType() == grammar.ClickHouseParserFORMAT {
+				if tn.GetSymbol().GetTokenType() == grammar1.ClickHouseParserGrammar1FORMAT {
 					formatTokenIdx = tn.GetSymbol().GetTokenIndex()
 				}
 			}
-			if ioc, ok := child.(*grammar.IdentifierOrNullContext); ok {
+			if ioc, ok := child.(*grammar1.IdentifierOrNullContext); ok {
 				formatNameCtx = ioc
 			}
 		}
@@ -52,7 +52,7 @@ func SetFormat(format string) nanopass.Pass {
 				{ // Try to include preceding whitespace
 					if deleteStart > 0 {
 						prevTok := pr.TokenStream.Get(deleteStart - 1)
-						if prevTok.GetTokenType() == grammar.ClickHouseLexerWHITESPACE {
+						if prevTok.GetTokenType() == grammar1.ClickHouseLexerWHITESPACE {
 							deleteStart = prevTok.GetTokenIndex()
 						}
 					}
@@ -99,11 +99,11 @@ func GetFormat(sql string) (format string, err error) {
 	for i := 0; i < root.GetChildCount(); i++ {
 		child := root.GetChild(i)
 		if tn, ok := child.(antlr.TerminalNode); ok {
-			if tn.GetSymbol().GetTokenType() == grammar.ClickHouseParserFORMAT {
+			if tn.GetSymbol().GetTokenType() == grammar1.ClickHouseParserGrammar1FORMAT {
 				hasFormatToken = true
 			}
 		}
-		if ioc, ok := child.(*grammar.IdentifierOrNullContext); ok && hasFormatToken {
+		if ioc, ok := child.(*grammar1.IdentifierOrNullContext); ok && hasFormatToken {
 			format = nanopass.NodeText(pr, ioc)
 			return
 		}

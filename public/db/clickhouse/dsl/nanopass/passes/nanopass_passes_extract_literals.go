@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -88,8 +88,8 @@ type extractedParam struct {
 }
 
 type literalCandidate struct {
-	node        *grammar.ColumnExprLiteralContext
-	castNode    *grammar.ColumnExprCastContext
+	node        *grammar1.ColumnExprLiteralContext
+	castNode    *grammar1.ColumnExprCastContext
 	contextName string
 	argIndex    int
 	literalText string
@@ -100,8 +100,8 @@ type literalCandidate struct {
 }
 
 type inListCandidate struct {
-	tupleNode    *grammar.ColumnExprTupleContext
-	castNode     *grammar.ColumnExprCastContext
+	tupleNode    *grammar1.ColumnExprTupleContext
+	castNode     *grammar1.ColumnExprCastContext
 	literalTexts []string
 	elementType  string
 	castType     canonicaltypes.PrimitiveAstNodeI
@@ -120,7 +120,7 @@ func ExtractLiterals(config *ExtractLiteralsConfig) nanopass.Pass {
 		}
 
 		inListCandidates := collectINListCandidates(pr, config)
-		inListNodes := make(map[*grammar.ColumnExprLiteralContext]bool)
+		inListNodes := make(map[*grammar1.ColumnExprLiteralContext]bool)
 		for _, ilc := range inListCandidates {
 			for _, litNode := range collectLiteralNodesInTuple(ilc.tupleNode) {
 				inListNodes[litNode] = true
@@ -191,7 +191,7 @@ func collectINListCandidates(pr *nanopass.ParseResult, config *ExtractLiteralsCo
 		return
 	}
 	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-		prec3, ok := ctx.(*grammar.ColumnExprPrecedence3Context)
+		prec3, ok := ctx.(*grammar1.ColumnExprPrecedence3Context)
 		if !ok {
 			return true
 		}
@@ -203,9 +203,9 @@ func collectINListCandidates(pr *nanopass.ParseResult, config *ExtractLiteralsCo
 			return true
 		}
 
-		var castNode *grammar.ColumnExprCastContext
+		var castNode *grammar1.ColumnExprCastContext
 		var castType canonicaltypes.PrimitiveAstNodeI
-		if castCtx, isCast := prec3.GetParent().(*grammar.ColumnExprCastContext); isCast && config.mapTypeToCanonical != nil {
+		if castCtx, isCast := prec3.GetParent().(*grammar1.ColumnExprCastContext); isCast && config.mapTypeToCanonical != nil {
 			castTypeText := extractCastTypeText(castCtx)
 			if castTypeText != "" {
 				ct, mapErr := config.mapTypeToCanonical(castTypeText)
@@ -230,10 +230,10 @@ func collectINListCandidates(pr *nanopass.ParseResult, config *ExtractLiteralsCo
 	return
 }
 
-func isINExpression(prec3 *grammar.ColumnExprPrecedence3Context) bool {
+func isINExpression(prec3 *grammar1.ColumnExprPrecedence3Context) bool {
 	for i := 0; i < prec3.GetChildCount(); i++ {
 		if term, ok := prec3.GetChild(i).(*antlr.TerminalNodeImpl); ok {
-			if term.GetSymbol().GetTokenType() == grammar.ClickHouseLexerIN {
+			if term.GetSymbol().GetTokenType() == grammar1.ClickHouseLexerIN {
 				return true
 			}
 		}
@@ -241,19 +241,19 @@ func isINExpression(prec3 *grammar.ColumnExprPrecedence3Context) bool {
 	return false
 }
 
-func findTupleInPrecedence3(prec3 *grammar.ColumnExprPrecedence3Context) *grammar.ColumnExprTupleContext {
+func findTupleInPrecedence3(prec3 *grammar1.ColumnExprPrecedence3Context) *grammar1.ColumnExprTupleContext {
 	for i := 0; i < prec3.GetChildCount(); i++ {
-		if tuple, ok := prec3.GetChild(i).(*grammar.ColumnExprTupleContext); ok {
+		if tuple, ok := prec3.GetChild(i).(*grammar1.ColumnExprTupleContext); ok {
 			return tuple
 		}
 	}
 	return nil
 }
 
-func extractTupleLiterals(pr *nanopass.ParseResult, tuple *grammar.ColumnExprTupleContext) (texts []string, elementType string, allLiterals bool) {
-	var exprList *grammar.ColumnExprListContext
+func extractTupleLiterals(pr *nanopass.ParseResult, tuple *grammar1.ColumnExprTupleContext) (texts []string, elementType string, allLiterals bool) {
+	var exprList *grammar1.ColumnExprListContext
 	for i := 0; i < tuple.GetChildCount(); i++ {
-		if el, ok := tuple.GetChild(i).(*grammar.ColumnExprListContext); ok {
+		if el, ok := tuple.GetChild(i).(*grammar1.ColumnExprListContext); ok {
 			exprList = el
 			break
 		}
@@ -264,7 +264,7 @@ func extractTupleLiterals(pr *nanopass.ParseResult, tuple *grammar.ColumnExprTup
 	texts = make([]string, 0, exprList.GetChildCount())
 	allLiterals = true
 	for i := 0; i < exprList.GetChildCount(); i++ {
-		colsExpr, ok := exprList.GetChild(i).(*grammar.ColumnsExprColumnContext)
+		colsExpr, ok := exprList.GetChild(i).(*grammar1.ColumnsExprColumnContext)
 		if !ok {
 			continue
 		}
@@ -272,7 +272,7 @@ func extractTupleLiterals(pr *nanopass.ParseResult, tuple *grammar.ColumnExprTup
 			allLiterals = false
 			return
 		}
-		litExpr, ok := colsExpr.GetChild(0).(*grammar.ColumnExprLiteralContext)
+		litExpr, ok := colsExpr.GetChild(0).(*grammar1.ColumnExprLiteralContext)
 		if !ok {
 			allLiterals = false
 			return
@@ -296,9 +296,9 @@ func extractTupleLiterals(pr *nanopass.ParseResult, tuple *grammar.ColumnExprTup
 	return
 }
 
-func collectLiteralNodesInTuple(tuple *grammar.ColumnExprTupleContext) (nodes []*grammar.ColumnExprLiteralContext) {
+func collectLiteralNodesInTuple(tuple *grammar1.ColumnExprTupleContext) (nodes []*grammar1.ColumnExprLiteralContext) {
 	nanopass.WalkCST(tuple, func(ctx antlr.ParserRuleContext) bool {
-		if litExpr, ok := ctx.(*grammar.ColumnExprLiteralContext); ok {
+		if litExpr, ok := ctx.(*grammar1.ColumnExprLiteralContext); ok {
 			nodes = append(nodes, litExpr)
 		}
 		return true
@@ -308,9 +308,9 @@ func collectLiteralNodesInTuple(tuple *grammar.ColumnExprTupleContext) (nodes []
 
 // --- Phase 1b: Individual literal collection ---
 
-func collectLiteralCandidates(pr *nanopass.ParseResult, config *ExtractLiteralsConfig, excludeNodes map[*grammar.ColumnExprLiteralContext]bool) (candidates []literalCandidate) {
+func collectLiteralCandidates(pr *nanopass.ParseResult, config *ExtractLiteralsConfig, excludeNodes map[*grammar1.ColumnExprLiteralContext]bool) (candidates []literalCandidate) {
 	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-		litExpr, ok := ctx.(*grammar.ColumnExprLiteralContext)
+		litExpr, ok := ctx.(*grammar1.ColumnExprLiteralContext)
 		if !ok {
 			return true
 		}
@@ -325,9 +325,9 @@ func collectLiteralCandidates(pr *nanopass.ParseResult, config *ExtractLiteralsC
 		literalText := nanopass.NodeText(pr, litExpr)
 		typeName := inferClickHouseType(litCtx)
 
-		var castNode *grammar.ColumnExprCastContext
+		var castNode *grammar1.ColumnExprCastContext
 		var castType canonicaltypes.PrimitiveAstNodeI
-		if castCtx, isCast := litExpr.GetParent().(*grammar.ColumnExprCastContext); isCast && config.mapTypeToCanonical != nil {
+		if castCtx, isCast := litExpr.GetParent().(*grammar1.ColumnExprCastContext); isCast && config.mapTypeToCanonical != nil {
 			castTypeText := extractCastTypeText(castCtx)
 			if castTypeText != "" {
 				ct, mapErr := config.mapTypeToCanonical(castTypeText)
@@ -360,13 +360,13 @@ func collectLiteralCandidates(pr *nanopass.ParseResult, config *ExtractLiteralsC
 
 // --- Cast type extraction ---
 
-func extractCastTypeText(castCtx *grammar.ColumnExprCastContext) string {
+func extractCastTypeText(castCtx *grammar1.ColumnExprCastContext) string {
 	for i := 0; i < castCtx.GetChildCount(); i++ {
 		child := castCtx.GetChild(i)
 		switch c := child.(type) {
-		case *grammar.ColumnTypeExprSimpleContext:
+		case *grammar1.ColumnTypeExprSimpleContext:
 			return c.GetText()
-		case *grammar.ColumnTypeExprComplexContext:
+		case *grammar1.ColumnTypeExprComplexContext:
 			return c.GetText()
 		}
 	}
@@ -375,16 +375,16 @@ func extractCastTypeText(castCtx *grammar.ColumnExprCastContext) string {
 
 // --- Helpers ---
 
-func findLiteralChild(litExpr *grammar.ColumnExprLiteralContext) *grammar.LiteralContext {
+func findLiteralChild(litExpr *grammar1.ColumnExprLiteralContext) *grammar1.LiteralContext {
 	for i := 0; i < litExpr.GetChildCount(); i++ {
-		if lit, ok := litExpr.GetChild(i).(*grammar.LiteralContext); ok {
+		if lit, ok := litExpr.GetChild(i).(*grammar1.LiteralContext); ok {
 			return lit
 		}
 	}
 	return nil
 }
 
-func inferClickHouseType(lit *grammar.LiteralContext) string {
+func inferClickHouseType(lit *grammar1.LiteralContext) string {
 	if lit.STRING_LITERAL() != nil {
 		return "String"
 	}
@@ -419,7 +419,7 @@ func inferClickHouseType(lit *grammar.LiteralContext) string {
 
 // --- Context resolution ---
 
-func resolveContext(litExpr *grammar.ColumnExprLiteralContext) (contextName string, argIndex int) {
+func resolveContext(litExpr *grammar1.ColumnExprLiteralContext) (contextName string, argIndex int) {
 	parent := litExpr.GetParent()
 	if parent == nil {
 		return "expr", 0
@@ -437,24 +437,24 @@ func resolveContextFromParent(node antlr.ParserRuleContext) (contextName string,
 
 func resolveContextFromNodeWithChild(parent antlr.Tree, child antlr.ParserRuleContext) (contextName string, argIndex int) {
 	switch p := parent.(type) {
-	case *grammar.ColumnArgExprContext:
+	case *grammar1.ColumnArgExprContext:
 		return resolveFuncArgContext(p)
-	case *grammar.ColumnExprPrecedence1Context:
+	case *grammar1.ColumnExprPrecedence1Context:
 		return resolveOperatorContextWithChild(p, child)
-	case *grammar.ColumnExprPrecedence2Context:
+	case *grammar1.ColumnExprPrecedence2Context:
 		return resolveOperatorContextWithChild(p, child)
-	case *grammar.ColumnExprPrecedence3Context:
+	case *grammar1.ColumnExprPrecedence3Context:
 		return resolveOperatorContextWithChild(p, child)
-	case *grammar.ColumnsExprColumnContext:
+	case *grammar1.ColumnsExprColumnContext:
 		return resolveColumnsExprContextGeneric(p)
-	case *grammar.ColumnExprBetweenContext:
+	case *grammar1.ColumnExprBetweenContext:
 		return resolveBetweenContextWithChild(p, child)
 	default:
 		return "expr", 0
 	}
 }
 
-func resolveFuncArgContext(argExpr *grammar.ColumnArgExprContext) (contextName string, argIndex int) {
+func resolveFuncArgContext(argExpr *grammar1.ColumnArgExprContext) (contextName string, argIndex int) {
 	argList := argExpr.GetParent()
 	if argList == nil {
 		return "func", 0
@@ -465,7 +465,7 @@ func resolveFuncArgContext(argExpr *grammar.ColumnArgExprContext) (contextName s
 		if child == argExpr {
 			break
 		}
-		if _, isArg := child.(*grammar.ColumnArgExprContext); isArg {
+		if _, isArg := child.(*grammar1.ColumnArgExprContext); isArg {
 			argIndex++
 		}
 	}
@@ -474,13 +474,13 @@ func resolveFuncArgContext(argExpr *grammar.ColumnArgExprContext) (contextName s
 		return "func", argIndex
 	}
 	switch fp := funcParent.(type) {
-	case *grammar.ColumnExprFunctionContext:
+	case *grammar1.ColumnExprFunctionContext:
 		if fp.Identifier() != nil {
 			contextName = normalizeFunctionName(fp.Identifier().GetText())
 		} else {
 			contextName = "func"
 		}
-	case *grammar.ColumnExprWinFunctionContext:
+	case *grammar1.ColumnExprWinFunctionContext:
 		if fp.Identifier() != nil {
 			contextName = normalizeFunctionName(fp.Identifier().GetText())
 		} else {
@@ -504,35 +504,35 @@ func resolveOperatorContextWithChild(parent antlr.ParserRuleContext, targetChild
 		if term, ok := child.(*antlr.TerminalNodeImpl); ok {
 			tok := term.GetSymbol()
 			switch tok.GetTokenType() {
-			case grammar.ClickHouseLexerEQ_SINGLE, grammar.ClickHouseLexerEQ_DOUBLE:
+			case grammar1.ClickHouseLexerEQ_SINGLE, grammar1.ClickHouseLexerEQ_DOUBLE:
 				opName = "eq"
-			case grammar.ClickHouseLexerNOT_EQ:
+			case grammar1.ClickHouseLexerNOT_EQ:
 				opName = "neq"
-			case grammar.ClickHouseLexerLT:
+			case grammar1.ClickHouseLexerLT:
 				opName = "lt"
-			case grammar.ClickHouseLexerGT:
+			case grammar1.ClickHouseLexerGT:
 				opName = "gt"
-			case grammar.ClickHouseLexerLE:
+			case grammar1.ClickHouseLexerLE:
 				opName = "le"
-			case grammar.ClickHouseLexerGE:
+			case grammar1.ClickHouseLexerGE:
 				opName = "ge"
-			case grammar.ClickHouseLexerPLUS:
+			case grammar1.ClickHouseLexerPLUS:
 				opName = "plus"
-			case grammar.ClickHouseLexerDASH:
+			case grammar1.ClickHouseLexerDASH:
 				opName = "minus"
-			case grammar.ClickHouseLexerASTERISK:
+			case grammar1.ClickHouseLexerASTERISK:
 				opName = "mul"
-			case grammar.ClickHouseLexerSLASH:
+			case grammar1.ClickHouseLexerSLASH:
 				opName = "div"
-			case grammar.ClickHouseLexerPERCENT:
+			case grammar1.ClickHouseLexerPERCENT:
 				opName = "mod"
-			case grammar.ClickHouseLexerCONCAT:
+			case grammar1.ClickHouseLexerCONCAT:
 				opName = "concat"
-			case grammar.ClickHouseLexerLIKE:
+			case grammar1.ClickHouseLexerLIKE:
 				opName = "like"
-			case grammar.ClickHouseLexerILIKE:
+			case grammar1.ClickHouseLexerILIKE:
 				opName = "ilike"
-			case grammar.ClickHouseLexerIN:
+			case grammar1.ClickHouseLexerIN:
 				opName = "in"
 			}
 		}
@@ -546,35 +546,35 @@ func resolveOperatorContextWithChild(parent antlr.ParserRuleContext, targetChild
 	return opName, litIdx
 }
 
-func resolveColumnsExprContextGeneric(parent *grammar.ColumnsExprColumnContext) (contextName string, argIndex int) {
+func resolveColumnsExprContextGeneric(parent *grammar1.ColumnsExprColumnContext) (contextName string, argIndex int) {
 	gp := parent.GetParent()
 	if gp == nil {
 		return "select", 0
 	}
-	if exprList, ok := gp.(*grammar.ColumnExprListContext); ok {
+	if exprList, ok := gp.(*grammar1.ColumnExprListContext); ok {
 		ggp := exprList.GetParent()
-		if _, isParen := ggp.(*grammar.ColumnExprPrecedence3Context); isParen {
+		if _, isParen := ggp.(*grammar1.ColumnExprPrecedence3Context); isParen {
 			argIndex = 0
 			for i := 0; i < exprList.GetChildCount(); i++ {
 				child := exprList.GetChild(i)
 				if child == parent {
 					break
 				}
-				if _, isCol := child.(*grammar.ColumnsExprColumnContext); isCol {
+				if _, isCol := child.(*grammar1.ColumnsExprColumnContext); isCol {
 					argIndex++
 				}
 			}
 			return "in", argIndex
 		}
 	}
-	if exprList, ok := gp.(*grammar.ColumnExprListContext); ok {
+	if exprList, ok := gp.(*grammar1.ColumnExprListContext); ok {
 		argIndex = 0
 		for i := 0; i < exprList.GetChildCount(); i++ {
 			child := exprList.GetChild(i)
 			if child == parent {
 				break
 			}
-			if _, isCol := child.(*grammar.ColumnsExprColumnContext); isCol {
+			if _, isCol := child.(*grammar1.ColumnsExprColumnContext); isCol {
 				argIndex++
 			}
 		}
@@ -582,7 +582,7 @@ func resolveColumnsExprContextGeneric(parent *grammar.ColumnsExprColumnContext) 
 	return "select", argIndex
 }
 
-func resolveBetweenContextWithChild(parent *grammar.ColumnExprBetweenContext, targetChild antlr.ParserRuleContext) (contextName string, argIndex int) {
+func resolveBetweenContextWithChild(parent *grammar1.ColumnExprBetweenContext, targetChild antlr.ParserRuleContext) (contextName string, argIndex int) {
 	contextName = "between"
 	argIndex = 0
 	exprIdx := 0
@@ -632,8 +632,8 @@ func literalHash(literalText string) uint64 {
 	return h.Lo
 }
 
-func assignParamNames(candidates []literalCandidate, config *ExtractLiteralsConfig) (params []extractedParam, paramByNode map[*grammar.ColumnExprLiteralContext]*extractedParam) {
-	paramByNode = make(map[*grammar.ColumnExprLiteralContext]*extractedParam, len(candidates))
+func assignParamNames(candidates []literalCandidate, config *ExtractLiteralsConfig) (params []extractedParam, paramByNode map[*grammar1.ColumnExprLiteralContext]*extractedParam) {
+	paramByNode = make(map[*grammar1.ColumnExprLiteralContext]*extractedParam, len(candidates))
 	type dedupKey struct {
 		contextName string
 		argIndex    int
@@ -766,7 +766,7 @@ func AnalyzeExtractions(sql string, config *ExtractLiteralsConfig) (extractions 
 		return
 	}
 	inListCandidates := collectINListCandidates(pr, config)
-	inListNodes := make(map[*grammar.ColumnExprLiteralContext]bool)
+	inListNodes := make(map[*grammar1.ColumnExprLiteralContext]bool)
 	for _, ilc := range inListCandidates {
 		for _, litNode := range collectLiteralNodesInTuple(ilc.tupleNode) {
 			inListNodes[litNode] = true

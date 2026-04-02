@@ -5,7 +5,7 @@ package passes
 import (
 	"strings"
 
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
@@ -23,7 +23,7 @@ func NormalizeWhitespace(sql string) (result string, err error) {
 
 	for i := 0; i < pr.TokenStream.Size(); i++ {
 		tok := pr.TokenStream.Get(i)
-		if tok.GetTokenType() != grammar.ClickHouseLexerWHITESPACE {
+		if tok.GetTokenType() != grammar1.ClickHouseLexerWHITESPACE {
 			continue
 		}
 
@@ -58,7 +58,7 @@ func NormalizeWhitespaceSingleLine(sql string) (result string, err error) {
 
 	for i := 0; i < pr.TokenStream.Size(); i++ {
 		tok := pr.TokenStream.Get(i)
-		if tok.GetTokenType() != grammar.ClickHouseLexerWHITESPACE {
+		if tok.GetTokenType() != grammar1.ClickHouseLexerWHITESPACE {
 			continue
 		}
 		text := tok.GetText()

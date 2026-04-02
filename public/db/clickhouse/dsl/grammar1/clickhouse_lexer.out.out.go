@@ -1,6 +1,6 @@
 // Code generated from ClickHouseLexer.g4 by ANTLR 4.13.2. DO NOT EDIT.
 
-package grammar
+package grammar1
 
 import (
 	"fmt"
@@ -22,16 +22,16 @@ type ClickHouseLexer struct {
 }
 
 var ClickHouseLexerLexerStaticData struct {
-	PredictionContextCache *antlr.PredictionContextCache
-	atn                    *antlr.ATN
+	once                   sync.Once
 	serializedATN          []int32
 	ChannelNames           []string
 	ModeNames              []string
 	LiteralNames           []string
 	SymbolicNames          []string
 	RuleNames              []string
+	PredictionContextCache *antlr.PredictionContextCache
+	atn                    *antlr.ATN
 	decisionToDFA          []*antlr.DFA
-	once                   sync.Once
 }
 
 func clickhouselexerLexerInit() {

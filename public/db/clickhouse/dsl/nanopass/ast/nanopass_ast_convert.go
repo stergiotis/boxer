@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
@@ -25,9 +25,9 @@ import (
 // [1,2] array literal, t.1 tuple access).
 func ConvertCSTToAST(pr *nanopass.ParseResult) (query Query, err error) {
 	// Find the queryStmt root
-	var queryStmtCtx *grammar.QueryStmtContext
+	var queryStmtCtx *grammar1.QueryStmtContext
 	for i := 0; i < pr.Tree.GetChildCount(); i++ {
-		if qs, ok := pr.Tree.GetChild(i).(*grammar.QueryStmtContext); ok {
+		if qs, ok := pr.Tree.GetChild(i).(*grammar1.QueryStmtContext); ok {
 			queryStmtCtx = qs
 			break
 		}
@@ -42,11 +42,11 @@ func ConvertCSTToAST(pr *nanopass.ParseResult) (query Query, err error) {
 func convertFromTree(pr *nanopass.ParseResult, tree antlr.Tree) (query Query, err error) {
 	for i := 0; i < tree.GetChildCount(); i++ {
 		switch ctx := tree.GetChild(i).(type) {
-		case *grammar.QueryStmtContext:
+		case *grammar1.QueryStmtContext:
 			return convertQueryStmt(pr, ctx)
-		case *grammar.QueryContext:
+		case *grammar1.QueryContext:
 			return convertQuery(pr, ctx)
-		case *grammar.SelectUnionStmtContext:
+		case *grammar1.SelectUnionStmtContext:
 			query.Body, err = convertSelectUnion(pr, ctx)
 			return
 		}
@@ -55,11 +55,11 @@ func convertFromTree(pr *nanopass.ParseResult, tree antlr.Tree) (query Query, er
 	return
 }
 
-func convertQueryStmt(pr *nanopass.ParseResult, ctx *grammar.QueryStmtContext) (query Query, err error) {
+func convertQueryStmt(pr *nanopass.ParseResult, ctx *grammar1.QueryStmtContext) (query Query, err error) {
 	// Find query child
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		switch c := ctx.GetChild(i).(type) {
-		case *grammar.QueryContext:
+		case *grammar1.QueryContext:
 			query, err = convertQuery(pr, c)
 			if err != nil {
 				return
@@ -70,7 +70,7 @@ func convertQueryStmt(pr *nanopass.ParseResult, ctx *grammar.QueryStmtContext) (
 	// INTO OUTFILE
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		if term, ok := ctx.GetChild(i).(*antlr.TerminalNodeImpl); ok {
-			if term.GetSymbol().GetTokenType() == grammar.ClickHouseLexerOUTFILE {
+			if term.GetSymbol().GetTokenType() == grammar1.ClickHouseLexerOUTFILE {
 				// Next non-terminal should be STRING_LITERAL
 				if i+1 < ctx.GetChildCount() {
 					if lit, ok := ctx.GetChild(i + 1).(*antlr.TerminalNodeImpl); ok {
@@ -84,9 +84,9 @@ func convertQueryStmt(pr *nanopass.ParseResult, ctx *grammar.QueryStmtContext) (
 	// FORMAT
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		if term, ok := ctx.GetChild(i).(*antlr.TerminalNodeImpl); ok {
-			if term.GetSymbol().GetTokenType() == grammar.ClickHouseLexerFORMAT {
+			if term.GetSymbol().GetTokenType() == grammar1.ClickHouseLexerFORMAT {
 				if i+1 < ctx.GetChildCount() {
-					if identCtx, ok := ctx.GetChild(i + 1).(*grammar.IdentifierOrNullContext); ok {
+					if identCtx, ok := ctx.GetChild(i + 1).(*grammar1.IdentifierOrNullContext); ok {
 						query.Format = normalizeIdentifier(identCtx.GetText())
 					}
 				}
@@ -97,10 +97,10 @@ func convertQueryStmt(pr *nanopass.ParseResult, ctx *grammar.QueryStmtContext) (
 	return
 }
 
-func convertQuery(pr *nanopass.ParseResult, ctx *grammar.QueryContext) (query Query, err error) {
+func convertQuery(pr *nanopass.ParseResult, ctx *grammar1.QueryContext) (query Query, err error) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		switch c := ctx.GetChild(i).(type) {
-		case *grammar.SetStmtContext:
+		case *grammar1.SetStmtContext:
 			settings, setErr := convertSetStmt(pr, c)
 			if setErr != nil {
 				err = eh.Errorf("convertQuery: %w", setErr)
@@ -108,13 +108,13 @@ func convertQuery(pr *nanopass.ParseResult, ctx *grammar.QueryContext) (query Qu
 			}
 			query.Settings = append(query.Settings, settings...)
 
-		case *grammar.CtesContext:
+		case *grammar1.CtesContext:
 			query.CTEs, err = convertCTEs(pr, c)
 			if err != nil {
 				return
 			}
 
-		case *grammar.SelectUnionStmtContext:
+		case *grammar1.SelectUnionStmtContext:
 			query.Body, err = convertSelectUnion(pr, c)
 			if err != nil {
 				return
@@ -126,9 +126,9 @@ func convertQuery(pr *nanopass.ParseResult, ctx *grammar.QueryContext) (query Qu
 
 // --- SET ---
 
-func convertSetStmt(pr *nanopass.ParseResult, ctx *grammar.SetStmtContext) (settings []SettingPair, err error) {
+func convertSetStmt(pr *nanopass.ParseResult, ctx *grammar1.SetStmtContext) (settings []SettingPair, err error) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if sel, ok := ctx.GetChild(i).(*grammar.SettingExprListContext); ok {
+		if sel, ok := ctx.GetChild(i).(*grammar1.SettingExprListContext); ok {
 			settings, err = convertSettingExprList(pr, sel)
 			return
 		}
@@ -136,9 +136,9 @@ func convertSetStmt(pr *nanopass.ParseResult, ctx *grammar.SetStmtContext) (sett
 	return
 }
 
-func convertSettingExprList(pr *nanopass.ParseResult, ctx *grammar.SettingExprListContext) (settings []SettingPair, err error) {
+func convertSettingExprList(pr *nanopass.ParseResult, ctx *grammar1.SettingExprListContext) (settings []SettingPair, err error) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if se, ok := ctx.GetChild(i).(*grammar.SettingExprContext); ok {
+		if se, ok := ctx.GetChild(i).(*grammar1.SettingExprContext); ok {
 			pair, pairErr := convertSettingExpr(pr, se)
 			if pairErr != nil {
 				err = pairErr
@@ -150,16 +150,16 @@ func convertSettingExprList(pr *nanopass.ParseResult, ctx *grammar.SettingExprLi
 	return
 }
 
-func convertSettingExpr(pr *nanopass.ParseResult, ctx *grammar.SettingExprContext) (pair SettingPair, err error) {
+func convertSettingExpr(pr *nanopass.ParseResult, ctx *grammar1.SettingExprContext) (pair SettingPair, err error) {
 	// identifier EQ_SINGLE settingValue
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if ident, ok := ctx.GetChild(i).(*grammar.IdentifierContext); ok {
+		if ident, ok := ctx.GetChild(i).(*grammar1.IdentifierContext); ok {
 			pair.Key = identText(ident)
 		}
 	}
 	// settingValue is the last child — take its full text
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if _, ok := ctx.GetChild(i).(grammar.ISettingValueContext); ok {
+		if _, ok := ctx.GetChild(i).(grammar1.ISettingValueContext); ok {
 			pair.ValueSQL = nanopass.NodeText(pr, ctx.GetChild(i).(antlr.ParserRuleContext))
 		}
 	}
@@ -168,9 +168,9 @@ func convertSettingExpr(pr *nanopass.ParseResult, ctx *grammar.SettingExprContex
 
 // --- CTEs ---
 
-func convertCTEs(pr *nanopass.ParseResult, ctx *grammar.CtesContext) (ctes []CTE, err error) {
+func convertCTEs(pr *nanopass.ParseResult, ctx *grammar1.CtesContext) (ctes []CTE, err error) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if nq, ok := ctx.GetChild(i).(*grammar.NamedQueryContext); ok {
+		if nq, ok := ctx.GetChild(i).(*grammar1.NamedQueryContext); ok {
 			cte, cteErr := convertNamedQuery(pr, nq)
 			if cteErr != nil {
 				err = cteErr
@@ -182,16 +182,16 @@ func convertCTEs(pr *nanopass.ParseResult, ctx *grammar.CtesContext) (ctes []CTE
 	return
 }
 
-func convertNamedQuery(pr *nanopass.ParseResult, ctx *grammar.NamedQueryContext) (cte CTE, err error) {
+func convertNamedQuery(pr *nanopass.ParseResult, ctx *grammar1.NamedQueryContext) (cte CTE, err error) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		switch c := ctx.GetChild(i).(type) {
-		case *grammar.IdentifierContext:
+		case *grammar1.IdentifierContext:
 			if cte.Name == "" {
 				cte.Name = identText(c)
 			}
-		case *grammar.ColumnAliasesContext:
+		case *grammar1.ColumnAliasesContext:
 			cte.ColumnAliases = convertColumnAliases(c)
-		case *grammar.QueryContext:
+		case *grammar1.QueryContext:
 			cte.Body, err = convertQuery(pr, c)
 			if err != nil {
 				return
@@ -201,9 +201,9 @@ func convertNamedQuery(pr *nanopass.ParseResult, ctx *grammar.NamedQueryContext)
 	return
 }
 
-func convertColumnAliases(ctx *grammar.ColumnAliasesContext) (aliases []string) {
+func convertColumnAliases(ctx *grammar1.ColumnAliasesContext) (aliases []string) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if ident, ok := ctx.GetChild(i).(*grammar.IdentifierContext); ok {
+		if ident, ok := ctx.GetChild(i).(*grammar1.IdentifierContext); ok {
 			aliases = append(aliases, identText(ident))
 		}
 	}
@@ -212,11 +212,11 @@ func convertColumnAliases(ctx *grammar.ColumnAliasesContext) (aliases []string) 
 
 // --- SELECT UNION ---
 
-func convertSelectUnion(pr *nanopass.ParseResult, ctx *grammar.SelectUnionStmtContext) (su SelectUnion, err error) {
+func convertSelectUnion(pr *nanopass.ParseResult, ctx *grammar1.SelectUnionStmtContext) (su SelectUnion, err error) {
 	first := true
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		switch c := ctx.GetChild(i).(type) {
-		case *grammar.SelectStmtWithParensContext:
+		case *grammar1.SelectStmtWithParensContext:
 			if first {
 				su.Head, err = convertSelectStmtWithParens(pr, c)
 				if err != nil {
@@ -224,7 +224,7 @@ func convertSelectUnion(pr *nanopass.ParseResult, ctx *grammar.SelectUnionStmtCo
 				}
 				first = false
 			}
-		case *grammar.SelectUnionStmtItemContext:
+		case *grammar1.SelectUnionStmtItemContext:
 			item, itemErr := convertSelectUnionItem(pr, c)
 			if itemErr != nil {
 				err = itemErr
@@ -236,24 +236,24 @@ func convertSelectUnion(pr *nanopass.ParseResult, ctx *grammar.SelectUnionStmtCo
 	return
 }
 
-func convertSelectUnionItem(pr *nanopass.ParseResult, ctx *grammar.SelectUnionStmtItemContext) (item SelectUnionItem, err error) {
+func convertSelectUnionItem(pr *nanopass.ParseResult, ctx *grammar1.SelectUnionStmtItemContext) (item SelectUnionItem, err error) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
 		if term, ok := child.(*antlr.TerminalNodeImpl); ok {
 			switch term.GetSymbol().GetTokenType() {
-			case grammar.ClickHouseLexerUNION:
+			case grammar1.ClickHouseLexerUNION:
 				item.Op = "UNION"
-			case grammar.ClickHouseLexerEXCEPT:
+			case grammar1.ClickHouseLexerEXCEPT:
 				item.Op = "EXCEPT"
-			case grammar.ClickHouseLexerINTERSECT:
+			case grammar1.ClickHouseLexerINTERSECT:
 				item.Op = "INTERSECT"
-			case grammar.ClickHouseLexerALL:
+			case grammar1.ClickHouseLexerALL:
 				item.Modifier = "ALL"
-			case grammar.ClickHouseLexerDISTINCT:
+			case grammar1.ClickHouseLexerDISTINCT:
 				item.Modifier = "DISTINCT"
 			}
 		}
-		if swp, ok := child.(*grammar.SelectStmtWithParensContext); ok {
+		if swp, ok := child.(*grammar1.SelectStmtWithParensContext); ok {
 			item.Select, err = convertSelectStmtWithParens(pr, swp)
 			if err != nil {
 				return
@@ -263,12 +263,12 @@ func convertSelectUnionItem(pr *nanopass.ParseResult, ctx *grammar.SelectUnionSt
 	return
 }
 
-func convertSelectStmtWithParens(pr *nanopass.ParseResult, ctx *grammar.SelectStmtWithParensContext) (sel Select, err error) {
+func convertSelectStmtWithParens(pr *nanopass.ParseResult, ctx *grammar1.SelectStmtWithParensContext) (sel Select, err error) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		switch c := ctx.GetChild(i).(type) {
-		case *grammar.SelectStmtContext:
+		case *grammar1.SelectStmtContext:
 			return convertSelectStmt(pr, c)
-		case *grammar.SelectUnionStmtContext:
+		case *grammar1.SelectUnionStmtContext:
 			// Parenthesized union — wrap in a subquery-like structure
 			// For simplicity, if it's a single select, unwrap
 			su, suErr := convertSelectUnion(pr, c)
@@ -292,59 +292,59 @@ func convertSelectStmtWithParens(pr *nanopass.ParseResult, ctx *grammar.SelectSt
 
 // --- SELECT ---
 
-func convertSelectStmt(pr *nanopass.ParseResult, ctx *grammar.SelectStmtContext) (sel Select, err error) {
+func convertSelectStmt(pr *nanopass.ParseResult, ctx *grammar1.SelectStmtContext) (sel Select, err error) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
 		switch c := child.(type) {
-		case *grammar.ProjectionClauseContext:
+		case *grammar1.ProjectionClauseContext:
 			err = convertProjectionClause(pr, c, &sel)
-		case *grammar.WithClauseContext:
+		case *grammar1.WithClauseContext:
 			sel.With, err = convertWithClause(pr, c)
-		case *grammar.FromClauseContext:
+		case *grammar1.FromClauseContext:
 			var je JoinExpr
 			je, err = convertFromClause(pr, c)
 			sel.From = &je
-		case *grammar.ArrayJoinClauseContext:
+		case *grammar1.ArrayJoinClauseContext:
 			var aj ArrayJoinClause
 			aj, err = convertArrayJoinClause(pr, c)
 			sel.ArrayJoin = &aj
-		case *grammar.WindowClauseContext:
+		case *grammar1.WindowClauseContext:
 			var wd WindowDefClause
 			wd, err = convertWindowClause(pr, c)
 			sel.WindowDef = &wd
-		case *grammar.QualifyClauseContext:
+		case *grammar1.QualifyClauseContext:
 			var expr Expr
 			expr, err = convertSingleExprClause(pr, c)
 			sel.Qualify = &expr
-		case *grammar.PrewhereClauseContext:
+		case *grammar1.PrewhereClauseContext:
 			var expr Expr
 			expr, err = convertSingleExprClause(pr, c)
 			sel.Prewhere = &expr
-		case *grammar.WhereClauseContext:
+		case *grammar1.WhereClauseContext:
 			var expr Expr
 			expr, err = convertSingleExprClause(pr, c)
 			sel.Where = &expr
-		case *grammar.GroupByClauseContext:
+		case *grammar1.GroupByClauseContext:
 			var gb GroupByClause
 			gb, err = convertGroupByClause(pr, c)
 			sel.GroupBy = &gb
-		case *grammar.HavingClauseContext:
+		case *grammar1.HavingClauseContext:
 			var expr Expr
 			expr, err = convertSingleExprClause(pr, c)
 			sel.Having = &expr
-		case *grammar.OrderByClauseContext:
+		case *grammar1.OrderByClauseContext:
 			var ob OrderByClause
 			ob, err = convertOrderByClause(pr, c)
 			sel.OrderBy = &ob
-		case *grammar.LimitByClauseContext:
+		case *grammar1.LimitByClauseContext:
 			var lb LimitByClause
 			lb, err = convertLimitByClause(pr, c)
 			sel.LimitBy = &lb
-		case *grammar.LimitClauseContext:
+		case *grammar1.LimitClauseContext:
 			var lc LimitClause
 			lc, err = convertLimitClause(pr, c)
 			sel.Limit = &lc
-		case *grammar.SettingsClauseContext:
+		case *grammar1.SettingsClauseContext:
 			sel.Settings, err = convertSettingsClause(pr, c)
 		}
 		if err != nil {
@@ -354,15 +354,15 @@ func convertSelectStmt(pr *nanopass.ParseResult, ctx *grammar.SelectStmtContext)
 	return
 }
 
-func convertProjectionClause(pr *nanopass.ParseResult, ctx *grammar.ProjectionClauseContext, sel *Select) (err error) {
+func convertProjectionClause(pr *nanopass.ParseResult, ctx *grammar1.ProjectionClauseContext, sel *Select) (err error) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
 		if term, ok := child.(*antlr.TerminalNodeImpl); ok {
-			if term.GetSymbol().GetTokenType() == grammar.ClickHouseLexerDISTINCT {
+			if term.GetSymbol().GetTokenType() == grammar1.ClickHouseLexerDISTINCT {
 				sel.Distinct = true
 			}
 		}
-		if tc, ok := child.(*grammar.TopClauseContext); ok {
+		if tc, ok := child.(*grammar1.TopClauseContext); ok {
 			top, topErr := convertTopClause(tc)
 			if topErr != nil {
 				err = topErr
@@ -370,13 +370,13 @@ func convertProjectionClause(pr *nanopass.ParseResult, ctx *grammar.ProjectionCl
 			}
 			sel.Top = &top
 		}
-		if cel, ok := child.(*grammar.ColumnExprListContext); ok {
+		if cel, ok := child.(*grammar1.ColumnExprListContext); ok {
 			sel.Projection, err = convertColumnExprList(pr, cel)
 			if err != nil {
 				return
 			}
 		}
-		if pec, ok := child.(*grammar.ProjectionExceptClauseContext); ok {
+		if pec, ok := child.(*grammar1.ProjectionExceptClauseContext); ok {
 			exc, excErr := convertProjectionExceptClause(pr, pec)
 			if excErr != nil {
 				err = excErr
@@ -388,17 +388,17 @@ func convertProjectionClause(pr *nanopass.ParseResult, ctx *grammar.ProjectionCl
 	return
 }
 
-func convertTopClause(ctx *grammar.TopClauseContext) (top TopClause, err error) {
+func convertTopClause(ctx *grammar1.TopClauseContext) (top TopClause, err error) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		if term, ok := ctx.GetChild(i).(*antlr.TerminalNodeImpl); ok {
 			switch term.GetSymbol().GetTokenType() {
-			case grammar.ClickHouseLexerDECIMAL_LITERAL:
+			case grammar1.ClickHouseLexerDECIMAL_LITERAL:
 				top.N, err = strconv.ParseUint(term.GetText(), 10, 64)
 				if err != nil {
 					err = eh.Errorf("convertTopClause: %w", err)
 					return
 				}
-			case grammar.ClickHouseLexerTIES:
+			case grammar1.ClickHouseLexerTIES:
 				top.WithTies = true
 			}
 		}
@@ -406,19 +406,19 @@ func convertTopClause(ctx *grammar.TopClauseContext) (top TopClause, err error) 
 	return
 }
 
-func convertProjectionExceptClause(pr *nanopass.ParseResult, ctx *grammar.ProjectionExceptClauseContext) (exc ExceptClause, err error) {
+func convertProjectionExceptClause(pr *nanopass.ParseResult, ctx *grammar1.ProjectionExceptClauseContext) (exc ExceptClause, err error) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
 		switch c := child.(type) {
-		case *grammar.StaticColumnListContext:
+		case *grammar1.StaticColumnListContext:
 			for j := 0; j < c.GetChildCount(); j++ {
-				if ident, ok := c.GetChild(j).(*grammar.IdentifierContext); ok {
+				if ident, ok := c.GetChild(j).(*grammar1.IdentifierContext); ok {
 					exc.Static = append(exc.Static, identText(ident))
 				}
 			}
-		case *grammar.DynamicColumnListContext:
+		case *grammar1.DynamicColumnListContext:
 			for j := 0; j < c.GetChildCount(); j++ {
-				if dcs, ok := c.GetChild(j).(*grammar.DynamicColumnSelectionContext); ok {
+				if dcs, ok := c.GetChild(j).(*grammar1.DynamicColumnSelectionContext); ok {
 					exc.Dynamic = extractDynamicPattern(dcs)
 				}
 			}
@@ -427,9 +427,9 @@ func convertProjectionExceptClause(pr *nanopass.ParseResult, ctx *grammar.Projec
 	return
 }
 
-func convertWithClause(pr *nanopass.ParseResult, ctx *grammar.WithClauseContext) (exprs []Expr, err error) {
+func convertWithClause(pr *nanopass.ParseResult, ctx *grammar1.WithClauseContext) (exprs []Expr, err error) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if cel, ok := ctx.GetChild(i).(*grammar.ColumnExprListContext); ok {
+		if cel, ok := ctx.GetChild(i).(*grammar1.ColumnExprListContext); ok {
 			exprs, err = convertColumnExprList(pr, cel)
 			return
 		}
@@ -439,7 +439,7 @@ func convertWithClause(pr *nanopass.ParseResult, ctx *grammar.WithClauseContext)
 
 func convertSingleExprClause(pr *nanopass.ParseResult, ctx antlr.ParserRuleContext) (expr Expr, err error) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if ce, ok := ctx.GetChild(i).(grammar.IColumnExprContext); ok {
+		if ce, ok := ctx.GetChild(i).(grammar1.IColumnExprContext); ok {
 			return convertColumnExpr(pr, ce.(antlr.ParserRuleContext))
 		}
 	}
@@ -449,20 +449,20 @@ func convertSingleExprClause(pr *nanopass.ParseResult, ctx antlr.ParserRuleConte
 
 // --- GROUP BY ---
 
-func convertGroupByClause(pr *nanopass.ParseResult, ctx *grammar.GroupByClauseContext) (gb GroupByClause, err error) {
+func convertGroupByClause(pr *nanopass.ParseResult, ctx *grammar1.GroupByClauseContext) (gb GroupByClause, err error) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
 		if term, ok := child.(*antlr.TerminalNodeImpl); ok {
 			switch term.GetSymbol().GetTokenType() {
-			case grammar.ClickHouseLexerCUBE:
+			case grammar1.ClickHouseLexerCUBE:
 				gb.Modifier = "CUBE"
-			case grammar.ClickHouseLexerROLLUP:
+			case grammar1.ClickHouseLexerROLLUP:
 				gb.Modifier = "ROLLUP"
-			case grammar.ClickHouseLexerTOTALS:
+			case grammar1.ClickHouseLexerTOTALS:
 				gb.WithTotals = true
 			}
 		}
-		if cel, ok := child.(*grammar.ColumnExprListContext); ok {
+		if cel, ok := child.(*grammar1.ColumnExprListContext); ok {
 			gb.Exprs, err = convertColumnExprList(pr, cel)
 			if err != nil {
 				return
@@ -474,10 +474,10 @@ func convertGroupByClause(pr *nanopass.ParseResult, ctx *grammar.GroupByClauseCo
 
 // --- ORDER BY ---
 
-func convertOrderByClause(pr *nanopass.ParseResult, ctx *grammar.OrderByClauseContext) (ob OrderByClause, err error) {
+func convertOrderByClause(pr *nanopass.ParseResult, ctx *grammar1.OrderByClauseContext) (ob OrderByClause, err error) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
-		if oel, ok := child.(*grammar.OrderExprListContext); ok {
+		if oel, ok := child.(*grammar1.OrderExprListContext); ok {
 			ob.Items, err = convertOrderExprList(pr, oel)
 			if err != nil {
 				return
@@ -488,10 +488,10 @@ func convertOrderByClause(pr *nanopass.ParseResult, ctx *grammar.OrderByClauseCo
 	return
 }
 
-func convertOrderExpr(pr *nanopass.ParseResult, ctx *grammar.OrderExprContext) (item OrderItem, err error) {
+func convertOrderExpr(pr *nanopass.ParseResult, ctx *grammar1.OrderExprContext) (item OrderItem, err error) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
-		if ce, ok := child.(grammar.IColumnExprContext); ok {
+		if ce, ok := child.(grammar1.IColumnExprContext); ok {
 			item.Expr, err = convertColumnExpr(pr, ce.(antlr.ParserRuleContext))
 			if err != nil {
 				return
@@ -502,19 +502,19 @@ func convertOrderExpr(pr *nanopass.ParseResult, ctx *grammar.OrderExprContext) (
 		if term, ok := child.(*antlr.TerminalNodeImpl); ok {
 			tt := term.GetSymbol().GetTokenType()
 			switch tt {
-			case grammar.ClickHouseLexerASCENDING:
+			case grammar1.ClickHouseLexerASCENDING:
 				item.Dir = "ASC"
-			case grammar.ClickHouseLexerDESCENDING:
+			case grammar1.ClickHouseLexerDESCENDING:
 				item.Dir = "DESC"
-			case grammar.ClickHouseLexerDESC:
+			case grammar1.ClickHouseLexerDESC:
 				item.Dir = "DESC"
-			case grammar.ClickHouseLexerNULLS:
+			case grammar1.ClickHouseLexerNULLS:
 				// skip
-			case grammar.ClickHouseLexerFIRST:
+			case grammar1.ClickHouseLexerFIRST:
 				item.Nulls = "FIRST"
-			case grammar.ClickHouseLexerLAST:
+			case grammar1.ClickHouseLexerLAST:
 				item.Nulls = "LAST"
-			case grammar.ClickHouseLexerSTRING_LITERAL:
+			case grammar1.ClickHouseLexerSTRING_LITERAL:
 				item.Collate = unquoteString(term.GetText())
 			}
 		}
@@ -554,9 +554,9 @@ func unwrapOrderExprAlias(expr Expr, item *OrderItem) Expr {
 	return expr
 }
 
-func convertOrderExprList(pr *nanopass.ParseResult, ctx *grammar.OrderExprListContext) (items []OrderItem, err error) {
+func convertOrderExprList(pr *nanopass.ParseResult, ctx *grammar1.OrderExprListContext) (items []OrderItem, err error) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if oe, ok := ctx.GetChild(i).(*grammar.OrderExprContext); ok {
+		if oe, ok := ctx.GetChild(i).(*grammar1.OrderExprContext); ok {
 			item, itemErr := convertOrderExpr(pr, oe)
 			if itemErr != nil {
 				err = itemErr
@@ -570,17 +570,17 @@ func convertOrderExprList(pr *nanopass.ParseResult, ctx *grammar.OrderExprListCo
 
 // --- LIMIT ---
 
-func convertLimitClause(pr *nanopass.ParseResult, ctx *grammar.LimitClauseContext) (lc LimitClause, err error) {
+func convertLimitClause(pr *nanopass.ParseResult, ctx *grammar1.LimitClauseContext) (lc LimitClause, err error) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
-		if le, ok := child.(*grammar.LimitExprContext); ok {
+		if le, ok := child.(*grammar1.LimitExprContext); ok {
 			lc.Limit, err = convertLimitExpr(pr, le)
 			if err != nil {
 				return
 			}
 		}
 		if term, ok := child.(*antlr.TerminalNodeImpl); ok {
-			if term.GetSymbol().GetTokenType() == grammar.ClickHouseLexerTIES {
+			if term.GetSymbol().GetTokenType() == grammar1.ClickHouseLexerTIES {
 				lc.WithTies = true
 			}
 		}
@@ -588,16 +588,16 @@ func convertLimitClause(pr *nanopass.ParseResult, ctx *grammar.LimitClauseContex
 	return
 }
 
-func convertLimitByClause(pr *nanopass.ParseResult, ctx *grammar.LimitByClauseContext) (lb LimitByClause, err error) {
+func convertLimitByClause(pr *nanopass.ParseResult, ctx *grammar1.LimitByClauseContext) (lb LimitByClause, err error) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
-		if le, ok := child.(*grammar.LimitExprContext); ok {
+		if le, ok := child.(*grammar1.LimitExprContext); ok {
 			lb.Limit, err = convertLimitExpr(pr, le)
 			if err != nil {
 				return
 			}
 		}
-		if cel, ok := child.(*grammar.ColumnExprListContext); ok {
+		if cel, ok := child.(*grammar1.ColumnExprListContext); ok {
 			lb.Columns, err = convertColumnExprList(pr, cel)
 			if err != nil {
 				return
@@ -607,10 +607,10 @@ func convertLimitByClause(pr *nanopass.ParseResult, ctx *grammar.LimitByClauseCo
 	return
 }
 
-func convertLimitExpr(pr *nanopass.ParseResult, ctx *grammar.LimitExprContext) (ls LimitSpec, err error) {
+func convertLimitExpr(pr *nanopass.ParseResult, ctx *grammar1.LimitExprContext) (ls LimitSpec, err error) {
 	exprs := make([]Expr, 0, 2)
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if ce, ok := ctx.GetChild(i).(grammar.IColumnExprContext); ok {
+		if ce, ok := ctx.GetChild(i).(grammar1.IColumnExprContext); ok {
 			expr, exprErr := convertColumnExpr(pr, ce.(antlr.ParserRuleContext))
 			if exprErr != nil {
 				err = exprErr
@@ -630,9 +630,9 @@ func convertLimitExpr(pr *nanopass.ParseResult, ctx *grammar.LimitExprContext) (
 
 // --- SETTINGS ---
 
-func convertSettingsClause(pr *nanopass.ParseResult, ctx *grammar.SettingsClauseContext) (settings []SettingPair, err error) {
+func convertSettingsClause(pr *nanopass.ParseResult, ctx *grammar1.SettingsClauseContext) (settings []SettingPair, err error) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if sel, ok := ctx.GetChild(i).(*grammar.SettingExprListContext); ok {
+		if sel, ok := ctx.GetChild(i).(*grammar1.SettingExprListContext); ok {
 			return convertSettingExprList(pr, sel)
 		}
 	}
@@ -641,18 +641,18 @@ func convertSettingsClause(pr *nanopass.ParseResult, ctx *grammar.SettingsClause
 
 // --- ARRAY JOIN ---
 
-func convertArrayJoinClause(pr *nanopass.ParseResult, ctx *grammar.ArrayJoinClauseContext) (aj ArrayJoinClause, err error) {
+func convertArrayJoinClause(pr *nanopass.ParseResult, ctx *grammar1.ArrayJoinClauseContext) (aj ArrayJoinClause, err error) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
 		if term, ok := child.(*antlr.TerminalNodeImpl); ok {
 			switch term.GetSymbol().GetTokenType() {
-			case grammar.ClickHouseLexerLEFT:
+			case grammar1.ClickHouseLexerLEFT:
 				aj.Kind = "LEFT"
-			case grammar.ClickHouseLexerINNER:
+			case grammar1.ClickHouseLexerINNER:
 				aj.Kind = "INNER"
 			}
 		}
-		if cel, ok := child.(*grammar.ColumnExprListContext); ok {
+		if cel, ok := child.(*grammar1.ColumnExprListContext); ok {
 			aj.Exprs, err = convertColumnExprList(pr, cel)
 			if err != nil {
 				return
@@ -664,13 +664,13 @@ func convertArrayJoinClause(pr *nanopass.ParseResult, ctx *grammar.ArrayJoinClau
 
 // --- WINDOW ---
 
-func convertWindowClause(pr *nanopass.ParseResult, ctx *grammar.WindowClauseContext) (wd WindowDefClause, err error) {
+func convertWindowClause(pr *nanopass.ParseResult, ctx *grammar1.WindowClauseContext) (wd WindowDefClause, err error) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
-		if ident, ok := child.(*grammar.IdentifierContext); ok {
+		if ident, ok := child.(*grammar1.IdentifierContext); ok {
 			wd.Name = identText(ident)
 		}
-		if we, ok := child.(*grammar.WindowExprContext); ok {
+		if we, ok := child.(*grammar1.WindowExprContext); ok {
 			wd.Window, err = convertWindowExpr(pr, we)
 			if err != nil {
 				return
@@ -680,29 +680,29 @@ func convertWindowClause(pr *nanopass.ParseResult, ctx *grammar.WindowClauseCont
 	return
 }
 
-func convertWindowExpr(pr *nanopass.ParseResult, ctx *grammar.WindowExprContext) (ws WindowSpec, err error) {
+func convertWindowExpr(pr *nanopass.ParseResult, ctx *grammar1.WindowExprContext) (ws WindowSpec, err error) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
 		switch c := child.(type) {
-		case *grammar.WinPartitionByClauseContext:
+		case *grammar1.WinPartitionByClauseContext:
 			for j := 0; j < c.GetChildCount(); j++ {
-				if cel, ok := c.GetChild(j).(*grammar.ColumnExprListContext); ok {
+				if cel, ok := c.GetChild(j).(*grammar1.ColumnExprListContext); ok {
 					ws.PartitionBy, err = convertColumnExprList(pr, cel)
 					if err != nil {
 						return
 					}
 				}
 			}
-		case *grammar.WinOrderByClauseContext:
+		case *grammar1.WinOrderByClauseContext:
 			for j := 0; j < c.GetChildCount(); j++ {
-				if oel, ok := c.GetChild(j).(*grammar.OrderExprListContext); ok {
+				if oel, ok := c.GetChild(j).(*grammar1.OrderExprListContext); ok {
 					ws.OrderBy, err = convertOrderExprList(pr, oel)
 					if err != nil {
 						return
 					}
 				}
 			}
-		case *grammar.WinFrameClauseContext:
+		case *grammar1.WinFrameClauseContext:
 			frame, frameErr := convertWinFrameClause(pr, c)
 			if frameErr != nil {
 				err = frameErr
@@ -714,28 +714,28 @@ func convertWindowExpr(pr *nanopass.ParseResult, ctx *grammar.WindowExprContext)
 	return
 }
 
-func convertWinFrameClause(pr *nanopass.ParseResult, ctx *grammar.WinFrameClauseContext) (wf WindowFrame, err error) {
+func convertWinFrameClause(pr *nanopass.ParseResult, ctx *grammar1.WinFrameClauseContext) (wf WindowFrame, err error) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
 		if term, ok := child.(*antlr.TerminalNodeImpl); ok {
 			switch term.GetSymbol().GetTokenType() {
-			case grammar.ClickHouseLexerROWS:
+			case grammar1.ClickHouseLexerROWS:
 				wf.Unit = "ROWS"
-			case grammar.ClickHouseLexerRANGE:
+			case grammar1.ClickHouseLexerRANGE:
 				wf.Unit = "RANGE"
 			}
 		}
 		switch c := child.(type) {
-		case *grammar.FrameStartContext:
+		case *grammar1.FrameStartContext:
 			for j := 0; j < c.GetChildCount(); j++ {
-				if wfb, ok := c.GetChild(j).(*grammar.WinFrameBoundContext); ok {
+				if wfb, ok := c.GetChild(j).(*grammar1.WinFrameBoundContext); ok {
 					wf.Start = convertFrameBound(pr, wfb)
 				}
 			}
-		case *grammar.FrameBetweenContext:
+		case *grammar1.FrameBetweenContext:
 			bounds := make([]FrameBound, 0, 2)
 			for j := 0; j < c.GetChildCount(); j++ {
-				if wfb, ok := c.GetChild(j).(*grammar.WinFrameBoundContext); ok {
+				if wfb, ok := c.GetChild(j).(*grammar1.WinFrameBoundContext); ok {
 					bounds = append(bounds, convertFrameBound(pr, wfb))
 				}
 			}
@@ -753,16 +753,16 @@ func convertWinFrameExtend(pr *nanopass.ParseResult, ctx antlr.ParserRuleContext
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
 		switch c := child.(type) {
-		case *grammar.FrameStartContext:
+		case *grammar1.FrameStartContext:
 			for j := 0; j < c.GetChildCount(); j++ {
-				if wfb, ok := c.GetChild(j).(*grammar.WinFrameBoundContext); ok {
+				if wfb, ok := c.GetChild(j).(*grammar1.WinFrameBoundContext); ok {
 					wf.Start = convertFrameBound(pr, wfb)
 				}
 			}
-		case *grammar.FrameBetweenContext:
+		case *grammar1.FrameBetweenContext:
 			bounds := make([]FrameBound, 0, 2)
 			for j := 0; j < c.GetChildCount(); j++ {
-				if wfb, ok := c.GetChild(j).(*grammar.WinFrameBoundContext); ok {
+				if wfb, ok := c.GetChild(j).(*grammar1.WinFrameBoundContext); ok {
 					bounds = append(bounds, convertFrameBound(pr, wfb))
 				}
 			}
@@ -784,7 +784,7 @@ func convertWinFrameExtend(pr *nanopass.ParseResult, ctx antlr.ParserRuleContext
 	return
 }
 
-func convertFrameBound(pr *nanopass.ParseResult, ctx *grammar.WinFrameBoundContext) (fb FrameBound) {
+func convertFrameBound(pr *nanopass.ParseResult, ctx *grammar1.WinFrameBoundContext) (fb FrameBound) {
 	hasCurrent := false
 	hasUnbounded := false
 	hasPreceding := false
@@ -795,17 +795,17 @@ func convertFrameBound(pr *nanopass.ParseResult, ctx *grammar.WinFrameBoundConte
 		child := ctx.GetChild(i)
 		if term, ok := child.(*antlr.TerminalNodeImpl); ok {
 			switch term.GetSymbol().GetTokenType() {
-			case grammar.ClickHouseLexerCURRENT:
+			case grammar1.ClickHouseLexerCURRENT:
 				hasCurrent = true
-			case grammar.ClickHouseLexerUNBOUNDED:
+			case grammar1.ClickHouseLexerUNBOUNDED:
 				hasUnbounded = true
-			case grammar.ClickHouseLexerPRECEDING:
+			case grammar1.ClickHouseLexerPRECEDING:
 				hasPreceding = true
-			case grammar.ClickHouseLexerFOLLOWING:
+			case grammar1.ClickHouseLexerFOLLOWING:
 				hasFollowing = true
 			}
 		}
-		if nl, ok := child.(*grammar.NumberLiteralContext); ok {
+		if nl, ok := child.(*grammar1.NumberLiteralContext); ok {
 			numText = nanopass.NodeText(pr, nl)
 		}
 	}
@@ -829,9 +829,9 @@ func convertFrameBound(pr *nanopass.ParseResult, ctx *grammar.WinFrameBoundConte
 
 // --- FROM / JOIN ---
 
-func convertFromClause(pr *nanopass.ParseResult, ctx *grammar.FromClauseContext) (je JoinExpr, err error) {
+func convertFromClause(pr *nanopass.ParseResult, ctx *grammar1.FromClauseContext) (je JoinExpr, err error) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if jec, ok := ctx.GetChild(i).(grammar.IJoinExprContext); ok {
+		if jec, ok := ctx.GetChild(i).(grammar1.IJoinExprContext); ok {
 			return convertJoinExpr(pr, jec.(antlr.ParserRuleContext))
 		}
 	}
@@ -841,16 +841,16 @@ func convertFromClause(pr *nanopass.ParseResult, ctx *grammar.FromClauseContext)
 
 func convertJoinExpr(pr *nanopass.ParseResult, ctx antlr.ParserRuleContext) (je JoinExpr, err error) {
 	switch c := ctx.(type) {
-	case *grammar.JoinExprTableContext:
+	case *grammar1.JoinExprTableContext:
 		return convertJoinExprTable(pr, c)
-	case *grammar.JoinExprOpContext:
+	case *grammar1.JoinExprOpContext:
 		return convertJoinExprOp(pr, c)
-	case *grammar.JoinExprCrossOpContext:
+	case *grammar1.JoinExprCrossOpContext:
 		return convertJoinExprCrossOp(pr, c)
-	case *grammar.JoinExprParensContext:
+	case *grammar1.JoinExprParensContext:
 		// Unwrap parenthesized joinExpr
 		for i := 0; i < c.GetChildCount(); i++ {
-			if inner, ok := c.GetChild(i).(grammar.IJoinExprContext); ok {
+			if inner, ok := c.GetChild(i).(grammar1.IJoinExprContext); ok {
 				return convertJoinExpr(pr, inner.(antlr.ParserRuleContext))
 			}
 		}
@@ -861,24 +861,24 @@ func convertJoinExpr(pr *nanopass.ParseResult, ctx antlr.ParserRuleContext) (je 
 	return
 }
 
-func convertJoinExprTable(pr *nanopass.ParseResult, ctx *grammar.JoinExprTableContext) (je JoinExpr, err error) {
+func convertJoinExprTable(pr *nanopass.ParseResult, ctx *grammar1.JoinExprTableContext) (je JoinExpr, err error) {
 	je.Kind = JoinExprTable
 	td := &JoinTableData{}
 
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
-		if te, ok := child.(grammar.ITableExprContext); ok {
+		if te, ok := child.(grammar1.ITableExprContext); ok {
 			err = convertTableExpr(pr, te.(antlr.ParserRuleContext), td)
 			if err != nil {
 				return
 			}
 		}
 		if term, ok := child.(*antlr.TerminalNodeImpl); ok {
-			if term.GetSymbol().GetTokenType() == grammar.ClickHouseLexerFINAL {
+			if term.GetSymbol().GetTokenType() == grammar1.ClickHouseLexerFINAL {
 				td.Final = true
 			}
 		}
-		if sc, ok := child.(*grammar.SampleClauseContext); ok {
+		if sc, ok := child.(*grammar1.SampleClauseContext); ok {
 			sample, sErr := convertSampleClause(pr, sc)
 			if sErr != nil {
 				err = sErr
@@ -894,27 +894,27 @@ func convertJoinExprTable(pr *nanopass.ParseResult, ctx *grammar.JoinExprTableCo
 
 func convertTableExpr(pr *nanopass.ParseResult, ctx antlr.ParserRuleContext, td *JoinTableData) (err error) {
 	switch c := ctx.(type) {
-	case *grammar.TableExprIdentifierContext:
+	case *grammar1.TableExprIdentifierContext:
 		td.TableKind = "ref"
 		for i := 0; i < c.GetChildCount(); i++ {
-			if ti, ok := c.GetChild(i).(*grammar.TableIdentifierContext); ok {
+			if ti, ok := c.GetChild(i).(*grammar1.TableIdentifierContext); ok {
 				td.Database, td.Table = extractTableIdentifier(ti)
 			}
 		}
-	case *grammar.TableExprFunctionContext:
+	case *grammar1.TableExprFunctionContext:
 		td.TableKind = "func"
 		for i := 0; i < c.GetChildCount(); i++ {
-			if tfe, ok := c.GetChild(i).(*grammar.TableFunctionExprContext); ok {
+			if tfe, ok := c.GetChild(i).(*grammar1.TableFunctionExprContext); ok {
 				td.FuncName, td.FuncArgs, err = convertTableFunctionExpr(pr, tfe)
 				if err != nil {
 					return
 				}
 			}
 		}
-	case *grammar.TableExprSubqueryContext:
+	case *grammar1.TableExprSubqueryContext:
 		td.TableKind = "subquery"
 		for i := 0; i < c.GetChildCount(); i++ {
-			if sus, ok := c.GetChild(i).(*grammar.SelectUnionStmtContext); ok {
+			if sus, ok := c.GetChild(i).(*grammar1.SelectUnionStmtContext); ok {
 				su, suErr := convertSelectUnion(pr, sus)
 				if suErr != nil {
 					err = suErr
@@ -923,20 +923,20 @@ func convertTableExpr(pr *nanopass.ParseResult, ctx antlr.ParserRuleContext, td 
 				td.Subquery = &su
 			}
 		}
-	case *grammar.TableExprAliasContext:
+	case *grammar1.TableExprAliasContext:
 		// Recurse into inner tableExpr, then extract alias
 		for i := 0; i < c.GetChildCount(); i++ {
 			child := c.GetChild(i)
-			if innerTE, ok := child.(grammar.ITableExprContext); ok {
+			if innerTE, ok := child.(grammar1.ITableExprContext); ok {
 				err = convertTableExpr(pr, innerTE.(antlr.ParserRuleContext), td)
 				if err != nil {
 					return
 				}
 			}
-			if ident, ok := child.(*grammar.IdentifierContext); ok {
+			if ident, ok := child.(*grammar1.IdentifierContext); ok {
 				td.Alias = identText(ident)
 			}
-			if al, ok := child.(*grammar.AliasContext); ok {
+			if al, ok := child.(*grammar1.AliasContext); ok {
 				td.Alias = aliasText(al)
 			}
 		}
@@ -946,15 +946,15 @@ func convertTableExpr(pr *nanopass.ParseResult, ctx antlr.ParserRuleContext, td 
 	return
 }
 
-func convertTableFunctionExpr(pr *nanopass.ParseResult, ctx *grammar.TableFunctionExprContext) (name string, args []Expr, err error) {
+func convertTableFunctionExpr(pr *nanopass.ParseResult, ctx *grammar1.TableFunctionExprContext) (name string, args []Expr, err error) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
-		if ident, ok := child.(*grammar.IdentifierContext); ok {
+		if ident, ok := child.(*grammar1.IdentifierContext); ok {
 			name = identText(ident)
 		}
-		if tal, ok := child.(*grammar.TableArgListContext); ok {
+		if tal, ok := child.(*grammar1.TableArgListContext); ok {
 			for j := 0; j < tal.GetChildCount(); j++ {
-				if tae, ok := tal.GetChild(j).(*grammar.TableArgExprContext); ok {
+				if tae, ok := tal.GetChild(j).(*grammar1.TableArgExprContext); ok {
 					// Table args can be identifiers, functions, or literals
 					arg := Expr{Kind: KindLiteral, Literal: &LiteralData{SQL: nanopass.NodeText(pr, tae)}}
 					args = append(args, arg)
@@ -965,28 +965,28 @@ func convertTableFunctionExpr(pr *nanopass.ParseResult, ctx *grammar.TableFuncti
 	return
 }
 
-func convertJoinExprOp(pr *nanopass.ParseResult, ctx *grammar.JoinExprOpContext) (je JoinExpr, err error) {
+func convertJoinExprOp(pr *nanopass.ParseResult, ctx *grammar1.JoinExprOpContext) (je JoinExpr, err error) {
 	je.Kind = JoinExprOp
 	op := &JoinOpData{}
 
 	joinExprs := make([]antlr.ParserRuleContext, 0, 2)
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
-		if jec, ok := child.(grammar.IJoinExprContext); ok {
+		if jec, ok := child.(grammar1.IJoinExprContext); ok {
 			joinExprs = append(joinExprs, jec.(antlr.ParserRuleContext))
 		}
 		if term, ok := child.(*antlr.TerminalNodeImpl); ok {
 			switch term.GetSymbol().GetTokenType() {
-			case grammar.ClickHouseLexerGLOBAL:
+			case grammar1.ClickHouseLexerGLOBAL:
 				op.Global = true
-			case grammar.ClickHouseLexerLOCAL:
+			case grammar1.ClickHouseLexerLOCAL:
 				op.Local = true
 			}
 		}
-		if jo, ok := child.(grammar.IJoinOpContext); ok {
+		if jo, ok := child.(grammar1.IJoinOpContext); ok {
 			op.Kind, op.Strictness = extractJoinOp(jo.(antlr.ParserRuleContext))
 		}
-		if jcc, ok := child.(*grammar.JoinConstraintClauseContext); ok {
+		if jcc, ok := child.(*grammar1.JoinConstraintClauseContext); ok {
 			op.Constraint, err = convertJoinConstraint(pr, jcc)
 			if err != nil {
 				return
@@ -1016,23 +1016,23 @@ func convertJoinExprOp(pr *nanopass.ParseResult, ctx *grammar.JoinExprOpContext)
 	return
 }
 
-func convertJoinExprCrossOp(pr *nanopass.ParseResult, ctx *grammar.JoinExprCrossOpContext) (je JoinExpr, err error) {
+func convertJoinExprCrossOp(pr *nanopass.ParseResult, ctx *grammar1.JoinExprCrossOpContext) (je JoinExpr, err error) {
 	je.Kind = JoinExprCross
 	cross := &JoinCrossData{}
 
 	joinExprs := make([]antlr.ParserRuleContext, 0, 2)
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
-		if jec, ok := child.(grammar.IJoinExprContext); ok {
+		if jec, ok := child.(grammar1.IJoinExprContext); ok {
 			joinExprs = append(joinExprs, jec.(antlr.ParserRuleContext))
 		}
-		if joc, ok := child.(*grammar.JoinOpCrossContext); ok {
+		if joc, ok := child.(*grammar1.JoinOpCrossContext); ok {
 			for j := 0; j < joc.GetChildCount(); j++ {
 				if term, ok := joc.GetChild(j).(*antlr.TerminalNodeImpl); ok {
 					switch term.GetSymbol().GetTokenType() {
-					case grammar.ClickHouseLexerGLOBAL:
+					case grammar1.ClickHouseLexerGLOBAL:
 						cross.Global = true
-					case grammar.ClickHouseLexerLOCAL:
+					case grammar1.ClickHouseLexerLOCAL:
 						cross.Local = true
 					}
 				}
@@ -1062,23 +1062,23 @@ func extractJoinOp(ctx antlr.ParserRuleContext) (kind, strictness string) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		if term, ok := ctx.GetChild(i).(*antlr.TerminalNodeImpl); ok {
 			switch term.GetSymbol().GetTokenType() {
-			case grammar.ClickHouseLexerINNER:
+			case grammar1.ClickHouseLexerINNER:
 				kind = "INNER"
-			case grammar.ClickHouseLexerLEFT:
+			case grammar1.ClickHouseLexerLEFT:
 				kind = "LEFT"
-			case grammar.ClickHouseLexerRIGHT:
+			case grammar1.ClickHouseLexerRIGHT:
 				kind = "RIGHT"
-			case grammar.ClickHouseLexerFULL:
+			case grammar1.ClickHouseLexerFULL:
 				kind = "FULL"
-			case grammar.ClickHouseLexerALL:
+			case grammar1.ClickHouseLexerALL:
 				strictness = "ALL"
-			case grammar.ClickHouseLexerANY:
+			case grammar1.ClickHouseLexerANY:
 				strictness = "ANY"
-			case grammar.ClickHouseLexerSEMI:
+			case grammar1.ClickHouseLexerSEMI:
 				strictness = "SEMI"
-			case grammar.ClickHouseLexerANTI:
+			case grammar1.ClickHouseLexerANTI:
 				strictness = "ANTI"
-			case grammar.ClickHouseLexerASOF:
+			case grammar1.ClickHouseLexerASOF:
 				strictness = "ASOF"
 			}
 		}
@@ -1086,18 +1086,18 @@ func extractJoinOp(ctx antlr.ParserRuleContext) (kind, strictness string) {
 	return
 }
 
-func convertJoinConstraint(pr *nanopass.ParseResult, ctx *grammar.JoinConstraintClauseContext) (jc JoinConstraint, err error) {
+func convertJoinConstraint(pr *nanopass.ParseResult, ctx *grammar1.JoinConstraintClauseContext) (jc JoinConstraint, err error) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
 		if term, ok := child.(*antlr.TerminalNodeImpl); ok {
 			switch term.GetSymbol().GetTokenType() {
-			case grammar.ClickHouseLexerON:
+			case grammar1.ClickHouseLexerON:
 				jc.Kind = "ON"
-			case grammar.ClickHouseLexerUSING:
+			case grammar1.ClickHouseLexerUSING:
 				jc.Kind = "USING"
 			}
 		}
-		if cel, ok := child.(*grammar.ColumnExprListContext); ok {
+		if cel, ok := child.(*grammar1.ColumnExprListContext); ok {
 			jc.Exprs, err = convertColumnExprList(pr, cel)
 			if err != nil {
 				return
@@ -1107,10 +1107,10 @@ func convertJoinConstraint(pr *nanopass.ParseResult, ctx *grammar.JoinConstraint
 	return
 }
 
-func convertSampleClause(pr *nanopass.ParseResult, ctx *grammar.SampleClauseContext) (sc SampleClause, err error) {
+func convertSampleClause(pr *nanopass.ParseResult, ctx *grammar1.SampleClauseContext) (sc SampleClause, err error) {
 	ratios := make([]RatioExpr, 0, 2)
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if re, ok := ctx.GetChild(i).(*grammar.RatioExprContext); ok {
+		if re, ok := ctx.GetChild(i).(*grammar1.RatioExprContext); ok {
 			ratios = append(ratios, convertRatioExpr(pr, re))
 		}
 	}
@@ -1123,10 +1123,10 @@ func convertSampleClause(pr *nanopass.ParseResult, ctx *grammar.SampleClauseCont
 	return
 }
 
-func convertRatioExpr(pr *nanopass.ParseResult, ctx *grammar.RatioExprContext) (re RatioExpr) {
+func convertRatioExpr(pr *nanopass.ParseResult, ctx *grammar1.RatioExprContext) (re RatioExpr) {
 	nums := make([]string, 0, 2)
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if nl, ok := ctx.GetChild(i).(*grammar.NumberLiteralContext); ok {
+		if nl, ok := ctx.GetChild(i).(*grammar1.NumberLiteralContext); ok {
 			nums = append(nums, nanopass.NodeText(pr, nl))
 		}
 	}
@@ -1141,13 +1141,13 @@ func convertRatioExpr(pr *nanopass.ParseResult, ctx *grammar.RatioExprContext) (
 
 // --- Column expression list ---
 
-func convertColumnExprList(pr *nanopass.ParseResult, ctx *grammar.ColumnExprListContext) (exprs []Expr, err error) {
+func convertColumnExprList(pr *nanopass.ParseResult, ctx *grammar1.ColumnExprListContext) (exprs []Expr, err error) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
 		switch c := child.(type) {
-		case *grammar.ColumnsExprColumnContext:
+		case *grammar1.ColumnsExprColumnContext:
 			for j := 0; j < c.GetChildCount(); j++ {
-				if ce, ok := c.GetChild(j).(grammar.IColumnExprContext); ok {
+				if ce, ok := c.GetChild(j).(grammar1.IColumnExprContext); ok {
 					expr, exprErr := convertColumnExpr(pr, ce.(antlr.ParserRuleContext))
 					if exprErr != nil {
 						err = exprErr
@@ -1156,14 +1156,14 @@ func convertColumnExprList(pr *nanopass.ParseResult, ctx *grammar.ColumnExprList
 					exprs = append(exprs, expr)
 				}
 			}
-		case *grammar.ColumnsExprAsteriskContext:
+		case *grammar1.ColumnsExprAsteriskContext:
 			exprs = append(exprs, Expr{
 				Kind:     KindAsterisk,
 				Asterisk: &AsteriskData{Table: extractAsteriskTable(c)},
 			})
-		case *grammar.ColumnsExprSubqueryContext:
+		case *grammar1.ColumnsExprSubqueryContext:
 			for j := 0; j < c.GetChildCount(); j++ {
-				if sus, ok := c.GetChild(j).(*grammar.SelectUnionStmtContext); ok {
+				if sus, ok := c.GetChild(j).(*grammar1.SelectUnionStmtContext); ok {
 					su, suErr := convertSelectUnion(pr, sus)
 					if suErr != nil {
 						err = suErr
@@ -1182,11 +1182,11 @@ func convertColumnExprList(pr *nanopass.ParseResult, ctx *grammar.ColumnExprList
 
 // --- Helpers ---
 
-func identText(ctx *grammar.IdentifierContext) string {
+func identText(ctx *grammar1.IdentifierContext) string {
 	return normalizeIdentifier(ctx.GetText())
 }
 
-func aliasText(ctx *grammar.AliasContext) string {
+func aliasText(ctx *grammar1.AliasContext) string {
 	return normalizeIdentifier(ctx.GetText())
 }
 
@@ -1211,22 +1211,22 @@ func unquoteString(s string) string {
 	return s
 }
 
-func extractTableIdentifier(ctx *grammar.TableIdentifierContext) (database, table string) {
+func extractTableIdentifier(ctx *grammar1.TableIdentifierContext) (database, table string) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
-		if db, ok := child.(*grammar.DatabaseIdentifierContext); ok {
+		if db, ok := child.(*grammar1.DatabaseIdentifierContext); ok {
 			database = identTextFromNode(db)
 		}
-		if ident, ok := child.(*grammar.IdentifierContext); ok {
+		if ident, ok := child.(*grammar1.IdentifierContext); ok {
 			table = identText(ident)
 		}
 	}
 	return
 }
 
-func extractAsteriskTable(ctx *grammar.ColumnsExprAsteriskContext) string {
+func extractAsteriskTable(ctx *grammar1.ColumnsExprAsteriskContext) string {
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if ti, ok := ctx.GetChild(i).(*grammar.TableIdentifierContext); ok {
+		if ti, ok := ctx.GetChild(i).(*grammar1.TableIdentifierContext); ok {
 			_, table := extractTableIdentifier(ti)
 			return table
 		}
@@ -1234,10 +1234,10 @@ func extractAsteriskTable(ctx *grammar.ColumnsExprAsteriskContext) string {
 	return ""
 }
 
-func extractDynamicPattern(ctx *grammar.DynamicColumnSelectionContext) string {
+func extractDynamicPattern(ctx *grammar1.DynamicColumnSelectionContext) string {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		if term, ok := ctx.GetChild(i).(*antlr.TerminalNodeImpl); ok {
-			if term.GetSymbol().GetTokenType() == grammar.ClickHouseLexerSTRING_LITERAL {
+			if term.GetSymbol().GetTokenType() == grammar1.ClickHouseLexerSTRING_LITERAL {
 				return unquoteString(term.GetText())
 			}
 		}

@@ -4,7 +4,7 @@ package passes
 
 import (
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
@@ -46,7 +46,7 @@ func qualifyTablesInScope(rw *antlr.TokenStreamRewriter, scope *nanopass.SelectS
 		if ts.Database != "" {
 			continue
 		}
-		tid, ok := ts.Node.(*grammar.TableIdentifierContext)
+		tid, ok := ts.Node.(*grammar1.TableIdentifierContext)
 		if !ok {
 			continue
 		}

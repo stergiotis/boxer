@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
@@ -62,7 +62,7 @@ func CanonicalizeConstructors(form ConstructorFormE) nanopass.Pass {
 
 func canonicalizeToLiteral(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter) {
 	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-		funcExpr, ok := ctx.(*grammar.ColumnExprFunctionContext)
+		funcExpr, ok := ctx.(*grammar1.ColumnExprFunctionContext)
 		if !ok {
 			return true
 		}
@@ -86,7 +86,7 @@ func canonicalizeToLiteral(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewrit
 	})
 }
 
-func rewriteTupleToLiteral(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, funcExpr *grammar.ColumnExprFunctionContext) {
+func rewriteTupleToLiteral(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, funcExpr *grammar1.ColumnExprFunctionContext) {
 	argList := funcExpr.ColumnArgList()
 	if argList == nil {
 		nanopass.ReplaceNode(rw, funcExpr, "()")
@@ -96,7 +96,7 @@ func rewriteTupleToLiteral(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewrit
 	nanopass.ReplaceNode(rw, funcExpr, "("+argsText+")")
 }
 
-func rewriteArrayToLiteral(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, funcExpr *grammar.ColumnExprFunctionContext) {
+func rewriteArrayToLiteral(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, funcExpr *grammar1.ColumnExprFunctionContext) {
 	argList := funcExpr.ColumnArgList()
 	if argList == nil {
 		nanopass.ReplaceNode(rw, funcExpr, "[]")
@@ -106,7 +106,7 @@ func rewriteArrayToLiteral(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewrit
 	nanopass.ReplaceNode(rw, funcExpr, "["+argsText+"]")
 }
 
-func rewriteTupleElementToAccess(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, funcExpr *grammar.ColumnExprFunctionContext) {
+func rewriteTupleElementToAccess(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, funcExpr *grammar1.ColumnExprFunctionContext) {
 	args := extractFunctionArgs(pr, funcExpr)
 	if len(args) != 2 {
 		return // not a simple tupleElement(expr, index)
@@ -114,7 +114,7 @@ func rewriteTupleElementToAccess(pr *nanopass.ParseResult, rw *antlr.TokenStream
 	nanopass.ReplaceNode(rw, funcExpr, args[0]+"."+args[1])
 }
 
-func rewriteArrayElementToAccess(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, funcExpr *grammar.ColumnExprFunctionContext) {
+func rewriteArrayElementToAccess(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, funcExpr *grammar1.ColumnExprFunctionContext) {
 	args := extractFunctionArgs(pr, funcExpr)
 	if len(args) != 2 {
 		return // not a simple arrayElement(expr, index)
@@ -127,16 +127,16 @@ func rewriteArrayElementToAccess(pr *nanopass.ParseResult, rw *antlr.TokenStream
 func canonicalizeToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter) {
 	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
 		switch c := ctx.(type) {
-		case *grammar.ColumnExprTupleContext:
+		case *grammar1.ColumnExprTupleContext:
 			rewriteTupleToFunction(pr, rw, c)
 			return false
-		case *grammar.ColumnExprArrayContext:
+		case *grammar1.ColumnExprArrayContext:
 			rewriteArrayToFunction(pr, rw, c)
 			return false
-		case *grammar.ColumnExprTupleAccessContext:
+		case *grammar1.ColumnExprTupleAccessContext:
 			rewriteTupleAccessToFunction(pr, rw, c)
 			return false
-		case *grammar.ColumnExprArrayAccessContext:
+		case *grammar1.ColumnExprArrayAccessContext:
 			rewriteArrayAccessToFunction(pr, rw, c)
 			return false
 		}
@@ -144,12 +144,12 @@ func canonicalizeToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewri
 	})
 }
 
-func rewriteTupleToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, ctx *grammar.ColumnExprTupleContext) {
+func rewriteTupleToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, ctx *grammar1.ColumnExprTupleContext) {
 	// ColumnExprTuple: ( ColumnExprList )
 	// Extract the inner expression list text
 	var innerText string
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if list, ok := ctx.GetChild(i).(*grammar.ColumnExprListContext); ok {
+		if list, ok := ctx.GetChild(i).(*grammar1.ColumnExprListContext); ok {
 			innerText = nanopass.NodeText(pr, list)
 			break
 		}
@@ -157,11 +157,11 @@ func rewriteTupleToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewri
 	nanopass.ReplaceNode(rw, ctx, "tuple("+innerText+")")
 }
 
-func rewriteArrayToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, ctx *grammar.ColumnExprArrayContext) {
+func rewriteArrayToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, ctx *grammar1.ColumnExprArrayContext) {
 	// ColumnExprArray: [ ColumnExprList ]
 	var innerText string
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if list, ok := ctx.GetChild(i).(*grammar.ColumnExprListContext); ok {
+		if list, ok := ctx.GetChild(i).(*grammar1.ColumnExprListContext); ok {
 			innerText = nanopass.NodeText(pr, list)
 			break
 		}
@@ -169,7 +169,7 @@ func rewriteArrayToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewri
 	nanopass.ReplaceNode(rw, ctx, "array("+innerText+")")
 }
 
-func rewriteTupleAccessToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, ctx *grammar.ColumnExprTupleAccessContext) {
+func rewriteTupleAccessToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, ctx *grammar1.ColumnExprTupleAccessContext) {
 	// ColumnExprTupleAccess: columnExpr . DECIMAL_LITERAL
 	// Children: ColumnExprIdentifier, ".", "1"
 	if ctx.GetChildCount() < 3 {
@@ -195,7 +195,7 @@ func rewriteTupleAccessToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStrea
 	nanopass.ReplaceNode(rw, ctx, "tupleElement("+exprText+", "+indexText+")")
 }
 
-func rewriteArrayAccessToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, ctx *grammar.ColumnExprArrayAccessContext) {
+func rewriteArrayAccessToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, ctx *grammar1.ColumnExprArrayAccessContext) {
 	// ColumnExprArrayAccess: columnExpr [ columnExpr ]
 	// Children: ColumnExprIdentifier, "[", ColumnExprLiteral, "]"
 	if ctx.GetChildCount() < 4 {
@@ -224,16 +224,16 @@ func rewriteArrayAccessToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStrea
 // --- Helpers ---
 
 // extractFunctionArgs extracts the text of each argument from a ColumnExprFunctionContext.
-func extractFunctionArgs(pr *nanopass.ParseResult, funcExpr *grammar.ColumnExprFunctionContext) (args []string) {
+func extractFunctionArgs(pr *nanopass.ParseResult, funcExpr *grammar1.ColumnExprFunctionContext) (args []string) {
 	argList := funcExpr.ColumnArgList()
 	if argList == nil {
 		return
 	}
-	argListCtx := argList.(*grammar.ColumnArgListContext)
+	argListCtx := argList.(*grammar1.ColumnArgListContext)
 
 	for i := 0; i < argListCtx.GetChildCount(); i++ {
 		child := argListCtx.GetChild(i)
-		argExpr, ok := child.(*grammar.ColumnArgExprContext)
+		argExpr, ok := child.(*grammar1.ColumnArgExprContext)
 		if !ok {
 			continue // skip commas
 		}
@@ -247,10 +247,10 @@ func extractFunctionArgs(pr *nanopass.ParseResult, funcExpr *grammar.ColumnExprF
 func canonicalizeSettingsToLiteral(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter) {
 	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
 		switch c := ctx.(type) {
-		case *grammar.SettingFunctionContext:
+		case *grammar1.SettingFunctionContext:
 			rewriteSettingFunctionToLiteral(pr, rw, c)
 			return false
-		case *grammar.SettingFunctionEmptyContext:
+		case *grammar1.SettingFunctionEmptyContext:
 			rewriteSettingFunctionEmptyToLiteral(pr, rw, c)
 			return false
 		}
@@ -261,13 +261,13 @@ func canonicalizeSettingsToLiteral(pr *nanopass.ParseResult, rw *antlr.TokenStre
 func canonicalizeSettingsToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter) {
 	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
 		switch c := ctx.(type) {
-		case *grammar.SettingArrayContext:
+		case *grammar1.SettingArrayContext:
 			rewriteSettingArrayToFunction(pr, rw, c)
 			return false
-		case *grammar.SettingTupleContext:
+		case *grammar1.SettingTupleContext:
 			rewriteSettingTupleToFunction(pr, rw, c)
 			return false
-		case *grammar.SettingEmptyArrayContext:
+		case *grammar1.SettingEmptyArrayContext:
 			nanopass.ReplaceNode(rw, c, "array()")
 			return false
 		}
@@ -275,11 +275,11 @@ func canonicalizeSettingsToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStr
 	})
 }
 
-func rewriteSettingFunctionToLiteral(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, ctx *grammar.SettingFunctionContext) {
+func rewriteSettingFunctionToLiteral(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, ctx *grammar1.SettingFunctionContext) {
 	// Get the function name from the first IdentifierContext child
 	funcName := ""
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if ident, ok := ctx.GetChild(i).(*grammar.IdentifierContext); ok {
+		if ident, ok := ctx.GetChild(i).(*grammar1.IdentifierContext); ok {
 			funcName = strings.ToLower(ident.GetText())
 			break
 		}
@@ -306,10 +306,10 @@ func rewriteSettingFunctionToLiteral(pr *nanopass.ParseResult, rw *antlr.TokenSt
 	}
 }
 
-func rewriteSettingFunctionEmptyToLiteral(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, ctx *grammar.SettingFunctionEmptyContext) {
+func rewriteSettingFunctionEmptyToLiteral(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, ctx *grammar1.SettingFunctionEmptyContext) {
 	funcName := ""
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if ident, ok := ctx.GetChild(i).(*grammar.IdentifierContext); ok {
+		if ident, ok := ctx.GetChild(i).(*grammar1.IdentifierContext); ok {
 			funcName = strings.ToLower(ident.GetText())
 			break
 		}
@@ -322,7 +322,7 @@ func rewriteSettingFunctionEmptyToLiteral(pr *nanopass.ParseResult, rw *antlr.To
 	// tuple() with 0 args is not valid as a literal — leave as-is
 }
 
-func rewriteSettingArrayToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, ctx *grammar.SettingArrayContext) {
+func rewriteSettingArrayToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, ctx *grammar1.SettingArrayContext) {
 	// Collect inner setting values (skip brackets and commas)
 	var values []string
 	for i := 0; i < ctx.GetChildCount(); i++ {
@@ -337,7 +337,7 @@ func rewriteSettingArrayToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStre
 	nanopass.ReplaceNode(rw, ctx, "array("+valuesText+")")
 }
 
-func rewriteSettingTupleToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, ctx *grammar.SettingTupleContext) {
+func rewriteSettingTupleToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, ctx *grammar1.SettingTupleContext) {
 	var values []string
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
@@ -354,12 +354,12 @@ func rewriteSettingTupleToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStre
 // isSettingValueNode returns true if the node is a settingValue alternative.
 func isSettingValueNode(ctx antlr.ParserRuleContext) bool {
 	switch ctx.(type) {
-	case *grammar.SettingLiteralContext,
-		*grammar.SettingArrayContext,
-		*grammar.SettingTupleContext,
-		*grammar.SettingEmptyArrayContext,
-		*grammar.SettingFunctionContext,
-		*grammar.SettingFunctionEmptyContext:
+	case *grammar1.SettingLiteralContext,
+		*grammar1.SettingArrayContext,
+		*grammar1.SettingTupleContext,
+		*grammar1.SettingEmptyArrayContext,
+		*grammar1.SettingFunctionContext,
+		*grammar1.SettingFunctionEmptyContext:
 		return true
 	}
 	return false

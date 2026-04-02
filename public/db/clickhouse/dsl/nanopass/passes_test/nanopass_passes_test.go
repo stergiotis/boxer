@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stretchr/testify/require"
 )
@@ -32,7 +32,7 @@ func TestRewriterAllChannels(t *testing.T) {
 	t.Skip("diagnostic only")
 	sql := "SELECT a FROM t"
 	input := antlr.NewInputStream(sql)
-	lexer := grammar.NewClickHouseLexer(input)
+	lexer := grammar1.NewClickHouseLexer(input)
 	stream := antlr.NewCommonTokenStream(lexer, -1)
 	stream.Fill()
 
@@ -50,14 +50,14 @@ func TestDebugNotParens(t *testing.T) {
 
 	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
 		switch c := ctx.(type) {
-		case *grammar.ColumnExprParensContext:
+		case *grammar1.ColumnExprParensContext:
 			t.Logf("Found ColumnExprParens: %s", c.GetText())
-		case *grammar.ColumnExprNotContext:
+		case *grammar1.ColumnExprNotContext:
 			t.Logf("Found ColumnExprNot: %s", c.GetText())
-		case *grammar.ColumnExprFunctionContext:
+		case *grammar1.ColumnExprFunctionContext:
 			t.Logf("Found ColumnExprFunction: %s", c.GetText())
 			t.Logf("  Identifier: %s", c.Identifier().GetText())
-		case *grammar.ColumnExprTupleContext:
+		case *grammar1.ColumnExprTupleContext:
 			t.Logf("Found ColumnExprTuple: %s", c.GetText())
 		}
 		return true
@@ -78,11 +78,11 @@ func TestDebugNotExpr(t *testing.T) {
 		require.NoError(t, err)
 		nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
 			switch c := ctx.(type) {
-			case *grammar.ColumnExprNotContext:
+			case *grammar1.ColumnExprNotContext:
 				t.Logf("  Found ColumnExprNot: %s", c.GetText())
-			case *grammar.ColumnExprFunctionContext:
+			case *grammar1.ColumnExprFunctionContext:
 				t.Logf("  Found ColumnExprFunction: %s (ident=%s)", c.GetText(), c.Identifier().GetText())
-			case *grammar.ColumnExprParensContext:
+			case *grammar1.ColumnExprParensContext:
 				t.Logf("  Found ColumnExprParens: %s", c.GetText())
 			}
 			return true
@@ -102,11 +102,11 @@ func TestDebugNegateParens(t *testing.T) {
 		require.NoError(t, err)
 		nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
 			switch c := ctx.(type) {
-			case *grammar.ColumnExprNegateContext:
+			case *grammar1.ColumnExprNegateContext:
 				t.Logf("  Found ColumnExprNegate: %s", c.GetText())
-			case *grammar.ColumnExprParensContext:
+			case *grammar1.ColumnExprParensContext:
 				t.Logf("  Found ColumnExprParens: %s", c.GetText())
-			case *grammar.ColumnExprFunctionContext:
+			case *grammar1.ColumnExprFunctionContext:
 				t.Logf("  Found ColumnExprFunction: %s (ident=%s)", c.GetText(), c.Identifier().GetText())
 			}
 			return true
@@ -259,9 +259,9 @@ func TestDebugTryEvalDirect(t *testing.T) {
 	require.NoError(t, err)
 
 	// Find outer myAdd
-	var outerFunc *grammar.ColumnExprFunctionContext
+	var outerFunc *grammar1.ColumnExprFunctionContext
 	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-		funcExpr, ok := ctx.(*grammar.ColumnExprFunctionContext)
+		funcExpr, ok := ctx.(*grammar1.ColumnExprFunctionContext)
 		if !ok {
 			return true
 		}
@@ -309,10 +309,10 @@ func TestDebugFuncArgContext(t *testing.T) {
 	require.NoError(t, err)
 
 	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-		if lit, ok := ctx.(*grammar.ColumnExprLiteralContext); ok {
+		if lit, ok := ctx.(*grammar1.ColumnExprLiteralContext); ok {
 			parent := lit.GetParent()
 			t.Logf("literal=%q parent=%T", lit.GetText(), parent)
-			if argExpr, ok := parent.(*grammar.ColumnArgExprContext); ok {
+			if argExpr, ok := parent.(*grammar1.ColumnArgExprContext); ok {
 				argList := argExpr.GetParent()
 				t.Logf("  argList=%T childCount=%d", argList, argList.GetChildCount())
 				// Find index

@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -156,7 +156,7 @@ func (inst *FunctionEvaluator) walkAndEval(pr *nanopass.ParseResult, rw *antlr.T
 		return
 	}
 
-	if funcExpr, ok := ctx.(*grammar.ColumnExprFunctionContext); ok {
+	if funcExpr, ok := ctx.(*grammar1.ColumnExprFunctionContext); ok {
 		name := strings.ToLower(funcExpr.Identifier().GetText())
 		if _, found := inst.funcs[name]; found {
 			// Try full recursive evaluation
@@ -185,11 +185,11 @@ func (inst *FunctionEvaluator) walkAndEval(pr *nanopass.ParseResult, rw *antlr.T
 // Returns (value, true, nil) on success.
 // Returns (nil, false, nil) if not all arguments are evaluable.
 // Returns (nil, false, error) on evaluation failure.
-func (inst *FunctionEvaluator) TryEval(pr *nanopass.ParseResult, funcExpr *grammar.ColumnExprFunctionContext) (val any, evaluated bool, err error) {
+func (inst *FunctionEvaluator) TryEval(pr *nanopass.ParseResult, funcExpr *grammar1.ColumnExprFunctionContext) (val any, evaluated bool, err error) {
 	return inst.tryEval(pr, funcExpr)
 }
 
-func (inst *FunctionEvaluator) tryEval(pr *nanopass.ParseResult, funcExpr *grammar.ColumnExprFunctionContext) (val any, evaluated bool, err error) {
+func (inst *FunctionEvaluator) tryEval(pr *nanopass.ParseResult, funcExpr *grammar1.ColumnExprFunctionContext) (val any, evaluated bool, err error) {
 	name := strings.ToLower(funcExpr.Identifier().GetText())
 	fn, found := inst.funcs[name]
 	if !found {
@@ -212,7 +212,7 @@ func (inst *FunctionEvaluator) tryEval(pr *nanopass.ParseResult, funcExpr *gramm
 
 // extractEvalArgs extracts arguments, recursively evaluating nested function calls.
 // Returns (args, true) if all args are evaluable, (nil, false) otherwise.
-func (inst *FunctionEvaluator) extractEvalArgs(pr *nanopass.ParseResult, funcExpr *grammar.ColumnExprFunctionContext, useAny bool) (args []any, ok bool) {
+func (inst *FunctionEvaluator) extractEvalArgs(pr *nanopass.ParseResult, funcExpr *grammar1.ColumnExprFunctionContext, useAny bool) (args []any, ok bool) {
 	argList := funcExpr.ColumnArgList()
 	if argList == nil {
 		args = make([]any, 0)
@@ -220,12 +220,12 @@ func (inst *FunctionEvaluator) extractEvalArgs(pr *nanopass.ParseResult, funcExp
 		return
 	}
 
-	argListCtx := argList.(*grammar.ColumnArgListContext)
+	argListCtx := argList.(*grammar1.ColumnArgListContext)
 	args = make([]any, 0, argListCtx.GetChildCount())
 
 	for i := 0; i < argListCtx.GetChildCount(); i++ {
 		child := argListCtx.GetChild(i)
-		argExpr, isArg := child.(*grammar.ColumnArgExprContext)
+		argExpr, isArg := child.(*grammar1.ColumnArgExprContext)
 		if !isArg {
 			continue // skip commas
 		}
@@ -255,7 +255,7 @@ func (inst *FunctionEvaluator) extractEvalArgs(pr *nanopass.ParseResult, funcExp
 }
 
 // evalArgExpr evaluates a single argument expression.
-func (inst *FunctionEvaluator) evalArgExpr(pr *nanopass.ParseResult, argExpr *grammar.ColumnArgExprContext) (val any, ok bool) {
+func (inst *FunctionEvaluator) evalArgExpr(pr *nanopass.ParseResult, argExpr *grammar1.ColumnArgExprContext) (val any, ok bool) {
 	if argExpr.GetChildCount() == 0 {
 		return nil, false
 	}
@@ -271,17 +271,17 @@ func (inst *FunctionEvaluator) evalColumnExpr(pr *nanopass.ParseResult, node ant
 	}
 
 	switch c := ctx.(type) {
-	case *grammar.ColumnExprLiteralContext:
+	case *grammar1.ColumnExprLiteralContext:
 		return inst.evalLiteral(c)
 
-	case *grammar.ColumnExprFunctionContext:
+	case *grammar1.ColumnExprFunctionContext:
 		result, evaluated, evalErr := inst.tryEval(pr, c)
 		if evalErr != nil || !evaluated {
 			return nil, false
 		}
 		return result, true
 
-	case *grammar.ColumnExprNegateContext:
+	case *grammar1.ColumnExprNegateContext:
 		if c.GetChildCount() < 2 {
 			return nil, false
 		}
@@ -292,11 +292,11 @@ func (inst *FunctionEvaluator) evalColumnExpr(pr *nanopass.ParseResult, node ant
 		}
 		return negateValue(innerVal)
 
-	case *grammar.ColumnExprParensContext:
+	case *grammar1.ColumnExprParensContext:
 		for i := 0; i < c.GetChildCount(); i++ {
 			child := c.GetChild(i)
 			if prc, isPrc := child.(antlr.ParserRuleContext); isPrc {
-				if prc.GetRuleIndex() == grammar.ClickHouseParserRULE_columnExpr {
+				if prc.GetRuleIndex() == grammar1.ClickHouseParserGrammar1RULE_columnExpr {
 					return inst.evalColumnExpr(pr, prc)
 				}
 			}
@@ -308,9 +308,9 @@ func (inst *FunctionEvaluator) evalColumnExpr(pr *nanopass.ParseResult, node ant
 	}
 }
 
-func (inst *FunctionEvaluator) evalLiteral(ctx *grammar.ColumnExprLiteralContext) (val any, ok bool) {
+func (inst *FunctionEvaluator) evalLiteral(ctx *grammar1.ColumnExprLiteralContext) (val any, ok bool) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if lit, isLit := ctx.GetChild(i).(*grammar.LiteralContext); isLit {
+		if lit, isLit := ctx.GetChild(i).(*grammar1.LiteralContext); isLit {
 			v, err := DeserializeLiteralContext(lit)
 			if err != nil {
 				return nil, false

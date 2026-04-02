@@ -3,7 +3,7 @@
 package passes
 
 import (
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
@@ -21,8 +21,8 @@ func StripComments(sql string) (result string, err error) {
 		tok := pr.TokenStream.Get(i)
 		tokenType := tok.GetTokenType()
 		switch tokenType {
-		case grammar.ClickHouseLexerMULTI_LINE_COMMENT,
-			grammar.ClickHouseLexerSINGLE_LINE_COMMENT:
+		case grammar1.ClickHouseLexerMULTI_LINE_COMMENT,
+			grammar1.ClickHouseLexerSINGLE_LINE_COMMENT:
 			nanopass.ReplaceToken(rw, tok.GetTokenIndex(), " ")
 		}
 	}
