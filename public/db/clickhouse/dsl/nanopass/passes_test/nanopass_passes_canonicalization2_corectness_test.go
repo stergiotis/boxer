@@ -25,7 +25,11 @@ import (
 // This is the sequence that transforms Grammar1 SQL into Grammar2 SQL.
 func fullPipeline(sql string) (result string, err error) {
 	// Phase 1: Structural rewrites (operate on Grammar1 CST)
-	result, err = passes.CanonicalizeJoin(sql)
+	result, err = passes.CanonicalizeEquals(sql)
+	if err != nil {
+		return
+	}
+	result, err = passes.CanonicalizeJoin(result)
 	if err != nil {
 		return
 	}
@@ -59,7 +63,7 @@ var allNewPasses = []struct {
 	name string
 	pass nanopass.Pass
 }{
-	{"NormalizeJoin", passes.CanonicalizeJoin},
+	{"CanonicalizeJoin", passes.CanonicalizeJoin},
 	{"NormalizeTernary", passes.CanonicalizeTernary},
 	{"CanonicalizeCaseConditionals", passes.CanonicalizeCaseConditionals},
 	{"NormalizeSugar", passes.CanonicalizeSugar},
@@ -94,16 +98,6 @@ func TestNormalizeJoinExplicitPairs(t *testing.T) {
 		{
 			name:     "bare_join_unchanged",
 			input:    "SELECT a FROM t1 JOIN t2 ON t1.id = t2.id",
-			expected: "SELECT a FROM t1 JOIN t2 ON t1.id = t2.id",
-		},
-		{
-			name:     "double_eq_to_single",
-			input:    "SELECT a FROM t WHERE a == 1",
-			expected: "SELECT a FROM t WHERE a = 1",
-		},
-		{
-			name:     "double_eq_in_join",
-			input:    "SELECT a FROM t1 JOIN t2 ON t1.id == t2.id",
 			expected: "SELECT a FROM t1 JOIN t2 ON t1.id = t2.id",
 		},
 	}
@@ -616,6 +610,7 @@ func TestPipelineOrderIndependence(t *testing.T) {
 		name string
 		pass nanopass.Pass
 	}{
+		{"Equal", passes.CanonicalizeEquals},
 		{"Join", passes.CanonicalizeJoin},
 		{"Ternary", passes.CanonicalizeTernary},
 		{"Case", passes.CanonicalizeCaseConditionals},

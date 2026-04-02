@@ -9,7 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-// NormalizeJoin canonicalizes JOIN syntax:
+// CanonicalizeJoin canonicalizes JOIN syntax:
 //
 //  1. Join keyword order: strictness always precedes direction.
 //     LEFT ALL JOIN  → ALL LEFT JOIN
@@ -22,11 +22,7 @@ import (
 //
 //  4. USING without parens → USING with parens:
 //     USING col → USING (col)
-//
-//  5. Double-equals → single-equals:
-//     a == b → a = b
-func CanonicalizeJoin(
-	sql string) (result string, err error) {
+func CanonicalizeJoin(sql string) (result string, err error) {
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
 		err = eh.Errorf("CanonicalizeJoin: %w", err)
@@ -49,16 +45,6 @@ func CanonicalizeJoin(
 		}
 		return true
 	})
-
-	// Normalize == to =
-	{
-		for i := 0; i < pr.TokenStream.Size(); i++ {
-			tok := pr.TokenStream.Get(i)
-			if tok.GetTokenType() == grammar1.ClickHouseLexerEQ_DOUBLE {
-				nanopass.ReplaceToken(rw, tok.GetTokenIndex(), "=")
-			}
-		}
-	}
 
 	result = nanopass.GetText(rw)
 	return

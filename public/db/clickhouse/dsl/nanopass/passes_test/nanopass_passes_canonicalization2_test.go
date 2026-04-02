@@ -24,7 +24,7 @@ func mustProduceValidSQL(t *testing.T, pass func(string) (string, error), sql st
 }
 
 // ============================================================================
-// NormalizeJoin
+// CanonicalizeJoin
 // ============================================================================
 
 func TestNormalizeJoinKeywordOrder(t *testing.T) {
@@ -128,12 +128,6 @@ func TestNormalizeJoinUsingParensAlreadyPresent(t *testing.T) {
 	input := "SELECT a FROM t1 JOIN t2 USING (id)"
 	got := mustProduceValidSQL(t, passes.CanonicalizeJoin, input)
 	assert.Contains(t, got, "USING (id)")
-}
-
-func TestNormalizeJoinDoubleEquals(t *testing.T) {
-	got := mustProduceValidSQL(t, passes.CanonicalizeJoin, "SELECT a FROM t WHERE a == 1")
-	assert.Contains(t, got, "a = 1")
-	assert.NotContains(t, got, "==")
 }
 
 func TestNormalizeJoinIdempotent(t *testing.T) {
@@ -474,12 +468,11 @@ func TestFullPipelineProducesCanonicalSQL(t *testing.T) {
 		{"substring_sugar", "SELECT SUBSTRING('hello' FROM 1 FOR 3)"},
 		{"trim_sugar", "SELECT TRIM(BOTH ' ' FROM s) FROM t"},
 		{"ternary", "SELECT a ? b : c FROM t"},
-		{"double_equals", "SELECT a FROM t WHERE a == 1"},
 		{"join_order", "SELECT a FROM t1 LEFT ALL JOIN t2 ON t1.id = t2.id"},
 		{"join_outer", "SELECT a FROM t1 LEFT OUTER JOIN t2 ON t1.id = t2.id"},
 		{"using_no_parens", "SELECT a FROM t1 JOIN t2 USING id"},
 		{"comma_join", "SELECT a FROM t1, t2"},
-		{"combined", "SELECT CASE WHEN a == 1 THEN DATE '2024-01-01' ELSE TIMESTAMP '2024-06-01 00:00:00' END AS d FROM t1 LEFT OUTER ALL JOIN t2 USING id"},
+		{"combined", "SELECT CASE WHEN a = 1 THEN DATE '2024-01-01' ELSE TIMESTAMP '2024-06-01 00:00:00' END AS d FROM t1 LEFT OUTER ALL JOIN t2 USING id"},
 	}
 
 	pipeline := func(sql string) (string, error) {
