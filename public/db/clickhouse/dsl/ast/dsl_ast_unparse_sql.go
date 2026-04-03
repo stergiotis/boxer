@@ -236,15 +236,24 @@ func writeOrderItem(b *strings.Builder, item OrderItem) {
 func writeJoinExpr(b *strings.Builder, je JoinExpr) {
 	switch je.Kind {
 	case JoinExprTable:
-		writeJoinTable(b, je.Table)
+		if je.Table != nil {
+			writeJoinTable(b, je.Table)
+		}
 	case JoinExprOp:
-		writeJoinOp(b, je.Op)
+		if je.Op != nil {
+			writeJoinOp(b, je.Op)
+		}
 	case JoinExprCross:
-		writeJoinCross(b, je.Cross)
+		if je.Cross != nil {
+			writeJoinCross(b, je.Cross)
+		}
 	}
 }
 
 func writeJoinTable(b *strings.Builder, td *JoinTableData) {
+	if td == nil {
+		return
+	}
 	switch td.TableKind {
 	case TableKindRef:
 		if td.Database != "" {
@@ -259,7 +268,9 @@ func writeJoinTable(b *strings.Builder, td *JoinTableData) {
 		b.WriteByte(')')
 	case TableKindSubquery:
 		b.WriteByte('(')
-		writeSelectUnion(b, *td.Subquery)
+		if td.Subquery != nil {
+			writeSelectUnion(b, *td.Subquery)
+		}
 		b.WriteByte(')')
 	}
 	if td.Final {

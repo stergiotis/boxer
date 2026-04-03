@@ -465,7 +465,7 @@ func MarshalGoValueToSQLWithOptions(val any, opts MarshalOptions) (sql string, e
 		return
 	}
 	if c != "" {
-		sql = "CAST(" + sql + ",'" + c + "')"
+		sql = "CAST(" + sql + ", '" + c + "')"
 	}
 	return
 }

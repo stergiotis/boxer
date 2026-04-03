@@ -3,12 +3,13 @@
 /*
 Great! Works fine. We reached an important milestone. We have created:
 * two grammars `grammar1` and `grammar2` (embodying "be generous what you accept, careful what you send").
-* a nanopass framework with fixed point iteration
-* a canonicalization pipeline combining various canonicalization passes
-* feature passes for application frameworks (e.g. setting manipulation, literal extraction, function expansion/macros, format override, ...)
-* an idiomatic, serializable AST representation
-* an AST to SQL unparser
-* a fluid query builder API ontop of the AST
+* a nanopass framework with fixed point iteration in the `nanopass` package
+* a canonicalization pipeline combining various canonicalization passes in the `passes` package
+* feature passes for application frameworks (e.g. setting manipulation, literal extraction, function expansion/macros, format override, ...) in the `passes` package
+* an idiomatic, serializable AST representation in the `ast` package
+* an AST to SQL unparser in the `ast` package
+* a fluid query builder API ontop of the AST in the `astbuilder` package
+* an AST to fluid query builder API code generator in the `ast` package
 */
 
 package ast_test

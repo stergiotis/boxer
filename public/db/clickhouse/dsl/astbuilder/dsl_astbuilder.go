@@ -1,4 +1,6 @@
-// Package chsql provides a fluent builder for constructing ClickHouse DQL
+//go:build llm_generated_opus46
+
+// Package astbuilder provides a fluent builder for constructing ClickHouse DQL
 // queries as ast.Query values.
 //
 // Errors are deferred: if Lit() receives an unsupported type, the error
@@ -6,16 +8,12 @@
 //
 //	q, err := Select(Col("a")).Where(Col("a").Eq(Lit(badValue))).Build()
 //	// err: "Lit: unsupported type ..."
-//
-//go:builder llm_generated_opus64
 package astbuilder
 
 import (
 	"strconv"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/ast"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
-	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // ============================================================================
@@ -68,50 +66,6 @@ func Col(parts ...string) E {
 		ref.Column = parts[2]
 	}
 	return E{Expr: ast.Expr{Kind: ast.KindColumnRef, ColRef: ref}}
-}
-
-var marshallingOptions = marshalling.MarshalOptions{
-	PreserveCasts:            false,
-	MapCanonicalToClickHouse: marshalling.MapCanonicalToClickHouseTypeStr,
-}
-var marshallingOptionsCast = marshalling.MarshalOptions{
-	PreserveCasts:            true,
-	MapCanonicalToClickHouse: marshalling.MapCanonicalToClickHouseTypeStr,
-}
-
-func preprocessLiteralValue(v any) any {
-	switch vt := v.(type) {
-	case int:
-		v = int64(vt)
-	case uint:
-		v = uint64(vt)
-	}
-	return v
-}
-
-// Lit creates a literal expression from a Go value. Uses marshalling.MarshalGoValueToSQL.
-// If the value type is unsupported, the error is deferred to Build().
-func Lit(v interface{}) E {
-	v = preprocessLiteralValue(v)
-	sql, err := marshalling.MarshalGoValueToSQLWithOptions(v, marshallingOptions)
-	if err != nil {
-		return errE(eh.Errorf("Lit: %w", err))
-	}
-	return E{Expr: ast.Expr{Kind: ast.KindLiteral, Literal: &ast.LiteralData{SQL: sql}}}
-}
-func LitCast(v interface{}) E {
-	v = preprocessLiteralValue(v)
-	sql, typeName, err := marshalling.MarshalGoValueToSQLWithOptionsCast(v, marshallingOptionsCast)
-	if err != nil {
-		return errE(eh.Errorf("LitCast: %w", err))
-	}
-	return E{Expr: ast.Expr{Kind: ast.KindFunctionCall, Func: &ast.FuncCallData{
-		Name: "CAST",
-		Args: []ast.Expr{
-			{Kind: ast.KindLiteral, Literal: &ast.LiteralData{SQL: sql}},
-			{Kind: ast.KindLiteral, Literal: &ast.LiteralData{SQL: "'" + typeName + "'"}},
-		},
-	}}}
 }
 
 // Func creates a function call expression.
@@ -169,24 +123,28 @@ func (inst E) As(name string) E {
 	return E{Expr: ast.Expr{Kind: ast.KindAlias, Alias: &ast.AliasData{Expr: inst.Expr, Name: name}}, err: inst.err}
 }
 
-func (inst E) Eq(other E) E     { return inst.binOp(ast.BinOpEq, other) }
-func (inst E) NotEq(other E) E  { return inst.binOp(ast.BinOpNotEq, other) }
-func (inst E) Gt(other E) E     { return inst.binOp(ast.BinOpGt, other) }
-func (inst E) Lt(other E) E     { return inst.binOp(ast.BinOpLt, other) }
-func (inst E) Ge(other E) E     { return inst.binOp(ast.BinOpGe, other) }
-func (inst E) Le(other E) E     { return inst.binOp(ast.BinOpLe, other) }
-func (inst E) And(other E) E    { return inst.binOp(ast.BinOpAnd, other) }
-func (inst E) Or(other E) E     { return inst.binOp(ast.BinOpOr, other) }
-func (inst E) Plus(other E) E   { return inst.binOp(ast.BinOpPlus, other) }
-func (inst E) Minus(other E) E  { return inst.binOp(ast.BinOpMinus, other) }
-func (inst E) Mul(other E) E    { return inst.binOp(ast.BinOpMultiply, other) }
-func (inst E) Div(other E) E    { return inst.binOp(ast.BinOpDivide, other) }
-func (inst E) Mod(other E) E    { return inst.binOp(ast.BinOpModulo, other) }
-func (inst E) Concat(other E) E { return inst.binOp(ast.BinOpConcat, other) }
-func (inst E) Like(other E) E   { return inst.binOp(ast.BinOpLike, other) }
-func (inst E) ILike(other E) E  { return inst.binOp(ast.BinOpILike, other) }
-func (inst E) In(other E) E     { return inst.binOp(ast.BinOpIn, other) }
-func (inst E) NotIn(other E) E  { return inst.binOp(ast.BinOpNotIn, other) }
+func (inst E) Eq(other E) E          { return inst.binOp(ast.BinOpEq, other) }
+func (inst E) NotEq(other E) E       { return inst.binOp(ast.BinOpNotEq, other) }
+func (inst E) Gt(other E) E          { return inst.binOp(ast.BinOpGt, other) }
+func (inst E) Lt(other E) E          { return inst.binOp(ast.BinOpLt, other) }
+func (inst E) Ge(other E) E          { return inst.binOp(ast.BinOpGe, other) }
+func (inst E) Le(other E) E          { return inst.binOp(ast.BinOpLe, other) }
+func (inst E) And(other E) E         { return inst.binOp(ast.BinOpAnd, other) }
+func (inst E) Or(other E) E          { return inst.binOp(ast.BinOpOr, other) }
+func (inst E) Plus(other E) E        { return inst.binOp(ast.BinOpPlus, other) }
+func (inst E) Minus(other E) E       { return inst.binOp(ast.BinOpMinus, other) }
+func (inst E) Mul(other E) E         { return inst.binOp(ast.BinOpMultiply, other) }
+func (inst E) Div(other E) E         { return inst.binOp(ast.BinOpDivide, other) }
+func (inst E) Mod(other E) E         { return inst.binOp(ast.BinOpModulo, other) }
+func (inst E) Concat(other E) E      { return inst.binOp(ast.BinOpConcat, other) }
+func (inst E) Like(other E) E        { return inst.binOp(ast.BinOpLike, other) }
+func (inst E) NotLike(other E) E     { return inst.binOp(ast.BinOpNotLike, other) }
+func (inst E) ILike(other E) E       { return inst.binOp(ast.BinOpILike, other) }
+func (inst E) NotILike(other E) E    { return inst.binOp(ast.BinOpNotILike, other) }
+func (inst E) In(other E) E          { return inst.binOp(ast.BinOpIn, other) }
+func (inst E) NotIn(other E) E       { return inst.binOp(ast.BinOpNotIn, other) }
+func (inst E) GlobalIn(other E) E    { return inst.binOp(ast.BinOpGlobalIn, other) }
+func (inst E) GlobalNotIn(other E) E { return inst.binOp(ast.BinOpGlobalNotIn, other) }
 
 func (inst E) Not() E {
 	return E{Expr: ast.Expr{Kind: ast.KindUnary, Unary: &ast.UnaryData{Op: ast.UnaryOpNot, Expr: inst.Expr}}, err: inst.err}
