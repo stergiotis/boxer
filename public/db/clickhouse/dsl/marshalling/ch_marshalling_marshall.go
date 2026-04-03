@@ -459,12 +459,30 @@ func MarshalGoValueToSQL(val any) (sql string, err error) {
 
 // MarshalGoValueToSQLWithOptions converts a Go value to SQL with configurable behavior.
 func MarshalGoValueToSQLWithOptions(val any, opts MarshalOptions) (sql string, err error) {
+	var c string
+	sql, c, err = MarshalGoValueToSQLWithOptionsCast(val, opts)
+	if err != nil {
+		return
+	}
+	if c != "" {
+		sql = "CAST(" + sql + ",'" + c + "')"
+	}
+	return
+}
+func MarshalGoValueToSQLWithOptionsCast(val any, opts MarshalOptions) (sql string, castType string, err error) {
 	if val == nil {
 		sql = "NULL"
 		return
 	}
 	switch v := val.(type) {
 	case TypedLiteral:
+		if opts.PreserveCasts && opts.MapCanonicalToClickHouse != nil && v.CastTypeCanonical != "" {
+			castType, err = opts.MapCanonicalToClickHouse(v.CastTypeCanonical)
+			if err != nil {
+				err = eh.Errorf("MarshalGoValueToSQLWithOptions: unable to map cast type%w", err)
+				return
+			}
+		}
 		sql, err = MarshalTypedLiteralToSQLEx(v, opts.MapCanonicalToClickHouse)
 		if err != nil {
 			err = eh.Errorf("MarshalGoValueToSQLWithOptions: %w", err)
@@ -474,6 +492,13 @@ func MarshalGoValueToSQLWithOptions(val any, opts MarshalOptions) (sql string, e
 		if v == nil {
 			sql = "NULL"
 			return
+		}
+		if opts.PreserveCasts && opts.MapCanonicalToClickHouse != nil && v.CastTypeCanonical != "" {
+			castType, err = opts.MapCanonicalToClickHouse(v.CastTypeCanonical)
+			if err != nil {
+				err = eh.Errorf("MarshalGoValueToSQLWithOptions: unable to map cast type%w", err)
+				return
+			}
 		}
 		sql, err = MarshalTypedLiteralToSQLEx(*v, opts.MapCanonicalToClickHouse)
 		if err != nil {
@@ -488,25 +513,25 @@ func MarshalGoValueToSQLWithOptions(val any, opts MarshalOptions) (sql string, e
 	case []int64:
 		sql, err = marshalGoArray(v, opts)
 		if err == nil && opts.PreserveCasts {
-			sql = "CAST(" + sql + ", 'Array(Int64)')"
+			castType = "Array(Int64)"
 		}
 		return
 	case []uint64:
 		sql, err = marshalGoArray(v, opts)
 		if err == nil && opts.PreserveCasts {
-			sql = "CAST(" + sql + ", 'Array(UInt64)')"
+			castType = "Array(UInt64)"
 		}
 		return
 	case []float64:
 		sql, err = marshalGoArray(v, opts)
 		if err == nil && opts.PreserveCasts {
-			sql = "CAST(" + sql + ", 'Array(Float64)')"
+			castType = "Array(Float64)"
 		}
 		return
 	case []float32:
 		sql, err = marshalGoArray(v, opts)
 		if err == nil && opts.PreserveCasts {
-			sql = "CAST(" + sql + ", 'Array(Float32)')"
+			castType = "Array(Float32)"
 		}
 		return
 	case []bool:
@@ -518,37 +543,37 @@ func MarshalGoValueToSQLWithOptions(val any, opts MarshalOptions) (sql string, e
 	case []int8:
 		sql, err = marshalGoArray(v, opts)
 		if err == nil && opts.PreserveCasts {
-			sql = "CAST(" + sql + ", 'Array(Int8)')"
+			castType = "Array(Int8)"
 		}
 		return
 	case []int16:
 		sql, err = marshalGoArray(v, opts)
 		if err == nil && opts.PreserveCasts {
-			sql = "CAST(" + sql + ", 'Array(Int16)')"
+			castType = "Array(Int16)"
 		}
 		return
 	case []int32:
 		sql, err = marshalGoArray(v, opts)
 		if err == nil && opts.PreserveCasts {
-			sql = "CAST(" + sql + ", 'Array(Int32)')"
+			castType = "Array(Int32)"
 		}
 		return
 	case []uint8:
 		sql, err = marshalGoArray(v, opts)
 		if err == nil && opts.PreserveCasts {
-			sql = "CAST(" + sql + ", 'Array(UInt8)')"
+			castType = "Array(UInt8)"
 		}
 		return
 	case []uint16:
 		sql, err = marshalGoArray(v, opts)
 		if err == nil && opts.PreserveCasts {
-			sql = "CAST(" + sql + ", 'Array(UInt16)')"
+			castType = "Array(UInt16)"
 		}
 		return
 	case []uint32:
 		sql, err = marshalGoArray(v, opts)
 		if err == nil && opts.PreserveCasts {
-			sql = "CAST(" + sql + ", 'Array(UInt32)')"
+			castType = "Array(UInt32)"
 		}
 		return
 	case []TypedLiteral:
@@ -576,19 +601,19 @@ func MarshalGoValueToSQLWithOptions(val any, opts MarshalOptions) (sql string, e
 	case int64:
 		sql, err = MarshalScalarToSQL(NewScalarInt64(v))
 		if err == nil && opts.PreserveCasts {
-			sql = "CAST(" + sql + ", 'Int64')"
+			castType = "Int64"
 		}
 		return
 	case uint64:
 		sql, err = MarshalScalarToSQL(NewScalarUint64(v))
 		if err == nil && opts.PreserveCasts {
-			sql = "CAST(" + sql + ", 'UInt64')"
+			castType = "UInt64"
 		}
 		return
 	case float64:
 		sql, err = MarshalScalarToSQL(NewScalarFloat64(v))
 		if err == nil && opts.PreserveCasts {
-			sql = "CAST(" + sql + ", 'Float64')"
+			castType = "Float64"
 		}
 		return
 
@@ -596,43 +621,43 @@ func MarshalGoValueToSQLWithOptions(val any, opts MarshalOptions) (sql string, e
 	case float32:
 		sql, err = MarshalScalarToSQL(NewScalarFloat64(float64(v)))
 		if err == nil && opts.PreserveCasts {
-			sql = "CAST(" + sql + ", 'Float32')"
+			castType = "Float32"
 		}
 		return
 	case int8:
 		sql, err = MarshalScalarToSQL(NewScalarInt64(int64(v)))
 		if err == nil && opts.PreserveCasts {
-			sql = "CAST(" + sql + ", 'Int8')"
+			castType = "Int8"
 		}
 		return
 	case int16:
 		sql, err = MarshalScalarToSQL(NewScalarInt64(int64(v)))
 		if err == nil && opts.PreserveCasts {
-			sql = "CAST(" + sql + ", 'Int16')"
+			castType = "Int16"
 		}
 		return
 	case int32:
 		sql, err = MarshalScalarToSQL(NewScalarInt64(int64(v)))
 		if err == nil && opts.PreserveCasts {
-			sql = "CAST(" + sql + ", 'Int32')"
+			castType = "Int32"
 		}
 		return
 	case uint8:
 		sql, err = MarshalScalarToSQL(NewScalarUint64(uint64(v)))
 		if err == nil && opts.PreserveCasts {
-			sql = "CAST(" + sql + ", 'UInt8')"
+			castType = "UInt8"
 		}
 		return
 	case uint16:
 		sql, err = MarshalScalarToSQL(NewScalarUint64(uint64(v)))
 		if err == nil && opts.PreserveCasts {
-			sql = "CAST(" + sql + ", 'UInt16')"
+			castType = "UInt16"
 		}
 		return
 	case uint32:
 		sql, err = MarshalScalarToSQL(NewScalarUint64(uint64(v)))
 		if err == nil && opts.PreserveCasts {
-			sql = "CAST(" + sql + ", 'UInt32')"
+			castType = "UInt32"
 		}
 		return
 
