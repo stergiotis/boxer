@@ -242,8 +242,8 @@ func TestDebugUnionMethods(t *testing.T) {
 	pr, err := nanopass.Parse(sql)
 	require.NoError(t, err)
 
-	query := pr.Tree.GetChild(0).(*grammar0.QueryContext)
-	union := query.GetChild(0).(*grammar0.SelectUnionStmtContext)
+	query := pr.Tree.GetChild(0).(*grammar1.QueryContext)
+	union := query.GetChild(0).(*grammar1.SelectUnionStmtContext)
 
 	t.Logf("union type: %T", union)
 	t.Logf("union children: %d", union.GetChildCount())
@@ -264,9 +264,9 @@ func TestDebugFromClause(t *testing.T) {
 		require.NoError(t, err)
 		nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
 			switch ctx.(type) {
-			case *grammar0.FromClauseContext,
-				*grammar0.JoinExprContext,
-				*grammar0.TableExprContext:
+			case *grammar1.FromClauseContext,
+				*grammar1.JoinExprContext,
+				*grammar1.TableExprContext:
 				t.Logf("  %T (rule=%d) text=%q", ctx, ctx.GetRuleIndex(), ctx.GetText())
 				for i := 0; i < ctx.GetChildCount(); i++ {
 					t.Logf("    child[%d]: %T", i, ctx.GetChild(i))
@@ -306,12 +306,12 @@ func TestDebugUnionAll(t *testing.T) {
 	pr, err := nanopass.Parse(sql)
 	require.NoError(t, err)
 
-	query := pr.Tree.GetChild(0).(*grammar0.QueryContext)
+	query := pr.Tree.GetChild(0).(*grammar1.QueryContext)
 	for i := 0; i < query.GetChildCount(); i++ {
 		t.Logf("query child[%d]: %T", i, query.GetChild(i))
 	}
 
-	union := query.GetChild(0).(*grammar0.SelectUnionStmtContext)
+	union := query.GetChild(0).(*grammar1.SelectUnionStmtContext)
 	t.Logf("union children: %d", union.GetChildCount())
 	for i := 0; i < union.GetChildCount(); i++ {
 		child := union.GetChild(i)

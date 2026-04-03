@@ -31,7 +31,7 @@ func TestDeleteNode(t *testing.T) {
 
 	// Find and delete the ORDER BY clause
 	orderBy := nanopass.FindFirst(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-		_, ok := ctx.(*grammar0.OrderByClauseContext)
+		_, ok := ctx.(*grammar1.OrderByClauseContext)
 		return ok
 	})
 	require.NotNil(t, orderBy)
@@ -56,7 +56,7 @@ func TestDeleteToken(t *testing.T) {
 	// Find the DISTINCT token and delete it
 	for i := 0; i < pr.TokenStream.Size(); i++ {
 		tok := pr.TokenStream.Get(i)
-		if tok.GetTokenType() == grammar0.ClickHouseParserDISTINCT {
+		if tok.GetTokenType() == grammar1.ClickHouseParserGrammar1DISTINCT {
 			nanopass.DeleteToken(rw, tok.GetTokenIndex())
 			break
 		}
@@ -80,7 +80,7 @@ func TestInsertBefore(t *testing.T) {
 
 	// Find the FROM clause and insert a comment-like marker before it
 	fromClause := nanopass.FindFirst(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-		_, ok := ctx.(*grammar0.FromClauseContext)
+		_, ok := ctx.(*grammar1.FromClauseContext)
 		return ok
 	})
 	require.NotNil(t, fromClause)
@@ -98,7 +98,7 @@ func TestInsertAfter(t *testing.T) {
 
 	// Find the FROM clause and insert FINAL after it
 	fromClause := nanopass.FindFirst(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-		_, ok := ctx.(*grammar0.FromClauseContext)
+		_, ok := ctx.(*grammar1.FromClauseContext)
 		return ok
 	})
 	require.NotNil(t, fromClause)
@@ -116,7 +116,7 @@ func TestReplaceNode(t *testing.T) {
 
 	// Find the WHERE clause and replace it entirely
 	whereClause := nanopass.FindFirst(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-		_, ok := ctx.(*grammar0.WhereClauseContext)
+		_, ok := ctx.(*grammar1.WhereClauseContext)
 		return ok
 	})
 	require.NotNil(t, whereClause)
@@ -189,7 +189,7 @@ func TestTrackedRewriterInPass(t *testing.T) {
 
 	// Simulate a pass replacing two column identifiers
 	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-		if _, ok := ctx.(*grammar0.ColumnIdentifierContext); ok {
+		if _, ok := ctx.(*grammar1.ColumnIdentifierContext); ok {
 			nanopass.TrackedReplaceNode(rw, ctx, "replaced")
 		}
 		return true
