@@ -21,7 +21,6 @@ import (
 	"github.com/go-json-experiment/json/jsontext"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/containers"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/base62"
@@ -205,13 +204,6 @@ func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name: "example",
 		Subcommands: []*cli.Command{
-			{
-				Name: "sql",
-				Action: func(context *cli.Context) error {
-					dql := dsl.NewParsedDqlQuery()
-					return dql.ParseFromString("SELECT 1;\nSELECT 2;")
-				},
-			},
 			{
 				Name:  "ndjson",
 				Usage: "a poor mans ndjson cleanup routine",

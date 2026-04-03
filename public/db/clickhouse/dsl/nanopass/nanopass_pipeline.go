@@ -22,6 +22,8 @@ func Pipeline(sql string, passes ...Pass) (result string, err error) {
 	return
 }
 
+var ErrNoFixPointReached = eh.Errorf("did not converge, no fix point reached")
+
 // FixedPoint repeats a pass until its output stabilizes or maxIter is reached.
 func FixedPoint(pass Pass, maxIter int) Pass {
 	return func(sql string) (result string, err error) {
@@ -37,6 +39,7 @@ func FixedPoint(pass Pass, maxIter int) Pass {
 			}
 			result = next
 		}
+		err = ErrNoFixPointReached
 		return
 	}
 }
