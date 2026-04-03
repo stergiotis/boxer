@@ -47,7 +47,7 @@ func TestNormalizeWhitespace(t *testing.T) {
 	}
 	for i, tt := range tests {
 		t.Run(fmt.Sprintf("case_%d", i), func(t *testing.T) {
-			got, err := passes.NormalizeWhitespace(tt.input)
+			got, err := passes.CanonicalizeWhitespace(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 		})
@@ -78,7 +78,7 @@ func TestNormalizeWhitespaceSingleLine(t *testing.T) {
 	}
 	for i, tt := range tests {
 		t.Run(fmt.Sprintf("case_%d", i), func(t *testing.T) {
-			got, err := passes.NormalizeWhitespaceSingleLine(tt.input)
+			got, err := passes.CanonicalizeWhitespaceSingleLine(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 		})
@@ -87,9 +87,9 @@ func TestNormalizeWhitespaceSingleLine(t *testing.T) {
 
 func TestNormalizeWhitespaceIdempotent(t *testing.T) {
 	sql := "SELECT  a  \n\n  FROM  t  WHERE   b > 1"
-	pass1, err := passes.NormalizeWhitespace(sql)
+	pass1, err := passes.CanonicalizeWhitespace(sql)
 	require.NoError(t, err)
-	pass2, err := passes.NormalizeWhitespace(pass1)
+	pass2, err := passes.CanonicalizeWhitespace(pass1)
 	require.NoError(t, err)
 	assert.Equal(t, pass1, pass2)
 }
@@ -100,7 +100,7 @@ func TestNormalizeWhitespaceOutputValidity(t *testing.T) {
 
 	for _, entry := range entries {
 		t.Run(entry.Name, func(t *testing.T) {
-			out, err := passes.NormalizeWhitespaceSingleLine(entry.SQL)
+			out, err := passes.CanonicalizeWhitespaceSingleLine(entry.SQL)
 			if err != nil {
 				t.Skipf("pass failed: %v", err)
 			}

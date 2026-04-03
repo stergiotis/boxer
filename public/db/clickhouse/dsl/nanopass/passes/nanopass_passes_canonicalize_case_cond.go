@@ -70,18 +70,20 @@ func CanonicalizeCaseConditionals(sql string) (result string, err error) {
 	return
 }
 
-// NormalizeMultiIf normalizes multiIf(c, r, d) with exactly 3 arguments to if(c, r, d).
+var _ nanopass.Pass = CanonicalizeCaseConditionals
+
+// CanonicalizeMultiIf normalizes multiIf(c, r, d) with exactly 3 arguments to if(c, r, d).
 // This is a separate pass because it needs to count function arguments, which requires
 // the CST to reflect the current state (after CanonicalizeCaseConditionals has been applied).
 //
 // Run this after CanonicalizeCaseConditionals in the pipeline:
 //
 //	result, err = nanopass.FixedPoint(passes.CanonicalizeCaseConditionals, 10)(sql)
-//	result, err = passes.NormalizeMultiIf(result)
-func NormalizeMultiIf(sql string) (result string, err error) {
+//	result, err = passes.CanonicalizeMultiIf(result)
+func CanonicalizeMultiIf(sql string) (result string, err error) {
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
-		err = eh.Errorf("NormalizeMultiIf: %w", err)
+		err = eh.Errorf("CanonicalizeMultiIf: %w", err)
 		return
 	}
 	rw := nanopass.NewRewriter(pr)
@@ -98,6 +100,8 @@ func NormalizeMultiIf(sql string) (result string, err error) {
 	result = nanopass.GetText(rw)
 	return
 }
+
+var _ nanopass.Pass = CanonicalizeMultiIf
 
 // rewriteMultiIfToIf checks if a function call is multiIf with exactly 3 arguments
 // and rewrites it to if.

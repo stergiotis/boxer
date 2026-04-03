@@ -18,10 +18,10 @@ func TestPipelineAllOrderings(t *testing.T) {
 		name string
 		pass nanopass.Pass
 	}{
-		{"case", passes.NormalizeKeywordCase},
+		{"case", passes.CanonicalizeKeywordCase},
 		{"parens", passes.RemoveRedundantParens},
 		{"comments", passes.StripComments},
-		{"whitespace", passes.NormalizeWhitespaceSingleLine},
+		{"whitespace", passes.CanonicalizeWhitespaceSingleLine},
 	}
 
 	// Test all permutations of 4 passes = 24 orderings

@@ -21,40 +21,10 @@ import (
 // Test Infrastructure
 // ============================================================================
 
-// fullPipeline applies all normalization passes in the correct order.
+// fullCanonicalizationPipeline applies all normalization passes in the correct order.
 // This is the sequence that transforms Grammar1 SQL into Grammar2 SQL.
-func fullPipeline(sql string) (result string, err error) {
-	// Phase 1: Structural rewrites (operate on Grammar1 CST)
-	result, err = passes.CanonicalizeEquals(sql)
-	if err != nil {
-		return
-	}
-	result, err = passes.CanonicalizeJoin(result)
-	if err != nil {
-		return
-	}
-	result, err = passes.CanonicalizeTernary(result)
-	if err != nil {
-		return
-	}
-	result, err = passes.CanonicalizeCaseConditionals(result)
-	if err != nil {
-		return
-	}
-	result, err = passes.CanonicalizeSugar(result)
-	if err != nil {
-		return
-	}
-	// Phase 2: Existing passes (assumed to exist)
-	// result, err = passes.CanonicalizeCast(result)
-	// result, err = passes.CanonicalizeConstructors(result)
-
-	// Phase 3: Identifier normalization (MUST BE LAST)
-	result, err = passes.CanonicalizeIdentifiers(result)
-	if err != nil {
-		return
-	}
-	return
+func fullCanonicalizationPipeline(sql string) (result string, err error) {
+	return passes.CanonicalizeFull(100)(sql)
 }
 
 // allNewPasses lists the new passes for parametric testing.
@@ -536,7 +506,7 @@ func TestGrammar2ComplianceAfterPipeline(t *testing.T) {
 
 	for _, tt := range inputs {
 		t.Run(tt.name, func(t *testing.T) {
-			out, err := fullPipeline(tt.sql)
+			out, err := fullCanonicalizationPipeline(tt.sql)
 			require.NoError(t, err, "pipeline failed for: %s", tt.sql)
 
 			pr, err := nanopass.Parse(out)
@@ -556,7 +526,7 @@ func TestGrammar2ComplianceCorpus(t *testing.T) {
 
 	for _, entry := range entries {
 		t.Run(entry.Name, func(t *testing.T) {
-			out, err := fullPipeline(entry.SQL)
+			out, err := fullCanonicalizationPipeline(entry.SQL)
 			if err != nil {
 				t.Skipf("pipeline failed: %v", err)
 			}
@@ -569,6 +539,10 @@ func TestGrammar2ComplianceCorpus(t *testing.T) {
 			violations := checkGrammar2Compliance(pr)
 			assert.Empty(t, violations,
 				"Grammar2 violations for %s:\n  %s", entry.Name, strings.Join(violations, "\n  "))
+			if len(violations) > 0 {
+				assert.Empty(t, violations,
+					"Grammar2 violations for %s:\n  %s", entry.Name, strings.Join(violations, "\n  "))
+			}
 		})
 	}
 }
@@ -583,11 +557,11 @@ func TestFullPipelineIdempotent(t *testing.T) {
 
 	for _, entry := range entries {
 		t.Run(entry.Name, func(t *testing.T) {
-			pass1, err := fullPipeline(entry.SQL)
+			pass1, err := fullCanonicalizationPipeline(entry.SQL)
 			if err != nil {
 				t.Skip()
 			}
-			pass2, err := fullPipeline(pass1)
+			pass2, err := fullCanonicalizationPipeline(pass1)
 			if err != nil {
 				t.Fatalf("pipeline failed on own output: %v", err)
 			}
@@ -610,18 +584,21 @@ func TestPipelineOrderIndependence(t *testing.T) {
 		name string
 		pass nanopass.Pass
 	}{
-		{"Equal", passes.CanonicalizeEquals},
-		{"Join", passes.CanonicalizeJoin},
-		{"Ternary", passes.CanonicalizeTernary},
-		{"Case", passes.CanonicalizeCaseConditionals},
-		{"Sugar", passes.CanonicalizeSugar},
+		{"SetFormat", passes.SetFormat("ArrowStream")},
+		{"RemoveParens", passes.RemoveRedundantParens},
+		{"ExtractLiterals", passes.ExtractLiterals(passes.NewExtractLiteralsConfig(0))},
 	}
 
 	// Test with a query that exercises multiple passes
 	sql := "SELECT CASE WHEN a == 1 THEN DATE '2024-01-01' ELSE a ? b : c END FROM t1 LEFT ALL JOIN t2 ON t1.id = t2.id"
 
-	// Canonical order
-	canonical, err := fullPipeline(sql)
+	// Canonical
+	for _, p := range reorderablePasses {
+		var err error
+		sql, err = p.pass(sql)
+		require.NoError(t, err)
+	}
+	canonical, err := fullCanonicalizationPipeline(sql)
 	require.NoError(t, err)
 
 	// All 24 permutations of 4 passes
@@ -637,8 +614,7 @@ func TestPipelineOrderIndependence(t *testing.T) {
 				result, err = reorderablePasses[idx].pass(result)
 				require.NoError(t, err)
 			}
-			// Always end with CanonicalizeIdentifiers
-			result, err = passes.CanonicalizeIdentifiers(result)
+			result, err = fullCanonicalizationPipeline(result)
 			require.NoError(t, err)
 
 			assert.Equal(t, canonical, result,

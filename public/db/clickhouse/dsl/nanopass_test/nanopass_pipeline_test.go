@@ -14,7 +14,7 @@ import (
 func TestPipeline(t *testing.T) {
 	sql := "select a from t"
 	result, err := nanopass.Pipeline(sql,
-		passes.NormalizeKeywordCase,
+		passes.CanonicalizeKeywordCase,
 		passes.QualifyTables("mydb"),
 	)
 	require.NoError(t, err)
@@ -25,7 +25,7 @@ func TestPipelineWithValidation(t *testing.T) {
 	sql := "select a from t where a > 1"
 	result, err := nanopass.Pipeline(sql,
 		nanopass.Validate,
-		passes.NormalizeKeywordCase,
+		passes.CanonicalizeKeywordCase,
 		nanopass.Validate,
 	)
 	require.NoError(t, err)
@@ -34,7 +34,7 @@ func TestPipelineWithValidation(t *testing.T) {
 
 func TestFixedPoint(t *testing.T) {
 	// A pass that is already idempotent should converge in 1 iteration
-	pass := nanopass.FixedPoint(passes.NormalizeKeywordCase, 5)
+	pass := nanopass.FixedPoint(passes.CanonicalizeKeywordCase, 5)
 	result, err := pass("select a from t")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT a FROM t", result)
@@ -55,9 +55,9 @@ func TestFixedPointConverges(t *testing.T) {
 
 func TestFixedPointPipeline(t *testing.T) {
 	pass := nanopass.FixedPointPipeline(5,
-		passes.NormalizeKeywordCase,
+		passes.CanonicalizeKeywordCase,
 		passes.QualifyTables("mydb"),
-		passes.NormalizeWhitespaceSingleLine,
+		passes.CanonicalizeWhitespaceSingleLine,
 	)
 	result, err := pass("select  a  from  t")
 	require.NoError(t, err)
@@ -72,7 +72,8 @@ func TestFixedPointDoesNotConverge(t *testing.T) {
 		return sql + " ", nil // always appends a space
 	}
 	pass := nanopass.FixedPoint(neverSettles, 3)
-	_, err := pass("SELECT 1")
+	sql, err := pass("SELECT 1")
+	_ = sql
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "did not converge")
 }

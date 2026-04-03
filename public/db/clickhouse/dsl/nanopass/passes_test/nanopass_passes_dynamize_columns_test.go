@@ -283,7 +283,7 @@ func TestWrapColumnsIdempotent(t *testing.T) {
 func TestWrapColumnsInPipeline(t *testing.T) {
 	result, err := nanopass.Pipeline(
 		"select tenant_id, amount from orders",
-		passes.NormalizeKeywordCase,
+		passes.CanonicalizeKeywordCase,
 		passes.WrapColumnsWithDynamic(".*_id$"),
 		nanopass.Validate,
 	)

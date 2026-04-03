@@ -5,7 +5,6 @@ import (
 	"slices"
 
 	"github.com/rs/zerolog/log"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl"
 	"github.com/stergiotis/boxer/public/dev"
 	"github.com/stergiotis/boxer/public/fffi/compiletime"
 	"github.com/stergiotis/boxer/public/imzero/demo"
@@ -43,7 +42,6 @@ func mainC() (exitCode int) {
 			dev.IoOverrideFlags,
 			coverage.CoverageFlags),
 		Commands: []*cli.Command{
-			dsl.NewCommand(),
 			cbor.NewCommand(),
 			compiletime.NewCommand(nil, nil),
 			demo.NewCommand(),

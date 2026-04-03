@@ -39,6 +39,8 @@ func CanonicalizeTernary(sql string) (result string, err error) {
 	return
 }
 
+var _ nanopass.Pass = CanonicalizeTernary
+
 // rewriteTernary converts a single ColumnExprTernaryOp to if(cond, then, else).
 // Grammar: <assoc=right> columnExpr QUERY columnExpr COLON columnExpr
 // Children: columnExpr[0] QUERY columnExpr[1] COLON columnExpr[2]

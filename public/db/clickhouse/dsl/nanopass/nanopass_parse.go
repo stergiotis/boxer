@@ -4,67 +4,116 @@ package nanopass
 
 import (
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar2"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-// ParseResult holds the CST and token stream for a pass to operate on.
+// ParseResult holds the result of parsing SQL with either Grammar1 or Grammar2.
+//
+// Tree and Parser are interface-typed to support both grammars. Callers that
+// need grammar-specific context types use type assertions:
+//
+//	root := pr.Tree.(*grammar1.QueryStmtContext)  // for Grammar1 results
+//	root := pr.Tree.(*grammar2.QueryStmtContext)  // for Grammar2 results
+//
+// The TokenStream is shared between both grammars — it's produced by the
+// lexer which is identical in both grammar packages.
 type ParseResult struct {
-	Tree        *grammar1.QueryStmtContext
+	// Tree is the root CST node. Its concrete type depends on which grammar
+	// was used for parsing:
+	//   - Parse():          *grammar1.QueryStmtContext
+	//   - ParseCanonical(): *grammar2.QueryStmtContext
+	Tree antlr.ParserRuleContext
+
+	// TokenStream is the lexed token stream including hidden-channel tokens.
 	TokenStream *antlr.CommonTokenStream
-	Lexer       *grammar1.ClickHouseLexer
-	Parser      *grammar1.ClickHouseParserGrammar1
+
+	// Parser is the ANTLR parser instance used to produce the CST. Useful for
+	// accessing rule names and vocabulary during debugging.
+	Parser antlr.Parser
 }
 
-// Parse parses a ClickHouse SELECT statement into a CST.
-// Any syntax error is fatal — partial/error-recovering parses are not allowed.
-func Parse(sql string) (result *ParseResult, err error) {
+// errorListener collects syntax errors during parsing.
+type errorListener struct {
+	*antlr.DefaultErrorListener
+	errors []string
+}
+
+func (inst *errorListener) SyntaxError(recognizer antlr.Recognizer, offendingSymbol interface{},
+	line, column int, msg string, e antlr.RecognitionException) {
+	inst.errors = append(inst.errors, msg)
+}
+
+// Parse parses SQL using Grammar1 (full ClickHouse SELECT surface, no keywordForAlias).
+// This is the parser used by all normalization passes.
+//
+// Returns an error if the SQL contains syntax errors. The error message includes
+// the first syntax error from the parser.
+func Parse(sql string) (pr *ParseResult, err error) {
 	input := antlr.NewInputStream(sql)
 	lexer := grammar1.NewClickHouseLexer(input)
-
-	// Use TokenDefaultChannel for the parser's filtered view.
-	// The underlying BufferedTokenStream stores all tokens regardless.
 	stream := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
+	parser := grammar1.NewClickHouseParserGrammar1(stream)
 
-	p := grammar1.NewClickHouseParserGrammar1(stream)
+	// Remove default error listeners, add our collector
+	errListener := &errorListener{}
+	parser.RemoveErrorListeners()
+	parser.AddErrorListener(errListener)
 
-	collector := &errorCollector{}
-	p.RemoveErrorListeners()
-	p.AddErrorListener(collector)
-	lexer.RemoveErrorListeners()
-	lexer.AddErrorListener(collector)
+	tree := parser.QueryStmt()
 
-	tree := p.QueryStmt()
-
-	if len(collector.errors) > 0 {
-		err = eh.Errorf("parse error: %s", collector.errors[0])
+	if len(errListener.errors) > 0 {
+		err = eh.Errorf("Parse: syntax error: %s", errListener.errors[0])
 		return
 	}
 
-	result = &ParseResult{
-		Tree:        tree.(*grammar1.QueryStmtContext),
+	pr = &ParseResult{
+		Tree:        tree,
 		TokenStream: stream,
-		Lexer:       lexer,
-		Parser:      p,
+		Parser:      parser,
 	}
 	return
 }
 
-// errorCollector implements antlr.ErrorListener, collecting syntax errors.
-type errorCollector struct {
-	antlr.DefaultErrorListener
-	errors []string
-}
+// ParseCanonical parses SQL using Grammar2 (canonical forms only).
+//
+// Grammar2 accepts only normalized SQL:
+//   - All identifiers double-quoted
+//   - No CASE/CAST/DATE/TIMESTAMP/EXTRACT/SUBSTRING/TRIM sugar
+//   - No array/tuple literal syntax
+//   - No ternary operator
+//   - No ==, no OUTER, no comma join
+//   - JOIN strictness before direction
+//   - USING with parentheses
+//
+// If the SQL contains any non-canonical form, Grammar2 will reject it with a
+// parse error. This serves as structural validation that the normalization
+// pipeline is complete.
+//
+// Used by the AST converter as its input parser.
+func ParseCanonical(sql string) (pr *ParseResult, err error) {
+	input := antlr.NewInputStream(sql)
+	lexer := grammar2.NewClickHouseLexer(input)
+	stream := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
+	parser := grammar2.NewClickHouseParserGrammar2(stream)
 
-func (inst *errorCollector) SyntaxError(_ antlr.Recognizer, _ interface{}, line, col int, msg string, _ antlr.RecognitionException) {
-	inst.errors = append(inst.errors, eh.Errorf("line %d:%d %s", line, col, msg).Error())
-}
+	// Remove default error listeners, add our collector
+	errListener := &errorListener{}
+	parser.RemoveErrorListeners()
+	parser.AddErrorListener(errListener)
 
-// LogParseResult logs a summary of a parse result at debug level.
-func LogParseResult(logger zerolog.Logger, pr *ParseResult) {
-	logger.Debug().
-		Int("tokenCount", pr.TokenStream.Size()).
-		Str("rootRule", pr.Tree.ToStringTree(nil, pr.Parser)).
-		Msg("parse result")
+	tree := parser.QueryStmt()
+
+	if len(errListener.errors) > 0 {
+		err = eh.Errorf("ParseCanonical: syntax error (non-canonical SQL?): %s", errListener.errors[0])
+		return
+	}
+
+	pr = &ParseResult{
+		Tree:        tree,
+		TokenStream: stream,
+		Parser:      parser,
+	}
+	return
 }

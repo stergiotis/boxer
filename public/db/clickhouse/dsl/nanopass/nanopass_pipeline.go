@@ -3,95 +3,85 @@
 package nanopass
 
 import (
-	"iter"
-	"slices"
-	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// Pass is a SQL-to-SQL transformation.
-// It receives syntactically valid ClickHouse SQL and returns modified SQL.
-// The returned SQL must also be syntactically valid.
-type Pass func(sql string) (string, error)
+// Pass is a function that transforms SQL → SQL. Every pass receives valid SQL
+// and must return valid SQL. This is the fundamental type for the nanopass pipeline.
+type Pass = func(sql string) (result string, err error)
 
-// Pipeline chains passes sequentially. Each pass receives the output of the previous.
+// Pipeline applies a sequence of passes to SQL, threading the result through each.
 func Pipeline(sql string, passes ...Pass) (result string, err error) {
-	return PipelineIter(sql, slices.Values(passes))
-}
-// Pipeline chains passes sequentially. Each pass receives the output of the previous.
-func PipelineIter(sql string, passes iter.Seq[Pass]) (result string, err error) {
 	result = sql
-	i := 0
-	for pass := range passes {
-		if pass == nil {
-			i++
-			continue
-		}
+	for _, pass := range passes {
 		result, err = pass(result)
 		if err != nil {
-			err = eb.Build().Int("i",i).Errorf("pass failed: %w", err)
 			return
 		}
-		i++
 	}
 	return
 }
 
-// FixedPoint runs a pass repeatedly until the output stabilizes (no change)
-// or maxIterations is reached. Returns an error if maxIterations is exceeded
-// without reaching a fixed point.
-func FixedPoint(pass Pass, maxIterations int) Pass {
+// FixedPoint repeats a pass until its output stabilizes or maxIter is reached.
+func FixedPoint(pass Pass, maxIter int) Pass {
 	return func(sql string) (result string, err error) {
 		result = sql
-		for i := 0; i < maxIterations; i++ {
-			var next string
-			next, err = pass(sql)
-			if err != nil {
-				err = eh.Errorf("FixedPoint iteration %d: %w", i, err)
+		for i := 0; i < maxIter; i++ {
+			next, nextErr := pass(result)
+			if nextErr != nil {
+				err = nextErr
 				return
 			}
 			if next == result {
 				return
 			}
 			result = next
-			sql = next
 		}
-		err = eh.Errorf("FixedPoint: did not converge after %d iterations", maxIterations)
 		return
 	}
 }
 
-// FixedPointPipeline runs an entire pipeline repeatedly until the output stabilizes
-// or maxIterations is reached.
-func FixedPointPipeline(maxIterations int, passes ...Pass) Pass {
+// FixedPointPipeline repeats an entire pipeline until its output stabilizes.
+func FixedPointPipeline(maxIter int, passes ...Pass) Pass {
 	combined := func(sql string) (string, error) {
 		return Pipeline(sql, passes...)
 	}
-	return FixedPoint(combined, maxIterations)
+	return FixedPoint(combined, maxIter)
 }
 
-// Validate parses the SQL and returns an error if it is invalid.
-// Useful as a pipeline pass for debugging.
+// Validate is a Pass that parses SQL with Grammar1 and returns an error if it
+// fails. The SQL is returned unchanged on success. Useful as a pipeline step
+// to verify that a preceding pass produced valid Grammar1 SQL.
 func Validate(sql string) (result string, err error) {
 	_, err = Parse(sql)
 	if err != nil {
+		err = eh.Errorf("Validate: %w", err)
 		return
 	}
 	result = sql
 	return
 }
 
-// LoggingPass wraps a pass with debug-level logging of input and output.
-func LoggingPass(logger zerolog.Logger, name string, pass Pass) Pass {
-	return func(sql string) (result string, err error) {
-		logger.Debug().Str("pass", name).Str("input", sql).Msg("pass start")
-		result, err = pass(sql)
-		if err != nil {
-			logger.Debug().Str("pass", name).Err(err).Msg("pass failed")
-			return
-		}
-		logger.Debug().Str("pass", name).Str("output", result).Msg("pass done")
+// ValidateCanonical is a Pass that parses SQL with Grammar2 and returns an
+// error if it fails. The SQL is returned unchanged on success.
+//
+// Use this as the final step of a normalization pipeline to verify that
+// the output conforms to Grammar2's canonical form. If this fails, one or
+// more normalization passes are incomplete or missing.
+//
+// Grammar2 rejects:
+//   - CASE, CAST(AS), expr::Type, DATE/TIMESTAMP sugar
+//   - Array/tuple literal syntax, array/tuple access syntax
+//   - Ternary operator (? :)
+//   - ==, OUTER, comma join, unparenthesized USING
+//   - Bare and backtick-quoted identifiers (must be double-quoted)
+//   - INTO OUTFILE, WITH FILL
+func ValidateCanonical(sql string) (result string, err error) {
+	_, err = ParseCanonical(sql)
+	if err != nil {
+		err = eh.Errorf("ValidateCanonical: %w", err)
 		return
 	}
+	result = sql
+	return
 }

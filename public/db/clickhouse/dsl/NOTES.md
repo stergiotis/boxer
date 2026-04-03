@@ -1,2 +1,0 @@
-# Design
-* Variable scoping in ClickHouse is a minefield, see https://github.com/ClickHouse/ClickHouse/issues/23194. --> Boxer does not attempt to resolve variables. --> Query simulation (quasi execution).

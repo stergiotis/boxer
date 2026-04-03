@@ -28,10 +28,10 @@ func TestPassesRejectInvalidSQL(t *testing.T) {
 		name string
 		pass nanopass.Pass
 	}{
-		{"NormalizeKeywordCase", passes.NormalizeKeywordCase},
+		{"CanonicalizeKeywordCase", passes.CanonicalizeKeywordCase},
 		{"RemoveRedundantParens", passes.RemoveRedundantParens},
 		{"StripComments", passes.StripComments},
-		{"NormalizeWhitespace", passes.NormalizeWhitespaceSingleLine},
+		{"CanonicalizeWhitespace", passes.CanonicalizeWhitespaceSingleLine},
 		{"QualifyTables", passes.QualifyTables("db")},
 	}
 
@@ -53,10 +53,10 @@ func TestAllPassesAllCorpus(t *testing.T) {
 		name string
 		pass nanopass.Pass
 	}{
-		{"NormalizeKeywordCase", passes.NormalizeKeywordCase},
+		{"CanonicalizeKeywordCase", passes.CanonicalizeKeywordCase},
 		{"RemoveRedundantParens", passes.RemoveRedundantParens},
 		{"StripComments", passes.StripComments},
-		{"NormalizeWhitespace", passes.NormalizeWhitespaceSingleLine},
+		{"CanonicalizeWhitespace", passes.CanonicalizeWhitespaceSingleLine},
 		{"QualifyTables", passes.QualifyTables("default")},
 	}
 
@@ -99,8 +99,8 @@ func TestPassesPreserveScopeStructure(t *testing.T) {
 		name string
 		pass nanopass.Pass
 	}{
-		{"NormalizeKeywordCase", passes.NormalizeKeywordCase},
-		{"NormalizeWhitespace", passes.NormalizeWhitespaceSingleLine},
+		{"CanonicalizeKeywordCase", passes.CanonicalizeKeywordCase},
+		{"CanonicalizeWhitespace", passes.CanonicalizeWhitespaceSingleLine},
 		{"StripComments", passes.StripComments},
 		{"RemoveRedundantParens", passes.RemoveRedundantParens},
 	}
@@ -145,10 +145,10 @@ func TestPipelineAllOrderings(t *testing.T) {
 		name string
 		pass nanopass.Pass
 	}{
-		{"case", passes.NormalizeKeywordCase},
+		{"case", passes.CanonicalizeKeywordCase},
 		{"parens", passes.RemoveRedundantParens},
 		{"comments", passes.StripComments},
-		{"whitespace", passes.NormalizeWhitespaceSingleLine},
+		{"whitespace", passes.CanonicalizeWhitespaceSingleLine},
 	}
 
 	permute(len(allPasses), func(perm []int) {

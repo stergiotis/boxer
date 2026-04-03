@@ -219,7 +219,7 @@ func TestSetFormatIdempotent(t *testing.T) {
 func TestSetFormatInPipeline(t *testing.T) {
 	result, err := nanopass.Pipeline(
 		"select a from t",
-		passes.NormalizeKeywordCase,
+		passes.CanonicalizeKeywordCase,
 		passes.SetFormat("JSON"),
 		nanopass.Validate,
 	)

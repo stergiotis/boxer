@@ -5,7 +5,6 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/code"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl"
 	"github.com/stergiotis/boxer/public/dev"
 	"github.com/stergiotis/boxer/public/docgen"
 	"github.com/stergiotis/boxer/public/fffi/compiletime"
@@ -47,7 +46,6 @@ func mainC() (exitCode int) {
 			dev.IoOverrideFlags,
 			coverage.CoverageFlags),
 		Commands: cli2.CommandsNilRemoved(
-			dsl.NewCommand(),
 			cbor.NewCommand(),
 			compiletime.NewCommand(nil, nil),
 			lw.NewCliCommand(),

@@ -235,7 +235,7 @@ func TestExplainSyntaxEquivalence(t *testing.T) {
 				t.Skipf("EXPLAIN SYNTAX failed for original: %v", err)
 			}
 
-			normalized, err := fullPipeline(tt.original)
+			normalized, err := fullCanonicalizationPipeline(tt.original)
 			require.NoError(t, err, "pipeline failed")
 
 			explainNorm, err := explainSyntax(ctx, cli, normalized)
@@ -272,7 +272,7 @@ func TestExplainSyntaxCorpus(t *testing.T) {
 				t.Skipf("EXPLAIN failed for original: %v", err)
 			}
 
-			normalized, err := fullPipeline(entry.SQL)
+			normalized, err := fullCanonicalizationPipeline(entry.SQL)
 			if err != nil {
 				skipped++
 				t.Skipf("pipeline failed: %v", err)
@@ -321,7 +321,7 @@ func TestExplainSmokeCanonicalizedSQLValid(t *testing.T) {
 				t.Skipf("original doesn't work with test schema: %v", err)
 			}
 
-			normalized, err := fullPipeline(entry.SQL)
+			normalized, err := fullCanonicalizationPipeline(entry.SQL)
 			if err != nil {
 				t.Skipf("pipeline failed: %v", err)
 			}

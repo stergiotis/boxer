@@ -50,6 +50,8 @@ func CanonicalizeIdentifiers(sql string) (result string, err error) {
 	return
 }
 
+var _ nanopass.Pass = CanonicalizeIdentifiers
+
 func quoteIdentifierCtx(rw *antlr.TokenStreamRewriter, ctx *grammar1.IdentifierContext, processed map[int]bool) {
 	tok := ctx.GetStart()
 	idx := tok.GetTokenIndex()

@@ -10,13 +10,13 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-// NormalizeWhitespace collapses all whitespace sequences between tokens to a single space
+// CanonicalizeWhitespace collapses all whitespace sequences between tokens to a single space
 // and trims leading/trailing whitespace. Newlines are preserved as single newlines
 // when collapseNewlines is false.
-func NormalizeWhitespace(sql string) (result string, err error) {
+func CanonicalizeWhitespace(sql string) (result string, err error) {
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
-		err = eh.Errorf("NormalizeWhitespace: %w", err)
+		err = eh.Errorf("CanonicalizeWhitespace: %w", err)
 		return
 	}
 	rw := nanopass.NewRewriter(pr)
@@ -47,11 +47,11 @@ func NormalizeWhitespace(sql string) (result string, err error) {
 	return
 }
 
-// NormalizeWhitespaceSingleLine collapses all whitespace (including newlines) to single spaces.
-func NormalizeWhitespaceSingleLine(sql string) (result string, err error) {
+// CanonicalizeWhitespaceSingleLine collapses all whitespace (including newlines) to single spaces.
+func CanonicalizeWhitespaceSingleLine(sql string) (result string, err error) {
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
-		err = eh.Errorf("NormalizeWhitespaceSingleLine: %w", err)
+		err = eh.Errorf("CanonicalizeWhitespaceSingleLine: %w", err)
 		return
 	}
 	rw := nanopass.NewRewriter(pr)

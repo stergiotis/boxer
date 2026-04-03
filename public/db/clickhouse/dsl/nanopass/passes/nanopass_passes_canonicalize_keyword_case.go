@@ -10,11 +10,11 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-// NormalizeKeywordCase uppercases all SQL keywords while preserving identifier and literal case.
-func NormalizeKeywordCase(sql string) (result string, err error) {
+// CanonicalizeKeywordCase uppercases all SQL keywords while preserving identifier and literal case.
+func CanonicalizeKeywordCase(sql string) (result string, err error) {
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
-		err = eh.Errorf("NormalizeKeywordCase: %w", err)
+		err = eh.Errorf("CanonicalizeKeywordCase: %w", err)
 		return
 	}
 	rw := nanopass.NewRewriter(pr)
@@ -33,6 +33,9 @@ func NormalizeKeywordCase(sql string) (result string, err error) {
 
 // isKeywordToken returns true if the token type corresponds to a SQL keyword.
 func isKeywordToken(tokenType int) bool {
+	if tokenType == grammar1.ClickHouseLexerJSON_TRUE || tokenType == grammar1.ClickHouseLexerJSON_FALSE {
+		return false
+	}
 	return tokenType >= grammar1.ClickHouseLexerADD &&
 		tokenType <= grammar1.ClickHouseLexerJSON_TRUE
 }

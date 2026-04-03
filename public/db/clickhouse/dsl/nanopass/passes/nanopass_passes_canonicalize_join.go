@@ -50,6 +50,8 @@ func CanonicalizeJoin(sql string) (result string, err error) {
 	return
 }
 
+var _ nanopass.Pass = CanonicalizeJoin
+
 // deleteTokenWithWhitespace deletes a token and any immediately preceding
 // whitespace on the hidden channel to prevent double spaces.
 func deleteTokenWithWhitespace(rw *antlr.TokenStreamRewriter, pr *nanopass.ParseResult, tokIdx int) {

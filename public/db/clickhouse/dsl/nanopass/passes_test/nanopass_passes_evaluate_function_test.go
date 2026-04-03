@@ -563,7 +563,7 @@ func TestEvalFunctionsInPipeline(t *testing.T) {
 
 	result, err := nanopass.Pipeline(
 		"select myAdd(1, myMul(2, 3)), a from t",
-		passes.NormalizeKeywordCase,
+		passes.CanonicalizeKeywordCase,
 		eval.Pass(),
 		nanopass.Validate,
 	)

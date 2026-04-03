@@ -20,16 +20,14 @@ func TestAllPassesAllCorpus(t *testing.T) {
 		name string
 		pass nanopass.Pass
 	}{
-		{"NormalizeKeywordCase", passes.NormalizeKeywordCase},
 		{"RemoveRedundantParens", passes.RemoveRedundantParens},
 		{"StripComments", passes.StripComments},
-		{"NormalizeWhitespace", passes.NormalizeWhitespaceSingleLine},
-		{"CanonicalizeConstructors", passes.CanonicalizeConstructors(passes.ConstructorFormFunction)},
 		{"QualifyTables", passes.QualifyTables("default")},
 		{"ExtractLiterals", passes.ExtractLiterals(passes.NewExtractLiteralsConfig(0))},
 		{"InjectParamsAsCTE", passes.InjectParamsAsCTE(passes.ParamPrefixExtracted, func(info passes.ExtractedParamInfo) bool {
 			return true
 		}, marshalling.MapCanonicalToClickHouseType)},
+		{"Canonicalize", passes.CanonicalizeFull(100)},
 	}
 
 	for _, entry := range entries {

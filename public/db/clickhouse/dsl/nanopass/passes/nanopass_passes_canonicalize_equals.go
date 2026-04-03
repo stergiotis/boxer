@@ -33,3 +33,5 @@ func CanonicalizeEquals(sql string) (result string, err error) {
 	result = nanopass.GetText(rw)
 	return
 }
+
+var _ nanopass.Pass = CanonicalizeEquals

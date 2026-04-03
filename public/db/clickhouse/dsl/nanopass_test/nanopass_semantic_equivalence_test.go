@@ -19,8 +19,8 @@ func TestPassesPreserveScopeStructure(t *testing.T) {
 		name string
 		pass nanopass.Pass
 	}{
-		{"NormalizeKeywordCase", passes.NormalizeKeywordCase},
-		{"NormalizeWhitespace", passes.NormalizeWhitespaceSingleLine},
+		{"CanonicalizeKeywordCase", passes.CanonicalizeKeywordCase},
+		{"CanonicalizeWhitespace", passes.CanonicalizeWhitespaceSingleLine},
 		{"StripComments", passes.StripComments},
 		{"RemoveRedundantParens", passes.RemoveRedundantParens},
 	}
