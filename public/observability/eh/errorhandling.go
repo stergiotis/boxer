@@ -65,6 +65,9 @@ func (inst *multiWrappedWithStackError) Error() string {
 
 func (inst *multiWrappedWithStackError) StackTrace() errors.StackTrace {
 	s := inst.stack
+	if s == nil {
+		return nil
+	}
 	f := make([]errors.Frame, len(*s))
 	for i := 0; i < len(f); i++ {
 		f[i] = errors.Frame((*s)[i])

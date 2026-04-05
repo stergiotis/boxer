@@ -3,8 +3,8 @@ package eh
 import "errors"
 
 func AppendError(errsIn []error, err error) (errsOut []error) {
+	errsOut = errsIn
 	if err == nil {
-		errsOut = errsIn
 		return
 	}
 	l := len(errsIn)

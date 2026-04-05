@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/math/numerical/finddivisions"
 	"github.com/stergiotis/boxer/public/observability"
 	"github.com/stergiotis/boxer/public/observability/coverage"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/logging"
 	"github.com/stergiotis/boxer/public/observability/ph"
 	"github.com/stergiotis/boxer/public/observability/profiling"
@@ -46,6 +47,7 @@ func mainC() (exitCode int) {
 			dev.IoOverrideFlags,
 			coverage.CoverageFlags),
 		Commands: cli2.CommandsNilRemoved(
+			eb.NewCliCommand(),
 			cbor.NewCommand(),
 			compiletime.NewCommand(nil, nil),
 			lw.NewCliCommand(),

@@ -155,6 +155,7 @@ func SetupConsoleLogger(w io.Writer) (err error) {
 	if err != nil {
 		return eh.Errorf("unable to create cbor console printer: %w", err)
 	}
+	zerolog.ErrorMarshalFunc = eh.ErrorMarshalFuncHuman
 	log.Logger = log.Output(zerolog.ConsoleWriter{
 		Out: w,
 		FormatFieldValue: func(i interface{}) string {
@@ -163,7 +164,9 @@ func SetupConsoleLogger(w io.Writer) (err error) {
 		FormatErrFieldValue: func(i interface{}) string {
 			return formatFieldValue(i, pp)
 		},
-		TimeFormat: time.RFC3339})
+		FieldsExclude: []string{zerolog.ErrorFieldName},
+		FormatExtra:   eh.ConsoleFormatErrorExtra(true),
+		TimeFormat:    time.RFC3339})
 	zerolog.InterfaceMarshalFunc = func(v any) (b []byte, err error) {
 		var se string
 		se, err = embeddAsCbor(cborEncMode, v)
