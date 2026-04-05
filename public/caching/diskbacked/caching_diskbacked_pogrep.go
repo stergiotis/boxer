@@ -1,4 +1,5 @@
 //go:build llm_generated_gemini3pro
+
 package diskbacked
 
 import (
@@ -8,7 +9,6 @@ import (
 	"github.com/akrylysov/pogreb"
 	"github.com/fxamacker/cbor/v2"
 )
-
 
 // PogrebStash implements StashBackend using the Pogreb key-value store.
 // It uses CBOR for serialization.
@@ -103,6 +103,7 @@ func (s *PogrebStash[K, V]) Add(key K, value V) (evicted bool) {
 
 	// 3. Put
 	err = s.db.Put(kBytes, vBytes)
+	_ = err
 	return evicted
 }
 

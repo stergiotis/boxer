@@ -114,7 +114,7 @@ func (inst *IntermediateTableRepresentation) ToSchemaTable(id naming.StylableNam
 		return
 	}
 
-	rec := builder.NewRecord()
+	rec := builder.NewRecordBatch()
 	defer rec.Release()
 
 	tbl := array.NewTableFromRecords(SchemaTableArrowSchema, []arrow.RecordBatch{rec})

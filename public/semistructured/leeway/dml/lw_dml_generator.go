@@ -315,6 +315,9 @@ func (inst *GoClassBuilder) composeFieldRelatedCode(op structFieldOperationE, cc
 		} else {
 			_, err = fmt.Fprintf(b, `	inst.%sListBuilder%03d.Append(true)
 `, prefix, idx)
+			if err != nil {
+				return
+			}
 			_, err = fmt.Fprintf(b, `	for _, v := range inst.%s {
 			inst.%sFieldBuilder%03d.Append(%sv%s)
 	}
@@ -480,6 +483,9 @@ func (inst *GoClassBuilder) composeStateVerificationCode(allowedSrcStates []runt
 %s
 	}
 `, runtime.EntityStateVariableNames[allowedSrcStates[0]], onErrCode)
+		if err != nil {
+			return
+		}
 		break
 	default:
 		_, err = b.WriteString(`	switch inst.state {
@@ -512,6 +518,9 @@ func (inst *GoClassBuilder) composeStateTransitionCode(allowedSrcStates []runtim
 	default:
 		_, err = b.WriteString(`	switch inst.state {
 	case `)
+		if err != nil {
+			return
+		}
 		for i, s := range allowedSrcStates {
 			if i > 0 {
 				_, err = fmt.Fprintf(b, `, runtime.%s`, runtime.EntityStateVariableNames[s])

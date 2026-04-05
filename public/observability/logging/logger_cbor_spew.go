@@ -23,6 +23,7 @@ func (inst *CborSpewLogger) Write(p []byte) (n int, err error) {
 	err = cbor2.Unmarshal(p, &v)
 	if err != nil {
 		err = eh.Errorf("unable to unmarshall cbor: %w", err)
+		return
 	}
 
 	err = inst.dumper.Fprint(inst.Out, v)

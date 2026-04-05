@@ -79,6 +79,9 @@ func (inst *CompatibilityRecord) ToBase64() (s string, diag string, err error) {
 }
 func (inst *CompatibilityRecord) Encode(enc cbor.FullEncoderI) (err error) {
 	_, err = enc.EncodeMapDefinite(4)
+	if err != nil {
+		return
+	}
 	_, err = enc.EncodeString("features")
 	if err != nil {
 		return

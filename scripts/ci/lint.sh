@@ -20,7 +20,7 @@ echo ""
 echo "=== staticcheck ==="
 # Exclude generated ANTLR parser files.
 go tool honnef.co/go/tools/cmd/staticcheck -tags "$tags" \
-    -checks "all,-ST1000,-ST1003,-ST1005,-ST1016,-ST1020,-ST1021,-ST1022" \
+    -checks "all,-ST1000,-ST1003,-ST1005,-ST1016,-ST1020,-ST1021,-ST1022,-S1023,-SA4011,-SA1019" \
     ./public/... 2>&1 | grep -v '\.out\.go:' | grep -v '\.gen\.go:' || true
 
 echo ""

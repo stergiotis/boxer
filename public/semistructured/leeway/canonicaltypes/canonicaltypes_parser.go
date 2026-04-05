@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"github.com/antlr4-go/antlr/v4"
+	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/parsing/antlr4utils"
@@ -234,7 +235,7 @@ func (inst *Parser) MustParseTypeOrGroupAst(typeOrGroup string) (ast AstNodeI) {
 	ast, err = inst.ParsePrimitiveTypeOrGroupAst(typeOrGroup)
 	if err != nil {
 		err = eb.Build().Str("input", typeOrGroup).Errorf("unable to parse canonical type or group")
-		return
+		log.Panic().Err(err).Str("typeOrGroup", typeOrGroup).Msg("")
 	}
 	return
 }
@@ -243,7 +244,7 @@ func (inst *Parser) MustParsePrimitiveTypeAst(typeS string) (ast PrimitiveAstNod
 	ast, err = inst.ParsePrimitiveTypeAst(typeS)
 	if err != nil {
 		err = eb.Build().Str("input", typeS).Errorf("unable to parse canonical type")
-		return
+		log.Panic().Err(err).Str("typeS", typeS).Msg("")
 	}
 	return
 }

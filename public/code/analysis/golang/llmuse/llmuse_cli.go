@@ -33,8 +33,8 @@ func NewCliCommand() *cli.Command {
 			err = fs.WalkDir(l, ".", func(path string, d fs.DirEntry, err error) error {
 				if !d.IsDir() && strings.HasSuffix(path, ".go") {
 					content, e := fs.ReadFile(l, path)
-					if err != nil {
-						return eb.Build().Str("path", path).Errorf("unable to read file: %w", err)
+					if e != nil {
+						return eb.Build().Str("path", path).Errorf("unable to read file: %w", e)
 					}
 					_, e = fmt.Printf("\n--- FILE: %s ---\n```go\n", path)
 					if e != nil {

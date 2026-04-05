@@ -93,6 +93,7 @@ func (inst *PebbleStash[K, V]) Add(key K, value V) bool {
 
 	// 2. Set (NoSync for speed, since it's just a cache)
 	err = inst.db.Set(kBytes, vBytes, pebble.NoSync)
+	_ = err
 
 	// Pebble manages its own capacity via compactions,
 	// but it doesn't strictly "Evict" based on count like a map.

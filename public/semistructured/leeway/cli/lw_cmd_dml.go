@@ -52,6 +52,9 @@ func NewCliCommandDml() *cli.Command {
 
 									var conv *ddl.HumanReadableNamingConvention
 									conv, err = ddl.NewHumanReadableNamingConvention(":")
+									if err != nil {
+										return eh.Errorf("unable to create human readable convention: %w", err)
+									}
 									chTech := clickhouse.NewTechnologySpecificCodeGenerator()
 									driver := dml.NewGoCodeGeneratorDriver(conv, chTech)
 
