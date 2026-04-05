@@ -358,7 +358,7 @@ func (inst *Orchestrator) Compile(ctx context.Context, input string) (result Res
 			Attempt: attempt, Duration: time.Since(t0), Err: llmErr,
 		})
 		if llmErr != nil {
-			err = eb.Build().Int("attempt", attempt).Errorf("LLM: %w", attempt, llmErr)
+			err = eb.Build().Int("attempt", attempt).Errorf("LLM: %w", llmErr)
 			if attempt == inst.cfg.MaxAttempts {
 				inst.emitComplete(ctx, cacheKey, "", time.Since(start), attempt, false, err)
 				return
