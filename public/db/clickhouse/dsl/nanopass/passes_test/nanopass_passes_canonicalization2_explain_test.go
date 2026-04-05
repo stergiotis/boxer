@@ -14,6 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/testdata"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -72,7 +73,7 @@ func (inst *clickHouseTestClient) Ping(ctx context.Context) (err error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		err = eh.Errorf("clickhouse ping status %d", resp.StatusCode)
+		err = eb.Build().Int("statusCode", resp.StatusCode).Errorf("clickhouse ping failed")
 	}
 	return
 }
@@ -92,7 +93,7 @@ func (inst *clickHouseTestClient) Exec(ctx context.Context, query string) (err e
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		err = eh.Errorf("clickhouse error (status %d): %s\nquery: %s", resp.StatusCode, string(body), query)
+		err = eb.Build().Int("statusCode", resp.StatusCode).Str("body", string(body)).Str("query", query).Errorf("clickhouse query error")
 	}
 	return
 }
@@ -116,7 +117,7 @@ func (inst *clickHouseTestClient) Query(ctx context.Context, query string) (resu
 		return
 	}
 	if resp.StatusCode != http.StatusOK {
-		err = eh.Errorf("clickhouse error (status %d): %s\nquery: %s", resp.StatusCode, string(result), query)
+		err = eb.Build().Int("statusCode", resp.StatusCode).Str("body", string(result)).Str("query", query).Errorf("clickhouse query error")
 	}
 	return
 }

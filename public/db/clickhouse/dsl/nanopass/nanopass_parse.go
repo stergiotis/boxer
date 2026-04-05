@@ -6,7 +6,7 @@ import (
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar2"
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // ParseResult holds the result of parsing SQL with either Grammar1 or Grammar2.
@@ -64,7 +64,7 @@ func Parse(sql string) (pr *ParseResult, err error) {
 	tree := parser.QueryStmt()
 
 	if len(errListener.errors) > 0 {
-		err = eh.Errorf("Parse: syntax error: %s", errListener.errors[0])
+		err = eb.Build().Str("detail", errListener.errors[0]).Errorf("syntax error")
 		return
 	}
 
@@ -106,7 +106,7 @@ func ParseCanonical(sql string) (pr *ParseResult, err error) {
 	tree := parser.QueryStmt()
 
 	if len(errListener.errors) > 0 {
-		err = eh.Errorf("ParseCanonical: syntax error (non-canonical SQL?): %s", errListener.errors[0])
+		err = eb.Build().Str("detail", errListener.errors[0]).Errorf("canonical parse failed, non-canonical SQL")
 		return
 	}
 

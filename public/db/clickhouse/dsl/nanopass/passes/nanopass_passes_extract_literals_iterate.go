@@ -9,6 +9,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
 )
@@ -52,7 +53,7 @@ func (inst *ExtractedParamInfo) Value() (val marshalling.TypedLiteral, err error
 func (inst *ExtractedParamInfo) ScalarValue() (val marshalling.TypedLiteral, err error) {
 	sql := strings.TrimSpace(inst.LiteralSQL)
 	if len(sql) > 0 && (sql[0] == '[' || sql[0] == '(') {
-		err = eh.Errorf("ScalarValue: value %q is a composite, not a scalar", sql)
+		err = eb.Build().Str("value", sql).Errorf("value is a composite, not a scalar")
 		return
 	}
 	val, err = marshalling.UnmarshalScalarLiteral(sql)

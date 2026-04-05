@@ -9,6 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // ConstructorFormE controls the canonical direction.
@@ -49,7 +50,7 @@ func CanonicalizeConstructors(form ConstructorFormE) nanopass.Pass {
 			canonicalizeToFunction(pr, rw)
 			canonicalizeSettingsToFunction(pr, rw)
 		default:
-			err = eh.Errorf("CanonicalizeConstructors: unknown form %d", form)
+			err = eb.Build().Int("form", int(form)).Errorf("unknown constructor form")
 			return
 		}
 

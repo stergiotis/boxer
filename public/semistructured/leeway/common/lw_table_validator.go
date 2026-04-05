@@ -74,7 +74,7 @@ func (inst *TableValidator) validateNames(names []naming.StylableName, nameType 
 			}
 		}
 		if !all {
-			err = eh.Errorf("found %s names in multiple naming styles", nameType)
+			err = eb.Build().Str("nameType", nameType).Errorf("found names in multiple naming styles")
 			return
 		}
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // ColumnNameViolation describes a projection column whose resulting name failed validation.
@@ -92,7 +93,7 @@ func ValidateColumnNames(pattern string) nanopass.Pass {
 	return func(sql string) (result string, err error) {
 		re, compileErr := regexp.Compile(pattern)
 		if compileErr != nil {
-			err = eh.Errorf("ValidateColumnNames: invalid regex %q: %w", pattern, compileErr)
+			err = eb.Build().Str("pattern", pattern).Errorf("invalid column name regex: %w", compileErr)
 			return
 		}
 

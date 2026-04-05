@@ -7,7 +7,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/fec/code/golay24"
 	ea2 "github.com/stergiotis/boxer/public/fec/ea"
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 type stateE int
@@ -114,7 +114,7 @@ func (inst *Golay24Reader) discardSlow(nBytes int) (n int, err error) {
 func (inst *Golay24Reader) MessageAccepted() (err error) {
 	err = inst.skipTrailingBytes()
 	if err != nil {
-		err = eh.Errorf("unable to skip trailing bytes in state %d: %w", inst.state, err)
+		err = eb.Build().Int("state", int(inst.state)).Errorf("unable to skip trailing bytes: %w", err)
 		return
 	}
 	inst.reset()
@@ -124,7 +124,7 @@ func (inst *Golay24Reader) MessageAccepted() (err error) {
 func (inst *Golay24Reader) MessageRejected(reason error) (err error) {
 	err = inst.skipTrailingBytes()
 	if err != nil {
-		err = eh.Errorf("unable to skip trailing bytes in state %d: %w", inst.state, err)
+		err = eb.Build().Int("state", int(inst.state)).Errorf("unable to skip trailing bytes: %w", err)
 		return
 	}
 	inst.reset()

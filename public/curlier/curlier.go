@@ -17,6 +17,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/config"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 type CurlierConfig struct {
@@ -284,7 +285,7 @@ func (inst *Curlier) Run(reqBody io.Reader) (resp *http.Response, err error) {
 func NewCurlier(cfg *CurlierConfig) (*Curlier, error) {
 	nMessages := cfg.Validate(false)
 	if nMessages > 0 {
-		return nil, eh.Errorf("validation of config failed with %d messages", nMessages)
+		return nil, eb.Build().Int("nMessages", nMessages).Errorf("validation of config failed")
 	}
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: cfg.Insecure},

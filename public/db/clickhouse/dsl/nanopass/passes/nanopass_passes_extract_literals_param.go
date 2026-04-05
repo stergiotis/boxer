@@ -9,6 +9,7 @@ import (
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // cborEncMode is a pinned canonical CBOR encoding mode for deterministic output.
@@ -90,7 +91,7 @@ func ParseParamName(name string, prefix string) (contextName string, meta ParamM
 		prefix = ParamPrefixExtracted
 	}
 	if !strings.HasPrefix(name, prefix+"_") {
-		err = eh.Errorf("ParseParamName: name %q does not start with prefix %q", name, prefix)
+		err = eb.Build().Str("name", name).Str("prefix", prefix).Errorf("param name does not start with expected prefix")
 		return
 	}
 
@@ -100,7 +101,7 @@ func ParseParamName(name string, prefix string) (contextName string, meta ParamM
 	// Everything before it (joined by _) is the context name.
 	lastUnderscore := strings.LastIndex(remainder, "_")
 	if lastUnderscore < 0 {
-		err = eh.Errorf("ParseParamName: name %q has no metadata suffix", name)
+		err = eb.Build().Str("name", name).Errorf("param name has no metadata suffix")
 		return
 	}
 

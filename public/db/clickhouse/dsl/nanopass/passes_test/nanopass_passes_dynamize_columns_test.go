@@ -298,7 +298,7 @@ func TestWrapColumnsInvalidRegex(t *testing.T) {
 	pass := passes.WrapColumnsWithDynamic("[invalid")
 	_, err := pass("SELECT a FROM t")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid regex")
+	assert.Contains(t, err.Error(), "invalid column regex")
 }
 
 // --- Edge cases ---

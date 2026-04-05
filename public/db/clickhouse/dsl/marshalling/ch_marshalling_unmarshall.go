@@ -9,6 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 )
 
@@ -63,7 +64,7 @@ func UnmarshalCompositeLiteralEx(sql string, mapClickHouseTypeToCanonical func(s
 	})
 
 	if exprNode == nil {
-		err = eh.Errorf("UnmarshalCompositeLiteral: no expression found in %q", sql)
+		err = eb.Build().Str("sql", sql).Errorf("no expression found in input")
 		return
 	}
 
@@ -99,7 +100,7 @@ func UnmarshalCSTToTypedLiteral(pr *nanopass.ParseResult, node antlr.ParserRuleC
 		err = eh.Errorf("UnmarshalCSTToTypedLiteral: empty ColumnArgExprContext")
 		return
 	default:
-		err = eh.Errorf("UnmarshalCSTToTypedLiteral: unsupported node type %T", node)
+		err = eb.Build().Type("nodeType", node).Errorf("unsupported node type")
 		return
 	}
 }
@@ -129,7 +130,7 @@ func unmarshalIdentifierCST(pr *nanopass.ParseResult, ctx *grammar1.ColumnExprId
 	case "null":
 		result = NewScalarNull()
 	default:
-		err = eh.Errorf("unmarshalIdentifierCST: identifier %q is not a literal value", text)
+		err = eb.Build().Str("identifier", text).Errorf("identifier is not a literal value")
 	}
 	return
 }
@@ -151,7 +152,7 @@ func unmarshalFunctionCST(pr *nanopass.ParseResult, ctx *grammar1.ColumnExprFunc
 	case "tuple":
 		return unmarshalTupleFunctionCST(pr, ctx, mapType)
 	default:
-		err = eh.Errorf("unmarshalFunctionCST: unsupported function %q (expected CAST or tuple)", funcName)
+		err = eb.Build().Str("funcName", funcName).Errorf("unsupported function, expected CAST or tuple")
 		return
 	}
 }
@@ -173,7 +174,7 @@ func unmarshalArrayFunctionCST(pr *nanopass.ParseResult, ctx *grammar1.ColumnExp
 			}
 			elem, elemErr := UnmarshalCSTToTypedLiteral(pr, arg, mapType)
 			if elemErr != nil {
-				err = eh.Errorf("unmarshalArrayFunctionCST: element %d: %w", len(elems), elemErr)
+				err = eb.Build().Int("element", len(elems)).Errorf("unmarshalArrayFunctionCST: %w", elemErr)
 				return
 			}
 			elems = append(elems, elem)
@@ -209,14 +210,14 @@ func unmarshalCastFunctionCST(pr *nanopass.ParseResult, ctx *grammar1.ColumnExpr
 		}
 	}
 	if len(args) != 2 {
-		err = eh.Errorf("unmarshalCastFunctionCST: expected 2 args, got %d", len(args))
+		err = eb.Build().Int("nArgs", len(args)).Errorf("expected 2 args for CAST")
 		return
 	}
 
 	typeText := nanopass.NodeText(pr, args[1])
 	typeText = strings.TrimSpace(typeText)
 	if len(typeText) < 2 || typeText[0] != '\'' || typeText[len(typeText)-1] != '\'' {
-		err = eh.Errorf("unmarshalCastFunctionCST: second arg %q is not a quoted type", typeText)
+		err = eb.Build().Str("arg", typeText).Errorf("second arg is not a quoted type")
 		return
 	}
 	chType := typeText[1 : len(typeText)-1]
@@ -260,7 +261,7 @@ func unmarshalTupleFunctionCST(pr *nanopass.ParseResult, ctx *grammar1.ColumnExp
 		}
 		elem, elemErr := UnmarshalCSTToTypedLiteral(pr, arg, mapType)
 		if elemErr != nil {
-			err = eh.Errorf("unmarshalTupleFunctionCST: element %d: %w", len(result.Elements), elemErr)
+			err = eb.Build().Int("element", len(result.Elements)).Errorf("unmarshalTupleFunctionCST: %w", elemErr)
 			return
 		}
 		result.Elements = append(result.Elements, elem)
@@ -296,7 +297,7 @@ func unmarshalArrayCST(pr *nanopass.ParseResult, ctx *grammar1.ColumnExprArrayCo
 			}
 			elem, elemErr := UnmarshalCSTToTypedLiteral(pr, innerNode, mapType)
 			if elemErr != nil {
-				err = eh.Errorf("unmarshalArrayCST: element %d: %w", len(elems), elemErr)
+				err = eb.Build().Int("element", len(elems)).Errorf("unmarshalArrayCST: %w", elemErr)
 				return
 			}
 			elems = append(elems, elem)
@@ -385,7 +386,7 @@ func unmarshalTupleExprCST(pr *nanopass.ParseResult, ctx *grammar1.ColumnExprTup
 		}
 		elem, elemErr := UnmarshalCSTToTypedLiteral(pr, innerNode, mapType)
 		if elemErr != nil {
-			err = eh.Errorf("unmarshalTupleExprCST: element %d: %w", len(result.Elements), elemErr)
+			err = eb.Build().Int("element", len(result.Elements)).Errorf("unmarshalTupleExprCST: %w", elemErr)
 			return
 		}
 		result.Elements = append(result.Elements, elem)

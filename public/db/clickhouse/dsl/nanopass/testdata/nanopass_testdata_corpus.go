@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 //go:embed corpus/*.sql
@@ -38,7 +39,7 @@ func LoadCorpus() (entries []CorpusEntry, err error) {
 		var data []byte
 		data, err = corpusFS.ReadFile("corpus/" + de.Name())
 		if err != nil {
-			err = eh.Errorf("unable to read corpus file %s: %w", de.Name(), err)
+			err = eb.Build().Str("file", de.Name()).Errorf("unable to read corpus file: %w", err)
 			return
 		}
 

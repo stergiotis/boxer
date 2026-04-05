@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"io"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 func NewByteBlockReaderDiscardReader(reader interface{}) (ByteBlockDiscardReader, error) {
@@ -26,7 +26,7 @@ func NewByteBlockReaderDiscardReader(reader interface{}) (ByteBlockDiscardReader
 			return newByteAndBlockReaderByteReadReader(probe), nil
 		}
 	}
-	return nil, eh.Errorf("unable to create ByteBlockDiscardReader from supplied reader: type=%t", reader)
+	return nil, eb.Build().Type("readerType", reader).Errorf("unable to create ByteBlockDiscardReader from supplied reader")
 }
 
 func newByteAndBlockReaderBufioReader(reader *bufio.Reader) ByteBlockDiscardReader {

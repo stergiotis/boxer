@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/fec/ea/golay24"
 	"github.com/stergiotis/boxer/public/fec/ea/passthrough"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 type AlgorithmE uint16
@@ -119,7 +120,7 @@ func NewWriterFromConfig(w io.Writer, config *FecConfig) (ea2.MessageWriter, err
 	case AlgorithmGolay24:
 		return golay24.NewWriter(w, config.NAnchorBytes), nil
 	}
-	return nil, eh.Errorf("unimplemented algorithm %d", config.FecAlgorithm)
+	return nil, eb.Build().Uint16("algorithm", config.FecAlgorithm).Errorf("unimplemented FEC algorithm")
 }
 
 func NewReaderFromConfig(r ea.ByteBlockDiscardReader, config *FecConfig) (ea2.MessageReader, error) {
@@ -132,5 +133,5 @@ func NewReaderFromConfig(r ea.ByteBlockDiscardReader, config *FecConfig) (ea2.Me
 	case AlgorithmGolay24:
 		return golay24.NewGolay24Reader(r, config.NAnchorBytes, config.AnchorMaxHammingDistPerByteIncl, config.MaxMessageSize), nil
 	}
-	return nil, eh.Errorf("unimplemented algorithm %d", config.FecAlgorithm)
+	return nil, eb.Build().Uint16("algorithm", config.FecAlgorithm).Errorf("unimplemented FEC algorithm")
 }

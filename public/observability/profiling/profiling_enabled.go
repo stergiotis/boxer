@@ -4,6 +4,7 @@ package profiling
 
 import (
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -22,7 +23,7 @@ func ProfilingHandleExit(context *cli.Context) {
 func cpuProfileFileAction(context *cli.Context, s string) error {
 	f, err := os.Create(s)
 	if err != nil {
-		return eh.Errorf("unable to create cpu profiling file %q: %w", s, err)
+		return eb.Build().Str("file", s).Errorf("unable to create cpu profiling file: %w", err)
 	}
 	log.Info().Str("file", s).Msg("started cpu profiling")
 	err = pprof.StartCPUProfile(f)

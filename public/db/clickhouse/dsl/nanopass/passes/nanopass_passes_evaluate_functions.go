@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/slices"
 )
 
@@ -203,7 +204,7 @@ func (inst *FunctionEvaluator) tryEval(pr *nanopass.ParseResult, funcExpr *gramm
 
 	val, err = fn.f(args)
 	if err != nil {
-		err = eh.Errorf("evaluating %s: %w", name, err)
+		err = eb.Build().Str("function", name).Errorf("evaluation failed: %w", err)
 		return
 	}
 	evaluated = true

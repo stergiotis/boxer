@@ -280,7 +280,7 @@ var LoggingFlags = []cli.Flag{
 				lvl = zerolog.PanicLevel
 				break
 			default:
-				return eh.Errorf("unhandled log level %s", s)
+				return eb.Build().Str("level", s).Errorf("unhandled log level")
 			}
 			zerolog.SetGlobalLevel(lvl)
 			return nil
@@ -329,7 +329,7 @@ var LoggingFlags = []cli.Flag{
 				log.Logger = log.Output(w)
 				break
 			default:
-				return eh.Errorf("unhandled log format %s", s)
+				return eb.Build().Str("format", s).Errorf("unhandled log format")
 			}
 			if context.Bool("logCaller") {
 				log.Logger = log.Logger.With().Caller().Logger()

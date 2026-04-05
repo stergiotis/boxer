@@ -3,7 +3,7 @@ package config
 import (
 	cli "github.com/urfave/cli/v2"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 type NameTransformFunc func(name string) (newName string)
@@ -28,6 +28,6 @@ func GenerateResolverFunc(nameAry []string, emptyMeansZero bool) func(s string) 
 				return i, nil
 			}
 		}
-		return 0, eh.Errorf("unable to resolve %q: possible values %q", s, nameAry)
+		return 0, eb.Build().Str("value", s).Strs("possibleValues", nameAry).Errorf("unable to resolve value")
 	}
 }

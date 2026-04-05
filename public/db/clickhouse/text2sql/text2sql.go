@@ -28,6 +28,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Result is the output of a successful text-to-SQL generation.
@@ -111,7 +112,7 @@ func (inst *Generator) Generate(ctx context.Context, question string) (result Re
 		var resp ollamaResponse
 		resp, err = inst.chat(ctx, messages)
 		if err != nil {
-			err = eh.Errorf("attempt %d: ollama: %w", attempt, err)
+			err = eb.Build().Int("attempt", attempt).Errorf("ollama request failed: %w", err)
 			return
 		}
 		result.TotalTokens += resp.EvalCount + resp.PromptEvalCount
@@ -134,7 +135,7 @@ func (inst *Generator) Generate(ctx context.Context, question string) (result Re
 				ollamaMessage{Role: "user", Content: formatFeedback(rawSQL, validationErr)},
 			)
 		} else {
-			err = eh.Errorf("failed after %d attempts, last error: %w", attempt, validationErr)
+			err = eb.Build().Int("attempts", attempt).Errorf("all attempts failed: %w", validationErr)
 		}
 	}
 	return
@@ -349,7 +350,7 @@ func (inst *Generator) chat(ctx context.Context, messages []ollamaMessage) (resp
 	}
 
 	if httpResp.StatusCode != http.StatusOK {
-		err = eh.Errorf("ollama error (%d): %s", httpResp.StatusCode, string(respBytes))
+		err = eb.Build().Int("statusCode", httpResp.StatusCode).Str("body", string(respBytes)).Errorf("ollama HTTP error")
 		return
 	}
 

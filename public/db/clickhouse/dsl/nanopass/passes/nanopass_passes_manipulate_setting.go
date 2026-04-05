@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // --- ReadSettings: CST → Go ---
@@ -49,7 +50,7 @@ func ReadSettings(sql string) (settings map[string]any, err error) {
 
 			name, val, extractErr := extractSettingExpr(expr)
 			if extractErr != nil {
-				err = eh.Errorf("ReadSettings: setting %q: %w", name, extractErr)
+				err = eb.Build().Str("setting", name).Errorf("unable to read setting: %w", extractErr)
 				return
 			}
 			settings[name] = val
@@ -90,7 +91,7 @@ func extractSettingExpr(expr *grammar1.SettingExprContext) (name string, val any
 		}
 	}
 
-	err = eh.Errorf("no value found for setting %q", name)
+	err = eb.Build().Str("setting", name).Errorf("no value found for setting")
 	return
 }
 
@@ -129,12 +130,12 @@ func deserializeSettingValueTyped(ctx antlr.ParserRuleContext) (val marshalling.
 		case "tuple":
 			val = marshalling.NewTupleTyped()
 		default:
-			err = eh.Errorf("unknown setting function: %s", funcName)
+			err = eb.Build().Str("function", funcName).Errorf("unknown setting function")
 		}
 		return
 
 	default:
-		err = eh.Errorf("unknown setting value type: %T", ctx)
+		err = eb.Build().Type("valueType", ctx).Errorf("unknown setting value type")
 		return
 	}
 }
@@ -231,7 +232,7 @@ func deserializeSettingFunction(ctx *grammar1.SettingFunctionContext) (val marsh
 	case "tuple":
 		val = marshalling.NewTupleTyped(elems...)
 	default:
-		err = eh.Errorf("unknown setting function: %s", funcName)
+		err = eb.Build().Str("function", funcName).Errorf("unknown setting function")
 	}
 	return
 }
@@ -344,7 +345,7 @@ func serializeSettingsMap(settings map[string]any) (sql string, err error) {
 		var valSQL string
 		valSQL, err = marshalling.MarshalGoValueToSQL(settings[k])
 		if err != nil {
-			err = eh.Errorf("setting %q: %w", k, err)
+			err = eb.Build().Str("setting", k).Errorf("invalid setting: %w", err)
 			return
 		}
 		parts = append(parts, k+" = "+valSQL)

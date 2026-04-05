@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
 )
@@ -123,7 +124,7 @@ func (a *HomogeneousArray) GetScalar(i int) (result TypedLiteral, err error) {
 	}
 	n := a.Len()
 	if i < 0 || i >= n {
-		err = eh.Errorf("HomogeneousArray.GetScalar: index %d out of range [0, %d)", i, n)
+		err = eb.Build().Int("index", i).Int("len", n).Errorf("index out of range")
 		return
 	}
 	result.Kind = KindScalar
@@ -140,17 +141,17 @@ func (a *HomogeneousArray) GetScalar(i int) (result TypedLiteral, err error) {
 	case "b":
 		result.BoolVal = a.BoolVals[i]
 	default:
-		err = eh.Errorf("HomogeneousArray.GetScalar: unsupported element type %s", a.ElementType)
+		err = eb.Build().Stringer("elementType", a.ElementType).Errorf("unsupported element type")
 	}
 	return
 }
 
 func (a *HomogeneousArray) AppendScalar(lit TypedLiteral) error {
 	if lit.Kind != KindScalar {
-		return eh.Errorf("HomogeneousArray.AppendScalar: expected KindScalar, got %s", lit.Kind)
+		return eb.Build().Stringer("kind", lit.Kind).Errorf("expected KindScalar")
 	}
 	if lit.ScalarType == nil || lit.ScalarType.String() != a.ElementType.String() {
-		return eh.Errorf("HomogeneousArray.AppendScalar: type mismatch: got %v, expected %s", lit.ScalarType, a.ElementType)
+		return eb.Build().Stringer("got", lit.ScalarType).Stringer("expected", a.ElementType).Errorf("type mismatch")
 	}
 	switch a.ElementType.String() {
 	case "s":
@@ -164,7 +165,7 @@ func (a *HomogeneousArray) AppendScalar(lit TypedLiteral) error {
 	case "b":
 		a.BoolVals = append(a.BoolVals, lit.BoolVal)
 	default:
-		return eh.Errorf("HomogeneousArray.AppendScalar: unsupported element type %s", a.ElementType)
+		return eb.Build().Stringer("elementType", a.ElementType).Errorf("unsupported element type")
 	}
 	return nil
 }
@@ -285,7 +286,7 @@ func (t TypedLiteral) ToHeterogeneous() (result TypedLiteral, err error) {
 	for i := 0; i < n; i++ {
 		elems[i], err = t.HomArray.GetScalar(i)
 		if err != nil {
-			err = eh.Errorf("ToHeterogeneous: element %d: %w", i, err)
+			err = eb.Build().Int("element", i).Errorf("ToHeterogeneous: %w", err)
 			return
 		}
 	}

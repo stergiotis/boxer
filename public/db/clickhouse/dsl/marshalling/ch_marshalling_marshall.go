@@ -288,7 +288,7 @@ func UnmarshalScalarLiteral(token string) (result TypedLiteral, err error) {
 // MarshalScalarToSQL converts a scalar TypedLiteral to ClickHouse SQL text.
 func MarshalScalarToSQL(lit TypedLiteral) (result string, err error) {
 	if lit.Kind != KindScalar {
-		err = eh.Errorf("MarshalScalarToSQL: expected KindScalar, got %s", lit.Kind)
+		err = eb.Build().Stringer("kind", lit.Kind).Errorf("expected KindScalar")
 		return
 	}
 	if lit.Null {
@@ -367,7 +367,7 @@ func marshalTypedLiteralInner(lit TypedLiteral, mapFunc func(string) (string, er
 	case KindTuple:
 		sql, err = marshalTupleTypedLiteralToSQL(lit.Elements, mapFunc)
 	default:
-		err = eh.Errorf("marshalTypedLiteralInner: unknown kind %s", lit.Kind)
+		err = eb.Build().Stringer("kind", lit.Kind).Errorf("unknown kind")
 	}
 	return
 }
@@ -386,12 +386,12 @@ func marshalHomogeneousArrayToSQL(a *HomogeneousArray) (sql string, err error) {
 		}
 		elem, getErr := a.GetScalar(i)
 		if getErr != nil {
-			err = eh.Errorf("marshalHomogeneousArrayToSQL: element %d: %w", i, getErr)
+			err = eb.Build().Int("element", i).Errorf("marshalHomogeneousArrayToSQL: %w", getErr)
 			return
 		}
 		elemSQL, marshalErr := MarshalScalarToSQL(elem)
 		if marshalErr != nil {
-			err = eh.Errorf("marshalHomogeneousArrayToSQL: element %d: %w", i, marshalErr)
+			err = eb.Build().Int("element", i).Errorf("marshalHomogeneousArrayToSQL: %w", marshalErr)
 			return
 		}
 		sb.WriteString(elemSQL)
@@ -410,7 +410,7 @@ func marshalHeterogeneousArrayToSQL(elems []TypedLiteral, mapFunc func(string) (
 		}
 		elemSQL, elemErr := MarshalTypedLiteralToSQLEx(elem, mapFunc)
 		if elemErr != nil {
-			err = eh.Errorf("marshalHeterogeneousArrayToSQL: element %d: %w", i, elemErr)
+			err = eb.Build().Int("element", i).Errorf("marshalHeterogeneousArrayToSQL: %w", elemErr)
 			return
 		}
 		sb.WriteString(elemSQL)
@@ -429,7 +429,7 @@ func marshalTupleTypedLiteralToSQL(elems []TypedLiteral, mapFunc func(string) (s
 		}
 		elemSQL, elemErr := MarshalTypedLiteralToSQLEx(elem, mapFunc)
 		if elemErr != nil {
-			err = eh.Errorf("marshalTupleTypedLiteralToSQL: element %d: %w", i, elemErr)
+			err = eb.Build().Int("element", i).Errorf("marshalTupleTypedLiteralToSQL: %w", elemErr)
 			return
 		}
 		sb.WriteString(elemSQL)
@@ -680,7 +680,7 @@ func marshalGoArray[T any](arr []T, opts MarshalOptions) (sql string, err error)
 		}
 		elemSQL, elemErr := MarshalGoValueToSQLWithOptions(elem, opts)
 		if elemErr != nil {
-			err = eh.Errorf("marshalGoArray: element %d: %w", i, elemErr)
+			err = eb.Build().Int("element", i).Errorf("marshalGoArray: %w", elemErr)
 			return
 		}
 		sb.WriteString(elemSQL)
@@ -704,12 +704,12 @@ func marshalGoTuple(tup *Tuple, opts MarshalOptions) (sql string, err error) {
 		}
 		elem, found := tup.GetByIndex(i)
 		if !found {
-			err = eh.Errorf("marshalGoTuple: element %d not found", i)
+			err = eb.Build().Int("element", i).Errorf("tuple element not found")
 			return
 		}
 		elemSQL, elemErr := MarshalGoValueToSQLWithOptions(elem, opts)
 		if elemErr != nil {
-			err = eh.Errorf("marshalGoTuple: element %d: %w", i, elemErr)
+			err = eb.Build().Int("element", i).Errorf("marshalGoTuple: %w", elemErr)
 			return
 		}
 		sb.WriteString(elemSQL)

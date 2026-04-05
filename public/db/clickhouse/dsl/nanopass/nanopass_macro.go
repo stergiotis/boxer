@@ -8,6 +8,7 @@ import (
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // LiteralTypeE represents the type of a literal argument.
@@ -89,7 +90,7 @@ func (inst *MacroExpander) Pass() Pass {
 
 			expanded, expandErr := fn(args)
 			if expandErr != nil {
-				err = eh.Errorf("MacroExpander: macro %s failed: %w", name, expandErr)
+				err = eb.Build().Str("macro", name).Errorf("macro expansion failed: %w", expandErr)
 				return false
 			}
 
@@ -174,7 +175,7 @@ func extractLiteralFromExpr(expr grammar1.IColumnExprContext) (arg LiteralArg, e
 		// Unwrap parentheses
 		return extractLiteralFromExpr(c.ColumnExpr())
 	default:
-		err = eh.Errorf("argument is not a literal: %T", expr)
+		err = eb.Build().Type("exprType", expr).Errorf("argument is not a literal")
 		return
 	}
 }

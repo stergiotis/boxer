@@ -9,6 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // WrapColumnsWithDynamic returns a Pass that wraps individual column references
@@ -29,7 +30,7 @@ func WrapColumnsWithDynamic(pattern string) nanopass.Pass {
 	return func(sql string) (result string, err error) {
 		re, compileErr := regexp.Compile(pattern)
 		if compileErr != nil {
-			err = eh.Errorf("WrapColumnsWithDynamic: invalid regex %q: %w", pattern, compileErr)
+			err = eb.Build().Str("pattern", pattern).Errorf("invalid column regex: %w", compileErr)
 			return
 		}
 

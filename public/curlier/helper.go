@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 func IsTransientError(code int) bool {
@@ -19,7 +19,7 @@ func ParseHeaderArgument(header *http.Header, h string) (key string, err error) 
 	k, v, ok := strings.Cut(h, ":")
 	key = k
 	if !ok {
-		err = eh.Errorf("invalid header %q, expecting colon character", h)
+		err = eb.Build().Str("header", h).Errorf("invalid header, expecting colon character")
 		return
 	}
 	k = http.CanonicalHeaderKey(k)

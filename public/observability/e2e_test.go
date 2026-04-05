@@ -12,7 +12,7 @@ import (
 )
 
 func a() error {
-	return eh.Errorf("a: %d", 0)
+	return eb.Build().Int("val", 0).Errorf("a")
 }
 func b() error {
 	return eh.Errorf("b: %w", a())

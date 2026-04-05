@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"io"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 type DeferredTee struct {
@@ -37,7 +37,7 @@ func (inst *DeferredTee) Read(p []byte) (n int, err error) {
 	var nw int
 	nw, err = inst.b.Write(p[:n])
 	if nw != n {
-		err = eh.Errorf("unable to write all read bytes: read %d bytes, wrote %d bytes", n, nw)
+		err = eb.Build().Int("bytesRead", n).Int("bytesWritten", nw).Errorf("unable to write all read bytes")
 		return
 	}
 	return

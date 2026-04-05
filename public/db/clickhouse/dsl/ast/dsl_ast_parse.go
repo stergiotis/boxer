@@ -9,13 +9,14 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar2"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // ConvertCSTToAST converts a Grammar2 CST (from nanopass.ParseCanonical) to an AST.
 func ConvertCSTToAST(pr *nanopass.ParseResult) (query Query, err error) {
 	root, ok := pr.Tree.(*grammar2.QueryStmtContext)
 	if !ok {
-		err = eh.Errorf("ConvertCSTToAST: expected *grammar2.QueryStmtContext, got %T", pr.Tree)
+		err = eb.Build().Type("ctxType", pr.Tree).Errorf("expected *grammar2.QueryStmtContext")
 		return
 	}
 	return convertQueryStmt(pr, root)
@@ -379,7 +380,7 @@ func convertSingleExprClause(pr *nanopass.ParseResult, ctx antlr.ParserRuleConte
 			return convertColumnExpr(pr, ce.(antlr.ParserRuleContext))
 		}
 	}
-	err = eh.Errorf("no column expression found in %T", ctx)
+	err = eb.Build().Type("ctxType", ctx).Errorf("no column expression found")
 	return
 }
 
@@ -706,7 +707,7 @@ func convertJoinExpr(pr *nanopass.ParseResult, ctx antlr.ParserRuleContext) (je 
 		}
 		err = eh.Errorf("empty JoinExprParens")
 	default:
-		err = eh.Errorf("unsupported join expression type %T", ctx)
+		err = eb.Build().Type("ctxType", ctx).Errorf("unsupported join expression type")
 	}
 	return
 }
@@ -789,7 +790,7 @@ func convertTableExpr(pr *nanopass.ParseResult, ctx antlr.ParserRuleContext, td 
 			}
 		}
 	default:
-		err = eh.Errorf("unsupported table expression type %T", ctx)
+		err = eb.Build().Type("ctxType", ctx).Errorf("unsupported table expression type")
 	}
 	return
 }

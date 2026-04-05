@@ -9,6 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar2"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 func convertColumnExpr(pr *nanopass.ParseResult, ctx antlr.ParserRuleContext) (expr Expr, err error) {
@@ -56,7 +57,7 @@ func convertColumnExpr(pr *nanopass.ParseResult, ctx antlr.ParserRuleContext) (e
 	case *grammar2.ColumnExprDynamicContext:
 		expr = convertDynamic(pr, c)
 	default:
-		err = eh.Errorf("convertColumnExpr: unsupported type %T", ctx)
+		err = eb.Build().Type("ctxType", ctx).Errorf("unsupported column expression type")
 	}
 	return
 }
