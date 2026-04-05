@@ -289,6 +289,7 @@ require (
 
 tool (
 	github.com/dkorunic/betteralign/cmd/betteralign
+	github.com/golangci/golangci-lint
 	github.com/golangci/golangci-lint/cmd/golangci-lint
 	github.com/incu6us/goimports-reviser/v3
 	github.com/mfridman/tparse

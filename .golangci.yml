@@ -55,7 +55,7 @@ linters-settings:
       main:
         deny:
           - pkg: "github.com/pkg/errors"
-            desc: Should be replaced by standard lib errors package
+            desc: Should be replaced by eh or eb package
           - pkg: "math/rand"
             desc: Should be replaced by math/rand/v2
           - pkg: "encoding/json"
@@ -126,9 +126,7 @@ linters-settings:
       - G112
       - G115
       - G203
-      - G204
       - G306
-      - G401
       - G501
   gosimple:
       checks:
