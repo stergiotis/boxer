@@ -1,20 +1,29 @@
-name: golangci-lint
+name: code statistics
 on:
   push:
     branches:
       - main
   pull_request:
+
 permissions:
   contents: read
+
 jobs:
   codestat:
     name: codestat
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Rust setup
-        run: rustup toolchain install stable --profile minimal
-      - name: Install tokei
-        run: cargo install --git https://github.com/XAMPPRocky/tokei.git tokei
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache-dependency-path: 'go.sum'
       - name: Code statistics
-        run: tokei . --exclude "*.gen.*" --exclude "*.out.*" --exclude "golay24" --files --sort=code --columns 200
+        run: go tool github.com/boyter/scc/v3 --not-match '(\.gen\.|\.out\.|golay24)' --sort code --wide .
+      - name: Dependency count
+        run: |
+          echo "Direct dependencies:"
+          go list -m -f '{{if not .Indirect}}  {{.Path}} {{.Version}}{{end}}' all
+          echo ""
+          echo "Total modules: $(go list -m all | wc -l)"
