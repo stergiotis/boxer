@@ -132,6 +132,7 @@ require (
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/telemetry v0.0.0-20260316223853-b6b0c46d1ccd // indirect
 	golang.org/x/term v0.41.0 // indirect
+	golang.org/x/vuln v1.1.4 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260316180232-0b37fe3546d5 // indirect
 	google.golang.org/grpc v1.79.3 // indirect
@@ -147,5 +148,6 @@ tool (
 	github.com/kisielk/errcheck
 	github.com/mfridman/tparse
 	go.uber.org/nilaway/cmd/nilaway
+	golang.org/x/vuln/cmd/govulncheck
 	honnef.co/go/tools/cmd/staticcheck
 )
