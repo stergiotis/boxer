@@ -21,7 +21,7 @@ Target the most recent stable go version available.
 * Use `github.com/stergiotis/boxer/public/observability/eh/eb` for structural error construction and wrapping.
 * Use `github.com/stergiotis/boxer/semistructured/leeway/canonicaltypes` for defining RPC or FFI interface descriptions.
 * Use `github.com/stergiotis/boxer/semistructured/leeway/naming` for conversions between naming schemes (e.g. snake_case to camelCase).
-* Use `github.com/urfave/cli/v3` for cli commands and flags handling.
+* Use `github.com/urfave/cli/v2` for cli commands and flags handling.
 * Use `github.com/dim13/colormap` for scientific color maps (Magma, Inferno, Plasma, Vidiris, Parula).
 
 ## Error Handling & Flow Control
