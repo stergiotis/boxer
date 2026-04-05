@@ -21,8 +21,6 @@ require (
 	github.com/google/flatbuffers v25.12.19+incompatible
 	github.com/matoous/go-nanoid/v2 v2.1.0
 	github.com/nao1215/markdown v0.13.0
-	github.com/philip-peterson/go-mutablestring v1.0.7
-	github.com/pkg/errors v0.9.1
 	github.com/rs/zerolog v1.35.0
 	github.com/scalalang2/golang-fifo v1.2.0
 	github.com/stoewer/go-strcase v1.3.1
@@ -200,6 +198,7 @@ require (
 	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	github.com/pierrec/lz4/v4 v4.1.26 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/polyfloyd/go-errorlint v1.7.1 // indirect
 	github.com/prometheus/client_golang v1.23.2 // indirect

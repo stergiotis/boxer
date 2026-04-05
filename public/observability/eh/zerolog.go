@@ -7,10 +7,8 @@ import (
 	"strings"
 
 	"github.com/fxamacker/cbor/v2"
-	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"github.com/stergiotis/boxer/internal/3rdParty/errorhandling"
 )
 
 type FrameTypeE uint8
@@ -27,31 +25,6 @@ type frameContainer struct {
 	Line     string
 	Function string
 	Type     FrameTypeE
-	Frame    errors.Frame
-}
-
-type state struct {
-	flags string
-	b     []byte
-}
-
-var _ fmt.State = (*state)(nil)
-
-func (inst *state) Write(b []byte) (n int, err error) {
-	inst.b = b
-	return len(b), nil
-}
-
-func (inst *state) Width() (wid int, ok bool) {
-	return 0, false
-}
-
-func (inst *state) Precision() (prec int, ok bool) {
-	return 0, false
-}
-
-func (inst *state) Flag(c int) bool {
-	return strings.ContainsRune(inst.flags, rune(c))
 }
 
 var (
@@ -78,7 +51,7 @@ func (inst *frameContainer) CleanupAndResolveType() {
 	if inst.Type != FrameTypeNil {
 		return
 	}
-	f := errorhandling.RemoveGoPath(inst.File)
+	f := removeGoPath(inst.File)
 	if f != inst.File {
 		inst.Type = FrameTypeGoPath
 		inst.File = f
@@ -91,6 +64,21 @@ func (inst *frameContainer) CleanupAndResolveType() {
 	inst.Type = FrameTypeOther
 }
 
+// removeGoPath makes a path relative to one of the src directories in the $GOPATH
+// environment variable. If $GOPATH is empty or the input path is not contained
+// within any of the src directories in $GOPATH, the original path is returned.
+func removeGoPath(path string) string {
+	gopath := os.Getenv("GOPATH")
+	if gopath == "" {
+		return path
+	}
+	srcdir := gopath + "/src/"
+	if strings.HasPrefix(path, srcdir) {
+		return path[len(srcdir):]
+	}
+	return path
+}
+
 type errorFact struct {
 	Msg            string
 	Frame          *frameContainer
@@ -98,7 +86,7 @@ type errorFact struct {
 	Id             uint64
 	ParentId       uint64
 
-	frameForAssertion errors.Frame
+	framePC uintptr
 }
 type errorContainer struct {
 	Facts []*errorFact
@@ -223,7 +211,7 @@ var _ zerolog.LogArrayMarshaler = (*errorFactsLogger)(nil)
 
 type gatherFactsAndStacks struct {
 	perStackFacts        [] /*stackIndex*/ [] /*stackPos*/ []*errorFact
-	stacks               [] /*stackIndex*/ errors.StackTrace
+	stacks               [] /*stackIndex*/ StackTrace
 	stackRepresentations [] /*stackIndex*/ []byte
 	nextId               uint64
 	materialized         bool
@@ -246,7 +234,7 @@ func newGatherFactsAndStacks() *gatherFactsAndStacks {
 	perStackFacts := make([][][]*errorFact, 0, 4)
 	perStackFacts = append(perStackFacts, make([][]*errorFact, 0, 1))
 	perStackFacts[0] = append(perStackFacts[0], make([]*errorFact, 0, 8))
-	stacks := make([]errors.StackTrace, 0, 4)
+	stacks := make([]StackTrace, 0, 4)
 	stacks = append(stacks, nil)
 	stackRepresentations := make([][]byte, 0, 4)
 	stackRepresentations = append(stackRepresentations, nil)
@@ -276,9 +264,9 @@ func (inst *gatherFactsAndStacks) MarshalZerologArray(a *zerolog.Array) {
 }
 func (inst *gatherFactsAndStacks) validateFrames(facts2 [][]*errorFact) {
 	for _, facts := range facts2 {
-		var s errors.Frame
+		var s uintptr
 		for _, fact := range facts {
-			f := fact.frameForAssertion
+			f := fact.framePC
 			if f != 0 {
 				if s == 0 {
 					s = f
@@ -299,21 +287,15 @@ func (inst *gatherFactsAndStacks) materialize() {
 	if inst.materialized {
 		return
 	}
-	s := &state{
-		b:     nil,
-		flags: "+",
-	}
 	for stackIndex, st := range inst.stacks {
 		facts := inst.perStackFacts[stackIndex]
 		l := len(st)
 		for inStackPos, frame := range st {
-			fc := frameContainer{Frame: frame}
-			frame.Format(s, 'd')
-			fc.Line = string(s.b)
-			frame.Format(s, 's')
-			fc.File = string(s.b)
-			frame.Format(s, 'n')
-			fc.Function = string(s.b)
+			fc := frameContainer{
+				File:     frame.File,
+				Line:     fmt.Sprintf("%d", frame.Line),
+				Function: frame.ShortFunction(),
+			}
 			fact := &errorFact{
 				Frame: &fc,
 			}
@@ -328,8 +310,6 @@ func (inst *gatherFactsAndStacks) materialize() {
 		}
 	}
 
-	// TODO: release memory in inst.stackRepresentations?
-
 	inst.materialized = true
 }
 
@@ -340,13 +320,13 @@ func (inst *gatherFactsAndStacks) addError(err error, parentId uint64) error {
 	stackIndex := uint32(0)
 	inStackPos := uint32(0)
 
-	var frame errors.Frame
+	var framePC uintptr
 	switch et := err.(type) {
 	case stackTracer:
 		st := et.StackTrace()
 		if len(st) > 0 {
 			stackIndex, inStackPos = inst.findStack(st)
-			frame = st[0]
+			framePC = st[0].PC
 		}
 	}
 
@@ -357,10 +337,10 @@ func (inst *gatherFactsAndStacks) addError(err error, parentId uint64) error {
 		facts = make([]*errorFact, 0, 2)
 	}
 	facts = append(facts, &errorFact{
-		Msg:               err.Error(),
-		Id:                id,
-		ParentId:          parentId,
-		frameForAssertion: frame,
+		Msg:       err.Error(),
+		Id:        id,
+		ParentId:  parentId,
+		framePC:   framePC,
 	})
 
 	switch et := err.(type) {
@@ -368,10 +348,10 @@ func (inst *gatherFactsAndStacks) addError(err error, parentId uint64) error {
 		data := et.GetCBORStructuredData()
 		if len(data) > 0 {
 			facts = append(facts, &errorFact{
-				StructuredData:    data,
-				Id:                id,
-				ParentId:          parentId,
-				frameForAssertion: frame,
+				StructuredData: data,
+				Id:             id,
+				ParentId:       parentId,
+				framePC:        framePC,
 			})
 		}
 	}
@@ -401,7 +381,7 @@ func (inst *gatherFactsAndStacks) addError(err error, parentId uint64) error {
 	}
 	return nil
 }
-func (inst *gatherFactsAndStacks) findStack(st errors.StackTrace) (stackIndex uint32, inStackPos uint32) {
+func (inst *gatherFactsAndStacks) findStack(st StackTrace) (stackIndex uint32, inStackPos uint32) {
 	rep := toBinaryRepresentation(st)
 	inStackPos = uint32(len(st))
 	for i, rep2 := range inst.stackRepresentations {

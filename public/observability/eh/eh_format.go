@@ -8,10 +8,10 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/fxamacker/cbor/v2"
-	"github.com/pkg/errors"
 )
 
 // FormatError produces a human-readable, terminal-friendly representation of
@@ -130,7 +130,8 @@ func buildErrorTree(err error) *errNode {
 	if st, ok := err.(stackTracer); ok {
 		trace := st.StackTrace()
 		if len(trace) > 0 {
-			node.location, node.function = formatFrame(trace[0])
+			node.location = shortenPath(trace[0].File) + ":" + strconv.Itoa(trace[0].Line)
+			node.function = trace[0].ShortFunction()
 		}
 	}
 
@@ -199,23 +200,8 @@ func (n *errNode) deduplicateMessages() {
 }
 
 // ---------------------------------------------------------------------------
-// Frame formatting
+// Path shortening
 // ---------------------------------------------------------------------------
-
-func formatFrame(frame errors.Frame) (location string, function string) {
-	s := &state{b: nil, flags: "+"}
-	frame.Format(s, 's')
-	file := string(s.b)
-	frame.Format(s, 'd')
-	line := string(s.b)
-	frame.Format(s, 'n')
-	fn := string(s.b)
-
-	// Shorten the file path for readability
-	file = shortenPath(file)
-
-	return file + ":" + line, fn
-}
 
 func shortenPath(path string) string {
 	// Strip GOROOT
@@ -321,9 +307,9 @@ func formatLinearChain(w io.Writer, root *errNode) {
 
 	// Part 2: Merged stack trace (deduplicated, bottom-up)
 	// Collect all unique locations from the chain, use the longest (deepest) stack
-	var deepestTrace errors.StackTrace
+	var deepestTrace StackTrace
 	// Walk the chain to find the error with the longest stack
-	walkLinearChainForStacks(root, func(st errors.StackTrace) {
+	walkLinearChainForStacks(root, func(st StackTrace) {
 		if len(st) > len(deepestTrace) {
 			deepestTrace = st
 		}
@@ -335,7 +321,7 @@ func formatLinearChain(w io.Writer, root *errNode) {
 	}
 }
 
-func walkLinearChainForStacks(n *errNode, fn func(errors.StackTrace)) {
+func walkLinearChainForStacks(n *errNode, fn func(StackTrace)) {
 	// We need to walk the original errors, not the nodes.
 	// But we only have nodes. We stored location per node, so let's
 	// reconstruct from the tree — actually we need the raw errors.
@@ -408,7 +394,7 @@ func formatTreeChildren(w io.Writer, n *errNode, depth int) {
 // printMergedStack prints a single merged stack trace, annotating frames where
 // errors in the chain were created. This is the key insight: instead of printing
 // N nearly-identical stacks, we print one stack with annotations.
-func printMergedStack(w io.Writer, trace errors.StackTrace, chain []*errNode) {
+func printMergedStack(w io.Writer, trace StackTrace, chain []*errNode) {
 	// Build a lookup: location -> messages created there
 	locationMsgs := make(map[string][]string)
 	for _, node := range chain {
@@ -421,7 +407,9 @@ func printMergedStack(w io.Writer, trace errors.StackTrace, chain []*errNode) {
 
 	// Print frames bottom-up (deepest/oldest first), skipping runtime noise
 	for i := len(trace) - 1; i >= 0; i-- {
-		loc, fn := formatFrame(trace[i])
+		frame := trace[i]
+		loc := shortenPath(frame.File) + ":" + strconv.Itoa(frame.Line)
+		fn := frame.ShortFunction()
 
 		// Skip runtime internals unless they're annotated
 		if isRuntimeFrame(fn) && len(locationMsgs[loc]) == 0 {
@@ -532,7 +520,7 @@ func formatLinearChain2(w io.Writer, root *errNode, err error) {
 	}
 
 	// Part 2: Find the deepest stack in the chain
-	var deepestTrace errors.StackTrace
+	var deepestTrace StackTrace
 	walkErrors(err, func(e error) {
 		if st, ok := e.(stackTracer); ok {
 			trace := st.StackTrace()
@@ -584,7 +572,7 @@ func printAllStacks(w io.Writer, err error, tree *errNode) {
 	collectNodes(tree)
 
 	// Find the deepest stack
-	var deepestTrace errors.StackTrace
+	var deepestTrace StackTrace
 	walkErrors(err, func(e error) {
 		if st, ok := e.(stackTracer); ok {
 			trace := st.StackTrace()

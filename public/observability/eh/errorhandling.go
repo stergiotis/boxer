@@ -3,8 +3,6 @@ package eh
 import (
 	"fmt"
 	"runtime"
-
-	"github.com/pkg/errors"
 )
 
 type singleWrappedWithStackError struct {
@@ -25,16 +23,8 @@ func (inst *singleWrappedWithStackError) Error() string {
 	return inst.wrappedErr.Error()
 }
 
-func (inst *singleWrappedWithStackError) StackTrace() errors.StackTrace {
-	s := inst.stack
-	if s != nil {
-		f := make([]errors.Frame, len(*s))
-		for i := 0; i < len(f); i++ {
-			f[i] = errors.Frame((*s)[i])
-		}
-		return f
-	}
-	return nil
+func (inst *singleWrappedWithStackError) StackTrace() StackTrace {
+	return resolveStack(inst.stack)
 }
 
 func (inst *singleWrappedWithStackError) Unwrap() error {
@@ -63,16 +53,8 @@ func (inst *multiWrappedWithStackError) Error() string {
 	return inst.wrappedErr.Error()
 }
 
-func (inst *multiWrappedWithStackError) StackTrace() errors.StackTrace {
-	s := inst.stack
-	if s == nil {
-		return nil
-	}
-	f := make([]errors.Frame, len(*s))
-	for i := 0; i < len(f); i++ {
-		f[i] = errors.Frame((*s)[i])
-	}
-	return f
+func (inst *multiWrappedWithStackError) StackTrace() StackTrace {
+	return resolveStack(inst.stack)
 }
 
 func (inst *multiWrappedWithStackError) Unwrap() []error {
@@ -101,16 +83,8 @@ func (inst *withStackError) Error() string {
 	return inst.err.Error()
 }
 
-func (inst *withStackError) StackTrace() errors.StackTrace {
-	s := inst.stack
-	if s == nil {
-		return nil
-	}
-	f := make([]errors.Frame, len(*s))
-	for i := 0; i < len(f); i++ {
-		f[i] = errors.Frame((*s)[i])
-	}
-	return f
+func (inst *withStackError) StackTrace() StackTrace {
+	return resolveStack(inst.stack)
 }
 
 var _ error = (*withStackError)(nil)

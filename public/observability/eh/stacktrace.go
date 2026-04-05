@@ -3,14 +3,13 @@ package eh
 import (
 	"bytes"
 	"encoding/binary"
-	"github.com/pkg/errors"
 )
 
-func toBinaryRepresentation(st errors.StackTrace) []byte {
+func toBinaryRepresentation(st StackTrace) []byte {
 	l := len(st)
 	r := make([]byte, 0, l*8)
 	for i := l - 1; i >= 0; i-- {
-		r = binary.LittleEndian.AppendUint64(r, uint64(st[i]))
+		r = binary.LittleEndian.AppendUint64(r, uint64(st[i].PC))
 	}
 	return r
 }

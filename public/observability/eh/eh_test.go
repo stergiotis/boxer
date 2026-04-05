@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/fxamacker/cbor/v2"
-	pkgerrors "github.com/pkg/errors"
 	"github.com/rs/zerolog"
 )
 
@@ -39,13 +38,10 @@ func TestNew_HasStackTrace(t *testing.T) {
 	if len(trace) == 0 {
 		t.Fatal("expected non-empty stack trace")
 	}
-	// Note: due to callers(4) skip, the first frame points into the eh
-	// package itself (New -> Errorf -> ErrorfWithData -> callers).
-	// The test file frame appears further down the stack.
+	// The test file frame should appear somewhere in the stack.
 	found := false
 	for _, frame := range trace {
-		s := fmt.Sprintf("%+s", frame)
-		if strings.Contains(s, "eh_test.go") {
+		if strings.Contains(frame.File, "eh_test.go") {
 			found = true
 			break
 		}
@@ -367,10 +363,10 @@ func TestClearErrors(t *testing.T) {
 // =============================================================================
 
 func TestToBinaryRepresentation(t *testing.T) {
-	st := pkgerrors.StackTrace{
-		pkgerrors.Frame(0x1000),
-		pkgerrors.Frame(0x2000),
-		pkgerrors.Frame(0x3000),
+	st := StackTrace{
+		{PC: 0x1000},
+		{PC: 0x2000},
+		{PC: 0x3000},
 	}
 	rep := toBinaryRepresentation(st)
 	// Reversed order: 0x3000, 0x2000, 0x1000 as little-endian uint64
@@ -384,7 +380,7 @@ func TestToBinaryRepresentation(t *testing.T) {
 }
 
 func TestToBinaryRepresentation_Empty(t *testing.T) {
-	rep := toBinaryRepresentation(pkgerrors.StackTrace{})
+	rep := toBinaryRepresentation(StackTrace{})
 	if len(rep) != 0 {
 		t.Fatal("expected empty for empty trace")
 	}
@@ -392,8 +388,8 @@ func TestToBinaryRepresentation_Empty(t *testing.T) {
 
 func TestIsSubStack_True(t *testing.T) {
 	// stackA is a prefix of stackB (shorter stack is sub-stack of longer)
-	stA := pkgerrors.StackTrace{pkgerrors.Frame(0x1000)}
-	stB := pkgerrors.StackTrace{pkgerrors.Frame(0x2000), pkgerrors.Frame(0x1000)}
+	stA := StackTrace{{PC: 0x1000}}
+	stB := StackTrace{{PC: 0x2000}, {PC: 0x1000}}
 	repA := toBinaryRepresentation(stA)
 	repB := toBinaryRepresentation(stB)
 	if !isSubStack(repA, repB) {
@@ -402,8 +398,8 @@ func TestIsSubStack_True(t *testing.T) {
 }
 
 func TestIsSubStack_False_SameLength(t *testing.T) {
-	stA := pkgerrors.StackTrace{pkgerrors.Frame(0x1000)}
-	stB := pkgerrors.StackTrace{pkgerrors.Frame(0x1000)}
+	stA := StackTrace{{PC: 0x1000}}
+	stB := StackTrace{{PC: 0x1000}}
 	repA := toBinaryRepresentation(stA)
 	repB := toBinaryRepresentation(stB)
 	if isSubStack(repA, repB) {
@@ -412,8 +408,8 @@ func TestIsSubStack_False_SameLength(t *testing.T) {
 }
 
 func TestIsSubStack_False_ALonger(t *testing.T) {
-	stA := pkgerrors.StackTrace{pkgerrors.Frame(0x2000), pkgerrors.Frame(0x1000)}
-	stB := pkgerrors.StackTrace{pkgerrors.Frame(0x1000)}
+	stA := StackTrace{{PC: 0x2000}, {PC: 0x1000}}
+	stB := StackTrace{{PC: 0x1000}}
 	repA := toBinaryRepresentation(stA)
 	repB := toBinaryRepresentation(stB)
 	if isSubStack(repA, repB) {
@@ -422,44 +418,12 @@ func TestIsSubStack_False_ALonger(t *testing.T) {
 }
 
 func TestIsSubStack_False_DifferentContent(t *testing.T) {
-	stA := pkgerrors.StackTrace{pkgerrors.Frame(0x9999)}
-	stB := pkgerrors.StackTrace{pkgerrors.Frame(0x2000), pkgerrors.Frame(0x1000)}
+	stA := StackTrace{{PC: 0x9999}}
+	stB := StackTrace{{PC: 0x2000}, {PC: 0x1000}}
 	repA := toBinaryRepresentation(stA)
 	repB := toBinaryRepresentation(stB)
 	if isSubStack(repA, repB) {
 		t.Fatal("different content should not match")
-	}
-}
-
-// =============================================================================
-// zerolog.go tests - state
-// =============================================================================
-
-func TestState_Implements_FmtState(t *testing.T) {
-	s := &state{flags: "+#", b: nil}
-	if !s.Flag('+') {
-		t.Fatal("expected '+' flag")
-	}
-	if !s.Flag('#') {
-		t.Fatal("expected '#' flag")
-	}
-	if s.Flag('-') {
-		t.Fatal("unexpected '-' flag")
-	}
-	w, ok := s.Width()
-	if w != 0 || ok {
-		t.Fatal("Width should return 0, false")
-	}
-	p, ok := s.Precision()
-	if p != 0 || ok {
-		t.Fatal("Precision should return 0, false")
-	}
-	n, err := s.Write([]byte("hello"))
-	if n != 5 || err != nil {
-		t.Fatal("Write error")
-	}
-	if string(s.b) != "hello" {
-		t.Fatal("Write should store bytes")
 	}
 }
 
