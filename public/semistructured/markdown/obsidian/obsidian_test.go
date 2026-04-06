@@ -2,6 +2,7 @@ package obsidian
 
 import (
 	"bytes"
+	"flag"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/yuin/goldmark/parser"
 )
+
+var updateGolden = flag.Bool("update-golden", false, "update golden files")
 
 func render(t *testing.T, opts Options, input string) string {
 	t.Helper()
@@ -632,9 +635,21 @@ func TestShowcase(t *testing.T) {
 	doc.Write(body.Bytes())
 	doc.WriteString("</body>\n</html>\n")
 
+	// Verify determinism: output must match the committed .out.html exactly.
+	// To update the golden file after intentional changes, run:
+	//   go test -run TestShowcase -update-golden
 	outPath := filepath.Join("testdata", "showcase.out.html")
-	err = os.WriteFile(outPath, doc.Bytes(), 0o644)
-	require.NoError(t, err)
+	got := doc.Bytes()
+
+	if *updateGolden {
+		err = os.WriteFile(outPath, got, 0o644)
+		require.NoError(t, err)
+		t.Logf("updated %s (%d bytes)", outPath, len(got))
+	} else {
+		want, readErr := os.ReadFile(outPath)
+		require.NoError(t, readErr, "golden file missing — run with -update-golden to create it")
+		require.Equal(t, string(want), string(got), "output differs from golden file — run with -update-golden to accept changes")
+	}
 
 	// Verify key features are present in output
 	html := doc.String()
@@ -656,6 +671,4 @@ func TestShowcase(t *testing.T) {
 	require.Contains(t, html, `<dt>title</dt><dd>Feature Showcase</dd>`)
 	require.NotContains(t, html, "but this is hidden")
 	require.NotContains(t, html, "a secret note")
-
-	t.Logf("wrote %s (%d bytes)", outPath, doc.Len())
 }
