@@ -28,6 +28,7 @@ require (
 	github.com/tetratelabs/wazero v1.11.0
 	github.com/urfave/cli/v2 v2.27.7
 	github.com/yassinebenaid/godump v0.11.1
+	github.com/yuin/goldmark v1.8.2
 	github.com/zeebo/xxh3 v1.1.0
 	golang.org/x/exp v0.0.0-20260312153236-7ab1446f8b90
 	golang.org/x/image v0.38.0
