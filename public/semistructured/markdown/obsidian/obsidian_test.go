@@ -411,3 +411,147 @@ func TestFrontmatter_TryGet_Malformed(t *testing.T) {
 	// depending on the yaml parser — we just verify it doesn't panic
 	_ = err
 }
+
+// =============================================================================
+// Frontmatter HTML rendering
+// =============================================================================
+
+func renderFM(t *testing.T, metadata map[string]interface{}, open bool) string {
+	t.Helper()
+	var buf bytes.Buffer
+	err := RenderFrontmatterHTML(&buf, metadata, open)
+	require.NoError(t, err)
+	return buf.String()
+}
+
+func TestRenderFrontmatter_Simple(t *testing.T) {
+	m := map[string]interface{}{
+		"title":  "My Note",
+		"author": "Alice",
+	}
+	out := renderFM(t, m, true)
+	require.Contains(t, out, `<details class="frontmatter" open>`)
+	require.Contains(t, out, `<summary>Properties</summary>`)
+	require.Contains(t, out, `<dt>title</dt><dd>My Note</dd>`)
+	require.Contains(t, out, `<dt>author</dt><dd>Alice</dd>`)
+	require.Contains(t, out, `</details>`)
+}
+
+func TestRenderFrontmatter_Closed(t *testing.T) {
+	m := map[string]interface{}{"key": "val"}
+	out := renderFM(t, m, false)
+	require.Contains(t, out, `<details class="frontmatter">`)
+	require.NotContains(t, out, "open")
+}
+
+func TestRenderFrontmatter_Array(t *testing.T) {
+	m := map[string]interface{}{
+		"tags": []interface{}{"foo", "bar", "baz"},
+	}
+	out := renderFM(t, m, true)
+	require.Contains(t, out, "<ul>")
+	require.Contains(t, out, "<li>foo</li>")
+	require.Contains(t, out, "<li>bar</li>")
+	require.Contains(t, out, "<li>baz</li>")
+	require.Contains(t, out, "</ul>")
+}
+
+func TestRenderFrontmatter_NestedMap(t *testing.T) {
+	m := map[string]interface{}{
+		"author": map[string]interface{}{
+			"name":  "Alice",
+			"email": "a@b.c",
+		},
+	}
+	out := renderFM(t, m, true)
+	// Outer dl
+	require.Contains(t, out, "<dt>author</dt><dd><dl>")
+	// Inner dl
+	require.Contains(t, out, "<dt>name</dt><dd>Alice</dd>")
+	require.Contains(t, out, "<dt>email</dt><dd>a@b.c</dd>")
+}
+
+func TestRenderFrontmatter_ArrayOfMaps(t *testing.T) {
+	m := map[string]interface{}{
+		"people": []interface{}{
+			map[string]interface{}{"name": "Alice"},
+			map[string]interface{}{"name": "Bob"},
+		},
+	}
+	out := renderFM(t, m, true)
+	require.Contains(t, out, "<ul>")
+	require.Contains(t, out, "<li><dl>")
+	require.Contains(t, out, "<dt>name</dt><dd>Alice</dd>")
+	require.Contains(t, out, "<dt>name</dt><dd>Bob</dd>")
+}
+
+func TestRenderFrontmatter_NilValue(t *testing.T) {
+	m := map[string]interface{}{
+		"draft": nil,
+	}
+	out := renderFM(t, m, true)
+	require.Contains(t, out, "<dt>draft</dt><dd></dd>")
+}
+
+func TestRenderFrontmatter_Numeric(t *testing.T) {
+	m := map[string]interface{}{
+		"version": 42,
+		"ratio":   3.14,
+	}
+	out := renderFM(t, m, true)
+	require.Contains(t, out, "<dt>version</dt><dd>42</dd>")
+	require.Contains(t, out, "<dt>ratio</dt><dd>3.14</dd>")
+}
+
+func TestRenderFrontmatter_Bool(t *testing.T) {
+	m := map[string]interface{}{
+		"publish": true,
+	}
+	out := renderFM(t, m, true)
+	require.Contains(t, out, "<dt>publish</dt><dd>true</dd>")
+}
+
+func TestRenderFrontmatter_HTMLEscape(t *testing.T) {
+	m := map[string]interface{}{
+		"title": `<script>alert("xss")</script>`,
+	}
+	out := renderFM(t, m, true)
+	require.NotContains(t, out, "<script>")
+	require.Contains(t, out, "&lt;script&gt;")
+}
+
+func TestRenderFrontmatter_Empty(t *testing.T) {
+	out := renderFM(t, nil, true)
+	require.Empty(t, out)
+
+	out = renderFM(t, map[string]interface{}{}, true)
+	require.Empty(t, out)
+}
+
+func TestRenderFrontmatter_SortedKeys(t *testing.T) {
+	m := map[string]interface{}{
+		"zebra": "z",
+		"alpha": "a",
+		"mid":   "m",
+	}
+	out := renderFM(t, m, true)
+	alphaIdx := strings.Index(out, "<dt>alpha</dt>")
+	midIdx := strings.Index(out, "<dt>mid</dt>")
+	zebraIdx := strings.Index(out, "<dt>zebra</dt>")
+	require.Greater(t, midIdx, alphaIdx)
+	require.Greater(t, zebraIdx, midIdx)
+}
+
+func TestRenderFrontmatter_Integration(t *testing.T) {
+	input := "---\ntitle: Test\ntags:\n  - a\n  - b\npublish: true\n---\n\nBody"
+	_, pc := renderWithContext(t, allFeatures(), input)
+
+	fm := GetFrontmatter(pc)
+	require.NotNil(t, fm)
+
+	out := renderFM(t, fm, true)
+	require.Contains(t, out, "<dt>title</dt><dd>Test</dd>")
+	require.Contains(t, out, "<li>a</li>")
+	require.Contains(t, out, "<li>b</li>")
+	require.Contains(t, out, "<dt>publish</dt><dd>true</dd>")
+}
