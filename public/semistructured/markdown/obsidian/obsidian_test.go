@@ -620,7 +620,7 @@ func TestShowcase(t *testing.T) {
 		}
 	}
 	doc.WriteString("<style>\n")
-	doc.WriteString(DefaultStylesheet)
+	doc.WriteString(DefaultStylesheet())
 	doc.WriteString("\n</style>\n")
 	doc.WriteString("<style>\n")
 	doc.WriteString("body { font-family: var(--ob-font-body); color: var(--ob-text); max-width: 50em; margin: 2em auto; padding: 0 1em; line-height: 1.6; }\n")
