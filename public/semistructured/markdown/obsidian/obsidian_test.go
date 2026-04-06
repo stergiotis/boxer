@@ -2,6 +2,8 @@ package obsidian
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -554,4 +556,106 @@ func TestRenderFrontmatter_Integration(t *testing.T) {
 	require.Contains(t, out, "<li>a</li>")
 	require.Contains(t, out, "<li>b</li>")
 	require.Contains(t, out, "<dt>publish</dt><dd>true</dd>")
+}
+
+// =============================================================================
+// Showcase — renders testdata/showcase.md to testdata/showcase.out.html
+// =============================================================================
+
+type showcaseResolver struct{}
+
+func (inst showcaseResolver) ResolveWikilink(page string, heading string) (url string, exists bool) {
+	if page == "NonExistent" {
+		url = "/" + page
+		exists = false
+		return
+	}
+	url = "/" + strings.ReplaceAll(page, " ", "%20")
+	if heading != "" {
+		url += "#" + strings.ToLower(strings.ReplaceAll(heading, " ", "-"))
+	}
+	exists = true
+	return
+}
+
+func (inst showcaseResolver) ResolveEmbed(target string, heading string) (url string, isImage bool, exists bool) {
+	url = "/assets/" + target
+	if heading != "" {
+		url += "#" + strings.ToLower(strings.ReplaceAll(heading, " ", "-"))
+	}
+	isImage = resolver.IsImageFile(target)
+	exists = true
+	return
+}
+
+func TestShowcase(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join("testdata", "showcase.md"))
+	require.NoError(t, err)
+
+	opts := Options{
+		Features: FeatureAll,
+		Resolver: showcaseResolver{},
+	}
+	md := New(opts)
+	pc := NewParserContext()
+
+	var body bytes.Buffer
+	err = md.Convert(src, &body, parser.WithContext(pc))
+	require.NoError(t, err)
+
+	fm := GetFrontmatter(pc)
+
+	// Assemble full HTML document
+	var doc bytes.Buffer
+	doc.WriteString("<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n")
+	doc.WriteString("<meta charset=\"utf-8\">\n")
+	if fm != nil {
+		if title, ok := fm["title"].(string); ok {
+			doc.WriteString("<title>")
+			doc.WriteString(htmlEscape(title))
+			doc.WriteString("</title>\n")
+		}
+	}
+	doc.WriteString("<style>\n")
+	doc.WriteString(DefaultStylesheet)
+	doc.WriteString("\n</style>\n")
+	doc.WriteString("<style>\n")
+	doc.WriteString("body { font-family: var(--ob-font-body); color: var(--ob-text); max-width: 50em; margin: 2em auto; padding: 0 1em; line-height: 1.6; }\n")
+	doc.WriteString("</style>\n")
+	doc.WriteString("</head>\n<body>\n")
+
+	if fm != nil {
+		err = RenderFrontmatterHTML(&doc, fm, true)
+		require.NoError(t, err)
+	}
+
+	doc.Write(body.Bytes())
+	doc.WriteString("</body>\n</html>\n")
+
+	outPath := filepath.Join("testdata", "showcase.out.html")
+	err = os.WriteFile(outPath, doc.Bytes(), 0o644)
+	require.NoError(t, err)
+
+	// Verify key features are present in output
+	html := doc.String()
+	require.Contains(t, html, `class="wikilink"`)
+	require.Contains(t, html, `class="wikilink wikilink-broken"`)
+	require.Contains(t, html, `class="embed-image"`)
+	require.Contains(t, html, `class="embed-note"`)
+	require.Contains(t, html, `<mark>`)
+	require.Contains(t, html, `class="tag"`)
+	require.Contains(t, html, `class="callout callout-note"`)
+	require.Contains(t, html, `class="callout callout-warning"`)
+	require.Contains(t, html, `class="callout callout-danger"`)
+	require.Contains(t, html, `<details>`)
+	require.Contains(t, html, `<details open>`)
+	require.Contains(t, html, `<table>`)
+	require.Contains(t, html, `type="checkbox"`)
+	require.Contains(t, html, `<del>`)
+	require.Contains(t, html, `class="frontmatter"`)
+	require.Contains(t, html, `<dt>title</dt><dd>Feature Showcase</dd>`)
+	require.NotContains(t, html, "but this is hidden")
+	require.NotContains(t, html, "a secret note")
+
+	t.Logf("wrote %s (%d bytes)", outPath, doc.Len())
 }

@@ -1,0 +1,361 @@
+/* ==========================================================================
+   Obsidian-flavored Markdown — Default Stylesheet
+   Target: modern desktop browsers (Chrome 120+, Firefox 120+, Safari 17+)
+   ========================================================================== */
+
+:root {
+  --ob-font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --ob-font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+
+  --ob-text: #1a1a1a;
+  --ob-text-muted: #6b7280;
+  --ob-bg: #ffffff;
+  --ob-bg-secondary: #f8f9fa;
+  --ob-border: #e2e4e8;
+
+  --ob-link: #4a7eff;
+  --ob-link-hover: #2b5cd9;
+  --ob-link-broken: #d94452;
+
+  --ob-mark-bg: #fff3a3;
+  --ob-mark-text: inherit;
+
+  --ob-tag-bg: #e8ecf1;
+  --ob-tag-text: #4a5568;
+  --ob-tag-hover-bg: #d1d8e3;
+
+  --ob-callout-radius: 6px;
+  --ob-callout-border-width: 4px;
+
+  --ob-fm-bg: var(--ob-bg-secondary);
+  --ob-fm-border: var(--ob-border);
+  --ob-fm-dt: var(--ob-text-muted);
+}
+
+/* --------------------------------------------------------------------------
+   Wikilinks
+   -------------------------------------------------------------------------- */
+
+.wikilink {
+  color: var(--ob-link);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.15s;
+
+  &:hover {
+    color: var(--ob-link-hover);
+    border-bottom-color: var(--ob-link-hover);
+  }
+
+  &.wikilink-broken {
+    color: var(--ob-link-broken);
+    border-bottom: 1px dashed var(--ob-link-broken);
+    opacity: 0.85;
+
+    &:hover {
+      opacity: 1;
+    }
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Embeds
+   -------------------------------------------------------------------------- */
+
+.embed-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  margin: 0.5em 0;
+}
+
+.embed-note {
+  border: 1px solid var(--ob-border);
+  border-left-width: 3px;
+  border-left-color: var(--ob-link);
+  border-radius: 4px;
+  padding: 0.75em 1em;
+  margin: 0.75em 0;
+  background: var(--ob-bg-secondary);
+  color: var(--ob-text-muted);
+  font-size: 0.9em;
+
+  &.embed-broken {
+    border-left-color: var(--ob-link-broken);
+    opacity: 0.7;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Highlights
+   -------------------------------------------------------------------------- */
+
+mark {
+  background: var(--ob-mark-bg);
+  color: var(--ob-mark-text);
+  padding: 0.05em 0.15em;
+  border-radius: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   Tags
+   -------------------------------------------------------------------------- */
+
+.tag {
+  display: inline-block;
+  background: var(--ob-tag-bg);
+  color: var(--ob-tag-text);
+  font-size: 0.85em;
+  padding: 0.1em 0.5em;
+  border-radius: 10px;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.15s;
+
+  &:hover {
+    background: var(--ob-tag-hover-bg);
+  }
+}
+
+a.tag {
+  cursor: pointer;
+}
+
+/* --------------------------------------------------------------------------
+   Callouts
+   -------------------------------------------------------------------------- */
+
+.callout {
+  border-radius: var(--ob-callout-radius);
+  border-left: var(--ob-callout-border-width) solid var(--ob-border);
+  margin: 1em 0;
+  background: var(--ob-bg-secondary);
+  overflow: hidden;
+
+  .callout-title {
+    font-weight: 600;
+    padding: 0.6em 1em;
+    font-size: 0.95em;
+    cursor: default;
+    user-select: none;
+  }
+
+  .callout-content {
+    padding: 0 1em 0.6em;
+
+    > :first-child { margin-top: 0; }
+    > :last-child { margin-bottom: 0; }
+  }
+
+  details {
+    summary.callout-title {
+      cursor: pointer;
+      list-style: none;
+
+      &::before {
+        content: "▸";
+        display: inline-block;
+        margin-right: 0.4em;
+        transition: transform 0.15s;
+      }
+
+      &::-webkit-details-marker { display: none; }
+    }
+
+    &[open] > summary.callout-title::before {
+      transform: rotate(90deg);
+    }
+  }
+}
+
+/* Callout type colors */
+.callout-note      { --_accent: #448aff; }
+.callout-abstract,
+.callout-summary,
+.callout-tldr       { --_accent: #00b8d4; }
+.callout-info       { --_accent: #448aff; }
+.callout-todo       { --_accent: #448aff; }
+.callout-tip,
+.callout-hint       { --_accent: #00bfa5; }
+.callout-success,
+.callout-check,
+.callout-done       { --_accent: #00c853; }
+.callout-question,
+.callout-help,
+.callout-faq        { --_accent: #ff9100; }
+.callout-warning,
+.callout-caution,
+.callout-attention  { --_accent: #ff9100; }
+.callout-failure,
+.callout-fail,
+.callout-missing    { --_accent: #ff5252; }
+.callout-danger,
+.callout-error      { --_accent: #ff1744; }
+.callout-bug        { --_accent: #ff1744; }
+.callout-example    { --_accent: #7c4dff; }
+.callout-quote,
+.callout-cite       { --_accent: #9e9e9e; }
+
+.callout[class*="callout-"] {
+  border-left-color: var(--_accent, var(--ob-border));
+
+  .callout-title {
+    color: var(--_accent, var(--ob-text));
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Frontmatter properties panel
+   -------------------------------------------------------------------------- */
+
+.frontmatter {
+  border: 1px solid var(--ob-fm-border);
+  border-radius: 6px;
+  margin-bottom: 1.5em;
+  background: var(--ob-fm-bg);
+  font-size: 0.9em;
+
+  > summary {
+    padding: 0.5em 0.9em;
+    font-weight: 600;
+    font-size: 0.85em;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ob-text-muted);
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+
+    &::before {
+      content: "▸";
+      display: inline-block;
+      margin-right: 0.4em;
+      transition: transform 0.15s;
+    }
+
+    &::-webkit-details-marker { display: none; }
+  }
+
+  &[open] > summary::before {
+    transform: rotate(90deg);
+  }
+
+  dl {
+    margin: 0;
+    padding: 0 0.9em 0.6em;
+    display: grid;
+    grid-template-columns: minmax(8em, auto) 1fr;
+    gap: 0.25em 1em;
+    align-items: baseline;
+  }
+
+  dt {
+    color: var(--ob-fm-dt);
+    font-size: 0.9em;
+    font-weight: 500;
+  }
+
+  dd {
+    margin: 0;
+
+    /* Nested dl (map values) */
+    dl {
+      padding: 0;
+      margin: 0.2em 0;
+    }
+
+    /* List values */
+    ul {
+      margin: 0;
+      padding-left: 1.2em;
+      list-style: disc;
+
+      li {
+        margin: 0.1em 0;
+      }
+    }
+  }
+}
+
+/* --------------------------------------------------------------------------
+   GFM: Tables
+   -------------------------------------------------------------------------- */
+
+table {
+  border-collapse: collapse;
+  margin: 1em 0;
+  width: auto;
+  min-width: 40%;
+
+  th, td {
+    border: 1px solid var(--ob-border);
+    padding: 0.45em 0.8em;
+    text-align: left;
+  }
+
+  th {
+    background: var(--ob-bg-secondary);
+    font-weight: 600;
+    font-size: 0.9em;
+  }
+
+  tr:hover td {
+    background: color-mix(in srgb, var(--ob-bg-secondary) 50%, transparent);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   GFM: Task lists
+   -------------------------------------------------------------------------- */
+
+.contains-task-list {
+  list-style: none;
+  padding-left: 0.4em;
+
+  .task-list-item {
+    position: relative;
+    padding-left: 1.6em;
+
+    input[type="checkbox"] {
+      position: absolute;
+      left: 0;
+      top: 0.3em;
+      accent-color: var(--ob-link);
+    }
+  }
+}
+
+/* --------------------------------------------------------------------------
+   GFM: Strikethrough
+   -------------------------------------------------------------------------- */
+
+del {
+  color: var(--ob-text-muted);
+  text-decoration: line-through;
+}
+
+/* --------------------------------------------------------------------------
+   Code
+   -------------------------------------------------------------------------- */
+
+code {
+  font-family: var(--ob-font-mono);
+  font-size: 0.88em;
+  background: var(--ob-bg-secondary);
+  padding: 0.15em 0.35em;
+  border-radius: 3px;
+}
+
+pre {
+  background: var(--ob-bg-secondary);
+  border: 1px solid var(--ob-border);
+  border-radius: 6px;
+  padding: 1em;
+  overflow-x: auto;
+
+  code {
+    background: none;
+    padding: 0;
+    font-size: 0.88em;
+  }
+}
