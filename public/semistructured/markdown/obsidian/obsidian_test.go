@@ -5,8 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stergiotis/boxer/public/markdown/obsidian/resolver"
+	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/resolver"
 	"github.com/stretchr/testify/require"
+	"github.com/yuin/goldmark/parser"
 )
 
 func render(t *testing.T, opts Options, input string) string {
@@ -321,4 +322,92 @@ func TestCustomResolver_Embed(t *testing.T) {
 	}
 	out := render(t, opts, "![[photo.png]]")
 	require.Contains(t, out, `src="/assets/photo.png"`)
+}
+
+// =============================================================================
+// Frontmatter
+// =============================================================================
+
+func renderWithContext(t *testing.T, opts Options, input string) (output string, pc parser.Context) {
+	t.Helper()
+	md := New(opts)
+	pc = NewParserContext()
+	var buf bytes.Buffer
+	err := md.Convert([]byte(input), &buf, parser.WithContext(pc))
+	require.NoError(t, err)
+	output = strings.TrimSpace(buf.String())
+	return
+}
+
+func TestFrontmatter_Parsed(t *testing.T) {
+	input := "---\ntitle: My Note\ntags:\n  - foo\n  - bar\n---\n\nHello world"
+	out, pc := renderWithContext(t, allFeatures(), input)
+	require.Contains(t, out, "Hello world")
+	require.NotContains(t, out, "title:")
+	require.NotContains(t, out, "---")
+
+	meta := GetFrontmatter(pc)
+	require.NotNil(t, meta)
+	require.Equal(t, "My Note", meta["title"])
+	tags, ok := meta["tags"].([]interface{})
+	require.True(t, ok)
+	require.Len(t, tags, 2)
+	require.Equal(t, "foo", tags[0])
+	require.Equal(t, "bar", tags[1])
+}
+
+func TestFrontmatter_Aliases(t *testing.T) {
+	input := "---\naliases:\n  - alias1\n  - alias2\n---\n\nContent"
+	_, pc := renderWithContext(t, allFeatures(), input)
+
+	meta := GetFrontmatter(pc)
+	require.NotNil(t, meta)
+	aliases, ok := meta["aliases"].([]interface{})
+	require.True(t, ok)
+	require.Len(t, aliases, 2)
+}
+
+func TestFrontmatter_CssClasses(t *testing.T) {
+	input := "---\ncssclasses:\n  - wide\n  - no-title\n---\n\nContent"
+	_, pc := renderWithContext(t, allFeatures(), input)
+
+	meta := GetFrontmatter(pc)
+	require.NotNil(t, meta)
+	require.NotNil(t, meta["cssclasses"])
+}
+
+func TestFrontmatter_Stripped(t *testing.T) {
+	input := "---\nkey: value\n---\n\nVisible"
+	out, _ := renderWithContext(t, allFeatures(), input)
+	require.Contains(t, out, "Visible")
+	require.NotContains(t, out, "key")
+	require.NotContains(t, out, "value")
+}
+
+func TestFrontmatter_NoFrontmatter(t *testing.T) {
+	input := "Just a paragraph"
+	_, pc := renderWithContext(t, allFeatures(), input)
+
+	meta := GetFrontmatter(pc)
+	require.Nil(t, meta)
+}
+
+func TestFrontmatter_Disabled(t *testing.T) {
+	opts := Options{Features: FeatureHighlight} // no frontmatter
+	input := "---\ntitle: test\n---\n\nContent"
+	out, pc := renderWithContext(t, opts, input)
+	// Without frontmatter feature, --- is rendered as an <hr> or left as-is
+	meta := GetFrontmatter(pc)
+	require.Nil(t, meta)
+	_ = out
+}
+
+func TestFrontmatter_TryGet_Malformed(t *testing.T) {
+	input := "---\n: invalid yaml [[\n---\n\nContent"
+	_, pc := renderWithContext(t, allFeatures(), input)
+
+	_, err := TryGetFrontmatter(pc)
+	// goldmark-meta may produce an error or silently handle malformed YAML
+	// depending on the yaml parser — we just verify it doesn't panic
+	_ = err
 }

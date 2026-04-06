@@ -1,24 +1,35 @@
 package obsidian
 
 import (
+	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/ext/callout"
+	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/ext/comment"
+	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/ext/embed"
+	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/ext/highlight"
+	tag2 "github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/ext/tag"
+	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/ext/wikilink"
+	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/resolver"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/extension"
-
-	"github.com/stergiotis/boxer/public/markdown/obsidian/ext/callout"
-	"github.com/stergiotis/boxer/public/markdown/obsidian/ext/comment"
-	"github.com/stergiotis/boxer/public/markdown/obsidian/ext/embed"
-	"github.com/stergiotis/boxer/public/markdown/obsidian/ext/highlight"
-	"github.com/stergiotis/boxer/public/markdown/obsidian/ext/tag"
-	"github.com/stergiotis/boxer/public/markdown/obsidian/ext/wikilink"
-	"github.com/stergiotis/boxer/public/markdown/obsidian/resolver"
+	"github.com/yuin/goldmark/parser"
+	meta "github.com/yuin/goldmark-meta"
 )
 
 // New creates a goldmark.Markdown instance configured with the requested
 // Obsidian-flavored extensions.
+//
+// When FeatureFrontmatter is enabled, use NewParserContext() to create a
+// parser.Context, pass it to Convert via parser.WithContext, then retrieve
+// metadata with GetFrontmatter.
 func New(opts Options) (md goldmark.Markdown) {
 	exts := collectExtensions(opts)
 	md = goldmark.New(goldmark.WithExtensions(exts...))
 	return
+}
+
+// NewParserContext creates a parser.Context for use with Convert.
+// This is required to retrieve frontmatter metadata after rendering.
+func NewParserContext() parser.Context {
+	return parser.NewContext()
 }
 
 // Extension returns a composite goldmark.Extender that adds all enabled
@@ -45,6 +56,9 @@ func collectExtensions(opts Options) (exts []goldmark.Extender) {
 
 	exts = make([]goldmark.Extender, 0, 8)
 
+	if opts.Features&FeatureFrontmatter != 0 {
+		exts = append(exts, meta.Meta)
+	}
 	if opts.Features&FeatureGFM != 0 {
 		exts = append(exts, extension.GFM)
 	}
@@ -64,11 +78,11 @@ func collectExtensions(opts Options) (exts []goldmark.Extender) {
 		exts = append(exts, &comment.Extender{})
 	}
 	if opts.Features&FeatureTag != 0 {
-		renderMode := tag.RenderModeSpan
+		renderMode := tag2.RenderModeSpan
 		if opts.TagRender == TagRenderLink {
-			renderMode = tag.RenderModeLink
+			renderMode = tag2.RenderModeLink
 		}
-		exts = append(exts, &tag.Extender{RenderMode: renderMode})
+		exts = append(exts, &tag2.Extender{RenderMode: renderMode})
 	}
 
 	return

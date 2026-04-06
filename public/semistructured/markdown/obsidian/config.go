@@ -1,6 +1,8 @@
 package obsidian
 
-import "github.com/stergiotis/boxer/public/markdown/obsidian/resolver"
+import (
+	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/resolver"
+)
 
 // FeatureE controls which Obsidian-flavored extensions are enabled.
 type FeatureE uint16
@@ -12,10 +14,11 @@ const (
 	FeatureHighlight FeatureE = 1 << 3
 	FeatureComment   FeatureE = 1 << 4
 	FeatureTag       FeatureE = 1 << 5
-	FeatureMath      FeatureE = 1 << 6
-	FeatureGFM       FeatureE = 1 << 7
+	FeatureMath        FeatureE = 1 << 6
+	FeatureGFM         FeatureE = 1 << 7
+	FeatureFrontmatter FeatureE = 1 << 8
 
-	FeatureAll FeatureE = (1 << 8) - 1
+	FeatureAll FeatureE = (1 << 9) - 1
 )
 
 // TagRenderE controls how tags are rendered in HTML.

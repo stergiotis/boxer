@@ -1,12 +1,11 @@
 package wikilink
 
 import (
+	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/resolver"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/renderer"
 	"github.com/yuin/goldmark/util"
-
-	"github.com/stergiotis/boxer/public/markdown/obsidian/resolver"
 )
 
 // Extender adds [[wikilink]] support to goldmark.

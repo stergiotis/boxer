@@ -1,11 +1,10 @@
 package embed
 
 import (
+	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/resolver"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/renderer"
 	"github.com/yuin/goldmark/util"
-
-	"github.com/stergiotis/boxer/public/markdown/obsidian/resolver"
 )
 
 type embedRenderer struct {
