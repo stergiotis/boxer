@@ -4,8 +4,9 @@ package compression
 
 import (
 	"compress/gzip"
-	_ "embed"
 	"fmt"
+	"math/rand"
+	"os"
 	"strings"
 	"testing"
 
@@ -13,6 +14,50 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+var corpus string
+
+func TestMain(m *testing.M) {
+	corpus = generateCorpus(1_100_000)
+	os.Exit(m.Run())
+}
+
+func generateCorpus(minSize int) (text string) {
+	phrases := []string{
+		"The architecture of modern distributed systems demands careful consideration of trade-offs between consistency and availability.",
+		"In practice, most engineering teams optimize for latency at the expense of strict serializability.",
+		"Functional programming enables compositional reasoning about complex state transformations.",
+		"Immutable data structures prevent whole classes of concurrency bugs in shared-memory environments.",
+		"Type systems serve as a form of lightweight formal verification for everyday software engineering.",
+		"The CAP theorem places fundamental limits on the guarantees a distributed database can provide.",
+		"Event sourcing captures every state change as an immutable sequence of domain events.",
+		"Consensus protocols like Raft and Paxos form the backbone of replicated state machines.",
+		"Garbage collection trades deterministic latency for programmer productivity and memory safety.",
+		"Property-based testing explores the input space far more thoroughly than hand-written examples.",
+		"Microservices introduce operational complexity that monoliths avoid but struggle to scale past.",
+		"Content-addressable storage enables efficient deduplication and integrity verification.",
+		"The normalized compression distance approximates Kolmogorov complexity for practical similarity measurement.",
+		"Stylometric analysis leverages statistical patterns in text to attribute authorship with high confidence.",
+		"Compression algorithms exploit redundancy in data, making them natural proxies for information content.",
+		"Language models capture distributional semantics but lack the causal reasoning of symbolic systems.",
+		"Cache coherence protocols ensure that multiple processors observe a consistent view of shared memory.",
+		"Write-ahead logging guarantees durability without requiring synchronous writes to the main data file.",
+		"Bloom filters provide space-efficient probabilistic set membership queries with controllable false-positive rates.",
+		"Lock-free data structures avoid the overhead of mutual exclusion at the cost of algorithmic complexity.",
+	}
+	rng := rand.New(rand.NewSource(12345))
+	var sb strings.Builder
+	sb.Grow(minSize + 256)
+	for sb.Len() < minSize {
+		sb.WriteString(phrases[rng.Intn(len(phrases))])
+		sb.WriteString(" ")
+		if rng.Intn(8) == 0 {
+			sb.WriteString("\n\n")
+		}
+	}
+	text = sb.String()
+	return
+}
 
 func newGzipSim(t testing.TB, ref string) (inst *Similarity) {
 	t.Helper()
@@ -147,9 +192,6 @@ func TestMeasureJointCompressedLength(t *testing.T) {
 	require.NoError(t, err)
 	assert.Greater(t, joint, uint64(0))
 }
-
-//go:embed testdata/bench_corpus.txt
-var corpus string
 
 var benchSizes = []struct {
 	name string
