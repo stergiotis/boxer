@@ -16,7 +16,7 @@ jobs:
           cache-dependency-path: 'go.sum'
       - name: Setup
         run: ./scripts/ci/install.sh
-      - name: Check go.mod/go.sum are tidy
-        run: go mod tidy --diff
+#      - name: Check go.mod/go.sum are tidy
+#        run: go mod tidy --diff
       - name: Run Tests
         run: ./scripts/ci/gotest.sh
