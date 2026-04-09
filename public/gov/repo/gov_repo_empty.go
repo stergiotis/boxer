@@ -1,6 +1,6 @@
-//go:build !(llm_generated_gemini3pro || llm_generated_opus46)
+//go:build !llm_generated_opus46
 
-package gov
+package repo
 
 import "github.com/urfave/cli/v2"
 
