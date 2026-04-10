@@ -19,8 +19,12 @@ jobs:
         with:
           go-version-file: 'go.mod'
           cache-dependency-path: 'go.sum'
-      - name: Code statistics
+      - name: Code statistics (all)
         run: go tool github.com/boyter/scc/v3 --not-match '(\.gen\.|\.out\.|golay24)' --sort code --wide .
+      - name: Code statistics (human written)
+        run: grep -rL '//go:build llm_generated' --include='*.go' . | xargs go tool github.com/boyter/scc/v3 --sort code --wide
+      - name: Code statistics (LLM generated)
+        run: grep -rl '//go:build llm_generated' --include='*.go' . | xargs go tool github.com/boyter/scc/v3 --sort code --wide
       - name: Dependency count
         run: |
           echo "Direct dependencies:"
