@@ -22,9 +22,9 @@ jobs:
       - name: Code statistics (all)
         run: go tool scc --not-match '(\.gen\.|\.out\.|golay24)' --sort code --wide .
       - name: Code statistics (human written)
-        run: grep -rL '//go:build llm_generated' --include='*.go' . | xargs go tool scc --not-match '(\.gen\.|\.out\.|golay24)' --sort code --wide
+        run: grep -rL '//go:build llm_generated' --include='*.go' . | grep -vE '\.(gen|out)\.|golay24' | xargs go tool scc --sort code --wide
       - name: Code statistics (LLM generated)
-        run: grep -rl '//go:build llm_generated' --include='*.go' . | xargs go tool scc --not-match '(\.gen\.|\.out\.|golay24)' --sort code --wide
+        run: grep -rl '//go:build llm_generated' --include='*.go' . | grep -vE '\.(gen|out)\.|golay24' | xargs go tool scc --sort code --wide
       - name: Dependency count
         run: |
           echo "Direct dependencies:"
