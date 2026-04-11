@@ -4,9 +4,12 @@ on:
     branches:
       - main
   pull_request:
+  schedule:
+    - cron: '0 6 * * 1' # weekly Monday 6am UTC
 
 permissions:
   contents: read
+  # contents: write # needed for README auto-update
 
 jobs:
   codestat:
@@ -14,6 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history for authorship analysis
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -31,3 +36,50 @@ jobs:
           go list -m -f '{{if not .Indirect}}  {{.Path}} {{.Version}}{{end}}' all
           echo ""
           echo "Total modules: $(go list -m all | wc -l)"
+      - name: Code authorship (human vs LLM)
+        run: go run -tags llm_generated_opus46 ./public/app/ gov repo authorship --repo .
+      - name: Job summary
+        run: |
+          {
+            echo '## Code Statistics'
+            echo ''
+            echo '### All Code'
+            echo '```'
+            go tool scc --not-match '(\.gen\.|\.out\.|golay24)' --sort code --wide .
+            echo '```'
+            echo ''
+            echo '### Human Written'
+            echo '```'
+            grep -rL '//go:build llm_generated' --include='*.go' . | grep -vE '\.(gen|out)\.|golay24' | xargs go tool scc --sort code --wide
+            echo '```'
+            echo ''
+            echo '### LLM Generated'
+            echo '```'
+            grep -rl '//go:build llm_generated' --include='*.go' . | grep -vE '\.(gen|out)\.|golay24' | xargs go tool scc --sort code --wide || echo '(none)'
+            echo '```'
+            echo ''
+            echo '### Code Authorship Over Time'
+            echo '```'
+            go run -tags llm_generated_opus46 ./public/app/ gov repo authorship --repo .
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      # - name: Update README
+      #   if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'push')
+      #   run: |
+      #     authorship=$(go run -tags llm_generated_opus46 ./public/app/ gov repo authorship --repo .)
+      #     sed -i '/<!-- AUTHORSHIP-START -->/,/<!-- AUTHORSHIP-END -->/{
+      #       /<!-- AUTHORSHIP-START -->/{
+      #         a\```
+      #         a\'"$authorship"'
+      #         a\```
+      #       }
+      #       /<!-- AUTHORSHIP-END -->/!d
+      #     }' README.md
+      # - name: Commit README
+      #   if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'push')
+      #   run: |
+      #     git config user.name 'github-actions[bot]'
+      #     git config user.email 'github-actions[bot]@users.noreply.github.com'
+      #     git add README.md
+      #     git diff --cached --quiet || git commit -m 'chore: update code authorship chart in README'
+      #     git push
