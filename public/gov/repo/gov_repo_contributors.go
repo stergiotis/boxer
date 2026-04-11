@@ -5,6 +5,7 @@ package repo
 import (
 	"context"
 	"iter"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -90,8 +91,15 @@ func (inst *ContributorAnalyzer) collect(ctx context.Context, git *GitRunner) (r
 	}
 	args = append(args, "HEAD")
 
+	type emailEntry struct {
+		email       string
+		displayName string
+		bestCount   int
+		totalCount  int
+	}
+
+	byEmail := make(map[string]*emailEntry, 32)
 	totalCommits := 0
-	records = make([]ContributorRecord, 0, 32)
 	for line, lineErr := range git.RunLines(ctx, args...) {
 		if lineErr != nil {
 			err = eh.Errorf("unable to read git shortlog: %w", lineErr)
@@ -113,16 +121,52 @@ func (inst *ContributorAnalyzer) collect(ctx context.Context, git *GitRunner) (r
 			return
 		}
 		totalCommits += count
+
+		author := parts[1]
+		email := extractEmail(author)
+		entry, ok := byEmail[email]
+		if !ok {
+			byEmail[email] = &emailEntry{
+				email:       email,
+				displayName: author,
+				bestCount:   count,
+				totalCount:  count,
+			}
+		} else {
+			entry.totalCount += count
+			if count > entry.bestCount {
+				entry.bestCount = count
+				entry.displayName = author
+			}
+		}
+	}
+
+	records = make([]ContributorRecord, 0, len(byEmail))
+	for _, entry := range byEmail {
 		records = append(records, ContributorRecord{
-			Author:      parts[1],
-			CommitCount: count,
+			Author:      entry.displayName,
+			CommitCount: entry.totalCount,
 		})
 	}
+	sort.Slice(records, func(i, j int) bool {
+		return records[i].CommitCount > records[j].CommitCount
+	})
 
 	if totalCommits > 0 {
 		for i := range records {
 			records[i].Percentage = float64(records[i].CommitCount) / float64(totalCommits) * 100.0
 		}
 	}
+	return
+}
+
+func extractEmail(author string) (email string) {
+	start := strings.LastIndexByte(author, '<')
+	end := strings.LastIndexByte(author, '>')
+	if start >= 0 && end > start {
+		email = strings.ToLower(author[start+1 : end])
+		return
+	}
+	email = author
 	return
 }
