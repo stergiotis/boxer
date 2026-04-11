@@ -3,6 +3,7 @@
 package repo
 
 import (
+	"os"
 	"slices"
 
 	"github.com/rs/zerolog/log"
@@ -53,6 +54,24 @@ func NewCliCommand() *cli.Command {
 		Name:  "repo",
 		Usage: "Git repository health diagnostics",
 		Subcommands: []*cli.Command{
+			{
+				Name:  "report",
+				Usage: "Generate a Unicode health report for embedding in project overviews",
+				Flags: sharedFlags(),
+				Action: func(c *cli.Context) error {
+					git := gitFromContext(c)
+					rpt := &ReportGenerator{
+						Since: c.String("since"),
+						Until: c.String("until"),
+						TopN:  c.Int("top"),
+					}
+					err = rpt.Generate(c.Context, &git, os.Stdout)
+					if err != nil {
+						return eh.Errorf("report generation failed: %w", err)
+					}
+					return nil
+				},
+			},
 			{
 				Name:  "churn",
 				Usage: "Show most frequently changed files",
@@ -159,6 +178,25 @@ func NewCliCommand() *cli.Command {
 					for rec, iterErr := range analyzer.Run(c.Context, &git) {
 						if iterErr != nil {
 							return eh.Errorf("contributor analysis failed: %w", iterErr)
+						}
+						err = f.FormatValue(c, rec)
+						if err != nil {
+							return eh.Errorf("unable to format value: %w", err)
+						}
+					}
+					return nil
+				},
+			},
+			{
+				Name:  "authorship",
+				Usage: "Show human vs LLM-generated code over time",
+				Flags: slices.Concat(sharedFlags(), fmtFlags),
+				Action: func(c *cli.Context) error {
+					git := gitFromContext(c)
+					analyzer := &AuthorshipAnalyzer{}
+					for rec, iterErr := range analyzer.Run(c.Context, &git) {
+						if iterErr != nil {
+							return eh.Errorf("authorship analysis failed: %w", iterErr)
 						}
 						err = f.FormatValue(c, rec)
 						if err != nil {
