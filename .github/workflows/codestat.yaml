@@ -37,7 +37,7 @@ jobs:
           echo ""
           echo "Total modules: $(go list -m all | wc -l)"
       - name: Code authorship (human vs LLM)
-        run: go run -tags llm_generated_opus46 ./public/app/ gov repo authorship --repo .
+        run: ./boxer.sh gov repo authorship --repo .
       - name: Job summary
         run: |
           {
@@ -60,13 +60,13 @@ jobs:
             echo ''
             echo '### Code Authorship Over Time'
             echo '```'
-            go run -tags llm_generated_opus46 ./public/app/ gov repo authorship --repo .
+            ./boxer.sh gov repo authorship --repo .
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
       # - name: Update README
       #   if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'push')
       #   run: |
-      #     authorship=$(go run -tags llm_generated_opus46 ./public/app/ gov repo authorship --repo .)
+      #     authorship=$(./boxer.sh gov repo authorship --repo .)
       #     sed -i '/<!-- AUTHORSHIP-START -->/,/<!-- AUTHORSHIP-END -->/{
       #       /<!-- AUTHORSHIP-START -->/{
       #         a\```
