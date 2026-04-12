@@ -1,4 +1,4 @@
-//go:build !extraChecks
+//go:build !extrachecks
 
 package compiletimeflags
 
