@@ -41,6 +41,11 @@ require (
 )
 
 require (
+	github.com/dlclark/regexp2 v1.10.0 // indirect
+	github.com/pkoukk/tiktoken-go v0.1.8 // indirect
+)
+
+require (
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/DataDog/zstd v1.5.7 // indirect
 	github.com/KimMachineGun/automemlimit v0.7.5 // indirect

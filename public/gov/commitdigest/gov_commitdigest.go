@@ -174,7 +174,7 @@ func WriteDigest(w io.Writer, digests []RepoDigest) (err error) {
 			continue
 		}
 		for _, c := range d.Commits {
-			_, err = fmt.Fprintf(bw, "\n## %s — %s (%s)\n%s\n", c.Hash[:12], c.Subject, c.Author, c.Date)
+			_, err = fmt.Fprintf(bw, "\n## %s — %s (%s)\n%s\n", shortHash(c.Hash), c.Subject, c.Author, c.Date)
 			if err != nil {
 				return
 			}
