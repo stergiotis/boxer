@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"encoding/json/v2"
+
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
@@ -19,6 +20,7 @@ type LlmClient struct {
 	Model      string
 	TimeoutSec int32
 	NumCtx     int32
+	ApiKey     string
 	client     http.Client
 }
 
@@ -92,6 +94,10 @@ func (inst *LlmClient) Summarize(ctx context.Context, systemPrompt string, userM
 	if err != nil {
 		err = eh.Errorf("unable to create HTTP request: %w", err)
 		return
+	}
+	if inst.ApiKey != "" {
+		req.Header.Set("X-Api-Key", inst.ApiKey)
+		req.Header.Set("Authorization", "Bearer "+inst.ApiKey)
 	}
 	req.Header.Set("Content-Type", "application/json")
 

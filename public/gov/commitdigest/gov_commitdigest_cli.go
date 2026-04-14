@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"encoding/json/v2"
+
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/urfave/cli/v2"
@@ -77,6 +78,15 @@ func NewCliCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:  "llm-model",
 				Usage: "Model name for the LLM (required in chunked mode)",
+			},
+			&cli.StringFlag{
+				Name:  "llm-apikey",
+				Usage: "API key (or blank) for LLM provider",
+			},
+			&cli.IntFlag{
+				Name:  "llm-timeout",
+				Usage: "number of seconds to wait for LLM provider",
+				Value: 0,
 			},
 			&cli.StringFlag{
 				Name:  "known-authors",
@@ -179,9 +189,11 @@ func NewCliCommand() *cli.Command {
 			}
 
 			llm := &LlmClient{
-				Endpoint: c.String("llm-endpoint"),
-				Model:    llmModel,
-				NumCtx:   int32(c.Int("num-ctx")),
+				Endpoint:   c.String("llm-endpoint"),
+				Model:      llmModel,
+				NumCtx:     int32(c.Int("num-ctx")),
+				ApiKey:     c.String("llm-apikey"),
+				TimeoutSec: int32(c.Int("llm-timeout")),
 			}
 			llm.Init()
 
