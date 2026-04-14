@@ -61,7 +61,7 @@ func CollectDigest(ctx context.Context, repoPath string, since string, author st
 
 	// %x01 separates records, %x00 separates fields within a record.
 	// %b (body) may contain newlines, so line-based splitting is not possible.
-	args := []string{"log", "--pretty=format:%x01%H%x00%an%x00%ai%x00%s%x00%b"}
+	args := []string{"log", "--pretty=format:%x01%H%x00%an%x00%ai%x00%s%x00%b", "--reverse"}
 	if since != "" {
 		args = append(args, "--since="+normalizeSince(since))
 	}
