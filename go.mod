@@ -22,6 +22,7 @@ require (
 	github.com/klauspost/compress v1.18.5
 	github.com/matoous/go-nanoid/v2 v2.1.0
 	github.com/nao1215/markdown v0.13.0
+	github.com/pkoukk/tiktoken-go v0.1.8
 	github.com/rs/zerolog v1.35.0
 	github.com/scalalang2/golang-fifo v1.2.0
 	github.com/stoewer/go-strcase v1.3.1
@@ -40,10 +41,7 @@ require (
 	lukechampine.com/blake3 v1.4.1
 )
 
-require (
-	github.com/dlclark/regexp2 v1.10.0 // indirect
-	github.com/pkoukk/tiktoken-go v0.1.8 // indirect
-)
+require github.com/dlclark/regexp2 v1.10.0 // indirect
 
 require (
 	github.com/BurntSushi/toml v1.6.0 // indirect
@@ -141,7 +139,6 @@ require (
 	golang.org/x/term v0.41.0 // indirect
 	golang.org/x/vuln v1.1.4 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
-	google.golang.org/genproto v0.0.0-20250303144028-a0af3efb3deb
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260316180232-0b37fe3546d5 // indirect
 	google.golang.org/grpc v1.79.3 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
