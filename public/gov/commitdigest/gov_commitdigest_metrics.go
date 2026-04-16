@@ -8,27 +8,20 @@ import (
 	"strings"
 )
 
-type ForeignCommit struct {
-	Hash   string
-	Author string
-	Date   string
-}
-
 type IterationHotspot struct {
-	Path        string
-	CommitCount int32
+	Path        string `json:"path"`
+	CommitCount int32  `json:"commitCount"`
 }
 
 type DigestMetrics struct {
-	ForeignCommits    []ForeignCommit
-	IterationHotspots []IterationHotspot
-	TotalCommits      int32
-	UniqueAuthors     int32
+	BoundaryCrossings []BoundaryCrossing `json:"boundaryCrossings,omitempty"`
+	IterationHotspots []IterationHotspot `json:"iterationHotspots,omitempty"`
+	TotalCommits      int32              `json:"totalCommits"`
+	UniqueAuthors     int32              `json:"uniqueAuthors"`
 }
 
 type MetricsConfig struct {
-	KnownAuthors []string
-	HotspotTopN  int32
+	HotspotTopN int32
 }
 
 var statLineRe = regexp.MustCompile(`^\s*(\S+)\s*\|`)
@@ -36,29 +29,12 @@ var statLineRe = regexp.MustCompile(`^\s*(\S+)\s*\|`)
 func ComputeMetrics(commits []CommitEntry, config MetricsConfig) (metrics DigestMetrics) {
 	metrics.TotalCommits = int32(len(commits))
 
-	knownSet := make(map[string]struct{}, len(config.KnownAuthors))
-	for _, a := range config.KnownAuthors {
-		knownSet[strings.ToLower(strings.TrimSpace(a))] = struct{}{}
-	}
-	hasKnownAuthors := len(knownSet) > 0
-
 	authorSet := make(map[string]struct{}, 16)
 	fileCounts := make(map[string]int32, 64)
-	metrics.ForeignCommits = make([]ForeignCommit, 0, 4)
 
 	for _, c := range commits {
 		email := extractCommitEmail(c.Author)
 		authorSet[email] = struct{}{}
-
-		if hasKnownAuthors {
-			if !isKnownAuthor(email, c.Author, knownSet) {
-				metrics.ForeignCommits = append(metrics.ForeignCommits, ForeignCommit{
-					Hash:   c.Hash,
-					Author: c.Author,
-					Date:   c.Date,
-				})
-			}
-		}
 
 		if c.Stat != "" {
 			for _, line := range strings.Split(c.Stat, "\n") {
@@ -118,20 +94,5 @@ func extractCommitEmail(author string) (email string) {
 		return
 	}
 	email = strings.ToLower(author)
-	return
-}
-
-func isKnownAuthor(email string, fullAuthor string, knownSet map[string]struct{}) (known bool) {
-	if _, ok := knownSet[email]; ok {
-		known = true
-		return
-	}
-	lowerAuthor := strings.ToLower(fullAuthor)
-	for k := range knownSet {
-		if strings.Contains(lowerAuthor, k) {
-			known = true
-			return
-		}
-	}
 	return
 }

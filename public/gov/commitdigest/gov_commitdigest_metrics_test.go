@@ -19,28 +19,6 @@ func TestComputeMetrics_TotalAndUniqueAuthors(t *testing.T) {
 	assert.Equal(t, int32(2), metrics.UniqueAuthors)
 }
 
-func TestComputeMetrics_ForeignAuthors(t *testing.T) {
-	commits := []CommitEntry{
-		{Hash: "aaaa1234567890abcdef1234567890abcdef1234", Author: "Alice <alice@example.com>", Date: "2026-04-10"},
-		{Hash: "bbbb1234567890abcdef1234567890abcdef1234", Author: "Bob <bob@external.com>", Date: "2026-04-11"},
-		{Hash: "cccc1234567890abcdef1234567890abcdef1234", Author: "Charlie <charlie@example.com>", Date: "2026-04-12"},
-	}
-	config := MetricsConfig{
-		KnownAuthors: []string{"alice@example.com", "charlie@example.com"},
-	}
-	metrics := ComputeMetrics(commits, config)
-	assert.Equal(t, 1, len(metrics.ForeignCommits))
-	assert.Equal(t, "Bob <bob@external.com>", metrics.ForeignCommits[0].Author)
-}
-
-func TestComputeMetrics_NoKnownAuthors(t *testing.T) {
-	commits := []CommitEntry{
-		{Hash: "aaaa1234567890abcdef1234567890abcdef1234", Author: "Alice <alice@example.com>", Date: "2026-04-10"},
-	}
-	metrics := ComputeMetrics(commits, MetricsConfig{})
-	assert.Equal(t, 0, len(metrics.ForeignCommits))
-}
-
 func TestComputeMetrics_IterationHotspots(t *testing.T) {
 	commits := []CommitEntry{
 		{
@@ -90,18 +68,15 @@ func TestComputeMetrics_HotspotsExcludeSingleTouch(t *testing.T) {
 	assert.Equal(t, 0, len(metrics.IterationHotspots))
 }
 
+func TestComputeMetrics_NoBoundaryCrossingsWithoutDetection(t *testing.T) {
+	commits := []CommitEntry{
+		{Hash: "aaaa1234567890abcdef1234567890abcdef1234", Author: "Alice <alice@example.com>", Date: "2026-04-10"},
+	}
+	metrics := ComputeMetrics(commits, MetricsConfig{})
+	assert.Nil(t, metrics.BoundaryCrossings)
+}
+
 func TestExtractCommitEmail(t *testing.T) {
 	assert.Equal(t, "alice@example.com", extractCommitEmail("Alice <alice@example.com>"))
 	assert.Equal(t, "alice", extractCommitEmail("Alice"))
-}
-
-func TestIsKnownAuthor_ByEmail(t *testing.T) {
-	known := map[string]struct{}{"alice@example.com": {}}
-	assert.True(t, isKnownAuthor("alice@example.com", "Alice <alice@example.com>", known))
-	assert.False(t, isKnownAuthor("bob@example.com", "Bob <bob@example.com>", known))
-}
-
-func TestIsKnownAuthor_BySubstring(t *testing.T) {
-	known := map[string]struct{}{"alice": {}}
-	assert.True(t, isKnownAuthor("alice@example.com", "Alice <alice@example.com>", known))
 }

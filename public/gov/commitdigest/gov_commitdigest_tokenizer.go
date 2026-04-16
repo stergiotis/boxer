@@ -6,7 +6,7 @@ import (
 	"math"
 
 	"github.com/pkoukk/tiktoken-go"
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 type TokenCounterI interface {
@@ -36,7 +36,7 @@ func (inst *TiktokenCounter) Init() (err error) {
 	}
 	inst.enc, err = tiktoken.GetEncoding(encoding)
 	if err != nil {
-		err = eh.Errorf("unable to get tiktoken encoding %q: %w", encoding, err)
+		err = eb.Build().Str("encoding", encoding).Errorf("unable to get tiktoken encoding: %w", err)
 		return
 	}
 	return

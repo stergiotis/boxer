@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 var ErrNotAGitRepo = errors.New("not a git repository")
@@ -37,7 +38,7 @@ type CommitEntry struct {
 func CollectDigest(ctx context.Context, repoPath string, since string, author string, noStat bool) (digest RepoDigest, err error) {
 	absPath, err := filepath.Abs(repoPath)
 	if err != nil {
-		err = eh.Errorf("unable to resolve repo path %q: %w", repoPath, err)
+		err = eb.Build().Str("path", repoPath).Errorf("unable to resolve repo path: %w", err)
 		return
 	}
 	digest.RepoPath = absPath
@@ -47,7 +48,7 @@ func CollectDigest(ctx context.Context, repoPath string, since string, author st
 	check := exec.CommandContext(ctx, "git", "rev-parse", "--git-dir")
 	check.Dir = absPath
 	if checkErr := check.Run(); checkErr != nil {
-		err = fmt.Errorf("%q: %w", absPath, ErrNotAGitRepo)
+		err = eb.Build().Str("path", absPath).Errorf("not a git repository: %w", ErrNotAGitRepo)
 		return
 	}
 
@@ -55,13 +56,13 @@ func CollectDigest(ctx context.Context, repoPath string, since string, author st
 	headCheck := exec.CommandContext(ctx, "git", "rev-parse", "--verify", "HEAD")
 	headCheck.Dir = absPath
 	if checkErr := headCheck.Run(); checkErr != nil {
-		err = fmt.Errorf("%q: %w", absPath, ErrNoCommits)
+		err = eb.Build().Str("path", absPath).Errorf("git repository has no commits: %w", ErrNoCommits)
 		return
 	}
 
 	// %x01 separates records, %x00 separates fields within a record.
 	// %b (body) may contain newlines, so line-based splitting is not possible.
-	args := []string{"log", "--pretty=format:%x01%H%x00%an%x00%ai%x00%s%x00%b", "--reverse"}
+	args := []string{"log", "--pretty=format:%x01%H%x00%an <%ae>%x00%ai%x00%s%x00%b", "--reverse"}
 	if since != "" {
 		args = append(args, "--since="+normalizeSince(since))
 	}
@@ -73,7 +74,7 @@ func CollectDigest(ctx context.Context, repoPath string, since string, author st
 	cmd.Dir = absPath
 	out, cmdErr := cmd.Output()
 	if cmdErr != nil {
-		err = eh.Errorf("git log failed in %q: %w", absPath, cmdErr)
+		err = eb.Build().Str("path", absPath).Errorf("git log failed: %w", cmdErr)
 		return
 	}
 
@@ -106,7 +107,7 @@ func CollectDigest(ctx context.Context, repoPath string, since string, author st
 		for i := range digest.Commits {
 			digest.Commits[i].Stat, err = commitStat(ctx, absPath, digest.Commits[i].Hash)
 			if err != nil {
-				err = eh.Errorf("unable to get stat for %s: %w", digest.Commits[i].Hash, err)
+				err = eb.Build().Str("hash", digest.Commits[i].Hash).Errorf("unable to get stat: %w", err)
 				return
 			}
 		}

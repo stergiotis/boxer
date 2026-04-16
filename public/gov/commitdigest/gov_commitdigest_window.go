@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 type SlidingWindow struct {
@@ -37,7 +37,7 @@ func (inst *SlidingWindow) LoadFromDir() (err error) {
 		if os.IsNotExist(readErr) {
 			return
 		}
-		err = eh.Errorf("unable to read summaries directory %q: %w", inst.Dir, readErr)
+		err = eb.Build().Str("dir", inst.Dir).Errorf("unable to read summaries directory: %w", readErr)
 		return
 	}
 
@@ -70,7 +70,7 @@ func (inst *SlidingWindow) LoadFromDir() (err error) {
 		var data []byte
 		data, err = os.ReadFile(filepath.Join(inst.Dir, name))
 		if err != nil {
-			err = eh.Errorf("unable to read summary file %q: %w", name, err)
+			err = eb.Build().Str("file", name).Errorf("unable to read summary file: %w", err)
 			return
 		}
 		content := strings.TrimSpace(string(data))
@@ -101,7 +101,7 @@ func (inst *SlidingWindow) Persist(chunkIndex int32, commits []CommitEntry) (err
 	}
 	err = os.MkdirAll(inst.Dir, 0o755)
 	if err != nil {
-		err = eh.Errorf("unable to create summaries directory %q: %w", inst.Dir, err)
+		err = eb.Build().Str("dir", inst.Dir).Errorf("unable to create summaries directory: %w", err)
 		return
 	}
 	if len(inst.Summaries) == 0 {
@@ -122,7 +122,7 @@ func (inst *SlidingWindow) Persist(chunkIndex int32, commits []CommitEntry) (err
 
 	err = os.WriteFile(filepath.Join(inst.Dir, name), []byte(latest+"\n"), 0o644)
 	if err != nil {
-		err = eh.Errorf("unable to write summary file %q: %w", name, err)
+		err = eb.Build().Str("file", name).Errorf("unable to write summary file: %w", err)
 		return
 	}
 	return

@@ -41,10 +41,11 @@ func RenderMetricsSection(metrics DigestMetrics) (rendered string) {
 	_, _ = fmt.Fprintf(&sb, "\n### Metrics\n")
 	_, _ = fmt.Fprintf(&sb, "- Total commits: %d\n", metrics.TotalCommits)
 	_, _ = fmt.Fprintf(&sb, "- Unique authors: %d\n", metrics.UniqueAuthors)
-	if len(metrics.ForeignCommits) > 0 {
-		_, _ = fmt.Fprintf(&sb, "- Foreign commits: %d\n", len(metrics.ForeignCommits))
-		for _, fc := range metrics.ForeignCommits {
-			_, _ = fmt.Fprintf(&sb, "  - %s by %s (%s)\n", shortHash(fc.Hash), fc.Author, fc.Date)
+	if len(metrics.BoundaryCrossings) > 0 {
+		_, _ = fmt.Fprintf(&sb, "- Ownership boundary crossings: %d\n", len(metrics.BoundaryCrossings))
+		for _, bc := range metrics.BoundaryCrossings {
+			_, _ = fmt.Fprintf(&sb, "  - %s modified `%s` (owners: %s)\n",
+				bc.Author, bc.File, strings.Join(bc.Owners, ", "))
 		}
 	}
 	if len(metrics.IterationHotspots) > 0 {
@@ -78,6 +79,6 @@ func RenderChunkPrompt(repoName string, commits []CommitEntry, metrics DigestMet
 const DefaultSystemPrompt = `You are a changelog summarizer. Given a set of git commits and repository metrics, produce a concise changelog summary.
 Focus on:
 - What changed and why (group related commits)
-- Notable patterns (foreign contributions, hotspot files)
-- Impact and risk areas
-Keep the summary under 300 words. Use markdown formatting.`
+- Ownership boundary crossings (files modified by someone outside the usual author group — flag these for review attention)
+- Iteration hotspots (files with high churn)
+Keep the summary under 300 words. Use markdown formatting. Include the date range in below the title.`

@@ -5,15 +5,20 @@ package commitdigest
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
+	"sort"
 	"time"
 
 	"encoding/json/v2"
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
+
+var ErrLlmRequestFailed = errors.New("LLM request failed")
 
 type LlmClient struct {
 	Endpoint   string
@@ -117,7 +122,13 @@ func (inst *LlmClient) Summarize(ctx context.Context, systemPrompt string, userM
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		err = eh.Errorf("LLM returned status %d: %s", resp.StatusCode, string(body))
+		if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusBadRequest {
+			if models, listErr := inst.ListModels(ctx); listErr == nil && len(models) > 0 {
+				err = eb.Build().Int("statusCode", resp.StatusCode).Str("body", string(body)).Strs("availableModels", models).Errorf("LLM request failed: %w", ErrLlmRequestFailed)
+				return
+			}
+		}
+		err = eb.Build().Int("statusCode", resp.StatusCode).Str("body", string(body)).Errorf("LLM request failed: %w", ErrLlmRequestFailed)
 		return
 	}
 
@@ -129,7 +140,7 @@ func (inst *LlmClient) Summarize(ctx context.Context, systemPrompt string, userM
 	}
 
 	if len(chatResp.Choices) == 0 {
-		err = eh.Errorf("LLM returned no choices")
+		err = eh.Errorf("LLM returned no choices: %w", ErrLlmRequestFailed)
 		return
 	}
 
@@ -139,5 +150,61 @@ func (inst *LlmClient) Summarize(ctx context.Context, systemPrompt string, userM
 		Int64("promptTokens", chatResp.Usage.PromptTokens).
 		Int64("completionTokens", chatResp.Usage.CompletionTokens).
 		Msg("LLM usage")
+	return
+}
+
+type modelEntry struct {
+	Id string `json:"id"`
+}
+
+type modelsResponse struct {
+	Data []modelEntry `json:"data"`
+}
+
+// ListModels fetches available model IDs from the OpenAI-compatible /models endpoint.
+func (inst *LlmClient) ListModels(ctx context.Context) (models []string, err error) {
+	endpoint := inst.Endpoint
+	if endpoint == "" {
+		endpoint = "http://localhost:11434/v1"
+	}
+	url := endpoint + "/models"
+
+	var req *http.Request
+	req, err = http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return
+	}
+	if inst.ApiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+inst.ApiKey)
+	}
+
+	var resp *http.Response
+	resp, err = inst.client.Do(req)
+	if err != nil {
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return
+	}
+
+	var body []byte
+	body, err = io.ReadAll(resp.Body)
+	if err != nil {
+		return
+	}
+
+	var parsed modelsResponse
+	err = json.Unmarshal(body, &parsed)
+	if err != nil {
+		return
+	}
+
+	models = make([]string, 0, len(parsed.Data))
+	for _, m := range parsed.Data {
+		models = append(models, m.Id)
+	}
+	sort.Strings(models)
 	return
 }
