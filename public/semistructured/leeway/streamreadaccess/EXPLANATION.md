@@ -1,3 +1,11 @@
+---
+type: explanation
+audience: leeway maintainer
+status: draft
+---
+
+> **Status: draft — pre-human-review.** Not verified against the current documentation standard; migrated from `KnownIssues.md`. Do not cite as authoritative.
+
 # Leeway Stream Readaccess Driver — Design Notes
 
 ## The Leeway Data Model

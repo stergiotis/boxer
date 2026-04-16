@@ -1,3 +1,11 @@
+---
+type: explanation
+audience: DSL maintainer
+status: draft
+---
+
+> **Status: draft — pre-human-review.** Not verified against the current documentation standard; migrated from `ARCHITECTURE.md`. Do not cite as authoritative.
+
 # ClickHouse SQL DSL Framework
 
 A structured approach to parsing, analyzing, transforming, and generating

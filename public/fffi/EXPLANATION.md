@@ -1,3 +1,13 @@
+---
+type: explanation
+audience: FFI integrator
+status: draft
+---
+
+> **Status: draft — pre-human-review.** Not verified against the current documentation standard; migrated from `FFFI.md`. Do not cite as authoritative.
+
+# FFFI — Foreign Function Framework Interface
+
 ## Features
 * FFFI preserves ...
     - ... comments;

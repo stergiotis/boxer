@@ -1,4 +1,16 @@
-# Resources
+---
+type: explanation
+audience: callsite framework maintainer
+status: draft
+---
+
+> **Status: draft — pre-human-review.** Not verified against the current documentation standard; migrated from `DESIGN.md`. Content is a stub — mostly external references. Do not cite as authoritative.
+
+# Callsite design — background
+
+Devirtualization and monomorphization notes relevant to the callsite framework. The external resources below record the constraints we design against.
+
+## Resources
 ## Devirtualization
 * Implementation: https://go.dev/src/cmd/compile/internal/devirtualize/devirtualize.go
 * Overview article: https://www.polarsignals.com/blog/posts/2023/11/24/go-interface-devirtualization-and-pgo

@@ -144,6 +144,64 @@ const (
 var AllWeekdays = []WeekdayE{WeekdayMonday,WeekdayTuesday,WeekdayWednesday,...}
 ```
 
+### Function & Method Naming
+
+**Suffixes.**
+*   `P` — procedures with no return values (e.g. `DoWorkP`). P = Procedure.
+*   `V` — advanced variants taking a larger argument set than the base function (e.g. `ExecV`). V = adVanced.
+*   `E` — functions returning an error (e.g. `OpenE`). E = Error. Distinct from the enum type-suffix `E` above; types and functions are disambiguated by Go's identifier conventions.
+
+**Prefixes.**
+*   `Set` — only idempotent setters may use this prefix.
+*   `Get` — getters.
+*   `Is` — predicates (functions or methods returning a single `bool`).
+
+### Opposite Pairs
+
+Use these canonical verb pairs rather than invented synonyms, so that symmetrical operations are immediately legible:
+
+*   Begin/End
+*   Prepare/Apply
+*   Start/Stop
+*   Incl/Excl, Inclusive/Exclusive
+*   Add/Remove
+*   Create/Delete/Prune, Create/Destroy
+*   Commit/Rollback
+*   Src/Dest, Source/Destination
+*   First/Last
+*   Incr/Decr, Increment/Decrement
+*   Lock/Unlock
+*   Next/Prev
+*   Old/New
+*   Open/Close
+*   Set/Get, Set/Clear, Set/Unset
+*   Show/Hide
+*   Up/Down
+*   Attach/Detach
+*   Compress/Decompress
+*   Connect/Disconnect
+*   Enable/Disable
+*   Encode/Decode
+*   Serialize/Deserialize
+*   Marshal/Unmarshal
+*   Inflate/Deflate
+*   Enter/Leave
+*   Freeze/Unfreeze
+*   Head/Tail
+*   Increase/Decrease
+*   Input/Output
+*   Ingress/Egress
+*   Prolog/Epilog
+*   Inbound/Outbound
+*   Link/Unlink
+*   Push/Pop, Push/Pull
+*   Read/Write
+*   Register/Deregister
+*   Resume/Suspend
+*   Select/Deselect
+*   Send/Receive
+*   Setup/Teardown
+
 ## Documentation
 *   **Self-documenting code:** Do not document obvious methods or fields.
 *   **No Tautologies:** Do not repeat literal values in comments.
