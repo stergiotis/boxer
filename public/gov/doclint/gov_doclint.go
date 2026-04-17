@@ -88,11 +88,23 @@ func (inst *Linter) Run(roots []string) iter.Seq2[Finding, error] {
 }
 
 // shouldSkipDir is consulted by every rule's filesystem walker to keep
-// vendored, generated, version-control, and test-fixture trees out of the
-// regular lint scope.
+// vendored, generated, version-control, fixture, and template trees out
+// of the regular lint scope.
+//
+// Excludes:
+//   - .git           — version control metadata
+//   - node_modules   — JS dependency tree
+//   - vendor         — Go vendored deps
+//   - testdata       — Go convention; per-rule fixtures live here
+//   - templates      — scaffolding the standard ships under doc/templates/;
+//                      its files have intentional draft/proposed status
+//                      and would otherwise show up in DL011 reports
+//
+// Run doclint with an explicit path under any of these directories to
+// process them deliberately.
 func shouldSkipDir(name string) (skip bool) {
 	switch name {
-	case ".git", "node_modules", "vendor", "testdata":
+	case ".git", "node_modules", "vendor", "testdata", "templates":
 		skip = true
 	}
 	return

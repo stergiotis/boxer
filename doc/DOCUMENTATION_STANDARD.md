@@ -293,7 +293,7 @@ Every invariant stated in this standard maps to exactly one enforcer. The `Rule`
 | Every exported symbol carries a doc comment that begins with its identifier name and ends with a period. | §1 Reference, §4 | `DL009` (pending) |
 | `Example*` functions carry an `// Output:` / `// Unordered output:` block and match it. | §1 How-To | `go test ./...` |
 | Go doc-link targets `[pkg.Symbol]` / `[Type.Method]` resolve to a real symbol. | §4, §5 | `DL008` (pending) |
-| ADRs contain `Context`, `Decision`, `Alternatives`, `Consequences`, `Status` sections. | §1 ADR | `DL010` (pending) |
+| ADRs contain `Context`, `Decision`, `Alternatives`, `Consequences`, `Status` sections. | §1 ADR | `DL010` |
 | ADRs: QOC section is used when ≥3 options × ≥3 criteria. | §1 ADR | *manual* |
 | Every `.md` under scoped paths begins with a compliant front-matter stanza. | §4 | `DL001` |
 | `type` is in the allowed enum (reference / how-to / explanation / tutorial / adr / router). | §4 | `DL001` |
@@ -303,7 +303,7 @@ Every invariant stated in this standard maps to exactly one enforcer. The `Rule`
 | Banned filenames (`SPEC.md`, `DESIGN.md`, `ARCH.md`, `NOTES.md`, `MISC.md`, `TODO.md`, `IDEA.md`, `IDEAS.md`) do not appear in package directories. | §6 | `DL005` |
 | Cross-package Markdown references use fully qualified Go import paths, not bare directory names. | §7 | `DL006` (pending) |
 | Every in-repo Markdown link resolves to an existing file or anchor. | §7 | `DL007` (pending) |
-| Open set of `status: draft` / `status: proposed` docs reported (informational, not a merge block). | §4 | `DL011` (pending) |
+| Open set of `status: draft` / `status: proposed` docs reported (informational, not a merge block). | §4 | `DL011` |
 
 Rules not in the table are either process guidance (e.g., "use AI for drafts") or judgment calls (e.g., quadrant selection) and are not mechanically enforceable.
 
