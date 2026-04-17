@@ -1,0 +1,11 @@
+---
+type: adr
+status: proposed
+date: 2026-04-17
+---
+
+> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
+
+# Compliant proposed ADR
+
+DL004 must not flag this — status proposed, matching banner.

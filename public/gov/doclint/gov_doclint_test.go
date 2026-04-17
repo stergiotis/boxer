@@ -85,6 +85,85 @@ func TestExtractFrontMatter(t *testing.T) {
 	}
 }
 
+func TestRuleDL003ChecksReviewMetadata(t *testing.T) {
+	rule := NewRuleDL003()
+	findings := collectFindings(t, rule, []string{"testdata/dl003"})
+	type entry struct {
+		base string
+		msg  string
+	}
+	var entries []entry
+	for _, f := range findings {
+		require.Equal(t, "DL003", f.RuleId)
+		entries = append(entries, entry{filepath.Base(f.Path), f.Message})
+	}
+
+	hasFor := func(base string) bool {
+		for _, e := range entries {
+			if e.base == base {
+				return true
+			}
+		}
+		return false
+	}
+	severityFor := func(base string) FindingSeverityE {
+		for _, f := range findings {
+			if filepath.Base(f.Path) == base {
+				return f.Severity
+			}
+		}
+		return 0
+	}
+
+	require.True(t, hasFor("missing_reviewed_by.md"))
+	require.True(t, hasFor("missing_reviewed_date.md"))
+	require.True(t, hasFor("invalid_date.md"))
+	require.Equal(t, FindingSeverityWarn, severityFor("invalid_date.md"))
+	require.False(t, hasFor("compliant.md"))
+	require.False(t, hasFor("draft_no_review_needed.md"))
+}
+
+func TestRuleDL004ChecksBannerConsistency(t *testing.T) {
+	rule := NewRuleDL004()
+	findings := collectFindings(t, rule, []string{"testdata/dl004"})
+	bases := map[string]bool{}
+	for _, f := range findings {
+		require.Equal(t, "DL004", f.RuleId)
+		require.Equal(t, FindingSeverityError, f.Severity)
+		bases[filepath.Base(f.Path)] = true
+	}
+	require.True(t, bases["draft_no_banner.md"])
+	require.True(t, bases["draft_wrong_banner.md"])
+	require.True(t, bases["stable_with_banner.md"])
+	require.False(t, bases["draft_with_banner.md"])
+	require.False(t, bases["stable_no_banner.md"])
+	require.False(t, bases["proposed_with_banner.md"])
+}
+
+func TestDetectStatusBanner(t *testing.T) {
+	cases := []struct {
+		name  string
+		body  string
+		found bool
+		state string
+	}{
+		{"none", "# Hello\n", false, ""},
+		{"canonical_draft", "> **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.\n\n# Body\n", true, "draft"},
+		{"canonical_proposed", "> **Status: proposed — pre-human-review.** Decision under consideration.\n", true, "proposed"},
+		{"trailing_prose", "> **Status: draft — pre-human-review.** Not verified against the current documentation standard; migrated from `FFFI.md`. Do not cite as authoritative.\n", true, "draft"},
+		{"leading_blanks", "\n\n> **Status: draft — pre-human-review.** ok.\n", true, "draft"},
+		{"first_blockquote_not_banner", "> a regular blockquote\n\nbody\n", false, ""},
+		{"first_line_not_blockquote", "# Heading\n\n> **Status: draft — pre-human-review.** later.\n", false, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			found, state := DetectStatusBanner([]byte(c.body))
+			require.Equal(t, c.found, found)
+			require.Equal(t, c.state, state)
+		})
+	}
+}
+
 func TestParseFormatAndSeverity(t *testing.T) {
 	f, err := ParseFormatE("json")
 	require.NoError(t, err)

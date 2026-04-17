@@ -298,8 +298,8 @@ Every invariant stated in this standard maps to exactly one enforcer. The `Rule`
 | Every `.md` under scoped paths begins with a compliant front-matter stanza. | §4 | `DL001` |
 | `type` is in the allowed enum (reference / how-to / explanation / tutorial / adr / router). | §4 | `DL001` |
 | `status` is in the allowed enum for the doc's `type`. | §4 | `DL001` |
-| `reviewed-by` + `reviewed-date` present when `status` is `stable` / `accepted`. | §4 | `DL003` (pending) |
-| Draft banner present iff `status` is `draft` / `proposed`; canonical phrasing used. | §4 | `DL004` (pending) |
+| `reviewed-by` + `reviewed-date` present when `status` is `stable` / `accepted`; date parses as `YYYY-MM-DD`. | §4 | `DL003` |
+| Draft banner present iff `status` is `draft` / `proposed`; banner state matches front-matter status. | §4 | `DL004` |
 | Banned filenames (`SPEC.md`, `DESIGN.md`, `ARCH.md`, `NOTES.md`, `MISC.md`, `TODO.md`, `IDEA.md`, `IDEAS.md`) do not appear in package directories. | §6 | `DL005` |
 | Cross-package Markdown references use fully qualified Go import paths, not bare directory names. | §7 | `DL006` (pending) |
 | Every in-repo Markdown link resolves to an existing file or anchor. | §7 | `DL007` (pending) |

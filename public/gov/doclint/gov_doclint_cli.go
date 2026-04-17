@@ -50,6 +50,8 @@ func doclintAction(ctx *cli.Context) (err error) {
 
 	linter := NewLinter()
 	linter.Register(NewRuleDL001())
+	linter.Register(NewRuleDL003())
+	linter.Register(NewRuleDL004())
 	linter.Register(NewRuleDL005())
 
 	var rep ReporterI
