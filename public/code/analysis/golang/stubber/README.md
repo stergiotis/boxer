@@ -1,3 +1,13 @@
+---
+type: reference
+audience: code-analysis tooling user
+status: draft
+---
+
+> **Status: draft — pre-human-review.** Not yet verified against the current documentation standard. Do not cite as authoritative.
+
+# stubber
+
 ## 1. Purpose
 **`stubber`** is a CLI tool designed to generate a **redacted, compilable version** of Go source packages. 
 Its primary goal is to strip away implementation details (proprietary logic) and private members while preserving the public API surface. 

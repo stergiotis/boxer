@@ -1,3 +1,11 @@
+---
+type: reference
+audience: analytics consumer
+status: draft
+---
+
+> **Status: draft — pre-human-review.** Not yet verified against the current documentation standard. Do not cite as authoritative.
+
 # stylometry — Compression-Based Authorship Analysis
 
 Streaming authorship analysis built on top of the `compression` similarity package. Compares a fixed reference author's text against candidate texts using NCD/CCC metrics with automatic convergence detection.

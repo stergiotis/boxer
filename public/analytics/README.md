@@ -1,3 +1,11 @@
+---
+type: router
+audience: analytics consumer
+status: draft
+---
+
+> **Status: draft — pre-human-review.** Not yet verified against the current documentation standard. Do not cite as authoritative.
+
 # analytics — Streaming Analytics and Similarity Measurement
 
 ## Package tree

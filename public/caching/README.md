@@ -1,3 +1,11 @@
+---
+type: reference
+audience: caching user
+status: draft
+---
+
+> **Status: draft — pre-human-review.** Not yet verified against the current documentation standard. Do not cite as authoritative.
+
 # Batch-Optimized Dependency Cache
 
 ## 1. Overview

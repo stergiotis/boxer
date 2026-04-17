@@ -1,3 +1,11 @@
+---
+type: reference
+audience: analytics consumer
+status: draft
+---
+
+> **Status: draft — pre-human-review.** Not yet verified against the current documentation standard. Do not cite as authoritative.
+
 # compression — Compression-Based Similarity Measurement
 
 General-purpose primitives for measuring similarity between texts using data compression as a proxy for Kolmogorov complexity.

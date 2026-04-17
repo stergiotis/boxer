@@ -1,3 +1,11 @@
+---
+type: explanation
+audience: DSL maintainer
+status: draft
+---
+
+> **Status: draft — pre-human-review.** Not yet verified against the current documentation standard. Do not cite as authoritative.
+
 # Database Resolution in the Nanopass Framework
 
 ## How ClickHouse Resolves Databases

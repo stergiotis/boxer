@@ -1,3 +1,11 @@
+---
+type: reference
+audience: DSL maintainer
+status: draft
+---
+
+> **Status: draft — pre-human-review.** Not yet verified against the current documentation standard. Do not cite as authoritative.
+
 # nanopass — ClickHouse SQL Transformation Framework
 
 A Go library for composable SQL→SQL transformations of ClickHouse SELECT statements. Each transformation is a self-contained **pass** that parses SQL, walks the concrete syntax tree (CST), rewrites tokens, and emits valid SQL. Passes are chained into pipelines — no shared mutable state, no custom AST, no partial parses.
