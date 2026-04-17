@@ -30,10 +30,11 @@ Original licence:
 > WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-// Constants mimicking R's environment
 const (
+	// DoubleEps mimics R's .Machine$double.eps.
 	DoubleEps = 2.220446049250313e-16
-	Eps       = DoubleEps * 100.0
+	// Eps is a relaxed epsilon (100×DoubleEps) used by the Talbot algorithm.
+	Eps = DoubleEps * 100.0
 )
 
 // Weights for the optimization components

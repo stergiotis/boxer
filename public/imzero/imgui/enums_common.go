@@ -13,7 +13,7 @@ const (
 	// ItemStatusDeactivated Only valid if ImGuiItemStatusFlags_HasDeactivated is set.
 	ItemStatusDeactivated          ItemStatusE = 1 << 6
 	ItemStatusDeactivatedAfterEdit ItemStatusE = 1 << 7
-	// ItemStatusVisible [WIP] Set when item is overlapping the current clipping rectangle (Used internally. Please don't use yet: API/system will change as we refactor Itemadd()).
+	// ItemStatusVisible (WIP) Set when item is overlapping the current clipping rectangle (Used internally. Please don't use yet: API/system will change as we refactor Itemadd()).
 	ItemStatusVisible ItemStatusE = 1 << 8
 	ItemStatusClicked ItemStatusE = 1 << 9
 	// ItemStatusToggleOpen Set when TreeNode() reports toggling their open state.

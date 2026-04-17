@@ -20,6 +20,7 @@ import (
 		return
 	}
 */
+
 func Text(format string, a ...any) {
 	TextUnformatted(fmt.Sprintf(format, a...))
 	return

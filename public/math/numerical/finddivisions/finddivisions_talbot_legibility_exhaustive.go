@@ -43,9 +43,9 @@ type LabelStrategy interface {
 	Score(val float64) float64
 }
 
-// 1. Decimal Strategy
-// Score: 1.0 if 10^-4 < |n| < 10^6, else 0.0 (Paper Table 3)
-// Note: 0 is always score 1.0
+// DecimalStrategy is strategy 1 from the paper (Table 3).
+//
+// Score: 1.0 if 10^-4 < |n| < 10^6, else 0.0. 0 is always score 1.0.
 type DecimalStrategy struct{}
 
 func (d DecimalStrategy) Format(val float64) string {
@@ -68,7 +68,8 @@ func (d DecimalStrategy) Score(val float64) float64 {
 	return 0.0 // C# implementation returns 0.5 or 0 based on implementation, paper says check bounds.
 }
 
-// 2. Scientific Strategy
+// ScientificStrategy is strategy 2 from the paper.
+//
 // Score: 0.25 constant.
 type ScientificStrategy struct{}
 
@@ -87,8 +88,9 @@ func (s ScientificStrategy) Score(val float64) float64 {
 	return 0.25
 }
 
-// 3. K-Suffix Strategy (Thousands)
-// Score: 0.75 if 10^3 <= |n| < 10^6
+// KSuffixStrategy is strategy 3 from the paper, the thousands K-suffix form.
+//
+// Score: 0.75 if 10^3 <= |n| < 10^6.
 type KSuffixStrategy struct{}
 
 func (k KSuffixStrategy) Format(val float64) string {
@@ -110,8 +112,9 @@ func (k KSuffixStrategy) Score(val float64) float64 {
 	return 0.0 // Penalty for using K notation on small numbers
 }
 
-// 4. M-Suffix Strategy (Millions)
-// Score: 0.75 if 10^6 <= |n| < 10^9
+// MSuffixStrategy is strategy 4 from the paper, the millions M-suffix form.
+//
+// Score: 0.75 if 10^6 <= |n| < 10^9.
 type MSuffixStrategy struct{}
 
 func (m MSuffixStrategy) Format(val float64) string {

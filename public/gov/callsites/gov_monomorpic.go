@@ -45,12 +45,14 @@ const (
 	SubtypeNone StaticPolySubtypeE = 0
 
 	// --- Stenciled / "Good" Cases ---
+
 	SubtypeBasic      StaticPolySubtypeE = 1 // int, float, bool, complex
 	SubtypeString     StaticPolySubtypeE = 2 // string
 	SubtypeSliceBasic StaticPolySubtypeE = 3 // []int, []string, etc.
 	SubtypeFunc       StaticPolySubtypeE = 4 // func() (User defined as "good")
 
 	// --- Shape / Dictionary Cases ---
+
 	SubtypePointer      StaticPolySubtypeE = 5  // *T
 	SubtypeStruct       StaticPolySubtypeE = 6  // struct { ... }
 	SubtypeInterface    StaticPolySubtypeE = 7  // interface { ... }

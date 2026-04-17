@@ -29,6 +29,7 @@ func sliceSum(nums []uint64) (r uint64) {
 }
 
 // Machine Numeric Samples
+
 var SampleMachineNumericTypeBaseType = []canonicaltypes2.BaseTypeMachineNumericE{canonicaltypes2.BaseTypeMachineNumericUnsigned, canonicaltypes2.BaseTypeMachineNumericSigned, canonicaltypes2.BaseTypeMachineNumericFloat}
 var SampleMachineNumericTypeWidth = []canonicaltypes2.Width{8, 16, 32, 64}
 var SampleMachineNumericTypeByteOrder = []canonicaltypes2.ByteOrderModifierE{canonicaltypes2.ByteOrderModifierNone, canonicaltypes2.ByteOrderModifierLittleEndian, canonicaltypes2.ByteOrderModifierBigEndian}
@@ -36,6 +37,7 @@ var sampleMachineNumericTypeRadixii = []uint64{uint64(len(SampleMachineNumericTy
 var SampleMachineNumericMaxExcl = sliceProd(sampleMachineNumericTypeRadixii)
 
 // String Samples
+
 var SampleStringTypeBaseType = []canonicaltypes2.BaseTypeStringE{canonicaltypes2.BaseTypeStringBool, canonicaltypes2.BaseTypeStringBytes, canonicaltypes2.BaseTypeStringUtf8}
 var SampleStringTypeWidthModifier = []canonicaltypes2.WidthModifierE{canonicaltypes2.WidthModifierNone, canonicaltypes2.WidthModifierFixed}
 var SampleStringTypeWidth = []canonicaltypes2.Width{0, 128, 145, 192}
@@ -43,15 +45,18 @@ var sampleStringTypeRadixii = []uint64{uint64(len(SampleStringTypeBaseType)), ui
 var SampleStringTypeMaxExcl = sliceProd(sampleStringTypeRadixii)
 
 // Temporal Samples
+
 var SampleTemporalTypeBaseType = []canonicaltypes2.BaseTypeTemporalE{canonicaltypes2.BaseTypeTemporalUtcDatetime, canonicaltypes2.BaseTypeTemporalZonedDatetime, canonicaltypes2.BaseTypeTemporalZonedTime}
 var SampleTemporalTypeWidth = []canonicaltypes2.Width{32, 64}
 var sampleTemporalTypeRadixii = []uint64{uint64(len(SampleTemporalTypeBaseType)), uint64(len(SampleTemporalTypeWidth)), uint64(len(SampleScalarModifier))}
 var SampleTemporalTypeMaxExcl = sliceProd(sampleTemporalTypeRadixii)
 
 // --- NEW: Network Samples ---
+
 var SampleNetworkTypeBaseType = []canonicaltypes2.BaseTypeNetworkE{canonicaltypes2.BaseTypeNetworkIPv4, canonicaltypes2.BaseTypeNetworkIPv6}
 
-// We sample common CIDR widths and 0
+// We sample common CIDR widths and 0.
+
 var SampleNetworkTypeCIDRWidth = []uint8{0, 8, 16, 24, 32, 48, 64, 128}
 var sampleNetworkTypeRadixii = []uint64{uint64(len(SampleNetworkTypeBaseType)), uint64(len(SampleNetworkTypeCIDRWidth)), uint64(len(SampleScalarModifier))}
 var SampleNetworkTypeMaxExcl = sliceProd(sampleNetworkTypeRadixii)

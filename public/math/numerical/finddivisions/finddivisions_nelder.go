@@ -49,6 +49,9 @@ Translated from Chez Scheme to go: Gemini 3 Pro Preview
 
 ```
 */
+
+// NelderDefaultQs is the default Q-value sequence from the reference Scheme
+// implementation above.
 var NelderDefaultQs = []float64{1.0, 1.2, 1.6, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0}
 
 // Nelder implements J.A. Nelder's 1976 scaling algorithm.

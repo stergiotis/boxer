@@ -38,13 +38,25 @@ go tool go.uber.org/nilaway/cmd/nilaway -tags "$tags" ./public/... 2>&1 || true
 
 echo ""
 echo "=== doclint ==="
-# Enforces DOCUMENTATION_STANDARD invariants (front-matter presence + valid
-# type/status, banned filenames). See standard §8 for the full rule list.
-if "$here/../../boxer.sh" gov doclint --min-severity error . 2>/dev/null; then
-    echo "passed"
+# Surfaces all warn-and-above doclint findings. Only error-severity
+# findings set rc=1 (warnings are visible but non-blocking, consistent
+# with the staticcheck/errcheck/nilaway sections above). See doc/
+# DOCUMENTATION_STANDARD.md §8 for the full invariant table.
+#
+# The 'if' wrapper is required because the script runs under `set -e`:
+# a direct `out=$(...)` assignment would abort the script when doclint
+# exits non-zero on error-severity findings.
+if out=$("$here/../../boxer.sh" gov doclint --min-severity warn . 2>/dev/null); then
+    if [ -n "$out" ]; then
+        echo "$out"
+    else
+        echo "passed"
+    fi
 else
+    echo "$out"
     rc=1
 fi
 
 echo ""
 echo "=== lint complete ==="
+exit $rc
