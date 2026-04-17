@@ -2,6 +2,7 @@ package doclint
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -271,6 +272,80 @@ func TestExtractInlineLinksSkipsFencedCodeBlocks(t *testing.T) {
 	require.Len(t, links, 2, "links inside ```...``` blocks must be skipped")
 	require.Equal(t, "outside", links[0].Text)
 	require.Equal(t, "after", links[1].Text)
+}
+
+func TestRuleDL009ChecksGoDocComments(t *testing.T) {
+	rule := NewRuleDL009()
+	findings := collectFindings(t, rule, []string{"testdata/dl009"})
+	type entry struct {
+		base     string
+		msg      string
+		severity FindingSeverityE
+	}
+	var entries []entry
+	for _, f := range findings {
+		require.Equal(t, "DL009", f.RuleId)
+		entries = append(entries, entry{filepath.Base(f.Path), f.Message, f.Severity})
+	}
+
+	hasOn := func(base, want string) bool {
+		for _, e := range entries {
+			if e.base == base && strings.Contains(e.msg, want) {
+				return true
+			}
+		}
+		return false
+	}
+	severityOn := func(base, want string) FindingSeverityE {
+		for _, e := range entries {
+			if e.base == base && strings.Contains(e.msg, want) {
+				return e.severity
+			}
+		}
+		return 0
+	}
+	countFor := func(base string) (n int) {
+		for _, e := range entries {
+			if e.base == base {
+				n++
+			}
+		}
+		return
+	}
+
+	require.Equal(t, 0, countFor("compliant.go"), "compliant fixture must produce no findings")
+
+	require.True(t, hasOn("missing_doc.go", "Foo"))
+	require.True(t, hasOn("missing_doc.go", "ExportedType"))
+	require.True(t, hasOn("missing_doc.go", "ExportedConst"))
+	require.Equal(t, FindingSeverityInfo, severityOn("missing_doc.go", "Foo"),
+		"missing doc comments are info-severity (baseline cleanup gap)")
+
+	require.True(t, hasOn("wrong_prefix.go", "does not begin with 'Bar'"))
+	require.Equal(t, FindingSeverityWarn, severityOn("wrong_prefix.go", "does not begin with 'Bar'"),
+		"existing comment with wrong prefix is warn-severity (active style violation)")
+
+	require.True(t, hasOn("no_period.go", "does not end with"))
+	require.Equal(t, FindingSeverityWarn, severityOn("no_period.go", "does not end with"))
+
+	require.Equal(t, 0, countFor("unexported.go"))
+}
+
+func TestEndsWithSentenceTerminator(t *testing.T) {
+	require.True(t, endsWithSentenceTerminator("Foo does X."))
+	require.True(t, endsWithSentenceTerminator("Stop!"))
+	require.True(t, endsWithSentenceTerminator("Why?"))
+	require.False(t, endsWithSentenceTerminator("Foo does X"))
+	require.False(t, endsWithSentenceTerminator(""))
+}
+
+func TestIsInScopeForDL009(t *testing.T) {
+	require.True(t, IsInScopeForDL009("public/foo/bar.go"))
+	require.False(t, IsInScopeForDL009("public/foo/bar_test.go"))
+	require.False(t, IsInScopeForDL009("public/foo/bar.gen.go"))
+	require.False(t, IsInScopeForDL009("public/foo/bar.out.go"))
+	require.False(t, IsInScopeForDL009("public/foo/bar.idl.go"))
+	require.False(t, IsInScopeForDL009("doc/standard.md"))
 }
 
 func TestParseFormatAndSeverity(t *testing.T) {
