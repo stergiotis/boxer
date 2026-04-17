@@ -37,7 +37,7 @@ func GetVcsRevision() (revision string, modified bool, err error) {
 	return
 }
 
-// BuildVersionInfo Human readable build info (vcs fields)
+// BuildVersionInfo returns a human-readable build-info string (vcs fields).
 func BuildVersionInfo() string {
 	info, ok := debug.ReadBuildInfo()
 	if !ok {

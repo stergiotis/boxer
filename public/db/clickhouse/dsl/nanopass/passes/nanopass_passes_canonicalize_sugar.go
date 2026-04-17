@@ -11,7 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-// CanonicalizeSugar converts SQL syntactic sugar to canonical function call form:
+// CanonicalizeSugar converts SQL syntactic sugar to canonical function call form.
 //
 //	DATE 'str'                            → toDate('str')
 //	TIMESTAMP 'str'                       → toDateTime('str')

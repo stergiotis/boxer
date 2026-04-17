@@ -37,7 +37,7 @@ const (
 	Eps = DoubleEps * 100.0
 )
 
-// Weights for the optimization components
+// Weights sets the relative influence of each optimization component.
 type Weights struct {
 	Simplicity float64
 	Coverage   float64
@@ -134,7 +134,7 @@ func densityMax(k, m int) float64 {
 	return 1.0
 }
 
-// Talbot implements the Extended Wilkinson Algorithm
+// Talbot implements the Extended Wilkinson Algorithm.
 func Talbot(dmin, dmax float64, m int, opts TalbotOptions, scorer LegibilityScorerI) AxisLayout {
 	w := opts.Weights
 	onlyLoose := opts.OnlyLoose

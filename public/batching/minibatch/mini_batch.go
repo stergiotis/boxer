@@ -104,7 +104,7 @@ func (inst *MiniBatcher) ForceEmit(w io.Writer) (n int, err error) {
 	return inst.Emit(w)
 }
 
-// Emit a no-op when NeedsEmit() is false
+// Emit a no-op when NeedsEmit() is false.
 func (inst *MiniBatcher) Emit(w io.Writer) (n int, err error) {
 	if !inst.needsEmit {
 		return 0, nil

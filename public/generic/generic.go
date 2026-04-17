@@ -2,7 +2,9 @@ package generic
 
 import "reflect"
 
-// IsNil source https://stackoverflow.com/questions/73956346/how-to-check-if-generic-type-is-nil
+// IsNil reports whether the generic value t is nil, for nillable kinds.
+//
+// Adapted from https://stackoverflow.com/questions/73956346/how-to-check-if-generic-type-is-nil
 func IsNil[T any](t T) bool {
 	v := reflect.ValueOf(t)
 	kind := v.Kind()

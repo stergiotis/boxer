@@ -24,12 +24,12 @@ type BaseReader struct {
 
 var ErrTooFar = eh.Errorf("unable to peek byte, peeked more bytes than maxMessageSize")
 
-// BytesRead return how many bytes have been consumed from the underlying reader
+// BytesRead returns how many bytes have been consumed from the underlying reader.
 func (inst *BaseReader) BytesRead() int {
 	return inst.totalBytesRead
 }
 
-// BytesPeeked return how many bytes have been peeked from the underlying reader (in-message)
+// BytesPeeked returns how many bytes have been peeked from the underlying reader (in-message).
 func (inst *BaseReader) BytesPeeked() int {
 	return inst.bytesPeeked
 }

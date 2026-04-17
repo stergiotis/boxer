@@ -4,7 +4,7 @@ package implot
 
 import "github.com/stergiotis/boxer/public/imzero/imgui"
 
-// ImPlotAutoCol Special color used to indicate that a color should be deduced automatically
+// ImPlotAutoCol is a sentinel colour meaning "deduce the colour automatically".
 var ImPlotAutoCol = imgui.ImVec4{0.0, 0.0, 0.0, -1.0}
 
 const ImPlotAuto = -1

@@ -73,6 +73,7 @@ func DecodeParamMetadata(encoded string) (meta ParamMetadata, err error) {
 }
 
 // BuildParamName constructs a parameter name from the context and metadata.
+//
 // Format: <prefix>_<context>_<hex(cbor(metadata))>
 func BuildParamName(prefix string, contextName string, meta *ParamMetadata) (name string, err error) {
 	encoded, encodeErr := EncodeParamMetadata(meta)
@@ -85,6 +86,7 @@ func BuildParamName(prefix string, contextName string, meta *ParamMetadata) (nam
 }
 
 // ParseParamName extracts the context name and metadata from a parameter name.
+//
 // Format: <prefix>_<context>_<hex(cbor(metadata))>
 func ParseParamName(name string, prefix string) (contextName string, meta ParamMetadata, err error) {
 	if prefix == "" {

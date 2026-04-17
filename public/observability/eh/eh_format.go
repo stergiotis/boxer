@@ -17,7 +17,7 @@ import (
 // FormatError produces a human-readable, terminal-friendly representation of
 // an error tree. It walks the error's Unwrap chain, deduplicates messages that
 // are embedded by fmt.Errorf's %w wrapping, merges overlapping stack traces
-// into a single annotated stack, and adapts its output complexity to the error:
+// into a single annotated stack, and adapts its output complexity to the error.
 //
 //   - A simple error with no wrapping prints as a one-liner with a location.
 //   - A linear wrap chain prints as a causal chain with a single merged stack.

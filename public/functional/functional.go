@@ -1,6 +1,6 @@
 package functional
 
-// TranslateEmpty if s is the empty value (type specific) TranslateEmpty returns replacement
+// TranslateEmpty returns replacement when s is the empty value (type-specific), otherwise s.
 func TranslateEmpty[T comparable](s T, replacement T) (r T) {
 	if s == r {
 		return replacement

@@ -51,7 +51,7 @@ func (inst *StreamStats) Reset() {
 }
 
 // Push adds a single float64 value.
-// Complexity: O(1)
+// Complexity: O(1).
 func (inst *StreamStats) Push(x float64) {
 	if inst.n == 0 {
 		inst.min = x

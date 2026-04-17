@@ -168,7 +168,10 @@ type TaggedValuesSectionDto struct {
 	MembershipSpec           MembershipSpecE                    `cbor:"membershipSpec" json:"membershipSpec"`
 }
 
-// TaggedValuesSection Note: If multiple, non-scalar columns are given they must have the same length and have co-array semantics
+// TaggedValuesSection groups tagged value columns that share co-array topology.
+//
+// Note: if multiple non-scalar columns are given they must have the same
+// length and have co-array semantics.
 type TaggedValuesSection struct {
 	Name               naming.StylableName
 	UseAspects         useaspects.AspectSet

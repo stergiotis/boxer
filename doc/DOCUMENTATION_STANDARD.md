@@ -290,7 +290,7 @@ Every invariant stated in this standard maps to exactly one enforcer. The `Rule`
 
 | Invariant | Defined in | Rule |
 |---|---|---|
-| Every exported symbol carries a doc comment that begins with its identifier name and ends with a period. | §1 Reference, §4 | `DL009` (existing comments with wrong form: warn; missing comments: info, baseline cleanup) |
+| Every exported symbol carries a doc comment that begins with its identifier name; the summary paragraph (up to the first blank line) ends with `.`, `!`, or `?`. | §1 Reference, §4 | `DL009` (existing comments with wrong form: warn; missing comments: info, baseline cleanup) |
 | `Example*` functions carry an `// Output:` / `// Unordered output:` block and match it. | §1 How-To | `go test ./...` |
 | Go doc-link targets `[Symbol]` resolve to an exported symbol in the same package. | §4, §5 | `DL008` (qualified `[pkg.Symbol]` and method `[Type.Method]` not yet checked) |
 | ADRs contain `Context`, `Decision`, `Alternatives`, `Consequences`, `Status` sections. | §1 ADR | `DL010` |

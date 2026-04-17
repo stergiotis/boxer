@@ -187,7 +187,7 @@ func (inst *BinarySearchGrowingKV[K, V]) Grow(n int) {
 	inst.vals = slices.Grow(inst.vals, n)
 }
 
-// UpsertBatch last write wins
+// UpsertBatch last write wins.
 func (inst *BinarySearchGrowingKV[K, V]) UpsertBatch(key K, val V) {
 	inst.keys = append(inst.keys, key)
 	inst.vals = append(inst.vals, val)

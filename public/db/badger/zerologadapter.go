@@ -5,7 +5,8 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// ZerologLoggerAdapter Zero usage: opts := badger.DefaultOptions(storePath).WithLogger(&badgerutil.ZerologLoggerAdapter{})
+// ZerologLoggerAdapter bridges badger.Logger to zerolog.
+// Usage: opts := badger.DefaultOptions(storePath).WithLogger(&badgerutil.ZerologLoggerAdapter{}).
 type ZerologLoggerAdapter struct {
 }
 

@@ -43,7 +43,7 @@ func (inst *DeferredTee) Read(p []byte) (n int, err error) {
 	return
 }
 
-// Discard needs buffering, use DiscardAndFlush to stream directly to output
+// Discard needs buffering, use DiscardAndFlush to stream directly to output.
 func (inst *DeferredTee) Discard(n int) (int, error) {
 	b := inst.b
 	b.Grow(n)

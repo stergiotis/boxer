@@ -30,7 +30,7 @@ func GenerateBitErrors(code uint32, minErrorsIncl uint8, maxErrorsIncl uint8, ha
 	}
 }
 
-// NumberOfPossibleErrorsIn24Bits binomialCoefficient(24,numberOfBitsToChange)
+// NumberOfPossibleErrorsIn24Bits returns binomialCoefficient(24, numberOfBitsToChange).
 func NumberOfPossibleErrorsIn24Bits(numberOfBitsToChange uint8) int {
 	if numberOfBitsToChange == 0 {
 		return 0

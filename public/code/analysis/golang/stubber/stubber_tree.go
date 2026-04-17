@@ -19,7 +19,7 @@ type TreeProcessor struct {
 }
 
 // ProcessTree walks the srcFS matching the Go package pattern and writes filtered files to writerFn.
-// pattern examples: "./...", "pkg/foo", "."
+// Pattern examples: "./...", "pkg/foo", ".".
 func (tp *TreeProcessor) ProcessTree(ctx context.Context, srcFS fs.FS, pattern string, excludeFilename *regexp.Regexp, excludePath *regexp.Regexp, writerFn func(path string) (w io.WriteCloser, err error), shouldProcessDir func(fpath string) (process bool), shouldProcessFile func(fpath string) (process bool)) error {
 	// 1. Determine base path and recursive mode
 	basePath := "."

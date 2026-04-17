@@ -9,7 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-// CanonicalizeJoin canonicalizes JOIN syntax:
+// CanonicalizeJoin canonicalizes JOIN syntax.
 //
 //  1. Join keyword order: strictness always precedes direction.
 //     LEFT ALL JOIN  → ALL LEFT JOIN

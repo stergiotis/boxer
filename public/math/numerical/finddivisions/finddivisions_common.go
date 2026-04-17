@@ -57,7 +57,7 @@ func (inst AxisLayout) MapToScreen(value, axisStartPx, axisEndPx float64) float6
 	return axisStartPx + t*(axisEndPx-axisStartPx)
 }
 
-// GenerateTicksNaive mimics R's seq function
+// GenerateTicksNaive mimics R's seq function.
 func GenerateTicksNaive(min, max, step float64) []float64 {
 	const eps = 1.0e-10
 	const scale = 1.0e12

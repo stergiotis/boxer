@@ -263,7 +263,14 @@ func checkValueSpecDL009(filePath string, fset *token.FileSet, s *ast.ValueSpec,
 }
 
 // checkDocCommentText verifies a non-empty doc comment text against the
-// "begins with name, ends with sentence-terminator" contract.
+// "begins with name, summary ends with sentence-terminator" contract from
+// DOCUMENTATION_STANDARD §4.
+//
+// The "ends with" check is applied to the SUMMARY paragraph only — the
+// text up to the first blank line — not the entire doc comment. Code
+// examples and detail paragraphs that follow the summary commonly end
+// in expression syntax (e.g. `cache.Init(ctx)`) rather than prose, and
+// the Go ecosystem convention is to leave them as-is.
 func checkDocCommentText(filePath string, pos token.Position, name, kind, text string, yield func(Finding, error) bool) (cont bool) {
 	cont = true
 	if !strings.HasPrefix(text, name) {
@@ -280,17 +287,29 @@ func checkDocCommentText(filePath string, pos token.Position, name, kind, text s
 			return
 		}
 	}
-	if !endsWithSentenceTerminator(text) {
+	summary := summaryParagraph(text)
+	if !endsWithSentenceTerminator(summary) {
 		f := Finding{
 			RuleId:   "DL009",
 			Severity: FindingSeverityWarn,
 			Path:     filePath,
 			Line:     int32(pos.Line),
 			Col:      int32(pos.Column),
-			Message:  "doc comment for exported " + kind + " '" + name + "' does not end with '.', '!', or '?'",
+			Message:  "doc comment summary for exported " + kind + " '" + name + "' does not end with '.', '!', or '?'",
 		}
 		cont = yield(f, nil)
 	}
+	return
+}
+
+// summaryParagraph returns the leading paragraph of text — everything up
+// to the first blank line — trimmed of surrounding whitespace.
+func summaryParagraph(text string) (summary string) {
+	summary = text
+	if idx := strings.Index(summary, "\n\n"); idx > 0 {
+		summary = summary[:idx]
+	}
+	summary = strings.TrimSpace(summary)
 	return
 }
 

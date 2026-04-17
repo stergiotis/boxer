@@ -192,7 +192,7 @@ var AllMembershipSpecs = []MembershipSpecE{
 	MembershipSpecMixedLowCardVerbatimHighCardParameters,
 }
 
-// GetIndex returns -1 if .Count() > 1
+// GetIndex returns the index of inst in AllMembershipSpecs, or -1 if Count() > 1.
 func (inst MembershipSpecE) GetIndex() int {
 	return slices.Index(AllMembershipSpecs, inst)
 }

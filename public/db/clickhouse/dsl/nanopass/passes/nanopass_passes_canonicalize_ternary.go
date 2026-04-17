@@ -9,7 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-// CanonicalizeTernary converts ternary conditional expressions to if() function calls:
+// CanonicalizeTernary converts ternary conditional expressions to if() function calls.
 //
 //	cond ? then_expr : else_expr → if(cond, then_expr, else_expr)
 //

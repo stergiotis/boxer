@@ -21,7 +21,7 @@ The goal is to generate axis labels that are "human-readable" (e.g., multiples o
 6.  **Calculate bounds:** Find the new minimum and maximum that are multiples of this spacing and enclose the original data.
 */
 
-// TickResult holds the calculated nicely spaced ticks
+// TickResult holds the calculated nicely spaced ticks.
 type TickResult struct {
 	Min     float64
 	Max     float64

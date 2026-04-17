@@ -52,7 +52,7 @@ func Color32ToU8(c uint32) (r, g, b, a uint8) {
 	return
 }
 
-// ToColorU32 see ColorConvertFloat4ToU32
+// ToColorU32 converts an ImVec4 to a packed U32 colour — see ColorConvertFloat4ToU32.
 func (inst ImVec4) ToColorU32() uint32 {
 	var r, g, b, a float32
 	if ImguiUsesBGRAColorFormat {

@@ -2,13 +2,13 @@ package identifier
 
 const TotalIdWidth = 64
 
-// TaggedId Concatenation of Tag with UntaggedId
+// TaggedId is the concatenation of a Tag with an UntaggedId.
 type TaggedId uint64
 
-// UntaggedId Id part of TaggedId
+// UntaggedId is the Id part of a TaggedId.
 type UntaggedId uint64
 
-// IdTag Tag part of a TaggedId with the tag in its original position
+// IdTag is the Tag part of a TaggedId, kept in its original bit position.
 type IdTag uint64
 
 type TagValue uint32

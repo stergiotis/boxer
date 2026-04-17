@@ -130,7 +130,7 @@ func (inst *BoundedFsWatcher) Close() (err error) {
 	return
 }
 
-// AddDirRecursive uses fs.WalkDir and therefore does not follow symlinks
+// AddDirRecursive uses fs.WalkDir and therefore does not follow symlinks.
 func (inst *BoundedFsWatcher) AddDirRecursive(root fs.FS, ignoreErrors bool, predicate func(path string, d fs.DirEntry) (prefixForLog string, add bool)) (err error) {
 	open := inst.open
 	watcher := inst.watcher

@@ -16,14 +16,16 @@ import (
 type ConstructorFormE int8
 
 const (
-	// ConstructorFormLiteral canonicalizes to syntax form:
+	// ConstructorFormLiteral canonicalizes to syntax form.
+	//
 	//   tuple(1,2) → (1,2)
 	//   array(1,2) → [1,2]
 	//   tupleElement(t,1) → t.1
 	//   arrayElement(arr,1) → arr[1]
 	ConstructorFormLiteral ConstructorFormE = 1
 
-	// ConstructorFormFunction canonicalizes to function form:
+	// ConstructorFormFunction canonicalizes to function form.
+	//
 	//   (1,2) → tuple(1,2)
 	//   [1,2] → array(1,2)
 	//   t.1 → tupleElement(t,1)

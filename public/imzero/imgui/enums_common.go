@@ -7,7 +7,7 @@ const (
 	ItemStatusHoveredPrimary   ItemStatusE = 1 << 1
 	ItemStatusHoveredSecondary ItemStatusE = 1 << 2
 	ItemStatusActive           ItemStatusE = 1 << 3
-	// ItemStatusEdited Value exposed by item was edited in the current frame (should match the bool return value of most widgets)
+	// ItemStatusEdited is set when the value exposed by the item was edited in the current frame (should match the bool return value of most widgets).
 	ItemStatusEdited    ItemStatusE = 1 << 4
 	ItemStatusActivated ItemStatusE = 1 << 5
 	// ItemStatusDeactivated Only valid if ImGuiItemStatusFlags_HasDeactivated is set.
@@ -19,7 +19,7 @@ const (
 	// ItemStatusToggleOpen Set when TreeNode() reports toggling their open state.
 	ItemStatusToggleOpen ItemStatusE = 1 << 10
 
-	// ItemStatusDisabled this is not an imgui status but an ImGuiItemFlag
+	// ItemStatusDisabled is not an imgui status but an ImGuiItemFlag, surfaced here for uniform handling.
 	ItemStatusDisabled ItemStatusE = 1 << 11
 )
 
