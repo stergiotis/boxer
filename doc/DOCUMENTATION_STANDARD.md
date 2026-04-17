@@ -263,7 +263,7 @@ The following are not permitted in package directories. If you find one, migrate
 Markdown docs must link with fully qualified Go import paths, not bare directory names. Navigability — for `pkgsite`, for readers on GitHub, for contributors jumping across a deeply nested tree, and for any tool that walks the graph — depends on stable, unambiguous references.
 
 - **Bad:** "This relies on leeway."
-- **Good:** "This relies on [`github.com/stergiotis/boxer/public/leeway`](../../../leeway)."
+- **Good:** "This relies on [`github.com/stergiotis/boxer/public/semistructured/leeway`](../public/semistructured/leeway)."
 
 Prefer `pkg.go.dev` URLs when referring to a symbol's *documentation*, and repo paths when referring to the *source*.
 
@@ -301,8 +301,8 @@ Every invariant stated in this standard maps to exactly one enforcer. The `Rule`
 | `reviewed-by` + `reviewed-date` present when `status` is `stable` / `accepted`; date parses as `YYYY-MM-DD`. | §4 | `DL003` |
 | Draft banner present iff `status` is `draft` / `proposed`; banner state matches front-matter status. | §4 | `DL004` |
 | Banned filenames (`SPEC.md`, `DESIGN.md`, `ARCH.md`, `NOTES.md`, `MISC.md`, `TODO.md`, `IDEA.md`, `IDEAS.md`) do not appear in package directories. | §6 | `DL005` |
-| Cross-package Markdown references use fully qualified Go import paths, not bare directory names. | §7 | `DL006` (pending) |
-| Every in-repo Markdown link resolves to an existing file or anchor. | §7 | `DL007` (pending) |
+| Cross-package Markdown references use fully qualified Go import paths, not bare directory names. | §7 | `DL006` |
+| Every in-repo Markdown link resolves to an existing file. | §7 | `DL007` (anchor existence not yet checked) |
 | Open set of `status: draft` / `status: proposed` docs reported (informational, not a merge block). | §4 | `DL011` |
 
 Rules not in the table are either process guidance (e.g., "use AI for drafts") or judgment calls (e.g., quadrant selection) and are not mechanically enforceable.

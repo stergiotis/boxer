@@ -220,6 +220,59 @@ func TestExtractH2TitlesAndPresence(t *testing.T) {
 	require.False(t, isSectionPresent(titles, "Consequences"))
 }
 
+func TestRuleDL006FlagsBareDirectoryNames(t *testing.T) {
+	rule := NewRuleDL006()
+	findings := collectFindings(t, rule, []string{"testdata/dl006"})
+	bases := map[string][]string{}
+	for _, f := range findings {
+		require.Equal(t, "DL006", f.RuleId)
+		require.Equal(t, FindingSeverityWarn, f.Severity)
+		bases[filepath.Base(f.Path)] = append(bases[filepath.Base(f.Path)], f.Message)
+	}
+	require.Contains(t, bases, "bare_name.md")
+	require.NotContains(t, bases, "qualified.md")
+	require.NotContains(t, bases, "file_link.md")
+	require.NotContains(t, bases, "external.md")
+	require.NotContains(t, bases, "anchor.md")
+}
+
+func TestRuleDL007FlagsBrokenLinks(t *testing.T) {
+	rule := NewRuleDL007()
+	findings := collectFindings(t, rule, []string{"testdata/dl007"})
+	bases := map[string]bool{}
+	for _, f := range findings {
+		require.Equal(t, "DL007", f.RuleId)
+		require.Equal(t, FindingSeverityError, f.Severity)
+		bases[filepath.Base(f.Path)] = true
+	}
+	require.True(t, bases["broken_link.md"])
+	require.False(t, bases["all_resolve.md"])
+	require.False(t, bases["external_only.md"])
+	require.False(t, bases["anchor_only.md"])
+	require.False(t, bases["sibling.md"])
+}
+
+func TestExtractInlineLinks(t *testing.T) {
+	body := []byte("intro [first](./a.md) prose\n[second](https://example.com)\n[`third`](../b)\n")
+	links := extractInlineLinks(body)
+	require.Len(t, links, 3)
+	require.Equal(t, "first", links[0].Text)
+	require.Equal(t, "./a.md", links[0].URL)
+	require.Equal(t, int32(1), links[0].Line)
+	require.Equal(t, "second", links[1].Text)
+	require.Equal(t, int32(2), links[1].Line)
+	require.Equal(t, "`third`", links[2].Text)
+	require.Equal(t, "../b", links[2].URL)
+}
+
+func TestExtractInlineLinksSkipsFencedCodeBlocks(t *testing.T) {
+	body := []byte("real [outside](./real.md)\n\n```markdown\nfake [inside](./nope.md)\n```\n\nreal [after](./real2.md)\n")
+	links := extractInlineLinks(body)
+	require.Len(t, links, 2, "links inside ```...``` blocks must be skipped")
+	require.Equal(t, "outside", links[0].Text)
+	require.Equal(t, "after", links[1].Text)
+}
+
 func TestParseFormatAndSeverity(t *testing.T) {
 	f, err := ParseFormatE("json")
 	require.NoError(t, err)
