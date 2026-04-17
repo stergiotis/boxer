@@ -1,6 +1,7 @@
 package doclint
 
 import (
+	"go/token"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -346,6 +347,62 @@ func TestIsInScopeForDL009(t *testing.T) {
 	require.False(t, IsInScopeForDL009("public/foo/bar.out.go"))
 	require.False(t, IsInScopeForDL009("public/foo/bar.idl.go"))
 	require.False(t, IsInScopeForDL009("doc/standard.md"))
+}
+
+func TestRuleDL008ChecksGoDocLinks(t *testing.T) {
+	rule := NewRuleDL008()
+	findings := collectFindings(t, rule, []string{"testdata/dl008"})
+	type entry struct {
+		base string
+		msg  string
+	}
+	var entries []entry
+	for _, f := range findings {
+		require.Equal(t, "DL008", f.RuleId)
+		require.Equal(t, FindingSeverityWarn, f.Severity)
+		entries = append(entries, entry{filepath.Base(f.Path), f.Message})
+	}
+
+	hasOn := func(base, want string) bool {
+		for _, e := range entries {
+			if e.base == base && strings.Contains(e.msg, want) {
+				return true
+			}
+		}
+		return false
+	}
+	countFor := func(base string) (n int) {
+		for _, e := range entries {
+			if e.base == base {
+				n++
+			}
+		}
+		return
+	}
+
+	require.Equal(t, 0, countFor("compliant.go"), "compliant fixture must produce no findings")
+	require.True(t, hasOn("broken.go", "[DoesNotExist]"))
+	require.True(t, hasOn("broken.go", "[AlsoMissing]"))
+	require.False(t, hasOn("broken.go", "[Foo]"), "valid same-package reference must not be flagged")
+	require.Equal(t, 0, countFor("excluded_forms.go"),
+		"qualified [pkg.Sym], lowercase, generic [T], slice/array brackets must all be ignored in v1")
+}
+
+func TestFindDL008CandidatesSkipsCodeBlocks(t *testing.T) {
+	text := "Foo references [Real].\n\n\tindented code uses [FakeInBlock]\n\nplain prose [AnotherReal]\n"
+	cands := findDL008Candidates(text, token.Position{Line: 1})
+	got := make([]string, 0, len(cands))
+	for _, c := range cands {
+		got = append(got, c.name)
+	}
+	require.Equal(t, []string{"Real", "AnotherReal"}, got)
+}
+
+func TestFindDL008CandidatesSkipsBacktickSpans(t *testing.T) {
+	text := "describing the `[Name]` syntax matches no candidate, but [RealRef] does"
+	cands := findDL008Candidates(text, token.Position{Line: 1})
+	require.Len(t, cands, 1)
+	require.Equal(t, "RealRef", cands[0].name)
 }
 
 func TestParseFormatAndSeverity(t *testing.T) {

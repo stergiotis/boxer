@@ -292,7 +292,7 @@ Every invariant stated in this standard maps to exactly one enforcer. The `Rule`
 |---|---|---|
 | Every exported symbol carries a doc comment that begins with its identifier name and ends with a period. | §1 Reference, §4 | `DL009` (existing comments with wrong form: warn; missing comments: info, baseline cleanup) |
 | `Example*` functions carry an `// Output:` / `// Unordered output:` block and match it. | §1 How-To | `go test ./...` |
-| Go doc-link targets `[pkg.Symbol]` / `[Type.Method]` resolve to a real symbol. | §4, §5 | `DL008` (pending) |
+| Go doc-link targets `[Symbol]` resolve to an exported symbol in the same package. | §4, §5 | `DL008` (qualified `[pkg.Symbol]` and method `[Type.Method]` not yet checked) |
 | ADRs contain `Context`, `Decision`, `Alternatives`, `Consequences`, `Status` sections. | §1 ADR | `DL010` |
 | ADRs: QOC section is used when ≥3 options × ≥3 criteria. | §1 ADR | *manual* |
 | Every `.md` under scoped paths begins with a compliant front-matter stanza. | §4 | `DL001` |
