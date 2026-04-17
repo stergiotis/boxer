@@ -1,9 +1,0 @@
-//go:build !(llm_generated_gemini3pro || llm_generated_opus46)
-
-package gov
-
-import "github.com/urfave/cli/v2"
-
-func NewCliCommand() *cli.Command {
-	return nil
-}
