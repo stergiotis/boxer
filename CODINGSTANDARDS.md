@@ -1,3 +1,11 @@
+---
+type: reference
+audience: contributor
+status: stable
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-04-17
+---
+
 # Go Coding Standard
 LLM statement: Refined and reviewed using Gemini3 Pro.
 

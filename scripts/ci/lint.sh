@@ -37,4 +37,14 @@ echo "=== nilaway ==="
 go tool go.uber.org/nilaway/cmd/nilaway -tags "$tags" ./public/... 2>&1 || true
 
 echo ""
+echo "=== doclint ==="
+# Enforces DOCUMENTATION_STANDARD invariants (front-matter presence + valid
+# type/status, banned filenames). See standard §8 for the full rule list.
+if "$here/../../boxer.sh" gov doclint --min-severity error . 2>/dev/null; then
+    echo "passed"
+else
+    rc=1
+fi
+
+echo ""
 echo "=== lint complete ==="

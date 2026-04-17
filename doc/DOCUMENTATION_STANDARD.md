@@ -275,29 +275,35 @@ A standard without checks erodes. Enforcement has three parts: how checks are in
 
 ### Orchestration
 
-All checks are invoked through scripts under `./scripts/`. The scripts wrap Go-native tooling — `go test`, `go vet`, `go build`, and the repo-local `docs-lint` tool — so that direct tool invocation stays an implementation detail contributors do not depend on. No Node, Python, Rust, or other external binaries are introduced into the check toolchain.
+All checks are invoked through scripts under `./scripts/`. The scripts wrap Go-native tooling — `go test`, `go vet`, `go build`, and `boxer gov doclint` (the repo-local subcommand at [`public/gov/doclint`](../public/gov/doclint)) — so that direct tool invocation stays an implementation detail contributors do not depend on. No Node, Python, Rust, or other external binaries are introduced into the check toolchain.
 
-Contributors run the project's check script before committing to `main`; CI runs the same script.
+Contributors run [`scripts/ci/lint.sh`](../scripts/ci/lint.sh) before committing to `main`; CI runs the same script.
 
 ### Invariants → enforcer
 
-Every invariant stated in this standard maps to exactly one enforcer. `docs-lint` is a repo-local Go tool declared under the `tool` directive in `go.mod` (Go 1.24+); it is **to be implemented** and the scripts call it once it exists.
+Every invariant stated in this standard maps to exactly one enforcer. The `Rule` column carries either:
 
-| Invariant | Defined in | Enforcer |
+- a `DLNNN` rule ID (implemented in `public/gov/doclint/`),
+- a `DLNNN (pending)` ID (planned but not yet wired up),
+- a stdlib invocation (`go test`, `go vet`),
+- or *manual* (a judgment call that cannot be mechanically checked).
+
+| Invariant | Defined in | Rule |
 |---|---|---|
-| Every exported symbol carries a doc comment that begins with its identifier name and ends with a period. | §1 Reference, §4 | `docs-lint` (via `go/ast`) |
+| Every exported symbol carries a doc comment that begins with its identifier name and ends with a period. | §1 Reference, §4 | `DL009` (pending) |
 | `Example*` functions carry an `// Output:` / `// Unordered output:` block and match it. | §1 How-To | `go test ./...` |
-| Go doc-link targets `[pkg.Symbol]` / `[Type.Method]` resolve to a real symbol. | §4, §5 | `docs-lint` (via `go/ast` + package index) |
-| ADRs contain `Context`, `Decision`, `Alternatives`, `Consequences`, `Status` sections. | §1 ADR | `docs-lint` |
-| ADRs: QOC section is used when ≥3 options × ≥3 criteria. | §1 ADR | *manual* (judgment, not mechanically checkable) |
-| Every `.md` under scoped paths begins with a compliant front-matter stanza. | §4 | `docs-lint` |
-| `status` is in the allowed enum for the doc's `type`. | §4 | `docs-lint` |
-| `reviewed-by` + `reviewed-date` present when `status` is `stable` / `accepted`. | §4 | `docs-lint` |
-| Draft banner present iff `status` is `draft` / `proposed`; canonical phrasing used. | §4 | `docs-lint` |
-| Banned filenames (`SPEC.md`, `DESIGN.md`, `ARCH.md`, `NOTES.md`, `MISC.md`, `TODO.md`, `IDEA.md`) do not appear in package directories. | §6 | `docs-lint` |
-| Cross-package Markdown references use fully qualified Go import paths, not bare directory names. | §7 | `docs-lint` |
-| Every in-repo Markdown link resolves to an existing file or anchor. | §7 | `docs-lint` |
-| Open set of `status: draft` / `status: proposed` docs reported (informational, not a merge block). | §4 | `docs-lint` (report only) |
+| Go doc-link targets `[pkg.Symbol]` / `[Type.Method]` resolve to a real symbol. | §4, §5 | `DL008` (pending) |
+| ADRs contain `Context`, `Decision`, `Alternatives`, `Consequences`, `Status` sections. | §1 ADR | `DL010` (pending) |
+| ADRs: QOC section is used when ≥3 options × ≥3 criteria. | §1 ADR | *manual* |
+| Every `.md` under scoped paths begins with a compliant front-matter stanza. | §4 | `DL001` |
+| `type` is in the allowed enum (reference / how-to / explanation / tutorial / adr / router). | §4 | `DL001` |
+| `status` is in the allowed enum for the doc's `type`. | §4 | `DL001` |
+| `reviewed-by` + `reviewed-date` present when `status` is `stable` / `accepted`. | §4 | `DL003` (pending) |
+| Draft banner present iff `status` is `draft` / `proposed`; canonical phrasing used. | §4 | `DL004` (pending) |
+| Banned filenames (`SPEC.md`, `DESIGN.md`, `ARCH.md`, `NOTES.md`, `MISC.md`, `TODO.md`, `IDEA.md`, `IDEAS.md`) do not appear in package directories. | §6 | `DL005` |
+| Cross-package Markdown references use fully qualified Go import paths, not bare directory names. | §7 | `DL006` (pending) |
+| Every in-repo Markdown link resolves to an existing file or anchor. | §7 | `DL007` (pending) |
+| Open set of `status: draft` / `status: proposed` docs reported (informational, not a merge block). | §4 | `DL011` (pending) |
 
 Rules not in the table are either process guidance (e.g., "use AI for drafts") or judgment calls (e.g., quadrant selection) and are not mechanically enforceable.
 
