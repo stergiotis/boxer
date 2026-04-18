@@ -113,7 +113,7 @@ func main() {
 }`
 
 	// 1. Process
-	inst := NewGoFilter("goFilterTag")
+	inst := NewGoFilter("goFilterTag", false)
 	var out bytes.Buffer
 	err := inst.Process(context.Background(), "myfile.go", strings.NewReader(src), &out)
 	require.NoError(t, err)
@@ -156,6 +156,75 @@ func main() {
 	// We build into /dev/null (or discard) to just check compilation
 	cmd := exec.Command("go", "build", "-o", os.DevNull, outFile)
 	// cmd.CombinedOutput() is useful for debugging if it fails
+	outBytes, err := cmd.CombinedOutput()
+	require.NoError(t, err, "Compilation failed:\n%s", string(outBytes))
+}
+
+func TestGoFilter_DeletePrivate(t *testing.T) {
+	// Covers: unreferenced private funcs/types/vars removed together with their
+	// doc comments; private decls referenced from surviving public signatures,
+	// type definitions or var/const initializers are kept (with bodies stubbed);
+	// reachability is transitive across private → private references.
+	src := `package stub
+
+// PublicStruct references privateA, which transitively references privateB.
+type PublicStruct struct {
+	F privateA
+}
+
+// privateA is reachable via PublicStruct.F.
+type privateA struct {
+	G privateB
+}
+
+// privateB is reachable transitively through privateA.
+type privateB int
+
+// privateOrphanType is unreachable — this whole decl AND comment go.
+type privateOrphanType struct{ x int }
+
+// privateOrphanFunc is unreachable — removed along with this doc.
+func privateOrphanFunc() {}
+
+// privateOrphanConst is unreachable — removed along with this doc.
+const privateOrphanConst = 99
+
+// privateInit is called by a surviving public var initializer; must be kept.
+func privateInit() int { return 42 }
+
+// PublicInitVar keeps privateInit reachable.
+var PublicInitVar = privateInit()
+
+// PublicFunc is kept; its body stubbed. Takes a reachable private type.
+func PublicFunc(p privateA) {}
+`
+	inst := NewGoFilter("", true)
+	var out bytes.Buffer
+	err := inst.Process(context.Background(), "stub.go", strings.NewReader(src), &out)
+	require.NoError(t, err)
+	outputCode := out.String()
+
+	// Reachable privates are kept (type, func) with stubbed bodies.
+	require.Contains(t, outputCode, "type privateA struct")
+	require.Contains(t, outputCode, "type privateB int")
+	require.Contains(t, outputCode, "func privateInit() int")
+	require.Contains(t, outputCode, `panic("stub")`)
+	require.Contains(t, outputCode, "PublicInitVar = privateInit()")
+
+	// Unreachable privates and their doc comments are gone.
+	require.NotContains(t, outputCode, "privateOrphanType")
+	require.NotContains(t, outputCode, "privateOrphanFunc")
+	require.NotContains(t, outputCode, "privateOrphanConst")
+	require.NotContains(t, outputCode, "is unreachable")
+
+	// Compilation check.
+	tmpDir, err := os.MkdirTemp("", "gofilter_deletePrivate")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+	outFile := filepath.Join(tmpDir, "stub.go")
+	err = os.WriteFile(outFile, out.Bytes(), 0644)
+	require.NoError(t, err)
+	cmd := exec.Command("go", "build", "-o", os.DevNull, outFile)
 	outBytes, err := cmd.CombinedOutput()
 	require.NoError(t, err, "Compilation failed:\n%s", string(outBytes))
 }

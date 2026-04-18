@@ -43,7 +43,7 @@ func TestTreeProcessor_ProcessTree(t *testing.T) {
 		},
 	}
 
-	tp := &TreeProcessor{Filter: NewGoFilter("")}
+	tp := &TreeProcessor{Filter: NewGoFilter("", false)}
 
 	t.Run("Recursive ./...", func(t *testing.T) {
 		output := make(map[string]string)

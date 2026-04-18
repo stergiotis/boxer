@@ -43,12 +43,19 @@ func newStubBlock() *ast.BlockStmt {
 
 // GoFilter processes Go source code to filter out private elements and public function bodies.
 type GoFilter struct {
-	BuildTag string
+	BuildTag      string
+	DeletePrivate bool
+
+	// Per-file transient state; reset at the start of each Process call.
+	// Not safe for concurrent Process invocations on the same instance.
+	reachablePrivates *containers.HashSet[string]
+	docsToStrip       map[*ast.CommentGroup]struct{}
 }
 
-func NewGoFilter(buildTag string) *GoFilter {
+func NewGoFilter(buildTag string, deletePrivate bool) *GoFilter {
 	return &GoFilter{
-		BuildTag: buildTag,
+		BuildTag:      buildTag,
+		DeletePrivate: deletePrivate,
 	}
 }
 
@@ -68,6 +75,17 @@ func (inst *GoFilter) Process(ctx context.Context, filename string, r io.Reader,
 		return eh.Errorf("unable to parse source: %w", err)
 	}
 
+	// 2a. Initialize per-file state and, if --deletePrivate is on,
+	// compute the set of top-level private names kept for reachability reasons.
+	inst.reachablePrivates = nil
+	inst.docsToStrip = nil
+	if inst.DeletePrivate {
+		inst.docsToStrip = make(map[*ast.CommentGroup]struct{}, 8)
+		privateNames := inst.collectTopLevelPrivateNames(file)
+		reachable := inst.computeReachablePrivates(file, privateNames)
+		inst.reachablePrivates = reachable
+	}
+
 	// 3. Filter Declarations
 	var keptDecls []ast.Decl
 	for _, decl := range file.Decls {
@@ -79,6 +97,12 @@ func (inst *GoFilter) Process(ctx context.Context, filename string, r io.Reader,
 		}
 	}
 	file.Decls = keptDecls
+
+	// 3a. Purge doc comment groups attached to decls/specs/fields we removed,
+	// so they do not linger in file.Comments as orphan comments.
+	if inst.DeletePrivate && len(inst.docsToStrip) > 0 {
+		inst.stripQueuedDocs(file)
+	}
 
 	// 4. Anonymize Unused Imports
 	// Converts unused imports to `_ "pkg"` so they aren't removed by goimports.
@@ -127,15 +151,38 @@ func (inst *GoFilter) shouldKeepDecl(decl ast.Decl) bool {
 	}
 }
 
+// isPrivateReachable reports whether a top-level private identifier must be
+// kept because it is referenced from surviving public code (transitively).
+// Always returns false when DeletePrivate is off, preserving legacy behavior.
+func (inst *GoFilter) isPrivateReachable(name string) bool {
+	return inst.reachablePrivates != nil && inst.reachablePrivates.Has(name)
+}
+
+// queueDoc marks a doc comment group for removal from file.Comments. A nil
+// doc or an inactive DeletePrivate flag are both no-ops.
+func (inst *GoFilter) queueDoc(doc *ast.CommentGroup) {
+	if doc == nil || inst.docsToStrip == nil {
+		return
+	}
+	inst.docsToStrip[doc] = struct{}{}
+}
+
 func (inst *GoFilter) processFunc(fn *ast.FuncDecl) bool {
-	if !fn.Name.IsExported() && fn.Name.Name != "main" && fn.Name.Name != "init" {
-		return false
+	isPrivate := !fn.Name.IsExported() && fn.Name.Name != "main" && fn.Name.Name != "init"
+	if isPrivate {
+		// Methods (with a receiver) are never reachability-kept: their fate
+		// follows the receiver type, and the current policy strips them.
+		if fn.Recv != nil || !inst.isPrivateReachable(fn.Name.Name) {
+			inst.queueDoc(fn.Doc)
+			return false
+		}
 	}
 	// Validate Signature (remove if it relies on private types)
 	if !inst.validFieldList(fn.Recv) ||
 		!inst.validFieldList(fn.Type.Params) ||
 		!inst.validFieldList(fn.Type.Results) ||
 		!inst.validFieldList(fn.Type.TypeParams) {
+		inst.queueDoc(fn.Doc)
 		return false
 	}
 
@@ -171,7 +218,12 @@ func (inst *GoFilter) processGenDecl(gen *ast.GenDecl) bool {
 		}
 	}
 	gen.Specs = keptSpecs
-	return len(gen.Specs) > 0
+	if len(gen.Specs) == 0 {
+		// Entire GenDecl block is gone — its leading doc comment would orphan.
+		inst.queueDoc(gen.Doc)
+		return false
+	}
+	return true
 }
 
 func (inst *GoFilter) processSpec(spec ast.Spec) bool {
@@ -179,10 +231,12 @@ func (inst *GoFilter) processSpec(spec ast.Spec) bool {
 	case *ast.ValueSpec:
 		return inst.processValueSpec(s)
 	case *ast.TypeSpec:
-		if !s.Name.IsExported() {
+		if !s.Name.IsExported() && !inst.isPrivateReachable(s.Name.Name) {
+			inst.queueDoc(s.Doc)
 			return false
 		}
 		if !inst.validFieldList(s.TypeParams) {
+			inst.queueDoc(s.Doc)
 			return false
 		}
 
@@ -198,6 +252,7 @@ func (inst *GoFilter) processSpec(spec ast.Spec) bool {
 
 		// For aliases or simple composites (Arrays, Maps), strictly validate
 		if !inst.isExportedType(s.Type) {
+			inst.queueDoc(s.Doc)
 			return false
 		}
 		return true
@@ -209,6 +264,7 @@ func (inst *GoFilter) processSpec(spec ast.Spec) bool {
 func (inst *GoFilter) processValueSpec(s *ast.ValueSpec) bool {
 	// If the variable explicitly uses a private type, remove it.
 	if s.Type != nil && !inst.isExportedType(s.Type) {
+		inst.queueDoc(s.Doc)
 		return false
 	}
 
@@ -216,7 +272,7 @@ func (inst *GoFilter) processValueSpec(s *ast.ValueSpec) bool {
 	var keptValues []ast.Expr
 
 	for i, name := range s.Names {
-		if name.IsExported() {
+		if name.IsExported() || inst.isPrivateReachable(name.Name) {
 			keptNames = append(keptNames, name)
 			if i < len(s.Values) {
 				keptValues = append(keptValues, inst.sanitizeExpr(s.Values[i]))
@@ -226,7 +282,11 @@ func (inst *GoFilter) processValueSpec(s *ast.ValueSpec) bool {
 
 	s.Names = keptNames
 	s.Values = keptValues
-	return len(s.Names) > 0
+	if len(s.Names) == 0 {
+		inst.queueDoc(s.Doc)
+		return false
+	}
+	return true
 }
 
 func (inst *GoFilter) processStructFields(st *ast.StructType) {
@@ -240,6 +300,8 @@ func (inst *GoFilter) processStructFields(st *ast.StructType) {
 		if len(field.Names) == 0 {
 			if inst.isExportedType(field.Type) {
 				keptFields = append(keptFields, field)
+			} else {
+				inst.queueDoc(field.Doc)
 			}
 			continue
 		}
@@ -255,6 +317,8 @@ func (inst *GoFilter) processStructFields(st *ast.StructType) {
 		if len(keptNames) > 0 {
 			field.Names = keptNames
 			keptFields = append(keptFields, field)
+		} else {
+			inst.queueDoc(field.Doc)
 		}
 	}
 	st.Fields.List = keptFields
@@ -270,12 +334,16 @@ func (inst *GoFilter) processInterfaceMethods(it *ast.InterfaceType) {
 		if len(field.Names) == 0 {
 			if inst.isExportedType(field.Type) {
 				keptMethods = append(keptMethods, field)
+			} else {
+				inst.queueDoc(field.Doc)
 			}
 			continue
 		}
 		// Explicit Method
 		if field.Names[0].IsExported() && inst.isExportedType(field.Type) {
 			keptMethods = append(keptMethods, field)
+		} else {
+			inst.queueDoc(field.Doc)
 		}
 	}
 	it.Methods.List = keptMethods
@@ -367,10 +435,275 @@ func (inst *GoFilter) anonymizeUnusedImports(file *ast.File) {
 	}
 }
 
+// collectTopLevelPrivateNames returns the set of top-level private identifier
+// names defined in file: non-method function names, type names, and var/const
+// names. Methods (FuncDecl with a receiver) are excluded — their fate follows
+// the receiver type, not package-level reachability.
+func (inst *GoFilter) collectTopLevelPrivateNames(file *ast.File) *containers.HashSet[string] {
+	names := containers.NewHashSet[string](16)
+	for _, decl := range file.Decls {
+		switch d := decl.(type) {
+		case *ast.FuncDecl:
+			if d.Recv != nil {
+				continue
+			}
+			if !d.Name.IsExported() && d.Name.Name != "main" && d.Name.Name != "init" {
+				names.Add(d.Name.Name)
+			}
+		case *ast.GenDecl:
+			if d.Tok == token.IMPORT {
+				continue
+			}
+			for _, spec := range d.Specs {
+				switch s := spec.(type) {
+				case *ast.TypeSpec:
+					if !s.Name.IsExported() {
+						names.Add(s.Name.Name)
+					}
+				case *ast.ValueSpec:
+					for _, n := range s.Names {
+						if !n.IsExported() {
+							names.Add(n.Name)
+						}
+					}
+				}
+			}
+		}
+	}
+	return names
+}
+
+// computeReachablePrivates returns the subset of privateNames that must be
+// kept to avoid dangling references in the filtered output. Seeding is
+// restricted to decls that survive the public filter; the frontier then
+// expands transitively through kept private decls' own signatures and
+// initializers until a fixed point.
+//
+// Function and FuncLit bodies are deliberately skipped during traversal
+// because they will be replaced with panic("stub"), so identifiers inside
+// them never reach the output.
+func (inst *GoFilter) computeReachablePrivates(file *ast.File, privateNames *containers.HashSet[string]) *containers.HashSet[string] {
+	reachable := containers.NewHashSet[string](8)
+	if privateNames.IsEmpty() {
+		return reachable
+	}
+
+	// Index private top-level decls/specs by name so we can expand the frontier.
+	privateNodes := make(map[string]ast.Node, privateNames.Size())
+	for _, decl := range file.Decls {
+		switch d := decl.(type) {
+		case *ast.FuncDecl:
+			if d.Recv == nil && privateNames.Has(d.Name.Name) {
+				privateNodes[d.Name.Name] = d
+			}
+		case *ast.GenDecl:
+			if d.Tok == token.IMPORT {
+				continue
+			}
+			for _, spec := range d.Specs {
+				switch s := spec.(type) {
+				case *ast.TypeSpec:
+					if privateNames.Has(s.Name.Name) {
+						privateNodes[s.Name.Name] = s
+					}
+				case *ast.ValueSpec:
+					for _, n := range s.Names {
+						if privateNames.Has(n.Name) {
+							privateNodes[n.Name] = s
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Seed: references from surviving public decls (i.e. decls the public
+	// filter would keep without --deletePrivate). We conservatively include
+	// every non-private top-level decl here; private decls are added only if
+	// reachable.
+	seed := containers.NewHashSet[string](16)
+	for _, decl := range file.Decls {
+		if inst.isPrivateTopLevelDecl(decl, privateNames) {
+			continue
+		}
+		inst.collectDeclRefs(decl, seed)
+	}
+
+	frontier := make([]string, 0, 8)
+	for name := range privateNodes {
+		if seed.Has(name) {
+			reachable.Add(name)
+			frontier = append(frontier, name)
+		}
+	}
+
+	for len(frontier) > 0 {
+		name := frontier[len(frontier)-1]
+		frontier = frontier[:len(frontier)-1]
+		node, ok := privateNodes[name]
+		if !ok {
+			continue
+		}
+		refs := containers.NewHashSet[string](8)
+		switch n := node.(type) {
+		case *ast.FuncDecl:
+			inst.collectDeclRefs(n, refs)
+		case *ast.TypeSpec:
+			if n.TypeParams != nil {
+				inst.collectNodeRefs(n.TypeParams, refs)
+			}
+			if n.Type != nil {
+				inst.collectNodeRefs(n.Type, refs)
+			}
+		case *ast.ValueSpec:
+			if n.Type != nil {
+				inst.collectNodeRefs(n.Type, refs)
+			}
+			for _, v := range n.Values {
+				if v != nil {
+					inst.collectNodeRefs(v, refs)
+				}
+			}
+		}
+		for refName := range privateNodes {
+			if reachable.Has(refName) {
+				continue
+			}
+			if refs.Has(refName) {
+				reachable.Add(refName)
+				frontier = append(frontier, refName)
+			}
+		}
+	}
+
+	return reachable
+}
+
+// isPrivateTopLevelDecl reports whether decl declares nothing but top-level
+// private names (so it would not seed reachability).
+func (inst *GoFilter) isPrivateTopLevelDecl(decl ast.Decl, privateNames *containers.HashSet[string]) bool {
+	switch d := decl.(type) {
+	case *ast.FuncDecl:
+		return d.Recv == nil && privateNames.Has(d.Name.Name)
+	case *ast.GenDecl:
+		if d.Tok == token.IMPORT {
+			return false
+		}
+		for _, spec := range d.Specs {
+			switch s := spec.(type) {
+			case *ast.TypeSpec:
+				if !privateNames.Has(s.Name.Name) {
+					return false
+				}
+			case *ast.ValueSpec:
+				for _, n := range s.Names {
+					if !privateNames.Has(n.Name) {
+						return false
+					}
+				}
+			default:
+				return false
+			}
+		}
+		return len(d.Specs) > 0
+	}
+	return false
+}
+
+// collectDeclRefs walks the reference-bearing parts of a top-level decl
+// (receiver, signature, type definition, initializer) and adds every
+// encountered identifier to out. Function bodies are skipped because the
+// filter replaces them with panic("stub").
+func (inst *GoFilter) collectDeclRefs(decl ast.Decl, out *containers.HashSet[string]) {
+	switch d := decl.(type) {
+	case *ast.FuncDecl:
+		if d.Recv != nil {
+			inst.collectNodeRefs(d.Recv, out)
+		}
+		if d.Type != nil {
+			inst.collectNodeRefs(d.Type, out)
+		}
+	case *ast.GenDecl:
+		if d.Tok == token.IMPORT {
+			return
+		}
+		for _, spec := range d.Specs {
+			switch s := spec.(type) {
+			case *ast.TypeSpec:
+				if s.TypeParams != nil {
+					inst.collectNodeRefs(s.TypeParams, out)
+				}
+				if s.Type != nil {
+					inst.collectNodeRefs(s.Type, out)
+				}
+			case *ast.ValueSpec:
+				if s.Type != nil {
+					inst.collectNodeRefs(s.Type, out)
+				}
+				for _, v := range s.Values {
+					if v != nil {
+						inst.collectNodeRefs(v, out)
+					}
+				}
+			}
+		}
+	}
+}
+
+// collectNodeRefs fills out with identifier names referenced from node.
+// FuncDecl/FuncLit bodies are skipped (they will be stubbed). For selector
+// expressions pkg.Sym only the base pkg is followed — Sym names a member of
+// an external namespace and cannot refer to a local private decl.
+func (inst *GoFilter) collectNodeRefs(node ast.Node, out *containers.HashSet[string]) {
+	if node == nil {
+		return
+	}
+	ast.Inspect(node, func(n ast.Node) bool {
+		switch x := n.(type) {
+		case *ast.FuncDecl:
+			if x.Recv != nil {
+				inst.collectNodeRefs(x.Recv, out)
+			}
+			if x.Type != nil {
+				inst.collectNodeRefs(x.Type, out)
+			}
+			return false
+		case *ast.FuncLit:
+			if x.Type != nil {
+				inst.collectNodeRefs(x.Type, out)
+			}
+			return false
+		case *ast.SelectorExpr:
+			if x.X != nil {
+				inst.collectNodeRefs(x.X, out)
+			}
+			return false
+		case *ast.Ident:
+			out.Add(x.Name)
+			return false
+		}
+		return true
+	})
+}
+
+// stripQueuedDocs removes comment groups queued during filtering from
+// file.Comments so they don't linger as orphan comments.
+func (inst *GoFilter) stripQueuedDocs(file *ast.File) {
+	n := 0
+	for _, g := range file.Comments {
+		if _, drop := inst.docsToStrip[g]; drop {
+			continue
+		}
+		file.Comments[n] = g
+		n++
+	}
+	file.Comments = file.Comments[:n]
+}
+
 func (inst *GoFilter) isExportedType(expr ast.Expr) bool {
 	switch t := expr.(type) {
 	case *ast.Ident:
-		return t.IsExported() || inst.isPredeclared(t.Name)
+		return t.IsExported() || inst.isPredeclared(t.Name) || inst.isPrivateReachable(t.Name)
 	case *ast.StarExpr:
 		return inst.isExportedType(t.X)
 	case *ast.SelectorExpr:

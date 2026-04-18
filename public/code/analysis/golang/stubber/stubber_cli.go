@@ -43,12 +43,17 @@ func NewCliCommand() *cli.Command {
 				Value: "",
 				Usage: "Build tag to merge into //go:build directives of generated files",
 			},
+			&cli.BoolFlag{
+				Name:  "deletePrivate",
+				Value: false,
+				Usage: "Delete private top-level funcs, types and vars/consts (including their doc comments) unless referenced from surviving public signatures, type definitions or var/const initializers",
+			},
 		},
 		Action: func(c *cli.Context) error {
 			pattern := "./..."
 			outputBaseDir := filepath.Clean(c.String("outputBaseDir"))
 
-			inst := &TreeProcessor{Filter: NewGoFilter(c.String("buildTag"))}
+			inst := &TreeProcessor{Filter: NewGoFilter(c.String("buildTag"), c.Bool("deletePrivate"))}
 
 			// Use os.DirFS for reading current directory
 			srcFS := os.DirFS(c.String("dir"))
