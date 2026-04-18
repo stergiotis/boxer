@@ -43,8 +43,8 @@ func (tp *TreeProcessor) ProcessTree(ctx context.Context, srcFS fs.FS, pattern s
 			return ctx.Err()
 		}
 
-		// Skip directories that shouldn't be recursed if not in recursive mode
 		if d.IsDir() {
+			// Skip directories that shouldn't be recursed if not in recursive mode
 			if !recursive && fpath != basePath && fpath != "." {
 				return fs.SkipDir
 			}
@@ -53,6 +53,9 @@ func (tp *TreeProcessor) ProcessTree(ctx context.Context, srcFS fs.FS, pattern s
 				if d.Name() != "." { // Allow root
 					return fs.SkipDir
 				}
+			}
+			if shouldProcessDir != nil && !shouldProcessDir(fpath) {
+				return fs.SkipDir
 			}
 			return nil
 		}
@@ -63,18 +66,12 @@ func (tp *TreeProcessor) ProcessTree(ctx context.Context, srcFS fs.FS, pattern s
 		}
 		if (excludeFilename != nil && excludeFilename.MatchString(d.Name())) ||
 			(excludePath != nil && excludePath.MatchString(fpath)) {
-			log.Debug().Str("path",fpath).Str("name",d.Name()).Msg("excluding file")
+			log.Debug().Str("path", fpath).Str("name", d.Name()).Msg("excluding file")
 			return nil
 		}
 
-		if d.IsDir() {
-			if shouldProcessDir != nil && !shouldProcessDir(fpath) {
-				return fs.SkipDir
-			}
-		} else {
-			if shouldProcessFile != nil && !shouldProcessFile(fpath) {
-				return nil
-			}
+		if shouldProcessFile != nil && !shouldProcessFile(fpath) {
+			return nil
 		}
 		log.Info().Str("path", fpath).Msg("processing")
 

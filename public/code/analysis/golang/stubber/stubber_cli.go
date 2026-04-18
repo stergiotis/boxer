@@ -38,12 +38,17 @@ func NewCliCommand() *cli.Command {
 				Name:  "excludePathRegex",
 				Value: "",
 			},
+			&cli.StringFlag{
+				Name:  "buildTag",
+				Value: "",
+				Usage: "Build tag to merge into //go:build directives of generated files",
+			},
 		},
 		Action: func(c *cli.Context) error {
 			pattern := "./..."
 			outputBaseDir := filepath.Clean(c.String("outputBaseDir"))
 
-			inst := &TreeProcessor{Filter: &GoFilter{}}
+			inst := &TreeProcessor{Filter: NewGoFilter(c.String("buildTag"))}
 
 			// Use os.DirFS for reading current directory
 			srcFS := os.DirFS(c.String("dir"))
@@ -72,7 +77,7 @@ func NewCliCommand() *cli.Command {
 				var err error
 				excludePathRegex, err = regexp.Compile(excludePathRegexStr)
 				if err != nil {
-					return eh.Errorf("unable to compile excludeFilenameRegex: %w", err)
+					return eh.Errorf("unable to compile excludePathRegex: %w", err)
 				}
 			}
 

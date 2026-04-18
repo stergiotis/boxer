@@ -24,16 +24,21 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-// Shared panic stub to reduce allocations
-var stubBlock = &ast.BlockStmt{
-	List: []ast.Stmt{
-		&ast.ExprStmt{
-			X: &ast.CallExpr{
-				Fun:  &ast.Ident{Name: "panic"},
-				Args: []ast.Expr{&ast.BasicLit{Kind: token.STRING, Value: `"stub"`}},
+// newStubBlock returns a fresh `panic("stub")` body.
+// Each caller must get its own AST subtree — sharing a single node across
+// multiple function bodies aliases token positions and comment slots, which
+// go/format does not guarantee to handle.
+func newStubBlock() *ast.BlockStmt {
+	return &ast.BlockStmt{
+		List: []ast.Stmt{
+			&ast.ExprStmt{
+				X: &ast.CallExpr{
+					Fun:  &ast.Ident{Name: "panic"},
+					Args: []ast.Expr{&ast.BasicLit{Kind: token.STRING, Value: `"stub"`}},
+				},
 			},
 		},
-	},
+	}
 }
 
 // GoFilter processes Go source code to filter out private elements and public function bodies.
@@ -135,7 +140,7 @@ func (inst *GoFilter) processFunc(fn *ast.FuncDecl) bool {
 	}
 
 	if fn.Body != nil {
-		fn.Body = stubBlock
+		fn.Body = newStubBlock()
 	}
 	return true
 }
@@ -279,7 +284,7 @@ func (inst *GoFilter) processInterfaceMethods(it *ast.InterfaceType) {
 func (inst *GoFilter) sanitizeExpr(expr ast.Expr) ast.Expr {
 	switch e := expr.(type) {
 	case *ast.FuncLit:
-		e.Body = stubBlock
+		e.Body = newStubBlock()
 		return e
 	case *ast.CompositeLit:
 		var keptElts []ast.Expr

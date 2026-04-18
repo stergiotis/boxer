@@ -115,6 +115,32 @@ func TestTreeProcessor_ProcessTree(t *testing.T) {
 		require.NotContains(t, output, "pkg/a/a.go")
 	})
 
+	t.Run("shouldProcessDir skips subtree", func(t *testing.T) {
+		output := make(map[string]string)
+		writer := func(path string) (w io.WriteCloser, err error) {
+			b := bytes.NewBuffer(make([]byte, 0, 1024))
+			w = ea.NewAnonymousCloseWriter(func() error {
+				output[path] = b.String()
+				return nil
+			}, func(p []byte) (n int, err error) {
+				return b.Write(p)
+			})
+			return
+		}
+
+		shouldProcessDir := func(fpath string) bool {
+			return !strings.HasPrefix(fpath, "pkg/b")
+		}
+
+		err := tp.ProcessTree(context.Background(), srcFS, "./...", nil, nil, writer, shouldProcessDir, nil)
+		require.NoError(t, err)
+
+		require.Contains(t, output, "main.go")
+		require.Contains(t, output, "pkg/a/a.go")
+		require.NotContains(t, output, "pkg/b/b.go", "shouldProcessDir should skip pkg/b")
+		require.NotContains(t, output, "pkg/b/c/c.go", "shouldProcessDir should skip nested dirs under pkg/b")
+	})
+
 	t.Run("Imports Formatted", func(t *testing.T) {
 		output := make(map[string]string)
 		writer := func(path string) (w io.WriteCloser, err error) {
