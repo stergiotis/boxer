@@ -1,4 +1,4 @@
-//go:build llm_generated_gemini3pro || llm_generated_opus46
+//go:build llm_generated_gemini3pro || llm_generated_opus46 || llm_generated_opus47
 package gov
 
 import (
@@ -6,6 +6,7 @@ import (
 	"github.com/stergiotis/boxer/public/gov/commitdigest"
 	"github.com/stergiotis/boxer/public/gov/doclint"
 	"github.com/stergiotis/boxer/public/gov/filename"
+	"github.com/stergiotis/boxer/public/gov/llmtag"
 	"github.com/stergiotis/boxer/public/gov/repo"
 	cli2 "github.com/stergiotis/boxer/public/hmi/cli"
 	"github.com/urfave/cli/v2"
@@ -20,6 +21,7 @@ func NewCliCommand() *cli.Command {
 			callsites.NewCliCommand(),
 			repo.NewCliCommand(),
 			commitdigest.NewCliCommand(),
+			llmtag.NewCliCommand(),
 		),
 	}
 }

@@ -58,5 +58,24 @@ else
 fi
 
 echo ""
+echo "=== llmtag ==="
+# Surfaces Go files whose git blame attributes a majority of lines to
+# commits carrying an LLM Co-Authored-By trailer but which lack the
+# corresponding //go:build llm_generated_<model> directive. A non-zero
+# exit sets rc=1 so the gate fails until the tags are applied (or the
+# attribution is corrected). Same `if out=$(...)` pattern as doclint
+# above — required because the script runs under `set -e`.
+if out=$("$here/../../boxer.sh" gov llmtag --diff --root . --repo . 2>/dev/null); then
+    if [ -n "$out" ]; then
+        echo "$out"
+    else
+        echo "passed"
+    fi
+else
+    echo "$out"
+    rc=1
+fi
+
+echo ""
 echo "=== lint complete ==="
 exit $rc

@@ -1,4 +1,4 @@
-//go:build llm_generated_opus46
+//go:build llm_generated_opus46 || llm_generated_opus47
 
 package repo
 
