@@ -2,6 +2,7 @@ package doclint
 
 import (
 	"go/token"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -347,6 +348,22 @@ func TestIsInScopeForDL009(t *testing.T) {
 	require.False(t, IsInScopeForDL009("public/foo/bar.out.go"))
 	require.False(t, IsInScopeForDL009("public/foo/bar.idl.go"))
 	require.False(t, IsInScopeForDL009("doc/standard.md"))
+}
+
+func TestIsInScopeForDL001ModuleRootReadme(t *testing.T) {
+	moduleRoot := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(moduleRoot, "go.mod"), []byte("module x\n"), 0o644))
+	rootReadme := filepath.Join(moduleRoot, "README.md")
+	require.NoError(t, os.WriteFile(rootReadme, []byte("# x\n"), 0o644))
+	require.False(t, IsInScopeForDL001(rootReadme, "README.md"),
+		"module-root README.md (sibling of go.mod) must be out of scope")
+
+	pkgDir := filepath.Join(moduleRoot, "pkg")
+	require.NoError(t, os.Mkdir(pkgDir, 0o755))
+	pkgReadme := filepath.Join(pkgDir, "README.md")
+	require.NoError(t, os.WriteFile(pkgReadme, []byte("# pkg\n"), 0o644))
+	require.True(t, IsInScopeForDL001(pkgReadme, "README.md"),
+		"package-level README.md (no sibling go.mod) must remain in scope")
 }
 
 func TestRuleDL008ChecksGoDocLinks(t *testing.T) {

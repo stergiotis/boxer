@@ -1,5 +1,5 @@
 ---
-type: router
+type: reference
 audience: analytics consumer
 status: draft
 ---

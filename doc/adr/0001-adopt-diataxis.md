@@ -80,9 +80,9 @@ We adopt two complementary conventions:
    in `doc/adr/NNNN-<slug>.md`, are append-only, and follow a fixed
    structure (Context, Decision, Alternatives, Consequences, Status).
 
-Packages with multiple companion docs may add an optional `README.md`
-router that points at the Diátaxis artifacts and any relevant ADRs;
-leaf packages with just code and `doc.go` do not need one (see
+Packages may add an optional `README.md` as a package-level overview,
+typed as a normal Diátaxis artifact (almost always `type: reference`);
+leaf packages adequately served by `doc.go` do not need one (see
 [`doc/DOCUMENTATION_STANDARD.md`](../DOCUMENTATION_STANDARD.md) §3).
 
 The full standard is codified in
@@ -135,6 +135,20 @@ The QOC matrix above carries the comparative assessment. The notes below capture
 
 Accepted — 2026-04-16. This is the first ADR in the repository and
 supersedes no prior record.
+
+## Updates
+
+- **2026-04-19 — Router sub-type withdrawn.** The original decision
+  introduced an optional `type: router` README that listed links to
+  companion Diátaxis artifacts. In practice no package adopted a pure
+  router: READMEs that were added carried substantive prose and used
+  `type: reference`, duplicating `doc.go`/`pkgsite` when they did not.
+  The `router` type was removed from the standard and from DL001's
+  enum; package READMEs are now ordinary Diátaxis artifacts. The
+  repository-root `README.md` is separately exempted from the
+  front-matter requirement, since it is the GitHub project landing
+  page rather than a package-scoped doc. The core Diátaxis + ADR
+  decision above is unchanged.
 
 ## References
 

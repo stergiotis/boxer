@@ -48,7 +48,6 @@ var validTypesDL001 = map[string]struct{}{
 	"explanation": {},
 	"tutorial":    {},
 	"adr":         {},
-	"router":      {},
 }
 
 var validStatusesDescriptive = map[string]struct{}{
@@ -67,7 +66,8 @@ var validStatusesAdr = map[string]struct{}{
 
 // IsInScopeForDL001 returns true if path/base should be evaluated by DL001.
 // The intent is to exclude generated, vendored, fixture, and out-of-standard
-// files (changelog summaries, Claude Code SKILL files).
+// files (changelog summaries, Claude Code SKILL files, and the module-root
+// README.md that serves as the GitHub landing page per §3).
 func IsInScopeForDL001(path string, base string) (in bool) {
 	if strings.HasSuffix(base, ".gen.md") {
 		return
@@ -81,6 +81,12 @@ func IsInScopeForDL001(path string, base string) (in bool) {
 	}
 	if base == "SKILL.md" {
 		return
+	}
+	if base == "README.md" {
+		dir := filepath.Dir(path)
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return
+		}
 	}
 	in = true
 	return
@@ -183,7 +189,7 @@ func checkOneDL001(path string, yield func(Finding, error) bool) (cont bool, err
 				Path:     path,
 				Line:     1,
 				Col:      1,
-				Message:  "front-matter 'type' value '" + meta.Type + "' is not one of: reference, how-to, explanation, tutorial, adr, router",
+				Message:  "front-matter 'type' value '" + meta.Type + "' is not one of: reference, how-to, explanation, tutorial, adr",
 			}
 			cont = yield(f, nil)
 			if !cont {

@@ -1,11 +1,3 @@
----
-type: reference
-audience: developer
-status: stable
-reviewed-by: "p@stergiotis"
-reviewed-date: 2026-04-17
----
-
 # boxer [![Go Reference](https://pkg.go.dev/badge/github.com/stergiotis/boxer.svg)](https://pkg.go.dev/github.com/stergiotis/boxer) [![Go Report Card](https://goreportcard.com/badge/github.com/stergiotis/boxer)](https://goreportcard.com/report/github.com/stergiotis/boxer)
 Go packages helping to win by K.O. when fighting cross-cutting concerns.
 

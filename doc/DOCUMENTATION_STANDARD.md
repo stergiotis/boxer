@@ -95,7 +95,7 @@ public/fec/ea/golay24/
 ├── doc.go               # Reference (package overview, cross-links to EXPLANATION and ADRs)
 ├── example_test.go      # How-To (executable recipes)
 ├── EXPLANATION.md       # Explanation (theory, math, memory layout)
-└── README.md            # Optional router — see §3
+└── README.md            # Optional package overview — see §3
 ```
 
 Repository-wide artifacts:
@@ -113,32 +113,17 @@ doc/
 
 ---
 
-## 3. README routers (optional)
+## 3. Package README.md (optional)
 
-A `README.md` that routes between the four Diátaxis artifacts is **optional**, not required. Use one only when a package has enough companion docs that routing adds value.
+A package-level `README.md` is **optional**. When present, it is a normal Diátaxis artifact — pick the quadrant (almost always `reference`) and follow the rules in §4. There is no dedicated "router" type: a README of nothing but links duplicates `doc.go` and `pkgsite` without adding understanding, and it rots whenever any linked artifact moves.
 
-**When to add a router.** Rule of thumb: the package contains **two or more** of `EXPLANATION.md`, `example_test.go` (or `HOWTO.md`), and a `TUTORIAL.md` that points back into this package. For small leaf packages with just `doc.go` + code, the package overview already serves as the single entry point — a README would be noise.
+**When to add one.** GitHub renders `README.md` by default when a reader navigates into a package directory, so packages with enough surface to warrant a landing page (top-level modules, subsystems worth onboarding contributors into) benefit from a substantive overview. Leaf packages already served by `doc.go` do not need a README.
 
-**When you do add one, it has one job: routing.** No prose bodies; that is what the other artifacts are for. A router template:
+**What goes in it.** Prose that is genuinely package-scoped: what the package is, the moving parts, how pieces fit together, and pointers into the companion artifacts (`EXPLANATION.md`, `example_test.go`, ADRs, `pkgsite`). Treat it like `doc.go` with Markdown affordances — tables, trees, and fenced code — not as a list of links.
 
-```markdown
----
-type: router
-package: github.com/stergiotis/boxer/public/fec/ea/golay24
----
+**The repository-root `README.md` is exempt from the front-matter requirement.** It is the GitHub landing page for the whole project, not a Diátaxis artifact, and the badges in its first heading would render poorly below a YAML stanza.
 
-# golay24
-
-One-sentence description of what the package does.
-
-- **Reference:** https://pkg.go.dev/github.com/stergiotis/boxer/public/fec/ea/golay24
-- **How-To:** see [`example_test.go`](./example_test.go)
-- **Explanation:** [`EXPLANATION.md`](./EXPLANATION.md)
-- **Tutorials:** [`public/imzero/TUTORIAL.md`](../../../imzero/TUTORIAL.md)  *(if applicable)*
-- **Decisions:** [ADR-0007](../../../../doc/adr/0007-fec-code-selection.md)
-```
-
-Routers must use fully qualified repo paths for in-repo links and render correctly on both GitHub and local clones.
+All in-repo links inside a README must use fully qualified repo paths so they render correctly on both GitHub and local clones (see §7).
 
 ---
 
@@ -155,11 +140,11 @@ Routers must use fully qualified repo paths for in-repo links and render correct
 
 ### Front-matter and document state (Markdown only)
 
-Every Markdown doc begins with a YAML front-matter stanza. Go files are exempt — their role is obvious from their extension and location.
+Every Markdown doc begins with a YAML front-matter stanza. Go files are exempt — their role is obvious from their extension and location. The repository-root `README.md` is also exempt (see §3).
 
 ```yaml
 ---
-type: explanation            # reference | how-to | explanation | tutorial | adr | router
+type: explanation            # reference | how-to | explanation | tutorial | adr
 audience: package maintainer # who should get value from this
 status: stable               # see state machine below
 reviewed-by: "@alice"        # required when status is stable or accepted
@@ -167,7 +152,7 @@ reviewed-date: 2026-04-16    # required when status is stable or accepted
 ---
 ```
 
-**State machine — descriptive docs** (router, EXPLANATION, HOWTO, TUTORIAL):
+**State machine — descriptive docs** (README, EXPLANATION, HOWTO, TUTORIAL):
 
 | State | Meaning | Requirements |
 |---|---|---|
@@ -296,7 +281,7 @@ Every invariant stated in this standard maps to exactly one enforcer. The `Rule`
 | ADRs contain `Context`, `Decision`, `Alternatives`, `Consequences`, `Status` sections. | §1 ADR | `DL010` |
 | ADRs: QOC section is used when ≥3 options × ≥3 criteria. | §1 ADR | *manual* |
 | Every `.md` under scoped paths begins with a compliant front-matter stanza. | §4 | `DL001` |
-| `type` is in the allowed enum (reference / how-to / explanation / tutorial / adr / router). | §4 | `DL001` |
+| `type` is in the allowed enum (reference / how-to / explanation / tutorial / adr). | §4 | `DL001` |
 | `status` is in the allowed enum for the doc's `type`. | §4 | `DL001` |
 | `reviewed-by` + `reviewed-date` present when `status` is `stable` / `accepted`; date parses as `YYYY-MM-DD`. | §4 | `DL003` |
 | Draft banner present iff `status` is `draft` / `proposed`; banner state matches front-matter status. | §4 | `DL004` |
@@ -317,7 +302,6 @@ Canonical skeletons live under `doc/templates/`:
 - `doc/templates/EXPLANATION.md.tmpl`
 - `doc/templates/TUTORIAL.md.tmpl`
 - `doc/templates/HOWTO.md.tmpl`
-- `doc/templates/README.router.md.tmpl`
 - `doc/templates/adr/0000-template.md`
 
 For reference, the ADR skeleton is:
