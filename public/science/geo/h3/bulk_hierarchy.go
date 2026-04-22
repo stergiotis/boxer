@@ -33,31 +33,30 @@ func (inst *Handle) CellsToParentsE(
 	if n == 0 {
 		return
 	}
-	var cellsOff, parentsOff, statusOff uint32
-	{ // Stage: allocate
-		cellsOff, err = inst.allocE(ctx, n*8)
-		if err != nil {
-			return
-		}
-		defer inst.freeNoE(ctx, cellsOff, n*8)
-		parentsOff, err = inst.allocE(ctx, n*8)
-		if err != nil {
-			return
-		}
-		defer inst.freeNoE(ctx, parentsOff, n*8)
-		statusOff, err = inst.allocE(ctx, n)
-		if err != nil {
-			return
-		}
-		defer inst.freeNoE(ctx, statusOff, n)
+
+	// Scratch layout: cells(8n) | parents(8n) | status(n).
+	n32 := uint32(n)
+	cellsRel := uint32(0)
+	parentsRel := cellsRel + n32*8
+	statusRel := parentsRel + n32*8
+	total := int(statusRel) + n
+
+	var base uint32
+	base, err = inst.ensureScratchE(ctx, total)
+	if err != nil {
+		return
 	}
+	cellsOff := base + cellsRel
+	parentsOff := base + parentsRel
+	statusOff := base + statusRel
+
 	err = inst.writeU64sE(cellsOff, cells)
 	if err != nil {
 		return
 	}
 	_, err = inst.fnCellToParent.Call(
 		ctx,
-		uint64(cellsOff), uint64(uint32(n)),
+		uint64(cellsOff), uint64(n32),
 		uint64(uint32(res)),
 		uint64(parentsOff), uint64(statusOff),
 	)
@@ -95,57 +94,45 @@ func (inst *Handle) CellsToChildrenE(
 	n := len(cells)
 	offsets = slices.Grow(offsetsDst[:0], n+1)[:n+1]
 	status = slices.Grow(statusDst[:0], n)[:n]
-	offsets[0] = 0
 	if n == 0 {
 		children = childrenDst[:0]
+		offsets[0] = 0
 		return
 	}
 
-	childrenCap := cap(childrenDst)
-	if childrenCap < n {
-		childrenCap = n
-	}
-	children = slices.Grow(childrenDst[:0], childrenCap)[:childrenCap]
-
-	var cellsOff, statusOff, neededOff, offsetsOff, childrenOff uint32
-	{ // Stage: allocate
-		cellsOff, err = inst.allocE(ctx, n*8)
-		if err != nil {
-			return
-		}
-		defer inst.freeNoE(ctx, cellsOff, n*8)
-		statusOff, err = inst.allocE(ctx, n)
-		if err != nil {
-			return
-		}
-		defer inst.freeNoE(ctx, statusOff, n)
-		neededOff, err = inst.allocE(ctx, 4)
-		if err != nil {
-			return
-		}
-		defer inst.freeNoE(ctx, neededOff, 4)
-		offsetsOff, err = inst.allocE(ctx, (n+1)*4)
-		if err != nil {
-			return
-		}
-		defer inst.freeNoE(ctx, offsetsOff, (n+1)*4)
-	}
-	err = inst.writeU64sE(cellsOff, cells)
-	if err != nil {
-		return
+	// Initial guess for the output capacity. Heuristic: two levels of
+	// refinement × hexagon fan-out (49). Grown on demand via retry.
+	outCap := cap(childrenDst)
+	if outCap < n*49 {
+		outCap = n * 49
 	}
 
-	// One-retry grow loop.
 	for attempt := 0; attempt < 2; attempt++ {
-		if childrenOff != 0 {
-			inst.freeNoE(ctx, childrenOff, len(children)*8)
-			childrenOff = 0
+		// Scratch layout: cells(8n) | offsets(4(n+1), pad to 8) |
+		// children(8*outCap) | needed(4, pad to 8) | status(n).
+		n32 := uint32(n)
+		cellsRel := uint32(0)
+		offsetsRel := cellsRel + n32*8
+		childrenRel := alignUp8(offsetsRel + (n32+1)*4)
+		neededRel := childrenRel + uint32(outCap)*8
+		statusRel := alignUp8(neededRel + 4)
+		total := int(statusRel) + n
+
+		var base uint32
+		base, err = inst.ensureScratchE(ctx, total)
+		if err != nil {
+			return
 		}
-		if len(children) > 0 {
-			childrenOff, err = inst.allocE(ctx, len(children)*8)
-			if err != nil {
-				return
-			}
+		cellsOff := base + cellsRel
+		offsetsOff := base + offsetsRel
+		childrenOff := base + childrenRel
+		neededOff := base + neededRel
+		statusOff := base + statusRel
+
+		// Inputs may be lost on scratch grow; rewrite each attempt.
+		err = inst.writeU64sE(cellsOff, cells)
+		if err != nil {
+			return
 		}
 
 		var rc uint32
@@ -153,22 +140,21 @@ func (inst *Handle) CellsToChildrenE(
 			var results []uint64
 			results, err = inst.fnCellToChildren.Call(
 				ctx,
-				uint64(cellsOff), uint64(uint32(n)),
+				uint64(cellsOff), uint64(n32),
 				uint64(uint32(res)),
 				uint64(childrenOff), uint64(offsetsOff),
-				uint64(uint32(len(children))),
+				uint64(uint32(outCap)),
 				uint64(neededOff), uint64(statusOff),
 			)
 			if err != nil {
-				if childrenOff != 0 {
-					inst.freeNoE(ctx, childrenOff, len(children)*8)
-				}
 				err = eh.Errorf("h3_cell_to_children: %w", err)
 				return
 			}
 			rc = uint32(results[0])
 		}
-		if rc == growBadResolution {
+
+		switch rc {
+		case growBadResolution:
 			for i := range status {
 				status[i] = StatusInvalidResolution
 			}
@@ -176,77 +162,46 @@ func (inst *Handle) CellsToChildrenE(
 				offsets[i] = 0
 			}
 			children = children[:0]
-			if childrenOff != 0 {
-				inst.freeNoE(ctx, childrenOff, len(children)*8)
-			}
 			return
-		}
-		if rc == growOK {
+
+		case growOK:
 			var needed uint32
 			needed, err = inst.readU32E(neededOff)
 			if err != nil {
-				if childrenOff != 0 {
-					inst.freeNoE(ctx, childrenOff, len(children)*8)
-				}
 				return
 			}
 			err = inst.readI32sE(offsetsOff, offsets)
 			if err != nil {
-				if childrenOff != 0 {
-					inst.freeNoE(ctx, childrenOff, len(children)*8)
-				}
 				return
 			}
 			err = inst.readStatusE(statusOff, status)
 			if err != nil {
-				if childrenOff != 0 {
-					inst.freeNoE(ctx, childrenOff, len(children)*8)
-				}
 				return
 			}
 			total := int(needed)
-			if total > len(children) {
-				total = len(children)
+			if total > outCap {
+				total = outCap
 			}
-			out := make([]uint64, total)
-			err = inst.readU64sE(childrenOff, out)
-			if childrenOff != 0 {
-				inst.freeNoE(ctx, childrenOff, len(children)*8)
-			}
-			if err != nil {
-				return
-			}
-			children = out
+			children = slices.Grow(childrenDst[:0], total)[:total]
+			err = inst.readU64sE(childrenOff, children)
 			return
-		}
-		if rc == growNeedMore {
+
+		case growNeedMore:
 			if attempt == 1 {
-				err = eb.Build().Int("cap", len(children)).Errorf("%w", ErrGrowProtocol)
-				if childrenOff != 0 {
-					inst.freeNoE(ctx, childrenOff, len(children)*8)
-				}
+				err = eb.Build().Int("cap", outCap).Errorf("%w", ErrGrowProtocol)
 				return
 			}
 			var needed uint32
 			needed, err = inst.readU32E(neededOff)
 			if err != nil {
-				if childrenOff != 0 {
-					inst.freeNoE(ctx, childrenOff, len(children)*8)
-				}
 				return
 			}
-			if childrenOff != 0 {
-				inst.freeNoE(ctx, childrenOff, len(children)*8)
-				childrenOff = 0
-			}
-			children = slices.Grow(childrenDst[:0], int(needed))[:needed]
-			continue
+			outCap = int(needed)
+
+		default:
+			err = eb.Build().Uint32("rc", rc).Errorf("h3_cell_to_children: unknown return code")
+			return
 		}
-		err = eb.Build().Uint32("rc", rc).Errorf("h3_cell_to_children: unknown return code")
-		if childrenOff != 0 {
-			inst.freeNoE(ctx, childrenOff, len(children)*8)
-		}
-		return
 	}
 	return
 }

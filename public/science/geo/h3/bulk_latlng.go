@@ -36,62 +36,48 @@ func (inst *Handle) LatLngsToCellsE(
 		return
 	}
 
-	var latsOff, lngsOff, cellsOff, statusOff uint32
-	{ // Stage: allocate wasm regions
-		latsOff, err = inst.allocE(ctx, n*8)
-		if err != nil {
-			return
-		}
-		defer inst.freeNoE(ctx, latsOff, n*8)
-		lngsOff, err = inst.allocE(ctx, n*8)
-		if err != nil {
-			return
-		}
-		defer inst.freeNoE(ctx, lngsOff, n*8)
-		cellsOff, err = inst.allocE(ctx, n*8)
-		if err != nil {
-			return
-		}
-		defer inst.freeNoE(ctx, cellsOff, n*8)
-		statusOff, err = inst.allocE(ctx, n)
-		if err != nil {
-			return
-		}
-		defer inst.freeNoE(ctx, statusOff, n)
+	// Scratch layout: lats(8n) | lngs(8n) | cells(8n) | status(n).
+	n32 := uint32(n)
+	latsRel := uint32(0)
+	lngsRel := latsRel + n32*8
+	cellsRel := lngsRel + n32*8
+	statusRel := cellsRel + n32*8
+	total := int(statusRel) + n
+
+	var base uint32
+	base, err = inst.ensureScratchE(ctx, total)
+	if err != nil {
+		return
 	}
-	{ // Stage: stage inputs
-		err = inst.writeF64sE(latsOff, latsDeg)
-		if err != nil {
-			return
-		}
-		err = inst.writeF64sE(lngsOff, lngsDeg)
-		if err != nil {
-			return
-		}
+	latsOff := base + latsRel
+	lngsOff := base + lngsRel
+	cellsOff := base + cellsRel
+	statusOff := base + statusRel
+
+	err = inst.writeF64sE(latsOff, latsDeg)
+	if err != nil {
+		return
 	}
-	{ // Stage: call
-		_, err = inst.fnLatLngToCell.Call(
-			ctx,
-			uint64(latsOff), uint64(lngsOff),
-			uint64(uint32(n)),
-			uint64(uint32(res)),
-			uint64(cellsOff), uint64(statusOff),
-		)
-		if err != nil {
-			err = eh.Errorf("h3_latlng_to_cell: %w", err)
-			return
-		}
+	err = inst.writeF64sE(lngsOff, lngsDeg)
+	if err != nil {
+		return
 	}
-	{ // Stage: read outputs
-		err = inst.readU64sE(cellsOff, cells)
-		if err != nil {
-			return
-		}
-		err = inst.readStatusE(statusOff, status)
-		if err != nil {
-			return
-		}
+	_, err = inst.fnLatLngToCell.Call(
+		ctx,
+		uint64(latsOff), uint64(lngsOff),
+		uint64(n32),
+		uint64(uint32(res)),
+		uint64(cellsOff), uint64(statusOff),
+	)
+	if err != nil {
+		err = eh.Errorf("h3_latlng_to_cell: %w", err)
+		return
 	}
+	err = inst.readU64sE(cellsOff, cells)
+	if err != nil {
+		return
+	}
+	err = inst.readStatusE(statusOff, status)
 	return
 }
 
@@ -112,59 +98,45 @@ func (inst *Handle) CellsToLatLngsE(
 		return
 	}
 
-	var cellsOff, latsOff, lngsOff, statusOff uint32
-	{ // Stage: allocate
-		cellsOff, err = inst.allocE(ctx, n*8)
-		if err != nil {
-			return
-		}
-		defer inst.freeNoE(ctx, cellsOff, n*8)
-		latsOff, err = inst.allocE(ctx, n*8)
-		if err != nil {
-			return
-		}
-		defer inst.freeNoE(ctx, latsOff, n*8)
-		lngsOff, err = inst.allocE(ctx, n*8)
-		if err != nil {
-			return
-		}
-		defer inst.freeNoE(ctx, lngsOff, n*8)
-		statusOff, err = inst.allocE(ctx, n)
-		if err != nil {
-			return
-		}
-		defer inst.freeNoE(ctx, statusOff, n)
+	// Scratch layout: cells(8n) | lats(8n) | lngs(8n) | status(n).
+	n32 := uint32(n)
+	cellsRel := uint32(0)
+	latsRel := cellsRel + n32*8
+	lngsRel := latsRel + n32*8
+	statusRel := lngsRel + n32*8
+	total := int(statusRel) + n
+
+	var base uint32
+	base, err = inst.ensureScratchE(ctx, total)
+	if err != nil {
+		return
 	}
-	{ // Stage: stage inputs
-		err = inst.writeU64sE(cellsOff, cells)
-		if err != nil {
-			return
-		}
+	cellsOff := base + cellsRel
+	latsOff := base + latsRel
+	lngsOff := base + lngsRel
+	statusOff := base + statusRel
+
+	err = inst.writeU64sE(cellsOff, cells)
+	if err != nil {
+		return
 	}
-	{ // Stage: call
-		_, err = inst.fnCellToLatLng.Call(
-			ctx,
-			uint64(cellsOff), uint64(uint32(n)),
-			uint64(latsOff), uint64(lngsOff), uint64(statusOff),
-		)
-		if err != nil {
-			err = eh.Errorf("h3_cell_to_latlng: %w", err)
-			return
-		}
+	_, err = inst.fnCellToLatLng.Call(
+		ctx,
+		uint64(cellsOff), uint64(n32),
+		uint64(latsOff), uint64(lngsOff), uint64(statusOff),
+	)
+	if err != nil {
+		err = eh.Errorf("h3_cell_to_latlng: %w", err)
+		return
 	}
-	{ // Stage: read outputs
-		err = inst.readF64sE(latsOff, latsDeg)
-		if err != nil {
-			return
-		}
-		err = inst.readF64sE(lngsOff, lngsDeg)
-		if err != nil {
-			return
-		}
-		err = inst.readStatusE(statusOff, status)
-		if err != nil {
-			return
-		}
+	err = inst.readF64sE(latsOff, latsDeg)
+	if err != nil {
+		return
 	}
+	err = inst.readF64sE(lngsOff, lngsDeg)
+	if err != nil {
+		return
+	}
+	err = inst.readStatusE(statusOff, status)
 	return
 }

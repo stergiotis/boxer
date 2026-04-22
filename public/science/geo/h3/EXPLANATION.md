@@ -1,10 +1,10 @@
 ---
 type: explanation
 audience: package maintainer
-status: draft
+status: stable
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-04-22
 ---
-
-> **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
 
 # H3 bridge — theory and invariants
 

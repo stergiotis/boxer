@@ -29,67 +29,42 @@ func (inst *Handle) GridDisksE(
 	n := len(cells)
 	offsets = slices.Grow(offsetsDst[:0], n+1)[:n+1]
 	status = slices.Grow(statusDst[:0], n)[:n]
-	offsets[0] = 0
 	if n == 0 {
 		outCells = outCellsDst[:0]
+		offsets[0] = 0
 		return
 	}
 
-	// Upper bound per cell: 3k(k+1)+1.
+	// Per-cell upper bound (non-pentagon): 3k(k+1)+1.
 	perCellMax := 3*int(k)*(int(k)+1) + 1
-	initialCap := n * perCellMax
-	if cap(outCellsDst) > initialCap {
-		initialCap = cap(outCellsDst)
-	}
-	outCells = slices.Grow(outCellsDst[:0], initialCap)[:initialCap]
-
-	var cellsOff, statusOff, neededOff, offsetsOff uint32
-	var outCellsOff uint32
-	var outCellsOffSize int
-	{ // Stage: allocate
-		cellsOff, err = inst.allocE(ctx, n*8)
-		if err != nil {
-			return
-		}
-		defer inst.freeNoE(ctx, cellsOff, n*8)
-		statusOff, err = inst.allocE(ctx, n)
-		if err != nil {
-			return
-		}
-		defer inst.freeNoE(ctx, statusOff, n)
-		neededOff, err = inst.allocE(ctx, 4)
-		if err != nil {
-			return
-		}
-		defer inst.freeNoE(ctx, neededOff, 4)
-		offsetsOff, err = inst.allocE(ctx, (n+1)*4)
-		if err != nil {
-			return
-		}
-		defer inst.freeNoE(ctx, offsetsOff, (n+1)*4)
-	}
-	defer func() {
-		if outCellsOff != 0 {
-			inst.freeNoE(ctx, outCellsOff, outCellsOffSize)
-		}
-	}()
-	err = inst.writeU64sE(cellsOff, cells)
-	if err != nil {
-		return
+	outCap := n * perCellMax
+	if cap(outCellsDst) > outCap {
+		outCap = cap(outCellsDst)
 	}
 
 	for attempt := 0; attempt < 2; attempt++ {
-		if outCellsOff != 0 {
-			inst.freeNoE(ctx, outCellsOff, outCellsOffSize)
-			outCellsOff = 0
-			outCellsOffSize = 0
+		n32 := uint32(n)
+		cellsRel := uint32(0)
+		offsetsRel := cellsRel + n32*8
+		outRel := alignUp8(offsetsRel + (n32+1)*4)
+		neededRel := outRel + uint32(outCap)*8
+		statusRel := alignUp8(neededRel + 4)
+		total := int(statusRel) + n
+
+		var base uint32
+		base, err = inst.ensureScratchE(ctx, total)
+		if err != nil {
+			return
 		}
-		if len(outCells) > 0 {
-			outCellsOff, err = inst.allocE(ctx, len(outCells)*8)
-			if err != nil {
-				return
-			}
-			outCellsOffSize = len(outCells) * 8
+		cellsOff := base + cellsRel
+		offsetsOff := base + offsetsRel
+		outOff := base + outRel
+		neededOff := base + neededRel
+		statusOff := base + statusRel
+
+		err = inst.writeU64sE(cellsOff, cells)
+		if err != nil {
+			return
 		}
 
 		var rc uint32
@@ -97,10 +72,10 @@ func (inst *Handle) GridDisksE(
 			var results []uint64
 			results, err = inst.fnGridDisk.Call(
 				ctx,
-				uint64(cellsOff), uint64(uint32(n)),
+				uint64(cellsOff), uint64(n32),
 				uint64(uint32(k)),
-				uint64(outCellsOff), uint64(offsetsOff),
-				uint64(uint32(len(outCells))),
+				uint64(outOff), uint64(offsetsOff),
+				uint64(uint32(outCap)),
 				uint64(neededOff), uint64(statusOff),
 			)
 			if err != nil {
@@ -109,7 +84,9 @@ func (inst *Handle) GridDisksE(
 			}
 			rc = uint32(results[0])
 		}
-		if rc == growOK {
+
+		switch rc {
+		case growOK:
 			var needed uint32
 			needed, err = inst.readU32E(neededOff)
 			if err != nil {
@@ -124,20 +101,16 @@ func (inst *Handle) GridDisksE(
 				return
 			}
 			total := int(needed)
-			if total > len(outCells) {
-				total = len(outCells)
+			if total > outCap {
+				total = outCap
 			}
-			out := make([]uint64, total)
-			err = inst.readU64sE(outCellsOff, out)
-			if err != nil {
-				return
-			}
-			outCells = out
+			outCells = slices.Grow(outCellsDst[:0], total)[:total]
+			err = inst.readU64sE(outOff, outCells)
 			return
-		}
-		if rc == growNeedMore {
+
+		case growNeedMore:
 			if attempt == 1 {
-				err = eb.Build().Int("cap", len(outCells)).Errorf("%w", ErrGrowProtocol)
+				err = eb.Build().Int("cap", outCap).Errorf("%w", ErrGrowProtocol)
 				return
 			}
 			var needed uint32
@@ -145,11 +118,12 @@ func (inst *Handle) GridDisksE(
 			if err != nil {
 				return
 			}
-			outCells = slices.Grow(outCellsDst[:0], int(needed))[:needed]
-			continue
+			outCap = int(needed)
+
+		default:
+			err = eb.Build().Uint32("rc", rc).Errorf("h3_grid_disk: unknown return code")
+			return
 		}
-		err = eb.Build().Uint32("rc", rc).Errorf("h3_grid_disk: unknown return code")
-		return
 	}
 	return
 }

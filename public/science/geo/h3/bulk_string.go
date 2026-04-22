@@ -26,66 +26,41 @@ func (inst *Handle) CellsToStringsE(
 	n := len(cells)
 	offsets = slices.Grow(offsetsDst[:0], n+1)[:n+1]
 	status = slices.Grow(statusDst[:0], n)[:n]
-	offsets[0] = 0
 	if n == 0 {
 		buf = bufDst[:0]
+		offsets[0] = 0
 		return
 	}
 
-	// H3 strings are ≤ 16 bytes each.
-	initialCap := n * 16
-	if cap(bufDst) > initialCap {
-		initialCap = cap(bufDst)
-	}
-	buf = slices.Grow(bufDst[:0], initialCap)[:initialCap]
-
-	var cellsOff, statusOff, neededOff, offsetsOff uint32
-	var bufOff uint32
-	var bufOffSize int
-	{ // Stage: allocate
-		cellsOff, err = inst.allocE(ctx, n*8)
-		if err != nil {
-			return
-		}
-		defer inst.freeNoE(ctx, cellsOff, n*8)
-		statusOff, err = inst.allocE(ctx, n)
-		if err != nil {
-			return
-		}
-		defer inst.freeNoE(ctx, statusOff, n)
-		neededOff, err = inst.allocE(ctx, 4)
-		if err != nil {
-			return
-		}
-		defer inst.freeNoE(ctx, neededOff, 4)
-		offsetsOff, err = inst.allocE(ctx, (n+1)*4)
-		if err != nil {
-			return
-		}
-		defer inst.freeNoE(ctx, offsetsOff, (n+1)*4)
-	}
-	defer func() {
-		if bufOff != 0 {
-			inst.freeNoE(ctx, bufOff, bufOffSize)
-		}
-	}()
-	err = inst.writeU64sE(cellsOff, cells)
-	if err != nil {
-		return
+	// H3 strings are <= 16 bytes each.
+	outCap := n * 16
+	if cap(bufDst) > outCap {
+		outCap = cap(bufDst)
 	}
 
 	for attempt := 0; attempt < 2; attempt++ {
-		if bufOff != 0 {
-			inst.freeNoE(ctx, bufOff, bufOffSize)
-			bufOff = 0
-			bufOffSize = 0
+		n32 := uint32(n)
+		cellsRel := uint32(0)
+		offsetsRel := cellsRel + n32*8
+		bufRel := offsetsRel + (n32+1)*4
+		neededRel := alignUp8(bufRel + uint32(outCap))
+		statusRel := alignUp8(neededRel + 4)
+		total := int(statusRel) + n
+
+		var base uint32
+		base, err = inst.ensureScratchE(ctx, total)
+		if err != nil {
+			return
 		}
-		if len(buf) > 0 {
-			bufOff, err = inst.allocE(ctx, len(buf))
-			if err != nil {
-				return
-			}
-			bufOffSize = len(buf)
+		cellsOff := base + cellsRel
+		offsetsOff := base + offsetsRel
+		bufOff := base + bufRel
+		neededOff := base + neededRel
+		statusOff := base + statusRel
+
+		err = inst.writeU64sE(cellsOff, cells)
+		if err != nil {
+			return
 		}
 
 		var rc uint32
@@ -93,9 +68,9 @@ func (inst *Handle) CellsToStringsE(
 			var results []uint64
 			results, err = inst.fnCellToString.Call(
 				ctx,
-				uint64(cellsOff), uint64(uint32(n)),
+				uint64(cellsOff), uint64(n32),
 				uint64(bufOff), uint64(offsetsOff),
-				uint64(uint32(len(buf))),
+				uint64(uint32(outCap)),
 				uint64(neededOff), uint64(statusOff),
 			)
 			if err != nil {
@@ -104,7 +79,9 @@ func (inst *Handle) CellsToStringsE(
 			}
 			rc = uint32(results[0])
 		}
-		if rc == growOK {
+
+		switch rc {
+		case growOK:
 			var needed uint32
 			needed, err = inst.readU32E(neededOff)
 			if err != nil {
@@ -119,22 +96,22 @@ func (inst *Handle) CellsToStringsE(
 				return
 			}
 			total := int(needed)
-			if total > len(buf) {
-				total = len(buf)
+			if total > outCap {
+				total = outCap
 			}
 			var raw []byte
 			raw, err = inst.readBytesE(bufOff, total)
 			if err != nil {
 				return
 			}
-			out := make([]byte, total)
-			copy(out, raw)
-			buf = out
+			// raw aliases guest memory; copy to a caller-owned slice.
+			buf = slices.Grow(bufDst[:0], total)[:total]
+			copy(buf, raw)
 			return
-		}
-		if rc == growNeedMore {
+
+		case growNeedMore:
 			if attempt == 1 {
-				err = eb.Build().Int("cap", len(buf)).Errorf("%w", ErrGrowProtocol)
+				err = eb.Build().Int("cap", outCap).Errorf("%w", ErrGrowProtocol)
 				return
 			}
 			var needed uint32
@@ -142,11 +119,12 @@ func (inst *Handle) CellsToStringsE(
 			if err != nil {
 				return
 			}
-			buf = slices.Grow(bufDst[:0], int(needed))[:needed]
-			continue
+			outCap = int(needed)
+
+		default:
+			err = eb.Build().Uint32("rc", rc).Errorf("h3_cell_to_string: unknown return code")
+			return
 		}
-		err = eb.Build().Uint32("rc", rc).Errorf("h3_cell_to_string: unknown return code")
-		return
 	}
 	return
 }
@@ -181,59 +159,50 @@ func (inst *Handle) StringsToCellsE(
 		return
 	}
 
-	var bufOff, offsetsOff, cellsOff, statusOff uint32
-	{ // Stage: allocate
-		if len(buf) > 0 {
-			bufOff, err = inst.allocE(ctx, len(buf))
-			if err != nil {
-				return
-			}
-			defer inst.freeNoE(ctx, bufOff, len(buf))
-		}
-		offsetsOff, err = inst.allocE(ctx, (n+1)*4)
-		if err != nil {
-			return
-		}
-		defer inst.freeNoE(ctx, offsetsOff, (n+1)*4)
-		cellsOff, err = inst.allocE(ctx, n*8)
-		if err != nil {
-			return
-		}
-		defer inst.freeNoE(ctx, cellsOff, n*8)
-		statusOff, err = inst.allocE(ctx, n)
-		if err != nil {
-			return
-		}
-		defer inst.freeNoE(ctx, statusOff, n)
+	// Scratch layout: buf(len(buf), pad to 4) | offsets(4(n+1), pad to 8) | cells(8n) | status(n).
+	n32 := uint32(n)
+	bufLen := uint32(len(buf))
+	bufRel := uint32(0)
+	offsetsRel := alignUp8(bufRel + bufLen) // i32 needs 4-byte; align to 8 for the u64 that follows
+	if offsetsRel < bufRel+bufLen {
+		offsetsRel = bufRel + bufLen
 	}
-	{ // Stage: stage inputs
-		err = inst.writeBytesE(bufOff, buf)
-		if err != nil {
-			return
-		}
-		err = inst.writeI32sE(offsetsOff, offsets)
-		if err != nil {
-			return
-		}
+	cellsRel := alignUp8(offsetsRel + (n32+1)*4)
+	statusRel := cellsRel + n32*8
+	total := int(statusRel) + n
+
+	var base uint32
+	base, err = inst.ensureScratchE(ctx, total)
+	if err != nil {
+		return
 	}
-	{ // Stage: call
-		_, err = inst.fnStringToCell.Call(
-			ctx,
-			uint64(bufOff), uint64(offsetsOff),
-			uint64(uint32(n)),
-			uint64(cellsOff), uint64(statusOff),
-		)
-		if err != nil {
-			err = eh.Errorf("h3_string_to_cell: %w", err)
-			return
-		}
+	bufOff := base + bufRel
+	offsetsOff := base + offsetsRel
+	cellsOff := base + cellsRel
+	statusOff := base + statusRel
+
+	err = inst.writeBytesE(bufOff, buf)
+	if err != nil {
+		return
 	}
-	{ // Stage: read outputs
-		err = inst.readU64sE(cellsOff, cells)
-		if err != nil {
-			return
-		}
-		err = inst.readStatusE(statusOff, status)
+	err = inst.writeI32sE(offsetsOff, offsets)
+	if err != nil {
+		return
 	}
+	_, err = inst.fnStringToCell.Call(
+		ctx,
+		uint64(bufOff), uint64(offsetsOff),
+		uint64(n32),
+		uint64(cellsOff), uint64(statusOff),
+	)
+	if err != nil {
+		err = eh.Errorf("h3_string_to_cell: %w", err)
+		return
+	}
+	err = inst.readU64sE(cellsOff, cells)
+	if err != nil {
+		return
+	}
+	err = inst.readStatusE(statusOff, status)
 	return
 }

@@ -38,7 +38,47 @@ type Handle struct {
 	fnAreValid      api.Function
 	fnGetResolution api.Function
 
+	// scratch is a per-handle region of wasm linear memory, reused across
+	// bulk calls to avoid one alloc/free per call per region. It grows
+	// geometrically; there is no explicit free — the scratch is reclaimed
+	// when the module is closed by [Runtime.Close].
+	scratchOff uint32
+	scratchCap int
+
 	released atomic.Bool
+}
+
+// alignUp8 rounds n up to the next multiple of 8.
+func alignUp8(n uint32) uint32 { return (n + 7) &^ 7 }
+
+// ensureScratchE ensures the handle's scratch region has at least n bytes
+// of capacity. The returned base offset is stable when n fits in the
+// current scratch; otherwise the region is reallocated and any previously
+// staged contents are discarded (callers must re-stage inputs after a
+// grow).
+func (inst *Handle) ensureScratchE(ctx context.Context, n int) (base uint32, err error) {
+	if n <= inst.scratchCap {
+		base = inst.scratchOff
+		return
+	}
+	newCap := inst.scratchCap * 2
+	if newCap < n {
+		newCap = n
+	}
+	if inst.scratchOff != 0 {
+		inst.freeNoE(ctx, inst.scratchOff, inst.scratchCap)
+		inst.scratchOff = 0
+		inst.scratchCap = 0
+	}
+	var off uint32
+	off, err = inst.allocE(ctx, newCap)
+	if err != nil {
+		return
+	}
+	inst.scratchOff = off
+	inst.scratchCap = newCap
+	base = off
+	return
 }
 
 // Release returns the handle to its Runtime's pool. Idempotent: a

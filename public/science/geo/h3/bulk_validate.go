@@ -21,17 +21,20 @@ func (inst *Handle) AreValidCellsE(
 	if n == 0 {
 		return
 	}
-	var cellsOff, validOff uint32
-	cellsOff, err = inst.allocE(ctx, n*8)
+
+	// Scratch layout: cells(8n) | valid(n).
+	n32 := uint32(n)
+	cellsRel := uint32(0)
+	validRel := cellsRel + n32*8
+	total := int(validRel) + n
+
+	var base uint32
+	base, err = inst.ensureScratchE(ctx, total)
 	if err != nil {
 		return
 	}
-	defer inst.freeNoE(ctx, cellsOff, n*8)
-	validOff, err = inst.allocE(ctx, n)
-	if err != nil {
-		return
-	}
-	defer inst.freeNoE(ctx, validOff, n)
+	cellsOff := base + cellsRel
+	validOff := base + validRel
 
 	err = inst.writeU64sE(cellsOff, cells)
 	if err != nil {
@@ -39,7 +42,7 @@ func (inst *Handle) AreValidCellsE(
 	}
 	_, err = inst.fnAreValid.Call(
 		ctx,
-		uint64(cellsOff), uint64(uint32(n)),
+		uint64(cellsOff), uint64(n32),
 		uint64(validOff),
 	)
 	if err != nil {
@@ -70,22 +73,22 @@ func (inst *Handle) GetResolutionsE(
 	if n == 0 {
 		return
 	}
-	var cellsOff, resOff, statusOff uint32
-	cellsOff, err = inst.allocE(ctx, n*8)
+
+	// Scratch layout: cells(8n) | res(n) | status(n).
+	n32 := uint32(n)
+	cellsRel := uint32(0)
+	resRel := cellsRel + n32*8
+	statusRel := resRel + n32
+	total := int(statusRel) + n
+
+	var base uint32
+	base, err = inst.ensureScratchE(ctx, total)
 	if err != nil {
 		return
 	}
-	defer inst.freeNoE(ctx, cellsOff, n*8)
-	resOff, err = inst.allocE(ctx, n)
-	if err != nil {
-		return
-	}
-	defer inst.freeNoE(ctx, resOff, n)
-	statusOff, err = inst.allocE(ctx, n)
-	if err != nil {
-		return
-	}
-	defer inst.freeNoE(ctx, statusOff, n)
+	cellsOff := base + cellsRel
+	resOff := base + resRel
+	statusOff := base + statusRel
 
 	err = inst.writeU64sE(cellsOff, cells)
 	if err != nil {
@@ -93,7 +96,7 @@ func (inst *Handle) GetResolutionsE(
 	}
 	_, err = inst.fnGetResolution.Call(
 		ctx,
-		uint64(cellsOff), uint64(uint32(n)),
+		uint64(cellsOff), uint64(n32),
 		uint64(resOff), uint64(statusOff),
 	)
 	if err != nil {
