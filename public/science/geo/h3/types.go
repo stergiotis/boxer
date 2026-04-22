@@ -84,3 +84,35 @@ type LatLng struct {
 	LatDeg float64
 	LngDeg float64
 }
+
+// ContainmentModeE selects the criterion H3 uses to decide whether a cell
+// falls inside a polygon during polyfill. Values mirror h3o's
+// ContainmentMode enum with the same ordinal values.
+type ContainmentModeE uint8
+
+const (
+	// ContainmentContainsCentroid selects cells whose centroid lies inside
+	// the polygon. Fastest; guarantees unique cell-to-polygon assignment
+	// but may leave polygon edges uncovered or overshoot near boundaries.
+	ContainmentContainsCentroid ContainmentModeE = 0
+	// ContainmentContainsBoundary selects cells whose entire boundary is
+	// inside the polygon. Unique assignment; no overshoot; may leave more
+	// of the polygon uncovered than ContainsCentroid.
+	ContainmentContainsBoundary ContainmentModeE = 1
+	// ContainmentIntersectsBoundary selects cells whose boundary intersects
+	// the polygon boundary (even partially). Full coverage; cells may be
+	// shared across adjacent polygons; cells fully containing the polygon
+	// are NOT returned (no intersection).
+	ContainmentIntersectsBoundary ContainmentModeE = 2
+	// ContainmentCovers is like IntersectsBoundary but additionally
+	// includes a single covering cell when the polygon is entirely inside
+	// one cell with no boundary intersection.
+	ContainmentCovers ContainmentModeE = 3
+)
+
+var AllContainmentModes = []ContainmentModeE{
+	ContainmentContainsCentroid,
+	ContainmentContainsBoundary,
+	ContainmentIntersectsBoundary,
+	ContainmentCovers,
+}

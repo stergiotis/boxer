@@ -34,3 +34,20 @@ var ErrMemoryOOB = eh.New("h3: wasm memory access out of bounds")
 // one-retry growth loop does not settle after the second attempt; the
 // guest reported `needed` incorrectly.
 var ErrGrowProtocol = eh.New("h3: variable-arity grow protocol did not settle in one retry")
+
+// ErrBadContainmentMode is returned by [Handle.PolygonToCellsE] when the
+// mode argument is outside the [ContainmentModeE] enum.
+var ErrBadContainmentMode = eh.New("h3: bad containment mode")
+
+// ErrBadPolygonGeometry is returned by [Handle.PolygonToCellsE] for a
+// malformed polygon (non-monotone ring offsets, rings not closed under
+// h3o's acceptance criteria).
+var ErrBadPolygonGeometry = eh.New("h3: bad polygon geometry")
+
+// ErrCompactMixedResolution is returned by [Handle.CompactCellsE] when the
+// input set mixes H3 resolutions.
+var ErrCompactMixedResolution = eh.New("h3: compact input mixes resolutions")
+
+// ErrCompactDuplicateInput is returned by [Handle.CompactCellsE] when the
+// input set contains duplicate cells.
+var ErrCompactDuplicateInput = eh.New("h3: compact input contains duplicates")

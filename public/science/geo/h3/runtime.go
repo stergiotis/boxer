@@ -109,8 +109,11 @@ func (inst *Runtime) newHandle(ctx context.Context, idx int) (h *Handle, err err
 		fnGridDisk:      mod.ExportedFunction("h3_grid_disk"),
 		fnCellToString:  mod.ExportedFunction("h3_cell_to_string"),
 		fnStringToCell:  mod.ExportedFunction("h3_string_to_cell"),
-		fnAreValid:      mod.ExportedFunction("h3_are_valid"),
-		fnGetResolution: mod.ExportedFunction("h3_get_resolution"),
+		fnAreValid:       mod.ExportedFunction("h3_are_valid"),
+		fnGetResolution:  mod.ExportedFunction("h3_get_resolution"),
+		fnPolygonToCells: mod.ExportedFunction("h3_polygon_to_cells"),
+		fnCompactCells:   mod.ExportedFunction("h3_compact_cells"),
+		fnUncompactCells: mod.ExportedFunction("h3_uncompact_cells"),
 	}
 	{ // Stage: export presence check
 		var missing string
@@ -137,6 +140,12 @@ func (inst *Runtime) newHandle(ctx context.Context, idx int) (h *Handle, err err
 			missing = "h3_are_valid"
 		case h.fnGetResolution == nil:
 			missing = "h3_get_resolution"
+		case h.fnPolygonToCells == nil:
+			missing = "h3_polygon_to_cells"
+		case h.fnCompactCells == nil:
+			missing = "h3_compact_cells"
+		case h.fnUncompactCells == nil:
+			missing = "h3_uncompact_cells"
 		}
 		if missing != "" {
 			_ = mod.Close(ctx)

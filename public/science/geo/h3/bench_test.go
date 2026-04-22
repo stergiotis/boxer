@@ -223,6 +223,88 @@ func BenchmarkCellsToStrings(b *testing.B) {
 	}
 }
 
+func BenchmarkPolygonToCells(b *testing.B) {
+	// Fixed unit-square polygon, swept over resolutions so the output-cell
+	// count is the throughput knob rather than batch size.
+	vertsLat := []float64{0, 0, 1, 1, 0}
+	vertsLng := []float64{0, 1, 1, 0, 0}
+	ringOffsets := []int32{0, 5}
+	for _, res := range []ResolutionE{ResolutionR5, ResolutionR7, ResolutionR9} {
+		b.Run("res"+string(rune('0'+res)), func(b *testing.B) {
+			h := benchSetupH(b, nil)
+			cellsDst := make([]uint64, 0, 1024)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				var err error
+				cellsDst, err = h.PolygonToCellsE(
+					context.Background(), res, ContainmentCovers,
+					vertsLat, vertsLng, ringOffsets, cellsDst,
+				)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+			b.ReportMetric(float64(len(cellsDst)), "cells/op")
+		})
+	}
+}
+
+func BenchmarkCompactCells(b *testing.B) {
+	// Input = all res-5 children of a res-2 anchor. Cell counts are fixed
+	// by the H3 grid (~2000 children per res-2), so we can't easily slide
+	// over sizes — one size, benchmark for regressions.
+	h := benchSetupH(b, nil)
+	lats, lngs := []float64{37.7749}, []float64{-122.4194}
+	anchor, _, err := h.LatLngsToCellsE(context.Background(), ResolutionR2, lats, lngs, nil, nil)
+	if err != nil {
+		b.Fatal(err)
+	}
+	children, offsets, _, err := h.CellsToChildrenE(
+		context.Background(), ResolutionR5, anchor, nil, nil, nil,
+	)
+	if err != nil {
+		b.Fatal(err)
+	}
+	input := children[offsets[0]:offsets[1]]
+	compactedDst := make([]uint64, 0, len(input))
+	b.SetBytes(int64(len(input) * 8))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		compactedDst, err = h.CompactCellsE(context.Background(), input, compactedDst)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+	b.ReportMetric(float64(len(compactedDst)), "compact-cells/op")
+}
+
+func BenchmarkUncompactCells(b *testing.B) {
+	// Input = a compacted set; uncompact to res 5 (one level down). Size
+	// ladder matches the other CSR benches.
+	for _, n := range benchSizes {
+		b.Run(sizeLabel(n), func(b *testing.B) {
+			h := benchSetupH(b, nil)
+			cells := seedCells(b, h, n, ResolutionR4)
+			expandedDst := make([]uint64, 0, n*7)
+			statusDst := make([]StatusE, 0, n)
+			b.SetBytes(int64(n * 8))
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				var err error
+				expandedDst, statusDst, err = h.UncompactCellsE(
+					context.Background(), ResolutionR5, cells, expandedDst, statusDst,
+				)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
 func sizeLabel(n int) string {
 	switch {
 	case n >= 1_000_000:

@@ -35,8 +35,11 @@ type Handle struct {
 	fnGridDisk      api.Function
 	fnCellToString  api.Function
 	fnStringToCell  api.Function
-	fnAreValid      api.Function
-	fnGetResolution api.Function
+	fnAreValid       api.Function
+	fnGetResolution  api.Function
+	fnPolygonToCells api.Function
+	fnCompactCells   api.Function
+	fnUncompactCells api.Function
 
 	// scratch is a per-handle region of wasm linear memory, reused across
 	// bulk calls to avoid one alloc/free per call per region. It grows

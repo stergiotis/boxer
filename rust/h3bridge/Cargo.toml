@@ -16,7 +16,15 @@ path = "src/bin/emit_golden.rs"
 required-features = []
 
 [dependencies]
-h3o = "0.9.4"
+h3o = { version = "0.9.4", features = ["geo"] }
+geo-types = { version = "0.7", default-features = false }
+
+# h3o[geo] pulls geo → rand → getrandom. On wasm32-unknown-unknown, getrandom
+# has no OS entropy source, so we must register a custom one. We only need
+# this to satisfy ahash's seeding — polyfill/tiling outputs are deterministic
+# once the hash seed is fixed, which is what we want for byte-reproducible
+# builds.
+getrandom = { version = "0.2", features = ["custom"] }
 
 [profile.release]
 opt-level = "z"
