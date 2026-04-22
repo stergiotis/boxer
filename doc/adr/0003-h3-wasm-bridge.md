@@ -121,6 +121,36 @@ Accepted — 2026-04-22. Design frozen; implementation begins on the `public/sci
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`. ADRs are append-only; supersession is recorded, not deleted.
 
+## Updates
+
+### 2026-04-23 — Implement SD7-deferred surface: polyfill + compactness
+
+SD7 deferred polyfill, cell-boundary polygons, directed edges, and compactness to "a later ADR / package revision." Two of those — polyfill and compactness (both `compact` and `uncompact`) — are the next operations consumer workloads need, so this entry records their API and ABI shape. The core decision (Rust→WASM→wazero; SoA; CSR for variable-arity; per-element `StatusE`; module pool; one-retry grow protocol) is unchanged, so this refinement is recorded inline rather than in a superseding ADR.
+
+**Scope.** Adds `PolygonToCellsE`, `CompactCellsE`, `UncompactCellsE`. Still deferred: bulk-of-polygons, cell-boundary polygons, directed edges.
+
+**Subsidiary design decisions (extending the SD series).**
+
+- **SD11 — Polyfill API shape: single-polygon per call.** `PolygonToCellsE` takes flat `vertsLat`/`vertsLng` parallel `[]float64` slices and a `[]int32` `ringOffsets` slice of length `ringCount+1` where `ringOffsets[0]==0` and `ringOffsets[ringCount]==len(verts)`; the first ring is the exterior, subsequent rings are holes. Rejected double-CSR bulk-of-polygons for v1: the incremental ABI complexity (per-polygon ring offsets plus per-polygon cell offsets) outweighs the per-call crossing savings for the expected workload of ~10² polygons, and the Go caller can loop. A bulk form lands in a future update if profiling shows loop cost dominating.
+- **SD12 — Containment modes: expose all four h3o variants.** `ContainmentModeE uint8` mirrors h3o's `Centroid`, `Full`, `Overlap`, `OverlapBoundary` with the same ordinal values. Rejected a `Centroid`-only MVP: the differences are semantic (boundary handling, strictness), not performance, and callers unfamiliar with H3 benefit from an explicit choice rather than inheriting a silent default.
+- **SD13 — `CompactCellsE` error model: bulk `error` only; no per-element `StatusE`.** `compact_cells` collapses N inputs into M ≤ N outputs with no stable 1:1 mapping, so a per-input status slice has no natural interpretation. Whole-batch failures (mixed resolutions, duplicate inputs) surface as `error`. This is a deliberate local deviation from SD5's per-element-status convention, driven by the operation's semantics rather than by preference.
+- **SD14 — `UncompactCellsE` output layout: flat `[]uint64` with per-input `StatusE`; no CSR provenance.** Consumers almost always want the expanded set as a unit; preserving per-input → children provenance doubles the ABI surface (offsets + values) for a case no current workload has requested. Provenance is already available via `CellsToChildrenE`'s CSR output when a caller needs it.
+
+**New ABI exports (in lock-step with `rust/h3bridge/src/lib.rs`).**
+
+- `h3_polygon_to_cells(lats_ptr, lngs_ptr, ring_offsets_ptr, ring_count, res, mode, out_ptr, cap, needed_ptr) -> u32` — grow-protocol status. Return codes: `0` ok, `1` need-more, `2` bad mode, `3` bad geometry.
+- `h3_compact_cells(cells_ptr, n, out_ptr, out_count_ptr) -> u32` — no grow protocol; output fits in `n` slots by construction. Return codes: `0` ok, `1` mixed resolution, `2` duplicate input.
+- `h3_uncompact_cells(cells_ptr, n, res, out_ptr, cap, needed_ptr, status_ptr) -> u32` — grow-protocol identical to `h3_cell_to_children`.
+
+**Testing additions (same four categories as the original SD7 Derived practices).**
+
+1. Golden vectors: US-shaped bounding box, a simple rectangle, and a rectangle-with-hole × three resolutions × all four containment modes for polyfill; small pre-compacted and re-expanded reference sets for compact/uncompact.
+2. Round-trip invariants: `uncompact(compact(cells), r) == set(cells)`; every cell in `PolygonToCellsE(P, r, Centroid)` has its center inside `P` on a sampled check.
+3. Grow-protocol fuzz: undersized `cellsDst` for polyfill; undersized `expandedDst` for uncompact.
+4. Error paths: malformed polygon ring (e.g., `ringOffsets` not monotone), mixed-resolution compact input, uncompact target resolution finer than some input cell.
+
+**Consequences.** Three new user-facing methods, three new ABI exports, one new enum (`ContainmentModeE`). Pulling in h3o's polygon machinery is expected to grow the committed `h3.wasm` by a few tens of KiB; the `CONST_RANDOM_SEED`-pinned build remains byte-reproducible and CI parity continues to gate drift. The `CompactCellsE` deviation from SD5 (bulk-only error) is the first per-operation status-model exception and is documented inline here rather than in `EXPLANATION.md` so that the rationale stays co-located with the decision.
+
 ## References
 
 - [`CODINGSTANDARDS.md`](../../CODINGSTANDARDS.md) — Go coding standard (SoA, `E` suffix, pre-allocation, `iter` package, no cgo policy).
