@@ -1,0 +1,8 @@
+# This file is honoured by rustup-managed installs. On distro-packaged Rust
+# (e.g., Fedora's system cargo) it is ignored; see scripts/dev/build_h3_wasm.sh
+# for the toolchain-presence checks that apply to both installs.
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]
+targets = ["wasm32-unknown-unknown"]
+profile = "minimal"

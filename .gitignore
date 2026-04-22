@@ -26,3 +26,6 @@ go.work
 # Local analysis outputs at repo root (anchored so subdirs are unaffected).
 /report.md
 /summary.md
+
+# Rust build artifacts — cargo target directories under rust/<crate>/target.
+rust/*/target/

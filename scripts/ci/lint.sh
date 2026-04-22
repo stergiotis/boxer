@@ -77,5 +77,22 @@ else
 fi
 
 echo ""
+echo "=== h3_wasm_parity ==="
+# Rebuilds rust/h3bridge to wasm and byte-compares against the committed
+# public/science/geo/h3/internal/h3o_wasm/h3.wasm. Gracefully skipped when
+# cargo or the wasm32-unknown-unknown target is absent so local lint stays
+# green for contributors not touching the bridge; CI is the enforcer.
+if out=$("$here/h3_wasm_parity.sh" 2>&1); then
+    if [ -n "$out" ]; then
+        echo "$out"
+    else
+        echo "passed"
+    fi
+else
+    echo "$out"
+    rc=1
+fi
+
+echo ""
 echo "=== lint complete ==="
 exit $rc

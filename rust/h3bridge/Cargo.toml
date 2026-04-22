@@ -1,0 +1,26 @@
+[package]
+name = "h3bridge"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Rust→WASM bridge exposing Uber H3 (via h3o) to Go through wazero."
+license = "MIT OR Apache-2.0"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+
+[[bin]]
+name = "emit_golden"
+path = "src/bin/emit_golden.rs"
+required-features = []
+
+[dependencies]
+h3o = "0.9.4"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
