@@ -54,6 +54,13 @@ type Handle struct {
 	// cover every current export's max(params, results); polyfill uses 9.
 	callStack [16]uint64
 
+	// iterLats / iterLngs are reusable Go-side staging buffers used by the
+	// iter.Seq2-input bulk variants (e.g., [Handle.LatLngsIterToCellsE]) to
+	// collect streamed Array-of-Structs inputs before the single batch
+	// write into wasm scratch. Grown via slices.Grow on demand.
+	iterLats []float64
+	iterLngs []float64
+
 	released atomic.Bool
 }
 
