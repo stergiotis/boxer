@@ -3,7 +3,7 @@ type: explanation
 audience: package maintainer
 status: stable
 reviewed-by: "p@stergiotis"
-reviewed-date: 2026-04-22
+reviewed-date: 2026-04-23
 ---
 
 # H3 bridge — theory and invariants
@@ -47,20 +47,50 @@ indicates a bug in this package, not in the caller.
 ### Status codes and bulk errors
 
 Per-element failure is reported via `StatusE` bytes in a slice parallel to
-the output values. Bulk-level `error` is reserved for two categories:
+the output values. Bulk-level `error` is reserved for three categories:
 
-- **WASM traps / I/O.** The wasm guest aborted or the runtime is in a
-  degenerate state (module closed, handle released twice).
+- **WASM traps / I/O.** The wasm guest aborted unexpectedly, the runtime
+  was closed, or a memory access crossed the guest memory bounds
+  (`ErrMemoryOOB` — a bug in this package, not in the caller).
 - **Caller-visible invariants violated.** Length mismatches between
-  parallel input slices, invalid CSR offsets on input.
+  parallel input slices, invalid CSR offsets on input, use-after-release
+  on a handle (`ErrHandleReleased`, caught centrally in
+  `ensureScratchE`), malformed polygon geometry
+  (`ErrBadPolygonGeometry`), out-of-enum containment mode
+  (`ErrBadContainmentMode`).
+- **Whole-batch semantic failures** — operations whose output has no
+  stable 1:1 mapping back to inputs cannot report per-element status and
+  so surface set-level errors instead (see the deviations below).
 
 A well-formed call with partially invalid data (out-of-range lat/lng,
-bit-garbage cell indices) returns `nil` bulk error and per-element
-`StatusE` codes. Callers filter rows by status.
+bit-garbage cell indices, finer-than-target cells in
+`UncompactCellsE`) returns `nil` bulk error and per-element `StatusE`
+codes. Callers filter rows by status.
+
+### Two local deviations from the status-code default
+
+- **`CompactCellsE` (SD13).** `compact_cells` collapses N input cells at
+  one resolution into M ≤ N outputs at mixed (coarser) resolutions,
+  with deduplication and reordering on the Rust side. There is no
+  stable input→output mapping, so a per-element `StatusE` has no
+  natural interpretation. Whole-batch failures (mixed-resolution input,
+  duplicate cells) surface as `ErrCompactMixedResolution` /
+  `ErrCompactDuplicateInput`.
+- **`UncompactCellsE` (SD14).** Output is a flat `[]uint64` + per-input
+  `StatusE`, not CSR. Consumers almost always want the expanded set as
+  a unit; per-input → children provenance, when genuinely needed, is
+  already available via `CellsToChildrenE`'s CSR output.
 
 ### CSR (Compressed Sparse Row) layout
 
-Variable-arity outputs (children, gridDisk, cell strings) use CSR:
+Variable-arity outputs use CSR. The full set of CSR-shaped methods:
+
+- `CellsToChildrenE` — one `values []uint64` + `offsets`.
+- `GridDisksE` — one `values []uint64` + `offsets`.
+- `CellsToStringsE` — one `buf []byte` + `offsets` (H3 hex strings, no separators, no NUL).
+- `CellsToBoundariesE` — two parallel `lats []float64` / `lngs []float64` sharing one `offsets` (SD15; open rings, typically 5–6 vertices per row, up to 10 for pentagons whose boundary crosses an icosahedron face edge).
+
+CSR invariants (identical across all four):
 
 - `values` holds the flat concatenation of all rows' payloads.
 - `offsets` has length N+1 where N is the batch size.
@@ -70,9 +100,13 @@ Variable-arity outputs (children, gridDisk, cell strings) use CSR:
 - Row i's payload is `values[offsets[i]:offsets[i+1]]`.
 
 An empty row (e.g., `StatusInvalidResolution` on a row whose child count
-cannot be computed) has `offsets[i] == offsets[i+1]`. Consumers should
-iterate through [iter.AllCSRRowsU64] or [iter.AllCSRRowsString] rather than
-recomputing row bounds by hand.
+cannot be computed, `StatusInvalidCell` on a bit-garbage boundary input)
+has `offsets[i] == offsets[i+1]`. Consumers should iterate through
+[iter.AllCSRRowsU64], [iter.AllCSRRowsString], or
+[iter.AllCSRRowsLatLng] rather than recomputing row bounds by hand.
+
+`PolygonToCellsE` (SD11) and `UncompactCellsE` (SD14) return flat
+`[]uint64` rather than CSR — see the deviations note above.
 
 ### Grow protocol
 
@@ -135,6 +169,35 @@ footprint scales linearly with pool size. A single handle with 10^6-element
 batches is usually faster and more memory-efficient than sharding a batch
 across handles; the pool exists to serve concurrent *callers*, not to
 parallelise a single batch.
+
+### Input shapes and iter variants
+
+The canonical input shape is Struct-of-Arrays: parallel `[]float64`
+lat/lng slices, or `[]uint64` cell slices. For callers whose source is
+naturally Array-of-Structs (an Arrow column extractor, a channel, a
+parsed event stream), `LatLngsIterToCellsE` (SD16) accepts an
+`iter.Seq2[int, LatLng]` plus an explicit `n` and drains into
+reusable Handle-local staging buffers before a single batch write into
+wasm scratch. This is an ergonomic convenience — there is still one
+unavoidable AoS → linear-memory copy — not a throughput optimisation.
+The iterator must yield every index in `[0, n)` exactly once; gaps,
+duplicates, or out-of-range indices surface as caller-visible errors.
+
+Iter variants for the other bulk methods are deliberately not added
+until a real consumer exposes AoS input for them.
+
+### Arrow interop
+
+The companion subpackage
+[`h3arrow`](h3arrow) provides zero-copy adapters from the h3 package's
+slice / CSR outputs to arrow-go arrays (`CellsAsArrowUint64`,
+`Float64sAsArrowFloat64`, `CSRAsArrowListUint64E`,
+`CSRAsArrowListFloat64E`). The adapters wrap caller slices without
+copying: the returned arrow arrays hold memory.Buffer references over
+the underlying Go backing arrays, so the caller must keep those
+slices reachable until the arrow arrays are Released. The subpackage
+is separate so consumers of `h3` that do not use arrow-go do not
+inherit its import graph.
 
 ## Why Rust → WASM → wazero (one paragraph)
 
