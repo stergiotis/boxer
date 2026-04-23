@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 
 	"encoding/json/v2"
 
@@ -94,6 +95,15 @@ func newExtractCommand() *cli.Command {
 				Name:  "detect-crossings",
 				Usage: "Detect ownership boundary crossings via git blame",
 			},
+			// resume
+			&cli.StringFlag{
+				Name:  "resume-dir",
+				Usage: "Directory holding cursors.json from a prior summarize run (usually same as --summaries-dir). For repos with a cursor, extracts commits since that hash instead of applying --since.",
+			},
+			&cli.BoolFlag{
+				Name:  "reset-cursor",
+				Usage: "Ignore existing cursor entries and fall back to --since. Cursors.json is not deleted; subsequent summarize runs will overwrite.",
+			},
 		},
 		Action: func(c *cli.Context) error {
 			repos := c.Args().Slice()
@@ -104,10 +114,36 @@ func newExtractCommand() *cli.Command {
 			author := c.String("author")
 			noStat := c.Bool("no-stat")
 			detectCrossings := c.Bool("detect-crossings")
+			resumeDir := c.String("resume-dir")
+			resetCursor := c.Bool("reset-cursor")
+
+			var cursors CursorMap
+			if resumeDir != "" && !resetCursor {
+				var loadErr error
+				cursors, loadErr = LoadCursors(resumeDir)
+				if loadErr != nil {
+					return loadErr
+				}
+			}
 
 			digests := make([]RepoDigest, 0, len(repos))
 			for _, repo := range repos {
-				d, err := CollectDigest(c.Context, repo, since, author, noStat)
+				absPath, absErr := filepath.Abs(repo)
+				if absErr != nil {
+					return eb.Build().Str("repo", repo).Errorf("unable to resolve repo path: %w", absErr)
+				}
+				repoName := filepath.Base(absPath)
+
+				var fromHash string
+				if cursor, ok := cursors[repoName]; ok {
+					if validateErr := ValidateCursorHash(c.Context, absPath, cursor.LastCommitHash); validateErr != nil {
+						return eb.Build().Str("repo", repoName).Str("hash", cursor.LastCommitHash).Str("cursorsFile", filepath.Join(resumeDir, cursorsFileName)).Errorf("cursor references unknown hash (history rewritten?); delete the cursors file or pass --reset-cursor: %w", validateErr)
+					}
+					fromHash = cursor.LastCommitHash
+					log.Info().Str("repo", repoName).Str("fromHash", shortHash(fromHash)).Msg("resuming from cursor")
+				}
+
+				d, err := CollectDigest(c.Context, repo, since, author, noStat, fromHash)
 				if err != nil {
 					if errors.Is(err, ErrNotAGitRepo) {
 						log.Warn().Str("path", repo).Msg("skipping directory: not a git repository")
@@ -270,13 +306,19 @@ func newSummarizeCommand() *cli.Command {
 				systemPrompt = DefaultSystemPrompt
 			}
 
+			summariesDir := c.String("summaries-dir")
 			window := &SlidingWindow{
 				MaxSummaries: int32(c.Int("window-size")),
-				Dir:          c.String("summaries-dir"),
+				Dir:          summariesDir,
 			}
 			err = window.LoadFromDir()
 			if err != nil {
 				return eh.Errorf("unable to load summaries: %w", err)
+			}
+
+			cursors, err := LoadCursors(summariesDir)
+			if err != nil {
+				return err
 			}
 
 			llm := &LlmClient{
@@ -321,6 +363,16 @@ func newSummarizeCommand() *cli.Command {
 					err = window.Persist(chunk.Index, chunk.Commits)
 					if err != nil {
 						return eb.Build().Int32("chunk", chunk.Index).Errorf("unable to persist summary: %w", err)
+					}
+
+					if summariesDir != "" {
+						if cursor, ok := NewCursorForChunk(chunk.Index, chunk.Commits); ok {
+							cursors[repos[ri].RepoName] = cursor
+							err = SaveCursors(summariesDir, cursors)
+							if err != nil {
+								return eb.Build().Str("repo", repos[ri].RepoName).Int32("chunk", chunk.Index).Errorf("unable to persist cursor: %w", err)
+							}
+						}
 					}
 
 					log.Info().

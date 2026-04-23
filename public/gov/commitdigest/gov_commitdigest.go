@@ -35,7 +35,10 @@ type CommitEntry struct {
 	Stat    string
 }
 
-func CollectDigest(ctx context.Context, repoPath string, since string, author string, noStat bool) (digest RepoDigest, err error) {
+// CollectDigest runs git log in repoPath. If fromHash is non-empty, commits
+// after that hash up to HEAD are returned (since is ignored); this is how
+// seamless resume works. Otherwise commits matching since/author are returned.
+func CollectDigest(ctx context.Context, repoPath string, since string, author string, noStat bool, fromHash string) (digest RepoDigest, err error) {
 	absPath, err := filepath.Abs(repoPath)
 	if err != nil {
 		err = eb.Build().Str("path", repoPath).Errorf("unable to resolve repo path: %w", err)
@@ -63,11 +66,13 @@ func CollectDigest(ctx context.Context, repoPath string, since string, author st
 	// %x01 separates records, %x00 separates fields within a record.
 	// %b (body) may contain newlines, so line-based splitting is not possible.
 	args := []string{"log", "--pretty=format:%x01%H%x00%an <%ae>%x00%ai%x00%s%x00%b", "--reverse"}
-	if since != "" {
-		args = append(args, "--since="+normalizeSince(since))
-	}
 	if author != "" {
 		args = append(args, "--author="+author)
+	}
+	if fromHash != "" {
+		args = append(args, fromHash+"..HEAD")
+	} else if since != "" {
+		args = append(args, "--since="+normalizeSince(since))
 	}
 
 	cmd := exec.CommandContext(ctx, "git", args...)

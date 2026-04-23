@@ -50,7 +50,7 @@ func (inst *SlidingWindow) LoadFromDir() (err error) {
 		name := e.Name()
 		if strings.HasPrefix(name, "summary_") && strings.HasSuffix(name, ".md") {
 			names = append(names, name)
-			// extract the numeric index: "summary_0028_2026-04-01_2026-04-12.md" → "0028"
+			// extract the numeric index: "summary_0028_2026-04-01_2026-04-12_g49852ee.md" → "0028"
 			rest := strings.TrimPrefix(name, "summary_")
 			indexStr, _, _ := strings.Cut(rest, "_")
 			if strings.HasSuffix(indexStr, ".md") {
@@ -112,10 +112,11 @@ func (inst *SlidingWindow) Persist(chunkIndex int32, commits []CommitEntry) (err
 
 	var name string
 	if len(commits) > 0 {
-		// commits are newest-first from git log; last entry is oldest, first is newest
-		oldest := extractDatePrefix(commits[len(commits)-1].Date)
-		newest := extractDatePrefix(commits[0].Date)
-		name = fmt.Sprintf("summary_%04d_%s_%s.md", globalIndex, oldest, newest)
+		// commits are oldest-first because CollectDigest uses git log --reverse
+		oldest := extractDatePrefix(commits[0].Date)
+		newest := extractDatePrefix(commits[len(commits)-1].Date)
+		newestHash := shortHash(commits[len(commits)-1].Hash)
+		name = fmt.Sprintf("summary_%04d_%s_%s_g%s.md", globalIndex, oldest, newest, newestHash)
 	} else {
 		name = fmt.Sprintf("summary_%04d.md", globalIndex)
 	}
