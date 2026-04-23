@@ -127,7 +127,7 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 
 SD7 deferred polyfill, cell-boundary polygons, directed edges, and compactness to "a later ADR / package revision." Two of those — polyfill and compactness (both `compact` and `uncompact`) — are the next operations consumer workloads need, so this entry records their API and ABI shape. The core decision (Rust→WASM→wazero; SoA; CSR for variable-arity; per-element `StatusE`; module pool; one-retry grow protocol) is unchanged, so this refinement is recorded inline rather than in a superseding ADR.
 
-**Scope.** Adds `PolygonToCellsE`, `CompactCellsE`, `UncompactCellsE`. Still deferred: bulk-of-polygons, cell-boundary polygons, directed edges.
+**Scope.** Adds `PolygonToCellsE`, `CompactCellsE`, `UncompactCellsE`, and — as of the SD15 addendum below — `CellsToBoundariesE`. Still deferred: bulk-of-polygons, directed edges.
 
 **Subsidiary design decisions (extending the SD series).**
 
@@ -135,12 +135,14 @@ SD7 deferred polyfill, cell-boundary polygons, directed edges, and compactness t
 - **SD12 — Containment modes: expose all four h3o variants.** `ContainmentModeE uint8` mirrors h3o's `Centroid`, `Full`, `Overlap`, `OverlapBoundary` with the same ordinal values. Rejected a `Centroid`-only MVP: the differences are semantic (boundary handling, strictness), not performance, and callers unfamiliar with H3 benefit from an explicit choice rather than inheriting a silent default.
 - **SD13 — `CompactCellsE` error model: bulk `error` only; no per-element `StatusE`.** `compact_cells` collapses N inputs into M ≤ N outputs with no stable 1:1 mapping, so a per-input status slice has no natural interpretation. Whole-batch failures (mixed resolutions, duplicate inputs) surface as `error`. This is a deliberate local deviation from SD5's per-element-status convention, driven by the operation's semantics rather than by preference.
 - **SD14 — `UncompactCellsE` output layout: flat `[]uint64` with per-input `StatusE`; no CSR provenance.** Consumers almost always want the expanded set as a unit; preserving per-input → children provenance doubles the ABI surface (offsets + values) for a case no current workload has requested. Provenance is already available via `CellsToChildrenE`'s CSR output when a caller needs it.
+- **SD15 — Cell boundaries: CSR lat/lng + offsets + per-input `StatusE`.** `CellsToBoundariesE` returns the polygonal boundary of each H3 cell as parallel flat `[]float64` lat/lng slices plus an `[]int32` `offsets` slice of length N+1; row i's vertex ring is `lats[offsets[i]:offsets[i+1]]` / `lngs[offsets[i]:offsets[i+1]]`. Typical vertex count is 6 (hexagon) or 5 (pentagon); pentagons whose boundary crosses an icosahedron face edge can reach up to 10 vertices (h3o's documented `MAX_BNDRY_VERTS`). The ring is open — callers that need a closed ring append `row[0]`. Invalid input cells flag `StatusInvalidCell` and produce a zero-length row (`offsets[i+1] == offsets[i]`). Rejected a fixed-6-vertex layout because of pentagons and edge crossings; rejected a tuple-of-(lat,lng) row format because that would break SoA and lose Arrow-`ListOf(FloatArray)` interop.
 
 **New ABI exports (in lock-step with `rust/h3bridge/src/lib.rs`).**
 
 - `h3_polygon_to_cells(lats_ptr, lngs_ptr, ring_offsets_ptr, ring_count, res, mode, out_ptr, cap, needed_ptr) -> u32` — grow-protocol status. Return codes: `0` ok, `1` need-more, `2` bad mode, `3` bad geometry.
 - `h3_compact_cells(cells_ptr, n, out_ptr, out_count_ptr) -> u32` — no grow protocol; output fits in `n` slots by construction. Return codes: `0` ok, `1` mixed resolution, `2` duplicate input.
 - `h3_uncompact_cells(cells_ptr, n, res, out_ptr, cap, needed_ptr, status_ptr) -> u32` — grow-protocol identical to `h3_cell_to_children`.
+- `h3_cell_to_boundary(cells_ptr, n, lats_ptr, lngs_ptr, offsets_ptr, cap, needed_ptr, status_ptr) -> u32` — CSR vertex output; grow-protocol identical to the children ABI. Safe upper-bound capacity is `10*n` vertices (h3o `MAX_BNDRY_VERTS`); the Go-side caller picks a tighter heuristic (`6*n`) and lets the one-retry protocol settle the pentagon-with-edge-crossing cases.
 
 **Testing additions (same four categories as the original SD7 Derived practices).**
 

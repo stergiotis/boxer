@@ -595,6 +595,64 @@ pub extern "C" fn h3_compact_cells(
     }
 }
 
+// --- cell boundaries ------------------------------------------------------
+
+#[no_mangle]
+pub extern "C" fn h3_cell_to_boundary(
+    cells_ptr: u32,
+    n: u32,
+    lats_ptr: u32,
+    lngs_ptr: u32,
+    offsets_ptr: u32,
+    cap: u32,
+    needed_ptr: u32,
+    status_ptr: u32,
+) -> u32 {
+    let cells = unsafe { as_u64_slice(cells_ptr, n) };
+    let status = unsafe { as_u8_slice_mut(status_ptr, n) };
+
+    // First pass: validate and compute total vertex count.
+    let mut total: u64 = 0;
+    for i in 0..n as usize {
+        match CellIndex::try_from(cells[i]) {
+            Ok(c) => {
+                total = total.saturating_add(c.boundary().len() as u64);
+                status[i] = STATUS_OK;
+            }
+            Err(_) => {
+                status[i] = STATUS_INVALID_CELL;
+            }
+        }
+    }
+
+    let total_u32 = u32::try_from(total).unwrap_or(u32::MAX);
+    unsafe {
+        *(needed_ptr as *mut u32) = total_u32;
+    }
+    if total_u32 > cap {
+        return GROW_NEED_MORE;
+    }
+
+    let lats = unsafe { as_f64_slice_mut(lats_ptr, total_u32) };
+    let lngs = unsafe { as_f64_slice_mut(lngs_ptr, total_u32) };
+    let offsets = unsafe { as_i32_slice_mut(offsets_ptr, n + 1) };
+    offsets[0] = 0;
+    let mut w: usize = 0;
+    for i in 0..n as usize {
+        if status[i] == STATUS_OK {
+            if let Ok(c) = CellIndex::try_from(cells[i]) {
+                for v in c.boundary().iter() {
+                    lats[w] = v.lat();
+                    lngs[w] = v.lng();
+                    w += 1;
+                }
+            }
+        }
+        offsets[i + 1] = w as i32;
+    }
+    GROW_OK
+}
+
 #[no_mangle]
 pub extern "C" fn h3_uncompact_cells(
     cells_ptr: u32,

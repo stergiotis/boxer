@@ -114,6 +114,7 @@ func (inst *Runtime) newHandle(ctx context.Context, idx int) (h *Handle, err err
 		fnPolygonToCells: mod.ExportedFunction("h3_polygon_to_cells"),
 		fnCompactCells:   mod.ExportedFunction("h3_compact_cells"),
 		fnUncompactCells: mod.ExportedFunction("h3_uncompact_cells"),
+		fnCellToBoundary: mod.ExportedFunction("h3_cell_to_boundary"),
 	}
 	{ // Stage: export presence check
 		var missing string
@@ -146,6 +147,8 @@ func (inst *Runtime) newHandle(ctx context.Context, idx int) (h *Handle, err err
 			missing = "h3_compact_cells"
 		case h.fnUncompactCells == nil:
 			missing = "h3_uncompact_cells"
+		case h.fnCellToBoundary == nil:
+			missing = "h3_cell_to_boundary"
 		}
 		if missing != "" {
 			_ = mod.Close(ctx)

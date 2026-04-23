@@ -40,6 +40,7 @@ type Handle struct {
 	fnPolygonToCells api.Function
 	fnCompactCells   api.Function
 	fnUncompactCells api.Function
+	fnCellToBoundary api.Function
 
 	// scratch is a per-handle region of wasm linear memory, reused across
 	// bulk calls to avoid one alloc/free per call per region. It grows

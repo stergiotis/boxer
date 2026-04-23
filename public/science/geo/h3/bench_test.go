@@ -223,6 +223,32 @@ func BenchmarkCellsToStrings(b *testing.B) {
 	}
 }
 
+func BenchmarkCellsToBoundaries(b *testing.B) {
+	for _, n := range benchSizes {
+		b.Run(sizeLabel(n), func(b *testing.B) {
+			h := benchSetupH(b, nil)
+			cells := seedCells(b, h, n, ResolutionR7)
+			latsDst := make([]float64, 0, n*6)
+			lngsDst := make([]float64, 0, n*6)
+			offsetsDst := make([]int32, 0, n+1)
+			statusDst := make([]StatusE, 0, n)
+			b.SetBytes(int64(n * 8))
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				var err error
+				latsDst, lngsDst, offsetsDst, statusDst, err = h.CellsToBoundariesE(
+					context.Background(), cells,
+					latsDst, lngsDst, offsetsDst, statusDst,
+				)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
 func BenchmarkPolygonToCells(b *testing.B) {
 	// Fixed unit-square polygon, swept over resolutions so the output-cell
 	// count is the throughput knob rather than batch size.

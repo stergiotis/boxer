@@ -174,6 +174,35 @@ fn emit_strings() {
     }
 }
 
+fn emit_boundaries() {
+    let mut w = open("golden_boundaries.ndjson");
+    for (name, lat, lng) in reference_points() {
+        for r in [0u8, 5, 10] {
+            let res = Resolution::try_from(r).expect("resolution");
+            let ll = LatLng::new(lat, lng).expect("valid latlng");
+            let cell = ll.to_cell(res);
+            let boundary = cell.boundary();
+            let lats_str = boundary
+                .iter()
+                .map(|v| v.lat().to_string())
+                .collect::<Vec<_>>()
+                .join(",");
+            let lngs_str = boundary
+                .iter()
+                .map(|v| v.lng().to_string())
+                .collect::<Vec<_>>()
+                .join(",");
+            writeln!(
+                w,
+                r#"{{"name":"{name}","cell":{},"res":{r},"vertex_count":{},"lats":[{lats_str}],"lngs":[{lngs_str}]}}"#,
+                u64::from(cell),
+                boundary.len(),
+            )
+            .unwrap();
+        }
+    }
+}
+
 fn emit_validate() {
     let mut w = open("golden_validate.ndjson");
     // Known-valid cells.
@@ -399,6 +428,7 @@ fn main() {
     emit_grid_disk();
     emit_strings();
     emit_validate();
+    emit_boundaries();
     emit_polyfill();
     emit_compact_uncompact();
     eprintln!(

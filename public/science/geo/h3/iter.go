@@ -49,6 +49,27 @@ func AllCSRRowsU64(values []uint64, offsets []int32) iter.Seq2[int, []uint64] {
 	}
 }
 
+// AllCSRRowsLatLng iterates a CSR-shaped pair of parallel lat/lng slices
+// (e.g., cell boundaries) as (rowIdx, (latRow, lngRow)) triplets. Each row
+// is a zero-copy view — do not retain it past the yield.
+func AllCSRRowsLatLng(latsDeg []float64, lngsDeg []float64, offsets []int32) iter.Seq2[int, [2][]float64] {
+	return func(yield func(int, [2][]float64) bool) {
+		if len(offsets) < 2 {
+			return
+		}
+		for i := 0; i < len(offsets)-1; i++ {
+			start := int(offsets[i])
+			end := int(offsets[i+1])
+			if start < 0 || end < start || end > len(latsDeg) || end > len(lngsDeg) {
+				return
+			}
+			if !yield(i, [2][]float64{latsDeg[start:end], lngsDeg[start:end]}) {
+				return
+			}
+		}
+	}
+}
+
 // AllCSRRowsString iterates a CSR-shaped []byte payload (e.g., cell
 // strings) as (rowIdx, string) pairs. The string is a zero-copy view into
 // buf — do not retain it past the yield.
