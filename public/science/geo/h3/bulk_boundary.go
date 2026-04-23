@@ -76,20 +76,15 @@ func (inst *Handle) CellsToBoundariesE(
 		}
 
 		var rc uint32
-		{ // Stage: call
-			var results []uint64
-			results, err = inst.fnCellToBoundary.Call(
-				ctx,
-				uint64(cellsOff), uint64(n32),
-				uint64(latsOff), uint64(lngsOff), uint64(offsetsOff),
-				uint64(uint32(vertexCap)),
-				uint64(neededOff), uint64(statusOff),
-			)
-			if err != nil {
-				err = eh.Errorf("h3_cell_to_boundary: %w", err)
-				return
-			}
-			rc = uint32(results[0])
+		rc, err = inst.callE(ctx, inst.fnCellToBoundary,
+			uint64(cellsOff), uint64(n32),
+			uint64(latsOff), uint64(lngsOff), uint64(offsetsOff),
+			uint64(uint32(vertexCap)),
+			uint64(neededOff), uint64(statusOff),
+		)
+		if err != nil {
+			err = eh.Errorf("h3_cell_to_boundary: %w", err)
+			return
 		}
 
 		switch rc {

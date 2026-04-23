@@ -59,18 +59,13 @@ func (inst *Handle) CompactCellsE(
 	}
 
 	var rc uint32
-	{ // Stage: call
-		var results []uint64
-		results, err = inst.fnCompactCells.Call(
-			ctx,
-			uint64(cellsOff), uint64(n32),
-			uint64(outOff), uint64(countOff),
-		)
-		if err != nil {
-			err = eh.Errorf("h3_compact_cells: %w", err)
-			return
-		}
-		rc = uint32(results[0])
+	rc, err = inst.callE(ctx, inst.fnCompactCells,
+		uint64(cellsOff), uint64(n32),
+		uint64(outOff), uint64(countOff),
+	)
+	if err != nil {
+		err = eh.Errorf("h3_compact_cells: %w", err)
+		return
 	}
 
 	switch rc {
@@ -153,21 +148,16 @@ func (inst *Handle) UncompactCellsE(
 		}
 
 		var rc uint32
-		{ // Stage: call
-			var results []uint64
-			results, err = inst.fnUncompactCells.Call(
-				ctx,
-				uint64(cellsOff), uint64(n32),
-				uint64(uint32(res)),
-				uint64(outOff),
-				uint64(uint32(outCap)),
-				uint64(neededOff), uint64(statusOff),
-			)
-			if err != nil {
-				err = eh.Errorf("h3_uncompact_cells: %w", err)
-				return
-			}
-			rc = uint32(results[0])
+		rc, err = inst.callE(ctx, inst.fnUncompactCells,
+			uint64(cellsOff), uint64(n32),
+			uint64(uint32(res)),
+			uint64(outOff),
+			uint64(uint32(outCap)),
+			uint64(neededOff), uint64(statusOff),
+		)
+		if err != nil {
+			err = eh.Errorf("h3_uncompact_cells: %w", err)
+			return
 		}
 
 		switch rc {

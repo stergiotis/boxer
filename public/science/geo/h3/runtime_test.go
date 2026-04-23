@@ -62,6 +62,21 @@ func TestRuntime_AcquireRespectsContext(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestHandle_UseAfterReleaseFails(t *testing.T) {
+	rt := newTestRuntime(t, 1)
+	ctx := context.Background()
+	h, err := rt.AcquireE(ctx)
+	require.NoError(t, err)
+	h.Release()
+
+	// Any bulk call on a released handle must surface ErrHandleReleased
+	// rather than corrupting guest memory or trapping. ensureScratchE is
+	// the single gate.
+	_, _, err = h.LatLngsToCellsE(ctx, ResolutionR9,
+		[]float64{37.7749}, []float64{-122.4194}, nil, nil)
+	require.ErrorIs(t, err, ErrHandleReleased)
+}
+
 func TestRuntime_ConcurrentAcquire(t *testing.T) {
 	const poolSize = 4
 	const workers = 16

@@ -96,22 +96,17 @@ func (inst *Handle) PolygonToCellsE(
 		}
 
 		var rc uint32
-		{ // Stage: call
-			var results []uint64
-			results, err = inst.fnPolygonToCells.Call(
-				ctx,
-				uint64(latsOff), uint64(lngsOff),
-				uint64(ringOff), uint64(rC),
-				uint64(uint32(res)), uint64(uint32(mode)),
-				uint64(cellsOff),
-				uint64(uint32(outCap)),
-				uint64(neededOff),
-			)
-			if err != nil {
-				err = eh.Errorf("h3_polygon_to_cells: %w", err)
-				return
-			}
-			rc = uint32(results[0])
+		rc, err = inst.callE(ctx, inst.fnPolygonToCells,
+			uint64(latsOff), uint64(lngsOff),
+			uint64(ringOff), uint64(rC),
+			uint64(uint32(res)), uint64(uint32(mode)),
+			uint64(cellsOff),
+			uint64(uint32(outCap)),
+			uint64(neededOff),
+		)
+		if err != nil {
+			err = eh.Errorf("h3_polygon_to_cells: %w", err)
+			return
 		}
 
 		switch rc {

@@ -40,8 +40,7 @@ func (inst *Handle) AreValidCellsE(
 	if err != nil {
 		return
 	}
-	_, err = inst.fnAreValid.Call(
-		ctx,
+	_, err = inst.callE(ctx, inst.fnAreValid,
 		uint64(cellsOff), uint64(n32),
 		uint64(validOff),
 	)
@@ -94,8 +93,7 @@ func (inst *Handle) GetResolutionsE(
 	if err != nil {
 		return
 	}
-	_, err = inst.fnGetResolution.Call(
-		ctx,
+	_, err = inst.callE(ctx, inst.fnGetResolution,
 		uint64(cellsOff), uint64(n32),
 		uint64(resOff), uint64(statusOff),
 	)

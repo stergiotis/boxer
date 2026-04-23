@@ -68,21 +68,16 @@ func (inst *Handle) GridDisksE(
 		}
 
 		var rc uint32
-		{ // Stage: call
-			var results []uint64
-			results, err = inst.fnGridDisk.Call(
-				ctx,
-				uint64(cellsOff), uint64(n32),
-				uint64(uint32(k)),
-				uint64(outOff), uint64(offsetsOff),
-				uint64(uint32(outCap)),
-				uint64(neededOff), uint64(statusOff),
-			)
-			if err != nil {
-				err = eh.Errorf("h3_grid_disk: %w", err)
-				return
-			}
-			rc = uint32(results[0])
+		rc, err = inst.callE(ctx, inst.fnGridDisk,
+			uint64(cellsOff), uint64(n32),
+			uint64(uint32(k)),
+			uint64(outOff), uint64(offsetsOff),
+			uint64(uint32(outCap)),
+			uint64(neededOff), uint64(statusOff),
+		)
+		if err != nil {
+			err = eh.Errorf("h3_grid_disk: %w", err)
+			return
 		}
 
 		switch rc {

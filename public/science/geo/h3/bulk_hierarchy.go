@@ -54,8 +54,7 @@ func (inst *Handle) CellsToParentsE(
 	if err != nil {
 		return
 	}
-	_, err = inst.fnCellToParent.Call(
-		ctx,
+	_, err = inst.callE(ctx, inst.fnCellToParent,
 		uint64(cellsOff), uint64(n32),
 		uint64(uint32(res)),
 		uint64(parentsOff), uint64(statusOff),
@@ -136,21 +135,16 @@ func (inst *Handle) CellsToChildrenE(
 		}
 
 		var rc uint32
-		{ // Stage: call
-			var results []uint64
-			results, err = inst.fnCellToChildren.Call(
-				ctx,
-				uint64(cellsOff), uint64(n32),
-				uint64(uint32(res)),
-				uint64(childrenOff), uint64(offsetsOff),
-				uint64(uint32(outCap)),
-				uint64(neededOff), uint64(statusOff),
-			)
-			if err != nil {
-				err = eh.Errorf("h3_cell_to_children: %w", err)
-				return
-			}
-			rc = uint32(results[0])
+		rc, err = inst.callE(ctx, inst.fnCellToChildren,
+			uint64(cellsOff), uint64(n32),
+			uint64(uint32(res)),
+			uint64(childrenOff), uint64(offsetsOff),
+			uint64(uint32(outCap)),
+			uint64(neededOff), uint64(statusOff),
+		)
+		if err != nil {
+			err = eh.Errorf("h3_cell_to_children: %w", err)
+			return
 		}
 
 		switch rc {

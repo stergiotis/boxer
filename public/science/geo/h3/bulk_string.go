@@ -64,20 +64,15 @@ func (inst *Handle) CellsToStringsE(
 		}
 
 		var rc uint32
-		{ // Stage: call
-			var results []uint64
-			results, err = inst.fnCellToString.Call(
-				ctx,
-				uint64(cellsOff), uint64(n32),
-				uint64(bufOff), uint64(offsetsOff),
-				uint64(uint32(outCap)),
-				uint64(neededOff), uint64(statusOff),
-			)
-			if err != nil {
-				err = eh.Errorf("h3_cell_to_string: %w", err)
-				return
-			}
-			rc = uint32(results[0])
+		rc, err = inst.callE(ctx, inst.fnCellToString,
+			uint64(cellsOff), uint64(n32),
+			uint64(bufOff), uint64(offsetsOff),
+			uint64(uint32(outCap)),
+			uint64(neededOff), uint64(statusOff),
+		)
+		if err != nil {
+			err = eh.Errorf("h3_cell_to_string: %w", err)
+			return
 		}
 
 		switch rc {
@@ -189,8 +184,7 @@ func (inst *Handle) StringsToCellsE(
 	if err != nil {
 		return
 	}
-	_, err = inst.fnStringToCell.Call(
-		ctx,
+	_, err = inst.callE(ctx, inst.fnStringToCell,
 		uint64(bufOff), uint64(offsetsOff),
 		uint64(n32),
 		uint64(cellsOff), uint64(statusOff),

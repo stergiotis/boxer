@@ -62,8 +62,7 @@ func (inst *Handle) LatLngsToCellsE(
 	if err != nil {
 		return
 	}
-	_, err = inst.fnLatLngToCell.Call(
-		ctx,
+	_, err = inst.callE(ctx, inst.fnLatLngToCell,
 		uint64(latsOff), uint64(lngsOff),
 		uint64(n32),
 		uint64(uint32(res)),
@@ -120,8 +119,7 @@ func (inst *Handle) CellsToLatLngsE(
 	if err != nil {
 		return
 	}
-	_, err = inst.fnCellToLatLng.Call(
-		ctx,
+	_, err = inst.callE(ctx, inst.fnCellToLatLng,
 		uint64(cellsOff), uint64(n32),
 		uint64(latsOff), uint64(lngsOff), uint64(statusOff),
 	)

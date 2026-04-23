@@ -49,6 +49,11 @@ type Handle struct {
 	scratchOff uint32
 	scratchCap int
 
+	// callStack is a pooled []uint64 for wazero's CallWithStack, avoiding
+	// the per-call []uint64 result allocation that Call performs. 16 slots
+	// cover every current export's max(params, results); polyfill uses 9.
+	callStack [16]uint64
+
 	released atomic.Bool
 }
 
@@ -60,7 +65,16 @@ func alignUp8(n uint32) uint32 { return (n + 7) &^ 7 }
 // current scratch; otherwise the region is reallocated and any previously
 // staged contents are discarded (callers must re-stage inputs after a
 // grow).
+//
+// Also the single gate for detecting use-after-release: every bulk method
+// passes through this helper before its first call, so a released handle
+// surfaces as [ErrHandleReleased] at a predictable point rather than as a
+// WASM trap.
 func (inst *Handle) ensureScratchE(ctx context.Context, n int) (base uint32, err error) {
+	if inst.released.Load() {
+		err = ErrHandleReleased
+		return
+	}
 	if n <= inst.scratchCap {
 		base = inst.scratchOff
 		return
@@ -114,13 +128,13 @@ func (inst *Handle) allocE(ctx context.Context, n int) (off uint32, err error) {
 		err = eb.Build().Int("n", n).Errorf("alloc: negative size")
 		return
 	}
-	var results []uint64
-	results, err = inst.fnExtAlloc.Call(ctx, uint64(uint32(n)))
+	var rc uint32
+	rc, err = inst.callE(ctx, inst.fnExtAlloc, uint64(uint32(n)))
 	if err != nil {
 		err = eh.Errorf("ext_alloc: %w", err)
 		return
 	}
-	off = uint32(results[0])
+	off = rc
 	if off == 0 {
 		err = ErrAllocReturnedZero
 	}
@@ -131,7 +145,26 @@ func (inst *Handle) freeNoE(ctx context.Context, off uint32, n int) {
 	if off == 0 || n <= 0 {
 		return
 	}
-	_, _ = inst.fnExtFree.Call(ctx, uint64(off), uint64(uint32(n)))
+	_, _ = inst.callE(ctx, inst.fnExtFree, uint64(off), uint64(uint32(n)))
+}
+
+// callE invokes fn with the given args via wazero's CallWithStack, reusing
+// the per-handle callStack to avoid the per-call []uint64 result allocation
+// that the variadic Call performs. rc is the first slot of the stack after
+// return; for void-return exports the caller ignores it.
+func (inst *Handle) callE(ctx context.Context, fn api.Function, args ...uint64) (rc uint32, err error) {
+	n := len(args)
+	if n > len(inst.callStack) {
+		err = eb.Build().Int("n", n).Int("cap", len(inst.callStack)).Errorf("h3: callStack too small")
+		return
+	}
+	stack := inst.callStack[:n]
+	copy(stack, args)
+	err = fn.CallWithStack(ctx, stack)
+	if err == nil && n > 0 {
+		rc = uint32(stack[0])
+	}
+	return
 }
 
 // --- memory helpers -----------------------------------------------------
