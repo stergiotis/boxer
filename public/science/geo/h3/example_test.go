@@ -75,3 +75,84 @@ func ExampleAllCSRRowsU64() {
 	// row=1 values=[200]
 	// row=2 values=[300 301]
 }
+
+// ExampleHandle_LatLngToCellE demonstrates the scalar wrapper for the
+// common "one point → one cell" UI-glue case. Returns the cell index
+// and per-element status directly, without the caller having to build
+// a 1-element slice or index [0] on return.
+func ExampleHandle_LatLngToCellE() {
+	ctx := context.Background()
+	rt, err := h3.NewRuntime(ctx, h3.RuntimeConfig{PoolSize: 1})
+	if err != nil {
+		if errors.Is(err, h3.ErrExportNotFound) || errors.Is(err, h3.ErrNoWasmBytes) {
+			fmt.Println("skip: wasm bridge not built")
+			return
+		}
+		fmt.Println("error:", err)
+		return
+	}
+	defer func() { _ = rt.Close() }()
+
+	handle, err := rt.AcquireE(ctx)
+	if err != nil {
+		fmt.Println("acquire:", err)
+		return
+	}
+	defer handle.Release()
+
+	cell, status, err := handle.LatLngToCellE(ctx, h3.ResolutionR9, 37.7749, -122.4194)
+	if err != nil {
+		fmt.Println("err:", err)
+		return
+	}
+	fmt.Printf("status=%s cell=%d\n", status, cell)
+}
+
+// ExampleHandle_GridDiskE shows the scalar k-ring wrapper — returns a
+// flat []uint64 for single-cell inputs, skipping the CSR offsets[] that
+// the bulk form produces for N-cell batches.
+func ExampleHandle_GridDiskE() {
+	ctx := context.Background()
+	rt, err := h3.NewRuntime(ctx, h3.RuntimeConfig{PoolSize: 1})
+	if err != nil {
+		if errors.Is(err, h3.ErrExportNotFound) || errors.Is(err, h3.ErrNoWasmBytes) {
+			fmt.Println("skip: wasm bridge not built")
+			return
+		}
+		fmt.Println("error:", err)
+		return
+	}
+	defer func() { _ = rt.Close() }()
+
+	handle, err := rt.AcquireE(ctx)
+	if err != nil {
+		fmt.Println("acquire:", err)
+		return
+	}
+	defer handle.Release()
+
+	cell, _, err := handle.LatLngToCellE(ctx, h3.ResolutionR7, 51.0992, 17.0366)
+	if err != nil {
+		fmt.Println("err:", err)
+		return
+	}
+	ring, _, err := handle.GridDiskE(ctx, 2, cell)
+	if err != nil {
+		fmt.Println("err:", err)
+		return
+	}
+	fmt.Printf("k=2 ring has %d cells\n", len(ring))
+}
+
+// ExampleFirstFailure demonstrates the status-triage helper. Typical use:
+// short-circuit the bulk op on any non-Ok element.
+func ExampleFirstFailure() {
+	statuses := []h3.StatusE{h3.StatusOk, h3.StatusOk, h3.StatusInvalidCell, h3.StatusOk}
+	idx, code, ok := h3.FirstFailure(statuses)
+	if !ok {
+		fmt.Println("all ok")
+		return
+	}
+	fmt.Printf("first failure at index %d: %s\n", idx, code)
+	// Output: first failure at index 2: invalid_cell
+}
