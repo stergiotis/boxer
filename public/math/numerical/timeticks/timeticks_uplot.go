@@ -180,9 +180,13 @@ var bucketRollovers = [...][]rolloverConfig{
 	bucketYear: nil,
 }
 
-// approxDuration returns an upper-bound average duration. Used only for
-// ladder selection; tick generation is calendar-correct via AddDate.
-func (inst TimeStep) approxDuration() (d time.Duration) {
+// ApproxDuration returns an upper-bound average duration for the step.
+// Months and years are approximated at 30.4375 and 365.25 days; sub-day
+// units are exact. Use this for span / ladder math, query-side interval
+// computation (e.g. ClickHouse INTERVAL parameters), or rough density
+// estimates. For calendar-correct stepping use Add, which honours DST,
+// leap years, and irregular month widths.
+func (inst TimeStep) ApproxDuration() (d time.Duration) {
 	switch inst.Unit {
 	case TimeStepUnitMillisecond:
 		d = time.Duration(inst.Count) * time.Millisecond
@@ -276,7 +280,14 @@ func (inst TimeStep) snapDown(t time.Time, loc *time.Location) (out time.Time) {
 	return
 }
 
-func (inst TimeStep) add(t time.Time) (out time.Time) {
+// Add advances t by one step, returning the next tick time. Day / Month /
+// Year units use time.Time.AddDate, which honours DST transitions, leap
+// years, and irregular month widths; sub-day units use time.Time.Add.
+//
+// Returns t unchanged for an invalid TimeStep (Unit == TimeStepUnitInvalid).
+// Callers iterating with Add should always start from a finite TimeStep
+// produced by PickTimeStep or TimeTicks to avoid infinite loops.
+func (inst TimeStep) Add(t time.Time) (out time.Time) {
 	switch inst.Unit {
 	case TimeStepUnitMillisecond:
 		out = t.Add(time.Duration(inst.Count) * time.Millisecond)
@@ -333,7 +344,7 @@ func pickStep(span time.Duration, panelWidthPx int32, targetSpacingPx int32) (st
 	}
 	minStepDur := time.Duration(float64(span) / maxTicks)
 	for _, s := range uplotLadder {
-		if s.approxDuration() >= minStepDur {
+		if s.ApproxDuration() >= minStepDur {
 			step = s
 			return
 		}
@@ -360,7 +371,7 @@ func stickyStep(natural TimeStep, prev TimeStep, span time.Duration, panelWidthP
 		return
 	}
 	target := float64(panelWidthPx) / float64(targetSpacingPx)
-	prevTicks := float64(span) / float64(prev.approxDuration())
+	prevTicks := float64(span) / float64(prev.ApproxDuration())
 	low := target * (1 - hysteresisFrac)
 	high := target * (1 + hysteresisFrac)
 	if prevTicks >= low && prevTicks <= high {
@@ -372,16 +383,16 @@ func stickyStep(natural TimeStep, prev TimeStep, span time.Duration, panelWidthP
 func generateTicks(dataMin, dataMax time.Time, step TimeStep, loc *time.Location) (ticks []time.Time) {
 	t := step.snapDown(dataMin, loc)
 	for t.Before(dataMin) {
-		t = step.add(t)
+		t = step.Add(t)
 	}
 	span := dataMax.Sub(dataMin)
-	approx := step.approxDuration()
+	approx := step.ApproxDuration()
 	if approx > 0 {
 		ticks = make([]time.Time, 0, int(span/approx)+2)
 	}
 	for !t.After(dataMax) {
 		ticks = append(ticks, t)
-		t = step.add(t)
+		t = step.Add(t)
 	}
 	return
 }
@@ -432,18 +443,49 @@ func groupRunsByLayout(ticks []time.Time, layout string) (out []ContextLabel) {
 	return
 }
 
+// PickTimeStep returns the step that TimeTicks would choose for the same
+// inputs, without generating ticks or labels. Use this on the query side
+// to fetch data at the same granularity the axis will render — e.g. as
+// the INTERVAL parameter in a ClickHouse M4 GROUP BY.
+//
+// The same TimeTickOptions fields apply (PanelWidthPx, TargetSpacingPx,
+// PrevStep, HysteresisFrac); Location is irrelevant to step selection
+// and is ignored.
+//
+// A degenerate span (dataMax ≤ dataMin) returns the smallest ladder step
+// rather than a zero TimeStep, so callers iterating with Add never loop
+// indefinitely.
+func PickTimeStep(dataMin, dataMax time.Time, opts TimeTickOptions) (step TimeStep) {
+	target := opts.TargetSpacingPx
+	if target <= 0 {
+		target = defaultTargetSpacingPx
+	}
+	hysteresisFrac := opts.HysteresisFrac
+	if hysteresisFrac <= 0 && !opts.PrevStep.IsZero() {
+		hysteresisFrac = defaultHysteresisFrac
+	}
+	span := dataMax.Sub(dataMin)
+	if span <= 0 {
+		step = uplotLadder[0]
+		return
+	}
+	natural := pickStep(span, opts.PanelWidthPx, target)
+	step = stickyStep(natural, opts.PrevStep, span, opts.PanelWidthPx, target, hysteresisFrac)
+	return
+}
+
 // TimeTicks computes a calendar-aware tick layout for a time axis spanning
 // [dataMin, dataMax]. The returned layout is ready for direct rendering:
 // TickValues / TickLabels for the primary axis row, RolloverRows for the
 // secondary context rows (year, date, hour, minute as appropriate to the
 // chosen step). RolloverRows is ordered coarsest first.
 //
-// Step selection picks the smallest entry in a curated ladder whose
-// approximate duration yields ≤ (PanelWidthPx / TargetSpacingPx) ticks
-// across the span. The first tick is snapped to a locale-aware boundary
-// in opts.Location (midnight, hour, month, year). Subsequent ticks advance
-// via AddDate, so DST transitions and non-uniform calendar widths are
-// honoured.
+// Step selection (delegated to PickTimeStep) picks the smallest ladder
+// entry whose approximate duration yields ≤ (PanelWidthPx / TargetSpacingPx)
+// ticks across the span. The first tick is snapped to a locale-aware
+// boundary in opts.Location (midnight, hour, month, year). Subsequent
+// ticks advance via TimeStep.Add, so DST transitions and non-uniform
+// calendar widths are honoured.
 //
 // If opts.PrevStep is set and is one ladder rung away from the natural
 // pick, hysteresis keeps PrevStep when its spacing is within
@@ -457,14 +499,6 @@ func TimeTicks(dataMin, dataMax time.Time, opts TimeTickOptions) (layout TimeAxi
 	if loc == nil {
 		loc = time.UTC
 	}
-	target := opts.TargetSpacingPx
-	if target <= 0 {
-		target = defaultTargetSpacingPx
-	}
-	hysteresisFrac := opts.HysteresisFrac
-	if hysteresisFrac <= 0 && !opts.PrevStep.IsZero() {
-		hysteresisFrac = defaultHysteresisFrac
-	}
 
 	layout.DataMin = dataMin
 	layout.DataMax = dataMax
@@ -472,18 +506,15 @@ func TimeTicks(dataMin, dataMax time.Time, opts TimeTickOptions) (layout TimeAxi
 	layout.ViewMax = dataMax
 	layout.Algorithm = "uplot-ladder"
 
-	span := dataMax.Sub(dataMin)
-	if span <= 0 {
+	if dataMax.Sub(dataMin) <= 0 {
 		return
 	}
 
-	natural := pickStep(span, opts.PanelWidthPx, target)
-	step := stickyStep(natural, opts.PrevStep, span, opts.PanelWidthPx, target, hysteresisFrac)
-	layout.Step = step
+	layout.Step = PickTimeStep(dataMin, dataMax, opts)
 
-	ticks := generateTicks(dataMin, dataMax, step, loc)
+	ticks := generateTicks(dataMin, dataMax, layout.Step, loc)
 	layout.TickValues = ticks
-	layout.TickLabels = formatInner(ticks, step.bucket())
-	layout.RolloverRows = generateRolloverRows(ticks, step.bucket())
+	layout.TickLabels = formatInner(ticks, layout.Step.bucket())
+	layout.RolloverRows = generateRolloverRows(ticks, layout.Step.bucket())
 	return
 }

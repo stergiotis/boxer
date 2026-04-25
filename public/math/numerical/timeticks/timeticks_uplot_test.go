@@ -254,6 +254,76 @@ func TestTimeTicks_Hysteresis(t *testing.T) {
 	}
 }
 
+func TestPickTimeStep_AgreesWithTimeTicks(t *testing.T) {
+	dataMin := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
+	cases := []time.Duration{
+		30 * time.Minute,
+		24 * time.Hour,
+		30 * 24 * time.Hour,
+		365 * 24 * time.Hour,
+	}
+	for _, span := range cases {
+		opts := TimeTickOptions{PanelWidthPx: 800}
+		picked := PickTimeStep(dataMin, dataMin.Add(span), opts)
+		layout := TimeTicks(dataMin, dataMin.Add(span), opts)
+		if picked != layout.Step {
+			t.Errorf("span %v: PickTimeStep=%+v, TimeTicks.Step=%+v", span, picked, layout.Step)
+		}
+	}
+}
+
+func TestPickTimeStep_DegenerateReturnsSmallestLadder(t *testing.T) {
+	dataMin := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
+	step := PickTimeStep(dataMin, dataMin, TimeTickOptions{PanelWidthPx: 600})
+	if step.IsZero() {
+		t.Errorf("expected non-zero step for degenerate span (so callers iterating with Add don't loop)")
+	}
+}
+
+func TestTimeStep_AddAndApproxDuration(t *testing.T) {
+	loc, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Skip("America/New_York unavailable")
+	}
+	// Spring-forward 2024-03-10: 02:00 EST → 03:00 EDT. Day-step Add must
+	// land on midnight of the next calendar day, not 23h or 25h later.
+	dst := time.Date(2024, 3, 10, 0, 0, 0, 0, loc)
+	next := TimeStep{TimeStepUnitDay, 1}.Add(dst)
+	if next.Day() != 11 || next.Hour() != 0 {
+		t.Errorf("Day+1 across spring-forward: got %v, want 2024-03-11 00:00 local", next)
+	}
+
+	// ApproxDuration should be exact for sub-day, approximate for month/year.
+	if got := (TimeStep{TimeStepUnitMinute, 5}).ApproxDuration(); got != 5*time.Minute {
+		t.Errorf("Minute×5 ApproxDuration: got %v, want 5m", got)
+	}
+	if got := (TimeStep{TimeStepUnitYear, 1}).ApproxDuration(); got < 364*24*time.Hour || got > 366*24*time.Hour {
+		t.Errorf("Year×1 ApproxDuration outside [364d, 366d]: got %v", got)
+	}
+}
+
+func TestTimeAxisLayout_MapToScreen(t *testing.T) {
+	dataMin := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
+	dataMax := dataMin.Add(24 * time.Hour)
+	layout := TimeTicks(dataMin, dataMax, TimeTickOptions{PanelWidthPx: 800})
+
+	if got := layout.MapToScreen(dataMin, 0, 800); got != 0 {
+		t.Errorf("ViewMin maps to %v, want 0", got)
+	}
+	if got := layout.MapToScreen(dataMax, 0, 800); got != 800 {
+		t.Errorf("ViewMax maps to %v, want 800", got)
+	}
+	mid := dataMin.Add(12 * time.Hour)
+	if got := layout.MapToScreen(mid, 0, 800); got != 400 {
+		t.Errorf("midpoint maps to %v, want 400", got)
+	}
+	// degenerate layout: span = 0
+	deg := TimeAxisLayout{ViewMin: dataMin, ViewMax: dataMin}
+	if got := deg.MapToScreen(dataMin, 100, 200); got != 100 {
+		t.Errorf("degenerate layout maps to %v, want axisStartPx (100)", got)
+	}
+}
+
 func TestTimeTicks_MonthlyTicksAlignedToFirstOfMonth(t *testing.T) {
 	dataMin := time.Date(2026, 1, 17, 12, 30, 0, 0, time.UTC)
 	dataMax := dataMin.AddDate(0, 6, 0)

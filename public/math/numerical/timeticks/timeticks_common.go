@@ -91,6 +91,21 @@ type TimeAxisLayout struct {
 	Algorithm string
 }
 
+// MapToScreen converts a time value to a pixel coordinate using the
+// layout's view bounds. Mirrors finddivisions.AxisLayout.MapToScreen for
+// the time-axis case. Returns axisStartPx for a degenerate view; the
+// caller is responsible for clipping if t falls outside [ViewMin, ViewMax].
+func (inst TimeAxisLayout) MapToScreen(t time.Time, axisStartPx, axisEndPx float64) (px float64) {
+	span := float64(inst.ViewMax.Sub(inst.ViewMin))
+	if span <= 0 {
+		px = axisStartPx
+		return
+	}
+	norm := float64(t.Sub(inst.ViewMin)) / span
+	px = axisStartPx + norm*(axisEndPx-axisStartPx)
+	return
+}
+
 // TimeTickOptions configures TimeTicks.
 //
 // PanelWidthPx and TargetSpacingPx together set how many ticks are produced:
