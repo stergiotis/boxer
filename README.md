@@ -69,3 +69,5 @@ LLM generated code is subject to the same coding standards as human generated co
 
 ## License
 The MIT License (MIT) 2023-2026 - [Panos Stergiotis](https://github.com/stergiotis/). See [LICENSE](LICENSE) for the full license text.
+
+[NOTICE](NOTICE) carries the project's attribution. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) documents inline ports of third-party code, the bundled `h3.wasm` artifact's license chain, and the policy enforced by the `go-licenses` CI gate.

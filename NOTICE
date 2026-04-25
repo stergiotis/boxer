@@ -1,0 +1,18 @@
+boxer
+Copyright (c) 2023-2026 Panos Stergiotis
+
+This product is licensed under the MIT License (see LICENSE).
+
+This product incorporates third-party software retained under its
+respective licenses. The complete list of third-party software --
+including inline ports of third-party source, vendored binary
+artifacts, and module-level Go dependencies -- is documented in
+THIRD_PARTY_NOTICES.md.
+
+Of particular note, the committed wasm artifact at
+public/science/geo/h3/internal/h3o_wasm/h3.wasm is built from the
+rust/h3bridge crate (MIT OR Apache-2.0, in this repository), which
+links the h3o crate (Apache-2.0). Binary redistributions that bundle
+this artifact, or that statically link Apache-2.0 module-level
+dependencies, must propagate the corresponding upstream NOTICE
+contents per Apache-2.0 section 4(d). See THIRD_PARTY_NOTICES.md.
