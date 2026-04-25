@@ -8,12 +8,15 @@ import (
 
 /* Time-axis tick generation derived from the uPlot project (MIT).
 
-   The curated step ladder, format-by-bucket convention, and dual-row
+   The curated step ladder, format-by-bucket convention, and multi-row
    context-label boundary detection follow uPlot's design in src/opts.js
    (xAxisTimeIncrs / _timeAxisStamps / timeAxisVals). The Go code below
-   is an independent re-implementation written from notes — not a
-   line-by-line port — and simplifies the rendering to two label rows
-   instead of uPlot's three-row rollover.
+   is an independent re-implementation written from notes, not a
+   line-by-line port. Rollover rows here are range-based (each row groups
+   ticks into contiguous runs sharing the same boundary value), which
+   leaves the renderer free to centre, anchor-left, or anchor at the
+   boundary tick — a small generalisation over uPlot's point-anchored
+   rendering of the same data.
 
    Original licence:
    > The MIT License (MIT)
@@ -128,18 +131,53 @@ var innerFormat = [...]string{
 	bucketYear:   "2006",
 }
 
-// contextFormat is the layout for the secondary (outer-row) context label.
-// Empty string disables the context row. A context label spans every run
-// of consecutive ticks that produce the same context-formatted string —
-// equivalent to "the next coarser unit didn't change yet."
-var contextFormat = [...]string{
-	bucketMillis: "Jan 2 2006",
-	bucketSecond: "Jan 2 2006",
-	bucketMinute: "Jan 2 2006",
-	bucketHour:   "Jan 2 2006",
-	bucketDay:    "2006",
-	bucketMonth:  "2006",
-	bucketYear:   "",
+// rolloverConfig is one row in a bucket's rollover stack. The layout must
+// produce the same string for every tick that falls inside one boundary
+// unit at this level (e.g. for BoundaryHour at second-step the layout is
+// "Jan 2 2006 15:00" — literal "00" minute keeps the string constant
+// across all ticks within the hour). Labels are grouped by string equality
+// at the layout, so this property is what makes runs cohere.
+//
+// Each layout is "full content" — it carries everything coarser-than-or-
+// equal-to its own boundary (the day row includes the year, the hour row
+// includes the date). A renderer can therefore display a single row at
+// coarse zoom and the full stack at fine zoom without losing context.
+type rolloverConfig struct {
+	boundary BoundaryE
+	layout   string
+}
+
+// bucketRollovers maps a chosen step's bucket to its ordered rollover
+// stack, coarsest first. Buckets that need no context row (year-step) get
+// nil. uPlot's three-row design at second / sub-second step is preserved
+// here as multiple distinct rows.
+var bucketRollovers = [...][]rolloverConfig{
+	bucketMillis: {
+		{BoundaryYear, "2006"},
+		{BoundaryDay, "Jan 2 2006"},
+		{BoundaryHour, "Jan 2 2006 15:00"},
+		{BoundaryMinute, "Jan 2 2006 15:04"},
+	},
+	bucketSecond: {
+		{BoundaryYear, "2006"},
+		{BoundaryDay, "Jan 2 2006"},
+		{BoundaryHour, "Jan 2 2006 15:00"},
+	},
+	bucketMinute: {
+		{BoundaryYear, "2006"},
+		{BoundaryDay, "Jan 2 2006"},
+	},
+	bucketHour: {
+		{BoundaryYear, "2006"},
+		{BoundaryDay, "Jan 2 2006"},
+	},
+	bucketDay: {
+		{BoundaryYear, "2006"},
+	},
+	bucketMonth: {
+		{BoundaryYear, "2006"},
+	},
+	bucketYear: nil,
 }
 
 // approxDuration returns an upper-bound average duration. Used only for
@@ -357,11 +395,26 @@ func formatInner(ticks []time.Time, b bucketE) (labels []string) {
 	return
 }
 
-// generateContextLabels emits one ContextLabel per contiguous run of ticks
-// that produce the same context-formatted string. A bucket with empty
-// contextFormat yields no labels.
-func generateContextLabels(ticks []time.Time, b bucketE) (out []ContextLabel) {
-	layout := contextFormat[b]
+// generateRolloverRows produces one RolloverRow per entry in the bucket's
+// rollover config. Each row groups ticks into contiguous runs that share
+// the same formatted string at that level. A bucket with no rollover
+// config (year-step) yields no rows.
+func generateRolloverRows(ticks []time.Time, b bucketE) (rows []RolloverRow) {
+	cfgs := bucketRollovers[b]
+	if len(cfgs) == 0 || len(ticks) == 0 {
+		return
+	}
+	rows = make([]RolloverRow, 0, len(cfgs))
+	for _, cfg := range cfgs {
+		labels := groupRunsByLayout(ticks, cfg.layout)
+		rows = append(rows, RolloverRow{Boundary: cfg.boundary, Labels: labels})
+	}
+	return
+}
+
+// groupRunsByLayout walks ticks and emits one ContextLabel per contiguous
+// run of ticks that format to the same string under layout.
+func groupRunsByLayout(ticks []time.Time, layout string) (out []ContextLabel) {
 	if layout == "" || len(ticks) == 0 {
 		return
 	}
@@ -381,8 +434,9 @@ func generateContextLabels(ticks []time.Time, b bucketE) (out []ContextLabel) {
 
 // TimeTicks computes a calendar-aware tick layout for a time axis spanning
 // [dataMin, dataMax]. The returned layout is ready for direct rendering:
-// TickValues / TickLabels for the primary axis row, ContextLabels for the
-// secondary date / year context row.
+// TickValues / TickLabels for the primary axis row, RolloverRows for the
+// secondary context rows (year, date, hour, minute as appropriate to the
+// chosen step). RolloverRows is ordered coarsest first.
 //
 // Step selection picks the smallest entry in a curated ladder whose
 // approximate duration yields ≤ (PanelWidthPx / TargetSpacingPx) ticks
@@ -430,6 +484,6 @@ func TimeTicks(dataMin, dataMax time.Time, opts TimeTickOptions) (layout TimeAxi
 	ticks := generateTicks(dataMin, dataMax, step, loc)
 	layout.TickValues = ticks
 	layout.TickLabels = formatInner(ticks, step.bucket())
-	layout.ContextLabels = generateContextLabels(ticks, step.bucket())
+	layout.RolloverRows = generateRolloverRows(ticks, step.bucket())
 	return
 }

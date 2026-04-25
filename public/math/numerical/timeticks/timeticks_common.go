@@ -40,6 +40,34 @@ type ContextLabel struct {
 	Label    string
 }
 
+// BoundaryE identifies which calendar unit's change drives a rollover row.
+// Used as informational metadata so a renderer can decide where to place
+// each row (e.g. coarsest at top, finest just above the tick row).
+type BoundaryE uint8
+
+const (
+	BoundaryNone BoundaryE = iota
+	BoundarySecond
+	BoundaryMinute
+	BoundaryHour
+	BoundaryDay
+	BoundaryMonth
+	BoundaryYear
+)
+
+// RolloverRow is one row of context labels at a specific calendar boundary.
+// Each label spans a contiguous run of ticks that produce the same
+// formatted string at this row's level (e.g. all ticks within "Apr 25
+// 2026" share one label in the day row). Rows are independent — a renderer
+// stacks them at increasing y offset. Each row's label format is
+// self-sufficient: it contains the full coarser-than-or-equal-to context
+// (the day row carries the year too), so a renderer can display a single
+// row at coarse zoom and the full stack at fine zoom.
+type RolloverRow struct {
+	Boundary BoundaryE
+	Labels   []ContextLabel
+}
+
 // TimeAxisLayout is the time-axis counterpart of finddivisions.AxisLayout.
 //
 // TickValues, TickLabels, ContextLabels are the renderer-facing outputs.
@@ -56,9 +84,9 @@ type TimeAxisLayout struct {
 
 	Step TimeStep
 
-	TickValues    []time.Time
-	TickLabels    []string
-	ContextLabels []ContextLabel
+	TickValues   []time.Time
+	TickLabels   []string
+	RolloverRows []RolloverRow
 
 	Algorithm string
 }

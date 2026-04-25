@@ -52,9 +52,11 @@ func TestTimeTicks_DegenerateSpan(t *testing.T) {
 	}
 }
 
-func TestTimeTicks_ContextLabels_DayBoundary(t *testing.T) {
-	// 48h span with 6h ticks → 9 ticks (00, 06, 12, 18 across 2 days, plus closing 00)
-	// → 3 context ranges, one per calendar date.
+func TestTimeTicks_RolloverRows_HourStepAcrossDays(t *testing.T) {
+	// 48h span with 6h ticks → 9 ticks across 3 calendar dates within one year.
+	// bucketHour rollover stack is [Year, Day], so:
+	//   - Year row: 1 label "2026" spanning all 9 ticks
+	//   - Day row: 3 labels (Apr 25 2026, Apr 26 2026, Apr 27 2026)
 	dataMin := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
 	dataMax := dataMin.Add(48 * time.Hour)
 	layout := TimeTicks(dataMin, dataMax, TimeTickOptions{
@@ -67,29 +69,107 @@ func TestTimeTicks_ContextLabels_DayBoundary(t *testing.T) {
 	if got := len(layout.TickValues); got != 9 {
 		t.Errorf("expected 9 ticks, got %d", got)
 	}
-	if len(layout.ContextLabels) != 3 {
-		t.Errorf("expected 3 context labels, got %d: %+v", len(layout.ContextLabels), layout.ContextLabels)
+	if len(layout.RolloverRows) != 2 {
+		t.Fatalf("expected 2 rollover rows (year, day), got %d", len(layout.RolloverRows))
 	}
-	wantLabels := []string{"Apr 25 2026", "Apr 26 2026", "Apr 27 2026"}
-	for i, want := range wantLabels {
-		if i >= len(layout.ContextLabels) {
-			break
-		}
-		if layout.ContextLabels[i].Label != want {
-			t.Errorf("context label %d: got %q, want %q", i, layout.ContextLabels[i].Label, want)
+
+	yearRow := layout.RolloverRows[0]
+	if yearRow.Boundary != BoundaryYear {
+		t.Errorf("row 0 boundary: got %v, want BoundaryYear", yearRow.Boundary)
+	}
+	if len(yearRow.Labels) != 1 || yearRow.Labels[0].Label != "2026" {
+		t.Errorf("year row: got %+v, want single label \"2026\"", yearRow.Labels)
+	}
+
+	dayRow := layout.RolloverRows[1]
+	if dayRow.Boundary != BoundaryDay {
+		t.Errorf("row 1 boundary: got %v, want BoundaryDay", dayRow.Boundary)
+	}
+	wantDays := []string{"Apr 25 2026", "Apr 26 2026", "Apr 27 2026"}
+	if len(dayRow.Labels) != len(wantDays) {
+		t.Fatalf("day row: got %d labels, want %d", len(dayRow.Labels), len(wantDays))
+	}
+	for i, want := range wantDays {
+		if dayRow.Labels[i].Label != want {
+			t.Errorf("day label %d: got %q, want %q", i, dayRow.Labels[i].Label, want)
 		}
 	}
 }
 
-func TestTimeTicks_NoContextForYearStep(t *testing.T) {
+func TestTimeTicks_NoRolloverForYearStep(t *testing.T) {
 	dataMin := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 	dataMax := time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC)
 	layout := TimeTicks(dataMin, dataMax, TimeTickOptions{PanelWidthPx: 600})
 	if layout.Step.Unit != TimeStepUnitYear {
 		t.Fatalf("expected year step, got %+v", layout.Step)
 	}
-	if len(layout.ContextLabels) != 0 {
-		t.Errorf("year step should produce no context labels, got %d", len(layout.ContextLabels))
+	if len(layout.RolloverRows) != 0 {
+		t.Errorf("year step should produce no rollover rows, got %d", len(layout.RolloverRows))
+	}
+}
+
+func TestTimeTicks_RolloverRows_SecondStepThreeRows(t *testing.T) {
+	// 5-minute span at 1-second-resolution panels: bucketSecond rollover
+	// stack is [Year, Day, Hour]. The span stays inside one hour, so each
+	// row collapses to a single label spanning every tick — but all three
+	// rows must be present.
+	dataMin := time.Date(2026, 4, 25, 12, 30, 0, 0, time.UTC)
+	dataMax := dataMin.Add(5 * time.Minute)
+	layout := TimeTicks(dataMin, dataMax, TimeTickOptions{
+		PanelWidthPx:    1200,
+		TargetSpacingPx: 50,
+	})
+	if layout.Step.Unit != TimeStepUnitSecond {
+		t.Fatalf("expected second step, got %+v", layout.Step)
+	}
+	if len(layout.RolloverRows) != 3 {
+		t.Fatalf("expected 3 rollover rows (year, day, hour) for second-step, got %d", len(layout.RolloverRows))
+	}
+	want := []struct {
+		boundary BoundaryE
+		label    string
+	}{
+		{BoundaryYear, "2026"},
+		{BoundaryDay, "Apr 25 2026"},
+		{BoundaryHour, "Apr 25 2026 12:00"},
+	}
+	for i, w := range want {
+		row := layout.RolloverRows[i]
+		if row.Boundary != w.boundary {
+			t.Errorf("row %d boundary: got %v, want %v", i, row.Boundary, w.boundary)
+		}
+		if len(row.Labels) != 1 {
+			t.Errorf("row %d (%v): expected 1 label spanning all ticks, got %d", i, w.boundary, len(row.Labels))
+			continue
+		}
+		if row.Labels[0].Label != w.label {
+			t.Errorf("row %d (%v): got %q, want %q", i, w.boundary, row.Labels[0].Label, w.label)
+		}
+	}
+}
+
+func TestTimeTicks_RolloverRows_MinuteStepWithinOneDay(t *testing.T) {
+	// 90-minute span at minute-step crosses an hour boundary but stays
+	// inside one day. bucketMinute rollover stack is [Year, Day]; expect
+	// exactly two rows, with the day row collapsed to one label.
+	dataMin := time.Date(2026, 4, 25, 11, 50, 0, 0, time.UTC)
+	dataMax := dataMin.Add(90 * time.Minute)
+	layout := TimeTicks(dataMin, dataMax, TimeTickOptions{
+		PanelWidthPx:    1200,
+		TargetSpacingPx: 50,
+	})
+	if layout.Step.Unit != TimeStepUnitMinute {
+		t.Fatalf("expected minute step, got %+v", layout.Step)
+	}
+	if len(layout.RolloverRows) != 2 {
+		t.Fatalf("expected 2 rollover rows for minute-step, got %d", len(layout.RolloverRows))
+	}
+	dayRow := layout.RolloverRows[1]
+	if dayRow.Boundary != BoundaryDay {
+		t.Errorf("row 1 boundary: got %v, want BoundaryDay", dayRow.Boundary)
+	}
+	if len(dayRow.Labels) != 1 {
+		t.Errorf("day row: expected 1 label (span stays in one day), got %d", len(dayRow.Labels))
 	}
 }
 

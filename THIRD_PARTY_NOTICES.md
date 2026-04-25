@@ -83,10 +83,11 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 - Origin: <https://github.com/leeoniya/uPlot> (`src/opts.js`)
 - License: MIT
 - Scope: the curated tick-step ladder, format-by-bucket convention, and
-  dual-row context-label boundary detection follow uPlot's design. The Go
-  code is an independent re-implementation written from notes, not a
-  line-by-line port; the rendering is simplified to two label rows
-  instead of uPlot's three-row rollover.
+  multi-row context-label boundary detection follow uPlot's design. The
+  Go code is an independent re-implementation written from notes, not a
+  line-by-line port. Rollover rows are range-based here (each row groups
+  ticks into contiguous runs sharing a boundary value) — a small
+  generalisation over uPlot's point-anchored rendering of the same data.
 
 ```
 The MIT License (MIT)
