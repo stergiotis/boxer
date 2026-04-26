@@ -1,3 +1,11 @@
+---
+type: reference
+audience: contributor
+status: stable
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-04-26
+---
+
 # Third-Party Notices
 
 This document enumerates third-party software incorporated into boxer
