@@ -3,7 +3,7 @@ here=$(dirname "$(readlink -f "${BASH_SOURCE}")")
 cd "$here/../.."
 ./boxer.sh gov commitdigest extract \
     --token-budget 4096 \
-    --since "160d" \
+    --since "365d" \
     --resume-dir ./doc/changelog/summaries/gemini31pro \
     --detect-crossings \
     . 2>/dev/null \

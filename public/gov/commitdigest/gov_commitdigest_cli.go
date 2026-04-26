@@ -38,6 +38,8 @@ func NewCliCommand() *cli.Command {
 		Subcommands: []*cli.Command{
 			newExtractCommand(),
 			newSummarizeCommand(),
+			newMineTrendsCommand(),
+			newSynthesizeThreadsCommand(),
 		},
 	}
 }
@@ -249,8 +251,9 @@ func newSummarizeCommand() *cli.Command {
 				Usage:    "Model name for the LLM (required unless --dry-run)",
 			},
 			&cli.StringFlag{
-				Name:  "llm-apikey",
-				Usage: "API key (or blank) for LLM provider",
+				Name:    "llm-apikey",
+				EnvVars: []string{"LLM_API_KEY"},
+				Usage:   "API key for LLM provider. Prefer the env var to avoid exposing the secret in process argv.",
 			},
 			&cli.IntFlag{
 				Name:  "llm-timeout",
@@ -266,6 +269,10 @@ func newSummarizeCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:  "system-prompt",
 				Usage: "Override the default summarization system prompt",
+			},
+			&cli.StringFlag{
+				Name:  "thread-registry",
+				Usage: "Path to a thread registry JSON (output of `synthesize-threads`). When set, chunk summaries anchor their themes to registered thread IDs.",
 			},
 			// sliding window
 			&cli.IntFlag{
@@ -306,6 +313,21 @@ func newSummarizeCommand() *cli.Command {
 				systemPrompt = DefaultSystemPrompt
 			}
 
+			var renderedRegistry string
+			registryPath := c.String("thread-registry")
+			if registryPath != "" {
+				registryData, readErr := os.ReadFile(registryPath)
+				if readErr != nil {
+					return eb.Build().Str("path", registryPath).Errorf("unable to read thread registry: %w", readErr)
+				}
+				var threads []Thread
+				readErr = json.Unmarshal(registryData, &threads)
+				if readErr != nil {
+					return eb.Build().Str("path", registryPath).Errorf("unable to parse thread registry JSON: %w", readErr)
+				}
+				renderedRegistry = RenderThreadRegistry(threads)
+			}
+
 			summariesDir := c.String("summaries-dir")
 			window := &SlidingWindow{
 				MaxSummaries: int32(c.Int("window-size")),
@@ -336,7 +358,7 @@ func newSummarizeCommand() *cli.Command {
 
 					if dryRun {
 						windowContext := window.RenderContext()
-						system, user := RenderChunkPrompt(repos[ri].RepoName, chunk.Commits, chunk.Metrics, windowContext, systemPrompt)
+						system, user := RenderChunkPrompt(repos[ri].RepoName, chunk.Commits, chunk.Metrics, windowContext, systemPrompt, renderedRegistry)
 						log.Info().
 							Int32("chunk", chunk.Index).
 							Int64("tokens", chunk.TokenCount).
@@ -349,7 +371,7 @@ func newSummarizeCommand() *cli.Command {
 					}
 
 					windowContext := window.RenderContext()
-					system, user := RenderChunkPrompt(repos[ri].RepoName, chunk.Commits, chunk.Metrics, windowContext, systemPrompt)
+					system, user := RenderChunkPrompt(repos[ri].RepoName, chunk.Commits, chunk.Metrics, windowContext, systemPrompt, renderedRegistry)
 
 					var summary string
 					summary, err = llm.Summarize(c.Context, system, user)
