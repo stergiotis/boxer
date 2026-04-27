@@ -58,6 +58,16 @@ MODIFICATIONS APPLIED DURING PORT
     uses github.com/twmb/franz-go/pkg/sasl/scram natively, so the
     wrapper is unnecessary in this port.
 
+  * Dropped the AWS_MSK_IAM and REDPANDA_CLOUD_SERVICE_ACCOUNT SASL
+    mechanisms from sasl.go. AWS_MSK_IAM is supplied upstream via an
+    indirect plug-point (AWSSASLFromConfigFn) populated when
+    components/aws is imported; pebble2impl does not import that
+    layer. REDPANDA_CLOUD_SERVICE_ACCOUNT depends on
+    github.com/redpanda-data/connect/v4/internal/serviceaccount,
+    a Connect-internal package not exposed for re-use. The four
+    portable franz-go mechanisms (PLAIN, OAUTHBEARER, SCRAM-SHA-256,
+    SCRAM-SHA-512) remain.
+
   * Dropped AddHeaders and ExtractHeaders from franz_headers.go (and
     the kafkaHeaders metadata-key constant they shared). Those
     functions converted between []kgo.RecordHeader and
