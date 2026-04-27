@@ -160,7 +160,34 @@ behind := lag.Load("orders", 0)
 
 `ConsumerLag` does not touch the reader's poll loop; the `kadm.Client` it constructs internally only issues admin RPCs (broker offsets, committed offsets) which are read-only and don't conflict with consumption. Reusing `reader.Client` avoids opening a second TCP connection.
 
-## Recipe 5: run the integration tests against Podman
+## Recipe 5: invoke the bundled `pebble kafka` CLI
+
+The package ships a kcat-style CLI at [`public/streaming/persisted/kafka/cli/`](../../../../../../src/go/app/commands/kafka), wired into the project-wide entry point `./pebble.sh`. Three nested subcommands cover the common interactive flows.
+
+```bash
+# List metadata: brokers, topics, partition leader/replica/ISR.
+./pebble.sh kafka list -b 127.0.0.1:9092
+
+# Produce a few records (one per stdin line; -K splits key from value):
+echo -e 'k1=v1\nk2=v2' | ./pebble.sh kafka produce -b 127.0.0.1:9092 -t demo -K '='
+
+# Consume the first 10 records and exit. Format string verbs:
+#   %t topic, %p partition, %o offset, %k key, %s value, %T timestamp-ms;
+#   \n \t \\ escapes; %% literal.
+./pebble.sh kafka consume -b 127.0.0.1:9092 -t demo -c 10 -f '%t/%p:%o key=%k value=%s\n'
+
+# Tail forever; Ctrl+C exits gracefully (commits offsets first when -G is set).
+./pebble.sh kafka consume -b 127.0.0.1:9092 -t demo -G my-group
+
+# Run until idle for 3s ("end of log" approximation, useful for scripts).
+./pebble.sh kafka consume -b 127.0.0.1:9092 -t demo -e
+```
+
+Environment variables `PEBBLE_KAFKA_BROKERS` and `PEBBLE_KAFKA_CLIENT_ID` set per-flag defaults so scripts can `export PEBBLE_KAFKA_BROKERS=…` once and stay terse.
+
+For the IPv4/IPv6 `localhost` gotcha some Podman setups hit, prefer `127.0.0.1:PORT` over `localhost:PORT` when targeting a podman-rootless Kafka container.
+
+## Recipe 6: run the integration tests against Podman
 
 The package's [`integration_test.go`](integration_test.go) is gated behind the `integration` build tag and requires Docker or Podman to spin up a `redpandadata/redpanda` container.
 
