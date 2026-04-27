@@ -53,6 +53,13 @@ import (
 // franz-go Kafka client. Zero-value SeedBrokers means the connection is
 // not yet configured; see [FranzConnectionDetails.IsConfigured].
 //
+// The duration fields (MetaMaxAge, RequestTimeoutOverhead,
+// ConnIdleTimeout) inherit franz-go's defaults when left at zero —
+// [FranzConnectionDetails.FranzOpts] only emits the corresponding
+// kgo.Opt when the field is non-zero. Use
+// [DefaultFranzConnectionDetails] to start from the upstream Connect
+// plugin defaults (1m metadata, 10s timeout overhead, 20s idle).
+//
 // Logger may be nil; when nil, franz-go uses its default no-op logger.
 //
 // Dialer is used directly when TLSEnabled is false, and as the underlying
@@ -70,6 +77,21 @@ type FranzConnectionDetails struct {
 	ConnIdleTimeout        time.Duration
 	Dialer                 net.Dialer
 	Logger                 *zerolog.Logger
+}
+
+// DefaultFranzConnectionDetails returns connection details populated
+// with the durations the upstream Connect plugin applied at its YAML
+// config layer (1m metadata-max-age, 10s request-timeout-overhead, 20s
+// conn-idle-timeout). The caller assigns SeedBrokers, ClientID, SASL,
+// TLS, Dialer, and Logger as needed before passing to
+// [FranzConnectionDetails.FranzOpts].
+func DefaultFranzConnectionDetails() (d FranzConnectionDetails) {
+	d = FranzConnectionDetails{
+		MetaMaxAge:             time.Minute,
+		RequestTimeoutOverhead: 10 * time.Second,
+		ConnIdleTimeout:        20 * time.Second,
+	}
+	return
 }
 
 // IsConfigured reports whether at least one seed broker is set.
@@ -91,9 +113,21 @@ func (inst *FranzConnectionDetails) FranzOpts() (opts []kgo.Opt) {
 		kgo.SeedBrokers(splitSeedBrokers(inst.SeedBrokers)...),
 		kgo.SASL(inst.SASL...),
 		kgo.ClientID(inst.ClientID),
-		kgo.MetadataMaxAge(inst.MetaMaxAge),
-		kgo.RequestTimeoutOverhead(inst.RequestTimeoutOverhead),
-		kgo.ConnIdleTimeout(inst.ConnIdleTimeout),
+	}
+	// Duration options: zero value defers to kgo's internal defaults.
+	// kgo's RequestTimeoutOverhead in particular rejects values below
+	// 100ms, so emitting kgo.RequestTimeoutOverhead(0) would fail
+	// NewClient construction; suppressing zero values is what makes
+	// FranzConnectionDetails{} (or a partially-populated value)
+	// usable.
+	if inst.MetaMaxAge > 0 {
+		opts = append(opts, kgo.MetadataMaxAge(inst.MetaMaxAge))
+	}
+	if inst.RequestTimeoutOverhead > 0 {
+		opts = append(opts, kgo.RequestTimeoutOverhead(inst.RequestTimeoutOverhead))
+	}
+	if inst.ConnIdleTimeout > 0 {
+		opts = append(opts, kgo.ConnIdleTimeout(inst.ConnIdleTimeout))
 	}
 	if inst.Logger != nil {
 		opts = append(opts, kgo.WithLogger(NewKGoLogger(inst.Logger)))

@@ -117,10 +117,9 @@ func safeName(t *testing.T) (s string) {
 func TestIntegrationConnectivity(t *testing.T) {
 	addr := startRedpanda(t)
 
-	details := kafka.FranzConnectionDetails{
-		SeedBrokers: []string{addr},
-		ClientID:    "pebble2impl-conn-test",
-	}
+	details := kafka.DefaultFranzConnectionDetails()
+	details.SeedBrokers = []string{addr}
+	details.ClientID = "pebble2impl-conn-test"
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -156,10 +155,9 @@ func runRoundTrip(t *testing.T, brokerAddr string, unordered bool) {
 
 	createKafkaTopic(t, brokerAddr, topic, 4)
 
-	connDetails := kafka.FranzConnectionDetails{
-		SeedBrokers: []string{brokerAddr},
-		ClientID:    "pebble2impl-rt",
-	}
+	connDetails := kafka.DefaultFranzConnectionDetails()
+	connDetails.SeedBrokers = []string{brokerAddr}
+	connDetails.ClientID = "pebble2impl-rt"
 
 	// ---- Producer
 	prodOpts := kafka.DefaultFranzProducerOpts()
