@@ -1,0 +1,103 @@
+src/go/public/streaming/persisted/kafka — NOTICE
+==================================================
+
+This package is a derivative work distributed under the Apache License,
+Version 2.0. The license text is at <licenses/Apache-2.0.txt> at the
+repository root, and online at <http://www.apache.org/licenses/LICENSE-2.0>.
+
+----------------------------------------------------------------------
+ORIGIN
+----------------------------------------------------------------------
+
+Derived from:
+  github.com/redpanda-data/connect/internal/impl/kafka
+  Pinned commit: 50aa034a668cc7d03d6acdcf63791fc36906a21c (2026-04-24)
+  https://github.com/redpanda-data/connect/tree/50aa034a668cc7d03d6acdcf63791fc36906a21c/internal/impl/kafka
+
+  Copyright 2024 Redpanda Data, Inc.
+  Licensed under the Apache License, Version 2.0.
+
+Decision record:
+  doc/adr/0015-streaming-persisted-kafka-from-connect.md
+
+----------------------------------------------------------------------
+MODIFICATIONS APPLIED DURING PORT
+----------------------------------------------------------------------
+
+  * Restricted scope to the franz-go (kgo) consumer and producer. The
+    sarama variant, the Redpanda-specific input/output/cache wrappers,
+    the schema-registry input/output, and the AWS MSK IAM helpers were
+    not ported.
+
+  * Removed all dependencies on
+    github.com/redpanda-data/benthos/v4/public/service. The Benthos
+    Message / MessageBatch / AckFunc / Resources / ConfigField surface
+    was replaced with package-local interfaces (ConsumerI, ProducerI,
+    BatchI, AckFnI, RecordEnvelopeI). Configuration moved from
+    service.ParsedConfig to plain Go option structs.
+
+  * Refactored to the boxer coding standards (see CODINGSTANDARDS.md
+    in github.com/stergiotis/boxer): receiver naming convention,
+    interface suffix "I", enum suffix "E", named return values,
+    error builder usage (eh.Errorf / eb.Build), sized integer fields
+    on structs, compile-time interface assertions.
+
+  * Replaced the service.Logger adapter with zerolog.
+
+  * Replaced github.com/Jeffail/shutdown lifecycle helpers with
+    context-cancellation primitives where the simplification was
+    safe; otherwise retained the dependency.
+
+  * Did not port the
+    github.com/redpanda-data/connect/internal/impl/kafka/enterprise/
+    subdirectory, which is licensed under the Redpanda Community
+    License (RCL), not Apache-2.0.
+
+Per Apache-2.0 §4.b, every modified source file in this package
+carries a "Modifications applied during port" line in its header
+referencing this NOTICE.
+
+----------------------------------------------------------------------
+THIRD-PARTY DEPENDENCIES OF THIS PACKAGE
+----------------------------------------------------------------------
+
+The aggregate index lives at doc/legal/third_party.md. Direct
+dependencies of this package:
+
+  github.com/twmb/franz-go/pkg/kgo
+    BSD-3-Clause
+    Copyright 2020, Travis Bischel.
+
+  github.com/twmb/franz-go/pkg/sasl/{plain,scram,oauth}
+    BSD-3-Clause (same module as kgo)
+
+  github.com/twmb/franz-go/pkg/kadm
+    BSD-3-Clause (same module; only if lag.go is ported in Phase 8)
+
+  github.com/Jeffail/checkpoint
+    MIT
+    Copyright (c) 2024 Ashley Jeffs
+
+  github.com/Jeffail/shutdown
+    MIT (only if retained after Phase 5)
+    Copyright (c) 2024 Ashley Jeffs
+
+  github.com/cenkalti/backoff/v4
+    MIT
+
+  github.com/dustin/go-humanize
+    MIT (cosmetic; may be dropped during port)
+
+----------------------------------------------------------------------
+RE-PINNING UPSTREAM
+----------------------------------------------------------------------
+
+When this package is re-synced against a newer upstream commit:
+
+  1. Update the "Pinned commit" line in the ORIGIN section above.
+  2. Append a dated entry under MODIFICATIONS APPLIED DURING PORT
+     summarising the diff applied during the resync.
+  3. Update doc/adr/0015-streaming-persisted-kafka-from-connect.md
+     References section with the new SHA and date.
+  4. Update doc/legal/third_party.md if any new third-party deps
+     were introduced upstream.
