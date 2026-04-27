@@ -75,6 +75,29 @@ MODIFICATIONS APPLIED DURING PORT
     to application code, so the conversion is unneeded. The pure
     helpers GetHeaderValue and SetHeaderValue were retained.
 
+  * franz_reader_ordered.go: dropped the per-message
+    dispatch.CtxOnTriggerSignal mechanism. Upstream used the trigger
+    to clear pendingDispatch[batchID] when the Benthos pipeline took
+    a batch's records into the processor chain (i.e. before ack),
+    enabling pipelined throughput on a single partition. This port
+    has no processor-chain notion, so pendingDispatch[batchID] is
+    set on pop and cleared only on ack, yielding strictly serial
+    batches per partition. Applications that want pipelined
+    throughput can wrap Read into a producer/consumer goroutine pair
+    externally. The companion test (TestPartitionCacheOrdering),
+    which existed solely to exercise the dispatch trigger under
+    tangled multi-worker dispatch, was dropped as well; the
+    chunking-focused TestPartitionCacheBatching was retained.
+
+  * franz_reader_ordered.go: dropped the ConsumerLag wiring (the
+    kafka_lag per-message metadata, the lag-refresh goroutine, and
+    the redpanda_lag gauge metric). Phase 8 may re-introduce
+    consumer-lag observability via a metrics seam.
+
+  * franz_reader_ordered.go: dropped ConnectionTest. NewFranzClient
+    already calls Ping on construction; callers that want a
+    "test connection" path can call NewFranzClient + Close.
+
 Per Apache-2.0 §4.b, every modified source file in this package
 carries a "Modifications applied during port" line in its header
 referencing this NOTICE.
