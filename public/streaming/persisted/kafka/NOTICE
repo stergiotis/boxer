@@ -53,6 +53,18 @@ MODIFICATIONS APPLIED DURING PORT
     subdirectory, which is licensed under the Redpanda Community
     License (RCL), not Apache-2.0.
 
+  * Did not port scram.go. The XDGSCRAMClient type wraps
+    github.com/xdg-go/scram for the sarama path; the franz-go path
+    uses github.com/twmb/franz-go/pkg/sasl/scram natively, so the
+    wrapper is unnecessary in this port.
+
+  * Dropped AddHeaders and ExtractHeaders from franz_headers.go (and
+    the kafkaHeaders metadata-key constant they shared). Those
+    functions converted between []kgo.RecordHeader and
+    service.Message metadata; this port exposes *kgo.Record directly
+    to application code, so the conversion is unneeded. The pure
+    helpers GetHeaderValue and SetHeaderValue were retained.
+
 Per Apache-2.0 §4.b, every modified source file in this package
 carries a "Modifications applied during port" line in its header
 referencing this NOTICE.
