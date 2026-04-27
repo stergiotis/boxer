@@ -41,6 +41,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fxamacker/cbor/v2"
 	"github.com/rs/zerolog/log"
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -266,10 +267,16 @@ func consumeCmd() *cli.Command {
 				Usage:   "start offset: earliest, latest, committed, or a numeric offset",
 			},
 			&cli.StringFlag{
+				Name:    "output-mode",
+				Aliases: []string{"O"},
+				Value:   "format",
+				Usage:   "output mode: 'format' (use --format), 'cbor' (one self-delimiting CBOR map per record with full metadata), 'netstring' (record value as a netstring '<len>:<bytes>,' — value only, no key/headers/metadata)",
+			},
+			&cli.StringFlag{
 				Name:    "format",
 				Aliases: []string{"f"},
 				Value:   "%s\\n",
-				Usage:   "output format: %t topic, %p partition, %o offset, %k key, %s value, %T timestamp-ms; \\n \\t escapes; %% literal",
+				Usage:   "output format (only used with --output-mode=format): %t topic, %p partition, %o offset, %k key, %s value, %T timestamp-ms; \\n \\t escapes; %% literal",
 			},
 			&cli.IntFlag{
 				Name:    "count",
@@ -333,7 +340,10 @@ func runConsume(c *cli.Context) (err error) {
 	out := bufio.NewWriter(os.Stdout)
 	defer func() { _ = out.Flush() }()
 
-	fmtFn := compileFormat(c.String("format"))
+	fmtFn, err := makeRecordWriter(c)
+	if err != nil {
+		return
+	}
 	count := c.Int("count")
 	exitOnEOF := c.Bool("exit-on-eof")
 	const eofIdleTimeout = 3 * time.Second
@@ -567,8 +577,94 @@ func parseOffset(s string) (off kgo.Offset, err error) {
 	return
 }
 
-// formatter writes one record's formatted output to w.
+// formatter writes one record's formatted output to w. Implementations
+// for the three output modes (format, cbor, netstring) are dispatched
+// from [makeRecordWriter].
 type formatter func(w io.Writer, r *kgo.Record) (err error)
+
+// makeRecordWriter returns the formatter selected by --output-mode.
+// 'format' uses the --format string; 'cbor' emits a CBOR map per
+// record; 'netstring' emits a netstring of record.Value.
+func makeRecordWriter(c *cli.Context) (fn formatter, err error) {
+	mode := c.String("output-mode")
+	switch mode {
+	case "", "format":
+		fn = compileFormat(c.String("format"))
+	case "cbor":
+		fn = cborWriter
+	case "netstring":
+		fn = netstringWriter
+	default:
+		err = fmt.Errorf("invalid --output-mode %q (try format, cbor, netstring)", mode)
+	}
+	return
+}
+
+// cborRecord is the on-the-wire shape for --output-mode=cbor. Field
+// names are lowercase so consumers parsing the CBOR map by string key
+// can use Kafka's natural vocabulary directly. Key and Value are NOT
+// `omitempty` — a nil Value is a tombstone (delete-marker), and the
+// distinction between "no value" (CBOR null) and "empty value" (CBOR
+// empty bytes) must be preserved.
+type cborRecord struct {
+	Topic       string       `cbor:"topic"`
+	Partition   int32        `cbor:"partition"`
+	Offset      int64        `cbor:"offset"`
+	TimestampMs int64        `cbor:"timestamp_ms"`
+	Key         []byte       `cbor:"key"`
+	Value       []byte       `cbor:"value"`
+	Headers     []cborHeader `cbor:"headers,omitempty"`
+}
+
+// cborHeader is the on-the-wire shape of one record header. Kafka
+// allows duplicate header keys, so headers serialise as an ordered
+// array rather than a map.
+type cborHeader struct {
+	Key   string `cbor:"key"`
+	Value []byte `cbor:"value"`
+}
+
+// cborWriter encodes one record as a CBOR map and writes the bytes
+// directly. CBOR is self-delimiting, so consecutive records can be
+// concatenated without a separator.
+func cborWriter(out io.Writer, r *kgo.Record) (err error) {
+	payload := cborRecord{
+		Topic:       r.Topic,
+		Partition:   r.Partition,
+		Offset:      r.Offset,
+		TimestampMs: r.Timestamp.UnixMilli(),
+		Key:         r.Key,
+		Value:       r.Value,
+	}
+	if len(r.Headers) > 0 {
+		payload.Headers = make([]cborHeader, len(r.Headers))
+		for i, h := range r.Headers {
+			payload.Headers[i] = cborHeader{Key: h.Key, Value: h.Value}
+		}
+	}
+	data, err := cbor.Marshal(payload)
+	if err != nil {
+		return
+	}
+	_, err = out.Write(data)
+	return
+}
+
+// netstringWriter encodes record.Value as a DJB-style netstring:
+// `<len>:<value>,`. The decimal length is the byte-count of value;
+// nil and zero-length values both encode as `0:,`.
+func netstringWriter(out io.Writer, r *kgo.Record) (err error) {
+	if _, err = fmt.Fprintf(out, "%d:", len(r.Value)); err != nil {
+		return
+	}
+	if len(r.Value) > 0 {
+		if _, err = out.Write(r.Value); err != nil {
+			return
+		}
+	}
+	_, err = out.Write([]byte{','})
+	return
+}
 
 // compileFormat returns a formatter that interprets a kcat-style format
 // string. Verbs: %t topic, %p partition, %o offset, %k key, %s value,

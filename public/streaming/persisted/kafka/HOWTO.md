@@ -181,6 +181,16 @@ echo -e 'k1=v1\nk2=v2' | ./pebble.sh kafka produce -b 127.0.0.1:9092 -t demo -K 
 
 # Run until idle for 3s ("end of log" approximation, useful for scripts).
 ./pebble.sh kafka consume -b 127.0.0.1:9092 -t demo -e
+
+# CBOR output: one self-delimiting CBOR map per record with full
+# metadata (topic, partition, offset, timestamp_ms, key, value, headers).
+# Pipe to xxd / cbor2json / your processing pipeline.
+./pebble.sh kafka consume -b 127.0.0.1:9092 -t demo -c 100 --output-mode=cbor | xxd
+
+# Netstring output: each record's value framed as `<len>:<bytes>,`.
+# Stream-parseable; preserves binary content; the `,` terminator
+# distinguishes empty values (`0:,`) from end-of-stream.
+./pebble.sh kafka consume -b 127.0.0.1:9092 -t demo -c 100 --output-mode=netstring
 ```
 
 Environment variables `PEBBLE_KAFKA_BROKERS` and `PEBBLE_KAFKA_CLIENT_ID` set per-flag defaults so scripts can `export PEBBLE_KAFKA_BROKERS=…` once and stay terse.

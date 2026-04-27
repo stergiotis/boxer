@@ -20,13 +20,17 @@
 package kafka
 
 import (
+	"bytes"
 	"io"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/fxamacker/cbor/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/twmb/franz-go/pkg/kgo"
 	cli "github.com/urfave/cli/v2"
 
 	pkafka "github.com/stergiotis/boxer/public/streaming/persisted/kafka"
@@ -171,6 +175,156 @@ func TestBuildTLS_BadCAFile(t *testing.T) {
 		assert.Contains(t, err.Error(), "read --tls-ca-file")
 		return nil
 	})
+}
+
+func TestNetstringWriter(t *testing.T) {
+	cases := []struct {
+		name  string
+		value []byte
+		want  string
+	}{
+		{"hello", []byte("hello"), "5:hello,"},
+		{"empty", []byte{}, "0:,"},
+		{"nil", nil, "0:,"},
+		{"binary", []byte{0xff, 0x00, 0x01}, "3:\xff\x00\x01,"},
+		{"unicode (byte length, not rune)", []byte("héllo"), "6:héllo,"}, // é is 2 bytes UTF-8
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			err := netstringWriter(&buf, &kgo.Record{Value: tc.value})
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, buf.String())
+		})
+	}
+}
+
+func TestCBORWriter_RoundTrip(t *testing.T) {
+	rec := &kgo.Record{
+		Topic:     "events",
+		Partition: 7,
+		Offset:    42,
+		Timestamp: time.UnixMilli(1700000000000),
+		Key:       []byte("user-123"),
+		Value:     []byte("payload"),
+		Headers: []kgo.RecordHeader{
+			{Key: "trace-id", Value: []byte("abc")},
+			{Key: "trace-id", Value: []byte("xyz")}, // duplicate keys allowed
+		},
+	}
+	var buf bytes.Buffer
+	require.NoError(t, cborWriter(&buf, rec))
+
+	var got cborRecord
+	require.NoError(t, cbor.Unmarshal(buf.Bytes(), &got))
+
+	assert.Equal(t, "events", got.Topic)
+	assert.Equal(t, int32(7), got.Partition)
+	assert.Equal(t, int64(42), got.Offset)
+	assert.Equal(t, int64(1700000000000), got.TimestampMs)
+	assert.Equal(t, []byte("user-123"), got.Key)
+	assert.Equal(t, []byte("payload"), got.Value)
+	require.Len(t, got.Headers, 2)
+	assert.Equal(t, "trace-id", got.Headers[0].Key)
+	assert.Equal(t, []byte("abc"), got.Headers[0].Value)
+	assert.Equal(t, "trace-id", got.Headers[1].Key) // duplicate preserved
+	assert.Equal(t, []byte("xyz"), got.Headers[1].Value)
+}
+
+func TestCBORWriter_TombstonePreservesNilValue(t *testing.T) {
+	// A Kafka tombstone has Value=nil; the encoded CBOR must preserve
+	// that as null (NOT omit the field), so downstream consumers can
+	// distinguish "delete marker" from "empty payload".
+	rec := &kgo.Record{
+		Topic:     "deletes",
+		Partition: 0,
+		Offset:    1,
+		Timestamp: time.UnixMilli(0),
+		Key:       []byte("k"),
+		Value:     nil,
+	}
+	var buf bytes.Buffer
+	require.NoError(t, cborWriter(&buf, rec))
+
+	// Round-trip into a generic map to confirm the "value" key exists.
+	var got map[string]any
+	require.NoError(t, cbor.Unmarshal(buf.Bytes(), &got))
+	assert.Contains(t, got, "value", "value key must be present even for tombstones")
+	assert.Nil(t, got["value"], "tombstone value must be CBOR null")
+}
+
+func TestCBORWriter_NoHeadersOmitsField(t *testing.T) {
+	rec := &kgo.Record{
+		Topic: "x", Value: []byte("v"), Timestamp: time.UnixMilli(0),
+	}
+	var buf bytes.Buffer
+	require.NoError(t, cborWriter(&buf, rec))
+	var got map[string]any
+	require.NoError(t, cbor.Unmarshal(buf.Bytes(), &got))
+	_, hasHeaders := got["headers"]
+	assert.False(t, hasHeaders, "headers field omitted when none present")
+}
+
+func TestCBORWriter_SelfDelimiting(t *testing.T) {
+	// Two records concatenated should decode as two separate records.
+	r1 := &kgo.Record{Topic: "t", Partition: 0, Offset: 1, Timestamp: time.UnixMilli(0), Value: []byte("a")}
+	r2 := &kgo.Record{Topic: "t", Partition: 0, Offset: 2, Timestamp: time.UnixMilli(0), Value: []byte("b")}
+	var buf bytes.Buffer
+	require.NoError(t, cborWriter(&buf, r1))
+	require.NoError(t, cborWriter(&buf, r2))
+
+	dec := cbor.NewDecoder(&buf)
+	var g1, g2 cborRecord
+	require.NoError(t, dec.Decode(&g1))
+	require.NoError(t, dec.Decode(&g2))
+	assert.Equal(t, []byte("a"), g1.Value)
+	assert.Equal(t, []byte("b"), g2.Value)
+}
+
+func TestMakeRecordWriter_Routing(t *testing.T) {
+	cases := []struct {
+		name    string
+		args    []string
+		wantErr string
+	}{
+		{"format default", nil, ""},
+		{"format explicit", []string{"--output-mode=format"}, ""},
+		{"cbor", []string{"--output-mode=cbor"}, ""},
+		{"netstring", []string{"--output-mode=netstring"}, ""},
+		{"bogus", []string{"--output-mode=avro"}, "invalid --output-mode"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			runWithCommonAndConsumeFlags(t, tc.args, func(c *cli.Context) error {
+				fn, err := makeRecordWriter(c)
+				if tc.wantErr != "" {
+					require.Error(t, err)
+					assert.Contains(t, err.Error(), tc.wantErr)
+					return nil
+				}
+				require.NoError(t, err)
+				assert.NotNil(t, fn)
+				return nil
+			})
+		})
+	}
+}
+
+// runWithCommonAndConsumeFlags is like runWithCommonFlags but layers
+// the consume command's own flags on top so --output-mode and
+// --format parse correctly.
+func runWithCommonAndConsumeFlags(t *testing.T, args []string, action func(c *cli.Context) error) {
+	t.Helper()
+	app := cli.NewApp()
+	app.Writer = io.Discard
+	app.ErrWriter = io.Discard
+	cmd := consumeCmd()
+	cmd.Action = action
+	app.Commands = []*cli.Command{cmd}
+	full := append([]string{"test", "consume", "--brokers=stub:9092", "--topic=stub"}, args...)
+	if err := app.Run(full); err != nil {
+		t.Fatalf("app.Run: %v", err)
+	}
 }
 
 func TestBuildTLS_EmptyCAFile(t *testing.T) {
