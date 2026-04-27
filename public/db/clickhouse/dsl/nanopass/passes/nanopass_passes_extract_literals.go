@@ -99,14 +99,37 @@ type literalCandidate struct {
 	whitelisted bool
 }
 
-type inListCandidate struct {
-	tupleNode    *grammar1.ColumnExprTupleContext
-	castNode     *grammar1.ColumnExprCastContext
-	literalTexts []string
-	elementType  string
-	castType     canonicaltypes.PrimitiveAstNodeI
-	blacklisted  bool
-	whitelisted  bool
+type compositeKind int
+
+const (
+	compositeKindINTuple compositeKind = iota
+	compositeKindArray
+	compositeKindTuple
+)
+
+func (k compositeKind) contextName() string {
+	switch k {
+	case compositeKindINTuple:
+		return "in"
+	case compositeKindArray:
+		return "array"
+	case compositeKindTuple:
+		return "tuple"
+	default:
+		return "composite"
+	}
+}
+
+type compositeCandidate struct {
+	kind            compositeKind
+	containerNode   antlr.ParserRuleContext
+	castNode        *grammar1.ColumnExprCastContext
+	literalTexts    []string
+	perElementTypes []string
+	elementType     string
+	castType        canonicaltypes.PrimitiveAstNodeI
+	blacklisted     bool
+	whitelisted     bool
 }
 
 // --- ExtractLiterals Pass ---
@@ -119,19 +142,19 @@ func ExtractLiterals(config *ExtractLiteralsConfig) nanopass.Pass {
 			return
 		}
 
-		inListCandidates := collectINListCandidates(pr, config)
-		inListNodes := make(map[*grammar1.ColumnExprLiteralContext]bool)
-		for _, ilc := range inListCandidates {
-			for _, litNode := range collectLiteralNodesInTuple(ilc.tupleNode) {
-				inListNodes[litNode] = true
+		compositeCandidates := collectCompositeCandidates(pr, config)
+		excludeNodes := make(map[*grammar1.ColumnExprLiteralContext]bool)
+		for _, cc := range compositeCandidates {
+			for _, litNode := range collectLiteralNodesInComposite(cc.containerNode) {
+				excludeNodes[litNode] = true
 			}
 		}
 
-		candidates := collectLiteralCandidates(pr, config, inListNodes)
+		candidates := collectLiteralCandidates(pr, config, excludeNodes)
 		filtered := filterCandidates(candidates, config)
-		filteredINLists := filterINListCandidates(inListCandidates, config)
+		filteredComposites := filterCompositeCandidates(compositeCandidates, config)
 
-		if len(filtered) == 0 && len(filteredINLists) == 0 {
+		if len(filtered) == 0 && len(filteredComposites) == 0 {
 			result = sql
 			return
 		}
@@ -153,16 +176,16 @@ func ExtractLiterals(config *ExtractLiteralsConfig) nanopass.Pass {
 			}
 		}
 
-		if len(filteredINLists) > 0 {
-			inParams := assignINListParamNames(filteredINLists, config)
-			allParams = append(allParams, inParams...)
-			for i, ilc := range filteredINLists {
-				p := &inParams[i]
+		if len(filteredComposites) > 0 {
+			compositeParams := assignCompositeParamNames(filteredComposites, config)
+			allParams = append(allParams, compositeParams...)
+			for i, cc := range filteredComposites {
+				p := &compositeParams[i]
 				slotText := fmt.Sprintf("{%s: %s}", p.name, p.typeName)
-				if ilc.castNode != nil {
-					nanopass.ReplaceNode(rw, ilc.castNode, slotText)
+				if cc.castNode != nil {
+					nanopass.ReplaceNode(rw, cc.castNode, slotText)
 				} else {
-					nanopass.ReplaceNode(rw, ilc.tupleNode, slotText)
+					nanopass.ReplaceNode(rw, cc.containerNode, slotText)
 				}
 			}
 		}
@@ -184,28 +207,83 @@ func ExtractLiterals(config *ExtractLiteralsConfig) nanopass.Pass {
 	}
 }
 
-// --- Phase 1a: IN-list collection ---
+// --- Phase 1a: Composite (IN-tuple, array, tuple) collection ---
 
-func collectINListCandidates(pr *nanopass.ParseResult, config *ExtractLiteralsConfig) (candidates []inListCandidate) {
+// collectCompositeCandidates walks the CST for literal-only composites worth
+// collapsing into a single composite parameter. It recognises two shapes:
+//
+//   - The IN-tuple syntactic form (`x IN (1, 2, 3)`), preserved for callers
+//     that have not run CanonicalizeConstructors.
+//   - The function-call form `array(...)` and `tuple(...)`, which is the
+//     canonical shape produced by `CanonicalizeConstructors(ConstructorFormFunction)`.
+//
+// Standalone `[...]` and `(...)` literals are intentionally NOT handled here:
+// CanonicalizeConstructors rewrites them into the function form first.
+func collectCompositeCandidates(pr *nanopass.ParseResult, config *ExtractLiteralsConfig) (candidates []compositeCandidate) {
 	if config.minINListSize <= 0 {
 		return
 	}
-	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-		prec3, ok := ctx.(*grammar1.ColumnExprPrecedence3Context)
-		if !ok {
-			return true
-		}
-		if !isINExpression(prec3) || config.IsBlacklisted("in") {
-			return true
-		}
-		tupleNode := findTupleInPrecedence3(prec3)
-		if tupleNode == nil {
-			return true
-		}
 
-		var castNode *grammar1.ColumnExprCastContext
-		var castType canonicaltypes.PrimitiveAstNodeI
-		if castCtx, isCast := prec3.GetParent().(*grammar1.ColumnExprCastContext); isCast && config.mapTypeToCanonical != nil {
+	inTuples := collectINTupleSet(pr)
+
+	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
+		switch container := ctx.(type) {
+		case *grammar1.ColumnExprTupleContext:
+			if !inTuples[container] {
+				return true
+			}
+			if cand, ok := buildCompositeCandidate(pr, container, compositeKindINTuple, config); ok {
+				candidates = append(candidates, cand)
+			}
+		case *grammar1.ColumnExprFunctionContext:
+			kind, isComposite := classifyCompositeFunction(container)
+			if !isComposite {
+				return true
+			}
+			if cand, ok := buildCompositeFunctionCandidate(pr, container, kind, config); ok {
+				candidates = append(candidates, cand)
+			}
+		}
+		return true
+	})
+	return
+}
+
+// classifyCompositeFunction returns the composite kind for `array(...)` and
+// `tuple(...)` function calls.
+func classifyCompositeFunction(funcCtx *grammar1.ColumnExprFunctionContext) (kind compositeKind, ok bool) {
+	ident := funcCtx.Identifier()
+	if ident == nil {
+		return
+	}
+	switch normalizeFunctionName(ident.GetText()) {
+	case "array":
+		return compositeKindArray, true
+	case "tuple":
+		return compositeKindTuple, true
+	}
+	return
+}
+
+func buildCompositeFunctionCandidate(pr *nanopass.ParseResult, funcCtx *grammar1.ColumnExprFunctionContext, kind compositeKind, config *ExtractLiteralsConfig) (cand compositeCandidate, ok bool) {
+	contextName := kind.contextName()
+	if config.IsBlacklisted(contextName) {
+		return
+	}
+
+	argList := funcCtx.ColumnArgList()
+	if argList == nil {
+		return
+	}
+	literalTexts, elementType, perElementTypes, allLiterals := extractLiteralsFromArgList(pr, argList.(*grammar1.ColumnArgListContext))
+	if !allLiterals || len(literalTexts) < config.minINListSize {
+		return
+	}
+
+	var castNode *grammar1.ColumnExprCastContext
+	var castType canonicaltypes.PrimitiveAstNodeI
+	if config.mapTypeToCanonical != nil {
+		if castCtx, isCast := funcCtx.GetParent().(*grammar1.ColumnExprCastContext); isCast {
 			castTypeText := extractCastTypeText(castCtx)
 			if castTypeText != "" {
 				ct, mapErr := config.mapTypeToCanonical(castTypeText)
@@ -215,19 +293,136 @@ func collectINListCandidates(pr *nanopass.ParseResult, config *ExtractLiteralsCo
 				}
 			}
 		}
+	}
 
-		literalTexts, elementType, allLiterals := extractTupleLiterals(pr, tupleNode)
-		if !allLiterals || len(literalTexts) < config.minINListSize {
+	cand = compositeCandidate{
+		kind:            kind,
+		containerNode:   funcCtx,
+		castNode:        castNode,
+		literalTexts:    literalTexts,
+		perElementTypes: perElementTypes,
+		elementType:     elementType,
+		castType:        castType,
+		whitelisted:     config.IsWhitelisted(contextName),
+	}
+	ok = true
+	return
+}
+
+func extractLiteralsFromArgList(pr *nanopass.ParseResult, argList *grammar1.ColumnArgListContext) (texts []string, elementType string, perElementTypes []string, allLiterals bool) {
+	texts = make([]string, 0, argList.GetChildCount())
+	perElementTypes = make([]string, 0, argList.GetChildCount())
+	allLiterals = true
+	for i := 0; i < argList.GetChildCount(); i++ {
+		argExpr, ok := argList.GetChild(i).(*grammar1.ColumnArgExprContext)
+		if !ok {
+			continue
+		}
+		if argExpr.GetChildCount() == 0 {
+			allLiterals = false
+			return
+		}
+		litExpr, ok := argExpr.GetChild(0).(*grammar1.ColumnExprLiteralContext)
+		if !ok {
+			allLiterals = false
+			return
+		}
+		litCtx := findLiteralChild(litExpr)
+		if litCtx == nil || litCtx.NULL_SQL() != nil {
+			allLiterals = false
+			return
+		}
+		thisType := inferClickHouseType(litCtx)
+		if elementType == "" {
+			elementType = thisType
+		} else if elementType != thisType {
+			elementType = "String"
+		}
+		perElementTypes = append(perElementTypes, thisType)
+		texts = append(texts, nanopass.NodeText(pr, litExpr))
+	}
+	if len(texts) == 0 {
+		allLiterals = false
+	}
+	return
+}
+
+func collectINTupleSet(pr *nanopass.ParseResult) (set map[*grammar1.ColumnExprTupleContext]bool) {
+	set = make(map[*grammar1.ColumnExprTupleContext]bool)
+	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
+		prec3, ok := ctx.(*grammar1.ColumnExprPrecedence3Context)
+		if !ok || !isINExpression(prec3) {
 			return true
 		}
-
-		candidates = append(candidates, inListCandidate{
-			tupleNode: tupleNode, castNode: castNode, literalTexts: literalTexts,
-			elementType: elementType, castType: castType, whitelisted: config.IsWhitelisted("in"),
-		})
+		if t := findTupleInPrecedence3(prec3); t != nil {
+			set[t] = true
+		}
 		return true
 	})
 	return
+}
+
+// buildCompositeCandidate handles the IN-tuple syntactic form. The container
+// here is always a ColumnExprTupleContext that appears as the right operand of
+// an IN expression.
+func buildCompositeCandidate(pr *nanopass.ParseResult, container antlr.ParserRuleContext, kind compositeKind, config *ExtractLiteralsConfig) (cand compositeCandidate, ok bool) {
+	contextName := kind.contextName()
+	if config.IsBlacklisted(contextName) {
+		return
+	}
+
+	literalTexts, elementType, perElementTypes, allLiterals := extractListLiteralsFromContainer(pr, container)
+	if !allLiterals || len(literalTexts) < config.minINListSize {
+		return
+	}
+
+	var castNode *grammar1.ColumnExprCastContext
+	var castType canonicaltypes.PrimitiveAstNodeI
+	if config.mapTypeToCanonical != nil {
+		castWrapper := findINTupleCastWrapper(container)
+		if castWrapper != nil {
+			castTypeText := extractCastTypeText(castWrapper)
+			if castTypeText != "" {
+				ct, mapErr := config.mapTypeToCanonical(castTypeText)
+				if mapErr == nil && ct != nil {
+					castNode = castWrapper
+					castType = ct
+				}
+			}
+		}
+	}
+
+	cand = compositeCandidate{
+		kind:            kind,
+		containerNode:   container,
+		castNode:        castNode,
+		literalTexts:    literalTexts,
+		perElementTypes: perElementTypes,
+		elementType:     elementType,
+		castType:        castType,
+		whitelisted:     config.IsWhitelisted(contextName),
+	}
+	ok = true
+	return
+}
+
+// findINTupleCastWrapper returns the cast wrapping an IN expression like
+// `(x IN (1,2,3))::Array(UInt64)`. The cast wraps the enclosing precedence3
+// expression, not the tuple itself.
+func findINTupleCastWrapper(container antlr.ParserRuleContext) *grammar1.ColumnExprCastContext {
+	parent := container.GetParent()
+	if parent == nil {
+		return nil
+	}
+	prec3, ok := parent.(*grammar1.ColumnExprPrecedence3Context)
+	if !ok {
+		return nil
+	}
+	castCtx, isCast := prec3.GetParent().(*grammar1.ColumnExprCastContext)
+	if !isCast {
+		return nil
+	}
+	return castCtx
 }
 
 func isINExpression(prec3 *grammar1.ColumnExprPrecedence3Context) bool {
@@ -250,18 +445,13 @@ func findTupleInPrecedence3(prec3 *grammar1.ColumnExprPrecedence3Context) *gramm
 	return nil
 }
 
-func extractTupleLiterals(pr *nanopass.ParseResult, tuple *grammar1.ColumnExprTupleContext) (texts []string, elementType string, allLiterals bool) {
-	var exprList *grammar1.ColumnExprListContext
-	for i := 0; i < tuple.GetChildCount(); i++ {
-		if el, ok := tuple.GetChild(i).(*grammar1.ColumnExprListContext); ok {
-			exprList = el
-			break
-		}
-	}
+func extractListLiteralsFromContainer(pr *nanopass.ParseResult, container antlr.ParserRuleContext) (texts []string, elementType string, perElementTypes []string, allLiterals bool) {
+	exprList := findExprListChild(container)
 	if exprList == nil {
-		return nil, "", false
+		return nil, "", nil, false
 	}
 	texts = make([]string, 0, exprList.GetChildCount())
+	perElementTypes = make([]string, 0, exprList.GetChildCount())
 	allLiterals = true
 	for i := 0; i < exprList.GetChildCount(); i++ {
 		colsExpr, ok := exprList.GetChild(i).(*grammar1.ColumnsExprColumnContext)
@@ -288,6 +478,7 @@ func extractTupleLiterals(pr *nanopass.ParseResult, tuple *grammar1.ColumnExprTu
 		} else if elementType != thisType {
 			elementType = "String"
 		}
+		perElementTypes = append(perElementTypes, thisType)
 		texts = append(texts, nanopass.NodeText(pr, litExpr))
 	}
 	if len(texts) == 0 {
@@ -296,8 +487,17 @@ func extractTupleLiterals(pr *nanopass.ParseResult, tuple *grammar1.ColumnExprTu
 	return
 }
 
-func collectLiteralNodesInTuple(tuple *grammar1.ColumnExprTupleContext) (nodes []*grammar1.ColumnExprLiteralContext) {
-	nanopass.WalkCST(tuple, func(ctx antlr.ParserRuleContext) bool {
+func findExprListChild(container antlr.Tree) *grammar1.ColumnExprListContext {
+	for i := 0; i < container.GetChildCount(); i++ {
+		if el, ok := container.GetChild(i).(*grammar1.ColumnExprListContext); ok {
+			return el
+		}
+	}
+	return nil
+}
+
+func collectLiteralNodesInComposite(container antlr.Tree) (nodes []*grammar1.ColumnExprLiteralContext) {
+	nanopass.WalkCST(container, func(ctx antlr.ParserRuleContext) bool {
 		if litExpr, ok := ctx.(*grammar1.ColumnExprLiteralContext); ok {
 			nodes = append(nodes, litExpr)
 		}
@@ -614,8 +814,8 @@ func filterCandidates(candidates []literalCandidate, config *ExtractLiteralsConf
 	return
 }
 
-func filterINListCandidates(candidates []inListCandidate, config *ExtractLiteralsConfig) (filtered []inListCandidate) {
-	filtered = make([]inListCandidate, 0, len(candidates))
+func filterCompositeCandidates(candidates []compositeCandidate, config *ExtractLiteralsConfig) (filtered []compositeCandidate) {
+	filtered = make([]compositeCandidate, 0, len(candidates))
 	for _, c := range candidates {
 		if c.blacklisted {
 			continue
@@ -691,39 +891,39 @@ func assignParamNames(candidates []literalCandidate, config *ExtractLiteralsConf
 	return
 }
 
-func assignINListParamNames(candidates []inListCandidate, config *ExtractLiteralsConfig) (params []extractedParam) {
+func assignCompositeParamNames(candidates []compositeCandidate, config *ExtractLiteralsConfig) (params []extractedParam) {
 	usedNames := make(map[string]bool)
 	params = make([]extractedParam, 0, len(candidates))
 	seqCounter := uint32(0)
 	for _, c := range candidates {
-		arrayValue := "[" + strings.Join(c.literalTexts, ", ") + "]"
+		value := formatCompositeValue(&c)
+		typeName := defaultCompositeTypeName(&c)
+		if c.castNode != nil {
+			if castTypeText := extractCastTypeText(c.castNode); castTypeText != "" {
+				typeName = castTypeText
+			}
+		}
 		castCanon := ""
 		if c.castType != nil {
 			castCanon = c.castType.String()
 		}
-		typeName := fmt.Sprintf("Array(%s)", c.elementType)
-		if c.castNode != nil {
-			castTypeText := extractCastTypeText(c.castNode)
-			if castTypeText != "" {
-				typeName = castTypeText
-			}
-		}
+		contextName := c.kind.contextName()
 		meta := ParamMetadata{ArgIndex: 0, CastTypeCanonical: castCanon}
 		if config.useSequentialNames {
 			meta.IsSequential = true
 			meta.SequentialIndex = seqCounter
 			seqCounter++
 		} else {
-			meta.ContentHash = literalHash(arrayValue)
+			meta.ContentHash = literalHash(value)
 		}
-		name, buildErr := BuildParamName(config.prefix, "in", &meta)
+		name, buildErr := BuildParamName(config.prefix, contextName, &meta)
 		if buildErr != nil {
 			continue
 		}
 		if usedNames[name] {
 			meta.HashCollisionCounter = 2
 			for {
-				name, buildErr = BuildParamName(config.prefix, "in", &meta)
+				name, buildErr = BuildParamName(config.prefix, contextName, &meta)
 				if buildErr != nil {
 					break
 				}
@@ -733,11 +933,34 @@ func assignINListParamNames(candidates []inListCandidate, config *ExtractLiteral
 				meta.HashCollisionCounter++
 			}
 		}
-		p := extractedParam{name: name, value: arrayValue, typeName: typeName, castType: c.castType, meta: meta}
+		p := extractedParam{name: name, value: value, typeName: typeName, castType: c.castType, meta: meta}
 		params = append(params, p)
 		usedNames[name] = true
 	}
 	return
+}
+
+// formatCompositeValue serializes the captured literal texts back into SQL form.
+// IN-tuples and arrays use brackets so they bind to ClickHouse Array(...) parameters;
+// standalone tuples use parentheses so they bind to Tuple(...) parameters.
+func formatCompositeValue(c *compositeCandidate) string {
+	joined := strings.Join(c.literalTexts, ", ")
+	if c.kind == compositeKindTuple {
+		return "(" + joined + ")"
+	}
+	return "[" + joined + "]"
+}
+
+// defaultCompositeTypeName returns the ClickHouse parameter type for the candidate
+// when no explicit cast wrapper is present.
+func defaultCompositeTypeName(c *compositeCandidate) string {
+	if c.kind == compositeKindTuple {
+		if len(c.perElementTypes) == 0 {
+			return fmt.Sprintf("Tuple(%s)", c.elementType)
+		}
+		return "Tuple(" + strings.Join(c.perElementTypes, ", ") + ")"
+	}
+	return fmt.Sprintf("Array(%s)", c.elementType)
 }
 
 func sanitizeName(name string) string {
@@ -765,17 +988,17 @@ func AnalyzeExtractions(sql string, config *ExtractLiteralsConfig) (extractions 
 		err = eh.Errorf("AnalyzeExtractions: %w", err)
 		return
 	}
-	inListCandidates := collectINListCandidates(pr, config)
-	inListNodes := make(map[*grammar1.ColumnExprLiteralContext]bool)
-	for _, ilc := range inListCandidates {
-		for _, litNode := range collectLiteralNodesInTuple(ilc.tupleNode) {
-			inListNodes[litNode] = true
+	compositeCandidates := collectCompositeCandidates(pr, config)
+	excludeNodes := make(map[*grammar1.ColumnExprLiteralContext]bool)
+	for _, cc := range compositeCandidates {
+		for _, litNode := range collectLiteralNodesInComposite(cc.containerNode) {
+			excludeNodes[litNode] = true
 		}
 	}
-	candidates := collectLiteralCandidates(pr, config, inListNodes)
+	candidates := collectLiteralCandidates(pr, config, excludeNodes)
 	filtered := filterCandidates(candidates, config)
-	filteredINLists := filterINListCandidates(inListCandidates, config)
-	extractions = make([]ExtractionInfo, 0, len(filtered)+len(filteredINLists))
+	filteredComposites := filterCompositeCandidates(compositeCandidates, config)
+	extractions = make([]ExtractionInfo, 0, len(filtered)+len(filteredComposites))
 	if len(filtered) > 0 {
 		_, paramByNode := assignParamNames(filtered, config)
 		seen := make(map[string]bool)
@@ -793,15 +1016,15 @@ func AnalyzeExtractions(sql string, config *ExtractLiteralsConfig) (extractions 
 			})
 		}
 	}
-	if len(filteredINLists) > 0 {
-		inParams := assignINListParamNames(filteredINLists, config)
-		for i, ilc := range filteredINLists {
-			p := &inParams[i]
+	if len(filteredComposites) > 0 {
+		compositeParams := assignCompositeParamNames(filteredComposites, config)
+		for i, cc := range filteredComposites {
+			p := &compositeParams[i]
 			extractions = append(extractions, ExtractionInfo{
 				ParamName: p.name, Value: p.value, TypeName: p.typeName,
-				ContextName: "in", ArgIndex: 0,
-				Line: ilc.tupleNode.GetStart().GetLine(), Column: ilc.tupleNode.GetStart().GetColumn(),
-				CastType: ilc.castType,
+				ContextName: cc.kind.contextName(), ArgIndex: 0,
+				Line: cc.containerNode.GetStart().GetLine(), Column: cc.containerNode.GetStart().GetColumn(),
+				CastType: cc.castType,
 			})
 		}
 	}

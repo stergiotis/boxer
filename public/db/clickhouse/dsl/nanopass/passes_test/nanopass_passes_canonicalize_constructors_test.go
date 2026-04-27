@@ -184,6 +184,24 @@ func TestCanonicalizeToFunctionTuple(t *testing.T) {
 			input:    "SELECT tuple(1, 2, 3)",
 			expected: "SELECT tuple(1, 2, 3)",
 		},
+		{
+			// IN's RHS becomes array(...) rather than tuple(...) so the
+			// downstream ExtractLiterals pass keeps the conventional Array
+			// parameter shape for IN.
+			name:     "in_tuple_becomes_array",
+			input:    "SELECT a FROM t WHERE id IN (1, 2, 3)",
+			expected: "SELECT a FROM t WHERE id IN array(1, 2, 3)",
+		},
+		{
+			name:     "not_in_tuple_becomes_array",
+			input:    "SELECT a FROM t WHERE id NOT IN (1, 2, 3)",
+			expected: "SELECT a FROM t WHERE id NOT IN array(1, 2, 3)",
+		},
+		{
+			name:     "global_in_tuple_becomes_array",
+			input:    "SELECT a FROM t WHERE id GLOBAL IN (1, 2, 3)",
+			expected: "SELECT a FROM t WHERE id GLOBAL IN array(1, 2, 3)",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

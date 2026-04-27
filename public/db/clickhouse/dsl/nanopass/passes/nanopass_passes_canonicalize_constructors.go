@@ -147,6 +147,11 @@ func canonicalizeToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewri
 	})
 }
 
+// rewriteTupleToFunction lowers a tuple syntactic form to its function call.
+// IN-list arguments (`x IN (1, 2, 3)`) are rewritten as `array(...)` because
+// ClickHouse accepts arrays on the RHS of IN, and the array shape lets
+// downstream passes (e.g. ExtractLiterals) emit Array-typed parameters that
+// match the conventional IN semantics.
 func rewriteTupleToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, ctx *grammar1.ColumnExprTupleContext) {
 	// ColumnExprTuple: ( ColumnExprList )
 	// Extract the inner expression list text
@@ -157,7 +162,30 @@ func rewriteTupleToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewri
 			break
 		}
 	}
+	if isINTupleArg(ctx) {
+		nanopass.ReplaceNode(rw, ctx, "array("+innerText+")")
+		return
+	}
 	nanopass.ReplaceNode(rw, ctx, "tuple("+innerText+")")
+}
+
+// isINTupleArg reports whether the tuple appears as the RHS of an `IN`
+// (or `NOT IN` / `GLOBAL IN`) expression.
+func isINTupleArg(ctx *grammar1.ColumnExprTupleContext) bool {
+	parent, ok := ctx.GetParent().(*grammar1.ColumnExprPrecedence3Context)
+	if !ok {
+		return false
+	}
+	for i := 0; i < parent.GetChildCount(); i++ {
+		term, ok := parent.GetChild(i).(*antlr.TerminalNodeImpl)
+		if !ok {
+			continue
+		}
+		if term.GetSymbol().GetTokenType() == grammar1.ClickHouseLexerIN {
+			return true
+		}
+	}
+	return false
 }
 
 func rewriteArrayToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, ctx *grammar1.ColumnExprArrayContext) {

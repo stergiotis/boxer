@@ -239,6 +239,271 @@ func TestExtractLiteralsINListDisabled(t *testing.T) {
 	assert.Equal(t, sql, got)
 }
 
+// --- Array function-call collapsing ---
+//
+// ExtractLiterals collapses literal-only `array(...)` and `tuple(...)` calls
+// into a single composite parameter. Syntactic `[...]` / `(...)` literals are
+// expected to be lowered to the function form by
+// CanonicalizeConstructors(ConstructorFormFunction) before this pass runs.
+
+func TestExtractLiteralsArrayCollapse(t *testing.T) {
+	config := passes.NewExtractLiteralsConfig(100)
+	config.SetUseSequentialNames(true)
+	config.SetMinINListSize(3)
+	pass := passes.ExtractLiterals(config)
+
+	sql := "SELECT array(1, 2, 3, 4, 5) FROM t"
+	got, err := pass(sql)
+	require.NoError(t, err)
+
+	sets, _, query := passes.ParseExtractedQuery(got, "")
+	require.Len(t, sets, 1, "expected single SET for array() call")
+	assert.Contains(t, sets[0], "[1, 2, 3, 4, 5]")
+	assert.Contains(t, query, "Array(")
+	assert.NotContains(t, query, "array(1", "array() call should be replaced by param slot")
+
+	t.Logf("Result:\n%s", got)
+}
+
+func TestExtractLiteralsArrayCollapseStrings(t *testing.T) {
+	config := passes.NewExtractLiteralsConfig(100)
+	config.SetUseSequentialNames(true)
+	config.SetMinINListSize(3)
+	pass := passes.ExtractLiterals(config)
+
+	sql := "SELECT array('a', 'b', 'c') FROM t"
+	got, err := pass(sql)
+	require.NoError(t, err)
+
+	sets, _, query := passes.ParseExtractedQuery(got, "")
+	require.Len(t, sets, 1)
+	assert.Contains(t, sets[0], "['a', 'b', 'c']")
+	assert.Contains(t, query, "Array(String)")
+}
+
+func TestExtractLiteralsArrayTooSmall(t *testing.T) {
+	config := passes.NewExtractLiteralsConfig(100)
+	config.SetMinINListSize(5)
+	pass := passes.ExtractLiterals(config)
+
+	sql := "SELECT array(1, 2, 3) FROM t"
+	got, err := pass(sql)
+	require.NoError(t, err)
+	assert.Equal(t, sql, got, "small array below threshold should be untouched")
+}
+
+func TestExtractLiteralsArrayDisabled(t *testing.T) {
+	config := newSeqConfig(100)
+	pass := passes.ExtractLiterals(config)
+
+	sql := "SELECT array(1, 2, 3, 4, 5) FROM t"
+	got, err := pass(sql)
+	require.NoError(t, err)
+	assert.Equal(t, sql, got)
+}
+
+func TestExtractLiteralsArrayWithExpressionsSkipped(t *testing.T) {
+	config := passes.NewExtractLiteralsConfig(100)
+	config.SetUseSequentialNames(true)
+	config.SetMinINListSize(3)
+	pass := passes.ExtractLiterals(config)
+
+	sql := "SELECT array(1, 2, x) FROM t"
+	got, err := pass(sql)
+	require.NoError(t, err)
+	sets, _, _ := passes.ParseExtractedQuery(got, "")
+	assert.Len(t, sets, 0, "non-literal element should disqualify the array() call")
+}
+
+func TestExtractLiteralsArraySyntacticFormSkipped(t *testing.T) {
+	config := passes.NewExtractLiteralsConfig(100)
+	config.SetUseSequentialNames(true)
+	config.SetMinINListSize(3)
+	pass := passes.ExtractLiterals(config)
+
+	// `[1, 2, 3]` is the syntactic form. It is intentionally not handled here;
+	// callers are expected to run CanonicalizeConstructors(ConstructorFormFunction)
+	// first to lower it to `array(1, 2, 3)`.
+	sql := "SELECT [1, 2, 3, 4, 5] FROM t"
+	got, err := pass(sql)
+	require.NoError(t, err)
+	sets, _, _ := passes.ParseExtractedQuery(got, "")
+	assert.Len(t, sets, 0, "syntactic [..] is not collapsed; canonicalize first")
+}
+
+// --- Tuple function-call collapsing ---
+
+func TestExtractLiteralsTupleCollapse(t *testing.T) {
+	config := passes.NewExtractLiteralsConfig(100)
+	config.SetUseSequentialNames(true)
+	config.SetMinINListSize(3)
+	pass := passes.ExtractLiterals(config)
+
+	sql := "SELECT tuple(1, 2, 3) AS x FROM t"
+	got, err := pass(sql)
+	require.NoError(t, err)
+
+	sets, _, query := passes.ParseExtractedQuery(got, "")
+	require.Len(t, sets, 1, "expected single SET for tuple() call")
+	assert.Contains(t, sets[0], "(1, 2, 3)")
+	assert.Contains(t, query, "Tuple(")
+	assert.NotContains(t, query, "tuple(1", "tuple() call should be replaced by param slot")
+
+	t.Logf("Result:\n%s", got)
+}
+
+func TestExtractLiteralsTupleHeterogeneous(t *testing.T) {
+	config := passes.NewExtractLiteralsConfig(100)
+	config.SetUseSequentialNames(true)
+	config.SetMinINListSize(3)
+	pass := passes.ExtractLiterals(config)
+
+	sql := "SELECT tuple(1, 'two', 3) AS x FROM t"
+	got, err := pass(sql)
+	require.NoError(t, err)
+
+	sets, _, query := passes.ParseExtractedQuery(got, "")
+	require.Len(t, sets, 1)
+	assert.Contains(t, sets[0], "(1, 'two', 3)")
+	assert.Contains(t, query, "Tuple(")
+	assert.Contains(t, query, "String")
+}
+
+func TestExtractLiteralsTupleInINStillArray(t *testing.T) {
+	config := passes.NewExtractLiteralsConfig(100)
+	config.SetUseSequentialNames(true)
+	config.SetMinINListSize(3)
+	pass := passes.ExtractLiterals(config)
+
+	// IN-tuple syntactic form is preserved for callers that have not yet run
+	// the constructor canonicalization. It still collapses to an Array param.
+	sql := "SELECT a FROM t WHERE id IN (1, 2, 3)"
+	got, err := pass(sql)
+	require.NoError(t, err)
+
+	sets, _, query := passes.ParseExtractedQuery(got, "")
+	require.Len(t, sets, 1)
+	assert.Contains(t, sets[0], "[1, 2, 3]", "IN-tuples must remain Array-shaped values")
+	assert.Contains(t, query, "Array(")
+	assert.NotContains(t, query, "Tuple(")
+}
+
+func TestExtractLiteralsTupleBlacklist(t *testing.T) {
+	config := passes.NewExtractLiteralsConfig(100)
+	config.SetUseSequentialNames(true)
+	config.SetMinINListSize(3)
+	config.Blacklist("tuple")
+	pass := passes.ExtractLiterals(config)
+
+	sql := "SELECT tuple(1, 2, 3) AS x FROM t"
+	got, err := pass(sql)
+	require.NoError(t, err)
+	assert.Equal(t, sql, got, "blacklisted tuple kind should leave the call alone")
+}
+
+func TestExtractLiteralsArrayBlacklist(t *testing.T) {
+	config := passes.NewExtractLiteralsConfig(100)
+	config.SetUseSequentialNames(true)
+	config.SetMinINListSize(3)
+	config.Blacklist("array")
+	pass := passes.ExtractLiterals(config)
+
+	sql := "SELECT array(1, 2, 3) FROM t"
+	got, err := pass(sql)
+	require.NoError(t, err)
+	assert.Equal(t, sql, got)
+}
+
+func TestExtractLiteralsArrayRoundTrip(t *testing.T) {
+	config := passes.NewExtractLiteralsConfig(100)
+	config.SetUseSequentialNames(true)
+	config.SetMinINListSize(3)
+	pass := passes.ExtractLiterals(config)
+
+	original := "SELECT array(1, 2, 3) FROM t"
+	extracted, err := pass(original)
+	require.NoError(t, err)
+
+	sets, _, query := passes.ParseExtractedQuery(extracted, "")
+	injected, err := passes.InjectParams(sets, "", query)
+	require.NoError(t, err)
+	// After injection, the param slot is replaced by the original SQL value `[1,2,3]`,
+	// not the array(...) call. That is the expected output and parses identically.
+	assert.Equal(t, "SELECT [1, 2, 3] FROM t", injected)
+}
+
+func TestExtractLiteralsTupleRoundTrip(t *testing.T) {
+	config := passes.NewExtractLiteralsConfig(100)
+	config.SetUseSequentialNames(true)
+	config.SetMinINListSize(3)
+	pass := passes.ExtractLiterals(config)
+
+	original := "SELECT tuple(1, 2, 3) AS x FROM t"
+	extracted, err := pass(original)
+	require.NoError(t, err)
+
+	sets, _, query := passes.ParseExtractedQuery(extracted, "")
+	injected, err := passes.InjectParams(sets, "", query)
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT (1, 2, 3) AS x FROM t", injected)
+}
+
+// --- Canonicalize + extract integration ---
+
+func TestExtractLiteralsCanonicalizeThenExtractArray(t *testing.T) {
+	canon := passes.CanonicalizeConstructors(passes.ConstructorFormFunction)
+	config := passes.NewExtractLiteralsConfig(100)
+	config.SetUseSequentialNames(true)
+	config.SetMinINListSize(3)
+	extract := passes.ExtractLiterals(config)
+
+	canonicalized, err := canon("SELECT [1, 2, 3, 4, 5] FROM t")
+	require.NoError(t, err)
+	got, err := extract(canonicalized)
+	require.NoError(t, err)
+
+	sets, _, query := passes.ParseExtractedQuery(got, "")
+	require.Len(t, sets, 1, "syntactic array should be captured after canonicalization")
+	assert.Contains(t, query, "Array(")
+}
+
+func TestExtractLiteralsCanonicalizeThenExtractTuple(t *testing.T) {
+	canon := passes.CanonicalizeConstructors(passes.ConstructorFormFunction)
+	config := passes.NewExtractLiteralsConfig(100)
+	config.SetUseSequentialNames(true)
+	config.SetMinINListSize(3)
+	extract := passes.ExtractLiterals(config)
+
+	canonicalized, err := canon("SELECT (1, 2, 3) AS x FROM t")
+	require.NoError(t, err)
+	got, err := extract(canonicalized)
+	require.NoError(t, err)
+
+	sets, _, query := passes.ParseExtractedQuery(got, "")
+	require.Len(t, sets, 1, "syntactic tuple should be captured after canonicalization")
+	assert.Contains(t, query, "Tuple(")
+}
+
+func TestExtractLiteralsCanonicalizeThenExtractIN(t *testing.T) {
+	canon := passes.CanonicalizeConstructors(passes.ConstructorFormFunction)
+	config := passes.NewExtractLiteralsConfig(100)
+	config.SetUseSequentialNames(true)
+	config.SetMinINListSize(3)
+	extract := passes.ExtractLiterals(config)
+
+	canonicalized, err := canon("SELECT a FROM t WHERE id IN (1, 2, 3)")
+	require.NoError(t, err)
+	assert.Contains(t, canonicalized, "IN array(", "IN-tuples should be lowered to array() form")
+
+	got, err := extract(canonicalized)
+	require.NoError(t, err)
+
+	sets, _, query := passes.ParseExtractedQuery(got, "")
+	require.Len(t, sets, 1, "IN-list should be captured as a single composite param")
+	assert.Contains(t, query, "Array(", "IN's RHS should be Array-typed, not Tuple")
+	assert.NotContains(t, query, "Tuple(")
+}
+
 // --- Cast-aware type inference ---
 
 func TestExtractLiteralsCastDoubleColon(t *testing.T) {
