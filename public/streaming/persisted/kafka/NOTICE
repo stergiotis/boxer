@@ -121,6 +121,17 @@ MODIFICATIONS APPLIED DURING PORT
     FranzReaderUnordered struct itself, which the toggled wrapper
     composes rather than supersedes.
 
+  * franz_reader_toggled.go: dropped the entire Benthos config-DSL
+    surface (krtField* constants, FranzReaderToggledConfigFields,
+    NewFranzReaderToggledFromConfig). Upstream's "toggled" wrapper
+    existed primarily to expose a single YAML schema that switched
+    between ordered and unordered via a nested
+    `unordered_processing.enabled` flag. Without YAML config, the
+    wrapper reduces to a constructor that picks the underlying
+    reader from a Go-struct field; the upstream return type
+    service.BatchInput is replaced with the package-local
+    ConsumerI.
+
 Per Apache-2.0 §4.b, every modified source file in this package
 carries a "Modifications applied during port" line in its header
 referencing this NOTICE.
