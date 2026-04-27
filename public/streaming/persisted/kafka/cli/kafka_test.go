@@ -20,6 +20,7 @@
 package kafka
 
 import (
+	"bufio"
 	"bytes"
 	"io"
 	"os"
@@ -279,6 +280,103 @@ func TestCBORWriter_SelfDelimiting(t *testing.T) {
 	require.NoError(t, dec.Decode(&g2))
 	assert.Equal(t, []byte("a"), g1.Value)
 	assert.Equal(t, []byte("b"), g2.Value)
+}
+
+func TestReadNetstring_HappyPaths(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want []byte
+	}{
+		{"hello", "5:hello,", []byte("hello")},
+		{"empty", "0:,", []byte{}},
+		{"binary", "3:\xff\x00\x01,", []byte{0xff, 0x00, 0x01}},
+		{"unicode", "6:héllo,", []byte("héllo")}, // é is 2 bytes UTF-8
+		{"leading-zero", "005:hello,", []byte("hello")},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := bufio.NewReader(bytes.NewReader([]byte(tc.in)))
+			value, ok, err := readNetstring(r)
+			require.NoError(t, err)
+			assert.True(t, ok)
+			assert.Equal(t, tc.want, value)
+		})
+	}
+}
+
+func TestReadNetstring_MultipleFramesSequentially(t *testing.T) {
+	r := bufio.NewReader(bytes.NewReader([]byte("3:foo,5:hello,3:bar,")))
+	want := [][]byte{[]byte("foo"), []byte("hello"), []byte("bar")}
+	for _, w := range want {
+		value, ok, err := readNetstring(r)
+		require.NoError(t, err)
+		require.True(t, ok)
+		assert.Equal(t, w, value)
+	}
+	// Next read should hit clean EOF.
+	value, ok, err := readNetstring(r)
+	require.NoError(t, err)
+	assert.False(t, ok)
+	assert.Nil(t, value)
+}
+
+func TestReadNetstring_CleanEOFAtStart(t *testing.T) {
+	r := bufio.NewReader(bytes.NewReader(nil))
+	value, ok, err := readNetstring(r)
+	require.NoError(t, err)
+	assert.False(t, ok)
+	assert.Nil(t, value)
+}
+
+func TestReadNetstring_ErrorPaths(t *testing.T) {
+	cases := []struct {
+		name      string
+		in        string
+		errSubstr string
+	}{
+		{"missing colon at EOF", "5", "unexpected EOF"},
+		{"non-numeric length", "abc:hello,", "invalid netstring length"},
+		{"negative length", "-1:,", "invalid netstring length"},
+		{"truncated value", "5:hel", "read netstring value"},
+		{"missing terminator", "5:hello", "read netstring terminator"},
+		{"wrong terminator", "5:hello.", "expected ','"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := bufio.NewReader(bytes.NewReader([]byte(tc.in)))
+			_, _, err := readNetstring(r)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.errSubstr)
+		})
+	}
+}
+
+func TestBuildRecord_NoKeyDelim(t *testing.T) {
+	rec := buildRecord("t", []byte("hello"), "")
+	assert.Equal(t, "t", rec.Topic)
+	assert.Nil(t, rec.Key)
+	assert.Equal(t, []byte("hello"), rec.Value)
+}
+
+func TestBuildRecord_KeyDelim_Found(t *testing.T) {
+	rec := buildRecord("t", []byte("k=v=foo"), "=")
+	// Split on first '=' only — value preserves further occurrences.
+	assert.Equal(t, []byte("k"), rec.Key)
+	assert.Equal(t, []byte("v=foo"), rec.Value)
+}
+
+func TestBuildRecord_KeyDelim_NotFound(t *testing.T) {
+	rec := buildRecord("t", []byte("hello"), "=")
+	// Falls through to value-only when delimiter absent.
+	assert.Nil(t, rec.Key)
+	assert.Equal(t, []byte("hello"), rec.Value)
+}
+
+func TestBuildRecord_KeyDelim_AtStart(t *testing.T) {
+	rec := buildRecord("t", []byte("=hello"), "=")
+	assert.Equal(t, []byte{}, rec.Key)
+	assert.Equal(t, []byte("hello"), rec.Value)
 }
 
 func TestMakeRecordWriter_Routing(t *testing.T) {

@@ -171,6 +171,11 @@ The package ships a kcat-style CLI at [`public/streaming/persisted/kafka/cli/`](
 # Produce a few records (one per stdin line; -K splits key from value):
 echo -e 'k1=v1\nk2=v2' | ./pebble.sh kafka produce -b 127.0.0.1:9092 -t demo -K '='
 
+# Produce from netstring-framed stdin (binary-safe; bytes can contain
+# newlines, NULs, commas, anything). Round-trips with --output-mode=netstring:
+./pebble.sh kafka consume -b 127.0.0.1:9092 -t src -e --output-mode=netstring \
+  | ./pebble.sh kafka produce -b 127.0.0.1:9092 -t dst --input-mode=netstring
+
 # Consume the first 10 records and exit. Format string verbs:
 #   %t topic, %p partition, %o offset, %k key, %s value, %T timestamp-ms;
 #   \n \t \\ escapes; %% literal.

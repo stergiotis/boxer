@@ -407,7 +407,13 @@ func produceCmd() *cli.Command {
 			&cli.StringFlag{
 				Name:    "key-delimiter",
 				Aliases: []string{"K"},
-				Usage:   "if set, split each input line at the first occurrence; left half is the record key, right half the value",
+				Usage:   "if set, split each input payload at the first occurrence; left half is the record key, right half the value (applies inside each line OR inside each netstring's bytes)",
+			},
+			&cli.StringFlag{
+				Name:    "input-mode",
+				Aliases: []string{"I"},
+				Value:   "lines",
+				Usage:   "input framing: 'lines' (newline-delimited stdin), 'netstring' (DJB '<len>:<bytes>,' frames; binary-safe)",
 			},
 		),
 		Action: runProduce,
@@ -450,23 +456,27 @@ func runProduce(c *cli.Context) (err error) {
 	topic := c.String("topic")
 	keyDelim := c.String("key-delimiter")
 
+	mode := c.String("input-mode")
+	switch mode {
+	case "", "lines":
+		err = produceLines(c, writer, topic, keyDelim)
+	case "netstring":
+		err = produceNetstrings(c, writer, topic, keyDelim)
+	default:
+		err = fmt.Errorf("invalid --input-mode %q (try lines, netstring)", mode)
+	}
+	return
+}
+
+// produceLines reads newline-delimited records from stdin and produces
+// them. Each line's bytes (without the trailing \n) become one record,
+// optionally split into key/value at keyDelim's first occurrence.
+func produceLines(c *cli.Context, writer *pkafka.FranzWriter, topic, keyDelim string) (err error) {
 	scanner := bufio.NewScanner(os.Stdin)
 	// Allow lines up to 64 MiB; brokers reject larger anyway.
 	scanner.Buffer(make([]byte, 64*1024), 64*1024*1024)
 	for scanner.Scan() {
-		line := scanner.Bytes()
-		rec := &kgo.Record{Topic: topic}
-		if keyDelim != "" {
-			idx := strings.Index(string(line), keyDelim)
-			if idx >= 0 {
-				rec.Key = append([]byte{}, line[:idx]...)
-				rec.Value = append([]byte{}, line[idx+len(keyDelim):]...)
-			} else {
-				rec.Value = append([]byte{}, line...)
-			}
-		} else {
-			rec.Value = append([]byte{}, line...)
-		}
+		rec := buildRecord(topic, scanner.Bytes(), keyDelim)
 		if err = writer.Write(c.Context, rec); err != nil {
 			err = fmt.Errorf("write: %w", err)
 			return
@@ -478,6 +488,102 @@ func runProduce(c *cli.Context) (err error) {
 	if scanErr := scanner.Err(); scanErr != nil {
 		err = fmt.Errorf("read stdin: %w", scanErr)
 	}
+	return
+}
+
+// produceNetstrings reads DJB-style `<len>:<bytes>,` frames from stdin
+// and produces one record per frame. Each frame's bytes are the
+// record payload, optionally split into key/value at keyDelim's
+// first occurrence — the netstring framing is binary-safe so the
+// payload may contain newlines, NULs, or any other byte.
+func produceNetstrings(c *cli.Context, writer *pkafka.FranzWriter, topic, keyDelim string) (err error) {
+	reader := bufio.NewReaderSize(os.Stdin, 64*1024)
+	for {
+		var (
+			payload []byte
+			ok      bool
+		)
+		payload, ok, err = readNetstring(reader)
+		if err != nil {
+			err = fmt.Errorf("netstring parse: %w", err)
+			return
+		}
+		if !ok {
+			return
+		}
+		rec := buildRecord(topic, payload, keyDelim)
+		if err = writer.Write(c.Context, rec); err != nil {
+			err = fmt.Errorf("write: %w", err)
+			return
+		}
+		if c.Context.Err() != nil {
+			return
+		}
+	}
+}
+
+// buildRecord constructs a *kgo.Record for the given topic from a raw
+// payload, optionally splitting key/value at keyDelim's first
+// occurrence. The payload is copied (slice from bufio.Scanner is
+// reused on the next Scan).
+func buildRecord(topic string, payload []byte, keyDelim string) (rec *kgo.Record) {
+	rec = &kgo.Record{Topic: topic}
+	if keyDelim != "" {
+		idx := strings.Index(string(payload), keyDelim)
+		if idx >= 0 {
+			rec.Key = append([]byte{}, payload[:idx]...)
+			rec.Value = append([]byte{}, payload[idx+len(keyDelim):]...)
+			return
+		}
+	}
+	rec.Value = append([]byte{}, payload...)
+	return
+}
+
+// readNetstring reads one DJB-style netstring frame from r:
+// `<decimal-len>:<bytes>,`. Returns ok=false at clean EOF (no bytes
+// pending). Errors on partial / malformed frames.
+func readNetstring(r *bufio.Reader) (value []byte, ok bool, err error) {
+	lenStr, readErr := r.ReadString(':')
+	if readErr != nil {
+		if errors.Is(readErr, io.EOF) {
+			if len(lenStr) > 0 {
+				err = fmt.Errorf("unexpected EOF after %q (missing ':')", lenStr)
+				return
+			}
+			// clean EOF — no more frames
+			return
+		}
+		err = readErr
+		return
+	}
+	lenStr = strings.TrimSuffix(lenStr, ":")
+	var n int
+	n, err = strconv.Atoi(lenStr)
+	if err != nil {
+		err = fmt.Errorf("invalid netstring length %q: %w", lenStr, err)
+		return
+	}
+	if n < 0 {
+		err = fmt.Errorf("invalid netstring length %d (must be non-negative)", n)
+		return
+	}
+	value = make([]byte, n)
+	if _, err = io.ReadFull(r, value); err != nil {
+		err = fmt.Errorf("read netstring value (%d bytes): %w", n, err)
+		return
+	}
+	var term byte
+	term, err = r.ReadByte()
+	if err != nil {
+		err = fmt.Errorf("read netstring terminator: %w", err)
+		return
+	}
+	if term != ',' {
+		err = fmt.Errorf("invalid netstring terminator: expected ',', got %q", term)
+		return
+	}
+	ok = true
 	return
 }
 
