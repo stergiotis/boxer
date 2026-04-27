@@ -1,10 +1,10 @@
 ---
 type: explanation
 audience: package maintainer
-status: draft
+status: stable
+reviewed-by: "@stergiotis"
+reviewed-date: 2026-04-27
 ---
-
-> **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
 
 # Streaming/persisted/kafka — Interface Contract
 
@@ -14,7 +14,7 @@ For the derivation decision itself (Apache-2.0 derivative, Benthos service frame
 
 ## What this package provides
 
-A franz-go-based Kafka consumer (`ConsumerI` — three readers in later phases: ordered, unordered, toggled) and producer (`ProducerI`). The seam at the application boundary is the `Batch` struct plus the `AckFn` callback. Configuration is plain Go option structs; logging is `zerolog`; lifecycle is `context.Context`.
+A franz-go-based Kafka consumer (`ConsumerI`, satisfied by three readers — ordered, unordered, toggled) and producer (`ProducerI`, satisfied by `FranzWriter`). The seam at the application boundary is the `Batch` struct plus the `AckFn` callback. Configuration is plain Go option structs; logging is `zerolog`; lifecycle is `context.Context`.
 
 ## Interface boundary
 
@@ -142,8 +142,10 @@ The upstream code is shaped against `github.com/redpanda-data/benthos/v4/public/
 
 The mapping is mechanical for archaeology purposes; the contracts diverge in ack semantics and configuration shape, as discussed above.
 
-## Open at end of Phase 1
+## Open today
 
-- Metrics: no abstraction in place. Reader-side counters (records/s, lag, rebalance count) emit through `zerolog` debug logs only. Whether to add a `MetricsI` seam is deferred to whichever upstream-port phase first wants to surface a counter.
-- `MessageTransportI` adapter: `src/go/public/transport/message/MessageTransportI` exposes `Publish([]byte, []byte, identifier.TaggedId) error` — single-message, hash-keyed, opaque-payload. Adapting `ProducerI` to satisfy it (lossy: kgo records carry topic/key/headers/timestamp that don't fit) is deferred to Phase 7 when the producer lands and use cases for the adapter are visible.
-- Per-record `Record.Ack(status)` (KIP-1222) is in franz-go but not used here. The upstream reader uses the older `MarkCommitRecords` path. We follow the upstream choice.
+- **Metrics.** No abstraction in place. Reader-side counters (records/s, lag, rebalance count) emit through `zerolog` debug logs only. Upstream's `ConsumerLag` (the `redpanda_lag` gauge + `kafka_lag` per-message metadata via `kadm.Client`) was deliberately not ported in Phase 5/6; it's the remaining piece of upstream's Phase 8 observability work in our plan. A `MetricsI` seam will land alongside the first concrete metric sink.
+- **Shared client across reader + writer.** `FranzWriter` accepts a caller-supplied `*kgo.Client`, so the application can construct one client and use it across multiple writers. The readers (`FranzReaderOrdered`/`FranzReaderUnordered`/`FranzReaderToggled`) still construct their own client internally via the `clientOpts` factory, so a reader/writer pair currently means two `*kgo.Client` instances. A `NewFranzReaderFromClient` variant would close the gap; deferred until a use case appears (transactions, EOS pipelines).
+- **`MessageTransportI` adapter.** `src/go/public/transport/message/MessageTransportI` exposes `Publish([]byte, []byte, identifier.TaggedId) error` — single-message, hash-keyed, opaque-payload. Adapting `ProducerI` to satisfy it (lossy: kgo records carry topic/key/headers/timestamp that don't fit) is deferred until a use case appears.
+- **Per-record `Record.Ack(status)` (KIP-1222).** Available in franz-go but not used here; the upstream reader uses the older `MarkCommitRecords` path and we follow that choice.
+- **Sarama variant.** Out of scope per ADR-0015 and unlikely to return; franz-go is the strategic client.

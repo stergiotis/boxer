@@ -1,0 +1,169 @@
+---
+type: how-to
+audience: engineer with a specific task
+status: stable
+reviewed-by: "@stergiotis"
+reviewed-date: 2026-04-27
+---
+
+# How to use the streaming/persisted/kafka package
+
+Recipes for the common consumer and producer flows. The package exposes the franz-go-derived plumbing through three reader implementations and a producer; this guide shows the minimum code each requires. For *why* the API is shaped the way it is — the ack contract, the iterator vs slice tradeoff, the concrete-vs-interface decision — see [`EXPLANATION.md`](EXPLANATION.md). For the upstream-derivation decision (Apache-2.0, Benthos service framework dropped), see [`ADR-0015`](../../../../../../doc/adr/0015-streaming-persisted-kafka-from-connect.md).
+
+## When to use this recipe
+
+This file exists because every realistic Kafka recipe needs a running broker. An `example_test.go` cannot satisfy a real `// Output:` block without one, so per [boxer's documentation standard](https://github.com/stergiotis/boxer/blob/main/doc/DOCUMENTATION_STANDARD.md) §1 ("How-To Guides"), the recipes live here in Markdown.
+
+## Prerequisites
+
+- Go 1.26+ with the build tags from `./tags`. All package code is gated behind `llm_generated_opus47`; invoke tooling as `go ... -tags "$(cat tags | tr -d $'\n')"`.
+- A reachable Kafka or Redpanda broker. For tests, the package ships a testcontainers-based [integration_test.go](integration_test.go) — see "Run integration tests" below.
+- Familiarity with [`github.com/twmb/franz-go/pkg/kgo`](https://pkg.go.dev/github.com/twmb/franz-go/pkg/kgo): records (`kgo.Record`), client construction, consumer groups, and the partitioner choices.
+
+## Recipe 1: produce records
+
+```go
+import (
+    "context"
+
+    "github.com/twmb/franz-go/pkg/kgo"
+    "github.com/stergiotis/boxer/public/streaming/persisted/kafka"
+)
+
+func produce(ctx context.Context, brokers []string, records []*kgo.Record) (err error) {
+    connDetails := kafka.DefaultFranzConnectionDetails()
+    connDetails.SeedBrokers = brokers
+    connDetails.ClientID = "my-producer"
+
+    producerOpts := kafka.DefaultFranzProducerOpts()
+    // producerOpts.Partitioner = kgo.RoundRobinPartitioner() // optional
+
+    kgoOpts := append([]kgo.Opt{}, connDetails.FranzOpts()...)
+    kgoOpts = append(kgoOpts, producerOpts.FranzOpts()...)
+
+    client, err := kafka.NewFranzClient(ctx, kgoOpts...)
+    if err != nil {
+        return
+    }
+    defer client.Close()
+
+    writer, err := kafka.NewFranzWriter(client, nil)
+    if err != nil {
+        return
+    }
+    if err = writer.Connect(ctx); err != nil {
+        return
+    }
+    if err = writer.Write(ctx, records...); err != nil {
+        return
+    }
+    err = writer.Close(ctx) // flush in-flight produces
+    return
+}
+```
+
+The application owns the `*kgo.Client`. `writer.Close` flushes pending produces but does not close the client; close it yourself when the application shuts down.
+
+## Recipe 2: consume records (ordered)
+
+```go
+func consume(ctx context.Context, brokers []string, topic, group string) (err error) {
+    connDetails := kafka.DefaultFranzConnectionDetails()
+    connDetails.SeedBrokers = brokers
+    connDetails.ClientID = "my-consumer"
+
+    consDetails := kafka.DefaultFranzConsumerDetails()
+    consDetails.Topics = []string{topic}
+
+    readerOpts := kafka.DefaultFranzReaderOrderedOpts()
+    readerOpts.ConsumerGroup = group
+
+    clientOptsFn := func() (opts []kgo.Opt, err error) {
+        opts = append(opts, connDetails.FranzOpts()...)
+        opts = append(opts, consDetails.FranzOpts()...)
+        return
+    }
+
+    reader, err := kafka.NewFranzReaderOrdered(readerOpts, clientOptsFn)
+    if err != nil {
+        return
+    }
+    if err = reader.Connect(ctx); err != nil {
+        return
+    }
+    defer reader.Close(context.Background())
+
+    for {
+        batch, err := reader.Read(ctx)
+        if err != nil {
+            return err
+        }
+        for r := range batch.Records.RecordsAll() {
+            // process r.Topic / r.Partition / r.Offset / r.Key / r.Value / r.Headers
+            _ = r
+        }
+        if err = batch.Ack(ctx, nil); err != nil {
+            return err
+        }
+    }
+}
+```
+
+The ordered reader guarantees per-partition order of `RecordsAll()` and gates subsequent batch reads on the prior batch's `Ack`. See [`EXPLANATION.md` §"Ack contract"](EXPLANATION.md#ack-contract) for the strict in-order, exactly-once-call invariant.
+
+## Recipe 3: switch ordered ↔ unordered at runtime
+
+`FranzReaderToggled` lets a single configuration knob pick between strictly-ordered (default) and parallel-per-partition (unordered) modes:
+
+```go
+toggledOpts := kafka.DefaultFranzReaderToggledOpts()
+toggledOpts.Unordered = unorderedFlag // true for parallel, false for ordered
+if toggledOpts.Unordered {
+    toggledOpts.UnorderedOpts.ConsumerGroup = group
+} else {
+    toggledOpts.OrderedOpts.ConsumerGroup = group
+}
+
+reader, err := kafka.NewFranzReaderToggled(toggledOpts, clientOptsFn)
+```
+
+The returned value is a `ConsumerI`; the rest of the loop is identical to Recipe 2.
+
+## Recipe 4: run the integration tests against Podman
+
+The package's [`integration_test.go`](integration_test.go) is gated behind the `integration` build tag and requires Docker or Podman to spin up a `redpandadata/redpanda` container.
+
+### Podman (rootless)
+
+```bash
+# Make sure the user-level Podman socket is running:
+systemctl --user start podman.socket
+
+# Run the tests:
+DOCKER_HOST=unix:///run/user/$UID/podman/podman.sock \
+TESTCONTAINERS_RYUK_DISABLED=true \
+  go test -tags "$(cat tags | tr -d $'\n'),integration" -count=1 -v -timeout 5m \
+    ./public/streaming/persisted/kafka/...
+```
+
+`TESTCONTAINERS_RYUK_DISABLED=true` is required because rootless Podman cannot reliably co-host the Ryuk reaper container that testcontainers-go uses for resource cleanup; with Ryuk disabled, container teardown is handled by the test's `t.Cleanup` instead.
+
+### Docker
+
+```bash
+go test -tags "$(cat tags | tr -d $'\n'),integration" -count=1 -v -timeout 5m \
+  ./public/streaming/persisted/kafka/...
+```
+
+No env-var gymnastics needed.
+
+### Expected runtime
+
+About 11–12 seconds end-to-end on a warm machine: ~2s for the connectivity test (one container), and ~9s for the produce/consume roundtrip (one shared container, two subtests).
+
+## Common pitfalls
+
+- **Zero-value `FranzConnectionDetails`.** Constructing the struct literal with only `SeedBrokers` set leaves `RequestTimeoutOverhead` at zero, which kgo would reject (`kgo.RequestTimeoutOverhead` requires ≥100ms). [`FranzConnectionDetails.FranzOpts`](franz_client.go) suppresses zero-value duration options to fall back to kgo's defaults, but using [`DefaultFranzConnectionDetails`](franz_client.go) is the recommended starting point.
+- **Forgetting `batch.Ack`.** A consumer that never acks stalls the partition; the consumer-group session times out and rebalance evicts the consumer. The package does not detect this — see [`EXPLANATION.md` §"Strict in-order, exactly-once-call"](EXPLANATION.md#strict-in-order-exactly-once-call).
+- **Sharing `*kgo.Client` across reader and writer.** The producer accepts a caller-supplied client. The readers do not (yet); they construct their own client internally via the `clientOpts` factory. A consumer + producer pair therefore opens two `*kgo.Client` instances. A `NewFranzReaderFromClient` variant would close this gap; see [`EXPLANATION.md` §"Open today"](EXPLANATION.md#open-today).
+- **Dropping the `kgo.Record.Value` for tombstones.** A nil `Value` is a valid Kafka tombstone (delete-marker). The producer and readers preserve nil; application code must not collapse `nil` and `[]byte{}` accidentally.
