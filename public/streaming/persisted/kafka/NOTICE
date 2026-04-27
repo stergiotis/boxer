@@ -98,6 +98,29 @@ MODIFICATIONS APPLIED DURING PORT
     already calls Ping on construction; callers that want a
     "test connection" path can call NewFranzClient + Close.
 
+  * franz_reader_unordered.go: dropped the service.Batcher
+    integration. Upstream's partitionTracker held a service.Batcher
+    per partition and a dedicated goroutine driving size-based and
+    time-based batch flushes. This port emits one *kgo.Record per
+    Batch (single-record batches), simplifying partitionTracker to a
+    checkpointer + lock with no internal goroutine. Applications
+    that want size or time batching wrap Read in their own batcher
+    externally.
+
+  * franz_reader_unordered.go: dropped the franzRecordToMsgFn
+    indirection (which defaulted to FranzRecordToMessageV0 / V1
+    depending on the multi-header config flag) and the multi_header
+    field. *kgo.Record is exposed directly per ADR-0015 /
+    EXPLANATION.md; callers read record.Headers themselves.
+
+  * franz_reader_unordered.go: dropped ConsumerLag wiring and
+    ConnectionTest (same scope decisions as the ordered reader).
+    Upstream's "Deprecated: use toggled" markers on the config-DSL
+    helpers do not carry over: the deprecation targeted those
+    helpers (which are dropped here anyway), not the
+    FranzReaderUnordered struct itself, which the toggled wrapper
+    composes rather than supersedes.
+
 Per Apache-2.0 §4.b, every modified source file in this package
 carries a "Modifications applied during port" line in its header
 referencing this NOTICE.
