@@ -216,6 +216,13 @@ dependencies of this package:
   github.com/dustin/go-humanize
     MIT (cosmetic; may be dropped during port)
 
+  github.com/testcontainers/testcontainers-go (and ./modules/redpanda)
+    MIT
+    Copyright (c) 2017-2019 Gianluca Arbezzano (and contributors)
+    Test-only — gated behind the `integration` build tag in
+    integration_test.go; required to spin up a Redpanda container
+    for the produce/consume round-trip tests.
+
 ----------------------------------------------------------------------
 RE-PINNING UPSTREAM
 ----------------------------------------------------------------------
