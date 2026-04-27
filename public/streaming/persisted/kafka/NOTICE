@@ -132,6 +132,55 @@ MODIFICATIONS APPLIED DURING PORT
     service.BatchInput is replaced with the package-local
     ConsumerI.
 
+  * franz_writer.go: dropped the entire producer-side config-DSL
+    surface (kfwField* constants for both producer-limit and
+    per-record fields, FranzProducerLimitsFields,
+    FranzProducerFields, FranzProducerLimitsOptsFromConfig,
+    FranzProducerOptsFromConfig, FranzWriterConfigFields,
+    FranzWriterConfigLints, NewFranzWriterFromConfig).
+
+  * franz_writer.go: dropped the per-record interpolation surface
+    (Topic / Key / Partition / Timestamp / MetaFilter as
+    service.InterpolatedString / service.MetadataFilter). The port
+    takes *kgo.Record values directly; applications populate Topic,
+    Key, Value, Headers, Partition, and Timestamp on each record
+    themselves.
+
+  * franz_writer.go: dropped the franzWriterHooks indirection
+    (accessClientFn / yieldClientFn / FranzSharedClientUseFn) and
+    chose not to port franz_shared_client.go at all. The hooks +
+    registry pattern existed so Benthos input and output components
+    — instantiated independently from YAML — could share a
+    *kgo.Client through a name-keyed registry on *service.Resources.
+    In this port, the application constructs the *kgo.Client
+    (typically via NewFranzClient) and passes it to NewFranzWriter
+    directly; ownership stays with the caller and Close does not
+    tear it down. A reader and writer that want to share one client
+    can both receive the same pointer at construction time. (Note:
+    today the readers still create their own client internally
+    via clientOpts; sharing across reader+writer would require an
+    additional NewFranzReaderFromClient constructor variant —
+    deferred until a use case appears.)
+
+  * franz_writer.go: dropped MessageBatchToFranzRecords,
+    DecorateRecord, and the SkipRecord sentinel (all hooks for the
+    migrator-style record-rewriting path). Upstream's
+    dispatch.TriggerSignal calls go away with them.
+
+  * franz_writer.go: dropped ConnectionTest. Connect calls Ping
+    directly; callers that want a deeper "test connection" path
+    own the *kgo.Client and can issue admin requests against it.
+
+  * franz_writer.go: replaced the upstream manual Produce +
+    sync.WaitGroup fan-out with kgo.Client.ProduceSync, which is
+    functionally identical (waits for all produces; surfaces
+    per-record errors via FirstErr) and roughly half the code.
+
+  * Did not port output_kafka_franz.go (the Benthos output-plugin
+    registration shim). It existed solely to wire FranzWriter into
+    the Benthos plugin registry; without that registry the file has
+    no role.
+
 Per Apache-2.0 §4.b, every modified source file in this package
 carries a "Modifications applied during port" line in its header
 referencing this NOTICE.
