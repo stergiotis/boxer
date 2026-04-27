@@ -30,6 +30,8 @@ package kafka
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
@@ -42,6 +44,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
+	"github.com/twmb/franz-go/pkg/sasl"
 	cli "github.com/urfave/cli/v2"
 
 	pkafka "github.com/stergiotis/boxer/public/streaming/persisted/kafka"
@@ -61,7 +64,9 @@ func NewCliCommand() *cli.Command {
 	}
 }
 
-// commonFlags returns the flags every subcommand shares.
+// commonFlags returns the flags every subcommand shares: connection
+// (brokers, client-id), SASL (mechanism + credentials), and TLS
+// (enable + cert/key/ca paths).
 func commonFlags() []cli.Flag {
 	return []cli.Flag{
 		&cli.StringFlag{
@@ -77,14 +82,160 @@ func commonFlags() []cli.Flag {
 			Usage:   "kafka client.id",
 			EnvVars: []string{"PEBBLE_KAFKA_CLIENT_ID"},
 		},
+
+		// SASL
+		&cli.StringFlag{
+			Name:    "sasl-mechanism",
+			Usage:   "SASL mechanism: none (default), PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER",
+			EnvVars: []string{"PEBBLE_KAFKA_SASL_MECHANISM"},
+		},
+		&cli.StringFlag{
+			Name:    "sasl-username",
+			Usage:   "SASL username (PLAIN, SCRAM-SHA-256, SCRAM-SHA-512)",
+			EnvVars: []string{"PEBBLE_KAFKA_SASL_USERNAME"},
+		},
+		&cli.StringFlag{
+			Name:    "sasl-password",
+			Usage:   "SASL password (PLAIN, SCRAM-SHA-256, SCRAM-SHA-512); prefer the env var to avoid shell history",
+			EnvVars: []string{"PEBBLE_KAFKA_SASL_PASSWORD"},
+		},
+		&cli.StringFlag{
+			Name:    "sasl-token",
+			Usage:   "static OAUTHBEARER token (only for --sasl-mechanism=OAUTHBEARER)",
+			EnvVars: []string{"PEBBLE_KAFKA_SASL_TOKEN"},
+		},
+
+		// TLS
+		&cli.BoolFlag{
+			Name:    "tls",
+			Usage:   "enable TLS (implicit if any --tls-* file flag is set)",
+			EnvVars: []string{"PEBBLE_KAFKA_TLS"},
+		},
+		&cli.StringFlag{
+			Name:    "tls-ca-file",
+			Usage:   "path to a PEM-encoded CA bundle for verifying the broker certificate",
+			EnvVars: []string{"PEBBLE_KAFKA_TLS_CA_FILE"},
+		},
+		&cli.StringFlag{
+			Name:    "tls-cert-file",
+			Usage:   "path to a PEM-encoded client certificate (for mTLS); requires --tls-key-file",
+			EnvVars: []string{"PEBBLE_KAFKA_TLS_CERT_FILE"},
+		},
+		&cli.StringFlag{
+			Name:    "tls-key-file",
+			Usage:   "path to a PEM-encoded client key (for mTLS); requires --tls-cert-file",
+			EnvVars: []string{"PEBBLE_KAFKA_TLS_KEY_FILE"},
+		},
+		&cli.BoolFlag{
+			Name:    "tls-skip-verify",
+			Usage:   "skip broker certificate verification (insecure; useful for self-signed dev clusters)",
+			EnvVars: []string{"PEBBLE_KAFKA_TLS_SKIP_VERIFY"},
+		},
 	}
 }
 
-func makeConnectionDetails(c *cli.Context) (d pkafka.FranzConnectionDetails) {
+func makeConnectionDetails(c *cli.Context) (d pkafka.FranzConnectionDetails, err error) {
 	d = pkafka.DefaultFranzConnectionDetails()
 	d.SeedBrokers = strings.Split(c.String("brokers"), ",")
 	d.ClientID = c.String("client-id")
 	d.Logger = &log.Logger
+
+	d.SASL, err = buildSASL(c)
+	if err != nil {
+		return
+	}
+
+	d.TLSEnabled, d.TLSConf, err = buildTLS(c)
+	if err != nil {
+		return
+	}
+	return
+}
+
+// parseSASLMechanism maps the user-supplied --sasl-mechanism string
+// (case-insensitive) to a SASLMechanismE. Empty string and "none" both
+// disable SASL.
+func parseSASLMechanism(s string) (m pkafka.SASLMechanismE, err error) {
+	switch strings.ToUpper(s) {
+	case "", "NONE":
+		m = pkafka.SASLMechanismNone
+	case "PLAIN":
+		m = pkafka.SASLMechanismPlain
+	case "SCRAM-SHA-256":
+		m = pkafka.SASLMechanismSCRAMSHA256
+	case "SCRAM-SHA-512":
+		m = pkafka.SASLMechanismSCRAMSHA512
+	case "OAUTHBEARER":
+		m = pkafka.SASLMechanismOAuthBearer
+	default:
+		err = fmt.Errorf("unsupported --sasl-mechanism %q (try PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER, or none)", s)
+	}
+	return
+}
+
+func buildSASL(c *cli.Context) (mechs []sasl.Mechanism, err error) {
+	mech, err := parseSASLMechanism(c.String("sasl-mechanism"))
+	if err != nil {
+		return
+	}
+	if mech == pkafka.SASLMechanismNone {
+		return
+	}
+	mechs, err = pkafka.SASLMechanisms([]pkafka.SASLConfig{{
+		Mechanism: mech,
+		Username:  c.String("sasl-username"),
+		Password:  c.String("sasl-password"),
+		Token:     c.String("sasl-token"),
+	}})
+	return
+}
+
+// buildTLS constructs a *tls.Config from the --tls-* flags. Returns
+// enabled=false when no TLS-related flag is set so plaintext clusters
+// require no extra ceremony.
+func buildTLS(c *cli.Context) (enabled bool, cfg *tls.Config, err error) {
+	caFile := c.String("tls-ca-file")
+	certFile := c.String("tls-cert-file")
+	keyFile := c.String("tls-key-file")
+	skipVerify := c.Bool("tls-skip-verify")
+	enabled = c.Bool("tls") || caFile != "" || certFile != "" || keyFile != "" || skipVerify
+	if !enabled {
+		return
+	}
+
+	cfg = &tls.Config{
+		MinVersion:         tls.VersionTLS12,
+		InsecureSkipVerify: skipVerify,
+	}
+
+	if caFile != "" {
+		var caPEM []byte
+		caPEM, err = os.ReadFile(caFile)
+		if err != nil {
+			err = fmt.Errorf("read --tls-ca-file %q: %w", caFile, err)
+			return
+		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(caPEM) {
+			err = fmt.Errorf("--tls-ca-file %q contains no PEM certificates", caFile)
+			return
+		}
+		cfg.RootCAs = pool
+	}
+
+	if certFile != "" || keyFile != "" {
+		if certFile == "" || keyFile == "" {
+			err = fmt.Errorf("--tls-cert-file and --tls-key-file must be set together")
+			return
+		}
+		var pair tls.Certificate
+		pair, err = tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			err = fmt.Errorf("load TLS keypair: %w", err)
+			return
+		}
+		cfg.Certificates = []tls.Certificate{pair}
+	}
 	return
 }
 
@@ -137,7 +288,11 @@ func consumeCmd() *cli.Command {
 }
 
 func runConsume(c *cli.Context) (err error) {
-	connDetails := makeConnectionDetails(c)
+	connDetails, err := makeConnectionDetails(c)
+	if err != nil {
+		err = fmt.Errorf("connection: %w", err)
+		return
+	}
 
 	consDetails := pkafka.DefaultFranzConsumerDetails()
 	if err = consDetails.SetTopicSpec([]string{c.String("topic")}, true); err != nil {
@@ -250,7 +405,11 @@ func produceCmd() *cli.Command {
 }
 
 func runProduce(c *cli.Context) (err error) {
-	connDetails := makeConnectionDetails(c)
+	connDetails, err := makeConnectionDetails(c)
+	if err != nil {
+		err = fmt.Errorf("connection: %w", err)
+		return
+	}
 	prodOpts := pkafka.DefaultFranzProducerOpts()
 
 	kgoOpts := append([]kgo.Opt{}, connDetails.FranzOpts()...)
@@ -326,7 +485,11 @@ func listCmd() *cli.Command {
 }
 
 func runList(c *cli.Context) (err error) {
-	connDetails := makeConnectionDetails(c)
+	connDetails, err := makeConnectionDetails(c)
+	if err != nil {
+		err = fmt.Errorf("connection: %w", err)
+		return
+	}
 
 	client, err := pkafka.NewFranzClient(c.Context, connDetails.FranzOpts()...)
 	if err != nil {

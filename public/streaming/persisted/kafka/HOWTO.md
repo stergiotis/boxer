@@ -185,6 +185,55 @@ echo -e 'k1=v1\nk2=v2' | ./pebble.sh kafka produce -b 127.0.0.1:9092 -t demo -K 
 
 Environment variables `PEBBLE_KAFKA_BROKERS` and `PEBBLE_KAFKA_CLIENT_ID` set per-flag defaults so scripts can `export PEBBLE_KAFKA_BROKERS=…` once and stay terse.
 
+### SASL authentication
+
+```bash
+# PLAIN auth (env vars recommended for the password — keeps it out of shell history):
+PEBBLE_KAFKA_SASL_PASSWORD=s3cret \
+  ./pebble.sh kafka list -b broker:9093 \
+    --sasl-mechanism=PLAIN --sasl-username=alice
+
+# SCRAM-SHA-512:
+./pebble.sh kafka list -b broker:9093 \
+    --sasl-mechanism=SCRAM-SHA-512 \
+    --sasl-username=alice --sasl-password=s3cret
+
+# OAUTHBEARER (static token):
+./pebble.sh kafka list -b broker:9093 \
+    --sasl-mechanism=OAUTHBEARER --sasl-token="${BEARER_TOKEN}"
+```
+
+Supported mechanisms: `PLAIN`, `SCRAM-SHA-256`, `SCRAM-SHA-512`, `OAUTHBEARER`. Case-insensitive. Empty / `none` disables SASL.
+
+### TLS
+
+```bash
+# TLS-only (system CA pool):
+./pebble.sh kafka list -b broker:9093 --tls
+
+# TLS with custom CA bundle:
+./pebble.sh kafka list -b broker:9093 \
+    --tls-ca-file=/etc/redpanda/ca.crt
+
+# Insecure dev-cluster (self-signed certs):
+./pebble.sh kafka list -b broker:9093 \
+    --tls-ca-file=/etc/redpanda/ca.crt \
+    --tls-skip-verify
+
+# Mutual TLS (client cert + key):
+./pebble.sh kafka list -b broker:9093 \
+    --tls-ca-file=/etc/redpanda/ca.crt \
+    --tls-cert-file=/etc/redpanda/client.crt \
+    --tls-key-file=/etc/redpanda/client.key
+
+# SASL_SSL (SASL on top of TLS) — common for managed clusters:
+PEBBLE_KAFKA_SASL_PASSWORD=s3cret \
+  ./pebble.sh kafka list -b broker:9093 \
+    --tls --sasl-mechanism=SCRAM-SHA-512 --sasl-username=alice
+```
+
+Any `--tls-*` file flag implies `--tls`; you don't have to pass both. Min TLS version is 1.2.
+
 For the IPv4/IPv6 `localhost` gotcha some Podman setups hit, prefer `127.0.0.1:PORT` over `localhost:PORT` when targeting a podman-rootless Kafka container.
 
 ## Recipe 6: run the integration tests against Podman
