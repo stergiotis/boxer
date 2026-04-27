@@ -129,7 +129,38 @@ reader, err := kafka.NewFranzReaderToggled(toggledOpts, clientOptsFn)
 
 The returned value is a `ConsumerI`; the rest of the loop is identical to Recipe 2.
 
-## Recipe 4: run the integration tests against Podman
+## Recipe 4: track consumer-group lag
+
+[`ConsumerLag`](consumer_lag.go) polls `kadm.Lag(group)` on a fixed interval and exposes per-(topic, partition) lag through both an in-memory cache (queryable via `Load`) and a user-supplied `LagSinkFn` callback (typically wired to a Prometheus / OTel / zerolog sink).
+
+```go
+import "github.com/rs/zerolog"
+
+reader, err := kafka.NewFranzReaderOrdered(readerOpts, clientOptsFn)
+if err != nil { /* ... */ }
+if err = reader.Connect(ctx); err != nil { /* ... */ }
+defer reader.Close(context.Background())
+
+lag := kafka.NewConsumerLag(
+    reader.Client,                 // reuse the reader's client (read-only admin requests)
+    readerOpts.ConsumerGroup,
+    5*time.Second,                 // refresh period
+    &zerolog.Logger{},             // optional; nil → zerolog.Nop()
+    func(topic string, partition int32, lag int64) {
+        // Push to whatever metric backend the application uses:
+        // promGauge.WithLabelValues(topic, fmt.Sprint(partition)).Set(float64(lag))
+    },
+)
+lag.Start()
+defer lag.Stop()
+
+// Application can also poll the cache directly:
+behind := lag.Load("orders", 0)
+```
+
+`ConsumerLag` does not touch the reader's poll loop; the `kadm.Client` it constructs internally only issues admin RPCs (broker offsets, committed offsets) which are read-only and don't conflict with consumption. Reusing `reader.Client` avoids opening a second TCP connection.
+
+## Recipe 5: run the integration tests against Podman
 
 The package's [`integration_test.go`](integration_test.go) is gated behind the `integration` build tag and requires Docker or Podman to spin up a `redpandadata/redpanda` container.
 

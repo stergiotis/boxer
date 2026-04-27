@@ -38,6 +38,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -132,26 +133,36 @@ func TestIntegrationConnectivity(t *testing.T) {
 }
 
 // TestIntegrationProduceConsume runs a produce → consume round-trip
-// against a real broker, once for each reader mode.
+// against a real broker, once for each reader mode. The consumer-lag
+// subtest runs after `ordered` and reuses the topic/group it created,
+// so it observes a fully-consumed group whose lag has settled to zero.
 func TestIntegrationProduceConsume(t *testing.T) {
 	addr := startRedpanda(t)
 
+	var orderedTopic, orderedGroup string
+
 	t.Run("ordered", func(t *testing.T) {
-		runRoundTrip(t, addr, false)
+		orderedTopic, orderedGroup = runRoundTrip(t, addr, false)
 	})
 	t.Run("unordered", func(t *testing.T) {
-		runRoundTrip(t, addr, true)
+		_, _ = runRoundTrip(t, addr, true)
+	})
+	t.Run("consumer-lag", func(t *testing.T) {
+		require.NotEmpty(t, orderedGroup, "ordered subtest must populate the group")
+		runConsumerLag(t, addr, orderedTopic, orderedGroup)
 	})
 }
 
 // runRoundTrip writes numRecords records via FranzWriter, reads them
 // back via FranzReaderToggled (mode chosen by `unordered`), and
-// asserts every record arrives with the expected key/value.
-func runRoundTrip(t *testing.T, brokerAddr string, unordered bool) {
+// asserts every record arrives with the expected key/value. Returns
+// the topic and consumer-group names it used so callers can keep
+// observing the group after the test (e.g. with [ConsumerLag]).
+func runRoundTrip(t *testing.T, brokerAddr string, unordered bool) (topic, group string) {
 	t.Helper()
 	const numRecords = 50
-	topic := fmt.Sprintf("rt-%s", safeName(t))
-	group := fmt.Sprintf("grp-%s", safeName(t))
+	topic = fmt.Sprintf("rt-%s", safeName(t))
+	group = fmt.Sprintf("grp-%s", safeName(t))
 
 	createKafkaTopic(t, brokerAddr, topic, 4)
 
@@ -231,5 +242,50 @@ func runRoundTrip(t *testing.T, brokerAddr string, unordered bool) {
 		key := fmt.Sprintf("key-%d", i)
 		wantVal := fmt.Sprintf("value-%d", i)
 		assert.Equal(t, wantVal, seen[key], "missing or wrong value for %s", key)
+	}
+	return
+}
+
+// runConsumerLag verifies the ConsumerLag tracker against a real
+// broker: it spins up an admin-only kgo.Client, runs the lag tracker
+// for long enough to capture a refresh tick against the
+// already-existing consumer group, and asserts that the sink callback
+// fires and Load returns sane values. The group has fully consumed
+// the topic, so the observed lag should settle at zero (or transient
+// non-zero values during the broker's offset-commit settling).
+func runConsumerLag(t *testing.T, brokerAddr, topic, group string) {
+	t.Helper()
+
+	connDetails := kafka.DefaultFranzConnectionDetails()
+	connDetails.SeedBrokers = []string{brokerAddr}
+	connDetails.ClientID = "pebble2impl-lag-admin"
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	admClient, err := kafka.NewFranzClient(ctx, connDetails.FranzOpts()...)
+	require.NoError(t, err, "admin client")
+	defer admClient.Close()
+
+	var callCount atomic.Int32
+	sink := func(_ string, _ int32, _ int64) {
+		callCount.Add(1)
+	}
+
+	lag := kafka.NewConsumerLag(admClient, group, 500*time.Millisecond, nil, sink)
+	lag.Start()
+
+	deadline := time.Now().Add(8 * time.Second)
+	for time.Now().Before(deadline) && callCount.Load() == 0 {
+		time.Sleep(100 * time.Millisecond)
+	}
+	lag.Stop()
+
+	require.GreaterOrEqual(t, callCount.Load(), int32(1), "sink invoked at least once during refresh window")
+
+	// Load should never return a negative value (max-clamped).
+	for partition := int32(0); partition < 4; partition++ {
+		v := lag.Load(topic, partition)
+		assert.GreaterOrEqual(t, v, int64(0), "Load returns non-negative for partition %d", partition)
 	}
 }

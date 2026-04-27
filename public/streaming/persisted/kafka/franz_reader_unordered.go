@@ -121,11 +121,18 @@ func DefaultFranzReaderUnorderedOpts() (opts FranzReaderUnorderedOpts) {
 // FranzReaderUnordered implements [ConsumerI] with parallel
 // per-partition delivery. See [FranzReaderUnorderedOpts] for the
 // at-least-once + parallel-processing tradeoff and configuration.
+//
+// Client is exposed (after Connect) so applications can issue
+// admin-level requests through the same kgo.Client the reader uses
+// internally — most notably feeding it to [NewConsumerLag] for
+// lag-gauge observability without opening a second connection.
+// Nil before Connect and after Close.
 type FranzReaderUnordered struct {
 	clientOpts func() (opts []kgo.Opt, err error)
 	opts       FranzReaderUnorderedOpts
 
 	batchChan atomic.Pointer[chan batchWithAckFn]
+	Client    *kgo.Client
 	log       *zerolog.Logger
 	shutSig   *shutdown.Signaller
 }
@@ -347,14 +354,13 @@ func (inst *FranzReaderUnordered) Connect(ctx context.Context) (err error) {
 
 	batchChan := make(chan batchWithAckFn)
 
-	var cl *kgo.Client
 	commitFn := func(*kgo.Record) {}
 	if inst.opts.ConsumerGroup != "" {
 		commitFn = func(r *kgo.Record) {
-			if cl == nil {
+			if inst.Client == nil {
 				return
 			}
-			cl.MarkCommitRecords(r)
+			inst.Client.MarkCommitRecords(r)
 		}
 	}
 	checkpoints := newCheckpointTracker(batchChan, commitFn)
@@ -384,7 +390,7 @@ func (inst *FranzReaderUnordered) Connect(ctx context.Context) (err error) {
 		)
 	}
 
-	cl, err = NewFranzClient(ctx, clientOpts...)
+	inst.Client, err = NewFranzClient(ctx, clientOpts...)
 	if err != nil {
 		return
 	}
@@ -394,7 +400,7 @@ func (inst *FranzReaderUnordered) Connect(ctx context.Context) (err error) {
 	connErrBackOff.MaxInterval = time.Second
 	connErrBackOff.MaxElapsedTime = 0
 
-	go inst.runPollLoop(cl, batchChan, checkpoints, connErrBackOff)
+	go inst.runPollLoop(inst.Client, batchChan, checkpoints, connErrBackOff)
 
 	inst.storeBatchChan(batchChan)
 	return
@@ -406,6 +412,7 @@ func (inst *FranzReaderUnordered) Connect(ctx context.Context) (err error) {
 func (inst *FranzReaderUnordered) runPollLoop(cl *kgo.Client, batchChan chan batchWithAckFn, checkpoints *checkpointTracker, connErrBackOff backoff.BackOff) {
 	defer func() {
 		cl.Close()
+		inst.Client = nil
 		checkpoints.close()
 		inst.storeBatchChan(nil)
 		close(batchChan)

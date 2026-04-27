@@ -181,6 +181,21 @@ MODIFICATIONS APPLIED DURING PORT
     the Benthos plugin registry; without that registry the file has
     no role.
 
+  * lag.go ported as consumer_lag.go. The *service.MetricGauge sink
+    is replaced with a LagSinkFn callback (the package commits to
+    no metrics interface; callers wire whatever backend they want).
+    The asyncroutine.Periodic dependency (a Connect-internal package)
+    is replaced with stdlib time.Ticker + a context-cancelled
+    goroutine — identical refresh-on-tick semantics. The
+    *service.Logger becomes *zerolog.Logger (nil-safe). The lag
+    cache key shape ("topic_partition"), max(lag, 0) clamping, and
+    kadm.Client usage are preserved verbatim. Integration into the
+    readers (per-message kafka_lag metadata) is NOT restored —
+    *kgo.Record is exposed directly per ADR-0015, so attaching
+    metadata is the application's job; ConsumerLag is a standalone
+    observability utility that callers compose with the reader
+    using the reader's Client field.
+
 Per Apache-2.0 §4.b, every modified source file in this package
 carries a "Modifications applied during port" line in its header
 referencing this NOTICE.
@@ -200,7 +215,7 @@ dependencies of this package:
     BSD-3-Clause (same module as kgo)
 
   github.com/twmb/franz-go/pkg/kadm
-    BSD-3-Clause (same module; only if lag.go is ported in Phase 8)
+    BSD-3-Clause (same module as kgo)
 
   github.com/Jeffail/checkpoint
     MIT
