@@ -34,6 +34,23 @@ func TestNormalizeKeywordCase(t *testing.T) {
 			input:    "select distinct a from t order by a desc limit 10",
 			expected: "SELECT DISTINCT a FROM t ORDER BY a DESC LIMIT 10",
 		},
+		{
+			// ClickHouse identifiers are case-sensitive: keyword tokens used as
+			// database / table / column names (e.g. system, tables, events, id)
+			// must keep their original case.
+			input:    "SELECT * FROM system.tables",
+			expected: "SELECT * FROM system.tables",
+		},
+		{
+			input:    "select id, name from events where day > 1",
+			expected: "SELECT id, name FROM events WHERE day > 1",
+		},
+		{
+			// Real keyword positions stay uppercased even when adjacent to
+			// keywords-as-identifiers.
+			input:    "select extract(day from ts), interval 1 day from system.events",
+			expected: "SELECT EXTRACT(DAY FROM ts), INTERVAL 1 DAY FROM system.events",
+		},
 	}
 	for i, tt := range tests {
 		t.Run(fmt.Sprintf("case_%d", i), func(t *testing.T) {
