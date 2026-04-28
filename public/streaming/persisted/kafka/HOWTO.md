@@ -8,7 +8,7 @@ reviewed-date: 2026-04-27
 
 # How to use the streaming/persisted/kafka package
 
-Recipes for the common consumer and producer flows. The package exposes the franz-go-derived plumbing through three reader implementations and a producer; this guide shows the minimum code each requires. For *why* the API is shaped the way it is — the ack contract, the iterator vs slice tradeoff, the concrete-vs-interface decision — see [`EXPLANATION.md`](EXPLANATION.md). For the upstream-derivation decision (Apache-2.0, Benthos service framework dropped), see [`ADR-0015`](../../../../../../doc/adr/0015-streaming-persisted-kafka-from-connect.md).
+Recipes for the common consumer and producer flows. The package exposes the franz-go-derived plumbing through three reader implementations and a producer; this guide shows the minimum code each requires. For *why* the API is shaped the way it is — the ack contract, the iterator vs slice tradeoff, the concrete-vs-interface decision — see [`EXPLANATION.md`](EXPLANATION.md). For the upstream-derivation decision (Apache-2.0, Benthos service framework dropped), see [`ADR-0005`](../../../../doc/adr/0005-streaming-persisted-kafka-from-connect.md).
 
 ## When to use this recipe
 

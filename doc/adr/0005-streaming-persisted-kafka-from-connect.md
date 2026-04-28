@@ -64,7 +64,7 @@ We will adopt **O2 — derivative under Apache-2.0, refactored to boxer style, B
 
 Scope: input + output, franz-go (`kgo`) variant only. Out of scope: sarama variant, schema registry input/output, Redpanda-specific input/output/cache wrappers, AWS MSK IAM helpers, the [`enterprise/`][upstream-enterprise] RCL-licensed subdirectory.
 
-License compliance: per-file Apache-2.0 header carrying the upstream copyright + a boxer modification copyright; per-file modification notice per §4.b; package-level [NOTICE][pkg-notice] per §4.d listing upstream provenance + third-party deps; aggregate [`doc/legal/third_party.md`][third-party] tracking transitive attributions.
+License compliance: per-file Apache-2.0 header carrying the upstream copyright + a boxer modification copyright; per-file modification notice per §4.b; package-level [NOTICE][pkg-notice] per §4.d listing upstream provenance + third-party deps; aggregate [`THIRD_PARTY_NOTICES.md`][third-party] §1.4 reproducing the Apache-2.0 license verbatim and tracking transitive attributions in §3.
 
 Local interface boundary (replaces `service.MessageBatch`, `service.AckFunc`, `service.Resources`):
 
@@ -122,9 +122,9 @@ Names are placeholders; the Phase 1 implementation reconciles them against exist
 ### Neutral
 
 - The pinned upstream SHA means we are not on Connect's release cadence. Re-pinning is an explicit decision recorded in NOTICE + this ADR's References + a follow-up commit message.
-- The `Jeffail/checkpoint` and `Jeffail/shutdown` libraries (MIT, Copyright 2024 Ashley Jeffs) become module dependencies. Their licenses are tracked via [`doc/legal/third_party.md`][third-party].
+- The `Jeffail/checkpoint` and `Jeffail/shutdown` libraries (MIT, Copyright 2024 Ashley Jeffs) become module dependencies. Their licenses are tracked via `go.mod` and the `go-licenses` CI gate ([`THIRD_PARTY_NOTICES.md`][third-party] §3).
 - A future port of Connect's *output* schema-registry / Avro / Protobuf codecs is unrelated and would warrant a separate ADR.
-- The kafka package will not vendor a per-package `LICENSE` file. The repo-level [`licenses/Apache-2.0.txt`][apache-2.0-text] satisfies §4.a once for the whole repo.
+- The kafka package will not vendor a per-package `LICENSE` file. The Apache-2.0 license text is reproduced verbatim under §1.4 of [`THIRD_PARTY_NOTICES.md`][third-party] (boxer's inline-port convention), satisfying §4.a once for the whole repo.
 
 ## Status
 
@@ -137,9 +137,9 @@ ADRs are append-only; supersession is recorded, not deleted.
 
 - Upstream pin: [`redpanda-data/connect@50aa034a`][upstream-pin] (2026-04-24).
 - Upstream license layout: [`redpanda-data/connect/licenses/`](https://github.com/redpanda-data/connect/tree/50aa034a668cc7d03d6acdcf63791fc36906a21c/licenses) — Apache-2.0 covers the regular plugins; RCL covers [`enterprise/`][upstream-enterprise].
-- Local license text: [`licenses/Apache-2.0.txt`](../../licenses/Apache-2.0.txt).
+- License text + package entry: [`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md) §1.4.
 - Package-level NOTICE: [`public/streaming/persisted/kafka/NOTICE`](../../public/streaming/persisted/kafka/NOTICE).
-- Aggregate third-party attribution: [`doc/legal/third_party.md`](../legal/third_party.md).
+- Repo-wide license framework: root [`LICENSE`](../../LICENSE) (boxer's MIT) + root [`NOTICE`](../../NOTICE) (top-level provenance) + [`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md) (third-party index).
 - franz-go: [`github.com/twmb/franz-go`][franz-go] — BSD-3-Clause, Copyright 2020 Travis Bischel.
 - Jeffail/checkpoint: [`github.com/Jeffail/checkpoint`](https://github.com/Jeffail/checkpoint) — MIT.
 - Jeffail/shutdown: [`github.com/Jeffail/shutdown`](https://github.com/Jeffail/shutdown) — MIT.
@@ -151,5 +151,4 @@ ADRs are append-only; supersession is recorded, not deleted.
 [upstream-pin]: https://github.com/redpanda-data/connect/tree/50aa034a668cc7d03d6acdcf63791fc36906a21c/internal/impl/kafka
 [upstream-enterprise]: https://github.com/redpanda-data/connect/tree/50aa034a668cc7d03d6acdcf63791fc36906a21c/internal/impl/kafka/enterprise
 [pkg-notice]: ../../public/streaming/persisted/kafka/NOTICE
-[third-party]: ../legal/third_party.md
-[apache-2.0-text]: ../../licenses/Apache-2.0.txt
+[third-party]: ../../THIRD_PARTY_NOTICES.md

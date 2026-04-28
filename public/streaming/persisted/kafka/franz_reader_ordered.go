@@ -22,7 +22,7 @@
 //     DefaultFranzReaderOrderedOpts factory + NewFranzReaderOrdered
 //     constructor.
 //   - Dropped messageWithRecord's *service.Message field. The port
-//     exposes *kgo.Record directly per ADR-0015 / EXPLANATION.md, so
+//     exposes *kgo.Record directly per ADR-0005 / EXPLANATION.md, so
 //     the per-record service.Message wrapper is unnecessary; only the
 //     *kgo.Record + per-record byte size are retained internally.
 //   - Dropped the per-message dispatch.CtxOnTriggerSignal mechanism.

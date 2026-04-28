@@ -34,7 +34,7 @@
 //     own batcher externally.
 //   - Dropped the franzRecordToMsgFn indirection (which defaulted to
 //     FranzRecordToMessageV0 / V1) and the multi-header config flag.
-//     This port exposes *kgo.Record directly per ADR-0015 /
+//     This port exposes *kgo.Record directly per ADR-0005 /
 //     EXPLANATION.md, so the conversion is unnecessary.
 //   - Dropped ConsumerLag wiring (kafka_lag metadata, lag-refresh
 //     goroutine, redpanda_lag gauge); same scope decision as

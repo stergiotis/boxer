@@ -2,8 +2,9 @@ public/streaming/persisted/kafka — NOTICE
 ==========================================
 
 This package is a derivative work distributed under the Apache License,
-Version 2.0. The license text is at <licenses/Apache-2.0.txt> at the
-repository root, and online at <http://www.apache.org/licenses/LICENSE-2.0>.
+Version 2.0. The license text is reproduced verbatim under section 1.4
+of <THIRD_PARTY_NOTICES.md> at the repository root, and online at
+<http://www.apache.org/licenses/LICENSE-2.0>.
 
 ----------------------------------------------------------------------
 ORIGIN
@@ -18,7 +19,7 @@ Derived from:
   Licensed under the Apache License, Version 2.0.
 
 Decision record:
-  doc/adr/0015-streaming-persisted-kafka-from-connect.md
+  doc/adr/0005-streaming-persisted-kafka-from-connect.md
 
 ----------------------------------------------------------------------
 MODIFICATIONS APPLIED DURING PORT
@@ -110,7 +111,7 @@ MODIFICATIONS APPLIED DURING PORT
   * franz_reader_unordered.go: dropped the franzRecordToMsgFn
     indirection (which defaulted to FranzRecordToMessageV0 / V1
     depending on the multi-header config flag) and the multi_header
-    field. *kgo.Record is exposed directly per ADR-0015 /
+    field. *kgo.Record is exposed directly per ADR-0005 /
     EXPLANATION.md; callers read record.Headers themselves.
 
   * franz_reader_unordered.go: dropped ConsumerLag wiring and
@@ -191,7 +192,7 @@ MODIFICATIONS APPLIED DURING PORT
     cache key shape ("topic_partition"), max(lag, 0) clamping, and
     kadm.Client usage are preserved verbatim. Integration into the
     readers (per-message kafka_lag metadata) is NOT restored —
-    *kgo.Record is exposed directly per ADR-0015, so attaching
+    *kgo.Record is exposed directly per ADR-0005, so attaching
     metadata is the application's job; ConsumerLag is a standalone
     observability utility that callers compose with the reader
     using the reader's Client field.
@@ -204,7 +205,8 @@ referencing this NOTICE.
 THIRD-PARTY DEPENDENCIES OF THIS PACKAGE
 ----------------------------------------------------------------------
 
-The aggregate index lives at doc/legal/third_party.md. Direct
+The aggregate index lives at THIRD_PARTY_NOTICES.md (section 1.4 for
+this package; section 3 for module-level Go deps). Direct
 dependencies of this package:
 
   github.com/twmb/franz-go/pkg/kgo
@@ -247,7 +249,7 @@ When this package is re-synced against a newer upstream commit:
   1. Update the "Pinned commit" line in the ORIGIN section above.
   2. Append a dated entry under MODIFICATIONS APPLIED DURING PORT
      summarising the diff applied during the resync.
-  3. Update doc/adr/0015-streaming-persisted-kafka-from-connect.md
+  3. Update doc/adr/0005-streaming-persisted-kafka-from-connect.md
      References section with the new SHA and date.
-  4. Update doc/legal/third_party.md if any new third-party deps
+  4. Update THIRD_PARTY_NOTICES.md if any new third-party deps
      were introduced upstream.

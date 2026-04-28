@@ -31,7 +31,7 @@
 //     kgo.ReadCommitted() / kgo.ReadUncommitted() and
 //     kgo.NewOffset().At*() values.
 //   - Dropped FranzRecordToMessageV0 / FranzRecordToMessageV1; this
-//     port exposes *kgo.Record directly per ADR-0015 / EXPLANATION.md
+//     port exposes *kgo.Record directly per ADR-0005 / EXPLANATION.md
 //     so the conversion to service.Message is unnecessary.
 //   - Added DefaultFranzConsumerDetails(): returns a FranzConsumerDetails
 //     pre-populated with the same defaults the upstream Connect config

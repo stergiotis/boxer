@@ -27,10 +27,11 @@
 // public/service framework is intentionally absent: configuration is plain
 // Go, the message envelope is [github.com/twmb/franz-go/pkg/kgo.Record]
 // directly, and lifecycle plumbing follows boxer coding standards. See
-// [doc/adr/0015-streaming-persisted-kafka-from-connect.md] for the
+// [doc/adr/0005-streaming-persisted-kafka-from-connect.md] for the
 // derivation decision and EXPLANATION.md for the interface contract.
 //
 // Per Apache-2.0 §4.b every modified source file in this package carries
-// a header referencing ./NOTICE. The repo-level licenses/Apache-2.0.txt
+// a header referencing ./NOTICE. THIRD_PARTY_NOTICES.md §1.4 (at the
+// repo root) reproduces the Apache-2.0 license text verbatim and
 // satisfies §4.a; the package NOTICE satisfies §4.d.
 package kafka

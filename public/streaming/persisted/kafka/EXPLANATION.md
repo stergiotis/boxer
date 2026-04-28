@@ -10,7 +10,7 @@ reviewed-date: 2026-04-27
 
 This document explains the *why* behind the interface boundary in `types.go`. The choices the package makes — concrete types over interface envelopes, a fire-and-forget ack callback, an iterator-shaped record stream — are not local design preferences. They follow from properties of the upstream Connect contract this package derives from, and from the franz-go vocabulary it is built on.
 
-For the derivation decision itself (Apache-2.0 derivative, Benthos service framework dropped, scope, license posture), see [`doc/adr/0015-streaming-persisted-kafka-from-connect.md`](../../../../../../doc/adr/0015-streaming-persisted-kafka-from-connect.md).
+For the derivation decision itself (Apache-2.0 derivative, Benthos service framework dropped, scope, license posture), see [`doc/adr/0005-streaming-persisted-kafka-from-connect.md`](../../../../doc/adr/0005-streaming-persisted-kafka-from-connect.md).
 
 ## What this package provides
 
@@ -99,7 +99,7 @@ The package does not pick one for the caller. Three things make this safe:
 
 ## Why concrete types not interfaces (Batch, *kgo.Record)
 
-ADR-0015 sketched a `RecordEnvelopeI` interface as a placeholder. Phase 1 reverses that to a concrete `*kgo.Record` for three reasons:
+ADR-0005 sketched a `RecordEnvelopeI` interface as a placeholder. Phase 1 reverses that to a concrete `*kgo.Record` for three reasons:
 
 1. **Allocation pressure.** A consumer pulling 10–100k records/s through an interface envelope generates 10–100k interface-conversion allocations per second. franz-go's hot path is allocation-conscious; wrapping its records discards that work.
 2. **No second implementation.** The package has exactly one record source (kgo) and exactly one consumer of `Batch` (the application). Tests use real `*kgo.Record` values constructed in-process. There is no mock target to abstract for.
@@ -144,8 +144,8 @@ The mapping is mechanical for archaeology purposes; the contracts diverge in ack
 
 ## Open today
 
-- **Metrics.** No package-wide `MetricsI` abstraction; the per-feature callback shape (`LagSinkFn` on `[ConsumerLag]`) is what the package commits to today. Reader-side counters (records/s, rebalance count) still emit through `zerolog` debug logs only — adding them would require a wider seam, which is deferred until a second metric appears. The per-message `kafka_lag` metadata that upstream attached on each delivered record is *not* restored: `*kgo.Record` is exposed directly per ADR-0015, so per-message metadata is the application's job; `ConsumerLag` is a standalone utility composed with the reader via `FranzReaderOrdered.Client` / `FranzReaderUnordered.Client`.
+- **Metrics.** No package-wide `MetricsI` abstraction; the per-feature callback shape (`LagSinkFn` on `[ConsumerLag]`) is what the package commits to today. Reader-side counters (records/s, rebalance count) still emit through `zerolog` debug logs only — adding them would require a wider seam, which is deferred until a second metric appears. The per-message `kafka_lag` metadata that upstream attached on each delivered record is *not* restored: `*kgo.Record` is exposed directly per ADR-0005, so per-message metadata is the application's job; `ConsumerLag` is a standalone utility composed with the reader via `FranzReaderOrdered.Client` / `FranzReaderUnordered.Client`.
 - **Shared client across reader + writer.** `FranzWriter` accepts a caller-supplied `*kgo.Client`, so the application can construct one client and use it across multiple writers. The readers (`FranzReaderOrdered`/`FranzReaderUnordered`/`FranzReaderToggled`) still construct their own client internally via the `clientOpts` factory, so a reader/writer pair currently means two `*kgo.Client` instances. A `NewFranzReaderFromClient` variant would close the gap; deferred until a use case appears (transactions, EOS pipelines).
 - **`MessageTransportI` adapter.** `src/go/public/transport/message/MessageTransportI` exposes `Publish([]byte, []byte, identifier.TaggedId) error` — single-message, hash-keyed, opaque-payload. Adapting `ProducerI` to satisfy it (lossy: kgo records carry topic/key/headers/timestamp that don't fit) is deferred until a use case appears.
 - **Per-record `Record.Ack(status)` (KIP-1222).** Available in franz-go but not used here; the upstream reader uses the older `MarkCommitRecords` path and we follow that choice.
-- **Sarama variant.** Out of scope per ADR-0015 and unlikely to return; franz-go is the strategic client.
+- **Sarama variant.** Out of scope per ADR-0005 and unlikely to return; franz-go is the strategic client.

@@ -25,7 +25,7 @@
 //   - Dropped the per-record interpolation surface (Topic / Key /
 //     Partition / Timestamp / MetaFilter as service.InterpolatedString /
 //     service.MetadataFilter). The pebble2impl producer takes
-//     *kgo.Record values directly per ADR-0015 / EXPLANATION.md;
+//     *kgo.Record values directly per ADR-0005 / EXPLANATION.md;
 //     applications populate Topic, Key, Value, Headers, Partition,
 //     and Timestamp on each record themselves.
 //   - Dropped the franzWriterHooks indirection (accessClientFn /
