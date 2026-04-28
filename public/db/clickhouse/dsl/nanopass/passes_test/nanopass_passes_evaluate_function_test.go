@@ -958,3 +958,95 @@ func TestEvalFunctionsEvalInsideBuiltin(t *testing.T) {
 		})
 	}
 }
+
+// --- VerbatimSql return type ---
+
+func TestEvalFunctionsVerbatimSqlSplice(t *testing.T) {
+	eval := passes.NewFunctionEvaluator()
+	eval.Register("emitRaw", func(args []any) (any, error) {
+		return marshalling.VerbatimSql{SQL: "x + 1"}, nil
+	}, true)
+	pass := eval.Pass()
+
+	got, err := pass("SELECT emitRaw() FROM t")
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT x + 1 FROM t", got)
+
+	_, err = nanopass.Parse(got)
+	require.NoError(t, err, "produced invalid SQL: %s", got)
+}
+
+func TestEvalFunctionsVerbatimSqlNotQuoted(t *testing.T) {
+	// Differentiates VerbatimSql from a plain string return, which would
+	// be serialized as a quoted SQL string literal.
+	eval := passes.NewFunctionEvaluator()
+	eval.Register("plainString", func(args []any) (any, error) {
+		return "x + 1", nil
+	}, true)
+	eval.Register("verbatimString", func(args []any) (any, error) {
+		return marshalling.VerbatimSql{SQL: "x + 1"}, nil
+	}, true)
+	pass := eval.Pass()
+
+	gotPlain, err := pass("SELECT plainString()")
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT 'x + 1'", gotPlain)
+
+	gotVerbatim, err := pass("SELECT verbatimString()")
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT x + 1", gotVerbatim)
+}
+
+func TestEvalFunctionsVerbatimSqlPartialEval(t *testing.T) {
+	// Inner verbatim-returning call is replaced via partial-evaluation
+	// descent; outer call (with non-evaluable column arg) is left untouched.
+	eval := newTestEvaluator()
+	eval.Register("emitFortyTwo", func(args []any) (any, error) {
+		return marshalling.VerbatimSql{SQL: "42"}, nil
+	}, true)
+	pass := eval.Pass()
+
+	got, err := pass("SELECT myAdd(a, emitFortyTwo()) FROM t")
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT myAdd(a, 42) FROM t", got)
+
+	_, err = nanopass.Parse(got)
+	require.NoError(t, err, "produced invalid SQL: %s", got)
+}
+
+func TestEvalFunctionsVerbatimSqlOpaqueToOuter(t *testing.T) {
+	// Even when all sibling args are literals, a VerbatimSql arg makes the
+	// outer call non-evaluable — the outer Go callback is never invoked.
+	called := false
+	eval := passes.NewFunctionEvaluator()
+	eval.Register("outerCheck", func(args []any) (any, error) {
+		called = true
+		return int64(0), nil
+	}, true)
+	eval.Register("emitCol", func(args []any) (any, error) {
+		return marshalling.VerbatimSql{SQL: "x"}, nil
+	}, true)
+	pass := eval.Pass()
+
+	got, err := pass("SELECT outerCheck(1, emitCol()) FROM t")
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT outerCheck(1, x) FROM t", got)
+	assert.False(t, called, "outerCheck must not be invoked with a VerbatimSql arg")
+
+	_, err = nanopass.Parse(got)
+	require.NoError(t, err, "produced invalid SQL: %s", got)
+}
+
+func TestEvalFunctionsVerbatimSqlFixedPoint(t *testing.T) {
+	// Verbatim output containing another registered call gets re-evaluated
+	// on the next FixedPoint iteration via the standard re-parse cycle.
+	eval := newTestEvaluator()
+	eval.Register("emitMul", func(args []any) (any, error) {
+		return marshalling.VerbatimSql{SQL: "myMul(2, 3)"}, nil
+	}, true)
+	pass := nanopass.FixedPoint(eval.Pass(), 10)
+
+	got, err := pass("SELECT emitMul()")
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT 6", got)
+}

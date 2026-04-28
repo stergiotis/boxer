@@ -828,6 +828,32 @@ func TestMarshalGoValueTypedLiteralPtrNil(t *testing.T) {
 	assert.Equal(t, "NULL", sql)
 }
 
+func TestMarshalGoValueVerbatimSql(t *testing.T) {
+	sql, err := marshalling.MarshalGoValueToSQL(marshalling.VerbatimSql{SQL: "x + 1"})
+	require.NoError(t, err)
+	assert.Equal(t, "x + 1", sql)
+}
+
+func TestMarshalGoValueVerbatimSqlEmpty(t *testing.T) {
+	sql, err := marshalling.MarshalGoValueToSQL(marshalling.VerbatimSql{SQL: ""})
+	require.NoError(t, err)
+	assert.Equal(t, "", sql)
+}
+
+func TestMarshalGoValueVerbatimSqlPtr(t *testing.T) {
+	v := marshalling.VerbatimSql{SQL: "foo(1, 2)"}
+	sql, err := marshalling.MarshalGoValueToSQL(&v)
+	require.NoError(t, err)
+	assert.Equal(t, "foo(1, 2)", sql)
+}
+
+func TestMarshalGoValueVerbatimSqlPtrNil(t *testing.T) {
+	var v *marshalling.VerbatimSql
+	sql, err := marshalling.MarshalGoValueToSQL(v)
+	require.NoError(t, err)
+	assert.Equal(t, "NULL", sql)
+}
+
 func TestMarshalGoValueSliceAny(t *testing.T) {
 	sql, err := marshalling.MarshalGoValueToSQL([]any{int64(1), int64(2)})
 	require.NoError(t, err)

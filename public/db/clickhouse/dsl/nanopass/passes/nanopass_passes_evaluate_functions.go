@@ -17,7 +17,12 @@ import (
 // EvalFuncI is the signature for a Go-side function evaluator.
 // It receives deserialized arguments and returns a Go value that will be
 // serialized back to SQL.
-// Supported return types: int64, int, float64, string, bool, nil, []any, *Tuple, TypedLiteral.
+// Supported return types: int64, int, float64, string, bool, nil, []any, *Tuple, TypedLiteral, VerbatimSql.
+//
+// VerbatimSql is an escape hatch: its contents are spliced into the output
+// unmodified. A VerbatimSql value passed as an argument to an outer evaluable
+// call is treated as opaque — the outer call will not be invoked, and its
+// inner verbatim subtree is replaced via the partial-evaluation descent.
 type EvalFuncI func(args []any) (any, error)
 
 // FunctionEvaluator holds a registry of Go-evaluable functions and provides a Pass.
@@ -235,6 +240,12 @@ func (inst *FunctionEvaluator) extractEvalArgs(pr *nanopass.ParseResult, funcExp
 
 		val, evalOk := inst.evalArgExpr(pr, argExpr)
 		if !evalOk {
+			return nil, false
+		}
+		// Verbatim SQL is opaque to outer evaluators — refuse to feed it as
+		// an argument. The descent in walkAndEval will still replace the
+		// inner verbatim-returning call on its own.
+		if _, isVerbatim := val.(marshalling.VerbatimSql); isVerbatim {
 			return nil, false
 		}
 		if useAny {

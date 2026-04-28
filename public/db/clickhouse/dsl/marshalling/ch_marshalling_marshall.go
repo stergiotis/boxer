@@ -441,6 +441,15 @@ func marshalTupleTypedLiteralToSQL(elems []TypedLiteral, mapFunc func(string) (s
 
 // --- Marshal Go values ---
 
+// VerbatimSql is an escape-hatch return type for callers that want to emit
+// a SQL fragment unmodified, bypassing the normal Go-value → SQL serialization.
+// The SQL field is spliced into the output as-is; an empty SQL field splices
+// nothing. The resulting SQL is the caller's responsibility — if it isn't
+// valid in the surrounding context, downstream parsers will surface the error.
+type VerbatimSql struct {
+	SQL string
+}
+
 // MarshalOptions controls SQL serialization behavior.
 type MarshalOptions struct {
 	// PreserveCasts wraps values in CAST(expr, 'Type') when the Go type
@@ -504,6 +513,18 @@ func MarshalGoValueToSQLWithOptionsCast(val any, opts MarshalOptions) (sql strin
 		if err != nil {
 			err = eh.Errorf("MarshalGoValueToSQLWithOptions: %w", err)
 		}
+		return
+
+	// --- Verbatim SQL (caller-supplied raw fragment) ---
+	case VerbatimSql:
+		sql = v.SQL
+		return
+	case *VerbatimSql:
+		if v == nil {
+			sql = "NULL"
+			return
+		}
+		sql = v.SQL
 		return
 
 	// --- Arrays ---
