@@ -17,7 +17,7 @@
 // Unit tests for the kafka subcommand's flag-parsing helpers
 // (buildSASL, buildTLS, parseSASLMechanism). No broker required.
 
-package kafka
+package cli
 
 import (
 	"bufio"

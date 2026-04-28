@@ -25,7 +25,7 @@
 //	echo 'hello' | ./pebble.sh kafka produce -b localhost:9092 -t events
 //	./pebble.sh kafka list -b localhost:9092
 
-package kafka
+package cli
 
 import (
 	"bufio"
