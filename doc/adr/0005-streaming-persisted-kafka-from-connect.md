@@ -139,7 +139,7 @@ ADRs are append-only; supersession is recorded, not deleted.
 - Upstream license layout: [`redpanda-data/connect/licenses/`](https://github.com/redpanda-data/connect/tree/50aa034a668cc7d03d6acdcf63791fc36906a21c/licenses) — Apache-2.0 covers the regular plugins; RCL covers [`enterprise/`][upstream-enterprise].
 - License text + package entry: [`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md) §1.4.
 - Package-level NOTICE: [`public/streaming/persisted/kafka/NOTICE`](../../public/streaming/persisted/kafka/NOTICE).
-- Repo-wide license framework: root [`LICENSE`](../../LICENSE) (boxer's MIT) + root [`NOTICE`](../../NOTICE) (top-level provenance) + [`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md) (third-party index).
+- Repo-wide license framework: [boxer's MIT license text](../../LICENSE), [the top-level boxer NOTICE](../../NOTICE) (carrying repo-wide provenance), and [`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md) (the third-party attribution index).
 - franz-go: [`github.com/twmb/franz-go`][franz-go] — BSD-3-Clause, Copyright 2020 Travis Bischel.
 - Jeffail/checkpoint: [`github.com/Jeffail/checkpoint`](https://github.com/Jeffail/checkpoint) — MIT.
 - Jeffail/shutdown: [`github.com/Jeffail/shutdown`](https://github.com/Jeffail/shutdown) — MIT.
