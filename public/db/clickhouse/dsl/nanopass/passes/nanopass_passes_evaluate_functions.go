@@ -159,6 +159,7 @@ func (inst *FunctionEvaluator) walkAndEval(pr *nanopass.ParseResult, rw *antlr.T
 
 	if funcExpr, ok := ctx.(*grammar1.ColumnExprFunctionContext); ok {
 		name := strings.ToLower(funcExpr.Identifier().GetText())
+		name = strings.Trim(name, "\"`")
 		if _, found := inst.funcs[name]; found {
 			// Try full recursive evaluation
 			val, evaluated, _ := inst.tryEval(pr, funcExpr)
@@ -192,6 +193,7 @@ func (inst *FunctionEvaluator) TryEval(pr *nanopass.ParseResult, funcExpr *gramm
 
 func (inst *FunctionEvaluator) tryEval(pr *nanopass.ParseResult, funcExpr *grammar1.ColumnExprFunctionContext) (val any, evaluated bool, err error) {
 	name := strings.ToLower(funcExpr.Identifier().GetText())
+	name = strings.Trim(name, "\"`")
 	fn, found := inst.funcs[name]
 	if !found {
 		return
