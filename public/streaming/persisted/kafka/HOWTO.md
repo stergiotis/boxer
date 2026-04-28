@@ -162,7 +162,7 @@ behind := lag.Load("orders", 0)
 
 ## Recipe 5: invoke the bundled `pebble kafka` CLI
 
-The package ships a kcat-style CLI at [`public/streaming/persisted/kafka/cli/`](../../../../../../src/go/app/commands/kafka), wired into the project-wide entry point `./pebble.sh`. Three nested subcommands cover the common interactive flows.
+The package ships a kcat-style CLI at [`cli/`](cli), exposed as a subcommand by downstream consumers (e.g. pebble2impl wires it into `./pebble.sh`). Three nested subcommands cover the common interactive flows.
 
 ```bash
 # List metadata: brokers, topics, partition leader/replica/ISR.

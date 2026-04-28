@@ -52,7 +52,7 @@ import (
 )
 
 // NewCliCommand returns the top-level "kafka" command, suitable for
-// registration in [src/go/app/app.go]'s Commands slice.
+// registration in a host application's Commands slice.
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "kafka",
