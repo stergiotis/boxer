@@ -85,8 +85,8 @@ func (inst *TableDesc) AddTaggedValuesSections(secs []TaggedValuesSectionDto) (e
 			ValueEncodingHints: sec.ValueColumnEncodingHints,
 			ValueSemantics:     sec.ValueSemantics,
 			UseAspects:         sec.UseAspects,
-			CoSectionGroup:     "",
-			StreamingGroup:     "",
+			CoSectionGroup:     sec.CoSectionGroup,
+			StreamingGroup:     sec.StreamingGroup,
 		})
 	}
 	return

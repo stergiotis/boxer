@@ -114,6 +114,7 @@ func NewIntermediateTaggedValueDesc() *IntermediateTaggedValuesDesc {
 		Membership:                      NewIntermediateColumnsProps(),
 		MembershipSupport:               NewIntermediateColumnsProps(),
 		CoSectionGroup:                  "",
+		StreamingGroup:                  "",
 	}
 }
 func (inst *IntermediateTaggedValuesDesc) Reset() {
@@ -127,9 +128,11 @@ func (inst *IntermediateTaggedValuesDesc) Reset() {
 	inst.Membership.Reset()
 	inst.MembershipSupport.Reset()
 	inst.CoSectionGroup = ""
+	inst.StreamingGroup = ""
 }
 func (inst *IntermediateTaggedValuesDesc) LoadSection(sec *TaggedValuesSection, tech TechnologySpecificMembershipSetGenI) (err error) {
 	inst.CoSectionGroup = sec.CoSectionGroup
+	inst.StreamingGroup = sec.StreamingGroup
 	err = inst.loadSectionValue(sec)
 	if err != nil {
 		return

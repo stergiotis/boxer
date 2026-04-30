@@ -85,6 +85,34 @@ func TestSimpleRoundtrip(t *testing.T) {
 		}
 	}
 }
+func TestTaggedSectionGroupsRoundtrip(t *testing.T) {
+	manip, err := common2.NewTableManipulator()
+	require.NoError(t, err)
+	ctp := canonicaltypes2.NewParser()
+	ct := ctp.MustParsePrimitiveTypeAst("s")
+
+	manip.MergeTaggedValueColumn("sec0", "u", ct,
+		encodingaspects.EmptyAspectSet, valueaspects.EmptyAspectSet,
+		useaspects.EmptyAspectSet, common2.MembershipSpecHighCardRef,
+		naming.Key("coGroup0"), naming.Key("streamGroup0"))
+	manip.MergeTaggedValueColumn("sec1", "v", ct,
+		encodingaspects.EmptyAspectSet, valueaspects.EmptyAspectSet,
+		useaspects.EmptyAspectSet, common2.MembershipSpecHighCardRef,
+		naming.Key("coGroup1"), naming.Key("streamGroup1"))
+
+	tbl, err := manip.BuildTableDesc()
+	require.NoError(t, err)
+	require.Len(t, tbl.TaggedValuesSections, 2)
+
+	found := map[naming.StylableName]common2.TaggedValuesSection{}
+	for _, sec := range tbl.TaggedValuesSections {
+		found[sec.Name] = sec
+	}
+	require.Equal(t, naming.Key("coGroup0"), found["sec0"].CoSectionGroup)
+	require.Equal(t, naming.Key("streamGroup0"), found["sec0"].StreamingGroup)
+	require.Equal(t, naming.Key("coGroup1"), found["sec1"].CoSectionGroup)
+	require.Equal(t, naming.Key("streamGroup1"), found["sec1"].StreamingGroup)
+}
 func TestNull(t *testing.T) {
 	manip, err := common2.NewTableManipulator()
 	require.NoError(t, err)

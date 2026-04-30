@@ -40,7 +40,7 @@ func TestNewTableNormalizer(t *testing.T) {
 	manip.AddPlainValueItem(common.PlainItemTypeTransaction, "myTransaction", ctp.MustParsePrimitiveTypeAst("s"), encodingaspects.EmptyAspectSet, valueaspects.EmptyAspectSet)
 	manip.MergeTaggedValueColumn("mySectionTwo", "col3", ctp.MustParsePrimitiveTypeAst("u16"), encodingaspects.EmptyAspectSet, valueaspects.EmptyAspectSet, useaspects.EmptyAspectSet, common.MembershipSpecE(0).AddLowCardVerbatim(), "", "")
 	manip.MergeTaggedValueColumn("mySection", "col2", ctp.MustParsePrimitiveTypeAst("u8"), encodingaspects.EmptyAspectSet, valueaspects.EmptyAspectSet, useaspects.EmptyAspectSet, common.MembershipSpecE(0).AddLowCardVerbatim(), "", "")
-	manip.MergeTaggedValueColumn("mySection", "col1", ctp.MustParsePrimitiveTypeAst("u32"), encodingaspects.EmptyAspectSet, valueaspects.EmptyAspectSet, useaspects.EmptyAspectSet, common.MembershipSpecE(0).AddLowCardVerbatim(), "", "")
+	manip.MergeTaggedValueColumn("mySection", "col1", ctp.MustParsePrimitiveTypeAst("u32"), encodingaspects.EmptyAspectSet, valueaspects.EmptyAspectSet, useaspects.EmptyAspectSet, common.MembershipSpecE(0).AddLowCardVerbatim(), naming.MustBeValidKey("coSectionKey1"), naming.MustBeValidKey("streamingGroup1"))
 	tbl2, err = manip.BuildTableDesc()
 	require.NoError(t, err)
 
