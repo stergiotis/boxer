@@ -1,4 +1,4 @@
-//go:build llm_generated_opus46
+//go:build llm_generated_opus47
 
 package passes
 
@@ -34,31 +34,40 @@ const (
 )
 
 // CanonicalizeConstructors returns a Pass that normalizes tuple and array
-// construction and access syntax to the chosen canonical form.
+// construction and access syntax to the chosen canonical form. Nested
+// constructors require fixpoint convergence — declares NeedsFixedPoint.
 func CanonicalizeConstructors(form ConstructorFormE) nanopass.Pass {
-	return func(sql string) (result string, err error) {
-		pr, err := nanopass.Parse(sql)
-		if err != nil {
-			err = eh.Errorf("CanonicalizeConstructors: %w", err)
-			return
-		}
-		rw := nanopass.NewRewriter(pr)
+	return nanopass.LiftBodyPass(
+		"CanonicalizeConstructors",
+		func(sql string) (result string, err error) {
+			pr, err := nanopass.Parse(sql)
+			if err != nil {
+				err = eh.Errorf("CanonicalizeConstructors: %w", err)
+				return
+			}
+			rw := nanopass.NewRewriter(pr)
 
-		switch form {
-		case ConstructorFormLiteral:
-			canonicalizeToLiteral(pr, rw)
-			canonicalizeSettingsToLiteral(pr, rw)
-		case ConstructorFormFunction:
-			canonicalizeToFunction(pr, rw)
-			canonicalizeSettingsToFunction(pr, rw)
-		default:
-			err = eb.Build().Int("form", int(form)).Errorf("unknown constructor form")
-			return
-		}
+			switch form {
+			case ConstructorFormLiteral:
+				canonicalizeToLiteral(pr, rw)
+				canonicalizeSettingsToLiteral(pr, rw)
+			case ConstructorFormFunction:
+				canonicalizeToFunction(pr, rw)
+				canonicalizeSettingsToFunction(pr, rw)
+			default:
+				err = eb.Build().Int("form", int(form)).Errorf("unknown constructor form")
+				return
+			}
 
-		result = nanopass.GetText(rw)
-		return
-	}
+			result = nanopass.GetText(rw)
+			return
+		},
+		nanopass.PassProperties{
+			NeedsFixedPoint: true,
+			Reads:           nanopass.RegionBody,
+			Writes:          nanopass.RegionBody,
+		},
+	)
 }
 
 // --- ToLiteral direction: function → syntax ---

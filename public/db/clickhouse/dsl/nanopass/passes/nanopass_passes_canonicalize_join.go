@@ -1,4 +1,4 @@
-//go:build llm_generated_opus46
+//go:build llm_generated_opus47
 
 package passes
 
@@ -11,18 +11,21 @@ import (
 
 // CanonicalizeJoin canonicalizes JOIN syntax.
 //
-//  1. Join keyword order: strictness always precedes direction.
-//     LEFT ALL JOIN  → ALL LEFT JOIN
-//
-//  2. OUTER keyword removed (redundant):
-//     LEFT OUTER JOIN → LEFT JOIN
-//
-//  3. Comma join → CROSS JOIN:
-//     FROM t1, t2 → FROM t1 CROSS JOIN t2
-//
-//  4. USING without parens → USING with parens:
-//     USING col → USING (col)
-func CanonicalizeJoin(sql string) (result string, err error) {
+//  1. Strictness precedes direction (LEFT ALL JOIN → ALL LEFT JOIN).
+//  2. OUTER keyword removed (LEFT OUTER JOIN → LEFT JOIN).
+//  3. Comma join → CROSS JOIN.
+//  4. USING without parens → USING with parens.
+var CanonicalizeJoin = nanopass.LiftBodyPass(
+	"CanonicalizeJoin",
+	canonicalizeJoinImpl,
+	nanopass.PassProperties{
+		Idempotent: true,
+		Reads:      nanopass.RegionBody,
+		Writes:     nanopass.RegionBody,
+	},
+)
+
+func canonicalizeJoinImpl(sql string) (result string, err error) {
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
 		err = eh.Errorf("CanonicalizeJoin: %w", err)

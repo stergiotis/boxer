@@ -1,4 +1,4 @@
-//go:build llm_generated_opus46
+//go:build llm_generated_opus47
 
 package passes
 
@@ -12,10 +12,19 @@ import (
 //
 //	a == b → a = b
 //
-// This is a pure token-level pass — it scans the entire token stream and
-// replaces every EQ_DOUBLE token regardless of context (WHERE, JOIN ON,
-// HAVING, SELECT list, CASE conditions, etc.).
-func CanonicalizeEquals(sql string) (result string, err error) {
+// Pure token-level pass; runs over the entire token stream regardless of
+// context (WHERE, JOIN ON, HAVING, SELECT list, CASE conditions, etc.).
+var CanonicalizeEquals = nanopass.LiftBodyPass(
+	"CanonicalizeEquals",
+	canonicalizeEqualsImpl,
+	nanopass.PassProperties{
+		Idempotent: true,
+		Reads:      nanopass.RegionBody,
+		Writes:     nanopass.RegionBody,
+	},
+)
+
+func canonicalizeEqualsImpl(sql string) (result string, err error) {
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
 		err = eh.Errorf("CanonicalizeEquals: %w", err)

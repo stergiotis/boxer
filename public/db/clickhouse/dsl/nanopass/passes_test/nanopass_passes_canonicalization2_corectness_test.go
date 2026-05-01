@@ -24,7 +24,7 @@ import (
 // fullCanonicalizationPipeline applies all normalization passes in the correct order.
 // This is the sequence that transforms Grammar1 SQL into Grammar2 SQL.
 func fullCanonicalizationPipeline(sql string) (result string, err error) {
-	return passes.CanonicalizeFull(100)(sql)
+	return passes.CanonicalizeFull(100).Run(sql)
 }
 
 // allNewPasses lists the new passes for parametric testing.
@@ -73,7 +73,7 @@ func TestNormalizeJoinExplicitPairs(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := passes.CanonicalizeJoin(tt.input)
+			got, err := passes.CanonicalizeJoin.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 			_, err = nanopass.Parse(got)
@@ -101,7 +101,7 @@ func TestNormalizeTernaryExplicitPairs(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := passes.CanonicalizeTernary(tt.input)
+			got, err := passes.CanonicalizeTernary.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 			_, err = nanopass.Parse(got)
@@ -134,7 +134,7 @@ func TestNormalizeSugarExplicitPairs(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := passes.CanonicalizeSugar(tt.input)
+			got, err := passes.CanonicalizeSugar.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 			_, err = nanopass.Parse(got)
@@ -155,11 +155,11 @@ func TestIdempotencyPerPass(t *testing.T) {
 		t.Run(p.name, func(t *testing.T) {
 			for _, entry := range entries {
 				t.Run(entry.Name, func(t *testing.T) {
-					pass1, err := p.pass(entry.SQL)
+					pass1, err := p.pass.Run(entry.SQL)
 					if err != nil {
 						t.Skipf("pass failed on input: %v", err)
 					}
-					pass2, err := p.pass(pass1)
+					pass2, err := p.pass.Run(pass1)
 					if err != nil {
 						t.Fatalf("pass failed on own output: %v", err)
 					}
@@ -182,7 +182,7 @@ func TestCorpusValidityPerPass(t *testing.T) {
 		t.Run(p.name, func(t *testing.T) {
 			for _, entry := range entries {
 				t.Run(entry.Name, func(t *testing.T) {
-					out, err := p.pass(entry.SQL)
+					out, err := p.pass.Run(entry.SQL)
 					if err != nil {
 						t.Skipf("pass failed: %v", err)
 					}
@@ -214,7 +214,7 @@ func TestScopePreservationPerPass(t *testing.T) {
 						t.Skip()
 					}
 
-					out, err := p.pass(entry.SQL)
+					out, err := p.pass.Run(entry.SQL)
 					if err != nil {
 						t.Skip()
 					}
@@ -283,7 +283,7 @@ func TestUnionAllPerPass(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := tt.pass(tt.input)
+			got, err := tt.pass.Run(tt.input)
 			require.NoError(t, err)
 			_, err = nanopass.Parse(got)
 			require.NoError(t, err, "produced invalid SQL: %s", got)
@@ -324,7 +324,7 @@ func TestCTETransformation(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := tt.pass(tt.input)
+			got, err := tt.pass.Run(tt.input)
 			require.NoError(t, err)
 			_, err = nanopass.Parse(got)
 			require.NoError(t, err)
@@ -342,7 +342,7 @@ func TestInvalidSQLRejection(t *testing.T) {
 	for _, p := range allNewPasses {
 		t.Run(p.name, func(t *testing.T) {
 			for _, sql := range invalid {
-				_, err := p.pass(sql)
+				_, err := p.pass.Run(sql)
 				assert.Error(t, err, "should reject invalid SQL: %q", sql)
 			}
 		})
@@ -374,7 +374,7 @@ func TestSemanticsPreservationTables(t *testing.T) {
 						t.Skip()
 					}
 
-					out, err := p.pass(entry.SQL)
+					out, err := p.pass.Run(entry.SQL)
 					if err != nil {
 						t.Skip()
 					}
@@ -595,7 +595,7 @@ func TestPipelineOrderIndependence(t *testing.T) {
 	// Canonical
 	for _, p := range reorderablePasses {
 		var err error
-		sql, err = p.pass(sql)
+		sql, err = p.pass.Run(sql)
 		require.NoError(t, err)
 	}
 	canonical, err := fullCanonicalizationPipeline(sql)
@@ -611,7 +611,7 @@ func TestPipelineOrderIndependence(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			result := sql
 			for _, idx := range perm {
-				result, err = reorderablePasses[idx].pass(result)
+				result, err = reorderablePasses[idx].pass.Run(result)
 				require.NoError(t, err)
 			}
 			result, err = fullCanonicalizationPipeline(result)
@@ -661,21 +661,21 @@ func permutations(n int) [][]int {
 func TestNormalizeIdentifiersPreservesStringLiterals(t *testing.T) {
 	// String literals must NOT be double-quoted — they use single quotes
 	input := "SELECT 'hello' FROM t"
-	got, err := passes.CanonicalizeIdentifiers(input)
+	got, err := passes.CanonicalizeIdentifiers.Run(input)
 	require.NoError(t, err)
 	assert.Contains(t, got, "'hello'", "string literal must not be modified")
 }
 
 func TestNormalizeIdentifiersPreservesOperators(t *testing.T) {
 	input := "SELECT a + b * c FROM t"
-	got, err := passes.CanonicalizeIdentifiers(input)
+	got, err := passes.CanonicalizeIdentifiers.Run(input)
 	require.NoError(t, err)
 	assert.Contains(t, got, "+")
 	assert.Contains(t, got, "*")
 }
 
 func TestNormalizeIdentifiersParamSlot(t *testing.T) {
-	got, err := passes.CanonicalizeIdentifiers("SELECT {p: UInt64} FROM t")
+	got, err := passes.CanonicalizeIdentifiers.Run("SELECT {p: UInt64} FROM t")
 	require.NoError(t, err)
 	assert.Contains(t, got, `"p"`)
 	// UInt64 is already an IDENTIFIER token (not a keyword), so it gets quoted too
@@ -687,7 +687,7 @@ func TestNormalizeIdentifiersInternalDoubleQuoteEscaping(t *testing.T) {
 	// In backtick form: `col"name`
 	// Should become: "col""name" (double-quote escaped by doubling)
 	input := "SELECT `col\"name` FROM t"
-	got, err := passes.CanonicalizeIdentifiers(input)
+	got, err := passes.CanonicalizeIdentifiers.Run(input)
 	require.NoError(t, err)
 	assert.Contains(t, got, `"col""name"`)
 }
@@ -699,7 +699,7 @@ func TestNormalizeIdentifiersInternalDoubleQuoteEscaping(t *testing.T) {
 func TestNormalizeCaseNested(t *testing.T) {
 	input := "SELECT CASE WHEN CASE WHEN a = 1 THEN 'inner' ELSE 'other' END = 'inner' THEN 'yes' ELSE 'no' END FROM t"
 	pass := nanopass.FixedPoint(passes.CanonicalizeCaseConditionals, 10)
-	got, err := pass(input)
+	got, err := pass.Run(input)
 	require.NoError(t, err)
 	_, err = nanopass.Parse(got)
 	require.NoError(t, err, "produced invalid SQL: %s", got)
@@ -723,13 +723,13 @@ func TestNormalizeTernaryNested(t *testing.T) {
 	input := "SELECT a ? b ? c : d : e FROM t"
 
 	// First pass: innermost ternary is rewritten
-	pass1, err := passes.CanonicalizeTernary(input)
+	pass1, err := passes.CanonicalizeTernary.Run(input)
 	require.NoError(t, err)
 	_, err = nanopass.Parse(pass1)
 	require.NoError(t, err)
 
 	// Second pass (re-parsed): outermost ternary is rewritten
-	pass2, err := passes.CanonicalizeTernary(pass1)
+	pass2, err := passes.CanonicalizeTernary.Run(pass1)
 	require.NoError(t, err)
 	_, err = nanopass.Parse(pass2)
 	require.NoError(t, err)
@@ -750,7 +750,7 @@ func TestNormalizeTernaryNested(t *testing.T) {
 
 func TestNormalizeSugarMultipleInSameQuery(t *testing.T) {
 	input := "SELECT DATE '2024-01-01', TIMESTAMP '2024-01-01 00:00:00', EXTRACT(DAY FROM d) FROM t"
-	got, err := passes.CanonicalizeSugar(input)
+	got, err := passes.CanonicalizeSugar.Run(input)
 	require.NoError(t, err)
 	_, err = nanopass.Parse(got)
 	require.NoError(t, err)
@@ -764,7 +764,7 @@ func TestNormalizeSugarMultipleInSameQuery(t *testing.T) {
 
 func TestNormalizeSugarInSubquery(t *testing.T) {
 	input := "SELECT a FROM t WHERE a IN (SELECT DATE '2024-01-01' FROM t2)"
-	got, err := passes.CanonicalizeSugar(input)
+	got, err := passes.CanonicalizeSugar.Run(input)
 	require.NoError(t, err)
 	_, err = nanopass.Parse(got)
 	require.NoError(t, err)

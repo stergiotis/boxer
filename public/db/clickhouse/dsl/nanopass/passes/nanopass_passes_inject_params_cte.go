@@ -1,4 +1,4 @@
-//go:build llm_generated_opus46
+//go:build llm_generated_opus47
 
 package passes
 
@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -41,95 +42,110 @@ func InjectParamsAsCTE(
 	}
 
 	ctParser := canonicaltypes.NewParser()
-	return func(sql string) (result string, err error) {
-		// Phase 1: Split into SET lines and query
-		sets, _, query := ParseExtractedQuery(sql, prefix)
-		if len(sets) == 0 {
-			result = sql
-			return
-		}
+	return nanopass.Pass{
+		Name: "InjectParamsAsCTE",
+		Apply: func(e *env.Environment, body string) (result string, err error) {
+			if e == nil || len(e.Params) == 0 {
+				result = body
+				return
+			}
 
-		var accepted []acceptedParam
-		var rejectedSets []string
+			// Build the input as `SET line; ... ; body` so the existing logic
+			// (which iterates SET text) can be reused without redesign.
+			var preludeBuilder strings.Builder
+			for name, p := range e.Params {
+				if p.Raw == "" {
+					continue
+				}
+				if _, _, parseErr := ParseParamName(name, prefix); parseErr != nil {
+					continue
+				}
+				preludeBuilder.WriteString("SET ")
+				preludeBuilder.WriteString(name)
+				preludeBuilder.WriteString(" = ")
+				preludeBuilder.WriteString(p.Raw)
+				preludeBuilder.WriteString(";\n")
+			}
+			prelude := preludeBuilder.String()
+			if prelude == "" {
+				result = body
+				return
+			}
+			full := prelude + body
+			sets, _, query := ParseExtractedQuery(full, prefix)
+			if len(sets) == 0 {
+				result = body
+				return
+			}
 
-		for _, info := range IterateExtractedParamsFromSets(sets, prefix) {
-			if predicate != nil && !predicate(info) {
-				// Find the original SET line for this param
-				for _, set := range sets {
-					if strings.Contains(set, info.FullName) {
-						rejectedSets = append(rejectedSets, set)
-						break
+			var accepted []acceptedParam
+			rejectedNames := make(map[string]bool, len(sets))
+
+			for _, info := range IterateExtractedParamsFromSets(sets, prefix) {
+				if predicate != nil && !predicate(info) {
+					rejectedNames[info.FullName] = true
+					continue
+				}
+				cteValue := info.LiteralSQL
+				if info.Metadata.CastTypeCanonical != "" && mapCanonicalToClickHouse != nil {
+					var ct canonicaltypes.PrimitiveAstNodeI
+					ct, err = ctParser.ParsePrimitiveTypeAst(info.Metadata.CastTypeCanonical)
+					if err != nil {
+						err = eb.Build().Str("info", info.String()).Errorf("error parsing canonical type (cast): %w", err)
+						return
+					}
+					chType, mapErr := mapCanonicalToClickHouse(ct)
+					if mapErr == nil && chType != "" {
+						cteValue = info.LiteralSQL + "::" + chType
 					}
 				}
-				continue
+				accepted = append(accepted, acceptedParam{info: info, cteValue: cteValue})
 			}
 
-			// Build the CTE value — reconstruct cast if present
-			cteValue := info.LiteralSQL
-			if info.Metadata.CastTypeCanonical != "" && mapCanonicalToClickHouse != nil {
-				var ct canonicaltypes.PrimitiveAstNodeI
-				ct, err = ctParser.ParsePrimitiveTypeAst(info.Metadata.CastTypeCanonical)
-				if err != nil {
-					err = eb.Build().Str("info", info.String()).Errorf("error parsing canonical type (cast): %w", err)
-					return
-				}
-				chType, mapErr := mapCanonicalToClickHouse(ct)
-				if mapErr == nil && chType != "" {
-					cteValue = info.LiteralSQL + "::" + chType
+			if len(accepted) == 0 {
+				result = body
+				return
+			}
+
+			modifiedQuery := query
+			for _, ap := range accepted {
+				slotPrefix := "{" + ap.info.FullName + ":"
+				for {
+					idx := strings.Index(modifiedQuery, slotPrefix)
+					if idx < 0 {
+						break
+					}
+					endIdx := strings.Index(modifiedQuery[idx:], "}")
+					if endIdx < 0 {
+						break
+					}
+					endIdx += idx
+					modifiedQuery = modifiedQuery[:idx] + ap.info.FullName + modifiedQuery[endIdx+1:]
 				}
 			}
 
-			accepted = append(accepted, acceptedParam{
-				info:     info,
-				cteValue: cteValue,
-			})
-		}
+			cteQuery, insertErr := insertCTEDefinitions(modifiedQuery, accepted)
+			if insertErr != nil {
+				err = eh.Errorf("InjectParamsAsCTE: %w", insertErr)
+				return
+			}
 
-		if len(accepted) == 0 {
-			// Nothing to inject — return original
-			result = sql
+			// Remove accepted-and-injected params from env so Integrate
+			// won't re-emit them as SET lines. Rejected params stay in env.
+			for _, ap := range accepted {
+				delete(e.Params, ap.info.FullName)
+			}
+			result = cteQuery
 			return
-		}
-
-		// Phase 3: Replace {param: Type} slots with bare param references in query
-		modifiedQuery := query
-		for _, ap := range accepted {
-			slotPrefix := "{" + ap.info.FullName + ":"
-			for {
-				idx := strings.Index(modifiedQuery, slotPrefix)
-				if idx < 0 {
-					break
-				}
-				endIdx := strings.Index(modifiedQuery[idx:], "}")
-				if endIdx < 0 {
-					break
-				}
-				endIdx += idx
-				modifiedQuery = modifiedQuery[:idx] + ap.info.FullName + modifiedQuery[endIdx+1:]
-			}
-		}
-
-		// Phase 4: Build CTE definitions and inject into query
-		cteQuery, insertErr := insertCTEDefinitions(modifiedQuery, accepted)
-		if insertErr != nil {
-			err = eh.Errorf("InjectParamsAsCTE: %w", insertErr)
-			return
-		}
-
-		// Phase 5: Prepend rejected SET lines
-		var sb strings.Builder
-		for _, set := range rejectedSets {
-			sb.WriteString(set)
-			sb.WriteString(";\n")
-		}
-		sb.WriteString(cteQuery)
-
-		result = sb.String()
-		return
+		},
+		Properties: nanopass.PassProperties{
+			Idempotent: true,
+			Reads:      nanopass.RegionBody | nanopass.RegionParams,
+			Writes:     nanopass.RegionBody | nanopass.RegionParams,
+		},
 	}
 }
 
-// Move to package level, before InjectParamsAsCTE
 type acceptedParam struct {
 	info     ExtractedParamInfo
 	cteValue string

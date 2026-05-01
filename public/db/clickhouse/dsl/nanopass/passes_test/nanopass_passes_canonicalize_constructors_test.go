@@ -46,7 +46,7 @@ func TestCanonicalizeToLiteralTuple(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -82,7 +82,7 @@ func TestCanonicalizeToLiteralArray(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -113,7 +113,7 @@ func TestCanonicalizeToLiteralTupleElement(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -149,7 +149,7 @@ func TestCanonicalizeToLiteralArrayElement(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -205,7 +205,7 @@ func TestCanonicalizeToFunctionTuple(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -236,7 +236,7 @@ func TestCanonicalizeToFunctionArray(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -267,7 +267,7 @@ func TestCanonicalizeToFunctionTupleAccess(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -303,7 +303,7 @@ func TestCanonicalizeToFunctionArrayAccess(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -318,7 +318,7 @@ func TestCanonicalizeToFunctionArrayAccess(t *testing.T) {
 func TestCanonicalizeToLiteralMixed(t *testing.T) {
 	pass := passes.CanonicalizeConstructors(passes.ConstructorFormLiteral)
 
-	got, err := pass("SELECT tuple(1, 2), array(3, 4), arrayElement(arr, 1), tupleElement(t, 2) FROM t")
+	got, err := pass.Run("SELECT tuple(1, 2), array(3, 4), arrayElement(arr, 1), tupleElement(t, 2) FROM t")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT (1, 2), [3, 4], arr[1], t.2 FROM t", got)
 
@@ -329,7 +329,7 @@ func TestCanonicalizeToLiteralMixed(t *testing.T) {
 func TestCanonicalizeToFunctionMixed(t *testing.T) {
 	pass := passes.CanonicalizeConstructors(passes.ConstructorFormFunction)
 
-	got, err := pass("SELECT (1, 2), [3, 4], arr[1], t.2 FROM t")
+	got, err := pass.Run("SELECT (1, 2), [3, 4], arr[1], t.2 FROM t")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT tuple(1, 2), array(3, 4), arrayElement(arr, 1), tupleElement(t, 2) FROM t", got)
 
@@ -353,11 +353,11 @@ func TestCanonicalizeRoundTrip(t *testing.T) {
 	for i, sql := range sqls {
 		t.Run(fmt.Sprintf("roundtrip_%d", i), func(t *testing.T) {
 			// function → literal → function should produce same as just function
-			lit, err := toLit(sql)
+			lit, err := toLit.Run(sql)
 			require.NoError(t, err)
-			backToFunc, err := toFunc(lit)
+			backToFunc, err := toFunc.Run(lit)
 			require.NoError(t, err)
-			backToLit, err := toLit(backToFunc)
+			backToLit, err := toLit.Run(backToFunc)
 			require.NoError(t, err)
 			assert.Equal(t, lit, backToLit, "round-trip failed")
 		})
@@ -384,9 +384,9 @@ func TestCanonicalizeIdempotent(t *testing.T) {
 		pass := passes.CanonicalizeConstructors(f.form)
 		for i, sql := range sqls {
 			t.Run(fmt.Sprintf("%s_%d", f.name, i), func(t *testing.T) {
-				pass1, err := pass(sql)
+				pass1, err := pass.Run(sql)
 				require.NoError(t, err)
-				pass2, err := pass(pass1)
+				pass2, err := pass.Run(pass1)
 				require.NoError(t, err)
 				assert.Equal(t, pass1, pass2, "not idempotent")
 			})
@@ -399,7 +399,7 @@ func TestCanonicalizeIdempotent(t *testing.T) {
 func TestCanonicalizeUnionAll(t *testing.T) {
 	pass := passes.CanonicalizeConstructors(passes.ConstructorFormLiteral)
 
-	got, err := pass("SELECT tuple(1, 2) UNION ALL SELECT array(3, 4)")
+	got, err := pass.Run("SELECT tuple(1, 2) UNION ALL SELECT array(3, 4)")
 	require.NoError(t, err)
 	assert.Contains(t, got, "(1, 2)")
 	assert.Contains(t, got, "[3, 4]")
@@ -415,7 +415,7 @@ func TestCanonicalizeNonTargetFunctions(t *testing.T) {
 
 	// Other functions should not be affected
 	sql := "SELECT count(*), sum(a), tuple(1, 2) FROM t"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 	assert.Contains(t, got, "count(*)")
 	assert.Contains(t, got, "sum(a)")
@@ -427,7 +427,7 @@ func TestCanonicalizeRejectsInvalid(t *testing.T) {
 	invalid := []string{"", "   ", "SELECT", ";;;"}
 	for i, sql := range invalid {
 		t.Run(fmt.Sprintf("invalid_%d", i), func(t *testing.T) {
-			_, err := pass(sql)
+			_, err := pass.Run(sql)
 			assert.Error(t, err)
 		})
 	}
@@ -451,7 +451,7 @@ func TestCanonicalizeOutputValidity(t *testing.T) {
 		pass := passes.CanonicalizeConstructors(f.form)
 		for _, entry := range entries {
 			t.Run(entry.Name+"/"+f.name, func(t *testing.T) {
-				out, err := pass(entry.SQL)
+				out, err := pass.Run(entry.SQL)
 				if err != nil {
 					t.Skipf("pass failed: %v", err)
 				}
@@ -510,7 +510,7 @@ func TestCanonicalizeSettingsToLiteral(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -563,7 +563,7 @@ func TestCanonicalizeSettingsToFunction(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -598,7 +598,7 @@ func TestCanonicalizeSettingsNested(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Nested requires fixed-point since inner nodes are replaced first
 			fp := nanopass.FixedPoint(pass, 5)
-			got, err := fp(tt.input)
+			got, err := fp.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -625,11 +625,11 @@ func TestCanonicalizeSettingsRoundTrip(t *testing.T) {
 
 	for i, sql := range sqls {
 		t.Run(fmt.Sprintf("settings_roundtrip_%d", i), func(t *testing.T) {
-			lit, err := toLit(sql)
+			lit, err := toLit.Run(sql)
 			require.NoError(t, err)
-			backToFunc, err := toFunc(lit)
+			backToFunc, err := toFunc.Run(lit)
 			require.NoError(t, err)
-			backToLit, err := toLit(backToFunc)
+			backToLit, err := toLit.Run(backToFunc)
 			require.NoError(t, err)
 			assert.Equal(t, lit, backToLit, "round-trip failed")
 		})
@@ -660,9 +660,9 @@ func TestCanonicalizeSettingsIdempotent(t *testing.T) {
 		pass := passes.CanonicalizeConstructors(f.form)
 		for i, sql := range sqls {
 			t.Run(fmt.Sprintf("%s_settings_%d", f.name, i), func(t *testing.T) {
-				pass1, err := pass(sql)
+				pass1, err := pass.Run(sql)
 				require.NoError(t, err)
-				pass2, err := pass(pass1)
+				pass2, err := pass.Run(pass1)
 				require.NoError(t, err)
 				assert.Equal(t, pass1, pass2, "not idempotent")
 			})
@@ -676,7 +676,7 @@ func TestCanonicalizeSettingsAndExpressions(t *testing.T) {
 	toLit := passes.CanonicalizeConstructors(passes.ConstructorFormLiteral)
 
 	// Both query expressions and settings should be canonicalized
-	got, err := toLit("SELECT tuple(1, 2), array(3, 4) FROM t SETTINGS a = array(5, 6)")
+	got, err := toLit.Run("SELECT tuple(1, 2), array(3, 4) FROM t SETTINGS a = array(5, 6)")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT (1, 2), [3, 4] FROM t SETTINGS a = [5, 6]", got)
 
@@ -687,7 +687,7 @@ func TestCanonicalizeSettingsAndExpressions(t *testing.T) {
 func TestCanonicalizeSettingsMultiple(t *testing.T) {
 	toLit := passes.CanonicalizeConstructors(passes.ConstructorFormLiteral)
 
-	got, err := toLit("SELECT 1 SETTINGS a = array(1, 2), b = tuple(3, 4)")
+	got, err := toLit.Run("SELECT 1 SETTINGS a = array(1, 2), b = tuple(3, 4)")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT 1 SETTINGS a = [1, 2], b = (3, 4)", got)
 

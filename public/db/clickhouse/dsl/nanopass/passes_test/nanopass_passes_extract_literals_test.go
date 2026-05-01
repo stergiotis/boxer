@@ -31,7 +31,7 @@ func TestExtractLiteralsSeqLongString(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE name = 'this is a long string value'"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	sets, _, query := passes.ParseExtractedQuery(got, "")
@@ -48,7 +48,7 @@ func TestExtractLiteralsSeqShortStringSkipped(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE name = 'short'"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 	assert.Equal(t, sql, got)
 }
@@ -58,7 +58,7 @@ func TestExtractLiteralsSeqNumber(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE id = 123456789"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	sets, _, query := passes.ParseExtractedQuery(got, "")
@@ -78,9 +78,9 @@ func TestExtractLiteralsStableNames(t *testing.T) {
 
 	sql := "SELECT a FROM t WHERE name = 'longvalue'"
 
-	got1, err := pass(sql)
+	got1, err := pass.Run(sql)
 	require.NoError(t, err)
-	got2, err := pass(sql)
+	got2, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	sets1, _, _ := passes.ParseExtractedQuery(got1, "")
@@ -114,7 +114,7 @@ func TestExtractLiteralsSeqDedup(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE name = 'longvalue1' AND name = 'longvalue1'"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	sets, _, _ := passes.ParseExtractedQuery(got, "")
@@ -128,7 +128,7 @@ func TestExtractLiteralsSeqDistinctValues(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE name = 'value_one_long' OR name = 'value_two_long'"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	sets, _, _ := passes.ParseExtractedQuery(got, "")
@@ -145,7 +145,7 @@ func TestExtractLiteralsWhitelist(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE name = 'hi'"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	assert.Contains(t, got, "SET param_x_eq_")
@@ -160,7 +160,7 @@ func TestExtractLiteralsBlacklist(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE name = 'this is a very long string value'"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	assert.NotContains(t, got, "SET ")
@@ -174,7 +174,7 @@ func TestExtractLiteralsBlacklistOverridesWhitelist(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE name = 'longvalue'"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	assert.NotContains(t, got, "SET ")
@@ -189,7 +189,7 @@ func TestExtractLiteralsINListCollapse(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE b IN ('longval1', 'longval2', 'longval3')"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	sets, _, query := passes.ParseExtractedQuery(got, "")
@@ -207,7 +207,7 @@ func TestExtractLiteralsINListCollapseIntegers(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE id IN (1, 2, 3, 4, 5)"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	sets, _, query := passes.ParseExtractedQuery(got, "")
@@ -224,7 +224,7 @@ func TestExtractLiteralsINListTooSmall(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE b IN ('a', 'b', 'c')"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 	assert.Equal(t, sql, got)
 }
@@ -234,7 +234,7 @@ func TestExtractLiteralsINListDisabled(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE b IN ('longval1', 'longval2', 'longval3')"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 	assert.Equal(t, sql, got)
 }
@@ -253,7 +253,7 @@ func TestExtractLiteralsArrayCollapse(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT array(1, 2, 3, 4, 5) FROM t"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	sets, _, query := passes.ParseExtractedQuery(got, "")
@@ -272,7 +272,7 @@ func TestExtractLiteralsArrayCollapseStrings(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT array('a', 'b', 'c') FROM t"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	sets, _, query := passes.ParseExtractedQuery(got, "")
@@ -287,7 +287,7 @@ func TestExtractLiteralsArrayTooSmall(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT array(1, 2, 3) FROM t"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 	assert.Equal(t, sql, got, "small array below threshold should be untouched")
 }
@@ -297,7 +297,7 @@ func TestExtractLiteralsArrayDisabled(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT array(1, 2, 3, 4, 5) FROM t"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 	assert.Equal(t, sql, got)
 }
@@ -309,7 +309,7 @@ func TestExtractLiteralsArrayWithExpressionsSkipped(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT array(1, 2, x) FROM t"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 	sets, _, _ := passes.ParseExtractedQuery(got, "")
 	assert.Len(t, sets, 0, "non-literal element should disqualify the array() call")
@@ -325,7 +325,7 @@ func TestExtractLiteralsArraySyntacticFormSkipped(t *testing.T) {
 	// callers are expected to run CanonicalizeConstructors(ConstructorFormFunction)
 	// first to lower it to `array(1, 2, 3)`.
 	sql := "SELECT [1, 2, 3, 4, 5] FROM t"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 	sets, _, _ := passes.ParseExtractedQuery(got, "")
 	assert.Len(t, sets, 0, "syntactic [..] is not collapsed; canonicalize first")
@@ -340,7 +340,7 @@ func TestExtractLiteralsTupleCollapse(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT tuple(1, 2, 3) AS x FROM t"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	sets, _, query := passes.ParseExtractedQuery(got, "")
@@ -359,7 +359,7 @@ func TestExtractLiteralsTupleHeterogeneous(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT tuple(1, 'two', 3) AS x FROM t"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	sets, _, query := passes.ParseExtractedQuery(got, "")
@@ -378,7 +378,7 @@ func TestExtractLiteralsTupleInINStillArray(t *testing.T) {
 	// IN-tuple syntactic form is preserved for callers that have not yet run
 	// the constructor canonicalization. It still collapses to an Array param.
 	sql := "SELECT a FROM t WHERE id IN (1, 2, 3)"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	sets, _, query := passes.ParseExtractedQuery(got, "")
@@ -396,7 +396,7 @@ func TestExtractLiteralsTupleBlacklist(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT tuple(1, 2, 3) AS x FROM t"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 	assert.Equal(t, sql, got, "blacklisted tuple kind should leave the call alone")
 }
@@ -409,7 +409,7 @@ func TestExtractLiteralsArrayBlacklist(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT array(1, 2, 3) FROM t"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 	assert.Equal(t, sql, got)
 }
@@ -421,7 +421,7 @@ func TestExtractLiteralsArrayRoundTrip(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	original := "SELECT array(1, 2, 3) FROM t"
-	extracted, err := pass(original)
+	extracted, err := pass.Run(original)
 	require.NoError(t, err)
 
 	sets, _, query := passes.ParseExtractedQuery(extracted, "")
@@ -439,7 +439,7 @@ func TestExtractLiteralsTupleRoundTrip(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	original := "SELECT tuple(1, 2, 3) AS x FROM t"
-	extracted, err := pass(original)
+	extracted, err := pass.Run(original)
 	require.NoError(t, err)
 
 	sets, _, query := passes.ParseExtractedQuery(extracted, "")
@@ -457,9 +457,9 @@ func TestExtractLiteralsCanonicalizeThenExtractArray(t *testing.T) {
 	config.SetMinINListSize(3)
 	extract := passes.ExtractLiterals(config)
 
-	canonicalized, err := canon("SELECT [1, 2, 3, 4, 5] FROM t")
+	canonicalized, err := canon.Run("SELECT [1, 2, 3, 4, 5] FROM t")
 	require.NoError(t, err)
-	got, err := extract(canonicalized)
+	got, err := extract.Run(canonicalized)
 	require.NoError(t, err)
 
 	sets, _, query := passes.ParseExtractedQuery(got, "")
@@ -474,9 +474,9 @@ func TestExtractLiteralsCanonicalizeThenExtractTuple(t *testing.T) {
 	config.SetMinINListSize(3)
 	extract := passes.ExtractLiterals(config)
 
-	canonicalized, err := canon("SELECT (1, 2, 3) AS x FROM t")
+	canonicalized, err := canon.Run("SELECT (1, 2, 3) AS x FROM t")
 	require.NoError(t, err)
-	got, err := extract(canonicalized)
+	got, err := extract.Run(canonicalized)
 	require.NoError(t, err)
 
 	sets, _, query := passes.ParseExtractedQuery(got, "")
@@ -491,11 +491,11 @@ func TestExtractLiteralsCanonicalizeThenExtractIN(t *testing.T) {
 	config.SetMinINListSize(3)
 	extract := passes.ExtractLiterals(config)
 
-	canonicalized, err := canon("SELECT a FROM t WHERE id IN (1, 2, 3)")
+	canonicalized, err := canon.Run("SELECT a FROM t WHERE id IN (1, 2, 3)")
 	require.NoError(t, err)
 	assert.Contains(t, canonicalized, "IN array(", "IN-tuples should be lowered to array() form")
 
-	got, err := extract(canonicalized)
+	got, err := extract.Run(canonicalized)
 	require.NoError(t, err)
 
 	sets, _, query := passes.ParseExtractedQuery(got, "")
@@ -512,7 +512,7 @@ func TestExtractLiteralsCastDoubleColon(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE x = 1::UInt64"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	sets, _, query := passes.ParseExtractedQuery(got, "")
@@ -530,7 +530,7 @@ func TestExtractLiteralsCastAS(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT CAST(1 AS UInt64)"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	sets, _, query := passes.ParseExtractedQuery(got, "")
@@ -547,7 +547,7 @@ func TestExtractLiteralsCastUnknownType(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE x = 1::Decimal128"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	t.Logf("Result:\n%s", got)
@@ -558,7 +558,7 @@ func TestExtractLiteralsCastNilMapper(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE x = 1::UInt64"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	t.Logf("Result:\n%s", got)
@@ -572,7 +572,7 @@ func TestExtractLiteralsCastMetadataRoundTrip(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE x = 1::UInt64"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	params := passes.CollectExtractedParams(got, "")
@@ -601,7 +601,7 @@ func TestExtractLiteralsCastArgIndexRight(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE x = 1::UInt64"
-	extracted, err := pass(sql)
+	extracted, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	params := passes.CollectExtractedParams(extracted, "")
@@ -622,7 +622,7 @@ func TestInjectParamsWithCastsBasic(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	original := "SELECT a FROM t WHERE x = 1::UInt64"
-	extracted, err := pass(original)
+	extracted, err := pass.Run(original)
 	require.NoError(t, err)
 
 	sets, _, query := passes.ParseExtractedQuery(extracted, "")
@@ -640,7 +640,7 @@ func TestInjectParamsWithCastsNoCast(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	original := "SELECT a FROM t WHERE name = 'longvalue'"
-	extracted, err := pass(original)
+	extracted, err := pass.Run(original)
 	require.NoError(t, err)
 
 	sets, _, query := passes.ParseExtractedQuery(extracted, "")
@@ -657,7 +657,7 @@ func TestInjectParamsWithCastsMixed(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	original := "SELECT a FROM t WHERE x = 1::UInt64 AND name = 'hello'"
-	extracted, err := pass(original)
+	extracted, err := pass.Run(original)
 	require.NoError(t, err)
 
 	sets, _, query := passes.ParseExtractedQuery(extracted, "")
@@ -675,7 +675,7 @@ func TestInjectParamsWithCastsNilMapper(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE x = 1::UInt64"
-	extracted, err := pass(sql)
+	extracted, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	sets, _, query := passes.ParseExtractedQuery(extracted, "")
@@ -693,7 +693,7 @@ func TestInjectParamsWithCastsCustomPrefix(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	original := "SELECT a FROM t WHERE name = 'longvalue'"
-	extracted, err := pass(original)
+	extracted, err := pass.Run(original)
 	require.NoError(t, err)
 
 	sets, _, query := passes.ParseExtractedQuery(extracted, "qp")
@@ -711,7 +711,7 @@ func TestExtractLiteralsSeqMultiple(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE name = 'longname1' AND status = 'longstatus'"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	sets, _, query := passes.ParseExtractedQuery(got, "")
@@ -727,7 +727,7 @@ func TestExtractLiteralsNullSkipped(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE name IS NULL"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 	assert.NotContains(t, got, "SET ")
 }
@@ -739,7 +739,7 @@ func TestExtractLiteralsNoLiterals(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a, b, c FROM t WHERE a > b"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 	assert.Equal(t, sql, got)
 }
@@ -785,7 +785,7 @@ func TestExtractLiteralsUnionAll(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE x = 'longval1' UNION ALL SELECT b FROM t2 WHERE y = 'longval2'"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	sets, _, _ := passes.ParseExtractedQuery(got, "")
@@ -799,7 +799,7 @@ func TestExtractLiteralsSubquery(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT * FROM (SELECT a FROM t WHERE name = 'longvalue')"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 	assert.Contains(t, got, "SET ")
 }
@@ -811,7 +811,7 @@ func TestExtractLiteralsCTE(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "WITH cte AS (SELECT a FROM t WHERE name = 'longvalue') SELECT * FROM cte"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 	assert.Contains(t, got, "SET ")
 }
@@ -825,7 +825,7 @@ func TestExtractLiteralsMixedWhitelistBlacklist(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT toDate('2024-01-01'), toString('2024-01-01') FROM t"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	assert.Contains(t, got, "SET param_x_todate_")
@@ -850,7 +850,7 @@ func TestInjectParamsRoundTrip(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	original := "SELECT a FROM t WHERE name = 'longvalue' AND x > 100000"
-	extracted, err := pass(original)
+	extracted, err := pass.Run(original)
 	require.NoError(t, err)
 
 	sets, _, query := passes.ParseExtractedQuery(extracted, "")
@@ -883,7 +883,7 @@ func TestExtractLiteralsRejectsInvalid(t *testing.T) {
 	invalid := []string{"", "   ", "SELECT", ";;;"}
 	for i, sql := range invalid {
 		t.Run(fmt.Sprintf("invalid_%d", i), func(t *testing.T) {
-			_, err := pass(sql)
+			_, err := pass.Run(sql)
 			assert.Error(t, err)
 		})
 	}
@@ -900,7 +900,7 @@ func TestExtractLiteralsCorpus(t *testing.T) {
 
 	for _, entry := range entries {
 		t.Run(entry.Name, func(t *testing.T) {
-			got, err := pass(entry.SQL)
+			got, err := pass.Run(entry.SQL)
 			if err != nil {
 				t.Skipf("pass failed: %v", err)
 			}
@@ -917,7 +917,7 @@ func TestExtractIterateWithCast(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE x = 1::UInt64 AND y = 'hello'"
-	extracted, err := pass(sql)
+	extracted, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	params := passes.CollectExtractedParams(extracted, "")

@@ -1,4 +1,4 @@
-//go:build llm_generated_opus46
+//go:build llm_generated_opus47
 
 package passes
 
@@ -189,8 +189,19 @@ func innerStartsWithMinus(ctx antlr.ParserRuleContext) bool {
 	return startTok.GetText() == "-"
 }
 
-// RemoveRedundantParens removes parentheses that are unnecessary given operator precedence.
-func RemoveRedundantParens(sql string) (result string, err error) {
+// RemoveRedundantParens removes parentheses that are unnecessary given
+// operator precedence.
+var RemoveRedundantParens = nanopass.LiftBodyPass(
+	"RemoveRedundantParens",
+	removeRedundantParensImpl,
+	nanopass.PassProperties{
+		Idempotent: true,
+		Reads:      nanopass.RegionBody,
+		Writes:     nanopass.RegionBody,
+	},
+)
+
+func removeRedundantParensImpl(sql string) (result string, err error) {
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
 		err = eh.Errorf("RemoveRedundantParens: %w", err)

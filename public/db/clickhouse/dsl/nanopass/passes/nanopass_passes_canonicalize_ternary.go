@@ -1,4 +1,4 @@
-//go:build llm_generated_opus46
+//go:build llm_generated_opus47
 
 package passes
 
@@ -9,17 +9,22 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-// CanonicalizeTernary converts ternary conditional expressions to if() function calls.
+// CanonicalizeTernary converts ternary conditional expressions to if()
+// function calls. Nested ternaries (e.g. `a ? b ? c : d : e`) require
+// fixpoint convergence — declares NeedsFixedPoint.
 //
 //	cond ? then_expr : else_expr → if(cond, then_expr, else_expr)
-//
-// Nested ternaries are handled correctly because the walk processes outer nodes
-// first and captures inner expression text verbatim (which may contain already-
-// rewritten if() calls from inner ternaries on a subsequent pipeline re-parse).
-//
-// For correct nesting, this pass should be applied with FixedPoint or re-parsed
-// between iterations when the SQL contains nested ternaries like a ? b ? c : d : e.
-func CanonicalizeTernary(sql string) (result string, err error) {
+var CanonicalizeTernary = nanopass.LiftBodyPass(
+	"CanonicalizeTernary",
+	canonicalizeTernaryImpl,
+	nanopass.PassProperties{
+		NeedsFixedPoint: true,
+		Reads:           nanopass.RegionBody,
+		Writes:          nanopass.RegionBody,
+	},
+)
+
+func canonicalizeTernaryImpl(sql string) (result string, err error) {
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
 		err = eh.Errorf("CanonicalizeTernary: %w", err)

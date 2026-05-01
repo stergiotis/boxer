@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/testdata"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -347,7 +348,7 @@ func TestExplainDifferentialPerPass(t *testing.T) {
 
 	tests := []struct {
 		passName string
-		pass     func(string) (string, error)
+		pass     nanopass.Pass
 		sql      string
 	}{
 		{"CanonicalizeJoin/reorder", passes.CanonicalizeJoin, "SELECT a FROM t1 LEFT ALL JOIN t2 ON t1.id = t2.id"},
@@ -369,7 +370,7 @@ func TestExplainDifferentialPerPass(t *testing.T) {
 				t.Skipf("original doesn't work: %v", err)
 			}
 
-			transformed, err := tt.pass(tt.sql)
+			transformed, err := tt.pass.Run(tt.sql)
 			require.NoError(t, err, "pass failed")
 
 			explainAfter, err := explainSyntax(ctx, cli, transformed)

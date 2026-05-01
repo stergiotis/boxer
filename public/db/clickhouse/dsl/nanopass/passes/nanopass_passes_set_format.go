@@ -1,4 +1,4 @@
-//go:build llm_generated_opus46
+//go:build llm_generated_opus47
 
 package passes
 
@@ -9,11 +9,26 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-// SetFormat returns a Pass that sets or replaces the FORMAT clause of a query.
-// If the query already has a FORMAT clause, it is replaced.
-// If not, a FORMAT clause is appended.
-// Pass an empty string to remove an existing FORMAT clause.
+// SetFormat returns a Pass that sets or replaces the FORMAT clause of a
+// query. If the body already has a FORMAT clause, it is replaced; if not, a
+// FORMAT clause is appended. Pass an empty string to remove an existing
+// FORMAT clause.
+//
+// v1: The pass operates on body's CST directly. Future versions may also
+// reflect changes into env.Format.
 func SetFormat(format string) nanopass.Pass {
+	return nanopass.LiftBodyPass(
+		"SetFormat",
+		setFormatImpl(format),
+		nanopass.PassProperties{
+			Idempotent: true,
+			Reads:      nanopass.RegionBody | nanopass.RegionFormat,
+			Writes:     nanopass.RegionBody | nanopass.RegionFormat,
+		},
+	)
+}
+
+func setFormatImpl(format string) func(string) (string, error) {
 	return func(sql string) (result string, err error) {
 		pr, err := nanopass.Parse(sql)
 		if err != nil {
@@ -86,6 +101,8 @@ func SetFormat(format string) nanopass.Pass {
 }
 
 // GetFormat returns the current FORMAT value of a query, or empty string if none.
+//
+//nolint:unused // public helper
 func GetFormat(sql string) (format string, err error) {
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
@@ -111,7 +128,6 @@ func GetFormat(sql string) (format string, err error) {
 	return
 }
 
-// RemoveFormat is a convenience pass that removes the FORMAT clause if present.
-func RemoveFormat(sql string) (result string, err error) {
-	return SetFormat("")(sql)
-}
+// RemoveFormat is a convenience Pass that removes the FORMAT clause if
+// present. Equivalent to SetFormat("").
+var RemoveFormat = SetFormat("")

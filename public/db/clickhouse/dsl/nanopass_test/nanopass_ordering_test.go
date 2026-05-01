@@ -33,7 +33,7 @@ func TestPipelineAllOrderings(t *testing.T) {
 			names[i] = allPasses[idx].name
 		}
 		t.Run(strings.Join(names, "_"), func(t *testing.T) {
-			result, err := nanopass.Pipeline(sql, ordered...)
+			result, err := nanopass.Sequence("test", ordered...).Run(sql)
 			require.NoError(t, err)
 			_, err = nanopass.Parse(result)
 			require.NoError(t, err, "ordering %v produced invalid SQL: %s", names, result)

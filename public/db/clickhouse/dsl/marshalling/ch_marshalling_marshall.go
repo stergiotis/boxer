@@ -450,6 +450,26 @@ type VerbatimSql struct {
 	SQL string
 }
 
+// UnresolvedParamSlot represents a `{name: Type}` parameter slot encountered
+// in the body for which no SET-bound value was found in the environment. It
+// is opaque to outer evaluators — passing it as an argument prevents the
+// outer call from being evaluated, mirroring VerbatimSql semantics. The
+// MarshalGoValueToSQL path emits it as `{Name: Type}`.
+type UnresolvedParamSlot struct {
+	Name string
+	Type string
+}
+
+// ResolvedParamSlot represents a `{name: Type}` parameter slot whose SET
+// binding was found in the environment. Value is the deserialised Go value;
+// it travels through the evaluator like any literal arg. MarshalGoValueToSQL
+// emits Value (not the slot syntax).
+type ResolvedParamSlot struct {
+	Name  string
+	Type  string
+	Value any
+}
+
 // MarshalOptions controls SQL serialization behavior.
 type MarshalOptions struct {
 	// PreserveCasts wraps values in CAST(expr, 'Type') when the Go type
@@ -526,6 +546,26 @@ func MarshalGoValueToSQLWithOptionsCast(val any, opts MarshalOptions) (sql strin
 		}
 		sql = v.SQL
 		return
+
+	// --- Param slots ---
+	case UnresolvedParamSlot:
+		sql = "{" + v.Name + ": " + v.Type + "}"
+		return
+	case *UnresolvedParamSlot:
+		if v == nil {
+			sql = "NULL"
+			return
+		}
+		sql = "{" + v.Name + ": " + v.Type + "}"
+		return
+	case ResolvedParamSlot:
+		return MarshalGoValueToSQLWithOptionsCast(v.Value, opts)
+	case *ResolvedParamSlot:
+		if v == nil {
+			sql = "NULL"
+			return
+		}
+		return MarshalGoValueToSQLWithOptionsCast(v.Value, opts)
 
 	// --- Arrays ---
 	case []any:

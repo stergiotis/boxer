@@ -1,4 +1,4 @@
-//go:build llm_generated_opus46
+//go:build llm_generated_opus47
 
 package passes
 
@@ -247,10 +247,22 @@ func getSettingFunctionName(ctx antlr.ParserRuleContext) string {
 
 // --- WriteSettings: Go → SQL ---
 
-// WriteSettings returns a Pass that replaces the SETTINGS clause with the given values.
-// If the query has no SETTINGS clause, one is added.
-// If settings is empty, the SETTINGS clause is removed.
+// WriteSettings returns a Pass that replaces the SETTINGS clause with the
+// given values. If the body has no SETTINGS clause, one is added. If
+// settings is empty, the SETTINGS clause is removed.
 func WriteSettings(settings map[string]any) nanopass.Pass {
+	return nanopass.LiftBodyPass(
+		"WriteSettings",
+		writeSettingsImpl(settings),
+		nanopass.PassProperties{
+			Idempotent: true,
+			Reads:      nanopass.RegionBody | nanopass.RegionStatementSettings,
+			Writes:     nanopass.RegionBody | nanopass.RegionStatementSettings,
+		},
+	)
+}
+
+func writeSettingsImpl(settings map[string]any) func(string) (string, error) {
 	return func(sql string) (result string, err error) {
 		// First remove existing SETTINGS, then add new ones
 		pr, err := nanopass.Parse(sql)
@@ -310,24 +322,30 @@ func WriteSettings(settings map[string]any) nanopass.Pass {
 	}
 }
 
-// ModifySettings returns a Pass that reads existing settings, applies a modifier function,
-// and writes the result back. This enables atomic read-modify-write.
+// ModifySettings returns a Pass that reads existing settings, applies a
+// modifier function, and writes the result back. This enables atomic
+// read-modify-write.
 func ModifySettings(modifier func(settings map[string]any) error) nanopass.Pass {
-	return func(sql string) (result string, err error) {
-		settings, err := ReadSettings(sql)
-		if err != nil {
+	return nanopass.LiftBodyPass(
+		"ModifySettings",
+		func(sql string) (result string, err error) {
+			settings, err := ReadSettings(sql)
+			if err != nil {
+				return
+			}
+			err = modifier(settings)
+			if err != nil {
+				err = eh.Errorf("ModifySettings: %w", err)
+				return
+			}
+			result, err = writeSettingsImpl(settings)(sql)
 			return
-		}
-
-		err = modifier(settings)
-		if err != nil {
-			err = eh.Errorf("ModifySettings: %w", err)
-			return
-		}
-
-		result, err = WriteSettings(settings)(sql)
-		return
-	}
+		},
+		nanopass.PassProperties{
+			Reads:  nanopass.RegionBody | nanopass.RegionStatementSettings,
+			Writes: nanopass.RegionBody | nanopass.RegionStatementSettings,
+		},
+	)
 }
 
 // --- Serialization: Go → SQL string ---

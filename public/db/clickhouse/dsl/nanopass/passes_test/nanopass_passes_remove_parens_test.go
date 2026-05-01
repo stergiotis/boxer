@@ -183,7 +183,7 @@ func TestRemoveRedundantParens(t *testing.T) {
 	}
 	for i, tt := range tests {
 		t.Run(fmt.Sprintf("case_%d", i), func(t *testing.T) {
-			got, err := passes.RemoveRedundantParens(tt.input)
+			got, err := passes.RemoveRedundantParens.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 		})
@@ -201,9 +201,9 @@ func TestRemoveRedundantParensIdempotent(t *testing.T) {
 	}
 	for i, sql := range tests {
 		t.Run(fmt.Sprintf("idempotent_%d", i), func(t *testing.T) {
-			pass1, err := passes.RemoveRedundantParens(sql)
+			pass1, err := passes.RemoveRedundantParens.Run(sql)
 			require.NoError(t, err)
-			pass2, err := passes.RemoveRedundantParens(pass1)
+			pass2, err := passes.RemoveRedundantParens.Run(pass1)
 			require.NoError(t, err)
 			assert.Equal(t, pass1, pass2, "not idempotent:\npass1: %s\npass2: %s", pass1, pass2)
 		})
@@ -216,7 +216,7 @@ func TestRemoveRedundantParensOutputValidity(t *testing.T) {
 
 	for _, entry := range entries {
 		t.Run(entry.Name, func(t *testing.T) {
-			out, err := passes.RemoveRedundantParens(entry.SQL)
+			out, err := passes.RemoveRedundantParens.Run(entry.SQL)
 			if err != nil {
 				t.Skipf("pass failed (may be expected for some corpus entries): %v", err)
 			}

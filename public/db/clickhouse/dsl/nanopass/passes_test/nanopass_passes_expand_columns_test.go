@@ -56,7 +56,7 @@ func TestExpandColumnsBareAsterisk(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -105,7 +105,7 @@ func TestExpandColumnsTableAsterisk(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -159,7 +159,7 @@ func TestExpandColumnsDynamic(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -195,7 +195,7 @@ func TestExpandColumnsUnionAll(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -230,7 +230,7 @@ func TestExpandColumnsCTEs(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -264,7 +264,7 @@ func TestExpandColumnsSubqueries(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -298,7 +298,7 @@ func TestExpandColumnsMixed(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -317,7 +317,7 @@ func TestExpandColumnsNoFrom(t *testing.T) {
 	pass := passes.ExpandColumns(schema, "")
 
 	sql := "SELECT 1"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 	assert.Equal(t, sql, got)
 }
@@ -327,7 +327,7 @@ func TestExpandColumnsEmptySchema(t *testing.T) {
 	pass := passes.ExpandColumns(schema, "")
 
 	sql := "SELECT * FROM orders"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 	assert.Equal(t, sql, got) // unexpanded — table not in schema
 }
@@ -343,9 +343,9 @@ func TestExpandColumnsIdempotent(t *testing.T) {
 	}
 	for i, sql := range sqls {
 		t.Run(fmt.Sprintf("idempotent_%d", i), func(t *testing.T) {
-			pass1, err := pass(sql)
+			pass1, err := pass.Run(sql)
 			require.NoError(t, err)
-			pass2, err := pass(pass1)
+			pass2, err := pass.Run(pass1)
 			require.NoError(t, err)
 			assert.Equal(t, pass1, pass2, "not idempotent")
 		})
@@ -358,7 +358,7 @@ func TestExpandColumnsCaseInsensitive(t *testing.T) {
 	})
 	pass := passes.ExpandColumns(schema, "")
 
-	got, err := pass("SELECT * FROM orders")
+	got, err := pass.Run("SELECT * FROM orders")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT orders.id, orders.amount FROM orders", got)
 }
@@ -372,7 +372,7 @@ func TestExpandColumnsOutputValidity(t *testing.T) {
 
 	for _, entry := range entries {
 		t.Run(entry.Name, func(t *testing.T) {
-			out, err := pass(entry.SQL)
+			out, err := pass.Run(entry.SQL)
 			if err != nil {
 				t.Skipf("pass failed: %v", err)
 			}
@@ -389,7 +389,7 @@ func TestExpandColumnsRejectsInvalid(t *testing.T) {
 	invalid := []string{"", "   ", "SELECT", ";;;"}
 	for i, sql := range invalid {
 		t.Run(fmt.Sprintf("invalid_%d", i), func(t *testing.T) {
-			_, err := pass(sql)
+			_, err := pass.Run(sql)
 			assert.Error(t, err)
 		})
 	}
@@ -400,13 +400,13 @@ func TestExpandColumnsPartialSchema(t *testing.T) {
 
 	// One table in schema, one not — bare * left unexpanded
 	sql := "SELECT * FROM orders JOIN unknown_table AS u ON orders.id = u.id"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 	assert.Equal(t, sql, got, "bare * should be left unexpanded when any table is missing from schema")
 
 	// But qualified star for known table should still expand
 	sql2 := "SELECT orders.*, u.id FROM orders JOIN unknown_table AS u ON orders.id = u.id"
-	got2, err := pass(sql2)
+	got2, err := pass.Run(sql2)
 	require.NoError(t, err)
 	assert.Contains(t, got2, "orders.id, orders.amount")
 	assert.Contains(t, got2, "u.id")
@@ -419,7 +419,7 @@ func TestExpandColumnsCTEStarUnexpanded(t *testing.T) {
 
 	// cte.* cannot be expanded — no schema for CTEs
 	sql := "WITH cte AS (SELECT id, name FROM customers) SELECT cte.* FROM cte"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 	// The outer SELECT's cte.* should be left unexpanded
 	assert.Contains(t, got, "cte.*")
@@ -430,7 +430,7 @@ func TestExpandColumnsInvalidRegex(t *testing.T) {
 	pass := passes.ExpandColumns(schema, "")
 
 	sql := "SELECT COLUMNS('[invalid') FROM orders"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 	assert.Equal(t, sql, got, "invalid regex should leave COLUMNS unexpanded")
 }
@@ -440,7 +440,7 @@ func TestExpandColumnsMultipleDynamic(t *testing.T) {
 	pass := passes.ExpandColumns(schema, "")
 
 	sql := "SELECT COLUMNS('^id$'), COLUMNS('amount') FROM orders"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 	assert.Contains(t, got, "orders.id")
 	assert.Contains(t, got, "orders.amount")
@@ -455,7 +455,7 @@ func TestExpandColumnsDynamicInSubquery(t *testing.T) {
 	pass := passes.ExpandColumns(schema, "")
 
 	sql := "SELECT * FROM (SELECT COLUMNS('.*_id') FROM orders)"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 	// Inner COLUMNS should be expanded
 	assert.Contains(t, got, "orders.tenant_id")
@@ -472,7 +472,7 @@ func TestExpandColumnsColumnOrder(t *testing.T) {
 	pass := passes.ExpandColumns(schema, "")
 
 	// Verify column order matches schema definition order
-	got, err := pass("SELECT * FROM products")
+	got, err := pass.Run("SELECT * FROM products")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT products.id, products.name, products.price, products.category FROM products", got)
 }
@@ -483,7 +483,7 @@ func TestExpandColumnsPreservesOtherExpressions(t *testing.T) {
 
 	// Non-star, non-COLUMNS expressions should be untouched
 	sql := "SELECT count(*), sum(amount) FROM orders"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 	assert.Equal(t, sql, got, "aggregate expressions should be untouched")
 }
@@ -493,7 +493,7 @@ func TestExpandColumnsWithWhere(t *testing.T) {
 	pass := passes.ExpandColumns(schema, "")
 
 	sql := "SELECT * FROM orders WHERE amount > 100"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 	assert.Contains(t, got, "orders.id, orders.amount")
 	assert.Contains(t, got, "WHERE amount > 100")
@@ -508,7 +508,7 @@ func TestExpandColumnsWithGroupBy(t *testing.T) {
 
 	// Star expansion with GROUP BY — syntactically valid even if semantically questionable
 	sql := "SELECT * FROM orders GROUP BY id"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 	assert.Contains(t, got, "orders.id, orders.amount")
 	assert.Contains(t, got, "GROUP BY id")
@@ -572,7 +572,7 @@ func TestExpandColumnsWithDatabaseQualifiedSchema(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -618,7 +618,7 @@ func TestExpandColumnsWithMixedSchema(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 

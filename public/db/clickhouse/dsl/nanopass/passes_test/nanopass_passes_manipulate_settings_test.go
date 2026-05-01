@@ -113,7 +113,7 @@ func TestWriteSettingsAdd(t *testing.T) {
 	pass := passes.WriteSettings(map[string]any{
 		"max_threads": int64(4),
 	})
-	got, err := pass("SELECT 1")
+	got, err := pass.Run("SELECT 1")
 	require.NoError(t, err)
 	assert.Contains(t, got, "SETTINGS max_threads = 4")
 
@@ -125,7 +125,7 @@ func TestWriteSettingsReplace(t *testing.T) {
 	pass := passes.WriteSettings(map[string]any{
 		"max_threads": int64(8),
 	})
-	got, err := pass("SELECT 1 SETTINGS max_threads = 4")
+	got, err := pass.Run("SELECT 1 SETTINGS max_threads = 4")
 	require.NoError(t, err)
 	assert.Contains(t, got, "max_threads = 8")
 	assert.NotContains(t, got, "max_threads = 4")
@@ -136,7 +136,7 @@ func TestWriteSettingsReplace(t *testing.T) {
 
 func TestWriteSettingsRemove(t *testing.T) {
 	pass := passes.WriteSettings(map[string]any{})
-	got, err := pass("SELECT 1 SETTINGS max_threads = 4")
+	got, err := pass.Run("SELECT 1 SETTINGS max_threads = 4")
 	require.NoError(t, err)
 	assert.NotContains(t, got, "SETTINGS")
 
@@ -148,7 +148,7 @@ func TestWriteSettingsArray(t *testing.T) {
 	pass := passes.WriteSettings(map[string]any{
 		"ids": []any{int64(1), int64(2), int64(3)},
 	})
-	got, err := pass("SELECT 1")
+	got, err := pass.Run("SELECT 1")
 	require.NoError(t, err)
 	assert.Contains(t, got, "SETTINGS ids = array(1, 2, 3)")
 
@@ -160,7 +160,7 @@ func TestWriteSettingsTuple(t *testing.T) {
 	pass := passes.WriteSettings(map[string]any{
 		"bounds": marshalling.NewUnnamedTuple(int64(0), int64(100)),
 	})
-	got, err := pass("SELECT 1")
+	got, err := pass.Run("SELECT 1")
 	require.NoError(t, err)
 	assert.Contains(t, got, "SETTINGS bounds = tuple(0, 100)")
 
@@ -172,7 +172,7 @@ func TestWriteSettingsString(t *testing.T) {
 	pass := passes.WriteSettings(map[string]any{
 		"name": "hello world",
 	})
-	got, err := pass("SELECT 1")
+	got, err := pass.Run("SELECT 1")
 	require.NoError(t, err)
 	assert.Contains(t, got, "name = 'hello world'")
 
@@ -184,7 +184,7 @@ func TestWriteSettingsStringEscape(t *testing.T) {
 	pass := passes.WriteSettings(map[string]any{
 		"name": "it's a test",
 	})
-	got, err := pass("SELECT 1")
+	got, err := pass.Run("SELECT 1")
 	require.NoError(t, err)
 	assert.Contains(t, got, "name = 'it\\'s a test'")
 }
@@ -193,7 +193,7 @@ func TestWriteSettingsNull(t *testing.T) {
 	pass := passes.WriteSettings(map[string]any{
 		"val": nil,
 	})
-	got, err := pass("SELECT 1")
+	got, err := pass.Run("SELECT 1")
 	require.NoError(t, err)
 	assert.Contains(t, got, "val = NULL")
 
@@ -205,7 +205,7 @@ func TestWriteSettingsBool(t *testing.T) {
 	pass := passes.WriteSettings(map[string]any{
 		"flag": true,
 	})
-	got, err := pass("SELECT 1")
+	got, err := pass.Run("SELECT 1")
 	require.NoError(t, err)
 	assert.Contains(t, got, "flag = true")
 }
@@ -214,7 +214,7 @@ func TestWriteSettingsEmptyArray(t *testing.T) {
 	pass := passes.WriteSettings(map[string]any{
 		"ids": []any{},
 	})
-	got, err := pass("SELECT 1")
+	got, err := pass.Run("SELECT 1")
 	require.NoError(t, err)
 	assert.Contains(t, got, "ids = array()")
 
@@ -229,7 +229,7 @@ func TestWriteSettingsNested(t *testing.T) {
 			[]int64{3, 4},
 		},
 	})
-	got, err := pass("SELECT 1")
+	got, err := pass.Run("SELECT 1")
 	require.NoError(t, err)
 	assert.Contains(t, got, "matrix = array(array(1, 2), array(3, 4))")
 
@@ -243,7 +243,7 @@ func TestWriteSettingsMultiple(t *testing.T) {
 		"b": "hello",
 		"c": []uint8{1, 2},
 	})
-	got, err := pass("SELECT 1")
+	got, err := pass.Run("SELECT 1")
 	require.NoError(t, err)
 	// Keys are sorted alphabetically
 	assert.Contains(t, got, "a = 1")
@@ -262,7 +262,7 @@ func TestModifySettingsAddKey(t *testing.T) {
 		return nil
 	})
 
-	got, err := pass("SELECT 1 SETTINGS existing = 1")
+	got, err := pass.Run("SELECT 1 SETTINGS existing = 1")
 	require.NoError(t, err)
 	assert.Contains(t, got, "existing = 1")
 	assert.Contains(t, got, "new_key = 42")
@@ -277,7 +277,7 @@ func TestModifySettingsDeleteKey(t *testing.T) {
 		return nil
 	})
 
-	got, err := pass("SELECT 1 SETTINGS keep = 1, remove_me = 2")
+	got, err := pass.Run("SELECT 1 SETTINGS keep = 1, remove_me = 2")
 	require.NoError(t, err)
 	assert.Contains(t, got, "keep = 1")
 	assert.NotContains(t, got, "remove_me")
@@ -294,7 +294,7 @@ func TestModifySettingsUpdateValue(t *testing.T) {
 		return nil
 	})
 
-	got, err := pass("SELECT 1 SETTINGS max_threads = 4")
+	got, err := pass.Run("SELECT 1 SETTINGS max_threads = 4")
 	require.NoError(t, err)
 	assert.Contains(t, got, "max_threads = 8")
 
@@ -310,7 +310,7 @@ func TestModifySettingsArrayManipulation(t *testing.T) {
 		return nil
 	})
 
-	got, err := pass("SELECT 1 SETTINGS ids = [1, 2, 3]")
+	got, err := pass.Run("SELECT 1 SETTINGS ids = [1, 2, 3]")
 	require.NoError(t, err)
 	assert.Contains(t, got, "ids = array(1, 2, 3, 4)")
 
@@ -325,7 +325,7 @@ func TestModifySettingsTupleManipulation(t *testing.T) {
 		return nil
 	})
 
-	got, err := pass("SELECT 1 SETTINGS bounds = tuple(0, 100)")
+	got, err := pass.Run("SELECT 1 SETTINGS bounds = tuple(0, 100)")
 	require.NoError(t, err)
 	assert.Contains(t, got, "bounds = tuple(0, 200)")
 
@@ -339,7 +339,7 @@ func TestModifySettingsNoExisting(t *testing.T) {
 		return nil
 	})
 
-	got, err := pass("SELECT 1")
+	got, err := pass.Run("SELECT 1")
 	require.NoError(t, err)
 	assert.Contains(t, got, "SETTINGS new_key = 1")
 
@@ -355,7 +355,7 @@ func TestModifySettingsClearAll(t *testing.T) {
 		return nil
 	})
 
-	got, err := pass("SELECT 1 SETTINGS a = 1, b = 2")
+	got, err := pass.Run("SELECT 1 SETTINGS a = 1, b = 2")
 	require.NoError(t, err)
 	assert.NotContains(t, got, "SETTINGS")
 
@@ -380,7 +380,7 @@ func TestSettingsRoundTrip(t *testing.T) {
 			settings, err := passes.ReadSettings(sql)
 			require.NoError(t, err)
 
-			got, err := passes.WriteSettings(settings)(sql)
+			got, err := passes.WriteSettings(settings).Run(sql)
 			require.NoError(t, err)
 
 			// Read again and compare
@@ -412,7 +412,7 @@ func TestWriteSettingsRejectsInvalid(t *testing.T) {
 	invalid := []string{"", "   ", "SELECT", ";;;"}
 	for i, sql := range invalid {
 		t.Run(fmt.Sprintf("invalid_%d", i), func(t *testing.T) {
-			_, err := pass(sql)
+			_, err := pass.Run(sql)
 			assert.Error(t, err)
 		})
 	}

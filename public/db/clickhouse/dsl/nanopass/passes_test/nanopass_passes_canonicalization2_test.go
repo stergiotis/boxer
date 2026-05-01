@@ -14,9 +14,13 @@ import (
 
 // --- Helper ---
 
-func mustProduceValidSQL(t *testing.T, pass func(string) (string, error), sql string) string {
+func mustProduceValidSQL(t *testing.T, pass nanopass.Pass, sql string) string {
+	return mustProduceValidSQLApply(t, pass.Run, sql)
+}
+
+func mustProduceValidSQLApply(t *testing.T, applyFn func(string) (string, error), sql string) string {
 	t.Helper()
-	got, err := pass(sql)
+	got, err := applyFn(sql)
 	require.NoError(t, err, "pass failed for: %s", sql)
 	_, err = nanopass.Parse(got)
 	require.NoError(t, err, "produced invalid SQL: %s", got)
@@ -478,24 +482,24 @@ func TestFullPipelineProducesCanonicalSQL(t *testing.T) {
 	pipeline := func(sql string) (string, error) {
 		var err error
 		// Order matters: identifiers last (after all structural rewrites)
-		sql, err = passes.CanonicalizeJoin(sql)
+		sql, err = passes.CanonicalizeJoin.Run(sql)
 		if err != nil {
 			return "", err
 		}
-		sql, err = passes.CanonicalizeTernary(sql)
+		sql, err = passes.CanonicalizeTernary.Run(sql)
 		if err != nil {
 			return "", err
 		}
-		sql, err = passes.CanonicalizeCaseConditionals(sql)
+		sql, err = passes.CanonicalizeCaseConditionals.Run(sql)
 		if err != nil {
 			return "", err
 		}
-		sql, err = passes.CanonicalizeSugar(sql)
+		sql, err = passes.CanonicalizeSugar.Run(sql)
 		if err != nil {
 			return "", err
 		}
 		// CanonicalizeIdentifiers runs last — all other passes may introduce bare identifiers
-		sql, err = passes.CanonicalizeIdentifiers(sql)
+		sql, err = passes.CanonicalizeIdentifiers.Run(sql)
 		if err != nil {
 			return "", err
 		}

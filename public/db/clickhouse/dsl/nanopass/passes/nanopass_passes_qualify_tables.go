@@ -1,4 +1,4 @@
-//go:build llm_generated_opus46
+//go:build llm_generated_opus47
 
 package passes
 
@@ -9,26 +9,35 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-// QualifyTables returns a Pass that qualifies all unqualified table references
-// with the given default database. It is scope-aware: it handles UNION ALL branches,
-// skips CTE references, and recurses into CTE bodies and subqueries.
+// QualifyTables returns a Pass that qualifies all unqualified table
+// references with the given default database. Scope-aware: handles UNION ALL
+// branches, skips CTE references, and recurses into CTE bodies and
+// subqueries.
 func QualifyTables(defaultDB string) nanopass.Pass {
-	return func(sql string) (result string, err error) {
-		pr, err := nanopass.Parse(sql)
-		if err != nil {
-			err = eh.Errorf("QualifyTables: %w", err)
+	return nanopass.LiftBodyPass(
+		"QualifyTables",
+		func(sql string) (result string, err error) {
+			pr, err := nanopass.Parse(sql)
+			if err != nil {
+				err = eh.Errorf("QualifyTables: %w", err)
+				return
+			}
+			rw := nanopass.NewRewriter(pr)
+
+			scopes := nanopass.BuildScopes(pr)
+			for _, scope := range scopes {
+				qualifyTablesInScope(rw, scope, defaultDB)
+			}
+
+			result = nanopass.GetText(rw)
 			return
-		}
-		rw := nanopass.NewRewriter(pr)
-
-		scopes := nanopass.BuildScopes(pr)
-		for _, scope := range scopes {
-			qualifyTablesInScope(rw, scope, defaultDB)
-		}
-
-		result = nanopass.GetText(rw)
-		return
-	}
+		},
+		nanopass.PassProperties{
+			Idempotent: true,
+			Reads:      nanopass.RegionBody,
+			Writes:     nanopass.RegionBody,
+		},
+	)
 }
 
 func qualifyTablesInScope(rw *antlr.TokenStreamRewriter, scope *nanopass.SelectScope, defaultDB string) {

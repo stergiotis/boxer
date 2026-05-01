@@ -379,7 +379,7 @@ func (inst *Orchestrator) Compile(ctx context.Context, input string) (result Res
 
 		// Stage 5: Normalize
 		t0 = time.Now()
-		normalized, normErr := inst.canonicalize(extractedSQL)
+		normalized, normErr := inst.canonicalize.Run(extractedSQL)
 		inst.observer.OnNormalize(ctx, NormalizeEvent{
 			InputSQL: extractedSQL, OutputSQL: normalized, Attempt: attempt, Duration: time.Since(t0), Err: normErr,
 		})

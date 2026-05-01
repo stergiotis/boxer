@@ -1,4 +1,4 @@
-//go:build llm_generated_opus46
+//go:build llm_generated_opus47
 
 package passes
 
@@ -10,10 +10,32 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-// CanonicalizeWhitespace collapses all whitespace sequences between tokens to a single space
-// and trims leading/trailing whitespace. Newlines are preserved as single newlines
-// when collapseNewlines is false.
-func CanonicalizeWhitespace(sql string) (result string, err error) {
+// CanonicalizeWhitespace collapses all whitespace sequences between tokens to
+// a single space and trims leading/trailing whitespace. Newlines are
+// preserved as single newlines.
+var CanonicalizeWhitespace = nanopass.LiftBodyPass(
+	"CanonicalizeWhitespace",
+	canonicalizeWhitespaceImpl,
+	nanopass.PassProperties{
+		Idempotent: true,
+		Reads:      nanopass.RegionBody,
+		Writes:     nanopass.RegionBody,
+	},
+)
+
+// CanonicalizeWhitespaceSingleLine collapses all whitespace (including
+// newlines) to single spaces.
+var CanonicalizeWhitespaceSingleLine = nanopass.LiftBodyPass(
+	"CanonicalizeWhitespaceSingleLine",
+	canonicalizeWhitespaceSingleLineImpl,
+	nanopass.PassProperties{
+		Idempotent: true,
+		Reads:      nanopass.RegionBody,
+		Writes:     nanopass.RegionBody,
+	},
+)
+
+func canonicalizeWhitespaceImpl(sql string) (result string, err error) {
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
 		err = eh.Errorf("CanonicalizeWhitespace: %w", err)
@@ -47,8 +69,7 @@ func CanonicalizeWhitespace(sql string) (result string, err error) {
 	return
 }
 
-// CanonicalizeWhitespaceSingleLine collapses all whitespace (including newlines) to single spaces.
-func CanonicalizeWhitespaceSingleLine(sql string) (result string, err error) {
+func canonicalizeWhitespaceSingleLineImpl(sql string) (result string, err error) {
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
 		err = eh.Errorf("CanonicalizeWhitespaceSingleLine: %w", err)

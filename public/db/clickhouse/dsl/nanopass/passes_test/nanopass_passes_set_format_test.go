@@ -56,7 +56,7 @@ func TestSetFormatAdd(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			pass := passes.SetFormat(tt.format)
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -97,7 +97,7 @@ func TestSetFormatReplace(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			pass := passes.SetFormat(tt.format)
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -134,7 +134,7 @@ func TestSetFormatRemove(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			pass := passes.SetFormat("")
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -147,7 +147,7 @@ func TestSetFormatRemove(t *testing.T) {
 // --- RemoveFormat convenience ---
 
 func TestRemoveFormat(t *testing.T) {
-	got, err := passes.RemoveFormat("SELECT 1 FORMAT JSON")
+	got, err := passes.RemoveFormat.Run("SELECT 1 FORMAT JSON")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT 1", got)
 }
@@ -205,9 +205,9 @@ func TestSetFormatIdempotent(t *testing.T) {
 	for i, tt := range sqls {
 		t.Run(fmt.Sprintf("idempotent_%d", i), func(t *testing.T) {
 			pass := passes.SetFormat(tt.format)
-			pass1, err := pass(tt.input)
+			pass1, err := pass.Run(tt.input)
 			require.NoError(t, err)
-			pass2, err := pass(pass1)
+			pass2, err := pass.Run(pass1)
 			require.NoError(t, err)
 			assert.Equal(t, pass1, pass2, "not idempotent")
 		})
@@ -217,24 +217,24 @@ func TestSetFormatIdempotent(t *testing.T) {
 // --- Pipeline integration ---
 
 func TestSetFormatInPipeline(t *testing.T) {
-	result, err := nanopass.Pipeline(
-		"select a from t",
+	pipe := nanopass.Sequence("setformat+validate",
 		passes.CanonicalizeKeywordCase,
 		passes.SetFormat("JSON"),
-		nanopass.Validate,
+		nanopass.ValidateGrammar1,
 	)
+	result, err := pipe.Run("select a from t")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT a FROM t FORMAT JSON", result)
 }
 
 func TestSetFormatWithRemoveAndAdd(t *testing.T) {
 	// Remove existing format, then add a new one
-	result, err := nanopass.Pipeline(
-		"SELECT a FROM t FORMAT CSV",
-		passes.SetFormat(""),     // remove
-		passes.SetFormat("JSON"), // add
-		nanopass.Validate,
+	pipe := nanopass.Sequence("remove+add+validate",
+		passes.SetFormat(""),
+		passes.SetFormat("JSON"),
+		nanopass.ValidateGrammar1,
 	)
+	result, err := pipe.Run("SELECT a FROM t FORMAT CSV")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT a FROM t FORMAT JSON", result)
 }
@@ -244,7 +244,7 @@ func TestSetFormatWithRemoveAndAdd(t *testing.T) {
 func TestSetFormatUnionAll(t *testing.T) {
 	// FORMAT applies to the whole query, not per-branch
 	pass := passes.SetFormat("JSON")
-	got, err := pass("SELECT a FROM t1 UNION ALL SELECT b FROM t2")
+	got, err := pass.Run("SELECT a FROM t1 UNION ALL SELECT b FROM t2")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT a FROM t1 UNION ALL SELECT b FROM t2 FORMAT JSON", got)
 
@@ -256,7 +256,7 @@ func TestSetFormatUnionAll(t *testing.T) {
 
 func TestSetFormatNoFrom(t *testing.T) {
 	pass := passes.SetFormat("JSON")
-	got, err := pass("SELECT 1")
+	got, err := pass.Run("SELECT 1")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT 1 FORMAT JSON", got)
 
@@ -269,7 +269,7 @@ func TestSetFormatRejectsInvalid(t *testing.T) {
 	invalid := []string{"", "   ", "SELECT", ";;;"}
 	for i, sql := range invalid {
 		t.Run(fmt.Sprintf("invalid_%d", i), func(t *testing.T) {
-			_, err := pass(sql)
+			_, err := pass.Run(sql)
 			assert.Error(t, err)
 		})
 	}
@@ -286,7 +286,7 @@ func TestSetFormatOutputValidity(t *testing.T) {
 		pass := passes.SetFormat(format)
 		for _, entry := range entries {
 			t.Run(entry.Name+"/"+format, func(t *testing.T) {
-				out, err := pass(entry.SQL)
+				out, err := pass.Run(entry.SQL)
 				if err != nil {
 					t.Skipf("pass failed: %v", err)
 				}

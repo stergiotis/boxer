@@ -32,7 +32,7 @@ func TestQualifyTablesUnionAll(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 		})
@@ -43,7 +43,7 @@ func TestQualifyTablesSkipsCTEs(t *testing.T) {
 	pass := passes.QualifyTables("mydb")
 
 	sql := "WITH cte AS (SELECT a FROM t_real) SELECT x FROM cte"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	// cte reference should NOT be qualified

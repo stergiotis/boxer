@@ -192,7 +192,7 @@ func TestParseCanonicalAcceptsCanonicalForms(t *testing.T) {
 			name = name[:50]
 		}
 		var err error
-		sql, err = passes.CanonicalizeFull(100)(sql)
+		sql, err = passes.CanonicalizeFull(100).Run(sql)
 		require.NoError(t, err)
 		t.Run(name, func(t *testing.T) {
 			_, err := nanopass.ParseCanonical(sql)
@@ -234,24 +234,24 @@ func TestParseCanonicalRejectsNonCanonical(t *testing.T) {
 // ============================================================================
 
 func TestValidatePass(t *testing.T) {
-	result, err := nanopass.Validate("SELECT a FROM t")
+	result, err := nanopass.ValidateGrammar1.Run("SELECT a FROM t")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT a FROM t", result)
 }
 
 func TestValidateRejectsInvalid(t *testing.T) {
-	_, err := nanopass.Validate("NOT SQL")
+	_, err := nanopass.ValidateGrammar1.Run("NOT SQL")
 	assert.Error(t, err)
 }
 
 func TestValidateCanonicalPass(t *testing.T) {
-	result, err := nanopass.ValidateCanonical(`SELECT "a" FROM "t"`)
+	result, err := nanopass.ValidateGrammar2.Run(`SELECT "a" FROM "t"`)
 	require.NoError(t, err)
 	assert.Equal(t, `SELECT "a" FROM "t"`, result)
 }
 
 func TestValidateCanonicalRejectsNonCanonical(t *testing.T) {
-	_, err := nanopass.ValidateCanonical("SELECT CASE WHEN a = 1 THEN 'x' END FROM t")
+	_, err := nanopass.ValidateGrammar2.Run("SELECT CASE WHEN a = 1 THEN 'x' END FROM t")
 	assert.Error(t, err)
 }
 
@@ -307,20 +307,18 @@ func TestNodeTextWorksWithGrammar2(t *testing.T) {
 
 func TestPipelineWithCanonicalValidation(t *testing.T) {
 	// A pipeline that ends with ValidateCanonical should pass for canonical SQL
-	result, err := nanopass.Pipeline(
-		`SELECT "a" FROM "t"`,
-		nanopass.ValidateCanonical,
-	)
+	result, err := nanopass.Sequence("test", nanopass.ValidateGrammar2,
+	).Run(
+		`SELECT "a" FROM "t"`)
 	require.NoError(t, err)
 	assert.Equal(t, `SELECT "a" FROM "t"`, result)
 }
 
 func TestPipelineWithCanonicalValidationRejects(t *testing.T) {
 	// A pipeline that ends with ValidateCanonical should fail for non-canonical SQL
-	_, err := nanopass.Pipeline(
-		"SELECT CASE WHEN a = 1 THEN 'x' END FROM t",
-		nanopass.ValidateCanonical,
-	)
+	_, err := nanopass.Sequence("test", nanopass.ValidateGrammar2,
+	).Run(
+		"SELECT CASE WHEN a = 1 THEN 'x' END FROM t")
 	assert.Error(t, err)
 }
 

@@ -17,7 +17,7 @@ import (
 
 func sqlToASTForEmit(t *testing.T, sql string) ast.Query {
 	t.Helper()
-	normalized, err := passes.CanonicalizeFull(100)(sql)
+	normalized, err := passes.CanonicalizeFull(100).Run(sql)
 	require.NoError(t, err)
 	pr, err := nanopass.ParseCanonical(normalized)
 	require.NoError(t, err)
@@ -210,7 +210,7 @@ func TestToGoCodeCorpusParseable(t *testing.T) {
 	passed, skipped := 0, 0
 	for _, entry := range entries {
 		t.Run(entry.Name, func(t *testing.T) {
-			normalized, err := passes.CanonicalizeFull(100)(entry.SQL)
+			normalized, err := passes.CanonicalizeFull(100).Run(entry.SQL)
 			if err != nil {
 				skipped++
 				t.Skipf("pipeline: %v", err)

@@ -1,4 +1,4 @@
-//go:build llm_generated_opus46
+//go:build llm_generated_opus47
 
 package passes
 
@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
@@ -14,29 +15,28 @@ import (
 	"github.com/stergiotis/boxer/public/slices"
 )
 
-// EvalFuncI is the signature for a Go-side function evaluator.
-// It receives deserialized arguments and returns a Go value that will be
-// serialized back to SQL.
-// Supported return types: int64, int, float64, string, bool, nil, []any, *Tuple, TypedLiteral, VerbatimSql.
+// EvalFuncI is the signature for a Go-side function evaluator. It receives
+// deserialised arguments and returns a Go value that will be serialised back
+// to SQL. Supported return types: int64, int, float64, string, bool, nil,
+// []any, *Tuple, TypedLiteral, VerbatimSql, ResolvedParamSlot.
 //
-// VerbatimSql is an escape hatch: its contents are spliced into the output
-// unmodified. A VerbatimSql value passed as an argument to an outer evaluable
-// call is treated as opaque — the outer call will not be invoked, and its
-// inner verbatim subtree is replaced via the partial-evaluation descent.
+// VerbatimSql is an escape hatch: contents are spliced into the output
+// unmodified. A VerbatimSql value passed as an argument to an outer
+// evaluable call is treated as opaque — the outer call will not be invoked,
+// and its inner verbatim subtree is replaced via the partial-evaluation
+// descent. UnresolvedParamSlot values follow the same opaque rule.
 type EvalFuncI func(args []any) (any, error)
 
-// FunctionEvaluator holds a registry of Go-evaluable functions and provides a Pass.
-// Functions are expanded recursively: if a function argument is itself an evaluable
-// function call with literal arguments, it is evaluated first.
+// FunctionEvaluator holds a registry of Go-evaluable functions and provides
+// a Pass. Functions are expanded recursively: if a function argument is
+// itself an evaluable function call with literal arguments, it is evaluated
+// first.
 //
-// Partial evaluation: if a registered function has a mix of evaluable and non-evaluable
-// arguments, the evaluable inner calls are still replaced with their results while the
-// outer call is left untouched. For example:
-//
-//	myAdd(a, myMul(2, 3)) → myAdd(a, 6)
-//
-// For cases where partial evaluation makes a previously non-evaluable outer call
-// fully evaluable, use FixedPoint(eval.Pass(), maxIterations).
+// Param-slot resolution: when a `{name: Type}` slot appears as an argument
+// the evaluator consults env.Params[name]. A resolved param contributes its
+// Go-typed Value as if it were a literal; an unresolved param makes the
+// outer call non-evaluable (the inner descent still folds independent
+// literal-only sibling calls).
 type FunctionEvaluator struct {
 	funcs map[string]struct {
 		f      EvalFuncI
@@ -134,29 +134,43 @@ func (inst *FunctionEvaluator) RegisterBuiltins() {
 	}, true)
 }
 
-// Pass returns a nanopass Pass that evaluates all registered functions
-// with fully-literal arguments and partially evaluates inner calls
-// when the outer call has non-literal arguments.
+// Pass returns a nanopass Pass that evaluates all registered functions with
+// fully-literal arguments and partially evaluates inner calls when the outer
+// call has non-literal arguments. The pass declares NeedsFixedPoint —
+// partial evaluation may make a previously non-evaluable outer call fully
+// evaluable, requiring iteration to convergence.
 func (inst *FunctionEvaluator) Pass() nanopass.Pass {
-	return func(sql string) (result string, err error) {
-		pr, err := nanopass.Parse(sql)
-		if err != nil {
-			err = eh.Errorf("FunctionEvaluator: %w", err)
-			return
-		}
-		rw := nanopass.NewRewriter(pr)
-
-		inst.walkAndEval(pr, rw, pr.Tree)
-
-		result = nanopass.GetText(rw)
-		return
+	return nanopass.Pass{
+		Name:  "FunctionEvaluator",
+		Apply: inst.apply,
+		Properties: nanopass.PassProperties{
+			NeedsFixedPoint: true,
+			Reads:           nanopass.RegionBody | nanopass.RegionParams,
+			Writes:          nanopass.RegionBody,
+		},
 	}
 }
 
+func (inst *FunctionEvaluator) apply(e *env.Environment, body string) (result string, err error) {
+	pr, err := nanopass.Parse(body)
+	if err != nil {
+		err = eh.Errorf("FunctionEvaluator: %w", err)
+		return
+	}
+	rw := nanopass.NewRewriter(pr)
+
+	inst.walkAndEval(e, pr, rw, pr.Tree)
+
+	result = nanopass.GetText(rw)
+	return
+}
+
 // walkAndEval walks the CST top-down. For each registered function call:
-//  1. Try full recursive evaluation — if all args evaluate to literals, replace the entire call.
-//  2. If not fully evaluable — descend into children to partially evaluate inner calls.
-func (inst *FunctionEvaluator) walkAndEval(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, node antlr.Tree) {
+//  1. Try full recursive evaluation — if all args evaluate to literals,
+//     replace the entire call.
+//  2. If not fully evaluable — descend into children to partially evaluate
+//     inner calls.
+func (inst *FunctionEvaluator) walkAndEval(e *env.Environment, pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, node antlr.Tree) {
 	ctx, ok := node.(antlr.ParserRuleContext)
 	if !ok {
 		return
@@ -166,37 +180,34 @@ func (inst *FunctionEvaluator) walkAndEval(pr *nanopass.ParseResult, rw *antlr.T
 		name := strings.ToLower(funcExpr.Identifier().GetText())
 		name = strings.Trim(name, "\"`")
 		if _, found := inst.funcs[name]; found {
-			// Try full recursive evaluation
-			val, evaluated, _ := inst.tryEval(pr, funcExpr)
+			val, evaluated, _ := inst.tryEval(e, pr, funcExpr)
 			if evaluated {
 				serialized, serErr := marshalling.MarshalGoValueToSQL(val)
 				if serErr == nil {
 					nanopass.ReplaceNode(rw, funcExpr, serialized)
-					return // entire subtree replaced — don't descend
+					return
 				}
 			}
-			// Not fully evaluable — fall through to descend into children
 		}
 	}
 
-	// Descend into children for partial evaluation
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
 		if childTree, ok := child.(antlr.Tree); ok {
-			inst.walkAndEval(pr, rw, childTree)
+			inst.walkAndEval(e, pr, rw, childTree)
 		}
 	}
 }
 
-// TryEval attempts to evaluate a function call recursively.
-// Returns (value, true, nil) on success.
-// Returns (nil, false, nil) if not all arguments are evaluable.
-// Returns (nil, false, error) on evaluation failure.
-func (inst *FunctionEvaluator) TryEval(pr *nanopass.ParseResult, funcExpr *grammar1.ColumnExprFunctionContext) (val any, evaluated bool, err error) {
-	return inst.tryEval(pr, funcExpr)
+// TryEval attempts to evaluate a function call recursively against an
+// environment. Returns (value, true, nil) on success; (nil, false, nil) if
+// not all arguments are evaluable; (nil, false, error) on evaluation
+// failure.
+func (inst *FunctionEvaluator) TryEval(e *env.Environment, pr *nanopass.ParseResult, funcExpr *grammar1.ColumnExprFunctionContext) (val any, evaluated bool, err error) {
+	return inst.tryEval(e, pr, funcExpr)
 }
 
-func (inst *FunctionEvaluator) tryEval(pr *nanopass.ParseResult, funcExpr *grammar1.ColumnExprFunctionContext) (val any, evaluated bool, err error) {
+func (inst *FunctionEvaluator) tryEval(e *env.Environment, pr *nanopass.ParseResult, funcExpr *grammar1.ColumnExprFunctionContext) (val any, evaluated bool, err error) {
 	name := strings.ToLower(funcExpr.Identifier().GetText())
 	name = strings.Trim(name, "\"`")
 	fn, found := inst.funcs[name]
@@ -204,7 +215,7 @@ func (inst *FunctionEvaluator) tryEval(pr *nanopass.ParseResult, funcExpr *gramm
 		return
 	}
 
-	args, ok := inst.extractEvalArgs(pr, funcExpr, fn.useAny)
+	args, ok := inst.extractEvalArgs(e, pr, funcExpr, fn.useAny)
 	if !ok {
 		return
 	}
@@ -218,9 +229,10 @@ func (inst *FunctionEvaluator) tryEval(pr *nanopass.ParseResult, funcExpr *gramm
 	return
 }
 
-// extractEvalArgs extracts arguments, recursively evaluating nested function calls.
-// Returns (args, true) if all args are evaluable, (nil, false) otherwise.
-func (inst *FunctionEvaluator) extractEvalArgs(pr *nanopass.ParseResult, funcExpr *grammar1.ColumnExprFunctionContext, useAny bool) (args []any, ok bool) {
+// extractEvalArgs extracts arguments, recursively evaluating nested function
+// calls. Returns (args, true) if all args are evaluable, (nil, false)
+// otherwise.
+func (inst *FunctionEvaluator) extractEvalArgs(e *env.Environment, pr *nanopass.ParseResult, funcExpr *grammar1.ColumnExprFunctionContext, useAny bool) (args []any, ok bool) {
 	argList := funcExpr.ColumnArgList()
 	if argList == nil {
 		args = make([]any, 0)
@@ -235,17 +247,20 @@ func (inst *FunctionEvaluator) extractEvalArgs(pr *nanopass.ParseResult, funcExp
 		child := argListCtx.GetChild(i)
 		argExpr, isArg := child.(*grammar1.ColumnArgExprContext)
 		if !isArg {
-			continue // skip commas
+			continue
 		}
 
-		val, evalOk := inst.evalArgExpr(pr, argExpr)
+		val, evalOk := inst.evalArgExpr(e, pr, argExpr)
 		if !evalOk {
 			return nil, false
 		}
-		// Verbatim SQL is opaque to outer evaluators — refuse to feed it as
-		// an argument. The descent in walkAndEval will still replace the
-		// inner verbatim-returning call on its own.
+		// Verbatim SQL and unresolved param slots are opaque to outer
+		// evaluators — refuse to feed them as arguments. The descent in
+		// walkAndEval will still replace inner producers on its own.
 		if _, isVerbatim := val.(marshalling.VerbatimSql); isVerbatim {
+			return nil, false
+		}
+		if _, isUnres := val.(marshalling.UnresolvedParamSlot); isUnres {
 			return nil, false
 		}
 		if useAny {
@@ -256,6 +271,8 @@ func (inst *FunctionEvaluator) extractEvalArgs(pr *nanopass.ParseResult, funcExp
 					return nil, false
 				}
 				args = append(args, a)
+			case marshalling.ResolvedParamSlot:
+				args = append(args, t.Value)
 			default:
 				args = append(args, val)
 			}
@@ -269,16 +286,16 @@ func (inst *FunctionEvaluator) extractEvalArgs(pr *nanopass.ParseResult, funcExp
 }
 
 // evalArgExpr evaluates a single argument expression.
-func (inst *FunctionEvaluator) evalArgExpr(pr *nanopass.ParseResult, argExpr *grammar1.ColumnArgExprContext) (val any, ok bool) {
+func (inst *FunctionEvaluator) evalArgExpr(e *env.Environment, pr *nanopass.ParseResult, argExpr *grammar1.ColumnArgExprContext) (val any, ok bool) {
 	if argExpr.GetChildCount() == 0 {
 		return nil, false
 	}
 	colExpr := argExpr.GetChild(0)
-	return inst.evalColumnExpr(pr, colExpr)
+	return inst.evalColumnExpr(e, pr, colExpr)
 }
 
 // evalColumnExpr evaluates a column expression recursively.
-func (inst *FunctionEvaluator) evalColumnExpr(pr *nanopass.ParseResult, node antlr.Tree) (val any, ok bool) {
+func (inst *FunctionEvaluator) evalColumnExpr(e *env.Environment, pr *nanopass.ParseResult, node antlr.Tree) (val any, ok bool) {
 	ctx, isCtx := node.(antlr.ParserRuleContext)
 	if !isCtx {
 		return nil, false
@@ -289,7 +306,7 @@ func (inst *FunctionEvaluator) evalColumnExpr(pr *nanopass.ParseResult, node ant
 		return inst.evalLiteral(c)
 
 	case *grammar1.ColumnExprFunctionContext:
-		result, evaluated, evalErr := inst.tryEval(pr, c)
+		result, evaluated, evalErr := inst.tryEval(e, pr, c)
 		if evalErr != nil || !evaluated {
 			return nil, false
 		}
@@ -300,7 +317,7 @@ func (inst *FunctionEvaluator) evalColumnExpr(pr *nanopass.ParseResult, node ant
 			return nil, false
 		}
 		inner := c.GetChild(1)
-		innerVal, innerOk := inst.evalColumnExpr(pr, inner)
+		innerVal, innerOk := inst.evalColumnExpr(e, pr, inner)
 		if !innerOk {
 			return nil, false
 		}
@@ -311,15 +328,58 @@ func (inst *FunctionEvaluator) evalColumnExpr(pr *nanopass.ParseResult, node ant
 			child := c.GetChild(i)
 			if prc, isPrc := child.(antlr.ParserRuleContext); isPrc {
 				if prc.GetRuleIndex() == grammar1.ClickHouseParserGrammar1RULE_columnExpr {
-					return inst.evalColumnExpr(pr, prc)
+					return inst.evalColumnExpr(e, pr, prc)
 				}
 			}
 		}
 		return nil, false
 
+	case *grammar1.ColumnExprParamSlotContext:
+		return resolveParamSlot(e, c)
+
 	default:
 		return nil, false
 	}
+}
+
+// resolveParamSlot looks the slot up in env.Params. Returns ResolvedParamSlot
+// when both type and value are known; UnresolvedParamSlot when only the type
+// is known. A slot the env has no record of is treated as unresolved-with-
+// blank-type rather than non-evaluable, so the caller's opaque-arg rule
+// applies.
+func resolveParamSlot(e *env.Environment, ctx *grammar1.ColumnExprParamSlotContext) (val any, ok bool) {
+	name, typ := splitParamSlotText(ctx.GetText())
+	if name == "" {
+		return nil, false
+	}
+	var entry env.Param
+	if e != nil {
+		entry = e.Params[name]
+	}
+	if entry.Type == "" {
+		entry.Type = typ
+	}
+	if entry.IsResolved() && entry.Value != nil {
+		return marshalling.ResolvedParamSlot{Name: name, Type: entry.Type, Value: entry.Value}, true
+	}
+	return marshalling.UnresolvedParamSlot{Name: name, Type: entry.Type}, true
+}
+
+// splitParamSlotText takes the textual form of a param slot — e.g.
+// `{a:UInt64}` — and returns name and type.
+func splitParamSlotText(s string) (name, typ string) {
+	s = strings.TrimSpace(s)
+	if !strings.HasPrefix(s, "{") || !strings.HasSuffix(s, "}") {
+		return
+	}
+	inner := s[1 : len(s)-1]
+	colon := strings.IndexByte(inner, ':')
+	if colon < 0 {
+		return
+	}
+	name = strings.TrimSpace(inner[:colon])
+	typ = strings.TrimSpace(inner[colon+1:])
+	return
 }
 
 func (inst *FunctionEvaluator) evalLiteral(ctx *grammar1.ColumnExprLiteralContext) (val any, ok bool) {

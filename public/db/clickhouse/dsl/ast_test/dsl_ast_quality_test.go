@@ -31,12 +31,12 @@ import (
 // ============================================================================
 
 func fullPipeline(sql string) (result string, err error) {
-	return passes.CanonicalizeFull(100)(sql)
+	return passes.CanonicalizeFull(100).Run(sql)
 }
 
 func sqlToAST(t *testing.T, sql string) ast.Query {
 	t.Helper()
-	normalized, err := passes.CanonicalizeFull(100)(sql)
+	normalized, err := passes.CanonicalizeFull(100).Run(sql)
 	require.NoError(t, err, "pipeline failed for: %s", sql)
 	pr, err := nanopass.ParseCanonical(normalized)
 	require.NoError(t, err, "ParseCanonical failed for: %s", normalized)

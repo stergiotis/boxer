@@ -175,7 +175,7 @@ func TestEvalFunctionsSimple(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -214,7 +214,7 @@ func TestEvalFunctionsNested(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -258,7 +258,7 @@ func TestEvalFunctionsArrayTuple(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -302,7 +302,7 @@ func TestEvalFunctionsNonLiteral(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -318,7 +318,7 @@ func TestEvalFunctionsNegativeArgs(t *testing.T) {
 	eval := newTestEvaluator()
 	pass := eval.Pass()
 
-	got, err := pass("SELECT myAdd(-3, 5)")
+	got, err := pass.Run("SELECT myAdd(-3, 5)")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT 2", got)
 
@@ -332,7 +332,7 @@ func TestEvalFunctionsMixed(t *testing.T) {
 	eval := newTestEvaluator()
 	pass := eval.Pass()
 
-	got, err := pass("SELECT myAdd(1, 2), a, myMul(3, 4) FROM t")
+	got, err := pass.Run("SELECT myAdd(1, 2), a, myMul(3, 4) FROM t")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT 3, a, 12 FROM t", got)
 
@@ -354,7 +354,7 @@ func TestEvalFunctionsFloat(t *testing.T) {
 	}, true)
 	pass := eval.Pass()
 
-	got, err := pass("SELECT myDiv(7, 2)")
+	got, err := pass.Run("SELECT myDiv(7, 2)")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT 3.5", got)
 
@@ -371,7 +371,7 @@ func TestEvalFunctionsEvalError(t *testing.T) {
 	}, true)
 	pass := eval.Pass()
 
-	got, err := pass("SELECT myFail(1)")
+	got, err := pass.Run("SELECT myFail(1)")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT myFail(1)", got) // left untouched
 }
@@ -392,11 +392,11 @@ func TestEvalFunctionsBoolResult(t *testing.T) {
 	}, true)
 	pass := eval.Pass()
 
-	got, err := pass("SELECT myIsPositive(42)")
+	got, err := pass.Run("SELECT myIsPositive(42)")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT true", got) // bool true → 1
 
-	got, err = pass("SELECT myIsPositive(-1)")
+	got, err = pass.Run("SELECT myIsPositive(-1)")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT false", got) // bool false → 0
 }
@@ -417,7 +417,7 @@ func TestEvalFunctionsStringEscaping(t *testing.T) {
 	}, true)
 	pass := eval.Pass()
 
-	got, err := pass("SELECT myQuote('hello')")
+	got, err := pass.Run("SELECT myQuote('hello')")
 	require.NoError(t, err)
 	// myQuote('hello') → "'hello'" → serialized as '\'hello\''
 	assert.Contains(t, got, "hello")
@@ -429,7 +429,7 @@ func TestEvalFunctionsNestedArrays(t *testing.T) {
 	eval := newTestEvaluator()
 	pass := eval.Pass()
 
-	got, err := pass("SELECT array(array(1, 2), array(3, 4))")
+	got, err := pass.Run("SELECT array(array(1, 2), array(3, 4))")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT array(array(1, 2), array(3, 4))", got)
 
@@ -443,7 +443,7 @@ func TestEvalFunctionsNestedTupleArray(t *testing.T) {
 	eval := newTestEvaluator()
 	pass := eval.Pass()
 
-	got, err := pass("SELECT tuple(array(1, 2), array(3, 4))")
+	got, err := pass.Run("SELECT tuple(array(1, 2), array(3, 4))")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT tuple(array(1, 2), array(3, 4))", got)
 
@@ -457,7 +457,7 @@ func TestEvalFunctionsInWhere(t *testing.T) {
 	eval := newTestEvaluator()
 	pass := eval.Pass()
 
-	got, err := pass("SELECT a FROM t WHERE a > myAdd(1, 2)")
+	got, err := pass.Run("SELECT a FROM t WHERE a > myAdd(1, 2)")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT a FROM t WHERE a > 3", got)
 
@@ -469,7 +469,7 @@ func TestEvalFunctionsInHaving(t *testing.T) {
 	eval := newTestEvaluator()
 	pass := eval.Pass()
 
-	got, err := pass("SELECT a, count(*) FROM t GROUP BY a HAVING count(*) > myAdd(5, 5)")
+	got, err := pass.Run("SELECT a, count(*) FROM t GROUP BY a HAVING count(*) > myAdd(5, 5)")
 	require.NoError(t, err)
 	assert.Contains(t, got, "> 10")
 
@@ -481,7 +481,7 @@ func TestEvalFunctionsInOrderBy(t *testing.T) {
 	eval := newTestEvaluator()
 	pass := eval.Pass()
 
-	got, err := pass("SELECT a FROM t ORDER BY a LIMIT myMul(5, 10)")
+	got, err := pass.Run("SELECT a FROM t ORDER BY a LIMIT myMul(5, 10)")
 	require.NoError(t, err)
 	assert.Contains(t, got, "LIMIT 50")
 
@@ -495,7 +495,7 @@ func TestEvalFunctionsUnionAll(t *testing.T) {
 	eval := newTestEvaluator()
 	pass := eval.Pass()
 
-	got, err := pass("SELECT myAdd(1, 2) UNION ALL SELECT myMul(3, 4)")
+	got, err := pass.Run("SELECT myAdd(1, 2) UNION ALL SELECT myMul(3, 4)")
 	require.NoError(t, err)
 	assert.Contains(t, got, "SELECT 3")
 	assert.Contains(t, got, "SELECT 12")
@@ -510,7 +510,7 @@ func TestEvalFunctionsCTE(t *testing.T) {
 	eval := newTestEvaluator()
 	pass := eval.Pass()
 
-	got, err := pass("WITH cte AS (SELECT myAdd(1, 2) AS x) SELECT x FROM cte")
+	got, err := pass.Run("WITH cte AS (SELECT myAdd(1, 2) AS x) SELECT x FROM cte")
 	require.NoError(t, err)
 	assert.Contains(t, got, "SELECT 3 AS x")
 
@@ -524,7 +524,7 @@ func TestEvalFunctionsSubquery(t *testing.T) {
 	eval := newTestEvaluator()
 	pass := eval.Pass()
 
-	got, err := pass("SELECT * FROM (SELECT myAdd(1, 2) AS x)")
+	got, err := pass.Run("SELECT * FROM (SELECT myAdd(1, 2) AS x)")
 	require.NoError(t, err)
 	assert.Contains(t, got, "SELECT 3 AS x")
 
@@ -547,9 +547,9 @@ func TestEvalFunctionsIdempotent(t *testing.T) {
 	}
 	for i, sql := range sqls {
 		t.Run(fmt.Sprintf("idempotent_%d", i), func(t *testing.T) {
-			pass1, err := pass(sql)
+			pass1, err := pass.Run(sql)
 			require.NoError(t, err)
-			pass2, err := pass(pass1)
+			pass2, err := pass.Run(pass1)
 			require.NoError(t, err)
 			assert.Equal(t, pass1, pass2, "not idempotent:\npass1: %s\npass2: %s", pass1, pass2)
 		})
@@ -561,12 +561,12 @@ func TestEvalFunctionsIdempotent(t *testing.T) {
 func TestEvalFunctionsInPipeline(t *testing.T) {
 	eval := newTestEvaluator()
 
-	result, err := nanopass.Pipeline(
-		"select myAdd(1, myMul(2, 3)), a from t",
+	pipe := nanopass.Sequence("eval+validate",
 		passes.CanonicalizeKeywordCase,
 		eval.Pass(),
-		nanopass.Validate,
+		nanopass.ValidateGrammar1,
 	)
+	result, err := pipe.Run("select myAdd(1, myMul(2, 3)), a from t")
 	require.NoError(t, err)
 	assert.Contains(t, result, "7")
 	assert.Contains(t, result, "a")
@@ -576,12 +576,12 @@ func TestEvalFunctionsPipelineWithCanonicalize(t *testing.T) {
 	eval := newTestEvaluator()
 
 	// First canonicalize [1,2,3] → array(1,2,3), then evaluate
-	result, err := nanopass.Pipeline(
-		"SELECT [myAdd(1, 2), myMul(3, 4)]",
+	pipe := nanopass.Sequence("canon+eval+validate",
 		passes.CanonicalizeConstructors(passes.ConstructorFormFunction),
 		eval.Pass(),
-		nanopass.Validate,
+		nanopass.ValidateGrammar1,
 	)
+	result, err := pipe.Run("SELECT [myAdd(1, 2), myMul(3, 4)]")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT array(3, 12)", result)
 }
@@ -615,11 +615,11 @@ func TestEvalFunctionsDomainSpecific(t *testing.T) {
 
 	pass := eval.Pass()
 
-	got, err := pass("SELECT daysInMonth(2024, 2)")
+	got, err := pass.Run("SELECT daysInMonth(2024, 2)")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT 29", got) // 2024 is a leap year
 
-	got, err = pass("SELECT daysInMonth(2023, 2)")
+	got, err = pass.Run("SELECT daysInMonth(2023, 2)")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT 28", got)
 }
@@ -653,11 +653,11 @@ func TestEvalFunctionsDomainConditional(t *testing.T) {
 
 	pass := eval.Pass()
 
-	got, err := pass("SELECT myIf(1, 'yes', 'no')")
+	got, err := pass.Run("SELECT myIf(1, 'yes', 'no')")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT 'yes'", got)
 
-	got, err = pass("SELECT myIf(0, 'yes', 'no')")
+	got, err = pass.Run("SELECT myIf(0, 'yes', 'no')")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT 'no'", got)
 }
@@ -670,7 +670,7 @@ func TestEvalFunctionsInsideNonEvaluable(t *testing.T) {
 
 	// count(myAdd(1, 2)) — count is not registered, but myAdd(1, 2) is evaluable
 	// The inner myAdd should be evaluated, producing count(3)
-	got, err := pass("SELECT count(myAdd(1, 2)) FROM t")
+	got, err := pass.Run("SELECT count(myAdd(1, 2)) FROM t")
 	require.NoError(t, err)
 	// myAdd(1,2) is inside count's ColumnArgList, but count is not registered
 	// The inner call IS a separate ColumnExprFunctionContext that can be evaluated
@@ -687,7 +687,7 @@ func TestEvalFunctionsEmpty(t *testing.T) {
 	pass := eval.Pass()
 
 	sql := "SELECT sum(a), count(*) FROM t"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 	assert.Equal(t, sql, got)
 }
@@ -701,7 +701,7 @@ func TestEvalFunctionsRejectsInvalid(t *testing.T) {
 	invalid := []string{"", "   ", "SELECT", ";;;"}
 	for i, sql := range invalid {
 		t.Run(fmt.Sprintf("invalid_%d", i), func(t *testing.T) {
-			_, err := pass(sql)
+			_, err := pass.Run(sql)
 			assert.Error(t, err)
 		})
 	}
@@ -718,7 +718,7 @@ func TestEvalFunctionsCorpus(t *testing.T) {
 
 	for _, entry := range entries {
 		t.Run(entry.Name, func(t *testing.T) {
-			out, err := pass(entry.SQL)
+			out, err := pass.Run(entry.SQL)
 			if err != nil {
 				t.Skipf("pass failed: %v", err)
 			}
@@ -734,7 +734,7 @@ func TestEvalFunctionsMultipleIndependent(t *testing.T) {
 	eval := newTestEvaluator()
 	pass := eval.Pass()
 
-	got, err := pass("SELECT myAdd(1, 2), myMul(3, 4), myConst(5)")
+	got, err := pass.Run("SELECT myAdd(1, 2), myMul(3, 4), myConst(5)")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT 3, 12, 5", got)
 
@@ -776,7 +776,7 @@ func TestEvalFunctionsNegativeLiteral(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -833,7 +833,7 @@ func TestEvalFunctionsNoRewriterConflicts(t *testing.T) {
 	}
 	for _, tt := range sqls {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -872,7 +872,7 @@ func TestEvalFunctionsStringRoundTrip(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -894,7 +894,7 @@ func TestEvalFunctionsZeroArgs(t *testing.T) {
 	}, true)
 	pass := eval.Pass()
 
-	got, err := pass("SELECT myPi()")
+	got, err := pass.Run("SELECT myPi()")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT 3.14159", got)
 
@@ -912,7 +912,7 @@ func TestEvalFunctionsDeeplyNestedPartial(t *testing.T) {
 	// Level 3: myMul(3, 3) → but first arg is column c, so partial → myMul(c, 3)
 	// Level 2: myAdd(b, myMul(c, 3)) → partial → myAdd(b, myMul(c, 3))
 	// Level 1: myConcat(a, ...) → partial
-	got, err := pass("SELECT myConcat(a, myAdd(b, myMul(c, myAdd(1, 2)))) FROM t")
+	got, err := pass.Run("SELECT myConcat(a, myAdd(b, myMul(c, myAdd(1, 2)))) FROM t")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT myConcat(a, myAdd(b, myMul(c, 3))) FROM t", got)
 
@@ -949,7 +949,7 @@ func TestEvalFunctionsEvalInsideBuiltin(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -968,7 +968,7 @@ func TestEvalFunctionsVerbatimSqlSplice(t *testing.T) {
 	}, true)
 	pass := eval.Pass()
 
-	got, err := pass("SELECT emitRaw() FROM t")
+	got, err := pass.Run("SELECT emitRaw() FROM t")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT x + 1 FROM t", got)
 
@@ -988,11 +988,11 @@ func TestEvalFunctionsVerbatimSqlNotQuoted(t *testing.T) {
 	}, true)
 	pass := eval.Pass()
 
-	gotPlain, err := pass("SELECT plainString()")
+	gotPlain, err := pass.Run("SELECT plainString()")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT 'x + 1'", gotPlain)
 
-	gotVerbatim, err := pass("SELECT verbatimString()")
+	gotVerbatim, err := pass.Run("SELECT verbatimString()")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT x + 1", gotVerbatim)
 }
@@ -1006,7 +1006,7 @@ func TestEvalFunctionsVerbatimSqlPartialEval(t *testing.T) {
 	}, true)
 	pass := eval.Pass()
 
-	got, err := pass("SELECT myAdd(a, emitFortyTwo()) FROM t")
+	got, err := pass.Run("SELECT myAdd(a, emitFortyTwo()) FROM t")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT myAdd(a, 42) FROM t", got)
 
@@ -1028,7 +1028,7 @@ func TestEvalFunctionsVerbatimSqlOpaqueToOuter(t *testing.T) {
 	}, true)
 	pass := eval.Pass()
 
-	got, err := pass("SELECT outerCheck(1, emitCol()) FROM t")
+	got, err := pass.Run("SELECT outerCheck(1, emitCol()) FROM t")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT outerCheck(1, x) FROM t", got)
 	assert.False(t, called, "outerCheck must not be invoked with a VerbatimSql arg")
@@ -1046,7 +1046,7 @@ func TestEvalFunctionsVerbatimSqlFixedPoint(t *testing.T) {
 	}, true)
 	pass := nanopass.FixedPoint(eval.Pass(), 10)
 
-	got, err := pass("SELECT emitMul()")
+	got, err := pass.Run("SELECT emitMul()")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT 6", got)
 }

@@ -22,7 +22,7 @@ func TestMacroExpanderSimple(t *testing.T) {
 	})
 
 	pass := expander.Pass()
-	got, err := pass("SELECT a FROM t WHERE tenantFilter(42)")
+	got, err := pass.Run("SELECT a FROM t WHERE tenantFilter(42)")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT a FROM t WHERE tenant_id = 42", got)
 
@@ -41,7 +41,7 @@ func TestMacroExpanderStringArg(t *testing.T) {
 	})
 
 	pass := expander.Pass()
-	got, err := pass("SELECT jsonCol('name') FROM t")
+	got, err := pass.Run("SELECT jsonCol('name') FROM t")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT JSONExtractString(payload, 'name') FROM t", got)
 }
@@ -56,7 +56,7 @@ func TestMacroExpanderMultipleArgs(t *testing.T) {
 	})
 
 	pass := expander.Pass()
-	got, err := pass("SELECT a FROM t WHERE between('col', 1, 10)")
+	got, err := pass.Run("SELECT a FROM t WHERE between('col', 1, 10)")
 	require.NoError(t, err)
 	assert.Contains(t, got, "'col' BETWEEN 1 AND 10")
 }
@@ -69,7 +69,7 @@ func TestMacroExpanderCaseInsensitive(t *testing.T) {
 
 	pass := expander.Pass()
 
-	got, err := pass("SELECT mymacro() FROM t")
+	got, err := pass.Run("SELECT mymacro() FROM t")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT 42 FROM t", got)
 }
@@ -83,7 +83,7 @@ func TestMacroExpanderNoMatch(t *testing.T) {
 	pass := expander.Pass()
 
 	// count is not registered — should be untouched
-	got, err := pass("SELECT count(*) FROM t")
+	got, err := pass.Run("SELECT count(*) FROM t")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT count(*) FROM t", got)
 }
@@ -97,7 +97,7 @@ func TestMacroExpanderNonLiteralArgSkipped(t *testing.T) {
 	pass := expander.Pass()
 
 	// Non-literal argument (column reference) — macro should be skipped
-	got, err := pass("SELECT myMacro(a) FROM t")
+	got, err := pass.Run("SELECT myMacro(a) FROM t")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT myMacro(a) FROM t", got)
 }
@@ -109,7 +109,7 @@ func TestMacroExpanderMultipleCalls(t *testing.T) {
 	})
 
 	pass := expander.Pass()
-	got, err := pass("SELECT c('x'), c('y') FROM t")
+	got, err := pass.Run("SELECT c('x'), c('y') FROM t")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT x, y FROM t", got)
 }
@@ -121,7 +121,7 @@ func TestMacroExpanderNegativeArg(t *testing.T) {
 	})
 
 	pass := expander.Pass()
-	got, err := pass("SELECT offset(-3) FROM t")
+	got, err := pass.Run("SELECT offset(-3) FROM t")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT created_at + -3 FROM t", got)
 }
@@ -133,9 +133,9 @@ func TestMacroExpanderIdempotent(t *testing.T) {
 	})
 
 	pass := expander.Pass()
-	pass1, err := pass("SELECT m() FROM t")
+	pass1, err := pass.Run("SELECT m() FROM t")
 	require.NoError(t, err)
-	pass2, err := pass(pass1)
+	pass2, err := pass.Run(pass1)
 	require.NoError(t, err)
 	assert.Equal(t, pass1, pass2)
 }
@@ -151,13 +151,13 @@ func TestMacroExpanderNestedWithFixedPoint(t *testing.T) {
 
 	// Single pass only expands outer
 	pass := expander.Pass()
-	got, err := pass("SELECT outer_m(5) FROM t")
+	got, err := pass.Run("SELECT outer_m(5) FROM t")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT inner_m(5) FROM t", got)
 
 	// Fixed-point expands both
 	fpPass := nanopass.FixedPoint(pass, 5)
-	got, err = fpPass("SELECT outer_m(5) FROM t")
+	got, err = fpPass.Run("SELECT outer_m(5) FROM t")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT 5 + 1 FROM t", got)
 
@@ -172,7 +172,7 @@ func TestMacroExpanderErrorPropagation(t *testing.T) {
 	})
 
 	pass := expander.Pass()
-	_, err := pass("SELECT bad_macro(1) FROM t")
+	_, err := pass.Run("SELECT bad_macro(1) FROM t")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "intentional error")
 }

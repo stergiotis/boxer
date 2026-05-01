@@ -1,4 +1,4 @@
-//go:build llm_generated_opus46
+//go:build llm_generated_opus47
 
 package passes
 
@@ -13,18 +13,20 @@ import (
 
 // CanonicalizeIdentifiers converts all identifiers to double-quoted form.
 //
-// This pass assumes parsing with Grammar1 where alias: IDENTIFIER (no
-// keywordForAlias). This means:
-//   - Every IdentifierContext is a genuine name (column, table, function, etc.)
-//   - Every AliasContext contains an IDENTIFIER token (never a keyword)
-//   - Structural keywords (DESC, ASC, ROWS, OUTER, etc.) are never parsed
-//     as identifiers or aliases — they're terminals of their respective rules
-//
-// The pass walks all IdentifierContext and AliasContext nodes and ensures
-// their tokens are double-quoted. Keyword tokens used as names (e.g. a table
-// named "system") are quoted. JSON_TRUE/JSON_FALSE are skipped (they are
-// boolean literals, not names).
-func CanonicalizeIdentifiers(sql string) (result string, err error) {
+// Walks IdentifierContext and AliasContext nodes and ensures their tokens are
+// double-quoted. Keyword tokens used as names (e.g. a table named "system")
+// are quoted. JSON_TRUE/JSON_FALSE are skipped (boolean literals, not names).
+var CanonicalizeIdentifiers = nanopass.LiftBodyPass(
+	"CanonicalizeIdentifiers",
+	canonicalizeIdentifiersImpl,
+	nanopass.PassProperties{
+		Idempotent: true,
+		Reads:      nanopass.RegionBody,
+		Writes:     nanopass.RegionBody,
+	},
+)
+
+func canonicalizeIdentifiersImpl(sql string) (result string, err error) {
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
 		err = eh.Errorf("CanonicalizeIdentifiers: %w", err)

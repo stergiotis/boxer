@@ -46,7 +46,7 @@ func TestWrapColumnsBasic(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -79,7 +79,7 @@ func TestWrapColumnsSkipsQualified(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -127,7 +127,7 @@ func TestWrapColumnsSkipsExpressions(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -168,7 +168,7 @@ func TestWrapColumnsPatterns(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			pass := passes.WrapColumnsWithDynamic(tt.pattern)
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -187,7 +187,7 @@ func TestWrapColumnsEscapesMetachars(t *testing.T) {
 	// If a column name were "a.b" (unusual but legal in backticks),
 	// the generated COLUMNS pattern must escape the dot
 	// We can test the escaping function directly
-	got, err := pass("SELECT amount FROM orders")
+	got, err := pass.Run("SELECT amount FROM orders")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT COLUMNS('^amount') FROM orders", got)
 }
@@ -197,7 +197,7 @@ func TestWrapColumnsEscapesMetachars(t *testing.T) {
 func TestWrapColumnsUnionAll(t *testing.T) {
 	pass := passes.WrapColumnsWithDynamic(".*_id$")
 
-	got, err := pass("SELECT tenant_id, amount FROM t1 UNION ALL SELECT customer_id, price FROM t2")
+	got, err := pass.Run("SELECT tenant_id, amount FROM t1 UNION ALL SELECT customer_id, price FROM t2")
 	require.NoError(t, err)
 	assert.Contains(t, got, "COLUMNS('^tenant_id')")
 	assert.Contains(t, got, "COLUMNS('^customer_id')")
@@ -213,7 +213,7 @@ func TestWrapColumnsUnionAll(t *testing.T) {
 func TestWrapColumnsCTE(t *testing.T) {
 	pass := passes.WrapColumnsWithDynamic(".*_id$")
 
-	got, err := pass("WITH cte AS (SELECT tenant_id, amount FROM orders) SELECT tenant_id FROM cte")
+	got, err := pass.Run("WITH cte AS (SELECT tenant_id, amount FROM orders) SELECT tenant_id FROM cte")
 	require.NoError(t, err)
 
 	// Both the CTE body and outer SELECT should be wrapped
@@ -229,7 +229,7 @@ func TestWrapColumnsCTE(t *testing.T) {
 func TestWrapColumnsSubquery(t *testing.T) {
 	pass := passes.WrapColumnsWithDynamic(".*_id$")
 
-	got, err := pass("SELECT * FROM (SELECT tenant_id, amount FROM orders)")
+	got, err := pass.Run("SELECT * FROM (SELECT tenant_id, amount FROM orders)")
 	require.NoError(t, err)
 	assert.Contains(t, got, "COLUMNS('^tenant_id')")
 	assert.Contains(t, got, "amount")
@@ -244,7 +244,7 @@ func TestWrapColumnsOnlyAffectsProjection(t *testing.T) {
 	pass := passes.WrapColumnsWithDynamic(".*_id$")
 
 	sql := "SELECT tenant_id FROM orders WHERE customer_id > 0 GROUP BY tenant_id"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	// Only the SELECT list column is wrapped
@@ -269,9 +269,9 @@ func TestWrapColumnsIdempotent(t *testing.T) {
 	}
 	for i, sql := range sqls {
 		t.Run(fmt.Sprintf("idempotent_%d", i), func(t *testing.T) {
-			pass1, err := pass(sql)
+			pass1, err := pass.Run(sql)
 			require.NoError(t, err)
-			pass2, err := pass(pass1)
+			pass2, err := pass.Run(pass1)
 			require.NoError(t, err)
 			assert.Equal(t, pass1, pass2, "not idempotent:\npass1: %s\npass2: %s", pass1, pass2)
 		})
@@ -281,12 +281,12 @@ func TestWrapColumnsIdempotent(t *testing.T) {
 // --- Pipeline integration ---
 
 func TestWrapColumnsInPipeline(t *testing.T) {
-	result, err := nanopass.Pipeline(
-		"select tenant_id, amount from orders",
+	pipe := nanopass.Sequence("dynamize+validate",
 		passes.CanonicalizeKeywordCase,
 		passes.WrapColumnsWithDynamic(".*_id$"),
-		nanopass.Validate,
+		nanopass.ValidateGrammar1,
 	)
+	result, err := pipe.Run("select tenant_id, amount from orders")
 	require.NoError(t, err)
 	assert.Contains(t, result, "COLUMNS('^tenant_id')")
 	assert.Contains(t, result, "amount")
@@ -296,7 +296,7 @@ func TestWrapColumnsInPipeline(t *testing.T) {
 
 func TestWrapColumnsInvalidRegex(t *testing.T) {
 	pass := passes.WrapColumnsWithDynamic("[invalid")
-	_, err := pass("SELECT a FROM t")
+	_, err := pass.Run("SELECT a FROM t")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid column regex")
 }
@@ -305,7 +305,7 @@ func TestWrapColumnsInvalidRegex(t *testing.T) {
 
 func TestWrapColumnsNoFrom(t *testing.T) {
 	pass := passes.WrapColumnsWithDynamic(".*")
-	got, err := pass("SELECT 1")
+	got, err := pass.Run("SELECT 1")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT 1", got)
 }
@@ -315,7 +315,7 @@ func TestWrapColumnsRejectsInvalid(t *testing.T) {
 	invalid := []string{"", "   ", "SELECT", ";;;"}
 	for i, sql := range invalid {
 		t.Run(fmt.Sprintf("invalid_%d", i), func(t *testing.T) {
-			_, err := pass(sql)
+			_, err := pass.Run(sql)
 			assert.Error(t, err)
 		})
 	}
@@ -331,7 +331,7 @@ func TestWrapColumnsOutputValidity(t *testing.T) {
 
 	for _, entry := range entries {
 		t.Run(entry.Name, func(t *testing.T) {
-			out, err := pass(entry.SQL)
+			out, err := pass.Run(entry.SQL)
 			if err != nil {
 				t.Skipf("pass failed: %v", err)
 			}

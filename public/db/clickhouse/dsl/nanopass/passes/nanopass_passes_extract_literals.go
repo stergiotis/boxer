@@ -1,4 +1,4 @@
-//go:build llm_generated_opus46
+//go:build llm_generated_opus47
 
 package passes
 
@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
@@ -134,8 +135,22 @@ type compositeCandidate struct {
 
 // --- ExtractLiterals Pass ---
 
+// ExtractLiterals returns a Pass that walks the body, replaces qualifying
+// literals with `{name: Type}` slots, and stores the extracted values into
+// env.Params. The accompanying Type info is preserved on each Param entry.
 func ExtractLiterals(config *ExtractLiteralsConfig) nanopass.Pass {
-	return func(sql string) (result string, err error) {
+	return nanopass.Pass{
+		Name:  "ExtractLiterals",
+		Apply: extractLiteralsApply(config),
+		Properties: nanopass.PassProperties{
+			Reads:  nanopass.RegionBody,
+			Writes: nanopass.RegionBody | nanopass.RegionParams,
+		},
+	}
+}
+
+func extractLiteralsApply(config *ExtractLiteralsConfig) nanopass.ApplyFunc {
+	return func(e *env.Environment, sql string) (result string, err error) {
 		pr, err := nanopass.Parse(sql)
 		if err != nil {
 			err = eh.Errorf("ExtractLiterals: %w", err)
@@ -190,19 +205,19 @@ func ExtractLiterals(config *ExtractLiteralsConfig) nanopass.Pass {
 			}
 		}
 
-		rewritten := nanopass.GetText(rw)
+		result = nanopass.GetText(rw)
 
-		var sb strings.Builder
-		sb.Grow(len(rewritten) + len(allParams)*50)
-		for _, p := range allParams {
-			sb.WriteString("SET ")
-			sb.WriteString(p.name)
-			sb.WriteString(" = ")
-			sb.WriteString(p.value)
-			sb.WriteString(";\n")
+		if e != nil {
+			for _, p := range allParams {
+				existing := e.Params[p.name]
+				existing.Name = p.name
+				existing.Raw = p.value
+				if existing.Type == "" {
+					existing.Type = p.typeName
+				}
+				e.Params[p.name] = existing
+			}
 		}
-		sb.WriteString(rewritten)
-		result = sb.String()
 		return
 	}
 }

@@ -1,4 +1,4 @@
-//go:build llm_generated_opus46
+//go:build llm_generated_opus47
 
 package passes
 
@@ -11,14 +11,22 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-// CanonicalizeKeywordCase uppercases all SQL keywords while preserving identifier and literal case.
-//
-// ClickHouse identifiers are case-sensitive (database, table, column, function names),
-// so context-dependent keywords used as identifiers — e.g. `system.tables`, where
-// SYSTEM and TABLES are both keyword tokens reachable via identifier → keyword —
-// must keep their original case. The pass therefore walks the CST first to collect
-// the token indices of every IdentifierContext leaf and skips those when uppercasing.
-func CanonicalizeKeywordCase(sql string) (result string, err error) {
+// CanonicalizeKeywordCase uppercases all SQL keywords while preserving
+// identifier and literal case. ClickHouse identifiers are case-sensitive, so
+// context-dependent keywords used as identifiers (e.g. `system.tables`) keep
+// their original case — the pass collects every IdentifierContext leaf's
+// token indices and skips them when uppercasing.
+var CanonicalizeKeywordCase = nanopass.LiftBodyPass(
+	"CanonicalizeKeywordCase",
+	canonicalizeKeywordCaseImpl,
+	nanopass.PassProperties{
+		Idempotent: true,
+		Reads:      nanopass.RegionBody,
+		Writes:     nanopass.RegionBody,
+	},
+)
+
+func canonicalizeKeywordCaseImpl(sql string) (result string, err error) {
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
 		err = eh.Errorf("CanonicalizeKeywordCase: %w", err)

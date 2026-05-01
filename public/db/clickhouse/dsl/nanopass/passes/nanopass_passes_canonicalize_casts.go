@@ -1,4 +1,4 @@
-//go:build llm_generated_opus46
+//go:build llm_generated_opus47
 
 package passes
 
@@ -11,35 +11,22 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-// CanonicalizeCasts returns a Pass that rewrites all cast syntaxes to the
-// canonical function form CAST(expr, 'Type').
-//
-// Canonicalized forms:
+// CanonicalizeCasts rewrites all cast syntaxes to the canonical function form
+// CAST(expr, 'Type'). Nested casts converge under fixpoint iteration —
+// innermost casts canonicalised first, then the next layer.
 //
 //	expr::Type            → CAST(expr, 'Type')
 //	CAST(expr AS Type)    → CAST(expr, 'Type')
 //	CAST(expr, 'Type')    → CAST(expr, 'Type') (no change)
-//
-// Nested casts are handled by iterating until fixpoint — innermost casts
-// are canonicalized first, then the pass re-parses and processes the next layer.
-func CanonicalizeCasts() nanopass.Pass {
-	return func(sql string) (result string, err error) {
-		current := sql
-		for {
-			next, passErr := canonicalizeCastsOnce(current)
-			if passErr != nil {
-				err = passErr
-				return
-			}
-			if next == current {
-				break
-			}
-			current = next
-		}
-		result = current
-		return
-	}
-}
+var CanonicalizeCasts = nanopass.LiftBodyPass(
+	"CanonicalizeCasts",
+	canonicalizeCastsOnce,
+	nanopass.PassProperties{
+		NeedsFixedPoint: true,
+		Reads:           nanopass.RegionBody,
+		Writes:          nanopass.RegionBody,
+	},
+)
 
 // canonicalizeCastsOnce performs a single canonicalization pass. It skips cast nodes
 // whose expression child is itself a non-canonical cast (to avoid overlapping rewrites).

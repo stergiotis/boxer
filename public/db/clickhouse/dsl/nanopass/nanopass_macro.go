@@ -1,4 +1,4 @@
-//go:build llm_generated_opus46
+//go:build llm_generated_opus47
 
 package nanopass
 
@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -53,67 +54,75 @@ func (inst *MacroExpander) Register(name string, fn MacroFuncI) {
 
 // Pass returns a nanopass Pass that expands all registered macros.
 func (inst *MacroExpander) Pass() Pass {
-	return func(sql string) (result string, err error) {
-		pr, err := Parse(sql)
-		if err != nil {
-			err = eh.Errorf("MacroExpander: %w", err)
-			return
-		}
-		rw := NewRewriter(pr)
+	return Pass{
+		Name:  "MacroExpander",
+		Apply: inst.apply,
+		Properties: PassProperties{
+			Reads:  RegionBody,
+			Writes: RegionBody,
+		},
+	}
+}
 
-		// Collect replacements first, then apply.
-		// This avoids issues with nested macros where inner nodes
-		// are invalidated by outer replacements.
-		type replacement struct {
-			node antlr.ParserRuleContext
-			text string
-		}
-		var replacements []replacement
-
-		WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-			funcExpr, ok := ctx.(*grammar1.ColumnExprFunctionContext)
-			if !ok {
-				return true
-			}
-
-			name := funcExpr.Identifier().GetText()
-			fn, found := inst.macros[strings.ToLower(name)]
-			if !found {
-				return true
-			}
-
-			args, extractErr := ExtractLiteralArgs(funcExpr)
-			if extractErr != nil {
-				// Not all arguments are literals — skip this call
-				return true
-			}
-
-			expanded, expandErr := fn(args)
-			if expandErr != nil {
-				err = eb.Build().Str("macro", name).Errorf("macro expansion failed: %w", expandErr)
-				return false
-			}
-
-			replacements = append(replacements, replacement{
-				node: funcExpr,
-				text: expanded,
-			})
-
-			// Don't descend into the function — we're replacing the whole thing
-			return false
-		})
-
-		if err != nil {
-			return
-		}
-
-		for _, r := range replacements {
-			ReplaceNode(rw, r.node, r.text)
-		}
-
-		result = GetText(rw)
+// apply is the body-only macro expansion implementation.
+func (inst *MacroExpander) apply(_ *env.Environment, body string) (result string, err error) {
+	pr, err := Parse(body)
+	if err != nil {
+		err = eh.Errorf("MacroExpander: %w", err)
 		return
 	}
+	rw := NewRewriter(pr)
+
+	// Collect replacements first, then apply.
+	// This avoids issues with nested macros where inner nodes
+	// are invalidated by outer replacements.
+	type replacement struct {
+		node antlr.ParserRuleContext
+		text string
+	}
+	var replacements []replacement
+
+	WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
+		funcExpr, ok := ctx.(*grammar1.ColumnExprFunctionContext)
+		if !ok {
+			return true
+		}
+
+		name := funcExpr.Identifier().GetText()
+		fn, found := inst.macros[strings.ToLower(name)]
+		if !found {
+			return true
+		}
+
+		args, extractErr := ExtractLiteralArgs(funcExpr)
+		if extractErr != nil {
+			return true
+		}
+
+		expanded, expandErr := fn(args)
+		if expandErr != nil {
+			err = eb.Build().Str("macro", name).Errorf("macro expansion failed: %w", expandErr)
+			return false
+		}
+
+		replacements = append(replacements, replacement{
+			node: funcExpr,
+			text: expanded,
+		})
+
+		return false
+	})
+
+	if err != nil {
+		return
+	}
+
+	for _, r := range replacements {
+		ReplaceNode(rw, r.node, r.text)
+	}
+
+	result = GetText(rw)
+	return
 }
 
 // ExtractLiteralArgs extracts all arguments from a ColumnExprFunctionContext.

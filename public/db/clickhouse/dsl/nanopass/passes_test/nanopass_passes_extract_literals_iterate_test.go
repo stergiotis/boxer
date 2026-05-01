@@ -332,7 +332,7 @@ func TestIterateFromExtractedOutput(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE name = 'longvalue' AND x > 100000"
-	extracted, err := pass(sql)
+	extracted, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	var params []passes.ExtractedParamInfo
@@ -355,7 +355,7 @@ func TestIterateFromExtractedOutputContextInfo(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE name = 'longvalue'"
-	extracted, err := pass(sql)
+	extracted, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	params := passes.CollectExtractedParams(extracted, "")
@@ -377,7 +377,7 @@ func TestIterateFromExtractedOutputINList(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE b IN ('x', 'y', 'z')"
-	extracted, err := pass(sql)
+	extracted, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	params := passes.CollectExtractedParams(extracted, "")
@@ -400,7 +400,7 @@ func TestIterateFromExtractedOutputHashBased(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE name = 'longvalue'"
-	extracted, err := pass(sql)
+	extracted, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	params := passes.CollectExtractedParams(extracted, "")
@@ -695,7 +695,7 @@ func TestExtractIterateDeserializeEndToEnd(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE name = 'longvalue' AND id IN (100, 200, 300)"
-	extracted, err := pass(sql)
+	extracted, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	params := passes.CollectExtractedParams(extracted, "")
@@ -714,7 +714,7 @@ func TestExtractIterateDeserializeWithCast(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE x = 1::UInt64 AND y = 'hello'"
-	extracted, err := pass(sql)
+	extracted, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	params := passes.CollectExtractedParams(extracted, "")
@@ -742,7 +742,7 @@ func TestIteratorEarlyTermination(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE name = 'longname1' AND status = 'longstatus' AND x > 100000"
-	extracted, err := pass(sql)
+	extracted, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	count := 0
@@ -762,7 +762,7 @@ func TestCollectExtractedParams(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE name = 'longvalue' AND x > 100000"
-	extracted, err := pass(sql)
+	extracted, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	params := passes.CollectExtractedParams(extracted, "")

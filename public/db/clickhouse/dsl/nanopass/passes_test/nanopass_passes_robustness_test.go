@@ -38,7 +38,7 @@ func TestPassesRejectInvalidSQL(t *testing.T) {
 	for _, sql := range invalid {
 		for _, pp := range allPasses {
 			t.Run(pp.name+"/"+sanitizeName(sql), func(t *testing.T) {
-				_, err := pp.pass(sql)
+				_, err := pp.pass.Run(sql)
 				assert.Error(t, err, "pass %s should reject invalid SQL %q", pp.name, sql)
 			})
 		}
@@ -63,7 +63,7 @@ func TestAllPassesAllCorpus(t *testing.T) {
 	for _, entry := range entries {
 		for _, pp := range allPasses {
 			t.Run(entry.Name+"/"+pp.name, func(t *testing.T) {
-				out, err := pp.pass(entry.SQL)
+				out, err := pp.pass.Run(entry.SQL)
 				if err != nil {
 					t.Skipf("pass failed: %v", err)
 				}
@@ -113,7 +113,7 @@ func TestPassesPreserveScopeStructure(t *testing.T) {
 					t.Skipf("parse failed: %v", err)
 				}
 
-				out, err := pp.pass(entry.SQL)
+				out, err := pp.pass.Run(entry.SQL)
 				if err != nil {
 					t.Skipf("pass failed: %v", err)
 				}
@@ -159,7 +159,7 @@ func TestPipelineAllOrderings(t *testing.T) {
 			names[i] = allPasses[idx].name
 		}
 		t.Run(strings.Join(names, "_"), func(t *testing.T) {
-			result, err := nanopass.Pipeline(sql, ordered...)
+			result, err := nanopass.Sequence("test", ordered...).Run(sql)
 			require.NoError(t, err)
 			_, err = nanopass.Parse(result)
 			require.NoError(t, err, "ordering %v produced invalid SQL: %s", names, result)

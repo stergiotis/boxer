@@ -1,4 +1,4 @@
-//go:build llm_generated_opus46
+//go:build llm_generated_opus47
 
 package passes
 
@@ -8,8 +8,18 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-// StripComments removes all single-line and multi-line comments from the SQL.
-func StripComments(sql string) (result string, err error) {
+// StripComments removes all single-line and multi-line comments from the body.
+var StripComments = nanopass.LiftBodyPass(
+	"StripComments",
+	stripCommentsImpl,
+	nanopass.PassProperties{
+		Idempotent: true,
+		Reads:      nanopass.RegionBody,
+		Writes:     nanopass.RegionBody,
+	},
+)
+
+func stripCommentsImpl(sql string) (result string, err error) {
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
 		err = eh.Errorf("StripComments: %w", err)

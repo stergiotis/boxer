@@ -34,7 +34,7 @@ func TestExtractInjectCorpusRoundTrip(t *testing.T) {
 
 	for _, entry := range entries {
 		t.Run(entry.Name, func(t *testing.T) {
-			extracted, err := pass(entry.SQL)
+			extracted, err := pass.Run(entry.SQL)
 			if err != nil {
 				t.Skipf("extraction failed: %v", err)
 			}
@@ -62,7 +62,7 @@ func TestExtractInjectCorpusRoundTripWithINList(t *testing.T) {
 
 	for _, entry := range entries {
 		t.Run(entry.Name, func(t *testing.T) {
-			extracted, err := pass(entry.SQL)
+			extracted, err := pass.Run(entry.SQL)
 			if err != nil {
 				t.Skipf("extraction failed: %v", err)
 			}
@@ -93,7 +93,7 @@ func TestExtractInjectCorpusRoundTripHashBased(t *testing.T) {
 
 	for _, entry := range entries {
 		t.Run(entry.Name, func(t *testing.T) {
-			extracted, err := pass(entry.SQL)
+			extracted, err := pass.Run(entry.SQL)
 			if err != nil {
 				t.Skipf("extraction failed: %v", err)
 			}
@@ -120,7 +120,7 @@ func TestExtractIterateCorpusMetadataIntegrity(t *testing.T) {
 
 	for _, entry := range entries {
 		t.Run(entry.Name, func(t *testing.T) {
-			extracted, err := pass(entry.SQL)
+			extracted, err := pass.Run(entry.SQL)
 			if err != nil {
 				t.Skipf("extraction failed: %v", err)
 			}
@@ -165,7 +165,7 @@ func TestExtractCorpusOutputParses(t *testing.T) {
 
 	for _, entry := range entries {
 		t.Run(entry.Name, func(t *testing.T) {
-			extracted, err := pass(entry.SQL)
+			extracted, err := pass.Run(entry.SQL)
 			if err != nil {
 				t.Skipf("extraction failed: %v", err)
 			}
@@ -294,7 +294,7 @@ func TestExtractInjectHandcraftedRoundTrips(t *testing.T) {
 
 	for i, sql := range queries {
 		t.Run(fmt.Sprintf("handcrafted_%d", i), func(t *testing.T) {
-			extracted, err := pass(sql)
+			extracted, err := pass.Run(sql)
 			require.NoError(t, err)
 
 			sets, sets2, query := passes.ParseExtractedQuery(extracted, "")
@@ -328,7 +328,7 @@ func TestExtractInjectWithCastsHandcraftedRoundTrips(t *testing.T) {
 
 	for i, sql := range queries {
 		t.Run(fmt.Sprintf("cast_handcrafted_%d", i), func(t *testing.T) {
-			extracted, err := pass(sql)
+			extracted, err := pass.Run(sql)
 			require.NoError(t, err)
 
 			sets, sets2, query := passes.ParseExtractedQuery(extracted, "")
@@ -359,7 +359,7 @@ func TestExtractStabilityAcrossRuns(t *testing.T) {
 		t.Run(fmt.Sprintf("stability_%d", i), func(t *testing.T) {
 			results := make([]string, 5)
 			for j := 0; j < 5; j++ {
-				got, err := pass(sql)
+				got, err := pass.Run(sql)
 				require.NoError(t, err)
 				results[j] = got
 			}
@@ -380,7 +380,7 @@ func TestExtractDeduplicationConsistency(t *testing.T) {
 
 	// Same literal in same context → should produce exactly 1 SET
 	sql := "SELECT a FROM t WHERE x = 'repeated' AND y = 'repeated' AND z = 'repeated'"
-	extracted, err := pass(sql)
+	extracted, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	sets, _, _ := passes.ParseExtractedQuery(extracted, "")

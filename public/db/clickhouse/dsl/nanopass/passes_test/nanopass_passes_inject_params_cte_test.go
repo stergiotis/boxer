@@ -32,11 +32,11 @@ func extractAndInjectAsCTE(t *testing.T, sql string, predicate func(passes.Extra
 	config.SetMinINListSize(0)
 	pass := passes.ExtractLiterals(config)
 
-	extracted, err := pass(sql)
+	extracted, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	ctePass := passes.InjectParamsAsCTE("", predicate, nil)
-	result, err := ctePass(extracted)
+	result, err := ctePass.Run(extracted)
 	require.NoError(t, err)
 
 	return result
@@ -51,11 +51,11 @@ func extractAndInjectAsCTEWithCasts(t *testing.T, sql string, predicate func(pas
 	config.SetMapTypeToCanonical(marshalling.MapClickHouseToCanonicalType)
 	pass := passes.ExtractLiterals(config)
 
-	extracted, err := pass(sql)
+	extracted, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	ctePass := passes.InjectParamsAsCTE("", predicate, marshalling.MapCanonicalToClickHouseType)
-	result, err := ctePass(extracted)
+	result, err := ctePass.Run(extracted)
 	require.NoError(t, err)
 
 	return result
@@ -104,11 +104,11 @@ func TestInjectParamsAsCTERejectAll(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE name = 'hello'"
-	extracted, err := pass(sql)
+	extracted, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	ctePass := passes.InjectParamsAsCTE("", rejectAll, nil)
-	result, err := ctePass(extracted)
+	result, err := ctePass.Run(extracted)
 	require.NoError(t, err)
 
 	// Nothing injected as CTE — original extracted output preserved
@@ -122,7 +122,7 @@ func TestInjectParamsAsCTEPartialPredicate(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE name = 'hello' AND x > 100000"
-	extracted, err := pass(sql)
+	extracted, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	// Only accept "eq" context params
@@ -131,7 +131,7 @@ func TestInjectParamsAsCTEPartialPredicate(t *testing.T) {
 	}
 
 	ctePass := passes.InjectParamsAsCTE("", predicate, nil)
-	result, err := ctePass(extracted)
+	result, err := ctePass.Run(extracted)
 	require.NoError(t, err)
 
 	// "eq" param should be in CTE, "gt" param should remain as SET + slot
@@ -183,12 +183,12 @@ func TestInjectParamsAsCTENilMapperWithCast(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE x = 1::UInt64"
-	extracted, err := pass(sql)
+	extracted, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	// nil mapCanonicalToClickHouse — cast not reconstructed in CTE
 	ctePass := passes.InjectParamsAsCTE("", acceptAll, nil)
-	result, err := ctePass(extracted)
+	result, err := ctePass.Run(extracted)
 	require.NoError(t, err)
 
 	assert.Contains(t, result, "1 AS param_x_")
@@ -204,12 +204,12 @@ func TestInjectParamsAsCTENoParams(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE name = 'hi'"
-	extracted, err := pass(sql)
+	extracted, err := pass.Run(sql)
 	require.NoError(t, err)
 	assert.Equal(t, sql, extracted, "nothing should be extracted")
 
 	ctePass := passes.InjectParamsAsCTE("", acceptAll, nil)
-	result, err := ctePass(extracted)
+	result, err := ctePass.Run(extracted)
 	require.NoError(t, err)
 
 	assert.Equal(t, sql, result, "no params → no change")
@@ -225,11 +225,11 @@ func TestInjectParamsAsCTECustomPrefix(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "SELECT a FROM t WHERE name = 'hello'"
-	extracted, err := pass(sql)
+	extracted, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	ctePass := passes.InjectParamsAsCTE("qp", acceptAll, nil)
-	result, err := ctePass(extracted)
+	result, err := ctePass.Run(extracted)
 	require.NoError(t, err)
 
 	assert.Contains(t, result, "WITH")
@@ -326,12 +326,12 @@ func TestInjectParamsAsCTECorpus(t *testing.T) {
 				t.Skipf("skipping entry with SET statements")
 			}
 
-			extracted, err := pass(entry.SQL)
+			extracted, err := pass.Run(entry.SQL)
 			if err != nil {
 				t.Skipf("extraction failed: %v", err)
 			}
 
-			result, err := ctePass(extracted)
+			result, err := ctePass.Run(extracted)
 			if err != nil {
 				t.Skipf("CTE injection failed: %v", err)
 			}
@@ -349,11 +349,11 @@ func TestInjectParamsAsCTEExistingWith(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "WITH 1 AS existing SELECT existing FROM t WHERE name = 'hello'"
-	extracted, err := pass(sql)
+	extracted, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	ctePass := passes.InjectParamsAsCTE("", acceptAll, nil)
-	result, err := ctePass(extracted)
+	result, err := ctePass.Run(extracted)
 	require.NoError(t, err)
 
 	assert.Contains(t, result, "'hello' AS param_x_")
@@ -370,11 +370,11 @@ func TestInjectParamsAsCTEExistingWithMultiple(t *testing.T) {
 	pass := passes.ExtractLiterals(config)
 
 	sql := "WITH 1 AS x, 2 AS y SELECT x, y FROM t WHERE name = 'hello'"
-	extracted, err := pass(sql)
+	extracted, err := pass.Run(sql)
 	require.NoError(t, err)
 
 	ctePass := passes.InjectParamsAsCTE("", acceptAll, nil)
-	result, err := ctePass(extracted)
+	result, err := ctePass.Run(extracted)
 	require.NoError(t, err)
 
 	assert.Contains(t, result, "'hello' AS param_x_")

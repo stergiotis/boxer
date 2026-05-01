@@ -44,7 +44,7 @@ func TestStripComments(t *testing.T) {
 	}
 	for i, tt := range tests {
 		t.Run(fmt.Sprintf("case_%d", i), func(t *testing.T) {
-			got, err := passes.StripComments(tt.input)
+			got, err := passes.StripComments.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 		})
@@ -53,9 +53,9 @@ func TestStripComments(t *testing.T) {
 
 func TestStripCommentsIdempotent(t *testing.T) {
 	sql := "SELECT a /* comment */ FROM t -- trailing\n"
-	pass1, err := passes.StripComments(sql)
+	pass1, err := passes.StripComments.Run(sql)
 	require.NoError(t, err)
-	pass2, err := passes.StripComments(pass1)
+	pass2, err := passes.StripComments.Run(pass1)
 	require.NoError(t, err)
 	assert.Equal(t, pass1, pass2)
 }
@@ -68,7 +68,7 @@ func TestStripCommentsOutputValidity(t *testing.T) {
 	}
 	for i, sql := range sqls {
 		t.Run(fmt.Sprintf("validity_%d", i), func(t *testing.T) {
-			out, err := passes.StripComments(sql)
+			out, err := passes.StripComments.Run(sql)
 			require.NoError(t, err)
 			_, err = nanopass.Parse(out)
 			require.NoError(t, err, "produced invalid SQL: %s", out)

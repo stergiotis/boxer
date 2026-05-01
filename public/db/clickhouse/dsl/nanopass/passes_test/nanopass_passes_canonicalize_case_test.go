@@ -54,7 +54,7 @@ func TestNormalizeKeywordCase(t *testing.T) {
 	}
 	for i, tt := range tests {
 		t.Run(fmt.Sprintf("case_%d", i), func(t *testing.T) {
-			got, err := passes.CanonicalizeKeywordCase(tt.input)
+			got, err := passes.CanonicalizeKeywordCase.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 		})
@@ -63,9 +63,9 @@ func TestNormalizeKeywordCase(t *testing.T) {
 
 func TestNormalizeKeywordCaseIdempotent(t *testing.T) {
 	sql := "select A, b from T where X > 1"
-	pass1, err := passes.CanonicalizeKeywordCase(sql)
+	pass1, err := passes.CanonicalizeKeywordCase.Run(sql)
 	require.NoError(t, err)
-	pass2, err := passes.CanonicalizeKeywordCase(pass1)
+	pass2, err := passes.CanonicalizeKeywordCase.Run(pass1)
 	require.NoError(t, err)
 	assert.Equal(t, pass1, pass2, "CanonicalizeKeywordCase is not idempotent")
 }
@@ -76,7 +76,7 @@ func TestNormalizeKeywordCaseOutputValidity(t *testing.T) {
 
 	for _, entry := range entries {
 		t.Run(entry.Name, func(t *testing.T) {
-			out, err := passes.CanonicalizeKeywordCase(entry.SQL)
+			out, err := passes.CanonicalizeKeywordCase.Run(entry.SQL)
 			require.NoError(t, err, "pass failed on %s", entry.Name)
 			_, err = nanopass.Parse(out)
 			require.NoError(t, err, "pass produced invalid SQL for %s:\noutput: %s", entry.Name, out)

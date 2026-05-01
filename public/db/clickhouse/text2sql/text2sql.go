@@ -175,7 +175,7 @@ func (inst *Generator) validate(rawSQL string) (canonical string, query ast.Quer
 }
 
 func fullPipeline(sql string) (string, error) {
-	return passes.CanonicalizeFull(100)(sql)
+	return passes.CanonicalizeFull(100).Run(sql)
 }
 
 // ============================================================================

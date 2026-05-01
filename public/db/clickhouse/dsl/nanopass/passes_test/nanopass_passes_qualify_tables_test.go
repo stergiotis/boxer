@@ -59,7 +59,7 @@ func TestQualifyTables(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 		})
@@ -96,7 +96,7 @@ func TestQualifyTablesUnionAll(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -136,7 +136,7 @@ func TestQualifyTablesSkipsCTEs(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 
@@ -164,7 +164,7 @@ func TestQualifyTablesSubqueries(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := pass(tt.input)
+			got, err := pass.Run(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 		})
@@ -174,7 +174,7 @@ func TestQualifyTablesSubqueries(t *testing.T) {
 func TestQualifyTablesNoFrom(t *testing.T) {
 	pass := passes.QualifyTables("mydb")
 
-	got, err := pass("SELECT 1")
+	got, err := pass.Run("SELECT 1")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT 1", got)
 }
@@ -190,9 +190,9 @@ func TestQualifyTablesIdempotent(t *testing.T) {
 	}
 	for i, sql := range sqls {
 		t.Run(fmt.Sprintf("idempotent_%d", i), func(t *testing.T) {
-			pass1, err := pass(sql)
+			pass1, err := pass.Run(sql)
 			require.NoError(t, err)
-			pass2, err := pass(pass1)
+			pass2, err := pass.Run(pass1)
 			require.NoError(t, err)
 			assert.Equal(t, pass1, pass2, "not idempotent")
 		})
@@ -206,7 +206,7 @@ func TestQualifyTablesOutputValidity(t *testing.T) {
 
 	for _, entry := range entries {
 		t.Run(entry.Name, func(t *testing.T) {
-			out, err := pass(entry.SQL)
+			out, err := pass.Run(entry.SQL)
 			if err != nil {
 				t.Skipf("pass failed (may be expected for some corpus entries): %v", err)
 			}
@@ -219,7 +219,7 @@ func TestQualifyTablesAliasedSubqueryInJoin(t *testing.T) {
 	pass := passes.QualifyTables("mydb")
 
 	sql := "SELECT * FROM t1 JOIN (SELECT b FROM t2) AS sub ON t1.id = sub.id"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 	assert.Contains(t, got, "FROM mydb.t1")
 	assert.Contains(t, got, "FROM mydb.t2")
@@ -234,7 +234,7 @@ func TestQualifyTablesScalarSubqueryInSelect(t *testing.T) {
 	pass := passes.QualifyTables("mydb")
 
 	sql := "SELECT (SELECT max(x) FROM t2) AS mx, a FROM t1"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 	assert.Contains(t, got, "FROM mydb.t1")
 	assert.Contains(t, got, "FROM mydb.t2")
@@ -247,7 +247,7 @@ func TestQualifyTablesExistsSubquery(t *testing.T) {
 	pass := passes.QualifyTables("mydb")
 
 	sql := "SELECT a FROM t1 WHERE a IN (SELECT 1 FROM t2 WHERE t2.id = t1.id)"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 	assert.Contains(t, got, "FROM mydb.t1")
 	assert.Contains(t, got, "FROM mydb.t2")
@@ -260,7 +260,7 @@ func TestQualifyTablesGlobalInSubquery(t *testing.T) {
 	pass := passes.QualifyTables("mydb")
 
 	sql := "SELECT a FROM t1 WHERE a GLOBAL IN (SELECT b FROM t2)"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 	assert.Contains(t, got, "FROM mydb.t1")
 	assert.Contains(t, got, "FROM mydb.t2")
@@ -273,7 +273,7 @@ func TestQualifyTablesNestedCTEWithSubqueryInWhere(t *testing.T) {
 	pass := passes.QualifyTables("mydb")
 
 	sql := "WITH cte AS (SELECT a FROM t1 WHERE b IN (SELECT c FROM t2)) SELECT * FROM cte"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 	assert.Contains(t, got, "FROM mydb.t1")
 	assert.Contains(t, got, "FROM mydb.t2")
@@ -287,7 +287,7 @@ func TestQualifyTablesDeepNesting(t *testing.T) {
 	pass := passes.QualifyTables("mydb")
 
 	sql := "SELECT * FROM (SELECT * FROM (SELECT a FROM t_deep))"
-	got, err := pass(sql)
+	got, err := pass.Run(sql)
 	require.NoError(t, err)
 	assert.Contains(t, got, "FROM mydb.t_deep")
 

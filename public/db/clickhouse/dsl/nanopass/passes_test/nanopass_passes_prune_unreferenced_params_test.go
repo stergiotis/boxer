@@ -18,7 +18,7 @@ func extractedFixture(t *testing.T, sql string) (sets []string, body string) {
 	t.Helper()
 	cfg := passes.NewExtractLiteralsConfig(0)
 	cfg.SetMinINListSize(0)
-	out, err := passes.ExtractLiterals(cfg)(sql)
+	out, err := passes.ExtractLiterals(cfg).Run(sql)
 	require.NoError(t, err)
 	sets, _, body = passes.ParseExtractedQuery(out, "")
 	return
@@ -37,7 +37,7 @@ func joinSets(sets []string, body string) string {
 // --- No-ops ---
 
 func TestPruneUnreferencedParams_NoSets(t *testing.T) {
-	got, err := passes.PruneUnreferencedParams("")("SELECT 1 FROM t")
+	got, err := passes.PruneUnreferencedParams("").Run("SELECT 1 FROM t")
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT 1 FROM t", got)
 }
@@ -47,7 +47,7 @@ func TestPruneUnreferencedParams_AllReferenced(t *testing.T) {
 	require.Len(t, sets, 2)
 	input := joinSets(sets, body)
 
-	got, err := passes.PruneUnreferencedParams("")(input)
+	got, err := passes.PruneUnreferencedParams("").Run(input)
 	require.NoError(t, err)
 	// Both slots still in body → both SETs kept; output equals input.
 	assert.Equal(t, input, got)
@@ -61,7 +61,7 @@ func TestPruneUnreferencedParams_DropsAllWhenBodyHasNoSlots(t *testing.T) {
 	// Simulate a downstream pass that folded both slots away.
 	input := joinSets(sets, "SELECT 99 FROM t")
 
-	got, err := passes.PruneUnreferencedParams("")(input)
+	got, err := passes.PruneUnreferencedParams("").Run(input)
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT 99 FROM t", got)
 	assert.NotContains(t, got, "SET ")
@@ -90,7 +90,7 @@ func TestPruneUnreferencedParams_DropsOnlyUnreferenced(t *testing.T) {
 	require.Contains(t, prunedBody, "{"+keptName+":")
 
 	input := joinSets(sets, prunedBody)
-	got, err := passes.PruneUnreferencedParams("")(input)
+	got, err := passes.PruneUnreferencedParams("").Run(input)
 	require.NoError(t, err)
 
 	assert.NotContains(t, got, droppedName)
@@ -107,7 +107,7 @@ func TestPruneUnreferencedParams_PreservesRegularSets(t *testing.T) {
 	// Body has no slot → extracted SET should be pruned, but a session-level
 	// SET on a non-matching name must survive.
 	input := sets[0] + ";\nSET max_threads = 4;\nSELECT a FROM t"
-	got, err := passes.PruneUnreferencedParams("")(input)
+	got, err := passes.PruneUnreferencedParams("").Run(input)
 	require.NoError(t, err)
 
 	assert.NotContains(t, got, sets[0])
@@ -126,7 +126,7 @@ func TestPruneUnreferencedParams_BareNameInCommentIsNotReference(t *testing.T) {
 	body := "SELECT 99 /* mentions " + name + " in a comment */ FROM t"
 	input := joinSets(sets, body)
 
-	got, err := passes.PruneUnreferencedParams("")(input)
+	got, err := passes.PruneUnreferencedParams("").Run(input)
 	require.NoError(t, err)
 	assert.NotContains(t, got, "SET "+name+" = ")
 	assert.Contains(t, got, body)
@@ -144,7 +144,7 @@ func TestPruneUnreferencedParams_BareNameInStringLiteralIsNotReference(t *testin
 	body := "SELECT 'pseudo-slot {" + name + ": Int64}' FROM t"
 	input := joinSets(sets, body)
 
-	got, err := passes.PruneUnreferencedParams("")(input)
+	got, err := passes.PruneUnreferencedParams("").Run(input)
 	require.NoError(t, err)
 	assert.NotContains(t, got, "SET "+name+" = ")
 	assert.Contains(t, got, body)
@@ -164,7 +164,7 @@ func TestPruneUnreferencedParams_BareIdentifierCountsAsReference(t *testing.T) {
 	body := "WITH 42 AS " + name + " SELECT a FROM t WHERE id = " + name
 	input := joinSets(sets, body)
 
-	got, err := passes.PruneUnreferencedParams("")(input)
+	got, err := passes.PruneUnreferencedParams("").Run(input)
 	require.NoError(t, err)
 	assert.Contains(t, got, "SET "+name+" = ")
 	assert.Contains(t, got, body)
@@ -192,7 +192,7 @@ func TestPruneUnreferencedParams_PrunesAfterPartialCTEInjection(t *testing.T) {
 	cteBody = "WITH 42 AS " + injectedName + " " + replaceSlot(cteBody, droppedName, "'inlined'")
 
 	input := joinSets(sets, cteBody)
-	got, err := passes.PruneUnreferencedParams("")(input)
+	got, err := passes.PruneUnreferencedParams("").Run(input)
 	require.NoError(t, err)
 	assert.Contains(t, got, "SET "+injectedName+" = ")
 	assert.NotContains(t, got, "SET "+droppedName+" = ")
@@ -215,7 +215,7 @@ func TestPruneUnreferencedParams_RejectsInvalidMetadataIdentifiers(t *testing.T)
 	body := "SELECT a FROM t WHERE a = " + bogus
 	input := joinSets(sets, body)
 
-	got, err := passes.PruneUnreferencedParams("")(input)
+	got, err := passes.PruneUnreferencedParams("").Run(input)
 	require.NoError(t, err)
 	assert.NotContains(t, got, "SET "+realName+" = ")
 	// Bogus identifier survives in the body untouched (we don't rewrite it).
@@ -229,9 +229,9 @@ func TestPruneUnreferencedParams_Idempotent(t *testing.T) {
 	require.Len(t, sets, 1)
 	input := joinSets(sets, "SELECT 99 FROM t")
 
-	once, err := passes.PruneUnreferencedParams("")(input)
+	once, err := passes.PruneUnreferencedParams("").Run(input)
 	require.NoError(t, err)
-	twice, err := passes.PruneUnreferencedParams("")(once)
+	twice, err := passes.PruneUnreferencedParams("").Run(once)
 	require.NoError(t, err)
 	assert.Equal(t, once, twice)
 }

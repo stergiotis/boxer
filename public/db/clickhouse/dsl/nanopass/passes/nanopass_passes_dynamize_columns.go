@@ -1,4 +1,4 @@
-//go:build llm_generated_opus46
+//go:build llm_generated_opus47
 
 package passes
 
@@ -27,28 +27,36 @@ import (
 // The pass is scope-aware: it processes all UNION ALL branches, CTE bodies,
 // and subqueries.
 func WrapColumnsWithDynamic(pattern string) nanopass.Pass {
-	return func(sql string) (result string, err error) {
-		re, compileErr := regexp.Compile(pattern)
-		if compileErr != nil {
-			err = eb.Build().Str("pattern", pattern).Errorf("invalid column regex: %w", compileErr)
+	return nanopass.LiftBodyPass(
+		"WrapColumnsWithDynamic",
+		func(sql string) (result string, err error) {
+			re, compileErr := regexp.Compile(pattern)
+			if compileErr != nil {
+				err = eb.Build().Str("pattern", pattern).Errorf("invalid column regex: %w", compileErr)
+				return
+			}
+
+			pr, err := nanopass.Parse(sql)
+			if err != nil {
+				err = eh.Errorf("WrapColumnsWithDynamic: %w", err)
+				return
+			}
+			rw := nanopass.NewRewriter(pr)
+
+			scopes := nanopass.BuildScopes(pr)
+			for _, scope := range scopes {
+				wrapColumnsInScope(rw, scope, re)
+			}
+
+			result = nanopass.GetText(rw)
 			return
-		}
-
-		pr, err := nanopass.Parse(sql)
-		if err != nil {
-			err = eh.Errorf("WrapColumnsWithDynamic: %w", err)
-			return
-		}
-		rw := nanopass.NewRewriter(pr)
-
-		scopes := nanopass.BuildScopes(pr)
-		for _, scope := range scopes {
-			wrapColumnsInScope(rw, scope, re)
-		}
-
-		result = nanopass.GetText(rw)
-		return
-	}
+		},
+		nanopass.PassProperties{
+			Idempotent: true,
+			Reads:      nanopass.RegionBody,
+			Writes:     nanopass.RegionBody,
+		},
+	)
 }
 
 func wrapColumnsInScope(rw *antlr.TokenStreamRewriter, scope *nanopass.SelectScope, re *regexp.Regexp) {

@@ -1,4 +1,4 @@
-//go:build llm_generated_opus46
+//go:build llm_generated_opus47
 
 package passes
 
@@ -21,7 +21,17 @@ import (
 //	TRIM(BOTH str FROM expr)              → trimBoth(expr, str)
 //	TRIM(LEADING str FROM expr)           → trimLeading(expr, str)
 //	TRIM(TRAILING str FROM expr)          → trimTrailing(expr, str)
-func CanonicalizeSugar(sql string) (result string, err error) {
+var CanonicalizeSugar = nanopass.LiftBodyPass(
+	"CanonicalizeSugar",
+	canonicalizeSugarImpl,
+	nanopass.PassProperties{
+		Idempotent: true,
+		Reads:      nanopass.RegionBody,
+		Writes:     nanopass.RegionBody,
+	},
+)
+
+func canonicalizeSugarImpl(sql string) (result string, err error) {
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
 		err = eh.Errorf("CanonicalizeSugar: %w", err)

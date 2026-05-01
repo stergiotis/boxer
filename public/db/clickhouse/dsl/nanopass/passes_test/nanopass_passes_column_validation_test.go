@@ -45,7 +45,7 @@ func TestValidateAliasesPass(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := pass(tt.input)
+			result, err := pass.Run(tt.input)
 			if tt.shouldErr {
 				require.Error(t, err)
 			} else {
@@ -59,7 +59,7 @@ func TestValidateAliasesPass(t *testing.T) {
 func TestValidateAliasesOriginalExample(t *testing.T) {
 	pass := passes.ValidateColumnNames(`^[^_]`)
 
-	_, err := pass(`SELECT sum(a) AS "_a" FROM t`)
+	_, err := pass.Run(`SELECT sum(a) AS "_a" FROM t`)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "_a")
 }
@@ -67,7 +67,7 @@ func TestValidateAliasesOriginalExample(t *testing.T) {
 func TestValidateAliasesQuoted(t *testing.T) {
 	pass := passes.ValidateColumnNames(`^[a-z]`)
 
-	_, err := pass(`SELECT a AS "Bad Name" FROM t`)
+	_, err := pass.Run(`SELECT a AS "Bad Name" FROM t`)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Bad Name")
 }
@@ -75,7 +75,7 @@ func TestValidateAliasesQuoted(t *testing.T) {
 func TestValidateAliasesBacktick(t *testing.T) {
 	pass := passes.ValidateColumnNames(`^[a-z]`)
 
-	_, err := pass("SELECT a AS `Bad` FROM t")
+	_, err := pass.Run("SELECT a AS `Bad` FROM t")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Bad")
 }
@@ -85,7 +85,7 @@ func TestValidateColumnNamesRejectsInvalid(t *testing.T) {
 	invalid := []string{"", "   ", "SELECT", ";;;"}
 	for i, sql := range invalid {
 		t.Run(fmt.Sprintf("invalid_%d", i), func(t *testing.T) {
-			_, err := pass(sql)
+			_, err := pass.Run(sql)
 			assert.Error(t, err)
 		})
 	}
@@ -99,7 +99,7 @@ func TestValidateColumnNamesCorpusPermissive(t *testing.T) {
 
 	for _, entry := range entries {
 		t.Run(entry.Name, func(t *testing.T) {
-			result, err := pass(entry.SQL)
+			result, err := pass.Run(entry.SQL)
 			if err != nil {
 				t.Skipf("pass failed: %v", err)
 			}

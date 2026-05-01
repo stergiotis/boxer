@@ -28,7 +28,7 @@ func TestPassesPreserveScopeStructure(t *testing.T) {
 	for _, entry := range entries {
 		for _, pp := range purePassses {
 			t.Run(entry.Name+"/"+pp.name, func(t *testing.T) {
-				out, err := pp.pass(entry.SQL)
+				out, err := pp.pass.Run(entry.SQL)
 				if err != nil {
 					t.Skipf("pass failed: %v", err)
 				}

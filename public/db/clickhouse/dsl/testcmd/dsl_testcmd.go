@@ -132,7 +132,7 @@ import (
 }
 
 func fullPipeline(sql string) (result string, err error) {
-	return passes.CanonicalizeFull(100)(sql)
+	return passes.CanonicalizeFull(100).Run(sql)
 }
 
 func sanitizeTestName(name string) string {

@@ -1,4 +1,4 @@
-//go:build llm_generated_opus46
+//go:build llm_generated_opus47
 
 package passes
 
@@ -128,28 +128,37 @@ var _ SchemaProviderI = (*StaticSchemaProvider)(nil)
 //
 // If a table is not found in the schema, the expression is left unexpanded.
 // CTE references and subquery sources are skipped (no schema for them).
-// ExpandColumns returns a Pass that expands `*`, `table.*`, and `COLUMNS('regex')`.
-// Optional defaultDatabase is used for resolving unqualified table names in schema lookups.
+// ExpandColumns returns a Pass that expands `*`, `table.*`, and
+// `COLUMNS('regex')`. Optional defaultDatabase is used for resolving
+// unqualified table names in schema lookups.
 func ExpandColumns(schema SchemaProviderI, defaultDatabase string) nanopass.Pass {
-	return func(sql string) (result string, err error) {
-		pr, err := nanopass.Parse(sql)
-		if err != nil {
-			err = eh.Errorf("ExpandColumns: %w", err)
-			return
-		}
-		rw := nanopass.NewRewriter(pr)
-
-		scopes := nanopass.BuildScopes(pr, defaultDatabase)
-		for _, scope := range scopes {
-			err = expandColumnsInScope(rw, scope, schema)
+	return nanopass.LiftBodyPass(
+		"ExpandColumns",
+		func(sql string) (result string, err error) {
+			pr, err := nanopass.Parse(sql)
 			if err != nil {
+				err = eh.Errorf("ExpandColumns: %w", err)
 				return
 			}
-		}
+			rw := nanopass.NewRewriter(pr)
 
-		result = nanopass.GetText(rw)
-		return
-	}
+			scopes := nanopass.BuildScopes(pr, defaultDatabase)
+			for _, scope := range scopes {
+				err = expandColumnsInScope(rw, scope, schema)
+				if err != nil {
+					return
+				}
+			}
+
+			result = nanopass.GetText(rw)
+			return
+		},
+		nanopass.PassProperties{
+			Idempotent: true,
+			Reads:      nanopass.RegionBody,
+			Writes:     nanopass.RegionBody,
+		},
+	)
 }
 
 func expandColumnsInScope(rw *antlr.TokenStreamRewriter, scope *nanopass.SelectScope, schema SchemaProviderI) (err error) {

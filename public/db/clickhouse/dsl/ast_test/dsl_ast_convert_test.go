@@ -18,7 +18,7 @@ import (
 func normalizeAndConvert(t *testing.T, sql string) ast.Query {
 	t.Helper()
 	normalize := passes.CanonicalizeFull(10)
-	normalized, err := normalize(sql)
+	normalized, err := normalize.Run(sql)
 	require.NoError(t, err, "pipeline failed for: %s", sql)
 	pr, err := nanopass.ParseCanonical(normalized)
 	require.NoError(t, err, "ParseCanonical failed for: %s", normalized)
@@ -317,14 +317,14 @@ func TestConvertCanonicalizedCase(t *testing.T) {
 	e := q.Body.Head.Projection[0]
 	// Single-branch searched CASE → if()
 	assert.Equal(t, ast.KindFunctionCall, e.Kind)
-	assert.Equal(t, "IF", e.Func.Name)
+	assert.Equal(t, "if", e.Func.Name)
 }
 
 func TestConvertCanonicalizedTernary(t *testing.T) {
 	q := normalizeAndConvert(t, "SELECT a > 0 ? a : -a FROM t")
 	e := q.Body.Head.Projection[0]
 	assert.Equal(t, ast.KindFunctionCall, e.Kind)
-	assert.Equal(t, "IF", e.Func.Name)
+	assert.Equal(t, "if", e.Func.Name)
 	assert.Len(t, e.Func.Args, 3)
 }
 
@@ -397,7 +397,7 @@ func TestCorpusEndToEnd(t *testing.T) {
 	normalize := passes.CanonicalizeFull(100)
 	for _, entry := range entries {
 		t.Run(entry.Name, func(t *testing.T) {
-			normalized, err := normalize(entry.SQL)
+			normalized, err := normalize.Run(entry.SQL)
 			if err != nil {
 				skipped++
 				t.Skipf("pipeline: %v", err)

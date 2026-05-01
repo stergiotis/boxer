@@ -1,4 +1,4 @@
-//go:build llm_generated_opus46
+//go:build llm_generated_opus47
 
 package passes
 
@@ -88,35 +88,42 @@ func GetColumnNameViolations(err error) []ColumnNameViolation {
 // The pattern is matched against unquoted names (quotes and backticks are stripped).
 // All UNION ALL branches, CTE bodies, and subqueries are checked.
 //
-// This is a validation-only pass — the SQL is returned unchanged if all names match.
+// This is a validation-only pass — body is returned unchanged if all names match.
 func ValidateColumnNames(pattern string) nanopass.Pass {
-	return func(sql string) (result string, err error) {
-		re, compileErr := regexp.Compile(pattern)
-		if compileErr != nil {
-			err = eb.Build().Str("pattern", pattern).Errorf("invalid column name regex: %w", compileErr)
-			return
-		}
-
-		pr, err := nanopass.Parse(sql)
-		if err != nil {
-			err = eh.Errorf("ValidateColumnNames: %w", err)
-			return
-		}
-
-		violations := collectColumnNameViolations(pr, ValidatorFromRegexp(re))
-
-		if len(violations) > 0 {
-			err = &ColumnNameValidationError{
-				Pattern:    pattern,
-				Violations: violations,
-				IsForbid:   false,
+	return nanopass.LiftBodyPass(
+		"ValidateColumnNames",
+		func(sql string) (result string, err error) {
+			re, compileErr := regexp.Compile(pattern)
+			if compileErr != nil {
+				err = eb.Build().Str("pattern", pattern).Errorf("invalid column name regex: %w", compileErr)
+				return
 			}
-			return
-		}
 
-		result = sql
-		return
-	}
+			pr, err := nanopass.Parse(sql)
+			if err != nil {
+				err = eh.Errorf("ValidateColumnNames: %w", err)
+				return
+			}
+
+			violations := collectColumnNameViolations(pr, ValidatorFromRegexp(re))
+
+			if len(violations) > 0 {
+				err = &ColumnNameValidationError{
+					Pattern:    pattern,
+					Violations: violations,
+					IsForbid:   false,
+				}
+				return
+			}
+
+			result = sql
+			return
+		},
+		nanopass.PassProperties{
+			Idempotent: true,
+			Reads:      nanopass.RegionBody,
+		},
+	)
 }
 func ValidatorFromRegexp(pattern *regexp.Regexp) ColumnNameValidator {
 	return func(unquotedColName string, isAlias bool) (err error) {

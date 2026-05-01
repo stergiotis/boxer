@@ -1,4 +1,4 @@
-//go:build llm_generated_opus46
+//go:build llm_generated_opus47
 
 package passes
 
@@ -11,10 +11,11 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-// CanonicalizeCaseConditionals converts CASE expressions to ClickHouse function calls and
-// normalizes multiIf with a single condition to if.
+// CanonicalizeCaseConditionals converts CASE expressions to ClickHouse
+// function calls. Leaf-level only per invocation — declares NeedsFixedPoint
+// for nested CASE convergence.
 //
-// CASE transformations (leaf-level only per invocation — use FixedPoint for nesting):
+// CASE transformations:
 //
 //	Searched CASE (no operand, multiple branches):
 //	  CASE WHEN c1 THEN r1 WHEN c2 THEN r2 ELSE d END
@@ -35,9 +36,20 @@ import (
 //
 //	multiIf(c, r, d) with exactly 3 arguments → if(c, r, d)
 //
-// All three function names (if, multiIf, caseWithExpression) are real ClickHouse
-// functions, so the output is valid ClickHouse SQL verifiable via EXPLAIN SYNTAX.
-func CanonicalizeCaseConditionals(sql string) (result string, err error) {
+// All three function names (if, multiIf, caseWithExpression) are real
+// ClickHouse functions, so the output is valid ClickHouse SQL verifiable via
+// EXPLAIN SYNTAX.
+var CanonicalizeCaseConditionals = nanopass.LiftBodyPass(
+	"CanonicalizeCaseConditionals",
+	canonicalizeCaseConditionalsImpl,
+	nanopass.PassProperties{
+		NeedsFixedPoint: true,
+		Reads:           nanopass.RegionBody,
+		Writes:          nanopass.RegionBody,
+	},
+)
+
+func canonicalizeCaseConditionalsImpl(sql string) (result string, err error) {
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
 		err = eh.Errorf("CanonicalizeCaseConditionals: %w", err)
@@ -70,17 +82,22 @@ func CanonicalizeCaseConditionals(sql string) (result string, err error) {
 	return
 }
 
-var _ nanopass.Pass = CanonicalizeCaseConditionals
+// CanonicalizeMultiIf normalizes multiIf(c, r, d) with exactly 3 arguments to
+// if(c, r, d). Separate pass because it needs to count function arguments,
+// which requires the CST to reflect the current state (after
+// CanonicalizeCaseConditionals has been applied). Run this after
+// CanonicalizeCaseConditionals in a Sequence.
+var CanonicalizeMultiIf = nanopass.LiftBodyPass(
+	"CanonicalizeMultiIf",
+	canonicalizeMultiIfImpl,
+	nanopass.PassProperties{
+		Idempotent: true,
+		Reads:      nanopass.RegionBody,
+		Writes:     nanopass.RegionBody,
+	},
+)
 
-// CanonicalizeMultiIf normalizes multiIf(c, r, d) with exactly 3 arguments to if(c, r, d).
-// This is a separate pass because it needs to count function arguments, which requires
-// the CST to reflect the current state (after CanonicalizeCaseConditionals has been applied).
-//
-// Run this after CanonicalizeCaseConditionals in the pipeline:
-//
-//	result, err = nanopass.FixedPoint(passes.CanonicalizeCaseConditionals, 10)(sql)
-//	result, err = passes.CanonicalizeMultiIf(result)
-func CanonicalizeMultiIf(sql string) (result string, err error) {
+func canonicalizeMultiIfImpl(sql string) (result string, err error) {
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
 		err = eh.Errorf("CanonicalizeMultiIf: %w", err)
@@ -148,7 +165,6 @@ func rewriteMultiIfToIf(rw *antlr.TokenStreamRewriter, pr *nanopass.ParseResult,
 	})
 
 	if argCount == 3 {
-		// Replace "multiIf" with "if" — just replace the identifier token
 		nanopass.ReplaceToken(rw, nameIdent.GetStart().GetTokenIndex(), "if")
 	}
 }
