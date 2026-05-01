@@ -135,13 +135,23 @@ func (g *Graggle) AddNode(id t.NodeID, content []byte, patch t.PatchHash, upCont
 	return nil
 }
 
+// VENDOR DEVIATION: DeleteNode is idempotent on already-deleted nodes
+// (returns nil instead of an error). Two patches can legitimately delete
+// the same node — e.g. two actors editing the same line, where LineDiff
+// produces a delete+insert pair on each side. Applying both patches must
+// succeed in either order; the upstream "already deleted" error breaks
+// the merge model. Plan to upstream this to hackathon_2026 pushout.
+
 // DeleteNode tombstones a live node: moves it to DeletedNodes, re-tags its
 // edges as Deleted, and marks the component dirty for pseudo-edge resolution.
+//
+// Idempotent: deleting an already-deleted node is a no-op (returns nil).
+// Required by the merge model — see the VENDOR DEVIATION note above.
 func (g *Graggle) DeleteNode(id t.NodeID) error {
+	if g.deletedNodes.Contains(id) {
+		return nil
+	}
 	if !g.nodes.Contains(id) {
-		if g.deletedNodes.Contains(id) {
-			return fmt.Errorf("node %v is already deleted", id)
-		}
 		return fmt.Errorf("node %v does not exist", id)
 	}
 	if id == t.RootNodeID {

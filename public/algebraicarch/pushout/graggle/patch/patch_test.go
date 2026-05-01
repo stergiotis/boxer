@@ -192,6 +192,10 @@ func TestPatchApply_DuplicateNode(tt *testing.T) {
 }
 
 func TestPatchApply_DeleteAlreadyDeleted(tt *testing.T) {
+	// VENDOR DEVIATION: this test was inverted from the upstream
+	// expectation. DeleteNode is idempotent in this fork; double-delete
+	// is a no-op success rather than an error so that two patches can
+	// legitimately delete the same node (the typical same-line conflict).
 	g := store.New()
 	p1 := NewPatch("test", "add", nil, []Change{
 		{Kind: ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("x\n"), UpContext: []t.NodeID{t.RootNodeID}},
@@ -199,21 +203,28 @@ func TestPatchApply_DeleteAlreadyDeleted(tt *testing.T) {
 	p1.Apply(g)
 
 	nodeID := t.NodeID{Patch: p1.Hash, Index: 0}
-	g.DeleteNode(nodeID)
+	if err := g.DeleteNode(nodeID); err != nil {
+		tt.Fatalf("first delete failed: %v", err)
+	}
+	if !g.IsDeleted(nodeID) {
+		tt.Fatalf("first delete did not tombstone node")
+	}
 
-	// Trying to delete again should fail.
+	// Apply a second patch that deletes the same node.
 	p2 := &Patch{
 		Hash: ph("p2_deldel"),
 		Changes: []Change{
 			{Kind: ChangeDeleteNode, NodeID: nodeID},
 		},
 	}
-	err := p2.Apply(g)
-	if err == nil {
-		tt.Fatal("expected error for double-delete")
+	if err := p2.Apply(g); err != nil {
+		tt.Fatalf("double-delete should be idempotent, got error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "already deleted") {
-		tt.Fatalf("unexpected error message: %v", err)
+	if !g.IsDeleted(nodeID) {
+		tt.Fatalf("node should still be tombstoned after double-delete")
+	}
+	if g.IsLive(nodeID) {
+		tt.Fatalf("node should not be live after double-delete")
 	}
 }
 

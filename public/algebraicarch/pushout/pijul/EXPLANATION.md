@@ -153,12 +153,14 @@ Pushout-native backend internal invariants:
   *log*; the in-memory `*Graggle` is the apply *result*. Push/Pull
   computes a set-difference over `applied.txt` and ships envelopes in
   apply-log order so dependencies always precede dependents.
-- `tolerantApply` (in the backend) applies a patch like
-  `patch.Patch.Apply` but treats `DeleteNode` of an already-deleted
-  node as a no-op. Two actors can independently delete the same node
-  (the typical "both edited the same line" merge); without this,
-  applying the second patch would error. AddNode/AddEdge identities
-  are patch-scoped so they do not need the same relaxation.
+- `store.Graggle.DeleteNode` is idempotent: deleting an already-deleted
+  node is a no-op. Two actors can independently delete the same node
+  (the typical "both edited the same line" merge); without this, the
+  second patch in a converged pair would fail to apply. The fix lives
+  in the vendored `store/graggle.go` behind a `VENDOR DEVIATION:`
+  comment so re-vendor reviewers can spot it; will be upstreamed to
+  hackathon_2026 pushout. AddNode/AddEdge identities are patch-scoped
+  so they do not need the same relaxation.
 - Conflict cells are derived in `cellsFromConflictedGraggle` by
   grouping live nodes by their cell path. The demo's value model
   guarantees each path appears as one node per actor's edit, so the

@@ -316,7 +316,7 @@ func (inst *pushoutRepo) SetAndRecord(ctx context.Context, cells []KVLine, autho
 
 	deps := patch.ComputeDependencies(changes)
 	p := patch.NewPatch(author, message, deps, changes)
-	aerr := tolerantApply(p, inst.g)
+	aerr := p.Apply(inst.g)
 	if aerr != nil {
 		err = eh.Errorf("apply new patch: %w", aerr)
 		return
@@ -420,7 +420,7 @@ func (inst *pushoutRepo) Apply(ctx context.Context, env PatchEnvelope) (audit st
 			return
 		}
 	}
-	if aerr := tolerantApply(decoded.Patch, inst.g); aerr != nil {
+	if aerr := decoded.Patch.Apply(inst.g); aerr != nil {
 		err = eh.Errorf("apply patch %s: %w", decoded.Patch.Hash, aerr)
 		return
 	}
@@ -634,40 +634,3 @@ func formatCellLine(c KVLine) (s string) {
 	return
 }
 
-// tolerantApply mirrors [patch.Patch.Apply] with one relaxation:
-// DeleteNode on an already-deleted node becomes a no-op. The vendored
-// store rejects double-deletion as an error, but the merge model
-// requires idempotent deletion — two actors can independently delete
-// the same node and both patches must remain applicable in either
-// order. AddNode/AddEdge do not have this issue because their
-// identities are patch-scoped.
-func tolerantApply(p *patch.Patch, g *store.Graggle) (err error) {
-	for _, c := range p.Changes {
-		switch c.Kind {
-		case patch.ChangeNewNode:
-			if aerr := g.AddNode(c.NodeID, c.Content, p.Hash, c.UpContext, c.DownContext); aerr != nil {
-				err = eh.Errorf("apply NewNode %v: %w", c.NodeID, aerr)
-				return
-			}
-		case patch.ChangeNewEdge:
-			if aerr := g.AddEdge(c.Src, c.Dest, p.Hash); aerr != nil {
-				err = eh.Errorf("apply NewEdge %v->%v: %w", c.Src, c.Dest, aerr)
-				return
-			}
-		}
-	}
-	for _, c := range p.Changes {
-		if c.Kind != patch.ChangeDeleteNode {
-			continue
-		}
-		if g.IsDeleted(c.NodeID) {
-			continue
-		}
-		if derr := g.DeleteNode(c.NodeID); derr != nil {
-			err = eh.Errorf("apply DeleteNode %v: %w", c.NodeID, derr)
-			return
-		}
-	}
-	g.ResolvePseudoEdges()
-	return
-}
