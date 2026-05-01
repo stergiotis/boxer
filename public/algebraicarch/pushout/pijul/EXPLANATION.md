@@ -161,6 +161,13 @@ Pushout-native backend internal invariants:
   comment so re-vendor reviewers can spot it; will be upstreamed to
   hackathon_2026 pushout. AddNode/AddEdge identities are patch-scoped
   so they do not need the same relaxation.
+- `types.HashBytes` uses BLAKE3 (not SHA-256). pushout's hash is purely
+  a content-addressed identity — both algorithms give the same 32-byte
+  output and equivalent collision resistance, but BLAKE3 is what the
+  rest of pebble2impl already uses (leeway/card schema fingerprint,
+  IMAP client). Marked `VENDOR DEVIATION:` in the vendored types
+  package. Switching changes every patch hash; envelope files written
+  by a SHA-256 build will fail Decode's hash-validation guard.
 - Conflict cells are derived in `cellsFromConflictedGraggle` by
   grouping live nodes by their cell path. The demo's value model
   guarantees each path appears as one node per actor's edit, so the

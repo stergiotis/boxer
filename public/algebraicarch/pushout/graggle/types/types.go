@@ -8,15 +8,24 @@ package types
 import (
 	"bytes"
 	"cmp"
-	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"slices"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"lukechampine.com/blake3"
 )
 
-// PatchHash identifies a patch by the SHA-256 hash of its contents.
+// VENDOR DEVIATION: hash function switched from crypto/sha256 to BLAKE3.
+// pushout uses the hash purely for content-addressed identity; collision
+// resistance is the only requirement, and BLAKE3 already provides that
+// at the same 32-byte size while matching the hash function used by the
+// rest of pebble2impl (leeway/card schema fingerprint, IMAP client).
+// Switching changes every patch hash — any persisted envelope files
+// from a SHA-256 build will fail Decode's hash-validation guard. Plan
+// to upstream this together with the other vendor deviations.
+
+// PatchHash identifies a patch by the BLAKE3 hash of its contents.
 // The zero value represents the "genesis" patch that introduces the root node.
 type PatchHash [32]byte
 
@@ -239,8 +248,8 @@ func CompareNodeID(a, b NodeID) (c int) {
 	return
 }
 
-// HashBytes computes a PatchHash from arbitrary data.
+// HashBytes computes a PatchHash from arbitrary data using BLAKE3.
 func HashBytes(data []byte) (h PatchHash) {
-	h = sha256.Sum256(data)
+	h = blake3.Sum256(data)
 	return
 }
