@@ -60,6 +60,9 @@ const (
 	AspectQualityStaging                          AspectE = 53 // i.e. Bronze in medaillon architecture
 	AspectQualityCore                             AspectE = 54 // i.e. Silver in medaillon architecture
 	AspectQualitySemantical                       AspectE = 55 // i.e. Gold in medaillon architecture
+
+	AspectSectionMembershipsAllPrimary   AspectE = 56 // every membership in this tagged-value section defines an attribute's identity
+	AspectSectionMembershipsAllSecondary AspectE = 57 // every membership in this tagged-value section annotates an existing attribute
 )
 
 var MaxAspectExcl = slices.Max(AllAspects) + 1
@@ -106,6 +109,23 @@ var AllAspects = []AspectE{
 	AspectDevice,
 	AspectDocumentation,
 	AspectObservability,
+	AspectCodeSourceOfTruth,
+	AspectDataSourceOfTruth,
+	AspectExternalSourceOfTruth,
+	AspectMiniDimension,
+	AspectSlowlyChangingDimensionRetainOriginal,
+	AspectSlowlyChangingDimensionOverwrite,
+	AspectSlowlyChangingDimensionAddNewRecord,
+	AspectSlowlyChangingDimensionAddNewAttribute,
+	AspectSlowlyChangingDimensionAddMiniDimension,
+	AspectSlowlyChangingDimensionType5,
+	AspectSlowlyChangingDimensionType6,
+	AspectSlowlyChangingDimensionType7,
+	AspectQualityStaging,
+	AspectQualityCore,
+	AspectQualitySemantical,
+	AspectSectionMembershipsAllPrimary,
+	AspectSectionMembershipsAllSecondary,
 }
 
 const InvalidAspectEnumValueString = "<invalid AspectE>"
@@ -197,6 +217,40 @@ func (inst AspectE) String() string {
 		return "documentation"
 	case AspectObservability:
 		return "observability"
+	case AspectCodeSourceOfTruth:
+		return "code-source-of-truth"
+	case AspectDataSourceOfTruth:
+		return "data-source-of-truth"
+	case AspectExternalSourceOfTruth:
+		return "external-source-of-truth"
+	case AspectMiniDimension:
+		return "mini-dimension"
+	case AspectSlowlyChangingDimensionRetainOriginal:
+		return "slowly-changing-dimension-retain-original"
+	case AspectSlowlyChangingDimensionOverwrite:
+		return "slowly-changing-dimension-overwrite"
+	case AspectSlowlyChangingDimensionAddNewRecord:
+		return "slowly-changing-dimension-add-new-record"
+	case AspectSlowlyChangingDimensionAddNewAttribute:
+		return "slowly-changing-dimension-add-new-attribute"
+	case AspectSlowlyChangingDimensionAddMiniDimension:
+		return "slowly-changing-dimension-add-mini-dimension"
+	case AspectSlowlyChangingDimensionType5:
+		return "slowly-changing-dimension-type5"
+	case AspectSlowlyChangingDimensionType6:
+		return "slowly-changing-dimension-type6"
+	case AspectSlowlyChangingDimensionType7:
+		return "slowly-changing-dimension-type7"
+	case AspectQualityStaging:
+		return "quality-staging"
+	case AspectQualityCore:
+		return "quality-core"
+	case AspectQualitySemantical:
+		return "quality-semantical"
+	case AspectSectionMembershipsAllPrimary:
+		return "section-memberships-all-primary"
+	case AspectSectionMembershipsAllSecondary:
+		return "section-memberships-all-secondary"
 	}
 	return InvalidAspectEnumValueString
 }
