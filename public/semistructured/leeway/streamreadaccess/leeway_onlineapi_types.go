@@ -6,6 +6,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
 )
 
 // Driver walks a Leeway TableDesc + arrow.RecordBatch and drives a StructuredOutput2I.
@@ -58,7 +59,11 @@ type SinkI interface {
 	BeginCoSectionGroup(name naming.Key)
 	EndCoSectionGroup() (err error)
 
-	BeginSection(name naming.StylableName, valueNames []naming.StylableName, valueCanonicalTypes []canonicaltypes.PrimitiveAstNodeI, nAttrs int)
+	// BeginSection signals the start of a tagged section. useAspects carries
+	// the section's UseAspects from the IR, enabling consumers (notably the
+	// membership-role classifier and the schema-document emitter) to honour
+	// uniformity hints without re-reading the IR.
+	BeginSection(name naming.StylableName, valueNames []naming.StylableName, valueCanonicalTypes []canonicaltypes.PrimitiveAstNodeI, useAspects useaspects.AspectSet, nAttrs int)
 	EndSection() (err error)
 
 	BeginTaggedValue()

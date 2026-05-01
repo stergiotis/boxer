@@ -8,6 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
 )
 
 type DebugSink struct {
@@ -105,8 +106,8 @@ func (inst *DebugSink) EndCoSectionGroup() (err error) {
 	return
 }
 
-func (inst *DebugSink) BeginSection(name naming.StylableName, valueNames []naming.StylableName, valueCanonicalTypes []canonicaltypes.PrimitiveAstNodeI, nAttrs int) {
-	fmt.Fprintf(inst.s, "\t\t\t\tBeginSection(name=%q,valueNames=%q,valueCanonicalTypes=%q,nAttrs=%d)\n", name, valueNames, valueCanonicalTypes, nAttrs)
+func (inst *DebugSink) BeginSection(name naming.StylableName, valueNames []naming.StylableName, valueCanonicalTypes []canonicaltypes.PrimitiveAstNodeI, useAspects useaspects.AspectSet, nAttrs int) {
+	fmt.Fprintf(inst.s, "\t\t\t\tBeginSection(name=%q,valueNames=%q,valueCanonicalTypes=%q,useAspects=%q,nAttrs=%d)\n", name, valueNames, valueCanonicalTypes, useAspects, nAttrs)
 	inst.check()
 }
 

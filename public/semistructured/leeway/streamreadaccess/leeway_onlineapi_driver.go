@@ -14,6 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
 	"github.com/stergiotis/boxer/public/unsafeperf"
 )
 
@@ -43,6 +44,7 @@ type sectionLayout struct {
 	sectionIdx     int
 	name           naming.StylableName
 	membershipSpec common.MembershipSpecE
+	useAspects     useaspects.AspectSet
 
 	scalarCols    []valueColLayout
 	arrayCols     []valueColLayout
@@ -188,6 +190,7 @@ func (inst *Driver) prepare() (err error) {
 				sec := sectionLayout{
 					sectionIdx: taggedOrd,
 					name:       cc.SectionName,
+					useAspects: cc.UseAspects,
 				}
 				if taggedOrd < len(inst.tblDesc.TaggedValuesSections) {
 					sec.membershipSpec = inst.tblDesc.TaggedValuesSections[taggedOrd].MembershipSpec
@@ -376,6 +379,7 @@ func (inst *Driver) prepareFromSchema(
 				sec := sectionLayout{
 					sectionIdx: taggedOrd,
 					name:       cc.SectionName,
+					useAspects: cc.UseAspects,
 				}
 				if taggedOrd < len(inst.tblDesc.TaggedValuesSections) {
 					sec.membershipSpec = inst.tblDesc.TaggedValuesSections[taggedOrd].MembershipSpec
@@ -662,7 +666,7 @@ func (inst *Driver) readPlainScalar(rec arrow.RecordBatch, colIdx int, rowIdx in
 func (inst *Driver) driveSection(sink SinkI, rec arrow.RecordBatch, entityIdx int, sIdx int) {
 	sec := &inst.sections[sIdx]
 	nAttrs := inst.sectionAttrCount(rec, entityIdx, sec)
-	sink.BeginSection(sec.name, sec.valueNames, sec.valueTypes, nAttrs)
+	sink.BeginSection(sec.name, sec.valueNames, sec.valueTypes, sec.useAspects, nAttrs)
 
 	for attrIdx := range nAttrs {
 		sink.BeginTaggedValue()
@@ -687,7 +691,7 @@ func (inst *Driver) driveCoGroup(sink SinkI, rec arrow.RecordBatch, entityIdx in
 	nAttrs := inst.sectionAttrCount(rec, entityIdx, firstSec)
 
 	// Use first section's name for the merged section
-	sink.BeginSection(firstSec.name, group.mergedNames, group.mergedTypes, nAttrs)
+	sink.BeginSection(firstSec.name, group.mergedNames, group.mergedTypes, firstSec.useAspects, nAttrs)
 
 	for attrIdx := range nAttrs {
 		sink.BeginTaggedValue()
