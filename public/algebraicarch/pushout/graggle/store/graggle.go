@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"iter"
 
+	"github.com/stergiotis/boxer/public/observability/eh"
+
 	t "github.com/stergiotis/pebble2impl/src/go/public/algebraicarch/pushout/graggle/types"
 )
 
@@ -98,14 +100,14 @@ func (inst *Graggle) DeletedNodeCount() int {
 // downContext: nodes that should follow this node.
 func (inst *Graggle) AddNode(id t.NodeID, content []byte, patch t.PatchHash, upContext, downContext []t.NodeID) error {
 	if inst.HasNode(id) {
-		return fmt.Errorf("node %v already exists", id)
+		return eh.Errorf("node %v already exists", id)
 	}
 	inst.nodes.Add(id)
 	inst.contents[id] = content
 
 	for _, up := range upContext {
 		if !inst.HasNode(up) {
-			return fmt.Errorf("up-context node %v does not exist", up)
+			return eh.Errorf("up-context node %v does not exist", up)
 		}
 		kind := t.EdgeKindLive
 		if inst.IsDeleted(up) {
@@ -120,7 +122,7 @@ func (inst *Graggle) AddNode(id t.NodeID, content []byte, patch t.PatchHash, upC
 	}
 	for _, down := range downContext {
 		if !inst.HasNode(down) {
-			return fmt.Errorf("down-context node %v does not exist", down)
+			return eh.Errorf("down-context node %v does not exist", down)
 		}
 		kind := t.EdgeKindLive
 		if inst.IsDeleted(down) {
@@ -152,10 +154,10 @@ func (inst *Graggle) DeleteNode(id t.NodeID) error {
 		return nil
 	}
 	if !inst.nodes.Contains(id) {
-		return fmt.Errorf("node %v does not exist", id)
+		return eh.Errorf("node %v does not exist", id)
 	}
 	if id == t.RootNodeID {
-		return fmt.Errorf("cannot delete root node")
+		return eh.Errorf("cannot delete root node")
 	}
 
 	// Move from live to deleted.
@@ -186,7 +188,7 @@ func (inst *Graggle) DeleteNode(id t.NodeID) error {
 // pseudo-edge recomputation handles each independently.
 func (inst *Graggle) UndeleteNode(id t.NodeID) error {
 	if !inst.deletedNodes.Contains(id) {
-		return fmt.Errorf("node %v is not deleted", id)
+		return eh.Errorf("node %v is not deleted", id)
 	}
 
 	// Snapshot the original component before any mutation. Members may
@@ -257,10 +259,10 @@ func (inst *Graggle) dropReasonsForRep(rep t.NodeID) {
 // AddEdge adds a directed edge between two existing nodes.
 func (inst *Graggle) AddEdge(src, dest t.NodeID, patch t.PatchHash) error {
 	if !inst.HasNode(src) {
-		return fmt.Errorf("source node %v does not exist", src)
+		return eh.Errorf("source node %v does not exist", src)
 	}
 	if !inst.HasNode(dest) {
-		return fmt.Errorf("dest node %v does not exist", dest)
+		return eh.Errorf("dest node %v does not exist", dest)
 	}
 	kind := t.EdgeKindLive
 	if inst.IsDeleted(src) || inst.IsDeleted(dest) {

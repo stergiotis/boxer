@@ -4,8 +4,9 @@
 package qc
 
 import (
-	"fmt"
 	"slices"
+
+	"github.com/stergiotis/boxer/public/observability/eh"
 
 	"github.com/stergiotis/pebble2impl/src/go/public/algebraicarch/pushout/graggle/algo"
 	t "github.com/stergiotis/pebble2impl/src/go/public/algebraicarch/pushout/graggle/types"
@@ -36,10 +37,10 @@ func CheckInvariants(g t.InspectableI) []error {
 func checkRootNodeInvariant(g t.InspectableI) []error {
 	var errs []error
 	if !g.IsLive(t.RootNodeID) {
-		errs = append(errs, fmt.Errorf("root node not in live set"))
+		errs = append(errs, eh.Errorf("root node not in live set"))
 	}
 	if g.IsDeleted(t.RootNodeID) {
-		errs = append(errs, fmt.Errorf("root node in deleted set"))
+		errs = append(errs, eh.Errorf("root node in deleted set"))
 	}
 	return errs
 }
@@ -52,18 +53,18 @@ func checkNodePartition(g t.InspectableI) []error {
 	// No node in both sets.
 	for id := range g.AllLiveNodes() {
 		if g.IsDeleted(id) {
-			errs = append(errs, fmt.Errorf("node %v in both live and deleted sets", id))
+			errs = append(errs, eh.Errorf("node %v in both live and deleted sets", id))
 		}
 	}
 
 	// Every edge endpoint must be in one of the sets.
 	for src := range g.ForwardEdgeSources() {
 		if !g.IsLive(src) && !g.IsDeleted(src) {
-			errs = append(errs, fmt.Errorf("edge source %v not in any node set", src))
+			errs = append(errs, eh.Errorf("edge source %v not in any node set", src))
 		}
 		for e := range g.ForwardEdges(src) {
 			if !g.IsLive(e.Dest) && !g.IsDeleted(e.Dest) {
-				errs = append(errs, fmt.Errorf("edge dest %v (from %v) not in any node set", e.Dest, src))
+				errs = append(errs, eh.Errorf("edge dest %v (from %v) not in any node set", e.Dest, src))
 			}
 		}
 	}
@@ -102,14 +103,14 @@ func checkEdgeSymmetry(g t.InspectableI) []error {
 	// Forward → backward: every forward edge should have a matching back-edge.
 	for k := range fwdSet {
 		if _, ok := bwdSet[k]; !ok {
-			errs = append(errs, fmt.Errorf("forward edge %v->%v (%s) has no matching back-edge", k.src, k.dest, k.kind))
+			errs = append(errs, eh.Errorf("forward edge %v->%v (%s) has no matching back-edge", k.src, k.dest, k.kind))
 		}
 	}
 
 	// Backward → forward: every back-edge should have a matching forward edge.
 	for k := range bwdSet {
 		if _, ok := fwdSet[k]; !ok {
-			errs = append(errs, fmt.Errorf("back-edge %v->%v (%s) has no matching forward edge", k.src, k.dest, k.kind))
+			errs = append(errs, eh.Errorf("back-edge %v->%v (%s) has no matching forward edge", k.src, k.dest, k.kind))
 		}
 	}
 	return errs
@@ -128,15 +129,15 @@ func checkEdgeKindConsistency(g t.InspectableI) []error {
 			switch e.Kind {
 			case t.EdgeKindLive:
 				if !srcLive || !destLive {
-					errs = append(errs, fmt.Errorf("live edge %v->%v but endpoints not both live (src_live=%v, dest_live=%v)", src, e.Dest, srcLive, destLive))
+					errs = append(errs, eh.Errorf("live edge %v->%v but endpoints not both live (src_live=%v, dest_live=%v)", src, e.Dest, srcLive, destLive))
 				}
 			case t.EdgeKindDeleted:
 				if !srcDel && !destDel {
-					errs = append(errs, fmt.Errorf("deleted edge %v->%v but neither endpoint is deleted", src, e.Dest))
+					errs = append(errs, eh.Errorf("deleted edge %v->%v but neither endpoint is deleted", src, e.Dest))
 				}
 			case t.EdgeKindPseudo:
 				if !srcLive || !destLive {
-					errs = append(errs, fmt.Errorf("pseudo-edge %v->%v but endpoints not both live (src_live=%v, dest_live=%v)", src, e.Dest, srcLive, destLive))
+					errs = append(errs, eh.Errorf("pseudo-edge %v->%v but endpoints not both live (src_live=%v, dest_live=%v)", src, e.Dest, srcLive, destLive))
 				}
 			}
 		}
@@ -149,12 +150,12 @@ func checkDeletedPartitionCoverage(g t.InspectableI) []error {
 	var errs []error
 	for id := range g.AllDeletedNodes() {
 		if !g.DeletedPartitionContains(id) {
-			errs = append(errs, fmt.Errorf("deleted node %v not in DeletedPartition", id))
+			errs = append(errs, eh.Errorf("deleted node %v not in DeletedPartition", id))
 		}
 	}
 	for id := range g.AllLiveNodes() {
 		if g.DeletedPartitionContains(id) {
-			errs = append(errs, fmt.Errorf("live node %v found in DeletedPartition", id))
+			errs = append(errs, eh.Errorf("live node %v found in DeletedPartition", id))
 		}
 	}
 	return errs
@@ -163,7 +164,7 @@ func checkDeletedPartitionCoverage(g t.InspectableI) []error {
 // Invariant 6: No dirty reps remain after ResolvePseudoEdges.
 func checkNoDirtyReps(g t.InspectableI) []error {
 	if g.DirtyRepCount() > 0 {
-		return []error{fmt.Errorf("%d dirty reps remain unresolved", g.DirtyRepCount())}
+		return []error{eh.Errorf("%d dirty reps remain unresolved", g.DirtyRepCount())}
 	}
 	return nil
 }
@@ -174,7 +175,7 @@ func checkPseudoEdgeMinimality(g t.InspectableI) []error {
 	for src := range g.ForwardEdgeSources() {
 		for e := range g.ForwardEdges(src) {
 			if e.Kind == t.EdgeKindPseudo && g.HasLiveEdgeTo(src, e.Dest) {
-				errs = append(errs, fmt.Errorf("pseudo-edge %v->%v duplicates a live edge", src, e.Dest))
+				errs = append(errs, eh.Errorf("pseudo-edge %v->%v duplicates a live edge", src, e.Dest))
 			}
 		}
 	}
@@ -190,7 +191,7 @@ func checkPseudoEdgeReachability(g t.InspectableI) []error {
 				continue
 			}
 			if !canReachThroughDeleted(g, src, e.Dest) {
-				errs = append(errs, fmt.Errorf("pseudo-edge %v->%v not justified by path through deleted nodes", src, e.Dest))
+				errs = append(errs, eh.Errorf("pseudo-edge %v->%v not justified by path through deleted nodes", src, e.Dest))
 			}
 		}
 	}
@@ -254,7 +255,7 @@ func checkPseudoEdgeCompleteness(g t.InspectableI) []error {
 					}
 				}
 				if !hasPseudo {
-					errs = append(errs, fmt.Errorf("missing pseudo-edge %v->%v (connected through deleted component rep=%v)", src, dest, rep))
+					errs = append(errs, eh.Errorf("missing pseudo-edge %v->%v (connected through deleted component rep=%v)", src, dest, rep))
 				}
 			}
 		}
@@ -288,12 +289,12 @@ func checkPseudoEdgeIdempotence(g t.InspectableI) []error {
 	var errs []error
 	for p := range before {
 		if _, ok := after[p]; !ok {
-			errs = append(errs, fmt.Errorf("pseudo-edge %v->%v removed by redundant ResolvePseudoEdges", p.src, p.dest))
+			errs = append(errs, eh.Errorf("pseudo-edge %v->%v removed by redundant ResolvePseudoEdges", p.src, p.dest))
 		}
 	}
 	for p := range after {
 		if _, ok := before[p]; !ok {
-			errs = append(errs, fmt.Errorf("pseudo-edge %v->%v added by redundant ResolvePseudoEdges", p.src, p.dest))
+			errs = append(errs, eh.Errorf("pseudo-edge %v->%v added by redundant ResolvePseudoEdges", p.src, p.dest))
 		}
 	}
 	return errs
@@ -308,7 +309,7 @@ func checkReasonTrackingConsistency(g t.InspectableI) []error {
 	for rep := range g.DeletedPartitionRepresentatives() {
 		for pe := range g.ReasonPseudoEdgesForRep(rep) {
 			if g.PseudoEdgeReasonCount(pe[0], pe[1]) == 0 {
-				errs = append(errs, fmt.Errorf("ReasonPseudoEdges[%v] references pseudo-edge %v->%v but PseudoEdgeReasons has no entry", rep, pe[0], pe[1]))
+				errs = append(errs, eh.Errorf("ReasonPseudoEdges[%v] references pseudo-edge %v->%v but PseudoEdgeReasons has no entry", rep, pe[0], pe[1]))
 			}
 		}
 	}
@@ -319,7 +320,7 @@ func checkReasonTrackingConsistency(g t.InspectableI) []error {
 			if e.Kind == t.EdgeKindPseudo {
 				pe := [2]t.NodeID{src, e.Dest}
 				if g.PseudoEdgeReasonCount(pe[0], pe[1]) == 0 {
-					errs = append(errs, fmt.Errorf("pseudo-edge %v->%v in graph but not tracked in PseudoEdgeReasons", src, e.Dest))
+					errs = append(errs, eh.Errorf("pseudo-edge %v->%v in graph but not tracked in PseudoEdgeReasons", src, e.Dest))
 				}
 			}
 		}
@@ -335,7 +336,7 @@ func checkReasonTrackingConsistency(g t.InspectableI) []error {
 			}
 		}
 		if !found {
-			errs = append(errs, fmt.Errorf("PseudoEdgeReasons has %v->%v but no pseudo-edge in graph", pe[0], pe[1]))
+			errs = append(errs, eh.Errorf("PseudoEdgeReasons has %v->%v but no pseudo-edge in graph", pe[0], pe[1]))
 		}
 	}
 
@@ -363,7 +364,7 @@ func checkLiveSubgraphConnectivity(g t.InspectableI) []error {
 	var errs []error
 	for id := range g.AllLiveNodes() {
 		if _, ok := reachable[id]; !ok {
-			errs = append(errs, fmt.Errorf("live node %v unreachable from root", id))
+			errs = append(errs, eh.Errorf("live node %v unreachable from root", id))
 		}
 	}
 	return errs
@@ -376,7 +377,7 @@ func checkConflictConsistency(g t.InspectableI) []error {
 	isLinear := linearOrder != nil
 
 	if hasConflicts == isLinear {
-		return []error{fmt.Errorf("HasConflicts()=%v but LinearOrder() returned nil=%v (should be opposites)", hasConflicts, linearOrder == nil)}
+		return []error{eh.Errorf("HasConflicts()=%v but LinearOrder() returned nil=%v (should be opposites)", hasConflicts, linearOrder == nil)}
 	}
 	return nil
 }

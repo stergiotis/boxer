@@ -20,7 +20,7 @@ type DiffResult struct {
 // oldIDs: NodeIDs of the current lines in order (after root).
 // oldContents: content of each old line.
 // newLines: content of the desired new lines.
-func LineDiff(oldIDs []t.NodeID, oldContents [][]byte, newLines [][]byte) DiffResult {
+func LineDiff(oldIDs []t.NodeID, oldContents [][]byte, newLines [][]byte) (result DiffResult) {
 	// Compute LCS using standard DP.
 	m := len(oldContents)
 	n := len(newLines)
@@ -131,5 +131,6 @@ func LineDiff(oldIDs []t.NodeID, oldContents [][]byte, newLines [][]byte) DiffRe
 		newIdx++
 	}
 
-	return DiffResult{Changes: changes}
+	result = DiffResult{Changes: changes}
+	return
 }

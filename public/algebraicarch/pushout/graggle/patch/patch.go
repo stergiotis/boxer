@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/stergiotis/boxer/public/observability/eh"
+
 	t "github.com/stergiotis/pebble2impl/src/go/public/algebraicarch/pushout/graggle/types"
 )
 
@@ -16,8 +18,8 @@ type ChangeKindE uint8
 
 const (
 	ChangeKindNewNode    ChangeKindE = iota // Add a new node with content
-	ChangeKindDeleteNode                   // Tombstone an existing node
-	ChangeKindNewEdge                      // Add an ordering edge between existing nodes
+	ChangeKindDeleteNode                    // Tombstone an existing node
+	ChangeKindNewEdge                       // Add an ordering edge between existing nodes
 )
 
 // Change is a single atomic operation in a patch.
@@ -68,28 +70,31 @@ type Patch struct {
 // that the encoder supports), so a marshal error indicates a programmer
 // error in extending Change — panic rather than produce a silently bogus
 // hash that breaks patch identity downstream.
-func (inst *Patch) ComputeHash() t.PatchHash {
+func (inst *Patch) ComputeHash() (h t.PatchHash) {
 	data, err := json.Marshal(inst.changesForHash())
 	if err != nil {
 		panic(fmt.Errorf("patch.ComputeHash: marshal changes: %w", err))
 	}
-	return t.HashBytes(data)
+	h = t.HashBytes(data)
+	return
 }
 
 // changesForHash returns inst.Changes with any post-fixup self-references
-// (NodeID.Patch == inst.Hash) rewritten back to PlaceholderHash. When inst.Hash
-// is zero (the first call from NewPatch, before fixup), the changes are
-// returned unmodified.
-func (inst *Patch) changesForHash() []Change {
+// (NodeID.Patch == inst.Hash) rewritten back to PlaceholderHash. When
+// inst.Hash is zero (the first call from NewPatch, before fixup), the
+// changes are returned unmodified.
+func (inst *Patch) changesForHash() (out []Change) {
 	if inst.Hash.IsZero() {
-		return inst.Changes
+		out = inst.Changes
+		return
 	}
-	out := make([]Change, len(inst.Changes))
-	defixup := func(id t.NodeID) t.NodeID {
+	out = make([]Change, len(inst.Changes))
+	defixup := func(id t.NodeID) (rewritten t.NodeID) {
+		rewritten = id
 		if id.Patch == inst.Hash {
-			id.Patch = t.PlaceholderHash
+			rewritten.Patch = t.PlaceholderHash
 		}
-		return id
+		return
 	}
 	for i, c := range inst.Changes {
 		out[i] = c
@@ -111,12 +116,12 @@ func (inst *Patch) changesForHash() []Change {
 		out[i].Src = defixup(c.Src)
 		out[i].Dest = defixup(c.Dest)
 	}
-	return out
+	return
 }
 
 // NewPatch creates a patch from a list of changes, computing its hash.
-func NewPatch(author, description string, deps []t.PatchHash, changes []Change) *Patch {
-	inst := &Patch{
+func NewPatch(author string, description string, deps []t.PatchHash, changes []Change) (inst *Patch) {
+	inst = &Patch{
 		Author:       author,
 		Description:  description,
 		Dependencies: deps,
@@ -154,63 +159,76 @@ func NewPatch(author, description string, deps []t.PatchHash, changes []Change) 
 	// original changes with placeholders, just like ojo/pijul. This ensures
 	// the patch identity is stable and the fixed-up NodeIDs correctly
 	// reference this patch's hash.
-	return inst
+	return
 }
 
 // Apply applies the patch to a graph store.
 // Changes are applied in order: NewNode and NewEdge first, then DeleteNode.
 // After applying, ResolvePseudoEdges is called.
-func (inst *Patch) Apply(g t.GraphStoreI) error {
+func (inst *Patch) Apply(g t.GraphStoreI) (err error) {
 	// Pass 1: non-deletion changes.
 	for _, c := range inst.Changes {
 		switch c.Kind {
 		case ChangeKindNewNode:
-			if err := g.AddNode(c.NodeID, c.Content, inst.Hash, c.UpContext, c.DownContext); err != nil {
-				return fmt.Errorf("apply NewNode %v: %w", c.NodeID, err)
+			err = g.AddNode(c.NodeID, c.Content, inst.Hash, c.UpContext, c.DownContext)
+			if err != nil {
+				err = eh.Errorf("apply NewNode %v: %w", c.NodeID, err)
+				return
 			}
 		case ChangeKindNewEdge:
-			if err := g.AddEdge(c.Src, c.Dest, inst.Hash); err != nil {
-				return fmt.Errorf("apply NewEdge %v->%v: %w", c.Src, c.Dest, err)
+			err = g.AddEdge(c.Src, c.Dest, inst.Hash)
+			if err != nil {
+				err = eh.Errorf("apply NewEdge %v->%v: %w", c.Src, c.Dest, err)
+				return
 			}
 		}
 	}
 	// Pass 2: deletions (after additions to handle ordering).
 	for _, c := range inst.Changes {
-		if c.Kind == ChangeKindDeleteNode {
-			if err := g.DeleteNode(c.NodeID); err != nil {
-				return fmt.Errorf("apply DeleteNode %v: %w", c.NodeID, err)
-			}
+		if c.Kind != ChangeKindDeleteNode {
+			continue
+		}
+		err = g.DeleteNode(c.NodeID)
+		if err != nil {
+			err = eh.Errorf("apply DeleteNode %v: %w", c.NodeID, err)
+			return
 		}
 	}
 	g.ResolvePseudoEdges()
-	return nil
+	return
 }
 
 // Unapply reverses the patch. Changes are reversed in reverse order:
 // first undelete, then remove edges, then remove nodes.
 //
-// Returns an error if any node introduced by this patch still has incident
-// edges that were introduced by a different patch — removing the node would
-// leave those edges dangling. Callers must unapply dependents first.
-func (inst *Patch) Unapply(g t.GraphStoreI) error {
+// Returns an error if any node introduced by this patch still has
+// incident edges that were introduced by a different patch — removing
+// the node would leave those edges dangling. Callers must unapply
+// dependents first.
+func (inst *Patch) Unapply(g t.GraphStoreI) (err error) {
 	// Pre-flight: every node we are about to remove must have no incident
 	// edges from other patches.
 	for _, c := range inst.Changes {
 		if c.Kind != ChangeKindNewNode {
 			continue
 		}
-		if err := assertNoForeignEdges(g, c.NodeID, inst.Hash); err != nil {
-			return fmt.Errorf("unapply %s: %w", inst.Hash, err)
+		err = assertNoForeignEdges(g, c.NodeID, inst.Hash)
+		if err != nil {
+			err = eh.Errorf("unapply %s: %w", inst.Hash, err)
+			return
 		}
 	}
 
 	// Pass 1: undelete nodes.
 	for i := len(inst.Changes) - 1; i >= 0; i-- {
 		c := inst.Changes[i]
-		if c.Kind == ChangeKindDeleteNode {
-			if err := g.UndeleteNode(c.NodeID); err != nil {
-				return fmt.Errorf("unapply DeleteNode %v: %w", c.NodeID, err)
-			}
+		if c.Kind != ChangeKindDeleteNode {
+			continue
+		}
+		err = g.UndeleteNode(c.NodeID)
+		if err != nil {
+			err = eh.Errorf("unapply DeleteNode %v: %w", c.NodeID, err)
+			return
 		}
 	}
 	// Pass 2: remove edges then nodes.
@@ -244,19 +262,20 @@ func (inst *Patch) Unapply(g t.GraphStoreI) error {
 		}
 	}
 	g.ResolvePseudoEdges()
-	return nil
+	return
 }
 
 // assertNoForeignEdges errors if id has any incident edge whose IntroducedBy
 // is not own. Such an edge belongs to a dependent patch and would dangle if
 // we removed id.
-func assertNoForeignEdges(g t.GraphReaderI, id t.NodeID, own t.PatchHash) error {
+func assertNoForeignEdges(g t.GraphReaderI, id t.NodeID, own t.PatchHash) (err error) {
 	for e := range g.ForwardEdges(id) {
 		if e.Kind == t.EdgeKindPseudo {
 			continue // pseudo-edges are derived, not authored
 		}
 		if e.IntroducedBy != own {
-			return fmt.Errorf("node %v has foreign forward edge from patch %s; unapply dependents first", id, e.IntroducedBy)
+			err = eh.Errorf("node %v has foreign forward edge from patch %s; unapply dependents first", id, e.IntroducedBy)
+			return
 		}
 	}
 	for e := range g.BackwardEdges(id) {
@@ -264,10 +283,11 @@ func assertNoForeignEdges(g t.GraphReaderI, id t.NodeID, own t.PatchHash) error 
 			continue
 		}
 		if e.IntroducedBy != own {
-			return fmt.Errorf("node %v has foreign back edge from patch %s; unapply dependents first", id, e.IntroducedBy)
+			err = eh.Errorf("node %v has foreign back edge from patch %s; unapply dependents first", id, e.IntroducedBy)
+			return
 		}
 	}
-	return nil
+	return
 }
 
 // ComputeDependencies computes the minimal set of patches that a set of
@@ -277,9 +297,8 @@ func assertNoForeignEdges(g t.GraphReaderI, id t.NodeID, own t.PatchHash) error 
 // The zero hash (root/genesis) and the placeholder hash (self-references in
 // pre-fixup changes) are intentionally excluded — neither identifies a
 // real patch the changes could depend on.
-func ComputeDependencies(changes []Change) []t.PatchHash {
+func ComputeDependencies(changes []Change) (deps []t.PatchHash) {
 	seen := make(map[t.PatchHash]struct{})
-	var deps []t.PatchHash
 	add := func(h t.PatchHash) {
 		if h.IsZero() || h.IsPlaceholder() {
 			return
@@ -306,5 +325,5 @@ func ComputeDependencies(changes []Change) []t.PatchHash {
 			add(c.Dest.Patch)
 		}
 	}
-	return deps
+	return
 }
