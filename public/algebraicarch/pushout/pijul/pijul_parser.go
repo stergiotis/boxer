@@ -12,12 +12,23 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
+// pijulLogEntry maps the JSON record emitted by `pijul log
+// --output-format json`. It is an internal staging type for the text
+// backend; the demo sees only [PatchMetadata].
+type pijulLogEntry struct {
+	Hash       string    `json:"hash"`
+	Authors    []string  `json:"authors"`
+	Timestamp  string    `json:"timestamp"`
+	Message    string    `json:"message"`
+	ParsedTime time.Time `json:"-"`
+}
+
 // parseLogJSON parses the JSON document emitted by `pijul log
 // --output-format json`. ParsedTime is filled in for each entry from
 // the RFC3339Nano Timestamp; entries whose Timestamp is unparseable
 // keep the zero time and will sort as "oldest" under
-// [applyCreditToLines]'s before-comparison.
-func parseLogJSON(logOut []byte) (entries []LogEntry, err error) {
+// [applyCreditToCells]'s before-comparison.
+func parseLogJSON(logOut []byte) (entries []pijulLogEntry, err error) {
 	if len(logOut) == 0 {
 		return
 	}
@@ -38,35 +49,28 @@ func parseLogJSON(logOut []byte) (entries []LogEntry, err error) {
 	return
 }
 
-// FormatLogEntry renders one log entry in the box-style block the demo
-// shows in the Pijul-history scroll view.
-func FormatLogEntry(entry LogEntry) (s string) {
-	author := "System"
-	if len(entry.Authors) > 0 {
-		author = entry.Authors[0]
+// toPatchMetadata converts a parsed log entry into the public
+// [PatchMetadata] shape. The conversion is lossy by design: the demo
+// does not need the raw textual timestamp.
+func (e pijulLogEntry) toPatchMetadata() (m PatchMetadata) {
+	m = PatchMetadata{
+		ID:        PatchID{Hex: e.Hash},
+		Authors:   append([]string(nil), e.Authors...),
+		Timestamp: e.ParsedTime,
+		Message:   e.Message,
 	}
-	s = fmt.Sprintf("Change %s\nAuthor: %s\nDate: %s\n\n    %s",
-		entry.Hash, author,
-		entry.ParsedTime.Local().Format("2006-01-02 15:04:05 (MST)"),
-		entry.Message)
 	return
 }
 
-// applyCreditToLines parses the block-based output of `pijul credit`
-// and attaches per-line provenance (introducing patch hash + author) to
-// each KVLine. When a line is introduced by multiple patches (a
-// "context node" on a graph edge), the OLDEST patch wins by graph-age
-// resolution — that yields stable authorship across rebases and
-// channel mixing.
-//
-// The implementation builds a `short→entry` index up front rather than
-// scanning the entire log per line; Pijul's credit output prints
-// exactly 12 hash characters today but the index tolerates any short
-// length 8…full.
-func applyCreditToLines(creditOut string, lines []KVLine, entries []LogEntry) (out []KVLine) {
+// applyCreditToCells parses the block-based output of `pijul credit`
+// and attaches per-cell provenance to each [KVLine]. When a cell is
+// introduced by multiple patches (a "context node" on a graph edge),
+// the OLDEST patch wins by graph-age resolution — that yields stable
+// authorship across rebases and channel mixing.
+func applyCreditToCells(creditOut string, cells []KVLine, entries []pijulLogEntry) (out []KVLine) {
 	shortToEntry := buildShortHashIndex(entries)
 
-	contentToEntry := make(map[string]LogEntry)
+	contentToEntry := make(map[string]pijulLogEntry)
 	var currentHashes []string
 
 	scanner := bufio.NewScanner(strings.NewReader(creditOut))
@@ -87,7 +91,7 @@ func applyCreditToLines(creditOut string, lines []KVLine, entries []LogEntry) (o
 		currentHashes = splitAndTrim(line, ",")
 	}
 
-	out = lines
+	out = cells
 	for i := range out {
 		if out[i].Conflict != nil {
 			continue
@@ -97,24 +101,19 @@ func applyCreditToLines(creditOut string, lines []KVLine, entries []LogEntry) (o
 		if !ok {
 			continue
 		}
-		hash := entry.Hash
-		if len(hash) > 8 {
-			hash = hash[:8]
-		}
-		out[i].CreditHash = hash
-		out[i].CreditAuthor = entry.Authors[0]
+		meta := entry.toPatchMetadata()
+		out[i].Credit = &meta
 	}
 	return
 }
 
-func buildShortHashIndex(entries []LogEntry) (idx map[string]LogEntry) {
-	idx = make(map[string]LogEntry, len(entries)*4)
+func buildShortHashIndex(entries []pijulLogEntry) (idx map[string]pijulLogEntry) {
+	idx = make(map[string]pijulLogEntry, len(entries)*4)
 	for _, e := range entries {
 		full := e.Hash
 		// Index every prefix from 8 chars up to the full hash.
-		// This costs O(L*N) keys but L is fixed (44 for SHA-256
-		// b64) and N is the number of patches, both small for
-		// the demo.
+		// Cost is O(L*N) keys; L is fixed (44 for SHA-256 b64)
+		// and N is the number of patches, both small for the demo.
 		for n := 8; n <= len(full); n++ {
 			idx[full[:n]] = e
 		}
@@ -122,7 +121,7 @@ func buildShortHashIndex(entries []LogEntry) (idx map[string]LogEntry) {
 	return
 }
 
-func oldestEntry(shortHashes []string, idx map[string]LogEntry) (oldest LogEntry, found bool) {
+func oldestEntry(shortHashes []string, idx map[string]pijulLogEntry) (oldest pijulLogEntry, found bool) {
 	for _, sh := range shortHashes {
 		sh = strings.TrimSpace(sh)
 		if sh == "" {
@@ -152,25 +151,15 @@ func splitAndTrim(s string, sep string) (out []string) {
 	return
 }
 
-// ParsePijulFile parses a flat-KV file possibly containing Pijul
-// conflict markers. Each non-conflict line is `<path> "<value>"`;
-// conflict blocks have the form
+// parseRecordText parses pijul's textual working-copy format into the
+// package's domain [KVLine] slice. Conflict blocks become cells with a
+// non-nil Conflict; clean rows become cells with Value populated.
 //
-//	>>>>>>> <label>
-//	<path> "<value-A>"
-//	=======
-//	<path> "<value-B>"
-//	<<<<<<< <label>
-//
-// where <label> is Pijul's internal side number (typically "1" / "2"),
-// not a hash. The parser preserves these labels in [ConflictData] so
-// that [DemoStore.SaveStateToFile] can re-emit byte-identical markers
-// when restoring an unresolved conflict to disk.
-//
-// Limitations: the parser handles only two-way conflicts spanning a
-// single key. Three-way conflicts and conflicts that span multiple
-// keys are not modelled by the demo.
-func ParsePijulFile(content string) (lines []KVLine, hasConflict bool) {
+// Limitations: handles only two-way conflicts spanning a single key,
+// and treats values as untyped trimmed-quote strings (so a value
+// containing an embedded `"` round-trips poorly). Both are
+// text-format issues and will not exist in the native backend.
+func parseRecordText(content string) (cells []KVLine, hasConflict bool) {
 	scanner := bufio.NewScanner(strings.NewReader(content))
 
 	var (
@@ -189,12 +178,11 @@ func ParsePijulFile(content string) (lines []KVLine, hasConflict bool) {
 		case strings.HasPrefix(line, ">>>>>>>"):
 			inConflict = true
 			hasConflict = true
-			cd = &ConflictData{AliceLabel: strings.TrimSpace(strings.TrimLeft(line, ">"))}
+			cd = &ConflictData{}
 		case inConflict && strings.HasPrefix(line, "======="):
 			// separator between sides
 		case inConflict && strings.HasPrefix(line, "<<<<<<<"):
-			cd.BobLabel = strings.TrimSpace(strings.TrimLeft(line, "<"))
-			lines = append(lines, KVLine{Path: conflictPath, Conflict: cd})
+			cells = append(cells, KVLine{Path: conflictPath, Conflict: cd})
 			inConflict = false
 			cd = nil
 			conflictPath = ""
@@ -214,7 +202,7 @@ func ParsePijulFile(content string) (lines []KVLine, hasConflict bool) {
 		default:
 			path, val, ok := splitKVLine(line)
 			if ok {
-				lines = append(lines, KVLine{Path: path, Value: val})
+				cells = append(cells, KVLine{Path: path, Value: val})
 			}
 		}
 	}
@@ -229,5 +217,31 @@ func splitKVLine(line string) (path string, value string, ok bool) {
 	path = parts[0]
 	value = strings.Trim(parts[1], `"`)
 	ok = true
+	return
+}
+
+// serializeRecordText is the inverse of [parseRecordText]: render the
+// in-memory cell slice back to pijul's textual flat-KV format. The
+// trailing newline is structurally important — without it pijul's
+// patch graph treats the EOF context node as overlapping and may
+// promote unrelated edits into spurious conflicts.
+//
+// Conflict blocks use fixed side labels "1" and "2"; pijul does not
+// require any specific values in those slots, only that the block is
+// well-formed.
+func serializeRecordText(cells []KVLine) (raw []byte) {
+	out := make([]string, 0, len(cells)+4)
+	for _, c := range cells {
+		if c.Conflict != nil {
+			out = append(out, ">>>>>>> 1")
+			out = append(out, fmt.Sprintf(`%s "%s"`, c.Path, c.Conflict.AliceValue))
+			out = append(out, "=======")
+			out = append(out, fmt.Sprintf(`%s "%s"`, c.Path, c.Conflict.BobValue))
+			out = append(out, "<<<<<<< 2")
+		} else {
+			out = append(out, fmt.Sprintf(`%s "%s"`, c.Path, c.Value))
+		}
+	}
+	raw = []byte(strings.Join(out, "\n") + "\n")
 	return
 }

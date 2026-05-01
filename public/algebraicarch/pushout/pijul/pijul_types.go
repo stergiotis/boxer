@@ -1,61 +1,44 @@
 //go:build llm_generated_opus47
 
-// Package pijul wraps the Pijul VCS as a multi-actor event-store demo:
-// it spawns four working copies (Server + Alice/Bob/Charlie), drives the
-// `pijul` CLI via os/exec, and renders the resulting state through the
-// imzero2/egui2 UI. The package is structured around a [PijulRunnerI]
-// seam so the CLI driver can be swapped for a future native Go
-// implementation backed by the pushout/graggle package
-// (../../../../../../hackathon_2026/src/go/public/pushout).
+// Package pijul wraps a patch-theory event-store as a multi-actor demo:
+// it spawns four working copies (Server + Alice/Bob/Charlie) backed by
+// a [BackendI], drives them through the [RepoI] interface, and renders
+// the resulting state through the imzero2/egui2 UI.
+//
+// The package is structured around two seams:
+//
+//   - [BackendI]/[RepoI] — pure-domain interfaces taking [KVLine] cells.
+//     The current implementation is [pijulTextBackend], which serialises
+//     cells into pijul's textual flat-KV format and shells out to the
+//     `pijul` binary. The planned successor is a native Go backend
+//     wrapping ../../../../../../hackathon_2026/src/go/public/pushout
+//     that operates directly on graggle patch operations without ever
+//     materialising text.
+//
+//   - [pijulRunnerI] — a CLI-verb-level seam used internally by the
+//     text backend; one method per `pijul` subcommand.
 package pijul
 
-import "time"
-
-// KVLine is one parsed `<path> "<value>"` row from the demo's flat-KV
-// data file. When the row is in a Pijul conflict block, Conflict carries
-// both sides and Value is empty.
+// KVLine is one parsed `<path> "<value>"` cell from the demo's flat-KV
+// record file. It is the package's domain noun: the [RepoI] interface
+// reads and writes slices of these without exposing the underlying
+// serialisation. When a cell is in an unresolved conflict, Conflict
+// carries both sides and Value is empty; when the introducing patch is
+// known, Credit carries the patch metadata.
 type KVLine struct {
-	Path         string
-	Value        string
-	Conflict     *ConflictData
-	CreditHash   string
-	CreditAuthor string
+	Path     string
+	Value    string
+	Conflict *ConflictData
+	Credit   *PatchMetadata
 }
 
-// ConflictData captures the two sides of a `>>>>>>> N === <<<<<<< M`
-// block as written by Pijul into the working copy.
-//
-// AliceLabel / BobLabel hold Pijul's *side labels* (typically "1" and
-// "2"), not patch hashes — Pijul does not embed the conflicting hashes
-// into the marker line. The fields are kept under the Alice/Bob naming
-// only because the demo personifies the two sides; the parser does not
-// know which actor authored which side.
+// ConflictData captures both sides of a two-way conflict at the cell
+// level. Side identifiers (pijul's "1"/"2" labels in the textual
+// working copy) are *not* part of this struct: they are a text-format
+// detail handled inside the text backend.
 type ConflictData struct {
-	AliceLabel string
 	AliceValue string
-	BobLabel   string
 	BobValue   string
-}
-
-// PatchEnvelope is one entry in the demo's shared "Inbox" — a binary
-// Pijul change file copied out of `.pijul/changes/` for peer-to-peer
-// distribution.
-type PatchEnvelope struct {
-	FromActor string
-	Hash      string
-	PatchPath string
-}
-
-// LogEntry maps the output of `pijul log --output-format json`.
-// ParsedTime is filled in by [parsePijulLogJSON] and is *not* a JSON
-// field; it is derived from Timestamp for graph-age comparison in
-// credit resolution.
-type LogEntry struct {
-	Hash       string    `json:"hash"`
-	Authors    []string  `json:"authors"`
-	Timestamp  string    `json:"timestamp"`
-	Message    string    `json:"message"`
-	ParsedTime time.Time `json:"-"`
 }
 
 // Task is one unit of work scheduled on [DemoStore.TaskQueue]. Action

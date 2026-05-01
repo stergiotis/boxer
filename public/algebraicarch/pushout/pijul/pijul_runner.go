@@ -16,22 +16,19 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-// PijulRunnerI is the seam between [DemoStore] orchestration and the
-// underlying Pijul implementation. The current implementation
-// ([cliRunner]) shells out to the `pijul` binary; the planned
-// replacement is a native Go driver backed by
-// ../../../../../../hackathon_2026/src/go/public/pushout/graggle, where
-// patches live as files under <repoDir>/.pijul/changes/ and the working
-// copy is rendered from an in-memory Graggle.
+// pijulRunnerI is the lower-level CLI-verb seam used by the text
+// backend. It is intentionally unexported: external consumers should
+// go through [BackendI]/[RepoI], which deal in domain objects rather
+// than pijul subcommand arguments.
 //
 // Each method returns an `audit` string — a single formatted line
-// describing what was executed and how it terminated — which the store
-// appends to the corresponding actor's CLI log without re-formatting.
-// Real errors come back via err. The Pull method additionally returns
-// hadConflict==true when Pijul exited non-zero because it injected
-// conflict markers; this is *not* a fatal error and err is nil in that
-// case.
-type PijulRunnerI interface {
+// describing what was executed and how it terminated — which the
+// caller appends to the corresponding actor's CLI log without further
+// formatting. Real errors come back via err. The Pull method
+// additionally returns hadConflict==true when Pijul exited non-zero
+// because it injected conflict markers; this is *not* a fatal error
+// and err is nil in that case.
+type pijulRunnerI interface {
 	Init(ctx context.Context, repoDir string) (audit string, err error)
 	Clone(ctx context.Context, srcRepo string, parentDir string, name string) (audit string, err error)
 	Add(ctx context.Context, repoDir string, file string) (audit string, err error)
@@ -39,7 +36,7 @@ type PijulRunnerI interface {
 	Push(ctx context.Context, repoDir string, remoteRepo string) (audit string, err error)
 	Pull(ctx context.Context, repoDir string, remoteRepo string) (audit string, hadConflict bool, err error)
 	ApplyPatch(ctx context.Context, repoDir string, patchPath string) (audit string, err error)
-	Log(ctx context.Context, repoDir string) (entries []LogEntry, audit string, err error)
+	Log(ctx context.Context, repoDir string) (entries []pijulLogEntry, audit string, err error)
 	LatestHash(ctx context.Context, repoDir string) (hash string, audit string, err error)
 	Credit(ctx context.Context, repoDir string, file string) (raw string, audit string, err error)
 	LatestChangeFile(ctx context.Context, repoDir string) (patchPath string, err error)
@@ -55,11 +52,12 @@ type cliRunner struct {
 	logTimeout time.Duration
 }
 
-var _ PijulRunnerI = (*cliRunner)(nil)
+var _ pijulRunnerI = (*cliRunner)(nil)
 
 // NewCliRunner returns a runner that drives the system `pijul` binary
 // via os/exec with conservative timeouts. The zero-valued [cliRunner]
-// is also usable.
+// is also usable. The constructor stays exported because callers seed
+// the [pijulTextBackend] with it; the runner *interface* is private.
 func NewCliRunner() (inst *cliRunner) {
 	inst = &cliRunner{
 		runTimeout: defaultRunTimeout,
@@ -174,7 +172,7 @@ func (inst *cliRunner) ApplyPatch(ctx context.Context, repoDir string, patchPath
 
 // Log uses a tighter timeout than the mutating commands because it is
 // invoked from the reload path on every task tick.
-func (inst *cliRunner) Log(ctx context.Context, repoDir string) (entries []LogEntry, audit string, err error) {
+func (inst *cliRunner) Log(ctx context.Context, repoDir string) (entries []pijulLogEntry, audit string, err error) {
 	timeout := inst.timeoutForLog()
 	cctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()

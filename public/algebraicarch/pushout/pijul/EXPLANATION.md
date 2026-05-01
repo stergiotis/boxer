@@ -41,24 +41,34 @@ External references:
 
 ## How it works
 
-The package is split into four concerns:
+The package is layered around two seams:
 
-- **`pijul_runner.go`** — defines `PijulRunnerI`, a one-method-per-CLI-op
-  interface (`Init`, `Clone`, `Add`, `Record`, `Push`, `Pull`,
-  `ApplyPatch`, `Log`, `LatestHash`, `Credit`, `LatestChangeFile`).
-  The current `cliRunner` implementation shells out to the system
-  `pijul` binary; the planned native runner backs the same interface
-  with an in-memory `Graggle` plus on-disk patches under
-  `<repoDir>/.pijul/changes/`.
-- **`pijul_parser.go`** — pure functions over Pijul's textual outputs:
-  `ParsePijulFile` reads the working copy's flat-KV format and detects
-  conflict blocks, `parseLogJSON` decodes `pijul log --output-format
-  json`, and `applyCreditToLines` resolves cell-level provenance from
-  `pijul credit` using oldest-wins graph-age comparison.
-- **`pijul_store.go`** — orchestration: spawns and tears down the four
-  per-actor working copies, runs a background worker that drains a
-  `Task` queue, and parallelises the per-frame reload of all four
-  actors via `errgroup`.
+- **`pijul_backend.go`** — defines the *domain* seam: `BackendI` (a
+  factory for `RepoI` handles) and `RepoI` (one actor's working copy).
+  These take and return [KVLine] cells, [PatchEnvelope] blobs, and
+  [PatchMetadata] records — never raw text bytes. Every `pijul`-flavoured
+  detail (textual flat-KV format, conflict-marker emission, side
+  labels, trailing-newline invariant) is a backend-internal concern.
+- **`pijul_text_backend.go`** — the *realisation* of `BackendI` that
+  drives a real `pijul` binary. `pijulTextBackend` and `pijulTextRepo`
+  serialise cells to pijul's textual working-copy format on the way
+  down and parse them back on the way up. The future native backend
+  (`pijul_native_backend.go`, planned) will satisfy the same `BackendI`
+  with in-memory graggle operations and on-disk JSON patches.
+- **`pijul_runner.go`** — the *CLI-verb* seam: `pijulRunnerI` is one
+  method per `pijul` subcommand (Init, Clone, Add, Record, Push, Pull,
+  ApplyPatch, Log, LatestHash, Credit, LatestChangeFile). It is
+  unexported; only `pijulTextBackend` consumes it. `cliRunner` is the
+  concrete implementation backed by `os/exec`.
+- **`pijul_parser.go`** — pure parsers and serialisers for pijul's
+  textual outputs (`parseRecordText`, `serializeRecordText`,
+  `parseLogJSON`, `applyCreditToCells`). All package-private because
+  they are text-backend internals.
+- **`pijul_store.go`** — orchestration: per-actor state, the background
+  task worker, and the parallel reload via `errgroup`. `DemoStore`
+  composes a single `BackendI` + per-actor `RepoI` instances; demo
+  actions like `SaveEdit` and `EmailPatch` are now thin wrappers over
+  `state.Repo.SetAndRecord(...)` and `state.Repo.ExportLatest(...)`.
 - **`pijul_render.go`** / **`pijul_playbook.go`** — egui2 view layer.
   Per-actor edit windows, central server/inbox window, and a
   storyboard window with five canned playbooks.
@@ -102,21 +112,30 @@ than surfacing a fatal-error block in the UI.
 
 ## Invariants
 
-- The tracked file always ends with a trailing newline (see
-  `DemoStore.saveStateToFileLocked`). Without it, Pijul treats the
-  EOF context node as overlapping and may promote unrelated edits into
-  spurious conflicts.
-- The *side labels* (`>>>>>>> 1`, `<<<<<<< 2`) in conflict markers are
-  Pijul's internal numbering, not patch hashes; the parser preserves
-  them in `ConflictData.AliceLabel` / `BobLabel` for round-trip
-  fidelity, but they carry no semantic information beyond "first" /
-  "second".
-- The per-actor `CliLogs` ring buffer copies into a fresh slice when
-  it overflows so the previously-grown backing array becomes garbage;
-  a long demo session does not retain unbounded log memory.
+Demo-level invariants (visible to anyone using `BackendI`/`RepoI`):
+
+- `Push` and `Pull` require both endpoints to come from the same
+  backend. Implementations type-assert and return an error otherwise.
+- `Pull`'s `(hadConflict=true, err=nil)` return signals "applied with
+  conflict markers", not failure. The orchestrator records an `[INFO]`
+  audit line; the UI does not show a fatal-error block.
 - `PendingOverrides` is keyed by inputKey string, never by `*string`,
   so overrides survive any pointer churn between the frame that
   queued them and the frame that applies them.
+- The per-actor `CliLogs` ring buffer copies into a fresh slice when
+  it overflows so the previously-grown backing array becomes garbage;
+  a long demo session does not retain unbounded log memory.
+
+Text-backend internal invariants (no longer visible to the demo, but
+still load-bearing for the `pijul-text` realisation):
+
+- The serialised tracked file always ends with a trailing newline.
+  Without it, Pijul treats the EOF context node as overlapping and
+  may promote unrelated edits into spurious conflicts.
+- The conflict-marker side labels (`>>>>>>> 1`, `<<<<<<< 2`) are
+  pijul's internal numbering, not patch hashes. The text backend emits
+  them on serialisation and discards them on parse; the public
+  `ConflictData` carries only the two side values.
 
 ## Trade-offs
 
