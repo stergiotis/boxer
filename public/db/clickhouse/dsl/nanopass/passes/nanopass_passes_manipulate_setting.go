@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	"github.com/antlr4-go/antlr/v4"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
@@ -248,104 +249,128 @@ func getSettingFunctionName(ctx antlr.ParserRuleContext) string {
 // --- WriteSettings: Go → SQL ---
 
 // WriteSettings returns a Pass that replaces the SETTINGS clause with the
-// given values. If the body has no SETTINGS clause, one is added. If
-// settings is empty, the SETTINGS clause is removed.
+// given values. If body has no SETTINGS clause, one is added. If settings
+// is empty, the SETTINGS clause is removed. After the body rewrite,
+// env.StatementSettings is refreshed to reflect the new state.
 func WriteSettings(settings map[string]any) nanopass.Pass {
-	return nanopass.LiftBodyPass(
-		"WriteSettings",
-		writeSettingsImpl(settings),
-		nanopass.PassProperties{
+	return nanopass.Pass{
+		Name: "WriteSettings",
+		Apply: func(e *env.Environment, body string) (string, error) {
+			out, err := writeSettingsBody(settings, body)
+			if err != nil {
+				return "", err
+			}
+			if e != nil {
+				for k := range e.StatementSettings {
+					delete(e.StatementSettings, k)
+				}
+				for name, val := range settings {
+					raw, mErr := marshalling.MarshalGoValueToSQL(val)
+					if mErr != nil {
+						continue
+					}
+					e.StatementSettings[name] = env.Setting{Name: name, Raw: raw, Value: val}
+				}
+			}
+			return out, nil
+		},
+		Properties: nanopass.PassProperties{
 			Idempotent: true,
 			Reads:      nanopass.RegionBody | nanopass.RegionStatementSettings,
 			Writes:     nanopass.RegionBody | nanopass.RegionStatementSettings,
 		},
-	)
-}
-
-func writeSettingsImpl(settings map[string]any) func(string) (string, error) {
-	return func(sql string) (result string, err error) {
-		// First remove existing SETTINGS, then add new ones
-		pr, err := nanopass.Parse(sql)
-		if err != nil {
-			err = eh.Errorf("WriteSettings: %w", err)
-			return
-		}
-		rw := nanopass.NewRewriter(pr)
-
-		settingsClause := findSettingsClause(pr)
-
-		if len(settings) == 0 {
-			// Remove existing SETTINGS clause
-			if settingsClause != nil {
-				start := settingsClause.GetStart().GetTokenIndex()
-				stop := settingsClause.GetStop().GetTokenIndex()
-				// Include preceding whitespace
-				if start > 0 {
-					prevTok := pr.TokenStream.Get(start - 1)
-					if prevTok.GetTokenType() == grammar1.ClickHouseLexerWHITESPACE {
-						start = prevTok.GetTokenIndex()
-					}
-				}
-				rw.DeleteDefault(start, stop)
-			}
-			result = nanopass.GetText(rw)
-			return
-		}
-
-		// Serialize the new settings
-		settingsSQL, serErr := serializeSettingsMap(settings)
-		if serErr != nil {
-			err = eh.Errorf("WriteSettings: %w", serErr)
-			return
-		}
-
-		if settingsClause != nil {
-			// Replace existing SETTINGS clause
-			nanopass.ReplaceNode(rw, settingsClause, "SETTINGS "+settingsSQL)
-		} else {
-			// Add new SETTINGS clause — find anchor
-			selectStmt := findOutermostSelectStmt(pr)
-			if selectStmt == nil {
-				err = eh.Errorf("WriteSettings: no SELECT statement found")
-				return
-			}
-			anchor := findLastSelectStmtClause(selectStmt)
-			if anchor == nil {
-				err = eh.Errorf("WriteSettings: no clause found to anchor SETTINGS")
-				return
-			}
-			nanopass.InsertAfter(rw, anchor, " SETTINGS "+settingsSQL)
-		}
-
-		result = nanopass.GetText(rw)
-		return
 	}
 }
 
-// ModifySettings returns a Pass that reads existing settings, applies a
-// modifier function, and writes the result back. This enables atomic
-// read-modify-write.
-func ModifySettings(modifier func(settings map[string]any) error) nanopass.Pass {
-	return nanopass.LiftBodyPass(
-		"ModifySettings",
-		func(sql string) (result string, err error) {
-			settings, err := ReadSettings(sql)
-			if err != nil {
-				return
+func writeSettingsBody(settings map[string]any, sql string) (result string, err error) {
+	pr, err := nanopass.Parse(sql)
+	if err != nil {
+		err = eh.Errorf("WriteSettings: %w", err)
+		return
+	}
+	rw := nanopass.NewRewriter(pr)
+
+	settingsClause := findSettingsClause(pr)
+
+	if len(settings) == 0 {
+		if settingsClause != nil {
+			start := settingsClause.GetStart().GetTokenIndex()
+			stop := settingsClause.GetStop().GetTokenIndex()
+			if start > 0 {
+				prevTok := pr.TokenStream.Get(start - 1)
+				if prevTok.GetTokenType() == grammar1.ClickHouseLexerWHITESPACE {
+					start = prevTok.GetTokenIndex()
+				}
 			}
-			err = modifier(settings)
-			if err != nil {
-				err = eh.Errorf("ModifySettings: %w", err)
-				return
-			}
-			result, err = writeSettingsImpl(settings)(sql)
+			rw.DeleteDefault(start, stop)
+		}
+		result = nanopass.GetText(rw)
+		return
+	}
+
+	settingsSQL, serErr := serializeSettingsMap(settings)
+	if serErr != nil {
+		err = eh.Errorf("WriteSettings: %w", serErr)
+		return
+	}
+
+	if settingsClause != nil {
+		nanopass.ReplaceNode(rw, settingsClause, "SETTINGS "+settingsSQL)
+	} else {
+		selectStmt := findOutermostSelectStmt(pr)
+		if selectStmt == nil {
+			err = eh.Errorf("WriteSettings: no SELECT statement found")
 			return
+		}
+		anchor := findLastSelectStmtClause(selectStmt)
+		if anchor == nil {
+			err = eh.Errorf("WriteSettings: no clause found to anchor SETTINGS")
+			return
+		}
+		nanopass.InsertAfter(rw, anchor, " SETTINGS "+settingsSQL)
+	}
+
+	result = nanopass.GetText(rw)
+	return
+}
+
+// ModifySettings returns a Pass that reads existing settings, applies a
+// modifier function, and writes the result back. Atomic read-modify-write
+// using the body's SETTINGS clause as the source of truth.
+func ModifySettings(modifier func(settings map[string]any) error) nanopass.Pass {
+	return nanopass.Pass{
+		Name: "ModifySettings",
+		Apply: func(e *env.Environment, body string) (string, error) {
+			settings, err := ReadSettings(body)
+			if err != nil {
+				return "", err
+			}
+			if err := modifier(settings); err != nil {
+				return "", eh.Errorf("ModifySettings: %w", err)
+			}
+			out, err := writeSettingsBody(settings, body)
+			if err != nil {
+				return "", err
+			}
+			if e != nil {
+				for k := range e.StatementSettings {
+					delete(e.StatementSettings, k)
+				}
+				for name, val := range settings {
+					raw, mErr := marshalling.MarshalGoValueToSQL(val)
+					if mErr != nil {
+						continue
+					}
+					e.StatementSettings[name] = env.Setting{Name: name, Raw: raw, Value: val}
+				}
+			}
+			return out, nil
 		},
-		nanopass.PassProperties{
+		Properties: nanopass.PassProperties{
 			Reads:  nanopass.RegionBody | nanopass.RegionStatementSettings,
 			Writes: nanopass.RegionBody | nanopass.RegionStatementSettings,
 		},
-	)
+	}
 }
 
 // --- Serialization: Go → SQL string ---

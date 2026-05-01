@@ -8,30 +8,80 @@ status: draft
 
 # nanopass — ClickHouse SQL Transformation Framework
 
-A Go library for composable SQL→SQL transformations of ClickHouse SELECT statements. Each transformation is a self-contained **pass** that parses SQL, walks the concrete syntax tree (CST), rewrites tokens, and emits valid SQL. Passes are chained into pipelines — no shared mutable state, no custom AST, no partial parses.
+A Go library for composable SQL→SQL transformations of ClickHouse SELECT statements. Each transformation is a self-contained **pass**: a struct value carrying an `Apply` function plus declared `PassProperties`. Passes compose via combinators that take and return passes; the runner threads a shared [`env.Environment`](../env) through the chain so settings, params, and FORMAT are first-class Go values.
+
+The current Pass / Environment design is recorded in [ADR-0006](../../../../../doc/adr/0006-nanopass-environment-and-first-class-pass.md). The substrate (stateless passes on CST + scopes) was decided in [ADR-0002](../../../../../doc/adr/0002-nanopass-discipline.md).
 
 ## Architecture
 
 ```
 SQL string
-  → Parse (ANTLR4 lexer + parser → CST)
-  → Walk CST + TokenStreamRewriter
-  → Emit modified SQL string
-  → next pass re-parses from scratch
+  → env.Extract           (split SET prelude → Environment, body)
+  → Pass.Apply(env, body) (parse, walk CST, rewrite tokens, emit body)
+  → env.Integrate(body)   (re-emit SET prelude + body)
+  → next pass repeats
 ```
 
-Every pass receives valid SQL and must return valid SQL. Re-parsing at each step eliminates corruption accumulation at the cost of repeated parsing (negligible for typical query sizes). Whitespace and comments are preserved on the hidden channel (`channel(HIDDEN)`), enabling lossless round-trip fidelity.
+`Pass.Run(sql)` does the full round-trip. `Sequence` shares the env across child passes — they all observe each other's mutations to settings and params. Re-parsing each Apply preserves composability at the cost of repeated parsing (negligible for typical query sizes). Whitespace and comments are preserved on the hidden channel (`channel(HIDDEN)`), enabling lossless round-trip fidelity.
+
+## Pass — first-class value
+
+```go
+type Pass struct {
+    Name       string
+    Apply      func(*env.Environment, string) (string, error)
+    Properties PassProperties
+}
+
+type PassProperties struct {
+    Idempotent      bool        // f(f(x)) == f(x) — testable via AssertProperties
+    NeedsFixedPoint bool        // runner auto-wraps Apply in a fixpoint loop
+    Reads, Writes   EnvRegions  // bitset: Body | SessionSettings | StatementSettings | Params | Format
+    Requires        []FormTag   // pre/post-condition hints (documentation in v1)
+    Produces        []FormTag
+}
+```
+
+`Idempotent` and `NeedsFixedPoint` are mutually exclusive — flagged by [`AssertProperties`](#assertproperties-machine-checked-annotations).
+
+## Combinators
+
+```go
+func Sequence(name string, ps ...Pass) Pass
+func FixedPoint(p Pass, maxIter int) Pass
+func Validating(g Grammar, p Pass) Pass
+func Conditional(name string, pred func(*env.Environment) bool, p Pass) Pass
+func LiftBodyPass(name string, fn func(string)(string,error), props PassProperties) Pass
+```
+
+The runner auto-wraps any pass with `NeedsFixedPoint: true` in `FixedPoint(p, DefaultFixedPointMaxIter)` (128). Pass authors who need a different cap call `FixedPoint(p, n)` explicitly. `Validating(g, p)` runs `p.Apply` then validates the body against grammar `g`; for pre-validation, insert `nanopass.ValidateGrammar1` as a prior step in a `Sequence`.
+
+## Environment
+
+[`dsl/env`](../env) models the execution context surrounding a SELECT.
+
+```go
+type Environment struct {
+    SessionSettings   map[string]Setting   // from leading `SET k = v;` (non-param)
+    StatementSettings map[string]Setting   // read-only view of inline `SETTINGS k=v`
+    Params            map[string]Param     // unified view: SET param_x AND {x: T} slots
+    Format            string               // read-only view of trailing `FORMAT X`
+}
+```
+
+`env.Extract` parses the SET prelude exhaustively: keys with the `param_` prefix or that match a body slot become `Params`; everything else becomes `SessionSettings`. The inline SETTINGS clause and FORMAT clause are populated as **read-only views** — they live in body, and passes that mutate them rewrite the body's CST (which then refreshes the env on the next Extract). `env.Integrate` re-emits SET-prelude lines only.
 
 ## Core Components
 
 | File | Purpose |
 |------|---------|
-| `parse.go` | `Parse(sql) → (*ParseResult, error)` — fatal on any syntax error |
-| `walk.go` | `WalkCST`, `FindAll`, `FindFirst` — depth-first CST traversal |
-| `rewrite.go` | `ReplaceNode`, `DeleteNode`, `InsertBefore`, `InsertAfter`, `TrackedRewriter` |
-| `pipeline.go` | `Pass` type, `Pipeline`, `FixedPoint`, `FixedPointPipeline`, `Validate` |
-| `scope.go` | `BuildScopes` — lexical scope tree with UNION ALL, CTE, subquery awareness |
-| `macro.go` | `MacroExpander` — function-call macro expansion with literal arguments |
+| `nanopass_pipeline.go` | `Pass`, `PassProperties`, combinators, `Pass.Run`, `Pass.Apply`, validators |
+| `nanopass_assert_properties.go` | `AssertProperties(t, p, corpus)` — corpus-backed contract enforcement |
+| `nanopass_parse.go` | `Parse` (Grammar1) and `ParseCanonical` (Grammar2) |
+| `nanopass_walk.go` | `WalkCST`, `FindAll`, `FindFirst` — depth-first CST traversal |
+| `nanopass_rewrite.go` | `ReplaceNode`, `DeleteNode`, `InsertBefore`, `InsertAfter`, `TrackedRewriter` |
+| `nanopass_scope.go` | `BuildScopes` — lexical scope tree with UNION ALL / CTE / subquery awareness |
+| `nanopass_macro.go` | `MacroExpander` — function-call macro expansion with literal arguments |
 
 ## Scope System
 
@@ -39,7 +89,7 @@ Every pass receives valid SQL and must return valid SQL. Re-parsing at each step
 
 - Enumerates all UNION ALL branches
 - Resolves table aliases in FROM/JOIN
-- Tags CTE references vs real tables (`TableSource.IsCTE`)
+- Tags CTE references vs. real tables (`TableSource.IsCTE`)
 - Links FROM subqueries and expression subqueries to inner scopes
 - Tracks default database for unqualified table resolution (`TableSource.ResolvedDatabase(scope)`)
 
@@ -47,7 +97,7 @@ Every pass receives valid SQL and must return valid SQL. Re-parsing at each step
 scopes := nanopass.BuildScopes(pr, "production")
 for _, scope := range scopes {
     for _, ts := range scope.Tables {
-        db := ts.ResolvedDatabase(scope) // "production" for unqualified, explicit db for qualified
+        db := ts.ResolvedDatabase(scope) // "production" for unqualified, explicit for qualified
     }
 }
 ```
@@ -56,98 +106,104 @@ Database resolution matches ClickHouse behavior: each table resolves independent
 
 ## Included Passes
 
-### Lexical Passes (token-level, no structural awareness needed)
+All passes live in [`passes/`](passes). Properties shown reflect declared `PassProperties` and are corpus-checked by `AssertProperties`.
+
+### Lexical (token-level)
 
 | Pass | Description | Idempotent |
 |------|-------------|-----------|
-| `NormalizeKeywordCase` | Uppercases all SQL keywords | Yes |
-| `NormalizeWhitespace` | Collapses whitespace, preserves newlines | Yes |
-| `NormalizeWhitespaceSingleLine` | Collapses all whitespace to single spaces | Yes |
 | `StripComments` | Removes single-line and multi-line comments | Yes |
+| `CanonicalizeKeywordCase` | Uppercases SQL keywords; preserves identifier case | Yes |
+| `CanonicalizeWhitespace` | Collapses whitespace, preserves single newlines | Yes |
+| `CanonicalizeWhitespaceSingleLine` | Collapses all whitespace to single spaces | Yes |
+| `CanonicalizeEquals` | Replaces `==` with `=` | Yes |
+| `CanonicalizeIdentifiers` | Wraps identifiers in double quotes | Yes |
 
-### Structural Passes (scope-aware, handle UNION ALL / CTEs / subqueries)
+### Structural (scope-aware)
 
 | Pass | Description | Idempotent |
 |------|-------------|-----------|
 | `QualifyTables(db)` | Adds default database prefix to unqualified tables, skips CTEs | Yes |
-| `AddWhereCondition(pred)` | Injects/ANDs a WHERE predicate into every UNION ALL branch | No |
-| `EnforceRLS(policy)` | Row-level security — per-table predicates with alias rewriting | No |
-| `ExpandColumns(schema)` | Expands `*`, `table.*`, `COLUMNS('regex')` using schema | Yes |
-| `ExpandColumnsWithOptions(schema, opts)` | Expand with Go-side EXCEPT/REPLACE/APPLY | Yes |
+| `ExpandColumns(schema, defaultDB)` | Expands `*`, `table.*`, `COLUMNS('regex')` using schema | Yes |
 | `WrapColumnsWithDynamic(pattern)` | Wraps matching column names in `COLUMNS('^name$')` | Yes |
 
-### Expression Passes
+### Expression Canonicalisation
 
-| Pass | Description | Idempotent |
+| Pass | Description | Properties |
 |------|-------------|-----------|
-| `RemoveRedundantParens` | Removes unnecessary parentheses based on operator precedence | Yes |
-| `RewriteFunctionNames(map)` | Renames function calls (case-insensitive) | Yes |
-| `CanonicalizeConstructors(form)` | Normalizes tuple/array syntax between literal and function form | Yes |
+| `CanonicalizeJoin` | Strictness-before-direction, removes OUTER, comma→CROSS, parenthesises USING | Idempotent |
+| `CanonicalizeSugar` | DATE/TIMESTAMP/EXTRACT/SUBSTRING/TRIM → function-call form | Idempotent |
+| `CanonicalizeCasts` | `expr::Type` and `CAST(expr AS Type)` → `CAST(expr, 'Type')` | NeedsFixedPoint |
+| `CanonicalizeCaseConditionals` | CASE → `if`/`multiIf`/`caseWithExpression`; leaf-level | NeedsFixedPoint |
+| `CanonicalizeMultiIf` | `multiIf(c, r, d)` (3-arg) → `if(c, r, d)` | Idempotent |
+| `CanonicalizeTernary` | `cond ? a : b` → `if(cond, a, b)`; leaf-level | NeedsFixedPoint |
+| `CanonicalizeConstructors(form)` | tuple/array between literal and function form | NeedsFixedPoint |
+| `RemoveRedundantParens` | Removes parentheses unnecessary given operator precedence | Idempotent |
 
-### Query-Level Passes
+`CanonicalizeFull(maxIter)` returns a `Sequence` of the above in the canonical order, ending in `CanonicalizeKeywordCase` and `CanonicalizeIdentifiers`.
 
-| Pass | Description | Idempotent |
+### Query-Level
+
+| Pass | Description | Properties |
 |------|-------------|-----------|
-| `SetFormat(name)` | Sets, replaces, or removes the FORMAT clause | Yes |
-| `AddSettings(entries)` | Appends SETTINGS clause to the outermost query | No |
+| `SetFormat(name)` | Sets, replaces, or removes the FORMAT clause; mirrors into env.Format | Idempotent |
+| `RemoveFormat` | `SetFormat("")` | Idempotent |
+| `WriteSettings(map)` | Replaces SETTINGS clause; mirrors into env.StatementSettings | Idempotent |
+| `ModifySettings(fn)` | Atomic read-modify-write of SETTINGS | (factory; not idempotent under arbitrary modifier) |
 
-### Settings Manipulation
+### Param Lifecycle
 
-| Function | Description |
-|----------|-------------|
-| `ReadSettings(sql)` | Deserializes SETTINGS to `map[string]any` |
-| `WriteSettings(map)` | Serializes `map[string]any` back to SETTINGS clause |
-| `ModifySettings(fn)` | Atomic read-modify-write of settings |
+| Pass | Description | Properties |
+|------|-------------|-----------|
+| `ExtractLiterals(config)` | Walks body, replaces qualifying literals with `{name: Type}` slots, writes Raw values to `env.Params` | (factory) |
+| `InjectParamsAsCTE(prefix, predicate, mapper)` | Selected `env.Params` entries become WITH-clause CTE definitions; their slots become bare references | Idempotent |
+| `PruneUnreferencedParams(prefix)` | Drops `env.Params` entries no longer referenced by body | Idempotent |
 
-Setting values round-trip through Go types: `int64`, `float64`, `string`, `nil`, `bool`, `[]any` (arrays), `*Tuple` (tuples).
+### Validation
+
+| Pass | Description |
+|------|-------------|
+| `nanopass.ValidateGrammar1` | Parses body with Grammar1; returns body unchanged or error |
+| `nanopass.ValidateGrammar2` | Parses body with Grammar2 (canonical-only); same |
+| `ValidateColumnNames(pattern)` | Checks all column names match a regex; returns body unchanged or `*ColumnNameValidationError` |
 
 ### Compile-Time Evaluation
 
 | Component | Description |
 |-----------|-------------|
 | `MacroExpander` | Expands registered function calls with literal arguments into SQL fragments |
-| `FunctionEvaluator` | Evaluates registered functions in Go, with recursive nested evaluation and partial evaluation |
+| `FunctionEvaluator` | Evaluates registered functions in Go, with recursive nested evaluation, partial evaluation, and `env.Params` slot resolution |
 
-The `FunctionEvaluator` handles three cases in a single pass:
-- **Full evaluation**: `myAdd(myAdd(1,2), 3)` → `6` (recursive, in-memory)
-- **Partial evaluation**: `myAdd(a, myAdd(1,2))` → `myAdd(a, 3)` (inner evaluated, outer left)
-- **Passthrough**: `myAdd(a, b)` → `myAdd(a, b)` (no evaluable args)
+`FunctionEvaluator.Pass()` declares `NeedsFixedPoint: true`. It handles:
 
-### Validation
+- **Full evaluation**: `myAdd(myAdd(1,2), 3)` → `6`
+- **Partial evaluation**: `myAdd(a, myAdd(1,2))` → `myAdd(a, 3)`
+- **Param resolution**: `{a: UInt64}` slots resolve via `env.Params`. A resolved param contributes its `Value` (unwrapped from `marshalling.ResolvedParamSlot` when `useAny=true`); an unresolved slot makes the outer call non-evaluable, mirroring `marshalling.VerbatimSql` semantics.
 
-| Pass | Description |
-|------|-------------|
-| `ValidateColumnNames(pattern)` | Checks all column names (aliases and inferred) match a regex |
-| `ValidateColumnNamesExclude(pattern)` | Checks no column name matches a forbidden regex |
-| `DetectUnsupportedColumnSyntax(sql)` | Pre-parse detection of EXCEPT/APPLY/REPLACE modifiers |
+## AssertProperties — machine-checked annotations
 
-### Utilities
+`nanopass.AssertProperties(t, p, corpus)` enforces declared properties against a corpus:
 
-| Function | Description |
-|----------|-------------|
-| `GetFormat(sql)` | Reads the FORMAT value without modifying the query |
-| `Validate` | Parse-only check — useful as a pipeline step |
-| `FixedPoint(pass, max)` | Repeats a pass until output stabilizes |
-| `FixedPointPipeline(max, passes...)` | Repeats an entire pipeline until stable |
-| `LoggingPass(logger, name, pass)` | Debug wrapper with zerolog |
+- `Idempotent: true` ⇒ `p.Apply(p.Apply(b)) == p.Apply(b)` byte-for-byte.
+- `NeedsFixedPoint: true` ⇒ at least one corpus entry exhibits non-convergence on the second Apply.
+- `Idempotent` and `NeedsFixedPoint` not both set.
+
+`TestAssertProperties` in [`passes_test/`](passes_test/nanopass_passes_assert_properties_test.go) covers every exported pass against the shared `testdata/corpus/`, with a small additional nested-forms corpus for passes that declare `NeedsFixedPoint`.
 
 ## Usage Examples
 
 ### Pipeline
 
 ```go
-result, err := nanopass.Pipeline(sql,
+result, err := nanopass.Sequence("normalize+validate",
     passes.StripComments,
-    passes.NormalizeKeywordCase,
+    passes.CanonicalizeKeywordCase,
     passes.RemoveRedundantParens,
     passes.QualifyTables("production"),
-    passes.EnforceRLS(rlsPolicy),
-    passes.AddWhereCondition("tenant_id = 42"),
-    passes.AddSettings([]passes.SettingEntry{{Key: "max_threads", Value: "4"}}),
     passes.SetFormat("JSON"),
-    passes.NormalizeWhitespaceSingleLine,
-    nanopass.Validate,
-)
+    passes.CanonicalizeWhitespaceSingleLine,
+    nanopass.ValidateGrammar1,
+).Run(sql)
 ```
 
 ### Macro Expansion
@@ -158,7 +214,10 @@ expander.Register("jsonCol", func(args []nanopass.LiteralArg) (string, error) {
     return "JSONExtractString(payload, " + args[0].Value + ")", nil
 })
 
-result, err := nanopass.Pipeline(sql, expander.Pass(), nanopass.Validate)
+result, err := nanopass.Sequence("expand+validate",
+    expander.Pass(),
+    nanopass.ValidateGrammar1,
+).Run(sql)
 ```
 
 ### Compile-Time Function Evaluation
@@ -167,51 +226,48 @@ result, err := nanopass.Pipeline(sql, expander.Pass(), nanopass.Validate)
 eval := passes.NewFunctionEvaluator()
 eval.RegisterBuiltins() // array(), tuple()
 eval.Register("daysInMonth", func(args []any) (any, error) {
-    year, month := args[0].(int64), args[1].(int64)
+    year, month := args[0].(uint64), args[1].(uint64)
     // ... compute ...
     return days, nil
-})
+}, true)
 
-result, err := eval.Pass()("SELECT daysInMonth(2024, 2)")
+result, err := eval.Pass().Run("SELECT daysInMonth(2024, 2)")
 // result: "SELECT 29"
 ```
 
-### Row-Level Security
+### Param Lifecycle
 
 ```go
-policy := passes.NewRLSPolicy(map[string]string{
-    "orders":    "orders.tenant_id = currentUser()",
-    "customers": "customers.visible = 1",
-})
-result, err := passes.EnforceRLS(policy)(sql)
-// Injects predicates into every scope, rewrites table qualifiers to match aliases
-```
-
-### Column Expansion with Schema
-
-```go
-schema := passes.NewSchemaProvider(map[string][]string{
-    "prod.orders": {"id", "amount", "tenant_id", "created"},
-    "customers":   {"id", "name", "email"},
-})
-result, err := passes.ExpandColumns(schema, "prod")(
-    "SELECT * FROM orders AS o JOIN customers AS c ON o.id = c.id",
-)
-// Expands * using schema, resolves "orders" to "prod.orders" via default database
+// 1) Extract literals; SET param_* lines emitted into env.Params on Run.
+result, err := nanopass.Sequence("extract+inject+prune",
+    passes.ExtractLiterals(passes.NewExtractLiteralsConfig(0)),
+    passes.InjectParamsAsCTE("", nil, nil),
+    passes.PruneUnreferencedParams(""),
+).Run(sql)
 ```
 
 ### Settings Manipulation
 
 ```go
-pass := passes.ModifySettings(func(settings map[string]any) error {
+result, err := passes.ModifySettings(func(settings map[string]any) error {
     if v, ok := settings["max_threads"]; ok {
         settings["max_threads"] = v.(int64) * 2
     }
     settings["optimize_read_in_order"] = int64(1)
     return nil
+}).Run("SELECT a FROM t SETTINGS max_threads = 4")
+```
+
+### Column Expansion with Schema
+
+```go
+schema := passes.NewStaticSchemaProvider(map[string][]string{
+    "prod.orders": {"id", "amount", "tenant_id", "created"},
+    "customers":   {"id", "name", "email"},
 })
-result, err := pass("SELECT a FROM t SETTINGS max_threads = 4")
-// result: "SELECT a FROM t SETTINGS max_threads = 8, optimize_read_in_order = 1"
+result, err := passes.ExpandColumns(schema, "prod").Run(
+    "SELECT * FROM orders AS o JOIN customers AS c ON o.id = c.id",
+)
 ```
 
 ## Analysis Functions
@@ -224,30 +280,27 @@ result, err := pass("SELECT a FROM t SETTINGS max_threads = 4")
 
 ## Test Corpus
 
-67+ embedded SQL files in `testdata/corpus/` cover SELECT features from simple literals to complex CTEs with window functions, UNION ALL, parametric aggregates, JSON functions, ARRAY JOIN, PREWHERE, SETTINGS with arrays/tuples, and FORMAT clauses. Loaded via `embed.FS` with `testdata.LoadCorpus()`.
+Embedded SQL files in `testdata/corpus/` cover SELECT features from simple literals to complex CTEs with window functions, UNION ALL, parametric aggregates, JSON functions, ARRAY JOIN, PREWHERE, SETTINGS with arrays/tuples, and FORMAT clauses. Loaded via `embed.FS` with `testdata.LoadCorpus()`.
 
 ## Test Strategy
 
 Every pass is tested with:
 
-1. **Explicit input/output pairs** — 5-10+ cases covering the transformation
-2. **Idempotency** — `pass(pass(x)) == pass(x)` for idempotent passes
+1. **Explicit input/output pairs** — 5–10+ cases covering the transformation
+2. **Idempotency / fixpoint** — `AssertProperties` corpus check enforces declared `Idempotent` / `NeedsFixedPoint`
 3. **Corpus validity** — every corpus entry produces parseable SQL
-4. **UNION ALL** — transformations apply to all branches
-5. **CTEs** — CTE references not accidentally modified, CTE bodies are transformed
-6. **Subqueries** — FROM subqueries, WHERE subqueries, scalar subqueries
-7. **Invalid SQL rejection** — empty strings, whitespace, incomplete statements
-8. **Pipeline integration** — composes correctly with other passes
-9. **Round-trip fidelity** — no-op rewrite reproduces input exactly
+4. **UNION ALL / CTEs / subqueries** — transformations apply to all branches; CTE references untouched, CTE bodies transformed
+5. **Invalid SQL rejection** — empty strings, whitespace, incomplete statements
+6. **Pipeline integration** — composes correctly with other passes
 
-Additional robustness tests: pipeline ordering permutations (all 24 orderings of 4 passes), scope structure preservation for pure passes, and full corpus × all passes cross-product.
+Additional robustness tests: pipeline ordering permutations, scope structure preservation for pure passes, full corpus × all passes cross-product.
 
 ## Dependencies
 
-- `github.com/antlr4-go/antlr/v4` v4.13.1 — ANTLR4 Go runtime
-- `github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar` — Generated ClickHouse lexer/parser
+- `github.com/antlr4-go/antlr/v4` — ANTLR4 Go runtime
+- `github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1`, `grammar2` — Generated ClickHouse lexer/parser
+- `github.com/stergiotis/boxer/public/db/clickhouse/dsl/env` — Environment package
 - `github.com/stergiotis/boxer/public/observability/eh` — Error handling
-- `github.com/rs/zerolog` — Structured logging
 - `github.com/stretchr/testify` — Test assertions
 
 ## Grammar Modifications
@@ -262,5 +315,5 @@ The upstream ClickHouse ANTLR4 grammar has these required modifications:
 - `FROM t SELECT a` (FROM-first syntax)
 - `WITH (SELECT x) AS name` (scalar subquery CTE)
 - `EXISTS (SELECT ...)` (EXISTS predicate)
-- `* EXCEPT(col)`, `COLUMNS('...') APPLY(func)`, `REPLACE(...)` (column modifiers — use Go-side `WithExcept`/`WithApply`/`WithReplace`)
+- `* EXCEPT(col)`, `COLUMNS('...') APPLY(func)`, `REPLACE(...)` (column modifiers)
 - Map literals in SET (`SET param = {'key': [1,2]}`)

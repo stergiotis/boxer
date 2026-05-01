@@ -133,6 +133,65 @@ func TestRoundTripPreservesResolvedParams(t *testing.T) {
 	assert.Equal(t, in, out)
 }
 
+func TestExtractSettingsClause(t *testing.T) {
+	// SETTINGS clause stays in body; env.StatementSettings is a read-only view.
+	e, body, err := env.Extract("SELECT 1 SETTINGS max_threads = 4, send_logs_level = 'trace'")
+	require.NoError(t, err)
+	assert.Contains(t, body, "SETTINGS")
+	assert.Len(t, e.StatementSettings, 2)
+	assert.Equal(t, "4", e.StatementSettings["max_threads"].Raw)
+	assert.Equal(t, "'trace'", e.StatementSettings["send_logs_level"].Raw)
+}
+
+func TestExtractFormatClause(t *testing.T) {
+	// FORMAT stays in body; env.Format is a read-only view.
+	e, body, err := env.Extract("SELECT 1 FORMAT TabSeparated")
+	require.NoError(t, err)
+	assert.Contains(t, body, "FORMAT")
+	assert.Equal(t, "TabSeparated", e.Format)
+}
+
+func TestExtractSettingsAndFormat(t *testing.T) {
+	e, body, err := env.Extract("SELECT 1 SETTINGS max_threads = 4 FORMAT JSON")
+	require.NoError(t, err)
+	assert.Contains(t, body, "SETTINGS")
+	assert.Contains(t, body, "FORMAT")
+	assert.Equal(t, "4", e.StatementSettings["max_threads"].Raw)
+	assert.Equal(t, "JSON", e.Format)
+}
+
+func TestExtractFullEnvironment(t *testing.T) {
+	in := "SET max_threads = 8;\nSET param_a = 5;\nSELECT {param_a: UInt64} SETTINGS k = 'v' FORMAT CSV"
+	e, body, err := env.Extract(in)
+	require.NoError(t, err)
+	assert.True(t, strings.HasPrefix(body, "SELECT"))
+	assert.Equal(t, "8", e.SessionSettings["max_threads"].Raw)
+	assert.Equal(t, "5", e.Params["param_a"].Raw)
+	assert.Equal(t, "UInt64", e.Params["param_a"].Type)
+	assert.Equal(t, "'v'", e.StatementSettings["k"].Raw)
+	assert.Equal(t, "CSV", e.Format)
+}
+
+func TestIntegrateDoesNotEmitInlineSettingsOrFormat(t *testing.T) {
+	// StatementSettings and Format are read-only views; mutations go via
+	// body-CST passes. Integrate must NOT re-emit them or we double-write.
+	e := env.NewEnvironment()
+	e.StatementSettings["k"] = env.Setting{Name: "k", Raw: "1"}
+	e.Format = "JSON"
+	sql, err := e.Integrate("SELECT 1")
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT 1", sql)
+}
+
+func TestRoundTripFullEnvironment(t *testing.T) {
+	in := "SET max_threads = 8;\nSET param_a = 5;\nSELECT {param_a: UInt64} SETTINGS k = 'v' FORMAT CSV"
+	e, body, err := env.Extract(in)
+	require.NoError(t, err)
+	out, err := e.Integrate(body)
+	require.NoError(t, err)
+	assert.Equal(t, in, out)
+}
+
 func TestRoundTripDeterministicOrder(t *testing.T) {
 	// Two valid orderings of the same prelude should integrate to the same canonical form.
 	a := "SET param_b = 2;\nSET param_a = 1;\nSELECT {param_a: UInt64} + {param_b: UInt64}"

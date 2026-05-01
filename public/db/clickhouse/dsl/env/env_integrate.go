@@ -7,10 +7,10 @@ import (
 	"strings"
 )
 
-// Integrate produces SQL by emitting the SET-line prelude from the
-// Environment followed by body. SET lines are emitted in deterministic
-// (alphabetical) order. v1 does not emit StatementSettings or Format —
-// passes that need them rewrite the body's CST directly.
+// Integrate produces SQL by emitting the SET-line prelude followed by body.
+// SET lines are emitted in alphabetical order. StatementSettings and Format
+// are read-only views populated by [Extract] — they live in body and are
+// not re-emitted here.
 //
 // Integrate is the inverse of [Extract] up to whitespace and SET-line
 // ordering. Round-trip is normalising, not byte-identical.

@@ -13,36 +13,35 @@ import (
 // `SET param_x = 5;`). Anything else under SET is a session setting.
 const ParamPrefix = "param_"
 
-// Extract splits SQL into an Environment and a body. The Environment owns the
-// leading SET-line prelude and a scan of `{name: Type}` slots in the body. The
-// body is the remainder of the input, unparsed and not byte-identical to the
-// input (leading SET lines are removed; whitespace between them is collapsed).
+// Extract splits SQL into an Environment and a body. The Environment owns:
+//
+//   - The leading `SET key = value;` prelude (split into Params vs.
+//     SessionSettings — see SET-line classification rules below).
+//   - `{name: Type}` slot occurrences in the body (populating Param.Type).
+//   - Read-only views of the inline `... SETTINGS k=v` clause
+//     (env.StatementSettings) and trailing `FORMAT FormatName` clause
+//     (env.Format). These remain in the body — env.Integrate does not
+//     re-emit them, and passes that mutate them rewrite the body's CST.
+//
+// Round-trip: Integrate(Extract(sql)) is normalising over the prelude only;
+// inline SETTINGS / FORMAT pass through verbatim via body.
 //
 // SET-line classification:
-//   - A SET whose key starts with [ParamPrefix] OR whose key matches the name
-//     of a `{name: Type}` slot found in the body becomes an env.Params entry.
+//   - A SET whose key starts with [ParamPrefix] OR whose key matches the
+//     name of a `{name: Type}` slot found in the body becomes an env.Params
+//     entry.
 //   - Everything else becomes an env.SessionSettings entry.
 //
-// v1 limitations:
-//   - Inline `... SETTINGS k=v` and `... FORMAT FormatName` clauses are NOT
-//     stripped from body. Env.StatementSettings and Env.Format remain empty
-//     unless a pass writes them.
-//   - Param.Value is not deserialised here. Callers that need the Go value
-//     must combine Param.Raw with Param.Type using a deserialiser of their
-//     choice.
-//
-// Slot-scan is best-effort: if the body does not parse, Extract still
-// returns a usable Environment based on the prelude alone.
+// All body parsing is best-effort: if the body does not parse, Extract
+// still returns a usable Environment based on the SET prelude alone.
 func Extract(sql string) (e *Environment, body string, err error) {
 	e = NewEnvironment()
 
-	// First, harvest the prelude into a per-line collection without
-	// classifying yet — we need to see body slots before deciding.
 	preludeEntries, body := harvestSetPrelude(sql)
 	body = strings.TrimLeft(body, " \t\r\n")
 
 	if body != "" {
-		scanParamSlots(body, e)
+		scanBody(body, e)
 	}
 
 	for _, entry := range preludeEntries {
@@ -68,9 +67,7 @@ type preludeEntry struct {
 }
 
 // harvestSetPrelude pulls leading `SET key = value;` lines out of sql,
-// returning their (name, raw) pairs and the remaining body. Classification
-// into Params vs SessionSettings is done by the caller after the body has
-// been scanned for slots.
+// returning their (name, raw) pairs and the remaining body.
 func harvestSetPrelude(sql string) (entries []preludeEntry, body string) {
 	lines := strings.Split(sql, "\n")
 	consumed := 0
@@ -116,34 +113,97 @@ func parseSetLine(line string) (name string, raw string, ok bool) {
 	return
 }
 
-// scanParamSlots parses the body and records the type of every {name: Type}
-// slot it finds, merging into e.Params. Parse failures are silently ignored
-// (best-effort scan).
-func scanParamSlots(body string, e *Environment) {
+// scanBody parses body and populates env.Params Type from slot occurrences,
+// env.StatementSettings from the inline SETTINGS clause, and env.Format
+// from the FORMAT clause. The body is not rewritten — these are read-only
+// observations that consumers may use to inform their behaviour.
+func scanBody(body string, e *Environment) {
 	input := antlr.NewInputStream(body)
 	lexer := grammar1.NewClickHouseLexer(input)
 	stream := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
 	parser := grammar1.NewClickHouseParserGrammar1(stream)
-	// Suppress error listener — best-effort parse.
 	parser.RemoveErrorListeners()
 	tree := parser.QueryStmt()
+
 	walkCST(tree, func(ctx antlr.ParserRuleContext) bool {
-		slot, ok := ctx.(*grammar1.ParamSlotContext)
-		if !ok {
+		if slot, ok := ctx.(*grammar1.ParamSlotContext); ok {
+			name, typ := splitParamSlotText(slot.GetText())
+			if name != "" {
+				p := e.Params[name]
+				p.Name = name
+				if typ != "" {
+					p.Type = typ
+				}
+				e.Params[name] = p
+			}
 			return true
 		}
-		name, typ := splitParamSlotText(slot.GetText())
-		if name == "" {
-			return true
+		if sc, ok := ctx.(*grammar1.SettingsClauseContext); ok {
+			collectSettingsClause(sc, e)
+			return false
 		}
-		p := e.Params[name]
-		p.Name = name
-		if typ != "" {
-			p.Type = typ
-		}
-		e.Params[name] = p
 		return true
 	})
+
+	if root, ok := tree.(antlr.ParserRuleContext); ok {
+		hasFormatToken := false
+		for i := 0; i < root.GetChildCount(); i++ {
+			child := root.GetChild(i)
+			if tn, isTerm := child.(antlr.TerminalNode); isTerm {
+				if tn.GetSymbol().GetTokenType() == grammar1.ClickHouseParserGrammar1FORMAT {
+					hasFormatToken = true
+				}
+				continue
+			}
+			if ioc, isIOC := child.(*grammar1.IdentifierOrNullContext); isIOC && hasFormatToken {
+				e.Format = strings.TrimSpace(ioc.GetText())
+				return
+			}
+		}
+	}
+}
+
+// collectSettingsClause walks a SettingsClauseContext and populates
+// env.StatementSettings with each k=v entry. Values are kept as raw text.
+func collectSettingsClause(sc *grammar1.SettingsClauseContext, e *Environment) {
+	for i := 0; i < sc.GetChildCount(); i++ {
+		exprList, ok := sc.GetChild(i).(*grammar1.SettingExprListContext)
+		if !ok {
+			continue
+		}
+		for j := 0; j < exprList.GetChildCount(); j++ {
+			expr, ok := exprList.GetChild(j).(*grammar1.SettingExprContext)
+			if !ok {
+				continue
+			}
+			name, raw := splitSettingExpr(expr)
+			if name == "" {
+				continue
+			}
+			e.StatementSettings[name] = Setting{Name: name, Raw: raw}
+		}
+	}
+}
+
+// splitSettingExpr extracts (name, raw value text) from a SettingExpr.
+func splitSettingExpr(expr *grammar1.SettingExprContext) (name string, raw string) {
+	for i := 0; i < expr.GetChildCount(); i++ {
+		if ident, ok := expr.GetChild(i).(*grammar1.IdentifierContext); ok {
+			name = ident.GetText()
+			break
+		}
+	}
+	for i := 0; i < expr.GetChildCount(); i++ {
+		child := expr.GetChild(i)
+		if prc, ok := child.(antlr.ParserRuleContext); ok {
+			if _, isIdent := prc.(*grammar1.IdentifierContext); isIdent {
+				continue
+			}
+			raw = prc.GetText()
+			return
+		}
+	}
+	return
 }
 
 // walkCST does a depth-first walk over node, invoking fn for each
