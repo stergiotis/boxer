@@ -88,6 +88,17 @@ func CountEncodedAspects(encoded AspectSet) (n int, err error) {
 	n = countEncodedAspect(num)
 	return
 }
+func ContainsAspect(encoded AspectSet, target AspectE) (has bool) {
+	if !target.IsValid() {
+		return
+	}
+	num, valid := decode(encoded)
+	if !valid {
+		return
+	}
+	has = num&(uint64(1)<<target) != 0
+	return
+}
 func IterateAspects(encoded AspectSet) iter.Seq2[int, AspectE] {
 	num, valid := decode(encoded)
 	if !valid {
@@ -161,4 +172,7 @@ func (inst AspectSet) CountEncodedAspects() (n int, err error) {
 }
 func (inst AspectSet) MaxEncodedAspect() (aspect AspectE, err error) {
 	return MaxEncodedAspect(inst)
+}
+func (inst AspectSet) Contains(target AspectE) (has bool) {
+	return ContainsAspect(inst, target)
 }

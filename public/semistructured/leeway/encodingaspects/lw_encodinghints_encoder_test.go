@@ -94,3 +94,30 @@ func TestCanonicalAspectCoder(t *testing.T) {
 		require.EqualValues(t, 0, n)
 	}
 }
+func TestContainsAspect(t *testing.T) {
+	require.False(t, EmptyAspectSet.Contains(AspectE(0)))
+	require.False(t, AspectSet("").Contains(AspectE(0)))
+	require.False(t, EmptyAspectSet.Contains(MaxAspectExcl))
+
+	for i := AspectE(0); i < MaxAspectExcl; i++ {
+		enc, err := EncodeAspects(i)
+		require.NoError(t, err)
+		require.True(t, enc.Contains(i))
+		require.True(t, ContainsAspect(enc, i))
+		require.False(t, enc.Contains(MaxAspectExcl))
+		neighbour := (i + 1) % MaxAspectExcl
+		if neighbour != i {
+			require.False(t, enc.Contains(neighbour))
+		}
+	}
+
+	if MaxAspectExcl >= 2 {
+		enc, err := EncodeAspects(AspectE(0), AspectE(1))
+		require.NoError(t, err)
+		require.True(t, enc.Contains(AspectE(0)))
+		require.True(t, enc.Contains(AspectE(1)))
+		if MaxAspectExcl > 2 {
+			require.False(t, enc.Contains(AspectE(2)))
+		}
+	}
+}

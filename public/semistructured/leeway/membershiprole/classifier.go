@@ -75,16 +75,7 @@ type SectionContext struct {
 // HasUseAspect reports whether the section's UseAspects set contains the given
 // aspect. Returns false on encoding errors or when UseAspects is empty.
 func (inst SectionContext) HasUseAspect(target useaspects.AspectE) (has bool) {
-	if !inst.UseAspects.IsValid() {
-		return
-	}
-	for _, a := range inst.UseAspects.IterateAspects() {
-		if a == target {
-			has = true
-			return
-		}
-	}
-	return
+	return inst.UseAspects.Contains(target)
 }
 
 // ClassifierI decides the role and parameter treatment of a single membership
