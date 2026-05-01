@@ -35,10 +35,11 @@ func (id PatchID) Short() (s string) {
 // what the demo's history pane and provenance label render. Backends
 // populate it from whatever underlying structure they use.
 type PatchMetadata struct {
-	ID        PatchID
-	Authors   []string
-	Timestamp time.Time
-	Message   string
+	ID           PatchID
+	Authors      []string
+	Timestamp    time.Time
+	Message      string
+	Dependencies []PatchID
 }
 
 // Author returns the first author or "System" as a fallback.

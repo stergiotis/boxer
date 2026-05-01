@@ -272,11 +272,16 @@ func (inst *pushoutRepo) metaToPatchMetadata(h t.PatchHash) (m PatchMetadata) {
 	if !ok {
 		return
 	}
+	deps := make([]PatchID, 0, len(env.Patch.Dependencies))
+	for _, d := range env.Patch.Dependencies {
+		deps = append(deps, PatchID{Hex: hex.EncodeToString(d[:])})
+	}
 	m = PatchMetadata{
-		ID:        PatchID{Hex: hex.EncodeToString(h[:])},
-		Authors:   []string{env.Patch.Author},
-		Timestamp: env.Timestamp,
-		Message:   env.Patch.Description,
+		ID:           PatchID{Hex: hex.EncodeToString(h[:])},
+		Authors:      []string{env.Patch.Author},
+		Timestamp:    env.Timestamp,
+		Message:      env.Patch.Description,
+		Dependencies: deps,
 	}
 	return
 }
