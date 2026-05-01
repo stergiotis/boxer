@@ -35,7 +35,7 @@ func FuzzLineDiff(f *testing.F) {
 			oldIDSet[id] = struct{}{}
 		}
 		for _, c := range result.Changes {
-			if c.Kind == ChangeDeleteNode {
+			if c.Kind == ChangeKindDeleteNode {
 				if _, ok := oldIDSet[c.NodeID]; !ok {
 					tt.Fatalf("deletion of non-existent old ID: %v", c.NodeID)
 				}
@@ -75,9 +75,9 @@ func FuzzPatchApplyUnapply(f *testing.F) {
 		// Build a small base graggle.
 		g := store.New()
 		base := NewPatch("fuzz", "base", nil, []Change{
-			{Kind: ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
-			{Kind: ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
-			{Kind: ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 2}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 1}}},
+			{Kind: ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
+			{Kind: ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
+			{Kind: ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 2}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 1}}},
 		})
 		base.Apply(g)
 
@@ -93,7 +93,7 @@ func FuzzPatchApplyUnapply(f *testing.F) {
 
 		p := NewPatch("fuzz", "insert", []t.PatchHash{base.Hash}, []Change{
 			{
-				Kind:        ChangeNewNode,
+				Kind:        ChangeKindNewNode,
 				NodeID:      t.NodeID{Patch: t.PlaceholderHash, Index: 0},
 				Content:     content,
 				UpContext:    []t.NodeID{upCtx},

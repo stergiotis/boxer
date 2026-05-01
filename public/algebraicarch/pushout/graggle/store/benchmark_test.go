@@ -19,7 +19,7 @@ func benchmarkBase(b *testing.B, n int) (*Graggle, *patch.Patch) {
 			up = []t.NodeID{{Patch: t.PlaceholderHash, Index: uint64(i - 1)}}
 		}
 		changes[i] = patch.Change{
-			Kind:      patch.ChangeNewNode,
+			Kind:      patch.ChangeKindNewNode,
 			NodeID:    t.NodeID{Patch: t.PlaceholderHash, Index: uint64(i)},
 			Content:   []byte(fmt.Sprintf("line %d\n", i)),
 			UpContext: up,
@@ -41,7 +41,7 @@ func BenchmarkPatchApply_Insert100(b *testing.B) {
 				up = []t.NodeID{{Patch: t.PlaceholderHash, Index: uint64(j - 1)}}
 			}
 			changes[j] = patch.Change{
-				Kind:      patch.ChangeNewNode,
+				Kind:      patch.ChangeKindNewNode,
 				NodeID:    t.NodeID{Patch: t.PlaceholderHash, Index: uint64(j)},
 				Content:   []byte(fmt.Sprintf("line %d\n", j)),
 				UpContext: up,
@@ -62,7 +62,7 @@ func BenchmarkPatchApply_Insert1000(b *testing.B) {
 				up = []t.NodeID{{Patch: t.PlaceholderHash, Index: uint64(j - 1)}}
 			}
 			changes[j] = patch.Change{
-				Kind:      patch.ChangeNewNode,
+				Kind:      patch.ChangeKindNewNode,
 				NodeID:    t.NodeID{Patch: t.PlaceholderHash, Index: uint64(j)},
 				Content:   []byte(fmt.Sprintf("line %d\n", j)),
 				UpContext: up,

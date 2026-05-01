@@ -22,7 +22,7 @@ func TestLineDiff_OldOnly(tt *testing.T) {
 
 	deletes := 0
 	for _, c := range result.Changes {
-		if c.Kind == ChangeDeleteNode {
+		if c.Kind == ChangeKindDeleteNode {
 			deletes++
 		}
 	}
@@ -37,7 +37,7 @@ func TestLineDiff_NewOnly(tt *testing.T) {
 
 	inserts := 0
 	for _, c := range result.Changes {
-		if c.Kind == ChangeNewNode {
+		if c.Kind == ChangeKindNewNode {
 			inserts++
 		}
 	}
@@ -59,7 +59,7 @@ func TestLineDiff_Identical(tt *testing.T) {
 
 func TestLineDiff_SingleLineInsert(tt *testing.T) {
 	result := LineDiff(nil, nil, [][]byte{[]byte("new\n")})
-	if len(result.Changes) != 1 || result.Changes[0].Kind != ChangeNewNode {
+	if len(result.Changes) != 1 || result.Changes[0].Kind != ChangeKindNewNode {
 		tt.Fatalf("expected 1 insertion, got %v", result.Changes)
 	}
 	if string(result.Changes[0].Content) != "new\n" {
@@ -71,7 +71,7 @@ func TestLineDiff_SingleLineDelete(tt *testing.T) {
 	oldIDs := []t.NodeID{nid("diff3", 0)}
 	oldContents := [][]byte{[]byte("old\n")}
 	result := LineDiff(oldIDs, oldContents, nil)
-	if len(result.Changes) != 1 || result.Changes[0].Kind != ChangeDeleteNode {
+	if len(result.Changes) != 1 || result.Changes[0].Kind != ChangeKindDeleteNode {
 		tt.Fatalf("expected 1 deletion, got %v", result.Changes)
 	}
 }
@@ -85,7 +85,7 @@ func TestLineDiff_RepeatedLines(tt *testing.T) {
 	result := LineDiff(oldIDs, oldContents, newLines)
 	deletes := 0
 	for _, c := range result.Changes {
-		if c.Kind == ChangeDeleteNode {
+		if c.Kind == ChangeKindDeleteNode {
 			deletes++
 		}
 	}
@@ -104,9 +104,9 @@ func TestLineDiff_LargeReplacement(tt *testing.T) {
 	deletes, inserts := 0, 0
 	for _, c := range result.Changes {
 		switch c.Kind {
-		case ChangeDeleteNode:
+		case ChangeKindDeleteNode:
 			deletes++
-		case ChangeNewNode:
+		case ChangeKindNewNode:
 			inserts++
 		}
 	}
@@ -145,7 +145,7 @@ func TestLineDiff_ChainedInsertsBetweenKeptLines(tt *testing.T) {
 
 	var inserts []Change
 	for _, c := range res.Changes {
-		if c.Kind == ChangeNewNode {
+		if c.Kind == ChangeKindNewNode {
 			inserts = append(inserts, c)
 		}
 	}
@@ -177,7 +177,7 @@ func TestLineDiff_ContextCorrectness(tt *testing.T) {
 
 	result := LineDiff(oldIDs, oldContents, newLines)
 	for _, c := range result.Changes {
-		if c.Kind == ChangeNewNode {
+		if c.Kind == ChangeKindNewNode {
 			if string(c.Content) != "b\n" {
 				tt.Fatalf("unexpected inserted content: %q", c.Content)
 			}

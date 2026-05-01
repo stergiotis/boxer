@@ -17,7 +17,7 @@ func TestComputeDependencies_NewNode(tt *testing.T) {
 	patchB := ph("depB")
 	changes := []Change{
 		{
-			Kind:       ChangeNewNode,
+			Kind:       ChangeKindNewNode,
 			NodeID:     t.NodeID{Patch: t.PlaceholderHash, Index: 0},
 			Content:    []byte("x\n"),
 			UpContext:   []t.NodeID{{Patch: patchA, Index: 0}},
@@ -43,7 +43,7 @@ func TestComputeDependencies_NewNode(tt *testing.T) {
 func TestComputeDependencies_DeleteNode(tt *testing.T) {
 	patchA := ph("depDel")
 	changes := []Change{
-		{Kind: ChangeDeleteNode, NodeID: t.NodeID{Patch: patchA, Index: 0}},
+		{Kind: ChangeKindDeleteNode, NodeID: t.NodeID{Patch: patchA, Index: 0}},
 	}
 	deps := ComputeDependencies(changes)
 	if len(deps) != 1 || deps[0] != patchA {
@@ -55,7 +55,7 @@ func TestComputeDependencies_NewEdge(tt *testing.T) {
 	patchA := ph("depEdgeA")
 	patchB := ph("depEdgeB")
 	changes := []Change{
-		{Kind: ChangeNewEdge, Src: t.NodeID{Patch: patchA, Index: 0}, Dest: t.NodeID{Patch: patchB, Index: 0}},
+		{Kind: ChangeKindNewEdge, Src: t.NodeID{Patch: patchA, Index: 0}, Dest: t.NodeID{Patch: patchB, Index: 0}},
 	}
 	deps := ComputeDependencies(changes)
 	if len(deps) != 2 {
@@ -67,7 +67,7 @@ func TestComputeDependencies_SkipsZeroHash(tt *testing.T) {
 	// References to root (zero hash) should not appear as dependencies.
 	changes := []Change{
 		{
-			Kind:     ChangeNewNode,
+			Kind:     ChangeKindNewNode,
 			NodeID:   t.NodeID{Patch: t.PlaceholderHash, Index: 0},
 			Content:  []byte("x\n"),
 			UpContext: []t.NodeID{t.RootNodeID}, // zero hash
@@ -83,7 +83,7 @@ func TestComputeDependencies_Deduplication(tt *testing.T) {
 	patchA := ph("depDedup")
 	changes := []Change{
 		{
-			Kind:       ChangeNewNode,
+			Kind:       ChangeKindNewNode,
 			NodeID:     t.NodeID{Patch: t.PlaceholderHash, Index: 0},
 			Content:    []byte("x\n"),
 			UpContext:   []t.NodeID{{Patch: patchA, Index: 0}},
@@ -108,7 +108,7 @@ func TestComputeDependencies_SkipsPlaceholder(tt *testing.T) {
 	// patch dependencies and must be excluded.
 	changes := []Change{
 		{
-			Kind:      ChangeNewNode,
+			Kind:      ChangeKindNewNode,
 			NodeID:    t.NodeID{Patch: t.PlaceholderHash, Index: 0},
 			Content:   []byte("x\n"),
 			UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 1}},
@@ -128,7 +128,7 @@ func TestPatchApply_MissingUpContext(tt *testing.T) {
 	g := store.New()
 	p := NewPatch("test", "bad context", nil, []Change{
 		{
-			Kind:     ChangeNewNode,
+			Kind:     ChangeKindNewNode,
 			NodeID:   t.NodeID{Patch: t.PlaceholderHash, Index: 0},
 			Content:  []byte("x\n"),
 			UpContext: []t.NodeID{nid("nonexistent", 0)},
@@ -147,7 +147,7 @@ func TestPatchApply_MissingDownContext(tt *testing.T) {
 	g := store.New()
 	p := NewPatch("test", "bad context", nil, []Change{
 		{
-			Kind:        ChangeNewNode,
+			Kind:        ChangeKindNewNode,
 			NodeID:      t.NodeID{Patch: t.PlaceholderHash, Index: 0},
 			Content:     []byte("x\n"),
 			UpContext:    []t.NodeID{t.RootNodeID},
@@ -163,7 +163,7 @@ func TestPatchApply_MissingDownContext(tt *testing.T) {
 func TestPatchApply_DeleteNonexistent(tt *testing.T) {
 	g := store.New()
 	p := NewPatch("test", "bad delete", nil, []Change{
-		{Kind: ChangeDeleteNode, NodeID: nid("nonexistent", 0)},
+		{Kind: ChangeKindDeleteNode, NodeID: nid("nonexistent", 0)},
 	})
 	err := p.Apply(g)
 	if err == nil {
@@ -175,14 +175,14 @@ func TestPatchApply_DuplicateNode(tt *testing.T) {
 	g := store.New()
 	// First patch adds a node.
 	p1 := NewPatch("test", "add node", nil, []Change{
-		{Kind: ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("x\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("x\n"), UpContext: []t.NodeID{t.RootNodeID}},
 	})
 	p1.Apply(g)
 
 	// Second patch tries to add a node with the same ID as one in p1.
 	// We need to use p1's actual hash.
 	p2Changes := []Change{
-		{Kind: ChangeNewNode, NodeID: t.NodeID{Patch: p1.Hash, Index: 0}, Content: []byte("y\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: ChangeKindNewNode, NodeID: t.NodeID{Patch: p1.Hash, Index: 0}, Content: []byte("y\n"), UpContext: []t.NodeID{t.RootNodeID}},
 	}
 	p2 := &Patch{Changes: p2Changes, Hash: ph("p2_dup")}
 	err := p2.Apply(g)
@@ -198,7 +198,7 @@ func TestPatchApply_DeleteAlreadyDeleted(tt *testing.T) {
 	// legitimately delete the same node (the typical same-line conflict).
 	g := store.New()
 	p1 := NewPatch("test", "add", nil, []Change{
-		{Kind: ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("x\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("x\n"), UpContext: []t.NodeID{t.RootNodeID}},
 	})
 	p1.Apply(g)
 
@@ -214,7 +214,7 @@ func TestPatchApply_DeleteAlreadyDeleted(tt *testing.T) {
 	p2 := &Patch{
 		Hash: ph("p2_deldel"),
 		Changes: []Change{
-			{Kind: ChangeDeleteNode, NodeID: nodeID},
+			{Kind: ChangeKindDeleteNode, NodeID: nodeID},
 		},
 	}
 	if err := p2.Apply(g); err != nil {
@@ -231,7 +231,7 @@ func TestPatchApply_DeleteAlreadyDeleted(tt *testing.T) {
 func TestPatchUnapply_UndeleteNonDeleted(tt *testing.T) {
 	g := store.New()
 	p1 := NewPatch("test", "add", nil, []Change{
-		{Kind: ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("x\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("x\n"), UpContext: []t.NodeID{t.RootNodeID}},
 	})
 	p1.Apply(g)
 
@@ -241,7 +241,7 @@ func TestPatchUnapply_UndeleteNonDeleted(tt *testing.T) {
 	pDel := &Patch{
 		Hash: ph("p_del_fake"),
 		Changes: []Change{
-			{Kind: ChangeDeleteNode, NodeID: nodeID},
+			{Kind: ChangeKindDeleteNode, NodeID: nodeID},
 		},
 	}
 	err := pDel.Unapply(g)
@@ -258,7 +258,7 @@ func TestPatchUnapply_RefusesWhenForeignEdgesExist(tt *testing.T) {
 
 	pBase := NewPatch("base", "add a", nil, []Change{
 		{
-			Kind:      ChangeNewNode,
+			Kind:      ChangeKindNewNode,
 			NodeID:    t.NodeID{Patch: t.PlaceholderHash, Index: 0},
 			Content:   []byte("a\n"),
 			UpContext: []t.NodeID{t.RootNodeID},
@@ -271,7 +271,7 @@ func TestPatchUnapply_RefusesWhenForeignEdgesExist(tt *testing.T) {
 	aID := t.NodeID{Patch: pBase.Hash, Index: 0}
 	pDep := NewPatch("dep", "add b after a", []t.PatchHash{pBase.Hash}, []Change{
 		{
-			Kind:      ChangeNewNode,
+			Kind:      ChangeKindNewNode,
 			NodeID:    t.NodeID{Patch: t.PlaceholderHash, Index: 0},
 			Content:   []byte("b\n"),
 			UpContext: []t.NodeID{aID},
@@ -305,12 +305,12 @@ func TestPatchUnapply_RefusesWhenForeignEdgesExist(tt *testing.T) {
 func TestPatchHash_Stability(tt *testing.T) {
 	// Same changes should produce same hash.
 	changes := []Change{
-		{Kind: ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
 	}
 	p1 := NewPatch("alice", "test1", nil, changes)
 
 	changes2 := []Change{
-		{Kind: ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
 	}
 	p2 := NewPatch("bob", "test2", nil, changes2)
 
@@ -322,10 +322,10 @@ func TestPatchHash_Stability(tt *testing.T) {
 
 func TestPatchHash_DifferentChanges(tt *testing.T) {
 	p1 := NewPatch("test", "a", nil, []Change{
-		{Kind: ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
 	})
 	p2 := NewPatch("test", "b", nil, []Change{
-		{Kind: ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("b\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("b\n"), UpContext: []t.NodeID{t.RootNodeID}},
 	})
 	if p1.Hash == p2.Hash {
 		tt.Fatal("different changes should produce different hash")
@@ -336,13 +336,13 @@ func TestPatchHash_DifferentChanges(tt *testing.T) {
 
 func TestNewPatch_PlaceholderFixup(tt *testing.T) {
 	p := NewPatch("test", "fixup", nil, []Change{
-		{Kind: ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
-		{Kind: ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
+		{Kind: ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 	})
 
 	// After NewPatch, placeholders should be replaced with the real hash.
 	for _, c := range p.Changes {
-		if c.Kind == ChangeNewNode {
+		if c.Kind == ChangeKindNewNode {
 			if c.NodeID.Patch.IsPlaceholder() {
 				tt.Fatal("NodeID should have been fixed up")
 			}

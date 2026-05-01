@@ -82,7 +82,7 @@ func TestMultiMap_AddGet(t *testing.T) {
 	mm := NewMultiMap()
 	src := nid("mm1", 0)
 	dest := nid("mm1", 1)
-	e := Edge{Dest: dest, Kind: EdgeLive, IntroducedBy: ph("mm1")}
+	e := Edge{Dest: dest, Kind: EdgeKindLive, IntroducedBy: ph("mm1")}
 
 	mm.Add(src, e)
 	edges := mm.Get(src)
@@ -99,8 +99,8 @@ func TestMultiMap_AddGet(t *testing.T) {
 func TestMultiMap_Remove(t *testing.T) {
 	mm := NewMultiMap()
 	src := nid("mm2", 0)
-	e1 := Edge{Dest: nid("mm2", 1), Kind: EdgeLive, IntroducedBy: ph("mm2")}
-	e2 := Edge{Dest: nid("mm2", 2), Kind: EdgeDeleted, IntroducedBy: ph("mm2")}
+	e1 := Edge{Dest: nid("mm2", 1), Kind: EdgeKindLive, IntroducedBy: ph("mm2")}
+	e2 := Edge{Dest: nid("mm2", 2), Kind: EdgeKindDeleted, IntroducedBy: ph("mm2")}
 
 	mm.Add(src, e1)
 	mm.Add(src, e2)
@@ -115,7 +115,7 @@ func TestMultiMap_Remove(t *testing.T) {
 func TestMultiMap_RemoveLastEdge(t *testing.T) {
 	mm := NewMultiMap()
 	src := nid("mm3", 0)
-	e := Edge{Dest: nid("mm3", 1), Kind: EdgeLive, IntroducedBy: ph("mm3")}
+	e := Edge{Dest: nid("mm3", 1), Kind: EdgeKindLive, IntroducedBy: ph("mm3")}
 
 	mm.Add(src, e)
 	mm.Remove(src, e)
@@ -129,8 +129,8 @@ func TestMultiMap_RemoveLastEdge(t *testing.T) {
 func TestMultiMap_Has(t *testing.T) {
 	mm := NewMultiMap()
 	src := nid("mm4", 0)
-	e := Edge{Dest: nid("mm4", 1), Kind: EdgeLive, IntroducedBy: ph("mm4")}
-	eOther := Edge{Dest: nid("mm4", 1), Kind: EdgeDeleted, IntroducedBy: ph("mm4")}
+	e := Edge{Dest: nid("mm4", 1), Kind: EdgeKindLive, IntroducedBy: ph("mm4")}
+	eOther := Edge{Dest: nid("mm4", 1), Kind: EdgeKindDeleted, IntroducedBy: ph("mm4")}
 
 	mm.Add(src, e)
 	if !mm.Has(src, e) {
@@ -145,7 +145,7 @@ func TestMultiMap_HasEdgeTo(t *testing.T) {
 	mm := NewMultiMap()
 	src := nid("mm5", 0)
 	dest := nid("mm5", 1)
-	e := Edge{Dest: dest, Kind: EdgeDeleted, IntroducedBy: ph("mm5")}
+	e := Edge{Dest: dest, Kind: EdgeKindDeleted, IntroducedBy: ph("mm5")}
 
 	mm.Add(src, e)
 	if !mm.HasEdgeTo(src, dest) {
@@ -161,12 +161,12 @@ func TestMultiMap_HasLiveEdgeTo(t *testing.T) {
 	src := nid("mm6", 0)
 	dest := nid("mm6", 1)
 
-	mm.Add(src, Edge{Dest: dest, Kind: EdgeDeleted, IntroducedBy: ph("mm6")})
+	mm.Add(src, Edge{Dest: dest, Kind: EdgeKindDeleted, IntroducedBy: ph("mm6")})
 	if mm.HasLiveEdgeTo(src, dest) {
 		t.Fatal("deleted edge should not count as live")
 	}
 
-	mm.Add(src, Edge{Dest: dest, Kind: EdgeLive, IntroducedBy: ph("mm6")})
+	mm.Add(src, Edge{Dest: dest, Kind: EdgeKindLive, IntroducedBy: ph("mm6")})
 	if !mm.HasLiveEdgeTo(src, dest) {
 		t.Fatal("should have live edge")
 	}
@@ -176,8 +176,8 @@ func TestMultiMap_Sources(t *testing.T) {
 	mm := NewMultiMap()
 	s1 := nid("mm7", 0)
 	s2 := nid("mm7", 1)
-	mm.Add(s1, Edge{Dest: nid("mm7", 2), Kind: EdgeLive, IntroducedBy: ph("mm7")})
-	mm.Add(s2, Edge{Dest: nid("mm7", 3), Kind: EdgeLive, IntroducedBy: ph("mm7")})
+	mm.Add(s1, Edge{Dest: nid("mm7", 2), Kind: EdgeKindLive, IntroducedBy: ph("mm7")})
+	mm.Add(s2, Edge{Dest: nid("mm7", 3), Kind: EdgeKindLive, IntroducedBy: ph("mm7")})
 
 	sources := mm.Sources()
 	if len(sources) != 2 {
@@ -244,21 +244,21 @@ func TestPatchHash_IsPlaceholder(t *testing.T) {
 	}
 }
 
-// --- EdgeKind ---
+// --- EdgeKindE ---
 
 func TestEdgeKind_String(t *testing.T) {
 	tests := []struct {
-		kind EdgeKind
+		kind EdgeKindE
 		want string
 	}{
-		{EdgeLive, "live"},
-		{EdgeDeleted, "deleted"},
-		{EdgePseudo, "pseudo"},
-		{EdgeKind(99), "unknown"},
+		{EdgeKindLive, "live"},
+		{EdgeKindDeleted, "deleted"},
+		{EdgeKindPseudo, "pseudo"},
+		{EdgeKindE(99), "unknown"},
 	}
 	for _, tt := range tests {
 		if got := tt.kind.String(); got != tt.want {
-			t.Errorf("EdgeKind(%d).String() = %q, want %q", tt.kind, got, tt.want)
+			t.Errorf("EdgeKindE(%d).String() = %q, want %q", tt.kind, got, tt.want)
 		}
 	}
 }

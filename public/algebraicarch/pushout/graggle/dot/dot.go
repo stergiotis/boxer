@@ -14,7 +14,7 @@ import (
 // Dot returns a Graphviz DOT representation of the graph.
 // Live nodes are shown as boxes, deleted nodes as dashed grey boxes.
 // Edge styles: live=solid black, deleted=dashed grey, pseudo=dotted blue.
-func Dot(g t.Visualizable) string {
+func Dot(g t.VisualizableI) string {
 	var buf bytes.Buffer
 	buf.WriteString("digraph graggle {\n")
 	buf.WriteString("  rankdir=TB;\n")
@@ -71,13 +71,13 @@ func dotNodeLabel(id t.NodeID, content []byte) string {
 }
 
 // dotEdgeStyle returns DOT style and color for an edge kind.
-func dotEdgeStyle(kind t.EdgeKind) (style, color string) {
+func dotEdgeStyle(kind t.EdgeKindE) (style, color string) {
 	switch kind {
-	case t.EdgeLive:
+	case t.EdgeKindLive:
 		return "solid", "black"
-	case t.EdgeDeleted:
+	case t.EdgeKindDeleted:
 		return "dashed", "grey"
-	case t.EdgePseudo:
+	case t.EdgeKindPseudo:
 		return "dotted", "blue"
 	default:
 		return "solid", "red"

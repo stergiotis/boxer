@@ -17,27 +17,27 @@ import (
 // Render mutates the graggle: it calls ResolvePseudoEdges() so the live
 // subgraph is consistent before traversal. Callers that need a read-only
 // view should snapshot via Clone() first.
-func (g *Graggle) Render() []byte {
-	g.ResolvePseudoEdges()
+func (inst *Graggle) Render() []byte {
+	inst.ResolvePseudoEdges()
 
 	// Try the simple case first.
-	order := algo.LinearOrder(g)
+	order := algo.LinearOrder(inst)
 	if order != nil {
-		return g.renderLinear(order)
+		return inst.renderLinear(order)
 	}
 
 	// Conflict case: DFS-based rendering with conflict markers.
-	return g.renderWithConflicts()
+	return inst.renderWithConflicts()
 }
 
 // renderLinear renders a linearly ordered graggle to plain text.
-func (g *Graggle) renderLinear(order []t.NodeID) []byte {
+func (inst *Graggle) renderLinear(order []t.NodeID) []byte {
 	var buf bytes.Buffer
 	for _, id := range order {
 		if id == t.RootNodeID {
 			continue
 		}
-		buf.Write(g.contents[id])
+		buf.Write(inst.contents[id])
 	}
 	return buf.Bytes()
 }
@@ -52,12 +52,12 @@ func (g *Graggle) renderLinear(order []t.NodeID) []byte {
 // around recursive children, we push the trailing marker first, then the
 // children in reverse with separators interleaved, then the leading marker
 // — LIFO pop order then yields the desired output sequence.
-func (g *Graggle) renderWithConflicts() []byte {
+func (inst *Graggle) renderWithConflicts() []byte {
 	var buf bytes.Buffer
 	visited := make(map[t.NodeID]bool)
 
 	// Build the condensed DAG from Tarjan SCCs.
-	sccs := algo.Tarjan(g)
+	sccs := algo.Tarjan(inst)
 	sccID := make(map[t.NodeID]int)
 	for i, scc := range sccs {
 		for _, v := range scc {
@@ -100,21 +100,21 @@ func (g *Graggle) renderWithConflicts() []byte {
 				if v == t.RootNodeID {
 					continue
 				}
-				buf.Write(g.contents[v])
+				buf.Write(inst.contents[v])
 			}
 			buf.WriteString("<<<<<<< cycle conflict\n")
 		} else {
 			v := sccs[scc][0]
 			if v != t.RootNodeID {
-				buf.Write(g.contents[v])
+				buf.Write(inst.contents[v])
 			}
 		}
 
 		// Find successor SCCs.
 		childSCCs := make(map[int]struct{})
 		for _, v := range sccs[scc] {
-			for w := range g.LiveChildren(v) {
-				if !g.IsLive(w) {
+			for w := range inst.LiveChildren(v) {
+				if !inst.IsLive(w) {
 					continue
 				}
 				ws := sccID[w]
@@ -157,8 +157,8 @@ func (g *Graggle) renderWithConflicts() []byte {
 
 // RenderLines returns the rendered output split into lines (each line keeps
 // its trailing newline; the final line keeps whatever it ended with).
-func (g *Graggle) RenderLines() []string {
-	content := g.Render()
+func (inst *Graggle) RenderLines() []string {
+	content := inst.Render()
 	if len(content) == 0 {
 		return nil
 	}

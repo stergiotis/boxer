@@ -29,9 +29,9 @@ func TestInvariants_SingleNode(tt *testing.T) {
 func TestInvariants_LinearChain(tt *testing.T) {
 	g := New()
 	p := patch.NewPatch("test", "chain", nil, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 2}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 1}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 2}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 1}}},
 	})
 	p.Apply(g)
 	assertNoInvariantViolations(tt, g)
@@ -40,9 +40,9 @@ func TestInvariants_LinearChain(tt *testing.T) {
 func TestInvariants_AfterDeletion(tt *testing.T) {
 	g := New()
 	p := patch.NewPatch("test", "chain", nil, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 2}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 1}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 2}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 1}}},
 	})
 	p.Apply(g)
 
@@ -55,9 +55,9 @@ func TestInvariants_AfterDeletion(tt *testing.T) {
 func TestInvariants_AfterUndeletion(tt *testing.T) {
 	g := New()
 	p := patch.NewPatch("test", "chain", nil, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 2}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 1}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 2}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 1}}},
 	})
 	p.Apply(g)
 
@@ -72,8 +72,8 @@ func TestInvariants_AfterUndeletion(tt *testing.T) {
 func TestInvariants_OrderConflict(tt *testing.T) {
 	g := New()
 	base := patch.NewPatch("test", "base", nil, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 	})
 	base.Apply(g)
 
@@ -81,11 +81,11 @@ func TestInvariants_OrderConflict(tt *testing.T) {
 	lineC := t.NodeID{Patch: base.Hash, Index: 1}
 
 	p1 := patch.NewPatch("u1", "X", []t.PatchHash{base.Hash}, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("X\n"),
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("X\n"),
 			UpContext: []t.NodeID{lineA}, DownContext: []t.NodeID{lineC}},
 	})
 	p2 := patch.NewPatch("u2", "Y", []t.PatchHash{base.Hash}, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("Y\n"),
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("Y\n"),
 			UpContext: []t.NodeID{lineA}, DownContext: []t.NodeID{lineC}},
 	})
 	p1.Apply(g)
@@ -107,14 +107,14 @@ func TestInvariants_CycleConflict(tt *testing.T) {
 func TestInvariants_AfterApplyUnapply(tt *testing.T) {
 	g := New()
 	base := patch.NewPatch("test", "base", nil, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 	})
 	base.Apply(g)
 	assertNoInvariantViolations(tt, g)
 
 	p := patch.NewPatch("test", "insert", []t.PatchHash{base.Hash}, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("X\n"),
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("X\n"),
 			UpContext: []t.NodeID{{Patch: base.Hash, Index: 0}}, DownContext: []t.NodeID{{Patch: base.Hash, Index: 1}}},
 	})
 	p.Apply(g)
@@ -127,9 +127,9 @@ func TestInvariants_AfterApplyUnapply(tt *testing.T) {
 func TestInvariants_ZombieNode(tt *testing.T) {
 	g := New()
 	base := patch.NewPatch("test", "base", nil, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 2}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 1}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 2}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 1}}},
 	})
 	base.Apply(g)
 
@@ -138,11 +138,11 @@ func TestInvariants_ZombieNode(tt *testing.T) {
 
 	// Insert X with context b, then delete b (zombie scenario).
 	pX := patch.NewPatch("u1", "X after b", []t.PatchHash{base.Hash}, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("X\n"),
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("X\n"),
 			UpContext: []t.NodeID{lineB}, DownContext: []t.NodeID{lineC}},
 	})
 	pDel := patch.NewPatch("u2", "delete b", []t.PatchHash{base.Hash}, []patch.Change{
-		{Kind: patch.ChangeDeleteNode, NodeID: lineB},
+		{Kind: patch.ChangeKindDeleteNode, NodeID: lineB},
 	})
 	pX.Apply(g)
 	pDel.Apply(g)
@@ -152,8 +152,8 @@ func TestInvariants_ZombieNode(tt *testing.T) {
 func TestInvariants_ConflictResolution(tt *testing.T) {
 	g := New()
 	base := patch.NewPatch("test", "base", nil, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 	})
 	base.Apply(g)
 
@@ -161,11 +161,11 @@ func TestInvariants_ConflictResolution(tt *testing.T) {
 	lineC := t.NodeID{Patch: base.Hash, Index: 1}
 
 	p1 := patch.NewPatch("u1", "X", []t.PatchHash{base.Hash}, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("X\n"),
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("X\n"),
 			UpContext: []t.NodeID{lineA}, DownContext: []t.NodeID{lineC}},
 	})
 	p2 := patch.NewPatch("u2", "Y", []t.PatchHash{base.Hash}, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("Y\n"),
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("Y\n"),
 			UpContext: []t.NodeID{lineA}, DownContext: []t.NodeID{lineC}},
 	})
 	p1.Apply(g)
@@ -176,7 +176,7 @@ func TestInvariants_ConflictResolution(tt *testing.T) {
 	lineX := t.NodeID{Patch: p1.Hash, Index: 0}
 	lineY := t.NodeID{Patch: p2.Hash, Index: 0}
 	res := patch.NewPatch("resolver", "X before Y", []t.PatchHash{p1.Hash, p2.Hash}, []patch.Change{
-		{Kind: patch.ChangeNewEdge, Src: lineX, Dest: lineY},
+		{Kind: patch.ChangeKindNewEdge, Src: lineX, Dest: lineY},
 	})
 	res.Apply(g)
 	assertNoInvariantViolations(tt, g)

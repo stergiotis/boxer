@@ -190,7 +190,7 @@ func TestProperty_IncrementalVsBatch(tt *testing.T) {
 				downCtx = []t.NodeID{{Patch: base.Hash, Index: uint64(pos + 1)}}
 			}
 			c := patch.Change{
-				Kind:       patch.ChangeNewNode,
+				Kind:       patch.ChangeKindNewNode,
 				NodeID:     t.NodeID{Patch: t.PlaceholderHash, Index: uint64(i)},
 				Content:    []byte(fmt.Sprintf("ins_%d_%d\n", seed, i)),
 				UpContext:  []t.NodeID{upCtx},
@@ -259,7 +259,7 @@ func randomChange(g *Graggle, rng *rand.Rand, label string, nodeIdx *uint64) (pa
 		idx := *nodeIdx
 		*nodeIdx++
 		return patch.Change{
-			Kind:      patch.ChangeNewNode,
+			Kind:      patch.ChangeKindNewNode,
 			NodeID:    t.NodeID{Patch: t.PlaceholderHash, Index: idx},
 			Content:   []byte(fmt.Sprintf("%s_%d\n", label, idx)),
 			UpContext: []t.NodeID{upCtx},
@@ -278,7 +278,7 @@ func randomChange(g *Graggle, rng *rand.Rand, label string, nodeIdx *uint64) (pa
 		}
 		target := candidates[rng.Intn(len(candidates))]
 		return patch.Change{
-			Kind:   patch.ChangeDeleteNode,
+			Kind:   patch.ChangeKindDeleteNode,
 			NodeID: target,
 		}, true
 
@@ -296,7 +296,7 @@ func randomChange(g *Graggle, rng *rand.Rand, label string, nodeIdx *uint64) (pa
 			src, dest := liveNodes[i], liveNodes[j]
 			if !g.edges.HasLiveEdgeTo(src, dest) {
 				return patch.Change{
-					Kind: patch.ChangeNewEdge,
+					Kind: patch.ChangeKindNewEdge,
 					Src:  src,
 					Dest: dest,
 				}, true
@@ -324,13 +324,13 @@ func TestProperty_RandomMixedSequence(tt *testing.T) {
 			}
 
 			switch c.Kind {
-			case patch.ChangeNewNode:
+			case patch.ChangeKindNewNode:
 				p := patch.NewPatch(fmt.Sprintf("op_%d", op), "insert", nil, []patch.Change{c})
 				p.Apply(g)
-			case patch.ChangeDeleteNode:
+			case patch.ChangeKindDeleteNode:
 				g.DeleteNode(c.NodeID)
 				g.ResolvePseudoEdges()
-			case patch.ChangeNewEdge:
+			case patch.ChangeKindNewEdge:
 				g.AddEdge(c.Src, c.Dest, ph(fmt.Sprintf("edge_%d_%d", seed, op)))
 				g.ResolvePseudoEdges()
 			}

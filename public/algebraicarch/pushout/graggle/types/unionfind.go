@@ -8,31 +8,33 @@ import "slices"
 // components of deleted nodes. Used for pseudo-edge resolution.
 type UnionFind struct {
 	parent map[NodeID]NodeID
-	rank   map[NodeID]int
+	rank   map[NodeID]int32
 }
 
-func NewUnionFind() *UnionFind {
-	return &UnionFind{
+func NewUnionFind() (inst *UnionFind) {
+	inst = &UnionFind{
 		parent: make(map[NodeID]NodeID),
-		rank:   make(map[NodeID]int),
+		rank:   make(map[NodeID]int32),
+	}
+	return
+}
+
+func (inst *UnionFind) Add(id NodeID) {
+	_, ok := inst.parent[id]
+	if !ok {
+		inst.parent[id] = id
+		inst.rank[id] = 0
 	}
 }
 
-func (uf *UnionFind) Add(id NodeID) {
-	if _, ok := uf.parent[id]; !ok {
-		uf.parent[id] = id
-		uf.rank[id] = 0
-	}
+func (inst *UnionFind) Remove(id NodeID) {
+	delete(inst.parent, id)
+	delete(inst.rank, id)
 }
 
-func (uf *UnionFind) Remove(id NodeID) {
-	delete(uf.parent, id)
-	delete(uf.rank, id)
-}
-
-func (uf *UnionFind) Contains(id NodeID) bool {
-	_, ok := uf.parent[id]
-	return ok
+func (inst *UnionFind) Contains(id NodeID) (b bool) {
+	_, b = inst.parent[id]
+	return
 }
 
 // Find returns the representative of id's component, with path compression.
@@ -41,80 +43,85 @@ func (uf *UnionFind) Contains(id NodeID) bool {
 // re-rooted at the last surviving ancestor — Remove leaves orphan parent
 // pointers behind, and Find must heal them rather than silently writing
 // the zero NodeID.
-func (uf *UnionFind) Find(id NodeID) NodeID {
-	if _, ok := uf.parent[id]; !ok {
-		return id
+func (inst *UnionFind) Find(id NodeID) (rep NodeID) {
+	_, ok := inst.parent[id]
+	if !ok {
+		rep = id
+		return
 	}
 	for {
-		p, ok := uf.parent[id]
+		p, ok := inst.parent[id]
 		if !ok {
 			// id's parent slot was removed mid-walk: heal by re-rooting.
-			uf.parent[id] = id
-			uf.rank[id] = 0
-			return id
+			inst.parent[id] = id
+			inst.rank[id] = 0
+			rep = id
+			return
 		}
 		if p == id {
-			return id
+			rep = id
+			return
 		}
-		gp, gpOK := uf.parent[p]
+		gp, gpOK := inst.parent[p]
 		if !gpOK {
 			// Parent p has been removed. Treat id as the new root of this
 			// branch — the surviving ancestor is gone.
-			uf.parent[id] = id
-			uf.rank[id] = 0
-			return id
+			inst.parent[id] = id
+			inst.rank[id] = 0
+			rep = id
+			return
 		}
 		// Path compression toward grandparent.
-		uf.parent[id] = gp
+		inst.parent[id] = gp
 		id = gp
 	}
 }
 
-func (uf *UnionFind) Union(a, b NodeID) {
-	ra := uf.Find(a)
-	rb := uf.Find(b)
+func (inst *UnionFind) Union(a, b NodeID) {
+	ra := inst.Find(a)
+	rb := inst.Find(b)
 	if ra == rb {
 		return
 	}
 	// Union by rank
-	if uf.rank[ra] < uf.rank[rb] {
+	if inst.rank[ra] < inst.rank[rb] {
 		ra, rb = rb, ra
 	}
-	uf.parent[rb] = ra
-	if uf.rank[ra] == uf.rank[rb] {
-		uf.rank[ra]++
+	inst.parent[rb] = ra
+	if inst.rank[ra] == inst.rank[rb] {
+		inst.rank[ra]++
 	}
 }
 
-func (uf *UnionFind) SameSet(a, b NodeID) bool {
-	return uf.Find(a) == uf.Find(b)
+func (inst *UnionFind) SameSet(a, b NodeID) (b2 bool) {
+	b2 = inst.Find(a) == inst.Find(b)
+	return
 }
 
 // Representatives returns one representative per connected component, in
 // CompareNodeID order so iteration is deterministic.
-func (uf *UnionFind) Representatives() []NodeID {
+func (inst *UnionFind) Representatives() (out []NodeID) {
 	reps := make(map[NodeID]struct{})
-	for id := range uf.parent {
-		reps[uf.Find(id)] = struct{}{}
+	for id := range inst.parent {
+		reps[inst.Find(id)] = struct{}{}
 	}
-	out := make([]NodeID, 0, len(reps))
+	out = make([]NodeID, 0, len(reps))
 	for r := range reps {
 		out = append(out, r)
 	}
 	slices.SortFunc(out, CompareNodeID)
-	return out
+	return
 }
 
 // Members returns all members of the component containing id, in
 // CompareNodeID order so iteration is deterministic.
-func (uf *UnionFind) Members(id NodeID) []NodeID {
-	rep := uf.Find(id)
-	var out []NodeID
-	for member := range uf.parent {
-		if uf.Find(member) == rep {
+func (inst *UnionFind) Members(id NodeID) (out []NodeID) {
+	rep := inst.Find(id)
+	for member := range inst.parent {
+		if inst.Find(member) == rep {
 			out = append(out, member)
 		}
 	}
 	slices.SortFunc(out, CompareNodeID)
-	return out
+	return
 }

@@ -60,8 +60,8 @@ func TestInvariant_NodeInBothSets(tt *testing.T) {
 func TestInvariant_EdgeEndpointMissing(tt *testing.T) {
 	g := New()
 	missing := nid("missing", 7)
-	g.edges.Add(t.RootNodeID, t.Edge{Dest: missing, Kind: t.EdgeLive, IntroducedBy: ph("p")})
-	g.backEdges.Add(missing, t.Edge{Dest: t.RootNodeID, Kind: t.EdgeLive, IntroducedBy: ph("p")})
+	g.edges.Add(t.RootNodeID, t.Edge{Dest: missing, Kind: t.EdgeKindLive, IntroducedBy: ph("p")})
+	g.backEdges.Add(missing, t.Edge{Dest: t.RootNodeID, Kind: t.EdgeKindLive, IntroducedBy: ph("p")})
 	hasErrorContaining(tt, qc.CheckInvariants(g), "not in any node set")
 }
 
@@ -72,7 +72,7 @@ func TestInvariant_ForwardWithoutBackEdge(tt *testing.T) {
 	if err := g.AddNode(id, []byte("x"), ph("p"), []t.NodeID{t.RootNodeID}, nil); err != nil {
 		tt.Fatal(err)
 	}
-	g.edges.Add(t.RootNodeID, t.Edge{Dest: id, Kind: t.EdgePseudo, IntroducedBy: ph("rogue")})
+	g.edges.Add(t.RootNodeID, t.Edge{Dest: id, Kind: t.EdgeKindPseudo, IntroducedBy: ph("rogue")})
 	hasErrorContaining(tt, qc.CheckInvariants(g), "no matching back-edge")
 }
 
@@ -91,8 +91,8 @@ func TestInvariant_LiveEdgeToDeletedNode(tt *testing.T) {
 		tt.Fatal(err)
 	}
 	g.ResolvePseudoEdges()
-	g.edges.Add(a, t.Edge{Dest: b, Kind: t.EdgeLive, IntroducedBy: ph("rogue")})
-	g.backEdges.Add(b, t.Edge{Dest: a, Kind: t.EdgeLive, IntroducedBy: ph("rogue")})
+	g.edges.Add(a, t.Edge{Dest: b, Kind: t.EdgeKindLive, IntroducedBy: ph("rogue")})
+	g.backEdges.Add(b, t.Edge{Dest: a, Kind: t.EdgeKindLive, IntroducedBy: ph("rogue")})
 	hasErrorContaining(tt, qc.CheckInvariants(g), "live edge")
 }
 
@@ -142,8 +142,8 @@ func TestInvariant_PseudoEdgeDuplicatesLive(tt *testing.T) {
 		tt.Fatal(err)
 	}
 	g.ResolvePseudoEdges()
-	g.edges.Add(t.RootNodeID, t.Edge{Dest: a, Kind: t.EdgePseudo, IntroducedBy: t.PatchHash{}})
-	g.backEdges.Add(a, t.Edge{Dest: t.RootNodeID, Kind: t.EdgePseudo, IntroducedBy: t.PatchHash{}})
+	g.edges.Add(t.RootNodeID, t.Edge{Dest: a, Kind: t.EdgeKindPseudo, IntroducedBy: t.PatchHash{}})
+	g.backEdges.Add(a, t.Edge{Dest: t.RootNodeID, Kind: t.EdgeKindPseudo, IntroducedBy: t.PatchHash{}})
 	hasErrorContaining(tt, qc.CheckInvariants(g), "duplicates a live edge")
 }
 
@@ -159,8 +159,8 @@ func TestInvariant_PseudoEdgeUnreachable(tt *testing.T) {
 		tt.Fatal(err)
 	}
 	g.ResolvePseudoEdges()
-	g.edges.Add(a, t.Edge{Dest: b, Kind: t.EdgePseudo, IntroducedBy: t.PatchHash{}})
-	g.backEdges.Add(b, t.Edge{Dest: a, Kind: t.EdgePseudo, IntroducedBy: t.PatchHash{}})
+	g.edges.Add(a, t.Edge{Dest: b, Kind: t.EdgeKindPseudo, IntroducedBy: t.PatchHash{}})
+	g.backEdges.Add(b, t.Edge{Dest: a, Kind: t.EdgeKindPseudo, IntroducedBy: t.PatchHash{}})
 	hasErrorContaining(tt, qc.CheckInvariants(g), "not justified by path through deleted nodes")
 }
 
@@ -183,8 +183,8 @@ func TestInvariant_PseudoEdgeMissing(tt *testing.T) {
 		tt.Fatal(err)
 	}
 	g.ResolvePseudoEdges()
-	g.edges.Remove(a, t.Edge{Dest: c, Kind: t.EdgePseudo, IntroducedBy: t.PatchHash{}})
-	g.backEdges.Remove(c, t.Edge{Dest: a, Kind: t.EdgePseudo, IntroducedBy: t.PatchHash{}})
+	g.edges.Remove(a, t.Edge{Dest: c, Kind: t.EdgeKindPseudo, IntroducedBy: t.PatchHash{}})
+	g.backEdges.Remove(c, t.Edge{Dest: a, Kind: t.EdgeKindPseudo, IntroducedBy: t.PatchHash{}})
 	hasErrorContaining(tt, qc.CheckInvariants(g), "missing pseudo-edge")
 }
 
@@ -207,8 +207,8 @@ func TestInvariant_PseudoEdgeTrackedButMissing(tt *testing.T) {
 		tt.Fatal(err)
 	}
 	g.ResolvePseudoEdges()
-	g.edges.Remove(a, t.Edge{Dest: c, Kind: t.EdgePseudo, IntroducedBy: t.PatchHash{}})
-	g.backEdges.Remove(c, t.Edge{Dest: a, Kind: t.EdgePseudo, IntroducedBy: t.PatchHash{}})
+	g.edges.Remove(a, t.Edge{Dest: c, Kind: t.EdgeKindPseudo, IntroducedBy: t.PatchHash{}})
+	g.backEdges.Remove(c, t.Edge{Dest: a, Kind: t.EdgeKindPseudo, IntroducedBy: t.PatchHash{}})
 	hasErrorContaining(tt, qc.CheckInvariants(g), "no pseudo-edge in graph")
 }
 

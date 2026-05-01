@@ -17,8 +17,8 @@ import (
 func TestDot_Simple(tt *testing.T) {
 	g := store.New()
 	p := patch.NewPatch("test", "lines", nil, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("hello\n"), UpContext: []t.NodeID{t.RootNodeID}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("world\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("hello\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("world\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 	})
 	p.Apply(g)
 
@@ -81,10 +81,10 @@ func TestDot_AllTypesExample(tt *testing.T) {
 
 	// Base: root -> a -> b -> c -> d
 	base := patch.NewPatch("alice", "initial file", nil, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("line a\n"), UpContext: []t.NodeID{t.RootNodeID}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("line b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 2}, Content: []byte("line c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 1}}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 3}, Content: []byte("line d\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 2}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("line a\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("line b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 2}, Content: []byte("line c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 1}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 3}, Content: []byte("line d\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 2}}},
 	})
 	base.Apply(g)
 
@@ -94,20 +94,20 @@ func TestDot_AllTypesExample(tt *testing.T) {
 
 	// User 1: delete b -> creates deleted node, deleted edges, pseudo-edge a->c.
 	pDel := patch.NewPatch("bob", "delete b", []t.PatchHash{base.Hash}, []patch.Change{
-		{Kind: patch.ChangeDeleteNode, NodeID: lineB},
+		{Kind: patch.ChangeKindDeleteNode, NodeID: lineB},
 	})
 	pDel.Apply(g)
 
 	// User 2: insert X between c and d.
 	pX := patch.NewPatch("carol", "insert X", []t.PatchHash{base.Hash}, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("line X\n"),
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("line X\n"),
 			UpContext: []t.NodeID{lineC}, DownContext: []t.NodeID{lineD}},
 	})
 	pX.Apply(g)
 
 	// User 3: insert Y between c and d (same position -> order conflict with X).
 	pY := patch.NewPatch("dave", "insert Y", []t.PatchHash{base.Hash}, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("line Y\n"),
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("line Y\n"),
 			UpContext: []t.NodeID{lineC}, DownContext: []t.NodeID{lineD}},
 	})
 	pY.Apply(g)
@@ -147,8 +147,8 @@ func TestDot_AllTypesExample(tt *testing.T) {
 func TestDot_Conflict(tt *testing.T) {
 	g := store.New()
 	base := patch.NewPatch("test", "base", nil, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 	})
 	base.Apply(g)
 
@@ -156,11 +156,11 @@ func TestDot_Conflict(tt *testing.T) {
 	lineC := t.NodeID{Patch: base.Hash, Index: 1}
 
 	p1 := patch.NewPatch("u1", "insert X", []t.PatchHash{base.Hash}, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("X\n"),
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("X\n"),
 			UpContext: []t.NodeID{lineA}, DownContext: []t.NodeID{lineC}},
 	})
 	p2 := patch.NewPatch("u2", "insert Y", []t.PatchHash{base.Hash}, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("Y\n"),
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("Y\n"),
 			UpContext: []t.NodeID{lineA}, DownContext: []t.NodeID{lineC}},
 	})
 	p1.Apply(g)

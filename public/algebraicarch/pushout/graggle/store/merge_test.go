@@ -209,7 +209,7 @@ func TestPseudoEdge_DoubleReason(tt *testing.T) {
 	// a -> c pseudo-edge should still exist (justified by {b2}).
 	found := false
 	for _, edge := range g.edges.Get(a) {
-		if edge.Dest == c && edge.Kind == t.EdgePseudo {
+		if edge.Dest == c && edge.Kind == t.EdgeKindPseudo {
 			found = true
 		}
 	}
@@ -223,7 +223,7 @@ func TestPseudoEdge_DoubleReason(tt *testing.T) {
 	assertNoInvariantViolations(tt, g)
 
 	for _, edge := range g.edges.Get(a) {
-		if edge.Dest == c && edge.Kind == t.EdgePseudo {
+		if edge.Dest == c && edge.Kind == t.EdgeKindPseudo {
 			tt.Fatal("pseudo-edge a->c should be gone after undeleting both b1 and b2")
 		}
 	}
@@ -275,8 +275,8 @@ func TestRoundtrip_DiffApplyRender(tt *testing.T) {
 	// Start with a file, diff against new content, apply, verify render.
 	g := New()
 	base := patch.NewPatch("test", "initial", nil, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("hello\n"), UpContext: []t.NodeID{t.RootNodeID}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("world\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("hello\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("world\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 	})
 	base.Apply(g)
 
@@ -303,8 +303,8 @@ func TestRoundtrip_DiffApplyRender(tt *testing.T) {
 func TestRoundtrip_DiffApplyUnapply(tt *testing.T) {
 	g := New()
 	base := patch.NewPatch("test", "initial", nil, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 	})
 	base.Apply(g)
 

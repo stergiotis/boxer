@@ -12,14 +12,17 @@ import (
 	"encoding/hex"
 	"fmt"
 	"slices"
+
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // PatchHash identifies a patch by the SHA-256 hash of its contents.
 // The zero value represents the "genesis" patch that introduces the root node.
 type PatchHash [32]byte
 
-func (h PatchHash) String() string {
-	return hex.EncodeToString(h[:8]) // short form for display
+func (inst PatchHash) String() (s string) {
+	s = hex.EncodeToString(inst[:8]) // short form for display
+	return
 }
 
 // VENDOR DEVIATION: hex MarshalText/UnmarshalText below is added downstream
@@ -28,42 +31,44 @@ func (h PatchHash) String() string {
 
 // MarshalText emits the patch hash as a 64-char lowercase hex string. This
 // is what encoding/json uses for fields of this type, including NodeID.Patch.
-func (h PatchHash) MarshalText() (text []byte, err error) {
-	text = make([]byte, hex.EncodedLen(len(h)))
-	hex.Encode(text, h[:])
+func (inst PatchHash) MarshalText() (text []byte, err error) {
+	text = make([]byte, hex.EncodedLen(len(inst)))
+	hex.Encode(text, inst[:])
 	return
 }
 
 // UnmarshalText parses a 64-char hex string back into a PatchHash.
-func (h *PatchHash) UnmarshalText(text []byte) (err error) {
-	if len(text) != hex.EncodedLen(len(h)) {
-		err = fmt.Errorf("PatchHash: expected %d hex chars, got %d", hex.EncodedLen(len(h)), len(text))
+func (inst *PatchHash) UnmarshalText(text []byte) (err error) {
+	if len(text) != hex.EncodedLen(len(inst)) {
+		err = eh.Errorf("PatchHash: expected %d hex chars, got %d", hex.EncodedLen(len(inst)), len(text))
 		return
 	}
-	if _, err = hex.Decode(h[:], text); err != nil {
-		err = fmt.Errorf("PatchHash: %w", err)
+	_, derr := hex.Decode(inst[:], text)
+	if derr != nil {
+		err = eh.Errorf("PatchHash: %w", derr)
 	}
 	return
 }
 
 // IsZero returns true for the genesis/root patch hash.
-func (h PatchHash) IsZero() bool {
-	return h == PatchHash{}
+func (inst PatchHash) IsZero() (b bool) {
+	b = inst == PatchHash{}
+	return
 }
 
 // PlaceholderHash is a sentinel used in patch construction to mean
 // "this patch" — distinct from the zero hash (which is the root/genesis).
-var PlaceholderHash = func() PatchHash {
-	var h PatchHash
+var PlaceholderHash = func() (h PatchHash) {
 	for i := range h {
 		h[i] = 0xFF
 	}
-	return h
+	return
 }()
 
 // IsPlaceholder returns true for the "current patch" placeholder hash.
-func (h PatchHash) IsPlaceholder() bool {
-	return h == PlaceholderHash
+func (inst PatchHash) IsPlaceholder() (b bool) {
+	b = inst == PlaceholderHash
+	return
 }
 
 // NodeID uniquely identifies a line/node in the graggle.
@@ -74,40 +79,42 @@ type NodeID struct {
 	Index uint64
 }
 
-func (n NodeID) String() string {
-	return fmt.Sprintf("%s/%d", n.Patch, n.Index)
+func (inst NodeID) String() (s string) {
+	s = fmt.Sprintf("%s/%d", inst.Patch, inst.Index)
+	return
 }
 
 // RootNodeID is the sentinel root node present in every graggle.
 // All top-level content is ordered after this node.
 var RootNodeID = NodeID{}
 
-// EdgeKind classifies edges in the graggle.
-type EdgeKind uint8
+// EdgeKindE classifies edges in the graggle.
+type EdgeKindE uint8
 
 const (
-	EdgeLive    EdgeKind = iota // Real ordering edge between live nodes
-	EdgeDeleted                 // Edge to/from a tombstoned (ghost) node
-	EdgePseudo                  // Computed shortcut over deleted regions
+	EdgeKindLive    EdgeKindE = iota // Real ordering edge between live nodes
+	EdgeKindDeleted                  // Edge to/from a tombstoned (ghost) node
+	EdgeKindPseudo                   // Computed shortcut over deleted regions
 )
 
-func (k EdgeKind) String() string {
-	switch k {
-	case EdgeLive:
-		return "live"
-	case EdgeDeleted:
-		return "deleted"
-	case EdgePseudo:
-		return "pseudo"
+func (inst EdgeKindE) String() (s string) {
+	switch inst {
+	case EdgeKindLive:
+		s = "live"
+	case EdgeKindDeleted:
+		s = "deleted"
+	case EdgeKindPseudo:
+		s = "pseudo"
 	default:
-		return "unknown"
+		s = "unknown"
 	}
+	return
 }
 
 // Edge represents a directed edge in the graggle.
 type Edge struct {
 	Dest         NodeID
-	Kind         EdgeKind
+	Kind         EdgeKindE
 	IntroducedBy PatchHash // which patch created this edge
 }
 
@@ -116,34 +123,36 @@ type NodeSet struct {
 	m map[NodeID]struct{}
 }
 
-func NewNodeSet() *NodeSet {
-	return &NodeSet{m: make(map[NodeID]struct{})}
+func NewNodeSet() (inst *NodeSet) {
+	inst = &NodeSet{m: make(map[NodeID]struct{})}
+	return
 }
 
-func (s *NodeSet) Add(id NodeID) {
-	s.m[id] = struct{}{}
+func (inst *NodeSet) Add(id NodeID) {
+	inst.m[id] = struct{}{}
 }
 
-func (s *NodeSet) Remove(id NodeID) {
-	delete(s.m, id)
+func (inst *NodeSet) Remove(id NodeID) {
+	delete(inst.m, id)
 }
 
-func (s *NodeSet) Contains(id NodeID) bool {
-	_, ok := s.m[id]
-	return ok
+func (inst *NodeSet) Contains(id NodeID) (b bool) {
+	_, b = inst.m[id]
+	return
 }
 
-func (s *NodeSet) Len() int {
-	return len(s.m)
+func (inst *NodeSet) Len() (n int) {
+	n = len(inst.m)
+	return
 }
 
-func (s *NodeSet) Items() []NodeID {
-	out := make([]NodeID, 0, len(s.m))
-	for id := range s.m {
+func (inst *NodeSet) Items() (out []NodeID) {
+	out = make([]NodeID, 0, len(inst.m))
+	for id := range inst.m {
 		out = append(out, id)
 	}
 	slices.SortFunc(out, CompareNodeID)
-	return out
+	return
 }
 
 // MultiMap maps a NodeID to a set of Edges.
@@ -151,79 +160,87 @@ type MultiMap struct {
 	m map[NodeID][]Edge
 }
 
-func NewMultiMap() *MultiMap {
-	return &MultiMap{m: make(map[NodeID][]Edge)}
+func NewMultiMap() (inst *MultiMap) {
+	inst = &MultiMap{m: make(map[NodeID][]Edge)}
+	return
 }
 
-func (mm *MultiMap) Add(src NodeID, e Edge) {
-	mm.m[src] = append(mm.m[src], e)
+func (inst *MultiMap) Add(src NodeID, e Edge) {
+	inst.m[src] = append(inst.m[src], e)
 }
 
-func (mm *MultiMap) Remove(src NodeID, e Edge) {
-	edges := mm.m[src]
+func (inst *MultiMap) Remove(src NodeID, e Edge) {
+	edges := inst.m[src]
 	for i, existing := range edges {
 		if existing == e {
-			mm.m[src] = append(edges[:i], edges[i+1:]...)
+			inst.m[src] = append(edges[:i], edges[i+1:]...)
 			break
 		}
 	}
-	if len(mm.m[src]) == 0 {
-		delete(mm.m, src)
+	if len(inst.m[src]) == 0 {
+		delete(inst.m, src)
 	}
 }
 
-func (mm *MultiMap) Get(src NodeID) []Edge {
-	return mm.m[src]
+func (inst *MultiMap) Get(src NodeID) (out []Edge) {
+	out = inst.m[src]
+	return
 }
 
-func (mm *MultiMap) Has(src NodeID, e Edge) bool {
-	for _, existing := range mm.m[src] {
+func (inst *MultiMap) Has(src NodeID, e Edge) (b bool) {
+	for _, existing := range inst.m[src] {
 		if existing == e {
-			return true
+			b = true
+			return
 		}
 	}
-	return false
+	return
 }
 
 // HasEdgeTo checks if there is any edge from src to dest (regardless of kind).
-func (mm *MultiMap) HasEdgeTo(src, dest NodeID) bool {
-	for _, e := range mm.m[src] {
+func (inst *MultiMap) HasEdgeTo(src, dest NodeID) (b bool) {
+	for _, e := range inst.m[src] {
 		if e.Dest == dest {
-			return true
+			b = true
+			return
 		}
 	}
-	return false
+	return
 }
 
 // HasLiveEdgeTo checks if there is a live edge from src to dest.
-func (mm *MultiMap) HasLiveEdgeTo(src, dest NodeID) bool {
-	for _, e := range mm.m[src] {
-		if e.Dest == dest && e.Kind == EdgeLive {
-			return true
+func (inst *MultiMap) HasLiveEdgeTo(src, dest NodeID) (b bool) {
+	for _, e := range inst.m[src] {
+		if e.Dest == dest && e.Kind == EdgeKindLive {
+			b = true
+			return
 		}
 	}
-	return false
+	return
 }
 
-func (mm *MultiMap) Sources() []NodeID {
-	out := make([]NodeID, 0, len(mm.m))
-	for src := range mm.m {
+func (inst *MultiMap) Sources() (out []NodeID) {
+	out = make([]NodeID, 0, len(inst.m))
+	for src := range inst.m {
 		out = append(out, src)
 	}
 	slices.SortFunc(out, CompareNodeID)
-	return out
+	return
 }
 
 // CompareNodeID provides a deterministic ordering for NodeIDs: patches
 // compare bytewise, ties broken by Index.
-func CompareNodeID(a, b NodeID) int {
-	if c := bytes.Compare(a.Patch[:], b.Patch[:]); c != 0 {
-		return c
+func CompareNodeID(a, b NodeID) (c int) {
+	c = bytes.Compare(a.Patch[:], b.Patch[:])
+	if c != 0 {
+		return
 	}
-	return cmp.Compare(a.Index, b.Index)
+	c = cmp.Compare(a.Index, b.Index)
+	return
 }
 
 // HashBytes computes a PatchHash from arbitrary data.
-func HashBytes(data []byte) PatchHash {
-	return sha256.Sum256(data)
+func HashBytes(data []byte) (h PatchHash) {
+	h = sha256.Sum256(data)
+	return
 }

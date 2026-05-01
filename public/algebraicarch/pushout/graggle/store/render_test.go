@@ -31,9 +31,9 @@ func TestRender_SingleLine(tt *testing.T) {
 func TestRender_MultipleLines(tt *testing.T) {
 	g := New()
 	p := patch.NewPatch("test", "lines", nil, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 2}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 1}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 2}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 1}}},
 	})
 	p.Apply(g)
 	rendered := string(g.Render())
@@ -76,9 +76,9 @@ func TestRender_ZombieNodeVisible(tt *testing.T) {
 	// Delete context but the child node itself should still render.
 	g := New()
 	base := patch.NewPatch("test", "base", nil, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 2}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 1}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 2}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 1}}},
 	})
 	base.Apply(g)
 
@@ -86,14 +86,14 @@ func TestRender_ZombieNodeVisible(tt *testing.T) {
 
 	// Insert X with up_context=b.
 	pInsert := patch.NewPatch("user", "add X after b", []t.PatchHash{base.Hash}, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("X\n"),
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("X\n"),
 			UpContext: []t.NodeID{lineB}, DownContext: []t.NodeID{{Patch: base.Hash, Index: 2}}},
 	})
 	pInsert.Apply(g)
 
 	// Delete b.
 	pDel := patch.NewPatch("user", "delete b", []t.PatchHash{base.Hash}, []patch.Change{
-		{Kind: patch.ChangeDeleteNode, NodeID: lineB},
+		{Kind: patch.ChangeKindDeleteNode, NodeID: lineB},
 	})
 	pDel.Apply(g)
 
@@ -106,8 +106,8 @@ func TestRender_ZombieNodeVisible(tt *testing.T) {
 func TestRenderLines_SplitCorrectness(tt *testing.T) {
 	g := New()
 	p := patch.NewPatch("test", "lines", nil, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("line1\n"), UpContext: []t.NodeID{t.RootNodeID}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("line2\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("line1\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("line2\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 	})
 	p.Apply(g)
 

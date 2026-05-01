@@ -384,9 +384,9 @@ func (inst *pushoutRepo) changesForResolution(cells []KVLine) (changes []patch.C
 		}
 		switch cell.Value {
 		case valA:
-			changes = append(changes, patch.Change{Kind: patch.ChangeDeleteNode, NodeID: sideB})
+			changes = append(changes, patch.Change{Kind: patch.ChangeKindDeleteNode, NodeID: sideB})
 		case valB:
-			changes = append(changes, patch.Change{Kind: patch.ChangeDeleteNode, NodeID: sideA})
+			changes = append(changes, patch.Change{Kind: patch.ChangeKindDeleteNode, NodeID: sideA})
 		default:
 			err = eh.Errorf("pushout-native: arbitrary conflict resolution (value %q matches neither side) is not supported; use Keep-A or Keep-B", cell.Value)
 			return

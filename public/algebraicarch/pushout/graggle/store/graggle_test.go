@@ -101,8 +101,8 @@ func TestUndeleteNode(tt *testing.T) {
 func TestClone_DeepCopy(tt *testing.T) {
 	g := New()
 	p := patch.NewPatch("test", "add lines", nil, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("first\n"), UpContext: []t.NodeID{t.RootNodeID}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("second\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("first\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("second\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 	})
 	p.Apply(g)
 
@@ -328,8 +328,8 @@ func TestPseudoEdge_UndeleteRemovesPseudo(tt *testing.T) {
 func TestPatchApply(tt *testing.T) {
 	g := New()
 	p := patch.NewPatch("test", "add lines", nil, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("first\n"), UpContext: []t.NodeID{t.RootNodeID}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("second\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}, DownContext: nil},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("first\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("second\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}, DownContext: nil},
 	})
 
 	if err := p.Apply(g); err != nil {
@@ -353,8 +353,8 @@ func TestPatchApply(tt *testing.T) {
 func TestPatchUnapply(tt *testing.T) {
 	g := New()
 	p := patch.NewPatch("test", "add lines", nil, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("first\n"), UpContext: []t.NodeID{t.RootNodeID}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("second\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("first\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("second\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 	})
 
 	p.Apply(g)
@@ -371,16 +371,16 @@ func TestPatchApplyDelete(tt *testing.T) {
 	g := New()
 	// First patch: add 3 lines.
 	p1 := patch.NewPatch("test", "add lines", nil, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 2}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 1}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 2}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 1}}},
 	})
 	p1.Apply(g)
 
 	// Second patch: delete middle line.
 	lineB := t.NodeID{Patch: p1.Hash, Index: 1}
 	p2 := patch.NewPatch("test", "delete b", []t.PatchHash{p1.Hash}, []patch.Change{
-		{Kind: patch.ChangeDeleteNode, NodeID: lineB},
+		{Kind: patch.ChangeKindDeleteNode, NodeID: lineB},
 	})
 	p2.Apply(g)
 
@@ -399,8 +399,8 @@ func TestMerge_NoConflict(tt *testing.T) {
 	// After applying both: root -> a -> b -> c -> d (no conflict).
 	g := New()
 	base := patch.NewPatch("test", "base", nil, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 	})
 	base.Apply(g)
 
@@ -408,11 +408,11 @@ func TestMerge_NoConflict(tt *testing.T) {
 	lineC := t.NodeID{Patch: base.Hash, Index: 1}
 
 	p1 := patch.NewPatch("user1", "insert b", []t.PatchHash{base.Hash}, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("b\n"),
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("b\n"),
 			UpContext: []t.NodeID{lineA}, DownContext: []t.NodeID{lineC}},
 	})
 	p2 := patch.NewPatch("user2", "insert d", []t.PatchHash{base.Hash}, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("d\n"),
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("d\n"),
 			UpContext: []t.NodeID{lineC}},
 	})
 
@@ -439,8 +439,8 @@ func TestMerge_OrderConflict(tt *testing.T) {
 	// Both insert at the same position => order conflict.
 	g := New()
 	base := patch.NewPatch("test", "base", nil, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 	})
 	base.Apply(g)
 
@@ -448,11 +448,11 @@ func TestMerge_OrderConflict(tt *testing.T) {
 	lineC := t.NodeID{Patch: base.Hash, Index: 1}
 
 	p1 := patch.NewPatch("user1", "insert X", []t.PatchHash{base.Hash}, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("X\n"),
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("X\n"),
 			UpContext: []t.NodeID{lineA}, DownContext: []t.NodeID{lineC}},
 	})
 	p2 := patch.NewPatch("user2", "insert Y", []t.PatchHash{base.Hash}, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("Y\n"),
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("Y\n"),
 			UpContext: []t.NodeID{lineA}, DownContext: []t.NodeID{lineC}},
 	})
 
@@ -484,9 +484,9 @@ func TestMerge_DeleteVsEdit_Zombie(tt *testing.T) {
 	// The system should handle this gracefully.
 	g := New()
 	base := patch.NewPatch("test", "base", nil, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 2}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 1}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 2}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 1}}},
 	})
 	base.Apply(g)
 
@@ -495,12 +495,12 @@ func TestMerge_DeleteVsEdit_Zombie(tt *testing.T) {
 
 	// Patch 1: delete b.
 	p1 := patch.NewPatch("user1", "delete b", []t.PatchHash{base.Hash}, []patch.Change{
-		{Kind: patch.ChangeDeleteNode, NodeID: lineB},
+		{Kind: patch.ChangeKindDeleteNode, NodeID: lineB},
 	})
 
 	// Patch 2: insert X after b, before c.
 	p2 := patch.NewPatch("user2", "insert X after b", []t.PatchHash{base.Hash}, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("X\n"),
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("X\n"),
 			UpContext: []t.NodeID{lineB}, DownContext: []t.NodeID{lineC}},
 	})
 
@@ -522,8 +522,8 @@ func TestMerge_Commutativity(tt *testing.T) {
 	makeBase := func() (*Graggle, *patch.Patch) {
 		g := New()
 		base := patch.NewPatch("test", "base", nil, []patch.Change{
-			{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
-			{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
+			{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
+			{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 		})
 		base.Apply(g)
 		return g, base
@@ -534,11 +534,11 @@ func TestMerge_Commutativity(tt *testing.T) {
 	lineC := t.NodeID{Patch: base.Hash, Index: 1}
 
 	p1 := patch.NewPatch("user1", "insert b", []t.PatchHash{base.Hash}, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("b\n"),
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("b\n"),
 			UpContext: []t.NodeID{lineA}, DownContext: []t.NodeID{lineC}},
 	})
 	p2 := patch.NewPatch("user2", "insert d", []t.PatchHash{base.Hash}, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("d\n"),
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("d\n"),
 			UpContext: []t.NodeID{lineC}},
 	})
 
@@ -565,8 +565,8 @@ func TestMerge_ConflictCommutativity(tt *testing.T) {
 	makeBase := func() (*Graggle, *patch.Patch) {
 		g := New()
 		base := patch.NewPatch("test", "base", nil, []patch.Change{
-			{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
-			{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
+			{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
+			{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 		})
 		base.Apply(g)
 		return g, base
@@ -577,11 +577,11 @@ func TestMerge_ConflictCommutativity(tt *testing.T) {
 	lineC := t.NodeID{Patch: base.Hash, Index: 1}
 
 	p1 := patch.NewPatch("user1", "insert X", []t.PatchHash{base.Hash}, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("X\n"),
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("X\n"),
 			UpContext: []t.NodeID{lineA}, DownContext: []t.NodeID{lineC}},
 	})
 	p2 := patch.NewPatch("user2", "insert Y", []t.PatchHash{base.Hash}, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("Y\n"),
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("Y\n"),
 			UpContext: []t.NodeID{lineA}, DownContext: []t.NodeID{lineC}},
 	})
 
@@ -620,8 +620,8 @@ func TestConflictResolution(tt *testing.T) {
 	// Create a conflict, then resolve it by adding an ordering edge.
 	g := New()
 	base := patch.NewPatch("test", "base", nil, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("c\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 	})
 	base.Apply(g)
 
@@ -629,11 +629,11 @@ func TestConflictResolution(tt *testing.T) {
 	lineC := t.NodeID{Patch: base.Hash, Index: 1}
 
 	p1 := patch.NewPatch("user1", "insert X", []t.PatchHash{base.Hash}, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("X\n"),
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("X\n"),
 			UpContext: []t.NodeID{lineA}, DownContext: []t.NodeID{lineC}},
 	})
 	p2 := patch.NewPatch("user2", "insert Y", []t.PatchHash{base.Hash}, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("Y\n"),
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("Y\n"),
 			UpContext: []t.NodeID{lineA}, DownContext: []t.NodeID{lineC}},
 	})
 
@@ -649,7 +649,7 @@ func TestConflictResolution(tt *testing.T) {
 	lineY := t.NodeID{Patch: p2.Hash, Index: 0}
 
 	resolution := patch.NewPatch("resolver", "resolve X before Y", []t.PatchHash{p1.Hash, p2.Hash}, []patch.Change{
-		{Kind: patch.ChangeNewEdge, Src: lineX, Dest: lineY},
+		{Kind: patch.ChangeKindNewEdge, Src: lineX, Dest: lineY},
 	})
 	resolution.Apply(g)
 
@@ -675,7 +675,7 @@ func TestLineDiff_Insert(tt *testing.T) {
 	// Should have one NewNode for "b\n".
 	newNodes := 0
 	for _, c := range result.Changes {
-		if c.Kind == patch.ChangeNewNode {
+		if c.Kind == patch.ChangeKindNewNode {
 			newNodes++
 			if string(c.Content) != "b\n" {
 				tt.Fatalf("wrong content: %q", string(c.Content))
@@ -695,7 +695,7 @@ func TestLineDiff_Delete(tt *testing.T) {
 	result := patch.LineDiff(oldIDs, oldContents, newLines)
 	deletes := 0
 	for _, c := range result.Changes {
-		if c.Kind == patch.ChangeDeleteNode {
+		if c.Kind == patch.ChangeKindDeleteNode {
 			deletes++
 			if c.NodeID != nid("p1", 1) {
 				tt.Fatalf("wrong deletion: %v", c.NodeID)
@@ -716,10 +716,10 @@ func TestLineDiff_Replace(tt *testing.T) {
 	deletes := 0
 	inserts := 0
 	for _, c := range result.Changes {
-		if c.Kind == patch.ChangeDeleteNode {
+		if c.Kind == patch.ChangeKindDeleteNode {
 			deletes++
 		}
-		if c.Kind == patch.ChangeNewNode {
+		if c.Kind == patch.ChangeKindNewNode {
 			inserts++
 		}
 	}
@@ -754,8 +754,8 @@ func TestMerge_Associativity(tt *testing.T) {
 	makeBase := func() (*Graggle, *patch.Patch) {
 		g := New()
 		base := patch.NewPatch("test", "base", nil, []patch.Change{
-			{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("start\n"), UpContext: []t.NodeID{t.RootNodeID}},
-			{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("end\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
+			{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("start\n"), UpContext: []t.NodeID{t.RootNodeID}},
+			{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("end\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 		})
 		base.Apply(g)
 		return g, base
@@ -767,17 +767,17 @@ func TestMerge_Associativity(tt *testing.T) {
 
 	// p1: insert A after start.
 	p1 := patch.NewPatch("u1", "insert A", []t.PatchHash{base.Hash}, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("A\n"),
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("A\n"),
 			UpContext: []t.NodeID{lineStart}, DownContext: []t.NodeID{lineEnd}},
 	})
 	// p2: insert B after start (will conflict with A).
 	p2 := patch.NewPatch("u2", "insert B", []t.PatchHash{base.Hash}, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("B\n"),
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("B\n"),
 			UpContext: []t.NodeID{lineStart}, DownContext: []t.NodeID{lineEnd}},
 	})
 	// p3: insert Z after end.
 	p3 := patch.NewPatch("u3", "insert Z", []t.PatchHash{base.Hash}, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("Z\n"),
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("Z\n"),
 			UpContext: []t.NodeID{lineEnd}},
 	})
 
@@ -831,8 +831,8 @@ func TestCherryPick_NoConflict(tt *testing.T) {
 	// does not cause conflicts, because patches have identity.
 	g := New()
 	base := patch.NewPatch("test", "base", nil, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("a\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 1}, Content: []byte("b\n"), UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}}},
 	})
 	base.Apply(g)
 
@@ -841,7 +841,7 @@ func TestCherryPick_NoConflict(tt *testing.T) {
 
 	// A patch that inserts X between a and b.
 	pX := patch.NewPatch("dev", "insert X", []t.PatchHash{base.Hash}, []patch.Change{
-		{Kind: patch.ChangeNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("X\n"),
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("X\n"),
 			UpContext: []t.NodeID{lineA}, DownContext: []t.NodeID{lineB}},
 	})
 

@@ -4,13 +4,13 @@ package types
 
 import "iter"
 
-// GraphReader provides read-only access to the graph state.
+// GraphReaderI provides read-only access to the graph state.
 // This is the minimal interface that graph algorithms need.
 // Enumeration methods return iter.Seq for lazy evaluation.
 //
 // Precondition: callers must ensure ResolvePseudoEdges() has been called
 // before invoking graph algorithms that depend on a consistent live subgraph.
-type GraphReader interface {
+type GraphReaderI interface {
 	// Node queries.
 	HasNode(id NodeID) bool
 	IsLive(id NodeID) bool
@@ -28,31 +28,31 @@ type GraphReader interface {
 	BackwardEdges(dest NodeID) iter.Seq[Edge]
 }
 
-// GraphWriter provides mutation access to the graph.
+// GraphWriterI provides mutation access to the graph.
 // Used by Patch.Apply and Patch.Unapply.
-type GraphWriter interface {
+type GraphWriterI interface {
 	AddNode(id NodeID, content []byte, patch PatchHash, upContext, downContext []NodeID) error
 	DeleteNode(id NodeID) error
 	UndeleteNode(id NodeID) error
 	AddEdge(src, dest NodeID, patch PatchHash) error
-	RemoveEdge(src, dest NodeID, kind EdgeKind, patch PatchHash)
+	RemoveEdge(src, dest NodeID, kind EdgeKindE, patch PatchHash)
 	RemoveNode(id NodeID)
 	ResolvePseudoEdges()
 }
 
-// GraphStore combines read and write access with cloning.
-type GraphStore interface {
-	GraphReader
-	GraphWriter
-	CloneStore() GraphStore
+// GraphStoreI combines read and write access with cloning.
+type GraphStoreI interface {
+	GraphReaderI
+	GraphWriterI
+	CloneStore() GraphStoreI
 }
 
-// Inspectable provides deep read access to internal state for invariant
+// InspectableI provides deep read access to internal state for invariant
 // checking and quality control. This interface is deliberately broad —
 // invariant checking needs to see everything. Only the QC subsystem
 // should depend on it.
-type Inspectable interface {
-	GraphReader
+type InspectableI interface {
+	GraphReaderI
 
 	// Full node enumeration (including deleted).
 	AllDeletedNodes() iter.Seq[NodeID]
@@ -82,9 +82,9 @@ type Inspectable interface {
 	ResolvePseudoEdges()
 }
 
-// Visualizable provides read access for DOT/Graphviz rendering.
+// VisualizableI provides read access for DOT/Graphviz rendering.
 // Includes deleted nodes and all edge kinds for a complete picture.
-type Visualizable interface {
+type VisualizableI interface {
 	AllLiveNodes() iter.Seq[NodeID]
 	AllDeletedNodes() iter.Seq[NodeID]
 	NodeContent(id NodeID) []byte

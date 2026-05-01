@@ -1,6 +1,6 @@
 //go:build llm_generated_opus47
 
-// Package algo provides pure graph algorithms operating on the GraphReader
+// Package algo provides pure graph algorithms operating on the GraphReaderI
 // interface. It has no knowledge of the concrete Graggle implementation.
 package algo
 
@@ -20,7 +20,7 @@ import (
 // happens when a frame is popped (the equivalent of a recursive return).
 //
 // Precondition: ResolvePseudoEdges must have been called.
-func Tarjan(g t.GraphReader) [][]t.NodeID {
+func Tarjan(g t.GraphReaderI) [][]t.NodeID {
 	index := 0
 	var sccStack []t.NodeID
 	onStack := make(map[t.NodeID]bool)
@@ -103,7 +103,7 @@ func Tarjan(g t.GraphReader) [][]t.NodeID {
 // Returns nil if the graph contains cycles.
 //
 // Precondition: ResolvePseudoEdges must have been called.
-func TopoSort(g t.GraphReader) []t.NodeID {
+func TopoSort(g t.GraphReaderI) []t.NodeID {
 	// Kahn's algorithm.
 	inDegree := make(map[t.NodeID]int)
 	for v := range g.AllLiveNodes() {
@@ -152,7 +152,7 @@ func TopoSort(g t.GraphReader) []t.NodeID {
 // consecutive pair has a direct edge between them.
 //
 // Precondition: ResolvePseudoEdges must have been called.
-func LinearOrder(g t.GraphReader) []t.NodeID {
+func LinearOrder(g t.GraphReaderI) []t.NodeID {
 	order := TopoSort(g)
 	if order == nil {
 		return nil // cycles
@@ -177,7 +177,7 @@ func LinearOrder(g t.GraphReader) []t.NodeID {
 // HasConflicts returns true if the live subgraph is not linearly ordered.
 //
 // Precondition: ResolvePseudoEdges must have been called.
-func HasConflicts(g t.GraphReader) bool {
+func HasConflicts(g t.GraphReaderI) bool {
 	return LinearOrder(g) == nil
 }
 
@@ -190,7 +190,7 @@ type ConflictInfo struct {
 // DetectConflicts returns a list of all conflicts in the live subgraph.
 //
 // Precondition: ResolvePseudoEdges must have been called.
-func DetectConflicts(g t.GraphReader) []ConflictInfo {
+func DetectConflicts(g t.GraphReaderI) []ConflictInfo {
 	var conflicts []ConflictInfo
 
 	// Cyclic conflicts: multi-vertex SCCs.
@@ -227,7 +227,7 @@ func DetectConflicts(g t.GraphReader) []ConflictInfo {
 }
 
 // hasPath checks if there is a directed path from src to dest in the live subgraph.
-func hasPath(g t.GraphReader, src, dest t.NodeID) bool {
+func hasPath(g t.GraphReaderI, src, dest t.NodeID) bool {
 	visited := make(map[t.NodeID]struct{})
 	stack := []t.NodeID{src}
 	for len(stack) > 0 {

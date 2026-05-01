@@ -63,7 +63,7 @@ func LineDiff(oldIDs []t.NodeID, oldContents [][]byte, newLines [][]byte) DiffRe
 	for idx := 0; idx < m; idx++ {
 		if !kept[idx] {
 			changes = append(changes, Change{
-				Kind:   ChangeDeleteNode,
+				Kind:   ChangeKindDeleteNode,
 				NodeID: oldIDs[idx],
 			})
 		}
@@ -119,7 +119,7 @@ func LineDiff(oldIDs []t.NodeID, oldContents [][]byte, newLines [][]byte) DiffRe
 
 		newID := t.NodeID{Patch: t.PlaceholderHash, Index: newNodeIndex}
 		changes = append(changes, Change{
-			Kind:        ChangeNewNode,
+			Kind:        ChangeKindNewNode,
 			NodeID:      newID,
 			Content:     newLines[newIdx],
 			UpContext:   []t.NodeID{upCtx},

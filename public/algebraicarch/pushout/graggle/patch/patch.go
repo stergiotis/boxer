@@ -11,18 +11,18 @@ import (
 	t "github.com/stergiotis/pebble2impl/src/go/public/algebraicarch/pushout/graggle/types"
 )
 
-// ChangeKind identifies the type of atomic operation in a patch.
-type ChangeKind uint8
+// ChangeKindE identifies the type of atomic operation in a patch.
+type ChangeKindE uint8
 
 const (
-	ChangeNewNode    ChangeKind = iota // Add a new node with content
-	ChangeDeleteNode                   // Tombstone an existing node
-	ChangeNewEdge                      // Add an ordering edge between existing nodes
+	ChangeKindNewNode    ChangeKindE = iota // Add a new node with content
+	ChangeKindDeleteNode                   // Tombstone an existing node
+	ChangeKindNewEdge                      // Add an ordering edge between existing nodes
 )
 
 // Change is a single atomic operation in a patch.
 type Change struct {
-	Kind ChangeKind
+	Kind ChangeKindE
 
 	// For NewNode:
 	NodeID      t.NodeID   // ID of the new node
@@ -52,7 +52,7 @@ type Patch struct {
 // hashing so it is idempotent across NewPatch's pre-/post-fixup states.
 // The envelope codec relies on Decode(env).Patch.ComputeHash() reproducing
 // the stored Hash; without this normalization that check would always fail
-// for any patch that introduces nodes (the NodeIDs would carry p.Hash
+// for any patch that introduces nodes (the NodeIDs would carry inst.Hash
 // post-fixup but PlaceholderHash pre-fixup).
 
 // ComputeHash computes the patch hash from its changes.
@@ -68,30 +68,30 @@ type Patch struct {
 // that the encoder supports), so a marshal error indicates a programmer
 // error in extending Change — panic rather than produce a silently bogus
 // hash that breaks patch identity downstream.
-func (p *Patch) ComputeHash() t.PatchHash {
-	data, err := json.Marshal(p.changesForHash())
+func (inst *Patch) ComputeHash() t.PatchHash {
+	data, err := json.Marshal(inst.changesForHash())
 	if err != nil {
 		panic(fmt.Errorf("patch.ComputeHash: marshal changes: %w", err))
 	}
 	return t.HashBytes(data)
 }
 
-// changesForHash returns p.Changes with any post-fixup self-references
-// (NodeID.Patch == p.Hash) rewritten back to PlaceholderHash. When p.Hash
+// changesForHash returns inst.Changes with any post-fixup self-references
+// (NodeID.Patch == inst.Hash) rewritten back to PlaceholderHash. When inst.Hash
 // is zero (the first call from NewPatch, before fixup), the changes are
 // returned unmodified.
-func (p *Patch) changesForHash() []Change {
-	if p.Hash.IsZero() {
-		return p.Changes
+func (inst *Patch) changesForHash() []Change {
+	if inst.Hash.IsZero() {
+		return inst.Changes
 	}
-	out := make([]Change, len(p.Changes))
+	out := make([]Change, len(inst.Changes))
 	defixup := func(id t.NodeID) t.NodeID {
-		if id.Patch == p.Hash {
+		if id.Patch == inst.Hash {
 			id.Patch = t.PlaceholderHash
 		}
 		return id
 	}
-	for i, c := range p.Changes {
+	for i, c := range inst.Changes {
 		out[i] = c
 		out[i].NodeID = defixup(c.NodeID)
 		if len(c.UpContext) > 0 {
@@ -116,36 +116,36 @@ func (p *Patch) changesForHash() []Change {
 
 // NewPatch creates a patch from a list of changes, computing its hash.
 func NewPatch(author, description string, deps []t.PatchHash, changes []Change) *Patch {
-	p := &Patch{
+	inst := &Patch{
 		Author:       author,
 		Description:  description,
 		Dependencies: deps,
 		Changes:      changes,
 	}
-	p.Hash = p.ComputeHash()
+	inst.Hash = inst.ComputeHash()
 
 	// Fix up NodeIDs: replace placeholder hashes (0xFF...) with the real hash.
-	for i := range p.Changes {
-		c := &p.Changes[i]
-		if c.Kind == ChangeNewNode && c.NodeID.Patch.IsPlaceholder() {
-			c.NodeID.Patch = p.Hash
+	for i := range inst.Changes {
+		c := &inst.Changes[i]
+		if c.Kind == ChangeKindNewNode && c.NodeID.Patch.IsPlaceholder() {
+			c.NodeID.Patch = inst.Hash
 		}
 		for j := range c.UpContext {
 			if c.UpContext[j].Patch.IsPlaceholder() {
-				c.UpContext[j].Patch = p.Hash
+				c.UpContext[j].Patch = inst.Hash
 			}
 		}
 		for j := range c.DownContext {
 			if c.DownContext[j].Patch.IsPlaceholder() {
-				c.DownContext[j].Patch = p.Hash
+				c.DownContext[j].Patch = inst.Hash
 			}
 		}
-		if c.Kind == ChangeNewEdge {
+		if c.Kind == ChangeKindNewEdge {
 			if c.Src.Patch.IsPlaceholder() {
-				c.Src.Patch = p.Hash
+				c.Src.Patch = inst.Hash
 			}
 			if c.Dest.Patch.IsPlaceholder() {
-				c.Dest.Patch = p.Hash
+				c.Dest.Patch = inst.Hash
 			}
 		}
 	}
@@ -154,29 +154,29 @@ func NewPatch(author, description string, deps []t.PatchHash, changes []Change) 
 	// original changes with placeholders, just like ojo/pijul. This ensures
 	// the patch identity is stable and the fixed-up NodeIDs correctly
 	// reference this patch's hash.
-	return p
+	return inst
 }
 
 // Apply applies the patch to a graph store.
 // Changes are applied in order: NewNode and NewEdge first, then DeleteNode.
 // After applying, ResolvePseudoEdges is called.
-func (p *Patch) Apply(g t.GraphStore) error {
+func (inst *Patch) Apply(g t.GraphStoreI) error {
 	// Pass 1: non-deletion changes.
-	for _, c := range p.Changes {
+	for _, c := range inst.Changes {
 		switch c.Kind {
-		case ChangeNewNode:
-			if err := g.AddNode(c.NodeID, c.Content, p.Hash, c.UpContext, c.DownContext); err != nil {
+		case ChangeKindNewNode:
+			if err := g.AddNode(c.NodeID, c.Content, inst.Hash, c.UpContext, c.DownContext); err != nil {
 				return fmt.Errorf("apply NewNode %v: %w", c.NodeID, err)
 			}
-		case ChangeNewEdge:
-			if err := g.AddEdge(c.Src, c.Dest, p.Hash); err != nil {
+		case ChangeKindNewEdge:
+			if err := g.AddEdge(c.Src, c.Dest, inst.Hash); err != nil {
 				return fmt.Errorf("apply NewEdge %v->%v: %w", c.Src, c.Dest, err)
 			}
 		}
 	}
 	// Pass 2: deletions (after additions to handle ordering).
-	for _, c := range p.Changes {
-		if c.Kind == ChangeDeleteNode {
+	for _, c := range inst.Changes {
+		if c.Kind == ChangeKindDeleteNode {
 			if err := g.DeleteNode(c.NodeID); err != nil {
 				return fmt.Errorf("apply DeleteNode %v: %w", c.NodeID, err)
 			}
@@ -192,52 +192,52 @@ func (p *Patch) Apply(g t.GraphStore) error {
 // Returns an error if any node introduced by this patch still has incident
 // edges that were introduced by a different patch — removing the node would
 // leave those edges dangling. Callers must unapply dependents first.
-func (p *Patch) Unapply(g t.GraphStore) error {
+func (inst *Patch) Unapply(g t.GraphStoreI) error {
 	// Pre-flight: every node we are about to remove must have no incident
 	// edges from other patches.
-	for _, c := range p.Changes {
-		if c.Kind != ChangeNewNode {
+	for _, c := range inst.Changes {
+		if c.Kind != ChangeKindNewNode {
 			continue
 		}
-		if err := assertNoForeignEdges(g, c.NodeID, p.Hash); err != nil {
-			return fmt.Errorf("unapply %s: %w", p.Hash, err)
+		if err := assertNoForeignEdges(g, c.NodeID, inst.Hash); err != nil {
+			return fmt.Errorf("unapply %s: %w", inst.Hash, err)
 		}
 	}
 
 	// Pass 1: undelete nodes.
-	for i := len(p.Changes) - 1; i >= 0; i-- {
-		c := p.Changes[i]
-		if c.Kind == ChangeDeleteNode {
+	for i := len(inst.Changes) - 1; i >= 0; i-- {
+		c := inst.Changes[i]
+		if c.Kind == ChangeKindDeleteNode {
 			if err := g.UndeleteNode(c.NodeID); err != nil {
 				return fmt.Errorf("unapply DeleteNode %v: %w", c.NodeID, err)
 			}
 		}
 	}
 	// Pass 2: remove edges then nodes.
-	for i := len(p.Changes) - 1; i >= 0; i-- {
-		c := p.Changes[i]
+	for i := len(inst.Changes) - 1; i >= 0; i-- {
+		c := inst.Changes[i]
 		switch c.Kind {
-		case ChangeNewEdge:
-			kind := t.EdgeLive
+		case ChangeKindNewEdge:
+			kind := t.EdgeKindLive
 			if g.IsDeleted(c.Src) || g.IsDeleted(c.Dest) {
-				kind = t.EdgeDeleted
+				kind = t.EdgeKindDeleted
 			}
-			g.RemoveEdge(c.Src, c.Dest, kind, p.Hash)
-		case ChangeNewNode:
+			g.RemoveEdge(c.Src, c.Dest, kind, inst.Hash)
+		case ChangeKindNewNode:
 			// Remove edges added during AddNode.
 			for _, up := range c.UpContext {
-				kind := t.EdgeLive
+				kind := t.EdgeKindLive
 				if g.IsDeleted(up) || g.IsDeleted(c.NodeID) {
-					kind = t.EdgeDeleted
+					kind = t.EdgeKindDeleted
 				}
-				g.RemoveEdge(up, c.NodeID, kind, p.Hash)
+				g.RemoveEdge(up, c.NodeID, kind, inst.Hash)
 			}
 			for _, down := range c.DownContext {
-				kind := t.EdgeLive
+				kind := t.EdgeKindLive
 				if g.IsDeleted(c.NodeID) || g.IsDeleted(down) {
-					kind = t.EdgeDeleted
+					kind = t.EdgeKindDeleted
 				}
-				g.RemoveEdge(c.NodeID, down, kind, p.Hash)
+				g.RemoveEdge(c.NodeID, down, kind, inst.Hash)
 			}
 			// Remove the node itself.
 			g.RemoveNode(c.NodeID)
@@ -250,9 +250,9 @@ func (p *Patch) Unapply(g t.GraphStore) error {
 // assertNoForeignEdges errors if id has any incident edge whose IntroducedBy
 // is not own. Such an edge belongs to a dependent patch and would dangle if
 // we removed id.
-func assertNoForeignEdges(g t.GraphReader, id t.NodeID, own t.PatchHash) error {
+func assertNoForeignEdges(g t.GraphReaderI, id t.NodeID, own t.PatchHash) error {
 	for e := range g.ForwardEdges(id) {
-		if e.Kind == t.EdgePseudo {
+		if e.Kind == t.EdgeKindPseudo {
 			continue // pseudo-edges are derived, not authored
 		}
 		if e.IntroducedBy != own {
@@ -260,7 +260,7 @@ func assertNoForeignEdges(g t.GraphReader, id t.NodeID, own t.PatchHash) error {
 		}
 	}
 	for e := range g.BackwardEdges(id) {
-		if e.Kind == t.EdgePseudo {
+		if e.Kind == t.EdgeKindPseudo {
 			continue
 		}
 		if e.IntroducedBy != own {
@@ -292,16 +292,16 @@ func ComputeDependencies(changes []Change) []t.PatchHash {
 	}
 	for _, c := range changes {
 		switch c.Kind {
-		case ChangeNewNode:
+		case ChangeKindNewNode:
 			for _, ctx := range c.UpContext {
 				add(ctx.Patch)
 			}
 			for _, ctx := range c.DownContext {
 				add(ctx.Patch)
 			}
-		case ChangeDeleteNode:
+		case ChangeKindDeleteNode:
 			add(c.NodeID.Patch)
-		case ChangeNewEdge:
+		case ChangeKindNewEdge:
 			add(c.Src.Patch)
 			add(c.Dest.Patch)
 		}

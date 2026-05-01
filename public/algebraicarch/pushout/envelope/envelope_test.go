@@ -21,13 +21,13 @@ func samplePatch(tt *testing.T) *patch.Patch {
 	tt.Helper()
 	return patch.NewPatch("alice", "two-line insert", nil, []patch.Change{
 		{
-			Kind:      patch.ChangeNewNode,
+			Kind:      patch.ChangeKindNewNode,
 			NodeID:    t.NodeID{Patch: t.PlaceholderHash, Index: 0},
 			Content:   []byte("hello\n"),
 			UpContext: []t.NodeID{t.RootNodeID},
 		},
 		{
-			Kind:      patch.ChangeNewNode,
+			Kind:      patch.ChangeKindNewNode,
 			NodeID:    t.NodeID{Patch: t.PlaceholderHash, Index: 1},
 			Content:   []byte("world\n"),
 			UpContext: []t.NodeID{{Patch: t.PlaceholderHash, Index: 0}},
