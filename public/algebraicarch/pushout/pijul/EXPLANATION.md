@@ -49,12 +49,20 @@ The package is layered around two seams:
   [PatchMetadata] records — never raw text bytes. Every `pijul`-flavoured
   detail (textual flat-KV format, conflict-marker emission, side
   labels, trailing-newline invariant) is a backend-internal concern.
-- **`pijul_text_backend.go`** — the *realisation* of `BackendI` that
-  drives a real `pijul` binary. `pijulTextBackend` and `pijulTextRepo`
-  serialise cells to pijul's textual working-copy format on the way
-  down and parse them back on the way up. The future native backend
-  (`pijul_native_backend.go`, planned) will satisfy the same `BackendI`
-  with in-memory graggle operations and on-disk JSON patches.
+- **`pijul_text_backend.go`** — the `pijul-text` realisation of
+  `BackendI` that drives a real `pijul` binary. `pijulTextBackend` and
+  `pijulTextRepo` serialise cells to pijul's textual working-copy
+  format on the way down and parse them back on the way up.
+- **`pijul_pushout_backend.go`** — the `pushout-native` realisation of
+  `BackendI` that uses the vendored `algebraicarch/pushout/graggle`
+  package directly. Each actor holds an in-memory `*store.Graggle` plus
+  an on-disk patch log under `<repoDir>/.pushout/`; `SetAndRecord` runs
+  `patch.LineDiff` over the live subgraph and constructs a `Patch`
+  natively; `State` walks `algo.LinearOrder()` (or, in conflict mode,
+  groups live nodes by cell path) without any text round-trip. No
+  `pijul` binary is involved. Selected at construction via
+  `Config.Backend = pijul.NewPushoutBackend()` or by setting
+  `PIJUL_BACKEND=pushout` before launching the demo.
 - **`pijul_runner.go`** — the *CLI-verb* seam: `pijulRunnerI` is one
   method per `pijul` subcommand (Init, Clone, Add, Record, Push, Pull,
   ApplyPatch, Log, LatestHash, Credit, LatestChangeFile). It is
@@ -136,6 +144,32 @@ still load-bearing for the `pijul-text` realisation):
   pijul's internal numbering, not patch hashes. The text backend emits
   them on serialisation and discards them on parse; the public
   `ConflictData` carries only the two side values.
+
+Pushout-native backend internal invariants:
+
+- The on-disk layout is `<repoDir>/.pushout/changes/<short-hex>.json`
+  for envelope files plus `<repoDir>/.pushout/applied.txt` listing
+  hashes in apply order (one per line). `applied.txt` is the apply
+  *log*; the in-memory `*Graggle` is the apply *result*. Push/Pull
+  computes a set-difference over `applied.txt` and ships envelopes in
+  apply-log order so dependencies always precede dependents.
+- `tolerantApply` (in the backend) applies a patch like
+  `patch.Patch.Apply` but treats `DeleteNode` of an already-deleted
+  node as a no-op. Two actors can independently delete the same node
+  (the typical "both edited the same line" merge); without this,
+  applying the second patch would error. AddNode/AddEdge identities
+  are patch-scoped so they do not need the same relaxation.
+- Conflict cells are derived in `cellsFromConflictedGraggle` by
+  grouping live nodes by their cell path. The demo's value model
+  guarantees each path appears as one node per actor's edit, so the
+  Alice/Bob sides come straight from the two live nodes' contents.
+  Cycle conflicts are out of scope; cell ordering in conflict mode is
+  alphabetical (the linear case preserves user order).
+- `SetAndRecord` rejects "arbitrary new value" conflict resolution: a
+  cell whose value matches neither side returns an error rather than
+  attempting an open-ended structural rewrite. The demo's UI offers
+  Keep-Alice / Keep-Bob buttons only, so this matches the user-facing
+  affordance.
 
 ## Trade-offs
 
