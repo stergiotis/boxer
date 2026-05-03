@@ -194,10 +194,13 @@ func parseRecordText(content string) (cells []KVLine, hasConflict bool) {
 			if conflictPath == "" {
 				conflictPath = path
 			}
-			if cd.AliceValue == "" {
+			switch {
+			case cd.AliceValue == "":
 				cd.AliceValue = val
-			} else if cd.BobValue == "" {
+			case cd.BobValue == "":
 				cd.BobValue = val
+			default:
+				cd.OtherValues = append(cd.OtherValues, val)
 			}
 		default:
 			path, val, ok := splitKVLine(line)
@@ -233,11 +236,15 @@ func serializeRecordText(cells []KVLine) (raw []byte) {
 	out := make([]string, 0, len(cells)+4)
 	for _, c := range cells {
 		if c.Conflict != nil {
-			out = append(out, ">>>>>>> 1")
-			out = append(out, fmt.Sprintf(`%s "%s"`, c.Path, c.Conflict.AliceValue))
-			out = append(out, "=======")
-			out = append(out, fmt.Sprintf(`%s "%s"`, c.Path, c.Conflict.BobValue))
-			out = append(out, "<<<<<<< 2")
+			values := c.Conflict.AllValues()
+			out = append(out, fmt.Sprintf(">>>>>>> %d", 1))
+			for i, v := range values {
+				if i > 0 {
+					out = append(out, "=======")
+				}
+				out = append(out, fmt.Sprintf(`%s "%s"`, c.Path, v))
+			}
+			out = append(out, fmt.Sprintf("<<<<<<< %d", len(values)))
 		} else {
 			out = append(out, fmt.Sprintf(`%s "%s"`, c.Path, c.Value))
 		}

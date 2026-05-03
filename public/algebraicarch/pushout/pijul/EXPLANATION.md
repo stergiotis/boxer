@@ -169,16 +169,20 @@ Pushout-native backend internal invariants:
   package. Switching changes every patch hash; envelope files written
   by a SHA-256 build will fail Decode's hash-validation guard.
 - Conflict cells are derived in `cellsFromConflictedGraggle` by
-  grouping live nodes by their cell path. The demo's value model
-  guarantees each path appears as one node per actor's edit, so the
-  Alice/Bob sides come straight from the two live nodes' contents.
-  Cycle conflicts are out of scope; cell ordering in conflict mode is
+  grouping live nodes by their cell path. Every live node for a given
+  path becomes one side of the resulting `ConflictData`: the first
+  two as `AliceValue` / `BobValue` and any extras as `OtherValues`,
+  so 3+-way conflicts (multiple actors editing the same cell, or
+  cycle conflicts that surface as N live nodes for one path) render
+  one Keep button per side. Cell ordering in conflict mode is
   alphabetical (the linear case preserves user order).
-- `SetAndRecord` rejects "arbitrary new value" conflict resolution: a
-  cell whose value matches neither side returns an error rather than
-  attempting an open-ended structural rewrite. The demo's UI offers
-  Keep-Alice / Keep-Bob buttons only, so this matches the user-facing
-  affordance.
+- `changesForResolution` accepts arbitrary chosen values: per
+  conflicted path, every live sibling whose content does not match
+  the chosen value is deleted, and the chosen value's existing node
+  (if any) is kept. If no existing sibling matches — the user typed
+  a brand-new value — every sibling is deleted and a new node is
+  added carrying the chosen value, anchored to a parent / downstream
+  shared by the conflict siblings via `commonAnchors`.
 
 ## Trade-offs
 

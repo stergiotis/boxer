@@ -32,13 +32,29 @@ type KVLine struct {
 	Credit   *PatchMetadata
 }
 
-// ConflictData captures both sides of a two-way conflict at the cell
-// level. Side identifiers (pijul's "1"/"2" labels in the textual
-// working copy) are *not* part of this struct: they are a text-format
-// detail handled inside the text backend.
+// ConflictData captures every side of a conflict at the cell level.
+// AliceValue / BobValue hold the first two side values for the common
+// 2-way case; OtherValues carries any additional sides for N-way
+// conflicts (3+ actors editing the same cell, or cycle conflicts that
+// surface as multiple live nodes for one path). Side identifiers
+// (pijul's "1"/"2" labels in the textual working copy) are *not* part
+// of this struct: they are a text-format detail handled inside the
+// text backend.
 type ConflictData struct {
-	AliceValue string
-	BobValue   string
+	AliceValue  string
+	BobValue    string
+	OtherValues []string
+}
+
+// AllValues returns every side of the conflict in render order
+// (Alice, Bob, then OtherValues). Convenience for renderers that
+// iterate buttons / chips per side.
+func (inst ConflictData) AllValues() (out []string) {
+	out = make([]string, 0, 2+len(inst.OtherValues))
+	out = append(out, inst.AliceValue)
+	out = append(out, inst.BobValue)
+	out = append(out, inst.OtherValues...)
+	return
 }
 
 // Task is one unit of work scheduled on [DemoStore.TaskQueue]. Action

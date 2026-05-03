@@ -256,12 +256,25 @@ func (inst *pushoutRepo) cellsFromConflictedGraggle() (cells []KVLine) {
 			}
 			cells = append(cells, cell)
 		default:
-			_, va, _ := splitKVLine(strings.TrimSuffix(string(inst.g.NodeContent(nodes[0])), "\n"))
-			_, vb, _ := splitKVLine(strings.TrimSuffix(string(inst.g.NodeContent(nodes[1])), "\n"))
-			cells = append(cells, KVLine{
-				Path:     p,
-				Conflict: &ConflictData{AliceValue: va, BobValue: vb},
-			})
+			values := make([]string, 0, len(nodes))
+			for _, n := range nodes {
+				_, v, ok := splitKVLine(strings.TrimSuffix(string(inst.g.NodeContent(n)), "\n"))
+				if !ok {
+					continue
+				}
+				values = append(values, v)
+			}
+			cd := &ConflictData{}
+			if len(values) > 0 {
+				cd.AliceValue = values[0]
+			}
+			if len(values) > 1 {
+				cd.BobValue = values[1]
+			}
+			if len(values) > 2 {
+				cd.OtherValues = append(cd.OtherValues, values[2:]...)
+			}
+			cells = append(cells, KVLine{Path: p, Conflict: cd})
 		}
 	}
 	return
@@ -366,36 +379,106 @@ func (inst *pushoutRepo) changesForLineDiff(cells []KVLine) (changes []patch.Cha
 	return
 }
 
+// changesForResolution turns the user's chosen cell values into the
+// graph operations that resolve every conflicted path. For each path
+// with multiple live nodes:
+//   - if exactly one node's content matches cell.Value, keep it and
+//     delete every other live sibling
+//   - otherwise (cell.Value is brand-new, or none matched), delete
+//     every live sibling and add a new node carrying cell.Value
+//
+// This generalises both the original "Keep Alice / Keep Bob" path and
+// the previously-rejected "arbitrary value" path. It also handles
+// N-way conflicts (3+ actors editing the same cell) and cycle
+// conflicts (multiple live nodes for one path) uniformly — the
+// resolution is always "produce one live node per path with the
+// user's chosen value".
 func (inst *pushoutRepo) changesForResolution(cells []KVLine) (changes []patch.Change, err error) {
 	cellByPath := make(map[string]KVLine, len(cells))
 	for _, c := range cells {
 		cellByPath[c.Path] = c
 	}
-	for _, conf := range algo.DetectConflicts(inst.g) {
-		if conf.Kind != "order" || len(conf.Nodes) != 3 {
+
+	byPath := make(map[string][]t.NodeID)
+	var paths []string
+	for n := range inst.g.AllLiveNodes() {
+		if n == t.RootNodeID {
 			continue
 		}
-		sideA, sideB := conf.Nodes[1], conf.Nodes[2]
-		pathA, valA, okA := splitKVLine(strings.TrimSuffix(string(inst.g.NodeContent(sideA)), "\n"))
-		_, valB, okB := splitKVLine(strings.TrimSuffix(string(inst.g.NodeContent(sideB)), "\n"))
-		if !okA || !okB {
+		path, _, ok := splitKVLine(strings.TrimSuffix(string(inst.g.NodeContent(n)), "\n"))
+		if !ok {
 			continue
 		}
-		cell, ok := cellByPath[pathA]
+		if _, exists := byPath[path]; !exists {
+			paths = append(paths, path)
+		}
+		byPath[path] = append(byPath[path], n)
+	}
+	sort.Strings(paths)
+
+	var newNodeIndex uint64
+	for _, path := range paths {
+		nodes := byPath[path]
+		if len(nodes) < 2 {
+			continue
+		}
+		cell, ok := cellByPath[path]
 		if !ok || cell.Conflict != nil {
 			// Partial resolution; this conflict stays unresolved
 			// in this patch.
 			continue
 		}
-		switch cell.Value {
-		case valA:
-			changes = append(changes, patch.Change{Kind: patch.ChangeKindDeleteNode, NodeID: sideB})
-		case valB:
-			changes = append(changes, patch.Change{Kind: patch.ChangeKindDeleteNode, NodeID: sideA})
-		default:
-			err = eh.Errorf("pushout-native: arbitrary conflict resolution (value %q matches neither side) is not supported; use Keep-A or Keep-B", cell.Value)
-			return
+		matched := false
+		for _, n := range nodes {
+			_, v, vok := splitKVLine(strings.TrimSuffix(string(inst.g.NodeContent(n)), "\n"))
+			if !vok {
+				continue
+			}
+			if v == cell.Value && !matched {
+				matched = true
+				continue
+			}
+			changes = append(changes, patch.Change{Kind: patch.ChangeKindDeleteNode, NodeID: n})
 		}
+		if matched {
+			continue
+		}
+		// The user's chosen value matches no existing side: delete
+		// every sibling (already scheduled above) and add a new node
+		// carrying the chosen value, anchored between a parent and a
+		// downstream that the conflict siblings shared.
+		upCtx, downCtx := commonAnchors(inst.g, nodes)
+		changes = append(changes, patch.Change{
+			Kind:        patch.ChangeKindNewNode,
+			NodeID:      t.NodeID{Patch: t.PlaceholderHash, Index: newNodeIndex},
+			Content:     []byte(formatCellLine(cell)),
+			UpContext:   upCtx,
+			DownContext: downCtx,
+		})
+		newNodeIndex++
+	}
+	return
+}
+
+// commonAnchors picks an upContext + downContext for a new node that
+// replaces a set of conflict-sibling live nodes. Conflict siblings in
+// the demo's KV-row pattern share their parent and child anchors (all
+// were inserted by `LineDiff` between the same two unchanged
+// neighbours), so the first sibling's first live parent / child gives
+// the right anchors. Returns nil slices if a sibling sits at a graph
+// boundary; the caller's [patch.NewPatch] tolerates empty contexts.
+func commonAnchors(g *store.Graggle, conflictNodes []t.NodeID) (upContext, downContext []t.NodeID) {
+	if len(conflictNodes) == 0 {
+		return
+	}
+	sample := conflictNodes[0]
+	for p := range g.LiveParents(sample) {
+		upContext = []t.NodeID{p}
+		break
+	}
+	for ch := range g.LiveChildren(sample) {
+		downContext = []t.NodeID{ch}
+		break
 	}
 	return
 }
