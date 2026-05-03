@@ -1,42 +1,32 @@
-# boxer — punch above your weight.
+# boxer
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/stergiotis/boxer.svg)](https://pkg.go.dev/github.com/stergiotis/boxer) [![Go Report Card](https://goreportcard.com/badge/github.com/stergiotis/boxer)](https://goreportcard.com/report/github.com/stergiotis/boxer)
 
-Go packages pursuing low allocation, data-oriented design, and predictable performance.
-
-## Goals
-* Apply **low allocation** coding practices;
-* use **data oriented programming** whenever appropriate;
-* introduce as few [**runtime dependencies**](https://deps.dev/go/github.com%252Fstergiotis%252Fboxer) as possible;
-* provide a **productive**, **pleasant** and **low churn** developer experience;
-* have **predictable performance**;
-* provide production grade **error reporting**.
+## Maturity
+Alpha, incomplete test coverage, unstable, API may still change heavily.
 
 ## Installation
 ```
 go get github.com/stergiotis/boxer
 ```
 
-## Maturity
-Alpha, incomplete test coverage, unstable, API may still change heavily.
-
 ## What's inside
-Boxer is a collection of loosely-coupled packages under `public/`. The larger subsystems:
+Boxer is a collection of packages under `public/`. The larger subsystems:
 
 * `semistructured/leeway` — code-driven entity-attribute-value data model with a staged codegen pipeline (DDL / DML / read-access / streaming read-access).
 * `semistructured/markdown/obsidian` — goldmark-based parser for Obsidian-flavored markdown (callouts, wikilinks, embeds, tags, highlights, frontmatter).
 * `db/clickhouse/dsl` — typed ClickHouse SQL DSL with an AST, marshalling, and nanopass rewrite passes (ADR-0002, ADR-0006).
 * `streaming/persisted/kafka` — embedded Kafka producer/consumer derived from Redpanda Connect's franz-go integration (ADR-0005).
 * `caching` — read-through batch cache aimed at ETL / build / graph-traversal pipelines: latency-hidden via dependency accumulation and partition-aware bulk fetches, with optional disk-backed L2.
-* `analytics/similarity/compression` — compression-based similarity metrics (NCD, CCC) over any `Reset`-able compressor; zero-allocation hot path for gzip/zstd.
+* `analytics/similarity/compression` — compression-based similarity metrics (NCD, CCC) over any `Reset`-able compressor.
 * `math/numerical/finddivisions` and `math/numerical/timeticks` — axis-tick layout: Heckbert / Wilkinson / Talbot for numeric and log axes; a uPlot-derived calendar ladder with locale-aware boundary snapping for time axes.
 * `science/geo/h3` — H3 geospatial indexing via a Rust→WASM→wazero bridge (ADR-0003); Rust source under `rust/h3bridge`.
 * `fec` — forward error correction (e.g. `fec/ea/golay24`).
 * `eb`, `eh` — structured error building and error handling.
 * `curlier` — Go code mimicking [cUrl](https://curl.se/).
-* `batching`, `containers`, `hashing`, `identity`, `logical`, `observability`, `parsing`, `slices`, `statespace`, `unsafeperf`, … — focused utility packages.
+* `batching`, `containers`, `hashing`, `identity`, `logical`, `observability`, `parsing`, `slices`, `statespace`, `unsafeperf`, … — utility packages.
 
-`internal/` carries vendored third-party ports held to boxer's coding standards.
+`internal/` carries vendored third-party ports.
 
 `imzero` and `fffi` were extracted into [`imzero_imgui`](https://github.com/stergiotis/imzero_imgui) (ImZero1) and are no longer part of this module.
 
@@ -92,7 +82,7 @@ Third-party licenses are vetted by a CI gate that builds a CycloneDX SBOM with `
 Currently, no third-party contributions are accepted.
 
 ## AI Codegen Declaration
-Code and documentation up to commit [`aa78183`](https://github.com/stergiotis/boxer/commit/aa78183adc2de0b0266d34f476b543d122af04a7) is 100% human-generated. Subsequent code with substantial LLM contributions is gated by `llm_generated_*` build tags (see [Building](#building)) so AI-free builds remain possible. LLM-generated code is held to the same coding standards as human-generated code.
+Code and documentation up to commit [`aa78183`](https://github.com/stergiotis/boxer/commit/aa78183adc2de0b0266d34f476b543d122af04a7) is 100% human-generated. Subsequent code with substantial LLM contributions is gated by `llm_generated_*` build tags (see [Building](#building)) so AI-free builds remain possible.
 
 ## License
 The MIT License (MIT) 2023-2026 — [Panos Stergiotis](https://github.com/stergiotis/). See [LICENSE](LICENSE) for full terms.
