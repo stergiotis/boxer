@@ -7,7 +7,6 @@ import (
 	"github.com/stergiotis/boxer/public/code"
 	"github.com/stergiotis/boxer/public/dev"
 	"github.com/stergiotis/boxer/public/docgen"
-	"github.com/stergiotis/boxer/public/fffi/compiletime"
 	"github.com/stergiotis/boxer/public/gov"
 	cli2 "github.com/stergiotis/boxer/public/hmi/cli"
 	"github.com/stergiotis/boxer/public/math/numerical/finddivisions"
@@ -49,7 +48,6 @@ func mainC() (exitCode int) {
 		Commands: cli2.CommandsNilRemoved(
 			eb.NewCliCommand(),
 			cbor.NewCommand(),
-			compiletime.NewCommand(nil, nil),
 			lw.NewCliCommand(),
 			observability.NewCliCommand(),
 			docgen.NewDocCli(),
