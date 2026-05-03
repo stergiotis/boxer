@@ -42,6 +42,21 @@ type FunctionEvaluator struct {
 		f      EvalFuncI
 		useAny bool
 	}
+	onObservation nanopass.ObservationFuncI
+}
+
+// OnObservation sets a callback fired for every visited call whose name is
+// in the registry, regardless of whether the args were foldable
+// (always-fire semantics — see nanopass.Observation). Passing nil clears
+// it. Used by editor-side tooling to attach affordances (regex testers,
+// time-range pickers, …) to detected call sites without altering the
+// pass's rewrite behaviour.
+//
+// The callback runs synchronously inside the walk; keep it cheap (log,
+// append, non-blocking channel send) — heavy work belongs on the consumer
+// side after the pass returns.
+func (inst *FunctionEvaluator) OnObservation(fn nanopass.ObservationFuncI) {
+	inst.onObservation = fn
 }
 
 // NewFunctionEvaluator creates a new FunctionEvaluator.
@@ -179,8 +194,23 @@ func (inst *FunctionEvaluator) walkAndEval(e *env.Environment, pr *nanopass.Pars
 	if funcExpr, ok := ctx.(*grammar1.ColumnExprFunctionContext); ok {
 		name := strings.ToLower(funcExpr.Identifier().GetText())
 		name = strings.Trim(name, "\"`")
-		if _, found := inst.funcs[name]; found {
+		if fn, found := inst.funcs[name]; found {
 			val, evaluated, _ := inst.tryEval(e, pr, funcExpr)
+			if inst.onObservation != nil {
+				obs := nanopass.Observation{
+					Name:      name,
+					Evaluated: evaluated,
+					Src:       nanopass.SourceRangeFromCtx(funcExpr),
+				}
+				if evaluated {
+					// Re-extract args so the observer sees what the handler
+					// saw. tryEval doesn't surface them; the cost is bounded
+					// by the number of registered calls in the body.
+					args, _ := inst.extractEvalArgs(e, pr, funcExpr, fn.useAny)
+					obs.Args = args
+				}
+				inst.onObservation(obs)
+			}
 			if evaluated {
 				serialized, serErr := marshalling.MarshalGoValueToSQL(val)
 				if serErr == nil {
