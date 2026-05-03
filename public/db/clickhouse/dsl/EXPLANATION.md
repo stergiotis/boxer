@@ -11,7 +11,7 @@ status: draft
 A structured approach to parsing, analyzing, transforming, and generating
 ClickHouse SELECT queries in Go.
 
-## Core Idea
+## Idea
 
 SQL is treated as a **data structure**, not a string. Every query flows through
 a pipeline that progressively simplifies its representation:

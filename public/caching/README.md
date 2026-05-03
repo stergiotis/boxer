@@ -128,7 +128,7 @@ cache := caching.NewReadThroughCache[string, Data, int](
 workItems := []int{1, 2, 3, ...}
 
 for i, wID := range workItems {
-    // 1. SIGNAL NEW BATCH (Crucial for memory management)
+    // 1. SIGNAL NEW BATCH (needed for memory management)
     if i % 100 == 0 {
         cache.AdvanceEpoch()
     }

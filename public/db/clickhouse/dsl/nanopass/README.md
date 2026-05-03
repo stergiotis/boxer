@@ -71,7 +71,7 @@ type Environment struct {
 
 `env.Extract` parses the SET prelude exhaustively: keys with the `param_` prefix or that match a body slot become `Params`; everything else becomes `SessionSettings`. The inline SETTINGS clause and FORMAT clause are populated as **read-only views** — they live in body, and passes that mutate them rewrite the body's CST (which then refreshes the env on the next Extract). `env.Integrate` re-emits SET-prelude lines only.
 
-## Core Components
+## Components
 
 | File | Purpose |
 |------|---------|

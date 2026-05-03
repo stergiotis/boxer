@@ -19,7 +19,7 @@ ClickHouse resolves table references to databases using these rules, in order:
    - Falls back to `default` if neither is specified
 3. **Independent resolution** — each table reference in a query resolves independently; the database of one table does NOT influence the resolution of another table in the same query
 
-### Key behaviors
+### Behaviors
 
 - **UNION ALL**: Each branch resolves tables against the same connection default — there is no per-branch database context
 - **Subqueries**: Inherit the connection's default database, not the enclosing query's table databases
