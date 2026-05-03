@@ -9,6 +9,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/google/uuid"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
@@ -450,6 +452,20 @@ type VerbatimSql struct {
 	SQL string
 }
 
+// ControlFlow is a sibling escape-hatch return type that signals
+// pipeline-level control flow rather than emitting a value. Handlers (e.g.
+// EvalFuncI) may return a ControlFlow to communicate with the nanopass
+// runner; marshalling renders it as a comment-shaped textual marker
+// containing Sentinel, which the pipeline detects via cheap string scan and
+// acts on (see nanopass.IsDiscardOutput).
+//
+// The marker shape is defined in the nanopass package (since the pipeline
+// is the consumer); marshalling delegates to nanopass.MarshalControlFlowMarker
+// when serialising. Recognised sentinels are declared in nanopass.
+type ControlFlow struct {
+	Sentinel uuid.UUID
+}
+
 // UnresolvedParamSlot represents a `{name: Type}` parameter slot encountered
 // in the body for which no SET-bound value was found in the environment. It
 // is opaque to outer evaluators — passing it as an argument prevents the
@@ -545,6 +561,19 @@ func MarshalGoValueToSQLWithOptionsCast(val any, opts MarshalOptions) (sql strin
 			return
 		}
 		sql = v.SQL
+		return
+
+	// --- Pipeline control flow (renders to a comment-shaped marker the
+	// nanopass runner detects via string scan; nil pointer renders empty
+	// because ControlFlow is a control value, not a NULL-coercible value). ---
+	case ControlFlow:
+		sql = nanopass.MarshalControlFlowMarker(v.Sentinel)
+		return
+	case *ControlFlow:
+		if v == nil {
+			return
+		}
+		sql = nanopass.MarshalControlFlowMarker(v.Sentinel)
 		return
 
 	// --- Param slots ---

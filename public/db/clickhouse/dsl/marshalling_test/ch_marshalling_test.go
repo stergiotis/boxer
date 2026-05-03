@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -852,6 +853,39 @@ func TestMarshalGoValueVerbatimSqlPtrNil(t *testing.T) {
 	sql, err := marshalling.MarshalGoValueToSQL(v)
 	require.NoError(t, err)
 	assert.Equal(t, "NULL", sql)
+}
+
+// --- ControlFlow ---
+
+func TestMarshalGoValueControlFlowDiscard(t *testing.T) {
+	cf := marshalling.ControlFlow{Sentinel: nanopass.PassDiscardOutput}
+	sql, err := marshalling.MarshalGoValueToSQL(cf)
+	require.NoError(t, err)
+	assert.Equal(t, nanopass.PassDiscardOutputMarker, sql)
+}
+
+func TestMarshalGoValueControlFlowPtr(t *testing.T) {
+	cf := marshalling.ControlFlow{Sentinel: nanopass.PassDiscardOutput}
+	sql, err := marshalling.MarshalGoValueToSQL(&cf)
+	require.NoError(t, err)
+	assert.Equal(t, nanopass.PassDiscardOutputMarker, sql)
+}
+
+// Nil ControlFlow renders empty (not "NULL") because it's a control value,
+// not a NULL-coercible value.
+func TestMarshalGoValueControlFlowPtrNil(t *testing.T) {
+	var v *marshalling.ControlFlow
+	sql, err := marshalling.MarshalGoValueToSQL(v)
+	require.NoError(t, err)
+	assert.Equal(t, "", sql)
+}
+
+// The marker shape is a SQL block comment so leaks past the discard check
+// parse as no-ops rather than syntax errors.
+func TestPassDiscardOutputMarkerIsBlockComment(t *testing.T) {
+	m := nanopass.PassDiscardOutputMarker
+	assert.True(t, len(m) > 4 && m[:2] == "/*" && m[len(m)-2:] == "*/",
+		"marker must be wrapped in /* */ to parse as a SQL no-op when leaked")
 }
 
 func TestMarshalGoValueSliceAny(t *testing.T) {

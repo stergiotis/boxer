@@ -3,10 +3,57 @@
 package nanopass
 
 import (
+	"strings"
+
+	"github.com/google/uuid"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
+
+// ControlFlowMarkerPrefix and ControlFlowMarkerSuffix bracket a UUID-shaped
+// sentinel inside a SQL block comment. The marker shape lives here (rather
+// than in marshalling, which depends on nanopass) so the runner can scan
+// for it without a circular import; marshalling.ControlFlow renders via
+// MarshalControlFlowMarker.
+//
+// Block-comment shape ensures any leak past the discard check parses as a
+// SQL no-op instead of a syntax error.
+const (
+	ControlFlowMarkerPrefix = "/*@@nanopass-control:"
+	ControlFlowMarkerSuffix = "@@*/"
+)
+
+// PassDiscardOutput, when returned via marshalling.ControlFlow from a
+// handler invoked inside an ApplyFunc, instructs the nanopass runner to
+// discard the pass's rewritten output and forward the input unchanged to
+// the next pass. Used for analytical passes that exist solely to populate
+// observation side channels.
+var PassDiscardOutput = uuid.MustParse("4c7d9e2f-1b86-4a35-9f0d-3e5c7a18b9d2")
+
+// PassDiscardOutputMarker is the pre-rendered text the runner scans for.
+// Equivalent to MarshalControlFlowMarker(PassDiscardOutput).
+var PassDiscardOutputMarker = MarshalControlFlowMarker(PassDiscardOutput)
+
+// MarshalControlFlowMarker renders a sentinel UUID into the comment-shaped
+// marker format. Pure helper.
+func MarshalControlFlowMarker(sentinel uuid.UUID) string {
+	return ControlFlowMarkerPrefix + sentinel.String() + ControlFlowMarkerSuffix
+}
+
+// IsDiscardOutput reports whether out contains the discard sentinel marker.
+// Used by Sequence, runFixedPoint, and Pass.Run to honour the "analytical
+// pass" contract: a handler returns
+// marshalling.ControlFlow{Sentinel: nanopass.PassDiscardOutput}, the
+// marshaller renders it as a comment-shaped marker spliced into the body,
+// and consumption sites see the marker and forward the *input* instead of
+// the rewritten output.
+//
+// Single strings.Contains call; UUID inside the marker rules out collisions
+// with user-typed text.
+func IsDiscardOutput(out string) bool {
+	return strings.Contains(out, PassDiscardOutputMarker)
+}
 
 // DefaultFixedPointMaxIter is the default convergence cap used by the runner
 // when auto-wrapping a pass that declares Properties.NeedsFixedPoint.
@@ -76,6 +123,10 @@ const (
 // Run applies the pass to a complete SQL string by extracting the env,
 // applying, and integrating back. Most external callers use Run; passes
 // invoked from another pass's Apply use Apply directly.
+//
+// If newBody carries the discard-output marker (analytical-pass contract),
+// the rewritten output is dropped and the original sql is returned
+// unchanged.
 func (p Pass) Run(sql string) (result string, err error) {
 	e, body, err := env.Extract(sql)
 	if err != nil {
@@ -85,6 +136,10 @@ func (p Pass) Run(sql string) (result string, err error) {
 	newBody, applyErr := p.applyWithProps(e, body)
 	if applyErr != nil {
 		err = applyErr
+		return
+	}
+	if IsDiscardOutput(newBody) {
+		result = sql
 		return
 	}
 	result, err = e.Integrate(newBody)
@@ -114,12 +169,20 @@ func (p Pass) applyWithProps(e *env.Environment, body string) (newBody string, e
 
 // runFixedPoint repeats fn until convergence or maxIter. Used both by
 // applyWithProps for auto-wrapping and by the FixedPoint combinator.
+//
+// A discard marker in next short-circuits the loop: the rewritten output is
+// dropped and the current accumulator is returned. This makes analytical
+// passes safe to wrap in fixed-point — they observe once and exit instead
+// of producing a stream of marker-laced outputs.
 func runFixedPoint(name string, fn ApplyFunc, e *env.Environment, body string, maxIter int) (result string, err error) {
 	result = body
 	for i := 0; i < maxIter; i++ {
 		next, applyErr := fn(e, result)
 		if applyErr != nil {
 			err = eb.Build().Str("pass", name).Int("iter", i).Errorf("apply failed: %w", applyErr)
+			return
+		}
+		if IsDiscardOutput(next) {
 			return
 		}
 		if next == result {
@@ -136,6 +199,11 @@ var ErrNoFixPointReached = eh.Errorf("did not converge, no fix point reached")
 
 // Sequence composes passes left-to-right under a single name. The returned
 // Pass calls each child's applyWithProps in turn, sharing the same env.
+//
+// A child returning the discard marker has its rewritten output dropped;
+// cur is forwarded to the next child unchanged, and the marker does not
+// propagate. This keeps analytical passes (which exist to populate
+// observation side channels) composable with normal rewriters.
 func Sequence(name string, ps ...Pass) Pass {
 	return Pass{
 		Name: name,
@@ -145,6 +213,9 @@ func Sequence(name string, ps ...Pass) Pass {
 				next, err := child.applyWithProps(e, cur)
 				if err != nil {
 					return "", err
+				}
+				if IsDiscardOutput(next) {
+					continue
 				}
 				cur = next
 			}
