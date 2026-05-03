@@ -3,8 +3,8 @@ name: License compliance
 on: [push]
 
 jobs:
-  golicenses:
-    name: go license check
+  license_gate:
+    name: license gate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -17,4 +17,4 @@ jobs:
       - name: Setup
         run: ./scripts/ci/install.sh
       - name: Check Licenses
-        run: ./scripts/ci/golicenses.sh
+        run: ./scripts/ci/license_gate.sh

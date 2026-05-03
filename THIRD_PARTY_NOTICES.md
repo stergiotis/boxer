@@ -366,40 +366,52 @@ fetched.
 A machine-readable license inventory can be regenerated at any time:
 
 ```
-go tool github.com/google/go-licenses csv ./public/... > third_party_licenses.csv
+go tool github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod mod \
+    -licenses=true -test=true -json -output sbom.json
+go run ./internal/cmd/licensegate -sbom sbom.json -csv third_party_licenses.csv
 ```
 
 This is not committed to the repository because it is fully derived
 from `go.mod` + `go.sum` and would otherwise drift on every dependency
-update.
+update. The CSV columns are `module,version,spdx_id,category`.
 
 ### 3.1 Compliance gate
 
 CI rejects any transitive dependency whose license falls into the
-[`forbidden`](https://github.com/google/licenseclassifier) or
-`restricted` categories used by `go-licenses` -- principally AGPL-*,
-GPL-*, LGPL-*, SSPL, and similar copyleft or commercially-restrictive
-terms. boxer's MIT license is incompatible with copyleft inbound
-dependencies, and the gate enforces this prospectively. See
-`.github/workflows/licenses.yaml` and `scripts/ci/golicenses.sh`.
+`forbidden` or `restricted` categories enumerated in
+[`internal/cmd/licensegate/policy.go`](internal/cmd/licensegate/policy.go) --
+principally AGPL-\*, GPL-\*, LGPL-\*, SSPL, BUSL, OSL, and CC-BY-NC-\*,
+plus other copyleft or commercially-restrictive terms. boxer's MIT
+license is incompatible with copyleft inbound dependencies, and the
+gate enforces this prospectively. See
+`.github/workflows/licenses.yaml` and `scripts/ci/license_gate.sh`;
+the design rationale is in
+[ADR-0004](doc/adr/0004-license-gate-cyclonedx.md).
 
 The gate does **not** fail on `unknown` classifications. A handful of
-upstream modules ship a single `LICENSE` at the module root and
-`go-licenses` cannot always resolve it for subpackages (e.g.
-`github.com/golang/freetype/{raster,truetype}`, transitively via
-`github.com/fogleman/gg`). The CI script surfaces these cases as a
-trailing "unresolved licenses" block for periodic manual review --
-typically the upstream license is well-known and permissive, but the
-classifier's regex did not locate it. If a new entry appears in that
-block on a dependency bump, verify the upstream license manually before
-merging.
+upstream modules ship their `LICENSE` in a form `cyclonedx-gomod`'s
+detector cannot classify (e.g. `LICENSE.md` instead of `LICENSE`, or
+an Apache header without a canonical license file). The gate surfaces
+these cases as a trailing "unresolved licenses" block for periodic
+manual review -- typically the upstream license is well-known and
+permissive, but the detector did not classify it. If a new entry
+appears in that block on a dependency bump, verify the upstream
+license manually before merging.
+
+Where an upstream is dual-licensed and the detector reports only the
+copyleft branch, the elected SPDX ID is recorded in the
+`moduleLicenseElection` map in `policy.go`. The current entry is
+`github.com/golang/freetype → FTL` (per upstream LICENSE: the project
+is offered under either the FreeType License (BSD-like) or
+GPL-2.0-or-later; boxer elects FTL).
 
 ### 3.2 Apache-2.0 dependencies and downstream NOTICE propagation
 
 A subset of `go.mod` dependencies are Apache-2.0-licensed and ship
 their own `NOTICE` files (notably `github.com/apache/arrow-go/v18`,
 `github.com/apache/thrift`, and `github.com/tetratelabs/wazero`; the
-authoritative list is the `go-licenses` CSV output above).
+authoritative list is the `licensegate` CSV inventory regenerated as
+shown above).
 
 When boxer is consumed in **source form** (`go get`, module proxy),
 downstream users receive these dependencies independently with their
@@ -418,4 +430,4 @@ substitute for the upstream NOTICEs; both must travel with the binary.
 - When adding a vendored binary artifact, append a subsection under
   section 2 with the build provenance and license chain.
 - Module-level dependency updates do not require edits here: `go.mod`
-  is the source of truth and the `go-licenses` CI gate is the guard.
+  is the source of truth and the `licensegate` CI gate is the guard.
