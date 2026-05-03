@@ -75,8 +75,11 @@ The package is layered around two seams:
 - **`pijul_store.go`** — orchestration: per-actor state, the background
   task worker, and the parallel reload via `errgroup`. `DemoStore`
   composes a single `BackendI` + per-actor `RepoI` instances; demo
-  actions like `SaveEdit` and `EmailPatch` are now thin wrappers over
-  `state.Repo.SetAndRecord(...)` and `state.Repo.ExportLatest(...)`.
+  actions (`SaveEdit`, `ResolveConflict`, `DeleteCell`, `CreateCell`)
+  funnel through one `recordWithCellsTransform` helper that reads the
+  repo's live cells, applies a transform, and calls
+  `state.Repo.SetAndRecord(...)`. `EmailPatch` similarly wraps
+  `state.Repo.ExportLatest(...)`.
 - **`pijul_render.go`** / **`pijul_playbook.go`** — egui2 view layer.
   Per-actor edit windows, central server/inbox window, and a
   storyboard window with five canned playbooks.
