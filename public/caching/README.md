@@ -165,7 +165,7 @@ The `processItem` function:
 *   **`WithMetrics(collector)`**: Inject Prometheus/StatsD hooks.
 *   **`WithErrorBackoff(duration)`**: Tune the circuit breaker recovery time.
 
-## 8. Anti-Patterns
+## 7. Anti-Patterns
 
 1.  **Sharing across Goroutines:** Never wrap this in a Mutex and share it. Create one Cache instance per Worker Goroutine.
 2.  **Ignoring the Boolean:** `val := c.Get(k)`. Never ignore the `found` boolean. If `false`, `val` is zero/garbage.
