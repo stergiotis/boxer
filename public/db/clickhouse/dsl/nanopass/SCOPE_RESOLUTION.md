@@ -6,7 +6,7 @@ status: draft
 
 > **Status: draft — pre-human-review.** Not yet verified against the current documentation standard. Do not cite as authoritative.
 
-# Database Resolution in the Nanopass Framework
+# Database Resolution in Nanopass
 
 ## How ClickHouse Resolves Databases
 
@@ -25,9 +25,9 @@ ClickHouse resolves table references to databases using these rules, in order:
 - **Subqueries**: Inherit the connection's default database, not the enclosing query's table databases
 - **JOINs**: `FROM db1.t1 JOIN t2 ON ...` — `t2` resolves to the connection default, NOT to `db1`
 - **CTEs**: CTE names (`WITH cte AS (...)`) are query-scoped aliases, not database-qualified. `FROM cte` references the CTE, not a table named `cte` in any database
-- **Table functions**: `remote('host', 'db', 'table')` — the database is an argument to the function, not in the table identifier. The nanopass framework cannot and should not rewrite inside function arguments
+- **Table functions**: `remote('host', 'db', 'table')` — the database is an argument to the function, not in the table identifier. Nanopass cannot and should not rewrite inside function arguments
 
-## How the Nanopass Framework Models This
+## How Nanopass Models This
 
 ### SelectScope.DefaultDatabase
 
@@ -62,7 +62,7 @@ for _, ts := range scope.Tables {
 
 ## Comparison With ClickHouse
 
-| Behavior | ClickHouse | Nanopass Framework | Match? |
+| Behavior | ClickHouse | Nanopass | Match? |
 |----------|-----------|-------------------|--------|
 | `db.table` resolves to `db` | Yes | `ts.Database = "db"` | ✅ |
 | Unqualified `table` resolves to connection default | Yes | `ts.ResolvedDatabase(scope)` returns `scope.DefaultDatabase` | ✅ |
@@ -80,19 +80,19 @@ for _, ts := range scope.Tables {
 
 ### Session-level `USE db`
 
-The framework processes individual SQL queries, not sessions. The `USE` statement changes the default database for subsequent queries in a session — this is connection-level state that must be provided externally via `BuildScopes(pr, "mydb")`.
+Nanopass processes individual SQL queries, not sessions. The `USE` statement changes the default database for subsequent queries in a session — this is connection-level state that must be provided externally via `BuildScopes(pr, "mydb")`.
 
 ### Table Functions
 
-`remote('host', 'db', 'table')`, `file('path')`, `numbers(10)`, etc. — these are opaque to the framework. The database parameter (if any) is a function argument, not a table identifier. The framework correctly skips `TableExprFunctionContext` nodes.
+`remote('host', 'db', 'table')`, `file('path')`, `numbers(10)`, etc. — these are opaque to Nanopass. The database parameter (if any) is a function argument, not a table identifier. Nanopass skips `TableExprFunctionContext` nodes.
 
 ### Runtime Indirection
 
-Distributed tables, materialized views, and dictionaries may reference tables in other databases at runtime. This is execution-level behavior invisible in the query text. The framework operates purely on query syntax.
+Distributed tables, materialized views, and dictionaries may reference tables in other databases at runtime. This is execution-level behavior invisible in the query text. Nanopass operates purely on query syntax.
 
 ### Database-Qualified Column References
 
-ClickHouse allows `db.table.column` syntax in some contexts. The framework's `ColumnIdentifierContext` tracking handles `table.column` qualifiers but does not track the database part of column references. This would require three-part identifier resolution, which is rare in practice.
+ClickHouse allows `db.table.column` syntax in some contexts. The `ColumnIdentifierContext` tracking handles `table.column` qualifiers but does not track the database part of column references. This would require three-part identifier resolution, which is rare in practice.
 
 ## Usage Patterns
 

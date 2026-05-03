@@ -1,6 +1,6 @@
 ---
 type: explanation
-audience: callsite framework maintainer
+audience: callsites package maintainer
 status: draft
 ---
 
@@ -8,7 +8,7 @@ status: draft
 
 # Callsite design — background
 
-Devirtualization and monomorphization notes relevant to the callsite framework. The external resources below record the constraints we design against.
+Devirtualization and monomorphization notes relevant to the callsites package. The external resources below record the constraints the package is designed against.
 
 ## Resources
 ## Devirtualization

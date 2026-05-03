@@ -19,7 +19,6 @@ General-purpose primitives for measuring similarity between texts using data com
 
 - Compressor-agnostic: works with any `io.Writer + io.Closer` that supports `Reset` (gzip, zstd, bzip2, ...).
 - zstd raw-dictionary optimization: preloads the reference text as initial compressor history, avoiding redundant re-compression on every measurement. Controlled by `useZstdDictOptimization` const.
-- Zero-allocation hot path for gzip/zstd (measured via benchmarks).
 
 ## References
 

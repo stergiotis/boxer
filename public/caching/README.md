@@ -6,27 +6,27 @@ status: draft
 
 > **Status: draft — pre-human-review.** Not yet verified against the current documentation standard. Do not cite as authoritative.
 
-# Batch-Optimized Dependency Cache
+# caching — read-through dependency cache
 
 ## 1. Overview
-The `ReadThroughCache` is a specialized, single-threaded synchronization primitive designed for **high-throughput data processing pipelines**.
+The `ReadThroughCache` is a single-threaded read-through cache that accumulates missing keys across pending work items and fetches them in partition-grouped batches.
 
-Unlike traditional caches (LRU/LFU) that focus on hit rates for random access, this system focuses on **Latency Hiding via Batching**. It decouples the *declaration* of data dependencies from the *execution* of fetching them, effectively transforming sequential `Get()` calls into optimized, partition-aware batch I/O.
+`Get()` calls declare dependencies; the actual fetch happens later, once enough work items have queued up misses. This trades random-access hit rates (the LRU/LFU target) for sequential-call latency.
 
-**Target Use Case:** ETL pipelines, Build Systems, Graph Traversals, and ML Feature Engineering where processing is cheap, but I/O is expensive and restartable.
+**Target use case:** ETL pipelines, build systems, graph traversals, and ML feature engineering — workloads where processing is cheap, I/O is expensive, and the work can be replayed.
 
 ## 2. Architecture
 
-The system operates as a state machine with three distinct storage tiers and a "Restart Loop" execution model.
+The system is a state machine with three storage tiers and a discovery / suspend / replay execution loop.
 
 ### 2.1 Storage Hierarchy
 1.  **L1 Primary (RAM):** A native Go map optimized for $O(1)$ access. Contains the "Working Set."
 2.  **L2 Stash (Victim Cache):** A secondary buffer (Memory or Disk) for items evicted from L1. It handles "Thrashing" scenarios where the working set exceeds L1 capacity.
 3.  **L3 Source (Fetcher):** The external truth (DB, S3, API). Accessed only via batch interfaces.
 
-## 2.2 The "Restart Loop" Pattern (Corrected)
+## 2.2 Execution model
 
-The core mechanism is **Speculative Execution with Accumulation**:
+Execution proceeds in phases:
 
 1.  **Discovery Phase:** The user code runs inside a `WorkItem` iterator. It requests **all** necessary keys for the current unit of work.
 2.  **Accumulation:**
@@ -37,7 +37,7 @@ The core mechanism is **Speculative Execution with Accumulation**:
 5.  **Fetch:** The cache groups keys by Partition and performs a bulk fetch.
 6.  **Replay:** The user code is re-run (`IterateReadyWorkItems`). This time, data is present, and the logic proceeds to completion.
 
-The `processItem` function must be written to **Accumulate Misses**:
+The `processItem` function must be written to accumulate misses:
 
 ### Incorrect (Sequential / N+1 Latency)
 ```go
@@ -69,7 +69,7 @@ if missing { return }
 Result = valA + valB
 ```
 
-## 3. Key Features & Implementation Details
+## 3. Implementation details
 
 ### 3.1 Epoch-Based Pinning
 To prevent cache thrashing (evicting data needed by the *current* batch to make room for *other* data in the same batch), the system uses **Epochs**.
@@ -84,7 +84,7 @@ When the L1 cache is full of "Pinned" items (Working Set > L1 Capacity), items a
     *   `SliceStash`: CPU-heavy ($O(N)$ scan), Memory-dense. Good for small L2.
     *   `MapStash`: Memory-heavy, CPU-light ($O(1)$). Good for large RAM L2.
     *   `PogrebStash`/`PebbleStash`: Disk-backed. Good for datasets exceeding RAM.
-*   **Eviction:** The Stash implements a Round-Robin or Random eviction policy when full, ensuring the system never OOMs.
+*   **Eviction:** The Stash implements a round-robin or random eviction policy when full, bounding L2 size.
 
 ### 3.3 Circuit Breaker
 To prevent cascading failures during outages:
@@ -100,7 +100,7 @@ To prevent cascading failures during outages:
 
 | Feature | Advantage | Trade-off / Constraint |
 | :--- | :--- | :--- |
-| **Single Threaded** | No Mutex contention; massive throughput; simple code. | **Must** be owned by a single Goroutine. No concurrent access. |
+| **Single Threaded** | No mutex contention; simple control flow. | **Must** be owned by a single Goroutine. No concurrent access. |
 | **Restart Loop** | Eliminates manual batching complexity. | User logic **must** be idempotent (safe to run multiple times). |
 | **Strict Pinning** | Guarantees progress for large batches. | Requires explicit `AdvanceEpoch()` call, or memory will leak (logic-wise). |
 | **Staleness** | Supports Stale-While-Revalidate. | Eventual consistency; user must opt-in via `GetAcceptStale`. |

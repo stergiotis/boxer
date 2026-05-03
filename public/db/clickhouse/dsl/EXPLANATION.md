@@ -6,7 +6,7 @@ status: draft
 
 > **Status: draft — pre-human-review.** Not verified against the current documentation standard; migrated from `ARCHITECTURE.md`. Do not cite as authoritative.
 
-# ClickHouse SQL DSL Framework
+# ClickHouse SQL DSL
 
 A structured approach to parsing, analyzing, transforming, and generating
 ClickHouse SELECT queries in Go.
@@ -27,7 +27,7 @@ closing the loop.
 
 ## Two Grammars
 
-The framework uses two ANTLR4 parser grammars sharing one lexer. This embodies
+The DSL uses two ANTLR4 parser grammars sharing one lexer. This embodies
 the robustness principle: **accept generously, emit carefully**.
 
 **Grammar1** accepts the full ClickHouse SELECT surface — all syntactic sugar,
@@ -41,7 +41,7 @@ as structural validation — if SQL parses with Grammar2, it is guaranteed
 canonical. The AST converter only handles Grammar2 context types, so
 non-canonical forms are rejected at compile time (the types don't exist).
 
-## Nanopass Framework
+## Nanopass passes
 
 The `nanopass` package provides the infrastructure for small, composable SQL
 transformations. Each **pass** is a function `string → (string, error)` that
@@ -57,7 +57,7 @@ Key properties of passes:
 - **Convergent** — `FixedPoint(pass, maxIter)` repeats a pass until stable,
   handling nested constructs like `CASE WHEN CASE ... END ... END`
 
-The framework provides `Parse()` (Grammar1) and `ParseCanonical()` (Grammar2)
+The package provides `Parse()` (Grammar1) and `ParseCanonical()` (Grammar2)
 as entry points, with `ValidateCanonical` as a pipeline-terminal pass that
 proves the output conforms to Grammar2.
 
