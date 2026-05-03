@@ -34,7 +34,11 @@ go tool github.com/kisielk/errcheck -tags "$tags" \
 
 echo ""
 echo "=== nilaway ==="
-go tool go.uber.org/nilaway/cmd/nilaway -tags "$tags" ./public/... 2>&1 || true
+# nilaway's own -tags flag is deprecated/no-op; build tags must be passed via
+# GOFLAGS so the analysis driver picks them up. Without this, tag-gated
+# packages (e.g. llm_generated_*) are excluded and importers cascade into
+# hundreds of bogus "could not import / undefined" lines.
+GOFLAGS="-tags=$tags" go tool go.uber.org/nilaway/cmd/nilaway ./public/... 2>&1 || true
 
 echo ""
 echo "=== doclint ==="
