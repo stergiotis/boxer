@@ -293,6 +293,11 @@ func (inst *FunctionEvaluator) extractEvalArgs(e *env.Environment, pr *nanopass.
 		if _, isUnres := val.(marshalling.UnresolvedParamSlot); isUnres {
 			return nil, false
 		}
+		// Resolved param slots travel through like literals — unwrap to
+		// the underlying Value before applying useAny conversion.
+		if rps, isResolved := val.(marshalling.ResolvedParamSlot); isResolved {
+			val = rps.Value
+		}
 		if useAny {
 			switch t := val.(type) {
 			case marshalling.TypedLiteral:
@@ -301,8 +306,6 @@ func (inst *FunctionEvaluator) extractEvalArgs(e *env.Environment, pr *nanopass.
 					return nil, false
 				}
 				args = append(args, a)
-			case marshalling.ResolvedParamSlot:
-				args = append(args, t.Value)
 			default:
 				args = append(args, val)
 			}
@@ -377,6 +380,11 @@ func (inst *FunctionEvaluator) evalColumnExpr(e *env.Environment, pr *nanopass.P
 // is known. A slot the env has no record of is treated as unresolved-with-
 // blank-type rather than non-evaluable, so the caller's opaque-arg rule
 // applies.
+//
+// Lazy hydration: when the env entry has Raw and Type populated but Value
+// is nil (the typical post-Extract state), the Raw text is deserialised on
+// demand and cached back into the env. This avoids forcing env.Extract to
+// import marshalling (which would create a cycle through nanopass).
 func resolveParamSlot(e *env.Environment, ctx *grammar1.ColumnExprParamSlotContext) (val any, ok bool) {
 	name, typ := splitParamSlotText(ctx.GetText())
 	if name == "" {
@@ -389,10 +397,43 @@ func resolveParamSlot(e *env.Environment, ctx *grammar1.ColumnExprParamSlotConte
 	if entry.Type == "" {
 		entry.Type = typ
 	}
+	if entry.Value == nil && entry.Raw != "" {
+		if hydrated, hydrateErr := hydrateParamRaw(entry.Raw); hydrateErr == nil {
+			entry.Value = hydrated
+			if e != nil {
+				e.Params[name] = entry
+			}
+		}
+	}
 	if entry.IsResolved() && entry.Value != nil {
 		return marshalling.ResolvedParamSlot{Name: name, Type: entry.Type, Value: entry.Value}, true
 	}
 	return marshalling.UnresolvedParamSlot{Name: name, Type: entry.Type}, true
+}
+
+// hydrateParamRaw deserialises a Param.Raw value into a Go-typed marshalling
+// representation. Composite forms (`[…]`, `(…)`) go through
+// UnmarshalCompositeLiteral; everything else through UnmarshalScalarLiteral.
+func hydrateParamRaw(raw string) (val any, err error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		err = eh.Errorf("hydrateParamRaw: empty raw")
+		return
+	}
+	first := trimmed[0]
+	last := trimmed[len(trimmed)-1]
+	if (first == '[' && last == ']') || (first == '(' && last == ')') {
+		val, err = marshalling.UnmarshalCompositeLiteral(trimmed)
+		if err != nil {
+			err = eh.Errorf("hydrateParamRaw composite: %w", err)
+		}
+		return
+	}
+	val, err = marshalling.UnmarshalScalarLiteral(trimmed)
+	if err != nil {
+		err = eh.Errorf("hydrateParamRaw scalar: %w", err)
+	}
+	return
 }
 
 // splitParamSlotText takes the textual form of a param slot — e.g.
