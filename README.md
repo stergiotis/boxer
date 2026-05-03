@@ -1,5 +1,8 @@
-# boxer [![Go Reference](https://pkg.go.dev/badge/github.com/stergiotis/boxer.svg)](https://pkg.go.dev/github.com/stergiotis/boxer) [![Go Report Card](https://goreportcard.com/badge/github.com/stergiotis/boxer)](https://goreportcard.com/report/github.com/stergiotis/boxer)
-Go packages helping to win by K.O. when fighting cross-cutting concerns.
+# boxer — punch above your weight.
+
+[![Go Reference](https://pkg.go.dev/badge/github.com/stergiotis/boxer.svg)](https://pkg.go.dev/github.com/stergiotis/boxer) [![Go Report Card](https://goreportcard.com/badge/github.com/stergiotis/boxer)](https://goreportcard.com/report/github.com/stergiotis/boxer)
+
+Go packages pursuing low allocation, data-oriented design, and predictable performance.
 
 ## Goals
 * Apply **low allocation** coding practices;
