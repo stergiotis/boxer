@@ -21,8 +21,7 @@ Alpha, incomplete test coverage, unstable, API may still change heavily.
 ### Modules
 <dl>
 <dt>leeway</dt><dd>A code-driven entity-attribute-value data model.</dd>
-<dt>imzero</dt><dd>A CGO-free immediate mode GUI library based on <a href="https://github.com/ocornut/imgui">DearImGui</a>. Client applications are available in <a href="https://github.com/stergiotis/imzero_client_cpp">imzero_client_cpp</a>.</dd>
-<dt>fffi</dt><dd>Frame oriented Foreign Function Interface</dd>
+<dt>imzero / fffi</dt><dd>Moved to <a href="https://github.com/stergiotis/imzero_imgui">imzero_imgui</a> (ImZero1).</dd>
 <dt>curlier</dt><dd>Go code mimicking <a href="https://curl.se/">cUrl</a>.</dd>
 <dt>eb</dt><dd>Structured error building.</dd>
 <dt>eh</dt><dd>Error handling.</dd>
