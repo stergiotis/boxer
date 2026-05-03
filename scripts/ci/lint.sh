@@ -38,7 +38,13 @@ echo "=== nilaway ==="
 # GOFLAGS so the analysis driver picks them up. Without this, tag-gated
 # packages (e.g. llm_generated_*) are excluded and importers cascade into
 # hundreds of bogus "could not import / undefined" lines.
-GOFLAGS="-tags=$tags" go tool go.uber.org/nilaway/cmd/nilaway ./public/... 2>&1 || true
+# -include-pkgs restricts analysis to first-party code; stdlib and 3rd-party
+# returns are then assumed non-nil, which suppresses the bulk of noise from
+# os.Stdout/http.Response.Body/ANTLR-style false positives that we cannot
+# fix locally.
+GOFLAGS="-tags=$tags" go tool go.uber.org/nilaway/cmd/nilaway \
+    -include-pkgs=github.com/stergiotis/boxer \
+    ./public/... 2>&1 || true
 
 echo ""
 echo "=== doclint ==="
