@@ -157,15 +157,8 @@ func MergeSliceSorted[K any, V any](sortedSliceReadIn []K, coSliceWriteIn []V, k
 	if existed {
 		coSliceWrite[idx] = merge(coSliceWrite[idx], val)
 	} else {
-		var dummyV V
-		var dummyK K
-		coSliceWrite = append(coSliceWrite, dummyV)
-		copy(coSliceWrite[idx+1:], coSliceWrite[idx:])
-		coSliceWrite[idx] = val
-
-		sortedSliceRead = append(sortedSliceRead, dummyK)
-		copy(sortedSliceRead[idx+1:], sortedSliceRead[idx:])
-		sortedSliceRead[idx] = key
+		coSliceWrite = slices.Insert(coSliceWrite, idx, val)
+		sortedSliceRead = slices.Insert(sortedSliceRead, idx, key)
 	}
 	return
 }
@@ -176,15 +169,8 @@ func InsertSliceSortedFunc[K any, V any](sortedSliceReadIn []K, coSliceWriteIn [
 	if existed {
 		coSliceWrite[idx] = val
 	} else {
-		var dummyV V
-		var dummyK K
-		coSliceWrite = append(coSliceWrite, dummyV)
-		copy(coSliceWrite[idx+1:], coSliceWrite[idx:])
-		coSliceWrite[idx] = val
-
-		sortedSliceRead = append(sortedSliceRead, dummyK)
-		copy(sortedSliceRead[idx+1:], sortedSliceRead[idx:])
-		sortedSliceRead[idx] = key
+		coSliceWrite = slices.Insert(coSliceWrite, idx, val)
+		sortedSliceRead = slices.Insert(sortedSliceRead, idx, key)
 	}
 	return
 }
@@ -195,15 +181,8 @@ func InsertSliceSorted[K cmp.Ordered, V any](sortedSliceReadIn []K, coSliceWrite
 	if existed {
 		coSliceWrite[idx] = val
 	} else {
-		var dummyV V
-		var dummyK K
-		coSliceWrite = append(coSliceWrite, dummyV)
-		copy(coSliceWrite[idx+1:], coSliceWrite[idx:])
-		coSliceWrite[idx] = val
-
-		sortedSliceRead = append(sortedSliceRead, dummyK)
-		copy(sortedSliceRead[idx+1:], sortedSliceRead[idx:])
-		sortedSliceRead[idx] = key
+		coSliceWrite = slices.Insert(coSliceWrite, idx, val)
+		sortedSliceRead = slices.Insert(sortedSliceRead, idx, key)
 	}
 	return
 }
