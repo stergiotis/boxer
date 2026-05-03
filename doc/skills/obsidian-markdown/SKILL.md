@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `obsidian` package renders Obsidian.md-flavored Markdown to HTML using [goldmark](https://github.com/yuin/goldmark). Each Obsidian-specific feature is implemented as a proper goldmark extension (AST node + parser + renderer) — no regexp hacks. Features are individually toggleable via a bitmask.
+The `obsidian` package renders Obsidian.md-flavored Markdown to HTML using [goldmark](https://github.com/yuin/goldmark). Each Obsidian-specific feature is implemented as a goldmark extension (AST node + parser + renderer). Features are individually toggleable via a bitmask.
 
 ## Package Location
 
@@ -249,7 +249,7 @@ Extensions are registered with specific goldmark parser priorities to ensure cor
 
 ## Design Decisions
 
-1. **Goldmark extensions, not regexp** — Each feature is a proper `parser.InlineParser`, `parser.BlockParser`, or `parser.ASTTransformer` with corresponding `renderer.NodeRenderer`. This ensures correct interaction with goldmark's parsing pipeline.
+1. **Goldmark extensions, not regex** — Each feature is a `parser.InlineParser`, `parser.BlockParser`, or `parser.ASTTransformer` with corresponding `renderer.NodeRenderer`, fitting goldmark's parsing pipeline.
 
 2. **ResolverI in separate package** — Prevents import cycles between `obsidian` and `ext/*` packages. The resolver package has no dependencies on goldmark.
 

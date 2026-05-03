@@ -8,7 +8,7 @@ The `marshalling` package provides bidirectional conversion between Go values an
 
 `github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling`
 
-## Core Type: `TypedLiteral`
+## `TypedLiteral`
 
 `TypedLiteral` is the single value type for all ClickHouse SQL literals. It replaces the former separate `Literal` and `TypedLiteral` types.
 
