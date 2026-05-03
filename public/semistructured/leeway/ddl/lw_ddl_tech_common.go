@@ -136,6 +136,7 @@ func (inst *CanonicalColumnarRepresentation) ResolveMembership(s common.Membersh
 		cardRole = common.ColumnRoleMixedLowCardVerbatimCardinality
 		return
 	}
+	err = eb.Build().Stringer("spec", s).Errorf("no membership branch matched: %w", common.ErrUnhandledMembershipSpec)
 	return
 }
 

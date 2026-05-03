@@ -87,7 +87,7 @@ func GenerateSampleType(n uint64) (sample canonicaltypes2.PrimitiveAstNodeI) {
 		}
 		n -= u
 	}
-	return
+	panic("unreachable: sampleTypeU exhausted without matching switch case (likely a new entry was added without a corresponding case)")
 }
 
 func GenerateSamplePrimitiveType(rnd *rand.Rand, accept func(ct canonicaltypes2.PrimitiveAstNodeI) (ok bool, msg string)) (sample canonicaltypes2.PrimitiveAstNodeI) {
