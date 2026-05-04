@@ -95,8 +95,8 @@ func (inst *pijulTextRepo) Path() (p string) {
 }
 
 // Init creates the repo directory and runs `pijul init`. The tracked
-// file is *not* added here — the first [SetAndRecord] does the `pijul
-// add` and the initial `pijul record` together.
+// file is *not* added here — the first [pijulTextRepo.SetAndRecord]
+// does the `pijul add` and the initial `pijul record` together.
 func (inst *pijulTextRepo) Init(ctx context.Context) (audit string, err error) {
 	merr := os.MkdirAll(inst.path, 0755)
 	if merr != nil {

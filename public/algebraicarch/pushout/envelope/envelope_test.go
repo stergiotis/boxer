@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stergiotis/pebble2impl/src/go/public/algebraicarch/pushout/graggle/patch"
-	"github.com/stergiotis/pebble2impl/src/go/public/algebraicarch/pushout/graggle/store"
-	t "github.com/stergiotis/pebble2impl/src/go/public/algebraicarch/pushout/graggle/types"
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/patch"
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/store"
+	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
 )
 
 // samplePatch builds a small patch with two new nodes chained off root, so

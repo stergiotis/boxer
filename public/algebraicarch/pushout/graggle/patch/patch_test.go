@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stergiotis/pebble2impl/src/go/public/algebraicarch/pushout/graggle/store"
-	t "github.com/stergiotis/pebble2impl/src/go/public/algebraicarch/pushout/graggle/types"
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/store"
+	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
 )
 
 // --- ComputeDependencies ---

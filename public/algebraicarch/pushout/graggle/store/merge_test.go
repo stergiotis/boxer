@@ -6,9 +6,9 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/stergiotis/pebble2impl/src/go/public/algebraicarch/pushout/graggle/algo"
-	"github.com/stergiotis/pebble2impl/src/go/public/algebraicarch/pushout/graggle/patch"
-	t "github.com/stergiotis/pebble2impl/src/go/public/algebraicarch/pushout/graggle/types"
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/algo"
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/patch"
+	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
 )
 
 // --- Integration: Complex Pseudo-Edge Scenarios ---

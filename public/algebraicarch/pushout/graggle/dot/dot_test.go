@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stergiotis/pebble2impl/src/go/public/algebraicarch/pushout/graggle/dot"
-	"github.com/stergiotis/pebble2impl/src/go/public/algebraicarch/pushout/graggle/patch"
-	"github.com/stergiotis/pebble2impl/src/go/public/algebraicarch/pushout/graggle/store"
-	t "github.com/stergiotis/pebble2impl/src/go/public/algebraicarch/pushout/graggle/types"
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/dot"
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/patch"
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/store"
+	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
 )
 
 func TestDot_Simple(tt *testing.T) {

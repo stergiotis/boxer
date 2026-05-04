@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	t "github.com/stergiotis/pebble2impl/src/go/public/algebraicarch/pushout/graggle/types"
+	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
 )
 
 // Dot returns a Graphviz DOT representation of the graph.

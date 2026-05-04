@@ -8,9 +8,9 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/stergiotis/pebble2impl/src/go/public/algebraicarch/pushout/graggle/patch"
-	"github.com/stergiotis/pebble2impl/src/go/public/algebraicarch/pushout/graggle/qc"
-	t "github.com/stergiotis/pebble2impl/src/go/public/algebraicarch/pushout/graggle/types"
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/patch"
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/qc"
+	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
 )
 
 // --- Invariants hold on basic states ---

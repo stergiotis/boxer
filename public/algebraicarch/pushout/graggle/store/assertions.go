@@ -2,7 +2,7 @@
 
 package store
 
-import t "github.com/stergiotis/pebble2impl/src/go/public/algebraicarch/pushout/graggle/types"
+import t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
 
 // Compile-time interface assertions.
 var (

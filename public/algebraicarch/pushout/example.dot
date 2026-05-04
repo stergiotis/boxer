@@ -1,0 +1,23 @@
+digraph graggle {
+  rankdir=TB;
+  node [fontname="monospace", fontsize=10];
+  edge [fontname="monospace", fontsize=8];
+
+  root [label="root", shape=diamond, style=filled, fillcolor=lightgrey];
+  n_0660280bb1582b29_0 [label="0660280b/0\\nline a", shape=box, style=filled, fillcolor=lightyellow];
+  n_0660280bb1582b29_2 [label="0660280b/2\\nline c", shape=box, style=filled, fillcolor=lightyellow];
+  n_0660280bb1582b29_3 [label="0660280b/3\\nline d", shape=box, style=filled, fillcolor=lightyellow];
+  n_7e487a07c5179d57_0 [label="7e487a07/0\\nline Y", shape=box, style=filled, fillcolor=lightyellow];
+  n_dfb6325ff6607e59_0 [label="dfb6325f/0\\nline X", shape=box, style=filled, fillcolor=lightyellow];
+  n_0660280bb1582b29_1 [label="0660280b/1\\nline b", shape=box, style="dashed,filled", fillcolor=lightgrey, fontcolor=grey40];
+
+  root -> n_0660280bb1582b29_0 [style=solid, color=black];
+  n_0660280bb1582b29_0 -> n_0660280bb1582b29_1 [style=dashed, color=grey];
+  n_0660280bb1582b29_0 -> n_0660280bb1582b29_2 [style=dotted, color=blue];
+  n_0660280bb1582b29_1 -> n_0660280bb1582b29_2 [style=dashed, color=grey];
+  n_0660280bb1582b29_2 -> n_0660280bb1582b29_3 [style=solid, color=black];
+  n_0660280bb1582b29_2 -> n_dfb6325ff6607e59_0 [style=solid, color=black];
+  n_0660280bb1582b29_2 -> n_7e487a07c5179d57_0 [style=solid, color=black];
+  n_7e487a07c5179d57_0 -> n_0660280bb1582b29_3 [style=solid, color=black];
+  n_dfb6325ff6607e59_0 -> n_0660280bb1582b29_3 [style=solid, color=black];
+}

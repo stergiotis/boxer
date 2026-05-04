@@ -10,7 +10,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 
-	t "github.com/stergiotis/pebble2impl/src/go/public/algebraicarch/pushout/graggle/types"
+	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
 )
 
 // Graggle is the core data structure: a directed graph of lines (nodes).

@@ -18,7 +18,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 
-	"github.com/stergiotis/pebble2impl/src/go/public/algebraicarch/pushout/graggle/patch"
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/patch"
 )
 
 // EnvelopeV1 is the v1 transmissible form of a patch. Producer and

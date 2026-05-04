@@ -5,9 +5,9 @@ package algo_test
 import (
 	"testing"
 
-	"github.com/stergiotis/pebble2impl/src/go/public/algebraicarch/pushout/graggle/algo"
-	"github.com/stergiotis/pebble2impl/src/go/public/algebraicarch/pushout/graggle/store"
-	t "github.com/stergiotis/pebble2impl/src/go/public/algebraicarch/pushout/graggle/types"
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/algo"
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/store"
+	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
 )
 
 func TestTopoSort_SingleNode(tt *testing.T) {

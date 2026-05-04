@@ -7,7 +7,7 @@ package algo
 import (
 	"slices"
 
-	t "github.com/stergiotis/pebble2impl/src/go/public/algebraicarch/pushout/graggle/types"
+	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
 )
 
 // Tarjan computes strongly connected components of the live subgraph.

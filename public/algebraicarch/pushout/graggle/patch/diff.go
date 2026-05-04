@@ -5,7 +5,7 @@ package patch
 import (
 	"bytes"
 
-	t "github.com/stergiotis/pebble2impl/src/go/public/algebraicarch/pushout/graggle/types"
+	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
 )
 
 // DiffResult holds the changes needed to transform one file state to another.
