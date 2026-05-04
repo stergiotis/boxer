@@ -336,6 +336,66 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
    limitations under the License.
 ```
 
+### 1.5 Joe Neeman -- ojo / graggle patch-theory design (MIT)
+
+- Files: `public/algebraicarch/pushout/graggle/` (entire subtree).
+- Origin (source): <https://github.com/jneem/ojo>.
+- Pinned upstream (source): `d24088016cff43ab2d03166d27539a06e96081a6`
+  (HEAD as of 2026-05-04). Wayback snapshot:
+  <https://web.archive.org/web/20260203233433/https://github.com/jneem/ojo>.
+- Origin (companion writing): Joe Neeman's blog series, source repo
+  <https://github.com/jneem/jneem.github.io>:
+  - <https://jneem.github.io/merging/> — introduces the *graggle* model.
+  - <https://jneem.github.io/pijul/> — patch composition and merging.
+  - <https://jneem.github.io/pseudo/> — pseudo-edges across deletions.
+- Pinned upstream (companion writing): `e709e085ad6a6badd86b79d8ad698ac1e2b1e716`
+  (HEAD of `jneem/jneem.github.io` as of 2026-05-04). Wayback snapshots:
+  - merging: <https://web.archive.org/web/20260208054945/https://jneem.github.io/merging/>
+  - pijul: <https://web.archive.org/web/20260220064237/https://jneem.github.io/pijul/>
+  - pseudo: <https://web.archive.org/web/20260221144337/https://jneem.github.io/pseudo/>
+- License: MIT (ojo is dual-licensed `Apache-2.0 OR MIT`; boxer elects
+  MIT to align with the project's own MIT licence). The companion blog
+  posts have no declared licence — they are cited, not redistributed;
+  the upstream repo SHA and the Wayback snapshots above provide
+  archival pointers without re-hosting.
+- Per-package NOTICE: [`public/algebraicarch/pushout/graggle/NOTICE`](public/algebraicarch/pushout/graggle/NOTICE).
+- Scope: the `graggle` subtree borrows ojo's conceptual model — the
+  *graggle* (graph-of-lines) data structure, pseudo-edge bookkeeping
+  over deleted regions, the patch-with-placeholder-hashes construction
+  scheme, and the apply / unapply / reapply round-trip test pattern.
+  The Go code is an independent re-implementation guided by Joe
+  Neeman's blog series, not a line-by-line port of ojo's Rust source.
+  The package was first authored in a sister project (`hackathon_2026`)
+  and vendored here at commit `cd992b1`; see commit `c6b802a` for the
+  vendor record. The companion `pijul` subpackage shells out to the
+  Pijul VCS binary; see [`public/algebraicarch/pushout/pijul/EXPLANATION.md`](public/algebraicarch/pushout/pijul/EXPLANATION.md)
+  for the conceptual lineage.
+
+```
+MIT License
+
+Copyright (c) 2018-2019 Joe Neeman
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
+
 ## 2. Vendored binary artifacts
 
 ### 2.1 h3.wasm -- H3 hierarchical geospatial index (Apache-2.0)

@@ -1,0 +1,96 @@
+public/algebraicarch/pushout/graggle — NOTICE
+==============================================
+
+This package borrows the conceptual model and terminology of Joe
+Neeman's `ojo` patch-theory revision-control prototype. The licence
+text under which boxer elects to receive that contribution is
+reproduced verbatim under section 1.5 of <THIRD_PARTY_NOTICES.md> at
+the repository root.
+
+----------------------------------------------------------------------
+ORIGIN
+----------------------------------------------------------------------
+
+Conceptually derived from:
+  github.com/jneem/ojo
+  https://github.com/jneem/ojo
+
+  Copyright (c) 2018-2019 Joe Neeman.
+  Dual-licensed under Apache-2.0 OR MIT; boxer elects MIT.
+
+  Pinned upstream commit (HEAD as of 2026-05-04):
+    d24088016cff43ab2d03166d27539a06e96081a6
+  Wayback snapshot:
+    https://web.archive.org/web/20260203233433/https://github.com/jneem/ojo
+
+Companion writing that this implementation follows (Jekyll source at
+https://github.com/jneem/jneem.github.io, pinned commit
+`e709e085ad6a6badd86b79d8ad698ac1e2b1e716`, HEAD as of 2026-05-04):
+
+  https://jneem.github.io/merging/   (introduces the *graggle* model)
+    Wayback: https://web.archive.org/web/20260208054945/https://jneem.github.io/merging/
+
+  https://jneem.github.io/pijul/     (patch composition and merging)
+    Wayback: https://web.archive.org/web/20260220064237/https://jneem.github.io/pijul/
+
+  https://jneem.github.io/pseudo/    (pseudo-edges across deletions)
+    Wayback: https://web.archive.org/web/20260221144337/https://jneem.github.io/pseudo/
+
+The blog posts have no declared licence — they are cited, not
+redistributed; the upstream repo SHA and the Wayback snapshots above
+provide archival pointers without re-hosting.
+
+The Go code in this subtree was first authored in the sister project
+`hackathon_2026` and vendored into boxer at upstream commit `cd992b1`
+under the import-rewrite recorded in commit `c6b802a`.
+
+----------------------------------------------------------------------
+SCOPE OF THE BORROWING
+----------------------------------------------------------------------
+
+The following design elements originate with ojo and Joe Neeman's
+blog series:
+
+  * The *graggle* (graph + file) data structure — a directed graph of
+    lines that generalises a file's linear order into a partial order
+    so that pushouts always exist. Used as the package name and as
+    the central type `store.Graggle`.
+
+  * The pseudo-edge bookkeeping that bridges over deleted regions
+    so the live subgraph stays connected after tombstoning.
+
+  * The patch-with-placeholder-hashes construction: changes are
+    hashed with self-references replaced by a sentinel placeholder,
+    then the placeholders are rewritten to the resulting patch hash.
+    See `patch.NewPatch` and the comment at `patch.go:159`.
+
+  * The apply / unapply / reapply round-trip test pattern used in
+    the property-based test suite. See `store/property_test.go:386`.
+
+The Go implementation is an independent re-implementation guided by
+the blog series, not a line-by-line port of ojo's Rust source. No
+ojo code was copied verbatim. Several local design choices diverge
+from ojo and from the upstream `hackathon_2026` snapshot; these are
+flagged inline with `VENDOR DEVIATION:` comments — currently the
+BLAKE3 hash function (versus crypto/sha256), idempotent
+`store.Graggle.DeleteNode`, the de-fixup step in
+`patch.Patch.ComputeHash`, and the hex `MarshalText` / `UnmarshalText`
+on `types.PatchHash`.
+
+----------------------------------------------------------------------
+RELATIONSHIP TO THE COMPANION PIJUL PACKAGE
+----------------------------------------------------------------------
+
+The sibling package `public/algebraicarch/pushout/pijul/` wraps the
+Pijul VCS (a production patch-theory VCS that ojo prototypes ideas
+for) as a four-actor demo. It defines a `BackendI`/`RepoI` seam with
+two realisations: `pijulTextBackend` shells out to a real `pijul`
+binary; `pijulPushoutBackend` uses the graggle subtree directly
+without invoking an external binary. Pijul itself is GPL-2.0 and is
+not redistributed by boxer — only invoked at runtime when the text
+backend is selected.
+
+See `public/algebraicarch/pushout/pijul/EXPLANATION.md` for the
+broader conceptual lineage (Mimram & Di Giusto 2013, Darcs, Pijul,
+ojo) and for the reasons behind the Graph Context Ambiguity and the
+two-backend split.

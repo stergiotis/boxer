@@ -13,7 +13,7 @@ go get github.com/stergiotis/boxer
 ## What's inside
 Boxer is a collection of packages under `public/`. The larger subsystems:
 
-* `algebraicarch/pushout` — algebraic three-way merge for line-graphs via categorical pushouts: `graggle/store` for the line-graph data structure, `graggle/patch` for the patch DAG, `envelope` for transmittable patches; ported from pebble2impl with full history. Includes a `BackendI`/`RepoI` seam under `algebraicarch/pushout/pijul` with two realisations — a native pushout backend (no external binary) and a text backend that shells out to `pijul`.
+* `algebraicarch/pushout` — algebraic three-way merge for line-graphs via categorical pushouts: `graggle/store` for the line-graph data structure, `graggle/patch` for the patch DAG, `envelope` for transmittable patches; the *graggle* and pseudo-edge constructs follow Joe Neeman's [ojo](https://github.com/jneem/ojo) design (see [`pushout/graggle/NOTICE`](public/algebraicarch/pushout/graggle/NOTICE)); ported from pebble2impl with full history. Includes a `BackendI`/`RepoI` seam under `algebraicarch/pushout/pijul` with two realisations — a native pushout backend (no external binary) and a text backend that shells out to `pijul`.
 * `semistructured/leeway` — code-driven entity-attribute-value data model with a staged codegen pipeline (DDL / DML / read-access / streaming read-access).
 * `semistructured/markdown/obsidian` — goldmark-based parser for Obsidian-flavored markdown (callouts, wikilinks, embeds, tags, highlights, frontmatter).
 * `db/clickhouse/dsl` — typed ClickHouse SQL DSL with an AST, marshalling, and nanopass rewrite passes (ADR-0002, ADR-0006).
