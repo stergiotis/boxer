@@ -12,10 +12,10 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-// pijulLogEntry maps the JSON record emitted by `pijul log
+// LogEntry maps the JSON record emitted by `pijul log
 // --output-format json`. It is an internal staging type for the text
 // backend; the demo sees only [PatchMetadata].
-type pijulLogEntry struct {
+type LogEntry struct {
 	Hash       string    `json:"hash"`
 	Authors    []string  `json:"authors"`
 	Timestamp  string    `json:"timestamp"`
@@ -23,12 +23,12 @@ type pijulLogEntry struct {
 	ParsedTime time.Time `json:"-"`
 }
 
-// parseLogJSON parses the JSON document emitted by `pijul log
+// ParseLogJSON parses the JSON document emitted by `pijul log
 // --output-format json`. ParsedTime is filled in for each entry from
 // the RFC3339Nano Timestamp; entries whose Timestamp is unparseable
 // keep the zero time and will sort as "oldest" under
-// [applyCreditToCells]'s before-comparison.
-func parseLogJSON(logOut []byte) (entries []pijulLogEntry, err error) {
+// [ApplyCreditToCells]'s before-comparison.
+func ParseLogJSON(logOut []byte) (entries []LogEntry, err error) {
 	if len(logOut) == 0 {
 		return
 	}
@@ -52,7 +52,7 @@ func parseLogJSON(logOut []byte) (entries []pijulLogEntry, err error) {
 // toPatchMetadata converts a parsed log entry into the public
 // [PatchMetadata] shape. The conversion is lossy by design: the demo
 // does not need the raw textual timestamp.
-func (e pijulLogEntry) toPatchMetadata() (m PatchMetadata) {
+func (e LogEntry) toPatchMetadata() (m PatchMetadata) {
 	m = PatchMetadata{
 		ID:        PatchID{Hex: e.Hash},
 		Authors:   append([]string(nil), e.Authors...),
@@ -62,15 +62,15 @@ func (e pijulLogEntry) toPatchMetadata() (m PatchMetadata) {
 	return
 }
 
-// applyCreditToCells parses the block-based output of `pijul credit`
+// ApplyCreditToCells parses the block-based output of `pijul credit`
 // and attaches per-cell provenance to each [KVLine]. When a cell is
 // introduced by multiple patches (a "context node" on a graph edge),
 // the OLDEST patch wins by graph-age resolution — that yields stable
 // authorship across rebases and channel mixing.
-func applyCreditToCells(creditOut string, cells []KVLine, entries []pijulLogEntry) (out []KVLine) {
+func ApplyCreditToCells(creditOut string, cells []KVLine, entries []LogEntry) (out []KVLine) {
 	shortToEntry := buildShortHashIndex(entries)
 
-	contentToEntry := make(map[string]pijulLogEntry)
+	contentToEntry := make(map[string]LogEntry)
 	var currentHashes []string
 
 	scanner := bufio.NewScanner(strings.NewReader(creditOut))
@@ -107,8 +107,8 @@ func applyCreditToCells(creditOut string, cells []KVLine, entries []pijulLogEntr
 	return
 }
 
-func buildShortHashIndex(entries []pijulLogEntry) (idx map[string]pijulLogEntry) {
-	idx = make(map[string]pijulLogEntry, len(entries)*4)
+func buildShortHashIndex(entries []LogEntry) (idx map[string]LogEntry) {
+	idx = make(map[string]LogEntry, len(entries)*4)
 	for _, e := range entries {
 		full := e.Hash
 		// Index every prefix from 8 chars up to the full hash.
@@ -121,7 +121,7 @@ func buildShortHashIndex(entries []pijulLogEntry) (idx map[string]pijulLogEntry)
 	return
 }
 
-func oldestEntry(shortHashes []string, idx map[string]pijulLogEntry) (oldest pijulLogEntry, found bool) {
+func oldestEntry(shortHashes []string, idx map[string]LogEntry) (oldest LogEntry, found bool) {
 	for _, sh := range shortHashes {
 		sh = strings.TrimSpace(sh)
 		if sh == "" {
@@ -151,7 +151,7 @@ func splitAndTrim(s string, sep string) (out []string) {
 	return
 }
 
-// parseRecordText parses pijul's textual working-copy format into the
+// ParseRecordText parses pijul's textual working-copy format into the
 // package's domain [KVLine] slice. Conflict blocks become cells with a
 // non-nil Conflict; clean rows become cells with Value populated.
 //
@@ -159,7 +159,7 @@ func splitAndTrim(s string, sep string) (out []string) {
 // and treats values as untyped trimmed-quote strings (so a value
 // containing an embedded `"` round-trips poorly). Both are
 // text-format issues and will not exist in the native backend.
-func parseRecordText(content string) (cells []KVLine, hasConflict bool) {
+func ParseRecordText(content string) (cells []KVLine, hasConflict bool) {
 	scanner := bufio.NewScanner(strings.NewReader(content))
 
 	var (
@@ -223,7 +223,7 @@ func splitKVLine(line string) (path string, value string, ok bool) {
 	return
 }
 
-// serializeRecordText is the inverse of [parseRecordText]: render the
+// SerializeRecordText is the inverse of [ParseRecordText]: render the
 // in-memory cell slice back to pijul's textual flat-KV format. The
 // trailing newline is structurally important — without it pijul's
 // patch graph treats the EOF context node as overlapping and may
@@ -232,7 +232,7 @@ func splitKVLine(line string) (path string, value string, ok bool) {
 // Conflict blocks use fixed side labels "1" and "2"; pijul does not
 // require any specific values in those slots, only that the block is
 // well-formed.
-func serializeRecordText(cells []KVLine) (raw []byte) {
+func SerializeRecordText(cells []KVLine) (raw []byte) {
 	out := make([]string, 0, len(cells)+4)
 	for _, c := range cells {
 		if c.Conflict != nil {

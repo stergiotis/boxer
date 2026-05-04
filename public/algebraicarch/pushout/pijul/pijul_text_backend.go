@@ -14,21 +14,19 @@ import (
 
 // pijulTextBackend is the realisation of [BackendI] that drives a
 // real `pijul` binary by serialising domain cells to pijul's textual
-// flat-KV working-copy format. It owns the [pijulRunnerI] for the
+// flat-KV working-copy format. It owns the [RunnerI] for the
 // whole demo run — every repo it produces shares the same runner.
 type pijulTextBackend struct {
-	runner      pijulRunnerI
+	runner      RunnerI
 	trackedFile string
 }
 
 var _ BackendI = (*pijulTextBackend)(nil)
 
-// NewPijulTextBackend wires a backend over the given runner. If
-// trackedFile is empty, "customer.txt" is used.
-func NewPijulTextBackend(runner pijulRunnerI, trackedFile string) (b *pijulTextBackend) {
-	if trackedFile == "" {
-		trackedFile = trackedFileDefault
-	}
+// NewPijulTextBackend wires a backend over the given runner. The
+// trackedFile is the flat-KV record file the backend reads/writes
+// inside each repo (e.g. "customer.txt" in the demo).
+func NewPijulTextBackend(runner RunnerI, trackedFile string) (b *pijulTextBackend) {
 	b = &pijulTextBackend{
 		runner:      runner,
 		trackedFile: trackedFile,
@@ -83,7 +81,7 @@ func (inst *pijulTextBackend) Clone(ctx context.Context, src RepoI, destPath str
 // State lives entirely on disk (the pijul repo dir + the rendered
 // tracked file); the struct itself is just a handle.
 type pijulTextRepo struct {
-	runner      pijulRunnerI
+	runner      RunnerI
 	actor       string
 	path        string
 	trackedFile string
@@ -123,7 +121,7 @@ func (inst *pijulTextRepo) State(ctx context.Context) (cells []KVLine, log []Pat
 		return
 	}
 
-	parsed, hasConflict := parseRecordText(string(content))
+	parsed, hasConflict := ParseRecordText(string(content))
 	cells = parsed
 
 	entries, logAudit, lerr := inst.runner.Log(ctx, inst.path)
@@ -144,7 +142,7 @@ func (inst *pijulTextRepo) State(ctx context.Context) (cells []KVLine, log []Pat
 			err = cerr
 			return
 		}
-		cells = applyCreditToCells(creditOut, cells, entries)
+		cells = ApplyCreditToCells(creditOut, cells, entries)
 	}
 	return
 }
@@ -154,7 +152,7 @@ func (inst *pijulTextRepo) State(ctx context.Context) (cells []KVLine, log []Pat
 // first call, and commits a new patch. The latest hash is fetched
 // after the record so the caller can refer to the new patch.
 func (inst *pijulTextRepo) SetAndRecord(ctx context.Context, cells []KVLine, author string, message string) (id PatchID, audit string, err error) {
-	raw := serializeRecordText(cells)
+	raw := SerializeRecordText(cells)
 	file := filepath.Join(inst.path, inst.trackedFile)
 
 	_, statErr := os.Stat(file)

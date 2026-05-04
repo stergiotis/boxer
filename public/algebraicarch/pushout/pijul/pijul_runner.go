@@ -16,10 +16,11 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-// pijulRunnerI is the lower-level CLI-verb seam used by the text
-// backend. It is intentionally unexported: external consumers should
-// go through [BackendI]/[RepoI], which deal in domain objects rather
-// than pijul subcommand arguments.
+// RunnerI is the lower-level CLI-verb seam used by the text
+// backend. External consumers normally go through [BackendI]/[RepoI],
+// which deal in domain objects rather than pijul subcommand arguments;
+// the interface is exported so that test fakes (and out-of-package
+// alternative runners) can satisfy it.
 //
 // Each method returns an `audit` string — a single formatted line
 // describing what was executed and how it terminated — which the
@@ -28,7 +29,7 @@ import (
 // additionally returns hadConflict==true when Pijul exited non-zero
 // because it injected conflict markers; this is *not* a fatal error
 // and err is nil in that case.
-type pijulRunnerI interface {
+type RunnerI interface {
 	Init(ctx context.Context, repoDir string) (audit string, err error)
 	Clone(ctx context.Context, srcRepo string, parentDir string, name string) (audit string, err error)
 	Add(ctx context.Context, repoDir string, file string) (audit string, err error)
@@ -36,7 +37,7 @@ type pijulRunnerI interface {
 	Push(ctx context.Context, repoDir string, remoteRepo string) (audit string, err error)
 	Pull(ctx context.Context, repoDir string, remoteRepo string) (audit string, hadConflict bool, err error)
 	ApplyPatch(ctx context.Context, repoDir string, patchPath string) (audit string, err error)
-	Log(ctx context.Context, repoDir string) (entries []pijulLogEntry, audit string, err error)
+	Log(ctx context.Context, repoDir string) (entries []LogEntry, audit string, err error)
 	LatestHash(ctx context.Context, repoDir string) (hash string, audit string, err error)
 	Credit(ctx context.Context, repoDir string, file string) (raw string, audit string, err error)
 	LatestChangeFile(ctx context.Context, repoDir string) (patchPath string, err error)
@@ -52,12 +53,11 @@ type cliRunner struct {
 	logTimeout time.Duration
 }
 
-var _ pijulRunnerI = (*cliRunner)(nil)
+var _ RunnerI = (*cliRunner)(nil)
 
 // NewCliRunner returns a runner that drives the system `pijul` binary
 // via os/exec with conservative timeouts. The zero-valued [cliRunner]
-// is also usable. The constructor stays exported because callers seed
-// the [pijulTextBackend] with it; the runner *interface* is private.
+// is also usable. Callers seed the [pijulTextBackend] with it.
 func NewCliRunner() (inst *cliRunner) {
 	inst = &cliRunner{
 		runTimeout: defaultRunTimeout,
@@ -172,7 +172,7 @@ func (inst *cliRunner) ApplyPatch(ctx context.Context, repoDir string, patchPath
 
 // Log uses a tighter timeout than the mutating commands because it is
 // invoked from the reload path on every task tick.
-func (inst *cliRunner) Log(ctx context.Context, repoDir string) (entries []pijulLogEntry, audit string, err error) {
+func (inst *cliRunner) Log(ctx context.Context, repoDir string) (entries []LogEntry, audit string, err error) {
 	timeout := inst.timeoutForLog()
 	cctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -188,7 +188,7 @@ func (inst *cliRunner) Log(ctx context.Context, repoDir string) (entries []pijul
 	switch {
 	case rerr == nil:
 		audit = cmdStr + "\n[OK]"
-		entries, err = parseLogJSON(outBuf.Bytes())
+		entries, err = ParseLogJSON(outBuf.Bytes())
 	case errors.Is(cctx.Err(), context.DeadlineExceeded):
 		audit = fmt.Sprintf("%s\n[TIMEOUT %s]", cmdStr, timeout)
 		err = eh.Errorf("pijul log timed out after %s", timeout)

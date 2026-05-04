@@ -15,7 +15,7 @@
 //     that operates directly on graggle patch operations without ever
 //     materialising text.
 //
-//   - [pijulRunnerI] — a CLI-verb-level seam used internally by the
+//   - [RunnerI] — a CLI-verb-level seam used internally by the
 //     text backend; one method per `pijul` subcommand.
 package pijul
 
