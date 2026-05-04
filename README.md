@@ -24,7 +24,6 @@ Boxer is a collection of packages under `public/`. The larger subsystems:
 * `science/geo/h3` — H3 geospatial indexing via a Rust→WASM→wazero bridge (ADR-0003); Rust source under `rust/h3bridge`.
 * `fec` — forward error correction (e.g. `fec/ea/golay24`).
 * `eb`, `eh` — structured error building and error handling.
-* `curlier` — Go code mimicking [cUrl](https://curl.se/).
 * `batching`, `containers`, `hashing`, `identity`, `logical`, `observability`, `parsing`, `slices`, `statespace`, `unsafeperf`, … — utility packages.
 
 `internal/` carries vendored third-party ports.
