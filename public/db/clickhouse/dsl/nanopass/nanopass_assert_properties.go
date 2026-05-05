@@ -9,7 +9,9 @@ import (
 )
 
 // AssertProperties verifies the declared PassProperties of p against a
-// corpus of input bodies. The check enforces:
+// corpus of input bodies.
+//
+// The check enforces:
 //
 //   - Idempotent and NeedsFixedPoint are mutually exclusive.
 //   - When Idempotent is true, p.Apply(p.Apply(b)) == p.Apply(b) for every b.

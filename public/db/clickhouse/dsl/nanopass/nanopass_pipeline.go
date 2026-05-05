@@ -11,18 +11,18 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// ControlFlowMarkerPrefix and ControlFlowMarkerSuffix bracket a UUID-shaped
-// sentinel inside a SQL block comment. The marker shape lives here (rather
-// than in marshalling, which depends on nanopass) so the runner can scan
-// for it without a circular import; marshalling.ControlFlow renders via
-// MarshalControlFlowMarker.
+// ControlFlowMarkerPrefix opens a UUID-shaped sentinel inside a SQL block
+// comment. The marker shape lives here (rather than in marshalling, which
+// depends on nanopass) so the runner can scan for it without a circular
+// import; marshalling.ControlFlow renders via MarshalControlFlowMarker.
 //
 // Block-comment shape ensures any leak past the discard check parses as a
 // SQL no-op instead of a syntax error.
-const (
-	ControlFlowMarkerPrefix = "/*@@nanopass-control:"
-	ControlFlowMarkerSuffix = "@@*/"
-)
+const ControlFlowMarkerPrefix = "/*@@nanopass-control:"
+
+// ControlFlowMarkerSuffix closes the UUID-shaped sentinel opened by
+// [ControlFlowMarkerPrefix].
+const ControlFlowMarkerSuffix = "@@*/"
 
 // PassDiscardOutput, when returned via marshalling.ControlFlow from a
 // handler invoked inside an ApplyFunc, instructs the nanopass runner to

@@ -14,7 +14,7 @@
 // stripped from the body in v1 — passes that operate on them continue to
 // rewrite the body's CST. SessionSettings and Params round-trip cleanly;
 // StatementSettings and Format are populated only when a pass explicitly sets
-// them (and [Integrate] will emit them on output).
+// them (and [Environment.Integrate] will emit them on output).
 package env
 
 // Environment holds the SETTINGS / params / FORMAT context of a SELECT.

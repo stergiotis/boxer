@@ -10,7 +10,7 @@ reviewed-date: 2026-04-27
 
 ## Context
 
-The repository's license-compliance gate at [`scripts/ci/golicenses.sh`](../../scripts/ci/golicenses.sh) is implemented on top of [`github.com/google/go-licenses`](https://github.com/google/go-licenses): the script invokes `go tool ... go-licenses check --disallowed_types=forbidden,restricted ./public/...` and a separate `go-licenses csv` invocation generates the dependency inventory referenced by [`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md) §3. The policy is unchanged: boxer is MIT-licensed and cannot accept AGPL/GPL/LGPL/SSPL inbound dependencies; the gate enforces this prospectively.
+The repository's license-compliance gate at `scripts/ci/golicenses.sh` (renamed to [`license_gate.sh`](../../scripts/ci/license_gate.sh) by SD11 below) is implemented on top of [`github.com/google/go-licenses`](https://github.com/google/go-licenses): the script invokes `go tool ... go-licenses check --disallowed_types=forbidden,restricted ./public/...` and a separate `go-licenses csv` invocation generates the dependency inventory referenced by [`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md) §3. The policy is unchanged: boxer is MIT-licensed and cannot accept AGPL/GPL/LGPL/SSPL inbound dependencies; the gate enforces this prospectively.
 
 `go-licenses v1.6.0` transitively depends on `gopkg.in/src-d/go-git.v4` — the *deprecated* fork of go-git, abandoned upstream in 2019 — to fall back to a network fetch when a license cannot be resolved from `$GOMODCACHE`. This is the sole consumer of the v4 fork in `go.sum`. The other go-git stack (`github.com/go-git/go-git/v5` + `go-billy/v5` + `gcfg`) is pulled in by [`cyclonedx-gomod`](https://github.com/CycloneDX/cyclonedx-gomod), which is already declared in the [`go.mod` `tool` block](../../go.mod) for SBOM generation purposes; that stack is actively maintained and not the concern of this ADR.
 
@@ -145,7 +145,7 @@ The election mechanism is the only addition; the cutover otherwise lands as desi
 
 ## References
 
-- [`scripts/ci/golicenses.sh`](../../scripts/ci/golicenses.sh) — current gate implementation to be replaced.
+- `scripts/ci/golicenses.sh` — gate implementation at the time of writing; replaced and renamed to [`license_gate.sh`](../../scripts/ci/license_gate.sh) by this ADR (SD11).
 - [`scripts/ci/install.sh`](../../scripts/ci/install.sh) — tool-installation script; `go-licenses` line removed by this ADR.
 - [`.github/workflows/licenses.yaml`](../../.github/workflows/licenses.yaml) — CI workflow invoking the gate; updated for the script rename in SD11.
 - [`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md) §3 — current policy documentation; updated by this ADR's implementation PR.

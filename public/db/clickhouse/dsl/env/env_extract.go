@@ -13,7 +13,9 @@ import (
 // `SET param_x = 5;`). Anything else under SET is a session setting.
 const ParamPrefix = "param_"
 
-// Extract splits SQL into an Environment and a body. The Environment owns:
+// Extract splits SQL into an Environment and a body.
+//
+// The Environment owns:
 //
 //   - The leading `SET key = value;` prelude (split into Params vs.
 //     SessionSettings — see SET-line classification rules below).

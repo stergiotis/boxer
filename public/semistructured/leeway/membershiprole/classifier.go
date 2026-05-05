@@ -40,7 +40,9 @@ const (
 )
 
 // MembershipValue carries the payload of one SinkI.AddMembership* call in
-// struct form. Field validity depends on Kind:
+// struct form.
+//
+// Field validity depends on Kind:
 //
 //   - MembershipKindRef:                              LowCard, Ref, HumanReadableRef.
 //   - MembershipKindVerbatim:                         LowCard, Verbatim, HumanReadableValue.

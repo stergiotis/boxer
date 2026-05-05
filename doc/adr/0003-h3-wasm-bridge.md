@@ -162,7 +162,7 @@ SD16 adds no new ABI export; it reuses `h3_latlng_to_cell`. The ADR's earlier op
 - [`doc/DOCUMENTATION_STANDARD.md`](../DOCUMENTATION_STANDARD.md) — Diátaxis + ADR conventions followed by this document.
 - [`doc/adr/0001-adopt-diataxis.md`](0001-adopt-diataxis.md) — framework ADR referenced by `status` / `reviewed-by` fields.
 - [`doc/adr/0002-nanopass-discipline.md`](0002-nanopass-discipline.md) — prior ADR; shape of QOC + derived-practices pattern.
-- [`public/imzero/wasm/wasm.go`](../../public/imzero/wasm/wasm.go) — existing wazero runtime usage; contrast: WASI-based, while this ADR uses `wasm32-unknown-unknown`.
+- `public/imzero/wasm/wasm.go` — existing wazero runtime usage at the time of writing; extracted to a standalone module post-acceptance (commit `5484e08`). Contrast: WASI-based, while this ADR uses `wasm32-unknown-unknown`.
 - H3 specification: https://h3geo.org
 - `h3o` crate: https://github.com/HydroniumLabs/h3o
 - `wazero`: https://github.com/tetratelabs/wazero
