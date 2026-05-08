@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
 	"github.com/stergiotis/boxer/public/unsafeperf"
 )
 
@@ -66,9 +67,10 @@ type memberCardDetail struct {
 }
 
 type valueColLayout struct {
-	arrowIdx      int
-	name          naming.StylableName
-	canonicalType canonicaltypes.PrimitiveAstNodeI
+	arrowIdx       int
+	name           naming.StylableName
+	canonicalType  canonicaltypes.PrimitiveAstNodeI
+	valueSemantics valueaspects.AspectSet
 }
 
 type memberColLayout struct {
@@ -266,9 +268,10 @@ func (inst *Driver) appendPlainCols(ps *plainSectionLayout, cp *common.Intermedi
 	for j, name := range cp.Names {
 		ps.valueCols = append(ps.valueCols, plainColLayout{
 			valueColLayout: valueColLayout{
-				arrowIdx:      int(baseOffset) + j,
-				name:          name,
-				canonicalType: cp.CanonicalType[j],
+				arrowIdx:       int(baseOffset) + j,
+				name:           name,
+				canonicalType:  cp.CanonicalType[j],
+				valueSemantics: cp.ValueSemantics[j],
 			},
 			kind: kind,
 		})
@@ -278,9 +281,10 @@ func (inst *Driver) appendPlainCols(ps *plainSectionLayout, cp *common.Intermedi
 func appendValueCols(out *[]valueColLayout, cp *common.IntermediateColumnProps, baseOffset uint32) {
 	for j, name := range cp.Names {
 		*out = append(*out, valueColLayout{
-			arrowIdx:      int(baseOffset) + j,
-			name:          name,
-			canonicalType: cp.CanonicalType[j],
+			arrowIdx:       int(baseOffset) + j,
+			name:           name,
+			canonicalType:  cp.CanonicalType[j],
+			valueSemantics: cp.ValueSemantics[j],
 		})
 	}
 }
@@ -423,9 +427,10 @@ func appendPlainColsResolved(ps *plainSectionLayout, cp *common.IntermediateColu
 		}
 		ps.valueCols = append(ps.valueCols, plainColLayout{
 			valueColLayout: valueColLayout{
-				arrowIdx:      arrowIdx,
-				name:          name,
-				canonicalType: cp.CanonicalType[j],
+				arrowIdx:       arrowIdx,
+				name:           name,
+				canonicalType:  cp.CanonicalType[j],
+				valueSemantics: cp.ValueSemantics[j],
 			},
 			kind: kind,
 		})
@@ -439,9 +444,10 @@ func appendValueColsResolved(out *[]valueColLayout, cp *common.IntermediateColum
 			continue
 		}
 		*out = append(*out, valueColLayout{
-			arrowIdx:      arrowIdx,
-			name:          name,
-			canonicalType: cp.CanonicalType[j],
+			arrowIdx:       arrowIdx,
+			name:           name,
+			canonicalType:  cp.CanonicalType[j],
+			valueSemantics: cp.ValueSemantics[j],
 		})
 	}
 }
@@ -607,7 +613,7 @@ func (inst *Driver) drivePlainSection(sink SinkI, rec arrow.RecordBatch, entityI
 
 	for _, col := range ps.valueCols {
 		addr := PhysicalColumnAddr{Index: col.arrowIdx, FullColumnName: rec.ColumnName(col.arrowIdx)}
-		sink.BeginColumn(addr, col.name, col.canonicalType)
+		sink.BeginColumn(addr, col.name, col.canonicalType, col.valueSemantics)
 
 		switch col.kind {
 		case plainColScalar:
@@ -725,7 +731,7 @@ func (inst *Driver) emitValueColumns(sink SinkI, rec arrow.RecordBatch, entityId
 		for _, col := range sec.scalarCols {
 			flatIdx := inst.listFlatIndex(rec, col.arrowIdx, entityIdx, attrIdx)
 			addr := PhysicalColumnAddr{Index: col.arrowIdx, FullColumnName: rec.ColumnName(col.arrowIdx)}
-			sink.BeginColumn(addr, col.name, col.canonicalType)
+			sink.BeginColumn(addr, col.name, col.canonicalType, col.valueSemantics)
 			sink.BeginScalarValue()
 			text := inst.readListInnerValue(rec, col.arrowIdx, flatIdx)
 			_, err := sink.WriteString(valueFmt.FormatValue(text, col.canonicalType))
@@ -741,7 +747,7 @@ func (inst *Driver) emitValueColumns(sink SinkI, rec arrow.RecordBatch, entityId
 			elemStart, elemEnd := inst.nonScalarElemRange(rec, col.arrowIdx, sec.arrayCardCols, entityIdx, attrIdx)
 			card := elemEnd - elemStart
 			addr := PhysicalColumnAddr{Index: col.arrowIdx, FullColumnName: rec.ColumnName(col.arrowIdx)}
-			sink.BeginColumn(addr, col.name, col.canonicalType)
+			sink.BeginColumn(addr, col.name, col.canonicalType, col.valueSemantics)
 			sink.BeginHomogenousArrayValue(card)
 			for elemIdx := range card {
 				sink.BeginValueItem(elemIdx)
@@ -760,7 +766,7 @@ func (inst *Driver) emitValueColumns(sink SinkI, rec arrow.RecordBatch, entityId
 			elemStart, elemEnd := inst.nonScalarElemRange(rec, col.arrowIdx, sec.setCardCols, entityIdx, attrIdx)
 			card := elemEnd - elemStart
 			addr := PhysicalColumnAddr{Index: col.arrowIdx, FullColumnName: rec.ColumnName(col.arrowIdx)}
-			sink.BeginColumn(addr, col.name, col.canonicalType)
+			sink.BeginColumn(addr, col.name, col.canonicalType, col.valueSemantics)
 			sink.BeginSetValue(card)
 			for elemIdx := range card {
 				sink.BeginValueItem(elemIdx)

@@ -7,6 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
 )
 
 // Driver walks a Leeway TableDesc + arrow.RecordBatch and drives a StructuredOutput2I.
@@ -69,7 +70,11 @@ type SinkI interface {
 	BeginTaggedValue()
 	EndTaggedValue() (err error)
 
-	BeginColumn(colAddr PhysicalColumnAddr, name naming.StylableName, canonicalType canonicaltypes.PrimitiveAstNodeI)
+	// BeginColumn signals the start of a value column. valueSemantics is the
+	// column's ValueSemantics aspect set from the IR, enabling consumers (e.g.
+	// human-readable renderers) to filter columns by aspects such as
+	// AspectHumanReadable / AspectMachineReadable without re-reading the IR.
+	BeginColumn(colAddr PhysicalColumnAddr, name naming.StylableName, canonicalType canonicaltypes.PrimitiveAstNodeI, valueSemantics valueaspects.AspectSet)
 	EndColumn()
 
 	BeginScalarValue()

@@ -9,6 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
 )
 
 type DebugSink struct {
@@ -128,8 +129,8 @@ func (inst *DebugSink) EndTaggedValue() (err error) {
 	return
 }
 
-func (inst *DebugSink) BeginColumn(colAddr PhysicalColumnAddr, name naming.StylableName, canonicalType canonicaltypes.PrimitiveAstNodeI) {
-	fmt.Fprintf(inst.s, "\t\t\t\t\t\tBeginColumn(colAddr.FullColumnName=%q,name=%q,canonicalType=%q)\n", colAddr.FullColumnName, name, canonicalType)
+func (inst *DebugSink) BeginColumn(colAddr PhysicalColumnAddr, name naming.StylableName, canonicalType canonicaltypes.PrimitiveAstNodeI, valueSemantics valueaspects.AspectSet) {
+	fmt.Fprintf(inst.s, "\t\t\t\t\t\tBeginColumn(colAddr.FullColumnName=%q,name=%q,canonicalType=%q,valueSemantics=%q)\n", colAddr.FullColumnName, name, canonicalType, valueSemantics)
 	inst.check()
 }
 
