@@ -7,33 +7,70 @@ tags="$(cat "$here/../../tags" | tr -d "\n")"
 
 rc=0
 
-echo "=== go vet ==="
+# Per-step bookkeeping for the summary trailer. Parallel arrays indexed by
+# step. status is one of: pass | fail | warn. fail means the step set rc=1
+# (drove the script's non-zero exit); warn means the step produced findings
+# that are non-blocking (staticcheck/errcheck/nilaway, doclint warn-only).
+declare -a step_names step_durs step_statuses
+overall_t0=$EPOCHREALTIME
+
+step_begin() {
+    _step_name="$1"
+    _step_t0=$EPOCHREALTIME
+    echo ""
+    echo "=== $_step_name ==="
+}
+
+step_end() {
+    local status="$1"
+    local dur
+    dur=$(awk -v s="$_step_t0" -v e="$EPOCHREALTIME" 'BEGIN{printf "%.3f", e-s}')
+    step_names+=("$_step_name")
+    step_durs+=("$dur")
+    step_statuses+=("$status")
+}
+
+step_begin "go vet"
 # go vet has no built-in exclude for generated files, so filter output.
 if go vet -tags "$tags" ./public/... 2>&1 | grep -v '\.out\.go:' | grep -v '\.gen\.go:' | grep -q .; then
     go vet -tags "$tags" ./public/... 2>&1 | grep -v '\.out\.go:' | grep -v '\.gen\.go:'
     rc=1
+    step_end fail
 else
     echo "passed"
+    step_end pass
 fi
 
-echo ""
-echo "=== staticcheck ==="
-# Exclude generated ANTLR parser files.
-go tool honnef.co/go/tools/cmd/staticcheck -tags "$tags" \
+step_begin "staticcheck"
+# Exclude generated ANTLR parser files. Capture so we can mark warn vs pass;
+# this trades streaming for status visibility (staticcheck batches anyway).
+sc_out=$(go tool honnef.co/go/tools/cmd/staticcheck -tags "$tags" \
     -checks "all,-ST1000,-ST1003,-ST1005,-ST1016,-ST1020,-ST1021,-ST1022,-S1023,-SA4011,-SA1019" \
-    ./public/... 2>&1 | grep -v '\.out\.go:' | grep -v '\.gen\.go:' || true
+    ./public/... 2>&1 | grep -v '\.out\.go:' | grep -v '\.gen\.go:' || true)
+if [ -n "$sc_out" ]; then
+    printf '%s\n' "$sc_out"
+    step_end warn
+else
+    echo "passed"
+    step_end pass
+fi
 
-echo ""
-echo "=== errcheck ==="
-go tool github.com/kisielk/errcheck -tags "$tags" \
+step_begin "errcheck"
+ec_out=$(go tool github.com/kisielk/errcheck -tags "$tags" \
     -exclude <(printf '%s\n' \
         'fmt.Fprintf' 'fmt.Fprintln' 'fmt.Fprint' \
         '(*strings.Builder).WriteString' '(*strings.Builder).WriteByte' '(*strings.Builder).WriteRune' \
         '(*bytes.Buffer).WriteString' '(*bytes.Buffer).WriteByte' '(*bytes.Buffer).Write') \
-    ./public/... 2>&1 | grep -v '\.out\.go:' | grep -v '\.gen\.go:' || true
+    ./public/... 2>&1 | grep -v '\.out\.go:' | grep -v '\.gen\.go:' || true)
+if [ -n "$ec_out" ]; then
+    printf '%s\n' "$ec_out"
+    step_end warn
+else
+    echo "passed"
+    step_end pass
+fi
 
-echo ""
-echo "=== nilaway ==="
+step_begin "nilaway"
 # nilaway's own -tags flag is deprecated/no-op; build tags must be passed via
 # GOFLAGS so the analysis driver picks them up. Without this, tag-gated
 # packages (e.g. llm_generated_*) are excluded and importers cascade into
@@ -42,12 +79,18 @@ echo "=== nilaway ==="
 # returns are then assumed non-nil, which suppresses the bulk of noise from
 # os.Stdout/http.Response.Body/ANTLR-style false positives that we cannot
 # fix locally.
-GOFLAGS="-tags=$tags" go tool go.uber.org/nilaway/cmd/nilaway \
+na_out=$(GOFLAGS="-tags=$tags" go tool go.uber.org/nilaway/cmd/nilaway \
     -include-pkgs=github.com/stergiotis/boxer \
-    ./public/... 2>&1 || true
+    ./public/... 2>&1 || true)
+if [ -n "$na_out" ]; then
+    printf '%s\n' "$na_out"
+    step_end warn
+else
+    echo "passed"
+    step_end pass
+fi
 
-echo ""
-echo "=== doclint ==="
+step_begin "doclint"
 # Surfaces all warn-and-above doclint findings. Only error-severity
 # findings set rc=1 (warnings are visible but non-blocking, consistent
 # with the staticcheck/errcheck/nilaway sections above). See doc/
@@ -59,16 +102,18 @@ echo "=== doclint ==="
 if out=$("$here/../../boxer.sh" gov doclint --min-severity warn . 2>/dev/null); then
     if [ -n "$out" ]; then
         echo "$out"
+        step_end warn
     else
         echo "passed"
+        step_end pass
     fi
 else
     echo "$out"
     rc=1
+    step_end fail
 fi
 
-echo ""
-echo "=== llmtag ==="
+step_begin "llmtag"
 # Surfaces Go files whose git blame attributes a majority of lines to
 # commits carrying an LLM Co-Authored-By trailer but which lack the
 # corresponding //go:build llm_generated_<model> directive. A non-zero
@@ -81,13 +126,14 @@ if out=$("$here/../../boxer.sh" gov llmtag --diff --root . --repo . 2>/dev/null)
     else
         echo "passed"
     fi
+    step_end pass
 else
     echo "$out"
     rc=1
+    step_end fail
 fi
 
-echo ""
-echo "=== h3_wasm_parity ==="
+step_begin "h3_wasm_parity"
 # Rebuilds rust/h3bridge to wasm and byte-compares against the committed
 # public/science/geo/h3/internal/h3o_wasm/h3.wasm. Gracefully skipped when
 # cargo or the wasm32-unknown-unknown target is absent so local lint stays
@@ -98,11 +144,45 @@ if out=$("$here/h3_wasm_parity.sh" 2>&1); then
     else
         echo "passed"
     fi
+    step_end pass
 else
     echo "$out"
     rc=1
+    step_end fail
 fi
 
+# === summary trailer ===
+overall_dur=$(awk -v s="$overall_t0" -v e="$EPOCHREALTIME" 'BEGIN{printf "%.2f", e-s}')
+
+# Compute name column width for alignment.
+max_w=4
+for n in "${step_names[@]}"; do
+    [ ${#n} -gt $max_w ] && max_w=${#n}
+done
+
 echo ""
-echo "=== lint complete ==="
+echo "=== summary ==="
+for i in "${!step_names[@]}"; do
+    printf "%-*s  %-4s  %7.2fs\n" "$max_w" "${step_names[i]}" "${step_statuses[i]}" "${step_durs[i]}"
+done
+
+failed=()
+warned=()
+for i in "${!step_names[@]}"; do
+    case "${step_statuses[i]}" in
+        fail) failed+=("${step_names[i]}") ;;
+        warn) warned+=("${step_names[i]}") ;;
+    esac
+done
+
+trailer="total: ${overall_dur}s  exit $rc"
+if [ ${#failed[@]} -gt 0 ]; then
+    trailer="$trailer  failing: ${failed[*]}"
+fi
+if [ ${#warned[@]} -gt 0 ]; then
+    trailer="$trailer  warnings: ${warned[*]}"
+fi
+echo ""
+echo "$trailer"
+
 exit $rc
