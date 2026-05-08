@@ -3,6 +3,7 @@
 package pijul
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"fmt"
@@ -483,6 +484,69 @@ func commonAnchors(g *store.Graggle, conflictNodes []t.NodeID) (upContext, downC
 	return
 }
 
+// Unrecord undoes a previously-recorded patch on this repo: the
+// patch's inverse is applied to the graggle (cell-level effects
+// reverted), the hash is removed from the in-memory and persisted
+// applied list. The patch envelope itself is *kept* in MetaByHash so
+// the receiver can reapply it later — e.g. via Pull from a peer that
+// still has it — making Unrecord round-trippable.
+//
+// Errors:
+//   - patch not currently applied (no-op on already-removed hash)
+//   - patch metadata missing from MetaByHash (corrupted state)
+//   - [patch.Patch.Unapply] rejection: the patch has dependents that
+//     still reference its nodes; the caller must Unrecord those first
+//     (Unapply enforces "no foreign edges into our nodes").
+//
+// Unrecord does not affect the patch graph as seen by Pull/Push: the
+// hash is gone from appliedHash, so missingOn() will treat the patch
+// as un-received again. A subsequent Pull from a peer that has it
+// will reapply it cleanly.
+func (inst *PushoutRepo) Unrecord(ctx context.Context, hash t.PatchHash) (audit string, err error) {
+	inst.Mu.Lock()
+	defer inst.Mu.Unlock()
+	if inst.Graggle == nil {
+		err = eh.Errorf("repo not initialised")
+		return
+	}
+
+	idx := -1
+	for i, h := range inst.appliedHash {
+		if h == hash {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		err = eh.Errorf("patch %s not currently applied", hash)
+		return
+	}
+	env, ok := inst.MetaByHash[hash]
+	if !ok || env.Patch == nil {
+		err = eh.Errorf("patch %s metadata missing from MetaByHash", hash)
+		return
+	}
+
+	if uerr := env.Patch.Unapply(inst.Graggle); uerr != nil {
+		err = eh.Errorf("unapply patch %s: %w", hash, uerr)
+		return
+	}
+
+	// Remove from in-memory applied list, then rewrite the
+	// persisted file from the new in-memory state. The append-only
+	// helper [appendApplied] is the wrong tool here; rewriting is
+	// the simplest way to keep on-disk and in-memory consistent.
+	inst.appliedHash = append(inst.appliedHash[:idx], inst.appliedHash[idx+1:]...)
+	if werr := writeAppliedList(inst.path, inst.appliedHash); werr != nil {
+		err = eh.Errorf("rewrite applied list: %w", werr)
+		return
+	}
+
+	short := hex.EncodeToString(hash[:8])
+	audit = fmt.Sprintf("[pushout-native] unrecord %s", short)
+	return
+}
+
 // Apply ingests a foreign envelope. The patch must depend only on
 // patches we have already applied; otherwise we reject — pushout has
 // no on-the-fly dependency fetch.
@@ -708,6 +772,22 @@ func appendApplied(repoPath string, h t.PatchHash) (err error) {
 	defer f.Close()
 	_, werr := fmt.Fprintln(f, hex.EncodeToString(h[:]))
 	if werr != nil {
+		err = eh.Errorf("write applied.txt: %w", werr)
+	}
+	return
+}
+
+// writeAppliedList replaces the persisted applied-list file with the
+// given hashes, one per line. Used by [PushoutRepo.Unrecord] where the
+// in-memory list shrinks and the on-disk file must shrink with it;
+// [appendApplied] is the wrong shape for that path because it's
+// append-only.
+func writeAppliedList(repoPath string, hashes []t.PatchHash) (err error) {
+	var buf bytes.Buffer
+	for _, h := range hashes {
+		fmt.Fprintln(&buf, hex.EncodeToString(h[:]))
+	}
+	if werr := os.WriteFile(appliedListPath(repoPath), buf.Bytes(), 0644); werr != nil {
 		err = eh.Errorf("write applied.txt: %w", werr)
 	}
 	return
