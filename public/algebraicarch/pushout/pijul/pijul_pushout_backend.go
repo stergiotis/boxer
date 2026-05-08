@@ -562,9 +562,25 @@ func (inst *PushoutRepo) Apply(ctx context.Context, env PatchEnvelope) (audit st
 		err = eh.Errorf("decode envelope: %w", derr)
 		return
 	}
-	if _, exists := inst.MetaByHash[decoded.Patch.Hash]; exists {
-		audit = fmt.Sprintf("[pushout-native] apply %s: already present", PatchID{Hex: hex.EncodeToString(decoded.Patch.Hash[:])}.Short())
-		return
+	if cached, exists := inst.MetaByHash[decoded.Patch.Hash]; exists {
+		alreadyApplied := false
+		for _, h := range inst.appliedHash {
+			if h == decoded.Patch.Hash {
+				alreadyApplied = true
+				break
+			}
+		}
+		if alreadyApplied {
+			audit = fmt.Sprintf("[pushout-native] apply %s: already present", PatchID{Hex: hex.EncodeToString(decoded.Patch.Hash[:])}.Short())
+			return
+		}
+		// Hash is cached in MetaByHash but absent from appliedHash:
+		// this is the post-[Unrecord] re-apply path. Reuse the
+		// cached envelope (identical content, by hash equality) and
+		// fall through to the apply/persist sequence so the patch
+		// re-enters the applied set without being redundantly
+		// decoded.
+		decoded = cached
 	}
 	for _, dep := range decoded.Patch.Dependencies {
 		if _, ok := inst.MetaByHash[dep]; !ok {
