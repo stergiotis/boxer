@@ -1032,7 +1032,15 @@ func (inst *Driver) memberColElemRange(rec arrow.RecordBatch, sec *sectionLayout
 }
 
 func (inst *Driver) findMemberCardCol(sec *sectionLayout, memberRole common.ColumnRoleE) (arrowIdx int) {
-	expectedCardRole := common.ColumnRoleE(string(memberRole) + "card")
+	// Canonical mapping handles the asymmetric pairs: mrhp shares lmrcard,
+	// mvhp shares lmvcard. The naive role+"card" suffix lookup would miss
+	// those and the driver would fall back to "1 item per attr", causing
+	// param-half items to leak into the wrong attribute (e.g. attr 1's
+	// "(region=eu-west-1)" rendering on attr 0).
+	expectedCardRole, err := common.GetCardinalityRoleByMembershipRole(memberRole)
+	if err != nil {
+		return -1
+	}
 	for _, mcd := range sec.memberCardDetails {
 		if mcd.role == expectedCardRole {
 			return mcd.arrowIdx
