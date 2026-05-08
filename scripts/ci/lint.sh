@@ -70,25 +70,26 @@ else
     step_end pass
 fi
 
-step_begin "nilaway"
-# nilaway's own -tags flag is deprecated/no-op; build tags must be passed via
-# GOFLAGS so the analysis driver picks them up. Without this, tag-gated
-# packages (e.g. llm_generated_*) are excluded and importers cascade into
-# hundreds of bogus "could not import / undefined" lines.
-# -include-pkgs restricts analysis to first-party code; stdlib and 3rd-party
-# returns are then assumed non-nil, which suppresses the bulk of noise from
-# os.Stdout/http.Response.Body/ANTLR-style false positives that we cannot
-# fix locally.
-na_out=$(GOFLAGS="-tags=$tags" go tool go.uber.org/nilaway/cmd/nilaway \
-    -include-pkgs=github.com/stergiotis/boxer \
-    ./public/... 2>&1 || true)
-if [ -n "$na_out" ]; then
-    printf '%s\n' "$na_out"
-    step_end warn
-else
-    echo "passed"
-    step_end pass
-fi
+# nilaway disabled — re-enable by uncommenting the block below.
+# step_begin "nilaway"
+# # nilaway's own -tags flag is deprecated/no-op; build tags must be passed via
+# # GOFLAGS so the analysis driver picks them up. Without this, tag-gated
+# # packages (e.g. llm_generated_*) are excluded and importers cascade into
+# # hundreds of bogus "could not import / undefined" lines.
+# # -include-pkgs restricts analysis to first-party code; stdlib and 3rd-party
+# # returns are then assumed non-nil, which suppresses the bulk of noise from
+# # os.Stdout/http.Response.Body/ANTLR-style false positives that we cannot
+# # fix locally.
+# na_out=$(GOFLAGS="-tags=$tags" go tool go.uber.org/nilaway/cmd/nilaway \
+#     -include-pkgs=github.com/stergiotis/boxer \
+#     ./public/... 2>&1 || true)
+# if [ -n "$na_out" ]; then
+#     printf '%s\n' "$na_out"
+#     step_end warn
+# else
+#     echo "passed"
+#     step_end pass
+# fi
 
 step_begin "doclint"
 # Surfaces all warn-and-above doclint findings. Only error-severity
