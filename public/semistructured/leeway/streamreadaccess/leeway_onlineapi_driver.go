@@ -843,12 +843,19 @@ func (inst *Driver) emitOneMembership(sink SinkI, rec arrow.RecordBatch, mc memb
 		sink.AddMembershipVerbatim(true, unsafeperf.UnsafeBytesToString(raw), verbFmt.FormatVerbatim(raw))
 
 	case common.ColumnRoleHighCardRefParametrized:
-		ref := inst.readListInnerUint64(rec, mc.arrowIdx, flatIdx)
-		sink.AddMembershipRefParametrized(false, ref, refFmt.FormatRef(ref), "", "")
+		// Canonical type (lw_ddl_tech_common.go: membershipSerializedType) is
+		// Binary, not Uint64 — the comment there reads "parametrization is
+		// always high-card, even when the ref is low-card", i.e. the
+		// payload-bearing column is bytes for both High and Low variants and
+		// carries the params half of the (ref, params) pair. Ref is not
+		// stored separately for this role; emit ref=0 and forward the bytes
+		// as params, mirroring the params half of the Mixed pattern below.
+		raw := inst.readListInnerBytes(rec, mc.arrowIdx, flatIdx)
+		sink.AddMembershipRefParametrized(false, 0, "", unsafeperf.UnsafeBytesToString(raw), paramsFmt.FormatParams(raw))
 
 	case common.ColumnRoleLowCardRefParametrized:
-		ref := inst.readListInnerUint64(rec, mc.arrowIdx, flatIdx)
-		sink.AddMembershipRefParametrized(true, ref, refFmt.FormatRef(ref), "", "")
+		raw := inst.readListInnerBytes(rec, mc.arrowIdx, flatIdx)
+		sink.AddMembershipRefParametrized(true, 0, "", unsafeperf.UnsafeBytesToString(raw), paramsFmt.FormatParams(raw))
 
 	case common.ColumnRoleMixedLowCardRef:
 		ref := inst.readListInnerUint64(rec, mc.arrowIdx, flatIdx)
