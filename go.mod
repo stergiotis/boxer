@@ -19,11 +19,13 @@ require (
 	github.com/go-json-experiment/json v0.0.0-20260214004413-d219187c3433
 	github.com/go-text/typesetting v0.3.4
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
+	github.com/google/uuid v1.6.0
 	github.com/klauspost/compress v1.18.5
 	github.com/matoous/go-nanoid/v2 v2.1.0
 	github.com/nao1215/markdown v0.13.0
 	github.com/pkoukk/tiktoken-go v0.1.8
 	github.com/rs/zerolog v1.35.1
+	github.com/sirkon/dst v0.26.4
 	github.com/stoewer/go-strcase v1.3.1
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go/modules/redpanda v0.42.0
@@ -111,7 +113,6 @@ require (
 	github.com/golang/snappy v1.0.0 // indirect
 	github.com/google/flatbuffers v25.12.19+incompatible // indirect
 	github.com/google/renameio/v2 v2.0.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/hhatto/gorst v0.0.0-20181029133204-ca9f730cac5b // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/incu6us/goimports-reviser/v3 v3.10.0 // indirect
@@ -172,7 +173,6 @@ require (
 	github.com/sergi/go-diff v1.4.0 // indirect
 	github.com/shirou/gopsutil/v4 v4.26.3 // indirect
 	github.com/shogo82148/go-shuffle v0.0.0-20170808115208-59829097ff3b // indirect
-	github.com/sirkon/dst v0.26.4 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/skeema/knownhosts v1.3.1 // indirect
 	github.com/spf13/cobra v1.10.1 // indirect

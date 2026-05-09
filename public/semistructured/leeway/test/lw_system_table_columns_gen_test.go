@@ -8,6 +8,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/code/synthesis/golang"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
@@ -36,7 +37,7 @@ func getSystemTableColumnsDesc() (tableDesc common.TableDesc, err error) {
 
 func writeFileSystemTableColumns(path string, code string, t *testing.T) {
 	_ = os.Remove(path)
-	err := os.WriteFile(path, unsafeperf.UnsafeStringToBytes(code), os.ModePerm)
+	err := golang.WriteAligned(path, unsafeperf.UnsafeStringToBytes(code))
 	require.NoError(t, err)
 }
 

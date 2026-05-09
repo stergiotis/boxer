@@ -51,7 +51,7 @@ func CreateSchemaTesttable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1175
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1184
 
 type InEntityTesttable struct {
 	plainTs1              time.Time
@@ -94,7 +94,7 @@ func NewInEntityTesttable(allocator memory.Allocator, estimatedNumberOfRecords i
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1289
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1298
 
 func (inst *InEntityTesttable) SetId(id0 uint64) *InEntityTesttable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -109,7 +109,7 @@ func (inst *InEntityTesttable) SetId(id0 uint64) *InEntityTesttable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1289
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1298
 
 func (inst *InEntityTesttable) SetTimestamp(ts1 time.Time) *InEntityTesttable {
 	if inst.state != runtime.EntityStateInEntity {

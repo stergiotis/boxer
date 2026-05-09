@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/code/synthesis/golang"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
@@ -81,7 +82,7 @@ func TestReadAccessGoClassBuilder(t *testing.T) {
 	sourceCode, _, err = driver.GenerateGoClasses("example", naming.MustBeValidStylableName("test_table"), tblDesc, tableRowConfig, namingConvention)
 	require.NoError(t, err)
 
-	err = os.WriteFile("example/readaccess_testtable_ra.out.go", sourceCode, os.ModePerm)
+	err = golang.WriteAligned("example/readaccess_testtable_ra.out.go", sourceCode)
 	require.NoError(t, err)
 }
 func TestGoClassBuilderSample(t *testing.T) {
@@ -139,7 +140,7 @@ func TestDmlSample(t *testing.T) {
 
 	p := "./example/readaccess_testtable_dml.out.go"
 	_ = os.Remove(p)
-	err = os.WriteFile(p, sourceCode, os.ModePerm)
+	err = golang.WriteAligned(p, sourceCode)
 	require.NoError(t, err)
 }
 

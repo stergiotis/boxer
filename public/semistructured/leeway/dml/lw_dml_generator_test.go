@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/code/synthesis/golang"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	canonicaltypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
@@ -121,7 +122,7 @@ func TestGenerateDmlSample(t *testing.T) {
 	require.NoError(t, err)
 	checkCodeInvariants(sourceCode, t)
 
-	err = os.WriteFile("example/dml_testtable.out.go", sourceCode, os.ModePerm)
+	err = golang.WriteAligned("example/dml_testtable.out.go", sourceCode)
 	require.NoError(t, err)
 }
 func TestGenerateDmlJsonMapping(t *testing.T) {
@@ -143,7 +144,7 @@ func TestGenerateDmlJsonMapping(t *testing.T) {
 
 	p := "./example/dml_json.out.go"
 	_ = os.Remove(p)
-	err = os.WriteFile(p, sourceCode, os.ModePerm)
+	err = golang.WriteAligned(p, sourceCode)
 	require.NoError(t, err)
 }
 func TestGoClassBuilderSample(t *testing.T) {
