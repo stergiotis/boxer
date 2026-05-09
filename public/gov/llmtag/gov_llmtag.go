@@ -64,6 +64,7 @@ const (
 	DecisionUpdated                 DecisionE = 10
 	DecisionWouldRemove             DecisionE = 11
 	DecisionRemoved                 DecisionE = 12
+	DecisionSkipUntracked           DecisionE = 13
 )
 
 // String returns a stable label for diagnostics.
@@ -93,6 +94,8 @@ func (inst DecisionE) String() (s string) {
 		s = "would_remove_tag"
 	case DecisionRemoved:
 		s = "removed_tag"
+	case DecisionSkipUntracked:
+		s = "skip_untracked"
 	default:
 		s = "unknown"
 	}
@@ -173,6 +176,17 @@ func (inst *Applier) Run(ctx context.Context, git *repo.GitRunner, root string) 
 			}
 		}
 
+		var tracked map[string]struct{}
+		{ // Stage: pre-fetch tracked .go files so untracked files can be
+			// skipped without invoking blame (which would error on them).
+			var err error
+			tracked, err = scanTrackedGoFiles(ctx, git)
+			if err != nil {
+				yield(FileReport{}, eh.Errorf("unable to list tracked files: %w", err))
+				return
+			}
+		}
+
 		threshold := inst.Threshold
 		if threshold <= 0 {
 			threshold = 0.5
@@ -193,7 +207,7 @@ func (inst *Applier) Run(ctx context.Context, git *repo.GitRunner, root string) 
 				}
 				continue
 			}
-			rec, procErr := inst.processFile(ctx, git, absPath, commits, threshold, minLines, cutoff)
+			rec, procErr := inst.processFile(ctx, git, absPath, commits, tracked, threshold, minLines, cutoff)
 			rec.DecisionLabel = rec.Decision.String()
 			if procErr != nil {
 				if !yield(rec, eb.Build().Str("path", absPath).Errorf("processing failed: %w", procErr)) {
@@ -208,7 +222,7 @@ func (inst *Applier) Run(ctx context.Context, git *repo.GitRunner, root string) 
 	}
 }
 
-func (inst *Applier) processFile(ctx context.Context, git *repo.GitRunner, absPath string, commits map[string]commitInfoT, threshold float64, minLines int32, cutoff time.Time) (rec FileReport, err error) {
+func (inst *Applier) processFile(ctx context.Context, git *repo.GitRunner, absPath string, commits map[string]commitInfoT, tracked map[string]struct{}, threshold float64, minLines int32, cutoff time.Time) (rec FileReport, err error) {
 	rec.Path = absPath
 	rec.ModelLines = make(map[string]int32, 4)
 
@@ -232,6 +246,13 @@ func (inst *Applier) processFile(ctx context.Context, git *repo.GitRunner, absPa
 		if relErr == nil && !strings.HasPrefix(rel, "..") {
 			blamePath = rel
 		}
+	}
+
+	if _, ok := tracked[blamePath]; !ok {
+		// Untracked file — no blame history to analyse. Skip cleanly so
+		// new local files don't error out the run.
+		rec.Decision = DecisionSkipUntracked
+		return
 	}
 
 	var counts map[string]int32
@@ -410,6 +431,24 @@ func scanCommits(ctx context.Context, git *repo.GitRunner, identities []LLMIdent
 			curBody.WriteString(line)
 			curBody.WriteByte('\n')
 		}
+	}
+	return
+}
+
+// scanTrackedGoFiles returns the set of repo-relative paths to tracked
+// .go files. Used to skip untracked sources cleanly, since `git blame`
+// errors out on them.
+func scanTrackedGoFiles(ctx context.Context, git *repo.GitRunner) (out map[string]struct{}, err error) {
+	out = make(map[string]struct{}, 1024)
+	for line, iterErr := range git.RunLines(ctx, "ls-files", "--", "*.go") {
+		if iterErr != nil {
+			err = eh.Errorf("ls-files: %w", iterErr)
+			return
+		}
+		if line == "" {
+			continue
+		}
+		out[line] = struct{}{}
 	}
 	return
 }
