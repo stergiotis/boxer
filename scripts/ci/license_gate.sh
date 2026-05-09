@@ -18,6 +18,7 @@ set -e
 set -o pipefail
 here=$(dirname "$(readlink -f "$BASH_SOURCE")")
 cd "$here/../.."
+tags="$(cat "$here/../../tags" | tr -d "\n")"
 
 sbom=$(mktemp --suffix=.json)
 trap 'rm -f "$sbom"' EXIT
@@ -32,4 +33,4 @@ go tool github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod mod \
     -json \
     -output "$sbom"
 
-go run ./internal/cmd/licensegate -sbom "$sbom"
+go run -tags "$tags" ./internal/cmd/licensegate -sbom "$sbom"
