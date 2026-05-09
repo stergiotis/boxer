@@ -7,6 +7,7 @@ package llmtag
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"io/fs"
 	"iter"
@@ -14,6 +15,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/stergiotis/boxer/public/gov/repo"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -49,14 +51,19 @@ const (
 type DecisionE uint8
 
 const (
-	DecisionUnknown           DecisionE = 0
-	DecisionSkipAlreadyTagged DecisionE = 1
-	DecisionSkipHasBuildTag   DecisionE = 2
-	DecisionSkipNotEnoughLLM  DecisionE = 3
-	DecisionSkipNoLines       DecisionE = 4
-	DecisionSkipUncommitted   DecisionE = 5
-	DecisionWouldApply        DecisionE = 6
-	DecisionApplied           DecisionE = 7
+	DecisionUnknown                 DecisionE = 0
+	DecisionSkipAlreadyTagged       DecisionE = 1
+	DecisionSkipHasBuildTag         DecisionE = 2
+	DecisionSkipNotEnoughLLM        DecisionE = 3
+	DecisionSkipNoLines             DecisionE = 4
+	DecisionSkipUncommitted         DecisionE = 5
+	DecisionWouldApply              DecisionE = 6
+	DecisionApplied                 DecisionE = 7
+	DecisionSkipComplexLLMDirective DecisionE = 8
+	DecisionWouldUpdate             DecisionE = 9
+	DecisionUpdated                 DecisionE = 10
+	DecisionWouldRemove             DecisionE = 11
+	DecisionRemoved                 DecisionE = 12
 )
 
 // String returns a stable label for diagnostics.
@@ -76,6 +83,16 @@ func (inst DecisionE) String() (s string) {
 		s = "would_apply"
 	case DecisionApplied:
 		s = "applied"
+	case DecisionSkipComplexLLMDirective:
+		s = "skip_complex_llm_directive"
+	case DecisionWouldUpdate:
+		s = "would_update_tag"
+	case DecisionUpdated:
+		s = "updated_tag"
+	case DecisionWouldRemove:
+		s = "would_remove_tag"
+	case DecisionRemoved:
+		s = "removed_tag"
 	default:
 		s = "unknown"
 	}
@@ -84,25 +101,61 @@ func (inst DecisionE) String() (s string) {
 
 // FileReport describes what the Applier decided for one file.
 type FileReport struct {
-	Path                  string           `json:"path"`
-	TotalLines            int32            `json:"totalLines"`
-	LLMLines              int32            `json:"llmLines"`
-	ModelLines            map[string]int32 `json:"modelLines,omitempty"`
-	DominantTag           string           `json:"dominantTag,omitempty"`
-	ExistingBuildDirective string          `json:"existingBuildDirective,omitempty"`
-	Decision              DecisionE        `json:"-"`
-	DecisionLabel         string           `json:"decision"`
+	Path                   string           `json:"path"`
+	TotalLines             int32            `json:"totalLines"`
+	LLMLines               int32            `json:"llmLines"`
+	NonLLMLines            int32            `json:"nonLLMLines"`
+	TrustedLLMLines        int32            `json:"trustedLLMLines,omitempty"`
+	ModelLines             map[string]int32 `json:"modelLines,omitempty"`
+	DominantTag            string           `json:"dominantTag,omitempty"`
+	ExistingBuildDirective string           `json:"existingBuildDirective,omitempty"`
+	ExistingLLMTag         string           `json:"existingLLMTag,omitempty"`
+	Decision               DecisionE        `json:"-"`
+	DecisionLabel          string           `json:"decision"`
 }
 
 // Applier analyses a directory of Go source files, attributes lines to
-// commits via git blame, and prepends //go:build llm_generated_<tag>
-// when the LLM share exceeds Threshold.
+// commits via git blame, and maintains //go:build llm_generated_<tag>
+// directives so they reflect current attribution.
 //
-// Zero value is usable: ApplyOpDryRun, Threshold 0.5, default identities.
+// A file is classified as LLM-generated iff LLM-attributed lines exceed
+// BOTH Threshold (fraction of all counted lines) AND MinLLMLines
+// (absolute floor). Tagged files whose share has dropped below the
+// thresholds get their tag stripped; tagged files whose dominant model
+// has changed get their tag rewritten.
+//
+// Co-Authored-By trailers became reliable only with Claude. Earlier LLMs
+// (notably Gemini) authored code with no trailer, so blame on such files
+// looks 100% human. To compensate, lines from commits whose author date
+// is before TrailerCutoff are attributed to the existing simple
+// llm_generated_<tag> directive when the file carries one. Untagged
+// files treat pre-cutoff lines as non-LLM (the safe default — we have no
+// signal to say otherwise). When TrailerCutoff is the zero time, no
+// trust is granted and only trailers matter.
+//
+// Zero value is usable: ApplyOpDryRun, Threshold 0.5, MinLLMLines 0,
+// default identities, no cutoff.
 type Applier struct {
 	ApplyOp         ApplyOpE
 	Threshold       float64
+	MinLLMLines     int32
+	TrailerCutoff   time.Time
 	ExtraIdentities []LLMIdentity
+}
+
+// AutoDetectCutoff scans the commit history once and returns the author
+// date of the earliest LLM-trailered commit, or the zero time if none
+// exist. Useful for logging the cutoff before iteration begins.
+func (inst *Applier) AutoDetectCutoff(ctx context.Context, git *repo.GitRunner) (out time.Time, err error) {
+	identities := slices.Concat(KnownLLMIdentities, inst.ExtraIdentities)
+	var commits map[string]commitInfoT
+	commits, err = scanCommits(ctx, git, identities)
+	if err != nil {
+		err = eh.Errorf("unable to scan commit history: %w", err)
+		return
+	}
+	out = earliestLLMCommitDate(commits)
+	return
 }
 
 // Run walks root yielding one FileReport per considered Go file.
@@ -110,10 +163,10 @@ func (inst *Applier) Run(ctx context.Context, git *repo.GitRunner, root string) 
 	return func(yield func(FileReport, error) bool) {
 		identities := slices.Concat(KnownLLMIdentities, inst.ExtraIdentities)
 
-		var llmCommits map[string]string
-		{ // Stage: pre-scan commit history for LLM co-authors.
+		var commits map[string]commitInfoT
+		{ // Stage: pre-scan commit history (date + LLM trailer per commit).
 			var err error
-			llmCommits, err = scanLLMCommits(ctx, git, identities)
+			commits, err = scanCommits(ctx, git, identities)
 			if err != nil {
 				yield(FileReport{}, eh.Errorf("unable to scan commit history: %w", err))
 				return
@@ -124,6 +177,14 @@ func (inst *Applier) Run(ctx context.Context, git *repo.GitRunner, root string) 
 		if threshold <= 0 {
 			threshold = 0.5
 		}
+		minLines := inst.MinLLMLines
+		if minLines < 0 {
+			minLines = 0
+		}
+		cutoff := inst.TrailerCutoff
+		if cutoff.IsZero() {
+			cutoff = earliestLLMCommitDate(commits)
+		}
 
 		for absPath, walkErr := range walkGoFiles(root) {
 			if walkErr != nil {
@@ -132,7 +193,7 @@ func (inst *Applier) Run(ctx context.Context, git *repo.GitRunner, root string) 
 				}
 				continue
 			}
-			rec, procErr := inst.processFile(ctx, git, absPath, llmCommits, threshold)
+			rec, procErr := inst.processFile(ctx, git, absPath, commits, threshold, minLines, cutoff)
 			rec.DecisionLabel = rec.Decision.String()
 			if procErr != nil {
 				if !yield(rec, eb.Build().Str("path", absPath).Errorf("processing failed: %w", procErr)) {
@@ -147,7 +208,7 @@ func (inst *Applier) Run(ctx context.Context, git *repo.GitRunner, root string) 
 	}
 }
 
-func (inst *Applier) processFile(ctx context.Context, git *repo.GitRunner, absPath string, llmCommits map[string]string, threshold float64) (rec FileReport, err error) {
+func (inst *Applier) processFile(ctx context.Context, git *repo.GitRunner, absPath string, commits map[string]commitInfoT, threshold float64, minLines int32, cutoff time.Time) (rec FileReport, err error) {
 	rec.Path = absPath
 	rec.ModelLines = make(map[string]int32, 4)
 
@@ -158,10 +219,12 @@ func (inst *Applier) processFile(ctx context.Context, git *repo.GitRunner, absPa
 		return
 	}
 	rec.ExistingBuildDirective = existing
-	if strings.Contains(existing, "llm_generated") {
-		rec.Decision = DecisionSkipAlreadyTagged
-		return
-	}
+
+	mentionsLLM := strings.Contains(existing, "llm_generated")
+	simpleTag := extractSimpleLLMTag(existing)
+	rec.ExistingLLMTag = simpleTag
+	complexLLMDirective := mentionsLLM && simpleTag == ""
+	hasOtherBuildTag := existing != "" && !mentionsLLM
 
 	blamePath := absPath
 	{ // Stage: resolve blame path relative to git repo root if possible.
@@ -178,94 +241,189 @@ func (inst *Applier) processFile(ctx context.Context, git *repo.GitRunner, absPa
 		err = eh.Errorf("git blame failed: %w", err)
 		return
 	}
-	if !allCommitted {
-		rec.Decision = DecisionSkipUncommitted
-	}
 
-	var total int32
-	var llm int32
+	var total, llm, trusted int32
 	for hash, count := range counts {
 		total += count
-		tag, ok := llmCommits[hash]
-		if !ok {
-			continue
+		info, known := commits[hash]
+		switch {
+		case known && info.LLMTag != "":
+			llm += count
+			rec.ModelLines[info.LLMTag] += count
+		case simpleTag != "" && !cutoff.IsZero() && known && info.Date.Before(cutoff):
+			// Pre-cutoff trailerless commit on a simple-tagged file.
+			// Trust the existing tag as the line's provenance.
+			llm += count
+			trusted += count
+			rec.ModelLines[simpleTag] += count
 		}
-		llm += count
-		rec.ModelLines[tag] += count
 	}
 	rec.TotalLines = total
 	rec.LLMLines = llm
-
-	if total == 0 {
-		if rec.Decision == DecisionUnknown {
-			rec.Decision = DecisionSkipNoLines
-		}
-		return
-	}
-	if float64(llm)/float64(total) < threshold {
-		if rec.Decision == DecisionUnknown {
-			rec.Decision = DecisionSkipNotEnoughLLM
-		}
-		return
-	}
+	rec.NonLLMLines = total - llm
+	rec.TrustedLLMLines = trusted
 
 	var bestTag string
-	var bestCount int32
-	for tag, count := range rec.ModelLines {
-		if count > bestCount {
-			bestTag = tag
-			bestCount = count
+	{ // Stage: pick the model with the most attributed lines.
+		var bestCount int32
+		for tag, count := range rec.ModelLines {
+			if count > bestCount {
+				bestTag = tag
+				bestCount = count
+			}
 		}
 	}
 	rec.DominantTag = bestTag
 
-	if existing != "" {
-		rec.Decision = DecisionSkipHasBuildTag
-		return
+	var shouldBeTagged bool
+	if total > 0 {
+		shouldBeTagged = float64(llm)/float64(total) > threshold && llm > minLines
 	}
 
-	if inst.ApplyOp == ApplyOpDryRun {
-		rec.Decision = DecisionWouldApply
+	switch {
+	case complexLLMDirective:
+		// Manually-crafted directive (e.g. `llm_generated_X || llm_generated_Y`,
+		// `!llm_generated_X`, `integration && llm_generated_X`). Don't touch.
+		rec.Decision = DecisionSkipComplexLLMDirective
 		return
-	}
 
-	err = prependBuildTag(absPath, bestTag)
-	if err != nil {
-		err = eb.Build().Str("path", absPath).Str("tag", bestTag).Errorf("unable to prepend build tag: %w", err)
+	case simpleTag != "":
+		// File carries a simple llm_generated_<tag> directive — re-evaluate.
+		if !allCommitted {
+			rec.Decision = DecisionSkipUncommitted
+			return
+		}
+		if total == 0 {
+			rec.Decision = DecisionSkipNoLines
+			return
+		}
+		if !shouldBeTagged {
+			if inst.ApplyOp == ApplyOpDryRun {
+				rec.Decision = DecisionWouldRemove
+				return
+			}
+			err = removeBuildTag(absPath, simpleTag)
+			if err != nil {
+				err = eb.Build().Str("path", absPath).Str("tag", simpleTag).Errorf("unable to remove build tag: %w", err)
+				return
+			}
+			rec.Decision = DecisionRemoved
+			return
+		}
+		if simpleTag != bestTag && bestTag != "" {
+			if inst.ApplyOp == ApplyOpDryRun {
+				rec.Decision = DecisionWouldUpdate
+				return
+			}
+			err = updateBuildTag(absPath, simpleTag, bestTag)
+			if err != nil {
+				err = eb.Build().Str("path", absPath).Str("oldTag", simpleTag).Str("newTag", bestTag).Errorf("unable to update build tag: %w", err)
+				return
+			}
+			rec.Decision = DecisionUpdated
+			return
+		}
+		rec.Decision = DecisionSkipAlreadyTagged
+		return
+
+	case hasOtherBuildTag:
+		// Non-llm directive present. Surface a conflict iff we would have
+		// tagged; otherwise stay silent.
+		if shouldBeTagged {
+			rec.Decision = DecisionSkipHasBuildTag
+		} else if total == 0 {
+			rec.Decision = DecisionSkipNoLines
+		} else {
+			rec.Decision = DecisionSkipNotEnoughLLM
+		}
+		return
+
+	default:
+		// Untagged file.
+		if total == 0 {
+			rec.Decision = DecisionSkipNoLines
+			return
+		}
+		if !shouldBeTagged {
+			rec.Decision = DecisionSkipNotEnoughLLM
+			return
+		}
+		if inst.ApplyOp == ApplyOpDryRun {
+			rec.Decision = DecisionWouldApply
+			return
+		}
+		err = prependBuildTag(absPath, bestTag)
+		if err != nil {
+			err = eb.Build().Str("path", absPath).Str("tag", bestTag).Errorf("unable to prepend build tag: %w", err)
+			return
+		}
+		rec.Decision = DecisionApplied
 		return
 	}
-	rec.Decision = DecisionApplied
-	return
 }
 
-// scanLLMCommits returns a map from commit hash to the llm_generated_<tag>
-// suffix implied by the first matching Co-Authored-By trailer.
-func scanLLMCommits(ctx context.Context, git *repo.GitRunner, identities []LLMIdentity) (out map[string]string, err error) {
-	out = make(map[string]string, 512)
+// commitInfoT carries the per-commit metadata needed to attribute a blame
+// line. LLMTag is the llm_generated_<tag> suffix implied by a matching
+// Co-Authored-By trailer (empty when none was found).
+type commitInfoT struct {
+	Date   time.Time
+	LLMTag string
+}
 
-	var curHash string
-	var curBody strings.Builder
+// scanCommits returns a map from commit hash to commitInfoT for every
+// commit reachable from HEAD. AuthorDate (%aI) is preferred so that the
+// cutoff reflects when the work was originally authored, even if commits
+// were later rebased or cherry-picked.
+func scanCommits(ctx context.Context, git *repo.GitRunner, identities []LLMIdentity) (out map[string]commitInfoT, err error) {
+	out = make(map[string]commitInfoT, 1024)
+
 	const recordEnd = "\x03"
-	for line, iterErr := range git.RunLines(ctx, "log", "--format=%H%n%B%n"+recordEnd) {
+	var stage int
+	var curHash string
+	var curDate time.Time
+	var curBody strings.Builder
+	for line, iterErr := range git.RunLines(ctx, "log", "--format=%H%n%aI%n%B%n"+recordEnd) {
 		if iterErr != nil {
 			err = eh.Errorf("unable to read git log: %w", iterErr)
 			return
 		}
 		if line == recordEnd {
 			tag := detectLLMFromBody(curBody.String(), identities)
-			if tag != "" {
-				out[curHash] = tag
-			}
+			out[curHash] = commitInfoT{Date: curDate, LLMTag: tag}
+			stage = 0
 			curHash = ""
+			curDate = time.Time{}
 			curBody.Reset()
 			continue
 		}
-		if curHash == "" {
+		switch stage {
+		case 0:
 			curHash = line
+			stage = 1
+		case 1:
+			d, parseErr := time.Parse(time.RFC3339, line)
+			if parseErr == nil {
+				curDate = d
+			}
+			stage = 2
+		default:
+			curBody.WriteString(line)
+			curBody.WriteByte('\n')
+		}
+	}
+	return
+}
+
+// earliestLLMCommitDate returns the author date of the earliest commit
+// carrying an LLM Co-Authored-By trailer, or the zero time if none exist.
+func earliestLLMCommitDate(commits map[string]commitInfoT) (out time.Time) {
+	for _, info := range commits {
+		if info.LLMTag == "" {
 			continue
 		}
-		curBody.WriteString(line)
-		curBody.WriteByte('\n')
+		if out.IsZero() || info.Date.Before(out) {
+			out = info.Date
+		}
 	}
 	return
 }
@@ -378,6 +536,139 @@ func prependBuildTag(path string, tag string) (err error) {
 	err = os.WriteFile(path, out, info.Mode().Perm())
 	if err != nil {
 		err = eh.Errorf("write: %w", err)
+		return
+	}
+	return
+}
+
+// extractSimpleLLMTag returns the suffix of a single positive llm_generated
+// build directive (e.g. "opus47" for "//go:build llm_generated_opus47").
+// Returns "" for complex expressions, negations, conjunctions/disjunctions,
+// or non-llm directives.
+func extractSimpleLLMTag(directive string) (tag string) {
+	const prefixModern = "//go:build llm_generated_"
+	const prefixLegacy = "// +build llm_generated_"
+	var rest string
+	switch {
+	case strings.HasPrefix(directive, prefixModern):
+		rest = strings.TrimSpace(directive[len(prefixModern):])
+	case strings.HasPrefix(directive, prefixLegacy):
+		rest = strings.TrimSpace(directive[len(prefixLegacy):])
+	default:
+		return
+	}
+	if !isPlainTagSuffix(rest) {
+		return
+	}
+	tag = rest
+	return
+}
+
+// isPlainTagSuffix reports whether s is a non-empty alphanumeric identifier
+// — i.e. a tag suffix free of whitespace, parentheses, !, &&, ||.
+func isPlainTagSuffix(s string) (ok bool) {
+	if s == "" {
+		return
+	}
+	for _, c := range s {
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' {
+			continue
+		}
+		return
+	}
+	ok = true
+	return
+}
+
+// removeBuildTag strips the simple //go:build llm_generated_<expectedTag>
+// directive from the preamble of path, along with one immediately-following
+// blank line if present. Original file mode is preserved.
+func removeBuildTag(path string, expectedTag string) (err error) {
+	var info os.FileInfo
+	info, err = os.Stat(path)
+	if err != nil {
+		err = eh.Errorf("stat: %w", err)
+		return
+	}
+	var data []byte
+	data, err = os.ReadFile(path)
+	if err != nil {
+		err = eh.Errorf("read: %w", err)
+		return
+	}
+	lines := bytes.Split(data, []byte("\n"))
+	idx := findSimpleLLMDirectiveLine(lines, expectedTag)
+	if idx < 0 {
+		err = eb.Build().Str("expectedTag", expectedTag).Errorf("simple llm_generated directive not found in preamble")
+		return
+	}
+	end := idx + 1
+	if end < len(lines) && len(bytes.TrimSpace(lines[end])) == 0 {
+		end++
+	}
+	out := make([][]byte, 0, len(lines)-(end-idx))
+	out = append(out, lines[:idx]...)
+	out = append(out, lines[end:]...)
+	err = os.WriteFile(path, bytes.Join(out, []byte("\n")), info.Mode().Perm())
+	if err != nil {
+		err = eh.Errorf("write: %w", err)
+		return
+	}
+	return
+}
+
+// updateBuildTag replaces a simple //go:build llm_generated_<oldTag>
+// directive in the preamble of path with the canonical form for newTag.
+func updateBuildTag(path string, oldTag string, newTag string) (err error) {
+	var info os.FileInfo
+	info, err = os.Stat(path)
+	if err != nil {
+		err = eh.Errorf("stat: %w", err)
+		return
+	}
+	var data []byte
+	data, err = os.ReadFile(path)
+	if err != nil {
+		err = eh.Errorf("read: %w", err)
+		return
+	}
+	lines := bytes.Split(data, []byte("\n"))
+	idx := findSimpleLLMDirectiveLine(lines, oldTag)
+	if idx < 0 {
+		err = eb.Build().Str("oldTag", oldTag).Errorf("simple llm_generated directive not found in preamble")
+		return
+	}
+	lines[idx] = []byte("//go:build llm_generated_" + newTag)
+	err = os.WriteFile(path, bytes.Join(lines, []byte("\n")), info.Mode().Perm())
+	if err != nil {
+		err = eh.Errorf("write: %w", err)
+		return
+	}
+	return
+}
+
+// findSimpleLLMDirectiveLine scans the preamble (blank lines and non-build
+// // comments are tolerated) for a simple //go:build llm_generated_<tag>
+// line whose tag matches expectedTag. Returns the line index, or -1 if it
+// is not present before the package clause.
+func findSimpleLLMDirectiveLine(lines [][]byte, expectedTag string) (idx int) {
+	idx = -1
+	for i, raw := range lines {
+		s := strings.TrimSpace(string(raw))
+		if s == "" {
+			continue
+		}
+		isBuildLine := strings.HasPrefix(s, "//go:build ") || strings.HasPrefix(s, "// +build ")
+		if !isBuildLine {
+			if strings.HasPrefix(s, "//") {
+				continue
+			}
+			return
+		}
+		if extractSimpleLLMTag(s) == expectedTag {
+			idx = i
+			return
+		}
 		return
 	}
 	return

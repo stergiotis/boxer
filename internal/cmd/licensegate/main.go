@@ -1,3 +1,5 @@
+//go:build llm_generated_opus47
+
 // Command licensegate applies the boxer inbound-license policy to a
 // CycloneDX SBOM produced by cyclonedx-gomod and emits a CSV inventory.
 //

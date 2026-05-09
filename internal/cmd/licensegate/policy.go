@@ -1,3 +1,5 @@
+//go:build llm_generated_opus47
+
 package main
 
 // Inbound-license policy for boxer (MIT-licensed). See ADR-0004

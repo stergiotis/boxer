@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package nanopass
 
 import "github.com/antlr4-go/antlr/v4"

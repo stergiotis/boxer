@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package h3 provides bulk, Struct-of-Arrays access to Uber H3 hierarchical
 // geospatial indexing.
 //
