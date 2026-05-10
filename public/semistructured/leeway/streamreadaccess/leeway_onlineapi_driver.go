@@ -326,11 +326,23 @@ func (inst *Driver) prepareFromSchema(
 	conv common.NamingConventionFwdI,
 	tableRowConfig common.TableRowConfigE,
 ) (err error) {
-	// Build name → Arrow index lookup from schema.
+	// Build name → Arrow index lookup from schema. Each schema column
+	// contributes up to two keys: the raw column name, and (when it
+	// differs) the canonical form produced by conv.CanonicalizeSchemaName.
+	// The canonical form re-styles StylableName components — section
+	// names, column names — to match what MapIntermediateToPhysicalColumns
+	// emits from the IR; without it a section authored as "geoPoint"
+	// would round-trip as "geo-point" and silently fail every value
+	// column lookup. See the doc comment on
+	// NamingConventionFwdI.CanonicalizeSchemaName for the full story.
 	nFields := schema.NumFields()
-	nameToIdx := make(map[string]int, nFields)
+	nameToIdx := make(map[string]int, nFields*2)
 	for i := 0; i < nFields; i++ {
-		nameToIdx[schema.Field(i).Name] = i
+		n := schema.Field(i).Name
+		nameToIdx[n] = i
+		if canon := conv.CanonicalizeSchemaName(n); canon != n {
+			nameToIdx[canon] = i
+		}
 	}
 
 	// resolveArrowIdx maps a PhysicalColumnDesc to an Arrow column index, or -1.

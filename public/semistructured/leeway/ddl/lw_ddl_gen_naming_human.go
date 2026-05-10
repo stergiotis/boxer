@@ -332,6 +332,49 @@ func (inst *HumanReadableNamingConvention) ExtractCanonicalType(column common.Ph
 	}
 	return
 }
+// CanonicalizeSchemaName re-styles the section-name and column-name
+// components of a physical column name to LowerSpinalCase — the same
+// transformation MakeStylableName applies when the IR is loaded from
+// a TableDesc. A schema that names a section "geoPoint" round-trips
+// through the IR as "geo-point", so prepareFromSchema looking up the
+// IR's reconstructed physical name in a raw schema map would miss
+// every value column for that section; canonicalising both sides
+// before comparison closes that gap.
+//
+// The other components (prefix, role, canonical-type, hint/aspect
+// strings, base62-encoded tableRowConfig, naming.Key-typed coSection
+// and streaming groups) are preserved verbatim — none of them are
+// stylised by the IR side, so re-styling them would *introduce* a
+// mismatch instead of removing one.
+//
+// Returns the input unchanged if the name has an unknown number of
+// components (not a leeway-shaped column).
+func (inst *HumanReadableNamingConvention) CanonicalizeSchemaName(name string) (canonical string) {
+	phy, err := inst.ParseColumn(name)
+	if err != nil {
+		return name
+	}
+	components := phy.NameComponents
+	switch len(components) {
+	case 13:
+		idx := parseStructure13.columnNameIndex
+		if idx >= 0 && idx < len(components) {
+			components[idx] = string(naming.StylableName(components[idx]).Convert(naming.DefaultNamingStyle))
+		}
+	case 21:
+		if idx := parseStructure21.sectionNameIndex; idx >= 0 && idx < len(components) {
+			components[idx] = string(naming.StylableName(components[idx]).Convert(naming.DefaultNamingStyle))
+		}
+		if idx := parseStructure21.columnNameIndex; idx >= 0 && idx < len(components) {
+			components[idx] = string(naming.StylableName(components[idx]).Convert(naming.DefaultNamingStyle))
+		}
+	default:
+		return name
+	}
+	canonical = strings.Join(components, "")
+	return
+}
+
 func (inst *HumanReadableNamingConvention) MapIntermediateToPhysicalColumns(cc common.IntermediateColumnContext, cp common.IntermediateColumnProps, in []common.PhysicalColumnDesc, tableRowConfig common.TableRowConfigE) (out []common.PhysicalColumnDesc, err error) {
 	out = slices.Grow(in, len(cp.Names))
 	if cc.IsPlainColumn() {

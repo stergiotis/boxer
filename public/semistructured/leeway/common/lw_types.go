@@ -223,6 +223,21 @@ var _ fmt.Stringer = ImplementationStatusE(0)
 type NamingConventionFwdI interface {
 	// MapIntermediateToPhysicalColumns mapping has to be 1:1 (i.e. len(cp.Names) == len(out))
 	MapIntermediateToPhysicalColumns(cc IntermediateColumnContext, cp IntermediateColumnProps, in []PhysicalColumnDesc, tableRowConfig TableRowConfigE) (out []PhysicalColumnDesc, err error)
+
+	// CanonicalizeSchemaName returns the physical column name as it would
+	// be reconstructed by MapIntermediateToPhysicalColumns from the IR.
+	// For naming conventions that re-style section and column-name
+	// components (e.g. HumanReadableNamingConvention forces
+	// StylableName components into LowerSpinalCase via MakeStylableName),
+	// schema columns that were authored in a different style (camelCase,
+	// PascalCase, snake_case, …) round-trip through the IR with their
+	// components re-styled. Callers that resolve schema columns by name
+	// — most notably the streamreadaccess Driver in NewDriverFromSchema
+	// — must canonicalise both sides before comparing, otherwise tagged
+	// sections whose name is not already in the canonical style silently
+	// drop every value column (arrowIdx=-1) and render as empty bars in
+	// the UI. Returns the input unchanged if the name cannot be parsed.
+	CanonicalizeSchemaName(name string) (canonical string)
 }
 type NamingConventionBwdI interface {
 	ExtractCanonicalType(column PhysicalColumnDesc) (ct canonicaltypes.PrimitiveAstNodeI, err error)
