@@ -232,6 +232,77 @@ func TestDetectConflicts_NoConflict(tt *testing.T) {
 	}
 }
 
+func TestDetectConflicts_ZombieConflict(tt *testing.T) {
+	// a -> b -> c, then add X anchored at b, then delete b.
+	// X stays live but its up-context (b) is deleted -> zombie.
+	g := store.New()
+	a := nid("dc_zomb", 0)
+	b := nid("dc_zomb", 1)
+	c := nid("dc_zomb", 2)
+	g.AddNode(a, []byte("a\n"), ph("dc_zomb"), []t.NodeID{t.RootNodeID}, nil)
+	g.AddNode(b, []byte("b\n"), ph("dc_zomb"), []t.NodeID{a}, nil)
+	g.AddNode(c, []byte("c\n"), ph("dc_zomb"), []t.NodeID{b}, nil)
+
+	x := nid("dc_zomb_x", 0)
+	g.AddNode(x, []byte("X\n"), ph("dc_zomb_x"), []t.NodeID{b}, []t.NodeID{c})
+	if err := g.DeleteNode(b); err != nil {
+		tt.Fatalf("DeleteNode(b): %v", err)
+	}
+	g.ResolvePseudoEdges()
+
+	conflicts := algo.DetectConflicts(g)
+	found := false
+	for _, conflict := range conflicts {
+		if conflict.Kind != "zombie" {
+			continue
+		}
+		if len(conflict.Nodes) >= 1 && conflict.Nodes[0] == x {
+			found = true
+			// Sanity: the deleted context should be among Nodes[1:].
+			sawB := false
+			for _, n := range conflict.Nodes[1:] {
+				if n == b {
+					sawB = true
+				}
+			}
+			if !sawB {
+				tt.Fatalf("zombie conflict for X should list b as deleted context, got %v", conflict.Nodes)
+			}
+		}
+	}
+	if !found {
+		tt.Fatalf("expected zombie conflict for X with deleted context b, got %v", conflicts)
+	}
+}
+
+func TestDetectConflicts_NoZombieAfterUndelete(tt *testing.T) {
+	// Same setup as the zombie test, but undelete b. X should no longer
+	// be a zombie because its context edge gets retagged back to live.
+	g := store.New()
+	a := nid("dc_zomb_undel", 0)
+	b := nid("dc_zomb_undel", 1)
+	c := nid("dc_zomb_undel", 2)
+	g.AddNode(a, []byte("a\n"), ph("dc_zomb_undel"), []t.NodeID{t.RootNodeID}, nil)
+	g.AddNode(b, []byte("b\n"), ph("dc_zomb_undel"), []t.NodeID{a}, nil)
+	g.AddNode(c, []byte("c\n"), ph("dc_zomb_undel"), []t.NodeID{b}, nil)
+	x := nid("dc_zomb_undel_x", 0)
+	g.AddNode(x, []byte("X\n"), ph("dc_zomb_undel_x"), []t.NodeID{b}, []t.NodeID{c})
+	if err := g.DeleteNode(b); err != nil {
+		tt.Fatalf("DeleteNode(b): %v", err)
+	}
+	if err := g.UndeleteNode(b); err != nil {
+		tt.Fatalf("UndeleteNode(b): %v", err)
+	}
+	g.ResolvePseudoEdges()
+
+	conflicts := algo.DetectConflicts(g)
+	for _, conflict := range conflicts {
+		if conflict.Kind == "zombie" {
+			tt.Fatalf("did not expect zombie conflict after undelete, got %v", conflict)
+		}
+	}
+}
+
 func TestHasConflicts_Linear(tt *testing.T) {
 	g := store.New()
 	a := nid("hc_lin", 0)

@@ -182,8 +182,12 @@ func HasConflicts(g t.GraphReaderI) bool {
 }
 
 // ConflictInfo describes a detected conflict.
+//
+// For "zombie" conflicts, Nodes[0] is the live zombie node and Nodes[1:]
+// are its deleted context nodes (parents and/or children); the other kinds
+// list co-equal participants.
 type ConflictInfo struct {
-	Kind  string     // "order" (fork), "cycle"
+	Kind  string     // "order" (fork), "cycle", "zombie"
 	Nodes []t.NodeID // involved nodes
 }
 
@@ -220,6 +224,35 @@ func DetectConflicts(g t.GraphReaderI) []ConflictInfo {
 					})
 				}
 			}
+		}
+	}
+
+	// Zombie conflicts: live nodes whose anchoring context (up or down) was
+	// deleted. A zombie's incident edges to the deleted neighbours carry
+	// EdgeKindDeleted; pseudo-edges keep the node visible in render but
+	// the user should decide whether to re-anchor or remove it. Pseudo-
+	// edges always point to live nodes so they cannot mask a true zombie
+	// here.
+	for v := range g.AllLiveNodes() {
+		if v == t.RootNodeID {
+			continue
+		}
+		var deletedCtx []t.NodeID
+		for be := range g.BackwardEdges(v) {
+			if be.Kind == t.EdgeKindDeleted {
+				deletedCtx = append(deletedCtx, be.Dest)
+			}
+		}
+		for e := range g.ForwardEdges(v) {
+			if e.Kind == t.EdgeKindDeleted {
+				deletedCtx = append(deletedCtx, e.Dest)
+			}
+		}
+		if len(deletedCtx) > 0 {
+			conflicts = append(conflicts, ConflictInfo{
+				Kind:  "zombie",
+				Nodes: append([]t.NodeID{v}, deletedCtx...),
+			})
 		}
 	}
 
