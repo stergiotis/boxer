@@ -16,27 +16,18 @@ import (
 	"lukechampine.com/blake3"
 )
 
-// VENDOR DEVIATION: hash function switched from crypto/sha256 to BLAKE3.
-// pushout uses the hash purely for content-addressed identity; collision
+// PatchHas pushout uses the hash purely for content-addressed identity; collision
 // resistance is the only requirement, and BLAKE3 already provides that
 // at the same 32-byte size while matching the hash function used by the
 // rest of pebble2impl (leeway/card schema fingerprint, IMAP client).
 // Switching changes every patch hash — any persisted envelope files
-// from a SHA-256 build will fail Decode's hash-validation guard. Plan
-// to upstream this together with the other vendor deviations.
-
-// PatchHash identifies a patch by the BLAKE3 hash of its contents.
-// The zero value represents the "genesis" patch that introduces the root node.
+// from a SHA-256 build will fail Decode's hash-validation guard.
 type PatchHash [32]byte
 
 func (inst PatchHash) String() (s string) {
 	s = hex.EncodeToString(inst[:8]) // short form for display
 	return
 }
-
-// VENDOR DEVIATION: hex MarshalText/UnmarshalText below is added downstream
-// so JSON envelopes can carry patch hashes as readable hex strings. The
-// upstream pushout types serialise [32]byte as a 32-element JSON array.
 
 // MarshalText emits the patch hash as a 64-char lowercase hex string. This
 // is what encoding/json uses for fields of this type, including NodeID.Patch.

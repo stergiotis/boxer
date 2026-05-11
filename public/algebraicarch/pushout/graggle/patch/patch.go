@@ -50,7 +50,7 @@ type Patch struct {
 	Changes      []Change
 }
 
-// VENDOR DEVIATION: ComputeHash now de-fixes-up self-references before
+// ComputeHash now de-fixes-up self-references before
 // hashing so it is idempotent across NewPatch's pre-/post-fixup states.
 // The envelope codec relies on Decode(env).Patch.ComputeHash() reproducing
 // the stored Hash; without this normalization that check would always fail
