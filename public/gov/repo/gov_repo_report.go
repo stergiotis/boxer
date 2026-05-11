@@ -380,7 +380,7 @@ func (inst *ReportGenerator) writeFirefighting(w io.Writer, records []FirefightR
 }
 
 func (inst *ReportGenerator) writeAuthorship(w io.Writer, records []AuthorshipRecord) (err error) {
-	err = writeSectionHeader(w, "Code Authorship (Human ▓▓ vs LLM ██)")
+	err = writeSectionHeader(w, "Code Authorship (▓ code-human ░ test-human █ code-llm ░ test-llm)")
 	if err != nil {
 		return
 	}
@@ -389,43 +389,82 @@ func (inst *ReportGenerator) writeAuthorship(w io.Writer, records []AuthorshipRe
 		return
 	}
 
-	// Find max for scaling both sides to the same scale
+	// Scale on the per-side total (code + tests) so the bar length reflects total volume.
 	maxVal := 0
 	for _, r := range records {
-		if r.HumanLines > maxVal {
-			maxVal = r.HumanLines
+		if t := r.HumanLines + r.HumanTestLines; t > maxVal {
+			maxVal = t
 		}
-		if r.LLMLines > maxVal {
-			maxVal = r.LLMLines
+		if t := r.LLMLines + r.LLMTestLines; t > maxVal {
+			maxVal = t
 		}
 	}
 
 	const halfBar = 25
 	for _, r := range records {
-		humanCells := 0
-		llmCells := 0
+		humanCells, codeHumanCells := 0, 0
+		llmCells, codeLLMCells := 0, 0
 		if maxVal > 0 {
-			humanCells = int(math.Round(float64(r.HumanLines) / float64(maxVal) * halfBar))
-			llmCells = int(math.Round(float64(r.LLMLines) / float64(maxVal) * halfBar))
+			totalHuman := r.HumanLines + r.HumanTestLines
+			totalLLM := r.LLMLines + r.LLMTestLines
+			humanCells = int(math.Round(float64(totalHuman) / float64(maxVal) * halfBar))
+			llmCells = int(math.Round(float64(totalLLM) / float64(maxVal) * halfBar))
+			if totalHuman > 0 {
+				codeHumanCells = int(math.Round(float64(r.HumanLines) / float64(totalHuman) * float64(humanCells)))
+			}
+			if totalLLM > 0 {
+				codeLLMCells = int(math.Round(float64(r.LLMLines) / float64(totalLLM) * float64(llmCells)))
+			}
 		}
-		humanBar := strings.Repeat(" ", halfBar-humanCells) + strings.Repeat("▓", humanCells)
-		llmBar := strings.Repeat("█", llmCells) + strings.Repeat(" ", halfBar-llmCells)
-		line := fmt.Sprintf("  %s %s│%s", r.Month, humanBar, llmBar)
+		if codeHumanCells > humanCells {
+			codeHumanCells = humanCells
+		}
+		if codeLLMCells > llmCells {
+			codeLLMCells = llmCells
+		}
+		testHumanCells := humanCells - codeHumanCells
+		testLLMCells := llmCells - codeLLMCells
+		// Code is rendered closest to the divider; tests extend outward.
+		humanBar := strings.Repeat(" ", halfBar-humanCells) + strings.Repeat("░", testHumanCells) + strings.Repeat("▓", codeHumanCells)
+		llmBar := strings.Repeat("█", codeLLMCells) + strings.Repeat("░", testLLMCells) + strings.Repeat(" ", halfBar-llmCells)
+		ratio := "   —"
+		if code := r.HumanLines + r.LLMLines; code > 0 {
+			ratio = fmt.Sprintf("%5.2f", float64(r.HumanTestLines+r.LLMTestLines)/float64(code))
+		}
+		line := fmt.Sprintf("  %s %s│%s  T/C %s", r.Month, humanBar, llmBar, ratio)
 		err = wRow(w, line)
 		if err != nil {
 			return
 		}
 	}
 
-	// Summary line
-	if last := records[len(records)-1]; last.HumanLines+last.LLMLines > 0 {
-		total := last.HumanLines + last.LLMLines
-		pct := 100.0 * float64(last.LLMLines) / float64(total)
-		line := fmt.Sprintf("  Latest: %d human, %d LLM (%d files), %.1f%% LLM", last.HumanLines, last.LLMLines, last.LLMFiles, pct)
-		err = wRow(w, "")
+	last := records[len(records)-1]
+	if last.HumanLines+last.LLMLines+last.HumanTestLines+last.LLMTestLines == 0 {
+		return
+	}
+	err = wRow(w, "")
+	if err != nil {
+		return
+	}
+	if codeTotal := last.HumanLines + last.LLMLines; codeTotal > 0 {
+		pct := 100.0 * float64(last.LLMLines) / float64(codeTotal)
+		line := fmt.Sprintf("  Current code:  %d human, %d LLM (%d files), %.1f%% LLM", last.HumanLines, last.LLMLines, last.LLMFiles, pct)
+		err = wRow(w, line)
 		if err != nil {
 			return
 		}
+	}
+	if testTotal := last.HumanTestLines + last.LLMTestLines; testTotal > 0 {
+		pct := 100.0 * float64(last.LLMTestLines) / float64(testTotal)
+		line := fmt.Sprintf("  Current tests: %d human, %d LLM (%d files), %.1f%% LLM", last.HumanTestLines, last.LLMTestLines, last.LLMTestFiles, pct)
+		err = wRow(w, line)
+		if err != nil {
+			return
+		}
+	}
+	if codeTotal := last.HumanLines + last.LLMLines; codeTotal > 0 {
+		ratio := float64(last.HumanTestLines+last.LLMTestLines) / float64(codeTotal)
+		line := fmt.Sprintf("  Current ratio: %.2f test lines per code line", ratio)
 		err = wRow(w, line)
 		if err != nil {
 			return

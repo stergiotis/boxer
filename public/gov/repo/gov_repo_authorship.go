@@ -12,11 +12,15 @@ import (
 )
 
 type AuthorshipRecord struct {
-	Month      string
-	HumanLines int
-	LLMLines   int
-	TotalFiles int
-	LLMFiles   int
+	Month          string
+	HumanLines     int
+	LLMLines       int
+	TotalFiles     int
+	LLMFiles       int
+	HumanTestLines int
+	LLMTestLines   int
+	TotalTestFiles int
+	LLMTestFiles   int
 }
 
 type AuthorshipAnalyzer struct{}
@@ -83,10 +87,9 @@ func (inst *AuthorshipAnalyzer) snapshot(ctx context.Context, git *GitRunner, ha
 		files = append(files, line)
 	}
 
-	rec.TotalFiles = len(files)
-
 	// Count lines per file, check first line for LLM tag
 	for _, path := range files {
+		isTest := strings.HasSuffix(path, "_test.go")
 		lineCount := 0
 		isLLM := false
 		for line, iterErr := range git.RunLines(ctx, "show", hash+":"+path) {
@@ -99,11 +102,22 @@ func (inst *AuthorshipAnalyzer) snapshot(ctx context.Context, git *GitRunner, ha
 			}
 			lineCount++
 		}
-		if isLLM {
-			rec.LLMLines += lineCount
-			rec.LLMFiles++
+		if isTest {
+			rec.TotalTestFiles++
+			if isLLM {
+				rec.LLMTestLines += lineCount
+				rec.LLMTestFiles++
+			} else {
+				rec.HumanTestLines += lineCount
+			}
 		} else {
-			rec.HumanLines += lineCount
+			rec.TotalFiles++
+			if isLLM {
+				rec.LLMLines += lineCount
+				rec.LLMFiles++
+			} else {
+				rec.HumanLines += lineCount
+			}
 		}
 	}
 	return
