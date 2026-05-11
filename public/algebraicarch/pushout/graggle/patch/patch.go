@@ -205,6 +205,12 @@ func (inst *Patch) Apply(g t.GraphStoreI) (err error) {
 // incident edges that were introduced by a different patch — removing
 // the node would leave those edges dangling. Callers must unapply
 // dependents first.
+//
+// Also returns an error if any node this patch tombstoned has had its
+// content purged by SweepTombstones (or, in future, Forget): the
+// resurrection would produce a node with no recoverable bytes, which
+// breaks the system's content guarantees. Past the retention horizon,
+// the patch is effectively permanent.
 func (inst *Patch) Unapply(g t.GraphStoreI) (err error) {
 	// Pre-flight: every node we are about to remove must have no incident
 	// edges from other patches.
@@ -215,6 +221,19 @@ func (inst *Patch) Unapply(g t.GraphStoreI) (err error) {
 		err = assertNoForeignEdges(g, c.NodeID, inst.Hash)
 		if err != nil {
 			err = eh.Errorf("unapply %s: %w", inst.Hash, err)
+			return
+		}
+	}
+	// Pre-flight: every node we are about to undelete must still have
+	// reconstructible content. If the sweep dropped it, the patch can no
+	// longer be unapplied; surface a clear error rather than producing
+	// an empty-content node.
+	for _, c := range inst.Changes {
+		if c.Kind != ChangeKindDeleteNode {
+			continue
+		}
+		if g.NodeContentStatus(c.NodeID) == t.NodeContentStatusPurged {
+			err = eh.Errorf("unapply %s: node %v has been swept (content purged past retention horizon); patch is permanent past retention", inst.Hash, c.NodeID)
 			return
 		}
 	}

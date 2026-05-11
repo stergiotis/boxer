@@ -16,6 +16,7 @@ type GraphReaderI interface {
 	IsLive(id NodeID) bool
 	IsDeleted(id NodeID) bool
 	NodeContent(id NodeID) []byte
+	NodeContentStatus(id NodeID) NodeContentStatusE
 
 	// Enumeration of the live subgraph.
 	AllLiveNodes() iter.Seq[NodeID]

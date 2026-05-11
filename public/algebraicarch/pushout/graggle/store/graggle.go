@@ -7,6 +7,8 @@ package store
 import (
 	"fmt"
 	"iter"
+	"slices"
+	"time"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 
@@ -44,6 +46,29 @@ type Graggle struct {
 	pseudoEdgeReasons map[pseudoEdge]map[t.NodeID]struct{}
 	// Components whose pseudo-edges need recomputation.
 	dirtyReps map[t.NodeID]struct{}
+
+	// Tombstone retention bookkeeping (storage-limitation under GDPR Art
+	// 5(1)(e) / FADP Art 6(4); see SweepTombstones).
+	//
+	// tombstoneAt[id] holds the wall-clock time the node was tombstoned
+	// by THIS graggle session. Populated by DeleteNode via inst.clock(),
+	// cleared by UndeleteNode and RemoveNode. Reflects session-local
+	// timing — graggles rebuilt from envelopes on each startup reset the
+	// clock; long-running processes accumulate genuine retention.
+	tombstoneAt map[t.NodeID]time.Time
+
+	// contentPurged[id] is present iff content was destroyed by
+	// SweepTombstones (or, in future, a Forget operation). Distinct from
+	// "node never had content recorded": the entry survives even after
+	// contents[id] has been dropped, so Patch.Unapply can refuse to
+	// resurrect a node whose content can no longer be reconstructed and
+	// audits can distinguish purged from missing.
+	contentPurged map[t.NodeID]struct{}
+
+	// clock is the time source used by DeleteNode to stamp tombstoneAt.
+	// Defaults to time.Now in New(); tests inject a fake clock via
+	// SetClock to make sweep behaviour deterministic.
+	clock func() time.Time
 }
 
 // pseudoEdge identifies a pseudo-edge by its endpoints.
@@ -63,9 +88,20 @@ func New() *Graggle {
 		reasonPseudoEdges: make(map[t.NodeID][]pseudoEdge),
 		pseudoEdgeReasons: make(map[pseudoEdge]map[t.NodeID]struct{}),
 		dirtyReps:         make(map[t.NodeID]struct{}),
+		tombstoneAt:       make(map[t.NodeID]time.Time),
+		contentPurged:     make(map[t.NodeID]struct{}),
+		clock:             time.Now,
 	}
 	inst.nodes.Add(t.RootNodeID)
 	return inst
+}
+
+// SetClock replaces the time source used by DeleteNode to stamp
+// tombstoneAt. Intended for deterministic testing of SweepTombstones;
+// production callers should leave the default (time.Now). The clock is
+// not used outside DeleteNode — SweepTombstones takes its now explicitly.
+func (inst *Graggle) SetClock(clock func() time.Time) {
+	inst.clock = clock
 }
 
 // HasNode returns true if the node exists (live or deleted).
@@ -158,6 +194,10 @@ func (inst *Graggle) DeleteNode(id t.NodeID) error {
 	inst.nodes.Remove(id)
 	inst.deletedNodes.Add(id)
 
+	// Record when the tombstone entered this graggle session, for
+	// SweepTombstones' retention-horizon decisions.
+	inst.tombstoneAt[id] = inst.clock()
+
 	// Re-tag all edges involving this node from Live to Deleted.
 	inst.retagEdgesForDeletion(id)
 
@@ -184,6 +224,9 @@ func (inst *Graggle) UndeleteNode(id t.NodeID) error {
 	if !inst.deletedNodes.Contains(id) {
 		return eh.Errorf("node %v is not deleted", id)
 	}
+	if _, purged := inst.contentPurged[id]; purged {
+		return eh.Errorf("node %v has been swept (content purged past retention horizon); patch is permanent past retention", id)
+	}
 
 	// Snapshot the original component before any mutation. Members may
 	// include id itself.
@@ -197,6 +240,7 @@ func (inst *Graggle) UndeleteNode(id t.NodeID) error {
 	// Move id from deleted to live and retag its edges accordingly.
 	inst.deletedNodes.Remove(id)
 	inst.nodes.Add(id)
+	delete(inst.tombstoneAt, id)
 	inst.retagEdgesForUndeletion(id)
 
 	// Remove every former peer from the partition so stale parent pointers
@@ -662,11 +706,94 @@ func (inst *Graggle) AllLiveNodes() iter.Seq[t.NodeID] {
 func (inst *Graggle) RemoveNode(id t.NodeID) {
 	inst.nodes.Remove(id)
 	delete(inst.contents, id)
+	delete(inst.tombstoneAt, id)
+	delete(inst.contentPurged, id)
 }
 
 // NodeContent returns the content of a node, or nil if not found.
+//
+// Note that nil is ambiguous: it can mean "node never had content
+// recorded", "node has been swept and content destroyed", or "node has
+// empty content". Use NodeContentStatus to disambiguate.
 func (inst *Graggle) NodeContent(id t.NodeID) []byte {
 	return inst.contents[id]
+}
+
+// NodeContentStatus reports whether content is recorded for id and, if
+// not, distinguishes "never recorded" from "purged by sweep". The
+// distinction matters for data-protection audits: a Purged node was
+// previously recorded and then deliberately destroyed, while a Missing
+// node simply has no entry.
+func (inst *Graggle) NodeContentStatus(id t.NodeID) (status t.NodeContentStatusE) {
+	if _, ok := inst.contents[id]; ok {
+		status = t.NodeContentStatusPresent
+		return
+	}
+	if _, ok := inst.contentPurged[id]; ok {
+		status = t.NodeContentStatusPurged
+		return
+	}
+	status = t.NodeContentStatusMissing
+	return
+}
+
+// SweepTombstones drops the content bytes of tombstoned nodes whose
+// tombstone time is strictly older than (now - horizon). The node
+// remains in deletedNodes — the graph topology is preserved so the live
+// subgraph stays well-defined — but contentPurged[id] is set and
+// contents[id] is freed.
+//
+// Implements the storage-limitation duty under GDPR Art 5(1)(e) and FADP
+// Art 6(4): personal data that is no longer necessary must be destroyed
+// or anonymised. The legal framing (the choice between salt-destruction,
+// commitment-destruction, encryption-shredding, etc.) is the consuming
+// repo's concern; this method is the mechanism that drops content past
+// a retention horizon under any of those architectures.
+//
+// Trade-off: a tombstoned node with purged content can no longer be
+// resurrected. Patch.Unapply of the patch that introduced the
+// DeleteNode for id will fail with a clear error after the sweep. This
+// is the intended trade-off — past the retention horizon, the patch is
+// effectively permanent. Callers wanting reversibility within the
+// horizon must keep horizon long enough to cover their unrecord
+// workflows.
+//
+// Caveats:
+//   - tombstoneAt is session-local: graggles rebuilt from envelopes on
+//     each startup reset the clock. Applications needing
+//     session-persistent retention must layer persistence on top.
+//   - Not safe for concurrent use with mutating graggle operations; the
+//     caller's mutex (e.g. PushoutRepo.Mu) applies.
+//
+// Returns the count of nodes whose content was newly purged, and the
+// list of their NodeIDs in deterministic order (sorted via
+// t.CompareNodeID) so callers can write structured audit log entries.
+func (inst *Graggle) SweepTombstones(now time.Time, horizon time.Duration) (purgedCount int32, purgedIDs []t.NodeID) {
+	cutoff := now.Add(-horizon)
+	for id, when := range inst.tombstoneAt {
+		if !when.Before(cutoff) {
+			continue
+		}
+		if _, already := inst.contentPurged[id]; already {
+			continue
+		}
+		if _, hasContent := inst.contents[id]; !hasContent {
+			// Marker without content: still flip to Purged so the audit
+			// signal survives, but nothing to delete.
+			inst.contentPurged[id] = struct{}{}
+			purgedIDs = append(purgedIDs, id)
+			purgedCount++
+			continue
+		}
+		delete(inst.contents, id)
+		inst.contentPurged[id] = struct{}{}
+		purgedIDs = append(purgedIDs, id)
+		purgedCount++
+	}
+	if len(purgedIDs) > 1 {
+		slices.SortFunc(purgedIDs, t.CompareNodeID)
+	}
+	return
 }
 
 // --- InspectableI / VisualizableI adapter methods ---
@@ -879,6 +1006,16 @@ func (inst *Graggle) Clone() *Graggle {
 	for rep := range inst.dirtyReps {
 		ng.dirtyReps[rep] = struct{}{}
 	}
+	// Copy tombstone retention bookkeeping.
+	for id, when := range inst.tombstoneAt {
+		ng.tombstoneAt[id] = when
+	}
+	for id := range inst.contentPurged {
+		ng.contentPurged[id] = struct{}{}
+	}
+	// Propagate the clock so a clone of a graggle with a test clock
+	// keeps the test clock; production clones inherit time.Now.
+	ng.clock = inst.clock
 	return ng
 }
 

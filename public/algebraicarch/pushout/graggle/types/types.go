@@ -111,6 +111,34 @@ func (inst EdgeKindE) String() (s string) {
 	return
 }
 
+// NodeContentStatusE classifies whether content is recorded for a node and,
+// if not, why. The distinction matters for storage-limitation handling
+// (GDPR Art 5(1)(e) / FADP Art 6(4)): a Purged node was previously
+// recorded and then deliberately destroyed, while a Missing node simply
+// has no entry. Callers that surface graggle state to data-protection
+// audits need to tell the two apart.
+type NodeContentStatusE uint8
+
+const (
+	NodeContentStatusMissing NodeContentStatusE = iota // node has no content recorded
+	NodeContentStatusPresent                           // node has content available
+	NodeContentStatusPurged                            // content was destroyed by SweepTombstones (or, in future, Forget)
+)
+
+func (inst NodeContentStatusE) String() (s string) {
+	switch inst {
+	case NodeContentStatusMissing:
+		s = "missing"
+	case NodeContentStatusPresent:
+		s = "present"
+	case NodeContentStatusPurged:
+		s = "purged"
+	default:
+		s = "unknown"
+	}
+	return
+}
+
 // Edge represents a directed edge in the graggle.
 type Edge struct {
 	Dest         NodeID
