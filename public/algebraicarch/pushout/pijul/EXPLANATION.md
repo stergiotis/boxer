@@ -189,6 +189,65 @@ Pushout-native backend internal invariants:
   added carrying the chosen value, anchored to a parent / downstream
   shared by the conflict siblings via `commonAnchors`.
 
+## Open design questions
+
+### Antiquing
+
+Pijul records each patch in its "most-antique" form — every patch is rewritten
+to depend only on what it genuinely needs, so two patches that don't truly
+depend on each other can be applied in either order. Boxer's port does not
+currently perform this rewrite; this section documents what the gap is and
+where it eventually bites.
+
+**Definition.** Given a patch `q` recorded against state including patch `p`,
+`q` is *antiqued* if there exists a patch `a(q)` starting from an earlier state
+such that the perfect merge of `p` and `a(q)` reproduces `q`. Joe Neeman's
+[pijul post](https://jneem.github.io/pijul/) phrases it as "making `q` look
+older than it really is." Perfect merges are associative, so repeated
+antiquing converges: every patch has a unique most-antique form, and the
+dependencies that the most-antique form still references *are* `q`'s true
+dependencies. Patches that have been antiqued past each other are parallel —
+applicable in either order — which is the property that lets cherry-pick work
+across diverged history.
+
+**Current state of the code.** `patch.NewPatch` records whatever the caller
+hands it; `ComputeDependencies` (`graggle/patch/patch.go`) extracts
+dependencies as literally referenced in change context fields. There is no
+pass that rewrites changes to reduce the dependency set. `LineDiff`
+(`graggle/patch/diff.go`) anchors new insertions at the LCS-immediate
+neighbours, so it tends to produce near-antique patches when the diff is
+localised — but that is an accidental property of the LCS choice, not a
+guarantee. `changesForResolution`'s `commonAnchors`
+(`pijul_pushout_backend.go:471`) picks the first live parent and child, which
+can be more conservative than the antique form requires.
+
+**Observed gap.** A patch may declare dependencies on patches it does not
+truly need. A peer attempting `Apply` is then rejected for "missing
+dependency" where an antiqued version would have applied cleanly. The gap
+has not surfaced as a bug in the demo workflows so far; it is a latent
+semantic divergence from the patch-theory framing the package adopts
+(`Background` above), not a known regression.
+
+**Why it eventually matters.**
+[ADR-0025 SD4](../../../../../pebble2impl/doc/adr/0025-pushout-forget-architecture.md)
+(compensating-patch construction for cooperative-purge erasure) names
+antiquing as a prerequisite: to construct a compensating patch that overwrites
+only the affected nodes, the system needs to know which dependent patches
+genuinely require the to-be-forgotten patch's content — which is exactly what
+the antiqued dependency set records. ADR-0027 ("Swiss-Only Forget
+Architecture", FADP scope) reaches the same need indirectly: any deployment
+that ever upgrades from S2 to S4 (vault + cooperative purge) inherits SD4's
+antiquing prerequisite.
+
+**Deferred decisions.** The shape of the algorithm — for each
+`ChangeKindNewNode`, walk the live subgraph to find the oldest equivalent
+up/down anchors that still pin the same partial-order position relative to
+surrounding kept content — is sketched but not committed to. Placement
+(inside `LineDiff`, between `LineDiff` and `NewPatch`, inside `NewPatch`, or
+as an independent post-record pass) is open. Conflict resolution's
+`commonAnchors` may need a separate antiquing pass or may benefit from the
+same one; that, too, is open.
+
 ## Trade-offs
 
 - The CLI runner has a 15-second timeout per mutating command and a
