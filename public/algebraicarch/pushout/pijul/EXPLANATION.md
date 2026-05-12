@@ -34,7 +34,9 @@ External references:
 
 - Joe Neeman's [merging](https://jneem.github.io/merging/) /
   [pijul](https://jneem.github.io/pijul/) /
-  [pseudo-edges](https://jneem.github.io/pseudo/) blog series.
+  [pseudo-edges](https://jneem.github.io/pseudo/) /
+  [ids](https://jneem.github.io/ids/) /
+  [cycles](https://jneem.github.io/cycles/) blog series.
 - Pijul user manual: <https://pijul.org/manual/>.
 - Native-Go reference implementation (planned migration target):
   `../../../../../../hackathon_2026/src/go/public/pushout/graggle/`.

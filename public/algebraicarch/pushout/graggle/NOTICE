@@ -36,6 +36,12 @@ https://github.com/jneem/jneem.github.io, pinned commit
   https://jneem.github.io/pseudo/    (pseudo-edges across deletions)
     Wayback: https://web.archive.org/web/20260221144337/https://jneem.github.io/pseudo/
 
+  https://jneem.github.io/ids/       (line identifiers for patches)
+    Wayback: https://web.archive.org/web/20260512103933/https://jneem.github.io/ids/
+
+  https://jneem.github.io/cycles/    (cycles in merged graggles)
+    Wayback: https://web.archive.org/web/20260512104117/https://jneem.github.io/cycles/
+
 The blog posts have no declared licence — they are cited, not
 redistributed; the upstream repo SHA and the Wayback snapshots above
 provide archival pointers without re-hosting.
