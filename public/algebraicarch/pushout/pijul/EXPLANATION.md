@@ -197,7 +197,10 @@ Pijul records each patch in its "most-antique" form — every patch is rewritten
 to depend only on what it genuinely needs, so two patches that don't truly
 depend on each other can be applied in either order. Boxer's port does not
 currently perform this rewrite; this section documents what the gap is and
-where it eventually bites.
+where it eventually bites. The full design-space analysis (architecture
+options, subsidiary decisions, open questions) is in
+[ADR-0008](../../../../doc/adr/0008-pushout-antiquing.md); the text below is
+the user-facing summary.
 
 **Definition.** Given a patch `q` recorded against state including patch `p`,
 `q` is *antiqued* if there exists a patch `a(q)` starting from an earlier state
@@ -246,7 +249,10 @@ surrounding kept content — is sketched but not committed to. Placement
 (inside `LineDiff`, between `LineDiff` and `NewPatch`, inside `NewPatch`, or
 as an independent post-record pass) is open. Conflict resolution's
 `commonAnchors` may need a separate antiquing pass or may benefit from the
-same one; that, too, is open.
+same one; that, too, is open. See
+[ADR-0008](../../../../doc/adr/0008-pushout-antiquing.md) SD1–SD8 and OQ1–OQ5
+for the enumerated options and the engineering recommendation (staged
+B → C).
 
 ## Trade-offs
 
