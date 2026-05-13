@@ -123,6 +123,57 @@ underlying `*exec.ExitError` and returns `(hadConflict=true, err=nil)`
 in that case; the orchestrator records an `[INFO]` audit line rather
 than surfacing a fatal-error block in the UI.
 
+### Pitfall: `Unrecord` is local rollback, not erasure
+
+An operator invokes `PushoutRepo.Unrecord(hash)`
+(`pijul_pushout_backend.go:505`) on a patch carrying personal data,
+expecting the data to be gone. The graggle's live subgraph no longer
+shows the patch's effect — but the envelope file at
+`.pushout/changes/<short>.json` and the `MetaByHash[hash]` entry are
+still present, and a future `Pull` from any peer that still has the
+patch will reapply it cleanly.
+
+**Cause.** `Unrecord` is designed to be round-trippable. It calls
+`Patch.Unapply` to rewind the graggle (un-deletes tombstones, removes
+edges and nodes the patch added), removes the hash from `appliedHash`,
+and rewrites `applied.txt`. It deliberately does *not* delete the
+envelope, because the typical use case is "back out a local change so
+a peer's newer version can be pulled in cleanly" — without the
+preserved envelope, a subsequent re-apply would have to re-fetch the
+bytes from a peer. Personal data carried in the patch's `Change.Content`
+therefore survives on disk after `Unrecord`, and on every peer that
+pulled the patch and has not itself run `Unrecord`. This is **not
+erasure** under GDPR Art 17, FADP Art 32 al. 2(c), or ICO "put beyond
+use".
+
+**Architecture for actual erasure.** Two related ADRs document the
+mechanism (both deferred pending counsel review):
+
+- [ADR-0025 (pebble2impl)](../../../../../pebble2impl/doc/adr/0025-pushout-forget-architecture.md)
+  — GDPR scope; recommends Architecture C (vault-by-design +
+  cooperative-purge fallback).
+- [ADR-0027 (pebble2impl)](../../../../../pebble2impl/doc/adr/0027-pushout-forget-swiss-fadp.md)
+  — FADP scope; recommends the leaner S2 (local meta-tier redaction),
+  with S4 (= Architecture C) as the adequacy-hedge upgrade.
+
+Both architectures use a different primitive than `Unrecord`: a
+**compensating patch**, a *new* patch added to the graggle that
+overwrites the affected node's content with a redaction marker while
+preserving the structural NodeIDs that downstream dependents reference.
+It is not an inverse of the original patch (an inverse would orphan
+dependents); it is an additive overlay that destroys the personal-data
+content while keeping the dependency structure intact.
+
+**Antiquing's role**
+(see [ADR-0008](../../../../doc/adr/0008-pushout-antiquing.md)) is
+*blast-radius minimisation* for compensation. If a dependent's antique
+form does not actually reference the to-be-forgotten patch's nodes, no
+compensating patch is needed for that dependent — the original patch
+can simply be removed. Without antiquing, the system must
+conservatively assume every literal reference is a real dependency,
+inflating the number of compensating patches that must be constructed
+and propagated.
+
 ## Invariants
 
 Demo-level invariants (visible to anyone using `BackendI`/`RepoI`):
