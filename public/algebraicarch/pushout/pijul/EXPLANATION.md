@@ -243,16 +243,20 @@ that ever upgrades from S2 to S4 (vault + cooperative purge) inherits SD4's
 antiquing prerequisite.
 
 **Deferred decisions.** The shape of the algorithm — for each
-`ChangeKindNewNode`, walk the live subgraph to find the oldest equivalent
-up/down anchors that still pin the same partial-order position relative to
-surrounding kept content — is sketched but not committed to. Placement
-(inside `LineDiff`, between `LineDiff` and `NewPatch`, inside `NewPatch`, or
-as an independent post-record pass) is open. Conflict resolution's
-`commonAnchors` may need a separate antiquing pass or may benefit from the
-same one; that, too, is open. See
-[ADR-0008](../../../../doc/adr/0008-pushout-antiquing.md) SD1–SD8 and OQ1–OQ5
-for the enumerated options and the engineering recommendation (staged
-B → C).
+`ChangeKindNewNode`, walk the live subgraph to find the up/down anchors that
+minimise the patch's dependency set while still pinning the same
+partial-order position relative to surrounding kept content, with a
+deterministic tie-breaker among equally-minimal candidates — is sketched
+but not committed to. "Canonical" here means *record-time canonicity given a
+fixed input*: Alice and Bob recording against different graggle states
+produce different patches by design, which is consistent with pijul's own
+semantics. Placement (inside `LineDiff`, between `LineDiff` and `NewPatch`,
+inside `NewPatch`, or as an independent post-record pass) is open. Conflict
+resolution's `commonAnchors` may need a separate antiquing pass or may
+benefit from the same one; that, too, is open. See
+[ADR-0008](../../../../doc/adr/0008-pushout-antiquing.md) SD1–SD10 and
+OQ1–OQ6 for the enumerated options and the engineering recommendation
+(staged B → C).
 
 ## Trade-offs
 
