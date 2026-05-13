@@ -124,14 +124,19 @@ type wireMessage struct {
 }
 
 type wireOptions struct {
-	NumCtx int32 `json:"num_ctx,omitempty"`
+	NumCtx int32 `json:"num_ctx,omitzero"`
 }
 
+// wireRequest uses omitzero on numeric fields because encoding/json/v2's
+// omitempty does not omit numeric zero (only zero-length strings / slices
+// / maps). Gemini's OpenAI-compat shim rejects max_tokens=0 with
+// "max_output_tokens must be positive", and we want Temperature=0 to mean
+// "let the provider default" rather than forcing deterministic sampling.
 type wireRequest struct {
 	Model              string         `json:"model"`
 	Messages           []wireMessage  `json:"messages"`
-	Temperature        float32        `json:"temperature,omitempty"`
-	MaxTokens          int32          `json:"max_tokens,omitempty"`
+	Temperature        float32        `json:"temperature,omitzero"`
+	MaxTokens          int32          `json:"max_tokens,omitzero"`
 	Stream             bool           `json:"stream"`
 	Options            *wireOptions   `json:"options,omitempty"`
 	ChatTemplateKwargs map[string]any `json:"chat_template_kwargs,omitempty"`
