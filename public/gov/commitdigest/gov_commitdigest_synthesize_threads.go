@@ -1,3 +1,5 @@
+//go:build llm_generated_opus47
+
 package commitdigest
 
 import (
@@ -9,6 +11,7 @@ import (
 	"encoding/json/v2"
 
 	"github.com/go-json-experiment/json/jsontext"
+	"github.com/stergiotis/boxer/public/llm/openaichat"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/urfave/cli/v2"
@@ -74,17 +77,21 @@ func newSynthesizeThreadsCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "llm-apikey",
 				EnvVars: []string{"LLM_API_KEY"},
-				Usage:   "API key for LLM provider. Prefer the env var to avoid exposing the secret in process argv.",
+				Usage:   "API key for non-Gemini LLM providers (LM Studio, generic OpenAI-compat). Prefer LLM_API_KEY env to avoid exposing the secret in process argv.",
+			},
+			&cli.StringFlag{
+				Name:  "gemini-api-key",
+				Usage: "Gemini API key. When set, overrides --llm-apikey; when set empty, walks GEMINI_API_KEY → GOOGLE_API_KEY → ~/.config/gemini/api_key. Auto-engaged when --llm-endpoint points at generativelanguage.googleapis.com.",
 			},
 			&cli.IntFlag{
 				Name:  "llm-timeout",
-				Usage: "Number of seconds to wait for LLM provider",
+				Usage: "Per-call timeout in seconds; 0 keeps the legacy 120s default",
 				Value: 0,
 			},
 			&cli.IntFlag{
 				Name:  "num-ctx",
 				Value: 8192,
-				Usage: "Context window size for the LLM (ollama num_ctx option)",
+				Usage: "Ollama options.num_ctx pass-through; set to 0 for OpenAI / Gemini endpoints (which reject the unknown field)",
 			},
 			&cli.BoolFlag{
 				Name:  "dry-run",
@@ -128,16 +135,21 @@ func newSynthesizeThreadsCommand() *cli.Command {
 				return nil
 			}
 
-			llm := &LlmClient{
-				Endpoint:   c.String("llm-endpoint"),
-				Model:      llmModel,
-				NumCtx:     int32(c.Int("num-ctx")),
-				ApiKey:     c.String("llm-apikey"),
-				TimeoutSec: int32(c.Int("llm-timeout")),
+			apiKey, err := resolveLlmApiKey(c)
+			if err != nil {
+				return eh.Errorf("resolve api key: %w", err)
 			}
-			llm.Init()
+			llm, err := openaichat.NewClient(c.String("llm-endpoint"), apiKey)
+			if err != nil {
+				return eh.Errorf("new llm client: %w", err)
+			}
+			defer func() { _ = llm.Close() }()
+			timeoutSec := c.Int("llm-timeout")
+			if timeoutSec <= 0 {
+				timeoutSec = 120
+			}
 
-			raw, err := llm.Summarize(c.Context, ThreadSynthesisSystemPrompt, user)
+			raw, err := summarizeOnce(c.Context, llm, llmModel, int32(c.Int("num-ctx")), timeoutSec, ThreadSynthesisSystemPrompt, user)
 			if err != nil {
 				return eh.Errorf("LLM thread synthesis failed: %w", err)
 			}
