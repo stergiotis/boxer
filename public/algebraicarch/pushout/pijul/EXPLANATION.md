@@ -146,6 +146,19 @@ pulled the patch and has not itself run `Unrecord`. This is **not
 erasure** under GDPR Art 17, FADP Art 32 al. 2(c), or ICO "put beyond
 use".
 
+**Git analogy.** Pushout has no equivalent of git's staging area or
+dirty working tree — every `SetAndRecord` immediately produces a
+content-addressed patch, comparable to a git commit. `Unrecord` is
+therefore *not* "unstage + checkout" (those discard uncommitted work).
+It is closer to **a `git rebase -i` drop that never gets
+garbage-collected**: the patch leaves the applied history
+(`appliedHash` / `applied.txt`), the graggle rewinds to its pre-patch
+state, but the envelope persists in `.pushout/changes/` indefinitely
+and can be re-introduced by `Pull` from any peer that still has it —
+analogous to recovering a dropped commit by its hash from git's object
+database, except that pushout's "object database" has no retention
+horizon and no GC.
+
 **Architecture for actual erasure.** Two related ADRs document the
 mechanism (both deferred pending counsel review):
 
