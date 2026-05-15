@@ -1,4 +1,4 @@
-//go:build llm_generated_opus47
+//go:build llm_generated_opus46
 
 package commitdigest
 
