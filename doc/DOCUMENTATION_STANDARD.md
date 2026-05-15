@@ -167,6 +167,7 @@ reviewed-date: 2026-04-16    # required when status is stable or accepted
 |---|---|---|
 | `proposed` | Pre-human-review; decision not yet in force. | Must display the draft banner. |
 | `accepted` | Decision is active. | `reviewed-by` + `reviewed-date` required. Banner removed. |
+| `deferred` | Decision shape is settled, but implementation is intentionally postponed pending a future trigger. | Must name the trigger in the `## Status` section (the condition that, when met, moves the ADR to `accepted` or motivates a successor). |
 | `deprecated` | Decision no longer in force; no successor. | |
 | `superseded` | Replaced by a later ADR. | Must link to the superseding ADR. |
 

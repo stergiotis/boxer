@@ -62,6 +62,7 @@ var validStatusesDescriptive = map[string]struct{}{
 var validStatusesAdr = map[string]struct{}{
 	"proposed":   {},
 	"accepted":   {},
+	"deferred":   {},
 	"deprecated": {},
 	"superseded": {},
 }
