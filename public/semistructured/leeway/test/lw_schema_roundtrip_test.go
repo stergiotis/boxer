@@ -28,8 +28,7 @@ func TestSimpleRoundtrip(t *testing.T) {
 	marshaller, err = common2.NewTableMarshaller()
 	require.NoError(t, err)
 	buf := bytes.NewBuffer(make([]byte, 0, 4096))
-	var validator *common2.TableValidator
-	validator = common2.NewTableValidator()
+	validator := common2.NewTableValidator()
 	var tblDesc1, tblDesc2 common2.TableDesc
 	var dto1, dto2 common2.TableDescDto
 	for i := 0; i < 100; i++ {
@@ -184,8 +183,7 @@ func TestTableOpsRoundtrip(t *testing.T) {
 	tblOp, err := common2.NewTableOperations()
 	tblNormalizer := common2.NewTableNormalizer(naming.DefaultNamingStyle)
 	require.NoError(t, err)
-	var validator *common2.TableValidator
-	validator = common2.NewTableValidator()
+	validator := common2.NewTableValidator()
 	require.NoError(t, err)
 	var tblDesc1, tblDesc2 common2.TableDesc
 	for i := 0; i < 100; i++ {
@@ -223,8 +221,7 @@ func TestIntermediateRoundtrip(t *testing.T) {
 	acceptCanonicalType := tech.CheckTypeCompatibility
 	acceptEncodingAspect := ddl.EncodingAspectFilterFuncFromTechnology(tech, common2.ImplementationStatusPartial)
 	tblNormalizer := common2.NewTableNormalizer(naming.DefaultNamingStyle)
-	var validator *common2.TableValidator
-	validator = common2.NewTableValidator()
+	validator := common2.NewTableValidator()
 	ir := common2.NewIntermediateTableRepresentation()
 	var tblDesc1, tblDesc2 common2.TableDesc
 	manip, err := common2.NewTableManipulator()
@@ -268,8 +265,7 @@ func TestNamingConventionRoundtrip(t *testing.T) {
 	tblOp, err := common2.NewTableOperations()
 	tblNormalizer := common2.NewTableNormalizer(naming.DefaultNamingStyle)
 	require.NoError(t, err)
-	var validator *common2.TableValidator
-	validator = common2.NewTableValidator()
+	validator := common2.NewTableValidator()
 	var conv *ddl.HumanReadableNamingConvention
 	conv, err = ddl.NewHumanReadableNamingConvention(":")
 	require.NoError(t, err)

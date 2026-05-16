@@ -191,9 +191,7 @@ func stripCodeFences(s string) (out string) {
 			out = out[idx+1:]
 		}
 	}
-	if strings.HasSuffix(out, "```") {
-		out = strings.TrimSuffix(out, "```")
-	}
+	out = strings.TrimSuffix(out, "```")
 	out = strings.TrimSpace(out)
 	return
 }

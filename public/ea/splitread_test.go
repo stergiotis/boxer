@@ -17,7 +17,7 @@ func TestTransferDataWithSplitReads(t *testing.T) {
 		byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()), byte(rand.Uint32()),
 	})
 	l := rand.IntN(1*1024*1024) + 100
-	v := make([]byte, l, l)
+	v := make([]byte, l)
 	_, err := ra.Read(v)
 	require.NoError(t, err)
 	b := bytes.NewBuffer(make([]byte, 0, l))

@@ -10,9 +10,9 @@ import (
 
 func TestDecodeLowLevel(t *testing.T) {
 	sz := (10 * 1024 / 12) * 12
-	input := make([]byte, sz, sz)
+	input := make([]byte, sz)
 	encoded := make([]byte, 0, sz*2)
-	decoded := make([]byte, sz, sz)
+	decoded := make([]byte, sz)
 	prng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	for i := 0; i < len(input)/4; i++ {
 		binary.BigEndian.PutUint32(input[i*4:], prng.Uint32())
@@ -28,9 +28,9 @@ func BenchmarkDecodeLowLevel(b *testing.B) {
 	b.StopTimer()
 	b.ReportAllocs()
 	sz := (100 * 1024 * 1024 / 12) * 12
-	input := make([]byte, sz, sz)
+	input := make([]byte, sz)
 	encoded := make([]byte, 0, sz*2)
-	decoded := make([]byte, sz, sz)
+	decoded := make([]byte, sz)
 	prng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	for i := 0; i < len(input)/4; i++ {
 		binary.BigEndian.PutUint32(input[i*4:], prng.Uint32())

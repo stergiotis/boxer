@@ -51,7 +51,7 @@ func NewEncoder(w EncoderWriter, hasher hash.Hash) *Encoder {
 		hashBuffer: bytes.NewBuffer(make([]byte, 0, 128)),
 		hasher:     hasher,
 		flushLimit: flushLimit,
-		scratch8:   make([]byte, 8, 8),
+		scratch8:   make([]byte, 8),
 	}
 }
 
@@ -288,7 +288,7 @@ func (inst *Encoder) writeString(s string, bytesWrittenBefore int) (n int, err e
 
 func (inst *Encoder) flushHashBuffer(force bool) (err error) {
 	buf := inst.hashBuffer
-	if force == false && buf.Len() < inst.flushLimit {
+	if !force && buf.Len() < inst.flushLimit {
 		return
 	}
 	_, err = inst.hasher.Write(buf.Bytes())

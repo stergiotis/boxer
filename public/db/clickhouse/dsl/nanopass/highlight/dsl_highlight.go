@@ -385,14 +385,12 @@ func isTableContext(tid *grammar1.TableIdentifierContext) bool {
 		return true
 	default:
 		// Could be nested — check grandparent
-		if gp := parent.(antlr.Tree); gp != nil {
-			if gpCtx, ok := gp.(antlr.ParserRuleContext); ok {
-				switch gpCtx.(type) {
-				case *grammar1.TableExprIdentifierContext:
-					return true
-				case *grammar1.TableExprAliasContext:
-					return true
-				}
+		if gpCtx, ok := parent.(antlr.ParserRuleContext); ok {
+			switch gpCtx.(type) {
+			case *grammar1.TableExprIdentifierContext:
+				return true
+			case *grammar1.TableExprAliasContext:
+				return true
 			}
 		}
 		return false

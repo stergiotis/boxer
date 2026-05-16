@@ -459,8 +459,8 @@ func checkGrammar2Compliance(pr *nanopass.ParseResult) (violations []string) {
 		// Check for OUTER in join ops
 		switch c := ctx.(type) {
 		case *grammar1.JoinOpLeftRightContext, *grammar1.JoinOpFullContext:
-			for i := 0; i < c.(antlr.ParserRuleContext).GetChildCount(); i++ {
-				if term, ok := c.(antlr.ParserRuleContext).GetChild(i).(*antlr.TerminalNodeImpl); ok {
+			for i := 0; i < c.GetChildCount(); i++ {
+				if term, ok := c.GetChild(i).(*antlr.TerminalNodeImpl); ok {
 					if term.GetSymbol().GetTokenType() == grammar1.ClickHouseLexerOUTER {
 						violations = append(violations, fmt.Sprintf("OUTER keyword at line %d:%d",
 							term.GetSymbol().GetLine(), term.GetSymbol().GetColumn()))

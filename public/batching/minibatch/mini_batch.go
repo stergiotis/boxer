@@ -162,7 +162,7 @@ func (inst *MiniBatcher) checkCriteria() (needsEmit bool) {
 	if c {
 		inst.numberOfEmitsDueToCount++
 	}
-	d := time.Now().Sub(inst.startTime) >= inst.durationCriteria
+	d := time.Since(inst.startTime) >= inst.durationCriteria
 	if d {
 		inst.numberOfEmitsDueToDuration++
 	}

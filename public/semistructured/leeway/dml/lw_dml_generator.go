@@ -1385,7 +1385,7 @@ func (inst *GoClassBuilder) ComposeEntityCode(clsNamer gocodegen.GoClassNamerI, 
 	{ // beginSections
 		_, err = fmt.Fprintf(b, `func (inst *%s) beginSections() {
 `, clsNames.InEntityClassName)
-		for i, _ := range sectionNames {
+		for i := range sectionNames {
 			_, err = fmt.Fprintf(b, `	inst.section%02dInst.beginSection()
 `, i)
 			if err != nil {
@@ -1401,7 +1401,7 @@ func (inst *GoClassBuilder) ComposeEntityCode(clsNamer gocodegen.GoClassNamerI, 
 	{ // resetSections
 		_, err = fmt.Fprintf(b, `func (inst *%s) resetSections() {
 `, clsNames.InEntityClassName)
-		for i, _ := range sectionNames {
+		for i := range sectionNames {
 			_, err = fmt.Fprintf(b, `	inst.section%02dInst.resetSection()
 `, i)
 			if err != nil {
@@ -1421,7 +1421,7 @@ func (inst *GoClassBuilder) ComposeEntityCode(clsNamer gocodegen.GoClassNamerI, 
 		if err != nil {
 			return
 		}
-		for i, _ := range sectionNames {
+		for i := range sectionNames {
 			_, err = fmt.Fprintf(b, `	err = errors.Join(err, inst.section%02dInst.CheckErrors())
 `, i)
 			if err != nil {

@@ -71,5 +71,5 @@ func TestNewTableNormalizer(t *testing.T) {
 	err = marshaller.EncodeTableCbor(buf2, &tbl2)
 	require.NoError(t, err)
 	require.EqualValues(t, tbl1, tbl2)
-	require.EqualValues(t, string(buf1.Bytes()), string(buf2.Bytes()))
+	require.EqualValues(t, buf1.String(), buf2.String())
 }

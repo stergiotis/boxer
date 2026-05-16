@@ -80,15 +80,11 @@ func (inst RegisteredNaturalKeyDml) MustAddRestriction(sectionName naming.Stylab
 func (inst RegisteredNaturalKeyDml) SetVirtual() RegisteredNaturalKeyVirtualDml {
 	inst.w.flags = inst.w.flags.SetVirtual()
 	inst.w.register(inst.w)
-	return RegisteredNaturalKeyVirtualDml{
-		w: inst.w,
-	}
+	return RegisteredNaturalKeyVirtualDml(inst)
 }
 func (inst RegisteredNaturalKeyDml) SetFinal() RegisteredNaturalKeyFinalDml {
 	inst.w.flags = inst.w.flags.SetFinal()
-	return RegisteredNaturalKeyFinalDml{
-		w: inst.w,
-	}
+	return RegisteredNaturalKeyFinalDml(inst)
 }
 func (inst RegisteredNaturalKeyDml) SetDeprecated() RegisteredNaturalKeyDml {
 	inst.w.flags = inst.w.flags.SetDeprecated()

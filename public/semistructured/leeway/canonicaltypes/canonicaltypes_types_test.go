@@ -12,8 +12,7 @@ var s = StringAstNode{BaseType: 's', WidthModifier: 0, Width: 0, ScalarModifier:
 var i8 = MachineNumericTypeAstNode{BaseType: 'i', Width: 8, ByteOrderModifier: 0, ScalarModifier: 0}
 
 func TestTypes(t *testing.T) {
-	var a AstNodeI
-	a = &GroupAstNode{}
+	var a AstNodeI = &GroupAstNode{}
 	_, castable := (a).(PrimitiveAstNodeI)
 	require.False(t, castable, "group ast node is a primitive type")
 }

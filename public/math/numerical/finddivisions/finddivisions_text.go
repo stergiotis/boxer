@@ -49,7 +49,7 @@ func (inst *CachingTextMeasurer) MeasureSingleLine(s string, fontSizePt float64,
 	}
 	if len(c) == inst.size {
 		// randomly delete an item (range over map is randomized in go)
-		for k, _ := range c {
+		for k := range c {
 			delete(c, k)
 			break
 		}

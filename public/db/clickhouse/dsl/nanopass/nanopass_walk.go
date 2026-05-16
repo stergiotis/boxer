@@ -19,7 +19,7 @@ func WalkCST(node antlr.Tree, fn func(antlr.ParserRuleContext) bool) {
 		if child == nil {
 			continue
 		}
-		WalkCST(child.(antlr.Tree), fn)
+		WalkCST(child, fn)
 	}
 }
 

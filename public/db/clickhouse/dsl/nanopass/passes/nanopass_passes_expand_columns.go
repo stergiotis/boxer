@@ -94,7 +94,7 @@ func NewCachingSchemaProvider(maxAge time.Duration, delegate SchemaProviderI, ma
 
 func (inst *CachingSchemaProvider) GetColumns(dbName, tableName string) (columns iter.Seq[string], nColumns int, found bool) {
 	c, hit := inst.cache[tableName]
-	if hit && time.Now().Sub(c.timestamp) < inst.maxAge {
+	if hit && time.Since(c.timestamp) < inst.maxAge {
 		columns = slices.Values(c.columns)
 		nColumns = len(c.columns)
 		found = true

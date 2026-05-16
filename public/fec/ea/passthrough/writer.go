@@ -42,7 +42,7 @@ func (inst *PassthroughWriter) BeginMessage() (n int, err error) {
 }
 
 func (inst *PassthroughWriter) EndMessage() (paddingBitsBeforeEncoding int, err error) {
-	if inst.inMessage == false {
+	if !inst.inMessage {
 		err = eh.Errorf("no message to end, call BeginMessage before EndMessage")
 		return
 	}

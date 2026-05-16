@@ -105,17 +105,17 @@ func canonicalizeCastExpr(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewrite
 			// Children: CAST, (, expr, AS, TypeExpr, )
 			for i := 0; i < castCtx.GetChildCount(); i++ {
 				child := castCtx.GetChild(i)
-				switch child.(type) {
+				switch c := child.(type) {
 				case *grammar1.ColumnTypeExprSimpleContext:
-					typeText = child.(*grammar1.ColumnTypeExprSimpleContext).GetText()
+					typeText = c.GetText()
 				case *grammar1.ColumnTypeExprComplexContext:
-					typeText = child.(*grammar1.ColumnTypeExprComplexContext).GetText()
+					typeText = c.GetText()
 				case antlr.ParserRuleContext:
 					if exprNode == nil {
 						_, isSimple := child.(*grammar1.ColumnTypeExprSimpleContext)
 						_, isComplex := child.(*grammar1.ColumnTypeExprComplexContext)
 						if !isSimple && !isComplex {
-							exprNode = child.(antlr.ParserRuleContext)
+							exprNode = c
 						}
 					}
 				}
@@ -129,17 +129,17 @@ func canonicalizeCastExpr(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewrite
 		// Children: expr, ::, ColumnTypeExpr
 		for i := 0; i < castCtx.GetChildCount(); i++ {
 			child := castCtx.GetChild(i)
-			switch child.(type) {
+			switch c := child.(type) {
 			case *grammar1.ColumnTypeExprSimpleContext:
-				typeText = child.(*grammar1.ColumnTypeExprSimpleContext).GetText()
+				typeText = c.GetText()
 			case *grammar1.ColumnTypeExprComplexContext:
-				typeText = child.(*grammar1.ColumnTypeExprComplexContext).GetText()
+				typeText = c.GetText()
 			case antlr.ParserRuleContext:
 				if exprNode == nil {
 					_, isSimple := child.(*grammar1.ColumnTypeExprSimpleContext)
 					_, isComplex := child.(*grammar1.ColumnTypeExprComplexContext)
 					if !isSimple && !isComplex {
-						exprNode = child.(antlr.ParserRuleContext)
+						exprNode = c
 					}
 				}
 			}

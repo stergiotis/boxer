@@ -223,9 +223,7 @@ func (inst *FunctionEvaluator) walkAndEval(e *env.Environment, pr *nanopass.Pars
 
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
-		if childTree, ok := child.(antlr.Tree); ok {
-			inst.walkAndEval(e, pr, rw, childTree)
-		}
+		inst.walkAndEval(e, pr, rw, child)
 	}
 }
 

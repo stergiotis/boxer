@@ -80,9 +80,7 @@ func (inst RegisteredNaturalKeyVirtualDml) MustAddRestriction(sectionName naming
 func (inst RegisteredNaturalKeyVirtualDml) ClearVirtual() RegisteredNaturalKeyDml {
 	inst.w.flags = inst.w.flags.ClearVirtual()
 	inst.w.register(inst.w)
-	return RegisteredNaturalKeyDml{
-		w: inst.w,
-	}
+	return RegisteredNaturalKeyDml(inst)
 }
 func (inst RegisteredNaturalKeyVirtualDml) SetDeprecated() RegisteredNaturalKeyVirtualDml {
 	inst.w.flags = inst.w.flags.SetDeprecated()
@@ -95,7 +93,5 @@ func (inst RegisteredNaturalKeyVirtualDml) ClearDeprecated() RegisteredNaturalKe
 	return inst
 }
 func (inst RegisteredNaturalKeyVirtualDml) End() RegisteredNaturalKeyVirtual {
-	return RegisteredNaturalKeyVirtual{
-		w: inst.w,
-	}
+	return RegisteredNaturalKeyVirtual(inst)
 }

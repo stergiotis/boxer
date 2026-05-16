@@ -53,9 +53,7 @@ func (inst *SlidingWindow) LoadFromDir() (err error) {
 			// extract the numeric index: "summary_0028_2026-04-01_2026-04-12_g49852ee.md" → "0028"
 			rest := strings.TrimPrefix(name, "summary_")
 			indexStr, _, _ := strings.Cut(rest, "_")
-			if strings.HasSuffix(indexStr, ".md") {
-				indexStr = strings.TrimSuffix(indexStr, ".md")
-			}
+			indexStr = strings.TrimSuffix(indexStr, ".md")
 			num, parseErr := strconv.ParseInt(indexStr, 10, 32)
 			if parseErr == nil && int32(num) >= maxIndex {
 				maxIndex = int32(num) + 1

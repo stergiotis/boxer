@@ -113,7 +113,7 @@ func TestCoSortSlicesReverse(t *testing.T) {
 func TestCoIterateFilter(t *testing.T) {
 	a := []int{0, 1, 2, 3, 4, 5, 5}
 	b := []string{"zero", "one", "two", "three", "four", "five", "five-too"}
-	for i, _ := range a[:5] {
+	for i := range a[:5] {
 		require.EqualValues(t, []string{b[i]}, slices.Collect(functional.IterRightOnly(CoIterateFilter(a, a[i], b))))
 	}
 	require.EqualValues(t, []string{"five", "five-too"}, slices.Collect(functional.IterRightOnly(CoIterateFilter(a, 5, b))))

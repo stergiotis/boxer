@@ -61,7 +61,7 @@ func (inst *HashSet[T]) Has(val T) bool {
 }
 func (inst *HashSet[T]) IterateAll() iter.Seq[T] {
 	return func(yield func(T) bool) {
-		for m, _ := range inst.data {
+		for m := range inst.data {
 			if !yield(m) {
 				return
 			}
@@ -77,7 +77,7 @@ func (inst *HashSet[T]) Slice() []T {
 }
 func (inst *HashSet[T]) SliceEx(in []T) (out []T) {
 	out = slices.Grow(in, len(inst.data))
-	for k, _ := range inst.data {
+	for k := range inst.data {
 		out = append(out, k)
 	}
 	return

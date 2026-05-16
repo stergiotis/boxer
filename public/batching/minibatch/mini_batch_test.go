@@ -41,7 +41,7 @@ func TestNewMiniBatcher(t *testing.T) {
 	emits := 0
 	for i := 0; i < ra.IntN(10000)+200; i++ {
 		l := ra.IntN(sizeCriteria / 100)
-		b := make([]byte, l, l)
+		b := make([]byte, l)
 		_, err = io.ReadFull(src, b)
 		require.NoError(t, err)
 		n, err = direct.Write(b)
