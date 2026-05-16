@@ -53,8 +53,6 @@ type ReadThroughCache[K comparable, V any, W comparable] struct {
 	// Configuration
 	fetchCriteria   FetchCriteria
 	errorBackoffDur time.Duration
-
-	stashEvictPtr int
 }
 
 // ItemStateE describes the state of an item in the cache.

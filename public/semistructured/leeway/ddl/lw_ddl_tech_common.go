@@ -9,18 +9,6 @@ import (
 	encodingaspects2 "github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 )
 
-var homogenousArrayLenType = canonicaltypes.MachineNumericTypeAstNode{
-	BaseType:          canonicaltypes.BaseTypeMachineNumericUnsigned,
-	Width:             64,
-	ByteOrderModifier: 0,
-	ScalarModifier:    0,
-}
-var setCardinalityType = canonicaltypes.MachineNumericTypeAstNode{
-	BaseType:          canonicaltypes.BaseTypeMachineNumericUnsigned,
-	Width:             64,
-	ByteOrderModifier: 0,
-	ScalarModifier:    0,
-}
 var membershipRefType = canonicaltypes.MachineNumericTypeAstNode{
 	BaseType:          canonicaltypes.BaseTypeMachineNumericUnsigned,
 	Width:             64,

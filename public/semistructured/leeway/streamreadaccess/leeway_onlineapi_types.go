@@ -26,9 +26,6 @@ type Driver struct {
 	coGroups         []coGroupLayout
 	sectionInCoGroup map[int]int // sectionIdx → coGroupIdx; -1 = standalone
 
-	// Precomputed column names from Arrow schema (set in DriveRecordBatch)
-	arrowColNames []string
-
 	errs []error
 }
 

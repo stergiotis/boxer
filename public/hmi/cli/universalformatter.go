@@ -24,7 +24,6 @@ type UniversalCliFormatter struct {
 	dumper       *godump.Dumper
 	nametransf   config.NameTransformFunc
 	flags        []cli.Flag
-	markdown     bool
 }
 
 func NewUniversalCliFormatter(nametransf config.NameTransformFunc) (inst *UniversalCliFormatter, err error) {

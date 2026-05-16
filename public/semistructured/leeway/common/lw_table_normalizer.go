@@ -71,31 +71,6 @@ func (inst *TableNormalizer) normalizeOrder(table *TableDesc) (reorderPlain bool
 	}
 	return
 }
-func (inst *TableNormalizer) scrambleOrder(table *TableDesc, rnd *rand.Rand) {
-	rnd.Shuffle(len(table.PlainValuesNames), func(i, j int) {
-		table.PlainValuesNames[j], table.PlainValuesNames[i] = table.PlainValuesNames[i], table.PlainValuesNames[j]
-		table.PlainValuesItemTypes[j], table.PlainValuesItemTypes[i] = table.PlainValuesItemTypes[i], table.PlainValuesItemTypes[j]
-		table.PlainValuesValueSemantics[j], table.PlainValuesValueSemantics[i] = table.PlainValuesValueSemantics[i], table.PlainValuesValueSemantics[j]
-		table.PlainValuesEncodingHints[j], table.PlainValuesEncodingHints[i] = table.PlainValuesEncodingHints[i], table.PlainValuesEncodingHints[j]
-		table.PlainValuesTypes[j], table.PlainValuesTypes[i] = table.PlainValuesTypes[i], table.PlainValuesTypes[j]
-	})
-	rnd.Shuffle(len(table.TaggedValuesSections), func(i, j int) {
-		table.TaggedValuesSections[j], table.TaggedValuesSections[i] = table.TaggedValuesSections[i], table.TaggedValuesSections[j]
-	})
-	for k := 0; k < len(table.TaggedValuesSections); k++ {
-		rnd.Shuffle(len(table.TaggedValuesSections[k].ValueColumnNames), func(i, j int) {
-			table.TaggedValuesSections[k].ValueColumnNames[j], table.TaggedValuesSections[k].ValueColumnNames[i] =
-				table.TaggedValuesSections[k].ValueColumnNames[i], table.TaggedValuesSections[k].ValueColumnNames[j]
-			table.TaggedValuesSections[k].ValueSemantics[j], table.TaggedValuesSections[k].ValueSemantics[i] =
-				table.TaggedValuesSections[k].ValueSemantics[i], table.TaggedValuesSections[k].ValueSemantics[j]
-			table.TaggedValuesSections[k].ValueEncodingHints[j], table.TaggedValuesSections[k].ValueEncodingHints[i] =
-				table.TaggedValuesSections[k].ValueEncodingHints[i], table.TaggedValuesSections[k].ValueEncodingHints[j]
-			table.TaggedValuesSections[k].ValueColumnTypes[j], table.TaggedValuesSections[k].ValueColumnTypes[i] =
-				table.TaggedValuesSections[k].ValueColumnTypes[i], table.TaggedValuesSections[k].ValueColumnTypes[j]
-		})
-	}
-	return
-}
 func (inst *TableNormalizer) normalizeNames(table *TableDesc) (changes bool) {
 	ns := inst.namingStyle
 	for i, name := range table.PlainValuesNames {
@@ -112,28 +87,6 @@ func (inst *TableNormalizer) normalizeNames(table *TableDesc) (changes bool) {
 		for j, name := range sec.ValueColumnNames {
 			newName := naming.ConvertNameStyle(name, ns)
 			changes = changes || newName != name
-			sec.ValueColumnNames[j] = newName
-		}
-		table.TaggedValuesSections[i] = sec
-	}
-	return
-}
-func (inst *TableNormalizer) scrambleNames(table *TableDesc, rnd *rand.Rand) {
-	l := len(naming.AllNamingStyles)
-	for i, name := range table.PlainValuesNames {
-		ns := naming.AllNamingStyles[rnd.IntN(l)]
-		newName := naming.ConvertNameStyle(name, ns)
-		table.PlainValuesNames[i] = newName
-	}
-	for i, sec := range table.TaggedValuesSections {
-		{
-			ns := naming.AllNamingStyles[rnd.IntN(l)]
-			newName := naming.ConvertNameStyle(sec.Name, ns)
-			sec.Name = newName
-		}
-		for j, name := range sec.ValueColumnNames {
-			ns := naming.AllNamingStyles[rnd.IntN(l)]
-			newName := naming.ConvertNameStyle(name, ns)
 			sec.ValueColumnNames[j] = newName
 		}
 		table.TaggedValuesSections[i] = sec

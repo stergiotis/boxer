@@ -432,53 +432,6 @@ func (inst *AnalyzerService) classifyType(t types.Type) StaticPolySubtypeE {
 	}
 }
 
-// isOptimizedType checks if the type is Primitive, String, Slice of Primitive, or Function.
-func (inst *AnalyzerService) isOptimizedType(t types.Type) bool {
-	// Unwrap names (e.g., type MyInt int)
-	if named, ok := t.(*types.Named); ok {
-		t = named.Underlying()
-	}
-
-	switch u := t.(type) {
-	case *types.Basic:
-		// Primitives + String
-		// Bool, Int..., Uint..., Float..., Complex..., String
-		// UnsafePointer is usually BasicKind too, but let's stick to safe primitives + string
-		kind := u.Kind()
-		if kind == types.String || (kind >= types.Bool && kind <= types.Complex128) {
-			return true
-		}
-		return false
-
-	case *types.Slice:
-		// Recursive check: Slice of Primitive
-		return inst.isOptimizedType(u.Elem())
-
-	case *types.Signature:
-		// User specifically listed "functions" as allowed optimized types.
-		return true
-
-	default:
-		// Pointers (*T), Structs, Interfaces, Maps, Channels, Arrays (unless primitive?)
-		return false
-	}
-}
-
-func (inst *AnalyzerService) isGenericType(tp types.Type) bool {
-	if ptr, ok := tp.(*types.Pointer); ok {
-		tp = ptr.Elem()
-	}
-	if _, ok := tp.(*types.TypeParam); ok {
-		return true
-	}
-	if named, ok := tp.(*types.Named); ok {
-		if named.TypeArgs().Len() > 0 {
-			return true
-		}
-	}
-	return false
-}
-
 func (inst *AnalyzerService) determineOrigin(pkg *types.Package, current *types.Package) OriginE {
 	if pkg == nil {
 		return OriginStdLib

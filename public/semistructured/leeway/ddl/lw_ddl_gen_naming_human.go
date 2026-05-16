@@ -39,7 +39,6 @@ const SeparatorExplanation = "separator"
 type HumanReadableNamingConvention struct {
 	tableManipulator    *common.TableManipulator
 	canonicalTypeParser *canonicaltypes.Parser
-	aspectCoder         *useaspects2.CanonicalEt7AspectCoder
 	separator           string
 }
 

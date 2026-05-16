@@ -159,34 +159,6 @@ func ComposeMembershipPackInfo(tblDesc common.TableDesc, namer gocodegen.GoClass
 	}
 	return
 }
-func (inst *GoClassBuilder) composeResolveColumnIndexCodeDynamic(conv common.NamingConventionFwdI, cc common.IntermediateColumnContext, cp common.IntermediateColumnProps, i int, tableRowConfig common.TableRowConfigE, physicalColumnNamesSliceExpr string, physicalColumnNameExpr string, indexVariableName string) (code string, err error) {
-	phy := make([]common.PhysicalColumnDesc, 0, 1)
-	phy, err = conv.MapIntermediateToPhysicalColumns(cc, cp.Slice(i, i+1), phy, tableRowConfig)
-	if err != nil {
-		err = eh.Errorf("unable to map intermediate to physical colum: %w", err)
-		return
-	}
-	if len(phy) != 1 {
-		err = eb.Build().Int("len", len(phy)).Errorf("convention returned not exactly one physical column: %w", err)
-		return
-	}
-	code = fmt.Sprintf(`	%s, err = runtime.LookupPhysicalColumnIndex(%s,%s)
-	if err != nil {
-		return
-	}`,
-		indexVariableName,
-		physicalColumnNamesSliceExpr,
-		physicalColumnNameExpr)
-	return
-}
-func (inst *GoClassBuilder) composeResolveColumnIndexCodeStatic(cc common.IntermediateColumnContext, cp common.IntermediateColumnProps, i int, tableRowConfig common.TableRowConfigE) (index int, err error) {
-	if i < 0 || i >= cp.Length() {
-		err = eh.Errorf("index is out of range")
-		return
-	}
-	index = int(cc.IndexOffset) + i
-	return
-}
 func (inst *GoClassBuilder) getColumnIndexBySectionAndRole(ir *common.IntermediateTableRepresentation, sectionName naming.StylableName, role common.ColumnRoleE) (idx int, err error) {
 	for cc, cp := range ir.IterateColumnProps() {
 		if cc.PlainItemType == common.PlainItemTypeNone &&

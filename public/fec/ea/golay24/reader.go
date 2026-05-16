@@ -12,8 +12,6 @@ import (
 
 type stateE int
 
-const stateNil stateE = 0
-
 const stateDecodeGolay24First stateE = 1
 
 const stateDecodeGolay24Second stateE = 2

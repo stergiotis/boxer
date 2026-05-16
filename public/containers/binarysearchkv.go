@@ -137,14 +137,6 @@ func (inst *BinarySearchGrowingKV[K, V]) compactOldestWins() {
 	}
 }
 
-func (inst *BinarySearchGrowingKV[K, V]) compactYoungestWins() {
-	slices.Reverse(inst.keys)
-	slices.Reverse(inst.vals)
-	inst.compactOldestWins()
-	slices.Reverse(inst.keys)
-	slices.Reverse(inst.vals)
-}
-
 func (inst *BinarySearchGrowingKV[K, V]) Has(key K) (has bool) {
 	inst.ensureSorted()
 	_, has = slices.BinarySearchFunc(inst.keys, key, inst.cmpKey)

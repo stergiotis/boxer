@@ -21,15 +21,7 @@ import (
 
 var CodeGeneratorName = "Leeway DML (" + vcs.ModuleInfo() + ")"
 
-type codeBuildModeE uint8
-
-const (
-	codeBuildModeCode      codeBuildModeE = 0
-	codeBuildModeInterface codeBuildModeE = 1
-)
-
 type structFieldOperationE uint8
-type sectionOperationE uint8
 
 const (
 	structFieldOperationDeclaration              structFieldOperationE = 0
@@ -48,9 +40,6 @@ const (
 	structFieldOperationIncrementContainerLength structFieldOperationE = 13
 	structFieldOperationDeclareContainerLength   structFieldOperationE = 14
 	structFieldOperationResetContainerLength     structFieldOperationE = 15
-)
-const (
-	sectionOperationA sectionOperationE = 0
 )
 
 func NewGoClassBuilder() *GoClassBuilder {
@@ -94,9 +83,6 @@ var ErrUnhandledSubType = eh.Errorf("unhandled sub type")
 var ErrUnhandledRole = eh.Errorf("unhandled column role")
 
 func (inst *GoClassBuilder) composeSharedMethods(clsName string) (err error) {
-	return
-}
-func (inst *GoClassBuilder) composeSectionRelatedCode(op sectionOperationE, sectionName string) (err error) {
 	return
 }
 func (inst *GoClassBuilder) composeFieldRelatedCodeAll(op structFieldOperationE, iter common.IntermediateColumnIterator, separator string) (err error) {
@@ -596,9 +582,6 @@ func deriveSubHolderSelectMembershipSupport(cc common.IntermediateColumnContext)
 }
 func deriveSubHolderSelectScalar(cc common.IntermediateColumnContext) (keep bool) {
 	return cc.SubType == common.IntermediateColumnsSubTypeScalar
-}
-func deriveSubHolderSelectTaggedValues(cc common.IntermediateColumnContext) (keep bool) {
-	return cc.PlainItemType == common.PlainItemTypeNone
 }
 func deriveSubHolderSelectPlainValues(cc common.IntermediateColumnContext) (keep bool) {
 	return cc.PlainItemType != common.PlainItemTypeNone

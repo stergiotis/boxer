@@ -154,5 +154,4 @@ type MembershipTagValueRegistry[C contract.ContractI] struct {
 	namingStyle naming.NamingStyleE
 	contr       C
 	memEnc      *naturalkey.Encoder
-	format      naturalkey.SerializationFormatE
 }

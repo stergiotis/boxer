@@ -62,15 +62,6 @@ func unpackEmbeddedCbor(s string) (r []byte, err error) {
 	}
 	return
 }
-func unmarshallEmbeddedCbor(s string, cborDecMode cbor.DecMode, v any) (err error) {
-	var r []byte
-	r, err = unpackEmbeddedCbor(s)
-	if err != nil {
-		return
-	}
-	err = cborDecMode.Unmarshal(r, v)
-	return
-}
 func unmarshallEmbeddedCborJson(s string, cborDecMode cbor.DecMode, v any) (err error) {
 	var r []byte
 	r, err = unpackEmbeddedCborJson(s)

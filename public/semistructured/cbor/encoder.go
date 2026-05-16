@@ -126,10 +126,6 @@ func (inst *Encoder) EncodeMapDefinite(length uint64) (n int, err error) {
 	return inst.encodeHead(MajorTypeMap, length)
 }
 
-func (inst *Encoder) encodeTagUnchecked(val uint64) (int, error) {
-	return inst.encodeHead(MajorTypeTag, val)
-}
-
 func (inst *Encoder) EncodeArrayIndefinite() (n int, err error) {
 	return inst.writeSingleByte(0x9f, 0)
 }

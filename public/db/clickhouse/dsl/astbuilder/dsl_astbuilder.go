@@ -220,13 +220,6 @@ type SelectBuilder struct {
 	err   error
 }
 
-func (inst SelectBuilder) withErr(err error) SelectBuilder {
-	if inst.err == nil {
-		inst.err = err
-	}
-	return inst
-}
-
 func (inst SelectBuilder) absorbE(es ...E) SelectBuilder {
 	if inst.err != nil {
 		return inst

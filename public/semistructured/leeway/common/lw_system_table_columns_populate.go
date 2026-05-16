@@ -12,28 +12,25 @@ import (
 // Well-known low-card ref IDs for the symbol section attributes.
 // These are FNV-1a hashes of the attribute names to ensure stable, collision-free identifiers.
 var (
-	lcrScope          = stableRef("scope")
-	lcrItemType       = stableRef("itemType")
-	lcrColumnRole     = stableRef("columnRole")
-	lcrSubType        = stableRef("subType")
-	lcrMembershipSpec = stableRef("membershipSpec")
+	lcrScope      = stableRef("scope")
+	lcrItemType   = stableRef("itemType")
+	lcrColumnRole = stableRef("columnRole")
+	lcrSubType    = stableRef("subType")
 )
 
 // Well-known low-card ref IDs for the string section attributes.
 var (
-	lcrSectionName        = stableRef("sectionName")
-	lcrLogicalColumnName  = stableRef("logicalColumnName")
-	lcrCanonicalType      = stableRef("canonicalType")
-	lcrCoSectionGroup     = stableRef("coSectionGroup")
-	lcrStreamingGroup     = stableRef("streamingGroup")
-	lcrTableComment       = stableRef("tableComment")
-	lcrValueSemantics     = stableRef("valueSemantics")
+	lcrSectionName       = stableRef("sectionName")
+	lcrLogicalColumnName = stableRef("logicalColumnName")
+	lcrCanonicalType     = stableRef("canonicalType")
+	lcrCoSectionGroup    = stableRef("coSectionGroup")
+	lcrStreamingGroup    = stableRef("streamingGroup")
+	lcrTableComment      = stableRef("tableComment")
 )
 
 // Well-known low-card ref IDs for the u64 section attributes.
 var (
 	lcrLocalMonotonicIndex = stableRef("localMonotonicIndex")
-	lcrLogicalIndex        = stableRef("logicalIndex")
 )
 
 // Well-known low-card ref IDs for the text section attributes.
