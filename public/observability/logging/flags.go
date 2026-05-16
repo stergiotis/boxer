@@ -124,7 +124,6 @@ func formatFieldValue(i any, pp *cborConsolePrinter) (s string) {
 			}
 			return s
 		}
-		break
 	case string:
 		if containsEmbeddedCbor(it) {
 			var b []byte
@@ -260,25 +259,18 @@ var LoggingFlags = []cli.Flag{
 			switch strings.ToLower(s) {
 			case "trace":
 				lvl = zerolog.TraceLevel
-				break
 			case "debug":
 				lvl = zerolog.DebugLevel
-				break
 			case "info":
 				lvl = zerolog.InfoLevel
-				break
 			case "warn":
 				lvl = zerolog.WarnLevel
-				break
 			case "error":
 				lvl = zerolog.ErrorLevel
-				break
 			case "fatal":
 				lvl = zerolog.FatalLevel
-				break
 			case "panic":
 				lvl = zerolog.PanicLevel
-				break
 			default:
 				return eb.Build().Str("level", s).Errorf("unhandled log level")
 			}
@@ -311,23 +303,17 @@ var LoggingFlags = []cli.Flag{
 				break
 			case "console":
 				err = SetupConsoleLogger(w)
-				break
 			case "diag":
 				err = SetupCborDiagLogger(w)
-				break
 			case "godump":
 				err = SetupGoDumpLogger(w)
-				break
 			case "json":
 				err = SetupJsonLogger(w)
-				break
 			case "json-indent":
 				err = SetupJsonIndentLogger(w)
-				break
 			case "cbor":
 				checkZeroLogCborBuild()
 				log.Logger = log.Output(w)
-				break
 			default:
 				return eb.Build().Str("format", s).Errorf("unhandled log format")
 			}

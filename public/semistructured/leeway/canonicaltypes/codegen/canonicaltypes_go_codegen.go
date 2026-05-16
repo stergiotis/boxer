@@ -50,12 +50,10 @@ func generateStringType(baseType canonicaltypes.BaseTypeStringE, widthModifier c
 			case canonicaltypes.ScalarModifierHomogenousArray, canonicaltypes.ScalarModifierSet:
 				code = "[]" + code
 				zeroValueLiteral = code + "(nil)"
-				break
 			default:
 				err = common.ErrNotImplemented
 			}
 		}
-		break
 	case canonicaltypes.BaseTypeStringBytes, canonicaltypes.BaseTypeStringUtf8:
 		if baseType == canonicaltypes.BaseTypeStringUtf8 {
 			code = "string"
@@ -83,7 +81,6 @@ func generateStringType(baseType canonicaltypes.BaseTypeStringE, widthModifier c
 				code = fmt.Sprintf("[%d]byte", width)
 				zeroValueLiteral = fmt.Sprintf("[%d]byte{}", width)
 			}
-			break
 		default:
 			err = common.ErrNotImplemented
 		}
@@ -94,12 +91,10 @@ func generateStringType(baseType canonicaltypes.BaseTypeStringE, widthModifier c
 			case canonicaltypes.ScalarModifierHomogenousArray, canonicaltypes.ScalarModifierSet:
 				code = "[]" + code
 				zeroValueLiteral = code + "(nil)"
-				break
 			default:
 				err = common.ErrNotImplemented
 			}
 		}
-		break
 	default:
 		err = common.ErrNotImplemented
 	}
@@ -117,21 +112,16 @@ func generateTemporalType(baseTemporal canonicaltypes.BaseTypeTemporalE, width c
 		case 32:
 			code = "time.Time"
 			zeroValueLiteral = "time.Time{}"
-			break
 		case 64:
 			code = "time.Time"
 			zeroValueLiteral = "time.Time{}"
-			break
 		default:
 			err = common.ErrNotImplemented
 		}
-		break
 	case canonicaltypes.BaseTypeTemporalZonedDatetime:
 		err = common.ErrNotImplemented
-		break
 	case canonicaltypes.BaseTypeTemporalZonedTime:
 		err = common.ErrNotImplemented
-		break
 	default:
 		err = common.ErrNotImplemented
 	}
@@ -142,7 +132,6 @@ func generateTemporalType(baseTemporal canonicaltypes.BaseTypeTemporalE, width c
 		case canonicaltypes.ScalarModifierHomogenousArray, canonicaltypes.ScalarModifierSet:
 			code = "[]" + code
 			zeroValueLiteral = code + "(nil)"
-			break
 		default:
 			err = common.ErrNotImplemented
 		}
@@ -166,7 +155,6 @@ func generateMachineNumericType(baseMachineNumber canonicaltypes.BaseTypeMachine
 		case 8, 16, 32, 64, 128, 256:
 			code = fmt.Sprintf("%s%d", code, width)
 			zeroValueLiteral = code + "(0)"
-			break
 		default:
 			err = common.ErrNotImplemented
 		}
@@ -176,18 +164,15 @@ func generateMachineNumericType(baseMachineNumber canonicaltypes.BaseTypeMachine
 		case canonicaltypes.ScalarModifierHomogenousArray, canonicaltypes.ScalarModifierSet:
 			code = "[]" + code
 			zeroValueLiteral = code + "(nil)"
-			break
 		default:
 			err = common.ErrNotImplemented
 		}
-		break
 	case canonicaltypes.BaseTypeMachineNumericFloat:
 		code = "float"
 		switch width {
 		case 32, 64:
 			code = fmt.Sprintf("%s%d", code, width)
 			zeroValueLiteral = code + "(0.0)"
-			break
 		default:
 			err = common.ErrNotImplemented
 		}
@@ -197,11 +182,9 @@ func generateMachineNumericType(baseMachineNumber canonicaltypes.BaseTypeMachine
 		case canonicaltypes.ScalarModifierHomogenousArray, canonicaltypes.ScalarModifierSet:
 			code = "[]" + code
 			zeroValueLiteral = code + "(nil)"
-			break
 		default:
 			err = common.ErrNotImplemented
 		}
-		break
 	default:
 		err = common.ErrNotImplemented
 	}

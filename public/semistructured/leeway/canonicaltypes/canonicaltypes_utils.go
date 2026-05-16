@@ -24,19 +24,15 @@ func DemoteToScalar(s PrimitiveAstNodeI) (out PrimitiveAstNodeI) {
 		case MachineNumericTypeAstNode:
 			ct.ScalarModifier = ScalarModifierNone
 			out = ct
-			break
 		case StringAstNode:
 			ct.ScalarModifier = ScalarModifierNone
 			out = ct
-			break
 		case TemporalTypeAstNode:
 			ct.ScalarModifier = ScalarModifierNone
 			out = ct
-			break
 		case NetworkTypeAstNode:
 			ct.ScalarModifier = ScalarModifierNone
 			out = ct
-			break
 		default:
 			log.Panic().Type("type", s).Msg("unable to demote unknown canonical type ast node")
 		}

@@ -219,31 +219,22 @@ func (inst *TableManipulator) LoadFromIntermediates(it iter.Seq2[IntermediateCol
 				switch r {
 				case ColumnRoleHighCardRef:
 					membership = membership.AddHighCardRefOnly()
-					break
 				case ColumnRoleHighCardRefParametrized:
 					membership = membership.AddHighCardRefParametrized()
-					break
 				case ColumnRoleHighCardVerbatim:
 					membership = membership.AddHighCardVerbatim()
-					break
 				case ColumnRoleLowCardRef:
 					membership = membership.AddLowCardRefOnly()
-					break
 				case ColumnRoleLowCardRefParametrized:
 					membership = membership.AddLowCardRefParametrized()
-					break
 				case ColumnRoleLowCardVerbatim:
 					membership = membership.AddLowCardVerbatim()
-					break
 				case ColumnRoleMixedLowCardVerbatim:
 					membership = membership.AddMixedLowCardVerbatimHighCardParameters()
-					break
 				case ColumnRoleMixedRefHighCardParameters, ColumnRoleMixedVerbatimHighCardParameters:
 					// mixed, trigger on other column
-					break
 				case ColumnRoleMixedLowCardRef:
 					membership = membership.AddMixedLowCardRefHighCardParameters()
-					break
 				case ColumnRoleValue:
 					switch cc.SubType {
 					case IntermediateColumnsSubTypeHomogenousArraySupport,
@@ -259,12 +250,10 @@ func (inst *TableManipulator) LoadFromIntermediates(it iter.Seq2[IntermediateCol
 						tmp.cts = append(tmp.cts, cp.CanonicalType[i])
 						tmp.hints = append(tmp.hints, cp.EncodingHints[i])
 						tmp.valueSemantics = append(tmp.valueSemantics, cp.ValueSemantics[i])
-						break
 					default:
 						err = eb.Build().Stringer("sectionName", cc.SectionName).Stringer("subType", cc.SubType).Stringer("plainItemType", cc.PlainItemType).Errorf("unhandled subtype")
 						return
 					}
-					break
 				case ColumnRoleHighCardRefCardinality,
 					ColumnRoleHighCardRefParametrizedCardinality,
 					ColumnRoleHighCardVerbatimCardinality,
@@ -273,9 +262,7 @@ func (inst *TableManipulator) LoadFromIntermediates(it iter.Seq2[IntermediateCol
 					ColumnRoleLowCardVerbatimCardinality,
 					ColumnRoleMixedLowCardRefCardinality,
 					ColumnRoleMixedLowCardVerbatimCardinality:
-					break
 				case ColumnRoleCardinality, ColumnRoleLength:
-					break
 				default:
 					err = eb.Build().Stringer("role", r).Errorf("encountered unhandled column role")
 					return
@@ -290,7 +277,6 @@ func (inst *TableManipulator) LoadFromIntermediates(it iter.Seq2[IntermediateCol
 			switch cc.PlainItemType {
 			case PlainItemTypeOpaque:
 				inst.SetOpaqueColumnStreamingGroup(cc.StreamingGroup)
-				break
 			}
 			for i, role := range cp.Roles {
 				if role == ColumnRoleValue {

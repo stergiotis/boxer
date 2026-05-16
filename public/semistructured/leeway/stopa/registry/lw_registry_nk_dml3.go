@@ -69,7 +69,6 @@ func (inst RegisteredNaturalKeyFinalDml) MustAddRestriction(sectionName naming.S
 	for m := range membershipSpec.Iterate() {
 		switch m {
 		case common.MembershipSpecLowCardRef, common.MembershipSpecHighCardRef, common.MembershipSpecMixedLowCardRefHighCardParameters, common.MembershipSpecLowCardRefParametrized, common.MembershipSpecHighCardRefParametrized:
-			break
 		default:
 			log.Panic().Stringer("m", m).Msg("found disallowed membership spec for natural key vdd")
 		}

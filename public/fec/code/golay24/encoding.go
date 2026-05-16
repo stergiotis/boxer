@@ -53,7 +53,6 @@ func EncodeBytes(dstP []byte, p []byte) (dst []byte, err error) {
 			uint8(g1>>16),
 			uint8(g1>>8),
 			uint8(g1))
-		break
 	case 2:
 		w1 = uint16(p[l-2]) << 4
 		w1 |= uint16(p[l-2] >> 4)
@@ -67,7 +66,6 @@ func EncodeBytes(dstP []byte, p []byte) (dst []byte, err error) {
 			uint8(g2>>16),
 			uint8(g2>>8),
 			uint8(g2))
-		break
 	}
 	return
 }

@@ -55,13 +55,10 @@ func (inst *TechnologySpecificCodeGenerator) GenerateType(canonicalType canonica
 	switch ct := canonicalType.(type) {
 	case canonicaltypes.MachineNumericTypeAstNode:
 		err = inst.generateMachineNumericType(ct.BaseType, ct.Width, ct.ByteOrderModifier, ct.ScalarModifier)
-		break
 	case canonicaltypes.StringAstNode:
 		err = inst.generateStringType(ct.BaseType, ct.WidthModifier, ct.Width, ct.ScalarModifier)
-		break
 	case canonicaltypes.TemporalTypeAstNode:
 		err = inst.generateTemporalType(ct.BaseType, ct.Width, ct.ScalarModifier)
-		break
 	default:
 		err = eb.Build().Stringer("canonicalType", canonicalType).Str("technology", inst.GetTechnology().Name).Type("canonicalType", canonicalType).Errorf("unable to generate ddl code: %w", common.ErrNotImplemented)
 	}
@@ -77,43 +74,30 @@ func (inst *TechnologySpecificCodeGenerator) generateTypeAndCodec(canonicalType 
 		switch hint {
 		case encodingaspects2.AspectUltraLightGeneralCompression:
 			compr = max(compr, 1)
-			break
 		case encodingaspects2.AspectLightGeneralCompression:
 			compr = max(compr, 2)
-			break
 		case encodingaspects2.AspectHeavyGeneralCompression:
 			compr = max(compr, 3)
-			break
 		case encodingaspects2.AspectUltraHeavyGeneralCompression:
 			compr = 4
-			break
 		case encodingaspects2.AspectInterRecordLowCardinality, encodingaspects2.AspectIntraRecordLowCardinality:
 			lowCard = true
-			break
 		case encodingaspects2.AspectDeltaEncoding:
 			delta = max(delta, 1)
-			break
 		case encodingaspects2.AspectDoubleDeltaEncoding:
 			delta = max(delta, 2)
-			break
 		case encodingaspects2.AspectUltraLightSlowlyChangingFloat:
 			floatc = max(floatc, 1)
-			break
 		case encodingaspects2.AspectLightSlowlyChangingFloat:
 			floatc = max(floatc, 2)
-			break
 		case encodingaspects2.AspectHeavySlowlyChangingFloat:
 			floatc = max(floatc, 3)
-			break
 		case encodingaspects2.AspectUltraHeavySlowlyChangingFloat:
 			floatc = 4
-			break
 		case encodingaspects2.AspectLightBiasSmallInteger:
 			biased = 1
-			break
 		case encodingaspects2.AspectHeavyBiasSmallInteger:
 			biased = 2
-			break
 		}
 	}
 	b := inst.codeBuilder
@@ -143,46 +127,34 @@ func (inst *TechnologySpecificCodeGenerator) generateTypeAndCodec(canonicalType 
 	switch delta {
 	case 1:
 		codecChain = append(codecChain, "Delta")
-		break
 	case 2:
 		codecChain = append(codecChain, "DoubleDelta")
-		break
 	}
 	switch floatc {
 	case 1:
 		codecChain = append(codecChain, "FPC(4)")
-		break
 	case 2:
 		codecChain = append(codecChain, "FPC(12)")
-		break
 	case 3:
 		codecChain = append(codecChain, "Gorilla")
-		break
 	case 4:
 		codecChain = append(codecChain, "Gorilla")
-		break
 	}
 	switch biased {
 	case 1, 2:
 		codecChain = append(codecChain, "T64")
-		break
 	}
 	switch compr {
 	case 0:
 		codecChain = append(codecChain, "NONE")
-		break
 	case 1:
 		codecChain = append(codecChain, "LZ4(4)")
-		break
 	case 2:
 		codecChain = append(codecChain, "ZSTD(3)")
-		break
 	case 3:
 		codecChain = append(codecChain, "ZSTD(12)")
-		break
 	case 4:
 		codecChain = append(codecChain, "ZSTD(19)")
-		break
 	}
 
 	if len(codecChain) > 1 {
@@ -265,7 +237,6 @@ func (inst *TechnologySpecificCodeGenerator) GenerateColumnCode(idx int, phy com
 			return
 		}
 		list = plainItemType == common.PlainItemTypeNone
-		break
 	default:
 		err = eb.Build().Stringer("tableRowConfig", tableRowConfig).Errorf("unhandled table row config")
 		return
@@ -355,7 +326,6 @@ func (inst *TechnologySpecificCodeGenerator) generateStringType(baseType canonic
 				break
 			case canonicaltypes.ScalarModifierHomogenousArray, canonicaltypes.ScalarModifierSet:
 				code = fmt.Sprintf("Array(%s)", code)
-				break
 			default:
 				err = common.ErrNotImplemented
 			}
@@ -367,7 +337,6 @@ func (inst *TechnologySpecificCodeGenerator) generateStringType(baseType canonic
 				return
 			}
 		}
-		break
 	case canonicaltypes.BaseTypeStringBytes, canonicaltypes.BaseTypeStringUtf8:
 		code := "String"
 		switch widthModifier {
@@ -375,7 +344,6 @@ func (inst *TechnologySpecificCodeGenerator) generateStringType(baseType canonic
 			break
 		case canonicaltypes.WidthModifierFixed:
 			code = fmt.Sprintf("FixedString(%d)", width)
-			break
 		default:
 			err = common.ErrNotImplemented
 		}
@@ -386,7 +354,6 @@ func (inst *TechnologySpecificCodeGenerator) generateStringType(baseType canonic
 				break
 			case canonicaltypes.ScalarModifierHomogenousArray, canonicaltypes.ScalarModifierSet:
 				code = fmt.Sprintf("Array(%s)", code)
-				break
 			default:
 				err = common.ErrNotImplemented
 			}
@@ -398,7 +365,6 @@ func (inst *TechnologySpecificCodeGenerator) generateStringType(baseType canonic
 				return
 			}
 		}
-		break
 	default:
 		err = common.ErrNotImplemented
 	}
@@ -420,20 +386,15 @@ func (inst *TechnologySpecificCodeGenerator) generateTemporalType(baseTemporal c
 		switch width {
 		case 32:
 			code = "DateTime('UTC')"
-			break
 		case 64:
 			code = "DateTime64(9,'UTC')" // 9 = nanosecond precision
-			break
 		default:
 			err = common.ErrNotImplemented
 		}
-		break
 	case canonicaltypes.BaseTypeTemporalZonedDatetime:
 		err = common.ErrNotImplemented
-		break
 	case canonicaltypes.BaseTypeTemporalZonedTime:
 		err = common.ErrNotImplemented
-		break
 	default:
 		err = common.ErrNotImplemented
 	}
@@ -444,7 +405,6 @@ func (inst *TechnologySpecificCodeGenerator) generateTemporalType(baseTemporal c
 			break
 		case canonicaltypes.ScalarModifierHomogenousArray, canonicaltypes.ScalarModifierSet:
 			code = fmt.Sprintf("Array(%s)", code)
-			break
 		default:
 			err = common.ErrNotImplemented
 		}
@@ -478,7 +438,6 @@ func (inst *TechnologySpecificCodeGenerator) generateMachineNumericType(baseMach
 		switch width {
 		case 8, 16, 32, 64, 128, 256:
 			code = fmt.Sprintf("%s%d", code, width)
-			break
 		default:
 			err = common.ErrNotImplemented
 		}
@@ -488,17 +447,14 @@ func (inst *TechnologySpecificCodeGenerator) generateMachineNumericType(baseMach
 			break
 		case canonicaltypes.ScalarModifierHomogenousArray, canonicaltypes.ScalarModifierSet:
 			code = fmt.Sprintf("Array(%s)", code)
-			break
 		default:
 			err = common.ErrNotImplemented
 		}
-		break
 	case canonicaltypes.BaseTypeMachineNumericFloat:
 		code = "Float"
 		switch width {
 		case 32, 64:
 			code = fmt.Sprintf("%s%d", code, width)
-			break
 		default:
 			err = common.ErrNotImplemented
 		}
@@ -508,11 +464,9 @@ func (inst *TechnologySpecificCodeGenerator) generateMachineNumericType(baseMach
 			break
 		case canonicaltypes.ScalarModifierHomogenousArray, canonicaltypes.ScalarModifierSet:
 			code = fmt.Sprintf("Array(%s)", code)
-			break
 		default:
 			err = common.ErrNotImplemented
 		}
-		break
 	default:
 		err = common.ErrNotImplemented
 	}

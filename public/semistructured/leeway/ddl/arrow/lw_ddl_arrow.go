@@ -47,13 +47,10 @@ func (inst *TechnologySpecificCodeGenerator) GenerateType(canonicalType canonica
 	switch ct := canonicalType.(type) {
 	case canonicaltypes.MachineNumericTypeAstNode:
 		err = inst.generateMachineNumericType(ct.BaseType, ct.Width, ct.ByteOrderModifier, ct.ScalarModifier)
-		break
 	case canonicaltypes.StringAstNode:
 		err = inst.generateStringType(ct.BaseType, ct.WidthModifier, ct.Width, ct.ScalarModifier)
-		break
 	case canonicaltypes.TemporalTypeAstNode:
 		err = inst.generateTemporalType(ct.BaseType, ct.Width, ct.ScalarModifier)
-		break
 	default:
 		err = eb.Build().Stringer("canonicalType", canonicalType).Str("technology", inst.GetTechnology().Name).Type("canonicalType", canonicalType).Errorf("unable to generate ddl code: %w", common.ErrNotImplemented)
 	}
@@ -65,7 +62,6 @@ func (inst *TechnologySpecificCodeGenerator) generateTypeAndCodec(canonicalType 
 		switch hint {
 		case encodingaspects2.AspectInterRecordLowCardinality, encodingaspects2.AspectIntraRecordLowCardinality:
 			lowCard = true
-			break
 		}
 	}
 	if lowCard && common.UseArrowDictionaryEncoding {
@@ -108,7 +104,6 @@ func (inst *TechnologySpecificCodeGenerator) GenerateColumnCode(idx int, phy com
 			return
 		}
 		list = plainItemType == common.PlainItemTypeNone
-		break
 	default:
 		err = eb.Build().Stringer("tableRowConfig", tableRowConfig).Errorf("unhandled table row config")
 		return
@@ -223,7 +218,6 @@ func (inst *TechnologySpecificCodeGenerator) generateStringType(baseType canonic
 				break
 			case canonicaltypes.ScalarModifierHomogenousArray, canonicaltypes.ScalarModifierSet:
 				code = fmt.Sprintf("arrow.ListOfNonNullable(%s)", code)
-				break
 			default:
 				err = common.ErrNotImplemented
 			}
@@ -235,7 +229,6 @@ func (inst *TechnologySpecificCodeGenerator) generateStringType(baseType canonic
 				return
 			}
 		}
-		break
 	case canonicaltypes.BaseTypeStringBytes, canonicaltypes.BaseTypeStringUtf8:
 		var code string
 		if baseType == canonicaltypes.BaseTypeStringUtf8 {
@@ -248,7 +241,6 @@ func (inst *TechnologySpecificCodeGenerator) generateStringType(baseType canonic
 			break
 		case canonicaltypes.WidthModifierFixed:
 			code = fmt.Sprintf("&arrow.FixedSizeBinaryType{ByteWidth: %d}", width)
-			break
 		default:
 			err = common.ErrNotImplemented
 		}
@@ -259,7 +251,6 @@ func (inst *TechnologySpecificCodeGenerator) generateStringType(baseType canonic
 				break
 			case canonicaltypes.ScalarModifierHomogenousArray, canonicaltypes.ScalarModifierSet:
 				code = fmt.Sprintf("arrow.ListOfNonNullable(%s)", code)
-				break
 			default:
 				err = common.ErrNotImplemented
 			}
@@ -271,7 +262,6 @@ func (inst *TechnologySpecificCodeGenerator) generateStringType(baseType canonic
 				return
 			}
 		}
-		break
 	default:
 		err = common.ErrNotImplemented
 	}
@@ -293,20 +283,15 @@ func (inst *TechnologySpecificCodeGenerator) generateTemporalType(baseTemporal c
 		switch width {
 		case 32:
 			code = "&arrow.TimestampType{Unit: arrow.Millisecond}"
-			break
 		case 64:
 			code = "&arrow.TimestampType{Unit: arrow.Nanosecond}"
-			break
 		default:
 			err = common.ErrNotImplemented
 		}
-		break
 	case canonicaltypes.BaseTypeTemporalZonedDatetime:
 		err = common.ErrNotImplemented
-		break
 	case canonicaltypes.BaseTypeTemporalZonedTime:
 		err = common.ErrNotImplemented
-		break
 	default:
 		err = common.ErrNotImplemented
 	}
@@ -317,7 +302,6 @@ func (inst *TechnologySpecificCodeGenerator) generateTemporalType(baseTemporal c
 			break
 		case canonicaltypes.ScalarModifierHomogenousArray, canonicaltypes.ScalarModifierSet:
 			code = fmt.Sprintf("arrow.ListOfNonNullable(%s)", code)
-			break
 		default:
 			err = common.ErrNotImplemented
 		}
@@ -351,7 +335,6 @@ func (inst *TechnologySpecificCodeGenerator) generateMachineNumericType(baseMach
 		switch width {
 		case 8, 16, 32, 64, 128, 256:
 			code = fmt.Sprintf("%s%d", code, width)
-			break
 		default:
 			err = common.ErrNotImplemented
 		}
@@ -361,17 +344,14 @@ func (inst *TechnologySpecificCodeGenerator) generateMachineNumericType(baseMach
 			break
 		case canonicaltypes.ScalarModifierHomogenousArray, canonicaltypes.ScalarModifierSet:
 			code = fmt.Sprintf("arrow.ListOfNonNullable(%s)", code)
-			break
 		default:
 			err = common.ErrNotImplemented
 		}
-		break
 	case canonicaltypes.BaseTypeMachineNumericFloat:
 		code = "arrow.PrimitiveTypes.Float"
 		switch width {
 		case 32, 64:
 			code = fmt.Sprintf("%s%d", code, width)
-			break
 		default:
 			err = common.ErrNotImplemented
 		}
@@ -381,11 +361,9 @@ func (inst *TechnologySpecificCodeGenerator) generateMachineNumericType(baseMach
 			break
 		case canonicaltypes.ScalarModifierHomogenousArray, canonicaltypes.ScalarModifierSet:
 			code = fmt.Sprintf("arrow.ListOfNonNullable(%s)", code)
-			break
 		default:
 			err = common.ErrNotImplemented
 		}
-		break
 	default:
 		err = common.ErrNotImplemented
 	}

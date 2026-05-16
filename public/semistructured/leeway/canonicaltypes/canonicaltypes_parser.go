@@ -263,7 +263,6 @@ func (inst *Parser) ParsePrimitiveTypeAst(typeS string) (ast PrimitiveAstNodeI, 
 	switch tt := t.GetChild(0).(type) {
 	case grammar2.ICanonicalTypeContext:
 		ast, err = inst.antlrTreeCanonicalTypeToAst(tt)
-		break
 	default:
 		err = eb.Build().Type("child0", t.GetChild(0)).Errorf("unhandled ast node: %w", ErrInternalParserError)
 	}
@@ -284,7 +283,6 @@ func (inst *Parser) ParsePrimitiveTypeOrGroupAst(typeOrGroup string) (ast AstNod
 	switch tt := t.GetChild(0).(type) {
 	case *grammar2.CanonicalTypeOrGroupContext:
 		ast, err = inst.antlrTreeCanonicalTypeOrGroupToAst(tt)
-		break
 	default:
 		err = ErrInternalParserError
 	}

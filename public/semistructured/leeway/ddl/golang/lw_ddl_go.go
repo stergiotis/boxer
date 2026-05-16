@@ -65,7 +65,6 @@ func (inst *TechnologySpecificCodeGenerator) generateTypeAndCodec(canonicalType 
 	for _, hint := range encodingaspects2.IterateAspects(hints) {
 		switch hint {
 		case encodingaspects2.AspectInterRecordLowCardinality, encodingaspects2.AspectIntraRecordLowCardinality:
-			break
 		}
 	}
 	err = inst.GenerateType(canonicalType)
@@ -150,7 +149,6 @@ func (inst *TechnologySpecificCodeGenerator) GenerateColumnCode(idx int, phy com
 	switch tableRowConfig {
 	case common.TableRowConfigMultiAttributesPerRow:
 		list = true
-		break
 	default:
 		err = eb.Build().Stringer("tableRowConfig", tableRowConfig).Errorf("unhandled table row config")
 		return

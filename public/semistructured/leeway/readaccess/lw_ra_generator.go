@@ -217,10 +217,8 @@ func getElementGoTypeName(ct canonicaltypes.PrimitiveAstNodeI, hints encodingasp
 		break
 	case canonicaltypes.ScalarModifierSet:
 		typeName = strings.TrimPrefix(typeName, "[]") // FIXME encoding hints vs demoted canonical type
-		break
 	case canonicaltypes.ScalarModifierHomogenousArray:
 		typeName = strings.TrimPrefix(typeName, "[]") // FIXME encoding hints vs demoted canonical type
-		break
 	default:
 		err = eb.Build().Stringer("scalarModifier", scalarModifier).Stringer("ct", ct).Errorf("unhandled scalar modifier")
 		return
@@ -935,14 +933,12 @@ func (inst *GoClassBuilder) composeSectionAttributeClasses(clsNamer gocodegen.Go
 									return
 								}
 							}
-							break
 						default:
 							err = eb.Build().Stringer("role", role).Stringer("subtype", cc.SubType).Errorf("unhandled role")
 							return
 						}
 					}
 				}
-				break
 			case common.IntermediateColumnsSubTypeHomogenousArraySupport, common.IntermediateColumnsSubTypeSetSupport:
 				for _, role := range cp.Roles {
 					var f1, f2, t string
@@ -951,12 +947,10 @@ func (inst *GoClassBuilder) composeSectionAttributeClasses(clsNamer gocodegen.Go
 						f1 = setAccelFieldName
 						f2 = setColumnIndexFieldName
 						t = "SetIdx"
-						break
 					case common.ColumnRoleLength:
 						f1 = homogenousArrayAccelFieldName
 						f2 = homogenousArrayColumnIndexFieldName
 						t = "HomogenousArrayIdx"
-						break
 					default:
 						err = eb.Build().Stringer("role", role).Stringer("subtype", cc.SubType).Errorf("unhandled role")
 						return
@@ -969,7 +963,6 @@ func (inst *GoClassBuilder) composeSectionAttributeClasses(clsNamer gocodegen.Go
 						return
 					}
 				}
-				break
 			}
 		}
 		for clsName, bc := range attrClassesKv.IteratePairs() {
@@ -1003,14 +996,12 @@ func (inst *GoClassBuilder) composeSectionAttributeClasses(clsNamer gocodegen.Go
 						case common.ColumnRoleValue:
 							fieldName := colName.Convert(naming.UpperCamelCase).String()
 							colIdxGen.AddField(clsNamer.ComposeColumnIndexFieldName(fieldName), cc.IndexOffset+uint32(i))
-							break
 						default:
 							err = eb.Build().Stringer("role", role).Stringer("subtype", cc.SubType).Errorf("unhandled role")
 							return
 						}
 					}
 				}
-				break
 			case common.IntermediateColumnsSubTypeHomogenousArraySupport, common.IntermediateColumnsSubTypeSetSupport:
 				for i, role := range cp.Roles {
 					var f1, f2, t string
@@ -1019,7 +1010,6 @@ func (inst *GoClassBuilder) composeSectionAttributeClasses(clsNamer gocodegen.Go
 						f1 = setColumnIndexFieldName
 						f2 = setAccelFieldName
 						t = "SetIdx"
-						break
 					case common.ColumnRoleLength:
 						f1 = homogenousArrayColumnIndexFieldName
 						f2 = homogenousArrayAccelFieldName
@@ -1036,7 +1026,6 @@ func (inst *GoClassBuilder) composeSectionAttributeClasses(clsNamer gocodegen.Go
 						return
 					}
 				}
-				break
 			}
 		}
 		for clsName, gen := range colIdxGenerators.IteratePairs() {
@@ -1104,24 +1093,20 @@ func (inst *GoClassBuilder) composeSectionAttributeClasses(clsNamer gocodegen.Go
 									return
 								}
 							}
-							break
 						default:
 							err = eb.Build().Stringer("role", role).Stringer("subtype", cc.SubType).Errorf("unhandled role")
 							return
 						}
 					}
 				}
-				break
 			case common.IntermediateColumnsSubTypeHomogenousArraySupport, common.IntermediateColumnsSubTypeSetSupport:
 				for _, role := range cp.Roles {
 					var f string
 					switch role {
 					case common.ColumnRoleCardinality:
 						f = setAccelFieldName
-						break
 					case common.ColumnRoleLength:
 						f = homogenousArrayAccelFieldName
-						break
 					default:
 						err = eb.Build().Stringer("role", role).Stringer("subtype", cc.SubType).Errorf("unhandled role")
 						return
@@ -1134,7 +1119,6 @@ func (inst *GoClassBuilder) composeSectionAttributeClasses(clsNamer gocodegen.Go
 						return
 					}
 				}
-				break
 			}
 		}
 		for clsName, bc := range attrClassesKv.IteratePairs() {
@@ -1183,24 +1167,20 @@ func (inst *GoClassBuilder) composeSectionAttributeClasses(clsNamer gocodegen.Go
 									return
 								}
 							}
-							break
 						default:
 							err = eb.Build().Stringer("role", role).Stringer("subtype", cc.SubType).Errorf("unhandled role")
 							return
 						}
 					}
 				}
-				break
 			case common.IntermediateColumnsSubTypeHomogenousArraySupport, common.IntermediateColumnsSubTypeSetSupport:
 				for _, role := range cp.Roles {
 					var f string
 					switch role {
 					case common.ColumnRoleCardinality:
 						f = setAccelFieldName
-						break
 					case common.ColumnRoleLength:
 						f = homogenousArrayAccelFieldName
-						break
 					default:
 						err = eb.Build().Stringer("role", role).Stringer("subtype", cc.SubType).Errorf("unhandled role")
 						return
@@ -1210,7 +1190,6 @@ func (inst *GoClassBuilder) composeSectionAttributeClasses(clsNamer gocodegen.Go
 						return
 					}
 				}
-				break
 			}
 		}
 		for clsName, bc := range attrClassesKv.IteratePairs() {
@@ -1261,14 +1240,12 @@ func (inst *%s%s) Release() {
 									return
 								}
 							}
-							break
 						default:
 							err = eb.Build().Stringer("role", role).Stringer("subtype", cc.SubType).Errorf("unhandled role")
 							return
 						}
 					}
 				}
-				break
 			}
 		}
 		for clsName, bc := range attrClassesKv.IteratePairs() {
@@ -1348,14 +1325,12 @@ func (inst *%s%s) Len() (nEntities int) {
 							if err != nil {
 								return
 							}
-							break
 						default:
 							err = eb.Build().Stringer("role", role).Stringer("subtype", cc.SubType).Errorf("unhandled role")
 							return
 						}
 					}
 				}
-				break
 			case common.IntermediateColumnsSubTypeHomogenousArraySupport, common.IntermediateColumnsSubTypeSetSupport:
 				for _, role := range cp.Roles {
 					var f1, f2 string
@@ -1363,11 +1338,9 @@ func (inst *%s%s) Len() (nEntities int) {
 					case common.ColumnRoleCardinality:
 						f1 = setColumnIndexFieldName
 						f2 = setAccelFieldName
-						break
 					case common.ColumnRoleLength:
 						f1 = homogenousArrayColumnIndexFieldName
 						f2 = homogenousArrayAccelFieldName
-						break
 					default:
 						err = eb.Build().Stringer("role", role).Stringer("subtype", cc.SubType).Errorf("unhandled role")
 						return
@@ -1381,7 +1354,6 @@ func (inst *%s%s) Len() (nEntities int) {
 						return
 					}
 				}
-				break
 			}
 		}
 		for clsName, bc := range attrClassesKv.IteratePairs() {
@@ -1450,16 +1422,13 @@ func (inst *%s%s) Len() (nEntities int) {
 						clsNamer.ComposeValueFieldElementAccessor(attrNameS),
 						typeConvSuffix,
 					)
-					break
 				case common.IntermediateColumnsSubTypeSet, common.IntermediateColumnsSubTypeHomogenousArray:
 					var f string
 					switch subType {
 					case common.IntermediateColumnsSubTypeSet:
 						f = setAccelFieldName
-						break
 					case common.IntermediateColumnsSubTypeHomogenousArray:
 						f = homogenousArrayAccelFieldName
-						break
 					}
 					_, err = fmt.Fprintf(b, `func (inst *%s%s) GetAttrValue%s(entityIdx runtime.EntityIdx,attrIdx runtime.AttributeIdx) iter.Seq[%s] {
 	accel := inst.%s
@@ -1489,7 +1458,6 @@ func (inst *%s%s) Len() (nEntities int) {
 					if err != nil {
 						return
 					}
-					break
 				}
 				if err != nil {
 					return
@@ -1533,7 +1501,6 @@ func (inst *%s%s) Len() (nEntities int) {
 					clsNamer.ComposeValueField(attrNameS),
 					typeConvSuffix,
 				)
-				break
 			case common.IntermediateColumnsSubTypeSet, common.IntermediateColumnsSubTypeHomogenousArray:
 				_, err = fmt.Fprintf(b, `func (inst *%s%s) GetAttrValue%s(entityIdx runtime.EntityIdx) iter.Seq[%s] {
 		return func(yield func(%s) bool) {
@@ -1560,7 +1527,6 @@ func (inst *%s%s) Len() (nEntities int) {
 				if err != nil {
 					return
 				}
-				break
 			}
 			if err != nil {
 				return

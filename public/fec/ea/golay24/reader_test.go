@@ -86,11 +86,9 @@ func TestPebbleReader24(t *testing.T) {
 		switch paddingBits {
 		case 0:
 			require.EqualValues(t, data, v.Bytes()) // FIXME flaky test
-			break
 		case 4, 8:
 			l := len(data)
 			require.EqualValues(t, data[:l], v.Bytes()[:l])
-			break
 		default:
 			require.Fail(t, "invalid number of padding bits")
 		}

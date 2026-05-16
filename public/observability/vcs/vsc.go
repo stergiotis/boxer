@@ -24,14 +24,12 @@ func GetVcsRevision() (revision string, modified bool, err error) {
 			if found == 2 {
 				return
 			}
-			break
 		case "vcs.modified":
 			modified = setting.Value == "true"
 			found++
 			if found == 2 {
 				return
 			}
-			break
 		}
 	}
 	return

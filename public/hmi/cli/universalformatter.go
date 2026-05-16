@@ -111,7 +111,6 @@ func (inst *UniversalCliFormatter) FormatValue(context *cli.Context, v any) (err
 		err = json.MarshalEncode(enc,
 			v,
 			json.DefaultOptionsV2())
-		break
 	case "json-indent":
 		syntax = md.SyntaxHighlightJSON
 		enc := jsontext.NewEncoder(out,
@@ -124,10 +123,8 @@ func (inst *UniversalCliFormatter) FormatValue(context *cli.Context, v any) (err
 		err = json.MarshalEncode(enc,
 			v,
 			json.DefaultOptionsV2())
-		break
 	case "cbor":
 		err = inst.cborEncMode.NewEncoder(out).Encode(v)
-		break
 	case "diag":
 		{
 			b := bytes.NewBuffer(make([]byte, 0, 4096))
@@ -143,7 +140,6 @@ func (inst *UniversalCliFormatter) FormatValue(context *cli.Context, v any) (err
 				}
 			}
 		}
-		break
 	case "godump":
 		err = inst.dumper.Fprintln(out, v)
 	default:

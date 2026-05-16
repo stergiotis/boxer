@@ -49,11 +49,9 @@ func (inst *Writer) WriteByte(c byte) (err error) {
 		t = 3 * ((uint16(inst.buffered) << 4) | uint16(c>>4))
 		inst.state = stateThird
 		inst.buffered = c & 0x0f
-		break
 	case stateThird:
 		t = 3 * ((uint16(inst.buffered) << 8) | uint16(c))
 		inst.state = stateFirst
-		break
 	default:
 		err = eh.Errorf("wrong state, call BeginMessage befor writing")
 		return
@@ -97,7 +95,6 @@ func (inst *Writer) Write(p []byte) (n int, err error) {
 		}
 		n += 3
 		p = p[2:]
-		break
 	case stateThird:
 		err = inst.WriteByte(p[0])
 		if err != nil {
@@ -105,7 +102,6 @@ func (inst *Writer) Write(p []byte) (n int, err error) {
 		}
 		n += 3
 		p = p[1:]
-		break
 	}
 
 	l := len(p)
@@ -165,19 +161,16 @@ func (inst *Writer) EndMessage() (paddingBitsBeforeEncoding int, err error) {
 		return
 	case stateFirst:
 		paddingBitsBeforeEncoding = 0
-		break
 	case stateSecond:
 		err = inst.WriteByte(0x00)
 		if err == nil {
 			paddingBitsBeforeEncoding = 4
 		}
-		break
 	case stateThird:
 		err = inst.WriteByte(0x00)
 		if err == nil {
 			paddingBitsBeforeEncoding = 8
 		}
-		break
 	}
 	inst.state = stateInit
 	return

@@ -100,7 +100,6 @@ func populateJsonEntity(dec *jsontext.Decoder, ent *InEntityJson, hasher hash.Ha
 		switch kind {
 		case '{', '[':
 			stack++
-			break
 		case '}', ']':
 			stack--
 		default:
@@ -114,7 +113,6 @@ func populateJsonEntity(dec *jsontext.Decoder, ent *InEntityJson, hasher hash.Ha
 				switch string(lowCardPtr) {
 				case "/kind", "/commit/operation", "/commit/collection":
 					isSymbol = true
-					break
 				}
 				//log.Info().Str("lc", string(lowCardPtr)).Str("hc", string(highCardPtr)).Str("token", string(kind)).Msg("got one")
 			}
@@ -123,20 +121,16 @@ func populateJsonEntity(dec *jsontext.Decoder, ent *InEntityJson, hasher hash.Ha
 			switch kind {
 			case 'n':
 				nullSec.BeginAttribute().AddMembershipMixedLowCardVerbatim(lowCardPtr, highCardPtr).EndAttribute()
-				break
 			case 'f':
 				boolSec.BeginAttribute(false).AddMembershipMixedLowCardVerbatim(lowCardPtr, highCardPtr).EndAttribute()
-				break
 			case 't':
 				boolSec.BeginAttribute(true).AddMembershipMixedLowCardVerbatim(lowCardPtr, highCardPtr).EndAttribute()
-				break
 			case '"':
 				if isSymbol {
 					symbolSec.BeginAttribute(token.String()).AddMembershipMixedLowCardVerbatim(lowCardPtr, highCardPtr).EndAttribute()
 				} else {
 					stringSec.BeginAttribute(token.String()).AddMembershipMixedLowCardVerbatim(lowCardPtr, highCardPtr).EndAttribute()
 				}
-				break
 			case '0':
 				{
 					v := token.Float()
@@ -146,7 +140,6 @@ func populateJsonEntity(dec *jsontext.Decoder, ent *InEntityJson, hasher hash.Ha
 						float64Sec.BeginAttribute(v).AddMembershipMixedLowCardVerbatim(lowCardPtr, highCardPtr).EndAttribute()
 					}
 				}
-				break
 			case '{', '[', '}', ']':
 				break
 			default:
@@ -317,7 +310,6 @@ func NewCliCommand() *cli.Command {
 						switch compression {
 						case compressionZstd:
 							opts = append(opts, ipc.WithZstd())
-							break
 						case compressionUncompressed:
 							break
 						}
@@ -328,16 +320,13 @@ func NewCliCommand() *cli.Command {
 							return
 						}
 						defer w.Close()
-						break
 					case outputFormatParquet:
 						var codec compress.Compression
 						switch compression {
 						case compressionZstd:
 							codec = compress.Codecs.Zstd
-							break
 						case compressionUncompressed:
 							codec = compress.Codecs.Uncompressed
-							break
 						}
 						log.Info().Stringer("compression", codec).Msg("using apache parquet output format")
 						props := parquet.NewWriterProperties(
@@ -356,7 +345,6 @@ func NewCliCommand() *cli.Command {
 							return
 						}
 						defer w2.Close()
-						break
 					}
 					records := make([]arrow.RecordBatch, 0, 1)
 					lc := bytes.NewBuffer(make([]byte, 0, 4*4096))

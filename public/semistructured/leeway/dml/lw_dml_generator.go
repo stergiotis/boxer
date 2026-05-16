@@ -159,7 +159,6 @@ func (inst *GoClassBuilder) composeFieldRelatedCode(op structFieldOperationE, cc
 	switch op {
 	case structFieldOperationArgUse:
 		_, err = b.WriteString(argName)
-		break
 	case structFieldOperationArgDeclaration:
 		_, err = fmt.Fprintf(b, "%s ", argName)
 		if err != nil {
@@ -169,7 +168,6 @@ func (inst *GoClassBuilder) composeFieldRelatedCode(op structFieldOperationE, cc
 		if err != nil {
 			return
 		}
-		break
 	case structFieldOperationArgDeclarationDemoted:
 		_, err = fmt.Fprintf(b, "%s ", argName)
 		if err != nil {
@@ -180,7 +178,6 @@ func (inst *GoClassBuilder) composeFieldRelatedCode(op structFieldOperationE, cc
 		if err != nil {
 			return
 		}
-		break
 	case structFieldOperationDeclaration:
 		switch cc.SubType {
 		case common.IntermediateColumnsSubTypeHomogenousArraySupport,
@@ -207,11 +204,9 @@ func (inst *GoClassBuilder) composeFieldRelatedCode(op structFieldOperationE, cc
 `, prefix, idx, arrowBuilderClassName, prefix, idx)
 				}
 			}
-			break
 		default:
 			err = ErrUnhandledSubType
 		}
-		break
 	case structFieldOperationInitialization:
 		switch cc.SubType {
 		case common.IntermediateColumnsSubTypeHomogenousArraySupport,
@@ -235,11 +230,9 @@ func (inst *GoClassBuilder) composeFieldRelatedCode(op structFieldOperationE, cc
 `, prefix, idx, idx, arrowBuilderClassName, prefix, idx, idx)
 				}
 			}
-			break
 		default:
 			err = ErrUnhandledSubType
 		}
-		break
 	case structFieldOperationAppendScalar:
 		if mayError {
 			_, err = fmt.Fprintf(b, `	{
@@ -255,7 +248,6 @@ func (inst *GoClassBuilder) composeFieldRelatedCode(op structFieldOperationE, cc
 `, prefix, idx)
 			}
 		}
-		break
 	case structFieldOperationDeclareContainerLength:
 		_, err = fmt.Fprintf(b, `	
 %sContainerLength%03d int
@@ -263,16 +255,13 @@ func (inst *GoClassBuilder) composeFieldRelatedCode(op structFieldOperationE, cc
 	case structFieldOperationIncrementContainerLength:
 		_, err = fmt.Fprintf(b, `	inst.%sContainerLength%03d++
 `, prefix, idx)
-		break
 	case structFieldOperationResetContainerLength:
 		_, err = fmt.Fprintf(b, `	inst.%sContainerLength%03d = 0
 `, prefix, idx)
-		break
 	case structFieldOperationStoreContainerLength:
 		_, err = fmt.Fprintf(b, `	l = inst.%sContainerLength%03d
 	inst.%sContainerLength%03d = 0
 `, prefix, idx, prefix, idx)
-		break
 	case structFieldOperationAppendContainer:
 		if cc.PlainItemType == common.PlainItemTypeNone {
 			_, err = fmt.Fprintf(b, `	inst.%sListBuilder%03d.Append(true)
@@ -284,12 +273,10 @@ func (inst *GoClassBuilder) composeFieldRelatedCode(op structFieldOperationE, cc
 			_, err = fmt.Fprintf(b, `	inst.%sListBuilder%03d.Append(true)
 `, prefix, idx)
 		}
-		break
 	case structFieldOperationAppendContainerLength:
 		// FIXME implement cast to uint64
 		_, err = fmt.Fprintf(b, `	inst.%sFieldBuilder%03d.Append(uint64(l))
 `, prefix, idx)
-		break
 	case structFieldOperationPlainDeclaration:
 		_, err = fmt.Fprintf(b, `	%s `, plainFieldName)
 		if err != nil {
@@ -303,11 +290,9 @@ func (inst *GoClassBuilder) composeFieldRelatedCode(op structFieldOperationE, cc
 		if err != nil {
 			return
 		}
-		break
 	case structFieldOperationPlainAssignArg:
 		_, err = fmt.Fprintf(b, `	inst.%s = %s
 `, plainFieldName, argName)
-		break
 	case structFieldOperationPlainAppend:
 		if ct.IsScalar() {
 			_, err = fmt.Fprintf(b, `	inst.%sFieldBuilder%03d.Append(%sinst.%s%s)
@@ -323,7 +308,6 @@ func (inst *GoClassBuilder) composeFieldRelatedCode(op structFieldOperationE, cc
 	}
 `, plainFieldName, prefix, idx, arrowConversionPrefix, arrowConversionSuffix)
 		}
-		break
 	case structFieldOperationPlainReset:
 		var zeroValueLiteral string
 		_, zeroValueLiteral, _, err = codegen.GenerateGoCode(ct, cp.EncodingHints[i])
@@ -333,7 +317,6 @@ func (inst *GoClassBuilder) composeFieldRelatedCode(op structFieldOperationE, cc
 		}
 		_, err = fmt.Fprintf(b, `	inst.%s = %s
 `, plainFieldName, zeroValueLiteral)
-		break
 	}
 
 	return
@@ -486,7 +469,6 @@ func (inst *GoClassBuilder) composeStateVerificationCode(allowedSrcStates []runt
 		if err != nil {
 			return
 		}
-		break
 	default:
 		_, err = b.WriteString(`	switch inst.state {
 	case `)
@@ -616,28 +598,20 @@ func GetMembershipAddFunctionName(role common.ColumnRoleE) (funcName string, err
 	switch role {
 	case common.ColumnRoleHighCardRef:
 		funcName = "AddMembershipHighCardRef"
-		break
 	case common.ColumnRoleHighCardRefParametrized:
 		funcName = "AddMembershipHighCardRefParametrized"
-		break
 	case common.ColumnRoleHighCardVerbatim:
 		funcName = "AddMembershipHighCardVerbatim"
-		break
 	case common.ColumnRoleLowCardRef:
 		funcName = "AddMembershipLowCardRef"
-		break
 	case common.ColumnRoleLowCardRefParametrized:
 		funcName = "AddMembershipLowCardRefParametrized"
-		break
 	case common.ColumnRoleLowCardVerbatim:
 		funcName = "AddMembershipLowCardVerbatim"
-		break
 	case common.ColumnRoleMixedLowCardRef:
 		funcName = "AddMembershipMixedLowCardRef"
-		break
 	case common.ColumnRoleMixedLowCardVerbatim:
 		funcName = "AddMembershipMixedLowCardVerbatim"
-		break
 	case common.ColumnRoleMixedRefHighCardParameters, common.ColumnRoleMixedVerbatimHighCardParameters:
 		// mixed, trigger on other
 		break
@@ -700,10 +674,8 @@ func (inst *GoClassBuilder) ComposeAttributeCode(clsNamer gocodegen.GoClassNamer
 			break
 		case 1:
 			_, err = fmt.Fprintf(b, "func (inst *%s) AddToContainer(", clsNames.InAttributeClassName)
-			break
 		default:
 			_, err = fmt.Fprintf(b, "func (inst *%s) AddToCoContainers(", clsNames.InAttributeClassName)
-			break
 		}
 		if err != nil {
 			return
@@ -759,12 +731,10 @@ func (inst *GoClassBuilder) ComposeAttributeCode(clsNamer gocodegen.GoClassNamer
 					mixedParamsIdx[0] = i
 					mixedParamsCp[0] = cp
 					mixedParamsCc[0] = cc
-					break
 				case common.ColumnRoleMixedVerbatimHighCardParameters:
 					mixedParamsIdx[1] = i
 					mixedParamsCp[1] = cp
 					mixedParamsCc[1] = cc
-					break
 				}
 			}
 		}
@@ -776,10 +746,8 @@ func (inst *GoClassBuilder) ComposeAttributeCode(clsNamer gocodegen.GoClassNamer
 				switch role {
 				case common.ColumnRoleMixedLowCardRef:
 					mixed = 0
-					break
 				case common.ColumnRoleMixedLowCardVerbatim:
 					mixed = 1
-					break
 				}
 				funcName, err = GetMembershipAddFunctionName(role)
 				if err != nil {
@@ -946,7 +914,6 @@ func (inst *GoClassBuilder) ComposeAttributeCode(clsNamer gocodegen.GoClassNamer
 						}
 					}
 				}
-				break
 			}
 		}
 		for cc, cp := range sectionIRH.IterateColumnProps() {
@@ -964,7 +931,6 @@ func (inst *GoClassBuilder) ComposeAttributeCode(clsNamer gocodegen.GoClassNamer
 						}
 					}
 				}
-				break
 			}
 		}
 		_, err = b.WriteString(`}

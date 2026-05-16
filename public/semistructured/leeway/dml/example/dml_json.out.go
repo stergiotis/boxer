@@ -56,7 +56,7 @@ func CreateSchemaJson() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1184
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1150
 
 type InEntityJson struct {
 	allocator             memory.Allocator
@@ -100,7 +100,7 @@ func NewInEntityJson(allocator memory.Allocator, estimatedNumberOfRecords int) (
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1298
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1264
 
 func (inst *InEntityJson) SetId(blake3hash0 []byte) *InEntityJson {
 	if inst.state != runtime.EntityStateInEntity {

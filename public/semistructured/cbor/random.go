@@ -294,35 +294,30 @@ func (inst *Generator) GenerateRandomCborScalar() (n int, err error) {
 		if err != nil {
 			return
 		}
-		break
 	case 1, 2, 3, 4, 5, 6, 7, 8:
 		u, err = enc.EncodeString(inst.generateString())
 		n += u
 		if err != nil {
 			return
 		}
-		break
 	case 9:
 		u, err = enc.EncodeBool(ra.Float32() < 0.5)
 		n += u
 		if err != nil {
 			return
 		}
-		break
 	case 10, 11, 12:
 		u, err = enc.EncodeInt(ra.Int64())
 		n += u
 		if err != nil {
 			return
 		}
-		break
 	case 13, 14, 15, 16:
 		u, err = enc.EncodeUint(ra.Uint64())
 		n += u
 		if err != nil {
 			return
 		}
-		break
 	}
 	return n, nil
 }
@@ -367,7 +362,6 @@ func (inst *Generator) generateRandomCbor(level int) (n int, err error) {
 				return
 			}
 		}
-		break
 	case 1:
 		l := ra.IntN(maxL)
 		inst.nPrimitives += l
@@ -385,7 +379,6 @@ func (inst *Generator) generateRandomCbor(level int) (n int, err error) {
 		}
 		u, err = enc.EncodeBreak()
 		n += u
-		break
 	case 2:
 		l := ra.IntN(maxL)
 		inst.nPrimitives += l
@@ -401,7 +394,6 @@ func (inst *Generator) generateRandomCbor(level int) (n int, err error) {
 				return
 			}
 		}
-		break
 	case 3:
 		l := ra.IntN(maxL)
 		inst.nPrimitives += l
@@ -419,7 +411,6 @@ func (inst *Generator) generateRandomCbor(level int) (n int, err error) {
 		}
 		u, err = enc.EncodeBreak()
 		n += u
-		break
 	case 4:
 		u, err = enc.EncodeTagSmall(TagExpectConversionToBase64Std)
 		n += u
@@ -431,7 +422,6 @@ func (inst *Generator) generateRandomCbor(level int) (n int, err error) {
 		if err != nil {
 			return
 		}
-		break
 	default:
 		u, err = inst.GenerateRandomCborScalar()
 		n += u

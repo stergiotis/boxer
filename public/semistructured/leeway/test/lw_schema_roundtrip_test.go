@@ -38,7 +38,6 @@ func TestSimpleRoundtrip(t *testing.T) {
 			tblDesc1, err = mapping.NewJsonMapping()
 			tblDesc1.DictionaryEntry.Name = ""
 			tblDesc1.DictionaryEntry.Comment = ""
-			break
 		default:
 			tblDesc1, err = common2.GenerateSampleTableDesc(rnd, nil, nil)
 		}
@@ -195,7 +194,6 @@ func TestTableOpsRoundtrip(t *testing.T) {
 			tblDesc1, err = mapping.NewJsonMapping()
 			tblDesc1.DictionaryEntry.Name = ""
 			tblDesc1.DictionaryEntry.Comment = ""
-			break
 		default:
 			tblDesc1, err = common2.GenerateSampleTableDesc(rnd, acceptCanonicalType, acceptEncodingAspect)
 		}
@@ -237,7 +235,6 @@ func TestIntermediateRoundtrip(t *testing.T) {
 			tblDesc1, err = mapping.NewJsonMapping()
 			tblDesc1.DictionaryEntry.Name = ""
 			tblDesc1.DictionaryEntry.Comment = ""
-			break
 		default:
 			tblDesc1, err = common2.GenerateSampleTableDesc(rnd, acceptCanonicalType, acceptEncodingAspect)
 		}
@@ -296,7 +293,6 @@ func TestNamingConventionRoundtrip(t *testing.T) {
 			tblDesc1, err = mapping.NewJsonMapping()
 			tblDesc1.DictionaryEntry.Name = ""
 			tblDesc1.DictionaryEntry.Comment = ""
-			break
 		default:
 			tblDesc1, err = common2.GenerateSampleTableDesc(rnd, acceptCanonicalType, acceptEncodingAspect)
 		}

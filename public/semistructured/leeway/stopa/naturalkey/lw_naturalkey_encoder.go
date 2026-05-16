@@ -18,7 +18,6 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
 
-
 func EncodeTaggedIdJson(id identifier.TaggedId) (r string) {
 	return JsonSpecialValuePrefix + taggedIdJsonValuePrefix + strconv.FormatUint(uint64(id), 16)
 }
@@ -410,16 +409,12 @@ func (inst *Encoder) getSerializedJson(copy bool) (r []byte, err error) {
 				switch ct := vt.Content.(type) {
 				case uint8:
 					n = uint64(ct)
-					break
 				case uint16:
 					n = uint64(ct)
-					break
 				case uint32:
 					n = uint64(ct)
-					break
 				case uint64:
 					n = ct
-					break
 				default:
 					err = eb.Build().Uint64("tagNumber", vt.Number).Type("valueType", vt.Content).Errorf("encountered unhandled cbor tag value")
 					return
@@ -430,12 +425,10 @@ func (inst *Encoder) getSerializedJson(copy bool) (r []byte, err error) {
 					return
 				}
 				vs[i] = EncodeTaggedIdJson(id)
-				break
 			default:
 				err = eb.Build().Uint64("tagNumber", vt.Number).Type("valueType", vt.Content).Errorf("encountered unhandled cbor tag")
 				return
 			}
-			break
 		}
 	}
 

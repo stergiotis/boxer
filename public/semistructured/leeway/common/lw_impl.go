@@ -26,28 +26,20 @@ func GetMembershipRoleByCardinalityRole(membershipCardinalityRole ColumnRoleE) (
 	switch membershipCardinalityRole {
 	case ColumnRoleHighCardRefCardinality:
 		membershipRole = ColumnRoleHighCardRef
-		break
 	case ColumnRoleHighCardRefParametrizedCardinality:
 		membershipRole = ColumnRoleHighCardRefParametrized
-		break
 	case ColumnRoleHighCardVerbatimCardinality:
 		membershipRole = ColumnRoleHighCardVerbatim
-		break
 	case ColumnRoleLowCardRefCardinality:
 		membershipRole = ColumnRoleLowCardRef
-		break
 	case ColumnRoleLowCardRefParametrizedCardinality:
 		membershipRole = ColumnRoleLowCardRefParametrized
-		break
 	case ColumnRoleLowCardVerbatimCardinality:
 		membershipRole = ColumnRoleLowCardVerbatim
-		break
 	case ColumnRoleMixedLowCardRefCardinality:
 		membershipRole = ColumnRoleMixedLowCardRef
-		break
 	case ColumnRoleMixedLowCardVerbatimCardinality:
 		membershipRole = ColumnRoleMixedLowCardVerbatim
-		break
 	default:
 		err = ErrUnhandledRole
 	}
@@ -57,28 +49,20 @@ func GetCardinalityRoleByMembershipRole(membershipRole ColumnRoleE) (cardinality
 	switch membershipRole {
 	case ColumnRoleHighCardRef:
 		cardinalityRole = ColumnRoleHighCardRefCardinality
-		break
 	case ColumnRoleHighCardRefParametrized:
 		cardinalityRole = ColumnRoleHighCardRefParametrizedCardinality
-		break
 	case ColumnRoleHighCardVerbatim:
 		cardinalityRole = ColumnRoleHighCardVerbatimCardinality
-		break
 	case ColumnRoleLowCardRef:
 		cardinalityRole = ColumnRoleLowCardRefCardinality
-		break
 	case ColumnRoleLowCardRefParametrized:
 		cardinalityRole = ColumnRoleLowCardRefParametrizedCardinality
-		break
 	case ColumnRoleLowCardVerbatim:
 		cardinalityRole = ColumnRoleLowCardVerbatimCardinality
-		break
 	case ColumnRoleMixedLowCardRef, ColumnRoleMixedRefHighCardParameters:
 		cardinalityRole = ColumnRoleMixedLowCardRefCardinality
-		break
 	case ColumnRoleMixedLowCardVerbatim, ColumnRoleMixedVerbatimHighCardParameters:
 		cardinalityRole = ColumnRoleMixedLowCardVerbatimCardinality
-		break
 	default:
 		err = ErrUnhandledRole
 	}
@@ -88,13 +72,10 @@ func GetSubTypeByScalarModifier(scalarModifier canonicaltypes.ScalarModifierE) (
 	switch scalarModifier {
 	case canonicaltypes.ScalarModifierNone:
 		subType = IntermediateColumnsSubTypeScalar
-		break
 	case canonicaltypes.ScalarModifierSet:
 		subType = IntermediateColumnsSubTypeSet
-		break
 	case canonicaltypes.ScalarModifierHomogenousArray:
 		subType = IntermediateColumnsSubTypeHomogenousArray
-		break
 	default:
 		log.Panic().Stringer("scalarModifier", scalarModifier).Msg("encountered unimplemented scalar modifier")
 	}

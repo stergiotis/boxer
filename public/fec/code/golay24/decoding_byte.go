@@ -58,11 +58,9 @@ func DecodeLowLevel2(dstPreallocated []byte, g24 []byte, nCodeWords uint32) {
 		case 0:
 			codeWord = uint32(b) << 16
 			next = 1
-			break
 		case 1:
 			codeWord |= uint32(b) << 8
 			next = 2
-			break
 		case 2:
 			codeWord |= uint32(b)
 			decoded := DecodeSingle(codeWord)
@@ -82,7 +80,6 @@ func DecodeLowLevel2(dstPreallocated []byte, g24 []byte, nCodeWords uint32) {
 				p++
 				even = true
 			}
-			break
 		}
 	}
 }
@@ -98,11 +95,9 @@ func DecodeLowLevel(dstPreallocated []byte, g24 []byte) {
 		case 0:
 			codeWord = uint32(b) << 16
 			next = 1
-			break
 		case 1:
 			codeWord |= uint32(b) << 8
 			next = 2
-			break
 		case 2:
 			codeWord |= uint32(b)
 			decoded := DecodeSingle(codeWord)
@@ -122,7 +117,6 @@ func DecodeLowLevel(dstPreallocated []byte, g24 []byte) {
 				p++
 				even = true
 			}
-			break
 		}
 	}
 

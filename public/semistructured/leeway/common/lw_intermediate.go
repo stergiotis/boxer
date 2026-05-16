@@ -17,13 +17,10 @@ func ExtractScalarModifier(ct canonicaltypes2.PrimitiveAstNodeI) (scalarModifier
 	switch ctt := ct.(type) {
 	case canonicaltypes2.StringAstNode:
 		scalarModifier = ctt.ScalarModifier
-		break
 	case canonicaltypes2.MachineNumericTypeAstNode:
 		scalarModifier = ctt.ScalarModifier
-		break
 	case canonicaltypes2.TemporalTypeAstNode:
 		scalarModifier = ctt.ScalarModifier
-		break
 	default:
 		err = eb.Build().Type("ct", ct).Errorf("unable to extract scalar modifier")
 		return
@@ -189,13 +186,10 @@ func (inst *IntermediateTaggedValuesDesc) loadSectionValue(sec *TaggedValuesSect
 			switch scalarModifier {
 			case canonicaltypes2.ScalarModifierNone:
 				inst.Scalar.Add(name, ColumnRoleValue, ct, hints, valueSemantics)
-				break
 			case canonicaltypes2.ScalarModifierHomogenousArray:
 				inst.NonScalarHomogenousArray.Add(name, ColumnRoleValue, ct, hints, valueSemantics)
-				break
 			case canonicaltypes2.ScalarModifierSet:
 				inst.NonScalarSet.Add(name, ColumnRoleValue, ct, hints, valueSemantics)
-				break
 			default:
 				err = eb.Build().Stringer("scalarModifier", scalarModifier).Errorf("unhandled scalar modifier")
 				return
@@ -253,13 +247,10 @@ func (inst *IntermediatePlainValuesDesc) Load(names []naming.StylableName, ctss 
 			switch scalarModifier {
 			case canonicaltypes2.ScalarModifierNone:
 				inst.Scalar.Add(attrName, ColumnRoleValue, ct, hints, ss[i])
-				break
 			case canonicaltypes2.ScalarModifierHomogenousArray:
 				inst.NonScalarHomogenousArray.Add(attrName, ColumnRoleValue, ct, hints, ss[i])
-				break
 			case canonicaltypes2.ScalarModifierSet:
 				inst.NonScalarSet.Add(attrName, ColumnRoleValue, ct, hints, ss[i])
-				break
 			default:
 				err = eb.Build().Stringer("scalarModifier", scalarModifier).Errorf("unhandled scalar modifier")
 			}
@@ -281,13 +272,10 @@ func (inst *IntermediatePlainValuesDesc) LoadSingle(name naming.StylableName, ct
 	switch scalarModifier {
 	case canonicaltypes2.ScalarModifierNone:
 		inst.Scalar.Add(name, ColumnRoleValue, ct, hints, vs)
-		break
 	case canonicaltypes2.ScalarModifierHomogenousArray:
 		inst.NonScalarHomogenousArray.Add(name, ColumnRoleValue, ct, hints, vs)
-		break
 	case canonicaltypes2.ScalarModifierSet:
 		inst.NonScalarSet.Add(name, ColumnRoleValue, ct, hints, vs)
-		break
 	default:
 		err = eb.Build().Stringer("scalarModifier", scalarModifier).Errorf("unhandled scalar modifier")
 		return
@@ -347,7 +335,6 @@ func (inst *IntermediateTableRepresentation) LoadFromTable(table *TableDesc, tec
 		switch itemType {
 		case PlainItemTypeOpaque:
 			streamingGroup = table.OpaqueStreamingGroup
-			break
 		}
 		err = dest.LoadSingle(table.PlainValuesNames[i], table.PlainValuesTypes[i], table.PlainValuesEncodingHints[i], table.PlainValuesValueSemantics[i], streamingGroup)
 		if err != nil {
@@ -498,7 +485,6 @@ func (inst *IntermediatePlainValuesDesc) IterateColumnProps(itemType PlainItemTy
 		switch itemType {
 		case PlainItemTypeOpaque:
 			cc.StreamingGroup = inst.StreamingGroup
-			break
 		}
 		if inst.Scalar != nil && inst.Scalar.Length() > 0 {
 			cc.SubType = IntermediateColumnsSubTypeScalar

@@ -332,6 +332,7 @@ func (inst *HumanReadableNamingConvention) ExtractCanonicalType(column common.Ph
 	}
 	return
 }
+
 // CanonicalizeSchemaName re-styles the section-name and column-name
 // components of a physical column name to LowerSpinalCase — the same
 // transformation MakeStylableName applies when the IR is loaded from
@@ -564,7 +565,6 @@ func (inst *HumanReadableNamingConvention) discoverTableFromSortedPhysicalColumn
 				switch itemType {
 				case common.PlainItemTypeOpaque:
 					tbl.SetOpaqueColumnStreamingGroup(streamingGroupK)
-					break
 				default:
 					err = eb.Build().Stringer("physicalColumn", phy).Stringer("plainItemType", itemType).Str("component", components[parseStructure13.streamingGroupIndex]).Errorf("found non-empty streaming group index in unsupported plain item type: %w", err)
 					return
@@ -573,7 +573,6 @@ func (inst *HumanReadableNamingConvention) discoverTableFromSortedPhysicalColumn
 
 			tbl.AddPlainValueItem(itemType, nameS, ct, hints, valueSemantics)
 			trc = components[parseStructure13.tableRowConfigIndex]
-			break
 		case 21:
 			switch components[parseStructure21.prefixIndex] {
 			case TaggedValuePrefix:
@@ -643,28 +642,20 @@ func (inst *HumanReadableNamingConvention) discoverTableFromSortedPhysicalColumn
 					switch role {
 					case common.ColumnRoleHighCardRef:
 						membership = membership.AddHighCardRefOnly()
-						break
 					case common.ColumnRoleHighCardRefParametrized:
 						membership = membership.AddHighCardRefParametrized()
-						break
 					case common.ColumnRoleHighCardVerbatim:
 						membership = membership.AddHighCardVerbatim()
-						break
 					case common.ColumnRoleLowCardRef:
 						membership = membership.AddLowCardRefOnly()
-						break
 					case common.ColumnRoleLowCardRefParametrized:
 						membership = membership.AddLowCardRefParametrized()
-						break
 					case common.ColumnRoleLowCardVerbatim:
 						membership = membership.AddLowCardVerbatim()
-						break
 					case common.ColumnRoleMixedLowCardVerbatim:
 						membership = membership.AddMixedLowCardVerbatimHighCardParameters()
-						break
 					case common.ColumnRoleMixedLowCardRef:
 						membership = membership.AddMixedLowCardRefHighCardParameters()
-						break
 					case common.ColumnRoleMixedRefHighCardParameters, common.ColumnRoleMixedVerbatimHighCardParameters:
 						// mixed, trigger on other
 						break
@@ -677,13 +668,11 @@ func (inst *HumanReadableNamingConvention) discoverTableFromSortedPhysicalColumn
 						coSectionGroupK,
 						streamingGroupK)
 				}
-				break
 			default:
 				err = eb.Build().Stringer("physicalColumn", phy).Str("prefix", components[0]).Errorf("unknown column prefix")
 				return
 			}
 			trc = components[parseStructure21.tableRowConfigIndex]
-			break
 		default:
 			err = eb.Build().Stringer("physicalColumn", phy).Int("components", l).Errorf("unhandled number of components")
 			return
@@ -753,7 +742,6 @@ func (inst *HumanReadableNamingConvention) ParseColumn(fullColumnName string) (c
 		column.NameComponentsExplanation = ColumnsComponentsExplanation13
 		column.Comment = ""
 		column.GeneratingNamingConvention = inst
-		break
 	case 21:
 		_, err = inst.canonicalTypeParser.ParsePrimitiveTypeOrGroupAst(components[parseStructure21.canonicalTypeIndex])
 		if err != nil {
@@ -771,7 +759,6 @@ func (inst *HumanReadableNamingConvention) ParseColumn(fullColumnName string) (c
 		column.NameComponentsExplanation = ColumnsComponentsExplanation21
 		column.Comment = ""
 		column.GeneratingNamingConvention = inst
-		break
 	default:
 		err = eb.Build().Str("column", fullColumnName).Int("components", l).Str("separator", inst.separator).Errorf("unknown number of name components")
 		return

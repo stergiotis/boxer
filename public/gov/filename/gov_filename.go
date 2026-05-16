@@ -119,7 +119,6 @@ func (inst *Renamer) processPath(oldPath string) (err error) {
 			err = eh.Errorf("os rename failed: %w", err)
 			return
 		}
-		break
 	case RenameOpDryRun:
 		log.Info().
 			Str("old", filename).

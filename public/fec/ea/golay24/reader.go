@@ -66,12 +66,10 @@ func (inst *Golay24Reader) ReadByte() (b byte, err error) {
 		b = byte(t >> 4)
 		inst.bufferedByte = byte(t & 0x0f)
 		inst.state = stateDecodeGolay24Second
-		break
 	case stateDecodeGolay24Second:
 		b = inst.bufferedByte<<4 | byte(t>>8)
 		inst.bufferedByte = byte(t)
 		inst.state = stateDecodeGolay24Third
-		break
 	default:
 		log.Fatal().Msg("should never get here: invalid state")
 	}
@@ -137,10 +135,8 @@ func (inst *Golay24Reader) skipTrailingBytes() (err error) {
 		break
 	case stateDecodeGolay24Second:
 		_, err = inst.baseReader.DiscardPeeking(2)
-		break
 	case stateDecodeGolay24Third:
 		_, err = inst.baseReader.DiscardPeeking(1)
-		break
 	}
 	inst.state = stateDecodeGolay24First
 	return
