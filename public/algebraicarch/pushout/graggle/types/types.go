@@ -16,12 +16,14 @@ import (
 	"lukechampine.com/blake3"
 )
 
-// PatchHas pushout uses the hash purely for content-addressed identity; collision
-// resistance is the only requirement, and BLAKE3 already provides that
-// at the same 32-byte size while matching the hash function used by the
-// rest of pebble2impl (leeway/card schema fingerprint, IMAP client).
-// Switching changes every patch hash — any persisted envelope files
-// from a SHA-256 build will fail Decode's hash-validation guard.
+// PatchHash is the 32-byte content-addressed identifier of a patch,
+// computed with BLAKE3. Pushout uses the hash purely for content-addressed
+// identity; collision resistance is the only requirement, and BLAKE3
+// already provides that at the same 32-byte size while matching the hash
+// function used by the rest of pebble2impl (leeway/card schema
+// fingerprint, IMAP client). Switching changes every patch hash — any
+// persisted envelope files from a SHA-256 build will fail Decode's
+// hash-validation guard.
 type PatchHash [32]byte
 
 func (inst PatchHash) String() (s string) {
