@@ -57,7 +57,7 @@ func (inst *MiniBatchConfig) Validate(force bool) (nMessages int) {
 	return
 }
 
-var _ config.Configer = (*MiniBatchConfig)(nil)
+var _ config.ConfigerI = (*MiniBatchConfig)(nil)
 
 func NewMiniBatcher(config *MiniBatchConfig) (*minibatch.MiniBatcher, error) {
 	return minibatch.NewMiniBatcher(config.SizeCriteria, config.CountCriteria, config.DurationCriteria, nil)

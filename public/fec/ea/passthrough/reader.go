@@ -59,9 +59,9 @@ func (inst *PassthroughReader) DetectedBitErrors() int {
 	return inst.baseReader.DetectedBitErrors()
 }
 
-var _ ea3.MessageReader = (*PassthroughReader)(nil)
+var _ ea3.MessageReaderI = (*PassthroughReader)(nil)
 
-func NewPassthroughReader(r ea.ByteBlockDiscardReader, nAnchorBytes uint8, maxHammingDistPerByteIncl uint8, maxMessageSize uint32) *PassthroughReader {
+func NewPassthroughReader(r ea.ByteBlockDiscardReaderI, nAnchorBytes uint8, maxHammingDistPerByteIncl uint8, maxMessageSize uint32) *PassthroughReader {
 	br := ea3.NewBaseReader(r, nAnchorBytes, maxHammingDistPerByteIncl, maxMessageSize)
 	return &PassthroughReader{
 		baseReader: br,

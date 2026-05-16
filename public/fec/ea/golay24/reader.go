@@ -148,7 +148,7 @@ func (inst *Golay24Reader) DetectedBitErrors() int {
 	return inst.baseReader.DetectedBitErrors() + inst.detectedBitErrors
 }
 
-var _ ea2.MessageReader = (*Golay24Reader)(nil)
+var _ ea2.MessageReaderI = (*Golay24Reader)(nil)
 
 func NewGolay24Reader(r io.Reader, nAnchorBytes uint8, maxHammingDistPerByteIncl uint8, maxMessageSize uint32) *Golay24Reader {
 	br := ea2.NewBaseReader(r, nAnchorBytes, maxHammingDistPerByteIncl, maxMessageSize)

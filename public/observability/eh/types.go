@@ -71,7 +71,7 @@ type unwrapableMulti interface {
 	error
 	Unwrap() []error
 }
-type ErrorWithStructuredData interface {
+type ErrorWithStructuredDataI interface {
 	error
 	SetCBORStructuredData(p []byte)
 	GetCBORStructuredData() []byte

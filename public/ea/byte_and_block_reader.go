@@ -7,7 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-func NewByteBlockReaderDiscardReader(reader interface{}) (ByteBlockDiscardReader, error) {
+func NewByteBlockReaderDiscardReader(reader interface{}) (ByteBlockDiscardReaderI, error) {
 	{
 		probe, ok := reader.(*bufio.Reader)
 		if ok {
@@ -21,36 +21,36 @@ func NewByteBlockReaderDiscardReader(reader interface{}) (ByteBlockDiscardReader
 		}
 	}
 	{
-		probe, ok := reader.(ByteReadReader)
+		probe, ok := reader.(ByteReadReaderI)
 		if ok {
 			return newByteAndBlockReaderByteReadReader(probe), nil
 		}
 	}
-	return nil, eb.Build().Type("readerType", reader).Errorf("unable to create ByteBlockDiscardReader from supplied reader")
+	return nil, eb.Build().Type("readerType", reader).Errorf("unable to create ByteBlockDiscardReaderI from supplied reader")
 }
 
-func newByteAndBlockReaderBufioReader(reader *bufio.Reader) ByteBlockDiscardReader {
+func newByteAndBlockReaderBufioReader(reader *bufio.Reader) ByteBlockDiscardReaderI {
 	return reader
 }
 
-func newByteAndBlockReaderBufioReadWriter(reader *bufio.ReadWriter) ByteBlockDiscardReader {
+func newByteAndBlockReaderBufioReadWriter(reader *bufio.ReadWriter) ByteBlockDiscardReaderI {
 	return reader
 }
 
-func newByteAndBlockReaderByteReadReader(reader ByteReadReader) ByteBlockDiscardReader {
+func newByteAndBlockReaderByteReadReader(reader ByteReadReaderI) ByteBlockDiscardReaderI {
 	return NewBytesBlockByteReadReader(reader)
 }
 
 type BytesBlockByteReadReader struct {
-	r   ByteReadReader
+	r   ByteReadReaderI
 	buf []byte
 }
 
-var _ ByteBlockDiscardReader = (*BytesBlockByteReadReader)(nil)
+var _ ByteBlockDiscardReaderI = (*BytesBlockByteReadReader)(nil)
 
 const blockSize = 4096
 
-func NewBytesBlockByteReadReader(r ByteReadReader) *BytesBlockByteReadReader {
+func NewBytesBlockByteReadReader(r ByteReadReaderI) *BytesBlockByteReadReader {
 	return &BytesBlockByteReadReader{
 		r:   r,
 		buf: make([]byte, 0, blockSize),

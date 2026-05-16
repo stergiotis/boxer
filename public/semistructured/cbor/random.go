@@ -22,7 +22,7 @@ type Generator struct {
 	nPrimitives        int
 }
 
-func NewGenerator(w EncoderWriter, randSeed int64) *Generator {
+func NewGenerator(w EncoderWriterI, randSeed int64) *Generator {
 	const maxStringLength = 4 * 1024
 	src := rand.NewPCG(uint64(randSeed), uint64(-randSeed))
 	ra := rand.New(src)

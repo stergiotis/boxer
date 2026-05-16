@@ -23,14 +23,14 @@ const MajorTypeMap MajorType = 5
 const MajorTypeTag MajorType = 6
 const MajorTypeFloatOrSimple MajorType = 7
 
-type EncoderWriter interface {
+type EncoderWriterI interface {
 	io.ByteWriter
 	io.Writer
 	io.StringWriter
 }
 
 type Encoder struct {
-	w          EncoderWriter
+	w          EncoderWriterI
 	hasher     hash.Hash
 	hashBuffer *bytes.Buffer
 	scratch8   []byte
@@ -41,7 +41,7 @@ var _ BasicEncoderI = (*Encoder)(nil)
 var _ IndefiniteContainerEncoderI = (*Encoder)(nil)
 var _ HashingEncoderI = (*Encoder)(nil)
 
-func NewEncoder(w EncoderWriter, hasher hash.Hash) *Encoder {
+func NewEncoder(w EncoderWriterI, hasher hash.Hash) *Encoder {
 	flushLimit := 512 / 8
 	if hasher != nil {
 		flushLimit = hasher.Size()
@@ -66,7 +66,7 @@ func (inst *Encoder) SetHasher(hasher hash.Hash) {
 	inst.hasher.Reset()
 	inst.flushLimit = hasher.BlockSize()
 }
-func (inst *Encoder) SetWriter(w EncoderWriter) {
+func (inst *Encoder) SetWriter(w EncoderWriterI) {
 	inst.w = w
 }
 

@@ -108,9 +108,9 @@ func (inst *FecConfig) Validate(force bool) (nMessages int) {
 	return
 }
 
-var _ config.Configer = (*FecConfig)(nil)
+var _ config.ConfigerI = (*FecConfig)(nil)
 
-func NewWriterFromConfig(w io.Writer, config *FecConfig) (ea2.MessageWriter, error) {
+func NewWriterFromConfig(w io.Writer, config *FecConfig) (ea2.MessageWriterI, error) {
 	if config.Validate(false) > 0 {
 		return nil, eh.Errorf("invalid fec config")
 	}
@@ -123,7 +123,7 @@ func NewWriterFromConfig(w io.Writer, config *FecConfig) (ea2.MessageWriter, err
 	return nil, eb.Build().Uint16("algorithm", config.FecAlgorithm).Errorf("unimplemented FEC algorithm")
 }
 
-func NewReaderFromConfig(r ea.ByteBlockDiscardReader, config *FecConfig) (ea2.MessageReader, error) {
+func NewReaderFromConfig(r ea.ByteBlockDiscardReaderI, config *FecConfig) (ea2.MessageReaderI, error) {
 	if config.Validate(false) > 0 {
 		return nil, eh.Errorf("invalid fec config")
 	}

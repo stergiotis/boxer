@@ -1,8 +1,8 @@
 package ea
 
 type TeeByteReader struct {
-	r ByteReadReader
-	w ByteBlockWriter
+	r ByteReadReaderI
+	w ByteBlockWriterI
 }
 
 func (inst *TeeByteReader) ReadByte() (b byte, err error) {
@@ -25,9 +25,9 @@ func (inst *TeeByteReader) Read(p []byte) (n int, err error) {
 	return
 }
 
-var _ ByteReadReader = (*TeeByteReader)(nil)
+var _ ByteReadReaderI = (*TeeByteReader)(nil)
 
-func NewTeeByteReader(r ByteReadReader, w ByteBlockWriter) *TeeByteReader {
+func NewTeeByteReader(r ByteReadReaderI, w ByteBlockWriterI) *TeeByteReader {
 	return &TeeByteReader{
 		r: r,
 		w: w,

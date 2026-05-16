@@ -360,7 +360,7 @@ func (inst *gatherFactsAndStacks) addError(err error, parentId uint64) error {
 	})
 
 	switch et := err.(type) {
-	case ErrorWithStructuredData:
+	case ErrorWithStructuredDataI:
 		data := et.GetCBORStructuredData()
 		if len(data) > 0 {
 			facts = append(facts, &errorFact{

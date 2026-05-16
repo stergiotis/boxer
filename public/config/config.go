@@ -12,7 +12,7 @@ func IdentityNameTransf(name string) (newName string) {
 	return name
 }
 
-type Configer interface {
+type ConfigerI interface {
 	ToCliFlags(nameTransf NameTransformFunc, envVarNameTransf NameTransformFunc) []cli.Flag
 	FromContext(nameTransf NameTransformFunc, ctx *cli.Context) (nMessages int)
 	Validate(force bool) (nMessages int)

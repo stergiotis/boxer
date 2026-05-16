@@ -55,4 +55,4 @@ func (inst *PassthroughWriter) EndMessage() (paddingBitsBeforeEncoding int, err 
 	return
 }
 
-var _ ea.MessageWriter = (*PassthroughWriter)(nil)
+var _ ea.MessageWriterI = (*PassthroughWriter)(nil)

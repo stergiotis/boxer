@@ -6,8 +6,8 @@ import (
 	"github.com/stergiotis/boxer/public/ea"
 )
 
-type MessageReader interface {
-	ea.ByteBlockDiscardReader
+type MessageReaderI interface {
+	ea.ByteBlockDiscardReaderI
 	// BytesRead return how many bytes have been consumed from the underlying reader
 	BytesRead() int
 	// BytesPeeked return how many bytes have been peeked from the underlying reader (in-message)
@@ -18,7 +18,7 @@ type MessageReader interface {
 	DetectedBitErrors() int
 }
 
-type MessageWriter interface {
+type MessageWriterI interface {
 	io.ByteWriter
 	io.Writer
 	BeginMessage() (n int, err error)

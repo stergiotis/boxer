@@ -67,7 +67,7 @@ func (inst *PassthroughEncoder[T]) Reset() {
 	inst.delegate.Reset()
 }
 
-func (inst *PassthroughEncoder[T]) SetWriter(dest cbor.EncoderWriter) {
+func (inst *PassthroughEncoder[T]) SetWriter(dest cbor.EncoderWriterI) {
 	inst.delegate.SetWriter(dest)
 }
 

@@ -2,17 +2,17 @@ package ea
 
 import "io"
 
-type ByteBlockWriter interface {
+type ByteBlockWriterI interface {
 	io.ByteWriter
 	io.Writer
 }
 
-type ByteReadReader interface {
+type ByteReadReaderI interface {
 	io.Reader
 	io.ByteReader
 }
 
-type ByteBlockDiscardReader interface {
-	ByteReadReader
+type ByteBlockDiscardReaderI interface {
+	ByteReadReaderI
 	Discard(n int) (int, error)
 }

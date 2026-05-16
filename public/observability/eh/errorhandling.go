@@ -33,7 +33,7 @@ func (inst *singleWrappedWithStackError) Unwrap() error {
 
 var _ unwrapableSingle = (*singleWrappedWithStackError)(nil)
 var _ stackTracer = (*singleWrappedWithStackError)(nil)
-var _ ErrorWithStructuredData = (*singleWrappedWithStackError)(nil)
+var _ ErrorWithStructuredDataI = (*singleWrappedWithStackError)(nil)
 
 type multiWrappedWithStackError struct {
 	wrappedErr unwrapableMulti
@@ -63,7 +63,7 @@ func (inst *multiWrappedWithStackError) Unwrap() []error {
 
 var _ unwrapableMulti = (*multiWrappedWithStackError)(nil)
 var _ stackTracer = (*multiWrappedWithStackError)(nil)
-var _ ErrorWithStructuredData = (*multiWrappedWithStackError)(nil)
+var _ ErrorWithStructuredDataI = (*multiWrappedWithStackError)(nil)
 
 type withStackError struct {
 	err      error
@@ -89,7 +89,7 @@ func (inst *withStackError) StackTrace() StackTrace {
 
 var _ error = (*withStackError)(nil)
 var _ stackTracer = (*withStackError)(nil)
-var _ ErrorWithStructuredData = (*withStackError)(nil)
+var _ ErrorWithStructuredDataI = (*withStackError)(nil)
 
 func ErrorfWithData(cborData []byte, format string, a ...any) error {
 	err := fmt.Errorf(format, a...)

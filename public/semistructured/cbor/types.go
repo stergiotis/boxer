@@ -22,7 +22,7 @@ type DefiniteContainerEncoderI interface {
 }
 type ResetableEncoderI interface {
 	Reset()
-	SetWriter(dest EncoderWriter)
+	SetWriter(dest EncoderWriterI)
 }
 type CborPayloadEncoderI interface {
 	EncodeCborPayload(val []byte) (int, error)

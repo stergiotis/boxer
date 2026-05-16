@@ -136,7 +136,7 @@ func buildErrorTree(err error) *errNode {
 	}
 
 	// Extract structured data
-	if esd, ok := err.(ErrorWithStructuredData); ok {
+	if esd, ok := err.(ErrorWithStructuredDataI); ok {
 		data := esd.GetCBORStructuredData()
 		if len(data) > 0 {
 			diag, diagErr := cbor.Diagnose(data)

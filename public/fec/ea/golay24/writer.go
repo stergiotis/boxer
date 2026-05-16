@@ -27,7 +27,7 @@ type Writer struct {
 	totalBytesWritten int
 }
 
-var _ ea.MessageWriter = (*Writer)(nil)
+var _ ea.MessageWriterI = (*Writer)(nil)
 
 func NewWriter(w io.Writer, nAnchorBytes uint8) *Writer {
 	return &Writer{

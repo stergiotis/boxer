@@ -124,9 +124,9 @@ func TestErrorfWithData(t *testing.T) {
 		t.Fatalf("unexpected message: %q", e.Error())
 	}
 
-	esd, ok := e.(ErrorWithStructuredData)
+	esd, ok := e.(ErrorWithStructuredDataI)
 	if !ok {
-		t.Fatal("expected ErrorWithStructuredData interface")
+		t.Fatal("expected ErrorWithStructuredDataI interface")
 	}
 	got := esd.GetCBORStructuredData()
 	if !bytes.Equal(got, data) {
@@ -136,9 +136,9 @@ func TestErrorfWithData(t *testing.T) {
 
 func TestErrorfWithData_SetCBOR(t *testing.T) {
 	e := ErrorfWithData(nil, "test")
-	esd, ok := e.(ErrorWithStructuredData)
+	esd, ok := e.(ErrorWithStructuredDataI)
 	if !ok {
-		t.Fatal("expected ErrorWithStructuredData")
+		t.Fatal("expected ErrorWithStructuredDataI")
 	}
 	if esd.GetCBORStructuredData() != nil {
 		t.Fatal("expected nil initially")
@@ -157,9 +157,9 @@ func TestErrorfWithData_WrappingSingle(t *testing.T) {
 	outer := ErrorfWithData(data, "wrap: %w", inner)
 
 	// Should be singleWrappedWithStackError
-	esd, ok := outer.(ErrorWithStructuredData)
+	esd, ok := outer.(ErrorWithStructuredDataI)
 	if !ok {
-		t.Fatal("expected ErrorWithStructuredData")
+		t.Fatal("expected ErrorWithStructuredDataI")
 	}
 	if !bytes.Equal(esd.GetCBORStructuredData(), data) {
 		t.Fatal("CBOR data mismatch on single-wrapped")
@@ -176,9 +176,9 @@ func TestErrorfWithData_WrappingMulti(t *testing.T) {
 	data := []byte{0xa0}
 	outer := ErrorfWithData(data, "wrap: %w", joined)
 
-	esd, ok := outer.(ErrorWithStructuredData)
+	esd, ok := outer.(ErrorWithStructuredDataI)
 	if !ok {
-		t.Fatal("expected ErrorWithStructuredData")
+		t.Fatal("expected ErrorWithStructuredDataI")
 	}
 	if !bytes.Equal(esd.GetCBORStructuredData(), data) {
 		t.Fatal("CBOR data mismatch on multi-wrapped")
@@ -1127,9 +1127,9 @@ func TestErrorsAs_WorksThroughWrappers(t *testing.T) {
 	inner := ErrorfWithData([]byte{0xa0}, "has data")
 	outer := Errorf("wrapped: %w", inner)
 
-	var esd ErrorWithStructuredData
+	var esd ErrorWithStructuredDataI
 	if !errors.As(outer, &esd) {
-		t.Fatal("errors.As should find ErrorWithStructuredData through wrapping")
+		t.Fatal("errors.As should find ErrorWithStructuredDataI through wrapping")
 	}
 }
 
@@ -1187,9 +1187,9 @@ func TestErrorfWithData_MultiWrapped_AllMethods(t *testing.T) {
 	}
 
 	// Exercise GetCBORStructuredData / SetCBORStructuredData
-	esd, ok := outer.(ErrorWithStructuredData)
+	esd, ok := outer.(ErrorWithStructuredDataI)
 	if !ok {
-		t.Skip("not ErrorWithStructuredData — fmt.Errorf may not produce unwrapableMulti")
+		t.Skip("not ErrorWithStructuredDataI — fmt.Errorf may not produce unwrapableMulti")
 	}
 	if !bytes.Equal(esd.GetCBORStructuredData(), data) {
 		t.Fatal("CBOR data mismatch")
@@ -1270,7 +1270,7 @@ func TestErrorContainer_MarshalZerologObject(t *testing.T) {
 
 func TestErrorfWithData_NilCBOR_ThenSet(t *testing.T) {
 	err := ErrorfWithData(nil, "test")
-	esd := err.(ErrorWithStructuredData)
+	esd := err.(ErrorWithStructuredDataI)
 
 	if esd.GetCBORStructuredData() != nil {
 		t.Fatal("expected nil initially")
