@@ -11,7 +11,7 @@ type SourceRange struct {
 }
 
 // Empty reports whether the range is unset / invalid.
-func (r SourceRange) Empty() bool { return r.Stop < r.Start }
+func (inst SourceRange) Empty() bool { return inst.Stop < inst.Start }
 
 // SourceRangeFromCtx returns the byte range covered by an ANTLR
 // ParserRuleContext. Returns the zero (empty) SourceRange when either the

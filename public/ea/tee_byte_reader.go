@@ -5,22 +5,22 @@ type TeeByteReader struct {
 	w ByteBlockWriter
 }
 
-func (t *TeeByteReader) ReadByte() (b byte, err error) {
-	b, err = t.r.ReadByte()
+func (inst *TeeByteReader) ReadByte() (b byte, err error) {
+	b, err = inst.r.ReadByte()
 	if err != nil {
 		return
 	}
-	err = t.w.WriteByte(b)
+	err = inst.w.WriteByte(b)
 	return
 }
 
-func (t *TeeByteReader) Read(p []byte) (n int, err error) {
-	n, err = t.r.Read(p)
+func (inst *TeeByteReader) Read(p []byte) (n int, err error) {
+	n, err = inst.r.Read(p)
 	if err != nil {
 		return
 	}
 	if n > 0 {
-		n, err = t.w.Write(p)
+		n, err = inst.w.Write(p)
 	}
 	return
 }

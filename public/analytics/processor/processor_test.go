@@ -22,8 +22,8 @@ type TestRow struct {
 	Val string
 }
 
-func (r TestRow) GetEntityID() TestID {
-	return r.ID
+func (inst TestRow) GetEntityID() TestID {
+	return inst.ID
 }
 
 // =============================================================================

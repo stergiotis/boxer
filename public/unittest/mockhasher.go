@@ -11,35 +11,35 @@ type MockHasher struct {
 	Buf *bytes.Buffer
 }
 
-func (m *MockHasher) Sum32() uint32 {
+func (inst *MockHasher) Sum32() uint32 {
 	return 0xdeadbeef
 }
 
-func (m *MockHasher) Sum64() uint64 {
+func (inst *MockHasher) Sum64() uint64 {
 	return 0xdeadbeeffeeffeef
 }
 
-func (m *MockHasher) Write(p []byte) (n int, err error) {
-	return m.Buf.Write(p)
+func (inst *MockHasher) Write(p []byte) (n int, err error) {
+	return inst.Buf.Write(p)
 }
 
-func (m *MockHasher) Sum(b []byte) []byte {
-	_, err := m.Buf.Write(b)
+func (inst *MockHasher) Sum(b []byte) []byte {
+	_, err := inst.Buf.Write(b)
 	if err != nil {
 		log.Fatal().Err(err).Msg("unable to write to buffer")
 	}
 	return []byte{0xde, 0xad, 0xbe, 0xef}
 }
 
-func (m *MockHasher) Reset() {
-	m.Buf.Reset()
+func (inst *MockHasher) Reset() {
+	inst.Buf.Reset()
 }
 
-func (m *MockHasher) Size() int {
+func (inst *MockHasher) Size() int {
 	return 4
 }
 
-func (m *MockHasher) BlockSize() int {
+func (inst *MockHasher) BlockSize() int {
 	return 64
 }
 

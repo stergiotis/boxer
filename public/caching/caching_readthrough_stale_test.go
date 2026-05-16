@@ -17,23 +17,23 @@ type MockMetrics struct {
 	HitsL1, HitsL2, Misses, Errors, EvictsStash, EvictsDrop int
 }
 
-func (m *MockMetrics) RecordHit(l1 bool) {
+func (inst *MockMetrics) RecordHit(l1 bool) {
 	if l1 {
-		m.HitsL1++
+		inst.HitsL1++
 	} else {
-		m.HitsL2++
+		inst.HitsL2++
 	}
 }
-func (m *MockMetrics) RecordMiss()            { m.Misses++ }
-func (m *MockMetrics) RecordFetchError(c int) { m.Errors += c }
-func (m *MockMetrics) RecordEviction(stash bool) {
+func (inst *MockMetrics) RecordMiss()            { inst.Misses++ }
+func (inst *MockMetrics) RecordFetchError(c int) { inst.Errors += c }
+func (inst *MockMetrics) RecordEviction(stash bool) {
 	if stash {
-		m.EvictsStash++
+		inst.EvictsStash++
 	} else {
-		m.EvictsDrop++
+		inst.EvictsDrop++
 	}
 }
-func (m *MockMetrics) RecordFetchDuration(d time.Duration) {}
+func (inst *MockMetrics) RecordFetchDuration(d time.Duration) {}
 
 type MockFetcherV2 struct {
 	data           map[string]int
@@ -52,11 +52,11 @@ func NewMockFetcherV2() *MockFetcherV2 {
 	}
 }
 
-func (m *MockFetcherV2) DeterminePartition(key string) uint64 { return 0 }
+func (inst *MockFetcherV2) DeterminePartition(key string) uint64 { return 0 }
 
-func (m *MockFetcherV2) FetchItemSinglePartition(ctx context.Context, partition uint64, keys []string, target ItemTargetI[string, int]) error {
-	m.fetchCalls++
-	m.fetchedBatches = append(m.fetchedBatches, slices.Clone(keys))
+func (inst *MockFetcherV2) FetchItemSinglePartition(ctx context.Context, partition uint64, keys []string, target ItemTargetI[string, int]) error {
+	inst.fetchCalls++
+	inst.fetchedBatches = append(inst.fetchedBatches, slices.Clone(keys))
 
 	// Simulate Context Cancel
 	if ctx.Err() != nil {
@@ -64,20 +64,20 @@ func (m *MockFetcherV2) FetchItemSinglePartition(ctx context.Context, partition 
 	}
 
 	for _, k := range keys {
-		if m.panicKeys[k] {
+		if inst.panicKeys[k] {
 			panic(fmt.Sprintf("Panic on key %s", k))
 		}
 	}
 
 	// Check for failures
 	for _, k := range keys {
-		if m.failKeys[k] {
+		if inst.failKeys[k] {
 			return errors.New("simulated fetch error")
 		}
 	}
 
 	for _, k := range keys {
-		if v, ok := m.data[k]; ok {
+		if v, ok := inst.data[k]; ok {
 			target.AddItem(k, v)
 		}
 	}
@@ -527,8 +527,8 @@ func TestMaxKeys_SmallerThanWorkItem_ChunkedFetch(t *testing.T) {
 // Minimal fetcher for benchmarks to avoid alloc overhead of the MockFetcherV2
 type BenchFetcher struct{}
 
-func (b *BenchFetcher) DeterminePartition(key string) uint64 { return 0 }
-func (b *BenchFetcher) FetchItemSinglePartition(ctx context.Context, p uint64, keys []string, t ItemTargetI[string, int]) error {
+func (inst *BenchFetcher) DeterminePartition(key string) uint64 { return 0 }
+func (inst *BenchFetcher) FetchItemSinglePartition(ctx context.Context, p uint64, keys []string, t ItemTargetI[string, int]) error {
 	// Minimal allocation fetch
 	for _, k := range keys {
 		t.AddItem(k, 1)
