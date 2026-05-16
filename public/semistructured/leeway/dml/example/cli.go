@@ -413,7 +413,7 @@ func NewCliCommand() *cli.Command {
 								i++
 							}
 						}
-						records, err = dml.WriteArrowRecords(ent, records, w, w2)
+						_, err = dml.WriteArrowRecords(ent, records, w, w2)
 						if err != nil {
 							err = eh.Errorf("unable to write arrow records: %w", err)
 							return

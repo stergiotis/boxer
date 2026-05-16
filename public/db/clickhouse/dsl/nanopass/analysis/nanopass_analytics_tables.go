@@ -24,11 +24,9 @@ func ExtractTables(pr *nanopass.ParseResult) (refs []TableRef) {
 		}
 		// Skip TableIdentifier nodes that are children of ColumnIdentifier —
 		// those are column qualifiers (e.g. "t1" in "t1.id"), not table references.
-		parent := ctx.GetParent()
-		if parent != nil {
-			if _, isColId := parent.(*grammar1.ColumnIdentifierContext); isColId {
-				return false
-			}
+		// A nil parent fails the type assertion, so no separate nil check.
+		if _, isColId := ctx.GetParent().(*grammar1.ColumnIdentifierContext); isColId {
+			return false
 		}
 		return true
 	})

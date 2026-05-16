@@ -112,6 +112,7 @@ func TestGoClassBuilderSample(t *testing.T) {
 		manip.SetTableName("sample")
 		var tblDesc common.TableDesc
 		tblDesc, err = manip.BuildTableDesc()
+		require.NoError(t, err)
 		var wellFormed bool
 		sourceCode, wellFormed, err = driver.GenerateGoClasses("example", naming.MustBeValidStylableName("testtable"), tblDesc, tableRowConfig, namingConvention)
 		var _ = sourceCode

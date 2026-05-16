@@ -151,15 +151,19 @@ func (inst *Encoder) EncodeBool(val bool) (n int, err error) {
 }
 func (inst *Encoder) EncodeFloat32(val float32) (n int, err error) {
 	n, err = inst.encodeHeadSmall(MajorTypeFloatOrSimple, 26)
-	binary.BigEndian.AppendUint32(inst.scratch8[:0], math.Float32bits(val))
-
-	return inst.writeBytes(inst.scratch8, n)
+	if err != nil {
+		return
+	}
+	binary.BigEndian.PutUint32(inst.scratch8[:4], math.Float32bits(val))
+	return inst.writeBytes(inst.scratch8[:4], n)
 }
 func (inst *Encoder) EncodeFloat64(val float64) (n int, err error) {
 	n, err = inst.encodeHeadSmall(MajorTypeFloatOrSimple, 27)
-	binary.BigEndian.AppendUint64(inst.scratch8[:0], math.Float64bits(val))
-
-	return inst.writeBytes(inst.scratch8, n)
+	if err != nil {
+		return
+	}
+	binary.BigEndian.PutUint64(inst.scratch8[:8], math.Float64bits(val))
+	return inst.writeBytes(inst.scratch8[:8], n)
 }
 
 func (inst *Encoder) EncodeNil() (n int, err error) {

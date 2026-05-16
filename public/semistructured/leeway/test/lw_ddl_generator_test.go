@@ -38,8 +38,8 @@ func TestDdlGenerator(t *testing.T) {
 		err = gen.GenerateColumnsCode(ir.IterateColumnProps(), tableRowConfig, conv, tech, func(hint encodingaspects.AspectE) (ok bool, msg string) {
 			var status common2.ImplementationStatusE
 			status, msg = tech.GetEncodingHintImplementationStatus(hint)
-			ok = status == common2.ImplementationStatusFull
-			ok = true // FIXME arrow dictionary
+			_ = status
+			ok = true // FIXME arrow dictionary: revert to `status == common2.ImplementationStatusFull` once dictionary encoding is supported
 			return
 		})
 		require.NoError(t, err)

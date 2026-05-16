@@ -472,6 +472,9 @@ func (inst *GoClassBuilder) composeStateVerificationCode(allowedSrcStates []runt
 	default:
 		_, err = b.WriteString(`	switch inst.state {
 	case `)
+		if err != nil {
+			return
+		}
 		for i, s := range allowedSrcStates {
 			if i > 0 {
 				_, err = fmt.Fprintf(b, `, runtime.%s`, runtime.EntityStateVariableNames[s])
@@ -488,6 +491,9 @@ func (inst *GoClassBuilder) composeStateVerificationCode(allowedSrcStates []runt
 %s
 	}
 `, onErrCode)
+		if err != nil {
+			return
+		}
 	}
 	return
 }
@@ -517,6 +523,9 @@ func (inst *GoClassBuilder) composeStateTransitionCode(allowedSrcStates []runtim
 		inst.state = runtime.%s
 		break
 `, runtime.EntityStateVariableNames[destState])
+		if err != nil {
+			return
+		}
 	}
 	if errReturnValue {
 		_, err = fmt.Fprintf(b, `	default:
@@ -831,6 +840,9 @@ func (inst *GoClassBuilder) ComposeAttributeCode(clsNamer gocodegen.GoClassNamer
 						}
 						if instRetrExpr != "" {
 							_, err = b.WriteString(" " + instRetrExpr)
+							if err != nil {
+								return
+							}
 						}
 						_, err = b.WriteString("\n}\n")
 						if err != nil {
@@ -1020,6 +1032,9 @@ func (inst *GoClassBuilder) ComposeSectionCode(clsNamer gocodegen.GoClassNamerI,
 			return
 		}
 		err = inst.composeStateTransitionCode([]runtime.EntityStateE{runtime.EntityStateInAttribute}, runtime.EntityStateInSection, false, "")
+		if err != nil {
+			return
+		}
 		_, err = b.WriteString(`}
 `)
 		if err != nil {

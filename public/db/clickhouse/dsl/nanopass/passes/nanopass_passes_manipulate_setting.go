@@ -345,7 +345,8 @@ func ModifySettings(modifier func(settings map[string]any) error) nanopass.Pass 
 			if err != nil {
 				return "", err
 			}
-			if err := modifier(settings); err != nil {
+			err = modifier(settings)
+			if err != nil {
 				return "", eh.Errorf("ModifySettings: %w", err)
 			}
 			out, err := writeSettingsBody(settings, body)

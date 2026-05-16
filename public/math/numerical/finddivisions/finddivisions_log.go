@@ -27,8 +27,7 @@ func TalbotLogarithmic(dmin, dmax float64, m int, opts TalbotOptions, scorer Leg
 
 	rangeDecades := lmax - lmin
 	if rangeDecades > 1.5 {
-		// Strict powers of 10 for wide ranges
-		logQ = []float64{1}
+		// Strict powers of 10 for wide ranges.
 		// Q values represent LOG-steps.
 		// 1.0  = 1 Decade (10^1)
 		// 0.5  = sqrt(10) (~3.16)
