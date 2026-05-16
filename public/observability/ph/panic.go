@@ -21,8 +21,9 @@ func ConvertPanicToError(panicErr any) error {
 	}
 }
 func PanicHandler(exitCode int, afterPanic func(), ensure func()) {
-	if err := recover(); err != nil {
-		e := ConvertPanicToError(err)
+	panicErr := recover()
+	if panicErr != nil {
+		e := ConvertPanicToError(panicErr)
 		log.Error().Err(e).Msg("program panicked")
 		if ensure != nil {
 			ensure()
