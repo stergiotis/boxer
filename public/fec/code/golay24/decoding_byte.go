@@ -47,43 +47,6 @@ func DecodeLowLevel1(dstPreallocated []byte, g24 []byte, nCodeWords uint32) {
 	}
 }
 
-func DecodeLowLevel2(dstPreallocated []byte, g24 []byte, nCodeWords uint32) {
-	codeWord := uint32(0)
-	next := 0
-	even := true
-	carry := byte(0)
-	p := 0
-	for _, b := range g24 {
-		switch next {
-		case 0:
-			codeWord = uint32(b) << 16
-			next = 1
-		case 1:
-			codeWord |= uint32(b) << 8
-			next = 2
-		case 2:
-			codeWord |= uint32(b)
-			decoded := DecodeSingle(codeWord)
-			next = 0
-
-			if even {
-				// even code word
-				dstPreallocated[p] = byte(decoded >> 4)
-				p++
-				carry = byte((decoded & 0b1111) << 4)
-				even = false
-			} else {
-				// odd code word
-				dstPreallocated[p] = carry | byte(decoded>>8)
-				p++
-				dstPreallocated[p] = byte(decoded)
-				p++
-				even = true
-			}
-		}
-	}
-}
-
 func DecodeLowLevel(dstPreallocated []byte, g24 []byte) {
 	codeWord := uint32(0)
 	next := 0
@@ -119,6 +82,4 @@ func DecodeLowLevel(dstPreallocated []byte, g24 []byte) {
 			}
 		}
 	}
-
-	return
 }

@@ -2,7 +2,6 @@ package common
 
 import (
 	"bytes"
-	"iter"
 	"slices"
 
 	"github.com/rs/zerolog/log"
@@ -204,7 +203,7 @@ func (inst *TableManipulator) mergeTaggedValueColumn(sectionName naming.Stylable
 	}
 	return
 }
-func (inst *TableManipulator) LoadFromIntermediates(it iter.Seq2[IntermediateColumnContext, *IntermediateColumnProps]) (err error) {
+func (inst *TableManipulator) LoadFromIntermediates(it IntermediateColumnIterator) (err error) {
 	tmpStatesPlain := make([]intermediateTmpState, MaxPlainItemTypeExcl)
 	tmpStatesTagged := make(map[string]intermediateTmpState, 128)
 	sectionNames := make([]naming.StylableName, 0, 128)

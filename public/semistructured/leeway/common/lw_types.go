@@ -66,7 +66,7 @@ type IntermediatePlainValuesDesc struct {
 	StreamingGroup                  naming.Key               `cbor:"streamingGroup"`
 	ItemType                        PlainItemTypeE           `cbor:"itemType"`
 }
-type IntermediateColumnIterator = iter.Seq2[IntermediateColumnContext, *IntermediateColumnProps]
+type IntermediateColumnIterator iter.Seq2[IntermediateColumnContext, *IntermediateColumnProps]
 type IntermediateTableRepresentation struct {
 	PlainValueDesc  []*IntermediatePlainValuesDesc  `cbor:"plainValueDesc"`
 	TaggedValueDesc []*IntermediateTaggedValuesDesc `cbor:"taggedValueDesc"`
