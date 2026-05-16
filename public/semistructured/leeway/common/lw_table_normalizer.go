@@ -27,6 +27,36 @@ func (inst *TableNormalizer) Equal(other *TableNormalizer) (same bool) {
 func (inst *TableNormalizer) Scramble(table *TableDesc, rnd *rand.Rand) {
 
 }
+
+// ScrambleOrder is the inverse of normalizeOrder: it randomly permutes the
+// row order in PlainValues* and TaggedValuesSections (and within each
+// section's value columns) so tests can exercise the Normalize path against
+// an input that is guaranteed to need re-sorting.
+func (inst *TableNormalizer) ScrambleOrder(table *TableDesc, rnd *rand.Rand) {
+	rnd.Shuffle(len(table.PlainValuesNames), func(i, j int) {
+		table.PlainValuesNames[j], table.PlainValuesNames[i] = table.PlainValuesNames[i], table.PlainValuesNames[j]
+		table.PlainValuesItemTypes[j], table.PlainValuesItemTypes[i] = table.PlainValuesItemTypes[i], table.PlainValuesItemTypes[j]
+		table.PlainValuesValueSemantics[j], table.PlainValuesValueSemantics[i] = table.PlainValuesValueSemantics[i], table.PlainValuesValueSemantics[j]
+		table.PlainValuesEncodingHints[j], table.PlainValuesEncodingHints[i] = table.PlainValuesEncodingHints[i], table.PlainValuesEncodingHints[j]
+		table.PlainValuesTypes[j], table.PlainValuesTypes[i] = table.PlainValuesTypes[i], table.PlainValuesTypes[j]
+	})
+	rnd.Shuffle(len(table.TaggedValuesSections), func(i, j int) {
+		table.TaggedValuesSections[j], table.TaggedValuesSections[i] = table.TaggedValuesSections[i], table.TaggedValuesSections[j]
+	})
+	for k := 0; k < len(table.TaggedValuesSections); k++ {
+		rnd.Shuffle(len(table.TaggedValuesSections[k].ValueColumnNames), func(i, j int) {
+			table.TaggedValuesSections[k].ValueColumnNames[j], table.TaggedValuesSections[k].ValueColumnNames[i] =
+				table.TaggedValuesSections[k].ValueColumnNames[i], table.TaggedValuesSections[k].ValueColumnNames[j]
+			table.TaggedValuesSections[k].ValueSemantics[j], table.TaggedValuesSections[k].ValueSemantics[i] =
+				table.TaggedValuesSections[k].ValueSemantics[i], table.TaggedValuesSections[k].ValueSemantics[j]
+			table.TaggedValuesSections[k].ValueEncodingHints[j], table.TaggedValuesSections[k].ValueEncodingHints[i] =
+				table.TaggedValuesSections[k].ValueEncodingHints[i], table.TaggedValuesSections[k].ValueEncodingHints[j]
+			table.TaggedValuesSections[k].ValueColumnTypes[j], table.TaggedValuesSections[k].ValueColumnTypes[i] =
+				table.TaggedValuesSections[k].ValueColumnTypes[i], table.TaggedValuesSections[k].ValueColumnTypes[j]
+		})
+	}
+}
+
 func (inst *TableNormalizer) Normalize(table *TableDesc) (nameChanges bool, reorderPlain bool, reorderTagged bool, err error) {
 	err = inst.validator.ValidateTable(table)
 	if err != nil {
