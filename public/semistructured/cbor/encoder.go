@@ -12,16 +12,16 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-type MajorType uint8
+type MajorTypeE uint8
 
-const MajorTypePositiveInt MajorType = 0
-const MajorTypeNegativeInt MajorType = 1
-const MajorTypeByteString MajorType = 2
-const MajorTypeUtf8String MajorType = 3
-const MajorTypeArray MajorType = 4
-const MajorTypeMap MajorType = 5
-const MajorTypeTag MajorType = 6
-const MajorTypeFloatOrSimple MajorType = 7
+const MajorTypePositiveInt MajorTypeE = 0
+const MajorTypeNegativeInt MajorTypeE = 1
+const MajorTypeByteString MajorTypeE = 2
+const MajorTypeUtf8String MajorTypeE = 3
+const MajorTypeArray MajorTypeE = 4
+const MajorTypeMap MajorTypeE = 5
+const MajorTypeTag MajorTypeE = 6
+const MajorTypeFloatOrSimple MajorTypeE = 7
 
 type EncoderWriterI interface {
 	io.ByteWriter
@@ -82,7 +82,7 @@ func (inst *Encoder) EncodeInt(val int64) (int, error) {
 	}
 }
 
-func (inst *Encoder) encodeHead(majorType MajorType, val uint64) (int, error) {
+func (inst *Encoder) encodeHead(majorType MajorTypeE, val uint64) (int, error) {
 	if val < 24 {
 		return inst.encodeHeadSmall(majorType, uint8(val))
 	} else if val <= 255 {
@@ -311,14 +311,14 @@ func (inst *Encoder) Hash(b []byte) (hash []byte, err error) {
 	return
 }
 
-func (inst *Encoder) encodeHeadSmall(majorType MajorType, val uint8) (int, error) {
+func (inst *Encoder) encodeHeadSmall(majorType MajorTypeE, val uint8) (int, error) {
 	return inst.writeSingleByte(uint8(majorType)<<5|val, 0)
 }
 func (inst *Encoder) EncodeTagSmall(val TagSmall) (int, error) {
 	return inst.encodeHeadSmall(6, uint8(val))
 }
 
-func (inst *Encoder) encodeHead8Bit(majorType MajorType, val uint8) (n int, err error) {
+func (inst *Encoder) encodeHead8Bit(majorType MajorTypeE, val uint8) (n int, err error) {
 	n, err = inst.writeSingleByte(uint8(majorType)<<5|24, 0)
 	if err != nil {
 		return
@@ -339,7 +339,7 @@ func (inst *Encoder) EncodeTag64(val TagUint64) (int, error) {
 	return inst.encodeHead64Bit(MajorTypeTag, uint64(val))
 }
 
-func (inst *Encoder) encodeHead16Bit(majorType MajorType, val uint16) (n int, err error) {
+func (inst *Encoder) encodeHead16Bit(majorType MajorTypeE, val uint16) (n int, err error) {
 	n, err = inst.writeSingleByte(uint8(majorType)<<5|25, 0)
 	if err != nil {
 		return
@@ -356,7 +356,7 @@ func (inst *Encoder) TagUint16(val TagUint16) (int, error) {
 	return inst.encodeHead16Bit(MajorTypeTag, uint16(val))
 }
 
-func (inst *Encoder) encodeHead32Bit(majorType MajorType, val uint32) (n int, err error) {
+func (inst *Encoder) encodeHead32Bit(majorType MajorTypeE, val uint32) (n int, err error) {
 	n, err = inst.writeSingleByte(uint8(majorType)<<5|26, 0)
 	if err != nil {
 		return
@@ -383,7 +383,7 @@ func (inst *Encoder) TagUint32(val TagUint32) (int, error) {
 	return inst.encodeHead32Bit(MajorTypeTag, uint32(val))
 }
 
-func (inst *Encoder) encodeHead64Bit(majorType MajorType, val uint64) (n int, err error) {
+func (inst *Encoder) encodeHead64Bit(majorType MajorTypeE, val uint64) (n int, err error) {
 	n, err = inst.writeSingleByte(uint8(majorType)<<5|27, 0)
 	if err != nil {
 		return

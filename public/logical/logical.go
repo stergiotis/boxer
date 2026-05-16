@@ -1,26 +1,26 @@
 package logical
 
-type Tristate int8
+type TristateE int8
 
 const (
-	TriFalse Tristate = -1
-	TriNil   Tristate = 0
-	TriTrue  Tristate = 1
+	TristateFalse TristateE = -1
+	TristateNil   TristateE = 0
+	TristateTrue  TristateE = 1
 )
 
-func (inst Tristate) IsFalse() bool {
-	return inst == TriFalse
+func (inst TristateE) IsFalse() bool {
+	return inst == TristateFalse
 }
-func (inst Tristate) IsTrue() bool {
-	return inst == TriTrue
+func (inst TristateE) IsTrue() bool {
+	return inst == TristateTrue
 }
-func (inst Tristate) IsNil() bool {
-	return inst == TriNil
+func (inst TristateE) IsNil() bool {
+	return inst == TristateNil
 }
 
-func TriFromBool(b bool) Tristate {
+func TristateFromBool(b bool) TristateE {
 	if b {
-		return TriTrue
+		return TristateTrue
 	}
-	return TriFalse
+	return TristateFalse
 }
