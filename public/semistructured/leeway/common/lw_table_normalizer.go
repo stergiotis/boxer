@@ -28,6 +28,31 @@ func (inst *TableNormalizer) Scramble(table *TableDesc, rnd *rand.Rand) {
 
 }
 
+// ScrambleNames is the inverse of normalizeNames: it rewrites every name in
+// the table to a randomly-chosen NamingStyle so tests can exercise the
+// Normalize path against an input that is guaranteed to need re-styling.
+func (inst *TableNormalizer) ScrambleNames(table *TableDesc, rnd *rand.Rand) {
+	l := len(naming.AllNamingStyles)
+	for i, name := range table.PlainValuesNames {
+		ns := naming.AllNamingStyles[rnd.IntN(l)]
+		newName := naming.ConvertNameStyle(name, ns)
+		table.PlainValuesNames[i] = newName
+	}
+	for i, sec := range table.TaggedValuesSections {
+		{
+			ns := naming.AllNamingStyles[rnd.IntN(l)]
+			newName := naming.ConvertNameStyle(sec.Name, ns)
+			sec.Name = newName
+		}
+		for j, name := range sec.ValueColumnNames {
+			ns := naming.AllNamingStyles[rnd.IntN(l)]
+			newName := naming.ConvertNameStyle(name, ns)
+			sec.ValueColumnNames[j] = newName
+		}
+		table.TaggedValuesSections[i] = sec
+	}
+}
+
 // ScrambleOrder is the inverse of normalizeOrder: it randomly permutes the
 // row order in PlainValues* and TaggedValuesSections (and within each
 // section's value columns) so tests can exercise the Normalize path against
