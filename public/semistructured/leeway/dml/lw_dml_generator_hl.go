@@ -85,7 +85,7 @@ import (
 		return
 	}
 
-	sourceCode = unsafeperf.UnsafeStringToByte(s.String())
+	sourceCode = unsafeperf.UnsafeStringToBytes(s.String())
 	{ // try formatting source code
 		var formatted []byte
 		formatted, err = format.Source(sourceCode)

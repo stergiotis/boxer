@@ -3,13 +3,29 @@ package eh
 import (
 	"fmt"
 	"os"
-	"runtime"
+	"os/exec"
 	"strings"
+	"sync"
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
+
+var detectedGoRoot = sync.OnceValue(func() string {
+	// Prefer the env var so users can override without invoking go.
+	if r := os.Getenv("GOROOT"); r != "" {
+		return r
+	}
+	// runtime.GOROOT was deprecated in Go 1.24: the build-time value can be
+	// wrong when the binary is copied across machines. Query the installed
+	// go tool once instead — empty result is fine (path just isn't shortened).
+	out, err := exec.Command("go", "env", "GOROOT").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+})
 
 type FrameTypeE uint8
 
@@ -57,7 +73,7 @@ func (inst *frameContainer) CleanupAndResolveType() {
 		inst.File = f
 		return
 	}
-	if strings.HasPrefix(f, runtime.GOROOT()) {
+	if r := detectedGoRoot(); r != "" && strings.HasPrefix(f, r) {
 		inst.Type = FrameTypeGoRoot
 		return
 	}

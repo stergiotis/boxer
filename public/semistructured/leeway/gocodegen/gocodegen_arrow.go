@@ -51,7 +51,7 @@ func GoTypeToArrowType(ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspec
 				return
 			}
 			if builderCls == "BinaryDictionary" {
-				prefix = "unsafeperf.UnsafeStringToByte("
+				prefix = "unsafeperf.UnsafeStringToBytes("
 				suffix = ")"
 			}
 		case canonicaltypes2.BaseTypeStringBytes:

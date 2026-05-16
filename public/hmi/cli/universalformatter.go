@@ -93,7 +93,7 @@ func (inst *UniversalCliFormatter) FormatValue(context *cli.Context, v any) (err
 	case "go-stringer":
 		s, ok := v.(fmt.Stringer)
 		if ok {
-			_, err = out.Write(unsafeperf.UnsafeStringToByte(s.String()))
+			_, err = out.Write(unsafeperf.UnsafeStringToBytes(s.String()))
 			if err == nil {
 				_, err = out.Write([]byte("\n"))
 			}
@@ -133,7 +133,7 @@ func (inst *UniversalCliFormatter) FormatValue(context *cli.Context, v any) (err
 				var diag string
 				diag, err = inst.cborDiagMode.Diagnose(b.Bytes())
 				if err == nil {
-					_, err = out.Write(unsafeperf.UnsafeStringToByte(diag))
+					_, err = out.Write(unsafeperf.UnsafeStringToBytes(diag))
 					if err == nil {
 						_, err = out.Write([]byte("\n"))
 					}
