@@ -32,6 +32,19 @@ type Options struct {
 	// header (e.g. "go generate ./public/config/env/..."). Empty
 	// suppresses the hint paragraph.
 	RegenerateHint string
+
+	// Status sets the front-matter `status:` value. Empty defaults to
+	// "draft" — machine-generated registry snapshots are pre-human-
+	// review by definition (DOCUMENTATION_STANDARD §4), so promoting
+	// to "stable" / "accepted" requires an explicit opt-in via this
+	// field plus matching ReviewedBy / ReviewedDate (DL003).
+	Status string
+
+	// ReviewedBy / ReviewedDate populate the matching front-matter
+	// fields (DL003); only honoured when Status is "stable" /
+	// "accepted". Empty values are omitted.
+	ReviewedBy   string
+	ReviewedDate string
 }
 
 // Render reads env.Snapshot() and returns the full markdown body.
@@ -55,17 +68,48 @@ func renderSpecs(specs []env.Spec, opts Options) (out string) {
 		return string(cats[i]) < string(cats[j])
 	})
 
+	status := opts.Status
+	if status == "" {
+		// Machine-generated registry snapshots are pre-human-review by
+		// definition; default to "draft" so DL003 doesn't fire on
+		// stable-without-reviewed-by — matches the rest of the
+		// auto-generated skill assets (doc/skills/*/assets/) per
+		// DOCUMENTATION_STANDARD §4.
+		status = "draft"
+	}
+
 	var b strings.Builder
 	b.WriteString("---\n")
 	b.WriteString("type: reference\n")
 	b.WriteString("audience: contributor\n")
-	b.WriteString("status: stable\n")
+	fmt.Fprintf(&b, "status: %s\n", status)
 	b.WriteString("generated: true\n")
 	if opts.GeneratorPath != "" {
 		fmt.Fprintf(&b, "generator: %s\n", opts.GeneratorPath)
 	}
 	fmt.Fprintf(&b, "generated-at: %s\n", time.Now().UTC().Format(time.RFC3339))
+	// Review metadata: only emitted for stable / accepted statuses (DL003
+	// requires both for non-draft statuses). Draft outputs leave them
+	// off so the snapshot stays self-consistent with the draft banner.
+	if status == "stable" || status == "accepted" {
+		if opts.ReviewedBy != "" {
+			fmt.Fprintf(&b, "reviewed-by: %s\n", opts.ReviewedBy)
+		}
+		if opts.ReviewedDate != "" {
+			fmt.Fprintf(&b, "reviewed-date: %s\n", opts.ReviewedDate)
+		}
+	}
 	b.WriteString("---\n\n")
+
+	// Matching draft banner (DL004) when status is draft. Mirrors the
+	// canonical phrasing used by hand-authored doc/ files; the second
+	// line provides context specific to machine-generated registries.
+	if status == "draft" {
+		b.WriteString("> **Status: draft — pre-human-review.** Machine-generated registry snapshot;\n")
+		b.WriteString("> regenerated on every IDL or env.Spec change. Do not promote to stable\n")
+		b.WriteString("> without freezing the registry contents and adding reviewed-by /\n")
+		b.WriteString("> reviewed-date metadata.\n\n")
+	}
 
 	b.WriteString("# Environment variables\n\n")
 	if opts.GeneratorPath != "" {
