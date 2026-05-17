@@ -65,15 +65,32 @@ func (inst *PathVar) setCached(value string) {
 	inst.cached = true
 }
 
+// WithPathAction attaches a caller-supplied Action func to the
+// cli.PathFlag returned by AsCliFlag. The user action runs first; on
+// success the parsed (and ~-expanded by the cache) value is written to
+// the cache.
+func WithPathAction(fn func(ctx *cli.Context, parsed string) error) (opt FlagOption) {
+	return func(o *flagOptions) {
+		o.actionFn = fn
+	}
+}
+
 func (inst *PathVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
 	fo := resolveFlagOptions(inst.spec, opts)
+	userAction, _ := fo.actionFn.(func(*cli.Context, string) error)
 	return &cli.PathFlag{
 		Name:     fo.cliFlagName,
 		Usage:    inst.spec.Description,
 		Category: string(inst.spec.Category),
 		EnvVars:  []string{inst.spec.Name},
 		Value:    inst.spec.Default,
-		Action: func(_ *cli.Context, parsed string) (err error) {
+		Action: func(ctx *cli.Context, parsed string) (err error) {
+			if userAction != nil {
+				err = userAction(ctx, parsed)
+				if err != nil {
+					return
+				}
+			}
 			inst.setCached(parsed)
 			return
 		},

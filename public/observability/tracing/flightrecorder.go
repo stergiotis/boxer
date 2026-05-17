@@ -10,37 +10,50 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/urfave/cli/v2"
 )
 
 var flightRecorder *trace.FlightRecorder
-var flightRecorderOutputFile string
 var flightRecorderOutputMtx sync.Mutex
 
+// Environment variable declarations for the tracing subsystem.
+var (
+	FlightRecorder = env.NewBool(env.Spec{
+		Name:        "BOXER_FLIGHT_RECORDER",
+		Description: "enable the Go runtime flight recorder",
+		Category:    env.CategoryObservability,
+		CliFlagName: "flightRecorder",
+	})
+
+	FlightRecorderOutputFile = env.NewPath(env.Spec{
+		Name:        "BOXER_FLIGHT_RECORDER_OUTPUT_FILE",
+		Default:     "flightRecorder.trace",
+		Description: "destination path for the flight recorder trace dump",
+		Category:    env.CategoryObservability,
+		CliFlagName: "flightRecorderOutputFile",
+	})
+)
+
 var TracingFlags = []cli.Flag{
-	&cli.BoolFlag{
-		Name:     "flightRecorder",
-		Category: "tracing",
-		EnvVars:  []string{"BOXER_FLIGHT_RECORDER"},
-		Action: func(context *cli.Context, b bool) error {
-			if !context.Bool("flightRecorder") {
-				return nil
-			}
-			cfg := trace.FlightRecorderConfig{
-				MinAge:   time.Second * 10,
-				MaxBytes: 128 * 1024 * 1024,
-			}
-			flightRecorder = trace.NewFlightRecorder(cfg)
-			err := flightRecorder.Start()
-			if err != nil {
-				return eh.Errorf("unable to start flight recorder")
-			}
-			log.Info().Msg("started golang flight recorder")
+	FlightRecorder.AsCliFlag(env.WithBoolAction(func(context *cli.Context, b bool) error {
+		if !b {
 			return nil
-		},
-	},
+		}
+		cfg := trace.FlightRecorderConfig{
+			MinAge:   time.Second * 10,
+			MaxBytes: 128 * 1024 * 1024,
+		}
+		flightRecorder = trace.NewFlightRecorder(cfg)
+		err := flightRecorder.Start()
+		if err != nil {
+			return eh.Errorf("unable to start flight recorder")
+		}
+		log.Info().Msg("started golang flight recorder")
+		return nil
+	})),
 	&cli.StringSliceFlag{
 		Name: "flightRecorderFlushOnSignal",
 		Action: func(context *cli.Context, signalNames []string) error {
@@ -63,7 +76,7 @@ var TracingFlags = []cli.Flag{
 			go func() {
 				for {
 					sig := <-sigChan
-					writeFlightRecorderTrace(flightRecorderOutputFile)
+					writeFlightRecorderTrace(FlightRecorderOutputFile.Get())
 					// see https://stackoverflow.com/questions/61487783/how-can-you-avoid-races-in-overriding-gos-default-signal-handlers
 					// for a discussion
 					switch sig {
@@ -76,16 +89,7 @@ var TracingFlags = []cli.Flag{
 			return nil
 		},
 	},
-	&cli.PathFlag{
-		EnvVars:  []string{"BOXER_FLIGHT_RECORDER_OUTPUT_FILE"},
-		Name:     "flightRecorderOutputFile",
-		Value:    "flightRecorder.trace",
-		Category: "tracing",
-		Action: func(context *cli.Context, path cli.Path) error {
-			flightRecorderOutputFile = path
-			return nil
-		},
-	},
+	FlightRecorderOutputFile.AsCliFlag(),
 }
 
 func writeFlightRecorderTrace(d string) {
@@ -125,5 +129,5 @@ func TracingHandleExit(context *cli.Context) {
 	if flightRecorder == nil {
 		return
 	}
-	writeFlightRecorderTrace(flightRecorderOutputFile)
+	writeFlightRecorderTrace(FlightRecorderOutputFile.Get())
 }

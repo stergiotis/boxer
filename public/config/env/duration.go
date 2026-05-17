@@ -80,8 +80,18 @@ func (inst *DurationVar) setCached(value time.Duration) {
 	inst.cached = true
 }
 
+// WithDurationAction attaches a caller-supplied Action func to the
+// cli.DurationFlag returned by AsCliFlag. The user action runs first;
+// on success the parsed value is written to the cache.
+func WithDurationAction(fn func(ctx *cli.Context, parsed time.Duration) error) (opt FlagOption) {
+	return func(o *flagOptions) {
+		o.actionFn = fn
+	}
+}
+
 func (inst *DurationVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
 	fo := resolveFlagOptions(inst.spec, opts)
+	userAction, _ := fo.actionFn.(func(*cli.Context, time.Duration) error)
 	defaultValue := time.Duration(0)
 	if inst.spec.Default != "" {
 		defaultValue = inst.parseDefault()
@@ -92,7 +102,13 @@ func (inst *DurationVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
 		Category: string(inst.spec.Category),
 		EnvVars:  []string{inst.spec.Name},
 		Value:    defaultValue,
-		Action: func(_ *cli.Context, parsed time.Duration) (err error) {
+		Action: func(ctx *cli.Context, parsed time.Duration) (err error) {
+			if userAction != nil {
+				err = userAction(ctx, parsed)
+				if err != nil {
+					return
+				}
+			}
 			inst.setCached(parsed)
 			return
 		},

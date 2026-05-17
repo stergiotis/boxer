@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/fxamacker/cbor/v2"
+	"github.com/stergiotis/boxer/public/config/env"
 )
 
 // FormatError produces a human-readable, terminal-friendly representation of
@@ -211,9 +212,9 @@ func shortenPath(path string) string {
 	}
 
 	// Strip GOPATH
-	gopath := os.Getenv("GOPATH")
+	gopath := env.GoPath.Get()
 	if gopath == "" {
-		gopath = filepath.Join(os.Getenv("HOME"), "go")
+		gopath = filepath.Join(env.Home.Get(), "go")
 	}
 	gopathSrc := gopath + "/src/"
 	if strings.HasPrefix(path, gopathSrc) {

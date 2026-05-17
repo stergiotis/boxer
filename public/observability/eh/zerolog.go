@@ -10,11 +10,13 @@ import (
 	"github.com/fxamacker/cbor/v2"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/config/env"
 )
 
 var detectedGoRoot = sync.OnceValue(func() string {
 	// Prefer the env var so users can override without invoking go.
-	if r := os.Getenv("GOROOT"); r != "" {
+	r := env.GoRoot.Get()
+	if r != "" {
 		return r
 	}
 	// runtime.GOROOT was deprecated in Go 1.24: the build-time value can be
@@ -84,7 +86,7 @@ func (inst *frameContainer) CleanupAndResolveType() {
 // environment variable. If $GOPATH is empty or the input path is not contained
 // within any of the src directories in $GOPATH, the original path is returned.
 func removeGoPath(path string) string {
-	gopath := os.Getenv("GOPATH")
+	gopath := env.GoPath.Get()
 	if gopath == "" {
 		return path
 	}

@@ -53,8 +53,13 @@ type Spec struct {
 // FlagOption customises the cli.Flag returned by Var.AsCliFlag.
 type FlagOption func(opts *flagOptions)
 
+// flagOptions carries the user-supplied customisations applied to
+// AsCliFlag's output. actionFn is typed per-Var via the WithXxxAction
+// helpers; each typed AsCliFlag type-asserts it to the matching
+// signature and chains it after the spec-derived cache write.
 type flagOptions struct {
 	cliFlagName string
+	actionFn    any
 }
 
 // WithCliFlagName overrides Spec.CliFlagName for the produced cli.Flag.

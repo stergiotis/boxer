@@ -80,8 +80,18 @@ func (inst *IntVar) setCached(value int64) {
 	inst.cached = true
 }
 
+// WithInt64Action attaches a caller-supplied Action func to the
+// cli.Int64Flag returned by AsCliFlag. The user action runs first; on
+// success the parsed value is written to the cache.
+func WithInt64Action(fn func(ctx *cli.Context, parsed int64) error) (opt FlagOption) {
+	return func(o *flagOptions) {
+		o.actionFn = fn
+	}
+}
+
 func (inst *IntVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
 	fo := resolveFlagOptions(inst.spec, opts)
+	userAction, _ := fo.actionFn.(func(*cli.Context, int64) error)
 	defaultValue := int64(0)
 	if inst.spec.Default != "" {
 		defaultValue = inst.parseDefault()
@@ -92,7 +102,13 @@ func (inst *IntVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
 		Category: string(inst.spec.Category),
 		EnvVars:  []string{inst.spec.Name},
 		Value:    defaultValue,
-		Action: func(_ *cli.Context, parsed int64) (err error) {
+		Action: func(ctx *cli.Context, parsed int64) (err error) {
+			if userAction != nil {
+				err = userAction(ctx, parsed)
+				if err != nil {
+					return
+				}
+			}
 			inst.setCached(parsed)
 			return
 		},

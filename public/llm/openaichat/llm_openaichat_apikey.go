@@ -7,8 +7,28 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+)
+
+// Sensitive credentials surfaced as the canonical Gemini/Google API key
+// inputs. Marked Sensitive so the doc generator and `env list`
+// subcommand redact the live value.
+var (
+	GeminiApiKey = env.NewString(env.Spec{
+		Name:        "GEMINI_API_KEY",
+		Description: "Google AI Studio / Gemini API key (primary)",
+		Category:    env.CategoryLLM,
+		Sensitive:   true,
+	})
+
+	GoogleApiKey = env.NewString(env.Spec{
+		Name:        "GOOGLE_API_KEY",
+		Description: "Google API key — secondary lookup if GEMINI_API_KEY is unset",
+		Category:    env.CategoryLLM,
+		Sensitive:   true,
+	})
 )
 
 // LoadGeminiApiKey resolves the Google AI Studio / Gemini API key from a
@@ -23,11 +43,11 @@ import (
 // The file fallback follows the same convention the gemini CLI uses; the
 // trailing newline (if any) is stripped.
 func LoadGeminiApiKey() (key string, err error) {
-	key = os.Getenv("GEMINI_API_KEY")
+	key = GeminiApiKey.Get()
 	if key != "" {
 		return
 	}
-	key = os.Getenv("GOOGLE_API_KEY")
+	key = GoogleApiKey.Get()
 	if key != "" {
 		return
 	}

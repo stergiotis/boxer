@@ -6,11 +6,11 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/testdata"
@@ -18,6 +18,38 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+)
+
+// Test-integration env vars for the ClickHouse EXPLAIN SYNTAX suite.
+// Names match the ClickHouse client tooling convention (not BOXER_*-
+// prefixed) because they are shared with pebble2impl and external
+// tooling.
+var (
+	clickhouseUser = env.NewString(env.Spec{
+		Name:        "CLICKHOUSE_USER",
+		Default:     "default",
+		Description: "ClickHouse user for EXPLAIN SYNTAX integration tests",
+		Category:    env.CategoryTestIntegration,
+	})
+
+	clickhousePassword = env.NewString(env.Spec{
+		Name:        "CLICKHOUSE_PASSWORD",
+		Description: "ClickHouse password for EXPLAIN SYNTAX integration tests; omits header when empty",
+		Category:    env.CategoryTestIntegration,
+		Sensitive:   true,
+	})
+
+	clickhouseDatabase = env.NewString(env.Spec{
+		Name:        "CLICKHOUSE_DATABASE",
+		Description: "ClickHouse database for EXPLAIN SYNTAX integration tests; omits header when empty",
+		Category:    env.CategoryTestIntegration,
+	})
+
+	clickhouseEndpoint = env.NewString(env.Spec{
+		Name:        "CLICKHOUSE_ENDPOINT",
+		Description: "ClickHouse HTTP endpoint; tests are skipped when empty",
+		Category:    env.CategoryTestIntegration,
+	})
 )
 
 // ============================================================================
@@ -47,15 +79,13 @@ func newClickHouseTestClient(endpoint string) *clickHouseTestClient {
 }
 
 func (inst *clickHouseTestClient) injectReqHeaders(req *http.Request) {
-	user := os.Getenv("CLICKHOUSE_USER")
-	if user == "" {
-		user = "default"
-	}
-	req.Header.Set("X-ClickHouse-User", user)
-	if pw := os.Getenv("CLICKHOUSE_PASSWORD"); pw != "" {
+	req.Header.Set("X-ClickHouse-User", clickhouseUser.Get())
+	pw := clickhousePassword.Get()
+	if pw != "" {
 		req.Header.Set("X-ClickHouse-Key", pw)
 	}
-	if db := os.Getenv("CLICKHOUSE_DATABASE"); db != "" {
+	db := clickhouseDatabase.Get()
+	if db != "" {
 		req.Header.Set("X-ClickHouse-Database", db)
 	}
 }
@@ -125,7 +155,7 @@ func (inst *clickHouseTestClient) Query(ctx context.Context, query string) (resu
 
 func getClickHouseClient(t *testing.T) *clickHouseTestClient {
 	t.Helper()
-	endpoint := os.Getenv("CLICKHOUSE_ENDPOINT")
+	endpoint := clickhouseEndpoint.Get()
 	if endpoint == "" {
 		t.Skip("CLICKHOUSE_ENDPOINT not set")
 	}

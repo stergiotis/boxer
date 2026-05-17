@@ -69,17 +69,36 @@ func (inst *StringVar) setCached(value string) {
 	inst.cached = true
 }
 
+// WithStringAction attaches a caller-supplied Action func to the
+// cli.StringFlag returned by AsCliFlag. The user action runs first; on
+// success the parsed value is written to the cache so subsequent
+// inst.Get() calls observe it.
+func WithStringAction(fn func(ctx *cli.Context, parsed string) error) (opt FlagOption) {
+	return func(o *flagOptions) {
+		o.actionFn = fn
+	}
+}
+
 // AsCliFlag returns a cli.StringFlag derived from the Spec. The Action
-// writes the parsed value into the cache so post-parse reads see it.
+// runs an optional caller-supplied user action (via WithStringAction)
+// and then writes the parsed value into the cache so post-parse reads
+// see it.
 func (inst *StringVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
 	fo := resolveFlagOptions(inst.spec, opts)
+	userAction, _ := fo.actionFn.(func(*cli.Context, string) error)
 	return &cli.StringFlag{
 		Name:     fo.cliFlagName,
 		Usage:    inst.spec.Description,
 		Category: string(inst.spec.Category),
 		EnvVars:  []string{inst.spec.Name},
 		Value:    inst.spec.Default,
-		Action: func(_ *cli.Context, parsed string) (err error) {
+		Action: func(ctx *cli.Context, parsed string) (err error) {
+			if userAction != nil {
+				err = userAction(ctx, parsed)
+				if err != nil {
+					return
+				}
+			}
 			inst.setCached(parsed)
 			return
 		},

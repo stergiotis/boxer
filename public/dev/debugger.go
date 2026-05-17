@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/urfave/cli/v2"
 )
@@ -35,17 +36,23 @@ func getTracerPidLinux() (tpid int, err error) {
 	return -1, eh.Errorf("unknown format of process status file")
 }
 
+// WaitForDebugger gates a Linux-only "block until ptrace tracer attached"
+// loop in the CLI Action. The env var is registered on every platform so
+// the registry is uniform; the cli.Flag is only attached on Linux.
+var WaitForDebugger = env.NewBool(env.Spec{
+	Name:        "BOXER_WAIT_FOR_DEBUGGER",
+	Description: "execution of program waits until an attached debugger is detected (linux only)",
+	Category:    env.CategoryDev,
+	CliFlagName: "waitForDebugger",
+})
+
 var DebuggerFlags = []cli.Flag{}
 
 func init() {
 	switch runtime.GOOS {
 	case "linux":
-		DebuggerFlags = []cli.Flag{&cli.BoolFlag{
-			Category: "development",
-			Name:     "waitForDebugger",
-			EnvVars:  []string{"BOXER_WAIT_FOR_DEBUGGER"},
-			Usage:    "execution of program waits until an attached debugger is detected",
-			Action: func(context *cli.Context, b bool) error {
+		DebuggerFlags = []cli.Flag{
+			WaitForDebugger.AsCliFlag(env.WithBoolAction(func(context *cli.Context, b bool) error {
 				for {
 					log.Info().Msg("waiting for debugger to attach")
 					tpid, err := getTracerPidLinux()
@@ -60,8 +67,7 @@ func init() {
 					time.Sleep(time.Second)
 				}
 				return nil
-			},
-		},
+			})),
 		}
 	}
 }

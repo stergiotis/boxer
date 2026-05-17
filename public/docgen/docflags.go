@@ -8,34 +8,36 @@ import (
 	"strings"
 
 	md "github.com/nao1215/markdown"
+	"github.com/stergiotis/boxer/public/config/env"
 	cli2 "github.com/stergiotis/boxer/public/hmi/cli"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/urfave/cli/v2"
 )
 
+var MarkdownEcho = env.NewBool(env.Spec{
+	Name:        "BOXER_MARKDOWN_ECHO",
+	Description: "echo os.Args as a markdown shell code block on startup (experimental)",
+	Category:    env.CategoryDocgen,
+	CliFlagName: "markdownEcho",
+})
+
 var DocFlags = []cli.Flag{
-	&cli.BoolFlag{
-		Name:     "markdownEcho",
-		Category: "doc",
-		Usage:    "echos the current command line (os.Args) as markdown shell code block [EXPERIMENTAL]",
-		EnvVars:  []string{"BOXER_MARKDOWN_ECHO"},
-		Action: func(context *cli.Context, b bool) error {
-			if b {
-				args := slices.Clone(os.Args)
-				cwd, err := os.Getwd()
-				if err == nil && len(args) > 0 {
-					var s string
-					s, err = filepath.Rel(cwd, args[0])
-					if err == nil {
-						args[0] = "./" + s
-					}
+	MarkdownEcho.AsCliFlag(env.WithBoolAction(func(context *cli.Context, b bool) error {
+		if b {
+			args := slices.Clone(os.Args)
+			cwd, err := os.Getwd()
+			if err == nil && len(args) > 0 {
+				var s string
+				s, err = filepath.Rel(cwd, args[0])
+				if err == nil {
+					args[0] = "./" + s
 				}
-				return md.NewMarkdown(os.Stdout).CodeBlocks(md.SyntaxHighlightShell,
-					strings.Join(args, " ")).LF().Build()
 			}
-			return nil
-		},
-	},
+			return md.NewMarkdown(os.Stdout).CodeBlocks(md.SyntaxHighlightShell,
+				strings.Join(args, " ")).LF().Build()
+		}
+		return nil
+	})),
 }
 
 func NewDocCli() *cli.Command {

@@ -82,8 +82,18 @@ func (inst *BoolVar) setCached(value bool) {
 	inst.cached = true
 }
 
+// WithBoolAction attaches a caller-supplied Action func to the
+// cli.BoolFlag returned by AsCliFlag. The user action runs first; on
+// success the parsed value is written to the cache.
+func WithBoolAction(fn func(ctx *cli.Context, parsed bool) error) (opt FlagOption) {
+	return func(o *flagOptions) {
+		o.actionFn = fn
+	}
+}
+
 func (inst *BoolVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
 	fo := resolveFlagOptions(inst.spec, opts)
+	userAction, _ := fo.actionFn.(func(*cli.Context, bool) error)
 	defaultValue := false
 	if inst.spec.Default != "" {
 		defaultValue = inst.parseDefault()
@@ -94,7 +104,13 @@ func (inst *BoolVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
 		Category: string(inst.spec.Category),
 		EnvVars:  []string{inst.spec.Name},
 		Value:    defaultValue,
-		Action: func(_ *cli.Context, parsed bool) (err error) {
+		Action: func(ctx *cli.Context, parsed bool) (err error) {
+			if userAction != nil {
+				err = userAction(ctx, parsed)
+				if err != nil {
+					return
+				}
+			}
 			inst.setCached(parsed)
 			return
 		},
