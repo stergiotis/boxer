@@ -240,7 +240,12 @@ func (inst *HumanReadableNamingConvention) ExtractSectionName(column common.Phys
 		err = eb.Build().Strs("components", column.NameComponents).Errorf("unable to extract plain item type: %w", err)
 		return
 	}
-	if plainItemType != common.PlainItemTypeNone {
+	// Only tagged-value columns carry a section name in their physical
+	// name layout. The 13-element plain layout has sectionNameIndex == -1
+	// (the SectionName component is absent), so we must NOT index into
+	// NameComponents for plain columns; the inverted condition was
+	// causing tagged columns to silently return empty here.
+	if plainItemType == common.PlainItemTypeNone {
 		sectionName = naming.StylableName(column.NameComponents[p.sectionNameIndex])
 		if !sectionName.IsValid() {
 			err = eb.Build().Str("sectionName", string(sectionName)).Strs("physicalColumn", column.NameComponents).Strs("explanation", column.NameComponentsExplanation).Errorf("extracted section name is not a valid stylable name")
