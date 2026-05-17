@@ -23,4 +23,10 @@ func FormatValue(spec Spec, value string) (out string) {
 	return value
 }
 
-//go:generate echo "TODO(ADR-0009 §4): wire up cmd/envgen to render Snapshot() into ../../../doc/env-vars.md"
+// The go:generate directive runs envgen with the boxer build tags
+// loaded from ../../../tags. Side-effect imports inside envgen pull
+// every owner package; without the full tag set, tag-gated declarations
+// (e.g. openaichat under llm_generated_opus47) would be skipped from
+// the generated registry.
+//
+//go:generate sh -c "go run -tags=\"$(cat ../../../tags)\" github.com/stergiotis/boxer/internal/cmd/envgen -out ../../../doc/env-vars.md"

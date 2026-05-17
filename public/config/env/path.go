@@ -25,6 +25,7 @@ var _ VarI = (*PathVar)(nil)
 func NewPath(spec Spec) (v *PathVar) {
 	mustValidate(spec)
 	spec.Origin = callerOrigin(2)
+	spec.Type = TypePath
 	v = &PathVar{spec: spec}
 	register(v)
 	return

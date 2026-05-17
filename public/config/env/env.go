@@ -18,16 +18,30 @@ import (
 // type is an open string per ADR-0009 §2 so that downstream consumers
 // (pebble2impl, third) can introduce additional tags without changes to
 // this package.
-type Category string
+type CategoryE string
 
 const (
-	CategoryObservability   Category = "observability"
-	CategoryDev             Category = "dev"
-	CategoryDocgen          Category = "docgen"
-	CategoryLLM             Category = "llm"
-	CategoryDatabase        Category = "database"
-	CategorySystem          Category = "system"
-	CategoryTestIntegration Category = "test-integration"
+	CategoryObservability   CategoryE = "observability"
+	CategoryDev             CategoryE = "dev"
+	CategoryDocgen          CategoryE = "docgen"
+	CategoryLLM             CategoryE = "llm"
+	CategoryDatabase        CategoryE = "database"
+	CategorySystem          CategoryE = "system"
+	CategoryTestIntegration CategoryE = "test-integration"
+)
+
+// TypeE classifies a Spec by the Go-side typed handle that owns it.
+// Filled at registration time by NewString / NewBool / NewInt /
+// NewDuration / NewPath; callers must not set it. The doc generator
+// (cmd/envgen) uses it to render the "Type" column in env-vars.md.
+type TypeE string
+
+const (
+	TypeString   TypeE = "string"
+	TypeBool     TypeE = "bool"
+	TypeInt64    TypeE = "int64"
+	TypeDuration TypeE = "duration"
+	TypePath     TypeE = "path"
 )
 
 // Origin identifies the declaring site of a Spec. It is auto-derived at
@@ -44,10 +58,11 @@ type Spec struct {
 	Name        string
 	Default     string
 	Description string
-	Category    Category
+	Category    CategoryE
 	Sensitive   bool
 	CliFlagName string
 	Origin      Origin
+	Type        TypeE
 }
 
 // FlagOption customises the cli.Flag returned by Var.AsCliFlag.
@@ -117,7 +132,7 @@ func All() (out []Spec) {
 }
 
 // ByCategory returns Specs whose Category equals c.
-func ByCategory(c Category) (out []Spec) {
+func ByCategory(c CategoryE) (out []Spec) {
 	registryMu.RLock()
 	defer registryMu.RUnlock()
 	out = make([]Spec, 0, len(registry))

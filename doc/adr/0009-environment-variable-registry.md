@@ -71,7 +71,7 @@ O5 dominates O6 on C5 (the `*StringVar` value carries metadata that the bare acc
 
 ## Decision
 
-We introduce **`public/config/env`** as a typed env-var registry. Each variable is declared as a package-level `var X = env.New*(env.Spec{...})` in the package that owns it; declaration registers the spec globally; reads go through `X.Get()` / `X.Lookup()`; CLI flags are constructed by `X.AsCliFlag()`. `Configer` is left unchanged. A lint test bans `os.Getenv` / `os.LookupEnv` outside an allowlist from day one.
+We introduce **`public/config/env`** as a typed env-var registry. Each variable is declared as a package-level `var X = env.New*(env.Spec{...})` in the package that owns it; declaration registers the spec globally; reads go through `X.Get()` / `X.Lookup()`; CLI flags are constructed by `X.AsCliFlag()`. `ConfigerI` is left unchanged. A lint test bans `os.Getenv` / `os.LookupEnv` outside an allowlist from day one.
 
 The decision has six parts.
 
@@ -96,27 +96,37 @@ public/config/
 ```go
 package env
 
-type Category string
+type CategoryE string
 const (
-    CategoryObservability    Category = "observability"
-    CategoryDev              Category = "dev"
-    CategoryDocgen           Category = "docgen"
-    CategoryLLM              Category = "llm"
-    CategoryDatabase         Category = "database"
-    CategorySystem           Category = "system"            // HOME, GOPATH, GOWORK
-    CategoryTestIntegration  Category = "test-integration"  // CLICKHOUSE_*
+    CategoryObservability    CategoryE = "observability"
+    CategoryDev              CategoryE = "dev"
+    CategoryDocgen           CategoryE = "docgen"
+    CategoryLLM              CategoryE = "llm"
+    CategoryDatabase         CategoryE = "database"
+    CategorySystem           CategoryE = "system"            // HOME, GOPATH, GOWORK
+    CategoryTestIntegration  CategoryE = "test-integration"  // CLICKHOUSE_*
 )
 
 type Spec struct {
     Name        string    // canonical, fully-qualified env var name; immutable
     Default     string    // string form; type-specific parsing happens in the var
     Description string
-    Category    Category
+    Category    CategoryE
     Sensitive   bool      // redact from runtime dumps and generated docs
     CliFlagName string    // if non-empty, AsCliFlag() emits a cli.Flag with this name
-    // Origin is filled at registration time, not by the caller:
+    // Origin and Type are filled at registration time, not by the caller:
     Origin      Origin
+    Type        TypeE     // string|bool|int64|duration|path; set by NewXxx
 }
+
+type TypeE string
+const (
+    TypeString   TypeE = "string"
+    TypeBool     TypeE = "bool"
+    TypeInt64    TypeE = "int64"
+    TypeDuration TypeE = "duration"
+    TypePath     TypeE = "path"
+)
 
 type Origin struct {
     Module string  // e.g. "github.com/stergiotis/boxer"
@@ -165,7 +175,7 @@ The Spec's `Name` (env var side) is **canonical and not transformable**. This is
 
 ```go
 func All() []Spec                          // every spec registered process-wide
-func ByCategory(c Category) []Spec
+func ByCategory(c CategoryE) []Spec
 func ByOrigin(modulePath string) []Spec    // e.g. boxer's specs vs pebble2impl's
 func ByPrefix(prefix string) []Spec        // e.g. ByPrefix("BOXER_")
 ```
@@ -334,13 +344,41 @@ ADRs are append-only; supersession is recorded, not deleted.
     (`db/clickhouse/clickhouseenv`, `thestack/imzero2/imzero2env`,
     `config/envlint`); mirror walker active.
 
-  **Still open.** `cmd/envgen` (the §4 generator) and the
-  `boxer env list` runtime subcommand (§4 introspection) have not
-  been built. The `//go:generate echo TODO` placeholder in
-  `doc_gen.go` still points at the future `cmd/envgen`.
+  **Still open.** The `boxer env list` runtime subcommand
+  (§4 introspection) has not been built.
 
   The core decision (typed declarative globals + process-global
   registry, Configer untouched, day-one lint) is unchanged.
+
+- **2026-05-17 — M4 shipped: cmd/envgen + Spec.Type.** The doc
+  generator §4 landed at `internal/cmd/envgen/main.go` (boxer
+  precedent for `cmd` placement: `internal/cmd/licensegate`). It
+  side-effect imports every boxer-owned env declaration site, calls
+  `env.Snapshot()`, and renders a Diátaxis-typed reference markdown
+  (`doc/env-vars.md`) with one H2 per category, an Origins lookup
+  table, and YAML front-matter marking the file generated. The
+  `//go:generate` directive in `doc_gen.go` uses
+  `sh -c "go run -tags=\"$(cat ../../../tags)\" ..."` so the boxer
+  build tags travel through to envgen without hardcoding them.
+
+  Two scaffold additions enable the generator:
+  - `Spec.Type TypeE` — filled at registration time by every
+    `NewXxx` constructor. The generator reads it as the "Type"
+    column; without it the renderer would have to type-switch on
+    the registered `VarI` concrete type. The field is documented
+    as set-by-constructor, like `Spec.Origin`.
+  - `Category` renamed to `CategoryE` per the boxer coding
+    standard's enum-suffix convention. The pre-existing constants
+    (`CategoryObservability`, …) keep their names. The ADR §4
+    `ByCategory(c Category)` signature is corrected in passing.
+    Pebble2impl's ten `env.Category("…")` consumer sites migrate
+    in a follow-up.
+
+  Initial generated `doc/env-vars.md` covers 21 variables across 6
+  categories (`dev`, `docgen`, `llm`, `observability`, `system`,
+  `test-integration`). The nanopass `passes_test` ClickHouse vars
+  are out of scope because they live in a `_test.go` file that
+  envgen does not link in.
 
 ## References
 

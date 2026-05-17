@@ -24,6 +24,7 @@ var _ VarI = (*StringVar)(nil)
 func NewString(spec Spec) (v *StringVar) {
 	mustValidate(spec)
 	spec.Origin = callerOrigin(2)
+	spec.Type = TypeString
 	v = &StringVar{spec: spec}
 	register(v)
 	return

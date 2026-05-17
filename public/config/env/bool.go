@@ -23,6 +23,7 @@ var _ VarI = (*BoolVar)(nil)
 func NewBool(spec Spec) (v *BoolVar) {
 	mustValidate(spec)
 	spec.Origin = callerOrigin(2)
+	spec.Type = TypeBool
 	v = &BoolVar{spec: spec}
 	register(v)
 	return

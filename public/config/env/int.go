@@ -23,6 +23,7 @@ var _ VarI = (*IntVar)(nil)
 func NewInt(spec Spec) (v *IntVar) {
 	mustValidate(spec)
 	spec.Origin = callerOrigin(2)
+	spec.Type = TypeInt64
 	v = &IntVar{spec: spec}
 	register(v)
 	return

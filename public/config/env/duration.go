@@ -23,6 +23,7 @@ var _ VarI = (*DurationVar)(nil)
 func NewDuration(spec Spec) (v *DurationVar) {
 	mustValidate(spec)
 	spec.Origin = callerOrigin(2)
+	spec.Type = TypeDuration
 	v = &DurationVar{spec: spec}
 	register(v)
 	return
