@@ -444,6 +444,25 @@ ADRs are append-only; supersession is recorded, not deleted.
     them to a non-main sibling package. The pebble2impl envgen
     documents this gap in its own header comment.
 
+- **2026-05-17 — Closed: BOXER_LOG_FACTS gap.** The two specs
+  documented as unreachable in the M6 entry above are no longer in
+  `package main`. They moved to a new
+  `src/go/public/keelson/runtime/factsstore/chstore/envvars.go`
+  file as `chstore.LogFactsEnabled` / `chstore.LogFactsURL`, which
+  is the natural home — chstore is the consumer of both
+  (`LogFactsEnabled` decides whether the upper layer wires
+  `chstore.New` at all; `LogFactsURL` overrides
+  `chstore.Defaults().URL`). The thestack imzero2 main reads
+  through the moved package; pebble2impl envgen gains a
+  side-effect import of chstore so the catalogue covers both
+  specs. The pebble2impl `doc/env-vars.md` regeneration brings the
+  total to 39 specs across 10 categories (the chstore import path
+  also transitively loads boxer's logging / tracing / dev / docgen
+  packages, surfacing their 14 BOXER_* specs in the pebble2impl
+  catalogue — accurate reflection of what a thestack-imzero2
+  binary actually consumes, not duplication of boxer's own
+  doc/env-vars.md).
+
 ## References
 
 - `public/config/config.go` — existing `Configer` interface, unchanged by this ADR.
