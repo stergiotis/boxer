@@ -416,6 +416,34 @@ ADRs are append-only; supersession is recorded, not deleted.
   All ADR §4 surfaces (doc generator + runtime introspection)
   have shipped. The core decision is unchanged.
 
+- **2026-05-17 — M6 shipped: pebble2impl envgen mirror.** The
+  pebble2impl-side doc generator landed at
+  `src/go/cmd/envgen/main.go`, mirroring the boxer pattern. The
+  renderer was extracted from `internal/cmd/envgen` into a new
+  importable package `public/config/env/envdoc` so both generators
+  share one source of truth for the markdown layout; each cmd binds
+  its own side-effect imports of owner packages. Pebble2impl's
+  initial output covers 26 variables across 9 categories at
+  `pebble2impl/doc/env-vars.md`.
+
+  Two pebble2impl-specific wrinkles:
+
+  - The cmd's main.go is gated on `llm_generated_opus47` so it can
+    import the tag-gated owner packages (play, runinfo, windowhost,
+    elevation_profile_demo). A tag-less `go generate ./src/go/cmd/envgen/...`
+    would skip the directive in that file. Workaround: a sibling
+    `generate.go` gated on the standard `generate` build tag
+    (which `go generate` sets automatically) carries the directive.
+    The directive itself shells `go run -tags=\"$(cat
+    ../../../../tags)\" . -out ../../../../doc/env-vars.md` so the
+    full pebble2impl tag set travels through to the build.
+  - `BOXER_LOG_FACTS` / `BOXER_LOG_FACTS_URL` declared in
+    `package main` at `src/go/public/thestack/cmd/imzero2/thestack_app.go`
+    do not appear in the pebble2impl doc — package main is not
+    importable from another main. A future refactor may relocate
+    them to a non-main sibling package. The pebble2impl envgen
+    documents this gap in its own header comment.
+
 ## References
 
 - `public/config/config.go` — existing `Configer` interface, unchanged by this ADR.
