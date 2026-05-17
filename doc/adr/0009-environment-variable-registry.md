@@ -233,6 +233,115 @@ Accepted 2026-05-13.
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
 ADRs are append-only; supersession is recorded, not deleted.
 
+## Updates
+
+- **2026-05-17 — M1/M2/M3 shipped; scaffold signature refinements
+  during implementation.** Implementation across boxer and pebble2impl
+  revealed five design gaps; this entry records them in one place
+  rather than threading rationale through three more commit messages.
+
+  1. **Per-type `WithXxxAction` options (added).** §3 specified
+     `FlagOption` as a single type but did not anticipate
+     Action-bearing flags whose cache write-back must run *after* a
+     caller-supplied validator. Six flags in the boxer migration
+     (`logLevel`, `logFormat`, `flightRecorder`,
+     `flightRecorderOutputFile`, `waitForDebugger`, `markdownEcho`)
+     carried such Actions. The scaffold gained `WithStringAction` /
+     `WithBoolAction` / `WithInt64Action` / `WithDurationAction` /
+     `WithPathAction`, each typed to the matching `cli.*Flag`
+     signature. The chained Action runs the user function first; the
+     cache is written only when the user function returns nil. The
+     pebble2impl migration exercised the same options (e.g.
+     `BOXER_FLIGHT_RECORDER` retains its trace-recorder bootstrap
+     Action).
+
+  2. **`IntVar` is 64-bit.** §3's signature
+     `NewInt(s Spec) *IntVar` did not specify bit width. The boxer
+     coding standard mandates sized integers on fields; the scaffold
+     uses `int64` internally and emits `cli.Int64Flag`. Existing
+     consumers reading via `ctx.Int(...)` migrated to
+     `int(env.X.Get())`. The two pebble2impl `findAnchor` flags
+     exercise this path; no consumer regressions surfaced.
+
+  3. **`Lookup()` shape uniform across typed vars.** §3 named the
+     StringVar signature `Lookup() (val string, set bool)` and left
+     the others implicit. All typed vars expose
+     `Lookup() (raw string, set bool)` — the raw env value as a
+     string, regardless of internal type. This keeps the diagnostic /
+     introspection surface trivially shared between the future doc
+     generator (§4) and call sites that want "is this set" vs.
+     "relying on the default" (`SPINNAKER_PLAY_SQL`'s
+     persisted-session-vs-env-override branch in
+     `play/app_register.go` is the canonical user).
+
+  4. **Parse-failure semantics: env falls back, default panics.**
+     §3 did not specify behaviour when `Bool` / `Int` / `Duration`
+     fail to parse the env-supplied value, nor when the Spec's
+     `Default` itself is malformed. The scaffold treats env-side
+     parse failure as user error (silent fall-back to the parsed
+     default) and default-side parse failure as programmer error
+     (panic at first read). Both are documented on the
+     `parseDefault` helpers.
+
+  5. **`Category` is an open string.** §2 enumerated seven category
+     constants. Consumers introduced five more by literal
+     `env.Category("anchor")` / `"krypto"` / `"spinnaker-play"` /
+     `"swisstopo"` / `"runinfo"` at declaration sites where the
+     enumerated set didn't fit and adding a constant would have
+     meant a boxer-side change for every new domain. The
+     open-string design (`type Category string`) was already in §2
+     — this entry confirms the pattern as deliberate. The boxer
+     migration also reused the original `cli.Flag.Category` strings
+     ("logging", "tracing", "doc") to avoid CLI-help UX churn.
+
+  Three deviations from the §6 migration scope proved benign:
+
+  - `CLICKHOUSE_PASSWORD` (both boxer nanopass test and pebble2impl
+    clickhouseenv) and `PEBBLE_CIPHER_KEY_HEX` (pebble2impl
+    encryptedHash) marked `Sensitive: true` even though §6 only
+    named the Gemini/Google keys explicitly; all three are
+    credentials and the redaction policy is "redact in dumps and
+    generated docs".
+  - `flightRecorderOutputFile` module-level mirror in
+    `public/observability/tracing/flightrecorder.go` dropped —
+    `FlightRecorderOutputFile.Get()` is now the single source of
+    truth. The mirror existed only because the original code lacked
+    a typed handle.
+  - Pebble2impl mirrored the §5 lint test rather than depending on
+    boxer's `_test.go` helper. The mirror at
+    `src/go/public/config/envlint/envlint_test.go` skips nested
+    `go.mod` sub-modules (the `scripts/dev/sponsor_deps` standalone
+    tool, the `whole_program_fixture` test fixtures) by
+    `os.Stat`-checking for `go.mod` in each directory. ADR §5 already
+    noted "boxer cannot enforce against external modules"; within-repo
+    sub-modules are equivalent for this purpose.
+
+  **Milestones shipped.**
+
+  - **M1 scaffold** — boxer `77e89dd`. `public/config/env/` with
+    `Spec`, `Origin` (auto-derived via `runtime.Caller`), registry,
+    five typed vars, `AsCliFlag`, `SetForTest`, the AST-based lint
+    test (initially `t.Skip`-ped), and `Snapshot` / `FormatValue`
+    helpers for the doc generator.
+  - **M2 boxer-internal migration** — boxer `5400809`. The 14
+    `BOXER_*` flags and 11 direct `os.Getenv` reads folded;
+    `BOXER_LOG_MODULE_INFO_IN_START` → `_ON_START` typo fixed;
+    lowercase `clickhouse` → `BOXER_CLICKHOUSE_BINARY_PATH`;
+    `TestNoStrayOsGetenv` un-skipped.
+  - **M3 pebble2impl migration** — pebble2impl `06bfb90c`. 7
+    cli.Flag declarations + 28 direct reads folded across 24 files;
+    three new shared spec packages
+    (`db/clickhouse/clickhouseenv`, `thestack/imzero2/imzero2env`,
+    `config/envlint`); mirror walker active.
+
+  **Still open.** `cmd/envgen` (the §4 generator) and the
+  `boxer env list` runtime subcommand (§4 introspection) have not
+  been built. The `//go:generate echo TODO` placeholder in
+  `doc_gen.go` still points at the future `cmd/envgen`.
+
+  The core decision (typed declarative globals + process-global
+  registry, Configer untouched, day-one lint) is unchanged.
+
 ## References
 
 - `public/config/config.go` — existing `Configer` interface, unchanged by this ADR.
