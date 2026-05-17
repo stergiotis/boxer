@@ -159,33 +159,40 @@ analogous to recovering a dropped commit by its hash from git's object
 database, except that pushout's "object database" has no retention
 horizon and no GC.
 
-**Architecture for actual erasure.** Two related ADRs document the
-mechanism (both deferred pending counsel review):
+**Architecture for actual erasure.** Documented in
+[ADR-0025 (pebble2impl)](../../../../../pebble2impl/doc/adr/0025-pushout-forget-architecture.md);
+**Architecture A** (vault-by-design) was selected on 2026-05-17 for a
+greenfield, multi-actor deployment.
 
-- [ADR-0025 (pebble2impl)](../../../../../pebble2impl/doc/adr/0025-pushout-forget-architecture.md)
-  — GDPR scope; recommends Architecture C (vault-by-design +
-  cooperative-purge fallback).
-- [ADR-0027 (pebble2impl)](../../../../../pebble2impl/doc/adr/0027-pushout-forget-swiss-fadp.md)
-  — FADP scope; recommends the leaner S2 (local meta-tier redaction),
-  with S4 (= Architecture C) as the adequacy-hedge upgrade.
+Under Architecture A the patch DAG is never rewritten. PII-flagged fields
+are intercepted at `SetAndRecord` time: cleartext is written to a
+controller-side vault (realised as a Leeway facts table in ClickHouse,
+per ADR-0025 SD5), and `Change.Content` carries the per-actor HMAC
+commitment `HMAC(actorSalt, fieldValue)` in place of the raw bytes. The
+`Forget(actorID, vaultRef)` operation deletes the vault rows under the
+mutation-finality contract in ADR-0025 SD11 and destroys / rotates the
+actor's salt — after which the in-patch commitment is an unrecoverable
+hash. The vault is never propagated; only the patch envelope (with
+commitments) flows through Push / Pull.
 
-Both architectures use a different primitive than `Unrecord`: a
-**compensating patch**, a *new* patch added to the graggle that
-overwrites the affected node's content with a redaction marker while
-preserving the structural NodeIDs that downstream dependents reference.
-It is not an inverse of the original patch (an inverse would orphan
-dependents); it is an additive overlay that destroys the personal-data
-content while keeping the dependency structure intact.
+The earlier architecture-design discussion considered a *compensating
+patch* mechanism (a new patch added to the graggle to overwrite affected
+node content with a redaction marker). That mechanism belonged to the
+rejected Architectures B and C in ADR-0025 and the superseded ADR-0027.
+It is not used under Architecture A.
 
-**Antiquing's role**
-(see [ADR-0039 (pebble2impl)](../../../../../pebble2impl/doc/adr/0039-pushout-antiquing.md)) is
-*blast-radius minimisation* for compensation. If a dependent's antique
-form does not actually reference the to-be-forgotten patch's nodes, no
-compensating patch is needed for that dependent — the original patch
-can simply be removed. Without antiquing, the system must
-conservatively assume every literal reference is a real dependency,
-inflating the number of compensating patches that must be constructed
-and propagated.
+[ADR-0027 (pebble2impl)](../../../../../pebble2impl/doc/adr/0027-pushout-forget-swiss-fadp.md)
+— the FADP-scope variant — is superseded by ADR-0025's selection.
+Architecture A also clears the FADP axis under BGE 136 II 508 + Art 32(4).
+
+**Antiquing's role** (see
+[ADR-0039 (pebble2impl)](../../../../../pebble2impl/doc/adr/0039-pushout-antiquing.md))
+is no longer load-bearing for erasure under Architecture A — the
+dependency-minimisation output it produces was a prerequisite for
+compensating-patch construction, which is not performed. Antiquing
+remains a real correctness / theoretical-alignment question for pushout
+on its own merits; ADR-0039's Decision section is deferred pending the
+internal SD1–SD10 + OQ1–OQ6 design dialogue.
 
 ## Invariants
 
@@ -295,16 +302,20 @@ has not surfaced as a bug in the demo workflows so far; it is a latent
 semantic divergence from the patch-theory framing the package adopts
 (`Background` above), not a known regression.
 
-**Why it eventually matters.**
-[ADR-0025 SD4](../../../../../pebble2impl/doc/adr/0025-pushout-forget-architecture.md)
-(compensating-patch construction for cooperative-purge erasure) names
-antiquing as a prerequisite: to construct a compensating patch that overwrites
-only the affected nodes, the system needs to know which dependent patches
-genuinely require the to-be-forgotten patch's content — which is exactly what
-the antiqued dependency set records. ADR-0027 ("Swiss-Only Forget
-Architecture", FADP scope) reaches the same need indirectly: any deployment
-that ever upgrades from S2 to S4 (vault + cooperative purge) inherits SD4's
-antiquing prerequisite.
+**Why it matters.** Antiquing is no longer a compliance prerequisite —
+ADR-0025 selected Architecture A (vault-by-design) on 2026-05-17, which
+does not construct compensating patches, and ADR-0027 is superseded by
+that decision. The historical motivation was that compensating-patch
+construction for cooperative-purge erasure (formerly ADR-0025 SD4)
+needed the dependency-minimisation output antiquing produces; that path
+is not pursued. What remains is the on-its-own-merits correctness story:
+without antiquing, a peer attempting `Apply` may be rejected for "missing
+dependency" where an antiqued version would have applied cleanly, and
+`commonAnchors`'s "first live parent / first live child" pick over-anchors
+in conflict-resolution paths. The
+[ADR-0039 (pebble2impl)](../../../../../pebble2impl/doc/adr/0039-pushout-antiquing.md)
+engineering recommendation (staged B → C) addresses both, independently
+of any forget-architecture milestone.
 
 **Deferred decisions.** The shape of the algorithm — for each
 `ChangeKindNewNode`, walk the live subgraph to find the up/down anchors that
