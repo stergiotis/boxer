@@ -1,11 +1,16 @@
 ---
 type: reference
 audience: contributor
-status: stable
+status: draft
 generated: true
 generator: internal/cmd/envgen
-generated-at: 2026-05-17T14:58:02Z
+generated-at: 2026-05-17T17:18:53Z
 ---
+
+> **Status: draft — pre-human-review.** Machine-generated registry snapshot;
+> regenerated on every IDL or env.Spec change. Do not promote to stable
+> without freezing the registry contents and adding reviewed-by /
+> reviewed-date metadata.
 
 # Environment variables
 
