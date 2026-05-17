@@ -178,7 +178,7 @@ dependents); it is an additive overlay that destroys the personal-data
 content while keeping the dependency structure intact.
 
 **Antiquing's role**
-(see [ADR-0008](../../../../doc/adr/0008-pushout-antiquing.md)) is
+(see [ADR-0039 (pebble2impl)](../../../../../pebble2impl/doc/adr/0039-pushout-antiquing.md)) is
 *blast-radius minimisation* for compensation. If a dependent's antique
 form does not actually reference the to-be-forgotten patch's nodes, no
 compensating patch is needed for that dependent — the original patch
@@ -263,7 +263,7 @@ depend on each other can be applied in either order. Boxer's port does not
 currently perform this rewrite; this section documents what the gap is and
 where it eventually bites. The full design-space analysis (architecture
 options, subsidiary decisions, open questions) is in
-[ADR-0008](../../../../doc/adr/0008-pushout-antiquing.md); the text below is
+[ADR-0039 (pebble2impl)](../../../../../pebble2impl/doc/adr/0039-pushout-antiquing.md); the text below is
 the user-facing summary.
 
 **Definition.** Given a patch `q` recorded against state including patch `p`,
@@ -318,7 +318,7 @@ semantics. Placement (inside `LineDiff`, between `LineDiff` and `NewPatch`,
 inside `NewPatch`, or as an independent post-record pass) is open. Conflict
 resolution's `commonAnchors` may need a separate antiquing pass or may
 benefit from the same one; that, too, is open. See
-[ADR-0008](../../../../doc/adr/0008-pushout-antiquing.md) SD1–SD10 and
+[ADR-0039 (pebble2impl)](../../../../../pebble2impl/doc/adr/0039-pushout-antiquing.md) SD1–SD10 and
 OQ1–OQ6 for the enumerated options and the engineering recommendation
 (staged B → C).
 
