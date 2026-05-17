@@ -70,8 +70,16 @@ active voice, e.g. "We will …".>
 
 Proposed — awaiting review by <code owner(s)>.
 
-Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
-ADRs are append-only; supersession is recorded, not deleted.
+Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
+See [DOCUMENTATION_STANDARD §1 ADR](../../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
+
+<!--
+## Updates
+
+Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
+claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
+YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
+-->
 
 ## References
 

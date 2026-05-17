@@ -67,13 +67,49 @@ Every Markdown doc must declare its type in a front-matter stanza (see §4). Thi
 
 ### Architecture Decision Records (Why-It-Is-This-Way)
 - **Goal:** Capture a single decision with its context, alternatives considered, and consequences. Replaces ad-hoc `DESIGN.md` and internal wiki pages.
-- **Format:** `doc/adr/NNNN-kebab-title.md`, monotonic numbering. ADRs are **append-only**; superseded records are marked, not deleted.
+- **Format:** `doc/adr/NNNN-kebab-title.md`, monotonic numbering. The decision history lives in git plus an explicit `Updates` section (below); the body text is not byte-sacred.
 - **Rules:**
     - One decision per file, one file per decision.
-    - Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
+    - Status lifecycle: `proposed → accepted → (deferred | deprecated | superseded by ADR-XXXX)`. Supersession is the documented escape hatch when the decision itself changes (see "Editing ADRs" below).
     - If a decision affects a specific package, link to it from that package's `README.md` and, where relevant, its `EXPLANATION.md`.
     - Minimum sections: *Context*, *Decision*, *Alternatives*, *Consequences*, *Status*.
     - **Design-space analysis (QOC):** when a decision has ≥3 viable options evaluated against ≥3 explicit criteria, use the optional `Design space (QOC)` section from the ADR template — Questions, Options, Criteria (MacLean, Bellotti, Young, Moran, 1991). The prose `Alternatives` section may then cross-reference the QOC matrix instead of duplicating the rationale. Below the threshold, a prose `Alternatives` list is sufficient.
+
+#### Editing ADRs: three tiers
+
+ADRs evolve. Three tiers of change keep the body load-bearing and the audit trail where readers look.
+
+**Tier 1 — Edit in place.** No dated entry, no new section. `git log` is the trail.
+
+- Value tweaks inside an existing table or constant (`0.20 → 0.24`, `MinIdle = 2 → 3`).
+- File-path / import-path / symbol-rename sweeps when the decision itself is unchanged.
+- Typos, clarifying re-phrasings, broken-link repairs.
+- Filling in a `TODO` or `Empty initially; results land here` placeholder when no design pivot accompanies the fill.
+
+The commit message carries the rationale; the reader sees the corrected value first.
+
+**Tier 2 — Append a dated entry to `## Updates`.** A single `## Updates` H2 (penultimate, before `## References`), with dated H3 entries inside it.
+
+- Implementation revealed a constraint the design missed; the design changed to accommodate it.
+- A new alternative surfaced after the original `Alternatives` section was written, with the reason it was (re-)rejected.
+- An aspirational claim in the original body turned out partially false, and the entry corrects it.
+- A milestone landed and the entry records what shipped vs. what was scoped, including in-flight contract refinements.
+
+If a `## Updates` H2 already exists, add an H3 inside it — never a second `## Updates` H2.
+
+**Tier 3 — Issue a new ADR that supersedes this one.** Flip the original's `status: superseded`, add a one-line pointer at the top of the body to the superseding ADR, and write the current state fresh in the new ADR.
+
+- The chosen option changed (you picked O1, now you're picking O2).
+- Scope changed materially (the ADR covered X; the new state covers X + Y, or X minus a major sub-decision).
+- A new reader can no longer reach the current truth by reading the body alone — body and `Updates` chain disagree on substance, not just numbers.
+
+Supersession is cheap. Prefer it over an `Updates` chain that has started to describe a different decision than the body.
+
+#### When to flip `proposed → accepted`
+
+`proposed` is for a decision the author wants reviewed before it is treated as in force. `accepted` is the steady state. A single code owner reading the ADR once and filling in `reviewed-by` + `reviewed-date` is the bar — review covers the body as it stands at the flip, not every future Tier 1 / Tier 2 change. Subsequent edits do not re-open the question and do not reset the status. A Tier 3 change later is a new ADR, not a re-review.
+
+If ADRs accumulate in `proposed` indefinitely, the bar is being misread. Flip them.
 
 ---
 
@@ -166,7 +202,7 @@ reviewed-date: 2026-04-16    # required when status is stable or accepted
 | State | Meaning | Requirements |
 |---|---|---|
 | `proposed` | Pre-human-review; decision not yet in force. | Must display the draft banner. |
-| `accepted` | Decision is active. | `reviewed-by` + `reviewed-date` required. Banner removed. |
+| `accepted` | Decision is active. Subsequent Tier 1/2 edits do not reset the review. | `reviewed-by` + `reviewed-date` required. Banner removed. |
 | `deferred` | Decision shape is settled, but implementation is intentionally postponed pending a future trigger. | Must name the trigger in the `## Status` section (the condition that, when met, moves the ADR to `accepted` or motivates a successor). |
 | `deprecated` | Decision no longer in force; no successor. | |
 | `superseded` | Replaced by a later ADR. | Must link to the superseding ADR. |

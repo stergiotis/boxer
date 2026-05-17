@@ -149,6 +149,27 @@ supersedes no prior record.
   front-matter requirement, since it is the GitHub project landing
   page rather than a package-scoped doc. The core Diátaxis + ADR
   decision above is unchanged.
+- **2026-05-17 — ADR editing model: three tiers + `Updates` section.**
+  The original "ADRs are append-only; superseded records are marked,
+  not deleted" framing was being read maximally: every change — value
+  tweaks, path sweeps, in-flight contract refinements — was appended
+  as a dated section instead of edited in the body, the supersession
+  off-ramp was never used (zero `superseded` ADRs across both
+  repositories at the time of this update), and the `proposed →
+  accepted` flip was withheld pending an unreachable "review the
+  whole accreted chain" bar (28/39 ADRs stuck in `proposed` in
+  pebble2impl). DOCUMENTATION_STANDARD §1 ADR now distinguishes Tier
+  1 (in-place edits for values, paths, typos), Tier 2 (dated H3s
+  inside a single `## Updates` H2 for design refinements, milestone
+  landings, retracted claims), and Tier 3 (new superseding ADR for
+  changed options, changed scope, or chains that have started to
+  describe a different decision than the body). The canonical
+  amendment section is named `## Updates` (boxer-precedent;
+  pebble2impl renames its `## Amendments` to match in the same
+  pass). `proposed → accepted` is clarified as a one-time
+  single-owner pass that does not re-open on subsequent Tier 1/2
+  edits. The core Diátaxis + ADR decision above is unchanged; this
+  update relaxes how ADRs evolve, not what they are.
 
 ## References
 
