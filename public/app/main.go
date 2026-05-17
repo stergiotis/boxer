@@ -5,6 +5,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/code"
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/dev"
 	"github.com/stergiotis/boxer/public/docgen"
 	"github.com/stergiotis/boxer/public/gov"
@@ -52,6 +53,7 @@ func mainC() (exitCode int) {
 			observability.NewCliCommand(),
 			docgen.NewDocCli(),
 			dev.NewCliCommand(),
+			env.NewCliCommand(),
 			gov.NewCliCommand(),
 			finddivisions.NewCliCommand(),
 			code.NewCliCommand(),

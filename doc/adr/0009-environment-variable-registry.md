@@ -380,6 +380,42 @@ ADRs are append-only; supersession is recorded, not deleted.
   are out of scope because they live in a `_test.go` file that
   envgen does not link in.
 
+- **2026-05-17 — M5 shipped: `boxer env list` subcommand.** The
+  runtime introspection surface §4 landed at
+  `public/config/env/cli.go` and is mounted into the top-level CLI
+  by `public/app/main.go`. Implements all three filters named in
+  §4 (`--category`, `--origin`, `--prefix`); output is a
+  `text/tabwriter` table with columns NAME / TYPE / CATEGORY /
+  DEFAULT / CURRENT / SENSITIVE / DESCRIPTION. Sensitive vars
+  render the live env value as `<redacted>`; the Default column
+  shows the literal Spec.Default unchanged (defaults are
+  source-code, not credentials).
+
+  Two scaffold additions service the command:
+
+  - `VarI.Lookup() (raw string, set bool)` lifted to the
+    interface. Every typed var already exposed this method —
+    making it part of the interface contract lets the CLI walk
+    the registry without per-type assertions, and codifies the
+    uniform Lookup shape that the earlier 2026-05-17 entry
+    described.
+  - `LookupVar(name) (VarI, ok)` exported. Pairs with
+    `Snapshot()` so the CLI iterates sorted Specs and resolves
+    each back to its typed var for the live value. Previously
+    only `lookupForTest` existed (package-private).
+
+  Coverage limitation, by design: `boxer env list` shows whatever
+  the running boxer binary linked in (currently 21 vars, same as
+  envgen output because `gov` transitively imports
+  `llm/openaichat`, and `lw` imports the leeway/ddl/clickhouse
+  testutils). Test-only declarations (e.g. the nanopass
+  `passes_test` ClickHouse vars) still do not appear here; the
+  complete catalogue lives in `doc/env-vars.md`, which is what
+  the CLI's `Description` field points readers to.
+
+  All ADR §4 surfaces (doc generator + runtime introspection)
+  have shipped. The core decision is unchanged.
+
 ## References
 
 - `public/config/config.go` — existing `Configer` interface, unchanged by this ADR.

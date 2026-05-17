@@ -96,9 +96,21 @@ func resolveFlagOptions(spec Spec, opts []FlagOption) (out flagOptions) {
 }
 
 // VarI is the common surface shared by every typed Var. Useful for
-// registry walks where the exact value type does not matter.
+// registry walks where the exact value type does not matter; the
+// runtime `env list` subcommand consumes Spec() for metadata and
+// Lookup() for the live env value.
 type VarI interface {
 	Spec() Spec
+	Lookup() (raw string, set bool)
+}
+
+// LookupVar returns the registered VarI for name. ok is false when no
+// spec with this Name has been registered.
+func LookupVar(name string) (v VarI, ok bool) {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
+	v, ok = registry[name]
+	return
 }
 
 var (
