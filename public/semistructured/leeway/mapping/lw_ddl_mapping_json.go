@@ -51,6 +51,6 @@ func NewJsonMapping() (tbl common.TableDesc, err error) {
 	}
 	LoadJsonMapping(manip)
 	manip.SetTableName("JsonMapping")
-	manip.SetTableComment("canonical et7 json mapping")
+	manip.SetTableComment("canonical leeway json mapping")
 	return manip.BuildTableDesc()
 }
