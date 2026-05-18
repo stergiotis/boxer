@@ -80,6 +80,7 @@ func codelintAction(ctx *cli.Context) (err error) {
 	linter.Register(NewRuleCS005())
 	linter.Register(NewRuleCS006())
 	linter.Register(NewRuleCS007())
+	linter.Register(NewRuleCS008())
 
 	var rep ReporterI
 	rep, err = NewReporterE(format, os.Stdout)

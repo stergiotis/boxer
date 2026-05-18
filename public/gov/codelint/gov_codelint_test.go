@@ -291,6 +291,48 @@ func TestCS007_PassesGoodFile(t *testing.T) {
 	}
 }
 
+func TestCS008_FlagsTypeAliases(t *testing.T) {
+	root, err := filepath.Abs("./testdata/cs008/bad")
+	require.NoError(t, err)
+
+	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	require.NoError(t, err)
+	require.NotEmpty(t, pkgs)
+
+	linter := codelint.NewLinter()
+	linter.Register(codelint.NewRuleCS008())
+
+	var findings []codelint.Finding
+	for f, runErr := range linter.Run(pkgs) {
+		require.NoError(t, runErr)
+		findings = append(findings, f)
+	}
+
+	require.Len(t, findings, 4, "expected 4 unsuppressed CS008 findings (one suppressed)")
+	for _, f := range findings {
+		assert.Equal(t, "CS008", f.RuleId)
+		assert.Equal(t, codelint.FindingSeverityWarn, f.Severity)
+		assert.Contains(t, f.Path, "bad.go")
+	}
+}
+
+func TestCS008_PassesGoodFile(t *testing.T) {
+	root, err := filepath.Abs("./testdata/cs008/good")
+	require.NoError(t, err)
+
+	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	require.NoError(t, err)
+	require.NotEmpty(t, pkgs)
+
+	linter := codelint.NewLinter()
+	linter.Register(codelint.NewRuleCS008())
+
+	for f, runErr := range linter.Run(pkgs) {
+		require.NoError(t, runErr)
+		t.Fatalf("unexpected finding: %+v", f)
+	}
+}
+
 func TestCS001_PassesGoodFile(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs001/good")
 	require.NoError(t, err)
