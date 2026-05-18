@@ -222,6 +222,33 @@ func TestCallout_CaseInsensitive(t *testing.T) {
 	require.Contains(t, out, `callout-note`)
 }
 
+// TestCallout_TitleNotDuplicatedInBody guards against the
+// ASTTransformer ordering bug: the callout transformer runs after
+// inline parsing, so removing the title line from para.Lines() does
+// not retract the matching ast.Text inline children. Without an
+// explicit child strip the title text appears twice in HTML output —
+// once in the callout-title div and once at the head of callout-content.
+func TestCallout_TitleNotDuplicatedInBody(t *testing.T) {
+	input := "> [!warning] Be careful\n> Danger ahead"
+	out := render(t, allFeatures(), input)
+	require.Equal(t, 1, strings.Count(out, "Be careful"),
+		"title appears %d time(s), want exactly 1; full output:\n%s",
+		strings.Count(out, "Be careful"), out)
+}
+
+// TestCallout_TitleOnlyParagraphRemoved covers the edge where the
+// callout's body has the title as its only content. removeFirstLine
+// strips the line, leaving an empty paragraph that must not survive
+// (and must not leak title text via stale inline children).
+func TestCallout_TitleOnlyParagraphRemoved(t *testing.T) {
+	input := "> [!info] Standalone"
+	out := render(t, allFeatures(), input)
+	require.Contains(t, out, "Standalone")
+	require.Equal(t, 1, strings.Count(out, "Standalone"),
+		"standalone title appears %d times, want 1; full output:\n%s",
+		strings.Count(out, "Standalone"), out)
+}
+
 // =============================================================================
 // GFM
 // =============================================================================

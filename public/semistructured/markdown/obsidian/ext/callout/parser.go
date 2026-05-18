@@ -4,6 +4,7 @@ package callout
 
 import (
 	"bytes"
+	"math"
 
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/parser"
@@ -104,8 +105,14 @@ func extractFirstLine(para *ast.Paragraph, source []byte) []byte {
 func removeFirstLine(para *ast.Paragraph, source []byte) {
 	lines := para.Lines()
 	if lines.Len() <= 1 {
-		// Remove all lines — paragraph becomes empty
+		// Remove all lines — paragraph becomes empty. We also need to
+		// drop inline children: goldmark's parser ran inline parsing
+		// *before* this ASTTransformer fires (parser.go:906), so the
+		// paragraph's ast.Text / ast.Emphasis / ... children still
+		// cover the original byte ranges. Without this strip, the
+		// title text leaks into the callout body via stale children.
 		para.SetLines(text.NewSegments())
+		stripChildrenBefore(para, math.MaxInt)
 		return
 	}
 	newLines := text.NewSegments()
@@ -113,6 +120,79 @@ func removeFirstLine(para *ast.Paragraph, source []byte) {
 		newLines.Append(lines.At(i))
 	}
 	para.SetLines(newLines)
+
+	// Same retroactive cleanup as the all-lines path above, scoped to
+	// the bytes that were just stripped.
+	bodyStart := newLines.At(0).Start
+	stripChildrenBefore(para, bodyStart)
+}
+
+// stripChildrenBefore walks para's inline children and removes those
+// whose byte coverage is fully at or before cutoff. ast.Text nodes are
+// checked via Segment; container inlines (Emphasis, Link, CodeSpan,
+// AutoLink, RawHTML, ...) are checked by recursing into their children
+// and dropping the container if it no longer covers any post-cutoff
+// content. Text nodes that straddle cutoff have their Segment.Start
+// clipped forward.
+func stripChildrenBefore(para *ast.Paragraph, cutoff int) {
+	for c := para.FirstChild(); c != nil; {
+		next := c.NextSibling()
+		if nodeFullyBefore(c, cutoff) {
+			para.RemoveChild(para, c)
+		} else {
+			clipNodeStart(c, cutoff)
+		}
+		c = next
+	}
+}
+
+func nodeFullyBefore(n ast.Node, cutoff int) bool {
+	switch v := n.(type) {
+	case *ast.Text:
+		return v.Segment.Stop <= cutoff
+	case *ast.String:
+		// Inline-injected raw bytes — no Segment to check. Conservative:
+		// keep them.
+		return false
+	case *ast.RawHTML:
+		segs := v.Segments
+		if segs.Len() == 0 {
+			return true
+		}
+		last := segs.At(segs.Len() - 1)
+		return last.Stop <= cutoff
+	default:
+		// Container inline (Emphasis, Link, CodeSpan, AutoLink, ...) —
+		// fully before cutoff iff every child is.
+		for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+			if !nodeFullyBefore(c, cutoff) {
+				return false
+			}
+		}
+		// All children before cutoff (or no children) → container can go.
+		return n.FirstChild() != nil
+	}
+}
+
+func clipNodeStart(n ast.Node, cutoff int) {
+	switch v := n.(type) {
+	case *ast.Text:
+		if v.Segment.Start < cutoff && v.Segment.Stop > cutoff {
+			v.Segment.Start = cutoff
+		}
+	default:
+		// Recurse into container children — pre-cutoff sub-trees get
+		// removed in place.
+		for c := n.FirstChild(); c != nil; {
+			next := c.NextSibling()
+			if nodeFullyBefore(c, cutoff) {
+				n.RemoveChild(n, c)
+			} else {
+				clipNodeStart(c, cutoff)
+			}
+			c = next
+		}
+	}
 }
 
 func parseCalloutHeader(line []byte) (calloutType []byte, title []byte, foldable bool, defaultOpen bool, matched bool) {
