@@ -3,7 +3,7 @@ type: reference
 audience: contributor
 status: stable
 reviewed-by: "p@stergiotis"
-reviewed-date: 2026-04-17
+reviewed-date: 2026-05-18
 ---
 
 # Go Coding Standard
@@ -32,27 +32,7 @@ Target the most recent stable go version available.
 * Use `github.com/urfave/cli/v2` for cli commands and flags handling.
 * Use `github.com/dim13/colormap` for scientific color maps (Magma, Inferno, Plasma, Vidiris, Parula).
 
-## Error Handling & Flow Control
-
-### Return Signature
-Named return values are **mandatory** for all functions and methods.
-```go
-func (inst *Type) DoWork() (n int, err error) { ... }
-```
-
-### Error Checking
-*   **Naked Returns:** Use naked returns (`return`) immediately after overwriting the `err` variable.
-*   **No Short Declaration:** Do not use the `if err := func(); err != nil` syntax. This prevents variable shadowing and keeps the logic linear.
-
-Correct Pattern:
-```go
-err = myFunc()
-if err != nil {
-    // Wrap with %w only. Do not use other format specifiers.
-    err = eh.Errorf("unable to capture context: %w", err)
-    return
-}
-```
+## Error Handling
 
 ### Error Construction
 *   **Simple Wrapping:** Use `eh.Errorf` with `%w` only.
@@ -64,34 +44,13 @@ if err != nil {
             Str("path", path).
             Int("len", length).
             Errorf("unable to capture context: %w", err)
-      return
+      return err
 }
 ```
 
 ## Control Flow
 *   **Conditionals:** Use `if val { ... } else { ... }` for binary conditions.
 *   **Guard Clauses:** Prefer early exits/returns to reduce nesting depth.
-
-## Scoping
-To mitigate scope pollution (caused by banning `if err := ...`), use explicit anonymous blocks with comments to segment logic within large functions.
-These blocks are candidates to be extracted in external functions.
-
-```go
-func (inst *Worker) Process() (err error) {
-    // ... setup code ...
-
-    { // Stage: Release
-        var x int
-        x, err = inst.calculateRelease()
-        if err != nil {
-            return
-        }
-        inst.use(x)
-    } // 'x' is now out of scope
-
-    return
-}
-```
 
 ## Memory Management
 
@@ -127,12 +86,6 @@ func (inst *Worker) Process() (err error) {
     ```
 ## Naming & Style
 
-### Receiver Name
-Always use `inst` (instance) as the receiver name.
-```go
-func (inst *Encoder) Method() { ... }
-```
-
 ### Interface Naming
 Interface names must end with a capital `I`.
 ```go
@@ -155,8 +108,6 @@ var AllWeekdays = []WeekdayE{WeekdayMonday,WeekdayTuesday,WeekdayWednesday,...}
 ### Function & Method Naming
 
 **Suffixes.**
-*   `P` — procedures with no return values (e.g. `DoWorkP`). P = Procedure.
-*   `V` — advanced variants taking a larger argument set than the base function (e.g. `ExecV`). V = adVanced.
 *   `E` — functions returning an error (e.g. `OpenE`). E = Error. Distinct from the enum type-suffix `E` above; types and functions are disambiguated by Go's identifier conventions.
 
 **Prefixes.**

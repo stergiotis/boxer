@@ -224,9 +224,7 @@ enforce front-matter.
 [CODINGSTANDARDS.md](../CODINGSTANDARDS.md) codifies non-idiomatic project
 conventions, including:
 
-- mandatory named returns and naked-return error flow,
 - `eh.Errorf` and `eb` error builders in place of `fmt.Errorf`,
-- receiver name `inst` throughout,
 - `I` suffix on interface names, `E` suffix on enum types,
 - struct-of-arrays preferred over array-of-structs,
 - `iter.Seq2` iterators preferred over slice returns,
