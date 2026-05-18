@@ -35,6 +35,48 @@ func TestCS001_FlagsFmtErrorfOutsideEh(t *testing.T) {
 	assert.Equal(t, int32(9), findings[0].Line)
 }
 
+func TestCS002_FlagsMisplacedCtx(t *testing.T) {
+	root, err := filepath.Abs("./testdata/cs002/bad")
+	require.NoError(t, err)
+
+	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	require.NoError(t, err)
+	require.NotEmpty(t, pkgs)
+
+	linter := codelint.NewLinter()
+	linter.Register(codelint.NewRuleCS002())
+
+	var findings []codelint.Finding
+	for f, runErr := range linter.Run(pkgs) {
+		require.NoError(t, runErr)
+		findings = append(findings, f)
+	}
+
+	require.Len(t, findings, 4, "expected 4 unsuppressed CS002 findings (suppressed one omitted)")
+	for _, f := range findings {
+		assert.Equal(t, "CS002", f.RuleId)
+		assert.Equal(t, codelint.FindingSeverityWarn, f.Severity)
+		assert.Contains(t, f.Path, "bad.go")
+	}
+}
+
+func TestCS002_PassesGoodFile(t *testing.T) {
+	root, err := filepath.Abs("./testdata/cs002/good")
+	require.NoError(t, err)
+
+	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	require.NoError(t, err)
+	require.NotEmpty(t, pkgs)
+
+	linter := codelint.NewLinter()
+	linter.Register(codelint.NewRuleCS002())
+
+	for f, runErr := range linter.Run(pkgs) {
+		require.NoError(t, runErr)
+		t.Fatalf("unexpected finding: %+v", f)
+	}
+}
+
 func TestCS001_PassesGoodFile(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs001/good")
 	require.NoError(t, err)
