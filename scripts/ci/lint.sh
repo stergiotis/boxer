@@ -91,6 +91,27 @@ fi
 #     step_end pass
 # fi
 
+step_begin "codelint"
+# Surfaces CS-prefixed violations of CODINGSTANDARDS.md detected via
+# go/analysis-based AST passes (ADR-0011). Warn-only while the in-tree
+# fallout is being cleared; promotion of individual rules to error
+# severity is per-rule, in a separate commit, once residual count
+# reaches zero. Same `if out=$(...)` pattern as doclint below —
+# required because the script runs under `set -e`.
+if out=$("$here/../../boxer.sh" gov codelint --tags "$tags" --min-severity warn ./public/... 2>/dev/null); then
+    if [ -n "$out" ]; then
+        echo "$out"
+        step_end warn
+    else
+        echo "passed"
+        step_end pass
+    fi
+else
+    echo "$out"
+    rc=1
+    step_end fail
+fi
+
 step_begin "doclint"
 # Surfaces all warn-and-above doclint findings. Only error-severity
 # findings set rc=1 (warnings are visible but non-blocking, consistent
