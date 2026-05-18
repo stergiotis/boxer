@@ -1,3 +1,11 @@
+---
+type: reference
+audience: security reporter
+status: stable
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-05-18
+---
+
 # Security Policy
 
 ## Supported versions
