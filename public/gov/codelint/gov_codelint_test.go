@@ -55,7 +55,7 @@ func TestCS002_FlagsMisplacedCtx(t *testing.T) {
 	require.Len(t, findings, 4, "expected 4 unsuppressed CS002 findings (suppressed one omitted)")
 	for _, f := range findings {
 		assert.Equal(t, "CS002", f.RuleId)
-		assert.Equal(t, codelint.FindingSeverityWarn, f.Severity)
+		assert.Equal(t, codelint.FindingSeverityError, f.Severity)
 		assert.Contains(t, f.Path, "bad.go")
 	}
 }
@@ -97,7 +97,7 @@ func TestCS003_FlagsPointerMutexFields(t *testing.T) {
 	require.Len(t, findings, 4, "expected 4 unsuppressed CS003 findings (one suppressed)")
 	for _, f := range findings {
 		assert.Equal(t, "CS003", f.RuleId)
-		assert.Equal(t, codelint.FindingSeverityWarn, f.Severity)
+		assert.Equal(t, codelint.FindingSeverityError, f.Severity)
 		assert.Contains(t, f.Path, "bad.go")
 	}
 }
@@ -139,7 +139,7 @@ func TestCS004_FlagsLegacyAtomicAPI(t *testing.T) {
 	require.Len(t, findings, 8, "expected 8 unsuppressed CS004 findings (one suppressed)")
 	for _, f := range findings {
 		assert.Equal(t, "CS004", f.RuleId)
-		assert.Equal(t, codelint.FindingSeverityWarn, f.Severity)
+		assert.Equal(t, codelint.FindingSeverityError, f.Severity)
 		assert.Contains(t, f.Path, "bad.go")
 	}
 }
@@ -311,7 +311,7 @@ func TestCS008_FlagsTypeAliases(t *testing.T) {
 	require.Len(t, findings, 4, "expected 4 unsuppressed CS008 findings (one suppressed)")
 	for _, f := range findings {
 		assert.Equal(t, "CS008", f.RuleId)
-		assert.Equal(t, codelint.FindingSeverityWarn, f.Severity)
+		assert.Equal(t, codelint.FindingSeverityError, f.Severity)
 		assert.Contains(t, f.Path, "bad.go")
 	}
 }
@@ -437,7 +437,7 @@ func TestCS011_FlagsStrayEnvAccess(t *testing.T) {
 	require.Len(t, findings, 4, "expected 4 unsuppressed CS011 findings (one suppressed)")
 	for _, f := range findings {
 		assert.Equal(t, "CS011", f.RuleId)
-		assert.Equal(t, codelint.FindingSeverityWarn, f.Severity)
+		assert.Equal(t, codelint.FindingSeverityError, f.Severity)
 		assert.Contains(t, f.Path, "bad.go")
 	}
 }

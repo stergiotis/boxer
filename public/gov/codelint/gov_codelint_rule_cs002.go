@@ -33,7 +33,7 @@ func (inst *RuleCS002) Id() (id string) {
 }
 
 func (inst *RuleCS002) DefaultSeverity() (sev FindingSeverityE) {
-	sev = FindingSeverityWarn
+	sev = FindingSeverityError
 	return
 }
 
