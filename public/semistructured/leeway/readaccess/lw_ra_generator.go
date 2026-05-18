@@ -538,10 +538,14 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 						err = eh.Errorf("unable to get arrow class name for canonical type: %w", err)
 						return
 					}
+					arrowConstName2 := typeName2
+					if arrowConstName2 == "Boolean" {
+						arrowConstName2 = "Bool" // arrow inconsistency: arrow.BOOL but array.NewBooleanData / array.Boolean
+					}
 					columnIndexFieldName2 := clsNamer.ComposeColumnIndexFieldName(name2)
 					_, err = fmt.Fprintf(b, tmpl,
 						columnIndexFieldName2,
-						naming.MustBeValidStylableName(typeName2).Convert(naming.UpperSnakeCase),
+						naming.MustBeValidStylableName(arrowConstName2).Convert(naming.UpperSnakeCase),
 						clsNamer.ComposeValueField(name2),
 						clsNamer.ComposeValueFieldElementAccessor(name2),
 						typeName2,
@@ -1263,6 +1267,12 @@ func (inst *%s%s) Len() (nEntities int) {
 								err = eh.Errorf("unable to get arrow class name for canonical type: %w", err)
 								return
 							}
+							arrowConstName := typeName
+							if arrowConstName == "Boolean" {
+								arrowConstName = "BOOL" // arrow inconsistency: arrow.BOOL but array.NewBooleanData / array.Boolean
+							} else {
+								arrowConstName = strings.ToUpper(arrowConstName)
+							}
 							var elementAccessor bool
 							elementAccessor, err = isElementAccessorNeeded(cc, role, tableRowConfig)
 							if err != nil {
@@ -1276,7 +1286,7 @@ func (inst *%s%s) Len() (nEntities int) {
 	}
 `,
 									clsNamer.ComposeColumnIndexFieldName(fieldName),
-									strings.ToUpper(typeName),
+									arrowConstName,
 									clsNamer.ComposeValueField(fieldName),
 									clsNamer.ComposeValueFieldElementAccessor(fieldName),
 									typeName,
@@ -1289,7 +1299,7 @@ func (inst *%s%s) Len() (nEntities int) {
 	}
 `,
 									clsNamer.ComposeColumnIndexFieldName(fieldName),
-									strings.ToUpper(typeName),
+									arrowConstName,
 									clsNamer.ComposeValueField(fieldName),
 									naming.MustBeValidStylableName(typeName).Convert(naming.UpperCamelCase),
 								)
