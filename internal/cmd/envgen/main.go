@@ -1,3 +1,5 @@
+//go:build llm_generated_opus47
+
 // envgen renders the boxer env-var registry to a Diátaxis reference
 // markdown file. Backs the //go:generate directive in
 // public/config/env/doc_gen.go (ADR-0009 §4). The renderer lives in

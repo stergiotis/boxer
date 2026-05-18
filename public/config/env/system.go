@@ -1,3 +1,5 @@
+//go:build llm_generated_opus47
+
 package env
 
 // System variables — OS- and Go-toolchain-owned. Declared here, not in
