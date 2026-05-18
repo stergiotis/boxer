@@ -224,11 +224,13 @@ Use the `iter` package to expose collections of data. This is preferred over ret
 This is particularly mandatory when traversing **Struct-of-Arrays (SoA)** storage to assemble "views" of the data on the fly.
 
 ### Naming
-Follow standard Go naming conventions for iterator methods:
+When a type exposes a single iterator, use one of the canonical method names:
 *   `All()`: Iterates over all items.
 *   `Values()`: Iterates over values (if distinct from `All`).
 *   `Keys()`: Iterates over keys/indices.
 *   `Backward()`: Iterates in reverse order.
+
+Types that legitimately expose multiple distinct iterators (e.g. a graph store with `LiveChildren`, `ForwardEdges`, `BackwardEdges`, `DeletedPartitionMembers`) should use domain-describing method names instead — the canonical quartet is for single-collection-per-receiver cases.
 
 ### Error Handling in Iterators
 If an iteration can fail (e.g., I/O during traversal), use `iter.Seq2[V, error]`.

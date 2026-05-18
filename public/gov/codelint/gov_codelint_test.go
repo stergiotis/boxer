@@ -392,7 +392,7 @@ func TestCS010_FlagsIterMethodNaming(t *testing.T) {
 		findings = append(findings, f)
 	}
 
-	require.Len(t, findings, 4, "expected 4 unsuppressed CS010 findings (one suppressed)")
+	require.Len(t, findings, 1, "expected 1 unsuppressed CS010 finding (sole-iterator with bad name; suppressed counterpart filtered)")
 	for _, f := range findings {
 		assert.Equal(t, "CS010", f.RuleId)
 		assert.Equal(t, codelint.FindingSeverityWarn, f.Severity)

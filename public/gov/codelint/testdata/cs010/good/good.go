@@ -2,49 +2,37 @@ package good
 
 import "iter"
 
-type Store struct {
-	ids   []uint64
-	names []string
+type SoleAll struct {
+	items []int
 }
 
-func (inst *Store) All() iter.Seq2[uint64, string] {
-	return func(yield func(uint64, string) bool) {
-		for i, id := range inst.ids {
-			if !yield(id, inst.names[i]) {
-				return
-			}
-		}
-	}
+func (inst *SoleAll) All() iter.Seq[int] {
+	return func(yield func(int) bool) {}
 }
 
-func (inst *Store) Values() iter.Seq[string] {
-	return func(yield func(string) bool) {
-		for _, n := range inst.names {
-			if !yield(n) {
-				return
-			}
-		}
-	}
+type SoleValues struct {
+	values []string
 }
 
-func (inst *Store) Keys() iter.Seq[uint64] {
-	return func(yield func(uint64) bool) {
-		for _, id := range inst.ids {
-			if !yield(id) {
-				return
-			}
-		}
-	}
+func (inst *SoleValues) Values() iter.Seq[string] {
+	return func(yield func(string) bool) {}
 }
 
-func (inst *Store) Backward() iter.Seq[string] {
-	return func(yield func(string) bool) {
-		for i := len(inst.names) - 1; i >= 0; i-- {
-			if !yield(inst.names[i]) {
-				return
-			}
-		}
-	}
+// MultiIter is the legitimate multi-iterator case (e.g. graph store).
+// Each domain-named iterator is fine because the receiver exposes
+// more than one iterator.
+type MultiIter struct{}
+
+func (inst *MultiIter) LiveChildren() iter.Seq[int] {
+	return func(yield func(int) bool) {}
+}
+
+func (inst *MultiIter) ForwardEdges() iter.Seq[int] {
+	return func(yield func(int) bool) {}
+}
+
+func (inst *MultiIter) BackwardEdges() iter.Seq[int] {
+	return func(yield func(int) bool) {}
 }
 
 // Free function returning iter.Seq is out of scope.
@@ -53,7 +41,6 @@ func freeSeq() iter.Seq[int] {
 }
 
 // Non-iter method is fine.
-func (inst *Store) Count() (n int) {
-	n = len(inst.ids)
+func (inst *MultiIter) Count() (n int) {
 	return
 }
