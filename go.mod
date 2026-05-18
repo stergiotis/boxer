@@ -9,14 +9,14 @@ require (
 	github.com/Jeffail/shutdown v1.1.0
 	github.com/akrylysov/pogreb v0.10.2
 	github.com/antlr4-go/antlr/v4 v4.13.1
-	github.com/apache/arrow-go/v18 v18.5.2
+	github.com/apache/arrow-go/v18 v18.6.0
 	github.com/brianvoe/gofakeit/v7 v7.14.1
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cockroachdb/pebble v1.1.5
 	github.com/dgraph-io/badger/v4 v4.9.1
 	github.com/ettle/strcase v0.2.0
 	github.com/fogleman/gg v1.3.0
-	github.com/fsnotify/fsnotify v1.9.0
+	github.com/fsnotify/fsnotify v1.10.1
 	github.com/fxamacker/cbor/v2 v2.9.2
 	github.com/go-json-experiment/json v0.0.0-20260214004413-d219187c3433
 	github.com/go-text/typesetting v0.3.4
@@ -40,7 +40,7 @@ require (
 	github.com/yuin/goldmark-meta v1.1.0
 	github.com/zeebo/xxh3 v1.1.0
 	golang.org/x/exp v0.0.0-20260312153236-7ab1446f8b90
-	golang.org/x/image v0.39.0
+	golang.org/x/image v0.40.0
 	golang.org/x/tools v0.45.0
 	gopkg.in/yaml.v3 v3.0.1
 	lukechampine.com/blake3 v1.4.1
@@ -59,7 +59,7 @@ require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/ProtonMail/go-crypto v1.4.1 // indirect
 	github.com/agnivade/levenshtein v1.2.2-0.20250519083737-420867539855 // indirect
-	github.com/andybalholm/brotli v1.2.0 // indirect
+	github.com/andybalholm/brotli v1.2.1 // indirect
 	github.com/apache/thrift v0.23.0 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -124,7 +124,6 @@ require (
 	github.com/karrick/godirwalk v1.17.0 // indirect
 	github.com/kevinburke/ssh_config v1.6.0 // indirect
 	github.com/kisielk/errcheck v1.10.0 // indirect
-	github.com/klauspost/asmfmt v1.3.2 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
@@ -135,8 +134,6 @@ require (
 	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/mattn/go-runewidth v0.0.21 // indirect
 	github.com/mfridman/tparse v0.18.0 // indirect
-	github.com/minio/asm2plan9s v0.0.0-20200509001527-cdd76441f9d8 // indirect
-	github.com/minio/c2goasm v0.0.0-20190812172519-36a3d3bbc4f3 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/go-archive v0.2.0 // indirect
 	github.com/moby/moby/api v1.54.1 // indirect
@@ -206,7 +203,6 @@ require (
 	golang.org/x/term v0.43.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
 	golang.org/x/vuln v1.3.0 // indirect
-	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	gonum.org/v1/gonum v0.17.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260316180232-0b37fe3546d5 // indirect
 	google.golang.org/grpc v1.80.0 // indirect
