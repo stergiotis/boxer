@@ -15,6 +15,30 @@ import (
 // (reserved CS999) and are not honoured here.
 var directivePattern = regexp.MustCompile(`//\s*boxer:lint\s+disable=([A-Z]+\d+(?:\s*,\s*[A-Z]+\d+)*)\s+reason="[^"]+"`)
 
+// enumPrefixPattern matches a `//codelint:enum-prefix=X` directive attached
+// to an enum type declaration. Used by CS007 to override the default
+// type-name-minus-E value prefix.
+var enumPrefixPattern = regexp.MustCompile(`//\s*codelint:enum-prefix=(\w+)`)
+
+// ExtractEnumPrefix returns the override prefix declared on a comment
+// group (typically a TypeSpec's or GenDecl's Doc field), or ("", false)
+// if no directive is present.
+func ExtractEnumPrefix(doc *ast.CommentGroup) (prefix string, ok bool) {
+	if doc == nil {
+		return
+	}
+	for _, c := range doc.List {
+		matches := enumPrefixPattern.FindStringSubmatch(c.Text)
+		if matches == nil {
+			continue
+		}
+		prefix = matches[1]
+		ok = true
+		return
+	}
+	return
+}
+
 // fileDisables indexes per-file the set of (line, ruleId) suppressions.
 type fileDisables struct {
 	byLine map[int]map[string]struct{}

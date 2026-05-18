@@ -266,7 +266,7 @@ func TestCS007_FlagsUnprefixedEnumValues(t *testing.T) {
 		findings = append(findings, f)
 	}
 
-	require.Len(t, findings, 6, "expected 6 unsuppressed CS007 findings (one suppressed)")
+	require.Len(t, findings, 7, "expected 7 unsuppressed CS007 findings (one suppressed; one override-violation)")
 	for _, f := range findings {
 		assert.Equal(t, "CS007", f.RuleId)
 		assert.Equal(t, codelint.FindingSeverityWarn, f.Severity)

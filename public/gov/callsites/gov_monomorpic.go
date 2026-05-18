@@ -39,6 +39,8 @@ func (inst CallTypeE) String() string {
 }
 
 // StaticPolySubtypeE refines the StaticPolymorphic case with granular types.
+//
+//codelint:enum-prefix=Subtype
 type StaticPolySubtypeE uint8
 
 const (

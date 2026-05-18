@@ -13,7 +13,7 @@ import (
 )
 
 // RuleCS007 — enum values must be prefixed with the enum type name
-// minus its trailing 'E'.
+// minus its trailing 'E', or with the type's declared override prefix.
 //
 // CODINGSTANDARDS.md "Naming & Style → Enum Naming" — given a type
 // WeekdayE, every value is expected to start with `Weekday`. Detection
@@ -22,9 +22,15 @@ import (
 // enum. Once classified, every constant of that type (including
 // stragglers in single-value declarations elsewhere) is checked.
 //
-// Types whose name does not end with 'E' are skipped here — CS006
-// covers the type-name issue and double-flagging the same root cause
-// is noise.
+// When the type-name prefix is awkwardly long, a per-enum override
+// may be declared on the type:
+//
+//	//codelint:enum-prefix=Subtype
+//	type StaticPolySubtypeE uint8
+//
+// Types whose name does not end with 'E' and have no override are
+// skipped here — CS006 covers the type-name issue and double-flagging
+// the same root cause is noise.
 type RuleCS007 struct{}
 
 func NewRuleCS007() (inst *RuleCS007) {
@@ -59,6 +65,7 @@ type cs007Value struct {
 func (inst *RuleCS007) run(pass *analysis.Pass) (res any, err error) {
 	allValues := make(map[*types.TypeName][]cs007Value)
 	isEnum := make(map[*types.TypeName]bool)
+	overrides := collectEnumPrefixOverrides(pass)
 
 	for _, file := range pass.Files {
 		for _, decl := range file.Decls {
@@ -105,10 +112,12 @@ func (inst *RuleCS007) run(pass *analysis.Pass) (res any, err error) {
 			continue
 		}
 		typeName := tn.Name()
-		if !endsWithCapitalE(typeName) {
-			continue
+		var prefix string
+		if override, has := overrides[tn]; has {
+			prefix = override
+		} else if endsWithCapitalE(typeName) {
+			prefix = typeName[:len(typeName)-1]
 		}
-		prefix := typeName[:len(typeName)-1]
 		if prefix == "" {
 			continue
 		}
@@ -120,6 +129,45 @@ func (inst *RuleCS007) run(pass *analysis.Pass) (res any, err error) {
 				Pos:     v.pos,
 				Message: fmt.Sprintf("CS007: enum value %q should be prefixed with %q (enum type %s)", v.name, prefix, typeName),
 			})
+		}
+	}
+	return
+}
+
+// collectEnumPrefixOverrides scans every type declaration in the pass
+// for a //codelint:enum-prefix=X directive on the GenDecl's lead doc
+// or the TypeSpec's own doc, and indexes them by *types.TypeName.
+func collectEnumPrefixOverrides(pass *analysis.Pass) (out map[*types.TypeName]string) {
+	out = make(map[*types.TypeName]string)
+	for _, file := range pass.Files {
+		for _, decl := range file.Decls {
+			gen, ok := decl.(*ast.GenDecl)
+			if !ok || gen.Tok != token.TYPE {
+				continue
+			}
+			for _, spec := range gen.Specs {
+				ts, ok := spec.(*ast.TypeSpec)
+				if !ok {
+					continue
+				}
+				doc := ts.Doc
+				if doc == nil {
+					doc = gen.Doc
+				}
+				prefix, has := ExtractEnumPrefix(doc)
+				if !has {
+					continue
+				}
+				obj := pass.TypesInfo.Defs[ts.Name]
+				if obj == nil {
+					continue
+				}
+				tn, isTypeName := obj.(*types.TypeName)
+				if !isTypeName {
+					continue
+				}
+				out[tn] = prefix
+			}
 		}
 	}
 	return

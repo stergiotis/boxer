@@ -106,6 +106,18 @@ const (
 var AllWeekdays = []WeekdayE{WeekdayMonday,WeekdayTuesday,WeekdayWednesday,...}
 ```
 
+When the full type-name prefix is awkwardly long (e.g. `StaticPolySubtype*` from `StaticPolySubtypeE`), a per-enum override may be declared once on the type:
+```go
+//codelint:enum-prefix=Subtype
+type StaticPolySubtypeE uint8
+const (
+    SubtypeNone  StaticPolySubtypeE = iota
+    SubtypeBasic
+    ...
+)
+```
+The override only affects the value-prefix rule; the type itself must still end with `E`.
+
 ### Function & Method Naming
 
 **Suffixes.**

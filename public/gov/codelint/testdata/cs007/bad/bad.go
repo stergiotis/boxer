@@ -24,3 +24,11 @@ const (
 	NotPrefixedA SuppressedE = 1 //boxer:lint disable=CS007 reason="testdata coverage of suppression"
 	NotPrefixedB SuppressedE = 2 // want CS007 here
 )
+
+//codelint:enum-prefix=Subtype
+type OverridenE uint8
+
+const (
+	SubtypeA   OverridenE = 1 // passes — override applies
+	WrongPrefB OverridenE = 2 // want CS007 here — doesn't match override prefix
+)

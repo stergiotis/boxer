@@ -27,3 +27,12 @@ const (
 	WrongFooA MissingESuffix = 1
 	WrongFooB MissingESuffix = 2
 )
+
+//codelint:enum-prefix=Subtype
+type StaticPolySubtypeE uint8
+
+const (
+	SubtypeNone  StaticPolySubtypeE = 1
+	SubtypeBasic StaticPolySubtypeE = 2
+	SubtypeFunc  StaticPolySubtypeE = 3
+)
