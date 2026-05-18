@@ -2,6 +2,8 @@ module github.com/stergiotis/boxer
 
 go 1.26
 
+toolchain go1.26.3
+
 require (
 	github.com/Jeffail/checkpoint v1.1.0
 	github.com/Jeffail/shutdown v1.1.0
@@ -38,7 +40,7 @@ require (
 	github.com/yuin/goldmark-meta v1.1.0
 	github.com/zeebo/xxh3 v1.1.0
 	golang.org/x/exp v0.0.0-20260312153236-7ab1446f8b90
-	golang.org/x/image v0.38.0
+	golang.org/x/image v0.39.0
 	golang.org/x/tools v0.45.0
 	gopkg.in/yaml.v3 v3.0.1
 	lukechampine.com/blake3 v1.4.1
