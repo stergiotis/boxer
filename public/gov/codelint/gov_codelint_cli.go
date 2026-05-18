@@ -75,6 +75,7 @@ func codelintAction(ctx *cli.Context) (err error) {
 	linter := NewLinter()
 	linter.Register(NewRuleCS001())
 	linter.Register(NewRuleCS002())
+	linter.Register(NewRuleCS003())
 
 	var rep ReporterI
 	rep, err = NewReporterE(format, os.Stdout)
