@@ -87,7 +87,6 @@ public/config/
     ├── int.go       // *IntVar
     ├── duration.go  // *DurationVar
     ├── path.go      // *PathVar (FS paths; allows ~ expansion)
-    ├── lint_test.go // bans os.Getenv outside allowlist
     └── doc_gen.go   // go:generate target → doc/env-vars.md
 ```
 
@@ -187,9 +186,9 @@ Surfaces:
 
 ### 5. Lint enforcement from day one
 
-`public/config/env/lint_test.go` walks the boxer module's Go files, parses each, and fails the test if any `os.Getenv` / `os.LookupEnv` / `syscall.Getenv` call appears in a non-allowlisted file. The allowlist is the env package itself plus a small documented set of legitimate exceptions (e.g., a test that exercises stdlib `os.Environ` semantics directly).
+Direct env-var access (`os.Getenv` / `os.LookupEnv` / `os.Environ` / `syscall.Getenv`) outside `public/config/env` is flagged at error severity by **codelint CS011** (see ADR-0011). The check is part of `scripts/ci/lint.sh`; a regression sets rc=1 and fails CI.
 
-Downstream consumers (pebble2impl, third) can adopt the same test in their own modules if they wish; boxer cannot enforce against external modules.
+Downstream consumers (pebble2impl, third) can adopt the same rule in their own modules; boxer cannot enforce against external ones.
 
 ### 6. Migration scope
 
@@ -462,6 +461,8 @@ ADRs are append-only; supersession is recorded, not deleted.
   catalogue — accurate reflection of what a thestack-imzero2
   binary actually consumes, not duplication of boxer's own
   doc/env-vars.md).
+
+- **2026-05-18 — §5 enforcement migrated to codelint CS011.** The bespoke `public/config/env/lint_test.go` AST walker that had enforced the no-stray-env rule since M1 is removed. Its successor is **codelint rule CS011** (ADR-0011), which runs against `./public/...` from `scripts/ci/lint.sh` at error severity and additionally covers `os.Environ` (which the original test had not modelled). The core decision (single-read-path lint enforced from day one) is unchanged; only the enforcer's location moved from an in-package `_test.go` to the project-wide governance lint suite. Downstream pebble2impl mirror at `src/go/public/config/envlint/envlint_test.go` is unaffected and continues to work independently.
 
 ## References
 
