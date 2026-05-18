@@ -2,21 +2,28 @@ name: Run all tests
 
 on: [push]
 
+permissions:
+  contents: read
+
 jobs:
   gotest:
     name: gotest
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: 'go.mod'
           cache-dependency-path: 'go.sum'
       - name: Setup
         run: ./scripts/ci/install.sh
-#      - name: Check go.mod/go.sum are tidy
-#        run: go mod tidy --diff
+      - name: Check go.mod/go.sum are tidy
+        run: go mod tidy --diff
+      - name: Verify module checksums
+        run: go mod verify
       - name: Run Tests
         run: ./scripts/ci/gotest.sh
