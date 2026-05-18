@@ -25,6 +25,7 @@ Target the most recent stable go version available.
 * Use `github.com/rs/zerolog` for structured logging.
 * Use `github.com/stretchr/testify` for unittest assertions.
 * Use `github.com/zeebo/xxh3` as 64-bit non-cryptographic hash function.
+* Use `github.com/stergiotis/boxer/public/config/env` for environment-variable access (see [Configuration](#configuration)).
 * Use `github.com/stergiotis/boxer/public/observability/eh` for error construction and wrapping.
 * Use `github.com/stergiotis/boxer/public/observability/eh/eb` for structural error construction and wrapping.
 * Use `github.com/stergiotis/boxer/semistructured/leeway/canonicaltypes` for defining RPC or FFI interface descriptions.
@@ -177,6 +178,24 @@ var Mask = (uint32(1)<<4)-1
 ## Portability
 Microsoft Windows is not a target runtime.
 Nevertheless, use stdlib functions aiming at writing portable code where it helps to capture intent and semantics. For example: Use `filepath` to manipulate paths.
+
+## Configuration
+
+### Environment Variables
+Use of the `public/config/env` registry is **mandatory** for every environment variable consumed by the codebase. Direct access via `os.Getenv`, `os.LookupEnv`, `os.Environ`, or `syscall.Getenv` is prohibited (a lint test enforces this).
+
+Each variable is declared once as a package-level value, which registers a `Spec` process-globally and returns a typed handle:
+
+```go
+var LogLevel = env.NewString(env.Spec{
+    Name:     "BOXER_LOG_LEVEL",
+    Category: env.CategoryObservability,
+    Default:  "info",
+    Usage:    "zerolog level (trace|debug|info|warn|error)",
+})
+```
+
+Read the value through the handle (`LogLevel.Get(ctx)` / `LogLevel.Lookup(ctx)`); derive CLI flags with `Spec.AsCliFlag()`; override in tests with `SetForTest`. Rationale: a single registry yields discoverability, typed parsing, doc generation (`cmd/envgen`), and prevents the lowercase-name and typo defects that motivated ADR-0009.
 
 ## Concurrency Patterns
 *  **Context:** usage is mandatory for all I/O bound or long-running functions. `ctx` must be the first argument.
