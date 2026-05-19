@@ -203,6 +203,7 @@ func SetupJsonIndentLogger(w io.Writer) (err error) {
 // Environment variable declarations for the logging subsystem.
 // Registered with the boxer-wide registry per ADR-0009.
 var (
+	// LogFile is the BOXER_LOG_FILE env-var spec.
 	LogFile = env.NewString(env.Spec{
 		Name:        "BOXER_LOG_FILE",
 		Description: "path to the log file; empty or \"-\" routes to stderr",
@@ -210,6 +211,7 @@ var (
 		CliFlagName: "logFile",
 	})
 
+	// LogCaller is the BOXER_LOG_CALLER env-var spec.
 	LogCaller = env.NewBool(env.Spec{
 		Name:        "BOXER_LOG_CALLER",
 		Description: "include caller file:line in log records",
@@ -217,6 +219,7 @@ var (
 		CliFlagName: "logCaller",
 	})
 
+	// LogOsHostOnStart is the BOXER_LOG_OS_HOST_ON_START env-var spec.
 	LogOsHostOnStart = env.NewBool(env.Spec{
 		Name:        "BOXER_LOG_OS_HOST_ON_START",
 		Description: "log the host name on application startup",
@@ -224,6 +227,7 @@ var (
 		CliFlagName: "logOsHostOnStart",
 	})
 
+	// LogOsArgsOnStart is the BOXER_LOG_OS_ARGS_ON_START env-var spec.
 	LogOsArgsOnStart = env.NewBool(env.Spec{
 		Name:        "BOXER_LOG_OS_ARGS_ON_START",
 		Description: "log os.Args on application startup",
@@ -231,6 +235,7 @@ var (
 		CliFlagName: "logOsArgsOnStart",
 	})
 
+	// LogOsPidOnStart is the BOXER_LOG_OS_PID_ON_START env-var spec.
 	LogOsPidOnStart = env.NewBool(env.Spec{
 		Name:        "BOXER_LOG_OS_PID_ON_START",
 		Description: "log the OS process id on application startup",
@@ -238,6 +243,7 @@ var (
 		CliFlagName: "logOsPidOnStart",
 	})
 
+	// LogVcsRevisionOnStart is the BOXER_LOG_VCS_REVISION_ON_START env-var spec.
 	LogVcsRevisionOnStart = env.NewBool(env.Spec{
 		Name:        "BOXER_LOG_VCS_REVISION_ON_START",
 		Description: "log the VCS revision on application startup",
@@ -245,8 +251,9 @@ var (
 		CliFlagName: "logVcsRevisionOnStart",
 	})
 
-	// Renamed from BOXER_LOG_MODULE_INFO_IN_START in passing per
-	// ADR-0009 §6 (the four sibling flags use _ON_START).
+	// LogModuleInfoOnStart is the BOXER_LOG_MODULE_INFO_ON_START env-var spec.
+	// Renamed from BOXER_LOG_MODULE_INFO_IN_START in passing per ADR-0009 §6
+	// (the four sibling flags use _ON_START).
 	LogModuleInfoOnStart = env.NewBool(env.Spec{
 		Name:        "BOXER_LOG_MODULE_INFO_ON_START",
 		Description: "log the Go module info on application startup",
@@ -254,6 +261,7 @@ var (
 		CliFlagName: "logModuleInfoOnStart",
 	})
 
+	// LogCorrelationId is the BOXER_LOG_CORRELATION_ID env-var spec.
 	LogCorrelationId = env.NewString(env.Spec{
 		Name:        "BOXER_LOG_CORRELATION_ID",
 		Description: "correlation id for log records; empty seeds a nanoid(21)",
@@ -261,6 +269,7 @@ var (
 		CliFlagName: "logCorrelationId",
 	})
 
+	// LogLevel is the BOXER_LOG_LEVEL env-var spec.
 	LogLevel = env.NewString(env.Spec{
 		Name:        "BOXER_LOG_LEVEL",
 		Default:     "info",
@@ -269,6 +278,7 @@ var (
 		CliFlagName: "logLevel",
 	})
 
+	// LogFormat is the BOXER_LOG_FORMAT env-var spec.
 	LogFormat = env.NewString(env.Spec{
 		Name:        "BOXER_LOG_FORMAT",
 		Default:     "json",

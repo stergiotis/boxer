@@ -16,6 +16,7 @@ import (
 // inputs. Marked Sensitive so the doc generator and `env list`
 // subcommand redact the live value.
 var (
+	// GeminiApiKey is the GEMINI_API_KEY env-var spec (primary Gemini key).
 	GeminiApiKey = env.NewString(env.Spec{
 		Name:        "GEMINI_API_KEY",
 		Description: "Google AI Studio / Gemini API key (primary)",
@@ -23,6 +24,8 @@ var (
 		Sensitive:   true,
 	})
 
+	// GoogleApiKey is the GOOGLE_API_KEY env-var spec (secondary lookup if
+	// GEMINI_API_KEY is unset).
 	GoogleApiKey = env.NewString(env.Spec{
 		Name:        "GOOGLE_API_KEY",
 		Description: "Google API key — secondary lookup if GEMINI_API_KEY is unset",

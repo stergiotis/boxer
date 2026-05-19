@@ -21,6 +21,7 @@ var flightRecorderOutputMtx sync.Mutex
 
 // Environment variable declarations for the tracing subsystem.
 var (
+	// FlightRecorder is the BOXER_FLIGHT_RECORDER env-var spec.
 	FlightRecorder = env.NewBool(env.Spec{
 		Name:        "BOXER_FLIGHT_RECORDER",
 		Description: "enable the Go runtime flight recorder",
@@ -28,6 +29,7 @@ var (
 		CliFlagName: "flightRecorder",
 	})
 
+	// FlightRecorderOutputFile is the BOXER_FLIGHT_RECORDER_OUTPUT_FILE env-var spec.
 	FlightRecorderOutputFile = env.NewPath(env.Spec{
 		Name:        "BOXER_FLIGHT_RECORDER_OUTPUT_FILE",
 		Default:     "flightRecorder.trace",

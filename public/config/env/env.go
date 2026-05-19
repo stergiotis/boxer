@@ -16,7 +16,7 @@ import (
 	"sync"
 )
 
-// Category tags a Spec for filtering and documentation grouping. The
+// CategoryE tags a Spec for filtering and documentation grouping. The
 // type is an open string per ADR-0009 §2 so that downstream consumers
 // (pebble2impl, third) can introduce additional tags without changes to
 // this package.
