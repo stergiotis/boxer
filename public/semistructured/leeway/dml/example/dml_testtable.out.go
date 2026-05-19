@@ -61,6 +61,7 @@ type InEntityTesttable struct {
 	section01Inst         *InEntityTesttableSectionFloat64
 	section02Inst         *InEntityTesttableSectionSpecial
 	section03Inst         *InEntityTesttableSectionString
+	activeSections        *[4]bool
 	scalarFieldBuilder000 *array.Uint64Builder
 
 	scalarFieldBuilder001 *array.TimestampBuilder
@@ -91,10 +92,33 @@ func NewInEntityTesttable(allocator memory.Allocator, estimatedNumberOfRecords i
 	return inst
 }
 
+// SetActiveSections marks which section indices BeginEntity should
+// initialise (skipping beginSection for the rest). Pass nil to clear.
+// The hint is a performance optimisation; sending BeginAttribute to
+// an unmarked section produces empty-list bytes at TransferRecords.
+func (inst *InEntityTesttable) SetActiveSections(idxs []int) {
+	if idxs == nil {
+		inst.activeSections = nil
+		return
+	}
+	var mask [4]bool
+	for _, i := range idxs {
+		if i >= 0 && i < len(mask) {
+			mask[i] = true
+		}
+	}
+	inst.activeSections = &mask
+}
+
+// Builder exposes the underlying RecordBuilder so callers can apply
+// shim-level hints (e.g. SetActiveFields on the arrowrowbinary /
+// arrowsparserb / arrowrowcbor backends).
+func (inst *InEntityTesttable) Builder() *array.RecordBuilder { return inst.builder }
+
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1275
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1308
 
 func (inst *InEntityTesttable) SetId(id0 uint64) *InEntityTesttable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -109,7 +133,7 @@ func (inst *InEntityTesttable) SetId(id0 uint64) *InEntityTesttable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1275
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1308
 
 func (inst *InEntityTesttable) SetTimestamp(ts1 time.Time) *InEntityTesttable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -137,6 +161,21 @@ func (inst *InEntityTesttable) initSections(builder *array.RecordBuilder) {
 	inst.section03Inst = NewInEntityTesttableSectionString(builder, inst)
 }
 func (inst *InEntityTesttable) beginSections() {
+	if mask := inst.activeSections; mask != nil {
+		if mask[0] {
+			inst.section00Inst.beginSection()
+		}
+		if mask[1] {
+			inst.section01Inst.beginSection()
+		}
+		if mask[2] {
+			inst.section02Inst.beginSection()
+		}
+		if mask[3] {
+			inst.section03Inst.beginSection()
+		}
+		return
+	}
 	inst.section00Inst.beginSection()
 	inst.section01Inst.beginSection()
 	inst.section02Inst.beginSection()

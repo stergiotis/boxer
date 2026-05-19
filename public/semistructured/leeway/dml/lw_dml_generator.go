@@ -1181,6 +1181,16 @@ func (inst *GoClassBuilder) ComposeEntityClassAndFactoryCode(clsNamer gocodegen.
 			return
 		}
 	}
+	// activeSections hint (ADR-0042 M9): if non-nil, beginSections only
+	// calls beginSection for indices where mask[i] is true. Skips
+	// list-slot-start Append chains for sections the caller knows it
+	// won't populate. Production callers (e.g. buscodec dispatch)
+	// precompute this once per kind at registration.
+	_, err = fmt.Fprintf(b, `	activeSections *[%d]bool
+`, len(sectionNames))
+	if err != nil {
+		return
+	}
 	plainIRH := entityIRH.DeriveSubHolder(deriveSubHolderSelectPlainValues)
 	plainScalarIRH := plainIRH.DeriveSubHolder(deriveSubHolderSelectScalar)
 	plainNonScalarIRH := plainIRH.DeriveSubHolder(deriveSubHolderSelectNonScalar)
@@ -1243,6 +1253,29 @@ func New%s(allocator memory.Allocator, estimatedNumberOfRecords int) (inst *%s) 
 	return inst
 }
 `)
+	if err != nil {
+		return
+	}
+	// ADR-0042 M9 — public hint methods.
+	_, err = fmt.Fprintf(b, `
+// SetActiveSections marks which section indices BeginEntity should
+// initialise (skipping beginSection for the rest). Pass nil to clear.
+// The hint is a performance optimisation; sending BeginAttribute to
+// an unmarked section produces empty-list bytes at TransferRecords.
+func (inst *%s) SetActiveSections(idxs []int) {
+	if idxs == nil { inst.activeSections = nil; return }
+	var mask [%d]bool
+	for _, i := range idxs {
+		if i >= 0 && i < len(mask) { mask[i] = true }
+	}
+	inst.activeSections = &mask
+}
+
+// Builder exposes the underlying RecordBuilder so callers can apply
+// shim-level hints (e.g. SetActiveFields on the arrowrowbinary /
+// arrowsparserb / arrowrowcbor backends).
+func (inst *%s) Builder() *%s.RecordBuilder { return inst.builder }
+`, clsNames.InEntityClassName, len(sectionNames), clsNames.InEntityClassName, inst.builderPkg.Alias)
 	if err != nil {
 		return
 	}
@@ -1378,9 +1411,26 @@ func (inst *GoClassBuilder) ComposeEntityCode(clsNamer gocodegen.GoClassNamerI, 
 			return
 		}
 	}
-	{ // beginSections
+	{ // beginSections (with optional activeSections hint)
 		_, err = fmt.Fprintf(b, `func (inst *%s) beginSections() {
+	if mask := inst.activeSections; mask != nil {
 `, clsNames.InEntityClassName)
+		if err != nil {
+			return
+		}
+		for i := range sectionNames {
+			_, err = fmt.Fprintf(b, `		if mask[%d] { inst.section%02dInst.beginSection() }
+`, i, i)
+			if err != nil {
+				return
+			}
+		}
+		_, err = b.WriteString(`		return
+	}
+`)
+		if err != nil {
+			return
+		}
 		for i := range sectionNames {
 			_, err = fmt.Fprintf(b, `	inst.section%02dInst.beginSection()
 `, i)

@@ -68,6 +68,7 @@ type InEntityJson struct {
 	section04Inst         *InEntityJsonSectionString
 	section05Inst         *InEntityJsonSectionSymbol
 	section06Inst         *InEntityJsonSectionUndefined
+	activeSections        *[7]bool
 	scalarFieldBuilder000 *array.BinaryBuilder
 	errs                  []error
 	records               []arrow.RecordBatch
@@ -97,10 +98,33 @@ func NewInEntityJson(allocator memory.Allocator, estimatedNumberOfRecords int) (
 	return inst
 }
 
+// SetActiveSections marks which section indices BeginEntity should
+// initialise (skipping beginSection for the rest). Pass nil to clear.
+// The hint is a performance optimisation; sending BeginAttribute to
+// an unmarked section produces empty-list bytes at TransferRecords.
+func (inst *InEntityJson) SetActiveSections(idxs []int) {
+	if idxs == nil {
+		inst.activeSections = nil
+		return
+	}
+	var mask [7]bool
+	for _, i := range idxs {
+		if i >= 0 && i < len(mask) {
+			mask[i] = true
+		}
+	}
+	inst.activeSections = &mask
+}
+
+// Builder exposes the underlying RecordBuilder so callers can apply
+// shim-level hints (e.g. SetActiveFields on the arrowrowbinary /
+// arrowsparserb / arrowrowcbor backends).
+func (inst *InEntityJson) Builder() *array.RecordBuilder { return inst.builder }
+
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1275
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1308
 
 func (inst *InEntityJson) SetId(blake3hash0 []byte) *InEntityJson {
 	if inst.state != runtime.EntityStateInEntity {
@@ -127,6 +151,30 @@ func (inst *InEntityJson) initSections(builder *array.RecordBuilder) {
 	inst.section06Inst = NewInEntityJsonSectionUndefined(builder, inst)
 }
 func (inst *InEntityJson) beginSections() {
+	if mask := inst.activeSections; mask != nil {
+		if mask[0] {
+			inst.section00Inst.beginSection()
+		}
+		if mask[1] {
+			inst.section01Inst.beginSection()
+		}
+		if mask[2] {
+			inst.section02Inst.beginSection()
+		}
+		if mask[3] {
+			inst.section03Inst.beginSection()
+		}
+		if mask[4] {
+			inst.section04Inst.beginSection()
+		}
+		if mask[5] {
+			inst.section05Inst.beginSection()
+		}
+		if mask[6] {
+			inst.section06Inst.beginSection()
+		}
+		return
+	}
 	inst.section00Inst.beginSection()
 	inst.section01Inst.beginSection()
 	inst.section02Inst.beginSection()
