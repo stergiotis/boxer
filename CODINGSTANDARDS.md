@@ -174,6 +174,27 @@ Use these canonical verb pairs rather than invented synonyms, so that symmetrica
 *   Send/Receive
 *   Setup/Teardown
 
+## Testing
+
+*   **Assertions:** use `github.com/stretchr/testify` (see [Packages to Use](#packages-to-use)).
+*   **Heavy test-only dependencies must be build-tag-gated.** If a test
+    introduces a non-trivial dependency chain — containers (testcontainers-go),
+    browser drivers, network harnesses, large fixture or model loaders — the
+    test file must carry a custom build tag (e.g. `//go:build integration`)
+    and the default `go test ./...` run must not pull those modules in. The
+    file [tags](./tags) lists which tags CI activates by default;
+    `integration` is opt-in and only set by integration CI jobs. Rationale:
+    keeps `go.sum`, the module cache, and developer build times bounded by
+    what production code actually needs. See
+    [§4 of ENGINEERING_PRACTICES.md](./doc/ENGINEERING_PRACTICES.md#4-tests)
+    for the kafka/Redpanda case study.
+*   **Test helpers shared across packages** live in regular (non-`_test.go`)
+    files because Go does not export `_test.go` symbols across package
+    boundaries. Name such files `*_testutils.go` or place them under a
+    `…/testcmd/` subpackage so their intent is obvious despite the file
+    extension. Be aware that they count as production code for `go list`
+    purposes and pull their imports into the production dependency graph.
+
 ## Documentation
 *   **Self-documenting code:** Do not document obvious methods or fields.
 *   **No Tautologies:** Do not repeat literal values in comments.

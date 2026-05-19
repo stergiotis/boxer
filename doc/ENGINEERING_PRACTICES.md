@@ -104,7 +104,15 @@ go test -race -json -short -cover -tags "$tags" ./... \
   (`//go:build integration && llm_generated_opus47`) and use
   [testcontainers-go](https://pkg.go.dev/github.com/testcontainers/testcontainers-go);
   see [the Kafka integration test](../public/streaming/persisted/kafka/integration_test.go),
-  which boots a Redpanda container.
+  which boots a Redpanda container. The tag doubles as a dependency-isolation
+  gate: under the default tag set, the testcontainers + Moby + OCI +
+  containerd + gopsutil chain (29 transitive modules, ≈41 MB in `$GOMODCACHE`,
+  59 entries in [go.sum](../go.sum)) is absent from `go list -deps ./...`, so
+  default `go build` and `go test -short` do not compile or download it. CI
+  opts into the chain only when running integration jobs. The same pattern
+  applies to any future test that would introduce a comparably heavy
+  dependency — gate it with a build tag rather than letting it leak into
+  every developer's build.
 - `example_test.go` files are reserved for the *How-To* quadrant of Diátaxis
   per [§1 of DOCUMENTATION_STANDARD.md](./DOCUMENTATION_STANDARD.md#how-to-guides-problem-oriented);
   current count is low, representing an under-served convention rather than an
