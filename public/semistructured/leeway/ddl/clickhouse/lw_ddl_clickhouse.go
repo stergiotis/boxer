@@ -30,7 +30,11 @@ func (inst *TechnologySpecificCodeGenerator) GetEncodingHintImplementationStatus
 		encodingaspects2.AspectInterRecordLowCardinality,
 		encodingaspects2.AspectIntraRecordLowCardinality,
 		encodingaspects2.AspectLightBiasSmallInteger,
-		encodingaspects2.AspectHeavyBiasSmallInteger:
+		encodingaspects2.AspectHeavyBiasSmallInteger,
+		encodingaspects2.AspectUltraLightSlowlyChangingFloat,
+		encodingaspects2.AspectLightSlowlyChangingFloat,
+		encodingaspects2.AspectHeavySlowlyChangingFloat,
+		encodingaspects2.AspectUltraHeavySlowlyChangingFloat:
 		return common.ImplementationStatusFull, ""
 	}
 	return common.ImplementationStatusNotImplemented, ""
@@ -110,7 +114,7 @@ func (inst *TechnologySpecificCodeGenerator) generateTypeAndCodec(canonicalType 
 		inst.typeEpilog += ")"
 	}
 	if list {
-		canonicalTypeScalar := canonicaltypes.DemoteToScalar(canonicalType)
+		canonicalTypeScalar := canonicaltypes.DemoteToScalarPrim(canonicalType)
 		err = inst.GenerateType(canonicalTypeScalar)
 	} else {
 		err = inst.GenerateType(canonicalType)

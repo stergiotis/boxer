@@ -195,7 +195,7 @@ func getElementGoTypeName(ct canonicaltypes.PrimitiveAstNodeI, hints encodingasp
 		err = eb.Build().Stringer("scalarModifier", scalarModifier).Stringer("ct", ct).Errorf("unhandled scalar modifier")
 		return
 	}
-	typeConvPrefix, typeConvSuffix, err = gocodegen.ArrowTypeToGoType(canonicaltypes.DemoteToScalar(ct), hints, common.UseArrowDictionaryEncoding)
+	typeConvPrefix, typeConvSuffix, err = gocodegen.ArrowTypeToGoType(canonicaltypes.DemoteToScalarPrim(ct), hints, common.UseArrowDictionaryEncoding)
 	if err != nil {
 		err = eb.Build().Stringer("ct", ct).Errorf("unable to get arrow to go type conversion: %w", err)
 		return

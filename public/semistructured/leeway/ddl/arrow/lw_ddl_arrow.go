@@ -128,7 +128,7 @@ func (inst *TechnologySpecificCodeGenerator) GenerateColumnCode(idx int, phy com
 		return
 	}
 	if list {
-		ctScalar := canonicaltypes.DemoteToScalar(ct)
+		ctScalar := canonicaltypes.DemoteToScalarPrim(ct)
 		err = inst.generateTypeAndCodec(ctScalar, hints)
 	} else {
 		err = inst.generateTypeAndCodec(ct, hints)

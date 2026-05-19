@@ -17,7 +17,7 @@ func GetScalarModifier(s PrimitiveAstNodeI) (mod ScalarModifierE, notSupported b
 	}
 	return
 }
-func DemoteToScalar(s PrimitiveAstNodeI) (out PrimitiveAstNodeI) {
+func DemoteToScalarPrim(s PrimitiveAstNodeI) (out PrimitiveAstNodeI) {
 	if !s.IsScalar() {
 		out = s
 		switch ct := s.(type) {
@@ -45,7 +45,7 @@ func PromoteScalars(in AstNodeI, scalarModifier ScalarModifierE) (out AstNodeI, 
 	switch typedIn := in.(type) {
 	case PrimitiveAstNodeI:
 		if typedIn.IsScalar() {
-			return promoteScalarPrim(typedIn, scalarModifier), 1, 0
+			return PromoteScalarPrim(typedIn, scalarModifier), 1, 0
 		}
 		return in, 0, 1
 
@@ -82,7 +82,7 @@ func DemoteToScalars(in AstNodeI) (out AstNodeI, modified int, unmodified int) {
 	switch typedIn := in.(type) {
 	case PrimitiveAstNodeI:
 		if !typedIn.IsScalar() {
-			return DemoteToScalar(typedIn), 1, 0
+			return DemoteToScalarPrim(typedIn), 1, 0
 		}
 		return in, 0, 1
 
@@ -115,7 +115,7 @@ func DemoteToScalars(in AstNodeI) (out AstNodeI, modified int, unmodified int) {
 	return in, 0, 0
 }
 
-func promoteScalarPrim(s PrimitiveAstNodeI, scalarModifier ScalarModifierE) (out PrimitiveAstNodeI) {
+func PromoteScalarPrim(s PrimitiveAstNodeI, scalarModifier ScalarModifierE) (out PrimitiveAstNodeI) {
 	if !s.IsScalar() {
 		return s
 	}
