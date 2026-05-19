@@ -5,7 +5,7 @@ package common
 import (
 	"errors"
 	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/apache/arrow-go/v18/arrow/array"
+	array "github.com/apache/arrow-go/v18/arrow/array"
 	_ "github.com/apache/arrow-go/v18/arrow/ipc"
 	_ "github.com/apache/arrow-go/v18/arrow/math"
 	"github.com/apache/arrow-go/v18/arrow/memory"
@@ -64,7 +64,7 @@ func CreateSchemaSystemTableColumns() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1148
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1159
 
 type InEntitySystemTableColumns struct {
 	allocator             memory.Allocator
@@ -113,7 +113,7 @@ func NewInEntitySystemTableColumns(allocator memory.Allocator, estimatedNumberOf
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1262
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1275
 
 func (inst *InEntitySystemTableColumns) SetId(tableHash0 uint64, columnIndex1 uint64) *InEntitySystemTableColumns {
 	if inst.state != runtime.EntityStateInEntity {
@@ -129,7 +129,7 @@ func (inst *InEntitySystemTableColumns) SetId(tableHash0 uint64, columnIndex1 ui
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1262
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1275
 
 func (inst *InEntitySystemTableColumns) SetRouting(tableName2 string) *InEntitySystemTableColumns {
 	if inst.state != runtime.EntityStateInEntity {

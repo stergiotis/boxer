@@ -43,9 +43,17 @@ const (
 )
 
 func NewGoClassBuilder() *GoClassBuilder {
+	return NewGoClassBuilderWithPackage(DefaultBuilderPackage())
+}
+
+// NewGoClassBuilderWithPackage constructs a GoClassBuilder that emits
+// type references against the given BuilderPackage. The DefaultBuilderPackage
+// targets arrow-go's array package — the historical behaviour.
+func NewGoClassBuilderWithPackage(pkg BuilderPackage) *GoClassBuilder {
 	return &GoClassBuilder{
-		builder: nil,
-		tech:    golang.NewTechnologySpecificCodeGenerator(),
+		builder:    nil,
+		tech:       golang.NewTechnologySpecificCodeGenerator(),
+		builderPkg: pkg,
 	}
 }
 
@@ -106,6 +114,7 @@ func (inst *GoClassBuilder) composeFieldRelatedCodeAll(op structFieldOperationE,
 }
 func (inst *GoClassBuilder) composeFieldRelatedCode(op structFieldOperationE, cc common.IntermediateColumnContext, cp *common.IntermediateColumnProps, i int) (err error) {
 	b := inst.builder
+	pkg := inst.builderPkg.Alias
 	ct := cp.CanonicalType[i]
 	encodingHints := cp.EncodingHints[i]
 	var arrowBuilderClassName string
@@ -174,20 +183,20 @@ func (inst *GoClassBuilder) composeFieldRelatedCode(op structFieldOperationE, cc
 			common.IntermediateColumnsSubTypeMembership,
 			common.IntermediateColumnsSubTypeScalar:
 			if cc.PlainItemType == common.PlainItemTypeNone {
-				_, err = fmt.Fprintf(b, `	%sFieldBuilder%03d *array.%sBuilder
-	%sListBuilder%03d *array.ListBuilder
-`, prefix, idx, arrowBuilderClassName, prefix, idx)
+				_, err = fmt.Fprintf(b, `	%sFieldBuilder%03d *%s.%sBuilder
+	%sListBuilder%03d *%s.ListBuilder
+`, prefix, idx, pkg, arrowBuilderClassName, prefix, idx, pkg)
 				if err != nil {
 					return
 				}
 			} else {
 				if ct.IsScalar() {
-					_, err = fmt.Fprintf(b, `	%sFieldBuilder%03d *array.%sBuilder
-`, prefix, idx, arrowBuilderClassName)
+					_, err = fmt.Fprintf(b, `	%sFieldBuilder%03d *%s.%sBuilder
+`, prefix, idx, pkg, arrowBuilderClassName)
 				} else {
-					_, err = fmt.Fprintf(b, `	%sFieldBuilder%03d *array.%sBuilder
-	%sListBuilder%03d *array.ListBuilder
-`, prefix, idx, arrowBuilderClassName, prefix, idx)
+					_, err = fmt.Fprintf(b, `	%sFieldBuilder%03d *%s.%sBuilder
+	%sListBuilder%03d *%s.ListBuilder
+`, prefix, idx, pkg, arrowBuilderClassName, prefix, idx, pkg)
 				}
 			}
 		default:
@@ -203,17 +212,17 @@ func (inst *GoClassBuilder) composeFieldRelatedCode(op structFieldOperationE, cc
 			common.IntermediateColumnsSubTypeMembership,
 			common.IntermediateColumnsSubTypeScalar:
 			if cc.PlainItemType == common.PlainItemTypeNone {
-				_, err = fmt.Fprintf(b, `	inst.%sFieldBuilder%03d = builder.Field(%d).(*array.ListBuilder).ValueBuilder().(*array.%sBuilder)
-	inst.%sListBuilder%03d = builder.Field(%d).(*array.ListBuilder)
-`, prefix, idx, idx, arrowBuilderClassName, prefix, idx, idx)
+				_, err = fmt.Fprintf(b, `	inst.%sFieldBuilder%03d = builder.Field(%d).(*%s.ListBuilder).ValueBuilder().(*%s.%sBuilder)
+	inst.%sListBuilder%03d = builder.Field(%d).(*%s.ListBuilder)
+`, prefix, idx, idx, pkg, pkg, arrowBuilderClassName, prefix, idx, idx, pkg)
 			} else {
 				if ct.IsScalar() {
-					_, err = fmt.Fprintf(b, `	inst.%sFieldBuilder%03d = builder.Field(%d).(*array.%sBuilder)
-`, prefix, idx, idx, arrowBuilderClassName)
+					_, err = fmt.Fprintf(b, `	inst.%sFieldBuilder%03d = builder.Field(%d).(*%s.%sBuilder)
+`, prefix, idx, idx, pkg, arrowBuilderClassName)
 				} else {
-					_, err = fmt.Fprintf(b, `	inst.%sFieldBuilder%03d = builder.Field(%d).(*array.ListBuilder).ValueBuilder().(*array.%sBuilder)
-	inst.%sListBuilder%03d = builder.Field(%d).(*array.ListBuilder)
-`, prefix, idx, idx, arrowBuilderClassName, prefix, idx, idx)
+					_, err = fmt.Fprintf(b, `	inst.%sFieldBuilder%03d = builder.Field(%d).(*%s.ListBuilder).ValueBuilder().(*%s.%sBuilder)
+	inst.%sListBuilder%03d = builder.Field(%d).(*%s.ListBuilder)
+`, prefix, idx, idx, pkg, pkg, arrowBuilderClassName, prefix, idx, idx, pkg)
 				}
 			}
 		default:
@@ -340,12 +349,13 @@ func (inst *GoClassBuilder) ComposeAttributeClassAndFactoryCode(clsNamer gocodeg
 	}
 	_, err = fmt.Fprintf(b, `}
 
-func New%s(builder *array.RecordBuilder, parent *%s) (inst *%s) {
+func New%s(builder *%s.RecordBuilder, parent *%s) (inst *%s) {
 	inst = &%s{}
 	inst.errs = make([]error,0,8)
 	inst.state = runtime.EntityStateInitial
 	inst.parent = parent
 `, clsNames.InAttributeClassName,
+		inst.builderPkg.Alias,
 		clsNames.InSectionClassName,
 		clsNames.InAttributeClassName,
 		clsNames.InAttributeClassName)
@@ -398,7 +408,7 @@ func (inst *GoClassBuilder) ComposeSectionClassAndFactoryCode(clsNamer gocodegen
 	}
 
 	_, err = fmt.Fprintf(b, `}
-func New%s(builder *array.RecordBuilder, parent *%s) (inst *%s) {
+func New%s(builder *%s.RecordBuilder, parent *%s) (inst *%s) {
 	inst = &%s{}
 	inAttr := New%s(builder,inst)
 	inst.errs = make([]error,0,8)
@@ -407,6 +417,7 @@ func New%s(builder *array.RecordBuilder, parent *%s) (inst *%s) {
 	inst.parent = parent
 `,
 		clsNames.InSectionClassName,
+		inst.builderPkg.Alias,
 		clsNames.InEntityClassName,
 		clsNames.InSectionClassName,
 		clsNames.InSectionClassName,
@@ -1150,9 +1161,9 @@ func (inst *GoClassBuilder) ComposeEntityClassAndFactoryCode(clsNamer gocodegen.
 	errs []error
 	state runtime.EntityStateE
 	allocator memory.Allocator
-	builder *array.RecordBuilder
-	records []arrow.RecordBatch
-`, clsNames.InEntityClassName)
+	builder *%s.RecordBuilder
+	records []%s
+`, clsNames.InEntityClassName, inst.builderPkg.Alias, inst.builderPkg.RecordType)
 	if err != nil {
 		return
 	}
@@ -1202,16 +1213,18 @@ func New%s(allocator memory.Allocator, estimatedNumberOfRecords int) (inst *%s) 
 	inst.errs = make([]error,0,8)
 	inst.state = runtime.EntityStateInitial
 	inst.allocator = allocator
-	inst.records = make([]arrow.RecordBatch,0,estimatedNumberOfRecords)
+	inst.records = make([]%s,0,estimatedNumberOfRecords)
 	schema := %s()
-	builder := array.NewRecordBuilder(allocator, schema)
+	builder := %s.NewRecordBuilder(allocator, schema)
 	inst.builder = builder
 	inst.initSections(builder)
 `,
 		clsNames.InEntityClassName,
 		clsNames.InEntityClassName,
 		clsNames.InEntityClassName,
-		schemaFactoryName)
+		inst.builderPkg.RecordType,
+		schemaFactoryName,
+		inst.builderPkg.Alias)
 	if err != nil {
 		return
 	}
@@ -1341,7 +1354,7 @@ func (inst *GoClassBuilder) ComposeEntityCode(clsNamer gocodegen.GoClassNamerI, 
 		}
 	}
 	{ // reset sections
-		_, err = fmt.Fprintf(b, `func (inst *%s) initSections(builder *array.RecordBuilder) {`, clsNames.InEntityClassName)
+		_, err = fmt.Fprintf(b, `func (inst *%s) initSections(builder *%s.RecordBuilder) {`, clsNames.InEntityClassName, inst.builderPkg.Alias)
 		if err != nil {
 			return
 		}
@@ -1534,8 +1547,8 @@ func (inst *GoClassBuilder) ComposeEntityCode(clsNamer gocodegen.GoClassNamerI, 
 	{ // TransferRecords
 		_, err = fmt.Fprintf(b, `
 // TransferRecords The returned Records must be Release()'d after use.
-func (inst *%s) TransferRecords(recordsIn []arrow.RecordBatch) (recordsOut []arrow.RecordBatch, err error) {
-`, clsNames.InEntityClassName)
+func (inst *%s) TransferRecords(recordsIn []%s) (recordsOut []%s, err error) {
+`, clsNames.InEntityClassName, inst.builderPkg.RecordType, inst.builderPkg.RecordType)
 		err = inst.composeStateVerificationCode([]runtime.EntityStateE{runtime.EntityStateInitial}, true, "inst")
 		if err != nil {
 			return
