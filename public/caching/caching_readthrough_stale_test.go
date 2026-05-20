@@ -729,17 +729,19 @@ func TestPartitionedFetch_OnePerPartition(t *testing.T) {
 	}
 
 	assert.Equal(t, 3, f.fetchCalls, "one fetch per partition")
-	// Each partition was visited exactly once.
-	slices.Sort(f.fetchedPartitions)
-	assert.Equal(t, []uint64{0, 1, 2}, f.fetchedPartitions)
 
-	// Verify keys ended up in the right partition's batch.
+	// Verify keys ended up in the right partition's batch. Partition order
+	// of iteration is map-random, so check the pairing as-is before
+	// sorting for the membership assertion.
 	for i, p := range f.fetchedPartitions {
 		for _, k := range f.fetchedBatches[i] {
 			assert.Equal(t, p, f.partitionFn(k),
-				"key %q routed to partition %d but should be %d", k, p, f.partitionFn(k))
+				"key %q in batch for partition %d but partitionFn says %d", k, p, f.partitionFn(k))
 		}
 	}
+	parts := slices.Clone(f.fetchedPartitions)
+	slices.Sort(parts)
+	assert.Equal(t, []uint64{0, 1, 2}, parts, "each partition visited exactly once")
 
 	// All values are now present.
 	for k, want := range f.data {
