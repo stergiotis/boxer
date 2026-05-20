@@ -12,13 +12,12 @@ import (
 )
 
 const (
-	// ItemStateReadThroughPending: Item is queued for fetch.
-	ItemStateReadThroughPending ItemStateE = 0
-	// ItemStateInCache: Item is valid and ready to use.
+	// ItemStateInCache marks an item as valid and ready to use.
 	ItemStateInCache ItemStateE = 1
-	// ItemStateStale: Item is valid but expired; triggers background refresh.
+	// ItemStateStale marks an item as expired; reading it queues a background refresh.
 	ItemStateStale ItemStateE = 2
-	// ItemStateError: Last fetch failed; item is in cooling-off period.
+	// ItemStateError marks the last fetch as failed; the item is in the circuit-breaker
+	// cooling-off window until errorUntil.
 	ItemStateError ItemStateE = 3
 )
 
@@ -98,7 +97,9 @@ func (inst *ReadThroughCache[K, V, W]) WorkItem(wk W) iter.Seq[functional.NilIte
 	}
 }
 
-// Get retrieves an item. Logic: L1 -> L2 -> Miss/Error/Pending.
+// Get retrieves an item. Lookup order: L1 → L2 → miss. On miss the key is
+// queued for the next batch fetch and the current work item (if any) is
+// marked pending.
 func (inst *ReadThroughCache[K, V, W]) Get(k K) (has bool, v V) {
 	return inst.getInternal(k, false)
 }
@@ -150,8 +151,6 @@ func (inst *ReadThroughCache[K, V, W]) getInternal(k K, acceptStale bool) (has b
 				inst.metrics.RecordMiss()
 				return false, v
 			}
-		case ItemStateReadThroughPending:
-			// Already queued
 		}
 
 		inst.registerPendingWork()
@@ -344,13 +343,13 @@ func (inst *ReadThroughCache[K, V, W]) AddItem(k K, v V) {
 		if len(inst.primaryStore) >= inst.cap {
 			useStash := inst.ensureSpaceByEvictingRandomly(1)
 			if useStash {
-				// 3. Primary is full of Pinned items. We MUST use Stash.
-
-				dropped := inst.stash.Add(k, v)
-				if dropped {
-					inst.metrics.RecordEviction(false) // L2 Drop (Data Loss)
+				// 3. Primary is full of pinned items; spill the new value
+				// directly to L2. No L1 item was demoted here, so the
+				// (toStash=true) eviction metric does NOT fire — only a
+				// (toStash=false) if the stash itself displaced something.
+				if dropped := inst.stash.Add(k, v); dropped {
+					inst.metrics.RecordEviction(false)
 				}
-				inst.metrics.RecordEviction(true) // L1 -> L2 Move
 				return
 			}
 		}
@@ -388,14 +387,12 @@ func (inst *ReadThroughCache[K, V, W]) ensureSpaceByEvictingRandomly(n int) (use
 			continue
 		}
 
-		// Found a victim in L1. Move to Stash.
-		// Move to Stash via Interface
+		// Found a victim in L1. Demote to L2.
 		dropped := inst.stash.Add(k, v.value)
-
+		inst.metrics.RecordEviction(true) // L1 -> L2 demotion (preserved).
 		if dropped {
-			inst.metrics.RecordEviction(false) // L2 Drop (Data Loss)
+			inst.metrics.RecordEviction(false) // Stash displaced an older item (data loss).
 		}
-		inst.metrics.RecordEviction(true) // L1 -> L2 Move
 
 		// Remove from Primary
 		delete(inst.primaryStore, k)

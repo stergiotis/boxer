@@ -9,11 +9,21 @@ import (
 )
 
 // MetricsCollectorI defines the observability hooks.
+//
+// RecordEviction semantics:
+//   - toStash=true:  an L1 item was demoted to L2 (preserved, no data loss).
+//   - toStash=false: an item was dropped from the cache entirely (data loss),
+//     either because the stash overflowed during an L1 demotion or because a
+//     freshly fetched value was spilled directly to a full stash.
+//
+// Both can fire from a single operation if an L1 demotion finds the stash
+// full: one (true) for the demoted L1 item, one (false) for the displaced
+// stash item.
 type MetricsCollectorI interface {
 	RecordHit(l1 bool)                   // l1=true (Primary), l1=false (Stash)
 	RecordMiss()                         // Item not found, fetch triggered
 	RecordFetchError(count int)          // Number of keys failed
-	RecordEviction(toStash bool)         // Evicted to Stash vs Dropped
+	RecordEviction(toStash bool)         // See interface doc for semantics.
 	RecordFetchDuration(d time.Duration) // Time taken by fetcher
 }
 
