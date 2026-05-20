@@ -8,7 +8,12 @@ import (
 
 	"github.com/cockroachdb/pebble"
 	"github.com/fxamacker/cbor/v2"
+	"github.com/stergiotis/boxer/public/caching"
 )
+
+// Compile-time assertion that PebbleStash satisfies caching.StashBackendI.
+// Concrete K, V chosen arbitrarily — the check is parametric.
+var _ caching.StashBackendI[string, []byte] = (*PebbleStash[string, []byte])(nil)
 
 // PebbleStash implements StashBackend using CockroachDB's Pebble.
 type PebbleStash[K comparable, V any] struct {
@@ -86,7 +91,9 @@ func (inst *PebbleStash[K, V]) Add(key K, value V) bool {
 	if err != nil {
 		return false // Fail silently or panic depending on philosophy
 	}
-	vBytes, err := keyEncMode.Marshal(value)
+	// Values use plain CBOR — canonical encoding is only needed for keys
+	// (to keep hashes/range-scans deterministic).
+	vBytes, err := cbor.Marshal(value)
 	if err != nil {
 		return false
 	}

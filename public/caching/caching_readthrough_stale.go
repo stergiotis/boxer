@@ -341,7 +341,7 @@ func (inst *ReadThroughCache[K, V, W]) AddItem(k K, v V) {
 	if _, exists := inst.primaryStore[k]; !exists {
 		// 2. If Primary is full, try to make space
 		if len(inst.primaryStore) >= inst.cap {
-			useStash := inst.ensureSpaceByEvictingRandomly(1)
+			useStash := inst.ensureSpaceByEvictingOne()
 			if useStash {
 				// 3. Primary is full of pinned items; spill the new value
 				// directly to L2. No L1 item was demoted here, so the
@@ -374,13 +374,11 @@ func (inst *ReadThroughCache[K, V, W]) AddItemIter2(it iter.Seq2[K, V]) {
 	}
 }
 
-func (inst *ReadThroughCache[K, V, W]) ensureSpaceByEvictingRandomly(n int) (useStash bool) {
-	if n <= 0 {
-		return false
-	}
-	evictedCount := 0
-
-	// We iterate the map to find victims
+// ensureSpaceByEvictingOne demotes at most one unpinned L1 victim to L2.
+// Returns useStash=true if every L1 entry is pinned to the current epoch
+// (the caller must then route the new value directly to the stash), and
+// false if a slot was freed (or L1 was already under capacity).
+func (inst *ReadThroughCache[K, V, W]) ensureSpaceByEvictingOne() (useStash bool) {
 	for k, v := range inst.primaryStore {
 		// Pinning Protection
 		if v.lastSeen == inst.currentEpoch {
@@ -396,11 +394,7 @@ func (inst *ReadThroughCache[K, V, W]) ensureSpaceByEvictingRandomly(n int) (use
 
 		// Remove from Primary
 		delete(inst.primaryStore, k)
-
-		evictedCount++
-		if evictedCount >= n {
-			return false
-		}
+		return false
 	}
 
 	// If we get here, everything in Primary was Pinned.

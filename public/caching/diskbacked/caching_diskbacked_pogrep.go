@@ -8,7 +8,11 @@ import (
 
 	"github.com/akrylysov/pogreb"
 	"github.com/fxamacker/cbor/v2"
+	"github.com/stergiotis/boxer/public/caching"
 )
+
+// Compile-time assertion that PogrebStash satisfies caching.StashBackendI.
+var _ caching.StashBackendI[string, []byte] = (*PogrebStash[string, []byte])(nil)
 
 // PogrebStash implements StashBackend using the Pogreb key-value store.
 // It uses CBOR for serialization.
