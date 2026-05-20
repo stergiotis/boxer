@@ -153,6 +153,13 @@ for wID := range cache.IterateRestWorkItems(ctx) {
 }
 ```
 
+The cache restores the active work-item context for each replay
+yielded by `IterateReadyWorkItems` / `IterateRestWorkItems`, so a
+cascading `Get()` miss inside `processItem` (e.g., one that only
+becomes visible after the first dependency resolves) will re-enter
+the pending queue and be retried on the next flush — no manual
+`WorkItem()` wrap is needed during replay.
+
 ### 5.3 User Logic Requirements
 The `processItem` function:
 1.  **Must be Idempotent:** It may be called multiple times. Side effects (DB writes, increments) should only happen *after* all `Get()` calls succeed.
@@ -161,9 +168,34 @@ The `processItem` function:
 
 ## 6. Configuration Options
 
-*   **`WithStash(backend)`**: Swap L2 storage (Memory vs Disk).
+*   **`WithStash(backend)`**: Swap L2 storage. Built-in options:
+    `NewSliceStash` (memory-dense, O(n) scan; good for small L2s),
+    `NewMapStash` (O(1), heavier per entry; good for large in-RAM L2s),
+    and the disk-backed `diskbacked.NewPogrebStash` /
+    `diskbacked.NewPebbleStash` (CBOR-encoded, optional soft cap; good
+    when the working set spills beyond RAM).
 *   **`WithMetrics(collector)`**: Inject Prometheus/StatsD hooks.
-*   **`WithErrorBackoff(duration)`**: Tune the circuit breaker recovery time.
+*   **`WithErrorBackoff(duration)`**: Circuit-breaker recovery window
+    set at construction time. `SetErrorBackoff(duration)` does the
+    same thing at runtime — useful for tests and for tuning live.
+
+### 6.1 Fetch threshold semantics
+
+`FetchCriteria` exposes three Min/Max pairs (`Keys`, `Partitions`,
+`WorkItems`). All thresholds are evaluated independently and **OR'd** —
+any single threshold being reached triggers a fetch:
+
+*   **Max\*** fires *synchronously* from inside `Get()`. A single
+    oversized work item that requests more than `MaxKeys` keys still
+    chunks naturally: the first `MaxKeys` keys flush, then the next
+    `Get()` enters discovery again.
+*   **Min\*** is only checked by `IterateReadyWorkItems`. If no Min is
+    met, the iterator yields nothing.
+*   **`IterateRestWorkItems`** ignores criteria entirely and always
+    flushes whatever is queued.
+*   A zero field disables that threshold. If all three `Min*` fields
+    are zero, `IterateReadyWorkItems` treats any non-empty queue as
+    ready.
 
 ## 7. Anti-Patterns
 
