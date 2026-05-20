@@ -13,7 +13,6 @@ import (
 // outer ctx is still live. The upstream source must honor its ctx for this
 // to terminate promptly.
 func Prefetcher[K comparable, V EntityItem[K]](
-	ctx context.Context,
 	source BatchReaderI[K, V],
 	depth int,
 ) BatchReaderI[K, V] {

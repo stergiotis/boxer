@@ -194,7 +194,7 @@ func BenchmarkPrefetcher_Overhead(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				var src BatchReaderI[TestID, TestRow] = &MockReader{Batches: batches}
 				if tc.useprefetch {
-					src = Prefetcher[TestID, TestRow](context.Background(), src, 4)
+					src = Prefetcher[TestID, TestRow](src, 4)
 				}
 				if err := proc.Run(context.Background(), src); err != nil {
 					b.Fatal(err)

@@ -163,8 +163,9 @@ func TestProcessor_CrossBatchLifecycle(t *testing.T) {
 
 	// Check Entity 1 (First lifecycle)
 	expected1 := []string{"1a", "1b", "1c"}
-	if !slices.Equal(consumer.Processed[1][:3], expected1) {
-		t.Errorf("Entity 1 stream mismatch. Got %v", consumer.Processed[1])
+	got1 := consumer.Processed[1]
+	if len(got1) < len(expected1) || !slices.Equal(got1[:len(expected1)], expected1) {
+		t.Errorf("Entity 1 stream mismatch. Got %v", got1)
 	}
 
 	// Check Entity 1 (Second lifecycle / Reappearance)
@@ -449,6 +450,52 @@ func TestProcessor_ContextCancellation_NoGoroutineLeak(t *testing.T) {
 	t.Errorf("goroutine leak: baseline=%d after=%d", baseline, runtime.NumGoroutine())
 }
 
+// TestProcessor_ErrorWrapsEntityID verifies that a consumer error is wrapped
+// with the entity ID that produced it, so multi-entity pipelines can identify
+// the failing entity without instrumenting the consumer.
+func TestProcessor_ErrorWrapsEntityID(t *testing.T) {
+	consumer := NewTestConsumer()
+	consumer.ErrorOnID = 42
+
+	batches := [][]TestRow{
+		{{ID: 7, Val: "ok"}},
+		{{ID: 42, Val: "boom"}},
+	}
+
+	proc := NewProcessor[TestID, TestRow](consumer, DefaultConfig())
+	err := proc.Run(context.Background(), &MockReader{Batches: batches})
+	if err == nil {
+		t.Fatal("expected error from consumer")
+	}
+	if !strings.Contains(err.Error(), "entity 42") {
+		t.Errorf("expected entity ID 42 in error message, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "simulated error") {
+		t.Errorf("expected wrapped consumer error, got: %v", err)
+	}
+}
+
+// TestSlicePool_ZeroOnPut verifies that WithZeroOnPut clears element values
+// before returning the slice to the pool, releasing pointer references for GC.
+func TestSlicePool_ZeroOnPut(t *testing.T) {
+	pool := NewSlicePool[int](10, WithZeroOnPut[int]())
+
+	s := pool.Get()
+	s = append(s, 11, 22, 33)
+	pool.Put(s)
+
+	// Get back the same slice (sync.Pool round-trip on the same goroutine is
+	// reliable in steady state) and inspect the first three slots via the
+	// underlying array.
+	got := pool.Get()
+	full := got[:cap(got)]
+	for i := 0; i < 3; i++ {
+		if full[i] != 0 {
+			t.Errorf("slot %d not zeroed: got %d, want 0", i, full[i])
+		}
+	}
+}
+
 // TestSlicePool_DropsOversizeSlices verifies that slices grown well past the
 // configured capacity are not returned to the pool, so spiky batch sizes
 // don't cause the pool to retain unboundedly large backing arrays.
@@ -591,7 +638,7 @@ func TestPrefetcher_PassThrough(t *testing.T) {
 	}
 
 	source := &MockReader{Batches: batches}
-	prefetched := Prefetcher[TestID, TestRow](context.Background(), source, 2)
+	prefetched := Prefetcher[TestID, TestRow](source, 2)
 
 	var got [][]TestRow
 	for batch, err := range prefetched.StreamBatches(context.Background()) {
@@ -637,7 +684,7 @@ func TestPrefetcher_NoGoroutineLeakOnDownstreamStop(t *testing.T) {
 		},
 	}
 
-	prefetched := Prefetcher[TestID, TestRow](context.Background(), source, 4)
+	prefetched := Prefetcher[TestID, TestRow](source, 4)
 
 	count := 0
 	for batch, err := range prefetched.StreamBatches(context.Background()) {

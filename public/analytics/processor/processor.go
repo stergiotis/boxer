@@ -53,10 +53,17 @@ func WithPool[K comparable, V EntityItem[K]](pool ChunkPoolI[V]) Option[K, V] {
 //
 // A consumer that returns nil before consuming all of its rows signals
 // "done with this entity"; remaining rows for that entity are dropped and
-// Run continues with the next entity. A non-nil return aborts the pipeline.
+// Run continues with the next entity. A non-nil return aborts the pipeline;
+// the error is wrapped as "consumer for entity <id>: <err>" so the failing
+// entity is identifiable.
 //
 // Rows are assumed grouped by entity ID; a non-contiguous reappearance of
 // the same ID is treated as a new lifecycle (a fresh consumer goroutine).
+//
+// Run may be called multiple times on the same Processor — the chunk pool
+// is reusable. Concurrent Run calls on the same Processor share the
+// supplied consumer; if you call Run from multiple goroutines, the consumer
+// must be safe to invoke from multiple goroutines.
 func (inst *Processor[K, V]) Run(ctx context.Context, source BatchReaderI[K, V]) (err error) {
 	var (
 		currentID   K
@@ -64,6 +71,12 @@ func (inst *Processor[K, V]) Run(ctx context.Context, source BatchReaderI[K, V])
 		currentDone chan error
 		isActive    bool
 	)
+
+	// wrapConsumerErr tags a consumer error with the entity ID that produced
+	// it, so multi-entity pipelines can identify the failing entity.
+	wrapConsumerErr := func(cerr error) error {
+		return eh.Errorf("consumer for entity %v: %w", currentID, cerr)
+	}
 
 	// closeCurrent closes the active row channel, joins the consumer
 	// goroutine, and returns any buffered chunks back to the pool. It does
@@ -88,7 +101,7 @@ func (inst *Processor[K, V]) Run(ctx context.Context, source BatchReaderI[K, V])
 	defer func() {
 		if isActive {
 			if cerr := closeCurrent(); err == nil && cerr != nil {
-				err = cerr
+				err = wrapConsumerErr(cerr)
 			}
 		}
 		if err == nil && ctx.Err() != nil {
@@ -113,7 +126,8 @@ func (inst *Processor[K, V]) Run(ctx context.Context, source BatchReaderI[K, V])
 
 			// Entity change: drain previous consumer.
 			if isActive && rowID != currentID {
-				if err = closeCurrent(); err != nil {
+				if cerr := closeCurrent(); cerr != nil {
+					err = wrapConsumerErr(cerr)
 					return
 				}
 			}
@@ -156,7 +170,7 @@ func (inst *Processor[K, V]) Run(ctx context.Context, source BatchReaderI[K, V])
 					inst.chunkPool.Put(chunk)
 				}
 				if consumerErr != nil {
-					err = consumerErr
+					err = wrapConsumerErr(consumerErr)
 					return
 				}
 				// Consumer returned nil: skip remaining rows of currentID in
@@ -167,7 +181,8 @@ func (inst *Processor[K, V]) Run(ctx context.Context, source BatchReaderI[K, V])
 	}
 
 	if isActive {
-		if err = closeCurrent(); err != nil {
+		if cerr := closeCurrent(); cerr != nil {
+			err = wrapConsumerErr(cerr)
 			return
 		}
 	}

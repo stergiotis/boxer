@@ -2,8 +2,8 @@ package processor
 
 import "sync"
 
-func NewSlicePool[T any](capacity int) *SlicePool[T] {
-	return &SlicePool[T]{
+func NewSlicePool[T any](capacity int, opts ...SlicePoolOption[T]) *SlicePool[T] {
+	p := &SlicePool[T]{
 		capacity: capacity,
 		internal: &sync.Pool{
 			New: func() any {
@@ -14,6 +14,21 @@ func NewSlicePool[T any](capacity int) *SlicePool[T] {
 				return &s
 			},
 		},
+	}
+	for _, opt := range opts {
+		opt(p)
+	}
+	return p
+}
+
+// WithZeroOnPut configures the pool to clear slice elements before
+// returning the slice to the pool. Use this when T contains pointers
+// (or string / slice / interface / map values) and you want the
+// references to be released for GC instead of being retained in the
+// pool's reused backing array.
+func WithZeroOnPut[T any]() SlicePoolOption[T] {
+	return func(p *SlicePool[T]) {
+		p.zero = true
 	}
 }
 
@@ -27,9 +42,9 @@ func (inst *SlicePool[T]) Put(s []T) {
 	if inst.capacity > 0 && cap(s) > 2*inst.capacity {
 		return
 	}
-	// Reset length to 0, keep capacity. Elements are not zeroed; if T holds
-	// pointers and you need GC to reclaim what they reference, clear them
-	// before calling Put.
+	if inst.zero {
+		clear(s)
+	}
 	s = s[:0]
 	inst.internal.Put(&s)
 }

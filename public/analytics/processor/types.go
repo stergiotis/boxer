@@ -28,7 +28,11 @@ type ChunkPoolI[T any] interface {
 type SlicePool[T any] struct {
 	internal *sync.Pool
 	capacity int
+	zero     bool
 }
+
+// SlicePoolOption mutates a SlicePool at construction time.
+type SlicePoolOption[T any] func(*SlicePool[T])
 type Config struct {
 	BufferSize   int // Channel buffer size
 	ChunkPoolCap int // Capacity of pooled slices
