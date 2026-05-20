@@ -214,6 +214,12 @@ func (inst *ReadThroughCache[K, V, W]) IterateRestWorkItems(ctx context.Context)
 	}
 }
 
+// yieldPending drains pendingWorkItems and yields each one to the caller's
+// replay loop. While a work item is being replayed the cache restores its
+// work-item context (currentWorkItem / hasCurrentWork) so that a cascading
+// Get miss inside the replay re-queues the same item via registerPendingWork
+// rather than being silently dropped. The context is reset when the
+// iterator exits.
 func (inst *ReadThroughCache[K, V, W]) yieldPending(yield func(W) bool) {
 	if len(inst.pendingWorkItems) == 0 {
 		return
@@ -222,10 +228,17 @@ func (inst *ReadThroughCache[K, V, W]) yieldPending(yield func(W) bool) {
 	for w := range inst.pendingWorkItems {
 		items = append(items, w)
 	}
-	for k := range inst.pendingWorkItems {
-		delete(inst.pendingWorkItems, k)
-	}
+	clear(inst.pendingWorkItems)
+
+	prevW, prevHas := inst.currentWorkItem, inst.hasCurrentWork
+	defer func() {
+		inst.currentWorkItem = prevW
+		inst.hasCurrentWork = prevHas
+	}()
+
 	for _, w := range items {
+		inst.currentWorkItem = w
+		inst.hasCurrentWork = true
 		if !yield(w) {
 			return
 		}
@@ -314,24 +327,27 @@ func (inst *ReadThroughCache[K, V, W]) performFetch(ctx context.Context) {
 	}
 }
 
+// markKeysAsError flips queued keys to ItemStateError for the backoff window.
+// Keys that the fetcher already populated (state == ItemStateInCache) are
+// left alone — a fetcher may legitimately AddItem some keys and then return
+// an error for the rest, and that partial progress must be preserved.
 func (inst *ReadThroughCache[K, V, W]) markKeysAsError(keys []K) {
 	until := time.Now().Add(inst.errorBackoffDur)
 	for _, k := range keys {
-		// If exists, update state. If not, insert placeholder.
-		if _, exists := inst.primaryStore[k]; !exists {
-			// Ensure space only if strictly necessary, but usually errors
-			// don't carry values, so strictly we might just want to track state.
-			// Here we insert a placeholder.
+		if item, exists := inst.primaryStore[k]; exists {
+			if item.state == ItemStateInCache {
+				// Fetcher succeeded for this key before erroring elsewhere.
+				continue
+			}
+			item.state = ItemStateError
+			item.errorUntil = until
+			inst.primaryStore[k] = item
+		} else {
 			inst.primaryStore[k] = primaryItem[V]{
 				state:      ItemStateError,
 				errorUntil: until,
 				lastSeen:   inst.currentEpoch,
 			}
-		} else {
-			item := inst.primaryStore[k]
-			item.state = ItemStateError
-			item.errorUntil = until
-			inst.primaryStore[k] = item
 		}
 	}
 }

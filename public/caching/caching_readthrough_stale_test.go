@@ -853,6 +853,125 @@ func TestMapStash_Eviction(t *testing.T) {
 	assert.Equal(t, 2, s.Len())
 }
 
+// partialFetcher pre-populates `good` keys before returning an error for
+// the `bad` keys in the same batch.
+type partialFetcher struct {
+	good       map[string]int
+	bad        map[string]bool
+	fetchCalls int
+}
+
+func (f *partialFetcher) DeterminePartition(string) uint64 { return 0 }
+func (f *partialFetcher) FetchItemSinglePartition(_ context.Context, _ uint64, keys []string, target ItemTargetI[string, int]) error {
+	f.fetchCalls++
+	for _, k := range keys {
+		if v, ok := f.good[k]; ok {
+			target.AddItem(k, v)
+		}
+	}
+	for _, k := range keys {
+		if f.bad[k] {
+			return errors.New("partial failure: " + k)
+		}
+	}
+	return nil
+}
+
+// TestMarkAsError_PreservesAlreadyFetched verifies the P2.1 contract:
+// when a fetcher AddItems some keys and then returns an error for others,
+// the successful keys must remain readable. Only keys still in the
+// pending/queued state get flipped to ItemStateError.
+func TestMarkAsError_PreservesAlreadyFetched(t *testing.T) {
+	f := &partialFetcher{
+		good: map[string]int{"keepA": 1, "keepB": 2},
+		bad:  map[string]bool{"failC": true},
+	}
+	c := NewReadThroughCache[string, int, int](10, f, FetchCriteria{MinKeys: 0},
+		WithStash[string, int, int](NewSliceStash[string, int](4)))
+	c.SetErrorBackoff(time.Hour) // long enough that backoff won't expire mid-test
+
+	for range c.WorkItem(1) {
+		c.Get("keepA")
+		c.Get("keepB")
+		c.Get("failC")
+	}
+	for range c.IterateRestWorkItems(context.Background()) {
+	}
+	assert.Equal(t, 1, f.fetchCalls)
+
+	has, v := c.Get("keepA")
+	assert.True(t, has, "keepA must survive partial-failure marking")
+	assert.Equal(t, 1, v)
+
+	has, v = c.Get("keepB")
+	assert.True(t, has, "keepB must survive partial-failure marking")
+	assert.Equal(t, 2, v)
+
+	// failC is in error state — Get returns false and the circuit breaker
+	// must suppress retries within the backoff window.
+	priorCalls := f.fetchCalls
+	for range c.WorkItem(2) {
+		has, _ = c.Get("failC")
+		assert.False(t, has)
+	}
+	for range c.IterateRestWorkItems(context.Background()) {
+	}
+	assert.Equal(t, priorCalls, f.fetchCalls, "failC must be suppressed by circuit breaker")
+}
+
+// TestReplay_CascadingMiss_ReQueued verifies the P2.2 contract:
+// when a work item is yielded from Iterate*WorkItems and its replay logic
+// then misses on a key discovered only after the first fetch (a "cascading
+// dependency"), the cache must restore the work-item context so the new
+// miss re-queues this item rather than dropping it on the floor.
+func TestReplay_CascadingMiss_ReQueued(t *testing.T) {
+	f := NewMockFetcherV2()
+	f.data["root"] = 100
+	f.data["leaf"] = 200
+
+	c := NewReadThroughCache[string, int, int](10, f, FetchCriteria{MinKeys: 0},
+		WithStash[string, int, int](NewSliceStash[string, int](4)))
+
+	completed := false
+	step := func() {
+		hasRoot, _ := c.Get("root")
+		if !hasRoot {
+			return
+		}
+		// Cascading dependency: only known once "root" is in hand.
+		hasLeaf, _ := c.Get("leaf")
+		if !hasLeaf {
+			return
+		}
+		completed = true
+	}
+
+	// Pass 1: queue "root".
+	for range c.WorkItem(42) {
+		step()
+	}
+	assert.False(t, completed)
+
+	// Flush: fetches "root", then yields work item 42 for replay.
+	// Replay finds "root" in L1 and queries "leaf" (cascading miss).
+	// With the P2.2 fix, that miss must re-enter pendingWorkItems.
+	yielded := 0
+	for range c.IterateRestWorkItems(context.Background()) {
+		yielded++
+		step()
+	}
+	assert.Equal(t, 1, yielded)
+	assert.False(t, completed, "leaf still missing after first flush")
+
+	// Pass 2: replay flush. With the cascading miss re-queued, "leaf"
+	// gets fetched and the next replay completes the work item.
+	for range c.IterateRestWorkItems(context.Background()) {
+		step()
+	}
+	assert.True(t, completed, "cascading dependency must resolve on second flush")
+	assert.Equal(t, 2, f.fetchCalls, "exactly two fetches: root then leaf")
+}
+
 // --- Benchmarks ---
 
 // Minimal fetcher for benchmarks to avoid alloc overhead of the MockFetcherV2
