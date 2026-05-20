@@ -81,10 +81,11 @@ The design conversation looked at four classes of existing libraries before deci
 - **ETL (Benthos / Redpanda Connect)** — abstracts the `BatchReader` side well, but injecting arbitrary Go consumer logic into the middle of a Benthos pipeline requires writing a Benthos plugin, which is more work than the loop in `processor.go`.
 - **Kafka-coupled stream processors (Goka)** — solve the entity-lifecycle problem with the right semantics, but presume a Kafka source. The source here is a SQL cursor.
 
-Two more deliberate non-features:
+Three more deliberate non-features:
 
 - **No internal sharding.** A single `Run` is single-threaded across entities. The design discussion sketched a `ShardedReader` (a `cityHash64(entity_id) % N` modulo predicate in the SQL) that lets the caller run `N` `Processor` instances in an `errgroup`. The package doesn't bundle that — it stays single-stream and leaves parallelism to the caller, who knows whether their consumer is per-shard isolated.
 - **No checkpointing.** The processor doesn't persist progress; if `Run` dies mid-stream, restart depends on the source's own ability to resume (the canonical reader uses keyset pagination, so it can).
+- **No retry, no stuck-consumer watchdog.** The Stage 7 design notes mentioned both as possible additions. Neither is here, deliberately. Retry doesn't fit the consumer's stateful lifecycle: if `Process` fails halfway through entity *N*'s rows, the processor has already forwarded those rows and returned their pool chunks; replaying them would require the consumer to be idempotent over partial state, and the processor has no way to know whether it is. Retry belongs either inside the consumer (which knows what's idempotent at the row or entity level) or inside the source (which knows what's transient at the network/SQL level). Stuck-consumer detection is what `ctx` is for: the contract already says `Process` must honor it, so a per-entity deadline is one `context.WithTimeout` wrapper away on the caller side. Bundling a `MaxEntityDuration` knob would cover for consumers that violate the ctx contract and would trip on legitimately long entities (a year of comments for one heavy poster). If you want to detect stuck consumers in production, wire `RecordEntityDuration` to a histogram and alert on the tail — that gives visibility without coupling the processor to a policy decision that depends on the workload.
 
 ## Known limitations
 
