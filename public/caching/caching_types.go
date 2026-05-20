@@ -94,11 +94,34 @@ type StashBackendI[K comparable, V any] interface {
 	Cap() int
 }
 
+// FetchCriteria controls when a queued batch is flushed to the fetcher.
+//
+// All Min and Max thresholds are evaluated independently and **OR'd**: any
+// single threshold being reached triggers a fetch. Max thresholds fire
+// synchronously from inside Get (so a single oversized work item still gets
+// chunked); Min thresholds are checked by IterateReadyWorkItems and require
+// a follow-up call. IterateRestWorkItems always flushes regardless of
+// criteria.
+//
+// A zero value on a threshold disables it. If all three Min fields are zero,
+// IterateReadyWorkItems treats any non-empty queue as ready.
 type FetchCriteria struct {
-	MinWorkItems  int
-	MaxWorkItems  int
-	MinKeys       int
-	MaxKeys       int
+	// MinWorkItems is the minimum number of distinct pending work items
+	// before IterateReadyWorkItems will flush. Zero disables.
+	MinWorkItems int
+	// MaxWorkItems forces a synchronous flush from inside Get once at least
+	// this many distinct work items are pending. Zero disables.
+	MaxWorkItems int
+	// MinKeys is the minimum number of queued keys before
+	// IterateReadyWorkItems will flush. Zero disables.
+	MinKeys int
+	// MaxKeys forces a synchronous flush from inside Get once at least this
+	// many keys are queued. Zero disables.
+	MaxKeys int
+	// MinPartitions is the minimum number of distinct partitions present in
+	// the queue before IterateReadyWorkItems will flush. Zero disables.
 	MinPartitions int
+	// MaxPartitions forces a synchronous flush from inside Get once at
+	// least this many distinct partitions are queued. Zero disables.
 	MaxPartitions int
 }
