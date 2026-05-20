@@ -6,6 +6,12 @@ import (
 )
 
 // Prefetcher wraps a BatchReaderI and reads 'depth' batches ahead.
+//
+// The producer goroutine is bound to the lifetime of each StreamBatches call:
+// when the consumer stops iterating (via yield-false or normal completion),
+// an internal sub-context is cancelled so the producer exits even if the
+// outer ctx is still live. The upstream source must honor its ctx for this
+// to terminate promptly.
 func Prefetcher[K comparable, V EntityItem[K]](
 	ctx context.Context,
 	source BatchReaderI[K, V],
@@ -29,34 +35,30 @@ type fetchResult[V any] struct {
 
 func (inst *prefetchReader[K, V]) StreamBatches(ctx context.Context) iter.Seq2[[]V, error] {
 	return func(yield func([]V, error) bool) {
-		// Create buffered channel to hold pre-fetched batches
+		// Sub-context cancelled when this iterator function returns
+		// (whether via yield-false, source completion, or upstream ctx
+		// cancel). Bounds the producer goroutine's lifetime to ours.
+		subCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
 		ch := make(chan fetchResult[V], inst.depth)
 
-		// 1. Background Producer
 		go func() {
 			defer close(ch)
-
-			// Iterate over the upstream source
-			for batch, err := range inst.source.StreamBatches(ctx) {
+			for batch, err := range inst.source.StreamBatches(subCtx) {
 				select {
 				case ch <- fetchResult[V]{batch, err}:
-					// Pushed to buffer
-				case <-ctx.Done():
-					// Context cancelled, stop fetching
+				case <-subCtx.Done():
 					return
 				}
-
 				if err != nil {
-					// Stop fetching on error
 					return
 				}
 			}
 		}()
 
-		// 2. Main Consumer (Yields to Processor)
 		for res := range ch {
 			if !yield(res.batch, res.err) {
-				// Downstream consumer stopped
 				return
 			}
 		}

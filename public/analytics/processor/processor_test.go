@@ -1,14 +1,20 @@
 package processor
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"iter"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 // =============================================================================
@@ -313,4 +319,297 @@ type FunctionalReader struct {
 
 func (inst *FunctionalReader) StreamBatches(ctx context.Context) iter.Seq2[[]TestRow, error] {
 	return inst.Stream(ctx)
+}
+
+// TestProcessor_EarlyExit_NilReturnAcrossBatches stresses the channel-full
+// race that the original code mis-handled: the consumer returns nil after
+// the first row, but the main loop is still trying to send more chunks. The
+// original code surfaced this as "consumer stopped early: %!w(<nil>)" by
+// wrapping a nil error.
+func TestProcessor_EarlyExit_NilReturnAcrossBatches(t *testing.T) {
+	batches := make([][]TestRow, 50)
+	for i := range batches {
+		batches[i] = []TestRow{{ID: 10, Val: "x"}}
+	}
+
+	consumer := NewTestConsumer()
+	consumer.StopEarlyOnID = 10
+
+	proc := NewProcessor[TestID, TestRow](consumer, DefaultConfig())
+	err := proc.Run(context.Background(), &MockReader{Batches: batches})
+
+	if err != nil {
+		t.Fatalf("consumer's nil return must not surface as error: %v", err)
+	}
+	if got := len(consumer.Processed[10]); got < 1 {
+		t.Errorf("expected at least one row processed, got %d", got)
+	}
+}
+
+// TestProcessor_EarlyExit_ErrorReturnPropagates pairs with the test above:
+// when the consumer returns a non-nil error mid-stream, the error must
+// propagate, not be discarded as a "legitimate early-stop".
+func TestProcessor_EarlyExit_ErrorReturnPropagates(t *testing.T) {
+	batches := make([][]TestRow, 50)
+	for i := range batches {
+		batches[i] = []TestRow{{ID: 10, Val: "x"}}
+	}
+
+	consumer := NewTestConsumer()
+	consumer.ErrorOnID = 10
+
+	proc := NewProcessor[TestID, TestRow](consumer, DefaultConfig())
+	err := proc.Run(context.Background(), &MockReader{Batches: batches})
+
+	if err == nil {
+		t.Fatal("expected consumer error to propagate")
+	}
+	if !strings.Contains(err.Error(), "simulated error") {
+		t.Errorf("expected consumer's error message, got: %v", err)
+	}
+}
+
+// TestProcessor_EarlyExit_NextEntityContinues verifies that after a consumer
+// early-stops on entity 1, the processor continues with entity 2 normally
+// instead of aborting the pipeline.
+func TestProcessor_EarlyExit_NextEntityContinues(t *testing.T) {
+	batches := make([][]TestRow, 0, 31)
+	for i := 0; i < 30; i++ {
+		batches = append(batches, []TestRow{{ID: 1, Val: "x"}})
+	}
+	batches = append(batches, []TestRow{{ID: 2, Val: "2a"}, {ID: 2, Val: "2b"}})
+
+	consumer := NewTestConsumer()
+	consumer.StopEarlyOnID = 1
+
+	proc := NewProcessor[TestID, TestRow](consumer, DefaultConfig())
+	err := proc.Run(context.Background(), &MockReader{Batches: batches})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := len(consumer.Processed[2]); got != 2 {
+		t.Errorf("entity 2 must process both rows: got %d, want 2", got)
+	}
+}
+
+// TestProcessor_ContextCancellation_NoGoroutineLeak verifies Run joins the
+// consumer goroutine on ctx cancellation. The original code abandoned the
+// goroutine, leaking it.
+func TestProcessor_ContextCancellation_NoGoroutineLeak(t *testing.T) {
+	baseline := runtime.NumGoroutine()
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	stream := func(ctx context.Context) iter.Seq2[[]TestRow, error] {
+		return func(yield func([]TestRow, error) bool) {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					if !yield([]TestRow{{ID: 1, Val: "tick"}}, nil) {
+						return
+					}
+					time.Sleep(time.Millisecond)
+				}
+			}
+		}
+	}
+
+	consumer := NewTestConsumer()
+	consumer.SleepDur = 5 * time.Millisecond
+	proc := NewProcessor[TestID, TestRow](consumer, DefaultConfig())
+
+	done := make(chan error, 1)
+	go func() {
+		done <- proc.Run(ctx, &FunctionalReader{Stream: stream})
+	}()
+
+	time.Sleep(30 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("expected context.Canceled, got: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run did not return after cancel")
+	}
+
+	// Allow scheduling to settle; check stabilizes.
+	for i := 0; i < 20; i++ {
+		runtime.Gosched()
+		if runtime.NumGoroutine() <= baseline {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Errorf("goroutine leak: baseline=%d after=%d", baseline, runtime.NumGoroutine())
+}
+
+// TestProcessor_PanicIsLogged verifies a recovered consumer panic is emitted
+// to the global zerolog logger, not just returned as an error. Without the
+// log call, a caller that drops the returned error would silently lose the
+// panic.
+func TestProcessor_PanicIsLogged(t *testing.T) {
+	var buf bytes.Buffer
+	original := log.Logger
+	log.Logger = zerolog.New(&buf)
+	t.Cleanup(func() { log.Logger = original })
+
+	batches := [][]TestRow{
+		{{ID: 1, Val: "OK"}},
+		{{ID: 666, Val: "DOOM"}},
+	}
+
+	consumer := NewTestConsumer()
+	consumer.PanicOnID = 666
+
+	proc := NewProcessor[TestID, TestRow](consumer, DefaultConfig())
+	err := proc.Run(context.Background(), &MockReader{Batches: batches})
+	if err == nil {
+		t.Fatal("expected error from panic")
+	}
+
+	logged := buf.String()
+	if !strings.Contains(logged, "panic recovered in consumer") {
+		t.Errorf("expected panic log message, got: %q", logged)
+	}
+	if !strings.Contains(logged, "entity_id") {
+		t.Errorf("expected entity_id field in log entry, got: %q", logged)
+	}
+	if !strings.Contains(logged, "666") {
+		t.Errorf("expected the panicking entity ID (666) in log entry, got: %q", logged)
+	}
+}
+
+// countingPool wraps another ChunkPoolI and counts Get/Put calls. Used to
+// assert that the processor returns every chunk it obtains.
+type countingPool[T any] struct {
+	inner ChunkPoolI[T]
+	gets  atomic.Int64
+	puts  atomic.Int64
+}
+
+func (p *countingPool[T]) Get() []T {
+	p.gets.Add(1)
+	return p.inner.Get()
+}
+
+func (p *countingPool[T]) Put(s []T) {
+	p.puts.Add(1)
+	p.inner.Put(s)
+}
+
+// TestProcessor_PoolReclaimsChunks_OnEarlyExit verifies that every chunk
+// obtained from the pool is returned to it when the consumer yield-falses
+// mid-stream — the path where chunks could previously be left buffered in
+// the row channel and lost to GC.
+func TestProcessor_PoolReclaimsChunks_OnEarlyExit(t *testing.T) {
+	batches := make([][]TestRow, 50)
+	for i := range batches {
+		batches[i] = []TestRow{{ID: 10, Val: "x"}}
+	}
+
+	pool := &countingPool[TestRow]{inner: NewSlicePool[TestRow](256)}
+
+	consumer := NewTestConsumer()
+	consumer.StopEarlyOnID = 10
+
+	proc := NewProcessor[TestID, TestRow](consumer, DefaultConfig(),
+		WithPool[TestID, TestRow](pool))
+	err := proc.Run(context.Background(), &MockReader{Batches: batches})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	gets := pool.gets.Load()
+	puts := pool.puts.Load()
+	if gets == 0 {
+		t.Fatal("expected at least one Get from the injected pool")
+	}
+	if gets != puts {
+		t.Errorf("pool leak: %d gets vs %d puts (delta %d)", gets, puts, gets-puts)
+	}
+}
+
+// TestPrefetcher_PassThrough verifies batches flow through the prefetcher
+// unmodified and in order. The package had no prefetcher tests before this.
+func TestPrefetcher_PassThrough(t *testing.T) {
+	batches := [][]TestRow{
+		{{ID: 1, Val: "a"}, {ID: 1, Val: "b"}},
+		{{ID: 2, Val: "c"}},
+		{{ID: 3, Val: "d"}, {ID: 3, Val: "e"}, {ID: 3, Val: "f"}},
+	}
+
+	source := &MockReader{Batches: batches}
+	prefetched := Prefetcher[TestID, TestRow](context.Background(), source, 2)
+
+	var got [][]TestRow
+	for batch, err := range prefetched.StreamBatches(context.Background()) {
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		cp := make([]TestRow, len(batch))
+		copy(cp, batch)
+		got = append(got, cp)
+	}
+
+	if len(got) != len(batches) {
+		t.Fatalf("expected %d batches, got %d", len(batches), len(got))
+	}
+	for i, b := range got {
+		if !slices.Equal(b, batches[i]) {
+			t.Errorf("batch %d mismatch: got %v, want %v", i, b, batches[i])
+		}
+	}
+}
+
+// TestPrefetcher_NoGoroutineLeakOnDownstreamStop verifies the producer
+// goroutine exits when the consumer stops iterating, even if the outer ctx
+// is never cancelled. The original code blocked the producer indefinitely
+// on the channel send.
+func TestPrefetcher_NoGoroutineLeakOnDownstreamStop(t *testing.T) {
+	baseline := runtime.NumGoroutine()
+
+	source := &FunctionalReader{
+		Stream: func(ctx context.Context) iter.Seq2[[]TestRow, error] {
+			return func(yield func([]TestRow, error) bool) {
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					default:
+						if !yield([]TestRow{{ID: 1, Val: "tick"}}, nil) {
+							return
+						}
+					}
+				}
+			}
+		},
+	}
+
+	prefetched := Prefetcher[TestID, TestRow](context.Background(), source, 4)
+
+	count := 0
+	for batch, err := range prefetched.StreamBatches(context.Background()) {
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		_ = batch
+		count++
+		if count >= 3 {
+			break
+		}
+	}
+
+	for i := 0; i < 20; i++ {
+		runtime.Gosched()
+		if runtime.NumGoroutine() <= baseline {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Errorf("goroutine leak: baseline=%d after=%d", baseline, runtime.NumGoroutine())
 }

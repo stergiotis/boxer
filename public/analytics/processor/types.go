@@ -46,3 +46,6 @@ type Processor[K comparable, V EntityItem[K]] struct {
 	cfg       Config
 	chunkPool ChunkPoolI[V]
 }
+
+// Option mutates a Processor at construction time. See [WithPool].
+type Option[K comparable, V EntityItem[K]] func(*Processor[K, V])
