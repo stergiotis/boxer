@@ -60,6 +60,8 @@ When the main loop sees the entity ID change (or end-of-input), it closes the ch
 
 **`Run` may be re-called; it is not internally goroutine-safe.** The chunk pool survives across calls (warm-up amortises), but the consumer instance is shared state. Calling `Run` concurrently on the same `Processor` from different goroutines is only safe if the consumer itself is safe to invoke concurrently — the processor doesn't synchronise on it.
 
+**Metrics are opt-in via `MetricsCollectorI`.** The four hooks — `RecordBatch`, `RecordRows(n)`, `RecordEntityFinalized(ok bool)`, `RecordEntityDuration(d)` — match the "introspectable" requirement from the design conversation. Naming and the `Record<Event>(<variant flag>)` shape mirror `caching.MetricsCollectorI` (`RecordHit(l1 bool)`, `RecordEviction(toStash bool)`, etc.) so the two packages read the same way. The default is a `noopMetrics` no-op, so the hot path pays nothing when nobody is watching. All hooks fire from Run's own goroutine.
+
 ## Consumer contract
 
 Three explicit contracts on `Process`:
@@ -79,11 +81,10 @@ The design conversation looked at four classes of existing libraries before deci
 - **ETL (Benthos / Redpanda Connect)** — abstracts the `BatchReader` side well, but injecting arbitrary Go consumer logic into the middle of a Benthos pipeline requires writing a Benthos plugin, which is more work than the loop in `processor.go`.
 - **Kafka-coupled stream processors (Goka)** — solve the entity-lifecycle problem with the right semantics, but presume a Kafka source. The source here is a SQL cursor.
 
-Three more deliberate non-features:
+Two more deliberate non-features:
 
 - **No internal sharding.** A single `Run` is single-threaded across entities. The design discussion sketched a `ShardedReader` (a `cityHash64(entity_id) % N` modulo predicate in the SQL) that lets the caller run `N` `Processor` instances in an `errgroup`. The package doesn't bundle that — it stays single-stream and leaves parallelism to the caller, who knows whether their consumer is per-shard isolated.
 - **No checkpointing.** The processor doesn't persist progress; if `Run` dies mid-stream, restart depends on the source's own ability to resume (the canonical reader uses keyset pagination, so it can).
-- **No metrics by default.** Earlier drafts of the design carried a `MetricsI` interface (CountBatch, CountRows, ObserveEntityDuration). The shipped package does not — it only logs panic events. Reintroducing structured metrics is an open question; for now, observability is the caller's responsibility.
 
 ## Known limitations
 

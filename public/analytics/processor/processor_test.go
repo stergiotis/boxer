@@ -450,6 +450,104 @@ func TestProcessor_ContextCancellation_NoGoroutineLeak(t *testing.T) {
 	t.Errorf("goroutine leak: baseline=%d after=%d", baseline, runtime.NumGoroutine())
 }
 
+// countingMetrics records every hook for inspection in tests.
+type countingMetrics struct {
+	batches   atomic.Int64
+	rows      atomic.Int64
+	finalized atomic.Int64
+	errors    atomic.Int64 // count of finalized(ok=false)
+	totalDur  atomic.Int64 // total ns across all entities
+}
+
+func (m *countingMetrics) RecordBatch()         { m.batches.Add(1) }
+func (m *countingMetrics) RecordRows(n int)     { m.rows.Add(int64(n)) }
+func (m *countingMetrics) RecordEntityFinalized(ok bool) {
+	m.finalized.Add(1)
+	if !ok {
+		m.errors.Add(1)
+	}
+}
+func (m *countingMetrics) RecordEntityDuration(d time.Duration) {
+	m.totalDur.Add(int64(d))
+}
+
+// TestProcessor_MetricsHappyPath verifies that the four MetricsCollectorI
+// hooks fire with the expected counts on a clean multi-entity stream.
+func TestProcessor_MetricsHappyPath(t *testing.T) {
+	batches := [][]TestRow{
+		{{ID: 1, Val: "1a"}, {ID: 1, Val: "1b"}, {ID: 2, Val: "2a"}},
+		{{ID: 2, Val: "2b"}, {ID: 3, Val: "3a"}},
+	}
+
+	m := &countingMetrics{}
+	consumer := NewTestConsumer()
+	proc := NewProcessor[TestID, TestRow](consumer, DefaultConfig(),
+		WithMetrics[TestID, TestRow](m))
+
+	err := proc.Run(context.Background(), &MockReader{Batches: batches})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got := m.batches.Load(); got != 2 {
+		t.Errorf("RecordBatch: got %d, want 2", got)
+	}
+	if got := m.rows.Load(); got != 5 {
+		t.Errorf("RecordRows total: got %d, want 5", got)
+	}
+	if got := m.finalized.Load(); got != 3 {
+		t.Errorf("RecordEntityFinalized: got %d, want 3 (entities 1, 2, 3)", got)
+	}
+	if got := m.errors.Load(); got != 0 {
+		t.Errorf("RecordEntityFinalized(false) count: got %d, want 0", got)
+	}
+	if m.totalDur.Load() <= 0 {
+		t.Errorf("RecordEntityDuration: expected positive total, got %d ns", m.totalDur.Load())
+	}
+}
+
+// TestProcessor_MetricsRecordErrorAndPanic verifies that a non-nil consumer
+// return and a consumer panic both surface as RecordEntityFinalized(false).
+func TestProcessor_MetricsRecordErrorAndPanic(t *testing.T) {
+	cases := []struct {
+		name    string
+		setup   func(c *ThreadSafeConsumer)
+		entityID TestID
+	}{
+		{
+			"consumer returns error",
+			func(c *ThreadSafeConsumer) { c.ErrorOnID = 7 },
+			7,
+		},
+		{
+			"consumer panics",
+			func(c *ThreadSafeConsumer) { c.PanicOnID = 7 },
+			7,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := &countingMetrics{}
+			consumer := NewTestConsumer()
+			tc.setup(consumer)
+
+			proc := NewProcessor[TestID, TestRow](consumer, DefaultConfig(),
+				WithMetrics[TestID, TestRow](m))
+			_ = proc.Run(context.Background(), &MockReader{
+				Batches: [][]TestRow{{{ID: tc.entityID, Val: "x"}}},
+			})
+
+			if got := m.finalized.Load(); got != 1 {
+				t.Errorf("RecordEntityFinalized: got %d, want 1", got)
+			}
+			if got := m.errors.Load(); got != 1 {
+				t.Errorf("RecordEntityFinalized(false): got %d, want 1", got)
+			}
+		})
+	}
+}
+
 // TestProcessor_ErrorWrapsEntityID verifies that a consumer error is wrapped
 // with the entity ID that produced it, so multi-entity pipelines can identify
 // the failing entity without instrumenting the consumer.

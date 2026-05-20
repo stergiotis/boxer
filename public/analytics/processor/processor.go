@@ -2,6 +2,7 @@ package processor
 
 import (
 	"context"
+	"time"
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -28,6 +29,7 @@ func NewProcessor[K comparable, V EntityItem[K]](
 		consumer:  consumer,
 		cfg:       cfg,
 		chunkPool: NewSlicePool[V](cfg.ChunkPoolCap),
+		metrics:   &noopMetrics{},
 	}
 	for _, opt := range opts {
 		opt(p)
@@ -43,6 +45,22 @@ func WithPool[K comparable, V EntityItem[K]](pool ChunkPoolI[V]) Option[K, V] {
 		p.chunkPool = pool
 	}
 }
+
+// WithMetrics installs an observability collector. If not set, a no-op
+// collector is used so the Run loop can fire hooks without nil checks.
+func WithMetrics[K comparable, V EntityItem[K]](m MetricsCollectorI) Option[K, V] {
+	return func(p *Processor[K, V]) {
+		p.metrics = m
+	}
+}
+
+// noopMetrics is the default collector — discards every event.
+type noopMetrics struct{}
+
+func (*noopMetrics) RecordBatch()                         {}
+func (*noopMetrics) RecordRows(int)                       {}
+func (*noopMetrics) RecordEntityFinalized(bool)           {}
+func (*noopMetrics) RecordEntityDuration(time.Duration)   {}
 
 // Run streams batches from source, partitions rows by entity ID, and invokes
 // the consumer on each entity's row stream in a dedicated goroutine.
@@ -64,18 +82,31 @@ func WithPool[K comparable, V EntityItem[K]](pool ChunkPoolI[V]) Option[K, V] {
 // is reusable. Concurrent Run calls on the same Processor share the
 // supplied consumer; if you call Run from multiple goroutines, the consumer
 // must be safe to invoke from multiple goroutines.
+//
+// Observability hooks (see WithMetrics) fire from Run's own goroutine in
+// the order: RecordBatch (per non-empty batch), RecordRows (per chunk sent
+// to a consumer), RecordEntityFinalized + RecordEntityDuration (once per
+// entity lifecycle, regardless of success or failure).
 func (inst *Processor[K, V]) Run(ctx context.Context, source BatchReaderI[K, V]) (err error) {
 	var (
-		currentID   K
-		currentCh   chan []V
-		currentDone chan error
-		isActive    bool
+		currentID    K
+		currentCh    chan []V
+		currentDone  chan error
+		isActive     bool
+		entityStart  time.Time
 	)
 
 	// wrapConsumerErr tags a consumer error with the entity ID that produced
 	// it, so multi-entity pipelines can identify the failing entity.
 	wrapConsumerErr := func(cerr error) error {
 		return eh.Errorf("consumer for entity %v: %w", currentID, cerr)
+	}
+
+	// recordFinalized fires the two end-of-entity metric hooks. Called from
+	// both closeCurrent and the in-flight <-currentDone select branch.
+	recordFinalized := func(consumerErr error) {
+		inst.metrics.RecordEntityFinalized(consumerErr == nil)
+		inst.metrics.RecordEntityDuration(time.Since(entityStart))
 	}
 
 	// closeCurrent closes the active row channel, joins the consumer
@@ -91,6 +122,7 @@ func (inst *Processor[K, V]) Run(ctx context.Context, source BatchReaderI[K, V])
 		for chunk := range currentCh {
 			inst.chunkPool.Put(chunk)
 		}
+		recordFinalized(consumerErr)
 		isActive = false
 		return
 	}
@@ -118,6 +150,7 @@ func (inst *Processor[K, V]) Run(ctx context.Context, source BatchReaderI[K, V])
 		if len(batch) == 0 {
 			continue
 		}
+		inst.metrics.RecordBatch()
 
 		i := 0
 		for i < len(batch) {
@@ -138,6 +171,7 @@ func (inst *Processor[K, V]) Run(ctx context.Context, source BatchReaderI[K, V])
 				currentCh = make(chan []V, inst.cfg.BufferSize)
 				currentDone = make(chan error, 1)
 				isActive = true
+				entityStart = time.Now()
 
 				go inst.runConsumerSafe(ctx, currentID, currentCh, currentDone)
 			}
@@ -154,6 +188,7 @@ func (inst *Processor[K, V]) Run(ctx context.Context, source BatchReaderI[K, V])
 
 			select {
 			case currentCh <- pooledChunk:
+				inst.metrics.RecordRows(j - i)
 				i = j
 			case <-ctx.Done():
 				inst.chunkPool.Put(pooledChunk)
@@ -164,11 +199,12 @@ func (inst *Processor[K, V]) Run(ctx context.Context, source BatchReaderI[K, V])
 				// the in-flight chunk, drain the buffer, and decide whether
 				// the exit was an error or a legitimate early-stop.
 				inst.chunkPool.Put(pooledChunk)
-				isActive = false
 				close(currentCh)
 				for chunk := range currentCh {
 					inst.chunkPool.Put(chunk)
 				}
+				recordFinalized(consumerErr)
+				isActive = false
 				if consumerErr != nil {
 					err = wrapConsumerErr(consumerErr)
 					return
