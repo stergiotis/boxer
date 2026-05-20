@@ -45,14 +45,18 @@ func TestPogrebStash_SoftCapEviction(t *testing.T) {
 	assert.False(t, s.Add("b", 2))
 	assert.Equal(t, 2, s.Len())
 
-	// At cap. Next Add must evict one and report it.
-	assert.True(t, s.Add("c", 3), "Add at softCap must evict")
+	// At cap. Next Add of a NEW key must evict one and report it.
+	assert.True(t, s.Add("c", 3), "Add of new key at softCap must evict")
 	assert.Equal(t, 2, s.Len(), "Len stays at softCap after eviction")
 
-	// The new key "c" is reachable; the surviving original is one of {a, b}.
+	// Update of an existing key at cap must NOT evict — it doesn't change
+	// the count, so dropping an unrelated entry would be pure data loss.
+	assert.False(t, s.Add("c", 33), "update of present key must not evict")
+	assert.Equal(t, 2, s.Len())
+
 	v, has := s.GetAndRemove("c")
 	assert.True(t, has)
-	assert.Equal(t, 3, v)
+	assert.Equal(t, 33, v, "update overwrote the value")
 }
 
 func TestPogrebStash_Delete(t *testing.T) {

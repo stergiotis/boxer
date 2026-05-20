@@ -84,7 +84,9 @@ func (s *PogrebStash[K, V]) GetAndRemove(key K) (V, bool) {
 	return zero, true
 }
 
-// Add inserts a value. If softCap is exceeded, it evicts a random item.
+// Add inserts a value. If softCap is exceeded by a NEW key, it evicts a
+// random item. Updates to an existing key never evict — they don't change
+// the count, so there is no reason to drop an unrelated entry.
 func (s *PogrebStash[K, V]) Add(key K, value V) (evicted bool) {
 	// 1. Serialize
 	kBytes, err := keyEncMode.Marshal(key)
@@ -96,16 +98,19 @@ func (s *PogrebStash[K, V]) Add(key K, value V) (evicted bool) {
 		return false
 	}
 
-	// 2. Check Eviction (Soft Cap)
-	// Pogreb doesn't have auto-eviction. We must manually check count.
-	// This check is somewhat expensive (atomic load), so we might want to sample it,
-	// but Pogreb's Count() is generally O(1) (cached).
-	if s.softCap > 0 && int(s.db.Count()) >= s.softCap {
+	// 2. Distinguish update from insert. pogreb.Get on a missing key returns
+	// (nil, nil); a real value is non-nil bytes.
+	existing, err := s.db.Get(kBytes)
+	updating := err == nil && existing != nil
+
+	// 3. Evict only when inserting a brand-new key over the cap.
+	// Pogreb's Count() is O(1) (cached), so the probe is cheap.
+	if !updating && s.softCap > 0 && int(s.db.Count()) >= s.softCap {
 		s.evictOne()
 		evicted = true
 	}
 
-	// 3. Put
+	// 4. Put
 	err = s.db.Put(kBytes, vBytes)
 	_ = err
 	return evicted
