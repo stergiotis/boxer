@@ -8,11 +8,22 @@ import (
 	"github.com/stergiotis/boxer/public/observability/ph"
 )
 
+// NewProcessor constructs a Processor. BufferSize and ChunkPoolCap must be
+// non-negative; negative values panic at construction time rather than
+// causing confusing make-time crashes later. BufferSize == 0 is valid
+// (unbuffered handoff between reader and consumer); ChunkPoolCap == 0 is
+// valid (no preallocation, append grows from nil).
 func NewProcessor[K comparable, V EntityItem[K]](
 	consumer ConsumerI[K, V],
 	cfg Config,
 	opts ...Option[K, V],
 ) *Processor[K, V] {
+	if cfg.BufferSize < 0 {
+		panic(eh.Errorf("processor.NewProcessor: invalid BufferSize %d (must be >= 0)", cfg.BufferSize))
+	}
+	if cfg.ChunkPoolCap < 0 {
+		panic(eh.Errorf("processor.NewProcessor: invalid ChunkPoolCap %d (must be >= 0)", cfg.ChunkPoolCap))
+	}
 	p := &Processor[K, V]{
 		consumer:  consumer,
 		cfg:       cfg,

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"iter"
 	"runtime"
 	"slices"
@@ -446,6 +447,52 @@ func TestProcessor_ContextCancellation_NoGoroutineLeak(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Errorf("goroutine leak: baseline=%d after=%d", baseline, runtime.NumGoroutine())
+}
+
+// TestSlicePool_DropsOversizeSlices verifies that slices grown well past the
+// configured capacity are not returned to the pool, so spiky batch sizes
+// don't cause the pool to retain unboundedly large backing arrays.
+func TestSlicePool_DropsOversizeSlices(t *testing.T) {
+	pool := NewSlicePool[int](10)
+
+	// A fresh slice well above 2*capacity should be dropped on Put.
+	oversize := make([]int, 0, 30)
+	pool.Put(oversize)
+
+	// Pool is now empty; Get should return a newly-allocated slice with
+	// the configured capacity, not the oversize one we just put back.
+	got := pool.Get()
+	if cap(got) > 2*10 {
+		t.Errorf("pool retained oversize slice: got cap %d, want <= %d", cap(got), 2*10)
+	}
+}
+
+// TestNewProcessor_RejectsInvalidConfig verifies that negative config values
+// fail loudly at construction rather than crashing later inside make() with
+// a confusing runtime message.
+func TestNewProcessor_RejectsInvalidConfig(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  Config
+	}{
+		{"negative BufferSize", Config{BufferSize: -1, ChunkPoolCap: 256}},
+		{"negative ChunkPoolCap", Config{BufferSize: 2, ChunkPoolCap: -1}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			defer func() {
+				r := recover()
+				if r == nil {
+					t.Fatal("expected panic for invalid config")
+				}
+				msg := fmt.Sprintf("%v", r)
+				if !strings.Contains(msg, "NewProcessor") {
+					t.Errorf("panic message should identify the constructor, got: %s", msg)
+				}
+			}()
+			NewProcessor[TestID, TestRow](NewTestConsumer(), tc.cfg)
+		})
+	}
 }
 
 // TestProcessor_PanicIsLogged verifies a recovered consumer panic is emitted

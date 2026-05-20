@@ -22,10 +22,14 @@ func (inst *SlicePool[T]) Get() []T {
 }
 
 func (inst *SlicePool[T]) Put(s []T) {
-	// Reset length to 0, keep capacity, to prevent data leakage between users.
-	// Note: We intentionally do not nil out the elements for performance,
-	// assuming T does not contain pointers that need GC (like our HnComment struct).
-	// If T contains pointers, you should loop and nil them here.
+	// Drop slices that have grown well past the configured capacity, so the
+	// pool's memory footprint stays bounded under spiky batch sizes.
+	if inst.capacity > 0 && cap(s) > 2*inst.capacity {
+		return
+	}
+	// Reset length to 0, keep capacity. Elements are not zeroed; if T holds
+	// pointers and you need GC to reclaim what they reference, clear them
+	// before calling Put.
 	s = s[:0]
 	inst.internal.Put(&s)
 }
