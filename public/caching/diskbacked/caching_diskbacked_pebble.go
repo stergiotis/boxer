@@ -1,4 +1,4 @@
-//go:build llm_generated_gemini3pro
+//go:build llm_generated_opus47
 
 package diskbacked
 
