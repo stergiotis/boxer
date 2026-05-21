@@ -116,10 +116,12 @@ step_begin "entry-points"
 # Enforces CODINGSTANDARDS.md "Entry Points": every `package main`
 # discovered under ./... must import github.com/urfave/cli/v2 and
 # reference both logging.SetupZeroLog and vcs.BuildVersionInfo.
-# --strict makes the audit fail CI on any non-conformant main. Same
-# `if out=$(...)` pattern as the other boxer.sh-based steps —
-# required under `set -e`.
-if out=$("$here/../../boxer.sh" dev entry-points --tags "$tags" --strict 2>/dev/null); then
+# --strict makes the audit fail CI on any non-conformant main.
+# --baseline points at a file listing grandfathered packages (empty
+# in boxer today; the mechanism exists for parity with pebble2impl's
+# CI wiring and as a documented escape hatch). Same `if out=$(...)`
+# pattern as the other boxer.sh-based steps — required under `set -e`.
+if out=$("$here/../../boxer.sh" dev entry-points --tags "$tags" --baseline "$here/entry-points-baseline.txt" --strict 2>/dev/null); then
     if [ -n "$out" ]; then
         echo "$out"
     else

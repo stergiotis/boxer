@@ -1,0 +1,14 @@
+# Entry-points audit baseline (CODINGSTANDARDS.md "Entry Points").
+#
+# Each non-empty, non-comment line is a fully-qualified package import
+# path whose `package main` is grandfathered: `boxer dev entry-points`
+# still lists it but its non-conformance does not fail the --strict gate
+# wired into scripts/ci/lint.sh.
+#
+# Currently empty: boxer has only one `package main` (./public/app) and
+# it conforms. The baseline file exists so the mechanism is in place
+# (mirroring pebble2impl/scripts/ci/entry-points-baseline.txt) — if a
+# legitimate exception ever needs grandfathering, add it here with a
+# brief rationale comment immediately above the line. New ad-hoc
+# `package main` declarations must NOT be added here as a workaround;
+# fix them at the source (fold into ./boxer.sh as a subcommand).
