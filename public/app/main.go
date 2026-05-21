@@ -8,6 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/config/env/envdoc"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/genbuildertest"
+	"github.com/stergiotis/boxer/public/db/clickhouse/text2sql"
 	"github.com/stergiotis/boxer/public/dev"
 	"github.com/stergiotis/boxer/public/docgen"
 	"github.com/stergiotis/boxer/public/gov"
@@ -65,6 +66,7 @@ func mainC() (exitCode int) {
 			gov.NewCliCommand(),
 			finddivisions.NewCliCommand(),
 			code.NewCliCommand(genbuildertest.NewCliCommand()),
+			text2sql.NewCliCommand(),
 		),
 		After: func(context *cli.Context) error {
 			profiling.ProfilingHandleExit(context)
