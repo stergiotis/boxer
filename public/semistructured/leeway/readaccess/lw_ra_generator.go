@@ -1412,14 +1412,18 @@ func (inst *%s%s) Len() (nEntities int) {
 					case common.IntermediateColumnsSubTypeHomogenousArray:
 						f = homogenousArrayAccelFieldName
 					}
+					// Tagged HA/Set: accel returns per-entity-local offsets; add the
+					// entity's global element offset (b) so reads index the flat
+					// elements array correctly for entityIdx>0 with multi-attr rows.
 					_, err = fmt.Fprintf(b, `func (inst *%s%s) GetAttrValue%s(entityIdx runtime.EntityIdx,attrIdx runtime.AttributeIdx) iter.Seq[%s] {
 	accel := inst.%s
 	accel.SetCurrentEntityIdx(int(entityIdx))
 	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.%s.ValueOffsets(int(entityIdx))
 	return func(yield func(%s) bool) {
 		vs := inst.%s
 		for i := r.BeginIncl; i < r.EndExcl; i++ {
-			if !yield(%svs.Value(int(i))%s) {
+			if !yield(%svs.Value(int(b)+int(i))%s) {
 				break
 			}
 		}
@@ -1432,6 +1436,7 @@ func (inst *%s%s) Len() (nEntities int) {
 						typeName,
 
 						f,
+						clsNamer.ComposeValueField(attrNameS),
 						typeName,
 						clsNamer.ComposeValueFieldElementAccessor(attrNameS),
 						typeConvPrefix,
@@ -1459,7 +1464,7 @@ func (inst *%s%s) Len() (nEntities int) {
 					convSuffix    string
 				}
 				var scalarCols, haCols, setCols []colInfo
-				var firstScalarFieldName string
+				var firstScalarFieldName, firstHAFieldName, firstSetFieldName string
 				for i, attrName := range s.ValueColumnNames {
 					ct := s.ValueColumnTypes[i]
 					tn, sm, tcp, tcs, gerr := getElementGoTypeName(ct, s.ValueEncodingHints[i])
@@ -1485,8 +1490,14 @@ func (inst *%s%s) Len() (nEntities int) {
 						}
 						scalarCols = append(scalarCols, ci)
 					case common.IntermediateColumnsSubTypeHomogenousArray:
+						if firstHAFieldName == "" {
+							firstHAFieldName = ci.fieldName
+						}
 						haCols = append(haCols, ci)
 					case common.IntermediateColumnsSubTypeSet:
+						if firstSetFieldName == "" {
+							firstSetFieldName = ci.fieldName
+						}
 						setCols = append(setCols, ci)
 					}
 				}
@@ -1524,6 +1535,9 @@ func (inst *%s%s) Len() (nEntities int) {
 						return
 					}
 					if len(haCols) > 0 {
+						// bHA holds the entity's global HA element offset; rHA.BeginIncl
+						// from the accel is entity-local, so add bHA when indexing the
+						// flat *Elements array (otherwise entityIdx>0 reads entity 0).
 						_, err = fmt.Fprintf(b, `	var rHA runtime.Range[runtime.HomogenousArrayIdx]
 	{
 		accel := inst.%s
@@ -1534,7 +1548,8 @@ func (inst *%s%s) Len() (nEntities int) {
 		err = eb.Build().Str("section",%q).Int("entityIdx",int(entityIdx)).Int("attrIdx",int(attrIdx)).Int64("cardinality",int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
 		return
 	}
-`, homogenousArrayAccelFieldName, string(s.Name))
+	bHA, _ := inst.%s.ValueOffsets(int(entityIdx))
+`, homogenousArrayAccelFieldName, string(s.Name), firstHAFieldName)
 						if err != nil {
 							return
 						}
@@ -1550,7 +1565,8 @@ func (inst *%s%s) Len() (nEntities int) {
 		err = eb.Build().Str("section",%q).Int("entityIdx",int(entityIdx)).Int("attrIdx",int(attrIdx)).Int64("cardinality",int64(rSet.EndExcl-rSet.BeginIncl)).Errorf("expected exactly one element per Set column")
 		return
 	}
-`, setAccelFieldName, string(s.Name))
+	bSet, _ := inst.%s.ValueOffsets(int(entityIdx))
+`, setAccelFieldName, string(s.Name), firstSetFieldName)
 						if err != nil {
 							return
 						}
@@ -1568,13 +1584,13 @@ func (inst *%s%s) Len() (nEntities int) {
 						}
 					}
 					for _, c := range haCols {
-						_, err = fmt.Fprintf(b, "\t%s = %sinst.%s.Value(int(rHA.BeginIncl))%s\n", c.argName, c.convPrefix, c.elementsField, c.convSuffix)
+						_, err = fmt.Fprintf(b, "\t%s = %sinst.%s.Value(int(bHA)+int(rHA.BeginIncl))%s\n", c.argName, c.convPrefix, c.elementsField, c.convSuffix)
 						if err != nil {
 							return
 						}
 					}
 					for _, c := range setCols {
-						_, err = fmt.Fprintf(b, "\t%s = %sinst.%s.Value(int(rSet.BeginIncl))%s\n", c.argName, c.convPrefix, c.elementsField, c.convSuffix)
+						_, err = fmt.Fprintf(b, "\t%s = %sinst.%s.Value(int(bSet)+int(rSet.BeginIncl))%s\n", c.argName, c.convPrefix, c.elementsField, c.convSuffix)
 						if err != nil {
 							return
 						}

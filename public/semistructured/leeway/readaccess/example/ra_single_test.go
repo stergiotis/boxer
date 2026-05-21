@@ -158,6 +158,70 @@ func TestGetAttrValueSingleOrDefaultTaggedDefaultsOnCardinalityMismatch(t *testi
 	require.Equal(t, "", words)
 }
 
+// Multi-entity, multi-attribute-per-entity stress for the HomogenousArray
+// accel-backed GetAttrValueSingle path. Each entity contributes >1 attribute,
+// each attribute carries a distinct WordLength/Words pair, and we verify each
+// (entity, attr) reads back its own values. The bug being guarded against:
+// the AccelHomogenousArray's per-entity LookupForwardRange returns offsets
+// relative to the entity's HA window, but the generated reader used them as
+// global element indices — so every entity > 0 silently returned entity 0's
+// values.
+func TestGetAttrValueSingleMultiEntityMultiAttribute(t *testing.T) {
+	ts := time.UnixMilli(1700000000000).UTC()
+
+	dml := NewInEntityTestTable(memory.DefaultAllocator, 3)
+	type attr struct {
+		text       string
+		wordLength uint32
+		words      string
+	}
+	entities := [][]attr{
+		{{"alpha", 100, "a"}, {"beta", 101, "b"}},
+		{{"gamma", 200, "c"}, {"delta", 201, "d"}, {"epsilon", 202, "e"}},
+		{{"zeta", 300, "f"}},
+	}
+	for i, ents := range entities {
+		ent := dml.BeginEntity()
+		ent.SetId(uint64(i))
+		ent.SetTimestamp(ts, []time.Time{ts})
+		sec := ent.GetSectionText()
+		for _, a := range ents {
+			sec.BeginAttributeSingle(a.text, a.wordLength, a.words).EndAttribute()
+		}
+		require.NoError(t, ent.CheckErrors())
+		require.NoError(t, ent.CommitEntity())
+	}
+
+	records, err := dml.TransferRecords(nil)
+	require.NoError(t, err)
+	require.Len(t, records, 1)
+
+	ra := NewReadAccessTestTable()
+	require.NoError(t, ra.LoadFromRecord(records[0]))
+
+	for i, ents := range entities {
+		eIdx := runtime.EntityIdx(i)
+		require.EqualValues(t, len(ents), ra.Text.Attributes.GetNumberOfAttributes(eIdx),
+			"entity %d attribute count", i)
+		for j, want := range ents {
+			aIdx := runtime.AttributeIdx(j)
+			text, wordLength, words, gerr := ra.Text.Attributes.GetAttrValueSingle(eIdx, aIdx)
+			require.NoError(t, gerr, "entity %d attr %d", i, j)
+			require.Equal(t, want.text, text, "entity %d attr %d text", i, j)
+			require.EqualValues(t, want.wordLength, wordLength, "entity %d attr %d wordLength", i, j)
+			require.Equal(t, want.words, words, "entity %d attr %d words", i, j)
+
+			// iter.Seq variants must agree.
+			require.EqualValues(t, []uint32{want.wordLength},
+				slices.Collect(ra.Text.Attributes.GetAttrValueWordLength(eIdx, aIdx)),
+				"entity %d attr %d wordLength seq", i, j)
+			require.EqualValues(t, []string{want.words},
+				slices.Collect(ra.Text.Attributes.GetAttrValueWords(eIdx, aIdx)),
+				"entity %d attr %d words seq", i, j)
+		}
+	}
+}
+
 // Plain attribute class: OrDefault returns values on cardinality-1 and
 // zero values on mismatch, mirroring the tagged side.
 func TestGetAttrValueSingleOrDefaultPlain(t *testing.T) {
