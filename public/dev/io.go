@@ -25,6 +25,7 @@ func NewCliCommand() *cli.Command {
 					return nil
 				},
 			},
+			newEntryPointsSubcommand(),
 		},
 	}
 }
