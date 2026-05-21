@@ -699,6 +699,23 @@ func (inst *ReadAccessTestTableTaggedTextAttributes) GetAttrValueWords(entityIdx
 		}
 	}
 }
+func (inst *ReadAccessTestTableTaggedTextAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (text string, wordLength uint32, words string, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
+	}
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "text").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
+		return
+	}
+	b, _ := inst.ValueText.ValueOffsets(int(entityIdx))
+	text = inst.ValueTextElements.Value(int(b) + int(attrIdx))
+	wordLength = inst.ValueWordLengthElements.Value(int(rHA.BeginIncl))
+	words = inst.ValueWordsElements.Value(int(rHA.BeginIncl))
+	return
+}
 func (inst *ReadAccessTestTablePlainEntityIdAttributes) GetAttrValueId(entityIdx runtime.EntityIdx) (scalarAttrValue uint64) {
 	scalarAttrValue = inst.ValueId.Value(int(entityIdx))
 	return
@@ -718,11 +735,21 @@ func (inst *ReadAccessTestTablePlainEntityTimestampAttributes) GetAttrValueProc(
 		}
 	}
 }
+func (inst *ReadAccessTestTablePlainEntityTimestampAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx) (ts time.Time, proc time.Time, err error) {
+	bHA, eHA := inst.ValueProc.ValueOffsets(int(entityIdx))
+	if eHA-bHA != 1 {
+		err = eb.Build().Int("entityIdx", int(entityIdx)).Int64("cardinality", int64(eHA-bHA)).Errorf("expected exactly one element per HomogenousArray column")
+		return
+	}
+	ts = inst.ValueTs.Value(int(entityIdx)).ToTime(arrow.Millisecond)
+	proc = inst.ValueProcElements.Value(int(bHA)).ToTime(arrow.Millisecond)
+	return
+}
 
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1520
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1806
 
 func (inst *ReadAccessTestTableTaggedGeoAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
 	b, e := inst.ValueLat.ValueOffsets(int(entityIdx))
@@ -738,7 +765,7 @@ func (inst *ReadAccessTestTableTaggedTextAttributes) GetNumberOfAttributes(entit
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1574
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1860
 
 type ReadAccessTestTableTaggedGeo struct {
 	Attributes  *ReadAccessTestTableTaggedGeoAttributes
@@ -917,7 +944,7 @@ func (inst *ReadAccessTestTableTaggedText) GetSectionMembershipSpec() common.Mem
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeEntityClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1924
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2210
 
 type ReadAccessTestTable struct {
 	EntityId        *ReadAccessTestTablePlainEntityIdAttributes

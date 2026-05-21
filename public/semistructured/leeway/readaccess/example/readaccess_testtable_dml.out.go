@@ -5,7 +5,7 @@ package example
 import (
 	"errors"
 	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/apache/arrow-go/v18/arrow/array"
+	array "github.com/apache/arrow-go/v18/arrow/array"
 	_ "github.com/apache/arrow-go/v18/arrow/ipc"
 	_ "github.com/apache/arrow-go/v18/arrow/math"
 	"github.com/apache/arrow-go/v18/arrow/memory"
@@ -51,7 +51,7 @@ func CreateSchemaTestTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1148
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1212
 
 type InEntityTestTable struct {
 	plainTs1              time.Time
@@ -59,6 +59,7 @@ type InEntityTestTable struct {
 	builder               *array.RecordBuilder
 	section00Inst         *InEntityTestTableSectionGeo
 	section01Inst         *InEntityTestTableSectionText
+	activeSections        *[2]bool
 	scalarFieldBuilder000 *array.Uint64Builder
 
 	scalarFieldBuilder001          *array.TimestampBuilder
@@ -92,10 +93,33 @@ func NewInEntityTestTable(allocator memory.Allocator, estimatedNumberOfRecords i
 	return inst
 }
 
+// SetActiveSections marks which section indices BeginEntity should
+// initialise (skipping beginSection for the rest). Pass nil to clear.
+// The hint is a performance optimisation; sending BeginAttribute to
+// an unmarked section produces empty-list bytes at TransferRecords.
+func (inst *InEntityTestTable) SetActiveSections(idxs []int) {
+	if idxs == nil {
+		inst.activeSections = nil
+		return
+	}
+	var mask [2]bool
+	for _, i := range idxs {
+		if i >= 0 && i < len(mask) {
+			mask[i] = true
+		}
+	}
+	inst.activeSections = &mask
+}
+
+// Builder exposes the underlying RecordBuilder so callers can apply
+// shim-level hints (e.g. SetActiveFields on the arrowrowbinary /
+// arrowsparserb / arrowrowcbor backends).
+func (inst *InEntityTestTable) Builder() *array.RecordBuilder { return inst.builder }
+
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1262
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1361
 
 func (inst *InEntityTestTable) SetId(id0 uint64) *InEntityTestTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -110,7 +134,7 @@ func (inst *InEntityTestTable) SetId(id0 uint64) *InEntityTestTable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1262
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1361
 
 func (inst *InEntityTestTable) SetTimestamp(ts1 time.Time, proc2 []time.Time) *InEntityTestTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -144,6 +168,15 @@ func (inst *InEntityTestTable) initSections(builder *array.RecordBuilder) {
 	inst.section01Inst = NewInEntityTestTableSectionText(builder, inst)
 }
 func (inst *InEntityTestTable) beginSections() {
+	if mask := inst.activeSections; mask != nil {
+		if mask[0] {
+			inst.section00Inst.beginSection()
+		}
+		if mask[1] {
+			inst.section01Inst.beginSection()
+		}
+		return
+	}
 	inst.section00Inst.beginSection()
 	inst.section01Inst.beginSection()
 }
@@ -584,6 +617,9 @@ func (inst *InEntityTestTableSectionText) BeginAttribute(text12 string) *InEntit
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
+}
+func (inst *InEntityTestTableSectionText) BeginAttributeSingle(text12 string, wordLength13 uint32, words14 string) *InEntityTestTableSectionTextInAttr {
+	return inst.BeginAttribute(text12).AddToCoContainers(wordLength13, words14)
 }
 func (inst *InEntityTestTableSectionText) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))

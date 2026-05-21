@@ -1445,6 +1445,146 @@ func (inst *%s%s) Len() (nEntities int) {
 					return
 				}
 			}
+			// Section-level GetAttrValueSingle — emitted when the section
+			// has at least one non-scalar value column. Returns all section
+			// columns in one call; returns err if any non-scalar subtype's
+			// cardinality != 1. Mirrors dml's BeginAttributeSingle.
+			{
+				type colInfo struct {
+					argName       string
+					fieldName     string
+					elementsField string
+					typeName      string
+					convPrefix    string
+					convSuffix    string
+				}
+				var scalarCols, haCols, setCols []colInfo
+				var firstScalarFieldName string
+				for i, attrName := range s.ValueColumnNames {
+					ct := s.ValueColumnTypes[i]
+					tn, sm, tcp, tcs, gerr := getElementGoTypeName(ct, s.ValueEncodingHints[i])
+					if gerr != nil {
+						err = eh.Errorf("unable to get element go type name: %w", gerr)
+						return
+					}
+					st := common.GetSubTypeByScalarModifier(sm)
+					upperName := attrName.Convert(naming.UpperCamelCase).String()
+					lowerName := attrName.Convert(naming.LowerCamelCase).String()
+					ci := colInfo{
+						argName:       lowerName,
+						fieldName:     clsNamer.ComposeValueField(upperName),
+						elementsField: clsNamer.ComposeValueFieldElementAccessor(upperName),
+						typeName:      tn,
+						convPrefix:    tcp,
+						convSuffix:    tcs,
+					}
+					switch st {
+					case common.IntermediateColumnsSubTypeScalar:
+						if firstScalarFieldName == "" {
+							firstScalarFieldName = ci.fieldName
+						}
+						scalarCols = append(scalarCols, ci)
+					case common.IntermediateColumnsSubTypeHomogenousArray:
+						haCols = append(haCols, ci)
+					case common.IntermediateColumnsSubTypeSet:
+						setCols = append(setCols, ci)
+					}
+				}
+				if len(haCols)+len(setCols) > 0 {
+					var clsNameSingle string
+					clsNameSingle, err = clsNamer.ComposeSectionReadAccessAttributeClassName(tableName, common.PlainItemTypeNone, s.Name)
+					if err != nil {
+						err = eh.Errorf("unable to compose read access inner class name: %w", err)
+						return
+					}
+					_, err = fmt.Fprintf(b, "func (inst *%s%s) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (", clsNameSingle, genericTypeParamsUse)
+					if err != nil {
+						return
+					}
+					for _, c := range scalarCols {
+						_, err = fmt.Fprintf(b, "%s %s, ", c.argName, c.typeName)
+						if err != nil {
+							return
+						}
+					}
+					for _, c := range haCols {
+						_, err = fmt.Fprintf(b, "%s %s, ", c.argName, c.typeName)
+						if err != nil {
+							return
+						}
+					}
+					for _, c := range setCols {
+						_, err = fmt.Fprintf(b, "%s %s, ", c.argName, c.typeName)
+						if err != nil {
+							return
+						}
+					}
+					_, err = b.WriteString("err error) {\n")
+					if err != nil {
+						return
+					}
+					if len(haCols) > 0 {
+						_, err = fmt.Fprintf(b, `	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.%s
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
+	}
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section",%q).Int("entityIdx",int(entityIdx)).Int("attrIdx",int(attrIdx)).Int64("cardinality",int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
+		return
+	}
+`, homogenousArrayAccelFieldName, string(s.Name))
+						if err != nil {
+							return
+						}
+					}
+					if len(setCols) > 0 {
+						_, err = fmt.Fprintf(b, `	var rSet runtime.Range[runtime.SetIdx]
+	{
+		accel := inst.%s
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rSet = accel.LookupForwardRange(attrIdx)
+	}
+	if rSet.EndExcl-rSet.BeginIncl != 1 {
+		err = eb.Build().Str("section",%q).Int("entityIdx",int(entityIdx)).Int("attrIdx",int(attrIdx)).Int64("cardinality",int64(rSet.EndExcl-rSet.BeginIncl)).Errorf("expected exactly one element per Set column")
+		return
+	}
+`, setAccelFieldName, string(s.Name))
+						if err != nil {
+							return
+						}
+					}
+					if len(scalarCols) > 0 {
+						_, err = fmt.Fprintf(b, "\tb, _ := inst.%s.ValueOffsets(int(entityIdx))\n", firstScalarFieldName)
+						if err != nil {
+							return
+						}
+						for _, c := range scalarCols {
+							_, err = fmt.Fprintf(b, "\t%s = %sinst.%s.Value(int(b)+int(attrIdx))%s\n", c.argName, c.convPrefix, c.elementsField, c.convSuffix)
+							if err != nil {
+								return
+							}
+						}
+					}
+					for _, c := range haCols {
+						_, err = fmt.Fprintf(b, "\t%s = %sinst.%s.Value(int(rHA.BeginIncl))%s\n", c.argName, c.convPrefix, c.elementsField, c.convSuffix)
+						if err != nil {
+							return
+						}
+					}
+					for _, c := range setCols {
+						_, err = fmt.Fprintf(b, "\t%s = %sinst.%s.Value(int(rSet.BeginIncl))%s\n", c.argName, c.convPrefix, c.elementsField, c.convSuffix)
+						if err != nil {
+							return
+						}
+					}
+					_, err = b.WriteString("\treturn\n}\n")
+					if err != nil {
+						return
+					}
+				}
+			}
 		}
 
 		for i, pt := range tblDesc.PlainValuesItemTypes {
@@ -1512,6 +1652,152 @@ func (inst *%s%s) Len() (nEntities int) {
 			}
 			if err != nil {
 				return
+			}
+		}
+		// Section-level GetAttrValueSingle for plain attribute classes —
+		// emitted per class that has ≥1 non-scalar value column. Returns
+		// all class columns in one call; returns err if any non-scalar
+		// subtype's cardinality != 1. Mirrors the tagged shape but uses
+		// ValueOffsets directly (no accel on the plain path).
+		{
+			type plainColInfo struct {
+				argName       string
+				fieldName     string
+				elementsField string
+				typeName      string
+				convPrefix    string
+				convSuffix    string
+				subType       common.IntermediateColumnSubTypeE
+			}
+			type plainGroup struct {
+				scalarCols, haCols, setCols   []plainColInfo
+				firstHAField, firstSetField   string
+			}
+			plainByCls := make(map[string]*plainGroup)
+			var clsOrder []string
+			for i, pt := range tblDesc.PlainValuesItemTypes {
+				ct := tblDesc.PlainValuesTypes[i]
+				hints := tblDesc.PlainValuesEncodingHints[i]
+				tn, sm, tcp, tcs, gerr := getElementGoTypeName(ct, hints)
+				if gerr != nil {
+					err = eh.Errorf("unable to get element go type name: %w", gerr)
+					return
+				}
+				st := common.GetSubTypeByScalarModifier(sm)
+				var clsName string
+				clsName, err = clsNamer.ComposeSectionReadAccessAttributeClassName(tableName, pt, "")
+				if err != nil {
+					err = eh.Errorf("unable to compose read access inner class name: %w", err)
+					return
+				}
+				grp, ok := plainByCls[clsName]
+				if !ok {
+					grp = &plainGroup{}
+					plainByCls[clsName] = grp
+					clsOrder = append(clsOrder, clsName)
+				}
+				attrName := tblDesc.PlainValuesNames[i]
+				upperName := attrName.Convert(naming.UpperCamelCase).String()
+				lowerName := attrName.Convert(naming.LowerCamelCase).String()
+				ci := plainColInfo{
+					argName:       lowerName,
+					fieldName:     clsNamer.ComposeValueField(upperName),
+					elementsField: clsNamer.ComposeValueFieldElementAccessor(upperName),
+					typeName:      tn,
+					convPrefix:    tcp,
+					convSuffix:    tcs,
+					subType:       st,
+				}
+				switch st {
+				case common.IntermediateColumnsSubTypeScalar:
+					grp.scalarCols = append(grp.scalarCols, ci)
+				case common.IntermediateColumnsSubTypeHomogenousArray:
+					if grp.firstHAField == "" {
+						grp.firstHAField = ci.fieldName
+					}
+					grp.haCols = append(grp.haCols, ci)
+				case common.IntermediateColumnsSubTypeSet:
+					if grp.firstSetField == "" {
+						grp.firstSetField = ci.fieldName
+					}
+					grp.setCols = append(grp.setCols, ci)
+				}
+			}
+			for _, clsName := range clsOrder {
+				grp := plainByCls[clsName]
+				if len(grp.haCols)+len(grp.setCols) == 0 {
+					continue
+				}
+				_, err = fmt.Fprintf(b, "func (inst *%s%s) GetAttrValueSingle(entityIdx runtime.EntityIdx) (", clsName, genericTypeParamsUse)
+				if err != nil {
+					return
+				}
+				for _, c := range grp.scalarCols {
+					_, err = fmt.Fprintf(b, "%s %s, ", c.argName, c.typeName)
+					if err != nil {
+						return
+					}
+				}
+				for _, c := range grp.haCols {
+					_, err = fmt.Fprintf(b, "%s %s, ", c.argName, c.typeName)
+					if err != nil {
+						return
+					}
+				}
+				for _, c := range grp.setCols {
+					_, err = fmt.Fprintf(b, "%s %s, ", c.argName, c.typeName)
+					if err != nil {
+						return
+					}
+				}
+				_, err = b.WriteString("err error) {\n")
+				if err != nil {
+					return
+				}
+				if len(grp.haCols) > 0 {
+					_, err = fmt.Fprintf(b, `	bHA, eHA := inst.%s.ValueOffsets(int(entityIdx))
+	if eHA-bHA != 1 {
+		err = eb.Build().Int("entityIdx",int(entityIdx)).Int64("cardinality",int64(eHA-bHA)).Errorf("expected exactly one element per HomogenousArray column")
+		return
+	}
+`, grp.firstHAField)
+					if err != nil {
+						return
+					}
+				}
+				if len(grp.setCols) > 0 {
+					_, err = fmt.Fprintf(b, `	bSet, eSet := inst.%s.ValueOffsets(int(entityIdx))
+	if eSet-bSet != 1 {
+		err = eb.Build().Int("entityIdx",int(entityIdx)).Int64("cardinality",int64(eSet-bSet)).Errorf("expected exactly one element per Set column")
+		return
+	}
+`, grp.firstSetField)
+					if err != nil {
+						return
+					}
+				}
+				for _, c := range grp.scalarCols {
+					_, err = fmt.Fprintf(b, "\t%s = %sinst.%s.Value(int(entityIdx))%s\n", c.argName, c.convPrefix, c.fieldName, c.convSuffix)
+					if err != nil {
+						return
+					}
+				}
+				for _, c := range grp.haCols {
+					_, err = fmt.Fprintf(b, "\t%s = %sinst.%s.Value(int(bHA))%s\n", c.argName, c.convPrefix, c.elementsField, c.convSuffix)
+					if err != nil {
+						return
+					}
+				}
+				for _, c := range grp.setCols {
+					_, err = fmt.Fprintf(b, "\t%s = %sinst.%s.Value(int(bSet))%s\n", c.argName, c.convPrefix, c.elementsField, c.convSuffix)
+					if err != nil {
+						return
+					}
+				}
+				_, err = b.WriteString("\treturn\n}\n")
+				if err != nil {
+					return
+				}
 			}
 		}
 	}
