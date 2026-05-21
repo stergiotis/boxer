@@ -51,7 +51,7 @@ func CreateSchemaTesttable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1159
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1212
 
 type InEntityTesttable struct {
 	plainTs1              time.Time
@@ -118,7 +118,7 @@ func (inst *InEntityTesttable) Builder() *array.RecordBuilder { return inst.buil
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1308
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1361
 
 func (inst *InEntityTesttable) SetId(id0 uint64) *InEntityTesttable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -133,7 +133,7 @@ func (inst *InEntityTesttable) SetId(id0 uint64) *InEntityTesttable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1308
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1361
 
 func (inst *InEntityTesttable) SetTimestamp(ts1 time.Time) *InEntityTesttable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -777,6 +777,9 @@ func (inst *InEntityTesttableSectionSpecial) BeginAttribute(spc14 string) *InEnt
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
+}
+func (inst *InEntityTesttableSectionSpecial) BeginAttributeSingle(spc14 string, ary115 uint32, ary216 uint32) *InEntityTesttableSectionSpecialInAttr {
+	return inst.BeginAttribute(spc14).AddToCoContainers(ary115, ary216)
 }
 func (inst *InEntityTesttableSectionSpecial) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))

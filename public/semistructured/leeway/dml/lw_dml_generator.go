@@ -1067,6 +1067,59 @@ func (inst *GoClassBuilder) ComposeSectionCode(clsNamer gocodegen.GoClassNamerI,
 			return
 		}
 	}
+	{ // BeginAttributeSingle — QoL wrapper that populates each non-scalar
+		// value column with exactly one element (array of size 1 / set of
+		// cardinality 1), mirroring the scalar BeginAttribute(v) signature
+		// shape. Emitted only when the section has at least one non-scalar
+		// value column; otherwise BeginAttribute alone already covers it.
+		nonScalarIRH := sectionIRH.DeriveSubHolder(deriveSubHolderSelectNonScalar)
+		nonScalarCount := nonScalarIRH.CountColumns()
+		if nonScalarCount > 0 {
+			_, err = fmt.Fprintf(b, `func (inst *%s) BeginAttributeSingle(`, clsNames.InSectionClassName)
+			if err != nil {
+				return
+			}
+			err = inst.composeFieldRelatedCodeAll(structFieldOperationArgDeclaration, scalarIRH.IterateColumnProps(), ", ")
+			if err != nil {
+				return
+			}
+			if scalarIRH.CountColumns() > 0 {
+				_, err = b.WriteString(", ")
+				if err != nil {
+					return
+				}
+			}
+			err = inst.composeFieldRelatedCodeAll(structFieldOperationArgDeclarationDemoted, nonScalarIRH.IterateColumnProps(), ", ")
+			if err != nil {
+				return
+			}
+			_, err = fmt.Fprintf(b, `) *%s {
+	return inst.BeginAttribute(`, clsNames.InAttributeClassName)
+			if err != nil {
+				return
+			}
+			err = inst.composeFieldRelatedCodeAll(structFieldOperationArgUse, scalarIRH.IterateColumnProps(), ", ")
+			if err != nil {
+				return
+			}
+			helperName := "AddToContainer"
+			if nonScalarCount > 1 {
+				helperName = "AddToCoContainers"
+			}
+			_, err = fmt.Fprintf(b, ").%s(", helperName)
+			if err != nil {
+				return
+			}
+			err = inst.composeFieldRelatedCodeAll(structFieldOperationArgUse, nonScalarIRH.IterateColumnProps(), ", ")
+			if err != nil {
+				return
+			}
+			_, err = b.WriteString(")\n}\n")
+			if err != nil {
+				return
+			}
+		}
+	}
 	{ // CheckErrors
 		_, err = fmt.Fprintf(b, `func (inst *%s) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs,inst.inAttr.errs))
