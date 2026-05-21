@@ -98,6 +98,35 @@ func TestBeginAttributeSingleMultipleAttributes(t *testing.T) {
 	assertEquivalent(t, recsA, recsB)
 }
 
+// "multi" section mixes a scalar (name), a HomogenousArray column (vals),
+// and a Set column (tags). BeginAttributeSingle must compose across both
+// non-scalar subtypes in one call, producing the same Arrow record as the
+// explicit BeginAttribute + AddToCoContainers chain.
+func TestBeginAttributeSingleMixedHomogenousArrayAndSet(t *testing.T) {
+	pool := memory.NewGoAllocator()
+	ts := time.Unix(1700000000, 0).UTC()
+
+	eA := NewInEntityTesttable(pool, 1)
+	eA.BeginEntity().SetId(1).SetTimestamp(ts)
+	eA.GetSectionMulti().BeginAttribute("a").AddToCoContainers(7, 100).EndAttribute()
+	eA.GetSectionMulti().BeginAttribute("b").AddToCoContainers(8, 200).EndAttribute()
+	require.NoError(t, eA.CommitEntity())
+	recsA, err := eA.TransferRecords(nil)
+	require.NoError(t, err)
+	defer releaseAll(recsA)
+
+	eB := NewInEntityTesttable(pool, 1)
+	eB.BeginEntity().SetId(1).SetTimestamp(ts)
+	eB.GetSectionMulti().BeginAttributeSingle("a", 7, 100).EndAttribute()
+	eB.GetSectionMulti().BeginAttributeSingle("b", 8, 200).EndAttribute()
+	require.NoError(t, eB.CommitEntity())
+	recsB, err := eB.TransferRecords(nil)
+	require.NoError(t, err)
+	defer releaseAll(recsB)
+
+	assertEquivalent(t, recsA, recsB)
+}
+
 // BeginAttributeSingle must return *InAttr so callers can still chain
 // memberships. Verify the chain produces the same record as going through
 // BeginAttribute + AddToCoContainers + AddMembership... .

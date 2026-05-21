@@ -98,6 +98,25 @@ func sampleTableDesc() (tbl common.TableDesc, err error) {
 		ScalarModifier: canonicaltypes2.ScalarModifierNone,
 	}, encodingaspects2.EmptyAspectSet, valueaspects.EmptyAspectSet, useaspects.EmptyAspectSet,
 		common.MembershipSpecMixedLowCardRefHighCardParameters, "", "")
+	// "multi" section — scalar + HomogenousArray + Set in one section.
+	// Exercises BeginAttributeSingle across mixed non-scalar subtypes.
+	manip.MergeTaggedValueColumn("multi", "name", canonicaltypes2.StringAstNode{
+		BaseType:       canonicaltypes2.BaseTypeStringUtf8,
+		ScalarModifier: canonicaltypes2.ScalarModifierNone,
+	}, encodingaspects2.EmptyAspectSet, valueaspects.EmptyAspectSet, useaspects.EmptyAspectSet,
+		common.MembershipSpecMixedLowCardRefHighCardParameters, "", "")
+	manip.MergeTaggedValueColumn("multi", "vals", canonicaltypes2.MachineNumericTypeAstNode{
+		BaseType:       canonicaltypes2.BaseTypeMachineNumericUnsigned,
+		Width:          32,
+		ScalarModifier: canonicaltypes2.ScalarModifierHomogenousArray,
+	}, encodingaspects2.EmptyAspectSet, valueaspects.EmptyAspectSet, useaspects.EmptyAspectSet,
+		common.MembershipSpecMixedLowCardRefHighCardParameters, "", "")
+	manip.MergeTaggedValueColumn("multi", "tags", canonicaltypes2.MachineNumericTypeAstNode{
+		BaseType:       canonicaltypes2.BaseTypeMachineNumericUnsigned,
+		Width:          64,
+		ScalarModifier: canonicaltypes2.ScalarModifierSet,
+	}, encodingaspects2.EmptyAspectSet, valueaspects.EmptyAspectSet, useaspects.EmptyAspectSet,
+		common.MembershipSpecMixedLowCardRefHighCardParameters, "", "")
 	return manip.BuildTableDesc()
 }
 

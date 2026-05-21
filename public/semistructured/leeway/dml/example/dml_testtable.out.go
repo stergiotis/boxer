@@ -44,6 +44,14 @@ func CreateSchemaTesttable() (schema *arrow.Schema) {
 		/* 018 */ arrow.Field{Name: "tv:special:mrhp:mrhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
 		/* 019 */ arrow.Field{Name: "tv:special:len:len:u64:28o:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 		/* 020 */ arrow.Field{Name: "tv:special:lmrcard:lmrcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 021 */ arrow.Field{Name: "tv:multi:name:val:s:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
+		/* 022 */ arrow.Field{Name: "tv:multi:vals:val:u32h:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint32)},
+		/* 023 */ arrow.Field{Name: "tv:multi:tags:val:u64m:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 024 */ arrow.Field{Name: "tv:multi:lmr:lmr:u64:2q:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 025 */ arrow.Field{Name: "tv:multi:mrhp:mrhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 026 */ arrow.Field{Name: "tv:multi:len:len:u64:28o:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 027 */ arrow.Field{Name: "tv:multi:card:card:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 028 */ arrow.Field{Name: "tv:multi:lmrcard:lmrcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 	}, nil)
 	return
 }
@@ -59,9 +67,10 @@ type InEntityTesttable struct {
 	builder               *array.RecordBuilder
 	section00Inst         *InEntityTesttableSectionBool
 	section01Inst         *InEntityTesttableSectionFloat64
-	section02Inst         *InEntityTesttableSectionSpecial
-	section03Inst         *InEntityTesttableSectionString
-	activeSections        *[4]bool
+	section02Inst         *InEntityTesttableSectionMulti
+	section03Inst         *InEntityTesttableSectionSpecial
+	section04Inst         *InEntityTesttableSectionString
+	activeSections        *[5]bool
 	scalarFieldBuilder000 *array.Uint64Builder
 
 	scalarFieldBuilder001 *array.TimestampBuilder
@@ -74,6 +83,7 @@ type InEntityTesttable struct {
 	section01State runtime.EntityStateE
 	section02State runtime.EntityStateE
 	section03State runtime.EntityStateE
+	section04State runtime.EntityStateE
 }
 
 func NewInEntityTesttable(allocator memory.Allocator, estimatedNumberOfRecords int) (inst *InEntityTesttable) {
@@ -101,7 +111,7 @@ func (inst *InEntityTesttable) SetActiveSections(idxs []int) {
 		inst.activeSections = nil
 		return
 	}
-	var mask [4]bool
+	var mask [5]bool
 	for _, i := range idxs {
 		if i >= 0 && i < len(mask) {
 			mask[i] = true
@@ -157,8 +167,9 @@ func (inst *InEntityTesttable) resetPlainValues() {
 func (inst *InEntityTesttable) initSections(builder *array.RecordBuilder) {
 	inst.section00Inst = NewInEntityTesttableSectionBool(builder, inst)
 	inst.section01Inst = NewInEntityTesttableSectionFloat64(builder, inst)
-	inst.section02Inst = NewInEntityTesttableSectionSpecial(builder, inst)
-	inst.section03Inst = NewInEntityTesttableSectionString(builder, inst)
+	inst.section02Inst = NewInEntityTesttableSectionMulti(builder, inst)
+	inst.section03Inst = NewInEntityTesttableSectionSpecial(builder, inst)
+	inst.section04Inst = NewInEntityTesttableSectionString(builder, inst)
 }
 func (inst *InEntityTesttable) beginSections() {
 	if mask := inst.activeSections; mask != nil {
@@ -174,18 +185,23 @@ func (inst *InEntityTesttable) beginSections() {
 		if mask[3] {
 			inst.section03Inst.beginSection()
 		}
+		if mask[4] {
+			inst.section04Inst.beginSection()
+		}
 		return
 	}
 	inst.section00Inst.beginSection()
 	inst.section01Inst.beginSection()
 	inst.section02Inst.beginSection()
 	inst.section03Inst.beginSection()
+	inst.section04Inst.beginSection()
 }
 func (inst *InEntityTesttable) resetSections() {
 	inst.section00Inst.resetSection()
 	inst.section01Inst.resetSection()
 	inst.section02Inst.resetSection()
 	inst.section03Inst.resetSection()
+	inst.section04Inst.resetSection()
 }
 func (inst *InEntityTesttable) CheckErrors() (err error) {
 	err = eh.CheckErrors(inst.errs)
@@ -193,6 +209,7 @@ func (inst *InEntityTesttable) CheckErrors() (err error) {
 	err = errors.Join(err, inst.section01Inst.CheckErrors())
 	err = errors.Join(err, inst.section02Inst.CheckErrors())
 	err = errors.Join(err, inst.section03Inst.CheckErrors())
+	err = errors.Join(err, inst.section04Inst.CheckErrors())
 
 	return
 }
@@ -202,11 +219,14 @@ func (inst *InEntityTesttable) GetSectionBool() *InEntityTesttableSectionBool {
 func (inst *InEntityTesttable) GetSectionFloat64() *InEntityTesttableSectionFloat64 {
 	return inst.section01Inst
 }
-func (inst *InEntityTesttable) GetSectionSpecial() *InEntityTesttableSectionSpecial {
+func (inst *InEntityTesttable) GetSectionMulti() *InEntityTesttableSectionMulti {
 	return inst.section02Inst
 }
-func (inst *InEntityTesttable) GetSectionString() *InEntityTesttableSectionString {
+func (inst *InEntityTesttable) GetSectionSpecial() *InEntityTesttableSectionSpecial {
 	return inst.section03Inst
+}
+func (inst *InEntityTesttable) GetSectionString() *InEntityTesttableSectionString {
+	return inst.section04Inst
 }
 func (inst *InEntityTesttable) BeginEntity() *InEntityTesttable {
 	switch inst.state {
@@ -242,12 +262,20 @@ func (inst *InEntityTesttable) validateEntity() {
 		state := inst.section02Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "special").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "multi").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
 	{
 		state := inst.section03Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "special").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section04Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
 			inst.AppendError(eb.Build().Str("section", "string").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
@@ -722,6 +750,257 @@ func (inst *InEntityTesttableSectionFloat64InAttr) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityTesttableSectionFloat64InAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTesttableSectionMulti struct {
+	inAttr                         *InEntityTesttableSectionMultiInAttr
+	parent                         *InEntityTesttable
+	scalarFieldBuilder021          *array.StringBuilder
+	scalarListBuilder021           *array.ListBuilder
+	homogenousArrayFieldBuilder022 *array.Uint32Builder
+	homogenousArrayListBuilder022  *array.ListBuilder
+	setFieldBuilder023             *array.Uint64Builder
+	setListBuilder023              *array.ListBuilder
+	errs                           []error
+	state                          runtime.EntityStateE
+}
+
+func NewInEntityTesttableSectionMulti(builder *array.RecordBuilder, parent *InEntityTesttable) (inst *InEntityTesttableSectionMulti) {
+	inst = &InEntityTesttableSectionMulti{}
+	inAttr := NewInEntityTesttableSectionMultiInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.scalarFieldBuilder021 = builder.Field(21).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.scalarListBuilder021 = builder.Field(21).(*array.ListBuilder)
+	inst.homogenousArrayFieldBuilder022 = builder.Field(22).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
+	inst.homogenousArrayListBuilder022 = builder.Field(22).(*array.ListBuilder)
+	inst.setFieldBuilder023 = builder.Field(23).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.setListBuilder023 = builder.Field(23).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTesttableSectionMulti) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityTesttableSectionMulti) BeginAttribute(name21 string) *InEntityTesttableSectionMultiInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+	inst.scalarFieldBuilder021.Append(name21)
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityTesttableSectionMulti) BeginAttributeSingle(name21 string, vals22 uint32, tags23 uint64) *InEntityTesttableSectionMultiInAttr {
+	return inst.BeginAttribute(name21).AddToCoContainers(vals22, tags23)
+}
+func (inst *InEntityTesttableSectionMulti) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityTesttableSectionMulti) EndSection() *InEntityTesttable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityTesttableSectionMulti) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityTesttableSectionMulti) resetSection() {
+	inst.clearErrors()
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityTesttableSectionMulti) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTesttableSectionMulti) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTesttableSectionMultiInAttr struct {
+	parent                                *InEntityTesttableSectionMulti
+	scalarFieldBuilder021                 *array.StringBuilder
+	scalarListBuilder021                  *array.ListBuilder
+	homogenousArrayFieldBuilder022        *array.Uint32Builder
+	homogenousArrayListBuilder022         *array.ListBuilder
+	setFieldBuilder023                    *array.Uint64Builder
+	setListBuilder023                     *array.ListBuilder
+	membershipFieldBuilder024             *array.Uint64Builder
+	membershipListBuilder024              *array.ListBuilder
+	membershipFieldBuilder025             *array.BinaryBuilder
+	membershipListBuilder025              *array.ListBuilder
+	homogenousArraySupportFieldBuilder026 *array.Uint64Builder
+	homogenousArraySupportListBuilder026  *array.ListBuilder
+	setSupportFieldBuilder027             *array.Uint64Builder
+	setSupportListBuilder027              *array.ListBuilder
+	membershipSupportFieldBuilder028      *array.Uint64Builder
+	membershipSupportListBuilder028       *array.ListBuilder
+
+	errs []error
+
+	membershipContainerLength024 int
+
+	membershipContainerLength025 int
+
+	homogenousArrayContainerLength022 int
+
+	setContainerLength023 int
+	state                 runtime.EntityStateE
+}
+
+func NewInEntityTesttableSectionMultiInAttr(builder *array.RecordBuilder, parent *InEntityTesttableSectionMulti) (inst *InEntityTesttableSectionMultiInAttr) {
+	inst = &InEntityTesttableSectionMultiInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.scalarFieldBuilder021 = builder.Field(21).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.scalarListBuilder021 = builder.Field(21).(*array.ListBuilder)
+	inst.homogenousArrayFieldBuilder022 = builder.Field(22).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
+	inst.homogenousArrayListBuilder022 = builder.Field(22).(*array.ListBuilder)
+	inst.setFieldBuilder023 = builder.Field(23).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.setListBuilder023 = builder.Field(23).(*array.ListBuilder)
+	inst.membershipFieldBuilder024 = builder.Field(24).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder024 = builder.Field(24).(*array.ListBuilder)
+	inst.membershipFieldBuilder025 = builder.Field(25).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder025 = builder.Field(25).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder026 = builder.Field(26).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder026 = builder.Field(26).(*array.ListBuilder)
+	inst.setSupportFieldBuilder027 = builder.Field(27).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.setSupportListBuilder027 = builder.Field(27).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder028 = builder.Field(28).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder028 = builder.Field(28).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTesttableSectionMultiInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder022.Append(true)
+	inst.setListBuilder023.Append(true)
+	inst.membershipListBuilder024.Append(true)
+	inst.membershipListBuilder025.Append(true)
+	inst.homogenousArrayContainerLength022 = 0
+	inst.setContainerLength023 = 0
+	inst.membershipContainerLength024 = 0
+	inst.membershipContainerLength025 = 0
+	inst.scalarListBuilder021.Append(true)
+	inst.homogenousArraySupportListBuilder026.Append(true)
+	inst.setSupportListBuilder027.Append(true)
+	inst.membershipSupportListBuilder028.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityTesttableSectionMultiInAttr) AddToCoContainers(vals22 uint32, tags23 uint64) *InEntityTesttableSectionMultiInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.homogenousArrayFieldBuilder022.Append(vals22)
+	inst.homogenousArrayContainerLength022++
+	inst.setFieldBuilder023.Append(tags23)
+	inst.setContainerLength023++
+	return inst
+}
+func (inst *InEntityTesttableSectionMultiInAttr) AddMembershipMixedLowCardRef(lmr24 uint64, mrhp25 []byte) *InEntityTesttableSectionMultiInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder024.Append(lmr24)
+	inst.membershipFieldBuilder025.Append(mrhp25)
+	inst.membershipContainerLength024++
+	inst.membershipContainerLength025++
+	return inst
+}
+func (inst *InEntityTesttableSectionMultiInAttr) AddMembershipMixedLowCardRefP(lmr24 uint64, mrhp25 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder024.Append(lmr24)
+	inst.membershipFieldBuilder025.Append(mrhp25)
+	inst.membershipContainerLength024++
+	inst.membershipContainerLength025++
+	return
+}
+func (inst *InEntityTesttableSectionMultiInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength024
+	inst.membershipContainerLength024 = 0
+	inst.membershipSupportFieldBuilder028.Append(uint64(l))
+}
+func (inst *InEntityTesttableSectionMultiInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.homogenousArrayContainerLength022
+	inst.homogenousArrayContainerLength022 = 0
+	inst.homogenousArraySupportFieldBuilder026.Append(uint64(l))
+	l = inst.setContainerLength023
+	inst.setContainerLength023 = 0
+	inst.setSupportFieldBuilder027.Append(uint64(l))
+}
+func (inst *InEntityTesttableSectionMultiInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityTesttableSectionMultiInAttr) EndSection() *InEntityTesttable {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityTesttableSectionMultiInAttr) EndAttribute() *InEntityTesttableSectionMulti {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+
+func (inst *InEntityTesttableSectionMultiInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTesttableSectionMultiInAttr) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 
