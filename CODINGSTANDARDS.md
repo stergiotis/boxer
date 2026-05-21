@@ -182,7 +182,7 @@ Use these canonical verb pairs rather than invented synonyms, so that symmetrica
     browser drivers, network harnesses, large fixture or model loaders — the
     test file must carry a custom build tag (e.g. `//go:build integration`)
     and the default `go test ./...` run must not pull those modules in. The
-    file [tags](./tags) lists which tags CI activates by default;
+    [`./tags`](./tags) file lists which tags CI activates by default;
     `integration` is opt-in and only set by integration CI jobs. Rationale:
     keeps `go.sum`, the module cache, and developer build times bounded by
     what production code actually needs. See
