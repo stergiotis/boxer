@@ -112,6 +112,26 @@ else
     step_end fail
 fi
 
+step_begin "entry-points"
+# Enforces CODINGSTANDARDS.md "Entry Points": every `package main`
+# discovered under ./... must import github.com/urfave/cli/v2 and
+# reference both logging.SetupZeroLog and vcs.BuildVersionInfo.
+# --strict makes the audit fail CI on any non-conformant main. Same
+# `if out=$(...)` pattern as the other boxer.sh-based steps —
+# required under `set -e`.
+if out=$("$here/../../boxer.sh" dev entry-points --tags "$tags" --strict 2>/dev/null); then
+    if [ -n "$out" ]; then
+        echo "$out"
+    else
+        echo "passed"
+    fi
+    step_end pass
+else
+    echo "$out"
+    rc=1
+    step_end fail
+fi
+
 step_begin "doclint"
 # Surfaces all warn-and-above doclint findings. Only error-severity
 # findings set rc=1 (warnings are visible but non-blocking, consistent
