@@ -168,7 +168,7 @@ to this project.
   CycloneDX 1.6 SBOM via
   [cyclonedx-gomod](https://pkg.go.dev/github.com/CycloneDX/cyclonedx-gomod)
   (`mod -licenses -test`), then feeds it to
-  [github.com/stergiotis/boxer/internal/cmd/licensegate](../internal/cmd/licensegate),
+  [`boxer gov license-gate`](../public/gov/licensegate) (subcommand registered under boxer's top-level CLI),
   which applies a forbidden/restricted policy. The driver and rationale are
   documented in [ADR-0004](./adr/0004-license-gate-cyclonedx.md): boxer is
   MIT-licensed and cannot accept copyleft inbound dependencies. Unknown

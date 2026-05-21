@@ -428,7 +428,7 @@ A machine-readable license inventory can be regenerated at any time:
 ```
 go tool github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod mod \
     -licenses=true -test=true -json -output sbom.json
-go run ./internal/cmd/licensegate -sbom sbom.json -csv third_party_licenses.csv
+go run ./public/app gov license-gate --sbom sbom.json --csv third_party_licenses.csv
 ```
 
 This is not committed to the repository because it is fully derived
@@ -439,7 +439,7 @@ update. The CSV columns are `module,version,spdx_id,category`.
 
 CI rejects any transitive dependency whose license falls into the
 `forbidden` or `restricted` categories enumerated in
-[`internal/cmd/licensegate/policy.go`](internal/cmd/licensegate/policy.go) --
+[`public/gov/licensegate/policy.go`](public/gov/licensegate/policy.go) --
 principally AGPL-\*, GPL-\*, LGPL-\*, SSPL, BUSL, OSL, and CC-BY-NC-\*,
 plus other copyleft or commercially-restrictive terms. boxer's MIT
 license is incompatible with copyleft inbound dependencies, and the
@@ -470,7 +470,7 @@ GPL-2.0-or-later; boxer elects FTL).
 A subset of `go.mod` dependencies are Apache-2.0-licensed and ship
 their own `NOTICE` files (notably `github.com/apache/arrow-go/v18`,
 `github.com/apache/thrift`, and `github.com/tetratelabs/wazero`; the
-authoritative list is the `licensegate` CSV inventory regenerated as
+authoritative list is the `boxer gov license-gate` CSV inventory regenerated as
 shown above).
 
 When boxer is consumed in **source form** (`go get`, module proxy),
@@ -490,4 +490,4 @@ substitute for the upstream NOTICEs; both must travel with the binary.
 - When adding a vendored binary artifact, append a subsection under
   section 2 with the build provenance and license chain.
 - Module-level dependency updates do not require edits here: `go.mod`
-  is the source of truth and the `licensegate` CI gate is the guard.
+  is the source of truth and the `boxer gov license-gate` CI gate is the guard.

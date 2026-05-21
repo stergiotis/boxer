@@ -3,7 +3,8 @@
 // Package envdoc renders the env-var registry to a Diátaxis-typed
 // reference markdown file. Two consumers today:
 //
-//   - boxer/internal/cmd/envgen renders the boxer-side catalogue.
+//   - boxer's `env gen-docs` subcommand (cli.go in this package)
+//     renders the boxer-side catalogue.
 //   - pebble2impl/src/go/cmd/envgen renders the pebble2impl-side
 //     catalogue.
 //
@@ -26,8 +27,8 @@ import (
 type Options struct {
 	// GeneratorPath is recorded in the YAML front-matter "generator"
 	// field and in the leading HTML comment so readers can find the
-	// binary that produced the file (e.g. "internal/cmd/envgen" for
-	// boxer, "src/go/cmd/envgen" for pebble2impl).
+	// binary that produced the file (e.g. "public/app env gen-docs"
+	// for boxer, "src/go/cmd/envgen" for pebble2impl).
 	GeneratorPath string
 
 	// RegenerateHint is the literal command shown under the page

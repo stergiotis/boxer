@@ -35,7 +35,7 @@ const (
 // TypeE classifies a Spec by the Go-side typed handle that owns it.
 // Filled at registration time by NewString / NewBool / NewInt /
 // NewDuration / NewPath; callers must not set it. The doc generator
-// (cmd/envgen) uses it to render the "Type" column in env-vars.md.
+// (`boxer env gen-docs`) uses it to render the "Type" column in env-vars.md.
 type TypeE string
 
 const (
