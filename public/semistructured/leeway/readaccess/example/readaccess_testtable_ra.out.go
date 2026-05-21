@@ -716,6 +716,10 @@ func (inst *ReadAccessTestTableTaggedTextAttributes) GetAttrValueSingle(entityId
 	words = inst.ValueWordsElements.Value(int(rHA.BeginIncl))
 	return
 }
+func (inst *ReadAccessTestTableTaggedTextAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (text string, wordLength uint32, words string) {
+	text, wordLength, words, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
 func (inst *ReadAccessTestTablePlainEntityIdAttributes) GetAttrValueId(entityIdx runtime.EntityIdx) (scalarAttrValue uint64) {
 	scalarAttrValue = inst.ValueId.Value(int(entityIdx))
 	return
@@ -745,11 +749,15 @@ func (inst *ReadAccessTestTablePlainEntityTimestampAttributes) GetAttrValueSingl
 	proc = inst.ValueProcElements.Value(int(bHA)).ToTime(arrow.Millisecond)
 	return
 }
+func (inst *ReadAccessTestTablePlainEntityTimestampAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx) (ts time.Time, proc time.Time) {
+	ts, proc, _ = inst.GetAttrValueSingle(entityIdx)
+	return
+}
 
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1806
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1857
 
 func (inst *ReadAccessTestTableTaggedGeoAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
 	b, e := inst.ValueLat.ValueOffsets(int(entityIdx))
@@ -765,7 +773,7 @@ func (inst *ReadAccessTestTableTaggedTextAttributes) GetNumberOfAttributes(entit
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1860
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1911
 
 type ReadAccessTestTableTaggedGeo struct {
 	Attributes  *ReadAccessTestTableTaggedGeoAttributes
@@ -944,7 +952,7 @@ func (inst *ReadAccessTestTableTaggedText) GetSectionMembershipSpec() common.Mem
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeEntityClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2210
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2261
 
 type ReadAccessTestTable struct {
 	EntityId        *ReadAccessTestTablePlainEntityIdAttributes

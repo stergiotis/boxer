@@ -120,3 +120,75 @@ func TestGetAttrValueSinglePlainRejectsZeroElements(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "expected exactly one element")
 }
+
+// GetAttrValueSingleOrDefault: on cardinality-1, returns the same values
+// as GetAttrValueSingle (just without err).
+func TestGetAttrValueSingleOrDefaultTaggedHappyPath(t *testing.T) {
+	ts := time.UnixMilli(1700000000000).UTC()
+	ra := loadSingleEntity(t, ts, func(sec *InEntityTestTableSectionText) {
+		sec.BeginAttributeSingle("hello", 2, "hi").EndAttribute()
+	})
+
+	const eIdx = runtime.EntityIdx(0)
+	const aIdx = runtime.AttributeIdx(0)
+
+	text, wordLength, words := ra.Text.Attributes.GetAttrValueSingleOrDefault(eIdx, aIdx)
+	require.Equal(t, "hello", text)
+	require.EqualValues(t, 2, wordLength)
+	require.Equal(t, "hi", words)
+}
+
+// GetAttrValueSingleOrDefault: on cardinality != 1, returns zero values
+// for every column (all-or-nothing) without surfacing an error.
+func TestGetAttrValueSingleOrDefaultTaggedDefaultsOnCardinalityMismatch(t *testing.T) {
+	ts := time.UnixMilli(1700000000000).UTC()
+	ra := loadSingleEntity(t, ts, func(sec *InEntityTestTableSectionText) {
+		sec.BeginAttribute("hello").
+			AddToCoContainers(5, "hello").
+			AddToCoContainers(5, "world").
+			EndAttribute()
+	})
+
+	const eIdx = runtime.EntityIdx(0)
+	const aIdx = runtime.AttributeIdx(0)
+
+	text, wordLength, words := ra.Text.Attributes.GetAttrValueSingleOrDefault(eIdx, aIdx)
+	require.Equal(t, "", text)
+	require.EqualValues(t, 0, wordLength)
+	require.Equal(t, "", words)
+}
+
+// Plain attribute class: OrDefault returns values on cardinality-1 and
+// zero values on mismatch, mirroring the tagged side.
+func TestGetAttrValueSingleOrDefaultPlain(t *testing.T) {
+	ts := time.UnixMilli(1700000000000).UTC()
+
+	// Cardinality-1 Proc: happy path.
+	{
+		ra := loadSingleEntity(t, ts, func(sec *InEntityTestTableSectionText) {
+			sec.BeginAttributeSingle("x", 1, "x").EndAttribute()
+		})
+		tsOut, proc := ra.EntityTimestamp.GetAttrValueSingleOrDefault(runtime.EntityIdx(0))
+		require.EqualValues(t, ts, tsOut)
+		require.EqualValues(t, ts, proc)
+	}
+	// Cardinality-0 Proc: ts populated (it's the entity's plain ts scalar
+	// — wait, actually under all-or-nothing, both default to zero).
+	{
+		dml := NewInEntityTestTable(memory.DefaultAllocator, 1)
+		ent := dml.BeginEntity()
+		ent.SetId(0)
+		ent.SetTimestamp(ts, nil) // Proc: zero elements
+		ent.GetSectionText().BeginAttributeSingle("x", 1, "x").EndAttribute()
+		require.NoError(t, ent.CheckErrors())
+		require.NoError(t, ent.CommitEntity())
+		records, err := dml.TransferRecords(nil)
+		require.NoError(t, err)
+		ra := NewReadAccessTestTable()
+		require.NoError(t, ra.LoadFromRecord(records[0]))
+
+		tsOut, proc := ra.EntityTimestamp.GetAttrValueSingleOrDefault(runtime.EntityIdx(0))
+		require.True(t, tsOut.IsZero(), "ts defaulted under all-or-nothing")
+		require.True(t, proc.IsZero(), "proc defaulted on cardinality 0")
+	}
+}

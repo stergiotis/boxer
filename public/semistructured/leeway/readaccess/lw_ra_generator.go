@@ -1583,6 +1583,33 @@ func (inst *%s%s) Len() (nEntities int) {
 					if err != nil {
 						return
 					}
+					// GetAttrValueSingleOrDefault — sibling of GetAttrValueSingle
+					// that silently degrades to zero values when any non-scalar
+					// subtype's cardinality != 1. Implemented as a one-line
+					// forward to Single (named returns auto-zero on Single's
+					// early-return failure path), so the two stay in sync.
+					var sigArgs []string
+					var callArgs []string
+					for _, c := range scalarCols {
+						sigArgs = append(sigArgs, c.argName+" "+c.typeName)
+						callArgs = append(callArgs, c.argName)
+					}
+					for _, c := range haCols {
+						sigArgs = append(sigArgs, c.argName+" "+c.typeName)
+						callArgs = append(callArgs, c.argName)
+					}
+					for _, c := range setCols {
+						sigArgs = append(sigArgs, c.argName+" "+c.typeName)
+						callArgs = append(callArgs, c.argName)
+					}
+					_, err = fmt.Fprintf(b, `func (inst *%s%s) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (%s) {
+	%s, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+`, clsNameSingle, genericTypeParamsUse, strings.Join(sigArgs, ", "), strings.Join(callArgs, ", "))
+					if err != nil {
+						return
+					}
 				}
 			}
 		}
@@ -1795,6 +1822,30 @@ func (inst *%s%s) Len() (nEntities int) {
 					}
 				}
 				_, err = b.WriteString("\treturn\n}\n")
+				if err != nil {
+					return
+				}
+				// GetAttrValueSingleOrDefault — one-line wrapper that
+				// silently defaults to zero values when cardinality != 1.
+				var sigArgs []string
+				var callArgs []string
+				for _, c := range grp.scalarCols {
+					sigArgs = append(sigArgs, c.argName+" "+c.typeName)
+					callArgs = append(callArgs, c.argName)
+				}
+				for _, c := range grp.haCols {
+					sigArgs = append(sigArgs, c.argName+" "+c.typeName)
+					callArgs = append(callArgs, c.argName)
+				}
+				for _, c := range grp.setCols {
+					sigArgs = append(sigArgs, c.argName+" "+c.typeName)
+					callArgs = append(callArgs, c.argName)
+				}
+				_, err = fmt.Fprintf(b, `func (inst *%s%s) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx) (%s) {
+	%s, _ = inst.GetAttrValueSingle(entityIdx)
+	return
+}
+`, clsName, genericTypeParamsUse, strings.Join(sigArgs, ", "), strings.Join(callArgs, ", "))
 				if err != nil {
 					return
 				}
