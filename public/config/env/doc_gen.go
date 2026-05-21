@@ -25,10 +25,10 @@ func FormatValue(spec Spec, value string) (out string) {
 	return value
 }
 
-// The go:generate directive runs envgen with the boxer build tags
-// loaded from ../../../tags. Side-effect imports inside envgen pull
-// every owner package; without the full tag set, tag-gated declarations
-// (e.g. openaichat under llm_generated_opus47) would be skipped from
-// the generated registry.
+// The go:generate directive runs `boxer env gen-docs` with the boxer
+// build tags loaded from ../../../tags. The blank-import set that loads
+// every Spec-declaring package lives in public/app/main.go (the rule in
+// CODINGSTANDARDS.md "Entry Points" forbids the previous standalone
+// internal/cmd/envgen main).
 //
-//go:generate sh -c "go run -tags=\"$(cat ../../../tags)\" github.com/stergiotis/boxer/internal/cmd/envgen -out ../../../doc/env-vars.md"
+//go:generate sh -c "go run -tags=\"$(cat ../../../tags)\" github.com/stergiotis/boxer/public/app env gen-docs --out ../../../doc/env-vars.md"

@@ -6,6 +6,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/code"
 	"github.com/stergiotis/boxer/public/config/env"
+	"github.com/stergiotis/boxer/public/config/env/envdoc"
 	"github.com/stergiotis/boxer/public/dev"
 	"github.com/stergiotis/boxer/public/docgen"
 	"github.com/stergiotis/boxer/public/gov"
@@ -22,6 +23,12 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/cbor"
 	lw "github.com/stergiotis/boxer/public/semistructured/leeway/cli"
 	"github.com/urfave/cli/v2"
+
+	// Side-effect imports: load env-var Specs from packages that are not
+	// otherwise referenced by this binary, so `boxer env list` and the
+	// envdoc generator see the full registered set (ADR-0009 §4).
+	_ "github.com/stergiotis/boxer/public/llm/openaichat"
+	_ "github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
 )
 
 func mainC() (exitCode int) {
@@ -53,7 +60,7 @@ func mainC() (exitCode int) {
 			observability.NewCliCommand(),
 			docgen.NewDocCli(),
 			dev.NewCliCommand(),
-			env.NewCliCommand(),
+			env.NewCliCommand(envdoc.NewGenDocsCommand()),
 			gov.NewCliCommand(),
 			finddivisions.NewCliCommand(),
 			code.NewCliCommand(),

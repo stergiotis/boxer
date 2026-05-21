@@ -14,13 +14,18 @@ import (
 // NewCliCommand returns the `env` parent command. Currently exposes
 // `env list`, the runtime introspection surface per ADR-0009 §4.
 // Mounted into the boxer top-level CLI by public/app/main.go.
-func NewCliCommand() (cmd *cli.Command) {
+//
+// extraSubcommands lets sibling packages (notably envdoc) attach their
+// own subcommands without forming an env → … → env import cycle —
+// public/app/main.go passes them in at wire-up time.
+func NewCliCommand(extraSubcommands ...*cli.Command) (cmd *cli.Command) {
+	subs := make([]*cli.Command, 0, 1+len(extraSubcommands))
+	subs = append(subs, newListCommand())
+	subs = append(subs, extraSubcommands...)
 	cmd = &cli.Command{
-		Name:  "env",
-		Usage: "introspect the env-var registry (ADR-0009)",
-		Subcommands: []*cli.Command{
-			newListCommand(),
-		},
+		Name:        "env",
+		Usage:       "introspect the env-var registry (ADR-0009)",
+		Subcommands: subs,
 	}
 	return
 }
