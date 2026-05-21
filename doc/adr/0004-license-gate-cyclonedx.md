@@ -143,6 +143,10 @@ Per SD10 this is a real finding, not a detector regression. The resolution is to
 
 The election mechanism is the only addition; the cutover otherwise lands as designed.
 
+### 2026-05-21 — Migrated to `boxer gov license-gate` subcommand
+
+The standalone `internal/cmd/licensegate/` main is removed per the new CODINGSTANDARDS.md "Entry Points" rule (no ad-hoc `main()` for utilities or compile-time tools). Its three source files move to `public/gov/licensegate/` with `package licensegate`; the test file moves with them. The new entry surface is `boxer gov license-gate --sbom … [--csv …]`, registered alongside the other `gov` subcommands. `scripts/ci/license_gate.sh` switches from `go run … ./internal/cmd/licensegate` to `go run … ./public/app gov license-gate`. Pre-migration exit codes 1 (policy violation) and 2 (invocation error) collapse to a single non-zero exit driven by the returned error, which is behaviour-equivalent for `set -e` callers and the only externally observable change. The policy table, election map, and SBOM parser are byte-identical to the pre-migration files — the core SD1–SD12 decisions stand unchanged.
+
 ## References
 
 - `scripts/ci/golicenses.sh` — gate implementation at the time of writing; replaced and renamed to [`license_gate.sh`](../../scripts/ci/license_gate.sh) by this ADR (SD11).

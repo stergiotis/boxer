@@ -1,8 +1,9 @@
 #!/bin/bash
 # License compliance gate. Generates a CycloneDX 1.6 SBOM via
-# cyclonedx-gomod and feeds it to internal/cmd/licensegate, which
-# applies the forbidden/restricted policy in policy.go. Exits non-zero
-# if any module's elected license falls into a violating category.
+# cyclonedx-gomod and feeds it to `boxer gov license-gate`, which
+# applies the forbidden/restricted policy in
+# public/gov/licensegate/policy.go. Exits non-zero if any module's
+# elected license falls into a violating category.
 # boxer is MIT-licensed and cannot accept copyleft inbound dependencies;
 # the gate enforces this prospectively. See ADR-0004
 # (doc/adr/0004-license-gate-cyclonedx.md) for the full rationale and
@@ -33,4 +34,4 @@ go tool github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod mod \
     -json \
     -output "$sbom"
 
-go run -tags "$tags" ./internal/cmd/licensegate -sbom "$sbom"
+go run -tags "$tags" ./public/app gov license-gate --sbom "$sbom"

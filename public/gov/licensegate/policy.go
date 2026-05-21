@@ -1,6 +1,6 @@
 //go:build llm_generated_opus47
 
-package main
+package licensegate
 
 // Inbound-license policy for boxer (MIT-licensed). See ADR-0004
 // (doc/adr/0004-license-gate-cyclonedx.md) for the rationale.

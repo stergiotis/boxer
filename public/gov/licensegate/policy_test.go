@@ -1,6 +1,6 @@
 //go:build llm_generated_opus47
 
-package main
+package licensegate
 
 import "testing"
 

@@ -1,28 +1,15 @@
 //go:build llm_generated_opus47
 
-// Command licensegate applies the boxer inbound-license policy to a
-// CycloneDX SBOM produced by cyclonedx-gomod and emits a CSV inventory.
-//
-// Usage:
-//
-//	go run ./internal/cmd/licensegate -sbom sbom.json [-csv third_party_licenses.csv]
-//
-// Exit codes:
-//
-//	0 — no policy violations
-//	1 — at least one forbidden or restricted dependency found
-//	2 — invocation error (missing flags, malformed SBOM, I/O failure)
-//
-// See doc/adr/0004-license-gate-cyclonedx.md for the policy rationale.
-package main
+package licensegate
 
 import (
 	"encoding/csv"
-	"flag"
 	"fmt"
 	"os"
 	"sort"
 	"strings"
+
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 const selfModulePurlPrefix = "pkg:golang/github.com/stergiotis/boxer"
@@ -34,23 +21,17 @@ type rowT struct {
 	category CategoryE
 }
 
-func main() {
-	sbomPath := flag.String("sbom", "", "path to CycloneDX JSON SBOM (required)")
-	csvPath := flag.String("csv", "", "output CSV inventory path (optional; written only if non-empty)")
-	flag.Parse()
-	if *sbomPath == "" {
-		fmt.Fprintln(os.Stderr, "ERROR: -sbom is required")
-		flag.Usage()
-		os.Exit(2)
-	}
-	os.Exit(run(*sbomPath, *csvPath))
-}
-
-func run(sbomPath, csvPath string) (exitCode int) {
+// Run applies the inbound-license policy to the SBOM at sbomPath. When
+// csvPath is non-empty the per-(module, license) inventory is also
+// written there. Returns the number of policy violations and any
+// invocation error (missing file, malformed SBOM, I/O failure). The
+// pre-migration command separated these two failure classes via exit
+// codes 1 vs 2; under boxer they collapse to a single non-zero exit
+// driven by the returned error, which is behaviour-equivalent for
+// `set -e` CI scripts (scripts/ci/license_gate.sh).
+func Run(sbomPath, csvPath string) (violationCount int, err error) {
 	bom, err := loadSBOM(sbomPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
-		exitCode = 2
 		return
 	}
 
@@ -96,8 +77,6 @@ func run(sbomPath, csvPath string) (exitCode int) {
 	if csvPath != "" {
 		err = writeCSV(csvPath, rows)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "ERROR: write CSV: %v\n", err)
-			exitCode = 2
 			return
 		}
 	}
@@ -110,25 +89,22 @@ func run(sbomPath, csvPath string) (exitCode int) {
 	}
 
 	if len(violations) > 0 {
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintf(os.Stderr, "=== POLICY VIOLATIONS (%d) ===\n", len(violations))
+		_, _ = fmt.Fprintln(os.Stderr, "")
+		_, _ = fmt.Fprintf(os.Stderr, "=== POLICY VIOLATIONS (%d) ===\n", len(violations))
 		for _, v := range violations {
-			fmt.Fprintf(os.Stderr, "  [%s] %s @ %s -- SPDX:%s\n", v.category, v.module, v.version, v.spdxID)
+			_, _ = fmt.Fprintf(os.Stderr, "  [%s] %s @ %s -- SPDX:%s\n", v.category, v.module, v.version, v.spdxID)
 		}
 	}
 
 	if len(noLicense) > 0 {
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintf(os.Stderr, "=== unresolved licenses (%d) -- review manually ===\n", len(noLicense))
+		_, _ = fmt.Fprintln(os.Stderr, "")
+		_, _ = fmt.Fprintf(os.Stderr, "=== unresolved licenses (%d) -- review manually ===\n", len(noLicense))
 		for _, m := range noLicense {
-			fmt.Fprintf(os.Stderr, "  - %s\n", m)
+			_, _ = fmt.Fprintf(os.Stderr, "  - %s\n", m)
 		}
 	}
 
-	if len(violations) > 0 {
-		exitCode = 1
-		return
-	}
+	violationCount = len(violations)
 	return
 }
 
@@ -140,32 +116,32 @@ func isSelfModule(purl string) (b bool) {
 func writeCSV(path string, rows []rowT) (err error) {
 	f, err := os.Create(path)
 	if err != nil {
-		err = fmt.Errorf("create CSV %q: %w", path, err)
+		err = eb.Build().Str("path", path).Errorf("create CSV: %w", err)
 		return
 	}
 	defer func() {
 		cerr := f.Close()
 		if err == nil && cerr != nil {
-			err = fmt.Errorf("close CSV %q: %w", path, cerr)
+			err = eb.Build().Str("path", path).Errorf("close CSV: %w", cerr)
 		}
 	}()
 	w := csv.NewWriter(f)
 	err = w.Write([]string{"module", "version", "spdx_id", "category"})
 	if err != nil {
-		err = fmt.Errorf("write CSV header: %w", err)
+		err = eb.Build().Errorf("write CSV header: %w", err)
 		return
 	}
 	for _, r := range rows {
 		err = w.Write([]string{r.module, r.version, r.spdxID, r.category.String()})
 		if err != nil {
-			err = fmt.Errorf("write CSV row %q: %w", r.module, err)
+			err = eb.Build().Str("module", r.module).Errorf("write CSV row: %w", err)
 			return
 		}
 	}
 	w.Flush()
 	err = w.Error()
 	if err != nil {
-		err = fmt.Errorf("flush CSV: %w", err)
+		err = eb.Build().Errorf("flush CSV: %w", err)
 		return
 	}
 	return
