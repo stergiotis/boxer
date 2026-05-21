@@ -38,10 +38,15 @@ func newEntryPointsSubcommand() *cli.Command {
 				Value: "",
 				Usage: "comma-separated build tags forwarded to packages.Load",
 			},
+			&cli.StringFlag{
+				Name:  "baseline",
+				Value: "",
+				Usage: "path to a baseline file (one grandfathered package import path per line; # comments and blank lines allowed); listed packages are reported but do not trigger --strict failure",
+			},
 			&cli.BoolFlag{
 				Name:  "strict",
 				Value: false,
-				Usage: "exit non-zero if any entry point fails any of the three checks",
+				Usage: "exit non-zero if any entry point fails any of the three checks (after baseline subtraction)",
 			},
 		},
 		Action: entryPointsAction,
@@ -51,6 +56,7 @@ func newEntryPointsSubcommand() *cli.Command {
 func entryPointsAction(ctx *cli.Context) (err error) {
 	root := ctx.String("root")
 	strict := ctx.Bool("strict")
+	baselinePath := ctx.String("baseline")
 
 	tags := make([]string, 0, 8)
 	if t := ctx.String("tags"); t != "" {
@@ -59,6 +65,14 @@ func entryPointsAction(ctx *cli.Context) (err error) {
 			if x != "" {
 				tags = append(tags, x)
 			}
+		}
+	}
+
+	baseline := make(map[string]struct{}, 0)
+	if baselinePath != "" {
+		baseline, err = loadBaseline(baselinePath)
+		if err != nil {
+			return
 		}
 	}
 
@@ -97,9 +111,10 @@ func entryPointsAction(ctx *cli.Context) (err error) {
 	}
 
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(tw, "ENTRY POINT\tCLI/V2\tSETUPZEROLOG\tBUILDVERSIONINFO")
+	_, _ = fmt.Fprintln(tw, "ENTRY POINT\tCLI/V2\tSETUPZEROLOG\tBUILDVERSIONINFO\tSTATUS")
 
-	missCount := uint64(0)
+	failCount := uint64(0)
+	baselinedCount := uint64(0)
 	for _, p := range mains {
 		if len(p.Errors) > 0 {
 			log.Warn().
@@ -111,21 +126,54 @@ func entryPointsAction(ctx *cli.Context) (err error) {
 		_, cliOK := p.Imports[urfaveCliV2ImportPath]
 		zerologOK := packageCallsFunc(p, setupZeroLogFQN)
 		vcsOK := packageCallsFunc(p, buildVersionInfoFQN)
-		if !cliOK || !zerologOK || !vcsOK {
-			missCount++
+		conformant := cliOK && zerologOK && vcsOK
+		_, isBaselined := baseline[p.PkgPath]
+		var status string
+		switch {
+		case conformant:
+			status = "ok"
+		case isBaselined:
+			status = "baselined"
+			baselinedCount++
+		default:
+			status = "fail"
+			failCount++
 		}
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", p.PkgPath, mark(cliOK), mark(zerologOK), mark(vcsOK))
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", p.PkgPath, mark(cliOK), mark(zerologOK), mark(vcsOK), status)
 	}
 	_ = tw.Flush()
 
 	log.Info().
 		Int("mains", len(mains)).
-		Uint64("nonConformant", missCount).
+		Uint64("fail", failCount).
+		Uint64("baselined", baselinedCount).
 		Bool("strict", strict).
 		Msg("entry-points audit complete")
 
-	if strict && missCount > 0 {
-		err = eb.Build().Uint64("nonConformant", missCount).Errorf("entry-points: one or more entry points fail conformance check")
+	if strict && failCount > 0 {
+		err = eb.Build().Uint64("fail", failCount).Uint64("baselined", baselinedCount).Errorf("entry-points: one or more entry points fail conformance check (not in baseline)")
+	}
+	return
+}
+
+// loadBaseline reads a list of grandfathered package import paths from
+// path. Each non-empty, non-comment line is a fully-qualified package
+// import path. '#' starts a line comment. Whitespace is trimmed. Unknown
+// paths in the file are not an error here; the entry-points action
+// merely looks them up by string equality against discovered mains.
+func loadBaseline(path string) (out map[string]struct{}, err error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		err = eb.Build().Str("path", path).Errorf("read baseline: %w", err)
+		return
+	}
+	out = make(map[string]struct{}, 16)
+	for line := range strings.SplitSeq(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		out[line] = struct{}{}
 	}
 	return
 }
