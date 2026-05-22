@@ -160,7 +160,7 @@ database, except that pushout's "object database" has no retention
 horizon and no GC.
 
 **Architecture for actual erasure.** Documented in
-[ADR-0025 (pebble2impl)](../../../../../pebble2impl/doc/adr/0025-pushout-forget-architecture.md);
+ADR-0025 (pebble2impl);
 **Architecture A** (vault-by-design) was selected on 2026-05-17 for a
 greenfield, multi-actor deployment.
 
@@ -181,12 +181,12 @@ node content with a redaction marker). That mechanism belonged to the
 rejected Architectures B and C in ADR-0025 and the superseded ADR-0027.
 It is not used under Architecture A.
 
-[ADR-0027 (pebble2impl)](../../../../../pebble2impl/doc/adr/0027-pushout-forget-swiss-fadp.md)
+ADR-0027 (pebble2impl)
 — the FADP-scope variant — is superseded by ADR-0025's selection.
 Architecture A also clears the FADP axis under BGE 136 II 508 + Art 32(4).
 
 **Antiquing's role** (see
-[ADR-0039 (pebble2impl)](../../../../../pebble2impl/doc/adr/0039-pushout-antiquing.md))
+ADR-0039 (pebble2impl))
 is no longer load-bearing for erasure under Architecture A — the
 dependency-minimisation output it produces was a prerequisite for
 compensating-patch construction, which is not performed. Antiquing
@@ -270,7 +270,7 @@ depend on each other can be applied in either order. Boxer's port does not
 currently perform this rewrite; this section documents what the gap is and
 where it eventually bites. The full design-space analysis (architecture
 options, subsidiary decisions, open questions) is in
-[ADR-0039 (pebble2impl)](../../../../../pebble2impl/doc/adr/0039-pushout-antiquing.md); the text below is
+ADR-0039 (pebble2impl); the text below is
 the user-facing summary.
 
 **Definition.** Given a patch `q` recorded against state including patch `p`,
@@ -313,7 +313,7 @@ without antiquing, a peer attempting `Apply` may be rejected for "missing
 dependency" where an antiqued version would have applied cleanly, and
 `commonAnchors`'s "first live parent / first live child" pick over-anchors
 in conflict-resolution paths. The
-[ADR-0039 (pebble2impl)](../../../../../pebble2impl/doc/adr/0039-pushout-antiquing.md)
+ADR-0039 (pebble2impl)
 engineering recommendation (staged B → C) addresses both, independently
 of any forget-architecture milestone.
 
@@ -329,7 +329,7 @@ semantics. Placement (inside `LineDiff`, between `LineDiff` and `NewPatch`,
 inside `NewPatch`, or as an independent post-record pass) is open. Conflict
 resolution's `commonAnchors` may need a separate antiquing pass or may
 benefit from the same one; that, too, is open. See
-[ADR-0039 (pebble2impl)](../../../../../pebble2impl/doc/adr/0039-pushout-antiquing.md) SD1–SD10 and
+ADR-0039 (pebble2impl) SD1–SD10 and
 OQ1–OQ6 for the enumerated options and the engineering recommendation
 (staged B → C).
 
