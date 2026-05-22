@@ -2,7 +2,6 @@ package dml
 
 import (
 	"math/rand/v2"
-	"os"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/code/synthesis/golang"
@@ -161,9 +160,7 @@ func TestGenerateDmlJsonMapping(t *testing.T) {
 	require.NoError(t, err)
 	checkCodeInvariants(sourceCode, t)
 
-	p := "./example/dml_json.out.go"
-	_ = os.Remove(p)
-	err = golang.WriteAligned(p, sourceCode)
+	err = golang.WriteAligned("./example/dml_json.out.go", sourceCode)
 	require.NoError(t, err)
 }
 func TestGoClassBuilderSample(t *testing.T) {
