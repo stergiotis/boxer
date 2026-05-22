@@ -47,6 +47,7 @@ Boxer follows the [Diátaxis](https://diataxis.fr/) framework (ADR-0001). Docs l
 * **Architecture decisions** — [`doc/adr/`](doc/adr/) records the *why* behind cross-cutting choices (nanopass discipline, h3 WASM bridge, license gate, Kafka port, leeway membership-role classifier, …).
 * **Per-package docs** — larger subsystems co-locate `TUTORIAL.md` / `HOWTO.md` / `EXPLANATION.md` / reference docs with their source (e.g. [`public/db/clickhouse/dsl/EXPLANATION.md`](public/db/clickhouse/dsl/EXPLANATION.md)).
 * **Standards** — [`CODINGSTANDARDS.md`](CODINGSTANDARDS.md) and [`doc/DOCUMENTATION_STANDARD.md`](doc/DOCUMENTATION_STANDARD.md).
+* **Engineering practices** — [`doc/ENGINEERING_PRACTICES.md`](doc/ENGINEERING_PRACTICES.md) catalogues CI workflows, static analysis, build-tag discipline, supply-chain gates, and in-tree governance.
 
 ## Style Conventions
 ### File Extensions

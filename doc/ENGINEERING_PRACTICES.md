@@ -61,14 +61,11 @@ Generated files (`*.gen.go`, `*.out.go`) are filtered post-hoc by grep since
 `go vet` has no native exclude flag.
 
 Most reference Go repos (Kubernetes, GitLab Runner, Grafana) drive these
-checks through [golangci-lint](https://golangci-lint.run/), a meta-runner
-that bundles staticcheck/errcheck/govet and others behind a single YAML
-config. This repo runs each analyzer directly and aggregates results in a
-shell script. `golangci-lint` is *available* under
-[scripts/dev/install.sh](../scripts/dev/install.sh) but is not used in CI.
-The direct-invocation approach trades the meta-runner's parallel scheduling
-and unified config for simpler debuggability and individually-versioned tool
-pins.
+checks through a meta-runner that bundles staticcheck/errcheck/govet and
+others behind a single YAML config. This repo runs each analyzer directly
+and aggregates results in a shell script. The direct-invocation approach
+trades the meta-runner's parallel scheduling and unified config for simpler
+debuggability and individually-versioned tool pins.
 
 ## 3. Build-tag discipline
 
@@ -250,9 +247,6 @@ in Go; the closest Go analogue is the published Uber Go style guide.
 The following are widely used in comparable Go projects but are not wired
 into this repository's CI:
 
-- [golangci-lint](https://golangci-lint.run/) is installed under
-  [scripts/dev/install.sh](../scripts/dev/install.sh) for local use but is
-  not invoked by CI.
 - `gofumpt` / `gci` formatting enforcement is absent.
 - `nilaway` is wired up but currently commented out in
   [scripts/ci/lint.sh](../scripts/ci/lint.sh); the `dev/` script preserves
@@ -272,7 +266,6 @@ into this repository's CI:
 
 The combination is internally consistent: a Go-tool-driven, single-binary,
 single-shell-orchestrator pipeline with custom in-tree governance for
-documentation and LLM authorship. The trade-off versus a `golangci-lint`-centred
-setup is broader linter coverage in exchange for tighter control over
-individual tool versions and bespoke checks that no off-the-shelf runner
-provides.
+documentation and LLM authorship. The trade-off versus a meta-runner setup
+is broader linter coverage in exchange for tighter control over individual
+tool versions and bespoke checks that no off-the-shelf runner provides.
