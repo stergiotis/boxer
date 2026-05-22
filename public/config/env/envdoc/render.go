@@ -173,6 +173,13 @@ func formatRow(s env.Spec) (row string) {
 	}
 	desc := strings.ReplaceAll(s.Description, "|", `\|`)
 	desc = strings.ReplaceAll(desc, "\n", " ")
+	if len(s.Allowed) > 0 {
+		quoted := make([]string, len(s.Allowed))
+		for i, v := range s.Allowed {
+			quoted[i] = "`" + v + "`"
+		}
+		desc += "<br>**Allowed:** " + strings.Join(quoted, ` \| `)
+	}
 	row = fmt.Sprintf("| %s | %s | %s | %s | %s | %s |\n",
 		name, typ, def, flagName, sens, desc)
 	return

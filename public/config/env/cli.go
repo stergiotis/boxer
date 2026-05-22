@@ -96,6 +96,9 @@ func runList(ctx *cli.Context) (err error) {
 			sens = "yes"
 		}
 		desc := s.Description
+		if len(s.Allowed) > 0 {
+			desc += " (one of: " + strings.Join(s.Allowed, "|") + ")"
+		}
 		if len(desc) > 70 {
 			desc = desc[:67] + "..."
 		}

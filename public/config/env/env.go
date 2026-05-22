@@ -39,11 +39,12 @@ const (
 type TypeE string
 
 const (
-	TypeString   TypeE = "string"
-	TypeBool     TypeE = "bool"
-	TypeInt64    TypeE = "int64"
-	TypeDuration TypeE = "duration"
-	TypePath     TypeE = "path"
+	TypeString           TypeE = "string"
+	TypeBool             TypeE = "bool"
+	TypeInt64            TypeE = "int64"
+	TypeDuration         TypeE = "duration"
+	TypePath             TypeE = "path"
+	TypeCategorialString TypeE = "categorial-string"
 )
 
 // Origin identifies the declaring site of a Spec. It is auto-derived at
@@ -54,8 +55,8 @@ type Origin struct {
 }
 
 // Spec is the declarative metadata for one environment variable. All
-// caller-supplied fields are immutable after registration; Origin is
-// filled in by the NewXxx constructor.
+// caller-supplied fields are immutable after registration; Origin,
+// Type, and Allowed are filled in by the NewXxx constructor.
 type Spec struct {
 	Name        string
 	Default     string
@@ -65,6 +66,9 @@ type Spec struct {
 	CliFlagName string
 	Origin      Origin
 	Type        TypeE
+	// Allowed is populated only for TypeCategorialString specs and
+	// lists the values Get() will accept. Empty for all other Types.
+	Allowed []string
 }
 
 // FlagOption customises the cli.Flag returned by Var.AsCliFlag.

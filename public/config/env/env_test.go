@@ -113,6 +113,108 @@ func TestDurationVarDefault(t *testing.T) {
 	}
 }
 
+func TestCategorialStringVarDefault(t *testing.T) {
+	resetRegistryForTest()
+	v := NewCategorialString(Spec{
+		Name:        "BOXER_TEST_CAT_DEFAULT",
+		Default:     "info",
+		Description: "test fixture",
+		Category:    CategoryDev,
+	}, []string{"trace", "debug", "info", "warn", "error"})
+	got := v.Get()
+	if got != "info" {
+		t.Errorf("Get default = %q, want %q", got, "info")
+	}
+	spec := v.Spec()
+	if spec.Type != TypeCategorialString {
+		t.Errorf("Spec.Type = %q, want %q", spec.Type, TypeCategorialString)
+	}
+	if len(spec.Allowed) != 5 {
+		t.Errorf("Spec.Allowed len = %d, want 5", len(spec.Allowed))
+	}
+}
+
+func TestCategorialStringVarAcceptsAllowedEnvValue(t *testing.T) {
+	resetRegistryForTest()
+	v := NewCategorialString(Spec{
+		Name:        "BOXER_TEST_CAT_OK",
+		Default:     "info",
+		Description: "test fixture",
+		Category:    CategoryDev,
+	}, []string{"debug", "info", "warn"})
+	v.SetForTest(t, "debug")
+	got := v.Get()
+	if got != "debug" {
+		t.Errorf("Get with allowed env value = %q, want %q", got, "debug")
+	}
+}
+
+func TestCategorialStringVarFallsBackOnInvalidEnvValue(t *testing.T) {
+	resetRegistryForTest()
+	v := NewCategorialString(Spec{
+		Name:        "BOXER_TEST_CAT_BAD",
+		Default:     "info",
+		Description: "test fixture",
+		Category:    CategoryDev,
+	}, []string{"debug", "info", "warn"})
+	v.SetForTest(t, "purple")
+	got := v.Get()
+	if got != "info" {
+		t.Errorf("Get with out-of-set env value = %q, want fallback %q", got, "info")
+	}
+}
+
+func TestCategorialStringVarRejectsBadDefault(t *testing.T) {
+	resetRegistryForTest()
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatalf("expected panic when Default is not in allowed set")
+		}
+	}()
+	_ = NewCategorialString(Spec{
+		Name:        "BOXER_TEST_CAT_BAD_DEFAULT",
+		Default:     "purple",
+		Description: "test fixture",
+		Category:    CategoryDev,
+	}, []string{"red", "green", "blue"})
+}
+
+func TestCategorialStringVarRejectsEmptyAllowed(t *testing.T) {
+	resetRegistryForTest()
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatalf("expected panic when allowed values is empty")
+		}
+	}()
+	_ = NewCategorialString(Spec{
+		Name:        "BOXER_TEST_CAT_EMPTY",
+		Description: "test fixture",
+		Category:    CategoryDev,
+	}, nil)
+}
+
+func TestCategorialStringVarAllowedIsDefensiveCopy(t *testing.T) {
+	resetRegistryForTest()
+	allowed := []string{"a", "b"}
+	v := NewCategorialString(Spec{
+		Name:        "BOXER_TEST_CAT_COPY",
+		Default:     "a",
+		Description: "test fixture",
+		Category:    CategoryDev,
+	}, allowed)
+	allowed[0] = "mutated"
+	if got := v.Allowed(); got[0] != "a" {
+		t.Errorf("Allowed()[0] = %q, want %q (registration must defensive-copy)", got[0], "a")
+	}
+	got := v.Allowed()
+	got[0] = "tampered"
+	if again := v.Allowed(); again[0] != "a" {
+		t.Errorf("Allowed()[0] = %q after caller mutation, want %q", again[0], "a")
+	}
+}
+
 func TestPathVarHomeExpansion(t *testing.T) {
 	resetRegistryForTest()
 	v := NewPath(Spec{

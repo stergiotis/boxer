@@ -4,7 +4,7 @@ audience: contributor
 status: draft
 generated: true
 generator: public/app env gen-docs
-generated-at: 2026-05-21T16:40:34Z
+generated-at: 2026-05-22T20:05:16Z
 ---
 
 > **Status: draft — pre-human-review.** Machine-generated registry snapshot;
@@ -46,8 +46,8 @@ generated-at: 2026-05-21T16:40:34Z
 | `BOXER_LOG_CALLER` | bool | — | `--logCaller` |  | include caller file:line in log records |
 | `BOXER_LOG_CORRELATION_ID` | string | — | `--logCorrelationId` |  | correlation id for log records; empty seeds a nanoid(21) |
 | `BOXER_LOG_FILE` | string | — | `--logFile` |  | path to the log file; empty or "-" routes to stderr |
-| `BOXER_LOG_FORMAT` | string | `json` | `--logFormat` |  | log output format: default\|console\|diag\|godump\|json\|json-indent\|cbor |
-| `BOXER_LOG_LEVEL` | string | `info` | `--logLevel` |  | zerolog level: trace\|debug\|info\|warn\|error\|fatal\|panic |
+| `BOXER_LOG_FORMAT` | categorial-string | `json` | `--logFormat` |  | log output format<br>**Allowed:** `default` \| `console` \| `diag` \| `godump` \| `json` \| `json-indent` \| `cbor` |
+| `BOXER_LOG_LEVEL` | categorial-string | `info` | `--logLevel` |  | zerolog level<br>**Allowed:** `trace` \| `debug` \| `info` \| `warn` \| `error` \| `fatal` \| `panic` |
 | `BOXER_LOG_MODULE_INFO_ON_START` | bool | — | `--logModuleInfoOnStart` |  | log the Go module info on application startup |
 | `BOXER_LOG_OS_ARGS_ON_START` | bool | — | `--logOsArgsOnStart` |  | log os.Args on application startup |
 | `BOXER_LOG_OS_HOST_ON_START` | bool | — | `--logOsHostOnStart` |  | log the host name on application startup |

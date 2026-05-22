@@ -270,22 +270,22 @@ var (
 	})
 
 	// LogLevel is the BOXER_LOG_LEVEL env-var spec.
-	LogLevel = env.NewString(env.Spec{
+	LogLevel = env.NewCategorialString(env.Spec{
 		Name:        "BOXER_LOG_LEVEL",
 		Default:     "info",
-		Description: "zerolog level: trace|debug|info|warn|error|fatal|panic",
+		Description: "zerolog level",
 		Category:    env.CategoryObservability,
 		CliFlagName: "logLevel",
-	})
+	}, []string{"trace", "debug", "info", "warn", "error", "fatal", "panic"})
 
 	// LogFormat is the BOXER_LOG_FORMAT env-var spec.
-	LogFormat = env.NewString(env.Spec{
+	LogFormat = env.NewCategorialString(env.Spec{
 		Name:        "BOXER_LOG_FORMAT",
 		Default:     "json",
-		Description: "log output format: default|console|diag|godump|json|json-indent|cbor",
+		Description: "log output format",
 		Category:    env.CategoryObservability,
 		CliFlagName: "logFormat",
-	})
+	}, []string{"default", "console", "diag", "godump", "json", "json-indent", "cbor"})
 )
 
 var LoggingFlags = []cli.Flag{
@@ -299,7 +299,7 @@ var LoggingFlags = []cli.Flag{
 	LogCorrelationId.AsCliFlag(),
 	LogLevel.AsCliFlag(env.WithStringAction(func(context *cli.Context, s string) error {
 		var lvl zerolog.Level
-		switch strings.ToLower(s) {
+		switch s {
 		case "trace":
 			lvl = zerolog.TraceLevel
 		case "debug":
@@ -314,8 +314,6 @@ var LoggingFlags = []cli.Flag{
 			lvl = zerolog.FatalLevel
 		case "panic":
 			lvl = zerolog.PanicLevel
-		default:
-			return eb.Build().Str("level", s).Errorf("unhandled log level")
 		}
 		zerolog.SetGlobalLevel(lvl)
 		return nil
@@ -350,8 +348,6 @@ var LoggingFlags = []cli.Flag{
 		case "cbor":
 			checkZeroLogCborBuild()
 			log.Logger = log.Output(w)
-		default:
-			return eb.Build().Str("format", s).Errorf("unhandled log format")
 		}
 		if context.Bool("logCaller") {
 			log.Logger = log.Logger.With().Caller().Logger()
