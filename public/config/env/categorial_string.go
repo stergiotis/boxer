@@ -17,9 +17,13 @@ import (
 // restricted to a fixed, declared set. Get() returns Spec.Default when
 // the env value is not in the allowed set, mirroring the env-side
 // parse-failure fallback used by BoolVar/IntVar/DurationVar (see
-// ADR-0009 §3 update 2026-05-17).
+// ADR-0009 §3 update 2026-05-17). AsCliFlag honours the same fallback
+// for env-supplied values; explicit `--flag=X` invocations with a
+// value outside the set surface as a hard CLI error.
 type CategorialStringVar struct {
-	spec    Spec
+	spec Spec
+	// allowed is set once in NewCategorialString and never mutated;
+	// membership checks therefore need no synchronisation.
 	allowed []string
 	cacheMu sync.Mutex
 	cached  bool
@@ -29,28 +33,37 @@ type CategorialStringVar struct {
 var _ VarI = (*CategorialStringVar)(nil)
 
 // NewCategorialString registers spec with the restricted value set and
-// returns a *CategorialStringVar. Allowed must be non-empty; if
-// Spec.Default is non-empty it must be a member of allowed — both
+// returns a *CategorialStringVar. Allowed must be non-empty;
+// Spec.Default must be non-empty and a member of allowed. All three
 // violations panic at registration as programmer errors.
 func NewCategorialString(spec Spec, allowed []string) (v *CategorialStringVar) {
 	mustValidate(spec)
 	if len(allowed) == 0 {
 		panic(fmt.Sprintf("env: NewCategorialString(%q) requires non-empty allowed values", spec.Name))
 	}
-	if spec.Default != "" && !slices.Contains(allowed, spec.Default) {
+	if spec.Default == "" {
+		panic(fmt.Sprintf("env: NewCategorialString(%q) requires non-empty Default — categorial vars cannot return an out-of-set zero value", spec.Name))
+	}
+	if !slices.Contains(allowed, spec.Default) {
 		panic(fmt.Sprintf("env: default %q for %q is not in allowed values %v",
 			spec.Default, spec.Name, allowed))
 	}
 	spec.Origin = callerOrigin(2)
 	spec.Type = TypeCategorialString
-	spec.Allowed = append([]string(nil), allowed...)
-	v = &CategorialStringVar{spec: spec, allowed: spec.Allowed}
+	allowedCopy := append([]string(nil), allowed...)
+	spec.Allowed = allowedCopy
+	v = &CategorialStringVar{spec: spec, allowed: allowedCopy}
 	register(v)
 	return
 }
 
+// Spec returns the registered Spec. The returned value carries a
+// defensive copy of Allowed so callers cannot mutate the registered
+// membership set through Spec().Allowed[i].
 func (inst *CategorialStringVar) Spec() (out Spec) {
-	return inst.spec
+	out = inst.spec
+	out.Allowed = append([]string(nil), inst.allowed...)
+	return
 }
 
 // Allowed returns the declared value set. The slice is a defensive copy;
@@ -78,7 +91,7 @@ func (inst *CategorialStringVar) Get() (out string) {
 		return inst.value
 	}
 	raw, ok := os.LookupEnv(inst.spec.Name)
-	if !ok || raw == "" || !inst.isAllowedLocked(raw) {
+	if !ok || raw == "" || !inst.IsAllowed(raw) {
 		inst.value = inst.spec.Default
 	} else {
 		inst.value = raw
@@ -105,16 +118,14 @@ func (inst *CategorialStringVar) setCached(value string) {
 	inst.cached = true
 }
 
-func (inst *CategorialStringVar) isAllowedLocked(value string) (ok bool) {
-	return slices.Contains(inst.allowed, value)
-}
-
 // AsCliFlag returns a cli.StringFlag derived from the Spec. The Usage
 // string gains an "(one of: a|b|c)" suffix listing the allowed values.
-// The Action validates membership before chaining a caller-supplied
-// user action (via WithStringAction) and writing the parsed value to
-// the cache; a non-allowed value returns an error and the cache is
-// left unchanged.
+// The Action's behaviour on an out-of-set value depends on the source
+// — matching urfave/cli's existing env-vs-flag treatment for typed
+// flags (BoolFlag / Int64Flag / DurationFlag): when the value came
+// from the bound env var it silently falls back to Spec.Default and
+// the chained user action runs on the default; when the value was
+// supplied explicitly via `--flag=…` it surfaces as a CLI error.
 func (inst *CategorialStringVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
 	fo := resolveFlagOptions(inst.spec, opts)
 	userAction, _ := fo.actionFn.(func(*cli.Context, string) error)
@@ -127,17 +138,24 @@ func (inst *CategorialStringVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
 		EnvVars:  []string{inst.spec.Name},
 		Value:    inst.spec.Default,
 		Action: func(ctx *cli.Context, parsed string) (err error) {
-			if !inst.IsAllowed(parsed) {
-				return fmt.Errorf("env: %q is not in allowed values for %s: %v",
-					parsed, inst.spec.Name, inst.allowed)
+			effective := parsed
+			if !inst.IsAllowed(effective) {
+				envRaw, envSet := os.LookupEnv(inst.spec.Name)
+				if envSet && envRaw == parsed {
+					// env-supplied invalid: silent fallback to Default
+					effective = inst.spec.Default
+				} else {
+					return fmt.Errorf("env: %q is not in allowed values for --%s: %v",
+						parsed, fo.cliFlagName, inst.allowed)
+				}
 			}
 			if userAction != nil {
-				err = userAction(ctx, parsed)
+				err = userAction(ctx, effective)
 				if err != nil {
 					return
 				}
 			}
-			inst.setCached(parsed)
+			inst.setCached(effective)
 			return
 		},
 	}
@@ -161,4 +179,3 @@ func (inst *CategorialStringVar) SetForTest(t testing.TB, value string) {
 		inst.cacheMu.Unlock()
 	})
 }
-

@@ -5,6 +5,7 @@ package env
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"text/tabwriter"
 
@@ -96,11 +97,14 @@ func runList(ctx *cli.Context) (err error) {
 			sens = "yes"
 		}
 		desc := s.Description
-		if len(s.Allowed) > 0 {
-			desc += " (one of: " + strings.Join(s.Allowed, "|") + ")"
-		}
+		// Truncate Description portion before appending the allowed
+		// suffix so the suffix — the whole point of a categorial type
+		// — never gets chopped mid-list.
 		if len(desc) > 70 {
 			desc = desc[:67] + "..."
+		}
+		if len(s.Allowed) > 0 {
+			desc += " (one of: " + strings.Join(s.Allowed, "|") + ")"
 		}
 		_, err = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			s.Name, s.Type, s.Category, displayValue(s.Default), current, sens, desc)
@@ -114,7 +118,10 @@ func runList(ctx *cli.Context) (err error) {
 
 // formatCurrent returns the live env value for a registered spec,
 // redacted when Sensitive. Returns the empty string when the env var
-// is unset; the caller's display layer renders that as a "—".
+// is unset; the caller's display layer renders that as a "—". For
+// categorial specs whose env value is outside the declared set, the
+// raw value is annotated as "<raw> [invalid; using <default>]" so
+// operators see why Get() returns the default.
 func formatCurrent(s Spec) (out string) {
 	v, ok := LookupVar(s.Name)
 	if !ok {
@@ -126,6 +133,9 @@ func formatCurrent(s Spec) (out string) {
 	}
 	if s.Sensitive {
 		return "<redacted>"
+	}
+	if len(s.Allowed) > 0 && !slices.Contains(s.Allowed, raw) {
+		return fmt.Sprintf("%s [invalid; using %s]", raw, s.Default)
 	}
 	return raw
 }

@@ -3,10 +3,10 @@
 // Package env is the boxer-wide environment variable registry.
 //
 // Each variable is declared once as a package-level value via NewString /
-// NewBool / NewInt / NewDuration / NewPath. The declaration registers a
-// Spec process-globally, and the returned typed *Var carries the
-// resolved value, caching, CLI-flag derivation, and test helpers. See
-// ADR-0009 for design rationale.
+// NewBool / NewInt / NewDuration / NewPath / NewCategorialString. The
+// declaration registers a Spec process-globally, and the returned typed
+// *Var carries the resolved value, caching, CLI-flag derivation, and
+// test helpers. See ADR-0009 for design rationale.
 package env
 
 import (
@@ -34,8 +34,9 @@ const (
 
 // TypeE classifies a Spec by the Go-side typed handle that owns it.
 // Filled at registration time by NewString / NewBool / NewInt /
-// NewDuration / NewPath; callers must not set it. The doc generator
-// (`boxer env gen-docs`) uses it to render the "Type" column in env-vars.md.
+// NewDuration / NewPath / NewCategorialString; callers must not set
+// it. The doc generator (`boxer env gen-docs`) uses it to render the
+// "Type" column in env-vars.md.
 type TypeE string
 
 const (

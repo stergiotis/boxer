@@ -314,6 +314,13 @@ var LoggingFlags = []cli.Flag{
 			lvl = zerolog.FatalLevel
 		case "panic":
 			lvl = zerolog.PanicLevel
+		default:
+			// Defense-in-depth: categorial validation should have
+			// rejected this upstream. A reachable default branch
+			// signals Allowed/switch drift, not user error — the
+			// zero-value zerolog.DebugLevel would otherwise silently
+			// take effect.
+			return eb.Build().Str("level", s).Errorf("unhandled log level (Allowed/switch drift)")
 		}
 		zerolog.SetGlobalLevel(lvl)
 		return nil
@@ -348,6 +355,9 @@ var LoggingFlags = []cli.Flag{
 		case "cbor":
 			checkZeroLogCborBuild()
 			log.Logger = log.Output(w)
+		default:
+			// Defense-in-depth: see LogLevel default arm above.
+			return eb.Build().Str("format", s).Errorf("unhandled log format (Allowed/switch drift)")
 		}
 		if context.Bool("logCaller") {
 			log.Logger = log.Logger.With().Caller().Logger()

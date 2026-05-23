@@ -176,7 +176,12 @@ func formatRow(s env.Spec) (row string) {
 	if len(s.Allowed) > 0 {
 		quoted := make([]string, len(s.Allowed))
 		for i, v := range s.Allowed {
-			quoted[i] = "`" + v + "`"
+			// Mirror the Description escape: any literal `|` inside
+			// an allowed value would otherwise split the table cell
+			// even though it sits inside a backtick span (some GFM
+			// renderers honour pipes regardless of code-span context).
+			escaped := strings.ReplaceAll(v, "|", `\|`)
+			quoted[i] = "`" + escaped + "`"
 		}
 		desc += "<br>**Allowed:** " + strings.Join(quoted, ` \| `)
 	}
