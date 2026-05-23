@@ -174,6 +174,22 @@ func (inst *BinarySearchGrowingKV[K, V]) UpsertSingle(key K, val V) (existed boo
 	_, existed, inst.keys, inst.vals = co.InsertSliceSortedFunc(inst.keys, inst.vals, key, val, inst.cmpKey)
 	return
 }
+
+// Delete removes the entry for key. Returns true when an entry was
+// present (and removed), false when key was not in the container.
+// O(log N) lookup + O(N) shift; sorted/compacted invariants are
+// preserved. slices.Delete zeros the trailing slot before truncating
+// so pointer values don't leak past their entry's lifetime.
+func (inst *BinarySearchGrowingKV[K, V]) Delete(key K) (existed bool) {
+	inst.ensureSorted()
+	idx, existed := slices.BinarySearchFunc(inst.keys, key, inst.cmpKey)
+	if !existed {
+		return
+	}
+	inst.keys = slices.Delete(inst.keys, idx, idx+1)
+	inst.vals = slices.Delete(inst.vals, idx, idx+1)
+	return
+}
 func (inst *BinarySearchGrowingKV[K, V]) Grow(n int) {
 	inst.keys = slices.Grow(inst.keys, n)
 	inst.vals = slices.Grow(inst.vals, n)

@@ -45,6 +45,38 @@ func TestNewBinarySearchGrowingKV(t *testing.T) {
 	require.EqualValues(t, slices.Collect(dict.IterateKeys()), [][]byte{[]byte("k0"), []byte("k1"), []byte("k2"), []byte("k3"), []byte("k4")})
 	require.EqualValues(t, slices.Collect(dict.IterateValues()), []string{"v0", "v1", "v2b", "v3", "v4"})
 }
+
+func TestBinarySearchGrowingKVDelete(t *testing.T) {
+	dict := NewBinarySearchGrowingKV[[]byte, string](16, bytes.Compare)
+	dict.UpsertSingle([]byte("k1"), "v1")
+	dict.UpsertSingle([]byte("k2"), "v2")
+	dict.UpsertSingle([]byte("k3"), "v3")
+
+	require.False(t, dict.Delete([]byte("missing")))
+	require.Equal(t, 3, dict.Len())
+
+	require.True(t, dict.Delete([]byte("k2")))
+	require.Equal(t, 2, dict.Len())
+	require.False(t, dict.Has([]byte("k2")))
+	require.EqualValues(t, [][]byte{[]byte("k1"), []byte("k3")}, slices.Collect(dict.IterateKeys()))
+	require.EqualValues(t, []string{"v1", "v3"}, slices.Collect(dict.IterateValues()))
+
+	require.False(t, dict.Delete([]byte("k2")))
+	require.Equal(t, 2, dict.Len())
+
+	require.True(t, dict.Delete([]byte("k1")))
+	require.True(t, dict.Delete([]byte("k3")))
+	require.True(t, dict.IsEmpty())
+
+	// Deletes on top of a deferred-sort queue must compact + sort first
+	// (Delete calls ensureSorted) before binary-search runs.
+	dict.UpsertBatch([]byte("k4"), "v4a")
+	dict.UpsertBatch([]byte("k5"), "v5")
+	dict.UpsertBatch([]byte("k4"), "v4b")
+	require.True(t, dict.Delete([]byte("k4")))
+	require.Equal(t, 1, dict.Len())
+	require.Equal(t, "v5", dict.GetDefault([]byte("k5"), ""))
+}
 func TestIterateSortedUniqueOrderedUnique(t *testing.T) {
 	rnd := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	var l1, l2 int
