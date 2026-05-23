@@ -1881,16 +1881,60 @@ func (inst *%s%s) Len() (nEntities int) {
 				return
 			}
 			attrNameS := attrName.Convert(naming.UpperCamelCase).String()
-			_, err = fmt.Fprintf(b, `func (inst *%s%s) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+
+			// Pick the accessor for "attribute count per entity": a column
+			// that holds one entry per attribute (not per value). For
+			// sections whose first value column is scalar (symbol, bool,
+			// foreignKey, u32Range, text…), the value column itself has
+			// one entry per attribute, so its per-entity ValueOffsets
+			// range size IS the attribute count. For sections whose
+			// first value column is non-scalar (u*Array, i*Array,
+			// f*Array, symbolArray, stringArray, textArray, blobArray,
+			// timeArray, u*Set), the value column flattens many values
+			// into one entity-level range, and we instead read the per-
+			// entity range from the cards/len accel (which carries one
+			// entry per attribute by construction).
+			ct := s.ValueColumnTypes[0]
+			var firstColSM canonicaltypes.ScalarModifierE
+			firstColSM, err = common.ExtractScalarModifier(ct)
+			if err != nil {
+				err = eh.Errorf("unable to extract scalar modifier: %w", err)
+				return
+			}
+			firstColST := common.GetSubTypeByScalarModifier(firstColSM)
+			switch firstColST {
+			case common.IntermediateColumnsSubTypeHomogenousArray:
+				_, err = fmt.Fprintf(b, `func (inst *%s%s) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.%s.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+`,
+					clsName,
+					genericTypeParamsUse,
+					clsNamer.ComposeAccelFieldName("HomogenousArray"),
+				)
+			case common.IntermediateColumnsSubTypeSet:
+				_, err = fmt.Fprintf(b, `func (inst *%s%s) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.%s.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+`,
+					clsName,
+					genericTypeParamsUse,
+					clsNamer.ComposeAccelFieldName("Set"),
+				)
+			default:
+				_, err = fmt.Fprintf(b, `func (inst *%s%s) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
 	b, e := inst.%s.ValueOffsets(int(entityIdx))
 	nAttributes = e-b
 	return
 }
 `,
-				clsName,
-				genericTypeParamsUse,
-				clsNamer.ComposeValueField(attrNameS),
-			)
+					clsName,
+					genericTypeParamsUse,
+					clsNamer.ComposeValueField(attrNameS),
+				)
+			}
 			if err != nil {
 				return
 			}

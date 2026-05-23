@@ -34,6 +34,21 @@ func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) SetRanger(ranger Value
 func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) LoadCardinalities(cards []uint64) {
 	inst.cards = cards
 }
+
+// GetEntityAttributeCount returns the number of attributes for the
+// given entity. The ranger column has one entry per attribute, so
+// ValueOffsets(entityIdx)'s [begin, end) range size IS the attribute
+// count — independent of how many values each attribute's co-container
+// holds. Used by GetNumberOfAttributes on non-scalar sections, where
+// the value column's offsets give the value count rather than the
+// attribute count.
+func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) GetEntityAttributeCount(entityIdx I) (n int64) {
+	if inst.ranger == nil {
+		return 0
+	}
+	b, e := inst.ranger.ValueOffsets(entityIdx)
+	return int64(e - b)
+}
 func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) LookupForward(i B) (beginIncl F, endExcl F) {
 	if inst.empty {
 		return
