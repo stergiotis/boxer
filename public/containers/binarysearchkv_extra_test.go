@@ -253,25 +253,20 @@ func TestUpsertBatch_DuplicateInSamePhase_NewestWins(t *testing.T) {
 	require.Equal(t, 1, dict.Len())
 }
 
-// TestLen_AfterDeferredBatchWithDuplicates_KnownInconsistency pins a known
-// inconsistency surfaced by the differential fuzz: Len() reads len(inst.keys)
-// directly without calling ensureSorted. So while a batch with duplicates is
-// in the deferred state, Len() reports the raw (over-count) number — every
-// other reader (Get / Has / Iterate*) silently flushes via ensureSorted first.
-//
-// Making Len() flush would be a behaviour change; the registry call site uses
-// it as an allocation upper bound so it is currently tolerant of over-counting.
-// If this is ever fixed, update the assertions below.
-func TestLen_AfterDeferredBatchWithDuplicates_KnownInconsistency(t *testing.T) {
+// TestLen_FlushesDeferredBatchState pins that Len forces ensureSorted so the
+// count reflects post-compaction unique entries. Without this flush, Len
+// would over-report by the number of shadowed duplicates in a deferred
+// batch — a bug the differential fuzz originally caught.
+func TestLen_FlushesDeferredBatchState(t *testing.T) {
 	dict := NewBinarySearchGrowingKVOrdered[string, int](4)
 	dict.UpsertBatch("k", 1)
 	dict.UpsertBatch("k", 2)
 	dict.UpsertBatch("k", 3)
-	require.Equal(t, 3, dict.Len(), "raw slice length, no compaction (current behaviour)")
+	require.Equal(t, 1, dict.Len(), "three writes to the same key collapse to one entry")
 
 	collected := slices.Collect(dict.IterateKeys())
-	require.Len(t, collected, 1, "iteration flushes — sees the single compacted entry")
-	require.Equal(t, 1, dict.Len(), "after a flushing read, Len agrees")
+	require.Len(t, collected, 1, "iteration sees the same compacted state")
+	require.Equal(t, 1, dict.Len(), "second Len is a no-op on the already-flushed container")
 }
 
 // --- Delete after deferred batch with many duplicates -------------------
