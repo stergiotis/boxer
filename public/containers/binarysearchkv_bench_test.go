@@ -3,6 +3,7 @@
 package containers
 
 import (
+	"cmp"
 	"fmt"
 	"math/rand/v2"
 	"testing"
@@ -308,6 +309,31 @@ func BenchmarkMap_DeleteChurn(b *testing.B) {
 					m[base[(i-1)%tc.N]] = i
 				}
 			}
+		})
+	}
+}
+
+// BenchmarkBSKV_GetHit_GeneralCtor measures the production Get path when
+// the caller uses NewBinarySearchGrowingKV with a function-value
+// comparator (cmp.Compare[string] here). Compare to BenchmarkBSKV_GetHit
+// (which uses NewBinarySearchGrowingKVOrdered) to see the cost of the
+// per-comparison indirect call that the Ordered constructor's inlined
+// dispatch avoids.
+func BenchmarkBSKV_GetHit_GeneralCtor(b *testing.B) {
+	for _, tc := range benchMatrix {
+		keys := genStringKeys(tc.N, tc.K, 1)
+		kv := NewBinarySearchGrowingKV[string, int](tc.N, cmp.Compare[string])
+		for j, k := range keys {
+			kv.UpsertBatch(k, j)
+		}
+		_ = kv.Has(keys[0])
+		b.Run(benchName(tc.N, tc.K), func(b *testing.B) {
+			b.ReportAllocs()
+			var sink int
+			for i := 0; i < b.N; i++ {
+				sink, _ = kv.Get(keys[i%tc.N])
+			}
+			_ = sink
 		})
 	}
 }

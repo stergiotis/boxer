@@ -37,8 +37,18 @@ import (
 // is needed. For point lookups it is typically several times slower than
 // map; for full iteration it is typically an order of magnitude faster.
 // See binarysearchkv_bench_test.go for measured break-evens on string keys.
+//
+// The point-lookup methods (Has, Get, GetDefault, Delete) dispatch through
+// the bsearch field, set at construction time. NewBinarySearchGrowingKVOrdered
+// stores a closure that calls slices.BinarySearch — cmp.Compare is then
+// inlined into the search loop and the per-comparison indirect-call cost
+// disappears. NewBinarySearchGrowingKV (general path) stores a closure that
+// calls slices.BinarySearchFunc with the supplied cmpKey, paying the
+// indirect call per comparison. Construction-time dispatch keeps the public
+// API identical across both flavours.
 type BinarySearchGrowingKV[K any, V any] struct {
 	cmpKey    func(a K, b K) int
+	bsearch   func(keys []K, target K) (int, bool)
 	keys      []K
 	vals      []V
 	sorted    bool
@@ -117,21 +127,41 @@ func (s bskvSortInterface[K, V]) Swap(i, j int) {
 	vals[j], vals[i] = vals[i], vals[j]
 }
 
+// NewBinarySearchGrowingKV constructs a container with a caller-supplied
+// comparator. Lookup methods (Has, Get, GetDefault, Delete) go through a
+// closure that calls slices.BinarySearchFunc with the supplied cmpKey —
+// the per-comparison cost is one indirect call. Prefer
+// NewBinarySearchGrowingKVOrdered when K satisfies cmp.Ordered, which
+// inlines the comparator and is measurably faster on the lookup hot path.
 func NewBinarySearchGrowingKV[K any, V any](estSize int, cmpKey func(a K, b K) int) (inst *BinarySearchGrowingKV[K, V]) {
 	inst = &BinarySearchGrowingKV[K, V]{
-		keys:      make([]K, 0, estSize),
-		vals:      make([]V, 0, estSize),
-		cmpKey:    cmpKey,
+		keys:   make([]K, 0, estSize),
+		vals:   make([]V, 0, estSize),
+		cmpKey: cmpKey,
+		bsearch: func(keys []K, target K) (int, bool) {
+			return slices.BinarySearchFunc(keys, target, cmpKey)
+		},
 		sorted:    true,
 		compacted: true,
 	}
 	return
 }
+
+// NewBinarySearchGrowingKVOrdered constructs a container for keys
+// satisfying cmp.Ordered. Lookup methods (Has, Get, GetDefault, Delete)
+// dispatch through a closure that calls slices.BinarySearch — cmp.Compare
+// is then inlined into the search loop, saving one indirect call per
+// comparison. Typically 1.4×–3.5× faster than NewBinarySearchGrowingKV
+// for Get on string keys; see binarysearchkv_bench_test.go for measured
+// numbers across N.
 func NewBinarySearchGrowingKVOrdered[K constraints.Ordered, V any](estSize int) (inst *BinarySearchGrowingKV[K, V]) {
 	inst = &BinarySearchGrowingKV[K, V]{
-		keys:      make([]K, 0, estSize),
-		vals:      make([]V, 0, estSize),
-		cmpKey:    cmp.Compare[K],
+		keys:   make([]K, 0, estSize),
+		vals:   make([]V, 0, estSize),
+		cmpKey: cmp.Compare[K],
+		bsearch: func(keys []K, target K) (int, bool) {
+			return slices.BinarySearch(keys, target)
+		},
 		sorted:    true,
 		compacted: true,
 	}
@@ -184,14 +214,14 @@ func (inst *BinarySearchGrowingKV[K, V]) compactNewestWins() {
 
 func (inst *BinarySearchGrowingKV[K, V]) Has(key K) (has bool) {
 	inst.ensureSorted()
-	_, has = slices.BinarySearchFunc(inst.keys, key, inst.cmpKey)
+	_, has = inst.bsearch(inst.keys, key)
 	return
 }
 
 func (inst *BinarySearchGrowingKV[K, V]) Get(key K) (val V, has bool) {
 	inst.ensureSorted()
 	var idx int
-	idx, has = slices.BinarySearchFunc(inst.keys, key, inst.cmpKey)
+	idx, has = inst.bsearch(inst.keys, key)
 	if has {
 		val = inst.vals[idx]
 	}
@@ -200,7 +230,7 @@ func (inst *BinarySearchGrowingKV[K, V]) Get(key K) (val V, has bool) {
 
 func (inst *BinarySearchGrowingKV[K, V]) GetDefault(key K, defaultV V) (val V) {
 	inst.ensureSorted()
-	idx, has := slices.BinarySearchFunc(inst.keys, key, inst.cmpKey)
+	idx, has := inst.bsearch(inst.keys, key)
 	if has {
 		val = inst.vals[idx]
 	} else {
@@ -235,7 +265,7 @@ func (inst *BinarySearchGrowingKV[K, V]) UpsertSingle(key K, val V) (existed boo
 // so pointer values don't leak past their entry's lifetime.
 func (inst *BinarySearchGrowingKV[K, V]) Delete(key K) (existed bool) {
 	inst.ensureSorted()
-	idx, existed := slices.BinarySearchFunc(inst.keys, key, inst.cmpKey)
+	idx, existed := inst.bsearch(inst.keys, key)
 	if !existed {
 		return
 	}

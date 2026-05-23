@@ -5,6 +5,7 @@ package containers
 import (
 	"cmp"
 	"iter"
+	"slices"
 
 	"golang.org/x/exp/constraints"
 )
@@ -25,10 +26,11 @@ import (
 //
 // Not safe for concurrent use.
 type BinarySearchGrowingKVBuilder[K any, V any] struct {
-	keys   []K
-	vals   []V
-	cmpKey func(a K, b K) int
-	frozen bool
+	keys    []K
+	vals    []V
+	cmpKey  func(a K, b K) int
+	bsearch func(keys []K, target K) (int, bool)
+	frozen  bool
 }
 
 // NewBinarySearchGrowingKVBuilder allocates a builder backed by slices
@@ -36,19 +38,35 @@ type BinarySearchGrowingKVBuilder[K any, V any] struct {
 // *total* number of Stage / StageSeq inserts (not the unique-key count),
 // to avoid growslice reallocations during build. See
 // [BinarySearchGrowingKV.UpsertBatch]'s docstring for the rationale.
+//
+// Prefer [NewBinarySearchGrowingKVBuilderOrdered] when K satisfies
+// cmp.Ordered — the produced container's point-lookup methods will use
+// an inlined comparator on the hot path. See [NewBinarySearchGrowingKV]
+// for the cost comparison.
 func NewBinarySearchGrowingKVBuilder[K any, V any](estSize int, cmpKey func(a K, b K) int) *BinarySearchGrowingKVBuilder[K, V] {
 	return &BinarySearchGrowingKVBuilder[K, V]{
 		keys:   make([]K, 0, estSize),
 		vals:   make([]V, 0, estSize),
 		cmpKey: cmpKey,
+		bsearch: func(keys []K, target K) (int, bool) {
+			return slices.BinarySearchFunc(keys, target, cmpKey)
+		},
 	}
 }
 
 // NewBinarySearchGrowingKVBuilderOrdered is the constraints.Ordered
-// convenience variant — equivalent to
-// [NewBinarySearchGrowingKVBuilder] with cmp.Compare[K] as cmpKey.
+// convenience variant. The produced container dispatches point-lookups
+// (Has, Get, GetDefault, Delete) through an inlined-comparator binary
+// search — see [NewBinarySearchGrowingKVOrdered] for the rationale.
 func NewBinarySearchGrowingKVBuilderOrdered[K constraints.Ordered, V any](estSize int) *BinarySearchGrowingKVBuilder[K, V] {
-	return NewBinarySearchGrowingKVBuilder[K, V](estSize, cmp.Compare[K])
+	return &BinarySearchGrowingKVBuilder[K, V]{
+		keys:   make([]K, 0, estSize),
+		vals:   make([]V, 0, estSize),
+		cmpKey: cmp.Compare[K],
+		bsearch: func(keys []K, target K) (int, bool) {
+			return slices.BinarySearch(keys, target)
+		},
+	}
 }
 
 // Stage appends one (key, value) pair to the staging buffer. O(1) per
@@ -102,6 +120,7 @@ func (b *BinarySearchGrowingKVBuilder[K, V]) Freeze() *BinarySearchGrowingKV[K, 
 		keys:      b.keys,
 		vals:      b.vals,
 		cmpKey:    b.cmpKey,
+		bsearch:   b.bsearch,
 		sorted:    false,
 		compacted: false,
 	}
