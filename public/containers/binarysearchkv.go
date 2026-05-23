@@ -96,45 +96,42 @@ func (inst *BinarySearchGrowingKV[K, V]) ensureSorted() {
 		inst.sorted = true
 	}
 	if !inst.compacted {
-		// FIXME this is ugly and most likely slow, rewrite compact to keep last instance
-		slices.Reverse(inst.keys)
-		slices.Reverse(inst.vals)
-		inst.compactOldestWins()
-		slices.Reverse(inst.keys)
-		slices.Reverse(inst.vals)
+		inst.compactNewestWins()
 		inst.compacted = true
 	}
 }
 
-// compactOldestWins adopted from go stdlib slices.Compact()
-func (inst *BinarySearchGrowingKV[K, V]) compactOldestWins() {
+// compactNewestWins collapses runs of equal-cmpKey entries in a sorted
+// keys/vals pair, keeping the newest value within each run. sort.Stable
+// preserves insertion order among equal keys, so within a run the last
+// element is the newest UpsertBatch. The trailing tail is cleared so
+// pointer-valued K/V slots don't keep their referents reachable past the
+// entry's lifetime.
+func (inst *BinarySearchGrowingKV[K, V]) compactNewestWins() {
 	keys := inst.keys
 	vals := inst.vals
 	if len(keys) < 2 {
 		return
 	}
 	c := inst.cmpKey
-	for k := 1; k < len(keys); k++ {
-		if c(keys[k], keys[k-1]) != 0 {
+	w := 0
+	for r := 1; r < len(keys); r++ {
+		if c(keys[r], keys[w]) == 0 {
+			keys[w] = keys[r]
+			vals[w] = vals[r]
 			continue
 		}
-
-		keys2 := keys[k:]
-		vals2 := vals[k:]
-		for k2 := 1; k2 < len(keys2); k2++ {
-			if c(keys2[k2], keys2[k2-1]) != 0 {
-				keys[k] = keys2[k2]
-				vals[k] = vals2[k2] // Stable sorted, keeps last value
-				k++
-			}
+		w++
+		if w != r {
+			keys[w] = keys[r]
+			vals[w] = vals[r]
 		}
-
-		clear(keys[k:])
-		clear(vals[k:])
-		inst.keys = keys[:k]
-		inst.vals = vals[:k]
-		return
 	}
+	w++
+	clear(keys[w:])
+	clear(vals[w:])
+	inst.keys = keys[:w]
+	inst.vals = vals[:w]
 }
 
 func (inst *BinarySearchGrowingKV[K, V]) Has(key K) (has bool) {
