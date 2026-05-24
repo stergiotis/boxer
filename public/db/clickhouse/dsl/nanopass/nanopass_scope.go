@@ -395,7 +395,14 @@ func tableSourceFromIdentifier(expr *grammar1.TableExprIdentifierContext) (ts *T
 func buildCTEDefs(ctes *grammar1.CtesContext, parent *SelectScope, defaultDB string) (defs []CTEDef) {
 	defs = make([]CTEDef, 0, ctes.GetChildCount())
 	for i := 0; i < ctes.GetChildCount(); i++ {
-		nqCtx, ok := ctes.GetChild(i).(*grammar1.NamedQueryContext)
+		// withItem alternation: WithItemNamedQueryContext wraps the CTE form
+		// (`name AS (subquery)`); WithItemColumnsExprContext wraps the scalar
+		// alias form (`expr AS name`) — the latter has no CTE scope, skip it.
+		wi, ok := ctes.GetChild(i).(*grammar1.WithItemNamedQueryContext)
+		if !ok {
+			continue
+		}
+		nqCtx, ok := wi.NamedQuery().(*grammar1.NamedQueryContext)
 		if !ok {
 			continue
 		}

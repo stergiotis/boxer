@@ -54,9 +54,17 @@ options {
 queryStmt: query (FORMAT IDENTIFIER)? (SEMICOLON)? EOF;
 query: setStmt* ctes? selectUnionStmt;
 
+// CTE / WITH-clause shared item — see grammar1's withItem comment. Grammar2
+// (the canonical form) keeps the same shape so canonicalised SQL can mix
+// scalar aliases and CTE definitions in one WITH clause.
+withItem
+    : namedQuery                                                                   # WithItemNamedQuery
+    | columnsExpr                                                                  # WithItemColumnsExpr
+    ;
+
 // CTE statement
 ctes
-    : WITH namedQuery (COMMA namedQuery)*
+    : WITH withItem (COMMA withItem)*
     ;
 
 namedQuery
@@ -96,7 +104,7 @@ staticOrDynamicColumnSelection
     | dynamicColumnSelection               # DynamicColumnList;
 dynamicColumnSelection
     : COLUMNS LPAREN STRING_LITERAL RPAREN;
-withClause: WITH columnExprList;
+withClause: WITH withItem (COMMA withItem)*;
 topClause: TOP DECIMAL_LITERAL (WITH TIES)?;
 fromClause: FROM joinExpr;
 arrayJoinClause: (LEFT | INNER)? ARRAY JOIN columnExprList;

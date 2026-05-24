@@ -19,6 +19,14 @@ func (v *BaseClickHouseParserGrammar1Visitor) VisitMultiQuery(ctx *MultiQueryCon
 	return v.VisitChildren(ctx)
 }
 
+func (v *BaseClickHouseParserGrammar1Visitor) VisitWithItemNamedQuery(ctx *WithItemNamedQueryContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseClickHouseParserGrammar1Visitor) VisitWithItemColumnsExpr(ctx *WithItemColumnsExprContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
 func (v *BaseClickHouseParserGrammar1Visitor) VisitCtes(ctx *CtesContext) interface{} {
 	return v.VisitChildren(ctx)
 }

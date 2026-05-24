@@ -33,9 +33,19 @@ queryStmt: query (FORMAT identifierOrNull)? (SEMICOLON)? EOF;
 query: setStmt* ctes? selectUnionStmt;
 multiQuery: query+ EOF;
 
-// CTE statement
+// CTE / WITH-clause shared item — accepts either a named subquery (CTE) or a
+// scalar/column expression with alias. ClickHouse permits both forms in a
+// single WITH clause and even in mixed order; the grammar uses a single
+// withItem rule so the parser does not need to commit to one form per WITH.
+withItem
+    : namedQuery                                                                   # WithItemNamedQuery
+    | columnsExpr                                                                  # WithItemColumnsExpr
+    ;
+
+// CTE statement — kept as a top-level optional in `query` (see line above) so
+// that scoping for CTE-on-union still anchors at the query level.
 ctes
-    : WITH namedQuery (COMMA namedQuery)*
+    : WITH withItem (COMMA withItem)*
     ;
 
 namedQuery
@@ -75,7 +85,7 @@ staticOrDynamicColumnSelection
     | dynamicColumnSelection               # DynamicColumnList;
 dynamicColumnSelection
     : COLUMNS LPAREN STRING_LITERAL RPAREN;
-withClause: WITH columnExprList;
+withClause: WITH withItem (COMMA withItem)*;
 topClause: TOP DECIMAL_LITERAL (WITH TIES)?;
 fromClause: FROM joinExpr;
 arrayJoinClause: (LEFT | INNER)? ARRAY JOIN columnExprList;

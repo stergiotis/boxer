@@ -111,15 +111,24 @@ func convertSettingExpr(pr *nanopass.ParseResult, ctx *grammar2.SettingExprConte
 // --- CTEs ---
 
 func convertCTEs(pr *nanopass.ParseResult, ctx *grammar2.CtesContext) (ctes []CTE, err error) {
+	// Items under ctes are withItem alternatives: WithItemNamedQueryContext is
+	// the CTE form; WithItemColumnsExprContext is the scalar alias form, which
+	// has no AST representation here and is skipped.
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if nq, ok := ctx.GetChild(i).(*grammar2.NamedQueryContext); ok {
-			var cte CTE
-			cte, err = convertNamedQuery(pr, nq)
-			if err != nil {
-				return
-			}
-			ctes = append(ctes, cte)
+		wi, ok := ctx.GetChild(i).(*grammar2.WithItemNamedQueryContext)
+		if !ok {
+			continue
 		}
+		nq, ok := wi.NamedQuery().(*grammar2.NamedQueryContext)
+		if !ok {
+			continue
+		}
+		var cte CTE
+		cte, err = convertNamedQuery(pr, nq)
+		if err != nil {
+			return
+		}
+		ctes = append(ctes, cte)
 	}
 	return
 }
@@ -366,9 +375,45 @@ func convertProjectionExceptClause(ctx *grammar2.ProjectionExceptClauseContext) 
 }
 
 func convertWithClause(pr *nanopass.ParseResult, ctx *grammar2.WithClauseContext) (exprs []Expr, err error) {
+	// withClause now holds a sequence of withItem alternatives. For the AST's
+	// Select.With (which models scalar/column expression aliases inside a
+	// selectStmt), collect only the WithItemColumnsExprContext items; any
+	// CTE-form items (rare inside a nested selectStmt) are skipped here and
+	// caught at the query level via convertCTEs.
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if cel, ok := ctx.GetChild(i).(*grammar2.ColumnExprListContext); ok {
-			return convertColumnExprList(pr, cel)
+		wi, ok := ctx.GetChild(i).(*grammar2.WithItemColumnsExprContext)
+		if !ok {
+			continue
+		}
+		ce := wi.ColumnsExpr()
+		if ce == nil {
+			continue
+		}
+		switch c := ce.(type) {
+		case *grammar2.ColumnsExprColumnContext:
+			for j := 0; j < c.GetChildCount(); j++ {
+				if cec, ok := c.GetChild(j).(grammar2.IColumnExprContext); ok {
+					var expr Expr
+					expr, err = convertColumnExpr(pr, cec.(antlr.ParserRuleContext))
+					if err != nil {
+						return
+					}
+					exprs = append(exprs, expr)
+				}
+			}
+		case *grammar2.ColumnsExprAsteriskContext:
+			exprs = append(exprs, Expr{Kind: KindAsterisk, Asterisk: &AsteriskData{Table: extractAsteriskTable(c)}})
+		case *grammar2.ColumnsExprSubqueryContext:
+			for j := 0; j < c.GetChildCount(); j++ {
+				if sus, ok := c.GetChild(j).(*grammar2.SelectUnionStmtContext); ok {
+					var su SelectUnion
+					su, err = convertSelectUnion(pr, sus)
+					if err != nil {
+						return
+					}
+					exprs = append(exprs, Expr{Kind: KindSubquery, Subquery: &SubqueryData{Query: su}})
+				}
+			}
 		}
 	}
 	return

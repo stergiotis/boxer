@@ -189,29 +189,15 @@ func insertCTEDefinitions(query string, accepted []acceptedParam) (result string
 
 	rw := nanopass.NewRewriter(pr)
 
-	// Check if there's an existing WITH clause
-	var withClause *grammar1.WithClauseContext
-	for i := 0; i < selectStmt.GetChildCount(); i++ {
-		if wc, ok := selectStmt.GetChild(i).(*grammar1.WithClauseContext); ok {
-			withClause = wc
-			break
-		}
-	}
+	// Find an existing WITH source for the query. Top-level WITH may live in
+	// the query-level `ctes?` rule (preferred by the parser) or in this
+	// selectStmt's `withClause?` (used when nested inside a subquery). Both
+	// rules emit a sequence of withItem children; we just need the first item.
+	firstItem := findFirstWithItem(pr.Tree, selectStmt)
 
-	if withClause != nil {
-		// Existing WITH clause — find the ColumnExprListContext and prepend
-		var exprList *grammar1.ColumnExprListContext
-		for i := 0; i < withClause.GetChildCount(); i++ {
-			if el, ok := withClause.GetChild(i).(*grammar1.ColumnExprListContext); ok {
-				exprList = el
-				break
-			}
-		}
-		if exprList != nil {
-			// Insert before the first token of the existing expression list
-			startToken := exprList.GetStart().GetTokenIndex()
-			rw.InsertBeforeDefault(startToken, cteText+", ")
-		}
+	if firstItem != nil {
+		startToken := firstItem.GetStart().GetTokenIndex()
+		rw.InsertBeforeDefault(startToken, cteText+", ")
 	} else {
 		// No WITH clause — find ProjectionClauseContext and insert WITH before it
 		var projectionClause *grammar1.ProjectionClauseContext
@@ -229,6 +215,50 @@ func insertCTEDefinitions(query string, accepted []acceptedParam) (result string
 
 	result = nanopass.GetText(rw)
 	return
+}
+
+// findFirstWithItem returns the first withItem under either the query-level
+// ctes? or the given selectStmt's withClause?, whichever holds the existing
+// WITH for this query. Returns nil if neither rule produced a withItem.
+func findFirstWithItem(tree antlr.ParserRuleContext, selectStmt *grammar1.SelectStmtContext) grammar1.IWithItemContext {
+	// query-level ctes (preferred at the top level)
+	if qs, ok := tree.(*grammar1.QueryStmtContext); ok {
+		for i := 0; i < qs.GetChildCount(); i++ {
+			q, ok := qs.GetChild(i).(*grammar1.QueryContext)
+			if !ok {
+				continue
+			}
+			for j := 0; j < q.GetChildCount(); j++ {
+				ctes, ok := q.GetChild(j).(*grammar1.CtesContext)
+				if !ok {
+					continue
+				}
+				if wi := firstWithItemIn(ctes); wi != nil {
+					return wi
+				}
+			}
+		}
+	}
+	// selectStmt-level withClause (used for nested SELECTs)
+	for i := 0; i < selectStmt.GetChildCount(); i++ {
+		wc, ok := selectStmt.GetChild(i).(*grammar1.WithClauseContext)
+		if !ok {
+			continue
+		}
+		if wi := firstWithItemIn(wc); wi != nil {
+			return wi
+		}
+	}
+	return nil
+}
+
+func firstWithItemIn(parent antlr.ParserRuleContext) grammar1.IWithItemContext {
+	for i := 0; i < parent.GetChildCount(); i++ {
+		if wi, ok := parent.GetChild(i).(grammar1.IWithItemContext); ok {
+			return wi
+		}
+	}
+	return nil
 }
 
 // insertCTEDefinitionsStringLevel is a fallback for when CST parsing fails

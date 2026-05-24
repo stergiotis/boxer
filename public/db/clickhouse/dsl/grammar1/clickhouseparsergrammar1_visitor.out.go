@@ -16,6 +16,12 @@ type ClickHouseParserGrammar1Visitor interface {
 	// Visit a parse tree produced by ClickHouseParserGrammar1#multiQuery.
 	VisitMultiQuery(ctx *MultiQueryContext) interface{}
 
+	// Visit a parse tree produced by ClickHouseParserGrammar1#WithItemNamedQuery.
+	VisitWithItemNamedQuery(ctx *WithItemNamedQueryContext) interface{}
+
+	// Visit a parse tree produced by ClickHouseParserGrammar1#WithItemColumnsExpr.
+	VisitWithItemColumnsExpr(ctx *WithItemColumnsExprContext) interface{}
+
 	// Visit a parse tree produced by ClickHouseParserGrammar1#ctes.
 	VisitCtes(ctx *CtesContext) interface{}
 
