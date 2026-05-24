@@ -671,36 +671,49 @@ func (inst *GoClassBuilder) ComposeAttributeCode(clsNamer gocodegen.GoClassNamer
 			return
 		}
 	}
-	{ // AddToContainer/AddToCoContainers
+	{ // AddToContainer/AddToCoContainers (chain + P void siblings)
+		var funcName string
 		switch nonScalarIRH.CountColumns() {
 		case 0:
-			break
+			// no non-scalar columns — nothing to emit
 		case 1:
-			_, err = fmt.Fprintf(b, "func (inst *%s) AddToContainer(", clsNames.InAttributeClassName)
+			funcName = "AddToContainer"
 		default:
-			_, err = fmt.Fprintf(b, "func (inst *%s) AddToCoContainers(", clsNames.InAttributeClassName)
+			funcName = "AddToCoContainers"
 		}
-		if err != nil {
-			return
-		}
-
-		first := true
-		for cc, cp := range nonScalarIRH.IterateColumnProps() {
-			for i := 0; i < cp.Length(); i++ {
-				if !first {
-					_, err = b.WriteString(", ")
-					if err != nil {
-						return
+		if funcName != "" {
+			emitArgs := func() (err error) {
+				first := true
+				for cc, cp := range nonScalarIRH.IterateColumnProps() {
+					for i := 0; i < cp.Length(); i++ {
+						if !first {
+							_, err = b.WriteString(", ")
+							if err != nil {
+								return
+							}
+						}
+						first = false
+						err = inst.composeFieldRelatedCode(structFieldOperationArgDeclarationDemoted, cc, cp, i)
+						if err != nil {
+							return
+						}
 					}
 				}
-				first = false
-				err = inst.composeFieldRelatedCode(structFieldOperationArgDeclarationDemoted, cc, cp, i)
-				if err != nil {
-					return
-				}
+				return
 			}
-		}
-		if nonScalarIRH.CountColumns() > 0 {
+			emitArgUseList := func() (err error) {
+				err = inst.composeFieldRelatedCodeAll(structFieldOperationArgUse, nonScalarIRH.IterateColumnProps(), ", ")
+				return
+			}
+			// Chain variant — returns *InAttr for caller-side chaining.
+			_, err = fmt.Fprintf(b, "func (inst *%s) %s(", clsNames.InAttributeClassName, funcName)
+			if err != nil {
+				return
+			}
+			err = emitArgs()
+			if err != nil {
+				return
+			}
 			_, err = fmt.Fprintf(b, ") *%s {\n", clsNames.InAttributeClassName)
 			if err != nil {
 				return
@@ -709,12 +722,35 @@ func (inst *GoClassBuilder) ComposeAttributeCode(clsNamer gocodegen.GoClassNamer
 			if err != nil {
 				return
 			}
-
 			err = inst.composeFieldRelatedCodeAll(structFieldOperationAppendScalar, nonScalarIRH.IterateColumnProps(), "")
 			if err != nil {
 				return
 			}
 			_, err = b.WriteString("\treturn inst\n}\n")
+			if err != nil {
+				return
+			}
+			// P sibling — void delegate that drops the chain return.
+			// Lets marshallgen-style generated interfaces declare an
+			// AttrI without an F-bounded `[Self]` type parameter,
+			// since the methods no longer return Self for chaining.
+			_, err = fmt.Fprintf(b, "func (inst *%s) %sP(", clsNames.InAttributeClassName, funcName)
+			if err != nil {
+				return
+			}
+			err = emitArgs()
+			if err != nil {
+				return
+			}
+			_, err = fmt.Fprintf(b, ") {\n\tinst.%s(", funcName)
+			if err != nil {
+				return
+			}
+			err = emitArgUseList()
+			if err != nil {
+				return
+			}
+			_, err = b.WriteString(")\n}\n")
 			if err != nil {
 				return
 			}
@@ -979,7 +1015,7 @@ func (inst *GoClassBuilder) ComposeAttributeCode(clsNamer gocodegen.GoClassNamer
 		}
 	}
 
-	{ // EndAttribute
+	{ // EndAttribute (chain + P void sibling)
 		_, err = fmt.Fprintf(b, `func (inst *%s) EndAttribute() *%s {
 `,
 			clsNames.InAttributeClassName, clsNames.InSectionClassName)
@@ -996,6 +1032,15 @@ func (inst *GoClassBuilder) ComposeAttributeCode(clsNamer gocodegen.GoClassNamer
 	return inst.parent
 }
 `)
+		if err != nil {
+			return
+		}
+		// P sibling — void delegate, lets marshallgen-style AttrI
+		// interfaces avoid an F-bounded `[Sec]` return-type parameter.
+		_, err = fmt.Fprintf(b, `func (inst *%s) EndAttributeP() {
+	inst.EndAttribute()
+}
+`, clsNames.InAttributeClassName)
 		if err != nil {
 			return
 		}
