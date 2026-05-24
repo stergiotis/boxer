@@ -1,3 +1,5 @@
+//go:build llm_generated_opus47
+
 // Package option provides a typed Some/None carrier for fields that
 // may be present or absent. Pure value semantics — no pointer, no nil.
 // Read Val only when Has is true.
