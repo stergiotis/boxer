@@ -147,6 +147,26 @@ the interfaces.
   derived interfaces. EntityI's per-section constraint is
   `<Sec>Attr <Kind><Sec>AttrI` (non-recursive), not the F-bounded
   `<Sec>Attr <Kind><Sec>AttrI[<Sec>Attr, <Sec>Sec]` form.
+- **One membership per attribute on write.** Both
+  `marshallgen.<Kind>BuildEntities` and `marshallreflect.Marshal`
+  call `AddMembership*P` exactly once per attribute. The leeway
+  wire format permits more, but the codec writers never do.
+
+## Read-side asymmetry between codegen and reflect
+
+The codegen-emitted `<Kind>FillFromArrow` uses an inline switch
+inside the membership loop, so if a single attribute happens to carry
+memberships for both `Foo` and `Bar`, the value is consumed once per
+matched DTO field — both `Foo`'s and `Bar`'s accumulators advance.
+The reflect-driven `marshallreflect.Unmarshal` dispatches on the
+first matching membership and stops. Both behaviours produce the
+same result for codec-written wire (one membership per attribute, by
+the invariant above) but diverge for third-party producers of leeway-
+shaped data with multi-membership attributes. Codec-wire round-trip
+parity is preserved; cross-producer compatibility on multi-membership
+input is not. A fix path (split dispatch into "list all matched
+fields", consume value per match) is straightforward when a real
+consumer surfaces the need.
 
 ## Trade-offs
 

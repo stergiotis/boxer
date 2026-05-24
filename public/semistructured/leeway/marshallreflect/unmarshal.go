@@ -193,6 +193,31 @@ func unmarshalSection(row reflect.Value, g sectionGroup, args UnmarshalArgs, i i
 // (uint64 or []byte) and returns the first DTO field whose membership
 // matches. Const fields are skipped (their value is fixed on the
 // write side; nothing to project here).
+//
+// Multi-membership read asymmetry vs marshallgen. The codegen-emitted
+// <Kind>FillFromArrow uses an inline switch inside the membership
+// loop:
+//
+//	for membID := range membsVar.GetMembValueLowCardRef(...) {
+//	    switch membID {
+//	    case kindFoo: <consume into Foo accumulator>
+//	    case kindBar: <consume into Bar accumulator>
+//	    }
+//	}
+//
+// If a single attribute carries memberships for both `foo` and `bar`,
+// the codegen reader fires BOTH cases — the value is consumed once
+// per matching DTO field. This implementation returns on the first
+// match, so only one field's accumulator increments.
+//
+// The divergence is unreachable through codec-written wire: both
+// marshallgen.BuildEntities and marshallreflect.Marshal emit
+// exactly one membership per attribute. The asymmetry only surfaces
+// when a third-party producer of leeway-shaped data attaches
+// multiple memberships to the same attribute. Codec wire
+// compatibility (encode-then-decode through either path) is
+// preserved; cross-producer compatibility against multi-membership
+// attributes is not.
 func dispatchMembership(membs reflect.Value, i int, attrJ int64, fields []marshallgen.TaggedField, membIDs map[string]uint64) (matched marshallgen.TaggedField, found bool) {
 	// Determine channel from any non-const field's flag (all fields in
 	// a section agree on the channel per ParsePlan uniformity check).

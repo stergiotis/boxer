@@ -1377,6 +1377,34 @@ func (inst *%s) Builder() *%s.RecordBuilder { return inst.builder }
 	if err != nil {
 		return
 	}
+
+	// %sSectionIndices maps each section's canonical name to its
+	// section00Inst…sectionNNInst slot. Lets downstream codec
+	// generators (e.g. marshallgen-driven wrappers) compute
+	// SetActiveSections inputs from section names without hand-
+	// maintaining a parallel table — the map is derived from the
+	// same TableDesc that drives the section instance ordering, so
+	// drift is impossible by construction.
+	_, err = fmt.Fprintf(b, `
+// %sSectionIndices maps each section name to its section%%02dInst slot in
+// the generated entity. Useful for callers that need to compute
+// SetActiveSections inputs from section names — for example, the
+// marshallgen-driven keelson codec wrappers.
+var %sSectionIndices = map[string]int{
+`, clsNames.InEntityClassName, clsNames.InEntityClassName)
+	if err != nil {
+		return
+	}
+	for i, sectionName := range sectionNames {
+		_, err = fmt.Fprintf(b, "\t%q: %d,\n", sectionName.String(), i)
+		if err != nil {
+			return
+		}
+	}
+	_, err = b.WriteString("}\n")
+	if err != nil {
+		return
+	}
 	return
 }
 func (inst *GoClassBuilder) ComposeEntityCode(clsNamer gocodegen.GoClassNamerI, tableName naming.StylableName, sectionNames []naming.StylableName, ir *common.IntermediateTableRepresentation, tableRowConfig common.TableRowConfigE, entityIRH *common.IntermediatePairHolder) (err error) {
