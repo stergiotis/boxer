@@ -331,6 +331,10 @@ func (inst testResolver) ResolveEmbed(target string, heading string) (url string
 	return
 }
 
+func (inst testResolver) LoadImage(ref string) (pixels []uint32, widthPx uint32, heightPx uint32, ok bool) {
+	return
+}
+
 func TestCustomResolver_Wikilink(t *testing.T) {
 	opts := Options{
 		Features: FeatureWikilink,
@@ -617,6 +621,10 @@ func (inst showcaseResolver) ResolveEmbed(target string, heading string) (url st
 	}
 	isImage = resolver.IsImageFile(target)
 	exists = true
+	return
+}
+
+func (inst showcaseResolver) LoadImage(ref string) (pixels []uint32, widthPx uint32, heightPx uint32, ok bool) {
 	return
 }
 
