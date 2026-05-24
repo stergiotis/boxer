@@ -37,6 +37,10 @@ type ResolverI interface {
 	// Use it for refs the resolver does not recognise (e.g. http:// URLs
 	// in a vault-only resolver) or for formats the resolver cannot
 	// decode.
+	//
+	// Ownership: the returned pixels slice is retained by the consumer
+	// for as long as the surrounding document lives; resolvers must not
+	// mutate or pool it across calls.
 	LoadImage(ref string) (pixels []uint32, widthPx uint32, heightPx uint32, ok bool)
 }
 
