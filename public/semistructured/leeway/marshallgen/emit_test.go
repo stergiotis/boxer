@@ -349,6 +349,49 @@ type MyDTO struct {
 	}
 }
 
+func TestEmit_Option_Verbatim(t *testing.T) {
+	// Option[T] + ,verbatim: scalar Has-guarded emit through the
+	// LowCardVerbatim channel. AttrI embeds the verbatim PI; the per-
+	// row driver emits the literal []byte at the call site; no kindXxx
+	// const is declared for the membership.
+	out := generate(t, `package demo
+type MyDTO struct {
+	_     struct{}              `+"`kind:\"my\"`"+`
+	Id    uint64                `+"`lw:\",id\"`"+`
+	Ts    time.Time             `+"`lw:\",ts\"`"+`
+	Trace option.Option[string] `+"`lw:\"traceId,symbol,verbatim\"`"+`
+}
+`)
+	parseGo(t, out)
+	mustContain(t, out, "dmlruntime.InAttributeMembershipLowCardVerbatimPI")
+	mustContain(t, out, "if c.TraceHas[i] {")
+	mustContain(t, out, "symbolSec.BeginAttribute(c.TraceVal[i])")
+	mustContain(t, out, `AddMembershipLowCardVerbatimP([]byte("traceId"))`)
+	mustNotContain(t, out, "kindTrace") // verbatim → no var
+	mustNotContain(t, out, ".AddMembershipLowCardRefP(")
+}
+
+func TestEmit_Roaring_Explode(t *testing.T) {
+	// *roaring.Bitmap + ,explode: per-bit BeginAttribute(uint32) loop
+	// (vs the default container path's single BeginAttribute() + N×
+	// AddToContainerP). Empty/nil bitmap = zero iterations = zero attrs.
+	out := generate(t, `package demo
+type MyDTO struct {
+	_    struct{}        `+"`kind:\"my\"`"+`
+	Id   uint64          `+"`lw:\",id\"`"+`
+	Ts   time.Time       `+"`lw:\",ts\"`"+`
+	Bits *roaring.Bitmap `+"`lw:\"bits,u32,explode\"`"+`
+}
+`)
+	parseGo(t, out)
+	mustContain(t, out, "if c.Bits[i] != nil {")
+	mustContain(t, out, "it := c.Bits[i].Iterator()")
+	mustContain(t, out, "for it.HasNext() {")
+	mustContain(t, out, "u32Sec.BeginAttribute(it.Next())")
+	mustNotContain(t, out, ".AddToContainerP(")             // explode does NOT use container append
+	mustContain(t, out, "BeginAttribute(value uint32) Attr") // scalar section signature
+}
+
 func TestEmit_MultiSubColumnSection(t *testing.T) {
 	// u32Range with beginIncl + endExcl sub-columns sharing one
 	// membership — SecI emits BeginAttribute(beginIncl T1, endExcl T2).

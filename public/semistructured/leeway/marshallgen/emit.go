@@ -146,6 +146,21 @@ func (g sectionGroup) IsVerbatim() bool {
 	return g.Memberships[0].Flags.Verbatim
 }
 
+// computeGroups walks plan.Fields in DTO declaration order, bucketing
+// each field by its lw: section name. The output ordering is the
+// load-bearing invariant that ties three independent emit sites
+// together — change at your peril:
+//
+//   - <Kind>EntityI's per-section type-parameter list (writeEntityInterface)
+//   - <Kind>BuildEntities' type-parameter list and per-section call sequence
+//   - <Kind>FillFromArrow's per-section reader-parameter list
+//
+// Wrappers that emit per-section helpers (e.g. FactsWrapper's Reader
+// struct + Unmarshal-call argument list) MUST iterate sections in the
+// same DTO-declaration order so the type-parameter binding at the
+// call site lines up. A wrapper that walks sections in
+// dml-index-sorted order (or alphabetical) silently passes the wrong
+// readers to FillFromArrow.
 func computeGroups(plan *Plan) (out []sectionGroup) {
 	seen := map[string]int{}
 	for _, f := range plan.Fields {

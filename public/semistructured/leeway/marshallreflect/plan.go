@@ -77,13 +77,13 @@ func buildPlan(rt reflect.Type) (plan *marshallgen.Plan, err error) {
 			err = eb.Build().Str("field", f.Name).Errorf("marshallreflect: non-`_` field missing `lw:` tag")
 			return
 		}
-		var membership, section, column string
-		var flags marshallgen.FieldFlags
-		membership, section, column, flags, err = marshallgen.SplitLW(lwTag)
+		var pt marshallgen.ParsedLWTag
+		pt, err = marshallgen.SplitLW(lwTag)
 		if err != nil {
 			err = eb.Build().Str("tag", lwTag).Errorf("marshallreflect: parse lw tag: %w", err)
 			return
 		}
+		membership, section, column, flags := pt.Membership, pt.Section, pt.Column, pt.Flags
 
 		shape, classErr := classifyReflectType(f.Type)
 		if classErr != nil {
@@ -228,39 +228,39 @@ func parseUnderscoreField(plan *marshallgen.Plan, st reflect.StructTag) (err err
 		return
 	}
 	// Constant declaration.
-	membership, section, column, flags, err := marshallgen.SplitLW(lwTag)
-	if err != nil {
-		err = eb.Build().Str("tag", lwTag).Errorf("marshallreflect: parse `_` lw tag: %w", err)
+	pt, parseErr := marshallgen.SplitLW(lwTag)
+	if parseErr != nil {
+		err = eb.Build().Str("tag", lwTag).Errorf("marshallreflect: parse `_` lw tag: %w", parseErr)
 		return
 	}
-	if !flags.HasConst {
+	if !pt.Flags.HasConst {
 		err = eb.Build().Str("tag", lwTag).Errorf("marshallreflect: `_` field's lw: tag must declare `,const=<value>`")
 		return
 	}
-	if membership == "" {
+	if pt.Membership == "" {
 		err = eb.Build().Str("tag", lwTag).Errorf("marshallreflect: const declaration requires non-empty membership name")
 		return
 	}
-	if section == "" {
+	if pt.Section == "" {
 		err = eb.Build().Str("tag", lwTag).Errorf("marshallreflect: const declaration requires a section name")
 		return
 	}
-	if column != "" {
+	if pt.Column != "" {
 		err = eb.Build().Str("tag", lwTag).Errorf("marshallreflect: const declaration cannot target a sub-column")
 		return
 	}
-	if flags.Explode {
+	if pt.Flags.Explode {
 		err = eb.Build().Str("tag", lwTag).Errorf("marshallreflect: const declaration cannot combine with `explode`")
 		return
 	}
 	plan.Fields = append(plan.Fields, marshallgen.TaggedField{
 		GoFieldName:  "",
 		GoType:       "string",
-		LWMembership: membership,
-		LWSection:    section,
-		Flags:        flags,
+		LWMembership: pt.Membership,
+		LWSection:    pt.Section,
+		Flags:        pt.Flags,
 		IsConst:      true,
-		ConstValue:   flags.ConstValue,
+		ConstValue:   pt.Flags.ConstValue,
 	})
 	return
 }

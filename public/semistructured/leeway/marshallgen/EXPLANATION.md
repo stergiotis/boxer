@@ -101,6 +101,13 @@ with `,unit` and `,verbatim`. Multiple `_` consts on the same
 membership emit multiple attributes per row (cardinality is bounded
 by the schema's membership-spec declaration).
 
+Const fields still need a kindXxx symbol when the channel is ref:
+the wrapper's init() resolves the membership name through whatever
+registry it consults (pebble's FactsWrapper hits `vdd.Memb<Name>`),
+so a const + ref pair requires the membership to be registered the
+same way a regular ref field does. Const + `,verbatim` skips the
+registry — the literal name embeds directly at the call site.
+
 ### Outputs
 
 EmitPlan walks the plan and produces (in order):

@@ -113,41 +113,40 @@ func ParsePlan(inputPath string) (plan *Plan, err error) {
 				continue
 			}
 			// Constant declaration on `_` field.
-			var membership, section, column string
-			var flags FieldFlags
-			membership, section, column, flags, err = SplitLW(lwUnderscoreTag)
+			var pt ParsedLWTag
+			pt, err = SplitLW(lwUnderscoreTag)
 			if err != nil {
 				err = eb.Build().Str("tag", lwUnderscoreTag).Errorf("marshallgen: parse `_` lw tag: %w", err)
 				return
 			}
-			if !flags.HasConst {
+			if !pt.Flags.HasConst {
 				err = eb.Build().Str("tag", lwUnderscoreTag).Errorf("marshallgen: `_` field's lw: tag must declare `,const=<value>` — bare memberships belong on Go fields")
 				return
 			}
-			if membership == "" {
+			if pt.Membership == "" {
 				err = eb.Build().Str("tag", lwUnderscoreTag).Errorf("marshallgen: const declaration requires non-empty membership name")
 				return
 			}
-			if section == "" {
+			if pt.Section == "" {
 				err = eb.Build().Str("tag", lwUnderscoreTag).Errorf("marshallgen: const declaration requires a section name")
 				return
 			}
-			if column != "" {
+			if pt.Column != "" {
 				err = eb.Build().Str("tag", lwUnderscoreTag).Errorf("marshallgen: const declaration cannot target a sub-column")
 				return
 			}
-			if flags.Explode {
+			if pt.Flags.Explode {
 				err = eb.Build().Str("tag", lwUnderscoreTag).Errorf("marshallgen: const declaration cannot combine with `explode`")
 				return
 			}
 			plan.Fields = append(plan.Fields, TaggedField{
 				GoFieldName:  "", // synthetic — no Go field
 				GoType:       "string",
-				LWMembership: membership,
-				LWSection:    section,
-				Flags:        flags,
+				LWMembership: pt.Membership,
+				LWSection:    pt.Section,
+				Flags:        pt.Flags,
 				IsConst:      true,
-				ConstValue:   flags.ConstValue,
+				ConstValue:   pt.Flags.ConstValue,
 			})
 			continue
 		}
@@ -157,13 +156,13 @@ func ParsePlan(inputPath string) (plan *Plan, err error) {
 			err = eb.Build().Str("input", inputPath).Str("field", fieldNamesString(field)).Errorf("marshallgen: non-`_` field missing `lw:` tag")
 			return
 		}
-		var membership, section, column string
-		var flags FieldFlags
-		membership, section, column, flags, err = SplitLW(lwTag)
+		var pt ParsedLWTag
+		pt, err = SplitLW(lwTag)
 		if err != nil {
 			err = eb.Build().Str("tag", lwTag).Errorf("marshallgen: parse lw tag: %w", err)
 			return
 		}
+		membership, section, column, flags := pt.Membership, pt.Section, pt.Column, pt.Flags
 
 		if len(field.Names) != 1 {
 			err = eb.Build().Str("input", inputPath).Errorf("marshallgen: multi-name or anonymous struct field forbidden — declare one field per line")
@@ -349,6 +348,16 @@ func stripQuotes(s string) (out string) {
 	return
 }
 
+// ParsedLWTag is the structured result of parsing an `lw:` tag value.
+// Returned by SplitLW; consumed by ParsePlan and the sibling
+// marshallreflect.buildPlan.
+type ParsedLWTag struct {
+	Membership string
+	Section    string
+	Column     string
+	Flags      FieldFlags
+}
+
 // SplitLW parses a value of the form
 //
 //	<membership>[,<section>[:<column>]][,<flag>][,<flag>…]
@@ -357,16 +366,16 @@ func stripQuotes(s string) (out string) {
 // values; unknown flag tokens are an error. Exported so the sibling
 // marshallreflect package can reuse the grammar without duplicating
 // the parser.
-func SplitLW(tag string) (membership, section, column string, flags FieldFlags, err error) {
+func SplitLW(tag string) (out ParsedLWTag, err error) {
 	parts := strings.Split(tag, ",")
-	membership = strings.TrimSpace(parts[0])
+	out.Membership = strings.TrimSpace(parts[0])
 	if len(parts) >= 2 {
 		s := strings.TrimSpace(parts[1])
 		if colonIdx := strings.IndexByte(s, ':'); colonIdx >= 0 {
-			section = s[:colonIdx]
-			column = s[colonIdx+1:]
+			out.Section = s[:colonIdx]
+			out.Column = s[colonIdx+1:]
 		} else {
-			section = s
+			out.Section = s
 		}
 	}
 	if len(parts) < 3 {
@@ -383,12 +392,12 @@ func SplitLW(tag string) (membership, section, column string, flags FieldFlags, 
 			val := token[eq+1:]
 			switch key {
 			case "const":
-				if flags.HasConst {
+				if out.Flags.HasConst {
 					err = eb.Build().Str("flag", key).Errorf("flag declared twice")
 					return
 				}
-				flags.HasConst = true
-				flags.ConstValue = val
+				out.Flags.HasConst = true
+				out.Flags.ConstValue = val
 			default:
 				err = eb.Build().Str("flag", key).Errorf("unknown key=value flag (recognised: const=<value>)")
 				return
@@ -397,23 +406,23 @@ func SplitLW(tag string) (membership, section, column string, flags FieldFlags, 
 		}
 		switch token {
 		case "unit":
-			if flags.Unit {
+			if out.Flags.Unit {
 				err = eb.Build().Str("flag", token).Errorf("flag declared twice")
 				return
 			}
-			flags.Unit = true
+			out.Flags.Unit = true
 		case "explode":
-			if flags.Explode {
+			if out.Flags.Explode {
 				err = eb.Build().Str("flag", token).Errorf("flag declared twice")
 				return
 			}
-			flags.Explode = true
+			out.Flags.Explode = true
 		case "verbatim":
-			if flags.Verbatim {
+			if out.Flags.Verbatim {
 				err = eb.Build().Str("flag", token).Errorf("flag declared twice")
 				return
 			}
-			flags.Verbatim = true
+			out.Flags.Verbatim = true
 		default:
 			err = eb.Build().Str("flag", token).Errorf("unknown flag token (recognised: unit, explode, verbatim, const=<value>)")
 			return
