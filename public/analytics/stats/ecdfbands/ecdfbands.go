@@ -1,0 +1,199 @@
+//go:build llm_generated_opus47
+
+package ecdfbands
+
+import (
+	"math"
+
+	"github.com/stergiotis/boxer/public/observability/eh"
+)
+
+// SampleBand bundles a finite-sample exact simultaneous (1-α)·100%
+// confidence band on the CDF computed from an iid sorted sample.
+// The band is consumable as a step function: between adjacent order
+// statistics Xs[i] and Xs[i+1], F is bounded by LowerCDF[i] and
+// UpperCDF[i].
+//
+// Fields:
+//
+//   - Xs        — the sorted input sample, echoed for convenience.
+//   - LowerCDF  — length-n band lower edges.
+//   - UpperCDF  — length-n band upper edges.
+//   - Method    — band family used.
+//   - Alpha     — nominal complement-of-coverage.
+//   - CritC     — critical value c that the inversion produced; useful
+//     diagnostic when reasoning about band shape or comparing methods.
+type SampleBand struct {
+	Xs       []float64
+	LowerCDF []float64
+	UpperCDF []float64
+	Method   BandMethodE
+	Alpha    float64
+	CritC    float64
+}
+
+// BandsForSample computes the simultaneous (1-α)·100% confidence band
+// on F using the given band method. The input sorted slice must be
+// non-decreasing; the method enumerates the band family
+// (Berk-Jones, DKW, equal-precision, higher-criticism).
+//
+// The crossing-probability engine is dispatched by CrossingAlgorithmAuto
+// — Steck-Noé for small n (≤ steckN), Moscovich-Nadler above.
+//
+// Allocates fresh slices for SampleBand.LowerCDF / UpperCDF; the
+// returned Xs slice is a copy of sorted (mutating the input post-call
+// will not corrupt the returned band).
+func BandsForSample(sorted []float64, alpha float64, method BandMethodE) (b SampleBand, err error) {
+	n := len(sorted)
+	if n == 0 {
+		err = eh.Errorf("empty sample")
+		return
+	}
+	if err = validateSorted(sorted); err != nil {
+		return
+	}
+	c, lower, upper, err := criticalValueAndBands(n, alpha, method, CrossingAlgorithmAuto)
+	if err != nil {
+		return
+	}
+	b.Xs = append([]float64(nil), sorted...)
+	b.LowerCDF = lower
+	b.UpperCDF = upper
+	b.Method = method
+	b.Alpha = alpha
+	b.CritC = c
+	return
+}
+
+// GridBand bundles a simultaneous confidence band evaluated at an
+// explicit set of x positions where the empirical CDF value F_n is
+// known — the streaming-friendly counterpart to SampleBand. The
+// interpretation is identical: at each xs[i], F(xs[i]) is contained
+// in [LowerCDF[i], UpperCDF[i]] with simultaneous (1-α)·100% coverage.
+//
+// Fields:
+//
+//   - Xs        — caller-supplied grid positions (echoed for convenience).
+//   - LowerCDF  — band lower edges, length len(Xs).
+//   - UpperCDF  — band upper edges, length len(Xs).
+//   - Method    — band family used.
+//   - Alpha     — nominal complement-of-coverage.
+//   - N         — sample size on which F_n was computed.
+//   - CritC     — critical value c that the inversion produced.
+type GridBand struct {
+	Xs       []float64
+	LowerCDF []float64
+	UpperCDF []float64
+	Method   BandMethodE
+	Alpha    float64
+	N        int
+	CritC    float64
+}
+
+// BandsForGrid evaluates the simultaneous confidence band at user-
+// supplied x positions where the empirical CDF value F_n is known.
+// This is the streaming-friendly entry point: callers holding a
+// t-digest (or any other ECDF estimator) at sample size n compute
+// F_n at a fixed grid of x values and let BandsForGrid expand each
+// to a band on F.
+//
+// Inputs:
+//
+//   - xs    — grid positions, monotone non-decreasing. Not required
+//     to coincide with any observed value.
+//   - fnAt  — F_n(xs[i]) ∈ [0, 1], monotone non-decreasing.
+//   - n     — total sample size on which F_n was computed.
+//   - alpha — desired confidence complement.
+//   - method — band family.
+//
+// The returned GridBand's LowerCDF / UpperCDF have length len(xs).
+// For grid points where F_n is in (0, 1), the band is the per-p
+// band of the chosen family at the inverted critical value c. For
+// F_n == 0 the band lower edge is 0 and the upper edge is the
+// family's "rank-zero" tail bound; for F_n == 1 the lower edge is
+// the family's "rank-n" tail bound and the upper edge is 1.
+func BandsForGrid(xs, fnAt []float64, n int, alpha float64, method BandMethodE) (b GridBand, err error) {
+	if len(xs) != len(fnAt) {
+		err = eh.Errorf("xs and fnAt length mismatch (%d vs %d)", len(xs), len(fnAt))
+		return
+	}
+	if n <= 0 {
+		err = eh.Errorf("n must be positive, got %d", n)
+		return
+	}
+	for i, v := range fnAt {
+		if math.IsNaN(v) || v < 0 || v > 1 {
+			err = eh.Errorf("fnAt[%d] out of [0,1]: %v", i, v)
+			return
+		}
+		if i > 0 && v < fnAt[i-1] {
+			err = eh.Errorf("fnAt not monotone at i=%d (%v < %v)", i, v, fnAt[i-1])
+			return
+		}
+	}
+	c, _, _, err := criticalValueAndBands(n, alpha, method, CrossingAlgorithmAuto)
+	if err != nil {
+		return
+	}
+
+	family := bandFamilyDispatch(method)
+	if family == nil {
+		err = eh.Errorf("unknown BandMethodE %d", method)
+		return
+	}
+
+	lower := make([]float64, len(xs))
+	upper := make([]float64, len(xs))
+	for i, p := range fnAt {
+		lo, hi := family.bandAtP(n, c, p)
+		lower[i] = lo
+		upper[i] = hi
+	}
+	b.Xs = append([]float64(nil), xs...)
+	b.LowerCDF = lower
+	b.UpperCDF = upper
+	b.Method = method
+	b.Alpha = alpha
+	b.N = n
+	b.CritC = c
+	return
+}
+
+// QuantileBoundaries returns the raw per-rank band edges
+// (lower[i], upper[i]) for the given (n, α, method). lower[i] /
+// upper[i] is the simultaneous (1-α)·100% interval on U_{(i+1)} —
+// the (i+1)-th order statistic of n iid Uniform(0, 1) draws under H0.
+//
+// This is the low-level entry point; callers wanting CDF-axis bands
+// for visualisation should prefer BandsForSample / BandsForGrid.
+func QuantileBoundaries(n int, alpha float64, method BandMethodE) (lower, upper []float64, err error) {
+	_, lower, upper, err = criticalValueAndBands(n, alpha, method, CrossingAlgorithmAuto)
+	return
+}
+
+// CriticalValue returns just the inverted critical value c for the
+// given (n, α, method) — the diagnostic value driving each family's
+// band geometry. Useful when comparing band methods at the same
+// nominal coverage.
+func CriticalValue(n int, alpha float64, method BandMethodE) (c float64, err error) {
+	c, _, _, err = criticalValueAndBands(n, alpha, method, CrossingAlgorithmAuto)
+	return
+}
+
+
+// validateSorted checks the non-decreasing invariant on a sample
+// slice. NaN values are rejected. Callers should sort before
+// calling BandsForSample — this routine does not sort in place.
+func validateSorted(sorted []float64) (err error) {
+	for i, x := range sorted {
+		if math.IsNaN(x) {
+			err = eh.Errorf("NaN in sample at i=%d", i)
+			return
+		}
+		if i > 0 && x < sorted[i-1] {
+			err = eh.Errorf("sample not sorted at i=%d (%v < %v)", i, x, sorted[i-1])
+			return
+		}
+	}
+	return
+}
