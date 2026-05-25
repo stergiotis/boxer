@@ -328,12 +328,21 @@ func Apply(ctx *cli.Context) (err error) {
 }
 
 func applyWriter(ctx *cli.Context) (err error) {
+	// Resolve format: prefer the CLI/env-bound flag value, fall back
+	// to LogFormat.Get() when the flag is absent from the app. A
+	// non-empty ctx.String reliably means the flag is present (no
+	// allowed value is the empty string), so an empty result here
+	// distinguishes "flag not on app" from "flag on app, defaulted".
+	// This lets smaller mains wire Before: logging.Apply without
+	// having to also list LoggingFlags. urfave/cli v2 runs
+	// App.Before before flag Actions (command.go:215-226 in v2.27.7),
+	// so the categorial Action inside env.CategorialStringVar.AsCliFlag
+	// fires too late to catch invalid CLI values before Apply runs —
+	// we re-validate here.
 	format := ctx.String("logFormat")
-	// Validate up-front: urfave/cli v2 runs App.Before before flag
-	// Actions (command.go:215-226 in v2.27.7), so the categorial
-	// Action inside env.CategorialStringVar.AsCliFlag fires too late
-	// to catch invalid values before Apply runs. We re-check here.
-	if !LogFormat.IsAllowed(format) {
+	if format == "" {
+		format = LogFormat.Get()
+	} else if !LogFormat.IsAllowed(format) {
 		return eb.Build().Str("format", format).Strs("allowed", LogFormat.Allowed()).
 			Errorf("invalid --logFormat value")
 	}
@@ -378,8 +387,11 @@ func applyWriter(ctx *cli.Context) (err error) {
 }
 
 func applyLevel(ctx *cli.Context) (err error) {
+	// See applyWriter for the empty-string fallback rationale.
 	level := ctx.String("logLevel")
-	if !LogLevel.IsAllowed(level) {
+	if level == "" {
+		level = LogLevel.Get()
+	} else if !LogLevel.IsAllowed(level) {
 		return eb.Build().Str("level", level).Strs("allowed", LogLevel.Allowed()).
 			Errorf("invalid --logLevel value")
 	}
