@@ -115,7 +115,8 @@ fi
 step_begin "entry-points"
 # Enforces CODINGSTANDARDS.md "Entry Points": every `package main`
 # discovered under ./... must import github.com/urfave/cli/v2 and
-# reference both logging.SetupZeroLog and vcs.BuildVersionInfo.
+# reference both logging.Apply (wired as cli.App.Before) and
+# vcs.BuildVersionInfo.
 # --strict makes the audit fail CI on any non-conformant main.
 # --baseline points at a file listing grandfathered packages (empty
 # in boxer today; the mechanism exists for parity with pebble2impl's

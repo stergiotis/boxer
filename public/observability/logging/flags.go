@@ -297,132 +297,171 @@ var LoggingFlags = []cli.Flag{
 	LogVcsRevisionOnStart.AsCliFlag(),
 	LogModuleInfoOnStart.AsCliFlag(),
 	LogCorrelationId.AsCliFlag(),
-	LogLevel.AsCliFlag(env.WithStringAction(func(context *cli.Context, s string) error {
-		var lvl zerolog.Level
-		switch s {
-		case "trace":
-			lvl = zerolog.TraceLevel
-		case "debug":
-			lvl = zerolog.DebugLevel
-		case "info":
-			lvl = zerolog.InfoLevel
-		case "warn":
-			lvl = zerolog.WarnLevel
-		case "error":
-			lvl = zerolog.ErrorLevel
-		case "fatal":
-			lvl = zerolog.FatalLevel
-		case "panic":
-			lvl = zerolog.PanicLevel
-		default:
-			// Defense-in-depth: categorial validation should have
-			// rejected this upstream. A reachable default branch
-			// signals Allowed/switch drift, not user error — the
-			// zero-value zerolog.DebugLevel would otherwise silently
-			// take effect.
-			return eb.Build().Str("level", s).Errorf("unhandled log level (Allowed/switch drift)")
-		}
-		zerolog.SetGlobalLevel(lvl)
-		return nil
-	})),
-	LogFormat.AsCliFlag(env.WithStringAction(func(context *cli.Context, s string) error {
-		logFile := context.String("logFile")
-		var w *os.File
-		if logFile == "" || logFile == "-" {
-			w = os.Stderr
-		} else {
-			var err error
-			w, err = os.OpenFile(logFile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o666)
-			if err != nil {
-				return eb.Build().Str("logFile", logFile).Errorf("unable to open log file: %w", err)
-			}
-		}
+	LogLevel.AsCliFlag(),
+	LogFormat.AsCliFlag(),
+}
 
-		var err error
-		switch s {
-		case "default":
-			break
-		case "console":
-			err = SetupConsoleLogger(w)
-		case "diag":
-			err = SetupCborDiagLogger(w)
-		case "godump":
-			err = SetupGoDumpLogger(w)
-		case "json":
-			err = SetupJsonLogger(w)
-		case "json-indent":
-			err = SetupJsonIndentLogger(w)
-		case "cbor":
-			checkZeroLogCborBuild()
-			log.Logger = log.Output(w)
-		default:
-			// Defense-in-depth: see LogLevel default arm above.
-			return eb.Build().Str("format", s).Errorf("unhandled log format (Allowed/switch drift)")
-		}
-		if context.Bool("logCaller") {
-			log.Logger = log.Logger.With().Caller().Logger()
-		}
+// Apply configures zerolog from the parsed cli.Context. Wire it as
+// cli.App.Before so it runs for every invocation regardless of which
+// flags the user supplied — flag-level Action closures only fire when
+// the flag is explicitly set, which silently swallowed startup-info
+// logging before this refactor.
+//
+// Order of effects: writer → global level → caller frame → correlation
+// id → "application startup" record. The startup record is emitted
+// only when at least one of the host/pid/args/vcs/module flags is set.
+func Apply(ctx *cli.Context) (err error) {
+	if err = applyWriter(ctx); err != nil {
+		return
+	}
+	if err = applyLevel(ctx); err != nil {
+		return
+	}
+	if ctx.Bool("logCaller") {
+		log.Logger = log.Logger.With().Caller().Logger()
+	}
+	applyCorrelationId(ctx)
+	if err = emitStartupRecord(ctx); err != nil {
+		return
+	}
+	return
+}
 
-		{
-			d := zerolog.Dict()
-			b := false
+func applyWriter(ctx *cli.Context) (err error) {
+	format := ctx.String("logFormat")
+	// Validate up-front: urfave/cli v2 runs App.Before before flag
+	// Actions (command.go:215-226 in v2.27.7), so the categorial
+	// Action inside env.CategorialStringVar.AsCliFlag fires too late
+	// to catch invalid values before Apply runs. We re-check here.
+	if !LogFormat.IsAllowed(format) {
+		return eb.Build().Str("format", format).Strs("allowed", LogFormat.Allowed()).
+			Errorf("invalid --logFormat value")
+	}
 
-			if context.IsSet("logCorrelationId") {
-				runInstanceId := context.String("logCorrelationId")
-				if runInstanceId == "" {
-					runInstanceId = gonanoid.Must(21)
-				}
-				d = d.Str("correlationId", runInstanceId)
-				b = true
-			}
-			if b {
-				log.Logger = log.Logger.With().Dict("boxer", d).Logger()
-			}
-		}
-		{
-			o := zerolog.Dict()
-			b := false
-			if context.Bool("logOsHostOnStart") {
-				var host string
-				host, err = os.Hostname()
-				if err != nil {
-					log.Panic().Err(err).Msg("unable to use -logOsHostOnStart: unable to get os host")
-				}
-				o = o.Str("host", host)
-				b = true
-			}
-			if context.Bool("logOsPidOnStart") {
-				pid := os.Getpid()
-				o = o.Int("pid", pid)
-				b = true
-			}
-			if context.Bool("logOsArgsOnStart") {
-				o = o.Strs("args", os.Args)
-				b = true
-			}
-			if context.Bool("logVcsRevisionOnStart") {
-				var rev string
-				var mod bool
-				rev, mod, err = vcs.GetVcsRevision()
-				if err != nil {
-					log.Panic().Err(err).Msg("unable to use -logVcsRevisionOnStart: unable to get vcs revision")
-				}
-				o = o.Str("vcsRevision", rev).Bool("vcsModified", mod)
-			}
-			if context.Bool("logModuleInfoOnStart") {
-				mod := vcs.ModuleInfo()
-				if mod == vcs.NoBuildInfo {
-					log.Panic().Msg("unable to use -logModuleInfoOnStartup: no build information available")
-				}
-				o = o.Str("moduleInfo", mod)
-			}
-			if b {
-				log.Info().Dict("boxer", zerolog.Dict().Dict("startup", o)).Msg("application startup")
-			}
-		}
+	logFile := ctx.String("logFile")
+	var w *os.File
+	if logFile == "" || logFile == "-" {
+		w = os.Stderr
+	} else {
+		w, err = os.OpenFile(logFile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o666)
 		if err != nil {
-			return eb.Build().Str("logger", s).Errorf("unable to setup logger: %w", err)
+			return eb.Build().Str("logFile", logFile).Errorf("unable to open log file: %w", err)
 		}
-		return nil
-	})),
+	}
+
+	switch format {
+	case "default":
+		break
+	case "console":
+		err = SetupConsoleLogger(w)
+	case "diag":
+		err = SetupCborDiagLogger(w)
+	case "godump":
+		err = SetupGoDumpLogger(w)
+	case "json":
+		err = SetupJsonLogger(w)
+	case "json-indent":
+		err = SetupJsonIndentLogger(w)
+	case "cbor":
+		checkZeroLogCborBuild()
+		log.Logger = log.Output(w)
+	default:
+		// Defense-in-depth: categorial validation rejects out-of-set
+		// values upstream. A reachable default signals Allowed/switch
+		// drift.
+		return eb.Build().Str("format", format).Errorf("unhandled log format (Allowed/switch drift)")
+	}
+	if err != nil {
+		return eb.Build().Str("logger", format).Errorf("unable to setup logger: %w", err)
+	}
+	return
+}
+
+func applyLevel(ctx *cli.Context) (err error) {
+	level := ctx.String("logLevel")
+	if !LogLevel.IsAllowed(level) {
+		return eb.Build().Str("level", level).Strs("allowed", LogLevel.Allowed()).
+			Errorf("invalid --logLevel value")
+	}
+	var lvl zerolog.Level
+	switch level {
+	case "trace":
+		lvl = zerolog.TraceLevel
+	case "debug":
+		lvl = zerolog.DebugLevel
+	case "info":
+		lvl = zerolog.InfoLevel
+	case "warn":
+		lvl = zerolog.WarnLevel
+	case "error":
+		lvl = zerolog.ErrorLevel
+	case "fatal":
+		lvl = zerolog.FatalLevel
+	case "panic":
+		lvl = zerolog.PanicLevel
+	default:
+		return eb.Build().Str("level", level).Errorf("unhandled log level (Allowed/switch drift)")
+	}
+	zerolog.SetGlobalLevel(lvl)
+	return
+}
+
+func applyCorrelationId(ctx *cli.Context) {
+	if !ctx.IsSet("logCorrelationId") {
+		return
+	}
+	runInstanceId := ctx.String("logCorrelationId")
+	if runInstanceId == "" {
+		runInstanceId = gonanoid.Must(21)
+	}
+	// correlationId is added as a top-level field on the persistent
+	// logger context rather than nested under "boxer". Before the
+	// refactor it shared the "boxer" namespace with the startup
+	// record, which produced a duplicate "boxer" JSON key when both
+	// fired in the same invocation (jsontext rejects duplicates).
+	log.Logger = log.Logger.With().Str("correlationId", runInstanceId).Logger()
+}
+
+func emitStartupRecord(ctx *cli.Context) (err error) {
+	o := zerolog.Dict()
+	any := false
+	if ctx.Bool("logOsHostOnStart") {
+		var host string
+		host, err = os.Hostname()
+		if err != nil {
+			return eb.Build().Errorf("unable to use -logOsHostOnStart: %w", err)
+		}
+		o = o.Str("host", host)
+		any = true
+	}
+	if ctx.Bool("logOsPidOnStart") {
+		o = o.Int("pid", os.Getpid())
+		any = true
+	}
+	if ctx.Bool("logOsArgsOnStart") {
+		o = o.Strs("args", os.Args)
+		any = true
+	}
+	if ctx.Bool("logVcsRevisionOnStart") {
+		var rev string
+		var mod bool
+		rev, mod, err = vcs.GetVcsRevision()
+		if err != nil {
+			return eb.Build().Errorf("unable to use -logVcsRevisionOnStart: %w", err)
+		}
+		o = o.Str("vcsRevision", rev).Bool("vcsModified", mod)
+		any = true
+	}
+	if ctx.Bool("logModuleInfoOnStart") {
+		mod := vcs.ModuleInfo()
+		if mod == vcs.NoBuildInfo {
+			return eb.Build().Errorf("unable to use -logModuleInfoOnStart: no build information available")
+		}
+		o = o.Str("moduleInfo", mod)
+		any = true
+	}
+	if any {
+		log.Info().Dict("boxer", zerolog.Dict().Dict("startup", o)).Msg("application startup")
+	}
+	return
 }

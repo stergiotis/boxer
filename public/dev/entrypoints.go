@@ -19,8 +19,14 @@ import (
 
 const (
 	urfaveCliV2ImportPath = "github.com/urfave/cli/v2"
-	setupZeroLogFQN       = "github.com/stergiotis/boxer/public/observability/logging.SetupZeroLog"
-	buildVersionInfoFQN   = "github.com/stergiotis/boxer/public/observability/vcs.BuildVersionInfo"
+	// loggingApplyFQN is referenced by every main that wires
+	// `Before: logging.Apply` on its cli.App. The logging package
+	// installs eh.MarshalError via init(), so no explicit
+	// setup-call is needed; what mains must do instead is hook
+	// Apply into the cli lifecycle so the writer/level/startup
+	// record actually engage.
+	loggingApplyFQN     = "github.com/stergiotis/boxer/public/observability/logging.Apply"
+	buildVersionInfoFQN = "github.com/stergiotis/boxer/public/observability/vcs.BuildVersionInfo"
 )
 
 func newEntryPointsSubcommand() *cli.Command {
@@ -111,7 +117,7 @@ func entryPointsAction(ctx *cli.Context) (err error) {
 	}
 
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(tw, "ENTRY POINT\tCLI/V2\tSETUPZEROLOG\tBUILDVERSIONINFO\tSTATUS")
+	_, _ = fmt.Fprintln(tw, "ENTRY POINT\tCLI/V2\tLOGGING.APPLY\tBUILDVERSIONINFO\tSTATUS")
 
 	failCount := uint64(0)
 	baselinedCount := uint64(0)
@@ -124,9 +130,9 @@ func entryPointsAction(ctx *cli.Context) (err error) {
 				Msg("package has load errors; audit may be incomplete")
 		}
 		_, cliOK := p.Imports[urfaveCliV2ImportPath]
-		zerologOK := packageCallsFunc(p, setupZeroLogFQN)
+		loggingOK := packageReferencesFunc(p, loggingApplyFQN)
 		vcsOK := packageCallsFunc(p, buildVersionInfoFQN)
-		conformant := cliOK && zerologOK && vcsOK
+		conformant := cliOK && loggingOK && vcsOK
 		_, isBaselined := baseline[p.PkgPath]
 		var status string
 		switch {
@@ -139,7 +145,7 @@ func entryPointsAction(ctx *cli.Context) (err error) {
 			status = "fail"
 			failCount++
 		}
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", p.PkgPath, mark(cliOK), mark(zerologOK), mark(vcsOK), status)
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", p.PkgPath, mark(cliOK), mark(loggingOK), mark(vcsOK), status)
 	}
 	_ = tw.Flush()
 
@@ -212,6 +218,31 @@ func packageCallsFunc(p *packages.Package, fullName string) (found bool) {
 		})
 		if found {
 			return
+		}
+	}
+	return
+}
+
+// packageReferencesFunc reports whether p contains any reference to the
+// function identified by fullName. Unlike packageCallsFunc this matches
+// value uses (e.g. `Before: logging.Apply` — assigning the function
+// value to a struct field, not invoking it), which is the shape mains
+// must use to hook logging.Apply into cli.App.Before.
+func packageReferencesFunc(p *packages.Package, fullName string) (found bool) {
+	if p == nil || p.TypesInfo == nil {
+		return
+	}
+	for ident, obj := range p.TypesInfo.Uses {
+		if found {
+			break
+		}
+		tf, ok := obj.(*types.Func)
+		if !ok {
+			continue
+		}
+		if tf.FullName() == fullName {
+			found = true
+			_ = ident
 		}
 	}
 	return

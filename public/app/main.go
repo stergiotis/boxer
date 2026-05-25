@@ -34,7 +34,6 @@ import (
 )
 
 func mainC() (exitCode int) {
-	logging.SetupZeroLog()
 	defer ph.PanicHandler(2, nil, nil)
 	app := cli.App{
 		Name:                 vcs.ModuleInfo(),
@@ -68,6 +67,7 @@ func mainC() (exitCode int) {
 			code.NewCliCommand(genbuildertest.NewCliCommand()),
 			text2sql.NewCliCommand(),
 		),
+		Before: logging.Apply,
 		After: func(context *cli.Context) error {
 			profiling.ProfilingHandleExit(context)
 			tracing.TracingHandleExit(context)

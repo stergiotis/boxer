@@ -33,7 +33,6 @@ func f() error {
 func TestErrorf(t *testing.T) {
 	buf := &bytes.Buffer{}
 	log.Logger = log.Output(logging2.NewJsonIndentLogger(buf))
-	logging2.SetupZeroLog()
 	err := f()
 	require.Error(t, err)
 	log.Error().Stack().Err(err).Msg("an error")
