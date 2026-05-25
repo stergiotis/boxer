@@ -81,12 +81,24 @@ func crossingProbabilityMoscovich(a, b []float64) (p float64, err error) {
 	scratchPi := make([]float64, n+1)
 	terms := make([]float64, 0, n+1)
 
+	// idxA / idxB amortise the boundary counts across the τ-sweep:
+	// since a, b, and taus are all non-decreasing, the count of
+	// entries ≤ τ_{k-1} grows monotonically with k, so two pointers
+	// give O(n) total across the loop instead of O(n) per step.
+	idxA, idxB := 0, 0
 	for k := 1; k < len(taus); k++ {
 		delta := taus[k] - taus[k-1]
 		// Bounds during (τ_{k-1}, τ_k]: based on which b's and a's
 		// satisfy ≤ τ_{k-1} (the right limit of the previous jump).
-		loK := countLE(b, taus[k-1])
-		hiK := countLE(a, taus[k-1])
+		t := taus[k-1]
+		for idxA < n && a[idxA] <= t {
+			idxA++
+		}
+		for idxB < n && b[idxB] <= t {
+			idxB++
+		}
+		loK := idxB
+		hiK := idxA
 		if hiK < loK {
 			// Infeasible bounds inside the interval — band is broken.
 			p = 0
@@ -179,16 +191,3 @@ func buildBreakpoints(a, b []float64) []float64 {
 	return out
 }
 
-// countLE returns the number of entries in xs that are ≤ t. xs is
-// assumed to be non-decreasing. Implemented as a linear scan rather
-// than slices.BinarySearch because the per-step n is small and the
-// constants of binary search add comparable overhead.
-func countLE(xs []float64, t float64) int {
-	c := 0
-	for _, x := range xs {
-		if x <= t {
-			c++
-		}
-	}
-	return c
-}

@@ -34,29 +34,38 @@ func NewConvergenceDetector(windowSize int, varianceTolerance float64) (inst *Co
 func (inst *ConvergenceDetector) CheckConvergence() (stable bool) {
 	currentVariance := inst.Variance()
 
-	if !inst.isFull {
-		inst.history[inst.head] = currentVariance
-		inst.head++
-		if inst.head >= inst.windowSize {
-			inst.head = 0
-			inst.isFull = true
-		}
-		return false
-	}
-
-	oldVariance := inst.history[inst.head]
-
 	inst.history[inst.head] = currentVariance
 	inst.head = (inst.head + 1) % inst.windowSize
 
-	if currentVariance == 0 {
-		return oldVariance == 0
+	if !inst.isFull {
+		if inst.head == 0 {
+			inst.isFull = true
+		} else {
+			return false
+		}
 	}
 
-	diff := math.Abs(currentVariance - oldVariance)
-	relErr := diff / currentVariance
+	// Stability is declared on the full window's max-min spread,
+	// not the endpoint-to-endpoint diff: a stream with periodic
+	// spikes whose period matches windowSize, or an outlier that
+	// happens to land on a value matching its predecessor 100
+	// steps later, would otherwise fake convergence.
+	minV, maxV := inst.history[0], inst.history[0]
+	for _, v := range inst.history[1:] {
+		if v < minV {
+			minV = v
+		}
+		if v > maxV {
+			maxV = v
+		}
+	}
 
-	return relErr < inst.tolerance
+	if currentVariance == 0 {
+		return maxV == 0
+	}
+
+	spread := maxV - minV
+	return (spread / math.Abs(currentVariance)) < inst.tolerance
 }
 
 func (inst *ConvergenceDetector) Reset() {

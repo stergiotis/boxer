@@ -75,47 +75,27 @@ func (inst *StreamStats) Push(x float64) {
 
 	// Update M4 (uses OLD M2 and M3)
 	valM4 := term1*deltaN*deltaN*(n*n-3*n+3) + 6*deltaN*deltaN*inst.m2 - 4*deltaN*inst.m3
-	inst.kahanAddM4(valM4)
+	kahanAdd(&inst.m4, &inst.cM4, valM4)
 
 	// Update M3 (uses OLD M2)
 	valM3 := term1*deltaN*(n-2) - 3*deltaN*inst.m2
-	inst.kahanAddM3(valM3)
+	kahanAdd(&inst.m3, &inst.cM3, valM3)
 
 	// Update M2
-	inst.kahanAddM2(term1)
+	kahanAdd(&inst.m2, &inst.cM2, term1)
 
 	// Update Mean
-	inst.kahanAddMean(deltaN)
+	kahanAdd(&inst.mean, &inst.cMean, deltaN)
 }
 
-// --- Kahan Helpers ---
-
-func (inst *StreamStats) kahanAddMean(inc float64) {
-	y := inc - inst.cMean
-	t := inst.mean + y
-	inst.cMean = (t - inst.mean) - y
-	inst.mean = t
-}
-
-func (inst *StreamStats) kahanAddM2(inc float64) {
-	y := inc - inst.cM2
-	t := inst.m2 + y
-	inst.cM2 = (t - inst.m2) - y
-	inst.m2 = t
-}
-
-func (inst *StreamStats) kahanAddM3(inc float64) {
-	y := inc - inst.cM3
-	t := inst.m3 + y
-	inst.cM3 = (t - inst.m3) - y
-	inst.m3 = t
-}
-
-func (inst *StreamStats) kahanAddM4(inc float64) {
-	y := inc - inst.cM4
-	t := inst.m4 + y
-	inst.cM4 = (t - inst.m4) - y
-	inst.m4 = t
+// kahanAdd performs compensated summation: *sum += inc, with *comp
+// carrying the rounding error so successive calls retain precision.
+// Inlines to the same code the four hand-written helpers compiled to.
+func kahanAdd(sum, comp *float64, inc float64) {
+	y := inc - *comp
+	t := *sum + y
+	*comp = (t - *sum) - y
+	*sum = t
 }
 
 // --- Bulk Helpers ---
@@ -247,26 +227,25 @@ func (inst *StreamStats) Merge(other *StreamStats) {
 	delta3 := delta2 * delta
 	delta4 := delta2 * delta2
 
-	inst.m4 += other.m4 +
+	// Funnel each Pébay increment through kahanAdd so repeated
+	// merges (MapReduce / stream-chunk shard accumulation) retain
+	// the same drift bound as serial Push.
+	incM4 := other.m4 +
 		delta4*(n1*n2*(n1*n1-n1*n2+n2*n2)/(n*n*n)) +
 		6.0*delta2*(n1*n1*other.m2+n2*n2*inst.m2)/(n*n) +
 		4.0*delta*(n1*other.m3-n2*inst.m3)/n
+	kahanAdd(&inst.m4, &inst.cM4, incM4)
 
-	inst.m3 += other.m3 +
+	incM3 := other.m3 +
 		delta3*(n1*n2*(n1-n2)/(n*n)) +
 		3.0*delta*(n1*other.m2-n2*inst.m2)/n
+	kahanAdd(&inst.m3, &inst.cM3, incM3)
 
-	inst.m2 += other.m2 + delta2*(n1*n2/n)
+	kahanAdd(&inst.m2, &inst.cM2, other.m2+delta2*(n1*n2/n))
 
-	inst.mean += delta * (n2 / n)
+	kahanAdd(&inst.mean, &inst.cMean, delta*(n2/n))
 
 	inst.n += other.n
-
-	// Reset Kahan compensations (not valid across merged streams)
-	inst.cMean = 0
-	inst.cM2 = 0
-	inst.cM3 = 0
-	inst.cM4 = 0
 }
 
 // IsMeanPrecise returns true if the 95% confidence interval of the mean

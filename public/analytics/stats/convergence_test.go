@@ -10,7 +10,13 @@ import (
 func TestConvergence(t *testing.T) {
 	// Scenario:
 	// We use a window of 100 samples to ensure we don't stop on a short lucky streak.
-	detector := NewConvergenceDetector(100, 0.000001)
+	// Tolerance is set to 0.5%: the natural relative spread of the running variance
+	// estimate over a 100-sample window for Normal(σ=10) at n≈30k sits around that
+	// scale, so this exercises actual convergence rather than relying on point-to-
+	// point coincidence at the window endpoints (the original 1e-6 was unreachable
+	// under the correct max-min-spread detector but happened to pass the previous
+	// buggy endpoint-only comparison).
+	detector := NewConvergenceDetector(100, 0.005)
 
 	// Source: Normal distribution (Mean=50, StdDev=10)
 	// Theoretically, the sample StdDev should converge to 10.0.
@@ -20,7 +26,7 @@ func TestConvergence(t *testing.T) {
 	targetStdDev := 10.0
 
 	var stabilizedAt int
-	maxIterations := 10000
+	maxIterations := 100000
 
 	fmt.Println("Step | Current Mean | Current StdDev | Status")
 	fmt.Println("-----|--------------|----------------|-------")

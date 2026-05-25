@@ -2,6 +2,8 @@
 
 package ecdfbands
 
+import "math"
+
 // BandMethodE selects the test statistic whose acceptance region
 // defines the simultaneous confidence band. Each value names a
 // peer-reviewed band family; the inversion machinery in invert.go
@@ -99,4 +101,16 @@ func bandFamilyDispatch(method BandMethodE) bandFamilyI {
 	default:
 		return nil
 	}
+}
+
+// varianceWeightedEdge: ε-strip weighted by √(p(1-p)/n), used by both
+// the Stepanova-Wang equal-precision band and the Donoho-Jin higher-
+// criticism band. Both families differ only in which p-values they
+// apply this edge to (EP trims [η, 1-η]; HC applies it everywhere
+// except the degenerate p ∈ {0, 1} endpoints).
+func varianceWeightedEdge(n int, c, p float64) (lo, hi float64) {
+	w := c * math.Sqrt(p*(1-p)) / math.Sqrt(float64(n))
+	lo = math.Max(0, p-w)
+	hi = math.Min(1, p+w)
+	return
 }

@@ -2,10 +2,6 @@
 
 package ecdfbands
 
-import (
-	"math"
-)
-
 // higherCriticismFamily implements the Donoho & Jin (2004)
 // higher-criticism statistic, restricted to the upper tail (positive
 // deviations only — the symmetric two-sided variant is used here for
@@ -34,7 +30,6 @@ type higherCriticismFamily struct{}
 func (higherCriticismFamily) name() string { return "highercriticism" }
 
 func (higherCriticismFamily) boundaries(n int, c float64, lower, upper []float64) {
-	sqrtN := math.Sqrt(float64(n))
 	for i := range n {
 		p := float64(i+1) / float64(n)
 		var lo, hi float64
@@ -46,9 +41,7 @@ func (higherCriticismFamily) boundaries(n int, c float64, lower, upper []float64
 			lo = 0
 			hi = 1
 		} else {
-			w := c * math.Sqrt(p*(1-p)) / sqrtN
-			lo = math.Max(0, p-w)
-			hi = math.Min(1, p+w)
+			lo, hi = varianceWeightedEdge(n, c, p)
 		}
 		lower[i] = lo
 		upper[i] = hi
@@ -66,9 +59,7 @@ func (higherCriticismFamily) bandAtP(n int, c, p float64) (lo, hi float64) {
 		hi = 1
 		return
 	}
-	w := c * math.Sqrt(p*(1-p)) / math.Sqrt(float64(n))
-	lo = math.Max(0, p-w)
-	hi = math.Min(1, p+w)
+	lo, hi = varianceWeightedEdge(n, c, p)
 	return
 }
 

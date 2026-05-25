@@ -1,3 +1,5 @@
+//go:build llm_generated_opus47
+
 package tdigest
 
 import (
@@ -44,6 +46,15 @@ func (inst *TDigest) UnmarshalJSON(data []byte) (err error) {
 	if len(dto.Means) != len(dto.Weights) {
 		err = eh.Errorf("tdigest: means/weights length mismatch (%d vs %d)", len(dto.Means), len(dto.Weights))
 		return
+	}
+	// Reject NaN/Inf means before the order check: any comparison
+	// against NaN evaluates to false, so a smuggled NaN would slip
+	// past `Means[i] < Means[i-1]` and poison every future quantile.
+	for i, m := range dto.Means {
+		if math.IsNaN(m) || math.IsInf(m, 0) {
+			err = eh.Errorf("tdigest: invalid mean at index %d: %v", i, m)
+			return
+		}
 	}
 	for i := 1; i < len(dto.Means); i++ {
 		if dto.Means[i] < dto.Means[i-1] {
