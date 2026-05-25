@@ -51,7 +51,7 @@ func CreateSchemaTestTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1212
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1257
 
 type InEntityTestTable struct {
 	plainTs1              time.Time
@@ -116,10 +116,19 @@ func (inst *InEntityTestTable) SetActiveSections(idxs []int) {
 // arrowsparserb / arrowrowcbor backends).
 func (inst *InEntityTestTable) Builder() *array.RecordBuilder { return inst.builder }
 
+// InEntityTestTableSectionIndices maps each section name to its section%02dInst slot in
+// the generated entity. Useful for callers that need to compute
+// SetActiveSections inputs from section names — for example, the
+// marshallgen-driven keelson codec wrappers.
+var InEntityTestTableSectionIndices = map[string]int{
+	"geo":  0,
+	"text": 1,
+}
+
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1361
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1434
 
 func (inst *InEntityTestTable) SetId(id0 uint64) *InEntityTestTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -134,7 +143,7 @@ func (inst *InEntityTestTable) SetId(id0 uint64) *InEntityTestTable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1361
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1434
 
 func (inst *InEntityTestTable) SetTimestamp(ts1 time.Time, proc2 []time.Time) *InEntityTestTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -272,6 +281,7 @@ func (inst *InEntityTestTable) RollbackEntity() (err error) {
 		// FIXME find better way to truncate builder
 		inst.builder.NewRecord().Release()
 	}
+	rec.Release()
 	return
 }
 
@@ -557,6 +567,9 @@ func (inst *InEntityTestTableSectionGeoInAttr) EndAttribute() *InEntityTestTable
 	inst.parent.endAttribute()
 	return inst.parent
 }
+func (inst *InEntityTestTableSectionGeoInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
 
 func (inst *InEntityTestTableSectionGeoInAttr) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
@@ -745,6 +758,9 @@ func (inst *InEntityTestTableSectionTextInAttr) AddToCoContainers(wordLength13 u
 	inst.homogenousArrayContainerLength014++
 	return inst
 }
+func (inst *InEntityTestTableSectionTextInAttr) AddToCoContainersP(wordLength13 uint32, words14 string) {
+	inst.AddToCoContainers(wordLength13, words14)
+}
 func (inst *InEntityTestTableSectionTextInAttr) AddMembershipLowCardRef(lr15 uint64) *InEntityTestTableSectionTextInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -833,6 +849,9 @@ func (inst *InEntityTestTableSectionTextInAttr) EndAttribute() *InEntityTestTabl
 	inst.completeAttribute()
 	inst.parent.endAttribute()
 	return inst.parent
+}
+func (inst *InEntityTestTableSectionTextInAttr) EndAttributeP() {
+	inst.EndAttribute()
 }
 
 func (inst *InEntityTestTableSectionTextInAttr) AppendError(err error) {

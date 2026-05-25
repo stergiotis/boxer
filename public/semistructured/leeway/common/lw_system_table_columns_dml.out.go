@@ -64,7 +64,7 @@ func CreateSchemaSystemTableColumns() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1159
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1257
 
 type InEntitySystemTableColumns struct {
 	allocator             memory.Allocator
@@ -73,6 +73,7 @@ type InEntitySystemTableColumns struct {
 	section01Inst         *InEntitySystemTableColumnsSectionSymbol
 	section02Inst         *InEntitySystemTableColumnsSectionText
 	section03Inst         *InEntitySystemTableColumnsSectionU64
+	activeSections        *[4]bool
 	scalarFieldBuilder000 *array.Uint64Builder
 
 	scalarFieldBuilder001 *array.Uint64Builder
@@ -110,10 +111,44 @@ func NewInEntitySystemTableColumns(allocator memory.Allocator, estimatedNumberOf
 	return inst
 }
 
+// SetActiveSections marks which section indices BeginEntity should
+// initialise (skipping beginSection for the rest). Pass nil to clear.
+// The hint is a performance optimisation; sending BeginAttribute to
+// an unmarked section produces empty-list bytes at TransferRecords.
+func (inst *InEntitySystemTableColumns) SetActiveSections(idxs []int) {
+	if idxs == nil {
+		inst.activeSections = nil
+		return
+	}
+	var mask [4]bool
+	for _, i := range idxs {
+		if i >= 0 && i < len(mask) {
+			mask[i] = true
+		}
+	}
+	inst.activeSections = &mask
+}
+
+// Builder exposes the underlying RecordBuilder so callers can apply
+// shim-level hints (e.g. SetActiveFields on the arrowrowbinary /
+// arrowsparserb / arrowrowcbor backends).
+func (inst *InEntitySystemTableColumns) Builder() *array.RecordBuilder { return inst.builder }
+
+// InEntitySystemTableColumnsSectionIndices maps each section name to its section%02dInst slot in
+// the generated entity. Useful for callers that need to compute
+// SetActiveSections inputs from section names — for example, the
+// marshallgen-driven keelson codec wrappers.
+var InEntitySystemTableColumnsSectionIndices = map[string]int{
+	"string": 0,
+	"symbol": 1,
+	"text":   2,
+	"u64":    3,
+}
+
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1275
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1434
 
 func (inst *InEntitySystemTableColumns) SetId(tableHash0 uint64, columnIndex1 uint64) *InEntitySystemTableColumns {
 	if inst.state != runtime.EntityStateInEntity {
@@ -129,7 +164,7 @@ func (inst *InEntitySystemTableColumns) SetId(tableHash0 uint64, columnIndex1 ui
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1275
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1434
 
 func (inst *InEntitySystemTableColumns) SetRouting(tableName2 string) *InEntitySystemTableColumns {
 	if inst.state != runtime.EntityStateInEntity {
@@ -161,6 +196,21 @@ func (inst *InEntitySystemTableColumns) initSections(builder *array.RecordBuilde
 	inst.section03Inst = NewInEntitySystemTableColumnsSectionU64(builder, inst)
 }
 func (inst *InEntitySystemTableColumns) beginSections() {
+	if mask := inst.activeSections; mask != nil {
+		if mask[0] {
+			inst.section00Inst.beginSection()
+		}
+		if mask[1] {
+			inst.section01Inst.beginSection()
+		}
+		if mask[2] {
+			inst.section02Inst.beginSection()
+		}
+		if mask[3] {
+			inst.section03Inst.beginSection()
+		}
+		return
+	}
 	inst.section00Inst.beginSection()
 	inst.section01Inst.beginSection()
 	inst.section02Inst.beginSection()
@@ -284,6 +334,7 @@ func (inst *InEntitySystemTableColumns) RollbackEntity() (err error) {
 		// FIXME find better way to truncate builder
 		inst.builder.NewRecord().Release()
 	}
+	rec.Release()
 	return
 }
 
@@ -573,6 +624,9 @@ func (inst *InEntitySystemTableColumnsSectionStringInAttr) EndAttribute() *InEnt
 	inst.parent.endAttribute()
 	return inst.parent
 }
+func (inst *InEntitySystemTableColumnsSectionStringInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
 
 func (inst *InEntitySystemTableColumnsSectionStringInAttr) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
@@ -837,6 +891,9 @@ func (inst *InEntitySystemTableColumnsSectionSymbolInAttr) EndAttribute() *InEnt
 	inst.completeAttribute()
 	inst.parent.endAttribute()
 	return inst.parent
+}
+func (inst *InEntitySystemTableColumnsSectionSymbolInAttr) EndAttributeP() {
+	inst.EndAttribute()
 }
 
 func (inst *InEntitySystemTableColumnsSectionSymbolInAttr) AppendError(err error) {
@@ -1103,6 +1160,9 @@ func (inst *InEntitySystemTableColumnsSectionTextInAttr) EndAttribute() *InEntit
 	inst.parent.endAttribute()
 	return inst.parent
 }
+func (inst *InEntitySystemTableColumnsSectionTextInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
 
 func (inst *InEntitySystemTableColumnsSectionTextInAttr) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
@@ -1367,6 +1427,9 @@ func (inst *InEntitySystemTableColumnsSectionU64InAttr) EndAttribute() *InEntity
 	inst.completeAttribute()
 	inst.parent.endAttribute()
 	return inst.parent
+}
+func (inst *InEntitySystemTableColumnsSectionU64InAttr) EndAttributeP() {
+	inst.EndAttribute()
 }
 
 func (inst *InEntitySystemTableColumnsSectionU64InAttr) AppendError(err error) {
