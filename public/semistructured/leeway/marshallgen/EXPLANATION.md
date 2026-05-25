@@ -202,8 +202,6 @@ consumer surfaces the need.
 
 ## Further reading
 
-- [ADR-0042: keelson leeway codec SoA generator](../../../../../../doc/adr/0042-keelson-leeway-codec-soa-generator.md)
-- [keelsoncodec target arc — Explanation](../../../../../../doc/explanation/keelsoncodec-target-arc.md)
 - Reference: https://pkg.go.dev/github.com/stergiotis/pebble2impl/src/go/public/boxerstaging/leeway/marshallgen
 - Sibling: `marshallreflect/` — runtime-reflection codec over the same Plan grammar (planned).
 - Wrapper consumer: `keelson/runtime/codec/factswrapper/` — facts target.
