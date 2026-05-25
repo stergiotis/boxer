@@ -73,13 +73,16 @@ func populateJsonEntity(dec *jsontext.Decoder, ent *InEntityJson, hasher hash.Ha
 		var token jsontext.Token
 		token, err = dec.ReadToken()
 		if err != nil {
+			// EOF inside the loop body always means CommitEntity has not
+			// run yet (it lives after the loop), so the builder is in
+			// EntityStateInEntity. Roll back so the next BeginEntity on
+			// the same builder is a valid state transition.
+			_ = ent.RollbackEntity()
 			if errors.Is(err, io.EOF) {
 				return
-			} else {
-				_ = ent.RollbackEntity()
-				err = eb.Build().Int("stackDepth", stack).Int64("offset", dec.InputOffset()).Errorf("unable to parse json input stream: %w", err)
-				return
 			}
+			err = eb.Build().Int("stackDepth", stack).Int64("offset", dec.InputOffset()).Errorf("unable to parse json input stream: %w", err)
+			return
 		}
 		ptr := dec.StackPointer()
 		isKey := false

@@ -35,6 +35,10 @@ func Decode(encoded Base62Num) (num uint64, valid bool) {
 	if !valid {
 		return
 	}
+	if !dec.IsUint64() {
+		valid = false
+		return
+	}
 	num = dec.Uint64()
 	return
 }

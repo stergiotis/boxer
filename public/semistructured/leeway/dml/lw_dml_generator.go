@@ -1713,6 +1713,7 @@ func (inst *GoClassBuilder) ComposeEntityCode(clsNamer gocodegen.GoClassNamerI, 
 		// FIXME find better way to truncate builder
 		inst.builder.NewRecord().Release()
 	}
+	rec.Release()
 	return
 }
 `)

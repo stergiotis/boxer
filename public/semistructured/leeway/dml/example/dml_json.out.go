@@ -56,7 +56,7 @@ func CreateSchemaJson() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1212
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1257
 
 type InEntityJson struct {
 	allocator             memory.Allocator
@@ -121,10 +121,24 @@ func (inst *InEntityJson) SetActiveSections(idxs []int) {
 // arrowsparserb / arrowrowcbor backends).
 func (inst *InEntityJson) Builder() *array.RecordBuilder { return inst.builder }
 
+// InEntityJsonSectionIndices maps each section name to its section%02dInst slot in
+// the generated entity. Useful for callers that need to compute
+// SetActiveSections inputs from section names — for example, the
+// marshallgen-driven keelson codec wrappers.
+var InEntityJsonSectionIndices = map[string]int{
+	"bool":      0,
+	"float64":   1,
+	"int64":     2,
+	"null":      3,
+	"string":    4,
+	"symbol":    5,
+	"undefined": 6,
+}
+
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1361
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1434
 
 func (inst *InEntityJson) SetId(blake3hash0 []byte) *InEntityJson {
 	if inst.state != runtime.EntityStateInEntity {
@@ -340,6 +354,7 @@ func (inst *InEntityJson) RollbackEntity() (err error) {
 		// FIXME find better way to truncate builder
 		inst.builder.NewRecord().Release()
 	}
+	rec.Release()
 	return
 }
 
@@ -561,6 +576,9 @@ func (inst *InEntityJsonSectionBoolInAttr) EndAttribute() *InEntityJsonSectionBo
 	inst.parent.endAttribute()
 	return inst.parent
 }
+func (inst *InEntityJsonSectionBoolInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
 
 func (inst *InEntityJsonSectionBoolInAttr) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
@@ -757,6 +775,9 @@ func (inst *InEntityJsonSectionFloat64InAttr) EndAttribute() *InEntityJsonSectio
 	inst.completeAttribute()
 	inst.parent.endAttribute()
 	return inst.parent
+}
+func (inst *InEntityJsonSectionFloat64InAttr) EndAttributeP() {
+	inst.EndAttribute()
 }
 
 func (inst *InEntityJsonSectionFloat64InAttr) AppendError(err error) {
@@ -955,6 +976,9 @@ func (inst *InEntityJsonSectionInt64InAttr) EndAttribute() *InEntityJsonSectionI
 	inst.parent.endAttribute()
 	return inst.parent
 }
+func (inst *InEntityJsonSectionInt64InAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
 
 func (inst *InEntityJsonSectionInt64InAttr) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
@@ -1141,6 +1165,9 @@ func (inst *InEntityJsonSectionNullInAttr) EndAttribute() *InEntityJsonSectionNu
 	inst.completeAttribute()
 	inst.parent.endAttribute()
 	return inst.parent
+}
+func (inst *InEntityJsonSectionNullInAttr) EndAttributeP() {
+	inst.EndAttribute()
 }
 
 func (inst *InEntityJsonSectionNullInAttr) AppendError(err error) {
@@ -1339,6 +1366,9 @@ func (inst *InEntityJsonSectionStringInAttr) EndAttribute() *InEntityJsonSection
 	inst.parent.endAttribute()
 	return inst.parent
 }
+func (inst *InEntityJsonSectionStringInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
 
 func (inst *InEntityJsonSectionStringInAttr) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
@@ -1536,6 +1566,9 @@ func (inst *InEntityJsonSectionSymbolInAttr) EndAttribute() *InEntityJsonSection
 	inst.parent.endAttribute()
 	return inst.parent
 }
+func (inst *InEntityJsonSectionSymbolInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
 
 func (inst *InEntityJsonSectionSymbolInAttr) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
@@ -1722,6 +1755,9 @@ func (inst *InEntityJsonSectionUndefinedInAttr) EndAttribute() *InEntityJsonSect
 	inst.completeAttribute()
 	inst.parent.endAttribute()
 	return inst.parent
+}
+func (inst *InEntityJsonSectionUndefinedInAttr) EndAttributeP() {
+	inst.EndAttribute()
 }
 
 func (inst *InEntityJsonSectionUndefinedInAttr) AppendError(err error) {

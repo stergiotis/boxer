@@ -20,23 +20,26 @@ func PlanFor[T any]() (plan *marshallgen.Plan, err error) {
 	return
 }
 
-var planCache sync.Map // map[reflect.Type]planEntry
+var planCache sync.Map // map[reflect.Type]*planEntry
 
+// planEntry wraps the (plan, err) result in a sync.OnceValues so concurrent
+// first-touch goroutines collapse onto a single buildPlan call instead of
+// stampeding the reflection path.
 type planEntry struct {
-	plan *marshallgen.Plan
-	err  error
+	once func() (*marshallgen.Plan, error)
 }
 
 func planForType(rt reflect.Type) (plan *marshallgen.Plan, err error) {
 	if cached, ok := planCache.Load(rt); ok {
-		e := cached.(planEntry)
-		plan = e.plan
-		err = e.err
-		return
+		return cached.(*planEntry).once()
 	}
-	plan, err = buildPlan(rt)
-	planCache.Store(rt, planEntry{plan: plan, err: err})
-	return
+	entry := &planEntry{
+		once: sync.OnceValues(func() (*marshallgen.Plan, error) {
+			return buildPlan(rt)
+		}),
+	}
+	actual, _ := planCache.LoadOrStore(rt, entry)
+	return actual.(*planEntry).once()
 }
 
 // buildPlan mirrors marshallgen.ParsePlan's per-field handling but

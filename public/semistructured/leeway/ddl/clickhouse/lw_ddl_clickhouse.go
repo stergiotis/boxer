@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
@@ -197,15 +198,7 @@ func (inst *TechnologySpecificCodeGenerator) GenerateColumnCode(idx int, phy com
 		return
 	}
 
-	_, err = b.WriteRune('"')
-	if err != nil {
-		return
-	}
-	_, err = b.WriteString(phy.String()) // FIXME escaping
-	if err != nil {
-		return
-	}
-	_, err = b.WriteRune('"')
+	_, err = b.WriteString(marshalling.EscapeIdentifier(phy.String()))
 	if err != nil {
 		return
 	}
@@ -251,15 +244,11 @@ func (inst *TechnologySpecificCodeGenerator) GenerateColumnCode(idx int, phy com
 		return
 	}
 	if phy.Comment != "" {
-		_, err = b.WriteString("COMMENT '")
+		_, err = b.WriteString("COMMENT ")
 		if err != nil {
 			return
 		}
-		_, err = b.WriteString(phy.Comment) // FIXME escaping
-		if err != nil {
-			return
-		}
-		_, err = b.WriteRune('\'')
+		_, err = b.WriteString(marshalling.EscapeString(phy.Comment))
 		if err != nil {
 			return
 		}

@@ -59,7 +59,7 @@ func CreateSchemaTesttable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1212
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1257
 
 type InEntityTesttable struct {
 	plainTs1              time.Time
@@ -125,10 +125,22 @@ func (inst *InEntityTesttable) SetActiveSections(idxs []int) {
 // arrowsparserb / arrowrowcbor backends).
 func (inst *InEntityTesttable) Builder() *array.RecordBuilder { return inst.builder }
 
+// InEntityTesttableSectionIndices maps each section name to its section%02dInst slot in
+// the generated entity. Useful for callers that need to compute
+// SetActiveSections inputs from section names — for example, the
+// marshallgen-driven keelson codec wrappers.
+var InEntityTesttableSectionIndices = map[string]int{
+	"bool":    0,
+	"float64": 1,
+	"multi":   2,
+	"special": 3,
+	"string":  4,
+}
+
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1361
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1434
 
 func (inst *InEntityTesttable) SetId(id0 uint64) *InEntityTesttable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -143,7 +155,7 @@ func (inst *InEntityTesttable) SetId(id0 uint64) *InEntityTesttable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1361
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1434
 
 func (inst *InEntityTesttable) SetTimestamp(ts1 time.Time) *InEntityTesttable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -327,6 +339,7 @@ func (inst *InEntityTesttable) RollbackEntity() (err error) {
 		// FIXME find better way to truncate builder
 		inst.builder.NewRecord().Release()
 	}
+	rec.Release()
 	return
 }
 
@@ -548,6 +561,9 @@ func (inst *InEntityTesttableSectionBoolInAttr) EndAttribute() *InEntityTesttabl
 	inst.parent.endAttribute()
 	return inst.parent
 }
+func (inst *InEntityTesttableSectionBoolInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
 
 func (inst *InEntityTesttableSectionBoolInAttr) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
@@ -745,6 +761,9 @@ func (inst *InEntityTesttableSectionFloat64InAttr) EndAttribute() *InEntityTestt
 	inst.parent.endAttribute()
 	return inst.parent
 }
+func (inst *InEntityTesttableSectionFloat64InAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
 
 func (inst *InEntityTesttableSectionFloat64InAttr) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
@@ -925,6 +944,9 @@ func (inst *InEntityTesttableSectionMultiInAttr) AddToCoContainers(vals22 uint32
 	inst.setContainerLength023++
 	return inst
 }
+func (inst *InEntityTesttableSectionMultiInAttr) AddToCoContainersP(vals22 uint32, tags23 uint64) {
+	inst.AddToCoContainers(vals22, tags23)
+}
 func (inst *InEntityTesttableSectionMultiInAttr) AddMembershipMixedLowCardRef(lmr24 uint64, mrhp25 []byte) *InEntityTesttableSectionMultiInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -995,6 +1017,9 @@ func (inst *InEntityTesttableSectionMultiInAttr) EndAttribute() *InEntityTesttab
 	inst.completeAttribute()
 	inst.parent.endAttribute()
 	return inst.parent
+}
+func (inst *InEntityTesttableSectionMultiInAttr) EndAttributeP() {
+	inst.EndAttribute()
 }
 
 func (inst *InEntityTesttableSectionMultiInAttr) AppendError(err error) {
@@ -1171,6 +1196,9 @@ func (inst *InEntityTesttableSectionSpecialInAttr) AddToCoContainers(ary115 uint
 	inst.homogenousArrayContainerLength016++
 	return inst
 }
+func (inst *InEntityTesttableSectionSpecialInAttr) AddToCoContainersP(ary115 uint32, ary216 uint32) {
+	inst.AddToCoContainers(ary115, ary216)
+}
 func (inst *InEntityTesttableSectionSpecialInAttr) AddMembershipMixedLowCardRef(lmr17 uint64, mrhp18 []byte) *InEntityTesttableSectionSpecialInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
@@ -1238,6 +1266,9 @@ func (inst *InEntityTesttableSectionSpecialInAttr) EndAttribute() *InEntityTestt
 	inst.completeAttribute()
 	inst.parent.endAttribute()
 	return inst.parent
+}
+func (inst *InEntityTesttableSectionSpecialInAttr) EndAttributeP() {
+	inst.EndAttribute()
 }
 
 func (inst *InEntityTesttableSectionSpecialInAttr) AppendError(err error) {
@@ -1435,6 +1466,9 @@ func (inst *InEntityTesttableSectionStringInAttr) EndAttribute() *InEntityTestta
 	inst.completeAttribute()
 	inst.parent.endAttribute()
 	return inst.parent
+}
+func (inst *InEntityTesttableSectionStringInAttr) EndAttributeP() {
+	inst.EndAttribute()
 }
 
 func (inst *InEntityTesttableSectionStringInAttr) AppendError(err error) {

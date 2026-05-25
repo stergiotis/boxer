@@ -681,15 +681,93 @@ func (inst *Driver) readPlainScalar(rec arrow.RecordBatch, colIdx int, rowIdx in
 
 // --- Tagged section driving ---
 
+// cardCursor walks one List<Uint64> cardinality column for a single entity,
+// maintaining a running prefix sum across sequential attrIdx values.
+// step(attrIdx) returns (relOff, card) for the current position and
+// advances the cursor. attrIdx must increase monotonically by 1.
+//
+// When inner is nil (card column missing or non-uint64), the cursor falls
+// back to "one element per attribute": each step returns card=1 and relOff
+// equal to the prior sum (so the first call yields relOff=0, the next 1, …),
+// matching the legacy fallback in nonScalarElemRange/memberColElemRange.
+type cardCursor struct {
+	inner       *array.Uint64
+	entityStart int
+	relOff      int
+}
+
+func (inst *Driver) newCardCursor(rec arrow.RecordBatch, cardArrowIdx int, entityIdx int) cardCursor {
+	if cardArrowIdx < 0 {
+		return cardCursor{}
+	}
+	cardEntityStart, _ := inst.listOffsets(rec, cardArrowIdx, entityIdx)
+	cardInner := inst.listInnerArray(rec, cardArrowIdx)
+	u64, _ := cardInner.(*array.Uint64)
+	return cardCursor{
+		inner:       u64,
+		entityStart: cardEntityStart,
+	}
+}
+
+// step returns (relOff, card) at the current position and advances by card.
+// Callers must invoke step exactly once per attrIdx, in increasing order.
+func (c *cardCursor) step(attrIdx int) (relOff, card int) {
+	relOff = c.relOff
+	if c.inner == nil {
+		card = 1
+	} else {
+		card = int(c.inner.Value(c.entityStart + attrIdx))
+	}
+	c.relOff = relOff + card
+	return
+}
+
+// attrCardSlot is the (relOff, card) snapshot a cursor produces for one attrIdx.
+type attrCardSlot struct {
+	relOff int
+	card   int
+}
+
+func cardArrowIdxOrSentinel(cardCols []int) int {
+	if len(cardCols) == 0 {
+		return -1
+	}
+	return cardCols[0]
+}
+
+// buildMemberCursors creates one cursor per entry in sec.memberCardDetails.
+// memberSlots is allocated alongside; reused across attrIdx steps.
+func (inst *Driver) buildMemberCursors(rec arrow.RecordBatch, sec *sectionLayout, entityIdx int) (cursors []cardCursor, slots []attrCardSlot) {
+	n := len(sec.memberCardDetails)
+	if n == 0 {
+		return
+	}
+	cursors = make([]cardCursor, n)
+	slots = make([]attrCardSlot, n)
+	for i, mcd := range sec.memberCardDetails {
+		cursors[i] = inst.newCardCursor(rec, mcd.arrowIdx, entityIdx)
+	}
+	return
+}
+
 func (inst *Driver) driveSection(sink SinkI, rec arrow.RecordBatch, entityIdx int, sIdx int) {
 	sec := &inst.sections[sIdx]
 	nAttrs := inst.sectionAttrCount(rec, entityIdx, sec)
 	sink.BeginSection(sec.name, sec.valueNames, sec.valueTypes, sec.useAspects, nAttrs)
 
+	arrayCur := inst.newCardCursor(rec, cardArrowIdxOrSentinel(sec.arrayCardCols), entityIdx)
+	setCur := inst.newCardCursor(rec, cardArrowIdxOrSentinel(sec.setCardCols), entityIdx)
+	memberCurs, memberSlots := inst.buildMemberCursors(rec, sec, entityIdx)
+
 	for attrIdx := range nAttrs {
 		sink.BeginTaggedValue()
-		inst.emitValueColumns(sink, rec, entityIdx, attrIdx, sec)
-		inst.emitMemberships(sink, rec, entityIdx, attrIdx, sec)
+		arrayRel, arrayCard := arrayCur.step(attrIdx)
+		setRel, setCard := setCur.step(attrIdx)
+		for i := range memberCurs {
+			memberSlots[i].relOff, memberSlots[i].card = memberCurs[i].step(attrIdx)
+		}
+		inst.emitValueColumns(sink, rec, entityIdx, attrIdx, sec, attrCardSlot{arrayRel, arrayCard}, attrCardSlot{setRel, setCard})
+		inst.emitMemberships(sink, rec, entityIdx, attrIdx, sec, memberSlots)
 		err := sink.EndTaggedValue()
 		if err != nil {
 			inst.handleError(err)
@@ -711,16 +789,32 @@ func (inst *Driver) driveCoGroup(sink SinkI, rec arrow.RecordBatch, entityIdx in
 	// Use first section's name for the merged section
 	sink.BeginSection(firstSec.name, group.mergedNames, group.mergedTypes, firstSec.useAspects, nAttrs)
 
+	type secCursors struct {
+		arrayCur cardCursor
+		setCur   cardCursor
+	}
+	perSec := make([]secCursors, len(group.sectionIds))
+	for i, sIdx := range group.sectionIds {
+		sec := &inst.sections[sIdx]
+		perSec[i] = secCursors{
+			arrayCur: inst.newCardCursor(rec, cardArrowIdxOrSentinel(sec.arrayCardCols), entityIdx),
+			setCur:   inst.newCardCursor(rec, cardArrowIdxOrSentinel(sec.setCardCols), entityIdx),
+		}
+	}
+	memberCurs, memberSlots := inst.buildMemberCursors(rec, firstSec, entityIdx)
+
 	for attrIdx := range nAttrs {
 		sink.BeginTaggedValue()
-
-		for _, sIdx := range group.sectionIds {
+		for i, sIdx := range group.sectionIds {
 			sec := &inst.sections[sIdx]
-			inst.emitValueColumns(sink, rec, entityIdx, attrIdx, sec)
+			arrayRel, arrayCard := perSec[i].arrayCur.step(attrIdx)
+			setRel, setCard := perSec[i].setCur.step(attrIdx)
+			inst.emitValueColumns(sink, rec, entityIdx, attrIdx, sec, attrCardSlot{arrayRel, arrayCard}, attrCardSlot{setRel, setCard})
 		}
-
-		inst.emitMemberships(sink, rec, entityIdx, attrIdx, firstSec)
-
+		for i := range memberCurs {
+			memberSlots[i].relOff, memberSlots[i].card = memberCurs[i].step(attrIdx)
+		}
+		inst.emitMemberships(sink, rec, entityIdx, attrIdx, firstSec, memberSlots)
 		err := sink.EndTaggedValue()
 		if err != nil {
 			inst.handleError(err)
@@ -736,7 +830,7 @@ func (inst *Driver) driveCoGroup(sink SinkI, rec arrow.RecordBatch, entityIdx in
 
 // --- Value emission ---
 
-func (inst *Driver) emitValueColumns(sink SinkI, rec arrow.RecordBatch, entityIdx int, attrIdx int, sec *sectionLayout) {
+func (inst *Driver) emitValueColumns(sink SinkI, rec arrow.RecordBatch, entityIdx int, attrIdx int, sec *sectionLayout, arraySlot, setSlot attrCardSlot) {
 	valueFmt := inst.fmts.ValueFormatter
 
 	{ // Scalar columns
@@ -756,8 +850,9 @@ func (inst *Driver) emitValueColumns(sink SinkI, rec arrow.RecordBatch, entityId
 
 	{ // Array columns
 		for _, col := range sec.arrayCols {
-			elemStart, elemEnd := inst.nonScalarElemRange(rec, col.arrowIdx, sec.arrayCardCols, entityIdx, attrIdx)
-			card := elemEnd - elemStart
+			valueEntityStart := inst.listStart(rec, col.arrowIdx, entityIdx)
+			elemStart := valueEntityStart + arraySlot.relOff
+			card := arraySlot.card
 			addr := PhysicalColumnAddr{Index: col.arrowIdx, FullColumnName: rec.ColumnName(col.arrowIdx)}
 			sink.BeginColumn(addr, col.name, col.canonicalType, col.valueSemantics)
 			sink.BeginHomogenousArrayValue(card)
@@ -775,8 +870,9 @@ func (inst *Driver) emitValueColumns(sink SinkI, rec arrow.RecordBatch, entityId
 
 	{ // Set columns
 		for _, col := range sec.setCols {
-			elemStart, elemEnd := inst.nonScalarElemRange(rec, col.arrowIdx, sec.setCardCols, entityIdx, attrIdx)
-			card := elemEnd - elemStart
+			valueEntityStart := inst.listStart(rec, col.arrowIdx, entityIdx)
+			elemStart := valueEntityStart + setSlot.relOff
+			card := setSlot.card
 			addr := PhysicalColumnAddr{Index: col.arrowIdx, FullColumnName: rec.ColumnName(col.arrowIdx)}
 			sink.BeginColumn(addr, col.name, col.canonicalType, col.valueSemantics)
 			sink.BeginSetValue(card)
@@ -795,7 +891,23 @@ func (inst *Driver) emitValueColumns(sink SinkI, rec arrow.RecordBatch, entityId
 
 // --- Membership emission ---
 
-func (inst *Driver) emitMemberships(sink SinkI, rec arrow.RecordBatch, entityIdx int, attrIdx int, sec *sectionLayout) {
+// memberSlotForRole returns the precomputed (relOff, card) for the given
+// membership role by scanning sec.memberCardDetails. Returns (-1, 0) if no
+// matching cardinality column was registered for the role.
+func memberSlotForRole(sec *sectionLayout, memberSlots []attrCardSlot, memberRole common.ColumnRoleE) (slot attrCardSlot, found bool) {
+	expectedCardRole, err := common.GetCardinalityRoleByMembershipRole(memberRole)
+	if err != nil {
+		return
+	}
+	for i, mcd := range sec.memberCardDetails {
+		if mcd.role == expectedCardRole {
+			return memberSlots[i], true
+		}
+	}
+	return
+}
+
+func (inst *Driver) emitMemberships(sink SinkI, rec arrow.RecordBatch, entityIdx int, attrIdx int, sec *sectionLayout, memberSlots []attrCardSlot) {
 	if len(sec.memberCols) == 0 {
 		sink.BeginTags(0)
 		sink.EndTags()
@@ -815,15 +927,25 @@ func (inst *Driver) emitMemberships(sink SinkI, rec arrow.RecordBatch, entityIdx
 		return
 	}
 
-	// Count total tags across all membership role cardinalities
+	// Total tags across all membership role cardinalities — use precomputed
+	// slot cards (avoids re-reading the Uint64 inner array).
 	totalTags := 0
-	for _, mcd := range sec.memberCardDetails {
-		totalTags += inst.readCardForAttr(rec, mcd.arrowIdx, entityIdx, attrIdx)
+	for _, s := range memberSlots {
+		totalTags += s.card
 	}
 	sink.BeginTags(totalTags)
 
 	for _, mc := range sec.memberCols {
-		mbrStart, mbrEnd := inst.memberColElemRange(rec, sec, mc, entityIdx, attrIdx)
+		entityStart := inst.listStart(rec, mc.arrowIdx, entityIdx)
+		slot, found := memberSlotForRole(sec, memberSlots, mc.role)
+		var mbrStart, mbrEnd int
+		if !found {
+			mbrStart = entityStart + attrIdx
+			mbrEnd = mbrStart + 1
+		} else {
+			mbrStart = entityStart + slot.relOff
+			mbrEnd = mbrStart + slot.card
+		}
 		for flatIdx := mbrStart; flatIdx < mbrEnd; flatIdx++ {
 			inst.emitOneMembership(sink, rec, mc, flatIdx)
 		}
@@ -966,100 +1088,6 @@ func (inst *Driver) readListInnerBytes(rec arrow.RecordBatch, arrowColIdx int, f
 }
 
 // --- Cardinality computation ---
-
-func (inst *Driver) readCardForAttr(rec arrow.RecordBatch, cardArrowIdx int, entityIdx int, attrIdx int) (card int) {
-	cardEntityStart, cardEntityEnd := inst.listOffsets(rec, cardArrowIdx, entityIdx)
-	if cardEntityStart+attrIdx >= cardEntityEnd {
-		return
-	}
-	cardInner := inst.listInnerArray(rec, cardArrowIdx)
-	uint64Inner, ok := cardInner.(*array.Uint64)
-	if !ok {
-		card = 1
-		return
-	}
-	card = int(uint64Inner.Value(cardEntityStart + attrIdx))
-	return
-}
-
-func (inst *Driver) nonScalarElemRange(rec arrow.RecordBatch, valueArrowIdx int, cardCols []int, entityIdx int, attrIdx int) (elemStart int, elemEnd int) {
-	if len(cardCols) == 0 {
-		start := inst.listStart(rec, valueArrowIdx, entityIdx)
-		elemStart = start + attrIdx
-		elemEnd = elemStart + 1
-		return
-	}
-
-	valueEntityStart := inst.listStart(rec, valueArrowIdx, entityIdx)
-	cardArrowIdx := cardCols[0]
-	cardEntityStart, _ := inst.listOffsets(rec, cardArrowIdx, entityIdx)
-	cardInner := inst.listInnerArray(rec, cardArrowIdx)
-
-	uint64Inner, ok := cardInner.(*array.Uint64)
-	if !ok {
-		elemStart = valueEntityStart + attrIdx
-		elemEnd = elemStart + 1
-		return
-	}
-
-	var relOffset int
-	for a := 0; a < attrIdx; a++ {
-		relOffset += int(uint64Inner.Value(cardEntityStart + a))
-	}
-	card := int(uint64Inner.Value(cardEntityStart + attrIdx))
-
-	elemStart = valueEntityStart + relOffset
-	elemEnd = valueEntityStart + relOffset + card
-	return
-}
-
-func (inst *Driver) memberColElemRange(rec arrow.RecordBatch, sec *sectionLayout, mc memberColLayout, entityIdx int, attrIdx int) (mbrStart int, mbrEnd int) {
-	entityStart := inst.listStart(rec, mc.arrowIdx, entityIdx)
-
-	cardArrowIdx := inst.findMemberCardCol(sec, mc.role)
-	if cardArrowIdx < 0 {
-		mbrStart = entityStart + attrIdx
-		mbrEnd = mbrStart + 1
-		return
-	}
-
-	cardEntityStart, _ := inst.listOffsets(rec, cardArrowIdx, entityIdx)
-	cardInner := inst.listInnerArray(rec, cardArrowIdx)
-	uint64Inner, ok := cardInner.(*array.Uint64)
-	if !ok {
-		mbrStart = entityStart + attrIdx
-		mbrEnd = mbrStart + 1
-		return
-	}
-
-	var relOffset int
-	for a := 0; a < attrIdx; a++ {
-		relOffset += int(uint64Inner.Value(cardEntityStart + a))
-	}
-	card := int(uint64Inner.Value(cardEntityStart + attrIdx))
-
-	mbrStart = entityStart + relOffset
-	mbrEnd = entityStart + relOffset + card
-	return
-}
-
-func (inst *Driver) findMemberCardCol(sec *sectionLayout, memberRole common.ColumnRoleE) (arrowIdx int) {
-	// Canonical mapping handles the asymmetric pairs: mrhp shares lmrcard,
-	// mvhp shares lmvcard. The naive role+"card" suffix lookup would miss
-	// those and the driver would fall back to "1 item per attr", causing
-	// param-half items to leak into the wrong attribute (e.g. attr 1's
-	// "(region=eu-west-1)" rendering on attr 0).
-	expectedCardRole, err := common.GetCardinalityRoleByMembershipRole(memberRole)
-	if err != nil {
-		return -1
-	}
-	for _, mcd := range sec.memberCardDetails {
-		if mcd.role == expectedCardRole {
-			return mcd.arrowIdx
-		}
-	}
-	return -1
-}
 
 func (inst *Driver) sectionAttrCount(rec arrow.RecordBatch, entityIdx int, sec *sectionLayout) (n int) {
 	if len(sec.scalarCols) > 0 {
