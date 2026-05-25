@@ -324,6 +324,48 @@ func TestTimeAxisLayout_MapToScreen(t *testing.T) {
 	}
 }
 
+// TestTimeTicks_ThousandYearSpan_NoDurationSaturation guards against the
+// time.Duration saturation bug: a span wider than ~292 years used to
+// collapse the step picker to the saturated MaxDuration and pile all
+// post-292y ticks at axisEndPx via Sub-based MapToScreen. Asserts the
+// step is multi-decade (≥ 25y), the ticks spread monotonically across
+// the panel, and the last tick lands near axisEndPx instead of every
+// late tick stacking there.
+func TestTimeTicks_ThousandYearSpan_NoDurationSaturation(t *testing.T) {
+	dataMin := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	dataMax := dataMin.AddDate(1000, 0, 0)
+	layout := TimeTicks(dataMin, dataMax, TimeTickOptions{
+		PanelWidthPx:    1024,
+		TargetSpacingPx: 50,
+	})
+
+	if layout.Step.Unit != TimeStepUnitYear || layout.Step.Count < 25 {
+		t.Errorf("step: got %+v, want Year>=25 (saturation bug picks Year<25)", layout.Step)
+	}
+	if n := len(layout.TickValues); n < 10 || n > 60 {
+		t.Errorf("tick count: got %d, want roughly 1000/step (10-60)", n)
+	}
+
+	var prevX float64 = -1
+	for i, tick := range layout.TickValues {
+		x := layout.MapToScreen(tick, 0, 1024)
+		if x < 0 || x > 1024 {
+			t.Errorf("tick %d (%v) maps to %v, outside [0, 1024]", i, tick, x)
+		}
+		if x <= prevX {
+			t.Errorf("tick %d (%v) at x=%v not strictly past prev x=%v (saturation symptom: piling at axisEndPx)",
+				i, tick, x, prevX)
+		}
+		prevX = x
+	}
+
+	lastTick := layout.TickValues[len(layout.TickValues)-1]
+	lastX := layout.MapToScreen(lastTick, 0, 1024)
+	if lastX < 900 {
+		t.Errorf("last tick at x=%v, expected near axisEndPx=1024 (saturated math would shrink the range)", lastX)
+	}
+}
+
 func TestTimeTicks_MonthlyTicksAlignedToFirstOfMonth(t *testing.T) {
 	dataMin := time.Date(2026, 1, 17, 12, 30, 0, 0, time.UTC)
 	dataMax := dataMin.AddDate(0, 6, 0)

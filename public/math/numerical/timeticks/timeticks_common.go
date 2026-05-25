@@ -97,13 +97,20 @@ type TimeAxisLayout struct {
 // layout's view bounds. Mirrors finddivisions.AxisLayout.MapToScreen for
 // the time-axis case. Returns axisStartPx for a degenerate view; the
 // caller is responsible for clipping if t falls outside [ViewMin, ViewMax].
+//
+// Uses int64 millisecond arithmetic — not time.Time.Sub — so spans
+// wider than time.Duration's ~292-year cap (e.g. a multi-century history
+// view) still project correctly. With time.Duration the numerator and
+// denominator would both saturate to MaxDuration and every t past
+// ViewMin + 292y would map to axisEndPx, piling labels at the right edge.
 func (inst TimeAxisLayout) MapToScreen(t time.Time, axisStartPx, axisEndPx float64) (px float64) {
-	span := float64(inst.ViewMax.Sub(inst.ViewMin))
-	if span <= 0 {
+	minMS := inst.ViewMin.UnixMilli()
+	spanMS := inst.ViewMax.UnixMilli() - minMS
+	if spanMS <= 0 {
 		px = axisStartPx
 		return
 	}
-	norm := float64(t.Sub(inst.ViewMin)) / span
+	norm := float64(t.UnixMilli()-minMS) / float64(spanMS)
 	px = axisStartPx + norm*(axisEndPx-axisStartPx)
 	return
 }

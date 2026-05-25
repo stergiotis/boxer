@@ -333,8 +333,13 @@ func abs32(v int32) (out int32) {
 // minimum required to keep tick count ≤ panelWidthPx / targetSpacingPx.
 // Returns the largest ladder entry if no smaller step satisfies the target,
 // so very long spans still produce ticks rather than failing.
-func pickStep(span time.Duration, panelWidthPx int32, targetSpacingPx int32) (step TimeStep) {
-	if panelWidthPx <= 0 || targetSpacingPx <= 0 || span <= 0 {
+//
+// Span is taken in int64 milliseconds — not time.Duration — so views past
+// the ~292-year Duration cap (e.g. multi-century history) pick a coarse
+// step from the actual span instead of from the saturated MaxDuration
+// (which would silently pick a step too fine and pile ticks together).
+func pickStep(spanMS int64, panelWidthPx int32, targetSpacingPx int32) (step TimeStep) {
+	if panelWidthPx <= 0 || targetSpacingPx <= 0 || spanMS <= 0 {
 		step = uplotLadder[0]
 		return
 	}
@@ -342,9 +347,9 @@ func pickStep(span time.Duration, panelWidthPx int32, targetSpacingPx int32) (st
 	if maxTicks < 2 {
 		maxTicks = 2
 	}
-	minStepDur := time.Duration(float64(span) / maxTicks)
+	minStepMS := max(int64(float64(spanMS)/maxTicks), 1)
 	for _, s := range uplotLadder {
-		if s.ApproxDuration() >= minStepDur {
+		if int64(s.ApproxDuration()/time.Millisecond) >= minStepMS {
 			step = s
 			return
 		}
@@ -357,7 +362,7 @@ func pickStep(span time.Duration, panelWidthPx int32, targetSpacingPx int32) (st
 // rung away from the natural pick AND prev's tick count is within
 // (1 ± hysteresisFrac) of the target, prev is preferred — preventing the
 // axis from flickering between two formats during a zoom gesture.
-func stickyStep(natural TimeStep, prev TimeStep, span time.Duration, panelWidthPx int32, targetSpacingPx int32, hysteresisFrac float64) (chosen TimeStep) {
+func stickyStep(natural TimeStep, prev TimeStep, spanMS int64, panelWidthPx int32, targetSpacingPx int32, hysteresisFrac float64) (chosen TimeStep) {
 	chosen = natural
 	if prev.IsZero() || hysteresisFrac <= 0 {
 		return
@@ -371,7 +376,11 @@ func stickyStep(natural TimeStep, prev TimeStep, span time.Duration, panelWidthP
 		return
 	}
 	target := float64(panelWidthPx) / float64(targetSpacingPx)
-	prevTicks := float64(span) / float64(prev.ApproxDuration())
+	prevMS := float64(prev.ApproxDuration() / time.Millisecond)
+	if prevMS <= 0 {
+		return
+	}
+	prevTicks := float64(spanMS) / prevMS
 	low := target * (1 - hysteresisFrac)
 	high := target * (1 + hysteresisFrac)
 	if prevTicks >= low && prevTicks <= high {
@@ -385,10 +394,10 @@ func generateTicks(dataMin, dataMax time.Time, step TimeStep, loc *time.Location
 	for t.Before(dataMin) {
 		t = step.Add(t)
 	}
-	span := dataMax.Sub(dataMin)
-	approx := step.ApproxDuration()
-	if approx > 0 {
-		ticks = make([]time.Time, 0, int(span/approx)+2)
+	spanMS := dataMax.UnixMilli() - dataMin.UnixMilli()
+	approxMS := int64(step.ApproxDuration() / time.Millisecond)
+	if approxMS > 0 && spanMS > 0 {
+		ticks = make([]time.Time, 0, int(spanMS/approxMS)+2)
 	}
 	for !t.After(dataMax) {
 		ticks = append(ticks, t)
@@ -464,13 +473,13 @@ func PickTimeStep(dataMin, dataMax time.Time, opts TimeTickOptions) (step TimeSt
 	if hysteresisFrac <= 0 && !opts.PrevStep.IsZero() {
 		hysteresisFrac = defaultHysteresisFrac
 	}
-	span := dataMax.Sub(dataMin)
-	if span <= 0 {
+	spanMS := dataMax.UnixMilli() - dataMin.UnixMilli()
+	if spanMS <= 0 {
 		step = uplotLadder[0]
 		return
 	}
-	natural := pickStep(span, opts.PanelWidthPx, target)
-	step = stickyStep(natural, opts.PrevStep, span, opts.PanelWidthPx, target, hysteresisFrac)
+	natural := pickStep(spanMS, opts.PanelWidthPx, target)
+	step = stickyStep(natural, opts.PrevStep, spanMS, opts.PanelWidthPx, target, hysteresisFrac)
 	return
 }
 
@@ -506,7 +515,7 @@ func TimeTicks(dataMin, dataMax time.Time, opts TimeTickOptions) (layout TimeAxi
 	layout.ViewMax = dataMax
 	layout.Algorithm = "uplot-ladder"
 
-	if dataMax.Sub(dataMin) <= 0 {
+	if dataMax.UnixMilli()-dataMin.UnixMilli() <= 0 {
 		return
 	}
 
