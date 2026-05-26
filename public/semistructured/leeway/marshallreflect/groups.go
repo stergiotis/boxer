@@ -3,6 +3,8 @@
 package marshallreflect
 
 import (
+	"sort"
+
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshallgen"
 )
 
@@ -22,6 +24,12 @@ type sectionGroup struct {
 	Memberships []marshallgen.TaggedField
 }
 
+// computeGroups mirrors marshallgen.computeGroups: section order is
+// DTO declaration order; within each section the fields are
+// stable-partitioned scalar-first (shapeScalarBegin /
+// shapeScalarBeginSingle) ahead of non-scalars per ADR-0008 D2.
+// Memberships are rebuilt from the post-partition order so the two
+// packages agree on first-seen-membership ordering.
 func computeGroups(plan *marshallgen.Plan) (out []sectionGroup) {
 	seen := map[string]int{}
 	for _, f := range plan.Fields {
@@ -49,19 +57,45 @@ func computeGroups(plan *marshallgen.Plan) (out []sectionGroup) {
 			scIdx = len(g.SubColumns) - 1
 		}
 		g.SubColumns[scIdx].Fields = append(g.SubColumns[scIdx].Fields, f)
+	}
 
-		seenMemb := false
-		for _, m := range g.Memberships {
-			if m.LWMembership == f.LWMembership {
-				seenMemb = true
-				break
-			}
+	for gi := range out {
+		g := &out[gi]
+		for sci := range g.SubColumns {
+			partitionScalarsFirst(g.SubColumns[sci].Fields)
 		}
-		if !seenMemb {
+		rebuildMemberships(g)
+	}
+	return
+}
+
+func partitionScalarsFirst(fields []marshallgen.TaggedField) {
+	sort.SliceStable(fields, func(i, j int) bool {
+		return isScalarShape(fields[i]) && !isScalarShape(fields[j])
+	})
+}
+
+func isScalarShape(f marshallgen.TaggedField) bool {
+	switch classifyBegin(f) {
+	case shapeScalarBegin, shapeScalarBeginSingle:
+		return true
+	default:
+		return false
+	}
+}
+
+func rebuildMemberships(g *sectionGroup) {
+	g.Memberships = g.Memberships[:0]
+	seen := map[string]bool{}
+	for sci := range g.SubColumns {
+		for _, f := range g.SubColumns[sci].Fields {
+			if seen[f.LWMembership] {
+				continue
+			}
+			seen[f.LWMembership] = true
 			g.Memberships = append(g.Memberships, f)
 		}
 	}
-	return
 }
 
 // fieldBeginShape mirrors marshallgen's internal classifier — kept

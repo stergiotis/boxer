@@ -189,8 +189,8 @@ func ParsePlan(inputPath string) (plan *Plan, err error) {
 				err = eb.Build().Str("tag", lwTag).Errorf("marshallgen: plain field cannot carry sub-column (`:<col>`)")
 				return
 			}
-			if flags.Unit || flags.Explode || flags.Verbatim {
-				err = eb.Build().Str("field", goFieldName).Errorf("marshallgen: plain field cannot carry `unit` / `explode` / `verbatim` flags (flags apply to tagged-value attributes only)")
+			if flags.Unit || flags.Explode || flags.Channel != MembershipChannelLowCardRef {
+				err = eb.Build().Str("field", goFieldName).Errorf("marshallgen: plain field cannot carry channel / `unit` / `explode` flags (flags apply to tagged-value attributes only)")
 				return
 			}
 			if shape.IsOption || shape.IsRoaring || shape.IsSlice {
@@ -287,18 +287,21 @@ func ParsePlan(inputPath string) (plan *Plan, err error) {
 	}
 
 	// Per-section membership-channel uniformity check: all fields
-	// targeting the same section must agree on Verbatim (the read-side
+	// targeting the same section must agree on Channel (the read-side
 	// dispatch iterates a per-section channel; mixed channels would
-	// require two separate decode passes).
-	bySection := map[string]bool{}
+	// require two separate decode passes). Generalised by ADR-0008 D3
+	// from the original "all Verbatim or all Ref" bool.
+	bySection := map[string]MembershipChannel{}
+	bySectionFirst := map[string]string{}
 	for _, f := range plan.Fields {
 		seen, ok := bySection[f.LWSection]
 		if !ok {
-			bySection[f.LWSection] = f.Flags.Verbatim
+			bySection[f.LWSection] = f.Flags.Channel
+			bySectionFirst[f.LWSection] = f.GoFieldName
 			continue
 		}
-		if seen != f.Flags.Verbatim {
-			err = eb.Build().Str("section", f.LWSection).Str("field", f.GoFieldName).Errorf("marshallgen: section mixes `,verbatim` and ref-channel fields — pick one channel per section")
+		if seen != f.Flags.Channel {
+			err = eb.Build().Str("section", f.LWSection).Str("field", f.GoFieldName).Str("firstField", bySectionFirst[f.LWSection]).Str("firstChannel", seen.String()).Str("secondChannel", f.Flags.Channel.String()).Errorf("marshallgen: section mixes membership channels — pick one channel per section")
 			return
 		}
 	}
@@ -356,6 +359,20 @@ type ParsedLWTag struct {
 	Section    string
 	Column     string
 	Flags      FieldFlags
+}
+
+// setChannelFlag installs the parsed channel on the in-progress flag
+// set, rejecting two channel flags on one tag. Tokens like `,verbatim`
+// and `,lowCardVerbatim` both map to MembershipChannelLowCardVerbatim
+// (per ADR-0008 D3 SD9); attempting either after a different channel
+// already set raises the same "declared twice" error.
+func setChannelFlag(flags *FieldFlags, ch MembershipChannel, token string) (err error) {
+	if flags.Channel != MembershipChannelLowCardRef {
+		err = eb.Build().Str("flag", token).Str("alreadySet", flags.Channel.String()).Errorf("channel flag declared twice on one tag")
+		return
+	}
+	flags.Channel = ch
+	return
 }
 
 // SplitLW parses a value of the form
@@ -417,14 +434,31 @@ func SplitLW(tag string) (out ParsedLWTag, err error) {
 				return
 			}
 			out.Flags.Explode = true
-		case "verbatim":
-			if out.Flags.Verbatim {
-				err = eb.Build().Str("flag", token).Errorf("flag declared twice")
+		case "verbatim", "lowCardVerbatim":
+			// `,verbatim` retained as alias for `,lowCardVerbatim` per
+			// ADR-0008 D3 SD9 — existing DTOs compile unchanged.
+			if err = setChannelFlag(&out.Flags, MembershipChannelLowCardVerbatim, token); err != nil {
 				return
 			}
-			out.Flags.Verbatim = true
+		case "highCardRef":
+			if err = setChannelFlag(&out.Flags, MembershipChannelHighCardRef, token); err != nil {
+				return
+			}
+		case "highCardVerbatim":
+			if err = setChannelFlag(&out.Flags, MembershipChannelHighCardVerbatim, token); err != nil {
+				return
+			}
+		case "lowCardRefParametrized", "highCardRefParametrized", "mixedLowCardRef", "mixedLowCardVerbatim":
+			// ADR-0008 D3 stages these four "complex" channels for a
+			// follow-up commit — the parametrized/mixed shapes require
+			// a two-field DTO pairing the section value with a sibling
+			// carrier, which is non-trivial. Parse-time rejection so
+			// DTO authors get a clear signal rather than misleading
+			// emit-time failures.
+			err = eb.Build().Str("flag", token).Errorf("lw: channel flag %q is recognised but not yet implemented — see ADR-0008 D3 staged-rollout note", token)
+			return
 		default:
-			err = eb.Build().Str("flag", token).Errorf("unknown flag token (recognised: unit, explode, verbatim, const=<value>)")
+			err = eb.Build().Str("flag", token).Errorf("unknown flag token (recognised: unit, explode, verbatim / lowCardVerbatim, highCardRef, highCardVerbatim, const=<value>)")
 			return
 		}
 	}

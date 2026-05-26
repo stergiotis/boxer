@@ -104,8 +104,8 @@ func buildPlan(rt reflect.Type) (plan *marshallgen.Plan, err error) {
 				err = eb.Build().Str("tag", lwTag).Errorf("marshallreflect: plain field cannot carry sub-column")
 				return
 			}
-			if flags.Unit || flags.Explode || flags.Verbatim || flags.HasConst {
-				err = eb.Build().Str("field", f.Name).Errorf("marshallreflect: plain field cannot carry `unit` / `explode` / `verbatim` / `const` flags")
+			if flags.Unit || flags.Explode || flags.Channel != marshallgen.MembershipChannelLowCardRef || flags.HasConst {
+				err = eb.Build().Str("field", f.Name).Errorf("marshallreflect: plain field cannot carry channel / `unit` / `explode` / `const` flags")
 				return
 			}
 			if shape.IsOption || shape.IsRoaring || shape.IsSlice {
@@ -197,16 +197,18 @@ func buildPlan(rt reflect.Type) (plan *marshallgen.Plan, err error) {
 		return
 	}
 
-	// Per-section verbatim uniformity.
-	bySection := map[string]bool{}
+	// Per-section channel uniformity — generalised per ADR-0008 D3.
+	bySection := map[string]marshallgen.MembershipChannel{}
+	bySectionFirst := map[string]string{}
 	for _, fld := range plan.Fields {
 		seen, ok := bySection[fld.LWSection]
 		if !ok {
-			bySection[fld.LWSection] = fld.Flags.Verbatim
+			bySection[fld.LWSection] = fld.Flags.Channel
+			bySectionFirst[fld.LWSection] = fld.GoFieldName
 			continue
 		}
-		if seen != fld.Flags.Verbatim {
-			err = eb.Build().Str("section", fld.LWSection).Errorf("marshallreflect: section mixes `,verbatim` and ref-channel fields")
+		if seen != fld.Flags.Channel {
+			err = eb.Build().Str("section", fld.LWSection).Str("field", fld.GoFieldName).Str("firstField", bySectionFirst[fld.LWSection]).Str("firstChannel", seen.String()).Str("secondChannel", fld.Flags.Channel.String()).Errorf("marshallreflect: section mixes membership channels — pick one channel per section")
 			return
 		}
 	}

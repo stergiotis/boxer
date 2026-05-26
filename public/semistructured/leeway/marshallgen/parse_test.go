@@ -245,7 +245,7 @@ type MyDTO struct {
 	Ts  time.Time `+"`lw:\",ts\"`"+`
 }
 `)
-	assertErrContains(t, err, "plain field cannot carry `unit` / `explode` / `verbatim`")
+	assertErrContains(t, err, "plain field cannot carry channel / `unit` / `explode`")
 }
 
 // --- Shape rejection (carried over from current codegen/parse_test.go). ---

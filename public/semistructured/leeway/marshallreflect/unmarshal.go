@@ -53,11 +53,13 @@ func Unmarshal[T any](args UnmarshalArgs, out *[]T, lookup LookupI) (err error) 
 		return
 	}
 
-	// Pre-resolve LowCardRef membership ids — cached so the inner
-	// dispatch loop doesn't pay one lookup per attribute per row.
+	// Pre-resolve ref-channel membership ids — cached so the inner
+	// dispatch loop doesn't pay one lookup per attribute per row. Only
+	// channels whose wire form takes a uint64 id need this; verbatim
+	// and parametrized-only channels are matched by literal bytes.
 	membIDs := map[string]uint64{}
 	for _, f := range plan.Fields {
-		if f.Flags.Verbatim || f.IsConst {
+		if !f.Flags.Channel.NeedsKindVar() || f.IsConst {
 			continue
 		}
 		var id uint64
@@ -221,21 +223,23 @@ func unmarshalSection(row reflect.Value, g sectionGroup, args UnmarshalArgs, i i
 func dispatchMembership(membs reflect.Value, i int, attrJ int64, fields []marshallgen.TaggedField, membIDs map[string]uint64) (matched marshallgen.TaggedField, found bool) {
 	// Determine channel from any non-const field's flag (all fields in
 	// a section agree on the channel per ParsePlan uniformity check).
-	verbatim := false
+	var ch marshallgen.MembershipChannel
 	for _, f := range fields {
 		if f.IsConst {
 			continue
 		}
-		verbatim = f.Flags.Verbatim
+		ch = f.Flags.Channel
 		break
 	}
 
-	if verbatim {
-		seq := mustCall(membs, "GetMembValueLowCardVerbatim", reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
+	method := "GetMembValue" + ch.AddMethodSuffix()
+	seq := mustCall(membs, method, reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
+
+	if ch.EmbedsLiteralName() {
 		for _, v := range collectIterSeq(seq) {
 			name := string(v.Bytes())
 			for _, f := range fields {
-				if f.IsConst || !f.Flags.Verbatim {
+				if f.IsConst || !f.Flags.Channel.EmbedsLiteralName() {
 					continue
 				}
 				if f.LWMembership == name {
@@ -246,11 +250,10 @@ func dispatchMembership(membs reflect.Value, i int, attrJ int64, fields []marsha
 		return
 	}
 
-	seq := mustCall(membs, "GetMembValueLowCardRef", reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
 	for _, v := range collectIterSeq(seq) {
 		id := v.Uint()
 		for _, f := range fields {
-			if f.IsConst || f.Flags.Verbatim {
+			if f.IsConst || f.Flags.Channel.EmbedsLiteralName() {
 				continue
 			}
 			if membIDs[f.LWMembership] == id {

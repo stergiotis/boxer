@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"go/format"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -134,26 +135,38 @@ type sectionGroup struct {
 	Memberships []TaggedField // one per distinct LWMembership, in first-seen order
 }
 
-// IsVerbatim reports whether this section's fields use the
-// LowCardVerbatim membership channel (literal []byte names embedded on
-// the wire) vs the default LowCardRef channel (uint64 ids resolved by
-// the wrapper). Uniformity is enforced by ParsePlan; either all
-// memberships in the section are Verbatim or none are.
-func (g sectionGroup) IsVerbatim() bool {
+// Channel reports the (uniform per section) membership channel for
+// this section's fields. ParsePlan enforces uniformity so any
+// representative field's channel speaks for the whole section.
+// Returns the zero value (LowCardRef) for empty groups.
+func (g sectionGroup) Channel() MembershipChannel {
 	if len(g.Memberships) == 0 {
-		return false
+		return MembershipChannelLowCardRef
 	}
-	return g.Memberships[0].Flags.Verbatim
+	return g.Memberships[0].Flags.Channel
+}
+
+// IsVerbatim reports whether this section's channel embeds the lw:
+// membership name as a literal []byte on the wire (Low/HighCardVerbatim).
+// Retained as a back-compat shorthand alongside Channel().
+func (g sectionGroup) IsVerbatim() bool {
+	return g.Channel().EmbedsLiteralName()
 }
 
 // computeGroups walks plan.Fields in DTO declaration order, bucketing
-// each field by its lw: section name. The output ordering is the
-// load-bearing invariant that ties three independent emit sites
-// together — change at your peril:
+// each field by its lw: section name. The section order in the output
+// is DTO declaration order — section-level layout matches three
+// independent emit sites and must not drift:
 //
 //   - <Kind>EntityI's per-section type-parameter list (writeEntityInterface)
 //   - <Kind>BuildEntities' type-parameter list and per-section call sequence
 //   - <Kind>FillFromArrow's per-section reader-parameter list
+//
+// Within each section the fields are partitioned scalar-first
+// (shapeScalarBegin / shapeScalarBeginSingle / consts) ahead of
+// non-scalars (shapeContainer / shapeExplodeBegin*). The partition is
+// stable: declaration order is preserved within each class. Per
+// ADR-0008 D2.
 //
 // Wrappers that emit per-section helpers (e.g. FactsWrapper's Reader
 // struct + Unmarshal-call argument list) MUST iterate sections in the
@@ -188,19 +201,55 @@ func computeGroups(plan *Plan) (out []sectionGroup) {
 			scIdx = len(g.SubColumns) - 1
 		}
 		g.SubColumns[scIdx].Fields = append(g.SubColumns[scIdx].Fields, f)
+	}
 
-		seenMemb := false
-		for _, m := range g.Memberships {
-			if m.LWMembership == f.LWMembership {
-				seenMemb = true
-				break
-			}
+	for gi := range out {
+		g := &out[gi]
+		for sci := range g.SubColumns {
+			partitionScalarsFirst(g.SubColumns[sci].Fields)
 		}
-		if !seenMemb {
+		rebuildMemberships(g)
+	}
+	return
+}
+
+// partitionScalarsFirst reorders fields in-place so all scalar-shaped
+// fields (shapeScalarBegin / shapeScalarBeginSingle, which includes
+// consts since they classify as scalar) precede non-scalar fields
+// (shapeContainer / shapeExplodeBegin / shapeExplodeBeginSingle).
+// Declaration order is preserved within each class via a stable sort.
+func partitionScalarsFirst(fields []TaggedField) {
+	sort.SliceStable(fields, func(i, j int) bool {
+		return isScalarShape(fields[i]) && !isScalarShape(fields[j])
+	})
+}
+
+// isScalarShape reports whether a tagged field emits as a single-value
+// scalar attribute. Used to drive the within-section partition.
+func isScalarShape(f TaggedField) bool {
+	switch classifyBegin(f) {
+	case shapeScalarBegin, shapeScalarBeginSingle:
+		return true
+	default:
+		return false
+	}
+}
+
+// rebuildMemberships repopulates the section's distinct-membership
+// slice from the (now scalar-first-partitioned) sub-column fields so
+// the first-seen order reflects the post-partition layout.
+func rebuildMemberships(g *sectionGroup) {
+	g.Memberships = g.Memberships[:0]
+	seen := map[string]bool{}
+	for sci := range g.SubColumns {
+		for _, f := range g.SubColumns[sci].Fields {
+			if seen[f.LWMembership] {
+				continue
+			}
+			seen[f.LWMembership] = true
 			g.Memberships = append(g.Memberships, f)
 		}
 	}
-	return
 }
 
 // Section returns the trusted section name from the lw: tag. Helper to
@@ -538,11 +587,7 @@ func writeSectionInterfaces(sb *strings.Builder, plan *Plan, g sectionGroup) (er
 	sb.WriteString("// every method returns void so no F-bounded `[Self]` parameter is\n")
 	sb.WriteString("// needed.\n")
 	fmt.Fprintf(sb, "type %s%sAttrI interface {\n", kind, method)
-	if g.IsVerbatim() {
-		sb.WriteString("\tdmlruntime.InAttributeMembershipLowCardVerbatimPI\n")
-	} else {
-		sb.WriteString("\tdmlruntime.InAttributeMembershipLowCardRefPI\n")
-	}
+	fmt.Fprintf(sb, "\tdmlruntime.InAttributeMembership%sPI\n", g.Channel().AddMethodSuffix())
 	if needAddToContainer != "" {
 		fmt.Fprintf(sb, "\tAddToContainerP(value %s)\n", needAddToContainer)
 	}
@@ -753,15 +798,19 @@ func writeMultiSubColumnDriver(sb *strings.Builder, g sectionGroup, secVar strin
 }
 
 // writeMembershipAdd emits the per-attribute membership push, choosing
-// between the ref (`kindXxx`) and verbatim (`[]byte("name")`) channels
-// based on the field's Verbatim flag. Indent is the leading whitespace
-// for the line.
+// the AddMembership<Channel>P method per ADR-0008 D3. Cut 1 supports
+// four channels: LowCardRef / HighCardRef (push the lookup-resolved
+// kindXxx symbol) and LowCardVerbatim / HighCardVerbatim (push the
+// literal lw: name as []byte). The four Cut-2 channels are rejected
+// upstream by SplitLW.
 func writeMembershipAdd(sb *strings.Builder, indent, attrVar string, f TaggedField) {
-	if f.Flags.Verbatim {
-		fmt.Fprintf(sb, "%s%s.AddMembershipLowCardVerbatimP([]byte(%q))\n", indent, attrVar, f.LWMembership)
+	ch := f.Flags.Channel
+	method := "AddMembership" + ch.AddMethodSuffix() + "P"
+	if ch.EmbedsLiteralName() {
+		fmt.Fprintf(sb, "%s%s.%s([]byte(%q))\n", indent, attrVar, method, f.LWMembership)
 		return
 	}
-	fmt.Fprintf(sb, "%s%s.AddMembershipLowCardRefP(%s)\n", indent, attrVar, f.KindVar())
+	fmt.Fprintf(sb, "%s%s.%s(%s)\n", indent, attrVar, method, f.KindVar())
 }
 
 // writeFieldDriver emits the per-field BuildEntities lines for one
@@ -980,11 +1029,8 @@ func writeSectionReadInterfaces(sb *strings.Builder, plan *Plan, g sectionGroup)
 
 	fmt.Fprintf(sb, "// %s%sMembsReadI is the Memberships-side view of the %s section.\n", kind, method, g.Section)
 	fmt.Fprintf(sb, "type %s%sMembsReadI interface {\n", kind, method)
-	if g.IsVerbatim() {
-		sb.WriteString("\tGetMembValueLowCardVerbatim(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[[]byte]\n")
-	} else {
-		sb.WriteString("\tGetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]\n")
-	}
+	fmt.Fprintf(sb, "\tGetMembValue%s(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[%s]\n",
+		g.Channel().AddMethodSuffix(), g.Channel().ReadIterElemType())
 	sb.WriteString("}\n\n")
 	return
 }
@@ -1106,11 +1152,11 @@ func writeSectionDecode(sb *strings.Builder, g sectionGroup, pkg string) (err er
 	}
 	fmt.Fprintf(sb, "\t\tn%s := %s.GetNumberOfAttributes(raruntime.EntityIdx(i))\n", prefix, attrsVar)
 	fmt.Fprintf(sb, "\t\tfor attrJ := int64(0); attrJ < n%s; attrJ++ {\n", prefix)
-	if g.IsVerbatim() {
-		fmt.Fprintf(sb, "\t\t\tfor membBytes := range %s.GetMembValueLowCardVerbatim(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {\n", membsVar)
+	if g.Channel().EmbedsLiteralName() {
+		fmt.Fprintf(sb, "\t\t\tfor membBytes := range %s.GetMembValue%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {\n", membsVar, g.Channel().AddMethodSuffix())
 		sb.WriteString("\t\t\t\tswitch string(membBytes) {\n")
 	} else {
-		fmt.Fprintf(sb, "\t\t\tfor membID := range %s.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {\n", membsVar)
+		fmt.Fprintf(sb, "\t\t\tfor membID := range %s.GetMembValue%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {\n", membsVar, g.Channel().AddMethodSuffix())
 		sb.WriteString("\t\t\t\tswitch membID {\n")
 	}
 	for _, f := range fields {
@@ -1170,7 +1216,7 @@ func writeFieldAppend(sb *strings.Builder, f TaggedField, prefix, pkg string) {
 }
 
 func writeFieldMembCase(sb *strings.Builder, f TaggedField, prefix, attrsVar string) {
-	if f.Flags.Verbatim {
+	if f.Flags.Channel.EmbedsLiteralName() {
 		fmt.Fprintf(sb, "\t\t\t\tcase %q:\n", f.LWMembership)
 	} else {
 		fmt.Fprintf(sb, "\t\t\t\tcase %s:\n", f.KindVar())
@@ -1260,11 +1306,11 @@ func writeMultiSubColumnDecode(sb *strings.Builder, g sectionGroup, attrsVar, me
 		fmt.Fprintf(sb, "\t\t\t%s%sLocal := %s.GetAttrValue%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))\n",
 			prefix, s.Field.GoFieldName, attrsVar, upperFirst(s.ColName))
 	}
-	if memb.Flags.Verbatim {
-		fmt.Fprintf(sb, "\t\t\tfor membBytes := range %s.GetMembValueLowCardVerbatim(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {\n", membsVar)
+	if memb.Flags.Channel.EmbedsLiteralName() {
+		fmt.Fprintf(sb, "\t\t\tfor membBytes := range %s.GetMembValue%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {\n", membsVar, memb.Flags.Channel.AddMethodSuffix())
 		fmt.Fprintf(sb, "\t\t\t\tif string(membBytes) == %q {\n", memb.LWMembership)
 	} else {
-		fmt.Fprintf(sb, "\t\t\tfor membID := range %s.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {\n", membsVar)
+		fmt.Fprintf(sb, "\t\t\tfor membID := range %s.GetMembValue%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {\n", membsVar, memb.Flags.Channel.AddMethodSuffix())
 		fmt.Fprintf(sb, "\t\t\t\tif membID == %s {\n", memb.KindVar())
 	}
 	for _, s := range subs {

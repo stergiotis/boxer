@@ -187,6 +187,35 @@ type MyDTO struct {
 
 // --- structural tests. ---
 
+// TestEmit_ScalarFirstOrdering confirms ADR-0008 D2: within one
+// section, scalar-shaped fields emit before container-shaped fields
+// regardless of DTO declaration order. Bits (container) is declared
+// first; Battery (scalar) is declared second; the BuildEntities body
+// must reference Battery before Bits in the section's emit run.
+func TestEmit_ScalarFirstOrdering(t *testing.T) {
+	out := generate(t, `package demo
+type MyDTO struct {
+	_       struct{}        `+"`kind:\"my\"`"+`
+	Id      uint64          `+"`lw:\",id\"`"+`
+	Ts      time.Time       `+"`lw:\",ts\"`"+`
+	Bits    *roaring.Bitmap `+"`lw:\"bits,u32Array\"`"+`
+	Battery uint32          `+"`lw:\"battery,u32Array,unit\"`"+`
+}
+`)
+	parseGo(t, out)
+	scalarMarker := "c.Battery[i]"
+	containerMarker := "c.Bits[i].Iterator()"
+	sIdx := strings.Index(out, scalarMarker)
+	cIdx := strings.Index(out, containerMarker)
+	if sIdx < 0 || cIdx < 0 {
+		t.Fatalf("expected both markers; scalar=%d container=%d\n---\n%s\n---", sIdx, cIdx, out)
+	}
+	if sIdx > cIdx {
+		t.Fatalf("expected scalar emit (%q at %d) to precede container emit (%q at %d):\n%s",
+			scalarMarker, sIdx, containerMarker, cIdx, out)
+	}
+}
+
 func TestEmit_NoFBoundedSelfOnAttrI(t *testing.T) {
 	// AttrI must use P-methods (void) — never carry an [Self] type
 	// parameter. This is the load-bearing simplification from the
@@ -250,6 +279,70 @@ type MyDTO struct {
 	mustNotContain(t, out, ".AddMembershipLowCardRefP(") // doc-comment mentions both methods; assert no call site
 }
 
+// TestEmit_HighCardRef confirms ADR-0008 D3's HighCardRef channel flag.
+// The emit shape mirrors LowCardRef but routes through the high-card
+// AddMembership / GetMembValue methods.
+func TestEmit_HighCardRef(t *testing.T) {
+	out := generate(t, `package demo
+type MyDTO struct {
+	_   struct{}  `+"`kind:\"my\"`"+`
+	Id  uint64    `+"`lw:\",id\"`"+`
+	Ts  time.Time `+"`lw:\",ts\"`"+`
+	App string    `+"`lw:\"my-app,symbol,highCardRef\"`"+`
+}
+`)
+	parseGo(t, out)
+	mustContain(t, out, "dmlruntime.InAttributeMembershipHighCardRefPI")
+	mustContain(t, out, ".AddMembershipHighCardRefP(kindApp)")
+	mustContain(t, out, "GetMembValueHighCardRef")
+	mustContain(t, out, "iter.Seq[uint64]")
+	mustContain(t, out, "kindApp uint64 = 1")
+}
+
+// TestEmit_HighCardVerbatim confirms ADR-0008 D3's HighCardVerbatim
+// channel flag. Mirrors LowCardVerbatim but routes through the high-
+// card accessors; no kindXxx is declared.
+func TestEmit_HighCardVerbatim(t *testing.T) {
+	out := generate(t, `package demo
+type MyDTO struct {
+	_   struct{}  `+"`kind:\"my\"`"+`
+	Id  uint64    `+"`lw:\",id\"`"+`
+	Ts  time.Time `+"`lw:\",ts\"`"+`
+	App string    `+"`lw:\"my-app,symbol,highCardVerbatim\"`"+`
+}
+`)
+	parseGo(t, out)
+	mustContain(t, out, "dmlruntime.InAttributeMembershipHighCardVerbatimPI")
+	mustContain(t, out, `AddMembershipHighCardVerbatimP([]byte("my-app"))`)
+	mustContain(t, out, "GetMembValueHighCardVerbatim")
+	mustContain(t, out, "iter.Seq[[]byte]")
+	mustNotContain(t, out, "kindApp")
+}
+
+// TestParse_RejectsStagedChannels confirms the four complex channel
+// flags (lowCardRefParametrized, highCardRefParametrized,
+// mixedLowCardRef, mixedLowCardVerbatim) are recognised but rejected
+// at parse time with a clear ADR-0008 pointer per the staged rollout.
+func TestParse_RejectsStagedChannels(t *testing.T) {
+	for _, flag := range []string{"lowCardRefParametrized", "highCardRefParametrized", "mixedLowCardRef", "mixedLowCardVerbatim"} {
+		src := `package demo
+type MyDTO struct {
+	_   struct{}  ` + "`kind:\"my\"`" + `
+	Id  uint64    ` + "`lw:\",id\"`" + `
+	Ts  time.Time ` + "`lw:\",ts\"`" + `
+	X   string    ` + "`lw:\"x,symbol," + flag + "\"`" + `
+}
+`
+		_, err := generateMay(t, src)
+		if err == nil {
+			t.Fatalf("flag %q: expected parse rejection, got success", flag)
+		}
+		if !strings.Contains(err.Error(), "not yet implemented") {
+			t.Fatalf("flag %q: expected `not yet implemented` error, got: %v", flag, err)
+		}
+	}
+}
+
 func TestParse_RejectsMixedVerbatimRef(t *testing.T) {
 	_, err := generateMay(t, `package demo
 type MyDTO struct {
@@ -263,8 +356,8 @@ type MyDTO struct {
 	if err == nil {
 		t.Fatalf("expected error for mixed verbatim/ref in same section, got success")
 	}
-	if !strings.Contains(err.Error(), "mixes `,verbatim`") {
-		t.Fatalf("expected mixed-verbatim error, got: %v", err)
+	if !strings.Contains(err.Error(), "mixes membership channels") {
+		t.Fatalf("expected mixed-channel error, got: %v", err)
 	}
 }
 

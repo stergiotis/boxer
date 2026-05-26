@@ -112,15 +112,15 @@ func (NoOpWrapper) BeforeCore(_ *strings.Builder, _ *Plan) error { return nil }
 func (NoOpWrapper) AfterCore(_ *strings.Builder, _ *Plan) error { return nil }
 
 // uniqueMemberships returns plan.Fields filtered so each LWMembership
-// appears at most once (first-seen wins), skipping Verbatim-flagged
-// memberships (those don't get a kindXxx declaration — the literal
-// []byte name is embedded directly at the call site). Multi-sub-column
-// sections (u32Range with beginIncl + endExcl) have two fields sharing
-// one membership; KindVars decl per membership, not per field.
+// appears at most once (first-seen wins), skipping channels that do
+// not consult a registry (the literal []byte name is embedded at the
+// call site, or the params-blob channels carry the wire payload
+// directly). Multi-sub-column sections share one membership across
+// two fields; KindVars decl per membership, not per field.
 func uniqueMemberships(plan *Plan) (out []TaggedField) {
 	seen := map[string]bool{}
 	for _, f := range plan.Fields {
-		if f.Flags.Verbatim {
+		if !f.Flags.Channel.NeedsKindVar() {
 			continue
 		}
 		if seen[f.LWMembership] {
