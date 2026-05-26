@@ -15,7 +15,7 @@ import (
 
 // --- Recording mock DML. ---
 //
-// recordingDML satisfies the reflective method-set MarshalStack /
+// recordingDML satisfies the reflective method-set RowComposer /
 // Marshal dispatch against: BeginEntity / SetId / SetTimestamp /
 // GetSection<Sym|Foo|Bar> / CommitEntity. Section and attribute
 // recorders chain back through pointers so the call sequence is
@@ -93,7 +93,7 @@ func (fakeLookup) LookupMembership(name string) (uint64, error) {
 	return h, nil
 }
 
-// --- DTOs for stacked tests. ---
+// --- DTOs for per-row composer tests. ---
 
 type stackedA struct {
 	_     struct{} `kind:"a"`
@@ -107,47 +107,34 @@ type stackedB struct {
 	Label string   `lw:"label,symbol"`
 }
 
-// stackedB_mismatch declares a different plain shape (Id is int64,
-// not uint64) so the plain-agreement check rejects mixing it with
-// stackedA. This is a contrived shape — id MUST be uint64 per the
-// plain-column shape validator — so the test instead uses a DTO
-// missing a plain column the first DTO has (via different fields).
-type stackedNoMatch struct {
-	_     struct{} `kind:"c"`
-	Id    uint64   `lw:",id"`
-	Ts    int64    `lw:",ts"`
-	Other string   `lw:"other,symbol"`
-}
-
-// TestMarshalStack_SingleBatchEqualsMarshal confirms that
-// MarshalStack with one batch produces the same observable call
-// sequence as Marshal with that batch. Per ADR-0008 D1 baseline.
-func TestMarshalStack_SingleBatchEqualsMarshal(t *testing.T) {
-	rows := []stackedA{{Id: 1, Color: "red"}, {Id: 2, Color: "blue"}}
-
-	dmlA := &recordingDML{}
-	err := marshallreflect.Marshal(dmlA, rows, fakeLookup{})
-	require.NoError(t, err)
-
-	dmlB := &recordingDML{}
-	err = marshallreflect.MarshalStack(dmlB, []any{rows}, fakeLookup{})
-	require.NoError(t, err)
-
-	require.Equal(t, dmlA.log, dmlB.log,
-		"MarshalStack with one batch must produce identical wire calls to Marshal")
-}
-
-// TestMarshalStack_TwoBatchesInterleave confirms that two batches
-// produce one BeginEntity / CommitEntity frame per row index with
-// both DTOs' sections emitted between. The B DTO's section call
-// must appear AFTER A's section call within the same entity frame.
-func TestMarshalStack_TwoBatchesInterleave(t *testing.T) {
-	aRows := []stackedA{{Id: 1, Color: "red"}}
-	bRows := []stackedB{{Id: 1, Label: "alpha"}}
-
+// TestRowComposer_SingleRow_PlainPlusSections confirms BeginRow opens
+// an entity, emits plain columns from the plainOwner DTO, and emits
+// its sections; CommitRow closes the entity.
+func TestRowComposer_SingleRow_PlainPlusSections(t *testing.T) {
 	dml := &recordingDML{}
-	err := marshallreflect.MarshalStack(dml, []any{aRows, bRows}, fakeLookup{})
-	require.NoError(t, err)
+	m := marshallreflect.NewRowComposer(dml, fakeLookup{})
+
+	require.NoError(t, m.BeginRow(stackedA{Id: 1, Color: "red"}))
+	require.NoError(t, m.CommitRow())
+
+	joined := strings.Join(dml.log, "\n")
+	require.Equal(t, 1, strings.Count(joined, "BeginEntity"))
+	require.Equal(t, 1, strings.Count(joined, "CommitEntity"))
+	require.Contains(t, joined, `SetId(1, "")`)
+	require.Contains(t, joined, `Symbol.BeginAttribute("red")`)
+}
+
+// TestRowComposer_Stacked_TwoDTOsOneRow confirms multiple DTOs can
+// contribute to one entity: BeginRow with DTO-A's row owns plains and
+// emits A's sections, AddSections with DTO-B's row adds B's sections,
+// then CommitRow closes. Order of section emit follows call order.
+func TestRowComposer_Stacked_TwoDTOsOneRow(t *testing.T) {
+	dml := &recordingDML{}
+	m := marshallreflect.NewRowComposer(dml, fakeLookup{})
+
+	require.NoError(t, m.BeginRow(stackedA{Id: 1, Color: "red"}))
+	require.NoError(t, m.AddSections(stackedB{Id: 99, Label: "alpha"}))
+	require.NoError(t, m.CommitRow())
 
 	joined := strings.Join(dml.log, "\n")
 	// Exactly one entity frame.
@@ -156,51 +143,100 @@ func TestMarshalStack_TwoBatchesInterleave(t *testing.T) {
 	// Both DTOs' section values appear.
 	require.Contains(t, joined, `Symbol.BeginAttribute("red")`)
 	require.Contains(t, joined, `Symbol.BeginAttribute("alpha")`)
-	// A's call precedes B's call within the entity.
+	// Plains owned by A (Id=1), not B (Id=99).
+	require.Contains(t, joined, `SetId(1, "")`)
+	require.NotContains(t, joined, `SetId(99, "")`)
+	// A's section emit precedes B's.
 	redIdx := strings.Index(joined, `Symbol.BeginAttribute("red")`)
 	alphaIdx := strings.Index(joined, `Symbol.BeginAttribute("alpha")`)
-	require.Less(t, redIdx, alphaIdx, "batch 0 (A) should emit before batch 1 (B)")
-	// BeginEntity precedes both section emits; CommitEntity follows.
+	require.Less(t, redIdx, alphaIdx, "BeginRow's DTO emits before AddSections's DTO")
+	// BeginEntity precedes both; CommitEntity follows.
 	beginIdx := strings.Index(joined, "BeginEntity")
 	commitIdx := strings.Index(joined, "CommitEntity")
 	require.Less(t, beginIdx, redIdx)
 	require.Less(t, alphaIdx, commitIdx)
 }
 
-// TestMarshalStack_RejectsPlainShapeMismatch confirms cross-DTO plain
-// disagreement is rejected at marshal time per ADR-0008 D1.
-// stackedA has plain {id}, stackedNoMatch has plain {id, ts} — the
-// extra `ts` triggers the agreement check.
-func TestMarshalStack_RejectsPlainShapeMismatch(t *testing.T) {
-	aRows := []stackedA{{Id: 1, Color: "red"}}
-	cRows := []stackedNoMatch{{Id: 1, Ts: 42, Other: "x"}}
-
+// TestRowComposer_MultipleRows_VaryingDTOMix confirms the composer
+// can produce different entity shapes across rows — row 0 stacks
+// (A, B), row 1 has just A. Each row gets exactly one entity frame.
+func TestRowComposer_MultipleRows_VaryingDTOMix(t *testing.T) {
 	dml := &recordingDML{}
-	err := marshallreflect.MarshalStack(dml, []any{aRows, cRows}, fakeLookup{})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "plain-column count mismatch")
-	require.Empty(t, dml.log, "no DML calls before the agreement check fails")
+	m := marshallreflect.NewRowComposer(dml, fakeLookup{})
+
+	require.NoError(t, m.BeginRow(stackedA{Id: 1, Color: "red"}))
+	require.NoError(t, m.AddSections(stackedB{Id: 99, Label: "alpha"}))
+	require.NoError(t, m.CommitRow())
+
+	require.NoError(t, m.BeginRow(stackedA{Id: 2, Color: "blue"}))
+	require.NoError(t, m.CommitRow())
+
+	joined := strings.Join(dml.log, "\n")
+	require.Equal(t, 2, strings.Count(joined, "BeginEntity"))
+	require.Equal(t, 2, strings.Count(joined, "CommitEntity"))
+	require.Contains(t, joined, `Symbol.BeginAttribute("red")`)
+	require.Contains(t, joined, `Symbol.BeginAttribute("alpha")`)
+	require.Contains(t, joined, `Symbol.BeginAttribute("blue")`)
 }
 
-// TestMarshalStack_RejectsRowCountMismatch confirms unequal batch
-// lengths trigger an error before any DML method is called.
-func TestMarshalStack_RejectsRowCountMismatch(t *testing.T) {
-	aRows := []stackedA{{Id: 1, Color: "red"}, {Id: 2, Color: "blue"}}
-	bRows := []stackedB{{Id: 1, Label: "alpha"}}
-
+// TestRowComposer_RejectsBeginRow_WhileInRow confirms the state
+// machine enforces close-before-reopen.
+func TestRowComposer_RejectsBeginRow_WhileInRow(t *testing.T) {
 	dml := &recordingDML{}
-	err := marshallreflect.MarshalStack(dml, []any{aRows, bRows}, fakeLookup{})
+	m := marshallreflect.NewRowComposer(dml, fakeLookup{})
+
+	require.NoError(t, m.BeginRow(stackedA{Id: 1, Color: "red"}))
+	err := m.BeginRow(stackedA{Id: 2, Color: "blue"})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "row count disagreement")
-	require.Empty(t, dml.log, "no DML calls before the agreement check fails")
+	require.Contains(t, err.Error(), "already inside a row")
 }
 
-// TestMarshalStack_EmptyBatchListIsNoOp confirms passing an empty
-// batches slice is a no-op rather than an error.
-func TestMarshalStack_EmptyBatchListIsNoOp(t *testing.T) {
+// TestRowComposer_RejectsAddSections_WithoutBeginRow confirms calling
+// AddSections before BeginRow fails without any DML side effects.
+func TestRowComposer_RejectsAddSections_WithoutBeginRow(t *testing.T) {
 	dml := &recordingDML{}
-	err := marshallreflect.MarshalStack(dml, nil, fakeLookup{})
-	require.NoError(t, err)
+	m := marshallreflect.NewRowComposer(dml, fakeLookup{})
+
+	err := m.AddSections(stackedB{Id: 1, Label: "alpha"})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "outside of a row")
 	require.Empty(t, dml.log)
 }
 
+// TestRowComposer_RejectsCommitRow_WithoutBeginRow confirms calling
+// CommitRow before BeginRow fails without any DML side effects.
+func TestRowComposer_RejectsCommitRow_WithoutBeginRow(t *testing.T) {
+	dml := &recordingDML{}
+	m := marshallreflect.NewRowComposer(dml, fakeLookup{})
+
+	err := m.CommitRow()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "outside of a row")
+	require.Empty(t, dml.log)
+}
+
+// TestRowComposer_AcceptsPointerRow confirms passing *T also works
+// (the composer dereferences before plan resolution).
+func TestRowComposer_AcceptsPointerRow(t *testing.T) {
+	dml := &recordingDML{}
+	m := marshallreflect.NewRowComposer(dml, fakeLookup{})
+
+	row := stackedA{Id: 7, Color: "green"}
+	require.NoError(t, m.BeginRow(&row))
+	require.NoError(t, m.CommitRow())
+
+	joined := strings.Join(dml.log, "\n")
+	require.Contains(t, joined, `SetId(7, "")`)
+	require.Contains(t, joined, `Symbol.BeginAttribute("green")`)
+}
+
+// TestRowComposer_RejectsNonStructRow confirms a non-struct argument
+// is rejected with a clear message.
+func TestRowComposer_RejectsNonStructRow(t *testing.T) {
+	dml := &recordingDML{}
+	m := marshallreflect.NewRowComposer(dml, fakeLookup{})
+
+	err := m.BeginRow(42)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "row must be a struct")
+}

@@ -79,33 +79,46 @@ We will extend the marshall\* pair along three orthogonal axes.
 
 ### D1 — Stacked entities (multi-DTO per entity, reflect-only)
 
-We add a `marshallreflect.MarshalStack` entry point that drives one
+We add a `marshallreflect.RowComposer` per-row builder that drives one
 `BeginEntity` / `CommitEntity` frame per entity, with sections from
 multiple DTOs interleaved between the frame markers. The codegen path
 gains no equivalent in this ADR; stacking is a runtime composition and
 its natural home is the reflect-side API.
 
-`MarshalStack` accepts a `dml`, a `lookup`, and a heterogeneous list of
-row-batches (typically passed as `[]any` where each element is a
-`[]TX`). At call time it:
+`RowComposer` exposes a three-method state machine:
 
-1. Resolves the `marshallgen.Plan` for every DTO type in the batch list
-   via the existing `PlanFor[T]()` cache.
-2. Cross-checks that every plan declares the same plain-column set —
-   same column names, same Go types per column, same field-name
-   convention. Any disagreement is an error.
-3. Cross-checks that every batch has the same row count.
-4. For each row index `i`, emits one `BeginEntity` frame, writes the
-   plain columns once (read from any plan — they all agree by step 2),
-   iterates the DTO batches in order and emits each DTO's section
-   groups, then `CommitEntity`.
+```go
+m := marshallreflect.NewRowComposer(dml, lookup)
+for ... {
+    if err := m.BeginRow(plainOwner); err != nil { ... }   // opens entity, plain + plainOwner's sections
+    if err := m.AddSections(other);   err != nil { ... }   // adds another DTO's sections (zero or more)
+    if err := m.CommitRow();          err != nil { ... }   // closes entity
+}
+```
 
-Sections may repeat across DTOs without protocol violation: the DML
-state machine permits `InEntity → InSection → InEntity → InSection`
-re-entry, so two DTOs both declaring section `Foo` cleanly produce
-two `BeginSectionFoo`…`EndSection` cycles in the same entity. We do
-**not** attempt to merge them at marshal time — each DTO's section run
-is emitted as the DTO declares it.
+State transitions: `Initial → InRow` on `BeginRow`; `InRow → InRow`
+on `AddSections`; `InRow → Initial` on `CommitRow`. Any mis-sequenced
+call returns a clear error without touching the DML.
+
+Plain-column ownership is **explicit per row**: only `plainOwner`'s
+DTO drives plain emission. Other DTOs passed via `AddSections`
+contribute only their sections; their plain declarations are ignored.
+The cross-DTO plain-shape agreement check of the earlier batch-shaped
+draft drops out — each row picks its own plain owner, and rows can
+legitimately use different DTOs as the plain owner across the loop.
+
+Sections may repeat across DTOs within one entity without protocol
+violation: the DML state machine permits
+`InEntity → InSection → InEntity → InSection` re-entry, so two DTOs
+both declaring section `Foo` cleanly produce two
+`BeginSectionFoo`…`EndSection` cycles in the same entity. We do
+**not** attempt to merge them at marshal time — each DTO's section
+run is emitted as the DTO declares it. Within one row the order is
+"plainOwner's sections first, then each `AddSections` call's sections
+in invocation order".
+
+Pointer rows (`*T`) are accepted — `BeginRow` / `AddSections`
+dereference once before plan resolution.
 
 ### D2 — Within-section scalar-first attribute ordering
 
@@ -212,16 +225,19 @@ with the per-channel argument list matching the
   on the read side. The read mapping is recorded in the wrapper /
   generator so each channel has exactly one read-time pairing.
 
-- **SD3 — Stacked DTOs' plain columns are cross-checked at marshal
-  time, not at PlanFor time.** Each `PlanFor[T]()` builds the plan in
-  isolation; the cross-DTO agreement check lives in `MarshalStack`'s
-  prelude. This keeps `Plan` per-type-pure (no implicit dependencies
-  between DTOs) and lets a DTO appear in multiple stacks with
-  different siblings.
+- **SD3 — Plain-column ownership is per-row, explicit at BeginRow.**
+  `RowComposer.BeginRow(plainOwner)` declares one DTO as the plain
+  owner for *that row*; `AddSections` ignores the secondary DTOs'
+  plain declarations. `PlanFor[T]()` stays per-type-pure (no implicit
+  dependencies between DTOs) and a DTO can serve as plain owner in
+  one row, sections-only in another, or both. The earlier
+  batch-shaped draft's cross-DTO plain-shape agreement check drops
+  out as a consequence — different rows can pick different plain
+  owners freely.
 
-- **SD4 — Stacked DTOs may share section names.** Two DTOs in a stack
-  both declaring section `Foo` produce two cycles
-  (`BeginSectionFoo`…`EndSection`) per entity. We do not deduplicate
+- **SD4 — Stacked DTOs may share section names within one row.** Two
+  DTOs added to the same entity both declaring section `Foo` produce
+  two cycles (`BeginSectionFoo`…`EndSection`). We do not deduplicate
   or merge. Read-back projects each DTO's section content into the
   matching DTO's accumulator independently — order within a section
   cycle reflects the DTO that emitted it, not a stack-level merge.
@@ -272,19 +288,30 @@ with the per-channel argument list matching the
 
 ## Alternatives
 
-- **Stacked entities as a Go interface tag on each DTO instead of a
-  cross-check at marshal time.** Each DTO would declare which other
-  DTOs it composes with via a type-level constraint. Rejected as too
-  coupling: it forces every DTO to know its peers, defeating the
-  composability win. The cross-check is a per-call concern, not a
-  per-DTO one.
+- **Stacked entities as a Go interface tag on each DTO.** Each DTO
+  would declare which other DTOs it composes with via a type-level
+  constraint. Rejected as too coupling: it forces every DTO to know
+  its peers, defeating the composability win. Composition is a
+  per-call concern, not a per-DTO one.
+
+- **Batch-shaped MarshalStack(dml, []any{rowsA, rowsB}, lookup).**
+  The earlier draft of D1 took a heterogeneous list of `[]TX`
+  batches and emitted one entity per row index across all batches,
+  with cross-batch plain-shape agreement and row-count checks.
+  Rejected in favour of `RowComposer` because the batches-as-
+  rectangles shape constrains callers to materialise every DTO's
+  rows up front in matched-length slices. `RowComposer` lets the
+  caller drive the row loop and compose each entity independently —
+  more flexible for streaming, conditional composition, and
+  per-row-varying DTO mixes.
 
 - **Sort by section instead of within section (cross-section
   reordering).** Visually clearer in the wire dump but interacts
-  badly with D1 (stacked DTOs would have to re-cluster their sections
-  to land in the global order), and the reordering benefit is
-  marginal because attribute locality matters per section, not per
-  entity. Rejected as gratuitous.
+  badly with D1 (the per-row composer would have to re-cluster
+  sections to land in a global order, defeating its incremental
+  nature), and the reordering benefit is marginal because attribute
+  locality matters per section, not per entity. Rejected as
+  gratuitous.
 
 - **`LeewayNativeLeaf` umbrella as a dynamic per-row channel selector
   (a discriminated-union Go field).** The original sketch from the
@@ -317,11 +344,12 @@ with the per-channel argument list matching the
   each lw: field reads from on the wire — i.e. essentially the same
   per-field flag we already pay, just paid twice.
 
-- **Single Marshal entry point with options instead of MarshalStack.**
-  `Marshal(dml, rows, lookup, MarshalOpts{Stack: [...]})`. Rejected on
-  API legibility — the stacked path is meaningfully different
-  (heterogeneous rows, cross-DTO validation, plain-column agreement);
-  a dedicated entry point makes the call site read better.
+- **Single Marshal entry point with options instead of a separate
+  composer.** `Marshal(dml, rows, lookup, MarshalOpts{Stack: [...]})`.
+  Rejected on API legibility — the stacked path is meaningfully
+  different (caller-driven row loop, mixed DTO types per entity);
+  a dedicated `RowComposer` type makes the call site read better
+  and gives the state machine somewhere natural to live.
 
 ## Consequences
 
@@ -343,11 +371,11 @@ with the per-channel argument list matching the
 
 ### Negative
 
-- **Plain-column cross-check is a runtime error path with potentially
-  surprising failure messages.** When two DTOs in a stack disagree on
-  plain shape, the failure surfaces at `MarshalStack` call time, not
-  at compile time. Mitigation: clear error messages naming both DTOs
-  and the disagreeing column.
+- **State-machine errors are runtime, not compile time.** Calling
+  `AddSections` before `BeginRow` or `BeginRow` while already in a
+  row returns a descriptive error but is a runtime check.
+  Mitigation: clear messages naming the missing transition; tests
+  cover each mis-sequenced call.
 - **Section-channel uniformity check grows from binary to 8-way.** The
   parser's uniformity validation now compares a channel enum, not a
   bool. Marginal complexity, but the failure message must name both
