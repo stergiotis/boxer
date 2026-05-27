@@ -60,8 +60,15 @@ type recordingSec struct {
 	name string
 }
 
-func (s *recordingSec) BeginAttribute(value string) *recordingAttr {
-	s.root.record(fmt.Sprintf("%s.BeginAttribute(%q)", s.name, value))
+// BeginAttribute is variadic so the same mock handles both scalar
+// emits (`BeginAttribute(value)`) and container emits
+// (`BeginAttribute()` followed by AddToContainerP calls).
+func (s *recordingSec) BeginAttribute(values ...string) *recordingAttr {
+	if len(values) == 0 {
+		s.root.record(fmt.Sprintf("%s.BeginAttribute()", s.name))
+	} else {
+		s.root.record(fmt.Sprintf("%s.BeginAttribute(%q)", s.name, values[0]))
+	}
 	return &recordingAttr{root: s.root}
 }
 func (s *recordingSec) EndSection() {
@@ -72,6 +79,9 @@ type recordingAttr struct {
 	root *recordingDML
 }
 
+func (a *recordingAttr) AddToContainerP(value string) {
+	a.root.record(fmt.Sprintf("AddToContainerP(%q)", value))
+}
 func (a *recordingAttr) AddMembershipLowCardRefP(id uint64) {
 	a.root.record(fmt.Sprintf("AddMembershipLowCardRefP(%d)", id))
 }
@@ -105,6 +115,16 @@ type stackedB struct {
 	_     struct{} `kind:"b"`
 	Id    uint64   `lw:",id"`
 	Label string   `lw:"label,symbol"`
+}
+
+// stackedMixed packs both a scalar and a container field into one
+// section so the per-attribute cardinality filter is observable in
+// test wire output.
+type stackedMixed struct {
+	_     struct{} `kind:"mixed"`
+	Id    uint64   `lw:",id"`
+	Color string   `lw:"color,symbol"`  // scalar → always size-1 attr
+	Brand []string `lw:"brand,symbol"`  // container → runtime size
 }
 
 // TestRowComposer_SingleRow_PlainPlusSections confirms BeginRow opens
@@ -239,4 +259,141 @@ func TestRowComposer_RejectsNonStructRow(t *testing.T) {
 	err := m.BeginRow(42)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "row must be a struct")
+}
+
+// TestRowComposer_AddSingleValueAttributes_PureScalarRow confirms a
+// DTO with only scalar fields emits its single section with one
+// size-1 attribute when AddSingleValueAttributes is called.
+func TestRowComposer_AddSingleValueAttributes_PureScalarRow(t *testing.T) {
+	dml := &recordingDML{}
+	m := marshallreflect.NewRowComposer(dml, fakeLookup{})
+
+	require.NoError(t, m.BeginRow(stackedA{Id: 1, Color: "red"}))
+	require.NoError(t, m.AddSingleValueAttributes(stackedB{Id: 1, Label: "alpha"}))
+	require.NoError(t, m.CommitRow())
+
+	joined := strings.Join(dml.log, "\n")
+	require.Contains(t, joined, `Symbol.BeginAttribute("alpha")`)
+	// No AddToContainerP calls — there are no containers.
+	require.NotContains(t, joined, "AddToContainerP")
+}
+
+// TestRowComposer_AddMultiValueAttributes_SkipsScalars confirms
+// AddMultiValueAttributes never emits attributes for purely scalar
+// DTOs — pure scalar rows produce no Begin/EndSection frame at all
+// (sectionHasMatchingField returns false).
+func TestRowComposer_AddMultiValueAttributes_SkipsScalars(t *testing.T) {
+	dml := &recordingDML{}
+	m := marshallreflect.NewRowComposer(dml, fakeLookup{})
+
+	require.NoError(t, m.BeginRow(stackedA{Id: 1, Color: "red"}))
+	logBefore := append([]string(nil), dml.log...)
+	require.NoError(t, m.AddMultiValueAttributes(stackedB{Id: 1, Label: "alpha"}))
+	require.NoError(t, m.CommitRow())
+
+	// Between BeginRow's emit and CommitRow's CommitEntity, the only
+	// new entries should be from CommitEntity — AddMultiValueAttributes
+	// on a pure-scalar DTO is a no-op.
+	tail := dml.log[len(logBefore):]
+	for _, line := range tail {
+		require.NotContains(t, line, "Symbol", "AddMultiValueAttributes should not open Symbol section for pure-scalar DTO")
+	}
+	require.Contains(t, dml.log, "CommitEntity")
+}
+
+// TestRowComposer_CardinalitySplit_OneOneMany confirms the
+// 1,1,…,>1,>1,… per-section attribute ordering when chaining the two
+// new methods across multiple DTOs in the same row.
+//
+// Both DTOs share section "symbol". DTO A's Brand is len=1 (so its
+// container attribute is size-1); DTO B's Brand is len=3 (size-3).
+// Chaining AddSingleValueAttributes(A) → AddSingleValueAttributes(B)
+// → AddMultiValueAttributes(A) → AddMultiValueAttributes(B) should
+// produce — within section symbol — attributes in this order:
+//
+//	A.Color ("red")           [size 1, scalar]
+//	A.Brand[0]                 [size 1, container len=1]
+//	B.Label ("alpha")          [size 1, scalar]
+//	B.Brand{x,y,z}             [size 3, container len=3]
+//
+// (A's multi-value pass produces nothing because its Brand is len=1
+// which is single-value; B's single-value pass produces only its
+// scalar Label because Brand is len=3.)
+func TestRowComposer_CardinalitySplit_OneOneMany(t *testing.T) {
+	dml := &recordingDML{}
+	m := marshallreflect.NewRowComposer(dml, fakeLookup{})
+
+	rowA := stackedMixed{Id: 1, Color: "red", Brand: []string{"acme"}}
+	rowB := stackedMixed{Id: 2, Color: "blue", Brand: []string{"x", "y", "z"}}
+
+	// BeginRow emits plain + plainOwner's full sections. To exercise
+	// only the filtered methods, plainOwner is a scalar-only DTO and
+	// we drive the cardinality split via Add* calls on the mixed DTOs.
+	require.NoError(t, m.BeginRow(stackedA{Id: 1, Color: "owner"}))
+	require.NoError(t, m.AddSingleValueAttributes(rowA))
+	require.NoError(t, m.AddSingleValueAttributes(rowB))
+	require.NoError(t, m.AddMultiValueAttributes(rowA))
+	require.NoError(t, m.AddMultiValueAttributes(rowB))
+	require.NoError(t, m.CommitRow())
+
+	joined := strings.Join(dml.log, "\n")
+
+	// Order assertion: rowA's scalar + len=1 container, then rowB's
+	// scalar, then rowB's len=3 container. rowA's MultiValue pass
+	// produces no Symbol cycle (len=1 is single-value).
+	redIdx := strings.Index(joined, `Symbol.BeginAttribute("red")`)
+	acmeIdx := strings.Index(joined, `AddToContainerP("acme")`)
+	blueIdx := strings.Index(joined, `Symbol.BeginAttribute("blue")`)
+	xIdx := strings.Index(joined, `AddToContainerP("x")`)
+
+	require.NotEqual(t, -1, redIdx)
+	require.NotEqual(t, -1, acmeIdx)
+	require.NotEqual(t, -1, blueIdx)
+	require.NotEqual(t, -1, xIdx)
+	require.Less(t, redIdx, acmeIdx, "size-1 scalar precedes size-1 container within rowA's single-value pass")
+	require.Less(t, acmeIdx, blueIdx, "rowA's single-value emit precedes rowB's single-value emit")
+	require.Less(t, blueIdx, xIdx, "size-1 emits precede size-3 container")
+
+	// rowA's container is len=1 so its MultiValue pass emits nothing.
+	require.Equal(t, 1, strings.Count(joined, `AddToContainerP("acme")`),
+		"rowA's len=1 container should appear exactly once (single-value pass only)")
+	// rowB's container has three elements added.
+	require.Equal(t, 1, strings.Count(joined, `AddToContainerP("x")`))
+	require.Equal(t, 1, strings.Count(joined, `AddToContainerP("y")`))
+	require.Equal(t, 1, strings.Count(joined, `AddToContainerP("z")`))
+}
+
+// TestRowComposer_AddSingleValueAttributes_EmptyContainerSkipped
+// confirms an empty container produces no attribute at all from
+// either method (splice semantics preserved).
+func TestRowComposer_AddSingleValueAttributes_EmptyContainerSkipped(t *testing.T) {
+	dml := &recordingDML{}
+	m := marshallreflect.NewRowComposer(dml, fakeLookup{})
+
+	row := stackedMixed{Id: 1, Color: "red", Brand: nil}
+	require.NoError(t, m.BeginRow(stackedA{Id: 1, Color: "owner"}))
+	require.NoError(t, m.AddSingleValueAttributes(row))
+	require.NoError(t, m.AddMultiValueAttributes(row))
+	require.NoError(t, m.CommitRow())
+
+	joined := strings.Join(dml.log, "\n")
+	require.NotContains(t, joined, "AddToContainerP",
+		"empty Brand should produce no container attribute under either filter")
+	// The scalar Color still emits under the single-value pass.
+	require.Contains(t, joined, `Symbol.BeginAttribute("red")`)
+}
+
+// TestRowComposer_FilteredMethodsRequireBeginRow confirms the
+// state-machine guard applies to the new methods as well.
+func TestRowComposer_FilteredMethodsRequireBeginRow(t *testing.T) {
+	dml := &recordingDML{}
+	m := marshallreflect.NewRowComposer(dml, fakeLookup{})
+
+	err := m.AddSingleValueAttributes(stackedA{})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "outside of a row")
+
+	err = m.AddMultiValueAttributes(stackedA{})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "outside of a row")
 }

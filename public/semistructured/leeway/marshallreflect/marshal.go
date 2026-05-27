@@ -53,7 +53,7 @@ func marshalRow(dml, row reflect.Value, plan *marshallgen.Plan, lookup LookupI) 
 	}
 	groups := computeGroups(plan)
 	for _, g := range groups {
-		err = marshalSection(dml, row, g, lookup)
+		err = marshalSection(dml, row, g, lookup, cardFilterAll)
 		if err != nil {
 			return
 		}
@@ -121,19 +121,29 @@ func plainTimeReflect(row reflect.Value, p *marshallgen.PlainCol) (out reflect.V
 	return
 }
 
-func marshalSection(dml, row reflect.Value, g sectionGroup, lookup LookupI) (err error) {
+func marshalSection(dml, row reflect.Value, g sectionGroup, lookup LookupI, filter cardFilter) (err error) {
+	if !sectionHasMatchingField(row, g, filter) {
+		return
+	}
 	method := upperFirst(g.Section)
 	sec := mustCall(dml, "GetSection"+method)[0]
 
 	if len(g.SubColumns) > 1 {
-		err = marshalMultiSubColumn(sec, row, g, lookup)
-		if err != nil {
-			return
+		// Multi-sub-column attributes carry one tuple per row — treated
+		// as single-value attributes for the cardFilter partition.
+		if filter != cardFilterMultiValue {
+			err = marshalMultiSubColumn(sec, row, g, lookup)
+			if err != nil {
+				return
+			}
 		}
 		mustCall(sec, "EndSection")
 		return
 	}
 	for _, f := range g.SubColumns[0].Fields {
+		if !fieldEmitsForFilter(row, f, filter) {
+			continue
+		}
 		err = marshalField(sec, row, f, lookup)
 		if err != nil {
 			return

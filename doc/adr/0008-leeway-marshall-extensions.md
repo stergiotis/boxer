@@ -85,20 +85,40 @@ multiple DTOs interleaved between the frame markers. The codegen path
 gains no equivalent in this ADR; stacking is a runtime composition and
 its natural home is the reflect-side API.
 
-`RowComposer` exposes a three-method state machine:
+`RowComposer` exposes a five-method state machine:
 
 ```go
 m := marshallreflect.NewRowComposer(dml, lookup)
 for ... {
-    if err := m.BeginRow(plainOwner); err != nil { ... }   // opens entity, plain + plainOwner's sections
-    if err := m.AddSections(other);   err != nil { ... }   // adds another DTO's sections (zero or more)
-    if err := m.CommitRow();          err != nil { ... }   // closes entity
+    if err := m.BeginRow(plainOwner); err != nil { ... }    // opens entity, plain + plainOwner's sections
+    if err := m.AddSections(other);   err != nil { ... }    // adds another DTO's sections (zero or more)
+    // — optional cardinality-filtered variants of AddSections —
+    m.AddSingleValueAttributes(row)                          // emits only size-1 attributes
+    m.AddMultiValueAttributes(row)                           // emits only size->1 attributes
+    if err := m.CommitRow();          err != nil { ... }    // closes entity
 }
 ```
 
 State transitions: `Initial → InRow` on `BeginRow`; `InRow → InRow`
-on `AddSections`; `InRow → Initial` on `CommitRow`. Any mis-sequenced
+on any `Add*` call; `InRow → Initial` on `CommitRow`. Any mis-sequenced
 call returns a clear error without touching the DML.
+
+`AddSingleValueAttributes` and `AddMultiValueAttributes` partition the
+emit by **runtime value-cardinality of each attribute**: scalar fields
+and `Option[T]` with `Has=true` always go through the single-value
+variant; container / roaring fields contribute to either variant
+depending on their runtime length (len 1 → single-value pass; len > 1
+→ multi-value pass; empty → no emit either way). Explode-shaped fields
+always emit through the single-value variant (each element is its own
+size-1 attribute). Sections whose fields all fail to match a given
+filter open no `BeginSection` frame in that pass.
+
+Chaining the two variants across multiple DTOs in one row produces
+the per-section `1,1,…,>1,>1,…` attribute ordering. This is the
+runtime-cardinality refinement of D2's static field-class partition
+— D2 sorts fields scalar-first within each section; D1's filtered
+emits sort attributes single-value-first within each section across
+multiple DTOs in one entity.
 
 Plain-column ownership is **explicit per row**: only `plainOwner`'s
 DTO drives plain emission. Other DTOs passed via `AddSections`
