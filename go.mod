@@ -24,6 +24,7 @@ require (
 	github.com/go-json-experiment/json v0.0.0-20260214004413-d219187c3433
 	github.com/go-text/typesetting v0.3.4
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
+	github.com/golangci/gofmt v0.0.0-20251215234548-e7be49a5ab4d
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/klauspost/compress v1.18.6
@@ -41,6 +42,7 @@ require (
 	github.com/twmb/franz-go v1.21.2
 	github.com/twmb/franz-go/pkg/kadm v1.18.0
 	github.com/urfave/cli/v2 v2.27.7
+	github.com/valyala/fasttemplate v1.2.2
 	github.com/yassinebenaid/godump v0.11.1
 	github.com/yuin/goldmark v1.8.2
 	github.com/yuin/goldmark-meta v1.1.0
@@ -189,6 +191,7 @@ require (
 	github.com/tklauser/go-sysconf v0.3.16 // indirect
 	github.com/tklauser/numcpus v0.11.0 // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.13.1 // indirect
+	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
