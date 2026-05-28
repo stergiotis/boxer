@@ -1,0 +1,989 @@
+// Code generated; TheStack (github.com/stergiotis/boxer/public/thestack/cmd/egui2gen) DO NOT EDIT.
+
+package bindings
+
+type FuncProcIdE uint32
+
+const (
+	FuncProcIdAddSpace                            FuncProcIdE = FuncProcIdOffset + 0
+	FuncProcIdAllocateUiAtRect                    FuncProcIdE = FuncProcIdOffset + 1
+	FuncProcIdAnimateBoolResponsive               FuncProcIdE = FuncProcIdOffset + 2
+	FuncProcIdAnimateBoolWithTime                 FuncProcIdE = FuncProcIdOffset + 3
+	FuncProcIdAnimateValueWithTime                FuncProcIdE = FuncProcIdOffset + 4
+	FuncProcIdAtoms                               FuncProcIdE = FuncProcIdOffset + 5
+	FuncProcIdButton                              FuncProcIdE = FuncProcIdOffset + 6
+	FuncProcIdCaptureAvailableSize                FuncProcIdE = FuncProcIdOffset + 7
+	FuncProcIdCaptureUiRect                       FuncProcIdE = FuncProcIdOffset + 8
+	FuncProcIdCheckbox                            FuncProcIdE = FuncProcIdOffset + 9
+	FuncProcIdCodeView                            FuncProcIdE = FuncProcIdOffset + 10
+	FuncProcIdCodeViewJob                         FuncProcIdE = FuncProcIdOffset + 11
+	FuncProcIdCollapsingHeader                    FuncProcIdE = FuncProcIdOffset + 12
+	FuncProcIdColor                               FuncProcIdE = FuncProcIdOffset + 13
+	FuncProcIdComboBox                            FuncProcIdE = FuncProcIdOffset + 14
+	FuncProcIdContextInspectionUi                 FuncProcIdE = FuncProcIdOffset + 15
+	FuncProcIdContextSendViewPortCommandClose     FuncProcIdE = FuncProcIdOffset + 16
+	FuncProcIdDatePickerButton                    FuncProcIdE = FuncProcIdOffset + 17
+	FuncProcIdDateTimePickerButton                FuncProcIdE = FuncProcIdOffset + 18
+	FuncProcIdDockAreaRaw                         FuncProcIdE = FuncProcIdOffset + 19
+	FuncProcIdDragValueF64                        FuncProcIdE = FuncProcIdOffset + 20
+	FuncProcIdDragValueI64                        FuncProcIdE = FuncProcIdOffset + 21
+	FuncProcIdDragValueU64                        FuncProcIdE = FuncProcIdOffset + 22
+	FuncProcIdEnabledUi                           FuncProcIdE = FuncProcIdOffset + 23
+	FuncProcIdEnd                                 FuncProcIdE = FuncProcIdOffset + 24
+	FuncProcIdEndETable                           FuncProcIdE = FuncProcIdOffset + 25
+	FuncProcIdEndRow                              FuncProcIdE = FuncProcIdOffset + 26
+	FuncProcIdEtColumn                            FuncProcIdE = FuncProcIdOffset + 27
+	FuncProcIdEtHeaderText                        FuncProcIdE = FuncProcIdOffset + 28
+	FuncProcIdEtRowHeight                         FuncProcIdE = FuncProcIdOffset + 29
+	FuncProcIdExportSvg                           FuncProcIdE = FuncProcIdOffset + 30
+	FuncProcIdExportSvgWindow                     FuncProcIdE = FuncProcIdOffset + 31
+	FuncProcIdFetchF1KeyPressed                   FuncProcIdE = FuncProcIdOffset + 32
+	FuncProcIdFetchFrameMetrics                   FuncProcIdE = FuncProcIdOffset + 33
+	FuncProcIdFetchGraphEvents                    FuncProcIdE = FuncProcIdOffset + 34
+	FuncProcIdFetchGraphMetrics                   FuncProcIdE = FuncProcIdOffset + 35
+	FuncProcIdFetchGraphSelection                 FuncProcIdE = FuncProcIdOffset + 36
+	FuncProcIdFetchR10                            FuncProcIdE = FuncProcIdOffset + 37
+	FuncProcIdFetchR14CanvasPointer               FuncProcIdE = FuncProcIdOffset + 38
+	FuncProcIdFetchR15PlotPointer                 FuncProcIdE = FuncProcIdOffset + 39
+	FuncProcIdFetchR15WalkersCamera               FuncProcIdE = FuncProcIdOffset + 40
+	FuncProcIdFetchR16ScrollDelta                 FuncProcIdE = FuncProcIdOffset + 41
+	FuncProcIdFetchR17Modifiers                   FuncProcIdE = FuncProcIdOffset + 42
+	FuncProcIdFetchR18AvailableSize               FuncProcIdE = FuncProcIdOffset + 43
+	FuncProcIdFetchR19ZoomDelta                   FuncProcIdE = FuncProcIdOffset + 44
+	FuncProcIdFetchR20Pointer                     FuncProcIdE = FuncProcIdOffset + 45
+	FuncProcIdFetchR21UiRects                     FuncProcIdE = FuncProcIdOffset + 46
+	FuncProcIdFetchR7                             FuncProcIdE = FuncProcIdOffset + 47
+	FuncProcIdFetchR9EtPrefetch                   FuncProcIdE = FuncProcIdOffset + 48
+	FuncProcIdFetchR9F64                          FuncProcIdE = FuncProcIdOffset + 49
+	FuncProcIdFetchR9I64                          FuncProcIdE = FuncProcIdOffset + 50
+	FuncProcIdFetchR9S                            FuncProcIdE = FuncProcIdOffset + 51
+	FuncProcIdFetchR9U64                          FuncProcIdE = FuncProcIdOffset + 52
+	FuncProcIdFetchSnarlEvents                    FuncProcIdE = FuncProcIdOffset + 53
+	FuncProcIdFrame                               FuncProcIdE = FuncProcIdOffset + 54
+	FuncProcIdGraph                               FuncProcIdE = FuncProcIdOffset + 55
+	FuncProcIdGraphEdge                           FuncProcIdE = FuncProcIdOffset + 56
+	FuncProcIdGraphNode                           FuncProcIdE = FuncProcIdOffset + 57
+	FuncProcIdGrid                                FuncProcIdE = FuncProcIdOffset + 58
+	FuncProcIdGroup                               FuncProcIdE = FuncProcIdOffset + 59
+	FuncProcIdGuiZoomZoomMenuButtons              FuncProcIdE = FuncProcIdOffset + 60
+	FuncProcIdH3CellsColored                      FuncProcIdE = FuncProcIdOffset + 61
+	FuncProcIdH3Region                            FuncProcIdE = FuncProcIdOffset + 62
+	FuncProcIdHorizontal                          FuncProcIdE = FuncProcIdOffset + 63
+	FuncProcIdHorizontalCentered                  FuncProcIdE = FuncProcIdOffset + 64
+	FuncProcIdHorizontalTop                       FuncProcIdE = FuncProcIdOffset + 65
+	FuncProcIdHorizontalWrapped                   FuncProcIdE = FuncProcIdOffset + 66
+	FuncProcIdHoverText                           FuncProcIdE = FuncProcIdOffset + 67
+	FuncProcIdHoverUi                             FuncProcIdE = FuncProcIdOffset + 68
+	FuncProcIdHyperlink                           FuncProcIdE = FuncProcIdOffset + 69
+	FuncProcIdHyperlinkTo                         FuncProcIdE = FuncProcIdOffset + 70
+	FuncProcIdImage                               FuncProcIdE = FuncProcIdOffset + 71
+	FuncProcIdImageRelease                        FuncProcIdE = FuncProcIdOffset + 72
+	FuncProcIdIndent                              FuncProcIdE = FuncProcIdOffset + 73
+	FuncProcIdLabel                               FuncProcIdE = FuncProcIdOffset + 74
+	FuncProcIdLabelAtoms                          FuncProcIdE = FuncProcIdOffset + 75
+	FuncProcIdLabelWidgetText                     FuncProcIdE = FuncProcIdOffset + 76
+	FuncProcIdMapMarker                           FuncProcIdE = FuncProcIdOffset + 77
+	FuncProcIdMapPolyline                         FuncProcIdE = FuncProcIdOffset + 78
+	FuncProcIdMeasureText                         FuncProcIdE = FuncProcIdOffset + 79
+	FuncProcIdMemoryResetAreas                    FuncProcIdE = FuncProcIdOffset + 80
+	FuncProcIdMenuBar                             FuncProcIdE = FuncProcIdOffset + 81
+	FuncProcIdMenuButton                          FuncProcIdE = FuncProcIdOffset + 82
+	FuncProcIdMoveWindowToTop                     FuncProcIdE = FuncProcIdOffset + 83
+	FuncProcIdNewTable                            FuncProcIdE = FuncProcIdOffset + 84
+	FuncProcIdNewTableColumn                      FuncProcIdE = FuncProcIdOffset + 85
+	FuncProcIdNewTableRowHeight                   FuncProcIdE = FuncProcIdOffset + 86
+	FuncProcIdNodeDir                             FuncProcIdE = FuncProcIdOffset + 87
+	FuncProcIdNodeDirClose                        FuncProcIdE = FuncProcIdOffset + 88
+	FuncProcIdNodeLeaf                            FuncProcIdE = FuncProcIdOffset + 89
+	FuncProcIdPaintAbsoluteOverlay                FuncProcIdE = FuncProcIdOffset + 90
+	FuncProcIdPaintArrow                          FuncProcIdE = FuncProcIdOffset + 91
+	FuncProcIdPaintCanvas                         FuncProcIdE = FuncProcIdOffset + 92
+	FuncProcIdPaintCircleFilled                   FuncProcIdE = FuncProcIdOffset + 93
+	FuncProcIdPaintCircleStroke                   FuncProcIdE = FuncProcIdOffset + 94
+	FuncProcIdPaintCubicBezier                    FuncProcIdE = FuncProcIdOffset + 95
+	FuncProcIdPaintDashedLine                     FuncProcIdE = FuncProcIdOffset + 96
+	FuncProcIdPaintLine                           FuncProcIdE = FuncProcIdOffset + 97
+	FuncProcIdPaintPolyline                       FuncProcIdE = FuncProcIdOffset + 98
+	FuncProcIdPaintRectFilled                     FuncProcIdE = FuncProcIdOffset + 99
+	FuncProcIdPaintRectStroke                     FuncProcIdE = FuncProcIdOffset + 100
+	FuncProcIdPaintSenseRegion                    FuncProcIdE = FuncProcIdOffset + 101
+	FuncProcIdPaintText                           FuncProcIdE = FuncProcIdOffset + 102
+	FuncProcIdPanelBottom                         FuncProcIdE = FuncProcIdOffset + 103
+	FuncProcIdPanelBottomInside                   FuncProcIdE = FuncProcIdOffset + 104
+	FuncProcIdPanelCentral                        FuncProcIdE = FuncProcIdOffset + 105
+	FuncProcIdPanelCentralInside                  FuncProcIdE = FuncProcIdOffset + 106
+	FuncProcIdPanelLeft                           FuncProcIdE = FuncProcIdOffset + 107
+	FuncProcIdPanelLeftInside                     FuncProcIdE = FuncProcIdOffset + 108
+	FuncProcIdPanelRight                          FuncProcIdE = FuncProcIdOffset + 109
+	FuncProcIdPanelRightInside                    FuncProcIdE = FuncProcIdOffset + 110
+	FuncProcIdPanelTop                            FuncProcIdE = FuncProcIdOffset + 111
+	FuncProcIdPanelTopInside                      FuncProcIdE = FuncProcIdOffset + 112
+	FuncProcIdPassthrough                         FuncProcIdE = FuncProcIdOffset + 113
+	FuncProcIdPlot                                FuncProcIdE = FuncProcIdOffset + 114
+	FuncProcIdPlotBars                            FuncProcIdE = FuncProcIdOffset + 115
+	FuncProcIdPlotBoxes                           FuncProcIdE = FuncProcIdOffset + 116
+	FuncProcIdPlotHLine                           FuncProcIdE = FuncProcIdOffset + 117
+	FuncProcIdPlotLine                            FuncProcIdE = FuncProcIdOffset + 118
+	FuncProcIdPlotPolygon                         FuncProcIdE = FuncProcIdOffset + 119
+	FuncProcIdPlotScatter                         FuncProcIdE = FuncProcIdOffset + 120
+	FuncProcIdPlotText                            FuncProcIdE = FuncProcIdOffset + 121
+	FuncProcIdPlotVLine                           FuncProcIdE = FuncProcIdOffset + 122
+	FuncProcIdPrepareNextFrame                    FuncProcIdE = FuncProcIdOffset + 123
+	FuncProcIdProgressBar                         FuncProcIdE = FuncProcIdOffset + 124
+	FuncProcIdPushId                              FuncProcIdE = FuncProcIdOffset + 125
+	FuncProcIdRadioButton                         FuncProcIdE = FuncProcIdOffset + 126
+	FuncProcIdRequestRepaint                      FuncProcIdE = FuncProcIdOffset + 127
+	FuncProcIdRequestRepaintAfter                 FuncProcIdE = FuncProcIdOffset + 128
+	FuncProcIdRequestScreenshot                   FuncProcIdE = FuncProcIdOffset + 129
+	FuncProcIdRequestScreenshotRect               FuncProcIdE = FuncProcIdOffset + 130
+	FuncProcIdScalarSize                          FuncProcIdE = FuncProcIdOffset + 131
+	FuncProcIdScope                               FuncProcIdE = FuncProcIdOffset + 132
+	FuncProcIdScrollArea                          FuncProcIdE = FuncProcIdOffset + 133
+	FuncProcIdScrollToCursor                      FuncProcIdE = FuncProcIdOffset + 134
+	FuncProcIdScrollingTexture                    FuncProcIdE = FuncProcIdOffset + 135
+	FuncProcIdScrollingTextureRelease             FuncProcIdE = FuncProcIdOffset + 136
+	FuncProcIdSelectableLabel                     FuncProcIdE = FuncProcIdOffset + 137
+	FuncProcIdSeparator                           FuncProcIdE = FuncProcIdOffset + 138
+	FuncProcIdSetAnimationFreeze                  FuncProcIdE = FuncProcIdOffset + 139
+	FuncProcIdSetWindowCollapsed                  FuncProcIdE = FuncProcIdOffset + 140
+	FuncProcIdShowDebugTools                      FuncProcIdE = FuncProcIdOffset + 141
+	FuncProcIdShowPuffinProfiler                  FuncProcIdE = FuncProcIdOffset + 142
+	FuncProcIdSliderF64                           FuncProcIdE = FuncProcIdOffset + 143
+	FuncProcIdSliderI64                           FuncProcIdE = FuncProcIdOffset + 144
+	FuncProcIdSliderU64                           FuncProcIdE = FuncProcIdOffset + 145
+	FuncProcIdSnarlConnection                     FuncProcIdE = FuncProcIdOffset + 146
+	FuncProcIdSnarlEditor                         FuncProcIdE = FuncProcIdOffset + 147
+	FuncProcIdSnarlNode                           FuncProcIdE = FuncProcIdOffset + 148
+	FuncProcIdSnarlPin                            FuncProcIdE = FuncProcIdOffset + 149
+	FuncProcIdSpinner                             FuncProcIdE = FuncProcIdOffset + 150
+	FuncProcIdTable                               FuncProcIdE = FuncProcIdOffset + 151
+	FuncProcIdTableCellRichText                   FuncProcIdE = FuncProcIdOffset + 152
+	FuncProcIdTableCellText                       FuncProcIdE = FuncProcIdOffset + 153
+	FuncProcIdTableColumn                         FuncProcIdE = FuncProcIdOffset + 154
+	FuncProcIdTableHeaderText                     FuncProcIdE = FuncProcIdOffset + 155
+	FuncProcIdTextEdit                            FuncProcIdE = FuncProcIdOffset + 156
+	FuncProcIdTimeRangePicker                     FuncProcIdE = FuncProcIdOffset + 157
+	FuncProcIdTintedScope                         FuncProcIdE = FuncProcIdOffset + 158
+	FuncProcIdTree                                FuncProcIdE = FuncProcIdOffset + 159
+	FuncProcIdUiDisable                           FuncProcIdE = FuncProcIdOffset + 160
+	FuncProcIdUiSetHeight                         FuncProcIdE = FuncProcIdOffset + 161
+	FuncProcIdUiSetMaxHeight                      FuncProcIdE = FuncProcIdOffset + 162
+	FuncProcIdUiSetMaxWidth                       FuncProcIdE = FuncProcIdOffset + 163
+	FuncProcIdUiSetMinHeight                      FuncProcIdE = FuncProcIdOffset + 164
+	FuncProcIdUiSetMinWidth                       FuncProcIdE = FuncProcIdOffset + 165
+	FuncProcIdUiSetWidth                          FuncProcIdE = FuncProcIdOffset + 166
+	FuncProcIdUiWithLayout                        FuncProcIdE = FuncProcIdOffset + 167
+	FuncProcIdVectorSize                          FuncProcIdE = FuncProcIdOffset + 168
+	FuncProcIdVertical                            FuncProcIdE = FuncProcIdOffset + 169
+	FuncProcIdVerticalCentered                    FuncProcIdE = FuncProcIdOffset + 170
+	FuncProcIdVerticalCenteredJustified           FuncProcIdE = FuncProcIdOffset + 171
+	FuncProcIdWalkersMap                          FuncProcIdE = FuncProcIdOffset + 172
+	FuncProcIdWarnIfDebugBuild                    FuncProcIdE = FuncProcIdOffset + 173
+	FuncProcIdWidgetText                          FuncProcIdE = FuncProcIdOffset + 174
+	FuncProcIdWidgetsGlobalThemePreferenceButtons FuncProcIdE = FuncProcIdOffset + 175
+	FuncProcIdWindow                              FuncProcIdE = FuncProcIdOffset + 176
+)
+const (
+	AtomsMethodIdBuild AtomsMethodIdE = 0
+
+	AtomsMethodIdText               AtomsMethodIdE = 1
+	AtomsMethodIdRichText           AtomsMethodIdE = 2
+	AtomsMethodIdRichTextColored    AtomsMethodIdE = 3
+	AtomsMethodIdEndRichText        AtomsMethodIdE = 4
+	AtomsMethodIdSize               AtomsMethodIdE = 5
+	AtomsMethodIdExtraLetterSpacing AtomsMethodIdE = 6
+	AtomsMethodIdLineHeight         AtomsMethodIdE = 7
+	AtomsMethodIdLineHeightDefault  AtomsMethodIdE = 8
+	AtomsMethodIdHeading            AtomsMethodIdE = 9
+	AtomsMethodIdMonospace          AtomsMethodIdE = 10
+	AtomsMethodIdCode               AtomsMethodIdE = 11
+	AtomsMethodIdStrong             AtomsMethodIdE = 12
+	AtomsMethodIdWeak               AtomsMethodIdE = 13
+	AtomsMethodIdUnderline          AtomsMethodIdE = 14
+	AtomsMethodIdStrikethrough      AtomsMethodIdE = 15
+	AtomsMethodIdItalics            AtomsMethodIdE = 16
+	AtomsMethodIdSmall              AtomsMethodIdE = 17
+	AtomsMethodIdSmallRaised        AtomsMethodIdE = 18
+	AtomsMethodIdRaised             AtomsMethodIdE = 19
+	AtomsMethodIdTextStyleName      AtomsMethodIdE = 20
+)
+
+const (
+	ButtonMethodIdBuild ButtonMethodIdE = 0
+
+	ButtonMethodIdFrame             ButtonMethodIdE = 1
+	ButtonMethodIdSmall             ButtonMethodIdE = 2
+	ButtonMethodIdWrap              ButtonMethodIdE = 3
+	ButtonMethodIdTruncate          ButtonMethodIdE = 4
+	ButtonMethodIdSelected          ButtonMethodIdE = 5
+	ButtonMethodIdFrameWhenInactive ButtonMethodIdE = 6
+	ButtonMethodIdRightText         ButtonMethodIdE = 7
+	ButtonMethodIdShortcutText      ButtonMethodIdE = 8
+)
+
+const (
+	CheckboxMethodIdBuild CheckboxMethodIdE = 0
+
+	CheckboxMethodIdIndeterminate CheckboxMethodIdE = 1
+)
+
+const (
+	CodeViewMethodIdBuild CodeViewMethodIdE = 0
+
+	CodeViewMethodIdSelectable CodeViewMethodIdE = 1
+	CodeViewMethodIdWrap       CodeViewMethodIdE = 2
+	CodeViewMethodIdTruncate   CodeViewMethodIdE = 3
+	CodeViewMethodIdExtend     CodeViewMethodIdE = 4
+)
+
+const (
+	CodeViewJobMethodIdBuild CodeViewJobMethodIdE = 0
+
+	CodeViewJobMethodIdSection CodeViewJobMethodIdE = 1
+)
+
+const (
+	CollapsingHeaderMethodIdBuild CollapsingHeaderMethodIdE = 0
+
+	CollapsingHeaderMethodIdDefaultOpen CollapsingHeaderMethodIdE = 1
+	CollapsingHeaderMethodIdOpen        CollapsingHeaderMethodIdE = 2
+	CollapsingHeaderMethodIdClose       CollapsingHeaderMethodIdE = 3
+)
+
+const (
+	ColorMethodIdBuild ColorMethodIdE = 0
+
+	ColorMethodIdFromRgb               ColorMethodIdE = 1
+	ColorMethodIdFromRgbaUnmultiplied  ColorMethodIdE = 2
+	ColorMethodIdFromRgbaPremultiplied ColorMethodIdE = 3
+	ColorMethodIdFromGray              ColorMethodIdE = 4
+	ColorMethodIdFromBlackAlpha        ColorMethodIdE = 5
+	ColorMethodIdGammaMultiplyU8       ColorMethodIdE = 6
+	ColorMethodIdGammaMultiplyF32      ColorMethodIdE = 7
+	ColorMethodIdLinearMultiplyF32     ColorMethodIdE = 8
+	ColorMethodIdToOpaque              ColorMethodIdE = 9
+	ColorMethodIdColorTransparent      ColorMethodIdE = 10
+	ColorMethodIdColorBlack            ColorMethodIdE = 11
+	ColorMethodIdColorDarkGray         ColorMethodIdE = 12
+	ColorMethodIdColorGray             ColorMethodIdE = 13
+	ColorMethodIdColorLightGray        ColorMethodIdE = 14
+	ColorMethodIdColorWhite            ColorMethodIdE = 15
+	ColorMethodIdColorBrown            ColorMethodIdE = 16
+	ColorMethodIdColorDarkRed          ColorMethodIdE = 17
+	ColorMethodIdColorLightRed         ColorMethodIdE = 18
+	ColorMethodIdColorCyan             ColorMethodIdE = 19
+	ColorMethodIdColorMagenta          ColorMethodIdE = 20
+	ColorMethodIdColorYellow           ColorMethodIdE = 21
+	ColorMethodIdColorOrange           ColorMethodIdE = 22
+	ColorMethodIdColorLightYellow      ColorMethodIdE = 23
+	ColorMethodIdColorKhaki            ColorMethodIdE = 24
+	ColorMethodIdColorDarkGreen        ColorMethodIdE = 25
+	ColorMethodIdColorGreen            ColorMethodIdE = 26
+	ColorMethodIdColorLightGreen       ColorMethodIdE = 27
+	ColorMethodIdColorDarkBlue         ColorMethodIdE = 28
+	ColorMethodIdColorBlue             ColorMethodIdE = 29
+	ColorMethodIdColorLightBlue        ColorMethodIdE = 30
+	ColorMethodIdColorPurple           ColorMethodIdE = 31
+	ColorMethodIdColorGold             ColorMethodIdE = 32
+	ColorMethodIdColorDebugColor       ColorMethodIdE = 33
+	ColorMethodIdColorPlaceholder      ColorMethodIdE = 34
+)
+
+const (
+	ComboBoxMethodIdBuild ComboBoxMethodIdE = 0
+
+	ComboBoxMethodIdWidth    ComboBoxMethodIdE = 1
+	ComboBoxMethodIdHeight   ComboBoxMethodIdE = 2
+	ComboBoxMethodIdWrap     ComboBoxMethodIdE = 3
+	ComboBoxMethodIdTruncate ComboBoxMethodIdE = 4
+)
+
+const (
+	DatePickerButtonMethodIdBuild DatePickerButtonMethodIdE = 0
+
+	DatePickerButtonMethodIdFormat            DatePickerButtonMethodIdE = 1
+	DatePickerButtonMethodIdHighlightWeekends DatePickerButtonMethodIdE = 2
+	DatePickerButtonMethodIdShowIcon          DatePickerButtonMethodIdE = 3
+	DatePickerButtonMethodIdCalendar          DatePickerButtonMethodIdE = 4
+	DatePickerButtonMethodIdCalendarWeek      DatePickerButtonMethodIdE = 5
+	DatePickerButtonMethodIdStartEndYears     DatePickerButtonMethodIdE = 6
+	DatePickerButtonMethodIdArrows            DatePickerButtonMethodIdE = 7
+)
+
+const (
+	DateTimePickerButtonMethodIdBuild DateTimePickerButtonMethodIdE = 0
+
+	DateTimePickerButtonMethodIdFormat            DateTimePickerButtonMethodIdE = 1
+	DateTimePickerButtonMethodIdHighlightWeekends DateTimePickerButtonMethodIdE = 2
+	DateTimePickerButtonMethodIdShowIcon          DateTimePickerButtonMethodIdE = 3
+	DateTimePickerButtonMethodIdCalendar          DateTimePickerButtonMethodIdE = 4
+	DateTimePickerButtonMethodIdCalendarWeek      DateTimePickerButtonMethodIdE = 5
+	DateTimePickerButtonMethodIdStartEndYears     DateTimePickerButtonMethodIdE = 6
+	DateTimePickerButtonMethodIdArrows            DateTimePickerButtonMethodIdE = 7
+)
+
+const (
+	DragValueF64MethodIdBuild DragValueF64MethodIdE = 0
+
+	DragValueF64MethodIdSpeed              DragValueF64MethodIdE = 1
+	DragValueF64MethodIdPrefix             DragValueF64MethodIdE = 2
+	DragValueF64MethodIdSuffix             DragValueF64MethodIdE = 3
+	DragValueF64MethodIdMinDecimals        DragValueF64MethodIdE = 4
+	DragValueF64MethodIdMaxDecimals        DragValueF64MethodIdE = 5
+	DragValueF64MethodIdFixedDecimals      DragValueF64MethodIdE = 6
+	DragValueF64MethodIdBinary             DragValueF64MethodIdE = 7
+	DragValueF64MethodIdOctal              DragValueF64MethodIdE = 8
+	DragValueF64MethodIdHexadecimal        DragValueF64MethodIdE = 9
+	DragValueF64MethodIdUpdateWhileEditing DragValueF64MethodIdE = 10
+)
+
+const (
+	DragValueI64MethodIdBuild DragValueI64MethodIdE = 0
+
+	DragValueI64MethodIdSpeed              DragValueI64MethodIdE = 1
+	DragValueI64MethodIdPrefix             DragValueI64MethodIdE = 2
+	DragValueI64MethodIdSuffix             DragValueI64MethodIdE = 3
+	DragValueI64MethodIdMinDecimals        DragValueI64MethodIdE = 4
+	DragValueI64MethodIdMaxDecimals        DragValueI64MethodIdE = 5
+	DragValueI64MethodIdFixedDecimals      DragValueI64MethodIdE = 6
+	DragValueI64MethodIdBinary             DragValueI64MethodIdE = 7
+	DragValueI64MethodIdOctal              DragValueI64MethodIdE = 8
+	DragValueI64MethodIdHexadecimal        DragValueI64MethodIdE = 9
+	DragValueI64MethodIdUpdateWhileEditing DragValueI64MethodIdE = 10
+)
+
+const (
+	DragValueU64MethodIdBuild DragValueU64MethodIdE = 0
+
+	DragValueU64MethodIdSpeed              DragValueU64MethodIdE = 1
+	DragValueU64MethodIdPrefix             DragValueU64MethodIdE = 2
+	DragValueU64MethodIdSuffix             DragValueU64MethodIdE = 3
+	DragValueU64MethodIdMinDecimals        DragValueU64MethodIdE = 4
+	DragValueU64MethodIdMaxDecimals        DragValueU64MethodIdE = 5
+	DragValueU64MethodIdFixedDecimals      DragValueU64MethodIdE = 6
+	DragValueU64MethodIdBinary             DragValueU64MethodIdE = 7
+	DragValueU64MethodIdOctal              DragValueU64MethodIdE = 8
+	DragValueU64MethodIdHexadecimal        DragValueU64MethodIdE = 9
+	DragValueU64MethodIdUpdateWhileEditing DragValueU64MethodIdE = 10
+)
+
+const (
+	EndETableMethodIdBuild EndETableMethodIdE = 0
+
+	EndETableMethodIdScrollToRow     EndETableMethodIdE = 1
+	EndETableMethodIdScrollToColumn  EndETableMethodIdE = 2
+	EndETableMethodIdScrollToRows    EndETableMethodIdE = 3
+	EndETableMethodIdScrollToColumns EndETableMethodIdE = 4
+	EndETableMethodIdAutoSizeMode    EndETableMethodIdE = 5
+	EndETableMethodIdStriped         EndETableMethodIdE = 6
+	EndETableMethodIdSelectedRow     EndETableMethodIdE = 7
+	EndETableMethodIdMaxHeight       EndETableMethodIdE = 8
+)
+
+const (
+	EtColumnMethodIdBuild EtColumnMethodIdE = 0
+
+	EtColumnMethodIdResizable         EtColumnMethodIdE = 1
+	EtColumnMethodIdRangeMinMax       EtColumnMethodIdE = 2
+	EtColumnMethodIdAutoSizeThisFrame EtColumnMethodIdE = 3
+)
+
+const (
+	FrameMethodIdBuild FrameMethodIdE = 0
+
+	FrameMethodIdInnerMargin         FrameMethodIdE = 1
+	FrameMethodIdOuterMargin         FrameMethodIdE = 2
+	FrameMethodIdCornerRadius        FrameMethodIdE = 3
+	FrameMethodIdInnerMarginSides    FrameMethodIdE = 4
+	FrameMethodIdOuterMarginSides    FrameMethodIdE = 5
+	FrameMethodIdCornerRadiusSides   FrameMethodIdE = 6
+	FrameMethodIdFill                FrameMethodIdE = 7
+	FrameMethodIdStroke              FrameMethodIdE = 8
+	FrameMethodIdShadow              FrameMethodIdE = 9
+	FrameMethodIdMultiplyWithOpacity FrameMethodIdE = 10
+	FrameMethodIdSenseClick          FrameMethodIdE = 11
+	FrameMethodIdSenseDrag           FrameMethodIdE = 12
+	FrameMethodIdHoverCursorPointer  FrameMethodIdE = 13
+	FrameMethodIdPresetGroup         FrameMethodIdE = 14
+	FrameMethodIdPresetWindow        FrameMethodIdE = 15
+	FrameMethodIdPresetPopup         FrameMethodIdE = 16
+	FrameMethodIdPresetMenu          FrameMethodIdE = 17
+	FrameMethodIdPresetCanvas        FrameMethodIdE = 18
+	FrameMethodIdPresetDarkCanvas    FrameMethodIdE = 19
+	FrameMethodIdPresetSideTopPanel  FrameMethodIdE = 20
+	FrameMethodIdPresetCentralPanel  FrameMethodIdE = 21
+)
+
+const (
+	GraphMethodIdBuild GraphMethodIdE = 0
+
+	GraphMethodIdWidth                     GraphMethodIdE = 1
+	GraphMethodIdHeight                    GraphMethodIdE = 2
+	GraphMethodIdDraggingEnabled           GraphMethodIdE = 3
+	GraphMethodIdHoverEnabled              GraphMethodIdE = 4
+	GraphMethodIdNodeClickingEnabled       GraphMethodIdE = 5
+	GraphMethodIdNodeSelectionEnabled      GraphMethodIdE = 6
+	GraphMethodIdNodeSelectionMultiEnabled GraphMethodIdE = 7
+	GraphMethodIdEdgeClickingEnabled       GraphMethodIdE = 8
+	GraphMethodIdEdgeSelectionEnabled      GraphMethodIdE = 9
+	GraphMethodIdEdgeSelectionMultiEnabled GraphMethodIdE = 10
+	GraphMethodIdFitToScreen               GraphMethodIdE = 11
+	GraphMethodIdZoomAndPan                GraphMethodIdE = 12
+	GraphMethodIdFitPadding                GraphMethodIdE = 13
+	GraphMethodIdZoomSpeed                 GraphMethodIdE = 14
+	GraphMethodIdLabelsAlways              GraphMethodIdE = 15
+	GraphMethodIdLayout                    GraphMethodIdE = 16
+	GraphMethodIdResetLayout               GraphMethodIdE = 17
+	GraphMethodIdFastForwardSteps          GraphMethodIdE = 18
+	GraphMethodIdLayoutDt                  GraphMethodIdE = 19
+	GraphMethodIdLayoutDamping             GraphMethodIdE = 20
+	GraphMethodIdLayoutEpsilon             GraphMethodIdE = 21
+	GraphMethodIdLayoutMaxStep             GraphMethodIdE = 22
+	GraphMethodIdLayoutKScale              GraphMethodIdE = 23
+	GraphMethodIdLayoutCAttract            GraphMethodIdE = 24
+	GraphMethodIdLayoutCRepulse            GraphMethodIdE = 25
+	GraphMethodIdLayoutRunning             GraphMethodIdE = 26
+	GraphMethodIdLayoutRowDist             GraphMethodIdE = 27
+	GraphMethodIdLayoutColDist             GraphMethodIdE = 28
+	GraphMethodIdLayoutCenterParent        GraphMethodIdE = 29
+	GraphMethodIdLayoutOrientation         GraphMethodIdE = 30
+)
+
+const (
+	GraphEdgeMethodIdBuild GraphEdgeMethodIdE = 0
+
+	GraphEdgeMethodIdColor GraphEdgeMethodIdE = 1
+	GraphEdgeMethodIdLabel GraphEdgeMethodIdE = 2
+)
+
+const (
+	GraphNodeMethodIdBuild GraphNodeMethodIdE = 0
+
+	GraphNodeMethodIdColor GraphNodeMethodIdE = 1
+)
+
+const (
+	GridMethodIdBuild GridMethodIdE = 0
+
+	GridMethodIdNumColumns   GridMethodIdE = 1
+	GridMethodIdStriped      GridMethodIdE = 2
+	GridMethodIdMinColWidth  GridMethodIdE = 3
+	GridMethodIdMinRowHeight GridMethodIdE = 4
+	GridMethodIdMaxColWidth  GridMethodIdE = 5
+	GridMethodIdStartRow     GridMethodIdE = 6
+)
+
+const (
+	H3CellsColoredMethodIdBuild H3CellsColoredMethodIdE = 0
+
+	H3CellsColoredMethodIdStrokeWidth H3CellsColoredMethodIdE = 1
+	H3CellsColoredMethodIdStrokeColor H3CellsColoredMethodIdE = 2
+)
+
+const (
+	H3RegionMethodIdBuild H3RegionMethodIdE = 0
+
+	H3RegionMethodIdFill   H3RegionMethodIdE = 1
+	H3RegionMethodIdStroke H3RegionMethodIdE = 2
+	H3RegionMethodIdLabel  H3RegionMethodIdE = 3
+)
+
+const (
+	HyperlinkMethodIdBuild HyperlinkMethodIdE = 0
+
+	HyperlinkMethodIdOpenInNewTab HyperlinkMethodIdE = 1
+)
+
+const (
+	HyperlinkToMethodIdBuild HyperlinkToMethodIdE = 0
+
+	HyperlinkToMethodIdOpenInNewTab HyperlinkToMethodIdE = 1
+)
+
+const (
+	LabelMethodIdBuild LabelMethodIdE = 0
+
+	LabelMethodIdSelectable LabelMethodIdE = 1
+	LabelMethodIdWrap       LabelMethodIdE = 2
+	LabelMethodIdTruncate   LabelMethodIdE = 3
+	LabelMethodIdExtend     LabelMethodIdE = 4
+)
+
+const (
+	LabelAtomsMethodIdBuild LabelAtomsMethodIdE = 0
+
+	LabelAtomsMethodIdWrap     LabelAtomsMethodIdE = 1
+	LabelAtomsMethodIdTruncate LabelAtomsMethodIdE = 2
+	LabelAtomsMethodIdExtend   LabelAtomsMethodIdE = 3
+)
+
+const (
+	MapMarkerMethodIdBuild MapMarkerMethodIdE = 0
+
+	MapMarkerMethodIdLabel  MapMarkerMethodIdE = 1
+	MapMarkerMethodIdColor  MapMarkerMethodIdE = 2
+	MapMarkerMethodIdRadius MapMarkerMethodIdE = 3
+)
+
+const (
+	MapPolylineMethodIdBuild MapPolylineMethodIdE = 0
+
+	MapPolylineMethodIdStroke MapPolylineMethodIdE = 1
+	MapPolylineMethodIdClosed MapPolylineMethodIdE = 2
+)
+
+const (
+	NewTableMethodIdBuild NewTableMethodIdE = 0
+
+	NewTableMethodIdStriped           NewTableMethodIdE = 1
+	NewTableMethodIdVscroll           NewTableMethodIdE = 2
+	NewTableMethodIdMinScrolledHeight NewTableMethodIdE = 3
+	NewTableMethodIdMaxScrollHeight   NewTableMethodIdE = 4
+	NewTableMethodIdScrollToRow       NewTableMethodIdE = 5
+	NewTableMethodIdHeaderHeight      NewTableMethodIdE = 6
+	NewTableMethodIdAutoShrink        NewTableMethodIdE = 7
+)
+
+const (
+	NewTableColumnMethodIdBuild NewTableColumnMethodIdE = 0
+
+	NewTableColumnMethodIdAuto         NewTableColumnMethodIdE = 1
+	NewTableColumnMethodIdExact        NewTableColumnMethodIdE = 2
+	NewTableColumnMethodIdInitial      NewTableColumnMethodIdE = 3
+	NewTableColumnMethodIdRemainder    NewTableColumnMethodIdE = 4
+	NewTableColumnMethodIdAtLeast      NewTableColumnMethodIdE = 5
+	NewTableColumnMethodIdAtMost       NewTableColumnMethodIdE = 6
+	NewTableColumnMethodIdResizable    NewTableColumnMethodIdE = 7
+	NewTableColumnMethodIdClipContents NewTableColumnMethodIdE = 8
+)
+
+const (
+	PaintCanvasMethodIdBuild PaintCanvasMethodIdE = 0
+
+	PaintCanvasMethodIdBackground PaintCanvasMethodIdE = 1
+	PaintCanvasMethodIdOpacity    PaintCanvasMethodIdE = 2
+	PaintCanvasMethodIdSense      PaintCanvasMethodIdE = 3
+)
+
+const (
+	PaintTextMethodIdBuild PaintTextMethodIdE = 0
+
+	PaintTextMethodIdMonospace PaintTextMethodIdE = 1
+)
+
+const (
+	PanelBottomMethodIdBuild PanelBottomMethodIdE = 0
+
+	PanelBottomMethodIdResizable   PanelBottomMethodIdE = 1
+	PanelBottomMethodIdDefaultSize PanelBottomMethodIdE = 2
+	PanelBottomMethodIdExactSize   PanelBottomMethodIdE = 3
+)
+
+const (
+	PanelBottomInsideMethodIdBuild PanelBottomInsideMethodIdE = 0
+
+	PanelBottomInsideMethodIdResizable   PanelBottomInsideMethodIdE = 1
+	PanelBottomInsideMethodIdDefaultSize PanelBottomInsideMethodIdE = 2
+	PanelBottomInsideMethodIdExactSize   PanelBottomInsideMethodIdE = 3
+)
+
+const (
+	PanelLeftMethodIdBuild PanelLeftMethodIdE = 0
+
+	PanelLeftMethodIdResizable   PanelLeftMethodIdE = 1
+	PanelLeftMethodIdDefaultSize PanelLeftMethodIdE = 2
+	PanelLeftMethodIdExactSize   PanelLeftMethodIdE = 3
+)
+
+const (
+	PanelLeftInsideMethodIdBuild PanelLeftInsideMethodIdE = 0
+
+	PanelLeftInsideMethodIdResizable   PanelLeftInsideMethodIdE = 1
+	PanelLeftInsideMethodIdDefaultSize PanelLeftInsideMethodIdE = 2
+	PanelLeftInsideMethodIdExactSize   PanelLeftInsideMethodIdE = 3
+)
+
+const (
+	PanelRightMethodIdBuild PanelRightMethodIdE = 0
+
+	PanelRightMethodIdResizable   PanelRightMethodIdE = 1
+	PanelRightMethodIdDefaultSize PanelRightMethodIdE = 2
+	PanelRightMethodIdExactSize   PanelRightMethodIdE = 3
+)
+
+const (
+	PanelRightInsideMethodIdBuild PanelRightInsideMethodIdE = 0
+
+	PanelRightInsideMethodIdResizable   PanelRightInsideMethodIdE = 1
+	PanelRightInsideMethodIdDefaultSize PanelRightInsideMethodIdE = 2
+	PanelRightInsideMethodIdExactSize   PanelRightInsideMethodIdE = 3
+)
+
+const (
+	PanelTopMethodIdBuild PanelTopMethodIdE = 0
+
+	PanelTopMethodIdResizable   PanelTopMethodIdE = 1
+	PanelTopMethodIdDefaultSize PanelTopMethodIdE = 2
+	PanelTopMethodIdExactSize   PanelTopMethodIdE = 3
+)
+
+const (
+	PanelTopInsideMethodIdBuild PanelTopInsideMethodIdE = 0
+
+	PanelTopInsideMethodIdResizable   PanelTopInsideMethodIdE = 1
+	PanelTopInsideMethodIdDefaultSize PanelTopInsideMethodIdE = 2
+	PanelTopInsideMethodIdExactSize   PanelTopInsideMethodIdE = 3
+)
+
+const (
+	PlotMethodIdBuild PlotMethodIdE = 0
+
+	PlotMethodIdWidth                 PlotMethodIdE = 1
+	PlotMethodIdHeight                PlotMethodIdE = 2
+	PlotMethodIdViewAspect            PlotMethodIdE = 3
+	PlotMethodIdDataAspect            PlotMethodIdE = 4
+	PlotMethodIdXAxisLabel            PlotMethodIdE = 5
+	PlotMethodIdYAxisLabel            PlotMethodIdE = 6
+	PlotMethodIdLegend                PlotMethodIdE = 7
+	PlotMethodIdAllowZoom             PlotMethodIdE = 8
+	PlotMethodIdAllowDrag             PlotMethodIdE = 9
+	PlotMethodIdAllowScroll           PlotMethodIdE = 10
+	PlotMethodIdAllowZoom2            PlotMethodIdE = 11
+	PlotMethodIdAllowDrag2            PlotMethodIdE = 12
+	PlotMethodIdAllowScroll2          PlotMethodIdE = 13
+	PlotMethodIdAllowBoxedZoom        PlotMethodIdE = 14
+	PlotMethodIdAllowDoubleClickReset PlotMethodIdE = 15
+	PlotMethodIdShowGrid              PlotMethodIdE = 16
+	PlotMethodIdShowAxes              PlotMethodIdE = 17
+	PlotMethodIdShowBackground        PlotMethodIdE = 18
+	PlotMethodIdIncludeX              PlotMethodIdE = 19
+	PlotMethodIdIncludeY              PlotMethodIdE = 20
+	PlotMethodIdIncludeXRange         PlotMethodIdE = 21
+	PlotMethodIdIncludeYRange         PlotMethodIdE = 22
+	PlotMethodIdCenterXAxis           PlotMethodIdE = 23
+	PlotMethodIdCenterYAxis           PlotMethodIdE = 24
+	PlotMethodIdYGridMarks            PlotMethodIdE = 25
+	PlotMethodIdClampX                PlotMethodIdE = 26
+	PlotMethodIdClampY                PlotMethodIdE = 27
+)
+
+const (
+	PlotBarsMethodIdBuild PlotBarsMethodIdE = 0
+
+	PlotBarsMethodIdColor      PlotBarsMethodIdE = 1
+	PlotBarsMethodIdWidth      PlotBarsMethodIdE = 2
+	PlotBarsMethodIdHorizontal PlotBarsMethodIdE = 3
+	PlotBarsMethodIdHighlight  PlotBarsMethodIdE = 4
+)
+
+const (
+	PlotBoxesMethodIdBuild PlotBoxesMethodIdE = 0
+
+	PlotBoxesMethodIdHorizontal          PlotBoxesMethodIdE = 1
+	PlotBoxesMethodIdHighlight           PlotBoxesMethodIdE = 2
+	PlotBoxesMethodIdAllowHover          PlotBoxesMethodIdE = 3
+	PlotBoxesMethodIdSuppressElementText PlotBoxesMethodIdE = 4
+)
+
+const (
+	PlotHLineMethodIdBuild PlotHLineMethodIdE = 0
+
+	PlotHLineMethodIdColor     PlotHLineMethodIdE = 1
+	PlotHLineMethodIdWidth     PlotHLineMethodIdE = 2
+	PlotHLineMethodIdHighlight PlotHLineMethodIdE = 3
+)
+
+const (
+	PlotLineMethodIdBuild PlotLineMethodIdE = 0
+
+	PlotLineMethodIdColor     PlotLineMethodIdE = 1
+	PlotLineMethodIdWidth     PlotLineMethodIdE = 2
+	PlotLineMethodIdHighlight PlotLineMethodIdE = 3
+	PlotLineMethodIdFill      PlotLineMethodIdE = 4
+)
+
+const (
+	PlotPolygonMethodIdBuild PlotPolygonMethodIdE = 0
+
+	PlotPolygonMethodIdHighlight PlotPolygonMethodIdE = 1
+)
+
+const (
+	PlotScatterMethodIdBuild PlotScatterMethodIdE = 0
+
+	PlotScatterMethodIdColor     PlotScatterMethodIdE = 1
+	PlotScatterMethodIdRadius    PlotScatterMethodIdE = 2
+	PlotScatterMethodIdShape     PlotScatterMethodIdE = 3
+	PlotScatterMethodIdHighlight PlotScatterMethodIdE = 4
+	PlotScatterMethodIdFilled    PlotScatterMethodIdE = 5
+)
+
+const (
+	PlotTextMethodIdBuild PlotTextMethodIdE = 0
+
+	PlotTextMethodIdColor PlotTextMethodIdE = 1
+)
+
+const (
+	PlotVLineMethodIdBuild PlotVLineMethodIdE = 0
+
+	PlotVLineMethodIdColor     PlotVLineMethodIdE = 1
+	PlotVLineMethodIdWidth     PlotVLineMethodIdE = 2
+	PlotVLineMethodIdHighlight PlotVLineMethodIdE = 3
+)
+
+const (
+	ProgressBarMethodIdBuild ProgressBarMethodIdE = 0
+
+	ProgressBarMethodIdText           ProgressBarMethodIdE = 1
+	ProgressBarMethodIdAnimate        ProgressBarMethodIdE = 2
+	ProgressBarMethodIdShowPercentage ProgressBarMethodIdE = 3
+	ProgressBarMethodIdDesiredWidth   ProgressBarMethodIdE = 4
+	ProgressBarMethodIdDesiredHeight  ProgressBarMethodIdE = 5
+	ProgressBarMethodIdCornerRadius   ProgressBarMethodIdE = 6
+	ProgressBarMethodIdFill           ProgressBarMethodIdE = 7
+)
+
+const (
+	ScalarSizeMethodIdBuild ScalarSizeMethodIdE = 0
+
+	ScalarSizeMethodIdAvailableWidth  ScalarSizeMethodIdE = 1
+	ScalarSizeMethodIdAvailableHeight ScalarSizeMethodIdE = 2
+)
+
+const (
+	ScrollAreaMethodIdBuild ScrollAreaMethodIdE = 0
+
+	ScrollAreaMethodIdHscroll    ScrollAreaMethodIdE = 1
+	ScrollAreaMethodIdVscroll    ScrollAreaMethodIdE = 2
+	ScrollAreaMethodIdAnimated   ScrollAreaMethodIdE = 3
+	ScrollAreaMethodIdAutoShrink ScrollAreaMethodIdE = 4
+)
+
+const (
+	SeparatorMethodIdBuild SeparatorMethodIdE = 0
+
+	SeparatorMethodIdHorizontal SeparatorMethodIdE = 1
+	SeparatorMethodIdVertical   SeparatorMethodIdE = 2
+	SeparatorMethodIdSpacing    SeparatorMethodIdE = 3
+	SeparatorMethodIdGrow       SeparatorMethodIdE = 4
+	SeparatorMethodIdShrink     SeparatorMethodIdE = 5
+)
+
+const (
+	SliderF64MethodIdBuild SliderF64MethodIdE = 0
+
+	SliderF64MethodIdShowValue          SliderF64MethodIdE = 1
+	SliderF64MethodIdPrefix             SliderF64MethodIdE = 2
+	SliderF64MethodIdSuffix             SliderF64MethodIdE = 3
+	SliderF64MethodIdText               SliderF64MethodIdE = 4
+	SliderF64MethodIdVertical           SliderF64MethodIdE = 5
+	SliderF64MethodIdLogarithmic        SliderF64MethodIdE = 6
+	SliderF64MethodIdSmallestPositive   SliderF64MethodIdE = 7
+	SliderF64MethodIdLargestFinite      SliderF64MethodIdE = 8
+	SliderF64MethodIdSmartAim           SliderF64MethodIdE = 9
+	SliderF64MethodIdDragValueSpeed     SliderF64MethodIdE = 10
+	SliderF64MethodIdMinDecimals        SliderF64MethodIdE = 11
+	SliderF64MethodIdMaxDecimals        SliderF64MethodIdE = 12
+	SliderF64MethodIdFixedDecimals      SliderF64MethodIdE = 13
+	SliderF64MethodIdTrailingFill       SliderF64MethodIdE = 14
+	SliderF64MethodIdBinary             SliderF64MethodIdE = 15
+	SliderF64MethodIdOctal              SliderF64MethodIdE = 16
+	SliderF64MethodIdHexadecimal        SliderF64MethodIdE = 17
+	SliderF64MethodIdInteger            SliderF64MethodIdE = 18
+	SliderF64MethodIdUpdateWhileEditing SliderF64MethodIdE = 19
+)
+
+const (
+	SliderI64MethodIdBuild SliderI64MethodIdE = 0
+
+	SliderI64MethodIdShowValue          SliderI64MethodIdE = 1
+	SliderI64MethodIdPrefix             SliderI64MethodIdE = 2
+	SliderI64MethodIdSuffix             SliderI64MethodIdE = 3
+	SliderI64MethodIdText               SliderI64MethodIdE = 4
+	SliderI64MethodIdVertical           SliderI64MethodIdE = 5
+	SliderI64MethodIdLogarithmic        SliderI64MethodIdE = 6
+	SliderI64MethodIdSmallestPositive   SliderI64MethodIdE = 7
+	SliderI64MethodIdLargestFinite      SliderI64MethodIdE = 8
+	SliderI64MethodIdSmartAim           SliderI64MethodIdE = 9
+	SliderI64MethodIdDragValueSpeed     SliderI64MethodIdE = 10
+	SliderI64MethodIdMinDecimals        SliderI64MethodIdE = 11
+	SliderI64MethodIdMaxDecimals        SliderI64MethodIdE = 12
+	SliderI64MethodIdFixedDecimals      SliderI64MethodIdE = 13
+	SliderI64MethodIdTrailingFill       SliderI64MethodIdE = 14
+	SliderI64MethodIdBinary             SliderI64MethodIdE = 15
+	SliderI64MethodIdOctal              SliderI64MethodIdE = 16
+	SliderI64MethodIdHexadecimal        SliderI64MethodIdE = 17
+	SliderI64MethodIdInteger            SliderI64MethodIdE = 18
+	SliderI64MethodIdUpdateWhileEditing SliderI64MethodIdE = 19
+)
+
+const (
+	SliderU64MethodIdBuild SliderU64MethodIdE = 0
+
+	SliderU64MethodIdShowValue          SliderU64MethodIdE = 1
+	SliderU64MethodIdPrefix             SliderU64MethodIdE = 2
+	SliderU64MethodIdSuffix             SliderU64MethodIdE = 3
+	SliderU64MethodIdText               SliderU64MethodIdE = 4
+	SliderU64MethodIdVertical           SliderU64MethodIdE = 5
+	SliderU64MethodIdLogarithmic        SliderU64MethodIdE = 6
+	SliderU64MethodIdSmallestPositive   SliderU64MethodIdE = 7
+	SliderU64MethodIdLargestFinite      SliderU64MethodIdE = 8
+	SliderU64MethodIdSmartAim           SliderU64MethodIdE = 9
+	SliderU64MethodIdDragValueSpeed     SliderU64MethodIdE = 10
+	SliderU64MethodIdMinDecimals        SliderU64MethodIdE = 11
+	SliderU64MethodIdMaxDecimals        SliderU64MethodIdE = 12
+	SliderU64MethodIdFixedDecimals      SliderU64MethodIdE = 13
+	SliderU64MethodIdTrailingFill       SliderU64MethodIdE = 14
+	SliderU64MethodIdBinary             SliderU64MethodIdE = 15
+	SliderU64MethodIdOctal              SliderU64MethodIdE = 16
+	SliderU64MethodIdHexadecimal        SliderU64MethodIdE = 17
+	SliderU64MethodIdInteger            SliderU64MethodIdE = 18
+	SliderU64MethodIdUpdateWhileEditing SliderU64MethodIdE = 19
+)
+
+const (
+	SnarlEditorMethodIdBuild SnarlEditorMethodIdE = 0
+
+	SnarlEditorMethodIdWidth              SnarlEditorMethodIdE = 1
+	SnarlEditorMethodIdHeight             SnarlEditorMethodIdE = 2
+	SnarlEditorMethodIdPersistPositions   SnarlEditorMethodIdE = 3
+	SnarlEditorMethodIdWireStyle          SnarlEditorMethodIdE = 4
+	SnarlEditorMethodIdBgPattern          SnarlEditorMethodIdE = 5
+	SnarlEditorMethodIdMinScale           SnarlEditorMethodIdE = 6
+	SnarlEditorMethodIdMaxScale           SnarlEditorMethodIdE = 7
+	SnarlEditorMethodIdCentering          SnarlEditorMethodIdE = 8
+	SnarlEditorMethodIdCrispMagnifiedText SnarlEditorMethodIdE = 9
+)
+
+const (
+	SnarlNodeMethodIdBuild SnarlNodeMethodIdE = 0
+
+	SnarlNodeMethodIdNumInputs  SnarlNodeMethodIdE = 1
+	SnarlNodeMethodIdNumOutputs SnarlNodeMethodIdE = 2
+)
+
+const (
+	SpinnerMethodIdBuild SpinnerMethodIdE = 0
+
+	SpinnerMethodIdSize SpinnerMethodIdE = 1
+)
+
+const (
+	TableMethodIdBuild TableMethodIdE = 0
+
+	TableMethodIdStriped           TableMethodIdE = 1
+	TableMethodIdVscroll           TableMethodIdE = 2
+	TableMethodIdScrollToRow       TableMethodIdE = 3
+	TableMethodIdMinScrolledHeight TableMethodIdE = 4
+	TableMethodIdMaxScrollHeight   TableMethodIdE = 5
+)
+
+const (
+	TableColumnMethodIdBuild TableColumnMethodIdE = 0
+
+	TableColumnMethodIdAuto         TableColumnMethodIdE = 1
+	TableColumnMethodIdExact        TableColumnMethodIdE = 2
+	TableColumnMethodIdInitial      TableColumnMethodIdE = 3
+	TableColumnMethodIdRemainder    TableColumnMethodIdE = 4
+	TableColumnMethodIdAtLeast      TableColumnMethodIdE = 5
+	TableColumnMethodIdAtMost       TableColumnMethodIdE = 6
+	TableColumnMethodIdResizable    TableColumnMethodIdE = 7
+	TableColumnMethodIdClipContents TableColumnMethodIdE = 8
+)
+
+const (
+	TextEditMethodIdBuild TextEditMethodIdE = 0
+
+	TextEditMethodIdCodeEditor   TextEditMethodIdE = 1
+	TextEditMethodIdFrame        TextEditMethodIdE = 2
+	TextEditMethodIdHintText     TextEditMethodIdE = 3
+	TextEditMethodIdPassword     TextEditMethodIdE = 4
+	TextEditMethodIdInteractive  TextEditMethodIdE = 5
+	TextEditMethodIdDesiredWidth TextEditMethodIdE = 6
+	TextEditMethodIdDesiredRows  TextEditMethodIdE = 7
+	TextEditMethodIdLockFocus    TextEditMethodIdE = 8
+	TextEditMethodIdCursorAtEnd  TextEditMethodIdE = 9
+	TextEditMethodIdClipText     TextEditMethodIdE = 10
+	TextEditMethodIdCharLimit    TextEditMethodIdE = 11
+)
+
+const (
+	TimeRangePickerMethodIdBuild TimeRangePickerMethodIdE = 0
+
+	TimeRangePickerMethodIdAddPreset       TimeRangePickerMethodIdE = 1
+	TimeRangePickerMethodIdTz              TimeRangePickerMethodIdE = 2
+	TimeRangePickerMethodIdRefreshInterval TimeRangePickerMethodIdE = 3
+	TimeRangePickerMethodIdEvaluatedBounds TimeRangePickerMethodIdE = 4
+)
+
+const (
+	TintedScopeMethodIdBuild TintedScopeMethodIdE = 0
+
+	TintedScopeMethodIdSenseClick  TintedScopeMethodIdE = 1
+	TintedScopeMethodIdStroke      TintedScopeMethodIdE = 2
+	TintedScopeMethodIdOuterMargin TintedScopeMethodIdE = 3
+	TintedScopeMethodIdInnerMargin TintedScopeMethodIdE = 4
+)
+
+const (
+	UiWithLayoutMethodIdBuild UiWithLayoutMethodIdE = 0
+
+	UiWithLayoutMethodIdMainDirLeftToRight UiWithLayoutMethodIdE = 1
+	UiWithLayoutMethodIdMainDirRightToLeft UiWithLayoutMethodIdE = 2
+	UiWithLayoutMethodIdMainDirTopDown     UiWithLayoutMethodIdE = 3
+	UiWithLayoutMethodIdMainDirBottomUp    UiWithLayoutMethodIdE = 4
+	UiWithLayoutMethodIdMainWrap           UiWithLayoutMethodIdE = 5
+	UiWithLayoutMethodIdMainJustify        UiWithLayoutMethodIdE = 6
+	UiWithLayoutMethodIdCrossAlignMin      UiWithLayoutMethodIdE = 7
+	UiWithLayoutMethodIdCrossAlignCenter   UiWithLayoutMethodIdE = 8
+	UiWithLayoutMethodIdCrossAlignMax      UiWithLayoutMethodIdE = 9
+	UiWithLayoutMethodIdCrossJustify       UiWithLayoutMethodIdE = 10
+)
+
+const (
+	VectorSizeMethodIdBuild VectorSizeMethodIdE = 0
+
+	VectorSizeMethodIdAvailableSize VectorSizeMethodIdE = 1
+)
+
+const (
+	WalkersMapMethodIdBuild WalkersMapMethodIdE = 0
+
+	WalkersMapMethodIdWidth           WalkersMapMethodIdE = 1
+	WalkersMapMethodIdHeight          WalkersMapMethodIdE = 2
+	WalkersMapMethodIdSetZoom         WalkersMapMethodIdE = 3
+	WalkersMapMethodIdCenterAt        WalkersMapMethodIdE = 4
+	WalkersMapMethodIdZoomGesture     WalkersMapMethodIdE = 5
+	WalkersMapMethodIdPanning         WalkersMapMethodIdE = 6
+	WalkersMapMethodIdTileUrl         WalkersMapMethodIdE = 7
+	WalkersMapMethodIdTileAttribution WalkersMapMethodIdE = 8
+	WalkersMapMethodIdTileMaxZoom     WalkersMapMethodIdE = 9
+	WalkersMapMethodIdTileSize        WalkersMapMethodIdE = 10
+)
+
+const (
+	WidgetTextMethodIdBuild WidgetTextMethodIdE = 0
+
+	WidgetTextMethodIdText WidgetTextMethodIdE = 1
+)
+
+const (
+	WindowMethodIdBuild WindowMethodIdE = 0
+
+	WindowMethodIdDefaultOpen   WindowMethodIdE = 1
+	WindowMethodIdEnabled       WindowMethodIdE = 2
+	WindowMethodIdInteractable  WindowMethodIdE = 3
+	WindowMethodIdMovable       WindowMethodIdE = 4
+	WindowMethodIdResizable     WindowMethodIdE = 5
+	WindowMethodIdCollapsible   WindowMethodIdE = 6
+	WindowMethodIdTitleBar      WindowMethodIdE = 7
+	WindowMethodIdDefaultWidth  WindowMethodIdE = 8
+	WindowMethodIdDefaultHeight WindowMethodIdE = 9
+	WindowMethodIdDefaultSize   WindowMethodIdE = 10
+	WindowMethodIdDefaultPos    WindowMethodIdE = 11
+	WindowMethodIdMinWidth      WindowMethodIdE = 12
+	WindowMethodIdMinHeight     WindowMethodIdE = 13
+	WindowMethodIdAlwaysOnTop   WindowMethodIdE = 14
+	WindowMethodIdOpenBound     WindowMethodIdE = 15
+)

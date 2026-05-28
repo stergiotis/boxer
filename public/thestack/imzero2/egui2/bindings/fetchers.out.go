@@ -1,0 +1,178 @@
+// Code generated; TheStack (github.com/stergiotis/boxer/public/thestack/cmd/egui2gen) DO NOT EDIT.
+
+package bindings
+
+import (
+	"iter"
+)
+
+func (inst *Fetcher) FetchF1KeyPressed() (pressed bool) {
+	inst.invoke(FuncProcIdFetchF1KeyPressed)
+	pressed = inst.readB()
+	return
+}
+func (inst *Fetcher) FetchFrameMetrics() (interpretUs uint64, passNr uint64) {
+	inst.invoke(FuncProcIdFetchFrameMetrics)
+	interpretUs = inst.readU64()
+	passNr = inst.readU64()
+	return
+}
+func (inst *Fetcher) FetchGraphEvents() (graphIds []uint64, kinds []uint32, keyA []uint64, keyB iter.Seq[uint64]) {
+	inst.invoke(FuncProcIdFetchGraphEvents)
+	graphIds = inst.readU64h()
+	kinds = inst.readU32h()
+	keyA = inst.readU64h()
+	keyB = inst.iterateU64h()
+	return
+}
+func (inst *Fetcher) FetchGraphMetrics() (graphIds []uint64, nodeCount []uint32, edgeCount []uint32, frSteps []uint64, frLastDisp iter.Seq[float32]) {
+	inst.invoke(FuncProcIdFetchGraphMetrics)
+	graphIds = inst.readU64h()
+	nodeCount = inst.readU32h()
+	edgeCount = inst.readU32h()
+	frSteps = inst.readU64h()
+	frLastDisp = inst.iterateF32h()
+	return
+}
+func (inst *Fetcher) FetchGraphSelection() (graphIds []uint64, kinds []uint32, keyA []uint64, keyB iter.Seq[uint64]) {
+	inst.invoke(FuncProcIdFetchGraphSelection)
+	graphIds = inst.readU64h()
+	kinds = inst.readU32h()
+	keyA = inst.readU64h()
+	keyB = inst.iterateU64h()
+	return
+}
+func (inst *Fetcher) FetchR10() (idsTrue []uint64, idsFalse iter.Seq[uint64]) {
+	inst.invoke(FuncProcIdFetchR10)
+	idsTrue = inst.readU64h()
+	idsFalse = inst.iterateU64h()
+	return
+}
+func (inst *Fetcher) FetchR14CanvasPointer() (hoverX float32, hoverY float32, clicked bool) {
+	inst.invoke(FuncProcIdFetchR14CanvasPointer)
+	hoverX = inst.readF32()
+	hoverY = inst.readF32()
+	clicked = inst.readB()
+	return
+}
+func (inst *Fetcher) FetchR15PlotPointer() (plotId uint64, x float64, y float64, clicked bool, hoverPlotId uint64, hoverX float64, hoverY float64) {
+	inst.invoke(FuncProcIdFetchR15PlotPointer)
+	plotId = inst.readU64()
+	x = inst.readF64()
+	y = inst.readF64()
+	clicked = inst.readB()
+	hoverPlotId = inst.readU64()
+	hoverX = inst.readF64()
+	hoverY = inst.readF64()
+	return
+}
+func (inst *Fetcher) FetchR15WalkersCamera() (found bool, mapId uint64, zoom float64, centerLat float64, centerLon float64, minLat float64, minLon float64, maxLat float64, maxLon float64, screenWidthPx float32, screenHeightPx float32, hoverLat float64, hoverLon float64, hoverValid bool, clicked bool, viewHash uint64) {
+	inst.invoke(FuncProcIdFetchR15WalkersCamera)
+	found = inst.readB()
+	mapId = inst.readU64()
+	zoom = inst.readF64()
+	centerLat = inst.readF64()
+	centerLon = inst.readF64()
+	minLat = inst.readF64()
+	minLon = inst.readF64()
+	maxLat = inst.readF64()
+	maxLon = inst.readF64()
+	screenWidthPx = inst.readF32()
+	screenHeightPx = inst.readF32()
+	hoverLat = inst.readF64()
+	hoverLon = inst.readF64()
+	hoverValid = inst.readB()
+	clicked = inst.readB()
+	viewHash = inst.readU64()
+	return
+}
+func (inst *Fetcher) FetchR16ScrollDelta() (x float32, y float32) {
+	inst.invoke(FuncProcIdFetchR16ScrollDelta)
+	x = inst.readF32()
+	y = inst.readF32()
+	return
+}
+func (inst *Fetcher) FetchR17Modifiers() (alt bool, ctrl bool, shift bool, macCmd bool, command bool) {
+	inst.invoke(FuncProcIdFetchR17Modifiers)
+	alt = inst.readB()
+	ctrl = inst.readB()
+	shift = inst.readB()
+	macCmd = inst.readB()
+	command = inst.readB()
+	return
+}
+func (inst *Fetcher) FetchR18AvailableSize() (w float32, h float32) {
+	inst.invoke(FuncProcIdFetchR18AvailableSize)
+	w = inst.readF32()
+	h = inst.readF32()
+	return
+}
+func (inst *Fetcher) FetchR19ZoomDelta() (zoom float32) {
+	inst.invoke(FuncProcIdFetchR19ZoomDelta)
+	zoom = inst.readF32()
+	return
+}
+func (inst *Fetcher) FetchR20Pointer() (x float32, y float32, valid bool) {
+	inst.invoke(FuncProcIdFetchR20Pointer)
+	x = inst.readF32()
+	y = inst.readF32()
+	valid = inst.readB()
+	return
+}
+func (inst *Fetcher) FetchR21UiRects() (seqs []uint64, minX []float32, minY []float32, maxX []float32, maxY iter.Seq[float32]) {
+	inst.invoke(FuncProcIdFetchR21UiRects)
+	seqs = inst.readU64h()
+	minX = inst.readF32h()
+	minY = inst.readF32h()
+	maxX = inst.readF32h()
+	maxY = inst.iterateF32h()
+	return
+}
+func (inst *Fetcher) FetchR7() (ids []uint64, responses iter.Seq[uint32]) {
+	inst.invoke(FuncProcIdFetchR7)
+	ids = inst.readU64h()
+	responses = inst.iterateU32h()
+	return
+}
+func (inst *Fetcher) FetchR9EtPrefetch() (ids []uint64, values iter.Seq[uint64]) {
+	inst.invoke(FuncProcIdFetchR9EtPrefetch)
+	ids = inst.readU64h()
+	values = inst.iterateU64h()
+	return
+}
+func (inst *Fetcher) FetchR9F64() (ids []uint64, values iter.Seq[float64]) {
+	inst.invoke(FuncProcIdFetchR9F64)
+	ids = inst.readU64h()
+	values = inst.iterateF64h()
+	return
+}
+func (inst *Fetcher) FetchR9I64() (ids []uint64, values iter.Seq[int64]) {
+	inst.invoke(FuncProcIdFetchR9I64)
+	ids = inst.readU64h()
+	values = inst.iterateI64h()
+	return
+}
+func (inst *Fetcher) FetchR9S() (ids []uint64, values iter.Seq[string]) {
+	inst.invoke(FuncProcIdFetchR9S)
+	ids = inst.readU64h()
+	values = inst.iterateSh()
+	return
+}
+func (inst *Fetcher) FetchR9U64() (ids []uint64, values iter.Seq[uint64]) {
+	inst.invoke(FuncProcIdFetchR9U64)
+	ids = inst.readU64h()
+	values = inst.iterateU64h()
+	return
+}
+func (inst *Fetcher) FetchSnarlEvents() (editorIds []uint64, kinds []uint32, nodeIds []uint64, portsA []uint32, nodeIdsB []uint64, portsB []uint32, xs []float32, ys iter.Seq[float32]) {
+	inst.invoke(FuncProcIdFetchSnarlEvents)
+	editorIds = inst.readU64h()
+	kinds = inst.readU32h()
+	nodeIds = inst.readU64h()
+	portsA = inst.readU32h()
+	nodeIdsB = inst.readU64h()
+	portsB = inst.readU32h()
+	xs = inst.readF32h()
+	ys = inst.iterateF32h()
+	return
+}

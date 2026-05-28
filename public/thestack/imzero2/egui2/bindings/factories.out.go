@@ -1,0 +1,2076 @@
+// Code generated; TheStack (github.com/stergiotis/boxer/public/thestack/cmd/egui2gen) DO NOT EDIT.
+
+package bindings
+
+import "github.com/stergiotis/boxer/public/thestack/fffi2/typed"
+
+import "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+
+import "github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
+
+import "encoding/binary"
+import "github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
+
+func AddSpace(amount float32) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdAddSpace))
+	r.WriteFloat32(amount)
+
+	r.SendIntermediate()
+}
+
+func AllocateUiAtRect(minX float32, minY float32, maxX float32, maxY float32) (inst AllocateUiAtRectFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdAllocateUiAtRect))
+	r.WriteFloat32(minX)
+	r.WriteFloat32(minY)
+	r.WriteFloat32(maxX)
+	r.WriteFloat32(maxY)
+
+	inst = AllocateUiAtRectFluid{
+		r: r,
+	}
+
+	return
+}
+
+func AnimateBoolResponsive(animId uint64, target bool) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdAnimateBoolResponsive))
+	r.WriteUint64(animId)
+	r.WriteBool(target)
+
+	r.SendIntermediate()
+}
+
+func AnimateBoolWithTime(animId uint64, target bool, durSecs float32) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdAnimateBoolWithTime))
+	r.WriteUint64(animId)
+	r.WriteBool(target)
+	r.WriteFloat32(durSecs)
+
+	r.SendIntermediate()
+}
+
+func AnimateValueWithTime(animId uint64, target float32, durSecs float32) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdAnimateValueWithTime))
+	r.WriteUint64(animId)
+	r.WriteFloat32(target)
+	r.WriteFloat32(durSecs)
+
+	r.SendIntermediate()
+}
+
+func Atoms() (inst AtomsFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdAtoms))
+
+	inst = AtomsFluid{
+		r: r,
+	}
+
+	return
+}
+
+func Button(i WidgetIdCreatorI, atoms typed.RetainedFffiHolderTyped[AtomsS]) (inst ButtonFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdButton))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+	r.SpliceRetained(atoms.Untype())
+
+	inst = ButtonFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func CaptureAvailableSize() {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdCaptureAvailableSize))
+
+	r.SendIntermediate()
+}
+
+func CaptureUiRect(seq uint64) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdCaptureUiRect))
+	r.WriteUint64(seq)
+
+	r.SendIntermediate()
+}
+
+func Checkbox(i WidgetIdCreatorI, checked bool, text string) (inst CheckboxFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdCheckbox))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+	r.WriteBool(checked)
+	r.WriteString(text)
+
+	inst = CheckboxFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func CodeView(i WidgetIdCreatorI, job typed.RetainedFffiHolderTyped[CodeViewJobS]) (inst CodeViewFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdCodeView))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+	r.SpliceRetained(job.Untype())
+
+	inst = CodeViewFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func CodeViewJob(text string) (inst CodeViewJobFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdCodeViewJob))
+	r.WriteString(text)
+
+	inst = CodeViewJobFluid{
+		r: r,
+	}
+
+	return
+}
+
+func CollapsingHeader(i WidgetIdCreatorI, label typed.RetainedFffiHolderTyped[WidgetTextS]) (inst CollapsingHeaderFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdCollapsingHeader))
+	v := i.DeriveStacked()
+	r.WriteWidgetId(checkId(v))
+	r.SpliceRetained(label.Untype())
+
+	inst = CollapsingHeaderFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func Color() (inst ColorFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdColor))
+
+	inst = ColorFluid{
+		r: r,
+	}
+
+	return
+}
+
+func ComboBox(i WidgetIdCreatorI, label typed.RetainedFffiHolderTyped[WidgetTextS], selectedText typed.RetainedFffiHolderTyped[WidgetTextS]) (inst ComboBoxFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdComboBox))
+	v := i.DeriveStacked()
+	r.WriteWidgetId(checkId(v))
+	r.SpliceRetained(label.Untype())
+	r.SpliceRetained(selectedText.Untype())
+
+	inst = ComboBoxFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func ContextInspectionUi() {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdContextInspectionUi))
+
+	r.SendIntermediate()
+}
+
+func ContextSendViewPortCommandClose() {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdContextSendViewPortCommandClose))
+
+	r.SendIntermediate()
+}
+
+func DatePickerButton(i WidgetIdCreatorI, packedYmd uint64) (inst DatePickerButtonFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdDatePickerButton))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+	r.WriteUint64(packedYmd)
+
+	inst = DatePickerButtonFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func DateTimePickerButton(i WidgetIdCreatorI, packedEpochMs uint64) (inst DateTimePickerButtonFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdDateTimePickerButton))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+	r.WriteUint64(packedEpochMs)
+
+	inst = DateTimePickerButtonFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func DockAreaRaw(i WidgetIdCreatorI, tabIds []uint64, tabTitles []string, initialLayout []uint8) (inst DockAreaRawFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdDockAreaRaw))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+	runtime.PutUint64SliceArg(r, tabIds)
+	runtime.PutStringSliceArg(r, tabTitles)
+	runtime.PutUint8SliceArg(r, initialLayout)
+
+	inst = DockAreaRawFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+	inst.deferredTabBody = runtime.NewDeferredBlockScopeHinted(typed.GetCurrentFffiCapture, binary.LittleEndian, runtime.RegisterScopeHint("TabBody"))
+
+	return
+}
+
+func DragValueF64(i WidgetIdCreatorI, val float64) (inst DragValueF64Fluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdDragValueF64))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+	r.WriteFloat64(val)
+
+	inst = DragValueF64Fluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func DragValueI64(i WidgetIdCreatorI, val int64) (inst DragValueI64Fluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdDragValueI64))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+	r.WriteInt64(val)
+
+	inst = DragValueI64Fluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func DragValueU64(i WidgetIdCreatorI, val uint64) (inst DragValueU64Fluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdDragValueU64))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+	r.WriteUint64(val)
+
+	inst = DragValueU64Fluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func EnabledUi(enabled bool) (inst EnabledUiFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdEnabledUi))
+	r.WriteBool(enabled)
+
+	inst = EnabledUiFluid{
+		r: r,
+	}
+
+	return
+}
+
+func End() {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdEnd))
+
+	r.SendIntermediate()
+}
+
+func EndETable(i WidgetIdCreatorI, numRows uint64, defaultRowHeight float32, numStickyHeaders uint32, numStickyCols uint32) (inst EndETableFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdEndETable))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+	r.WriteUint64(numRows)
+	r.WriteFloat32(defaultRowHeight)
+	r.WriteUint32(numStickyHeaders)
+	r.WriteUint32(numStickyCols)
+
+	inst = EndETableFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+	inst.deferredCells = runtime.NewDeferredBlockScopeHinted(typed.GetCurrentFffiCapture, binary.LittleEndian, runtime.RegisterScopeHint("Cells"))
+	inst.deferredHeaders = runtime.NewDeferredBlockScopeHinted(typed.GetCurrentFffiCapture, binary.LittleEndian, runtime.RegisterScopeHint("Headers"))
+
+	return
+}
+
+func EndRow() {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdEndRow))
+
+	r.SendIntermediate()
+}
+
+func EtColumn(currentWidth float32) (inst EtColumnFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdEtColumn))
+	r.WriteFloat32(currentWidth)
+
+	inst = EtColumnFluid{
+		r: r,
+	}
+
+	return
+}
+
+func EtHeaderText(text string) (inst EtHeaderTextFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdEtHeaderText))
+	r.WriteString(text)
+
+	inst = EtHeaderTextFluid{
+		r: r,
+	}
+
+	return
+}
+
+func EtRowHeight(height float32) (inst EtRowHeightFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdEtRowHeight))
+	r.WriteFloat32(height)
+
+	inst = EtRowHeightFluid{
+		r: r,
+	}
+
+	return
+}
+
+func ExportSvg(path string, embedFonts bool, bgRgba uint32) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdExportSvg))
+	r.WriteString(path)
+	r.WriteBool(embedFonts)
+	r.WriteUint32(bgRgba)
+
+	r.SendIntermediate()
+}
+
+func ExportSvgWindow(h widgethandle.WidgetHandle, path string, embedFonts bool, mode uint8, bgRgba uint32) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdExportSvgWindow))
+	r.WriteWidgetId(h.Resolve())
+	r.WriteString(path)
+	r.WriteBool(embedFonts)
+	r.WriteUint8(mode)
+	r.WriteUint32(bgRgba)
+
+	r.SendIntermediate()
+}
+
+func Frame(i WidgetIdCreatorI) (inst FrameFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdFrame))
+	v := i.DeriveStacked()
+	r.WriteWidgetId(checkId(v))
+
+	inst = FrameFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func Graph(i WidgetIdCreatorI) (inst GraphFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdGraph))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+
+	inst = GraphFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func GraphEdge(fromId uint64, toId uint64) (inst GraphEdgeFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdGraphEdge))
+	r.WriteUint64(fromId)
+	r.WriteUint64(toId)
+
+	inst = GraphEdgeFluid{
+		r: r,
+	}
+
+	return
+}
+
+func GraphNode(nodeId uint64, label string) (inst GraphNodeFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdGraphNode))
+	r.WriteUint64(nodeId)
+	r.WriteString(label)
+
+	inst = GraphNodeFluid{
+		r: r,
+	}
+
+	return
+}
+
+func Grid(i WidgetIdCreatorI) (inst GridFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdGrid))
+	v := i.DeriveStacked()
+	r.WriteWidgetId(checkId(v))
+
+	inst = GridFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func Group() (inst GroupFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdGroup))
+
+	inst = GroupFluid{
+		r: r,
+	}
+
+	return
+}
+
+func GuiZoomZoomMenuButtons() {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdGuiZoomZoomMenuButtons))
+
+	r.SendIntermediate()
+}
+
+func H3CellsColored(cellIds []uint64, cols color.Colors) (inst H3CellsColoredFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdH3CellsColored))
+	runtime.PutUint64SliceArg(r, cellIds)
+	color.PutColorsSlice(r, cols)
+
+	inst = H3CellsColoredFluid{
+		r: r,
+	}
+
+	return
+}
+
+func H3Region(cellIds []uint64) (inst H3RegionFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdH3Region))
+	runtime.PutUint64SliceArg(r, cellIds)
+
+	inst = H3RegionFluid{
+		r: r,
+	}
+
+	return
+}
+
+func Horizontal() (inst HorizontalFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdHorizontal))
+
+	inst = HorizontalFluid{
+		r: r,
+	}
+
+	return
+}
+
+func HorizontalCentered() (inst HorizontalCenteredFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdHorizontalCentered))
+
+	inst = HorizontalCenteredFluid{
+		r: r,
+	}
+
+	return
+}
+
+func HorizontalTop() (inst HorizontalTopFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdHorizontalTop))
+
+	inst = HorizontalTopFluid{
+		r: r,
+	}
+
+	return
+}
+
+func HorizontalWrapped() (inst HorizontalWrappedFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdHorizontalWrapped))
+
+	inst = HorizontalWrappedFluid{
+		r: r,
+	}
+
+	return
+}
+
+func HoverText(text string) (inst HoverTextFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdHoverText))
+	r.WriteString(text)
+
+	inst = HoverTextFluid{
+		r: r,
+	}
+
+	return
+}
+
+func HoverUi() (inst HoverUiFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdHoverUi))
+
+	inst = HoverUiFluid{
+		r: r,
+	}
+
+	inst.deferredTip = runtime.NewDeferredBlockScopeHinted(typed.GetCurrentFffiCapture, binary.LittleEndian, runtime.RegisterScopeHint("Tip"))
+	inst.deferredTarget = runtime.NewDeferredBlockScopeHinted(typed.GetCurrentFffiCapture, binary.LittleEndian, runtime.RegisterScopeHint("Target"))
+
+	return
+}
+
+func Hyperlink(url string) (inst HyperlinkFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdHyperlink))
+	r.WriteString(url)
+
+	inst = HyperlinkFluid{
+		r: r,
+	}
+
+	return
+}
+
+func HyperlinkTo(label string, url string) (inst HyperlinkToFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdHyperlinkTo))
+	r.WriteString(label)
+	r.WriteString(url)
+
+	inst = HyperlinkToFluid{
+		r: r,
+	}
+
+	return
+}
+
+func Image(i WidgetIdCreatorI, widthPx uint32, heightPx uint32, contentVersion uint64, fit uint8, fixedW uint32, fixedH uint32, filter uint8, tintRgba uint32, pixels []uint32) (inst ImageFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdImage))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+	r.WriteUint32(widthPx)
+	r.WriteUint32(heightPx)
+	r.WriteUint64(contentVersion)
+	r.WriteUint8(fit)
+	r.WriteUint32(fixedW)
+	r.WriteUint32(fixedH)
+	r.WriteUint8(filter)
+	r.WriteUint32(tintRgba)
+	runtime.PutUint32SliceArg(r, pixels)
+
+	inst = ImageFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func ImageRelease(i WidgetIdCreatorI) (inst ImageReleaseFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdImageRelease))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+
+	inst = ImageReleaseFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func Indent(i WidgetIdCreatorI) (inst IndentFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdIndent))
+	v := i.DeriveStacked()
+	r.WriteWidgetId(checkId(v))
+
+	inst = IndentFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func Label(text string) (inst LabelFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdLabel))
+	r.WriteString(text)
+
+	inst = LabelFluid{
+		r: r,
+	}
+
+	return
+}
+
+func LabelAtoms(atoms typed.RetainedFffiHolderTyped[AtomsS]) (inst LabelAtomsFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdLabelAtoms))
+	r.SpliceRetained(atoms.Untype())
+
+	inst = LabelAtomsFluid{
+		r: r,
+	}
+
+	return
+}
+
+func LabelWidgetText(widgetText typed.RetainedFffiHolderTyped[WidgetTextS]) (inst LabelWidgetTextFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdLabelWidgetText))
+	r.SpliceRetained(widgetText.Untype())
+
+	inst = LabelWidgetTextFluid{
+		r: r,
+	}
+
+	return
+}
+
+func MapMarker(markerId uint64, lat float64, lon float64) (inst MapMarkerFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdMapMarker))
+	r.WriteUint64(markerId)
+	r.WriteFloat64(lat)
+	r.WriteFloat64(lon)
+
+	inst = MapMarkerFluid{
+		r: r,
+	}
+
+	return
+}
+
+func MapPolyline(lats []float64, lons []float64) (inst MapPolylineFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdMapPolyline))
+	runtime.PutFloat64SliceArg(r, lats)
+	runtime.PutFloat64SliceArg(r, lons)
+
+	inst = MapPolylineFluid{
+		r: r,
+	}
+
+	return
+}
+
+func MeasureText(measureId uint64, text string, fontSize float32, monospace bool) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdMeasureText))
+	r.WriteUint64(measureId)
+	r.WriteString(text)
+	r.WriteFloat32(fontSize)
+	r.WriteBool(monospace)
+
+	r.SendIntermediate()
+}
+
+func MemoryResetAreas() {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdMemoryResetAreas))
+
+	r.SendIntermediate()
+}
+
+func MenuBar() (inst MenuBarFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdMenuBar))
+
+	inst = MenuBarFluid{
+		r: r,
+	}
+
+	return
+}
+
+func MenuButton(atoms typed.RetainedFffiHolderTyped[AtomsS]) (inst MenuButtonFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdMenuButton))
+	r.SpliceRetained(atoms.Untype())
+
+	inst = MenuButtonFluid{
+		r: r,
+	}
+
+	return
+}
+
+func MoveWindowToTop(h widgethandle.WidgetHandle) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdMoveWindowToTop))
+	r.WriteWidgetId(h.Resolve())
+
+	r.SendIntermediate()
+}
+
+func NewTable(i WidgetIdCreatorI) (inst NewTableFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdNewTable))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+
+	inst = NewTableFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+	inst.deferredHeaders = runtime.NewDeferredBlockScopeHinted(typed.GetCurrentFffiCapture, binary.LittleEndian, runtime.RegisterScopeHint("Headers"))
+	inst.deferredRows = runtime.NewDeferredBlockScopeHinted(typed.GetCurrentFffiCapture, binary.LittleEndian, runtime.RegisterScopeHint("Rows"))
+
+	return
+}
+
+func NewTableColumn() (inst NewTableColumnFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdNewTableColumn))
+
+	inst = NewTableColumnFluid{
+		r: r,
+	}
+
+	return
+}
+
+func NewTableRowHeight(height float32) (inst NewTableRowHeightFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdNewTableRowHeight))
+	r.WriteFloat32(height)
+
+	inst = NewTableRowHeightFluid{
+		r: r,
+	}
+
+	return
+}
+
+func NodeDir(i WidgetIdCreatorI, label typed.RetainedFffiHolderTyped[WidgetTextS]) (inst NodeDirFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdNodeDir))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+	r.SpliceRetained(label.Untype())
+
+	inst = NodeDirFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func NodeDirClose(childCount uint32) (inst NodeDirCloseFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdNodeDirClose))
+	r.WriteUint32(childCount)
+
+	inst = NodeDirCloseFluid{
+		r: r,
+	}
+
+	return
+}
+
+func NodeLeaf(i WidgetIdCreatorI, label typed.RetainedFffiHolderTyped[WidgetTextS]) (inst NodeLeafFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdNodeLeaf))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+	r.SpliceRetained(label.Untype())
+
+	inst = NodeLeafFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func PaintAbsoluteOverlay() {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdPaintAbsoluteOverlay))
+
+	r.SendIntermediate()
+}
+
+func PaintArrow(ox float32, oy float32, dx float32, dy float32, col color.Color, strokeWidth float32) (inst PaintArrowFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPaintArrow))
+	r.WriteFloat32(ox)
+	r.WriteFloat32(oy)
+	r.WriteFloat32(dx)
+	r.WriteFloat32(dy)
+	color.PutAsU32(r, col)
+	r.WriteFloat32(strokeWidth)
+
+	inst = PaintArrowFluid{
+		r: r,
+	}
+
+	return
+}
+
+func PaintCanvas(i WidgetIdCreatorI, canvasWidth float32, canvasHeight float32) (inst PaintCanvasFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPaintCanvas))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+	r.WriteFloat32(canvasWidth)
+	r.WriteFloat32(canvasHeight)
+
+	inst = PaintCanvasFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func PaintCircleFilled(cx float32, cy float32, radius float32, col color.Color) (inst PaintCircleFilledFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPaintCircleFilled))
+	r.WriteFloat32(cx)
+	r.WriteFloat32(cy)
+	r.WriteFloat32(radius)
+	color.PutAsU32(r, col)
+
+	inst = PaintCircleFilledFluid{
+		r: r,
+	}
+
+	return
+}
+
+func PaintCircleStroke(cx float32, cy float32, radius float32, col color.Color, strokeWidth float32) (inst PaintCircleStrokeFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPaintCircleStroke))
+	r.WriteFloat32(cx)
+	r.WriteFloat32(cy)
+	r.WriteFloat32(radius)
+	color.PutAsU32(r, col)
+	r.WriteFloat32(strokeWidth)
+
+	inst = PaintCircleStrokeFluid{
+		r: r,
+	}
+
+	return
+}
+
+func PaintCubicBezier(startX float32, startY float32, cp1x float32, cp1y float32, cp2x float32, cp2y float32, endX float32, endY float32, col color.Color, strokeWidth float32) (inst PaintCubicBezierFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPaintCubicBezier))
+	r.WriteFloat32(startX)
+	r.WriteFloat32(startY)
+	r.WriteFloat32(cp1x)
+	r.WriteFloat32(cp1y)
+	r.WriteFloat32(cp2x)
+	r.WriteFloat32(cp2y)
+	r.WriteFloat32(endX)
+	r.WriteFloat32(endY)
+	color.PutAsU32(r, col)
+	r.WriteFloat32(strokeWidth)
+
+	inst = PaintCubicBezierFluid{
+		r: r,
+	}
+
+	return
+}
+
+func PaintDashedLine(fromX float32, fromY float32, toX float32, toY float32, dashLen float32, gapLen float32, col color.Color, strokeWidth float32) (inst PaintDashedLineFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPaintDashedLine))
+	r.WriteFloat32(fromX)
+	r.WriteFloat32(fromY)
+	r.WriteFloat32(toX)
+	r.WriteFloat32(toY)
+	r.WriteFloat32(dashLen)
+	r.WriteFloat32(gapLen)
+	color.PutAsU32(r, col)
+	r.WriteFloat32(strokeWidth)
+
+	inst = PaintDashedLineFluid{
+		r: r,
+	}
+
+	return
+}
+
+func PaintLine(fromX float32, fromY float32, toX float32, toY float32, col color.Color, strokeWidth float32) (inst PaintLineFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPaintLine))
+	r.WriteFloat32(fromX)
+	r.WriteFloat32(fromY)
+	r.WriteFloat32(toX)
+	r.WriteFloat32(toY)
+	color.PutAsU32(r, col)
+	r.WriteFloat32(strokeWidth)
+
+	inst = PaintLineFluid{
+		r: r,
+	}
+
+	return
+}
+
+func PaintPolyline(xs []float32, ys []float32, col color.Color, strokeWidth float32) (inst PaintPolylineFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPaintPolyline))
+	runtime.PutFloat32SliceArg(r, xs)
+	runtime.PutFloat32SliceArg(r, ys)
+	color.PutAsU32(r, col)
+	r.WriteFloat32(strokeWidth)
+
+	inst = PaintPolylineFluid{
+		r: r,
+	}
+
+	return
+}
+
+func PaintRectFilled(minX float32, minY float32, maxX float32, maxY float32, rounding float32, col color.Color) (inst PaintRectFilledFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPaintRectFilled))
+	r.WriteFloat32(minX)
+	r.WriteFloat32(minY)
+	r.WriteFloat32(maxX)
+	r.WriteFloat32(maxY)
+	r.WriteFloat32(rounding)
+	color.PutAsU32(r, col)
+
+	inst = PaintRectFilledFluid{
+		r: r,
+	}
+
+	return
+}
+
+func PaintRectStroke(minX float32, minY float32, maxX float32, maxY float32, rounding float32, col color.Color, strokeWidth float32) (inst PaintRectStrokeFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPaintRectStroke))
+	r.WriteFloat32(minX)
+	r.WriteFloat32(minY)
+	r.WriteFloat32(maxX)
+	r.WriteFloat32(maxY)
+	r.WriteFloat32(rounding)
+	color.PutAsU32(r, col)
+	r.WriteFloat32(strokeWidth)
+
+	inst = PaintRectStrokeFluid{
+		r: r,
+	}
+
+	return
+}
+
+func PaintSenseRegion(i WidgetIdCreatorI, px float32, py float32, sw float32, sh float32) (inst PaintSenseRegionFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPaintSenseRegion))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+	r.WriteFloat32(px)
+	r.WriteFloat32(py)
+	r.WriteFloat32(sw)
+	r.WriteFloat32(sh)
+
+	inst = PaintSenseRegionFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func PaintText(px float32, py float32, anchorH uint8, anchorV uint8, text string, fontSize float32, col color.Color) (inst PaintTextFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPaintText))
+	r.WriteFloat32(px)
+	r.WriteFloat32(py)
+	r.WriteUint8(anchorH)
+	r.WriteUint8(anchorV)
+	r.WriteString(text)
+	r.WriteFloat32(fontSize)
+	color.PutAsU32(r, col)
+
+	inst = PaintTextFluid{
+		r: r,
+	}
+
+	return
+}
+
+func PanelBottom(i WidgetIdCreatorI) (inst PanelBottomFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPanelBottom))
+	v := i.DeriveStacked()
+	r.WriteWidgetId(checkId(v))
+
+	inst = PanelBottomFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func PanelBottomInside(i WidgetIdCreatorI) (inst PanelBottomInsideFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPanelBottomInside))
+	v := i.DeriveStacked()
+	r.WriteWidgetId(checkId(v))
+
+	inst = PanelBottomInsideFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func PanelCentral() (inst PanelCentralFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPanelCentral))
+
+	inst = PanelCentralFluid{
+		r: r,
+	}
+
+	return
+}
+
+func PanelCentralInside() (inst PanelCentralInsideFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPanelCentralInside))
+
+	inst = PanelCentralInsideFluid{
+		r: r,
+	}
+
+	return
+}
+
+func PanelLeft(i WidgetIdCreatorI) (inst PanelLeftFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPanelLeft))
+	v := i.DeriveStacked()
+	r.WriteWidgetId(checkId(v))
+
+	inst = PanelLeftFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func PanelLeftInside(i WidgetIdCreatorI) (inst PanelLeftInsideFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPanelLeftInside))
+	v := i.DeriveStacked()
+	r.WriteWidgetId(checkId(v))
+
+	inst = PanelLeftInsideFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func PanelRight(i WidgetIdCreatorI) (inst PanelRightFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPanelRight))
+	v := i.DeriveStacked()
+	r.WriteWidgetId(checkId(v))
+
+	inst = PanelRightFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func PanelRightInside(i WidgetIdCreatorI) (inst PanelRightInsideFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPanelRightInside))
+	v := i.DeriveStacked()
+	r.WriteWidgetId(checkId(v))
+
+	inst = PanelRightInsideFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func PanelTop(i WidgetIdCreatorI) (inst PanelTopFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPanelTop))
+	v := i.DeriveStacked()
+	r.WriteWidgetId(checkId(v))
+
+	inst = PanelTopFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func PanelTopInside(i WidgetIdCreatorI) (inst PanelTopInsideFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPanelTopInside))
+	v := i.DeriveStacked()
+	r.WriteWidgetId(checkId(v))
+
+	inst = PanelTopInsideFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func Passthrough(i WidgetIdCreatorI, input uint64) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdPassthrough))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+	r.WriteUint64(input)
+
+	r.SendIntermediate()
+}
+
+func Plot(i WidgetIdCreatorI) (inst PlotFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPlot))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+
+	inst = PlotFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func PlotBars(name string, arguments []float64, values []float64) (inst PlotBarsFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPlotBars))
+	r.WriteString(name)
+	runtime.PutFloat64SliceArg(r, arguments)
+	runtime.PutFloat64SliceArg(r, values)
+
+	inst = PlotBarsFluid{
+		r: r,
+	}
+
+	return
+}
+
+func PlotBoxes(name string, arguments []float64, q1s []float64, medians []float64, q3s []float64, whiskerMins []float64, whiskerMaxes []float64, boxWidths []float64, fillColors []uint32, strokeColors []uint32, strokeWidths []float32) (inst PlotBoxesFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPlotBoxes))
+	r.WriteString(name)
+	runtime.PutFloat64SliceArg(r, arguments)
+	runtime.PutFloat64SliceArg(r, q1s)
+	runtime.PutFloat64SliceArg(r, medians)
+	runtime.PutFloat64SliceArg(r, q3s)
+	runtime.PutFloat64SliceArg(r, whiskerMins)
+	runtime.PutFloat64SliceArg(r, whiskerMaxes)
+	runtime.PutFloat64SliceArg(r, boxWidths)
+	runtime.PutUint32SliceArg(r, fillColors)
+	runtime.PutUint32SliceArg(r, strokeColors)
+	runtime.PutFloat32SliceArg(r, strokeWidths)
+
+	inst = PlotBoxesFluid{
+		r: r,
+	}
+
+	return
+}
+
+func PlotHLine(name string, yy float64) (inst PlotHLineFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPlotHLine))
+	r.WriteString(name)
+	r.WriteFloat64(yy)
+
+	inst = PlotHLineFluid{
+		r: r,
+	}
+
+	return
+}
+
+func PlotLine(name string, xs []float64, ys []float64) (inst PlotLineFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPlotLine))
+	r.WriteString(name)
+	runtime.PutFloat64SliceArg(r, xs)
+	runtime.PutFloat64SliceArg(r, ys)
+
+	inst = PlotLineFluid{
+		r: r,
+	}
+
+	return
+}
+
+func PlotPolygon(name string, xs []float64, ys []float64, fillColor uint32, strokeColor uint32, strokeWidth float32) (inst PlotPolygonFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPlotPolygon))
+	r.WriteString(name)
+	runtime.PutFloat64SliceArg(r, xs)
+	runtime.PutFloat64SliceArg(r, ys)
+	r.WriteUint32(fillColor)
+	r.WriteUint32(strokeColor)
+	r.WriteFloat32(strokeWidth)
+
+	inst = PlotPolygonFluid{
+		r: r,
+	}
+
+	return
+}
+
+func PlotScatter(name string, xs []float64, ys []float64) (inst PlotScatterFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPlotScatter))
+	r.WriteString(name)
+	runtime.PutFloat64SliceArg(r, xs)
+	runtime.PutFloat64SliceArg(r, ys)
+
+	inst = PlotScatterFluid{
+		r: r,
+	}
+
+	return
+}
+
+func PlotText(name string, px float64, py float64, text string) (inst PlotTextFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPlotText))
+	r.WriteString(name)
+	r.WriteFloat64(px)
+	r.WriteFloat64(py)
+	r.WriteString(text)
+
+	inst = PlotTextFluid{
+		r: r,
+	}
+
+	return
+}
+
+func PlotVLine(name string, xx float64) (inst PlotVLineFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPlotVLine))
+	r.WriteString(name)
+	r.WriteFloat64(xx)
+
+	inst = PlotVLineFluid{
+		r: r,
+	}
+
+	return
+}
+
+func PrepareNextFrame() {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdPrepareNextFrame))
+
+	r.SendIntermediate()
+}
+
+func ProgressBar(progress float32) (inst ProgressBarFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdProgressBar))
+	r.WriteFloat32(progress)
+
+	inst = ProgressBarFluid{
+		r: r,
+	}
+
+	return
+}
+
+func PushId(i WidgetIdCreatorI) (inst PushIdFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPushId))
+	v := i.DeriveStacked()
+	r.WriteWidgetId(checkId(v))
+
+	inst = PushIdFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func RadioButton(i WidgetIdCreatorI, atoms typed.RetainedFffiHolderTyped[AtomsS], checked bool) (inst RadioButtonFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdRadioButton))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+	r.WriteBool(checked)
+	r.SpliceRetained(atoms.Untype())
+
+	inst = RadioButtonFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func RequestRepaint() {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdRequestRepaint))
+
+	r.SendIntermediate()
+}
+
+func RequestRepaintAfter(durSecs float64) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdRequestRepaintAfter))
+	r.WriteFloat64(durSecs)
+
+	r.SendIntermediate()
+}
+
+func RequestScreenshot(path string) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdRequestScreenshot))
+	r.WriteString(path)
+
+	r.SendIntermediate()
+}
+
+func RequestScreenshotRect(path string, rectX float32, rectY float32, rectW float32, rectH float32) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdRequestScreenshotRect))
+	r.WriteString(path)
+	r.WriteFloat32(rectX)
+	r.WriteFloat32(rectY)
+	r.WriteFloat32(rectW)
+	r.WriteFloat32(rectH)
+
+	r.SendIntermediate()
+}
+
+func ScalarSize() (inst ScalarSizeFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdScalarSize))
+
+	inst = ScalarSizeFluid{
+		r: r,
+	}
+
+	return
+}
+
+func Scope() (inst ScopeFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdScope))
+
+	inst = ScopeFluid{
+		r: r,
+	}
+
+	return
+}
+
+func ScrollArea() (inst ScrollAreaFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdScrollArea))
+
+	inst = ScrollAreaFluid{
+		r: r,
+	}
+
+	return
+}
+
+func ScrollToCursor(align uint8) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdScrollToCursor))
+	r.WriteUint8(align)
+
+	r.SendIntermediate()
+}
+
+func ScrollingTexture(i WidgetIdCreatorI, widthSlots uint32, heightSlots uint32, orientation uint8, filter uint8, head uint32, newCount uint32, newColumns []uint32, displayWidthPx float32, displayHeightPx float32) (inst ScrollingTextureFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdScrollingTexture))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+	r.WriteUint32(widthSlots)
+	r.WriteUint32(heightSlots)
+	r.WriteUint8(orientation)
+	r.WriteUint8(filter)
+	r.WriteUint32(head)
+	r.WriteUint32(newCount)
+	runtime.PutUint32SliceArg(r, newColumns)
+	r.WriteFloat32(displayWidthPx)
+	r.WriteFloat32(displayHeightPx)
+
+	inst = ScrollingTextureFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func ScrollingTextureRelease(i WidgetIdCreatorI) (inst ScrollingTextureReleaseFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdScrollingTextureRelease))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+
+	inst = ScrollingTextureReleaseFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func SelectableLabel(i WidgetIdCreatorI, checked bool, text string) (inst SelectableLabelFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdSelectableLabel))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+	r.WriteBool(checked)
+	r.WriteString(text)
+
+	inst = SelectableLabelFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func Separator() (inst SeparatorFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdSeparator))
+
+	inst = SeparatorFluid{
+		r: r,
+	}
+
+	return
+}
+
+func SetAnimationFreeze(freeze bool) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdSetAnimationFreeze))
+	r.WriteBool(freeze)
+
+	r.SendIntermediate()
+}
+
+func SetWindowCollapsed(h widgethandle.WidgetHandle, collapsed bool) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdSetWindowCollapsed))
+	r.WriteWidgetId(h.Resolve())
+	r.WriteBool(collapsed)
+
+	r.SendIntermediate()
+}
+
+func ShowDebugTools() {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdShowDebugTools))
+
+	r.SendIntermediate()
+}
+
+func ShowPuffinProfiler() {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdShowPuffinProfiler))
+
+	r.SendIntermediate()
+}
+
+func SliderF64(i WidgetIdCreatorI, val float64, rangeBeginIncl float64, rangeEndIncl float64) (inst SliderF64Fluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdSliderF64))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+	r.WriteFloat64(val)
+	r.WriteFloat64(rangeBeginIncl)
+	r.WriteFloat64(rangeEndIncl)
+
+	inst = SliderF64Fluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func SliderI64(i WidgetIdCreatorI, val int64, rangeBeginIncl int64, rangeEndIncl int64) (inst SliderI64Fluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdSliderI64))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+	r.WriteInt64(val)
+	r.WriteInt64(rangeBeginIncl)
+	r.WriteInt64(rangeEndIncl)
+
+	inst = SliderI64Fluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func SliderU64(i WidgetIdCreatorI, val uint64, rangeBeginIncl uint64, rangeEndIncl uint64) (inst SliderU64Fluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdSliderU64))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+	r.WriteUint64(val)
+	r.WriteUint64(rangeBeginIncl)
+	r.WriteUint64(rangeEndIncl)
+
+	inst = SliderU64Fluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func SnarlConnection(srcNodeId uint64, srcPort uint32, dstNodeId uint64, dstPort uint32) (inst SnarlConnectionFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdSnarlConnection))
+	r.WriteUint64(srcNodeId)
+	r.WriteUint32(srcPort)
+	r.WriteUint64(dstNodeId)
+	r.WriteUint32(dstPort)
+
+	inst = SnarlConnectionFluid{
+		r: r,
+	}
+
+	return
+}
+
+func SnarlEditor(i WidgetIdCreatorI) (inst SnarlEditorFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdSnarlEditor))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+
+	inst = SnarlEditorFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+	inst.deferredNodeBody = runtime.NewDeferredBlockScopeHinted(typed.GetCurrentFffiCapture, binary.LittleEndian, runtime.RegisterScopeHint("NodeBody"))
+
+	return
+}
+
+func SnarlNode(nodeId uint64, posX float32, posY float32, kind uint32, title string) (inst SnarlNodeFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdSnarlNode))
+	r.WriteUint64(nodeId)
+	r.WriteFloat32(posX)
+	r.WriteFloat32(posY)
+	r.WriteUint32(kind)
+	r.WriteString(title)
+
+	inst = SnarlNodeFluid{
+		r: r,
+	}
+
+	return
+}
+
+func SnarlPin(nodeId uint64, side uint8, pinIdx uint32, label string, kind uint32) (inst SnarlPinFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdSnarlPin))
+	r.WriteUint64(nodeId)
+	r.WriteUint8(side)
+	r.WriteUint32(pinIdx)
+	r.WriteString(label)
+	r.WriteUint32(kind)
+
+	inst = SnarlPinFluid{
+		r: r,
+	}
+
+	return
+}
+
+func Spinner() (inst SpinnerFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdSpinner))
+
+	inst = SpinnerFluid{
+		r: r,
+	}
+
+	return
+}
+
+func Table(i WidgetIdCreatorI, rowHeight float32, numRows uint64) (inst TableFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdTable))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+	r.WriteFloat32(rowHeight)
+	r.WriteUint64(numRows)
+
+	inst = TableFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func TableCellRichText(widgetText typed.RetainedFffiHolderTyped[WidgetTextS]) (inst TableCellRichTextFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdTableCellRichText))
+	r.SpliceRetained(widgetText.Untype())
+
+	inst = TableCellRichTextFluid{
+		r: r,
+	}
+
+	return
+}
+
+func TableCellText(text string) (inst TableCellTextFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdTableCellText))
+	r.WriteString(text)
+
+	inst = TableCellTextFluid{
+		r: r,
+	}
+
+	return
+}
+
+func TableColumn() (inst TableColumnFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdTableColumn))
+
+	inst = TableColumnFluid{
+		r: r,
+	}
+
+	return
+}
+
+func TableHeaderText(text string) (inst TableHeaderTextFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdTableHeaderText))
+	r.WriteString(text)
+
+	inst = TableHeaderTextFluid{
+		r: r,
+	}
+
+	return
+}
+
+func TextEdit(i WidgetIdCreatorI, text string, multiline bool) (inst TextEditFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdTextEdit))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+	r.WriteString(text)
+	r.WriteBool(multiline)
+
+	inst = TextEditFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func TimeRangePicker(i WidgetIdCreatorI, fromInitial string, toInitial string) (inst TimeRangePickerFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdTimeRangePicker))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+	r.WriteString(fromInitial)
+	r.WriteString(toInitial)
+
+	inst = TimeRangePickerFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func TintedScope(i WidgetIdCreatorI, col color.Color) (inst TintedScopeFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdTintedScope))
+	v := i.DeriveStacked()
+	r.WriteWidgetId(checkId(v))
+	color.PutAsU32(r, col)
+
+	inst = TintedScopeFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func Tree(i WidgetIdCreatorI) (inst TreeFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdTree))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+
+	inst = TreeFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func UiDisable() {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdUiDisable))
+
+	r.SendIntermediate()
+}
+
+func UiSetHeight(height float32) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdUiSetHeight))
+	r.WriteFloat32(height)
+
+	r.SendIntermediate()
+}
+
+func UiSetMaxHeight(height float32) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdUiSetMaxHeight))
+	r.WriteFloat32(height)
+
+	r.SendIntermediate()
+}
+
+func UiSetMaxWidth(width float32) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdUiSetMaxWidth))
+	r.WriteFloat32(width)
+
+	r.SendIntermediate()
+}
+
+func UiSetMinHeight(height float32) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdUiSetMinHeight))
+	r.WriteFloat32(height)
+
+	r.SendIntermediate()
+}
+
+func UiSetMinWidth(width float32) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdUiSetMinWidth))
+	r.WriteFloat32(width)
+
+	r.SendIntermediate()
+}
+
+func UiSetWidth(width float32) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdUiSetWidth))
+	r.WriteFloat32(width)
+
+	r.SendIntermediate()
+}
+
+func UiWithLayout() (inst UiWithLayoutFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdUiWithLayout))
+
+	inst = UiWithLayoutFluid{
+		r: r,
+	}
+
+	return
+}
+
+func VectorSize() (inst VectorSizeFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdVectorSize))
+
+	inst = VectorSizeFluid{
+		r: r,
+	}
+
+	return
+}
+
+func Vertical() (inst VerticalFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdVertical))
+
+	inst = VerticalFluid{
+		r: r,
+	}
+
+	return
+}
+
+func VerticalCentered() (inst VerticalCenteredFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdVerticalCentered))
+
+	inst = VerticalCenteredFluid{
+		r: r,
+	}
+
+	return
+}
+
+func VerticalCenteredJustified() (inst VerticalCenteredJustifiedFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdVerticalCenteredJustified))
+
+	inst = VerticalCenteredJustifiedFluid{
+		r: r,
+	}
+
+	return
+}
+
+func WalkersMap(i WidgetIdCreatorI, initLat float64, initLon float64, noTiles bool) (inst WalkersMapFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdWalkersMap))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+	r.WriteFloat64(initLat)
+	r.WriteFloat64(initLon)
+	r.WriteBool(noTiles)
+
+	inst = WalkersMapFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
+func WarnIfDebugBuild() {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdWarnIfDebugBuild))
+
+	r.SendIntermediate()
+}
+
+func WidgetText() (inst WidgetTextFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdWidgetText))
+
+	inst = WidgetTextFluid{
+		r: r,
+	}
+
+	return
+}
+
+func WidgetsGlobalThemePreferenceButtons() {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdWidgetsGlobalThemePreferenceButtons))
+
+	r.SendIntermediate()
+}
+
+func Window(i WidgetIdCreatorI, label typed.RetainedFffiHolderTyped[WidgetTextS]) (inst WindowFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdWindow))
+	v := i.DeriveStacked()
+	r.WriteWidgetId(checkId(v))
+	r.SpliceRetained(label.Untype())
+
+	inst = WindowFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}

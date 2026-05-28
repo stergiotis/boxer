@@ -1,0 +1,5078 @@
+// Code generated; TheStack (github.com/stergiotis/boxer/public/thestack/cmd/egui2gen) DO NOT EDIT.
+
+package bindings
+
+import "github.com/stergiotis/boxer/public/thestack/fffi2/typed"
+
+import "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+
+import "github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
+
+import (
+	"github.com/stergiotis/boxer/public/functional"
+	"iter"
+)
+
+func (inst AllocateUiAtRectFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst AllocateUiAtRectFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst AtomsFluid) Text(val string) AtomsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(AtomsMethodIdText))
+	r.WriteString(val)
+
+	return inst
+}
+
+func (inst AtomsFluid) RichText(val string) AtomsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(AtomsMethodIdRichText))
+	r.WriteString(val)
+
+	return inst
+}
+
+func (inst AtomsFluid) RichTextColored(val string, cl color.Color, bk color.Color) AtomsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(AtomsMethodIdRichTextColored))
+	r.WriteString(val)
+	PutColorAsRetainedColor32(r, cl)
+	PutColorAsRetainedColor32(r, bk)
+
+	return inst
+}
+
+func (inst AtomsFluid) EndRichText() AtomsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(AtomsMethodIdEndRichText))
+
+	return inst
+}
+
+func (inst AtomsFluid) Size(sz float32) AtomsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(AtomsMethodIdSize))
+	r.WriteFloat32(sz)
+
+	return inst
+}
+
+func (inst AtomsFluid) ExtraLetterSpacing(sp float32) AtomsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(AtomsMethodIdExtraLetterSpacing))
+	r.WriteFloat32(sp)
+
+	return inst
+}
+
+func (inst AtomsFluid) LineHeight(lh float32) AtomsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(AtomsMethodIdLineHeight))
+	r.WriteFloat32(lh)
+
+	return inst
+}
+
+func (inst AtomsFluid) LineHeightDefault() AtomsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(AtomsMethodIdLineHeightDefault))
+
+	return inst
+}
+
+func (inst AtomsFluid) Heading() AtomsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(AtomsMethodIdHeading))
+
+	return inst
+}
+
+func (inst AtomsFluid) Monospace() AtomsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(AtomsMethodIdMonospace))
+
+	return inst
+}
+
+func (inst AtomsFluid) Code() AtomsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(AtomsMethodIdCode))
+
+	return inst
+}
+
+func (inst AtomsFluid) Strong() AtomsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(AtomsMethodIdStrong))
+
+	return inst
+}
+
+func (inst AtomsFluid) Weak() AtomsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(AtomsMethodIdWeak))
+
+	return inst
+}
+
+func (inst AtomsFluid) Underline() AtomsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(AtomsMethodIdUnderline))
+
+	return inst
+}
+
+func (inst AtomsFluid) Strikethrough() AtomsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(AtomsMethodIdStrikethrough))
+
+	return inst
+}
+
+func (inst AtomsFluid) Italics() AtomsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(AtomsMethodIdItalics))
+
+	return inst
+}
+
+func (inst AtomsFluid) Small() AtomsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(AtomsMethodIdSmall))
+
+	return inst
+}
+
+func (inst AtomsFluid) SmallRaised() AtomsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(AtomsMethodIdSmallRaised))
+
+	return inst
+}
+
+func (inst AtomsFluid) Raised() AtomsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(AtomsMethodIdRaised))
+
+	return inst
+}
+
+func (inst AtomsFluid) TextStyleName(name string) AtomsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(AtomsMethodIdTextStyleName))
+	r.WriteString(name)
+
+	return inst
+}
+
+func (inst AtomsFluid) Keep() typed.RetainedFffiHolderTyped[AtomsS] {
+	r := inst.r
+	r.WriteOpCode(uint32(AtomsMethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[AtomsS](r.BuildRetained())
+}
+func (inst ButtonFluid) Frame(val bool) ButtonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ButtonMethodIdFrame))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst ButtonFluid) Small() ButtonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ButtonMethodIdSmall))
+
+	return inst
+}
+
+func (inst ButtonFluid) Wrap() ButtonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ButtonMethodIdWrap))
+
+	return inst
+}
+
+func (inst ButtonFluid) Truncate() ButtonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ButtonMethodIdTruncate))
+
+	return inst
+}
+
+func (inst ButtonFluid) Selected(selected bool) ButtonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ButtonMethodIdSelected))
+	r.WriteBool(selected)
+
+	return inst
+}
+
+func (inst ButtonFluid) FrameWhenInactive(val bool) ButtonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ButtonMethodIdFrameWhenInactive))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst ButtonFluid) RightText(text string) ButtonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ButtonMethodIdRightText))
+	r.WriteString(text)
+
+	return inst
+}
+
+func (inst ButtonFluid) ShortcutText(text string) ButtonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ButtonMethodIdShortcutText))
+	r.WriteString(text)
+
+	return inst
+}
+
+func (inst ButtonFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(ButtonMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst ButtonFluid) Keep() typed.RetainedFffiHolderTyped[ButtonS] {
+	r := inst.r
+	r.WriteOpCode(uint32(ButtonMethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[ButtonS](r.BuildRetained())
+}
+func (inst CheckboxFluid) Indeterminate(indeterminate bool) CheckboxFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(CheckboxMethodIdIndeterminate))
+	r.WriteBool(indeterminate)
+
+	return inst
+}
+
+func (inst CheckboxFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(CheckboxMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst CodeViewFluid) Selectable(val bool) CodeViewFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(CodeViewMethodIdSelectable))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst CodeViewFluid) Wrap() CodeViewFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(CodeViewMethodIdWrap))
+
+	return inst
+}
+
+func (inst CodeViewFluid) Truncate() CodeViewFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(CodeViewMethodIdTruncate))
+
+	return inst
+}
+
+func (inst CodeViewFluid) Extend() CodeViewFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(CodeViewMethodIdExtend))
+
+	return inst
+}
+
+func (inst CodeViewFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(CodeViewMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst CodeViewFluid) Keep() typed.RetainedFffiHolderTyped[CodeViewS] {
+	r := inst.r
+	r.WriteOpCode(uint32(CodeViewMethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[CodeViewS](r.BuildRetained())
+}
+func (inst CodeViewJobFluid) Section(byteStart uint32, byteStop uint32, col color.Color) CodeViewJobFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(CodeViewJobMethodIdSection))
+	r.WriteUint32(byteStart)
+	r.WriteUint32(byteStop)
+	PutColorAsRetainedColor32(r, col)
+
+	return inst
+}
+
+func (inst CodeViewJobFluid) Keep() typed.RetainedFffiHolderTyped[CodeViewJobS] {
+	r := inst.r
+	r.WriteOpCode(uint32(CodeViewJobMethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[CodeViewJobS](r.BuildRetained())
+}
+func (inst CollapsingHeaderFluid) DefaultOpen(val bool) CollapsingHeaderFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(CollapsingHeaderMethodIdDefaultOpen))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst CollapsingHeaderFluid) Open(val bool) CollapsingHeaderFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(CollapsingHeaderMethodIdOpen))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst CollapsingHeaderFluid) Close(val bool) CollapsingHeaderFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(CollapsingHeaderMethodIdClose))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst CollapsingHeaderFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(CollapsingHeaderMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst CollapsingHeaderFluid) Keep() typed.RetainedFffiHolderTyped[BlockI] {
+	r := inst.r
+	r.WriteOpCode(uint32(CollapsingHeaderMethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[BlockI](r.BuildRetained())
+}
+func (inst CollapsingHeaderFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+	inst.r.WriteOpCode(uint32(CollapsingHeaderMethodIdBuild))
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+		/*if inst.idGen.DeriveStacked() != inst.id {
+			panic("id handling is incorrect. iterators are nested in an unhandled way.")
+		}*/
+		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst ColorFluid) FromRgb(rv uint8, gv uint8, bv uint8) ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdFromRgb))
+	r.WriteUint8(rv)
+	r.WriteUint8(gv)
+	r.WriteUint8(bv)
+
+	return inst
+}
+
+func (inst ColorFluid) FromRgbaUnmultiplied(rv uint8, gv uint8, bv uint8, av uint8) ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdFromRgbaUnmultiplied))
+	r.WriteUint8(rv)
+	r.WriteUint8(gv)
+	r.WriteUint8(bv)
+	r.WriteUint8(av)
+
+	return inst
+}
+
+func (inst ColorFluid) FromRgbaPremultiplied(rv uint8, gv uint8, bv uint8, av uint8) ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdFromRgbaPremultiplied))
+	r.WriteUint8(rv)
+	r.WriteUint8(gv)
+	r.WriteUint8(bv)
+	r.WriteUint8(av)
+
+	return inst
+}
+
+func (inst ColorFluid) FromGray(lv uint8) ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdFromGray))
+	r.WriteUint8(lv)
+
+	return inst
+}
+
+func (inst ColorFluid) FromBlackAlpha(av uint8) ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdFromBlackAlpha))
+	r.WriteUint8(av)
+
+	return inst
+}
+
+func (inst ColorFluid) GammaMultiplyU8(factor uint8) ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdGammaMultiplyU8))
+	r.WriteUint8(factor)
+
+	return inst
+}
+
+func (inst ColorFluid) GammaMultiplyF32(factor float32) ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdGammaMultiplyF32))
+	r.WriteFloat32(factor)
+
+	return inst
+}
+
+func (inst ColorFluid) LinearMultiplyF32(factor float32) ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdLinearMultiplyF32))
+	r.WriteFloat32(factor)
+
+	return inst
+}
+
+func (inst ColorFluid) ToOpaque() ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdToOpaque))
+
+	return inst
+}
+
+func (inst ColorFluid) ColorTransparent() ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdColorTransparent))
+
+	return inst
+}
+
+func (inst ColorFluid) ColorBlack() ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdColorBlack))
+
+	return inst
+}
+
+func (inst ColorFluid) ColorDarkGray() ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdColorDarkGray))
+
+	return inst
+}
+
+func (inst ColorFluid) ColorGray() ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdColorGray))
+
+	return inst
+}
+
+func (inst ColorFluid) ColorLightGray() ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdColorLightGray))
+
+	return inst
+}
+
+func (inst ColorFluid) ColorWhite() ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdColorWhite))
+
+	return inst
+}
+
+func (inst ColorFluid) ColorBrown() ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdColorBrown))
+
+	return inst
+}
+
+func (inst ColorFluid) ColorDarkRed() ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdColorDarkRed))
+
+	return inst
+}
+
+func (inst ColorFluid) ColorLightRed() ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdColorLightRed))
+
+	return inst
+}
+
+func (inst ColorFluid) ColorCyan() ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdColorCyan))
+
+	return inst
+}
+
+func (inst ColorFluid) ColorMagenta() ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdColorMagenta))
+
+	return inst
+}
+
+func (inst ColorFluid) ColorYellow() ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdColorYellow))
+
+	return inst
+}
+
+func (inst ColorFluid) ColorOrange() ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdColorOrange))
+
+	return inst
+}
+
+func (inst ColorFluid) ColorLightYellow() ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdColorLightYellow))
+
+	return inst
+}
+
+func (inst ColorFluid) ColorKhaki() ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdColorKhaki))
+
+	return inst
+}
+
+func (inst ColorFluid) ColorDarkGreen() ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdColorDarkGreen))
+
+	return inst
+}
+
+func (inst ColorFluid) ColorGreen() ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdColorGreen))
+
+	return inst
+}
+
+func (inst ColorFluid) ColorLightGreen() ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdColorLightGreen))
+
+	return inst
+}
+
+func (inst ColorFluid) ColorDarkBlue() ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdColorDarkBlue))
+
+	return inst
+}
+
+func (inst ColorFluid) ColorBlue() ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdColorBlue))
+
+	return inst
+}
+
+func (inst ColorFluid) ColorLightBlue() ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdColorLightBlue))
+
+	return inst
+}
+
+func (inst ColorFluid) ColorPurple() ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdColorPurple))
+
+	return inst
+}
+
+func (inst ColorFluid) ColorGold() ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdColorGold))
+
+	return inst
+}
+
+func (inst ColorFluid) ColorDebugColor() ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdColorDebugColor))
+
+	return inst
+}
+
+func (inst ColorFluid) ColorPlaceholder() ColorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdColorPlaceholder))
+
+	return inst
+}
+
+func (inst ColorFluid) Keep() typed.RetainedFffiHolderTyped[Color32S] {
+	r := inst.r
+	r.WriteOpCode(uint32(ColorMethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[Color32S](r.BuildRetained())
+}
+func (inst ComboBoxFluid) Width(width float32) ComboBoxFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ComboBoxMethodIdWidth))
+	r.WriteFloat32(width)
+
+	return inst
+}
+
+func (inst ComboBoxFluid) Height(height float32) ComboBoxFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ComboBoxMethodIdHeight))
+	r.WriteFloat32(height)
+
+	return inst
+}
+
+func (inst ComboBoxFluid) Wrap() ComboBoxFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ComboBoxMethodIdWrap))
+
+	return inst
+}
+
+func (inst ComboBoxFluid) Truncate() ComboBoxFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ComboBoxMethodIdTruncate))
+
+	return inst
+}
+
+func (inst ComboBoxFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(ComboBoxMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst ComboBoxFluid) Keep() typed.RetainedFffiHolderTyped[BlockI] {
+	r := inst.r
+	r.WriteOpCode(uint32(ComboBoxMethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[BlockI](r.BuildRetained())
+}
+func (inst ComboBoxFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+	inst.r.WriteOpCode(uint32(ComboBoxMethodIdBuild))
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+		/*if inst.idGen.DeriveStacked() != inst.id {
+			panic("id handling is incorrect. iterators are nested in an unhandled way.")
+		}*/
+		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst DatePickerButtonFluid) Format(format string) DatePickerButtonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DatePickerButtonMethodIdFormat))
+	r.WriteString(format)
+
+	return inst
+}
+
+func (inst DatePickerButtonFluid) HighlightWeekends(enabled bool) DatePickerButtonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DatePickerButtonMethodIdHighlightWeekends))
+	r.WriteBool(enabled)
+
+	return inst
+}
+
+func (inst DatePickerButtonFluid) ShowIcon(enabled bool) DatePickerButtonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DatePickerButtonMethodIdShowIcon))
+	r.WriteBool(enabled)
+
+	return inst
+}
+
+func (inst DatePickerButtonFluid) Calendar(enabled bool) DatePickerButtonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DatePickerButtonMethodIdCalendar))
+	r.WriteBool(enabled)
+
+	return inst
+}
+
+func (inst DatePickerButtonFluid) CalendarWeek(enabled bool) DatePickerButtonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DatePickerButtonMethodIdCalendarWeek))
+	r.WriteBool(enabled)
+
+	return inst
+}
+
+func (inst DatePickerButtonFluid) StartEndYears(startYear int16, endYear int16) DatePickerButtonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DatePickerButtonMethodIdStartEndYears))
+	r.WriteInt16(startYear)
+	r.WriteInt16(endYear)
+
+	return inst
+}
+
+func (inst DatePickerButtonFluid) Arrows(enabled bool) DatePickerButtonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DatePickerButtonMethodIdArrows))
+	r.WriteBool(enabled)
+
+	return inst
+}
+
+func (inst DatePickerButtonFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(DatePickerButtonMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst DatePickerButtonFluid) Keep() typed.RetainedFffiHolderTyped[DatePickerButtonS] {
+	r := inst.r
+	r.WriteOpCode(uint32(DatePickerButtonMethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[DatePickerButtonS](r.BuildRetained())
+}
+func (inst DateTimePickerButtonFluid) Format(format string) DateTimePickerButtonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DateTimePickerButtonMethodIdFormat))
+	r.WriteString(format)
+
+	return inst
+}
+
+func (inst DateTimePickerButtonFluid) HighlightWeekends(enabled bool) DateTimePickerButtonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DateTimePickerButtonMethodIdHighlightWeekends))
+	r.WriteBool(enabled)
+
+	return inst
+}
+
+func (inst DateTimePickerButtonFluid) ShowIcon(enabled bool) DateTimePickerButtonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DateTimePickerButtonMethodIdShowIcon))
+	r.WriteBool(enabled)
+
+	return inst
+}
+
+func (inst DateTimePickerButtonFluid) Calendar(enabled bool) DateTimePickerButtonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DateTimePickerButtonMethodIdCalendar))
+	r.WriteBool(enabled)
+
+	return inst
+}
+
+func (inst DateTimePickerButtonFluid) CalendarWeek(enabled bool) DateTimePickerButtonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DateTimePickerButtonMethodIdCalendarWeek))
+	r.WriteBool(enabled)
+
+	return inst
+}
+
+func (inst DateTimePickerButtonFluid) StartEndYears(startYear int16, endYear int16) DateTimePickerButtonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DateTimePickerButtonMethodIdStartEndYears))
+	r.WriteInt16(startYear)
+	r.WriteInt16(endYear)
+
+	return inst
+}
+
+func (inst DateTimePickerButtonFluid) Arrows(enabled bool) DateTimePickerButtonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DateTimePickerButtonMethodIdArrows))
+	r.WriteBool(enabled)
+
+	return inst
+}
+
+func (inst DateTimePickerButtonFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(DateTimePickerButtonMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst DateTimePickerButtonFluid) Keep() typed.RetainedFffiHolderTyped[DateTimePickerButtonS] {
+	r := inst.r
+	r.WriteOpCode(uint32(DateTimePickerButtonMethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[DateTimePickerButtonS](r.BuildRetained())
+}
+func (inst DockAreaRawFluid) Send() {
+	r := inst.r
+
+	r.SpliceDeferredBlockMap(inst.deferredTabBody)
+	inst.deferredTabBody.ReleaseWithHint()
+	r.SendIntermediate()
+}
+func (inst DockAreaRawFluid) BeginTabBody(key0 uint64) DockAreaRawFluid {
+	inst.deferredTabBody.Begin(key0)
+	return inst
+}
+
+func (inst DockAreaRawFluid) EndTabBody() DockAreaRawFluid {
+	inst.deferredTabBody.End()
+	return inst
+}
+
+func (inst DragValueF64Fluid) Speed(speed float64) DragValueF64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueF64MethodIdSpeed))
+	r.WriteFloat64(speed)
+
+	return inst
+}
+
+func (inst DragValueF64Fluid) Prefix(prefix string) DragValueF64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueF64MethodIdPrefix))
+	r.WriteString(prefix)
+
+	return inst
+}
+
+func (inst DragValueF64Fluid) Suffix(suffix string) DragValueF64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueF64MethodIdSuffix))
+	r.WriteString(suffix)
+
+	return inst
+}
+
+func (inst DragValueF64Fluid) MinDecimals(digits uint32) DragValueF64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueF64MethodIdMinDecimals))
+	r.WriteUint32(digits)
+
+	return inst
+}
+
+func (inst DragValueF64Fluid) MaxDecimals(digits uint32) DragValueF64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueF64MethodIdMaxDecimals))
+	r.WriteUint32(digits)
+
+	return inst
+}
+
+func (inst DragValueF64Fluid) FixedDecimals(digits uint32) DragValueF64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueF64MethodIdFixedDecimals))
+	r.WriteUint32(digits)
+
+	return inst
+}
+
+func (inst DragValueF64Fluid) Binary(minWidth uint32, twosComplement bool) DragValueF64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueF64MethodIdBinary))
+	r.WriteUint32(minWidth)
+	r.WriteBool(twosComplement)
+
+	return inst
+}
+
+func (inst DragValueF64Fluid) Octal(minWidth uint32, twosComplement bool) DragValueF64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueF64MethodIdOctal))
+	r.WriteUint32(minWidth)
+	r.WriteBool(twosComplement)
+
+	return inst
+}
+
+func (inst DragValueF64Fluid) Hexadecimal(minWidth uint32, twosComplement bool, upper bool) DragValueF64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueF64MethodIdHexadecimal))
+	r.WriteUint32(minWidth)
+	r.WriteBool(twosComplement)
+	r.WriteBool(upper)
+
+	return inst
+}
+
+func (inst DragValueF64Fluid) UpdateWhileEditing(update bool) DragValueF64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueF64MethodIdUpdateWhileEditing))
+	r.WriteBool(update)
+
+	return inst
+}
+
+func (inst DragValueF64Fluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueF64MethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst DragValueF64Fluid) Keep() typed.RetainedFffiHolderTyped[DragValueS] {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueF64MethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[DragValueS](r.BuildRetained())
+}
+func (inst DragValueI64Fluid) Speed(speed float64) DragValueI64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueI64MethodIdSpeed))
+	r.WriteFloat64(speed)
+
+	return inst
+}
+
+func (inst DragValueI64Fluid) Prefix(prefix string) DragValueI64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueI64MethodIdPrefix))
+	r.WriteString(prefix)
+
+	return inst
+}
+
+func (inst DragValueI64Fluid) Suffix(suffix string) DragValueI64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueI64MethodIdSuffix))
+	r.WriteString(suffix)
+
+	return inst
+}
+
+func (inst DragValueI64Fluid) MinDecimals(digits uint32) DragValueI64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueI64MethodIdMinDecimals))
+	r.WriteUint32(digits)
+
+	return inst
+}
+
+func (inst DragValueI64Fluid) MaxDecimals(digits uint32) DragValueI64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueI64MethodIdMaxDecimals))
+	r.WriteUint32(digits)
+
+	return inst
+}
+
+func (inst DragValueI64Fluid) FixedDecimals(digits uint32) DragValueI64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueI64MethodIdFixedDecimals))
+	r.WriteUint32(digits)
+
+	return inst
+}
+
+func (inst DragValueI64Fluid) Binary(minWidth uint32, twosComplement bool) DragValueI64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueI64MethodIdBinary))
+	r.WriteUint32(minWidth)
+	r.WriteBool(twosComplement)
+
+	return inst
+}
+
+func (inst DragValueI64Fluid) Octal(minWidth uint32, twosComplement bool) DragValueI64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueI64MethodIdOctal))
+	r.WriteUint32(minWidth)
+	r.WriteBool(twosComplement)
+
+	return inst
+}
+
+func (inst DragValueI64Fluid) Hexadecimal(minWidth uint32, twosComplement bool, upper bool) DragValueI64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueI64MethodIdHexadecimal))
+	r.WriteUint32(minWidth)
+	r.WriteBool(twosComplement)
+	r.WriteBool(upper)
+
+	return inst
+}
+
+func (inst DragValueI64Fluid) UpdateWhileEditing(update bool) DragValueI64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueI64MethodIdUpdateWhileEditing))
+	r.WriteBool(update)
+
+	return inst
+}
+
+func (inst DragValueI64Fluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueI64MethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst DragValueI64Fluid) Keep() typed.RetainedFffiHolderTyped[DragValueS] {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueI64MethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[DragValueS](r.BuildRetained())
+}
+func (inst DragValueU64Fluid) Speed(speed float64) DragValueU64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueU64MethodIdSpeed))
+	r.WriteFloat64(speed)
+
+	return inst
+}
+
+func (inst DragValueU64Fluid) Prefix(prefix string) DragValueU64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueU64MethodIdPrefix))
+	r.WriteString(prefix)
+
+	return inst
+}
+
+func (inst DragValueU64Fluid) Suffix(suffix string) DragValueU64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueU64MethodIdSuffix))
+	r.WriteString(suffix)
+
+	return inst
+}
+
+func (inst DragValueU64Fluid) MinDecimals(digits uint32) DragValueU64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueU64MethodIdMinDecimals))
+	r.WriteUint32(digits)
+
+	return inst
+}
+
+func (inst DragValueU64Fluid) MaxDecimals(digits uint32) DragValueU64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueU64MethodIdMaxDecimals))
+	r.WriteUint32(digits)
+
+	return inst
+}
+
+func (inst DragValueU64Fluid) FixedDecimals(digits uint32) DragValueU64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueU64MethodIdFixedDecimals))
+	r.WriteUint32(digits)
+
+	return inst
+}
+
+func (inst DragValueU64Fluid) Binary(minWidth uint32, twosComplement bool) DragValueU64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueU64MethodIdBinary))
+	r.WriteUint32(minWidth)
+	r.WriteBool(twosComplement)
+
+	return inst
+}
+
+func (inst DragValueU64Fluid) Octal(minWidth uint32, twosComplement bool) DragValueU64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueU64MethodIdOctal))
+	r.WriteUint32(minWidth)
+	r.WriteBool(twosComplement)
+
+	return inst
+}
+
+func (inst DragValueU64Fluid) Hexadecimal(minWidth uint32, twosComplement bool, upper bool) DragValueU64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueU64MethodIdHexadecimal))
+	r.WriteUint32(minWidth)
+	r.WriteBool(twosComplement)
+	r.WriteBool(upper)
+
+	return inst
+}
+
+func (inst DragValueU64Fluid) UpdateWhileEditing(update bool) DragValueU64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueU64MethodIdUpdateWhileEditing))
+	r.WriteBool(update)
+
+	return inst
+}
+
+func (inst DragValueU64Fluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueU64MethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst DragValueU64Fluid) Keep() typed.RetainedFffiHolderTyped[DragValueS] {
+	r := inst.r
+	r.WriteOpCode(uint32(DragValueU64MethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[DragValueS](r.BuildRetained())
+}
+func (inst EnabledUiFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst EnabledUiFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst EndETableFluid) ScrollToRow(row uint64, align uint8) EndETableFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(EndETableMethodIdScrollToRow))
+	r.WriteUint64(row)
+	r.WriteUint8(align)
+
+	return inst
+}
+
+func (inst EndETableFluid) ScrollToColumn(col uint32, align uint8) EndETableFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(EndETableMethodIdScrollToColumn))
+	r.WriteUint32(col)
+	r.WriteUint8(align)
+
+	return inst
+}
+
+func (inst EndETableFluid) ScrollToRows(rowBegin uint64, rowEnd uint64, align uint8) EndETableFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(EndETableMethodIdScrollToRows))
+	r.WriteUint64(rowBegin)
+	r.WriteUint64(rowEnd)
+	r.WriteUint8(align)
+
+	return inst
+}
+
+func (inst EndETableFluid) ScrollToColumns(colBegin uint32, colEnd uint32, align uint8) EndETableFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(EndETableMethodIdScrollToColumns))
+	r.WriteUint32(colBegin)
+	r.WriteUint32(colEnd)
+	r.WriteUint8(align)
+
+	return inst
+}
+
+func (inst EndETableFluid) AutoSizeMode(mode uint8) EndETableFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(EndETableMethodIdAutoSizeMode))
+	r.WriteUint8(mode)
+
+	return inst
+}
+
+func (inst EndETableFluid) Striped(val bool) EndETableFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(EndETableMethodIdStriped))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst EndETableFluid) SelectedRow(row uint64) EndETableFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(EndETableMethodIdSelectedRow))
+	r.WriteUint64(row)
+
+	return inst
+}
+
+func (inst EndETableFluid) MaxHeight(height float32) EndETableFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(EndETableMethodIdMaxHeight))
+	r.WriteFloat32(height)
+
+	return inst
+}
+
+func (inst EndETableFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(EndETableMethodIdBuild))
+	r.SpliceDeferredBlockMap(inst.deferredCells)
+	r.SpliceDeferredBlockMap(inst.deferredHeaders)
+	inst.deferredCells.ReleaseWithHint()
+	inst.deferredHeaders.ReleaseWithHint()
+	r.SendIntermediate()
+}
+func (inst EndETableFluid) BeginCells(key0 uint64, key1 uint32) EndETableFluid {
+	inst.deferredCells.Begin(key0, key1)
+	return inst
+}
+
+func (inst EndETableFluid) EndCells() EndETableFluid {
+	inst.deferredCells.End()
+	return inst
+}
+
+func (inst EndETableFluid) BeginHeaders(key0 uint32, key1 uint32) EndETableFluid {
+	inst.deferredHeaders.Begin(key0, key1)
+	return inst
+}
+
+func (inst EndETableFluid) EndHeaders() EndETableFluid {
+	inst.deferredHeaders.End()
+	return inst
+}
+
+func (inst EtColumnFluid) Resizable(val bool) EtColumnFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(EtColumnMethodIdResizable))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst EtColumnFluid) RangeMinMax(min float32, max float32) EtColumnFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(EtColumnMethodIdRangeMinMax))
+	r.WriteFloat32(min)
+	r.WriteFloat32(max)
+
+	return inst
+}
+
+func (inst EtColumnFluid) AutoSizeThisFrame(val bool) EtColumnFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(EtColumnMethodIdAutoSizeThisFrame))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst EtColumnFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(EtColumnMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst EtColumnFluid) Keep() typed.RetainedFffiHolderTyped[EtColumnS] {
+	r := inst.r
+	r.WriteOpCode(uint32(EtColumnMethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[EtColumnS](r.BuildRetained())
+}
+func (inst EtHeaderTextFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst EtHeaderTextFluid) Keep() typed.RetainedFffiHolderTyped[EtHeaderTextS] {
+	r := inst.r
+
+	return typed.NewRetainedFffiHolderTyped[EtHeaderTextS](r.BuildRetained())
+}
+func (inst EtRowHeightFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst FrameFluid) InnerMargin(val float32) FrameFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(FrameMethodIdInnerMargin))
+	r.WriteFloat32(val)
+
+	return inst
+}
+
+func (inst FrameFluid) OuterMargin(val float32) FrameFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(FrameMethodIdOuterMargin))
+	r.WriteFloat32(val)
+
+	return inst
+}
+
+func (inst FrameFluid) CornerRadius(val float32) FrameFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(FrameMethodIdCornerRadius))
+	r.WriteFloat32(val)
+
+	return inst
+}
+
+func (inst FrameFluid) InnerMarginSides(left float32, right float32, top float32, bottom float32) FrameFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(FrameMethodIdInnerMarginSides))
+	r.WriteFloat32(left)
+	r.WriteFloat32(right)
+	r.WriteFloat32(top)
+	r.WriteFloat32(bottom)
+
+	return inst
+}
+
+func (inst FrameFluid) OuterMarginSides(left float32, right float32, top float32, bottom float32) FrameFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(FrameMethodIdOuterMarginSides))
+	r.WriteFloat32(left)
+	r.WriteFloat32(right)
+	r.WriteFloat32(top)
+	r.WriteFloat32(bottom)
+
+	return inst
+}
+
+func (inst FrameFluid) CornerRadiusSides(nw uint8, ne uint8, sw uint8, se uint8) FrameFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(FrameMethodIdCornerRadiusSides))
+	r.WriteUint8(nw)
+	r.WriteUint8(ne)
+	r.WriteUint8(sw)
+	r.WriteUint8(se)
+
+	return inst
+}
+
+func (inst FrameFluid) Fill(col color.Color) FrameFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(FrameMethodIdFill))
+	PutColorAsRetainedColor32(r, col)
+
+	return inst
+}
+
+func (inst FrameFluid) Stroke(width float32, col color.Color) FrameFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(FrameMethodIdStroke))
+	r.WriteFloat32(width)
+	PutColorAsRetainedColor32(r, col)
+
+	return inst
+}
+
+func (inst FrameFluid) Shadow(offsetX float32, offsetY float32, blur uint8, spread uint8, col color.Color) FrameFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(FrameMethodIdShadow))
+	r.WriteFloat32(offsetX)
+	r.WriteFloat32(offsetY)
+	r.WriteUint8(blur)
+	r.WriteUint8(spread)
+	PutColorAsRetainedColor32(r, col)
+
+	return inst
+}
+
+func (inst FrameFluid) MultiplyWithOpacity(val float32) FrameFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(FrameMethodIdMultiplyWithOpacity))
+	r.WriteFloat32(val)
+
+	return inst
+}
+
+func (inst FrameFluid) SenseClick() FrameFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(FrameMethodIdSenseClick))
+
+	return inst
+}
+
+func (inst FrameFluid) SenseDrag() FrameFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(FrameMethodIdSenseDrag))
+
+	return inst
+}
+
+func (inst FrameFluid) HoverCursorPointer() FrameFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(FrameMethodIdHoverCursorPointer))
+
+	return inst
+}
+
+func (inst FrameFluid) PresetGroup() FrameFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(FrameMethodIdPresetGroup))
+
+	return inst
+}
+
+func (inst FrameFluid) PresetWindow() FrameFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(FrameMethodIdPresetWindow))
+
+	return inst
+}
+
+func (inst FrameFluid) PresetPopup() FrameFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(FrameMethodIdPresetPopup))
+
+	return inst
+}
+
+func (inst FrameFluid) PresetMenu() FrameFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(FrameMethodIdPresetMenu))
+
+	return inst
+}
+
+func (inst FrameFluid) PresetCanvas() FrameFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(FrameMethodIdPresetCanvas))
+
+	return inst
+}
+
+func (inst FrameFluid) PresetDarkCanvas() FrameFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(FrameMethodIdPresetDarkCanvas))
+
+	return inst
+}
+
+func (inst FrameFluid) PresetSideTopPanel() FrameFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(FrameMethodIdPresetSideTopPanel))
+
+	return inst
+}
+
+func (inst FrameFluid) PresetCentralPanel() FrameFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(FrameMethodIdPresetCentralPanel))
+
+	return inst
+}
+
+func (inst FrameFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(FrameMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst FrameFluid) Keep() typed.RetainedFffiHolderTyped[BlockI] {
+	r := inst.r
+	r.WriteOpCode(uint32(FrameMethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[BlockI](r.BuildRetained())
+}
+func (inst FrameFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+	inst.r.WriteOpCode(uint32(FrameMethodIdBuild))
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+		/*if inst.idGen.DeriveStacked() != inst.id {
+			panic("id handling is incorrect. iterators are nested in an unhandled way.")
+		}*/
+		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst GraphFluid) Width(wi float32) GraphFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdWidth))
+	r.WriteFloat32(wi)
+
+	return inst
+}
+
+func (inst GraphFluid) Height(he float32) GraphFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdHeight))
+	r.WriteFloat32(he)
+
+	return inst
+}
+
+func (inst GraphFluid) DraggingEnabled(vl bool) GraphFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdDraggingEnabled))
+	r.WriteBool(vl)
+
+	return inst
+}
+
+func (inst GraphFluid) HoverEnabled(vl bool) GraphFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdHoverEnabled))
+	r.WriteBool(vl)
+
+	return inst
+}
+
+func (inst GraphFluid) NodeClickingEnabled(vl bool) GraphFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdNodeClickingEnabled))
+	r.WriteBool(vl)
+
+	return inst
+}
+
+func (inst GraphFluid) NodeSelectionEnabled(vl bool) GraphFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdNodeSelectionEnabled))
+	r.WriteBool(vl)
+
+	return inst
+}
+
+func (inst GraphFluid) NodeSelectionMultiEnabled(vl bool) GraphFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdNodeSelectionMultiEnabled))
+	r.WriteBool(vl)
+
+	return inst
+}
+
+func (inst GraphFluid) EdgeClickingEnabled(vl bool) GraphFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdEdgeClickingEnabled))
+	r.WriteBool(vl)
+
+	return inst
+}
+
+func (inst GraphFluid) EdgeSelectionEnabled(vl bool) GraphFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdEdgeSelectionEnabled))
+	r.WriteBool(vl)
+
+	return inst
+}
+
+func (inst GraphFluid) EdgeSelectionMultiEnabled(vl bool) GraphFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdEdgeSelectionMultiEnabled))
+	r.WriteBool(vl)
+
+	return inst
+}
+
+func (inst GraphFluid) FitToScreen(vl bool) GraphFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdFitToScreen))
+	r.WriteBool(vl)
+
+	return inst
+}
+
+func (inst GraphFluid) ZoomAndPan(vl bool) GraphFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdZoomAndPan))
+	r.WriteBool(vl)
+
+	return inst
+}
+
+func (inst GraphFluid) FitPadding(pd float32) GraphFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdFitPadding))
+	r.WriteFloat32(pd)
+
+	return inst
+}
+
+func (inst GraphFluid) ZoomSpeed(sp float32) GraphFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdZoomSpeed))
+	r.WriteFloat32(sp)
+
+	return inst
+}
+
+func (inst GraphFluid) LabelsAlways(vl bool) GraphFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdLabelsAlways))
+	r.WriteBool(vl)
+
+	return inst
+}
+
+func (inst GraphFluid) Layout(kind uint8) GraphFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdLayout))
+	r.WriteUint8(kind)
+
+	return inst
+}
+
+func (inst GraphFluid) ResetLayout() GraphFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdResetLayout))
+
+	return inst
+}
+
+func (inst GraphFluid) FastForwardSteps(st uint32) GraphFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdFastForwardSteps))
+	r.WriteUint32(st)
+
+	return inst
+}
+
+func (inst GraphFluid) LayoutDt(dt float32) GraphFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdLayoutDt))
+	r.WriteFloat32(dt)
+
+	return inst
+}
+
+func (inst GraphFluid) LayoutDamping(dp float32) GraphFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdLayoutDamping))
+	r.WriteFloat32(dp)
+
+	return inst
+}
+
+func (inst GraphFluid) LayoutEpsilon(ep float32) GraphFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdLayoutEpsilon))
+	r.WriteFloat32(ep)
+
+	return inst
+}
+
+func (inst GraphFluid) LayoutMaxStep(ms float32) GraphFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdLayoutMaxStep))
+	r.WriteFloat32(ms)
+
+	return inst
+}
+
+func (inst GraphFluid) LayoutKScale(ks float32) GraphFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdLayoutKScale))
+	r.WriteFloat32(ks)
+
+	return inst
+}
+
+func (inst GraphFluid) LayoutCAttract(ca float32) GraphFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdLayoutCAttract))
+	r.WriteFloat32(ca)
+
+	return inst
+}
+
+func (inst GraphFluid) LayoutCRepulse(cr float32) GraphFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdLayoutCRepulse))
+	r.WriteFloat32(cr)
+
+	return inst
+}
+
+func (inst GraphFluid) LayoutRunning(vl bool) GraphFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdLayoutRunning))
+	r.WriteBool(vl)
+
+	return inst
+}
+
+func (inst GraphFluid) LayoutRowDist(rd float32) GraphFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdLayoutRowDist))
+	r.WriteFloat32(rd)
+
+	return inst
+}
+
+func (inst GraphFluid) LayoutColDist(cd float32) GraphFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdLayoutColDist))
+	r.WriteFloat32(cd)
+
+	return inst
+}
+
+func (inst GraphFluid) LayoutCenterParent(vl bool) GraphFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdLayoutCenterParent))
+	r.WriteBool(vl)
+
+	return inst
+}
+
+func (inst GraphFluid) LayoutOrientation(or uint8) GraphFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdLayoutOrientation))
+	r.WriteUint8(or)
+
+	return inst
+}
+
+func (inst GraphFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst GraphFluid) Keep() typed.RetainedFffiHolderTyped[GraphDrainS] {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphMethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[GraphDrainS](r.BuildRetained())
+}
+func (inst GraphEdgeFluid) Color(col color.Color) GraphEdgeFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphEdgeMethodIdColor))
+	color.PutAsU32(r, col)
+
+	return inst
+}
+
+func (inst GraphEdgeFluid) Label(text string) GraphEdgeFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphEdgeMethodIdLabel))
+	r.WriteString(text)
+
+	return inst
+}
+
+func (inst GraphEdgeFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphEdgeMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst GraphNodeFluid) Color(col color.Color) GraphNodeFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphNodeMethodIdColor))
+	color.PutAsU32(r, col)
+
+	return inst
+}
+
+func (inst GraphNodeFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(GraphNodeMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst GridFluid) NumColumns(val uint32) GridFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GridMethodIdNumColumns))
+	r.WriteUint32(val)
+
+	return inst
+}
+
+func (inst GridFluid) Striped(val bool) GridFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GridMethodIdStriped))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst GridFluid) MinColWidth(val float32) GridFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GridMethodIdMinColWidth))
+	r.WriteFloat32(val)
+
+	return inst
+}
+
+func (inst GridFluid) MinRowHeight(val float32) GridFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GridMethodIdMinRowHeight))
+	r.WriteFloat32(val)
+
+	return inst
+}
+
+func (inst GridFluid) MaxColWidth(val float32) GridFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GridMethodIdMaxColWidth))
+	r.WriteFloat32(val)
+
+	return inst
+}
+
+func (inst GridFluid) StartRow(val uint64) GridFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(GridMethodIdStartRow))
+	r.WriteUint64(val)
+
+	return inst
+}
+
+func (inst GridFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(GridMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst GridFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+	inst.r.WriteOpCode(uint32(GridMethodIdBuild))
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+		/*if inst.idGen.DeriveStacked() != inst.id {
+			panic("id handling is incorrect. iterators are nested in an unhandled way.")
+		}*/
+		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst GroupFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst GroupFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst H3CellsColoredFluid) StrokeWidth(width float32) H3CellsColoredFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(H3CellsColoredMethodIdStrokeWidth))
+	r.WriteFloat32(width)
+
+	return inst
+}
+
+func (inst H3CellsColoredFluid) StrokeColor(col color.Color) H3CellsColoredFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(H3CellsColoredMethodIdStrokeColor))
+	color.PutAsU32(r, col)
+
+	return inst
+}
+
+func (inst H3CellsColoredFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(H3CellsColoredMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst H3RegionFluid) Fill(col color.Color) H3RegionFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(H3RegionMethodIdFill))
+	color.PutAsU32(r, col)
+
+	return inst
+}
+
+func (inst H3RegionFluid) Stroke(col color.Color, width float32) H3RegionFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(H3RegionMethodIdStroke))
+	color.PutAsU32(r, col)
+	r.WriteFloat32(width)
+
+	return inst
+}
+
+func (inst H3RegionFluid) Label(text string) H3RegionFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(H3RegionMethodIdLabel))
+	r.WriteString(text)
+
+	return inst
+}
+
+func (inst H3RegionFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(H3RegionMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst HorizontalFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst HorizontalFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst HorizontalCenteredFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst HorizontalCenteredFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst HorizontalTopFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst HorizontalTopFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst HorizontalWrappedFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst HorizontalWrappedFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst HoverTextFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst HoverTextFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst HoverUiFluid) Send() {
+	r := inst.r
+
+	r.SpliceDeferredBlockMap(inst.deferredTip)
+	r.SpliceDeferredBlockMap(inst.deferredTarget)
+	inst.deferredTip.ReleaseWithHint()
+	inst.deferredTarget.ReleaseWithHint()
+	r.SendIntermediate()
+}
+func (inst HoverUiFluid) BeginTip(key0 uint32) HoverUiFluid {
+	inst.deferredTip.Begin(key0)
+	return inst
+}
+
+func (inst HoverUiFluid) EndTip() HoverUiFluid {
+	inst.deferredTip.End()
+	return inst
+}
+
+func (inst HoverUiFluid) BeginTarget(key0 uint32) HoverUiFluid {
+	inst.deferredTarget.Begin(key0)
+	return inst
+}
+
+func (inst HoverUiFluid) EndTarget() HoverUiFluid {
+	inst.deferredTarget.End()
+	return inst
+}
+
+func (inst HyperlinkFluid) OpenInNewTab(enabled bool) HyperlinkFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(HyperlinkMethodIdOpenInNewTab))
+	r.WriteBool(enabled)
+
+	return inst
+}
+
+func (inst HyperlinkFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(HyperlinkMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst HyperlinkFluid) Keep() typed.RetainedFffiHolderTyped[HyperlinkS] {
+	r := inst.r
+	r.WriteOpCode(uint32(HyperlinkMethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[HyperlinkS](r.BuildRetained())
+}
+func (inst HyperlinkToFluid) OpenInNewTab(enabled bool) HyperlinkToFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(HyperlinkToMethodIdOpenInNewTab))
+	r.WriteBool(enabled)
+
+	return inst
+}
+
+func (inst HyperlinkToFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(HyperlinkToMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst HyperlinkToFluid) Keep() typed.RetainedFffiHolderTyped[HyperlinkS] {
+	r := inst.r
+	r.WriteOpCode(uint32(HyperlinkToMethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[HyperlinkS](r.BuildRetained())
+}
+func (inst ImageFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst ImageReleaseFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst IndentFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst IndentFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+		/*if inst.idGen.DeriveStacked() != inst.id {
+			panic("id handling is incorrect. iterators are nested in an unhandled way.")
+		}*/
+		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst LabelFluid) Selectable(val bool) LabelFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(LabelMethodIdSelectable))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst LabelFluid) Wrap() LabelFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(LabelMethodIdWrap))
+
+	return inst
+}
+
+func (inst LabelFluid) Truncate() LabelFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(LabelMethodIdTruncate))
+
+	return inst
+}
+
+func (inst LabelFluid) Extend() LabelFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(LabelMethodIdExtend))
+
+	return inst
+}
+
+func (inst LabelFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(LabelMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst LabelFluid) Keep() typed.RetainedFffiHolderTyped[LabelS] {
+	r := inst.r
+	r.WriteOpCode(uint32(LabelMethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[LabelS](r.BuildRetained())
+}
+func (inst LabelAtomsFluid) Wrap() LabelAtomsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(LabelAtomsMethodIdWrap))
+
+	return inst
+}
+
+func (inst LabelAtomsFluid) Truncate() LabelAtomsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(LabelAtomsMethodIdTruncate))
+
+	return inst
+}
+
+func (inst LabelAtomsFluid) Extend() LabelAtomsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(LabelAtomsMethodIdExtend))
+
+	return inst
+}
+
+func (inst LabelAtomsFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(LabelAtomsMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst LabelAtomsFluid) Keep() typed.RetainedFffiHolderTyped[LabelS] {
+	r := inst.r
+	r.WriteOpCode(uint32(LabelAtomsMethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[LabelS](r.BuildRetained())
+}
+func (inst LabelWidgetTextFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst LabelWidgetTextFluid) Keep() typed.RetainedFffiHolderTyped[LabelS] {
+	r := inst.r
+
+	return typed.NewRetainedFffiHolderTyped[LabelS](r.BuildRetained())
+}
+func (inst MapMarkerFluid) Label(text string) MapMarkerFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(MapMarkerMethodIdLabel))
+	r.WriteString(text)
+
+	return inst
+}
+
+func (inst MapMarkerFluid) Color(col color.Color) MapMarkerFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(MapMarkerMethodIdColor))
+	color.PutAsU32(r, col)
+
+	return inst
+}
+
+func (inst MapMarkerFluid) Radius(radius float32) MapMarkerFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(MapMarkerMethodIdRadius))
+	r.WriteFloat32(radius)
+
+	return inst
+}
+
+func (inst MapMarkerFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(MapMarkerMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst MapPolylineFluid) Stroke(col color.Color, width float32) MapPolylineFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(MapPolylineMethodIdStroke))
+	color.PutAsU32(r, col)
+	r.WriteFloat32(width)
+
+	return inst
+}
+
+func (inst MapPolylineFluid) Closed(closed bool) MapPolylineFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(MapPolylineMethodIdClosed))
+	r.WriteBool(closed)
+
+	return inst
+}
+
+func (inst MapPolylineFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(MapPolylineMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst MenuBarFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst MenuBarFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst MenuButtonFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst NewTableFluid) Striped(val bool) NewTableFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(NewTableMethodIdStriped))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst NewTableFluid) Vscroll(val bool) NewTableFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(NewTableMethodIdVscroll))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst NewTableFluid) MinScrolledHeight(val float32) NewTableFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(NewTableMethodIdMinScrolledHeight))
+	r.WriteFloat32(val)
+
+	return inst
+}
+
+func (inst NewTableFluid) MaxScrollHeight(val float32) NewTableFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(NewTableMethodIdMaxScrollHeight))
+	r.WriteFloat32(val)
+
+	return inst
+}
+
+func (inst NewTableFluid) ScrollToRow(row uint64) NewTableFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(NewTableMethodIdScrollToRow))
+	r.WriteUint64(row)
+
+	return inst
+}
+
+func (inst NewTableFluid) HeaderHeight(val float32) NewTableFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(NewTableMethodIdHeaderHeight))
+	r.WriteFloat32(val)
+
+	return inst
+}
+
+func (inst NewTableFluid) AutoShrink(horiz bool, vert bool) NewTableFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(NewTableMethodIdAutoShrink))
+	r.WriteBool(horiz)
+	r.WriteBool(vert)
+
+	return inst
+}
+
+func (inst NewTableFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(NewTableMethodIdBuild))
+	r.SpliceDeferredBlockMap(inst.deferredHeaders)
+	r.SpliceDeferredBlockMap(inst.deferredRows)
+	inst.deferredHeaders.ReleaseWithHint()
+	inst.deferredRows.ReleaseWithHint()
+	r.SendIntermediate()
+}
+func (inst NewTableFluid) BeginHeaders(key0 uint32, key1 uint32) NewTableFluid {
+	inst.deferredHeaders.Begin(key0, key1)
+	return inst
+}
+
+func (inst NewTableFluid) EndHeaders() NewTableFluid {
+	inst.deferredHeaders.End()
+	return inst
+}
+
+func (inst NewTableFluid) BeginRows(key0 uint64, key1 uint32) NewTableFluid {
+	inst.deferredRows.Begin(key0, key1)
+	return inst
+}
+
+func (inst NewTableFluid) EndRows() NewTableFluid {
+	inst.deferredRows.End()
+	return inst
+}
+
+func (inst NewTableColumnFluid) Auto() NewTableColumnFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(NewTableColumnMethodIdAuto))
+
+	return inst
+}
+
+func (inst NewTableColumnFluid) Exact(width float32) NewTableColumnFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(NewTableColumnMethodIdExact))
+	r.WriteFloat32(width)
+
+	return inst
+}
+
+func (inst NewTableColumnFluid) Initial(width float32) NewTableColumnFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(NewTableColumnMethodIdInitial))
+	r.WriteFloat32(width)
+
+	return inst
+}
+
+func (inst NewTableColumnFluid) Remainder() NewTableColumnFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(NewTableColumnMethodIdRemainder))
+
+	return inst
+}
+
+func (inst NewTableColumnFluid) AtLeast(minWidth float32) NewTableColumnFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(NewTableColumnMethodIdAtLeast))
+	r.WriteFloat32(minWidth)
+
+	return inst
+}
+
+func (inst NewTableColumnFluid) AtMost(maxWidth float32) NewTableColumnFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(NewTableColumnMethodIdAtMost))
+	r.WriteFloat32(maxWidth)
+
+	return inst
+}
+
+func (inst NewTableColumnFluid) Resizable(val bool) NewTableColumnFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(NewTableColumnMethodIdResizable))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst NewTableColumnFluid) ClipContents(val bool) NewTableColumnFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(NewTableColumnMethodIdClipContents))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst NewTableColumnFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(NewTableColumnMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst NewTableColumnFluid) Keep() typed.RetainedFffiHolderTyped[NewTableColumnS] {
+	r := inst.r
+	r.WriteOpCode(uint32(NewTableColumnMethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[NewTableColumnS](r.BuildRetained())
+}
+func (inst NewTableRowHeightFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst NodeDirFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst NodeDirFluid) Keep() typed.RetainedFffiHolderTyped[NodeCommandS] {
+	r := inst.r
+
+	return typed.NewRetainedFffiHolderTyped[NodeCommandS](r.BuildRetained())
+}
+func (inst NodeDirCloseFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst NodeDirCloseFluid) Keep() typed.RetainedFffiHolderTyped[NodeCommandS] {
+	r := inst.r
+
+	return typed.NewRetainedFffiHolderTyped[NodeCommandS](r.BuildRetained())
+}
+func (inst NodeLeafFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst NodeLeafFluid) Keep() typed.RetainedFffiHolderTyped[NodeCommandS] {
+	r := inst.r
+
+	return typed.NewRetainedFffiHolderTyped[NodeCommandS](r.BuildRetained())
+}
+func (inst PaintArrowFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst PaintCanvasFluid) Background(col color.Color) PaintCanvasFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PaintCanvasMethodIdBackground))
+	color.PutAsU32(r, col)
+
+	return inst
+}
+
+func (inst PaintCanvasFluid) Opacity(op float32) PaintCanvasFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PaintCanvasMethodIdOpacity))
+	r.WriteFloat32(op)
+
+	return inst
+}
+
+func (inst PaintCanvasFluid) Sense(click bool, drag bool, hover bool) PaintCanvasFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PaintCanvasMethodIdSense))
+	r.WriteBool(click)
+	r.WriteBool(drag)
+	r.WriteBool(hover)
+
+	return inst
+}
+
+func (inst PaintCanvasFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(PaintCanvasMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst PaintCanvasFluid) Keep() typed.RetainedFffiHolderTyped[PaintCanvasS] {
+	r := inst.r
+	r.WriteOpCode(uint32(PaintCanvasMethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[PaintCanvasS](r.BuildRetained())
+}
+func (inst PaintCircleFilledFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst PaintCircleStrokeFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst PaintCubicBezierFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst PaintDashedLineFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst PaintLineFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst PaintPolylineFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst PaintRectFilledFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst PaintRectStrokeFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst PaintSenseRegionFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst PaintTextFluid) Monospace() PaintTextFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PaintTextMethodIdMonospace))
+
+	return inst
+}
+
+func (inst PaintTextFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(PaintTextMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst PanelBottomFluid) Resizable(val bool) PanelBottomFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelBottomMethodIdResizable))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst PanelBottomFluid) DefaultSize(val float32) PanelBottomFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelBottomMethodIdDefaultSize))
+	r.WriteFloat32(val)
+
+	return inst
+}
+
+func (inst PanelBottomFluid) ExactSize(val float32) PanelBottomFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelBottomMethodIdExactSize))
+	r.WriteFloat32(val)
+
+	return inst
+}
+
+func (inst PanelBottomFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelBottomMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst PanelBottomFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+	inst.r.WriteOpCode(uint32(PanelBottomMethodIdBuild))
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+		/*if inst.idGen.DeriveStacked() != inst.id {
+			panic("id handling is incorrect. iterators are nested in an unhandled way.")
+		}*/
+		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst PanelBottomInsideFluid) Resizable(val bool) PanelBottomInsideFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelBottomInsideMethodIdResizable))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst PanelBottomInsideFluid) DefaultSize(val float32) PanelBottomInsideFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelBottomInsideMethodIdDefaultSize))
+	r.WriteFloat32(val)
+
+	return inst
+}
+
+func (inst PanelBottomInsideFluid) ExactSize(val float32) PanelBottomInsideFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelBottomInsideMethodIdExactSize))
+	r.WriteFloat32(val)
+
+	return inst
+}
+
+func (inst PanelBottomInsideFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelBottomInsideMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst PanelBottomInsideFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+	inst.r.WriteOpCode(uint32(PanelBottomInsideMethodIdBuild))
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+		/*if inst.idGen.DeriveStacked() != inst.id {
+			panic("id handling is incorrect. iterators are nested in an unhandled way.")
+		}*/
+		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst PanelCentralFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst PanelCentralFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst PanelCentralInsideFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst PanelCentralInsideFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst PanelLeftFluid) Resizable(val bool) PanelLeftFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelLeftMethodIdResizable))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst PanelLeftFluid) DefaultSize(val float32) PanelLeftFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelLeftMethodIdDefaultSize))
+	r.WriteFloat32(val)
+
+	return inst
+}
+
+func (inst PanelLeftFluid) ExactSize(val float32) PanelLeftFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelLeftMethodIdExactSize))
+	r.WriteFloat32(val)
+
+	return inst
+}
+
+func (inst PanelLeftFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelLeftMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst PanelLeftFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+	inst.r.WriteOpCode(uint32(PanelLeftMethodIdBuild))
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+		/*if inst.idGen.DeriveStacked() != inst.id {
+			panic("id handling is incorrect. iterators are nested in an unhandled way.")
+		}*/
+		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst PanelLeftInsideFluid) Resizable(val bool) PanelLeftInsideFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelLeftInsideMethodIdResizable))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst PanelLeftInsideFluid) DefaultSize(val float32) PanelLeftInsideFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelLeftInsideMethodIdDefaultSize))
+	r.WriteFloat32(val)
+
+	return inst
+}
+
+func (inst PanelLeftInsideFluid) ExactSize(val float32) PanelLeftInsideFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelLeftInsideMethodIdExactSize))
+	r.WriteFloat32(val)
+
+	return inst
+}
+
+func (inst PanelLeftInsideFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelLeftInsideMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst PanelLeftInsideFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+	inst.r.WriteOpCode(uint32(PanelLeftInsideMethodIdBuild))
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+		/*if inst.idGen.DeriveStacked() != inst.id {
+			panic("id handling is incorrect. iterators are nested in an unhandled way.")
+		}*/
+		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst PanelRightFluid) Resizable(val bool) PanelRightFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelRightMethodIdResizable))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst PanelRightFluid) DefaultSize(val float32) PanelRightFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelRightMethodIdDefaultSize))
+	r.WriteFloat32(val)
+
+	return inst
+}
+
+func (inst PanelRightFluid) ExactSize(val float32) PanelRightFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelRightMethodIdExactSize))
+	r.WriteFloat32(val)
+
+	return inst
+}
+
+func (inst PanelRightFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelRightMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst PanelRightFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+	inst.r.WriteOpCode(uint32(PanelRightMethodIdBuild))
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+		/*if inst.idGen.DeriveStacked() != inst.id {
+			panic("id handling is incorrect. iterators are nested in an unhandled way.")
+		}*/
+		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst PanelRightInsideFluid) Resizable(val bool) PanelRightInsideFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelRightInsideMethodIdResizable))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst PanelRightInsideFluid) DefaultSize(val float32) PanelRightInsideFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelRightInsideMethodIdDefaultSize))
+	r.WriteFloat32(val)
+
+	return inst
+}
+
+func (inst PanelRightInsideFluid) ExactSize(val float32) PanelRightInsideFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelRightInsideMethodIdExactSize))
+	r.WriteFloat32(val)
+
+	return inst
+}
+
+func (inst PanelRightInsideFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelRightInsideMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst PanelRightInsideFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+	inst.r.WriteOpCode(uint32(PanelRightInsideMethodIdBuild))
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+		/*if inst.idGen.DeriveStacked() != inst.id {
+			panic("id handling is incorrect. iterators are nested in an unhandled way.")
+		}*/
+		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst PanelTopFluid) Resizable(val bool) PanelTopFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelTopMethodIdResizable))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst PanelTopFluid) DefaultSize(val float32) PanelTopFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelTopMethodIdDefaultSize))
+	r.WriteFloat32(val)
+
+	return inst
+}
+
+func (inst PanelTopFluid) ExactSize(val float32) PanelTopFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelTopMethodIdExactSize))
+	r.WriteFloat32(val)
+
+	return inst
+}
+
+func (inst PanelTopFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelTopMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst PanelTopFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+	inst.r.WriteOpCode(uint32(PanelTopMethodIdBuild))
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+		/*if inst.idGen.DeriveStacked() != inst.id {
+			panic("id handling is incorrect. iterators are nested in an unhandled way.")
+		}*/
+		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst PanelTopInsideFluid) Resizable(val bool) PanelTopInsideFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelTopInsideMethodIdResizable))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst PanelTopInsideFluid) DefaultSize(val float32) PanelTopInsideFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelTopInsideMethodIdDefaultSize))
+	r.WriteFloat32(val)
+
+	return inst
+}
+
+func (inst PanelTopInsideFluid) ExactSize(val float32) PanelTopInsideFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelTopInsideMethodIdExactSize))
+	r.WriteFloat32(val)
+
+	return inst
+}
+
+func (inst PanelTopInsideFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(PanelTopInsideMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst PanelTopInsideFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+	inst.r.WriteOpCode(uint32(PanelTopInsideMethodIdBuild))
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+		/*if inst.idGen.DeriveStacked() != inst.id {
+			panic("id handling is incorrect. iterators are nested in an unhandled way.")
+		}*/
+		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst PlotFluid) Width(wi float32) PlotFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotMethodIdWidth))
+	r.WriteFloat32(wi)
+
+	return inst
+}
+
+func (inst PlotFluid) Height(he float32) PlotFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotMethodIdHeight))
+	r.WriteFloat32(he)
+
+	return inst
+}
+
+func (inst PlotFluid) ViewAspect(va float32) PlotFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotMethodIdViewAspect))
+	r.WriteFloat32(va)
+
+	return inst
+}
+
+func (inst PlotFluid) DataAspect(da float32) PlotFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotMethodIdDataAspect))
+	r.WriteFloat32(da)
+
+	return inst
+}
+
+func (inst PlotFluid) XAxisLabel(label string) PlotFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotMethodIdXAxisLabel))
+	r.WriteString(label)
+
+	return inst
+}
+
+func (inst PlotFluid) YAxisLabel(label string) PlotFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotMethodIdYAxisLabel))
+	r.WriteString(label)
+
+	return inst
+}
+
+func (inst PlotFluid) Legend() PlotFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotMethodIdLegend))
+
+	return inst
+}
+
+func (inst PlotFluid) AllowZoom(val bool) PlotFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotMethodIdAllowZoom))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst PlotFluid) AllowDrag(val bool) PlotFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotMethodIdAllowDrag))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst PlotFluid) AllowScroll(val bool) PlotFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotMethodIdAllowScroll))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst PlotFluid) AllowZoom2(xa bool, ya bool) PlotFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotMethodIdAllowZoom2))
+	r.WriteBool(xa)
+	r.WriteBool(ya)
+
+	return inst
+}
+
+func (inst PlotFluid) AllowDrag2(xa bool, ya bool) PlotFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotMethodIdAllowDrag2))
+	r.WriteBool(xa)
+	r.WriteBool(ya)
+
+	return inst
+}
+
+func (inst PlotFluid) AllowScroll2(xa bool, ya bool) PlotFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotMethodIdAllowScroll2))
+	r.WriteBool(xa)
+	r.WriteBool(ya)
+
+	return inst
+}
+
+func (inst PlotFluid) AllowBoxedZoom(val bool) PlotFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotMethodIdAllowBoxedZoom))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst PlotFluid) AllowDoubleClickReset(val bool) PlotFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotMethodIdAllowDoubleClickReset))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst PlotFluid) ShowGrid(gx bool, gy bool) PlotFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotMethodIdShowGrid))
+	r.WriteBool(gx)
+	r.WriteBool(gy)
+
+	return inst
+}
+
+func (inst PlotFluid) ShowAxes(ax bool, ay bool) PlotFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotMethodIdShowAxes))
+	r.WriteBool(ax)
+	r.WriteBool(ay)
+
+	return inst
+}
+
+func (inst PlotFluid) ShowBackground(val bool) PlotFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotMethodIdShowBackground))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst PlotFluid) IncludeX(ix float64) PlotFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotMethodIdIncludeX))
+	r.WriteFloat64(ix)
+
+	return inst
+}
+
+func (inst PlotFluid) IncludeY(iy float64) PlotFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotMethodIdIncludeY))
+	r.WriteFloat64(iy)
+
+	return inst
+}
+
+func (inst PlotFluid) IncludeXRange(lo float64, hi float64) PlotFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotMethodIdIncludeXRange))
+	r.WriteFloat64(lo)
+	r.WriteFloat64(hi)
+
+	return inst
+}
+
+func (inst PlotFluid) IncludeYRange(lo float64, hi float64) PlotFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotMethodIdIncludeYRange))
+	r.WriteFloat64(lo)
+	r.WriteFloat64(hi)
+
+	return inst
+}
+
+func (inst PlotFluid) CenterXAxis(val bool) PlotFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotMethodIdCenterXAxis))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst PlotFluid) CenterYAxis(val bool) PlotFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotMethodIdCenterYAxis))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst PlotFluid) YGridMarks(values []float64, labels []string) PlotFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotMethodIdYGridMarks))
+	runtime.PutFloat64SliceArg(r, values)
+	runtime.PutStringSliceArg(r, labels)
+
+	return inst
+}
+
+func (inst PlotFluid) ClampX(lo float64, hi float64) PlotFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotMethodIdClampX))
+	r.WriteFloat64(lo)
+	r.WriteFloat64(hi)
+
+	return inst
+}
+
+func (inst PlotFluid) ClampY(lo float64, hi float64) PlotFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotMethodIdClampY))
+	r.WriteFloat64(lo)
+	r.WriteFloat64(hi)
+
+	return inst
+}
+
+func (inst PlotFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst PlotFluid) Keep() typed.RetainedFffiHolderTyped[PlotDrainS] {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotMethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[PlotDrainS](r.BuildRetained())
+}
+func (inst PlotBarsFluid) Color(col color.Color) PlotBarsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotBarsMethodIdColor))
+	color.PutAsU32(r, col)
+
+	return inst
+}
+
+func (inst PlotBarsFluid) Width(wi float64) PlotBarsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotBarsMethodIdWidth))
+	r.WriteFloat64(wi)
+
+	return inst
+}
+
+func (inst PlotBarsFluid) Horizontal() PlotBarsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotBarsMethodIdHorizontal))
+
+	return inst
+}
+
+func (inst PlotBarsFluid) Highlight(val bool) PlotBarsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotBarsMethodIdHighlight))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst PlotBarsFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotBarsMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst PlotBoxesFluid) Horizontal() PlotBoxesFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotBoxesMethodIdHorizontal))
+
+	return inst
+}
+
+func (inst PlotBoxesFluid) Highlight(val bool) PlotBoxesFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotBoxesMethodIdHighlight))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst PlotBoxesFluid) AllowHover(val bool) PlotBoxesFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotBoxesMethodIdAllowHover))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst PlotBoxesFluid) SuppressElementText() PlotBoxesFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotBoxesMethodIdSuppressElementText))
+
+	return inst
+}
+
+func (inst PlotBoxesFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotBoxesMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst PlotHLineFluid) Color(col color.Color) PlotHLineFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotHLineMethodIdColor))
+	color.PutAsU32(r, col)
+
+	return inst
+}
+
+func (inst PlotHLineFluid) Width(wi float32) PlotHLineFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotHLineMethodIdWidth))
+	r.WriteFloat32(wi)
+
+	return inst
+}
+
+func (inst PlotHLineFluid) Highlight(val bool) PlotHLineFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotHLineMethodIdHighlight))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst PlotHLineFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotHLineMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst PlotLineFluid) Color(col color.Color) PlotLineFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotLineMethodIdColor))
+	color.PutAsU32(r, col)
+
+	return inst
+}
+
+func (inst PlotLineFluid) Width(wi float32) PlotLineFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotLineMethodIdWidth))
+	r.WriteFloat32(wi)
+
+	return inst
+}
+
+func (inst PlotLineFluid) Highlight(val bool) PlotLineFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotLineMethodIdHighlight))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst PlotLineFluid) Fill(fy float64) PlotLineFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotLineMethodIdFill))
+	r.WriteFloat64(fy)
+
+	return inst
+}
+
+func (inst PlotLineFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotLineMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst PlotPolygonFluid) Highlight(val bool) PlotPolygonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotPolygonMethodIdHighlight))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst PlotPolygonFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotPolygonMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst PlotScatterFluid) Color(col color.Color) PlotScatterFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotScatterMethodIdColor))
+	color.PutAsU32(r, col)
+
+	return inst
+}
+
+func (inst PlotScatterFluid) Radius(ra float32) PlotScatterFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotScatterMethodIdRadius))
+	r.WriteFloat32(ra)
+
+	return inst
+}
+
+func (inst PlotScatterFluid) Shape(sa uint8) PlotScatterFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotScatterMethodIdShape))
+	r.WriteUint8(sa)
+
+	return inst
+}
+
+func (inst PlotScatterFluid) Highlight(val bool) PlotScatterFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotScatterMethodIdHighlight))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst PlotScatterFluid) Filled(val bool) PlotScatterFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotScatterMethodIdFilled))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst PlotScatterFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotScatterMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst PlotTextFluid) Color(col color.Color) PlotTextFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotTextMethodIdColor))
+	color.PutAsU32(r, col)
+
+	return inst
+}
+
+func (inst PlotTextFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotTextMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst PlotVLineFluid) Color(col color.Color) PlotVLineFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotVLineMethodIdColor))
+	color.PutAsU32(r, col)
+
+	return inst
+}
+
+func (inst PlotVLineFluid) Width(wi float32) PlotVLineFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotVLineMethodIdWidth))
+	r.WriteFloat32(wi)
+
+	return inst
+}
+
+func (inst PlotVLineFluid) Highlight(val bool) PlotVLineFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotVLineMethodIdHighlight))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst PlotVLineFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotVLineMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst ProgressBarFluid) Text(text string) ProgressBarFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ProgressBarMethodIdText))
+	r.WriteString(text)
+
+	return inst
+}
+
+func (inst ProgressBarFluid) Animate(enabled bool) ProgressBarFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ProgressBarMethodIdAnimate))
+	r.WriteBool(enabled)
+
+	return inst
+}
+
+func (inst ProgressBarFluid) ShowPercentage() ProgressBarFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ProgressBarMethodIdShowPercentage))
+
+	return inst
+}
+
+func (inst ProgressBarFluid) DesiredWidth(width float32) ProgressBarFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ProgressBarMethodIdDesiredWidth))
+	r.WriteFloat32(width)
+
+	return inst
+}
+
+func (inst ProgressBarFluid) DesiredHeight(height float32) ProgressBarFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ProgressBarMethodIdDesiredHeight))
+	r.WriteFloat32(height)
+
+	return inst
+}
+
+func (inst ProgressBarFluid) CornerRadius(radius uint8) ProgressBarFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ProgressBarMethodIdCornerRadius))
+	r.WriteUint8(radius)
+
+	return inst
+}
+
+func (inst ProgressBarFluid) Fill(col color.Color) ProgressBarFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ProgressBarMethodIdFill))
+	PutColorAsRetainedColor32(r, col)
+
+	return inst
+}
+
+func (inst ProgressBarFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(ProgressBarMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst ProgressBarFluid) Keep() typed.RetainedFffiHolderTyped[ProgressBarS] {
+	r := inst.r
+	r.WriteOpCode(uint32(ProgressBarMethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[ProgressBarS](r.BuildRetained())
+}
+func (inst PushIdFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst PushIdFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+		/*if inst.idGen.DeriveStacked() != inst.id {
+			panic("id handling is incorrect. iterators are nested in an unhandled way.")
+		}*/
+		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst RadioButtonFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst ScalarSizeFluid) AvailableWidth() ScalarSizeFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ScalarSizeMethodIdAvailableWidth))
+
+	return inst
+}
+
+func (inst ScalarSizeFluid) AvailableHeight() ScalarSizeFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ScalarSizeMethodIdAvailableHeight))
+
+	return inst
+}
+
+func (inst ScalarSizeFluid) Keep() typed.RetainedFffiHolderTyped[ScalarSizeS] {
+	r := inst.r
+	r.WriteOpCode(uint32(ScalarSizeMethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[ScalarSizeS](r.BuildRetained())
+}
+func (inst ScopeFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst ScopeFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst ScrollAreaFluid) Hscroll(val bool) ScrollAreaFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ScrollAreaMethodIdHscroll))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst ScrollAreaFluid) Vscroll(val bool) ScrollAreaFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ScrollAreaMethodIdVscroll))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst ScrollAreaFluid) Animated(val bool) ScrollAreaFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ScrollAreaMethodIdAnimated))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst ScrollAreaFluid) AutoShrink(horiz bool, vert bool) ScrollAreaFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ScrollAreaMethodIdAutoShrink))
+	r.WriteBool(horiz)
+	r.WriteBool(vert)
+
+	return inst
+}
+
+func (inst ScrollAreaFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(ScrollAreaMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst ScrollAreaFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+	inst.r.WriteOpCode(uint32(ScrollAreaMethodIdBuild))
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst ScrollingTextureFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst ScrollingTextureReleaseFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst SelectableLabelFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst SeparatorFluid) Horizontal() SeparatorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SeparatorMethodIdHorizontal))
+
+	return inst
+}
+
+func (inst SeparatorFluid) Vertical() SeparatorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SeparatorMethodIdVertical))
+
+	return inst
+}
+
+func (inst SeparatorFluid) Spacing(spacing float32) SeparatorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SeparatorMethodIdSpacing))
+	r.WriteFloat32(spacing)
+
+	return inst
+}
+
+func (inst SeparatorFluid) Grow(extra float32) SeparatorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SeparatorMethodIdGrow))
+	r.WriteFloat32(extra)
+
+	return inst
+}
+
+func (inst SeparatorFluid) Shrink(shrink float32) SeparatorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SeparatorMethodIdShrink))
+	r.WriteFloat32(shrink)
+
+	return inst
+}
+
+func (inst SeparatorFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(SeparatorMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst SliderF64Fluid) ShowValue(enabled bool) SliderF64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderF64MethodIdShowValue))
+	r.WriteBool(enabled)
+
+	return inst
+}
+
+func (inst SliderF64Fluid) Prefix(prefix string) SliderF64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderF64MethodIdPrefix))
+	r.WriteString(prefix)
+
+	return inst
+}
+
+func (inst SliderF64Fluid) Suffix(suffix string) SliderF64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderF64MethodIdSuffix))
+	r.WriteString(suffix)
+
+	return inst
+}
+
+func (inst SliderF64Fluid) Text(text string) SliderF64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderF64MethodIdText))
+	r.WriteString(text)
+
+	return inst
+}
+
+func (inst SliderF64Fluid) Vertical() SliderF64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderF64MethodIdVertical))
+
+	return inst
+}
+
+func (inst SliderF64Fluid) Logarithmic(enabled bool) SliderF64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderF64MethodIdLogarithmic))
+	r.WriteBool(enabled)
+
+	return inst
+}
+
+func (inst SliderF64Fluid) SmallestPositive(smallestNum float64) SliderF64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderF64MethodIdSmallestPositive))
+	r.WriteFloat64(smallestNum)
+
+	return inst
+}
+
+func (inst SliderF64Fluid) LargestFinite(largestNum float64) SliderF64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderF64MethodIdLargestFinite))
+	r.WriteFloat64(largestNum)
+
+	return inst
+}
+
+func (inst SliderF64Fluid) SmartAim(enabled bool) SliderF64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderF64MethodIdSmartAim))
+	r.WriteBool(enabled)
+
+	return inst
+}
+
+func (inst SliderF64Fluid) DragValueSpeed(speed float64) SliderF64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderF64MethodIdDragValueSpeed))
+	r.WriteFloat64(speed)
+
+	return inst
+}
+
+func (inst SliderF64Fluid) MinDecimals(digits uint32) SliderF64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderF64MethodIdMinDecimals))
+	r.WriteUint32(digits)
+
+	return inst
+}
+
+func (inst SliderF64Fluid) MaxDecimals(digits uint32) SliderF64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderF64MethodIdMaxDecimals))
+	r.WriteUint32(digits)
+
+	return inst
+}
+
+func (inst SliderF64Fluid) FixedDecimals(digits uint32) SliderF64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderF64MethodIdFixedDecimals))
+	r.WriteUint32(digits)
+
+	return inst
+}
+
+func (inst SliderF64Fluid) TrailingFill(enabled bool) SliderF64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderF64MethodIdTrailingFill))
+	r.WriteBool(enabled)
+
+	return inst
+}
+
+func (inst SliderF64Fluid) Binary(minWidth uint32, twosComplement bool) SliderF64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderF64MethodIdBinary))
+	r.WriteUint32(minWidth)
+	r.WriteBool(twosComplement)
+
+	return inst
+}
+
+func (inst SliderF64Fluid) Octal(minWidth uint32, twosComplement bool) SliderF64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderF64MethodIdOctal))
+	r.WriteUint32(minWidth)
+	r.WriteBool(twosComplement)
+
+	return inst
+}
+
+func (inst SliderF64Fluid) Hexadecimal(minWidth uint32, twosComplement bool, upper bool) SliderF64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderF64MethodIdHexadecimal))
+	r.WriteUint32(minWidth)
+	r.WriteBool(twosComplement)
+	r.WriteBool(upper)
+
+	return inst
+}
+
+func (inst SliderF64Fluid) Integer() SliderF64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderF64MethodIdInteger))
+
+	return inst
+}
+
+func (inst SliderF64Fluid) UpdateWhileEditing(update bool) SliderF64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderF64MethodIdUpdateWhileEditing))
+	r.WriteBool(update)
+
+	return inst
+}
+
+func (inst SliderF64Fluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderF64MethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst SliderF64Fluid) Keep() typed.RetainedFffiHolderTyped[SliderS] {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderF64MethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[SliderS](r.BuildRetained())
+}
+func (inst SliderI64Fluid) ShowValue(enabled bool) SliderI64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderI64MethodIdShowValue))
+	r.WriteBool(enabled)
+
+	return inst
+}
+
+func (inst SliderI64Fluid) Prefix(prefix string) SliderI64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderI64MethodIdPrefix))
+	r.WriteString(prefix)
+
+	return inst
+}
+
+func (inst SliderI64Fluid) Suffix(suffix string) SliderI64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderI64MethodIdSuffix))
+	r.WriteString(suffix)
+
+	return inst
+}
+
+func (inst SliderI64Fluid) Text(text string) SliderI64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderI64MethodIdText))
+	r.WriteString(text)
+
+	return inst
+}
+
+func (inst SliderI64Fluid) Vertical() SliderI64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderI64MethodIdVertical))
+
+	return inst
+}
+
+func (inst SliderI64Fluid) Logarithmic(enabled bool) SliderI64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderI64MethodIdLogarithmic))
+	r.WriteBool(enabled)
+
+	return inst
+}
+
+func (inst SliderI64Fluid) SmallestPositive(smallestNum float64) SliderI64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderI64MethodIdSmallestPositive))
+	r.WriteFloat64(smallestNum)
+
+	return inst
+}
+
+func (inst SliderI64Fluid) LargestFinite(largestNum float64) SliderI64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderI64MethodIdLargestFinite))
+	r.WriteFloat64(largestNum)
+
+	return inst
+}
+
+func (inst SliderI64Fluid) SmartAim(enabled bool) SliderI64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderI64MethodIdSmartAim))
+	r.WriteBool(enabled)
+
+	return inst
+}
+
+func (inst SliderI64Fluid) DragValueSpeed(speed float64) SliderI64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderI64MethodIdDragValueSpeed))
+	r.WriteFloat64(speed)
+
+	return inst
+}
+
+func (inst SliderI64Fluid) MinDecimals(digits uint32) SliderI64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderI64MethodIdMinDecimals))
+	r.WriteUint32(digits)
+
+	return inst
+}
+
+func (inst SliderI64Fluid) MaxDecimals(digits uint32) SliderI64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderI64MethodIdMaxDecimals))
+	r.WriteUint32(digits)
+
+	return inst
+}
+
+func (inst SliderI64Fluid) FixedDecimals(digits uint32) SliderI64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderI64MethodIdFixedDecimals))
+	r.WriteUint32(digits)
+
+	return inst
+}
+
+func (inst SliderI64Fluid) TrailingFill(enabled bool) SliderI64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderI64MethodIdTrailingFill))
+	r.WriteBool(enabled)
+
+	return inst
+}
+
+func (inst SliderI64Fluid) Binary(minWidth uint32, twosComplement bool) SliderI64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderI64MethodIdBinary))
+	r.WriteUint32(minWidth)
+	r.WriteBool(twosComplement)
+
+	return inst
+}
+
+func (inst SliderI64Fluid) Octal(minWidth uint32, twosComplement bool) SliderI64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderI64MethodIdOctal))
+	r.WriteUint32(minWidth)
+	r.WriteBool(twosComplement)
+
+	return inst
+}
+
+func (inst SliderI64Fluid) Hexadecimal(minWidth uint32, twosComplement bool, upper bool) SliderI64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderI64MethodIdHexadecimal))
+	r.WriteUint32(minWidth)
+	r.WriteBool(twosComplement)
+	r.WriteBool(upper)
+
+	return inst
+}
+
+func (inst SliderI64Fluid) Integer() SliderI64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderI64MethodIdInteger))
+
+	return inst
+}
+
+func (inst SliderI64Fluid) UpdateWhileEditing(update bool) SliderI64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderI64MethodIdUpdateWhileEditing))
+	r.WriteBool(update)
+
+	return inst
+}
+
+func (inst SliderI64Fluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderI64MethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst SliderI64Fluid) Keep() typed.RetainedFffiHolderTyped[SliderS] {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderI64MethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[SliderS](r.BuildRetained())
+}
+func (inst SliderU64Fluid) ShowValue(enabled bool) SliderU64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderU64MethodIdShowValue))
+	r.WriteBool(enabled)
+
+	return inst
+}
+
+func (inst SliderU64Fluid) Prefix(prefix string) SliderU64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderU64MethodIdPrefix))
+	r.WriteString(prefix)
+
+	return inst
+}
+
+func (inst SliderU64Fluid) Suffix(suffix string) SliderU64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderU64MethodIdSuffix))
+	r.WriteString(suffix)
+
+	return inst
+}
+
+func (inst SliderU64Fluid) Text(text string) SliderU64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderU64MethodIdText))
+	r.WriteString(text)
+
+	return inst
+}
+
+func (inst SliderU64Fluid) Vertical() SliderU64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderU64MethodIdVertical))
+
+	return inst
+}
+
+func (inst SliderU64Fluid) Logarithmic(enabled bool) SliderU64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderU64MethodIdLogarithmic))
+	r.WriteBool(enabled)
+
+	return inst
+}
+
+func (inst SliderU64Fluid) SmallestPositive(smallestNum float64) SliderU64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderU64MethodIdSmallestPositive))
+	r.WriteFloat64(smallestNum)
+
+	return inst
+}
+
+func (inst SliderU64Fluid) LargestFinite(largestNum float64) SliderU64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderU64MethodIdLargestFinite))
+	r.WriteFloat64(largestNum)
+
+	return inst
+}
+
+func (inst SliderU64Fluid) SmartAim(enabled bool) SliderU64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderU64MethodIdSmartAim))
+	r.WriteBool(enabled)
+
+	return inst
+}
+
+func (inst SliderU64Fluid) DragValueSpeed(speed float64) SliderU64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderU64MethodIdDragValueSpeed))
+	r.WriteFloat64(speed)
+
+	return inst
+}
+
+func (inst SliderU64Fluid) MinDecimals(digits uint32) SliderU64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderU64MethodIdMinDecimals))
+	r.WriteUint32(digits)
+
+	return inst
+}
+
+func (inst SliderU64Fluid) MaxDecimals(digits uint32) SliderU64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderU64MethodIdMaxDecimals))
+	r.WriteUint32(digits)
+
+	return inst
+}
+
+func (inst SliderU64Fluid) FixedDecimals(digits uint32) SliderU64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderU64MethodIdFixedDecimals))
+	r.WriteUint32(digits)
+
+	return inst
+}
+
+func (inst SliderU64Fluid) TrailingFill(enabled bool) SliderU64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderU64MethodIdTrailingFill))
+	r.WriteBool(enabled)
+
+	return inst
+}
+
+func (inst SliderU64Fluid) Binary(minWidth uint32, twosComplement bool) SliderU64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderU64MethodIdBinary))
+	r.WriteUint32(minWidth)
+	r.WriteBool(twosComplement)
+
+	return inst
+}
+
+func (inst SliderU64Fluid) Octal(minWidth uint32, twosComplement bool) SliderU64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderU64MethodIdOctal))
+	r.WriteUint32(minWidth)
+	r.WriteBool(twosComplement)
+
+	return inst
+}
+
+func (inst SliderU64Fluid) Hexadecimal(minWidth uint32, twosComplement bool, upper bool) SliderU64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderU64MethodIdHexadecimal))
+	r.WriteUint32(minWidth)
+	r.WriteBool(twosComplement)
+	r.WriteBool(upper)
+
+	return inst
+}
+
+func (inst SliderU64Fluid) Integer() SliderU64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderU64MethodIdInteger))
+
+	return inst
+}
+
+func (inst SliderU64Fluid) UpdateWhileEditing(update bool) SliderU64Fluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderU64MethodIdUpdateWhileEditing))
+	r.WriteBool(update)
+
+	return inst
+}
+
+func (inst SliderU64Fluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderU64MethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst SliderU64Fluid) Keep() typed.RetainedFffiHolderTyped[SliderS] {
+	r := inst.r
+	r.WriteOpCode(uint32(SliderU64MethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[SliderS](r.BuildRetained())
+}
+func (inst SnarlConnectionFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst SnarlEditorFluid) Width(wi float32) SnarlEditorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SnarlEditorMethodIdWidth))
+	r.WriteFloat32(wi)
+
+	return inst
+}
+
+func (inst SnarlEditorFluid) Height(he float32) SnarlEditorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SnarlEditorMethodIdHeight))
+	r.WriteFloat32(he)
+
+	return inst
+}
+
+func (inst SnarlEditorFluid) PersistPositions(vl bool) SnarlEditorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SnarlEditorMethodIdPersistPositions))
+	r.WriteBool(vl)
+
+	return inst
+}
+
+func (inst SnarlEditorFluid) WireStyle(ws uint8) SnarlEditorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SnarlEditorMethodIdWireStyle))
+	r.WriteUint8(ws)
+
+	return inst
+}
+
+func (inst SnarlEditorFluid) BgPattern(bp uint8) SnarlEditorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SnarlEditorMethodIdBgPattern))
+	r.WriteUint8(bp)
+
+	return inst
+}
+
+func (inst SnarlEditorFluid) MinScale(ms float32) SnarlEditorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SnarlEditorMethodIdMinScale))
+	r.WriteFloat32(ms)
+
+	return inst
+}
+
+func (inst SnarlEditorFluid) MaxScale(ms float32) SnarlEditorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SnarlEditorMethodIdMaxScale))
+	r.WriteFloat32(ms)
+
+	return inst
+}
+
+func (inst SnarlEditorFluid) Centering(vl bool) SnarlEditorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SnarlEditorMethodIdCentering))
+	r.WriteBool(vl)
+
+	return inst
+}
+
+func (inst SnarlEditorFluid) CrispMagnifiedText(vl bool) SnarlEditorFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SnarlEditorMethodIdCrispMagnifiedText))
+	r.WriteBool(vl)
+
+	return inst
+}
+
+func (inst SnarlEditorFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(SnarlEditorMethodIdBuild))
+	r.SpliceDeferredBlockMap(inst.deferredNodeBody)
+	inst.deferredNodeBody.ReleaseWithHint()
+	r.SendIntermediate()
+}
+func (inst SnarlEditorFluid) BeginNodeBody(key0 uint64) SnarlEditorFluid {
+	inst.deferredNodeBody.Begin(key0)
+	return inst
+}
+
+func (inst SnarlEditorFluid) EndNodeBody() SnarlEditorFluid {
+	inst.deferredNodeBody.End()
+	return inst
+}
+
+func (inst SnarlNodeFluid) NumInputs(ni uint32) SnarlNodeFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SnarlNodeMethodIdNumInputs))
+	r.WriteUint32(ni)
+
+	return inst
+}
+
+func (inst SnarlNodeFluid) NumOutputs(no uint32) SnarlNodeFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SnarlNodeMethodIdNumOutputs))
+	r.WriteUint32(no)
+
+	return inst
+}
+
+func (inst SnarlNodeFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(SnarlNodeMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst SnarlPinFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst SpinnerFluid) Size(size float32) SpinnerFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(SpinnerMethodIdSize))
+	r.WriteFloat32(size)
+
+	return inst
+}
+
+func (inst SpinnerFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(SpinnerMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst TableFluid) Striped(val bool) TableFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TableMethodIdStriped))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst TableFluid) Vscroll(val bool) TableFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TableMethodIdVscroll))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst TableFluid) ScrollToRow(row uint64) TableFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TableMethodIdScrollToRow))
+	r.WriteUint64(row)
+
+	return inst
+}
+
+func (inst TableFluid) MinScrolledHeight(val float32) TableFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TableMethodIdMinScrolledHeight))
+	r.WriteFloat32(val)
+
+	return inst
+}
+
+func (inst TableFluid) MaxScrollHeight(val float32) TableFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TableMethodIdMaxScrollHeight))
+	r.WriteFloat32(val)
+
+	return inst
+}
+
+func (inst TableFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(TableMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst TableFluid) Keep() typed.RetainedFffiHolderTyped[BlockI] {
+	r := inst.r
+	r.WriteOpCode(uint32(TableMethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[BlockI](r.BuildRetained())
+}
+func (inst TableCellRichTextFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst TableCellRichTextFluid) Keep() typed.RetainedFffiHolderTyped[TableCellS] {
+	r := inst.r
+
+	return typed.NewRetainedFffiHolderTyped[TableCellS](r.BuildRetained())
+}
+func (inst TableCellTextFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst TableCellTextFluid) Keep() typed.RetainedFffiHolderTyped[TableCellS] {
+	r := inst.r
+
+	return typed.NewRetainedFffiHolderTyped[TableCellS](r.BuildRetained())
+}
+func (inst TableColumnFluid) Auto() TableColumnFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TableColumnMethodIdAuto))
+
+	return inst
+}
+
+func (inst TableColumnFluid) Exact(width float32) TableColumnFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TableColumnMethodIdExact))
+	r.WriteFloat32(width)
+
+	return inst
+}
+
+func (inst TableColumnFluid) Initial(width float32) TableColumnFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TableColumnMethodIdInitial))
+	r.WriteFloat32(width)
+
+	return inst
+}
+
+func (inst TableColumnFluid) Remainder() TableColumnFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TableColumnMethodIdRemainder))
+
+	return inst
+}
+
+func (inst TableColumnFluid) AtLeast(minWidth float32) TableColumnFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TableColumnMethodIdAtLeast))
+	r.WriteFloat32(minWidth)
+
+	return inst
+}
+
+func (inst TableColumnFluid) AtMost(maxWidth float32) TableColumnFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TableColumnMethodIdAtMost))
+	r.WriteFloat32(maxWidth)
+
+	return inst
+}
+
+func (inst TableColumnFluid) Resizable(val bool) TableColumnFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TableColumnMethodIdResizable))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst TableColumnFluid) ClipContents(val bool) TableColumnFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TableColumnMethodIdClipContents))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst TableColumnFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(TableColumnMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst TableColumnFluid) Keep() typed.RetainedFffiHolderTyped[TableColumnS] {
+	r := inst.r
+	r.WriteOpCode(uint32(TableColumnMethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[TableColumnS](r.BuildRetained())
+}
+func (inst TableHeaderTextFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst TableHeaderTextFluid) Keep() typed.RetainedFffiHolderTyped[TableHeaderTextS] {
+	r := inst.r
+
+	return typed.NewRetainedFffiHolderTyped[TableHeaderTextS](r.BuildRetained())
+}
+func (inst TextEditFluid) CodeEditor() TextEditFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TextEditMethodIdCodeEditor))
+
+	return inst
+}
+
+func (inst TextEditFluid) Frame(frame bool) TextEditFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TextEditMethodIdFrame))
+	r.WriteBool(frame)
+
+	return inst
+}
+
+func (inst TextEditFluid) HintText(hint string) TextEditFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TextEditMethodIdHintText))
+	r.WriteString(hint)
+
+	return inst
+}
+
+func (inst TextEditFluid) Password(password bool) TextEditFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TextEditMethodIdPassword))
+	r.WriteBool(password)
+
+	return inst
+}
+
+func (inst TextEditFluid) Interactive(interactive bool) TextEditFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TextEditMethodIdInteractive))
+	r.WriteBool(interactive)
+
+	return inst
+}
+
+func (inst TextEditFluid) DesiredWidth(width float32) TextEditFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TextEditMethodIdDesiredWidth))
+	r.WriteFloat32(width)
+
+	return inst
+}
+
+func (inst TextEditFluid) DesiredRows(rows uint32) TextEditFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TextEditMethodIdDesiredRows))
+	r.WriteUint32(rows)
+
+	return inst
+}
+
+func (inst TextEditFluid) LockFocus(lock bool) TextEditFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TextEditMethodIdLockFocus))
+	r.WriteBool(lock)
+
+	return inst
+}
+
+func (inst TextEditFluid) CursorAtEnd(val bool) TextEditFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TextEditMethodIdCursorAtEnd))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst TextEditFluid) ClipText(val bool) TextEditFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TextEditMethodIdClipText))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst TextEditFluid) CharLimit(chars uint32) TextEditFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TextEditMethodIdCharLimit))
+	r.WriteUint32(chars)
+
+	return inst
+}
+
+func (inst TextEditFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(TextEditMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst TimeRangePickerFluid) AddPreset(label string, fromSql string, toSql string) TimeRangePickerFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TimeRangePickerMethodIdAddPreset))
+	r.WriteString(label)
+	r.WriteString(fromSql)
+	r.WriteString(toSql)
+
+	return inst
+}
+
+func (inst TimeRangePickerFluid) Tz(zone string) TimeRangePickerFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TimeRangePickerMethodIdTz))
+	r.WriteString(zone)
+
+	return inst
+}
+
+func (inst TimeRangePickerFluid) RefreshInterval(intervalMs uint32) TimeRangePickerFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TimeRangePickerMethodIdRefreshInterval))
+	r.WriteUint32(intervalMs)
+
+	return inst
+}
+
+func (inst TimeRangePickerFluid) EvaluatedBounds(fromMs int64, toMs int64) TimeRangePickerFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TimeRangePickerMethodIdEvaluatedBounds))
+	r.WriteInt64(fromMs)
+	r.WriteInt64(toMs)
+
+	return inst
+}
+
+func (inst TimeRangePickerFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(TimeRangePickerMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst TimeRangePickerFluid) Keep() typed.RetainedFffiHolderTyped[TimeRangePickerS] {
+	r := inst.r
+	r.WriteOpCode(uint32(TimeRangePickerMethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[TimeRangePickerS](r.BuildRetained())
+}
+func (inst TintedScopeFluid) SenseClick() TintedScopeFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TintedScopeMethodIdSenseClick))
+
+	return inst
+}
+
+func (inst TintedScopeFluid) Stroke(width float32, strokeCol color.Color) TintedScopeFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TintedScopeMethodIdStroke))
+	r.WriteFloat32(width)
+	color.PutAsU32(r, strokeCol)
+
+	return inst
+}
+
+func (inst TintedScopeFluid) OuterMargin(width float32) TintedScopeFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TintedScopeMethodIdOuterMargin))
+	r.WriteFloat32(width)
+
+	return inst
+}
+
+func (inst TintedScopeFluid) InnerMargin(width float32) TintedScopeFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TintedScopeMethodIdInnerMargin))
+	r.WriteFloat32(width)
+
+	return inst
+}
+
+func (inst TintedScopeFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(TintedScopeMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst TintedScopeFluid) Keep() typed.RetainedFffiHolderTyped[BlockI] {
+	r := inst.r
+	r.WriteOpCode(uint32(TintedScopeMethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[BlockI](r.BuildRetained())
+}
+func (inst TintedScopeFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+	inst.r.WriteOpCode(uint32(TintedScopeMethodIdBuild))
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+		/*if inst.idGen.DeriveStacked() != inst.id {
+			panic("id handling is incorrect. iterators are nested in an unhandled way.")
+		}*/
+		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst TreeFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst UiWithLayoutFluid) MainDirLeftToRight() UiWithLayoutFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(UiWithLayoutMethodIdMainDirLeftToRight))
+
+	return inst
+}
+
+func (inst UiWithLayoutFluid) MainDirRightToLeft() UiWithLayoutFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(UiWithLayoutMethodIdMainDirRightToLeft))
+
+	return inst
+}
+
+func (inst UiWithLayoutFluid) MainDirTopDown() UiWithLayoutFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(UiWithLayoutMethodIdMainDirTopDown))
+
+	return inst
+}
+
+func (inst UiWithLayoutFluid) MainDirBottomUp() UiWithLayoutFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(UiWithLayoutMethodIdMainDirBottomUp))
+
+	return inst
+}
+
+func (inst UiWithLayoutFluid) MainWrap(wrap bool) UiWithLayoutFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(UiWithLayoutMethodIdMainWrap))
+	r.WriteBool(wrap)
+
+	return inst
+}
+
+func (inst UiWithLayoutFluid) MainJustify(justify bool) UiWithLayoutFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(UiWithLayoutMethodIdMainJustify))
+	r.WriteBool(justify)
+
+	return inst
+}
+
+func (inst UiWithLayoutFluid) CrossAlignMin() UiWithLayoutFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(UiWithLayoutMethodIdCrossAlignMin))
+
+	return inst
+}
+
+func (inst UiWithLayoutFluid) CrossAlignCenter() UiWithLayoutFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(UiWithLayoutMethodIdCrossAlignCenter))
+
+	return inst
+}
+
+func (inst UiWithLayoutFluid) CrossAlignMax() UiWithLayoutFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(UiWithLayoutMethodIdCrossAlignMax))
+
+	return inst
+}
+
+func (inst UiWithLayoutFluid) CrossJustify(justify bool) UiWithLayoutFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(UiWithLayoutMethodIdCrossJustify))
+	r.WriteBool(justify)
+
+	return inst
+}
+
+func (inst UiWithLayoutFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+	inst.r.WriteOpCode(uint32(UiWithLayoutMethodIdBuild))
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst VectorSizeFluid) AvailableSize() VectorSizeFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(VectorSizeMethodIdAvailableSize))
+
+	return inst
+}
+
+func (inst VectorSizeFluid) Keep() typed.RetainedFffiHolderTyped[ScalarSizeS] {
+	r := inst.r
+	r.WriteOpCode(uint32(VectorSizeMethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[ScalarSizeS](r.BuildRetained())
+}
+func (inst VerticalFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst VerticalFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst VerticalCenteredFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst VerticalCenteredFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst VerticalCenteredJustifiedFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst VerticalCenteredJustifiedFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst WalkersMapFluid) Width(wi float32) WalkersMapFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WalkersMapMethodIdWidth))
+	r.WriteFloat32(wi)
+
+	return inst
+}
+
+func (inst WalkersMapFluid) Height(he float32) WalkersMapFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WalkersMapMethodIdHeight))
+	r.WriteFloat32(he)
+
+	return inst
+}
+
+func (inst WalkersMapFluid) SetZoom(zoom float64) WalkersMapFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WalkersMapMethodIdSetZoom))
+	r.WriteFloat64(zoom)
+
+	return inst
+}
+
+func (inst WalkersMapFluid) CenterAt(lat float64, lon float64) WalkersMapFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WalkersMapMethodIdCenterAt))
+	r.WriteFloat64(lat)
+	r.WriteFloat64(lon)
+
+	return inst
+}
+
+func (inst WalkersMapFluid) ZoomGesture(enabled bool) WalkersMapFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WalkersMapMethodIdZoomGesture))
+	r.WriteBool(enabled)
+
+	return inst
+}
+
+func (inst WalkersMapFluid) Panning(enabled bool) WalkersMapFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WalkersMapMethodIdPanning))
+	r.WriteBool(enabled)
+
+	return inst
+}
+
+func (inst WalkersMapFluid) TileUrl(url string) WalkersMapFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WalkersMapMethodIdTileUrl))
+	r.WriteString(url)
+
+	return inst
+}
+
+func (inst WalkersMapFluid) TileAttribution(text string) WalkersMapFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WalkersMapMethodIdTileAttribution))
+	r.WriteString(text)
+
+	return inst
+}
+
+func (inst WalkersMapFluid) TileMaxZoom(zoom uint8) WalkersMapFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WalkersMapMethodIdTileMaxZoom))
+	r.WriteUint8(zoom)
+
+	return inst
+}
+
+func (inst WalkersMapFluid) TileSize(size uint32) WalkersMapFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WalkersMapMethodIdTileSize))
+	r.WriteUint32(size)
+
+	return inst
+}
+
+func (inst WalkersMapFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(WalkersMapMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst WalkersMapFluid) Keep() typed.RetainedFffiHolderTyped[WalkersMapS] {
+	r := inst.r
+	r.WriteOpCode(uint32(WalkersMapMethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[WalkersMapS](r.BuildRetained())
+}
+func (inst WidgetTextFluid) Text(val string) WidgetTextFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WidgetTextMethodIdText))
+	r.WriteString(val)
+
+	return inst
+}
+
+func (inst WidgetTextFluid) Keep() typed.RetainedFffiHolderTyped[WidgetTextS] {
+	r := inst.r
+	r.WriteOpCode(uint32(WidgetTextMethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[WidgetTextS](r.BuildRetained())
+}
+func (inst WindowFluid) DefaultOpen(val bool) WindowFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WindowMethodIdDefaultOpen))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst WindowFluid) Enabled(val bool) WindowFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WindowMethodIdEnabled))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst WindowFluid) Interactable(val bool) WindowFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WindowMethodIdInteractable))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst WindowFluid) Movable(val bool) WindowFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WindowMethodIdMovable))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst WindowFluid) Resizable(val bool) WindowFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WindowMethodIdResizable))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst WindowFluid) Collapsible(val bool) WindowFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WindowMethodIdCollapsible))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst WindowFluid) TitleBar(val bool) WindowFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WindowMethodIdTitleBar))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst WindowFluid) DefaultWidth(width float32) WindowFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WindowMethodIdDefaultWidth))
+	r.WriteFloat32(width)
+
+	return inst
+}
+
+func (inst WindowFluid) DefaultHeight(height float32) WindowFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WindowMethodIdDefaultHeight))
+	r.WriteFloat32(height)
+
+	return inst
+}
+
+func (inst WindowFluid) DefaultSize(width float32, height float32) WindowFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WindowMethodIdDefaultSize))
+	r.WriteFloat32(width)
+	r.WriteFloat32(height)
+
+	return inst
+}
+
+func (inst WindowFluid) DefaultPos(posX float32, posY float32) WindowFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WindowMethodIdDefaultPos))
+	r.WriteFloat32(posX)
+	r.WriteFloat32(posY)
+
+	return inst
+}
+
+func (inst WindowFluid) MinWidth(width float32) WindowFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WindowMethodIdMinWidth))
+	r.WriteFloat32(width)
+
+	return inst
+}
+
+func (inst WindowFluid) MinHeight(height float32) WindowFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WindowMethodIdMinHeight))
+	r.WriteFloat32(height)
+
+	return inst
+}
+
+func (inst WindowFluid) AlwaysOnTop(val bool) WindowFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WindowMethodIdAlwaysOnTop))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst WindowFluid) OpenBound(bindingId uint64) WindowFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WindowMethodIdOpenBound))
+	r.WriteUint64(bindingId)
+
+	return inst
+}
+
+func (inst WindowFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(WindowMethodIdBuild))
+	r.SendIntermediate()
+}
+func (inst WindowFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+	inst.r.WriteOpCode(uint32(WindowMethodIdBuild))
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+		/*if inst.idGen.DeriveStacked() != inst.id {
+			panic("id handling is incorrect. iterators are nested in an unhandled way.")
+		}*/
+		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
