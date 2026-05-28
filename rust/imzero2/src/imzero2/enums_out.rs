@@ -1,0 +1,1471 @@
+// Code generated; TheStack (github.com/stergiotis/pebble2impl/src/go/public/thestack/cmd/egui2gen) DO NOT EDIT.
+
+
+use crate::imzero2::fenums;
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum FuncProcId {
+	AddSpace = fenums::FUNC_PROC_ID_OFFSET + 0,
+	AllocateUiAtRect = fenums::FUNC_PROC_ID_OFFSET + 1,
+	AnimateBoolResponsive = fenums::FUNC_PROC_ID_OFFSET + 2,
+	AnimateBoolWithTime = fenums::FUNC_PROC_ID_OFFSET + 3,
+	AnimateValueWithTime = fenums::FUNC_PROC_ID_OFFSET + 4,
+	Atoms = fenums::FUNC_PROC_ID_OFFSET + 5,
+	Button = fenums::FUNC_PROC_ID_OFFSET + 6,
+	CaptureAvailableSize = fenums::FUNC_PROC_ID_OFFSET + 7,
+	CaptureUiRect = fenums::FUNC_PROC_ID_OFFSET + 8,
+	Checkbox = fenums::FUNC_PROC_ID_OFFSET + 9,
+	CodeView = fenums::FUNC_PROC_ID_OFFSET + 10,
+	CodeViewJob = fenums::FUNC_PROC_ID_OFFSET + 11,
+	CollapsingHeader = fenums::FUNC_PROC_ID_OFFSET + 12,
+	Color = fenums::FUNC_PROC_ID_OFFSET + 13,
+	ComboBox = fenums::FUNC_PROC_ID_OFFSET + 14,
+	ContextInspectionUi = fenums::FUNC_PROC_ID_OFFSET + 15,
+	ContextSendViewPortCommandClose = fenums::FUNC_PROC_ID_OFFSET + 16,
+	DatePickerButton = fenums::FUNC_PROC_ID_OFFSET + 17,
+	DateTimePickerButton = fenums::FUNC_PROC_ID_OFFSET + 18,
+	DockAreaRaw = fenums::FUNC_PROC_ID_OFFSET + 19,
+	DragValueF64 = fenums::FUNC_PROC_ID_OFFSET + 20,
+	DragValueI64 = fenums::FUNC_PROC_ID_OFFSET + 21,
+	DragValueU64 = fenums::FUNC_PROC_ID_OFFSET + 22,
+	EnabledUi = fenums::FUNC_PROC_ID_OFFSET + 23,
+	End = fenums::FUNC_PROC_ID_OFFSET + 24,
+	EndETable = fenums::FUNC_PROC_ID_OFFSET + 25,
+	EndRow = fenums::FUNC_PROC_ID_OFFSET + 26,
+	EtColumn = fenums::FUNC_PROC_ID_OFFSET + 27,
+	EtHeaderText = fenums::FUNC_PROC_ID_OFFSET + 28,
+	EtRowHeight = fenums::FUNC_PROC_ID_OFFSET + 29,
+	ExportSvg = fenums::FUNC_PROC_ID_OFFSET + 30,
+	ExportSvgWindow = fenums::FUNC_PROC_ID_OFFSET + 31,
+	FetchF1KeyPressed = fenums::FUNC_PROC_ID_OFFSET + 32,
+	FetchFrameMetrics = fenums::FUNC_PROC_ID_OFFSET + 33,
+	FetchGraphEvents = fenums::FUNC_PROC_ID_OFFSET + 34,
+	FetchGraphMetrics = fenums::FUNC_PROC_ID_OFFSET + 35,
+	FetchGraphSelection = fenums::FUNC_PROC_ID_OFFSET + 36,
+	FetchR10 = fenums::FUNC_PROC_ID_OFFSET + 37,
+	FetchR14CanvasPointer = fenums::FUNC_PROC_ID_OFFSET + 38,
+	FetchR15PlotPointer = fenums::FUNC_PROC_ID_OFFSET + 39,
+	FetchR15WalkersCamera = fenums::FUNC_PROC_ID_OFFSET + 40,
+	FetchR16ScrollDelta = fenums::FUNC_PROC_ID_OFFSET + 41,
+	FetchR17Modifiers = fenums::FUNC_PROC_ID_OFFSET + 42,
+	FetchR18AvailableSize = fenums::FUNC_PROC_ID_OFFSET + 43,
+	FetchR19ZoomDelta = fenums::FUNC_PROC_ID_OFFSET + 44,
+	FetchR20Pointer = fenums::FUNC_PROC_ID_OFFSET + 45,
+	FetchR21UiRects = fenums::FUNC_PROC_ID_OFFSET + 46,
+	FetchR7 = fenums::FUNC_PROC_ID_OFFSET + 47,
+	FetchR9EtPrefetch = fenums::FUNC_PROC_ID_OFFSET + 48,
+	FetchR9F64 = fenums::FUNC_PROC_ID_OFFSET + 49,
+	FetchR9I64 = fenums::FUNC_PROC_ID_OFFSET + 50,
+	FetchR9S = fenums::FUNC_PROC_ID_OFFSET + 51,
+	FetchR9U64 = fenums::FUNC_PROC_ID_OFFSET + 52,
+	FetchSnarlEvents = fenums::FUNC_PROC_ID_OFFSET + 53,
+	Frame = fenums::FUNC_PROC_ID_OFFSET + 54,
+	Graph = fenums::FUNC_PROC_ID_OFFSET + 55,
+	GraphEdge = fenums::FUNC_PROC_ID_OFFSET + 56,
+	GraphNode = fenums::FUNC_PROC_ID_OFFSET + 57,
+	Grid = fenums::FUNC_PROC_ID_OFFSET + 58,
+	Group = fenums::FUNC_PROC_ID_OFFSET + 59,
+	GuiZoomZoomMenuButtons = fenums::FUNC_PROC_ID_OFFSET + 60,
+	H3CellsColored = fenums::FUNC_PROC_ID_OFFSET + 61,
+	H3Region = fenums::FUNC_PROC_ID_OFFSET + 62,
+	Horizontal = fenums::FUNC_PROC_ID_OFFSET + 63,
+	HorizontalCentered = fenums::FUNC_PROC_ID_OFFSET + 64,
+	HorizontalTop = fenums::FUNC_PROC_ID_OFFSET + 65,
+	HorizontalWrapped = fenums::FUNC_PROC_ID_OFFSET + 66,
+	HoverText = fenums::FUNC_PROC_ID_OFFSET + 67,
+	HoverUi = fenums::FUNC_PROC_ID_OFFSET + 68,
+	Hyperlink = fenums::FUNC_PROC_ID_OFFSET + 69,
+	HyperlinkTo = fenums::FUNC_PROC_ID_OFFSET + 70,
+	Image = fenums::FUNC_PROC_ID_OFFSET + 71,
+	ImageRelease = fenums::FUNC_PROC_ID_OFFSET + 72,
+	Indent = fenums::FUNC_PROC_ID_OFFSET + 73,
+	Label = fenums::FUNC_PROC_ID_OFFSET + 74,
+	LabelAtoms = fenums::FUNC_PROC_ID_OFFSET + 75,
+	LabelWidgetText = fenums::FUNC_PROC_ID_OFFSET + 76,
+	MapMarker = fenums::FUNC_PROC_ID_OFFSET + 77,
+	MapPolyline = fenums::FUNC_PROC_ID_OFFSET + 78,
+	MeasureText = fenums::FUNC_PROC_ID_OFFSET + 79,
+	MemoryResetAreas = fenums::FUNC_PROC_ID_OFFSET + 80,
+	MenuBar = fenums::FUNC_PROC_ID_OFFSET + 81,
+	MenuButton = fenums::FUNC_PROC_ID_OFFSET + 82,
+	MoveWindowToTop = fenums::FUNC_PROC_ID_OFFSET + 83,
+	NewTable = fenums::FUNC_PROC_ID_OFFSET + 84,
+	NewTableColumn = fenums::FUNC_PROC_ID_OFFSET + 85,
+	NewTableRowHeight = fenums::FUNC_PROC_ID_OFFSET + 86,
+	NodeDir = fenums::FUNC_PROC_ID_OFFSET + 87,
+	NodeDirClose = fenums::FUNC_PROC_ID_OFFSET + 88,
+	NodeLeaf = fenums::FUNC_PROC_ID_OFFSET + 89,
+	PaintAbsoluteOverlay = fenums::FUNC_PROC_ID_OFFSET + 90,
+	PaintArrow = fenums::FUNC_PROC_ID_OFFSET + 91,
+	PaintCanvas = fenums::FUNC_PROC_ID_OFFSET + 92,
+	PaintCircleFilled = fenums::FUNC_PROC_ID_OFFSET + 93,
+	PaintCircleStroke = fenums::FUNC_PROC_ID_OFFSET + 94,
+	PaintCubicBezier = fenums::FUNC_PROC_ID_OFFSET + 95,
+	PaintDashedLine = fenums::FUNC_PROC_ID_OFFSET + 96,
+	PaintLine = fenums::FUNC_PROC_ID_OFFSET + 97,
+	PaintPolyline = fenums::FUNC_PROC_ID_OFFSET + 98,
+	PaintRectFilled = fenums::FUNC_PROC_ID_OFFSET + 99,
+	PaintRectStroke = fenums::FUNC_PROC_ID_OFFSET + 100,
+	PaintSenseRegion = fenums::FUNC_PROC_ID_OFFSET + 101,
+	PaintText = fenums::FUNC_PROC_ID_OFFSET + 102,
+	PanelBottom = fenums::FUNC_PROC_ID_OFFSET + 103,
+	PanelBottomInside = fenums::FUNC_PROC_ID_OFFSET + 104,
+	PanelCentral = fenums::FUNC_PROC_ID_OFFSET + 105,
+	PanelCentralInside = fenums::FUNC_PROC_ID_OFFSET + 106,
+	PanelLeft = fenums::FUNC_PROC_ID_OFFSET + 107,
+	PanelLeftInside = fenums::FUNC_PROC_ID_OFFSET + 108,
+	PanelRight = fenums::FUNC_PROC_ID_OFFSET + 109,
+	PanelRightInside = fenums::FUNC_PROC_ID_OFFSET + 110,
+	PanelTop = fenums::FUNC_PROC_ID_OFFSET + 111,
+	PanelTopInside = fenums::FUNC_PROC_ID_OFFSET + 112,
+	Passthrough = fenums::FUNC_PROC_ID_OFFSET + 113,
+	Plot = fenums::FUNC_PROC_ID_OFFSET + 114,
+	PlotBars = fenums::FUNC_PROC_ID_OFFSET + 115,
+	PlotBoxes = fenums::FUNC_PROC_ID_OFFSET + 116,
+	PlotHLine = fenums::FUNC_PROC_ID_OFFSET + 117,
+	PlotLine = fenums::FUNC_PROC_ID_OFFSET + 118,
+	PlotPolygon = fenums::FUNC_PROC_ID_OFFSET + 119,
+	PlotScatter = fenums::FUNC_PROC_ID_OFFSET + 120,
+	PlotText = fenums::FUNC_PROC_ID_OFFSET + 121,
+	PlotVLine = fenums::FUNC_PROC_ID_OFFSET + 122,
+	PrepareNextFrame = fenums::FUNC_PROC_ID_OFFSET + 123,
+	ProgressBar = fenums::FUNC_PROC_ID_OFFSET + 124,
+	PushId = fenums::FUNC_PROC_ID_OFFSET + 125,
+	RadioButton = fenums::FUNC_PROC_ID_OFFSET + 126,
+	RequestRepaint = fenums::FUNC_PROC_ID_OFFSET + 127,
+	RequestRepaintAfter = fenums::FUNC_PROC_ID_OFFSET + 128,
+	RequestScreenshot = fenums::FUNC_PROC_ID_OFFSET + 129,
+	RequestScreenshotRect = fenums::FUNC_PROC_ID_OFFSET + 130,
+	ScalarSize = fenums::FUNC_PROC_ID_OFFSET + 131,
+	Scope = fenums::FUNC_PROC_ID_OFFSET + 132,
+	ScrollArea = fenums::FUNC_PROC_ID_OFFSET + 133,
+	ScrollToCursor = fenums::FUNC_PROC_ID_OFFSET + 134,
+	ScrollingTexture = fenums::FUNC_PROC_ID_OFFSET + 135,
+	ScrollingTextureRelease = fenums::FUNC_PROC_ID_OFFSET + 136,
+	SelectableLabel = fenums::FUNC_PROC_ID_OFFSET + 137,
+	Separator = fenums::FUNC_PROC_ID_OFFSET + 138,
+	SetAnimationFreeze = fenums::FUNC_PROC_ID_OFFSET + 139,
+	SetWindowCollapsed = fenums::FUNC_PROC_ID_OFFSET + 140,
+	ShowDebugTools = fenums::FUNC_PROC_ID_OFFSET + 141,
+	ShowPuffinProfiler = fenums::FUNC_PROC_ID_OFFSET + 142,
+	SliderF64 = fenums::FUNC_PROC_ID_OFFSET + 143,
+	SliderI64 = fenums::FUNC_PROC_ID_OFFSET + 144,
+	SliderU64 = fenums::FUNC_PROC_ID_OFFSET + 145,
+	SnarlConnection = fenums::FUNC_PROC_ID_OFFSET + 146,
+	SnarlEditor = fenums::FUNC_PROC_ID_OFFSET + 147,
+	SnarlNode = fenums::FUNC_PROC_ID_OFFSET + 148,
+	SnarlPin = fenums::FUNC_PROC_ID_OFFSET + 149,
+	Spinner = fenums::FUNC_PROC_ID_OFFSET + 150,
+	Table = fenums::FUNC_PROC_ID_OFFSET + 151,
+	TableCellRichText = fenums::FUNC_PROC_ID_OFFSET + 152,
+	TableCellText = fenums::FUNC_PROC_ID_OFFSET + 153,
+	TableColumn = fenums::FUNC_PROC_ID_OFFSET + 154,
+	TableHeaderText = fenums::FUNC_PROC_ID_OFFSET + 155,
+	TextEdit = fenums::FUNC_PROC_ID_OFFSET + 156,
+	TimeRangePicker = fenums::FUNC_PROC_ID_OFFSET + 157,
+	TintedScope = fenums::FUNC_PROC_ID_OFFSET + 158,
+	Tree = fenums::FUNC_PROC_ID_OFFSET + 159,
+	UiDisable = fenums::FUNC_PROC_ID_OFFSET + 160,
+	UiSetHeight = fenums::FUNC_PROC_ID_OFFSET + 161,
+	UiSetMaxHeight = fenums::FUNC_PROC_ID_OFFSET + 162,
+	UiSetMaxWidth = fenums::FUNC_PROC_ID_OFFSET + 163,
+	UiSetMinHeight = fenums::FUNC_PROC_ID_OFFSET + 164,
+	UiSetMinWidth = fenums::FUNC_PROC_ID_OFFSET + 165,
+	UiSetWidth = fenums::FUNC_PROC_ID_OFFSET + 166,
+	UiWithLayout = fenums::FUNC_PROC_ID_OFFSET + 167,
+	VectorSize = fenums::FUNC_PROC_ID_OFFSET + 168,
+	Vertical = fenums::FUNC_PROC_ID_OFFSET + 169,
+	VerticalCentered = fenums::FUNC_PROC_ID_OFFSET + 170,
+	VerticalCenteredJustified = fenums::FUNC_PROC_ID_OFFSET + 171,
+	WalkersMap = fenums::FUNC_PROC_ID_OFFSET + 172,
+	WarnIfDebugBuild = fenums::FUNC_PROC_ID_OFFSET + 173,
+	WidgetText = fenums::FUNC_PROC_ID_OFFSET + 174,
+	WidgetsGlobalThemePreferenceButtons = fenums::FUNC_PROC_ID_OFFSET + 175,
+	Window = fenums::FUNC_PROC_ID_OFFSET + 176,
+}
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum AllocateUiAtRectBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum AtomsBuilderMethodId {
+    Build = 0,
+    Text = 1,
+    RichText = 2,
+    RichTextColored = 3,
+    EndRichText = 4,
+    Size = 5,
+    ExtraLetterSpacing = 6,
+    LineHeight = 7,
+    LineHeightDefault = 8,
+    Heading = 9,
+    Monospace = 10,
+    Code = 11,
+    Strong = 12,
+    Weak = 13,
+    Underline = 14,
+    Strikethrough = 15,
+    Italics = 16,
+    Small = 17,
+    SmallRaised = 18,
+    Raised = 19,
+    TextStyleName = 20,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum ButtonBuilderMethodId {
+    Build = 0,
+    Frame = 1,
+    Small = 2,
+    Wrap = 3,
+    Truncate = 4,
+    Selected = 5,
+    FrameWhenInactive = 6,
+    RightText = 7,
+    ShortcutText = 8,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum CheckboxBuilderMethodId {
+    Build = 0,
+    Indeterminate = 1,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum CodeViewBuilderMethodId {
+    Build = 0,
+    Selectable = 1,
+    Wrap = 2,
+    Truncate = 3,
+    Extend = 4,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum CodeViewJobBuilderMethodId {
+    Build = 0,
+    Section = 1,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum CollapsingHeaderBuilderMethodId {
+    Build = 0,
+    DefaultOpen = 1,
+    Open = 2,
+    Close = 3,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum ColorBuilderMethodId {
+    Build = 0,
+    FromRgb = 1,
+    FromRgbaUnmultiplied = 2,
+    FromRgbaPremultiplied = 3,
+    FromGray = 4,
+    FromBlackAlpha = 5,
+    GammaMultiplyU8 = 6,
+    GammaMultiplyF32 = 7,
+    LinearMultiplyF32 = 8,
+    ToOpaque = 9,
+    ColorTransparent = 10,
+    ColorBlack = 11,
+    ColorDarkGray = 12,
+    ColorGray = 13,
+    ColorLightGray = 14,
+    ColorWhite = 15,
+    ColorBrown = 16,
+    ColorDarkRed = 17,
+    ColorLightRed = 18,
+    ColorCyan = 19,
+    ColorMagenta = 20,
+    ColorYellow = 21,
+    ColorOrange = 22,
+    ColorLightYellow = 23,
+    ColorKhaki = 24,
+    ColorDarkGreen = 25,
+    ColorGreen = 26,
+    ColorLightGreen = 27,
+    ColorDarkBlue = 28,
+    ColorBlue = 29,
+    ColorLightBlue = 30,
+    ColorPurple = 31,
+    ColorGold = 32,
+    ColorDebugColor = 33,
+    ColorPlaceholder = 34,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum ComboBoxBuilderMethodId {
+    Build = 0,
+    Width = 1,
+    Height = 2,
+    Wrap = 3,
+    Truncate = 4,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum DatePickerButtonBuilderMethodId {
+    Build = 0,
+    Format = 1,
+    HighlightWeekends = 2,
+    ShowIcon = 3,
+    Calendar = 4,
+    CalendarWeek = 5,
+    StartEndYears = 6,
+    Arrows = 7,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum DateTimePickerButtonBuilderMethodId {
+    Build = 0,
+    Format = 1,
+    HighlightWeekends = 2,
+    ShowIcon = 3,
+    Calendar = 4,
+    CalendarWeek = 5,
+    StartEndYears = 6,
+    Arrows = 7,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum DockAreaRawBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum DragValueF64BuilderMethodId {
+    Build = 0,
+    Speed = 1,
+    Prefix = 2,
+    Suffix = 3,
+    MinDecimals = 4,
+    MaxDecimals = 5,
+    FixedDecimals = 6,
+    Binary = 7,
+    Octal = 8,
+    Hexadecimal = 9,
+    UpdateWhileEditing = 10,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum DragValueI64BuilderMethodId {
+    Build = 0,
+    Speed = 1,
+    Prefix = 2,
+    Suffix = 3,
+    MinDecimals = 4,
+    MaxDecimals = 5,
+    FixedDecimals = 6,
+    Binary = 7,
+    Octal = 8,
+    Hexadecimal = 9,
+    UpdateWhileEditing = 10,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum DragValueU64BuilderMethodId {
+    Build = 0,
+    Speed = 1,
+    Prefix = 2,
+    Suffix = 3,
+    MinDecimals = 4,
+    MaxDecimals = 5,
+    FixedDecimals = 6,
+    Binary = 7,
+    Octal = 8,
+    Hexadecimal = 9,
+    UpdateWhileEditing = 10,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum EnabledUiBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum EndETableBuilderMethodId {
+    Build = 0,
+    ScrollToRow = 1,
+    ScrollToColumn = 2,
+    ScrollToRows = 3,
+    ScrollToColumns = 4,
+    AutoSizeMode = 5,
+    Striped = 6,
+    SelectedRow = 7,
+    MaxHeight = 8,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum EtColumnBuilderMethodId {
+    Build = 0,
+    Resizable = 1,
+    RangeMinMax = 2,
+    AutoSizeThisFrame = 3,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum EtHeaderTextBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum EtRowHeightBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum FrameBuilderMethodId {
+    Build = 0,
+    InnerMargin = 1,
+    OuterMargin = 2,
+    CornerRadius = 3,
+    InnerMarginSides = 4,
+    OuterMarginSides = 5,
+    CornerRadiusSides = 6,
+    Fill = 7,
+    Stroke = 8,
+    Shadow = 9,
+    MultiplyWithOpacity = 10,
+    SenseClick = 11,
+    SenseDrag = 12,
+    HoverCursorPointer = 13,
+    PresetGroup = 14,
+    PresetWindow = 15,
+    PresetPopup = 16,
+    PresetMenu = 17,
+    PresetCanvas = 18,
+    PresetDarkCanvas = 19,
+    PresetSideTopPanel = 20,
+    PresetCentralPanel = 21,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum GraphBuilderMethodId {
+    Build = 0,
+    Width = 1,
+    Height = 2,
+    DraggingEnabled = 3,
+    HoverEnabled = 4,
+    NodeClickingEnabled = 5,
+    NodeSelectionEnabled = 6,
+    NodeSelectionMultiEnabled = 7,
+    EdgeClickingEnabled = 8,
+    EdgeSelectionEnabled = 9,
+    EdgeSelectionMultiEnabled = 10,
+    FitToScreen = 11,
+    ZoomAndPan = 12,
+    FitPadding = 13,
+    ZoomSpeed = 14,
+    LabelsAlways = 15,
+    Layout = 16,
+    ResetLayout = 17,
+    FastForwardSteps = 18,
+    LayoutDt = 19,
+    LayoutDamping = 20,
+    LayoutEpsilon = 21,
+    LayoutMaxStep = 22,
+    LayoutKScale = 23,
+    LayoutCAttract = 24,
+    LayoutCRepulse = 25,
+    LayoutRunning = 26,
+    LayoutRowDist = 27,
+    LayoutColDist = 28,
+    LayoutCenterParent = 29,
+    LayoutOrientation = 30,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum GraphEdgeBuilderMethodId {
+    Build = 0,
+    Color = 1,
+    Label = 2,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum GraphNodeBuilderMethodId {
+    Build = 0,
+    Color = 1,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum GridBuilderMethodId {
+    Build = 0,
+    NumColumns = 1,
+    Striped = 2,
+    MinColWidth = 3,
+    MinRowHeight = 4,
+    MaxColWidth = 5,
+    StartRow = 6,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum GroupBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum H3CellsColoredBuilderMethodId {
+    Build = 0,
+    StrokeWidth = 1,
+    StrokeColor = 2,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum H3RegionBuilderMethodId {
+    Build = 0,
+    Fill = 1,
+    Stroke = 2,
+    Label = 3,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum HorizontalBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum HorizontalCenteredBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum HorizontalTopBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum HorizontalWrappedBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum HoverTextBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum HoverUiBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum HyperlinkBuilderMethodId {
+    Build = 0,
+    OpenInNewTab = 1,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum HyperlinkToBuilderMethodId {
+    Build = 0,
+    OpenInNewTab = 1,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum ImageBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum ImageReleaseBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum IndentBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum LabelBuilderMethodId {
+    Build = 0,
+    Selectable = 1,
+    Wrap = 2,
+    Truncate = 3,
+    Extend = 4,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum LabelAtomsBuilderMethodId {
+    Build = 0,
+    Wrap = 1,
+    Truncate = 2,
+    Extend = 3,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum LabelWidgetTextBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum MapMarkerBuilderMethodId {
+    Build = 0,
+    Label = 1,
+    Color = 2,
+    Radius = 3,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum MapPolylineBuilderMethodId {
+    Build = 0,
+    Stroke = 1,
+    Closed = 2,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum MenuBarBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum MenuButtonBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum NewTableBuilderMethodId {
+    Build = 0,
+    Striped = 1,
+    Vscroll = 2,
+    MinScrolledHeight = 3,
+    MaxScrollHeight = 4,
+    ScrollToRow = 5,
+    HeaderHeight = 6,
+    AutoShrink = 7,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum NewTableColumnBuilderMethodId {
+    Build = 0,
+    Auto = 1,
+    Exact = 2,
+    Initial = 3,
+    Remainder = 4,
+    AtLeast = 5,
+    AtMost = 6,
+    Resizable = 7,
+    ClipContents = 8,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum NewTableRowHeightBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum NodeDirBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum NodeDirCloseBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum NodeLeafBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PaintArrowBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PaintCanvasBuilderMethodId {
+    Build = 0,
+    Background = 1,
+    Opacity = 2,
+    Sense = 3,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PaintCircleFilledBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PaintCircleStrokeBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PaintCubicBezierBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PaintDashedLineBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PaintLineBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PaintPolylineBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PaintRectFilledBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PaintRectStrokeBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PaintSenseRegionBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PaintTextBuilderMethodId {
+    Build = 0,
+    Monospace = 1,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PanelBottomBuilderMethodId {
+    Build = 0,
+    Resizable = 1,
+    DefaultSize = 2,
+    ExactSize = 3,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PanelBottomInsideBuilderMethodId {
+    Build = 0,
+    Resizable = 1,
+    DefaultSize = 2,
+    ExactSize = 3,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PanelCentralBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PanelCentralInsideBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PanelLeftBuilderMethodId {
+    Build = 0,
+    Resizable = 1,
+    DefaultSize = 2,
+    ExactSize = 3,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PanelLeftInsideBuilderMethodId {
+    Build = 0,
+    Resizable = 1,
+    DefaultSize = 2,
+    ExactSize = 3,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PanelRightBuilderMethodId {
+    Build = 0,
+    Resizable = 1,
+    DefaultSize = 2,
+    ExactSize = 3,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PanelRightInsideBuilderMethodId {
+    Build = 0,
+    Resizable = 1,
+    DefaultSize = 2,
+    ExactSize = 3,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PanelTopBuilderMethodId {
+    Build = 0,
+    Resizable = 1,
+    DefaultSize = 2,
+    ExactSize = 3,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PanelTopInsideBuilderMethodId {
+    Build = 0,
+    Resizable = 1,
+    DefaultSize = 2,
+    ExactSize = 3,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PlotBuilderMethodId {
+    Build = 0,
+    Width = 1,
+    Height = 2,
+    ViewAspect = 3,
+    DataAspect = 4,
+    XAxisLabel = 5,
+    YAxisLabel = 6,
+    Legend = 7,
+    AllowZoom = 8,
+    AllowDrag = 9,
+    AllowScroll = 10,
+    AllowZoom2 = 11,
+    AllowDrag2 = 12,
+    AllowScroll2 = 13,
+    AllowBoxedZoom = 14,
+    AllowDoubleClickReset = 15,
+    ShowGrid = 16,
+    ShowAxes = 17,
+    ShowBackground = 18,
+    IncludeX = 19,
+    IncludeY = 20,
+    IncludeXRange = 21,
+    IncludeYRange = 22,
+    CenterXAxis = 23,
+    CenterYAxis = 24,
+    YGridMarks = 25,
+    ClampX = 26,
+    ClampY = 27,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PlotBarsBuilderMethodId {
+    Build = 0,
+    Color = 1,
+    Width = 2,
+    Horizontal = 3,
+    Highlight = 4,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PlotBoxesBuilderMethodId {
+    Build = 0,
+    Horizontal = 1,
+    Highlight = 2,
+    AllowHover = 3,
+    SuppressElementText = 4,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PlotHLineBuilderMethodId {
+    Build = 0,
+    Color = 1,
+    Width = 2,
+    Highlight = 3,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PlotLineBuilderMethodId {
+    Build = 0,
+    Color = 1,
+    Width = 2,
+    Highlight = 3,
+    Fill = 4,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PlotPolygonBuilderMethodId {
+    Build = 0,
+    Highlight = 1,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PlotScatterBuilderMethodId {
+    Build = 0,
+    Color = 1,
+    Radius = 2,
+    Shape = 3,
+    Highlight = 4,
+    Filled = 5,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PlotTextBuilderMethodId {
+    Build = 0,
+    Color = 1,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PlotVLineBuilderMethodId {
+    Build = 0,
+    Color = 1,
+    Width = 2,
+    Highlight = 3,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum ProgressBarBuilderMethodId {
+    Build = 0,
+    Text = 1,
+    Animate = 2,
+    ShowPercentage = 3,
+    DesiredWidth = 4,
+    DesiredHeight = 5,
+    CornerRadius = 6,
+    Fill = 7,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum PushIdBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum RadioButtonBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum ScalarSizeBuilderMethodId {
+    Build = 0,
+    AvailableWidth = 1,
+    AvailableHeight = 2,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum ScopeBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum ScrollAreaBuilderMethodId {
+    Build = 0,
+    Hscroll = 1,
+    Vscroll = 2,
+    Animated = 3,
+    AutoShrink = 4,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum ScrollingTextureBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum ScrollingTextureReleaseBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum SelectableLabelBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum SeparatorBuilderMethodId {
+    Build = 0,
+    Horizontal = 1,
+    Vertical = 2,
+    Spacing = 3,
+    Grow = 4,
+    Shrink = 5,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum SliderF64BuilderMethodId {
+    Build = 0,
+    ShowValue = 1,
+    Prefix = 2,
+    Suffix = 3,
+    Text = 4,
+    Vertical = 5,
+    Logarithmic = 6,
+    SmallestPositive = 7,
+    LargestFinite = 8,
+    SmartAim = 9,
+    DragValueSpeed = 10,
+    MinDecimals = 11,
+    MaxDecimals = 12,
+    FixedDecimals = 13,
+    TrailingFill = 14,
+    Binary = 15,
+    Octal = 16,
+    Hexadecimal = 17,
+    Integer = 18,
+    UpdateWhileEditing = 19,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum SliderI64BuilderMethodId {
+    Build = 0,
+    ShowValue = 1,
+    Prefix = 2,
+    Suffix = 3,
+    Text = 4,
+    Vertical = 5,
+    Logarithmic = 6,
+    SmallestPositive = 7,
+    LargestFinite = 8,
+    SmartAim = 9,
+    DragValueSpeed = 10,
+    MinDecimals = 11,
+    MaxDecimals = 12,
+    FixedDecimals = 13,
+    TrailingFill = 14,
+    Binary = 15,
+    Octal = 16,
+    Hexadecimal = 17,
+    Integer = 18,
+    UpdateWhileEditing = 19,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum SliderU64BuilderMethodId {
+    Build = 0,
+    ShowValue = 1,
+    Prefix = 2,
+    Suffix = 3,
+    Text = 4,
+    Vertical = 5,
+    Logarithmic = 6,
+    SmallestPositive = 7,
+    LargestFinite = 8,
+    SmartAim = 9,
+    DragValueSpeed = 10,
+    MinDecimals = 11,
+    MaxDecimals = 12,
+    FixedDecimals = 13,
+    TrailingFill = 14,
+    Binary = 15,
+    Octal = 16,
+    Hexadecimal = 17,
+    Integer = 18,
+    UpdateWhileEditing = 19,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum SnarlConnectionBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum SnarlEditorBuilderMethodId {
+    Build = 0,
+    Width = 1,
+    Height = 2,
+    PersistPositions = 3,
+    WireStyle = 4,
+    BgPattern = 5,
+    MinScale = 6,
+    MaxScale = 7,
+    Centering = 8,
+    CrispMagnifiedText = 9,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum SnarlNodeBuilderMethodId {
+    Build = 0,
+    NumInputs = 1,
+    NumOutputs = 2,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum SnarlPinBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum SpinnerBuilderMethodId {
+    Build = 0,
+    Size = 1,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum TableBuilderMethodId {
+    Build = 0,
+    Striped = 1,
+    Vscroll = 2,
+    ScrollToRow = 3,
+    MinScrolledHeight = 4,
+    MaxScrollHeight = 5,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum TableCellRichTextBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum TableCellTextBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum TableColumnBuilderMethodId {
+    Build = 0,
+    Auto = 1,
+    Exact = 2,
+    Initial = 3,
+    Remainder = 4,
+    AtLeast = 5,
+    AtMost = 6,
+    Resizable = 7,
+    ClipContents = 8,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum TableHeaderTextBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum TextEditBuilderMethodId {
+    Build = 0,
+    CodeEditor = 1,
+    Frame = 2,
+    HintText = 3,
+    Password = 4,
+    Interactive = 5,
+    DesiredWidth = 6,
+    DesiredRows = 7,
+    LockFocus = 8,
+    CursorAtEnd = 9,
+    ClipText = 10,
+    CharLimit = 11,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum TimeRangePickerBuilderMethodId {
+    Build = 0,
+    AddPreset = 1,
+    Tz = 2,
+    RefreshInterval = 3,
+    EvaluatedBounds = 4,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum TintedScopeBuilderMethodId {
+    Build = 0,
+    SenseClick = 1,
+    Stroke = 2,
+    OuterMargin = 3,
+    InnerMargin = 4,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum TreeBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum UiWithLayoutBuilderMethodId {
+    Build = 0,
+    MainDirLeftToRight = 1,
+    MainDirRightToLeft = 2,
+    MainDirTopDown = 3,
+    MainDirBottomUp = 4,
+    MainWrap = 5,
+    MainJustify = 6,
+    CrossAlignMin = 7,
+    CrossAlignCenter = 8,
+    CrossAlignMax = 9,
+    CrossJustify = 10,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum VectorSizeBuilderMethodId {
+    Build = 0,
+    AvailableSize = 1,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum VerticalBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum VerticalCenteredBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum VerticalCenteredJustifiedBuilderMethodId {
+    Build = 0,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum WalkersMapBuilderMethodId {
+    Build = 0,
+    Width = 1,
+    Height = 2,
+    SetZoom = 3,
+    CenterAt = 4,
+    ZoomGesture = 5,
+    Panning = 6,
+    TileUrl = 7,
+    TileAttribution = 8,
+    TileMaxZoom = 9,
+    TileSize = 10,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum WidgetTextBuilderMethodId {
+    Build = 0,
+    Text = 1,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
+pub enum WindowBuilderMethodId {
+    Build = 0,
+    DefaultOpen = 1,
+    Enabled = 2,
+    Interactable = 3,
+    Movable = 4,
+    Resizable = 5,
+    Collapsible = 6,
+    TitleBar = 7,
+    DefaultWidth = 8,
+    DefaultHeight = 9,
+    DefaultSize = 10,
+    DefaultPos = 11,
+    MinWidth = 12,
+    MinHeight = 13,
+    AlwaysOnTop = 14,
+    OpenBound = 15,
+}
+

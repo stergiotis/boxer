@@ -1,0 +1,16 @@
+[package]
+name = "imzero2_egui"
+version = "0.1.0"
+authors = ["Panos Stergiotis <p@stergiotis.ch>"]
+edition = "2024"
+rust-version = "1.92"
+description = "ImZero2 Design System (IDS) — token layer over egui::Style; no widget forks. ADR-0029."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+egui = ">=0.34.1"
+
+[lints]
+workspace = true

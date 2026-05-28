@@ -1,0 +1,90 @@
+# IDS semantic palette source-of-truth (ADR-0033 §SD3 / ADR-0031 §SD2).
+#
+# OKLCh coordinates. Generator at src/go/public/keelson/designsystem/colors/gen/
+# reads this file, performs OKLCh → sRGB gamut clipping (chroma reduction; never
+# lightness reduction), runs APCA / WCAG / CVD verifiers, runs IP-boundary
+# verbatim search, and emits:
+#   - src/rust/imzero2_egui/src/style/tokens/palette_generated.rs
+#   - src/go/public/keelson/designsystem/styletokens/palette_generated.go
+#   - doc/design-system/foundations/color.md
+#   - doc/design-system/foundations/ip-boundary-check.md
+#
+# Re-emit via `make designcolors-gen` or `go run ./src/go/cmd/designsystem colors gen`.
+#
+# Per-token edits flow through normal PR review; structural changes (new
+# role, new emphasis level, hue change) are Tier 3 ADRs.
+
+[meta]
+oklab_version = "ottosson-2020"     # Ottosson 2020 reference math
+gamut         = "srgb"              # target color space for emission
+emit          = ["rust", "go", "markdown"]
+theme         = "dark"              # v1 is dark-only (ADR-0031 Context fourth force)
+
+# ---- Neutral spine (ADR-0033 §SD3 second table; ADR-0031 §SD4) ----
+# C ≈ 0.005 with h = 240 — a barely-perceptible cool tint, not pure grey.
+
+[neutral]
+hue    = 240.0
+chroma = 0.005
+
+[neutral.spine]
+bg_extreme     = 0.06    # modal scrim base
+bg_panel       = 0.16    # default panel fill (ADR-0037 — spine bump from 0.13 for desktop dark-mode comfort)
+bg_faint       = 0.18    # alternating rows (ADR-0037 — spine bump from 0.17, kept > bg_panel)
+bg_surface     = 0.24    # raised cards / windows (ADR-0037 amendment — 0.20 → 0.24 for visible panel↔surface elevation step)
+border_faint   = 0.48    # subtle dividers (ADR-0037 2026-05-17b amendment — bumped from 0.26 to restore perceptibility against bg.surface=0.24; the original L=0.26 collapsed to ΔL=0.02 / 1.05:1 after the bg.surface bump, predicted at ADR-0037 line 162; clears APCA Lc-15 floating gate with WCAG ratios just under the 3:1 advisory floor, intentional for the "subtle divider" role)
+border_default = 0.58    # standard borders (APCA Lc-30 ambient floor at panel=0.16; softening deferred — see ADR-0037 Status)
+text_disabled  = 0.50    # disabled text (exempt from APCA gate per ADR-0031 §SD5)
+text_secondary = 0.74    # caption / secondary (ADR-0037 — softened from 0.78 for headroom comfort)
+text_primary   = 0.93    # body text (ADR-0037 — softened from 0.95; clears APCA Lc-90 on L=0.16 spine)
+text_extreme   = 0.98    # display / strong emphasis
+
+# ---- Semantic palette: 6 roles × 3 emphasis (dark theme) ----
+# C values are Swiss-restrained per ADR-0031 §SD2 (default 0.10, lower than
+# typical bright-UI ~0.15).
+
+[semantic.info]
+hue     = 240.0
+subtle  = { L = 0.20, C = 0.03 }
+default = { L = 0.80, C = 0.12 }
+strong  = { L = 0.90, C = 0.13 }
+
+[semantic.success]
+hue     = 145.0
+subtle  = { L = 0.20, C = 0.03 }
+default = { L = 0.80, C = 0.12 }
+strong  = { L = 0.90, C = 0.13 }
+
+[semantic.warning]
+hue     = 80.0
+subtle  = { L = 0.20, C = 0.03 }
+default = { L = 0.80, C = 0.12 }
+strong  = { L = 0.90, C = 0.13 }
+
+[semantic.error]
+hue     = 25.0
+subtle  = { L = 0.20, C = 0.03 }
+default = { L = 0.80, C = 0.12 }
+strong  = { L = 0.90, C = 0.13 }
+
+[semantic.neutral]
+# Hue irrelevant at C = 0; kept for table symmetry.
+hue     = 240.0
+# subtle L nudged 0.20 → 0.22 per ADR-0033 §SD7: original L=0.20 emitted
+# `#161616` which collided with Carbon's `gray-100`. Nudge clears the role
+# overlap and keeps the value within the ±0.02 perturbation bound.
+subtle  = { L = 0.22, C = 0.00 }
+default = { L = 0.80, C = 0.00 }
+strong  = { L = 0.90, C = 0.00 }
+
+[semantic.accent]
+# ADR-0033 §SD1 + 2026-05-17 amendment: h = 270 (blue-violet), down from
+# 295. h=270 is the lowest hue that still reads as violet rather than
+# blue, keeping accent perceptually distinct from info at h=240.
+hue     = 270.0
+subtle  = { L = 0.20, C = 0.03 }
+# 2026-05-17 amendment: accent.default C 0.12 → 0.08 (muted). Accent
+# now intentionally quieter than the four status hues (still at C=0.12)
+# to read as "supporting emphasis" rather than competing with status.
+default = { L = 0.80, C = 0.08 }
+strong  = { L = 0.90, C = 0.13 }

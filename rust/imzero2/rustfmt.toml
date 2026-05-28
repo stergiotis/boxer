@@ -1,0 +1,4 @@
+brace_style = "SameLineWhere"
+chain_width = 140
+wrap_comments = false
+edition = "2024"

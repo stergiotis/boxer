@@ -1,0 +1,151 @@
+# Foreground / background pairs verified by the IDS color generator.
+#
+# Per the M0b refinement of ADR-0031 §SD5 (Amendment): APCA is the
+# primary contrast metric; WCAG 2.1 stays as a warn-only secondary check
+# (legacy compliance signal). Per-pair font weight + size are required
+# because APCA's threshold is a function of (weight, size).
+#
+# fg / bg name keys in palette.toml (e.g. "neutral.spine.text_primary").
+# font_pt — exact rendering size for the pair (matches ADR-0030 §SD3 type-scale).
+# font_weight — 400 / 500 / 600 / 700 per ADR-0030 §SD4.
+# category — "text" for letterforms; "ui" for non-text (borders, icons, focus rings).
+# ui_kind — "meaningful" | "ambient" | "floating" (UI category only).
+
+# ---- Body text on each surface (Iosevka Aile, Body=13pt, Regular) ----
+
+[[pair]]
+name        = "body-on-panel"
+fg          = "neutral.spine.text_primary"
+bg          = "neutral.spine.bg_panel"
+category    = "text"
+font_pt     = 13.0
+font_weight = 400
+
+[[pair]]
+name        = "body-on-faint"
+fg          = "neutral.spine.text_primary"
+bg          = "neutral.spine.bg_faint"
+category    = "text"
+font_pt     = 13.0
+font_weight = 400
+
+[[pair]]
+name        = "body-on-surface"
+fg          = "neutral.spine.text_primary"
+bg          = "neutral.spine.bg_surface"
+category    = "text"
+font_pt     = 13.0
+font_weight = 400
+
+[[pair]]
+name        = "secondary-on-panel"
+fg          = "neutral.spine.text_secondary"
+bg          = "neutral.spine.bg_panel"
+category    = "text"
+font_pt     = 11.0
+font_weight = 500   # Caption-tier text is typically Medium per ADR-0030 §SD4
+
+[[pair]]
+name        = "disabled-on-panel"
+fg          = "neutral.spine.text_disabled"
+bg          = "neutral.spine.bg_panel"
+category    = "text"
+font_pt     = 13.0
+font_weight = 400
+# Disabled is graded but not gated — ADR-0031 §SD5 exempts.
+
+[[pair]]
+name        = "display-on-panel"
+fg          = "neutral.spine.text_extreme"
+bg          = "neutral.spine.bg_panel"
+category    = "text"
+font_pt     = 22.0
+font_weight = 600
+
+# ---- Semantic-color foreground on default panel ----
+
+[[pair]]
+name        = "info-default-on-panel"
+fg          = "semantic.info.default"
+bg          = "neutral.spine.bg_panel"
+category    = "ui"
+ui_kind     = "meaningful"
+
+[[pair]]
+name        = "success-default-on-panel"
+fg          = "semantic.success.default"
+bg          = "neutral.spine.bg_panel"
+category    = "ui"
+ui_kind     = "meaningful"
+
+[[pair]]
+name        = "warning-default-on-panel"
+fg          = "semantic.warning.default"
+bg          = "neutral.spine.bg_panel"
+category    = "ui"
+ui_kind     = "meaningful"
+
+[[pair]]
+name        = "error-default-on-panel"
+fg          = "semantic.error.default"
+bg          = "neutral.spine.bg_panel"
+category    = "ui"
+ui_kind     = "meaningful"
+
+[[pair]]
+name        = "accent-default-on-panel"
+fg          = "semantic.accent.default"
+bg          = "neutral.spine.bg_panel"
+category    = "ui"
+ui_kind     = "meaningful"
+
+[[pair]]
+name        = "border-default-on-panel"
+fg          = "neutral.spine.border_default"
+bg          = "neutral.spine.bg_panel"
+category    = "ui"
+ui_kind     = "ambient"
+
+# ---- border.faint dividers on the spine surfaces it is actually
+# drawn on. egui binds widgets.noninteractive.bg_stroke to border_faint
+# (style/tokens/visuals.rs), which strokes the indent vlines, faint
+# separators, and frame borders for ScrollAreas / CollapsingHeaders.
+#
+# Gated as "floating" (Lc-15) per the "subtle divider" role semantic —
+# the marker is meant to read as a quiet structural hint, not as a
+# foreground UI element. The stricter "ambient" gate (Lc-30) would
+# require L > border_default = 0.58, collapsing the faint/default
+# divider ladder; documented in ADR-0037 2026-05-17b amendment.
+#
+# Closes the coverage gap the original ADR-0037 line 162 predicted:
+# "vs bg.surface = 0.24, the divider/surface contrast compresses to
+# ΔL=0.02". The pair was missing from this file when the 2026-05-17
+# surface bump landed; this entry blocks the same class of regression
+# from recurring undetected.
+
+[[pair]]
+name        = "border-faint-on-surface"
+fg          = "neutral.spine.border_faint"
+bg          = "neutral.spine.bg_surface"
+category    = "ui"
+ui_kind     = "floating"
+
+[[pair]]
+name        = "border-faint-on-panel"
+fg          = "neutral.spine.border_faint"
+bg          = "neutral.spine.bg_panel"
+category    = "ui"
+ui_kind     = "floating"
+
+# ---- Selection / hover fills (closes the gap surfaced by the System
+# button low-contrast bug — the verifier didn't gate text on selection
+# bg, so ACCENT_DEFAULT was set as selection fill despite Lc≈30 against
+# body text. ACCENT_SUBTLE is the post-fix value; this pair locks it in.
+
+[[pair]]
+name        = "body-on-selection"
+fg          = "neutral.spine.text_primary"
+bg          = "semantic.accent.subtle"
+category    = "text"
+font_pt     = 13.0
+font_weight = 400
