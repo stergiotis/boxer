@@ -1,0 +1,7 @@
+12 1 0x01 96 26112 41 12345
+name                            type data
+hits                            4    9876543
+misses                          4    1234567
+c_min                           4    500000
+c_max                           4    8000000
+size                            4    2000000
