@@ -229,7 +229,7 @@ func TestBundle_LiveSystem_Smoke(t *testing.T) {
 // BenchmarkBundle_LiveSystem documents the M4 done-when criterion
 // ("under 5 ms on a 16-core laptop"). Run with:
 //
-//	go test -tags="$(cat tags|tr -d $'\n')" -bench=BenchmarkBundle ./src/go/public/observability/sysmetrics/
+//	go test -tags="$(cat tags|tr -d $'\n')" -bench=BenchmarkBundle ./public/observability/sysmetrics/
 func BenchmarkBundle_LiveSystem(b *testing.B) {
 	if _, err := os.Stat("/proc/stat"); err != nil {
 		b.Skipf("no live /proc/stat: %v", err)
