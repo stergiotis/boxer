@@ -1,0 +1,7976 @@
+// Code generated; Leeway DML (github.com/stergiotis/boxer/public/semistructured/leeway/anchor.test) DO NOT EDIT.
+
+package anchor
+
+import (
+	"errors"
+	"github.com/apache/arrow-go/v18/arrow"
+	array "github.com/apache/arrow-go/v18/arrow/array"
+	_ "github.com/apache/arrow-go/v18/arrow/ipc"
+	_ "github.com/apache/arrow-go/v18/arrow/math"
+	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
+	"slices"
+	"time"
+)
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// gocodegen.GenerateArrowSchemaFactory
+// ./public/semistructured/leeway/gocodegen/gocodegen_common.go:26
+
+func CreateSchemaTestTable() (schema *arrow.Schema) {
+	schema = arrow.NewSchema([]arrow.Field{
+		/* 000 */ arrow.Field{Name: "id:id:u64:2k:0:0:", Nullable: false, Type: arrow.PrimitiveTypes.Uint64},
+		/* 001 */ arrow.Field{Name: "id:naturalKey:y:g:0:0:", Nullable: false, Type: &arrow.BinaryType{}},
+		/* 002 */ arrow.Field{Name: "tv:foreignKey:value:val:u64:g:1d0DV72:0:0::foreignKey", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 003 */ arrow.Field{Name: "tv:foreignKey:lr:lr:u64:2q:1d0DV72:0:0::foreignKey", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 004 */ arrow.Field{Name: "tv:foreignKey:lrcard:lrcard:u64:4gw:1d0DV72:0:0::foreignKey", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 005 */ arrow.Field{Name: "tv:symbol:value:val:s:m:0:24:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
+		/* 006 */ arrow.Field{Name: "tv:symbol:hr:hr:u64:2k:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 007 */ arrow.Field{Name: "tv:symbol:lr:lr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 008 */ arrow.Field{Name: "tv:symbol:lv:lv:y:m:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 009 */ arrow.Field{Name: "tv:symbol:lmr:lmr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 010 */ arrow.Field{Name: "tv:symbol:mrhp:mrhp:y:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 011 */ arrow.Field{Name: "tv:symbol:hrcard:hrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 012 */ arrow.Field{Name: "tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 013 */ arrow.Field{Name: "tv:symbol:lvcard:lvcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 014 */ arrow.Field{Name: "tv:symbol:lmrcard:lmrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 015 */ arrow.Field{Name: "tv:symbolArray:value:val:sh:g:0:24:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
+		/* 016 */ arrow.Field{Name: "tv:symbolArray:hr:hr:u64:2k:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 017 */ arrow.Field{Name: "tv:symbolArray:lr:lr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 018 */ arrow.Field{Name: "tv:symbolArray:lv:lv:y:m:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 019 */ arrow.Field{Name: "tv:symbolArray:lmr:lmr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 020 */ arrow.Field{Name: "tv:symbolArray:mrhp:mrhp:y:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 021 */ arrow.Field{Name: "tv:symbolArray:len:len:u64:28o:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 022 */ arrow.Field{Name: "tv:symbolArray:hrcard:hrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 023 */ arrow.Field{Name: "tv:symbolArray:lrcard:lrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 024 */ arrow.Field{Name: "tv:symbolArray:lvcard:lvcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 025 */ arrow.Field{Name: "tv:symbolArray:lmrcard:lmrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 026 */ arrow.Field{Name: "tv:stringArray:value:val:sh:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
+		/* 027 */ arrow.Field{Name: "tv:stringArray:hr:hr:u64:2k:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 028 */ arrow.Field{Name: "tv:stringArray:lr:lr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 029 */ arrow.Field{Name: "tv:stringArray:lv:lv:y:m:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 030 */ arrow.Field{Name: "tv:stringArray:lmr:lmr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 031 */ arrow.Field{Name: "tv:stringArray:mrhp:mrhp:y:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 032 */ arrow.Field{Name: "tv:stringArray:len:len:u64:28o:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 033 */ arrow.Field{Name: "tv:stringArray:hrcard:hrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 034 */ arrow.Field{Name: "tv:stringArray:lrcard:lrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 035 */ arrow.Field{Name: "tv:stringArray:lvcard:lvcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 036 */ arrow.Field{Name: "tv:stringArray:lmrcard:lmrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 037 */ arrow.Field{Name: "tv:text:text:val:s:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
+		/* 038 */ arrow.Field{Name: "tv:text:wordLength:val:u32h:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint32)},
+		/* 039 */ arrow.Field{Name: "tv:text:wordBag:val:sh:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
+		/* 040 */ arrow.Field{Name: "tv:text:hr:hr:u64:2k:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 041 */ arrow.Field{Name: "tv:text:lr:lr:u64:2q:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 042 */ arrow.Field{Name: "tv:text:lv:lv:y:m:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 043 */ arrow.Field{Name: "tv:text:lmr:lmr:u64:2q:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 044 */ arrow.Field{Name: "tv:text:mrhp:mrhp:y:g:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 045 */ arrow.Field{Name: "tv:text:len:len:u64:28o:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 046 */ arrow.Field{Name: "tv:text:hrcard:hrcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 047 */ arrow.Field{Name: "tv:text:lrcard:lrcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 048 */ arrow.Field{Name: "tv:text:lvcard:lvcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 049 */ arrow.Field{Name: "tv:text:lmrcard:lmrcard:u64:4gw:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 050 */ arrow.Field{Name: "tv:blobArray:value:val:yh:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 051 */ arrow.Field{Name: "tv:blobArray:hr:hr:u64:2k:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 052 */ arrow.Field{Name: "tv:blobArray:lr:lr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 053 */ arrow.Field{Name: "tv:blobArray:lv:lv:y:m:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 054 */ arrow.Field{Name: "tv:blobArray:lmr:lmr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 055 */ arrow.Field{Name: "tv:blobArray:mrhp:mrhp:y:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 056 */ arrow.Field{Name: "tv:blobArray:len:len:u64:28o:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 057 */ arrow.Field{Name: "tv:blobArray:hrcard:hrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 058 */ arrow.Field{Name: "tv:blobArray:lrcard:lrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 059 */ arrow.Field{Name: "tv:blobArray:lvcard:lvcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 060 */ arrow.Field{Name: "tv:blobArray:lmrcard:lmrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 061 */ arrow.Field{Name: "tv:u8Array:value:val:u8h:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint8)},
+		/* 062 */ arrow.Field{Name: "tv:u8Array:hr:hr:u64:2k:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 063 */ arrow.Field{Name: "tv:u8Array:lr:lr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 064 */ arrow.Field{Name: "tv:u8Array:lv:lv:y:m:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 065 */ arrow.Field{Name: "tv:u8Array:lmr:lmr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 066 */ arrow.Field{Name: "tv:u8Array:mrhp:mrhp:y:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 067 */ arrow.Field{Name: "tv:u8Array:len:len:u64:28o:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 068 */ arrow.Field{Name: "tv:u8Array:hrcard:hrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 069 */ arrow.Field{Name: "tv:u8Array:lrcard:lrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 070 */ arrow.Field{Name: "tv:u8Array:lvcard:lvcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 071 */ arrow.Field{Name: "tv:u8Array:lmrcard:lmrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 072 */ arrow.Field{Name: "tv:u16Array:value:val:u16h:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint16)},
+		/* 073 */ arrow.Field{Name: "tv:u16Array:hr:hr:u64:2k:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 074 */ arrow.Field{Name: "tv:u16Array:lr:lr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 075 */ arrow.Field{Name: "tv:u16Array:lv:lv:y:m:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 076 */ arrow.Field{Name: "tv:u16Array:lmr:lmr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 077 */ arrow.Field{Name: "tv:u16Array:mrhp:mrhp:y:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 078 */ arrow.Field{Name: "tv:u16Array:len:len:u64:28o:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 079 */ arrow.Field{Name: "tv:u16Array:hrcard:hrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 080 */ arrow.Field{Name: "tv:u16Array:lrcard:lrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 081 */ arrow.Field{Name: "tv:u16Array:lvcard:lvcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 082 */ arrow.Field{Name: "tv:u16Array:lmrcard:lmrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 083 */ arrow.Field{Name: "tv:u32Array:value:val:u32h:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint32)},
+		/* 084 */ arrow.Field{Name: "tv:u32Array:hr:hr:u64:2k:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 085 */ arrow.Field{Name: "tv:u32Array:lr:lr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 086 */ arrow.Field{Name: "tv:u32Array:lv:lv:y:m:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 087 */ arrow.Field{Name: "tv:u32Array:lmr:lmr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 088 */ arrow.Field{Name: "tv:u32Array:mrhp:mrhp:y:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 089 */ arrow.Field{Name: "tv:u32Array:len:len:u64:28o:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 090 */ arrow.Field{Name: "tv:u32Array:hrcard:hrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 091 */ arrow.Field{Name: "tv:u32Array:lrcard:lrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 092 */ arrow.Field{Name: "tv:u32Array:lvcard:lvcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 093 */ arrow.Field{Name: "tv:u32Array:lmrcard:lmrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 094 */ arrow.Field{Name: "tv:u32Set:value:val:u32m:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint32)},
+		/* 095 */ arrow.Field{Name: "tv:u32Set:hr:hr:u64:2k:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 096 */ arrow.Field{Name: "tv:u32Set:lr:lr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 097 */ arrow.Field{Name: "tv:u32Set:lv:lv:y:m:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 098 */ arrow.Field{Name: "tv:u32Set:lmr:lmr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 099 */ arrow.Field{Name: "tv:u32Set:mrhp:mrhp:y:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 100 */ arrow.Field{Name: "tv:u32Set:card:card:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 101 */ arrow.Field{Name: "tv:u32Set:hrcard:hrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 102 */ arrow.Field{Name: "tv:u32Set:lrcard:lrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 103 */ arrow.Field{Name: "tv:u32Set:lvcard:lvcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 104 */ arrow.Field{Name: "tv:u32Set:lmrcard:lmrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 105 */ arrow.Field{Name: "tv:u64Array:value:val:u64h:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 106 */ arrow.Field{Name: "tv:u64Array:hr:hr:u64:2k:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 107 */ arrow.Field{Name: "tv:u64Array:lr:lr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 108 */ arrow.Field{Name: "tv:u64Array:lv:lv:y:m:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 109 */ arrow.Field{Name: "tv:u64Array:lmr:lmr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 110 */ arrow.Field{Name: "tv:u64Array:mrhp:mrhp:y:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 111 */ arrow.Field{Name: "tv:u64Array:len:len:u64:28o:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 112 */ arrow.Field{Name: "tv:u64Array:hrcard:hrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 113 */ arrow.Field{Name: "tv:u64Array:lrcard:lrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 114 */ arrow.Field{Name: "tv:u64Array:lvcard:lvcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 115 */ arrow.Field{Name: "tv:u64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 116 */ arrow.Field{Name: "tv:u64Set:value:val:u64m:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 117 */ arrow.Field{Name: "tv:u64Set:hr:hr:u64:2k:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 118 */ arrow.Field{Name: "tv:u64Set:lr:lr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 119 */ arrow.Field{Name: "tv:u64Set:lv:lv:y:m:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 120 */ arrow.Field{Name: "tv:u64Set:lmr:lmr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 121 */ arrow.Field{Name: "tv:u64Set:mrhp:mrhp:y:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 122 */ arrow.Field{Name: "tv:u64Set:card:card:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 123 */ arrow.Field{Name: "tv:u64Set:hrcard:hrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 124 */ arrow.Field{Name: "tv:u64Set:lrcard:lrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 125 */ arrow.Field{Name: "tv:u64Set:lvcard:lvcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 126 */ arrow.Field{Name: "tv:u64Set:lmrcard:lmrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 127 */ arrow.Field{Name: "tv:i8Array:value:val:i8h:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Int8)},
+		/* 128 */ arrow.Field{Name: "tv:i8Array:hr:hr:u64:2k:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 129 */ arrow.Field{Name: "tv:i8Array:lr:lr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 130 */ arrow.Field{Name: "tv:i8Array:lv:lv:y:m:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 131 */ arrow.Field{Name: "tv:i8Array:lmr:lmr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 132 */ arrow.Field{Name: "tv:i8Array:mrhp:mrhp:y:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 133 */ arrow.Field{Name: "tv:i8Array:len:len:u64:28o:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 134 */ arrow.Field{Name: "tv:i8Array:hrcard:hrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 135 */ arrow.Field{Name: "tv:i8Array:lrcard:lrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 136 */ arrow.Field{Name: "tv:i8Array:lvcard:lvcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 137 */ arrow.Field{Name: "tv:i8Array:lmrcard:lmrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 138 */ arrow.Field{Name: "tv:i16Array:value:val:i16h:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Int16)},
+		/* 139 */ arrow.Field{Name: "tv:i16Array:hr:hr:u64:2k:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 140 */ arrow.Field{Name: "tv:i16Array:lr:lr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 141 */ arrow.Field{Name: "tv:i16Array:lv:lv:y:m:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 142 */ arrow.Field{Name: "tv:i16Array:lmr:lmr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 143 */ arrow.Field{Name: "tv:i16Array:mrhp:mrhp:y:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 144 */ arrow.Field{Name: "tv:i16Array:len:len:u64:28o:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 145 */ arrow.Field{Name: "tv:i16Array:hrcard:hrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 146 */ arrow.Field{Name: "tv:i16Array:lrcard:lrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 147 */ arrow.Field{Name: "tv:i16Array:lvcard:lvcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 148 */ arrow.Field{Name: "tv:i16Array:lmrcard:lmrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 149 */ arrow.Field{Name: "tv:i32Array:value:val:i32h:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Int32)},
+		/* 150 */ arrow.Field{Name: "tv:i32Array:hr:hr:u64:2k:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 151 */ arrow.Field{Name: "tv:i32Array:lr:lr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 152 */ arrow.Field{Name: "tv:i32Array:lv:lv:y:m:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 153 */ arrow.Field{Name: "tv:i32Array:lmr:lmr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 154 */ arrow.Field{Name: "tv:i32Array:mrhp:mrhp:y:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 155 */ arrow.Field{Name: "tv:i32Array:len:len:u64:28o:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 156 */ arrow.Field{Name: "tv:i32Array:hrcard:hrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 157 */ arrow.Field{Name: "tv:i32Array:lrcard:lrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 158 */ arrow.Field{Name: "tv:i32Array:lvcard:lvcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 159 */ arrow.Field{Name: "tv:i32Array:lmrcard:lmrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 160 */ arrow.Field{Name: "tv:i64Array:value:val:i64h:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Int64)},
+		/* 161 */ arrow.Field{Name: "tv:i64Array:hr:hr:u64:2k:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 162 */ arrow.Field{Name: "tv:i64Array:lr:lr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 163 */ arrow.Field{Name: "tv:i64Array:lv:lv:y:m:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 164 */ arrow.Field{Name: "tv:i64Array:lmr:lmr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 165 */ arrow.Field{Name: "tv:i64Array:mrhp:mrhp:y:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 166 */ arrow.Field{Name: "tv:i64Array:len:len:u64:28o:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 167 */ arrow.Field{Name: "tv:i64Array:hrcard:hrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 168 */ arrow.Field{Name: "tv:i64Array:lrcard:lrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 169 */ arrow.Field{Name: "tv:i64Array:lvcard:lvcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 170 */ arrow.Field{Name: "tv:i64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 171 */ arrow.Field{Name: "tv:timeRange:beginIncl:val:z64:2k:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.TimestampType{Unit: arrow.Nanosecond})},
+		/* 172 */ arrow.Field{Name: "tv:timeRange:endExcl:val:z64:2k:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.TimestampType{Unit: arrow.Nanosecond})},
+		/* 173 */ arrow.Field{Name: "tv:timeRange:hr:hr:u64:2k:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 174 */ arrow.Field{Name: "tv:timeRange:lr:lr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 175 */ arrow.Field{Name: "tv:timeRange:lv:lv:y:m:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 176 */ arrow.Field{Name: "tv:timeRange:lmr:lmr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 177 */ arrow.Field{Name: "tv:timeRange:mrhp:mrhp:y:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 178 */ arrow.Field{Name: "tv:timeRange:hrcard:hrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 179 */ arrow.Field{Name: "tv:timeRange:lrcard:lrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 180 */ arrow.Field{Name: "tv:timeRange:lvcard:lvcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 181 */ arrow.Field{Name: "tv:timeRange:lmrcard:lmrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 182 */ arrow.Field{Name: "tv:f32Array:value:val:f32h:gM:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Float32)},
+		/* 183 */ arrow.Field{Name: "tv:f32Array:hr:hr:u64:2k:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 184 */ arrow.Field{Name: "tv:f32Array:lr:lr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 185 */ arrow.Field{Name: "tv:f32Array:lv:lv:y:m:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 186 */ arrow.Field{Name: "tv:f32Array:lmr:lmr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 187 */ arrow.Field{Name: "tv:f32Array:mrhp:mrhp:y:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 188 */ arrow.Field{Name: "tv:f32Array:len:len:u64:28o:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 189 */ arrow.Field{Name: "tv:f32Array:hrcard:hrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 190 */ arrow.Field{Name: "tv:f32Array:lrcard:lrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 191 */ arrow.Field{Name: "tv:f32Array:lvcard:lvcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 192 */ arrow.Field{Name: "tv:f32Array:lmrcard:lmrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 193 */ arrow.Field{Name: "tv:f64Array:value:val:f64h:gM:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Float64)},
+		/* 194 */ arrow.Field{Name: "tv:f64Array:hr:hr:u64:2k:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 195 */ arrow.Field{Name: "tv:f64Array:lr:lr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 196 */ arrow.Field{Name: "tv:f64Array:lv:lv:y:m:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 197 */ arrow.Field{Name: "tv:f64Array:lmr:lmr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 198 */ arrow.Field{Name: "tv:f64Array:mrhp:mrhp:y:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 199 */ arrow.Field{Name: "tv:f64Array:len:len:u64:28o:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 200 */ arrow.Field{Name: "tv:f64Array:hrcard:hrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 201 */ arrow.Field{Name: "tv:f64Array:lrcard:lrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 202 */ arrow.Field{Name: "tv:f64Array:lvcard:lvcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 203 */ arrow.Field{Name: "tv:f64Array:lmrcard:lmrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 204 */ arrow.Field{Name: "tv:geoPoint:pointLat:val:f32:g:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Float32)},
+		/* 205 */ arrow.Field{Name: "tv:geoPoint:pointLng:val:f32:g:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Float32)},
+		/* 206 */ arrow.Field{Name: "tv:geoPoint:h3:val:u64:g:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 207 */ arrow.Field{Name: "tv:geoPoint:hr:hr:u64:2k:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 208 */ arrow.Field{Name: "tv:geoPoint:lr:lr:u64:2q:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 209 */ arrow.Field{Name: "tv:geoPoint:lv:lv:y:m:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 210 */ arrow.Field{Name: "tv:geoPoint:lmr:lmr:u64:2q:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 211 */ arrow.Field{Name: "tv:geoPoint:mrhp:mrhp:y:g:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 212 */ arrow.Field{Name: "tv:geoPoint:hrcard:hrcard:u64:4gw:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 213 */ arrow.Field{Name: "tv:geoPoint:lrcard:lrcard:u64:4gw:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 214 */ arrow.Field{Name: "tv:geoPoint:lvcard:lvcard:u64:4gw:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 215 */ arrow.Field{Name: "tv:geoPoint:lmrcard:lmrcard:u64:4gw:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 216 */ arrow.Field{Name: "tv:geoArea:polyLat:val:f32h:g:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Float32)},
+		/* 217 */ arrow.Field{Name: "tv:geoArea:polyLng:val:f32h:g:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Float32)},
+		/* 218 */ arrow.Field{Name: "tv:geoArea:h3:val:u64m:g:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 219 */ arrow.Field{Name: "tv:geoArea:hr:hr:u64:2k:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 220 */ arrow.Field{Name: "tv:geoArea:lr:lr:u64:2q:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 221 */ arrow.Field{Name: "tv:geoArea:lv:lv:y:m:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 222 */ arrow.Field{Name: "tv:geoArea:lmr:lmr:u64:2q:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 223 */ arrow.Field{Name: "tv:geoArea:mrhp:mrhp:y:g:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 224 */ arrow.Field{Name: "tv:geoArea:len:len:u64:28o:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 225 */ arrow.Field{Name: "tv:geoArea:card:card:u64:4gw:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 226 */ arrow.Field{Name: "tv:geoArea:hrcard:hrcard:u64:4gw:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 227 */ arrow.Field{Name: "tv:geoArea:lrcard:lrcard:u64:4gw:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 228 */ arrow.Field{Name: "tv:geoArea:lvcard:lvcard:u64:4gw:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 229 */ arrow.Field{Name: "tv:geoArea:lmrcard:lmrcard:u64:4gw:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 230 */ arrow.Field{Name: "tv:timeArray:value:val:z64h:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.TimestampType{Unit: arrow.Nanosecond})},
+		/* 231 */ arrow.Field{Name: "tv:timeArray:hr:hr:u64:2k:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 232 */ arrow.Field{Name: "tv:timeArray:lr:lr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 233 */ arrow.Field{Name: "tv:timeArray:lv:lv:y:m:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 234 */ arrow.Field{Name: "tv:timeArray:lmr:lmr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 235 */ arrow.Field{Name: "tv:timeArray:mrhp:mrhp:y:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 236 */ arrow.Field{Name: "tv:timeArray:len:len:u64:28o:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 237 */ arrow.Field{Name: "tv:timeArray:hrcard:hrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 238 */ arrow.Field{Name: "tv:timeArray:lrcard:lrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 239 */ arrow.Field{Name: "tv:timeArray:lvcard:lvcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 240 */ arrow.Field{Name: "tv:timeArray:lmrcard:lmrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+	}, nil)
+	return
+}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1257
+
+type InEntityTestTable struct {
+	errs           []error
+	state          runtime.EntityStateE
+	allocator      memory.Allocator
+	builder        *array.RecordBuilder
+	records        []arrow.RecordBatch
+	section00Inst  *InEntityTestTableSectionBlobArray
+	section00State runtime.EntityStateE
+	section01Inst  *InEntityTestTableSectionF32Array
+	section01State runtime.EntityStateE
+	section02Inst  *InEntityTestTableSectionF64Array
+	section02State runtime.EntityStateE
+	section03Inst  *InEntityTestTableSectionForeignKey
+	section03State runtime.EntityStateE
+	section04Inst  *InEntityTestTableSectionGeoArea
+	section04State runtime.EntityStateE
+	section05Inst  *InEntityTestTableSectionGeoPoint
+	section05State runtime.EntityStateE
+	section06Inst  *InEntityTestTableSectionI16Array
+	section06State runtime.EntityStateE
+	section07Inst  *InEntityTestTableSectionI32Array
+	section07State runtime.EntityStateE
+	section08Inst  *InEntityTestTableSectionI64Array
+	section08State runtime.EntityStateE
+	section09Inst  *InEntityTestTableSectionI8Array
+	section09State runtime.EntityStateE
+	section10Inst  *InEntityTestTableSectionStringArray
+	section10State runtime.EntityStateE
+	section11Inst  *InEntityTestTableSectionSymbol
+	section11State runtime.EntityStateE
+	section12Inst  *InEntityTestTableSectionSymbolArray
+	section12State runtime.EntityStateE
+	section13Inst  *InEntityTestTableSectionText
+	section13State runtime.EntityStateE
+	section14Inst  *InEntityTestTableSectionTimeArray
+	section14State runtime.EntityStateE
+	section15Inst  *InEntityTestTableSectionTimeRange
+	section15State runtime.EntityStateE
+	section16Inst  *InEntityTestTableSectionU16Array
+	section16State runtime.EntityStateE
+	section17Inst  *InEntityTestTableSectionU32Array
+	section17State runtime.EntityStateE
+	section18Inst  *InEntityTestTableSectionU32Set
+	section18State runtime.EntityStateE
+	section19Inst  *InEntityTestTableSectionU64Array
+	section19State runtime.EntityStateE
+	section20Inst  *InEntityTestTableSectionU64Set
+	section20State runtime.EntityStateE
+	section21Inst  *InEntityTestTableSectionU8Array
+	section21State runtime.EntityStateE
+	activeSections *[22]bool
+	plainId0       uint64
+
+	plainNaturalKey1      []byte
+	scalarFieldBuilder000 *array.Uint64Builder
+
+	scalarFieldBuilder001 *array.BinaryBuilder
+}
+
+func NewInEntityTestTable(allocator memory.Allocator, estimatedNumberOfRecords int) (inst *InEntityTestTable) {
+	inst = &InEntityTestTable{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.allocator = allocator
+	inst.records = make([]arrow.RecordBatch, 0, estimatedNumberOfRecords)
+	schema := CreateSchemaTestTable()
+	builder := array.NewRecordBuilder(allocator, schema)
+	inst.builder = builder
+	inst.initSections(builder)
+	inst.scalarFieldBuilder000 = builder.Field(0).(*array.Uint64Builder)
+	inst.scalarFieldBuilder001 = builder.Field(1).(*array.BinaryBuilder)
+
+	return inst
+}
+
+// SetActiveSections marks which section indices BeginEntity should
+// initialise (skipping beginSection for the rest). Pass nil to clear.
+// The hint is a performance optimisation; sending BeginAttribute to
+// an unmarked section produces empty-list bytes at TransferRecords.
+func (inst *InEntityTestTable) SetActiveSections(idxs []int) {
+	if idxs == nil {
+		inst.activeSections = nil
+		return
+	}
+	var mask [22]bool
+	for _, i := range idxs {
+		if i >= 0 && i < len(mask) {
+			mask[i] = true
+		}
+	}
+	inst.activeSections = &mask
+}
+
+// Builder exposes the underlying RecordBuilder so callers can apply
+// shim-level hints (e.g. SetActiveFields on the arrowrowbinary /
+// arrowsparserb / arrowrowcbor backends).
+func (inst *InEntityTestTable) Builder() *array.RecordBuilder { return inst.builder }
+
+// InEntityTestTableSectionIndices maps each section name to its section%02dInst slot in
+// the generated entity. Useful for callers that need to compute
+// SetActiveSections inputs from section names — for example, the
+// marshallgen-driven keelson codec wrappers.
+var InEntityTestTableSectionIndices = map[string]int{
+	"blobArray":   0,
+	"f32Array":    1,
+	"f64Array":    2,
+	"foreignKey":  3,
+	"geoArea":     4,
+	"geoPoint":    5,
+	"i16Array":    6,
+	"i32Array":    7,
+	"i64Array":    8,
+	"i8Array":     9,
+	"stringArray": 10,
+	"symbol":      11,
+	"symbolArray": 12,
+	"text":        13,
+	"timeArray":   14,
+	"timeRange":   15,
+	"u16Array":    16,
+	"u32Array":    17,
+	"u32Set":      18,
+	"u64Array":    19,
+	"u64Set":      20,
+	"u8Array":     21,
+}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).ComposeEntityCode
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1434
+
+func (inst *InEntityTestTable) SetId(id0 uint64, naturalKey1 []byte) *InEntityTestTable {
+	if inst.state != runtime.EntityStateInEntity {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.plainId0 = id0
+	inst.plainNaturalKey1 = naturalKey1
+
+	return inst
+}
+func (inst *InEntityTestTable) appendPlainValues() {
+	inst.scalarFieldBuilder000.Append(inst.plainId0)
+
+	inst.scalarFieldBuilder001.Append(inst.plainNaturalKey1)
+}
+func (inst *InEntityTestTable) resetPlainValues() {
+	inst.plainId0 = uint64(0)
+
+	inst.plainNaturalKey1 = []byte(nil)
+}
+func (inst *InEntityTestTable) initSections(builder *array.RecordBuilder) {
+	inst.section00Inst = NewInEntityTestTableSectionBlobArray(builder, inst)
+	inst.section01Inst = NewInEntityTestTableSectionF32Array(builder, inst)
+	inst.section02Inst = NewInEntityTestTableSectionF64Array(builder, inst)
+	inst.section03Inst = NewInEntityTestTableSectionForeignKey(builder, inst)
+	inst.section04Inst = NewInEntityTestTableSectionGeoArea(builder, inst)
+	inst.section05Inst = NewInEntityTestTableSectionGeoPoint(builder, inst)
+	inst.section06Inst = NewInEntityTestTableSectionI16Array(builder, inst)
+	inst.section07Inst = NewInEntityTestTableSectionI32Array(builder, inst)
+	inst.section08Inst = NewInEntityTestTableSectionI64Array(builder, inst)
+	inst.section09Inst = NewInEntityTestTableSectionI8Array(builder, inst)
+	inst.section10Inst = NewInEntityTestTableSectionStringArray(builder, inst)
+	inst.section11Inst = NewInEntityTestTableSectionSymbol(builder, inst)
+	inst.section12Inst = NewInEntityTestTableSectionSymbolArray(builder, inst)
+	inst.section13Inst = NewInEntityTestTableSectionText(builder, inst)
+	inst.section14Inst = NewInEntityTestTableSectionTimeArray(builder, inst)
+	inst.section15Inst = NewInEntityTestTableSectionTimeRange(builder, inst)
+	inst.section16Inst = NewInEntityTestTableSectionU16Array(builder, inst)
+	inst.section17Inst = NewInEntityTestTableSectionU32Array(builder, inst)
+	inst.section18Inst = NewInEntityTestTableSectionU32Set(builder, inst)
+	inst.section19Inst = NewInEntityTestTableSectionU64Array(builder, inst)
+	inst.section20Inst = NewInEntityTestTableSectionU64Set(builder, inst)
+	inst.section21Inst = NewInEntityTestTableSectionU8Array(builder, inst)
+}
+func (inst *InEntityTestTable) beginSections() {
+	if mask := inst.activeSections; mask != nil {
+		if mask[0] {
+			inst.section00Inst.beginSection()
+		}
+		if mask[1] {
+			inst.section01Inst.beginSection()
+		}
+		if mask[2] {
+			inst.section02Inst.beginSection()
+		}
+		if mask[3] {
+			inst.section03Inst.beginSection()
+		}
+		if mask[4] {
+			inst.section04Inst.beginSection()
+		}
+		if mask[5] {
+			inst.section05Inst.beginSection()
+		}
+		if mask[6] {
+			inst.section06Inst.beginSection()
+		}
+		if mask[7] {
+			inst.section07Inst.beginSection()
+		}
+		if mask[8] {
+			inst.section08Inst.beginSection()
+		}
+		if mask[9] {
+			inst.section09Inst.beginSection()
+		}
+		if mask[10] {
+			inst.section10Inst.beginSection()
+		}
+		if mask[11] {
+			inst.section11Inst.beginSection()
+		}
+		if mask[12] {
+			inst.section12Inst.beginSection()
+		}
+		if mask[13] {
+			inst.section13Inst.beginSection()
+		}
+		if mask[14] {
+			inst.section14Inst.beginSection()
+		}
+		if mask[15] {
+			inst.section15Inst.beginSection()
+		}
+		if mask[16] {
+			inst.section16Inst.beginSection()
+		}
+		if mask[17] {
+			inst.section17Inst.beginSection()
+		}
+		if mask[18] {
+			inst.section18Inst.beginSection()
+		}
+		if mask[19] {
+			inst.section19Inst.beginSection()
+		}
+		if mask[20] {
+			inst.section20Inst.beginSection()
+		}
+		if mask[21] {
+			inst.section21Inst.beginSection()
+		}
+		return
+	}
+	inst.section00Inst.beginSection()
+	inst.section01Inst.beginSection()
+	inst.section02Inst.beginSection()
+	inst.section03Inst.beginSection()
+	inst.section04Inst.beginSection()
+	inst.section05Inst.beginSection()
+	inst.section06Inst.beginSection()
+	inst.section07Inst.beginSection()
+	inst.section08Inst.beginSection()
+	inst.section09Inst.beginSection()
+	inst.section10Inst.beginSection()
+	inst.section11Inst.beginSection()
+	inst.section12Inst.beginSection()
+	inst.section13Inst.beginSection()
+	inst.section14Inst.beginSection()
+	inst.section15Inst.beginSection()
+	inst.section16Inst.beginSection()
+	inst.section17Inst.beginSection()
+	inst.section18Inst.beginSection()
+	inst.section19Inst.beginSection()
+	inst.section20Inst.beginSection()
+	inst.section21Inst.beginSection()
+}
+func (inst *InEntityTestTable) resetSections() {
+	inst.section00Inst.resetSection()
+	inst.section01Inst.resetSection()
+	inst.section02Inst.resetSection()
+	inst.section03Inst.resetSection()
+	inst.section04Inst.resetSection()
+	inst.section05Inst.resetSection()
+	inst.section06Inst.resetSection()
+	inst.section07Inst.resetSection()
+	inst.section08Inst.resetSection()
+	inst.section09Inst.resetSection()
+	inst.section10Inst.resetSection()
+	inst.section11Inst.resetSection()
+	inst.section12Inst.resetSection()
+	inst.section13Inst.resetSection()
+	inst.section14Inst.resetSection()
+	inst.section15Inst.resetSection()
+	inst.section16Inst.resetSection()
+	inst.section17Inst.resetSection()
+	inst.section18Inst.resetSection()
+	inst.section19Inst.resetSection()
+	inst.section20Inst.resetSection()
+	inst.section21Inst.resetSection()
+}
+func (inst *InEntityTestTable) CheckErrors() (err error) {
+	err = eh.CheckErrors(inst.errs)
+	err = errors.Join(err, inst.section00Inst.CheckErrors())
+	err = errors.Join(err, inst.section01Inst.CheckErrors())
+	err = errors.Join(err, inst.section02Inst.CheckErrors())
+	err = errors.Join(err, inst.section03Inst.CheckErrors())
+	err = errors.Join(err, inst.section04Inst.CheckErrors())
+	err = errors.Join(err, inst.section05Inst.CheckErrors())
+	err = errors.Join(err, inst.section06Inst.CheckErrors())
+	err = errors.Join(err, inst.section07Inst.CheckErrors())
+	err = errors.Join(err, inst.section08Inst.CheckErrors())
+	err = errors.Join(err, inst.section09Inst.CheckErrors())
+	err = errors.Join(err, inst.section10Inst.CheckErrors())
+	err = errors.Join(err, inst.section11Inst.CheckErrors())
+	err = errors.Join(err, inst.section12Inst.CheckErrors())
+	err = errors.Join(err, inst.section13Inst.CheckErrors())
+	err = errors.Join(err, inst.section14Inst.CheckErrors())
+	err = errors.Join(err, inst.section15Inst.CheckErrors())
+	err = errors.Join(err, inst.section16Inst.CheckErrors())
+	err = errors.Join(err, inst.section17Inst.CheckErrors())
+	err = errors.Join(err, inst.section18Inst.CheckErrors())
+	err = errors.Join(err, inst.section19Inst.CheckErrors())
+	err = errors.Join(err, inst.section20Inst.CheckErrors())
+	err = errors.Join(err, inst.section21Inst.CheckErrors())
+
+	return
+}
+func (inst *InEntityTestTable) GetSectionBlobArray() *InEntityTestTableSectionBlobArray {
+	return inst.section00Inst
+}
+func (inst *InEntityTestTable) GetSectionF32Array() *InEntityTestTableSectionF32Array {
+	return inst.section01Inst
+}
+func (inst *InEntityTestTable) GetSectionF64Array() *InEntityTestTableSectionF64Array {
+	return inst.section02Inst
+}
+func (inst *InEntityTestTable) GetSectionForeignKey() *InEntityTestTableSectionForeignKey {
+	return inst.section03Inst
+}
+func (inst *InEntityTestTable) GetSectionGeoArea() *InEntityTestTableSectionGeoArea {
+	return inst.section04Inst
+}
+func (inst *InEntityTestTable) GetSectionGeoPoint() *InEntityTestTableSectionGeoPoint {
+	return inst.section05Inst
+}
+func (inst *InEntityTestTable) GetSectionI16Array() *InEntityTestTableSectionI16Array {
+	return inst.section06Inst
+}
+func (inst *InEntityTestTable) GetSectionI32Array() *InEntityTestTableSectionI32Array {
+	return inst.section07Inst
+}
+func (inst *InEntityTestTable) GetSectionI64Array() *InEntityTestTableSectionI64Array {
+	return inst.section08Inst
+}
+func (inst *InEntityTestTable) GetSectionI8Array() *InEntityTestTableSectionI8Array {
+	return inst.section09Inst
+}
+func (inst *InEntityTestTable) GetSectionStringArray() *InEntityTestTableSectionStringArray {
+	return inst.section10Inst
+}
+func (inst *InEntityTestTable) GetSectionSymbol() *InEntityTestTableSectionSymbol {
+	return inst.section11Inst
+}
+func (inst *InEntityTestTable) GetSectionSymbolArray() *InEntityTestTableSectionSymbolArray {
+	return inst.section12Inst
+}
+func (inst *InEntityTestTable) GetSectionText() *InEntityTestTableSectionText {
+	return inst.section13Inst
+}
+func (inst *InEntityTestTable) GetSectionTimeArray() *InEntityTestTableSectionTimeArray {
+	return inst.section14Inst
+}
+func (inst *InEntityTestTable) GetSectionTimeRange() *InEntityTestTableSectionTimeRange {
+	return inst.section15Inst
+}
+func (inst *InEntityTestTable) GetSectionU16Array() *InEntityTestTableSectionU16Array {
+	return inst.section16Inst
+}
+func (inst *InEntityTestTable) GetSectionU32Array() *InEntityTestTableSectionU32Array {
+	return inst.section17Inst
+}
+func (inst *InEntityTestTable) GetSectionU32Set() *InEntityTestTableSectionU32Set {
+	return inst.section18Inst
+}
+func (inst *InEntityTestTable) GetSectionU64Array() *InEntityTestTableSectionU64Array {
+	return inst.section19Inst
+}
+func (inst *InEntityTestTable) GetSectionU64Set() *InEntityTestTableSectionU64Set {
+	return inst.section20Inst
+}
+func (inst *InEntityTestTable) GetSectionU8Array() *InEntityTestTableSectionU8Array {
+	return inst.section21Inst
+}
+func (inst *InEntityTestTable) BeginEntity() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInitial:
+		inst.state = runtime.EntityStateInEntity
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+
+	inst.beginSections()
+	return inst
+}
+func (inst *InEntityTestTable) validateEntity() {
+	{
+		state := inst.section00Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "blobArray").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section01Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "f32Array").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section02Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "f64Array").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section03Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "foreignKey").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section04Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "geoArea").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section05Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "geoPoint").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section06Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "i16Array").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section07Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "i32Array").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section08Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "i64Array").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section09Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "i8Array").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section10Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "stringArray").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section11Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "symbol").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section12Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "symbolArray").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section13Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "text").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section14Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "timeArray").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section15Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "timeRange").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section16Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "u16Array").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section17Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "u32Array").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section18Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "u32Set").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section19Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "u64Array").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section20Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "u64Set").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section21Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "u8Array").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+
+	// FIXME check coSectionGroup consistency
+	return
+}
+func (inst *InEntityTestTable) CommitEntity() (err error) {
+	inst.validateEntity()
+	err = inst.CheckErrors()
+	if err != nil {
+		err = eh.Errorf("unable to commit entity, found errors: %w", err)
+		return
+	}
+	switch inst.state {
+	case runtime.EntityStateInEntity:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		err = runtime.ErrInvalidStateTransition
+		return
+	}
+
+	inst.appendPlainValues()
+	inst.resetPlainValues()
+	inst.resetSections()
+	return
+}
+func (inst *InEntityTestTable) RollbackEntity() (err error) {
+	switch inst.state {
+	case runtime.EntityStateInEntity:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		err = runtime.ErrInvalidStateTransition
+		return
+	}
+
+	inst.appendPlainValues() // arrow fields must all have one row
+	inst.resetPlainValues()
+	inst.resetSections()
+	rec := inst.builder.NewRecord()
+	if rec.NumRows() > 1 {
+		inst.records = append(inst.records, rec.NewSlice(0, rec.NumRows()-1))
+	} else {
+		// FIXME find better way to truncate builder
+		inst.builder.NewRecord().Release()
+	}
+	rec.Release()
+	return
+}
+
+// TransferRecords The returned Records must be Release()'d after use.
+func (inst *InEntityTestTable) TransferRecords(recordsIn []arrow.RecordBatch) (recordsOut []arrow.RecordBatch, err error) {
+	if inst.state != runtime.EntityStateInitial {
+		err = runtime.ErrInvalidStateTransition
+		return
+	}
+
+	recordsOut = slices.Grow(recordsIn, len(inst.records)+1)
+	copy(recordsOut, inst.records)
+	clear(inst.records)
+	inst.records = inst.records[:0]
+	rec := inst.builder.NewRecord()
+	if rec.NumRows() > 0 {
+		recordsOut = append(recordsOut, rec)
+	}
+	return
+}
+
+func (inst *InEntityTestTable) GetSchema() (schema *arrow.Schema) {
+	return inst.builder.Schema()
+}
+
+func (inst *InEntityTestTable) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTable) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionBlobArray struct {
+	errs                           []error
+	inAttr                         *InEntityTestTableSectionBlobArrayInAttr
+	state                          runtime.EntityStateE
+	parent                         *InEntityTestTable
+	homogenousArrayFieldBuilder050 *array.BinaryBuilder
+	homogenousArrayListBuilder050  *array.ListBuilder
+}
+
+func NewInEntityTestTableSectionBlobArray(builder *array.RecordBuilder, parent *InEntityTestTable) (inst *InEntityTestTableSectionBlobArray) {
+	inst = &InEntityTestTableSectionBlobArray{}
+	inAttr := NewInEntityTestTableSectionBlobArrayInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder050 = builder.Field(50).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.homogenousArrayListBuilder050 = builder.Field(50).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionBlobArray) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityTestTableSectionBlobArray) BeginAttribute() *InEntityTestTableSectionBlobArrayInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityTestTableSectionBlobArray) BeginAttributeSingle(value50 []byte) *InEntityTestTableSectionBlobArrayInAttr {
+	return inst.BeginAttribute().AddToContainer(value50)
+}
+func (inst *InEntityTestTableSectionBlobArray) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityTestTableSectionBlobArray) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityTestTableSectionBlobArray) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityTestTableSectionBlobArray) resetSection() {
+	inst.clearErrors()
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityTestTableSectionBlobArray) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionBlobArray) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionBlobArrayInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityTestTableSectionBlobArray
+	homogenousArrayFieldBuilder050        *array.BinaryBuilder
+	homogenousArrayListBuilder050         *array.ListBuilder
+	membershipFieldBuilder051             *array.Uint64Builder
+	membershipListBuilder051              *array.ListBuilder
+	membershipFieldBuilder052             *array.Uint64Builder
+	membershipListBuilder052              *array.ListBuilder
+	membershipFieldBuilder053             *array.BinaryBuilder
+	membershipListBuilder053              *array.ListBuilder
+	membershipFieldBuilder054             *array.Uint64Builder
+	membershipListBuilder054              *array.ListBuilder
+	membershipFieldBuilder055             *array.BinaryBuilder
+	membershipListBuilder055              *array.ListBuilder
+	homogenousArraySupportFieldBuilder056 *array.Uint64Builder
+	homogenousArraySupportListBuilder056  *array.ListBuilder
+	membershipSupportFieldBuilder057      *array.Uint64Builder
+	membershipSupportListBuilder057       *array.ListBuilder
+	membershipSupportFieldBuilder058      *array.Uint64Builder
+	membershipSupportListBuilder058       *array.ListBuilder
+	membershipSupportFieldBuilder059      *array.Uint64Builder
+	membershipSupportListBuilder059       *array.ListBuilder
+	membershipSupportFieldBuilder060      *array.Uint64Builder
+	membershipSupportListBuilder060       *array.ListBuilder
+
+	membershipContainerLength051 int
+
+	membershipContainerLength052 int
+
+	membershipContainerLength053 int
+
+	membershipContainerLength054 int
+
+	membershipContainerLength055 int
+
+	homogenousArrayContainerLength050 int
+}
+
+func NewInEntityTestTableSectionBlobArrayInAttr(builder *array.RecordBuilder, parent *InEntityTestTableSectionBlobArray) (inst *InEntityTestTableSectionBlobArrayInAttr) {
+	inst = &InEntityTestTableSectionBlobArrayInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder050 = builder.Field(50).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.homogenousArrayListBuilder050 = builder.Field(50).(*array.ListBuilder)
+	inst.membershipFieldBuilder051 = builder.Field(51).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder051 = builder.Field(51).(*array.ListBuilder)
+	inst.membershipFieldBuilder052 = builder.Field(52).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder052 = builder.Field(52).(*array.ListBuilder)
+	inst.membershipFieldBuilder053 = builder.Field(53).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder053 = builder.Field(53).(*array.ListBuilder)
+	inst.membershipFieldBuilder054 = builder.Field(54).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder054 = builder.Field(54).(*array.ListBuilder)
+	inst.membershipFieldBuilder055 = builder.Field(55).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder055 = builder.Field(55).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder056 = builder.Field(56).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder056 = builder.Field(56).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder057 = builder.Field(57).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder057 = builder.Field(57).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder058 = builder.Field(58).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder058 = builder.Field(58).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder059 = builder.Field(59).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder059 = builder.Field(59).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder060 = builder.Field(60).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder060 = builder.Field(60).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionBlobArrayInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder050.Append(true)
+	inst.membershipListBuilder051.Append(true)
+	inst.membershipListBuilder052.Append(true)
+	inst.membershipListBuilder053.Append(true)
+	inst.membershipListBuilder054.Append(true)
+	inst.membershipListBuilder055.Append(true)
+	inst.homogenousArrayContainerLength050 = 0
+	inst.membershipContainerLength051 = 0
+	inst.membershipContainerLength052 = 0
+	inst.membershipContainerLength053 = 0
+	inst.membershipContainerLength054 = 0
+	inst.membershipContainerLength055 = 0
+	inst.homogenousArraySupportListBuilder056.Append(true)
+	inst.membershipSupportListBuilder057.Append(true)
+	inst.membershipSupportListBuilder058.Append(true)
+	inst.membershipSupportListBuilder059.Append(true)
+	inst.membershipSupportListBuilder060.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityTestTableSectionBlobArrayInAttr) AddToContainer(value50 []byte) *InEntityTestTableSectionBlobArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.homogenousArrayFieldBuilder050.Append(value50)
+	inst.homogenousArrayContainerLength050++
+	return inst
+}
+func (inst *InEntityTestTableSectionBlobArrayInAttr) AddToContainerP(value50 []byte) {
+	inst.AddToContainer(value50)
+}
+func (inst *InEntityTestTableSectionBlobArrayInAttr) AddMembershipHighCardRef(hr51 uint64) *InEntityTestTableSectionBlobArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder051.Append(hr51)
+	inst.membershipContainerLength051++
+	return inst
+}
+func (inst *InEntityTestTableSectionBlobArrayInAttr) AddMembershipHighCardRefP(hr51 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder051.Append(hr51)
+	inst.membershipContainerLength051++
+	return
+}
+func (inst *InEntityTestTableSectionBlobArrayInAttr) AddMembershipLowCardRef(lr52 uint64) *InEntityTestTableSectionBlobArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder052.Append(lr52)
+	inst.membershipContainerLength052++
+	return inst
+}
+func (inst *InEntityTestTableSectionBlobArrayInAttr) AddMembershipLowCardRefP(lr52 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder052.Append(lr52)
+	inst.membershipContainerLength052++
+	return
+}
+func (inst *InEntityTestTableSectionBlobArrayInAttr) AddMembershipLowCardVerbatim(lv53 []byte) *InEntityTestTableSectionBlobArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder053.Append(lv53)
+	inst.membershipContainerLength053++
+	return inst
+}
+func (inst *InEntityTestTableSectionBlobArrayInAttr) AddMembershipLowCardVerbatimP(lv53 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder053.Append(lv53)
+	inst.membershipContainerLength053++
+	return
+}
+func (inst *InEntityTestTableSectionBlobArrayInAttr) AddMembershipMixedLowCardRef(lmr54 uint64, mrhp55 []byte) *InEntityTestTableSectionBlobArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder054.Append(lmr54)
+	inst.membershipFieldBuilder055.Append(mrhp55)
+	inst.membershipContainerLength054++
+	inst.membershipContainerLength055++
+	return inst
+}
+func (inst *InEntityTestTableSectionBlobArrayInAttr) AddMembershipMixedLowCardRefP(lmr54 uint64, mrhp55 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder054.Append(lmr54)
+	inst.membershipFieldBuilder055.Append(mrhp55)
+	inst.membershipContainerLength054++
+	inst.membershipContainerLength055++
+	return
+}
+func (inst *InEntityTestTableSectionBlobArrayInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength051
+	inst.membershipContainerLength051 = 0
+	inst.membershipSupportFieldBuilder057.Append(uint64(l))
+	l = inst.membershipContainerLength052
+	inst.membershipContainerLength052 = 0
+	inst.membershipSupportFieldBuilder058.Append(uint64(l))
+	l = inst.membershipContainerLength053
+	inst.membershipContainerLength053 = 0
+	inst.membershipSupportFieldBuilder059.Append(uint64(l))
+	l = inst.membershipContainerLength054
+	inst.membershipContainerLength054 = 0
+	inst.membershipSupportFieldBuilder060.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionBlobArrayInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.homogenousArrayContainerLength050
+	inst.homogenousArrayContainerLength050 = 0
+	inst.homogenousArraySupportFieldBuilder056.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionBlobArrayInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityTestTableSectionBlobArrayInAttr) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityTestTableSectionBlobArrayInAttr) EndAttribute() *InEntityTestTableSectionBlobArray {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityTestTableSectionBlobArrayInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityTestTableSectionBlobArrayInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionBlobArrayInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionF32Array struct {
+	errs                           []error
+	inAttr                         *InEntityTestTableSectionF32ArrayInAttr
+	state                          runtime.EntityStateE
+	parent                         *InEntityTestTable
+	homogenousArrayFieldBuilder182 *array.Float32Builder
+	homogenousArrayListBuilder182  *array.ListBuilder
+}
+
+func NewInEntityTestTableSectionF32Array(builder *array.RecordBuilder, parent *InEntityTestTable) (inst *InEntityTestTableSectionF32Array) {
+	inst = &InEntityTestTableSectionF32Array{}
+	inAttr := NewInEntityTestTableSectionF32ArrayInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder182 = builder.Field(182).(*array.ListBuilder).ValueBuilder().(*array.Float32Builder)
+	inst.homogenousArrayListBuilder182 = builder.Field(182).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionF32Array) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityTestTableSectionF32Array) BeginAttribute() *InEntityTestTableSectionF32ArrayInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityTestTableSectionF32Array) BeginAttributeSingle(value182 float32) *InEntityTestTableSectionF32ArrayInAttr {
+	return inst.BeginAttribute().AddToContainer(value182)
+}
+func (inst *InEntityTestTableSectionF32Array) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityTestTableSectionF32Array) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityTestTableSectionF32Array) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityTestTableSectionF32Array) resetSection() {
+	inst.clearErrors()
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityTestTableSectionF32Array) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionF32Array) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionF32ArrayInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityTestTableSectionF32Array
+	homogenousArrayFieldBuilder182        *array.Float32Builder
+	homogenousArrayListBuilder182         *array.ListBuilder
+	membershipFieldBuilder183             *array.Uint64Builder
+	membershipListBuilder183              *array.ListBuilder
+	membershipFieldBuilder184             *array.Uint64Builder
+	membershipListBuilder184              *array.ListBuilder
+	membershipFieldBuilder185             *array.BinaryBuilder
+	membershipListBuilder185              *array.ListBuilder
+	membershipFieldBuilder186             *array.Uint64Builder
+	membershipListBuilder186              *array.ListBuilder
+	membershipFieldBuilder187             *array.BinaryBuilder
+	membershipListBuilder187              *array.ListBuilder
+	homogenousArraySupportFieldBuilder188 *array.Uint64Builder
+	homogenousArraySupportListBuilder188  *array.ListBuilder
+	membershipSupportFieldBuilder189      *array.Uint64Builder
+	membershipSupportListBuilder189       *array.ListBuilder
+	membershipSupportFieldBuilder190      *array.Uint64Builder
+	membershipSupportListBuilder190       *array.ListBuilder
+	membershipSupportFieldBuilder191      *array.Uint64Builder
+	membershipSupportListBuilder191       *array.ListBuilder
+	membershipSupportFieldBuilder192      *array.Uint64Builder
+	membershipSupportListBuilder192       *array.ListBuilder
+
+	membershipContainerLength183 int
+
+	membershipContainerLength184 int
+
+	membershipContainerLength185 int
+
+	membershipContainerLength186 int
+
+	membershipContainerLength187 int
+
+	homogenousArrayContainerLength182 int
+}
+
+func NewInEntityTestTableSectionF32ArrayInAttr(builder *array.RecordBuilder, parent *InEntityTestTableSectionF32Array) (inst *InEntityTestTableSectionF32ArrayInAttr) {
+	inst = &InEntityTestTableSectionF32ArrayInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder182 = builder.Field(182).(*array.ListBuilder).ValueBuilder().(*array.Float32Builder)
+	inst.homogenousArrayListBuilder182 = builder.Field(182).(*array.ListBuilder)
+	inst.membershipFieldBuilder183 = builder.Field(183).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder183 = builder.Field(183).(*array.ListBuilder)
+	inst.membershipFieldBuilder184 = builder.Field(184).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder184 = builder.Field(184).(*array.ListBuilder)
+	inst.membershipFieldBuilder185 = builder.Field(185).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder185 = builder.Field(185).(*array.ListBuilder)
+	inst.membershipFieldBuilder186 = builder.Field(186).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder186 = builder.Field(186).(*array.ListBuilder)
+	inst.membershipFieldBuilder187 = builder.Field(187).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder187 = builder.Field(187).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder188 = builder.Field(188).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder188 = builder.Field(188).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder189 = builder.Field(189).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder189 = builder.Field(189).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder190 = builder.Field(190).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder190 = builder.Field(190).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder191 = builder.Field(191).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder191 = builder.Field(191).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder192 = builder.Field(192).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder192 = builder.Field(192).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionF32ArrayInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder182.Append(true)
+	inst.membershipListBuilder183.Append(true)
+	inst.membershipListBuilder184.Append(true)
+	inst.membershipListBuilder185.Append(true)
+	inst.membershipListBuilder186.Append(true)
+	inst.membershipListBuilder187.Append(true)
+	inst.homogenousArrayContainerLength182 = 0
+	inst.membershipContainerLength183 = 0
+	inst.membershipContainerLength184 = 0
+	inst.membershipContainerLength185 = 0
+	inst.membershipContainerLength186 = 0
+	inst.membershipContainerLength187 = 0
+	inst.homogenousArraySupportListBuilder188.Append(true)
+	inst.membershipSupportListBuilder189.Append(true)
+	inst.membershipSupportListBuilder190.Append(true)
+	inst.membershipSupportListBuilder191.Append(true)
+	inst.membershipSupportListBuilder192.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityTestTableSectionF32ArrayInAttr) AddToContainer(value182 float32) *InEntityTestTableSectionF32ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.homogenousArrayFieldBuilder182.Append(value182)
+	inst.homogenousArrayContainerLength182++
+	return inst
+}
+func (inst *InEntityTestTableSectionF32ArrayInAttr) AddToContainerP(value182 float32) {
+	inst.AddToContainer(value182)
+}
+func (inst *InEntityTestTableSectionF32ArrayInAttr) AddMembershipHighCardRef(hr183 uint64) *InEntityTestTableSectionF32ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder183.Append(hr183)
+	inst.membershipContainerLength183++
+	return inst
+}
+func (inst *InEntityTestTableSectionF32ArrayInAttr) AddMembershipHighCardRefP(hr183 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder183.Append(hr183)
+	inst.membershipContainerLength183++
+	return
+}
+func (inst *InEntityTestTableSectionF32ArrayInAttr) AddMembershipLowCardRef(lr184 uint64) *InEntityTestTableSectionF32ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder184.Append(lr184)
+	inst.membershipContainerLength184++
+	return inst
+}
+func (inst *InEntityTestTableSectionF32ArrayInAttr) AddMembershipLowCardRefP(lr184 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder184.Append(lr184)
+	inst.membershipContainerLength184++
+	return
+}
+func (inst *InEntityTestTableSectionF32ArrayInAttr) AddMembershipLowCardVerbatim(lv185 []byte) *InEntityTestTableSectionF32ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder185.Append(lv185)
+	inst.membershipContainerLength185++
+	return inst
+}
+func (inst *InEntityTestTableSectionF32ArrayInAttr) AddMembershipLowCardVerbatimP(lv185 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder185.Append(lv185)
+	inst.membershipContainerLength185++
+	return
+}
+func (inst *InEntityTestTableSectionF32ArrayInAttr) AddMembershipMixedLowCardRef(lmr186 uint64, mrhp187 []byte) *InEntityTestTableSectionF32ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder186.Append(lmr186)
+	inst.membershipFieldBuilder187.Append(mrhp187)
+	inst.membershipContainerLength186++
+	inst.membershipContainerLength187++
+	return inst
+}
+func (inst *InEntityTestTableSectionF32ArrayInAttr) AddMembershipMixedLowCardRefP(lmr186 uint64, mrhp187 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder186.Append(lmr186)
+	inst.membershipFieldBuilder187.Append(mrhp187)
+	inst.membershipContainerLength186++
+	inst.membershipContainerLength187++
+	return
+}
+func (inst *InEntityTestTableSectionF32ArrayInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength183
+	inst.membershipContainerLength183 = 0
+	inst.membershipSupportFieldBuilder189.Append(uint64(l))
+	l = inst.membershipContainerLength184
+	inst.membershipContainerLength184 = 0
+	inst.membershipSupportFieldBuilder190.Append(uint64(l))
+	l = inst.membershipContainerLength185
+	inst.membershipContainerLength185 = 0
+	inst.membershipSupportFieldBuilder191.Append(uint64(l))
+	l = inst.membershipContainerLength186
+	inst.membershipContainerLength186 = 0
+	inst.membershipSupportFieldBuilder192.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionF32ArrayInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.homogenousArrayContainerLength182
+	inst.homogenousArrayContainerLength182 = 0
+	inst.homogenousArraySupportFieldBuilder188.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionF32ArrayInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityTestTableSectionF32ArrayInAttr) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityTestTableSectionF32ArrayInAttr) EndAttribute() *InEntityTestTableSectionF32Array {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityTestTableSectionF32ArrayInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityTestTableSectionF32ArrayInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionF32ArrayInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionF64Array struct {
+	errs                           []error
+	inAttr                         *InEntityTestTableSectionF64ArrayInAttr
+	state                          runtime.EntityStateE
+	parent                         *InEntityTestTable
+	homogenousArrayFieldBuilder193 *array.Float64Builder
+	homogenousArrayListBuilder193  *array.ListBuilder
+}
+
+func NewInEntityTestTableSectionF64Array(builder *array.RecordBuilder, parent *InEntityTestTable) (inst *InEntityTestTableSectionF64Array) {
+	inst = &InEntityTestTableSectionF64Array{}
+	inAttr := NewInEntityTestTableSectionF64ArrayInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder193 = builder.Field(193).(*array.ListBuilder).ValueBuilder().(*array.Float64Builder)
+	inst.homogenousArrayListBuilder193 = builder.Field(193).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionF64Array) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityTestTableSectionF64Array) BeginAttribute() *InEntityTestTableSectionF64ArrayInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityTestTableSectionF64Array) BeginAttributeSingle(value193 float64) *InEntityTestTableSectionF64ArrayInAttr {
+	return inst.BeginAttribute().AddToContainer(value193)
+}
+func (inst *InEntityTestTableSectionF64Array) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityTestTableSectionF64Array) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityTestTableSectionF64Array) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityTestTableSectionF64Array) resetSection() {
+	inst.clearErrors()
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityTestTableSectionF64Array) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionF64Array) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionF64ArrayInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityTestTableSectionF64Array
+	homogenousArrayFieldBuilder193        *array.Float64Builder
+	homogenousArrayListBuilder193         *array.ListBuilder
+	membershipFieldBuilder194             *array.Uint64Builder
+	membershipListBuilder194              *array.ListBuilder
+	membershipFieldBuilder195             *array.Uint64Builder
+	membershipListBuilder195              *array.ListBuilder
+	membershipFieldBuilder196             *array.BinaryBuilder
+	membershipListBuilder196              *array.ListBuilder
+	membershipFieldBuilder197             *array.Uint64Builder
+	membershipListBuilder197              *array.ListBuilder
+	membershipFieldBuilder198             *array.BinaryBuilder
+	membershipListBuilder198              *array.ListBuilder
+	homogenousArraySupportFieldBuilder199 *array.Uint64Builder
+	homogenousArraySupportListBuilder199  *array.ListBuilder
+	membershipSupportFieldBuilder200      *array.Uint64Builder
+	membershipSupportListBuilder200       *array.ListBuilder
+	membershipSupportFieldBuilder201      *array.Uint64Builder
+	membershipSupportListBuilder201       *array.ListBuilder
+	membershipSupportFieldBuilder202      *array.Uint64Builder
+	membershipSupportListBuilder202       *array.ListBuilder
+	membershipSupportFieldBuilder203      *array.Uint64Builder
+	membershipSupportListBuilder203       *array.ListBuilder
+
+	membershipContainerLength194 int
+
+	membershipContainerLength195 int
+
+	membershipContainerLength196 int
+
+	membershipContainerLength197 int
+
+	membershipContainerLength198 int
+
+	homogenousArrayContainerLength193 int
+}
+
+func NewInEntityTestTableSectionF64ArrayInAttr(builder *array.RecordBuilder, parent *InEntityTestTableSectionF64Array) (inst *InEntityTestTableSectionF64ArrayInAttr) {
+	inst = &InEntityTestTableSectionF64ArrayInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder193 = builder.Field(193).(*array.ListBuilder).ValueBuilder().(*array.Float64Builder)
+	inst.homogenousArrayListBuilder193 = builder.Field(193).(*array.ListBuilder)
+	inst.membershipFieldBuilder194 = builder.Field(194).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder194 = builder.Field(194).(*array.ListBuilder)
+	inst.membershipFieldBuilder195 = builder.Field(195).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder195 = builder.Field(195).(*array.ListBuilder)
+	inst.membershipFieldBuilder196 = builder.Field(196).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder196 = builder.Field(196).(*array.ListBuilder)
+	inst.membershipFieldBuilder197 = builder.Field(197).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder197 = builder.Field(197).(*array.ListBuilder)
+	inst.membershipFieldBuilder198 = builder.Field(198).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder198 = builder.Field(198).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder199 = builder.Field(199).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder199 = builder.Field(199).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder200 = builder.Field(200).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder200 = builder.Field(200).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder201 = builder.Field(201).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder201 = builder.Field(201).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder202 = builder.Field(202).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder202 = builder.Field(202).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder203 = builder.Field(203).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder203 = builder.Field(203).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionF64ArrayInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder193.Append(true)
+	inst.membershipListBuilder194.Append(true)
+	inst.membershipListBuilder195.Append(true)
+	inst.membershipListBuilder196.Append(true)
+	inst.membershipListBuilder197.Append(true)
+	inst.membershipListBuilder198.Append(true)
+	inst.homogenousArrayContainerLength193 = 0
+	inst.membershipContainerLength194 = 0
+	inst.membershipContainerLength195 = 0
+	inst.membershipContainerLength196 = 0
+	inst.membershipContainerLength197 = 0
+	inst.membershipContainerLength198 = 0
+	inst.homogenousArraySupportListBuilder199.Append(true)
+	inst.membershipSupportListBuilder200.Append(true)
+	inst.membershipSupportListBuilder201.Append(true)
+	inst.membershipSupportListBuilder202.Append(true)
+	inst.membershipSupportListBuilder203.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityTestTableSectionF64ArrayInAttr) AddToContainer(value193 float64) *InEntityTestTableSectionF64ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.homogenousArrayFieldBuilder193.Append(value193)
+	inst.homogenousArrayContainerLength193++
+	return inst
+}
+func (inst *InEntityTestTableSectionF64ArrayInAttr) AddToContainerP(value193 float64) {
+	inst.AddToContainer(value193)
+}
+func (inst *InEntityTestTableSectionF64ArrayInAttr) AddMembershipHighCardRef(hr194 uint64) *InEntityTestTableSectionF64ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder194.Append(hr194)
+	inst.membershipContainerLength194++
+	return inst
+}
+func (inst *InEntityTestTableSectionF64ArrayInAttr) AddMembershipHighCardRefP(hr194 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder194.Append(hr194)
+	inst.membershipContainerLength194++
+	return
+}
+func (inst *InEntityTestTableSectionF64ArrayInAttr) AddMembershipLowCardRef(lr195 uint64) *InEntityTestTableSectionF64ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder195.Append(lr195)
+	inst.membershipContainerLength195++
+	return inst
+}
+func (inst *InEntityTestTableSectionF64ArrayInAttr) AddMembershipLowCardRefP(lr195 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder195.Append(lr195)
+	inst.membershipContainerLength195++
+	return
+}
+func (inst *InEntityTestTableSectionF64ArrayInAttr) AddMembershipLowCardVerbatim(lv196 []byte) *InEntityTestTableSectionF64ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder196.Append(lv196)
+	inst.membershipContainerLength196++
+	return inst
+}
+func (inst *InEntityTestTableSectionF64ArrayInAttr) AddMembershipLowCardVerbatimP(lv196 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder196.Append(lv196)
+	inst.membershipContainerLength196++
+	return
+}
+func (inst *InEntityTestTableSectionF64ArrayInAttr) AddMembershipMixedLowCardRef(lmr197 uint64, mrhp198 []byte) *InEntityTestTableSectionF64ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder197.Append(lmr197)
+	inst.membershipFieldBuilder198.Append(mrhp198)
+	inst.membershipContainerLength197++
+	inst.membershipContainerLength198++
+	return inst
+}
+func (inst *InEntityTestTableSectionF64ArrayInAttr) AddMembershipMixedLowCardRefP(lmr197 uint64, mrhp198 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder197.Append(lmr197)
+	inst.membershipFieldBuilder198.Append(mrhp198)
+	inst.membershipContainerLength197++
+	inst.membershipContainerLength198++
+	return
+}
+func (inst *InEntityTestTableSectionF64ArrayInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength194
+	inst.membershipContainerLength194 = 0
+	inst.membershipSupportFieldBuilder200.Append(uint64(l))
+	l = inst.membershipContainerLength195
+	inst.membershipContainerLength195 = 0
+	inst.membershipSupportFieldBuilder201.Append(uint64(l))
+	l = inst.membershipContainerLength196
+	inst.membershipContainerLength196 = 0
+	inst.membershipSupportFieldBuilder202.Append(uint64(l))
+	l = inst.membershipContainerLength197
+	inst.membershipContainerLength197 = 0
+	inst.membershipSupportFieldBuilder203.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionF64ArrayInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.homogenousArrayContainerLength193
+	inst.homogenousArrayContainerLength193 = 0
+	inst.homogenousArraySupportFieldBuilder199.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionF64ArrayInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityTestTableSectionF64ArrayInAttr) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityTestTableSectionF64ArrayInAttr) EndAttribute() *InEntityTestTableSectionF64Array {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityTestTableSectionF64ArrayInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityTestTableSectionF64ArrayInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionF64ArrayInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionForeignKey struct {
+	errs                  []error
+	inAttr                *InEntityTestTableSectionForeignKeyInAttr
+	state                 runtime.EntityStateE
+	parent                *InEntityTestTable
+	scalarFieldBuilder002 *array.Uint64Builder
+	scalarListBuilder002  *array.ListBuilder
+}
+
+func NewInEntityTestTableSectionForeignKey(builder *array.RecordBuilder, parent *InEntityTestTable) (inst *InEntityTestTableSectionForeignKey) {
+	inst = &InEntityTestTableSectionForeignKey{}
+	inAttr := NewInEntityTestTableSectionForeignKeyInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.scalarFieldBuilder002 = builder.Field(2).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.scalarListBuilder002 = builder.Field(2).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionForeignKey) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityTestTableSectionForeignKey) BeginAttribute(value2 uint64) *InEntityTestTableSectionForeignKeyInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+	inst.scalarFieldBuilder002.Append(value2)
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityTestTableSectionForeignKey) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityTestTableSectionForeignKey) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityTestTableSectionForeignKey) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityTestTableSectionForeignKey) resetSection() {
+	inst.clearErrors()
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityTestTableSectionForeignKey) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionForeignKey) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionForeignKeyInAttr struct {
+	errs                             []error
+	state                            runtime.EntityStateE
+	parent                           *InEntityTestTableSectionForeignKey
+	scalarFieldBuilder002            *array.Uint64Builder
+	scalarListBuilder002             *array.ListBuilder
+	membershipFieldBuilder003        *array.Uint64Builder
+	membershipListBuilder003         *array.ListBuilder
+	membershipSupportFieldBuilder004 *array.Uint64Builder
+	membershipSupportListBuilder004  *array.ListBuilder
+
+	membershipContainerLength003 int
+}
+
+func NewInEntityTestTableSectionForeignKeyInAttr(builder *array.RecordBuilder, parent *InEntityTestTableSectionForeignKey) (inst *InEntityTestTableSectionForeignKeyInAttr) {
+	inst = &InEntityTestTableSectionForeignKeyInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.scalarFieldBuilder002 = builder.Field(2).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.scalarListBuilder002 = builder.Field(2).(*array.ListBuilder)
+	inst.membershipFieldBuilder003 = builder.Field(3).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder003 = builder.Field(3).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder004 = builder.Field(4).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder004 = builder.Field(4).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionForeignKeyInAttr) beginAttribute() {
+	inst.membershipListBuilder003.Append(true)
+	inst.membershipContainerLength003 = 0
+	inst.scalarListBuilder002.Append(true)
+	inst.membershipSupportListBuilder004.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityTestTableSectionForeignKeyInAttr) AddMembershipLowCardRef(lr3 uint64) *InEntityTestTableSectionForeignKeyInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder003.Append(lr3)
+	inst.membershipContainerLength003++
+	return inst
+}
+func (inst *InEntityTestTableSectionForeignKeyInAttr) AddMembershipLowCardRefP(lr3 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder003.Append(lr3)
+	inst.membershipContainerLength003++
+	return
+}
+func (inst *InEntityTestTableSectionForeignKeyInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength003
+	inst.membershipContainerLength003 = 0
+	inst.membershipSupportFieldBuilder004.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionForeignKeyInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+}
+func (inst *InEntityTestTableSectionForeignKeyInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityTestTableSectionForeignKeyInAttr) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityTestTableSectionForeignKeyInAttr) EndAttribute() *InEntityTestTableSectionForeignKey {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityTestTableSectionForeignKeyInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityTestTableSectionForeignKeyInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionForeignKeyInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionGeoArea struct {
+	errs                           []error
+	inAttr                         *InEntityTestTableSectionGeoAreaInAttr
+	state                          runtime.EntityStateE
+	parent                         *InEntityTestTable
+	homogenousArrayFieldBuilder216 *array.Float32Builder
+	homogenousArrayListBuilder216  *array.ListBuilder
+	homogenousArrayFieldBuilder217 *array.Float32Builder
+	homogenousArrayListBuilder217  *array.ListBuilder
+	setFieldBuilder218             *array.Uint64Builder
+	setListBuilder218              *array.ListBuilder
+}
+
+func NewInEntityTestTableSectionGeoArea(builder *array.RecordBuilder, parent *InEntityTestTable) (inst *InEntityTestTableSectionGeoArea) {
+	inst = &InEntityTestTableSectionGeoArea{}
+	inAttr := NewInEntityTestTableSectionGeoAreaInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder216 = builder.Field(216).(*array.ListBuilder).ValueBuilder().(*array.Float32Builder)
+	inst.homogenousArrayListBuilder216 = builder.Field(216).(*array.ListBuilder)
+	inst.homogenousArrayFieldBuilder217 = builder.Field(217).(*array.ListBuilder).ValueBuilder().(*array.Float32Builder)
+	inst.homogenousArrayListBuilder217 = builder.Field(217).(*array.ListBuilder)
+	inst.setFieldBuilder218 = builder.Field(218).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.setListBuilder218 = builder.Field(218).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionGeoArea) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityTestTableSectionGeoArea) BeginAttribute() *InEntityTestTableSectionGeoAreaInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityTestTableSectionGeoArea) BeginAttributeSingle(polyLat216 float32, polyLng217 float32, h3218 uint64) *InEntityTestTableSectionGeoAreaInAttr {
+	return inst.BeginAttribute().AddToCoContainers(polyLat216, polyLng217, h3218)
+}
+func (inst *InEntityTestTableSectionGeoArea) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityTestTableSectionGeoArea) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityTestTableSectionGeoArea) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityTestTableSectionGeoArea) resetSection() {
+	inst.clearErrors()
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityTestTableSectionGeoArea) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionGeoArea) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionGeoAreaInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityTestTableSectionGeoArea
+	homogenousArrayFieldBuilder216        *array.Float32Builder
+	homogenousArrayListBuilder216         *array.ListBuilder
+	homogenousArrayFieldBuilder217        *array.Float32Builder
+	homogenousArrayListBuilder217         *array.ListBuilder
+	setFieldBuilder218                    *array.Uint64Builder
+	setListBuilder218                     *array.ListBuilder
+	membershipFieldBuilder219             *array.Uint64Builder
+	membershipListBuilder219              *array.ListBuilder
+	membershipFieldBuilder220             *array.Uint64Builder
+	membershipListBuilder220              *array.ListBuilder
+	membershipFieldBuilder221             *array.BinaryBuilder
+	membershipListBuilder221              *array.ListBuilder
+	membershipFieldBuilder222             *array.Uint64Builder
+	membershipListBuilder222              *array.ListBuilder
+	membershipFieldBuilder223             *array.BinaryBuilder
+	membershipListBuilder223              *array.ListBuilder
+	homogenousArraySupportFieldBuilder224 *array.Uint64Builder
+	homogenousArraySupportListBuilder224  *array.ListBuilder
+	setSupportFieldBuilder225             *array.Uint64Builder
+	setSupportListBuilder225              *array.ListBuilder
+	membershipSupportFieldBuilder226      *array.Uint64Builder
+	membershipSupportListBuilder226       *array.ListBuilder
+	membershipSupportFieldBuilder227      *array.Uint64Builder
+	membershipSupportListBuilder227       *array.ListBuilder
+	membershipSupportFieldBuilder228      *array.Uint64Builder
+	membershipSupportListBuilder228       *array.ListBuilder
+	membershipSupportFieldBuilder229      *array.Uint64Builder
+	membershipSupportListBuilder229       *array.ListBuilder
+
+	membershipContainerLength219 int
+
+	membershipContainerLength220 int
+
+	membershipContainerLength221 int
+
+	membershipContainerLength222 int
+
+	membershipContainerLength223 int
+
+	homogenousArrayContainerLength216 int
+
+	homogenousArrayContainerLength217 int
+
+	setContainerLength218 int
+}
+
+func NewInEntityTestTableSectionGeoAreaInAttr(builder *array.RecordBuilder, parent *InEntityTestTableSectionGeoArea) (inst *InEntityTestTableSectionGeoAreaInAttr) {
+	inst = &InEntityTestTableSectionGeoAreaInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder216 = builder.Field(216).(*array.ListBuilder).ValueBuilder().(*array.Float32Builder)
+	inst.homogenousArrayListBuilder216 = builder.Field(216).(*array.ListBuilder)
+	inst.homogenousArrayFieldBuilder217 = builder.Field(217).(*array.ListBuilder).ValueBuilder().(*array.Float32Builder)
+	inst.homogenousArrayListBuilder217 = builder.Field(217).(*array.ListBuilder)
+	inst.setFieldBuilder218 = builder.Field(218).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.setListBuilder218 = builder.Field(218).(*array.ListBuilder)
+	inst.membershipFieldBuilder219 = builder.Field(219).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder219 = builder.Field(219).(*array.ListBuilder)
+	inst.membershipFieldBuilder220 = builder.Field(220).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder220 = builder.Field(220).(*array.ListBuilder)
+	inst.membershipFieldBuilder221 = builder.Field(221).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder221 = builder.Field(221).(*array.ListBuilder)
+	inst.membershipFieldBuilder222 = builder.Field(222).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder222 = builder.Field(222).(*array.ListBuilder)
+	inst.membershipFieldBuilder223 = builder.Field(223).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder223 = builder.Field(223).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder224 = builder.Field(224).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder224 = builder.Field(224).(*array.ListBuilder)
+	inst.setSupportFieldBuilder225 = builder.Field(225).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.setSupportListBuilder225 = builder.Field(225).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder226 = builder.Field(226).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder226 = builder.Field(226).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder227 = builder.Field(227).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder227 = builder.Field(227).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder228 = builder.Field(228).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder228 = builder.Field(228).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder229 = builder.Field(229).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder229 = builder.Field(229).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionGeoAreaInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder216.Append(true)
+	inst.homogenousArrayListBuilder217.Append(true)
+	inst.setListBuilder218.Append(true)
+	inst.membershipListBuilder219.Append(true)
+	inst.membershipListBuilder220.Append(true)
+	inst.membershipListBuilder221.Append(true)
+	inst.membershipListBuilder222.Append(true)
+	inst.membershipListBuilder223.Append(true)
+	inst.homogenousArrayContainerLength216 = 0
+	inst.homogenousArrayContainerLength217 = 0
+	inst.setContainerLength218 = 0
+	inst.membershipContainerLength219 = 0
+	inst.membershipContainerLength220 = 0
+	inst.membershipContainerLength221 = 0
+	inst.membershipContainerLength222 = 0
+	inst.membershipContainerLength223 = 0
+	inst.homogenousArraySupportListBuilder224.Append(true)
+	inst.setSupportListBuilder225.Append(true)
+	inst.membershipSupportListBuilder226.Append(true)
+	inst.membershipSupportListBuilder227.Append(true)
+	inst.membershipSupportListBuilder228.Append(true)
+	inst.membershipSupportListBuilder229.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityTestTableSectionGeoAreaInAttr) AddToCoContainers(polyLat216 float32, polyLng217 float32, h3218 uint64) *InEntityTestTableSectionGeoAreaInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.homogenousArrayFieldBuilder216.Append(polyLat216)
+	inst.homogenousArrayContainerLength216++
+	inst.homogenousArrayFieldBuilder217.Append(polyLng217)
+	inst.homogenousArrayContainerLength217++
+	inst.setFieldBuilder218.Append(h3218)
+	inst.setContainerLength218++
+	return inst
+}
+func (inst *InEntityTestTableSectionGeoAreaInAttr) AddToCoContainersP(polyLat216 float32, polyLng217 float32, h3218 uint64) {
+	inst.AddToCoContainers(polyLat216, polyLng217, h3218)
+}
+func (inst *InEntityTestTableSectionGeoAreaInAttr) AddMembershipHighCardRef(hr219 uint64) *InEntityTestTableSectionGeoAreaInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder219.Append(hr219)
+	inst.membershipContainerLength219++
+	return inst
+}
+func (inst *InEntityTestTableSectionGeoAreaInAttr) AddMembershipHighCardRefP(hr219 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder219.Append(hr219)
+	inst.membershipContainerLength219++
+	return
+}
+func (inst *InEntityTestTableSectionGeoAreaInAttr) AddMembershipLowCardRef(lr220 uint64) *InEntityTestTableSectionGeoAreaInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder220.Append(lr220)
+	inst.membershipContainerLength220++
+	return inst
+}
+func (inst *InEntityTestTableSectionGeoAreaInAttr) AddMembershipLowCardRefP(lr220 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder220.Append(lr220)
+	inst.membershipContainerLength220++
+	return
+}
+func (inst *InEntityTestTableSectionGeoAreaInAttr) AddMembershipLowCardVerbatim(lv221 []byte) *InEntityTestTableSectionGeoAreaInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder221.Append(lv221)
+	inst.membershipContainerLength221++
+	return inst
+}
+func (inst *InEntityTestTableSectionGeoAreaInAttr) AddMembershipLowCardVerbatimP(lv221 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder221.Append(lv221)
+	inst.membershipContainerLength221++
+	return
+}
+func (inst *InEntityTestTableSectionGeoAreaInAttr) AddMembershipMixedLowCardRef(lmr222 uint64, mrhp223 []byte) *InEntityTestTableSectionGeoAreaInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder222.Append(lmr222)
+	inst.membershipFieldBuilder223.Append(mrhp223)
+	inst.membershipContainerLength222++
+	inst.membershipContainerLength223++
+	return inst
+}
+func (inst *InEntityTestTableSectionGeoAreaInAttr) AddMembershipMixedLowCardRefP(lmr222 uint64, mrhp223 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder222.Append(lmr222)
+	inst.membershipFieldBuilder223.Append(mrhp223)
+	inst.membershipContainerLength222++
+	inst.membershipContainerLength223++
+	return
+}
+func (inst *InEntityTestTableSectionGeoAreaInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength219
+	inst.membershipContainerLength219 = 0
+	inst.membershipSupportFieldBuilder226.Append(uint64(l))
+	l = inst.membershipContainerLength220
+	inst.membershipContainerLength220 = 0
+	inst.membershipSupportFieldBuilder227.Append(uint64(l))
+	l = inst.membershipContainerLength221
+	inst.membershipContainerLength221 = 0
+	inst.membershipSupportFieldBuilder228.Append(uint64(l))
+	l = inst.membershipContainerLength222
+	inst.membershipContainerLength222 = 0
+	inst.membershipSupportFieldBuilder229.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionGeoAreaInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.homogenousArrayContainerLength216
+	inst.homogenousArrayContainerLength216 = 0
+	inst.homogenousArraySupportFieldBuilder224.Append(uint64(l))
+	l = inst.setContainerLength218
+	inst.setContainerLength218 = 0
+	inst.setSupportFieldBuilder225.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionGeoAreaInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityTestTableSectionGeoAreaInAttr) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityTestTableSectionGeoAreaInAttr) EndAttribute() *InEntityTestTableSectionGeoArea {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityTestTableSectionGeoAreaInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityTestTableSectionGeoAreaInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionGeoAreaInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionGeoPoint struct {
+	errs                  []error
+	inAttr                *InEntityTestTableSectionGeoPointInAttr
+	state                 runtime.EntityStateE
+	parent                *InEntityTestTable
+	scalarFieldBuilder204 *array.Float32Builder
+	scalarListBuilder204  *array.ListBuilder
+	scalarFieldBuilder205 *array.Float32Builder
+	scalarListBuilder205  *array.ListBuilder
+	scalarFieldBuilder206 *array.Uint64Builder
+	scalarListBuilder206  *array.ListBuilder
+}
+
+func NewInEntityTestTableSectionGeoPoint(builder *array.RecordBuilder, parent *InEntityTestTable) (inst *InEntityTestTableSectionGeoPoint) {
+	inst = &InEntityTestTableSectionGeoPoint{}
+	inAttr := NewInEntityTestTableSectionGeoPointInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.scalarFieldBuilder204 = builder.Field(204).(*array.ListBuilder).ValueBuilder().(*array.Float32Builder)
+	inst.scalarListBuilder204 = builder.Field(204).(*array.ListBuilder)
+	inst.scalarFieldBuilder205 = builder.Field(205).(*array.ListBuilder).ValueBuilder().(*array.Float32Builder)
+	inst.scalarListBuilder205 = builder.Field(205).(*array.ListBuilder)
+	inst.scalarFieldBuilder206 = builder.Field(206).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.scalarListBuilder206 = builder.Field(206).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionGeoPoint) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityTestTableSectionGeoPoint) BeginAttribute(pointLat204 float32, pointLng205 float32, h3206 uint64) *InEntityTestTableSectionGeoPointInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+	inst.scalarFieldBuilder204.Append(pointLat204)
+	inst.scalarFieldBuilder205.Append(pointLng205)
+	inst.scalarFieldBuilder206.Append(h3206)
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityTestTableSectionGeoPoint) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityTestTableSectionGeoPoint) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityTestTableSectionGeoPoint) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityTestTableSectionGeoPoint) resetSection() {
+	inst.clearErrors()
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityTestTableSectionGeoPoint) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionGeoPoint) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionGeoPointInAttr struct {
+	errs                             []error
+	state                            runtime.EntityStateE
+	parent                           *InEntityTestTableSectionGeoPoint
+	scalarFieldBuilder204            *array.Float32Builder
+	scalarListBuilder204             *array.ListBuilder
+	scalarFieldBuilder205            *array.Float32Builder
+	scalarListBuilder205             *array.ListBuilder
+	scalarFieldBuilder206            *array.Uint64Builder
+	scalarListBuilder206             *array.ListBuilder
+	membershipFieldBuilder207        *array.Uint64Builder
+	membershipListBuilder207         *array.ListBuilder
+	membershipFieldBuilder208        *array.Uint64Builder
+	membershipListBuilder208         *array.ListBuilder
+	membershipFieldBuilder209        *array.BinaryBuilder
+	membershipListBuilder209         *array.ListBuilder
+	membershipFieldBuilder210        *array.Uint64Builder
+	membershipListBuilder210         *array.ListBuilder
+	membershipFieldBuilder211        *array.BinaryBuilder
+	membershipListBuilder211         *array.ListBuilder
+	membershipSupportFieldBuilder212 *array.Uint64Builder
+	membershipSupportListBuilder212  *array.ListBuilder
+	membershipSupportFieldBuilder213 *array.Uint64Builder
+	membershipSupportListBuilder213  *array.ListBuilder
+	membershipSupportFieldBuilder214 *array.Uint64Builder
+	membershipSupportListBuilder214  *array.ListBuilder
+	membershipSupportFieldBuilder215 *array.Uint64Builder
+	membershipSupportListBuilder215  *array.ListBuilder
+
+	membershipContainerLength207 int
+
+	membershipContainerLength208 int
+
+	membershipContainerLength209 int
+
+	membershipContainerLength210 int
+
+	membershipContainerLength211 int
+}
+
+func NewInEntityTestTableSectionGeoPointInAttr(builder *array.RecordBuilder, parent *InEntityTestTableSectionGeoPoint) (inst *InEntityTestTableSectionGeoPointInAttr) {
+	inst = &InEntityTestTableSectionGeoPointInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.scalarFieldBuilder204 = builder.Field(204).(*array.ListBuilder).ValueBuilder().(*array.Float32Builder)
+	inst.scalarListBuilder204 = builder.Field(204).(*array.ListBuilder)
+	inst.scalarFieldBuilder205 = builder.Field(205).(*array.ListBuilder).ValueBuilder().(*array.Float32Builder)
+	inst.scalarListBuilder205 = builder.Field(205).(*array.ListBuilder)
+	inst.scalarFieldBuilder206 = builder.Field(206).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.scalarListBuilder206 = builder.Field(206).(*array.ListBuilder)
+	inst.membershipFieldBuilder207 = builder.Field(207).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder207 = builder.Field(207).(*array.ListBuilder)
+	inst.membershipFieldBuilder208 = builder.Field(208).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder208 = builder.Field(208).(*array.ListBuilder)
+	inst.membershipFieldBuilder209 = builder.Field(209).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder209 = builder.Field(209).(*array.ListBuilder)
+	inst.membershipFieldBuilder210 = builder.Field(210).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder210 = builder.Field(210).(*array.ListBuilder)
+	inst.membershipFieldBuilder211 = builder.Field(211).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder211 = builder.Field(211).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder212 = builder.Field(212).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder212 = builder.Field(212).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder213 = builder.Field(213).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder213 = builder.Field(213).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder214 = builder.Field(214).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder214 = builder.Field(214).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder215 = builder.Field(215).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder215 = builder.Field(215).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionGeoPointInAttr) beginAttribute() {
+	inst.membershipListBuilder207.Append(true)
+	inst.membershipListBuilder208.Append(true)
+	inst.membershipListBuilder209.Append(true)
+	inst.membershipListBuilder210.Append(true)
+	inst.membershipListBuilder211.Append(true)
+	inst.membershipContainerLength207 = 0
+	inst.membershipContainerLength208 = 0
+	inst.membershipContainerLength209 = 0
+	inst.membershipContainerLength210 = 0
+	inst.membershipContainerLength211 = 0
+	inst.scalarListBuilder204.Append(true)
+	inst.scalarListBuilder205.Append(true)
+	inst.scalarListBuilder206.Append(true)
+	inst.membershipSupportListBuilder212.Append(true)
+	inst.membershipSupportListBuilder213.Append(true)
+	inst.membershipSupportListBuilder214.Append(true)
+	inst.membershipSupportListBuilder215.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityTestTableSectionGeoPointInAttr) AddMembershipHighCardRef(hr207 uint64) *InEntityTestTableSectionGeoPointInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder207.Append(hr207)
+	inst.membershipContainerLength207++
+	return inst
+}
+func (inst *InEntityTestTableSectionGeoPointInAttr) AddMembershipHighCardRefP(hr207 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder207.Append(hr207)
+	inst.membershipContainerLength207++
+	return
+}
+func (inst *InEntityTestTableSectionGeoPointInAttr) AddMembershipLowCardRef(lr208 uint64) *InEntityTestTableSectionGeoPointInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder208.Append(lr208)
+	inst.membershipContainerLength208++
+	return inst
+}
+func (inst *InEntityTestTableSectionGeoPointInAttr) AddMembershipLowCardRefP(lr208 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder208.Append(lr208)
+	inst.membershipContainerLength208++
+	return
+}
+func (inst *InEntityTestTableSectionGeoPointInAttr) AddMembershipLowCardVerbatim(lv209 []byte) *InEntityTestTableSectionGeoPointInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder209.Append(lv209)
+	inst.membershipContainerLength209++
+	return inst
+}
+func (inst *InEntityTestTableSectionGeoPointInAttr) AddMembershipLowCardVerbatimP(lv209 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder209.Append(lv209)
+	inst.membershipContainerLength209++
+	return
+}
+func (inst *InEntityTestTableSectionGeoPointInAttr) AddMembershipMixedLowCardRef(lmr210 uint64, mrhp211 []byte) *InEntityTestTableSectionGeoPointInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder210.Append(lmr210)
+	inst.membershipFieldBuilder211.Append(mrhp211)
+	inst.membershipContainerLength210++
+	inst.membershipContainerLength211++
+	return inst
+}
+func (inst *InEntityTestTableSectionGeoPointInAttr) AddMembershipMixedLowCardRefP(lmr210 uint64, mrhp211 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder210.Append(lmr210)
+	inst.membershipFieldBuilder211.Append(mrhp211)
+	inst.membershipContainerLength210++
+	inst.membershipContainerLength211++
+	return
+}
+func (inst *InEntityTestTableSectionGeoPointInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength207
+	inst.membershipContainerLength207 = 0
+	inst.membershipSupportFieldBuilder212.Append(uint64(l))
+	l = inst.membershipContainerLength208
+	inst.membershipContainerLength208 = 0
+	inst.membershipSupportFieldBuilder213.Append(uint64(l))
+	l = inst.membershipContainerLength209
+	inst.membershipContainerLength209 = 0
+	inst.membershipSupportFieldBuilder214.Append(uint64(l))
+	l = inst.membershipContainerLength210
+	inst.membershipContainerLength210 = 0
+	inst.membershipSupportFieldBuilder215.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionGeoPointInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+}
+func (inst *InEntityTestTableSectionGeoPointInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityTestTableSectionGeoPointInAttr) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityTestTableSectionGeoPointInAttr) EndAttribute() *InEntityTestTableSectionGeoPoint {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityTestTableSectionGeoPointInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityTestTableSectionGeoPointInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionGeoPointInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionI16Array struct {
+	errs                           []error
+	inAttr                         *InEntityTestTableSectionI16ArrayInAttr
+	state                          runtime.EntityStateE
+	parent                         *InEntityTestTable
+	homogenousArrayFieldBuilder138 *array.Int16Builder
+	homogenousArrayListBuilder138  *array.ListBuilder
+}
+
+func NewInEntityTestTableSectionI16Array(builder *array.RecordBuilder, parent *InEntityTestTable) (inst *InEntityTestTableSectionI16Array) {
+	inst = &InEntityTestTableSectionI16Array{}
+	inAttr := NewInEntityTestTableSectionI16ArrayInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder138 = builder.Field(138).(*array.ListBuilder).ValueBuilder().(*array.Int16Builder)
+	inst.homogenousArrayListBuilder138 = builder.Field(138).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionI16Array) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityTestTableSectionI16Array) BeginAttribute() *InEntityTestTableSectionI16ArrayInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityTestTableSectionI16Array) BeginAttributeSingle(value138 int16) *InEntityTestTableSectionI16ArrayInAttr {
+	return inst.BeginAttribute().AddToContainer(value138)
+}
+func (inst *InEntityTestTableSectionI16Array) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityTestTableSectionI16Array) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityTestTableSectionI16Array) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityTestTableSectionI16Array) resetSection() {
+	inst.clearErrors()
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityTestTableSectionI16Array) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionI16Array) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionI16ArrayInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityTestTableSectionI16Array
+	homogenousArrayFieldBuilder138        *array.Int16Builder
+	homogenousArrayListBuilder138         *array.ListBuilder
+	membershipFieldBuilder139             *array.Uint64Builder
+	membershipListBuilder139              *array.ListBuilder
+	membershipFieldBuilder140             *array.Uint64Builder
+	membershipListBuilder140              *array.ListBuilder
+	membershipFieldBuilder141             *array.BinaryBuilder
+	membershipListBuilder141              *array.ListBuilder
+	membershipFieldBuilder142             *array.Uint64Builder
+	membershipListBuilder142              *array.ListBuilder
+	membershipFieldBuilder143             *array.BinaryBuilder
+	membershipListBuilder143              *array.ListBuilder
+	homogenousArraySupportFieldBuilder144 *array.Uint64Builder
+	homogenousArraySupportListBuilder144  *array.ListBuilder
+	membershipSupportFieldBuilder145      *array.Uint64Builder
+	membershipSupportListBuilder145       *array.ListBuilder
+	membershipSupportFieldBuilder146      *array.Uint64Builder
+	membershipSupportListBuilder146       *array.ListBuilder
+	membershipSupportFieldBuilder147      *array.Uint64Builder
+	membershipSupportListBuilder147       *array.ListBuilder
+	membershipSupportFieldBuilder148      *array.Uint64Builder
+	membershipSupportListBuilder148       *array.ListBuilder
+
+	membershipContainerLength139 int
+
+	membershipContainerLength140 int
+
+	membershipContainerLength141 int
+
+	membershipContainerLength142 int
+
+	membershipContainerLength143 int
+
+	homogenousArrayContainerLength138 int
+}
+
+func NewInEntityTestTableSectionI16ArrayInAttr(builder *array.RecordBuilder, parent *InEntityTestTableSectionI16Array) (inst *InEntityTestTableSectionI16ArrayInAttr) {
+	inst = &InEntityTestTableSectionI16ArrayInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder138 = builder.Field(138).(*array.ListBuilder).ValueBuilder().(*array.Int16Builder)
+	inst.homogenousArrayListBuilder138 = builder.Field(138).(*array.ListBuilder)
+	inst.membershipFieldBuilder139 = builder.Field(139).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder139 = builder.Field(139).(*array.ListBuilder)
+	inst.membershipFieldBuilder140 = builder.Field(140).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder140 = builder.Field(140).(*array.ListBuilder)
+	inst.membershipFieldBuilder141 = builder.Field(141).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder141 = builder.Field(141).(*array.ListBuilder)
+	inst.membershipFieldBuilder142 = builder.Field(142).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder142 = builder.Field(142).(*array.ListBuilder)
+	inst.membershipFieldBuilder143 = builder.Field(143).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder143 = builder.Field(143).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder144 = builder.Field(144).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder144 = builder.Field(144).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder145 = builder.Field(145).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder145 = builder.Field(145).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder146 = builder.Field(146).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder146 = builder.Field(146).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder147 = builder.Field(147).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder147 = builder.Field(147).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder148 = builder.Field(148).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder148 = builder.Field(148).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionI16ArrayInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder138.Append(true)
+	inst.membershipListBuilder139.Append(true)
+	inst.membershipListBuilder140.Append(true)
+	inst.membershipListBuilder141.Append(true)
+	inst.membershipListBuilder142.Append(true)
+	inst.membershipListBuilder143.Append(true)
+	inst.homogenousArrayContainerLength138 = 0
+	inst.membershipContainerLength139 = 0
+	inst.membershipContainerLength140 = 0
+	inst.membershipContainerLength141 = 0
+	inst.membershipContainerLength142 = 0
+	inst.membershipContainerLength143 = 0
+	inst.homogenousArraySupportListBuilder144.Append(true)
+	inst.membershipSupportListBuilder145.Append(true)
+	inst.membershipSupportListBuilder146.Append(true)
+	inst.membershipSupportListBuilder147.Append(true)
+	inst.membershipSupportListBuilder148.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityTestTableSectionI16ArrayInAttr) AddToContainer(value138 int16) *InEntityTestTableSectionI16ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.homogenousArrayFieldBuilder138.Append(value138)
+	inst.homogenousArrayContainerLength138++
+	return inst
+}
+func (inst *InEntityTestTableSectionI16ArrayInAttr) AddToContainerP(value138 int16) {
+	inst.AddToContainer(value138)
+}
+func (inst *InEntityTestTableSectionI16ArrayInAttr) AddMembershipHighCardRef(hr139 uint64) *InEntityTestTableSectionI16ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder139.Append(hr139)
+	inst.membershipContainerLength139++
+	return inst
+}
+func (inst *InEntityTestTableSectionI16ArrayInAttr) AddMembershipHighCardRefP(hr139 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder139.Append(hr139)
+	inst.membershipContainerLength139++
+	return
+}
+func (inst *InEntityTestTableSectionI16ArrayInAttr) AddMembershipLowCardRef(lr140 uint64) *InEntityTestTableSectionI16ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder140.Append(lr140)
+	inst.membershipContainerLength140++
+	return inst
+}
+func (inst *InEntityTestTableSectionI16ArrayInAttr) AddMembershipLowCardRefP(lr140 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder140.Append(lr140)
+	inst.membershipContainerLength140++
+	return
+}
+func (inst *InEntityTestTableSectionI16ArrayInAttr) AddMembershipLowCardVerbatim(lv141 []byte) *InEntityTestTableSectionI16ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder141.Append(lv141)
+	inst.membershipContainerLength141++
+	return inst
+}
+func (inst *InEntityTestTableSectionI16ArrayInAttr) AddMembershipLowCardVerbatimP(lv141 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder141.Append(lv141)
+	inst.membershipContainerLength141++
+	return
+}
+func (inst *InEntityTestTableSectionI16ArrayInAttr) AddMembershipMixedLowCardRef(lmr142 uint64, mrhp143 []byte) *InEntityTestTableSectionI16ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder142.Append(lmr142)
+	inst.membershipFieldBuilder143.Append(mrhp143)
+	inst.membershipContainerLength142++
+	inst.membershipContainerLength143++
+	return inst
+}
+func (inst *InEntityTestTableSectionI16ArrayInAttr) AddMembershipMixedLowCardRefP(lmr142 uint64, mrhp143 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder142.Append(lmr142)
+	inst.membershipFieldBuilder143.Append(mrhp143)
+	inst.membershipContainerLength142++
+	inst.membershipContainerLength143++
+	return
+}
+func (inst *InEntityTestTableSectionI16ArrayInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength139
+	inst.membershipContainerLength139 = 0
+	inst.membershipSupportFieldBuilder145.Append(uint64(l))
+	l = inst.membershipContainerLength140
+	inst.membershipContainerLength140 = 0
+	inst.membershipSupportFieldBuilder146.Append(uint64(l))
+	l = inst.membershipContainerLength141
+	inst.membershipContainerLength141 = 0
+	inst.membershipSupportFieldBuilder147.Append(uint64(l))
+	l = inst.membershipContainerLength142
+	inst.membershipContainerLength142 = 0
+	inst.membershipSupportFieldBuilder148.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionI16ArrayInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.homogenousArrayContainerLength138
+	inst.homogenousArrayContainerLength138 = 0
+	inst.homogenousArraySupportFieldBuilder144.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionI16ArrayInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityTestTableSectionI16ArrayInAttr) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityTestTableSectionI16ArrayInAttr) EndAttribute() *InEntityTestTableSectionI16Array {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityTestTableSectionI16ArrayInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityTestTableSectionI16ArrayInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionI16ArrayInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionI32Array struct {
+	errs                           []error
+	inAttr                         *InEntityTestTableSectionI32ArrayInAttr
+	state                          runtime.EntityStateE
+	parent                         *InEntityTestTable
+	homogenousArrayFieldBuilder149 *array.Int32Builder
+	homogenousArrayListBuilder149  *array.ListBuilder
+}
+
+func NewInEntityTestTableSectionI32Array(builder *array.RecordBuilder, parent *InEntityTestTable) (inst *InEntityTestTableSectionI32Array) {
+	inst = &InEntityTestTableSectionI32Array{}
+	inAttr := NewInEntityTestTableSectionI32ArrayInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder149 = builder.Field(149).(*array.ListBuilder).ValueBuilder().(*array.Int32Builder)
+	inst.homogenousArrayListBuilder149 = builder.Field(149).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionI32Array) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityTestTableSectionI32Array) BeginAttribute() *InEntityTestTableSectionI32ArrayInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityTestTableSectionI32Array) BeginAttributeSingle(value149 int32) *InEntityTestTableSectionI32ArrayInAttr {
+	return inst.BeginAttribute().AddToContainer(value149)
+}
+func (inst *InEntityTestTableSectionI32Array) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityTestTableSectionI32Array) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityTestTableSectionI32Array) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityTestTableSectionI32Array) resetSection() {
+	inst.clearErrors()
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityTestTableSectionI32Array) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionI32Array) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionI32ArrayInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityTestTableSectionI32Array
+	homogenousArrayFieldBuilder149        *array.Int32Builder
+	homogenousArrayListBuilder149         *array.ListBuilder
+	membershipFieldBuilder150             *array.Uint64Builder
+	membershipListBuilder150              *array.ListBuilder
+	membershipFieldBuilder151             *array.Uint64Builder
+	membershipListBuilder151              *array.ListBuilder
+	membershipFieldBuilder152             *array.BinaryBuilder
+	membershipListBuilder152              *array.ListBuilder
+	membershipFieldBuilder153             *array.Uint64Builder
+	membershipListBuilder153              *array.ListBuilder
+	membershipFieldBuilder154             *array.BinaryBuilder
+	membershipListBuilder154              *array.ListBuilder
+	homogenousArraySupportFieldBuilder155 *array.Uint64Builder
+	homogenousArraySupportListBuilder155  *array.ListBuilder
+	membershipSupportFieldBuilder156      *array.Uint64Builder
+	membershipSupportListBuilder156       *array.ListBuilder
+	membershipSupportFieldBuilder157      *array.Uint64Builder
+	membershipSupportListBuilder157       *array.ListBuilder
+	membershipSupportFieldBuilder158      *array.Uint64Builder
+	membershipSupportListBuilder158       *array.ListBuilder
+	membershipSupportFieldBuilder159      *array.Uint64Builder
+	membershipSupportListBuilder159       *array.ListBuilder
+
+	membershipContainerLength150 int
+
+	membershipContainerLength151 int
+
+	membershipContainerLength152 int
+
+	membershipContainerLength153 int
+
+	membershipContainerLength154 int
+
+	homogenousArrayContainerLength149 int
+}
+
+func NewInEntityTestTableSectionI32ArrayInAttr(builder *array.RecordBuilder, parent *InEntityTestTableSectionI32Array) (inst *InEntityTestTableSectionI32ArrayInAttr) {
+	inst = &InEntityTestTableSectionI32ArrayInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder149 = builder.Field(149).(*array.ListBuilder).ValueBuilder().(*array.Int32Builder)
+	inst.homogenousArrayListBuilder149 = builder.Field(149).(*array.ListBuilder)
+	inst.membershipFieldBuilder150 = builder.Field(150).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder150 = builder.Field(150).(*array.ListBuilder)
+	inst.membershipFieldBuilder151 = builder.Field(151).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder151 = builder.Field(151).(*array.ListBuilder)
+	inst.membershipFieldBuilder152 = builder.Field(152).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder152 = builder.Field(152).(*array.ListBuilder)
+	inst.membershipFieldBuilder153 = builder.Field(153).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder153 = builder.Field(153).(*array.ListBuilder)
+	inst.membershipFieldBuilder154 = builder.Field(154).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder154 = builder.Field(154).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder155 = builder.Field(155).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder155 = builder.Field(155).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder156 = builder.Field(156).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder156 = builder.Field(156).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder157 = builder.Field(157).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder157 = builder.Field(157).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder158 = builder.Field(158).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder158 = builder.Field(158).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder159 = builder.Field(159).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder159 = builder.Field(159).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionI32ArrayInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder149.Append(true)
+	inst.membershipListBuilder150.Append(true)
+	inst.membershipListBuilder151.Append(true)
+	inst.membershipListBuilder152.Append(true)
+	inst.membershipListBuilder153.Append(true)
+	inst.membershipListBuilder154.Append(true)
+	inst.homogenousArrayContainerLength149 = 0
+	inst.membershipContainerLength150 = 0
+	inst.membershipContainerLength151 = 0
+	inst.membershipContainerLength152 = 0
+	inst.membershipContainerLength153 = 0
+	inst.membershipContainerLength154 = 0
+	inst.homogenousArraySupportListBuilder155.Append(true)
+	inst.membershipSupportListBuilder156.Append(true)
+	inst.membershipSupportListBuilder157.Append(true)
+	inst.membershipSupportListBuilder158.Append(true)
+	inst.membershipSupportListBuilder159.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityTestTableSectionI32ArrayInAttr) AddToContainer(value149 int32) *InEntityTestTableSectionI32ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.homogenousArrayFieldBuilder149.Append(value149)
+	inst.homogenousArrayContainerLength149++
+	return inst
+}
+func (inst *InEntityTestTableSectionI32ArrayInAttr) AddToContainerP(value149 int32) {
+	inst.AddToContainer(value149)
+}
+func (inst *InEntityTestTableSectionI32ArrayInAttr) AddMembershipHighCardRef(hr150 uint64) *InEntityTestTableSectionI32ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder150.Append(hr150)
+	inst.membershipContainerLength150++
+	return inst
+}
+func (inst *InEntityTestTableSectionI32ArrayInAttr) AddMembershipHighCardRefP(hr150 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder150.Append(hr150)
+	inst.membershipContainerLength150++
+	return
+}
+func (inst *InEntityTestTableSectionI32ArrayInAttr) AddMembershipLowCardRef(lr151 uint64) *InEntityTestTableSectionI32ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder151.Append(lr151)
+	inst.membershipContainerLength151++
+	return inst
+}
+func (inst *InEntityTestTableSectionI32ArrayInAttr) AddMembershipLowCardRefP(lr151 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder151.Append(lr151)
+	inst.membershipContainerLength151++
+	return
+}
+func (inst *InEntityTestTableSectionI32ArrayInAttr) AddMembershipLowCardVerbatim(lv152 []byte) *InEntityTestTableSectionI32ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder152.Append(lv152)
+	inst.membershipContainerLength152++
+	return inst
+}
+func (inst *InEntityTestTableSectionI32ArrayInAttr) AddMembershipLowCardVerbatimP(lv152 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder152.Append(lv152)
+	inst.membershipContainerLength152++
+	return
+}
+func (inst *InEntityTestTableSectionI32ArrayInAttr) AddMembershipMixedLowCardRef(lmr153 uint64, mrhp154 []byte) *InEntityTestTableSectionI32ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder153.Append(lmr153)
+	inst.membershipFieldBuilder154.Append(mrhp154)
+	inst.membershipContainerLength153++
+	inst.membershipContainerLength154++
+	return inst
+}
+func (inst *InEntityTestTableSectionI32ArrayInAttr) AddMembershipMixedLowCardRefP(lmr153 uint64, mrhp154 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder153.Append(lmr153)
+	inst.membershipFieldBuilder154.Append(mrhp154)
+	inst.membershipContainerLength153++
+	inst.membershipContainerLength154++
+	return
+}
+func (inst *InEntityTestTableSectionI32ArrayInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength150
+	inst.membershipContainerLength150 = 0
+	inst.membershipSupportFieldBuilder156.Append(uint64(l))
+	l = inst.membershipContainerLength151
+	inst.membershipContainerLength151 = 0
+	inst.membershipSupportFieldBuilder157.Append(uint64(l))
+	l = inst.membershipContainerLength152
+	inst.membershipContainerLength152 = 0
+	inst.membershipSupportFieldBuilder158.Append(uint64(l))
+	l = inst.membershipContainerLength153
+	inst.membershipContainerLength153 = 0
+	inst.membershipSupportFieldBuilder159.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionI32ArrayInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.homogenousArrayContainerLength149
+	inst.homogenousArrayContainerLength149 = 0
+	inst.homogenousArraySupportFieldBuilder155.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionI32ArrayInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityTestTableSectionI32ArrayInAttr) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityTestTableSectionI32ArrayInAttr) EndAttribute() *InEntityTestTableSectionI32Array {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityTestTableSectionI32ArrayInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityTestTableSectionI32ArrayInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionI32ArrayInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionI64Array struct {
+	errs                           []error
+	inAttr                         *InEntityTestTableSectionI64ArrayInAttr
+	state                          runtime.EntityStateE
+	parent                         *InEntityTestTable
+	homogenousArrayFieldBuilder160 *array.Int64Builder
+	homogenousArrayListBuilder160  *array.ListBuilder
+}
+
+func NewInEntityTestTableSectionI64Array(builder *array.RecordBuilder, parent *InEntityTestTable) (inst *InEntityTestTableSectionI64Array) {
+	inst = &InEntityTestTableSectionI64Array{}
+	inAttr := NewInEntityTestTableSectionI64ArrayInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder160 = builder.Field(160).(*array.ListBuilder).ValueBuilder().(*array.Int64Builder)
+	inst.homogenousArrayListBuilder160 = builder.Field(160).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionI64Array) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityTestTableSectionI64Array) BeginAttribute() *InEntityTestTableSectionI64ArrayInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityTestTableSectionI64Array) BeginAttributeSingle(value160 int64) *InEntityTestTableSectionI64ArrayInAttr {
+	return inst.BeginAttribute().AddToContainer(value160)
+}
+func (inst *InEntityTestTableSectionI64Array) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityTestTableSectionI64Array) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityTestTableSectionI64Array) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityTestTableSectionI64Array) resetSection() {
+	inst.clearErrors()
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityTestTableSectionI64Array) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionI64Array) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionI64ArrayInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityTestTableSectionI64Array
+	homogenousArrayFieldBuilder160        *array.Int64Builder
+	homogenousArrayListBuilder160         *array.ListBuilder
+	membershipFieldBuilder161             *array.Uint64Builder
+	membershipListBuilder161              *array.ListBuilder
+	membershipFieldBuilder162             *array.Uint64Builder
+	membershipListBuilder162              *array.ListBuilder
+	membershipFieldBuilder163             *array.BinaryBuilder
+	membershipListBuilder163              *array.ListBuilder
+	membershipFieldBuilder164             *array.Uint64Builder
+	membershipListBuilder164              *array.ListBuilder
+	membershipFieldBuilder165             *array.BinaryBuilder
+	membershipListBuilder165              *array.ListBuilder
+	homogenousArraySupportFieldBuilder166 *array.Uint64Builder
+	homogenousArraySupportListBuilder166  *array.ListBuilder
+	membershipSupportFieldBuilder167      *array.Uint64Builder
+	membershipSupportListBuilder167       *array.ListBuilder
+	membershipSupportFieldBuilder168      *array.Uint64Builder
+	membershipSupportListBuilder168       *array.ListBuilder
+	membershipSupportFieldBuilder169      *array.Uint64Builder
+	membershipSupportListBuilder169       *array.ListBuilder
+	membershipSupportFieldBuilder170      *array.Uint64Builder
+	membershipSupportListBuilder170       *array.ListBuilder
+
+	membershipContainerLength161 int
+
+	membershipContainerLength162 int
+
+	membershipContainerLength163 int
+
+	membershipContainerLength164 int
+
+	membershipContainerLength165 int
+
+	homogenousArrayContainerLength160 int
+}
+
+func NewInEntityTestTableSectionI64ArrayInAttr(builder *array.RecordBuilder, parent *InEntityTestTableSectionI64Array) (inst *InEntityTestTableSectionI64ArrayInAttr) {
+	inst = &InEntityTestTableSectionI64ArrayInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder160 = builder.Field(160).(*array.ListBuilder).ValueBuilder().(*array.Int64Builder)
+	inst.homogenousArrayListBuilder160 = builder.Field(160).(*array.ListBuilder)
+	inst.membershipFieldBuilder161 = builder.Field(161).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder161 = builder.Field(161).(*array.ListBuilder)
+	inst.membershipFieldBuilder162 = builder.Field(162).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder162 = builder.Field(162).(*array.ListBuilder)
+	inst.membershipFieldBuilder163 = builder.Field(163).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder163 = builder.Field(163).(*array.ListBuilder)
+	inst.membershipFieldBuilder164 = builder.Field(164).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder164 = builder.Field(164).(*array.ListBuilder)
+	inst.membershipFieldBuilder165 = builder.Field(165).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder165 = builder.Field(165).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder166 = builder.Field(166).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder166 = builder.Field(166).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder167 = builder.Field(167).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder167 = builder.Field(167).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder168 = builder.Field(168).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder168 = builder.Field(168).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder169 = builder.Field(169).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder169 = builder.Field(169).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder170 = builder.Field(170).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder170 = builder.Field(170).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionI64ArrayInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder160.Append(true)
+	inst.membershipListBuilder161.Append(true)
+	inst.membershipListBuilder162.Append(true)
+	inst.membershipListBuilder163.Append(true)
+	inst.membershipListBuilder164.Append(true)
+	inst.membershipListBuilder165.Append(true)
+	inst.homogenousArrayContainerLength160 = 0
+	inst.membershipContainerLength161 = 0
+	inst.membershipContainerLength162 = 0
+	inst.membershipContainerLength163 = 0
+	inst.membershipContainerLength164 = 0
+	inst.membershipContainerLength165 = 0
+	inst.homogenousArraySupportListBuilder166.Append(true)
+	inst.membershipSupportListBuilder167.Append(true)
+	inst.membershipSupportListBuilder168.Append(true)
+	inst.membershipSupportListBuilder169.Append(true)
+	inst.membershipSupportListBuilder170.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityTestTableSectionI64ArrayInAttr) AddToContainer(value160 int64) *InEntityTestTableSectionI64ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.homogenousArrayFieldBuilder160.Append(value160)
+	inst.homogenousArrayContainerLength160++
+	return inst
+}
+func (inst *InEntityTestTableSectionI64ArrayInAttr) AddToContainerP(value160 int64) {
+	inst.AddToContainer(value160)
+}
+func (inst *InEntityTestTableSectionI64ArrayInAttr) AddMembershipHighCardRef(hr161 uint64) *InEntityTestTableSectionI64ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder161.Append(hr161)
+	inst.membershipContainerLength161++
+	return inst
+}
+func (inst *InEntityTestTableSectionI64ArrayInAttr) AddMembershipHighCardRefP(hr161 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder161.Append(hr161)
+	inst.membershipContainerLength161++
+	return
+}
+func (inst *InEntityTestTableSectionI64ArrayInAttr) AddMembershipLowCardRef(lr162 uint64) *InEntityTestTableSectionI64ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder162.Append(lr162)
+	inst.membershipContainerLength162++
+	return inst
+}
+func (inst *InEntityTestTableSectionI64ArrayInAttr) AddMembershipLowCardRefP(lr162 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder162.Append(lr162)
+	inst.membershipContainerLength162++
+	return
+}
+func (inst *InEntityTestTableSectionI64ArrayInAttr) AddMembershipLowCardVerbatim(lv163 []byte) *InEntityTestTableSectionI64ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder163.Append(lv163)
+	inst.membershipContainerLength163++
+	return inst
+}
+func (inst *InEntityTestTableSectionI64ArrayInAttr) AddMembershipLowCardVerbatimP(lv163 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder163.Append(lv163)
+	inst.membershipContainerLength163++
+	return
+}
+func (inst *InEntityTestTableSectionI64ArrayInAttr) AddMembershipMixedLowCardRef(lmr164 uint64, mrhp165 []byte) *InEntityTestTableSectionI64ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder164.Append(lmr164)
+	inst.membershipFieldBuilder165.Append(mrhp165)
+	inst.membershipContainerLength164++
+	inst.membershipContainerLength165++
+	return inst
+}
+func (inst *InEntityTestTableSectionI64ArrayInAttr) AddMembershipMixedLowCardRefP(lmr164 uint64, mrhp165 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder164.Append(lmr164)
+	inst.membershipFieldBuilder165.Append(mrhp165)
+	inst.membershipContainerLength164++
+	inst.membershipContainerLength165++
+	return
+}
+func (inst *InEntityTestTableSectionI64ArrayInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength161
+	inst.membershipContainerLength161 = 0
+	inst.membershipSupportFieldBuilder167.Append(uint64(l))
+	l = inst.membershipContainerLength162
+	inst.membershipContainerLength162 = 0
+	inst.membershipSupportFieldBuilder168.Append(uint64(l))
+	l = inst.membershipContainerLength163
+	inst.membershipContainerLength163 = 0
+	inst.membershipSupportFieldBuilder169.Append(uint64(l))
+	l = inst.membershipContainerLength164
+	inst.membershipContainerLength164 = 0
+	inst.membershipSupportFieldBuilder170.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionI64ArrayInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.homogenousArrayContainerLength160
+	inst.homogenousArrayContainerLength160 = 0
+	inst.homogenousArraySupportFieldBuilder166.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionI64ArrayInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityTestTableSectionI64ArrayInAttr) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityTestTableSectionI64ArrayInAttr) EndAttribute() *InEntityTestTableSectionI64Array {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityTestTableSectionI64ArrayInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityTestTableSectionI64ArrayInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionI64ArrayInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionI8Array struct {
+	errs                           []error
+	inAttr                         *InEntityTestTableSectionI8ArrayInAttr
+	state                          runtime.EntityStateE
+	parent                         *InEntityTestTable
+	homogenousArrayFieldBuilder127 *array.Int8Builder
+	homogenousArrayListBuilder127  *array.ListBuilder
+}
+
+func NewInEntityTestTableSectionI8Array(builder *array.RecordBuilder, parent *InEntityTestTable) (inst *InEntityTestTableSectionI8Array) {
+	inst = &InEntityTestTableSectionI8Array{}
+	inAttr := NewInEntityTestTableSectionI8ArrayInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder127 = builder.Field(127).(*array.ListBuilder).ValueBuilder().(*array.Int8Builder)
+	inst.homogenousArrayListBuilder127 = builder.Field(127).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionI8Array) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityTestTableSectionI8Array) BeginAttribute() *InEntityTestTableSectionI8ArrayInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityTestTableSectionI8Array) BeginAttributeSingle(value127 int8) *InEntityTestTableSectionI8ArrayInAttr {
+	return inst.BeginAttribute().AddToContainer(value127)
+}
+func (inst *InEntityTestTableSectionI8Array) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityTestTableSectionI8Array) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityTestTableSectionI8Array) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityTestTableSectionI8Array) resetSection() {
+	inst.clearErrors()
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityTestTableSectionI8Array) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionI8Array) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionI8ArrayInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityTestTableSectionI8Array
+	homogenousArrayFieldBuilder127        *array.Int8Builder
+	homogenousArrayListBuilder127         *array.ListBuilder
+	membershipFieldBuilder128             *array.Uint64Builder
+	membershipListBuilder128              *array.ListBuilder
+	membershipFieldBuilder129             *array.Uint64Builder
+	membershipListBuilder129              *array.ListBuilder
+	membershipFieldBuilder130             *array.BinaryBuilder
+	membershipListBuilder130              *array.ListBuilder
+	membershipFieldBuilder131             *array.Uint64Builder
+	membershipListBuilder131              *array.ListBuilder
+	membershipFieldBuilder132             *array.BinaryBuilder
+	membershipListBuilder132              *array.ListBuilder
+	homogenousArraySupportFieldBuilder133 *array.Uint64Builder
+	homogenousArraySupportListBuilder133  *array.ListBuilder
+	membershipSupportFieldBuilder134      *array.Uint64Builder
+	membershipSupportListBuilder134       *array.ListBuilder
+	membershipSupportFieldBuilder135      *array.Uint64Builder
+	membershipSupportListBuilder135       *array.ListBuilder
+	membershipSupportFieldBuilder136      *array.Uint64Builder
+	membershipSupportListBuilder136       *array.ListBuilder
+	membershipSupportFieldBuilder137      *array.Uint64Builder
+	membershipSupportListBuilder137       *array.ListBuilder
+
+	membershipContainerLength128 int
+
+	membershipContainerLength129 int
+
+	membershipContainerLength130 int
+
+	membershipContainerLength131 int
+
+	membershipContainerLength132 int
+
+	homogenousArrayContainerLength127 int
+}
+
+func NewInEntityTestTableSectionI8ArrayInAttr(builder *array.RecordBuilder, parent *InEntityTestTableSectionI8Array) (inst *InEntityTestTableSectionI8ArrayInAttr) {
+	inst = &InEntityTestTableSectionI8ArrayInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder127 = builder.Field(127).(*array.ListBuilder).ValueBuilder().(*array.Int8Builder)
+	inst.homogenousArrayListBuilder127 = builder.Field(127).(*array.ListBuilder)
+	inst.membershipFieldBuilder128 = builder.Field(128).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder128 = builder.Field(128).(*array.ListBuilder)
+	inst.membershipFieldBuilder129 = builder.Field(129).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder129 = builder.Field(129).(*array.ListBuilder)
+	inst.membershipFieldBuilder130 = builder.Field(130).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder130 = builder.Field(130).(*array.ListBuilder)
+	inst.membershipFieldBuilder131 = builder.Field(131).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder131 = builder.Field(131).(*array.ListBuilder)
+	inst.membershipFieldBuilder132 = builder.Field(132).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder132 = builder.Field(132).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder133 = builder.Field(133).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder133 = builder.Field(133).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder134 = builder.Field(134).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder134 = builder.Field(134).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder135 = builder.Field(135).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder135 = builder.Field(135).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder136 = builder.Field(136).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder136 = builder.Field(136).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder137 = builder.Field(137).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder137 = builder.Field(137).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionI8ArrayInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder127.Append(true)
+	inst.membershipListBuilder128.Append(true)
+	inst.membershipListBuilder129.Append(true)
+	inst.membershipListBuilder130.Append(true)
+	inst.membershipListBuilder131.Append(true)
+	inst.membershipListBuilder132.Append(true)
+	inst.homogenousArrayContainerLength127 = 0
+	inst.membershipContainerLength128 = 0
+	inst.membershipContainerLength129 = 0
+	inst.membershipContainerLength130 = 0
+	inst.membershipContainerLength131 = 0
+	inst.membershipContainerLength132 = 0
+	inst.homogenousArraySupportListBuilder133.Append(true)
+	inst.membershipSupportListBuilder134.Append(true)
+	inst.membershipSupportListBuilder135.Append(true)
+	inst.membershipSupportListBuilder136.Append(true)
+	inst.membershipSupportListBuilder137.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityTestTableSectionI8ArrayInAttr) AddToContainer(value127 int8) *InEntityTestTableSectionI8ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.homogenousArrayFieldBuilder127.Append(value127)
+	inst.homogenousArrayContainerLength127++
+	return inst
+}
+func (inst *InEntityTestTableSectionI8ArrayInAttr) AddToContainerP(value127 int8) {
+	inst.AddToContainer(value127)
+}
+func (inst *InEntityTestTableSectionI8ArrayInAttr) AddMembershipHighCardRef(hr128 uint64) *InEntityTestTableSectionI8ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder128.Append(hr128)
+	inst.membershipContainerLength128++
+	return inst
+}
+func (inst *InEntityTestTableSectionI8ArrayInAttr) AddMembershipHighCardRefP(hr128 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder128.Append(hr128)
+	inst.membershipContainerLength128++
+	return
+}
+func (inst *InEntityTestTableSectionI8ArrayInAttr) AddMembershipLowCardRef(lr129 uint64) *InEntityTestTableSectionI8ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder129.Append(lr129)
+	inst.membershipContainerLength129++
+	return inst
+}
+func (inst *InEntityTestTableSectionI8ArrayInAttr) AddMembershipLowCardRefP(lr129 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder129.Append(lr129)
+	inst.membershipContainerLength129++
+	return
+}
+func (inst *InEntityTestTableSectionI8ArrayInAttr) AddMembershipLowCardVerbatim(lv130 []byte) *InEntityTestTableSectionI8ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder130.Append(lv130)
+	inst.membershipContainerLength130++
+	return inst
+}
+func (inst *InEntityTestTableSectionI8ArrayInAttr) AddMembershipLowCardVerbatimP(lv130 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder130.Append(lv130)
+	inst.membershipContainerLength130++
+	return
+}
+func (inst *InEntityTestTableSectionI8ArrayInAttr) AddMembershipMixedLowCardRef(lmr131 uint64, mrhp132 []byte) *InEntityTestTableSectionI8ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder131.Append(lmr131)
+	inst.membershipFieldBuilder132.Append(mrhp132)
+	inst.membershipContainerLength131++
+	inst.membershipContainerLength132++
+	return inst
+}
+func (inst *InEntityTestTableSectionI8ArrayInAttr) AddMembershipMixedLowCardRefP(lmr131 uint64, mrhp132 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder131.Append(lmr131)
+	inst.membershipFieldBuilder132.Append(mrhp132)
+	inst.membershipContainerLength131++
+	inst.membershipContainerLength132++
+	return
+}
+func (inst *InEntityTestTableSectionI8ArrayInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength128
+	inst.membershipContainerLength128 = 0
+	inst.membershipSupportFieldBuilder134.Append(uint64(l))
+	l = inst.membershipContainerLength129
+	inst.membershipContainerLength129 = 0
+	inst.membershipSupportFieldBuilder135.Append(uint64(l))
+	l = inst.membershipContainerLength130
+	inst.membershipContainerLength130 = 0
+	inst.membershipSupportFieldBuilder136.Append(uint64(l))
+	l = inst.membershipContainerLength131
+	inst.membershipContainerLength131 = 0
+	inst.membershipSupportFieldBuilder137.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionI8ArrayInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.homogenousArrayContainerLength127
+	inst.homogenousArrayContainerLength127 = 0
+	inst.homogenousArraySupportFieldBuilder133.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionI8ArrayInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityTestTableSectionI8ArrayInAttr) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityTestTableSectionI8ArrayInAttr) EndAttribute() *InEntityTestTableSectionI8Array {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityTestTableSectionI8ArrayInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityTestTableSectionI8ArrayInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionI8ArrayInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionStringArray struct {
+	errs                           []error
+	inAttr                         *InEntityTestTableSectionStringArrayInAttr
+	state                          runtime.EntityStateE
+	parent                         *InEntityTestTable
+	homogenousArrayFieldBuilder026 *array.StringBuilder
+	homogenousArrayListBuilder026  *array.ListBuilder
+}
+
+func NewInEntityTestTableSectionStringArray(builder *array.RecordBuilder, parent *InEntityTestTable) (inst *InEntityTestTableSectionStringArray) {
+	inst = &InEntityTestTableSectionStringArray{}
+	inAttr := NewInEntityTestTableSectionStringArrayInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder026 = builder.Field(26).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.homogenousArrayListBuilder026 = builder.Field(26).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionStringArray) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityTestTableSectionStringArray) BeginAttribute() *InEntityTestTableSectionStringArrayInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityTestTableSectionStringArray) BeginAttributeSingle(value26 string) *InEntityTestTableSectionStringArrayInAttr {
+	return inst.BeginAttribute().AddToContainer(value26)
+}
+func (inst *InEntityTestTableSectionStringArray) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityTestTableSectionStringArray) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityTestTableSectionStringArray) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityTestTableSectionStringArray) resetSection() {
+	inst.clearErrors()
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityTestTableSectionStringArray) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionStringArray) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionStringArrayInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityTestTableSectionStringArray
+	homogenousArrayFieldBuilder026        *array.StringBuilder
+	homogenousArrayListBuilder026         *array.ListBuilder
+	membershipFieldBuilder027             *array.Uint64Builder
+	membershipListBuilder027              *array.ListBuilder
+	membershipFieldBuilder028             *array.Uint64Builder
+	membershipListBuilder028              *array.ListBuilder
+	membershipFieldBuilder029             *array.BinaryBuilder
+	membershipListBuilder029              *array.ListBuilder
+	membershipFieldBuilder030             *array.Uint64Builder
+	membershipListBuilder030              *array.ListBuilder
+	membershipFieldBuilder031             *array.BinaryBuilder
+	membershipListBuilder031              *array.ListBuilder
+	homogenousArraySupportFieldBuilder032 *array.Uint64Builder
+	homogenousArraySupportListBuilder032  *array.ListBuilder
+	membershipSupportFieldBuilder033      *array.Uint64Builder
+	membershipSupportListBuilder033       *array.ListBuilder
+	membershipSupportFieldBuilder034      *array.Uint64Builder
+	membershipSupportListBuilder034       *array.ListBuilder
+	membershipSupportFieldBuilder035      *array.Uint64Builder
+	membershipSupportListBuilder035       *array.ListBuilder
+	membershipSupportFieldBuilder036      *array.Uint64Builder
+	membershipSupportListBuilder036       *array.ListBuilder
+
+	membershipContainerLength027 int
+
+	membershipContainerLength028 int
+
+	membershipContainerLength029 int
+
+	membershipContainerLength030 int
+
+	membershipContainerLength031 int
+
+	homogenousArrayContainerLength026 int
+}
+
+func NewInEntityTestTableSectionStringArrayInAttr(builder *array.RecordBuilder, parent *InEntityTestTableSectionStringArray) (inst *InEntityTestTableSectionStringArrayInAttr) {
+	inst = &InEntityTestTableSectionStringArrayInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder026 = builder.Field(26).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.homogenousArrayListBuilder026 = builder.Field(26).(*array.ListBuilder)
+	inst.membershipFieldBuilder027 = builder.Field(27).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder027 = builder.Field(27).(*array.ListBuilder)
+	inst.membershipFieldBuilder028 = builder.Field(28).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder028 = builder.Field(28).(*array.ListBuilder)
+	inst.membershipFieldBuilder029 = builder.Field(29).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder029 = builder.Field(29).(*array.ListBuilder)
+	inst.membershipFieldBuilder030 = builder.Field(30).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder030 = builder.Field(30).(*array.ListBuilder)
+	inst.membershipFieldBuilder031 = builder.Field(31).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder031 = builder.Field(31).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder032 = builder.Field(32).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder032 = builder.Field(32).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder033 = builder.Field(33).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder033 = builder.Field(33).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder034 = builder.Field(34).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder034 = builder.Field(34).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder035 = builder.Field(35).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder035 = builder.Field(35).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder036 = builder.Field(36).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder036 = builder.Field(36).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionStringArrayInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder026.Append(true)
+	inst.membershipListBuilder027.Append(true)
+	inst.membershipListBuilder028.Append(true)
+	inst.membershipListBuilder029.Append(true)
+	inst.membershipListBuilder030.Append(true)
+	inst.membershipListBuilder031.Append(true)
+	inst.homogenousArrayContainerLength026 = 0
+	inst.membershipContainerLength027 = 0
+	inst.membershipContainerLength028 = 0
+	inst.membershipContainerLength029 = 0
+	inst.membershipContainerLength030 = 0
+	inst.membershipContainerLength031 = 0
+	inst.homogenousArraySupportListBuilder032.Append(true)
+	inst.membershipSupportListBuilder033.Append(true)
+	inst.membershipSupportListBuilder034.Append(true)
+	inst.membershipSupportListBuilder035.Append(true)
+	inst.membershipSupportListBuilder036.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityTestTableSectionStringArrayInAttr) AddToContainer(value26 string) *InEntityTestTableSectionStringArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.homogenousArrayFieldBuilder026.Append(value26)
+	inst.homogenousArrayContainerLength026++
+	return inst
+}
+func (inst *InEntityTestTableSectionStringArrayInAttr) AddToContainerP(value26 string) {
+	inst.AddToContainer(value26)
+}
+func (inst *InEntityTestTableSectionStringArrayInAttr) AddMembershipHighCardRef(hr27 uint64) *InEntityTestTableSectionStringArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder027.Append(hr27)
+	inst.membershipContainerLength027++
+	return inst
+}
+func (inst *InEntityTestTableSectionStringArrayInAttr) AddMembershipHighCardRefP(hr27 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder027.Append(hr27)
+	inst.membershipContainerLength027++
+	return
+}
+func (inst *InEntityTestTableSectionStringArrayInAttr) AddMembershipLowCardRef(lr28 uint64) *InEntityTestTableSectionStringArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder028.Append(lr28)
+	inst.membershipContainerLength028++
+	return inst
+}
+func (inst *InEntityTestTableSectionStringArrayInAttr) AddMembershipLowCardRefP(lr28 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder028.Append(lr28)
+	inst.membershipContainerLength028++
+	return
+}
+func (inst *InEntityTestTableSectionStringArrayInAttr) AddMembershipLowCardVerbatim(lv29 []byte) *InEntityTestTableSectionStringArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder029.Append(lv29)
+	inst.membershipContainerLength029++
+	return inst
+}
+func (inst *InEntityTestTableSectionStringArrayInAttr) AddMembershipLowCardVerbatimP(lv29 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder029.Append(lv29)
+	inst.membershipContainerLength029++
+	return
+}
+func (inst *InEntityTestTableSectionStringArrayInAttr) AddMembershipMixedLowCardRef(lmr30 uint64, mrhp31 []byte) *InEntityTestTableSectionStringArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder030.Append(lmr30)
+	inst.membershipFieldBuilder031.Append(mrhp31)
+	inst.membershipContainerLength030++
+	inst.membershipContainerLength031++
+	return inst
+}
+func (inst *InEntityTestTableSectionStringArrayInAttr) AddMembershipMixedLowCardRefP(lmr30 uint64, mrhp31 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder030.Append(lmr30)
+	inst.membershipFieldBuilder031.Append(mrhp31)
+	inst.membershipContainerLength030++
+	inst.membershipContainerLength031++
+	return
+}
+func (inst *InEntityTestTableSectionStringArrayInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength027
+	inst.membershipContainerLength027 = 0
+	inst.membershipSupportFieldBuilder033.Append(uint64(l))
+	l = inst.membershipContainerLength028
+	inst.membershipContainerLength028 = 0
+	inst.membershipSupportFieldBuilder034.Append(uint64(l))
+	l = inst.membershipContainerLength029
+	inst.membershipContainerLength029 = 0
+	inst.membershipSupportFieldBuilder035.Append(uint64(l))
+	l = inst.membershipContainerLength030
+	inst.membershipContainerLength030 = 0
+	inst.membershipSupportFieldBuilder036.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionStringArrayInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.homogenousArrayContainerLength026
+	inst.homogenousArrayContainerLength026 = 0
+	inst.homogenousArraySupportFieldBuilder032.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionStringArrayInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityTestTableSectionStringArrayInAttr) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityTestTableSectionStringArrayInAttr) EndAttribute() *InEntityTestTableSectionStringArray {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityTestTableSectionStringArrayInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityTestTableSectionStringArrayInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionStringArrayInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionSymbol struct {
+	errs                  []error
+	inAttr                *InEntityTestTableSectionSymbolInAttr
+	state                 runtime.EntityStateE
+	parent                *InEntityTestTable
+	scalarFieldBuilder005 *array.StringBuilder
+	scalarListBuilder005  *array.ListBuilder
+}
+
+func NewInEntityTestTableSectionSymbol(builder *array.RecordBuilder, parent *InEntityTestTable) (inst *InEntityTestTableSectionSymbol) {
+	inst = &InEntityTestTableSectionSymbol{}
+	inAttr := NewInEntityTestTableSectionSymbolInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.scalarFieldBuilder005 = builder.Field(5).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.scalarListBuilder005 = builder.Field(5).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionSymbol) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityTestTableSectionSymbol) BeginAttribute(value5 string) *InEntityTestTableSectionSymbolInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+	inst.scalarFieldBuilder005.Append(value5)
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityTestTableSectionSymbol) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityTestTableSectionSymbol) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityTestTableSectionSymbol) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityTestTableSectionSymbol) resetSection() {
+	inst.clearErrors()
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityTestTableSectionSymbol) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionSymbol) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionSymbolInAttr struct {
+	errs                             []error
+	state                            runtime.EntityStateE
+	parent                           *InEntityTestTableSectionSymbol
+	scalarFieldBuilder005            *array.StringBuilder
+	scalarListBuilder005             *array.ListBuilder
+	membershipFieldBuilder006        *array.Uint64Builder
+	membershipListBuilder006         *array.ListBuilder
+	membershipFieldBuilder007        *array.Uint64Builder
+	membershipListBuilder007         *array.ListBuilder
+	membershipFieldBuilder008        *array.BinaryBuilder
+	membershipListBuilder008         *array.ListBuilder
+	membershipFieldBuilder009        *array.Uint64Builder
+	membershipListBuilder009         *array.ListBuilder
+	membershipFieldBuilder010        *array.BinaryBuilder
+	membershipListBuilder010         *array.ListBuilder
+	membershipSupportFieldBuilder011 *array.Uint64Builder
+	membershipSupportListBuilder011  *array.ListBuilder
+	membershipSupportFieldBuilder012 *array.Uint64Builder
+	membershipSupportListBuilder012  *array.ListBuilder
+	membershipSupportFieldBuilder013 *array.Uint64Builder
+	membershipSupportListBuilder013  *array.ListBuilder
+	membershipSupportFieldBuilder014 *array.Uint64Builder
+	membershipSupportListBuilder014  *array.ListBuilder
+
+	membershipContainerLength006 int
+
+	membershipContainerLength007 int
+
+	membershipContainerLength008 int
+
+	membershipContainerLength009 int
+
+	membershipContainerLength010 int
+}
+
+func NewInEntityTestTableSectionSymbolInAttr(builder *array.RecordBuilder, parent *InEntityTestTableSectionSymbol) (inst *InEntityTestTableSectionSymbolInAttr) {
+	inst = &InEntityTestTableSectionSymbolInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.scalarFieldBuilder005 = builder.Field(5).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.scalarListBuilder005 = builder.Field(5).(*array.ListBuilder)
+	inst.membershipFieldBuilder006 = builder.Field(6).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder006 = builder.Field(6).(*array.ListBuilder)
+	inst.membershipFieldBuilder007 = builder.Field(7).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder007 = builder.Field(7).(*array.ListBuilder)
+	inst.membershipFieldBuilder008 = builder.Field(8).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder008 = builder.Field(8).(*array.ListBuilder)
+	inst.membershipFieldBuilder009 = builder.Field(9).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder009 = builder.Field(9).(*array.ListBuilder)
+	inst.membershipFieldBuilder010 = builder.Field(10).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder010 = builder.Field(10).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder011 = builder.Field(11).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder011 = builder.Field(11).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder012 = builder.Field(12).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder012 = builder.Field(12).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder013 = builder.Field(13).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder013 = builder.Field(13).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder014 = builder.Field(14).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder014 = builder.Field(14).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionSymbolInAttr) beginAttribute() {
+	inst.membershipListBuilder006.Append(true)
+	inst.membershipListBuilder007.Append(true)
+	inst.membershipListBuilder008.Append(true)
+	inst.membershipListBuilder009.Append(true)
+	inst.membershipListBuilder010.Append(true)
+	inst.membershipContainerLength006 = 0
+	inst.membershipContainerLength007 = 0
+	inst.membershipContainerLength008 = 0
+	inst.membershipContainerLength009 = 0
+	inst.membershipContainerLength010 = 0
+	inst.scalarListBuilder005.Append(true)
+	inst.membershipSupportListBuilder011.Append(true)
+	inst.membershipSupportListBuilder012.Append(true)
+	inst.membershipSupportListBuilder013.Append(true)
+	inst.membershipSupportListBuilder014.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityTestTableSectionSymbolInAttr) AddMembershipHighCardRef(hr6 uint64) *InEntityTestTableSectionSymbolInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder006.Append(hr6)
+	inst.membershipContainerLength006++
+	return inst
+}
+func (inst *InEntityTestTableSectionSymbolInAttr) AddMembershipHighCardRefP(hr6 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder006.Append(hr6)
+	inst.membershipContainerLength006++
+	return
+}
+func (inst *InEntityTestTableSectionSymbolInAttr) AddMembershipLowCardRef(lr7 uint64) *InEntityTestTableSectionSymbolInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder007.Append(lr7)
+	inst.membershipContainerLength007++
+	return inst
+}
+func (inst *InEntityTestTableSectionSymbolInAttr) AddMembershipLowCardRefP(lr7 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder007.Append(lr7)
+	inst.membershipContainerLength007++
+	return
+}
+func (inst *InEntityTestTableSectionSymbolInAttr) AddMembershipLowCardVerbatim(lv8 []byte) *InEntityTestTableSectionSymbolInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder008.Append(lv8)
+	inst.membershipContainerLength008++
+	return inst
+}
+func (inst *InEntityTestTableSectionSymbolInAttr) AddMembershipLowCardVerbatimP(lv8 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder008.Append(lv8)
+	inst.membershipContainerLength008++
+	return
+}
+func (inst *InEntityTestTableSectionSymbolInAttr) AddMembershipMixedLowCardRef(lmr9 uint64, mrhp10 []byte) *InEntityTestTableSectionSymbolInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder009.Append(lmr9)
+	inst.membershipFieldBuilder010.Append(mrhp10)
+	inst.membershipContainerLength009++
+	inst.membershipContainerLength010++
+	return inst
+}
+func (inst *InEntityTestTableSectionSymbolInAttr) AddMembershipMixedLowCardRefP(lmr9 uint64, mrhp10 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder009.Append(lmr9)
+	inst.membershipFieldBuilder010.Append(mrhp10)
+	inst.membershipContainerLength009++
+	inst.membershipContainerLength010++
+	return
+}
+func (inst *InEntityTestTableSectionSymbolInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength006
+	inst.membershipContainerLength006 = 0
+	inst.membershipSupportFieldBuilder011.Append(uint64(l))
+	l = inst.membershipContainerLength007
+	inst.membershipContainerLength007 = 0
+	inst.membershipSupportFieldBuilder012.Append(uint64(l))
+	l = inst.membershipContainerLength008
+	inst.membershipContainerLength008 = 0
+	inst.membershipSupportFieldBuilder013.Append(uint64(l))
+	l = inst.membershipContainerLength009
+	inst.membershipContainerLength009 = 0
+	inst.membershipSupportFieldBuilder014.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionSymbolInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+}
+func (inst *InEntityTestTableSectionSymbolInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityTestTableSectionSymbolInAttr) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityTestTableSectionSymbolInAttr) EndAttribute() *InEntityTestTableSectionSymbol {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityTestTableSectionSymbolInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityTestTableSectionSymbolInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionSymbolInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionSymbolArray struct {
+	errs                           []error
+	inAttr                         *InEntityTestTableSectionSymbolArrayInAttr
+	state                          runtime.EntityStateE
+	parent                         *InEntityTestTable
+	homogenousArrayFieldBuilder015 *array.StringBuilder
+	homogenousArrayListBuilder015  *array.ListBuilder
+}
+
+func NewInEntityTestTableSectionSymbolArray(builder *array.RecordBuilder, parent *InEntityTestTable) (inst *InEntityTestTableSectionSymbolArray) {
+	inst = &InEntityTestTableSectionSymbolArray{}
+	inAttr := NewInEntityTestTableSectionSymbolArrayInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder015 = builder.Field(15).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.homogenousArrayListBuilder015 = builder.Field(15).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionSymbolArray) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityTestTableSectionSymbolArray) BeginAttribute() *InEntityTestTableSectionSymbolArrayInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityTestTableSectionSymbolArray) BeginAttributeSingle(value15 string) *InEntityTestTableSectionSymbolArrayInAttr {
+	return inst.BeginAttribute().AddToContainer(value15)
+}
+func (inst *InEntityTestTableSectionSymbolArray) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityTestTableSectionSymbolArray) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityTestTableSectionSymbolArray) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityTestTableSectionSymbolArray) resetSection() {
+	inst.clearErrors()
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityTestTableSectionSymbolArray) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionSymbolArray) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionSymbolArrayInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityTestTableSectionSymbolArray
+	homogenousArrayFieldBuilder015        *array.StringBuilder
+	homogenousArrayListBuilder015         *array.ListBuilder
+	membershipFieldBuilder016             *array.Uint64Builder
+	membershipListBuilder016              *array.ListBuilder
+	membershipFieldBuilder017             *array.Uint64Builder
+	membershipListBuilder017              *array.ListBuilder
+	membershipFieldBuilder018             *array.BinaryBuilder
+	membershipListBuilder018              *array.ListBuilder
+	membershipFieldBuilder019             *array.Uint64Builder
+	membershipListBuilder019              *array.ListBuilder
+	membershipFieldBuilder020             *array.BinaryBuilder
+	membershipListBuilder020              *array.ListBuilder
+	homogenousArraySupportFieldBuilder021 *array.Uint64Builder
+	homogenousArraySupportListBuilder021  *array.ListBuilder
+	membershipSupportFieldBuilder022      *array.Uint64Builder
+	membershipSupportListBuilder022       *array.ListBuilder
+	membershipSupportFieldBuilder023      *array.Uint64Builder
+	membershipSupportListBuilder023       *array.ListBuilder
+	membershipSupportFieldBuilder024      *array.Uint64Builder
+	membershipSupportListBuilder024       *array.ListBuilder
+	membershipSupportFieldBuilder025      *array.Uint64Builder
+	membershipSupportListBuilder025       *array.ListBuilder
+
+	membershipContainerLength016 int
+
+	membershipContainerLength017 int
+
+	membershipContainerLength018 int
+
+	membershipContainerLength019 int
+
+	membershipContainerLength020 int
+
+	homogenousArrayContainerLength015 int
+}
+
+func NewInEntityTestTableSectionSymbolArrayInAttr(builder *array.RecordBuilder, parent *InEntityTestTableSectionSymbolArray) (inst *InEntityTestTableSectionSymbolArrayInAttr) {
+	inst = &InEntityTestTableSectionSymbolArrayInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder015 = builder.Field(15).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.homogenousArrayListBuilder015 = builder.Field(15).(*array.ListBuilder)
+	inst.membershipFieldBuilder016 = builder.Field(16).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder016 = builder.Field(16).(*array.ListBuilder)
+	inst.membershipFieldBuilder017 = builder.Field(17).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder017 = builder.Field(17).(*array.ListBuilder)
+	inst.membershipFieldBuilder018 = builder.Field(18).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder018 = builder.Field(18).(*array.ListBuilder)
+	inst.membershipFieldBuilder019 = builder.Field(19).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder019 = builder.Field(19).(*array.ListBuilder)
+	inst.membershipFieldBuilder020 = builder.Field(20).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder020 = builder.Field(20).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder021 = builder.Field(21).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder021 = builder.Field(21).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder022 = builder.Field(22).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder022 = builder.Field(22).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder023 = builder.Field(23).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder023 = builder.Field(23).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder024 = builder.Field(24).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder024 = builder.Field(24).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder025 = builder.Field(25).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder025 = builder.Field(25).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionSymbolArrayInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder015.Append(true)
+	inst.membershipListBuilder016.Append(true)
+	inst.membershipListBuilder017.Append(true)
+	inst.membershipListBuilder018.Append(true)
+	inst.membershipListBuilder019.Append(true)
+	inst.membershipListBuilder020.Append(true)
+	inst.homogenousArrayContainerLength015 = 0
+	inst.membershipContainerLength016 = 0
+	inst.membershipContainerLength017 = 0
+	inst.membershipContainerLength018 = 0
+	inst.membershipContainerLength019 = 0
+	inst.membershipContainerLength020 = 0
+	inst.homogenousArraySupportListBuilder021.Append(true)
+	inst.membershipSupportListBuilder022.Append(true)
+	inst.membershipSupportListBuilder023.Append(true)
+	inst.membershipSupportListBuilder024.Append(true)
+	inst.membershipSupportListBuilder025.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityTestTableSectionSymbolArrayInAttr) AddToContainer(value15 string) *InEntityTestTableSectionSymbolArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.homogenousArrayFieldBuilder015.Append(value15)
+	inst.homogenousArrayContainerLength015++
+	return inst
+}
+func (inst *InEntityTestTableSectionSymbolArrayInAttr) AddToContainerP(value15 string) {
+	inst.AddToContainer(value15)
+}
+func (inst *InEntityTestTableSectionSymbolArrayInAttr) AddMembershipHighCardRef(hr16 uint64) *InEntityTestTableSectionSymbolArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder016.Append(hr16)
+	inst.membershipContainerLength016++
+	return inst
+}
+func (inst *InEntityTestTableSectionSymbolArrayInAttr) AddMembershipHighCardRefP(hr16 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder016.Append(hr16)
+	inst.membershipContainerLength016++
+	return
+}
+func (inst *InEntityTestTableSectionSymbolArrayInAttr) AddMembershipLowCardRef(lr17 uint64) *InEntityTestTableSectionSymbolArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder017.Append(lr17)
+	inst.membershipContainerLength017++
+	return inst
+}
+func (inst *InEntityTestTableSectionSymbolArrayInAttr) AddMembershipLowCardRefP(lr17 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder017.Append(lr17)
+	inst.membershipContainerLength017++
+	return
+}
+func (inst *InEntityTestTableSectionSymbolArrayInAttr) AddMembershipLowCardVerbatim(lv18 []byte) *InEntityTestTableSectionSymbolArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder018.Append(lv18)
+	inst.membershipContainerLength018++
+	return inst
+}
+func (inst *InEntityTestTableSectionSymbolArrayInAttr) AddMembershipLowCardVerbatimP(lv18 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder018.Append(lv18)
+	inst.membershipContainerLength018++
+	return
+}
+func (inst *InEntityTestTableSectionSymbolArrayInAttr) AddMembershipMixedLowCardRef(lmr19 uint64, mrhp20 []byte) *InEntityTestTableSectionSymbolArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder019.Append(lmr19)
+	inst.membershipFieldBuilder020.Append(mrhp20)
+	inst.membershipContainerLength019++
+	inst.membershipContainerLength020++
+	return inst
+}
+func (inst *InEntityTestTableSectionSymbolArrayInAttr) AddMembershipMixedLowCardRefP(lmr19 uint64, mrhp20 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder019.Append(lmr19)
+	inst.membershipFieldBuilder020.Append(mrhp20)
+	inst.membershipContainerLength019++
+	inst.membershipContainerLength020++
+	return
+}
+func (inst *InEntityTestTableSectionSymbolArrayInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength016
+	inst.membershipContainerLength016 = 0
+	inst.membershipSupportFieldBuilder022.Append(uint64(l))
+	l = inst.membershipContainerLength017
+	inst.membershipContainerLength017 = 0
+	inst.membershipSupportFieldBuilder023.Append(uint64(l))
+	l = inst.membershipContainerLength018
+	inst.membershipContainerLength018 = 0
+	inst.membershipSupportFieldBuilder024.Append(uint64(l))
+	l = inst.membershipContainerLength019
+	inst.membershipContainerLength019 = 0
+	inst.membershipSupportFieldBuilder025.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionSymbolArrayInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.homogenousArrayContainerLength015
+	inst.homogenousArrayContainerLength015 = 0
+	inst.homogenousArraySupportFieldBuilder021.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionSymbolArrayInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityTestTableSectionSymbolArrayInAttr) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityTestTableSectionSymbolArrayInAttr) EndAttribute() *InEntityTestTableSectionSymbolArray {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityTestTableSectionSymbolArrayInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityTestTableSectionSymbolArrayInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionSymbolArrayInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionText struct {
+	errs                           []error
+	inAttr                         *InEntityTestTableSectionTextInAttr
+	state                          runtime.EntityStateE
+	parent                         *InEntityTestTable
+	scalarFieldBuilder037          *array.StringBuilder
+	scalarListBuilder037           *array.ListBuilder
+	homogenousArrayFieldBuilder038 *array.Uint32Builder
+	homogenousArrayListBuilder038  *array.ListBuilder
+	homogenousArrayFieldBuilder039 *array.StringBuilder
+	homogenousArrayListBuilder039  *array.ListBuilder
+}
+
+func NewInEntityTestTableSectionText(builder *array.RecordBuilder, parent *InEntityTestTable) (inst *InEntityTestTableSectionText) {
+	inst = &InEntityTestTableSectionText{}
+	inAttr := NewInEntityTestTableSectionTextInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.scalarFieldBuilder037 = builder.Field(37).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.scalarListBuilder037 = builder.Field(37).(*array.ListBuilder)
+	inst.homogenousArrayFieldBuilder038 = builder.Field(38).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
+	inst.homogenousArrayListBuilder038 = builder.Field(38).(*array.ListBuilder)
+	inst.homogenousArrayFieldBuilder039 = builder.Field(39).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.homogenousArrayListBuilder039 = builder.Field(39).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionText) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityTestTableSectionText) BeginAttribute(text37 string) *InEntityTestTableSectionTextInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+	inst.scalarFieldBuilder037.Append(text37)
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityTestTableSectionText) BeginAttributeSingle(text37 string, wordLength38 uint32, wordBag39 string) *InEntityTestTableSectionTextInAttr {
+	return inst.BeginAttribute(text37).AddToCoContainers(wordLength38, wordBag39)
+}
+func (inst *InEntityTestTableSectionText) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityTestTableSectionText) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityTestTableSectionText) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityTestTableSectionText) resetSection() {
+	inst.clearErrors()
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityTestTableSectionText) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionText) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionTextInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityTestTableSectionText
+	scalarFieldBuilder037                 *array.StringBuilder
+	scalarListBuilder037                  *array.ListBuilder
+	homogenousArrayFieldBuilder038        *array.Uint32Builder
+	homogenousArrayListBuilder038         *array.ListBuilder
+	homogenousArrayFieldBuilder039        *array.StringBuilder
+	homogenousArrayListBuilder039         *array.ListBuilder
+	membershipFieldBuilder040             *array.Uint64Builder
+	membershipListBuilder040              *array.ListBuilder
+	membershipFieldBuilder041             *array.Uint64Builder
+	membershipListBuilder041              *array.ListBuilder
+	membershipFieldBuilder042             *array.BinaryBuilder
+	membershipListBuilder042              *array.ListBuilder
+	membershipFieldBuilder043             *array.Uint64Builder
+	membershipListBuilder043              *array.ListBuilder
+	membershipFieldBuilder044             *array.BinaryBuilder
+	membershipListBuilder044              *array.ListBuilder
+	homogenousArraySupportFieldBuilder045 *array.Uint64Builder
+	homogenousArraySupportListBuilder045  *array.ListBuilder
+	membershipSupportFieldBuilder046      *array.Uint64Builder
+	membershipSupportListBuilder046       *array.ListBuilder
+	membershipSupportFieldBuilder047      *array.Uint64Builder
+	membershipSupportListBuilder047       *array.ListBuilder
+	membershipSupportFieldBuilder048      *array.Uint64Builder
+	membershipSupportListBuilder048       *array.ListBuilder
+	membershipSupportFieldBuilder049      *array.Uint64Builder
+	membershipSupportListBuilder049       *array.ListBuilder
+
+	membershipContainerLength040 int
+
+	membershipContainerLength041 int
+
+	membershipContainerLength042 int
+
+	membershipContainerLength043 int
+
+	membershipContainerLength044 int
+
+	homogenousArrayContainerLength038 int
+
+	homogenousArrayContainerLength039 int
+}
+
+func NewInEntityTestTableSectionTextInAttr(builder *array.RecordBuilder, parent *InEntityTestTableSectionText) (inst *InEntityTestTableSectionTextInAttr) {
+	inst = &InEntityTestTableSectionTextInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.scalarFieldBuilder037 = builder.Field(37).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.scalarListBuilder037 = builder.Field(37).(*array.ListBuilder)
+	inst.homogenousArrayFieldBuilder038 = builder.Field(38).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
+	inst.homogenousArrayListBuilder038 = builder.Field(38).(*array.ListBuilder)
+	inst.homogenousArrayFieldBuilder039 = builder.Field(39).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.homogenousArrayListBuilder039 = builder.Field(39).(*array.ListBuilder)
+	inst.membershipFieldBuilder040 = builder.Field(40).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder040 = builder.Field(40).(*array.ListBuilder)
+	inst.membershipFieldBuilder041 = builder.Field(41).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder041 = builder.Field(41).(*array.ListBuilder)
+	inst.membershipFieldBuilder042 = builder.Field(42).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder042 = builder.Field(42).(*array.ListBuilder)
+	inst.membershipFieldBuilder043 = builder.Field(43).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder043 = builder.Field(43).(*array.ListBuilder)
+	inst.membershipFieldBuilder044 = builder.Field(44).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder044 = builder.Field(44).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder045 = builder.Field(45).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder045 = builder.Field(45).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder046 = builder.Field(46).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder046 = builder.Field(46).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder047 = builder.Field(47).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder047 = builder.Field(47).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder048 = builder.Field(48).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder048 = builder.Field(48).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder049 = builder.Field(49).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder049 = builder.Field(49).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionTextInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder038.Append(true)
+	inst.homogenousArrayListBuilder039.Append(true)
+	inst.membershipListBuilder040.Append(true)
+	inst.membershipListBuilder041.Append(true)
+	inst.membershipListBuilder042.Append(true)
+	inst.membershipListBuilder043.Append(true)
+	inst.membershipListBuilder044.Append(true)
+	inst.homogenousArrayContainerLength038 = 0
+	inst.homogenousArrayContainerLength039 = 0
+	inst.membershipContainerLength040 = 0
+	inst.membershipContainerLength041 = 0
+	inst.membershipContainerLength042 = 0
+	inst.membershipContainerLength043 = 0
+	inst.membershipContainerLength044 = 0
+	inst.scalarListBuilder037.Append(true)
+	inst.homogenousArraySupportListBuilder045.Append(true)
+	inst.membershipSupportListBuilder046.Append(true)
+	inst.membershipSupportListBuilder047.Append(true)
+	inst.membershipSupportListBuilder048.Append(true)
+	inst.membershipSupportListBuilder049.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityTestTableSectionTextInAttr) AddToCoContainers(wordLength38 uint32, wordBag39 string) *InEntityTestTableSectionTextInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.homogenousArrayFieldBuilder038.Append(wordLength38)
+	inst.homogenousArrayContainerLength038++
+	inst.homogenousArrayFieldBuilder039.Append(wordBag39)
+	inst.homogenousArrayContainerLength039++
+	return inst
+}
+func (inst *InEntityTestTableSectionTextInAttr) AddToCoContainersP(wordLength38 uint32, wordBag39 string) {
+	inst.AddToCoContainers(wordLength38, wordBag39)
+}
+func (inst *InEntityTestTableSectionTextInAttr) AddMembershipHighCardRef(hr40 uint64) *InEntityTestTableSectionTextInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder040.Append(hr40)
+	inst.membershipContainerLength040++
+	return inst
+}
+func (inst *InEntityTestTableSectionTextInAttr) AddMembershipHighCardRefP(hr40 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder040.Append(hr40)
+	inst.membershipContainerLength040++
+	return
+}
+func (inst *InEntityTestTableSectionTextInAttr) AddMembershipLowCardRef(lr41 uint64) *InEntityTestTableSectionTextInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder041.Append(lr41)
+	inst.membershipContainerLength041++
+	return inst
+}
+func (inst *InEntityTestTableSectionTextInAttr) AddMembershipLowCardRefP(lr41 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder041.Append(lr41)
+	inst.membershipContainerLength041++
+	return
+}
+func (inst *InEntityTestTableSectionTextInAttr) AddMembershipLowCardVerbatim(lv42 []byte) *InEntityTestTableSectionTextInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder042.Append(lv42)
+	inst.membershipContainerLength042++
+	return inst
+}
+func (inst *InEntityTestTableSectionTextInAttr) AddMembershipLowCardVerbatimP(lv42 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder042.Append(lv42)
+	inst.membershipContainerLength042++
+	return
+}
+func (inst *InEntityTestTableSectionTextInAttr) AddMembershipMixedLowCardRef(lmr43 uint64, mrhp44 []byte) *InEntityTestTableSectionTextInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder043.Append(lmr43)
+	inst.membershipFieldBuilder044.Append(mrhp44)
+	inst.membershipContainerLength043++
+	inst.membershipContainerLength044++
+	return inst
+}
+func (inst *InEntityTestTableSectionTextInAttr) AddMembershipMixedLowCardRefP(lmr43 uint64, mrhp44 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder043.Append(lmr43)
+	inst.membershipFieldBuilder044.Append(mrhp44)
+	inst.membershipContainerLength043++
+	inst.membershipContainerLength044++
+	return
+}
+func (inst *InEntityTestTableSectionTextInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength040
+	inst.membershipContainerLength040 = 0
+	inst.membershipSupportFieldBuilder046.Append(uint64(l))
+	l = inst.membershipContainerLength041
+	inst.membershipContainerLength041 = 0
+	inst.membershipSupportFieldBuilder047.Append(uint64(l))
+	l = inst.membershipContainerLength042
+	inst.membershipContainerLength042 = 0
+	inst.membershipSupportFieldBuilder048.Append(uint64(l))
+	l = inst.membershipContainerLength043
+	inst.membershipContainerLength043 = 0
+	inst.membershipSupportFieldBuilder049.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionTextInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.homogenousArrayContainerLength038
+	inst.homogenousArrayContainerLength038 = 0
+	inst.homogenousArraySupportFieldBuilder045.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionTextInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityTestTableSectionTextInAttr) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityTestTableSectionTextInAttr) EndAttribute() *InEntityTestTableSectionText {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityTestTableSectionTextInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityTestTableSectionTextInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionTextInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionTimeArray struct {
+	errs                           []error
+	inAttr                         *InEntityTestTableSectionTimeArrayInAttr
+	state                          runtime.EntityStateE
+	parent                         *InEntityTestTable
+	homogenousArrayFieldBuilder230 *array.TimestampBuilder
+	homogenousArrayListBuilder230  *array.ListBuilder
+}
+
+func NewInEntityTestTableSectionTimeArray(builder *array.RecordBuilder, parent *InEntityTestTable) (inst *InEntityTestTableSectionTimeArray) {
+	inst = &InEntityTestTableSectionTimeArray{}
+	inAttr := NewInEntityTestTableSectionTimeArrayInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder230 = builder.Field(230).(*array.ListBuilder).ValueBuilder().(*array.TimestampBuilder)
+	inst.homogenousArrayListBuilder230 = builder.Field(230).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionTimeArray) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityTestTableSectionTimeArray) BeginAttribute() *InEntityTestTableSectionTimeArrayInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityTestTableSectionTimeArray) BeginAttributeSingle(value230 time.Time) *InEntityTestTableSectionTimeArrayInAttr {
+	return inst.BeginAttribute().AddToContainer(value230)
+}
+func (inst *InEntityTestTableSectionTimeArray) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityTestTableSectionTimeArray) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityTestTableSectionTimeArray) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityTestTableSectionTimeArray) resetSection() {
+	inst.clearErrors()
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityTestTableSectionTimeArray) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionTimeArray) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionTimeArrayInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityTestTableSectionTimeArray
+	homogenousArrayFieldBuilder230        *array.TimestampBuilder
+	homogenousArrayListBuilder230         *array.ListBuilder
+	membershipFieldBuilder231             *array.Uint64Builder
+	membershipListBuilder231              *array.ListBuilder
+	membershipFieldBuilder232             *array.Uint64Builder
+	membershipListBuilder232              *array.ListBuilder
+	membershipFieldBuilder233             *array.BinaryBuilder
+	membershipListBuilder233              *array.ListBuilder
+	membershipFieldBuilder234             *array.Uint64Builder
+	membershipListBuilder234              *array.ListBuilder
+	membershipFieldBuilder235             *array.BinaryBuilder
+	membershipListBuilder235              *array.ListBuilder
+	homogenousArraySupportFieldBuilder236 *array.Uint64Builder
+	homogenousArraySupportListBuilder236  *array.ListBuilder
+	membershipSupportFieldBuilder237      *array.Uint64Builder
+	membershipSupportListBuilder237       *array.ListBuilder
+	membershipSupportFieldBuilder238      *array.Uint64Builder
+	membershipSupportListBuilder238       *array.ListBuilder
+	membershipSupportFieldBuilder239      *array.Uint64Builder
+	membershipSupportListBuilder239       *array.ListBuilder
+	membershipSupportFieldBuilder240      *array.Uint64Builder
+	membershipSupportListBuilder240       *array.ListBuilder
+
+	membershipContainerLength231 int
+
+	membershipContainerLength232 int
+
+	membershipContainerLength233 int
+
+	membershipContainerLength234 int
+
+	membershipContainerLength235 int
+
+	homogenousArrayContainerLength230 int
+}
+
+func NewInEntityTestTableSectionTimeArrayInAttr(builder *array.RecordBuilder, parent *InEntityTestTableSectionTimeArray) (inst *InEntityTestTableSectionTimeArrayInAttr) {
+	inst = &InEntityTestTableSectionTimeArrayInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder230 = builder.Field(230).(*array.ListBuilder).ValueBuilder().(*array.TimestampBuilder)
+	inst.homogenousArrayListBuilder230 = builder.Field(230).(*array.ListBuilder)
+	inst.membershipFieldBuilder231 = builder.Field(231).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder231 = builder.Field(231).(*array.ListBuilder)
+	inst.membershipFieldBuilder232 = builder.Field(232).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder232 = builder.Field(232).(*array.ListBuilder)
+	inst.membershipFieldBuilder233 = builder.Field(233).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder233 = builder.Field(233).(*array.ListBuilder)
+	inst.membershipFieldBuilder234 = builder.Field(234).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder234 = builder.Field(234).(*array.ListBuilder)
+	inst.membershipFieldBuilder235 = builder.Field(235).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder235 = builder.Field(235).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder236 = builder.Field(236).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder236 = builder.Field(236).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder237 = builder.Field(237).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder237 = builder.Field(237).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder238 = builder.Field(238).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder238 = builder.Field(238).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder239 = builder.Field(239).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder239 = builder.Field(239).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder240 = builder.Field(240).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder240 = builder.Field(240).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionTimeArrayInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder230.Append(true)
+	inst.membershipListBuilder231.Append(true)
+	inst.membershipListBuilder232.Append(true)
+	inst.membershipListBuilder233.Append(true)
+	inst.membershipListBuilder234.Append(true)
+	inst.membershipListBuilder235.Append(true)
+	inst.homogenousArrayContainerLength230 = 0
+	inst.membershipContainerLength231 = 0
+	inst.membershipContainerLength232 = 0
+	inst.membershipContainerLength233 = 0
+	inst.membershipContainerLength234 = 0
+	inst.membershipContainerLength235 = 0
+	inst.homogenousArraySupportListBuilder236.Append(true)
+	inst.membershipSupportListBuilder237.Append(true)
+	inst.membershipSupportListBuilder238.Append(true)
+	inst.membershipSupportListBuilder239.Append(true)
+	inst.membershipSupportListBuilder240.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityTestTableSectionTimeArrayInAttr) AddToContainer(value230 time.Time) *InEntityTestTableSectionTimeArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.homogenousArrayFieldBuilder230.Append(arrow.Timestamp(value230.UnixNano()))
+	inst.homogenousArrayContainerLength230++
+	return inst
+}
+func (inst *InEntityTestTableSectionTimeArrayInAttr) AddToContainerP(value230 time.Time) {
+	inst.AddToContainer(value230)
+}
+func (inst *InEntityTestTableSectionTimeArrayInAttr) AddMembershipHighCardRef(hr231 uint64) *InEntityTestTableSectionTimeArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder231.Append(hr231)
+	inst.membershipContainerLength231++
+	return inst
+}
+func (inst *InEntityTestTableSectionTimeArrayInAttr) AddMembershipHighCardRefP(hr231 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder231.Append(hr231)
+	inst.membershipContainerLength231++
+	return
+}
+func (inst *InEntityTestTableSectionTimeArrayInAttr) AddMembershipLowCardRef(lr232 uint64) *InEntityTestTableSectionTimeArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder232.Append(lr232)
+	inst.membershipContainerLength232++
+	return inst
+}
+func (inst *InEntityTestTableSectionTimeArrayInAttr) AddMembershipLowCardRefP(lr232 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder232.Append(lr232)
+	inst.membershipContainerLength232++
+	return
+}
+func (inst *InEntityTestTableSectionTimeArrayInAttr) AddMembershipLowCardVerbatim(lv233 []byte) *InEntityTestTableSectionTimeArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder233.Append(lv233)
+	inst.membershipContainerLength233++
+	return inst
+}
+func (inst *InEntityTestTableSectionTimeArrayInAttr) AddMembershipLowCardVerbatimP(lv233 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder233.Append(lv233)
+	inst.membershipContainerLength233++
+	return
+}
+func (inst *InEntityTestTableSectionTimeArrayInAttr) AddMembershipMixedLowCardRef(lmr234 uint64, mrhp235 []byte) *InEntityTestTableSectionTimeArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder234.Append(lmr234)
+	inst.membershipFieldBuilder235.Append(mrhp235)
+	inst.membershipContainerLength234++
+	inst.membershipContainerLength235++
+	return inst
+}
+func (inst *InEntityTestTableSectionTimeArrayInAttr) AddMembershipMixedLowCardRefP(lmr234 uint64, mrhp235 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder234.Append(lmr234)
+	inst.membershipFieldBuilder235.Append(mrhp235)
+	inst.membershipContainerLength234++
+	inst.membershipContainerLength235++
+	return
+}
+func (inst *InEntityTestTableSectionTimeArrayInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength231
+	inst.membershipContainerLength231 = 0
+	inst.membershipSupportFieldBuilder237.Append(uint64(l))
+	l = inst.membershipContainerLength232
+	inst.membershipContainerLength232 = 0
+	inst.membershipSupportFieldBuilder238.Append(uint64(l))
+	l = inst.membershipContainerLength233
+	inst.membershipContainerLength233 = 0
+	inst.membershipSupportFieldBuilder239.Append(uint64(l))
+	l = inst.membershipContainerLength234
+	inst.membershipContainerLength234 = 0
+	inst.membershipSupportFieldBuilder240.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionTimeArrayInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.homogenousArrayContainerLength230
+	inst.homogenousArrayContainerLength230 = 0
+	inst.homogenousArraySupportFieldBuilder236.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionTimeArrayInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityTestTableSectionTimeArrayInAttr) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityTestTableSectionTimeArrayInAttr) EndAttribute() *InEntityTestTableSectionTimeArray {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityTestTableSectionTimeArrayInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityTestTableSectionTimeArrayInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionTimeArrayInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionTimeRange struct {
+	errs                  []error
+	inAttr                *InEntityTestTableSectionTimeRangeInAttr
+	state                 runtime.EntityStateE
+	parent                *InEntityTestTable
+	scalarFieldBuilder171 *array.TimestampBuilder
+	scalarListBuilder171  *array.ListBuilder
+	scalarFieldBuilder172 *array.TimestampBuilder
+	scalarListBuilder172  *array.ListBuilder
+}
+
+func NewInEntityTestTableSectionTimeRange(builder *array.RecordBuilder, parent *InEntityTestTable) (inst *InEntityTestTableSectionTimeRange) {
+	inst = &InEntityTestTableSectionTimeRange{}
+	inAttr := NewInEntityTestTableSectionTimeRangeInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.scalarFieldBuilder171 = builder.Field(171).(*array.ListBuilder).ValueBuilder().(*array.TimestampBuilder)
+	inst.scalarListBuilder171 = builder.Field(171).(*array.ListBuilder)
+	inst.scalarFieldBuilder172 = builder.Field(172).(*array.ListBuilder).ValueBuilder().(*array.TimestampBuilder)
+	inst.scalarListBuilder172 = builder.Field(172).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionTimeRange) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityTestTableSectionTimeRange) BeginAttribute(beginIncl171 time.Time, endExcl172 time.Time) *InEntityTestTableSectionTimeRangeInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+	inst.scalarFieldBuilder171.Append(arrow.Timestamp(beginIncl171.UnixNano()))
+	inst.scalarFieldBuilder172.Append(arrow.Timestamp(endExcl172.UnixNano()))
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityTestTableSectionTimeRange) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityTestTableSectionTimeRange) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityTestTableSectionTimeRange) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityTestTableSectionTimeRange) resetSection() {
+	inst.clearErrors()
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityTestTableSectionTimeRange) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionTimeRange) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionTimeRangeInAttr struct {
+	errs                             []error
+	state                            runtime.EntityStateE
+	parent                           *InEntityTestTableSectionTimeRange
+	scalarFieldBuilder171            *array.TimestampBuilder
+	scalarListBuilder171             *array.ListBuilder
+	scalarFieldBuilder172            *array.TimestampBuilder
+	scalarListBuilder172             *array.ListBuilder
+	membershipFieldBuilder173        *array.Uint64Builder
+	membershipListBuilder173         *array.ListBuilder
+	membershipFieldBuilder174        *array.Uint64Builder
+	membershipListBuilder174         *array.ListBuilder
+	membershipFieldBuilder175        *array.BinaryBuilder
+	membershipListBuilder175         *array.ListBuilder
+	membershipFieldBuilder176        *array.Uint64Builder
+	membershipListBuilder176         *array.ListBuilder
+	membershipFieldBuilder177        *array.BinaryBuilder
+	membershipListBuilder177         *array.ListBuilder
+	membershipSupportFieldBuilder178 *array.Uint64Builder
+	membershipSupportListBuilder178  *array.ListBuilder
+	membershipSupportFieldBuilder179 *array.Uint64Builder
+	membershipSupportListBuilder179  *array.ListBuilder
+	membershipSupportFieldBuilder180 *array.Uint64Builder
+	membershipSupportListBuilder180  *array.ListBuilder
+	membershipSupportFieldBuilder181 *array.Uint64Builder
+	membershipSupportListBuilder181  *array.ListBuilder
+
+	membershipContainerLength173 int
+
+	membershipContainerLength174 int
+
+	membershipContainerLength175 int
+
+	membershipContainerLength176 int
+
+	membershipContainerLength177 int
+}
+
+func NewInEntityTestTableSectionTimeRangeInAttr(builder *array.RecordBuilder, parent *InEntityTestTableSectionTimeRange) (inst *InEntityTestTableSectionTimeRangeInAttr) {
+	inst = &InEntityTestTableSectionTimeRangeInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.scalarFieldBuilder171 = builder.Field(171).(*array.ListBuilder).ValueBuilder().(*array.TimestampBuilder)
+	inst.scalarListBuilder171 = builder.Field(171).(*array.ListBuilder)
+	inst.scalarFieldBuilder172 = builder.Field(172).(*array.ListBuilder).ValueBuilder().(*array.TimestampBuilder)
+	inst.scalarListBuilder172 = builder.Field(172).(*array.ListBuilder)
+	inst.membershipFieldBuilder173 = builder.Field(173).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder173 = builder.Field(173).(*array.ListBuilder)
+	inst.membershipFieldBuilder174 = builder.Field(174).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder174 = builder.Field(174).(*array.ListBuilder)
+	inst.membershipFieldBuilder175 = builder.Field(175).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder175 = builder.Field(175).(*array.ListBuilder)
+	inst.membershipFieldBuilder176 = builder.Field(176).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder176 = builder.Field(176).(*array.ListBuilder)
+	inst.membershipFieldBuilder177 = builder.Field(177).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder177 = builder.Field(177).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder178 = builder.Field(178).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder178 = builder.Field(178).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder179 = builder.Field(179).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder179 = builder.Field(179).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder180 = builder.Field(180).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder180 = builder.Field(180).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder181 = builder.Field(181).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder181 = builder.Field(181).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionTimeRangeInAttr) beginAttribute() {
+	inst.membershipListBuilder173.Append(true)
+	inst.membershipListBuilder174.Append(true)
+	inst.membershipListBuilder175.Append(true)
+	inst.membershipListBuilder176.Append(true)
+	inst.membershipListBuilder177.Append(true)
+	inst.membershipContainerLength173 = 0
+	inst.membershipContainerLength174 = 0
+	inst.membershipContainerLength175 = 0
+	inst.membershipContainerLength176 = 0
+	inst.membershipContainerLength177 = 0
+	inst.scalarListBuilder171.Append(true)
+	inst.scalarListBuilder172.Append(true)
+	inst.membershipSupportListBuilder178.Append(true)
+	inst.membershipSupportListBuilder179.Append(true)
+	inst.membershipSupportListBuilder180.Append(true)
+	inst.membershipSupportListBuilder181.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityTestTableSectionTimeRangeInAttr) AddMembershipHighCardRef(hr173 uint64) *InEntityTestTableSectionTimeRangeInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder173.Append(hr173)
+	inst.membershipContainerLength173++
+	return inst
+}
+func (inst *InEntityTestTableSectionTimeRangeInAttr) AddMembershipHighCardRefP(hr173 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder173.Append(hr173)
+	inst.membershipContainerLength173++
+	return
+}
+func (inst *InEntityTestTableSectionTimeRangeInAttr) AddMembershipLowCardRef(lr174 uint64) *InEntityTestTableSectionTimeRangeInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder174.Append(lr174)
+	inst.membershipContainerLength174++
+	return inst
+}
+func (inst *InEntityTestTableSectionTimeRangeInAttr) AddMembershipLowCardRefP(lr174 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder174.Append(lr174)
+	inst.membershipContainerLength174++
+	return
+}
+func (inst *InEntityTestTableSectionTimeRangeInAttr) AddMembershipLowCardVerbatim(lv175 []byte) *InEntityTestTableSectionTimeRangeInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder175.Append(lv175)
+	inst.membershipContainerLength175++
+	return inst
+}
+func (inst *InEntityTestTableSectionTimeRangeInAttr) AddMembershipLowCardVerbatimP(lv175 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder175.Append(lv175)
+	inst.membershipContainerLength175++
+	return
+}
+func (inst *InEntityTestTableSectionTimeRangeInAttr) AddMembershipMixedLowCardRef(lmr176 uint64, mrhp177 []byte) *InEntityTestTableSectionTimeRangeInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder176.Append(lmr176)
+	inst.membershipFieldBuilder177.Append(mrhp177)
+	inst.membershipContainerLength176++
+	inst.membershipContainerLength177++
+	return inst
+}
+func (inst *InEntityTestTableSectionTimeRangeInAttr) AddMembershipMixedLowCardRefP(lmr176 uint64, mrhp177 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder176.Append(lmr176)
+	inst.membershipFieldBuilder177.Append(mrhp177)
+	inst.membershipContainerLength176++
+	inst.membershipContainerLength177++
+	return
+}
+func (inst *InEntityTestTableSectionTimeRangeInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength173
+	inst.membershipContainerLength173 = 0
+	inst.membershipSupportFieldBuilder178.Append(uint64(l))
+	l = inst.membershipContainerLength174
+	inst.membershipContainerLength174 = 0
+	inst.membershipSupportFieldBuilder179.Append(uint64(l))
+	l = inst.membershipContainerLength175
+	inst.membershipContainerLength175 = 0
+	inst.membershipSupportFieldBuilder180.Append(uint64(l))
+	l = inst.membershipContainerLength176
+	inst.membershipContainerLength176 = 0
+	inst.membershipSupportFieldBuilder181.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionTimeRangeInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+}
+func (inst *InEntityTestTableSectionTimeRangeInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityTestTableSectionTimeRangeInAttr) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityTestTableSectionTimeRangeInAttr) EndAttribute() *InEntityTestTableSectionTimeRange {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityTestTableSectionTimeRangeInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityTestTableSectionTimeRangeInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionTimeRangeInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionU16Array struct {
+	errs                           []error
+	inAttr                         *InEntityTestTableSectionU16ArrayInAttr
+	state                          runtime.EntityStateE
+	parent                         *InEntityTestTable
+	homogenousArrayFieldBuilder072 *array.Uint16Builder
+	homogenousArrayListBuilder072  *array.ListBuilder
+}
+
+func NewInEntityTestTableSectionU16Array(builder *array.RecordBuilder, parent *InEntityTestTable) (inst *InEntityTestTableSectionU16Array) {
+	inst = &InEntityTestTableSectionU16Array{}
+	inAttr := NewInEntityTestTableSectionU16ArrayInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder072 = builder.Field(72).(*array.ListBuilder).ValueBuilder().(*array.Uint16Builder)
+	inst.homogenousArrayListBuilder072 = builder.Field(72).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionU16Array) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityTestTableSectionU16Array) BeginAttribute() *InEntityTestTableSectionU16ArrayInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityTestTableSectionU16Array) BeginAttributeSingle(value72 uint16) *InEntityTestTableSectionU16ArrayInAttr {
+	return inst.BeginAttribute().AddToContainer(value72)
+}
+func (inst *InEntityTestTableSectionU16Array) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityTestTableSectionU16Array) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityTestTableSectionU16Array) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityTestTableSectionU16Array) resetSection() {
+	inst.clearErrors()
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityTestTableSectionU16Array) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionU16Array) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionU16ArrayInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityTestTableSectionU16Array
+	homogenousArrayFieldBuilder072        *array.Uint16Builder
+	homogenousArrayListBuilder072         *array.ListBuilder
+	membershipFieldBuilder073             *array.Uint64Builder
+	membershipListBuilder073              *array.ListBuilder
+	membershipFieldBuilder074             *array.Uint64Builder
+	membershipListBuilder074              *array.ListBuilder
+	membershipFieldBuilder075             *array.BinaryBuilder
+	membershipListBuilder075              *array.ListBuilder
+	membershipFieldBuilder076             *array.Uint64Builder
+	membershipListBuilder076              *array.ListBuilder
+	membershipFieldBuilder077             *array.BinaryBuilder
+	membershipListBuilder077              *array.ListBuilder
+	homogenousArraySupportFieldBuilder078 *array.Uint64Builder
+	homogenousArraySupportListBuilder078  *array.ListBuilder
+	membershipSupportFieldBuilder079      *array.Uint64Builder
+	membershipSupportListBuilder079       *array.ListBuilder
+	membershipSupportFieldBuilder080      *array.Uint64Builder
+	membershipSupportListBuilder080       *array.ListBuilder
+	membershipSupportFieldBuilder081      *array.Uint64Builder
+	membershipSupportListBuilder081       *array.ListBuilder
+	membershipSupportFieldBuilder082      *array.Uint64Builder
+	membershipSupportListBuilder082       *array.ListBuilder
+
+	membershipContainerLength073 int
+
+	membershipContainerLength074 int
+
+	membershipContainerLength075 int
+
+	membershipContainerLength076 int
+
+	membershipContainerLength077 int
+
+	homogenousArrayContainerLength072 int
+}
+
+func NewInEntityTestTableSectionU16ArrayInAttr(builder *array.RecordBuilder, parent *InEntityTestTableSectionU16Array) (inst *InEntityTestTableSectionU16ArrayInAttr) {
+	inst = &InEntityTestTableSectionU16ArrayInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder072 = builder.Field(72).(*array.ListBuilder).ValueBuilder().(*array.Uint16Builder)
+	inst.homogenousArrayListBuilder072 = builder.Field(72).(*array.ListBuilder)
+	inst.membershipFieldBuilder073 = builder.Field(73).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder073 = builder.Field(73).(*array.ListBuilder)
+	inst.membershipFieldBuilder074 = builder.Field(74).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder074 = builder.Field(74).(*array.ListBuilder)
+	inst.membershipFieldBuilder075 = builder.Field(75).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder075 = builder.Field(75).(*array.ListBuilder)
+	inst.membershipFieldBuilder076 = builder.Field(76).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder076 = builder.Field(76).(*array.ListBuilder)
+	inst.membershipFieldBuilder077 = builder.Field(77).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder077 = builder.Field(77).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder078 = builder.Field(78).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder078 = builder.Field(78).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder079 = builder.Field(79).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder079 = builder.Field(79).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder080 = builder.Field(80).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder080 = builder.Field(80).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder081 = builder.Field(81).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder081 = builder.Field(81).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder082 = builder.Field(82).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder082 = builder.Field(82).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionU16ArrayInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder072.Append(true)
+	inst.membershipListBuilder073.Append(true)
+	inst.membershipListBuilder074.Append(true)
+	inst.membershipListBuilder075.Append(true)
+	inst.membershipListBuilder076.Append(true)
+	inst.membershipListBuilder077.Append(true)
+	inst.homogenousArrayContainerLength072 = 0
+	inst.membershipContainerLength073 = 0
+	inst.membershipContainerLength074 = 0
+	inst.membershipContainerLength075 = 0
+	inst.membershipContainerLength076 = 0
+	inst.membershipContainerLength077 = 0
+	inst.homogenousArraySupportListBuilder078.Append(true)
+	inst.membershipSupportListBuilder079.Append(true)
+	inst.membershipSupportListBuilder080.Append(true)
+	inst.membershipSupportListBuilder081.Append(true)
+	inst.membershipSupportListBuilder082.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityTestTableSectionU16ArrayInAttr) AddToContainer(value72 uint16) *InEntityTestTableSectionU16ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.homogenousArrayFieldBuilder072.Append(value72)
+	inst.homogenousArrayContainerLength072++
+	return inst
+}
+func (inst *InEntityTestTableSectionU16ArrayInAttr) AddToContainerP(value72 uint16) {
+	inst.AddToContainer(value72)
+}
+func (inst *InEntityTestTableSectionU16ArrayInAttr) AddMembershipHighCardRef(hr73 uint64) *InEntityTestTableSectionU16ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder073.Append(hr73)
+	inst.membershipContainerLength073++
+	return inst
+}
+func (inst *InEntityTestTableSectionU16ArrayInAttr) AddMembershipHighCardRefP(hr73 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder073.Append(hr73)
+	inst.membershipContainerLength073++
+	return
+}
+func (inst *InEntityTestTableSectionU16ArrayInAttr) AddMembershipLowCardRef(lr74 uint64) *InEntityTestTableSectionU16ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder074.Append(lr74)
+	inst.membershipContainerLength074++
+	return inst
+}
+func (inst *InEntityTestTableSectionU16ArrayInAttr) AddMembershipLowCardRefP(lr74 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder074.Append(lr74)
+	inst.membershipContainerLength074++
+	return
+}
+func (inst *InEntityTestTableSectionU16ArrayInAttr) AddMembershipLowCardVerbatim(lv75 []byte) *InEntityTestTableSectionU16ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder075.Append(lv75)
+	inst.membershipContainerLength075++
+	return inst
+}
+func (inst *InEntityTestTableSectionU16ArrayInAttr) AddMembershipLowCardVerbatimP(lv75 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder075.Append(lv75)
+	inst.membershipContainerLength075++
+	return
+}
+func (inst *InEntityTestTableSectionU16ArrayInAttr) AddMembershipMixedLowCardRef(lmr76 uint64, mrhp77 []byte) *InEntityTestTableSectionU16ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder076.Append(lmr76)
+	inst.membershipFieldBuilder077.Append(mrhp77)
+	inst.membershipContainerLength076++
+	inst.membershipContainerLength077++
+	return inst
+}
+func (inst *InEntityTestTableSectionU16ArrayInAttr) AddMembershipMixedLowCardRefP(lmr76 uint64, mrhp77 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder076.Append(lmr76)
+	inst.membershipFieldBuilder077.Append(mrhp77)
+	inst.membershipContainerLength076++
+	inst.membershipContainerLength077++
+	return
+}
+func (inst *InEntityTestTableSectionU16ArrayInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength073
+	inst.membershipContainerLength073 = 0
+	inst.membershipSupportFieldBuilder079.Append(uint64(l))
+	l = inst.membershipContainerLength074
+	inst.membershipContainerLength074 = 0
+	inst.membershipSupportFieldBuilder080.Append(uint64(l))
+	l = inst.membershipContainerLength075
+	inst.membershipContainerLength075 = 0
+	inst.membershipSupportFieldBuilder081.Append(uint64(l))
+	l = inst.membershipContainerLength076
+	inst.membershipContainerLength076 = 0
+	inst.membershipSupportFieldBuilder082.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionU16ArrayInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.homogenousArrayContainerLength072
+	inst.homogenousArrayContainerLength072 = 0
+	inst.homogenousArraySupportFieldBuilder078.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionU16ArrayInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityTestTableSectionU16ArrayInAttr) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityTestTableSectionU16ArrayInAttr) EndAttribute() *InEntityTestTableSectionU16Array {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityTestTableSectionU16ArrayInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityTestTableSectionU16ArrayInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionU16ArrayInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionU32Array struct {
+	errs                           []error
+	inAttr                         *InEntityTestTableSectionU32ArrayInAttr
+	state                          runtime.EntityStateE
+	parent                         *InEntityTestTable
+	homogenousArrayFieldBuilder083 *array.Uint32Builder
+	homogenousArrayListBuilder083  *array.ListBuilder
+}
+
+func NewInEntityTestTableSectionU32Array(builder *array.RecordBuilder, parent *InEntityTestTable) (inst *InEntityTestTableSectionU32Array) {
+	inst = &InEntityTestTableSectionU32Array{}
+	inAttr := NewInEntityTestTableSectionU32ArrayInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder083 = builder.Field(83).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
+	inst.homogenousArrayListBuilder083 = builder.Field(83).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionU32Array) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityTestTableSectionU32Array) BeginAttribute() *InEntityTestTableSectionU32ArrayInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityTestTableSectionU32Array) BeginAttributeSingle(value83 uint32) *InEntityTestTableSectionU32ArrayInAttr {
+	return inst.BeginAttribute().AddToContainer(value83)
+}
+func (inst *InEntityTestTableSectionU32Array) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityTestTableSectionU32Array) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityTestTableSectionU32Array) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityTestTableSectionU32Array) resetSection() {
+	inst.clearErrors()
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityTestTableSectionU32Array) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionU32Array) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionU32ArrayInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityTestTableSectionU32Array
+	homogenousArrayFieldBuilder083        *array.Uint32Builder
+	homogenousArrayListBuilder083         *array.ListBuilder
+	membershipFieldBuilder084             *array.Uint64Builder
+	membershipListBuilder084              *array.ListBuilder
+	membershipFieldBuilder085             *array.Uint64Builder
+	membershipListBuilder085              *array.ListBuilder
+	membershipFieldBuilder086             *array.BinaryBuilder
+	membershipListBuilder086              *array.ListBuilder
+	membershipFieldBuilder087             *array.Uint64Builder
+	membershipListBuilder087              *array.ListBuilder
+	membershipFieldBuilder088             *array.BinaryBuilder
+	membershipListBuilder088              *array.ListBuilder
+	homogenousArraySupportFieldBuilder089 *array.Uint64Builder
+	homogenousArraySupportListBuilder089  *array.ListBuilder
+	membershipSupportFieldBuilder090      *array.Uint64Builder
+	membershipSupportListBuilder090       *array.ListBuilder
+	membershipSupportFieldBuilder091      *array.Uint64Builder
+	membershipSupportListBuilder091       *array.ListBuilder
+	membershipSupportFieldBuilder092      *array.Uint64Builder
+	membershipSupportListBuilder092       *array.ListBuilder
+	membershipSupportFieldBuilder093      *array.Uint64Builder
+	membershipSupportListBuilder093       *array.ListBuilder
+
+	membershipContainerLength084 int
+
+	membershipContainerLength085 int
+
+	membershipContainerLength086 int
+
+	membershipContainerLength087 int
+
+	membershipContainerLength088 int
+
+	homogenousArrayContainerLength083 int
+}
+
+func NewInEntityTestTableSectionU32ArrayInAttr(builder *array.RecordBuilder, parent *InEntityTestTableSectionU32Array) (inst *InEntityTestTableSectionU32ArrayInAttr) {
+	inst = &InEntityTestTableSectionU32ArrayInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder083 = builder.Field(83).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
+	inst.homogenousArrayListBuilder083 = builder.Field(83).(*array.ListBuilder)
+	inst.membershipFieldBuilder084 = builder.Field(84).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder084 = builder.Field(84).(*array.ListBuilder)
+	inst.membershipFieldBuilder085 = builder.Field(85).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder085 = builder.Field(85).(*array.ListBuilder)
+	inst.membershipFieldBuilder086 = builder.Field(86).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder086 = builder.Field(86).(*array.ListBuilder)
+	inst.membershipFieldBuilder087 = builder.Field(87).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder087 = builder.Field(87).(*array.ListBuilder)
+	inst.membershipFieldBuilder088 = builder.Field(88).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder088 = builder.Field(88).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder089 = builder.Field(89).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder089 = builder.Field(89).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder090 = builder.Field(90).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder090 = builder.Field(90).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder091 = builder.Field(91).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder091 = builder.Field(91).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder092 = builder.Field(92).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder092 = builder.Field(92).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder093 = builder.Field(93).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder093 = builder.Field(93).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionU32ArrayInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder083.Append(true)
+	inst.membershipListBuilder084.Append(true)
+	inst.membershipListBuilder085.Append(true)
+	inst.membershipListBuilder086.Append(true)
+	inst.membershipListBuilder087.Append(true)
+	inst.membershipListBuilder088.Append(true)
+	inst.homogenousArrayContainerLength083 = 0
+	inst.membershipContainerLength084 = 0
+	inst.membershipContainerLength085 = 0
+	inst.membershipContainerLength086 = 0
+	inst.membershipContainerLength087 = 0
+	inst.membershipContainerLength088 = 0
+	inst.homogenousArraySupportListBuilder089.Append(true)
+	inst.membershipSupportListBuilder090.Append(true)
+	inst.membershipSupportListBuilder091.Append(true)
+	inst.membershipSupportListBuilder092.Append(true)
+	inst.membershipSupportListBuilder093.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityTestTableSectionU32ArrayInAttr) AddToContainer(value83 uint32) *InEntityTestTableSectionU32ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.homogenousArrayFieldBuilder083.Append(value83)
+	inst.homogenousArrayContainerLength083++
+	return inst
+}
+func (inst *InEntityTestTableSectionU32ArrayInAttr) AddToContainerP(value83 uint32) {
+	inst.AddToContainer(value83)
+}
+func (inst *InEntityTestTableSectionU32ArrayInAttr) AddMembershipHighCardRef(hr84 uint64) *InEntityTestTableSectionU32ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder084.Append(hr84)
+	inst.membershipContainerLength084++
+	return inst
+}
+func (inst *InEntityTestTableSectionU32ArrayInAttr) AddMembershipHighCardRefP(hr84 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder084.Append(hr84)
+	inst.membershipContainerLength084++
+	return
+}
+func (inst *InEntityTestTableSectionU32ArrayInAttr) AddMembershipLowCardRef(lr85 uint64) *InEntityTestTableSectionU32ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder085.Append(lr85)
+	inst.membershipContainerLength085++
+	return inst
+}
+func (inst *InEntityTestTableSectionU32ArrayInAttr) AddMembershipLowCardRefP(lr85 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder085.Append(lr85)
+	inst.membershipContainerLength085++
+	return
+}
+func (inst *InEntityTestTableSectionU32ArrayInAttr) AddMembershipLowCardVerbatim(lv86 []byte) *InEntityTestTableSectionU32ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder086.Append(lv86)
+	inst.membershipContainerLength086++
+	return inst
+}
+func (inst *InEntityTestTableSectionU32ArrayInAttr) AddMembershipLowCardVerbatimP(lv86 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder086.Append(lv86)
+	inst.membershipContainerLength086++
+	return
+}
+func (inst *InEntityTestTableSectionU32ArrayInAttr) AddMembershipMixedLowCardRef(lmr87 uint64, mrhp88 []byte) *InEntityTestTableSectionU32ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder087.Append(lmr87)
+	inst.membershipFieldBuilder088.Append(mrhp88)
+	inst.membershipContainerLength087++
+	inst.membershipContainerLength088++
+	return inst
+}
+func (inst *InEntityTestTableSectionU32ArrayInAttr) AddMembershipMixedLowCardRefP(lmr87 uint64, mrhp88 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder087.Append(lmr87)
+	inst.membershipFieldBuilder088.Append(mrhp88)
+	inst.membershipContainerLength087++
+	inst.membershipContainerLength088++
+	return
+}
+func (inst *InEntityTestTableSectionU32ArrayInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength084
+	inst.membershipContainerLength084 = 0
+	inst.membershipSupportFieldBuilder090.Append(uint64(l))
+	l = inst.membershipContainerLength085
+	inst.membershipContainerLength085 = 0
+	inst.membershipSupportFieldBuilder091.Append(uint64(l))
+	l = inst.membershipContainerLength086
+	inst.membershipContainerLength086 = 0
+	inst.membershipSupportFieldBuilder092.Append(uint64(l))
+	l = inst.membershipContainerLength087
+	inst.membershipContainerLength087 = 0
+	inst.membershipSupportFieldBuilder093.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionU32ArrayInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.homogenousArrayContainerLength083
+	inst.homogenousArrayContainerLength083 = 0
+	inst.homogenousArraySupportFieldBuilder089.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionU32ArrayInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityTestTableSectionU32ArrayInAttr) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityTestTableSectionU32ArrayInAttr) EndAttribute() *InEntityTestTableSectionU32Array {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityTestTableSectionU32ArrayInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityTestTableSectionU32ArrayInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionU32ArrayInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionU32Set struct {
+	errs               []error
+	inAttr             *InEntityTestTableSectionU32SetInAttr
+	state              runtime.EntityStateE
+	parent             *InEntityTestTable
+	setFieldBuilder094 *array.Uint32Builder
+	setListBuilder094  *array.ListBuilder
+}
+
+func NewInEntityTestTableSectionU32Set(builder *array.RecordBuilder, parent *InEntityTestTable) (inst *InEntityTestTableSectionU32Set) {
+	inst = &InEntityTestTableSectionU32Set{}
+	inAttr := NewInEntityTestTableSectionU32SetInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.setFieldBuilder094 = builder.Field(94).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
+	inst.setListBuilder094 = builder.Field(94).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionU32Set) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityTestTableSectionU32Set) BeginAttribute() *InEntityTestTableSectionU32SetInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityTestTableSectionU32Set) BeginAttributeSingle(value94 uint32) *InEntityTestTableSectionU32SetInAttr {
+	return inst.BeginAttribute().AddToContainer(value94)
+}
+func (inst *InEntityTestTableSectionU32Set) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityTestTableSectionU32Set) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityTestTableSectionU32Set) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityTestTableSectionU32Set) resetSection() {
+	inst.clearErrors()
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityTestTableSectionU32Set) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionU32Set) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionU32SetInAttr struct {
+	errs                             []error
+	state                            runtime.EntityStateE
+	parent                           *InEntityTestTableSectionU32Set
+	setFieldBuilder094               *array.Uint32Builder
+	setListBuilder094                *array.ListBuilder
+	membershipFieldBuilder095        *array.Uint64Builder
+	membershipListBuilder095         *array.ListBuilder
+	membershipFieldBuilder096        *array.Uint64Builder
+	membershipListBuilder096         *array.ListBuilder
+	membershipFieldBuilder097        *array.BinaryBuilder
+	membershipListBuilder097         *array.ListBuilder
+	membershipFieldBuilder098        *array.Uint64Builder
+	membershipListBuilder098         *array.ListBuilder
+	membershipFieldBuilder099        *array.BinaryBuilder
+	membershipListBuilder099         *array.ListBuilder
+	setSupportFieldBuilder100        *array.Uint64Builder
+	setSupportListBuilder100         *array.ListBuilder
+	membershipSupportFieldBuilder101 *array.Uint64Builder
+	membershipSupportListBuilder101  *array.ListBuilder
+	membershipSupportFieldBuilder102 *array.Uint64Builder
+	membershipSupportListBuilder102  *array.ListBuilder
+	membershipSupportFieldBuilder103 *array.Uint64Builder
+	membershipSupportListBuilder103  *array.ListBuilder
+	membershipSupportFieldBuilder104 *array.Uint64Builder
+	membershipSupportListBuilder104  *array.ListBuilder
+
+	membershipContainerLength095 int
+
+	membershipContainerLength096 int
+
+	membershipContainerLength097 int
+
+	membershipContainerLength098 int
+
+	membershipContainerLength099 int
+
+	setContainerLength094 int
+}
+
+func NewInEntityTestTableSectionU32SetInAttr(builder *array.RecordBuilder, parent *InEntityTestTableSectionU32Set) (inst *InEntityTestTableSectionU32SetInAttr) {
+	inst = &InEntityTestTableSectionU32SetInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.setFieldBuilder094 = builder.Field(94).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
+	inst.setListBuilder094 = builder.Field(94).(*array.ListBuilder)
+	inst.membershipFieldBuilder095 = builder.Field(95).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder095 = builder.Field(95).(*array.ListBuilder)
+	inst.membershipFieldBuilder096 = builder.Field(96).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder096 = builder.Field(96).(*array.ListBuilder)
+	inst.membershipFieldBuilder097 = builder.Field(97).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder097 = builder.Field(97).(*array.ListBuilder)
+	inst.membershipFieldBuilder098 = builder.Field(98).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder098 = builder.Field(98).(*array.ListBuilder)
+	inst.membershipFieldBuilder099 = builder.Field(99).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder099 = builder.Field(99).(*array.ListBuilder)
+	inst.setSupportFieldBuilder100 = builder.Field(100).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.setSupportListBuilder100 = builder.Field(100).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder101 = builder.Field(101).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder101 = builder.Field(101).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder102 = builder.Field(102).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder102 = builder.Field(102).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder103 = builder.Field(103).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder103 = builder.Field(103).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder104 = builder.Field(104).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder104 = builder.Field(104).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionU32SetInAttr) beginAttribute() {
+	inst.setListBuilder094.Append(true)
+	inst.membershipListBuilder095.Append(true)
+	inst.membershipListBuilder096.Append(true)
+	inst.membershipListBuilder097.Append(true)
+	inst.membershipListBuilder098.Append(true)
+	inst.membershipListBuilder099.Append(true)
+	inst.setContainerLength094 = 0
+	inst.membershipContainerLength095 = 0
+	inst.membershipContainerLength096 = 0
+	inst.membershipContainerLength097 = 0
+	inst.membershipContainerLength098 = 0
+	inst.membershipContainerLength099 = 0
+	inst.setSupportListBuilder100.Append(true)
+	inst.membershipSupportListBuilder101.Append(true)
+	inst.membershipSupportListBuilder102.Append(true)
+	inst.membershipSupportListBuilder103.Append(true)
+	inst.membershipSupportListBuilder104.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityTestTableSectionU32SetInAttr) AddToContainer(value94 uint32) *InEntityTestTableSectionU32SetInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.setFieldBuilder094.Append(value94)
+	inst.setContainerLength094++
+	return inst
+}
+func (inst *InEntityTestTableSectionU32SetInAttr) AddToContainerP(value94 uint32) {
+	inst.AddToContainer(value94)
+}
+func (inst *InEntityTestTableSectionU32SetInAttr) AddMembershipHighCardRef(hr95 uint64) *InEntityTestTableSectionU32SetInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder095.Append(hr95)
+	inst.membershipContainerLength095++
+	return inst
+}
+func (inst *InEntityTestTableSectionU32SetInAttr) AddMembershipHighCardRefP(hr95 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder095.Append(hr95)
+	inst.membershipContainerLength095++
+	return
+}
+func (inst *InEntityTestTableSectionU32SetInAttr) AddMembershipLowCardRef(lr96 uint64) *InEntityTestTableSectionU32SetInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder096.Append(lr96)
+	inst.membershipContainerLength096++
+	return inst
+}
+func (inst *InEntityTestTableSectionU32SetInAttr) AddMembershipLowCardRefP(lr96 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder096.Append(lr96)
+	inst.membershipContainerLength096++
+	return
+}
+func (inst *InEntityTestTableSectionU32SetInAttr) AddMembershipLowCardVerbatim(lv97 []byte) *InEntityTestTableSectionU32SetInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder097.Append(lv97)
+	inst.membershipContainerLength097++
+	return inst
+}
+func (inst *InEntityTestTableSectionU32SetInAttr) AddMembershipLowCardVerbatimP(lv97 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder097.Append(lv97)
+	inst.membershipContainerLength097++
+	return
+}
+func (inst *InEntityTestTableSectionU32SetInAttr) AddMembershipMixedLowCardRef(lmr98 uint64, mrhp99 []byte) *InEntityTestTableSectionU32SetInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder098.Append(lmr98)
+	inst.membershipFieldBuilder099.Append(mrhp99)
+	inst.membershipContainerLength098++
+	inst.membershipContainerLength099++
+	return inst
+}
+func (inst *InEntityTestTableSectionU32SetInAttr) AddMembershipMixedLowCardRefP(lmr98 uint64, mrhp99 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder098.Append(lmr98)
+	inst.membershipFieldBuilder099.Append(mrhp99)
+	inst.membershipContainerLength098++
+	inst.membershipContainerLength099++
+	return
+}
+func (inst *InEntityTestTableSectionU32SetInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength095
+	inst.membershipContainerLength095 = 0
+	inst.membershipSupportFieldBuilder101.Append(uint64(l))
+	l = inst.membershipContainerLength096
+	inst.membershipContainerLength096 = 0
+	inst.membershipSupportFieldBuilder102.Append(uint64(l))
+	l = inst.membershipContainerLength097
+	inst.membershipContainerLength097 = 0
+	inst.membershipSupportFieldBuilder103.Append(uint64(l))
+	l = inst.membershipContainerLength098
+	inst.membershipContainerLength098 = 0
+	inst.membershipSupportFieldBuilder104.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionU32SetInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.setContainerLength094
+	inst.setContainerLength094 = 0
+	inst.setSupportFieldBuilder100.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionU32SetInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityTestTableSectionU32SetInAttr) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityTestTableSectionU32SetInAttr) EndAttribute() *InEntityTestTableSectionU32Set {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityTestTableSectionU32SetInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityTestTableSectionU32SetInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionU32SetInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionU64Array struct {
+	errs                           []error
+	inAttr                         *InEntityTestTableSectionU64ArrayInAttr
+	state                          runtime.EntityStateE
+	parent                         *InEntityTestTable
+	homogenousArrayFieldBuilder105 *array.Uint64Builder
+	homogenousArrayListBuilder105  *array.ListBuilder
+}
+
+func NewInEntityTestTableSectionU64Array(builder *array.RecordBuilder, parent *InEntityTestTable) (inst *InEntityTestTableSectionU64Array) {
+	inst = &InEntityTestTableSectionU64Array{}
+	inAttr := NewInEntityTestTableSectionU64ArrayInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder105 = builder.Field(105).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArrayListBuilder105 = builder.Field(105).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionU64Array) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityTestTableSectionU64Array) BeginAttribute() *InEntityTestTableSectionU64ArrayInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityTestTableSectionU64Array) BeginAttributeSingle(value105 uint64) *InEntityTestTableSectionU64ArrayInAttr {
+	return inst.BeginAttribute().AddToContainer(value105)
+}
+func (inst *InEntityTestTableSectionU64Array) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityTestTableSectionU64Array) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityTestTableSectionU64Array) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityTestTableSectionU64Array) resetSection() {
+	inst.clearErrors()
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityTestTableSectionU64Array) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionU64Array) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionU64ArrayInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityTestTableSectionU64Array
+	homogenousArrayFieldBuilder105        *array.Uint64Builder
+	homogenousArrayListBuilder105         *array.ListBuilder
+	membershipFieldBuilder106             *array.Uint64Builder
+	membershipListBuilder106              *array.ListBuilder
+	membershipFieldBuilder107             *array.Uint64Builder
+	membershipListBuilder107              *array.ListBuilder
+	membershipFieldBuilder108             *array.BinaryBuilder
+	membershipListBuilder108              *array.ListBuilder
+	membershipFieldBuilder109             *array.Uint64Builder
+	membershipListBuilder109              *array.ListBuilder
+	membershipFieldBuilder110             *array.BinaryBuilder
+	membershipListBuilder110              *array.ListBuilder
+	homogenousArraySupportFieldBuilder111 *array.Uint64Builder
+	homogenousArraySupportListBuilder111  *array.ListBuilder
+	membershipSupportFieldBuilder112      *array.Uint64Builder
+	membershipSupportListBuilder112       *array.ListBuilder
+	membershipSupportFieldBuilder113      *array.Uint64Builder
+	membershipSupportListBuilder113       *array.ListBuilder
+	membershipSupportFieldBuilder114      *array.Uint64Builder
+	membershipSupportListBuilder114       *array.ListBuilder
+	membershipSupportFieldBuilder115      *array.Uint64Builder
+	membershipSupportListBuilder115       *array.ListBuilder
+
+	membershipContainerLength106 int
+
+	membershipContainerLength107 int
+
+	membershipContainerLength108 int
+
+	membershipContainerLength109 int
+
+	membershipContainerLength110 int
+
+	homogenousArrayContainerLength105 int
+}
+
+func NewInEntityTestTableSectionU64ArrayInAttr(builder *array.RecordBuilder, parent *InEntityTestTableSectionU64Array) (inst *InEntityTestTableSectionU64ArrayInAttr) {
+	inst = &InEntityTestTableSectionU64ArrayInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder105 = builder.Field(105).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArrayListBuilder105 = builder.Field(105).(*array.ListBuilder)
+	inst.membershipFieldBuilder106 = builder.Field(106).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder106 = builder.Field(106).(*array.ListBuilder)
+	inst.membershipFieldBuilder107 = builder.Field(107).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder107 = builder.Field(107).(*array.ListBuilder)
+	inst.membershipFieldBuilder108 = builder.Field(108).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder108 = builder.Field(108).(*array.ListBuilder)
+	inst.membershipFieldBuilder109 = builder.Field(109).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder109 = builder.Field(109).(*array.ListBuilder)
+	inst.membershipFieldBuilder110 = builder.Field(110).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder110 = builder.Field(110).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder111 = builder.Field(111).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder111 = builder.Field(111).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder112 = builder.Field(112).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder112 = builder.Field(112).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder113 = builder.Field(113).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder113 = builder.Field(113).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder114 = builder.Field(114).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder114 = builder.Field(114).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder115 = builder.Field(115).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder115 = builder.Field(115).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionU64ArrayInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder105.Append(true)
+	inst.membershipListBuilder106.Append(true)
+	inst.membershipListBuilder107.Append(true)
+	inst.membershipListBuilder108.Append(true)
+	inst.membershipListBuilder109.Append(true)
+	inst.membershipListBuilder110.Append(true)
+	inst.homogenousArrayContainerLength105 = 0
+	inst.membershipContainerLength106 = 0
+	inst.membershipContainerLength107 = 0
+	inst.membershipContainerLength108 = 0
+	inst.membershipContainerLength109 = 0
+	inst.membershipContainerLength110 = 0
+	inst.homogenousArraySupportListBuilder111.Append(true)
+	inst.membershipSupportListBuilder112.Append(true)
+	inst.membershipSupportListBuilder113.Append(true)
+	inst.membershipSupportListBuilder114.Append(true)
+	inst.membershipSupportListBuilder115.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityTestTableSectionU64ArrayInAttr) AddToContainer(value105 uint64) *InEntityTestTableSectionU64ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.homogenousArrayFieldBuilder105.Append(value105)
+	inst.homogenousArrayContainerLength105++
+	return inst
+}
+func (inst *InEntityTestTableSectionU64ArrayInAttr) AddToContainerP(value105 uint64) {
+	inst.AddToContainer(value105)
+}
+func (inst *InEntityTestTableSectionU64ArrayInAttr) AddMembershipHighCardRef(hr106 uint64) *InEntityTestTableSectionU64ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder106.Append(hr106)
+	inst.membershipContainerLength106++
+	return inst
+}
+func (inst *InEntityTestTableSectionU64ArrayInAttr) AddMembershipHighCardRefP(hr106 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder106.Append(hr106)
+	inst.membershipContainerLength106++
+	return
+}
+func (inst *InEntityTestTableSectionU64ArrayInAttr) AddMembershipLowCardRef(lr107 uint64) *InEntityTestTableSectionU64ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder107.Append(lr107)
+	inst.membershipContainerLength107++
+	return inst
+}
+func (inst *InEntityTestTableSectionU64ArrayInAttr) AddMembershipLowCardRefP(lr107 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder107.Append(lr107)
+	inst.membershipContainerLength107++
+	return
+}
+func (inst *InEntityTestTableSectionU64ArrayInAttr) AddMembershipLowCardVerbatim(lv108 []byte) *InEntityTestTableSectionU64ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder108.Append(lv108)
+	inst.membershipContainerLength108++
+	return inst
+}
+func (inst *InEntityTestTableSectionU64ArrayInAttr) AddMembershipLowCardVerbatimP(lv108 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder108.Append(lv108)
+	inst.membershipContainerLength108++
+	return
+}
+func (inst *InEntityTestTableSectionU64ArrayInAttr) AddMembershipMixedLowCardRef(lmr109 uint64, mrhp110 []byte) *InEntityTestTableSectionU64ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder109.Append(lmr109)
+	inst.membershipFieldBuilder110.Append(mrhp110)
+	inst.membershipContainerLength109++
+	inst.membershipContainerLength110++
+	return inst
+}
+func (inst *InEntityTestTableSectionU64ArrayInAttr) AddMembershipMixedLowCardRefP(lmr109 uint64, mrhp110 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder109.Append(lmr109)
+	inst.membershipFieldBuilder110.Append(mrhp110)
+	inst.membershipContainerLength109++
+	inst.membershipContainerLength110++
+	return
+}
+func (inst *InEntityTestTableSectionU64ArrayInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength106
+	inst.membershipContainerLength106 = 0
+	inst.membershipSupportFieldBuilder112.Append(uint64(l))
+	l = inst.membershipContainerLength107
+	inst.membershipContainerLength107 = 0
+	inst.membershipSupportFieldBuilder113.Append(uint64(l))
+	l = inst.membershipContainerLength108
+	inst.membershipContainerLength108 = 0
+	inst.membershipSupportFieldBuilder114.Append(uint64(l))
+	l = inst.membershipContainerLength109
+	inst.membershipContainerLength109 = 0
+	inst.membershipSupportFieldBuilder115.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionU64ArrayInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.homogenousArrayContainerLength105
+	inst.homogenousArrayContainerLength105 = 0
+	inst.homogenousArraySupportFieldBuilder111.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionU64ArrayInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityTestTableSectionU64ArrayInAttr) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityTestTableSectionU64ArrayInAttr) EndAttribute() *InEntityTestTableSectionU64Array {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityTestTableSectionU64ArrayInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityTestTableSectionU64ArrayInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionU64ArrayInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionU64Set struct {
+	errs               []error
+	inAttr             *InEntityTestTableSectionU64SetInAttr
+	state              runtime.EntityStateE
+	parent             *InEntityTestTable
+	setFieldBuilder116 *array.Uint64Builder
+	setListBuilder116  *array.ListBuilder
+}
+
+func NewInEntityTestTableSectionU64Set(builder *array.RecordBuilder, parent *InEntityTestTable) (inst *InEntityTestTableSectionU64Set) {
+	inst = &InEntityTestTableSectionU64Set{}
+	inAttr := NewInEntityTestTableSectionU64SetInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.setFieldBuilder116 = builder.Field(116).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.setListBuilder116 = builder.Field(116).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionU64Set) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityTestTableSectionU64Set) BeginAttribute() *InEntityTestTableSectionU64SetInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityTestTableSectionU64Set) BeginAttributeSingle(value116 uint64) *InEntityTestTableSectionU64SetInAttr {
+	return inst.BeginAttribute().AddToContainer(value116)
+}
+func (inst *InEntityTestTableSectionU64Set) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityTestTableSectionU64Set) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityTestTableSectionU64Set) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityTestTableSectionU64Set) resetSection() {
+	inst.clearErrors()
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityTestTableSectionU64Set) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionU64Set) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionU64SetInAttr struct {
+	errs                             []error
+	state                            runtime.EntityStateE
+	parent                           *InEntityTestTableSectionU64Set
+	setFieldBuilder116               *array.Uint64Builder
+	setListBuilder116                *array.ListBuilder
+	membershipFieldBuilder117        *array.Uint64Builder
+	membershipListBuilder117         *array.ListBuilder
+	membershipFieldBuilder118        *array.Uint64Builder
+	membershipListBuilder118         *array.ListBuilder
+	membershipFieldBuilder119        *array.BinaryBuilder
+	membershipListBuilder119         *array.ListBuilder
+	membershipFieldBuilder120        *array.Uint64Builder
+	membershipListBuilder120         *array.ListBuilder
+	membershipFieldBuilder121        *array.BinaryBuilder
+	membershipListBuilder121         *array.ListBuilder
+	setSupportFieldBuilder122        *array.Uint64Builder
+	setSupportListBuilder122         *array.ListBuilder
+	membershipSupportFieldBuilder123 *array.Uint64Builder
+	membershipSupportListBuilder123  *array.ListBuilder
+	membershipSupportFieldBuilder124 *array.Uint64Builder
+	membershipSupportListBuilder124  *array.ListBuilder
+	membershipSupportFieldBuilder125 *array.Uint64Builder
+	membershipSupportListBuilder125  *array.ListBuilder
+	membershipSupportFieldBuilder126 *array.Uint64Builder
+	membershipSupportListBuilder126  *array.ListBuilder
+
+	membershipContainerLength117 int
+
+	membershipContainerLength118 int
+
+	membershipContainerLength119 int
+
+	membershipContainerLength120 int
+
+	membershipContainerLength121 int
+
+	setContainerLength116 int
+}
+
+func NewInEntityTestTableSectionU64SetInAttr(builder *array.RecordBuilder, parent *InEntityTestTableSectionU64Set) (inst *InEntityTestTableSectionU64SetInAttr) {
+	inst = &InEntityTestTableSectionU64SetInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.setFieldBuilder116 = builder.Field(116).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.setListBuilder116 = builder.Field(116).(*array.ListBuilder)
+	inst.membershipFieldBuilder117 = builder.Field(117).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder117 = builder.Field(117).(*array.ListBuilder)
+	inst.membershipFieldBuilder118 = builder.Field(118).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder118 = builder.Field(118).(*array.ListBuilder)
+	inst.membershipFieldBuilder119 = builder.Field(119).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder119 = builder.Field(119).(*array.ListBuilder)
+	inst.membershipFieldBuilder120 = builder.Field(120).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder120 = builder.Field(120).(*array.ListBuilder)
+	inst.membershipFieldBuilder121 = builder.Field(121).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder121 = builder.Field(121).(*array.ListBuilder)
+	inst.setSupportFieldBuilder122 = builder.Field(122).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.setSupportListBuilder122 = builder.Field(122).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder123 = builder.Field(123).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder123 = builder.Field(123).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder124 = builder.Field(124).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder124 = builder.Field(124).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder125 = builder.Field(125).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder125 = builder.Field(125).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder126 = builder.Field(126).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder126 = builder.Field(126).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionU64SetInAttr) beginAttribute() {
+	inst.setListBuilder116.Append(true)
+	inst.membershipListBuilder117.Append(true)
+	inst.membershipListBuilder118.Append(true)
+	inst.membershipListBuilder119.Append(true)
+	inst.membershipListBuilder120.Append(true)
+	inst.membershipListBuilder121.Append(true)
+	inst.setContainerLength116 = 0
+	inst.membershipContainerLength117 = 0
+	inst.membershipContainerLength118 = 0
+	inst.membershipContainerLength119 = 0
+	inst.membershipContainerLength120 = 0
+	inst.membershipContainerLength121 = 0
+	inst.setSupportListBuilder122.Append(true)
+	inst.membershipSupportListBuilder123.Append(true)
+	inst.membershipSupportListBuilder124.Append(true)
+	inst.membershipSupportListBuilder125.Append(true)
+	inst.membershipSupportListBuilder126.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityTestTableSectionU64SetInAttr) AddToContainer(value116 uint64) *InEntityTestTableSectionU64SetInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.setFieldBuilder116.Append(value116)
+	inst.setContainerLength116++
+	return inst
+}
+func (inst *InEntityTestTableSectionU64SetInAttr) AddToContainerP(value116 uint64) {
+	inst.AddToContainer(value116)
+}
+func (inst *InEntityTestTableSectionU64SetInAttr) AddMembershipHighCardRef(hr117 uint64) *InEntityTestTableSectionU64SetInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder117.Append(hr117)
+	inst.membershipContainerLength117++
+	return inst
+}
+func (inst *InEntityTestTableSectionU64SetInAttr) AddMembershipHighCardRefP(hr117 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder117.Append(hr117)
+	inst.membershipContainerLength117++
+	return
+}
+func (inst *InEntityTestTableSectionU64SetInAttr) AddMembershipLowCardRef(lr118 uint64) *InEntityTestTableSectionU64SetInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder118.Append(lr118)
+	inst.membershipContainerLength118++
+	return inst
+}
+func (inst *InEntityTestTableSectionU64SetInAttr) AddMembershipLowCardRefP(lr118 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder118.Append(lr118)
+	inst.membershipContainerLength118++
+	return
+}
+func (inst *InEntityTestTableSectionU64SetInAttr) AddMembershipLowCardVerbatim(lv119 []byte) *InEntityTestTableSectionU64SetInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder119.Append(lv119)
+	inst.membershipContainerLength119++
+	return inst
+}
+func (inst *InEntityTestTableSectionU64SetInAttr) AddMembershipLowCardVerbatimP(lv119 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder119.Append(lv119)
+	inst.membershipContainerLength119++
+	return
+}
+func (inst *InEntityTestTableSectionU64SetInAttr) AddMembershipMixedLowCardRef(lmr120 uint64, mrhp121 []byte) *InEntityTestTableSectionU64SetInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder120.Append(lmr120)
+	inst.membershipFieldBuilder121.Append(mrhp121)
+	inst.membershipContainerLength120++
+	inst.membershipContainerLength121++
+	return inst
+}
+func (inst *InEntityTestTableSectionU64SetInAttr) AddMembershipMixedLowCardRefP(lmr120 uint64, mrhp121 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder120.Append(lmr120)
+	inst.membershipFieldBuilder121.Append(mrhp121)
+	inst.membershipContainerLength120++
+	inst.membershipContainerLength121++
+	return
+}
+func (inst *InEntityTestTableSectionU64SetInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength117
+	inst.membershipContainerLength117 = 0
+	inst.membershipSupportFieldBuilder123.Append(uint64(l))
+	l = inst.membershipContainerLength118
+	inst.membershipContainerLength118 = 0
+	inst.membershipSupportFieldBuilder124.Append(uint64(l))
+	l = inst.membershipContainerLength119
+	inst.membershipContainerLength119 = 0
+	inst.membershipSupportFieldBuilder125.Append(uint64(l))
+	l = inst.membershipContainerLength120
+	inst.membershipContainerLength120 = 0
+	inst.membershipSupportFieldBuilder126.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionU64SetInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.setContainerLength116
+	inst.setContainerLength116 = 0
+	inst.setSupportFieldBuilder122.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionU64SetInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityTestTableSectionU64SetInAttr) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityTestTableSectionU64SetInAttr) EndAttribute() *InEntityTestTableSectionU64Set {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityTestTableSectionU64SetInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityTestTableSectionU64SetInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionU64SetInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionU8Array struct {
+	errs                           []error
+	inAttr                         *InEntityTestTableSectionU8ArrayInAttr
+	state                          runtime.EntityStateE
+	parent                         *InEntityTestTable
+	homogenousArrayFieldBuilder061 *array.Uint8Builder
+	homogenousArrayListBuilder061  *array.ListBuilder
+}
+
+func NewInEntityTestTableSectionU8Array(builder *array.RecordBuilder, parent *InEntityTestTable) (inst *InEntityTestTableSectionU8Array) {
+	inst = &InEntityTestTableSectionU8Array{}
+	inAttr := NewInEntityTestTableSectionU8ArrayInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder061 = builder.Field(61).(*array.ListBuilder).ValueBuilder().(*array.Uint8Builder)
+	inst.homogenousArrayListBuilder061 = builder.Field(61).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionU8Array) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityTestTableSectionU8Array) BeginAttribute() *InEntityTestTableSectionU8ArrayInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityTestTableSectionU8Array) BeginAttributeSingle(value61 uint8) *InEntityTestTableSectionU8ArrayInAttr {
+	return inst.BeginAttribute().AddToContainer(value61)
+}
+func (inst *InEntityTestTableSectionU8Array) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityTestTableSectionU8Array) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityTestTableSectionU8Array) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityTestTableSectionU8Array) resetSection() {
+	inst.clearErrors()
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityTestTableSectionU8Array) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionU8Array) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityTestTableSectionU8ArrayInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityTestTableSectionU8Array
+	homogenousArrayFieldBuilder061        *array.Uint8Builder
+	homogenousArrayListBuilder061         *array.ListBuilder
+	membershipFieldBuilder062             *array.Uint64Builder
+	membershipListBuilder062              *array.ListBuilder
+	membershipFieldBuilder063             *array.Uint64Builder
+	membershipListBuilder063              *array.ListBuilder
+	membershipFieldBuilder064             *array.BinaryBuilder
+	membershipListBuilder064              *array.ListBuilder
+	membershipFieldBuilder065             *array.Uint64Builder
+	membershipListBuilder065              *array.ListBuilder
+	membershipFieldBuilder066             *array.BinaryBuilder
+	membershipListBuilder066              *array.ListBuilder
+	homogenousArraySupportFieldBuilder067 *array.Uint64Builder
+	homogenousArraySupportListBuilder067  *array.ListBuilder
+	membershipSupportFieldBuilder068      *array.Uint64Builder
+	membershipSupportListBuilder068       *array.ListBuilder
+	membershipSupportFieldBuilder069      *array.Uint64Builder
+	membershipSupportListBuilder069       *array.ListBuilder
+	membershipSupportFieldBuilder070      *array.Uint64Builder
+	membershipSupportListBuilder070       *array.ListBuilder
+	membershipSupportFieldBuilder071      *array.Uint64Builder
+	membershipSupportListBuilder071       *array.ListBuilder
+
+	membershipContainerLength062 int
+
+	membershipContainerLength063 int
+
+	membershipContainerLength064 int
+
+	membershipContainerLength065 int
+
+	membershipContainerLength066 int
+
+	homogenousArrayContainerLength061 int
+}
+
+func NewInEntityTestTableSectionU8ArrayInAttr(builder *array.RecordBuilder, parent *InEntityTestTableSectionU8Array) (inst *InEntityTestTableSectionU8ArrayInAttr) {
+	inst = &InEntityTestTableSectionU8ArrayInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder061 = builder.Field(61).(*array.ListBuilder).ValueBuilder().(*array.Uint8Builder)
+	inst.homogenousArrayListBuilder061 = builder.Field(61).(*array.ListBuilder)
+	inst.membershipFieldBuilder062 = builder.Field(62).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder062 = builder.Field(62).(*array.ListBuilder)
+	inst.membershipFieldBuilder063 = builder.Field(63).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder063 = builder.Field(63).(*array.ListBuilder)
+	inst.membershipFieldBuilder064 = builder.Field(64).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder064 = builder.Field(64).(*array.ListBuilder)
+	inst.membershipFieldBuilder065 = builder.Field(65).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder065 = builder.Field(65).(*array.ListBuilder)
+	inst.membershipFieldBuilder066 = builder.Field(66).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder066 = builder.Field(66).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder067 = builder.Field(67).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder067 = builder.Field(67).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder068 = builder.Field(68).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder068 = builder.Field(68).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder069 = builder.Field(69).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder069 = builder.Field(69).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder070 = builder.Field(70).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder070 = builder.Field(70).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder071 = builder.Field(71).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder071 = builder.Field(71).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityTestTableSectionU8ArrayInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder061.Append(true)
+	inst.membershipListBuilder062.Append(true)
+	inst.membershipListBuilder063.Append(true)
+	inst.membershipListBuilder064.Append(true)
+	inst.membershipListBuilder065.Append(true)
+	inst.membershipListBuilder066.Append(true)
+	inst.homogenousArrayContainerLength061 = 0
+	inst.membershipContainerLength062 = 0
+	inst.membershipContainerLength063 = 0
+	inst.membershipContainerLength064 = 0
+	inst.membershipContainerLength065 = 0
+	inst.membershipContainerLength066 = 0
+	inst.homogenousArraySupportListBuilder067.Append(true)
+	inst.membershipSupportListBuilder068.Append(true)
+	inst.membershipSupportListBuilder069.Append(true)
+	inst.membershipSupportListBuilder070.Append(true)
+	inst.membershipSupportListBuilder071.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityTestTableSectionU8ArrayInAttr) AddToContainer(value61 uint8) *InEntityTestTableSectionU8ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.homogenousArrayFieldBuilder061.Append(value61)
+	inst.homogenousArrayContainerLength061++
+	return inst
+}
+func (inst *InEntityTestTableSectionU8ArrayInAttr) AddToContainerP(value61 uint8) {
+	inst.AddToContainer(value61)
+}
+func (inst *InEntityTestTableSectionU8ArrayInAttr) AddMembershipHighCardRef(hr62 uint64) *InEntityTestTableSectionU8ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder062.Append(hr62)
+	inst.membershipContainerLength062++
+	return inst
+}
+func (inst *InEntityTestTableSectionU8ArrayInAttr) AddMembershipHighCardRefP(hr62 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder062.Append(hr62)
+	inst.membershipContainerLength062++
+	return
+}
+func (inst *InEntityTestTableSectionU8ArrayInAttr) AddMembershipLowCardRef(lr63 uint64) *InEntityTestTableSectionU8ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder063.Append(lr63)
+	inst.membershipContainerLength063++
+	return inst
+}
+func (inst *InEntityTestTableSectionU8ArrayInAttr) AddMembershipLowCardRefP(lr63 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder063.Append(lr63)
+	inst.membershipContainerLength063++
+	return
+}
+func (inst *InEntityTestTableSectionU8ArrayInAttr) AddMembershipLowCardVerbatim(lv64 []byte) *InEntityTestTableSectionU8ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder064.Append(lv64)
+	inst.membershipContainerLength064++
+	return inst
+}
+func (inst *InEntityTestTableSectionU8ArrayInAttr) AddMembershipLowCardVerbatimP(lv64 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder064.Append(lv64)
+	inst.membershipContainerLength064++
+	return
+}
+func (inst *InEntityTestTableSectionU8ArrayInAttr) AddMembershipMixedLowCardRef(lmr65 uint64, mrhp66 []byte) *InEntityTestTableSectionU8ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder065.Append(lmr65)
+	inst.membershipFieldBuilder066.Append(mrhp66)
+	inst.membershipContainerLength065++
+	inst.membershipContainerLength066++
+	return inst
+}
+func (inst *InEntityTestTableSectionU8ArrayInAttr) AddMembershipMixedLowCardRefP(lmr65 uint64, mrhp66 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder065.Append(lmr65)
+	inst.membershipFieldBuilder066.Append(mrhp66)
+	inst.membershipContainerLength065++
+	inst.membershipContainerLength066++
+	return
+}
+func (inst *InEntityTestTableSectionU8ArrayInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength062
+	inst.membershipContainerLength062 = 0
+	inst.membershipSupportFieldBuilder068.Append(uint64(l))
+	l = inst.membershipContainerLength063
+	inst.membershipContainerLength063 = 0
+	inst.membershipSupportFieldBuilder069.Append(uint64(l))
+	l = inst.membershipContainerLength064
+	inst.membershipContainerLength064 = 0
+	inst.membershipSupportFieldBuilder070.Append(uint64(l))
+	l = inst.membershipContainerLength065
+	inst.membershipContainerLength065 = 0
+	inst.membershipSupportFieldBuilder071.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionU8ArrayInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.homogenousArrayContainerLength061
+	inst.homogenousArrayContainerLength061 = 0
+	inst.homogenousArraySupportFieldBuilder067.Append(uint64(l))
+}
+func (inst *InEntityTestTableSectionU8ArrayInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityTestTableSectionU8ArrayInAttr) EndSection() *InEntityTestTable {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityTestTableSectionU8ArrayInAttr) EndAttribute() *InEntityTestTableSectionU8Array {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityTestTableSectionU8ArrayInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityTestTableSectionU8ArrayInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityTestTableSectionU8ArrayInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}

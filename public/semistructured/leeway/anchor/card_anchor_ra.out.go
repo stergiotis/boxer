@@ -1,0 +1,5930 @@
+// Code generated; Leeway readaccess (github.com/stergiotis/boxer/public/semistructured/leeway/anchor.test) DO NOT EDIT.
+
+package anchor
+
+import (
+	///////////////////////////////////////////////////////////////////
+	// code generator
+	// readaccess.(*GeneratorDriver).GenerateGoClasses
+	// ./public/semistructured/leeway/readaccess/lw_ra_generator_hl.go:67
+
+	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/fatruntime"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
+	"iter"
+	"slices"
+	"time"
+	///////////////////////////////////////////////////////////////////
+	// code generator
+	// readaccess.(*GeneratorDriver).GenerateGoClasses
+	// ./public/semistructured/leeway/readaccess/lw_ra_generator_hl.go:101
+)
+
+var _ = time.Time{}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// readaccess.(*GoClassBuilder).composeMembershipPacks
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:208
+
+type MembershipPackTestTableForeignKey struct {
+	ValueLowCardRef            *array.List
+	ValueLowCardRefElements    *array.Uint64
+	AccelLowCardRef            *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexLowCardRef      uint32
+	ColumnIndexLowCardRefAccel uint32
+}
+type MembershipPackTestTableShared1 struct {
+	ValueHighCardRef                           *array.List
+	ValueHighCardRefElements                   *array.Uint64
+	AccelHighCardRef                           *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHighCardRef                     uint32
+	ColumnIndexHighCardRefAccel                uint32
+	ValueLowCardRef                            *array.List
+	ValueLowCardRefElements                    *array.Uint64
+	AccelLowCardRef                            *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexLowCardRef                      uint32
+	ColumnIndexLowCardRefAccel                 uint32
+	ValueLowCardVerbatim                       *array.List
+	ValueLowCardVerbatimElements               *array.Binary
+	AccelLowCardVerbatim                       *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexLowCardVerbatim                 uint32
+	ColumnIndexLowCardVerbatimAccel            uint32
+	ValueMixedLowCardRef                       *array.List
+	ValueMixedLowCardRefElements               *array.Uint64
+	AccelMixedLowCardRef                       *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexMixedLowCardRef                 uint32
+	ColumnIndexMixedLowCardRefAccel            uint32
+	ValueMixedRefHighCardParameters            *array.List
+	ValueMixedRefHighCardParametersElements    *array.Binary
+	AccelMixedRefHighCardParameters            *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexMixedRefHighCardParameters      uint32
+	ColumnIndexMixedRefHighCardParametersAccel uint32
+}
+
+func NewMembershipPackTestTableForeignKeyForeignKey() (inst *MembershipPackTestTableForeignKey) {
+	inst = &MembershipPackTestTableForeignKey{}
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexLowCardRef = 3
+	inst.ColumnIndexLowCardRefAccel = 4
+	return
+}
+
+func (inst *MembershipPackTestTableForeignKey) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexLowCardRef,
+		inst.ColumnIndexLowCardRefAccel,
+	}
+	return
+}
+
+func (inst *MembershipPackTestTableForeignKey) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"MembershipPackTestTableForeignKey.ColumnIndexLowCardRef",
+		"MembershipPackTestTableForeignKey.ColumnIndexLowCardRefAccel",
+	}
+	return
+}
+
+func (inst *MembershipPackTestTableForeignKey) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexLowCardRef = indices[0]
+	inst.ColumnIndexLowCardRefAccel = indices[1]
+
+	rest = indices[2:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*MembershipPackTestTableForeignKey)(nil)
+
+func NewMembershipPackTestTableShared1Symbol() (inst *MembershipPackTestTableShared1) {
+	inst = &MembershipPackTestTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 6
+	inst.ColumnIndexHighCardRefAccel = 11
+	inst.ColumnIndexLowCardRef = 7
+	inst.ColumnIndexLowCardRefAccel = 12
+	inst.ColumnIndexLowCardVerbatim = 8
+	inst.ColumnIndexLowCardVerbatimAccel = 13
+	inst.ColumnIndexMixedLowCardRef = 9
+	inst.ColumnIndexMixedLowCardRefAccel = 14
+	inst.ColumnIndexMixedRefHighCardParameters = 10
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 14
+	return
+}
+
+func (inst *MembershipPackTestTableShared1) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexHighCardRef,
+		inst.ColumnIndexHighCardRefAccel,
+		inst.ColumnIndexLowCardRef,
+		inst.ColumnIndexLowCardRefAccel,
+		inst.ColumnIndexLowCardVerbatim,
+		inst.ColumnIndexLowCardVerbatimAccel,
+		inst.ColumnIndexMixedLowCardRef,
+		inst.ColumnIndexMixedLowCardRefAccel,
+		inst.ColumnIndexMixedRefHighCardParameters,
+		inst.ColumnIndexMixedRefHighCardParametersAccel,
+	}
+	return
+}
+
+func (inst *MembershipPackTestTableShared1) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"MembershipPackTestTableShared1.ColumnIndexHighCardRef",
+		"MembershipPackTestTableShared1.ColumnIndexHighCardRefAccel",
+		"MembershipPackTestTableShared1.ColumnIndexLowCardRef",
+		"MembershipPackTestTableShared1.ColumnIndexLowCardRefAccel",
+		"MembershipPackTestTableShared1.ColumnIndexLowCardVerbatim",
+		"MembershipPackTestTableShared1.ColumnIndexLowCardVerbatimAccel",
+		"MembershipPackTestTableShared1.ColumnIndexMixedLowCardRef",
+		"MembershipPackTestTableShared1.ColumnIndexMixedLowCardRefAccel",
+		"MembershipPackTestTableShared1.ColumnIndexMixedRefHighCardParameters",
+		"MembershipPackTestTableShared1.ColumnIndexMixedRefHighCardParametersAccel",
+	}
+	return
+}
+
+func (inst *MembershipPackTestTableShared1) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexHighCardRef = indices[0]
+	inst.ColumnIndexHighCardRefAccel = indices[1]
+	inst.ColumnIndexLowCardRef = indices[2]
+	inst.ColumnIndexLowCardRefAccel = indices[3]
+	inst.ColumnIndexLowCardVerbatim = indices[4]
+	inst.ColumnIndexLowCardVerbatimAccel = indices[5]
+	inst.ColumnIndexMixedLowCardRef = indices[6]
+	inst.ColumnIndexMixedLowCardRefAccel = indices[7]
+	inst.ColumnIndexMixedRefHighCardParameters = indices[8]
+	inst.ColumnIndexMixedRefHighCardParametersAccel = indices[9]
+
+	rest = indices[10:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*MembershipPackTestTableShared1)(nil)
+
+func NewMembershipPackTestTableShared1SymbolArray() (inst *MembershipPackTestTableShared1) {
+	inst = &MembershipPackTestTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 16
+	inst.ColumnIndexHighCardRefAccel = 22
+	inst.ColumnIndexLowCardRef = 17
+	inst.ColumnIndexLowCardRefAccel = 23
+	inst.ColumnIndexLowCardVerbatim = 18
+	inst.ColumnIndexLowCardVerbatimAccel = 24
+	inst.ColumnIndexMixedLowCardRef = 19
+	inst.ColumnIndexMixedLowCardRefAccel = 25
+	inst.ColumnIndexMixedRefHighCardParameters = 20
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 25
+	return
+}
+
+func NewMembershipPackTestTableShared1StringArray() (inst *MembershipPackTestTableShared1) {
+	inst = &MembershipPackTestTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 27
+	inst.ColumnIndexHighCardRefAccel = 33
+	inst.ColumnIndexLowCardRef = 28
+	inst.ColumnIndexLowCardRefAccel = 34
+	inst.ColumnIndexLowCardVerbatim = 29
+	inst.ColumnIndexLowCardVerbatimAccel = 35
+	inst.ColumnIndexMixedLowCardRef = 30
+	inst.ColumnIndexMixedLowCardRefAccel = 36
+	inst.ColumnIndexMixedRefHighCardParameters = 31
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 36
+	return
+}
+
+func NewMembershipPackTestTableShared1Text() (inst *MembershipPackTestTableShared1) {
+	inst = &MembershipPackTestTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 40
+	inst.ColumnIndexHighCardRefAccel = 46
+	inst.ColumnIndexLowCardRef = 41
+	inst.ColumnIndexLowCardRefAccel = 47
+	inst.ColumnIndexLowCardVerbatim = 42
+	inst.ColumnIndexLowCardVerbatimAccel = 48
+	inst.ColumnIndexMixedLowCardRef = 43
+	inst.ColumnIndexMixedLowCardRefAccel = 49
+	inst.ColumnIndexMixedRefHighCardParameters = 44
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 49
+	return
+}
+
+func NewMembershipPackTestTableShared1BlobArray() (inst *MembershipPackTestTableShared1) {
+	inst = &MembershipPackTestTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 51
+	inst.ColumnIndexHighCardRefAccel = 57
+	inst.ColumnIndexLowCardRef = 52
+	inst.ColumnIndexLowCardRefAccel = 58
+	inst.ColumnIndexLowCardVerbatim = 53
+	inst.ColumnIndexLowCardVerbatimAccel = 59
+	inst.ColumnIndexMixedLowCardRef = 54
+	inst.ColumnIndexMixedLowCardRefAccel = 60
+	inst.ColumnIndexMixedRefHighCardParameters = 55
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 60
+	return
+}
+
+func NewMembershipPackTestTableShared1U8Array() (inst *MembershipPackTestTableShared1) {
+	inst = &MembershipPackTestTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 62
+	inst.ColumnIndexHighCardRefAccel = 68
+	inst.ColumnIndexLowCardRef = 63
+	inst.ColumnIndexLowCardRefAccel = 69
+	inst.ColumnIndexLowCardVerbatim = 64
+	inst.ColumnIndexLowCardVerbatimAccel = 70
+	inst.ColumnIndexMixedLowCardRef = 65
+	inst.ColumnIndexMixedLowCardRefAccel = 71
+	inst.ColumnIndexMixedRefHighCardParameters = 66
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 71
+	return
+}
+
+func NewMembershipPackTestTableShared1U16Array() (inst *MembershipPackTestTableShared1) {
+	inst = &MembershipPackTestTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 73
+	inst.ColumnIndexHighCardRefAccel = 79
+	inst.ColumnIndexLowCardRef = 74
+	inst.ColumnIndexLowCardRefAccel = 80
+	inst.ColumnIndexLowCardVerbatim = 75
+	inst.ColumnIndexLowCardVerbatimAccel = 81
+	inst.ColumnIndexMixedLowCardRef = 76
+	inst.ColumnIndexMixedLowCardRefAccel = 82
+	inst.ColumnIndexMixedRefHighCardParameters = 77
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 82
+	return
+}
+
+func NewMembershipPackTestTableShared1U32Array() (inst *MembershipPackTestTableShared1) {
+	inst = &MembershipPackTestTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 84
+	inst.ColumnIndexHighCardRefAccel = 90
+	inst.ColumnIndexLowCardRef = 85
+	inst.ColumnIndexLowCardRefAccel = 91
+	inst.ColumnIndexLowCardVerbatim = 86
+	inst.ColumnIndexLowCardVerbatimAccel = 92
+	inst.ColumnIndexMixedLowCardRef = 87
+	inst.ColumnIndexMixedLowCardRefAccel = 93
+	inst.ColumnIndexMixedRefHighCardParameters = 88
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 93
+	return
+}
+
+func NewMembershipPackTestTableShared1U32Set() (inst *MembershipPackTestTableShared1) {
+	inst = &MembershipPackTestTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 95
+	inst.ColumnIndexHighCardRefAccel = 101
+	inst.ColumnIndexLowCardRef = 96
+	inst.ColumnIndexLowCardRefAccel = 102
+	inst.ColumnIndexLowCardVerbatim = 97
+	inst.ColumnIndexLowCardVerbatimAccel = 103
+	inst.ColumnIndexMixedLowCardRef = 98
+	inst.ColumnIndexMixedLowCardRefAccel = 104
+	inst.ColumnIndexMixedRefHighCardParameters = 99
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 104
+	return
+}
+
+func NewMembershipPackTestTableShared1U64Array() (inst *MembershipPackTestTableShared1) {
+	inst = &MembershipPackTestTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 106
+	inst.ColumnIndexHighCardRefAccel = 112
+	inst.ColumnIndexLowCardRef = 107
+	inst.ColumnIndexLowCardRefAccel = 113
+	inst.ColumnIndexLowCardVerbatim = 108
+	inst.ColumnIndexLowCardVerbatimAccel = 114
+	inst.ColumnIndexMixedLowCardRef = 109
+	inst.ColumnIndexMixedLowCardRefAccel = 115
+	inst.ColumnIndexMixedRefHighCardParameters = 110
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 115
+	return
+}
+
+func NewMembershipPackTestTableShared1U64Set() (inst *MembershipPackTestTableShared1) {
+	inst = &MembershipPackTestTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 117
+	inst.ColumnIndexHighCardRefAccel = 123
+	inst.ColumnIndexLowCardRef = 118
+	inst.ColumnIndexLowCardRefAccel = 124
+	inst.ColumnIndexLowCardVerbatim = 119
+	inst.ColumnIndexLowCardVerbatimAccel = 125
+	inst.ColumnIndexMixedLowCardRef = 120
+	inst.ColumnIndexMixedLowCardRefAccel = 126
+	inst.ColumnIndexMixedRefHighCardParameters = 121
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 126
+	return
+}
+
+func NewMembershipPackTestTableShared1I8Array() (inst *MembershipPackTestTableShared1) {
+	inst = &MembershipPackTestTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 128
+	inst.ColumnIndexHighCardRefAccel = 134
+	inst.ColumnIndexLowCardRef = 129
+	inst.ColumnIndexLowCardRefAccel = 135
+	inst.ColumnIndexLowCardVerbatim = 130
+	inst.ColumnIndexLowCardVerbatimAccel = 136
+	inst.ColumnIndexMixedLowCardRef = 131
+	inst.ColumnIndexMixedLowCardRefAccel = 137
+	inst.ColumnIndexMixedRefHighCardParameters = 132
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 137
+	return
+}
+
+func NewMembershipPackTestTableShared1I16Array() (inst *MembershipPackTestTableShared1) {
+	inst = &MembershipPackTestTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 139
+	inst.ColumnIndexHighCardRefAccel = 145
+	inst.ColumnIndexLowCardRef = 140
+	inst.ColumnIndexLowCardRefAccel = 146
+	inst.ColumnIndexLowCardVerbatim = 141
+	inst.ColumnIndexLowCardVerbatimAccel = 147
+	inst.ColumnIndexMixedLowCardRef = 142
+	inst.ColumnIndexMixedLowCardRefAccel = 148
+	inst.ColumnIndexMixedRefHighCardParameters = 143
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 148
+	return
+}
+
+func NewMembershipPackTestTableShared1I32Array() (inst *MembershipPackTestTableShared1) {
+	inst = &MembershipPackTestTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 150
+	inst.ColumnIndexHighCardRefAccel = 156
+	inst.ColumnIndexLowCardRef = 151
+	inst.ColumnIndexLowCardRefAccel = 157
+	inst.ColumnIndexLowCardVerbatim = 152
+	inst.ColumnIndexLowCardVerbatimAccel = 158
+	inst.ColumnIndexMixedLowCardRef = 153
+	inst.ColumnIndexMixedLowCardRefAccel = 159
+	inst.ColumnIndexMixedRefHighCardParameters = 154
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 159
+	return
+}
+
+func NewMembershipPackTestTableShared1I64Array() (inst *MembershipPackTestTableShared1) {
+	inst = &MembershipPackTestTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 161
+	inst.ColumnIndexHighCardRefAccel = 167
+	inst.ColumnIndexLowCardRef = 162
+	inst.ColumnIndexLowCardRefAccel = 168
+	inst.ColumnIndexLowCardVerbatim = 163
+	inst.ColumnIndexLowCardVerbatimAccel = 169
+	inst.ColumnIndexMixedLowCardRef = 164
+	inst.ColumnIndexMixedLowCardRefAccel = 170
+	inst.ColumnIndexMixedRefHighCardParameters = 165
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 170
+	return
+}
+
+func NewMembershipPackTestTableShared1TimeRange() (inst *MembershipPackTestTableShared1) {
+	inst = &MembershipPackTestTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 173
+	inst.ColumnIndexHighCardRefAccel = 178
+	inst.ColumnIndexLowCardRef = 174
+	inst.ColumnIndexLowCardRefAccel = 179
+	inst.ColumnIndexLowCardVerbatim = 175
+	inst.ColumnIndexLowCardVerbatimAccel = 180
+	inst.ColumnIndexMixedLowCardRef = 176
+	inst.ColumnIndexMixedLowCardRefAccel = 181
+	inst.ColumnIndexMixedRefHighCardParameters = 177
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 181
+	return
+}
+
+func NewMembershipPackTestTableShared1F32Array() (inst *MembershipPackTestTableShared1) {
+	inst = &MembershipPackTestTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 183
+	inst.ColumnIndexHighCardRefAccel = 189
+	inst.ColumnIndexLowCardRef = 184
+	inst.ColumnIndexLowCardRefAccel = 190
+	inst.ColumnIndexLowCardVerbatim = 185
+	inst.ColumnIndexLowCardVerbatimAccel = 191
+	inst.ColumnIndexMixedLowCardRef = 186
+	inst.ColumnIndexMixedLowCardRefAccel = 192
+	inst.ColumnIndexMixedRefHighCardParameters = 187
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 192
+	return
+}
+
+func NewMembershipPackTestTableShared1F64Array() (inst *MembershipPackTestTableShared1) {
+	inst = &MembershipPackTestTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 194
+	inst.ColumnIndexHighCardRefAccel = 200
+	inst.ColumnIndexLowCardRef = 195
+	inst.ColumnIndexLowCardRefAccel = 201
+	inst.ColumnIndexLowCardVerbatim = 196
+	inst.ColumnIndexLowCardVerbatimAccel = 202
+	inst.ColumnIndexMixedLowCardRef = 197
+	inst.ColumnIndexMixedLowCardRefAccel = 203
+	inst.ColumnIndexMixedRefHighCardParameters = 198
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 203
+	return
+}
+
+func NewMembershipPackTestTableShared1GeoPoint() (inst *MembershipPackTestTableShared1) {
+	inst = &MembershipPackTestTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 207
+	inst.ColumnIndexHighCardRefAccel = 212
+	inst.ColumnIndexLowCardRef = 208
+	inst.ColumnIndexLowCardRefAccel = 213
+	inst.ColumnIndexLowCardVerbatim = 209
+	inst.ColumnIndexLowCardVerbatimAccel = 214
+	inst.ColumnIndexMixedLowCardRef = 210
+	inst.ColumnIndexMixedLowCardRefAccel = 215
+	inst.ColumnIndexMixedRefHighCardParameters = 211
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 215
+	return
+}
+
+func NewMembershipPackTestTableShared1GeoArea() (inst *MembershipPackTestTableShared1) {
+	inst = &MembershipPackTestTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 219
+	inst.ColumnIndexHighCardRefAccel = 226
+	inst.ColumnIndexLowCardRef = 220
+	inst.ColumnIndexLowCardRefAccel = 227
+	inst.ColumnIndexLowCardVerbatim = 221
+	inst.ColumnIndexLowCardVerbatimAccel = 228
+	inst.ColumnIndexMixedLowCardRef = 222
+	inst.ColumnIndexMixedLowCardRefAccel = 229
+	inst.ColumnIndexMixedRefHighCardParameters = 223
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 229
+	return
+}
+
+func NewMembershipPackTestTableShared1TimeArray() (inst *MembershipPackTestTableShared1) {
+	inst = &MembershipPackTestTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 231
+	inst.ColumnIndexHighCardRefAccel = 237
+	inst.ColumnIndexLowCardRef = 232
+	inst.ColumnIndexLowCardRefAccel = 238
+	inst.ColumnIndexLowCardVerbatim = 233
+	inst.ColumnIndexLowCardVerbatimAccel = 239
+	inst.ColumnIndexMixedLowCardRef = 234
+	inst.ColumnIndexMixedLowCardRefAccel = 240
+	inst.ColumnIndexMixedRefHighCardParameters = 235
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 240
+	return
+}
+
+func (inst *MembershipPackTestTableForeignKey) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueLowCardRef)
+	runtime.ReleaseIfNotNil(inst.ValueLowCardRefElements)
+}
+
+func (inst *MembershipPackTestTableShared1) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueHighCardRef)
+	runtime.ReleaseIfNotNil(inst.ValueHighCardRefElements)
+	runtime.ReleaseIfNotNil(inst.ValueLowCardRef)
+	runtime.ReleaseIfNotNil(inst.ValueLowCardRefElements)
+	runtime.ReleaseIfNotNil(inst.ValueLowCardVerbatim)
+	runtime.ReleaseIfNotNil(inst.ValueLowCardVerbatimElements)
+	runtime.ReleaseIfNotNil(inst.ValueMixedLowCardRef)
+	runtime.ReleaseIfNotNil(inst.ValueMixedLowCardRefElements)
+	runtime.ReleaseIfNotNil(inst.ValueMixedRefHighCardParameters)
+	runtime.ReleaseIfNotNil(inst.ValueMixedRefHighCardParametersElements)
+}
+
+func (inst *MembershipPackTestTableForeignKey) Reset() {
+	inst.ValueLowCardRef = nil
+	inst.ValueLowCardRefElements = nil
+}
+
+func (inst *MembershipPackTestTableShared1) Reset() {
+	inst.ValueHighCardRef = nil
+	inst.ValueHighCardRefElements = nil
+	inst.ValueLowCardRef = nil
+	inst.ValueLowCardRefElements = nil
+	inst.ValueLowCardVerbatim = nil
+	inst.ValueLowCardVerbatimElements = nil
+	inst.ValueMixedLowCardRef = nil
+	inst.ValueMixedLowCardRefElements = nil
+	inst.ValueMixedRefHighCardParameters = nil
+	inst.ValueMixedRefHighCardParametersElements = nil
+}
+
+func (inst *MembershipPackTestTableForeignKey) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexLowCardRef, arrow.UINT64, rec, &inst.ValueLowCardRef, &inst.ValueLowCardRefElements, array.NewUint64Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexLowCardRefAccel, rec, inst.AccelLowCardRef)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *MembershipPackTestTableShared1) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexHighCardRef, arrow.UINT64, rec, &inst.ValueHighCardRef, &inst.ValueHighCardRefElements, array.NewUint64Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHighCardRefAccel, rec, inst.AccelHighCardRef)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexLowCardRef, arrow.UINT64, rec, &inst.ValueLowCardRef, &inst.ValueLowCardRefElements, array.NewUint64Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexLowCardRefAccel, rec, inst.AccelLowCardRef)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexLowCardVerbatim, arrow.BINARY, rec, &inst.ValueLowCardVerbatim, &inst.ValueLowCardVerbatimElements, array.NewBinaryData)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexLowCardVerbatimAccel, rec, inst.AccelLowCardVerbatim)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexMixedLowCardRef, arrow.UINT64, rec, &inst.ValueMixedLowCardRef, &inst.ValueMixedLowCardRefElements, array.NewUint64Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexMixedLowCardRefAccel, rec, inst.AccelMixedLowCardRef)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexMixedRefHighCardParameters, arrow.BINARY, rec, &inst.ValueMixedRefHighCardParameters, &inst.ValueMixedRefHighCardParametersElements, array.NewBinaryData)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexMixedLowCardRefAccel, rec, inst.AccelMixedRefHighCardParameters)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *MembershipPackTestTableForeignKey) Len() (nEntities int) {
+	if inst.ValueLowCardRef != nil {
+		nEntities = inst.ValueLowCardRef.Len()
+	}
+	return
+}
+
+func (inst *MembershipPackTestTableShared1) Len() (nEntities int) {
+	if inst.ValueHighCardRef != nil {
+		nEntities = inst.ValueHighCardRef.Len()
+	}
+	return
+}
+
+func (inst *MembershipPackTestTableForeignKey) GetTotalNumberOfMemberItems(entityIdx runtime.EntityIdx) (nItems int64) {
+	nItems += inst.GetNumberOfMemberItemsLowCardRef(entityIdx)
+	return
+}
+
+func (inst *MembershipPackTestTableShared1) GetTotalNumberOfMemberItems(entityIdx runtime.EntityIdx) (nItems int64) {
+	nItems += inst.GetNumberOfMemberItemsHighCardRef(entityIdx)
+	nItems += inst.GetNumberOfMemberItemsLowCardRef(entityIdx)
+	nItems += inst.GetNumberOfMemberItemsLowCardVerbatim(entityIdx)
+	nItems += inst.GetNumberOfMemberItemsMixedLowCardRef(entityIdx)
+	return
+}
+
+func (inst *MembershipPackTestTableForeignKey) GetNumberOfMemberItemsLowCardRef(entityIdx runtime.EntityIdx) (nItems int64) {
+	if inst.ValueLowCardRef != nil {
+		b, e := inst.ValueLowCardRef.ValueOffsets(int(entityIdx))
+		nItems = e - b
+	}
+	return
+}
+func (inst *MembershipPackTestTableShared1) GetNumberOfMemberItemsHighCardRef(entityIdx runtime.EntityIdx) (nItems int64) {
+	if inst.ValueHighCardRef != nil {
+		b, e := inst.ValueHighCardRef.ValueOffsets(int(entityIdx))
+		nItems = e - b
+	}
+	return
+}
+func (inst *MembershipPackTestTableShared1) GetNumberOfMemberItemsLowCardRef(entityIdx runtime.EntityIdx) (nItems int64) {
+	if inst.ValueLowCardRef != nil {
+		b, e := inst.ValueLowCardRef.ValueOffsets(int(entityIdx))
+		nItems = e - b
+	}
+	return
+}
+func (inst *MembershipPackTestTableShared1) GetNumberOfMemberItemsLowCardVerbatim(entityIdx runtime.EntityIdx) (nItems int64) {
+	if inst.ValueLowCardVerbatim != nil {
+		b, e := inst.ValueLowCardVerbatim.ValueOffsets(int(entityIdx))
+		nItems = e - b
+	}
+	return
+}
+func (inst *MembershipPackTestTableShared1) GetNumberOfMemberItemsMixedLowCardRef(entityIdx runtime.EntityIdx) (nItems int64) {
+	if inst.ValueMixedLowCardRef != nil {
+		b, e := inst.ValueMixedLowCardRef.ValueOffsets(int(entityIdx))
+		nItems = e - b
+	}
+	return
+}
+func (inst *MembershipPackTestTableForeignKey) GetMembValueLowCardRef(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[uint64] {
+	accel := inst.AccelLowCardRef
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueLowCardRef.ValueOffsets(int(entityIdx))
+	return func(yield func(uint64) bool) {
+		vs := inst.ValueLowCardRefElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *MembershipPackTestTableShared1) GetMembValueHighCardRef(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[uint64] {
+	accel := inst.AccelHighCardRef
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueHighCardRef.ValueOffsets(int(entityIdx))
+	return func(yield func(uint64) bool) {
+		vs := inst.ValueHighCardRefElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *MembershipPackTestTableShared1) GetMembValueLowCardRef(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[uint64] {
+	accel := inst.AccelLowCardRef
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueLowCardRef.ValueOffsets(int(entityIdx))
+	return func(yield func(uint64) bool) {
+		vs := inst.ValueLowCardRefElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *MembershipPackTestTableShared1) GetMembValueLowCardVerbatim(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[[]byte] {
+	accel := inst.AccelLowCardVerbatim
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueLowCardVerbatim.ValueOffsets(int(entityIdx))
+	return func(yield func([]byte) bool) {
+		vs := inst.ValueLowCardVerbatimElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *MembershipPackTestTableShared1) GetMembValueMixedLowCardRef(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[uint64] {
+	accel := inst.AccelMixedLowCardRef
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueMixedLowCardRef.ValueOffsets(int(entityIdx))
+	return func(yield func(uint64) bool) {
+		vs := inst.ValueMixedLowCardRefElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *MembershipPackTestTableShared1) GetMembValueMixedRefHighCardParameters(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[[]byte] {
+	accel := inst.AccelMixedRefHighCardParameters
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueMixedRefHighCardParameters.ValueOffsets(int(entityIdx))
+	return func(yield func([]byte) bool) {
+		vs := inst.ValueMixedRefHighCardParametersElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *MembershipPackTestTableShared1) GetMembValueLowCardRefHighCardParams(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq2[uint64, []byte] {
+	accel := inst.AccelMixedLowCardRef
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueMixedLowCardRef.ValueOffsets(int(entityIdx))
+	return func(yield func(uint64, []byte) bool) {
+		vs1 := inst.ValueMixedLowCardRefElements
+		vs2 := inst.ValueMixedRefHighCardParametersElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			idx := int(b) + int(i)
+			if !yield(vs1.Value(idx), vs2.Value(idx)) {
+				break
+			}
+		}
+	}
+}
+func (inst *MembershipPackTestTableForeignKey) GetNumberOfMemberItemsByAttrLowCardRef(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (nItems int) {
+	accel := inst.AccelLowCardRef
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	nItems = int(accel.LookupForwardRange(attrIdx).CalcCardinality())
+	return
+}
+func (inst *MembershipPackTestTableShared1) GetNumberOfMemberItemsByAttrHighCardRef(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (nItems int) {
+	accel := inst.AccelHighCardRef
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	nItems = int(accel.LookupForwardRange(attrIdx).CalcCardinality())
+	return
+}
+func (inst *MembershipPackTestTableShared1) GetNumberOfMemberItemsByAttrLowCardRef(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (nItems int) {
+	accel := inst.AccelLowCardRef
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	nItems = int(accel.LookupForwardRange(attrIdx).CalcCardinality())
+	return
+}
+func (inst *MembershipPackTestTableShared1) GetNumberOfMemberItemsByAttrLowCardVerbatim(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (nItems int) {
+	accel := inst.AccelLowCardVerbatim
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	nItems = int(accel.LookupForwardRange(attrIdx).CalcCardinality())
+	return
+}
+func (inst *MembershipPackTestTableShared1) GetNumberOfMemberItemsByAttrLowCardRefHighCardParams(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (nItems int) {
+	accel := inst.AccelMixedLowCardRef
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	nItems = int(accel.LookupForwardRange(attrIdx).CalcCardinality())
+	return
+}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// readaccess.(*GoClassBuilder).composeSectionAttributeClasses
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:826
+
+type ReadAccessTestTablePlainEntityIdAttributes struct {
+	ValueId               *array.Uint64
+	ColumnIndexId         uint32
+	ValueNaturalKey       *array.Binary
+	ColumnIndexNaturalKey uint32
+}
+
+type ReadAccessTestTableTaggedBlobArrayAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.Binary
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
+}
+
+type ReadAccessTestTableTaggedF32ArrayAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.Float32
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
+}
+
+type ReadAccessTestTableTaggedF64ArrayAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.Float64
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
+}
+
+type ReadAccessTestTableTaggedForeignKeyAttributes struct {
+	ValueValue         *array.List
+	ColumnIndexValue   uint32
+	ValueValueElements *array.Uint64
+}
+
+type ReadAccessTestTableTaggedGeoAreaAttributes struct {
+	ValuePolyLat               *array.List
+	ColumnIndexPolyLat         uint32
+	ValuePolyLatElements       *array.Float32
+	ValuePolyLng               *array.List
+	ColumnIndexPolyLng         uint32
+	ValuePolyLngElements       *array.Float32
+	ValueH3                    *array.List
+	ColumnIndexH3              uint32
+	ValueH3Elements            *array.Uint64
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
+	AccelSet                   *runtime.RandomAccessTwoLevelLookupAccel[runtime.SetIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexSet             uint32
+}
+
+type ReadAccessTestTableTaggedGeoPointAttributes struct {
+	ValuePointLat         *array.List
+	ColumnIndexPointLat   uint32
+	ValuePointLatElements *array.Float32
+	ValuePointLng         *array.List
+	ColumnIndexPointLng   uint32
+	ValuePointLngElements *array.Float32
+	ValueH3               *array.List
+	ColumnIndexH3         uint32
+	ValueH3Elements       *array.Uint64
+}
+
+type ReadAccessTestTableTaggedI16ArrayAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.Int16
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
+}
+
+type ReadAccessTestTableTaggedI32ArrayAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.Int32
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
+}
+
+type ReadAccessTestTableTaggedI64ArrayAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.Int64
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
+}
+
+type ReadAccessTestTableTaggedI8ArrayAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.Int8
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
+}
+
+type ReadAccessTestTableTaggedStringArrayAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.String
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
+}
+
+type ReadAccessTestTableTaggedSymbolArrayAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.String
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
+}
+
+type ReadAccessTestTableTaggedSymbolAttributes struct {
+	ValueValue         *array.List
+	ColumnIndexValue   uint32
+	ValueValueElements *array.String
+}
+
+type ReadAccessTestTableTaggedTextAttributes struct {
+	ValueText                  *array.List
+	ColumnIndexText            uint32
+	ValueTextElements          *array.String
+	ValueWordLength            *array.List
+	ColumnIndexWordLength      uint32
+	ValueWordLengthElements    *array.Uint32
+	ValueWordBag               *array.List
+	ColumnIndexWordBag         uint32
+	ValueWordBagElements       *array.String
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
+}
+
+type ReadAccessTestTableTaggedTimeArrayAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.Timestamp
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
+}
+
+type ReadAccessTestTableTaggedTimeRangeAttributes struct {
+	ValueBeginIncl         *array.List
+	ColumnIndexBeginIncl   uint32
+	ValueBeginInclElements *array.Timestamp
+	ValueEndExcl           *array.List
+	ColumnIndexEndExcl     uint32
+	ValueEndExclElements   *array.Timestamp
+}
+
+type ReadAccessTestTableTaggedU16ArrayAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.Uint16
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
+}
+
+type ReadAccessTestTableTaggedU32ArrayAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.Uint32
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
+}
+
+type ReadAccessTestTableTaggedU32SetAttributes struct {
+	ValueValue         *array.List
+	ColumnIndexValue   uint32
+	ValueValueElements *array.Uint32
+	AccelSet           *runtime.RandomAccessTwoLevelLookupAccel[runtime.SetIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexSet     uint32
+}
+
+type ReadAccessTestTableTaggedU64ArrayAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.Uint64
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
+}
+
+type ReadAccessTestTableTaggedU64SetAttributes struct {
+	ValueValue         *array.List
+	ColumnIndexValue   uint32
+	ValueValueElements *array.Uint64
+	AccelSet           *runtime.RandomAccessTwoLevelLookupAccel[runtime.SetIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexSet     uint32
+}
+
+type ReadAccessTestTableTaggedU8ArrayAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.Uint8
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
+}
+
+func NewReadAccessTestTablePlainEntityIdAttributes() (inst *ReadAccessTestTablePlainEntityIdAttributes) {
+	inst = &ReadAccessTestTablePlainEntityIdAttributes{}
+	inst.ColumnIndexId = 0
+	inst.ColumnIndexNaturalKey = 1
+	return
+}
+
+func (inst *ReadAccessTestTablePlainEntityIdAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexId,
+		inst.ColumnIndexNaturalKey,
+	}
+	return
+}
+
+func (inst *ReadAccessTestTablePlainEntityIdAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessTestTablePlainEntityIdAttributes.ColumnIndexId",
+		"ReadAccessTestTablePlainEntityIdAttributes.ColumnIndexNaturalKey",
+	}
+	return
+}
+
+func (inst *ReadAccessTestTablePlainEntityIdAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexId = indices[0]
+	inst.ColumnIndexNaturalKey = indices[1]
+
+	rest = indices[2:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTablePlainEntityIdAttributes)(nil)
+
+func NewReadAccessTestTableTaggedBlobArrayAttributes() (inst *ReadAccessTestTableTaggedBlobArrayAttributes) {
+	inst = &ReadAccessTestTableTaggedBlobArrayAttributes{}
+	inst.ColumnIndexValue = 50
+	inst.ColumnIndexHomogenousArray = 56
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedBlobArrayAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedBlobArrayAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessTestTableTaggedBlobArrayAttributes.ColumnIndexValue",
+		"ReadAccessTestTableTaggedBlobArrayAttributes.ColumnIndexHomogenousArray",
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedBlobArrayAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
+
+	rest = indices[2:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedBlobArrayAttributes)(nil)
+
+func NewReadAccessTestTableTaggedF32ArrayAttributes() (inst *ReadAccessTestTableTaggedF32ArrayAttributes) {
+	inst = &ReadAccessTestTableTaggedF32ArrayAttributes{}
+	inst.ColumnIndexValue = 182
+	inst.ColumnIndexHomogenousArray = 188
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedF32ArrayAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedF32ArrayAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessTestTableTaggedF32ArrayAttributes.ColumnIndexValue",
+		"ReadAccessTestTableTaggedF32ArrayAttributes.ColumnIndexHomogenousArray",
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedF32ArrayAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
+
+	rest = indices[2:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedF32ArrayAttributes)(nil)
+
+func NewReadAccessTestTableTaggedF64ArrayAttributes() (inst *ReadAccessTestTableTaggedF64ArrayAttributes) {
+	inst = &ReadAccessTestTableTaggedF64ArrayAttributes{}
+	inst.ColumnIndexValue = 193
+	inst.ColumnIndexHomogenousArray = 199
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedF64ArrayAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedF64ArrayAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessTestTableTaggedF64ArrayAttributes.ColumnIndexValue",
+		"ReadAccessTestTableTaggedF64ArrayAttributes.ColumnIndexHomogenousArray",
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedF64ArrayAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
+
+	rest = indices[2:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedF64ArrayAttributes)(nil)
+
+func NewReadAccessTestTableTaggedForeignKeyAttributes() (inst *ReadAccessTestTableTaggedForeignKeyAttributes) {
+	inst = &ReadAccessTestTableTaggedForeignKeyAttributes{}
+	inst.ColumnIndexValue = 2
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedForeignKeyAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedForeignKeyAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessTestTableTaggedForeignKeyAttributes.ColumnIndexValue",
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedForeignKeyAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+
+	rest = indices[1:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedForeignKeyAttributes)(nil)
+
+func NewReadAccessTestTableTaggedGeoAreaAttributes() (inst *ReadAccessTestTableTaggedGeoAreaAttributes) {
+	inst = &ReadAccessTestTableTaggedGeoAreaAttributes{}
+	inst.ColumnIndexPolyLat = 216
+	inst.ColumnIndexPolyLng = 217
+	inst.ColumnIndexH3 = 218
+	inst.ColumnIndexHomogenousArray = 224
+	inst.ColumnIndexSet = 225
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelSet = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.SetIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedGeoAreaAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexPolyLat,
+		inst.ColumnIndexPolyLng,
+		inst.ColumnIndexH3,
+		inst.ColumnIndexHomogenousArray,
+		inst.ColumnIndexSet,
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedGeoAreaAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessTestTableTaggedGeoAreaAttributes.ColumnIndexPolyLat",
+		"ReadAccessTestTableTaggedGeoAreaAttributes.ColumnIndexPolyLng",
+		"ReadAccessTestTableTaggedGeoAreaAttributes.ColumnIndexH3",
+		"ReadAccessTestTableTaggedGeoAreaAttributes.ColumnIndexHomogenousArray",
+		"ReadAccessTestTableTaggedGeoAreaAttributes.ColumnIndexSet",
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedGeoAreaAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexPolyLat = indices[0]
+	inst.ColumnIndexPolyLng = indices[1]
+	inst.ColumnIndexH3 = indices[2]
+	inst.ColumnIndexHomogenousArray = indices[3]
+	inst.ColumnIndexSet = indices[4]
+
+	rest = indices[5:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedGeoAreaAttributes)(nil)
+
+func NewReadAccessTestTableTaggedGeoPointAttributes() (inst *ReadAccessTestTableTaggedGeoPointAttributes) {
+	inst = &ReadAccessTestTableTaggedGeoPointAttributes{}
+	inst.ColumnIndexPointLat = 204
+	inst.ColumnIndexPointLng = 205
+	inst.ColumnIndexH3 = 206
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedGeoPointAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexPointLat,
+		inst.ColumnIndexPointLng,
+		inst.ColumnIndexH3,
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedGeoPointAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessTestTableTaggedGeoPointAttributes.ColumnIndexPointLat",
+		"ReadAccessTestTableTaggedGeoPointAttributes.ColumnIndexPointLng",
+		"ReadAccessTestTableTaggedGeoPointAttributes.ColumnIndexH3",
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedGeoPointAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexPointLat = indices[0]
+	inst.ColumnIndexPointLng = indices[1]
+	inst.ColumnIndexH3 = indices[2]
+
+	rest = indices[3:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedGeoPointAttributes)(nil)
+
+func NewReadAccessTestTableTaggedI16ArrayAttributes() (inst *ReadAccessTestTableTaggedI16ArrayAttributes) {
+	inst = &ReadAccessTestTableTaggedI16ArrayAttributes{}
+	inst.ColumnIndexValue = 138
+	inst.ColumnIndexHomogenousArray = 144
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI16ArrayAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI16ArrayAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessTestTableTaggedI16ArrayAttributes.ColumnIndexValue",
+		"ReadAccessTestTableTaggedI16ArrayAttributes.ColumnIndexHomogenousArray",
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI16ArrayAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
+
+	rest = indices[2:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedI16ArrayAttributes)(nil)
+
+func NewReadAccessTestTableTaggedI32ArrayAttributes() (inst *ReadAccessTestTableTaggedI32ArrayAttributes) {
+	inst = &ReadAccessTestTableTaggedI32ArrayAttributes{}
+	inst.ColumnIndexValue = 149
+	inst.ColumnIndexHomogenousArray = 155
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI32ArrayAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI32ArrayAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessTestTableTaggedI32ArrayAttributes.ColumnIndexValue",
+		"ReadAccessTestTableTaggedI32ArrayAttributes.ColumnIndexHomogenousArray",
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI32ArrayAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
+
+	rest = indices[2:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedI32ArrayAttributes)(nil)
+
+func NewReadAccessTestTableTaggedI64ArrayAttributes() (inst *ReadAccessTestTableTaggedI64ArrayAttributes) {
+	inst = &ReadAccessTestTableTaggedI64ArrayAttributes{}
+	inst.ColumnIndexValue = 160
+	inst.ColumnIndexHomogenousArray = 166
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI64ArrayAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI64ArrayAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessTestTableTaggedI64ArrayAttributes.ColumnIndexValue",
+		"ReadAccessTestTableTaggedI64ArrayAttributes.ColumnIndexHomogenousArray",
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI64ArrayAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
+
+	rest = indices[2:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedI64ArrayAttributes)(nil)
+
+func NewReadAccessTestTableTaggedI8ArrayAttributes() (inst *ReadAccessTestTableTaggedI8ArrayAttributes) {
+	inst = &ReadAccessTestTableTaggedI8ArrayAttributes{}
+	inst.ColumnIndexValue = 127
+	inst.ColumnIndexHomogenousArray = 133
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI8ArrayAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI8ArrayAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessTestTableTaggedI8ArrayAttributes.ColumnIndexValue",
+		"ReadAccessTestTableTaggedI8ArrayAttributes.ColumnIndexHomogenousArray",
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI8ArrayAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
+
+	rest = indices[2:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedI8ArrayAttributes)(nil)
+
+func NewReadAccessTestTableTaggedStringArrayAttributes() (inst *ReadAccessTestTableTaggedStringArrayAttributes) {
+	inst = &ReadAccessTestTableTaggedStringArrayAttributes{}
+	inst.ColumnIndexValue = 26
+	inst.ColumnIndexHomogenousArray = 32
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedStringArrayAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedStringArrayAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessTestTableTaggedStringArrayAttributes.ColumnIndexValue",
+		"ReadAccessTestTableTaggedStringArrayAttributes.ColumnIndexHomogenousArray",
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedStringArrayAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
+
+	rest = indices[2:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedStringArrayAttributes)(nil)
+
+func NewReadAccessTestTableTaggedSymbolArrayAttributes() (inst *ReadAccessTestTableTaggedSymbolArrayAttributes) {
+	inst = &ReadAccessTestTableTaggedSymbolArrayAttributes{}
+	inst.ColumnIndexValue = 15
+	inst.ColumnIndexHomogenousArray = 21
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedSymbolArrayAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedSymbolArrayAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessTestTableTaggedSymbolArrayAttributes.ColumnIndexValue",
+		"ReadAccessTestTableTaggedSymbolArrayAttributes.ColumnIndexHomogenousArray",
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedSymbolArrayAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
+
+	rest = indices[2:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedSymbolArrayAttributes)(nil)
+
+func NewReadAccessTestTableTaggedSymbolAttributes() (inst *ReadAccessTestTableTaggedSymbolAttributes) {
+	inst = &ReadAccessTestTableTaggedSymbolAttributes{}
+	inst.ColumnIndexValue = 5
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedSymbolAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedSymbolAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessTestTableTaggedSymbolAttributes.ColumnIndexValue",
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedSymbolAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+
+	rest = indices[1:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedSymbolAttributes)(nil)
+
+func NewReadAccessTestTableTaggedTextAttributes() (inst *ReadAccessTestTableTaggedTextAttributes) {
+	inst = &ReadAccessTestTableTaggedTextAttributes{}
+	inst.ColumnIndexText = 37
+	inst.ColumnIndexWordLength = 38
+	inst.ColumnIndexWordBag = 39
+	inst.ColumnIndexHomogenousArray = 45
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedTextAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexText,
+		inst.ColumnIndexWordLength,
+		inst.ColumnIndexWordBag,
+		inst.ColumnIndexHomogenousArray,
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedTextAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessTestTableTaggedTextAttributes.ColumnIndexText",
+		"ReadAccessTestTableTaggedTextAttributes.ColumnIndexWordLength",
+		"ReadAccessTestTableTaggedTextAttributes.ColumnIndexWordBag",
+		"ReadAccessTestTableTaggedTextAttributes.ColumnIndexHomogenousArray",
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedTextAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexText = indices[0]
+	inst.ColumnIndexWordLength = indices[1]
+	inst.ColumnIndexWordBag = indices[2]
+	inst.ColumnIndexHomogenousArray = indices[3]
+
+	rest = indices[4:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedTextAttributes)(nil)
+
+func NewReadAccessTestTableTaggedTimeArrayAttributes() (inst *ReadAccessTestTableTaggedTimeArrayAttributes) {
+	inst = &ReadAccessTestTableTaggedTimeArrayAttributes{}
+	inst.ColumnIndexValue = 230
+	inst.ColumnIndexHomogenousArray = 236
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedTimeArrayAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedTimeArrayAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessTestTableTaggedTimeArrayAttributes.ColumnIndexValue",
+		"ReadAccessTestTableTaggedTimeArrayAttributes.ColumnIndexHomogenousArray",
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedTimeArrayAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
+
+	rest = indices[2:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedTimeArrayAttributes)(nil)
+
+func NewReadAccessTestTableTaggedTimeRangeAttributes() (inst *ReadAccessTestTableTaggedTimeRangeAttributes) {
+	inst = &ReadAccessTestTableTaggedTimeRangeAttributes{}
+	inst.ColumnIndexBeginIncl = 171
+	inst.ColumnIndexEndExcl = 172
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedTimeRangeAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexBeginIncl,
+		inst.ColumnIndexEndExcl,
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedTimeRangeAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessTestTableTaggedTimeRangeAttributes.ColumnIndexBeginIncl",
+		"ReadAccessTestTableTaggedTimeRangeAttributes.ColumnIndexEndExcl",
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedTimeRangeAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexBeginIncl = indices[0]
+	inst.ColumnIndexEndExcl = indices[1]
+
+	rest = indices[2:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedTimeRangeAttributes)(nil)
+
+func NewReadAccessTestTableTaggedU16ArrayAttributes() (inst *ReadAccessTestTableTaggedU16ArrayAttributes) {
+	inst = &ReadAccessTestTableTaggedU16ArrayAttributes{}
+	inst.ColumnIndexValue = 72
+	inst.ColumnIndexHomogenousArray = 78
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU16ArrayAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU16ArrayAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessTestTableTaggedU16ArrayAttributes.ColumnIndexValue",
+		"ReadAccessTestTableTaggedU16ArrayAttributes.ColumnIndexHomogenousArray",
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU16ArrayAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
+
+	rest = indices[2:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedU16ArrayAttributes)(nil)
+
+func NewReadAccessTestTableTaggedU32ArrayAttributes() (inst *ReadAccessTestTableTaggedU32ArrayAttributes) {
+	inst = &ReadAccessTestTableTaggedU32ArrayAttributes{}
+	inst.ColumnIndexValue = 83
+	inst.ColumnIndexHomogenousArray = 89
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU32ArrayAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU32ArrayAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessTestTableTaggedU32ArrayAttributes.ColumnIndexValue",
+		"ReadAccessTestTableTaggedU32ArrayAttributes.ColumnIndexHomogenousArray",
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU32ArrayAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
+
+	rest = indices[2:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedU32ArrayAttributes)(nil)
+
+func NewReadAccessTestTableTaggedU32SetAttributes() (inst *ReadAccessTestTableTaggedU32SetAttributes) {
+	inst = &ReadAccessTestTableTaggedU32SetAttributes{}
+	inst.ColumnIndexValue = 94
+	inst.ColumnIndexSet = 100
+	inst.AccelSet = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.SetIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU32SetAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+		inst.ColumnIndexSet,
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU32SetAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessTestTableTaggedU32SetAttributes.ColumnIndexValue",
+		"ReadAccessTestTableTaggedU32SetAttributes.ColumnIndexSet",
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU32SetAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexSet = indices[1]
+
+	rest = indices[2:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedU32SetAttributes)(nil)
+
+func NewReadAccessTestTableTaggedU64ArrayAttributes() (inst *ReadAccessTestTableTaggedU64ArrayAttributes) {
+	inst = &ReadAccessTestTableTaggedU64ArrayAttributes{}
+	inst.ColumnIndexValue = 105
+	inst.ColumnIndexHomogenousArray = 111
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU64ArrayAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU64ArrayAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessTestTableTaggedU64ArrayAttributes.ColumnIndexValue",
+		"ReadAccessTestTableTaggedU64ArrayAttributes.ColumnIndexHomogenousArray",
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU64ArrayAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
+
+	rest = indices[2:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedU64ArrayAttributes)(nil)
+
+func NewReadAccessTestTableTaggedU64SetAttributes() (inst *ReadAccessTestTableTaggedU64SetAttributes) {
+	inst = &ReadAccessTestTableTaggedU64SetAttributes{}
+	inst.ColumnIndexValue = 116
+	inst.ColumnIndexSet = 122
+	inst.AccelSet = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.SetIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU64SetAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+		inst.ColumnIndexSet,
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU64SetAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessTestTableTaggedU64SetAttributes.ColumnIndexValue",
+		"ReadAccessTestTableTaggedU64SetAttributes.ColumnIndexSet",
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU64SetAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexSet = indices[1]
+
+	rest = indices[2:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedU64SetAttributes)(nil)
+
+func NewReadAccessTestTableTaggedU8ArrayAttributes() (inst *ReadAccessTestTableTaggedU8ArrayAttributes) {
+	inst = &ReadAccessTestTableTaggedU8ArrayAttributes{}
+	inst.ColumnIndexValue = 61
+	inst.ColumnIndexHomogenousArray = 67
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU8ArrayAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU8ArrayAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessTestTableTaggedU8ArrayAttributes.ColumnIndexValue",
+		"ReadAccessTestTableTaggedU8ArrayAttributes.ColumnIndexHomogenousArray",
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU8ArrayAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
+
+	rest = indices[2:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedU8ArrayAttributes)(nil)
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// readaccess.(*GoClassBuilder).composeSectionAttributeClasses
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1044
+
+func (inst *ReadAccessTestTablePlainEntityIdAttributes) Reset() {
+	inst.ValueId = nil
+	inst.ValueNaturalKey = nil
+}
+
+func (inst *ReadAccessTestTableTaggedBlobArrayAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
+}
+
+func (inst *ReadAccessTestTableTaggedF32ArrayAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
+}
+
+func (inst *ReadAccessTestTableTaggedF64ArrayAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
+}
+
+func (inst *ReadAccessTestTableTaggedForeignKeyAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+}
+
+func (inst *ReadAccessTestTableTaggedGeoAreaAttributes) Reset() {
+	inst.ValuePolyLat = nil
+	inst.ValuePolyLatElements = nil
+	inst.ValuePolyLng = nil
+	inst.ValuePolyLngElements = nil
+	inst.ValueH3 = nil
+	inst.ValueH3Elements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
+	if inst.AccelSet != nil {
+		inst.AccelSet.Reset()
+	}
+}
+
+func (inst *ReadAccessTestTableTaggedGeoPointAttributes) Reset() {
+	inst.ValuePointLat = nil
+	inst.ValuePointLatElements = nil
+	inst.ValuePointLng = nil
+	inst.ValuePointLngElements = nil
+	inst.ValueH3 = nil
+	inst.ValueH3Elements = nil
+}
+
+func (inst *ReadAccessTestTableTaggedI16ArrayAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
+}
+
+func (inst *ReadAccessTestTableTaggedI32ArrayAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
+}
+
+func (inst *ReadAccessTestTableTaggedI64ArrayAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
+}
+
+func (inst *ReadAccessTestTableTaggedI8ArrayAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
+}
+
+func (inst *ReadAccessTestTableTaggedStringArrayAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
+}
+
+func (inst *ReadAccessTestTableTaggedSymbolArrayAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
+}
+
+func (inst *ReadAccessTestTableTaggedSymbolAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+}
+
+func (inst *ReadAccessTestTableTaggedTextAttributes) Reset() {
+	inst.ValueText = nil
+	inst.ValueTextElements = nil
+	inst.ValueWordLength = nil
+	inst.ValueWordLengthElements = nil
+	inst.ValueWordBag = nil
+	inst.ValueWordBagElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
+}
+
+func (inst *ReadAccessTestTableTaggedTimeArrayAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
+}
+
+func (inst *ReadAccessTestTableTaggedTimeRangeAttributes) Reset() {
+	inst.ValueBeginIncl = nil
+	inst.ValueBeginInclElements = nil
+	inst.ValueEndExcl = nil
+	inst.ValueEndExclElements = nil
+}
+
+func (inst *ReadAccessTestTableTaggedU16ArrayAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
+}
+
+func (inst *ReadAccessTestTableTaggedU32ArrayAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
+}
+
+func (inst *ReadAccessTestTableTaggedU32SetAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+	if inst.AccelSet != nil {
+		inst.AccelSet.Reset()
+	}
+}
+
+func (inst *ReadAccessTestTableTaggedU64ArrayAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
+}
+
+func (inst *ReadAccessTestTableTaggedU64SetAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+	if inst.AccelSet != nil {
+		inst.AccelSet.Reset()
+	}
+}
+
+func (inst *ReadAccessTestTableTaggedU8ArrayAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
+}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// readaccess.(*GoClassBuilder).composeSectionAttributeClasses
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1118
+
+var _ runtime.ReleasableI = (*ReadAccessTestTablePlainEntityIdAttributes)(nil)
+
+func (inst *ReadAccessTestTablePlainEntityIdAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueId)
+	runtime.ReleaseIfNotNil(inst.ValueNaturalKey)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedBlobArrayAttributes)(nil)
+
+func (inst *ReadAccessTestTableTaggedBlobArrayAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedF32ArrayAttributes)(nil)
+
+func (inst *ReadAccessTestTableTaggedF32ArrayAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedF64ArrayAttributes)(nil)
+
+func (inst *ReadAccessTestTableTaggedF64ArrayAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedForeignKeyAttributes)(nil)
+
+func (inst *ReadAccessTestTableTaggedForeignKeyAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedGeoAreaAttributes)(nil)
+
+func (inst *ReadAccessTestTableTaggedGeoAreaAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValuePolyLat)
+	runtime.ReleaseIfNotNil(inst.ValuePolyLatElements)
+	runtime.ReleaseIfNotNil(inst.ValuePolyLng)
+	runtime.ReleaseIfNotNil(inst.ValuePolyLngElements)
+	runtime.ReleaseIfNotNil(inst.ValueH3)
+	runtime.ReleaseIfNotNil(inst.ValueH3Elements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
+	runtime.ReleaseIfNotNil(inst.AccelSet)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedGeoPointAttributes)(nil)
+
+func (inst *ReadAccessTestTableTaggedGeoPointAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValuePointLat)
+	runtime.ReleaseIfNotNil(inst.ValuePointLatElements)
+	runtime.ReleaseIfNotNil(inst.ValuePointLng)
+	runtime.ReleaseIfNotNil(inst.ValuePointLngElements)
+	runtime.ReleaseIfNotNil(inst.ValueH3)
+	runtime.ReleaseIfNotNil(inst.ValueH3Elements)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedI16ArrayAttributes)(nil)
+
+func (inst *ReadAccessTestTableTaggedI16ArrayAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedI32ArrayAttributes)(nil)
+
+func (inst *ReadAccessTestTableTaggedI32ArrayAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedI64ArrayAttributes)(nil)
+
+func (inst *ReadAccessTestTableTaggedI64ArrayAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedI8ArrayAttributes)(nil)
+
+func (inst *ReadAccessTestTableTaggedI8ArrayAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedStringArrayAttributes)(nil)
+
+func (inst *ReadAccessTestTableTaggedStringArrayAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedSymbolArrayAttributes)(nil)
+
+func (inst *ReadAccessTestTableTaggedSymbolArrayAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedSymbolAttributes)(nil)
+
+func (inst *ReadAccessTestTableTaggedSymbolAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedTextAttributes)(nil)
+
+func (inst *ReadAccessTestTableTaggedTextAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueText)
+	runtime.ReleaseIfNotNil(inst.ValueTextElements)
+	runtime.ReleaseIfNotNil(inst.ValueWordLength)
+	runtime.ReleaseIfNotNil(inst.ValueWordLengthElements)
+	runtime.ReleaseIfNotNil(inst.ValueWordBag)
+	runtime.ReleaseIfNotNil(inst.ValueWordBagElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedTimeArrayAttributes)(nil)
+
+func (inst *ReadAccessTestTableTaggedTimeArrayAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedTimeRangeAttributes)(nil)
+
+func (inst *ReadAccessTestTableTaggedTimeRangeAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueBeginIncl)
+	runtime.ReleaseIfNotNil(inst.ValueBeginInclElements)
+	runtime.ReleaseIfNotNil(inst.ValueEndExcl)
+	runtime.ReleaseIfNotNil(inst.ValueEndExclElements)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedU16ArrayAttributes)(nil)
+
+func (inst *ReadAccessTestTableTaggedU16ArrayAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedU32ArrayAttributes)(nil)
+
+func (inst *ReadAccessTestTableTaggedU32ArrayAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedU32SetAttributes)(nil)
+
+func (inst *ReadAccessTestTableTaggedU32SetAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelSet)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedU64ArrayAttributes)(nil)
+
+func (inst *ReadAccessTestTableTaggedU64ArrayAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedU64SetAttributes)(nil)
+
+func (inst *ReadAccessTestTableTaggedU64SetAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelSet)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessTestTableTaggedU8ArrayAttributes)(nil)
+
+func (inst *ReadAccessTestTableTaggedU8ArrayAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
+}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// readaccess.(*GoClassBuilder).composeSectionAttributeClasses
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1197
+
+func (inst *ReadAccessTestTablePlainEntityIdAttributes) Len() (nEntities int) {
+	if inst.ValueId != nil {
+		nEntities = inst.ValueId.Len()
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedBlobArrayAttributes) Len() (nEntities int) {
+	if inst.ValueValue != nil {
+		nEntities = inst.ValueValue.Len()
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedF32ArrayAttributes) Len() (nEntities int) {
+	if inst.ValueValue != nil {
+		nEntities = inst.ValueValue.Len()
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedF64ArrayAttributes) Len() (nEntities int) {
+	if inst.ValueValue != nil {
+		nEntities = inst.ValueValue.Len()
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedForeignKeyAttributes) Len() (nEntities int) {
+	if inst.ValueValue != nil {
+		nEntities = inst.ValueValue.Len()
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedGeoAreaAttributes) Len() (nEntities int) {
+	if inst.ValuePolyLat != nil {
+		nEntities = inst.ValuePolyLat.Len()
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedGeoPointAttributes) Len() (nEntities int) {
+	if inst.ValuePointLat != nil {
+		nEntities = inst.ValuePointLat.Len()
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI16ArrayAttributes) Len() (nEntities int) {
+	if inst.ValueValue != nil {
+		nEntities = inst.ValueValue.Len()
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI32ArrayAttributes) Len() (nEntities int) {
+	if inst.ValueValue != nil {
+		nEntities = inst.ValueValue.Len()
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI64ArrayAttributes) Len() (nEntities int) {
+	if inst.ValueValue != nil {
+		nEntities = inst.ValueValue.Len()
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI8ArrayAttributes) Len() (nEntities int) {
+	if inst.ValueValue != nil {
+		nEntities = inst.ValueValue.Len()
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedStringArrayAttributes) Len() (nEntities int) {
+	if inst.ValueValue != nil {
+		nEntities = inst.ValueValue.Len()
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedSymbolArrayAttributes) Len() (nEntities int) {
+	if inst.ValueValue != nil {
+		nEntities = inst.ValueValue.Len()
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedSymbolAttributes) Len() (nEntities int) {
+	if inst.ValueValue != nil {
+		nEntities = inst.ValueValue.Len()
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedTextAttributes) Len() (nEntities int) {
+	if inst.ValueText != nil {
+		nEntities = inst.ValueText.Len()
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedTimeArrayAttributes) Len() (nEntities int) {
+	if inst.ValueValue != nil {
+		nEntities = inst.ValueValue.Len()
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedTimeRangeAttributes) Len() (nEntities int) {
+	if inst.ValueBeginIncl != nil {
+		nEntities = inst.ValueBeginIncl.Len()
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU16ArrayAttributes) Len() (nEntities int) {
+	if inst.ValueValue != nil {
+		nEntities = inst.ValueValue.Len()
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU32ArrayAttributes) Len() (nEntities int) {
+	if inst.ValueValue != nil {
+		nEntities = inst.ValueValue.Len()
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU32SetAttributes) Len() (nEntities int) {
+	if inst.ValueValue != nil {
+		nEntities = inst.ValueValue.Len()
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU64ArrayAttributes) Len() (nEntities int) {
+	if inst.ValueValue != nil {
+		nEntities = inst.ValueValue.Len()
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU64SetAttributes) Len() (nEntities int) {
+	if inst.ValueValue != nil {
+		nEntities = inst.ValueValue.Len()
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU8ArrayAttributes) Len() (nEntities int) {
+	if inst.ValueValue != nil {
+		nEntities = inst.ValueValue.Len()
+	}
+	return
+}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// readaccess.(*GoClassBuilder).composeSectionAttributeClasses
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1249
+
+func (inst *ReadAccessTestTablePlainEntityIdAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadScalarValueFieldFromRecord(inst.ColumnIndexId, arrow.UINT64, rec, &inst.ValueId, array.NewUint64Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadScalarValueFieldFromRecord(inst.ColumnIndexNaturalKey, arrow.BINARY, rec, &inst.ValueNaturalKey, array.NewBinaryData)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedBlobArrayAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.BINARY, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewBinaryData)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedF32ArrayAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.FLOAT32, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewFloat32Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedF64ArrayAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.FLOAT64, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewFloat64Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedForeignKeyAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.UINT64, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewUint64Data)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedGeoAreaAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexPolyLat, arrow.FLOAT32, rec, &inst.ValuePolyLat, &inst.ValuePolyLatElements, array.NewFloat32Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexPolyLng, arrow.FLOAT32, rec, &inst.ValuePolyLng, &inst.ValuePolyLngElements, array.NewFloat32Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexH3, arrow.UINT64, rec, &inst.ValueH3, &inst.ValueH3Elements, array.NewUint64Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexSet, rec, inst.AccelSet)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedGeoPointAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexPointLat, arrow.FLOAT32, rec, &inst.ValuePointLat, &inst.ValuePointLatElements, array.NewFloat32Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexPointLng, arrow.FLOAT32, rec, &inst.ValuePointLng, &inst.ValuePointLngElements, array.NewFloat32Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexH3, arrow.UINT64, rec, &inst.ValueH3, &inst.ValueH3Elements, array.NewUint64Data)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI16ArrayAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.INT16, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewInt16Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI32ArrayAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.INT32, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewInt32Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI64ArrayAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.INT64, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewInt64Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI8ArrayAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.INT8, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewInt8Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedStringArrayAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedSymbolArrayAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedSymbolAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedTextAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexText, arrow.STRING, rec, &inst.ValueText, &inst.ValueTextElements, array.NewStringData)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexWordLength, arrow.UINT32, rec, &inst.ValueWordLength, &inst.ValueWordLengthElements, array.NewUint32Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexWordBag, arrow.STRING, rec, &inst.ValueWordBag, &inst.ValueWordBagElements, array.NewStringData)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedTimeArrayAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.TIMESTAMP, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewTimestampData)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedTimeRangeAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexBeginIncl, arrow.TIMESTAMP, rec, &inst.ValueBeginIncl, &inst.ValueBeginInclElements, array.NewTimestampData)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexEndExcl, arrow.TIMESTAMP, rec, &inst.ValueEndExcl, &inst.ValueEndExclElements, array.NewTimestampData)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU16ArrayAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.UINT16, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewUint16Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU32ArrayAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.UINT32, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewUint32Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU32SetAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.UINT32, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewUint32Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexSet, rec, inst.AccelSet)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU64ArrayAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.UINT64, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewUint64Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU64SetAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.UINT64, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewUint64Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexSet, rec, inst.AccelSet)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU8ArrayAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.UINT8, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewUint8Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedForeignKeyAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue uint64) {
+	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
+	if int64(attrIdx) > (e - b) {
+		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	}
+	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
+	return
+}
+func (inst *ReadAccessTestTableTaggedSymbolAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
+	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
+	if int64(attrIdx) > (e - b) {
+		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	}
+	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
+	return
+}
+func (inst *ReadAccessTestTableTaggedSymbolArrayAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[string] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(string) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessTestTableTaggedSymbolArrayAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value string, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
+	}
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "symbolArray").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
+		return
+	}
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl))
+	return
+}
+func (inst *ReadAccessTestTableTaggedSymbolArrayAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value string) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessTestTableTaggedStringArrayAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[string] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(string) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessTestTableTaggedStringArrayAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value string, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
+	}
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "stringArray").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
+		return
+	}
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl))
+	return
+}
+func (inst *ReadAccessTestTableTaggedStringArrayAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value string) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessTestTableTaggedTextAttributes) GetAttrValueText(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
+	b, e := inst.ValueText.ValueOffsets(int(entityIdx))
+	if int64(attrIdx) > (e - b) {
+		log.Panic().Str("attribute", "Text").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	}
+	scalarAttrValue = inst.ValueTextElements.Value(int(b) + int(attrIdx))
+	return
+}
+func (inst *ReadAccessTestTableTaggedTextAttributes) GetAttrValueWordLength(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[uint32] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueWordLength.ValueOffsets(int(entityIdx))
+	return func(yield func(uint32) bool) {
+		vs := inst.ValueWordLengthElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessTestTableTaggedTextAttributes) GetAttrValueWordBag(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[string] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueWordBag.ValueOffsets(int(entityIdx))
+	return func(yield func(string) bool) {
+		vs := inst.ValueWordBagElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessTestTableTaggedTextAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (text string, wordLength uint32, wordBag string, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
+	}
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "text").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
+		return
+	}
+	bHA, _ := inst.ValueWordLength.ValueOffsets(int(entityIdx))
+	b, _ := inst.ValueText.ValueOffsets(int(entityIdx))
+	text = inst.ValueTextElements.Value(int(b) + int(attrIdx))
+	wordLength = inst.ValueWordLengthElements.Value(int(bHA) + int(rHA.BeginIncl))
+	wordBag = inst.ValueWordBagElements.Value(int(bHA) + int(rHA.BeginIncl))
+	return
+}
+func (inst *ReadAccessTestTableTaggedTextAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (text string, wordLength uint32, wordBag string) {
+	text, wordLength, wordBag, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessTestTableTaggedBlobArrayAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[[]byte] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func([]byte) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessTestTableTaggedBlobArrayAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value []byte, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
+	}
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "blobArray").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
+		return
+	}
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl))
+	return
+}
+func (inst *ReadAccessTestTableTaggedBlobArrayAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value []byte) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessTestTableTaggedU8ArrayAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[uint8] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(uint8) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessTestTableTaggedU8ArrayAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value uint8, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
+	}
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "u8Array").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
+		return
+	}
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl))
+	return
+}
+func (inst *ReadAccessTestTableTaggedU8ArrayAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value uint8) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessTestTableTaggedU16ArrayAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[uint16] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(uint16) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessTestTableTaggedU16ArrayAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value uint16, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
+	}
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "u16Array").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
+		return
+	}
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl))
+	return
+}
+func (inst *ReadAccessTestTableTaggedU16ArrayAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value uint16) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessTestTableTaggedU32ArrayAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[uint32] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(uint32) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessTestTableTaggedU32ArrayAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value uint32, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
+	}
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "u32Array").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
+		return
+	}
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl))
+	return
+}
+func (inst *ReadAccessTestTableTaggedU32ArrayAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value uint32) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessTestTableTaggedU32SetAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[uint32] {
+	accel := inst.AccelSet
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(uint32) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessTestTableTaggedU32SetAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value uint32, err error) {
+	var rSet runtime.Range[runtime.SetIdx]
+	{
+		accel := inst.AccelSet
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rSet = accel.LookupForwardRange(attrIdx)
+	}
+	if rSet.EndExcl-rSet.BeginIncl != 1 {
+		err = eb.Build().Str("section", "u32Set").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rSet.EndExcl-rSet.BeginIncl)).Errorf("expected exactly one element per Set column")
+		return
+	}
+	bSet, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bSet) + int(rSet.BeginIncl))
+	return
+}
+func (inst *ReadAccessTestTableTaggedU32SetAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value uint32) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessTestTableTaggedU64ArrayAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[uint64] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(uint64) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessTestTableTaggedU64ArrayAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value uint64, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
+	}
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "u64Array").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
+		return
+	}
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl))
+	return
+}
+func (inst *ReadAccessTestTableTaggedU64ArrayAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value uint64) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessTestTableTaggedU64SetAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[uint64] {
+	accel := inst.AccelSet
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(uint64) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessTestTableTaggedU64SetAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value uint64, err error) {
+	var rSet runtime.Range[runtime.SetIdx]
+	{
+		accel := inst.AccelSet
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rSet = accel.LookupForwardRange(attrIdx)
+	}
+	if rSet.EndExcl-rSet.BeginIncl != 1 {
+		err = eb.Build().Str("section", "u64Set").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rSet.EndExcl-rSet.BeginIncl)).Errorf("expected exactly one element per Set column")
+		return
+	}
+	bSet, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bSet) + int(rSet.BeginIncl))
+	return
+}
+func (inst *ReadAccessTestTableTaggedU64SetAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value uint64) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessTestTableTaggedI8ArrayAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[int8] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(int8) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessTestTableTaggedI8ArrayAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value int8, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
+	}
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "i8Array").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
+		return
+	}
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl))
+	return
+}
+func (inst *ReadAccessTestTableTaggedI8ArrayAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value int8) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessTestTableTaggedI16ArrayAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[int16] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(int16) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessTestTableTaggedI16ArrayAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value int16, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
+	}
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "i16Array").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
+		return
+	}
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl))
+	return
+}
+func (inst *ReadAccessTestTableTaggedI16ArrayAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value int16) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessTestTableTaggedI32ArrayAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[int32] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(int32) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessTestTableTaggedI32ArrayAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value int32, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
+	}
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "i32Array").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
+		return
+	}
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl))
+	return
+}
+func (inst *ReadAccessTestTableTaggedI32ArrayAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value int32) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessTestTableTaggedI64ArrayAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[int64] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(int64) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessTestTableTaggedI64ArrayAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value int64, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
+	}
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "i64Array").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
+		return
+	}
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl))
+	return
+}
+func (inst *ReadAccessTestTableTaggedI64ArrayAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value int64) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessTestTableTaggedTimeRangeAttributes) GetAttrValueBeginIncl(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue time.Time) {
+	b, e := inst.ValueBeginIncl.ValueOffsets(int(entityIdx))
+	if int64(attrIdx) > (e - b) {
+		log.Panic().Str("attribute", "BeginIncl").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	}
+	scalarAttrValue = inst.ValueBeginInclElements.Value(int(b) + int(attrIdx)).ToTime(arrow.Nanosecond)
+	return
+}
+func (inst *ReadAccessTestTableTaggedTimeRangeAttributes) GetAttrValueEndExcl(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue time.Time) {
+	b, e := inst.ValueEndExcl.ValueOffsets(int(entityIdx))
+	if int64(attrIdx) > (e - b) {
+		log.Panic().Str("attribute", "EndExcl").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	}
+	scalarAttrValue = inst.ValueEndExclElements.Value(int(b) + int(attrIdx)).ToTime(arrow.Nanosecond)
+	return
+}
+func (inst *ReadAccessTestTableTaggedF32ArrayAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[float32] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(float32) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessTestTableTaggedF32ArrayAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value float32, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
+	}
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "f32Array").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
+		return
+	}
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl))
+	return
+}
+func (inst *ReadAccessTestTableTaggedF32ArrayAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value float32) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessTestTableTaggedF64ArrayAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[float64] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(float64) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessTestTableTaggedF64ArrayAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value float64, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
+	}
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "f64Array").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
+		return
+	}
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl))
+	return
+}
+func (inst *ReadAccessTestTableTaggedF64ArrayAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value float64) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessTestTableTaggedGeoPointAttributes) GetAttrValuePointLat(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue float32) {
+	b, e := inst.ValuePointLat.ValueOffsets(int(entityIdx))
+	if int64(attrIdx) > (e - b) {
+		log.Panic().Str("attribute", "PointLat").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	}
+	scalarAttrValue = inst.ValuePointLatElements.Value(int(b) + int(attrIdx))
+	return
+}
+func (inst *ReadAccessTestTableTaggedGeoPointAttributes) GetAttrValuePointLng(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue float32) {
+	b, e := inst.ValuePointLng.ValueOffsets(int(entityIdx))
+	if int64(attrIdx) > (e - b) {
+		log.Panic().Str("attribute", "PointLng").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	}
+	scalarAttrValue = inst.ValuePointLngElements.Value(int(b) + int(attrIdx))
+	return
+}
+func (inst *ReadAccessTestTableTaggedGeoPointAttributes) GetAttrValueH3(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue uint64) {
+	b, e := inst.ValueH3.ValueOffsets(int(entityIdx))
+	if int64(attrIdx) > (e - b) {
+		log.Panic().Str("attribute", "H3").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	}
+	scalarAttrValue = inst.ValueH3Elements.Value(int(b) + int(attrIdx))
+	return
+}
+func (inst *ReadAccessTestTableTaggedGeoAreaAttributes) GetAttrValuePolyLat(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[float32] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValuePolyLat.ValueOffsets(int(entityIdx))
+	return func(yield func(float32) bool) {
+		vs := inst.ValuePolyLatElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessTestTableTaggedGeoAreaAttributes) GetAttrValuePolyLng(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[float32] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValuePolyLng.ValueOffsets(int(entityIdx))
+	return func(yield func(float32) bool) {
+		vs := inst.ValuePolyLngElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessTestTableTaggedGeoAreaAttributes) GetAttrValueH3(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[uint64] {
+	accel := inst.AccelSet
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueH3.ValueOffsets(int(entityIdx))
+	return func(yield func(uint64) bool) {
+		vs := inst.ValueH3Elements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessTestTableTaggedGeoAreaAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (polyLat float32, polyLng float32, h3 uint64, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
+	}
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "geoArea").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
+		return
+	}
+	bHA, _ := inst.ValuePolyLat.ValueOffsets(int(entityIdx))
+	var rSet runtime.Range[runtime.SetIdx]
+	{
+		accel := inst.AccelSet
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rSet = accel.LookupForwardRange(attrIdx)
+	}
+	if rSet.EndExcl-rSet.BeginIncl != 1 {
+		err = eb.Build().Str("section", "geoArea").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rSet.EndExcl-rSet.BeginIncl)).Errorf("expected exactly one element per Set column")
+		return
+	}
+	bSet, _ := inst.ValueH3.ValueOffsets(int(entityIdx))
+	polyLat = inst.ValuePolyLatElements.Value(int(bHA) + int(rHA.BeginIncl))
+	polyLng = inst.ValuePolyLngElements.Value(int(bHA) + int(rHA.BeginIncl))
+	h3 = inst.ValueH3Elements.Value(int(bSet) + int(rSet.BeginIncl))
+	return
+}
+func (inst *ReadAccessTestTableTaggedGeoAreaAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (polyLat float32, polyLng float32, h3 uint64) {
+	polyLat, polyLng, h3, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessTestTableTaggedTimeArrayAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[time.Time] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(time.Time) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i)).ToTime(arrow.Nanosecond)) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessTestTableTaggedTimeArrayAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value time.Time, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
+	}
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "timeArray").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
+		return
+	}
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl)).ToTime(arrow.Nanosecond)
+	return
+}
+func (inst *ReadAccessTestTableTaggedTimeArrayAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value time.Time) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessTestTablePlainEntityIdAttributes) GetAttrValueId(entityIdx runtime.EntityIdx) (scalarAttrValue uint64) {
+	scalarAttrValue = inst.ValueId.Value(int(entityIdx))
+	return
+}
+func (inst *ReadAccessTestTablePlainEntityIdAttributes) GetAttrValueNaturalKey(entityIdx runtime.EntityIdx) (scalarAttrValue []byte) {
+	scalarAttrValue = inst.ValueNaturalKey.Value(int(entityIdx))
+	return
+}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// readaccess.(*GoClassBuilder).composeSectionAttributeClasses
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1873
+
+func (inst *ReadAccessTestTableTaggedForeignKeyAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
+	nAttributes = e - b
+	return
+}
+func (inst *ReadAccessTestTableTaggedSymbolAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
+	nAttributes = e - b
+	return
+}
+func (inst *ReadAccessTestTableTaggedSymbolArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessTestTableTaggedStringArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessTestTableTaggedTextAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	b, e := inst.ValueText.ValueOffsets(int(entityIdx))
+	nAttributes = e - b
+	return
+}
+func (inst *ReadAccessTestTableTaggedBlobArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessTestTableTaggedU8ArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessTestTableTaggedU16ArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessTestTableTaggedU32ArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessTestTableTaggedU32SetAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelSet.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessTestTableTaggedU64ArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessTestTableTaggedU64SetAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelSet.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessTestTableTaggedI8ArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessTestTableTaggedI16ArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessTestTableTaggedI32ArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessTestTableTaggedI64ArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessTestTableTaggedTimeRangeAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	b, e := inst.ValueBeginIncl.ValueOffsets(int(entityIdx))
+	nAttributes = e - b
+	return
+}
+func (inst *ReadAccessTestTableTaggedF32ArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessTestTableTaggedF64ArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessTestTableTaggedGeoPointAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	b, e := inst.ValuePointLat.ValueOffsets(int(entityIdx))
+	nAttributes = e - b
+	return
+}
+func (inst *ReadAccessTestTableTaggedGeoAreaAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessTestTableTaggedTimeArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// readaccess.(*GoClassBuilder).composeSectionClasses
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1971
+
+type ReadAccessTestTableTaggedForeignKey struct {
+	Attributes  *ReadAccessTestTableTaggedForeignKeyAttributes
+	Memberships *MembershipPackTestTableForeignKey
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedForeignKey)(nil)
+
+type ReadAccessTestTableTaggedSymbol struct {
+	Attributes  *ReadAccessTestTableTaggedSymbolAttributes
+	Memberships *MembershipPackTestTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedSymbol)(nil)
+
+type ReadAccessTestTableTaggedSymbolArray struct {
+	Attributes  *ReadAccessTestTableTaggedSymbolArrayAttributes
+	Memberships *MembershipPackTestTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedSymbolArray)(nil)
+
+type ReadAccessTestTableTaggedStringArray struct {
+	Attributes  *ReadAccessTestTableTaggedStringArrayAttributes
+	Memberships *MembershipPackTestTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedStringArray)(nil)
+
+type ReadAccessTestTableTaggedText struct {
+	Attributes  *ReadAccessTestTableTaggedTextAttributes
+	Memberships *MembershipPackTestTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedText)(nil)
+
+type ReadAccessTestTableTaggedBlobArray struct {
+	Attributes  *ReadAccessTestTableTaggedBlobArrayAttributes
+	Memberships *MembershipPackTestTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedBlobArray)(nil)
+
+type ReadAccessTestTableTaggedU8Array struct {
+	Attributes  *ReadAccessTestTableTaggedU8ArrayAttributes
+	Memberships *MembershipPackTestTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedU8Array)(nil)
+
+type ReadAccessTestTableTaggedU16Array struct {
+	Attributes  *ReadAccessTestTableTaggedU16ArrayAttributes
+	Memberships *MembershipPackTestTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedU16Array)(nil)
+
+type ReadAccessTestTableTaggedU32Array struct {
+	Attributes  *ReadAccessTestTableTaggedU32ArrayAttributes
+	Memberships *MembershipPackTestTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedU32Array)(nil)
+
+type ReadAccessTestTableTaggedU32Set struct {
+	Attributes  *ReadAccessTestTableTaggedU32SetAttributes
+	Memberships *MembershipPackTestTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedU32Set)(nil)
+
+type ReadAccessTestTableTaggedU64Array struct {
+	Attributes  *ReadAccessTestTableTaggedU64ArrayAttributes
+	Memberships *MembershipPackTestTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedU64Array)(nil)
+
+type ReadAccessTestTableTaggedU64Set struct {
+	Attributes  *ReadAccessTestTableTaggedU64SetAttributes
+	Memberships *MembershipPackTestTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedU64Set)(nil)
+
+type ReadAccessTestTableTaggedI8Array struct {
+	Attributes  *ReadAccessTestTableTaggedI8ArrayAttributes
+	Memberships *MembershipPackTestTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedI8Array)(nil)
+
+type ReadAccessTestTableTaggedI16Array struct {
+	Attributes  *ReadAccessTestTableTaggedI16ArrayAttributes
+	Memberships *MembershipPackTestTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedI16Array)(nil)
+
+type ReadAccessTestTableTaggedI32Array struct {
+	Attributes  *ReadAccessTestTableTaggedI32ArrayAttributes
+	Memberships *MembershipPackTestTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedI32Array)(nil)
+
+type ReadAccessTestTableTaggedI64Array struct {
+	Attributes  *ReadAccessTestTableTaggedI64ArrayAttributes
+	Memberships *MembershipPackTestTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedI64Array)(nil)
+
+type ReadAccessTestTableTaggedTimeRange struct {
+	Attributes  *ReadAccessTestTableTaggedTimeRangeAttributes
+	Memberships *MembershipPackTestTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedTimeRange)(nil)
+
+type ReadAccessTestTableTaggedF32Array struct {
+	Attributes  *ReadAccessTestTableTaggedF32ArrayAttributes
+	Memberships *MembershipPackTestTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedF32Array)(nil)
+
+type ReadAccessTestTableTaggedF64Array struct {
+	Attributes  *ReadAccessTestTableTaggedF64ArrayAttributes
+	Memberships *MembershipPackTestTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedF64Array)(nil)
+
+type ReadAccessTestTableTaggedGeoPoint struct {
+	Attributes  *ReadAccessTestTableTaggedGeoPointAttributes
+	Memberships *MembershipPackTestTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedGeoPoint)(nil)
+
+type ReadAccessTestTableTaggedGeoArea struct {
+	Attributes  *ReadAccessTestTableTaggedGeoAreaAttributes
+	Memberships *MembershipPackTestTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedGeoArea)(nil)
+
+type ReadAccessTestTableTaggedTimeArray struct {
+	Attributes  *ReadAccessTestTableTaggedTimeArrayAttributes
+	Memberships *MembershipPackTestTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableTaggedTimeArray)(nil)
+
+func NewReadAccessTestTableTaggedForeignKey() (inst *ReadAccessTestTableTaggedForeignKey) {
+	inst = &ReadAccessTestTableTaggedForeignKey{}
+	inst.Attributes = NewReadAccessTestTableTaggedForeignKeyAttributes()
+	inst.Memberships = NewMembershipPackTestTableForeignKeyForeignKey()
+	return
+}
+
+func NewReadAccessTestTableTaggedSymbol() (inst *ReadAccessTestTableTaggedSymbol) {
+	inst = &ReadAccessTestTableTaggedSymbol{}
+	inst.Attributes = NewReadAccessTestTableTaggedSymbolAttributes()
+	inst.Memberships = NewMembershipPackTestTableShared1Symbol()
+	return
+}
+
+func NewReadAccessTestTableTaggedSymbolArray() (inst *ReadAccessTestTableTaggedSymbolArray) {
+	inst = &ReadAccessTestTableTaggedSymbolArray{}
+	inst.Attributes = NewReadAccessTestTableTaggedSymbolArrayAttributes()
+	inst.Memberships = NewMembershipPackTestTableShared1SymbolArray()
+	return
+}
+
+func NewReadAccessTestTableTaggedStringArray() (inst *ReadAccessTestTableTaggedStringArray) {
+	inst = &ReadAccessTestTableTaggedStringArray{}
+	inst.Attributes = NewReadAccessTestTableTaggedStringArrayAttributes()
+	inst.Memberships = NewMembershipPackTestTableShared1StringArray()
+	return
+}
+
+func NewReadAccessTestTableTaggedText() (inst *ReadAccessTestTableTaggedText) {
+	inst = &ReadAccessTestTableTaggedText{}
+	inst.Attributes = NewReadAccessTestTableTaggedTextAttributes()
+	inst.Memberships = NewMembershipPackTestTableShared1Text()
+	return
+}
+
+func NewReadAccessTestTableTaggedBlobArray() (inst *ReadAccessTestTableTaggedBlobArray) {
+	inst = &ReadAccessTestTableTaggedBlobArray{}
+	inst.Attributes = NewReadAccessTestTableTaggedBlobArrayAttributes()
+	inst.Memberships = NewMembershipPackTestTableShared1BlobArray()
+	return
+}
+
+func NewReadAccessTestTableTaggedU8Array() (inst *ReadAccessTestTableTaggedU8Array) {
+	inst = &ReadAccessTestTableTaggedU8Array{}
+	inst.Attributes = NewReadAccessTestTableTaggedU8ArrayAttributes()
+	inst.Memberships = NewMembershipPackTestTableShared1U8Array()
+	return
+}
+
+func NewReadAccessTestTableTaggedU16Array() (inst *ReadAccessTestTableTaggedU16Array) {
+	inst = &ReadAccessTestTableTaggedU16Array{}
+	inst.Attributes = NewReadAccessTestTableTaggedU16ArrayAttributes()
+	inst.Memberships = NewMembershipPackTestTableShared1U16Array()
+	return
+}
+
+func NewReadAccessTestTableTaggedU32Array() (inst *ReadAccessTestTableTaggedU32Array) {
+	inst = &ReadAccessTestTableTaggedU32Array{}
+	inst.Attributes = NewReadAccessTestTableTaggedU32ArrayAttributes()
+	inst.Memberships = NewMembershipPackTestTableShared1U32Array()
+	return
+}
+
+func NewReadAccessTestTableTaggedU32Set() (inst *ReadAccessTestTableTaggedU32Set) {
+	inst = &ReadAccessTestTableTaggedU32Set{}
+	inst.Attributes = NewReadAccessTestTableTaggedU32SetAttributes()
+	inst.Memberships = NewMembershipPackTestTableShared1U32Set()
+	return
+}
+
+func NewReadAccessTestTableTaggedU64Array() (inst *ReadAccessTestTableTaggedU64Array) {
+	inst = &ReadAccessTestTableTaggedU64Array{}
+	inst.Attributes = NewReadAccessTestTableTaggedU64ArrayAttributes()
+	inst.Memberships = NewMembershipPackTestTableShared1U64Array()
+	return
+}
+
+func NewReadAccessTestTableTaggedU64Set() (inst *ReadAccessTestTableTaggedU64Set) {
+	inst = &ReadAccessTestTableTaggedU64Set{}
+	inst.Attributes = NewReadAccessTestTableTaggedU64SetAttributes()
+	inst.Memberships = NewMembershipPackTestTableShared1U64Set()
+	return
+}
+
+func NewReadAccessTestTableTaggedI8Array() (inst *ReadAccessTestTableTaggedI8Array) {
+	inst = &ReadAccessTestTableTaggedI8Array{}
+	inst.Attributes = NewReadAccessTestTableTaggedI8ArrayAttributes()
+	inst.Memberships = NewMembershipPackTestTableShared1I8Array()
+	return
+}
+
+func NewReadAccessTestTableTaggedI16Array() (inst *ReadAccessTestTableTaggedI16Array) {
+	inst = &ReadAccessTestTableTaggedI16Array{}
+	inst.Attributes = NewReadAccessTestTableTaggedI16ArrayAttributes()
+	inst.Memberships = NewMembershipPackTestTableShared1I16Array()
+	return
+}
+
+func NewReadAccessTestTableTaggedI32Array() (inst *ReadAccessTestTableTaggedI32Array) {
+	inst = &ReadAccessTestTableTaggedI32Array{}
+	inst.Attributes = NewReadAccessTestTableTaggedI32ArrayAttributes()
+	inst.Memberships = NewMembershipPackTestTableShared1I32Array()
+	return
+}
+
+func NewReadAccessTestTableTaggedI64Array() (inst *ReadAccessTestTableTaggedI64Array) {
+	inst = &ReadAccessTestTableTaggedI64Array{}
+	inst.Attributes = NewReadAccessTestTableTaggedI64ArrayAttributes()
+	inst.Memberships = NewMembershipPackTestTableShared1I64Array()
+	return
+}
+
+func NewReadAccessTestTableTaggedTimeRange() (inst *ReadAccessTestTableTaggedTimeRange) {
+	inst = &ReadAccessTestTableTaggedTimeRange{}
+	inst.Attributes = NewReadAccessTestTableTaggedTimeRangeAttributes()
+	inst.Memberships = NewMembershipPackTestTableShared1TimeRange()
+	return
+}
+
+func NewReadAccessTestTableTaggedF32Array() (inst *ReadAccessTestTableTaggedF32Array) {
+	inst = &ReadAccessTestTableTaggedF32Array{}
+	inst.Attributes = NewReadAccessTestTableTaggedF32ArrayAttributes()
+	inst.Memberships = NewMembershipPackTestTableShared1F32Array()
+	return
+}
+
+func NewReadAccessTestTableTaggedF64Array() (inst *ReadAccessTestTableTaggedF64Array) {
+	inst = &ReadAccessTestTableTaggedF64Array{}
+	inst.Attributes = NewReadAccessTestTableTaggedF64ArrayAttributes()
+	inst.Memberships = NewMembershipPackTestTableShared1F64Array()
+	return
+}
+
+func NewReadAccessTestTableTaggedGeoPoint() (inst *ReadAccessTestTableTaggedGeoPoint) {
+	inst = &ReadAccessTestTableTaggedGeoPoint{}
+	inst.Attributes = NewReadAccessTestTableTaggedGeoPointAttributes()
+	inst.Memberships = NewMembershipPackTestTableShared1GeoPoint()
+	return
+}
+
+func NewReadAccessTestTableTaggedGeoArea() (inst *ReadAccessTestTableTaggedGeoArea) {
+	inst = &ReadAccessTestTableTaggedGeoArea{}
+	inst.Attributes = NewReadAccessTestTableTaggedGeoAreaAttributes()
+	inst.Memberships = NewMembershipPackTestTableShared1GeoArea()
+	return
+}
+
+func NewReadAccessTestTableTaggedTimeArray() (inst *ReadAccessTestTableTaggedTimeArray) {
+	inst = &ReadAccessTestTableTaggedTimeArray{}
+	inst.Attributes = NewReadAccessTestTableTaggedTimeArrayAttributes()
+	inst.Memberships = NewMembershipPackTestTableShared1TimeArray()
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedForeignKey) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedSymbol) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedSymbolArray) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedStringArray) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedText) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedBlobArray) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU8Array) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU16Array) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU32Array) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU32Set) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU64Array) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU64Set) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI8Array) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI16Array) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI32Array) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI64Array) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedTimeRange) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedF32Array) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedF64Array) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedGeoPoint) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedGeoArea) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedTimeArray) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedForeignKey) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedSymbol) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedSymbolArray) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedStringArray) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedText) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedBlobArray) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU8Array) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU16Array) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU32Array) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU32Set) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU64Array) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU64Set) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI8Array) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI16Array) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI32Array) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI64Array) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedTimeRange) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedF32Array) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedF64Array) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedGeoPoint) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedGeoArea) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedTimeArray) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedForeignKey) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedSymbol) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedSymbolArray) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedStringArray) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedText) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedBlobArray) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU8Array) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU16Array) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU32Array) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU32Set) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU64Array) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU64Set) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI8Array) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI16Array) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI32Array) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI64Array) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedTimeRange) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedF32Array) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedF64Array) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedGeoPoint) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedGeoArea) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedTimeArray) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedForeignKey) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessTestTableTaggedSymbol) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessTestTableTaggedSymbolArray) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessTestTableTaggedStringArray) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessTestTableTaggedText) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessTestTableTaggedBlobArray) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessTestTableTaggedU8Array) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessTestTableTaggedU16Array) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessTestTableTaggedU32Array) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessTestTableTaggedU32Set) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessTestTableTaggedU64Array) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessTestTableTaggedU64Set) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessTestTableTaggedI8Array) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessTestTableTaggedI16Array) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessTestTableTaggedI32Array) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessTestTableTaggedI64Array) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessTestTableTaggedTimeRange) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessTestTableTaggedF32Array) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessTestTableTaggedF64Array) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessTestTableTaggedGeoPoint) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessTestTableTaggedGeoArea) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessTestTableTaggedTimeArray) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessTestTableTaggedForeignKey) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedSymbol) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedSymbolArray) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedStringArray) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedText) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedBlobArray) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU8Array) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU16Array) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU32Array) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU32Set) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU64Array) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU64Set) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI8Array) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI16Array) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI32Array) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI64Array) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedTimeRange) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedF32Array) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedF64Array) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedGeoPoint) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedGeoArea) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedTimeArray) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedForeignKey) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedSymbol) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedSymbolArray) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedStringArray) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedText) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedBlobArray) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU8Array) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU16Array) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU32Array) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU32Set) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU64Array) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedU64Set) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI8Array) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI16Array) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI32Array) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedI64Array) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedTimeRange) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedF32Array) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedF64Array) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedGeoPoint) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedGeoArea) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedTimeArray) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessTestTableTaggedForeignKey) GetAttributes() *ReadAccessTestTableTaggedForeignKeyAttributes {
+	return inst.Attributes
+}
+
+func (inst *ReadAccessTestTableTaggedSymbol) GetAttributes() *ReadAccessTestTableTaggedSymbolAttributes {
+	return inst.Attributes
+}
+
+func (inst *ReadAccessTestTableTaggedSymbolArray) GetAttributes() *ReadAccessTestTableTaggedSymbolArrayAttributes {
+	return inst.Attributes
+}
+
+func (inst *ReadAccessTestTableTaggedStringArray) GetAttributes() *ReadAccessTestTableTaggedStringArrayAttributes {
+	return inst.Attributes
+}
+
+func (inst *ReadAccessTestTableTaggedText) GetAttributes() *ReadAccessTestTableTaggedTextAttributes {
+	return inst.Attributes
+}
+
+func (inst *ReadAccessTestTableTaggedBlobArray) GetAttributes() *ReadAccessTestTableTaggedBlobArrayAttributes {
+	return inst.Attributes
+}
+
+func (inst *ReadAccessTestTableTaggedU8Array) GetAttributes() *ReadAccessTestTableTaggedU8ArrayAttributes {
+	return inst.Attributes
+}
+
+func (inst *ReadAccessTestTableTaggedU16Array) GetAttributes() *ReadAccessTestTableTaggedU16ArrayAttributes {
+	return inst.Attributes
+}
+
+func (inst *ReadAccessTestTableTaggedU32Array) GetAttributes() *ReadAccessTestTableTaggedU32ArrayAttributes {
+	return inst.Attributes
+}
+
+func (inst *ReadAccessTestTableTaggedU32Set) GetAttributes() *ReadAccessTestTableTaggedU32SetAttributes {
+	return inst.Attributes
+}
+
+func (inst *ReadAccessTestTableTaggedU64Array) GetAttributes() *ReadAccessTestTableTaggedU64ArrayAttributes {
+	return inst.Attributes
+}
+
+func (inst *ReadAccessTestTableTaggedU64Set) GetAttributes() *ReadAccessTestTableTaggedU64SetAttributes {
+	return inst.Attributes
+}
+
+func (inst *ReadAccessTestTableTaggedI8Array) GetAttributes() *ReadAccessTestTableTaggedI8ArrayAttributes {
+	return inst.Attributes
+}
+
+func (inst *ReadAccessTestTableTaggedI16Array) GetAttributes() *ReadAccessTestTableTaggedI16ArrayAttributes {
+	return inst.Attributes
+}
+
+func (inst *ReadAccessTestTableTaggedI32Array) GetAttributes() *ReadAccessTestTableTaggedI32ArrayAttributes {
+	return inst.Attributes
+}
+
+func (inst *ReadAccessTestTableTaggedI64Array) GetAttributes() *ReadAccessTestTableTaggedI64ArrayAttributes {
+	return inst.Attributes
+}
+
+func (inst *ReadAccessTestTableTaggedTimeRange) GetAttributes() *ReadAccessTestTableTaggedTimeRangeAttributes {
+	return inst.Attributes
+}
+
+func (inst *ReadAccessTestTableTaggedF32Array) GetAttributes() *ReadAccessTestTableTaggedF32ArrayAttributes {
+	return inst.Attributes
+}
+
+func (inst *ReadAccessTestTableTaggedF64Array) GetAttributes() *ReadAccessTestTableTaggedF64ArrayAttributes {
+	return inst.Attributes
+}
+
+func (inst *ReadAccessTestTableTaggedGeoPoint) GetAttributes() *ReadAccessTestTableTaggedGeoPointAttributes {
+	return inst.Attributes
+}
+
+func (inst *ReadAccessTestTableTaggedGeoArea) GetAttributes() *ReadAccessTestTableTaggedGeoAreaAttributes {
+	return inst.Attributes
+}
+
+func (inst *ReadAccessTestTableTaggedTimeArray) GetAttributes() *ReadAccessTestTableTaggedTimeArrayAttributes {
+	return inst.Attributes
+}
+
+func (inst *ReadAccessTestTableTaggedForeignKey) GetMemberships() *MembershipPackTestTableForeignKey {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessTestTableTaggedSymbol) GetMemberships() *MembershipPackTestTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessTestTableTaggedSymbolArray) GetMemberships() *MembershipPackTestTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessTestTableTaggedStringArray) GetMemberships() *MembershipPackTestTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessTestTableTaggedText) GetMemberships() *MembershipPackTestTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessTestTableTaggedBlobArray) GetMemberships() *MembershipPackTestTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessTestTableTaggedU8Array) GetMemberships() *MembershipPackTestTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessTestTableTaggedU16Array) GetMemberships() *MembershipPackTestTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessTestTableTaggedU32Array) GetMemberships() *MembershipPackTestTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessTestTableTaggedU32Set) GetMemberships() *MembershipPackTestTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessTestTableTaggedU64Array) GetMemberships() *MembershipPackTestTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessTestTableTaggedU64Set) GetMemberships() *MembershipPackTestTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessTestTableTaggedI8Array) GetMemberships() *MembershipPackTestTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessTestTableTaggedI16Array) GetMemberships() *MembershipPackTestTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessTestTableTaggedI32Array) GetMemberships() *MembershipPackTestTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessTestTableTaggedI64Array) GetMemberships() *MembershipPackTestTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessTestTableTaggedTimeRange) GetMemberships() *MembershipPackTestTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessTestTableTaggedF32Array) GetMemberships() *MembershipPackTestTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessTestTableTaggedF64Array) GetMemberships() *MembershipPackTestTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessTestTableTaggedGeoPoint) GetMemberships() *MembershipPackTestTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessTestTableTaggedGeoArea) GetMemberships() *MembershipPackTestTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessTestTableTaggedTimeArray) GetMemberships() *MembershipPackTestTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessTestTableTaggedForeignKey) GetSectionName() naming.StylableName {
+	return "foreign-key"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessTestTableTaggedForeignKey)(nil)
+
+func (inst *ReadAccessTestTableTaggedSymbol) GetSectionName() naming.StylableName {
+	return "symbol"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessTestTableTaggedSymbol)(nil)
+
+func (inst *ReadAccessTestTableTaggedSymbolArray) GetSectionName() naming.StylableName {
+	return "symbol-array"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessTestTableTaggedSymbolArray)(nil)
+
+func (inst *ReadAccessTestTableTaggedStringArray) GetSectionName() naming.StylableName {
+	return "string-array"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessTestTableTaggedStringArray)(nil)
+
+func (inst *ReadAccessTestTableTaggedText) GetSectionName() naming.StylableName {
+	return "text"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessTestTableTaggedText)(nil)
+
+func (inst *ReadAccessTestTableTaggedBlobArray) GetSectionName() naming.StylableName {
+	return "blob-array"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessTestTableTaggedBlobArray)(nil)
+
+func (inst *ReadAccessTestTableTaggedU8Array) GetSectionName() naming.StylableName {
+	return "u8-array"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessTestTableTaggedU8Array)(nil)
+
+func (inst *ReadAccessTestTableTaggedU16Array) GetSectionName() naming.StylableName {
+	return "u16-array"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessTestTableTaggedU16Array)(nil)
+
+func (inst *ReadAccessTestTableTaggedU32Array) GetSectionName() naming.StylableName {
+	return "u32-array"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessTestTableTaggedU32Array)(nil)
+
+func (inst *ReadAccessTestTableTaggedU32Set) GetSectionName() naming.StylableName {
+	return "u32-set"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessTestTableTaggedU32Set)(nil)
+
+func (inst *ReadAccessTestTableTaggedU64Array) GetSectionName() naming.StylableName {
+	return "u64-array"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessTestTableTaggedU64Array)(nil)
+
+func (inst *ReadAccessTestTableTaggedU64Set) GetSectionName() naming.StylableName {
+	return "u64-set"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessTestTableTaggedU64Set)(nil)
+
+func (inst *ReadAccessTestTableTaggedI8Array) GetSectionName() naming.StylableName {
+	return "i8-array"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessTestTableTaggedI8Array)(nil)
+
+func (inst *ReadAccessTestTableTaggedI16Array) GetSectionName() naming.StylableName {
+	return "i16-array"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessTestTableTaggedI16Array)(nil)
+
+func (inst *ReadAccessTestTableTaggedI32Array) GetSectionName() naming.StylableName {
+	return "i32-array"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessTestTableTaggedI32Array)(nil)
+
+func (inst *ReadAccessTestTableTaggedI64Array) GetSectionName() naming.StylableName {
+	return "i64-array"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessTestTableTaggedI64Array)(nil)
+
+func (inst *ReadAccessTestTableTaggedTimeRange) GetSectionName() naming.StylableName {
+	return "time-range"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessTestTableTaggedTimeRange)(nil)
+
+func (inst *ReadAccessTestTableTaggedF32Array) GetSectionName() naming.StylableName {
+	return "f32-array"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessTestTableTaggedF32Array)(nil)
+
+func (inst *ReadAccessTestTableTaggedF64Array) GetSectionName() naming.StylableName {
+	return "f64-array"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessTestTableTaggedF64Array)(nil)
+
+func (inst *ReadAccessTestTableTaggedGeoPoint) GetSectionName() naming.StylableName {
+	return "geo-point"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessTestTableTaggedGeoPoint)(nil)
+
+func (inst *ReadAccessTestTableTaggedGeoArea) GetSectionName() naming.StylableName {
+	return "geo-area"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessTestTableTaggedGeoArea)(nil)
+
+func (inst *ReadAccessTestTableTaggedTimeArray) GetSectionName() naming.StylableName {
+	return "time-array"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessTestTableTaggedTimeArray)(nil)
+
+func (inst *ReadAccessTestTableTaggedForeignKey) GetSectionUseAspects() useaspects.AspectSet {
+	return "1d0DV72"
+}
+
+func (inst *ReadAccessTestTableTaggedSymbol) GetSectionUseAspects() useaspects.AspectSet {
+	return "0"
+}
+
+func (inst *ReadAccessTestTableTaggedSymbolArray) GetSectionUseAspects() useaspects.AspectSet {
+	return "0"
+}
+
+func (inst *ReadAccessTestTableTaggedStringArray) GetSectionUseAspects() useaspects.AspectSet {
+	return "0"
+}
+
+func (inst *ReadAccessTestTableTaggedText) GetSectionUseAspects() useaspects.AspectSet {
+	return "0"
+}
+
+func (inst *ReadAccessTestTableTaggedBlobArray) GetSectionUseAspects() useaspects.AspectSet {
+	return "0"
+}
+
+func (inst *ReadAccessTestTableTaggedU8Array) GetSectionUseAspects() useaspects.AspectSet {
+	return "0"
+}
+
+func (inst *ReadAccessTestTableTaggedU16Array) GetSectionUseAspects() useaspects.AspectSet {
+	return "0"
+}
+
+func (inst *ReadAccessTestTableTaggedU32Array) GetSectionUseAspects() useaspects.AspectSet {
+	return "0"
+}
+
+func (inst *ReadAccessTestTableTaggedU32Set) GetSectionUseAspects() useaspects.AspectSet {
+	return "0"
+}
+
+func (inst *ReadAccessTestTableTaggedU64Array) GetSectionUseAspects() useaspects.AspectSet {
+	return "0"
+}
+
+func (inst *ReadAccessTestTableTaggedU64Set) GetSectionUseAspects() useaspects.AspectSet {
+	return "0"
+}
+
+func (inst *ReadAccessTestTableTaggedI8Array) GetSectionUseAspects() useaspects.AspectSet {
+	return "0"
+}
+
+func (inst *ReadAccessTestTableTaggedI16Array) GetSectionUseAspects() useaspects.AspectSet {
+	return "0"
+}
+
+func (inst *ReadAccessTestTableTaggedI32Array) GetSectionUseAspects() useaspects.AspectSet {
+	return "0"
+}
+
+func (inst *ReadAccessTestTableTaggedI64Array) GetSectionUseAspects() useaspects.AspectSet {
+	return "0"
+}
+
+func (inst *ReadAccessTestTableTaggedTimeRange) GetSectionUseAspects() useaspects.AspectSet {
+	return "0"
+}
+
+func (inst *ReadAccessTestTableTaggedF32Array) GetSectionUseAspects() useaspects.AspectSet {
+	return "0"
+}
+
+func (inst *ReadAccessTestTableTaggedF64Array) GetSectionUseAspects() useaspects.AspectSet {
+	return "0"
+}
+
+func (inst *ReadAccessTestTableTaggedGeoPoint) GetSectionUseAspects() useaspects.AspectSet {
+	return "0"
+}
+
+func (inst *ReadAccessTestTableTaggedGeoArea) GetSectionUseAspects() useaspects.AspectSet {
+	return "0"
+}
+
+func (inst *ReadAccessTestTableTaggedTimeArray) GetSectionUseAspects() useaspects.AspectSet {
+	return "0"
+}
+
+func (inst *ReadAccessTestTableTaggedForeignKey) GetSectionStreamingGroup() naming.Key {
+	return "foreignKey"
+}
+
+func (inst *ReadAccessTestTableTaggedSymbol) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
+func (inst *ReadAccessTestTableTaggedSymbolArray) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
+func (inst *ReadAccessTestTableTaggedStringArray) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
+func (inst *ReadAccessTestTableTaggedText) GetSectionStreamingGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessTestTableTaggedBlobArray) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
+func (inst *ReadAccessTestTableTaggedU8Array) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
+func (inst *ReadAccessTestTableTaggedU16Array) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
+func (inst *ReadAccessTestTableTaggedU32Array) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
+func (inst *ReadAccessTestTableTaggedU32Set) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
+func (inst *ReadAccessTestTableTaggedU64Array) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
+func (inst *ReadAccessTestTableTaggedU64Set) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
+func (inst *ReadAccessTestTableTaggedI8Array) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
+func (inst *ReadAccessTestTableTaggedI16Array) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
+func (inst *ReadAccessTestTableTaggedI32Array) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
+func (inst *ReadAccessTestTableTaggedI64Array) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
+func (inst *ReadAccessTestTableTaggedTimeRange) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
+func (inst *ReadAccessTestTableTaggedF32Array) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
+func (inst *ReadAccessTestTableTaggedF64Array) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
+func (inst *ReadAccessTestTableTaggedGeoPoint) GetSectionStreamingGroup() naming.Key {
+	return "geo"
+}
+
+func (inst *ReadAccessTestTableTaggedGeoArea) GetSectionStreamingGroup() naming.Key {
+	return "geo"
+}
+
+func (inst *ReadAccessTestTableTaggedTimeArray) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
+func (inst *ReadAccessTestTableTaggedForeignKey) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessTestTableTaggedSymbol) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessTestTableTaggedSymbolArray) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessTestTableTaggedStringArray) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessTestTableTaggedText) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessTestTableTaggedBlobArray) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessTestTableTaggedU8Array) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessTestTableTaggedU16Array) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessTestTableTaggedU32Array) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessTestTableTaggedU32Set) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessTestTableTaggedU64Array) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessTestTableTaggedU64Set) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessTestTableTaggedI8Array) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessTestTableTaggedI16Array) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessTestTableTaggedI32Array) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessTestTableTaggedI64Array) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessTestTableTaggedTimeRange) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessTestTableTaggedF32Array) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessTestTableTaggedF64Array) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessTestTableTaggedGeoPoint) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessTestTableTaggedGeoArea) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessTestTableTaggedTimeArray) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessTestTableTaggedForeignKey) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b10000
+}
+
+func (inst *ReadAccessTestTableTaggedSymbol) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b111001
+}
+
+func (inst *ReadAccessTestTableTaggedSymbolArray) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b111001
+}
+
+func (inst *ReadAccessTestTableTaggedStringArray) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b111001
+}
+
+func (inst *ReadAccessTestTableTaggedText) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b111001
+}
+
+func (inst *ReadAccessTestTableTaggedBlobArray) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b111001
+}
+
+func (inst *ReadAccessTestTableTaggedU8Array) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b111001
+}
+
+func (inst *ReadAccessTestTableTaggedU16Array) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b111001
+}
+
+func (inst *ReadAccessTestTableTaggedU32Array) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b111001
+}
+
+func (inst *ReadAccessTestTableTaggedU32Set) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b111001
+}
+
+func (inst *ReadAccessTestTableTaggedU64Array) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b111001
+}
+
+func (inst *ReadAccessTestTableTaggedU64Set) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b111001
+}
+
+func (inst *ReadAccessTestTableTaggedI8Array) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b111001
+}
+
+func (inst *ReadAccessTestTableTaggedI16Array) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b111001
+}
+
+func (inst *ReadAccessTestTableTaggedI32Array) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b111001
+}
+
+func (inst *ReadAccessTestTableTaggedI64Array) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b111001
+}
+
+func (inst *ReadAccessTestTableTaggedTimeRange) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b111001
+}
+
+func (inst *ReadAccessTestTableTaggedF32Array) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b111001
+}
+
+func (inst *ReadAccessTestTableTaggedF64Array) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b111001
+}
+
+func (inst *ReadAccessTestTableTaggedGeoPoint) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b111001
+}
+
+func (inst *ReadAccessTestTableTaggedGeoArea) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b111001
+}
+
+func (inst *ReadAccessTestTableTaggedTimeArray) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b111001
+}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// readaccess.(*GoClassBuilder).composeEntityClasses
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2321
+
+type ReadAccessTestTable struct {
+	EntityId    *ReadAccessTestTablePlainEntityIdAttributes
+	ForeignKey  *ReadAccessTestTableTaggedForeignKey
+	Symbol      *ReadAccessTestTableTaggedSymbol
+	SymbolArray *ReadAccessTestTableTaggedSymbolArray
+	StringArray *ReadAccessTestTableTaggedStringArray
+	Text        *ReadAccessTestTableTaggedText
+	BlobArray   *ReadAccessTestTableTaggedBlobArray
+	U8Array     *ReadAccessTestTableTaggedU8Array
+	U16Array    *ReadAccessTestTableTaggedU16Array
+	U32Array    *ReadAccessTestTableTaggedU32Array
+	U32Set      *ReadAccessTestTableTaggedU32Set
+	U64Array    *ReadAccessTestTableTaggedU64Array
+	U64Set      *ReadAccessTestTableTaggedU64Set
+	I8Array     *ReadAccessTestTableTaggedI8Array
+	I16Array    *ReadAccessTestTableTaggedI16Array
+	I32Array    *ReadAccessTestTableTaggedI32Array
+	I64Array    *ReadAccessTestTableTaggedI64Array
+	TimeRange   *ReadAccessTestTableTaggedTimeRange
+	F32Array    *ReadAccessTestTableTaggedF32Array
+	F64Array    *ReadAccessTestTableTaggedF64Array
+	GeoPoint    *ReadAccessTestTableTaggedGeoPoint
+	GeoArea     *ReadAccessTestTableTaggedGeoArea
+	TimeArray   *ReadAccessTestTableTaggedTimeArray
+}
+
+func NewReadAccessTestTable() (inst *ReadAccessTestTable) {
+	inst = &ReadAccessTestTable{}
+	inst.EntityId = NewReadAccessTestTablePlainEntityIdAttributes()
+	inst.ForeignKey = NewReadAccessTestTableTaggedForeignKey()
+	inst.Symbol = NewReadAccessTestTableTaggedSymbol()
+	inst.SymbolArray = NewReadAccessTestTableTaggedSymbolArray()
+	inst.StringArray = NewReadAccessTestTableTaggedStringArray()
+	inst.Text = NewReadAccessTestTableTaggedText()
+	inst.BlobArray = NewReadAccessTestTableTaggedBlobArray()
+	inst.U8Array = NewReadAccessTestTableTaggedU8Array()
+	inst.U16Array = NewReadAccessTestTableTaggedU16Array()
+	inst.U32Array = NewReadAccessTestTableTaggedU32Array()
+	inst.U32Set = NewReadAccessTestTableTaggedU32Set()
+	inst.U64Array = NewReadAccessTestTableTaggedU64Array()
+	inst.U64Set = NewReadAccessTestTableTaggedU64Set()
+	inst.I8Array = NewReadAccessTestTableTaggedI8Array()
+	inst.I16Array = NewReadAccessTestTableTaggedI16Array()
+	inst.I32Array = NewReadAccessTestTableTaggedI32Array()
+	inst.I64Array = NewReadAccessTestTableTaggedI64Array()
+	inst.TimeRange = NewReadAccessTestTableTaggedTimeRange()
+	inst.F32Array = NewReadAccessTestTableTaggedF32Array()
+	inst.F64Array = NewReadAccessTestTableTaggedF64Array()
+	inst.GeoPoint = NewReadAccessTestTableTaggedGeoPoint()
+	inst.GeoArea = NewReadAccessTestTableTaggedGeoArea()
+	inst.TimeArray = NewReadAccessTestTableTaggedTimeArray()
+	return
+}
+
+func (inst *ReadAccessTestTable) Release() {
+	runtime.ReleaseIfNotNil(inst.EntityId)
+	runtime.ReleaseIfNotNil(inst.ForeignKey)
+	runtime.ReleaseIfNotNil(inst.Symbol)
+	runtime.ReleaseIfNotNil(inst.SymbolArray)
+	runtime.ReleaseIfNotNil(inst.StringArray)
+	runtime.ReleaseIfNotNil(inst.Text)
+	runtime.ReleaseIfNotNil(inst.BlobArray)
+	runtime.ReleaseIfNotNil(inst.U8Array)
+	runtime.ReleaseIfNotNil(inst.U16Array)
+	runtime.ReleaseIfNotNil(inst.U32Array)
+	runtime.ReleaseIfNotNil(inst.U32Set)
+	runtime.ReleaseIfNotNil(inst.U64Array)
+	runtime.ReleaseIfNotNil(inst.U64Set)
+	runtime.ReleaseIfNotNil(inst.I8Array)
+	runtime.ReleaseIfNotNil(inst.I16Array)
+	runtime.ReleaseIfNotNil(inst.I32Array)
+	runtime.ReleaseIfNotNil(inst.I64Array)
+	runtime.ReleaseIfNotNil(inst.TimeRange)
+	runtime.ReleaseIfNotNil(inst.F32Array)
+	runtime.ReleaseIfNotNil(inst.F64Array)
+	runtime.ReleaseIfNotNil(inst.GeoPoint)
+	runtime.ReleaseIfNotNil(inst.GeoArea)
+	runtime.ReleaseIfNotNil(inst.TimeArray)
+}
+
+func (inst *ReadAccessTestTable) LoadFromRecord(rec runtime.RecordI) (err error) {
+	if inst.EntityId != nil {
+		err = inst.EntityId.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "test-table").Str("fieldName", "EntityId").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.ForeignKey != nil {
+		err = inst.ForeignKey.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "test-table").Str("fieldName", "ForeignKey").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.Symbol != nil {
+		err = inst.Symbol.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "test-table").Str("fieldName", "Symbol").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.SymbolArray != nil {
+		err = inst.SymbolArray.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "test-table").Str("fieldName", "SymbolArray").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.StringArray != nil {
+		err = inst.StringArray.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "test-table").Str("fieldName", "StringArray").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.Text != nil {
+		err = inst.Text.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "test-table").Str("fieldName", "Text").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.BlobArray != nil {
+		err = inst.BlobArray.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "test-table").Str("fieldName", "BlobArray").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.U8Array != nil {
+		err = inst.U8Array.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "test-table").Str("fieldName", "U8Array").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.U16Array != nil {
+		err = inst.U16Array.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "test-table").Str("fieldName", "U16Array").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.U32Array != nil {
+		err = inst.U32Array.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "test-table").Str("fieldName", "U32Array").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.U32Set != nil {
+		err = inst.U32Set.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "test-table").Str("fieldName", "U32Set").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.U64Array != nil {
+		err = inst.U64Array.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "test-table").Str("fieldName", "U64Array").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.U64Set != nil {
+		err = inst.U64Set.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "test-table").Str("fieldName", "U64Set").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.I8Array != nil {
+		err = inst.I8Array.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "test-table").Str("fieldName", "I8Array").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.I16Array != nil {
+		err = inst.I16Array.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "test-table").Str("fieldName", "I16Array").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.I32Array != nil {
+		err = inst.I32Array.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "test-table").Str("fieldName", "I32Array").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.I64Array != nil {
+		err = inst.I64Array.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "test-table").Str("fieldName", "I64Array").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.TimeRange != nil {
+		err = inst.TimeRange.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "test-table").Str("fieldName", "TimeRange").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.F32Array != nil {
+		err = inst.F32Array.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "test-table").Str("fieldName", "F32Array").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.F64Array != nil {
+		err = inst.F64Array.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "test-table").Str("fieldName", "F64Array").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.GeoPoint != nil {
+		err = inst.GeoPoint.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "test-table").Str("fieldName", "GeoPoint").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.GeoArea != nil {
+		err = inst.GeoArea.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "test-table").Str("fieldName", "GeoArea").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.TimeArray != nil {
+		err = inst.TimeArray.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "test-table").Str("fieldName", "TimeArray").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	return
+}
+
+func (inst *ReadAccessTestTable) SetColumnIndices(indices []uint32) (rest []uint32) {
+	rest = indices
+	if inst.EntityId != nil {
+		rest = inst.EntityId.SetColumnIndices(rest)
+	}
+	if inst.ForeignKey != nil {
+		rest = inst.ForeignKey.SetColumnIndices(rest)
+	}
+	if inst.Symbol != nil {
+		rest = inst.Symbol.SetColumnIndices(rest)
+	}
+	if inst.SymbolArray != nil {
+		rest = inst.SymbolArray.SetColumnIndices(rest)
+	}
+	if inst.StringArray != nil {
+		rest = inst.StringArray.SetColumnIndices(rest)
+	}
+	if inst.Text != nil {
+		rest = inst.Text.SetColumnIndices(rest)
+	}
+	if inst.BlobArray != nil {
+		rest = inst.BlobArray.SetColumnIndices(rest)
+	}
+	if inst.U8Array != nil {
+		rest = inst.U8Array.SetColumnIndices(rest)
+	}
+	if inst.U16Array != nil {
+		rest = inst.U16Array.SetColumnIndices(rest)
+	}
+	if inst.U32Array != nil {
+		rest = inst.U32Array.SetColumnIndices(rest)
+	}
+	if inst.U32Set != nil {
+		rest = inst.U32Set.SetColumnIndices(rest)
+	}
+	if inst.U64Array != nil {
+		rest = inst.U64Array.SetColumnIndices(rest)
+	}
+	if inst.U64Set != nil {
+		rest = inst.U64Set.SetColumnIndices(rest)
+	}
+	if inst.I8Array != nil {
+		rest = inst.I8Array.SetColumnIndices(rest)
+	}
+	if inst.I16Array != nil {
+		rest = inst.I16Array.SetColumnIndices(rest)
+	}
+	if inst.I32Array != nil {
+		rest = inst.I32Array.SetColumnIndices(rest)
+	}
+	if inst.I64Array != nil {
+		rest = inst.I64Array.SetColumnIndices(rest)
+	}
+	if inst.TimeRange != nil {
+		rest = inst.TimeRange.SetColumnIndices(rest)
+	}
+	if inst.F32Array != nil {
+		rest = inst.F32Array.SetColumnIndices(rest)
+	}
+	if inst.F64Array != nil {
+		rest = inst.F64Array.SetColumnIndices(rest)
+	}
+	if inst.GeoPoint != nil {
+		rest = inst.GeoPoint.SetColumnIndices(rest)
+	}
+	if inst.GeoArea != nil {
+		rest = inst.GeoArea.SetColumnIndices(rest)
+	}
+	if inst.TimeArray != nil {
+		rest = inst.TimeArray.SetColumnIndices(rest)
+	}
+	return
+}
+
+func (inst *ReadAccessTestTable) GetColumnIndices() (columnIndices []uint32) {
+	if inst.EntityId != nil {
+		columnIndices = slices.Concat(columnIndices, inst.EntityId.GetColumnIndices())
+	}
+	if inst.ForeignKey != nil {
+		columnIndices = slices.Concat(columnIndices, inst.ForeignKey.GetColumnIndices())
+	}
+	if inst.Symbol != nil {
+		columnIndices = slices.Concat(columnIndices, inst.Symbol.GetColumnIndices())
+	}
+	if inst.SymbolArray != nil {
+		columnIndices = slices.Concat(columnIndices, inst.SymbolArray.GetColumnIndices())
+	}
+	if inst.StringArray != nil {
+		columnIndices = slices.Concat(columnIndices, inst.StringArray.GetColumnIndices())
+	}
+	if inst.Text != nil {
+		columnIndices = slices.Concat(columnIndices, inst.Text.GetColumnIndices())
+	}
+	if inst.BlobArray != nil {
+		columnIndices = slices.Concat(columnIndices, inst.BlobArray.GetColumnIndices())
+	}
+	if inst.U8Array != nil {
+		columnIndices = slices.Concat(columnIndices, inst.U8Array.GetColumnIndices())
+	}
+	if inst.U16Array != nil {
+		columnIndices = slices.Concat(columnIndices, inst.U16Array.GetColumnIndices())
+	}
+	if inst.U32Array != nil {
+		columnIndices = slices.Concat(columnIndices, inst.U32Array.GetColumnIndices())
+	}
+	if inst.U32Set != nil {
+		columnIndices = slices.Concat(columnIndices, inst.U32Set.GetColumnIndices())
+	}
+	if inst.U64Array != nil {
+		columnIndices = slices.Concat(columnIndices, inst.U64Array.GetColumnIndices())
+	}
+	if inst.U64Set != nil {
+		columnIndices = slices.Concat(columnIndices, inst.U64Set.GetColumnIndices())
+	}
+	if inst.I8Array != nil {
+		columnIndices = slices.Concat(columnIndices, inst.I8Array.GetColumnIndices())
+	}
+	if inst.I16Array != nil {
+		columnIndices = slices.Concat(columnIndices, inst.I16Array.GetColumnIndices())
+	}
+	if inst.I32Array != nil {
+		columnIndices = slices.Concat(columnIndices, inst.I32Array.GetColumnIndices())
+	}
+	if inst.I64Array != nil {
+		columnIndices = slices.Concat(columnIndices, inst.I64Array.GetColumnIndices())
+	}
+	if inst.TimeRange != nil {
+		columnIndices = slices.Concat(columnIndices, inst.TimeRange.GetColumnIndices())
+	}
+	if inst.F32Array != nil {
+		columnIndices = slices.Concat(columnIndices, inst.F32Array.GetColumnIndices())
+	}
+	if inst.F64Array != nil {
+		columnIndices = slices.Concat(columnIndices, inst.F64Array.GetColumnIndices())
+	}
+	if inst.GeoPoint != nil {
+		columnIndices = slices.Concat(columnIndices, inst.GeoPoint.GetColumnIndices())
+	}
+	if inst.GeoArea != nil {
+		columnIndices = slices.Concat(columnIndices, inst.GeoArea.GetColumnIndices())
+	}
+	if inst.TimeArray != nil {
+		columnIndices = slices.Concat(columnIndices, inst.TimeArray.GetColumnIndices())
+	}
+	return
+}
+
+func (inst *ReadAccessTestTable) GetColumnIndexFieldNames() (fieldNames []string) {
+	if inst.EntityId != nil {
+		fieldNames = slices.Concat(fieldNames, inst.EntityId.GetColumnIndexFieldNames())
+	}
+	if inst.ForeignKey != nil {
+		fieldNames = slices.Concat(fieldNames, inst.ForeignKey.GetColumnIndexFieldNames())
+	}
+	if inst.Symbol != nil {
+		fieldNames = slices.Concat(fieldNames, inst.Symbol.GetColumnIndexFieldNames())
+	}
+	if inst.SymbolArray != nil {
+		fieldNames = slices.Concat(fieldNames, inst.SymbolArray.GetColumnIndexFieldNames())
+	}
+	if inst.StringArray != nil {
+		fieldNames = slices.Concat(fieldNames, inst.StringArray.GetColumnIndexFieldNames())
+	}
+	if inst.Text != nil {
+		fieldNames = slices.Concat(fieldNames, inst.Text.GetColumnIndexFieldNames())
+	}
+	if inst.BlobArray != nil {
+		fieldNames = slices.Concat(fieldNames, inst.BlobArray.GetColumnIndexFieldNames())
+	}
+	if inst.U8Array != nil {
+		fieldNames = slices.Concat(fieldNames, inst.U8Array.GetColumnIndexFieldNames())
+	}
+	if inst.U16Array != nil {
+		fieldNames = slices.Concat(fieldNames, inst.U16Array.GetColumnIndexFieldNames())
+	}
+	if inst.U32Array != nil {
+		fieldNames = slices.Concat(fieldNames, inst.U32Array.GetColumnIndexFieldNames())
+	}
+	if inst.U32Set != nil {
+		fieldNames = slices.Concat(fieldNames, inst.U32Set.GetColumnIndexFieldNames())
+	}
+	if inst.U64Array != nil {
+		fieldNames = slices.Concat(fieldNames, inst.U64Array.GetColumnIndexFieldNames())
+	}
+	if inst.U64Set != nil {
+		fieldNames = slices.Concat(fieldNames, inst.U64Set.GetColumnIndexFieldNames())
+	}
+	if inst.I8Array != nil {
+		fieldNames = slices.Concat(fieldNames, inst.I8Array.GetColumnIndexFieldNames())
+	}
+	if inst.I16Array != nil {
+		fieldNames = slices.Concat(fieldNames, inst.I16Array.GetColumnIndexFieldNames())
+	}
+	if inst.I32Array != nil {
+		fieldNames = slices.Concat(fieldNames, inst.I32Array.GetColumnIndexFieldNames())
+	}
+	if inst.I64Array != nil {
+		fieldNames = slices.Concat(fieldNames, inst.I64Array.GetColumnIndexFieldNames())
+	}
+	if inst.TimeRange != nil {
+		fieldNames = slices.Concat(fieldNames, inst.TimeRange.GetColumnIndexFieldNames())
+	}
+	if inst.F32Array != nil {
+		fieldNames = slices.Concat(fieldNames, inst.F32Array.GetColumnIndexFieldNames())
+	}
+	if inst.F64Array != nil {
+		fieldNames = slices.Concat(fieldNames, inst.F64Array.GetColumnIndexFieldNames())
+	}
+	if inst.GeoPoint != nil {
+		fieldNames = slices.Concat(fieldNames, inst.GeoPoint.GetColumnIndexFieldNames())
+	}
+	if inst.GeoArea != nil {
+		fieldNames = slices.Concat(fieldNames, inst.GeoArea.GetColumnIndexFieldNames())
+	}
+	if inst.TimeArray != nil {
+		fieldNames = slices.Concat(fieldNames, inst.TimeArray.GetColumnIndexFieldNames())
+	}
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTable)(nil)
+
+func (inst *ReadAccessTestTable) GetNumberOfEntities() (nEntities int) {
+	if inst.EntityId != nil {
+		nEntities = inst.EntityId.Len()
+	}
+	return
+}

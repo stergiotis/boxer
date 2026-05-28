@@ -1,0 +1,2062 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Leeway Record View</title>
+<style>
+:root {
+  --bg: #0d0d11;
+  --bg-entity: #131318;
+  --bg-card: #1a1a22;
+  --bg-card-hover: #1f1f2a;
+  --bg-kv-alt: rgba(255,255,255,0.02);
+  --fg: #c8c8d4;
+  --fg-dim: #70708a;
+  --fg-key: #9090aa;
+  --fg-val: #e8e8f4;
+  --fg-bright: #f4f4ff;
+  --fg-type: #585870;
+  --border: #252535;
+  --border-light: #1e1e2c;
+  --tag-bg: rgba(255,255,255,0.04);
+  --tag-border: #303045;
+  --mono: 'JetBrains Mono','Fira Code','Cascadia Code','SF Mono','Consolas',monospace;
+  --sans: 'Inter','Segoe UI',system-ui,sans-serif;
+  --radius: 6px;
+  --card-width: 280px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{
+  background:var(--bg);color:var(--fg);
+  font-family:var(--sans);font-size:13px;line-height:1.5;
+  padding:12px 16px;
+}
+.batch{max-width:1600px;margin:0 auto;}
+
+/* Entity accordion */
+.entity{
+  background:var(--bg-entity);
+  border:1px solid var(--border);
+  border-radius:8px;
+  margin-bottom:10px;
+}
+.entity>summary{
+  padding:8px 14px;cursor:pointer;
+  font-weight:600;font-size:13px;color:var(--fg-bright);
+  list-style:none;user-select:none;
+  display:flex;align-items:center;gap:6px;
+}
+.entity>summary::before{
+  content:'▶';font-size:9px;
+  transition:transform .15s;display:inline-block;width:12px;
+  color:var(--fg-dim);
+}
+.entity[open]>summary::before{transform:rotate(90deg);}
+.entity-body{padding:6px 10px 10px;display:flex;flex-wrap:wrap;gap:6px;align-items:flex-start;}
+
+/* Section group */
+.sec-group{margin-bottom:2px;flex:0 1 auto;min-width:200px;}
+.sec-label{
+  font-family:var(--mono);font-size:11px;font-weight:600;
+  color:var(--fg-dim);
+  padding:3px 0 4px;
+  display:flex;align-items:center;gap:6px;
+  letter-spacing:0.3px;
+}
+.sec-dot{
+  width:7px;height:7px;border-radius:50%;flex-shrink:0;
+}
+.sec-count{
+  font-weight:400;opacity:0.5;font-size:10px;
+}
+.sec-kind{
+  font-weight:400;opacity:0.4;font-size:9px;
+  text-transform:uppercase;letter-spacing:0.5px;
+}
+
+/* Attribute card grid */
+.attr-grid{
+  display:flex;flex-wrap:wrap;gap:6px;
+  padding:2px 0;
+  align-items:flex-start;
+}
+
+/* Single attribute card */
+.attr-card{
+  background:var(--bg-card);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  min-width:180px;
+  flex:0 1 var(--card-width);
+  overflow:hidden;
+  transition:background .1s;
+}
+.attr-card:hover{background:var(--bg-card-hover);}
+.attr-card-accent{
+  display:flex;align-items:center;gap:6px;
+  padding:3px 8px;
+  font-family:var(--mono);font-size:10px;
+  font-weight:600;letter-spacing:0.3px;
+  color:rgba(255,255,255,0.85);
+}
+
+/* Key-value rows inside card */
+.kv-table{width:100%;border-collapse:collapse;}
+.kv-table tr:nth-child(even){background:var(--bg-kv-alt);}
+.kv-table td{
+  padding:2px 8px;
+  vertical-align:top;
+  font-family:var(--mono);font-size:11px;
+}
+.kv-key{
+  color:var(--fg-key);white-space:nowrap;
+  width:1%;padding-right:4px;
+}
+.kv-type{
+  color:var(--fg-type);font-size:10px;
+  font-weight:400;margin-left:2px;
+}
+.kv-val{
+  color:var(--fg-val);
+  word-break:break-all;
+  max-width:220px;
+}
+
+/* Collections inside value cells */
+.coll{padding:0;margin:0;}
+.coll-item{display:block;padding:0 0 1px;}
+.coll-item::before{color:var(--fg-dim);margin-right:3px;font-size:10px;}
+.coll-item.arr::before{content:attr(data-idx)']';}
+.coll-item.set::before{content:'•';}
+
+/* Tag footer */
+.attr-tags{
+  padding:3px 6px 4px;
+  border-top:1px solid var(--border-light);
+  display:flex;flex-wrap:wrap;gap:3px;
+}
+.tag{
+  display:inline-flex;align-items:center;gap:3px;
+  padding:1px 5px;border-radius:3px;
+  font-family:var(--mono);font-size:10px;
+  background:var(--tag-bg);
+  border:1px solid var(--tag-border);
+  color:var(--fg-dim);white-space:nowrap;
+}
+.tag-t{opacity:0.5;}
+
+/* Co-section group */
+.co-group{
+  border:1px dashed var(--border);
+  border-radius:var(--radius);
+  padding:4px 6px;margin-bottom:2px;
+  flex:0 1 auto;min-width:200px;
+}
+.co-group-label{
+  font-size:10px;color:var(--fg-dim);
+  text-transform:uppercase;letter-spacing:0.5px;
+  padding:0 2px 3px;
+}
+
+/* Wide cards for sections with many columns */
+.attr-card.wide{
+  flex-basis:100%;min-width:100%;
+}
+</style>
+</head>
+<body>
+<div class="batch">
+<details class="entity" open>
+<summary>Entity 0</summary>
+<div class="entity-body">
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#3b0f70"></span>entity-id <span class="sec-kind">plain</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#3b0f70"></div>
+<table class="kv-table">
+<tr><td class="kv-key">id<span class="kv-type"> u64</span></td><td class="kv-val">500001</td></tr>
+<tr><td class="kv-key">naturalKey<span class="kv-type"> y</span></td><td class="kv-val">U0VOUy1aUk0tMQ==</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#b2357b"></span>symbol <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#b2357b"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> s</span></td><td class="kv-val">HEARTBEAT</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(L)</span> 0xc</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#aa327d"></span>blobArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#aa327d"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> yh</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">w1KslPKBbWhzvRcubz+mGdfbWTJQgq0Cv8jCe5IcI8E=</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#dd4869"></span>u64Array <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#dd4869"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> u64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">165</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#57147e"></span>timeRange <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#57147e"></div>
+<table class="kv-table">
+<tr><td class="kv-key">beginIncl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-11T22:43:20Z</td></tr>
+<tr><td class="kv-key">endExcl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-11T22:48:20Z</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#f7705c"></span>geoPoint <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#f7705c"></div>
+<table class="kv-table">
+<tr><td class="kv-key">pointLat<span class="kv-type"> f32</span></td><td class="kv-val">45.997</td></tr>
+<tr><td class="kv-key">pointLng<span class="kv-type"> f32</span></td><td class="kv-val">7.737</td></tr>
+<tr><td class="kv-key">h3<span class="kv-type"> u64</span></td><td class="kv-val">61029384</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(H)</span> 0x15aec</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#892881"></span>timeArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#892881"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> z64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">2026-03-11T22:48:20Z</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+</div>
+</details>
+<details class="entity" open>
+<summary>Entity 1</summary>
+<div class="entity-body">
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#3b0f70"></span>entity-id <span class="sec-kind">plain</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#3b0f70"></div>
+<table class="kv-table">
+<tr><td class="kv-key">id<span class="kv-type"> u64</span></td><td class="kv-val">500002</td></tr>
+<tr><td class="kv-key">naturalKey<span class="kv-type"> y</span></td><td class="kv-val">U0VOUy1aUk0tMg==</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#b2357b"></span>symbol <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#b2357b"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> s</span></td><td class="kv-val">HEARTBEAT</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(L)</span> 0xc</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#aa327d"></span>blobArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#aa327d"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> yh</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">sca1hg6EoSLDO9VlLdMd0anE5eNrsSDdvR0d5o0yeEk=</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#dd4869"></span>u64Array <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#dd4869"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> u64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">180</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#57147e"></span>timeRange <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#57147e"></div>
+<table class="kv-table">
+<tr><td class="kv-key">beginIncl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-11T22:48:20Z</td></tr>
+<tr><td class="kv-key">endExcl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-11T22:53:20Z</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#f7705c"></span>geoPoint <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#f7705c"></div>
+<table class="kv-table">
+<tr><td class="kv-key">pointLat<span class="kv-type"> f32</span></td><td class="kv-val">46.002</td></tr>
+<tr><td class="kv-key">pointLng<span class="kv-type"> f32</span></td><td class="kv-val">7.7349997</td></tr>
+<tr><td class="kv-key">h3<span class="kv-type"> u64</span></td><td class="kv-val">61029384</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(H)</span> 0x15aec</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#892881"></span>timeArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#892881"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> z64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">2026-03-11T22:53:20Z</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+</div>
+</details>
+<details class="entity" open>
+<summary>Entity 2</summary>
+<div class="entity-body">
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#3b0f70"></span>entity-id <span class="sec-kind">plain</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#3b0f70"></div>
+<table class="kv-table">
+<tr><td class="kv-key">id<span class="kv-type"> u64</span></td><td class="kv-val">500003</td></tr>
+<tr><td class="kv-key">naturalKey<span class="kv-type"> y</span></td><td class="kv-val">U0VOUy1aUk0tMw==</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#b2357b"></span>symbol <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#b2357b"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> s</span></td><td class="kv-val">SNOW_SHIFT</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(L)</span> 0xc</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#aa327d"></span>blobArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#aa327d"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> yh</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">Of668jGlOKAiyoor3NMM+OuXG31UwGYdlxLKr2Gj1/8=</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#dd4869"></span>u64Array <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#dd4869"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> u64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">195</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#57147e"></span>timeRange <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#57147e"></div>
+<table class="kv-table">
+<tr><td class="kv-key">beginIncl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-11T22:53:20Z</td></tr>
+<tr><td class="kv-key">endExcl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-11T22:58:20Z</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#f7705c"></span>geoPoint <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#f7705c"></div>
+<table class="kv-table">
+<tr><td class="kv-key">pointLat<span class="kv-type"> f32</span></td><td class="kv-val">46.007</td></tr>
+<tr><td class="kv-key">pointLng<span class="kv-type"> f32</span></td><td class="kv-val">7.733</td></tr>
+<tr><td class="kv-key">h3<span class="kv-type"> u64</span></td><td class="kv-val">61029384</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(H)</span> 0x15aec</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#4f117b"></span>geoArea <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#4f117b"></div>
+<table class="kv-table">
+<tr><td class="kv-key">polyLat<span class="kv-type"> f32h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">45.997</span></div></td></tr>
+<tr><td class="kv-key">polyLng<span class="kv-type"> f32h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">7.7229996</span></div></td></tr>
+<tr><td class="kv-key">h3<span class="kv-type"> u64m</span></td><td class="kv-val"><div class="coll"><span class="coll-item set">61029394</span><span class="coll-item set">61029395</span><span class="coll-item set">61029396</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#892881"></span>timeArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#892881"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> z64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">2026-03-11T22:58:20Z</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+</div>
+</details>
+<details class="entity" open>
+<summary>Entity 3</summary>
+<div class="entity-body">
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#3b0f70"></span>entity-id <span class="sec-kind">plain</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#3b0f70"></div>
+<table class="kv-table">
+<tr><td class="kv-key">id<span class="kv-type"> u64</span></td><td class="kv-val">500004</td></tr>
+<tr><td class="kv-key">naturalKey<span class="kv-type"> y</span></td><td class="kv-val">U0VOUy1aUk0tNA==</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#b2357b"></span>symbol <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#b2357b"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> s</span></td><td class="kv-val">HEARTBEAT</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(L)</span> 0xc</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#aa327d"></span>blobArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#aa327d"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> yh</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">87M+9rsgQBGgNTa1/pN78lxkwPROrhv/8aN8PFr8150=</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#dd4869"></span>u64Array <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#dd4869"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> u64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">210</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#57147e"></span>timeRange <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#57147e"></div>
+<table class="kv-table">
+<tr><td class="kv-key">beginIncl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-11T22:58:20Z</td></tr>
+<tr><td class="kv-key">endExcl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-11T23:03:20Z</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#f7705c"></span>geoPoint <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#f7705c"></div>
+<table class="kv-table">
+<tr><td class="kv-key">pointLat<span class="kv-type"> f32</span></td><td class="kv-val">46.012</td></tr>
+<tr><td class="kv-key">pointLng<span class="kv-type"> f32</span></td><td class="kv-val">7.731</td></tr>
+<tr><td class="kv-key">h3<span class="kv-type"> u64</span></td><td class="kv-val">61029384</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(H)</span> 0x15aec</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#892881"></span>timeArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#892881"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> z64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">2026-03-11T23:03:20Z</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+</div>
+</details>
+<details class="entity" open>
+<summary>Entity 4</summary>
+<div class="entity-body">
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#3b0f70"></span>entity-id <span class="sec-kind">plain</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#3b0f70"></div>
+<table class="kv-table">
+<tr><td class="kv-key">id<span class="kv-type"> u64</span></td><td class="kv-val">500005</td></tr>
+<tr><td class="kv-key">naturalKey<span class="kv-type"> y</span></td><td class="kv-val">U0VOUy1aUk0tNQ==</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#b2357b"></span>symbol <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#b2357b"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> s</span></td><td class="kv-val">HEARTBEAT</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(L)</span> 0xc</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#aa327d"></span>blobArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#aa327d"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> yh</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">cXiXRCaEqeoEB4w3EFM15SEnUycBGQ1pswy3TXY5vkU=</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#dd4869"></span>u64Array <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#dd4869"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> u64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">225</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#57147e"></span>timeRange <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#57147e"></div>
+<table class="kv-table">
+<tr><td class="kv-key">beginIncl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-11T23:03:20Z</td></tr>
+<tr><td class="kv-key">endExcl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-11T23:08:20Z</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#f7705c"></span>geoPoint <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#f7705c"></div>
+<table class="kv-table">
+<tr><td class="kv-key">pointLat<span class="kv-type"> f32</span></td><td class="kv-val">46.017002</td></tr>
+<tr><td class="kv-key">pointLng<span class="kv-type"> f32</span></td><td class="kv-val">7.7289996</td></tr>
+<tr><td class="kv-key">h3<span class="kv-type"> u64</span></td><td class="kv-val">61029384</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(H)</span> 0x15aec</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#892881"></span>timeArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#892881"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> z64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">2026-03-11T23:08:20Z</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+</div>
+</details>
+<details class="entity" open>
+<summary>Entity 5</summary>
+<div class="entity-body">
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#3b0f70"></span>entity-id <span class="sec-kind">plain</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#3b0f70"></div>
+<table class="kv-table">
+<tr><td class="kv-key">id<span class="kv-type"> u64</span></td><td class="kv-val">500006</td></tr>
+<tr><td class="kv-key">naturalKey<span class="kv-type"> y</span></td><td class="kv-val">U0VOUy1aUk0tNg==</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#b2357b"></span>symbol <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#b2357b"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> s</span></td><td class="kv-val">SNOW_SHIFT</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(L)</span> 0xc</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#aa327d"></span>blobArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#aa327d"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> yh</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">/Ly9LlWeoqr1BAKQ4rotXIlEjOdQ/rBpfE9dNH2/Ab4=</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#dd4869"></span>u64Array <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#dd4869"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> u64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">240</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#57147e"></span>timeRange <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#57147e"></div>
+<table class="kv-table">
+<tr><td class="kv-key">beginIncl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-11T23:08:20Z</td></tr>
+<tr><td class="kv-key">endExcl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-11T23:13:20Z</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#f7705c"></span>geoPoint <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#f7705c"></div>
+<table class="kv-table">
+<tr><td class="kv-key">pointLat<span class="kv-type"> f32</span></td><td class="kv-val">46.022</td></tr>
+<tr><td class="kv-key">pointLng<span class="kv-type"> f32</span></td><td class="kv-val">7.7269998</td></tr>
+<tr><td class="kv-key">h3<span class="kv-type"> u64</span></td><td class="kv-val">61029384</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(H)</span> 0x15aec</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#4f117b"></span>geoArea <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#4f117b"></div>
+<table class="kv-table">
+<tr><td class="kv-key">polyLat<span class="kv-type"> f32h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">46.012</span></div></td></tr>
+<tr><td class="kv-key">polyLng<span class="kv-type"> f32h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">7.7169995</span></div></td></tr>
+<tr><td class="kv-key">h3<span class="kv-type"> u64m</span></td><td class="kv-val"><div class="coll"><span class="coll-item set">61029394</span><span class="coll-item set">61029395</span><span class="coll-item set">61029396</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#892881"></span>timeArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#892881"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> z64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">2026-03-11T23:13:20Z</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+</div>
+</details>
+<details class="entity" open>
+<summary>Entity 6</summary>
+<div class="entity-body">
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#3b0f70"></span>entity-id <span class="sec-kind">plain</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#3b0f70"></div>
+<table class="kv-table">
+<tr><td class="kv-key">id<span class="kv-type"> u64</span></td><td class="kv-val">500007</td></tr>
+<tr><td class="kv-key">naturalKey<span class="kv-type"> y</span></td><td class="kv-val">U0VOUy1aUk0tNw==</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#b2357b"></span>symbol <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#b2357b"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> s</span></td><td class="kv-val">SEISMIC_ANOMALY</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(L)</span> 0xc</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#6e1e81"></span>text <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#6e1e81"></div>
+<table class="kv-table">
+<tr><td class="kv-key">text<span class="kv-type"> s</span></td><td class="kv-val">High risk of slab avalanche on northern face.</td></tr>
+<tr><td class="kv-key">wordLength<span class="kv-type"> u32h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">9</span></div></td></tr>
+<tr><td class="kv-key">wordBag<span class="kv-type"> sh</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">avalanche</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#aa327d"></span>blobArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#aa327d"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> yh</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">4pI68IoouAZymhmnHVbxXo6RF2W4u58FOrOiNs1w89w=</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#dd4869"></span>u64Array <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#dd4869"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> u64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">255</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#57147e"></span>timeRange <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#57147e"></div>
+<table class="kv-table">
+<tr><td class="kv-key">beginIncl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-11T23:13:20Z</td></tr>
+<tr><td class="kv-key">endExcl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-11T23:18:20Z</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#f7705c"></span>geoPoint <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#f7705c"></div>
+<table class="kv-table">
+<tr><td class="kv-key">pointLat<span class="kv-type"> f32</span></td><td class="kv-val">46.027</td></tr>
+<tr><td class="kv-key">pointLng<span class="kv-type"> f32</span></td><td class="kv-val">7.725</td></tr>
+<tr><td class="kv-key">h3<span class="kv-type"> u64</span></td><td class="kv-val">61029384</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(H)</span> 0x15aec</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#4f117b"></span>geoArea <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#4f117b"></div>
+<table class="kv-table">
+<tr><td class="kv-key">polyLat<span class="kv-type"> f32h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">46.017002</span></div></td></tr>
+<tr><td class="kv-key">polyLng<span class="kv-type"> f32h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">7.7149997</span></div></td></tr>
+<tr><td class="kv-key">h3<span class="kv-type"> u64m</span></td><td class="kv-val"><div class="coll"><span class="coll-item set">61029394</span><span class="coll-item set">61029395</span><span class="coll-item set">61029396</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#892881"></span>timeArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#892881"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> z64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">2026-03-11T23:18:20Z</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+</div>
+</details>
+<details class="entity" open>
+<summary>Entity 7</summary>
+<div class="entity-body">
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#3b0f70"></span>entity-id <span class="sec-kind">plain</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#3b0f70"></div>
+<table class="kv-table">
+<tr><td class="kv-key">id<span class="kv-type"> u64</span></td><td class="kv-val">500008</td></tr>
+<tr><td class="kv-key">naturalKey<span class="kv-type"> y</span></td><td class="kv-val">U0VOUy1aUk0tOA==</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#b2357b"></span>symbol <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#b2357b"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> s</span></td><td class="kv-val">HEARTBEAT</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(L)</span> 0xc</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#aa327d"></span>blobArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#aa327d"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> yh</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">1alGQlaMFc+rxK+wL4UkzaPEsVZjlGG6rN44qsoxZgI=</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#dd4869"></span>u64Array <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#dd4869"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> u64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">270</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#57147e"></span>timeRange <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#57147e"></div>
+<table class="kv-table">
+<tr><td class="kv-key">beginIncl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-11T23:18:20Z</td></tr>
+<tr><td class="kv-key">endExcl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-11T23:23:20Z</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#f7705c"></span>geoPoint <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#f7705c"></div>
+<table class="kv-table">
+<tr><td class="kv-key">pointLat<span class="kv-type"> f32</span></td><td class="kv-val">46.032</td></tr>
+<tr><td class="kv-key">pointLng<span class="kv-type"> f32</span></td><td class="kv-val">7.723</td></tr>
+<tr><td class="kv-key">h3<span class="kv-type"> u64</span></td><td class="kv-val">61029384</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(H)</span> 0x15aec</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#892881"></span>timeArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#892881"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> z64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">2026-03-11T23:23:20Z</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+</div>
+</details>
+<details class="entity" open>
+<summary>Entity 8</summary>
+<div class="entity-body">
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#3b0f70"></span>entity-id <span class="sec-kind">plain</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#3b0f70"></div>
+<table class="kv-table">
+<tr><td class="kv-key">id<span class="kv-type"> u64</span></td><td class="kv-val">500009</td></tr>
+<tr><td class="kv-key">naturalKey<span class="kv-type"> y</span></td><td class="kv-val">U0VOUy1aUk0tOQ==</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#b2357b"></span>symbol <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#b2357b"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> s</span></td><td class="kv-val">SNOW_SHIFT</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(L)</span> 0xc</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#aa327d"></span>blobArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#aa327d"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> yh</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">0gnyoC2BgvOuB3WyPdzmaY3xyUqxcR+ne+5FrAXDWr0=</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#dd4869"></span>u64Array <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#dd4869"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> u64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">285</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#57147e"></span>timeRange <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#57147e"></div>
+<table class="kv-table">
+<tr><td class="kv-key">beginIncl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-11T23:23:20Z</td></tr>
+<tr><td class="kv-key">endExcl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-11T23:28:20Z</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#f7705c"></span>geoPoint <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#f7705c"></div>
+<table class="kv-table">
+<tr><td class="kv-key">pointLat<span class="kv-type"> f32</span></td><td class="kv-val">46.037</td></tr>
+<tr><td class="kv-key">pointLng<span class="kv-type"> f32</span></td><td class="kv-val">7.7209997</td></tr>
+<tr><td class="kv-key">h3<span class="kv-type"> u64</span></td><td class="kv-val">61029384</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(H)</span> 0x15aec</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#4f117b"></span>geoArea <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#4f117b"></div>
+<table class="kv-table">
+<tr><td class="kv-key">polyLat<span class="kv-type"> f32h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">46.027</span></div></td></tr>
+<tr><td class="kv-key">polyLng<span class="kv-type"> f32h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">7.7109995</span></div></td></tr>
+<tr><td class="kv-key">h3<span class="kv-type"> u64m</span></td><td class="kv-val"><div class="coll"><span class="coll-item set">61029394</span><span class="coll-item set">61029395</span><span class="coll-item set">61029396</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#892881"></span>timeArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#892881"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> z64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">2026-03-11T23:28:20Z</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+</div>
+</details>
+<details class="entity" open>
+<summary>Entity 9</summary>
+<div class="entity-body">
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#3b0f70"></span>entity-id <span class="sec-kind">plain</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#3b0f70"></div>
+<table class="kv-table">
+<tr><td class="kv-key">id<span class="kv-type"> u64</span></td><td class="kv-val">500010</td></tr>
+<tr><td class="kv-key">naturalKey<span class="kv-type"> y</span></td><td class="kv-val">U0VOUy1aUk0tMTA=</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#b2357b"></span>symbol <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#b2357b"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> s</span></td><td class="kv-val">HEARTBEAT</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(L)</span> 0xc</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#aa327d"></span>blobArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#aa327d"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> yh</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">M3AJoXG3Kwz/7geTTMvNig2IRuqiyc+OQ2Sadkwt8N8=</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#dd4869"></span>u64Array <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#dd4869"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> u64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">300</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#57147e"></span>timeRange <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#57147e"></div>
+<table class="kv-table">
+<tr><td class="kv-key">beginIncl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-11T23:28:20Z</td></tr>
+<tr><td class="kv-key">endExcl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-11T23:33:20Z</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#f7705c"></span>geoPoint <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#f7705c"></div>
+<table class="kv-table">
+<tr><td class="kv-key">pointLat<span class="kv-type"> f32</span></td><td class="kv-val">46.042</td></tr>
+<tr><td class="kv-key">pointLng<span class="kv-type"> f32</span></td><td class="kv-val">7.719</td></tr>
+<tr><td class="kv-key">h3<span class="kv-type"> u64</span></td><td class="kv-val">61029384</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(H)</span> 0x15aec</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#892881"></span>timeArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#892881"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> z64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">2026-03-11T23:33:20Z</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+</div>
+</details>
+<details class="entity" open>
+<summary>Entity 10</summary>
+<div class="entity-body">
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#3b0f70"></span>entity-id <span class="sec-kind">plain</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#3b0f70"></div>
+<table class="kv-table">
+<tr><td class="kv-key">id<span class="kv-type"> u64</span></td><td class="kv-val">500011</td></tr>
+<tr><td class="kv-key">naturalKey<span class="kv-type"> y</span></td><td class="kv-val">U0VOUy1aUk0tMTE=</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#b2357b"></span>symbol <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#b2357b"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> s</span></td><td class="kv-val">HEARTBEAT</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(L)</span> 0xc</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#aa327d"></span>blobArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#aa327d"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> yh</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">TvaM6nvsKnOKAtOXBLm/+SomtS2+IJuRfXxd6cKDHqA=</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#dd4869"></span>u64Array <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#dd4869"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> u64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">315</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#57147e"></span>timeRange <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#57147e"></div>
+<table class="kv-table">
+<tr><td class="kv-key">beginIncl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-11T23:33:20Z</td></tr>
+<tr><td class="kv-key">endExcl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-11T23:38:20Z</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#f7705c"></span>geoPoint <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#f7705c"></div>
+<table class="kv-table">
+<tr><td class="kv-key">pointLat<span class="kv-type"> f32</span></td><td class="kv-val">46.047</td></tr>
+<tr><td class="kv-key">pointLng<span class="kv-type"> f32</span></td><td class="kv-val">7.717</td></tr>
+<tr><td class="kv-key">h3<span class="kv-type"> u64</span></td><td class="kv-val">61029384</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(H)</span> 0x15aec</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#892881"></span>timeArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#892881"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> z64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">2026-03-11T23:38:20Z</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+</div>
+</details>
+<details class="entity" open>
+<summary>Entity 11</summary>
+<div class="entity-body">
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#3b0f70"></span>entity-id <span class="sec-kind">plain</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#3b0f70"></div>
+<table class="kv-table">
+<tr><td class="kv-key">id<span class="kv-type"> u64</span></td><td class="kv-val">500012</td></tr>
+<tr><td class="kv-key">naturalKey<span class="kv-type"> y</span></td><td class="kv-val">U0VOUy1aUk0tMTI=</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#b2357b"></span>symbol <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#b2357b"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> s</span></td><td class="kv-val">SNOW_SHIFT</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(L)</span> 0xc</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#aa327d"></span>blobArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#aa327d"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> yh</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">+PXsOgJe+gEPf/J/vj1NzztK+cE1Jj78HDJAEzdrKUg=</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#dd4869"></span>u64Array <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#dd4869"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> u64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">330</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#57147e"></span>timeRange <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#57147e"></div>
+<table class="kv-table">
+<tr><td class="kv-key">beginIncl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-11T23:38:20Z</td></tr>
+<tr><td class="kv-key">endExcl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-11T23:43:20Z</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#f7705c"></span>geoPoint <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#f7705c"></div>
+<table class="kv-table">
+<tr><td class="kv-key">pointLat<span class="kv-type"> f32</span></td><td class="kv-val">46.052002</td></tr>
+<tr><td class="kv-key">pointLng<span class="kv-type"> f32</span></td><td class="kv-val">7.7149997</td></tr>
+<tr><td class="kv-key">h3<span class="kv-type"> u64</span></td><td class="kv-val">61029384</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(H)</span> 0x15aec</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#4f117b"></span>geoArea <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#4f117b"></div>
+<table class="kv-table">
+<tr><td class="kv-key">polyLat<span class="kv-type"> f32h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">46.042004</span></div></td></tr>
+<tr><td class="kv-key">polyLng<span class="kv-type"> f32h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">7.7049994</span></div></td></tr>
+<tr><td class="kv-key">h3<span class="kv-type"> u64m</span></td><td class="kv-val"><div class="coll"><span class="coll-item set">61029394</span><span class="coll-item set">61029395</span><span class="coll-item set">61029396</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#892881"></span>timeArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#892881"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> z64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">2026-03-11T23:43:20Z</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+</div>
+</details>
+<details class="entity" open>
+<summary>Entity 12</summary>
+<div class="entity-body">
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#3b0f70"></span>entity-id <span class="sec-kind">plain</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#3b0f70"></div>
+<table class="kv-table">
+<tr><td class="kv-key">id<span class="kv-type"> u64</span></td><td class="kv-val">500013</td></tr>
+<tr><td class="kv-key">naturalKey<span class="kv-type"> y</span></td><td class="kv-val">U0VOUy1aUk0tMTM=</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#b2357b"></span>symbol <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#b2357b"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> s</span></td><td class="kv-val">HEARTBEAT</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(L)</span> 0xc</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#aa327d"></span>blobArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#aa327d"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> yh</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">62w+O99YB8DPy2wJ8NzXadpAWyJAXD3xR4hRKCHyXow=</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#dd4869"></span>u64Array <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#dd4869"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> u64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">345</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#57147e"></span>timeRange <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#57147e"></div>
+<table class="kv-table">
+<tr><td class="kv-key">beginIncl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-11T23:43:20Z</td></tr>
+<tr><td class="kv-key">endExcl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-11T23:48:20Z</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#f7705c"></span>geoPoint <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#f7705c"></div>
+<table class="kv-table">
+<tr><td class="kv-key">pointLat<span class="kv-type"> f32</span></td><td class="kv-val">46.057</td></tr>
+<tr><td class="kv-key">pointLng<span class="kv-type"> f32</span></td><td class="kv-val">7.713</td></tr>
+<tr><td class="kv-key">h3<span class="kv-type"> u64</span></td><td class="kv-val">61029384</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(H)</span> 0x15aec</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#892881"></span>timeArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#892881"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> z64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">2026-03-11T23:48:20Z</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+</div>
+</details>
+<details class="entity" open>
+<summary>Entity 13</summary>
+<div class="entity-body">
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#3b0f70"></span>entity-id <span class="sec-kind">plain</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#3b0f70"></div>
+<table class="kv-table">
+<tr><td class="kv-key">id<span class="kv-type"> u64</span></td><td class="kv-val">500014</td></tr>
+<tr><td class="kv-key">naturalKey<span class="kv-type"> y</span></td><td class="kv-val">U0VOUy1aUk0tMTQ=</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#b2357b"></span>symbol <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#b2357b"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> s</span></td><td class="kv-val">SEISMIC_ANOMALY</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(L)</span> 0xc</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#6e1e81"></span>text <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#6e1e81"></div>
+<table class="kv-table">
+<tr><td class="kv-key">text<span class="kv-type"> s</span></td><td class="kv-val">High risk of slab avalanche on northern face.</td></tr>
+<tr><td class="kv-key">wordLength<span class="kv-type"> u32h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">9</span></div></td></tr>
+<tr><td class="kv-key">wordBag<span class="kv-type"> sh</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">avalanche</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#aa327d"></span>blobArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#aa327d"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> yh</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">7YFU+lGaGGDC8q38fKM7ubpy4/suCPBC+ZbjnzR1Z80=</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#dd4869"></span>u64Array <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#dd4869"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> u64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">360</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#57147e"></span>timeRange <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#57147e"></div>
+<table class="kv-table">
+<tr><td class="kv-key">beginIncl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-11T23:48:20Z</td></tr>
+<tr><td class="kv-key">endExcl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-11T23:53:20Z</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#f7705c"></span>geoPoint <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#f7705c"></div>
+<table class="kv-table">
+<tr><td class="kv-key">pointLat<span class="kv-type"> f32</span></td><td class="kv-val">46.062</td></tr>
+<tr><td class="kv-key">pointLng<span class="kv-type"> f32</span></td><td class="kv-val">7.711</td></tr>
+<tr><td class="kv-key">h3<span class="kv-type"> u64</span></td><td class="kv-val">61029384</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(H)</span> 0x15aec</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#4f117b"></span>geoArea <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#4f117b"></div>
+<table class="kv-table">
+<tr><td class="kv-key">polyLat<span class="kv-type"> f32h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">46.052002</span></div></td></tr>
+<tr><td class="kv-key">polyLng<span class="kv-type"> f32h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">7.7009997</span></div></td></tr>
+<tr><td class="kv-key">h3<span class="kv-type"> u64m</span></td><td class="kv-val"><div class="coll"><span class="coll-item set">61029394</span><span class="coll-item set">61029395</span><span class="coll-item set">61029396</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#892881"></span>timeArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#892881"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> z64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">2026-03-11T23:53:20Z</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+</div>
+</details>
+<details class="entity" open>
+<summary>Entity 14</summary>
+<div class="entity-body">
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#3b0f70"></span>entity-id <span class="sec-kind">plain</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#3b0f70"></div>
+<table class="kv-table">
+<tr><td class="kv-key">id<span class="kv-type"> u64</span></td><td class="kv-val">500015</td></tr>
+<tr><td class="kv-key">naturalKey<span class="kv-type"> y</span></td><td class="kv-val">U0VOUy1aUk0tMTU=</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#b2357b"></span>symbol <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#b2357b"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> s</span></td><td class="kv-val">SNOW_SHIFT</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(L)</span> 0xc</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#aa327d"></span>blobArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#aa327d"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> yh</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">Vek16udnQT+zB/8bdhx42onCQgUIhqEGSgMv7HC9IGU=</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#dd4869"></span>u64Array <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#dd4869"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> u64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">375</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#57147e"></span>timeRange <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#57147e"></div>
+<table class="kv-table">
+<tr><td class="kv-key">beginIncl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-11T23:53:20Z</td></tr>
+<tr><td class="kv-key">endExcl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-11T23:58:20Z</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#f7705c"></span>geoPoint <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#f7705c"></div>
+<table class="kv-table">
+<tr><td class="kv-key">pointLat<span class="kv-type"> f32</span></td><td class="kv-val">46.067</td></tr>
+<tr><td class="kv-key">pointLng<span class="kv-type"> f32</span></td><td class="kv-val">7.7089996</td></tr>
+<tr><td class="kv-key">h3<span class="kv-type"> u64</span></td><td class="kv-val">61029384</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(H)</span> 0x15aec</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#4f117b"></span>geoArea <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#4f117b"></div>
+<table class="kv-table">
+<tr><td class="kv-key">polyLat<span class="kv-type"> f32h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">46.057003</span></div></td></tr>
+<tr><td class="kv-key">polyLng<span class="kv-type"> f32h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">7.6989994</span></div></td></tr>
+<tr><td class="kv-key">h3<span class="kv-type"> u64m</span></td><td class="kv-val"><div class="coll"><span class="coll-item set">61029394</span><span class="coll-item set">61029395</span><span class="coll-item set">61029396</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#892881"></span>timeArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#892881"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> z64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">2026-03-11T23:58:20Z</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+</div>
+</details>
+<details class="entity" open>
+<summary>Entity 15</summary>
+<div class="entity-body">
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#3b0f70"></span>entity-id <span class="sec-kind">plain</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#3b0f70"></div>
+<table class="kv-table">
+<tr><td class="kv-key">id<span class="kv-type"> u64</span></td><td class="kv-val">500016</td></tr>
+<tr><td class="kv-key">naturalKey<span class="kv-type"> y</span></td><td class="kv-val">U0VOUy1aUk0tMTY=</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#b2357b"></span>symbol <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#b2357b"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> s</span></td><td class="kv-val">HEARTBEAT</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(L)</span> 0xc</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#aa327d"></span>blobArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#aa327d"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> yh</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">1Pf/g3J76HJOcSTWROhu0P21D4b8/SZFA/OxoQpIVUg=</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#dd4869"></span>u64Array <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#dd4869"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> u64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">390</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#57147e"></span>timeRange <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#57147e"></div>
+<table class="kv-table">
+<tr><td class="kv-key">beginIncl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-11T23:58:20Z</td></tr>
+<tr><td class="kv-key">endExcl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-12T00:03:20Z</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#f7705c"></span>geoPoint <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#f7705c"></div>
+<table class="kv-table">
+<tr><td class="kv-key">pointLat<span class="kv-type"> f32</span></td><td class="kv-val">46.072002</td></tr>
+<tr><td class="kv-key">pointLng<span class="kv-type"> f32</span></td><td class="kv-val">7.707</td></tr>
+<tr><td class="kv-key">h3<span class="kv-type"> u64</span></td><td class="kv-val">61029384</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(H)</span> 0x15aec</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#892881"></span>timeArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#892881"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> z64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">2026-03-12T00:03:20Z</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+</div>
+</details>
+<details class="entity" open>
+<summary>Entity 16</summary>
+<div class="entity-body">
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#3b0f70"></span>entity-id <span class="sec-kind">plain</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#3b0f70"></div>
+<table class="kv-table">
+<tr><td class="kv-key">id<span class="kv-type"> u64</span></td><td class="kv-val">500017</td></tr>
+<tr><td class="kv-key">naturalKey<span class="kv-type"> y</span></td><td class="kv-val">U0VOUy1aUk0tMTc=</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#b2357b"></span>symbol <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#b2357b"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> s</span></td><td class="kv-val">HEARTBEAT</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(L)</span> 0xc</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#aa327d"></span>blobArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#aa327d"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> yh</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">nocQO6dI5mG8iwMYp6krvtrIrStvFr6mPXAoLEkbPNM=</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#dd4869"></span>u64Array <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#dd4869"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> u64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">405</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#57147e"></span>timeRange <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#57147e"></div>
+<table class="kv-table">
+<tr><td class="kv-key">beginIncl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-12T00:03:20Z</td></tr>
+<tr><td class="kv-key">endExcl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-12T00:08:20Z</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#f7705c"></span>geoPoint <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#f7705c"></div>
+<table class="kv-table">
+<tr><td class="kv-key">pointLat<span class="kv-type"> f32</span></td><td class="kv-val">46.077</td></tr>
+<tr><td class="kv-key">pointLng<span class="kv-type"> f32</span></td><td class="kv-val">7.705</td></tr>
+<tr><td class="kv-key">h3<span class="kv-type"> u64</span></td><td class="kv-val">61029384</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(H)</span> 0x15aec</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#892881"></span>timeArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#892881"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> z64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">2026-03-12T00:08:20Z</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+</div>
+</details>
+<details class="entity" open>
+<summary>Entity 17</summary>
+<div class="entity-body">
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#3b0f70"></span>entity-id <span class="sec-kind">plain</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#3b0f70"></div>
+<table class="kv-table">
+<tr><td class="kv-key">id<span class="kv-type"> u64</span></td><td class="kv-val">500018</td></tr>
+<tr><td class="kv-key">naturalKey<span class="kv-type"> y</span></td><td class="kv-val">U0VOUy1aUk0tMTg=</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#b2357b"></span>symbol <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#b2357b"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> s</span></td><td class="kv-val">SNOW_SHIFT</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(L)</span> 0xc</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#aa327d"></span>blobArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#aa327d"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> yh</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">lpzRLp+2Iwn6gx9VaqTHh4/yItUqKGP+Mh1mQOqPamM=</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#dd4869"></span>u64Array <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#dd4869"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> u64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">420</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#57147e"></span>timeRange <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#57147e"></div>
+<table class="kv-table">
+<tr><td class="kv-key">beginIncl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-12T00:08:20Z</td></tr>
+<tr><td class="kv-key">endExcl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-12T00:13:20Z</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#f7705c"></span>geoPoint <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#f7705c"></div>
+<table class="kv-table">
+<tr><td class="kv-key">pointLat<span class="kv-type"> f32</span></td><td class="kv-val">46.082</td></tr>
+<tr><td class="kv-key">pointLng<span class="kv-type"> f32</span></td><td class="kv-val">7.703</td></tr>
+<tr><td class="kv-key">h3<span class="kv-type"> u64</span></td><td class="kv-val">61029384</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(H)</span> 0x15aec</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#4f117b"></span>geoArea <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#4f117b"></div>
+<table class="kv-table">
+<tr><td class="kv-key">polyLat<span class="kv-type"> f32h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">46.072002</span></div></td></tr>
+<tr><td class="kv-key">polyLng<span class="kv-type"> f32h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">7.693</span></div></td></tr>
+<tr><td class="kv-key">h3<span class="kv-type"> u64m</span></td><td class="kv-val"><div class="coll"><span class="coll-item set">61029394</span><span class="coll-item set">61029395</span><span class="coll-item set">61029396</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#892881"></span>timeArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#892881"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> z64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">2026-03-12T00:13:20Z</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+</div>
+</details>
+<details class="entity" open>
+<summary>Entity 18</summary>
+<div class="entity-body">
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#3b0f70"></span>entity-id <span class="sec-kind">plain</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#3b0f70"></div>
+<table class="kv-table">
+<tr><td class="kv-key">id<span class="kv-type"> u64</span></td><td class="kv-val">500019</td></tr>
+<tr><td class="kv-key">naturalKey<span class="kv-type"> y</span></td><td class="kv-val">U0VOUy1aUk0tMTk=</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#b2357b"></span>symbol <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#b2357b"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> s</span></td><td class="kv-val">HEARTBEAT</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(L)</span> 0xc</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#aa327d"></span>blobArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#aa327d"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> yh</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">HM3eYQLf+ZzAdR+dKlgfXMpsSouDN9TqWgeWgQSpPeY=</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#dd4869"></span>u64Array <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#dd4869"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> u64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">435</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#57147e"></span>timeRange <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#57147e"></div>
+<table class="kv-table">
+<tr><td class="kv-key">beginIncl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-12T00:13:20Z</td></tr>
+<tr><td class="kv-key">endExcl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-12T00:18:20Z</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#f7705c"></span>geoPoint <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#f7705c"></div>
+<table class="kv-table">
+<tr><td class="kv-key">pointLat<span class="kv-type"> f32</span></td><td class="kv-val">46.087</td></tr>
+<tr><td class="kv-key">pointLng<span class="kv-type"> f32</span></td><td class="kv-val">7.7009997</td></tr>
+<tr><td class="kv-key">h3<span class="kv-type"> u64</span></td><td class="kv-val">61029384</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(H)</span> 0x15aec</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#892881"></span>timeArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#892881"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> z64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">2026-03-12T00:18:20Z</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+</div>
+</details>
+<details class="entity" open>
+<summary>Entity 19</summary>
+<div class="entity-body">
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#3b0f70"></span>entity-id <span class="sec-kind">plain</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#3b0f70"></div>
+<table class="kv-table">
+<tr><td class="kv-key">id<span class="kv-type"> u64</span></td><td class="kv-val">500020</td></tr>
+<tr><td class="kv-key">naturalKey<span class="kv-type"> y</span></td><td class="kv-val">U0VOUy1aUk0tMjA=</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#b2357b"></span>symbol <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#b2357b"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> s</span></td><td class="kv-val">HEARTBEAT</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(L)</span> 0xc</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#aa327d"></span>blobArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#aa327d"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> yh</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">pAQcsMJSFWEUMCjbp2UPkNyoz32p7ZLs27VKN1TbIsk=</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#dd4869"></span>u64Array <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#dd4869"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> u64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">450</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#57147e"></span>timeRange <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#57147e"></div>
+<table class="kv-table">
+<tr><td class="kv-key">beginIncl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-12T00:18:20Z</td></tr>
+<tr><td class="kv-key">endExcl<span class="kv-type"> z64</span></td><td class="kv-val">2026-03-12T00:23:20Z</td></tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#f7705c"></span>geoPoint <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#f7705c"></div>
+<table class="kv-table">
+<tr><td class="kv-key">pointLat<span class="kv-type"> f32</span></td><td class="kv-val">46.092</td></tr>
+<tr><td class="kv-key">pointLng<span class="kv-type"> f32</span></td><td class="kv-val">7.699</td></tr>
+<tr><td class="kv-key">h3<span class="kv-type"> u64</span></td><td class="kv-val">61029384</td></tr>
+</table>
+<div class="attr-tags"><span class="tag"><span class="tag-t">ref(H)</span> 0x15aec</span></div>
+</div>
+</div>
+</div>
+<div class="sec-group">
+<div class="sec-label"><span class="sec-dot" style="background:#892881"></span>timeArray <span class="sec-count">(1)</span></div>
+<div class="attr-grid">
+<div class="attr-card">
+<div class="attr-card-accent" style="background:#892881"></div>
+<table class="kv-table">
+<tr><td class="kv-key">value<span class="kv-type"> z64h</span></td><td class="kv-val"><div class="coll"><span class="coll-item arr" data-idx="[0">2026-03-12T00:23:20Z</span></div></td></tr>
+</table>
+</div>
+</div>
+</div>
+</div>
+</details>
+</div>
+</body>
+</html>

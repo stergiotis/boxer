@@ -1,0 +1,3033 @@
+{
+  "leewayCardData": "1",
+  "entities": [
+    {
+      "byStructure": {
+        "plain": [
+          {
+            "itemType": "entity-id",
+            "values": {
+              "id": 500001,
+              "naturalKey": "U0VOUy1aUk0tMQ=="
+            }
+          }
+        ],
+        "sections": [
+          {
+            "name": "foreignKey",
+            "nAttrs": 0
+          },
+          {
+            "name": "symbol",
+            "nAttrs": 1
+          },
+          {
+            "name": "symbolArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "stringArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "text",
+            "nAttrs": 0
+          },
+          {
+            "name": "blobArray",
+            "nAttrs": 1
+          },
+          {
+            "name": "u8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "u64Array",
+            "nAttrs": 1
+          },
+          {
+            "name": "u64Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "i8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeRange",
+            "nAttrs": 1
+          },
+          {
+            "name": "f32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "f64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "geoPoint",
+            "nAttrs": 1
+          },
+          {
+            "name": "geoArea",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeArray",
+            "nAttrs": 1
+          }
+        ],
+        "coGroups": []
+      },
+      "byAttribute": {
+        "0x15aec": {
+          "section": "geoPoint",
+          "values": {
+            "h3": 61029384,
+            "pointLat": 45.997,
+            "pointLng": 7.737
+          }
+        },
+        "0xc": {
+          "section": "symbol",
+          "scalar": "HEARTBEAT"
+        },
+        "_unidentified/blobArray/0": {
+          "section": "blobArray",
+          "value": [
+            "w1KslPKBbWhzvRcubz+mGdfbWTJQgq0Cv8jCe5IcI8E="
+          ]
+        },
+        "_unidentified/timeArray/0": {
+          "section": "timeArray",
+          "value": [
+            "2026-03-11T22:48:20Z"
+          ]
+        },
+        "_unidentified/timeRange/0": {
+          "section": "timeRange",
+          "values": {
+            "beginIncl": "2026-03-11T22:43:20Z",
+            "endExcl": "2026-03-11T22:48:20Z"
+          }
+        },
+        "_unidentified/u64Array/0": {
+          "section": "u64Array",
+          "value": [
+            165
+          ]
+        }
+      }
+    },
+    {
+      "byStructure": {
+        "plain": [
+          {
+            "itemType": "entity-id",
+            "values": {
+              "id": 500002,
+              "naturalKey": "U0VOUy1aUk0tMg=="
+            }
+          }
+        ],
+        "sections": [
+          {
+            "name": "foreignKey",
+            "nAttrs": 0
+          },
+          {
+            "name": "symbol",
+            "nAttrs": 1
+          },
+          {
+            "name": "symbolArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "stringArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "text",
+            "nAttrs": 0
+          },
+          {
+            "name": "blobArray",
+            "nAttrs": 1
+          },
+          {
+            "name": "u8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "u64Array",
+            "nAttrs": 1
+          },
+          {
+            "name": "u64Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "i8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeRange",
+            "nAttrs": 1
+          },
+          {
+            "name": "f32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "f64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "geoPoint",
+            "nAttrs": 1
+          },
+          {
+            "name": "geoArea",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeArray",
+            "nAttrs": 1
+          }
+        ],
+        "coGroups": []
+      },
+      "byAttribute": {
+        "0x15aec": {
+          "section": "geoPoint",
+          "values": {
+            "h3": 61029384,
+            "pointLat": 46.002,
+            "pointLng": 7.7349997
+          }
+        },
+        "0xc": {
+          "section": "symbol",
+          "scalar": "HEARTBEAT"
+        },
+        "_unidentified/blobArray/0": {
+          "section": "blobArray",
+          "value": [
+            "sca1hg6EoSLDO9VlLdMd0anE5eNrsSDdvR0d5o0yeEk="
+          ]
+        },
+        "_unidentified/timeArray/0": {
+          "section": "timeArray",
+          "value": [
+            "2026-03-11T22:53:20Z"
+          ]
+        },
+        "_unidentified/timeRange/0": {
+          "section": "timeRange",
+          "values": {
+            "beginIncl": "2026-03-11T22:48:20Z",
+            "endExcl": "2026-03-11T22:53:20Z"
+          }
+        },
+        "_unidentified/u64Array/0": {
+          "section": "u64Array",
+          "value": [
+            180
+          ]
+        }
+      }
+    },
+    {
+      "byStructure": {
+        "plain": [
+          {
+            "itemType": "entity-id",
+            "values": {
+              "id": 500003,
+              "naturalKey": "U0VOUy1aUk0tMw=="
+            }
+          }
+        ],
+        "sections": [
+          {
+            "name": "foreignKey",
+            "nAttrs": 0
+          },
+          {
+            "name": "symbol",
+            "nAttrs": 1
+          },
+          {
+            "name": "symbolArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "stringArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "text",
+            "nAttrs": 0
+          },
+          {
+            "name": "blobArray",
+            "nAttrs": 1
+          },
+          {
+            "name": "u8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "u64Array",
+            "nAttrs": 1
+          },
+          {
+            "name": "u64Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "i8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeRange",
+            "nAttrs": 1
+          },
+          {
+            "name": "f32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "f64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "geoPoint",
+            "nAttrs": 1
+          },
+          {
+            "name": "geoArea",
+            "nAttrs": 1
+          },
+          {
+            "name": "timeArray",
+            "nAttrs": 1
+          }
+        ],
+        "coGroups": []
+      },
+      "byAttribute": {
+        "0x15aec": {
+          "section": "geoPoint",
+          "values": {
+            "h3": 61029384,
+            "pointLat": 46.007,
+            "pointLng": 7.733
+          }
+        },
+        "0xc": {
+          "section": "symbol",
+          "scalar": "SNOW_SHIFT"
+        },
+        "_unidentified/blobArray/0": {
+          "section": "blobArray",
+          "value": [
+            "Of668jGlOKAiyoor3NMM+OuXG31UwGYdlxLKr2Gj1/8="
+          ]
+        },
+        "_unidentified/geoArea/0": {
+          "section": "geoArea",
+          "values": {
+            "h3": {
+              "set": [
+                61029394,
+                61029395,
+                61029396
+              ]
+            },
+            "polyLat": [
+              45.997
+            ],
+            "polyLng": [
+              7.7229996
+            ]
+          }
+        },
+        "_unidentified/timeArray/0": {
+          "section": "timeArray",
+          "value": [
+            "2026-03-11T22:58:20Z"
+          ]
+        },
+        "_unidentified/timeRange/0": {
+          "section": "timeRange",
+          "values": {
+            "beginIncl": "2026-03-11T22:53:20Z",
+            "endExcl": "2026-03-11T22:58:20Z"
+          }
+        },
+        "_unidentified/u64Array/0": {
+          "section": "u64Array",
+          "value": [
+            195
+          ]
+        }
+      }
+    },
+    {
+      "byStructure": {
+        "plain": [
+          {
+            "itemType": "entity-id",
+            "values": {
+              "id": 500004,
+              "naturalKey": "U0VOUy1aUk0tNA=="
+            }
+          }
+        ],
+        "sections": [
+          {
+            "name": "foreignKey",
+            "nAttrs": 0
+          },
+          {
+            "name": "symbol",
+            "nAttrs": 1
+          },
+          {
+            "name": "symbolArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "stringArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "text",
+            "nAttrs": 0
+          },
+          {
+            "name": "blobArray",
+            "nAttrs": 1
+          },
+          {
+            "name": "u8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "u64Array",
+            "nAttrs": 1
+          },
+          {
+            "name": "u64Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "i8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeRange",
+            "nAttrs": 1
+          },
+          {
+            "name": "f32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "f64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "geoPoint",
+            "nAttrs": 1
+          },
+          {
+            "name": "geoArea",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeArray",
+            "nAttrs": 1
+          }
+        ],
+        "coGroups": []
+      },
+      "byAttribute": {
+        "0x15aec": {
+          "section": "geoPoint",
+          "values": {
+            "h3": 61029384,
+            "pointLat": 46.012,
+            "pointLng": 7.731
+          }
+        },
+        "0xc": {
+          "section": "symbol",
+          "scalar": "HEARTBEAT"
+        },
+        "_unidentified/blobArray/0": {
+          "section": "blobArray",
+          "value": [
+            "87M+9rsgQBGgNTa1/pN78lxkwPROrhv/8aN8PFr8150="
+          ]
+        },
+        "_unidentified/timeArray/0": {
+          "section": "timeArray",
+          "value": [
+            "2026-03-11T23:03:20Z"
+          ]
+        },
+        "_unidentified/timeRange/0": {
+          "section": "timeRange",
+          "values": {
+            "beginIncl": "2026-03-11T22:58:20Z",
+            "endExcl": "2026-03-11T23:03:20Z"
+          }
+        },
+        "_unidentified/u64Array/0": {
+          "section": "u64Array",
+          "value": [
+            210
+          ]
+        }
+      }
+    },
+    {
+      "byStructure": {
+        "plain": [
+          {
+            "itemType": "entity-id",
+            "values": {
+              "id": 500005,
+              "naturalKey": "U0VOUy1aUk0tNQ=="
+            }
+          }
+        ],
+        "sections": [
+          {
+            "name": "foreignKey",
+            "nAttrs": 0
+          },
+          {
+            "name": "symbol",
+            "nAttrs": 1
+          },
+          {
+            "name": "symbolArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "stringArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "text",
+            "nAttrs": 0
+          },
+          {
+            "name": "blobArray",
+            "nAttrs": 1
+          },
+          {
+            "name": "u8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "u64Array",
+            "nAttrs": 1
+          },
+          {
+            "name": "u64Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "i8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeRange",
+            "nAttrs": 1
+          },
+          {
+            "name": "f32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "f64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "geoPoint",
+            "nAttrs": 1
+          },
+          {
+            "name": "geoArea",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeArray",
+            "nAttrs": 1
+          }
+        ],
+        "coGroups": []
+      },
+      "byAttribute": {
+        "0x15aec": {
+          "section": "geoPoint",
+          "values": {
+            "h3": 61029384,
+            "pointLat": 46.017002,
+            "pointLng": 7.7289996
+          }
+        },
+        "0xc": {
+          "section": "symbol",
+          "scalar": "HEARTBEAT"
+        },
+        "_unidentified/blobArray/0": {
+          "section": "blobArray",
+          "value": [
+            "cXiXRCaEqeoEB4w3EFM15SEnUycBGQ1pswy3TXY5vkU="
+          ]
+        },
+        "_unidentified/timeArray/0": {
+          "section": "timeArray",
+          "value": [
+            "2026-03-11T23:08:20Z"
+          ]
+        },
+        "_unidentified/timeRange/0": {
+          "section": "timeRange",
+          "values": {
+            "beginIncl": "2026-03-11T23:03:20Z",
+            "endExcl": "2026-03-11T23:08:20Z"
+          }
+        },
+        "_unidentified/u64Array/0": {
+          "section": "u64Array",
+          "value": [
+            225
+          ]
+        }
+      }
+    },
+    {
+      "byStructure": {
+        "plain": [
+          {
+            "itemType": "entity-id",
+            "values": {
+              "id": 500006,
+              "naturalKey": "U0VOUy1aUk0tNg=="
+            }
+          }
+        ],
+        "sections": [
+          {
+            "name": "foreignKey",
+            "nAttrs": 0
+          },
+          {
+            "name": "symbol",
+            "nAttrs": 1
+          },
+          {
+            "name": "symbolArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "stringArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "text",
+            "nAttrs": 0
+          },
+          {
+            "name": "blobArray",
+            "nAttrs": 1
+          },
+          {
+            "name": "u8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "u64Array",
+            "nAttrs": 1
+          },
+          {
+            "name": "u64Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "i8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeRange",
+            "nAttrs": 1
+          },
+          {
+            "name": "f32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "f64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "geoPoint",
+            "nAttrs": 1
+          },
+          {
+            "name": "geoArea",
+            "nAttrs": 1
+          },
+          {
+            "name": "timeArray",
+            "nAttrs": 1
+          }
+        ],
+        "coGroups": []
+      },
+      "byAttribute": {
+        "0x15aec": {
+          "section": "geoPoint",
+          "values": {
+            "h3": 61029384,
+            "pointLat": 46.022,
+            "pointLng": 7.7269998
+          }
+        },
+        "0xc": {
+          "section": "symbol",
+          "scalar": "SNOW_SHIFT"
+        },
+        "_unidentified/blobArray/0": {
+          "section": "blobArray",
+          "value": [
+            "/Ly9LlWeoqr1BAKQ4rotXIlEjOdQ/rBpfE9dNH2/Ab4="
+          ]
+        },
+        "_unidentified/geoArea/0": {
+          "section": "geoArea",
+          "values": {
+            "h3": {
+              "set": [
+                61029394,
+                61029395,
+                61029396
+              ]
+            },
+            "polyLat": [
+              46.012
+            ],
+            "polyLng": [
+              7.7169995
+            ]
+          }
+        },
+        "_unidentified/timeArray/0": {
+          "section": "timeArray",
+          "value": [
+            "2026-03-11T23:13:20Z"
+          ]
+        },
+        "_unidentified/timeRange/0": {
+          "section": "timeRange",
+          "values": {
+            "beginIncl": "2026-03-11T23:08:20Z",
+            "endExcl": "2026-03-11T23:13:20Z"
+          }
+        },
+        "_unidentified/u64Array/0": {
+          "section": "u64Array",
+          "value": [
+            240
+          ]
+        }
+      }
+    },
+    {
+      "byStructure": {
+        "plain": [
+          {
+            "itemType": "entity-id",
+            "values": {
+              "id": 500007,
+              "naturalKey": "U0VOUy1aUk0tNw=="
+            }
+          }
+        ],
+        "sections": [
+          {
+            "name": "foreignKey",
+            "nAttrs": 0
+          },
+          {
+            "name": "symbol",
+            "nAttrs": 1
+          },
+          {
+            "name": "symbolArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "stringArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "text",
+            "nAttrs": 1
+          },
+          {
+            "name": "blobArray",
+            "nAttrs": 1
+          },
+          {
+            "name": "u8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "u64Array",
+            "nAttrs": 1
+          },
+          {
+            "name": "u64Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "i8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeRange",
+            "nAttrs": 1
+          },
+          {
+            "name": "f32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "f64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "geoPoint",
+            "nAttrs": 1
+          },
+          {
+            "name": "geoArea",
+            "nAttrs": 1
+          },
+          {
+            "name": "timeArray",
+            "nAttrs": 1
+          }
+        ],
+        "coGroups": []
+      },
+      "byAttribute": {
+        "0x15aec": {
+          "section": "geoPoint",
+          "values": {
+            "h3": 61029384,
+            "pointLat": 46.027,
+            "pointLng": 7.725
+          }
+        },
+        "0xc": {
+          "section": "symbol",
+          "scalar": "SEISMIC_ANOMALY"
+        },
+        "_unidentified/blobArray/0": {
+          "section": "blobArray",
+          "value": [
+            "4pI68IoouAZymhmnHVbxXo6RF2W4u58FOrOiNs1w89w="
+          ]
+        },
+        "_unidentified/geoArea/0": {
+          "section": "geoArea",
+          "values": {
+            "h3": {
+              "set": [
+                61029394,
+                61029395,
+                61029396
+              ]
+            },
+            "polyLat": [
+              46.017002
+            ],
+            "polyLng": [
+              7.7149997
+            ]
+          }
+        },
+        "_unidentified/text/0": {
+          "section": "text",
+          "values": {
+            "text": "High risk of slab avalanche on northern face.",
+            "wordBag": [
+              "avalanche"
+            ],
+            "wordLength": [
+              9
+            ]
+          }
+        },
+        "_unidentified/timeArray/0": {
+          "section": "timeArray",
+          "value": [
+            "2026-03-11T23:18:20Z"
+          ]
+        },
+        "_unidentified/timeRange/0": {
+          "section": "timeRange",
+          "values": {
+            "beginIncl": "2026-03-11T23:13:20Z",
+            "endExcl": "2026-03-11T23:18:20Z"
+          }
+        },
+        "_unidentified/u64Array/0": {
+          "section": "u64Array",
+          "value": [
+            255
+          ]
+        }
+      }
+    },
+    {
+      "byStructure": {
+        "plain": [
+          {
+            "itemType": "entity-id",
+            "values": {
+              "id": 500008,
+              "naturalKey": "U0VOUy1aUk0tOA=="
+            }
+          }
+        ],
+        "sections": [
+          {
+            "name": "foreignKey",
+            "nAttrs": 0
+          },
+          {
+            "name": "symbol",
+            "nAttrs": 1
+          },
+          {
+            "name": "symbolArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "stringArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "text",
+            "nAttrs": 0
+          },
+          {
+            "name": "blobArray",
+            "nAttrs": 1
+          },
+          {
+            "name": "u8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "u64Array",
+            "nAttrs": 1
+          },
+          {
+            "name": "u64Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "i8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeRange",
+            "nAttrs": 1
+          },
+          {
+            "name": "f32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "f64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "geoPoint",
+            "nAttrs": 1
+          },
+          {
+            "name": "geoArea",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeArray",
+            "nAttrs": 1
+          }
+        ],
+        "coGroups": []
+      },
+      "byAttribute": {
+        "0x15aec": {
+          "section": "geoPoint",
+          "values": {
+            "h3": 61029384,
+            "pointLat": 46.032,
+            "pointLng": 7.723
+          }
+        },
+        "0xc": {
+          "section": "symbol",
+          "scalar": "HEARTBEAT"
+        },
+        "_unidentified/blobArray/0": {
+          "section": "blobArray",
+          "value": [
+            "1alGQlaMFc+rxK+wL4UkzaPEsVZjlGG6rN44qsoxZgI="
+          ]
+        },
+        "_unidentified/timeArray/0": {
+          "section": "timeArray",
+          "value": [
+            "2026-03-11T23:23:20Z"
+          ]
+        },
+        "_unidentified/timeRange/0": {
+          "section": "timeRange",
+          "values": {
+            "beginIncl": "2026-03-11T23:18:20Z",
+            "endExcl": "2026-03-11T23:23:20Z"
+          }
+        },
+        "_unidentified/u64Array/0": {
+          "section": "u64Array",
+          "value": [
+            270
+          ]
+        }
+      }
+    },
+    {
+      "byStructure": {
+        "plain": [
+          {
+            "itemType": "entity-id",
+            "values": {
+              "id": 500009,
+              "naturalKey": "U0VOUy1aUk0tOQ=="
+            }
+          }
+        ],
+        "sections": [
+          {
+            "name": "foreignKey",
+            "nAttrs": 0
+          },
+          {
+            "name": "symbol",
+            "nAttrs": 1
+          },
+          {
+            "name": "symbolArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "stringArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "text",
+            "nAttrs": 0
+          },
+          {
+            "name": "blobArray",
+            "nAttrs": 1
+          },
+          {
+            "name": "u8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "u64Array",
+            "nAttrs": 1
+          },
+          {
+            "name": "u64Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "i8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeRange",
+            "nAttrs": 1
+          },
+          {
+            "name": "f32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "f64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "geoPoint",
+            "nAttrs": 1
+          },
+          {
+            "name": "geoArea",
+            "nAttrs": 1
+          },
+          {
+            "name": "timeArray",
+            "nAttrs": 1
+          }
+        ],
+        "coGroups": []
+      },
+      "byAttribute": {
+        "0x15aec": {
+          "section": "geoPoint",
+          "values": {
+            "h3": 61029384,
+            "pointLat": 46.037,
+            "pointLng": 7.7209997
+          }
+        },
+        "0xc": {
+          "section": "symbol",
+          "scalar": "SNOW_SHIFT"
+        },
+        "_unidentified/blobArray/0": {
+          "section": "blobArray",
+          "value": [
+            "0gnyoC2BgvOuB3WyPdzmaY3xyUqxcR+ne+5FrAXDWr0="
+          ]
+        },
+        "_unidentified/geoArea/0": {
+          "section": "geoArea",
+          "values": {
+            "h3": {
+              "set": [
+                61029394,
+                61029395,
+                61029396
+              ]
+            },
+            "polyLat": [
+              46.027
+            ],
+            "polyLng": [
+              7.7109995
+            ]
+          }
+        },
+        "_unidentified/timeArray/0": {
+          "section": "timeArray",
+          "value": [
+            "2026-03-11T23:28:20Z"
+          ]
+        },
+        "_unidentified/timeRange/0": {
+          "section": "timeRange",
+          "values": {
+            "beginIncl": "2026-03-11T23:23:20Z",
+            "endExcl": "2026-03-11T23:28:20Z"
+          }
+        },
+        "_unidentified/u64Array/0": {
+          "section": "u64Array",
+          "value": [
+            285
+          ]
+        }
+      }
+    },
+    {
+      "byStructure": {
+        "plain": [
+          {
+            "itemType": "entity-id",
+            "values": {
+              "id": 500010,
+              "naturalKey": "U0VOUy1aUk0tMTA="
+            }
+          }
+        ],
+        "sections": [
+          {
+            "name": "foreignKey",
+            "nAttrs": 0
+          },
+          {
+            "name": "symbol",
+            "nAttrs": 1
+          },
+          {
+            "name": "symbolArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "stringArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "text",
+            "nAttrs": 0
+          },
+          {
+            "name": "blobArray",
+            "nAttrs": 1
+          },
+          {
+            "name": "u8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "u64Array",
+            "nAttrs": 1
+          },
+          {
+            "name": "u64Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "i8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeRange",
+            "nAttrs": 1
+          },
+          {
+            "name": "f32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "f64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "geoPoint",
+            "nAttrs": 1
+          },
+          {
+            "name": "geoArea",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeArray",
+            "nAttrs": 1
+          }
+        ],
+        "coGroups": []
+      },
+      "byAttribute": {
+        "0x15aec": {
+          "section": "geoPoint",
+          "values": {
+            "h3": 61029384,
+            "pointLat": 46.042,
+            "pointLng": 7.719
+          }
+        },
+        "0xc": {
+          "section": "symbol",
+          "scalar": "HEARTBEAT"
+        },
+        "_unidentified/blobArray/0": {
+          "section": "blobArray",
+          "value": [
+            "M3AJoXG3Kwz/7geTTMvNig2IRuqiyc+OQ2Sadkwt8N8="
+          ]
+        },
+        "_unidentified/timeArray/0": {
+          "section": "timeArray",
+          "value": [
+            "2026-03-11T23:33:20Z"
+          ]
+        },
+        "_unidentified/timeRange/0": {
+          "section": "timeRange",
+          "values": {
+            "beginIncl": "2026-03-11T23:28:20Z",
+            "endExcl": "2026-03-11T23:33:20Z"
+          }
+        },
+        "_unidentified/u64Array/0": {
+          "section": "u64Array",
+          "value": [
+            300
+          ]
+        }
+      }
+    },
+    {
+      "byStructure": {
+        "plain": [
+          {
+            "itemType": "entity-id",
+            "values": {
+              "id": 500011,
+              "naturalKey": "U0VOUy1aUk0tMTE="
+            }
+          }
+        ],
+        "sections": [
+          {
+            "name": "foreignKey",
+            "nAttrs": 0
+          },
+          {
+            "name": "symbol",
+            "nAttrs": 1
+          },
+          {
+            "name": "symbolArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "stringArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "text",
+            "nAttrs": 0
+          },
+          {
+            "name": "blobArray",
+            "nAttrs": 1
+          },
+          {
+            "name": "u8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "u64Array",
+            "nAttrs": 1
+          },
+          {
+            "name": "u64Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "i8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeRange",
+            "nAttrs": 1
+          },
+          {
+            "name": "f32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "f64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "geoPoint",
+            "nAttrs": 1
+          },
+          {
+            "name": "geoArea",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeArray",
+            "nAttrs": 1
+          }
+        ],
+        "coGroups": []
+      },
+      "byAttribute": {
+        "0x15aec": {
+          "section": "geoPoint",
+          "values": {
+            "h3": 61029384,
+            "pointLat": 46.047,
+            "pointLng": 7.717
+          }
+        },
+        "0xc": {
+          "section": "symbol",
+          "scalar": "HEARTBEAT"
+        },
+        "_unidentified/blobArray/0": {
+          "section": "blobArray",
+          "value": [
+            "TvaM6nvsKnOKAtOXBLm/+SomtS2+IJuRfXxd6cKDHqA="
+          ]
+        },
+        "_unidentified/timeArray/0": {
+          "section": "timeArray",
+          "value": [
+            "2026-03-11T23:38:20Z"
+          ]
+        },
+        "_unidentified/timeRange/0": {
+          "section": "timeRange",
+          "values": {
+            "beginIncl": "2026-03-11T23:33:20Z",
+            "endExcl": "2026-03-11T23:38:20Z"
+          }
+        },
+        "_unidentified/u64Array/0": {
+          "section": "u64Array",
+          "value": [
+            315
+          ]
+        }
+      }
+    },
+    {
+      "byStructure": {
+        "plain": [
+          {
+            "itemType": "entity-id",
+            "values": {
+              "id": 500012,
+              "naturalKey": "U0VOUy1aUk0tMTI="
+            }
+          }
+        ],
+        "sections": [
+          {
+            "name": "foreignKey",
+            "nAttrs": 0
+          },
+          {
+            "name": "symbol",
+            "nAttrs": 1
+          },
+          {
+            "name": "symbolArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "stringArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "text",
+            "nAttrs": 0
+          },
+          {
+            "name": "blobArray",
+            "nAttrs": 1
+          },
+          {
+            "name": "u8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "u64Array",
+            "nAttrs": 1
+          },
+          {
+            "name": "u64Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "i8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeRange",
+            "nAttrs": 1
+          },
+          {
+            "name": "f32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "f64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "geoPoint",
+            "nAttrs": 1
+          },
+          {
+            "name": "geoArea",
+            "nAttrs": 1
+          },
+          {
+            "name": "timeArray",
+            "nAttrs": 1
+          }
+        ],
+        "coGroups": []
+      },
+      "byAttribute": {
+        "0x15aec": {
+          "section": "geoPoint",
+          "values": {
+            "h3": 61029384,
+            "pointLat": 46.052002,
+            "pointLng": 7.7149997
+          }
+        },
+        "0xc": {
+          "section": "symbol",
+          "scalar": "SNOW_SHIFT"
+        },
+        "_unidentified/blobArray/0": {
+          "section": "blobArray",
+          "value": [
+            "+PXsOgJe+gEPf/J/vj1NzztK+cE1Jj78HDJAEzdrKUg="
+          ]
+        },
+        "_unidentified/geoArea/0": {
+          "section": "geoArea",
+          "values": {
+            "h3": {
+              "set": [
+                61029394,
+                61029395,
+                61029396
+              ]
+            },
+            "polyLat": [
+              46.042004
+            ],
+            "polyLng": [
+              7.7049994
+            ]
+          }
+        },
+        "_unidentified/timeArray/0": {
+          "section": "timeArray",
+          "value": [
+            "2026-03-11T23:43:20Z"
+          ]
+        },
+        "_unidentified/timeRange/0": {
+          "section": "timeRange",
+          "values": {
+            "beginIncl": "2026-03-11T23:38:20Z",
+            "endExcl": "2026-03-11T23:43:20Z"
+          }
+        },
+        "_unidentified/u64Array/0": {
+          "section": "u64Array",
+          "value": [
+            330
+          ]
+        }
+      }
+    },
+    {
+      "byStructure": {
+        "plain": [
+          {
+            "itemType": "entity-id",
+            "values": {
+              "id": 500013,
+              "naturalKey": "U0VOUy1aUk0tMTM="
+            }
+          }
+        ],
+        "sections": [
+          {
+            "name": "foreignKey",
+            "nAttrs": 0
+          },
+          {
+            "name": "symbol",
+            "nAttrs": 1
+          },
+          {
+            "name": "symbolArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "stringArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "text",
+            "nAttrs": 0
+          },
+          {
+            "name": "blobArray",
+            "nAttrs": 1
+          },
+          {
+            "name": "u8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "u64Array",
+            "nAttrs": 1
+          },
+          {
+            "name": "u64Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "i8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeRange",
+            "nAttrs": 1
+          },
+          {
+            "name": "f32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "f64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "geoPoint",
+            "nAttrs": 1
+          },
+          {
+            "name": "geoArea",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeArray",
+            "nAttrs": 1
+          }
+        ],
+        "coGroups": []
+      },
+      "byAttribute": {
+        "0x15aec": {
+          "section": "geoPoint",
+          "values": {
+            "h3": 61029384,
+            "pointLat": 46.057,
+            "pointLng": 7.713
+          }
+        },
+        "0xc": {
+          "section": "symbol",
+          "scalar": "HEARTBEAT"
+        },
+        "_unidentified/blobArray/0": {
+          "section": "blobArray",
+          "value": [
+            "62w+O99YB8DPy2wJ8NzXadpAWyJAXD3xR4hRKCHyXow="
+          ]
+        },
+        "_unidentified/timeArray/0": {
+          "section": "timeArray",
+          "value": [
+            "2026-03-11T23:48:20Z"
+          ]
+        },
+        "_unidentified/timeRange/0": {
+          "section": "timeRange",
+          "values": {
+            "beginIncl": "2026-03-11T23:43:20Z",
+            "endExcl": "2026-03-11T23:48:20Z"
+          }
+        },
+        "_unidentified/u64Array/0": {
+          "section": "u64Array",
+          "value": [
+            345
+          ]
+        }
+      }
+    },
+    {
+      "byStructure": {
+        "plain": [
+          {
+            "itemType": "entity-id",
+            "values": {
+              "id": 500014,
+              "naturalKey": "U0VOUy1aUk0tMTQ="
+            }
+          }
+        ],
+        "sections": [
+          {
+            "name": "foreignKey",
+            "nAttrs": 0
+          },
+          {
+            "name": "symbol",
+            "nAttrs": 1
+          },
+          {
+            "name": "symbolArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "stringArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "text",
+            "nAttrs": 1
+          },
+          {
+            "name": "blobArray",
+            "nAttrs": 1
+          },
+          {
+            "name": "u8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "u64Array",
+            "nAttrs": 1
+          },
+          {
+            "name": "u64Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "i8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeRange",
+            "nAttrs": 1
+          },
+          {
+            "name": "f32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "f64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "geoPoint",
+            "nAttrs": 1
+          },
+          {
+            "name": "geoArea",
+            "nAttrs": 1
+          },
+          {
+            "name": "timeArray",
+            "nAttrs": 1
+          }
+        ],
+        "coGroups": []
+      },
+      "byAttribute": {
+        "0x15aec": {
+          "section": "geoPoint",
+          "values": {
+            "h3": 61029384,
+            "pointLat": 46.062,
+            "pointLng": 7.711
+          }
+        },
+        "0xc": {
+          "section": "symbol",
+          "scalar": "SEISMIC_ANOMALY"
+        },
+        "_unidentified/blobArray/0": {
+          "section": "blobArray",
+          "value": [
+            "7YFU+lGaGGDC8q38fKM7ubpy4/suCPBC+ZbjnzR1Z80="
+          ]
+        },
+        "_unidentified/geoArea/0": {
+          "section": "geoArea",
+          "values": {
+            "h3": {
+              "set": [
+                61029394,
+                61029395,
+                61029396
+              ]
+            },
+            "polyLat": [
+              46.052002
+            ],
+            "polyLng": [
+              7.7009997
+            ]
+          }
+        },
+        "_unidentified/text/0": {
+          "section": "text",
+          "values": {
+            "text": "High risk of slab avalanche on northern face.",
+            "wordBag": [
+              "avalanche"
+            ],
+            "wordLength": [
+              9
+            ]
+          }
+        },
+        "_unidentified/timeArray/0": {
+          "section": "timeArray",
+          "value": [
+            "2026-03-11T23:53:20Z"
+          ]
+        },
+        "_unidentified/timeRange/0": {
+          "section": "timeRange",
+          "values": {
+            "beginIncl": "2026-03-11T23:48:20Z",
+            "endExcl": "2026-03-11T23:53:20Z"
+          }
+        },
+        "_unidentified/u64Array/0": {
+          "section": "u64Array",
+          "value": [
+            360
+          ]
+        }
+      }
+    },
+    {
+      "byStructure": {
+        "plain": [
+          {
+            "itemType": "entity-id",
+            "values": {
+              "id": 500015,
+              "naturalKey": "U0VOUy1aUk0tMTU="
+            }
+          }
+        ],
+        "sections": [
+          {
+            "name": "foreignKey",
+            "nAttrs": 0
+          },
+          {
+            "name": "symbol",
+            "nAttrs": 1
+          },
+          {
+            "name": "symbolArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "stringArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "text",
+            "nAttrs": 0
+          },
+          {
+            "name": "blobArray",
+            "nAttrs": 1
+          },
+          {
+            "name": "u8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "u64Array",
+            "nAttrs": 1
+          },
+          {
+            "name": "u64Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "i8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeRange",
+            "nAttrs": 1
+          },
+          {
+            "name": "f32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "f64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "geoPoint",
+            "nAttrs": 1
+          },
+          {
+            "name": "geoArea",
+            "nAttrs": 1
+          },
+          {
+            "name": "timeArray",
+            "nAttrs": 1
+          }
+        ],
+        "coGroups": []
+      },
+      "byAttribute": {
+        "0x15aec": {
+          "section": "geoPoint",
+          "values": {
+            "h3": 61029384,
+            "pointLat": 46.067,
+            "pointLng": 7.7089996
+          }
+        },
+        "0xc": {
+          "section": "symbol",
+          "scalar": "SNOW_SHIFT"
+        },
+        "_unidentified/blobArray/0": {
+          "section": "blobArray",
+          "value": [
+            "Vek16udnQT+zB/8bdhx42onCQgUIhqEGSgMv7HC9IGU="
+          ]
+        },
+        "_unidentified/geoArea/0": {
+          "section": "geoArea",
+          "values": {
+            "h3": {
+              "set": [
+                61029394,
+                61029395,
+                61029396
+              ]
+            },
+            "polyLat": [
+              46.057003
+            ],
+            "polyLng": [
+              7.6989994
+            ]
+          }
+        },
+        "_unidentified/timeArray/0": {
+          "section": "timeArray",
+          "value": [
+            "2026-03-11T23:58:20Z"
+          ]
+        },
+        "_unidentified/timeRange/0": {
+          "section": "timeRange",
+          "values": {
+            "beginIncl": "2026-03-11T23:53:20Z",
+            "endExcl": "2026-03-11T23:58:20Z"
+          }
+        },
+        "_unidentified/u64Array/0": {
+          "section": "u64Array",
+          "value": [
+            375
+          ]
+        }
+      }
+    },
+    {
+      "byStructure": {
+        "plain": [
+          {
+            "itemType": "entity-id",
+            "values": {
+              "id": 500016,
+              "naturalKey": "U0VOUy1aUk0tMTY="
+            }
+          }
+        ],
+        "sections": [
+          {
+            "name": "foreignKey",
+            "nAttrs": 0
+          },
+          {
+            "name": "symbol",
+            "nAttrs": 1
+          },
+          {
+            "name": "symbolArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "stringArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "text",
+            "nAttrs": 0
+          },
+          {
+            "name": "blobArray",
+            "nAttrs": 1
+          },
+          {
+            "name": "u8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "u64Array",
+            "nAttrs": 1
+          },
+          {
+            "name": "u64Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "i8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeRange",
+            "nAttrs": 1
+          },
+          {
+            "name": "f32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "f64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "geoPoint",
+            "nAttrs": 1
+          },
+          {
+            "name": "geoArea",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeArray",
+            "nAttrs": 1
+          }
+        ],
+        "coGroups": []
+      },
+      "byAttribute": {
+        "0x15aec": {
+          "section": "geoPoint",
+          "values": {
+            "h3": 61029384,
+            "pointLat": 46.072002,
+            "pointLng": 7.707
+          }
+        },
+        "0xc": {
+          "section": "symbol",
+          "scalar": "HEARTBEAT"
+        },
+        "_unidentified/blobArray/0": {
+          "section": "blobArray",
+          "value": [
+            "1Pf/g3J76HJOcSTWROhu0P21D4b8/SZFA/OxoQpIVUg="
+          ]
+        },
+        "_unidentified/timeArray/0": {
+          "section": "timeArray",
+          "value": [
+            "2026-03-12T00:03:20Z"
+          ]
+        },
+        "_unidentified/timeRange/0": {
+          "section": "timeRange",
+          "values": {
+            "beginIncl": "2026-03-11T23:58:20Z",
+            "endExcl": "2026-03-12T00:03:20Z"
+          }
+        },
+        "_unidentified/u64Array/0": {
+          "section": "u64Array",
+          "value": [
+            390
+          ]
+        }
+      }
+    },
+    {
+      "byStructure": {
+        "plain": [
+          {
+            "itemType": "entity-id",
+            "values": {
+              "id": 500017,
+              "naturalKey": "U0VOUy1aUk0tMTc="
+            }
+          }
+        ],
+        "sections": [
+          {
+            "name": "foreignKey",
+            "nAttrs": 0
+          },
+          {
+            "name": "symbol",
+            "nAttrs": 1
+          },
+          {
+            "name": "symbolArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "stringArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "text",
+            "nAttrs": 0
+          },
+          {
+            "name": "blobArray",
+            "nAttrs": 1
+          },
+          {
+            "name": "u8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "u64Array",
+            "nAttrs": 1
+          },
+          {
+            "name": "u64Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "i8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeRange",
+            "nAttrs": 1
+          },
+          {
+            "name": "f32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "f64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "geoPoint",
+            "nAttrs": 1
+          },
+          {
+            "name": "geoArea",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeArray",
+            "nAttrs": 1
+          }
+        ],
+        "coGroups": []
+      },
+      "byAttribute": {
+        "0x15aec": {
+          "section": "geoPoint",
+          "values": {
+            "h3": 61029384,
+            "pointLat": 46.077,
+            "pointLng": 7.705
+          }
+        },
+        "0xc": {
+          "section": "symbol",
+          "scalar": "HEARTBEAT"
+        },
+        "_unidentified/blobArray/0": {
+          "section": "blobArray",
+          "value": [
+            "nocQO6dI5mG8iwMYp6krvtrIrStvFr6mPXAoLEkbPNM="
+          ]
+        },
+        "_unidentified/timeArray/0": {
+          "section": "timeArray",
+          "value": [
+            "2026-03-12T00:08:20Z"
+          ]
+        },
+        "_unidentified/timeRange/0": {
+          "section": "timeRange",
+          "values": {
+            "beginIncl": "2026-03-12T00:03:20Z",
+            "endExcl": "2026-03-12T00:08:20Z"
+          }
+        },
+        "_unidentified/u64Array/0": {
+          "section": "u64Array",
+          "value": [
+            405
+          ]
+        }
+      }
+    },
+    {
+      "byStructure": {
+        "plain": [
+          {
+            "itemType": "entity-id",
+            "values": {
+              "id": 500018,
+              "naturalKey": "U0VOUy1aUk0tMTg="
+            }
+          }
+        ],
+        "sections": [
+          {
+            "name": "foreignKey",
+            "nAttrs": 0
+          },
+          {
+            "name": "symbol",
+            "nAttrs": 1
+          },
+          {
+            "name": "symbolArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "stringArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "text",
+            "nAttrs": 0
+          },
+          {
+            "name": "blobArray",
+            "nAttrs": 1
+          },
+          {
+            "name": "u8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "u64Array",
+            "nAttrs": 1
+          },
+          {
+            "name": "u64Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "i8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeRange",
+            "nAttrs": 1
+          },
+          {
+            "name": "f32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "f64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "geoPoint",
+            "nAttrs": 1
+          },
+          {
+            "name": "geoArea",
+            "nAttrs": 1
+          },
+          {
+            "name": "timeArray",
+            "nAttrs": 1
+          }
+        ],
+        "coGroups": []
+      },
+      "byAttribute": {
+        "0x15aec": {
+          "section": "geoPoint",
+          "values": {
+            "h3": 61029384,
+            "pointLat": 46.082,
+            "pointLng": 7.703
+          }
+        },
+        "0xc": {
+          "section": "symbol",
+          "scalar": "SNOW_SHIFT"
+        },
+        "_unidentified/blobArray/0": {
+          "section": "blobArray",
+          "value": [
+            "lpzRLp+2Iwn6gx9VaqTHh4/yItUqKGP+Mh1mQOqPamM="
+          ]
+        },
+        "_unidentified/geoArea/0": {
+          "section": "geoArea",
+          "values": {
+            "h3": {
+              "set": [
+                61029394,
+                61029395,
+                61029396
+              ]
+            },
+            "polyLat": [
+              46.072002
+            ],
+            "polyLng": [
+              7.693
+            ]
+          }
+        },
+        "_unidentified/timeArray/0": {
+          "section": "timeArray",
+          "value": [
+            "2026-03-12T00:13:20Z"
+          ]
+        },
+        "_unidentified/timeRange/0": {
+          "section": "timeRange",
+          "values": {
+            "beginIncl": "2026-03-12T00:08:20Z",
+            "endExcl": "2026-03-12T00:13:20Z"
+          }
+        },
+        "_unidentified/u64Array/0": {
+          "section": "u64Array",
+          "value": [
+            420
+          ]
+        }
+      }
+    },
+    {
+      "byStructure": {
+        "plain": [
+          {
+            "itemType": "entity-id",
+            "values": {
+              "id": 500019,
+              "naturalKey": "U0VOUy1aUk0tMTk="
+            }
+          }
+        ],
+        "sections": [
+          {
+            "name": "foreignKey",
+            "nAttrs": 0
+          },
+          {
+            "name": "symbol",
+            "nAttrs": 1
+          },
+          {
+            "name": "symbolArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "stringArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "text",
+            "nAttrs": 0
+          },
+          {
+            "name": "blobArray",
+            "nAttrs": 1
+          },
+          {
+            "name": "u8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "u64Array",
+            "nAttrs": 1
+          },
+          {
+            "name": "u64Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "i8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeRange",
+            "nAttrs": 1
+          },
+          {
+            "name": "f32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "f64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "geoPoint",
+            "nAttrs": 1
+          },
+          {
+            "name": "geoArea",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeArray",
+            "nAttrs": 1
+          }
+        ],
+        "coGroups": []
+      },
+      "byAttribute": {
+        "0x15aec": {
+          "section": "geoPoint",
+          "values": {
+            "h3": 61029384,
+            "pointLat": 46.087,
+            "pointLng": 7.7009997
+          }
+        },
+        "0xc": {
+          "section": "symbol",
+          "scalar": "HEARTBEAT"
+        },
+        "_unidentified/blobArray/0": {
+          "section": "blobArray",
+          "value": [
+            "HM3eYQLf+ZzAdR+dKlgfXMpsSouDN9TqWgeWgQSpPeY="
+          ]
+        },
+        "_unidentified/timeArray/0": {
+          "section": "timeArray",
+          "value": [
+            "2026-03-12T00:18:20Z"
+          ]
+        },
+        "_unidentified/timeRange/0": {
+          "section": "timeRange",
+          "values": {
+            "beginIncl": "2026-03-12T00:13:20Z",
+            "endExcl": "2026-03-12T00:18:20Z"
+          }
+        },
+        "_unidentified/u64Array/0": {
+          "section": "u64Array",
+          "value": [
+            435
+          ]
+        }
+      }
+    },
+    {
+      "byStructure": {
+        "plain": [
+          {
+            "itemType": "entity-id",
+            "values": {
+              "id": 500020,
+              "naturalKey": "U0VOUy1aUk0tMjA="
+            }
+          }
+        ],
+        "sections": [
+          {
+            "name": "foreignKey",
+            "nAttrs": 0
+          },
+          {
+            "name": "symbol",
+            "nAttrs": 1
+          },
+          {
+            "name": "symbolArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "stringArray",
+            "nAttrs": 0
+          },
+          {
+            "name": "text",
+            "nAttrs": 0
+          },
+          {
+            "name": "blobArray",
+            "nAttrs": 1
+          },
+          {
+            "name": "u8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "u32Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "u64Array",
+            "nAttrs": 1
+          },
+          {
+            "name": "u64Set",
+            "nAttrs": 0
+          },
+          {
+            "name": "i8Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i16Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "i64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeRange",
+            "nAttrs": 1
+          },
+          {
+            "name": "f32Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "f64Array",
+            "nAttrs": 0
+          },
+          {
+            "name": "geoPoint",
+            "nAttrs": 1
+          },
+          {
+            "name": "geoArea",
+            "nAttrs": 0
+          },
+          {
+            "name": "timeArray",
+            "nAttrs": 1
+          }
+        ],
+        "coGroups": []
+      },
+      "byAttribute": {
+        "0x15aec": {
+          "section": "geoPoint",
+          "values": {
+            "h3": 61029384,
+            "pointLat": 46.092,
+            "pointLng": 7.699
+          }
+        },
+        "0xc": {
+          "section": "symbol",
+          "scalar": "HEARTBEAT"
+        },
+        "_unidentified/blobArray/0": {
+          "section": "blobArray",
+          "value": [
+            "pAQcsMJSFWEUMCjbp2UPkNyoz32p7ZLs27VKN1TbIsk="
+          ]
+        },
+        "_unidentified/timeArray/0": {
+          "section": "timeArray",
+          "value": [
+            "2026-03-12T00:23:20Z"
+          ]
+        },
+        "_unidentified/timeRange/0": {
+          "section": "timeRange",
+          "values": {
+            "beginIncl": "2026-03-12T00:18:20Z",
+            "endExcl": "2026-03-12T00:23:20Z"
+          }
+        },
+        "_unidentified/u64Array/0": {
+          "section": "u64Array",
+          "value": [
+            450
+          ]
+        }
+      }
+    }
+  ]
+}
