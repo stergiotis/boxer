@@ -11,14 +11,16 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap/layout"
 )
 
-// topoContainerW / topoContainerH size the fixed treemap canvas. The squarify
-// widget takes its bounds at construction, so this is a one-time choice rather
-// than a per-frame fit; it's wrapped in the tab's ScrollArea so smaller
-// viewports scroll rather than clip. Sized to fill the left dock leaf at the
-// 1280×694 compositor-clamped viewport on a typical (≤64-thread) machine.
+// topoMinW / topoMinH floor the dynamically-sized treemap canvas. The panel
+// resizes the treemap to fill its dock pane every frame (renderTopologyPanel);
+// the floor keeps the tree legible on a small pane — below it the tab's
+// ScrollArea scrolls rather than collapsing the boxes. topoScrollbarAllowPx is
+// shaved off the width while the vertical scrollbar is showing so the
+// Vscroll-only ScrollArea does not clip the treemap's right edge.
 const (
-	topoContainerW float32 = 920
-	topoContainerH float32 = 540
+	topoMinW             float32 = 360
+	topoMinH             float32 = 320
+	topoScrollbarAllowPx float32 = 16
 )
 
 // initTopology performs the one-shot sysfs topology read and builds the
@@ -56,8 +58,10 @@ func (inst *App) initTopology() {
 		treemap.ContinuousColoring(cpuHeatmapPalette(), loadFn, 0, 100),
 		treemap.DepthColoring(treemap.DefaultDepthColors),
 	)
+	// No WithContainerSize: the canvas is sized per-frame in
+	// renderTopologyPanel to fill the dock pane. The widget's 700×450 default
+	// is only the first-frame fallback, before available_size is captured.
 	inst.topoTreemap = treemap.New(inst.ids, "imztop-topology", root,
-		treemap.WithContainerSize(topoContainerW, topoContainerH),
 		treemap.WithColoring(coloring),
 	)
 }
@@ -93,5 +97,25 @@ func (inst *App) renderTopologyPanel(snap *PublishedSnapshot) {
 		c.Label("boxes nest package → cache → core → thread; tint = live per-core load · drag a box to drill in").Send()
 	}
 	c.AddSpace(inst.spaceInner())
+
+	// Fill the dock pane: track ui.available_size each frame and resize the
+	// treemap canvas to it (one-frame lag, the same idiom the CPU heatmap
+	// uses). Captured here — after the header + hint — so it reflects the
+	// space left for the tree. Floored at topoMin* so a short pane scrolls
+	// via the tab's ScrollArea instead of collapsing the tree.
+	c.CaptureAvailableSize()
+	avail := c.CurrentApplicationState.StateManager.GetAvailableSize()
+	if avail.W > 0 && avail.H > 0 &&
+		!math.IsNaN(float64(avail.W)) && !math.IsNaN(float64(avail.H)) {
+		w, h := avail.W, avail.H
+		if h < topoMinH {
+			h = topoMinH
+			w -= topoScrollbarAllowPx // vertical scrollbar is showing
+		}
+		if w < topoMinW {
+			w = topoMinW
+		}
+		inst.topoTreemap.SetContainerSize(w, h)
+	}
 	inst.topoTreemap.Render()
 }
