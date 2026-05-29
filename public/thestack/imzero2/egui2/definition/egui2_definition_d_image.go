@@ -4,7 +4,7 @@ package definition
 
 // =============================================================================
 // image binding — RGBA8 pixel-data widget with Go-controlled content version
-// and Rust-side texture cache. Sibling to scrollingTexture (ADR-0009) but
+// and Rust-side texture cache. Sibling to scrollingTexture (ADR-0058) but
 // without the ring-buffer; one upload per (id, contentVersion) shape.
 // =============================================================================
 //
@@ -19,7 +19,7 @@ package definition
 //     re-upload (defensive — Go shouldn't send pixels when version matches);
 //     an empty buffer with no cached entry is treated as "no draw".
 //
-// Hover readout (per SD11 in ADR-0009): packed as `(row << 32) | col` in
+// Hover readout (per SD11 in ADR-0058): packed as `(row << 32) | col` in
 // image-pixel space (NOT screen pixels — caller doesn't have to invert the
 // fit math). Sentinel `u64::MAX` = pointer outside widget rect. Forwarded to
 // `r9_u64` keyed by the widget id.

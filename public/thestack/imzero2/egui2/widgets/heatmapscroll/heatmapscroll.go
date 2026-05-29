@@ -1,5 +1,5 @@
 // Package heatmapscroll composes the colormap package with the
-// scrollingTexture widget (ADR-0009) into a single, opinionated wrapper
+// scrollingTexture widget (ADR-0058) into a single, opinionated wrapper
 // for "streaming scalar → colour heatmap" use cases: audio spectrograms,
 // RF waterfalls, thermal streams, rolling metrics heatmaps.
 //
@@ -10,7 +10,7 @@
 //     column of heightSlots float32 samples per "time step".
 //   - The wrapper owns the ring-buffer write cursor (head) and the
 //     per-frame staging buffer of freshly-mapped RGBA columns.
-//   - The Rust widget owns the GPU TextureHandle (per ADR-0009 SD10,
+//   - The Rust widget owns the GPU TextureHandle (per ADR-0058 SD10,
 //     texture storage is encapsulated inside the scrollingTexture
 //     opcode; frame-LRU reaps it after 600 idle frames, or Release
 //     drops it immediately).
@@ -29,7 +29,7 @@
 //	if hs.Clicked() { ... }
 //
 // Hover and click readouts are one frame behind the pixels that produced
-// them, per ADR-0009 "Consequences / Negative" (FFFI r9/r10 databindings
+// them, per ADR-0058 "Consequences / Negative" (FFFI r9/r10 databindings
 // reset each Sync). Callers that need zero-lag readout should track the
 // pointer themselves and index into the data ring they already own.
 package heatmapscroll
@@ -50,7 +50,7 @@ type Orientation = c.OrientationE
 type Filter = c.FilterE
 
 // ScrollLeft — append right, scroll left; classical audio spectrogram.
-// Alias for c.OrientationScrollLeftE. See ADR-0009 SD8.
+// Alias for c.OrientationScrollLeftE. See ADR-0058 SD8.
 const ScrollLeft Orientation = c.OrientationScrollLeftE
 
 // ScrollRight — append left, scroll right; mirror of ScrollLeft.
@@ -65,11 +65,11 @@ const ScrollUp Orientation = c.OrientationScrollUpE
 // Alias for c.OrientationScrollDownE.
 const ScrollDown Orientation = c.OrientationScrollDownE
 
-// FilterNearest — nearest-neighbour sampling; default. See ADR-0009 SD3.
+// FilterNearest — nearest-neighbour sampling; default. See ADR-0058 SD3.
 const FilterNearest Filter = c.FilterNearestE
 
 // FilterLinear — bilinear sampling; blurs across neighbouring columns.
-// See ADR-0009 SD3 for why the default is Nearest for scientific data.
+// See ADR-0058 SD3 for why the default is Nearest for scientific data.
 const FilterLinear Filter = c.FilterLinearE
 
 // HeatmapScroll is a streaming-scalar heatmap widget. Construct once
@@ -112,7 +112,7 @@ type HeatmapScroll struct {
 // across frames so the Rust-side texture cache can key on it.
 //
 // Defaults: ScrollLeft + FilterNearest (the scientific-visualisation
-// defaults called out in ADR-0009 SD3).
+// defaults called out in ADR-0058 SD3).
 func New(ids *c.WidgetIdStack, scopeKey string, cfg *colormap.Config, widthSlots, heightSlots uint32) *HeatmapScroll {
 	if ids == nil {
 		panic("heatmapscroll: New requires a non-nil WidgetIdStack")
@@ -155,13 +155,13 @@ func (inst *HeatmapScroll) SetDisplaySize(widthPx, heightPx float32) {
 	inst.displayHeightPx = heightPx
 }
 
-// SetFilter selects GPU texture sampling (see ADR-0009 SD3).
+// SetFilter selects GPU texture sampling (see ADR-0058 SD3).
 // Takes effect on the next Render call.
 func (inst *HeatmapScroll) SetFilter(f Filter) { inst.filter = f }
 
 // SetConfig replaces the colormap configuration used by subsequent
 // PushColumn calls. Does NOT re-map already-pushed columns: the live
-// gradient-swap path described in ADR-0009 SD1 requires retaining the
+// gradient-swap path described in ADR-0058 SD1 requires retaining the
 // original f32 samples, which this wrapper does not do yet. If you need
 // that today, Release and re-push from your retained source.
 func (inst *HeatmapScroll) SetConfig(cfg *colormap.Config) {
@@ -229,7 +229,7 @@ func (inst *HeatmapScroll) Render() {
 // Release emits the scrollingTextureRelease opcode, dropping the
 // Rust-side TextureHandle for this widget id immediately. Intended for
 // predictable lifecycle callers (tab close, demo teardown); otherwise
-// the frame-LRU reaps idle entries after ~10 s at 60 Hz (ADR-0009 SD7).
+// the frame-LRU reaps idle entries after ~10 s at 60 Hz (ADR-0058 SD7).
 func (inst *HeatmapScroll) Release() {
 	creator := inst.ids.PrepareStr(inst.scopeKey)
 	c.ScrollingTextureRelease(creator).Send()

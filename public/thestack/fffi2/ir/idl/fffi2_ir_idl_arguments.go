@@ -116,7 +116,7 @@ func (inst *ArgumentsBuilder) AsColor() *ArgumentsBuilder {
 }
 
 // AsColors annotates the last-appended argument as a bulk color (color.Colors).
-// Valid only on Plain-transport slice arguments (ADR-0003 SD9 forbids retained
+// Valid only on Plain-transport slice arguments (ADR-0052 SD9 forbids retained
 // values in arrays). Panics on misuse.
 func (inst *ArgumentsBuilder) AsColors() *ArgumentsBuilder {
 	if !inst.lastArgKindWasPlain {

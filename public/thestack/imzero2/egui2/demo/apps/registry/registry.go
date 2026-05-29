@@ -5,7 +5,7 @@
 // carrying Name, Category, Render closure, and per-demo flags. Three hosts
 // consume the registry independently: InteractiveDriver (human shell),
 // TestDriver (deterministic screenshot capture), and Embed (drop a single
-// demo into any host Ui scope — profiler, debug shell, etc.). See ADR-0008
+// demo into any host Ui scope — profiler, debug shell, etc.). See ADR-0057
 // for design rationale and SKILLS.md §14 for screenshot infrastructure.
 package registry
 

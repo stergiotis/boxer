@@ -2,7 +2,7 @@
 
 package color
 
-// Colors is a bulk-color payload type. Literal-only per ADR-0003 SD9; retained
+// Colors is a bulk-color payload type. Literal-only per ADR-0052 SD9; retained
 // values are a scalar-only concept and cannot enter a Colors slice.
 //
 // Memory shape is identical to []uint32 (zero-overhead new type). Wire format

@@ -3,7 +3,7 @@
 // Package imzero2env centralises the IMZERO2_* environment variables
 // consumed across the imzero2 demo carousel, tours, and embedded
 // applications. Each spec is registered with the boxer-wide registry
-// (ADR-0009).
+// (ADR-0058).
 package imzero2env
 
 import (
@@ -71,7 +71,7 @@ var (
 	// (imztop, regex_explorer) switch from full-viewport capture to
 	// rect-based capture at the same size. The launch wrapper
 	// (src/rust/hmi.sh) widens the eframe viewport to fit so the
-	// captured rect does not silently clip. ADR-0008 SD5.
+	// captured rect does not silently clip. ADR-0057 SD5.
 	ScreenshotSize = env.NewString(env.Spec{
 		Name:        "IMZERO2_SCREENSHOT_SIZE",
 		Description: "tour capture size as WxH (e.g. 1600x900); empty uses per-demo defaults",

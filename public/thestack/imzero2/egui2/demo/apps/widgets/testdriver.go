@@ -140,7 +140,7 @@ func RenderLoopHandlerTestDriver(seed uint64) (err error) {
 	// IMZERO2_SCREENSHOT_SIZE overrides every demo's Stage so the tour
 	// produces uniformly-sized PNGs at the requested resolution. The
 	// launch wrapper widens the eframe viewport in tandem so the rect
-	// doesn't clip against the window. ADR-0008 SD5. The env override
+	// doesn't clip against the window. ADR-0057 SD5. The env override
 	// bypasses the registry stage budget on the assumption the operator
 	// knows their compositor will honour the request.
 	if w, h, ok := imzero2env.ScreenshotSizeWH(); ok {

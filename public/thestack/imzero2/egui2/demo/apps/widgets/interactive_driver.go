@@ -123,7 +123,7 @@ type App struct {
 	// IsBlockSkipped and skip RenderDemoIntro / Embed / RenderDemoOutro
 	// for collapsed demos. Without the guard, all the demo Render
 	// closures (walkers tile fetch, graphs force-layout, treemap2
-	// layout) would fire every frame — the original ~11s ADR-0008
+	// layout) would fire every frame — the original ~11s ADR-0057
 	// startup stall, but recurring.
 	frame int32
 }

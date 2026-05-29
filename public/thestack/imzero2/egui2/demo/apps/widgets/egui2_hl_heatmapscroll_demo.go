@@ -1,7 +1,7 @@
 package widgets
 
 // =============================================================================
-// DEMO: heatmapscroll — spectrogram / waterfall wrapper (ADR-0009)
+// DEMO: heatmapscroll — spectrogram / waterfall wrapper (ADR-0058)
 // =============================================================================
 //
 // A 2×2 grid of HeatmapScroll widgets, one per orientation, streaming a
@@ -21,7 +21,7 @@ package widgets
 //     the caller-chosen BadColor (bright red) is visible as speckle.
 //
 // Readouts per panel:
-//   - Hover row/col in ring-buffer space (one frame behind; see ADR-0009
+//   - Hover row/col in ring-buffer space (one frame behind; see ADR-0058
 //     Consequences / Negative).
 //   - Click counter (aggregated across all four panels in the header).
 //
@@ -85,7 +85,7 @@ func init() {
 		Stage:       [2]float32{780, 820},
 		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindUX,
-		Description: "Spectrogram-style scrolling heatmap with a colorscale legend; an ADR-0009 streaming-texture consumer.",
+		Description: "Spectrogram-style scrolling heatmap with a colorscale legend; an ADR-0058 streaming-texture consumer.",
 		Init: func(ids *c.WidgetIdStack) (state any) {
 			st := &heatmapscrollDemoState{
 				colBuf: make([]float32, heatmapDemoHeightSlots),
@@ -274,7 +274,7 @@ func (st *heatmapscrollDemoState) renderHeatmapDemoPanel(p *heatmapDemoPanel) {
 		var txt string
 		if ok {
 			// Annotate the semantic meaning of row/col per the
-			// ADR-0009 SD11 screen-axis convention: horizontal
+			// ADR-0058 SD11 screen-axis convention: horizontal
 			// panels map (row, col) to (bin, time); vertical
 			// panels rotate the screen axes, so the mapping
 			// swaps to (time, bin).

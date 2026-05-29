@@ -428,7 +428,7 @@ func TestLangE_Constants(t *testing.T) {
 }
 
 func TestColorArgKindE_ZeroValueIsNone(t *testing.T) {
-	// ADR-0003: zero value preserves pre-ADR-0003 behavior.
+	// ADR-0052: zero value preserves pre-ADR-0052 behavior.
 	var k ColorArgKindE
 	if k != ColorArgKindNone {
 		t.Errorf("zero value: got %d want ColorArgKindNone (0)", k)

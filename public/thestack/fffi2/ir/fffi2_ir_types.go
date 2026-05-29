@@ -50,7 +50,7 @@ type ProcedureFeaturesSpec struct {
 // ColorArgKindE marks whether an argument is to be surfaced as a unified
 // color type in generated Go signatures. Parallel-slice entries on the
 // argument specs carry one value per argument position; the zero value
-// [ColorArgKindNone] preserves pre-ADR-0003 behaviour and is emitted for
+// [ColorArgKindNone] preserves pre-ADR-0052 behaviour and is emitted for
 // every non-annotated argument so the slice stays index-synchronous with
 // Names and Types.
 type ColorArgKindE uint8
@@ -63,7 +63,7 @@ const (
 	// Evaluated Color32) carries the value.
 	ColorArgKindScalar ColorArgKindE = 1
 	// ColorArgKindSlice marks a bulk color argument; Go signature surfaces as
-	// color.Colors. Valid only on Plain slice (ctabb.U32h) args; ADR-0003 SD9
+	// color.Colors. Valid only on Plain slice (ctabb.U32h) args; ADR-0052 SD9
 	// forbids retained values in arrays.
 	ColorArgKindSlice ColorArgKindE = 2
 )

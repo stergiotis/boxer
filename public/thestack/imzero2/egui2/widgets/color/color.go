@@ -1,6 +1,6 @@
 //go:build llm_generated_opus47
 
-// Package color provides the unified ImZero2 color type per ADR-0003.
+// Package color provides the unified ImZero2 color type per ADR-0052.
 //
 // Callers construct Color values via [Hex], [RGB], [RGBA], or [Gray] and pass
 // them to any widget method that takes a color. Under the hood the generated
@@ -13,7 +13,7 @@
 // u32, so flattening onto a PlainArg(U32)-transport method is zero-cost.
 //
 // Array-valued color payloads use the companion type [Colors] (literal only
-// per ADR-0003 SD9).
+// per ADR-0052 SD9).
 //
 // Package structure note: color.Color deliberately does not hold a typed
 // components.Color32S retained holder, because components imports color
@@ -45,7 +45,7 @@ const (
 
 // Color is a discriminated union of a literal u32 RGBA and a retained-variant
 // flag. Literal values interpret their bytes as sRGB non-premultiplied per
-// ADR-0003 SD8.
+// ADR-0052 SD8.
 type Color struct {
 	kind    ColorKindE
 	literal uint32

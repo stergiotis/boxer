@@ -9,7 +9,7 @@ import (
 
 // PutColorAsRetainedColor32 emits Color32 construction opcodes into the
 // retained builder so an [EvaluatedArg(Color32)]-transport widget method
-// can consume a unified [color.Color] argument (ADR-0003 SD3).
+// can consume a unified [color.Color] argument (ADR-0052 SD3).
 //
 // When the Color carries an externally-constructed holder (SD7 escape-hatch
 // path; see [color.FromRetainedHolder]), the holder's bytes are spliced

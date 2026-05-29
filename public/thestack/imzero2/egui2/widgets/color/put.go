@@ -8,7 +8,7 @@ import (
 )
 
 // PutAsU32 writes a Color to a retained-fffi builder as a 4-byte RGBA u32,
-// matching the legacy PlainArg(U32) wire encoding (ADR-0003 SD3). Works on
+// matching the legacy PlainArg(U32) wire encoding (ADR-0052 SD3). Works on
 // both literal and retained variants via the stashed originating u32, so no
 // opcode parsing is required.
 //

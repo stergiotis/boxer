@@ -8,7 +8,7 @@ package regex_explorer
 // are inlined into the SQL via boxer's [marshalling.EscapeString], which
 // produces a single-quoted ClickHouse literal with ClickHouse-specific
 // escaping (single-quote, backslash, \n, \t, \r, \0). This is the
-// fallback-chain path codified in ADR-0005 SD2: the originally-proposed
+// fallback-chain path codified in ADR-0054 SD2: the originally-proposed
 // SETTINGS-clause binding does not work (ClickHouse's SETTINGS is for
 // query-level server settings, not parameter substitution), and
 // multi-statement SET requires multi_statements=1 which

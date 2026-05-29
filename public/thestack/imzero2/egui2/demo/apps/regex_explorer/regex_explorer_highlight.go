@@ -4,7 +4,7 @@ package regex_explorer
 
 // Inline match highlighting.
 //
-// Match offsets are computed locally via Go's regexp (RE2). See ADR-0005
+// Match offsets are computed locally via Go's regexp (RE2). See ADR-0054
 // for why this is engine-compatible with ClickHouse's single-pattern regex
 // functions, and how the SD1 tripwire guards against implementation drift
 // between Go's regexp and ClickHouse's libre2.

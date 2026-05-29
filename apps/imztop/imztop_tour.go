@@ -212,7 +212,7 @@ func RenderLoopHandlerTour(seed uint64) (err error) {
 		// rect (matching the widgets TestDriver). hmi.sh resizes the
 		// eframe viewport to the same WxH so imztop's central-panel
 		// layout fills the rect exactly. Empty / malformed env →
-		// keep the legacy full-viewport capture. ADR-0008 SD5.
+		// keep the legacy full-viewport capture. ADR-0057 SD5.
 		if w, h, ok := imzero2env.ScreenshotSizeWH(); ok {
 			c.RequestScreenshotRect(path, 0, 0, float32(w), float32(h))
 		} else {

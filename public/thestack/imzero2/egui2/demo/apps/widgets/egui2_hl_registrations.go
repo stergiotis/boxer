@@ -10,7 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )
 
-// ADR-0008 demo registrations. Each Render closure draws into the current
+// ADR-0057 demo registrations. Each Render closure draws into the current
 // Ui scope with no outer Window chrome — the consuming driver supplies it
 // (Window for InteractiveDriver, stage rect for TestDriver, nothing for
 // Embed). Closures still on this legacy path capture the package-level

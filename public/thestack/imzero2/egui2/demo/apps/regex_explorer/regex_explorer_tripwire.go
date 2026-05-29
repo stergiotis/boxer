@@ -8,7 +8,7 @@ package regex_explorer
 // independent implementations. The tripwire runs a small fixed corpus of
 // (haystack, pattern, expected_matches) tuples through both engines on
 // startup; divergences are logged via eh structured fields and surfaced in
-// the status bar. See ADR-0005 section "Subsidiary design decisions" for
+// the status bar. See ADR-0054 section "Subsidiary design decisions" for
 // the rationale.
 //
 // The tripwire is not gating: a drift does not block the app. Users can

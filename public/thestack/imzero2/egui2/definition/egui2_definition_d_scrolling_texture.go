@@ -9,8 +9,8 @@ package definition
 // Purpose-built pixel-data widget: ring-buffer of RGBA columns, caller-owned
 // head cursor, split-UV two-call draw. Colormap, intensity scaling, and
 // bad/underflow/overflow substitution all live Go-side in the `colormap`
-// package; this IDL carries only raw pre-packed RGBA (see ADR-0009 SD9 for
-// why bulk pixel buffers bypass egui2.Color / ADR-0003).
+// package; this IDL carries only raw pre-packed RGBA (see ADR-0058 SD9 for
+// why bulk pixel buffers bypass egui2.Color / ADR-0052).
 //
 // Opcodes:
 //   - scrollingTexture        — write new columns at `head` + draw

@@ -176,7 +176,7 @@ type SubjectFilter struct {
 	Sticky    bool
 }
 
-// ScreenshotFlagsE mirrors ADR-0008's DemoFlagsE so the screenshot tour
+// ScreenshotFlagsE mirrors ADR-0057's DemoFlagsE so the screenshot tour
 // registry folds into app.Registry without behavioural change.
 type ScreenshotFlagsE uint32
 
@@ -198,10 +198,10 @@ type SurfaceHints struct {
 	PreferredWidth  uint16
 	PreferredHeight uint16
 	// ScreenshotStage: canonical capture size for the screenshot driver.
-	// Folded in from ADR-0008's Demo.Stage. Zero means "use driver default".
+	// Folded in from ADR-0057's Demo.Stage. Zero means "use driver default".
 	ScreenshotStage [2]float32
 	// ScreenshotFlags: per-app bitmask consumed by the screenshot host.
-	// Folded in from ADR-0008's Demo.Flags.
+	// Folded in from ADR-0057's Demo.Flags.
 	ScreenshotFlags ScreenshotFlagsE
 }
 
@@ -224,7 +224,7 @@ type Manifest struct {
 	// The runtime renders it as "Icon Title" in the title bar.
 	Icon string
 	// Category groups apps in interactive shells. Empty means "uncategorised".
-	// Folded in from ADR-0008's Demo.Category.
+	// Folded in from ADR-0057's Demo.Category.
 	Category string
 
 	Surface      SurfaceE

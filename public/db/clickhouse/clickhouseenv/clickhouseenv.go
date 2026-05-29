@@ -3,7 +3,7 @@
 // Package clickhouseenv centralises the ClickHouse-related environment
 // variables consumed across boxer: the funccharacterize fuzzer,
 // the spinnaker play HMI, and the live test harness. Each spec is
-// registered with the boxer-wide registry (ADR-0009).
+// registered with the boxer-wide registry (ADR-0058).
 //
 // Names match the ClickHouse client-tool convention (CLICKHOUSE_USER /
 // CLICKHOUSE_PASSWORD / CLICKHOUSE_DATABASE / CLICKHOUSE_ENDPOINT /

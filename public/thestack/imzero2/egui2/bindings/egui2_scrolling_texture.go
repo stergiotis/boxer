@@ -8,7 +8,7 @@ package bindings
 // src/rust/src/imzero2/scrolling_texture.rs.
 
 // OrientationE names the four scroll orientations supported by the
-// scrollingTexture widget. See ADR-0009 SD8.
+// scrollingTexture widget. See ADR-0058 SD8.
 type OrientationE uint8
 
 const (
@@ -28,7 +28,7 @@ const (
 )
 
 // FilterE selects the GPU texture sampling mode for the scrollingTexture
-// widget. See ADR-0009 SD3 — naming mirrors egui's TextureOptions::NEAREST
+// widget. See ADR-0058 SD3 — naming mirrors egui's TextureOptions::NEAREST
 // and ::LINEAR deliberately, rather than a misleading `bilinear: bool`,
 // so callers reading "Linear" understand it as sampling, not as
 // column-to-column data interpolation.
@@ -48,7 +48,7 @@ const (
 // SendRespVal flushes the scrollingTexture opcode and registers r9_u64 /
 // r10 databindings for the widget id. `hoverRc` receives the packed
 // hover readout — ((row as uint64) << 32) | col, or u64::MAX when the
-// pointer is outside the widget rect (per ADR-0009 SD11). `clicked`
+// pointer is outside the widget rect (per ADR-0058 SD11). `clicked`
 // receives true on frames where egui recognises a primary click on the
 // widget rect (SD12).
 //
@@ -66,7 +66,7 @@ func (inst ScrollingTextureFluid) SendRespVal(hoverRc *uint64, clicked *bool) Re
 
 // UnpackHoverRc splits the packed (row:col) hover readout returned via
 // r9_u64 into (row, col, hovered). hovered == false when the widget
-// reports the u64::MAX sentinel. See ADR-0009 SD11.
+// reports the u64::MAX sentinel. See ADR-0058 SD11.
 func UnpackHoverRc(packed uint64) (row uint32, col uint32, hovered bool) {
 	const sentinel = ^uint64(0)
 	if packed == sentinel {

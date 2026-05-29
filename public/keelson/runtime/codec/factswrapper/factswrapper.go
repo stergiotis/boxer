@@ -498,7 +498,7 @@ func writeCodec(sb *strings.Builder, plan *marshallgen.Plan) {
 // uniqueMemberships returns each distinct LWMembership once, skipping
 // channels that need no kindXxx var (Verbatim / Parametrized) — those
 // either embed the literal name at the call site or carry the payload
-// directly. Generalised by boxer ADR-0008 D3 from the original
+// directly. Generalised by boxer ADR-0057 D3 from the original
 // "Verbatim-only" skip.
 func uniqueMemberships(plan *marshallgen.Plan) (out []marshallgen.TaggedField) {
 	seen := map[string]bool{}

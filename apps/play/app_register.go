@@ -16,7 +16,7 @@ import (
 
 // SPINNAKER_PLAY_* drive optional one-shot/scripted-screenshot
 // behaviours on the play HMI. Registered with the boxer-wide env
-// registry per ADR-0009.
+// registry per ADR-0058.
 var (
 	SQLOverride = env.NewString(env.Spec{
 		Name:        "SPINNAKER_PLAY_SQL",

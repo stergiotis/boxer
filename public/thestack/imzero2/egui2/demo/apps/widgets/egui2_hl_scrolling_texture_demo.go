@@ -14,7 +14,7 @@ package widgets
 // PNG.
 //
 // The colormap lives inline here. The generic Go `colormap` package called
-// out in ADR-0009 is a follow-up milestone; this demo only exercises the
+// out in ADR-0058 is a follow-up milestone; this demo only exercises the
 // Rust widget's texture lifecycle and split-UV draw.
 //
 // =============================================================================
@@ -48,7 +48,7 @@ func init() {
 		Title:       "scrolling texture",
 		Stage:       [2]float32{600, 320},
 		Kind:        registry.DemoKindUX,
-		Description: "Streaming-texture demo (ADR-0009): a generated scrolling texture demonstrating the zero-copy upload path.",
+		Description: "Streaming-texture demo (ADR-0058): a generated scrolling texture demonstrating the zero-copy upload path.",
 		Init: func(_ *c.WidgetIdStack) (state any) {
 			state = &scrollingTextureDemoState{
 				buffer: make([]uint32, scrollingTextureDemoWidth*scrollingTextureDemoHeight),

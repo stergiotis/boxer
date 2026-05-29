@@ -9,7 +9,7 @@ import "github.com/stergiotis/boxer/public/config/env"
 // register with the env catalogue regardless of which binary links
 // chstore. Package main was not importable from envgen, leaving
 // these specs invisible to `boxer env list` and `doc/env-vars.md`
-// (ADR-0009 §4) until the relocation.
+// (ADR-0058 §4) until the relocation.
 var (
 	// LogFactsEnabled gates whether the logbridge sink routes through
 	// this ClickHouse-backed store (non-empty and != "0") versus the
