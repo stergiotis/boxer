@@ -396,6 +396,31 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
+### 1.6 Grafana Labs -- time-range-picker UX (Apache-2.0)
+
+- Files: `public/thestack/imzero2/egui2/widgets/timerangepicker/` (derivative work).
+- Origin: <https://github.com/grafana/grafana> (`packages/grafana-data` +
+  `public/app/core/components/TimePicker`).
+- Copyright: 2014-2022 Grafana Labs.
+- Pinned upstream: `84411794f37db9f70276c6aab54d4f5ec5fd7498` (2022-04-12,
+  tag `v7.5.17` -- the last Apache-2.0 release before Grafana's v8.0 switch to
+  AGPL-3.0; only pre-switch sources are used).
+- Use: the time-range-picker UX shape and default preset labels, ported per
+  [ADR-0016](doc/adr/0016-imzero2-time-range-picker.md). Grafana's datemath
+  relative-expression grammar is NOT ported (expressions are ClickHouse SQL
+  evaluated by `clickhouse-local`).
+- Authoritative NOTICE:
+  [`.../timerangepicker/NOTICE`](public/thestack/imzero2/egui2/widgets/timerangepicker/NOTICE).
+  Per Apache-2.0 section 4 that NOTICE content must accompany redistribution.
+
+### 1.7 Fatih Arslan -- camelcase splitter (MIT)
+
+- File: `public/app/commands/compression/dict.go` (the `splitCamelCase` function).
+- Origin: <https://github.com/fatih/camelcase> (MIT).
+- Use: case-boundary tokenization of corpus words for compression-dictionary
+  building. The ~30-line `Split` algorithm was inlined verbatim (with in-file
+  attribution) to avoid a single-function third-party module dependency.
+
 ## 2. Vendored binary artifacts
 
 ### 2.1 h3.wasm -- H3 hierarchical geospatial index (Apache-2.0)
@@ -415,6 +440,27 @@ must accompany the redistribution. The `rust/h3bridge` crate itself is
 dual-licensed `MIT OR Apache-2.0`, allowing downstream redistributors to
 elect either license for the bridge layer; the underlying `h3o`
 attribution remains required in either case.
+
+### 2.2 Embedded UI fonts (rust/imzero2)
+
+The imzero2 egui renderer embeds three fonts via `include_bytes!`
+(`rust/imzero2/imzero2_egui/src/style/tokens/typography.rs`):
+
+- **IDS Mono** -- `rust/imzero2/assets/fonts/ids-mono/IDSMono-Regular.ttf`.
+  SIL Open Font License 1.1, Reserved Font Name "IDS Mono"; Copyright (c) 2026
+  Panos Stergiotis and the IDS Mono contributors. License text:
+  [`.../ids-mono/LICENSE`](rust/imzero2/assets/fonts/ids-mono/LICENSE).
+- **Phosphor** -- `rust/imzero2/assets/fonts/phosphor/Phosphor.ttf`. MIT.
+  License text: [`.../phosphor/LICENSE`](rust/imzero2/assets/fonts/phosphor/LICENSE).
+- **Iosevka Aile** -- `rust/imzero2/assets/fonts/iosevka-aile/IosevkaAile-Regular.ttf`.
+  SIL Open Font License 1.1 (upstream <https://github.com/be5invis/Iosevka>).
+  **TODO before release:** vendor the OFL-1.1 license text next to the `.ttf`
+  (only the font binary + `SHA256SUMS` are currently committed); OFL
+  redistribution requires the license to accompany the font.
+
+Only the `Regular` weight of IDS Mono is embedded; the five upstream
+italic/bold variants are not vendored. PragmataPro is never shipped -- it is a
+personal-install monospace override (ADR-0030 section SD11).
 
 ## 3. Module-level Go dependencies
 

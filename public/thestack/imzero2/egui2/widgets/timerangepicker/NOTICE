@@ -1,4 +1,4 @@
-src/go/public/thestack/imzero2/egui2/widgets/timerangepicker — NOTICE
+public/thestack/imzero2/egui2/widgets/timerangepicker — NOTICE
 ========================================================================
 
 This package is a derivative work distributed under the Apache License,
@@ -88,7 +88,7 @@ THIRD-PARTY DEPENDENCIES OF THIS PACKAGE
 The aggregate index lives at doc/legal/third_party.md.
 
 This package's only direct in-tree dependency is the ClickHouse SQL
-DSL parser at src/go/public/db/clickhouse/dsl/, used in-process for
+DSL parser at public/db/clickhouse/dsl/, used in-process for
 sub-millisecond syntax validation as the user types.
 
 The runtime requirement on the `clickhouse-local` CLI binary is a
