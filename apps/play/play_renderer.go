@@ -979,8 +979,11 @@ func (inst *PlayApp) renderTimelineTab(rec arrow.RecordBatch, schema *arrow.Sche
 }
 
 // renderDetailTab is the Detail dock tab body: the leeway card stack for
-// the currently selected row. renderDetailPane already wraps in its own
-// ScrollArea, so the dock tab is called without an outer wrap.
+// the currently selected row. renderDetailPane scrolls its own content (the
+// leeway card table owns its scroll; the JSON and ad-hoc fallbacks each add
+// one), so the dock tab must NOT add an outer ScrollArea — wrapping the
+// self-scrolling card table hands it unbounded height and crops its tail
+// (tagged) sections.
 func (inst *PlayApp) renderDetailTab(rec arrow.RecordBatch, schema *arrow.Schema, row int64) {
 	if rec == nil {
 		for rt := range c.RichTextLabel("Run a query, then select a row to see its detail.") {
