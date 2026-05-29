@@ -3,12 +3,21 @@
 package ecdfbands
 
 import (
+	"context"
 	"math"
 	"sync"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
+
+// ProgressFunc receives solver progress: `done` crossing-probability
+// evaluations completed out of an estimated `total` (two bracket checks
+// plus the bisection iterations, fixed up front). Each eval is the same
+// O(n²) cost, so the ratio is a near-linear progress signal callers can
+// turn into a fraction and ETA. nil disables reporting. Invoked on the
+// solving goroutine — keep it cheap and non-blocking.
+type ProgressFunc func(done, total int)
 
 // criticalValueAndBands returns the critical value c and the
 // per-rank boundary sequences (lower, upper) for the given band
@@ -34,9 +43,21 @@ import (
 // Wasteful but harmless. No double-checked locking is in place
 // because the inversion itself is deterministic and the duplication
 // cost amortises away across realistic workloads.
-func criticalValueAndBands(
-	n int, alpha float64, method BandMethodE, algo CrossingAlgorithmE,
+func criticalValueAndBands(n int, alpha float64, method BandMethodE, algo CrossingAlgorithmE) (c float64, lower, upper []float64, err error) {
+	return criticalValueAndBandsCtx(context.Background(), n, alpha, method, algo, nil)
+}
+
+// criticalValueAndBandsCtx is the cancellable, progress-reporting
+// implementation behind criticalValueAndBands. ctx cancellation lands
+// within one O(n²) eval; onProgress fires once per eval (see
+// ProgressFunc). The cache lookup/store and α validation are identical
+// to the wrapper — only the inversion gains ctx + progress.
+func criticalValueAndBandsCtx(
+	ctx context.Context, n int, alpha float64, method BandMethodE, algo CrossingAlgorithmE, onProgress ProgressFunc,
 ) (c float64, lower, upper []float64, err error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if n <= 0 {
 		err = eh.Errorf("n must be positive, got %d", n)
 		return
@@ -67,7 +88,7 @@ func criticalValueAndBands(
 		return
 	}
 
-	c, lower, upper, err = invertCriticalValue(n, alpha, family, algo)
+	c, lower, upper, err = invertCriticalValue(ctx, n, alpha, family, algo, onProgress)
 	if err != nil {
 		return
 	}
@@ -87,8 +108,11 @@ func criticalValueAndBands(
 // criticalValueAndBands so the test suite can exercise it
 // cache-free.
 func invertCriticalValue(
-	n int, alpha float64, family bandFamilyI, algo CrossingAlgorithmE,
+	ctx context.Context, n int, alpha float64, family bandFamilyI, algo CrossingAlgorithmE, onProgress ProgressFunc,
 ) (c float64, lower, upper []float64, err error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	target := 1 - alpha
 	cLo, cHi := family.criticalValueBracket(n, alpha)
 	if !(cLo < cHi) {
@@ -99,9 +123,27 @@ func invertCriticalValue(
 	lower = make([]float64, n)
 	upper = make([]float64, n)
 
+	// total is the worst-case number of crossing-probability evals: two
+	// bracket-validation evals plus the bisection iterations below. Each
+	// eval is the same O(n²) cost, so reporting once per eval yields a
+	// near-linear progress signal and a stable ETA. The eval closure
+	// also checks ctx so a cancellation lands within one eval.
+	const bisectIters = 60
+	total := 2 + bisectIters
+	done := 0
 	eval := func(cAt float64) (p float64, err error) {
+		if err = ctx.Err(); err != nil {
+			err = eh.Errorf("ecdf band inversion cancelled after %d/%d evals: %w", done, total, err)
+			return
+		}
 		family.boundaries(n, cAt, lower, upper)
-		p, err = CrossingProbability(lower, upper, algo)
+		if p, err = CrossingProbability(lower, upper, algo); err != nil {
+			return
+		}
+		done++
+		if onProgress != nil {
+			onProgress(done, total)
+		}
 		return
 	}
 
@@ -143,7 +185,7 @@ func invertCriticalValue(
 	// against target.
 	_ = pLo
 	_ = pHi
-	for range 60 {
+	for range bisectIters {
 		cMid := 0.5 * (cLo + cHi)
 		if cMid <= cLo || cMid >= cHi {
 			break
@@ -161,6 +203,9 @@ func invertCriticalValue(
 	}
 	c = 0.5 * (cLo + cHi)
 	family.boundaries(n, c, lower, upper)
+	if onProgress != nil {
+		onProgress(total, total)
+	}
 	return
 }
 

@@ -49,11 +49,13 @@ import (
 	"github.com/stergiotis/boxer/public/analytics/stats/letterval"
 	"github.com/stergiotis/boxer/public/analytics/stats/tdigest"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/boxenplot"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/ecdf"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/ecdfdigest"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/inspector"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/jobprogress"
 )
 
 // tabE selects which body the inspector window renders.
@@ -110,6 +112,15 @@ type Renderer struct {
 	// case in tests + ad-hoc dashboards) leave the inspector window
 	// header free of provenance chrome.
 	provenance inspector.Provenance
+
+	// tasks, when non-nil, is the keelson task API the embedded ECDF
+	// widget uses to warm its confidence band on a background job
+	// (ADR-0038), so a large-n O(n²) inversion runs off the render
+	// thread, shows in the supervisor / taskmonitor, and cancels on
+	// window close. nil (default) still computes the band off-thread via
+	// the in-process job registry; only task-framework visibility is
+	// lost. Set via Tasks.
+	tasks task.TaskApiI
 }
 
 // instanceState carries the per-distsummary pinned-window open flag
@@ -207,6 +218,18 @@ func (inst Renderer) GridN(n int) (out Renderer) {
 		n = defaultEcdfGridN
 	}
 	inst.gridN = n
+	out = inst
+	return
+}
+
+// Tasks wires a keelson task API so the embedded ECDF widget warms its
+// confidence band on a background job (ADR-0038) rather than blocking
+// the render thread, surfacing the work in the supervisor and any
+// taskmonitor panel and cancelling it when the host window closes.
+// Optional: when unset the band still computes off-thread via the
+// in-process job registry — only task-framework visibility is lost.
+func (inst Renderer) Tasks(api task.TaskApiI) (out Renderer) {
+	inst.tasks = api
 	out = inst
 	return
 }
@@ -477,10 +500,27 @@ func (inst Renderer) renderEcdfBody(scope string, digest *tdigest.TDigest) (rend
 		return
 	}
 	plotID := c.MakeAbsoluteIdStr(scope + "-ecdf-plot")
+	n := int(digest.Count())
 	xs, fn := ecdfdigest.BuildDigestGrid(digest, inst.gridN)
-	ch := inst.ecdfPlot.AtGrid(plotID, xs, fn, int(digest.Count()))
-	_ = inst.ecdfPlot.RenderGrid(xs, fn, int(digest.Count()))
-	inst.ecdfPlot.PaintCrosshair(ch)
+
+	// The simultaneous band needs an O(n²) critical-value inversion far
+	// too slow for the render thread at large n (≈minutes at n=1e4).
+	// When the band for this (n, α, method) is already cached we draw it
+	// directly; otherwise draw the ECDF curve immediately, warm the band
+	// on a keelson background job (ADR-0038), and show its progress + ETA
+	// below the plot. A later frame finds the cache warm and renders the
+	// full band + hover crosshair.
+	bandReady := inst.ecdfPlot.BandReady(n)
+	var ch ecdf.Crosshair
+	var job ecdf.BandJobSnapshot
+	if bandReady {
+		ch = inst.ecdfPlot.AtGrid(plotID, xs, fn, n)
+		_ = inst.ecdfPlot.RenderGrid(xs, fn, n)
+		inst.ecdfPlot.PaintCrosshair(ch)
+	} else {
+		job = inst.ecdfPlot.EnsureBandJob(inst.tasks, n)
+		inst.ecdfPlot.RenderGridCurveOnly(xs, fn)
+	}
 	pad := inst.popupPad
 	if pad > 0 {
 		c.AddSpace(pad)
@@ -510,7 +550,20 @@ func (inst Renderer) renderEcdfBody(scope string, digest *tdigest.TDigest) (rend
 	if pad > 0 {
 		c.AddSpace(pad)
 	}
-	ecdf.WriteStatusLine(ch)
+	if bandReady {
+		ecdf.WriteStatusLine(ch)
+	} else {
+		switch job.State {
+		case ecdf.BandJobError:
+			c.Label("confidence band unavailable: " + job.Note).Send()
+		case ecdf.BandJobRunning:
+			jobprogress.Render(jobprogress.Input{
+				Title:    "computing confidence band",
+				Fraction: job.Fraction,
+				EtaMs:    job.EtaMs,
+			})
+		}
+	}
 	rendered = true
 	return
 }

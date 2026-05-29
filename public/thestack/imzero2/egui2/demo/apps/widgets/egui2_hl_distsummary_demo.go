@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/analytics/stats/tdigest"
+	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/distsummary"
@@ -38,6 +40,14 @@ type distsumDemoRow struct {
 
 var distsumDemoRows = buildDistsumDemoRows()
 
+// distsumDemoTasks is the keelson task API captured from the gallery
+// host's bus in BusInit. The demo's confidence-band warm-up (an O(n²)
+// solve at n=10 000) runs as a background job through it so it never
+// blocks the render thread and shows in the supervisor / taskmonitor.
+// nil when the host supplies no bus (tour/headless): the band still
+// warms off-thread via the in-process registry, just without audit.
+var distsumDemoTasks task.TaskApiI
+
 func init() {
 	registry.Register(registry.Demo{
 		Name:     "distsummary",
@@ -56,6 +66,16 @@ func init() {
 			"boxenplot in the second tab — both reading the same caller-owned " +
 			"tdigest per the ADR-0046 shared-sketch rule. Composes tdigest + " +
 			"letterval + boxenplot + ecdf + ecdfbands.",
+		BusInit: func(_ *c.WidgetIdStack, bus runtimeapp.BusI) (state any) {
+			// Build a task API from the host bus so the band warm-up is a
+			// keelson background job (ADR-0038). nil bus (tour) leaves
+			// distsumDemoTasks unset — the in-process registry still runs
+			// the solve off the render thread.
+			if bus != nil {
+				distsumDemoTasks = task.NewBusApi(task.ApiConfig{Bus: bus})
+			}
+			return nil
+		},
 		Render: demoDistsummary,
 	})
 }
@@ -71,10 +91,12 @@ func demoDistsummary(ids *c.WidgetIdStack) {
 		// own toggle / window / tether identities — required because
 		// distsummary derives those ids from idPrefix and the pinned
 		// state lives in a package-level map keyed by the same string.
-		r := distsummary.New(row.idPrefix).Provenance(inspector.Provenance{
-			Subject:   row.subject,
-			SampledAt: now,
-		})
+		r := distsummary.New(row.idPrefix).
+			Tasks(distsumDemoTasks).
+			Provenance(inspector.Provenance{
+				Subject:   row.subject,
+				SampledAt: now,
+			})
 		for range c.Horizontal().KeepIter() {
 			// Fixed-width label column keeps every distsummary cell at
 			// the same x — visually aligned across rows.

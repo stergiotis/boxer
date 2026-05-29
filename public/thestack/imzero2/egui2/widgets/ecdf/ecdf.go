@@ -18,6 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/analytics/stats/ecdfbands"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )
@@ -163,6 +164,35 @@ func (inst Renderer) RenderGrid(xs, fnAt []float64, n int) (err error) {
 	inst.emitBandRectangles(g.Xs, g.LowerCDF, g.UpperCDF)
 	inst.emitGridEcdfPolyline(g.Xs, fnAt)
 	return
+}
+
+// BandReady reports whether this renderer's (n, α, method) confidence
+// band is already cached — i.e. whether RenderGrid/AtGrid will draw
+// without blocking on the O(n²) inversion. Non-blocking probe; pair it
+// with EnsureBandJob to drive the schedule-and-show-progress path.
+func (inst Renderer) BandReady(n int) bool {
+	return ecdfbands.BandReady(n, inst.alpha, inst.method)
+}
+
+// EnsureBandJob schedules (once, idempotently) a background warm-up of
+// this renderer's (n, α, method) band and returns its current progress
+// snapshot. tasks may be nil (the solve still runs; only keelson task
+// integration is skipped). Call on frames where BandReady(n) is false:
+// render RenderGridCurveOnly for the curve and show the returned
+// snapshot via a progress widget below the plot.
+func (inst Renderer) EnsureBandJob(tasks task.TaskApiI, n int) BandJobSnapshot {
+	return ensureBandWarm(tasks, n, inst.alpha, inst.method)
+}
+
+// RenderGridCurveOnly emits only the ECDF step polyline for an (xs,
+// fnAt) grid — the band-free counterpart to RenderGrid, drawn while the
+// confidence band is still warming in the background. The caller must
+// already be inside a c.Plot block.
+func (inst Renderer) RenderGridCurveOnly(xs, fnAt []float64) {
+	if len(xs) < 2 {
+		return
+	}
+	inst.emitGridEcdfPolyline(xs, fnAt)
 }
 
 // emitBandRectangles emits the confidence band as a sequence of

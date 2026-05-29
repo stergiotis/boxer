@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/analytics/stats/tdigest"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
@@ -34,6 +35,13 @@ type App struct {
 	// MountCtx.Ids() at Mount time. The ctor seeds it with a fresh
 	// stack so tour mode and tests work without a Mount call.
 	ids *c.WidgetIdStack
+
+	// tasks is the keelson task API (task.ForApp at Mount). The embedded
+	// distsummary widgets thread it into their ECDF band warm-up so the
+	// O(n²) inversion runs as a background job (ADR-0038) instead of on
+	// the render thread. Zero value (tour/tests, no Mount) is nil — the
+	// band still warms off-thread, just without task-framework audit.
+	tasks task.TaskApiI
 
 	// density resolves IDS spacing tokens at the active preset
 	// (ADR-0032 §SD2); cached once at newApp.
@@ -100,6 +108,7 @@ func newApp() (inst *App) {
 func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
+	inst.tasks = task.ForApp(ctx)
 	return
 }
 func (inst *App) Unmount(ctx app.MountContextI) (err error) { return }

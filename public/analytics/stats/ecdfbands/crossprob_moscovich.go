@@ -59,6 +59,10 @@ func crossingProbabilityMoscovich(a, b []float64) (p float64, err error) {
 		return
 	}
 
+	// Memoise log(k!) up to k = n so the O(n²) logPoissonPMF calls and
+	// the final log(n!) below are table reads, not math.Lgamma calls.
+	ensureLogFactorials(n)
+
 	taus := buildBreakpoints(a, b)
 	// π carries log P(N(τ_k) = j AND band held). Index j ∈ [0, n].
 	// Use -Inf to mark structurally impossible states. (slices.Fill

@@ -200,6 +200,24 @@ Proposed — awaiting review.
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
 ADRs are append-only; supersession is recorded, not deleted.
 
+## Updates
+
+### 2026-05-29 — First GUI consumer: ECDF confidence-band warm-up (cached, deduplicated compute job)
+
+The imzero2 ECDF / `distsummary` widget became the first in-tree consumer of this primitive, and it is exactly the workload the Context envisioned: the simultaneous confidence band needs an O(n²) Berk-Jones/Moscovich critical-value inversion that runs ≈minutes at n=10⁴. It had been computed synchronously inside `AppI.Frame` (`widgets/ecdf` → `analytics/stats/ecdfbands.BandsForGrid`), so opening a distsummary inspector over a 10⁴-sample digest froze the UI — "long-running work cannot live there," verbatim.
+
+The primitive needed **no protocol change**. The worker uses it as specified: `Spawn` → per-eval `Report(UnitSteps)` → `Done(nil)`. Three design calls in this ADR were validated rather than revisited:
+
+- **`Result` stays opaque and unused here.** The band result travels through a *domain* cache (`ecdfbands` keyed by `{n, α, method}`), not the `Done` payload — so `Done(nil)` is called purely for the side effect (a warmed cache), exactly the case the Producer surface's "pass nil result … the outcome is the side effect itself" anticipates. No typed-result registry was needed (Consequences §Neutral holds).
+- **Caching + dedup is a thin app-side layer, not pool machinery.** A non-blocking probe (`ecdfbands.BandReady`) lets the render thread pick draw-vs-schedule each frame; an in-flight registry keyed by the same `{n, α, method}` makes every widget and frame at that key attach to one solve. This is precisely the "pool layered on top of O3" that the O2 rejection predicted — coordination stays bus-side, the dedup/caching stays domain-side.
+- **The producer honours `Ctx().Done()`** (Consequences §Negative): the inversion checks the context once per eval, so a bus cancel and the host's mount-cancel (window close) both abort a long solve within one eval. Progress is reported per bisection eval (~62 of equal cost), giving the estimator a near-linear signal and a stable ETA.
+
+Host wiring: imztop takes the API via `task.ForApp(ctx)` at Mount; the demo gallery, whose demos are bus-only (no `MountContextI`), builds one with `task.NewBusApi(ApiConfig{Bus})` from its `BusInit`-captured bus. The widget degrades to an **in-process-only** job (off-thread solve, in-process progress, no supervisor audit) when no task API is supplied, so library and test callers are unaffected. A small stateless `widgets/jobprogress` widget renders the progress + ETA inline below the plot (consuming the in-process snapshot, not a per-widget `task.>` subscription — `taskmonitor` (M4) remains the global, bus-driven view).
+
+A complementary, fidelity-preserving speedup landed alongside: `ecdfbands.logFactorial` is now memoised into a lock-free table, cutting the inversion's dominant `math.Lgamma` cost (~1.3–1.45× at n=512–1024, more at larger n) without changing any band value.
+
+Source: [`../../public/analytics/stats/ecdfbands/`](../../public/analytics/stats/ecdfbands/) (`WarmBand` / `BandReady` / `ProgressFunc`, tabulated `logFactorial`); [`../../public/thestack/imzero2/egui2/widgets/ecdf/bandjob.go`](../../public/thestack/imzero2/egui2/widgets/ecdf/bandjob.go) (registry + `Spawn`); [`../../public/thestack/imzero2/egui2/widgets/jobprogress/`](../../public/thestack/imzero2/egui2/widgets/jobprogress/); [`../../public/thestack/imzero2/egui2/widgets/distsummary/distsummary.go`](../../public/thestack/imzero2/egui2/widgets/distsummary/distsummary.go) (render-thread orchestration). `status` and `reviewed-date` are deliberately not re-stamped — the decision is unchanged, only confirmed by a consumer.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — app runtime, in-proc bus, cap-as-subject taxonomy. Defines `AppI`, `Manifest.Caps`, `BusI`, `MountContext.Cancel()`.

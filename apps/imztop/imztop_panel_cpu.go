@@ -109,7 +109,7 @@ func (inst *App) renderDistsummaryRow(
 	sampledAt time.Time,
 	format distsummary.FormatFunc,
 ) {
-	ds := distsummary.New("imztop-" + idSuffix).Format(format)
+	ds := distsummary.New("imztop-" + idSuffix).Tasks(inst.tasks).Format(format)
 	for range c.Horizontal().KeepIter() {
 		c.UiSetMinWidth(cpuDistsumLabelWidth)
 		c.Label(label).Send()

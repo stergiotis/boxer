@@ -3,6 +3,7 @@
 package ecdfbands
 
 import (
+	"context"
 	"math"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -180,6 +181,31 @@ func CriticalValue(n int, alpha float64, method BandMethodE) (c float64, err err
 	return
 }
 
+
+// BandReady reports whether the (n, α, method) critical value is
+// already cached — i.e. whether a subsequent BandsForGrid /
+// BandsForSample returns without running the O(n²) inversion.
+// Non-blocking: a pure cache probe, no computation. Render loops use
+// this to choose between drawing the band now and scheduling a
+// background WarmBand.
+func BandReady(n int, alpha float64, method BandMethodE) bool {
+	key := bandCacheKey{n: n, method: method, alphaBits: quantizeAlpha(alpha)}
+	bandCacheMu.RLock()
+	_, ok := bandCache[key]
+	bandCacheMu.RUnlock()
+	return ok
+}
+
+// WarmBand computes and caches the (n, α, method) critical value when
+// absent, reporting bisection progress via onProgress and honouring ctx
+// for cancellation. Built to run on a background goroutine: once it
+// returns nil, BandReady(n, α, method) is true and the following
+// BandsForGrid / BandsForSample is a cheap cache hit. A cancelled solve
+// returns ctx.Err() (wrapped) and caches nothing.
+func WarmBand(ctx context.Context, n int, alpha float64, method BandMethodE, onProgress ProgressFunc) (err error) {
+	_, _, _, err = criticalValueAndBandsCtx(ctx, n, alpha, method, CrossingAlgorithmAuto, onProgress)
+	return
+}
 
 // validateSorted checks the non-decreasing invariant on a sample
 // slice. NaN values are rejected. Callers should sort before
