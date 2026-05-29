@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/cpu"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colorscale"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap/layout"
 )
@@ -114,6 +115,17 @@ type App struct {
 	topoFreq       []uint32
 	topoFreqMaxMHz uint32
 	topoDim        topoDimE
+
+	// Colorscale legend state (imztop_panel_topology.go). topoScaleMax is the
+	// value the gradient tops out at in real units (100 for %, the smoothed
+	// peak MHz for frequency); it is the shared denominator for the tint and
+	// the legend so the two agree. topoScale is rebuilt (keyed by topoScaleKey)
+	// only when the dimension or rounded max changes. topoLastSampleMs gates
+	// the frequency-max smoothing to once per new sample.
+	topoScaleMax     uint32
+	topoScale        *colorscale.ColorScale
+	topoScaleKey     string
+	topoLastSampleMs int64
 }
 
 var _ app.AppI = (*App)(nil)

@@ -11,24 +11,37 @@ import (
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/cpu"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sensors"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colorscale"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap/layout"
 )
 
-// topoMinW / topoMinH floor the dynamically-sized treemap canvas. The panel
-// resizes the treemap to fill its dock pane every frame (renderTopologyPanel);
-// the floor keeps the tree legible on a small pane — below it the tab's
-// ScrollArea scrolls rather than collapsing the boxes. topoScrollbarAllowPx is
-// shaved off the width while the vertical scrollbar is showing so the
-// Vscroll-only ScrollArea does not clip the treemap's right edge.
 const (
+	// topoMinW / topoMinH floor the dynamically-sized treemap canvas; below
+	// the floor the tab's ScrollArea scrolls instead of collapsing the tree.
+	// topoScrollbarAllowPx is shaved off the width while the vertical scrollbar
+	// shows so the Vscroll-only ScrollArea does not clip the right edge.
 	topoMinW             float32 = 360
 	topoMinH             float32 = 320
 	topoScrollbarAllowPx float32 = 16
+	// topoReservedBelowPx leaves room under the tree for the colorscale legend
+	// and the hover-detail line when sizing the treemap to the pane.
+	topoReservedBelowPx float32 = 104
+	// topoScaleW / topoScaleH size the horizontal colorscale legend. The height
+	// must fit the gradient strip (the widget gives it 55%) plus the tick marks
+	// and a row of labels *below* them — at 26 px the labels paint past the
+	// canvas and clip, so ~44 px (cf. the colorscale demo's 42) is the floor.
+	topoScaleW float32 = 420
+	topoScaleH float32 = 44
+	// topoFreqReleaseAlpha is the per-sample slow-release factor for the
+	// frequency-max estimate (fast attack, slow release). ~0.1 at the 1 Hz
+	// sampler ≈ a 10 s memory, so a one-off boost spike fades gradually rather
+	// than latching the legend's top forever.
+	topoFreqReleaseAlpha = 0.1
 )
 
 // topoDimE selects which live per-core dimension the continuous (sequential)
-// tint encodes. The discrete depth palette is independent of this choice.
+// tint encodes. The monochrome depth palette is independent of this choice.
 type topoDimE uint8
 
 const (
@@ -45,25 +58,31 @@ func topoDimLabel(d topoDimE) string {
 	return "CPU %"
 }
 
-// topoDepthPalette builds a discrete palette from the IDS qualitative cycle so
-// structural depth (machine / package / cache / core …) reads as distinct
-// hues — leaving the sequential gradient (cpuHeatmapPalette) to mean magnitude,
-// i.e. load. 8 entries is deeper than the topology ever nests, so adjacent
-// levels never collide.
+// topoDepthPalette samples the IDS curated monochrome ramp — Crameri grayC,
+// the same perceptually-uniform grayscale IDS uses for AccessibilityMonochrome
+// ([styletokens.SequentialGrayC]) — at 8 discrete depth steps. Keeping the
+// structure greyscale leaves the one *coloured* gradient (cpuHeatmapPalette)
+// to mean magnitude (the load/frequency tint), so colour never competes with
+// hierarchy. grayC runs white→black over t∈[0,1]; we walk a mid-dark sub-range
+// so outer containers stay subdued on the dark theme and grow lighter as the
+// hierarchy nests inward toward the coloured PU cells.
 func topoDepthPalette() (p []uint32) {
-	const n = 8
+	const (
+		n             = 8
+		tDark, tLight = 0.85, 0.32 // grayC t at the outer (dark) / inner (light) ends
+	)
 	p = make([]uint32, n)
 	for i := range n {
-		q := styletokens.QualitativeCycle(i)
-		p[i] = uint32(q.R)<<24 | uint32(q.G)<<16 | uint32(q.B)<<8 | uint32(q.A)
+		t := tDark + (tLight-tDark)*float64(i)/float64(n-1)
+		rgba := styletokens.Sequential(styletokens.SequentialGrayC, float32(t))
+		p[i] = uint32(rgba.R)<<24 | uint32(rgba.G)<<16 | uint32(rgba.B)<<8 | uint32(rgba.A)
 	}
 	return
 }
 
 // initTopology performs the one-shot sysfs topology read and builds the treemap
-// widget. It is called lazily on the first Topology-tab frame (not in newApp)
-// so it captures the post-Mount inst.ids. On read failure topoErr is recorded
-// and the panel renders a message instead of a tree.
+// widget. Called lazily on the first Topology-tab frame so it captures the
+// post-Mount inst.ids. On read failure topoErr is recorded.
 func (inst *App) initTopology() {
 	topo, err := cpu.ReadTopology(cpu.TopologyOptions{})
 	if err != nil {
@@ -73,48 +92,47 @@ func (inst *App) initTopology() {
 	root, nodeObj := buildTopoLayout(topo)
 	inst.topoNodeObj = nodeObj
 
-	// Continuous (sequential) tint over the live dimension, normalised to
-	// [0,1] so switching dimension (% ↔ MHz) only changes how loadFn scales —
-	// the colormap range stays fixed. Non-PU nodes return NaN (ok=false) and
-	// fall through to the discrete depth base. Layer order matters:
-	// CompositeColoring is last-ok-wins and DepthColoring always returns ok, so
-	// the depth base must be FIRST and the load override LAST.
+	// The tint is normalised to [0,1] against inst.topoScaleMax (the same value
+	// the legend tops out at, so tint and colorscale agree). Non-PU nodes
+	// return NaN (ok=false) and fall through to the monochrome depth base.
+	// Layer order matters: CompositeColoring is last-ok-wins and DepthColoring
+	// always returns ok, so depth is FIRST and the load override LAST.
 	loadFn := func(n *layout.Node) (v float64) {
 		obj := inst.topoNodeObj[n]
-		if obj == nil || obj.Kind != cpu.TopoKindPU {
+		if obj == nil || obj.Kind != cpu.TopoKindPU || inst.topoScaleMax == 0 {
 			return math.NaN()
 		}
 		id := int(obj.OSIndex)
-		switch inst.topoDim {
-		case topoDimFreq:
-			if id < 0 || id >= len(inst.topoFreq) || inst.topoFreqMaxMHz == 0 {
+		var raw uint32
+		if inst.topoDim == topoDimFreq {
+			if id < 0 || id >= len(inst.topoFreq) {
 				return math.NaN()
 			}
-			return float64(inst.topoFreq[id]) / float64(inst.topoFreqMaxMHz)
-		default:
+			raw = inst.topoFreq[id]
+		} else {
 			if id < 0 || id >= len(inst.topoLoad) {
 				return math.NaN()
 			}
-			return float64(inst.topoLoad[id]) / 100
+			raw = uint32(inst.topoLoad[id])
 		}
+		return float64(raw) / float64(inst.topoScaleMax)
 	}
 	coloring := treemap.CompositeColoring(
 		treemap.DepthColoring(topoDepthPalette()),
 		treemap.ContinuousColoring(cpuHeatmapPalette(), loadFn, 0, 1),
 	)
-	// No WithContainerSize: the canvas is sized per-frame to fill the dock
-	// pane. WithMaxNestingDepth(0) renders the whole hierarchy at once
-	// (lstopo-style); drill-in still works on the top-level boxes.
+	// No WithContainerSize: sized per-frame to fill the dock pane.
+	// WithMaxNestingDepth(0) renders the whole hierarchy at once (lstopo-style);
+	// drill-in still works on the top-level boxes.
 	inst.topoTreemap = treemap.New(inst.ids, "imztop-topology", root,
 		treemap.WithMaxNestingDepth(0),
 		treemap.WithColoring(coloring),
 	)
 }
 
-// renderTopologyPanel draws the lstopo-style CPU containment tree (package →
-// NUMA → L3/L2/L1 → core → SMT thread) as nested treemap boxes: depth by a
-// discrete IDS palette, the selected live dimension by a sequential gradient.
-// A hover-detail line below reports per-object data. See ADR-0020 (Update).
+// renderTopologyPanel draws the lstopo-style CPU containment tree: monochrome
+// depth, the selected live dimension as a sequential gradient, a colorscale
+// legend, and a hover-detail readout. See ADR-0020 (Update).
 func (inst *App) renderTopologyPanel(snap *PublishedSnapshot) {
 	inst.sectionHeader("CPU Topology")
 
@@ -131,19 +149,18 @@ func (inst *App) renderTopologyPanel(snap *PublishedSnapshot) {
 		return
 	}
 
-	// Refresh the live slices the coloring closure reads. Held on *App so the
-	// colors update each frame without rebuilding the (static) tree. Frequency
-	// is normalised against a running max so the tint reads as "fraction of
-	// peak observed clock".
+	// Refresh the live slices the coloring reads, and re-estimate the frequency
+	// max once per new sample (fast attack, slow release). topoScaleMax is the
+	// shared denominator for the tint and the legend's top value.
 	if snap != nil && snap.LatestCPU != nil {
 		inst.topoLoad = snap.LatestCPU.PerCorePercent
 		inst.topoFreq = snap.LatestCPU.PerCoreFreqMHz
-		for _, f := range inst.topoFreq {
-			if f > inst.topoFreqMaxMHz {
-				inst.topoFreqMaxMHz = f
-			}
+		if snap.SampledAtUnixMs != inst.topoLastSampleMs {
+			inst.topoLastSampleMs = snap.SampledAtUnixMs
+			inst.updateFreqMax()
 		}
 	}
+	inst.topoScaleMax = inst.scaleMaxFor(inst.topoDim)
 
 	// Tint-dimension switch (% ↔ frequency).
 	for range c.ComboBox(
@@ -168,14 +185,13 @@ func (inst *App) renderTopologyPanel(snap *PublishedSnapshot) {
 	}
 	c.AddSpace(inst.spaceInner())
 
-	// Fill the dock pane: track ui.available_size each frame and resize the
-	// treemap to it (one-frame lag, the CPU-heatmap idiom). Captured here —
-	// after the header/controls — so it reflects the space left for the tree.
+	// Size the treemap to the pane, reserving room below for the legend + hover
+	// line. One-frame lag on available_size, the CPU-heatmap idiom.
 	c.CaptureAvailableSize()
 	avail := c.CurrentApplicationState.StateManager.GetAvailableSize()
 	if avail.W > 0 && avail.H > 0 &&
 		!math.IsNaN(float64(avail.W)) && !math.IsNaN(float64(avail.H)) {
-		w, h := avail.W, avail.H
+		w, h := avail.W, avail.H-topoReservedBelowPx
 		if h < topoMinH {
 			h = topoMinH
 			w -= topoScrollbarAllowPx // vertical scrollbar is showing
@@ -187,8 +203,81 @@ func (inst *App) renderTopologyPanel(snap *PublishedSnapshot) {
 	}
 	inst.topoTreemap.Render()
 
+	// Colorscale legend (gradient + value axis), rebuilt only when the
+	// dimension or rounded max changes.
+	c.AddSpace(inst.spaceTight())
+	inst.ensureTopoScale()
+	if inst.topoScale != nil {
+		inst.topoScale.Render()
+	}
+
 	c.AddSpace(inst.spaceTight())
 	inst.renderTopoHoverDetail(snap)
+}
+
+// updateFreqMax re-estimates the peak core frequency with a fast-attack /
+// slow-release follower: jump up immediately so a live value never exceeds the
+// scale, decay slowly so a transient boost spike does not pin the top forever.
+func (inst *App) updateFreqMax() {
+	var frameMax uint32
+	for _, f := range inst.topoFreq {
+		if f > frameMax {
+			frameMax = f
+		}
+	}
+	switch {
+	case frameMax > inst.topoFreqMaxMHz:
+		inst.topoFreqMaxMHz = frameMax
+	case inst.topoFreqMaxMHz > 0:
+		inst.topoFreqMaxMHz = uint32(float64(inst.topoFreqMaxMHz)*(1-topoFreqReleaseAlpha) +
+			float64(frameMax)*topoFreqReleaseAlpha)
+	}
+}
+
+// scaleMaxFor returns the value the gradient tops out at, in the dimension's
+// real units. Utilisation has a known max (100); frequency does not, so we use
+// the smoothed peak rounded up to a clean 100 MHz (stable legend, rare rebuild).
+func (inst *App) scaleMaxFor(d topoDimE) uint32 {
+	if d == topoDimFreq {
+		return roundUp100(inst.topoFreqMaxMHz)
+	}
+	return 100
+}
+
+func roundUp100(v uint32) uint32 {
+	if v == 0 {
+		return 0
+	}
+	return ((v + 99) / 100) * 100
+}
+
+// ensureTopoScale (re)builds the colorscale legend when the dimension or the
+// rounded max changes. nil when there is nothing to show yet (frequency before
+// the first sample).
+func (inst *App) ensureTopoScale() {
+	if inst.topoScaleMax == 0 {
+		inst.topoScale = nil
+		inst.topoScaleKey = ""
+		return
+	}
+	key := fmt.Sprintf("%d:%d", inst.topoDim, inst.topoScaleMax)
+	if key == inst.topoScaleKey && inst.topoScale != nil {
+		return
+	}
+	inst.topoScaleKey = key
+
+	cm := treemap.NewColormap(cpuHeatmapPalette(), 0, float64(inst.topoScaleMax))
+	var labelFmt func(float64) string
+	if inst.topoDim == topoDimFreq {
+		labelFmt = func(v float64) string { return mhzLabel(uint32(v)) }
+	} else {
+		labelFmt = func(v float64) string { return fmt.Sprintf("%.0f%%", v) }
+	}
+	inst.topoScale = colorscale.New(inst.ids, "imztop-topo-scale", cm,
+		colorscale.WithSize(topoScaleW, topoScaleH),
+		colorscale.WithDesiredTicks(5),
+		colorscale.WithLabelFormat(labelFmt),
+	)
 }
 
 // renderTopoHoverDetail prints a one-line readout of the hovered object: its
