@@ -22,13 +22,18 @@ Boxer is a collection of packages under `public/`. The larger subsystems:
 * `analytics/similarity/compression` — compression-based similarity metrics (NCD, CCC) over any `Reset`-able compressor.
 * `math/numerical/finddivisions` and `math/numerical/timeticks` — axis-tick layout: Heckbert / Wilkinson / Talbot for numeric and log axes; a uPlot-derived calendar ladder with locale-aware boundary snapping for time axes.
 * `science/geo/h3` — H3 geospatial indexing via a Rust→WASM→wazero bridge (ADR-0003); Rust source under `rust/h3bridge`.
+* `thestack/imzero2` — ImZero v2: an egui-based immediate-mode UI stack (egui2 FFI bindings, ~40 widgets, the IDS design system, demo apps), rendered by the Rust backend under `rust/imzero2`; ported from pebble2impl.
+* `thestack/fffi2` — Framed Foreign Function Interface: the typed FFI / IR layer imzero2 builds on (ADR-0049).
+* `keelson` — application runtime for imzero2 apps: an `AppI` registry with dock/CLI hosts, an in-process bus, a CBOR bus-codec, a facts store, background-task supervision, and a help system.
+* `observability/sysmetrics` — Linux system-metrics collectors (cpu, mem, disk, net, proc, sensors, battery, container, opt-in GPU backends) (ADR-0019).
+* `science/geo/swisstopo` — Swiss LV95 ⇄ WGS84 coordinate transforms, GeoTIFF elevation sampling, and line-of-sight queries.
 * `fec` — forward error correction (e.g. `fec/ea/golay24`).
 * `eb`, `eh` — structured error building and error handling.
 * `batching`, `containers`, `hashing`, `identity`, `logical`, `observability`, `parsing`, `slices`, `statespace`, `unsafeperf`, … — utility packages.
 
 `internal/` carries vendored third-party ports.
 
-`imzero` and `fffi` were extracted into [`imzero_imgui`](https://github.com/stergiotis/imzero_imgui) (ImZero1) and are no longer part of this module.
+ImZero **v1** (Dear ImGui-based) lives in [`imzero_imgui`](https://github.com/stergiotis/imzero_imgui). ImZero **v2** (egui-based) is part of this module: the Go side under `public/thestack/{imzero2,fffi2}`, its Rust egui renderer under `rust/imzero2`, and runnable demo applications under `apps/` (`play`, `imztop`, `capdemo`, `capinspector`, `taskdemo`).
 
 ## Building
 Boxer uses Go build tags to gate optional features, Go experiments, and AI-generated code paths. The canonical tag set lives in [`./tags`](tags); pass it to every `go build`, `go test`, and `go vet` invocation:
