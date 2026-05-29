@@ -5,6 +5,7 @@ go 1.26
 toolchain go1.26.3
 
 require (
+	github.com/BurntSushi/toml v1.6.0
 	github.com/Jeffail/checkpoint v1.1.0
 	github.com/Jeffail/shutdown v1.1.0
 	github.com/RoaringBitmap/roaring v1.9.4
@@ -16,6 +17,7 @@ require (
 	github.com/cockroachdb/pebble v1.1.5
 	github.com/dgraph-io/badger/v4 v4.9.1
 	github.com/dim13/colormap v1.1.0
+	github.com/dustin/go-humanize v1.0.1
 	github.com/ebitengine/purego v0.10.0
 	github.com/ettle/strcase v0.2.0
 	github.com/fogleman/gg v1.3.0
@@ -27,6 +29,7 @@ require (
 	github.com/golangci/gofmt v0.0.0-20251215234548-e7be49a5ab4d
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
+	github.com/hishamk/statetrooper v0.1.4
 	github.com/klauspost/compress v1.18.6
 	github.com/matoous/go-nanoid/v2 v2.1.0
 	github.com/mattn/go-isatty v0.0.22
@@ -42,6 +45,7 @@ require (
 	github.com/twmb/franz-go v1.21.2
 	github.com/twmb/franz-go/pkg/kadm v1.18.0
 	github.com/urfave/cli/v2 v2.27.7
+	github.com/valyala/bytebufferpool v1.0.0
 	github.com/valyala/fasttemplate v1.2.2
 	github.com/yassinebenaid/godump v0.11.1
 	github.com/yuin/goldmark v1.8.2
@@ -62,7 +66,6 @@ require github.com/dlclark/regexp2 v1.11.5 // indirect
 require (
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
-	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/CycloneDX/cyclonedx-go v0.9.3 // indirect
 	github.com/CycloneDX/cyclonedx-gomod v1.10.0 // indirect
 	github.com/DataDog/zstd v1.5.7 // indirect
@@ -106,7 +109,6 @@ require (
 	github.com/dkorunic/betteralign v0.8.0 // indirect
 	github.com/docker/go-connections v0.6.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
-	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/ekzhu/minhash-lsh v0.0.0-20171225071031-5c06ee8586a1 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/fatih/color v1.19.0 // indirect
@@ -191,7 +193,6 @@ require (
 	github.com/tklauser/go-sysconf v0.3.16 // indirect
 	github.com/tklauser/numcpus v0.11.0 // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.13.1 // indirect
-	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
