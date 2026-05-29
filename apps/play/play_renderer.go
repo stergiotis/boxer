@@ -154,7 +154,8 @@ type PlayApp struct {
 	// last. paramHidePrelude (default false) is the "show/hide
 	// parameter prelude" toggle; when true, the editor TextEdit binds
 	// to paramSqlEdit (the residual after slicing the prelude) and a
-	// secondary read-only label renders the prelude above the widgets.
+	// secondary read-only label renders the prelude above the residual
+	// editor.
 	paramSlots             []paramSlot
 	paramDrafts            map[string]*string
 	paramSyncedValues      map[string]string
@@ -676,7 +677,10 @@ func (inst *PlayApp) renderEditorTab() {
 	// (TextStyle::Monospace ≈ 14 px + ~2 px line spacing). The reserve
 	// covers chrome below the editor: a thin bottom margin always, plus
 	// room for the affordances block when at least one observation was
-	// captured by the most recent updatePreview run.
+	// captured by the most recent updatePreview run. The parameter block
+	// now renders ABOVE the editor, so it is deliberately absent from
+	// this reserve: CaptureAvailableSize runs after renderParamSlots, so
+	// avail.H already has the param block's height subtracted.
 	const editorRowPx float32 = 16.0
 	const editorBaseReservePx float32 = 8.0
 	const editorAffordanceReservePx float32 = 120.0
@@ -696,25 +700,28 @@ func (inst *PlayApp) renderEditorTab() {
 		}
 	}
 
-	// Capture the dock pane's available height for next frame. Must run
-	// BEFORE the Vertical scope so it measures the full tab body, not
-	// the post-allocation cursor inside the Vertical (which would
-	// ratchet down each frame).
-	c.CaptureAvailableSize()
-
 	for range c.Vertical().KeepIter() {
+		// Param-slot widgets render above the editor; they author the
+		// leading SET prelude. Rendered first so the editor below claims
+		// the remaining vertical space.
+		inst.renderParamSlots()
+
+		// Capture the height left below the param block for next frame's
+		// editor sizing. Runs AFTER renderParamSlots so the captured
+		// value already excludes the param block, but BEFORE the editor:
+		// the param block is fixed-height for a given slot count, so
+		// capturing here is stable, whereas capturing after the
+		// variable-height editor would ratchet the size down each frame.
+		c.CaptureAvailableSize()
+
 		// Editor binding. Default mode keeps the leading SET prelude
 		// inside the main editor; hide-prelude mode slices the prelude
 		// off, binds the editor to the residual-only mirror, and
 		// recomposes inst.sql when the residual mirror diverges. The
 		// prelude itself is re-rendered as a small read-only label
-		// (and the widget section below stays authoritative for
+		// (and the widget section above stays authoritative for
 		// editing values).
 		inst.renderSqlEditor(rows)
-
-		// Param-slot widgets render between the editor and the
-		// affordance block; they author the leading SET prelude.
-		inst.renderParamSlots()
 
 		// SQL function affordances (regex testers etc.) for call sites the
 		// affordanceEval observed during updatePreview.

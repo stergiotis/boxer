@@ -48,10 +48,11 @@ func (inst *PlayApp) refreshParamSlotsFromParse(slots []paramSlot, preludeValues
 	}
 }
 
-// renderParamSlots draws the per-slot widgets between the editor body
-// and the affordance section. Each registered widget is offered the
-// remaining (unconsumed) slots in editor order; the scalarTextWidget
-// at the tail is the catch-all so every slot renders something.
+// renderParamSlots draws the per-slot widgets above the SQL editor,
+// closed by a horizontal rule that divides them from the editor below.
+// Each registered widget is offered the remaining (unconsumed) slots in
+// editor order; the scalarTextWidget at the tail is the catch-all so
+// every slot renders something.
 //
 // After dispatch, the function compares each draft to its last
 // prelude-synced value; on drift it calls SyncParamPrelude and
@@ -64,7 +65,6 @@ func (inst *PlayApp) renderParamSlots() {
 		return
 	}
 
-	c.Separator().Horizontal().Send()
 	for rt := range c.RichTextLabel("PARAMETERS") {
 		rt.Small().Weak()
 	}
@@ -116,6 +116,9 @@ func (inst *PlayApp) renderParamSlots() {
 			}
 		}
 	}
+
+	// Divider between the parameter block and the SQL editor below it.
+	c.Separator().Horizontal().Send()
 
 	inst.syncParamDriftToPrelude()
 }
