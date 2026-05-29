@@ -78,7 +78,12 @@ func LoadFixtureSchema(manip common.TableManipulatorFluidI) {
 		AddColumnValueSemantics(valueaspects.AspectMachineReadable)
 
 	// --- co-section group: geo (geoPoint + geoArea, flattened) ---
+	// CoSectionGroup is what makes the driver merge the two sections into one
+	// wide BeginSection (buildCoGroups keys off it). StreamingGroup is the
+	// orthogonal row-transport concern; both happen to be "geo" here. Without
+	// the CoSectionGroup the sections render standalone, not merged.
 	geoPoint := manip.TaggedValueSection("geoPoint").
+		SectionCoSectionGroup("geo").
 		SectionStreamingGroup("geo").
 		AddSectionMembership(common.MembershipSpecLowCardVerbatim)
 	geoPoint.TaggedValueColumn("lat", ctabb.F32).
@@ -89,6 +94,7 @@ func LoadFixtureSchema(manip common.TableManipulatorFluidI) {
 		AddColumnValueSemantics(valueaspects.AspectHumanReadable, valueaspects.AspectMachineReadable)
 
 	geoArea := manip.TaggedValueSection("geoArea").
+		SectionCoSectionGroup("geo").
 		SectionStreamingGroup("geo")
 	geoArea.TaggedValueColumn("poly", ctabb.F32h).
 		AddColumnEncodingHints(easp.AspectLightGeneralCompression).

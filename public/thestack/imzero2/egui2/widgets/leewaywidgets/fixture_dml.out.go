@@ -43,13 +43,13 @@ func CreateSchemaFixture() (schema *arrow.Schema) {
 		/* 018 */ arrow.Field{Name: "tv:metric:lpcard:lpcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 		/* 019 */ arrow.Field{Name: "tv:metric:lmrcard:lmrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 		/* 020 */ arrow.Field{Name: "tv:metric:lmvcard:lmvcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 021 */ arrow.Field{Name: "tv:geoPoint:lat:val:f32:g:0:Ny:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Float32)},
-		/* 022 */ arrow.Field{Name: "tv:geoPoint:lng:val:f32:g:0:Ny:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Float32)},
-		/* 023 */ arrow.Field{Name: "tv:geoPoint:lv:lv:y:m:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 024 */ arrow.Field{Name: "tv:geoPoint:lvcard:lvcard:u64:4gw:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 025 */ arrow.Field{Name: "tv:geoArea:code:val:s:g:0:Ny:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
-		/* 026 */ arrow.Field{Name: "tv:geoArea:poly:val:f32h:g:0:Ny:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Float32)},
-		/* 027 */ arrow.Field{Name: "tv:geoArea:len:len:u64:28o:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 021 */ arrow.Field{Name: "tv:geoPoint:lat:val:f32:g:0:Ny:0:geo:geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Float32)},
+		/* 022 */ arrow.Field{Name: "tv:geoPoint:lng:val:f32:g:0:Ny:0:geo:geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Float32)},
+		/* 023 */ arrow.Field{Name: "tv:geoPoint:lv:lv:y:m:0:0:0:geo:geo", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 024 */ arrow.Field{Name: "tv:geoPoint:lvcard:lvcard:u64:4gw:0:0:0:geo:geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 025 */ arrow.Field{Name: "tv:geoArea:code:val:s:g:0:Ny:0:geo:geo", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
+		/* 026 */ arrow.Field{Name: "tv:geoArea:poly:val:f32h:g:0:Ny:0:geo:geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Float32)},
+		/* 027 */ arrow.Field{Name: "tv:geoArea:len:len:u64:28o:0:0:0:geo:geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 	}, nil)
 	return
 }
