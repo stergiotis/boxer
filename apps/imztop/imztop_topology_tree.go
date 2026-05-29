@@ -8,26 +8,27 @@ import (
 )
 
 // buildTopoLayout converts a static [cpu.Topology] into a treemap [layout.Node]
-// tree plus a map from each PU leaf node to its logical CPU id. The map is the
-// hook the live-load coloring uses (imztop_panel_topology.go): the tree is
-// built once and never mutated — only the per-frame load slice changes — so
-// the treemap widget's drill-in state, which keys off node identity, stays
-// stable across frames.
+// tree plus a map from every layout node back to its source [cpu.TopoObject].
+// That map drives both the live tint (PU leaves → logical CPU via OSIndex) and
+// the hover-detail panel (any node → its kind and fields). The tree is built
+// once and never mutated — only the per-frame load/freq slices change — so the
+// treemap widget's drill-in state, which keys off node identity, stays stable
+// across frames.
 //
 // Every PU leaf is given Size:1 so the squarified layout weights all hardware
-// threads equally; interior nodes (packages, NUMA nodes, caches, cores) derive
-// their size from their children via [layout.Node.TotalSize].
-func buildTopoLayout(topo cpu.Topology) (root *layout.Node, nodeCPU map[*layout.Node]int32) {
-	nodeCPU = make(map[*layout.Node]int32)
+// threads equally; interior nodes derive their size from their children via
+// [layout.Node.TotalSize].
+func buildTopoLayout(topo cpu.Topology) (root *layout.Node, nodeObj map[*layout.Node]*cpu.TopoObject) {
+	nodeObj = make(map[*layout.Node]*cpu.TopoObject)
 	if topo.Root == nil {
-		return &layout.Node{Name: "Machine"}, nodeCPU
+		return &layout.Node{Name: "Machine"}, nodeObj
 	}
 	var conv func(o *cpu.TopoObject) *layout.Node
 	conv = func(o *cpu.TopoObject) (n *layout.Node) {
 		n = &layout.Node{Name: o.Label()}
+		nodeObj[n] = o
 		if o.Kind == cpu.TopoKindPU {
 			n.Size = 1
-			nodeCPU[n] = o.OSIndex
 			return
 		}
 		n.Children = make([]*layout.Node, 0, len(o.Children))
@@ -37,5 +38,35 @@ func buildTopoLayout(topo cpu.Topology) (root *layout.Node, nodeCPU map[*layout.
 		return
 	}
 	root = conv(topo.Root)
+	return
+}
+
+// countKind returns the number of [cpu.TopoObject]s of kind k in the subtree
+// rooted at o (inclusive). Drives hover summaries like "shared by N threads".
+func countKind(o *cpu.TopoObject, k cpu.TopoKindE) (n int) {
+	if o == nil {
+		return 0
+	}
+	if o.Kind == k {
+		n = 1
+	}
+	for _, child := range o.Children {
+		n += countKind(child, k)
+	}
+	return
+}
+
+// puIndexes returns the logical-CPU ids of every PU leaf in the subtree rooted
+// at o, used to aggregate live load/frequency over a core / cache / package.
+func puIndexes(o *cpu.TopoObject) (ids []int32) {
+	if o == nil {
+		return nil
+	}
+	if o.Kind == cpu.TopoKindPU {
+		return []int32{o.OSIndex}
+	}
+	for _, child := range o.Children {
+		ids = append(ids, puIndexes(child)...)
+	}
 	return
 }

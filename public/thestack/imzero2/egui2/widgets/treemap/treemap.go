@@ -446,6 +446,20 @@ func (t *Treemap) Breadcrumb() []*layout.Node {
 	return out
 }
 
+// HoveredNode returns the node whose cell is under the pointer this frame, or
+// nil. Call it after Render(): it scans the cells painted this frame, innermost
+// first (matching the widget's own status-label readout). Carries the usual
+// one-frame egui hover lag.
+func (t *Treemap) HoveredNode() (node *layout.Node) {
+	sm := c.CurrentApplicationState.StateManager
+	for i := len(t.cells) - 1; i >= 0; i-- {
+		if sm.GetResponse(t.cells[i].handle).HasHovered() {
+			return t.cells[i].node
+		}
+	}
+	return nil
+}
+
 // resolveColors picks the appropriate fill, border, and text color from
 // colors using the StyleI's role selectors and the cell's state. The text
 // color tracks whichever fill slot is selected so WCAG-picked contrast

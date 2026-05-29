@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/cpu"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap/layout"
@@ -100,14 +101,19 @@ type App struct {
 	//   topoInit     guards the one-shot initTopology call.
 	//   topoErr      non-nil when the sysfs read failed; panel shows a message.
 	//   topoTreemap  the squarify widget; nil until built / on error.
-	//   topoNodeCPU  PU-leaf node → logical CPU id, the live-tint lookup.
-	//   topoLoad     per-frame per-core busy% the coloring reads; aliases the
-	//                published snapshot's PerCorePercent for the current frame.
-	topoInit    bool
-	topoErr     error
-	topoTreemap *treemap.Treemap
-	topoNodeCPU map[*layout.Node]int32
-	topoLoad    []uint8
+	//   topoNodeObj    layout node → source TopoObject (live tint + hover detail).
+	//   topoLoad       per-frame per-core busy%; aliases the snapshot slice.
+	//   topoFreq       per-frame per-core MHz; aliases the snapshot slice.
+	//   topoFreqMaxMHz running max core MHz, for normalising the freq tint.
+	//   topoDim        which dimension the continuous tint encodes (% or MHz).
+	topoInit       bool
+	topoErr        error
+	topoTreemap    *treemap.Treemap
+	topoNodeObj    map[*layout.Node]*cpu.TopoObject
+	topoLoad       []uint8
+	topoFreq       []uint32
+	topoFreqMaxMHz uint32
+	topoDim        topoDimE
 }
 
 var _ app.AppI = (*App)(nil)
