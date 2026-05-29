@@ -1,0 +1,1200 @@
+//go:build llm_generated_opus47
+
+package play
+
+import (
+	"fmt"
+	"math"
+	"os"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/rs/zerolog"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker/evaluator"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
+)
+
+// persistKeyLastSql is the runtime.persist key the playground uses to
+// stash the editor buffer between sessions. Single NATS token (no
+// dots) per the persist.Client contract; matches the manifest's
+// PersistedKeys entry.
+const (
+	persistKeyLastSql           = "lastSql"
+	persistKeyTimelineBandsSql  = "timelineBandsSql"
+)
+
+const (
+	defaultPageSize   = 100
+	editorDesiredRows = 10
+	// Column-width heuristic bounds (px).
+	colMinWidth      = 100.0
+	colMaxWidth      = 420.0
+	colCharPx        = 7.0 // approx monospace-ish character advance
+	colSampleRows    = 64
+	historyLabelChar = 46 // one-line label fit target
+	// previewDebounce is the idle window the editor buffer must sit for before
+	// the nanopass formatting pipeline runs. Parsing is ~1–10 ms so debouncing
+	// keeps the UI from thrashing under continuous keystrokes.
+	previewDebounce = 300 * time.Millisecond
+)
+
+// Stable tab identifiers for the dock area. Persistent egui_dock state is
+// keyed off these — never renumber and never reuse a retired value.
+const (
+	dockTabEditor     uint64 = 1
+	dockTabHistory    uint64 = 2
+	dockTabTable      uint64 = 3
+	dockTabProjection uint64 = 4
+	dockTabDetail     uint64 = 5
+	dockTabPreview    uint64 = 6
+	dockTabTimeline   uint64 = 7
+)
+
+type PlayApp struct {
+	ids          *c.WidgetIdStack
+	store        *QueryStore
+	client       *Client
+
+	// density resolves IDS spacing tokens at the active preset
+	// (ADR-0032 §SD2); cached once at NewPlayApp.
+	density styletokens.DensityE
+
+	sql         string
+	lastSentSql string
+	requestRun  bool
+	selectedRow      int64
+	cards            *CardDriver
+	projector        *Projector
+
+	// projFSM mirrors projector lifecycle into a fsmview.Machine so the
+	// renderer can show a chip + drill-down popup (table / graph /
+	// history). statetrooper FSM is render-thread-only; renderProjection
+	// reads the projector's snapshot status and forwards into
+	// projFSM.Transition each frame. Rule declarations enumerate every
+	// observed status transition so the popup graph view paints the full
+	// lifecycle.
+	projFSM       *fsmview.Machine[projectorStatusE]
+	projFSMWidget *fsmview.Widget[projectorStatusE]
+	timeline              *TimelineDriver
+	timelineBandsSql      string
+	timelineNowLineEnabled bool
+
+	// colorByFeature picks the EntityFeatures field whose value drives the
+	// projection scatter's per-point colour. -1 means monochrome (default);
+	// 0..card.NumFeatures-1 indexes card.FeatureNames(). Persisted across
+	// recomputes so the user's chosen colouring sticks.
+	colorByFeature int8
+
+	// Auto-run + screenshot (driven by env vars for one-shot captures).
+	AutoRun        bool
+	ScreenshotPath string
+	ExitOnShot     bool
+	frame          int
+	didAutoRun     bool
+	shotPhase      int // 0=idle, 1=settle, 2=requested, 3=done
+	shotSettle     int
+
+	// Debounced canonical-form preview.
+	lastSeenSql  string
+	lastEditAt   time.Time
+	formatted    string
+	formattedFor string
+	formattedErr error
+
+	// Results pagination. pagerSeenExecuted tracks the QueryStore's
+	// "executed" timestamp — when it advances, the pager snaps back to
+	// page 0 because the dataset changed.
+	pager             *Pager
+	pagerSeenExecuted time.Time
+
+	// Column-width cache, keyed by Arrow *Schema pointer. Widths are sampled
+	// once on schema change; recomputing per-frame would make the table reflow
+	// every time the pager advances because different pages have different
+	// string lengths.
+	colWidthsForSchema *arrow.Schema
+	colWidths          []float32
+
+	// Analytical FunctionEvaluator that runs alongside the canonicalisers in
+	// updatePreview. Its handlers return ControlFlow{PassDiscardOutput} so
+	// the runner forwards the input unchanged; the side channel is the
+	// OnObservation callback fired per visited registered call. Built once
+	// in NewPlayApp and reused across debounce ticks.
+	affordanceEval *passes.FunctionEvaluator
+
+	// Observations populated by affordanceEval each pipeline run; cleared at
+	// the start of updatePreview so the slice mirrors the current SQL.
+	observations []nanopass.Observation
+
+	// Affordance instances rendered against observations. Order is checked
+	// in registration order; first Matches wins. State (test inputs etc.)
+	// lives on the affordance struct so it survives across debounce ticks.
+	affordances []sqlAffordanceI
+
+	// Shared regex test-input buffer for affordances that match against a
+	// user-typed string (currently: multiMatchIndexAny).
+	affordanceTestInput string
+
+	// Param-slot UI (see play_param_render.go). paramSlots mirrors what
+	// the debounced parse extracted from inst.sql; paramDrafts owns the
+	// stable string pointers each widget binds via SendRespVal;
+	// paramSyncedValues is the drift-detection cache that mirrors the
+	// editor's leading SET prelude so the post-render sync stays a
+	// no-op until a widget mutates a draft. paramWidgets is the
+	// match-order registry — pair widget first, scalar text fallback
+	// last. paramHidePrelude (default false) is the "show/hide
+	// parameter prelude" toggle; when true, the editor TextEdit binds
+	// to paramSqlEdit (the residual after slicing the prelude) and a
+	// secondary read-only label renders the prelude above the widgets.
+	paramSlots             []paramSlot
+	paramDrafts            map[string]*string
+	paramSyncedValues      map[string]string
+	paramWidgets           []paramWidgetI
+	paramEvaluator         *evaluator.Evaluator
+	paramHidePrelude       bool
+	paramSqlEdit           string
+	paramSqlEditSyncedFrom string
+
+	// M2 capability handles, populated by SetCapabilities from the
+	// runtime's MountCtx. Both may be nil when running outside the
+	// carousel (legacy CLI command, unit tests, screenshot tour).
+	// bus drives "Load .sql" via fs.dialog.read; storage persists
+	// the SQL buffer between sessions on Run + Unmount.
+	bus     app.BusI
+	storage app.StorageI
+	logger  zerolog.Logger
+
+	// pickMu guards the goroutine-side load state. The Load button
+	// fires loadFromPicker in a goroutine; the Render loop reads
+	// pickInFlight + pickErr under the lock to render the status
+	// indicator.
+	pickMu       sync.Mutex
+	pickInFlight bool
+	pickErr      string
+}
+
+// SetCapabilities is the host-side seam for wiring the runtime's M2
+// capabilities (ADR-0026). Called once from PlayLauncher.Mount with
+// ctx.Bus() and ctx.Storage(). Either argument may be nil — the
+// "Load .sql" button stays hidden when bus is nil; persist save/
+// restore is skipped when storage is nil.
+func (inst *PlayApp) SetCapabilities(bus app.BusI, storage app.StorageI, logger zerolog.Logger) {
+	inst.bus = bus
+	inst.storage = storage
+	inst.logger = logger
+
+	// Wire the time-range evaluator + fan it out to widgets that
+	// opt into evaluatorAwareI. Nil-bus or constructor failure
+	// leaves paramEvaluator nil; the range widget then declines
+	// matches and the simpler DateTimePickerButton-pair widget
+	// (registered next in the order) claims the from/to slots.
+	//
+	// Only fan the evaluator out when actually constructed —
+	// passing a typed-nil *evaluator.Evaluator through an interface
+	// parameter would land non-nil on the widget side and trip the
+	// classic Go interface-nil trap.
+	ev, evErr := evaluator.NewEvaluator(bus, timerangepicker.PoolName)
+	if evErr != nil {
+		logger.Debug().Err(evErr).Msg("play: time-range evaluator unavailable (falling back to dateTimePairWidget)")
+		return
+	}
+	inst.paramEvaluator = ev
+	for _, w := range inst.paramWidgets {
+		if ea, ok := w.(evaluatorAwareI); ok {
+			ea.SetTimeRangeEvaluator(ev)
+		}
+	}
+}
+
+// RestorePersistedSql replaces inst.sql with the value stored under
+// persistKeyLastSql when storage is wired and the value is non-empty.
+// Best-effort: errors are logged at debug level and the existing
+// inst.sql stays. The caller (PlayLauncher.Mount) decides precedence:
+// today it lets SPINNAKER_PLAY_SQL win over persist, persist win over
+// the literal default.
+func (inst *PlayApp) RestorePersistedSql() {
+	if inst.storage == nil {
+		return
+	}
+	value, found, err := inst.storage.Get(persistKeyLastSql)
+	if err != nil {
+		inst.logger.Debug().Err(err).Msg("play: persist restore failed (continuing with default sql)")
+		return
+	}
+	if !found || len(value) == 0 {
+		return
+	}
+	inst.sql = string(value)
+}
+
+// PersistSql writes inst.sql under persistKeyLastSql when storage is
+// wired. Called on Run + Unmount; errors are logged at debug level
+// (audit-trail concern, not a user-visible failure).
+func (inst *PlayApp) PersistSql() {
+	if inst.storage == nil {
+		return
+	}
+	err := inst.storage.Set(persistKeyLastSql, []byte(inst.sql))
+	if err != nil {
+		inst.logger.Debug().Err(err).Msg("play: persist save failed")
+	}
+}
+
+// RestorePersistedTimelineBandsSql loads the bands-SQL editor buffer
+// from the persist cap. Same best-effort semantics as RestorePersistedSql.
+func (inst *PlayApp) RestorePersistedTimelineBandsSql() {
+	if inst.storage == nil {
+		return
+	}
+	value, found, err := inst.storage.Get(persistKeyTimelineBandsSql)
+	if err != nil {
+		inst.logger.Debug().Err(err).Msg("play: persist restore (bands) failed")
+		return
+	}
+	if !found || len(value) == 0 {
+		return
+	}
+	inst.timelineBandsSql = string(value)
+}
+
+// PersistTimelineBandsSql writes the current bands-SQL editor buffer
+// to the persist cap. Called from Unmount so the user's bands query
+// survives session restart; the value-write happens unconditionally
+// so an empty buffer also persists (and overrides a previous value).
+func (inst *PlayApp) PersistTimelineBandsSql() {
+	if inst.storage == nil {
+		return
+	}
+	err := inst.storage.Set(persistKeyTimelineBandsSql, []byte(inst.timelineBandsSql))
+	if err != nil {
+		inst.logger.Debug().Err(err).Msg("play: persist save (bands) failed")
+	}
+}
+
+// loadFromPicker is the goroutine driving an fs.dialog.read +
+// fs.handle.{uuid}.read round-trip. State updates happen under
+// pickMu so the Render loop sees a consistent snapshot. Errors
+// surface on inst.pickErr and render below the toolbar as a small
+// muted label; the editor buffer is untouched on failure.
+//
+// Matches capdemo.runPick — the goroutine pattern is the
+// recommended template for any synchronous Request that the Frame
+// goroutine can't block on directly.
+func (inst *PlayApp) loadFromPicker() {
+	if inst.bus == nil {
+		return
+	}
+	inst.setLoadBusy(true)
+	defer inst.setLoadBusy(false)
+
+	rawReply, rerr := inst.bus.Request(fsbroker.SubjectDialogRead, nil)
+	if rerr != nil {
+		inst.setLoadErr("fs.dialog.read: " + rerr.Error())
+		return
+	}
+	dr, jerr := fsbroker.UnmarshalDialogReply(rawReply)
+	if jerr != nil {
+		inst.setLoadErr("dialog reply parse: " + jerr.Error())
+		return
+	}
+	if !dr.Granted {
+		inst.setLoadErr("dialog denied: " + dr.Reason)
+		return
+	}
+	body, rerr := inst.bus.Request(dr.HandleSubjectPrefix+".read", nil)
+	if rerr != nil {
+		inst.setLoadErr("handle read: " + rerr.Error())
+		return
+	}
+	// Successful load — replace the editor buffer. The next debounce
+	// tick will re-format and the next Run will persist the new value.
+	inst.pickMu.Lock()
+	inst.sql = string(body)
+	inst.pickErr = ""
+	inst.pickMu.Unlock()
+}
+
+func (inst *PlayApp) setLoadBusy(b bool) {
+	inst.pickMu.Lock()
+	inst.pickInFlight = b
+	if b {
+		inst.pickErr = ""
+	}
+	inst.pickMu.Unlock()
+}
+
+func (inst *PlayApp) setLoadErr(s string) {
+	inst.pickMu.Lock()
+	inst.pickErr = s
+	inst.pickMu.Unlock()
+}
+
+func NewPlayApp(client *Client, store *QueryStore, initialSQL string) *PlayApp {
+	cardIds := c.NewWidgetIdStack()
+	pagerIds := c.NewWidgetIdStack()
+	projectorIds := c.NewWidgetIdStack()
+	projFSMIds := c.NewWidgetIdStack()
+	timelineIds := c.NewWidgetIdStack()
+	cards := NewCardDriver(cardIds, nil)
+	projFSM := newProjectorFSM()
+	inst := &PlayApp{
+		ids:            c.NewWidgetIdStack(),
+		store:          store,
+		client:         client,
+		density:        styletokens.DensityFromEnv(),
+		sql:            initialSQL,
+		selectedRow:    -1,
+		cards:          cards,
+		projector:      NewProjector(projectorIds, cards),
+		projFSM:        projFSM,
+		projFSMWidget: fsmview.New(projFSMIds, "projector-fsm", projFSM).
+			Title("UMAP projector").
+			ShowSubscript(true).
+			AutoAnchor(true),
+		colorByFeature: -1,
+		pager:          NewPager(pagerIds, int64(defaultPageSize)),
+		affordances: []sqlAffordanceI{
+			&multiMatchAffordance{},
+		},
+		paramDrafts:       map[string]*string{},
+		paramSyncedValues: map[string]string{},
+		// Range widget first so the Grafana-style picker (when the
+		// host has wired an evaluator via SetCapabilities) folds the
+		// from/to pair; otherwise its Matches returns ok=false and
+		// the simpler dateTimePairWidget claims the slots. Scalar
+		// text widget is the tail catch-all — one TextEdit per
+		// remaining slot.
+		paramWidgets: []paramWidgetI{
+			newDateTimeRangeWidget(),
+			newDateTimePairWidget(),
+			newScalarTextWidget(),
+		},
+	}
+	inst.timeline = NewTimelineDriver(timelineIds, &inst.selectedRow, client, &inst.timelineBandsSql, &inst.timelineNowLineEnabled)
+	inst.affordanceEval = newAffordanceEvaluator(&inst.observations)
+	return inst
+}
+
+// newProjectorFSM seeds the fsmview.Machine with every transition the
+// Projector is known to take, plus operator-friendly edge labels. The
+// rule set mirrors the actual mutation sites in play_projection.go
+// (Start / Cancel / run-goroutine / fail / markCancelled / Invalidate);
+// any divergence shows up as a "transition rejected" log warning in
+// renderProjection's mirror step, and a missing arrow in the popup
+// graph view.
+func newProjectorFSM() *fsmview.Machine[projectorStatusE] {
+	m := fsmview.NewMachine(projectorStatusIdle, 64,
+		fsmview.WithLabel(func(s projectorStatusE) string { return s.String() }),
+		fsmview.WithStateOrder([]projectorStatusE{
+			projectorStatusIdle,
+			projectorStatusExtracting,
+			projectorStatusRunning,
+			projectorStatusCancelling,
+			projectorStatusCancelled,
+			projectorStatusDone,
+			projectorStatusFailed,
+		}),
+	)
+	m.AddRule(projectorStatusIdle, projectorStatusExtracting).
+		AddRule(projectorStatusExtracting, projectorStatusRunning, projectorStatusCancelling, projectorStatusFailed).
+		AddRule(projectorStatusRunning, projectorStatusDone, projectorStatusCancelling, projectorStatusFailed).
+		AddRule(projectorStatusCancelling, projectorStatusCancelled, projectorStatusFailed).
+		AddRule(projectorStatusDone, projectorStatusIdle, projectorStatusExtracting).
+		AddRule(projectorStatusFailed, projectorStatusIdle, projectorStatusExtracting).
+		AddRule(projectorStatusCancelled, projectorStatusIdle, projectorStatusExtracting).
+		EdgeLabel(projectorStatusIdle, projectorStatusExtracting, "Compute").
+		EdgeLabel(projectorStatusExtracting, projectorStatusRunning, "features ready").
+		EdgeLabel(projectorStatusExtracting, projectorStatusCancelling, "Cancel").
+		EdgeLabel(projectorStatusExtracting, projectorStatusFailed, "fail").
+		EdgeLabel(projectorStatusRunning, projectorStatusDone, "UMAP fit").
+		EdgeLabel(projectorStatusRunning, projectorStatusCancelling, "Cancel").
+		EdgeLabel(projectorStatusRunning, projectorStatusFailed, "fail").
+		EdgeLabel(projectorStatusCancelling, projectorStatusCancelled, "drained").
+		EdgeLabel(projectorStatusCancelling, projectorStatusFailed, "fail").
+		EdgeLabel(projectorStatusDone, projectorStatusIdle, "Invalidate").
+		EdgeLabel(projectorStatusDone, projectorStatusExtracting, "Recompute").
+		EdgeLabel(projectorStatusFailed, projectorStatusIdle, "Invalidate").
+		EdgeLabel(projectorStatusFailed, projectorStatusExtracting, "retry").
+		EdgeLabel(projectorStatusCancelled, projectorStatusIdle, "Invalidate").
+		EdgeLabel(projectorStatusCancelled, projectorStatusExtracting, "retry")
+	return m
+}
+
+func (inst *PlayApp) Render() error {
+	ids := inst.ids
+	ids.Reset()
+
+	// One Snapshot per frame, with a matching release at end-of-frame.
+	// Tab bodies are captured into detached buffers by the DockArea
+	// iterator and flushed when the dock scope exits — all per-frame
+	// state syncs (selection clamp, pager configure, projector
+	// invalidate) must run here, before any tab body executes, so the
+	// values the tab callees observe are consistent.
+	rec, schema, numRows, elapsed, summary, executed, err := inst.store.Snapshot()
+	if rec != nil {
+		defer rec.Release()
+		if inst.selectedRow < 0 || inst.selectedRow >= rec.NumRows() {
+			inst.selectedRow = 0
+		}
+		if executed != inst.pagerSeenExecuted {
+			inst.pagerSeenExecuted = executed
+			inst.pager.Reset()
+		}
+		inst.pager.Configure(rec.NumRows())
+		inst.projector.Invalidate(schema, executed)
+	}
+
+	// Run the canonical-form pipeline once per frame regardless of which
+	// tab is active. The pipeline is debounced internally (previewDebounce),
+	// so most frames are a no-op; running it here keeps the Preview tab's
+	// output fresh even when the user has the Editor tab hidden.
+	inst.updatePreview()
+
+	// Layout inside the runtime-created window scope (ADR-0026
+	// Amendment 2026-05-12). Mirrors imztop's shape: a pinned topbar
+	// with controls, a single DockArea hosting the body panes as
+	// drag-rearrangeable tabs, and a non-resizable status bar for
+	// per-result metrics. The DockArea's initial split lives in the
+	// InitRoot/Split block; once the user drags, the persistent
+	// dock_state on the Rust side wins.
+	for range c.PanelTopInside(ids.PrepareStr("topbar")).Resizable(false).KeepIter() {
+		inst.renderTopBar()
+	}
+	for range c.PanelBottomInside(ids.PrepareStr("status")).Resizable(false).KeepIter() {
+		inst.renderStatus(rec, numRows, elapsed, summary, err)
+	}
+	for range c.PanelCentralInside().KeepIter() {
+		for dock := range c.DockArea(ids.PrepareStr("play-dock")) {
+			editLeaf := dock.InitRoot(dockTabEditor, dockTabHistory)
+			bodyLeaf := dock.Split(editLeaf, c.DockBelow, 0.45,
+				dockTabTable, dockTabProjection, dockTabTimeline)
+			_ = dock.Split(bodyLeaf, c.DockRight, 0.70, dockTabDetail)
+			_ = dock.Split(editLeaf, c.DockRight, 0.55, dockTabPreview)
+
+			for range dock.Tab(dockTabEditor, "Editor") {
+				inst.renderEditorTab()
+			}
+			for range dock.Tab(dockTabPreview, "Preview") {
+				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+					inst.renderPreviewTab()
+				}
+			}
+			for range dock.Tab(dockTabHistory, "History") {
+				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+					inst.renderHistoryTab()
+				}
+			}
+			for range dock.Tab(dockTabTable, "Table") {
+				inst.renderTableTab(rec, schema, numRows, err)
+			}
+			for range dock.Tab(dockTabProjection, "Projection") {
+				inst.renderProjectionTab(rec, err)
+			}
+			for range dock.Tab(dockTabTimeline, "Timeline") {
+				inst.renderTimelineTab(rec, schema, executed, err)
+			}
+			for range dock.Tab(dockTabDetail, "Detail") {
+				inst.renderDetailTab(rec, schema, inst.selectedRow)
+			}
+		}
+	}
+
+	// Execute after rendering — keeps the UI responsive on the submit frame.
+	if inst.requestRun && !inst.store.IsLoading() {
+		inst.requestRun = false
+		sql := strings.TrimSpace(inst.sql)
+		if sql != "" {
+			inst.lastSentSql = sql
+			inst.store.Execute(sql)
+			// Persist on Run: the user's intent is "this is the SQL I
+			// want to keep around". Save-on-Unmount is the fallback
+			// for sessions that never Run; doing both keeps the
+			// persistence point user-intent-anchored.
+			inst.PersistSql()
+		}
+	}
+
+	inst.frame++
+	inst.autoShotTick()
+	c.RequestRepaint()
+	return nil
+}
+
+// autoShotTick implements: first frame → kick auto-run; once results
+// settle → request screenshot; wait for the PNG to land on disk → quit
+// if asked. Driven by PlayApp.AutoRun / ScreenshotPath / ExitOnShot.
+//
+// The disk-stat gate in shotPhase 2 closes a race: c.RequestScreenshot
+// only queues an egui::ViewportCommand::Screenshot, and the actual
+// readback + PNG encode happens asynchronously across the next 1+
+// frames (depending on GPU pipeline depth). If we sent
+// ContextSendViewPortCommandClose immediately after RequestScreenshot,
+// the Rust event loop could exit before handle_screenshot_event ever
+// observed the Screenshot input event — eframe returned Ok() and the
+// PNG never made it to disk. Polling os.Stat is the only timing-
+// independent signal the Go side has that the Rust write_screenshot_png
+// path actually completed.
+func (inst *PlayApp) autoShotTick() {
+	if inst.AutoRun && !inst.didAutoRun && inst.frame >= 3 {
+		inst.didAutoRun = true
+		inst.requestRun = true
+	}
+	if inst.ScreenshotPath == "" || inst.shotPhase == 3 {
+		return
+	}
+	switch inst.shotPhase {
+	case 0:
+		// Wait until a query has completed with results.
+		if inst.didAutoRun && !inst.store.IsLoading() {
+			rec, _, _, _, _, _, _ := inst.store.Snapshot()
+			if rec != nil {
+				rec.Release()
+				inst.shotPhase = 1
+				inst.shotSettle = inst.frame
+			}
+		}
+	case 1:
+		// Let layout settle for a few frames so the table is fully
+		// laid out, AND wait for the canonical-form preview to
+		// populate (updatePreview is debounced 300ms ≈ 18 frames at
+		// 60fps after the SQL changes). Without the preview gate the
+		// Preview tab captures its placeholder hint instead of the
+		// syntax-highlighted SQL. A 60-frame ceiling guards against
+		// the formatter never running (parse error already covered
+		// by formattedErr != nil).
+		previewReady := inst.formatted != "" || inst.formattedErr != nil
+		settled := inst.frame-inst.shotSettle >= 5
+		ceiling := inst.frame-inst.shotSettle >= 60
+		if settled && (previewReady || ceiling) {
+			c.RequestScreenshot(inst.ScreenshotPath)
+			inst.shotPhase = 2
+		}
+	case 2:
+		// Wait until the PNG actually exists on disk before quitting.
+		// See the function docstring for the race this closes.
+		if fi, err := os.Stat(inst.ScreenshotPath); err == nil && fi.Size() > 0 {
+			inst.shotPhase = 3
+			if inst.ExitOnShot {
+				c.ContextSendViewPortCommandClose()
+			}
+		}
+	}
+}
+
+// renderTopBar is the pinned controls row at the window top: Run/Cancel
+// with the loading spinner, Load .sql Powerbox button (only when the
+// runtime wired a bus client), and the ClickHouse connection label.
+// History/Detail/Projection visibility lives in the DockArea tab bar,
+// so the legacy toggle buttons are gone.
+func (inst *PlayApp) renderTopBar() {
+	ids := inst.ids
+	for range c.Horizontal().KeepIter() {
+		if inst.store.IsLoading() {
+			c.Spinner().Size(16).Send()
+			if c.Button(ids.PrepareStr("cancel"), c.Atoms().Text("Cancel").Keep()).
+				SendResp().HasPrimaryClicked() {
+				inst.store.Cancel()
+			}
+		} else {
+			if c.Button(ids.PrepareStr("run"), c.Atoms().Text("Run").Keep()).
+				SendResp().HasPrimaryClicked() {
+				inst.requestRun = true
+			}
+		}
+
+		// Load .sql via fs Powerbox — only when the runtime wired a
+		// bus client. The picker overlay lives at the host level
+		// (carousel renders pickerbridge between Frame and metrics);
+		// this button only kicks the fs.dialog.read request that puts
+		// a pending entry on the broker's queue.
+		var pickErr string
+		if inst.bus != nil {
+			c.Separator().Vertical().Send()
+			inst.pickMu.Lock()
+			busy := inst.pickInFlight
+			pickErr = inst.pickErr
+			inst.pickMu.Unlock()
+			if busy {
+				c.Label("Loading…").Send()
+			} else {
+				if c.Button(ids.PrepareStr("loadSql"),
+					c.Atoms().Text("Load .sql…").Keep()).
+					SendResp().HasPrimaryClicked() {
+					go inst.loadFromPicker()
+				}
+			}
+			if pickErr != "" {
+				c.Separator().Vertical().Send()
+				for rt := range c.RichTextLabel("Load failed: " + pickErr) {
+					rt.Small().Weak()
+				}
+			}
+		}
+
+		if inst.client != nil {
+			c.Separator().Vertical().Send()
+			c.Label(fmt.Sprintf("%s  as %s",
+				inst.client.cfg.URL, inst.client.cfg.User)).
+				Truncate().Send()
+		}
+
+		// Hide-prelude toggle (visible only when there's at least one
+		// param slot — no point in offering it for queries with no
+		// placeholders). Mutates the canonical state on the next
+		// frame; the editor binding flips at the start of the next
+		// renderEditorTab.
+		if len(inst.paramSlots) > 0 {
+			c.Separator().Vertical().Send()
+			c.Checkbox(ids.PrepareStr("hidePrelude"), inst.paramHidePrelude, "Hide prelude").
+				SendRespVal(&inst.paramHidePrelude)
+		}
+	}
+}
+
+// renderEditorTab is the Editor dock tab body: multi-line SQL editor
+// followed by the SQL function affordances. The syntax-highlighted
+// canonical form lives in its own Preview tab (split to the right by
+// default); the toolbar lives in the topbar.
+//
+// The TextEdit's desired_rows is computed from the previous frame's
+// captured ui.available_size (R18) so the editor fills the dock pane
+// vertically. egui's TextEdit otherwise allocates a fixed
+// desired_rows × row_height and leaves the rest of the pane blank.
+// First frame falls back to editorDesiredRows; the editor's own
+// internal scroll handles content overflow.
+func (inst *PlayApp) renderEditorTab() {
+	// Approximate row height for Monospace at default text-style size
+	// (TextStyle::Monospace ≈ 14 px + ~2 px line spacing). The reserve
+	// covers chrome below the editor: a thin bottom margin always, plus
+	// room for the affordances block when at least one observation was
+	// captured by the most recent updatePreview run.
+	const editorRowPx float32 = 16.0
+	const editorBaseReservePx float32 = 8.0
+	const editorAffordanceReservePx float32 = 120.0
+
+	rows := uint32(editorDesiredRows)
+	avail := c.CurrentApplicationState.StateManager.GetAvailableSize()
+	if !math.IsNaN(float64(avail.H)) && avail.H > 0 {
+		reserve := editorBaseReservePx
+		if len(inst.observations) > 0 {
+			reserve += editorAffordanceReservePx
+		}
+		usable := avail.H - reserve
+		if usable > 0 {
+			if r := uint32(usable / editorRowPx); r > rows {
+				rows = r
+			}
+		}
+	}
+
+	// Capture the dock pane's available height for next frame. Must run
+	// BEFORE the Vertical scope so it measures the full tab body, not
+	// the post-allocation cursor inside the Vertical (which would
+	// ratchet down each frame).
+	c.CaptureAvailableSize()
+
+	for range c.Vertical().KeepIter() {
+		// Editor binding. Default mode keeps the leading SET prelude
+		// inside the main editor; hide-prelude mode slices the prelude
+		// off, binds the editor to the residual-only mirror, and
+		// recomposes inst.sql when the residual mirror diverges. The
+		// prelude itself is re-rendered as a small read-only label
+		// (and the widget section below stays authoritative for
+		// editing values).
+		inst.renderSqlEditor(rows)
+
+		// Param-slot widgets render between the editor and the
+		// affordance block; they author the leading SET prelude.
+		inst.renderParamSlots()
+
+		// SQL function affordances (regex testers etc.) for call sites the
+		// affordanceEval observed during updatePreview.
+		inst.renderAffordances()
+	}
+}
+
+// sqlTextEditField is the shared multi-line CodeEditor TextEdit
+// builder for the SQL editor surface — three variants reuse this
+// single chain (canonical, fallback when slicing fails, residual
+// mirror in hide mode). idSlot keeps each instance's stable widget
+// id distinct; valuePtr is the bound buffer (both displayed value
+// and SendRespVal target); hint is the empty-buffer placeholder.
+func (inst *PlayApp) sqlTextEditField(idSlot string, valuePtr *string, hint string, rows uint32) {
+	c.TextEdit(inst.ids.PrepareStr(idSlot), *valuePtr, true).
+		CodeEditor().
+		DesiredRows(rows).
+		DesiredWidth(float32(math.Inf(1))).
+		HintText(hint).
+		SendRespVal(valuePtr)
+}
+
+// renderSqlEditor wires the main SQL TextEdit and the show/hide
+// parameter-prelude toggle. Default mode binds the editor to
+// inst.sql verbatim — the user sees and can hand-edit the SET
+// prelude. Hide mode delegates the canonical/mirror state machine
+// to recomposeMirror (see play_param_inject.go) and renders the
+// sliced-off prelude as a read-only label above the residual editor.
+func (inst *PlayApp) renderSqlEditor(rows uint32) {
+	const mainHint = "-- type SQL, press Run"
+	if !inst.paramHidePrelude {
+		inst.sqlTextEditField("sqlEditor", &inst.sql, mainHint, rows)
+		return
+	}
+
+	pre := recomposeMirror(inst.sql, inst.paramSqlEdit, inst.paramSqlEditSyncedFrom)
+	if !pre.OK {
+		// Parse broken — fall back to the unsliced editor so the
+		// user can fix the syntax. Don't try to slice a buffer we
+		// don't understand.
+		inst.sqlTextEditField("sqlEditor", &inst.sql, mainHint, rows)
+		return
+	}
+	inst.sql = pre.Canonical
+	inst.paramSqlEdit = pre.Mirror
+	inst.paramSqlEditSyncedFrom = pre.SyncedFrom
+
+	if pre.Prelude != "" {
+		for rt := range c.RichTextLabel(strings.TrimRight(pre.Prelude, "\n")) {
+			rt.Small().Weak().Monospace()
+		}
+	}
+	inst.sqlTextEditField("sqlEditorResidual", &inst.paramSqlEdit,
+		"-- type SQL (prelude hidden)", rows)
+}
+
+// renderPreviewTab is the Preview dock tab body: the canonical-form
+// SQL rendered as a syntax-highlighted CodeView. The pipeline itself
+// runs once per frame from Render() (debounced via previewDebounce),
+// so this helper just renders the latest cached output.
+func (inst *PlayApp) renderPreviewTab() {
+	ids := inst.ids
+	switch {
+	case inst.formattedErr != nil:
+		for rt := range c.RichTextLabel("parse: " + inst.formattedErr.Error()) {
+			rt.Small().Weak()
+		}
+	case inst.formatted != "":
+		c.CodeView(ids.PrepareStr("sqlPreview"),
+			codeview.BuildSql(inst.formatted)).
+			Wrap().
+			Send()
+	default:
+		for rt := range c.RichTextLabel("Type SQL in the Editor tab to see its canonical form here.") {
+			rt.Small().Weak()
+		}
+	}
+}
+
+// updatePreview runs the nanopass formatting pipeline on inst.sql when the
+// buffer has been idle for previewDebounce. No-op if nothing changed or the
+// debounce window hasn't elapsed yet.
+func (inst *PlayApp) updatePreview() {
+	if inst.sql != inst.lastSeenSql {
+		inst.lastSeenSql = inst.sql
+		inst.lastEditAt = time.Now()
+	}
+	if inst.sql == inst.formattedFor {
+		return
+	}
+	if time.Since(inst.lastEditAt) < previewDebounce {
+		return
+	}
+	inst.formattedFor = inst.sql
+	// Reset observations: the slice is populated by affordanceEval's
+	// OnObservation callback during the pipeline run below. Whatever was
+	// there is for the previous SQL.
+	inst.observations = inst.observations[:0]
+	raw := strings.TrimSpace(inst.sql)
+	if raw == "" {
+		inst.formatted = ""
+		inst.formattedErr = nil
+		inst.refreshParamSlotsFromParse(nil, nil)
+		return
+	}
+	// Param-slot extraction runs unconditionally on the raw buffer:
+	// failures here only suppress widget rendering for the broken
+	// frame, never the canonical-form preview itself. One parse
+	// (extractSlotsAndParams) covers both the slot list and the
+	// SET-prelude value cache.
+	if slots, vals, slotErr := extractSlotsAndParams(raw); slotErr == nil {
+		inst.refreshParamSlotsFromParse(slots, vals)
+	}
+	// Reparse first so syntax errors surface with line/column info —
+	// the Sequence's error drops position because its internal listener
+	// does not capture it.
+	if err := formatSyntaxError(raw); err != nil {
+		inst.formatted = ""
+		inst.formattedErr = err
+		return
+	}
+	// affordanceEval is analytical: its handlers return discard ControlFlow,
+	// so the runner forwards `raw` to the canonicalisers unchanged. The
+	// side effect is OnObservation firing per detected call site.
+	out, err := nanopass.Sequence("sqlPreview",
+		inst.affordanceEval.Pass(),
+		passes.StripComments,
+		passes.CanonicalizeKeywordCase,
+		passes.CanonicalizeWhitespace,
+		passes.RemoveRedundantParens,
+	).Run(raw)
+	if err != nil {
+		inst.formatted = ""
+		inst.formattedErr = err
+		return
+	}
+	inst.formatted = out
+	inst.formattedErr = nil
+}
+
+// renderStatus is the bottom-bar status line. Per-frame snapshot values
+// are passed in from Render() so this helper does not take its own
+// Snapshot+Release — the frame already owns one retained reference.
+func (inst *PlayApp) renderStatus(rec arrow.RecordBatch, numRows int64, elapsed time.Duration, summary Summary, err error) {
+	for range c.Horizontal().KeepIter() {
+		if err != nil {
+			c.Label(fmt.Sprintf("Error: %s", err.Error())).Truncate().Send()
+			return
+		}
+		if inst.store.IsLoading() {
+			c.Label("Running…").Send()
+			return
+		}
+		if rec == nil {
+			c.Label("Ready.").Send()
+			return
+		}
+		c.Label(fmt.Sprintf("Rows: %d", numRows)).Send()
+		c.Separator().Vertical().Send()
+		c.Label(fmt.Sprintf("Elapsed: %s", elapsed.Round(time.Millisecond))).Send()
+		c.Separator().Vertical().Send()
+		c.Label(fmt.Sprintf("Read: %d rows / %s",
+			summary.ReadRows, humanBytes(summary.ReadBytes))).Send()
+	}
+}
+
+// renderHistoryTab is the History dock tab body. The tab title already
+// labels the pane so the legacy heading and inner ScrollArea are gone;
+// the outer ScrollArea wrap lives in Render().
+func (inst *PlayApp) renderHistoryTab() {
+	ids := inst.ids
+	hist := inst.store.History()
+	// Newest first.
+	for i := len(hist) - 1; i >= 0; i-- {
+		entry := hist[i]
+		label := historyLabel(entry)
+		for range c.IdScope(ids.PrepareSeq(uint64(i))) {
+			if c.Button(ids.PrepareStr("entry"),
+				c.Atoms().Text(label).Keep()).
+				Frame(false).
+				Truncate().
+				SendResp().HasPrimaryClicked() {
+				inst.sql = entry.SQL
+			}
+		}
+	}
+}
+
+// renderTableTab is the Table dock tab body: pager strip atop the master
+// table, with a centred empty-state when there is no result yet.
+func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema, numRows int64, err error) {
+	if inst.store.IsLoading() && rec == nil {
+		inst.renderResultsLoading()
+		return
+	}
+	if err != nil && rec == nil {
+		for range c.ScrollArea().Vscroll(true).KeepIter() {
+			c.Label("Query failed:").Send()
+			c.Label(err.Error()).Wrap().Send()
+		}
+		return
+	}
+	if rec == nil {
+		inst.renderResultsEmpty()
+		return
+	}
+	inst.pager.Render()
+	inst.renderMasterTable(rec, schema, numRows)
+}
+
+// renderProjectionTab is the Projection dock tab body: the UMAP scatter
+// with its own toolbar/status. Same empty/error guards as the Table tab.
+func (inst *PlayApp) renderProjectionTab(rec arrow.RecordBatch, err error) {
+	if inst.store.IsLoading() && rec == nil {
+		inst.renderResultsLoading()
+		return
+	}
+	if err != nil && rec == nil {
+		c.Label("Query failed.").Send()
+		return
+	}
+	if rec == nil {
+		inst.renderResultsEmpty()
+		return
+	}
+	inst.renderProjection(rec)
+}
+
+// renderTimelineTab is the Timeline dock tab body: the calendar-axis
+// interval/point/annotation widget driven by the strict `_tl_*` column
+// contract. Same empty/error guards as the other result tabs; the contract
+// rejection hint is rendered inside TimelineDriver.Render so the SQL
+// author can debug from the panel without leaving it.
+func (inst *PlayApp) renderTimelineTab(rec arrow.RecordBatch, schema *arrow.Schema, executed time.Time, err error) {
+	if inst.store.IsLoading() && rec == nil {
+		inst.renderResultsLoading()
+		return
+	}
+	if err != nil && rec == nil {
+		c.Label("Query failed.").Send()
+		return
+	}
+	if rec == nil {
+		// Timeline-specific empty state: pair the generic "run a query"
+		// hint with the column contract so first-time users see what
+		// shape of SELECT the panel expects without leaving the tab.
+		for range c.Vertical().KeepIter() {
+			c.Label("Run a query to see the timeline.").Send()
+			c.AddSpace(8)
+			inst.timeline.RenderContractHelp()
+		}
+		return
+	}
+	inst.timeline.Render(rec, schema, executed)
+}
+
+// renderDetailTab is the Detail dock tab body: the leeway card stack for
+// the currently selected row. renderDetailPane already wraps in its own
+// ScrollArea, so the dock tab is called without an outer wrap.
+func (inst *PlayApp) renderDetailTab(rec arrow.RecordBatch, schema *arrow.Schema, row int64) {
+	if rec == nil {
+		for rt := range c.RichTextLabel("Run a query, then select a row to see its detail.") {
+			rt.Small().Weak()
+		}
+		return
+	}
+	if row < 0 || row >= rec.NumRows() {
+		for rt := range c.RichTextLabel("Select a row in the Table tab to see its detail.") {
+			rt.Small().Weak()
+		}
+		return
+	}
+	inst.renderDetailPane(rec, schema, row)
+}
+
+func (inst *PlayApp) renderResultsLoading() {
+	for range c.VerticalCentered().KeepIter() {
+		c.AddSpace(styletokens.Px(inst.density, 7))
+		c.Spinner().Size(32).Send()
+		c.Label("Executing query…").Send()
+	}
+}
+
+func (inst *PlayApp) renderResultsEmpty() {
+	for range c.VerticalCentered().KeepIter() {
+		c.AddSpace(styletokens.Px(inst.density, 7))
+		c.Label("Run a query to see results.").Send()
+	}
+}
+
+func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Schema, numRows int64) {
+	ids := inst.ids
+	ncols := int(rec.NumCols())
+	totalRows := rec.NumRows()
+	if totalRows > numRows {
+		totalRows = numRows
+	}
+
+	// Slice to the current page. The pager was Configure()d with totalRows
+	// before this function is called.
+	pageStart, pageEnd := inst.pager.Range()
+	if pageEnd > totalRows {
+		pageEnd = totalRows
+	}
+	if pageStart > pageEnd {
+		pageStart = pageEnd
+	}
+	displayRows := pageEnd - pageStart
+
+	// Leading "#" selector column (click to select row) + the data columns.
+	c.EtColumn(44.0).Resizable(false).Send()
+
+	// Emit per-column widths from the schema-keyed cache. Resampling every
+	// frame from the current page's content would reflow the table each
+	// time the pager advances, since different pages have different string
+	// lengths. The cache is invalidated when the Arrow *Schema pointer
+	// changes, i.e. on a new query.
+	inst.ensureColWidths(rec, schema, pageStart, pageEnd)
+	for col := 0; col < ncols; col++ {
+		c.EtColumn(inst.colWidths[col]).Resizable(true).Send()
+	}
+
+	et := c.EndETable(ids.PrepareStr("results"),
+		uint64(displayRows),
+		18.0, 1, 1).
+		Striped(true)
+	// Selection is stored as an absolute row index; translate to the
+	// page-local row when highlighting so the stripe lands on the right line.
+	if inst.selectedRow >= pageStart && inst.selectedRow < pageEnd {
+		et = et.SelectedRow(uint64(inst.selectedRow - pageStart))
+	}
+
+	// Visibility prefetch: the previous frame's egui_table::prepare pushed
+	// the visible (row, col) ranges + num_sticky_columns. We only emit
+	// cells and headers for columns egui_table will actually draw — cuts
+	// the per-frame cell count from ~pageSize*ncols to ~visibleRows*visibleCols.
+	// First frame has no prefetch yet; ok=false and ColVisible returns
+	// true for everything so egui_table can populate its block-map cache.
+
+	// Header: selector column + data column headers. Tabular data reads
+	// as monospace — column names align with their cells, type strings
+	// stay legible at small size, and the "#" gutter matches the row
+	// numbers below.
+	if vis, _ := et.ColVisible(0); vis {
+		for range et.Headers(0, 0) {
+			for rt := range c.RichTextLabel("#") {
+				rt.Weak().Monospace()
+			}
+		}
+	}
+	for col := 0; col < ncols; col++ {
+		if vis, _ := et.ColVisible(uint32(col + 1)); !vis {
+			continue
+		}
+		for range et.Headers(0, uint32(col+1)) {
+			field := schema.Field(col)
+			for rt := range c.RichTextLabel(field.Name) {
+				rt.Strong().Monospace()
+			}
+			for rt := range c.RichTextLabel(field.Type.String()) {
+				rt.Small().Weak().Monospace()
+			}
+		}
+	}
+
+	// Cells: every cell is a frameless selectable button so clicking anywhere
+	// on a row selects it (not just the "#" column). Button ids use a
+	// (row, col) composite seq to avoid collisions with other PrepareSeq
+	// sites in the app. `local` is the page-relative row; `absRow` is the
+	// index into the underlying record batch (used for formatCell and for
+	// the persistent selection).
+	const cellIdBase uint64 = 0x01000000
+	const cellColStride uint64 = 0x00010000
+	rowLo, rowHi := uint64(0), uint64(displayRows)
+	if rb, re, _, _, _, ok := et.VisibleRange(); ok {
+		rowLo, rowHi = rb, re
+		if rowHi > uint64(displayRows) {
+			rowHi = uint64(displayRows)
+		}
+	}
+	for local := rowLo; local < rowHi; local++ {
+		absRow := pageStart + int64(local)
+		selected := absRow == inst.selectedRow
+		rowBase := cellIdBase + uint64(absRow)*cellColStride
+
+		if vis, _ := et.ColVisible(0); vis {
+			for range et.Cells(local, 0) {
+				marker := fmt.Sprintf("%d", absRow+1)
+				if c.Button(ids.PrepareSeq(rowBase),
+					c.Atoms().RichText(marker).Monospace().EndRichText().Keep()).
+					Frame(false).
+					Selected(selected).
+					Truncate().
+					SendResp().HasPrimaryClicked() {
+					inst.selectedRow = absRow
+				}
+			}
+		}
+		for col := 0; col < ncols; col++ {
+			colPlus1 := uint32(col + 1)
+			if vis, _ := et.ColVisible(colPlus1); !vis {
+				continue
+			}
+			for range et.Cells(local, colPlus1) {
+				text := formatCell(rec, col, absRow)
+				if c.Button(ids.PrepareSeq(rowBase+uint64(col)+1),
+					c.Atoms().RichText(text).Monospace().EndRichText().Keep()).
+					Frame(false).
+					Selected(selected).
+					Truncate().
+					SendResp().HasPrimaryClicked() {
+					inst.selectedRow = absRow
+				}
+			}
+		}
+	}
+	et.Send()
+}
+
+// ensureColWidths samples per-column widths the first time a given schema
+// is seen and caches them. Subsequent calls with the same schema are a
+// cheap pointer compare. The sample window is the first colSampleRows rows
+// of whichever page happens to be active when the cache gets populated —
+// good enough for initial sizing; user resizes via drag persist separately
+// in egui_table's own state.
+func (inst *PlayApp) ensureColWidths(rec arrow.RecordBatch, schema *arrow.Schema, pageStart, pageEnd int64) {
+	if schema == inst.colWidthsForSchema && len(inst.colWidths) == schema.NumFields() {
+		return
+	}
+	ncols := schema.NumFields()
+	widths := make([]float32, ncols)
+	sampleN := pageEnd - pageStart
+	if sampleN > colSampleRows {
+		sampleN = colSampleRows
+	}
+	for col := 0; col < ncols; col++ {
+		maxChars := len(schema.Field(col).Name)
+		for r := int64(0); r < sampleN; r++ {
+			if n := len(formatCell(rec, col, pageStart+r)); n > maxChars {
+				maxChars = n
+			}
+		}
+		w := float32(maxChars)*colCharPx + 16.0
+		if w < colMinWidth {
+			w = colMinWidth
+		}
+		if w > colMaxWidth {
+			w = colMaxWidth
+		}
+		widths[col] = w
+	}
+	inst.colWidthsForSchema = schema
+	inst.colWidths = widths
+}
+
+func historyLabel(e HistoryEntry) string {
+	sql := strings.ReplaceAll(e.SQL, "\n", " ")
+	sql = strings.Join(strings.Fields(sql), " ")
+	status := fmt.Sprintf("%dr %s",
+		e.NumRows, e.Elapsed.Round(time.Millisecond))
+	if e.ErrorText != "" {
+		status = "ERR"
+	}
+	line := fmt.Sprintf("%s  %s  %s",
+		e.Executed.Format("15:04:05"), status, sql)
+	if len(line) > historyLabelChar {
+		line = line[:historyLabelChar-1] + "…"
+	}
+	return line
+}
+
+func humanBytes(b uint64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := uint64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
+}

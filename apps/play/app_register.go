@@ -1,0 +1,187 @@
+//go:build llm_generated_opus47
+
+package play
+
+import (
+	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/config/env"
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
+	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker"
+)
+
+// SPINNAKER_PLAY_* drive optional one-shot/scripted-screenshot
+// behaviours on the play HMI. Registered with the boxer-wide env
+// registry per ADR-0009.
+var (
+	SQLOverride = env.NewString(env.Spec{
+		Name:        "SPINNAKER_PLAY_SQL",
+		Description: "initial SQL buffer for the play HMI; non-empty wins over the persisted-session restore",
+		Category:    env.CategoryE("spinnaker-play"),
+	})
+
+	TimelineBandsSQLOverride = env.NewString(env.Spec{
+		Name:        "SPINNAKER_PLAY_TIMELINE_BANDS_SQL",
+		Description: "panel-local bands SQL for the Timeline tab; non-empty wins over the persisted-session restore",
+		Category:    env.CategoryE("spinnaker-play"),
+	})
+
+	AutoRun = env.NewString(env.Spec{
+		Name:        "SPINNAKER_PLAY_AUTORUN",
+		Description: "non-empty enables auto-run of the initial SQL on mount",
+		Category:    env.CategoryE("spinnaker-play"),
+	})
+
+	ScreenshotPath = env.NewPath(env.Spec{
+		Name:        "SPINNAKER_PLAY_SCREENSHOT",
+		Description: "if set, the play HMI captures a screenshot to this path after the first frame",
+		Category:    env.CategoryE("spinnaker-play"),
+	})
+
+	ExitOnShot = env.NewString(env.Spec{
+		Name:        "SPINNAKER_PLAY_EXIT_ON_SHOT",
+		Description: "non-empty exits the play HMI after writing SPINNAKER_PLAY_SCREENSHOT",
+		Category:    env.CategoryE("spinnaker-play"),
+	})
+)
+
+// PlayLauncher is the AppI wrapper for the SQL Playground. Late binding —
+// ClickHouse connection details are read from environment variables at
+// Mount, matching the legacy resolveApplication behaviour. A simple
+// LegacyFuncApp wouldn't suffice because the env-var-driven configuration
+// can't be captured cleanly at init time before the cli flag parser has run.
+type PlayLauncher struct {
+	inner *PlayApp
+}
+
+var _ app.AppI = (*PlayLauncher)(nil)
+
+func (inst *PlayLauncher) Manifest() (m app.Manifest) {
+	m = app.Manifest{
+		Id:       "github.com/stergiotis/boxer/apps/play",
+		Version:  "0.1.0",
+		Display:  "SQL playground",
+		Title:    "SQL Playground",
+		Icon:     "🛢",
+		Category: "Tools",
+		Surface:  app.SurfaceWindowed,
+		// fs Powerbox — Load .sql button publishes fs.dialog.read,
+		// then issues fs.handle.{uuid}.read once the broker mints
+		// the handle. ADR-0026 §SD7.
+		// ch.local.exec.timerangepicker — the from/to param-slot
+		// widget calls evaluator.Eval to resolve ClickHouse SQL
+		// time expressions to literal bounds; routes through the
+		// chlocalbroker pool per ADR-0028. Absent this cap the
+		// host falls back to the simpler DateTimePickerButton pair.
+		Caps: []app.SubjectFilter{
+			{
+				Pattern:   fsbroker.SubjectDialogRead,
+				Direction: app.CapDirectionPub,
+				Reason:    "Load .sql via Powerbox picker",
+			},
+			{
+				Pattern:   fsbroker.HandleSubjectPrefix + ">",
+				Direction: app.CapDirectionPub,
+				Reason:    "read file contents through granted handle",
+			},
+			{
+				Pattern:   chlocalbroker.SubjectExecPrefix + timerangepicker.PoolName,
+				Direction: app.CapDirectionPub,
+				Reason:    "evaluate user time-range expressions (ADR-0016 Phase 4)",
+			},
+		},
+		// PersistedKeys → host auto-injects
+		// runtime.persist.play.> cap; the editor buffer survives
+		// session restart. SPINNAKER_PLAY_SQL still wins when set.
+		// timelineBandsSql persists the Timeline panel's bands-SQL
+		// editor across sessions; empty is a valid value (no bands).
+		PersistedKeys: []string{persistKeyLastSql, persistKeyTimelineBandsSql},
+	}
+	return
+}
+
+func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
+	// Precedence for the initial SQL buffer:
+	//   1. SPINNAKER_PLAY_SQL env var — explicit user override
+	//      (one-shot screenshots, scripted runs).
+	//   2. runtime.persist.play.lastSql — restored from the previous
+	//      session via MountCtx.Storage.
+	//   3. Default literal — first run, no prior state.
+	// The persist restore happens after NewPlayApp because the
+	// PlayApp's Storage handle is set via SetCapabilities below;
+	// RestorePersistedSql replaces inst.sql in place.
+	initSQL, envProvided := SQLOverride.Lookup()
+	if initSQL == "" {
+		initSQL = "SELECT * FROM spinnaker.facts"
+	}
+	cfg := ClientConfig{
+		URL:      clickhouseenv.URL.Get(),
+		User:     clickhouseenv.User.Get(),
+		Password: clickhouseenv.Password.Get(),
+	}
+	client := NewClient(cfg, nil)
+	store := NewQueryStore(client, memory.NewGoAllocator(), 100)
+	inner := NewPlayApp(client, store, initSQL)
+	inner.AutoRun = AutoRun.Get() != ""
+	inner.ScreenshotPath = ScreenshotPath.Get()
+	inner.ExitOnShot = ExitOnShot.Get() != ""
+	inner.SetCapabilities(ctx.Bus(), ctx.Storage(), ctx.Log())
+	if !envProvided {
+		// Storage restore is best-effort — silent miss leaves the
+		// default literal in place.
+		inner.RestorePersistedSql()
+	}
+	// Bands SQL is always restored regardless of the main env override —
+	// it's panel-local, not main-SQL, so SPINNAKER_PLAY_SQL has no
+	// bearing on whether the user's last bands query should come back.
+	inner.RestorePersistedTimelineBandsSql()
+	// Dedicated bands env override (parallel to SPINNAKER_PLAY_SQL) lets
+	// scripted screenshots seed the bands editor without interactive input.
+	if bandsSQL, hasBands := TimelineBandsSQLOverride.Lookup(); hasBands && bandsSQL != "" {
+		inner.timelineBandsSql = bandsSQL
+	}
+	inst.inner = inner
+	return
+}
+
+func (inst *PlayLauncher) Frame(ctx app.FrameContextI) (err error) {
+	if inst.inner == nil {
+		err = eh.Errorf("playlauncher: Frame called before Mount")
+		return
+	}
+	err = inst.inner.Render()
+	return
+}
+
+func (inst *PlayLauncher) Unmount(ctx app.MountContextI) (err error) {
+	// Save-on-Unmount fallback: catches sessions that edited the
+	// buffer without ever clicking Run. Idempotent — same value
+	// already persisted on Run paths.
+	if inst.inner != nil {
+		inst.inner.PersistSql()
+		inst.inner.PersistTimelineBandsSql()
+	}
+	inst.inner = nil
+	return
+}
+
+func init() {
+	// Factory registration — each Open() yields a fresh PlayLauncher
+	// with its own inner *PlayApp (allocated in Mount). PlayApp owns
+	// its own WidgetIdStack (inst.ids), so two open windows produce
+	// disjoint Go-side widget IDs without the SeededFuncApp scope
+	// wrapper that the legacy-renderer apps need. The manifest passed
+	// to RegisterFactory must match what Manifest() returns.
+	m := (&PlayLauncher{}).Manifest()
+	err := app.DefaultRegistry.RegisterFactory(m, func() (a app.AppI, ctorErr error) {
+		a = &PlayLauncher{}
+		return
+	})
+	if err != nil {
+		log.Warn().Err(err).Msg("play: failed to register factory")
+	}
+}

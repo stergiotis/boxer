@@ -1,0 +1,126 @@
+//go:build llm_generated_opus47
+
+package play
+
+import (
+	"bytes"
+	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+	"testing"
+
+	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/apache/arrow-go/v18/arrow/ipc"
+	"github.com/apache/arrow-go/v18/arrow/memory"
+)
+
+// emptyArrowStream produces a minimal Arrow IPC byte stream so that the
+// ipc.Reader handshake in ExecuteArrowStream succeeds.
+func emptyArrowStream(t *testing.T) []byte {
+	t.Helper()
+	alloc := memory.NewGoAllocator()
+	schema := arrow.NewSchema([]arrow.Field{}, nil)
+	var buf bytes.Buffer
+	w := ipc.NewWriter(&buf, ipc.WithSchema(schema), ipc.WithAllocator(alloc))
+	rec := array.NewRecord(schema, nil, 0)
+	defer rec.Release()
+	if err := w.Write(rec); err != nil {
+		t.Fatalf("ipc write: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("ipc close: %v", err)
+	}
+	return buf.Bytes()
+}
+
+func TestExecuteArrowStreamSendsParamsOnURLWhenPresent(t *testing.T) {
+	body := emptyArrowStream(t)
+
+	var (
+		gotMethod      string
+		gotContentType string
+		gotURLParams   url.Values
+		gotBody        []byte
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotContentType = r.Header.Get("Content-Type")
+		gotURLParams = r.URL.Query()
+		gotBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(srv.Close)
+
+	c := NewClient(ClientConfig{URL: srv.URL}, nil)
+	rdr, closer, _, err := c.ExecuteArrowStream(
+		context.Background(),
+		`SET param_a = 1; SET param_b = 'hello world'; SELECT {param_a : UInt64}`,
+		memory.NewGoAllocator(),
+	)
+	if err != nil {
+		t.Fatalf("ExecuteArrowStream: %v", err)
+	}
+	t.Cleanup(func() { _ = closer.Close() })
+	t.Cleanup(rdr.Release)
+
+	if gotMethod != http.MethodPost {
+		t.Errorf("method = %q, want POST", gotMethod)
+	}
+	if !strings.HasPrefix(gotContentType, "text/plain") {
+		t.Errorf("content-type = %q, want text/plain", gotContentType)
+	}
+	if got, want := gotURLParams.Get("param_a"), "1"; got != want {
+		t.Errorf("URL param_a = %q, want %q", got, want)
+	}
+	if got, want := gotURLParams.Get("param_b"), "hello world"; got != want {
+		t.Errorf("URL param_b = %q, want %q", got, want)
+	}
+	bs := string(gotBody)
+	for _, want := range []string{"SELECT", "{param_a", "FORMAT ArrowStream"} {
+		if !strings.Contains(bs, want) {
+			t.Errorf("body missing %q: %q", want, bs)
+		}
+	}
+	if strings.Contains(bs, "SET ") {
+		t.Errorf("body still contains harvested SET: %q", bs)
+	}
+}
+
+func TestExecuteArrowStreamPlainPostWhenNoParams(t *testing.T) {
+	body := emptyArrowStream(t)
+
+	var (
+		gotContentType string
+		gotBody        []byte
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotContentType = r.Header.Get("Content-Type")
+		gotBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(srv.Close)
+
+	c := NewClient(ClientConfig{URL: srv.URL}, nil)
+	rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), `SELECT 1`, memory.NewGoAllocator())
+	if err != nil {
+		t.Fatalf("ExecuteArrowStream: %v", err)
+	}
+	t.Cleanup(func() { _ = closer.Close() })
+	t.Cleanup(rdr.Release)
+
+	if !strings.HasPrefix(gotContentType, "text/plain") {
+		t.Errorf("content-type = %q, want text/plain", gotContentType)
+	}
+	if !strings.Contains(string(gotBody), "SELECT 1") {
+		t.Errorf("body = %q", gotBody)
+	}
+	if !strings.Contains(string(gotBody), "FORMAT ArrowStream") {
+		t.Errorf("body missing FORMAT clause: %q", gotBody)
+	}
+}
