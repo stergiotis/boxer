@@ -115,11 +115,12 @@ type Renderer struct {
 
 	// tasks, when non-nil, is the keelson task API the embedded ECDF
 	// widget uses to warm its confidence band on a background job
-	// (ADR-0038), so a large-n O(n²) inversion runs off the render
-	// thread, shows in the supervisor / taskmonitor, and cancels on
-	// window close. nil (default) still computes the band off-thread via
-	// the in-process job registry; only task-framework visibility is
-	// lost. Set via Tasks.
+	// (ADR-0038), so a large-n O(n²) inversion runs off the render thread
+	// and shows in the supervisor / taskmonitor. nil (default) still
+	// computes the band off-thread via the in-process job registry — only
+	// task-framework visibility and the host mount-cancel path are lost.
+	// Either way the warm-up is cancelled when this inspector closes or
+	// retracts (see Render). Set via Tasks.
 	tasks task.TaskApiI
 }
 
@@ -225,9 +226,11 @@ func (inst Renderer) GridN(n int) (out Renderer) {
 // Tasks wires a keelson task API so the embedded ECDF widget warms its
 // confidence band on a background job (ADR-0038) rather than blocking
 // the render thread, surfacing the work in the supervisor and any
-// taskmonitor panel and cancelling it when the host window closes.
-// Optional: when unset the band still computes off-thread via the
-// in-process job registry — only task-framework visibility is lost.
+// taskmonitor panel. Optional: when unset the band still computes
+// off-thread via the in-process job registry — only task-framework
+// visibility (and the host mount-cancel path) is lost. The warm-up is
+// cancelled when the inspector window closes or retracts regardless of
+// this setting.
 func (inst Renderer) Tasks(api task.TaskApiI) (out Renderer) {
 	inst.tasks = api
 	out = inst
@@ -360,6 +363,13 @@ func (inst Renderer) Render(idGen c.WidgetIdCreatorI, digest *tdigest.TDigest, e
 	}
 
 	if !state.pinned {
+		// Inspector closed (title-bar X) or retracted (anchor handle): both
+		// land here with pinned == false. Abort any confidence-band warm-up
+		// this instance started so a long O(n²) inversion does not outlive
+		// the window that requested it. Idempotent — a no-op when no band
+		// job is in flight for this scope, and a band that already finished
+		// stays in the shared ecdfbands cache for an instant reopen.
+		ecdf.CancelBandJob(scope)
 		return
 	}
 	inst.renderPinnedWindow(scope, tether, state, digest, extremes)
@@ -518,7 +528,7 @@ func (inst Renderer) renderEcdfBody(scope string, digest *tdigest.TDigest) (rend
 		_ = inst.ecdfPlot.RenderGrid(xs, fn, n)
 		inst.ecdfPlot.PaintCrosshair(ch)
 	} else {
-		job = inst.ecdfPlot.EnsureBandJob(inst.tasks, n)
+		job = inst.ecdfPlot.EnsureBandJob(scope, inst.tasks, n)
 		inst.ecdfPlot.RenderGridCurveOnly(xs, fn)
 	}
 	pad := inst.popupPad

@@ -5,7 +5,6 @@ package ecdf
 import (
 	"context"
 	"fmt"
-	"math"
 	"sync"
 	"time"
 
@@ -38,7 +37,25 @@ type BandJobSnapshot struct {
 	Err      error
 }
 
+// bandJob is one in-flight (or finished) confidence-band warm-up,
+// registered in [bandJobs] under a caller-supplied job key.
 type bandJob struct {
+	// cancel aborts the background solve. Set once at construction, before
+	// the job is published to [bandJobs], so it is safe to read without
+	// the mutex. Calling it is idempotent: it drives the inversion to
+	// ctx.Err() within one O(n²) eval and (when a task handle is attached)
+	// lands that handle in its cancelled/error state.
+	cancel context.CancelFunc
+
+	// n, alpha, method are the solve parameters captured at spawn. They are
+	// immutable for the life of the job. A caller whose parameters have
+	// moved on (typically n advancing as a live digest grows) holds a stale
+	// job; [ensureBandWarm] cancels and replaces it rather than reading its
+	// now-irrelevant progress.
+	n      int
+	alpha  float64
+	method ecdfbands.BandMethodE
+
 	mu   sync.Mutex
 	snap BandJobSnapshot
 }
@@ -56,67 +73,111 @@ func (j *bandJob) store(s BandJobSnapshot) {
 	j.mu.Unlock()
 }
 
-// bandJobKey deduplicates warm-ups across every widget and frame at the
-// same granularity ecdfbands caches results, so two ECDF plots sharing
-// an (n, α, method) share one background solve. α is keyed by raw bit
-// pattern; in the worst case two near-identical α's spawn a second job
-// that finds the first's result already cached and returns at once.
-type bandJobKey struct {
-	n         int
-	alphaBits uint64
-	method    ecdfbands.BandMethodE
+func (j *bandJob) matches(n int, alpha float64, method ecdfbands.BandMethodE) (ok bool) {
+	ok = j.n == n && j.alpha == alpha && j.method == method
+	return
 }
 
-// bandJobs is the process-global in-flight (and finished) registry.
-var bandJobs sync.Map // bandJobKey -> *bandJob
+// bandJobs is the process-global warm-up registry, keyed by the caller's
+// job key — one entry per consuming widget instance (the ECDF inspector's
+// per-call scope), NOT per (n, α, method). Per-instance keying is what
+// makes cancellation safe: closing one inspector aborts exactly its own
+// solve and never a band another open inspector is still waiting on. The
+// underlying ecdfbands cache (keyed by n / α / method) still deduplicates
+// the expensive result across instances — once any inspector's job lands,
+// a second inspector on the same parameters finds BandReady true and never
+// schedules a job at all; only inspectors that begin warming the same
+// parameters concurrently pay a redundant (and harmless) solve.
+var bandJobs sync.Map // string(jobKey) -> *bandJob
 
-// ensureBandWarm returns the current snapshot of the (n, α, method)
-// warm-up, starting one on first request. Idempotent: calling it every
-// frame from every widget attaches to the existing job rather than
-// spawning duplicates. tasks may be nil — the solve still runs and
-// drives the snapshot; only the keelson task.HandleI integration
-// (supervisor audit, global taskmonitor visibility, cancel-on-window-
-// close) is skipped when nil.
-func ensureBandWarm(tasks task.TaskApiI, n int, alpha float64, method ecdfbands.BandMethodE) BandJobSnapshot {
-	key := bandJobKey{n: n, alphaBits: math.Float64bits(alpha), method: method}
-	if existing, ok := bandJobs.Load(key); ok {
-		return existing.(*bandJob).read()
+// ensureBandWarm returns the current snapshot of jobKey's warm-up,
+// starting one on first request. Idempotent across frames: the same
+// inspector calling it every frame attaches to its existing job rather
+// than spawning duplicates. When the parameters registered under jobKey no
+// longer match (the digest grew, so n advanced) the stale solve is
+// cancelled and a fresh one scheduled for the new parameters.
+//
+// tasks may be nil — the solve still runs and drives the snapshot, and
+// [cancelBandJob] still aborts it; only the keelson task.HandleI
+// integration (supervisor audit, global taskmonitor visibility, host
+// mount-cancel) is skipped when nil.
+func ensureBandWarm(jobKey string, tasks task.TaskApiI, n int, alpha float64, method ecdfbands.BandMethodE) BandJobSnapshot {
+	if existing, ok := bandJobs.Load(jobKey); ok {
+		j := existing.(*bandJob)
+		if j.matches(n, alpha, method) {
+			return j.read()
+		}
+		// Stale parameters under this key: abort the old solve and drop it
+		// so the LoadOrStore below schedules a fresh warm-up for the new n.
+		j.cancel()
+		bandJobs.Delete(jobKey)
 	}
-	j := &bandJob{snap: BandJobSnapshot{
-		State:    BandJobRunning,
-		Fraction: 0,
-		EtaMs:    -1,
-		Note:     "computing confidence band…",
-	}}
-	actual, loaded := bandJobs.LoadOrStore(key, j)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	j := &bandJob{
+		cancel: cancel,
+		n:      n,
+		alpha:  alpha,
+		method: method,
+		snap: BandJobSnapshot{
+			State:    BandJobRunning,
+			Fraction: 0,
+			EtaMs:    -1,
+			Note:     "computing confidence band…",
+		},
+	}
+	actual, loaded := bandJobs.LoadOrStore(jobKey, j)
 	if loaded {
-		// Lost a race for the same key (not expected on the single-
-		// threaded render loop, but honoured cheaply).
+		// Lost a race for this key (not expected on the single-threaded
+		// render loop). Discard the unused context and attach to the winner
+		// rather than leaking a second goroutine.
+		cancel()
 		return actual.(*bandJob).read()
 	}
-	go runBandWarm(j, tasks, n, alpha, method)
+	go runBandWarm(ctx, j, tasks, n, alpha, method)
 	return j.read()
+}
+
+// cancelBandJob aborts and forgets the warm-up registered under jobKey, if
+// any. Idempotent and cheap enough to call every frame an inspector is
+// closed: a missing key is a no-op. Cancelling drives the in-flight
+// inversion to ctx.Err() within one eval (landing any attached task handle
+// in its cancelled state) and removes the registry entry, so a later
+// reopen schedules a fresh solve instead of surfacing the cancelled one.
+// The shared ecdfbands cache is untouched: a band that already finished
+// stays cached and a reopen renders it immediately.
+func cancelBandJob(jobKey string) {
+	if existing, ok := bandJobs.LoadAndDelete(jobKey); ok {
+		existing.(*bandJob).cancel()
+	}
 }
 
 // runBandWarm performs the warm-up on a background goroutine: spawns a
 // keelson task (when tasks != nil), runs the cancellable inversion
 // reporting per-eval progress, and lands the result in the ecdfbands
-// cache. The render loop observes completion via ecdfbands.BandReady on
-// a later frame; the result travels through the cache, not the task's
-// Done payload.
-func runBandWarm(j *bandJob, tasks task.TaskApiI, n int, alpha float64, method ecdfbands.BandMethodE) {
+// cache. The render loop observes completion via ecdfbands.BandReady on a
+// later frame; the result travels through the cache, not the task's Done
+// payload.
+//
+// ctx is the job's cancellation root (see [ensureBandWarm]); the keelson
+// task is parented on it so a widget-driven cancel (window closed /
+// inspector retracted, via [cancelBandJob]) propagates to the task handle
+// too, while the handle additionally folds in bus-cancel and the host's
+// mount-cancel.
+func runBandWarm(ctx context.Context, j *bandJob, tasks task.TaskApiI, n int, alpha float64, method ecdfbands.BandMethodE) {
 	var h task.HandleI
 	if tasks != nil {
-		h, _ = tasks.Spawn(context.Background(), task.SpawnOpts{
+		h, _ = tasks.Spawn(ctx, task.SpawnOpts{
 			Kind:  "ecdf.band",
 			Title: fmt.Sprintf("ECDF confidence band (n=%d)", n),
 		})
 	}
-	ctx := context.Background()
+	solveCtx := ctx
 	if h != nil {
-		// h.Ctx() cancels on bus-cancel or the host's mount-cancel, so
-		// closing the hosting window aborts a long solve for free.
-		ctx = h.Ctx()
+		// h.Ctx() is a descendant of ctx that also cancels on bus-cancel
+		// and the host's mount-cancel, so closing the hosting window aborts
+		// a long solve through either path.
+		solveCtx = h.Ctx()
 	}
 
 	start := time.Now()
@@ -144,9 +205,9 @@ func runBandWarm(j *bandJob, tasks task.TaskApiI, n int, alpha float64, method e
 		}
 	}
 
-	if err := ecdfbands.WarmBand(ctx, n, alpha, method, onProgress); err != nil {
+	if err := ecdfbands.WarmBand(solveCtx, n, alpha, method, onProgress); err != nil {
 		note := "confidence band failed"
-		if ctx.Err() != nil {
+		if solveCtx.Err() != nil {
 			note = "confidence band cancelled"
 		}
 		j.store(BandJobSnapshot{State: BandJobError, Err: err, Note: note})

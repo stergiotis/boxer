@@ -175,13 +175,28 @@ func (inst Renderer) BandReady(n int) bool {
 }
 
 // EnsureBandJob schedules (once, idempotently) a background warm-up of
-// this renderer's (n, α, method) band and returns its current progress
-// snapshot. tasks may be nil (the solve still runs; only keelson task
-// integration is skipped). Call on frames where BandReady(n) is false:
-// render RenderGridCurveOnly for the curve and show the returned
-// snapshot via a progress widget below the plot.
-func (inst Renderer) EnsureBandJob(tasks task.TaskApiI, n int) BandJobSnapshot {
-	return ensureBandWarm(tasks, n, inst.alpha, inst.method)
+// this renderer's (n, α, method) band under jobKey — a stable per-inspector
+// identity the host widget supplies (its per-call scope) — and returns the
+// current progress snapshot. tasks may be nil (the solve still runs; only
+// keelson task integration is skipped). Call on frames where BandReady(n)
+// is false: render RenderGridCurveOnly for the curve and show the returned
+// snapshot via a progress widget below the plot. Pair it with
+// CancelBandJob(jobKey) when the inspector closes so a long solve does not
+// outlive the window that asked for it.
+func (inst Renderer) EnsureBandJob(jobKey string, tasks task.TaskApiI, n int) BandJobSnapshot {
+	return ensureBandWarm(jobKey, tasks, n, inst.alpha, inst.method)
+}
+
+// CancelBandJob aborts the background band warm-up scheduled under jobKey
+// by EnsureBandJob, if one is in flight, and forgets it. Idempotent — a
+// no-op when nothing is registered for jobKey — so it is safe to call every
+// frame an inspector is closed. It is a package function rather than a
+// Renderer method because the job is identified by jobKey alone: the
+// renderer's own (α, method) configuration is irrelevant to which solve to
+// stop. A band that already finished stays in the shared ecdfbands cache,
+// so a reopen still renders instantly.
+func CancelBandJob(jobKey string) {
+	cancelBandJob(jobKey)
 }
 
 // RenderGridCurveOnly emits only the ECDF step polyline for an (xs,

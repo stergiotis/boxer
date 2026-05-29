@@ -97,12 +97,26 @@ that ADR's shared-source-of-truth rule (see
   / `Quantiles([0.25, 0.5, 0.75])` once per frame.
 - ECDF tab (`renderEcdfBody`) calls
   `ecdfdigest.BuildDigestGrid(digest, gridN)` — `gridN`=128 by
-  default — and forwards the resulting `(xs, fnAt)` plus
-  `digest.Count()` to `ecdf.Renderer.RenderGrid`. The simultaneous-
-  band inversion is cached upstream by `(n, α, method)`
-  (`boxer/public/analytics/stats/ecdfbands/invert.go:19`), so the
-  Moscovich-Nadler step runs once per parameter combo and is
-  reused on every subsequent frame.
+  default — to build the `(xs, fnAt)` grid. The simultaneous-band
+  inversion is an O(n²) Moscovich-Nadler solve far too slow for the
+  render thread at large n, so it never runs inline: a non-blocking
+  `ecdf.Renderer.BandReady(n)` probe picks the path each frame. Warm
+  → `RenderGrid` draws curve + band straight from the upstream
+  `ecdfbands` cache (keyed by `(n, α, method)`,
+  `boxer/public/analytics/stats/ecdfbands/invert.go:19`, so the solve
+  runs once per parameter combo and is reused on every subsequent
+  frame). Cold → `RenderGridCurveOnly` draws the curve immediately
+  while `ecdf.Renderer.EnsureBandJob(scope, tasks, n)` warms the band
+  on a background keelson job (ADR-0038) and a `widgets/jobprogress`
+  readout shows progress + ETA below the plot; a later frame finds
+  the cache warm and draws the band.
+- Closing the inspector (title-bar X) or retracting it (anchor
+  handle) — both land on `instanceState.pinned == false` — calls
+  `ecdf.CancelBandJob(scope)`, aborting an in-flight band solve
+  within one eval so it never outlives its window. The warm-up is
+  keyed by the per-call `scope`, so cancelling one inspector never
+  disturbs another; a solve that already finished stays in the
+  `ecdfbands` cache, so a reopen redraws the band instantly.
 - Boxenplot tab (`renderBoxenplotBody`) calls
   `letterval.RecommendedLevels(digest)` (bounded by
   `RecommendedDepth(n)`, typically ~7 levels) and forwards the
