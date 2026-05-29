@@ -139,27 +139,43 @@ func (inst *PlayApp) renderDetailPane(rec arrow.RecordBatch, schema *arrow.Schem
 			}
 		}
 
-		for range c.ScrollArea().Vscroll(true).Hscroll(true).KeepIter() {
+		// The leeway card view (Table2CardEmitter) renders into an
+		// egui_extras::TableBuilder that owns its own ScrollArea, so it must
+		// NOT be wrapped in an outer ScrollArea: that hands the table
+		// unbounded available height and egui_extras then crops its tail rows.
+		// The driver emits the plain section first and the tagged / co-sections
+		// after it, so the cropped rows are exactly the tagged sections —
+		// leaving "only plain value sections" visible. Render the card directly
+		// in the bounded dock tab, matching the leewaywidgets demo's
+		// renderActiveView. The ad-hoc fallback has no self-scrolling widget,
+		// so it keeps an explicit ScrollArea.
+		switch {
+		case inst.cards != nil && inst.cards.EnsureFor(schema):
+			if err := inst.cards.Render(rec, row); err != nil {
+				c.Label(fmt.Sprintf("card render error: %s", err)).Wrap().Send()
+			}
+			// Canonical Leeway card-JSON (ADR-0018) as a collapsed-by-default
+			// reference below the table. CodeView is a plain (selectable)
+			// egui::Label with no scroll of its own, so its body gets a
+			// dedicated ScrollArea — a sibling of the table's scroll, never its
+			// parent (a parent ScrollArea is what crops the table above).
+			// Cached per (rec, row) inside CardDriver, so the JSON view is
+			// recomputed only on selection change or new query.
+			view, ok, err := inst.cards.JSONFor(rec, row)
 			switch {
-			case inst.cards != nil && inst.cards.EnsureFor(schema):
-				if err := inst.cards.Render(rec, row); err != nil {
-					c.Label(fmt.Sprintf("card render error: %s", err)).Wrap().Send()
-				}
-				// Canonical Leeway card-JSON (ADR-0018) below the table.
-				// Cached per (rec, row) inside CardDriver, so the JSON view is
-				// recomputed only on selection change or new query.
-				view, ok, err := inst.cards.JSONFor(rec, row)
-				switch {
-				case err != nil:
-					c.Label(fmt.Sprintf("json render error: %s", err)).Wrap().Send()
-				case ok:
-					c.Separator().Horizontal().Send()
-					for rt := range c.RichTextLabel("CANONICAL JSON") {
-						rt.Small().Weak()
+			case err != nil:
+				c.Label(fmt.Sprintf("json render error: %s", err)).Wrap().Send()
+			case ok:
+				c.Separator().Horizontal().Send()
+				for range c.CollapsingHeader(inst.ids.PrepareStr("rowJsonHdr"),
+					c.WidgetText().Text("CANONICAL JSON").Keep()).KeepIter() {
+					for range c.ScrollArea().Vscroll(true).Hscroll(true).KeepIter() {
+						c.CodeView(inst.ids.PrepareStr("rowJson"), view).Wrap().Send()
 					}
-					c.CodeView(inst.ids.PrepareStr("rowJson"), view).Wrap().Send()
 				}
-			default:
+			}
+		default:
+			for range c.ScrollArea().Vscroll(true).Hscroll(true).KeepIter() {
 				inst.renderAdHocDetail(rec, schema, row)
 			}
 		}
