@@ -13,6 +13,19 @@ LLM statement: Refined and reviewed using Gemini3 Pro.
 This is a very specific, opinionated standard deviating from idiomatic go in some ways.
 It is tailored towards the enablement of small teams of ambitious data scientists and data engineers developing high-throughput system.
 In these roles go is not the only language to master and is important to lower the cognitive load by embracing universally applicable conventions.
+The team works trunk-based, committing directly to `main`; see [Version Control](#version-control).
+
+## Version Control
+
+Development is **trunk-based**: `main` is the single long-lived branch and work is committed directly to it. There are no pull-request gates, no `CODEOWNERS`, and no branch-protection automation (see [§10 of ENGINEERING_PRACTICES.md](./doc/ENGINEERING_PRACTICES.md#10-notably-absent)). Short-lived local branches are fine for work in progress, but are expected to land on `main` quickly rather than accumulate divergence; long-lived feature branches are not part of the workflow.
+
+This carries a few obligations:
+
+*   **Keep `main` buildable.** CI runs on every push (see [§1 of ENGINEERING_PRACTICES.md](./doc/ENGINEERING_PRACTICES.md#1-ci-surface)), so each commit should compile and pass the default test and lint gates under the active build tags. A change that spans several files lands as one self-contained commit rather than a sequence that leaves intermediate `HEAD`s broken.
+*   **State lives in front-matter, not branches.** Draft and stable documents — and `proposed` vs. `accepted` ADRs — coexist on `main`, distinguished by their front-matter `status` (and a draft banner), never by branch. See [doc/DOCUMENTATION_STANDARD.md](./doc/DOCUMENTATION_STANDARD.md).
+*   **Small, focused commits.** Review is continuous rather than gated at a merge boundary, so each commit stays scoped to one concern and carries its rationale in the message.
+
+The "no PR branches" assumption is shared with the [documentation standard](./doc/DOCUMENTATION_STANDARD.md) and suits a small, AI-assisted team where review happens as work lands rather than at a merge gate.
 
 ## Go Version
 Target the most recent stable go version available.
