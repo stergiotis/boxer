@@ -19,8 +19,13 @@
 set -ev
 here=$(dirname "$(readlink -f "$BASH_SOURCE")")
 cd "$here/../.."
-go get -tool github.com/mfridman/tparse@latest
-go get -tool go.uber.org/nilaway/cmd/nilaway@latest
-go get -tool github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
-go get -tool golang.org/x/vuln/cmd/govulncheck@latest
+# Tool versions are pinned (not @latest) so `go mod tidy --diff` stays
+# deterministic: an unpinned @latest silently upgrades go.mod/go.sum on each
+# install run, drifting from the committed versions and failing the tidy gate.
+# Bump these intentionally (and re-run `go mod tidy`) to adopt a newer release;
+# keep them in sync with the versions in go.mod.
+go get -tool github.com/mfridman/tparse@v0.18.0
+go get -tool go.uber.org/nilaway/cmd/nilaway@v0.0.0-20260528182042-490362de4fb6
+go get -tool github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@v1.10.0
+go get -tool golang.org/x/vuln/cmd/govulncheck@v1.3.0
 go mod download
