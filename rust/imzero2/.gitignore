@@ -7,3 +7,9 @@ target_ra
 
 # https://github.com/lycheeverse/lychee
 .lycheecache
+
+# Go host binary built by build_go.sh / hmi.sh
+main_go
+
+# Flight-recorder trace written by hmi.sh
+flightRecorder.trace
