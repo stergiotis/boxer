@@ -2710,7 +2710,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
         let mut r = false;
 //IMZERO2_INCLUDE_FFFI_DISPATCH_OUT
 /*--------------------- //IMZERO2_INCLUDE_FFFI_DISPATCH_OUT -----------------------*/
-// Code generated; TheStack (github.com/stergiotis/pebble2impl/src/go/public/thestack/cmd/egui2gen) DO NOT EDIT.
+// Code generated; TheStack (github.com/stergiotis/boxer/public/thestack/cmd/egui2gen) DO NOT EDIT.
 
 match f {
 FuncProcId::AddSpace => {
@@ -2723,7 +2723,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						u.as_mut().unwrap().add_space(amount);
@@ -2747,7 +2747,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						let parent_ui = u.as_mut().unwrap();
@@ -2778,7 +2778,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 			let aid = egui::Id::new(anim_id);
 			let val = if self.animation_freeze {
@@ -2803,7 +2803,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 			let aid = egui::Id::new(anim_id);
 			let val = if self.animation_freeze {
@@ -2828,7 +2828,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 			let aid = egui::Id::new(anim_id);
 			let val = if self.animation_freeze {
@@ -2856,7 +2856,7 @@ AtomsBuilderMethodId::Text => {
 	puffin::profile_scope!("match AtomsBuilderMethodId::Text");
 #[allow(unused_mut)]
 let mut val = self.io.read_plain_s()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.r0_atoms.push_right(val);
 
 }
@@ -2865,7 +2865,7 @@ AtomsBuilderMethodId::RichText => {
 	puffin::profile_scope!("match AtomsBuilderMethodId::RichText");
 #[allow(unused_mut)]
 let mut val = self.io.read_plain_s()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 {
 let mut rt = egui::RichText::new(val);
@@ -2950,7 +2950,7 @@ let bk = {
 	self.r11_color32
 
 };
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 {
 let mut rt = egui::RichText::new(val).color(cl).background_color(bk);
@@ -3215,7 +3215,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.apply_widget(w,u,f,Some(i));
 
 }
@@ -3227,7 +3227,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 if u.is_some() {
     let ui = u.as_mut().unwrap();
@@ -3250,7 +3250,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 if u.is_some() {
     let ui = u.as_mut().unwrap();
@@ -3302,10 +3302,10 @@ self.end_consume_message()?;
 }
 // apply
 let resp =
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.apply_widget(w,u,f,Some(i));
 if resp.is_some() && resp.unwrap().changed() {
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.r10_push(i.value(),checked);
 }
 }
@@ -3346,28 +3346,28 @@ CodeViewBuilderMethodId::Selectable => {
 	puffin::profile_scope!("match CodeViewBuilderMethodId::Selectable");
 #[allow(unused_mut)]
 let mut val = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.selectable(val);
 
 }
 CodeViewBuilderMethodId::Wrap => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match CodeViewBuilderMethodId::Wrap");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.wrap_mode(egui::TextWrapMode::Wrap);
 
 }
 CodeViewBuilderMethodId::Truncate => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match CodeViewBuilderMethodId::Truncate");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.wrap_mode(egui::TextWrapMode::Truncate);
 
 }
 CodeViewBuilderMethodId::Extend => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match CodeViewBuilderMethodId::Extend");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.wrap_mode(egui::TextWrapMode::Extend);
 
 }
@@ -3377,7 +3377,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.apply_widget(w,u,f,Some(i));
 
 }
@@ -3390,7 +3390,7 @@ let mut text = self.io.read_plain_s()?;
 // construct
 
 #[allow(unused_mut)]
-let mut w = // generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+let mut w = // generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 {
 	self.r12_code_view_job.sections.clear();
 	self.r12_code_view_job.text = text;
@@ -3423,7 +3423,7 @@ let col = {
 	self.r11_color32
 
 };
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.r12_code_view_job.sections.push(code_view::Section{byte_start, byte_stop, color: col});
 
 }
@@ -3456,7 +3456,7 @@ let label = {
 // construct
 
 #[allow(unused_mut)]
-let mut w = // generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+let mut w = // generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 egui::CollapsingHeader::new(label).id_salt(i);
 // methods
 loop {
@@ -3478,7 +3478,7 @@ CollapsingHeaderBuilderMethodId::Open => {
 	puffin::profile_scope!("match CollapsingHeaderBuilderMethodId::Open");
 #[allow(unused_mut)]
 let mut val = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.open(Some(true))
 }
 CollapsingHeaderBuilderMethodId::Close => {
@@ -3486,7 +3486,7 @@ CollapsingHeaderBuilderMethodId::Close => {
 	puffin::profile_scope!("match CollapsingHeaderBuilderMethodId::Close");
 #[allow(unused_mut)]
 let mut val = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.open(Some(false))
 }
 }
@@ -3495,7 +3495,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						if w.show(u.as_mut().unwrap(), |ui| {
@@ -3533,7 +3533,7 @@ let mut rv = self.io.read_plain_u8()?;
 let mut gv = self.io.read_plain_u8()?;
 #[allow(unused_mut)]
 let mut bv = self.io.read_plain_u8()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Color32::from_rgb(rv,gv,bv);
 
 }
@@ -3548,7 +3548,7 @@ let mut gv = self.io.read_plain_u8()?;
 let mut bv = self.io.read_plain_u8()?;
 #[allow(unused_mut)]
 let mut av = self.io.read_plain_u8()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Color32::from_rgba_unmultiplied(rv,gv,bv,av);
 
 }
@@ -3563,7 +3563,7 @@ let mut gv = self.io.read_plain_u8()?;
 let mut bv = self.io.read_plain_u8()?;
 #[allow(unused_mut)]
 let mut av = self.io.read_plain_u8()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Color32::from_rgba_premultiplied(rv,gv,bv,av);
 
 }
@@ -3572,7 +3572,7 @@ ColorBuilderMethodId::FromGray => {
 	puffin::profile_scope!("match ColorBuilderMethodId::FromGray");
 #[allow(unused_mut)]
 let mut lv = self.io.read_plain_u8()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Color32::from_gray(lv);
 
 }
@@ -3581,7 +3581,7 @@ ColorBuilderMethodId::FromBlackAlpha => {
 	puffin::profile_scope!("match ColorBuilderMethodId::FromBlackAlpha");
 #[allow(unused_mut)]
 let mut av = self.io.read_plain_u8()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Color32::from_black_alpha(av);
 
 }
@@ -3590,7 +3590,7 @@ ColorBuilderMethodId::GammaMultiplyU8 => {
 	puffin::profile_scope!("match ColorBuilderMethodId::GammaMultiplyU8");
 #[allow(unused_mut)]
 let mut factor = self.io.read_plain_u8()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.gamma_multiply_u8(factor);
 
 }
@@ -3599,7 +3599,7 @@ ColorBuilderMethodId::GammaMultiplyF32 => {
 	puffin::profile_scope!("match ColorBuilderMethodId::GammaMultiplyF32");
 #[allow(unused_mut)]
 let mut factor = self.io.read_plain_f32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.gamma_multiply(factor);
 
 }
@@ -3608,189 +3608,189 @@ ColorBuilderMethodId::LinearMultiplyF32 => {
 	puffin::profile_scope!("match ColorBuilderMethodId::LinearMultiplyF32");
 #[allow(unused_mut)]
 let mut factor = self.io.read_plain_f32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.linear_multiply(factor);
 
 }
 ColorBuilderMethodId::ToOpaque => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match ColorBuilderMethodId::ToOpaque");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.to_opaque();
 
 }
 ColorBuilderMethodId::ColorTransparent => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match ColorBuilderMethodId::ColorTransparent");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Color32::TRANSPARENT;
 
 }
 ColorBuilderMethodId::ColorBlack => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match ColorBuilderMethodId::ColorBlack");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Color32::BLACK;
 
 }
 ColorBuilderMethodId::ColorDarkGray => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match ColorBuilderMethodId::ColorDarkGray");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Color32::DARK_GRAY;
 
 }
 ColorBuilderMethodId::ColorGray => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match ColorBuilderMethodId::ColorGray");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Color32::GRAY;
 
 }
 ColorBuilderMethodId::ColorLightGray => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match ColorBuilderMethodId::ColorLightGray");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Color32::LIGHT_GRAY;
 
 }
 ColorBuilderMethodId::ColorWhite => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match ColorBuilderMethodId::ColorWhite");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Color32::WHITE;
 
 }
 ColorBuilderMethodId::ColorBrown => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match ColorBuilderMethodId::ColorBrown");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Color32::BROWN;
 
 }
 ColorBuilderMethodId::ColorDarkRed => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match ColorBuilderMethodId::ColorDarkRed");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Color32::DARK_RED;
 
 }
 ColorBuilderMethodId::ColorLightRed => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match ColorBuilderMethodId::ColorLightRed");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Color32::LIGHT_RED;
 
 }
 ColorBuilderMethodId::ColorCyan => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match ColorBuilderMethodId::ColorCyan");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Color32::CYAN;
 
 }
 ColorBuilderMethodId::ColorMagenta => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match ColorBuilderMethodId::ColorMagenta");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Color32::MAGENTA;
 
 }
 ColorBuilderMethodId::ColorYellow => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match ColorBuilderMethodId::ColorYellow");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Color32::YELLOW;
 
 }
 ColorBuilderMethodId::ColorOrange => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match ColorBuilderMethodId::ColorOrange");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Color32::ORANGE;
 
 }
 ColorBuilderMethodId::ColorLightYellow => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match ColorBuilderMethodId::ColorLightYellow");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Color32::LIGHT_YELLOW;
 
 }
 ColorBuilderMethodId::ColorKhaki => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match ColorBuilderMethodId::ColorKhaki");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Color32::KHAKI;
 
 }
 ColorBuilderMethodId::ColorDarkGreen => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match ColorBuilderMethodId::ColorDarkGreen");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Color32::DARK_GREEN;
 
 }
 ColorBuilderMethodId::ColorGreen => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match ColorBuilderMethodId::ColorGreen");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Color32::GREEN;
 
 }
 ColorBuilderMethodId::ColorLightGreen => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match ColorBuilderMethodId::ColorLightGreen");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Color32::LIGHT_GREEN;
 
 }
 ColorBuilderMethodId::ColorDarkBlue => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match ColorBuilderMethodId::ColorDarkBlue");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Color32::DARK_BLUE;
 
 }
 ColorBuilderMethodId::ColorBlue => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match ColorBuilderMethodId::ColorBlue");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Color32::BLUE;
 
 }
 ColorBuilderMethodId::ColorLightBlue => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match ColorBuilderMethodId::ColorLightBlue");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Color32::LIGHT_BLUE;
 
 }
 ColorBuilderMethodId::ColorPurple => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match ColorBuilderMethodId::ColorPurple");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Color32::PURPLE;
 
 }
 ColorBuilderMethodId::ColorGold => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match ColorBuilderMethodId::ColorGold");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Color32::GOLD;
 
 }
 ColorBuilderMethodId::ColorDebugColor => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match ColorBuilderMethodId::ColorDebugColor");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Color32::DEBUG_COLOR;
 
 }
 ColorBuilderMethodId::ColorPlaceholder => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match ColorBuilderMethodId::ColorPlaceholder");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Color32::PLACEHOLDER;
 
 }
@@ -3800,7 +3800,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.r11_color32
  = w;
 
@@ -3839,7 +3839,7 @@ let selected_text = {
 // construct
 
 #[allow(unused_mut)]
-let mut w = // generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+let mut w = // generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 egui::ComboBox::new(i,label).selected_text(selected_text);
 // methods
 loop {
@@ -3882,7 +3882,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						if w.show_ui(u.as_mut().unwrap(), |ui| {
@@ -3905,7 +3905,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 			if u.is_some() {
 				c.inspection_ui(u.as_mut().unwrap());
@@ -3920,7 +3920,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 c.send_viewport_cmd(egui::ViewportCommand::Close);
 }
 FuncProcId::DatePickerButton => {
@@ -3946,7 +3946,7 @@ DatePickerButtonBuilderMethodId::Format => {
 	puffin::profile_scope!("match DatePickerButtonBuilderMethodId::Format");
 #[allow(unused_mut)]
 let mut format = self.io.read_plain_s()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w.format = Some(format);
 
 }
@@ -3955,7 +3955,7 @@ DatePickerButtonBuilderMethodId::HighlightWeekends => {
 	puffin::profile_scope!("match DatePickerButtonBuilderMethodId::HighlightWeekends");
 #[allow(unused_mut)]
 let mut enabled = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w.highlight_weekends = Some(enabled);
 
 }
@@ -3964,7 +3964,7 @@ DatePickerButtonBuilderMethodId::ShowIcon => {
 	puffin::profile_scope!("match DatePickerButtonBuilderMethodId::ShowIcon");
 #[allow(unused_mut)]
 let mut enabled = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w.show_icon = Some(enabled);
 
 }
@@ -3973,7 +3973,7 @@ DatePickerButtonBuilderMethodId::Calendar => {
 	puffin::profile_scope!("match DatePickerButtonBuilderMethodId::Calendar");
 #[allow(unused_mut)]
 let mut enabled = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w.calendar = Some(enabled);
 
 }
@@ -3982,7 +3982,7 @@ DatePickerButtonBuilderMethodId::CalendarWeek => {
 	puffin::profile_scope!("match DatePickerButtonBuilderMethodId::CalendarWeek");
 #[allow(unused_mut)]
 let mut enabled = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w.calendar_week = Some(enabled);
 
 }
@@ -3993,7 +3993,7 @@ DatePickerButtonBuilderMethodId::StartEndYears => {
 let mut start_year = self.io.read_plain_i16()?;
 #[allow(unused_mut)]
 let mut end_year = self.io.read_plain_i16()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w.start_end_years = Some((start_year, end_year));
 
 }
@@ -4002,7 +4002,7 @@ DatePickerButtonBuilderMethodId::Arrows => {
 	puffin::profile_scope!("match DatePickerButtonBuilderMethodId::Arrows");
 #[allow(unused_mut)]
 let mut enabled = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w.arrows = Some(enabled);
 
 }
@@ -4012,7 +4012,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.apply_date_picker_button(w,u,f,i,packed_ymd);
 
 }
@@ -4039,7 +4039,7 @@ DateTimePickerButtonBuilderMethodId::Format => {
 	puffin::profile_scope!("match DateTimePickerButtonBuilderMethodId::Format");
 #[allow(unused_mut)]
 let mut format = self.io.read_plain_s()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w.format = Some(format);
 
 }
@@ -4048,7 +4048,7 @@ DateTimePickerButtonBuilderMethodId::HighlightWeekends => {
 	puffin::profile_scope!("match DateTimePickerButtonBuilderMethodId::HighlightWeekends");
 #[allow(unused_mut)]
 let mut enabled = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w.highlight_weekends = Some(enabled);
 
 }
@@ -4057,7 +4057,7 @@ DateTimePickerButtonBuilderMethodId::ShowIcon => {
 	puffin::profile_scope!("match DateTimePickerButtonBuilderMethodId::ShowIcon");
 #[allow(unused_mut)]
 let mut enabled = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w.show_icon = Some(enabled);
 
 }
@@ -4066,7 +4066,7 @@ DateTimePickerButtonBuilderMethodId::Calendar => {
 	puffin::profile_scope!("match DateTimePickerButtonBuilderMethodId::Calendar");
 #[allow(unused_mut)]
 let mut enabled = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w.calendar = Some(enabled);
 
 }
@@ -4075,7 +4075,7 @@ DateTimePickerButtonBuilderMethodId::CalendarWeek => {
 	puffin::profile_scope!("match DateTimePickerButtonBuilderMethodId::CalendarWeek");
 #[allow(unused_mut)]
 let mut enabled = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w.calendar_week = Some(enabled);
 
 }
@@ -4086,7 +4086,7 @@ DateTimePickerButtonBuilderMethodId::StartEndYears => {
 let mut start_year = self.io.read_plain_i16()?;
 #[allow(unused_mut)]
 let mut end_year = self.io.read_plain_i16()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w.start_end_years = Some((start_year, end_year));
 
 }
@@ -4095,7 +4095,7 @@ DateTimePickerButtonBuilderMethodId::Arrows => {
 	puffin::profile_scope!("match DateTimePickerButtonBuilderMethodId::Arrows");
 #[allow(unused_mut)]
 let mut enabled = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w.arrows = Some(enabled);
 
 }
@@ -4105,7 +4105,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.apply_date_time_picker_button(w,u,f,i,packed_epoch_ms);
 
 }
@@ -4122,7 +4122,7 @@ let mut tab_titles = self.io.read_plain_sh()?;
 let mut initial_layout = self.io.read_plain_u8h()?;
 // construct
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 	let bodies = self.io.read_deferred_block_map_u64()?;
 	if u.is_some() {
@@ -4242,7 +4242,7 @@ DragValueF64BuilderMethodId::MinDecimals => {
 	puffin::profile_scope!("match DragValueF64BuilderMethodId::MinDecimals");
 #[allow(unused_mut)]
 let mut digits = self.io.read_plain_u32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.min_decimals(digits as usize);
 
 }
@@ -4251,7 +4251,7 @@ DragValueF64BuilderMethodId::MaxDecimals => {
 	puffin::profile_scope!("match DragValueF64BuilderMethodId::MaxDecimals");
 #[allow(unused_mut)]
 let mut digits = self.io.read_plain_u32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.max_decimals(digits as usize);
 
 }
@@ -4260,7 +4260,7 @@ DragValueF64BuilderMethodId::FixedDecimals => {
 	puffin::profile_scope!("match DragValueF64BuilderMethodId::FixedDecimals");
 #[allow(unused_mut)]
 let mut digits = self.io.read_plain_u32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.fixed_decimals(digits as usize);
 
 }
@@ -4271,7 +4271,7 @@ DragValueF64BuilderMethodId::Binary => {
 let mut min_width = self.io.read_plain_u32()?;
 #[allow(unused_mut)]
 let mut twos_complement = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.binary(min_width as usize,twos_complement);
 
 }
@@ -4282,7 +4282,7 @@ DragValueF64BuilderMethodId::Octal => {
 let mut min_width = self.io.read_plain_u32()?;
 #[allow(unused_mut)]
 let mut twos_complement = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.octal(min_width as usize,twos_complement);
 
 }
@@ -4295,7 +4295,7 @@ let mut min_width = self.io.read_plain_u32()?;
 let mut twos_complement = self.io.read_plain_b()?;
 #[allow(unused_mut)]
 let mut upper = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.hexadecimal(min_width as usize,twos_complement,upper);
 
 }
@@ -4314,10 +4314,10 @@ self.end_consume_message()?;
 }
 // apply
 let resp =
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.apply_widget(w,u,f,Some(i));
 if resp.is_some() && resp.unwrap().changed() {
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.r9_f64_push(i.value(),val);
 }
 }
@@ -4368,7 +4368,7 @@ DragValueI64BuilderMethodId::MinDecimals => {
 	puffin::profile_scope!("match DragValueI64BuilderMethodId::MinDecimals");
 #[allow(unused_mut)]
 let mut digits = self.io.read_plain_u32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.min_decimals(digits as usize);
 
 }
@@ -4377,7 +4377,7 @@ DragValueI64BuilderMethodId::MaxDecimals => {
 	puffin::profile_scope!("match DragValueI64BuilderMethodId::MaxDecimals");
 #[allow(unused_mut)]
 let mut digits = self.io.read_plain_u32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.max_decimals(digits as usize);
 
 }
@@ -4386,7 +4386,7 @@ DragValueI64BuilderMethodId::FixedDecimals => {
 	puffin::profile_scope!("match DragValueI64BuilderMethodId::FixedDecimals");
 #[allow(unused_mut)]
 let mut digits = self.io.read_plain_u32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.fixed_decimals(digits as usize);
 
 }
@@ -4397,7 +4397,7 @@ DragValueI64BuilderMethodId::Binary => {
 let mut min_width = self.io.read_plain_u32()?;
 #[allow(unused_mut)]
 let mut twos_complement = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.binary(min_width as usize,twos_complement);
 
 }
@@ -4408,7 +4408,7 @@ DragValueI64BuilderMethodId::Octal => {
 let mut min_width = self.io.read_plain_u32()?;
 #[allow(unused_mut)]
 let mut twos_complement = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.octal(min_width as usize,twos_complement);
 
 }
@@ -4421,7 +4421,7 @@ let mut min_width = self.io.read_plain_u32()?;
 let mut twos_complement = self.io.read_plain_b()?;
 #[allow(unused_mut)]
 let mut upper = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.hexadecimal(min_width as usize,twos_complement,upper);
 
 }
@@ -4440,10 +4440,10 @@ self.end_consume_message()?;
 }
 // apply
 let resp =
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.apply_widget(w,u,f,Some(i));
 if resp.is_some() && resp.unwrap().changed() {
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.r9_i64_push(i.value(),val);
 }
 }
@@ -4494,7 +4494,7 @@ DragValueU64BuilderMethodId::MinDecimals => {
 	puffin::profile_scope!("match DragValueU64BuilderMethodId::MinDecimals");
 #[allow(unused_mut)]
 let mut digits = self.io.read_plain_u32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.min_decimals(digits as usize);
 
 }
@@ -4503,7 +4503,7 @@ DragValueU64BuilderMethodId::MaxDecimals => {
 	puffin::profile_scope!("match DragValueU64BuilderMethodId::MaxDecimals");
 #[allow(unused_mut)]
 let mut digits = self.io.read_plain_u32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.max_decimals(digits as usize);
 
 }
@@ -4512,7 +4512,7 @@ DragValueU64BuilderMethodId::FixedDecimals => {
 	puffin::profile_scope!("match DragValueU64BuilderMethodId::FixedDecimals");
 #[allow(unused_mut)]
 let mut digits = self.io.read_plain_u32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.fixed_decimals(digits as usize);
 
 }
@@ -4523,7 +4523,7 @@ DragValueU64BuilderMethodId::Binary => {
 let mut min_width = self.io.read_plain_u32()?;
 #[allow(unused_mut)]
 let mut twos_complement = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.binary(min_width as usize,twos_complement);
 
 }
@@ -4534,7 +4534,7 @@ DragValueU64BuilderMethodId::Octal => {
 let mut min_width = self.io.read_plain_u32()?;
 #[allow(unused_mut)]
 let mut twos_complement = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.octal(min_width as usize,twos_complement);
 
 }
@@ -4547,7 +4547,7 @@ let mut min_width = self.io.read_plain_u32()?;
 let mut twos_complement = self.io.read_plain_b()?;
 #[allow(unused_mut)]
 let mut upper = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.hexadecimal(min_width as usize,twos_complement,upper);
 
 }
@@ -4566,10 +4566,10 @@ self.end_consume_message()?;
 }
 // apply
 let resp =
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.apply_widget(w,u,f,Some(i));
 if resp.is_some() && resp.unwrap().changed() {
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.r9_u64_push(i.value(),val);
 }
 }
@@ -4584,7 +4584,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						u.as_mut().unwrap().add_enabled_ui(enabled, |ui| {
@@ -4720,7 +4720,7 @@ max_height_override = Some(height);
 }
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 if u.is_some() {
 	let ui = u.as_mut().unwrap();
@@ -4940,7 +4940,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						u.as_mut().unwrap().end_row();
@@ -4969,7 +4969,7 @@ EtColumnBuilderMethodId::Resizable => {
 	puffin::profile_scope!("match EtColumnBuilderMethodId::Resizable");
 #[allow(unused_mut)]
 let mut val = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.resizable(val);
 
 }
@@ -4980,7 +4980,7 @@ EtColumnBuilderMethodId::RangeMinMax => {
 let mut min = self.io.read_plain_f32()?;
 #[allow(unused_mut)]
 let mut max = self.io.read_plain_f32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.range(egui::Rangef::new(min, max));
 
 }
@@ -4989,7 +4989,7 @@ EtColumnBuilderMethodId::AutoSizeThisFrame => {
 	puffin::profile_scope!("match EtColumnBuilderMethodId::AutoSizeThisFrame");
 #[allow(unused_mut)]
 let mut val = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.auto_size_this_frame(val);
 
 }
@@ -4999,7 +4999,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.et_columns.push(w);
 
 }
@@ -5084,7 +5084,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 			let window_mode = if mode == 1 {
 				crate::imzero2::svgexport::WindowMode::ContentOnly
@@ -5122,7 +5122,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 let pressed = c.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F1));
 self.io.write_plain_b(pressed)?;
@@ -5137,7 +5137,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 self.io.write_plain_u64(self.last_interpret_us as u64)?;
 self.io.write_plain_u64(self.last_pass_nr)?;
@@ -5152,7 +5152,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 let len = self.graph_events_pending.len();
 let graph_ids: Vec<u64> = self.graph_events_pending.iter().map(|r| r.graph_id).collect();
@@ -5175,7 +5175,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 let len = self.graph_metrics_graph_ids.len();
 self.io.write_plain_u64h(len, self.graph_metrics_graph_ids.drain(..))?;
@@ -5198,7 +5198,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 let len = self.graph_selection_graph_ids.len();
 self.io.write_plain_u64h(len, self.graph_selection_graph_ids.drain(..))?;
@@ -5216,7 +5216,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 self.io.write_plain_u64h(self.r10_true_ids.len(), self.r10_true_ids.drain(..))?;
 self.io.write_plain_u64h(self.r10_false_ids.len(), self.r10_false_ids.drain(..))?;
@@ -5231,7 +5231,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 self.io.write_plain_f32(self.r14_canvas_hover_x)?;
 self.io.write_plain_f32(self.r14_canvas_hover_y)?;
@@ -5247,7 +5247,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 self.io.write_plain_u64(self.r15_plot_clicked_id)?;
 self.io.write_plain_f64(self.r15_plot_clicked_x)?;
@@ -5268,7 +5268,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 // Non-consuming read: multiple readers per frame (e.g. an overlay
 // emitter and an on-screen camera readout) must see the same value.
@@ -5325,7 +5325,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 let d = c.input(|i| i.smooth_scroll_delta);
 self.io.write_plain_f32(d.x)?;
@@ -5341,7 +5341,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 let m = c.input(|i| i.modifiers);
 self.io.write_plain_b(m.alt)?;
@@ -5360,7 +5360,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 self.io.write_plain_f32(self.r18_avail_w)?;
 self.io.write_plain_f32(self.r18_avail_h)?;
@@ -5375,7 +5375,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 let z = c.input(|i| i.zoom_delta());
 self.io.write_plain_f32(z)?;
@@ -5390,7 +5390,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 let pos = c.input(|i| i.pointer.latest_pos());
 let (px, py, valid) = match pos {
@@ -5411,7 +5411,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 let len = self.r21_ui_rect_seqs.len();
 debug_assert_eq!(len, self.r21_ui_rect_min_x.len());
@@ -5434,7 +5434,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 let len = self.r7_ids.len();
 self.io.write_plain_u64h(len, self.r7_ids.drain(..))?;
@@ -5450,7 +5450,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 let len = self.r9_et_prefetch_ids.len();
 self.io.write_plain_u64h(len, self.r9_et_prefetch_ids.drain(..))?;
@@ -5466,7 +5466,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 let len = self.r9_f64_ids.len();
 self.io.write_plain_u64h(len, self.r9_f64_ids.drain(..))?;
@@ -5482,7 +5482,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 let len = self.r9_i64_ids.len();
 self.io.write_plain_u64h(len, self.r9_i64_ids.drain(..))?;
@@ -5498,7 +5498,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 let len = self.r9_s_ids.len();
 self.io.write_plain_u64h(len, self.r9_s_ids.drain(..))?;
@@ -5514,7 +5514,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 let len = self.r9_u64_ids.len();
 self.io.write_plain_u64h(len, self.r9_u64_ids.drain(..))?;
@@ -5530,7 +5530,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 let len = self.snarl_events_pending.len();
 let editor_ids: Vec<u64> = self.snarl_events_pending.iter().map(|r| r.editor_id).collect();
@@ -5608,7 +5608,7 @@ let mut right = self.io.read_plain_f32()?;
 let mut top = self.io.read_plain_f32()?;
 #[allow(unused_mut)]
 let mut bottom = self.io.read_plain_f32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.inner_margin(egui::Margin{left: left as i8, right: right as i8, top: top as i8, bottom: bottom as i8});
 
 }
@@ -5623,7 +5623,7 @@ let mut right = self.io.read_plain_f32()?;
 let mut top = self.io.read_plain_f32()?;
 #[allow(unused_mut)]
 let mut bottom = self.io.read_plain_f32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.outer_margin(egui::Margin{left: left as i8, right: right as i8, top: top as i8, bottom: bottom as i8});
 
 }
@@ -5638,7 +5638,7 @@ let mut ne = self.io.read_plain_u8()?;
 let mut sw = self.io.read_plain_u8()?;
 #[allow(unused_mut)]
 let mut se = self.io.read_plain_u8()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.corner_radius(egui::CornerRadius{nw, ne, sw, se});
 
 }
@@ -5658,7 +5658,7 @@ let col = {
 	self.r11_color32
 
 };
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.fill(col);
 
 }
@@ -5680,7 +5680,7 @@ let col = {
 	self.r11_color32
 
 };
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.stroke(egui::Stroke::new(width, col));
 
 }
@@ -5708,7 +5708,7 @@ let col = {
 	self.r11_color32
 
 };
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.shadow(egui::Shadow{offset: [offset_x as i8, offset_y as i8], blur, spread, color: col});
 
 }
@@ -5741,56 +5741,56 @@ hover_cursor_pointer = true;
 FrameBuilderMethodId::PresetGroup => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match FrameBuilderMethodId::PresetGroup");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Frame::group(c.style().as_ref());
 
 }
 FrameBuilderMethodId::PresetWindow => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match FrameBuilderMethodId::PresetWindow");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Frame::window(c.style().as_ref());
 
 }
 FrameBuilderMethodId::PresetPopup => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match FrameBuilderMethodId::PresetPopup");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Frame::popup(c.style().as_ref());
 
 }
 FrameBuilderMethodId::PresetMenu => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match FrameBuilderMethodId::PresetMenu");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Frame::menu(c.style().as_ref());
 
 }
 FrameBuilderMethodId::PresetCanvas => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match FrameBuilderMethodId::PresetCanvas");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Frame::canvas(c.style().as_ref());
 
 }
 FrameBuilderMethodId::PresetDarkCanvas => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match FrameBuilderMethodId::PresetDarkCanvas");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Frame::dark_canvas(c.style().as_ref());
 
 }
 FrameBuilderMethodId::PresetSideTopPanel => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match FrameBuilderMethodId::PresetSideTopPanel");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Frame::side_top_panel(c.style().as_ref());
 
 }
 FrameBuilderMethodId::PresetCentralPanel => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match FrameBuilderMethodId::PresetCentralPanel");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui::Frame::central_panel(c.style().as_ref());
 
 }
@@ -5800,7 +5800,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						let ui = u.as_mut().unwrap();
@@ -6126,7 +6126,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 if u.is_some() {
     let ui = u.as_mut().unwrap();
@@ -6317,7 +6317,7 @@ FuncProcId::Grid => {
 // construct
 
 #[allow(unused_mut)]
-let mut w = // generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+let mut w = // generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 egui::Grid::new(i);
 // methods
 loop {
@@ -6331,7 +6331,7 @@ GridBuilderMethodId::NumColumns => {
 	puffin::profile_scope!("match GridBuilderMethodId::NumColumns");
 #[allow(unused_mut)]
 let mut val = self.io.read_plain_u32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.num_columns(val as usize);
 
 }
@@ -6372,7 +6372,7 @@ GridBuilderMethodId::StartRow => {
 	puffin::profile_scope!("match GridBuilderMethodId::StartRow");
 #[allow(unused_mut)]
 let mut val = self.io.read_plain_u64()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.start_row(val as usize);
 
 }
@@ -6382,7 +6382,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						w.show(u.as_mut().unwrap(), |ui| {
@@ -6402,7 +6402,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						u.as_mut().unwrap().group(|ui| {
@@ -6421,7 +6421,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 				if u.is_some() {
 					egui::gui_zoom::zoom_menu_buttons(u.as_mut().unwrap());
@@ -6538,7 +6538,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						u.as_mut().unwrap().horizontal(|ui| {
@@ -6558,7 +6558,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						u.as_mut().unwrap().horizontal_centered(|ui| {
@@ -6578,7 +6578,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						u.as_mut().unwrap().horizontal_top(|ui| {
@@ -6598,7 +6598,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						u.as_mut().unwrap().horizontal_top(|ui| {
@@ -6620,7 +6620,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						let ui = u.as_mut().unwrap();
@@ -6644,7 +6644,7 @@ FuncProcId::HoverUi => {
 // arguments
 // construct
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						let mut tip_blocks = self.io.read_deferred_block_map_u32()?;
@@ -6795,7 +6795,7 @@ let mut w = 0u8;if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 if u.is_some() {
     let ui = u.as_mut().unwrap();
@@ -6832,7 +6832,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.image_cache.release(i.value());
 
 }
@@ -6846,7 +6846,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						u.as_mut().unwrap().indent(i, |ui| {
@@ -6879,7 +6879,7 @@ LabelBuilderMethodId::Selectable => {
 	puffin::profile_scope!("match LabelBuilderMethodId::Selectable");
 #[allow(unused_mut)]
 let mut val = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.selectable(val);
 
 }
@@ -6907,7 +6907,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.apply_widget(w,u,f,None);
 
 }
@@ -6987,19 +6987,19 @@ LabelAtomsBuilderMethodId::Build => {
 LabelAtomsBuilderMethodId::Wrap => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match LabelAtomsBuilderMethodId::Wrap");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.wrap_mode(egui::TextWrapMode::Wrap);
 }
 LabelAtomsBuilderMethodId::Truncate => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match LabelAtomsBuilderMethodId::Truncate");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.wrap_mode(egui::TextWrapMode::Truncate);
 }
 LabelAtomsBuilderMethodId::Extend => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match LabelAtomsBuilderMethodId::Extend");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.wrap_mode(egui::TextWrapMode::Extend);
 }
 }
@@ -7008,7 +7008,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.apply_widget(w,u,f,None);
 
 }
@@ -7037,7 +7037,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.apply_widget(w,u,f,None);
 
 }
@@ -7162,7 +7162,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 			let font_id = if monospace {
 				egui::FontId::monospace(font_size)
@@ -7185,7 +7185,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 c.memory_mut(|mem| mem.reset_areas());
 }
 FuncProcId::MenuBar => {
@@ -7199,7 +7199,7 @@ let mut w = egui::MenuBar::new();if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						w.ui(u.as_mut().unwrap(), |ui| {
@@ -7232,7 +7232,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						let retr = u.as_mut().unwrap().menu_button(atoms, |ui| {
@@ -7255,7 +7255,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 			c.move_to_top(egui::LayerId::new(egui::Order::Middle, i));
 
@@ -7348,7 +7348,7 @@ auto_shrink_set = true;
 }
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 if u.is_some() {
 	let ui = u.as_mut().unwrap();
@@ -7391,7 +7391,7 @@ NewTableColumnBuilderMethodId::Build => {
 NewTableColumnBuilderMethodId::Auto => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match NewTableColumnBuilderMethodId::Auto");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui_extras::Column::auto();
 
 }
@@ -7400,7 +7400,7 @@ NewTableColumnBuilderMethodId::Exact => {
 	puffin::profile_scope!("match NewTableColumnBuilderMethodId::Exact");
 #[allow(unused_mut)]
 let mut width = self.io.read_plain_f32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui_extras::Column::exact(width);
 
 }
@@ -7409,14 +7409,14 @@ NewTableColumnBuilderMethodId::Initial => {
 	puffin::profile_scope!("match NewTableColumnBuilderMethodId::Initial");
 #[allow(unused_mut)]
 let mut width = self.io.read_plain_f32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui_extras::Column::initial(width);
 
 }
 NewTableColumnBuilderMethodId::Remainder => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match NewTableColumnBuilderMethodId::Remainder");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui_extras::Column::remainder();
 
 }
@@ -7425,7 +7425,7 @@ NewTableColumnBuilderMethodId::AtLeast => {
 	puffin::profile_scope!("match NewTableColumnBuilderMethodId::AtLeast");
 #[allow(unused_mut)]
 let mut min_width = self.io.read_plain_f32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.at_least(min_width);
 
 }
@@ -7434,7 +7434,7 @@ NewTableColumnBuilderMethodId::AtMost => {
 	puffin::profile_scope!("match NewTableColumnBuilderMethodId::AtMost");
 #[allow(unused_mut)]
 let mut max_width = self.io.read_plain_f32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.at_most(max_width);
 
 }
@@ -7443,7 +7443,7 @@ NewTableColumnBuilderMethodId::Resizable => {
 	puffin::profile_scope!("match NewTableColumnBuilderMethodId::Resizable");
 #[allow(unused_mut)]
 let mut val = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.resizable(val);
 
 }
@@ -7452,7 +7452,7 @@ NewTableColumnBuilderMethodId::ClipContents => {
 	puffin::profile_scope!("match NewTableColumnBuilderMethodId::ClipContents");
 #[allow(unused_mut)]
 let mut val = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.clip(val);
 
 }
@@ -7462,7 +7462,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.new_table_columns.push(w);
 
 }
@@ -7501,13 +7501,13 @@ let label = {
 // construct
 
 #[allow(unused_mut)]
-let mut w = // generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+let mut w = // generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 egui_ltreeview::NodeBuilder::dir(i.value()).label(label);
 if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.r3_node_cmds.push(NodeCommand::NodeDir(w));
 
 }
@@ -7546,13 +7546,13 @@ let label = {
 // construct
 
 #[allow(unused_mut)]
-let mut w = // generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+let mut w = // generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 egui_ltreeview::NodeBuilder::leaf(i.value()).label(label);
 if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.r3_node_cmds.push(NodeCommand::NodeLeaf(w));
 
 }
@@ -7564,7 +7564,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 {
     let screen = c.screen_rect();
@@ -7657,7 +7657,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 if u.is_some() {
     let ui = u.as_mut().unwrap();
@@ -7912,7 +7912,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.paint_cmds.push(PaintCmd::SenseRegion { id: i, px, py, sw, sh });
 
 }
@@ -7969,7 +7969,7 @@ FuncProcId::PanelBottom => {
 // construct
 
 #[allow(unused_mut)]
-let mut w = // generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+let mut w = // generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 egui::Panel::bottom(i);
 // methods
 loop {
@@ -8008,7 +8008,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					w.show(c, |ui| {
 						let _ = self.interpret_outer_logged(c, &mut Some(ui));
@@ -8023,7 +8023,7 @@ FuncProcId::PanelBottomInside => {
 // construct
 
 #[allow(unused_mut)]
-let mut w = // generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+let mut w = // generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 egui::Panel::bottom(i);
 // methods
 loop {
@@ -8062,7 +8062,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						w.show_inside(u.as_mut().unwrap(), |ui| {
@@ -8085,7 +8085,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 						w.show(c, |ui| {
 							let _ = self.interpret_outer_logged(c, &mut Some(ui));
@@ -8104,7 +8104,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						w.show_inside(u.as_mut().unwrap(), |ui| {
@@ -8123,7 +8123,7 @@ FuncProcId::PanelLeft => {
 // construct
 
 #[allow(unused_mut)]
-let mut w = // generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+let mut w = // generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 egui::Panel::left(i);
 // methods
 loop {
@@ -8162,7 +8162,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					w.show(c, |ui| {
 						let _ = self.interpret_outer_logged(c, &mut Some(ui));
@@ -8177,7 +8177,7 @@ FuncProcId::PanelLeftInside => {
 // construct
 
 #[allow(unused_mut)]
-let mut w = // generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+let mut w = // generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 egui::Panel::left(i);
 // methods
 loop {
@@ -8216,7 +8216,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						w.show_inside(u.as_mut().unwrap(), |ui| {
@@ -8235,7 +8235,7 @@ FuncProcId::PanelRight => {
 // construct
 
 #[allow(unused_mut)]
-let mut w = // generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+let mut w = // generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 egui::Panel::right(i);
 // methods
 loop {
@@ -8274,7 +8274,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					w.show(c, |ui| {
 						let _ = self.interpret_outer_logged(c, &mut Some(ui));
@@ -8289,7 +8289,7 @@ FuncProcId::PanelRightInside => {
 // construct
 
 #[allow(unused_mut)]
-let mut w = // generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+let mut w = // generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 egui::Panel::right(i);
 // methods
 loop {
@@ -8328,7 +8328,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						w.show_inside(u.as_mut().unwrap(), |ui| {
@@ -8347,7 +8347,7 @@ FuncProcId::PanelTop => {
 // construct
 
 #[allow(unused_mut)]
-let mut w = // generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+let mut w = // generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 egui::Panel::top(i);
 // methods
 loop {
@@ -8386,7 +8386,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					w.show(c, |ui| {
 						let _ = self.interpret_outer_logged(c, &mut Some(ui));
@@ -8401,7 +8401,7 @@ FuncProcId::PanelTopInside => {
 // construct
 
 #[allow(unused_mut)]
-let mut w = // generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+let mut w = // generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 egui::Panel::top(i);
 // methods
 loop {
@@ -8440,7 +8440,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						w.show_inside(u.as_mut().unwrap(), |ui| {
@@ -8462,7 +8462,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.r9_u64_push(i.value(),input+1);
 
 }
@@ -8747,7 +8747,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 if u.is_some() {
     let ui = u.as_mut().unwrap();
@@ -9519,7 +9519,7 @@ ProgressBarBuilderMethodId::Animate => {
 	puffin::profile_scope!("match ProgressBarBuilderMethodId::Animate");
 #[allow(unused_mut)]
 let mut enabled = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.animate(enabled && !self.animation_freeze);
 
 }
@@ -9550,7 +9550,7 @@ ProgressBarBuilderMethodId::CornerRadius => {
 	puffin::profile_scope!("match ProgressBarBuilderMethodId::CornerRadius");
 #[allow(unused_mut)]
 let mut radius = self.io.read_plain_u8()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.corner_radius(radius);
 
 }
@@ -9570,7 +9570,7 @@ let col = {
 	self.r11_color32
 
 };
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.fill(col);
 
 }
@@ -9580,7 +9580,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.apply_widget(w,u,f,None);
 
 }
@@ -9594,7 +9594,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						u.as_mut().unwrap().push_id(i, |ui| {
@@ -9634,10 +9634,10 @@ self.end_consume_message()?;
 }
 // apply
 let resp =
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.apply_widget(w,u,f,Some(i));
 if resp.is_some() && resp.unwrap().clicked() {
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.r10_push(i.value(), true);
 }
 }
@@ -9649,7 +9649,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 c.request_repaint();
 
 }
@@ -9663,7 +9663,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 			c.request_repaint_after(std::time::Duration::from_secs_f64(dur_secs));
 
@@ -9678,7 +9678,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 			c.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::new(path)));
 
@@ -9701,7 +9701,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 			let req = crate::imzero2::interpreter::ScreenshotRequest {
 				path,
@@ -9730,14 +9730,14 @@ ScalarSizeBuilderMethodId::Build => {
 ScalarSizeBuilderMethodId::AvailableWidth => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match ScalarSizeBuilderMethodId::AvailableWidth");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = if u.is_some() { u.as_mut().unwrap().available_width() } else { 0.0 };
 
 }
 ScalarSizeBuilderMethodId::AvailableHeight => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match ScalarSizeBuilderMethodId::AvailableHeight");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = if u.is_some() { u.as_mut().unwrap().available_height() } else { 0.0 };
 
 }
@@ -9758,7 +9758,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						u.as_mut().unwrap().scope(|ui| {
@@ -9805,7 +9805,7 @@ ScrollAreaBuilderMethodId::Animated => {
 	puffin::profile_scope!("match ScrollAreaBuilderMethodId::Animated");
 #[allow(unused_mut)]
 let mut val = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.animated(val && !self.animation_freeze);
 
 }
@@ -9816,7 +9816,7 @@ ScrollAreaBuilderMethodId::AutoShrink => {
 let mut horiz = self.io.read_plain_b()?;
 #[allow(unused_mut)]
 let mut vert = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.auto_shrink([horiz, vert]);
 
 }
@@ -9826,7 +9826,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						w.show(u.as_mut().unwrap(), |ui| {
@@ -9847,7 +9847,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						let a = match align {
@@ -9889,7 +9889,7 @@ let mut w = 0u8;if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 if u.is_some() {
     let ui = u.as_mut().unwrap();
@@ -9922,7 +9922,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.scrolling_texture.release(i.value());
 
 }
@@ -9943,7 +9943,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.apply_widget(w,u,f,Some(i));
 
 }
@@ -9965,14 +9965,14 @@ SeparatorBuilderMethodId::Build => {
 SeparatorBuilderMethodId::Horizontal => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match SeparatorBuilderMethodId::Horizontal");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.horizontal();
 
 }
 SeparatorBuilderMethodId::Vertical => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match SeparatorBuilderMethodId::Vertical");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.vertical();
 
 }
@@ -9981,7 +9981,7 @@ SeparatorBuilderMethodId::Spacing => {
 	puffin::profile_scope!("match SeparatorBuilderMethodId::Spacing");
 #[allow(unused_mut)]
 let mut spacing = self.io.read_plain_f32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.spacing(spacing);
 
 }
@@ -9990,7 +9990,7 @@ SeparatorBuilderMethodId::Grow => {
 	puffin::profile_scope!("match SeparatorBuilderMethodId::Grow");
 #[allow(unused_mut)]
 let mut extra = self.io.read_plain_f32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.grow(extra);
 
 }
@@ -9999,7 +9999,7 @@ SeparatorBuilderMethodId::Shrink => {
 	puffin::profile_scope!("match SeparatorBuilderMethodId::Shrink");
 #[allow(unused_mut)]
 let mut shrink = self.io.read_plain_f32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.shrink(shrink);
 
 }
@@ -10009,7 +10009,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.apply_widget(w,u,f,None);
 
 }
@@ -10038,7 +10038,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 			let collapsing_id = i.with("collapsing");
 			let mut state = egui::collapsing_header::CollapsingState::load_with_default_open(c, collapsing_id, true);
@@ -10054,7 +10054,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 				if u.is_some() {
 					self.render_debug_tools(c, u.as_mut().unwrap());
@@ -10069,7 +10069,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 //#[cfg(feature = "puffin")]
 //puffin_egui::profiler_window(c); // FIXME problem with egui version in puffin_egui crate
@@ -10180,7 +10180,7 @@ SliderF64BuilderMethodId::MinDecimals => {
 	puffin::profile_scope!("match SliderF64BuilderMethodId::MinDecimals");
 #[allow(unused_mut)]
 let mut digits = self.io.read_plain_u32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.min_decimals(digits as usize);
 
 }
@@ -10189,7 +10189,7 @@ SliderF64BuilderMethodId::MaxDecimals => {
 	puffin::profile_scope!("match SliderF64BuilderMethodId::MaxDecimals");
 #[allow(unused_mut)]
 let mut digits = self.io.read_plain_u32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.max_decimals(digits as usize);
 
 }
@@ -10198,7 +10198,7 @@ SliderF64BuilderMethodId::FixedDecimals => {
 	puffin::profile_scope!("match SliderF64BuilderMethodId::FixedDecimals");
 #[allow(unused_mut)]
 let mut digits = self.io.read_plain_u32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.fixed_decimals(digits as usize);
 
 }
@@ -10217,7 +10217,7 @@ SliderF64BuilderMethodId::Binary => {
 let mut min_width = self.io.read_plain_u32()?;
 #[allow(unused_mut)]
 let mut twos_complement = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.binary(min_width as usize,twos_complement);
 
 }
@@ -10228,7 +10228,7 @@ SliderF64BuilderMethodId::Octal => {
 let mut min_width = self.io.read_plain_u32()?;
 #[allow(unused_mut)]
 let mut twos_complement = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.octal(min_width as usize,twos_complement);
 
 }
@@ -10241,7 +10241,7 @@ let mut min_width = self.io.read_plain_u32()?;
 let mut twos_complement = self.io.read_plain_b()?;
 #[allow(unused_mut)]
 let mut upper = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.hexadecimal(min_width as usize,twos_complement,upper);
 
 }
@@ -10266,10 +10266,10 @@ self.end_consume_message()?;
 }
 // apply
 let resp =
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.apply_widget(w,u,f,Some(i));
 if resp.is_some() && resp.unwrap().changed() {
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.r9_f64_push(i.value(),val);
 }
 }
@@ -10378,7 +10378,7 @@ SliderI64BuilderMethodId::MinDecimals => {
 	puffin::profile_scope!("match SliderI64BuilderMethodId::MinDecimals");
 #[allow(unused_mut)]
 let mut digits = self.io.read_plain_u32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.min_decimals(digits as usize);
 
 }
@@ -10387,7 +10387,7 @@ SliderI64BuilderMethodId::MaxDecimals => {
 	puffin::profile_scope!("match SliderI64BuilderMethodId::MaxDecimals");
 #[allow(unused_mut)]
 let mut digits = self.io.read_plain_u32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.max_decimals(digits as usize);
 
 }
@@ -10396,7 +10396,7 @@ SliderI64BuilderMethodId::FixedDecimals => {
 	puffin::profile_scope!("match SliderI64BuilderMethodId::FixedDecimals");
 #[allow(unused_mut)]
 let mut digits = self.io.read_plain_u32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.fixed_decimals(digits as usize);
 
 }
@@ -10415,7 +10415,7 @@ SliderI64BuilderMethodId::Binary => {
 let mut min_width = self.io.read_plain_u32()?;
 #[allow(unused_mut)]
 let mut twos_complement = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.binary(min_width as usize,twos_complement);
 
 }
@@ -10426,7 +10426,7 @@ SliderI64BuilderMethodId::Octal => {
 let mut min_width = self.io.read_plain_u32()?;
 #[allow(unused_mut)]
 let mut twos_complement = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.octal(min_width as usize,twos_complement);
 
 }
@@ -10439,7 +10439,7 @@ let mut min_width = self.io.read_plain_u32()?;
 let mut twos_complement = self.io.read_plain_b()?;
 #[allow(unused_mut)]
 let mut upper = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.hexadecimal(min_width as usize,twos_complement,upper);
 
 }
@@ -10464,10 +10464,10 @@ self.end_consume_message()?;
 }
 // apply
 let resp =
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.apply_widget(w,u,f,Some(i));
 if resp.is_some() && resp.unwrap().changed() {
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.r9_i64_push(i.value(),val);
 }
 }
@@ -10576,7 +10576,7 @@ SliderU64BuilderMethodId::MinDecimals => {
 	puffin::profile_scope!("match SliderU64BuilderMethodId::MinDecimals");
 #[allow(unused_mut)]
 let mut digits = self.io.read_plain_u32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.min_decimals(digits as usize);
 
 }
@@ -10585,7 +10585,7 @@ SliderU64BuilderMethodId::MaxDecimals => {
 	puffin::profile_scope!("match SliderU64BuilderMethodId::MaxDecimals");
 #[allow(unused_mut)]
 let mut digits = self.io.read_plain_u32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.max_decimals(digits as usize);
 
 }
@@ -10594,7 +10594,7 @@ SliderU64BuilderMethodId::FixedDecimals => {
 	puffin::profile_scope!("match SliderU64BuilderMethodId::FixedDecimals");
 #[allow(unused_mut)]
 let mut digits = self.io.read_plain_u32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.fixed_decimals(digits as usize);
 
 }
@@ -10613,7 +10613,7 @@ SliderU64BuilderMethodId::Binary => {
 let mut min_width = self.io.read_plain_u32()?;
 #[allow(unused_mut)]
 let mut twos_complement = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.binary(min_width as usize,twos_complement);
 
 }
@@ -10624,7 +10624,7 @@ SliderU64BuilderMethodId::Octal => {
 let mut min_width = self.io.read_plain_u32()?;
 #[allow(unused_mut)]
 let mut twos_complement = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.octal(min_width as usize,twos_complement);
 
 }
@@ -10637,7 +10637,7 @@ let mut min_width = self.io.read_plain_u32()?;
 let mut twos_complement = self.io.read_plain_b()?;
 #[allow(unused_mut)]
 let mut upper = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.hexadecimal(min_width as usize,twos_complement,upper);
 
 }
@@ -10662,10 +10662,10 @@ self.end_consume_message()?;
 }
 // apply
 let resp =
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.apply_widget(w,u,f,Some(i));
 if resp.is_some() && resp.unwrap().changed() {
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.r9_u64_push(i.value(),val);
 }
 }
@@ -10794,7 +10794,7 @@ crisp_magnified_text = vl;
 }
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 let bodies = self.io.read_deferred_block_map_u64()?;
 if u.is_some() {
@@ -10928,7 +10928,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.apply_widget(w,u,f,None);
 
 }
@@ -10957,7 +10957,7 @@ TableBuilderMethodId::Striped => {
 	puffin::profile_scope!("match TableBuilderMethodId::Striped");
 #[allow(unused_mut)]
 let mut val = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w.striped = val;
 
 }
@@ -10966,7 +10966,7 @@ TableBuilderMethodId::Vscroll => {
 	puffin::profile_scope!("match TableBuilderMethodId::Vscroll");
 #[allow(unused_mut)]
 let mut val = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w.vscroll = val;
 
 }
@@ -10975,7 +10975,7 @@ TableBuilderMethodId::ScrollToRow => {
 	puffin::profile_scope!("match TableBuilderMethodId::ScrollToRow");
 #[allow(unused_mut)]
 let mut row = self.io.read_plain_u64()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w.scroll_to_row = Some(row as usize);
 
 }
@@ -10984,7 +10984,7 @@ TableBuilderMethodId::MinScrolledHeight => {
 	puffin::profile_scope!("match TableBuilderMethodId::MinScrolledHeight");
 #[allow(unused_mut)]
 let mut val = self.io.read_plain_f32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w.min_scrolled_height = val;
 
 }
@@ -10993,7 +10993,7 @@ TableBuilderMethodId::MaxScrollHeight => {
 	puffin::profile_scope!("match TableBuilderMethodId::MaxScrollHeight");
 #[allow(unused_mut)]
 let mut val = self.io.read_plain_f32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w.max_scroll_height = val;
 
 }
@@ -11003,7 +11003,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 if u.is_some() {
 	let ui = u.as_mut().unwrap();
@@ -11135,7 +11135,7 @@ TableColumnBuilderMethodId::Build => {
 TableColumnBuilderMethodId::Auto => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match TableColumnBuilderMethodId::Auto");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui_extras::Column::auto();
 
 }
@@ -11144,7 +11144,7 @@ TableColumnBuilderMethodId::Exact => {
 	puffin::profile_scope!("match TableColumnBuilderMethodId::Exact");
 #[allow(unused_mut)]
 let mut width = self.io.read_plain_f32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui_extras::Column::exact(width);
 
 }
@@ -11153,14 +11153,14 @@ TableColumnBuilderMethodId::Initial => {
 	puffin::profile_scope!("match TableColumnBuilderMethodId::Initial");
 #[allow(unused_mut)]
 let mut width = self.io.read_plain_f32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui_extras::Column::initial(width);
 
 }
 TableColumnBuilderMethodId::Remainder => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match TableColumnBuilderMethodId::Remainder");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = egui_extras::Column::remainder();
 
 }
@@ -11169,7 +11169,7 @@ TableColumnBuilderMethodId::AtLeast => {
 	puffin::profile_scope!("match TableColumnBuilderMethodId::AtLeast");
 #[allow(unused_mut)]
 let mut min_width = self.io.read_plain_f32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.at_least(min_width);
 
 }
@@ -11178,7 +11178,7 @@ TableColumnBuilderMethodId::AtMost => {
 	puffin::profile_scope!("match TableColumnBuilderMethodId::AtMost");
 #[allow(unused_mut)]
 let mut max_width = self.io.read_plain_f32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.at_most(max_width);
 
 }
@@ -11187,7 +11187,7 @@ TableColumnBuilderMethodId::Resizable => {
 	puffin::profile_scope!("match TableColumnBuilderMethodId::Resizable");
 #[allow(unused_mut)]
 let mut val = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.resizable(val);
 
 }
@@ -11196,7 +11196,7 @@ TableColumnBuilderMethodId::ClipContents => {
 	puffin::profile_scope!("match TableColumnBuilderMethodId::ClipContents");
 #[allow(unused_mut)]
 let mut val = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.clip(val);
 
 }
@@ -11206,7 +11206,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.table_columns.push(w);
 
 }
@@ -11236,7 +11236,7 @@ let mut multiline = self.io.read_plain_b()?;
 // construct
 
 #[allow(unused_mut)]
-let mut w = // generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+let mut w = // generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 if multiline { egui::TextEdit::multiline(&mut text).id(i) } else { egui::TextEdit::singleline(&mut text).id(i) };
 // methods
 loop {
@@ -11256,7 +11256,7 @@ TextEditBuilderMethodId::Frame => {
 	puffin::profile_scope!("match TextEditBuilderMethodId::Frame");
 #[allow(unused_mut)]
 let mut frame = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 if !frame { w = w.frame(egui::Frame::NONE); }
 
 }
@@ -11297,7 +11297,7 @@ TextEditBuilderMethodId::DesiredRows => {
 	puffin::profile_scope!("match TextEditBuilderMethodId::DesiredRows");
 #[allow(unused_mut)]
 let mut rows = self.io.read_plain_u32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.desired_rows(rows as usize);
 
 }
@@ -11330,7 +11330,7 @@ TextEditBuilderMethodId::CharLimit => {
 	puffin::profile_scope!("match TextEditBuilderMethodId::CharLimit");
 #[allow(unused_mut)]
 let mut chars = self.io.read_plain_u32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.char_limit(chars as usize);
 
 }
@@ -11341,10 +11341,10 @@ self.end_consume_message()?;
 }
 // apply
 let resp =
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.apply_widget(w,u,f,Some(i));
 if resp.is_some() && resp.unwrap().changed() {
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.r9_s_push(i.value(),text);
 }
 }
@@ -11377,7 +11377,7 @@ let mut label = self.io.read_plain_s()?;
 let mut from_sql = self.io.read_plain_s()?;
 #[allow(unused_mut)]
 let mut to_sql = self.io.read_plain_s()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w.presets.push(crate::imzero2::time_range_picker::PresetEntry{label, from_sql, to_sql});
 
 }
@@ -11386,7 +11386,7 @@ TimeRangePickerBuilderMethodId::Tz => {
 	puffin::profile_scope!("match TimeRangePickerBuilderMethodId::Tz");
 #[allow(unused_mut)]
 let mut zone = self.io.read_plain_s()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w.tz = Some(zone);
 
 }
@@ -11395,7 +11395,7 @@ TimeRangePickerBuilderMethodId::RefreshInterval => {
 	puffin::profile_scope!("match TimeRangePickerBuilderMethodId::RefreshInterval");
 #[allow(unused_mut)]
 let mut interval_ms = self.io.read_plain_u32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w.refresh_interval_ms = Some(interval_ms);
 
 }
@@ -11406,7 +11406,7 @@ TimeRangePickerBuilderMethodId::EvaluatedBounds => {
 let mut from_ms = self.io.read_plain_i64()?;
 #[allow(unused_mut)]
 let mut to_ms = self.io.read_plain_i64()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w.evaluated_from_ms = Some(from_ms);
 w.evaluated_to_ms = Some(to_ms);
 
@@ -11417,7 +11417,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.apply_time_range_picker(w,u,f,i,from_initial,to_initial);
 
 }
@@ -11485,7 +11485,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						let ui = u.as_mut().unwrap();
@@ -11538,7 +11538,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 if u.is_some() {
 	let ui = u.as_mut().unwrap();
 	// egui_ltreeview 0.7 quirk: TreeViewBuilder::close_dir reads ui.clip_rect()
@@ -11607,7 +11607,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						u.as_mut().unwrap().disable();
@@ -11624,7 +11624,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						u.as_mut().unwrap().set_height(height);
@@ -11641,7 +11641,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						u.as_mut().unwrap().set_max_height(height);
@@ -11658,7 +11658,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						u.as_mut().unwrap().set_max_width(width);
@@ -11675,7 +11675,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						u.as_mut().unwrap().set_min_height(height);
@@ -11692,7 +11692,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						u.as_mut().unwrap().set_min_width(width);
@@ -11709,7 +11709,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						u.as_mut().unwrap().set_width(width);
@@ -11793,7 +11793,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						u.as_mut().unwrap().with_layout(layout, |ui| {
@@ -11822,7 +11822,7 @@ VectorSizeBuilderMethodId::Build => {
 VectorSizeBuilderMethodId::AvailableSize => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match VectorSizeBuilderMethodId::AvailableSize");
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = if u.is_some() { u.as_mut().unwrap().available_size() } else { egui::emath::Vec2::new(0.0f32,0.0f32) };
 
 }
@@ -11843,7 +11843,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						u.as_mut().unwrap().vertical(|ui| {
@@ -11863,7 +11863,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						u.as_mut().unwrap().vertical_centered(|ui| {
@@ -11883,7 +11883,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 					if u.is_some() {
 						u.as_mut().unwrap().vertical_centered_justified(|ui| {
@@ -12014,7 +12014,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 self.render_walkers_map(
     u, f, i,
@@ -12033,7 +12033,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 			if u.is_some() {
 				egui::warn_if_debug_build(u.as_mut().unwrap());
@@ -12057,7 +12057,7 @@ WidgetTextBuilderMethodId::Text => {
 	puffin::profile_scope!("match WidgetTextBuilderMethodId::Text");
 #[allow(unused_mut)]
 let mut val = self.io.read_plain_s()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.r1_widget_text = egui::WidgetText::Text(val);
 
 }
@@ -12077,7 +12077,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 			if u.is_some() {
 				egui::widgets::global_theme_preference_buttons(u.as_mut().unwrap());
@@ -12105,7 +12105,7 @@ let label = {
 // construct
 
 #[allow(unused_mut)]
-let mut w = // generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+let mut w = // generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 egui::Window::new(label).id(i);
 // methods
 loop {
@@ -12175,7 +12175,7 @@ WindowBuilderMethodId::DefaultWidth => {
 	puffin::profile_scope!("match WindowBuilderMethodId::DefaultWidth");
 #[allow(unused_mut)]
 let mut width = self.io.read_plain_f32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.default_width(width);
 
 }
@@ -12184,7 +12184,7 @@ WindowBuilderMethodId::DefaultHeight => {
 	puffin::profile_scope!("match WindowBuilderMethodId::DefaultHeight");
 #[allow(unused_mut)]
 let mut height = self.io.read_plain_f32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.default_height(height);
 
 }
@@ -12195,7 +12195,7 @@ WindowBuilderMethodId::DefaultSize => {
 let mut width = self.io.read_plain_f32()?;
 #[allow(unused_mut)]
 let mut height = self.io.read_plain_f32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.default_size(egui::vec2(width, height));
 
 }
@@ -12206,7 +12206,7 @@ WindowBuilderMethodId::DefaultPos => {
 let mut pos_x = self.io.read_plain_f32()?;
 #[allow(unused_mut)]
 let mut pos_y = self.io.read_plain_f32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.default_pos(egui::pos2(pos_x, pos_y));
 
 }
@@ -12215,7 +12215,7 @@ WindowBuilderMethodId::MinWidth => {
 	puffin::profile_scope!("match WindowBuilderMethodId::MinWidth");
 #[allow(unused_mut)]
 let mut width = self.io.read_plain_f32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.min_width(width);
 
 }
@@ -12224,7 +12224,7 @@ WindowBuilderMethodId::MinHeight => {
 	puffin::profile_scope!("match WindowBuilderMethodId::MinHeight");
 #[allow(unused_mut)]
 let mut height = self.io.read_plain_f32()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 w = w.min_height(height);
 
 }
@@ -12233,7 +12233,7 @@ WindowBuilderMethodId::AlwaysOnTop => {
 	puffin::profile_scope!("match WindowBuilderMethodId::AlwaysOnTop");
 #[allow(unused_mut)]
 let mut val = self.io.read_plain_b()?;
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 if val { w = w.order(egui::Order::Foreground); }
 
 }
@@ -12251,7 +12251,7 @@ if d == 0 {
 self.end_consume_message()?;
 }
 // apply
-// generating location: /home/spx/repo/pebble2impl/src/go/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/pebble2impl/src/go/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+// generating location: boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
 				let open_binding_id = std::mem::take(&mut self.scratch_open_binding_id);
 				// window_open always defaults to true: Go re-emitting this

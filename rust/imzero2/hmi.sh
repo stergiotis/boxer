@@ -56,7 +56,7 @@ export HN_EXPLORER_CLICKHOUSE_URL="http://default:hack@localhost:8123/"
 	--logLevel=info \
        	--pprofHttpListenAddress "localhost:6060" \
        	--flightRecorder --flightRecorderOutputFile="$flightRecord" --flightRecorderFlushOnSignal=SIGTERM,SIGINT \
-       	imzero2 demo --clientBinary "$clientDir/pebble2_rust" \
+       	imzero2 demo --clientBinary "$clientDir/imzero2" \
                       --clientType "egui" \
                       --clientBackgroundColorRGBA 8f8f8fff \
                       --clientVsync $VSYNC \

@@ -3,7 +3,7 @@ members = [".", "imzero2_egui"]
 resolver = "2"
 
 [package]
-name = "pebble2_rust"
+name = "imzero2"
 version = "0.1.0"
 authors = ["Panos Stergiotis <p@stergiotis.ch>"]
 edition = "2024"

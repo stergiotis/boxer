@@ -8,7 +8,7 @@
 
 use egui::{Color32, Context, Id, Pos2, RawInput, Rect, Vec2};
 
-use pebble2_rust::imzero2::svgexport::{
+use imzero2::imzero2::svgexport::{
     self, FontResolver, LinkZonesHandle, TexturePixelCache, TexturePixelCacheHandle, WindowMode,
 };
 use std::sync::{Arc, Mutex};

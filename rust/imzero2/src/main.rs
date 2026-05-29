@@ -1,7 +1,7 @@
 #![warn(clippy::all, rust_2018_idioms)]
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
-use pebble2_rust::cli::flags;
+use imzero2::cli::flags;
 
 #[cfg(feature = "dhat-heap")]
 #[global_allocator]
@@ -69,8 +69,8 @@ fn main() -> Result<(),Box<dyn std::error::Error>> {
     // guard binding must outlive every event we want tagged — kept in
     // scope for the duration of main. ADR-0026 §2026-05-12 follow-up
     // (b): cross-process audit attribution via PEBBLE2_RUN_ID.
-    let _run_span = pebble2_rust::runinfo::enter_root_span();
-    pebble2_rust::runinfo::log_bound_run();
+    let _run_span = imzero2::runinfo::enter_root_span();
+    imzero2::runinfo::log_bound_run();
 
     #[cfg(feature = "puffin")]
     start_puffin_server();
@@ -90,14 +90,14 @@ fn main() -> Result<(),Box<dyn std::error::Error>> {
 
     let r = match command {
         "imzero2" => {
-            let mut cfg = pebble2_rust::appconfig::AppConfig::default();
-            if pebble2_rust::cli::flags::find_flag_value_default_bool(rest_args.iter(), &mut used, "-help", false) {
+            let mut cfg = imzero2::appconfig::AppConfig::default();
+            if imzero2::cli::flags::find_flag_value_default_bool(rest_args.iter(), &mut used, "-help", false) {
                 cfg.usage(&mut std::io::stderr()).expect("unable to display usage");
             } else {
                 cfg.parse(&mut used, &rest_args);
             }
             flags::validate_all_args_used(rest_args, rest_args.len() as u32,&used);
-            let r = pebble2_rust::run_imzero2_main_loop(cfg);
+            let r = imzero2::run_imzero2_main_loop(cfg);
             if r.is_err() {
                 let e = r.err().unwrap();
                 Err(Box::<dyn std::error::Error>::from(e))
@@ -113,10 +113,10 @@ fn main() -> Result<(),Box<dyn std::error::Error>> {
             tracing::info!(shm_path=shm_path,data_size=data_size,mode=mode,"running ipc test harness");
             match mode.as_str() {
                 "consumer" => {
-                    pebble2_rust::run_ipc06_testharness_consumer(shm_path.as_str(), data_size);
+                    imzero2::run_ipc06_testharness_consumer(shm_path.as_str(), data_size);
                 },
                 "producer" => {
-                    pebble2_rust::run_ipc06_testharness_producer(shm_path.as_str(), data_size);
+                    imzero2::run_ipc06_testharness_producer(shm_path.as_str(), data_size);
                 }
                 _ => {
                     tracing::error!(mode=mode,"unknown test harness mode");

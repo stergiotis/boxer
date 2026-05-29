@@ -8,7 +8,7 @@ use std::sync::Arc;
 use egui::epaint::{Mesh, Shape};
 use egui::{Color32, Context, Pos2, RawInput, Rect, Vec2};
 
-use pebble2_rust::imzero2::svgexport;
+use imzero2::imzero2::svgexport;
 
 const W: f32 = 480.0;
 const H: f32 = 360.0;
