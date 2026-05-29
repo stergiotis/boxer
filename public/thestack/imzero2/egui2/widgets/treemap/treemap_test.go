@@ -3,6 +3,7 @@
 package treemap
 
 import (
+	"math"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap/layout"
@@ -391,6 +392,51 @@ func TestCompositeColoring_AllSkipMeansNotOk(t *testing.T) {
 	composite := CompositeColoring(a, b)
 	if _, ok := composite.Colors(CellInfo{}); ok {
 		t.Error("expected ok=false when all layers skip")
+	}
+}
+
+// TestCompositeColoring_OverrideOverAlwaysOkBase pins the order for the
+// "tint a subset of nodes over a base that colors everything" pattern (the
+// imztop topology panel: per-PU load tint over a DepthColoring base). Because
+// CompositeColoring is last-ok-wins and DepthColoring always returns ok, the
+// always-ok base MUST be first and the conditional override LAST. Reversing
+// them lets the base clobber the override on every node — the colors look
+// static. This guards against that regression.
+func TestCompositeColoring_OverrideOverAlwaysOkBase(t *testing.T) {
+	leaf := &layout.Node{Name: "pu", Size: 1}
+	branch := &layout.Node{Name: "core", Children: []*layout.Node{leaf}}
+
+	base := DepthColoring([]uint32{0x111111ff, 0x222222ff}) // always ok
+	override := ContinuousColoring([]uint32{0x000000ff, 0xffffffff},
+		func(n *layout.Node) float64 {
+			if n == leaf {
+				return 100 // opinion on the leaf only
+			}
+			return math.NaN() // abstain elsewhere
+		}, 0, 100)
+
+	// Correct order: base first, override last.
+	good := CompositeColoring(base, override)
+	gotLeaf, ok := good.Colors(CellInfo{Node: leaf, Depth: 1})
+	if !ok {
+		t.Fatal("leaf: expected ok")
+	}
+	wantLeaf, _ := override.Colors(CellInfo{Node: leaf, Depth: 1})
+	if gotLeaf != wantLeaf {
+		t.Error("leaf: override (load) layer should win over the base")
+	}
+	gotBranch, _ := good.Colors(CellInfo{Node: branch, Depth: 0})
+	wantBranch, _ := base.Colors(CellInfo{Node: branch, Depth: 0})
+	if gotBranch != wantBranch {
+		t.Error("branch: base should show where the override abstains")
+	}
+
+	// Reversed order regresses the leaf to the base color (the bug).
+	bad := CompositeColoring(override, base)
+	gotBad, _ := bad.Colors(CellInfo{Node: leaf, Depth: 1})
+	wantBaseLeaf, _ := base.Colors(CellInfo{Node: leaf, Depth: 1})
+	if gotBad != wantBaseLeaf {
+		t.Error("reversed order should let the always-ok base clobber the leaf override")
 	}
 }
 

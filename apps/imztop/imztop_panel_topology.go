@@ -54,9 +54,14 @@ func (inst *App) initTopology() {
 		}
 		return float64(ld[cpuID])
 	}
+	// Layer order matters: CompositeColoring is last-ok-wins and DepthColoring
+	// always returns ok, so the depth base must come FIRST and the load layer
+	// LAST — otherwise depth clobbers the tint on every node (the colors look
+	// static). On non-PU nodes loadFn returns NaN (ok=false) so the depth base
+	// shows through; on PU leaves the load layer wins.
 	coloring := treemap.CompositeColoring(
-		treemap.ContinuousColoring(cpuHeatmapPalette(), loadFn, 0, 100),
 		treemap.DepthColoring(treemap.DefaultDepthColors),
+		treemap.ContinuousColoring(cpuHeatmapPalette(), loadFn, 0, 100),
 	)
 	// No WithContainerSize: the canvas is sized per-frame in
 	// renderTopologyPanel to fill the dock pane. The widget's 700×450 default
