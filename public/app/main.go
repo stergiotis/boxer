@@ -4,6 +4,18 @@ import (
 	"os"
 
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/app/commands/capslock"
+	"github.com/stergiotis/boxer/public/app/commands/codedriven"
+	"github.com/stergiotis/boxer/public/app/commands/compression"
+	"github.com/stergiotis/boxer/public/app/commands/datasource"
+	"github.com/stergiotis/boxer/public/app/commands/designsystem"
+	"github.com/stergiotis/boxer/public/app/commands/findAnchor"
+	"github.com/stergiotis/boxer/public/app/commands/http"
+	"github.com/stergiotis/boxer/public/app/commands/key"
+	"github.com/stergiotis/boxer/public/app/commands/runtimecodegen"
+	"github.com/stergiotis/boxer/public/app/commands/sample"
+	"github.com/stergiotis/boxer/public/app/commands/swisstopo"
+	"github.com/stergiotis/boxer/public/app/commands/watch"
 	"github.com/stergiotis/boxer/public/code"
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/config/env/envdoc"
@@ -66,6 +78,22 @@ func mainC() (exitCode int) {
 			finddivisions.NewCliCommand(),
 			code.NewCliCommand(genbuildertest.NewCliCommand()),
 			text2sql.NewCliCommand(),
+			// Ported from pebble2impl app/commands (P9). cbor/leeway/observability/
+			// dev/env(=envgen)/gov are intentionally omitted as boxer wires them
+			// from their home packages above; adversarialreview/clarityrate are
+			// dropped (depended on the absent cmd/adversarial-review tree).
+			capslock.NewCliCommand(),
+			codedriven.NewCliCommand(),
+			compression.NewCliCommand(),
+			datasource.NewCliCommand(),
+			designsystem.NewCliCommand(),
+			findAnchor.NewCliCommand(),
+			http.NewCliCommand(),
+			key.NewCliCommand(),
+			runtimecodegen.NewCliCommand(),
+			sample.NewCliCommand(),
+			swisstopo.NewCliCommand(),
+			watch.NewCliCommand(),
 		),
 		Before: logging.Apply,
 		After: func(context *cli.Context) error {
