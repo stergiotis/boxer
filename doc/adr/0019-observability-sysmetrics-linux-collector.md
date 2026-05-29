@@ -22,7 +22,7 @@ Forces the design must respect:
 
 - **Linux-only.** This ADR explicitly does not cover macOS / BSD; later ADRs may. The Go source uses `//go:build linux` files.
 - **Non-interactive and library-shaped.** No TUI, no global config, no logger singleton; collectors take options structs and return values.
-- **Boxer conventions** ([CLAUDE.md](../../CLAUDE.md), [ADR-0055](./0006-adopt-boxer-standards.md)) — `inst` receivers, `*I` interface suffix, `*E` enum suffix, `eh.Errorf` errors, `iter.Seq2[V, error]` for variable-length sequences, sized integers on fields, zero-value-usable structs, SoA over AoS where multiplicity exists.
+- **Boxer conventions** (CLAUDE.md, [ADR-0055](0055-adopt-boxer-standards.md)) — `inst` receivers, `*I` interface suffix, `*E` enum suffix, `eh.Errorf` errors, `iter.Seq2[V, error]` for variable-length sequences, sized integers on fields, zero-value-usable structs, SoA over AoS where multiplicity exists.
 - **No cgo, no libstdc++.** This repo's binary footprint already carries Rust-via-FFFI2 and a Go core; pulling C++ runtime support to read `/proc/stat` is disproportionate.
 - **GPU vendor SDKs are optional and gated.** btop dlopens NVML and ROCm-SMI at runtime and degrades gracefully when missing; we mirror that, but at build-tag granularity so callers can compile NVIDIA-free binaries.
 - **Drift-guarded.** Kernel procfs/sysfs schemas are stable but not literally append-only; we need fixture-based tests so a 2030 kernel change in `/proc/meminfo` field ordering does not silently corrupt our counters.
@@ -235,7 +235,7 @@ Six milestones, each independently shippable. A green `scripts/ci/lint.sh` and `
 ### Neutral
 
 - **`Bundle` is one orchestrator among possible many** (SD13). Callers are free to wire collectors against `errgroup`, `pool.Pool`, or anything else. The Bundle is a convenience.
-- **Tags-file gating** (SD5) means users opting into NVIDIA recompile the entire repo. Acceptable per the existing `./tags` discipline ([CLAUDE.md](../../CLAUDE.md) "Build tags from tags file").
+- **Tags-file gating** (SD5) means users opting into NVIDIA recompile the entire repo. Acceptable per the existing `./tags` discipline (CLAUDE.md "Build tags from tags file").
 
 ### Derived practices
 
@@ -260,15 +260,34 @@ Accepted 2026-05-03 by @spx. Implementation tracked across M1–M6 above.
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
 ADRs are append-only; supersession is recorded, not deleted.
 
+## Updates
+
+### 2026-05-29 — static CPU topology reader (`ReadTopology`)
+
+The Public API sketch above covers only **sampling** collectors: each `*.Collector` is primed once and then `Sample(ctx)`-ed on a cadence to produce rate/snapshot deltas. CPU *topology* — the package/cache/core/thread containment tree that `lstopo`(1) draws — is structural, not temporal: it is read once and never deltas. Rather than bend the `Sample()` contract around a value that has no second reading, this adds a one-shot reader alongside the CPU collector:
+
+```go
+// public/observability/sysmetrics/cpu/topology.go
+func ReadTopology(opts TopologyOptions) (Topology, error)
+```
+
+- **Source is pure sysfs.** No CPUID, no `/proc`, no hwloc/cgo. The reader walks `/sys/devices/system/cpu/online`, then per logical CPU reads `topology/{physical_package_id,die_id,cluster_id,core_id,thread_siblings_list}` and `cache/index*/{level,type,size,shared_cpu_list}`, plus `/sys/devices/system/node/node*/cpulist` for NUMA grouping. (Model name is still `/proc/cpuinfo`, unchanged.) `lstopo`/hwloc reads these same files; the parts it adds via CPUID/ACPI/PCI are out of scope below.
+- **Reuses existing machinery.** `TopologyOptions` carries an injectable `Sys *sysfs.Reader` exactly like `Options.Sys`, so the SD12 fixture-tree drift guards apply unchanged. The `*_list` / `shared_cpu_list` fields are parsed by the existing `parseCPUSet` helper (ranges + comma lists).
+- **Cache levels become nodes** by grouping the logical CPUs that share each `index*`; a split last-level cache (e.g. per-CCX L3) therefore materialises as sibling cache nodes automatically.
+- **Scope.** Packages, dies/clusters, L1/L2/L3 caches, cores, SMT threads (PUs), and NUMA-node grouping. PCI/GPU/NIC locality (the rest of full hwloc parity) is deliberately deferred.
+- **Consumer.** [ADR-0020](./0020-imzero2-imztop-resource-monitor.md) (Update of the same date) renders this in the imztop `Topology` panel. Topology stays out of the `Bundle`/`Sampler` path, so it adds zero per-tick cost.
+
+`status` and `reviewed-date` are deliberately not re-stamped: the sampling-collector decision is unchanged; this extends the surface with an orthogonal static read.
+
 ## References
 
 - [`../../../contrib/btop/LICENSE`](../../../contrib/btop/LICENSE) — Apache 2.0; structural mirroring with attribution is unencumbered.
 - [`../../../contrib/btop/src/linux/btop_collect.cpp`](../../../contrib/btop/src/linux/btop_collect.cpp) — Linux collector implementations; primary provenance source.
 - [`../../../contrib/btop/src/btop_shared.hpp`](../../../contrib/btop/src/btop_shared.hpp) — upstream Snapshot struct shapes.
-- [`../../CLAUDE.md`](../../CLAUDE.md) — repo conventions, build-tag handling.
+- `../../CLAUDE.md` — repo conventions, build-tag handling.
 - [`../../tags`](../../tags) — build-tag listing; new GPU tags appended here.
-- [ADR-0055](./0006-adopt-boxer-standards.md) — boxer coding/doc standards adoption.
-- [ADR-0005](./0015-streaming-persisted-kafka-from-connect.md) — possible downstream sink for snapshots (out of scope here).
+- [ADR-0055](0055-adopt-boxer-standards.md) — boxer coding/doc standards adoption.
+- [ADR-0005](0005-streaming-persisted-kafka-from-connect.md) — possible downstream sink for snapshots (out of scope here).
 - `golang.org/x/sys/unix` — `PerfEventOpen` for Intel GPU PMU access (M5).
 - `github.com/ebitengine/purego` — cgo-free vendor SDK loader for NVML / ROCm-SMI (M6).
 - `github.com/prometheus/procfs` — surveyed and rejected as a foundation; see Alternatives.

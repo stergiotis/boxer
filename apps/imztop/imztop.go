@@ -12,6 +12,8 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap/layout"
 )
 
 // Sampler is a system-wide singleton: one OS sampler feeds every open
@@ -89,6 +91,23 @@ type App struct {
 	// renderPerDeviceDistsummary in imztop_panel_cpu.go.
 	diskDistsumDigest *tdigest.TDigest
 	gpuDistsumDigest  *tdigest.TDigest
+
+	// Topology panel state (imztop_panel_topology.go). The CPU topology is
+	// static, so it is read from sysfs once — lazily, on the first Topology-
+	// tab frame (initTopology), which is also when inst.ids is the post-Mount
+	// stack the treemap must bind to.
+	//
+	//   topoInit     guards the one-shot initTopology call.
+	//   topoErr      non-nil when the sysfs read failed; panel shows a message.
+	//   topoTreemap  the squarify widget; nil until built / on error.
+	//   topoNodeCPU  PU-leaf node → logical CPU id, the live-tint lookup.
+	//   topoLoad     per-frame per-core busy% the coloring reads; aliases the
+	//                published snapshot's PerCorePercent for the current frame.
+	topoInit    bool
+	topoErr     error
+	topoTreemap *treemap.Treemap
+	topoNodeCPU map[*layout.Node]int32
+	topoLoad    []uint8
 }
 
 var _ app.AppI = (*App)(nil)
@@ -158,6 +177,7 @@ const (
 	dockTabNet     uint64 = 6
 	dockTabGPU     uint64 = 7
 	dockTabProc    uint64 = 8
+	dockTabTopo    uint64 = 9
 )
 
 // renderApp arranges the body inside the runtime-created window scope
@@ -189,13 +209,18 @@ func (inst *App) renderApp(snap *PublishedSnapshot, s *Sampler) {
 			// + I/O panels as a 3-tab leaf with Net active. PROC spans
 			// the bottom on its own leaf. Fewer leaves = more room per
 			// panel at the 1280×694 compositor-clamped viewport size.
-			cpuLeaf := dock.InitRoot(dockTabCPU, dockTabMem, dockTabBattery, dockTabSensors)
+			cpuLeaf := dock.InitRoot(dockTabCPU, dockTabTopo, dockTabMem, dockTabBattery, dockTabSensors)
 			_ = dock.Split(cpuLeaf, c.DockBelow, 0.55, dockTabProc) // PROC at bottom (~45%)
 			_ = dock.Split(cpuLeaf, c.DockRight, 0.27, dockTabNet, dockTabDisk, dockTabGPU)
 
 			for range dock.Tab(dockTabCPU, "CPU") {
 				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
 					inst.renderCPUPanel(snap)
+				}
+			}
+			for range dock.Tab(dockTabTopo, "Topology") {
+				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+					inst.renderTopologyPanel(snap)
 				}
 			}
 			for range dock.Tab(dockTabMem, "Memory") {
