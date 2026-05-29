@@ -204,7 +204,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.42.0 // indirect
 	go.opentelemetry.io/otel/trace v1.42.0 // indirect
 	go.uber.org/automaxprocs v1.6.0 // indirect
-	go.uber.org/nilaway v0.0.0-20260515015210-fd187751154f // indirect
+	go.uber.org/nilaway v0.0.0-20260528182042-490362de4fb6 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	golang.org/x/crypto v0.51.0 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20250210185358-939b2ce775ac // indirect
