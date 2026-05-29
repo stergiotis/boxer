@@ -1,0 +1,1124 @@
+// Code generated; Leeway DML (github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/leewaywidgets.test) DO NOT EDIT.
+
+package leewaywidgets
+
+import (
+	"errors"
+	"github.com/apache/arrow-go/v18/arrow"
+	array "github.com/apache/arrow-go/v18/arrow/array"
+	_ "github.com/apache/arrow-go/v18/arrow/ipc"
+	_ "github.com/apache/arrow-go/v18/arrow/math"
+	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
+	"slices"
+)
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// gocodegen.GenerateArrowSchemaFactory
+// ./public/semistructured/leeway/gocodegen/gocodegen_common.go:26
+
+func CreateSchemaFixture() (schema *arrow.Schema) {
+	schema = arrow.NewSchema([]arrow.Field{
+		/* 000 */ arrow.Field{Name: "id:id:u64:g:Ny:0:", Nullable: false, Type: arrow.PrimitiveTypes.Uint64},
+		/* 001 */ arrow.Field{Name: "id:internalKey:s:g:x2:0:", Nullable: false, Type: &arrow.StringType{}},
+		/* 002 */ arrow.Field{Name: "id:naturalKey:s:g:Ny:0:", Nullable: false, Type: &arrow.StringType{}},
+		/* 003 */ arrow.Field{Name: "tv:metric:value:val:f64:g:0:Ny:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Float64)},
+		/* 004 */ arrow.Field{Name: "tv:metric:rawBlob:val:s:g:0:x2:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
+		/* 005 */ arrow.Field{Name: "tv:metric:tags:val:sh:g:0:Ny:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
+		/* 006 */ arrow.Field{Name: "tv:metric:bins:val:u32m:g:0:Ny:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint32)},
+		/* 007 */ arrow.Field{Name: "tv:metric:lr:lr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 008 */ arrow.Field{Name: "tv:metric:lv:lv:y:m:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 009 */ arrow.Field{Name: "tv:metric:lp:lp:y:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 010 */ arrow.Field{Name: "tv:metric:lmr:lmr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 011 */ arrow.Field{Name: "tv:metric:mrhp:mrhp:y:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 012 */ arrow.Field{Name: "tv:metric:lmv:lmv:y:m:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 013 */ arrow.Field{Name: "tv:metric:mvhp:mvhp:y:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 014 */ arrow.Field{Name: "tv:metric:len:len:u64:28o:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 015 */ arrow.Field{Name: "tv:metric:card:card:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 016 */ arrow.Field{Name: "tv:metric:lrcard:lrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 017 */ arrow.Field{Name: "tv:metric:lvcard:lvcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 018 */ arrow.Field{Name: "tv:metric:lpcard:lpcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 019 */ arrow.Field{Name: "tv:metric:lmrcard:lmrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 020 */ arrow.Field{Name: "tv:metric:lmvcard:lmvcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 021 */ arrow.Field{Name: "tv:geoPoint:lat:val:f32:g:0:Ny:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Float32)},
+		/* 022 */ arrow.Field{Name: "tv:geoPoint:lng:val:f32:g:0:Ny:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Float32)},
+		/* 023 */ arrow.Field{Name: "tv:geoPoint:lv:lv:y:m:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 024 */ arrow.Field{Name: "tv:geoPoint:lvcard:lvcard:u64:4gw:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 025 */ arrow.Field{Name: "tv:geoArea:code:val:s:g:0:Ny:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
+		/* 026 */ arrow.Field{Name: "tv:geoArea:poly:val:f32h:g:0:Ny:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Float32)},
+		/* 027 */ arrow.Field{Name: "tv:geoArea:len:len:u64:28o:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+	}, nil)
+	return
+}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1257
+
+type InEntityFixture struct {
+	errs           []error
+	state          runtime.EntityStateE
+	allocator      memory.Allocator
+	builder        *array.RecordBuilder
+	records        []arrow.RecordBatch
+	section00Inst  *InEntityFixtureSectionGeoArea
+	section00State runtime.EntityStateE
+	section01Inst  *InEntityFixtureSectionGeoPoint
+	section01State runtime.EntityStateE
+	section02Inst  *InEntityFixtureSectionMetric
+	section02State runtime.EntityStateE
+	activeSections *[3]bool
+	plainId0       uint64
+
+	plainInternalKey1 string
+
+	plainNaturalKey2      string
+	scalarFieldBuilder000 *array.Uint64Builder
+
+	scalarFieldBuilder001 *array.StringBuilder
+
+	scalarFieldBuilder002 *array.StringBuilder
+}
+
+func NewInEntityFixture(allocator memory.Allocator, estimatedNumberOfRecords int) (inst *InEntityFixture) {
+	inst = &InEntityFixture{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.allocator = allocator
+	inst.records = make([]arrow.RecordBatch, 0, estimatedNumberOfRecords)
+	schema := CreateSchemaFixture()
+	builder := array.NewRecordBuilder(allocator, schema)
+	inst.builder = builder
+	inst.initSections(builder)
+	inst.scalarFieldBuilder000 = builder.Field(0).(*array.Uint64Builder)
+	inst.scalarFieldBuilder001 = builder.Field(1).(*array.StringBuilder)
+	inst.scalarFieldBuilder002 = builder.Field(2).(*array.StringBuilder)
+
+	return inst
+}
+
+// SetActiveSections marks which section indices BeginEntity should
+// initialise (skipping beginSection for the rest). Pass nil to clear.
+// The hint is a performance optimisation; sending BeginAttribute to
+// an unmarked section produces empty-list bytes at TransferRecords.
+func (inst *InEntityFixture) SetActiveSections(idxs []int) {
+	if idxs == nil {
+		inst.activeSections = nil
+		return
+	}
+	var mask [3]bool
+	for _, i := range idxs {
+		if i >= 0 && i < len(mask) {
+			mask[i] = true
+		}
+	}
+	inst.activeSections = &mask
+}
+
+// Builder exposes the underlying RecordBuilder so callers can apply
+// shim-level hints (e.g. SetActiveFields on the arrowrowbinary /
+// arrowsparserb / arrowrowcbor backends).
+func (inst *InEntityFixture) Builder() *array.RecordBuilder { return inst.builder }
+
+// InEntityFixtureSectionIndices maps each section name to its section%02dInst slot in
+// the generated entity. Useful for callers that need to compute
+// SetActiveSections inputs from section names — for example, the
+// marshallgen-driven keelson codec wrappers.
+var InEntityFixtureSectionIndices = map[string]int{
+	"geoArea":  0,
+	"geoPoint": 1,
+	"metric":   2,
+}
+
+///////////////////////////////////////////////////////////////////
+// code generator
+// dml.(*GoClassBuilder).ComposeEntityCode
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1434
+
+func (inst *InEntityFixture) SetId(id0 uint64, internalKey1 string, naturalKey2 string) *InEntityFixture {
+	if inst.state != runtime.EntityStateInEntity {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.plainId0 = id0
+	inst.plainInternalKey1 = internalKey1
+	inst.plainNaturalKey2 = naturalKey2
+
+	return inst
+}
+func (inst *InEntityFixture) appendPlainValues() {
+	inst.scalarFieldBuilder000.Append(inst.plainId0)
+
+	inst.scalarFieldBuilder001.Append(inst.plainInternalKey1)
+
+	inst.scalarFieldBuilder002.Append(inst.plainNaturalKey2)
+}
+func (inst *InEntityFixture) resetPlainValues() {
+	inst.plainId0 = uint64(0)
+
+	inst.plainInternalKey1 = ""
+
+	inst.plainNaturalKey2 = ""
+}
+func (inst *InEntityFixture) initSections(builder *array.RecordBuilder) {
+	inst.section00Inst = NewInEntityFixtureSectionGeoArea(builder, inst)
+	inst.section01Inst = NewInEntityFixtureSectionGeoPoint(builder, inst)
+	inst.section02Inst = NewInEntityFixtureSectionMetric(builder, inst)
+}
+func (inst *InEntityFixture) beginSections() {
+	if mask := inst.activeSections; mask != nil {
+		if mask[0] {
+			inst.section00Inst.beginSection()
+		}
+		if mask[1] {
+			inst.section01Inst.beginSection()
+		}
+		if mask[2] {
+			inst.section02Inst.beginSection()
+		}
+		return
+	}
+	inst.section00Inst.beginSection()
+	inst.section01Inst.beginSection()
+	inst.section02Inst.beginSection()
+}
+func (inst *InEntityFixture) resetSections() {
+	inst.section00Inst.resetSection()
+	inst.section01Inst.resetSection()
+	inst.section02Inst.resetSection()
+}
+func (inst *InEntityFixture) CheckErrors() (err error) {
+	err = eh.CheckErrors(inst.errs)
+	err = errors.Join(err, inst.section00Inst.CheckErrors())
+	err = errors.Join(err, inst.section01Inst.CheckErrors())
+	err = errors.Join(err, inst.section02Inst.CheckErrors())
+
+	return
+}
+func (inst *InEntityFixture) GetSectionGeoArea() *InEntityFixtureSectionGeoArea {
+	return inst.section00Inst
+}
+func (inst *InEntityFixture) GetSectionGeoPoint() *InEntityFixtureSectionGeoPoint {
+	return inst.section01Inst
+}
+func (inst *InEntityFixture) GetSectionMetric() *InEntityFixtureSectionMetric {
+	return inst.section02Inst
+}
+func (inst *InEntityFixture) BeginEntity() *InEntityFixture {
+	switch inst.state {
+	case runtime.EntityStateInitial:
+		inst.state = runtime.EntityStateInEntity
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+
+	inst.beginSections()
+	return inst
+}
+func (inst *InEntityFixture) validateEntity() {
+	{
+		state := inst.section00Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "geoArea").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section01Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "geoPoint").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section02Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "metric").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+
+	// FIXME check coSectionGroup consistency
+	return
+}
+func (inst *InEntityFixture) CommitEntity() (err error) {
+	inst.validateEntity()
+	err = inst.CheckErrors()
+	if err != nil {
+		err = eh.Errorf("unable to commit entity, found errors: %w", err)
+		return
+	}
+	switch inst.state {
+	case runtime.EntityStateInEntity:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		err = runtime.ErrInvalidStateTransition
+		return
+	}
+
+	inst.appendPlainValues()
+	inst.resetPlainValues()
+	inst.resetSections()
+	return
+}
+func (inst *InEntityFixture) RollbackEntity() (err error) {
+	switch inst.state {
+	case runtime.EntityStateInEntity:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		err = runtime.ErrInvalidStateTransition
+		return
+	}
+
+	inst.appendPlainValues() // arrow fields must all have one row
+	inst.resetPlainValues()
+	inst.resetSections()
+	rec := inst.builder.NewRecord()
+	if rec.NumRows() > 1 {
+		inst.records = append(inst.records, rec.NewSlice(0, rec.NumRows()-1))
+	} else {
+		// FIXME find better way to truncate builder
+		inst.builder.NewRecord().Release()
+	}
+	rec.Release()
+	return
+}
+
+// TransferRecords The returned Records must be Release()'d after use.
+func (inst *InEntityFixture) TransferRecords(recordsIn []arrow.RecordBatch) (recordsOut []arrow.RecordBatch, err error) {
+	if inst.state != runtime.EntityStateInitial {
+		err = runtime.ErrInvalidStateTransition
+		return
+	}
+
+	recordsOut = slices.Grow(recordsIn, len(inst.records)+1)
+	copy(recordsOut, inst.records)
+	clear(inst.records)
+	inst.records = inst.records[:0]
+	rec := inst.builder.NewRecord()
+	if rec.NumRows() > 0 {
+		recordsOut = append(recordsOut, rec)
+	}
+	return
+}
+
+func (inst *InEntityFixture) GetSchema() (schema *arrow.Schema) {
+	return inst.builder.Schema()
+}
+
+func (inst *InEntityFixture) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityFixture) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityFixtureSectionGeoArea struct {
+	errs                           []error
+	inAttr                         *InEntityFixtureSectionGeoAreaInAttr
+	state                          runtime.EntityStateE
+	parent                         *InEntityFixture
+	scalarFieldBuilder025          *array.StringBuilder
+	scalarListBuilder025           *array.ListBuilder
+	homogenousArrayFieldBuilder026 *array.Float32Builder
+	homogenousArrayListBuilder026  *array.ListBuilder
+}
+
+func NewInEntityFixtureSectionGeoArea(builder *array.RecordBuilder, parent *InEntityFixture) (inst *InEntityFixtureSectionGeoArea) {
+	inst = &InEntityFixtureSectionGeoArea{}
+	inAttr := NewInEntityFixtureSectionGeoAreaInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.scalarFieldBuilder025 = builder.Field(25).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.scalarListBuilder025 = builder.Field(25).(*array.ListBuilder)
+	inst.homogenousArrayFieldBuilder026 = builder.Field(26).(*array.ListBuilder).ValueBuilder().(*array.Float32Builder)
+	inst.homogenousArrayListBuilder026 = builder.Field(26).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityFixtureSectionGeoArea) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityFixtureSectionGeoArea) BeginAttribute(code25 string) *InEntityFixtureSectionGeoAreaInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+	inst.scalarFieldBuilder025.Append(code25)
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityFixtureSectionGeoArea) BeginAttributeSingle(code25 string, poly26 float32) *InEntityFixtureSectionGeoAreaInAttr {
+	return inst.BeginAttribute(code25).AddToContainer(poly26)
+}
+func (inst *InEntityFixtureSectionGeoArea) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityFixtureSectionGeoArea) EndSection() *InEntityFixture {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityFixtureSectionGeoArea) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityFixtureSectionGeoArea) resetSection() {
+	inst.clearErrors()
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityFixtureSectionGeoArea) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityFixtureSectionGeoArea) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityFixtureSectionGeoAreaInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityFixtureSectionGeoArea
+	scalarFieldBuilder025                 *array.StringBuilder
+	scalarListBuilder025                  *array.ListBuilder
+	homogenousArrayFieldBuilder026        *array.Float32Builder
+	homogenousArrayListBuilder026         *array.ListBuilder
+	homogenousArraySupportFieldBuilder027 *array.Uint64Builder
+	homogenousArraySupportListBuilder027  *array.ListBuilder
+
+	homogenousArrayContainerLength026 int
+}
+
+func NewInEntityFixtureSectionGeoAreaInAttr(builder *array.RecordBuilder, parent *InEntityFixtureSectionGeoArea) (inst *InEntityFixtureSectionGeoAreaInAttr) {
+	inst = &InEntityFixtureSectionGeoAreaInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.scalarFieldBuilder025 = builder.Field(25).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.scalarListBuilder025 = builder.Field(25).(*array.ListBuilder)
+	inst.homogenousArrayFieldBuilder026 = builder.Field(26).(*array.ListBuilder).ValueBuilder().(*array.Float32Builder)
+	inst.homogenousArrayListBuilder026 = builder.Field(26).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder027 = builder.Field(27).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder027 = builder.Field(27).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityFixtureSectionGeoAreaInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder026.Append(true)
+	inst.homogenousArrayContainerLength026 = 0
+	inst.scalarListBuilder025.Append(true)
+	inst.homogenousArraySupportListBuilder027.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityFixtureSectionGeoAreaInAttr) AddToContainer(poly26 float32) *InEntityFixtureSectionGeoAreaInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.homogenousArrayFieldBuilder026.Append(poly26)
+	inst.homogenousArrayContainerLength026++
+	return inst
+}
+func (inst *InEntityFixtureSectionGeoAreaInAttr) AddToContainerP(poly26 float32) {
+	inst.AddToContainer(poly26)
+}
+func (inst *InEntityFixtureSectionGeoAreaInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+}
+func (inst *InEntityFixtureSectionGeoAreaInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.homogenousArrayContainerLength026
+	inst.homogenousArrayContainerLength026 = 0
+	inst.homogenousArraySupportFieldBuilder027.Append(uint64(l))
+}
+func (inst *InEntityFixtureSectionGeoAreaInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityFixtureSectionGeoAreaInAttr) EndSection() *InEntityFixture {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityFixtureSectionGeoAreaInAttr) EndAttribute() *InEntityFixtureSectionGeoArea {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityFixtureSectionGeoAreaInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityFixtureSectionGeoAreaInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityFixtureSectionGeoAreaInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityFixtureSectionGeoPoint struct {
+	errs                  []error
+	inAttr                *InEntityFixtureSectionGeoPointInAttr
+	state                 runtime.EntityStateE
+	parent                *InEntityFixture
+	scalarFieldBuilder021 *array.Float32Builder
+	scalarListBuilder021  *array.ListBuilder
+	scalarFieldBuilder022 *array.Float32Builder
+	scalarListBuilder022  *array.ListBuilder
+}
+
+func NewInEntityFixtureSectionGeoPoint(builder *array.RecordBuilder, parent *InEntityFixture) (inst *InEntityFixtureSectionGeoPoint) {
+	inst = &InEntityFixtureSectionGeoPoint{}
+	inAttr := NewInEntityFixtureSectionGeoPointInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.scalarFieldBuilder021 = builder.Field(21).(*array.ListBuilder).ValueBuilder().(*array.Float32Builder)
+	inst.scalarListBuilder021 = builder.Field(21).(*array.ListBuilder)
+	inst.scalarFieldBuilder022 = builder.Field(22).(*array.ListBuilder).ValueBuilder().(*array.Float32Builder)
+	inst.scalarListBuilder022 = builder.Field(22).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityFixtureSectionGeoPoint) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityFixtureSectionGeoPoint) BeginAttribute(lat21 float32, lng22 float32) *InEntityFixtureSectionGeoPointInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+	inst.scalarFieldBuilder021.Append(lat21)
+	inst.scalarFieldBuilder022.Append(lng22)
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityFixtureSectionGeoPoint) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityFixtureSectionGeoPoint) EndSection() *InEntityFixture {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityFixtureSectionGeoPoint) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityFixtureSectionGeoPoint) resetSection() {
+	inst.clearErrors()
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityFixtureSectionGeoPoint) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityFixtureSectionGeoPoint) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityFixtureSectionGeoPointInAttr struct {
+	errs                             []error
+	state                            runtime.EntityStateE
+	parent                           *InEntityFixtureSectionGeoPoint
+	scalarFieldBuilder021            *array.Float32Builder
+	scalarListBuilder021             *array.ListBuilder
+	scalarFieldBuilder022            *array.Float32Builder
+	scalarListBuilder022             *array.ListBuilder
+	membershipFieldBuilder023        *array.BinaryBuilder
+	membershipListBuilder023         *array.ListBuilder
+	membershipSupportFieldBuilder024 *array.Uint64Builder
+	membershipSupportListBuilder024  *array.ListBuilder
+
+	membershipContainerLength023 int
+}
+
+func NewInEntityFixtureSectionGeoPointInAttr(builder *array.RecordBuilder, parent *InEntityFixtureSectionGeoPoint) (inst *InEntityFixtureSectionGeoPointInAttr) {
+	inst = &InEntityFixtureSectionGeoPointInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.scalarFieldBuilder021 = builder.Field(21).(*array.ListBuilder).ValueBuilder().(*array.Float32Builder)
+	inst.scalarListBuilder021 = builder.Field(21).(*array.ListBuilder)
+	inst.scalarFieldBuilder022 = builder.Field(22).(*array.ListBuilder).ValueBuilder().(*array.Float32Builder)
+	inst.scalarListBuilder022 = builder.Field(22).(*array.ListBuilder)
+	inst.membershipFieldBuilder023 = builder.Field(23).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder023 = builder.Field(23).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder024 = builder.Field(24).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder024 = builder.Field(24).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityFixtureSectionGeoPointInAttr) beginAttribute() {
+	inst.membershipListBuilder023.Append(true)
+	inst.membershipContainerLength023 = 0
+	inst.scalarListBuilder021.Append(true)
+	inst.scalarListBuilder022.Append(true)
+	inst.membershipSupportListBuilder024.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityFixtureSectionGeoPointInAttr) AddMembershipLowCardVerbatim(lv23 []byte) *InEntityFixtureSectionGeoPointInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder023.Append(lv23)
+	inst.membershipContainerLength023++
+	return inst
+}
+func (inst *InEntityFixtureSectionGeoPointInAttr) AddMembershipLowCardVerbatimP(lv23 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder023.Append(lv23)
+	inst.membershipContainerLength023++
+	return
+}
+func (inst *InEntityFixtureSectionGeoPointInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength023
+	inst.membershipContainerLength023 = 0
+	inst.membershipSupportFieldBuilder024.Append(uint64(l))
+}
+func (inst *InEntityFixtureSectionGeoPointInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+}
+func (inst *InEntityFixtureSectionGeoPointInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityFixtureSectionGeoPointInAttr) EndSection() *InEntityFixture {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityFixtureSectionGeoPointInAttr) EndAttribute() *InEntityFixtureSectionGeoPoint {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityFixtureSectionGeoPointInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityFixtureSectionGeoPointInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityFixtureSectionGeoPointInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityFixtureSectionMetric struct {
+	errs                           []error
+	inAttr                         *InEntityFixtureSectionMetricInAttr
+	state                          runtime.EntityStateE
+	parent                         *InEntityFixture
+	scalarFieldBuilder003          *array.Float64Builder
+	scalarListBuilder003           *array.ListBuilder
+	scalarFieldBuilder004          *array.StringBuilder
+	scalarListBuilder004           *array.ListBuilder
+	homogenousArrayFieldBuilder005 *array.StringBuilder
+	homogenousArrayListBuilder005  *array.ListBuilder
+	setFieldBuilder006             *array.Uint32Builder
+	setListBuilder006              *array.ListBuilder
+}
+
+func NewInEntityFixtureSectionMetric(builder *array.RecordBuilder, parent *InEntityFixture) (inst *InEntityFixtureSectionMetric) {
+	inst = &InEntityFixtureSectionMetric{}
+	inAttr := NewInEntityFixtureSectionMetricInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.scalarFieldBuilder003 = builder.Field(3).(*array.ListBuilder).ValueBuilder().(*array.Float64Builder)
+	inst.scalarListBuilder003 = builder.Field(3).(*array.ListBuilder)
+	inst.scalarFieldBuilder004 = builder.Field(4).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.scalarListBuilder004 = builder.Field(4).(*array.ListBuilder)
+	inst.homogenousArrayFieldBuilder005 = builder.Field(5).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.homogenousArrayListBuilder005 = builder.Field(5).(*array.ListBuilder)
+	inst.setFieldBuilder006 = builder.Field(6).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
+	inst.setListBuilder006 = builder.Field(6).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityFixtureSectionMetric) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityFixtureSectionMetric) BeginAttribute(value3 float64, rawBlob4 string) *InEntityFixtureSectionMetricInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+	inst.scalarFieldBuilder003.Append(value3)
+	inst.scalarFieldBuilder004.Append(rawBlob4)
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityFixtureSectionMetric) BeginAttributeSingle(value3 float64, rawBlob4 string, tags5 string, bins6 uint32) *InEntityFixtureSectionMetricInAttr {
+	return inst.BeginAttribute(value3, rawBlob4).AddToCoContainers(tags5, bins6)
+}
+func (inst *InEntityFixtureSectionMetric) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityFixtureSectionMetric) EndSection() *InEntityFixture {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityFixtureSectionMetric) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityFixtureSectionMetric) resetSection() {
+	inst.clearErrors()
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityFixtureSectionMetric) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityFixtureSectionMetric) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityFixtureSectionMetricInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityFixtureSectionMetric
+	scalarFieldBuilder003                 *array.Float64Builder
+	scalarListBuilder003                  *array.ListBuilder
+	scalarFieldBuilder004                 *array.StringBuilder
+	scalarListBuilder004                  *array.ListBuilder
+	homogenousArrayFieldBuilder005        *array.StringBuilder
+	homogenousArrayListBuilder005         *array.ListBuilder
+	setFieldBuilder006                    *array.Uint32Builder
+	setListBuilder006                     *array.ListBuilder
+	membershipFieldBuilder007             *array.Uint64Builder
+	membershipListBuilder007              *array.ListBuilder
+	membershipFieldBuilder008             *array.BinaryBuilder
+	membershipListBuilder008              *array.ListBuilder
+	membershipFieldBuilder009             *array.BinaryBuilder
+	membershipListBuilder009              *array.ListBuilder
+	membershipFieldBuilder010             *array.Uint64Builder
+	membershipListBuilder010              *array.ListBuilder
+	membershipFieldBuilder011             *array.BinaryBuilder
+	membershipListBuilder011              *array.ListBuilder
+	membershipFieldBuilder012             *array.BinaryBuilder
+	membershipListBuilder012              *array.ListBuilder
+	membershipFieldBuilder013             *array.BinaryBuilder
+	membershipListBuilder013              *array.ListBuilder
+	homogenousArraySupportFieldBuilder014 *array.Uint64Builder
+	homogenousArraySupportListBuilder014  *array.ListBuilder
+	setSupportFieldBuilder015             *array.Uint64Builder
+	setSupportListBuilder015              *array.ListBuilder
+	membershipSupportFieldBuilder016      *array.Uint64Builder
+	membershipSupportListBuilder016       *array.ListBuilder
+	membershipSupportFieldBuilder017      *array.Uint64Builder
+	membershipSupportListBuilder017       *array.ListBuilder
+	membershipSupportFieldBuilder018      *array.Uint64Builder
+	membershipSupportListBuilder018       *array.ListBuilder
+	membershipSupportFieldBuilder019      *array.Uint64Builder
+	membershipSupportListBuilder019       *array.ListBuilder
+	membershipSupportFieldBuilder020      *array.Uint64Builder
+	membershipSupportListBuilder020       *array.ListBuilder
+
+	membershipContainerLength007 int
+
+	membershipContainerLength008 int
+
+	membershipContainerLength009 int
+
+	membershipContainerLength010 int
+
+	membershipContainerLength011 int
+
+	membershipContainerLength012 int
+
+	membershipContainerLength013 int
+
+	homogenousArrayContainerLength005 int
+
+	setContainerLength006 int
+}
+
+func NewInEntityFixtureSectionMetricInAttr(builder *array.RecordBuilder, parent *InEntityFixtureSectionMetric) (inst *InEntityFixtureSectionMetricInAttr) {
+	inst = &InEntityFixtureSectionMetricInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.scalarFieldBuilder003 = builder.Field(3).(*array.ListBuilder).ValueBuilder().(*array.Float64Builder)
+	inst.scalarListBuilder003 = builder.Field(3).(*array.ListBuilder)
+	inst.scalarFieldBuilder004 = builder.Field(4).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.scalarListBuilder004 = builder.Field(4).(*array.ListBuilder)
+	inst.homogenousArrayFieldBuilder005 = builder.Field(5).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.homogenousArrayListBuilder005 = builder.Field(5).(*array.ListBuilder)
+	inst.setFieldBuilder006 = builder.Field(6).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
+	inst.setListBuilder006 = builder.Field(6).(*array.ListBuilder)
+	inst.membershipFieldBuilder007 = builder.Field(7).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder007 = builder.Field(7).(*array.ListBuilder)
+	inst.membershipFieldBuilder008 = builder.Field(8).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder008 = builder.Field(8).(*array.ListBuilder)
+	inst.membershipFieldBuilder009 = builder.Field(9).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder009 = builder.Field(9).(*array.ListBuilder)
+	inst.membershipFieldBuilder010 = builder.Field(10).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder010 = builder.Field(10).(*array.ListBuilder)
+	inst.membershipFieldBuilder011 = builder.Field(11).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder011 = builder.Field(11).(*array.ListBuilder)
+	inst.membershipFieldBuilder012 = builder.Field(12).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder012 = builder.Field(12).(*array.ListBuilder)
+	inst.membershipFieldBuilder013 = builder.Field(13).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder013 = builder.Field(13).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder014 = builder.Field(14).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder014 = builder.Field(14).(*array.ListBuilder)
+	inst.setSupportFieldBuilder015 = builder.Field(15).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.setSupportListBuilder015 = builder.Field(15).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder016 = builder.Field(16).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder016 = builder.Field(16).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder017 = builder.Field(17).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder017 = builder.Field(17).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder018 = builder.Field(18).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder018 = builder.Field(18).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder019 = builder.Field(19).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder019 = builder.Field(19).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder020 = builder.Field(20).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder020 = builder.Field(20).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityFixtureSectionMetricInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder005.Append(true)
+	inst.setListBuilder006.Append(true)
+	inst.membershipListBuilder007.Append(true)
+	inst.membershipListBuilder008.Append(true)
+	inst.membershipListBuilder009.Append(true)
+	inst.membershipListBuilder010.Append(true)
+	inst.membershipListBuilder011.Append(true)
+	inst.membershipListBuilder012.Append(true)
+	inst.membershipListBuilder013.Append(true)
+	inst.homogenousArrayContainerLength005 = 0
+	inst.setContainerLength006 = 0
+	inst.membershipContainerLength007 = 0
+	inst.membershipContainerLength008 = 0
+	inst.membershipContainerLength009 = 0
+	inst.membershipContainerLength010 = 0
+	inst.membershipContainerLength011 = 0
+	inst.membershipContainerLength012 = 0
+	inst.membershipContainerLength013 = 0
+	inst.scalarListBuilder003.Append(true)
+	inst.scalarListBuilder004.Append(true)
+	inst.homogenousArraySupportListBuilder014.Append(true)
+	inst.setSupportListBuilder015.Append(true)
+	inst.membershipSupportListBuilder016.Append(true)
+	inst.membershipSupportListBuilder017.Append(true)
+	inst.membershipSupportListBuilder018.Append(true)
+	inst.membershipSupportListBuilder019.Append(true)
+	inst.membershipSupportListBuilder020.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityFixtureSectionMetricInAttr) AddToCoContainers(tags5 string, bins6 uint32) *InEntityFixtureSectionMetricInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.homogenousArrayFieldBuilder005.Append(tags5)
+	inst.homogenousArrayContainerLength005++
+	inst.setFieldBuilder006.Append(bins6)
+	inst.setContainerLength006++
+	return inst
+}
+func (inst *InEntityFixtureSectionMetricInAttr) AddToCoContainersP(tags5 string, bins6 uint32) {
+	inst.AddToCoContainers(tags5, bins6)
+}
+func (inst *InEntityFixtureSectionMetricInAttr) AddMembershipLowCardRef(lr7 uint64) *InEntityFixtureSectionMetricInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder007.Append(lr7)
+	inst.membershipContainerLength007++
+	return inst
+}
+func (inst *InEntityFixtureSectionMetricInAttr) AddMembershipLowCardRefP(lr7 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder007.Append(lr7)
+	inst.membershipContainerLength007++
+	return
+}
+func (inst *InEntityFixtureSectionMetricInAttr) AddMembershipLowCardVerbatim(lv8 []byte) *InEntityFixtureSectionMetricInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder008.Append(lv8)
+	inst.membershipContainerLength008++
+	return inst
+}
+func (inst *InEntityFixtureSectionMetricInAttr) AddMembershipLowCardVerbatimP(lv8 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder008.Append(lv8)
+	inst.membershipContainerLength008++
+	return
+}
+func (inst *InEntityFixtureSectionMetricInAttr) AddMembershipLowCardRefParametrized(lp9 []byte) *InEntityFixtureSectionMetricInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder009.Append(lp9)
+	inst.membershipContainerLength009++
+	return inst
+}
+func (inst *InEntityFixtureSectionMetricInAttr) AddMembershipLowCardRefParametrizedP(lp9 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder009.Append(lp9)
+	inst.membershipContainerLength009++
+	return
+}
+func (inst *InEntityFixtureSectionMetricInAttr) AddMembershipMixedLowCardRef(lmr10 uint64, mrhp11 []byte) *InEntityFixtureSectionMetricInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder010.Append(lmr10)
+	inst.membershipFieldBuilder011.Append(mrhp11)
+	inst.membershipContainerLength010++
+	inst.membershipContainerLength011++
+	return inst
+}
+func (inst *InEntityFixtureSectionMetricInAttr) AddMembershipMixedLowCardRefP(lmr10 uint64, mrhp11 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder010.Append(lmr10)
+	inst.membershipFieldBuilder011.Append(mrhp11)
+	inst.membershipContainerLength010++
+	inst.membershipContainerLength011++
+	return
+}
+func (inst *InEntityFixtureSectionMetricInAttr) AddMembershipMixedLowCardVerbatim(lmv12 []byte, mvhp13 []byte) *InEntityFixtureSectionMetricInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder012.Append(lmv12)
+	inst.membershipFieldBuilder013.Append(mvhp13)
+	inst.membershipContainerLength012++
+	inst.membershipContainerLength013++
+	return inst
+}
+func (inst *InEntityFixtureSectionMetricInAttr) AddMembershipMixedLowCardVerbatimP(lmv12 []byte, mvhp13 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder012.Append(lmv12)
+	inst.membershipFieldBuilder013.Append(mvhp13)
+	inst.membershipContainerLength012++
+	inst.membershipContainerLength013++
+	return
+}
+func (inst *InEntityFixtureSectionMetricInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength007
+	inst.membershipContainerLength007 = 0
+	inst.membershipSupportFieldBuilder016.Append(uint64(l))
+	l = inst.membershipContainerLength008
+	inst.membershipContainerLength008 = 0
+	inst.membershipSupportFieldBuilder017.Append(uint64(l))
+	l = inst.membershipContainerLength009
+	inst.membershipContainerLength009 = 0
+	inst.membershipSupportFieldBuilder018.Append(uint64(l))
+	l = inst.membershipContainerLength010
+	inst.membershipContainerLength010 = 0
+	inst.membershipSupportFieldBuilder019.Append(uint64(l))
+	l = inst.membershipContainerLength012
+	inst.membershipContainerLength012 = 0
+	inst.membershipSupportFieldBuilder020.Append(uint64(l))
+}
+func (inst *InEntityFixtureSectionMetricInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.homogenousArrayContainerLength005
+	inst.homogenousArrayContainerLength005 = 0
+	inst.homogenousArraySupportFieldBuilder014.Append(uint64(l))
+	l = inst.setContainerLength006
+	inst.setContainerLength006 = 0
+	inst.setSupportFieldBuilder015.Append(uint64(l))
+}
+func (inst *InEntityFixtureSectionMetricInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityFixtureSectionMetricInAttr) EndSection() *InEntityFixture {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityFixtureSectionMetricInAttr) EndAttribute() *InEntityFixtureSectionMetric {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityFixtureSectionMetricInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityFixtureSectionMetricInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityFixtureSectionMetricInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}

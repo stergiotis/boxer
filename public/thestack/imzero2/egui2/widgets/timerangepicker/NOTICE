@@ -1,0 +1,115 @@
+src/go/public/thestack/imzero2/egui2/widgets/timerangepicker — NOTICE
+========================================================================
+
+This package is a derivative work distributed under the Apache License,
+Version 2.0. The license text is at <licenses/Apache-2.0.txt> at the
+repository root, and online at <http://www.apache.org/licenses/LICENSE-2.0>.
+
+----------------------------------------------------------------------
+ORIGIN
+----------------------------------------------------------------------
+
+Derived from:
+  github.com/grafana/grafana (v7.5.17, last Apache-2.0 release)
+  Pinned commit: 84411794f37db9f70276c6aab54d4f5ec5fd7498 (2022-04-12)
+  https://github.com/grafana/grafana/tree/v7.5.17
+
+  Copyright 2014-2022 Grafana Labs.
+  Licensed under the Apache License, Version 2.0.
+
+The v8.0.0 release (2021-06-08) re-licensed Grafana under the GNU
+Affero General Public License v3.0. This package pins to v7.5.17,
+the final 7.5.x patch and the last release on the Apache-2.0 line,
+to keep the derivation under a permissive license.
+
+Decision record:
+  doc/adr/0016-imzero2-time-range-picker.md
+
+----------------------------------------------------------------------
+SCOPE OF THIS PORT
+----------------------------------------------------------------------
+
+The Grafana-derived contents of this package are limited to:
+
+  * The time range picker UX shape — composite layout of from/to
+    expression fields, presets sidebar, calendar pop, and
+    Apply / Cancel controls — re-expressed in egui idiom.
+
+  * The default preset list (labels and semantic intent) shipped
+    by Grafana 7.5: "Last 5 minutes" through "This year". Labels
+    and semantic intent are Grafana-derived; concrete SQL bodies
+    are pebble2impl-authored.
+
+The relative-expression grammar of Grafana's datemath (`now-5m`,
+`now/d`, etc.) is NOT ported. Expressions in this package are
+ClickHouse SQL fragments evaluated via the `clickhouse-local` CLI;
+see ADR-0016 §"Decision".
+
+----------------------------------------------------------------------
+MODIFICATIONS APPLIED DURING PORT
+----------------------------------------------------------------------
+
+  * Re-implemented from React/TypeScript to Go + Rust. No upstream
+    source files were copied verbatim; Grafana's source served as
+    a reference for UX shape and preset semantics.
+
+  * Replaced Grafana's datemath grammar with ClickHouse SQL evaluated
+    by clickhouse-local. Anchor injected via WITH ... AS anchor_now
+    per ADR-0016. The picker is therefore in ClickHouse SQL idiom,
+    not Grafana datemath.
+
+  * Translated the default preset list to ClickHouse SQL bodies.
+    Labels and semantic intent are Grafana-derived; the SQL bodies
+    are pebble2impl-authored.
+
+  * Refactored to the boxer coding standards (see CODINGSTANDARDS.md
+    in github.com/stergiotis/boxer): receiver naming convention,
+    interface suffix "I", named return values, error builder usage
+    (eh.Errorf / eb.Build), sized integer fields on structs,
+    compile-time interface assertions.
+
+  * Did not port: Grafana's fiscal-year offset, the auto-refresh
+    runner (the picker exposes the interval value; the runner is
+    a separate component out of scope for this package), and any
+    dashboard-JSON serialisation surface.
+
+Per Apache-2.0 §4.b, files in this package that contain Grafana-
+derived material (the presets registry's default labels, primarily)
+carry a "Modifications applied during port" line in their header
+referencing this NOTICE. Files that are pebble2impl-authored from
+scratch (the evaluator subprocess wrapper, the validator, the IDL
+definitions, the widget glue) carry no upstream attribution because
+they contain no upstream material.
+
+----------------------------------------------------------------------
+THIRD-PARTY DEPENDENCIES OF THIS PACKAGE
+----------------------------------------------------------------------
+
+The aggregate index lives at doc/legal/third_party.md.
+
+This package's only direct in-tree dependency is the ClickHouse SQL
+DSL parser at src/go/public/db/clickhouse/dsl/, used in-process for
+sub-millisecond syntax validation as the user types.
+
+The runtime requirement on the `clickhouse-local` CLI binary is a
+process-level dependency, not a build-time link. Tests probe via
+exec.LookPath("clickhouse-local") (with `clickhouse local`
+fallback) and call t.Skip when the binary is missing; CI does not
+install it.
+
+----------------------------------------------------------------------
+RE-PINNING UPSTREAM
+----------------------------------------------------------------------
+
+When this package is re-synced against a different upstream version:
+
+  1. Update the "Pinned commit" line in the ORIGIN section above.
+  2. Append a dated entry under MODIFICATIONS APPLIED DURING PORT
+     summarising the diff applied during the resync.
+  3. Update doc/adr/0016-imzero2-time-range-picker.md References
+     section with the new SHA and date.
+  4. Update doc/legal/third_party.md with the new pinned commit.
+
+  Do not advance the pin past v7.5.17 without resolving the AGPL-3.0
+  license switch in v8.0.0; that decision is captured as a
+  constraint in ADR-0016.
