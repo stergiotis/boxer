@@ -20,7 +20,6 @@ require (
 	github.com/dustin/go-humanize v1.0.1
 	github.com/ebitengine/purego v0.10.0
 	github.com/ettle/strcase v0.2.0
-	github.com/fatih/camelcase v1.0.0
 	github.com/fogleman/gg v1.3.0
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/fxamacker/cbor/v2 v2.9.2

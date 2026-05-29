@@ -10,11 +10,12 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"iter"
 	"slices"
 
-	"github.com/fatih/camelcase"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/identity/fibonaccicode"
 	"github.com/urfave/cli/v2"
@@ -263,7 +264,7 @@ func NewDictCommand() *cli.Command {
 			var dots uint32
 			for _, w := range words {
 				if acceptanceRgx.MatchString(w) {
-					us := camelcase.Split(w)
+					us := splitCamelCase(w)
 					for _, u := range us {
 						underscodes += uint32(strings.Count(u, "_"))
 						hyphen += uint32(strings.Count(u, "-"))
@@ -374,4 +375,52 @@ func NewDictCommand() *cli.Command {
 			return nil
 		},
 	}
+}
+
+// splitCamelCase splits src at transitions between rune classes
+// (lower / upper / digit / other), folding the trailing rune of an all-caps run
+// onto a following lower-case run so e.g. "PDFLoader" -> ["PDF", "Loader"].
+// Inlined from github.com/fatih/camelcase (MIT) to drop the third-party dep;
+// see THIRD_PARTY_NOTICES.
+func splitCamelCase(src string) (entries []string) {
+	if !utf8.ValidString(src) {
+		return []string{src}
+	}
+	entries = make([]string, 0, 4)
+	var runs [][]rune
+	lastClass := 0
+	for _, r := range src {
+		var class int
+		switch {
+		case unicode.IsLower(r):
+			class = 1
+		case unicode.IsUpper(r):
+			class = 2
+		case unicode.IsDigit(r):
+			class = 3
+		default:
+			class = 4
+		}
+		if class == lastClass {
+			runs[len(runs)-1] = append(runs[len(runs)-1], r)
+		} else {
+			runs = append(runs, []rune{r})
+		}
+		lastClass = class
+	}
+	// Move a trailing upper-case rune onto the next run when it begins a
+	// lower-case word (acronym boundary).
+	for i := 0; i < len(runs)-1; i++ {
+		if unicode.IsUpper(runs[i][0]) && unicode.IsLower(runs[i+1][0]) {
+			last := len(runs[i]) - 1
+			runs[i+1] = append([]rune{runs[i][last]}, runs[i+1]...)
+			runs[i] = runs[i][:last]
+		}
+	}
+	for _, s := range runs {
+		if len(s) > 0 {
+			entries = append(entries, string(s))
+		}
+	}
+	return
 }
