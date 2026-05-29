@@ -76,6 +76,11 @@ const (
 	cellSeqBase uint64 = 0xcc00ff0000
 	// Breadcrumb buttons use PrepareSeq(level); keep this well below cellSeqBase.
 	bcButtonMaxLevel uint64 = 1 << 20
+
+	// maxPreviewRecursion safety-caps "unlimited" preview nesting
+	// (WithMaxNestingDepth(n<=0)); real trees terminate far sooner via the
+	// minimum-cell-size cull. Guards against a pathologically deep tree.
+	maxPreviewRecursion int = 64
 )
 
 // Option configures a Treemap at construction time.
@@ -88,6 +93,17 @@ func WithContainerSize(w, h float32) Option {
 		panic(fmt.Sprintf("treemap: WithContainerSize requires positive w,h (got %v,%v)", w, h))
 	}
 	return func(t *Treemap) { t.containerW, t.containerH = w, h }
+}
+
+// WithMaxNestingDepth sets how many non-interactive preview levels render
+// below the focused (frontier) node. The default, 1, shows the frontier's
+// children plus a single preview level of grandchildren — the drill-down
+// view. A value >1 nests that many levels; n<=0 renders the entire subtree
+// at once (an lstopo-style "show everything" view), bounded only by the
+// minimum cell size and an internal recursion cap. Drill-in/zoom still apply
+// to the frontier; deeper preview cells are display-only.
+func WithMaxNestingDepth(n int) Option {
+	return func(t *Treemap) { t.maxNestingDepth = n }
 }
 
 // WithAnimationDuration sets the zoom-transition duration in seconds.
@@ -329,6 +345,9 @@ type Treemap struct {
 	animDurSecs float32
 	style       StyleI
 	coloring    ColoringI
+	// maxNestingDepth: preview levels rendered below the frontier (1 = the
+	// historic single preview level; <=0 = all, capped by maxPreviewRecursion).
+	maxNestingDepth int
 
 	// Retained chrome colors (breadcrumb / container / leaf-view backgrounds)
 	colorBreadcrumbBg  color.Color
@@ -371,16 +390,17 @@ func New(ids *c.WidgetIdStack, scopeKey string, root *layout.Node, opts ...Optio
 		panic("treemap: New requires a non-nil root")
 	}
 	t := &Treemap{
-		ids:         ids,
-		scopeKey:    scopeKey,
-		root:        root,
-		density:     styletokens.DensityFromEnv(),
-		breadcrumb:  []*layout.Node{root},
-		containerW:  defaultContainerW,
-		containerH:  defaultContainerH,
-		animDurSecs: styletokens.MotionSlowSecs(),
-		style:       DefaultStyle(),
-		coloring:    DepthColoring(DefaultDepthColors),
+		ids:             ids,
+		scopeKey:        scopeKey,
+		root:            root,
+		density:         styletokens.DensityFromEnv(),
+		breadcrumb:      []*layout.Node{root},
+		containerW:      defaultContainerW,
+		containerH:      defaultContainerH,
+		animDurSecs:     styletokens.MotionSlowSecs(),
+		style:           DefaultStyle(),
+		coloring:        DepthColoring(DefaultDepthColors),
+		maxNestingDepth: 1,
 	}
 
 	// Chrome (breadcrumb / frame / container / leaf surfaces) sources from
@@ -665,15 +685,29 @@ func (t *Treemap) renderZoom(node *layout.Node, bounds layout.Rect, depth, bcLev
 		} else if atFrontier && len(child.Children) > 0 {
 			inner := innerRect(r)
 			if inner.W > 8 && inner.H > 8 {
-				t.renderLeafChildren(child, inner, depth+1, cellSeq)
+				t.renderLeafChildren(child, inner, depth+1, t.previewDepth(), cellSeq)
 			}
 		}
 	}
 }
 
-// renderLeafChildren paints a non-interactive one-level preview.
-func (t *Treemap) renderLeafChildren(node *layout.Node, bounds layout.Rect, depth int, cellSeq *uint64) {
-	if len(node.Children) == 0 {
+// previewDepth resolves the effective number of preview levels to render
+// below the frontier: maxNestingDepth when positive, else the "show all"
+// safety cap (WithMaxNestingDepth documents n<=0 as unlimited).
+func (t *Treemap) previewDepth() (n int) {
+	if t.maxNestingDepth <= 0 {
+		return maxPreviewRecursion
+	}
+	return t.maxNestingDepth
+}
+
+// renderLeafChildren paints a non-interactive preview of node's descendants,
+// up to `remaining` levels deep (1 = direct children only — the historic
+// behavior). Deeper levels nest inside their parent's inner rect, which is
+// what lets the whole subtree show at once (see WithMaxNestingDepth). These
+// cells are display-only; interactivity stays on the frontier in renderZoom.
+func (t *Treemap) renderLeafChildren(node *layout.Node, bounds layout.Rect, depth, remaining int, cellSeq *uint64) {
+	if remaining <= 0 || len(node.Children) == 0 {
 		return
 	}
 	lay := layout.ComputeLayoutAt(node, bounds)
@@ -725,6 +759,16 @@ func (t *Treemap) renderLeafChildren(node *layout.Node, bounds layout.Rect, dept
 		// override that policy.
 		if !visuals.Hatch.IsZero() {
 			t.paintHatch(r, *cellSeq, visuals.Hatch)
+		}
+
+		// Recurse one level deeper when the nesting budget and cell size
+		// allow, so a multi-level (or full) preview shows the whole subtree
+		// nested at once. remaining==1 stops here — the historic behavior.
+		if remaining > 1 && len(child.Children) > 0 {
+			inner := innerRect(r)
+			if inner.W > 8 && inner.H > 8 {
+				t.renderLeafChildren(child, inner, depth+1, remaining-1, cellSeq)
+			}
 		}
 	}
 }

@@ -601,6 +601,39 @@ func TestColormap_RangeAndPalette(t *testing.T) {
 }
 
 // =============================================================================
+// WithMaxNestingDepth / previewDepth
+// =============================================================================
+
+func TestWithMaxNestingDepth_SetsField(t *testing.T) {
+	tm := &Treemap{}
+	WithMaxNestingDepth(5)(tm)
+	if tm.maxNestingDepth != 5 {
+		t.Fatalf("WithMaxNestingDepth(5): maxNestingDepth = %d, want 5", tm.maxNestingDepth)
+	}
+}
+
+func TestPreviewDepth(t *testing.T) {
+	cases := []struct {
+		name string
+		set  int
+		want int
+	}{
+		{"default one-level", 1, 1},
+		{"explicit multi-level", 3, 3},
+		{"zero means all", 0, maxPreviewRecursion},
+		{"negative means all", -1, maxPreviewRecursion},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tm := &Treemap{maxNestingDepth: tc.set}
+			if got := tm.previewDepth(); got != tc.want {
+				t.Errorf("previewDepth() with maxNestingDepth=%d = %d, want %d", tc.set, got, tc.want)
+			}
+		})
+	}
+}
+
+// =============================================================================
 // Helpers
 // =============================================================================
 

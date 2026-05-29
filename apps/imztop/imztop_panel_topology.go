@@ -61,7 +61,11 @@ func (inst *App) initTopology() {
 	// No WithContainerSize: the canvas is sized per-frame in
 	// renderTopologyPanel to fill the dock pane. The widget's 700×450 default
 	// is only the first-frame fallback, before available_size is captured.
+	// WithMaxNestingDepth(0) renders the whole hierarchy at once (lstopo-style)
+	// instead of the default drill-down preview, so every core/thread shows
+	// without drilling; drill-in still works on the top-level boxes.
 	inst.topoTreemap = treemap.New(inst.ids, "imztop-topology", root,
+		treemap.WithMaxNestingDepth(0),
 		treemap.WithColoring(coloring),
 	)
 }
