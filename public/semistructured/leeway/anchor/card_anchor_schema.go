@@ -139,6 +139,13 @@ func LoadExampleSchema(manip common.TableManipulatorFluidI) {
 		}
 
 		{
+			// geoPoint and geoArea share a *streaming* group ("geo") for row
+			// transport, but are deliberately NOT a co-section group: the data
+			// generators give them independent per-entity cardinality (every
+			// entity has a GeoPoint; only some have a GeoArea), so they are not
+			// co-aligned. SectionCoSectionGroup requires equal attribute counts
+			// per entity — driveCoGroup would misread otherwise. (Contrast the
+			// leewaywidgets fixture, where geo IS a co-section.) See SKILLS.md.
 			sec := manip.TaggedValueSection("geoPoint").
 				SectionStreamingGroup("geo").
 				AddSectionMembership(membershipSpec...)

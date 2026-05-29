@@ -195,7 +195,7 @@ Lets now assume that we want to "label" error messages in the document without i
 
 In the labeling example above, `/metrics/error` and `errormsg` ride in the same `low-card-memberships` column with `membership-card: 2`. They are mechanically identical at the protocol layer but semantically different: `/metrics/error` *defines* what the attribute is, `errormsg` *annotates* it.
 
-This distinction matters for downstream tooling — JSON Schema generation, ODCS field declarations, quality SQL, PII classification — but the protocol does not carry it. Per boxer ADR-0007 (`$(boxer-path)/doc/adr/0007-leeway-membership-role-classifier.md`; see also [pebble2impl ADR-0017](../../adr/0017-leeway-membership-role-classifier.md)), the role is decided by an application-supplied classifier that consumes value-level membership instances and returns a `(role, paramTreatment)` pair.
+This distinction matters for downstream tooling — JSON Schema generation, ODCS field declarations, quality SQL, PII classification — but the protocol does not carry it. Per boxer ADR-0007 (`$(boxer-path)/doc/adr/0007-leeway-membership-role-classifier.md`; see also [pebble2impl ADR-0017](../../adr/0007-leeway-membership-role-classifier.md)), the role is decided by an application-supplied classifier that consumes value-level membership instances and returns a `(role, paramTreatment)` pair.
 
 ### Four-quadrant model
 
@@ -218,28 +218,30 @@ The hint is *advisory*, not enforced. A classifier may override on a per-members
 
 ### Pattern: secondary co-section for annotation overlays
 
-Co-sections without value columns are valid Leeway: a co-section can be membership-only. Combined with the uniformity hint, this yields a clean pattern for layering annotations on an existing primary table without rewriting the primary section:
+Co-sections without value columns are valid Leeway: a co-section can be membership-only. Combined with the uniformity hint, this yields a clean pattern for layering annotations on an existing primary section without changing its value columns or data. A co-section group forms when two or more sections share a `SectionCoSectionGroup` key (here `"null"`, by convention the primary's name), so both the primary and the annotation section carry that one tag:
 
 ```go
-// Existing primary section, unchanged
+// Existing primary section — opted into the "null" co-group with a single
+// tag; its value columns and rows are otherwise unchanged.
 manip.TaggedValueSection("null").
+    SectionCoSectionGroup("null").
     AddSectionMembership(common.MembershipSpecMixedLowCardVerbatimHighCardParameters).
-    AddSectionUseAspect(useaspects.AspectSectionMembershipsAllPrimary)
+    AddSectionUseAspects(useaspects.AspectSectionMembershipsAllPrimary)
 
-// New co-section — pure annotations, no value columns
+// New co-section — pure annotations, no value columns, same co-group key
 manip.TaggedValueSection("null__labels").
-    CoOf("null").
+    SectionCoSectionGroup("null").
     AddSectionMembership(common.MembershipSpecLowCardVerbatim).
-    AddSectionUseAspect(useaspects.AspectSectionMembershipsAllSecondary)
+    AddSectionUseAspects(useaspects.AspectSectionMembershipsAllSecondary)
 ```
 
-The shared attribute index ties primary value to secondary annotations. Vertical subsetting drops or keeps the secondary co-group whole. Annotation teams (PII, governance, ML labels) bolt on their co-section without touching the primary.
+The shared attribute index ties primary value to secondary annotations. Vertical subsetting drops or keeps the secondary co-group whole. Annotation teams (PII, governance, ML labels) add their co-section and opt the primary into the shared co-group key — the primary's value columns and rows stay untouched.
 
 This pattern is *one* organizational option, not a requirement. Mixed-role sections work equally well; the classifier handles them because it acts at value grain.
 
 ### Consequences for canonical JSON
 
-Under boxer ADR-0007 (and pebble2impl [ADR-0017](../../adr/0017-leeway-membership-role-classifier.md)) the canonical JSON layout is attribute-centric: primary memberships form attribute keys, secondary memberships ride in a per-attribute `labels` slot. Aliasing (multiple primary memberships on one value, e.g. `/price/current` ≡ `/stats/min`) collapses into one attribute object with an `aliases` field. ODCS / JSON Schema generation reads the classifier output to decide `properties` + `required` for primary versus `customProperties.x-leeway.labelInventory` for secondary.
+Under boxer ADR-0007 (and pebble2impl [ADR-0017](../../adr/0007-leeway-membership-role-classifier.md)) the canonical JSON layout is attribute-centric: primary memberships form attribute keys, secondary memberships ride in a per-attribute `labels` slot. Aliasing (multiple primary memberships on one value, e.g. `/price/current` ≡ `/stats/min`) collapses into one attribute object with an `aliases` field. ODCS / JSON Schema generation reads the classifier output to decide `properties` + `required` for primary versus `customProperties.x-leeway.labelInventory` for secondary.
 
 The classifier interface lives in boxer at `github.com/stergiotis/boxer/public/semistructured/leeway/membershiprole`.
 
