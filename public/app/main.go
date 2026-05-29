@@ -9,8 +9,11 @@ import (
 	"github.com/stergiotis/boxer/public/app/commands/compression"
 	"github.com/stergiotis/boxer/public/app/commands/datasource"
 	"github.com/stergiotis/boxer/public/app/commands/designsystem"
+	"github.com/stergiotis/boxer/public/app/commands/egui2gen"
 	"github.com/stergiotis/boxer/public/app/commands/findAnchor"
 	"github.com/stergiotis/boxer/public/app/commands/http"
+	"github.com/stergiotis/boxer/public/app/commands/iconsgen"
+	"github.com/stergiotis/boxer/public/app/commands/keelsoncodec"
 	"github.com/stergiotis/boxer/public/app/commands/key"
 	"github.com/stergiotis/boxer/public/app/commands/runtimecodegen"
 	"github.com/stergiotis/boxer/public/app/commands/sample"
@@ -96,6 +99,10 @@ func mainC() (exitCode int) {
 			sample.NewCliCommand(),
 			swisstopo.NewCliCommand(),
 			watch.NewCliCommand(),
+			// Codegen tools folded from cmd/* mains (entry-point standard).
+			egui2gen.NewCliCommand(),
+			iconsgen.NewCliCommand(),
+			keelsoncodec.NewCliCommand(),
 		),
 		Before: logging.Apply,
 		After: func(context *cli.Context) error {
