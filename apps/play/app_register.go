@@ -3,6 +3,8 @@
 package play
 
 import (
+	"embed"
+
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/config/env"
@@ -11,8 +13,16 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker"
 )
+
+// helpFS embeds the play app's inline-help corpus (apps/play/help/*.md). The
+// keelson/runtime/help DefaultLibrary indexes it per-app on first access and
+// the HelpHost renders it. See helphost/help/howto/add-help.md.
+//
+//go:embed help
+var helpFS embed.FS
 
 // SPINNAKER_PLAY_* drive optional one-shot/scripted-screenshot
 // behaviours on the play HMI. Registered with the boxer-wide env
@@ -69,6 +79,9 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 		Icon:     "🛢",
 		Category: "Tools",
 		Surface:  app.SurfaceWindowed,
+		// Inline help corpus (apps/play/help/), indexed by
+		// keelson/runtime/help and shown by the HelpHost.
+		Help: help.MustSub(helpFS, "help"),
 		// fs Powerbox — Load .sql button publishes fs.dialog.read,
 		// then issues fs.handle.{uuid}.read once the broker mints
 		// the handle. ADR-0026 §SD7.
