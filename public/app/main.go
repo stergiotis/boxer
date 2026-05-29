@@ -19,6 +19,7 @@ import (
 	"github.com/stergiotis/boxer/public/code"
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/config/env/envdoc"
+	badgercli "github.com/stergiotis/boxer/public/db/badger/cli"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/genbuildertest"
 	"github.com/stergiotis/boxer/public/db/clickhouse/text2sql"
 	"github.com/stergiotis/boxer/public/dev"
@@ -78,6 +79,7 @@ func mainC() (exitCode int) {
 			finddivisions.NewCliCommand(),
 			code.NewCliCommand(genbuildertest.NewCliCommand()),
 			text2sql.NewCliCommand(),
+			badgercli.NewCliCommandBadger(),
 			// Ported from pebble2impl app/commands (P9). cbor/leeway/observability/
 			// dev/env(=envgen)/gov are intentionally omitted as boxer wires them
 			// from their home packages above; adversarialreview/clarityrate are
