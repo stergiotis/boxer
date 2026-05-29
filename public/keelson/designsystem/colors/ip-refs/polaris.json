@@ -1,0 +1,17 @@
+{
+  "_source": "https://polaris.shopify.com/tokens/colors",
+  "_retrieved": "2026-05-15",
+  "_note": "Shopify Polaris color tokens — dark scheme primary anchors.",
+  "interactive":            "#2c6ecb",
+  "interactive-pressed":    "#103262",
+  "critical":               "#d72c0d",
+  "critical-pressed":       "#8a1b00",
+  "warning":                "#b98900",
+  "success":                "#008060",
+  "highlight":              "#5bcdda",
+  "surface":                "#0b0c0d",
+  "surface-subdued":        "#1a1c1d",
+  "border":                 "#3d3f44",
+  "text":                   "#e3e5e7",
+  "text-subdued":           "#999fa4"
+}

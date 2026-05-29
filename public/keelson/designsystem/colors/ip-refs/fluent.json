@@ -1,0 +1,15 @@
+{
+  "_source": "https://fluent2.microsoft.design/color",
+  "_retrieved": "2026-05-15",
+  "_note": "Microsoft Fluent 2 communication / shared color anchors.",
+  "communication-blue": "#0078d4",
+  "shared-red":         "#d13438",
+  "shared-green":       "#107c10",
+  "shared-yellow":      "#ffb900",
+  "shared-orange":      "#d83b01",
+  "shared-purple":      "#5c2d91",
+  "neutral-grey-94":    "#f0f0f0",
+  "neutral-grey-22":    "#383838",
+  "neutral-grey-12":    "#1f1f1f",
+  "neutral-grey-8":     "#141414"
+}

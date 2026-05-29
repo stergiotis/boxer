@@ -1,0 +1,7634 @@
+[
+  {
+    "name": "acorn",
+    "pascal_name": "Acorn",
+    "codepoint": 60314
+  },
+  {
+    "name": "address-book",
+    "pascal_name": "AddressBook",
+    "codepoint": 59128
+  },
+  {
+    "name": "address-book-tabs",
+    "pascal_name": "AddressBookTabs",
+    "codepoint": 61006
+  },
+  {
+    "name": "air-traffic-control",
+    "pascal_name": "AirTrafficControl",
+    "codepoint": 60632
+  },
+  {
+    "name": "airplane",
+    "pascal_name": "Airplane",
+    "codepoint": 57346
+  },
+  {
+    "name": "airplane-in-flight",
+    "pascal_name": "AirplaneInFlight",
+    "codepoint": 58622
+  },
+  {
+    "name": "airplane-landing",
+    "pascal_name": "AirplaneLanding",
+    "codepoint": 58626
+  },
+  {
+    "name": "airplane-takeoff",
+    "pascal_name": "AirplaneTakeoff",
+    "codepoint": 58628
+  },
+  {
+    "name": "airplane-taxiing",
+    "pascal_name": "AirplaneTaxiing",
+    "codepoint": 58624
+  },
+  {
+    "name": "airplane-tilt",
+    "pascal_name": "AirplaneTilt",
+    "codepoint": 58838
+  },
+  {
+    "name": "airplay",
+    "pascal_name": "Airplay",
+    "codepoint": 57348
+  },
+  {
+    "name": "alarm",
+    "pascal_name": "Alarm",
+    "codepoint": 57350
+  },
+  {
+    "name": "alien",
+    "pascal_name": "Alien",
+    "codepoint": 59558
+  },
+  {
+    "name": "align-bottom",
+    "pascal_name": "AlignBottom",
+    "codepoint": 58630
+  },
+  {
+    "name": "align-bottom-simple",
+    "pascal_name": "AlignBottomSimple",
+    "codepoint": 60172
+  },
+  {
+    "name": "align-center-horizontal",
+    "pascal_name": "AlignCenterHorizontal",
+    "codepoint": 58634
+  },
+  {
+    "name": "align-center-horizontal-simple",
+    "pascal_name": "AlignCenterHorizontalSimple",
+    "codepoint": 60174
+  },
+  {
+    "name": "align-center-vertical",
+    "pascal_name": "AlignCenterVertical",
+    "codepoint": 58636
+  },
+  {
+    "name": "align-center-vertical-simple",
+    "pascal_name": "AlignCenterVerticalSimple",
+    "codepoint": 60176
+  },
+  {
+    "name": "align-left",
+    "pascal_name": "AlignLeft",
+    "codepoint": 58638
+  },
+  {
+    "name": "align-left-simple",
+    "pascal_name": "AlignLeftSimple",
+    "codepoint": 60142
+  },
+  {
+    "name": "align-right",
+    "pascal_name": "AlignRight",
+    "codepoint": 58640
+  },
+  {
+    "name": "align-right-simple",
+    "pascal_name": "AlignRightSimple",
+    "codepoint": 60178
+  },
+  {
+    "name": "align-top",
+    "pascal_name": "AlignTop",
+    "codepoint": 58642
+  },
+  {
+    "name": "align-top-simple",
+    "pascal_name": "AlignTopSimple",
+    "codepoint": 60180
+  },
+  {
+    "name": "amazon-logo",
+    "pascal_name": "AmazonLogo",
+    "codepoint": 59756
+  },
+  {
+    "name": "ambulance",
+    "pascal_name": "Ambulance",
+    "codepoint": 58738
+  },
+  {
+    "name": "anchor",
+    "pascal_name": "Anchor",
+    "codepoint": 58644
+  },
+  {
+    "name": "anchor-simple",
+    "pascal_name": "AnchorSimple",
+    "codepoint": 58840
+  },
+  {
+    "name": "android-logo",
+    "pascal_name": "AndroidLogo",
+    "codepoint": 57352
+  },
+  {
+    "name": "angle",
+    "pascal_name": "Angle",
+    "codepoint": 59324
+  },
+  {
+    "name": "angular-logo",
+    "pascal_name": "AngularLogo",
+    "codepoint": 60288
+  },
+  {
+    "name": "aperture",
+    "pascal_name": "Aperture",
+    "codepoint": 57354
+  },
+  {
+    "name": "app-store-logo",
+    "pascal_name": "AppStoreLogo",
+    "codepoint": 59764
+  },
+  {
+    "name": "app-window",
+    "pascal_name": "AppWindow",
+    "codepoint": 58842
+  },
+  {
+    "name": "apple-logo",
+    "pascal_name": "AppleLogo",
+    "codepoint": 58646
+  },
+  {
+    "name": "apple-podcasts-logo",
+    "pascal_name": "ApplePodcastsLogo",
+    "codepoint": 60310
+  },
+  {
+    "name": "approximate-equals",
+    "pascal_name": "ApproximateEquals",
+    "codepoint": 60842
+  },
+  {
+    "name": "archive",
+    "pascal_name": "Archive",
+    "codepoint": 57356
+  },
+  {
+    "name": "armchair",
+    "pascal_name": "Armchair",
+    "codepoint": 57362
+  },
+  {
+    "name": "arrow-arc-left",
+    "pascal_name": "ArrowArcLeft",
+    "codepoint": 57364
+  },
+  {
+    "name": "arrow-arc-right",
+    "pascal_name": "ArrowArcRight",
+    "codepoint": 57366
+  },
+  {
+    "name": "arrow-bend-double-up-left",
+    "pascal_name": "ArrowBendDoubleUpLeft",
+    "codepoint": 57402
+  },
+  {
+    "name": "arrow-bend-double-up-right",
+    "pascal_name": "ArrowBendDoubleUpRight",
+    "codepoint": 57404
+  },
+  {
+    "name": "arrow-bend-down-left",
+    "pascal_name": "ArrowBendDownLeft",
+    "codepoint": 57368
+  },
+  {
+    "name": "arrow-bend-down-right",
+    "pascal_name": "ArrowBendDownRight",
+    "codepoint": 57370
+  },
+  {
+    "name": "arrow-bend-left-down",
+    "pascal_name": "ArrowBendLeftDown",
+    "codepoint": 57372
+  },
+  {
+    "name": "arrow-bend-left-up",
+    "pascal_name": "ArrowBendLeftUp",
+    "codepoint": 57374
+  },
+  {
+    "name": "arrow-bend-right-down",
+    "pascal_name": "ArrowBendRightDown",
+    "codepoint": 57376
+  },
+  {
+    "name": "arrow-bend-right-up",
+    "pascal_name": "ArrowBendRightUp",
+    "codepoint": 57378
+  },
+  {
+    "name": "arrow-bend-up-left",
+    "pascal_name": "ArrowBendUpLeft",
+    "codepoint": 57380
+  },
+  {
+    "name": "arrow-bend-up-right",
+    "pascal_name": "ArrowBendUpRight",
+    "codepoint": 57382
+  },
+  {
+    "name": "arrow-circle-down",
+    "pascal_name": "ArrowCircleDown",
+    "codepoint": 57384
+  },
+  {
+    "name": "arrow-circle-down-left",
+    "pascal_name": "ArrowCircleDownLeft",
+    "codepoint": 57386
+  },
+  {
+    "name": "arrow-circle-down-right",
+    "pascal_name": "ArrowCircleDownRight",
+    "codepoint": 57388
+  },
+  {
+    "name": "arrow-circle-left",
+    "pascal_name": "ArrowCircleLeft",
+    "codepoint": 57434
+  },
+  {
+    "name": "arrow-circle-right",
+    "pascal_name": "ArrowCircleRight",
+    "codepoint": 57390
+  },
+  {
+    "name": "arrow-circle-up",
+    "pascal_name": "ArrowCircleUp",
+    "codepoint": 57392
+  },
+  {
+    "name": "arrow-circle-up-left",
+    "pascal_name": "ArrowCircleUpLeft",
+    "codepoint": 57394
+  },
+  {
+    "name": "arrow-circle-up-right",
+    "pascal_name": "ArrowCircleUpRight",
+    "codepoint": 57396
+  },
+  {
+    "name": "arrow-clockwise",
+    "pascal_name": "ArrowClockwise",
+    "codepoint": 57398
+  },
+  {
+    "name": "arrow-counter-clockwise",
+    "pascal_name": "ArrowCounterClockwise",
+    "codepoint": 57400
+  },
+  {
+    "name": "arrow-down",
+    "pascal_name": "ArrowDown",
+    "codepoint": 57406
+  },
+  {
+    "name": "arrow-down-left",
+    "pascal_name": "ArrowDownLeft",
+    "codepoint": 57408
+  },
+  {
+    "name": "arrow-down-right",
+    "pascal_name": "ArrowDownRight",
+    "codepoint": 57410
+  },
+  {
+    "name": "arrow-elbow-down-left",
+    "pascal_name": "ArrowElbowDownLeft",
+    "codepoint": 57412
+  },
+  {
+    "name": "arrow-elbow-down-right",
+    "pascal_name": "ArrowElbowDownRight",
+    "codepoint": 57414
+  },
+  {
+    "name": "arrow-elbow-left",
+    "pascal_name": "ArrowElbowLeft",
+    "codepoint": 57416
+  },
+  {
+    "name": "arrow-elbow-left-down",
+    "pascal_name": "ArrowElbowLeftDown",
+    "codepoint": 57418
+  },
+  {
+    "name": "arrow-elbow-left-up",
+    "pascal_name": "ArrowElbowLeftUp",
+    "codepoint": 57420
+  },
+  {
+    "name": "arrow-elbow-right",
+    "pascal_name": "ArrowElbowRight",
+    "codepoint": 57422
+  },
+  {
+    "name": "arrow-elbow-right-down",
+    "pascal_name": "ArrowElbowRightDown",
+    "codepoint": 57424
+  },
+  {
+    "name": "arrow-elbow-right-up",
+    "pascal_name": "ArrowElbowRightUp",
+    "codepoint": 57426
+  },
+  {
+    "name": "arrow-elbow-up-left",
+    "pascal_name": "ArrowElbowUpLeft",
+    "codepoint": 57428
+  },
+  {
+    "name": "arrow-elbow-up-right",
+    "pascal_name": "ArrowElbowUpRight",
+    "codepoint": 57430
+  },
+  {
+    "name": "arrow-fat-down",
+    "pascal_name": "ArrowFatDown",
+    "codepoint": 58648
+  },
+  {
+    "name": "arrow-fat-left",
+    "pascal_name": "ArrowFatLeft",
+    "codepoint": 58650
+  },
+  {
+    "name": "arrow-fat-line-down",
+    "pascal_name": "ArrowFatLineDown",
+    "codepoint": 58652
+  },
+  {
+    "name": "arrow-fat-line-left",
+    "pascal_name": "ArrowFatLineLeft",
+    "codepoint": 58654
+  },
+  {
+    "name": "arrow-fat-line-right",
+    "pascal_name": "ArrowFatLineRight",
+    "codepoint": 58656
+  },
+  {
+    "name": "arrow-fat-line-up",
+    "pascal_name": "ArrowFatLineUp",
+    "codepoint": 58658
+  },
+  {
+    "name": "arrow-fat-lines-down",
+    "pascal_name": "ArrowFatLinesDown",
+    "codepoint": 58660
+  },
+  {
+    "name": "arrow-fat-lines-left",
+    "pascal_name": "ArrowFatLinesLeft",
+    "codepoint": 58662
+  },
+  {
+    "name": "arrow-fat-lines-right",
+    "pascal_name": "ArrowFatLinesRight",
+    "codepoint": 58664
+  },
+  {
+    "name": "arrow-fat-lines-up",
+    "pascal_name": "ArrowFatLinesUp",
+    "codepoint": 58666
+  },
+  {
+    "name": "arrow-fat-right",
+    "pascal_name": "ArrowFatRight",
+    "codepoint": 58668
+  },
+  {
+    "name": "arrow-fat-up",
+    "pascal_name": "ArrowFatUp",
+    "codepoint": 58670
+  },
+  {
+    "name": "arrow-left",
+    "pascal_name": "ArrowLeft",
+    "codepoint": 57432
+  },
+  {
+    "name": "arrow-line-down",
+    "pascal_name": "ArrowLineDown",
+    "codepoint": 57436
+  },
+  {
+    "name": "arrow-line-down-left",
+    "pascal_name": "ArrowLineDownLeft",
+    "codepoint": 57438
+  },
+  {
+    "name": "arrow-line-down-right",
+    "pascal_name": "ArrowLineDownRight",
+    "codepoint": 57440
+  },
+  {
+    "name": "arrow-line-left",
+    "pascal_name": "ArrowLineLeft",
+    "codepoint": 57442
+  },
+  {
+    "name": "arrow-line-right",
+    "pascal_name": "ArrowLineRight",
+    "codepoint": 57444
+  },
+  {
+    "name": "arrow-line-up",
+    "pascal_name": "ArrowLineUp",
+    "codepoint": 57446
+  },
+  {
+    "name": "arrow-line-up-left",
+    "pascal_name": "ArrowLineUpLeft",
+    "codepoint": 57448
+  },
+  {
+    "name": "arrow-line-up-right",
+    "pascal_name": "ArrowLineUpRight",
+    "codepoint": 57450
+  },
+  {
+    "name": "arrow-right",
+    "pascal_name": "ArrowRight",
+    "codepoint": 57452
+  },
+  {
+    "name": "arrow-square-down",
+    "pascal_name": "ArrowSquareDown",
+    "codepoint": 57454
+  },
+  {
+    "name": "arrow-square-down-left",
+    "pascal_name": "ArrowSquareDownLeft",
+    "codepoint": 57456
+  },
+  {
+    "name": "arrow-square-down-right",
+    "pascal_name": "ArrowSquareDownRight",
+    "codepoint": 57458
+  },
+  {
+    "name": "arrow-square-in",
+    "pascal_name": "ArrowSquareIn",
+    "codepoint": 58844
+  },
+  {
+    "name": "arrow-square-left",
+    "pascal_name": "ArrowSquareLeft",
+    "codepoint": 57460
+  },
+  {
+    "name": "arrow-square-out",
+    "pascal_name": "ArrowSquareOut",
+    "codepoint": 58846
+  },
+  {
+    "name": "arrow-square-right",
+    "pascal_name": "ArrowSquareRight",
+    "codepoint": 57462
+  },
+  {
+    "name": "arrow-square-up",
+    "pascal_name": "ArrowSquareUp",
+    "codepoint": 57464
+  },
+  {
+    "name": "arrow-square-up-left",
+    "pascal_name": "ArrowSquareUpLeft",
+    "codepoint": 57466
+  },
+  {
+    "name": "arrow-square-up-right",
+    "pascal_name": "ArrowSquareUpRight",
+    "codepoint": 57468
+  },
+  {
+    "name": "arrow-u-down-left",
+    "pascal_name": "ArrowUDownLeft",
+    "codepoint": 57470
+  },
+  {
+    "name": "arrow-u-down-right",
+    "pascal_name": "ArrowUDownRight",
+    "codepoint": 57472
+  },
+  {
+    "name": "arrow-u-left-down",
+    "pascal_name": "ArrowULeftDown",
+    "codepoint": 57474
+  },
+  {
+    "name": "arrow-u-left-up",
+    "pascal_name": "ArrowULeftUp",
+    "codepoint": 57476
+  },
+  {
+    "name": "arrow-u-right-down",
+    "pascal_name": "ArrowURightDown",
+    "codepoint": 57478
+  },
+  {
+    "name": "arrow-u-right-up",
+    "pascal_name": "ArrowURightUp",
+    "codepoint": 57480
+  },
+  {
+    "name": "arrow-u-up-left",
+    "pascal_name": "ArrowUUpLeft",
+    "codepoint": 57482
+  },
+  {
+    "name": "arrow-u-up-right",
+    "pascal_name": "ArrowUUpRight",
+    "codepoint": 57484
+  },
+  {
+    "name": "arrow-up",
+    "pascal_name": "ArrowUp",
+    "codepoint": 57486
+  },
+  {
+    "name": "arrow-up-left",
+    "pascal_name": "ArrowUpLeft",
+    "codepoint": 57488
+  },
+  {
+    "name": "arrow-up-right",
+    "pascal_name": "ArrowUpRight",
+    "codepoint": 57490
+  },
+  {
+    "name": "arrows-clockwise",
+    "pascal_name": "ArrowsClockwise",
+    "codepoint": 57492
+  },
+  {
+    "name": "arrows-counter-clockwise",
+    "pascal_name": "ArrowsCounterClockwise",
+    "codepoint": 57494
+  },
+  {
+    "name": "arrows-down-up",
+    "pascal_name": "ArrowsDownUp",
+    "codepoint": 57496
+  },
+  {
+    "name": "arrows-horizontal",
+    "pascal_name": "ArrowsHorizontal",
+    "codepoint": 60166
+  },
+  {
+    "name": "arrows-in",
+    "pascal_name": "ArrowsIn",
+    "codepoint": 57498
+  },
+  {
+    "name": "arrows-in-cardinal",
+    "pascal_name": "ArrowsInCardinal",
+    "codepoint": 57500
+  },
+  {
+    "name": "arrows-in-line-horizontal",
+    "pascal_name": "ArrowsInLineHorizontal",
+    "codepoint": 58672
+  },
+  {
+    "name": "arrows-in-line-vertical",
+    "pascal_name": "ArrowsInLineVertical",
+    "codepoint": 58674
+  },
+  {
+    "name": "arrows-in-simple",
+    "pascal_name": "ArrowsInSimple",
+    "codepoint": 57502
+  },
+  {
+    "name": "arrows-left-right",
+    "pascal_name": "ArrowsLeftRight",
+    "codepoint": 57504
+  },
+  {
+    "name": "arrows-merge",
+    "pascal_name": "ArrowsMerge",
+    "codepoint": 60734
+  },
+  {
+    "name": "arrows-out",
+    "pascal_name": "ArrowsOut",
+    "codepoint": 57506
+  },
+  {
+    "name": "arrows-out-cardinal",
+    "pascal_name": "ArrowsOutCardinal",
+    "codepoint": 57508
+  },
+  {
+    "name": "arrows-out-line-horizontal",
+    "pascal_name": "ArrowsOutLineHorizontal",
+    "codepoint": 58676
+  },
+  {
+    "name": "arrows-out-line-vertical",
+    "pascal_name": "ArrowsOutLineVertical",
+    "codepoint": 58678
+  },
+  {
+    "name": "arrows-out-simple",
+    "pascal_name": "ArrowsOutSimple",
+    "codepoint": 57510
+  },
+  {
+    "name": "arrows-split",
+    "pascal_name": "ArrowsSplit",
+    "codepoint": 60732
+  },
+  {
+    "name": "arrows-vertical",
+    "pascal_name": "ArrowsVertical",
+    "codepoint": 60164
+  },
+  {
+    "name": "article",
+    "pascal_name": "Article",
+    "codepoint": 57512
+  },
+  {
+    "name": "article-medium",
+    "pascal_name": "ArticleMedium",
+    "codepoint": 58848
+  },
+  {
+    "name": "article-ny-times",
+    "pascal_name": "ArticleNyTimes",
+    "codepoint": 58850
+  },
+  {
+    "name": "asclepius",
+    "pascal_name": "Asclepius",
+    "alias": {
+      "name": "caduceus",
+      "pascal_name": "Caduceus"
+    },
+    "codepoint": 60980
+  },
+  {
+    "name": "asterisk",
+    "pascal_name": "Asterisk",
+    "codepoint": 57514
+  },
+  {
+    "name": "asterisk-simple",
+    "pascal_name": "AsteriskSimple",
+    "codepoint": 59442
+  },
+  {
+    "name": "at",
+    "pascal_name": "At",
+    "codepoint": 57516
+  },
+  {
+    "name": "atom",
+    "pascal_name": "Atom",
+    "codepoint": 58852
+  },
+  {
+    "name": "avocado",
+    "pascal_name": "Avocado",
+    "codepoint": 60932
+  },
+  {
+    "name": "axe",
+    "pascal_name": "Axe",
+    "codepoint": 59900
+  },
+  {
+    "name": "baby",
+    "pascal_name": "Baby",
+    "codepoint": 59252
+  },
+  {
+    "name": "baby-carriage",
+    "pascal_name": "BabyCarriage",
+    "codepoint": 59416
+  },
+  {
+    "name": "backpack",
+    "pascal_name": "Backpack",
+    "codepoint": 59682
+  },
+  {
+    "name": "backspace",
+    "pascal_name": "Backspace",
+    "codepoint": 57518
+  },
+  {
+    "name": "bag",
+    "pascal_name": "Bag",
+    "codepoint": 57520
+  },
+  {
+    "name": "bag-simple",
+    "pascal_name": "BagSimple",
+    "codepoint": 58854
+  },
+  {
+    "name": "balloon",
+    "pascal_name": "Balloon",
+    "codepoint": 59244
+  },
+  {
+    "name": "bandaids",
+    "pascal_name": "Bandaids",
+    "codepoint": 57522
+  },
+  {
+    "name": "bank",
+    "pascal_name": "Bank",
+    "codepoint": 57524
+  },
+  {
+    "name": "barbell",
+    "pascal_name": "Barbell",
+    "codepoint": 57526
+  },
+  {
+    "name": "barcode",
+    "pascal_name": "Barcode",
+    "codepoint": 57528
+  },
+  {
+    "name": "barn",
+    "pascal_name": "Barn",
+    "codepoint": 60530
+  },
+  {
+    "name": "barricade",
+    "pascal_name": "Barricade",
+    "codepoint": 59720
+  },
+  {
+    "name": "baseball",
+    "pascal_name": "Baseball",
+    "codepoint": 59162
+  },
+  {
+    "name": "baseball-cap",
+    "pascal_name": "BaseballCap",
+    "codepoint": 59944
+  },
+  {
+    "name": "baseball-helmet",
+    "pascal_name": "BaseballHelmet",
+    "codepoint": 61002
+  },
+  {
+    "name": "basket",
+    "pascal_name": "Basket",
+    "codepoint": 59748
+  },
+  {
+    "name": "basketball",
+    "pascal_name": "Basketball",
+    "codepoint": 59172
+  },
+  {
+    "name": "bathtub",
+    "pascal_name": "Bathtub",
+    "codepoint": 59422
+  },
+  {
+    "name": "battery-charging",
+    "pascal_name": "BatteryCharging",
+    "codepoint": 57530
+  },
+  {
+    "name": "battery-charging-vertical",
+    "pascal_name": "BatteryChargingVertical",
+    "codepoint": 57532
+  },
+  {
+    "name": "battery-empty",
+    "pascal_name": "BatteryEmpty",
+    "codepoint": 57534
+  },
+  {
+    "name": "battery-full",
+    "pascal_name": "BatteryFull",
+    "codepoint": 57536
+  },
+  {
+    "name": "battery-high",
+    "pascal_name": "BatteryHigh",
+    "codepoint": 57538
+  },
+  {
+    "name": "battery-low",
+    "pascal_name": "BatteryLow",
+    "codepoint": 57540
+  },
+  {
+    "name": "battery-medium",
+    "pascal_name": "BatteryMedium",
+    "codepoint": 57542
+  },
+  {
+    "name": "battery-plus",
+    "pascal_name": "BatteryPlus",
+    "codepoint": 59400
+  },
+  {
+    "name": "battery-plus-vertical",
+    "pascal_name": "BatteryPlusVertical",
+    "codepoint": 60496
+  },
+  {
+    "name": "battery-vertical-empty",
+    "pascal_name": "BatteryVerticalEmpty",
+    "codepoint": 59334
+  },
+  {
+    "name": "battery-vertical-full",
+    "pascal_name": "BatteryVerticalFull",
+    "codepoint": 59332
+  },
+  {
+    "name": "battery-vertical-high",
+    "pascal_name": "BatteryVerticalHigh",
+    "codepoint": 59330
+  },
+  {
+    "name": "battery-vertical-low",
+    "pascal_name": "BatteryVerticalLow",
+    "codepoint": 59326
+  },
+  {
+    "name": "battery-vertical-medium",
+    "pascal_name": "BatteryVerticalMedium",
+    "codepoint": 59328
+  },
+  {
+    "name": "battery-warning",
+    "pascal_name": "BatteryWarning",
+    "codepoint": 57544
+  },
+  {
+    "name": "battery-warning-vertical",
+    "pascal_name": "BatteryWarningVertical",
+    "codepoint": 57546
+  },
+  {
+    "name": "beach-ball",
+    "pascal_name": "BeachBall",
+    "codepoint": 60708
+  },
+  {
+    "name": "beanie",
+    "pascal_name": "Beanie",
+    "codepoint": 59946
+  },
+  {
+    "name": "bed",
+    "pascal_name": "Bed",
+    "codepoint": 57548
+  },
+  {
+    "name": "beer-bottle",
+    "pascal_name": "BeerBottle",
+    "codepoint": 59312
+  },
+  {
+    "name": "beer-stein",
+    "pascal_name": "BeerStein",
+    "codepoint": 60258
+  },
+  {
+    "name": "behance-logo",
+    "pascal_name": "BehanceLogo",
+    "codepoint": 59380
+  },
+  {
+    "name": "bell",
+    "pascal_name": "Bell",
+    "codepoint": 57550
+  },
+  {
+    "name": "bell-ringing",
+    "pascal_name": "BellRinging",
+    "codepoint": 58856
+  },
+  {
+    "name": "bell-simple",
+    "pascal_name": "BellSimple",
+    "codepoint": 57552
+  },
+  {
+    "name": "bell-simple-ringing",
+    "pascal_name": "BellSimpleRinging",
+    "codepoint": 58858
+  },
+  {
+    "name": "bell-simple-slash",
+    "pascal_name": "BellSimpleSlash",
+    "codepoint": 57554
+  },
+  {
+    "name": "bell-simple-z",
+    "pascal_name": "BellSimpleZ",
+    "codepoint": 58860
+  },
+  {
+    "name": "bell-slash",
+    "pascal_name": "BellSlash",
+    "codepoint": 57556
+  },
+  {
+    "name": "bell-z",
+    "pascal_name": "BellZ",
+    "codepoint": 58862
+  },
+  {
+    "name": "belt",
+    "pascal_name": "Belt",
+    "codepoint": 59948
+  },
+  {
+    "name": "bezier-curve",
+    "pascal_name": "BezierCurve",
+    "codepoint": 60160
+  },
+  {
+    "name": "bicycle",
+    "pascal_name": "Bicycle",
+    "codepoint": 57558
+  },
+  {
+    "name": "binary",
+    "pascal_name": "Binary",
+    "codepoint": 61024
+  },
+  {
+    "name": "binoculars",
+    "pascal_name": "Binoculars",
+    "codepoint": 60004
+  },
+  {
+    "name": "biohazard",
+    "pascal_name": "Biohazard",
+    "codepoint": 59872
+  },
+  {
+    "name": "bird",
+    "pascal_name": "Bird",
+    "codepoint": 59180
+  },
+  {
+    "name": "blueprint",
+    "pascal_name": "Blueprint",
+    "codepoint": 60832
+  },
+  {
+    "name": "bluetooth",
+    "pascal_name": "Bluetooth",
+    "codepoint": 57562
+  },
+  {
+    "name": "bluetooth-connected",
+    "pascal_name": "BluetoothConnected",
+    "codepoint": 57564
+  },
+  {
+    "name": "bluetooth-slash",
+    "pascal_name": "BluetoothSlash",
+    "codepoint": 57566
+  },
+  {
+    "name": "bluetooth-x",
+    "pascal_name": "BluetoothX",
+    "codepoint": 57568
+  },
+  {
+    "name": "boat",
+    "pascal_name": "Boat",
+    "codepoint": 59270
+  },
+  {
+    "name": "bomb",
+    "pascal_name": "Bomb",
+    "codepoint": 60938
+  },
+  {
+    "name": "bone",
+    "pascal_name": "Bone",
+    "codepoint": 59378
+  },
+  {
+    "name": "book",
+    "pascal_name": "Book",
+    "codepoint": 57570
+  },
+  {
+    "name": "book-bookmark",
+    "pascal_name": "BookBookmark",
+    "codepoint": 57572
+  },
+  {
+    "name": "book-open",
+    "pascal_name": "BookOpen",
+    "codepoint": 57574
+  },
+  {
+    "name": "book-open-text",
+    "pascal_name": "BookOpenText",
+    "codepoint": 59634
+  },
+  {
+    "name": "book-open-user",
+    "pascal_name": "BookOpenUser",
+    "codepoint": 60896
+  },
+  {
+    "name": "bookmark",
+    "pascal_name": "Bookmark",
+    "codepoint": 57576
+  },
+  {
+    "name": "bookmark-simple",
+    "pascal_name": "BookmarkSimple",
+    "codepoint": 57578
+  },
+  {
+    "name": "bookmarks",
+    "pascal_name": "Bookmarks",
+    "codepoint": 57580
+  },
+  {
+    "name": "bookmarks-simple",
+    "pascal_name": "BookmarksSimple",
+    "codepoint": 58864
+  },
+  {
+    "name": "books",
+    "pascal_name": "Books",
+    "codepoint": 59224
+  },
+  {
+    "name": "boot",
+    "pascal_name": "Boot",
+    "codepoint": 60618
+  },
+  {
+    "name": "boules",
+    "pascal_name": "Boules",
+    "codepoint": 59170
+  },
+  {
+    "name": "bounding-box",
+    "pascal_name": "BoundingBox",
+    "codepoint": 59086
+  },
+  {
+    "name": "bowl-food",
+    "pascal_name": "BowlFood",
+    "codepoint": 60068
+  },
+  {
+    "name": "bowl-steam",
+    "pascal_name": "BowlSteam",
+    "codepoint": 59620
+  },
+  {
+    "name": "bowling-ball",
+    "pascal_name": "BowlingBall",
+    "codepoint": 59956
+  },
+  {
+    "name": "box-arrow-down",
+    "pascal_name": "BoxArrowDown",
+    "alias": {
+      "name": "archive-box",
+      "pascal_name": "ArchiveBox"
+    },
+    "codepoint": 57358
+  },
+  {
+    "name": "box-arrow-up",
+    "pascal_name": "BoxArrowUp",
+    "codepoint": 61012
+  },
+  {
+    "name": "boxing-glove",
+    "pascal_name": "BoxingGlove",
+    "codepoint": 59958
+  },
+  {
+    "name": "brackets-angle",
+    "pascal_name": "BracketsAngle",
+    "codepoint": 59490
+  },
+  {
+    "name": "brackets-curly",
+    "pascal_name": "BracketsCurly",
+    "codepoint": 59488
+  },
+  {
+    "name": "brackets-round",
+    "pascal_name": "BracketsRound",
+    "codepoint": 59492
+  },
+  {
+    "name": "brackets-square",
+    "pascal_name": "BracketsSquare",
+    "codepoint": 59486
+  },
+  {
+    "name": "brain",
+    "pascal_name": "Brain",
+    "codepoint": 59214
+  },
+  {
+    "name": "brandy",
+    "pascal_name": "Brandy",
+    "codepoint": 59060
+  },
+  {
+    "name": "bread",
+    "pascal_name": "Bread",
+    "codepoint": 59420
+  },
+  {
+    "name": "bridge",
+    "pascal_name": "Bridge",
+    "codepoint": 60008
+  },
+  {
+    "name": "briefcase",
+    "pascal_name": "Briefcase",
+    "codepoint": 57582
+  },
+  {
+    "name": "briefcase-metal",
+    "pascal_name": "BriefcaseMetal",
+    "codepoint": 58866
+  },
+  {
+    "name": "broadcast",
+    "pascal_name": "Broadcast",
+    "codepoint": 57586
+  },
+  {
+    "name": "broom",
+    "pascal_name": "Broom",
+    "codepoint": 60500
+  },
+  {
+    "name": "browser",
+    "pascal_name": "Browser",
+    "codepoint": 57588
+  },
+  {
+    "name": "browsers",
+    "pascal_name": "Browsers",
+    "codepoint": 57590
+  },
+  {
+    "name": "bug",
+    "pascal_name": "Bug",
+    "codepoint": 58868
+  },
+  {
+    "name": "bug-beetle",
+    "pascal_name": "BugBeetle",
+    "codepoint": 58870
+  },
+  {
+    "name": "bug-droid",
+    "pascal_name": "BugDroid",
+    "codepoint": 58872
+  },
+  {
+    "name": "building",
+    "pascal_name": "Building",
+    "codepoint": 57600
+  },
+  {
+    "name": "building-apartment",
+    "pascal_name": "BuildingApartment",
+    "codepoint": 57598
+  },
+  {
+    "name": "building-office",
+    "pascal_name": "BuildingOffice",
+    "codepoint": 57598
+  },
+  {
+    "name": "buildings",
+    "pascal_name": "Buildings",
+    "codepoint": 57602
+  },
+  {
+    "name": "bulldozer",
+    "pascal_name": "Bulldozer",
+    "codepoint": 60524
+  },
+  {
+    "name": "bus",
+    "pascal_name": "Bus",
+    "codepoint": 57606
+  },
+  {
+    "name": "butterfly",
+    "pascal_name": "Butterfly",
+    "codepoint": 60014
+  },
+  {
+    "name": "cable-car",
+    "pascal_name": "CableCar",
+    "codepoint": 58524
+  },
+  {
+    "name": "cactus",
+    "pascal_name": "Cactus",
+    "codepoint": 59672
+  },
+  {
+    "name": "cake",
+    "pascal_name": "Cake",
+    "codepoint": 59264
+  },
+  {
+    "name": "calculator",
+    "pascal_name": "Calculator",
+    "codepoint": 58680
+  },
+  {
+    "name": "calendar",
+    "pascal_name": "Calendar",
+    "codepoint": 57608
+  },
+  {
+    "name": "calendar-blank",
+    "pascal_name": "CalendarBlank",
+    "codepoint": 57610
+  },
+  {
+    "name": "calendar-check",
+    "pascal_name": "CalendarCheck",
+    "codepoint": 59154
+  },
+  {
+    "name": "calendar-dot",
+    "pascal_name": "CalendarDot",
+    "codepoint": 59314
+  },
+  {
+    "name": "calendar-dots",
+    "pascal_name": "CalendarDots",
+    "codepoint": 59316
+  },
+  {
+    "name": "calendar-heart",
+    "pascal_name": "CalendarHeart",
+    "codepoint": 59568
+  },
+  {
+    "name": "calendar-minus",
+    "pascal_name": "CalendarMinus",
+    "codepoint": 59924
+  },
+  {
+    "name": "calendar-plus",
+    "pascal_name": "CalendarPlus",
+    "codepoint": 59156
+  },
+  {
+    "name": "calendar-slash",
+    "pascal_name": "CalendarSlash",
+    "codepoint": 59922
+  },
+  {
+    "name": "calendar-star",
+    "pascal_name": "CalendarStar",
+    "codepoint": 59570
+  },
+  {
+    "name": "calendar-x",
+    "pascal_name": "CalendarX",
+    "codepoint": 57612
+  },
+  {
+    "name": "call-bell",
+    "pascal_name": "CallBell",
+    "codepoint": 59358
+  },
+  {
+    "name": "camera",
+    "pascal_name": "Camera",
+    "codepoint": 57614
+  },
+  {
+    "name": "camera-plus",
+    "pascal_name": "CameraPlus",
+    "codepoint": 60504
+  },
+  {
+    "name": "camera-rotate",
+    "pascal_name": "CameraRotate",
+    "codepoint": 59300
+  },
+  {
+    "name": "camera-slash",
+    "pascal_name": "CameraSlash",
+    "codepoint": 57616
+  },
+  {
+    "name": "campfire",
+    "pascal_name": "Campfire",
+    "codepoint": 59864
+  },
+  {
+    "name": "car",
+    "pascal_name": "Car",
+    "codepoint": 57618
+  },
+  {
+    "name": "car-battery",
+    "pascal_name": "CarBattery",
+    "codepoint": 60976
+  },
+  {
+    "name": "car-profile",
+    "pascal_name": "CarProfile",
+    "codepoint": 59596
+  },
+  {
+    "name": "car-simple",
+    "pascal_name": "CarSimple",
+    "codepoint": 57620
+  },
+  {
+    "name": "cardholder",
+    "pascal_name": "Cardholder",
+    "codepoint": 58874
+  },
+  {
+    "name": "cards",
+    "pascal_name": "Cards",
+    "codepoint": 57592
+  },
+  {
+    "name": "cards-three",
+    "pascal_name": "CardsThree",
+    "codepoint": 61008
+  },
+  {
+    "name": "caret-circle-double-down",
+    "pascal_name": "CaretCircleDoubleDown",
+    "codepoint": 57622
+  },
+  {
+    "name": "caret-circle-double-left",
+    "pascal_name": "CaretCircleDoubleLeft",
+    "codepoint": 57624
+  },
+  {
+    "name": "caret-circle-double-right",
+    "pascal_name": "CaretCircleDoubleRight",
+    "codepoint": 57626
+  },
+  {
+    "name": "caret-circle-double-up",
+    "pascal_name": "CaretCircleDoubleUp",
+    "codepoint": 57628
+  },
+  {
+    "name": "caret-circle-down",
+    "pascal_name": "CaretCircleDown",
+    "codepoint": 57630
+  },
+  {
+    "name": "caret-circle-left",
+    "pascal_name": "CaretCircleLeft",
+    "codepoint": 57632
+  },
+  {
+    "name": "caret-circle-right",
+    "pascal_name": "CaretCircleRight",
+    "codepoint": 57634
+  },
+  {
+    "name": "caret-circle-up",
+    "pascal_name": "CaretCircleUp",
+    "codepoint": 57636
+  },
+  {
+    "name": "caret-circle-up-down",
+    "pascal_name": "CaretCircleUpDown",
+    "codepoint": 57662
+  },
+  {
+    "name": "caret-double-down",
+    "pascal_name": "CaretDoubleDown",
+    "codepoint": 57638
+  },
+  {
+    "name": "caret-double-left",
+    "pascal_name": "CaretDoubleLeft",
+    "codepoint": 57640
+  },
+  {
+    "name": "caret-double-right",
+    "pascal_name": "CaretDoubleRight",
+    "codepoint": 57642
+  },
+  {
+    "name": "caret-double-up",
+    "pascal_name": "CaretDoubleUp",
+    "codepoint": 57644
+  },
+  {
+    "name": "caret-down",
+    "pascal_name": "CaretDown",
+    "codepoint": 57654
+  },
+  {
+    "name": "caret-left",
+    "pascal_name": "CaretLeft",
+    "codepoint": 57656
+  },
+  {
+    "name": "caret-line-down",
+    "pascal_name": "CaretLineDown",
+    "codepoint": 57652
+  },
+  {
+    "name": "caret-line-left",
+    "pascal_name": "CaretLineLeft",
+    "codepoint": 57650
+  },
+  {
+    "name": "caret-line-right",
+    "pascal_name": "CaretLineRight",
+    "codepoint": 57648
+  },
+  {
+    "name": "caret-line-up",
+    "pascal_name": "CaretLineUp",
+    "codepoint": 57646
+  },
+  {
+    "name": "caret-right",
+    "pascal_name": "CaretRight",
+    "codepoint": 57658
+  },
+  {
+    "name": "caret-up",
+    "pascal_name": "CaretUp",
+    "codepoint": 57660
+  },
+  {
+    "name": "caret-up-down",
+    "pascal_name": "CaretUpDown",
+    "codepoint": 57664
+  },
+  {
+    "name": "carrot",
+    "pascal_name": "Carrot",
+    "codepoint": 60728
+  },
+  {
+    "name": "cash-register",
+    "pascal_name": "CashRegister",
+    "codepoint": 60800
+  },
+  {
+    "name": "cassette-tape",
+    "pascal_name": "CassetteTape",
+    "codepoint": 60718
+  },
+  {
+    "name": "castle-turret",
+    "pascal_name": "CastleTurret",
+    "codepoint": 59856
+  },
+  {
+    "name": "cat",
+    "pascal_name": "Cat",
+    "codepoint": 59208
+  },
+  {
+    "name": "cell-signal-full",
+    "pascal_name": "CellSignalFull",
+    "codepoint": 57666
+  },
+  {
+    "name": "cell-signal-high",
+    "pascal_name": "CellSignalHigh",
+    "codepoint": 57668
+  },
+  {
+    "name": "cell-signal-low",
+    "pascal_name": "CellSignalLow",
+    "codepoint": 57670
+  },
+  {
+    "name": "cell-signal-medium",
+    "pascal_name": "CellSignalMedium",
+    "codepoint": 57672
+  },
+  {
+    "name": "cell-signal-none",
+    "pascal_name": "CellSignalNone",
+    "codepoint": 57674
+  },
+  {
+    "name": "cell-signal-slash",
+    "pascal_name": "CellSignalSlash",
+    "codepoint": 57676
+  },
+  {
+    "name": "cell-signal-x",
+    "pascal_name": "CellSignalX",
+    "codepoint": 57678
+  },
+  {
+    "name": "cell-tower",
+    "pascal_name": "CellTower",
+    "codepoint": 60330
+  },
+  {
+    "name": "certificate",
+    "pascal_name": "Certificate",
+    "codepoint": 59238
+  },
+  {
+    "name": "chair",
+    "pascal_name": "Chair",
+    "codepoint": 59728
+  },
+  {
+    "name": "chalkboard",
+    "pascal_name": "Chalkboard",
+    "codepoint": 58876
+  },
+  {
+    "name": "chalkboard-simple",
+    "pascal_name": "ChalkboardSimple",
+    "codepoint": 58878
+  },
+  {
+    "name": "chalkboard-teacher",
+    "pascal_name": "ChalkboardTeacher",
+    "codepoint": 58880
+  },
+  {
+    "name": "champagne",
+    "pascal_name": "Champagne",
+    "codepoint": 60106
+  },
+  {
+    "name": "charging-station",
+    "pascal_name": "ChargingStation",
+    "codepoint": 59600
+  },
+  {
+    "name": "chart-bar",
+    "pascal_name": "ChartBar",
+    "codepoint": 57680
+  },
+  {
+    "name": "chart-bar-horizontal",
+    "pascal_name": "ChartBarHorizontal",
+    "codepoint": 57682
+  },
+  {
+    "name": "chart-donut",
+    "pascal_name": "ChartDonut",
+    "codepoint": 60070
+  },
+  {
+    "name": "chart-line",
+    "pascal_name": "ChartLine",
+    "codepoint": 57684
+  },
+  {
+    "name": "chart-line-down",
+    "pascal_name": "ChartLineDown",
+    "codepoint": 59574
+  },
+  {
+    "name": "chart-line-up",
+    "pascal_name": "ChartLineUp",
+    "codepoint": 57686
+  },
+  {
+    "name": "chart-pie",
+    "pascal_name": "ChartPie",
+    "codepoint": 57688
+  },
+  {
+    "name": "chart-pie-slice",
+    "pascal_name": "ChartPieSlice",
+    "codepoint": 57690
+  },
+  {
+    "name": "chart-polar",
+    "pascal_name": "ChartPolar",
+    "codepoint": 60072
+  },
+  {
+    "name": "chart-scatter",
+    "pascal_name": "ChartScatter",
+    "codepoint": 60076
+  },
+  {
+    "name": "chat",
+    "pascal_name": "Chat",
+    "codepoint": 57692
+  },
+  {
+    "name": "chat-centered",
+    "pascal_name": "ChatCentered",
+    "codepoint": 57696
+  },
+  {
+    "name": "chat-centered-dots",
+    "pascal_name": "ChatCenteredDots",
+    "codepoint": 57700
+  },
+  {
+    "name": "chat-centered-slash",
+    "pascal_name": "ChatCenteredSlash",
+    "codepoint": 57698
+  },
+  {
+    "name": "chat-centered-text",
+    "pascal_name": "ChatCenteredText",
+    "codepoint": 57702
+  },
+  {
+    "name": "chat-circle",
+    "pascal_name": "ChatCircle",
+    "codepoint": 57704
+  },
+  {
+    "name": "chat-circle-dots",
+    "pascal_name": "ChatCircleDots",
+    "codepoint": 57708
+  },
+  {
+    "name": "chat-circle-slash",
+    "pascal_name": "ChatCircleSlash",
+    "codepoint": 57706
+  },
+  {
+    "name": "chat-circle-text",
+    "pascal_name": "ChatCircleText",
+    "codepoint": 57710
+  },
+  {
+    "name": "chat-dots",
+    "pascal_name": "ChatDots",
+    "codepoint": 57712
+  },
+  {
+    "name": "chat-slash",
+    "pascal_name": "ChatSlash",
+    "codepoint": 57694
+  },
+  {
+    "name": "chat-teardrop",
+    "pascal_name": "ChatTeardrop",
+    "codepoint": 57714
+  },
+  {
+    "name": "chat-teardrop-dots",
+    "pascal_name": "ChatTeardropDots",
+    "codepoint": 57718
+  },
+  {
+    "name": "chat-teardrop-slash",
+    "pascal_name": "ChatTeardropSlash",
+    "codepoint": 57716
+  },
+  {
+    "name": "chat-teardrop-text",
+    "pascal_name": "ChatTeardropText",
+    "codepoint": 57720
+  },
+  {
+    "name": "chat-text",
+    "pascal_name": "ChatText",
+    "codepoint": 57722
+  },
+  {
+    "name": "chats",
+    "pascal_name": "Chats",
+    "codepoint": 57724
+  },
+  {
+    "name": "chats-circle",
+    "pascal_name": "ChatsCircle",
+    "codepoint": 57726
+  },
+  {
+    "name": "chats-teardrop",
+    "pascal_name": "ChatsTeardrop",
+    "codepoint": 57728
+  },
+  {
+    "name": "check",
+    "pascal_name": "Check",
+    "codepoint": 57730
+  },
+  {
+    "name": "check-circle",
+    "pascal_name": "CheckCircle",
+    "codepoint": 57732
+  },
+  {
+    "name": "check-fat",
+    "pascal_name": "CheckFat",
+    "codepoint": 60326
+  },
+  {
+    "name": "check-square",
+    "pascal_name": "CheckSquare",
+    "codepoint": 57734
+  },
+  {
+    "name": "check-square-offset",
+    "pascal_name": "CheckSquareOffset",
+    "codepoint": 57736
+  },
+  {
+    "name": "checkerboard",
+    "pascal_name": "Checkerboard",
+    "codepoint": 59588
+  },
+  {
+    "name": "checks",
+    "pascal_name": "Checks",
+    "codepoint": 58682
+  },
+  {
+    "name": "cheers",
+    "pascal_name": "Cheers",
+    "codepoint": 59978
+  },
+  {
+    "name": "cheese",
+    "pascal_name": "Cheese",
+    "codepoint": 59902
+  },
+  {
+    "name": "chef-hat",
+    "pascal_name": "ChefHat",
+    "codepoint": 60814
+  },
+  {
+    "name": "cherries",
+    "pascal_name": "Cherries",
+    "codepoint": 59440
+  },
+  {
+    "name": "church",
+    "pascal_name": "Church",
+    "codepoint": 60650
+  },
+  {
+    "name": "cigarette",
+    "pascal_name": "Cigarette",
+    "codepoint": 60816
+  },
+  {
+    "name": "cigarette-slash",
+    "pascal_name": "CigaretteSlash",
+    "codepoint": 60818
+  },
+  {
+    "name": "circle",
+    "pascal_name": "Circle",
+    "codepoint": 57738
+  },
+  {
+    "name": "circle-dashed",
+    "pascal_name": "CircleDashed",
+    "codepoint": 58882
+  },
+  {
+    "name": "circle-half",
+    "pascal_name": "CircleHalf",
+    "codepoint": 57740
+  },
+  {
+    "name": "circle-half-tilt",
+    "pascal_name": "CircleHalfTilt",
+    "codepoint": 57742
+  },
+  {
+    "name": "circle-notch",
+    "pascal_name": "CircleNotch",
+    "codepoint": 60228
+  },
+  {
+    "name": "circles-four",
+    "pascal_name": "CirclesFour",
+    "codepoint": 57744
+  },
+  {
+    "name": "circles-three",
+    "pascal_name": "CirclesThree",
+    "codepoint": 57746
+  },
+  {
+    "name": "circles-three-plus",
+    "pascal_name": "CirclesThreePlus",
+    "codepoint": 57748
+  },
+  {
+    "name": "circuitry",
+    "pascal_name": "Circuitry",
+    "codepoint": 59842
+  },
+  {
+    "name": "city",
+    "pascal_name": "City",
+    "codepoint": 60010
+  },
+  {
+    "name": "clipboard",
+    "pascal_name": "Clipboard",
+    "codepoint": 57750
+  },
+  {
+    "name": "clipboard-text",
+    "pascal_name": "ClipboardText",
+    "codepoint": 57752
+  },
+  {
+    "name": "clock",
+    "pascal_name": "Clock",
+    "codepoint": 57754
+  },
+  {
+    "name": "clock-afternoon",
+    "pascal_name": "ClockAfternoon",
+    "codepoint": 57756
+  },
+  {
+    "name": "clock-clockwise",
+    "pascal_name": "ClockClockwise",
+    "codepoint": 57758
+  },
+  {
+    "name": "clock-countdown",
+    "pascal_name": "ClockCountdown",
+    "codepoint": 60716
+  },
+  {
+    "name": "clock-counter-clockwise",
+    "pascal_name": "ClockCounterClockwise",
+    "codepoint": 57760
+  },
+  {
+    "name": "clock-user",
+    "pascal_name": "ClockUser",
+    "codepoint": 60908
+  },
+  {
+    "name": "closed-captioning",
+    "pascal_name": "ClosedCaptioning",
+    "codepoint": 57764
+  },
+  {
+    "name": "cloud",
+    "pascal_name": "Cloud",
+    "codepoint": 57770
+  },
+  {
+    "name": "cloud-arrow-down",
+    "pascal_name": "CloudArrowDown",
+    "codepoint": 57772
+  },
+  {
+    "name": "cloud-arrow-up",
+    "pascal_name": "CloudArrowUp",
+    "codepoint": 57774
+  },
+  {
+    "name": "cloud-check",
+    "pascal_name": "CloudCheck",
+    "codepoint": 57776
+  },
+  {
+    "name": "cloud-fog",
+    "pascal_name": "CloudFog",
+    "codepoint": 58684
+  },
+  {
+    "name": "cloud-lightning",
+    "pascal_name": "CloudLightning",
+    "codepoint": 57778
+  },
+  {
+    "name": "cloud-moon",
+    "pascal_name": "CloudMoon",
+    "codepoint": 58686
+  },
+  {
+    "name": "cloud-rain",
+    "pascal_name": "CloudRain",
+    "codepoint": 57780
+  },
+  {
+    "name": "cloud-slash",
+    "pascal_name": "CloudSlash",
+    "codepoint": 57782
+  },
+  {
+    "name": "cloud-snow",
+    "pascal_name": "CloudSnow",
+    "codepoint": 57784
+  },
+  {
+    "name": "cloud-sun",
+    "pascal_name": "CloudSun",
+    "codepoint": 58688
+  },
+  {
+    "name": "cloud-warning",
+    "pascal_name": "CloudWarning",
+    "codepoint": 60056
+  },
+  {
+    "name": "cloud-x",
+    "pascal_name": "CloudX",
+    "codepoint": 60054
+  },
+  {
+    "name": "clover",
+    "pascal_name": "Clover",
+    "codepoint": 60872
+  },
+  {
+    "name": "club",
+    "pascal_name": "Club",
+    "codepoint": 57786
+  },
+  {
+    "name": "coat-hanger",
+    "pascal_name": "CoatHanger",
+    "codepoint": 59390
+  },
+  {
+    "name": "coda-logo",
+    "pascal_name": "CodaLogo",
+    "codepoint": 59342
+  },
+  {
+    "name": "code",
+    "pascal_name": "Code",
+    "codepoint": 57788
+  },
+  {
+    "name": "code-block",
+    "pascal_name": "CodeBlock",
+    "codepoint": 60158
+  },
+  {
+    "name": "code-simple",
+    "pascal_name": "CodeSimple",
+    "codepoint": 57790
+  },
+  {
+    "name": "codepen-logo",
+    "pascal_name": "CodepenLogo",
+    "codepoint": 59768
+  },
+  {
+    "name": "codesandbox-logo",
+    "pascal_name": "CodesandboxLogo",
+    "codepoint": 59910
+  },
+  {
+    "name": "coffee",
+    "pascal_name": "Coffee",
+    "codepoint": 57794
+  },
+  {
+    "name": "coffee-bean",
+    "pascal_name": "CoffeeBean",
+    "codepoint": 57792
+  },
+  {
+    "name": "coin",
+    "pascal_name": "Coin",
+    "codepoint": 58894
+  },
+  {
+    "name": "coin-vertical",
+    "pascal_name": "CoinVertical",
+    "codepoint": 60232
+  },
+  {
+    "name": "coins",
+    "pascal_name": "Coins",
+    "codepoint": 59278
+  },
+  {
+    "name": "columns",
+    "pascal_name": "Columns",
+    "codepoint": 58694
+  },
+  {
+    "name": "columns-plus-left",
+    "pascal_name": "ColumnsPlusLeft",
+    "codepoint": 58692
+  },
+  {
+    "name": "columns-plus-right",
+    "pascal_name": "ColumnsPlusRight",
+    "codepoint": 58690
+  },
+  {
+    "name": "command",
+    "pascal_name": "Command",
+    "codepoint": 57796
+  },
+  {
+    "name": "compass",
+    "pascal_name": "Compass",
+    "codepoint": 57800
+  },
+  {
+    "name": "compass-rose",
+    "pascal_name": "CompassRose",
+    "codepoint": 57798
+  },
+  {
+    "name": "compass-tool",
+    "pascal_name": "CompassTool",
+    "codepoint": 59918
+  },
+  {
+    "name": "computer-tower",
+    "pascal_name": "ComputerTower",
+    "codepoint": 58696
+  },
+  {
+    "name": "confetti",
+    "pascal_name": "Confetti",
+    "codepoint": 59418
+  },
+  {
+    "name": "contactless-payment",
+    "pascal_name": "ContactlessPayment",
+    "codepoint": 60738
+  },
+  {
+    "name": "control",
+    "pascal_name": "Control",
+    "codepoint": 60582
+  },
+  {
+    "name": "cookie",
+    "pascal_name": "Cookie",
+    "codepoint": 59082
+  },
+  {
+    "name": "cooking-pot",
+    "pascal_name": "CookingPot",
+    "codepoint": 59236
+  },
+  {
+    "name": "copy",
+    "pascal_name": "Copy",
+    "codepoint": 57802
+  },
+  {
+    "name": "copy-simple",
+    "pascal_name": "CopySimple",
+    "codepoint": 57804
+  },
+  {
+    "name": "copyleft",
+    "pascal_name": "Copyleft",
+    "codepoint": 59498
+  },
+  {
+    "name": "copyright",
+    "pascal_name": "Copyright",
+    "codepoint": 58698
+  },
+  {
+    "name": "corners-in",
+    "pascal_name": "CornersIn",
+    "codepoint": 57806
+  },
+  {
+    "name": "corners-out",
+    "pascal_name": "CornersOut",
+    "codepoint": 57808
+  },
+  {
+    "name": "couch",
+    "pascal_name": "Couch",
+    "codepoint": 59382
+  },
+  {
+    "name": "court-basketball",
+    "pascal_name": "CourtBasketball",
+    "codepoint": 60982
+  },
+  {
+    "name": "cow",
+    "pascal_name": "Cow",
+    "codepoint": 60094
+  },
+  {
+    "name": "cowboy-hat",
+    "pascal_name": "CowboyHat",
+    "codepoint": 60690
+  },
+  {
+    "name": "cpu",
+    "pascal_name": "Cpu",
+    "codepoint": 58896
+  },
+  {
+    "name": "crane",
+    "pascal_name": "Crane",
+    "codepoint": 60744
+  },
+  {
+    "name": "crane-tower",
+    "pascal_name": "CraneTower",
+    "codepoint": 60744
+  },
+  {
+    "name": "credit-card",
+    "pascal_name": "CreditCard",
+    "codepoint": 57810
+  },
+  {
+    "name": "cricket",
+    "pascal_name": "Cricket",
+    "codepoint": 60946
+  },
+  {
+    "name": "crop",
+    "pascal_name": "Crop",
+    "codepoint": 57812
+  },
+  {
+    "name": "cross",
+    "pascal_name": "Cross",
+    "codepoint": 59552
+  },
+  {
+    "name": "crosshair",
+    "pascal_name": "Crosshair",
+    "codepoint": 57814
+  },
+  {
+    "name": "crosshair-simple",
+    "pascal_name": "CrosshairSimple",
+    "codepoint": 57816
+  },
+  {
+    "name": "crown",
+    "pascal_name": "Crown",
+    "codepoint": 58900
+  },
+  {
+    "name": "crown-cross",
+    "pascal_name": "CrownCross",
+    "codepoint": 61022
+  },
+  {
+    "name": "crown-simple",
+    "pascal_name": "CrownSimple",
+    "codepoint": 58902
+  },
+  {
+    "name": "cube",
+    "pascal_name": "Cube",
+    "codepoint": 57818
+  },
+  {
+    "name": "cube-focus",
+    "pascal_name": "CubeFocus",
+    "codepoint": 60682
+  },
+  {
+    "name": "cube-transparent",
+    "pascal_name": "CubeTransparent",
+    "codepoint": 60540
+  },
+  {
+    "name": "currency-btc",
+    "pascal_name": "CurrencyBtc",
+    "codepoint": 58904
+  },
+  {
+    "name": "currency-circle-dollar",
+    "pascal_name": "CurrencyCircleDollar",
+    "codepoint": 58700
+  },
+  {
+    "name": "currency-cny",
+    "pascal_name": "CurrencyCny",
+    "codepoint": 58702
+  },
+  {
+    "name": "currency-dollar",
+    "pascal_name": "CurrencyDollar",
+    "codepoint": 58704
+  },
+  {
+    "name": "currency-dollar-simple",
+    "pascal_name": "CurrencyDollarSimple",
+    "codepoint": 58706
+  },
+  {
+    "name": "currency-eth",
+    "pascal_name": "CurrencyEth",
+    "codepoint": 60122
+  },
+  {
+    "name": "currency-eur",
+    "pascal_name": "CurrencyEur",
+    "codepoint": 58708
+  },
+  {
+    "name": "currency-gbp",
+    "pascal_name": "CurrencyGbp",
+    "codepoint": 58710
+  },
+  {
+    "name": "currency-inr",
+    "pascal_name": "CurrencyInr",
+    "codepoint": 58712
+  },
+  {
+    "name": "currency-jpy",
+    "pascal_name": "CurrencyJpy",
+    "codepoint": 58714
+  },
+  {
+    "name": "currency-krw",
+    "pascal_name": "CurrencyKrw",
+    "codepoint": 58716
+  },
+  {
+    "name": "currency-kzt",
+    "pascal_name": "CurrencyKzt",
+    "codepoint": 60492
+  },
+  {
+    "name": "currency-ngn",
+    "pascal_name": "CurrencyNgn",
+    "codepoint": 60242
+  },
+  {
+    "name": "currency-rub",
+    "pascal_name": "CurrencyRub",
+    "codepoint": 58718
+  },
+  {
+    "name": "cursor",
+    "pascal_name": "Cursor",
+    "codepoint": 57820
+  },
+  {
+    "name": "cursor-click",
+    "pascal_name": "CursorClick",
+    "codepoint": 59336
+  },
+  {
+    "name": "cursor-text",
+    "pascal_name": "CursorText",
+    "codepoint": 59352
+  },
+  {
+    "name": "cylinder",
+    "pascal_name": "Cylinder",
+    "codepoint": 59644
+  },
+  {
+    "name": "database",
+    "pascal_name": "Database",
+    "codepoint": 57822
+  },
+  {
+    "name": "desk",
+    "pascal_name": "Desk",
+    "codepoint": 60694
+  },
+  {
+    "name": "desktop",
+    "pascal_name": "Desktop",
+    "codepoint": 58720
+  },
+  {
+    "name": "desktop-tower",
+    "pascal_name": "DesktopTower",
+    "codepoint": 58722
+  },
+  {
+    "name": "detective",
+    "pascal_name": "Detective",
+    "codepoint": 59454
+  },
+  {
+    "name": "dev-to-logo",
+    "pascal_name": "DevToLogo",
+    "codepoint": 60686
+  },
+  {
+    "name": "device-mobile",
+    "pascal_name": "DeviceMobile",
+    "codepoint": 57824
+  },
+  {
+    "name": "device-mobile-camera",
+    "pascal_name": "DeviceMobileCamera",
+    "codepoint": 57826
+  },
+  {
+    "name": "device-mobile-slash",
+    "pascal_name": "DeviceMobileSlash",
+    "codepoint": 60998
+  },
+  {
+    "name": "device-mobile-speaker",
+    "pascal_name": "DeviceMobileSpeaker",
+    "codepoint": 57828
+  },
+  {
+    "name": "device-rotate",
+    "pascal_name": "DeviceRotate",
+    "codepoint": 60914
+  },
+  {
+    "name": "device-tablet",
+    "pascal_name": "DeviceTablet",
+    "codepoint": 57830
+  },
+  {
+    "name": "device-tablet-camera",
+    "pascal_name": "DeviceTabletCamera",
+    "codepoint": 57832
+  },
+  {
+    "name": "device-tablet-speaker",
+    "pascal_name": "DeviceTabletSpeaker",
+    "codepoint": 57834
+  },
+  {
+    "name": "devices",
+    "pascal_name": "Devices",
+    "codepoint": 60324
+  },
+  {
+    "name": "diamond",
+    "pascal_name": "Diamond",
+    "codepoint": 57836
+  },
+  {
+    "name": "diamonds-four",
+    "pascal_name": "DiamondsFour",
+    "codepoint": 59636
+  },
+  {
+    "name": "dice-five",
+    "pascal_name": "DiceFive",
+    "codepoint": 57838
+  },
+  {
+    "name": "dice-four",
+    "pascal_name": "DiceFour",
+    "codepoint": 57840
+  },
+  {
+    "name": "dice-one",
+    "pascal_name": "DiceOne",
+    "codepoint": 57842
+  },
+  {
+    "name": "dice-six",
+    "pascal_name": "DiceSix",
+    "codepoint": 57844
+  },
+  {
+    "name": "dice-three",
+    "pascal_name": "DiceThree",
+    "codepoint": 57846
+  },
+  {
+    "name": "dice-two",
+    "pascal_name": "DiceTwo",
+    "codepoint": 57848
+  },
+  {
+    "name": "disc",
+    "pascal_name": "Disc",
+    "codepoint": 58724
+  },
+  {
+    "name": "disco-ball",
+    "pascal_name": "DiscoBall",
+    "codepoint": 60824
+  },
+  {
+    "name": "discord-logo",
+    "pascal_name": "DiscordLogo",
+    "codepoint": 58906
+  },
+  {
+    "name": "divide",
+    "pascal_name": "Divide",
+    "codepoint": 57850
+  },
+  {
+    "name": "dna",
+    "pascal_name": "Dna",
+    "codepoint": 59684
+  },
+  {
+    "name": "dog",
+    "pascal_name": "Dog",
+    "codepoint": 59210
+  },
+  {
+    "name": "door",
+    "pascal_name": "Door",
+    "codepoint": 58908
+  },
+  {
+    "name": "door-open",
+    "pascal_name": "DoorOpen",
+    "codepoint": 59366
+  },
+  {
+    "name": "dot",
+    "pascal_name": "Dot",
+    "codepoint": 60638
+  },
+  {
+    "name": "dot-outline",
+    "pascal_name": "DotOutline",
+    "codepoint": 60640
+  },
+  {
+    "name": "dots-nine",
+    "pascal_name": "DotsNine",
+    "codepoint": 57852
+  },
+  {
+    "name": "dots-six",
+    "pascal_name": "DotsSix",
+    "codepoint": 59284
+  },
+  {
+    "name": "dots-six-vertical",
+    "pascal_name": "DotsSixVertical",
+    "codepoint": 60130
+  },
+  {
+    "name": "dots-three",
+    "pascal_name": "DotsThree",
+    "codepoint": 57854
+  },
+  {
+    "name": "dots-three-circle",
+    "pascal_name": "DotsThreeCircle",
+    "codepoint": 57856
+  },
+  {
+    "name": "dots-three-circle-vertical",
+    "pascal_name": "DotsThreeCircleVertical",
+    "codepoint": 57858
+  },
+  {
+    "name": "dots-three-outline",
+    "pascal_name": "DotsThreeOutline",
+    "codepoint": 57860
+  },
+  {
+    "name": "dots-three-outline-vertical",
+    "pascal_name": "DotsThreeOutlineVertical",
+    "codepoint": 57862
+  },
+  {
+    "name": "dots-three-vertical",
+    "pascal_name": "DotsThreeVertical",
+    "codepoint": 57864
+  },
+  {
+    "name": "download",
+    "pascal_name": "Download",
+    "codepoint": 57866
+  },
+  {
+    "name": "download-simple",
+    "pascal_name": "DownloadSimple",
+    "codepoint": 57868
+  },
+  {
+    "name": "dress",
+    "pascal_name": "Dress",
+    "codepoint": 60030
+  },
+  {
+    "name": "dresser",
+    "pascal_name": "Dresser",
+    "codepoint": 59726
+  },
+  {
+    "name": "dribbble-logo",
+    "pascal_name": "DribbbleLogo",
+    "codepoint": 57870
+  },
+  {
+    "name": "drone",
+    "pascal_name": "Drone",
+    "codepoint": 60788
+  },
+  {
+    "name": "drop",
+    "pascal_name": "Drop",
+    "codepoint": 57872
+  },
+  {
+    "name": "drop-half",
+    "pascal_name": "DropHalf",
+    "codepoint": 58726
+  },
+  {
+    "name": "drop-half-bottom",
+    "pascal_name": "DropHalfBottom",
+    "codepoint": 60224
+  },
+  {
+    "name": "drop-simple",
+    "pascal_name": "DropSimple",
+    "codepoint": 60978
+  },
+  {
+    "name": "drop-slash",
+    "pascal_name": "DropSlash",
+    "codepoint": 59732
+  },
+  {
+    "name": "dropbox-logo",
+    "pascal_name": "DropboxLogo",
+    "codepoint": 59344
+  },
+  {
+    "name": "ear",
+    "pascal_name": "Ear",
+    "codepoint": 59148
+  },
+  {
+    "name": "ear-slash",
+    "pascal_name": "EarSlash",
+    "codepoint": 59150
+  },
+  {
+    "name": "egg",
+    "pascal_name": "Egg",
+    "codepoint": 59410
+  },
+  {
+    "name": "egg-crack",
+    "pascal_name": "EggCrack",
+    "codepoint": 60260
+  },
+  {
+    "name": "eject",
+    "pascal_name": "Eject",
+    "codepoint": 57874
+  },
+  {
+    "name": "eject-simple",
+    "pascal_name": "EjectSimple",
+    "codepoint": 59054
+  },
+  {
+    "name": "elevator",
+    "pascal_name": "Elevator",
+    "codepoint": 60608
+  },
+  {
+    "name": "empty",
+    "pascal_name": "Empty",
+    "codepoint": 60860
+  },
+  {
+    "name": "engine",
+    "pascal_name": "Engine",
+    "codepoint": 60032
+  },
+  {
+    "name": "envelope",
+    "pascal_name": "Envelope",
+    "codepoint": 57876
+  },
+  {
+    "name": "envelope-open",
+    "pascal_name": "EnvelopeOpen",
+    "codepoint": 57878
+  },
+  {
+    "name": "envelope-simple",
+    "pascal_name": "EnvelopeSimple",
+    "codepoint": 57880
+  },
+  {
+    "name": "envelope-simple-open",
+    "pascal_name": "EnvelopeSimpleOpen",
+    "codepoint": 57882
+  },
+  {
+    "name": "equalizer",
+    "pascal_name": "Equalizer",
+    "codepoint": 60348
+  },
+  {
+    "name": "equals",
+    "pascal_name": "Equals",
+    "codepoint": 57884
+  },
+  {
+    "name": "eraser",
+    "pascal_name": "Eraser",
+    "codepoint": 57886
+  },
+  {
+    "name": "escalator-down",
+    "pascal_name": "EscalatorDown",
+    "codepoint": 60602
+  },
+  {
+    "name": "escalator-up",
+    "pascal_name": "EscalatorUp",
+    "codepoint": 60604
+  },
+  {
+    "name": "exam",
+    "pascal_name": "Exam",
+    "codepoint": 59202
+  },
+  {
+    "name": "exclamation-mark",
+    "pascal_name": "ExclamationMark",
+    "codepoint": 60996
+  },
+  {
+    "name": "exclude",
+    "pascal_name": "Exclude",
+    "codepoint": 59522
+  },
+  {
+    "name": "exclude-square",
+    "pascal_name": "ExcludeSquare",
+    "codepoint": 59520
+  },
+  {
+    "name": "export",
+    "pascal_name": "Export",
+    "codepoint": 60144
+  },
+  {
+    "name": "eye",
+    "pascal_name": "Eye",
+    "codepoint": 57888
+  },
+  {
+    "name": "eye-closed",
+    "pascal_name": "EyeClosed",
+    "codepoint": 57890
+  },
+  {
+    "name": "eye-slash",
+    "pascal_name": "EyeSlash",
+    "codepoint": 57892
+  },
+  {
+    "name": "eyedropper",
+    "pascal_name": "Eyedropper",
+    "codepoint": 58728
+  },
+  {
+    "name": "eyedropper-sample",
+    "pascal_name": "EyedropperSample",
+    "codepoint": 60100
+  },
+  {
+    "name": "eyeglasses",
+    "pascal_name": "Eyeglasses",
+    "codepoint": 59322
+  },
+  {
+    "name": "eyes",
+    "pascal_name": "Eyes",
+    "codepoint": 61020
+  },
+  {
+    "name": "face-mask",
+    "pascal_name": "FaceMask",
+    "codepoint": 58730
+  },
+  {
+    "name": "facebook-logo",
+    "pascal_name": "FacebookLogo",
+    "codepoint": 57894
+  },
+  {
+    "name": "factory",
+    "pascal_name": "Factory",
+    "codepoint": 59232
+  },
+  {
+    "name": "faders",
+    "pascal_name": "Faders",
+    "codepoint": 57896
+  },
+  {
+    "name": "faders-horizontal",
+    "pascal_name": "FadersHorizontal",
+    "codepoint": 57898
+  },
+  {
+    "name": "fallout-shelter",
+    "pascal_name": "FalloutShelter",
+    "codepoint": 59870
+  },
+  {
+    "name": "fan",
+    "pascal_name": "Fan",
+    "codepoint": 59890
+  },
+  {
+    "name": "farm",
+    "pascal_name": "Farm",
+    "codepoint": 60528
+  },
+  {
+    "name": "fast-forward",
+    "pascal_name": "FastForward",
+    "codepoint": 59046
+  },
+  {
+    "name": "fast-forward-circle",
+    "pascal_name": "FastForwardCircle",
+    "codepoint": 57900
+  },
+  {
+    "name": "feather",
+    "pascal_name": "Feather",
+    "codepoint": 59840
+  },
+  {
+    "name": "fediverse-logo",
+    "pascal_name": "FediverseLogo",
+    "codepoint": 60774
+  },
+  {
+    "name": "figma-logo",
+    "pascal_name": "FigmaLogo",
+    "codepoint": 57902
+  },
+  {
+    "name": "file",
+    "pascal_name": "File",
+    "codepoint": 57904
+  },
+  {
+    "name": "file-archive",
+    "pascal_name": "FileArchive",
+    "codepoint": 60202
+  },
+  {
+    "name": "file-arrow-down",
+    "pascal_name": "FileArrowDown",
+    "codepoint": 57906
+  },
+  {
+    "name": "file-arrow-up",
+    "pascal_name": "FileArrowUp",
+    "codepoint": 58910
+  },
+  {
+    "name": "file-audio",
+    "pascal_name": "FileAudio",
+    "codepoint": 59936
+  },
+  {
+    "name": "file-c",
+    "pascal_name": "FileC",
+    "codepoint": 60210
+  },
+  {
+    "name": "file-c-sharp",
+    "pascal_name": "FileCSharp",
+    "codepoint": 60208
+  },
+  {
+    "name": "file-cloud",
+    "pascal_name": "FileCloud",
+    "codepoint": 59742
+  },
+  {
+    "name": "file-code",
+    "pascal_name": "FileCode",
+    "codepoint": 59668
+  },
+  {
+    "name": "file-cpp",
+    "pascal_name": "FileCpp",
+    "codepoint": 60206
+  },
+  {
+    "name": "file-css",
+    "pascal_name": "FileCss",
+    "codepoint": 60212
+  },
+  {
+    "name": "file-csv",
+    "pascal_name": "FileCsv",
+    "codepoint": 60188
+  },
+  {
+    "name": "file-dashed",
+    "pascal_name": "FileDashed",
+    "alias": {
+      "name": "file-dotted",
+      "pascal_name": "FileDotted"
+    },
+    "codepoint": 59140
+  },
+  {
+    "name": "file-doc",
+    "pascal_name": "FileDoc",
+    "codepoint": 60190
+  },
+  {
+    "name": "file-html",
+    "pascal_name": "FileHtml",
+    "codepoint": 60216
+  },
+  {
+    "name": "file-image",
+    "pascal_name": "FileImage",
+    "codepoint": 59940
+  },
+  {
+    "name": "file-ini",
+    "pascal_name": "FileIni",
+    "codepoint": 60210
+  },
+  {
+    "name": "file-jpg",
+    "pascal_name": "FileJpg",
+    "codepoint": 60186
+  },
+  {
+    "name": "file-js",
+    "pascal_name": "FileJs",
+    "codepoint": 60196
+  },
+  {
+    "name": "file-jsx",
+    "pascal_name": "FileJsx",
+    "codepoint": 60218
+  },
+  {
+    "name": "file-lock",
+    "pascal_name": "FileLock",
+    "codepoint": 59740
+  },
+  {
+    "name": "file-magnifying-glass",
+    "pascal_name": "FileMagnifyingGlass",
+    "alias": {
+      "name": "file-search",
+      "pascal_name": "FileSearch"
+    },
+    "codepoint": 57912
+  },
+  {
+    "name": "file-md",
+    "pascal_name": "FileMd",
+    "codepoint": 60752
+  },
+  {
+    "name": "file-minus",
+    "pascal_name": "FileMinus",
+    "codepoint": 57908
+  },
+  {
+    "name": "file-pdf",
+    "pascal_name": "FilePdf",
+    "codepoint": 59138
+  },
+  {
+    "name": "file-plus",
+    "pascal_name": "FilePlus",
+    "codepoint": 57910
+  },
+  {
+    "name": "file-png",
+    "pascal_name": "FilePng",
+    "codepoint": 60184
+  },
+  {
+    "name": "file-ppt",
+    "pascal_name": "FilePpt",
+    "codepoint": 60192
+  },
+  {
+    "name": "file-py",
+    "pascal_name": "FilePy",
+    "codepoint": 60204
+  },
+  {
+    "name": "file-rs",
+    "pascal_name": "FileRs",
+    "codepoint": 60200
+  },
+  {
+    "name": "file-sql",
+    "pascal_name": "FileSql",
+    "codepoint": 60750
+  },
+  {
+    "name": "file-svg",
+    "pascal_name": "FileSvg",
+    "codepoint": 60680
+  },
+  {
+    "name": "file-text",
+    "pascal_name": "FileText",
+    "codepoint": 57914
+  },
+  {
+    "name": "file-ts",
+    "pascal_name": "FileTs",
+    "codepoint": 60198
+  },
+  {
+    "name": "file-tsx",
+    "pascal_name": "FileTsx",
+    "codepoint": 60220
+  },
+  {
+    "name": "file-txt",
+    "pascal_name": "FileTxt",
+    "codepoint": 60210
+  },
+  {
+    "name": "file-video",
+    "pascal_name": "FileVideo",
+    "codepoint": 59938
+  },
+  {
+    "name": "file-vue",
+    "pascal_name": "FileVue",
+    "codepoint": 60222
+  },
+  {
+    "name": "file-x",
+    "pascal_name": "FileX",
+    "codepoint": 57916
+  },
+  {
+    "name": "file-xls",
+    "pascal_name": "FileXls",
+    "codepoint": 60194
+  },
+  {
+    "name": "file-zip",
+    "pascal_name": "FileZip",
+    "codepoint": 59736
+  },
+  {
+    "name": "files",
+    "pascal_name": "Files",
+    "codepoint": 59152
+  },
+  {
+    "name": "film-reel",
+    "pascal_name": "FilmReel",
+    "codepoint": 59584
+  },
+  {
+    "name": "film-script",
+    "pascal_name": "FilmScript",
+    "codepoint": 60240
+  },
+  {
+    "name": "film-slate",
+    "pascal_name": "FilmSlate",
+    "codepoint": 59586
+  },
+  {
+    "name": "film-strip",
+    "pascal_name": "FilmStrip",
+    "codepoint": 59282
+  },
+  {
+    "name": "fingerprint",
+    "pascal_name": "Fingerprint",
+    "codepoint": 57918
+  },
+  {
+    "name": "fingerprint-simple",
+    "pascal_name": "FingerprintSimple",
+    "codepoint": 57920
+  },
+  {
+    "name": "finn-the-human",
+    "pascal_name": "FinnTheHuman",
+    "codepoint": 58732
+  },
+  {
+    "name": "fire",
+    "pascal_name": "Fire",
+    "codepoint": 57922
+  },
+  {
+    "name": "fire-extinguisher",
+    "pascal_name": "FireExtinguisher",
+    "codepoint": 59880
+  },
+  {
+    "name": "fire-simple",
+    "pascal_name": "FireSimple",
+    "codepoint": 58912
+  },
+  {
+    "name": "fire-truck",
+    "pascal_name": "FireTruck",
+    "codepoint": 58740
+  },
+  {
+    "name": "first-aid",
+    "pascal_name": "FirstAid",
+    "codepoint": 58734
+  },
+  {
+    "name": "first-aid-kit",
+    "pascal_name": "FirstAidKit",
+    "codepoint": 58736
+  },
+  {
+    "name": "fish",
+    "pascal_name": "Fish",
+    "codepoint": 59176
+  },
+  {
+    "name": "fish-simple",
+    "pascal_name": "FishSimple",
+    "codepoint": 59178
+  },
+  {
+    "name": "flag",
+    "pascal_name": "Flag",
+    "codepoint": 57924
+  },
+  {
+    "name": "flag-banner",
+    "pascal_name": "FlagBanner",
+    "codepoint": 58914
+  },
+  {
+    "name": "flag-banner-fold",
+    "pascal_name": "FlagBannerFold",
+    "codepoint": 60658
+  },
+  {
+    "name": "flag-checkered",
+    "pascal_name": "FlagCheckered",
+    "codepoint": 59960
+  },
+  {
+    "name": "flag-pennant",
+    "pascal_name": "FlagPennant",
+    "codepoint": 60656
+  },
+  {
+    "name": "flame",
+    "pascal_name": "Flame",
+    "codepoint": 58916
+  },
+  {
+    "name": "flashlight",
+    "pascal_name": "Flashlight",
+    "codepoint": 57926
+  },
+  {
+    "name": "flask",
+    "pascal_name": "Flask",
+    "codepoint": 59294
+  },
+  {
+    "name": "flip-horizontal",
+    "pascal_name": "FlipHorizontal",
+    "codepoint": 60778
+  },
+  {
+    "name": "flip-vertical",
+    "pascal_name": "FlipVertical",
+    "codepoint": 60780
+  },
+  {
+    "name": "floppy-disk",
+    "pascal_name": "FloppyDisk",
+    "codepoint": 57928
+  },
+  {
+    "name": "floppy-disk-back",
+    "pascal_name": "FloppyDiskBack",
+    "codepoint": 60148
+  },
+  {
+    "name": "flow-arrow",
+    "pascal_name": "FlowArrow",
+    "codepoint": 59116
+  },
+  {
+    "name": "flower",
+    "pascal_name": "Flower",
+    "codepoint": 59230
+  },
+  {
+    "name": "flower-lotus",
+    "pascal_name": "FlowerLotus",
+    "codepoint": 59084
+  },
+  {
+    "name": "flower-tulip",
+    "pascal_name": "FlowerTulip",
+    "codepoint": 60108
+  },
+  {
+    "name": "flying-saucer",
+    "pascal_name": "FlyingSaucer",
+    "codepoint": 60234
+  },
+  {
+    "name": "folder",
+    "pascal_name": "Folder",
+    "alias": {
+      "name": "folder-notch",
+      "pascal_name": "FolderNotch"
+    },
+    "codepoint": 57930
+  },
+  {
+    "name": "folder-dashed",
+    "pascal_name": "FolderDashed",
+    "alias": {
+      "name": "folder-dotted",
+      "pascal_name": "FolderDotted"
+    },
+    "codepoint": 59640
+  },
+  {
+    "name": "folder-lock",
+    "pascal_name": "FolderLock",
+    "codepoint": 59964
+  },
+  {
+    "name": "folder-minus",
+    "pascal_name": "FolderMinus",
+    "alias": {
+      "name": "folder-notch-minus",
+      "pascal_name": "FolderNotchMinus"
+    },
+    "codepoint": 57940
+  },
+  {
+    "name": "folder-open",
+    "pascal_name": "FolderOpen",
+    "alias": {
+      "name": "folder-notch-open",
+      "pascal_name": "FolderNotchOpen"
+    },
+    "codepoint": 57942
+  },
+  {
+    "name": "folder-plus",
+    "pascal_name": "FolderPlus",
+    "alias": {
+      "name": "folder-notch-plus",
+      "pascal_name": "FolderNotchPlus"
+    },
+    "codepoint": 57944
+  },
+  {
+    "name": "folder-simple",
+    "pascal_name": "FolderSimple",
+    "codepoint": 57946
+  },
+  {
+    "name": "folder-simple-dashed",
+    "pascal_name": "FolderSimpleDashed",
+    "alias": {
+      "name": "folder-simple-dotted",
+      "pascal_name": "FolderSimpleDotted"
+    },
+    "codepoint": 60458
+  },
+  {
+    "name": "folder-simple-lock",
+    "pascal_name": "FolderSimpleLock",
+    "codepoint": 60254
+  },
+  {
+    "name": "folder-simple-minus",
+    "pascal_name": "FolderSimpleMinus",
+    "codepoint": 57948
+  },
+  {
+    "name": "folder-simple-plus",
+    "pascal_name": "FolderSimplePlus",
+    "codepoint": 57950
+  },
+  {
+    "name": "folder-simple-star",
+    "pascal_name": "FolderSimpleStar",
+    "codepoint": 60462
+  },
+  {
+    "name": "folder-simple-user",
+    "pascal_name": "FolderSimpleUser",
+    "codepoint": 60256
+  },
+  {
+    "name": "folder-star",
+    "pascal_name": "FolderStar",
+    "codepoint": 60038
+  },
+  {
+    "name": "folder-user",
+    "pascal_name": "FolderUser",
+    "codepoint": 60230
+  },
+  {
+    "name": "folders",
+    "pascal_name": "Folders",
+    "codepoint": 57952
+  },
+  {
+    "name": "football",
+    "pascal_name": "Football",
+    "codepoint": 59160
+  },
+  {
+    "name": "football-helmet",
+    "pascal_name": "FootballHelmet",
+    "codepoint": 61004
+  },
+  {
+    "name": "footprints",
+    "pascal_name": "Footprints",
+    "codepoint": 60040
+  },
+  {
+    "name": "fork-knife",
+    "pascal_name": "ForkKnife",
+    "codepoint": 57954
+  },
+  {
+    "name": "four-k",
+    "pascal_name": "FourK",
+    "codepoint": 59996
+  },
+  {
+    "name": "frame-corners",
+    "pascal_name": "FrameCorners",
+    "codepoint": 58918
+  },
+  {
+    "name": "framer-logo",
+    "pascal_name": "FramerLogo",
+    "codepoint": 57956
+  },
+  {
+    "name": "function",
+    "pascal_name": "Function",
+    "codepoint": 60388
+  },
+  {
+    "name": "funnel",
+    "pascal_name": "Funnel",
+    "codepoint": 57958
+  },
+  {
+    "name": "funnel-simple",
+    "pascal_name": "FunnelSimple",
+    "codepoint": 57960
+  },
+  {
+    "name": "funnel-simple-x",
+    "pascal_name": "FunnelSimpleX",
+    "codepoint": 57962
+  },
+  {
+    "name": "funnel-x",
+    "pascal_name": "FunnelX",
+    "codepoint": 57964
+  },
+  {
+    "name": "game-controller",
+    "pascal_name": "GameController",
+    "codepoint": 57966
+  },
+  {
+    "name": "garage",
+    "pascal_name": "Garage",
+    "codepoint": 60630
+  },
+  {
+    "name": "gas-can",
+    "pascal_name": "GasCan",
+    "codepoint": 59598
+  },
+  {
+    "name": "gas-pump",
+    "pascal_name": "GasPump",
+    "codepoint": 59240
+  },
+  {
+    "name": "gauge",
+    "pascal_name": "Gauge",
+    "codepoint": 58920
+  },
+  {
+    "name": "gavel",
+    "pascal_name": "Gavel",
+    "codepoint": 59954
+  },
+  {
+    "name": "gear",
+    "pascal_name": "Gear",
+    "codepoint": 57968
+  },
+  {
+    "name": "gear-fine",
+    "pascal_name": "GearFine",
+    "codepoint": 59516
+  },
+  {
+    "name": "gear-six",
+    "pascal_name": "GearSix",
+    "codepoint": 57970
+  },
+  {
+    "name": "gender-female",
+    "pascal_name": "GenderFemale",
+    "codepoint": 59104
+  },
+  {
+    "name": "gender-intersex",
+    "pascal_name": "GenderIntersex",
+    "codepoint": 59110
+  },
+  {
+    "name": "gender-male",
+    "pascal_name": "GenderMale",
+    "codepoint": 59106
+  },
+  {
+    "name": "gender-neuter",
+    "pascal_name": "GenderNeuter",
+    "codepoint": 59114
+  },
+  {
+    "name": "gender-nonbinary",
+    "pascal_name": "GenderNonbinary",
+    "codepoint": 59108
+  },
+  {
+    "name": "gender-transgender",
+    "pascal_name": "GenderTransgender",
+    "codepoint": 59112
+  },
+  {
+    "name": "ghost",
+    "pascal_name": "Ghost",
+    "codepoint": 58922
+  },
+  {
+    "name": "gif",
+    "pascal_name": "Gif",
+    "codepoint": 57972
+  },
+  {
+    "name": "gift",
+    "pascal_name": "Gift",
+    "codepoint": 57974
+  },
+  {
+    "name": "git-branch",
+    "pascal_name": "GitBranch",
+    "codepoint": 57976
+  },
+  {
+    "name": "git-commit",
+    "pascal_name": "GitCommit",
+    "codepoint": 57978
+  },
+  {
+    "name": "git-diff",
+    "pascal_name": "GitDiff",
+    "codepoint": 57980
+  },
+  {
+    "name": "git-fork",
+    "pascal_name": "GitFork",
+    "codepoint": 57982
+  },
+  {
+    "name": "git-merge",
+    "pascal_name": "GitMerge",
+    "codepoint": 57984
+  },
+  {
+    "name": "git-pull-request",
+    "pascal_name": "GitPullRequest",
+    "codepoint": 57986
+  },
+  {
+    "name": "github-logo",
+    "pascal_name": "GithubLogo",
+    "codepoint": 58742
+  },
+  {
+    "name": "gitlab-logo",
+    "pascal_name": "GitlabLogo",
+    "codepoint": 59028
+  },
+  {
+    "name": "gitlab-logo-simple",
+    "pascal_name": "GitlabLogoSimple",
+    "codepoint": 59030
+  },
+  {
+    "name": "globe",
+    "pascal_name": "Globe",
+    "codepoint": 57992
+  },
+  {
+    "name": "globe-hemisphere-east",
+    "pascal_name": "GlobeHemisphereEast",
+    "codepoint": 57994
+  },
+  {
+    "name": "globe-hemisphere-west",
+    "pascal_name": "GlobeHemisphereWest",
+    "codepoint": 57996
+  },
+  {
+    "name": "globe-simple",
+    "pascal_name": "GlobeSimple",
+    "codepoint": 57998
+  },
+  {
+    "name": "globe-simple-x",
+    "pascal_name": "GlobeSimpleX",
+    "codepoint": 57988
+  },
+  {
+    "name": "globe-stand",
+    "pascal_name": "GlobeStand",
+    "codepoint": 58000
+  },
+  {
+    "name": "globe-x",
+    "pascal_name": "GlobeX",
+    "codepoint": 57990
+  },
+  {
+    "name": "goggles",
+    "pascal_name": "Goggles",
+    "codepoint": 60596
+  },
+  {
+    "name": "golf",
+    "pascal_name": "Golf",
+    "codepoint": 59966
+  },
+  {
+    "name": "goodreads-logo",
+    "pascal_name": "GoodreadsLogo",
+    "codepoint": 60688
+  },
+  {
+    "name": "google-cardboard-logo",
+    "pascal_name": "GoogleCardboardLogo",
+    "codepoint": 59318
+  },
+  {
+    "name": "google-chrome-logo",
+    "pascal_name": "GoogleChromeLogo",
+    "codepoint": 59766
+  },
+  {
+    "name": "google-drive-logo",
+    "pascal_name": "GoogleDriveLogo",
+    "codepoint": 59638
+  },
+  {
+    "name": "google-logo",
+    "pascal_name": "GoogleLogo",
+    "codepoint": 58002
+  },
+  {
+    "name": "google-photos-logo",
+    "pascal_name": "GooglePhotosLogo",
+    "codepoint": 60306
+  },
+  {
+    "name": "google-play-logo",
+    "pascal_name": "GooglePlayLogo",
+    "codepoint": 58004
+  },
+  {
+    "name": "google-podcasts-logo",
+    "pascal_name": "GooglePodcastsLogo",
+    "codepoint": 60308
+  },
+  {
+    "name": "gps",
+    "pascal_name": "Gps",
+    "codepoint": 60888
+  },
+  {
+    "name": "gps-fix",
+    "pascal_name": "GpsFix",
+    "codepoint": 60886
+  },
+  {
+    "name": "gps-slash",
+    "pascal_name": "GpsSlash",
+    "codepoint": 60884
+  },
+  {
+    "name": "gradient",
+    "pascal_name": "Gradient",
+    "codepoint": 60226
+  },
+  {
+    "name": "graduation-cap",
+    "pascal_name": "GraduationCap",
+    "codepoint": 58924
+  },
+  {
+    "name": "grains",
+    "pascal_name": "Grains",
+    "codepoint": 60520
+  },
+  {
+    "name": "grains-slash",
+    "pascal_name": "GrainsSlash",
+    "codepoint": 60522
+  },
+  {
+    "name": "graph",
+    "pascal_name": "Graph",
+    "codepoint": 60248
+  },
+  {
+    "name": "graphics-card",
+    "pascal_name": "GraphicsCard",
+    "codepoint": 58898
+  },
+  {
+    "name": "greater-than",
+    "pascal_name": "GreaterThan",
+    "codepoint": 60868
+  },
+  {
+    "name": "greater-than-or-equal",
+    "pascal_name": "GreaterThanOrEqual",
+    "codepoint": 60834
+  },
+  {
+    "name": "grid-four",
+    "pascal_name": "GridFour",
+    "codepoint": 58006
+  },
+  {
+    "name": "grid-nine",
+    "pascal_name": "GridNine",
+    "codepoint": 60556
+  },
+  {
+    "name": "guitar",
+    "pascal_name": "Guitar",
+    "codepoint": 60042
+  },
+  {
+    "name": "hair-dryer",
+    "pascal_name": "HairDryer",
+    "codepoint": 60006
+  },
+  {
+    "name": "hamburger",
+    "pascal_name": "Hamburger",
+    "codepoint": 59280
+  },
+  {
+    "name": "hammer",
+    "pascal_name": "Hammer",
+    "codepoint": 59406
+  },
+  {
+    "name": "hand",
+    "pascal_name": "Hand",
+    "codepoint": 58008
+  },
+  {
+    "name": "hand-arrow-down",
+    "pascal_name": "HandArrowDown",
+    "codepoint": 59982
+  },
+  {
+    "name": "hand-arrow-up",
+    "pascal_name": "HandArrowUp",
+    "codepoint": 61018
+  },
+  {
+    "name": "hand-coins",
+    "pascal_name": "HandCoins",
+    "codepoint": 60044
+  },
+  {
+    "name": "hand-deposit",
+    "pascal_name": "HandDeposit",
+    "codepoint": 61058
+  },
+  {
+    "name": "hand-eye",
+    "pascal_name": "HandEye",
+    "codepoint": 59980
+  },
+  {
+    "name": "hand-fist",
+    "pascal_name": "HandFist",
+    "codepoint": 58746
+  },
+  {
+    "name": "hand-grabbing",
+    "pascal_name": "HandGrabbing",
+    "codepoint": 58748
+  },
+  {
+    "name": "hand-heart",
+    "pascal_name": "HandHeart",
+    "codepoint": 59408
+  },
+  {
+    "name": "hand-palm",
+    "pascal_name": "HandPalm",
+    "codepoint": 58750
+  },
+  {
+    "name": "hand-peace",
+    "pascal_name": "HandPeace",
+    "codepoint": 59340
+  },
+  {
+    "name": "hand-pointing",
+    "pascal_name": "HandPointing",
+    "codepoint": 58010
+  },
+  {
+    "name": "hand-soap",
+    "pascal_name": "HandSoap",
+    "codepoint": 58928
+  },
+  {
+    "name": "hand-swipe-left",
+    "pascal_name": "HandSwipeLeft",
+    "codepoint": 60564
+  },
+  {
+    "name": "hand-swipe-right",
+    "pascal_name": "HandSwipeRight",
+    "codepoint": 60562
+  },
+  {
+    "name": "hand-tap",
+    "pascal_name": "HandTap",
+    "codepoint": 60560
+  },
+  {
+    "name": "hand-waving",
+    "pascal_name": "HandWaving",
+    "codepoint": 58752
+  },
+  {
+    "name": "hand-withdraw",
+    "pascal_name": "HandWithdraw",
+    "codepoint": 61056
+  },
+  {
+    "name": "handbag",
+    "pascal_name": "Handbag",
+    "codepoint": 58012
+  },
+  {
+    "name": "handbag-simple",
+    "pascal_name": "HandbagSimple",
+    "codepoint": 58926
+  },
+  {
+    "name": "hands-clapping",
+    "pascal_name": "HandsClapping",
+    "codepoint": 59040
+  },
+  {
+    "name": "hands-praying",
+    "pascal_name": "HandsPraying",
+    "codepoint": 60616
+  },
+  {
+    "name": "handshake",
+    "pascal_name": "Handshake",
+    "codepoint": 58754
+  },
+  {
+    "name": "hard-drive",
+    "pascal_name": "HardDrive",
+    "codepoint": 58014
+  },
+  {
+    "name": "hard-drives",
+    "pascal_name": "HardDrives",
+    "codepoint": 58016
+  },
+  {
+    "name": "hard-hat",
+    "pascal_name": "HardHat",
+    "codepoint": 60742
+  },
+  {
+    "name": "hash",
+    "pascal_name": "Hash",
+    "codepoint": 58018
+  },
+  {
+    "name": "hash-straight",
+    "pascal_name": "HashStraight",
+    "codepoint": 58020
+  },
+  {
+    "name": "head-circuit",
+    "pascal_name": "HeadCircuit",
+    "codepoint": 59348
+  },
+  {
+    "name": "headlights",
+    "pascal_name": "Headlights",
+    "codepoint": 59134
+  },
+  {
+    "name": "headphones",
+    "pascal_name": "Headphones",
+    "codepoint": 58022
+  },
+  {
+    "name": "headset",
+    "pascal_name": "Headset",
+    "codepoint": 58756
+  },
+  {
+    "name": "heart",
+    "pascal_name": "Heart",
+    "codepoint": 58024
+  },
+  {
+    "name": "heart-break",
+    "pascal_name": "HeartBreak",
+    "codepoint": 60392
+  },
+  {
+    "name": "heart-half",
+    "pascal_name": "HeartHalf",
+    "codepoint": 60488
+  },
+  {
+    "name": "heart-straight",
+    "pascal_name": "HeartStraight",
+    "codepoint": 58026
+  },
+  {
+    "name": "heart-straight-break",
+    "pascal_name": "HeartStraightBreak",
+    "codepoint": 60312
+  },
+  {
+    "name": "heartbeat",
+    "pascal_name": "Heartbeat",
+    "codepoint": 58028
+  },
+  {
+    "name": "hexagon",
+    "pascal_name": "Hexagon",
+    "codepoint": 58030
+  },
+  {
+    "name": "high-definition",
+    "pascal_name": "HighDefinition",
+    "codepoint": 60046
+  },
+  {
+    "name": "high-heel",
+    "pascal_name": "HighHeel",
+    "codepoint": 59624
+  },
+  {
+    "name": "highlighter",
+    "pascal_name": "Highlighter",
+    "codepoint": 60534
+  },
+  {
+    "name": "highlighter-circle",
+    "pascal_name": "HighlighterCircle",
+    "codepoint": 58930
+  },
+  {
+    "name": "hockey",
+    "pascal_name": "Hockey",
+    "codepoint": 60550
+  },
+  {
+    "name": "hoodie",
+    "pascal_name": "Hoodie",
+    "codepoint": 60624
+  },
+  {
+    "name": "horse",
+    "pascal_name": "Horse",
+    "codepoint": 58032
+  },
+  {
+    "name": "hospital",
+    "pascal_name": "Hospital",
+    "codepoint": 59460
+  },
+  {
+    "name": "hourglass",
+    "pascal_name": "Hourglass",
+    "codepoint": 58034
+  },
+  {
+    "name": "hourglass-high",
+    "pascal_name": "HourglassHigh",
+    "codepoint": 58036
+  },
+  {
+    "name": "hourglass-low",
+    "pascal_name": "HourglassLow",
+    "codepoint": 58038
+  },
+  {
+    "name": "hourglass-medium",
+    "pascal_name": "HourglassMedium",
+    "codepoint": 58040
+  },
+  {
+    "name": "hourglass-simple",
+    "pascal_name": "HourglassSimple",
+    "codepoint": 58042
+  },
+  {
+    "name": "hourglass-simple-high",
+    "pascal_name": "HourglassSimpleHigh",
+    "codepoint": 58044
+  },
+  {
+    "name": "hourglass-simple-low",
+    "pascal_name": "HourglassSimpleLow",
+    "codepoint": 58046
+  },
+  {
+    "name": "hourglass-simple-medium",
+    "pascal_name": "HourglassSimpleMedium",
+    "codepoint": 58048
+  },
+  {
+    "name": "house",
+    "pascal_name": "House",
+    "codepoint": 58050
+  },
+  {
+    "name": "house-line",
+    "pascal_name": "HouseLine",
+    "codepoint": 58052
+  },
+  {
+    "name": "house-simple",
+    "pascal_name": "HouseSimple",
+    "codepoint": 58054
+  },
+  {
+    "name": "hurricane",
+    "pascal_name": "Hurricane",
+    "codepoint": 59534
+  },
+  {
+    "name": "ice-cream",
+    "pascal_name": "IceCream",
+    "codepoint": 59396
+  },
+  {
+    "name": "identification-badge",
+    "pascal_name": "IdentificationBadge",
+    "codepoint": 59126
+  },
+  {
+    "name": "identification-card",
+    "pascal_name": "IdentificationCard",
+    "codepoint": 58056
+  },
+  {
+    "name": "image",
+    "pascal_name": "Image",
+    "codepoint": 58058
+  },
+  {
+    "name": "image-broken",
+    "pascal_name": "ImageBroken",
+    "codepoint": 59304
+  },
+  {
+    "name": "image-square",
+    "pascal_name": "ImageSquare",
+    "codepoint": 58060
+  },
+  {
+    "name": "images",
+    "pascal_name": "Images",
+    "codepoint": 59446
+  },
+  {
+    "name": "images-square",
+    "pascal_name": "ImagesSquare",
+    "codepoint": 59444
+  },
+  {
+    "name": "infinity",
+    "pascal_name": "Infinity",
+    "alias": {
+      "name": "lemniscate",
+      "pascal_name": "Lemniscate"
+    },
+    "codepoint": 58932
+  },
+  {
+    "name": "info",
+    "pascal_name": "Info",
+    "codepoint": 58062
+  },
+  {
+    "name": "instagram-logo",
+    "pascal_name": "InstagramLogo",
+    "codepoint": 58064
+  },
+  {
+    "name": "intersect",
+    "pascal_name": "Intersect",
+    "codepoint": 58066
+  },
+  {
+    "name": "intersect-square",
+    "pascal_name": "IntersectSquare",
+    "codepoint": 59514
+  },
+  {
+    "name": "intersect-three",
+    "pascal_name": "IntersectThree",
+    "codepoint": 60612
+  },
+  {
+    "name": "intersection",
+    "pascal_name": "Intersection",
+    "codepoint": 60858
+  },
+  {
+    "name": "invoice",
+    "pascal_name": "Invoice",
+    "codepoint": 60994
+  },
+  {
+    "name": "island",
+    "pascal_name": "Island",
+    "codepoint": 60934
+  },
+  {
+    "name": "jar",
+    "pascal_name": "Jar",
+    "codepoint": 59360
+  },
+  {
+    "name": "jar-label",
+    "pascal_name": "JarLabel",
+    "codepoint": 59360
+  },
+  {
+    "name": "jeep",
+    "pascal_name": "Jeep",
+    "codepoint": 58068
+  },
+  {
+    "name": "joystick",
+    "pascal_name": "Joystick",
+    "codepoint": 59998
+  },
+  {
+    "name": "kanban",
+    "pascal_name": "Kanban",
+    "codepoint": 60244
+  },
+  {
+    "name": "key",
+    "pascal_name": "Key",
+    "codepoint": 58070
+  },
+  {
+    "name": "key-return",
+    "pascal_name": "KeyReturn",
+    "codepoint": 59266
+  },
+  {
+    "name": "keyboard",
+    "pascal_name": "Keyboard",
+    "codepoint": 58072
+  },
+  {
+    "name": "keyhole",
+    "pascal_name": "Keyhole",
+    "codepoint": 60024
+  },
+  {
+    "name": "knife",
+    "pascal_name": "Knife",
+    "codepoint": 58934
+  },
+  {
+    "name": "ladder",
+    "pascal_name": "Ladder",
+    "codepoint": 59876
+  },
+  {
+    "name": "ladder-simple",
+    "pascal_name": "LadderSimple",
+    "codepoint": 60454
+  },
+  {
+    "name": "lamp",
+    "pascal_name": "Lamp",
+    "codepoint": 58936
+  },
+  {
+    "name": "lamp-pendant",
+    "pascal_name": "LampPendant",
+    "codepoint": 60974
+  },
+  {
+    "name": "laptop",
+    "pascal_name": "Laptop",
+    "codepoint": 58758
+  },
+  {
+    "name": "lasso",
+    "pascal_name": "Lasso",
+    "codepoint": 60870
+  },
+  {
+    "name": "lastfm-logo",
+    "pascal_name": "LastfmLogo",
+    "codepoint": 59458
+  },
+  {
+    "name": "layout",
+    "pascal_name": "Layout",
+    "codepoint": 59094
+  },
+  {
+    "name": "leaf",
+    "pascal_name": "Leaf",
+    "codepoint": 58074
+  },
+  {
+    "name": "lectern",
+    "pascal_name": "Lectern",
+    "codepoint": 59738
+  },
+  {
+    "name": "lego",
+    "pascal_name": "Lego",
+    "codepoint": 59590
+  },
+  {
+    "name": "lego-smiley",
+    "pascal_name": "LegoSmiley",
+    "codepoint": 59590
+  },
+  {
+    "name": "less-than",
+    "pascal_name": "LessThan",
+    "codepoint": 60844
+  },
+  {
+    "name": "less-than-or-equal",
+    "pascal_name": "LessThanOrEqual",
+    "codepoint": 60836
+  },
+  {
+    "name": "letter-circle-h",
+    "pascal_name": "LetterCircleH",
+    "codepoint": 60408
+  },
+  {
+    "name": "letter-circle-p",
+    "pascal_name": "LetterCircleP",
+    "codepoint": 60424
+  },
+  {
+    "name": "letter-circle-v",
+    "pascal_name": "LetterCircleV",
+    "codepoint": 60436
+  },
+  {
+    "name": "lifebuoy",
+    "pascal_name": "Lifebuoy",
+    "codepoint": 58938
+  },
+  {
+    "name": "lightbulb",
+    "pascal_name": "Lightbulb",
+    "codepoint": 58076
+  },
+  {
+    "name": "lightbulb-filament",
+    "pascal_name": "LightbulbFilament",
+    "codepoint": 58940
+  },
+  {
+    "name": "lighthouse",
+    "pascal_name": "Lighthouse",
+    "codepoint": 59894
+  },
+  {
+    "name": "lightning",
+    "pascal_name": "Lightning",
+    "codepoint": 58078
+  },
+  {
+    "name": "lightning-a",
+    "pascal_name": "LightningA",
+    "codepoint": 60036
+  },
+  {
+    "name": "lightning-slash",
+    "pascal_name": "LightningSlash",
+    "codepoint": 58080
+  },
+  {
+    "name": "line-segment",
+    "pascal_name": "LineSegment",
+    "codepoint": 59090
+  },
+  {
+    "name": "line-segments",
+    "pascal_name": "LineSegments",
+    "codepoint": 59092
+  },
+  {
+    "name": "line-vertical",
+    "pascal_name": "LineVertical",
+    "codepoint": 60784
+  },
+  {
+    "name": "link",
+    "pascal_name": "Link",
+    "codepoint": 58082
+  },
+  {
+    "name": "link-break",
+    "pascal_name": "LinkBreak",
+    "codepoint": 58084
+  },
+  {
+    "name": "link-simple",
+    "pascal_name": "LinkSimple",
+    "codepoint": 58086
+  },
+  {
+    "name": "link-simple-break",
+    "pascal_name": "LinkSimpleBreak",
+    "codepoint": 58088
+  },
+  {
+    "name": "link-simple-horizontal",
+    "pascal_name": "LinkSimpleHorizontal",
+    "codepoint": 58090
+  },
+  {
+    "name": "link-simple-horizontal-break",
+    "pascal_name": "LinkSimpleHorizontalBreak",
+    "codepoint": 58092
+  },
+  {
+    "name": "linkedin-logo",
+    "pascal_name": "LinkedinLogo",
+    "codepoint": 58094
+  },
+  {
+    "name": "linktree-logo",
+    "pascal_name": "LinktreeLogo",
+    "codepoint": 60910
+  },
+  {
+    "name": "linux-logo",
+    "pascal_name": "LinuxLogo",
+    "codepoint": 60162
+  },
+  {
+    "name": "list",
+    "pascal_name": "List",
+    "codepoint": 58096
+  },
+  {
+    "name": "list-bullets",
+    "pascal_name": "ListBullets",
+    "codepoint": 58098
+  },
+  {
+    "name": "list-checks",
+    "pascal_name": "ListChecks",
+    "codepoint": 60124
+  },
+  {
+    "name": "list-dashes",
+    "pascal_name": "ListDashes",
+    "codepoint": 58100
+  },
+  {
+    "name": "list-heart",
+    "pascal_name": "ListHeart",
+    "codepoint": 60382
+  },
+  {
+    "name": "list-magnifying-glass",
+    "pascal_name": "ListMagnifyingGlass",
+    "codepoint": 60384
+  },
+  {
+    "name": "list-numbers",
+    "pascal_name": "ListNumbers",
+    "codepoint": 58102
+  },
+  {
+    "name": "list-plus",
+    "pascal_name": "ListPlus",
+    "codepoint": 58104
+  },
+  {
+    "name": "list-star",
+    "pascal_name": "ListStar",
+    "codepoint": 60380
+  },
+  {
+    "name": "lock",
+    "pascal_name": "Lock",
+    "codepoint": 58106
+  },
+  {
+    "name": "lock-key",
+    "pascal_name": "LockKey",
+    "codepoint": 58110
+  },
+  {
+    "name": "lock-key-open",
+    "pascal_name": "LockKeyOpen",
+    "codepoint": 58112
+  },
+  {
+    "name": "lock-laminated",
+    "pascal_name": "LockLaminated",
+    "codepoint": 58114
+  },
+  {
+    "name": "lock-laminated-open",
+    "pascal_name": "LockLaminatedOpen",
+    "codepoint": 58116
+  },
+  {
+    "name": "lock-open",
+    "pascal_name": "LockOpen",
+    "codepoint": 58118
+  },
+  {
+    "name": "lock-simple",
+    "pascal_name": "LockSimple",
+    "codepoint": 58120
+  },
+  {
+    "name": "lock-simple-open",
+    "pascal_name": "LockSimpleOpen",
+    "codepoint": 58122
+  },
+  {
+    "name": "lockers",
+    "pascal_name": "Lockers",
+    "codepoint": 60600
+  },
+  {
+    "name": "log",
+    "pascal_name": "Log",
+    "codepoint": 60802
+  },
+  {
+    "name": "magic-wand",
+    "pascal_name": "MagicWand",
+    "codepoint": 59062
+  },
+  {
+    "name": "magnet",
+    "pascal_name": "Magnet",
+    "codepoint": 59008
+  },
+  {
+    "name": "magnet-straight",
+    "pascal_name": "MagnetStraight",
+    "codepoint": 59010
+  },
+  {
+    "name": "magnifying-glass",
+    "pascal_name": "MagnifyingGlass",
+    "codepoint": 58124
+  },
+  {
+    "name": "magnifying-glass-minus",
+    "pascal_name": "MagnifyingGlassMinus",
+    "codepoint": 58126
+  },
+  {
+    "name": "magnifying-glass-plus",
+    "pascal_name": "MagnifyingGlassPlus",
+    "codepoint": 58128
+  },
+  {
+    "name": "mailbox",
+    "pascal_name": "Mailbox",
+    "codepoint": 60446
+  },
+  {
+    "name": "map-pin",
+    "pascal_name": "MapPin",
+    "codepoint": 58134
+  },
+  {
+    "name": "map-pin-area",
+    "pascal_name": "MapPinArea",
+    "codepoint": 60986
+  },
+  {
+    "name": "map-pin-line",
+    "pascal_name": "MapPinLine",
+    "codepoint": 58136
+  },
+  {
+    "name": "map-pin-plus",
+    "pascal_name": "MapPinPlus",
+    "codepoint": 58132
+  },
+  {
+    "name": "map-pin-simple",
+    "pascal_name": "MapPinSimple",
+    "codepoint": 60990
+  },
+  {
+    "name": "map-pin-simple-area",
+    "pascal_name": "MapPinSimpleArea",
+    "codepoint": 60988
+  },
+  {
+    "name": "map-pin-simple-line",
+    "pascal_name": "MapPinSimpleLine",
+    "codepoint": 60984
+  },
+  {
+    "name": "map-trifold",
+    "pascal_name": "MapTrifold",
+    "codepoint": 58138
+  },
+  {
+    "name": "markdown-logo",
+    "pascal_name": "MarkdownLogo",
+    "codepoint": 58632
+  },
+  {
+    "name": "marker-circle",
+    "pascal_name": "MarkerCircle",
+    "codepoint": 58944
+  },
+  {
+    "name": "martini",
+    "pascal_name": "Martini",
+    "codepoint": 58140
+  },
+  {
+    "name": "mask-happy",
+    "pascal_name": "MaskHappy",
+    "codepoint": 59892
+  },
+  {
+    "name": "mask-sad",
+    "pascal_name": "MaskSad",
+    "codepoint": 60318
+  },
+  {
+    "name": "mastodon-logo",
+    "pascal_name": "MastodonLogo",
+    "codepoint": 60776
+  },
+  {
+    "name": "math-operations",
+    "pascal_name": "MathOperations",
+    "codepoint": 58142
+  },
+  {
+    "name": "matrix-logo",
+    "pascal_name": "MatrixLogo",
+    "codepoint": 60772
+  },
+  {
+    "name": "medal",
+    "pascal_name": "Medal",
+    "codepoint": 58144
+  },
+  {
+    "name": "medal-military",
+    "pascal_name": "MedalMilitary",
+    "codepoint": 60668
+  },
+  {
+    "name": "medium-logo",
+    "pascal_name": "MediumLogo",
+    "codepoint": 58146
+  },
+  {
+    "name": "megaphone",
+    "pascal_name": "Megaphone",
+    "codepoint": 58148
+  },
+  {
+    "name": "megaphone-simple",
+    "pascal_name": "MegaphoneSimple",
+    "codepoint": 58946
+  },
+  {
+    "name": "member-of",
+    "pascal_name": "MemberOf",
+    "codepoint": 60866
+  },
+  {
+    "name": "memory",
+    "pascal_name": "Memory",
+    "codepoint": 59844
+  },
+  {
+    "name": "messenger-logo",
+    "pascal_name": "MessengerLogo",
+    "codepoint": 59096
+  },
+  {
+    "name": "meta-logo",
+    "pascal_name": "MetaLogo",
+    "codepoint": 60674
+  },
+  {
+    "name": "meteor",
+    "pascal_name": "Meteor",
+    "codepoint": 59834
+  },
+  {
+    "name": "metronome",
+    "pascal_name": "Metronome",
+    "codepoint": 60558
+  },
+  {
+    "name": "microphone",
+    "pascal_name": "Microphone",
+    "codepoint": 58150
+  },
+  {
+    "name": "microphone-slash",
+    "pascal_name": "MicrophoneSlash",
+    "codepoint": 58152
+  },
+  {
+    "name": "microphone-stage",
+    "pascal_name": "MicrophoneStage",
+    "codepoint": 59228
+  },
+  {
+    "name": "microscope",
+    "pascal_name": "Microscope",
+    "codepoint": 60538
+  },
+  {
+    "name": "microsoft-excel-logo",
+    "pascal_name": "MicrosoftExcelLogo",
+    "codepoint": 60268
+  },
+  {
+    "name": "microsoft-outlook-logo",
+    "pascal_name": "MicrosoftOutlookLogo",
+    "codepoint": 60272
+  },
+  {
+    "name": "microsoft-powerpoint-logo",
+    "pascal_name": "MicrosoftPowerpointLogo",
+    "codepoint": 60110
+  },
+  {
+    "name": "microsoft-teams-logo",
+    "pascal_name": "MicrosoftTeamsLogo",
+    "codepoint": 60262
+  },
+  {
+    "name": "microsoft-word-logo",
+    "pascal_name": "MicrosoftWordLogo",
+    "codepoint": 60266
+  },
+  {
+    "name": "minus",
+    "pascal_name": "Minus",
+    "codepoint": 58154
+  },
+  {
+    "name": "minus-circle",
+    "pascal_name": "MinusCircle",
+    "codepoint": 58156
+  },
+  {
+    "name": "minus-square",
+    "pascal_name": "MinusSquare",
+    "codepoint": 60748
+  },
+  {
+    "name": "money",
+    "pascal_name": "Money",
+    "codepoint": 58760
+  },
+  {
+    "name": "money-wavy",
+    "pascal_name": "MoneyWavy",
+    "codepoint": 61032
+  },
+  {
+    "name": "monitor",
+    "pascal_name": "Monitor",
+    "codepoint": 58158
+  },
+  {
+    "name": "monitor-arrow-up",
+    "pascal_name": "MonitorArrowUp",
+    "codepoint": 58762
+  },
+  {
+    "name": "monitor-play",
+    "pascal_name": "MonitorPlay",
+    "codepoint": 58764
+  },
+  {
+    "name": "moon",
+    "pascal_name": "Moon",
+    "codepoint": 58160
+  },
+  {
+    "name": "moon-stars",
+    "pascal_name": "MoonStars",
+    "codepoint": 58766
+  },
+  {
+    "name": "moped",
+    "pascal_name": "Moped",
+    "codepoint": 59428
+  },
+  {
+    "name": "moped-front",
+    "pascal_name": "MopedFront",
+    "codepoint": 59426
+  },
+  {
+    "name": "mosque",
+    "pascal_name": "Mosque",
+    "codepoint": 60654
+  },
+  {
+    "name": "motorcycle",
+    "pascal_name": "Motorcycle",
+    "codepoint": 59402
+  },
+  {
+    "name": "mountains",
+    "pascal_name": "Mountains",
+    "codepoint": 59310
+  },
+  {
+    "name": "mouse",
+    "pascal_name": "Mouse",
+    "codepoint": 58170
+  },
+  {
+    "name": "mouse-left-click",
+    "pascal_name": "MouseLeftClick",
+    "codepoint": 58164
+  },
+  {
+    "name": "mouse-middle-click",
+    "pascal_name": "MouseMiddleClick",
+    "codepoint": 58168
+  },
+  {
+    "name": "mouse-right-click",
+    "pascal_name": "MouseRightClick",
+    "codepoint": 58166
+  },
+  {
+    "name": "mouse-scroll",
+    "pascal_name": "MouseScroll",
+    "codepoint": 58162
+  },
+  {
+    "name": "mouse-simple",
+    "pascal_name": "MouseSimple",
+    "codepoint": 58948
+  },
+  {
+    "name": "music-note",
+    "pascal_name": "MusicNote",
+    "codepoint": 58172
+  },
+  {
+    "name": "music-note-simple",
+    "pascal_name": "MusicNoteSimple",
+    "codepoint": 58174
+  },
+  {
+    "name": "music-notes",
+    "pascal_name": "MusicNotes",
+    "codepoint": 58176
+  },
+  {
+    "name": "music-notes-minus",
+    "pascal_name": "MusicNotesMinus",
+    "codepoint": 60940
+  },
+  {
+    "name": "music-notes-plus",
+    "pascal_name": "MusicNotesPlus",
+    "codepoint": 60284
+  },
+  {
+    "name": "music-notes-simple",
+    "pascal_name": "MusicNotesSimple",
+    "codepoint": 58178
+  },
+  {
+    "name": "navigation-arrow",
+    "pascal_name": "NavigationArrow",
+    "codepoint": 60126
+  },
+  {
+    "name": "needle",
+    "pascal_name": "Needle",
+    "codepoint": 59438
+  },
+  {
+    "name": "network",
+    "pascal_name": "Network",
+    "codepoint": 60894
+  },
+  {
+    "name": "network-slash",
+    "pascal_name": "NetworkSlash",
+    "codepoint": 60892
+  },
+  {
+    "name": "network-x",
+    "pascal_name": "NetworkX",
+    "codepoint": 60890
+  },
+  {
+    "name": "newspaper",
+    "pascal_name": "Newspaper",
+    "codepoint": 58180
+  },
+  {
+    "name": "newspaper-clipping",
+    "pascal_name": "NewspaperClipping",
+    "codepoint": 58182
+  },
+  {
+    "name": "not-equals",
+    "pascal_name": "NotEquals",
+    "codepoint": 60838
+  },
+  {
+    "name": "not-member-of",
+    "pascal_name": "NotMemberOf",
+    "codepoint": 60846
+  },
+  {
+    "name": "not-subset-of",
+    "pascal_name": "NotSubsetOf",
+    "codepoint": 60848
+  },
+  {
+    "name": "not-superset-of",
+    "pascal_name": "NotSupersetOf",
+    "codepoint": 60850
+  },
+  {
+    "name": "notches",
+    "pascal_name": "Notches",
+    "codepoint": 60730
+  },
+  {
+    "name": "note",
+    "pascal_name": "Note",
+    "codepoint": 58184
+  },
+  {
+    "name": "note-blank",
+    "pascal_name": "NoteBlank",
+    "codepoint": 58186
+  },
+  {
+    "name": "note-pencil",
+    "pascal_name": "NotePencil",
+    "codepoint": 58188
+  },
+  {
+    "name": "notebook",
+    "pascal_name": "Notebook",
+    "codepoint": 58190
+  },
+  {
+    "name": "notepad",
+    "pascal_name": "Notepad",
+    "codepoint": 58942
+  },
+  {
+    "name": "notification",
+    "pascal_name": "Notification",
+    "codepoint": 59130
+  },
+  {
+    "name": "notion-logo",
+    "pascal_name": "NotionLogo",
+    "codepoint": 59808
+  },
+  {
+    "name": "nuclear-plant",
+    "pascal_name": "NuclearPlant",
+    "codepoint": 60796
+  },
+  {
+    "name": "number-circle-eight",
+    "pascal_name": "NumberCircleEight",
+    "codepoint": 58194
+  },
+  {
+    "name": "number-circle-five",
+    "pascal_name": "NumberCircleFive",
+    "codepoint": 58200
+  },
+  {
+    "name": "number-circle-four",
+    "pascal_name": "NumberCircleFour",
+    "codepoint": 58206
+  },
+  {
+    "name": "number-circle-nine",
+    "pascal_name": "NumberCircleNine",
+    "codepoint": 58212
+  },
+  {
+    "name": "number-circle-one",
+    "pascal_name": "NumberCircleOne",
+    "codepoint": 58218
+  },
+  {
+    "name": "number-circle-seven",
+    "pascal_name": "NumberCircleSeven",
+    "codepoint": 58224
+  },
+  {
+    "name": "number-circle-six",
+    "pascal_name": "NumberCircleSix",
+    "codepoint": 58230
+  },
+  {
+    "name": "number-circle-three",
+    "pascal_name": "NumberCircleThree",
+    "codepoint": 58236
+  },
+  {
+    "name": "number-circle-two",
+    "pascal_name": "NumberCircleTwo",
+    "codepoint": 58242
+  },
+  {
+    "name": "number-circle-zero",
+    "pascal_name": "NumberCircleZero",
+    "codepoint": 58248
+  },
+  {
+    "name": "number-eight",
+    "pascal_name": "NumberEight",
+    "codepoint": 58192
+  },
+  {
+    "name": "number-five",
+    "pascal_name": "NumberFive",
+    "codepoint": 58198
+  },
+  {
+    "name": "number-four",
+    "pascal_name": "NumberFour",
+    "codepoint": 58204
+  },
+  {
+    "name": "number-nine",
+    "pascal_name": "NumberNine",
+    "codepoint": 58210
+  },
+  {
+    "name": "number-one",
+    "pascal_name": "NumberOne",
+    "codepoint": 58216
+  },
+  {
+    "name": "number-seven",
+    "pascal_name": "NumberSeven",
+    "codepoint": 58222
+  },
+  {
+    "name": "number-six",
+    "pascal_name": "NumberSix",
+    "codepoint": 58228
+  },
+  {
+    "name": "number-square-eight",
+    "pascal_name": "NumberSquareEight",
+    "codepoint": 58196
+  },
+  {
+    "name": "number-square-five",
+    "pascal_name": "NumberSquareFive",
+    "codepoint": 58202
+  },
+  {
+    "name": "number-square-four",
+    "pascal_name": "NumberSquareFour",
+    "codepoint": 58208
+  },
+  {
+    "name": "number-square-nine",
+    "pascal_name": "NumberSquareNine",
+    "codepoint": 58214
+  },
+  {
+    "name": "number-square-one",
+    "pascal_name": "NumberSquareOne",
+    "codepoint": 58220
+  },
+  {
+    "name": "number-square-seven",
+    "pascal_name": "NumberSquareSeven",
+    "codepoint": 58226
+  },
+  {
+    "name": "number-square-six",
+    "pascal_name": "NumberSquareSix",
+    "codepoint": 58232
+  },
+  {
+    "name": "number-square-three",
+    "pascal_name": "NumberSquareThree",
+    "codepoint": 58238
+  },
+  {
+    "name": "number-square-two",
+    "pascal_name": "NumberSquareTwo",
+    "codepoint": 58244
+  },
+  {
+    "name": "number-square-zero",
+    "pascal_name": "NumberSquareZero",
+    "codepoint": 58250
+  },
+  {
+    "name": "number-three",
+    "pascal_name": "NumberThree",
+    "codepoint": 58234
+  },
+  {
+    "name": "number-two",
+    "pascal_name": "NumberTwo",
+    "codepoint": 58240
+  },
+  {
+    "name": "number-zero",
+    "pascal_name": "NumberZero",
+    "codepoint": 58246
+  },
+  {
+    "name": "numpad",
+    "pascal_name": "Numpad",
+    "codepoint": 58312
+  },
+  {
+    "name": "nut",
+    "pascal_name": "Nut",
+    "codepoint": 58252
+  },
+  {
+    "name": "ny-times-logo",
+    "pascal_name": "NyTimesLogo",
+    "codepoint": 58950
+  },
+  {
+    "name": "octagon",
+    "pascal_name": "Octagon",
+    "codepoint": 58254
+  },
+  {
+    "name": "office-chair",
+    "pascal_name": "OfficeChair",
+    "codepoint": 59974
+  },
+  {
+    "name": "onigiri",
+    "pascal_name": "Onigiri",
+    "codepoint": 60972
+  },
+  {
+    "name": "open-ai-logo",
+    "pascal_name": "OpenAiLogo",
+    "codepoint": 59346
+  },
+  {
+    "name": "option",
+    "pascal_name": "Option",
+    "codepoint": 59560
+  },
+  {
+    "name": "orange",
+    "pascal_name": "Orange",
+    "codepoint": 60992
+  },
+  {
+    "name": "orange-slice",
+    "pascal_name": "OrangeSlice",
+    "codepoint": 60726
+  },
+  {
+    "name": "oven",
+    "pascal_name": "Oven",
+    "codepoint": 60812
+  },
+  {
+    "name": "package",
+    "pascal_name": "Package",
+    "codepoint": 58256
+  },
+  {
+    "name": "paint-brush",
+    "pascal_name": "PaintBrush",
+    "codepoint": 59120
+  },
+  {
+    "name": "paint-brush-broad",
+    "pascal_name": "PaintBrushBroad",
+    "codepoint": 58768
+  },
+  {
+    "name": "paint-brush-household",
+    "pascal_name": "PaintBrushHousehold",
+    "codepoint": 59122
+  },
+  {
+    "name": "paint-bucket",
+    "pascal_name": "PaintBucket",
+    "codepoint": 58258
+  },
+  {
+    "name": "paint-roller",
+    "pascal_name": "PaintRoller",
+    "codepoint": 59124
+  },
+  {
+    "name": "palette",
+    "pascal_name": "Palette",
+    "codepoint": 59080
+  },
+  {
+    "name": "panorama",
+    "pascal_name": "Panorama",
+    "codepoint": 60066
+  },
+  {
+    "name": "pants",
+    "pascal_name": "Pants",
+    "codepoint": 60552
+  },
+  {
+    "name": "paper-plane",
+    "pascal_name": "PaperPlane",
+    "codepoint": 58260
+  },
+  {
+    "name": "paper-plane-right",
+    "pascal_name": "PaperPlaneRight",
+    "codepoint": 58262
+  },
+  {
+    "name": "paper-plane-tilt",
+    "pascal_name": "PaperPlaneTilt",
+    "codepoint": 58264
+  },
+  {
+    "name": "paperclip",
+    "pascal_name": "Paperclip",
+    "codepoint": 58266
+  },
+  {
+    "name": "paperclip-horizontal",
+    "pascal_name": "PaperclipHorizontal",
+    "codepoint": 58770
+  },
+  {
+    "name": "parachute",
+    "pascal_name": "Parachute",
+    "codepoint": 60028
+  },
+  {
+    "name": "paragraph",
+    "pascal_name": "Paragraph",
+    "codepoint": 59744
+  },
+  {
+    "name": "parallelogram",
+    "pascal_name": "Parallelogram",
+    "codepoint": 60614
+  },
+  {
+    "name": "park",
+    "pascal_name": "Park",
+    "codepoint": 60594
+  },
+  {
+    "name": "password",
+    "pascal_name": "Password",
+    "codepoint": 59218
+  },
+  {
+    "name": "path",
+    "pascal_name": "Path",
+    "codepoint": 58268
+  },
+  {
+    "name": "patreon-logo",
+    "pascal_name": "PatreonLogo",
+    "codepoint": 59786
+  },
+  {
+    "name": "pause",
+    "pascal_name": "Pause",
+    "codepoint": 58270
+  },
+  {
+    "name": "pause-circle",
+    "pascal_name": "PauseCircle",
+    "codepoint": 58272
+  },
+  {
+    "name": "paw-print",
+    "pascal_name": "PawPrint",
+    "codepoint": 58952
+  },
+  {
+    "name": "paypal-logo",
+    "pascal_name": "PaypalLogo",
+    "codepoint": 59788
+  },
+  {
+    "name": "peace",
+    "pascal_name": "Peace",
+    "codepoint": 58274
+  },
+  {
+    "name": "pen",
+    "pascal_name": "Pen",
+    "codepoint": 58282
+  },
+  {
+    "name": "pen-nib",
+    "pascal_name": "PenNib",
+    "codepoint": 58284
+  },
+  {
+    "name": "pen-nib-straight",
+    "pascal_name": "PenNibStraight",
+    "codepoint": 58954
+  },
+  {
+    "name": "pencil",
+    "pascal_name": "Pencil",
+    "codepoint": 58286
+  },
+  {
+    "name": "pencil-circle",
+    "pascal_name": "PencilCircle",
+    "codepoint": 58288
+  },
+  {
+    "name": "pencil-line",
+    "pascal_name": "PencilLine",
+    "codepoint": 58290
+  },
+  {
+    "name": "pencil-ruler",
+    "pascal_name": "PencilRuler",
+    "codepoint": 59654
+  },
+  {
+    "name": "pencil-simple",
+    "pascal_name": "PencilSimple",
+    "codepoint": 58292
+  },
+  {
+    "name": "pencil-simple-line",
+    "pascal_name": "PencilSimpleLine",
+    "codepoint": 60358
+  },
+  {
+    "name": "pencil-simple-slash",
+    "pascal_name": "PencilSimpleSlash",
+    "codepoint": 60662
+  },
+  {
+    "name": "pencil-slash",
+    "pascal_name": "PencilSlash",
+    "codepoint": 60664
+  },
+  {
+    "name": "pentagon",
+    "pascal_name": "Pentagon",
+    "codepoint": 60542
+  },
+  {
+    "name": "pentagram",
+    "pascal_name": "Pentagram",
+    "codepoint": 60508
+  },
+  {
+    "name": "pepper",
+    "pascal_name": "Pepper",
+    "codepoint": 59722
+  },
+  {
+    "name": "percent",
+    "pascal_name": "Percent",
+    "codepoint": 58294
+  },
+  {
+    "name": "person",
+    "pascal_name": "Person",
+    "codepoint": 58280
+  },
+  {
+    "name": "person-arms-spread",
+    "pascal_name": "PersonArmsSpread",
+    "codepoint": 60670
+  },
+  {
+    "name": "person-simple",
+    "pascal_name": "PersonSimple",
+    "codepoint": 59182
+  },
+  {
+    "name": "person-simple-bike",
+    "pascal_name": "PersonSimpleBike",
+    "codepoint": 59188
+  },
+  {
+    "name": "person-simple-circle",
+    "pascal_name": "PersonSimpleCircle",
+    "codepoint": 61016
+  },
+  {
+    "name": "person-simple-hike",
+    "pascal_name": "PersonSimpleHike",
+    "codepoint": 60756
+  },
+  {
+    "name": "person-simple-run",
+    "pascal_name": "PersonSimpleRun",
+    "codepoint": 59184
+  },
+  {
+    "name": "person-simple-ski",
+    "pascal_name": "PersonSimpleSki",
+    "codepoint": 59164
+  },
+  {
+    "name": "person-simple-snowboard",
+    "pascal_name": "PersonSimpleSnowboard",
+    "codepoint": 59166
+  },
+  {
+    "name": "person-simple-swim",
+    "pascal_name": "PersonSimpleSwim",
+    "codepoint": 59190
+  },
+  {
+    "name": "person-simple-tai-chi",
+    "pascal_name": "PersonSimpleTaiChi",
+    "codepoint": 60764
+  },
+  {
+    "name": "person-simple-throw",
+    "pascal_name": "PersonSimpleThrow",
+    "codepoint": 59186
+  },
+  {
+    "name": "person-simple-walk",
+    "pascal_name": "PersonSimpleWalk",
+    "codepoint": 59194
+  },
+  {
+    "name": "perspective",
+    "pascal_name": "Perspective",
+    "codepoint": 60390
+  },
+  {
+    "name": "phone",
+    "pascal_name": "Phone",
+    "codepoint": 58296
+  },
+  {
+    "name": "phone-call",
+    "pascal_name": "PhoneCall",
+    "codepoint": 58298
+  },
+  {
+    "name": "phone-disconnect",
+    "pascal_name": "PhoneDisconnect",
+    "codepoint": 58300
+  },
+  {
+    "name": "phone-incoming",
+    "pascal_name": "PhoneIncoming",
+    "codepoint": 58302
+  },
+  {
+    "name": "phone-list",
+    "pascal_name": "PhoneList",
+    "codepoint": 58316
+  },
+  {
+    "name": "phone-outgoing",
+    "pascal_name": "PhoneOutgoing",
+    "codepoint": 58304
+  },
+  {
+    "name": "phone-pause",
+    "pascal_name": "PhonePause",
+    "codepoint": 58314
+  },
+  {
+    "name": "phone-plus",
+    "pascal_name": "PhonePlus",
+    "codepoint": 60502
+  },
+  {
+    "name": "phone-slash",
+    "pascal_name": "PhoneSlash",
+    "codepoint": 58306
+  },
+  {
+    "name": "phone-transfer",
+    "pascal_name": "PhoneTransfer",
+    "codepoint": 58310
+  },
+  {
+    "name": "phone-x",
+    "pascal_name": "PhoneX",
+    "codepoint": 58308
+  },
+  {
+    "name": "phosphor-logo",
+    "pascal_name": "PhosphorLogo",
+    "codepoint": 58318
+  },
+  {
+    "name": "pi",
+    "pascal_name": "Pi",
+    "codepoint": 60544
+  },
+  {
+    "name": "piano-keys",
+    "pascal_name": "PianoKeys",
+    "codepoint": 59848
+  },
+  {
+    "name": "picnic-table",
+    "pascal_name": "PicnicTable",
+    "codepoint": 60966
+  },
+  {
+    "name": "picture-in-picture",
+    "pascal_name": "PictureInPicture",
+    "codepoint": 58956
+  },
+  {
+    "name": "piggy-bank",
+    "pascal_name": "PiggyBank",
+    "codepoint": 59908
+  },
+  {
+    "name": "pill",
+    "pascal_name": "Pill",
+    "codepoint": 59136
+  },
+  {
+    "name": "ping-pong",
+    "pascal_name": "PingPong",
+    "codepoint": 59970
+  },
+  {
+    "name": "pint-glass",
+    "pascal_name": "PintGlass",
+    "codepoint": 60880
+  },
+  {
+    "name": "pinterest-logo",
+    "pascal_name": "PinterestLogo",
+    "codepoint": 58958
+  },
+  {
+    "name": "pinwheel",
+    "pascal_name": "Pinwheel",
+    "codepoint": 60316
+  },
+  {
+    "name": "pipe",
+    "pascal_name": "Pipe",
+    "codepoint": 60806
+  },
+  {
+    "name": "pipe-wrench",
+    "pascal_name": "PipeWrench",
+    "codepoint": 60808
+  },
+  {
+    "name": "pix-logo",
+    "pascal_name": "PixLogo",
+    "codepoint": 60610
+  },
+  {
+    "name": "pizza",
+    "pascal_name": "Pizza",
+    "codepoint": 59286
+  },
+  {
+    "name": "placeholder",
+    "pascal_name": "Placeholder",
+    "codepoint": 58960
+  },
+  {
+    "name": "planet",
+    "pascal_name": "Planet",
+    "codepoint": 58962
+  },
+  {
+    "name": "plant",
+    "pascal_name": "Plant",
+    "codepoint": 60334
+  },
+  {
+    "name": "play",
+    "pascal_name": "Play",
+    "codepoint": 58320
+  },
+  {
+    "name": "play-circle",
+    "pascal_name": "PlayCircle",
+    "codepoint": 58322
+  },
+  {
+    "name": "play-pause",
+    "pascal_name": "PlayPause",
+    "codepoint": 59582
+  },
+  {
+    "name": "playlist",
+    "pascal_name": "Playlist",
+    "codepoint": 59050
+  },
+  {
+    "name": "plug",
+    "pascal_name": "Plug",
+    "codepoint": 59718
+  },
+  {
+    "name": "plug-charging",
+    "pascal_name": "PlugCharging",
+    "codepoint": 60252
+  },
+  {
+    "name": "plugs",
+    "pascal_name": "Plugs",
+    "codepoint": 60246
+  },
+  {
+    "name": "plugs-connected",
+    "pascal_name": "PlugsConnected",
+    "codepoint": 60250
+  },
+  {
+    "name": "plus",
+    "pascal_name": "Plus",
+    "codepoint": 58324
+  },
+  {
+    "name": "plus-circle",
+    "pascal_name": "PlusCircle",
+    "codepoint": 58326
+  },
+  {
+    "name": "plus-minus",
+    "pascal_name": "PlusMinus",
+    "codepoint": 58328
+  },
+  {
+    "name": "plus-square",
+    "pascal_name": "PlusSquare",
+    "codepoint": 60746
+  },
+  {
+    "name": "poker-chip",
+    "pascal_name": "PokerChip",
+    "codepoint": 58772
+  },
+  {
+    "name": "police-car",
+    "pascal_name": "PoliceCar",
+    "codepoint": 60490
+  },
+  {
+    "name": "polygon",
+    "pascal_name": "Polygon",
+    "codepoint": 59088
+  },
+  {
+    "name": "popcorn",
+    "pascal_name": "Popcorn",
+    "codepoint": 60238
+  },
+  {
+    "name": "popsicle",
+    "pascal_name": "Popsicle",
+    "codepoint": 60350
+  },
+  {
+    "name": "potted-plant",
+    "pascal_name": "PottedPlant",
+    "codepoint": 60450
+  },
+  {
+    "name": "power",
+    "pascal_name": "Power",
+    "codepoint": 58330
+  },
+  {
+    "name": "prescription",
+    "pascal_name": "Prescription",
+    "codepoint": 59298
+  },
+  {
+    "name": "presentation",
+    "pascal_name": "Presentation",
+    "codepoint": 58964
+  },
+  {
+    "name": "presentation-chart",
+    "pascal_name": "PresentationChart",
+    "codepoint": 58966
+  },
+  {
+    "name": "printer",
+    "pascal_name": "Printer",
+    "codepoint": 58332
+  },
+  {
+    "name": "prohibit",
+    "pascal_name": "Prohibit",
+    "codepoint": 58334
+  },
+  {
+    "name": "prohibit-inset",
+    "pascal_name": "ProhibitInset",
+    "codepoint": 58336
+  },
+  {
+    "name": "projector-screen",
+    "pascal_name": "ProjectorScreen",
+    "codepoint": 58968
+  },
+  {
+    "name": "projector-screen-chart",
+    "pascal_name": "ProjectorScreenChart",
+    "codepoint": 58970
+  },
+  {
+    "name": "pulse",
+    "pascal_name": "Pulse",
+    "alias": {
+      "name": "activity",
+      "pascal_name": "Activity"
+    },
+    "codepoint": 57344
+  },
+  {
+    "name": "push-pin",
+    "pascal_name": "PushPin",
+    "codepoint": 58338
+  },
+  {
+    "name": "push-pin-simple",
+    "pascal_name": "PushPinSimple",
+    "codepoint": 58972
+  },
+  {
+    "name": "push-pin-simple-slash",
+    "pascal_name": "PushPinSimpleSlash",
+    "codepoint": 58974
+  },
+  {
+    "name": "push-pin-slash",
+    "pascal_name": "PushPinSlash",
+    "codepoint": 58340
+  },
+  {
+    "name": "puzzle-piece",
+    "pascal_name": "PuzzlePiece",
+    "codepoint": 58774
+  },
+  {
+    "name": "qr-code",
+    "pascal_name": "QrCode",
+    "codepoint": 58342
+  },
+  {
+    "name": "question",
+    "pascal_name": "Question",
+    "codepoint": 58344
+  },
+  {
+    "name": "question-mark",
+    "pascal_name": "QuestionMark",
+    "codepoint": 58344
+  },
+  {
+    "name": "queue",
+    "pascal_name": "Queue",
+    "codepoint": 59052
+  },
+  {
+    "name": "quotes",
+    "pascal_name": "Quotes",
+    "codepoint": 58976
+  },
+  {
+    "name": "rabbit",
+    "pascal_name": "Rabbit",
+    "codepoint": 60098
+  },
+  {
+    "name": "racquet",
+    "pascal_name": "Racquet",
+    "codepoint": 60930
+  },
+  {
+    "name": "radical",
+    "pascal_name": "Radical",
+    "codepoint": 58346
+  },
+  {
+    "name": "radio",
+    "pascal_name": "Radio",
+    "codepoint": 59262
+  },
+  {
+    "name": "radio-button",
+    "pascal_name": "RadioButton",
+    "codepoint": 60168
+  },
+  {
+    "name": "radioactive",
+    "pascal_name": "Radioactive",
+    "codepoint": 59868
+  },
+  {
+    "name": "rainbow",
+    "pascal_name": "Rainbow",
+    "codepoint": 58776
+  },
+  {
+    "name": "rainbow-cloud",
+    "pascal_name": "RainbowCloud",
+    "codepoint": 58778
+  },
+  {
+    "name": "ranking",
+    "pascal_name": "Ranking",
+    "codepoint": 60770
+  },
+  {
+    "name": "read-cv-logo",
+    "pascal_name": "ReadCvLogo",
+    "codepoint": 60684
+  },
+  {
+    "name": "receipt",
+    "pascal_name": "Receipt",
+    "codepoint": 58348
+  },
+  {
+    "name": "receipt-x",
+    "pascal_name": "ReceiptX",
+    "codepoint": 60736
+  },
+  {
+    "name": "record",
+    "pascal_name": "Record",
+    "codepoint": 58350
+  },
+  {
+    "name": "rectangle",
+    "pascal_name": "Rectangle",
+    "codepoint": 58352
+  },
+  {
+    "name": "rectangle-dashed",
+    "pascal_name": "RectangleDashed",
+    "codepoint": 58354
+  },
+  {
+    "name": "recycle",
+    "pascal_name": "Recycle",
+    "codepoint": 59226
+  },
+  {
+    "name": "reddit-logo",
+    "pascal_name": "RedditLogo",
+    "codepoint": 58780
+  },
+  {
+    "name": "repeat",
+    "pascal_name": "Repeat",
+    "codepoint": 58358
+  },
+  {
+    "name": "repeat-once",
+    "pascal_name": "RepeatOnce",
+    "codepoint": 58360
+  },
+  {
+    "name": "replit-logo",
+    "pascal_name": "ReplitLogo",
+    "codepoint": 60298
+  },
+  {
+    "name": "resize",
+    "pascal_name": "Resize",
+    "codepoint": 60782
+  },
+  {
+    "name": "rewind",
+    "pascal_name": "Rewind",
+    "codepoint": 59048
+  },
+  {
+    "name": "rewind-circle",
+    "pascal_name": "RewindCircle",
+    "codepoint": 58362
+  },
+  {
+    "name": "road-horizon",
+    "pascal_name": "RoadHorizon",
+    "codepoint": 59448
+  },
+  {
+    "name": "robot",
+    "pascal_name": "Robot",
+    "codepoint": 59234
+  },
+  {
+    "name": "rocket",
+    "pascal_name": "Rocket",
+    "codepoint": 58364
+  },
+  {
+    "name": "rocket-launch",
+    "pascal_name": "RocketLaunch",
+    "codepoint": 58366
+  },
+  {
+    "name": "rows",
+    "pascal_name": "Rows",
+    "codepoint": 58786
+  },
+  {
+    "name": "rows-plus-bottom",
+    "pascal_name": "RowsPlusBottom",
+    "codepoint": 58782
+  },
+  {
+    "name": "rows-plus-top",
+    "pascal_name": "RowsPlusTop",
+    "codepoint": 58784
+  },
+  {
+    "name": "rss",
+    "pascal_name": "Rss",
+    "codepoint": 58368
+  },
+  {
+    "name": "rss-simple",
+    "pascal_name": "RssSimple",
+    "codepoint": 58370
+  },
+  {
+    "name": "rug",
+    "pascal_name": "Rug",
+    "codepoint": 59930
+  },
+  {
+    "name": "ruler",
+    "pascal_name": "Ruler",
+    "codepoint": 59064
+  },
+  {
+    "name": "sailboat",
+    "pascal_name": "Sailboat",
+    "codepoint": 59274
+  },
+  {
+    "name": "scales",
+    "pascal_name": "Scales",
+    "codepoint": 59216
+  },
+  {
+    "name": "scan",
+    "pascal_name": "Scan",
+    "codepoint": 60342
+  },
+  {
+    "name": "scan-smiley",
+    "pascal_name": "ScanSmiley",
+    "codepoint": 60340
+  },
+  {
+    "name": "scissors",
+    "pascal_name": "Scissors",
+    "codepoint": 60128
+  },
+  {
+    "name": "scooter",
+    "pascal_name": "Scooter",
+    "codepoint": 59424
+  },
+  {
+    "name": "screencast",
+    "pascal_name": "Screencast",
+    "codepoint": 58372
+  },
+  {
+    "name": "screwdriver",
+    "pascal_name": "Screwdriver",
+    "codepoint": 59502
+  },
+  {
+    "name": "scribble",
+    "pascal_name": "Scribble",
+    "codepoint": 59398
+  },
+  {
+    "name": "scribble-loop",
+    "pascal_name": "ScribbleLoop",
+    "codepoint": 58978
+  },
+  {
+    "name": "scroll",
+    "pascal_name": "Scroll",
+    "codepoint": 60282
+  },
+  {
+    "name": "seal",
+    "pascal_name": "Seal",
+    "alias": {
+      "name": "circle-wavy",
+      "pascal_name": "CircleWavy"
+    },
+    "codepoint": 58884
+  },
+  {
+    "name": "seal-check",
+    "pascal_name": "SealCheck",
+    "alias": {
+      "name": "circle-wavy-check",
+      "pascal_name": "CircleWavyCheck"
+    },
+    "codepoint": 58886
+  },
+  {
+    "name": "seal-percent",
+    "pascal_name": "SealPercent",
+    "codepoint": 58890
+  },
+  {
+    "name": "seal-question",
+    "pascal_name": "SealQuestion",
+    "alias": {
+      "name": "circle-wavy-question",
+      "pascal_name": "CircleWavyQuestion"
+    },
+    "codepoint": 58888
+  },
+  {
+    "name": "seal-warning",
+    "pascal_name": "SealWarning",
+    "alias": {
+      "name": "circle-wavy-warning",
+      "pascal_name": "CircleWavyWarning"
+    },
+    "codepoint": 58892
+  },
+  {
+    "name": "seat",
+    "pascal_name": "Seat",
+    "codepoint": 60302
+  },
+  {
+    "name": "seatbelt",
+    "pascal_name": "Seatbelt",
+    "codepoint": 60926
+  },
+  {
+    "name": "security-camera",
+    "pascal_name": "SecurityCamera",
+    "codepoint": 60580
+  },
+  {
+    "name": "selection",
+    "pascal_name": "Selection",
+    "codepoint": 59034
+  },
+  {
+    "name": "selection-all",
+    "pascal_name": "SelectionAll",
+    "codepoint": 59206
+  },
+  {
+    "name": "selection-background",
+    "pascal_name": "SelectionBackground",
+    "codepoint": 60152
+  },
+  {
+    "name": "selection-foreground",
+    "pascal_name": "SelectionForeground",
+    "codepoint": 60150
+  },
+  {
+    "name": "selection-inverse",
+    "pascal_name": "SelectionInverse",
+    "codepoint": 59204
+  },
+  {
+    "name": "selection-plus",
+    "pascal_name": "SelectionPlus",
+    "codepoint": 59036
+  },
+  {
+    "name": "selection-slash",
+    "pascal_name": "SelectionSlash",
+    "codepoint": 59038
+  },
+  {
+    "name": "shapes",
+    "pascal_name": "Shapes",
+    "codepoint": 60510
+  },
+  {
+    "name": "share",
+    "pascal_name": "Share",
+    "codepoint": 58374
+  },
+  {
+    "name": "share-fat",
+    "pascal_name": "ShareFat",
+    "codepoint": 60754
+  },
+  {
+    "name": "share-network",
+    "pascal_name": "ShareNetwork",
+    "codepoint": 58376
+  },
+  {
+    "name": "shield",
+    "pascal_name": "Shield",
+    "codepoint": 58378
+  },
+  {
+    "name": "shield-check",
+    "pascal_name": "ShieldCheck",
+    "codepoint": 58380
+  },
+  {
+    "name": "shield-checkered",
+    "pascal_name": "ShieldCheckered",
+    "codepoint": 59144
+  },
+  {
+    "name": "shield-chevron",
+    "pascal_name": "ShieldChevron",
+    "codepoint": 58382
+  },
+  {
+    "name": "shield-plus",
+    "pascal_name": "ShieldPlus",
+    "codepoint": 59142
+  },
+  {
+    "name": "shield-slash",
+    "pascal_name": "ShieldSlash",
+    "codepoint": 58384
+  },
+  {
+    "name": "shield-star",
+    "pascal_name": "ShieldStar",
+    "codepoint": 60468
+  },
+  {
+    "name": "shield-warning",
+    "pascal_name": "ShieldWarning",
+    "codepoint": 58386
+  },
+  {
+    "name": "shipping-container",
+    "pascal_name": "ShippingContainer",
+    "codepoint": 59276
+  },
+  {
+    "name": "shirt-folded",
+    "pascal_name": "ShirtFolded",
+    "codepoint": 60050
+  },
+  {
+    "name": "shooting-star",
+    "pascal_name": "ShootingStar",
+    "codepoint": 60666
+  },
+  {
+    "name": "shopping-bag",
+    "pascal_name": "ShoppingBag",
+    "codepoint": 58390
+  },
+  {
+    "name": "shopping-bag-open",
+    "pascal_name": "ShoppingBagOpen",
+    "codepoint": 58392
+  },
+  {
+    "name": "shopping-cart",
+    "pascal_name": "ShoppingCart",
+    "codepoint": 58398
+  },
+  {
+    "name": "shopping-cart-simple",
+    "pascal_name": "ShoppingCartSimple",
+    "codepoint": 58400
+  },
+  {
+    "name": "shovel",
+    "pascal_name": "Shovel",
+    "codepoint": 59878
+  },
+  {
+    "name": "shower",
+    "pascal_name": "Shower",
+    "codepoint": 59254
+  },
+  {
+    "name": "shrimp",
+    "pascal_name": "Shrimp",
+    "codepoint": 60084
+  },
+  {
+    "name": "shuffle",
+    "pascal_name": "Shuffle",
+    "codepoint": 58402
+  },
+  {
+    "name": "shuffle-angular",
+    "pascal_name": "ShuffleAngular",
+    "codepoint": 58404
+  },
+  {
+    "name": "shuffle-simple",
+    "pascal_name": "ShuffleSimple",
+    "codepoint": 58406
+  },
+  {
+    "name": "sidebar",
+    "pascal_name": "Sidebar",
+    "codepoint": 60086
+  },
+  {
+    "name": "sidebar-simple",
+    "pascal_name": "SidebarSimple",
+    "codepoint": 60452
+  },
+  {
+    "name": "sigma",
+    "pascal_name": "Sigma",
+    "codepoint": 60088
+  },
+  {
+    "name": "sign-in",
+    "pascal_name": "SignIn",
+    "codepoint": 58408
+  },
+  {
+    "name": "sign-out",
+    "pascal_name": "SignOut",
+    "codepoint": 58410
+  },
+  {
+    "name": "signature",
+    "pascal_name": "Signature",
+    "codepoint": 60332
+  },
+  {
+    "name": "signpost",
+    "pascal_name": "Signpost",
+    "codepoint": 59548
+  },
+  {
+    "name": "sim-card",
+    "pascal_name": "SimCard",
+    "codepoint": 58980
+  },
+  {
+    "name": "siren",
+    "pascal_name": "Siren",
+    "codepoint": 59832
+  },
+  {
+    "name": "sketch-logo",
+    "pascal_name": "SketchLogo",
+    "codepoint": 58412
+  },
+  {
+    "name": "skip-back",
+    "pascal_name": "SkipBack",
+    "codepoint": 58788
+  },
+  {
+    "name": "skip-back-circle",
+    "pascal_name": "SkipBackCircle",
+    "codepoint": 58414
+  },
+  {
+    "name": "skip-forward",
+    "pascal_name": "SkipForward",
+    "codepoint": 58790
+  },
+  {
+    "name": "skip-forward-circle",
+    "pascal_name": "SkipForwardCircle",
+    "codepoint": 58416
+  },
+  {
+    "name": "skull",
+    "pascal_name": "Skull",
+    "codepoint": 59670
+  },
+  {
+    "name": "skype-logo",
+    "pascal_name": "SkypeLogo",
+    "codepoint": 59612
+  },
+  {
+    "name": "slack-logo",
+    "pascal_name": "SlackLogo",
+    "codepoint": 58792
+  },
+  {
+    "name": "sliders",
+    "pascal_name": "Sliders",
+    "codepoint": 58418
+  },
+  {
+    "name": "sliders-horizontal",
+    "pascal_name": "SlidersHorizontal",
+    "codepoint": 58420
+  },
+  {
+    "name": "slideshow",
+    "pascal_name": "Slideshow",
+    "codepoint": 60722
+  },
+  {
+    "name": "smiley",
+    "pascal_name": "Smiley",
+    "codepoint": 58422
+  },
+  {
+    "name": "smiley-angry",
+    "pascal_name": "SmileyAngry",
+    "codepoint": 60514
+  },
+  {
+    "name": "smiley-blank",
+    "pascal_name": "SmileyBlank",
+    "codepoint": 58424
+  },
+  {
+    "name": "smiley-meh",
+    "pascal_name": "SmileyMeh",
+    "codepoint": 58426
+  },
+  {
+    "name": "smiley-melting",
+    "pascal_name": "SmileyMelting",
+    "codepoint": 61014
+  },
+  {
+    "name": "smiley-nervous",
+    "pascal_name": "SmileyNervous",
+    "codepoint": 58428
+  },
+  {
+    "name": "smiley-sad",
+    "pascal_name": "SmileySad",
+    "codepoint": 58430
+  },
+  {
+    "name": "smiley-sticker",
+    "pascal_name": "SmileySticker",
+    "codepoint": 58432
+  },
+  {
+    "name": "smiley-wink",
+    "pascal_name": "SmileyWink",
+    "codepoint": 58982
+  },
+  {
+    "name": "smiley-x-eyes",
+    "pascal_name": "SmileyXEyes",
+    "codepoint": 58434
+  },
+  {
+    "name": "snapchat-logo",
+    "pascal_name": "SnapchatLogo",
+    "codepoint": 58984
+  },
+  {
+    "name": "sneaker",
+    "pascal_name": "Sneaker",
+    "codepoint": 59404
+  },
+  {
+    "name": "sneaker-move",
+    "pascal_name": "SneakerMove",
+    "codepoint": 60768
+  },
+  {
+    "name": "snowflake",
+    "pascal_name": "Snowflake",
+    "codepoint": 58794
+  },
+  {
+    "name": "soccer-ball",
+    "pascal_name": "SoccerBall",
+    "codepoint": 59158
+  },
+  {
+    "name": "sock",
+    "pascal_name": "Sock",
+    "codepoint": 60622
+  },
+  {
+    "name": "solar-panel",
+    "pascal_name": "SolarPanel",
+    "codepoint": 60794
+  },
+  {
+    "name": "solar-roof",
+    "pascal_name": "SolarRoof",
+    "codepoint": 60794
+  },
+  {
+    "name": "sort-ascending",
+    "pascal_name": "SortAscending",
+    "codepoint": 58436
+  },
+  {
+    "name": "sort-descending",
+    "pascal_name": "SortDescending",
+    "codepoint": 58438
+  },
+  {
+    "name": "soundcloud-logo",
+    "pascal_name": "SoundcloudLogo",
+    "codepoint": 59614
+  },
+  {
+    "name": "spade",
+    "pascal_name": "Spade",
+    "codepoint": 58440
+  },
+  {
+    "name": "sparkle",
+    "pascal_name": "Sparkle",
+    "codepoint": 59042
+  },
+  {
+    "name": "speaker-hifi",
+    "pascal_name": "SpeakerHifi",
+    "codepoint": 59912
+  },
+  {
+    "name": "speaker-high",
+    "pascal_name": "SpeakerHigh",
+    "codepoint": 58442
+  },
+  {
+    "name": "speaker-low",
+    "pascal_name": "SpeakerLow",
+    "codepoint": 58444
+  },
+  {
+    "name": "speaker-none",
+    "pascal_name": "SpeakerNone",
+    "codepoint": 58446
+  },
+  {
+    "name": "speaker-simple-high",
+    "pascal_name": "SpeakerSimpleHigh",
+    "codepoint": 58448
+  },
+  {
+    "name": "speaker-simple-low",
+    "pascal_name": "SpeakerSimpleLow",
+    "codepoint": 58450
+  },
+  {
+    "name": "speaker-simple-none",
+    "pascal_name": "SpeakerSimpleNone",
+    "codepoint": 58452
+  },
+  {
+    "name": "speaker-simple-slash",
+    "pascal_name": "SpeakerSimpleSlash",
+    "codepoint": 58454
+  },
+  {
+    "name": "speaker-simple-x",
+    "pascal_name": "SpeakerSimpleX",
+    "codepoint": 58456
+  },
+  {
+    "name": "speaker-slash",
+    "pascal_name": "SpeakerSlash",
+    "codepoint": 58458
+  },
+  {
+    "name": "speaker-x",
+    "pascal_name": "SpeakerX",
+    "codepoint": 58460
+  },
+  {
+    "name": "speedometer",
+    "pascal_name": "Speedometer",
+    "codepoint": 61044
+  },
+  {
+    "name": "sphere",
+    "pascal_name": "Sphere",
+    "codepoint": 61030
+  },
+  {
+    "name": "spinner",
+    "pascal_name": "Spinner",
+    "codepoint": 58986
+  },
+  {
+    "name": "spinner-ball",
+    "pascal_name": "SpinnerBall",
+    "codepoint": 60968
+  },
+  {
+    "name": "spinner-gap",
+    "pascal_name": "SpinnerGap",
+    "codepoint": 58988
+  },
+  {
+    "name": "spiral",
+    "pascal_name": "Spiral",
+    "codepoint": 59898
+  },
+  {
+    "name": "split-horizontal",
+    "pascal_name": "SplitHorizontal",
+    "codepoint": 59506
+  },
+  {
+    "name": "split-vertical",
+    "pascal_name": "SplitVertical",
+    "codepoint": 59510
+  },
+  {
+    "name": "spotify-logo",
+    "pascal_name": "SpotifyLogo",
+    "codepoint": 58990
+  },
+  {
+    "name": "spray-bottle",
+    "pascal_name": "SprayBottle",
+    "codepoint": 59364
+  },
+  {
+    "name": "square",
+    "pascal_name": "Square",
+    "codepoint": 58462
+  },
+  {
+    "name": "square-half",
+    "pascal_name": "SquareHalf",
+    "codepoint": 58466
+  },
+  {
+    "name": "square-half-bottom",
+    "pascal_name": "SquareHalfBottom",
+    "codepoint": 60182
+  },
+  {
+    "name": "square-logo",
+    "pascal_name": "SquareLogo",
+    "codepoint": 59024
+  },
+  {
+    "name": "square-split-horizontal",
+    "pascal_name": "SquareSplitHorizontal",
+    "codepoint": 59504
+  },
+  {
+    "name": "square-split-vertical",
+    "pascal_name": "SquareSplitVertical",
+    "codepoint": 59508
+  },
+  {
+    "name": "squares-four",
+    "pascal_name": "SquaresFour",
+    "codepoint": 58468
+  },
+  {
+    "name": "stack",
+    "pascal_name": "Stack",
+    "codepoint": 58470
+  },
+  {
+    "name": "stack-minus",
+    "pascal_name": "StackMinus",
+    "codepoint": 60916
+  },
+  {
+    "name": "stack-overflow-logo",
+    "pascal_name": "StackOverflowLogo",
+    "codepoint": 60280
+  },
+  {
+    "name": "stack-plus",
+    "pascal_name": "StackPlus",
+    "codepoint": 60918
+  },
+  {
+    "name": "stack-simple",
+    "pascal_name": "StackSimple",
+    "codepoint": 58472
+  },
+  {
+    "name": "stairs",
+    "pascal_name": "Stairs",
+    "codepoint": 59628
+  },
+  {
+    "name": "stamp",
+    "pascal_name": "Stamp",
+    "codepoint": 59976
+  },
+  {
+    "name": "standard-definition",
+    "pascal_name": "StandardDefinition",
+    "codepoint": 60048
+  },
+  {
+    "name": "star",
+    "pascal_name": "Star",
+    "codepoint": 58474
+  },
+  {
+    "name": "star-and-crescent",
+    "pascal_name": "StarAndCrescent",
+    "codepoint": 60660
+  },
+  {
+    "name": "star-four",
+    "pascal_name": "StarFour",
+    "codepoint": 59044
+  },
+  {
+    "name": "star-half",
+    "pascal_name": "StarHalf",
+    "codepoint": 59146
+  },
+  {
+    "name": "star-of-david",
+    "pascal_name": "StarOfDavid",
+    "codepoint": 59550
+  },
+  {
+    "name": "steam-logo",
+    "pascal_name": "SteamLogo",
+    "codepoint": 60116
+  },
+  {
+    "name": "steering-wheel",
+    "pascal_name": "SteeringWheel",
+    "codepoint": 59820
+  },
+  {
+    "name": "steps",
+    "pascal_name": "Steps",
+    "codepoint": 60606
+  },
+  {
+    "name": "stethoscope",
+    "pascal_name": "Stethoscope",
+    "codepoint": 59370
+  },
+  {
+    "name": "sticker",
+    "pascal_name": "Sticker",
+    "codepoint": 58796
+  },
+  {
+    "name": "stool",
+    "pascal_name": "Stool",
+    "codepoint": 59972
+  },
+  {
+    "name": "stop",
+    "pascal_name": "Stop",
+    "codepoint": 58476
+  },
+  {
+    "name": "stop-circle",
+    "pascal_name": "StopCircle",
+    "codepoint": 58478
+  },
+  {
+    "name": "storefront",
+    "pascal_name": "Storefront",
+    "codepoint": 58480
+  },
+  {
+    "name": "strategy",
+    "pascal_name": "Strategy",
+    "codepoint": 59962
+  },
+  {
+    "name": "stripe-logo",
+    "pascal_name": "StripeLogo",
+    "codepoint": 59032
+  },
+  {
+    "name": "student",
+    "pascal_name": "Student",
+    "codepoint": 59198
+  },
+  {
+    "name": "subset-of",
+    "pascal_name": "SubsetOf",
+    "codepoint": 60864
+  },
+  {
+    "name": "subset-proper-of",
+    "pascal_name": "SubsetProperOf",
+    "codepoint": 60854
+  },
+  {
+    "name": "subtitles",
+    "pascal_name": "Subtitles",
+    "codepoint": 57768
+  },
+  {
+    "name": "subtitles-slash",
+    "pascal_name": "SubtitlesSlash",
+    "codepoint": 57766
+  },
+  {
+    "name": "subtract",
+    "pascal_name": "Subtract",
+    "codepoint": 60374
+  },
+  {
+    "name": "subtract-square",
+    "pascal_name": "SubtractSquare",
+    "codepoint": 60372
+  },
+  {
+    "name": "subway",
+    "pascal_name": "Subway",
+    "codepoint": 58520
+  },
+  {
+    "name": "suitcase",
+    "pascal_name": "Suitcase",
+    "codepoint": 58798
+  },
+  {
+    "name": "suitcase-rolling",
+    "pascal_name": "SuitcaseRolling",
+    "codepoint": 59824
+  },
+  {
+    "name": "suitcase-simple",
+    "pascal_name": "SuitcaseSimple",
+    "codepoint": 58800
+  },
+  {
+    "name": "sun",
+    "pascal_name": "Sun",
+    "codepoint": 58482
+  },
+  {
+    "name": "sun-dim",
+    "pascal_name": "SunDim",
+    "codepoint": 58484
+  },
+  {
+    "name": "sun-horizon",
+    "pascal_name": "SunHorizon",
+    "codepoint": 58806
+  },
+  {
+    "name": "sunglasses",
+    "pascal_name": "Sunglasses",
+    "codepoint": 59414
+  },
+  {
+    "name": "superset-of",
+    "pascal_name": "SupersetOf",
+    "codepoint": 60856
+  },
+  {
+    "name": "superset-proper-of",
+    "pascal_name": "SupersetProperOf",
+    "codepoint": 60852
+  },
+  {
+    "name": "swap",
+    "pascal_name": "Swap",
+    "codepoint": 59452
+  },
+  {
+    "name": "swatches",
+    "pascal_name": "Swatches",
+    "codepoint": 58808
+  },
+  {
+    "name": "swimming-pool",
+    "pascal_name": "SwimmingPool",
+    "codepoint": 60598
+  },
+  {
+    "name": "sword",
+    "pascal_name": "Sword",
+    "codepoint": 58810
+  },
+  {
+    "name": "synagogue",
+    "pascal_name": "Synagogue",
+    "codepoint": 60652
+  },
+  {
+    "name": "syringe",
+    "pascal_name": "Syringe",
+    "codepoint": 59752
+  },
+  {
+    "name": "t-shirt",
+    "pascal_name": "TShirt",
+    "codepoint": 58992
+  },
+  {
+    "name": "table",
+    "pascal_name": "Table",
+    "codepoint": 58486
+  },
+  {
+    "name": "tabs",
+    "pascal_name": "Tabs",
+    "codepoint": 59256
+  },
+  {
+    "name": "tag",
+    "pascal_name": "Tag",
+    "codepoint": 58488
+  },
+  {
+    "name": "tag-chevron",
+    "pascal_name": "TagChevron",
+    "codepoint": 58994
+  },
+  {
+    "name": "tag-simple",
+    "pascal_name": "TagSimple",
+    "codepoint": 58490
+  },
+  {
+    "name": "target",
+    "pascal_name": "Target",
+    "codepoint": 58492
+  },
+  {
+    "name": "taxi",
+    "pascal_name": "Taxi",
+    "codepoint": 59650
+  },
+  {
+    "name": "tea-bag",
+    "pascal_name": "TeaBag",
+    "codepoint": 59622
+  },
+  {
+    "name": "telegram-logo",
+    "pascal_name": "TelegramLogo",
+    "codepoint": 58812
+  },
+  {
+    "name": "television",
+    "pascal_name": "Television",
+    "codepoint": 59220
+  },
+  {
+    "name": "television-simple",
+    "pascal_name": "TelevisionSimple",
+    "codepoint": 60134
+  },
+  {
+    "name": "tennis-ball",
+    "pascal_name": "TennisBall",
+    "codepoint": 59168
+  },
+  {
+    "name": "tent",
+    "pascal_name": "Tent",
+    "codepoint": 59578
+  },
+  {
+    "name": "terminal",
+    "pascal_name": "Terminal",
+    "codepoint": 58494
+  },
+  {
+    "name": "terminal-window",
+    "pascal_name": "TerminalWindow",
+    "codepoint": 60136
+  },
+  {
+    "name": "test-tube",
+    "pascal_name": "TestTube",
+    "codepoint": 59296
+  },
+  {
+    "name": "text-a-underline",
+    "pascal_name": "TextAUnderline",
+    "codepoint": 60724
+  },
+  {
+    "name": "text-aa",
+    "pascal_name": "TextAa",
+    "codepoint": 59118
+  },
+  {
+    "name": "text-align-center",
+    "pascal_name": "TextAlignCenter",
+    "codepoint": 58496
+  },
+  {
+    "name": "text-align-justify",
+    "pascal_name": "TextAlignJustify",
+    "codepoint": 58498
+  },
+  {
+    "name": "text-align-left",
+    "pascal_name": "TextAlignLeft",
+    "codepoint": 58500
+  },
+  {
+    "name": "text-align-right",
+    "pascal_name": "TextAlignRight",
+    "codepoint": 58502
+  },
+  {
+    "name": "text-b",
+    "pascal_name": "TextB",
+    "alias": {
+      "name": "text-bolder",
+      "pascal_name": "TextBolder"
+    },
+    "codepoint": 58814
+  },
+  {
+    "name": "text-columns",
+    "pascal_name": "TextColumns",
+    "codepoint": 60566
+  },
+  {
+    "name": "text-h",
+    "pascal_name": "TextH",
+    "codepoint": 59066
+  },
+  {
+    "name": "text-h-five",
+    "pascal_name": "TextHFive",
+    "codepoint": 59076
+  },
+  {
+    "name": "text-h-four",
+    "pascal_name": "TextHFour",
+    "codepoint": 59074
+  },
+  {
+    "name": "text-h-one",
+    "pascal_name": "TextHOne",
+    "codepoint": 59068
+  },
+  {
+    "name": "text-h-six",
+    "pascal_name": "TextHSix",
+    "codepoint": 59078
+  },
+  {
+    "name": "text-h-three",
+    "pascal_name": "TextHThree",
+    "codepoint": 59072
+  },
+  {
+    "name": "text-h-two",
+    "pascal_name": "TextHTwo",
+    "codepoint": 59070
+  },
+  {
+    "name": "text-indent",
+    "pascal_name": "TextIndent",
+    "codepoint": 59934
+  },
+  {
+    "name": "text-italic",
+    "pascal_name": "TextItalic",
+    "codepoint": 58816
+  },
+  {
+    "name": "text-outdent",
+    "pascal_name": "TextOutdent",
+    "codepoint": 59932
+  },
+  {
+    "name": "text-strikethrough",
+    "pascal_name": "TextStrikethrough",
+    "codepoint": 58818
+  },
+  {
+    "name": "text-subscript",
+    "pascal_name": "TextSubscript",
+    "codepoint": 60568
+  },
+  {
+    "name": "text-superscript",
+    "pascal_name": "TextSuperscript",
+    "codepoint": 60570
+  },
+  {
+    "name": "text-t",
+    "pascal_name": "TextT",
+    "codepoint": 58506
+  },
+  {
+    "name": "text-t-slash",
+    "pascal_name": "TextTSlash",
+    "codepoint": 58504
+  },
+  {
+    "name": "text-underline",
+    "pascal_name": "TextUnderline",
+    "codepoint": 58820
+  },
+  {
+    "name": "textbox",
+    "pascal_name": "Textbox",
+    "codepoint": 60170
+  },
+  {
+    "name": "thermometer",
+    "pascal_name": "Thermometer",
+    "codepoint": 58822
+  },
+  {
+    "name": "thermometer-cold",
+    "pascal_name": "ThermometerCold",
+    "codepoint": 58824
+  },
+  {
+    "name": "thermometer-hot",
+    "pascal_name": "ThermometerHot",
+    "codepoint": 58826
+  },
+  {
+    "name": "thermometer-simple",
+    "pascal_name": "ThermometerSimple",
+    "codepoint": 58828
+  },
+  {
+    "name": "threads-logo",
+    "pascal_name": "ThreadsLogo",
+    "codepoint": 60830
+  },
+  {
+    "name": "three-d",
+    "pascal_name": "ThreeD",
+    "codepoint": 59994
+  },
+  {
+    "name": "thumbs-down",
+    "pascal_name": "ThumbsDown",
+    "codepoint": 58508
+  },
+  {
+    "name": "thumbs-up",
+    "pascal_name": "ThumbsUp",
+    "codepoint": 58510
+  },
+  {
+    "name": "ticket",
+    "pascal_name": "Ticket",
+    "codepoint": 58512
+  },
+  {
+    "name": "tidal-logo",
+    "pascal_name": "TidalLogo",
+    "codepoint": 60700
+  },
+  {
+    "name": "tiktok-logo",
+    "pascal_name": "TiktokLogo",
+    "codepoint": 60146
+  },
+  {
+    "name": "tilde",
+    "pascal_name": "Tilde",
+    "codepoint": 60840
+  },
+  {
+    "name": "timer",
+    "pascal_name": "Timer",
+    "codepoint": 58514
+  },
+  {
+    "name": "tip-jar",
+    "pascal_name": "TipJar",
+    "codepoint": 59360
+  },
+  {
+    "name": "tipi",
+    "pascal_name": "Tipi",
+    "codepoint": 60720
+  },
+  {
+    "name": "tire",
+    "pascal_name": "Tire",
+    "codepoint": 60882
+  },
+  {
+    "name": "toggle-left",
+    "pascal_name": "ToggleLeft",
+    "codepoint": 58996
+  },
+  {
+    "name": "toggle-right",
+    "pascal_name": "ToggleRight",
+    "codepoint": 58998
+  },
+  {
+    "name": "toilet",
+    "pascal_name": "Toilet",
+    "codepoint": 59290
+  },
+  {
+    "name": "toilet-paper",
+    "pascal_name": "ToiletPaper",
+    "codepoint": 59292
+  },
+  {
+    "name": "toolbox",
+    "pascal_name": "Toolbox",
+    "codepoint": 60576
+  },
+  {
+    "name": "tooth",
+    "pascal_name": "Tooth",
+    "codepoint": 59852
+  },
+  {
+    "name": "tornado",
+    "pascal_name": "Tornado",
+    "codepoint": 59532
+  },
+  {
+    "name": "tote",
+    "pascal_name": "Tote",
+    "codepoint": 58516
+  },
+  {
+    "name": "tote-simple",
+    "pascal_name": "ToteSimple",
+    "codepoint": 59000
+  },
+  {
+    "name": "towel",
+    "pascal_name": "Towel",
+    "codepoint": 60902
+  },
+  {
+    "name": "tractor",
+    "pascal_name": "Tractor",
+    "codepoint": 60526
+  },
+  {
+    "name": "trademark",
+    "pascal_name": "Trademark",
+    "codepoint": 59888
+  },
+  {
+    "name": "trademark-registered",
+    "pascal_name": "TrademarkRegistered",
+    "codepoint": 58356
+  },
+  {
+    "name": "traffic-cone",
+    "pascal_name": "TrafficCone",
+    "codepoint": 59816
+  },
+  {
+    "name": "traffic-sign",
+    "pascal_name": "TrafficSign",
+    "codepoint": 59002
+  },
+  {
+    "name": "traffic-signal",
+    "pascal_name": "TrafficSignal",
+    "codepoint": 59818
+  },
+  {
+    "name": "train",
+    "pascal_name": "Train",
+    "codepoint": 58518
+  },
+  {
+    "name": "train-regional",
+    "pascal_name": "TrainRegional",
+    "codepoint": 58526
+  },
+  {
+    "name": "train-simple",
+    "pascal_name": "TrainSimple",
+    "codepoint": 58528
+  },
+  {
+    "name": "tram",
+    "pascal_name": "Tram",
+    "codepoint": 59884
+  },
+  {
+    "name": "translate",
+    "pascal_name": "Translate",
+    "codepoint": 58530
+  },
+  {
+    "name": "trash",
+    "pascal_name": "Trash",
+    "codepoint": 58534
+  },
+  {
+    "name": "trash-simple",
+    "pascal_name": "TrashSimple",
+    "codepoint": 58536
+  },
+  {
+    "name": "tray",
+    "pascal_name": "Tray",
+    "codepoint": 58538
+  },
+  {
+    "name": "tray-arrow-down",
+    "pascal_name": "TrayArrowDown",
+    "alias": {
+      "name": "archive-tray",
+      "pascal_name": "ArchiveTray"
+    },
+    "codepoint": 57360
+  },
+  {
+    "name": "tray-arrow-up",
+    "pascal_name": "TrayArrowUp",
+    "codepoint": 61010
+  },
+  {
+    "name": "treasure-chest",
+    "pascal_name": "TreasureChest",
+    "codepoint": 60898
+  },
+  {
+    "name": "tree",
+    "pascal_name": "Tree",
+    "codepoint": 59098
+  },
+  {
+    "name": "tree-evergreen",
+    "pascal_name": "TreeEvergreen",
+    "codepoint": 59100
+  },
+  {
+    "name": "tree-palm",
+    "pascal_name": "TreePalm",
+    "codepoint": 59674
+  },
+  {
+    "name": "tree-structure",
+    "pascal_name": "TreeStructure",
+    "codepoint": 59004
+  },
+  {
+    "name": "tree-view",
+    "pascal_name": "TreeView",
+    "codepoint": 61000
+  },
+  {
+    "name": "trend-down",
+    "pascal_name": "TrendDown",
+    "codepoint": 58540
+  },
+  {
+    "name": "trend-up",
+    "pascal_name": "TrendUp",
+    "codepoint": 58542
+  },
+  {
+    "name": "triangle",
+    "pascal_name": "Triangle",
+    "codepoint": 58544
+  },
+  {
+    "name": "triangle-dashed",
+    "pascal_name": "TriangleDashed",
+    "codepoint": 58546
+  },
+  {
+    "name": "trolley",
+    "pascal_name": "Trolley",
+    "codepoint": 58802
+  },
+  {
+    "name": "trolley-suitcase",
+    "pascal_name": "TrolleySuitcase",
+    "codepoint": 58804
+  },
+  {
+    "name": "trophy",
+    "pascal_name": "Trophy",
+    "codepoint": 59006
+  },
+  {
+    "name": "truck",
+    "pascal_name": "Truck",
+    "codepoint": 58548
+  },
+  {
+    "name": "truck-trailer",
+    "pascal_name": "TruckTrailer",
+    "codepoint": 58550
+  },
+  {
+    "name": "tumblr-logo",
+    "pascal_name": "TumblrLogo",
+    "codepoint": 59604
+  },
+  {
+    "name": "twitch-logo",
+    "pascal_name": "TwitchLogo",
+    "codepoint": 58830
+  },
+  {
+    "name": "twitter-logo",
+    "pascal_name": "TwitterLogo",
+    "codepoint": 58554
+  },
+  {
+    "name": "umbrella",
+    "pascal_name": "Umbrella",
+    "codepoint": 59012
+  },
+  {
+    "name": "umbrella-simple",
+    "pascal_name": "UmbrellaSimple",
+    "codepoint": 59014
+  },
+  {
+    "name": "union",
+    "pascal_name": "Union",
+    "codepoint": 60862
+  },
+  {
+    "name": "unite",
+    "pascal_name": "Unite",
+    "codepoint": 59518
+  },
+  {
+    "name": "unite-square",
+    "pascal_name": "UniteSquare",
+    "codepoint": 59512
+  },
+  {
+    "name": "upload",
+    "pascal_name": "Upload",
+    "codepoint": 58558
+  },
+  {
+    "name": "upload-simple",
+    "pascal_name": "UploadSimple",
+    "codepoint": 58560
+  },
+  {
+    "name": "usb",
+    "pascal_name": "Usb",
+    "codepoint": 59734
+  },
+  {
+    "name": "user",
+    "pascal_name": "User",
+    "codepoint": 58562
+  },
+  {
+    "name": "user-check",
+    "pascal_name": "UserCheck",
+    "codepoint": 60154
+  },
+  {
+    "name": "user-circle",
+    "pascal_name": "UserCircle",
+    "codepoint": 58564
+  },
+  {
+    "name": "user-circle-check",
+    "pascal_name": "UserCircleCheck",
+    "codepoint": 60472
+  },
+  {
+    "name": "user-circle-dashed",
+    "pascal_name": "UserCircleDashed",
+    "codepoint": 60470
+  },
+  {
+    "name": "user-circle-gear",
+    "pascal_name": "UserCircleGear",
+    "codepoint": 58566
+  },
+  {
+    "name": "user-circle-minus",
+    "pascal_name": "UserCircleMinus",
+    "codepoint": 58568
+  },
+  {
+    "name": "user-circle-plus",
+    "pascal_name": "UserCirclePlus",
+    "codepoint": 58570
+  },
+  {
+    "name": "user-focus",
+    "pascal_name": "UserFocus",
+    "codepoint": 59132
+  },
+  {
+    "name": "user-gear",
+    "pascal_name": "UserGear",
+    "codepoint": 58572
+  },
+  {
+    "name": "user-list",
+    "pascal_name": "UserList",
+    "codepoint": 59196
+  },
+  {
+    "name": "user-minus",
+    "pascal_name": "UserMinus",
+    "codepoint": 58574
+  },
+  {
+    "name": "user-plus",
+    "pascal_name": "UserPlus",
+    "codepoint": 58576
+  },
+  {
+    "name": "user-rectangle",
+    "pascal_name": "UserRectangle",
+    "codepoint": 58578
+  },
+  {
+    "name": "user-sound",
+    "pascal_name": "UserSound",
+    "codepoint": 60584
+  },
+  {
+    "name": "user-square",
+    "pascal_name": "UserSquare",
+    "codepoint": 58580
+  },
+  {
+    "name": "user-switch",
+    "pascal_name": "UserSwitch",
+    "codepoint": 59222
+  },
+  {
+    "name": "users",
+    "pascal_name": "Users",
+    "codepoint": 58582
+  },
+  {
+    "name": "users-four",
+    "pascal_name": "UsersFour",
+    "codepoint": 59020
+  },
+  {
+    "name": "users-three",
+    "pascal_name": "UsersThree",
+    "codepoint": 59022
+  },
+  {
+    "name": "van",
+    "pascal_name": "Van",
+    "codepoint": 59430
+  },
+  {
+    "name": "vault",
+    "pascal_name": "Vault",
+    "codepoint": 59246
+  },
+  {
+    "name": "vector-three",
+    "pascal_name": "VectorThree",
+    "codepoint": 61026
+  },
+  {
+    "name": "vector-two",
+    "pascal_name": "VectorTwo",
+    "codepoint": 61028
+  },
+  {
+    "name": "vibrate",
+    "pascal_name": "Vibrate",
+    "codepoint": 58584
+  },
+  {
+    "name": "video",
+    "pascal_name": "Video",
+    "codepoint": 59200
+  },
+  {
+    "name": "video-camera",
+    "pascal_name": "VideoCamera",
+    "codepoint": 58586
+  },
+  {
+    "name": "video-camera-slash",
+    "pascal_name": "VideoCameraSlash",
+    "codepoint": 58588
+  },
+  {
+    "name": "video-conference",
+    "pascal_name": "VideoConference",
+    "codepoint": 60878
+  },
+  {
+    "name": "vignette",
+    "pascal_name": "Vignette",
+    "codepoint": 60322
+  },
+  {
+    "name": "vinyl-record",
+    "pascal_name": "VinylRecord",
+    "codepoint": 60588
+  },
+  {
+    "name": "virtual-reality",
+    "pascal_name": "VirtualReality",
+    "codepoint": 59320
+  },
+  {
+    "name": "virus",
+    "pascal_name": "Virus",
+    "codepoint": 59350
+  },
+  {
+    "name": "visor",
+    "pascal_name": "Visor",
+    "codepoint": 60970
+  },
+  {
+    "name": "voicemail",
+    "pascal_name": "Voicemail",
+    "codepoint": 58590
+  },
+  {
+    "name": "volleyball",
+    "pascal_name": "Volleyball",
+    "codepoint": 59174
+  },
+  {
+    "name": "wall",
+    "pascal_name": "Wall",
+    "codepoint": 59016
+  },
+  {
+    "name": "wallet",
+    "pascal_name": "Wallet",
+    "codepoint": 59018
+  },
+  {
+    "name": "warehouse",
+    "pascal_name": "Warehouse",
+    "codepoint": 60628
+  },
+  {
+    "name": "warning",
+    "pascal_name": "Warning",
+    "codepoint": 58592
+  },
+  {
+    "name": "warning-circle",
+    "pascal_name": "WarningCircle",
+    "codepoint": 58594
+  },
+  {
+    "name": "warning-diamond",
+    "pascal_name": "WarningDiamond",
+    "codepoint": 59388
+  },
+  {
+    "name": "warning-octagon",
+    "pascal_name": "WarningOctagon",
+    "codepoint": 58596
+  },
+  {
+    "name": "washing-machine",
+    "pascal_name": "WashingMachine",
+    "codepoint": 60904
+  },
+  {
+    "name": "watch",
+    "pascal_name": "Watch",
+    "codepoint": 58598
+  },
+  {
+    "name": "wave-sawtooth",
+    "pascal_name": "WaveSawtooth",
+    "codepoint": 60060
+  },
+  {
+    "name": "wave-sine",
+    "pascal_name": "WaveSine",
+    "codepoint": 60058
+  },
+  {
+    "name": "wave-square",
+    "pascal_name": "WaveSquare",
+    "codepoint": 60062
+  },
+  {
+    "name": "wave-triangle",
+    "pascal_name": "WaveTriangle",
+    "codepoint": 60064
+  },
+  {
+    "name": "waveform",
+    "pascal_name": "Waveform",
+    "codepoint": 59394
+  },
+  {
+    "name": "waveform-slash",
+    "pascal_name": "WaveformSlash",
+    "codepoint": 59392
+  },
+  {
+    "name": "waves",
+    "pascal_name": "Waves",
+    "codepoint": 59102
+  },
+  {
+    "name": "webcam",
+    "pascal_name": "Webcam",
+    "codepoint": 59826
+  },
+  {
+    "name": "webcam-slash",
+    "pascal_name": "WebcamSlash",
+    "codepoint": 60636
+  },
+  {
+    "name": "webhooks-logo",
+    "pascal_name": "WebhooksLogo",
+    "codepoint": 60590
+  },
+  {
+    "name": "wechat-logo",
+    "pascal_name": "WechatLogo",
+    "codepoint": 59602
+  },
+  {
+    "name": "whatsapp-logo",
+    "pascal_name": "WhatsappLogo",
+    "codepoint": 58832
+  },
+  {
+    "name": "wheelchair",
+    "pascal_name": "Wheelchair",
+    "codepoint": 58600
+  },
+  {
+    "name": "wheelchair-motion",
+    "pascal_name": "WheelchairMotion",
+    "codepoint": 59546
+  },
+  {
+    "name": "wifi-high",
+    "pascal_name": "WifiHigh",
+    "codepoint": 58602
+  },
+  {
+    "name": "wifi-low",
+    "pascal_name": "WifiLow",
+    "codepoint": 58604
+  },
+  {
+    "name": "wifi-medium",
+    "pascal_name": "WifiMedium",
+    "codepoint": 58606
+  },
+  {
+    "name": "wifi-none",
+    "pascal_name": "WifiNone",
+    "codepoint": 58608
+  },
+  {
+    "name": "wifi-slash",
+    "pascal_name": "WifiSlash",
+    "codepoint": 58610
+  },
+  {
+    "name": "wifi-x",
+    "pascal_name": "WifiX",
+    "codepoint": 58612
+  },
+  {
+    "name": "wind",
+    "pascal_name": "Wind",
+    "codepoint": 58834
+  },
+  {
+    "name": "windmill",
+    "pascal_name": "Windmill",
+    "codepoint": 59896
+  },
+  {
+    "name": "windows-logo",
+    "pascal_name": "WindowsLogo",
+    "codepoint": 59026
+  },
+  {
+    "name": "wine",
+    "pascal_name": "Wine",
+    "codepoint": 59058
+  },
+  {
+    "name": "wrench",
+    "pascal_name": "Wrench",
+    "codepoint": 58836
+  },
+  {
+    "name": "x",
+    "pascal_name": "X",
+    "codepoint": 58614
+  },
+  {
+    "name": "x-circle",
+    "pascal_name": "XCircle",
+    "codepoint": 58616
+  },
+  {
+    "name": "x-logo",
+    "pascal_name": "XLogo",
+    "codepoint": 58556
+  },
+  {
+    "name": "x-square",
+    "pascal_name": "XSquare",
+    "codepoint": 58618
+  },
+  {
+    "name": "yarn",
+    "pascal_name": "Yarn",
+    "codepoint": 60826
+  },
+  {
+    "name": "yin-yang",
+    "pascal_name": "YinYang",
+    "codepoint": 59690
+  },
+  {
+    "name": "youtube-logo",
+    "pascal_name": "YoutubeLogo",
+    "codepoint": 58620
+  }
+]

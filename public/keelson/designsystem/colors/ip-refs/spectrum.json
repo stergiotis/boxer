@@ -1,0 +1,16 @@
+{
+  "_source": "https://spectrum.adobe.com/page/color-fundamentals/",
+  "_retrieved": "2026-05-15",
+  "_note": "Adobe Spectrum global colors; most-recognisable anchors of the 100/200/300 ladder.",
+  "blue-500": "#1473e6",
+  "blue-600": "#0d66d0",
+  "red-600":  "#d7373f",
+  "red-700":  "#b1131b",
+  "green-600":"#268e6c",
+  "yellow-600":"#cb6f10",
+  "gray-50":  "#252525",
+  "gray-100": "#323232",
+  "gray-200": "#3e3e3e",
+  "gray-300": "#4a4a4a",
+  "gray-400": "#5a5a5a"
+}

@@ -1,0 +1,19 @@
+{
+  "_source": "https://carbondesignsystem.com/elements/color/tokens/",
+  "_retrieved": "2026-05-15",
+  "_note": "IBM Carbon v11 g100 (dark) theme tokens — most-recognisable anchors.",
+  "blue-60":  "#0f62fe",
+  "blue-70":  "#0043ce",
+  "red-60":   "#da1e28",
+  "red-70":   "#a2191f",
+  "green-50": "#24a148",
+  "green-60": "#198038",
+  "yellow-30":"#f1c21b",
+  "purple-60":"#8a3ffc",
+  "gray-100": "#161616",
+  "gray-90":  "#262626",
+  "gray-80":  "#393939",
+  "gray-70":  "#525252",
+  "gray-30":  "#c6c6c6",
+  "gray-10":  "#f4f4f4"
+}

@@ -1,0 +1,17 @@
+{
+  "_source": "https://www.radix-ui.com/colors",
+  "_retrieved": "2026-05-15",
+  "_note": "Radix Colors dark variants — step 9 anchors, the brand-tier of each scale.",
+  "blue-9":   "#0090ff",
+  "red-9":    "#e5484d",
+  "green-9":  "#30a46c",
+  "yellow-9": "#ffe629",
+  "amber-9":  "#ffb224",
+  "violet-9": "#6e56cf",
+  "purple-9": "#8e4ec6",
+  "gray-1":   "#111111",
+  "gray-2":   "#191919",
+  "gray-3":   "#222222",
+  "gray-9":   "#7e7e7e",
+  "gray-12":  "#eeeeee"
+}

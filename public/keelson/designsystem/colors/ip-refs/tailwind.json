@@ -1,0 +1,20 @@
+{
+  "_source": "https://tailwindcss.com/docs/customizing-colors",
+  "_retrieved": "2026-05-15",
+  "_note": "Tailwind v3 default palette; 500 / 600 anchors are the most-borrowed.",
+  "slate-500":   "#64748b",
+  "slate-600":   "#475569",
+  "slate-800":   "#1e293b",
+  "slate-900":   "#0f172a",
+  "blue-500":    "#3b82f6",
+  "blue-600":    "#2563eb",
+  "red-500":     "#ef4444",
+  "red-600":     "#dc2626",
+  "green-500":   "#22c55e",
+  "green-600":   "#16a34a",
+  "amber-500":   "#f59e0b",
+  "yellow-500":  "#eab308",
+  "violet-500":  "#8b5cf6",
+  "violet-600":  "#7c3aed",
+  "purple-500":  "#a855f7"
+}
