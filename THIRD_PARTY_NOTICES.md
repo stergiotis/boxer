@@ -453,10 +453,9 @@ The imzero2 egui renderer embeds three fonts via `include_bytes!`
 - **Phosphor** -- `rust/imzero2/assets/fonts/phosphor/Phosphor.ttf`. MIT.
   License text: [`.../phosphor/LICENSE`](rust/imzero2/assets/fonts/phosphor/LICENSE).
 - **Iosevka Aile** -- `rust/imzero2/assets/fonts/iosevka-aile/IosevkaAile-Regular.ttf`.
-  SIL Open Font License 1.1 (upstream <https://github.com/be5invis/Iosevka>).
-  **TODO before release:** vendor the OFL-1.1 license text next to the `.ttf`
-  (only the font binary + `SHA256SUMS` are currently committed); OFL
-  redistribution requires the license to accompany the font.
+  SIL Open Font License 1.1; Copyright (c) 2015-2026 Renzhi Li (aka. Belleve
+  Invis), upstream <https://github.com/be5invis/Iosevka>. License text:
+  [`.../iosevka-aile/LICENSE`](rust/imzero2/assets/fonts/iosevka-aile/LICENSE).
 
 Only the `Regular` weight of IDS Mono is embedded; the five upstream
 italic/bold variants are not vendored. PragmataPro is never shipped -- it is a
