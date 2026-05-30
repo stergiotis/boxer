@@ -17,6 +17,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/mem"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/net"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/proc"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/psi"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sensors"
 )
 
@@ -34,6 +35,7 @@ const (
 	DomainSensors   Domain = "sensors"
 	DomainContainer Domain = "container"
 	DomainGPU       Domain = "gpu"
+	DomainPSI       Domain = "psi"
 )
 
 // BundleOptions wires per-domain collectors into a [Bundle]. Any nil
@@ -56,6 +58,9 @@ type BundleOptions struct {
 	// resources held by the wired GPU sampler.
 	GPU gpu.SamplerI
 
+	// PSI is the Pressure Stall Information sampler (/proc/pressure).
+	PSI *psi.Collector
+
 	// NowFunc, when non-nil, overrides the wall clock used to stamp
 	// [BundleSnapshot.SampledAtUnixMs]. Defaults to [time.Now].
 	NowFunc func() time.Time
@@ -73,6 +78,7 @@ type BundleSnapshot struct {
 	Battery   *battery.Snapshot
 	Container *container.Info
 	GPU       *gpu.Snapshot
+	PSI       *psi.Snapshot
 
 	// Procs is the slice form of the process table. Empty when the proc
 	// collector was not wired.
@@ -121,8 +127,8 @@ func (inst *Bundle) Sample(ctx context.Context) (snap BundleSnapshot, err error)
 	snap.Errors = map[Domain]error{}
 
 	var (
-		mu  sync.Mutex
-		wg  sync.WaitGroup
+		mu sync.Mutex
+		wg sync.WaitGroup
 	)
 
 	captureErr := func(d Domain, e error) {
@@ -158,6 +164,19 @@ func (inst *Bundle) Sample(ctx context.Context) (snap BundleSnapshot, err error)
 				mu.Unlock()
 			}
 			captureErr(DomainMem, e)
+		}()
+	}
+	if inst.opts.PSI != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			s, e := inst.opts.PSI.Sample(ctx)
+			if e == nil {
+				mu.Lock()
+				snap.PSI = &s
+				mu.Unlock()
+			}
+			captureErr(DomainPSI, e)
 		}()
 	}
 	if inst.opts.Disk != nil {
@@ -280,6 +299,7 @@ func (inst *Bundle) Close() (err error) {
 		inst.opts.Sensors,
 		inst.opts.Container,
 		inst.opts.GPU,
+		inst.opts.PSI,
 	}
 	var errs []error
 	for _, c := range candidates {

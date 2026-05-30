@@ -262,6 +262,10 @@ ADRs are append-only; supersession is recorded, not deleted.
 
 ## Updates
 
+### 2026-05-30 — PSI collector (`psi`)
+
+Adds a Pressure Stall Information collector under [`../../public/observability/sysmetrics/psi/`](../../public/observability/sysmetrics/psi/) reading `/proc/pressure/{cpu,memory,io}` — the share of wall-time tasks spent stalled on each resource over 10/60/300 s windows (`some` / `full`). This is *beyond* btop's data set (btop predates PSI): it is the kernel's saturation signal, distinguishing a resource that is merely busy from one that is contended. A standard `Sample()`-based collector wired into the `Bundle` (`DomainPSI`); a kernel without `CONFIG_PSI` (or booted `psi=0`) yields `Available=false` rather than an error. Consumed by the imztop Pressure tab ([ADR-0020](./0020-imzero2-imztop-resource-monitor.md), Update of the same date). `status` / `reviewed-date` unchanged.
+
 ### 2026-05-29 — static CPU topology reader (`ReadTopology`)
 
 The Public API sketch above covers only **sampling** collectors: each `*.Collector` is primed once and then `Sample(ctx)`-ed on a cadence to produce rate/snapshot deltas. CPU *topology* — the package/cache/core/thread containment tree that `lstopo`(1) draws — is structural, not temporal: it is read once and never deltas. Rather than bend the `Sample()` contract around a value that has no second reading, this adds a one-shot reader alongside the CPU collector:

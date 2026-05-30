@@ -191,15 +191,16 @@ func ensureSampler() (s *Sampler, err error) {
 // them, and the Rust-side reconciler (retain_tabs + push_to_first_leaf)
 // trusts them as a stable identity.
 const (
-	dockTabCPU     uint64 = 1
-	dockTabMem     uint64 = 2
-	dockTabBattery uint64 = 3
-	dockTabSensors uint64 = 4
-	dockTabDisk    uint64 = 5
-	dockTabNet     uint64 = 6
-	dockTabGPU     uint64 = 7
-	dockTabProc    uint64 = 8
-	dockTabTopo    uint64 = 9
+	dockTabCPU      uint64 = 1
+	dockTabMem      uint64 = 2
+	dockTabBattery  uint64 = 3
+	dockTabSensors  uint64 = 4
+	dockTabDisk     uint64 = 5
+	dockTabNet      uint64 = 6
+	dockTabGPU      uint64 = 7
+	dockTabProc     uint64 = 8
+	dockTabTopo     uint64 = 9
+	dockTabPressure uint64 = 10
 )
 
 // renderApp arranges the body inside the runtime-created window scope
@@ -231,7 +232,7 @@ func (inst *App) renderApp(snap *PublishedSnapshot, s *Sampler) {
 			// + I/O panels as a 3-tab leaf with Net active. PROC spans
 			// the bottom on its own leaf. Fewer leaves = more room per
 			// panel at the 1280×694 compositor-clamped viewport size.
-			cpuLeaf := dock.InitRoot(dockTabCPU, dockTabTopo, dockTabMem, dockTabBattery, dockTabSensors)
+			cpuLeaf := dock.InitRoot(dockTabCPU, dockTabTopo, dockTabPressure, dockTabMem, dockTabBattery, dockTabSensors)
 			_ = dock.Split(cpuLeaf, c.DockBelow, 0.55, dockTabProc) // PROC at bottom (~45%)
 			_ = dock.Split(cpuLeaf, c.DockRight, 0.27, dockTabNet, dockTabDisk, dockTabGPU)
 
@@ -243,6 +244,11 @@ func (inst *App) renderApp(snap *PublishedSnapshot, s *Sampler) {
 			for range dock.Tab(dockTabTopo, "Topology") {
 				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
 					inst.renderTopologyPanel(snap)
+				}
+			}
+			for range dock.Tab(dockTabPressure, "Pressure") {
+				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+					inst.renderPressurePanel(snap)
 				}
 			}
 			for range dock.Tab(dockTabMem, "Memory") {

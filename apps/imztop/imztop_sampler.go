@@ -19,6 +19,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/mem"
 	netcoll "github.com/stergiotis/boxer/public/observability/sysmetrics/net"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/proc"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/psi"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sensors"
 )
 
@@ -66,6 +67,7 @@ type PublishedSnapshot struct {
 	LatestBattery   *battery.Snapshot
 	LatestGPU       *gpu.Snapshot
 	LatestContainer *container.Info
+	LatestPSI       *psi.Snapshot
 	Sensors         []sensors.TempReading
 	Procs           []proc.Info
 
@@ -209,6 +211,13 @@ func NewSampler(opts SamplerOptions) (inst *Sampler, err error) {
 		log.Warn().Err(cerr2).Msg("imztop: build container detector failed; container badge disabled")
 	} else {
 		bopts.Container = cntC
+	}
+
+	psiC, psierr := psi.New(psi.Options{})
+	if psierr != nil {
+		log.Warn().Err(psierr).Msg("imztop: build PSI collector failed; pressure panel disabled")
+	} else {
+		bopts.PSI = psiC
 	}
 
 	wireGPUSampler(&bopts)
@@ -416,6 +425,7 @@ func (inst *Sampler) tick(ctx context.Context) {
 		LatestBattery:         bundleSnap.Battery,
 		LatestGPU:             bundleSnap.GPU,
 		LatestContainer:       bundleSnap.Container,
+		LatestPSI:             bundleSnap.PSI,
 		Sensors:               bundleSnap.Sensors,
 		Procs:                 procs,
 		ProcCPUSmoothed:       smoothed,

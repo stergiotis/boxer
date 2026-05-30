@@ -254,6 +254,15 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 
 ## Updates
 
+### 2026-05-30 — Pressure tab + process-tree mode
+
+Two panel additions beyond the M1–M5 btop set:
+
+- **Pressure tab** (`dockTabPressure`) renders the new [`psi`](./0019-observability-sysmetrics-linux-collector.md) collector — CPU / memory / IO stall shares (`some` / `full`, over 10/60/300 s). PSI has no btop analogue; it answers "which resource is the bottleneck", which utilisation alone cannot. Values-only for now; avg-history sparklines are a deferred follow-up.
+- **Process-tree mode** in the proc panel: a `tree` toggle reorders the (filtered + sorted) rows into a PPID forest, depth-first, indenting the Name column. Render-only over the existing `proc.Info.PPID`; siblings keep the active sort; the table's top-N-by-CPU cap means the tree is of the *visible* processes (orphans become roots). A `visited` guard makes PID-reuse cycles safe.
+
+`status` / `reviewed-date` unchanged.
+
 ### 2026-05-29 — `Topology` panel (lstopo-style CPU hierarchy)
 
 Adds a `Topology` dock tab (`dockTabTopo`) that draws the CPU package → NUMA → L3/L2/L1 → core → SMT-thread containment tree, the view `lstopo`(1) is known for. Data comes from the static [`cpu.ReadTopology`](./0019-observability-sysmetrics-linux-collector.md) reader added in ADR-0019's Update of the same date; it is read **once** at `App` construction and never re-sampled.
