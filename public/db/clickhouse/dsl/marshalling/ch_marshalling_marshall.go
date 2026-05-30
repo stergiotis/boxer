@@ -422,42 +422,34 @@ func marshalHomogeneousArrayToSQL(a *HomogeneousArray) (sql string, err error) {
 	return
 }
 
-func marshalHeterogeneousArrayToSQL(elems []TypedLiteral, mapFunc func(string) (string, error)) (sql string, err error) {
+// marshalTypedLiteralListToSQL renders elems as a comma-separated SQL list
+// wrapped in prefix/suffix (e.g. "["/']' for arrays, "tuple("/')' for tuples).
+// ctx labels element-marshalling errors.
+func marshalTypedLiteralListToSQL(prefix string, suffix byte, ctx string, elems []TypedLiteral, mapFunc func(string) (string, error)) (sql string, err error) {
 	var sb strings.Builder
-	sb.WriteByte('[')
+	sb.WriteString(prefix)
 	for i, elem := range elems {
 		if i > 0 {
 			sb.WriteString(", ")
 		}
 		elemSQL, elemErr := MarshalTypedLiteralToSQLEx(elem, mapFunc)
 		if elemErr != nil {
-			err = eb.Build().Int("element", i).Errorf("marshalHeterogeneousArrayToSQL: %w", elemErr)
+			err = eb.Build().Int("element", i).Errorf("%s: %w", ctx, elemErr)
 			return
 		}
 		sb.WriteString(elemSQL)
 	}
-	sb.WriteByte(']')
+	sb.WriteByte(suffix)
 	sql = sb.String()
 	return
 }
 
+func marshalHeterogeneousArrayToSQL(elems []TypedLiteral, mapFunc func(string) (string, error)) (sql string, err error) {
+	return marshalTypedLiteralListToSQL("[", ']', "marshalHeterogeneousArrayToSQL", elems, mapFunc)
+}
+
 func marshalTupleTypedLiteralToSQL(elems []TypedLiteral, mapFunc func(string) (string, error)) (sql string, err error) {
-	var sb strings.Builder
-	sb.WriteString("tuple(")
-	for i, elem := range elems {
-		if i > 0 {
-			sb.WriteString(", ")
-		}
-		elemSQL, elemErr := MarshalTypedLiteralToSQLEx(elem, mapFunc)
-		if elemErr != nil {
-			err = eb.Build().Int("element", i).Errorf("marshalTupleTypedLiteralToSQL: %w", elemErr)
-			return
-		}
-		sb.WriteString(elemSQL)
-	}
-	sb.WriteByte(')')
-	sql = sb.String()
-	return
+	return marshalTypedLiteralListToSQL("tuple(", ')', "marshalTupleTypedLiteralToSQL", elems, mapFunc)
 }
 
 // --- Marshal Go values ---
