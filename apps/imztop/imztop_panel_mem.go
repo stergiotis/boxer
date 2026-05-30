@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/observability/humanfmt"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
@@ -89,24 +90,8 @@ func (inst *App) renderMemPanel(snap *PublishedSnapshot) {
 	}
 }
 
+// humanBytes renders a byte count with a binary unit suffix. It delegates to
+// the shared formatter lifted out of imzrt + imztop per ADR-0061 SD13.
 func humanBytes(n uint64) (s string) {
-	const (
-		kib = 1 << 10
-		mib = 1 << 20
-		gib = 1 << 30
-		tib = 1 << 40
-	)
-	switch {
-	case n >= tib:
-		s = fmt.Sprintf("%.2f TiB", float64(n)/float64(tib))
-	case n >= gib:
-		s = fmt.Sprintf("%.2f GiB", float64(n)/float64(gib))
-	case n >= mib:
-		s = fmt.Sprintf("%.1f MiB", float64(n)/float64(mib))
-	case n >= kib:
-		s = fmt.Sprintf("%.0f KiB", float64(n)/float64(kib))
-	default:
-		s = fmt.Sprintf("%d B", n)
-	}
-	return
+	return humanfmt.Bytes(n)
 }

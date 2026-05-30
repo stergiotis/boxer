@@ -1,6 +1,10 @@
 package imzrt
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/stergiotis/boxer/public/observability/humanfmt"
+)
 
 const bytesPerMiB = 1024 * 1024
 
@@ -11,29 +15,10 @@ func mib(b uint64) (v float64) {
 	return
 }
 
-// humanBytes renders a byte count with a binary unit suffix. Copy of imztop's
-// helper (apps/imztop/imztop_panel_mem.go) — see SD13's duplication note for the
-// same rationale applied to SlidingWindow.
+// humanBytes renders a byte count with a binary unit suffix. It delegates to
+// the shared formatter lifted out of imzrt + imztop per ADR-0061 SD13.
 func humanBytes(n uint64) (s string) {
-	const (
-		kib = 1 << 10
-		mib = 1 << 20
-		gib = 1 << 30
-		tib = 1 << 40
-	)
-	switch {
-	case n >= tib:
-		s = fmt.Sprintf("%.2f TiB", float64(n)/float64(tib))
-	case n >= gib:
-		s = fmt.Sprintf("%.2f GiB", float64(n)/float64(gib))
-	case n >= mib:
-		s = fmt.Sprintf("%.1f MiB", float64(n)/float64(mib))
-	case n >= kib:
-		s = fmt.Sprintf("%.0f KiB", float64(n)/float64(kib))
-	default:
-		s = fmt.Sprintf("%d B", n)
-	}
-	return
+	return humanfmt.Bytes(n)
 }
 
 // humanDuration renders a duration given in seconds with an adaptive unit, so GC

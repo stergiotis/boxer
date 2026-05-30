@@ -341,6 +341,19 @@ display-height limit, so it is confirmed by build + unit test rather than captur
 and observe-only decisions stand; this records implementation detail and one
 spawned refactor.
 
+### 2026-05-31 — SlidingWindow + byte formatter lifted to shared packages
+
+Open question 3 / SD13 resolved. imztop's and imzrt's verbatim `SlidingWindow[T]`
+copies are lifted into `public/observability/slidingwindow` (`Window[T]` +
+`New`); each app keeps its `SlidingWindow` / `NewSlidingWindow` names as a
+generic alias plus a one-line constructor wrapper, so the sampler call sites are
+untouched. The same imzrt↔imztop `humanBytes` copy moved to
+`public/observability/humanfmt` (`Bytes`), with each app's `humanBytes` now a
+one-line delegate; the apps' divergent `humanDuration` helpers and imzrt-only
+`humanCount` stay per-app. Both lifts are verbatim — behaviour is unchanged and
+the shared packages carry their own unit tests. Surfaced by a `dupl` sweep; the
+accepted decision stands, so `status` / `reviewed-date` are not re-stamped.
+
 ## References
 
 - [ADR-0020](./0020-imzero2-imztop-resource-monitor.md) — `imztop`; the structural template this ADR mirrors.
