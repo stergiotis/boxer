@@ -38,6 +38,7 @@ type procViewState struct {
 	SortBy ProcSortByE
 	Desc   bool
 	Filter string
+	Tree   bool
 }
 
 var (
@@ -66,6 +67,12 @@ func setProcSort(by ProcSortByE) {
 func setProcFilter(filter string) {
 	procViewMu.Lock()
 	procView.Filter = filter
+	procViewMu.Unlock()
+}
+
+func toggleProcTree() {
+	procViewMu.Lock()
+	procView.Tree = !procView.Tree
 	procViewMu.Unlock()
 }
 
@@ -168,6 +175,17 @@ func (inst *App) renderProcPanel(snap *PublishedSnapshot) {
 		if resp.HasChanged() {
 			setProcFilter(inst.procFilterDraft)
 		}
+		c.AddSpace(inst.spaceOuter())
+		treeLabel := "tree ▸"
+		if view.Tree {
+			treeLabel = "tree ▾"
+		}
+		if c.Button(inst.ids.PrepareStr("proc-tree-tgl"), c.Atoms().Text(treeLabel).Keep()).
+			Selected(view.Tree).
+			Frame(true).
+			SendResp().HasPrimaryClicked() {
+			toggleProcTree()
+		}
 	}
 	c.AddSpace(inst.spaceInner())
 
@@ -190,7 +208,21 @@ func (inst *App) renderProcPanel(snap *PublishedSnapshot) {
 
 	inst.renderProcHeader(et, view)
 
-	for row, p := range snap.Procs {
+	// Tree mode reorders the (already filtered + sorted) rows into a PPID
+	// forest, depth-first; flat mode renders snap.Procs as-is (depth 0). The
+	// reordering is render-only — srcIdx maps an output row back to its index
+	// in snap.Procs / ProcCPUSmoothed, so per-row data and the smoothed-tint
+	// lookup stay correct in both modes.
+	var treeOrder, treeDepth []int
+	if view.Tree {
+		treeOrder, treeDepth = buildProcOrder(snap.Procs)
+	}
+	for row := range snap.Procs {
+		srcIdx, d := row, 0
+		if view.Tree {
+			srcIdx, d = treeOrder[row], treeDepth[row]
+		}
+		p := snap.Procs[srcIdx]
 		r := uint64(row)
 		for range et.Cells(r, 0) {
 			procCellLabel(fmt.Sprintf("%d", p.PID))
@@ -199,8 +231,8 @@ func (inst *App) renderProcPanel(snap *PublishedSnapshot) {
 			procCellLabel(p.User)
 		}
 		smoothedPct := p.CPUPercent
-		if row < len(snap.ProcCPUSmoothed) {
-			smoothedPct = snap.ProcCPUSmoothed[row]
+		if srcIdx < len(snap.ProcCPUSmoothed) {
+			smoothedPct = snap.ProcCPUSmoothed[srcIdx]
 		}
 		for range et.Cells(r, 2) {
 			// CPU%~ — smoothed. Tinted with the heatmap palette only
@@ -228,7 +260,7 @@ func (inst *App) renderProcPanel(snap *PublishedSnapshot) {
 			procCellLabel(string(p.State))
 		}
 		for range et.Cells(r, 7) {
-			procCellLabel(p.Name)
+			procCellLabel(treeIndent(d, p.Name))
 		}
 		for range et.Cells(r, 8) {
 			procCellLabel(p.Cmd)
@@ -351,3 +383,68 @@ func (inst *App) renderProcHeader(et c.EndETableFluid, view procViewState) {
 // well outside the defined ProcSortByE range so a normal const cannot
 // alias it.
 const procSortNoneSentinel ProcSortByE = 255
+
+// treeIndent prefixes a process name with a depth-proportional tree marker.
+// Depth 0 (a forest root) is unindented; deeper rows get one "  " per level
+// plus a "└ " elbow, so the column reads as a parent → child hierarchy.
+func treeIndent(depth int, name string) string {
+	if depth <= 0 {
+		return name
+	}
+	return strings.Repeat("  ", depth-1) + "└ " + name
+}
+
+// buildProcOrder reorders infos into a PPID forest, depth-first, returning the
+// output-row → infos-index permutation alongside each row's tree depth.
+// Siblings keep infos' incoming order, so the active sort is preserved within
+// each parent. A process whose parent is absent from infos (the table is
+// truncated to the top-N by CPU, or it's a real root like PID 1) starts a new
+// root. A visited guard makes PID-reuse cycles safe; any node the walk misses
+// is appended at depth 0.
+func buildProcOrder(infos []proc.Info) (order, depth []int) {
+	n := len(infos)
+	idxByPID := make(map[uint32]int, n)
+	for i := range infos {
+		idxByPID[infos[i].PID] = i
+	}
+	children := make(map[int][]int)
+	var roots []int
+	for i := range infos {
+		if pi, ok := idxByPID[infos[i].PPID]; ok && pi != i {
+			children[pi] = append(children[pi], i)
+		} else {
+			roots = append(roots, i)
+		}
+	}
+	order = make([]int, 0, n)
+	depth = make([]int, 0, n)
+	visited := make([]bool, n)
+	type frame struct{ idx, d int }
+	stack := make([]frame, 0, n)
+	for i := len(roots) - 1; i >= 0; i-- {
+		stack = append(stack, frame{roots[i], 0})
+	}
+	for len(stack) > 0 {
+		f := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if visited[f.idx] {
+			continue
+		}
+		visited[f.idx] = true
+		order = append(order, f.idx)
+		depth = append(depth, f.d)
+		ch := children[f.idx]
+		for i := len(ch) - 1; i >= 0; i-- {
+			if !visited[ch[i]] {
+				stack = append(stack, frame{ch[i], f.d + 1})
+			}
+		}
+	}
+	for i := range infos {
+		if !visited[i] {
+			order = append(order, i)
+			depth = append(depth, 0)
+		}
+	}
+	return
+}
