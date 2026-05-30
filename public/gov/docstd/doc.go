@@ -1,5 +1,3 @@
-//go:build llm_generated_opus48
-
 // Package docstd is the canonical vocabulary for the boxer documentation
 // standard's front-matter contract (DOCUMENTATION_STANDARD §4): the
 // allowed Diátaxis `type:` values, the per-type `status:` lifecycle

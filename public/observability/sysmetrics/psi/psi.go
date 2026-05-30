@@ -1,5 +1,3 @@
-//go:build llm_generated_opus48
-
 package psi
 
 import (

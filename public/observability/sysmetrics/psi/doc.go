@@ -1,5 +1,3 @@
-//go:build llm_generated_opus48
-
 // Package psi samples Linux Pressure Stall Information (PSI) from
 // /proc/pressure/{cpu,memory,io} — the share of wall-time tasks spent stalled
 // on each resource, averaged over 10/60/300 s windows. PSI is the kernel's
