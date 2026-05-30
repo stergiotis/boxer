@@ -98,8 +98,21 @@ type TopoObject struct {
 	// meminfo); set only for Kind == TopoKindNUMANode, 0 otherwise.
 	MemBytes uint64
 
+	// FreqPolicy is the cpufreq scaling policy; set only for Kind ==
+	// TopoKindPU, nil otherwise.
+	FreqPolicy *FreqPolicy
+
 	// Children are the contained objects, in discovery order.
 	Children []*TopoObject
+}
+
+// FreqPolicy is a CPU's cpufreq scaling policy (governor, driver, and the
+// min/max clock the governor may select), read once from cpuN/cpufreq.
+type FreqPolicy struct {
+	MinMHz   uint32
+	MaxMHz   uint32
+	Governor string
+	Driver   string
 }
 
 // Label returns a human-readable lstopo-style label, e.g. "Package P#0",
@@ -202,12 +215,13 @@ func ReadTopology(opts TopologyOptions) (topo Topology, err error) {
 // (package) to narrowest (the PU itself). Steps are emitted already ordered
 // outermost-first by readCPUSteps.
 type topoStep struct {
-	kind    TopoKindE
-	osIndex int32
-	level   uint8
-	ctype   CacheTypeE
-	size    uint64
-	mem     uint64
+	kind       TopoKindE
+	osIndex    int32
+	level      uint8
+	ctype      CacheTypeE
+	size       uint64
+	mem        uint64
+	freqPolicy *FreqPolicy
 	// key uniquely identifies the object among its siblings: it folds the
 	// covered CPU set together with the cache discriminators so two CPUs that
 	// share, say, an L3 dedupe to the same node while L1d and L1i (same set,
@@ -269,7 +283,7 @@ func readCPUSteps(sys *sysfs.Reader, cpu int32, numaByCPU map[int32]int32, nodeM
 		key: "core:" + setKey(threadSet),
 	})
 	steps = append(steps, topoStep{
-		kind: TopoKindPU, osIndex: cpu,
+		kind: TopoKindPU, osIndex: cpu, freqPolicy: readPUFreqPolicy(sys, cpu),
 		key: "pu:" + strconv.FormatInt(int64(cpu), 10),
 	})
 	return
@@ -361,6 +375,7 @@ func (b *topoBuilder) insert(steps []topoStep) {
 				CacheType:      s.ctype,
 				CacheSizeBytes: s.size,
 				MemBytes:       s.mem,
+				FreqPolicy:     s.freqPolicy,
 			}
 			parent.Children = append(parent.Children, child)
 			idx[s.key] = child
@@ -424,6 +439,40 @@ func readNodeMemTotal(sys *sysfs.Reader, nodeName string) (bytes uint64) {
 		break
 	}
 	return 0
+}
+
+// readPUFreqPolicy reads cpuN/cpufreq/{scaling_min_freq,scaling_max_freq,
+// scaling_governor,scaling_driver}. Returns nil when the CPU exposes no
+// cpufreq policy (container, cpufreq disabled, or a non-cpufreq kernel).
+func readPUFreqPolicy(sys *sysfs.Reader, cpu int32) (p *FreqPolicy) {
+	base := "devices/system/cpu/cpu" + strconv.FormatInt(int64(cpu), 10) + "/cpufreq/"
+	gov, _ := sys.ReadString(base + "scaling_governor")
+	drv, _ := sys.ReadString(base + "scaling_driver")
+	minKHz := readUintFile(sys, base+"scaling_min_freq")
+	maxKHz := readUintFile(sys, base+"scaling_max_freq")
+	if gov == "" && drv == "" && minKHz == 0 && maxKHz == 0 {
+		return nil
+	}
+	return &FreqPolicy{
+		MinMHz:   uint32(minKHz / 1000),
+		MaxMHz:   uint32(maxKHz / 1000),
+		Governor: strings.TrimSpace(gov),
+		Driver:   strings.TrimSpace(drv),
+	}
+}
+
+// readUintFile reads a sysfs leaf holding a single unsigned integer; 0 on
+// error or absence.
+func readUintFile(sys *sysfs.Reader, rel string) (v uint64) {
+	s, err := sys.ReadString(rel)
+	if err != nil {
+		return 0
+	}
+	n, perr := strconv.ParseUint(strings.TrimSpace(s), 10, 64)
+	if perr != nil {
+		return 0
+	}
+	return n
 }
 
 // readInt32 reads a sysfs leaf holding a single integer.

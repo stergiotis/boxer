@@ -64,6 +64,12 @@ func writeTopoFixture(t *testing.T) (sysRoot string) {
 		writeCacheIndex(t, cache, "index3", "3", "Unified", "8192K", l3Set(i))
 		// A non-cache entry that must be ignored (no level file).
 		mustWrite(t, filepath.Join(cache, "uevent"), "DEVTYPE=cache\n")
+
+		freq := filepath.Join(cpuBase, fmt.Sprintf("cpu%d/cpufreq", i))
+		mustWrite(t, filepath.Join(freq, "scaling_min_freq"), "1000000\n")
+		mustWrite(t, filepath.Join(freq, "scaling_max_freq"), "4000000\n")
+		mustWrite(t, filepath.Join(freq, "scaling_governor"), "schedutil\n")
+		mustWrite(t, filepath.Join(freq, "scaling_driver"), "acpi-cpufreq\n")
 	}
 	mustWrite(t, filepath.Join(sysRoot, "devices/system/node/node0/cpulist"), "0-7\n")
 	mustWrite(t, filepath.Join(sysRoot, "devices/system/node/node0/meminfo"),
@@ -159,6 +165,12 @@ func TestReadTopology_Hierarchy(t *testing.T) {
 	assert.Equal(t, int32(0), core.Children[0].OSIndex)
 	assert.Equal(t, "PU P#0", core.Children[0].Label())
 	assert.Equal(t, int32(1), core.Children[1].OSIndex)
+	if fp := core.Children[0].FreqPolicy; assert.NotNil(t, fp, "PU should carry a cpufreq policy") {
+		assert.Equal(t, uint32(1000), fp.MinMHz)
+		assert.Equal(t, uint32(4000), fp.MaxMHz)
+		assert.Equal(t, "schedutil", fp.Governor)
+		assert.Equal(t, "acpi-cpufreq", fp.Driver)
+	}
 
 	// Every logical CPU appears exactly once as a PU leaf.
 	pus := collectPUs(topo.Root)

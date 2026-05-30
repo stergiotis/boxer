@@ -5,6 +5,7 @@ package imztop
 import (
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 
 	"github.com/dustin/go-humanize"
@@ -103,6 +104,10 @@ func (inst *App) initTopology() {
 		if obj == nil || obj.Kind != cpu.TopoKindPU || inst.topoScaleMax == 0 {
 			return math.NaN()
 		}
+		// PUs outside the cgroup-effective cpuset render inactive (grey).
+		if !cpuActive(inst.topoActive, obj.OSIndex) {
+			return math.NaN()
+		}
 		id := int(obj.OSIndex)
 		var raw uint32
 		if inst.topoDim == topoDimFreq {
@@ -156,6 +161,7 @@ func (inst *App) renderTopologyPanel(snap *PublishedSnapshot) {
 	if snap != nil && snap.LatestCPU != nil {
 		inst.topoLoad = snap.LatestCPU.PerCorePercent
 		inst.topoFreq = snap.LatestCPU.PerCoreFreqMHz
+		inst.topoActive = snap.LatestCPU.ActiveCPUs
 		if snap.SampledAtUnixMs != inst.topoLastSampleMs {
 			inst.topoLastSampleMs = snap.SampledAtUnixMs
 			inst.updateFreqMax()
@@ -252,6 +258,13 @@ func roundUp100(v uint32) uint32 {
 	return ((v + 99) / 100) * 100
 }
 
+// cpuActive reports whether logical CPU id is in the cgroup-effective cpuset.
+// An empty set means "unrestricted" (no cgroup confinement), so all PUs are
+// active and nothing is greyed.
+func cpuActive(active []int32, id int32) bool {
+	return len(active) == 0 || slices.Contains(active, id)
+}
+
 // ensureTopoScale (re)builds the colorscale legend when the dimension or the
 // rounded max changes. nil when there is nothing to show yet (frequency before
 // the first sample).
@@ -312,6 +325,17 @@ func (inst *App) renderTopoHoverDetail(snap *PublishedSnapshot) {
 			if id >= 0 && id < len(cs.PerCoreFreqMHz) && cs.PerCoreFreqMHz[id] > 0 {
 				fmt.Fprintf(&b, " · %s", mhzLabel(cs.PerCoreFreqMHz[id]))
 			}
+		}
+		if fp := obj.FreqPolicy; fp != nil {
+			if fp.Governor != "" {
+				fmt.Fprintf(&b, " · gov %s", fp.Governor)
+			}
+			if fp.MinMHz > 0 || fp.MaxMHz > 0 {
+				fmt.Fprintf(&b, " · %s–%s", mhzLabel(fp.MinMHz), mhzLabel(fp.MaxMHz))
+			}
+		}
+		if !cpuActive(inst.topoActive, obj.OSIndex) {
+			b.WriteString(" · outside cpuset")
 		}
 	case cpu.TopoKindCore:
 		fmt.Fprintf(&b, " · %d threads", countKind(obj, cpu.TopoKindPU))

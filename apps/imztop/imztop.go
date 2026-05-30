@@ -126,6 +126,10 @@ type App struct {
 	topoScale        *colorscale.ColorScale
 	topoScaleKey     string
 	topoLastSampleMs int64
+
+	// topoActive aliases the latest cgroup-effective cpuset (cpu.ActiveCPUs);
+	// PU boxes whose logical CPU is outside it render inactive (greyed).
+	topoActive []int32
 }
 
 var _ app.AppI = (*App)(nil)
