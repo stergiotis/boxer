@@ -136,8 +136,27 @@ fn load_custom_fonts(ctx: &egui::Context, config: &AppConfig) -> imzero2::svgexp
     resolver
 }
 
+/// Passes to render back-to-back at startup before dropping to the idle
+/// heartbeat. Covers the Wayland/VSYNC `swap_buffers` handshake (see the
+/// startup-stall note on `App::new`'s `request_repaint`) and the initial
+/// multi-frame layout fit-up. ~16 passes ≈ 0.25 s at 60 Hz.
+const WARMUP_PASSES: u32 = 16;
+
+/// Idle repaint cadence once warmed up. egui overrides this with sooner
+/// repaints for input, animation and the Go-side RequestRepaint opcodes (it
+/// keeps the earliest deadline), so it only bounds how often a fully idle
+/// window refreshes. Matches the imztop sampler's 1 s tick.
+const IDLE_REPAINT_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
+
 pub struct App<'a,R: std::io::BufRead,W: std::io::Write> {
     fffi: imzero2::interpreter::ImZeroFffi<'a,R,W>,
+    /// Counts down from [WARMUP_PASSES]; while > 0, `logic()` forces an
+    /// immediate repaint even in reactive mode. See `logic()`.
+    warmup_passes: u32,
+    /// When true (IMZERO2_RENDER_CADENCE=reactive), `logic()` drops to the
+    /// idle heartbeat after warmup. When false (continuous, the default) it
+    /// requests an immediate repaint every pass. See `logic()`.
+    reactive: bool,
 }
 
 impl<'a,R: std::io::BufRead,W: std::io::Write> App<'a,R,W> {
@@ -173,6 +192,13 @@ impl<'a,R: std::io::BufRead,W: std::io::Write> App<'a,R,W> {
             imzero2_egui::style::apply_tour_neutral_overrides(&cc.egui_ctx);
             tracing::info!("applied tour-neutral hover/active stroke override");
         }
+        // IMZERO2_RENDER_CADENCE selects idle repaint behaviour; the Go-side
+        // registry (imzero2env.RenderCadence) documents the values and the Go
+        // decorator mirrors the choice. "reactive" drops to an idle heartbeat
+        // after warmup; anything else (incl. unset) is continuous, the default.
+        let reactive = std::env::var("IMZERO2_RENDER_CADENCE")
+            .map(|v| v.eq_ignore_ascii_case("reactive"))
+            .unwrap_or(false);
         // Schedule an initial repaint so logic() (and then ui()) actually fires
         // without waiting for a user event. See the logic() impl below for why
         // this matters — tl;dr: reactive eframe + hidden startup window + Go
@@ -200,7 +226,7 @@ impl<'a,R: std::io::BufRead,W: std::io::Write> App<'a,R,W> {
             fffi.texture_cache.clone(),
             fffi.link_zones.clone(),
         ));
-        Self { fffi }
+        Self { fffi, warmup_passes: WARMUP_PASSES, reactive }
     }
 }
 
@@ -223,21 +249,22 @@ impl<'a,R: std::io::BufRead,W: std::io::Write> eframe::App for App<'a,R,W> {
     /// visible. Before eframe 0.34 this wasn't needed because `update()`
     /// was called unconditionally.
     ///
-    /// NOTE: the explicit `ctx.request_repaint()` at the end puts the app in
-    /// *continuous-rendering* mode — every pass requests another pass, so
-    /// the loop never goes idle. Relying on the Go-side decorator's
-    /// `c.RequestRepaint()` alone (processed via the FFFI interpreter above)
-    /// is theoretically equivalent, but we observed first-frame stalls on
-    /// Wayland with VSYNC=on where the Go-side request arrived too late for
-    /// the initial `swap_buffers` handshake. Calling it here as well
-    /// guarantees the repaint flag is set after the frame's work completes,
-    /// before the pass ends, regardless of what Go did or when.
-    ///
-    /// Trade-off: the app paints at vsync rate continuously — fine for a dev
-    /// demo, but wastes CPU/GPU when idle. If battery/idle cost matters
-    /// later, replace with `ctx.request_repaint_after(…)` driven by a
-    /// "work pending" signal from the interpreter instead of an
-    /// unconditional call.
+    /// Repaint scheduling depends on the render cadence (IMZERO2_RENDER_CADENCE,
+    /// read into `self.reactive` in `new`):
+    ///   - Continuous (default): request an immediate repaint every pass, so
+    ///     the client paints at vsync rate.
+    ///   - Reactive: render the first [WARMUP_PASSES] passes immediately so the
+    ///     Wayland/VSYNC `swap_buffers` startup handshake settles — the Go-side
+    ///     `c.RequestRepaint()` historically arrived too late for it, so driving
+    ///     the repaint from here sets the flag before the pass ends regardless
+    ///     of what Go did or when — then drop to a slow idle heartbeat
+    ///     (`request_repaint_after(IDLE_REPAINT_INTERVAL)`). egui still
+    ///     schedules sooner repaints for input, animation and Go-side
+    ///     RequestRepaint opcodes (it keeps the earliest deadline), so
+    ///     interaction stays at vsync rate while a visible-but-idle window drops
+    ///     to a few fps.
+    /// The Go decorator mirrors this cadence; both sides must agree or the
+    /// immediate request wins and the loop spins continuously again.
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if let Err(e) = self.fffi.interpret_commands_outer(ctx) {
             match e {
@@ -259,7 +286,12 @@ impl<'a,R: std::io::BufRead,W: std::io::Write> eframe::App for App<'a,R,W> {
                 }
             }
         }
-        ctx.request_repaint();
+        if self.reactive && self.warmup_passes == 0 {
+            ctx.request_repaint_after(IDLE_REPAINT_INTERVAL);
+        } else {
+            self.warmup_passes = self.warmup_passes.saturating_sub(1);
+            ctx.request_repaint();
+        }
     }
 
     /// No-op: all work happens in `logic()`. We still have to provide `ui()`

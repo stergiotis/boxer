@@ -16,19 +16,21 @@ import (
 // FrameBudgetNs is the wall-clock budget for a single 60 Hz frame.
 const FrameBudgetNs int64 = 16_666_667
 
-// SlowFrameThresholdNs is the per-frame total wall-clock at or above which
-// [FrameMetrics.RecordBytes] emits a structured warning. Set to 1.5 × the
-// 60 Hz frame budget so jitter that stays inside vsync slack stays quiet,
-// but a frame that missed its deadline surfaces with its breakdown
-// (render_us / sync_us / interpret_us / written_b / read_b / frame).
+// SlowFrameThresholdNs is the real-work budget at or above which
+// [FrameMetrics.RecordBytes] emits a structured warning. "Real work" is the
+// Go-side widget build (render) plus the Rust-side interpret — the two slots
+// the app can actually regress. Sync wait is deliberately excluded; see
+// [shouldWarnSlowFrame] for why. Set to 1.5 × the 60 Hz frame budget so
+// jitter that stays inside vsync slack stays quiet, but a frame whose work
+// missed its deadline surfaces with its breakdown (render_us / sync_us /
+// interpret_us / written_b / read_b / frame).
 //
 // The log line is intentionally emitted from RecordBytes — last call in
 // the frame lifecycle — so the timings (set by EndFrame just before) and
 // the wire byte counters (set inside RecordBytes itself) line up against
-// the same frame. Use case is stutter triage: matching the per-second
-// rate of log lines against a perceived stutter cadence identifies which
-// slot of the Go-render / Rust-interpret / FFFI2-pipe path overran.
-// Zero disables.
+// the same frame. Use case is stutter triage: a run of log lines whose
+// render_us or interpret_us is elevated names the slot — Go-render or
+// Rust-interpret — that overran. Zero disables.
 const SlowFrameThresholdNs int64 = 25_000_000
 
 // slowFrameTopNScopes is the number of scope-hint entries (highest
@@ -142,10 +144,10 @@ func (inst *FrameMetrics) EndFrame() {
 // frame's wire counters can be sampled (after RenderLoopHandler returned
 // and Sync drained the inbound register fetches).
 //
-// When LastTotalNs (set by the immediately-preceding [EndFrame] call)
-// exceeds [SlowFrameThresholdNs], a structured warning is emitted with
-// the full per-frame breakdown — see SlowFrameThresholdNs for the use
-// case.
+// When the frame's real work (render + interpret) crosses
+// [SlowFrameThresholdNs] — see [shouldWarnSlowFrame] — a structured warning
+// is emitted with the full per-frame breakdown, total_us included so the
+// excluded sync wait stays visible during triage.
 func (inst *FrameMetrics) RecordBytes(written int, read int) {
 	inst.LastWritten = int64(written)
 	inst.LastRead = int64(read)
@@ -153,7 +155,7 @@ func (inst *FrameMetrics) RecordBytes(written int, read int) {
 		inst.EmaWritten = ema(inst.EmaWritten, float64(written))
 		inst.EmaRead = ema(inst.EmaRead, float64(read))
 	}
-	if SlowFrameThresholdNs > 0 && inst.LastTotalNs > SlowFrameThresholdNs {
+	if shouldWarnSlowFrame(inst.LastRenderNs, inst.LastInterpretNs, SlowFrameThresholdNs) {
 		log.Warn().
 			Uint64("frame", inst.frameCounter).
 			Int64("render_us", inst.LastRenderNs/1000).
@@ -165,6 +167,19 @@ func (inst *FrameMetrics) RecordBytes(written int, read int) {
 			Str("top_scopes", formatTopScopes(runtime.ScopeHintsSnapshot(), slowFrameTopNScopes)).
 			Msg("imzero2: slow frame")
 	}
+}
+
+// shouldWarnSlowFrame reports whether a frame's real work — Go-side widget
+// build (renderNs) plus Rust-side interpret (interpretNs) — crossed
+// thresholdNs. It deliberately ignores sync wait: when a window is occluded
+// or simply idle the compositor throttles vblank delivery (≈1 Hz on Wayland),
+// and with vsync the Go frame loop blocks in Sync for that whole interval.
+// That inflates total wall-clock to ~1 s while render and interpret stay in
+// the low milliseconds — a display-pacing artifact, not a regression the app
+// can act on. Gating on render+interpret keeps the warning tied to work.
+// thresholdNs <= 0 disables the warning.
+func shouldWarnSlowFrame(renderNs int64, interpretNs int64, thresholdNs int64) bool {
+	return thresholdNs > 0 && renderNs+interpretNs > thresholdNs
 }
 
 // formatTopScopes returns "kind1=bytes1,kind2=bytes2,…" for up to n

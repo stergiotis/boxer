@@ -13,6 +13,12 @@ import (
 	"github.com/stergiotis/boxer/public/config/env"
 )
 
+// Render cadence values for [RenderCadence].
+const (
+	RenderCadenceContinuous = "continuous"
+	RenderCadenceReactive   = "reactive"
+)
+
 var (
 	// ScreenshotDir is the destination for per-window PNG captures
 	// produced by the demo tour infrastructure. Empty means
@@ -77,6 +83,27 @@ var (
 		Description: "tour capture size as WxH (e.g. 1600x900); empty uses per-demo defaults",
 		Category:    env.CategoryDev,
 	})
+
+	// RenderCadence selects how the imzero2 frame loop schedules repaints
+	// when the UI is idle (no input or animation):
+	//   - "continuous" (default): request a repaint every pass, so the client
+	//     paints at vsync rate. Most responsive; an occluded window is still
+	//     throttled to the compositor's frame-callback rate for free, so this
+	//     no longer floods the slow-frame log (that gate keys on real work,
+	//     not wall-clock — see metrics.shouldWarnSlowFrame).
+	//   - "reactive": after a short warmup, request only a slow idle heartbeat;
+	//     egui still repaints immediately for input and animation, so
+	//     interaction stays at vsync rate while a visible-but-idle window drops
+	//     to a few fps, saving CPU/GPU.
+	// Read by both the Go decorator (carousel.decorateRenderer) and the Rust
+	// client (src/imzero2/app.rs), which inherits the variable as a child
+	// process.
+	RenderCadence = env.NewCategorialString(env.Spec{
+		Name:        "IMZERO2_RENDER_CADENCE",
+		Description: "frame-loop repaint cadence when idle: continuous (vsync rate) | reactive (idle heartbeat)",
+		Category:    env.CategoryDev,
+		Default:     RenderCadenceContinuous,
+	}, []string{RenderCadenceContinuous, RenderCadenceReactive})
 )
 
 // ScreenshotSizeWH parses [ScreenshotSize] as "WxH". Returns (0,0,false)

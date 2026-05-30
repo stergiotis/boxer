@@ -291,3 +291,34 @@ func TestFrameBudgetNs_Is60Hz(t *testing.T) {
 		t.Errorf("FrameBudgetNs: got %d want %d", FrameBudgetNs, want)
 	}
 }
+
+func TestShouldWarnSlowFrame_GatesOnWorkNotTotal(t *testing.T) {
+	const thr = SlowFrameThresholdNs // 25ms
+	cases := []struct {
+		name                  string
+		renderNs, interpretNs int64
+		thresholdNs           int64
+		want                  bool
+	}{
+		// The occlusion/idle case the gate exists for: trivial render+interpret,
+		// huge sync wait elsewhere — must stay quiet.
+		{"trivial work stays quiet", 4_000_000, 6_000_000, thr, false},
+		// Real regressions on either side must still fire.
+		{"slow Go render fires", 30_000_000, 1_000_000, thr, true},
+		{"slow Rust interpret fires", 2_000_000, 40_000_000, thr, true},
+		{"sum crossing threshold fires", 13_000_000, 13_000_000, thr, true},
+		// Strict >: exactly at the threshold stays quiet.
+		{"exactly at threshold stays quiet", thr, 0, thr, false},
+		// Zero/negative threshold disables regardless of work.
+		{"zero threshold disables", 100_000_000, 100_000_000, 0, false},
+		{"negative threshold disables", 100_000_000, 100_000_000, -1, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := shouldWarnSlowFrame(tc.renderNs, tc.interpretNs, tc.thresholdNs); got != tc.want {
+				t.Errorf("shouldWarnSlowFrame(%d,%d,%d): got %v want %v",
+					tc.renderNs, tc.interpretNs, tc.thresholdNs, got, tc.want)
+			}
+		})
+	}
+}

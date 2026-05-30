@@ -81,6 +81,12 @@ func decorateRenderer(r func() error, extraMenus func(), status *runtimestatus.S
 	//      pass renders for capture, rather than the interactive idle
 	//      heartbeat below.
 	screenshotMode := imzero2env.ScreenshotDir.Get() != ""
+	// Render cadence (IMZERO2_RENDER_CADENCE), captured once. Continuous
+	// (default) paints at vsync rate; reactive drops to an idle heartbeat
+	// when nothing is happening. The Rust client reads the same variable;
+	// both sides must agree, since egui takes the soonest repaint deadline —
+	// an immediate request on either side overrides the other's heartbeat.
+	reactive := imzero2env.RenderCadence.Get() == imzero2env.RenderCadenceReactive
 	return func() error {
 		// F1 global shortcut: open or focus HelpHost. The cached value
 		// was drained from egui's input queue during StateManager.Sync
@@ -93,15 +99,13 @@ func decorateRenderer(r func() error, extraMenus func(), status *runtimestatus.S
 				log.Warn().Err(openErr).Msg("F1: helphost open failed")
 			}
 		}
-		// Drive the next frame. In screenshot/tour mode keep requesting
-		// immediate repaints so every pass renders for capture. Otherwise
-		// request a slow idle heartbeat: egui requests sooner repaints for
+		// Drive the next frame. Continuous mode (the default) and screenshot
+		// capture always request an immediate repaint. Reactive mode requests
+		// a slow idle heartbeat instead; egui still repaints immediately for
 		// input and animation (it keeps the earliest deadline), so interaction
-		// stays at vsync rate, but an idle or occluded window stops driving the
-		// Go↔Rust pipe at full vsync. The Rust side mirrors this cadence
-		// (src/imzero2/app.rs); both must agree or the immediate request wins
-		// and continuous mode returns.
-		if screenshotMode {
+		// stays at vsync rate while a visible-but-idle window drops to a few
+		// fps. The Rust side mirrors this (src/imzero2/app.rs).
+		if screenshotMode || !reactive {
 			c.RequestRepaint()
 		} else {
 			c.RequestRepaintAfter(idleRepaintIntervalSecs)
