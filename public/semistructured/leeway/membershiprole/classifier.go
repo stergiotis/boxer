@@ -66,6 +66,29 @@ type MembershipValue struct {
 	HumanReadableParams string
 }
 
+// IsPlaceholder reports whether mv is a driver-emitted "spec-slot is empty" tag
+// rather than a real membership.
+//
+// The Leeway driver emits one AddMembership* call per membership-spec slot
+// declared on a section, regardless of whether the slot carries data for the
+// current attribute. Empty slots manifest as zero-ref / empty-verbatim /
+// empty-params payloads; treating them as real memberships would make every
+// such attribute resolve to the same "ref:0" key. Callers (the card JSON
+// emitter, the leewaywidgets table emitter) skip placeholders.
+func IsPlaceholder(mv MembershipValue) (placeholder bool) {
+	switch mv.Kind {
+	case MembershipKindRef, MembershipKindRefParametrized:
+		placeholder = mv.Ref == 0 && mv.HumanReadableRef == "" && mv.Params == "" && mv.HumanReadableParams == ""
+	case MembershipKindMixedLowCardRefHighCardParam:
+		placeholder = mv.Ref == 0 && mv.HumanReadableRef == "" && mv.Params == "" && mv.HumanReadableParams == ""
+	case MembershipKindMixedLowCardVerbatimHighCardParam:
+		placeholder = mv.Verbatim == "" && mv.HumanReadableValue == "" && mv.Params == "" && mv.HumanReadableParams == ""
+	case MembershipKindVerbatim:
+		placeholder = mv.Verbatim == "" && mv.HumanReadableValue == ""
+	}
+	return
+}
+
 // SectionContext provides per-section state that a classifier may consult.
 // UseAspects carries the section-level uniformity hints
 // [useaspects.AspectSectionMembershipsAllPrimary] /

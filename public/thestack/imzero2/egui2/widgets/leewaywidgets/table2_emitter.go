@@ -577,7 +577,7 @@ func (inst *Table2CardEmitter) addMembership(mv membershiprole.MembershipValue, 
 	if inst.currentRow == nil {
 		return
 	}
-	if isPlaceholderMembership(mv) {
+	if membershiprole.IsPlaceholder(mv) {
 		return
 	}
 	display := label
