@@ -66,6 +66,8 @@ func writeTopoFixture(t *testing.T) (sysRoot string) {
 		mustWrite(t, filepath.Join(cache, "uevent"), "DEVTYPE=cache\n")
 	}
 	mustWrite(t, filepath.Join(sysRoot, "devices/system/node/node0/cpulist"), "0-7\n")
+	mustWrite(t, filepath.Join(sysRoot, "devices/system/node/node0/meminfo"),
+		"Node 0 MemTotal:       8000000 kB\nNode 0 MemFree:        4000000 kB\n")
 	return
 }
 
@@ -116,6 +118,7 @@ func TestReadTopology_Hierarchy(t *testing.T) {
 	numa := pkg.Children[0]
 	assert.Equal(t, cpu.TopoKindNUMANode, numa.Kind)
 	assert.Equal(t, "NUMANode #0", numa.Label())
+	assert.Equal(t, uint64(8000000)*1024, numa.MemBytes, "per-node MemTotal, in bytes")
 
 	// NUMANode → two L3 caches (the CCX split)
 	require.Len(t, numa.Children, 2)

@@ -7,6 +7,7 @@ import (
 	"math"
 	"strings"
 
+	"github.com/dustin/go-humanize"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/cpu"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sensors"
@@ -335,6 +336,9 @@ func (inst *App) renderTopoHoverDetail(snap *PublishedSnapshot) {
 			}
 		}
 	case cpu.TopoKindNUMANode:
+		if obj.MemBytes > 0 {
+			fmt.Fprintf(&b, " · %s RAM", humanize.IBytes(obj.MemBytes))
+		}
 		fmt.Fprintf(&b, " · %d cores / %d threads",
 			countKind(obj, cpu.TopoKindCore), countKind(obj, cpu.TopoKindPU))
 	case cpu.TopoKindMachine:
@@ -347,6 +351,15 @@ func (inst *App) renderTopoHoverDetail(snap *PublishedSnapshot) {
 			if cs.UsageWattsAvailable {
 				fmt.Fprintf(&b, " · %.1f W", cs.UsageWatts)
 			}
+		}
+		if snap != nil && snap.LatestMem != nil {
+			m := snap.LatestMem
+			var pct uint64
+			if m.TotalBytes > 0 {
+				pct = m.UsedBytes * 100 / m.TotalBytes
+			}
+			fmt.Fprintf(&b, " · RAM %s / %s (%d%%)",
+				humanize.IBytes(m.UsedBytes), humanize.IBytes(m.TotalBytes), pct)
 		}
 	}
 	c.Label(b.String()).Send()

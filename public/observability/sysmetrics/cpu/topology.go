@@ -94,6 +94,10 @@ type TopoObject struct {
 	CacheType      CacheTypeE
 	CacheSizeBytes uint64
 
+	// MemBytes is the node-local RAM in bytes (MemTotal from the node's
+	// meminfo); set only for Kind == TopoKindNUMANode, 0 otherwise.
+	MemBytes uint64
+
 	// Children are the contained objects, in discovery order.
 	Children []*TopoObject
 }
@@ -174,12 +178,14 @@ func ReadTopology(opts TopologyOptions) (topo Topology, err error) {
 		return
 	}
 
-	numaByCPU := readNUMAByCPU(sys) // cpu id -> node id, or nil when unavailable
+	// cpu id -> node id, and node id -> local RAM bytes; both nil when the
+	// NUMA sysfs tree is absent.
+	numaByCPU, nodeMem := readNUMA(sys)
 
 	b := newTopoBuilder()
 	for _, c := range online {
 		var steps []topoStep
-		steps, err = readCPUSteps(sys, c, numaByCPU)
+		steps, err = readCPUSteps(sys, c, numaByCPU, nodeMem)
 		if err != nil {
 			err = eb.Build().Int32("cpu", c).Errorf("read cpu topology: %w", err)
 			return
@@ -201,6 +207,7 @@ type topoStep struct {
 	level   uint8
 	ctype   CacheTypeE
 	size    uint64
+	mem     uint64
 	// key uniquely identifies the object among its siblings: it folds the
 	// covered CPU set together with the cache discriminators so two CPUs that
 	// share, say, an L3 dedupe to the same node while L1d and L1i (same set,
@@ -211,7 +218,7 @@ type topoStep struct {
 // readCPUSteps builds the outermost-first containment chain for one logical
 // CPU: Package, [NUMANode], caches (level-descending), Core, PU. The fixed
 // order respects physical CPU-set inclusion on standard topologies.
-func readCPUSteps(sys *sysfs.Reader, cpu int32, numaByCPU map[int32]int32) (steps []topoStep, err error) {
+func readCPUSteps(sys *sysfs.Reader, cpu int32, numaByCPU map[int32]int32, nodeMem map[int32]uint64) (steps []topoStep, err error) {
 	base := "devices/system/cpu/cpu" + strconv.FormatInt(int64(cpu), 10)
 
 	pkgID, err := readInt32(sys, base+"/topology/physical_package_id")
@@ -243,7 +250,7 @@ func readCPUSteps(sys *sysfs.Reader, cpu int32, numaByCPU map[int32]int32) (step
 	if numaByCPU != nil {
 		if node, ok := numaByCPU[cpu]; ok {
 			steps = append(steps, topoStep{
-				kind: TopoKindNUMANode, osIndex: node,
+				kind: TopoKindNUMANode, osIndex: node, mem: nodeMem[node],
 				key: "numa:" + strconv.FormatInt(int64(node), 10),
 			})
 		}
@@ -353,6 +360,7 @@ func (b *topoBuilder) insert(steps []topoStep) {
 				CacheLevel:     s.level,
 				CacheType:      s.ctype,
 				CacheSizeBytes: s.size,
+				MemBytes:       s.mem,
 			}
 			parent.Children = append(parent.Children, child)
 			idx[s.key] = child
@@ -361,12 +369,13 @@ func (b *topoBuilder) insert(steps []topoStep) {
 	}
 }
 
-// readNUMAByCPU returns a cpu-id -> node-id map, or nil when the NUMA sysfs
-// tree is absent (UMA machines or stripped kernels).
-func readNUMAByCPU(sys *sysfs.Reader) (m map[int32]int32) {
+// readNUMA returns a cpu-id -> node-id map and a node-id -> local-RAM-bytes
+// map, or nil maps when the NUMA sysfs tree is absent (UMA machines or
+// stripped kernels). Memory comes from each node's meminfo MemTotal.
+func readNUMA(sys *sysfs.Reader) (cpuNode map[int32]int32, nodeMem map[int32]uint64) {
 	names, err := sys.ListDir("devices/system/node")
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	for _, name := range names {
 		if !strings.HasPrefix(name, "node") {
@@ -376,18 +385,45 @@ func readNUMAByCPU(sys *sysfs.Reader) (m map[int32]int32) {
 		if perr != nil {
 			continue
 		}
-		list, rerr := sys.ReadString("devices/system/node/" + name + "/cpulist")
-		if rerr != nil {
-			continue
-		}
-		for _, c := range parseCPUSet(list) {
-			if m == nil {
-				m = make(map[int32]int32)
+		if list, rerr := sys.ReadString("devices/system/node/" + name + "/cpulist"); rerr == nil {
+			for _, c := range parseCPUSet(list) {
+				if cpuNode == nil {
+					cpuNode = make(map[int32]int32)
+				}
+				cpuNode[c] = int32(node)
 			}
-			m[c] = int32(node)
+		}
+		if mb := readNodeMemTotal(sys, name); mb > 0 {
+			if nodeMem == nil {
+				nodeMem = make(map[int32]uint64)
+			}
+			nodeMem[int32(node)] = mb
 		}
 	}
 	return
+}
+
+// readNodeMemTotal parses a node's meminfo for the MemTotal field (reported in
+// kB) and returns it in bytes; 0 when the file or field is absent.
+func readNodeMemTotal(sys *sysfs.Reader, nodeName string) (bytes uint64) {
+	data, err := sys.ReadString("devices/system/node/" + nodeName + "/meminfo")
+	if err != nil {
+		return 0
+	}
+	for line := range strings.SplitSeq(data, "\n") {
+		_, after, ok := strings.Cut(line, "MemTotal:")
+		if !ok {
+			continue
+		}
+		fields := strings.Fields(after)
+		if len(fields) >= 1 {
+			if kb, perr := strconv.ParseUint(fields[0], 10, 64); perr == nil {
+				return kb * 1024
+			}
+		}
+		break
+	}
+	return 0
 }
 
 // readInt32 reads a sysfs leaf holding a single integer.

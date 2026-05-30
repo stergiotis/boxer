@@ -3,6 +3,8 @@
 package imztop
 
 import (
+	"github.com/dustin/go-humanize"
+
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/cpu"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap/layout"
 )
@@ -25,7 +27,12 @@ func buildTopoLayout(topo cpu.Topology) (root *layout.Node, nodeObj map[*layout.
 	}
 	var conv func(o *cpu.TopoObject) *layout.Node
 	conv = func(o *cpu.TopoObject) (n *layout.Node) {
-		n = &layout.Node{Name: o.Label()}
+		name := o.Label()
+		// lstopo-style: show the NUMA node's local RAM size in the box label.
+		if o.Kind == cpu.TopoKindNUMANode && o.MemBytes > 0 {
+			name += " · " + humanize.IBytes(o.MemBytes)
+		}
+		n = &layout.Node{Name: name}
 		nodeObj[n] = o
 		if o.Kind == cpu.TopoKindPU {
 			n.Size = 1
