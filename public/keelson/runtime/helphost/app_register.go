@@ -8,6 +8,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 )
@@ -39,6 +40,17 @@ var manifest = app.Manifest{
 	SurfaceHints: app.SurfaceHints{
 		PreferredWidth:  900,
 		PreferredHeight: 640,
+	},
+	// The reader's one capability: copy a rendered code/verbatim block to
+	// the clipboard via the per-block copy button (ADR-0026 Update
+	// 2026-05-30). Pub only — the broker subscribes to clipboard.write and
+	// the windowed host drains the queued text into an egui copy_text op.
+	Caps: []app.SubjectFilter{
+		{
+			Pattern:   clipboardbroker.SubjectWrite,
+			Direction: app.CapDirectionPub,
+			Reason:    "copy help code blocks to the clipboard",
+		},
 	},
 	// Self-documenting corpus: an overview of the Help app and a
 	// how-to for wiring help docs into a new app's manifest. Anyone

@@ -22,6 +22,7 @@ package helphost
 
 import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
@@ -68,6 +69,13 @@ type HelpHost struct {
 	manifest app.Manifest
 	ids      *c.WidgetIdStack
 	lib      help.LibraryI
+
+	// bus is the per-instance BusI captured at Mount. Used only for the
+	// clipboard.write copy affordance on rendered code blocks (the
+	// manifest declares that single cap); nil on M1 hosts (NoopBus),
+	// in which case the copy button is still shown but the request is a
+	// no-op that errors silently.
+	bus app.BusI
 
 	// Selection state. Empty AppId means "no book selected, show the
 	// library overview"; empty Doc means "book selected, no doc
@@ -173,12 +181,15 @@ func (inst *HelpHost) Manifest() (m app.Manifest) {
 	return
 }
 
-// Mount picks up the host-supplied per-instance WidgetIdStack. The
-// host has already pre-pushed a window-unique salt onto the stack so
-// widget ids derived during Frame() can't collide with another open
-// app's ids in the same frame.
+// Mount picks up the host-supplied per-instance WidgetIdStack and the
+// BusI. The host has already pre-pushed a window-unique salt onto the
+// stack so widget ids derived during Frame() can't collide with another
+// open app's ids in the same frame. The bus carries the clipboard.write
+// requests issued by the code-block copy buttons (ADR-0026 Update
+// 2026-05-30); on an M1 host it is a NoopBus and copies error silently.
 func (inst *HelpHost) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
+	inst.bus = ctx.Bus()
 	return
 }
 
@@ -325,7 +336,7 @@ func (inst *HelpHost) renderReader() {
 		renderSource(inst.ids, src)
 	default:
 		section := inst.consumeScrollTarget()
-		renderRendered(inst.ids, doc, section)
+		renderRendered(inst.ids, doc, section, inst.clipboardSink())
 	}
 }
 
@@ -380,16 +391,41 @@ func (inst *HelpHost) renderViewToggle() {
 // markdown.WithScrollToSection; the caller is responsible for clearing
 // the value after the scroll lands (HelpHost.consumeScrollTarget does
 // this).
-func renderRendered(ids *c.WidgetIdStack, doc *markdown.Doc, scrollToSection string) {
+// clipboard, when non-nil, adds a copy-to-clipboard button to every
+// rendered code/verbatim block ([markdown.WithClipboard]); nil omits the
+// affordance entirely.
+func renderRendered(ids *c.WidgetIdStack, doc *markdown.Doc, scrollToSection string, clipboard func(text string)) {
+	opts := make([]markdown.RenderOpt, 0, 2)
+	if scrollToSection != "" {
+		opts = append(opts, markdown.WithScrollToSection(scrollToSection))
+	}
+	if clipboard != nil {
+		opts = append(opts, markdown.WithClipboard(clipboard))
+	}
 	for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
 		for range c.IdScope(ids.PrepareStr("doc-render")) {
-			if scrollToSection != "" {
-				doc.Render(ids, markdown.WithScrollToSection(scrollToSection))
-			} else {
-				doc.Render(ids)
-			}
+			doc.Render(ids, opts...)
 		}
 	}
+}
+
+// clipboardSink returns the WithClipboard sink for rendered code blocks,
+// or nil when no bus is available (M1 host) — in which case no copy
+// button is shown. The sink fires the clipboard.write request off the
+// frame goroutine: Request blocks until the broker acks, and the frame
+// thread must not block. Errors are swallowed — a failed copy is not
+// worth interrupting a help reader.
+func (inst *HelpHost) clipboardSink() (sink func(text string)) {
+	if inst.bus == nil {
+		return nil
+	}
+	bus := inst.bus
+	sink = func(text string) {
+		go func() {
+			_, _ = bus.Request(clipboardbroker.SubjectWrite, []byte(text))
+		}()
+	}
+	return
 }
 
 // renderSource draws the raw .md source inside a syntax-highlighted
