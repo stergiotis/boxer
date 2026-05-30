@@ -42,11 +42,15 @@ type PlainCol struct {
 	GoType  string // matching DTO field Go type, e.g. "uint64" / "time.Time" / "[]byte"
 }
 
-// MembershipChannel enumerates the eight leeway membership channels the
+// MembershipChannel selects one of the leeway membership channels the
 // DML exposes via AddMembership*P. Per ADR-0008 D3, every lw:-tagged
 // field selects one channel; the section-level uniformity invariant
-// (one channel per section) generalises the historical "all Verbatim
-// or all Ref" rule to all eight values.
+// (one channel per section) holds across all channels.
+//
+// Only the four "simple" channels are implemented: LowCardRef (the
+// default), LowCardVerbatim, HighCardRef, and HighCardVerbatim. The
+// parametrized / mixed channels from ADR-0008 D3 (Cut 2) are recognised
+// as flag spellings but rejected by SplitLW until they are implemented.
 //
 // The default (zero value) is MembershipChannelLowCardRef so existing
 // DTOs without a channel flag continue to compile.
@@ -68,24 +72,6 @@ const (
 	// MembershipChannelHighCardVerbatim mirrors LowCardVerbatim on the
 	// high-card channel: AddMembershipHighCardVerbatimP([]byte).
 	MembershipChannelHighCardVerbatim
-	// MembershipChannelLowCardRefParametrized carries a single []byte
-	// params payload via AddMembershipLowCardRefParametrizedP. The Go
-	// field type is []byte and the value IS the params blob.
-	MembershipChannelLowCardRefParametrized
-	// MembershipChannelHighCardRefParametrized is the high-card
-	// analogue of LowCardRefParametrized.
-	MembershipChannelHighCardRefParametrized
-	// MembershipChannelMixedLowCardRef carries both a uint64 membership
-	// id and a []byte params blob via AddMembershipMixedLowCardRefP.
-	// Cut 2 (per ADR-0008): two-field DTO pairing the section value
-	// with a sibling carrier carrying Id + Params.
-	MembershipChannelMixedLowCardRef
-	// MembershipChannelMixedLowCardVerbatim carries both a uint64
-	// (typed as `lowCardVerbatim` by the DML, but uint64 on the wire)
-	// and a []byte params blob via AddMembershipMixedLowCardVerbatimP.
-	// Cut 2 (per ADR-0008): same two-field DTO pairing as
-	// MixedLowCardRef.
-	MembershipChannelMixedLowCardVerbatim
 )
 
 // String returns the lw: flag spelling for this channel. The default
@@ -100,14 +86,6 @@ func (c MembershipChannel) String() string {
 		return "highCardRef"
 	case MembershipChannelHighCardVerbatim:
 		return "highCardVerbatim"
-	case MembershipChannelLowCardRefParametrized:
-		return "lowCardRefParametrized"
-	case MembershipChannelHighCardRefParametrized:
-		return "highCardRefParametrized"
-	case MembershipChannelMixedLowCardRef:
-		return "mixedLowCardRef"
-	case MembershipChannelMixedLowCardVerbatim:
-		return "mixedLowCardVerbatim"
 	}
 	return "unknown"
 }
@@ -115,8 +93,6 @@ func (c MembershipChannel) String() string {
 // EmbedsLiteralName reports whether the channel's wire identity is the
 // literal lw: membership name as []byte rather than a uint64 id from
 // the lookup registry. True for LowCardVerbatim and HighCardVerbatim.
-// Mixed*Verbatim is false: the DML signature uses a uint64 first arg
-// despite the channel name.
 func (c MembershipChannel) EmbedsLiteralName() bool {
 	switch c {
 	case MembershipChannelLowCardVerbatim, MembershipChannelHighCardVerbatim:
@@ -128,28 +104,13 @@ func (c MembershipChannel) EmbedsLiteralName() bool {
 
 // NeedsKindVar reports whether emitted code requires a package-level
 // kindXxx symbol holding the resolved uint64 membership id for this
-// channel. True for any channel whose DML method takes a uint64 ref
-// argument (LowCardRef, HighCardRef, MixedLowCardRef,
-// MixedLowCardVerbatim). False for channels that embed a []byte
-// directly on the wire.
+// channel. True for the ref channels (LowCardRef, HighCardRef); false
+// for the verbatim channels, which embed a []byte name directly on the
+// wire.
 func (c MembershipChannel) NeedsKindVar() bool {
 	switch c {
 	case MembershipChannelLowCardRef,
-		MembershipChannelHighCardRef,
-		MembershipChannelMixedLowCardRef,
-		MembershipChannelMixedLowCardVerbatim:
-		return true
-	default:
-		return false
-	}
-}
-
-// IsMixed reports whether the channel's DML signature takes two
-// arguments (uint64 id, []byte params) and therefore requires a
-// dedicated carrier struct on the DTO side.
-func (c MembershipChannel) IsMixed() bool {
-	switch c {
-	case MembershipChannelMixedLowCardRef, MembershipChannelMixedLowCardVerbatim:
+		MembershipChannelHighCardRef:
 		return true
 	default:
 		return false
@@ -163,8 +124,7 @@ func (c MembershipChannel) IsMixed() bool {
 func (c MembershipChannel) ReadIterElemType() string {
 	switch c {
 	case MembershipChannelLowCardRef,
-		MembershipChannelHighCardRef,
-		MembershipChannelMixedLowCardRef:
+		MembershipChannelHighCardRef:
 		return "uint64"
 	default:
 		return "[]byte"
@@ -186,14 +146,6 @@ func (c MembershipChannel) AddMethodSuffix() string {
 		return "HighCardRef"
 	case MembershipChannelHighCardVerbatim:
 		return "HighCardVerbatim"
-	case MembershipChannelLowCardRefParametrized:
-		return "LowCardRefParametrized"
-	case MembershipChannelHighCardRefParametrized:
-		return "HighCardRefParametrized"
-	case MembershipChannelMixedLowCardRef:
-		return "MixedLowCardRef"
-	case MembershipChannelMixedLowCardVerbatim:
-		return "MixedLowCardVerbatim"
 	}
 	return ""
 }
