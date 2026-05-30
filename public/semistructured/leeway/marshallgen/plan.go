@@ -244,7 +244,6 @@ type FieldFlags struct {
 	ConstValue string
 }
 
-
 // TaggedField is one DTO field (or constant) bound to a leeway
 // membership via an lw: tag.
 type TaggedField struct {
@@ -289,17 +288,7 @@ func (f TaggedField) KindVar() string {
 		return ""
 	}
 	if f.IsConst {
-		return "kind" + upperFirstASCII(f.LWMembership)
+		return "kind" + UpperFirst(f.LWMembership)
 	}
 	return "kind" + f.GoFieldName
-}
-
-func upperFirstASCII(s string) string {
-	if s == "" {
-		return s
-	}
-	if s[0] >= 'a' && s[0] <= 'z' {
-		return string(s[0]-32) + s[1:]
-	}
-	return s
 }

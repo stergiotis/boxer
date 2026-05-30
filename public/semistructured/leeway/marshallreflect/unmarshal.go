@@ -48,10 +48,12 @@ func Unmarshal[T any](args UnmarshalArgs, out *[]T, lookup LookupI) (err error) 
 	if lookup == nil {
 		lookup = NoLookup{}
 	}
-	plan, err := PlanFor[T]()
+	rowType := reflect.TypeOf((*T)(nil)).Elem()
+	r, err := resolveForType(rowType)
 	if err != nil {
 		return
 	}
+	plan := r.plan
 
 	// Pre-resolve ref-channel membership ids — cached so the inner
 	// dispatch loop doesn't pay one lookup per attribute per row. Only
@@ -65,27 +67,26 @@ func Unmarshal[T any](args UnmarshalArgs, out *[]T, lookup LookupI) (err error) 
 		var id uint64
 		id, err = lookup.LookupMembership(f.LWMembership)
 		if err != nil {
-			err = eb.Build().Str("membership", f.LWMembership).Errorf("marshallreflect: %w", err)
+			err = eb.Build().Str("membership", f.LWMembership).Errorf("%w", err)
 			return
 		}
 		membIDs[f.LWMembership] = id
 	}
 
-	groups := computeGroups(plan)
-	rowType := reflect.TypeOf((*T)(nil)).Elem()
+	groups := r.groups
 
 	for i := 0; i < args.NumRows; i++ {
 		rowPtr := reflect.New(rowType)
 		rowVal := rowPtr.Elem()
 		err = unmarshalPlain(rowVal, plan, args, i)
 		if err != nil {
-			err = eb.Build().Int("row", i).Errorf("marshallreflect: plain decode: %w", err)
+			err = eb.Build().Int("row", i).Errorf("plain decode: %w", err)
 			return
 		}
 		for _, g := range groups {
 			err = unmarshalSection(rowVal, g, args, i, membIDs)
 			if err != nil {
-				err = eb.Build().Int("row", i).Str("section", g.Section).Errorf("marshallreflect: %w", err)
+				err = eb.Build().Int("row", i).Str("section", g.Section).Errorf("%w", err)
 				return
 			}
 		}
@@ -95,10 +96,10 @@ func Unmarshal[T any](args UnmarshalArgs, out *[]T, lookup LookupI) (err error) 
 }
 
 func unmarshalPlain(row reflect.Value, plan *marshallgen.Plan, args UnmarshalArgs, i int) (err error) {
-	idCol := findPlainCol(plan, "id")
+	idCol := marshallgen.FindPlainCol(plan, "id")
 	row.FieldByName(idCol.GoField).SetUint(args.IdCol.Value(i))
 
-	if nkCol := findPlainCol(plan, "naturalKey"); nkCol != nil {
+	if nkCol := marshallgen.FindPlainCol(plan, "naturalKey"); nkCol != nil {
 		raw := args.NkCol.Value(i)
 		switch nkCol.GoType {
 		case "[]byte":
@@ -112,11 +113,11 @@ func unmarshalPlain(row reflect.Value, plan *marshallgen.Plan, args UnmarshalArg
 			return
 		}
 	}
-	if tsCol := findPlainCol(plan, "ts"); tsCol != nil {
+	if tsCol := marshallgen.FindPlainCol(plan, "ts"); tsCol != nil {
 		ns := int64(args.TsCol.Value(i))
 		setTimeColumn(row.FieldByName(tsCol.GoField), tsCol.GoType, ns)
 	}
-	if lcCol := findPlainCol(plan, "expiresAt"); lcCol != nil {
+	if lcCol := marshallgen.FindPlainCol(plan, "expiresAt"); lcCol != nil {
 		ns := int64(args.LcCol.Value(i))
 		setTimeColumn(row.FieldByName(lcCol.GoField), lcCol.GoType, ns)
 	}
@@ -132,7 +133,7 @@ func setTimeColumn(fld reflect.Value, goType string, ns int64) {
 	}
 }
 
-func unmarshalSection(row reflect.Value, g sectionGroup, args UnmarshalArgs, i int, membIDs map[string]uint64) (err error) {
+func unmarshalSection(row reflect.Value, g marshallgen.SectionGroup, args UnmarshalArgs, i int, membIDs map[string]uint64) (err error) {
 	attrs := reflect.ValueOf(args.SectionAttrs(g.Section))
 	membs := reflect.ValueOf(args.SectionMembs(g.Section))
 	if !attrs.IsValid() || !membs.IsValid() {
@@ -165,9 +166,12 @@ func unmarshalSection(row reflect.Value, g sectionGroup, args UnmarshalArgs, i i
 		accs[f.GoFieldName] = a
 	}
 
+	// Section channel is uniform across its fields (enforced by the
+	// plan's channel-uniformity check); resolve it once for all attributes.
+	ch := g.Channel()
 	n := mustCall(attrs, "GetNumberOfAttributes", reflect.ValueOf(entityIdx(i)))[0].Int()
 	for attrJ := int64(0); attrJ < n; attrJ++ {
-		matchedField, found := dispatchMembership(membs, i, attrJ, fields, membIDs)
+		matchedField, found := dispatchMembership(membs, i, attrJ, fields, membIDs, ch)
 		if !found {
 			continue
 		}
@@ -220,18 +224,10 @@ func unmarshalSection(row reflect.Value, g sectionGroup, args UnmarshalArgs, i i
 // compatibility (encode-then-decode through either path) is
 // preserved; cross-producer compatibility against multi-membership
 // attributes is not.
-func dispatchMembership(membs reflect.Value, i int, attrJ int64, fields []marshallgen.TaggedField, membIDs map[string]uint64) (matched marshallgen.TaggedField, found bool) {
-	// Determine channel from any non-const field's flag (all fields in
-	// a section agree on the channel per ParsePlan uniformity check).
-	var ch marshallgen.MembershipChannel
-	for _, f := range fields {
-		if f.IsConst {
-			continue
-		}
-		ch = f.Flags.Channel
-		break
-	}
-
+func dispatchMembership(membs reflect.Value, i int, attrJ int64, fields []marshallgen.TaggedField, membIDs map[string]uint64, ch marshallgen.MembershipChannel) (matched marshallgen.TaggedField, found bool) {
+	// ch is the section's (uniform) membership channel, resolved once by
+	// the caller — all fields in a section agree on it per the plan's
+	// channel-uniformity check.
 	method := "GetMembValue" + ch.AddMethodSuffix()
 	seq := mustCall(membs, method, reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
 
@@ -300,14 +296,14 @@ func consumeValue(attrs reflect.Value, i int, attrJ int64, f marshallgen.TaggedF
 		// Single-value read — scalar section uses GetAttrValueValue
 		// returning T; non-scalar section uses GetAttrValueSingleOrDefault.
 		method := "GetAttrValueSingleOrDefault"
-		switch classifyBegin(f) {
-		case shapeScalarBegin, shapeExplodeBegin:
+		switch marshallgen.ClassifyBegin(f) {
+		case marshallgen.ShapeScalarBegin, marshallgen.ShapeExplodeBegin:
 			method = "GetAttrValueValue"
 		}
 		v := mustCall(attrs, method, reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
-		switch f.GoType {
-		case "[4]byte", "[16]byte":
-			// Copy bytes into a fresh array via the val's bytes.
+		switch {
+		case marshallgen.IsFixedByteArray(f.GoType):
+			// Copy bytes into a fresh [N]byte array from the wire blob.
 			arrType := goTypeReflect(f.GoType)
 			arr := reflect.New(arrType).Elem()
 			src := v.Bytes()
@@ -315,7 +311,7 @@ func consumeValue(attrs reflect.Value, i int, attrJ int64, f marshallgen.TaggedF
 				arr.Index(k).SetUint(uint64(src[k]))
 			}
 			a.Val = arr
-		case "[]byte":
+		case f.GoType == "[]byte":
 			src := v.Bytes()
 			cp := make([]byte, len(src))
 			copy(cp, src)
@@ -353,7 +349,7 @@ func projectAccumulator(row reflect.Value, a *accumulator) (err error) {
 	return
 }
 
-func unmarshalMultiSubColumn(row reflect.Value, g sectionGroup, attrs, membs reflect.Value, i int, membIDs map[string]uint64) (err error) {
+func unmarshalMultiSubColumn(row reflect.Value, g marshallgen.SectionGroup, attrs, membs reflect.Value, i int, membIDs map[string]uint64) (err error) {
 	if len(g.Memberships) != 1 {
 		err = eb.Build().Str("section", g.Section).Errorf("multi-sub-column section with multiple memberships not supported")
 		return
@@ -378,7 +374,7 @@ func unmarshalMultiSubColumn(row reflect.Value, g sectionGroup, attrs, membs ref
 	for attrJ := int64(0); attrJ < n; attrJ++ {
 		locals := make([]reflect.Value, len(subs))
 		for k, s := range subs {
-			locals[k] = mustCall(attrs, "GetAttrValue"+upperFirst(s.ColName), reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
+			locals[k] = mustCall(attrs, "GetAttrValue"+marshallgen.UpperFirst(s.ColName), reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
 		}
 		seq := mustCall(membs, "GetMembValueLowCardRef", reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
 		for _, v := range collectIterSeq(seq) {
@@ -405,6 +401,9 @@ func unmarshalMultiSubColumn(row reflect.Value, g sectionGroup, attrs, membs ref
 // corresponding reflect.Type. Inverse of reflectGoTypeName for the
 // types Unmarshal needs to instantiate accumulators for.
 func goTypeReflect(name string) reflect.Type {
+	if n, ok := marshallgen.FixedByteArrayLen(name); ok {
+		return reflect.ArrayOf(n, reflect.TypeOf(byte(0)))
+	}
 	switch name {
 	case "uint8":
 		return reflect.TypeOf(uint8(0))
@@ -434,10 +433,6 @@ func goTypeReflect(name string) reflect.Type {
 		return reflect.TypeOf(time.Time{})
 	case "[]byte":
 		return reflect.TypeOf([]byte(nil))
-	case "[4]byte":
-		return reflect.TypeOf([4]byte{})
-	case "[16]byte":
-		return reflect.TypeOf([16]byte{})
 	}
 	return nil
 }
@@ -463,7 +458,7 @@ func collectIterSeq(seq reflect.Value) (out []reflect.Value) {
 // entityIdx / attributeIdx wrap int / int64 to the raruntime's
 // typed-int constructors so reflect.Value.Call sees the exact
 // parameter type the ra method signature declares.
-func entityIdx(i int) raruntime.EntityIdx       { return raruntime.EntityIdx(i) }
+func entityIdx(i int) raruntime.EntityIdx         { return raruntime.EntityIdx(i) }
 func attributeIdx(i int64) raruntime.AttributeIdx { return raruntime.AttributeIdx(i) }
 
 // newRoaringBitmap returns a reflect.Value wrapping a freshly

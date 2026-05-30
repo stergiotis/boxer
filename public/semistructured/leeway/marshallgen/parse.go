@@ -43,16 +43,12 @@ func ParsePlan(inputPath string) (plan *Plan, err error) {
 	var file *ast.File
 	file, err = parser.ParseFile(fset, inputPath, nil, parser.ParseComments)
 	if err != nil {
-		err = eb.Build().Str("input", inputPath).Errorf("marshallgen: parse file: %w", err)
+		err = eb.Build().Str("input", inputPath).Errorf("parse file: %w", err)
 		return
 	}
 
-	plan = &Plan{
-		InputPath:   inputPath,
-		PackageName: file.Name.Name,
-	}
-
 	var structType *ast.StructType
+	var kindType string
 	for _, decl := range file.Decls {
 		gd, ok := decl.(*ast.GenDecl)
 		if !ok || gd.Tok != token.TYPE {
@@ -68,253 +64,66 @@ func ParsePlan(inputPath string) (plan *Plan, err error) {
 				continue
 			}
 			if structType != nil {
-				err = eb.Build().Str("input", inputPath).Errorf("marshallgen: more than one struct type declared; only one DTO per file")
+				err = eb.Build().Str("input", inputPath).Errorf("more than one struct type declared; only one DTO per file")
 				return
 			}
-			plan.KindType = ts.Name.Name
+			kindType = ts.Name.Name
 			structType = st
 		}
 	}
 	if structType == nil {
-		err = eb.Build().Str("input", inputPath).Errorf("marshallgen: no struct type found in input")
+		err = eb.Build().Str("input", inputPath).Errorf("no struct type found in input")
 		return
 	}
 
-	usedMemberships := map[string]string{}
-	usedPlainCols := map[string]string{}
+	// Per-field validation + plan assembly is shared with the reflect
+	// front-end (marshallreflect.buildPlan) via PlanBuilder; this loop
+	// only handles the go/ast-specific concerns (tag extraction, the
+	// multi-name/anonymous-field check, type classification).
+	b := NewPlanBuilder(inputPath, file.Name.Name, kindType)
 
 	for _, field := range structType.Fields.List {
 		if field.Tag == nil {
-			err = eb.Build().Str("input", inputPath).Errorf("marshallgen: untagged DTO field; every field must carry `lw:` or be the `_` entity-level field")
+			err = eb.Build().Str("input", inputPath).Errorf("untagged DTO field; every field must carry `lw:` or be the `_` entity-level field")
 			return
 		}
-		tag := stripQuotes(field.Tag.Value)
-		st := reflect.StructTag(tag)
+		st := reflect.StructTag(stripQuotes(field.Tag.Value))
 
-		// `_` entity-level field — carries `kind:"<name>"` and/or a
-		// `lw:"<membership>,<section>,const=<value>"` constant
-		// declaration. Multiple `_` fields are allowed (one per kind
-		// directive and one per constant declaration).
+		// `_` entity-level field — kind directive and/or a `,const=`
+		// declaration; validated by the shared builder.
 		if len(field.Names) == 1 && field.Names[0].Name == "_" {
-			kindTag := st.Get("kind")
-			if kindTag != "" {
-				if plan.KindName != "" {
-					err = eb.Build().Str("input", inputPath).Errorf("marshallgen: multiple `_` fields carry `kind:` — only one entity-level kind name allowed per DTO")
-					return
-				}
-				plan.KindName = kindTag
-			}
-			if st.Get("plain") != "" {
-				err = eb.Build().Str("input", inputPath).Errorf("marshallgen: `_` field's `plain:` map is retired — declare plain columns per-field via `lw:\",<col>\"` (e.g. `Id uint64 \\`lw:\",id\"\\``)")
+			if err = b.AddUnderscoreField(st.Get("kind"), st.Get("plain"), st.Get("lw")); err != nil {
 				return
 			}
-			lwUnderscoreTag := st.Get("lw")
-			if lwUnderscoreTag == "" {
-				continue
-			}
-			// Constant declaration on `_` field.
-			var pt ParsedLWTag
-			pt, err = SplitLW(lwUnderscoreTag)
-			if err != nil {
-				err = eb.Build().Str("tag", lwUnderscoreTag).Errorf("marshallgen: parse `_` lw tag: %w", err)
-				return
-			}
-			if !pt.Flags.HasConst {
-				err = eb.Build().Str("tag", lwUnderscoreTag).Errorf("marshallgen: `_` field's lw: tag must declare `,const=<value>` — bare memberships belong on Go fields")
-				return
-			}
-			if pt.Membership == "" {
-				err = eb.Build().Str("tag", lwUnderscoreTag).Errorf("marshallgen: const declaration requires non-empty membership name")
-				return
-			}
-			if pt.Section == "" {
-				err = eb.Build().Str("tag", lwUnderscoreTag).Errorf("marshallgen: const declaration requires a section name")
-				return
-			}
-			if pt.Column != "" {
-				err = eb.Build().Str("tag", lwUnderscoreTag).Errorf("marshallgen: const declaration cannot target a sub-column")
-				return
-			}
-			if pt.Flags.Explode {
-				err = eb.Build().Str("tag", lwUnderscoreTag).Errorf("marshallgen: const declaration cannot combine with `explode`")
-				return
-			}
-			plan.Fields = append(plan.Fields, TaggedField{
-				GoFieldName:  "", // synthetic — no Go field
-				GoType:       "string",
-				LWMembership: pt.Membership,
-				LWSection:    pt.Section,
-				Flags:        pt.Flags,
-				IsConst:      true,
-				ConstValue:   pt.Flags.ConstValue,
-			})
 			continue
 		}
 
 		lwTag := st.Get("lw")
 		if lwTag == "" {
-			err = eb.Build().Str("input", inputPath).Str("field", fieldNamesString(field)).Errorf("marshallgen: non-`_` field missing `lw:` tag")
+			err = eb.Build().Str("input", inputPath).Str("field", fieldNamesString(field)).Errorf("non-`_` field missing `lw:` tag")
 			return
 		}
-		var pt ParsedLWTag
-		pt, err = SplitLW(lwTag)
-		if err != nil {
-			err = eb.Build().Str("tag", lwTag).Errorf("marshallgen: parse lw tag: %w", err)
-			return
-		}
-		membership, section, column, flags := pt.Membership, pt.Section, pt.Column, pt.Flags
-
+		// Multi-name / anonymous fields are a go/ast-only concern (reflect
+		// fields always carry exactly one name).
 		if len(field.Names) != 1 {
-			err = eb.Build().Str("input", inputPath).Errorf("marshallgen: multi-name or anonymous struct field forbidden — declare one field per line")
+			err = eb.Build().Str("input", inputPath).Errorf("multi-name or anonymous struct field forbidden — declare one field per line")
 			return
 		}
 		goFieldName := field.Names[0].Name
 
-		shape, parseErr := classifyType(field.Type)
-		if parseErr != nil {
-			err = eb.Build().Str("field", goFieldName).Errorf("marshallgen: classify field type: %w", parseErr)
+		var shape FieldShape
+		shape, err = classifyType(field.Type)
+		if err != nil {
+			err = eb.Build().Str("field", goFieldName).Errorf("classify field type: %w", err)
 			return
 		}
 
-		// Empty membership ⇒ plain row column. The section slot names
-		// the fact-row column (id / ts / naturalKey / expiresAt).
-		// Shape is constrained per-column; flags are not allowed
-		// (plain columns have no BeginAttribute call to switch).
-		if membership == "" {
-			if section == "" {
-				err = eb.Build().Str("tag", lwTag).Errorf("marshallgen: empty membership AND empty section — plain field needs `lw:\",<col>\"` (id/ts/naturalKey/expiresAt)")
-				return
-			}
-			if column != "" {
-				err = eb.Build().Str("tag", lwTag).Errorf("marshallgen: plain field cannot carry sub-column (`:<col>`)")
-				return
-			}
-			if flags.Unit || flags.Explode || flags.Channel != MembershipChannelLowCardRef {
-				err = eb.Build().Str("field", goFieldName).Errorf("marshallgen: plain field cannot carry channel / `unit` / `explode` flags (flags apply to tagged-value attributes only)")
-				return
-			}
-			if shape.IsOption || shape.IsRoaring || shape.IsSlice {
-				// `[]byte` is the one slice shape allowed (naturalKey),
-				// recognised because classifyType returns
-				// IsSlice=false GoType="[]byte" for top-level `[]byte`.
-				err = eb.Build().Str("field", goFieldName).Errorf("marshallgen: plain field must be a scalar T (no Option / no slice / no roaring; top-level `[]byte` for naturalKey is allowed)")
-				return
-			}
-			if prev, dup := usedPlainCols[section]; dup {
-				err = eb.Build().Str("column", section).Str("first", prev).Str("second", goFieldName).Errorf("marshallgen: plain column declared on two DTO fields")
-				return
-			}
-			usedPlainCols[section] = goFieldName
-			err = ValidatePlainColumnShape(section, shape.GoType)
-			if err != nil {
-				err = eb.Build().Str("field", goFieldName).Errorf("marshallgen: %w", err)
-				return
-			}
-			plan.PlainCols = append(plan.PlainCols, PlainCol{
-				Column:  section,
-				GoField: goFieldName,
-				GoType:  shape.GoType,
-			})
-			continue
-		}
-
-		// Tagged-value field. Slice element allowlist is shape-level
-		// only (per-element identity conversion in the emitted code);
-		// schema-specific section compatibility is the Go compiler's
-		// job at the BuildEntities call site.
-		if shape.IsSlice {
-			switch shape.GoType {
-			case "string",
-				"uint8", "uint16", "uint32", "uint64",
-				"int8", "int16", "int32", "int64",
-				"float32", "float64", "bool":
-				// OK — identity-conversion primitives.
-			case "[]byte":
-				// OK — [][]byte. Section choice is author's; the
-				// generated AddToContainer call only compiles against
-				// a section whose value column accepts []byte.
-			default:
-				err = eb.Build().Str("field", goFieldName).Str("elemType", shape.GoType).Errorf("marshallgen: slice element type not yet supported")
-				return
-			}
-		}
-
-		// In-DTO uniqueness: (membership, sub-column) is the key.
-		// Two fields can share a membership iff they target distinct
-		// sub-columns of a multi-column section (u32Range with
-		// beginIncl + endExcl).
-		dupKey := membership
-		if column != "" {
-			dupKey = membership + ":" + column
-		}
-		if prev, dup := usedMemberships[dupKey]; dup {
-			err = eb.Build().Str("membership", membership).Str("column", column).Str("first", prev).Str("second", goFieldName).Errorf("marshallgen: membership+column appears on two DTO fields")
-			return
-		}
-		usedMemberships[dupKey] = goFieldName
-
-		// Flag × shape consistency.
-		isMulti := shape.IsSlice || shape.IsRoaring
-		if flags.Explode && !isMulti {
-			err = eb.Build().Str("field", goFieldName).Str("flag", "explode").Errorf("marshallgen: `explode` requires a multi-element shape (`[]T`, `*roaring.Bitmap`, `[][]byte`)")
-			return
-		}
-		if flags.Unit && isMulti && !flags.Explode {
-			err = eb.Build().Str("field", goFieldName).Str("flag", "unit").Errorf("marshallgen: `unit` on a multi-element shape requires `explode` (otherwise the default container shape has no per-element call to switch)")
-			return
-		}
-		if flags.HasConst {
-			err = eb.Build().Str("field", goFieldName).Errorf("marshallgen: `,const=<value>` only valid on `_` blank-identifier fields (carries no Go-side data)")
-			return
-		}
-
-		plan.Fields = append(plan.Fields, TaggedField{
-			GoFieldName:  goFieldName,
-			GoType:       shape.GoType,
-			IsOption:     shape.IsOption,
-			IsSlice:      shape.IsSlice,
-			IsRoaring:    shape.IsRoaring,
-			LWMembership: membership,
-			LWSection:    section,
-			LWColumn:     column,
-			Flags:        flags,
-		})
-	}
-
-	if plan.KindName == "" {
-		err = eb.Build().Str("input", inputPath).Errorf("marshallgen: DTO struct is missing the `_` entity-level field with `kind:\"…\"`")
-		return
-	}
-
-	// Per-section membership-channel uniformity check: all fields
-	// targeting the same section must agree on Channel (the read-side
-	// dispatch iterates a per-section channel; mixed channels would
-	// require two separate decode passes). Generalised by ADR-0008 D3
-	// from the original "all Verbatim or all Ref" bool.
-	bySection := map[string]MembershipChannel{}
-	bySectionFirst := map[string]string{}
-	for _, f := range plan.Fields {
-		seen, ok := bySection[f.LWSection]
-		if !ok {
-			bySection[f.LWSection] = f.Flags.Channel
-			bySectionFirst[f.LWSection] = f.GoFieldName
-			continue
-		}
-		if seen != f.Flags.Channel {
-			err = eb.Build().Str("section", f.LWSection).Str("field", f.GoFieldName).Str("firstField", bySectionFirst[f.LWSection]).Str("firstChannel", seen.String()).Str("secondChannel", f.Flags.Channel.String()).Errorf("marshallgen: section mixes membership channels — pick one channel per section")
+		if err = b.AddField(goFieldName, lwTag, shape); err != nil {
 			return
 		}
 	}
-	if len(plan.PlainCols) == 0 {
-		err = eb.Build().Str("input", inputPath).Errorf("marshallgen: DTO declares no plain columns; at least `Id uint64 `+\"`lw:\\\",id\\\"`\"+` is required")
-		return
-	}
-	if _, ok := usedPlainCols["id"]; !ok {
-		err = eb.Build().Str("input", inputPath).Errorf("marshallgen: DTO missing required plain column `id` (`lw:\",id\"`)")
-		return
-	}
 
-	return
+	return b.Finish()
 }
 
 // ValidatePlainColumnShape enforces the per-column type constraints
@@ -474,21 +283,12 @@ func fieldNamesString(field *ast.Field) (out string) {
 	return
 }
 
-// fieldShape is the parser-internal classification of a DTO field's Go
-// type. classifyType returns one of these instead of a wide return
-// tuple.
-type fieldShape struct {
-	GoType    string // inner element type, source-form (e.g. "uint64", "time.Time", "[4]byte", "[]byte")
-	IsOption  bool   // option.Option[T] wrapper
-	IsSlice   bool   // []T element-slice (top-level)
-	IsRoaring bool   // *roaring.Bitmap
-}
-
-// classifyType walks an AST type expression and reports its shape.
-// Rejects forbidden shapes: `Option[[]T]` (except Option[[]byte]),
-// `[]Option[T]`, arbitrary pointers (other than `*roaring.Bitmap`),
-// and nested generics other than `option.Option`.
-func classifyType(expr ast.Expr) (shape fieldShape, err error) {
+// classifyType walks an AST type expression and reports its shape as a
+// shared FieldShape (consumed by PlanBuilder). Rejects forbidden shapes:
+// `Option[[]T]` (except Option[[]byte]), `[]Option[T]`, arbitrary
+// pointers (other than `*roaring.Bitmap`), and nested generics other
+// than `option.Option`.
+func classifyType(expr ast.Expr) (shape FieldShape, err error) {
 	// option.Option[T] at the top level (functional.option in boxer).
 	if idx, ok := expr.(*ast.IndexExpr); ok {
 		sel, sok := idx.X.(*ast.SelectorExpr)
@@ -582,7 +382,7 @@ func renderInner(expr ast.Expr) (s string, err error) {
 		}
 		bl, ok := v.Len.(*ast.BasicLit)
 		if !ok || bl.Kind != token.INT {
-			err = eb.Build().Errorf("only fixed-length byte arrays are supported (e.g. [4]byte, [16]byte)")
+			err = eb.Build().Errorf("only fixed-length `[N]byte` arrays are supported (e.g. [4]byte, [16]byte)")
 			return
 		}
 		elt, ok := v.Elt.(*ast.Ident)

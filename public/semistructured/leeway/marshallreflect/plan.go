@@ -22,54 +22,70 @@ func PlanFor[T any]() (plan *marshallgen.Plan, err error) {
 
 var planCache sync.Map // map[reflect.Type]*planEntry
 
-// planEntry wraps the (plan, err) result in a sync.OnceValues so concurrent
-// first-touch goroutines collapse onto a single buildPlan call instead of
-// stampeding the reflection path.
-type planEntry struct {
-	once func() (*marshallgen.Plan, error)
+// resolvedPlan bundles a built Plan with its section grouping. Both are
+// pure functions of the DTO type, so they are computed once per type and
+// cached together: Marshal, Unmarshal, and RowComposer all read the
+// shared groups instead of recomputing marshallgen.ComputeGroups per row
+// / per call.
+type resolvedPlan struct {
+	plan   *marshallgen.Plan
+	groups []marshallgen.SectionGroup
 }
 
-func planForType(rt reflect.Type) (plan *marshallgen.Plan, err error) {
+// planEntry wraps the (resolvedPlan, err) result in a sync.OnceValues so
+// concurrent first-touch goroutines collapse onto a single buildPlan +
+// ComputeGroups call instead of stampeding the reflection path.
+type planEntry struct {
+	once func() (*resolvedPlan, error)
+}
+
+func resolveForType(rt reflect.Type) (*resolvedPlan, error) {
 	if cached, ok := planCache.Load(rt); ok {
 		return cached.(*planEntry).once()
 	}
 	entry := &planEntry{
-		once: sync.OnceValues(func() (*marshallgen.Plan, error) {
-			return buildPlan(rt)
+		once: sync.OnceValues(func() (*resolvedPlan, error) {
+			plan, err := buildPlan(rt)
+			if err != nil {
+				return nil, err
+			}
+			return &resolvedPlan{plan: plan, groups: marshallgen.ComputeGroups(plan)}, nil
 		}),
 	}
 	actual, _ := planCache.LoadOrStore(rt, entry)
 	return actual.(*planEntry).once()
 }
 
-// buildPlan mirrors marshallgen.ParsePlan's per-field handling but
-// against reflect.StructField inputs instead of ast.Field. The output
-// is a marshallgen.Plan that downstream Marshal / Unmarshal helpers
-// drive the same way the marshallgen-emitted code does (via the
-// shared TaggedField vocabulary).
+func planForType(rt reflect.Type) (plan *marshallgen.Plan, err error) {
+	r, err := resolveForType(rt)
+	if err != nil {
+		return nil, err
+	}
+	return r.plan, nil
+}
+
+// buildPlan is the reflect front-end of the shared plan builder: it
+// classifies each struct field's reflect.Type into a marshallgen.FieldShape
+// and feeds it to marshallgen.PlanBuilder, which applies exactly the same
+// per-field validation + assembly the codegen front-end (marshallgen.ParsePlan)
+// uses. The result is a marshallgen.Plan the Marshal / Unmarshal helpers
+// drive via the shared TaggedField vocabulary.
 func buildPlan(rt reflect.Type) (plan *marshallgen.Plan, err error) {
 	if rt.Kind() != reflect.Struct {
-		err = eb.Build().Str("type", rt.String()).Errorf("marshallreflect: DTO must be a struct type")
+		err = eb.Build().Str("type", rt.String()).Errorf("DTO must be a struct type")
 		return
 	}
-	plan = &marshallgen.Plan{
-		InputPath:   rt.PkgPath() + "/" + rt.Name(),
-		PackageName: pkgLastSegment(rt.PkgPath()),
-		KindType:    rt.Name(),
-	}
 
-	usedPlainCols := map[string]string{}
-	usedMemberships := map[string]string{}
+	b := marshallgen.NewPlanBuilder(rt.PkgPath()+"/"+rt.Name(), pkgLastSegment(rt.PkgPath()), rt.Name())
 
 	for i := 0; i < rt.NumField(); i++ {
 		f := rt.Field(i)
 		st := f.Tag
 
 		// `_` blank-identifier — entity-level metadata + optional const
-		// declarations. Multiple `_` fields allowed; one carries kind:.
+		// declarations; validated by the shared builder.
 		if f.Name == "_" {
-			err = parseUnderscoreField(plan, st)
-			if err != nil {
+			if err = b.AddUnderscoreField(st.Get("kind"), st.Get("plain"), st.Get("lw")); err != nil {
 				return
 			}
 			continue
@@ -77,197 +93,23 @@ func buildPlan(rt reflect.Type) (plan *marshallgen.Plan, err error) {
 
 		lwTag := st.Get("lw")
 		if lwTag == "" {
-			err = eb.Build().Str("field", f.Name).Errorf("marshallreflect: non-`_` field missing `lw:` tag")
+			err = eb.Build().Str("field", f.Name).Errorf("non-`_` field missing `lw:` tag")
 			return
 		}
-		var pt marshallgen.ParsedLWTag
-		pt, err = marshallgen.SplitLW(lwTag)
+
+		var shape marshallgen.FieldShape
+		shape, err = classifyReflectType(f.Type)
 		if err != nil {
-			err = eb.Build().Str("tag", lwTag).Errorf("marshallreflect: parse lw tag: %w", err)
-			return
-		}
-		membership, section, column, flags := pt.Membership, pt.Section, pt.Column, pt.Flags
-
-		shape, classErr := classifyReflectType(f.Type)
-		if classErr != nil {
-			err = eb.Build().Str("field", f.Name).Errorf("marshallreflect: classify field type: %w", classErr)
+			err = eb.Build().Str("field", f.Name).Errorf("classify field type: %w", err)
 			return
 		}
 
-		// Empty membership → plain row column.
-		if membership == "" {
-			if section == "" {
-				err = eb.Build().Str("tag", lwTag).Errorf("marshallreflect: empty membership AND empty section — plain field needs `lw:\",<col>\"`")
-				return
-			}
-			if column != "" {
-				err = eb.Build().Str("tag", lwTag).Errorf("marshallreflect: plain field cannot carry sub-column")
-				return
-			}
-			if flags.Unit || flags.Explode || flags.Channel != marshallgen.MembershipChannelLowCardRef || flags.HasConst {
-				err = eb.Build().Str("field", f.Name).Errorf("marshallreflect: plain field cannot carry channel / `unit` / `explode` / `const` flags")
-				return
-			}
-			if shape.IsOption || shape.IsRoaring || shape.IsSlice {
-				err = eb.Build().Str("field", f.Name).Errorf("marshallreflect: plain field must be a scalar T (top-level `[]byte` for naturalKey is allowed)")
-				return
-			}
-			if prev, dup := usedPlainCols[section]; dup {
-				err = eb.Build().Str("column", section).Str("first", prev).Str("second", f.Name).Errorf("marshallreflect: plain column declared on two DTO fields")
-				return
-			}
-			usedPlainCols[section] = f.Name
-			err = marshallgen.ValidatePlainColumnShape(section, shape.GoType)
-			if err != nil {
-				err = eb.Build().Str("field", f.Name).Errorf("marshallreflect: %w", err)
-				return
-			}
-			plan.PlainCols = append(plan.PlainCols, marshallgen.PlainCol{
-				Column:  section,
-				GoField: f.Name,
-				GoType:  shape.GoType,
-			})
-			continue
-		}
-
-		// Tagged-value field. Slice element allowlist (same as marshallgen).
-		if shape.IsSlice {
-			switch shape.GoType {
-			case "string",
-				"uint8", "uint16", "uint32", "uint64",
-				"int8", "int16", "int32", "int64",
-				"float32", "float64", "bool",
-				"[]byte":
-				// OK
-			default:
-				err = eb.Build().Str("field", f.Name).Str("elemType", shape.GoType).Errorf("marshallreflect: slice element type not yet supported")
-				return
-			}
-		}
-
-		// In-DTO uniqueness: (membership, sub-column).
-		dupKey := membership
-		if column != "" {
-			dupKey = membership + ":" + column
-		}
-		if prev, dup := usedMemberships[dupKey]; dup {
-			err = eb.Build().Str("membership", membership).Str("first", prev).Str("second", f.Name).Errorf("marshallreflect: membership+column appears on two DTO fields")
-			return
-		}
-		usedMemberships[dupKey] = f.Name
-
-		// Flag × shape consistency.
-		isMulti := shape.IsSlice || shape.IsRoaring
-		if flags.Explode && !isMulti {
-			err = eb.Build().Str("field", f.Name).Errorf("marshallreflect: `explode` requires a multi-element shape")
-			return
-		}
-		if flags.Unit && isMulti && !flags.Explode {
-			err = eb.Build().Str("field", f.Name).Errorf("marshallreflect: `unit` on a multi-element shape requires `explode`")
-			return
-		}
-		if flags.HasConst {
-			err = eb.Build().Str("field", f.Name).Errorf("marshallreflect: `,const=<value>` only valid on `_` blank-identifier fields")
-			return
-		}
-
-		plan.Fields = append(plan.Fields, marshallgen.TaggedField{
-			GoFieldName:  f.Name,
-			GoType:       shape.GoType,
-			IsOption:     shape.IsOption,
-			IsSlice:      shape.IsSlice,
-			IsRoaring:    shape.IsRoaring,
-			LWMembership: membership,
-			LWSection:    section,
-			LWColumn:     column,
-			Flags:        flags,
-		})
-	}
-
-	if plan.KindName == "" {
-		err = eb.Build().Str("type", rt.String()).Errorf("marshallreflect: DTO struct missing `_` field with `kind:\"…\"`")
-		return
-	}
-	if len(plan.PlainCols) == 0 {
-		err = eb.Build().Str("type", rt.String()).Errorf("marshallreflect: DTO declares no plain columns; at least `Id uint64 `+\"`lw:\\\",id\\\"`\"+` required")
-		return
-	}
-	if _, ok := usedPlainCols["id"]; !ok {
-		err = eb.Build().Str("type", rt.String()).Errorf("marshallreflect: DTO missing required plain column `id`")
-		return
-	}
-
-	// Per-section channel uniformity — generalised per ADR-0008 D3.
-	bySection := map[string]marshallgen.MembershipChannel{}
-	bySectionFirst := map[string]string{}
-	for _, fld := range plan.Fields {
-		seen, ok := bySection[fld.LWSection]
-		if !ok {
-			bySection[fld.LWSection] = fld.Flags.Channel
-			bySectionFirst[fld.LWSection] = fld.GoFieldName
-			continue
-		}
-		if seen != fld.Flags.Channel {
-			err = eb.Build().Str("section", fld.LWSection).Str("field", fld.GoFieldName).Str("firstField", bySectionFirst[fld.LWSection]).Str("firstChannel", seen.String()).Str("secondChannel", fld.Flags.Channel.String()).Errorf("marshallreflect: section mixes membership channels — pick one channel per section")
+		if err = b.AddField(f.Name, lwTag, shape); err != nil {
 			return
 		}
 	}
-	return
-}
 
-func parseUnderscoreField(plan *marshallgen.Plan, st reflect.StructTag) (err error) {
-	kindTag := st.Get("kind")
-	if kindTag != "" {
-		if plan.KindName != "" {
-			err = eb.Build().Errorf("marshallreflect: multiple `_` fields carry `kind:`")
-			return
-		}
-		plan.KindName = kindTag
-	}
-	if st.Get("plain") != "" {
-		err = eb.Build().Errorf("marshallreflect: `_` field's `plain:` map is retired — declare plain columns per-field via `lw:\",<col>\"`")
-		return
-	}
-	lwTag := st.Get("lw")
-	if lwTag == "" {
-		return
-	}
-	// Constant declaration.
-	pt, parseErr := marshallgen.SplitLW(lwTag)
-	if parseErr != nil {
-		err = eb.Build().Str("tag", lwTag).Errorf("marshallreflect: parse `_` lw tag: %w", parseErr)
-		return
-	}
-	if !pt.Flags.HasConst {
-		err = eb.Build().Str("tag", lwTag).Errorf("marshallreflect: `_` field's lw: tag must declare `,const=<value>`")
-		return
-	}
-	if pt.Membership == "" {
-		err = eb.Build().Str("tag", lwTag).Errorf("marshallreflect: const declaration requires non-empty membership name")
-		return
-	}
-	if pt.Section == "" {
-		err = eb.Build().Str("tag", lwTag).Errorf("marshallreflect: const declaration requires a section name")
-		return
-	}
-	if pt.Column != "" {
-		err = eb.Build().Str("tag", lwTag).Errorf("marshallreflect: const declaration cannot target a sub-column")
-		return
-	}
-	if pt.Flags.Explode {
-		err = eb.Build().Str("tag", lwTag).Errorf("marshallreflect: const declaration cannot combine with `explode`")
-		return
-	}
-	plan.Fields = append(plan.Fields, marshallgen.TaggedField{
-		GoFieldName:  "",
-		GoType:       "string",
-		LWMembership: pt.Membership,
-		LWSection:    pt.Section,
-		Flags:        pt.Flags,
-		IsConst:      true,
-		ConstValue:   pt.Flags.ConstValue,
-	})
-	return
+	return b.Finish()
 }
 
 func pkgLastSegment(pkg string) string {

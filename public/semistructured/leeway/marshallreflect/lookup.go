@@ -25,7 +25,7 @@ type NoLookup struct{}
 
 // LookupMembership always errors.
 func (NoLookup) LookupMembership(name string) (id uint64, err error) {
-	err = eb.Build().Str("membership", name).Errorf("marshallreflect: no membership lookup configured (use `,verbatim` on the DTO field or pass a LookupI implementation)")
+	err = eb.Build().Str("membership", name).Errorf("no membership lookup configured (use `,verbatim` on the DTO field or pass a LookupI implementation)")
 	return
 }
 
@@ -37,7 +37,7 @@ type MapLookup map[string]uint64
 func (m MapLookup) LookupMembership(name string) (id uint64, err error) {
 	v, ok := m[name]
 	if !ok {
-		err = eb.Build().Str("membership", name).Errorf("marshallreflect: membership not in MapLookup")
+		err = eb.Build().Str("membership", name).Errorf("membership not in MapLookup")
 		return
 	}
 	id = v

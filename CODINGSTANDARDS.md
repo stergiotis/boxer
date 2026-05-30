@@ -62,6 +62,18 @@ if err != nil {
 }
 ```
 
+### Message Text
+*   **No package or function-name prefixes.** `eh.Errorf` and `eb.Build()` capture a stack trace at the call site (via `runtime.Callers` in `eh`), so the originating package and function are already attached to the error. Do **not** prefix the message with the package/function name (e.g. `"mypkg: ..."` or `"LoadConfig: ..."`) — it duplicates what the stack records and drifts out of sync when code is moved or renamed.
+*   Write the bare semantic message; let `Str`/`Int`/… carry structured context and the stack carry location.
+
+```go
+// Good — the stack already records package + function.
+err = eb.Build().Str("path", path).Errorf("open config: %w", err)
+
+// Avoid — "config:" / "LoadConfig:" repeat what the stack already has.
+err = eb.Build().Str("path", path).Errorf("config: open config: %w", err)
+```
+
 ## Control Flow
 *   **Conditionals:** Use `if val { ... } else { ... }` for binary conditions.
 *   **Guard Clauses:** Prefer early exits/returns to reduce nesting depth.

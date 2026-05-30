@@ -59,10 +59,10 @@ func NewRowComposer(dml any, lookup LookupI) *RowComposer {
 // underlying emit.
 func (c *RowComposer) BeginRow(plainOwner any) (err error) {
 	if c.inRow {
-		err = eb.Build().Errorf("marshallreflect: BeginRow called while already inside a row — call CommitRow first")
+		err = eb.Build().Errorf("BeginRow called while already inside a row — call CommitRow first")
 		return
 	}
-	rowVal, plan, err := resolvePlan(plainOwner)
+	rowVal, plan, groups, err := resolvePlan(plainOwner)
 	if err != nil {
 		return
 	}
@@ -72,7 +72,7 @@ func (c *RowComposer) BeginRow(plainOwner any) (err error) {
 	if err = marshalPlain(c.dml, rowVal, plan); err != nil {
 		return
 	}
-	err = marshalRowSections(c.dml, rowVal, plan, c.lookup)
+	err = marshalRowSectionsFiltered(c.dml, rowVal, groups, c.lookup, cardFilterAll)
 	return
 }
 
@@ -123,14 +123,14 @@ func (c *RowComposer) AddMultiValueAttributes(row any) (err error) {
 
 func (c *RowComposer) addSectionsFiltered(row any, filter cardFilter, callerName string) (err error) {
 	if !c.inRow {
-		err = eb.Build().Str("call", callerName).Errorf("marshallreflect: %s called outside of a row — call BeginRow first", callerName)
+		err = eb.Build().Str("call", callerName).Errorf("%s called outside of a row — call BeginRow first", callerName)
 		return
 	}
-	rowVal, plan, err := resolvePlan(row)
+	rowVal, _, groups, err := resolvePlan(row)
 	if err != nil {
 		return
 	}
-	err = marshalRowSectionsFiltered(c.dml, rowVal, plan, c.lookup, filter)
+	err = marshalRowSectionsFiltered(c.dml, rowVal, groups, c.lookup, filter)
 	return
 }
 
@@ -140,7 +140,7 @@ func (c *RowComposer) addSectionsFiltered(row any, filter cardFilter, callerName
 // BeginRow.
 func (c *RowComposer) CommitRow() (err error) {
 	if !c.inRow {
-		err = eb.Build().Errorf("marshallreflect: CommitRow called outside of a row — call BeginRow first")
+		err = eb.Build().Errorf("CommitRow called outside of a row — call BeginRow first")
 		return
 	}
 	c.inRow = false
@@ -152,39 +152,32 @@ func (c *RowComposer) CommitRow() (err error) {
 }
 
 // resolvePlan inspects a row value, ensuring it's a struct (not a
-// slice / map / pointer), and returns its reflect.Value plus the
-// cached Plan for its type.
-func resolvePlan(row any) (rowVal reflect.Value, plan *marshallgen.Plan, err error) {
+// slice / map / pointer), and returns its reflect.Value plus the cached
+// Plan + section grouping for its type.
+func resolvePlan(row any) (rowVal reflect.Value, plan *marshallgen.Plan, groups []marshallgen.SectionGroup, err error) {
 	rowVal = reflect.ValueOf(row)
 	if rowVal.Kind() == reflect.Ptr {
 		rowVal = rowVal.Elem()
 	}
 	if rowVal.Kind() != reflect.Struct {
-		err = eb.Build().Str("type", reflect.TypeOf(row).String()).Errorf("marshallreflect: row must be a struct (or *struct), got %s", rowVal.Kind())
+		err = eb.Build().Str("type", reflect.TypeOf(row).String()).Errorf("row must be a struct (or *struct), got %s", rowVal.Kind())
 		return
 	}
-	plan, err = planForType(rowVal.Type())
-	if err != nil {
-		err = eb.Build().Str("type", rowVal.Type().String()).Errorf("marshallreflect: plan for row type: %w", err)
+	r, rerr := resolveForType(rowVal.Type())
+	if rerr != nil {
+		err = eb.Build().Str("type", rowVal.Type().String()).Errorf("plan for row type: %w", rerr)
 		return
 	}
+	plan = r.plan
+	groups = r.groups
 	return
 }
 
-// marshalRowSections emits every section in plan against rowVal
-// using the existing computeGroups / marshalSection machinery shared
-// with Marshal. Equivalent to marshalRowSectionsFiltered with
-// cardFilterAll; kept as the unfiltered entry point used by BeginRow.
-func marshalRowSections(dml, rowVal reflect.Value, plan *marshallgen.Plan, lookup LookupI) (err error) {
-	return marshalRowSectionsFiltered(dml, rowVal, plan, lookup, cardFilterAll)
-}
-
-func marshalRowSectionsFiltered(dml, rowVal reflect.Value, plan *marshallgen.Plan, lookup LookupI, filter cardFilter) (err error) {
-	groups := computeGroups(plan)
+func marshalRowSectionsFiltered(dml, rowVal reflect.Value, groups []marshallgen.SectionGroup, lookup LookupI, filter cardFilter) (err error) {
 	for _, g := range groups {
 		err = marshalSection(dml, rowVal, g, lookup, filter)
 		if err != nil {
-			err = eb.Build().Str("section", g.Section).Errorf("marshallreflect: section %s: %w", g.Section, err)
+			err = eb.Build().Str("section", g.Section).Errorf("section %s: %w", g.Section, err)
 			return
 		}
 	}
@@ -207,7 +200,7 @@ const (
 // would emit at least one attribute matching `filter`, given the
 // current row's values. Used to decide whether to open a
 // BeginSection frame for a filtered emit.
-func sectionHasMatchingField(row reflect.Value, g sectionGroup, filter cardFilter) bool {
+func sectionHasMatchingField(row reflect.Value, g marshallgen.SectionGroup, filter cardFilter) bool {
 	if filter == cardFilterAll {
 		return true
 	}

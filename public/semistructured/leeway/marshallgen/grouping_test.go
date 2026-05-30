@@ -1,6 +1,4 @@
-//go:build llm_generated_opus47
-
-package marshallreflect
+package marshallgen_test
 
 import (
 	"testing"
@@ -24,7 +22,7 @@ func TestComputeGroups_ScalarFirstPartition(t *testing.T) {
 			{GoFieldName: "Volt", GoType: "uint32", LWMembership: "volt", LWSection: "u32Array"},
 		},
 	}
-	groups := computeGroups(plan)
+	groups := marshallgen.ComputeGroups(plan)
 	require.Len(t, groups, 1)
 	g := groups[0]
 	require.Len(t, g.SubColumns, 1)
@@ -54,7 +52,7 @@ func TestComputeGroups_PreservesSectionOrder(t *testing.T) {
 			{GoFieldName: "Battery", GoType: "uint32", LWMembership: "battery", LWSection: "u32Array", Flags: marshallgen.FieldFlags{Unit: true}},
 		},
 	}
-	groups := computeGroups(plan)
+	groups := marshallgen.ComputeGroups(plan)
 	require.Len(t, groups, 2)
 	require.Equal(t, "u32Array", groups[0].Section, "first-declared section keeps first slot")
 	require.Equal(t, "symbol", groups[1].Section)

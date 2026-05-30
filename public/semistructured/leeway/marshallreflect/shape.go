@@ -7,11 +7,13 @@ import (
 	"reflect"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+
+	"github.com/stergiotis/boxer/public/semistructured/leeway/marshallgen"
 )
 
 // optionPkgPath is the import path of the new boxer-side Option type.
-// Recognised by reflectShape so DTO authors can use option.Option[T]
-// without the reflect parser needing to scan the source.
+// Recognised by classifyReflectType so DTO authors can use
+// option.Option[T] without the reflect parser needing to scan the source.
 const optionPkgPath = "github.com/stergiotis/boxer/public/functional/option"
 
 // roaringPkgPath is the import path of the *roaring.Bitmap type — the
@@ -19,24 +21,15 @@ const optionPkgPath = "github.com/stergiotis/boxer/public/functional/option"
 // field.
 const roaringPkgPath = "github.com/RoaringBitmap/roaring"
 
-// reflectShape mirrors marshallgen's internal fieldShape — populated
-// from reflect.Type via the rules below. The Go-side spelling is
-// recorded as a string so the rest of the parser can compare against
-// the same go-type tokens marshallgen uses ("uint64", "time.Time",
+// classifyReflectType inspects rt and returns the corresponding shared
+// marshallgen.FieldShape (consumed by marshallgen.PlanBuilder). Forbids
+// the same Go shapes the codegen classifier forbids: Option[[]T] (except
+// Option[[]byte]), []Option[T], arbitrary pointers other than
+// *roaring.Bitmap, nested generics other than option.Option. The Go-side
+// spelling is recorded as a string so downstream comparisons use the
+// same go-type tokens the AST classifier produces ("uint64", "time.Time",
 // "[4]byte", "[]byte", "*roaring.Bitmap", …).
-type reflectShape struct {
-	GoType    string
-	IsOption  bool
-	IsSlice   bool
-	IsRoaring bool
-}
-
-// classifyReflectType inspects rt and returns the corresponding
-// reflectShape. Forbids the same Go shapes marshallgen forbids:
-// Option[[]T] (except Option[[]byte]), []Option[T], arbitrary
-// pointers other than *roaring.Bitmap, nested generics other than
-// option.Option.
-func classifyReflectType(rt reflect.Type) (s reflectShape, err error) {
+func classifyReflectType(rt reflect.Type) (s marshallgen.FieldShape, err error) {
 	switch rt.Kind() {
 
 	case reflect.Ptr:
@@ -97,7 +90,7 @@ func classifyReflectType(rt reflect.Type) (s reflectShape, err error) {
 	case reflect.Array:
 		elem := rt.Elem()
 		if elem.Kind() != reflect.Uint8 {
-			err = eb.Build().Str("type", rt.String()).Errorf("only fixed-length byte arrays supported (e.g. [4]byte, [16]byte)")
+			err = eb.Build().Str("type", rt.String()).Errorf("only fixed-length `[N]byte` arrays supported (e.g. [4]byte, [16]byte)")
 			return
 		}
 		s.GoType = fmt.Sprintf("[%d]byte", rt.Len())

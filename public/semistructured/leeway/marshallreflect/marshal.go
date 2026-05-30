@@ -29,29 +29,28 @@ func Marshal[T any](dml any, rows []T, lookup LookupI) (err error) {
 	if lookup == nil {
 		lookup = NoLookup{}
 	}
-	plan, err := PlanFor[T]()
+	r, err := resolveForType(reflect.TypeOf((*T)(nil)).Elem())
 	if err != nil {
 		return
 	}
 	dmlVal := reflect.ValueOf(dml)
 	for i := range rows {
 		rowVal := reflect.ValueOf(rows[i])
-		err = marshalRow(dmlVal, rowVal, plan, lookup)
+		err = marshalRow(dmlVal, rowVal, r.plan, r.groups, lookup)
 		if err != nil {
-			err = eb.Build().Int("row", i).Errorf("marshallreflect: row %d: %w", i, err)
+			err = eb.Build().Int("row", i).Errorf("row %d: %w", i, err)
 			return
 		}
 	}
 	return
 }
 
-func marshalRow(dml, row reflect.Value, plan *marshallgen.Plan, lookup LookupI) (err error) {
+func marshalRow(dml, row reflect.Value, plan *marshallgen.Plan, groups []marshallgen.SectionGroup, lookup LookupI) (err error) {
 	mustCall(dml, "BeginEntity")
 	err = marshalPlain(dml, row, plan)
 	if err != nil {
 		return
 	}
-	groups := computeGroups(plan)
 	for _, g := range groups {
 		err = marshalSection(dml, row, g, lookup, cardFilterAll)
 		if err != nil {
@@ -66,10 +65,10 @@ func marshalRow(dml, row reflect.Value, plan *marshallgen.Plan, lookup LookupI) 
 }
 
 func marshalPlain(dml, row reflect.Value, plan *marshallgen.Plan) (err error) {
-	idCol := findPlainCol(plan, "id")
-	nkCol := findPlainCol(plan, "naturalKey")
-	tsCol := findPlainCol(plan, "ts")
-	lcCol := findPlainCol(plan, "expiresAt")
+	idCol := marshallgen.FindPlainCol(plan, "id")
+	nkCol := marshallgen.FindPlainCol(plan, "naturalKey")
+	tsCol := marshallgen.FindPlainCol(plan, "ts")
+	lcCol := marshallgen.FindPlainCol(plan, "expiresAt")
 
 	idVal := row.FieldByName(idCol.GoField)
 	var nkVal reflect.Value
@@ -121,11 +120,11 @@ func plainTimeReflect(row reflect.Value, p *marshallgen.PlainCol) (out reflect.V
 	return
 }
 
-func marshalSection(dml, row reflect.Value, g sectionGroup, lookup LookupI, filter cardFilter) (err error) {
+func marshalSection(dml, row reflect.Value, g marshallgen.SectionGroup, lookup LookupI, filter cardFilter) (err error) {
 	if !sectionHasMatchingField(row, g, filter) {
 		return
 	}
-	method := upperFirst(g.Section)
+	method := marshallgen.UpperFirst(g.Section)
 	sec := mustCall(dml, "GetSection"+method)[0]
 
 	if len(g.SubColumns) > 1 {
@@ -153,7 +152,7 @@ func marshalSection(dml, row reflect.Value, g sectionGroup, lookup LookupI, filt
 	return
 }
 
-func marshalMultiSubColumn(sec, row reflect.Value, g sectionGroup, lookup LookupI) (err error) {
+func marshalMultiSubColumn(sec, row reflect.Value, g marshallgen.SectionGroup, lookup LookupI) (err error) {
 	if len(g.Memberships) != 1 {
 		err = eb.Build().Str("section", g.Section).Errorf("multi-sub-column section with multiple memberships not supported")
 		return
@@ -173,17 +172,17 @@ func marshalMultiSubColumn(sec, row reflect.Value, g sectionGroup, lookup Lookup
 }
 
 func marshalField(sec, row reflect.Value, f marshallgen.TaggedField, lookup LookupI) (err error) {
-	shape := classifyBegin(f)
+	shape := marshallgen.ClassifyBegin(f)
 	switch shape {
-	case shapeScalarBegin:
+	case marshallgen.ShapeScalarBegin:
 		err = marshalScalarOne(sec, row, f, lookup, "BeginAttribute")
-	case shapeScalarBeginSingle:
+	case marshallgen.ShapeScalarBeginSingle:
 		err = marshalScalarOne(sec, row, f, lookup, "BeginAttributeSingle")
-	case shapeContainer:
+	case marshallgen.ShapeContainer:
 		err = marshalContainer(sec, row, f, lookup)
-	case shapeExplodeBegin:
+	case marshallgen.ShapeExplodeBegin:
 		err = marshalExplode(sec, row, f, lookup, "BeginAttribute")
-	case shapeExplodeBeginSingle:
+	case marshallgen.ShapeExplodeBeginSingle:
 		err = marshalExplode(sec, row, f, lookup, "BeginAttributeSingle")
 	}
 	return
@@ -318,7 +317,7 @@ func addMembership(attr reflect.Value, row reflect.Value, f marshallgen.TaggedFi
 	}
 	id, lookupErr := lookup.LookupMembership(f.LWMembership)
 	if lookupErr != nil {
-		err = eb.Build().Str("membership", f.LWMembership).Errorf("marshallreflect: %w", lookupErr)
+		err = eb.Build().Str("membership", f.LWMembership).Errorf("%w", lookupErr)
 		return
 	}
 	mustCall(attr, method, reflect.ValueOf(id))
@@ -329,7 +328,7 @@ func addMembership(attr reflect.Value, row reflect.Value, f marshallgen.TaggedFi
 // slice reference, mirroring marshallgen's blobSliceMaybe. Returns
 // the value unchanged for any other shape.
 func reslicedIfFixedByte(v reflect.Value, f marshallgen.TaggedField) reflect.Value {
-	if f.GoType == "[4]byte" || f.GoType == "[16]byte" {
+	if marshallgen.IsFixedByteArray(f.GoType) {
 		// Take address-of element 0 + slice — reflect lacks a direct
 		// "convert array to slice" but Slice(v, 0, len) works on
 		// addressable arrays. Field values via FieldByName are not
@@ -349,7 +348,7 @@ func reslicedIfFixedByte(v reflect.Value, f marshallgen.TaggedField) reflect.Val
 func mustCall(recv reflect.Value, name string, args ...reflect.Value) (rets []reflect.Value) {
 	m := recv.MethodByName(name)
 	if !m.IsValid() {
-		panic(eb.Build().Str("method", name).Str("recv", recv.Type().String()).Errorf("marshallreflect: target DML does not have method %s", name))
+		panic(eb.Build().Str("method", name).Str("recv", recv.Type().String()).Errorf("target DML does not have method %s", name))
 	}
 	rets = m.Call(args)
 	return

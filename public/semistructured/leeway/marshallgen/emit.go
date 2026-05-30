@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"go/format"
 	"os"
-	"sort"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -49,7 +48,7 @@ func EmitPlan(plan *Plan, wrapper WrapperEmitterI) (out []byte, err error) {
 	wrapper.Init(&sb, plan)
 	err = wrapper.BeforeCore(&sb, plan)
 	if err != nil {
-		err = eb.Build().Errorf("marshallgen: wrapper BeforeCore: %w", err)
+		err = eb.Build().Errorf("wrapper BeforeCore: %w", err)
 		return
 	}
 
@@ -59,25 +58,25 @@ func EmitPlan(plan *Plan, wrapper WrapperEmitterI) (out []byte, err error) {
 
 	err = writeBuildHelper(&sb, plan)
 	if err != nil {
-		err = eb.Build().Errorf("marshallgen: emit BuildEntities: %w", err)
+		err = eb.Build().Errorf("emit BuildEntities: %w", err)
 		return
 	}
 	err = writeFillHelper(&sb, plan)
 	if err != nil {
-		err = eb.Build().Errorf("marshallgen: emit FillFromArrow: %w", err)
+		err = eb.Build().Errorf("emit FillFromArrow: %w", err)
 		return
 	}
 
 	err = wrapper.AfterCore(&sb, plan)
 	if err != nil {
-		err = eb.Build().Errorf("marshallgen: wrapper AfterCore: %w", err)
+		err = eb.Build().Errorf("wrapper AfterCore: %w", err)
 		return
 	}
 
 	raw := []byte(sb.String())
 	out, err = format.Source(raw)
 	if err != nil {
-		err = eb.Build().Str("emitted", string(raw)).Errorf("marshallgen: gofmt rejected output: %w", err)
+		err = eb.Build().Str("emitted", string(raw)).Errorf("gofmt rejected output: %w", err)
 		return
 	}
 	return
@@ -108,148 +107,10 @@ func Generate(inputPath, outputPath string, wrapper WrapperEmitterI) (out []byte
 func writeFile(path string, data []byte) (err error) {
 	err = os.WriteFile(path, data, 0644)
 	if err != nil {
-		err = eb.Build().Str("path", path).Errorf("marshallgen: write file: %w", err)
+		err = eb.Build().Str("path", path).Errorf("write file: %w", err)
 		return
 	}
 	return
-}
-
-// --- section grouping. ---
-
-// subColumn groups fields targeting the same physical sub-column inside
-// a section. Most sections have one sub-column ("value"); u32Range has
-// two (beginIncl + endExcl) sharing the section's per-attribute support
-// arrays.
-type subColumn struct {
-	Name   string        // "value", "beginIncl", "endExcl"
-	Fields []TaggedField // fields routing to this sub-column, DTO order
-}
-
-// sectionGroup is the per-section emission unit. Fields are grouped on
-// two orthogonal axes: by sub-column (one value-array per sub-column on
-// the wire) and by distinct membership (one lr+lrcard pair per
-// membership).
-type sectionGroup struct {
-	Section     string
-	SubColumns  []subColumn
-	Memberships []TaggedField // one per distinct LWMembership, in first-seen order
-}
-
-// Channel reports the (uniform per section) membership channel for
-// this section's fields. ParsePlan enforces uniformity so any
-// representative field's channel speaks for the whole section.
-// Returns the zero value (LowCardRef) for empty groups.
-func (g sectionGroup) Channel() MembershipChannel {
-	if len(g.Memberships) == 0 {
-		return MembershipChannelLowCardRef
-	}
-	return g.Memberships[0].Flags.Channel
-}
-
-// IsVerbatim reports whether this section's channel embeds the lw:
-// membership name as a literal []byte on the wire (Low/HighCardVerbatim).
-// Retained as a back-compat shorthand alongside Channel().
-func (g sectionGroup) IsVerbatim() bool {
-	return g.Channel().EmbedsLiteralName()
-}
-
-// computeGroups walks plan.Fields in DTO declaration order, bucketing
-// each field by its lw: section name. The section order in the output
-// is DTO declaration order — section-level layout matches three
-// independent emit sites and must not drift:
-//
-//   - <Kind>EntityI's per-section type-parameter list (writeEntityInterface)
-//   - <Kind>BuildEntities' type-parameter list and per-section call sequence
-//   - <Kind>FillFromArrow's per-section reader-parameter list
-//
-// Within each section the fields are partitioned scalar-first
-// (shapeScalarBegin / shapeScalarBeginSingle / consts) ahead of
-// non-scalars (shapeContainer / shapeExplodeBegin*). The partition is
-// stable: declaration order is preserved within each class. Per
-// ADR-0008 D2.
-//
-// Wrappers that emit per-section helpers (e.g. FactsWrapper's Reader
-// struct + Unmarshal-call argument list) MUST iterate sections in the
-// same DTO-declaration order so the type-parameter binding at the
-// call site lines up. A wrapper that walks sections in
-// dml-index-sorted order (or alphabetical) silently passes the wrong
-// readers to FillFromArrow.
-func computeGroups(plan *Plan) (out []sectionGroup) {
-	seen := map[string]int{}
-	for _, f := range plan.Fields {
-		gIdx, ok := seen[f.Section()]
-		if !ok {
-			seen[f.Section()] = len(out)
-			gIdx = len(out)
-			out = append(out, sectionGroup{Section: f.Section()})
-		}
-		g := &out[gIdx]
-
-		colName := f.LWColumn
-		if colName == "" {
-			colName = "value"
-		}
-		scIdx := -1
-		for i := range g.SubColumns {
-			if g.SubColumns[i].Name == colName {
-				scIdx = i
-				break
-			}
-		}
-		if scIdx < 0 {
-			g.SubColumns = append(g.SubColumns, subColumn{Name: colName})
-			scIdx = len(g.SubColumns) - 1
-		}
-		g.SubColumns[scIdx].Fields = append(g.SubColumns[scIdx].Fields, f)
-	}
-
-	for gi := range out {
-		g := &out[gi]
-		for sci := range g.SubColumns {
-			partitionScalarsFirst(g.SubColumns[sci].Fields)
-		}
-		rebuildMemberships(g)
-	}
-	return
-}
-
-// partitionScalarsFirst reorders fields in-place so all scalar-shaped
-// fields (shapeScalarBegin / shapeScalarBeginSingle, which includes
-// consts since they classify as scalar) precede non-scalar fields
-// (shapeContainer / shapeExplodeBegin / shapeExplodeBeginSingle).
-// Declaration order is preserved within each class via a stable sort.
-func partitionScalarsFirst(fields []TaggedField) {
-	sort.SliceStable(fields, func(i, j int) bool {
-		return isScalarShape(fields[i]) && !isScalarShape(fields[j])
-	})
-}
-
-// isScalarShape reports whether a tagged field emits as a single-value
-// scalar attribute. Used to drive the within-section partition.
-func isScalarShape(f TaggedField) bool {
-	switch classifyBegin(f) {
-	case shapeScalarBegin, shapeScalarBeginSingle:
-		return true
-	default:
-		return false
-	}
-}
-
-// rebuildMemberships repopulates the section's distinct-membership
-// slice from the (now scalar-first-partitioned) sub-column fields so
-// the first-seen order reflects the post-partition layout.
-func rebuildMemberships(g *sectionGroup) {
-	g.Memberships = g.Memberships[:0]
-	seen := map[string]bool{}
-	for sci := range g.SubColumns {
-		for _, f := range g.SubColumns[sci].Fields {
-			if seen[f.LWMembership] {
-				continue
-			}
-			seen[f.LWMembership] = true
-			g.Memberships = append(g.Memberships, f)
-		}
-	}
 }
 
 // Section returns the trusted section name from the lw: tag. Helper to
@@ -260,10 +121,10 @@ func (f TaggedField) Section() string { return f.LWSection }
 
 // methodFor returns the PascalCase section name used in the DML's
 // `GetSection<X>()` getter and the ra reader's `Tagged<X>` type. This
-// is convention-based: upperFirst of the section name from the lw:
+// is convention-based: UpperFirst of the section name from the lw:
 // tag. Same convention boxer's gocodegen uses.
 func methodFor(section string) string {
-	return upperFirst(section)
+	return UpperFirst(section)
 }
 
 // --- render helpers. ---
@@ -407,19 +268,10 @@ func writeRowExtract(sb *strings.Builder, plan *Plan) {
 
 // --- plain-column helpers. ---
 
-func planIdCol(plan *Plan) *PlainCol         { return findPlainCol(plan, "id") }
-func planTsCol(plan *Plan) *PlainCol         { return findPlainCol(plan, "ts") }
-func planNaturalKeyCol(plan *Plan) *PlainCol { return findPlainCol(plan, "naturalKey") }
-func planExpiresAtCol(plan *Plan) *PlainCol  { return findPlainCol(plan, "expiresAt") }
-
-func findPlainCol(plan *Plan, col string) *PlainCol {
-	for i := range plan.PlainCols {
-		if plan.PlainCols[i].Column == col {
-			return &plan.PlainCols[i]
-		}
-	}
-	return nil
-}
+func planIdCol(plan *Plan) *PlainCol         { return FindPlainCol(plan, "id") }
+func planTsCol(plan *Plan) *PlainCol         { return FindPlainCol(plan, "ts") }
+func planNaturalKeyCol(plan *Plan) *PlainCol { return FindPlainCol(plan, "naturalKey") }
+func planExpiresAtCol(plan *Plan) *PlainCol  { return FindPlainCol(plan, "expiresAt") }
 
 // plainTimeExpr renders the expression that produces a time.Time from
 // the plain column's Go value at row i. Used by both BuildEntities
@@ -432,7 +284,7 @@ func plainTimeExpr(p *PlainCol) (expr string, err error) {
 	case "int64":
 		expr = fmt.Sprintf("time.Unix(0, c.%s[i]).UTC()", p.GoField)
 	default:
-		err = eb.Build().Str("column", p.Column).Str("goType", p.GoType).Errorf("marshallgen: plain time column must be time.Time or int64 (nanos)")
+		err = eb.Build().Str("column", p.Column).Str("goType", p.GoType).Errorf("plain time column must be time.Time or int64 (nanos)")
 	}
 	return
 }
@@ -440,7 +292,7 @@ func plainTimeExpr(p *PlainCol) (expr string, err error) {
 // --- BuildEntities core + derived interfaces. ---
 
 func writeBuildHelper(sb *strings.Builder, plan *Plan) (err error) {
-	groups := computeGroups(plan)
+	groups := ComputeGroups(plan)
 
 	sb.WriteString("// --- Composed-interface BuildEntities helper (schema-agnostic). ---\n//\n")
 	fmt.Fprintf(sb, "// %sBuildEntities walks the SoA columns and emits one entity per\n", plan.KindType)
@@ -467,48 +319,6 @@ func writeBuildHelper(sb *strings.Builder, plan *Plan) (err error) {
 	return
 }
 
-// fieldBeginShape classifies how one field opens its attribute on the
-// wire — drives the SecI's exposed methods AND the per-field call
-// pattern in BuildEntities. Independent of any registry; derived from
-// (Go shape, FieldFlags) alone.
-type fieldBeginShape int
-
-const (
-	// shapeScalarBegin: T or Option[T] without `unit`. Section's
-	// BeginAttribute takes the value directly (`sec.BeginAttribute(v)`).
-	shapeScalarBegin fieldBeginShape = iota
-	// shapeScalarBeginSingle: T or Option[T] with `unit`. Section's
-	// BeginAttributeSingle takes the value (`sec.BeginAttributeSingle(v)`).
-	shapeScalarBeginSingle
-	// shapeContainer: []T / *roaring.Bitmap / [][]byte default. Section's
-	// BeginAttribute opens a container (no args); AttrI carries
-	// AddToContainerP for per-value append.
-	shapeContainer
-	// shapeExplodeBegin: []T,explode. Per-element loop with
-	// `sec.BeginAttribute(v)` (scalar BeginAttribute signature).
-	shapeExplodeBegin
-	// shapeExplodeBeginSingle: []T,explode,unit. Per-element loop with
-	// `sec.BeginAttributeSingle(v)`.
-	shapeExplodeBeginSingle
-)
-
-// classifyBegin maps a TaggedField to its fieldBeginShape.
-func classifyBegin(f TaggedField) fieldBeginShape {
-	isMulti := f.IsSlice || f.IsRoaring
-	switch {
-	case isMulti && f.Flags.Explode && f.Flags.Unit:
-		return shapeExplodeBeginSingle
-	case isMulti && f.Flags.Explode:
-		return shapeExplodeBegin
-	case isMulti:
-		return shapeContainer
-	case f.Flags.Unit:
-		return shapeScalarBeginSingle
-	default:
-		return shapeScalarBegin
-	}
-}
-
 // elemType reports the per-attribute / per-element argument type the
 // section's value column accepts. For `*roaring.Bitmap` the wire
 // element is uint32; for `[N]byte` re-sliced into a blob the element
@@ -520,8 +330,7 @@ func elemType(f TaggedField) string {
 	if f.IsRoaring {
 		return "uint32"
 	}
-	switch f.GoType {
-	case "[4]byte", "[16]byte":
+	if IsFixedByteArray(f.GoType) {
 		return "[]byte"
 	}
 	return f.GoType
@@ -537,46 +346,46 @@ func elemType(f TaggedField) string {
 // `[Self]` parameter is needed. SecI keeps `[Attr, Ent]` parameters
 // because BeginAttribute* still return Attr (caller needs the handle)
 // and EndSection returns Ent for the chain back to the entity.
-func writeSectionInterfaces(sb *strings.Builder, plan *Plan, g sectionGroup) (err error) {
+func writeSectionInterfaces(sb *strings.Builder, plan *Plan, g SectionGroup) (err error) {
 	kind := plan.KindType
 	method := methodFor(g.Section)
 
 	// Survey which Begin* shapes and container-append the SecI / AttrI
 	// must expose, based on the union of field shapes in this group.
-	needContainerOpen := false   // shape: sec.BeginAttribute() (no args, opens container)
-	needBeginSingleVal := ""     // shape: sec.BeginAttributeSingle(value T) — element type
-	needBeginScalarVal := ""     // shape: sec.BeginAttribute(value T) — element type
-	needAddToContainer := ""     // attr.AddToContainerP(v T) — element type
-	multiSubColAttr := false     // multi-sub-column scalar (u32Range) — emit BeginAttribute(arg1, arg2, …)
+	needContainerOpen := false // shape: sec.BeginAttribute() (no args, opens container)
+	needBeginSingleVal := ""   // shape: sec.BeginAttributeSingle(value T) — element type
+	needBeginScalarVal := ""   // shape: sec.BeginAttribute(value T) — element type
+	needAddToContainer := ""   // attr.AddToContainerP(v T) — element type
+	multiSubColAttr := false   // multi-sub-column scalar (u32Range) — emit BeginAttribute(arg1, arg2, …)
 	multiSubColPairs := []argPair{}
 
 	if len(g.SubColumns) > 1 {
 		multiSubColAttr = true
 		for _, sc := range g.SubColumns {
 			if len(sc.Fields) != 1 {
-				err = eb.Build().Str("section", g.Section).Str("column", sc.Name).Errorf("marshallgen: multi-field sub-column in multi-sub-column section not supported")
+				err = eb.Build().Str("section", g.Section).Str("column", sc.Name).Errorf("multi-field sub-column in multi-sub-column section not supported")
 				return
 			}
 			f := sc.Fields[0]
 			if f.IsOption || f.IsSlice || f.IsRoaring {
-				err = eb.Build().Str("section", g.Section).Str("field", f.GoFieldName).Errorf("marshallgen: non-scalar field in multi-sub-column section not supported")
+				err = eb.Build().Str("section", g.Section).Str("field", f.GoFieldName).Errorf("non-scalar field in multi-sub-column section not supported")
 				return
 			}
 			multiSubColPairs = append(multiSubColPairs, argPair{Name: sc.Name, Type: f.GoType})
 		}
 	} else {
 		for _, f := range g.SubColumns[0].Fields {
-			switch classifyBegin(f) {
-			case shapeScalarBegin:
+			switch ClassifyBegin(f) {
+			case ShapeScalarBegin:
 				needBeginScalarVal = elemType(f)
-			case shapeScalarBeginSingle:
+			case ShapeScalarBeginSingle:
 				needBeginSingleVal = elemType(f)
-			case shapeContainer:
+			case ShapeContainer:
 				needContainerOpen = true
 				needAddToContainer = elemType(f)
-			case shapeExplodeBegin:
+			case ShapeExplodeBegin:
 				needBeginScalarVal = elemType(f)
-			case shapeExplodeBeginSingle:
+			case ShapeExplodeBeginSingle:
 				needBeginSingleVal = elemType(f)
 			}
 		}
@@ -614,7 +423,7 @@ func writeSectionInterfaces(sb *strings.Builder, plan *Plan, g sectionGroup) (er
 		} else if needBeginScalarVal != "" {
 			// container path + per-element scalar Begin both exist on the
 			// same section: would require Go overloading; not supported.
-			err = eb.Build().Str("section", g.Section).Errorf("marshallgen: section mixes container default and scalar BeginAttribute on different fields — disambiguate via flags (add `,explode` everywhere, or none)")
+			err = eb.Build().Str("section", g.Section).Errorf("section mixes container default and scalar BeginAttribute on different fields — disambiguate via flags (add `,explode` everywhere, or none)")
 			return
 		}
 		if needBeginSingleVal != "" {
@@ -631,7 +440,7 @@ func writeSectionInterfaces(sb *strings.Builder, plan *Plan, g sectionGroup) (er
 // type parameter (no F-bounded recursion on Attr). Ent stays on the
 // EntityI (BeginEntity / SetId / SetTimestamp / SetLifecycle return
 // it; CommitEntity returns error).
-func writeEntityInterface(sb *strings.Builder, plan *Plan, groups []sectionGroup) (err error) {
+func writeEntityInterface(sb *strings.Builder, plan *Plan, groups []SectionGroup) (err error) {
 	kind := plan.KindType
 
 	fmt.Fprintf(sb, "// %sEntityI lists exactly the entity-level methods %s uses.\n", kind, kind)
@@ -650,7 +459,7 @@ func writeEntityInterface(sb *strings.Builder, plan *Plan, groups []sectionGroup
 
 	idCol := planIdCol(plan)
 	if idCol == nil {
-		err = eb.Build().Errorf("marshallgen: plain spec missing required `id` column")
+		err = eb.Build().Errorf("plain spec missing required `id` column")
 		return
 	}
 	sb.WriteString("\tSetId(id uint64, naturalKey []byte) Ent\n")
@@ -674,7 +483,7 @@ func writeEntityInterface(sb *strings.Builder, plan *Plan, groups []sectionGroup
 // call routes through the derived interfaces; flag-driven per-field
 // dispatch picks BeginAttribute / BeginAttributeSingle / container /
 // explode pattern.
-func writeBuildEntitiesFunc(sb *strings.Builder, plan *Plan, groups []sectionGroup) (err error) {
+func writeBuildEntitiesFunc(sb *strings.Builder, plan *Plan, groups []SectionGroup) (err error) {
 	kind := plan.KindType
 
 	fmt.Fprintf(sb, "// %sBuildEntities walks c row-by-row, drives dml's entity / section\n", kind)
@@ -704,7 +513,7 @@ func writeBuildEntitiesFunc(sb *strings.Builder, plan *Plan, groups []sectionGro
 	tsCol := planTsCol(plan)
 	lcCol := planExpiresAtCol(plan)
 	if idCol == nil {
-		err = eb.Build().Errorf("marshallgen: plain spec missing required `id` column")
+		err = eb.Build().Errorf("plain spec missing required `id` column")
 		return
 	}
 	sb.WriteString("\t\tdml.BeginEntity()\n")
@@ -716,7 +525,7 @@ func writeBuildEntitiesFunc(sb *strings.Builder, plan *Plan, groups []sectionGro
 		case "string":
 			nkExpr = fmt.Sprintf("[]byte(c.%s[i])", nkCol.GoField)
 		default:
-			err = eb.Build().Str("goType", nkCol.GoType).Errorf("marshallgen: plain naturalKey must be []byte or string")
+			err = eb.Build().Str("goType", nkCol.GoType).Errorf("plain naturalKey must be []byte or string")
 			return
 		}
 	}
@@ -747,7 +556,7 @@ func writeBuildEntitiesFunc(sb *strings.Builder, plan *Plan, groups []sectionGro
 
 	sb.WriteString("\t\terr = dml.CommitEntity()\n")
 	sb.WriteString("\t\tif err != nil {\n")
-	fmt.Fprintf(sb, "\t\t\terr = eh.Errorf(\"%s: commit row %%d: %%w\", i, err)\n", plan.PackageName)
+	sb.WriteString("\t\t\terr = eh.Errorf(\"commit row %d: %w\", i, err)\n")
 	sb.WriteString("\t\t\treturn\n")
 	sb.WriteString("\t\t}\n")
 	sb.WriteString("\t}\n")
@@ -756,7 +565,7 @@ func writeBuildEntitiesFunc(sb *strings.Builder, plan *Plan, groups []sectionGro
 	return
 }
 
-func writeSectionDriver(sb *strings.Builder, g sectionGroup) (err error) {
+func writeSectionDriver(sb *strings.Builder, g SectionGroup) (err error) {
 	method := methodFor(g.Section)
 	secVar := lowerFirst(method) + "Sec"
 	fmt.Fprintf(sb, "\t\t// --- %s. ---\n", g.Section)
@@ -780,9 +589,9 @@ func writeSectionDriver(sb *strings.Builder, g sectionGroup) (err error) {
 	return
 }
 
-func writeMultiSubColumnDriver(sb *strings.Builder, g sectionGroup, secVar string) (err error) {
+func writeMultiSubColumnDriver(sb *strings.Builder, g SectionGroup, secVar string) (err error) {
 	if len(g.Memberships) != 1 {
-		err = eb.Build().Str("section", g.Section).Errorf("marshallgen: multi-sub-column section with multiple memberships not supported")
+		err = eb.Build().Str("section", g.Section).Errorf("multi-sub-column section with multiple memberships not supported")
 		return
 	}
 	args := make([]string, 0, len(g.SubColumns))
@@ -820,13 +629,13 @@ func writeMembershipAdd(sb *strings.Builder, indent, attrVar string, f TaggedFie
 func writeFieldDriver(sb *strings.Builder, f TaggedField, secVar string) (err error) {
 	tag := f.GoFieldName
 	if tag == "" {
-		tag = upperFirstASCII(f.LWMembership) // const fields have no Go name
+		tag = UpperFirst(f.LWMembership) // const fields have no Go name
 	}
 	attrVar := secVar + "Attr_" + tag
-	shape := classifyBegin(f)
+	shape := ClassifyBegin(f)
 
 	switch shape {
-	case shapeScalarBegin:
+	case ShapeScalarBegin:
 		valExpr := scalarValueExpr(f)
 		if f.IsOption {
 			fmt.Fprintf(sb, "\t\tif c.%sHas[i] {\n", f.GoFieldName)
@@ -840,7 +649,7 @@ func writeFieldDriver(sb *strings.Builder, f TaggedField, secVar string) (err er
 		writeMembershipAdd(sb, "\t\t", attrVar, f)
 		fmt.Fprintf(sb, "\t\t%s.EndAttributeP()\n", attrVar)
 
-	case shapeScalarBeginSingle:
+	case ShapeScalarBeginSingle:
 		valExpr := scalarValueExpr(f)
 		if f.IsOption {
 			fmt.Fprintf(sb, "\t\tif c.%sHas[i] {\n", f.GoFieldName)
@@ -854,7 +663,7 @@ func writeFieldDriver(sb *strings.Builder, f TaggedField, secVar string) (err er
 		writeMembershipAdd(sb, "\t\t", attrVar, f)
 		fmt.Fprintf(sb, "\t\t%s.EndAttributeP()\n", attrVar)
 
-	case shapeContainer:
+	case ShapeContainer:
 		// 1 attribute, N values via AddToContainerP. Empty / nil skips
 		// (leeway splice semantics: empty non-scalars vanish).
 		switch {
@@ -878,12 +687,12 @@ func writeFieldDriver(sb *strings.Builder, f TaggedField, secVar string) (err er
 			fmt.Fprintf(sb, "\t\t\t%s.EndAttributeP()\n", attrVar)
 			sb.WriteString("\t\t}\n")
 		default:
-			err = eb.Build().Str("field", f.GoFieldName).Errorf("marshallgen: container shape on non-slice / non-roaring field — should have been caught by parser")
+			err = eb.Build().Str("field", f.GoFieldName).Errorf("container shape on non-slice / non-roaring field — should have been caught by parser")
 		}
 
-	case shapeExplodeBegin, shapeExplodeBeginSingle:
+	case ShapeExplodeBegin, ShapeExplodeBeginSingle:
 		beginMethod := "BeginAttribute"
-		if shape == shapeExplodeBeginSingle {
+		if shape == ShapeExplodeBeginSingle {
 			beginMethod = "BeginAttributeSingle"
 		}
 		switch {
@@ -903,7 +712,7 @@ func writeFieldDriver(sb *strings.Builder, f TaggedField, secVar string) (err er
 			fmt.Fprintf(sb, "\t\t\t%s.EndAttributeP()\n", attrVar)
 			sb.WriteString("\t\t}\n")
 		default:
-			err = eb.Build().Str("field", f.GoFieldName).Errorf("marshallgen: explode shape on non-slice / non-roaring field — should have been caught by parser")
+			err = eb.Build().Str("field", f.GoFieldName).Errorf("explode shape on non-slice / non-roaring field — should have been caught by parser")
 		}
 	}
 	return
@@ -930,8 +739,7 @@ func scalarValueExpr(f TaggedField) string {
 // AddToContainerP / SecI's BeginAttribute (which take []byte for blob
 // sections) accepts them.
 func sliceElemExpr(f TaggedField, elemVar string) string {
-	switch f.GoType {
-	case "[4]byte", "[16]byte":
+	if IsFixedByteArray(f.GoType) {
 		return elemVar + "[:]"
 	}
 	return elemVar
@@ -941,7 +749,7 @@ func sliceElemExpr(f TaggedField, elemVar string) string {
 // []byte the blob-section BeginAttribute expects. No-op for any other
 // type.
 func blobSliceMaybe(f TaggedField, base string) string {
-	if f.GoType == "[4]byte" || f.GoType == "[16]byte" {
+	if IsFixedByteArray(f.GoType) {
 		return base + "[:]"
 	}
 	return base
@@ -950,7 +758,7 @@ func blobSliceMaybe(f TaggedField, base string) string {
 // --- FillFromArrow core + derived read interfaces. ---
 
 func writeFillHelper(sb *strings.Builder, plan *Plan) (err error) {
-	groups := computeGroups(plan)
+	groups := ComputeGroups(plan)
 
 	sb.WriteString("// --- Composed-interface FillFromArrow helper (schema-agnostic). ---\n//\n")
 	fmt.Fprintf(sb, "// %sFillFromArrow walks the Arrow record row-by-row and appends\n", plan.KindType)
@@ -972,7 +780,7 @@ func writeFillHelper(sb *strings.Builder, plan *Plan) (err error) {
 // section read interfaces (one accessor per sub-column).
 type argPair struct{ Name, Type string }
 
-func writeSectionReadInterfaces(sb *strings.Builder, plan *Plan, g sectionGroup) (err error) {
+func writeSectionReadInterfaces(sb *strings.Builder, plan *Plan, g SectionGroup) (err error) {
 	kind := plan.KindType
 	method := methodFor(g.Section)
 
@@ -985,18 +793,18 @@ func writeSectionReadInterfaces(sb *strings.Builder, plan *Plan, g sectionGroup)
 	var hasScalarValue, hasSingleVal, hasIterVal bool
 	for _, sc := range g.SubColumns {
 		for _, f := range sc.Fields {
-			switch classifyBegin(f) {
-			case shapeScalarBegin, shapeExplodeBegin:
+			switch ClassifyBegin(f) {
+			case ShapeScalarBegin, ShapeExplodeBegin:
 				hasScalarValue = true
-			case shapeScalarBeginSingle, shapeExplodeBeginSingle:
+			case ShapeScalarBeginSingle, ShapeExplodeBeginSingle:
 				hasSingleVal = true
-			case shapeContainer:
+			case ShapeContainer:
 				hasIterVal = true
 			}
 		}
 	}
 	if hasScalarValue && (hasSingleVal || hasIterVal) {
-		err = eb.Build().Str("section", g.Section).Errorf("marshallgen: section mixes scalar-section field shape with non-scalar-section field shape — disambiguate via flags so the read API resolves to one method set")
+		err = eb.Build().Str("section", g.Section).Errorf("section mixes scalar-section field shape with non-scalar-section field shape — disambiguate via flags so the read API resolves to one method set")
 		return
 	}
 
@@ -1005,7 +813,7 @@ func writeSectionReadInterfaces(sb *strings.Builder, plan *Plan, g sectionGroup)
 	if len(g.SubColumns) > 1 {
 		for _, sc := range g.SubColumns {
 			f := sc.Fields[0]
-			fmt.Fprintf(sb, "\tGetAttrValue%s(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) %s\n", upperFirst(sc.Name), f.GoType)
+			fmt.Fprintf(sb, "\tGetAttrValue%s(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) %s\n", UpperFirst(sc.Name), f.GoType)
 		}
 	} else {
 		f := g.SubColumns[0].Fields[0]
@@ -1035,16 +843,15 @@ func writeSectionReadInterfaces(sb *strings.Builder, plan *Plan, g sectionGroup)
 	return
 }
 
-func writeFillFromArrowFunc(sb *strings.Builder, plan *Plan, groups []sectionGroup) (err error) {
+func writeFillFromArrowFunc(sb *strings.Builder, plan *Plan, groups []SectionGroup) (err error) {
 	kind := plan.KindType
-	pkg := plan.PackageName
 
 	idCol := planIdCol(plan)
 	nkCol := planNaturalKeyCol(plan)
 	tsCol := planTsCol(plan)
 	lcCol := planExpiresAtCol(plan)
 	if idCol == nil {
-		err = eb.Build().Errorf("marshallgen: plain spec missing required `id` column")
+		err = eb.Build().Errorf("plain spec missing required `id` column")
 		return
 	}
 
@@ -1088,7 +895,7 @@ func writeFillFromArrowFunc(sb *strings.Builder, plan *Plan, groups []sectionGro
 		case "string":
 			fmt.Fprintf(sb, "\t\tc.%s = append(c.%s, string(nkCol.Value(i)))\n", nkCol.GoField, nkCol.GoField)
 		default:
-			err = eb.Build().Str("goType", nkCol.GoType).Errorf("marshallgen: plain naturalKey must be []byte or string")
+			err = eb.Build().Str("goType", nkCol.GoType).Errorf("plain naturalKey must be []byte or string")
 			return
 		}
 	}
@@ -1101,7 +908,7 @@ func writeFillFromArrowFunc(sb *strings.Builder, plan *Plan, groups []sectionGro
 			fmt.Fprintf(sb, "\t\tc.%s = append(c.%s, int64(tsCol.Value(i)))\n",
 				tsCol.GoField, tsCol.GoField)
 		default:
-			err = eb.Build().Str("goType", tsCol.GoType).Errorf("marshallgen: plain ts must be time.Time or int64 (nanos)")
+			err = eb.Build().Str("goType", tsCol.GoType).Errorf("plain ts must be time.Time or int64 (nanos)")
 			return
 		}
 	}
@@ -1114,13 +921,13 @@ func writeFillFromArrowFunc(sb *strings.Builder, plan *Plan, groups []sectionGro
 			fmt.Fprintf(sb, "\t\tc.%s = append(c.%s, int64(lcCol.Value(i)))\n",
 				lcCol.GoField, lcCol.GoField)
 		default:
-			err = eb.Build().Str("goType", lcCol.GoType).Errorf("marshallgen: plain expiresAt must be time.Time or int64 (nanos)")
+			err = eb.Build().Str("goType", lcCol.GoType).Errorf("plain expiresAt must be time.Time or int64 (nanos)")
 			return
 		}
 	}
 
 	for _, g := range groups {
-		err = writeSectionDecode(sb, g, pkg)
+		err = writeSectionDecode(sb, g)
 		if err != nil {
 			return
 		}
@@ -1131,7 +938,7 @@ func writeFillFromArrowFunc(sb *strings.Builder, plan *Plan, groups []sectionGro
 	return
 }
 
-func writeSectionDecode(sb *strings.Builder, g sectionGroup, pkg string) (err error) {
+func writeSectionDecode(sb *strings.Builder, g SectionGroup) (err error) {
 	method := methodFor(g.Section)
 	attrsVar := lowerFirst(method) + "Attrs"
 	membsVar := lowerFirst(method) + "Membs"
@@ -1140,7 +947,7 @@ func writeSectionDecode(sb *strings.Builder, g sectionGroup, pkg string) (err er
 	fmt.Fprintf(sb, "\t\t// --- %s. ---\n", g.Section)
 
 	if len(g.SubColumns) > 1 {
-		return writeMultiSubColumnDecode(sb, g, attrsVar, membsVar, prefix, pkg)
+		return writeMultiSubColumnDecode(sb, g, attrsVar, membsVar, prefix)
 	}
 
 	fields := g.SubColumns[0].Fields
@@ -1172,7 +979,7 @@ func writeSectionDecode(sb *strings.Builder, g sectionGroup, pkg string) (err er
 		if f.IsConst {
 			continue
 		}
-		writeFieldAppend(sb, f, prefix, pkg)
+		writeFieldAppend(sb, f, prefix)
 	}
 	return
 }
@@ -1192,7 +999,7 @@ func writeFieldAccumulatorDecl(sb *strings.Builder, f TaggedField, prefix string
 	}
 }
 
-func writeFieldAppend(sb *strings.Builder, f TaggedField, prefix, pkg string) {
+func writeFieldAppend(sb *strings.Builder, f TaggedField, prefix string) {
 	switch {
 	case f.IsOption:
 		fmt.Fprintf(sb, "\t\tif %s%sCount == 1 {\n", prefix, f.GoFieldName)
@@ -1209,7 +1016,7 @@ func writeFieldAppend(sb *strings.Builder, f TaggedField, prefix, pkg string) {
 		fmt.Fprintf(sb, "\t\tc.%s = append(c.%s, %s%sBitmap)\n", f.GoFieldName, f.GoFieldName, prefix, f.GoFieldName)
 	default:
 		fmt.Fprintf(sb, "\t\tif %s%sCount != 1 {\n", prefix, f.GoFieldName)
-		fmt.Fprintf(sb, "\t\t\terr = eb.Build().Int(\"row\", i).Str(\"field\", %q).Errorf(\"%s: expected exactly one occurrence per row\")\n", f.GoFieldName, pkg)
+		fmt.Fprintf(sb, "\t\t\terr = eb.Build().Int(\"row\", i).Str(\"field\", %q).Errorf(\"expected exactly one occurrence per row\")\n", f.GoFieldName)
 		sb.WriteString("\t\t\treturn\n\t\t}\n")
 		fmt.Fprintf(sb, "\t\tc.%s = append(c.%s, %s%sVal)\n", f.GoFieldName, f.GoFieldName, prefix, f.GoFieldName)
 	}
@@ -1224,11 +1031,11 @@ func writeFieldMembCase(sb *strings.Builder, f TaggedField, prefix, attrsVar str
 	// Single-value read pulls the value via GetAttrValueValue for
 	// scalar sections, GetAttrValueSingleOrDefault for non-scalar.
 	// Classifier on the field's Begin shape mirrors the write side:
-	// shapeScalarBegin / shapeExplodeBegin → scalar section.
+	// ShapeScalarBegin / ShapeExplodeBegin → scalar section.
 	singleVal := func() string {
 		method := "GetAttrValueSingleOrDefault"
-		switch classifyBegin(f) {
-		case shapeScalarBegin, shapeExplodeBegin:
+		switch ClassifyBegin(f) {
+		case ShapeScalarBegin, ShapeExplodeBegin:
 			method = "GetAttrValueValue"
 		}
 		return fmt.Sprintf("%s.%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))", attrsVar, method)
@@ -1236,12 +1043,10 @@ func writeFieldMembCase(sb *strings.Builder, f TaggedField, prefix, attrsVar str
 	switch {
 	case f.IsOption:
 		fmt.Fprintf(sb, "\t\t\t\t\tval := %s\n", singleVal())
-		switch f.GoType {
-		case "time.Time":
-			fmt.Fprintf(sb, "\t\t\t\t\t%s%sVal = val\n", prefix, f.GoFieldName)
-		case "[4]byte", "[16]byte":
+		switch {
+		case IsFixedByteArray(f.GoType):
 			fmt.Fprintf(sb, "\t\t\t\t\tcopy(%s%sVal[:], val)\n", prefix, f.GoFieldName)
-		case "[]byte":
+		case f.GoType == "[]byte":
 			sb.WriteString("\t\t\t\t\tcp := make([]byte, len(val))\n")
 			sb.WriteString("\t\t\t\t\tcopy(cp, val)\n")
 			fmt.Fprintf(sb, "\t\t\t\t\t%s%sVal = cp\n", prefix, f.GoFieldName)
@@ -1268,10 +1073,10 @@ func writeFieldMembCase(sb *strings.Builder, f TaggedField, prefix, attrsVar str
 		sb.WriteString("\t\t\t\t\t}\n")
 	default:
 		fmt.Fprintf(sb, "\t\t\t\t\tval := %s\n", singleVal())
-		switch f.GoType {
-		case "[4]byte", "[16]byte":
+		switch {
+		case IsFixedByteArray(f.GoType):
 			fmt.Fprintf(sb, "\t\t\t\t\tcopy(%s%sVal[:], val)\n", prefix, f.GoFieldName)
-		case "[]byte":
+		case f.GoType == "[]byte":
 			sb.WriteString("\t\t\t\t\tcp := make([]byte, len(val))\n")
 			sb.WriteString("\t\t\t\t\tcopy(cp, val)\n")
 			fmt.Fprintf(sb, "\t\t\t\t\t%s%sVal = cp\n", prefix, f.GoFieldName)
@@ -1282,9 +1087,9 @@ func writeFieldMembCase(sb *strings.Builder, f TaggedField, prefix, attrsVar str
 	}
 }
 
-func writeMultiSubColumnDecode(sb *strings.Builder, g sectionGroup, attrsVar, membsVar, prefix, pkg string) (err error) {
+func writeMultiSubColumnDecode(sb *strings.Builder, g SectionGroup, attrsVar, membsVar, prefix string) (err error) {
 	if len(g.Memberships) != 1 {
-		err = eb.Build().Str("section", g.Section).Errorf("marshallgen: multi-sub-column section with multiple memberships not supported on read side")
+		err = eb.Build().Str("section", g.Section).Errorf("multi-sub-column section with multiple memberships not supported on read side")
 		return
 	}
 	type sub struct {
@@ -1304,7 +1109,7 @@ func writeMultiSubColumnDecode(sb *strings.Builder, g sectionGroup, attrsVar, me
 	fmt.Fprintf(sb, "\t\tfor attrJ := int64(0); attrJ < n%s; attrJ++ {\n", prefix)
 	for _, s := range subs {
 		fmt.Fprintf(sb, "\t\t\t%s%sLocal := %s.GetAttrValue%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))\n",
-			prefix, s.Field.GoFieldName, attrsVar, upperFirst(s.ColName))
+			prefix, s.Field.GoFieldName, attrsVar, UpperFirst(s.ColName))
 	}
 	if memb.Flags.Channel.EmbedsLiteralName() {
 		fmt.Fprintf(sb, "\t\t\tfor membBytes := range %s.GetMembValue%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {\n", membsVar, memb.Flags.Channel.AddMethodSuffix())
@@ -1321,7 +1126,7 @@ func writeMultiSubColumnDecode(sb *strings.Builder, g sectionGroup, attrsVar, me
 	sb.WriteString("\t\t\t}\n")
 	sb.WriteString("\t\t}\n")
 	fmt.Fprintf(sb, "\t\tif %s%sCount != 1 {\n", prefix, memb.GoFieldName)
-	fmt.Fprintf(sb, "\t\t\terr = eb.Build().Int(\"row\", i).Str(\"membership\", %q).Errorf(\"%s: expected exactly one occurrence per row\")\n", memb.LWMembership, pkg)
+	fmt.Fprintf(sb, "\t\t\terr = eb.Build().Int(\"row\", i).Str(\"membership\", %q).Errorf(\"expected exactly one occurrence per row\")\n", memb.LWMembership)
 	sb.WriteString("\t\t\treturn\n\t\t}\n")
 	for _, s := range subs {
 		fmt.Fprintf(sb, "\t\tc.%s = append(c.%s, %s%sVal)\n", s.Field.GoFieldName, s.Field.GoFieldName, prefix, s.Field.GoFieldName)
@@ -1330,16 +1135,6 @@ func writeMultiSubColumnDecode(sb *strings.Builder, g sectionGroup, attrsVar, me
 }
 
 // --- case helpers. ---
-
-func upperFirst(s string) string {
-	if s == "" {
-		return s
-	}
-	if s[0] >= 'a' && s[0] <= 'z' {
-		return string(s[0]-32) + s[1:]
-	}
-	return s
-}
 
 func lowerFirst(s string) string {
 	if s == "" {
