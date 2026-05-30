@@ -391,9 +391,7 @@ func (inst *HelpHost) renderViewToggle() {
 // markdown.WithScrollToSection; the caller is responsible for clearing
 // the value after the scroll lands (HelpHost.consumeScrollTarget does
 // this).
-// clipboard, when non-nil, adds a copy-to-clipboard button to every
-// rendered code/verbatim block ([markdown.WithClipboard]); nil omits the
-// affordance entirely.
+//
 // bus, when non-nil, enables a "Copy" button on each rendered
 // code/verbatim block via [markdown.Doc.RenderActions]; a click copies
 // the block's verbatim source to the clipboard over clipboard.write. On
