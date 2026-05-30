@@ -27,10 +27,10 @@ cd "$here"
 sha256sum -c SHA256SUMS
 
 # Regenerate phosphor.out.go and phosphor_lookup.out.go from the JSON.
-# Tags pass-through so build-tagged source remains compilable during
-# the generator's go run.
-go run -tags "$(cat ../../../../../../tags | tr -d $'\n')" \
-	../../../../cmd/iconsgen generate \
+# boxer.sh builds ./public/app with the repo tag set, then runs the iconsgen
+# subcommand (the former cmd/iconsgen main, folded into app per the
+# entry-point standard).
+../../../../boxer.sh iconsgen generate \
 	--iconsJson ./phosphor-icons.json \
 	--constsOut ./phosphor.out.go \
 	--lookupOut ./phosphor_lookup.out.go \

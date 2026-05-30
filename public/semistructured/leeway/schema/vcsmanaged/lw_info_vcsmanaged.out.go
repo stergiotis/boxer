@@ -1,4 +1,4 @@
-// Code generated; Leeway DML (github.com/stergiotis/boxer/public/app) DO NOT EDIT.
+// Code generated; Leeway DML (github.com/stergiotis/boxer/public/semistructured/leeway/schema/vcsmanaged.test) DO NOT EDIT.
 
 package vcsmanaged
 

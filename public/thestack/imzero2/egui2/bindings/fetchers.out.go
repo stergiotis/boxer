@@ -1,4 +1,4 @@
-// Code generated; TheStack (github.com/stergiotis/boxer/public/thestack/cmd/egui2gen) DO NOT EDIT.
+// Code generated; TheStack (github.com/stergiotis/boxer/public/app) DO NOT EDIT.
 
 package bindings
 

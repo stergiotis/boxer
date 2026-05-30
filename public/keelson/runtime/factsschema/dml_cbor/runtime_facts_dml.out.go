@@ -1,4 +1,4 @@
-// Code generated; Leeway DML (github.com/stergiotis/boxer/cmd/runtimecodegen) DO NOT EDIT.
+// Code generated; Leeway DML (github.com/stergiotis/boxer/public/app) DO NOT EDIT.
 
 package dml_cbor
 
@@ -8,10 +8,10 @@ import (
 	_ "github.com/apache/arrow-go/v18/arrow/ipc"
 	_ "github.com/apache/arrow-go/v18/arrow/math"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	arrowrowcbor "github.com/stergiotis/boxer/public/keelson/runtime/factsschema/arrowrowcbor"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
-	arrowrowcbor "github.com/stergiotis/boxer/public/keelson/runtime/factsschema/arrowrowcbor"
 	"slices"
 	"time"
 )

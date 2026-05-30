@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//go:generate sh -c "go test -tags=\"$(cat ../../../../../../../../tags)\" -run TestFixtureDmlGeneration ."
+//go:generate sh -c "go test -tags=\"$(cat ../../../../../../tags)\" -run TestFixtureDmlGeneration ."
 
 // TestFixtureDmlGeneration regenerates fixture_dml.out.go from the fixture
 // TableDesc. Driven by `//go:generate` above; run via `go generate ./...`

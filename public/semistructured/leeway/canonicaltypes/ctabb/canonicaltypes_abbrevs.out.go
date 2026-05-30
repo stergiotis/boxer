@@ -1,4 +1,3 @@
-//home/spx/repo/boxer/public/semistructured/leeway/canonicaltypes/ctabb
 // Code generated; Leeway CT (github.com/stergiotis/boxer/public/app) DO NOT EDIT.
 
 package ctabb

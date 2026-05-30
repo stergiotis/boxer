@@ -1,4 +1,4 @@
-// Code generated; Leeway DML (github.com/stergiotis/boxer/cmd/runtimecodegen) DO NOT EDIT.
+// Code generated; Leeway DML (github.com/stergiotis/boxer/public/app) DO NOT EDIT.
 
 package dml
 

@@ -1,4 +1,4 @@
-// Code generated; ET7 DDL (github.com/stergiotis/boxer/cmd/runtimecodegen) DO NOT EDIT.
+// Code generated; ET7 DDL (github.com/stergiotis/boxer/public/app) DO NOT EDIT.
 
 package ddl
 

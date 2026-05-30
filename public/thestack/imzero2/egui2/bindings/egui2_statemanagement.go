@@ -158,14 +158,14 @@ type UiRectValue struct {
 // via callback) so multiple consumers in the same frame can read
 // independently — though in practice exactly one demo per dock tile
 // touches snarl events.
-type SnarlEventsValue = []SnarlEvent
+type SnarlEventsValue []SnarlEvent
 
 // GraphEventsValue / GraphSelectionValue / GraphMetricsValue cache the
 // three egui_graphs fetcher outputs at frame-end. Same rationale as
 // SnarlEventsValue.
-type GraphEventsValue = []GraphEvent
-type GraphSelectionValue = []GraphSelectedItem
-type GraphMetricsValue = []GraphMetrics
+type GraphEventsValue []GraphEvent
+type GraphSelectionValue []GraphSelectedItem
+type GraphMetricsValue []GraphMetrics
 
 type StateManager struct {
 	responseFlags        *containers.BinarySearchGrowingKV[uint64, ResponseFlagsE]

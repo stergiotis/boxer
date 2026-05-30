@@ -40,7 +40,7 @@ on every build.
 | `SHA256SUMS`   | This dir's `sha256sum` of `Phosphor.ttf` — matches release `SHA256SUMS`     | CI-verified                 |
 
 The Go-side codepoint catalogue (`phosphor-icons.json`) lives separately
-at [`src/go/public/keelson/runtime/icons/`](../../../../go/public/keelson/runtime/icons/);
+at [`src/go/public/keelson/runtime/icons/`](../../../../../public/keelson/runtime/icons);
 the Go generator (`src/go/cmd/iconsgen`) regenerates `phosphor.out.go`
 and `phosphor_lookup.out.go` from it. See ADR-0044 §SD3 for the split.
 
