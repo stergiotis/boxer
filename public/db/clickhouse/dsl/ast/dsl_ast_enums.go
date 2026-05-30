@@ -175,6 +175,39 @@ const (
 	BinOpNotILike
 )
 
+// binaryOpInfo is the single source of truth for how each binary operator is
+// rendered. GoMethod is the builder-API method name emitted by the Go-source
+// unparser; SQL is the operator text emitted by the SQL unparser. binOpMethod
+// (dsl_ast_unparse_go.go) and binaryOpSQL (dsl_ast_unparse_sql.go) look it up
+// rather than each maintaining its own parallel switch over the operator set.
+var binaryOpInfo = map[BinaryOpE]struct {
+	GoMethod string
+	SQL      string
+}{
+	BinOpAnd:         {"And", "AND"},
+	BinOpOr:          {"Or", "OR"},
+	BinOpPlus:        {"Plus", "+"},
+	BinOpMinus:       {"Minus", "-"},
+	BinOpMultiply:    {"Mul", "*"},
+	BinOpDivide:      {"Div", "/"},
+	BinOpModulo:      {"Mod", "%"},
+	BinOpConcat:      {"Concat", "||"},
+	BinOpEq:          {"Eq", "="},
+	BinOpNotEq:       {"NotEq", "!="},
+	BinOpLt:          {"Lt", "<"},
+	BinOpGt:          {"Gt", ">"},
+	BinOpLe:          {"Le", "<="},
+	BinOpGe:          {"Ge", ">="},
+	BinOpIn:          {"In", "IN"},
+	BinOpNotIn:       {"NotIn", "NOT IN"},
+	BinOpGlobalIn:    {"GlobalIn", "GLOBAL IN"},
+	BinOpGlobalNotIn: {"GlobalNotIn", "GLOBAL NOT IN"},
+	BinOpLike:        {"Like", "LIKE"},
+	BinOpNotLike:     {"NotLike", "NOT LIKE"},
+	BinOpILike:       {"ILike", "ILIKE"},
+	BinOpNotILike:    {"NotILike", "NOT ILIKE"},
+}
+
 type UnaryOpE uint8
 
 const (

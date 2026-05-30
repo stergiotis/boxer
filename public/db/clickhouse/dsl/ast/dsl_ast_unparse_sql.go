@@ -630,54 +630,11 @@ func writeLambda(b *strings.Builder, lam *LambdaData) {
 // --- SQL text for enums ---
 
 func binaryOpSQL(op BinaryOpE) string {
-	switch op {
-	case BinOpAnd:
-		return "AND"
-	case BinOpOr:
-		return "OR"
-	case BinOpPlus:
-		return "+"
-	case BinOpMinus:
-		return "-"
-	case BinOpMultiply:
-		return "*"
-	case BinOpDivide:
-		return "/"
-	case BinOpModulo:
-		return "%"
-	case BinOpConcat:
-		return "||"
-	case BinOpEq:
-		return "="
-	case BinOpNotEq:
-		return "!="
-	case BinOpLt:
-		return "<"
-	case BinOpGt:
-		return ">"
-	case BinOpLe:
-		return "<="
-	case BinOpGe:
-		return ">="
-	case BinOpIn:
-		return "IN"
-	case BinOpNotIn:
-		return "NOT IN"
-	case BinOpGlobalIn:
-		return "GLOBAL IN"
-	case BinOpGlobalNotIn:
-		return "GLOBAL NOT IN"
-	case BinOpLike:
-		return "LIKE"
-	case BinOpNotLike:
-		return "NOT LIKE"
-	case BinOpILike:
-		return "ILIKE"
-	case BinOpNotILike:
-		return "NOT ILIKE"
-	default:
-		return "?"
+	if info, ok := binaryOpInfo[op]; ok {
+		return info.SQL
 	}
+	// Preserve the prior switch default for unknown ops.
+	return "?"
 }
 
 func intervalUnitSQL(u IntervalUnitE) string {

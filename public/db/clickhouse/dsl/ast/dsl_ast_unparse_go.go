@@ -551,54 +551,9 @@ func extractLitInt(e Expr) string {
 }
 
 func binOpMethod(op BinaryOpE) string {
-	switch op {
-	case BinOpEq:
-		return "Eq"
-	case BinOpNotEq:
-		return "NotEq"
-	case BinOpGt:
-		return "Gt"
-	case BinOpLt:
-		return "Lt"
-	case BinOpGe:
-		return "Ge"
-	case BinOpLe:
-		return "Le"
-	case BinOpAnd:
-		return "And"
-	case BinOpOr:
-		return "Or"
-	case BinOpPlus:
-		return "Plus"
-	case BinOpMinus:
-		return "Minus"
-	case BinOpMultiply:
-		return "Mul"
-	case BinOpDivide:
-		return "Div"
-	case BinOpModulo:
-		return "Mod"
-	case BinOpConcat:
-		return "Concat"
-	case BinOpLike:
-		return "Like"
-	case BinOpNotLike:
-		return "NotLike"
-	case BinOpILike:
-		return "ILike"
-	case BinOpNotILike:
-		return "NotILike"
-	case BinOpIn:
-		return "In"
-	case BinOpNotIn:
-		return "NotIn"
-	case BinOpGlobalIn:
-		return "GlobalIn"
-	case BinOpGlobalNotIn:
-		return "GlobalNotIn"
-	default:
-		return ""
-	}
+	// Unknown ops yield the zero struct's empty GoMethod, matching the prior
+	// switch default of "".
+	return binaryOpInfo[op].GoMethod
 }
 
 func joinKindConst(k JoinKindE) string {
