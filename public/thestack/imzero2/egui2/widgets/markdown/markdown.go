@@ -3,6 +3,8 @@
 package markdown
 
 import (
+	"iter"
+	"slices"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/containers"
@@ -101,6 +103,53 @@ func SlugHeading(text string) (slug string) {
 // usually does not need an extra wrap — the outer container already
 // scopes the ids.
 func (inst *Doc) Render(ids *c.WidgetIdStack, opts ...RenderOpt) {
+	inst.renderCollect(ids, "", false, opts)
+}
+
+// CodeBlockAction is one code/verbatim block whose action button was
+// clicked during a [Doc.RenderActions] frame. Text is the block's
+// verbatim source (what the author wrote, before the highlighter's
+// canonicalisation); Lang is the normalised fence language ("go", "sql",
+// "" for an unlabelled/indented block); Index is the block's 0-based
+// ordinal among the code blocks in the document, stable across frames.
+type CodeBlockAction struct {
+	Text  string
+	Lang  string
+	Index int
+}
+
+// RenderActions renders the document like [Doc.Render] but additionally
+// places a small button labelled `label` above every code/verbatim
+// block, and returns the blocks whose button was clicked this frame.
+//
+// It is an immediate-mode API: the whole document is drawn eagerly when
+// RenderActions is called (the returned sequence merely replays clicks
+// already captured), so ranging over it, breaking early, or ignoring it
+// entirely all leave the same pixels on screen. A single frame can yield
+// more than one action when the user clicks several buttons before the
+// next paint, so the sequence may produce zero, one, or many values.
+//
+// Typical use — wire the button to any per-block action:
+//
+//	for act := range doc.RenderActions(ids, "Copy", markdown.WithScrollToSection(s)) {
+//		text := act.Text
+//		go func() { _, _ = bus.Request(clipboardbroker.SubjectWrite, []byte(text)) }()
+//	}
+//
+// The renderer itself performs no action — it only reports clicks; the
+// caller decides what a click means. CodeView's built-in selectable text
+// (Ctrl+C) is unaffected and present whether or not buttons are shown.
+func (inst *Doc) RenderActions(ids *c.WidgetIdStack, label string, opts ...RenderOpt) iter.Seq[CodeBlockAction] {
+	actions := inst.renderCollect(ids, label, true, opts)
+	return slices.Values(actions)
+}
+
+// renderCollect is the shared render core. actionsEnabled gates the
+// per-code-block action button (labelled actionLabel); when true the
+// returned slice holds every block whose button was clicked this frame,
+// in document order. [Doc.Render] calls it with actions disabled (nil
+// return); [Doc.RenderActions] wraps the slice as an iter.Seq.
+func (inst *Doc) renderCollect(ids *c.WidgetIdStack, actionLabel string, actionsEnabled bool, opts []RenderOpt) (actions []CodeBlockAction) {
 	var ro renderOptions
 	for _, opt := range opts {
 		opt(&ro)
@@ -111,11 +160,14 @@ func (inst *Doc) Render(ids *c.WidgetIdStack, opts ...RenderOpt) {
 		imageMaxH:      inst.imageMaxH,
 		scrollToSlug:   ro.scrollToSlug,
 		headings:       inst.headings,
-		clipboardWrite: ro.clipboardWrite,
+		actionsEnabled: actionsEnabled,
+		actionLabel:    actionLabel,
 	}
 	for i := range inst.segments {
 		inst.segments[i].render(&rc)
 	}
+	actions = rc.codeActions
+	return
 }
 
 // RenderOpt configures a single [Doc.Render] call. Construct via the
@@ -124,8 +176,7 @@ func (inst *Doc) Render(ids *c.WidgetIdStack, opts ...RenderOpt) {
 type RenderOpt func(*renderOptions)
 
 type renderOptions struct {
-	scrollToSlug   string
-	clipboardWrite func(text string)
+	scrollToSlug string
 }
 
 // WithScrollToSection asks the next [Doc.Render] to schedule an egui
@@ -143,31 +194,6 @@ type renderOptions struct {
 func WithScrollToSection(slug string) (opt RenderOpt) {
 	opt = func(o *renderOptions) {
 		o.scrollToSlug = slug
-	}
-	return
-}
-
-// WithClipboard enables a copy-to-clipboard affordance on every code /
-// verbatim block: when set, each rendered code block gets a small
-// icon-only button that hands the block's source text to write on click.
-// The renderer never touches the OS clipboard itself — write is the
-// caller's sink into the clipboard.write capability (ADR-0026 Update
-// 2026-05-30). A host app holding the cap typically wires
-//
-//	WithClipboard(func(t string) {
-//		go func() { _, _ = bus.Request(clipboardbroker.SubjectWrite, []byte(t)) }()
-//	})
-//
-// off the frame goroutine (Request blocks until the broker acks).
-//
-// When write is nil (the default — e.g. an app without the cap, or a
-// viewport-less render path like SVG export or the screenshot tour) no
-// button is emitted; the block renders exactly as before. The
-// CodeView's built-in selectable text (Ctrl+C) is unaffected either way;
-// the button is an additional affordance.
-func WithClipboard(write func(text string)) (opt RenderOpt) {
-	opt = func(o *renderOptions) {
-		o.clipboardWrite = write
 	}
 	return
 }
@@ -192,10 +218,15 @@ type renderCtx struct {
 	headings     []HeadingInfo
 	headingIdx   int
 
-	// clipboardWrite, when non-nil ([WithClipboard]), makes each code
-	// block emit an icon-only copy button that calls this sink with the
-	// block's source text on click. Nil disables the affordance.
-	clipboardWrite func(text string)
+	// Code-block action state ([Doc.RenderActions]). When actionsEnabled
+	// is set, each code block emits a small button labelled actionLabel;
+	// a click appends a [CodeBlockAction] to codeActions. codeBlockIdx is
+	// bumped per code block so each action carries a stable 0-based
+	// ordinal. All three are zero/empty under the plain [Doc.Render] path.
+	actionsEnabled bool
+	actionLabel    string
+	codeActions    []CodeBlockAction
+	codeBlockIdx   int
 }
 
 // Option configures [Parse]. Pass options at construction time.
@@ -351,7 +382,8 @@ type paragraphRun struct {
 //   - segKindParagraph / segKindHeading: runs is the inline flow.
 //   - segKindCodeBlock:                  code holds the retained job;
 //     codeText holds the verbatim source
-//     for the copy affordance.
+//     and codeLang the fence language,
+//     both surfaced by [Doc.RenderActions].
 //   - segKindList:                       children is a slice of segKindListItem
 //     segments; listOrdered + listStart
 //     drive the bullet glyph.
@@ -366,6 +398,7 @@ type segment struct {
 	runs               []paragraphRun
 	code               typed.RetainedFffiHolderTyped[c.CodeViewJobS]
 	codeText           string
+	codeLang           string
 	children           []segment
 	listOrdered        bool
 	listStart          uint32

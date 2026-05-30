@@ -6,9 +6,7 @@ import (
 	"strconv"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
-	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )
 
 // padDefault resolves the IDS Padding.Default token at the active
@@ -50,17 +48,19 @@ func (inst *segment) render(rc *renderCtx) {
 	case segKindParagraph:
 		renderRuns(inst.runs, rc)
 	case segKindCodeBlock:
+		// Code-block action button ([Doc.RenderActions]). Only when the
+		// caller enabled actions; otherwise the block is untouched. The
+		// small IDS button sits on its own line above the code; a click
+		// records a CodeBlockAction the caller consumes from the returned
+		// iter.Seq. The CodeView's own selectable text (Ctrl+C) is
+		// independent of this. codeBlockIdx advances per code block so the
+		// action's ordinal is stable regardless of whether buttons render.
+		if rc.actionsEnabled {
+			renderCodeActionButton(rc, inst.codeText, inst.codeLang, rc.codeBlockIdx)
+		}
+		rc.codeBlockIdx++
 		seq := rc.idSeq
 		rc.idSeq++
-		// Copy-to-clipboard affordance (ADR-0026 Update 2026-05-30). Only
-		// when a sink is wired ([WithClipboard]); otherwise the block is
-		// untouched. The frameless small icon button sits on its own line
-		// above the code; clicking hands inst.code to the sink, which
-		// routes it through the clipboard.write capability. The CodeView's
-		// own selectable text (Ctrl+C) is independent of this.
-		if rc.clipboardWrite != nil {
-			renderCopyButton(rc, inst.codeText)
-		}
 		c.CodeView(rc.ids.PrepareSeq(seq), inst.code).Send()
 	case segKindList:
 		renderList(inst, rc)
@@ -85,25 +85,20 @@ func (inst *segment) render(rc *renderCtx) {
 	}
 }
 
-// renderCopyButton emits a frameless, icon-only copy button for a code
-// block, used only when [WithClipboard] wired rc.clipboardWrite. It
-// consumes one id-sequence slot (so collapse/scroll state keyed by id
-// stays stable across frames) and, on click, hands code to the sink —
-// the caller's entry into the clipboard.write capability (ADR-0026
-// Update 2026-05-30). The accent-tinted Phosphor copy glyph matches the
-// icon-button styling used elsewhere (e.g. inspector/anchor); HoverText
-// names the action since the button carries no label.
-func renderCopyButton(rc *renderCtx, code string) {
+// renderCodeActionButton emits a small IDS button above a code block,
+// used only on the [Doc.RenderActions] path. It consumes one id-sequence
+// slot (so layout state keyed by id stays stable across frames) and, on
+// click, records a [CodeBlockAction] carrying the block's verbatim text,
+// fence language, and ordinal — the caller consumes these from the
+// returned iter.Seq and decides what the click means. text/lang/idx are
+// passed rather than read off rc so the call site stays adjacent to the
+// CodeView it labels.
+func renderCodeActionButton(rc *renderCtx, text, lang string, idx int) {
 	seq := rc.idSeq
 	rc.idSeq++
-	accent := color.Hex(styletokens.AccentDefault.AsHex())
-	atoms := c.Atoms().
-		BeginRichTextColored(accent, color.Transparent, icons.PhCopy).
-		End().Keep()
-	for range c.HoverText("copy to clipboard").KeepIter() {
-		if c.Button(rc.ids.PrepareSeq(seq), atoms).Small().Frame(false).SendResp().HasPrimaryClicked() {
-			rc.clipboardWrite(code)
-		}
+	if c.Button(rc.ids.PrepareSeq(seq), c.Atoms().Text(rc.actionLabel).Keep()).
+		Small().SendResp().HasPrimaryClicked() {
+		rc.codeActions = append(rc.codeActions, CodeBlockAction{Text: text, Lang: lang, Index: idx})
 	}
 }
 

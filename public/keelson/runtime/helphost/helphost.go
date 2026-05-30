@@ -336,7 +336,7 @@ func (inst *HelpHost) renderReader() {
 		renderSource(inst.ids, src)
 	default:
 		section := inst.consumeScrollTarget()
-		renderRendered(inst.ids, doc, section, inst.clipboardSink())
+		renderRendered(inst.ids, doc, section, inst.bus)
 	}
 }
 
@@ -394,38 +394,34 @@ func (inst *HelpHost) renderViewToggle() {
 // clipboard, when non-nil, adds a copy-to-clipboard button to every
 // rendered code/verbatim block ([markdown.WithClipboard]); nil omits the
 // affordance entirely.
-func renderRendered(ids *c.WidgetIdStack, doc *markdown.Doc, scrollToSection string, clipboard func(text string)) {
-	opts := make([]markdown.RenderOpt, 0, 2)
+// bus, when non-nil, enables a "Copy" button on each rendered
+// code/verbatim block via [markdown.Doc.RenderActions]; a click copies
+// the block's verbatim source to the clipboard over clipboard.write. On
+// an M1 host (nil bus) the plain [markdown.Doc.Render] path is used and
+// no button is shown.
+func renderRendered(ids *c.WidgetIdStack, doc *markdown.Doc, scrollToSection string, bus app.BusI) {
+	opts := make([]markdown.RenderOpt, 0, 1)
 	if scrollToSection != "" {
 		opts = append(opts, markdown.WithScrollToSection(scrollToSection))
 	}
-	if clipboard != nil {
-		opts = append(opts, markdown.WithClipboard(clipboard))
-	}
 	for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
 		for range c.IdScope(ids.PrepareStr("doc-render")) {
-			doc.Render(ids, opts...)
+			if bus == nil {
+				doc.Render(ids, opts...)
+				continue
+			}
+			// Copy a clicked block's verbatim source over clipboard.write,
+			// off the frame goroutine: Request blocks until the broker
+			// acks, and the frame thread must not block. Errors are
+			// swallowed — a failed copy isn't worth interrupting a reader.
+			for act := range doc.RenderActions(ids, "Copy", opts...) {
+				text := act.Text
+				go func() {
+					_, _ = bus.Request(clipboardbroker.SubjectWrite, []byte(text))
+				}()
+			}
 		}
 	}
-}
-
-// clipboardSink returns the WithClipboard sink for rendered code blocks,
-// or nil when no bus is available (M1 host) — in which case no copy
-// button is shown. The sink fires the clipboard.write request off the
-// frame goroutine: Request blocks until the broker acks, and the frame
-// thread must not block. Errors are swallowed — a failed copy is not
-// worth interrupting a help reader.
-func (inst *HelpHost) clipboardSink() (sink func(text string)) {
-	if inst.bus == nil {
-		return nil
-	}
-	bus := inst.bus
-	sink = func(text string) {
-		go func() {
-			_, _ = bus.Request(clipboardbroker.SubjectWrite, []byte(text))
-		}()
-	}
-	return
 }
 
 // renderSource draws the raw .md source inside a syntax-highlighted

@@ -359,6 +359,29 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 
 ## Updates
 
+### 2026-05-30 — markdown consumer API: `Doc.RenderActions` (generic, immediate-mode) supersedes the `WithClipboard` sketch
+
+The clipboard-button entry below sketched the markdown consumer hook as `WithClipboard(write func(string))` — a clipboard-specific callback. Implementation generalised it: the markdown widget should not know about clipboards, and a callback is an awkward fit for an immediate-mode renderer. The shipped API is:
+
+```go
+type CodeBlockAction struct {
+    Text  string // verbatim author source (pre-highlighter-canonicalisation)
+    Lang  string // normalised fence language: "go", "sql", "" (unlabelled)
+    Index int    // 0-based ordinal among the doc's code blocks
+}
+
+func (inst *Doc) RenderActions(ids *c.WidgetIdStack, label string, opts ...RenderOpt) iter.Seq[CodeBlockAction]
+```
+
+`RenderActions` draws the whole document eagerly (placing a **small IDS `Button`** labelled `label` above each code/verbatim block) and returns the blocks clicked this frame as an `iter.Seq[CodeBlockAction]`. Properties:
+
+- **Generic, not clipboard-specific.** The widget reports clicks; the caller decides the action. Copy-to-clipboard is one consumer (`capdemo`, `helphost`), but the same button can drive run-in-REPL, open-in-editor, etc.
+- **Immediate-mode.** The pixels are drawn when `RenderActions` is called; the returned sequence only replays already-captured clicks. Ranging, breaking early, or ignoring the result all leave identical output — no deferred/retained callback.
+- **Multiple clicks per frame.** The sequence yields once per button clicked before the next paint (0, 1, or many), so a consumer never silently drops a click.
+- `Doc.Render` stays void and button-free; consumers that don't want actions (SVG export, screenshot tour, `capinspector`, the widgets demo) are unchanged. `segment` gained `codeLang` alongside `codeText` to populate the action.
+
+The capability, broker, subject, and egui opcode below are **unchanged** — only the widget-facing hook evolved. The button changed from the originally-shipped frameless `PhCopy` icon to a labelled small IDS button per design-system review.
+
 ### 2026-05-30 — `clipboard.write` capability: copy-to-clipboard as a brokered subject + bus→egui bridge
 
 **Status: design agreed; implementation pending.** This entry records the decision and wire surface ahead of the code, per the design-first norm for new packages.

@@ -60,17 +60,18 @@ const watchEventDisplay = 12
 
 // clipboardDoc is the markdown rendered in the clipboard section. Parsed
 // once at package load (markdown.Parse is the retain-once / render-many
-// shape) and rendered every frame with a WithClipboard sink. The fenced
-// blocks are what the per-block copy buttons hand to clipboard.write.
+// shape) and rendered every frame via Doc.RenderActions, which places a
+// small "Copy" button on each fenced block; a click is consumed from the
+// returned iter.Seq and routed to clipboard.write.
 var clipboardDoc = markdown.Parse([]byte("" +
 	"`clipboard.write` copies text to the viewport clipboard through the bus —\n" +
 	"the broker accumulates the request off-frame and the host drains it into an\n" +
-	"egui `copy_text` op. Click the copy glyph on either block below.\n\n" +
+	"egui `copy_text` op. Click the Copy button above either block below.\n\n" +
 	"```go\n" +
-	"// the host wires the markdown copy button to the capability:\n" +
-	"md.Render(ids, markdown.WithClipboard(func(t string) {\n" +
-	"\tgo func() { _, _ = bus.Request(clipboardbroker.SubjectWrite, []byte(t)) }()\n" +
-	"}))\n" +
+	"// the consumer wires the code-block button to any action:\n" +
+	"for act := range doc.RenderActions(ids, \"Copy\") {\n" +
+	"\tgo func() { _, _ = bus.Request(clipboardbroker.SubjectWrite, []byte(act.Text)) }()\n" +
+	"}\n" +
 	"```\n\n" +
 	"```\n" +
 	"plain verbatim block — copies exactly these bytes, no highlighting\n" +
@@ -176,23 +177,26 @@ func (inst *App) renderApp() {
 }
 
 // renderClipboardSection demonstrates the clipboard.write capability via
-// the markdown widget's copy button (ADR-0026 Update 2026-05-30). The
-// WithClipboard sink fires a clipboard.write Request off the frame
-// goroutine — Request blocks until the broker acks, and the frame thread
-// must not block (same idiom as runPick). The broker enqueues the text;
-// the host's windowed renderer drains it into an egui copy_text op.
+// the markdown widget's code-block action buttons (ADR-0026 Update
+// 2026-05-30). Doc.RenderActions draws a small "Copy" button on each
+// fenced block and yields the clicked blocks; each click fires a
+// clipboard.write Request off the frame goroutine — Request blocks until
+// the broker acks, and the frame thread must not block (same idiom as
+// runPick). The broker enqueues the text; the host's windowed renderer
+// drains it into an egui copy_text op.
 func (inst *App) renderClipboardSection() {
 	for range c.CollapsingHeader(ids.PrepareStr("hdr-clipboard"),
 		c.WidgetText().Text("clipboard.write — copy code blocks to the clipboard").Keep()).
 		DefaultOpen(true).KeepIter() {
-		clipboardDoc.Render(ids, markdown.WithClipboard(func(text string) {
+		for act := range clipboardDoc.RenderActions(ids, "Copy") {
 			if inst.bus == nil {
-				return
+				continue
 			}
+			text := act.Text
 			go func() {
 				_, _ = inst.bus.Request(clipboardbroker.SubjectWrite, []byte(text))
 			}()
-		}))
+		}
 	}
 }
 
