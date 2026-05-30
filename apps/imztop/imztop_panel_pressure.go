@@ -9,10 +9,14 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
+// psiRowHeight is the per-row height of the PSI table.
+const psiRowHeight float32 = 22.0
+
 // renderPressurePanel shows Linux PSI (Pressure Stall Information): the share
 // of wall-time tasks spent stalled on CPU / memory / IO, over 10/60/300 s
 // windows. "some" = at least one task stalled; "full" = every non-idle task
-// stalled (a strong saturation signal). CPU reports only "some".
+// stalled (a strong saturation signal). CPU has no meaningful "full" line, so
+// only its "some" row is shown.
 func (inst *App) renderPressurePanel(snap *PublishedSnapshot) {
 	inst.sectionHeader("Pressure (PSI)")
 
@@ -23,32 +27,38 @@ func (inst *App) renderPressurePanel(snap *PublishedSnapshot) {
 	}
 
 	for range c.Horizontal().KeepIter() {
-		c.Label("share of time stalled · some = any task, full = all non-idle tasks · windows 10s / 60s / 300s").Send()
+		c.Label("share of time stalled · some = any task, full = all non-idle tasks").Send()
 	}
 	c.AddSpace(inst.spaceInner())
 
-	inst.renderPressureRow("CPU", ps.CPU, false)
-	inst.renderPressureRow("Memory", ps.Memory, true)
-	inst.renderPressureRow("IO", ps.IO, true)
-}
-
-// renderPressureRow prints one resource's some (and optionally full) pressure
-// triple. showFull is false for CPU, whose full line is always zero.
-func (inst *App) renderPressureRow(name string, r psi.Resource, showFull bool) {
-	for range c.Horizontal().KeepIter() {
-		for rt := range c.RichTextLabel(name) {
-			rt.Strong()
-		}
-		c.AddSpace(inst.spaceOuter())
-		c.Label("some " + pressureTriple(r.Some)).Send()
-		if showFull {
-			c.AddSpace(inst.spaceOuter())
-			c.Label("full " + pressureTriple(r.Full)).Send()
-		}
+	rows := []struct {
+		label string
+		p     psi.Pressure
+	}{
+		{"CPU · some", ps.CPU.Some},
+		{"Memory · some", ps.Memory.Some},
+		{"Memory · full", ps.Memory.Full},
+		{"IO · some", ps.IO.Some},
+		{"IO · full", ps.IO.Full},
 	}
-}
 
-// pressureTriple formats the avg10/avg60/avg300 percentages.
-func pressureTriple(p psi.Pressure) string {
-	return fmt.Sprintf("%.1f / %.1f / %.1f%%", p.Avg10, p.Avg60, p.Avg300)
+	// Register-drain table: columns → headers → row-major cells → Table().
+	c.TableColumn().Initial(150.0).Resizable(true).Send()
+	c.TableColumn().Initial(80.0).Resizable(true).Send()
+	c.TableColumn().Initial(80.0).Resizable(true).Send()
+	c.TableColumn().Remainder().Send()
+
+	c.TableHeaderText("pressure").Send()
+	c.TableHeaderText("avg 10s").Send()
+	c.TableHeaderText("avg 60s").Send()
+	c.TableHeaderText("avg 300s").Send()
+
+	for _, r := range rows {
+		c.TableCellText(r.label).Send()
+		c.TableCellText(fmt.Sprintf("%.1f%%", r.p.Avg10)).Send()
+		c.TableCellText(fmt.Sprintf("%.1f%%", r.p.Avg60)).Send()
+		c.TableCellText(fmt.Sprintf("%.1f%%", r.p.Avg300)).Send()
+	}
+
+	c.Table(inst.ids.PrepareStr("psi-table"), psiRowHeight, uint64(len(rows))).Striped(true).Send()
 }
