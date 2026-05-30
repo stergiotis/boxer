@@ -93,6 +93,74 @@ func NewConfig(palette []uint32, min, max float64) *Config {
 	}
 }
 
+// Range returns the data range [DataMin, DataMax] this config maps onto the
+// palette. A legend widget uses it as the value axis.
+func (inst *Config) Range() (min, max float64) { return inst.DataMin, inst.DataMax }
+
+// IsLog reports whether the scale is logarithmic, so a legend can place
+// log-spaced ticks. Db is linear in decibels, so it reports false.
+func (inst *Config) IsLog() bool { return inst.Scale == ScaleLogE }
+
+// Normalize returns the 0..1 palette position for value under the configured
+// scale, clamped to [0, 1] — the single-value form of the per-scale math in Map.
+// Non-positive values under Log/Db, and degenerate ranges, return 0.
+func (inst *Config) Normalize(value float64) (t float64) {
+	switch inst.Scale {
+	case ScaleLogE:
+		if value <= 0 || inst.DataMin <= 0 || inst.DataMax <= 0 {
+			return 0
+		}
+		logMin := math.Log10(inst.DataMin)
+		logSpan := math.Log10(inst.DataMax) - logMin
+		if !(logSpan > 0) {
+			return 0
+		}
+		t = (math.Log10(value) - logMin) / logSpan
+	case ScaleDbE:
+		span := inst.DataMax - inst.DataMin
+		if !(span > 0) || value <= 0 {
+			return 0
+		}
+		t = (10*math.Log10(value) - inst.DataMin) / span
+	default: // ScaleLinearE
+		span := inst.DataMax - inst.DataMin
+		if !(span > 0) {
+			return 0
+		}
+		t = (value - inst.DataMin) / span
+	}
+	if t < 0 {
+		t = 0
+	}
+	if t > 1 {
+		t = 1
+	}
+	return
+}
+
+// At returns the interpolated palette colour (0xRRGGBBAA) for value — the
+// gradient sample a legend draws. Uses the same Normalize + palette lerp as Map,
+// so the legend matches the rendered texture exactly.
+func (inst *Config) At(value float64) uint32 {
+	return paletteLerp(inst.Palette, inst.Normalize(value))
+}
+
+// IndexAt quantizes value to the nearest of n equispaced palette slots. Used by
+// callers (e.g. treemap) that key pre-derived per-slot data off the colormap.
+func (inst *Config) IndexAt(value float64, n int) (idx int) {
+	if n <= 1 {
+		return 0
+	}
+	idx = int(inst.Normalize(value) * float64(n-1))
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= n {
+		idx = n - 1
+	}
+	return
+}
+
 // ColumnStats carries per-Map counts of samples that fell into each
 // substitution bucket. Useful for test assertions ("expect BadSamples=0
 // on this fixture") and production dashboards ("underflow rate over the

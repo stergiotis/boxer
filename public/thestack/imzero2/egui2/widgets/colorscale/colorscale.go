@@ -1,9 +1,10 @@
 //go:build llm_generated_opus47
 
-// Package colorscale renders a value-axis legend for a treemap.Colormap.
-// Construct a Colormap once and pass it to both a treemap (via
-// treemap.ContinuousColoringFromMap) and a colorscale.New instance so the
-// visualization and its legend stay in sync automatically.
+// Package colorscale renders a value-axis legend for a colormap.Config — the
+// same colormap type the scientific texture widgets (heatmapscroll) and treemap
+// use. Pass one Config to colorscale.New and to whatever renders the data (a
+// treemap via treemap.ContinuousColoringFromMap + its Config(), or a heatmap) so
+// the visualization and its legend stay in sync automatically.
 //
 // Rendering: gradient strip + tick marks + numeric labels. Ticks are
 // produced by finddivisions — Talbot with a TypesettingScorer for linear
@@ -24,7 +25,7 @@ import (
 	"github.com/stergiotis/boxer/public/math/numerical/finddivisions"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colormap"
 )
 
 // OrientationE selects the scale's primary axis. Phase 1 only implements
@@ -149,7 +150,7 @@ type HoverInfo struct {
 type ColorScale struct {
 	ids          *c.WidgetIdStack
 	scopeKey     string
-	colormap     *treemap.Colormap
+	cmap         *colormap.Config
 	width        float32
 	height       float32
 	orientation  OrientationE
@@ -191,7 +192,7 @@ type ColorScale struct {
 // New constructs a ColorScale bound to cm. scopeKey must be unique among
 // ColorScale instances sharing the same ids stack. Panics on nil or empty
 // required arguments.
-func New(ids *c.WidgetIdStack, scopeKey string, cm *treemap.Colormap, opts ...Option) *ColorScale {
+func New(ids *c.WidgetIdStack, scopeKey string, cm *colormap.Config, opts ...Option) *ColorScale {
 	if ids == nil {
 		panic("colorscale: New requires a non-nil ids stack")
 	}
@@ -204,7 +205,7 @@ func New(ids *c.WidgetIdStack, scopeKey string, cm *treemap.Colormap, opts ...Op
 	inst := &ColorScale{
 		ids:          ids,
 		scopeKey:     scopeKey,
-		colormap:     cm,
+		cmap:         cm,
 		width:        DefaultSize[0],
 		height:       DefaultSize[1],
 		desiredTicks: DefaultDesiredTicks,
@@ -231,8 +232,8 @@ func New(ids *c.WidgetIdStack, scopeKey string, cm *treemap.Colormap, opts ...Op
 	return inst
 }
 
-// Colormap returns the Colormap this scale is bound to.
-func (inst *ColorScale) Colormap() *treemap.Colormap { return inst.colormap }
+// Colormap returns the colormap.Config this scale is bound to.
+func (inst *ColorScale) Colormap() *colormap.Config { return inst.cmap }
 
 // HoveredValue returns the colormap value under the pointer as of the most
 // recent Render. The returned ok is false when the pointer is not over the
@@ -254,7 +255,7 @@ func (inst *ColorScale) Render() {
 }
 
 func (inst *ColorScale) renderHorizontal() {
-	cm := inst.colormap
+	cm := inst.cmap
 	min, max := cm.Range()
 
 	// Recompute only when an input that affects the Talbot score changes,
@@ -400,7 +401,7 @@ func (inst *ColorScale) computeAxis(min, max float64) finddivisions.AxisLayout {
 // computeAxisTalbot uses Talbot + TypesettingScorer for linear colormaps and
 // TalbotLogarithmic for log colormaps.
 func (inst *ColorScale) computeAxisTalbot(min, max float64) finddivisions.AxisLayout {
-	if inst.colormap.IsLog() {
+	if inst.cmap.IsLog() {
 		// TalbotLogarithmic calls the inner Talbot with the supplied opts
 		// (only Qs is overwritten internally). Without populated Weights
 		// the scorer returns 0 for every candidate, and the algorithm
@@ -475,7 +476,7 @@ func (inst *ColorScale) computeAxisNelder(min, max float64) finddivisions.AxisLa
 // log-transforming the range for log colormaps and inverting ticks back.
 // algName is used in warnings. On error it falls back to an endpoints axis.
 func (inst *ColorScale) runLinearTicker(min, max float64, algName string, run func(lo, hi float64) (finddivisions.AxisLayout, error)) finddivisions.AxisLayout {
-	if inst.colormap.IsLog() {
+	if inst.cmap.IsLog() {
 		// Guard the log transform: math.Log10(0) = -Inf and math.Log10(<0) =
 		// NaN, either of which poison the linear algorithm's arithmetic.
 		// TalbotLogarithmic validates this internally, so computeAxisTalbot

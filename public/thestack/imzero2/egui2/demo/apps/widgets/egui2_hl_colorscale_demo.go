@@ -137,7 +137,7 @@ func (st *colorscaleDemoState) rebuildCsWidgets() {
 		treemap.WithColoring(st.hoverBand),
 	)
 
-	st.scale = colorscale.New(st.ids, "cs-scale", st.colormap,
+	st.scale = colorscale.New(st.ids, "cs-scale", st.colormap.Config(),
 		colorscale.WithSize(700, 42),
 		colorscale.WithDesiredTicks(int(st.cfg.ticks)),
 		colorscale.WithTicker(csTickers[st.cfg.tickerIdx].t),

@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/cpu"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sensors"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colormap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colorscale"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap/layout"
@@ -280,7 +281,7 @@ func (inst *App) ensureTopoScale() {
 	}
 	inst.topoScaleKey = key
 
-	cm := treemap.NewColormap(cpuHeatmapPalette(), 0, float64(inst.topoScaleMax))
+	cm := colormap.NewConfig(cpuHeatmapPalette(), 0, float64(inst.topoScaleMax))
 	var labelFmt func(float64) string
 	if inst.topoDim == topoDimFreq {
 		labelFmt = func(v float64) string { return mhzLabel(uint32(v)) }

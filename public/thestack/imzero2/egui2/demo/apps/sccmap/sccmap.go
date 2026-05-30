@@ -314,7 +314,7 @@ func (inst *App) rebuildTreemap() {
 	// clip rect and clipping the digits vertically. h=56 puts the
 	// gradient at 30 px (still legible) with ~26 px of room for the
 	// axis below.
-	inst.cs = colorscale.New(inst.ids, "scc-colorscale", cm,
+	inst.cs = colorscale.New(inst.ids, "scc-colorscale", cm.Config(),
 		colorscale.WithSize(280, colorscaleH),
 		colorscale.WithDesiredTicks(4),
 	)

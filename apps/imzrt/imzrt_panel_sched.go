@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/math/numerical/timeticks"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colormap"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colorscale"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/heatmapscroll"
 )
 
@@ -27,6 +28,8 @@ const (
 	spectroLoSec                 = 10e-9  // 10 ns
 	spectroHiSec                 = 100e-3 // 100 ms
 	spectroDisplayHeight float32 = 240
+	spectroLegendW       float32 = 280
+	spectroLegendH       float32 = 26
 )
 
 // schedSpectroState is per-window state for the scheduling-latency spectrogram.
@@ -35,10 +38,11 @@ const (
 type schedSpectroState struct {
 	hs           *heatmapscroll.HeatmapScroll
 	cfg          *colormap.Config
-	loIdx, hiIdx int    // displayed bucket-index range [loIdx, hiIdx] after clipping
-	nDisplay     int    // hiIdx - loIdx + 1
-	loLabel      string // latency at the bottom edge
-	hiLabel      string // latency at the top edge
+	legend       *colorscale.ColorScale // colour→count legend bound to cfg
+	loIdx, hiIdx int                    // displayed bucket-index range [loIdx, hiIdx] after clipping
+	nDisplay     int                    // hiIdx - loIdx + 1
+	loLabel      string                 // latency at the bottom edge
+	hiLabel      string                 // latency at the top edge
 	colBuf       []float32
 	lastPushedMs int64
 	smoothedMax  float64 // smoothed peak per-interval bucket count → colormap DataMax
@@ -136,6 +140,14 @@ func (inst *App) renderSchedSpectrogram(snap *PublishedSnapshot) {
 		for range spectroWidthSlots {
 			st.hs.PushColumn(st.colBuf)
 		}
+		// Legend for the colour axis (goroutine count), bound to the same cfg the
+		// heatmap colours from — now possible because colorscale takes a
+		// colormap.Config. It tracks cfg.DataMax live as the scale rescales.
+		st.legend = colorscale.New(inst.ids, "sched-spectro-scale", st.cfg,
+			colorscale.WithSize(spectroLegendW, spectroLegendH),
+			colorscale.WithDesiredTicks(4),
+			colorscale.WithLabelFormat(func(v float64) string { return fmt.Sprintf("%.0f", v) }),
+		)
 	}
 
 	// One column per published sample; guard against re-pushing across the many
@@ -169,8 +181,9 @@ func (inst *App) renderSchedSpectrogram(snap *PublishedSnapshot) {
 	st.hs.SetDisplaySize(0, spectroDisplayHeight)
 	st.hs.Render()
 	renderSpectroXTicks(snap.HistTimeUnixSec)
-	c.Label(fmt.Sprintf("y: %s (bottom) → %s (top), log · x: time, newest right · brighter = more goroutines waiting",
-		st.loLabel, st.hiLabel)).Send()
+	c.Label(fmt.Sprintf("y: %s (bottom) → %s (top), log · x: time, newest right", st.loLabel, st.hiLabel)).Send()
+	c.Label("colour = goroutines waiting per interval (log):").Send()
+	st.legend.Render()
 }
 
 // clipBucketRange returns the inclusive count-bin index range whose buckets

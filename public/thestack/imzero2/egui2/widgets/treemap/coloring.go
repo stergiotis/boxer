@@ -4,9 +4,9 @@ package treemap
 
 import (
 	"fmt"
-	"math"
 
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colormap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap/layout"
 )
 
@@ -141,123 +141,76 @@ func (inst *categoricalColoring) Colors(info CellInfo) (CellColors, bool) {
 	return inst.palette[idx%len(inst.palette)], true
 }
 
-// Colormap is a reusable palette + data-range mapping, shared between
-// ContinuousColoring and standalone color-scale legend widgets. Construct
-// once and pass to both so the legend shows exactly what the treemap
-// renders.
+// Colormap pairs a colormap.Config — the palette + data-range + scale mapping,
+// shared with the scientific texture widgets and the colorscale legend — with
+// treemap's per-entry CellColors derivation. Construct once, pass it to a
+// ContinuousColoringFromMap, and pass its Config() to colorscale.New so the
+// legend samples the exact gradient the cells use.
 //
 // Linear by default (NewColormap) or log-base-10 (NewLogColormap) for
 // heavy-tailed distributions like complexity or file-size histograms.
 //
-// Values <= Min map to palette[0], >= Max map to palette[len-1]; in
-// between they're quantized to the nearest palette entry. Smooth
-// interpolation between palette entries is a future enhancement.
+// Cells quantize value to the nearest palette entry; the legend (via Config)
+// interpolates between entries for a smooth gradient strip.
 type Colormap struct {
-	palette []uint32
-	min     float64
-	span    float64
-	colors  []CellColors // pre-derived per palette entry
-	logMode bool
-	logMin  float64 // log10(min); valid only when logMode
-	logSpan float64 // log10(max) - log10(min); valid only when logMode
+	cfg   *colormap.Config
+	cells []CellColors // CellColors pre-derived per palette entry
 }
 
-// NewColormap constructs a linear Colormap. Panics if palette has fewer
-// than 2 colors or if min >= max.
+// NewColormap constructs a linear Colormap. Panics if palette has fewer than 2
+// colors or if min >= max.
 func NewColormap(palette []uint32, min, max float64) *Colormap {
-	return newColormap(palette, min, max, false)
+	return wrapColormap(colormap.NewConfig(palette, min, max))
 }
 
-// NewLogColormap constructs a log-base-10 Colormap. Panics if palette has
-// fewer than 2 colors, if min or max is non-positive, or if min >= max.
-// Suitable for heavy-tailed data (e.g., cyclomatic complexity).
+// NewLogColormap constructs a log-base-10 Colormap. Panics if palette has fewer
+// than 2 colors, if min or max is non-positive, or if min >= max. Suitable for
+// heavy-tailed data (e.g., cyclomatic complexity).
 func NewLogColormap(palette []uint32, min, max float64) *Colormap {
 	if min <= 0 || max <= 0 {
 		panic(fmt.Sprintf("treemap: NewLogColormap requires strictly positive min,max (got %v,%v)", min, max))
 	}
-	return newColormap(palette, min, max, true)
+	cfg := colormap.NewConfig(palette, min, max)
+	cfg.Scale = colormap.ScaleLogE
+	return wrapColormap(cfg)
 }
 
-func newColormap(palette []uint32, min, max float64, logMode bool) *Colormap {
-	if len(palette) < 2 {
-		panic("treemap: Colormap requires a palette with at least 2 colors")
+func wrapColormap(cfg *colormap.Config) *Colormap {
+	cells := make([]CellColors, len(cfg.Palette))
+	for i, rgba := range cfg.Palette {
+		cells[i] = deriveCellColors(rgba)
 	}
-	if !(min < max) {
-		panic("treemap: Colormap requires min < max")
-	}
-	colors := make([]CellColors, len(palette))
-	pcopy := make([]uint32, len(palette))
-	for i, rgba := range palette {
-		colors[i] = deriveCellColors(rgba)
-		pcopy[i] = rgba
-	}
-	inst := &Colormap{
-		palette: pcopy,
-		min:     min,
-		span:    max - min,
-		colors:  colors,
-		logMode: logMode,
-	}
-	if logMode {
-		inst.logMin = math.Log10(min)
-		inst.logSpan = math.Log10(max) - inst.logMin
-	}
-	return inst
+	return &Colormap{cfg: cfg, cells: cells}
 }
+
+// Config returns the underlying colormap.Config. Pass it to colorscale.New so the
+// legend renders the exact same gradient the treemap cells are coloured from.
+func (inst *Colormap) Config() *colormap.Config { return inst.cfg }
 
 // Range returns the (min, max) data range this colormap covers.
-func (inst *Colormap) Range() (min, max float64) { return inst.min, inst.min + inst.span }
+func (inst *Colormap) Range() (min, max float64) { return inst.cfg.Range() }
 
 // IsLog reports whether this colormap uses log-base-10 scaling.
-func (inst *Colormap) IsLog() bool { return inst.logMode }
+func (inst *Colormap) IsLog() bool { return inst.cfg.IsLog() }
 
 // Palette returns a copy of the raw 0xRRGGBBAA palette values.
 func (inst *Colormap) Palette() []uint32 {
-	out := make([]uint32, len(inst.palette))
-	copy(out, inst.palette)
+	out := make([]uint32, len(inst.cfg.Palette))
+	copy(out, inst.cfg.Palette)
 	return out
 }
 
 // Normalize returns a 0..1 position for value within the colormap's range,
-// clamped to the range endpoints. For log colormaps this uses
-// log10(value) mapped against log10(min)..log10(max); values <= 0 clamp to 0.
-func (inst *Colormap) Normalize(value float64) float64 {
-	var t float64
-	if inst.logMode {
-		if value <= 0 {
-			return 0
-		}
-		t = (math.Log10(value) - inst.logMin) / inst.logSpan
-	} else {
-		t = (value - inst.min) / inst.span
-	}
-	if t < 0 {
-		t = 0
-	}
-	if t > 1 {
-		t = 1
-	}
-	return t
-}
+// clamped to the range endpoints.
+func (inst *Colormap) Normalize(value float64) float64 { return inst.cfg.Normalize(value) }
 
-// At returns the raw 0xRRGGBBAA color for a value, quantized to the nearest
-// palette entry. Intended for legend widgets that sample the gradient.
-func (inst *Colormap) At(value float64) uint32 {
-	return inst.palette[inst.indexAt(value)]
-}
+// At returns the interpolated 0xRRGGBBAA color for a value.
+func (inst *Colormap) At(value float64) uint32 { return inst.cfg.At(value) }
 
-// ColorsAt is like At but returns the full pre-derived CellColors struct
-// (fill/hover/dim/border/accent). Used by ContinuousColoringFromMap.
+// ColorsAt returns the pre-derived CellColors (fill/hover/dim/border/accent) for
+// a value, quantized to the nearest palette entry. Used by ContinuousColoringFromMap.
 func (inst *Colormap) ColorsAt(value float64) CellColors {
-	return inst.colors[inst.indexAt(value)]
-}
-
-func (inst *Colormap) indexAt(value float64) int {
-	idx := int(inst.Normalize(value) * float64(len(inst.palette)-1))
-	if idx >= len(inst.palette) {
-		idx = len(inst.palette) - 1
-	}
-	return idx
+	return inst.cells[inst.cfg.IndexAt(value, len(inst.cells))]
 }
 
 // ContinuousColoringFromMap wraps a Colormap as a ColoringI. Use this when
