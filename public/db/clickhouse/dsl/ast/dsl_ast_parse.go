@@ -389,31 +389,9 @@ func convertWithClause(pr *nanopass.ParseResult, ctx *grammar2.WithClauseContext
 		if ce == nil {
 			continue
 		}
-		switch c := ce.(type) {
-		case *grammar2.ColumnsExprColumnContext:
-			for j := 0; j < c.GetChildCount(); j++ {
-				if cec, ok := c.GetChild(j).(grammar2.IColumnExprContext); ok {
-					var expr Expr
-					expr, err = convertColumnExpr(pr, cec.(antlr.ParserRuleContext))
-					if err != nil {
-						return
-					}
-					exprs = append(exprs, expr)
-				}
-			}
-		case *grammar2.ColumnsExprAsteriskContext:
-			exprs = append(exprs, Expr{Kind: KindAsterisk, Asterisk: &AsteriskData{Table: extractAsteriskTable(c)}})
-		case *grammar2.ColumnsExprSubqueryContext:
-			for j := 0; j < c.GetChildCount(); j++ {
-				if sus, ok := c.GetChild(j).(*grammar2.SelectUnionStmtContext); ok {
-					var su SelectUnion
-					su, err = convertSelectUnion(pr, sus)
-					if err != nil {
-						return
-					}
-					exprs = append(exprs, Expr{Kind: KindSubquery, Subquery: &SubqueryData{Query: su}})
-				}
-			}
+		exprs, err = appendColumnsExpr(pr, ce, exprs)
+		if err != nil {
+			return
 		}
 	}
 	return
@@ -1023,35 +1001,49 @@ func convertRatioExpr(pr *nanopass.ParseResult, ctx *grammar2.RatioExprContext) 
 
 // --- Column expression list ---
 
+// appendColumnsExpr converts a single columnsExpr CST node — its column,
+// asterisk, and subquery alternatives — and appends the resulting Expr(s) to
+// exprs, returning the extended slice. convertWithClause and
+// convertColumnExprList select the node differently (a withItem's ColumnsExpr()
+// vs a columnExprList child) but convert the alternatives identically.
+func appendColumnsExpr(pr *nanopass.ParseResult, node antlr.Tree, exprs []Expr) (out []Expr, err error) {
+	out = exprs
+	switch c := node.(type) {
+	case *grammar2.ColumnsExprColumnContext:
+		for j := 0; j < c.GetChildCount(); j++ {
+			if ce, ok := c.GetChild(j).(grammar2.IColumnExprContext); ok {
+				var expr Expr
+				expr, err = convertColumnExpr(pr, ce.(antlr.ParserRuleContext))
+				if err != nil {
+					return
+				}
+				out = append(out, expr)
+			}
+		}
+	case *grammar2.ColumnsExprAsteriskContext:
+		out = append(out, Expr{Kind: KindAsterisk, Asterisk: &AsteriskData{Table: extractAsteriskTable(c)}})
+	case *grammar2.ColumnsExprSubqueryContext:
+		for j := 0; j < c.GetChildCount(); j++ {
+			if sus, ok := c.GetChild(j).(*grammar2.SelectUnionStmtContext); ok {
+				var su SelectUnion
+				su, err = convertSelectUnion(pr, sus)
+				if err != nil {
+					return
+				}
+				out = append(out, Expr{Kind: KindSubquery, Subquery: &SubqueryData{Query: su}})
+			}
+		}
+	}
+	return
+}
+
 func convertColumnExprList(pr *nanopass.ParseResult, ctx *grammar2.ColumnExprListContext) (exprs []Expr, err error) {
 	n := ctx.GetChildCount()
 	exprs = make([]Expr, 0, (n+1)/2)
 	for i := 0; i < n; i++ {
-		switch c := ctx.GetChild(i).(type) {
-		case *grammar2.ColumnsExprColumnContext:
-			for j := 0; j < c.GetChildCount(); j++ {
-				if ce, ok := c.GetChild(j).(grammar2.IColumnExprContext); ok {
-					var expr Expr
-					expr, err = convertColumnExpr(pr, ce.(antlr.ParserRuleContext))
-					if err != nil {
-						return
-					}
-					exprs = append(exprs, expr)
-				}
-			}
-		case *grammar2.ColumnsExprAsteriskContext:
-			exprs = append(exprs, Expr{Kind: KindAsterisk, Asterisk: &AsteriskData{Table: extractAsteriskTable(c)}})
-		case *grammar2.ColumnsExprSubqueryContext:
-			for j := 0; j < c.GetChildCount(); j++ {
-				if sus, ok := c.GetChild(j).(*grammar2.SelectUnionStmtContext); ok {
-					var su SelectUnion
-					su, err = convertSelectUnion(pr, sus)
-					if err != nil {
-						return
-					}
-					exprs = append(exprs, Expr{Kind: KindSubquery, Subquery: &SubqueryData{Query: su}})
-				}
-			}
+		exprs, err = appendColumnsExpr(pr, ctx.GetChild(i), exprs)
+		if err != nil {
+			return
 		}
 	}
 	return
