@@ -17,7 +17,9 @@ func (inst *App) renderGCPanel(snap *PublishedSnapshot) {
 	}
 	for range c.Horizontal().KeepIter() {
 		c.Label(fmt.Sprintf("pause p50 %s", humanDuration(snap.PauseP50Sec))).Send()
-		c.Label(fmt.Sprintf("· p99 %s", humanDuration(snap.PauseP99Sec))).Send()
+		for rt := range c.RichTextLabelColored(latencyThresholdColor(snap.PauseP99Sec), colorBgClear, fmt.Sprintf("· p99 %s", humanDuration(snap.PauseP99Sec))) {
+			rt.Strong()
+		}
 		c.Label(fmt.Sprintf("· max %s", humanDuration(snap.PauseMaxSec))).Send()
 		c.Label(fmt.Sprintf("· %d in window", snap.PausesInWindow)).Send()
 	}

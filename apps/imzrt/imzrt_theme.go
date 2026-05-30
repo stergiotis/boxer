@@ -44,6 +44,21 @@ func thresholdColor(pct float32) (cl color.Color) {
 	return
 }
 
+// latencyThresholdColor tints a latency given in seconds: good below 1 ms, warn
+// 1–10 ms, hot above 10 ms. Drives the GC-pause and scheduling-latency p99
+// readouts so an over-budget tail stands out (ADR-0061 SD14).
+func latencyThresholdColor(sec float64) (cl color.Color) {
+	switch {
+	case sec >= 10e-3:
+		cl = colorHot
+	case sec >= 1e-3:
+		cl = colorWarn
+	default:
+		cl = colorGood
+	}
+	return
+}
+
 // sequentialPalette resamples the active IDS sequential palette
 // (styletokens.SequentialDefault — ADR-0031 §SD3) into the 0xRRGGBBAA stop list
 // colormap.Config consumes, so the spectrogram honours the same

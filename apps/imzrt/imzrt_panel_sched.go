@@ -38,7 +38,9 @@ func (inst *App) renderSchedPanel(snap *PublishedSnapshot) {
 	for range c.Horizontal().KeepIter() {
 		c.Label(fmt.Sprintf("goroutines %s", humanCount(snap.Goroutines))).Send()
 		c.Label(fmt.Sprintf("· GOMAXPROCS %d/%d", runtime.GOMAXPROCS(0), runtime.NumCPU())).Send()
-		c.Label(fmt.Sprintf("· sched p99 %s", humanDuration(snap.SchedP99Sec))).Send()
+		for rt := range c.RichTextLabelColored(latencyThresholdColor(snap.SchedP99Sec), colorBgClear, fmt.Sprintf("· sched p99 %s", humanDuration(snap.SchedP99Sec))) {
+			rt.Strong()
+		}
 	}
 	if snap.STWAvailable {
 		for range c.Horizontal().KeepIter() {
