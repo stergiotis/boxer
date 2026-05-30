@@ -281,6 +281,66 @@ Accepted 2026-05-30 by @spx. Implementation tracked across M1–M4 above.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`. See boxer's `DOCUMENTATION_STANDARD.md` §1 ADR for the edit-policy tiers (Tier 1 in-place / Tier 2 `## Updates` H3 / Tier 3 superseding ADR).
 
+## Updates
+
+### 2026-05-30 — M1–M4 landed; deviations and one spawned refactor
+
+The first cut shipped across four commits — M1 (collector + sampler spine + top
+bar + Heap), M2 (GC tab + cumulative-histogram→windowed-delta helper), M3
+(Scheduler tab + `/sched/latencies` spectrogram), M4 (screenshot tour + threshold
+tints). The accepted decision stands; this records where the implementation
+diverged from the text above.
+
+- **No cgo series.** boxer is cgo-free, so `/cgo/go-to-c-calls:calls` is a
+  permanently-zero metric. It was dropped from the `goruntime` collector and the
+  sampler rather than shown as a flat-zero line — contrary to the `CgoCalls`
+  field in the Public API sketch.
+
+- **GC pause distribution as rolling percentile lines, not `distsummary`.** M2
+  specified "via `distsummary`." It renders as windowed-delta p50/p99/max lines
+  over time instead: feeding a bucketed histogram into `distsummary` (a
+  t-digest / sample widget) needs exactly the sample-synthesis step Q1/O1
+  rejected as lossy, so the percentile lines are the faithful view. The
+  instantaneous per-bucket shape is left to the M3 spectrogram.
+
+- **Pause stops sampling.** The text frames pause as "freeze the displayed
+  snapshot while the sampler keeps running"; the implementation stops sampling
+  while paused (matching imztop's actual behaviour, ADR-0020 SD14). For a
+  self-measuring app this also halts the observer effect, which is the honest
+  choice. The display still freezes (`Latest()` holds the last snapshot).
+
+- **Spectrogram clipped + labelled.** SD10 specified the `heatmapscroll`
+  spectrogram; the implementation adds a useful-latency clip window
+  (`[10ns, 100ms]`, dropping the always-empty extreme bins and the ±Inf ends),
+  calendar-aware x-axis time ticks, a y-range caption, and a colour→count
+  `colorscale` legend. Separately, `/gc/heap/live` reads zero until the first GC
+  completes, so `HeapLive` falls back to allocs-frees (the continuous live-byte
+  count that drives the sawtooth).
+
+- **Spawned follow-on: `colorscale`/`colormap` decoupled from `treemap`.** Giving
+  the spectrogram a legend required a widget-framework change outside imzrt:
+  `colorscale.New` took a `*treemap.Colormap`, so it could not legend the
+  heatmap's `colormap.Config`. `colormap.Config` gained the value-axis API
+  (`Range`/`IsLog`/`Normalize`/`At`/`IndexAt`), `treemap.Colormap` became a thin
+  wrapper over it (deduping the range/log math), and `colorscale.New` now takes
+  `*colormap.Config`. Consumers (imztop topology, sccmap, the colorscale demo)
+  were updated. No separate ADR, per @spx.
+
+Still deferred exactly as named above: the CPU-classes and allocation-size-class
+panels, interactive knobs, flight-recorder capture, and facts-table persistence.
+Two smaller open follow-ons surfaced: per-row y-axis latency labels on the
+spectrogram (vs the y-range caption), and fully eliminating `treemap.Colormap`
+(vs the thin wrapper).
+
+Visual check: the three tabs were captured via the screenshot tour and reviewed.
+The spectrogram is correctly sparse on an idle runtime — it fills under
+scheduling pressure, not before. The colorscale legend renders below the tour's
+display-height limit, so it is confirmed by build + unit test rather than capture.
+
+`status` and `reviewed-date` are deliberately not re-stamped: the M1–M4 panel-set
+and observe-only decisions stand; this records implementation detail and one
+spawned refactor.
+
 ## References
 
 - [ADR-0020](./0020-imzero2-imztop-resource-monitor.md) — `imztop`; the structural template this ADR mirrors.
