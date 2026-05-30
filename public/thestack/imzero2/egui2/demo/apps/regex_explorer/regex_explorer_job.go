@@ -122,62 +122,75 @@ func (inst *App) RunExtractAll(ctx context.Context) {
 	}()
 }
 
-// runExtractAllBlocking executes SELECT extractAll(...) and decodes the
-// Array(String) column into a Go []string. The record has a single row
-// whose first column is an Arrow List<String>; we iterate the inner string
-// array over the list's offsets.
-func (inst *App) runExtractAllBlocking(ctx context.Context, haystack string, pattern string) (matches []string, stats clStats, err error) {
-	sql := buildExtractAllSQL(haystack, pattern)
-
+// runListQueryBlocking executes sql via the bus, expects a single record whose
+// first column is an Arrow List, and decodes that list's single row via decode.
+// label names the query in error messages. Shared by runExtractAllBlocking and
+// runMultiMatchBlocking, which differ only in the list's inner element type.
+// (Free function, not a method: Go methods cannot take type parameters.)
+func runListQueryBlocking[T any](ctx context.Context, inst *App, label string, sql string, decode func(list *array.List) (out []T, err error)) (out []T, stats clStats, err error) {
 	start := time.Now()
 	rdr, closer, execErr := executeArrowStreamViaBus(ctx, inst.bus, sql, inst.alloc)
 	if execErr != nil {
-		err = eh.Errorf("execute extractAll query: %w", execErr)
+		err = eh.Errorf("execute %s query: %w", label, execErr)
 		return
 	}
 	defer func() {
 		cErr := closer.Close()
-		if cErr != nil && err == nil{
-			err = eh.Errorf("close extractAll query: %w", cErr)
+		if cErr != nil && err == nil {
+			err = eh.Errorf("close %s query: %w", label, cErr)
 		}
 	}()
 	defer rdr.Release()
 
 	if !rdr.Next() {
 		readerErr := rdr.Err()
-		if readerErr != nil{
-			err = eh.Errorf("read extractAll result: %w", readerErr)
+		if readerErr != nil {
+			err = eh.Errorf("read %s result: %w", label, readerErr)
 			return
 		}
-		err = eh.Errorf("extractAll query returned no records")
+		err = eh.Errorf("%s query returned no records", label)
 		return
 	}
 	rec := rdr.Record()
 	if rec.NumRows() == 0 || rec.NumCols() == 0 {
-		err = eh.Errorf("extractAll query returned empty record (rows=%d cols=%d)", rec.NumRows(), rec.NumCols())
+		err = eh.Errorf("%s query returned empty record (rows=%d cols=%d)", label, rec.NumRows(), rec.NumCols())
 		return
 	}
 
 	col := rec.Column(0)
 	list, ok := col.(*array.List)
 	if !ok {
-		err = eh.Errorf("extractAll query returned unexpected column type %T (expected *array.List)", col)
+		err = eh.Errorf("%s query returned unexpected column type %T (expected *array.List)", label, col)
 		return
 	}
-	inner, ok := list.ListValues().(*array.String)
-	if !ok {
-		err = eh.Errorf("extractAll inner column type %T (expected *array.String)", list.ListValues())
+	out, err = decode(list)
+	if err != nil {
 		return
-	}
-	offsets := list.Offsets()
-	startIdx := int(offsets[0])
-	end := int(offsets[1])
-	matches = make([]string, 0, end-startIdx)
-	for i := startIdx; i < end; i++ {
-		matches = append(matches, inner.Value(i))
 	}
 	stats.ElapsedNs = uint64(time.Since(start).Nanoseconds())
 	return
+}
+
+// runExtractAllBlocking executes SELECT extractAll(...) and decodes the
+// Array(String) column into a Go []string. The record has a single row
+// whose first column is an Arrow List<String>; we iterate the inner string
+// array over the list's offsets.
+func (inst *App) runExtractAllBlocking(ctx context.Context, haystack string, pattern string) (matches []string, stats clStats, err error) {
+	return runListQueryBlocking(ctx, inst, "extractAll", buildExtractAllSQL(haystack, pattern), func(list *array.List) (out []string, err error) {
+		inner, ok := list.ListValues().(*array.String)
+		if !ok {
+			err = eh.Errorf("extractAll inner column type %T (expected *array.String)", list.ListValues())
+			return
+		}
+		offsets := list.Offsets()
+		startIdx := int(offsets[0])
+		end := int(offsets[1])
+		out = make([]string, 0, end-startIdx)
+		for i := startIdx; i < end; i++ {
+			out = append(out, inner.Value(i))
+		}
+		return
+	})
 }
 
 // RunReplaceAll dispatches an asynchronous ClickHouse query that evaluates
@@ -327,55 +340,19 @@ func (inst *App) RunMultiMatch(ctx context.Context, patternListText string) {
 // decodes the Array(UInt64) column into a Go []uint64. Intended to run on
 // a goroutine.
 func (inst *App) runMultiMatchBlocking(ctx context.Context, haystack string, patterns []string) (hits []uint64, stats clStats, err error) {
-	sql := buildMultiMatchSQL(haystack, patterns)
-
-	start := time.Now()
-	rdr, closer, execErr := executeArrowStreamViaBus(ctx, inst.bus, sql, inst.alloc)
-	if execErr != nil {
-		err = eh.Errorf("execute multiMatchAllIndices query: %w", execErr)
-		return
-	}
-	defer func() {
-		cErr := closer.Close()
-		if cErr != nil && err == nil{
-			err = eh.Errorf("close multiMatchAllIndices query: %w", cErr)
-		}
-	}()
-	defer rdr.Release()
-
-	if !rdr.Next() {
-		readerErr := rdr.Err()
-		if readerErr != nil{
-			err = eh.Errorf("read multiMatchAllIndices result: %w", readerErr)
+	return runListQueryBlocking(ctx, inst, "multiMatchAllIndices", buildMultiMatchSQL(haystack, patterns), func(list *array.List) (out []uint64, err error) {
+		inner, ok := list.ListValues().(*array.Uint64)
+		if !ok {
+			err = eh.Errorf("multiMatchAllIndices inner column type %T (expected *array.Uint64)", list.ListValues())
 			return
 		}
-		err = eh.Errorf("multiMatchAllIndices query returned no records")
+		offsets := list.Offsets()
+		startIdx := int(offsets[0])
+		end := int(offsets[1])
+		out = make([]uint64, 0, end-startIdx)
+		for i := startIdx; i < end; i++ {
+			out = append(out, inner.Value(i))
+		}
 		return
-	}
-	rec := rdr.Record()
-	if rec.NumRows() == 0 || rec.NumCols() == 0 {
-		err = eh.Errorf("multiMatchAllIndices query returned empty record (rows=%d cols=%d)", rec.NumRows(), rec.NumCols())
-		return
-	}
-
-	col := rec.Column(0)
-	list, ok := col.(*array.List)
-	if !ok {
-		err = eh.Errorf("multiMatchAllIndices returned unexpected column type %T (expected *array.List)", col)
-		return
-	}
-	inner, ok := list.ListValues().(*array.Uint64)
-	if !ok {
-		err = eh.Errorf("multiMatchAllIndices inner column type %T (expected *array.Uint64)", list.ListValues())
-		return
-	}
-	offsets := list.Offsets()
-	startIdx := int(offsets[0])
-	end := int(offsets[1])
-	hits = make([]uint64, 0, end-startIdx)
-	for i := startIdx; i < end; i++ {
-		hits = append(hits, inner.Value(i))
-	}
-	stats.ElapsedNs = uint64(time.Since(start).Nanoseconds())
-	return
+	})
 }
