@@ -4,29 +4,41 @@ import (
 	"fmt"
 	"image/color"
 	"runtime"
+	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/math/numerical/timeticks"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colormap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/heatmapscroll"
 )
 
 // spectroWidthSlots is the spectrogram ring width in time steps — 10 minutes of
-// history at the default 1 Hz cadence. Fixed at construction (the underlying
-// scrolling texture is sized to it).
+// history at the default 1 Hz cadence. Fixed at construction (the scrolling
+// texture is sized to it).
 const spectroWidthSlots uint32 = 600
 
-// spectroDisplayHeight is the on-screen height (px) the bucket-tall texture is
-// stretched to, so the heatmap reads regardless of the runtime's bucket count.
-const spectroDisplayHeight float32 = 200
+// The /sched/latencies histogram spans sub-ns to ~1000s, but real scheduling
+// latencies live in a narrow band. Clip the spectrogram to [10ns, 100ms] so its
+// height is spent on the latencies that actually occur: the bottom carries the
+// normal fast schedules and the band climbs under scheduling pressure. Buckets
+// outside the window (including the runtime's open ±Inf end bins) are dropped.
+const (
+	spectroLoSec                 = 10e-9  // 10 ns
+	spectroHiSec                 = 100e-3 // 100 ms
+	spectroDisplayHeight float32 = 240
+)
 
 // schedSpectroState is per-window state for the scheduling-latency spectrogram.
-// Initialised lazily on the first column that carries the histogram's bucket
-// layout, so the texture height locks to the runtime's bucket count.
+// Built lazily on the first column that carries the histogram's bucket layout, so
+// the clipped bucket range and the texture height lock to the runtime's buckets.
 type schedSpectroState struct {
 	hs           *heatmapscroll.HeatmapScroll
 	cfg          *colormap.Config
-	nBuckets     uint32 // count bins = len(buckets)-1, locked at first push
+	loIdx, hiIdx int    // displayed bucket-index range [loIdx, hiIdx] after clipping
+	nDisplay     int    // hiIdx - loIdx + 1
+	loLabel      string // latency at the bottom edge
+	hiLabel      string // latency at the top edge
 	colBuf       []float32
 	lastPushedMs int64
 	smoothedMax  float64 // smoothed peak per-interval bucket count → colormap DataMax
@@ -91,19 +103,21 @@ func (inst *App) renderSchedPanel(snap *PublishedSnapshot) {
 }
 
 func (inst *App) renderSchedSpectrogram(snap *PublishedSnapshot) {
-	nb := len(snap.SchedLatColBuckets)
-	if nb < 2 {
+	buckets := snap.SchedLatColBuckets
+	if len(buckets) < 3 {
 		c.Label("scheduling-latency data not yet available…").Send()
 		return
 	}
-	nBuckets := uint32(nb - 1)
 	st := &inst.schedSpectro
 
 	if st.hs == nil {
-		st.nBuckets = nBuckets
-		// Log scale: count 1 sits at the palette floor, the smoothed peak at the
+		st.loIdx, st.hiIdx = clipBucketRange(buckets, spectroLoSec, spectroHiSec)
+		st.nDisplay = st.hiIdx - st.loIdx + 1
+		st.loLabel = humanDuration(buckets[st.loIdx])
+		st.hiLabel = humanDuration(buckets[st.hiIdx+1])
+		// Log scale: count 1 at the palette floor, the smoothed peak at the
 		// ceiling; count 0 is non-positive → underflow → background. DataMax is
-		// rescaled live each tick (it is a plain mutable field).
+		// rescaled live each tick (a plain mutable field).
 		st.cfg = colormap.NewConfig(sequentialPalette(), 1, 2)
 		st.cfg.Scale = colormap.ScaleLogE
 		bg := color.NRGBA{
@@ -114,28 +128,27 @@ func (inst *App) renderSchedSpectrogram(snap *PublishedSnapshot) {
 		}
 		st.cfg.BadColor = bg
 		st.cfg.UnderflowColor = bg
-		st.hs = heatmapscroll.New(inst.ids, "sched-spectro", st.cfg, spectroWidthSlots, nBuckets)
+		st.hs = heatmapscroll.New(inst.ids, "sched-spectro", st.cfg, spectroWidthSlots, uint32(st.nDisplay))
 		// ScrollLeft — classical spectrogram: newest column on the right.
 		st.hs.SetOrientation(heatmapscroll.ScrollLeft)
-		st.colBuf = make([]float32, nBuckets)
-		// Prefill the ring so it opens as a full background rectangle (all-zero
-		// columns map to underflow → bg) rather than a sparse edge of real data.
+		st.colBuf = make([]float32, st.nDisplay)
+		// Prefill the ring so it opens as a full background rectangle.
 		for range spectroWidthSlots {
 			st.hs.PushColumn(st.colBuf)
 		}
 	}
 
-	// One column per published sample. Guard against re-pushing the same column
-	// across the many render frames between sampler ticks.
-	if snap.SampledAtUnixMs > st.lastPushedMs && uint32(len(snap.SchedLatColCounts)) == st.nBuckets {
+	// One column per published sample; guard against re-pushing across the many
+	// render frames between sampler ticks.
+	if snap.SampledAtUnixMs > st.lastPushedMs && len(snap.SchedLatColCounts) > st.hiIdx {
 		var colMax float64
-		for i := range st.nBuckets {
-			cnt := snap.SchedLatColCounts[i]
+		for j := range st.nDisplay {
+			cnt := snap.SchedLatColCounts[st.loIdx+j]
 			if float64(cnt) > colMax {
 				colMax = float64(cnt)
 			}
-			// Low latency at the bottom (bucket 0 → last texture row).
-			st.colBuf[st.nBuckets-1-i] = float32(cnt)
+			// Low latency (j=0, loIdx) at the bottom texture row.
+			st.colBuf[st.nDisplay-1-j] = float32(cnt)
 		}
 		// Fast-attack / slow-release peak so the colour scale tracks pressure
 		// without flickering on a single busy interval.
@@ -155,5 +168,54 @@ func (inst *App) renderSchedSpectrogram(snap *PublishedSnapshot) {
 
 	st.hs.SetDisplaySize(0, spectroDisplayHeight)
 	st.hs.Render()
-	c.Label("low latency at bottom · brighter = more goroutines waiting (log scale) · newest on the right").Send()
+	renderSpectroXTicks(snap.HistTimeUnixSec)
+	c.Label(fmt.Sprintf("y: %s (bottom) → %s (top), log · x: time, newest right · brighter = more goroutines waiting",
+		st.loLabel, st.hiLabel)).Send()
+}
+
+// clipBucketRange returns the inclusive count-bin index range whose buckets
+// overlap [loSec, hiSec]. Bins entirely below loSec or above hiSec — including the
+// runtime's open ±Inf end bins and the always-empty extreme-latency bins — are
+// dropped, so the spectrogram spends its height on the latencies that occur.
+func clipBucketRange(buckets []float64, loSec, hiSec float64) (lo, hi int) {
+	n := len(buckets) - 1 // number of count bins
+	lo = 0
+	for lo < n-1 && buckets[lo+1] <= loSec {
+		lo++
+	}
+	hi = n - 1
+	for hi > lo && buckets[hi] >= hiSec {
+		hi--
+	}
+	return
+}
+
+// renderSpectroXTicks draws calendar-aware time labels under the spectrogram.
+// ScrollLeft puts oldest on the left and newest on the right, so labels render in
+// ascending order. Mirrors imztop's heatmap x-axis (timeticks).
+func renderSpectroXTicks(timeUnixSec []float64) {
+	if len(timeUnixSec) < 2 {
+		return
+	}
+	minT := time.Unix(int64(timeUnixSec[0]), 0).Local()
+	maxT := time.Unix(int64(timeUnixSec[len(timeUnixSec)-1]), 0).Local()
+	if !maxT.After(minT) {
+		return
+	}
+	layout := timeticks.TimeTicks(minT, maxT, timeticks.TimeTickOptions{
+		PanelWidthPx:    600,
+		TargetSpacingPx: 120,
+		Location:        time.Local,
+	})
+	if len(layout.TickLabels) == 0 {
+		return
+	}
+	for range c.Horizontal().KeepIter() {
+		for i := range layout.TickLabels {
+			c.Label(layout.TickLabels[i]).Send()
+			if i < len(layout.TickLabels)-1 {
+				c.AddSpace(24)
+			}
+		}
+	}
 }
