@@ -47,8 +47,12 @@
 package kafka
 
 import (
+	"context"
+	"errors"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
+	"github.com/rs/zerolog"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
@@ -166,6 +170,40 @@ func (inst *FranzConsumerDetails) FranzOpts() (opts []kgo.Opt) {
 	}
 	if inst.InstanceID != "" {
 		opts = append(opts, kgo.InstanceID(inst.InstanceID))
+	}
+	return
+}
+
+// handleFetchErrors classifies the errors attached to a poll's fetches, logs
+// the non-temporal ones, and drives the connection-error backoff. Context
+// deadline/cancellation errors are temporal (the stall-prevention timeout) and
+// ignored; kgo.ErrClientClosed is non-temporal but not logged (expected at
+// shutdown). On a clean fetch the backoff is reset. When only non-temporal
+// errors arrive and the fetch is empty it sleeps for the next backoff interval,
+// returning abort=true if closeCtx fires during that wait so the caller's poll
+// loop exits promptly. Shared verbatim by the ordered and unordered readers.
+func handleFetchErrors(fetches kgo.Fetches, log *zerolog.Logger, connErrBackOff backoff.BackOff, closeCtx context.Context) (abort bool) {
+	errs := fetches.Errors()
+	if len(errs) == 0 {
+		connErrBackOff.Reset()
+		return
+	}
+	nonTemporalErr := false
+	for _, kerr := range errs {
+		if errors.Is(kerr.Err, context.DeadlineExceeded) || errors.Is(kerr.Err, context.Canceled) {
+			continue
+		}
+		nonTemporalErr = true
+		if !errors.Is(kerr.Err, kgo.ErrClientClosed) {
+			log.Error().Err(kerr.Err).Str("topic", kerr.Topic).Int32("partition", kerr.Partition).Msg("kafka: poll error")
+		}
+	}
+	if nonTemporalErr && fetches.Empty() {
+		select {
+		case <-time.After(connErrBackOff.NextBackOff()):
+		case <-closeCtx.Done():
+			abort = true
+		}
 	}
 	return
 }

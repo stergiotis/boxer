@@ -65,7 +65,6 @@ package kafka
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -431,27 +430,8 @@ func (inst *FranzReaderUnordered) runPollLoop(cl *kgo.Client, batchChan chan bat
 		fetches := cl.PollFetches(stallCtx)
 		pollDone()
 
-		errs := fetches.Errors()
-		if len(errs) > 0 {
-			nonTemporalErr := false
-			for _, kerr := range errs {
-				if errors.Is(kerr.Err, context.DeadlineExceeded) || errors.Is(kerr.Err, context.Canceled) {
-					continue
-				}
-				nonTemporalErr = true
-				if !errors.Is(kerr.Err, kgo.ErrClientClosed) {
-					inst.log.Error().Err(kerr.Err).Str("topic", kerr.Topic).Int32("partition", kerr.Partition).Msg("kafka: poll error")
-				}
-			}
-			if nonTemporalErr && fetches.Empty() {
-				select {
-				case <-time.After(connErrBackOff.NextBackOff()):
-				case <-closeCtx.Done():
-					return
-				}
-			}
-		} else {
-			connErrBackOff.Reset()
+		if handleFetchErrors(fetches, inst.log, connErrBackOff, closeCtx) {
+			return
 		}
 
 		if closeCtx.Err() != nil {
