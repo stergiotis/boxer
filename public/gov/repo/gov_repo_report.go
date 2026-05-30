@@ -270,24 +270,29 @@ func (inst *ReportGenerator) writeVelocity(w io.Writer, records []VelocityRecord
 	return
 }
 
-func (inst *ReportGenerator) writeChurn(w io.Writer, records []ChurnRecord) (err error) {
-	err = writeSectionHeader(w, "High-Churn Files")
+// writeRankedFileTable writes a section listing files ranked by a per-file
+// count: each row is a mid-truncated path, the count, and a proportional bar.
+// records must be sorted by count descending (records[0] sets the bar scale);
+// an empty slice writes emptyMsg. filePath and count extract the path and rank
+// value from each record. Shared by writeChurn and writeBugHotspots.
+func writeRankedFileTable[T any](w io.Writer, header string, emptyMsg string, records []T, filePath func(T) string, count func(T) int) (err error) {
+	err = writeSectionHeader(w, header)
 	if err != nil {
 		return
 	}
 
 	if len(records) == 0 {
-		err = wRow(w, "  (no file changes in range)")
+		err = wRow(w, emptyMsg)
 		return
 	}
 
-	maxCount := records[0].ChangeCount
+	maxCount := count(records[0])
 	const pathW = 55
 	const barW = 12
 	for _, r := range records {
-		bar := buildBar(r.ChangeCount, maxCount, barW)
-		path := padRight(truncateMid(r.FilePath, pathW), pathW)
-		line := fmt.Sprintf("  %s %4d %s", path, r.ChangeCount, bar)
+		bar := buildBar(count(r), maxCount, barW)
+		path := padRight(truncateMid(filePath(r), pathW), pathW)
+		line := fmt.Sprintf("  %s %4d %s", path, count(r), bar)
 		err = wRow(w, line)
 		if err != nil {
 			return
@@ -296,30 +301,16 @@ func (inst *ReportGenerator) writeChurn(w io.Writer, records []ChurnRecord) (err
 	return
 }
 
+func (inst *ReportGenerator) writeChurn(w io.Writer, records []ChurnRecord) (err error) {
+	return writeRankedFileTable(w, "High-Churn Files", "  (no file changes in range)", records,
+		func(r ChurnRecord) string { return r.FilePath },
+		func(r ChurnRecord) int { return r.ChangeCount })
+}
+
 func (inst *ReportGenerator) writeBugHotspots(w io.Writer, records []BugHotspotRecord) (err error) {
-	err = writeSectionHeader(w, "Bug Hotspots")
-	if err != nil {
-		return
-	}
-
-	if len(records) == 0 {
-		err = wRow(w, "  (no bug-fix commits in range)")
-		return
-	}
-
-	maxCount := records[0].BugFixCount
-	const pathW = 55
-	const barW = 12
-	for _, r := range records {
-		bar := buildBar(r.BugFixCount, maxCount, barW)
-		path := padRight(truncateMid(r.FilePath, pathW), pathW)
-		line := fmt.Sprintf("  %s %4d %s", path, r.BugFixCount, bar)
-		err = wRow(w, line)
-		if err != nil {
-			return
-		}
-	}
-	return
+	return writeRankedFileTable(w, "Bug Hotspots", "  (no bug-fix commits in range)", records,
+		func(r BugHotspotRecord) string { return r.FilePath },
+		func(r BugHotspotRecord) int { return r.BugFixCount })
 }
 
 func (inst *ReportGenerator) writeFirefighting(w io.Writer, records []FirefightRecord) (err error) {

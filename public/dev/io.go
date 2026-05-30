@@ -30,53 +30,32 @@ func NewCliCommand() *cli.Command {
 	}
 }
 
+// newRedirectFlag builds an "override"-category StringFlag that, when set to a
+// non-empty path, opens that file with openFlags and points dst (one of
+// &os.Stdin/&os.Stdout/&os.Stderr) at it. what names the stream and verb the
+// direction ("input from file" / "output to file") in the log and error
+// messages.
+func newRedirectFlag(flagName string, openFlags int, dst **os.File, what string, verb string) *cli.StringFlag {
+	return &cli.StringFlag{
+		Category: "override",
+		Name:     flagName,
+		Value:    "",
+		Action: func(context *cli.Context, s string) error {
+			if s != "" {
+				f, err := os.OpenFile(s, openFlags, os.ModePerm)
+				if err != nil {
+					return eb.Build().Str(flagName, s).Errorf("unable to replace %s with %s: %w", what, verb, err)
+				}
+				*dst = f
+				log.Info().Str(flagName, s).Msg("attaching " + what + " to file")
+			}
+			return nil
+		},
+	}
+}
+
 var IoOverrideFlags = []cli.Flag{
-	&cli.StringFlag{
-		Category: "override",
-		Name:     "stdinFromFile",
-		Value:    "",
-		Action: func(context *cli.Context, s string) error {
-			if s != "" {
-				f, err := os.OpenFile(s, os.O_RDONLY, os.ModePerm)
-				if err != nil {
-					return eb.Build().Str("stdinFromFile", s).Errorf("unable to replace os.Stdin with input from file: %w", err)
-				}
-				os.Stdin = f
-				log.Info().Str("stdinFromFile", s).Msg("attaching os.Stdin to file")
-			}
-			return nil
-		},
-	},
-	&cli.StringFlag{
-		Category: "override",
-		Name:     "stdoutToFile",
-		Value:    "",
-		Action: func(context *cli.Context, s string) error {
-			if s != "" {
-				f, err := os.OpenFile(s, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, os.ModePerm)
-				if err != nil {
-					return eb.Build().Str("stdoutToFile", s).Errorf("unable to replace os.Stdout with output to file: %w", err)
-				}
-				os.Stdout = f
-				log.Info().Str("stdoutToFile", s).Msg("attaching os.Stdout to file")
-			}
-			return nil
-		},
-	},
-	&cli.StringFlag{
-		Category: "override",
-		Name:     "stderrToFile",
-		Value:    "",
-		Action: func(context *cli.Context, s string) error {
-			if s != "" {
-				f, err := os.OpenFile(s, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, os.ModePerm)
-				if err != nil {
-					return eb.Build().Str("stderrToFile", s).Errorf("unable to replace os.Stderr with output to file: %w", err)
-				}
-				os.Stderr = f
-				log.Info().Str("stderrToFile", s).Msg("attaching os.Stderr to file")
-			}
-			return nil
-		},
-	},
+	newRedirectFlag("stdinFromFile", os.O_RDONLY, &os.Stdin, "os.Stdin", "input from file"),
+	newRedirectFlag("stdoutToFile", os.O_WRONLY|os.O_TRUNC|os.O_CREATE, &os.Stdout, "os.Stdout", "output to file"),
+	newRedirectFlag("stderrToFile", os.O_WRONLY|os.O_TRUNC|os.O_CREATE, &os.Stderr, "os.Stderr", "output to file"),
 }
