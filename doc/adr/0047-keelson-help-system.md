@@ -266,13 +266,42 @@ Proposed — awaiting review by code owner.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`. See boxer's `DOCUMENTATION_STANDARD.md` §1 ADR for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
--->
+### 2026-05-30 — Front-matter validation and the shared `docstd` vocabulary
+
+SD5 read `title:`, `type:`, and `status:` but did not validate them: a
+malformed or absent value fell through to the H1/filename fallback
+silently, so a misfiled doc (`type: tutoral`, a missing `status:`) reached
+operators with no signal. The help library now checks the `type`/`status`
+contract.
+
+The type/status enums and the conformance logic were extracted to a new
+pure leaf package,
+[`github.com/stergiotis/boxer/public/gov/docstd`](../../public/gov/docstd),
+now the single source of truth. The repo-wide linter
+([`doclint`](../../public/gov/doclint)) was refactored to consume it:
+DL001 delegates the type/status conformance check (so the runtime help
+check and the CI check can no longer drift), and the sibling frontmatter
+rules — DL003 (review metadata), DL004 (draft banner), DL010 (ADR
+sections), DL011 (open-drafts report) — now reference `docstd`'s
+status/type constants instead of their own string literals. This is the
+concrete form of SD5's "same frontmatter shape, same enforcement" intent.
+
+The two consumers differ on exactly one axis, captured by
+`docstd.ValidateFrontmatter`'s `allowADR` parameter: repo-wide linting
+accepts `type: adr`, while inline help does not — an ADR is design history,
+not operator-facing help (consistent with the Context section above, which
+lists ADRs as a non-operator surface).
+
+Surface in `help`: `BookI.Validate()` and the standalone `ValidateDocInfo`
+return the problems; the same problems are emitted as Warn logs during the
+one-shot index walk, so a misconfigured corpus surfaces in runtime logs
+without a caller opting in. Validation is advisory — parsing still succeeds
+and the title fallback is unchanged, so a missing `title:` remains a
+non-issue by design; only `type` and `status` are validated. The play
+corpus test now asserts conformance through `Validate()` against a real
+shipped corpus.
 
 ## References
 

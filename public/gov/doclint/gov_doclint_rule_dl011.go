@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/stergiotis/boxer/public/gov/docstd"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -88,10 +89,10 @@ func checkOneDL011(path string, yield func(Finding, error) bool) (cont bool, err
 
 	var label string
 	switch meta.Status {
-	case "draft":
-		label = "draft"
-	case "proposed":
-		label = "proposed"
+	case docstd.StatusDraft:
+		label = docstd.StatusDraft
+	case docstd.StatusProposed:
+		label = docstd.StatusProposed
 	default:
 		return
 	}

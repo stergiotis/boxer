@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/stergiotis/boxer/public/gov/docstd"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"gopkg.in/yaml.v3"
 )
@@ -17,10 +18,10 @@ import (
 // RuleDL001 — every Markdown doc carries a compliant front-matter stanza.
 //
 // Implements DOCUMENTATION_STANDARD §4: the YAML stanza must declare a
-// known 'type' and a 'status' value valid for that type. Rules DL002 and
-// DL003 (status enum / review metadata) will share the same parser later;
-// for now they are folded in here so a single rule covers the foundational
-// front-matter contract.
+// known 'type' and a 'status' value valid for that type. The type/status
+// enums and the conformance check live in [docstd], shared with the
+// keelson help library; this rule owns front-matter extraction, YAML
+// parsing, and mapping each [docstd.Violation] to a DL001 finding.
 //
 // Files outside the doc-standard scope (testdata, generated, changelog
 // summaries, Claude Code SKILL files) are skipped silently.
@@ -42,29 +43,6 @@ type frontMatterDL001 struct {
 	Status       string `yaml:"status"`
 	ReviewedBy   string `yaml:"reviewed-by,omitempty"`
 	ReviewedDate string `yaml:"reviewed-date,omitempty"`
-}
-
-var validTypesDL001 = map[string]struct{}{
-	"reference":   {},
-	"how-to":      {},
-	"explanation": {},
-	"tutorial":    {},
-	"adr":         {},
-}
-
-var validStatusesDescriptive = map[string]struct{}{
-	"draft":      {},
-	"stable":     {},
-	"deprecated": {},
-	"superseded": {},
-}
-
-var validStatusesAdr = map[string]struct{}{
-	"proposed":   {},
-	"accepted":   {},
-	"deferred":   {},
-	"deprecated": {},
-	"superseded": {},
 }
 
 // IsInScopeForDL001 returns true if path/base should be evaluated by DL001.
@@ -170,65 +148,22 @@ func checkOneDL001(path string, yield func(Finding, error) bool) (cont bool, err
 		return
 	}
 
-	if meta.Type == "" {
+	// allowADR=true: repo-wide linting accepts 'type: adr'. The enums and
+	// the conformance check are shared with the keelson help library via
+	// docstd; DL001 only frames each violation as an error finding.
+	for _, v := range docstd.ValidateFrontmatter(meta.Type, meta.Status, true) {
 		f := Finding{
 			RuleId:   "DL001",
 			Severity: FindingSeverityError,
 			Path:     path,
 			Line:     1,
 			Col:      1,
-			Message:  "front-matter missing required field 'type'",
+			Message:  v.Message,
 		}
 		cont = yield(f, nil)
 		if !cont {
 			return
 		}
-	} else {
-		_, typeOk := validTypesDL001[meta.Type]
-		if !typeOk {
-			f := Finding{
-				RuleId:   "DL001",
-				Severity: FindingSeverityError,
-				Path:     path,
-				Line:     1,
-				Col:      1,
-				Message:  "front-matter 'type' value '" + meta.Type + "' is not one of: reference, how-to, explanation, tutorial, adr",
-			}
-			cont = yield(f, nil)
-			if !cont {
-				return
-			}
-		}
-	}
-
-	if meta.Status == "" {
-		f := Finding{
-			RuleId:   "DL001",
-			Severity: FindingSeverityError,
-			Path:     path,
-			Line:     1,
-			Col:      1,
-			Message:  "front-matter missing required field 'status'",
-		}
-		cont = yield(f, nil)
-		return
-	}
-
-	valid := validStatusesDescriptive
-	if meta.Type == "adr" {
-		valid = validStatusesAdr
-	}
-	_, statusOk := valid[meta.Status]
-	if !statusOk {
-		f := Finding{
-			RuleId:   "DL001",
-			Severity: FindingSeverityError,
-			Path:     path,
-			Line:     1,
-			Col:      1,
-			Message:  "front-matter 'status' value '" + meta.Status + "' is not valid for type '" + meta.Type + "'",
-		}
-		cont = yield(f, nil)
 	}
 
 	return

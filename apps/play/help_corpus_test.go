@@ -21,6 +21,11 @@ func TestHelpCorpusIndexes(t *testing.T) {
 	b, ok := help.Book("github.com/stergiotis/boxer/apps/play")
 	require.True(t, ok, "play help book must be indexed from Manifest.Help")
 
+	// The corpus must satisfy the documentation-standard front-matter
+	// contract (type/status enums, operator-facing so no adr). This also
+	// dogfoods help.BookI.Validate against a real shipped corpus.
+	require.Empty(t, b.Validate(), "play help corpus front-matter must conform")
+
 	want := map[string]bool{
 		"overview":              false,
 		"howto-example-queries": false,

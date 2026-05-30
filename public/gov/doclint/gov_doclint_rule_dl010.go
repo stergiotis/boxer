@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/stergiotis/boxer/public/gov/docstd"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -92,7 +93,7 @@ func checkOneDL010(path string, yield func(Finding, error) bool) (cont bool, err
 	if !ok || parseErr != nil {
 		return
 	}
-	if meta.Type != "adr" {
+	if meta.Type != docstd.TypeADR {
 		return
 	}
 

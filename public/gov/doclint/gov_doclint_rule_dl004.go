@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/stergiotis/boxer/public/gov/docstd"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -91,10 +92,10 @@ func checkOneDL004(path string, yield func(Finding, error) bool) (cont bool, err
 	bannerExpected := false
 	expectedState := ""
 	switch meta.Status {
-	case "draft", "proposed":
+	case docstd.StatusDraft, docstd.StatusProposed:
 		bannerExpected = true
 		expectedState = meta.Status
-	case "stable", "accepted":
+	case docstd.StatusStable, docstd.StatusAccepted:
 		bannerExpected = false
 	default:
 		// deprecated / superseded / unknown — DL004 does not constrain the
@@ -149,7 +150,7 @@ func checkOneDL004(path string, yield func(Finding, error) bool) (cont bool, err
 // meaningful; the rest are accepted as detection-only so a wrong banner on
 // a stable/accepted doc still surfaces as a banner rather than being
 // silently invisible.
-var bannerStates = []string{"draft", "proposed", "stable", "accepted", "deprecated", "superseded"}
+var bannerStates = []string{docstd.StatusDraft, docstd.StatusProposed, docstd.StatusStable, docstd.StatusAccepted, docstd.StatusDeprecated, docstd.StatusSuperseded}
 
 // DetectStatusBanner inspects body for a leading status banner blockquote.
 // It returns whether one was found and which state it announces.

@@ -73,6 +73,12 @@ type BookI interface {
 	// absent or the section is unknown. Used by [RefT] consumers to
 	// validate cross-document links at write time.
 	HasSection(docPath string, section string) (ok bool)
+	// Validate reports documentation-standard front-matter conformance
+	// problems across every indexed document, in path-sorted order (empty
+	// when the book conforms). Operator-facing, so `type: adr` is rejected;
+	// see [ValidateDocInfo] for the per-document check. Triggers the
+	// one-shot walk on first call, like the other index methods.
+	Validate() (problems []Problem)
 }
 
 // NewBook constructs a [BookI] over fsys. The book holds the fs.FS
@@ -194,6 +200,11 @@ func (inst *book) ensureIndex() {
 			md := markdown.Parse(src, markdown.WithResolver(NewFSImageResolver(inst.fsys)))
 			docPath := strings.TrimSuffix(p, ".md")
 			info := buildDocInfo(docPath, md)
+			for _, prob := range ValidateDocInfo(info) {
+				log.Warn().Str("appid", string(inst.appId)).Str("path", prob.DocPath).
+					Str("field", prob.Field).Str("value", prob.Value).Str("detail", prob.Message).
+					Msg("help.book: front-matter does not conform to the documentation standard")
+			}
 			inst.parsed[docPath] = &parsedDoc{info: info, doc: md, src: src}
 			return nil
 		})

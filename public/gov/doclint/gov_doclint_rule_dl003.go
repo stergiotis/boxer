@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/stergiotis/boxer/public/gov/docstd"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -89,7 +90,7 @@ func checkOneDL003(path string, yield func(Finding, error) bool) (cont bool, err
 
 	requiresReview := false
 	switch meta.Status {
-	case "stable", "accepted":
+	case docstd.StatusStable, docstd.StatusAccepted:
 		requiresReview = true
 	}
 	if !requiresReview {
