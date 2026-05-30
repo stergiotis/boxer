@@ -44,6 +44,22 @@ func thresholdColor(pct float32) (cl color.Color) {
 	return
 }
 
+// sequentialPalette resamples the active IDS sequential palette
+// (styletokens.SequentialDefault — ADR-0031 §SD3) into the 0xRRGGBBAA stop list
+// colormap.Config consumes, so the spectrogram honours the same
+// IDS_PALETTE_SEQUENTIAL / IDS_ACCESSIBILITY knobs as every other keelson heatmap.
+func sequentialPalette() (palette []uint32) {
+	s := styletokens.SequentialDefault()
+	const stops = 256
+	palette = make([]uint32, stops)
+	for i := range palette {
+		t := float32(i) / float32(stops-1)
+		rgba := styletokens.Sequential(s, t)
+		palette[i] = uint32(rgba.R)<<24 | uint32(rgba.G)<<16 | uint32(rgba.B)<<8 | uint32(rgba.A)
+	}
+	return
+}
+
 // Density-aware spacing (IDS spacing tokens at the active preset, ADR-0032 §SD2).
 func (inst *App) spaceInner() (px float32) { px = styletokens.PaddingInner(inst.density); return }
 func (inst *App) spaceTight() (px float32) { px = styletokens.PaddingTight(inst.density); return }

@@ -30,6 +30,10 @@ type App struct {
 	ids *c.WidgetIdStack
 	// density resolves IDS spacing tokens at the active preset (ADR-0032 §SD2).
 	density styletokens.DensityE
+	// schedSpectro is the per-window scheduling-latency spectrogram state
+	// (heatmapscroll texture + colormap), built lazily on the first frame that
+	// carries the histogram's bucket layout. See imzrt_panel_sched.go.
+	schedSpectro schedSpectroState
 }
 
 var _ app.AppI = (*App)(nil)
@@ -84,8 +88,9 @@ func ensureSampler() (s *Sampler, err error) {
 // Stable dock tab identifiers. egui_dock keys its persistent layout state off
 // them, so they must not be reused across tabs. M3 adds the Scheduler tab.
 const (
-	dockTabHeap uint64 = 1
-	dockTabGC   uint64 = 2
+	dockTabHeap  uint64 = 1
+	dockTabGC    uint64 = 2
+	dockTabSched uint64 = 3
 )
 
 // renderApp lays the body out inside the runtime-created window scope: a pinned
@@ -104,7 +109,7 @@ func (inst *App) renderApp(snap *PublishedSnapshot, s *Sampler) {
 	}
 	for range c.PanelCentralInside().KeepIter() {
 		for dock := range c.DockArea(inst.ids.PrepareStr("imzrt-dock")) {
-			dock.InitRoot(dockTabHeap, dockTabGC)
+			dock.InitRoot(dockTabHeap, dockTabGC, dockTabSched)
 			for range dock.Tab(dockTabHeap, "Heap") {
 				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
 					inst.renderHeapPanel(snap)
@@ -113,6 +118,11 @@ func (inst *App) renderApp(snap *PublishedSnapshot, s *Sampler) {
 			for range dock.Tab(dockTabGC, "GC") {
 				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
 					inst.renderGCPanel(snap)
+				}
+			}
+			for range dock.Tab(dockTabSched, "Scheduler") {
+				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+					inst.renderSchedPanel(snap)
 				}
 			}
 		}

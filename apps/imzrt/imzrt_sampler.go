@@ -48,7 +48,6 @@ type PublishedSnapshot struct {
 	GCCyclesForced   uint64
 	GOGCPercent      uint64
 	GOMemLimitBytes  uint64 // goruntime.MemLimitUnset when GOMEMLIMIT is not set
-	CgoCallsTotal    uint64
 
 	// Derived current rates.
 	AllocRateBytesPerSec float64
@@ -67,6 +66,19 @@ type PublishedSnapshot struct {
 	PausesInWindow     uint64
 	GCForcedPerSec     float64
 	AllocObjPerSec     float64
+
+	// Scheduler dynamics (M3).
+	HistSchedP99Ms []float64 // rolling per-interval p99 scheduling latency (ms)
+	SchedP99Sec    float64
+	// Spectrogram: the current interval's per-bucket /sched/latencies counts plus
+	// the bucket boundaries. The panel pushes one column per tick.
+	SchedLatColCounts  []uint64
+	SchedLatColBuckets []float64
+	// STW pause counts this interval (gc / other). STWAvailable is false on a Go
+	// version lacking /sched/pauses/total/* — the panel hides the row.
+	STWGCCount    uint64
+	STWOtherCount uint64
+	STWAvailable  bool
 
 	// Count of curated runtime metrics absent on this Go version (0 on a current toolchain).
 	MissingMetrics int
@@ -123,11 +135,15 @@ type Sampler struct {
 	gcTotalWin  *SlidingWindow[float64]
 	gcForcedWin *SlidingWindow[float64]
 	allocWin    *SlidingWindow[float64]
+	schedP99Win *SlidingWindow[float64]
 
-	// histWork is the reused per-tick windowed pause histogram; prevGCPauses
-	// holds the previous tick's cumulative pause histogram for the delta.
-	histWork     WindowedHistogram
-	prevGCPauses goruntime.Histogram
+	// histWork is the reused per-tick windowed histogram buffer (one delta at a
+	// time); the prev* histograms hold each metric's previous cumulative snapshot.
+	histWork       WindowedHistogram
+	prevGCPauses   goruntime.Histogram
+	prevSchedLat   goruntime.Histogram
+	prevSchedGC    goruntime.Histogram
+	prevSchedOther goruntime.Histogram
 
 	// Rate-derivation state. Cumulative counters are differenced against the
 	// previous tick; havePrev gates the first tick, where no rate exists yet.
@@ -176,6 +192,7 @@ func NewSampler(opts SamplerOptions) (inst *Sampler, err error) {
 		gcTotalWin:   NewSlidingWindow[float64](histN),
 		gcForcedWin:  NewSlidingWindow[float64](histN),
 		allocWin:     NewSlidingWindow[float64](histN),
+		schedP99Win:  NewSlidingWindow[float64](histN),
 	}
 	inst.intervalNs.Store(int64(opts.UpdateInterval))
 	return
@@ -315,6 +332,28 @@ func (inst *Sampler) tick() {
 	inst.gcForcedWin.Push(gcForcedRate)
 	inst.allocWin.Push(allocRate / bytesPerMiB)
 
+	// Scheduling-latency distribution: rolling p99 plus the per-interval per-bucket
+	// counts the Scheduler panel scrolls into its spectrogram (one column per tick).
+	WindowDelta(w.SchedLatencies, inst.prevSchedLat, &inst.histWork)
+	schedP99 := inst.histWork.Quantile(0.99)
+	schedColCounts := append([]uint64(nil), inst.histWork.Counts...)
+	schedColBuckets := append([]float64(nil), inst.histWork.Buckets...)
+	inst.prevSchedLat.Buckets = append(inst.prevSchedLat.Buckets[:0], w.SchedLatencies.Buckets...)
+	inst.prevSchedLat.Counts = append(inst.prevSchedLat.Counts[:0], w.SchedLatencies.Counts...)
+	inst.schedP99Win.Push(schedP99 * 1000)
+
+	// STW pause counts this interval (gc / other); degrades when the metric is
+	// absent (older Go), signalled by an empty histogram.
+	stwAvail := len(w.SchedPausesGC.Buckets) > 0
+	WindowDelta(w.SchedPausesGC, inst.prevSchedGC, &inst.histWork)
+	stwGC := inst.histWork.Total()
+	inst.prevSchedGC.Buckets = append(inst.prevSchedGC.Buckets[:0], w.SchedPausesGC.Buckets...)
+	inst.prevSchedGC.Counts = append(inst.prevSchedGC.Counts[:0], w.SchedPausesGC.Counts...)
+	WindowDelta(w.SchedPausesOther, inst.prevSchedOther, &inst.histWork)
+	stwOther := inst.histWork.Total()
+	inst.prevSchedOther.Buckets = append(inst.prevSchedOther.Buckets[:0], w.SchedPausesOther.Buckets...)
+	inst.prevSchedOther.Counts = append(inst.prevSchedOther.Counts[:0], w.SchedPausesOther.Counts...)
+
 	pub := &PublishedSnapshot{
 		SampledAtUnixMs:    nowMs,
 		HistTimeUnixSec:    copyFloats(inst.timeWin.Values()),
@@ -343,7 +382,6 @@ func (inst *Sampler) tick() {
 		GCCyclesForced:   w.GCCyclesForced,
 		GOGCPercent:      w.GOGCPercent,
 		GOMemLimitBytes:  w.GOMemLimit,
-		CgoCallsTotal:    w.CgoCalls,
 
 		AllocRateBytesPerSec: allocRate,
 		GCPerSec:             gcRate,
@@ -360,6 +398,14 @@ func (inst *Sampler) tick() {
 		PausesInWindow:     pausesInWindow,
 		GCForcedPerSec:     gcForcedRate,
 		AllocObjPerSec:     allocObjRate,
+
+		HistSchedP99Ms:     copyFloats(inst.schedP99Win.Values()),
+		SchedP99Sec:        schedP99,
+		SchedLatColCounts:  schedColCounts,
+		SchedLatColBuckets: schedColBuckets,
+		STWGCCount:         stwGC,
+		STWOtherCount:      stwOther,
+		STWAvailable:       stwAvail,
 
 		MissingMetrics: w.Missing,
 	}

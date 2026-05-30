@@ -59,13 +59,15 @@ type Snapshot struct {
 	GOMemLimit  uint64 // MemLimitUnset when GOMEMLIMIT is not configured
 
 	// Misc.
-	CgoCalls     uint64  // cumulative cgo calls (go-to-c)
 	MutexWaitSec float64 // cumulative seconds goroutines blocked on mutexes
 
 	// Cumulative histograms. Captured here so the GC and Scheduler panels (later
 	// milestones) inherit a populated collector; the Heap panel does not read them.
 	GCPauses       Histogram // /gc/pauses:seconds
 	SchedLatencies Histogram // /sched/latencies:seconds
+	// STW pause distributions (Go 1.22+); empty when the running Go lacks them.
+	SchedPausesGC    Histogram // /sched/pauses/total/gc:seconds
+	SchedPausesOther Histogram // /sched/pauses/total/other:seconds
 
 	// Missing counts curated metrics absent from metrics.All() on this runtime.
 	Missing int
@@ -106,11 +108,12 @@ const (
 	mGoroutines = "/sched/goroutines:goroutines"
 	mGomaxprocs = "/sched/gomaxprocs:threads"
 
-	mCgoCalls  = "/cgo/go-to-c-calls:calls"
 	mMutexWait = "/sync/mutex/wait/total:seconds"
 
-	mGCPauses       = "/gc/pauses:seconds"
-	mSchedLatencies = "/sched/latencies:seconds"
+	mGCPauses         = "/gc/pauses:seconds"
+	mSchedLatencies   = "/sched/latencies:seconds"
+	mSchedPausesGC    = "/sched/pauses/total/gc:seconds"
+	mSchedPausesOther = "/sched/pauses/total/other:seconds"
 )
 
 // curatedNames is the full set the collector requests. Order is irrelevant
@@ -124,8 +127,8 @@ var curatedNames = []string{
 	mGCCyclesTotal, mGCCyclesForced,
 	mGOGC, mGOMemLimit,
 	mGoroutines, mGomaxprocs,
-	mCgoCalls, mMutexWait,
-	mGCPauses, mSchedLatencies,
+	mMutexWait,
+	mGCPauses, mSchedLatencies, mSchedPausesGC, mSchedPausesOther,
 }
 
 // Collector reads a curated subset of runtime/metrics into a Snapshot. It owns a
@@ -213,11 +216,12 @@ func (inst *Collector) Read(snap *Snapshot) (err error) {
 		snap.GOMemLimit = MemLimitUnset
 	}
 
-	snap.CgoCalls = inst.u64(mCgoCalls)
 	snap.MutexWaitSec = inst.f64(mMutexWait)
 
 	inst.histInto(&snap.GCPauses, mGCPauses)
 	inst.histInto(&snap.SchedLatencies, mSchedLatencies)
+	inst.histInto(&snap.SchedPausesGC, mSchedPausesGC)
+	inst.histInto(&snap.SchedPausesOther, mSchedPausesOther)
 
 	snap.Missing = inst.missing
 	return
