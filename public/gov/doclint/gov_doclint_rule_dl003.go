@@ -3,11 +3,8 @@
 package doclint
 
 import (
-	"io/fs"
 	"iter"
 	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/stergiotis/boxer/public/gov/docstd"
@@ -37,40 +34,7 @@ func (inst *RuleDL003) Id() (id string) {
 }
 
 func (inst *RuleDL003) Check(roots []string) iter.Seq2[Finding, error] {
-	return func(yield func(Finding, error) bool) {
-		for _, root := range roots {
-			err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
-				if walkErr != nil {
-					return walkErr
-				}
-				if d.IsDir() {
-					if shouldSkipDir(d.Name()) {
-						return filepath.SkipDir
-					}
-					return nil
-				}
-				base := filepath.Base(path)
-				if !strings.HasSuffix(strings.ToLower(base), ".md") {
-					return nil
-				}
-				if !IsInScopeForDL001(path, base) {
-					return nil
-				}
-				cont, fErr := checkOneDL003(path, yield)
-				if fErr != nil {
-					return fErr
-				}
-				if !cont {
-					return filepath.SkipAll
-				}
-				return nil
-			})
-			if err != nil {
-				yield(Finding{}, eb.Build().Str("root", root).Errorf("DL003 walk: %w", err))
-				return
-			}
-		}
-	}
+	return runMarkdownCheck("DL003", roots, checkOneDL003)
 }
 
 func checkOneDL003(path string, yield func(Finding, error) bool) (cont bool, err error) {

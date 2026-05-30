@@ -4,10 +4,8 @@ package doclint
 
 import (
 	"bytes"
-	"io/fs"
 	"iter"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/gov/docstd"
@@ -45,40 +43,7 @@ var requiredAdrSections = []string{
 }
 
 func (inst *RuleDL010) Check(roots []string) iter.Seq2[Finding, error] {
-	return func(yield func(Finding, error) bool) {
-		for _, root := range roots {
-			err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
-				if walkErr != nil {
-					return walkErr
-				}
-				if d.IsDir() {
-					if shouldSkipDir(d.Name()) {
-						return filepath.SkipDir
-					}
-					return nil
-				}
-				base := filepath.Base(path)
-				if !strings.HasSuffix(strings.ToLower(base), ".md") {
-					return nil
-				}
-				if !IsInScopeForDL001(path, base) {
-					return nil
-				}
-				cont, fErr := checkOneDL010(path, yield)
-				if fErr != nil {
-					return fErr
-				}
-				if !cont {
-					return filepath.SkipAll
-				}
-				return nil
-			})
-			if err != nil {
-				yield(Finding{}, eb.Build().Str("root", root).Errorf("DL010 walk: %w", err))
-				return
-			}
-		}
-	}
+	return runMarkdownCheck("DL010", roots, checkOneDL010)
 }
 
 func checkOneDL010(path string, yield func(Finding, error) bool) (cont bool, err error) {

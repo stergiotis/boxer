@@ -4,7 +4,6 @@ package doclint
 
 import (
 	"bytes"
-	"io/fs"
 	"iter"
 	"os"
 	"path/filepath"
@@ -74,40 +73,7 @@ func IsInScopeForDL001(path string, base string) (in bool) {
 }
 
 func (inst *RuleDL001) Check(roots []string) iter.Seq2[Finding, error] {
-	return func(yield func(Finding, error) bool) {
-		for _, root := range roots {
-			err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
-				if walkErr != nil {
-					return walkErr
-				}
-				if d.IsDir() {
-					if shouldSkipDir(d.Name()) {
-						return filepath.SkipDir
-					}
-					return nil
-				}
-				base := filepath.Base(path)
-				if !strings.HasSuffix(strings.ToLower(base), ".md") {
-					return nil
-				}
-				if !IsInScopeForDL001(path, base) {
-					return nil
-				}
-				cont, fErr := checkOneDL001(path, yield)
-				if fErr != nil {
-					return fErr
-				}
-				if !cont {
-					return filepath.SkipAll
-				}
-				return nil
-			})
-			if err != nil {
-				yield(Finding{}, eb.Build().Str("root", root).Errorf("DL001 walk: %w", err))
-				return
-			}
-		}
-	}
+	return runMarkdownCheck("DL001", roots, checkOneDL001)
 }
 
 func checkOneDL001(path string, yield func(Finding, error) bool) (cont bool, err error) {

@@ -3,11 +3,9 @@
 package doclint
 
 import (
-	"io/fs"
 	"iter"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -38,40 +36,7 @@ func (inst *RuleDL007) Id() (id string) {
 }
 
 func (inst *RuleDL007) Check(roots []string) iter.Seq2[Finding, error] {
-	return func(yield func(Finding, error) bool) {
-		for _, root := range roots {
-			err := filepath.WalkDir(root, func(p string, d fs.DirEntry, walkErr error) error {
-				if walkErr != nil {
-					return walkErr
-				}
-				if d.IsDir() {
-					if shouldSkipDir(d.Name()) {
-						return filepath.SkipDir
-					}
-					return nil
-				}
-				base := filepath.Base(p)
-				if !strings.HasSuffix(strings.ToLower(base), ".md") {
-					return nil
-				}
-				if !IsInScopeForDL001(p, base) {
-					return nil
-				}
-				cont, fErr := checkOneDL007(p, yield)
-				if fErr != nil {
-					return fErr
-				}
-				if !cont {
-					return filepath.SkipAll
-				}
-				return nil
-			})
-			if err != nil {
-				yield(Finding{}, eb.Build().Str("root", root).Errorf("DL007 walk: %w", err))
-				return
-			}
-		}
-	}
+	return runMarkdownCheck("DL007", roots, checkOneDL007)
 }
 
 func checkOneDL007(filePath string, yield func(Finding, error) bool) (cont bool, err error) {
