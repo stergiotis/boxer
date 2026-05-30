@@ -1,5 +1,3 @@
-//go:build llm_generated_opus48
-
 package imzrt
 
 // SlidingWindow is a fixed-capacity buffer that drops the oldest value on
