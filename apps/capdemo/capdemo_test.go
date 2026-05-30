@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
@@ -157,7 +158,7 @@ func TestApp_PersistSet_NoStorage_Errors(t *testing.T) {
 }
 
 func TestManifest_DeclaresExpectedCaps(t *testing.T) {
-	require.Len(t, manifest.Caps, 3)
+	require.Len(t, manifest.Caps, 4)
 	patterns := make([]string, 0, len(manifest.Caps))
 	for _, cap := range manifest.Caps {
 		patterns = append(patterns, cap.Pattern)
@@ -165,6 +166,7 @@ func TestManifest_DeclaresExpectedCaps(t *testing.T) {
 	assert.Contains(t, patterns, fsbroker.SubjectDialogRead)
 	assert.Contains(t, patterns, fsbroker.SubjectDialogWatch)
 	assert.Contains(t, patterns, fsbroker.HandleSubjectPrefix+">")
+	assert.Contains(t, patterns, clipboardbroker.SubjectWrite)
 	require.Len(t, manifest.PersistedKeys, 1)
 	assert.Equal(t, scratchpadKey, manifest.PersistedKeys[0])
 }

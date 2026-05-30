@@ -20,16 +20,12 @@ import (
 	"github.com/stergiotis/boxer/public/config"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/apps/capinspector"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/application"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/runtimestatus"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
-	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/audit"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
+	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/audit"
+	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
@@ -39,6 +35,11 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
 	tasksupervisor "github.com/stergiotis/boxer/public/keelson/runtime/task/supervisor"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/application"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/runtimestatus"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
 )
 
 func NewCommand() *cli.Command {
@@ -252,6 +253,23 @@ func NewCommand() *cli.Command {
 				}
 			}()
 
+			// Clipboard Powerbox (ADR-0026 Update 2026-05-30): subscribes to
+			// clipboard.write and accumulates copy requests off-frame; the
+			// windowed renderer drains them each frame and emits the egui
+			// copy_text op. Best-effort: a start failure leaves clipboard.*
+			// unbound (copies time out on Request) but doesn't block boot.
+			// First consumer is the markdown copy button via capdemo.
+			clipSvc, clipErr := clipboardbroker.NewService(bus, log.Logger)
+			if clipErr != nil {
+				log.Warn().Err(clipErr).Msg("clipboardbroker: service start failed; clipboard.* will be unbound")
+				clipSvc = nil
+			}
+			defer func() {
+				if clipSvc != nil {
+					clipSvc.Close()
+				}
+			}()
+
 			// ADR-0038 §M3: task supervisor subscribes to task.>,
 			// persists every terminal-grade verb (created / done /
 			// error / cancel / abandoned) into runtime.facts via
@@ -320,7 +338,7 @@ func NewCommand() *cli.Command {
 				if runInst != nil {
 					runId = runInst.RunId
 				}
-				r, host := buildWindowedRenderer(launchApps, runId, facts, bus, fsSvc, status)
+				r, host := buildWindowedRenderer(launchApps, runId, facts, bus, fsSvc, clipSvc, status)
 				windowHostRef = host
 				renderers = append(renderers, r)
 				log.Info().Int("initialWindows", len(launchApps)).Msg("window host: started")

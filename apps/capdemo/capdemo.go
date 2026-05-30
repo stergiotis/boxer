@@ -24,9 +24,11 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
-	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 )
 
 // ids is the package-level WidgetIdStack. Each frame's render wraps
@@ -56,6 +58,24 @@ const watchEventLimit = 50
 // frame. Keeps the section vertically bounded regardless of cadence.
 const watchEventDisplay = 12
 
+// clipboardDoc is the markdown rendered in the clipboard section. Parsed
+// once at package load (markdown.Parse is the retain-once / render-many
+// shape) and rendered every frame with a WithClipboard sink. The fenced
+// blocks are what the per-block copy buttons hand to clipboard.write.
+var clipboardDoc = markdown.Parse([]byte("" +
+	"`clipboard.write` copies text to the viewport clipboard through the bus —\n" +
+	"the broker accumulates the request off-frame and the host drains it into an\n" +
+	"egui `copy_text` op. Click the copy glyph on either block below.\n\n" +
+	"```go\n" +
+	"// the host wires the markdown copy button to the capability:\n" +
+	"md.Render(ids, markdown.WithClipboard(func(t string) {\n" +
+	"\tgo func() { _, _ = bus.Request(clipboardbroker.SubjectWrite, []byte(t)) }()\n" +
+	"}))\n" +
+	"```\n\n" +
+	"```\n" +
+	"plain verbatim block — copies exactly these bytes, no highlighting\n" +
+	"```\n"))
+
 // App is the per-window capdemo instance. Mount captures bus +
 // storage from the MountContextI; Frame renders the three sections;
 // Unmount is a no-op (the goroutine guards against use-after-unmount
@@ -74,11 +94,11 @@ type App struct {
 	mu sync.Mutex
 
 	// fs.dialog.read state.
-	pickInFlight    bool
+	pickInFlight     bool
 	lastHandlePrefix string
-	previewBytes    []byte
-	previewTotal    int
-	fileErr         string
+	previewBytes     []byte
+	previewTotal     int
+	fileErr          string
 
 	// runtime.persist state — the TextEdit binds to scratchpad; the
 	// last operation's status (success / error) lands in
@@ -149,7 +169,30 @@ func (inst *App) renderApp() {
 			inst.renderPersistSection()
 			c.AddSpace(styletokens.PaddingOuter(inst.density))
 			inst.renderWatchSection()
+			c.AddSpace(styletokens.PaddingOuter(inst.density))
+			inst.renderClipboardSection()
 		}
+	}
+}
+
+// renderClipboardSection demonstrates the clipboard.write capability via
+// the markdown widget's copy button (ADR-0026 Update 2026-05-30). The
+// WithClipboard sink fires a clipboard.write Request off the frame
+// goroutine — Request blocks until the broker acks, and the frame thread
+// must not block (same idiom as runPick). The broker enqueues the text;
+// the host's windowed renderer drains it into an egui copy_text op.
+func (inst *App) renderClipboardSection() {
+	for range c.CollapsingHeader(ids.PrepareStr("hdr-clipboard"),
+		c.WidgetText().Text("clipboard.write — copy code blocks to the clipboard").Keep()).
+		DefaultOpen(true).KeepIter() {
+		clipboardDoc.Render(ids, markdown.WithClipboard(func(text string) {
+			if inst.bus == nil {
+				return
+			}
+			go func() {
+				_, _ = inst.bus.Request(clipboardbroker.SubjectWrite, []byte(text))
+			}()
+		}))
 	}
 }
 

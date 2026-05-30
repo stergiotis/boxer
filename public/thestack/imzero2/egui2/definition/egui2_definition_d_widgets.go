@@ -53,6 +53,26 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 					}
 `)).
 		Build())
+	// copyTextToClipboard — copy a UTF-8 string to the viewport clipboard via
+	// egui's Context::copy_text (egui >=0.34, resolved here to 0.34.2). This is
+	// the mechanism half of the clipboard.write capability (ADR-0026 Update
+	// 2026-05-30): the only way to reach the OS clipboard from this stack, since
+	// Go is CGO-free and the real clipboard belongs to the egui/winit viewport,
+	// not the Go process. The clipboardbroker accumulates copy requests off the
+	// bus; the host frame loop drains them and emits this op once per pending
+	// string.
+	//
+	// copy_text is a Context method (it pushes an OutputCommand), not a Ui
+	// method, so this uses the interpreter's frame-scoped `c: &egui::Context`
+	// directly rather than the optional Ui — same handle the codeView node uses
+	// for its layout-job cache. That deliberately removes any active-Ui-scope
+	// requirement: the host can drain and emit after its panels have closed.
+	// The FFFI2 string arg arrives as an owned String, which copy_text consumes
+	// directly.
+	widgets = append(widgets, idl.NewProceduralNode("copyTextToClipboard").
+		AddArguments(idl.NewArgumentsBuilder().PlainArg("text", ctabb.S).Build()).
+		WithApplyCodeClientRust(rustClientCode("c.copy_text(text);\n")).
+		Build())
 	widgets = append(widgets, idl.NewProceduralNode("uiSetMinWidth").
 		AddArguments(idl.NewArgumentsBuilder().PlainArg("width", ctabb.F32).Build()).
 		WithApplyCodeClientRust(rustClientCode(`

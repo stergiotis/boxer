@@ -160,6 +160,12 @@ func lowerCodeBlock(lines *text.Segments, src []byte, lang string) (seg segment)
 	}
 	seg.kind = segKindCodeBlock
 	source := buf.String()
+	// Retain the raw source alongside the highlighted job: the markdown
+	// highlighter canonicalises its output (codeview.BuildMarkdown notes
+	// the rendered text is not verbatim) and the job holder exposes no
+	// way to read the text back. The copy-to-clipboard affordance
+	// ([WithClipboard]) must copy what the author wrote, so we stash it.
+	seg.codeText = source
 	switch strings.ToLower(strings.TrimSpace(lang)) {
 	case "go", "golang":
 		seg.code = codeview.PrepareGo(source)

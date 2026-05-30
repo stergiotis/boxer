@@ -106,11 +106,12 @@ func (inst *Doc) Render(ids *c.WidgetIdStack, opts ...RenderOpt) {
 		opt(&ro)
 	}
 	rc := renderCtx{
-		ids:          ids,
-		imageMaxW:    inst.imageMaxW,
-		imageMaxH:    inst.imageMaxH,
-		scrollToSlug: ro.scrollToSlug,
-		headings:     inst.headings,
+		ids:            ids,
+		imageMaxW:      inst.imageMaxW,
+		imageMaxH:      inst.imageMaxH,
+		scrollToSlug:   ro.scrollToSlug,
+		headings:       inst.headings,
+		clipboardWrite: ro.clipboardWrite,
 	}
 	for i := range inst.segments {
 		inst.segments[i].render(&rc)
@@ -123,7 +124,8 @@ func (inst *Doc) Render(ids *c.WidgetIdStack, opts ...RenderOpt) {
 type RenderOpt func(*renderOptions)
 
 type renderOptions struct {
-	scrollToSlug string
+	scrollToSlug   string
+	clipboardWrite func(text string)
 }
 
 // WithScrollToSection asks the next [Doc.Render] to schedule an egui
@@ -141,6 +143,31 @@ type renderOptions struct {
 func WithScrollToSection(slug string) (opt RenderOpt) {
 	opt = func(o *renderOptions) {
 		o.scrollToSlug = slug
+	}
+	return
+}
+
+// WithClipboard enables a copy-to-clipboard affordance on every code /
+// verbatim block: when set, each rendered code block gets a small
+// icon-only button that hands the block's source text to write on click.
+// The renderer never touches the OS clipboard itself — write is the
+// caller's sink into the clipboard.write capability (ADR-0026 Update
+// 2026-05-30). A host app holding the cap typically wires
+//
+//	WithClipboard(func(t string) {
+//		go func() { _, _ = bus.Request(clipboardbroker.SubjectWrite, []byte(t)) }()
+//	})
+//
+// off the frame goroutine (Request blocks until the broker acks).
+//
+// When write is nil (the default — e.g. an app without the cap, or a
+// viewport-less render path like SVG export or the screenshot tour) no
+// button is emitted; the block renders exactly as before. The
+// CodeView's built-in selectable text (Ctrl+C) is unaffected either way;
+// the button is an additional affordance.
+func WithClipboard(write func(text string)) (opt RenderOpt) {
+	opt = func(o *renderOptions) {
+		o.clipboardWrite = write
 	}
 	return
 }
@@ -164,6 +191,11 @@ type renderCtx struct {
 	scrollToSlug string
 	headings     []HeadingInfo
 	headingIdx   int
+
+	// clipboardWrite, when non-nil ([WithClipboard]), makes each code
+	// block emit an icon-only copy button that calls this sink with the
+	// block's source text on click. Nil disables the affordance.
+	clipboardWrite func(text string)
 }
 
 // Option configures [Parse]. Pass options at construction time.
@@ -317,7 +349,9 @@ type paragraphRun struct {
 // of each field depends on kind:
 //
 //   - segKindParagraph / segKindHeading: runs is the inline flow.
-//   - segKindCodeBlock:                  code holds the retained job.
+//   - segKindCodeBlock:                  code holds the retained job;
+//     codeText holds the verbatim source
+//     for the copy affordance.
 //   - segKindList:                       children is a slice of segKindListItem
 //     segments; listOrdered + listStart
 //     drive the bullet glyph.
@@ -331,6 +365,7 @@ type segment struct {
 	kind               segKindE
 	runs               []paragraphRun
 	code               typed.RetainedFffiHolderTyped[c.CodeViewJobS]
+	codeText           string
 	children           []segment
 	listOrdered        bool
 	listStart          uint32

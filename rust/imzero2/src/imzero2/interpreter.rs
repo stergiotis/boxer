@@ -3923,6 +3923,19 @@ self.end_consume_message()?;
 // generating location: /home/spx/repo/boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 c.send_viewport_cmd(egui::ViewportCommand::Close);
 }
+FuncProcId::CopyTextToClipboard => {
+    #[cfg(feature = "puffin")]
+	puffin::profile_scope!("match FuncProcId::CopyTextToClipboard");
+// arguments
+#[allow(unused_mut)]
+let mut text = self.io.read_plain_s()?;
+if d == 0 {
+self.end_consume_message()?;
+}
+// apply
+c.copy_text(text);
+
+}
 FuncProcId::DatePickerButton => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match FuncProcId::DatePickerButton");

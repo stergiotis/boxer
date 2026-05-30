@@ -213,6 +213,14 @@ func ContextSendViewPortCommandClose() {
 	r.SendIntermediate()
 }
 
+func CopyTextToClipboard(text string) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdCopyTextToClipboard))
+	r.WriteString(text)
+
+	r.SendIntermediate()
+}
+
 func DatePickerButton(i WidgetIdCreatorI, packedYmd uint64) (inst DatePickerButtonFluid) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteOpCode(uint32(FuncProcIdDatePickerButton))

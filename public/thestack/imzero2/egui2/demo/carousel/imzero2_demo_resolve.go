@@ -8,18 +8,19 @@ import (
 	"strings"
 
 	"github.com/rs/zerolog/log"
-	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/apps/capinspector"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker/pickerbridge"
 	"github.com/stergiotis/boxer/public/keelson/runtime/helphost"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/metricsoverlay"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/runtimestatus"
@@ -32,8 +33,8 @@ import (
 	_ "github.com/stergiotis/boxer/apps/capinspector"
 	_ "github.com/stergiotis/boxer/apps/imzrt"
 	_ "github.com/stergiotis/boxer/apps/imztop"
-	_ "github.com/stergiotis/boxer/apps/taskdemo"
 	_ "github.com/stergiotis/boxer/apps/play"
+	_ "github.com/stergiotis/boxer/apps/taskdemo"
 	_ "github.com/stergiotis/boxer/public/keelson/runtime/configview"
 	_ "github.com/stergiotis/boxer/public/keelson/runtime/logviewer"
 	_ "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/hn_explorer"
@@ -44,6 +45,15 @@ import (
 	_ "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/sccmap"
 	_ "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/widgets"
 )
+
+// idleRepaintIntervalSecs is the steady-state repaint cadence requested by
+// decorateRenderer in interactive mode. egui overrides it with sooner
+// repaints for input and animation (it keeps the earliest deadline), so it
+// only bounds how often a fully idle window refreshes. Matches the imztop
+// sampler's 1 s tick; the Rust side mirrors it (src/imzero2/app.rs's
+// IDLE_REPAINT_INTERVAL). Apps that change without interaction faster than
+// this can request a sooner repaint themselves.
+const idleRepaintIntervalSecs = 1.0
 
 // decorateRenderer wraps an inner renderer in the shared host chrome:
 // top PanelTop with the File / Layout menus + an optional extraMenus
@@ -61,13 +71,16 @@ func decorateRenderer(r func() error, extraMenus func(), status *runtimestatus.S
 	// env-read cost. ADR-0032 §SD2 — IDS spacing tokens at the active
 	// density preset.
 	density := styletokens.DensityFromEnv()
-	// Skip the bottom status panel under IMZERO2_SCREENSHOT_DIR — the
-	// metrics overlay (Go ms / Rust ms / vsync / network / fps) and the
-	// run_id chip in runtimestatus change byte-for-byte every frame,
-	// producing 30+ "modified" file diffs every tour rerun without any
-	// visual content change. Captured once so the per-frame closure
-	// doesn't repeat the env read.
-	skipBottomPanel := imzero2env.ScreenshotDir.Get() != ""
+	// Screenshot/tour mode (IMZERO2_SCREENSHOT_DIR set). Drives two things,
+	// captured once so the per-frame closure doesn't repeat the env read:
+	//   1. Skips the bottom status panel — the metrics overlay (Go ms / Rust
+	//      ms / vsync / network / fps) and the run_id chip in runtimestatus
+	//      change byte-for-byte every frame, producing 30+ "modified" file
+	//      diffs every tour rerun without any visual content change.
+	//   2. Keeps requesting immediate repaints (continuous mode) so every
+	//      pass renders for capture, rather than the interactive idle
+	//      heartbeat below.
+	screenshotMode := imzero2env.ScreenshotDir.Get() != ""
 	return func() error {
 		// F1 global shortcut: open or focus HelpHost. The cached value
 		// was drained from egui's input queue during StateManager.Sync
@@ -80,15 +93,19 @@ func decorateRenderer(r func() error, extraMenus func(), status *runtimestatus.S
 				log.Warn().Err(openErr).Msg("F1: helphost open failed")
 			}
 		}
-		// Kept as a defense-in-depth signal that Go still wants frames. The
-		// Rust side's logic() also calls ctx.request_repaint() every pass
-		// (continuous-rendering mode — see src/rust/src/imzero2/app.rs), so
-		// this is technically redundant today; removing it would put the
-		// continuous-mode contract entirely on the Rust side. Keeping it
-		// here makes the intent visible at the Go entry point and guards
-		// against regressions if the Rust side is ever scaled back to a
-		// reactive model.
-		c.RequestRepaint()
+		// Drive the next frame. In screenshot/tour mode keep requesting
+		// immediate repaints so every pass renders for capture. Otherwise
+		// request a slow idle heartbeat: egui requests sooner repaints for
+		// input and animation (it keeps the earliest deadline), so interaction
+		// stays at vsync rate, but an idle or occluded window stops driving the
+		// Go↔Rust pipe at full vsync. The Rust side mirrors this cadence
+		// (src/imzero2/app.rs); both must agree or the immediate request wins
+		// and continuous mode returns.
+		if screenshotMode {
+			c.RequestRepaint()
+		} else {
+			c.RequestRepaintAfter(idleRepaintIntervalSecs)
+		}
 		c.CurrentApplicationState.StartServersideFrame()
 		defer c.CurrentApplicationState.FinishServersideFrame()
 		for range c.PanelTop(ids.PrepareStr("topPanel")).KeepIter() {
@@ -110,7 +127,7 @@ func decorateRenderer(r func() error, extraMenus func(), status *runtimestatus.S
 				c.AddSpace(styletokens.GapSections(density))
 			}
 		}
-		if !skipBottomPanel {
+		if !screenshotMode {
 			for range c.PanelBottom(ids.PrepareStr("bottomPanel")).Resizable(false).KeepIter() {
 				for range c.Horizontal().KeepIter() {
 					c.AddSpace(styletokens.GapItems(density))
@@ -163,7 +180,12 @@ func decorateRenderer(r func() error, extraMenus func(), status *runtimestatus.S
 // initial Open calls are logged and dropped; a bad seed entry
 // shouldn't abort startup. An empty seed is fine (user opens apps
 // via the Apps menu).
-func buildWindowedRenderer(apps []app.AppI, runId string, facts factsstore.FactsStoreI, bus *inprocbus.Inst, fsSvc *fsbroker.Service, status *runtimestatus.Snapshot) (r func() error, host *windowhost.Inst) {
+//
+// clipSvc may be nil — in that case clipboard.write copies are not
+// drained into egui copy_text ops (apps publishing clipboard.write get
+// no responder and their Request times out), but rendering is otherwise
+// unaffected.
+func buildWindowedRenderer(apps []app.AppI, runId string, facts factsstore.FactsStoreI, bus *inprocbus.Inst, fsSvc *fsbroker.Service, clipSvc *clipboardbroker.Service, status *runtimestatus.Snapshot) (r func() error, host *windowhost.Inst) {
 	host = windowhost.NewInst(app.DefaultRegistry, log.Logger)
 	if bus != nil {
 		// Wire the bus before seeding so the seeded windows pick up a
@@ -209,6 +231,17 @@ func buildWindowedRenderer(apps []app.AppI, runId string, facts factsstore.Facts
 		if fsBridge != nil {
 			bridgeIds.Reset()
 			fsBridge.Render(bridgeIds)
+		}
+		// Clipboard bridge (ADR-0026 Update 2026-05-30): drain the copies
+		// the clipboardbroker accumulated off the bus this frame and emit
+		// one CopyTextToClipboard op per pending string. Runs after the
+		// host body + picker overlay; the op rides the frame-scoped egui
+		// Context, not a Ui scope, so no active panel is required and no
+		// WidgetIdStack is needed (it is a procedural op, not a widget).
+		if clipSvc != nil {
+			for _, text := range clipSvc.DrainPending() {
+				c.CopyTextToClipboard(text)
+			}
 		}
 		return
 	}

@@ -32,6 +32,7 @@ status: draft
 | ComboBox | BuilderFactory | Yes | 0 | 2 | 4 | Immediate, Retained, BlockIterator |
 | ContextInspectionUi | Procedural | No | 0 | 0 | - | - |
 | ContextSendViewPortCommandClose | Procedural | No | 0 | 0 | - | - |
+| CopyTextToClipboard | Procedural | No | 1 | 0 | - | - |
 | DatePickerButton | BuilderFactory | Yes | 1 | 0 | 7 | Immediate, Retained |
 | DateTimePickerButton | BuilderFactory | Yes | 1 | 0 | 7 | Immediate, Retained |
 | DockAreaRaw | BuilderFactory | Yes | 3 | 0 | 0 | Immediate |
@@ -2982,6 +2983,19 @@ Block
 
 - **Type:** Procedural
 - **Identity:** No
+
+---
+
+### CopyTextToClipboard
+
+- **Type:** Procedural
+- **Identity:** No
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| text | plain | s |
 
 ---
 

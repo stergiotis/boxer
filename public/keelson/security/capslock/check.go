@@ -133,6 +133,7 @@ func Run(args []string) (exitCode int) {
 var trustBoundaryPackages = []string{
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker",
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool",
+	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker",
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker",
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus",
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist",

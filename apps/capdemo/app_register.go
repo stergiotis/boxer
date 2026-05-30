@@ -6,6 +6,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 )
@@ -55,6 +56,11 @@ var manifest = app.Manifest{
 			Pattern:   fsbroker.HandleSubjectPrefix + ">",
 			Direction: app.CapDirectionPub,
 			Reason:    "demo: publish read/watch/unwatch/close on the granted handle",
+		},
+		{
+			Pattern:   clipboardbroker.SubjectWrite,
+			Direction: app.CapDirectionPub,
+			Reason:    "demo: copy code blocks to the clipboard via the markdown copy button",
 		},
 	},
 	PersistedKeys: []string{scratchpadKey},
