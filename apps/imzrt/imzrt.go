@@ -1,5 +1,3 @@
-//go:build llm_generated_opus48
-
 package imzrt
 
 import (
@@ -83,10 +81,16 @@ func ensureSampler() (s *Sampler, err error) {
 	return
 }
 
+// Stable dock tab identifiers. egui_dock keys its persistent layout state off
+// them, so they must not be reused across tabs. M3 adds the Scheduler tab.
+const (
+	dockTabHeap uint64 = 1
+	dockTabGC   uint64 = 2
+)
+
 // renderApp lays the body out inside the runtime-created window scope: a pinned
-// top bar plus the Heap & GC panel in the central area. M1 renders the single
-// panel directly; M2/M3 promote the central area to a DockArea as the GC and
-// Scheduler tabs land (ADR-0061).
+// top bar plus a DockArea holding the Heap and GC tabs. M3 adds the Scheduler tab
+// to the same leaf (ADR-0061).
 func (inst *App) renderApp(snap *PublishedSnapshot, s *Sampler) {
 	if snap == nil {
 		for range c.PanelCentralInside().KeepIter() {
@@ -99,8 +103,18 @@ func (inst *App) renderApp(snap *PublishedSnapshot, s *Sampler) {
 		inst.renderTopBar(snap, s)
 	}
 	for range c.PanelCentralInside().KeepIter() {
-		for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
-			inst.renderHeapPanel(snap)
+		for dock := range c.DockArea(inst.ids.PrepareStr("imzrt-dock")) {
+			dock.InitRoot(dockTabHeap, dockTabGC)
+			for range dock.Tab(dockTabHeap, "Heap") {
+				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+					inst.renderHeapPanel(snap)
+				}
+			}
+			for range dock.Tab(dockTabGC, "GC") {
+				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+					inst.renderGCPanel(snap)
+				}
+			}
 		}
 	}
 }

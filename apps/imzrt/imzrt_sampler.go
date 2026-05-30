@@ -1,5 +1,3 @@
-//go:build llm_generated_opus48
-
 package imzrt
 
 import (
@@ -56,6 +54,20 @@ type PublishedSnapshot struct {
 	AllocRateBytesPerSec float64
 	GCPerSec             float64
 
+	// GC dynamics (M2): rolling history plus current-interval scalars.
+	HistPauseP50Ms     []float64 // rolling per-interval p50 GC pause (ms)
+	HistPauseP99Ms     []float64 // rolling per-interval p99 GC pause (ms)
+	HistPauseMaxMs     []float64 // rolling per-interval max GC pause (ms)
+	HistGCPerSec       []float64 // total GC cycles/s
+	HistGCForcedPerSec []float64 // forced GC cycles/s
+	HistAllocMiBs      []float64 // allocation rate (MiB/s)
+	PauseP50Sec        float64
+	PauseP99Sec        float64
+	PauseMaxSec        float64
+	PausesInWindow     uint64
+	GCForcedPerSec     float64
+	AllocObjPerSec     float64
+
 	// Count of curated runtime metrics absent on this Go version (0 on a current toolchain).
 	MissingMetrics int
 }
@@ -103,12 +115,28 @@ type Sampler struct {
 	totalWin     *SlidingWindow[float64]
 	goroutineWin *SlidingWindow[float64]
 
+	// GC-dynamics history (M2): rolling pause percentiles (ms), GC rates
+	// (cycles/s), and allocation rate (MiB/s).
+	pauseP50Win *SlidingWindow[float64]
+	pauseP99Win *SlidingWindow[float64]
+	pauseMaxWin *SlidingWindow[float64]
+	gcTotalWin  *SlidingWindow[float64]
+	gcForcedWin *SlidingWindow[float64]
+	allocWin    *SlidingWindow[float64]
+
+	// histWork is the reused per-tick windowed pause histogram; prevGCPauses
+	// holds the previous tick's cumulative pause histogram for the delta.
+	histWork     WindowedHistogram
+	prevGCPauses goruntime.Histogram
+
 	// Rate-derivation state. Cumulative counters are differenced against the
 	// previous tick; havePrev gates the first tick, where no rate exists yet.
-	havePrev       bool
-	prevAllocBytes uint64
-	prevGCCycles   uint64
-	prevTimeMs     int64
+	havePrev         bool
+	prevAllocBytes   uint64
+	prevAllocObjects uint64
+	prevGCCycles     uint64
+	prevGCForced     uint64
+	prevTimeMs       int64
 
 	latest atomic.Pointer[PublishedSnapshot]
 	paused atomic.Bool
@@ -142,6 +170,12 @@ func NewSampler(opts SamplerOptions) (inst *Sampler, err error) {
 		otherWin:     NewSlidingWindow[float64](histN),
 		totalWin:     NewSlidingWindow[float64](histN),
 		goroutineWin: NewSlidingWindow[float64](histN),
+		pauseP50Win:  NewSlidingWindow[float64](histN),
+		pauseP99Win:  NewSlidingWindow[float64](histN),
+		pauseMaxWin:  NewSlidingWindow[float64](histN),
+		gcTotalWin:   NewSlidingWindow[float64](histN),
+		gcForcedWin:  NewSlidingWindow[float64](histN),
+		allocWin:     NewSlidingWindow[float64](histN),
 	}
 	inst.intervalNs.Store(int64(opts.UpdateInterval))
 	return
@@ -248,16 +282,38 @@ func (inst *Sampler) tick() {
 	inst.totalWin.Push(mib(w.TotalMapped))
 	inst.goroutineWin.Push(float64(w.Goroutines))
 
-	var allocRate, gcRate float64
+	var allocRate, allocObjRate, gcRate, gcForcedRate float64
 	if inst.havePrev && nowMs > inst.prevTimeMs {
 		dt := float64(nowMs-inst.prevTimeMs) / 1000.0
 		allocRate = float64(w.AllocBytes-inst.prevAllocBytes) / dt
+		allocObjRate = float64(w.AllocObjects-inst.prevAllocObjects) / dt
 		gcRate = float64(w.GCCyclesTotal-inst.prevGCCycles) / dt
+		gcForcedRate = float64(w.GCCyclesForced-inst.prevGCForced) / dt
 	}
 	inst.prevAllocBytes = w.AllocBytes
+	inst.prevAllocObjects = w.AllocObjects
 	inst.prevGCCycles = w.GCCyclesTotal
+	inst.prevGCForced = w.GCCyclesForced
 	inst.prevTimeMs = nowMs
 	inst.havePrev = true
+
+	// Per-interval GC pause distribution from the cumulative histogram delta.
+	// On the first tick prevGCPauses is empty, so the delta is all-zero and the
+	// percentiles read zero — no NaN, no spurious startup spike.
+	WindowDelta(w.GCPauses, inst.prevGCPauses, &inst.histWork)
+	pauseP50 := inst.histWork.Quantile(0.50)
+	pauseP99 := inst.histWork.Quantile(0.99)
+	pauseMax := inst.histWork.Max()
+	pausesInWindow := inst.histWork.Total()
+	inst.prevGCPauses.Buckets = append(inst.prevGCPauses.Buckets[:0], w.GCPauses.Buckets...)
+	inst.prevGCPauses.Counts = append(inst.prevGCPauses.Counts[:0], w.GCPauses.Counts...)
+
+	inst.pauseP50Win.Push(pauseP50 * 1000)
+	inst.pauseP99Win.Push(pauseP99 * 1000)
+	inst.pauseMaxWin.Push(pauseMax * 1000)
+	inst.gcTotalWin.Push(gcRate)
+	inst.gcForcedWin.Push(gcForcedRate)
+	inst.allocWin.Push(allocRate / bytesPerMiB)
 
 	pub := &PublishedSnapshot{
 		SampledAtUnixMs:    nowMs,
@@ -291,7 +347,21 @@ func (inst *Sampler) tick() {
 
 		AllocRateBytesPerSec: allocRate,
 		GCPerSec:             gcRate,
-		MissingMetrics:       w.Missing,
+
+		HistPauseP50Ms:     copyFloats(inst.pauseP50Win.Values()),
+		HistPauseP99Ms:     copyFloats(inst.pauseP99Win.Values()),
+		HistPauseMaxMs:     copyFloats(inst.pauseMaxWin.Values()),
+		HistGCPerSec:       copyFloats(inst.gcTotalWin.Values()),
+		HistGCForcedPerSec: copyFloats(inst.gcForcedWin.Values()),
+		HistAllocMiBs:      copyFloats(inst.allocWin.Values()),
+		PauseP50Sec:        pauseP50,
+		PauseP99Sec:        pauseP99,
+		PauseMaxSec:        pauseMax,
+		PausesInWindow:     pausesInWindow,
+		GCForcedPerSec:     gcForcedRate,
+		AllocObjPerSec:     allocObjRate,
+
+		MissingMetrics: w.Missing,
 	}
 	inst.latest.Store(pub)
 }

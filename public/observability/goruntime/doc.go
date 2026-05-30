@@ -1,5 +1,3 @@
-//go:build llm_generated_opus48
-
 // Package goruntime reads the running process's own Go runtime metrics
 // (runtime/metrics) into a caller-owned [Snapshot]. It is the portable
 // counterpart to the Linux-only sysmetrics collector: the same Bundle-style
@@ -7,9 +5,7 @@
 // runtime/metrics surface — heap occupancy, GC accounting, scheduler state.
 //
 // Portability: the collector carries no platform or feature build tags. It runs
-// on every GOOS/GOARCH the Go toolchain supports. (The //go:build
-// llm_generated_opus48 line every file in this package carries is a repo-wide
-// authorship-provenance marker handled by `gov llmtag`, not a portability gate.)
+// on every GOOS/GOARCH the Go toolchain supports.
 //
 // Version tolerance: the curated metric set is intersected with metrics.All()
 // at construction, so a metric that a given Go release does not expose is simply

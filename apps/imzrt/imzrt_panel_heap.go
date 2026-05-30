@@ -1,5 +1,3 @@
-//go:build llm_generated_opus48
-
 package imzrt
 
 import (
@@ -9,7 +7,7 @@ import (
 )
 
 func (inst *App) renderHeapPanel(snap *PublishedSnapshot) {
-	inst.sectionHeader("Heap & GC")
+	inst.sectionHeader("Heap")
 
 	// Instant readouts.
 	for range c.Horizontal().KeepIter() {

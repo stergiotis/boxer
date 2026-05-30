@@ -1,5 +1,3 @@
-//go:build llm_generated_opus48
-
 package imzrt
 
 import "fmt"
@@ -34,6 +32,24 @@ func humanBytes(n uint64) (s string) {
 		s = fmt.Sprintf("%.0f KiB", float64(n)/float64(kib))
 	default:
 		s = fmt.Sprintf("%d B", n)
+	}
+	return
+}
+
+// humanDuration renders a duration given in seconds with an adaptive unit, so GC
+// pauses (typically µs–ms) read naturally.
+func humanDuration(sec float64) (s string) {
+	switch {
+	case sec <= 0:
+		s = "0"
+	case sec < 1e-6:
+		s = fmt.Sprintf("%.0f ns", sec*1e9)
+	case sec < 1e-3:
+		s = fmt.Sprintf("%.1f µs", sec*1e6)
+	case sec < 1:
+		s = fmt.Sprintf("%.2f ms", sec*1e3)
+	default:
+		s = fmt.Sprintf("%.2f s", sec)
 	}
 	return
 }
