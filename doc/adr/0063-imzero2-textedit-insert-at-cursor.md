@@ -1,10 +1,12 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-05-31
+reviewed-by: "@spx"
+reviewed-date: 2026-05-31
 ---
 
-> **Status: proposed — pre-human-review.** Implemented on both sides (Go binding + Rust interpreter) and building, but not yet reviewed; do not cite as settled.
+> **Status: accepted 2026-05-31 by @spx.** Implemented on both sides (Go binding + Rust interpreter), unit-tested (the char-indexed splice), and shipped in play's snippet library.
 
 # ADR-0063: ImZero2 — Programmatic Insert-at-Cursor for TextEdit
 

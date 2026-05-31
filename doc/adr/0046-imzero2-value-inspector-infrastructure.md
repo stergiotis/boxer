@@ -1,12 +1,12 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-05-24
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "@spx"
+reviewed-date: 2026-05-31
 ---
 
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
+> **Status: accepted 2026-05-31 by @spx.** The inspector infrastructure (Provenance, Source[T], ProvenanceChip, AnchorToggle, the bezier AnchorTether) and its updates — including first-class fsmview tethering — are shipped.
 
 # ADR-0046: Value-inspector infrastructure — Provenance, Source[T], chip, anchor chevron, bezier tether
 
@@ -333,7 +333,7 @@ them from code archaeology.
 
 ## Status
 
-Proposed — awaiting review.
+Accepted 2026-05-31 by @spx.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`. See boxer's `DOCUMENTATION_STANDARD.md` §1 ADR for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
@@ -431,7 +431,7 @@ The 2026-05-25 toggle update kept fsmview opted out of the disclosure affordance
 
 **First consumer.** play's query-result FSM (`app.play.query.result-state`): the status bar now reads `[state badge] N rows · 12ms · 8s ago [↗]`, and the `↗` toggle pops the bezier-tethered graph / history / provenance window. "Tethered" is the word for this composition across the ADR, the code comments, and the `Tethered()` API.
 
-**Status.** `status` stays `proposed` — a widget gaining an opt-in mode over primitives the ADR already names, not a new decision.
+**Status.** Accepted with the ADR on 2026-05-31 (@spx) — a widget gaining an opt-in mode over primitives the ADR already names. Shipped in play's query-result inspector (`8b5b157`).
 
 ## References
 

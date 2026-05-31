@@ -11,7 +11,7 @@ title: The SQL Playground
 
 `play` is a graphical ClickHouse SQL playground. You type a query, run it, and
 inspect the result through several linked views. It speaks ClickHouse over HTTP
-(default `http://localhost:8123/`, overridable with `--url`) and pulls results
+(default `http://localhost:8123/`, overridable with `--clickHouseUrl`) and pulls results
 back as Arrow, so wide leeway-encoded tables arrive without a row-by-row decode.
 
 You never write a `FORMAT` clause: the app rewrites the query to end with
@@ -21,7 +21,8 @@ appended `FORMAT` clause is invalid on those statements.
 
 ## Tabs
 
-The window is a dock of tabs you can rearrange and split:
+The window is a dock of tabs you can rearrange and split (each, and every other
+feature, is covered in depth on the **Features** page):
 
 - **Editor** — the SQL buffer plus a row of parameter editors (see below). The
   buffer is persisted across sessions.
