@@ -89,16 +89,23 @@ func loadAssets() {
 			splashErr = fmt.Errorf("splash png has empty bounds %dx%d", w, h)
 			return
 		}
-		// Remap luminance through the IDS grayscale ramp (Crameri grayC) so the
-		// splash neutrals match the design system rather than the raw scan.
-		// Build a 256-entry LUT once: grayC runs t=0→white … t=1→black, so we
-		// invert luminance to preserve the artwork's tonality (dark stays
-		// dark). Output is packed 0xRRGGBBAA row-major — the imzero2 Image
-		// widget's pixel contract; alpha is carried through per pixel.
-		var grayLUT [256]uint32
-		for n := range grayLUT {
-			gc := styletokens.Sequential(styletokens.SequentialGrayC, 1.0-float32(n)/255.0)
-			grayLUT[n] = uint32(gc.R)<<24 | uint32(gc.G)<<16 | uint32(gc.B)<<8
+		// Map luminance through an IDS sequential palette via a 256-entry LUT.
+		// Default: the design-system grayscale ramp (Crameri grayC, which runs
+		// t=0→white … t=1→black, so invert luminance to keep the artwork's
+		// tonality — dark stays dark). When the KEELSON_EASTEREGG toggle is on,
+		// colourise with viridis instead (t runs dark→bright, no inversion).
+		// Output is packed 0xRRGGBBAA row-major — the imzero2 Image widget's
+		// pixel contract; alpha is carried through per pixel.
+		egg := app.EasterEgg.Get()
+		var paletteLUT [256]uint32
+		for n := range paletteLUT {
+			var c8 styletokens.RGBA8
+			if egg {
+				c8 = styletokens.Sequential(styletokens.SequentialViridis, float32(n)/255.0)
+			} else {
+				c8 = styletokens.Sequential(styletokens.SequentialGrayC, 1.0-float32(n)/255.0)
+			}
+			paletteLUT[n] = uint32(c8.R)<<24 | uint32(c8.G)<<16 | uint32(c8.B)<<8
 		}
 		px := make([]uint32, w*h)
 		i := 0
@@ -109,7 +116,7 @@ func loadAssets() {
 				// our grayscale asset, but stays correct if a colour image is
 				// ever swapped in.
 				lum := (77*(r>>8) + 150*(g>>8) + 29*(bl>>8)) >> 8
-				px[i] = grayLUT[lum] | uint32(a>>8)
+				px[i] = paletteLUT[lum] | uint32(a>>8)
 				i++
 			}
 		}
