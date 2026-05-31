@@ -151,6 +151,40 @@ func (inst *Machine[T]) Transition(target T) error {
 	return nil
 }
 
+// Mirror drives the machine to target like [Machine.Transition], but never
+// fails. Use it when the machine is a passive mirror of state derived
+// elsewhere (e.g. a per-frame projection of external data): the source of
+// truth lives outside, so refusing an "illegal" edge would only wedge the
+// mirror — a memoryless producer re-proposes the same target next frame and
+// the machine never catches up. When target is reachable by a declared
+// rule, Mirror behaves exactly like Transition (records history, returns
+// declared=true). When it is not, Mirror still moves there and records the
+// transition, but returns declared=false so the caller can log the
+// unexpected edge as a diagnostic.
+//
+// The undeclared edge is taught to the underlying FSM (so the move records
+// in history and CanTransition stays honest) and target is registered as a
+// known node, but the edge is deliberately NOT added to the drawn rule graph
+// ([Machine.Edges]): the graph keeps only the edges the domain declared via
+// [Machine.AddRule], and surprises surface in the logs / history instead of
+// as phantom arrows. A same-state call is a no-op (no self-loop is recorded).
+//
+// Prefer [Machine.Transition] when the machine itself is authoritative and
+// an illegal edge is a real error the caller must handle.
+func (inst *Machine[T]) Mirror(target T) (declared bool) {
+	cur := inst.Current()
+	if cur == target {
+		return true
+	}
+	declared = inst.fsm.CanTransition(target)
+	if !declared {
+		inst.observe(target)
+		inst.fsm.AddRule(cur, target)
+	}
+	_, _ = inst.fsm.Transition(target, nil)
+	return declared
+}
+
 // Current returns the current FSM state.
 func (inst *Machine[T]) Current() T {
 	return inst.fsm.CurrentState()

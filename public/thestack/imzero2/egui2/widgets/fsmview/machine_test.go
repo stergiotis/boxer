@@ -112,6 +112,59 @@ func TestTransition_invalid(t *testing.T) {
 	assert.Equal(t, 0, m.HistoryLen())
 }
 
+// TestMirror_declaredEdge behaves exactly like Transition for a declared
+// edge: advances Current, records history, reports declared=true.
+func TestMirror_declaredEdge(t *testing.T) {
+	m := NewMachine("red", 4).AddRule("red", "green")
+	assert.True(t, m.Mirror("green"), "declared edge must report declared=true")
+	assert.Equal(t, "green", m.Current())
+	assert.Equal(t, 1, m.HistoryLen())
+}
+
+// TestMirror_undeclaredEdgeFollows is the regression guard for the wedge a
+// rejecting Transition causes when the producer is memoryless: Mirror must
+// follow an undeclared edge (Current advances, the real edge is recorded in
+// history) and report declared=false — never refuse and stick a state behind.
+func TestMirror_undeclaredEdgeFollows(t *testing.T) {
+	m := NewMachine("red", 4).AddRule("red", "green")
+	assert.False(t, m.Mirror("yellow"), "undeclared edge must report declared=false")
+	assert.Equal(t, "yellow", m.Current(), "Mirror must follow the undeclared edge, not wedge")
+	require.Equal(t, 1, m.HistoryLen(), "the forced edge is still recorded in history")
+	last, ok := m.LastTransition()
+	require.True(t, ok)
+	assert.Equal(t, EdgeKey[string]{From: "red", To: "yellow"},
+		EdgeKey[string]{From: last.From, To: last.To})
+	// The forced edge is taught to the underlying FSM once: after cycling
+	// back to red, red→yellow now reads as a declared transition.
+	m.Mirror("red") // forces yellow→red (no such rule either)
+	assert.True(t, m.CanTransition("yellow"), "a forced edge is taught once, then declared")
+}
+
+// TestMirror_undeclaredEdgeNotDrawn confirms the forced edge is taught to the
+// underlying FSM (so Current/CanTransition stay honest) but does NOT leak
+// into the drawn rule graph — Edges() keeps only what AddRule declared, while
+// States() gains the forced node so it still renders.
+func TestMirror_undeclaredEdgeNotDrawn(t *testing.T) {
+	m := NewMachine("red", 4).AddRule("red", "green")
+	m.Mirror("yellow")
+	var edges []EdgeKey[string]
+	for k := range m.Edges() {
+		edges = append(edges, k)
+	}
+	assert.Equal(t, []EdgeKey[string]{{From: "red", To: "green"}}, edges,
+		"Mirror's forced edge must not appear in the drawn graph")
+	assert.Contains(t, slices.Collect(m.States()), "yellow",
+		"the forced state must become a known node")
+}
+
+// TestMirror_sameStateNoop guards against self-loop history spam when the
+// observed state already matches Current.
+func TestMirror_sameStateNoop(t *testing.T) {
+	m := NewMachine("red", 4)
+	assert.True(t, m.Mirror("red"))
+	assert.Equal(t, 0, m.HistoryLen(), "same-state Mirror must not record a self-loop")
+}
+
 // TestHistory_orderChronological iterates oldest → newest, mirroring
 // statetrooper's append-only ordering. Used by the History tab's "scroll
 // back through time" reading.

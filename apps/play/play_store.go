@@ -33,8 +33,16 @@ type QueryStore struct {
 	elapsed  time.Duration
 	summary  Summary
 	executed time.Time
-	history  []HistoryEntry
-	maxHist  int
+	// loading mirrors isLoading but lives under mu, so Snapshot hands back a
+	// (loading, executed) pair that is always mutually consistent: a reader
+	// can never see loading=false against a pre-finish snapshot (executed not
+	// yet advanced), which is the torn read that used to manufacture a
+	// spurious idle in the query FSM. isLoading (atomic, lock-free) stays for
+	// callers where a momentary skew is harmless — the Run guard, the
+	// autoshot gate, the results-loading spinners.
+	loading bool
+	history []HistoryEntry
+	maxHist int
 
 	isLoading atomic.Bool
 	cancel    context.CancelFunc
@@ -57,14 +65,17 @@ func (inst *QueryStore) IsLoading() bool { return inst.isLoading.Load() }
 // rec.Release() when done (nil-safe). Retaining under the read lock ensures
 // a concurrent Execute→finish can't pull the record out from under us.
 // executed is the time the most recent finish() completed — use it as an
-// identity token for the current dataset (changes ⇒ new query).
-func (inst *QueryStore) Snapshot() (rec arrow.RecordBatch, schema *arrow.Schema, numRows int64, elapsed time.Duration, summary Summary, executed time.Time, err error) {
+// identity token for the current dataset (changes ⇒ new query). loading is
+// read under the same lock as executed, so the pair is consistent: feed this
+// loading to the FSM mirror rather than a separate IsLoading() call, which
+// could observe the post-finish flag against this pre-finish snapshot.
+func (inst *QueryStore) Snapshot() (rec arrow.RecordBatch, schema *arrow.Schema, numRows int64, loading bool, elapsed time.Duration, summary Summary, executed time.Time, err error) {
 	inst.mu.RLock()
 	defer inst.mu.RUnlock()
 	if inst.record != nil {
 		inst.record.Retain()
 	}
-	return inst.record, inst.schema, inst.numRows, inst.elapsed, inst.summary, inst.executed, inst.err
+	return inst.record, inst.schema, inst.numRows, inst.loading, inst.elapsed, inst.summary, inst.executed, inst.err
 }
 
 func (inst *QueryStore) History() []HistoryEntry {
@@ -81,6 +92,9 @@ func (inst *QueryStore) Execute(sql string) {
 	if inst.isLoading.Swap(true) {
 		return
 	}
+	inst.mu.Lock()
+	inst.loading = true
+	inst.mu.Unlock()
 	ctx, cancel := context.WithCancel(context.Background())
 	inst.cancelMu.Lock()
 	inst.cancel = cancel
@@ -160,6 +174,7 @@ func (inst *QueryStore) finish(sql string, start time.Time, rec arrow.RecordBatc
 	inst.elapsed = time.Since(start)
 	inst.err = err
 	inst.executed = time.Now()
+	inst.loading = false
 
 	entry := HistoryEntry{
 		SQL:      sql,

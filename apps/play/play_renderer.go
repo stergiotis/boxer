@@ -462,7 +462,7 @@ func (inst *PlayApp) Render() error {
 	// state syncs (selection clamp, pager configure, projector
 	// invalidate) must run here, before any tab body executes, so the
 	// values the tab callees observe are consistent.
-	rec, schema, numRows, elapsed, summary, executed, err := inst.store.Snapshot()
+	rec, schema, numRows, loading, elapsed, summary, executed, err := inst.store.Snapshot()
 	if rec != nil {
 		defer rec.Release()
 		if inst.selectedRow < 0 || inst.selectedRow >= rec.NumRows() {
@@ -479,7 +479,7 @@ func (inst *PlayApp) Render() error {
 	// Mirror the result↔input lifecycle into the query FSM every frame —
 	// runs outside the rec!=nil guard so idle / empty / failed are observed
 	// too. The status bar and its chip both read inst.queryFSM.
-	inst.syncQueryFSM(numRows, executed, err)
+	inst.syncQueryFSM(loading, numRows, executed, err)
 
 	// Run the canonical-form pipeline once per frame regardless of which
 	// tab is active. The pipeline is debounced internally (previewDebounce),
@@ -586,7 +586,7 @@ func (inst *PlayApp) autoShotTick() {
 	case 0:
 		// Wait until a query has completed with results.
 		if inst.didAutoRun && !inst.store.IsLoading() {
-			rec, _, _, _, _, _, _ := inst.store.Snapshot()
+			rec, _, _, _, _, _, _, _ := inst.store.Snapshot()
 			if rec != nil {
 				rec.Release()
 				inst.shotPhase = 1

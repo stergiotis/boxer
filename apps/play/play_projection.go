@@ -482,17 +482,17 @@ func (inst *PlayApp) renderProjection(rec arrow.RecordBatch) {
 
 	// Mirror the projector's status (mutated under its internal mutex
 	// from worker goroutines) into the render-thread-only fsmview.Machine.
-	// Rules are pre-declared in newProjectorFSM; a rejected transition
-	// means the projector took an undeclared path — log and continue.
-	// The mirror falls one frame behind the projector but that's
+	// Rules are pre-declared in newProjectorFSM and drive the drawn graph;
+	// Mirror follows an undeclared path (logging it) instead of rejecting,
+	// since a memoryless per-frame mirror would otherwise wedge a state
+	// behind. The mirror falls one frame behind the projector but that's
 	// imperceptible at 60 fps.
 	if cur := inst.projFSM.Current(); cur != snap.status {
-		if err := inst.projFSM.Transition(snap.status); err != nil {
+		if declared := inst.projFSM.Mirror(snap.status); !declared {
 			log.Warn().
 				Stringer("from", cur).
 				Stringer("to", snap.status).
-				Err(err).
-				Msg("play: projector FSM mirror transition rejected")
+				Msg("play: projector FSM observed an undeclared edge (mirrored)")
 		}
 	}
 

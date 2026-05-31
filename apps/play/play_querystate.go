@@ -90,27 +90,39 @@ func (inst *PlayApp) observeQueryState(loading bool, numRows int64, executed tim
 
 // syncQueryFSM mirrors the observed state into the render-thread-only
 // fsmview.Machine once per frame, mirroring the projector-FSM pattern in
-// play_projection.go (renderProjection). A rejected transition means
-// observeQueryState produced an edge newQueryFSM didn't declare — logged,
-// not fatal, and shows up as a missing arrow in the popup graph.
-func (inst *PlayApp) syncQueryFSM(numRows int64, executed time.Time, err error) {
-	obs := inst.observeQueryState(inst.store.IsLoading(), numRows, executed, err)
+// play_projection.go (renderProjection). observeQueryState is a memoryless
+// projection of the snapshot, so it can legitimately hand us an edge
+// newQueryFSM never drew — e.g. a first query that finishes within a single
+// repaint skips the running observation, landing idle→rows(stale). We use
+// Mirror, which follows the edge regardless and reports declared=false so we
+// can log it as a diagnostic. A rejecting Transition would instead wedge the
+// mirror: the observer re-proposes the same unreachable target every frame,
+// so one refusal freezes the FSM a state behind for good.
+//
+// loading comes from the same store Snapshot as numRows/executed/err (not a
+// fresh IsLoading()), so the observer never sees "not loading" against a
+// pre-finish snapshot — the torn read that used to manufacture a spurious
+// idle and trigger exactly this wedge.
+func (inst *PlayApp) syncQueryFSM(loading bool, numRows int64, executed time.Time, err error) {
+	obs := inst.observeQueryState(loading, numRows, executed, err)
 	if cur := inst.queryFSM.Current(); cur != obs {
-		if e := inst.queryFSM.Transition(obs); e != nil {
+		if declared := inst.queryFSM.Mirror(obs); !declared {
 			log.Warn().
 				Stringer("from", cur).
 				Stringer("to", obs).
-				Err(e).
-				Msg("play: query result FSM mirror transition rejected")
+				Msg("play: query result FSM observed an undeclared edge (mirrored)")
 		}
 	}
 }
 
 // newQueryFSM declares the query result lifecycle graph: Idle→Running→
 // {Rows,Empty,Failed}, each result kind flips to its *Stale twin on an edit
-// (and back on revert), and every settled state can re-Run. The rule set
-// must cover every edge observeQueryState can produce, else syncQueryFSM
-// logs a rejected transition.
+// (and back on revert), and every settled state can re-Run. These rules
+// drive the drawn graph (the popup's arrows) and label the happy path;
+// they need not be exhaustive, because syncQueryFSM mirrors observed state
+// with [fsmview.Machine.Mirror] — an edge not declared here is followed and
+// logged, not rejected. There is deliberately no Running→Idle edge: a cancel
+// sets err+executed in the store, so it settles as Failed, not Idle.
 func newQueryFSM() *fsmview.Machine[queryStateE] {
 	m := fsmview.NewMachine(queryStateIdle, 64,
 		fsmview.WithLabel(func(s queryStateE) string { return s.String() }),
@@ -127,7 +139,7 @@ func newQueryFSM() *fsmview.Machine[queryStateE] {
 		fsmview.WithStateColor(queryStateColor),
 	)
 	m.AddRule(queryStateIdle, queryStateRunning).
-		AddRule(queryStateRunning, queryStateRows, queryStateEmpty, queryStateFailed, queryStateIdle).
+		AddRule(queryStateRunning, queryStateRows, queryStateEmpty, queryStateFailed).
 		AddRule(queryStateRows, queryStateRunning, queryStateRowsStale).
 		AddRule(queryStateEmpty, queryStateRunning, queryStateEmptyStale).
 		AddRule(queryStateFailed, queryStateRunning, queryStateFailedStale).
@@ -138,7 +150,6 @@ func newQueryFSM() *fsmview.Machine[queryStateE] {
 		EdgeLabel(queryStateRunning, queryStateRows, "rows").
 		EdgeLabel(queryStateRunning, queryStateEmpty, "0 rows").
 		EdgeLabel(queryStateRunning, queryStateFailed, "error").
-		EdgeLabel(queryStateRunning, queryStateIdle, "cancel").
 		EdgeLabel(queryStateRows, queryStateRunning, "Run").
 		EdgeLabel(queryStateRows, queryStateRowsStale, "edit").
 		EdgeLabel(queryStateEmpty, queryStateRunning, "Run").
