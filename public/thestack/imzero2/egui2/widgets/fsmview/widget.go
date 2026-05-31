@@ -83,6 +83,21 @@ type Widget[T comparable] struct {
 	// popup. Zero value (default) suppresses the chip entirely so
 	// existing call sites keep their current visual.
 	provenance inspector.Provenance
+
+	// tethered, set via [Widget.Tethered], promotes the level-1 chip to a
+	// tethered inspector summary: the state badge gains an
+	// [inspector.AnchorToggle] and the level-2 window is linked back to it by
+	// the spring-animated bezier [inspector.AnchorTether] (ADR-0046). Off by
+	// default — non-tethered call sites keep the plain chip-click popup.
+	tethered bool
+	tether   inspector.AnchorTether
+	// summaryFn, set via [Widget.Summary], renders a caller-owned addendum
+	// (stats / freshness) just right of the state badge in tethered mode.
+	summaryFn func()
+	// badgeToneFn, set via [Widget.BadgeTone], colours the level-1 badge by
+	// state (severity); nil keeps the default TonePrimary. Applies in both
+	// tethered and plain modes.
+	badgeToneFn func(T) badge.ToneE
 }
 
 // New constructs a Widget bound to the given Machine. scopeKey scopes all
@@ -203,6 +218,39 @@ func (inst *Widget[T]) AutoAnchor(on bool) *Widget[T] {
 	return inst
 }
 
+// Tethered promotes the level-1 chip to a tethered inspector summary: the
+// state badge gains an [inspector.AnchorToggle] (the arrow-square-out
+// open/close affordance) and the level-2 window is linked back to it by the
+// spring-animated bezier [inspector.AnchorTether] — the same connector
+// distsummary / regexsummary use (ADR-0046). Pair with [Widget.Summary] for a
+// rich stat line and [Widget.Provenance] for the window's identity chip. Off
+// by default; non-tethered widgets keep the plain chip-click popup. Returns
+// the receiver for chaining.
+func (inst *Widget[T]) Tethered() *Widget[T] {
+	inst.tethered = true
+	inst.tether = inspector.NewAnchorTether(inst.scopeKey)
+	return inst
+}
+
+// Summary sets the level-1 addendum rendered just right of the state badge in
+// tethered mode — the caller emits its own stats / freshness labels (e.g.
+// "50 rows · 12ms · 8s ago"). It runs inside the tethered chip's Horizontal,
+// so emit inline widgets only. No-op unless [Widget.Tethered] is set. Returns
+// the receiver for chaining.
+func (inst *Widget[T]) Summary(fn func()) *Widget[T] {
+	inst.summaryFn = fn
+	return inst
+}
+
+// BadgeTone colours the level-1 state badge by mapping the current state to a
+// [badge.ToneE] (e.g. error states red, success green). nil (default) keeps
+// the badge at TonePrimary. Applies in both plain and tethered modes. Returns
+// the receiver for chaining.
+func (inst *Widget[T]) BadgeTone(fn func(T) badge.ToneE) *Widget[T] {
+	inst.badgeToneFn = fn
+	return inst
+}
+
 // Render emits the level-1 chip and, when open, the level-2 popup. Call
 // once per frame inside an active egui surface (panel or window).
 //
@@ -216,15 +264,25 @@ func (inst *Widget[T]) Render() {
 		if inst.popupOpen {
 			inst.renderPopup()
 		}
+		// Tethered mode: draw the bezier from the level-1 toggle to the open
+		// window above everything (PaintAbsoluteOverlay). One-frame lag on
+		// first open; gated on popupOpen so the curve vanishes with it.
+		if inst.tethered && inst.popupOpen {
+			inst.tether.Paint()
+		}
 	}
 }
 
 func (inst *Widget[T]) renderChip() {
 	current := inst.machine.Current()
 	label := inst.machine.Label(current)
+	tone := badge.TonePrimary
+	if inst.badgeToneFn != nil {
+		tone = inst.badgeToneFn(current)
+	}
 	emitBadge := func() {
 		resp := badge.New(inst.ids.PrepareStr("chip"), label).
-			Tone(badge.TonePrimary).
+			Tone(tone).
 			Variant(badge.VariantSolid).
 			Size(badge.SizeMd).
 			Tooltip(fmt.Sprintf("%s — click for state-machine details", inst.title)).
@@ -244,6 +302,29 @@ func (inst *Widget[T]) renderChip() {
 				}
 			}
 		}
+	}
+	if inst.tethered {
+		// Tethered inspector summary: badge · caller summary · AnchorToggle,
+		// then stamp the row rect for the bezier tether.
+		for range c.Horizontal().KeepIter() {
+			emitBadge()
+			if inst.summaryFn != nil {
+				c.AddSpace(styletokens.GapInline(inst.density))
+				inst.summaryFn()
+			}
+			c.AddSpace(styletokens.GapInline(inst.density))
+			if inspector.AnchorToggle(inst.ids.PrepareStr("anchor-toggle"), &inst.popupOpen) {
+				// Same AutoAnchor pointer-capture as the badge click, so the
+				// window opens near the toggle and the bezier stays short.
+				if inst.autoAnchor && inst.popupOpen {
+					if p := c.CurrentApplicationState.StateManager.GetPointer(); p.Valid {
+						inst.popupAnchor = &popupAnchorXY{X: p.X, Y: p.Y}
+					}
+				}
+			}
+			inst.tether.CaptureToggle()
+		}
+		return
 	}
 	if !inst.showSubscript {
 		emitBadge()
@@ -284,6 +365,12 @@ func (inst *Widget[T]) renderPopup() {
 		Collapsible(false).
 		MinWidth(360).
 		MinHeight(240)
+	if inst.tethered {
+		// Tethered inspectors stay foreground (matching distsummary /
+		// regexsummary) so the window the bezier points at can't fall behind
+		// the panes it's anchored from.
+		win = win.AlwaysOnTop(true)
+	}
 	if inst.popupAnchor != nil {
 		win = win.DefaultPos(inst.popupAnchor.X, inst.popupAnchor.Y)
 	}
@@ -297,6 +384,11 @@ func (inst *Widget[T]) renderPopup() {
 	win = win.OpenBound(bindId)
 	c.CurrentApplicationState.StateManager.AddR10Databinding(bindId, &inst.popupOpen)
 	for range win.KeepIter() {
+		if inst.tethered {
+			// Stamp the window content rect first (before any content shifts
+			// min_rect) so the bezier tether anchors to the window edge.
+			inst.tether.CaptureWindow()
+		}
 		c.AddSpace(styletokens.PaddingInner(inst.density))
 		if !inst.provenance.IsZero() {
 			inspector.ProvenanceChip(inst.provenance)

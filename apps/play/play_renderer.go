@@ -18,6 +18,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/inspector"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker/evaluator"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -93,6 +94,11 @@ type PlayApp struct {
 	// lifecycle.
 	projFSM       *fsmview.Machine[projectorStatusE]
 	projFSMWidget *fsmview.Widget[projectorStatusE]
+	// queryFSM tracks the result↔input lifecycle (play_querystate.go) so the
+	// status bar names the state and flags stale/empty output; queryFSMWidget
+	// surfaces the graph + transition history + provenance as a status-bar chip.
+	queryFSM       *fsmview.Machine[queryStateE]
+	queryFSMWidget *fsmview.Widget[queryStateE]
 	timeline              *TimelineDriver
 	timelineBandsSql      string
 	timelineNowLineEnabled bool
@@ -352,9 +358,11 @@ func NewPlayApp(client *Client, store *QueryStore, initialSQL string) *PlayApp {
 	pagerIds := c.NewWidgetIdStack()
 	projectorIds := c.NewWidgetIdStack()
 	projFSMIds := c.NewWidgetIdStack()
+	queryFSMIds := c.NewWidgetIdStack()
 	timelineIds := c.NewWidgetIdStack()
 	cards := NewCardDriver(cardIds, nil)
 	projFSM := newProjectorFSM()
+	queryFSM := newQueryFSM()
 	inst := &PlayApp{
 		ids:            c.NewWidgetIdStack(),
 		store:          store,
@@ -368,6 +376,12 @@ func NewPlayApp(client *Client, store *QueryStore, initialSQL string) *PlayApp {
 		projFSMWidget: fsmview.New(projFSMIds, "projector-fsm", projFSM).
 			Title("UMAP projector").
 			ShowSubscript(true).
+			AutoAnchor(true),
+		queryFSM: queryFSM,
+		queryFSMWidget: fsmview.New(queryFSMIds, "query-state-fsm", queryFSM).
+			Title("Query result state").
+			Tethered().
+			BadgeTone(queryStateTone).
 			AutoAnchor(true),
 		colorByFeature: -1,
 		pager:          NewPager(pagerIds, int64(defaultPageSize)),
@@ -462,6 +476,11 @@ func (inst *PlayApp) Render() error {
 		inst.projector.Invalidate(schema, executed)
 	}
 
+	// Mirror the result↔input lifecycle into the query FSM every frame —
+	// runs outside the rec!=nil guard so idle / empty / failed are observed
+	// too. The status bar and its chip both read inst.queryFSM.
+	inst.syncQueryFSM(numRows, executed, err)
+
 	// Run the canonical-form pipeline once per frame regardless of which
 	// tab is active. The pipeline is debounced internally (previewDebounce),
 	// so most frames are a no-op; running it here keeps the Preview tab's
@@ -479,7 +498,7 @@ func (inst *PlayApp) Render() error {
 		inst.renderTopBar()
 	}
 	for range c.PanelBottomInside(ids.PrepareStr("status")).Resizable(false).KeepIter() {
-		inst.renderStatus(rec, numRows, elapsed, summary, err)
+		inst.renderStatus(numRows, elapsed, summary, executed, err)
 	}
 	for range c.PanelCentralInside().KeepIter() {
 		for dock := range c.DockArea(ids.PrepareStr("play-dock")) {
@@ -897,27 +916,21 @@ func (inst *PlayApp) updatePreview() {
 // renderStatus is the bottom-bar status line. Per-frame snapshot values
 // are passed in from Render() so this helper does not take its own
 // Snapshot+Release — the frame already owns one retained reference.
-func (inst *PlayApp) renderStatus(rec arrow.RecordBatch, numRows int64, elapsed time.Duration, summary Summary, err error) {
-	for range c.Horizontal().KeepIter() {
-		if err != nil {
-			c.Label(fmt.Sprintf("Error: %s", err.Error())).Truncate().Send()
-			return
-		}
-		if inst.store.IsLoading() {
-			c.Label("Running…").Send()
-			return
-		}
-		if rec == nil {
-			c.Label("Ready.").Send()
-			return
-		}
-		c.Label(fmt.Sprintf("Rows: %d", numRows)).Send()
-		c.Separator().Vertical().Send()
-		c.Label(fmt.Sprintf("Elapsed: %s", elapsed.Round(time.Millisecond))).Send()
-		c.Separator().Vertical().Send()
-		c.Label(fmt.Sprintf("Read: %d rows / %s",
-			summary.ReadRows, humanBytes(summary.ReadBytes))).Send()
-	}
+// renderStatus draws the bottom status bar as the tethered query-result
+// inspector summary: a severity-colored state badge + a stat line
+// (rows/elapsed/age, or the empty/stale/error message) + an arrow-square-out
+// toggle that pops out the bezier-tethered inspector window (state graph /
+// history / provenance). The FSM is mirrored each frame in Render so the badge
+// and summary agree.
+func (inst *PlayApp) renderStatus(numRows int64, elapsed time.Duration, summary Summary, executed time.Time, err error) {
+	inst.queryFSMWidget.
+		Provenance(inspector.Provenance{
+			Subject:   "app.play.query.result-state",
+			SourceApp: "github.com/stergiotis/boxer/apps/play",
+			SampledAt: executed,
+		}).
+		Summary(func() { inst.renderQuerySummary(numRows, elapsed, summary, executed, err) }).
+		Render()
 }
 
 // renderHistoryTab is the History dock tab body. The tab title already
@@ -957,7 +970,18 @@ func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema,
 		return
 	}
 	if rec == nil {
-		inst.renderResultsEmpty()
+		// No batch: distinguish "never ran" from "ran, returned nothing"
+		// via the FSM (which uses the executed token) so an empty result
+		// reads clearly instead of looking idle.
+		if inst.queryFSM.Current() == queryStateIdle {
+			inst.renderResultsEmpty()
+		} else {
+			inst.renderResultsZeroRows()
+		}
+		return
+	}
+	if numRows == 0 {
+		inst.renderResultsZeroRows()
 		return
 	}
 	inst.pager.Render()
@@ -1044,6 +1068,16 @@ func (inst *PlayApp) renderResultsEmpty() {
 	for range c.VerticalCentered().KeepIter() {
 		c.AddSpace(styletokens.Px(inst.density, 7))
 		c.Label("Run a query to see results.").Send()
+	}
+}
+
+// renderResultsZeroRows is the empty-state for a query that completed with no
+// rows — distinct from renderResultsEmpty ("never ran") so the user can tell
+// the query worked and simply matched nothing.
+func (inst *PlayApp) renderResultsZeroRows() {
+	for range c.VerticalCentered().KeepIter() {
+		c.AddSpace(styletokens.Px(inst.density, 7))
+		c.Label("0 rows — the query ran but matched nothing.").Send()
 	}
 }
 

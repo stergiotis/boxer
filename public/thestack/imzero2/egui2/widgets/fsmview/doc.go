@@ -23,6 +23,15 @@
 //	    v.Render()
 //	}
 //
+// # Tethered mode
+//
+// [Widget.Tethered] promotes the level-1 chip to a "tethered inspector
+// summary" (ADR-0046): the state badge gains an [inspector.AnchorToggle] and
+// the level-2 window is linked back to it by the spring-animated bezier
+// [inspector.AnchorTether]. Pair with [Widget.Summary] for a caller-supplied
+// stat line and [Widget.BadgeTone] to colour the badge by state severity. Off
+// by default — plain chips keep the click-to-open popup.
+//
 // # Choice of FSM library
 //
 // The widget couples tightly to [statetrooper.FSM]: generic over the

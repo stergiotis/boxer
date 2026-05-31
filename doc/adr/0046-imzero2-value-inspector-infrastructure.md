@@ -417,6 +417,22 @@ The M2 bezier connector landed as a static geometric S-curve recomputed each fra
 
 **Status.** Shipped as commit `0b81717a` (single-file change in `widgets/inspector/anchor.go`). ADR `status` remains `proposed` — this is a behaviour amendment to a primitive the ADR already names, not a new decision.
 
+### 2026-05-31 — fsmview becomes first-class **tethered**
+
+The 2026-05-25 toggle update kept fsmview opted out of the disclosure affordance — its accent state chip was "a sufficient affordance", so an fsmview popup opened on a chip click and floated free, with no `AnchorToggle` and no bezier back to its origin. That held while an FSM chip was a bare status indicator. play's query-result FSM (an [ADR-0045](0045-imzero2-fsmview-widget.md) consumer) changed the calculus: promoted to a status-bar **summary** (state badge + result stats — rows / elapsed / age, and the empty / stale / error message), it wants the same "this summary ↔ that window" legibility the distsummary / regexsummary inspectors already get from the tether. So fsmview adopts the pattern — as an **opt-in** mode named **tethered**.
+
+**API.** `fsmview.Widget` gains three chainable builders, all no-ops unless opted in:
+
+- `Tethered()` — switch the level-1 chip to a tethered inspector summary: the state badge gains an `inspector.AnchorToggle` and the level-2 window is linked back to it by the spring `inspector.AnchorTether` — `CaptureToggle` in the chip row, `CaptureWindow` at the top of the window body, `Paint` after the window. The pinned window is `AlwaysOnTop` (the `PaintAbsoluteOverlay` bezier is foreground regardless, but the *window* it points at must stay foreground too, or it falls behind the panes it's anchored from — the same `AlwaysOnTop` distsummary / regexsummary set). This is the exact distsummary / regexsummary recipe; the tether's scope is the widget's existing `scopeKey`.
+- `Summary(func())` — a caller-owned addendum rendered just right of the badge (the stats line).
+- `BadgeTone(func(T) badge.ToneE)` — colour the badge by state severity. Orthogonal to tethering; applies to plain chips too.
+
+**Default unchanged.** Non-tethered widgets — including play's own projector FSM — keep the plain badge-click popup; every tethered branch is gated on the opt-in flag. So this *extends* the shipped behaviour rather than breaking it: the 2026-05-25 opt-out remains the default, and `Tethered()` is the door out of it for inspectors that want the connector.
+
+**First consumer.** play's query-result FSM (`app.play.query.result-state`): the status bar now reads `[state badge] N rows · 12ms · 8s ago [↗]`, and the `↗` toggle pops the bezier-tethered graph / history / provenance window. "Tethered" is the word for this composition across the ADR, the code comments, and the `Tethered()` API.
+
+**Status.** `status` stays `proposed` — a widget gaining an opt-in mode over primitives the ADR already names, not a new decision.
+
 ## References
 
 - [ADR-0026 — app runtime + cap subjects](0026-app-runtime-and-capability-subjects.md) — source of the `app.<id>.event.<name>` subject convention used in `Provenance.Subject`.
