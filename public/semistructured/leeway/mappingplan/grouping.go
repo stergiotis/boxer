@@ -1,4 +1,4 @@
-package marshallgen
+package mappingplan
 
 import "sort"
 

@@ -15,7 +15,9 @@ date: 2026-05-26
 The sibling pair `public/semistructured/leeway/marshallgen` (codegen)
 and `public/semistructured/leeway/marshallreflect` (runtime reflection)
 ships an annotated-Go-DTO → leeway DML / RA codec built on a shared
-`marshallgen.Plan` vocabulary. The current grammar supports
+`mappingplan.Plan` vocabulary (the DTO model lives in the sibling
+`public/semistructured/leeway/mappingplan` package — see Updates). The
+current grammar supports
 
 - one DTO per leeway entity (one `BeginEntity`…`CommitEntity` frame per
   row, plain columns are entity-scoped and bound to that single DTO);
@@ -461,20 +463,33 @@ Tracked as named follow-ons, not gates on this ADR:
 Proposed — awaiting review.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
-See [DOCUMENTATION_STANDARD §1 ADR](../../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
+See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
--->
+### 2026-05-31 — DTO model extracted to the `mappingplan` package
+
+Everything plan-related moved out of `marshallgen` into a new sibling
+package `public/semistructured/leeway/mappingplan`: the parsed `Plan`, the
+`lw:` tag grammar (`SplitLW`), per-field validation and assembly
+(`PlanBuilder`), the `MembershipChannel` enum, section grouping
+(`ComputeGroups` / `SectionGroup`), and field-shape classification
+(`ClassifyBegin`, `IsFixedByteArray`). The decisions in this ADR are
+unchanged — only the code's home moved.
+
+`marshallgen` is now the go/ast front-end plus emitter, and
+`marshallreflect` the reflect front-end plus runtime codec; both depend on
+`mappingplan` and no longer on each other. `marshallreflect` no longer
+imports `marshallgen` (nor, transitively, `go/ast` / `go/parser`). Symbols
+this ADR spells `marshallgen.Plan` / `marshallgen.SplitLW` /
+`marshallgen.MembershipChannel*` now live in `mappingplan` (e.g.
+`mappingplan.Plan`).
 
 ## References
 
-- [`../../public/semistructured/leeway/marshallgen/`](../../public/semistructured/leeway/marshallgen/) — codegen side of the codec pair.
-- [`../../public/semistructured/leeway/marshallreflect/`](../../public/semistructured/leeway/marshallreflect/) — runtime-reflection sibling.
+- [`../../public/semistructured/leeway/mappingplan/`](../../public/semistructured/leeway/mappingplan/) — shared DTO model: `Plan`, `lw:` grammar, `PlanBuilder`, membership channels, section grouping, shape classification.
+- [`../../public/semistructured/leeway/marshallgen/`](../../public/semistructured/leeway/marshallgen/) — codegen front-end + emitter over `mappingplan`.
+- [`../../public/semistructured/leeway/marshallreflect/`](../../public/semistructured/leeway/marshallreflect/) — runtime-reflection front-end + codec over `mappingplan`.
 - [`../../public/semistructured/leeway/marshallgen/EXPLANATION.md`](../../public/semistructured/leeway/marshallgen/EXPLANATION.md) — package-level explainer, including the existing multi-membership read asymmetry note.
 - [`../../public/semistructured/leeway/dml/runtime/lw_dml_types.go`](../../public/semistructured/leeway/dml/runtime/lw_dml_types.go) — write-side membership channel interface (`AddMembership*P`).
 - [`../../public/semistructured/leeway/readaccess/runtime/lw_ra_rt_types.go`](../../public/semistructured/leeway/readaccess/runtime/lw_ra_rt_types.go) — read-side `GetMembValue*` accessors that D3's read-side dispatch consumes.

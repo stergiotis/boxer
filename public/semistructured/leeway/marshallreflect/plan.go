@@ -8,13 +8,13 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 
-	"github.com/stergiotis/boxer/public/semistructured/leeway/marshallgen"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 )
 
-// PlanFor returns the marshallgen.Plan derived from T's struct tags.
+// PlanFor returns the mappingplan.Plan derived from T's struct tags.
 // Cached per reflect.Type via sync.Map — call once per type per
 // process is the same cost as building the plan once at codegen time.
-func PlanFor[T any]() (plan *marshallgen.Plan, err error) {
+func PlanFor[T any]() (plan *mappingplan.Plan, err error) {
 	rt := reflect.TypeOf((*T)(nil)).Elem()
 	plan, err = planForType(rt)
 	return
@@ -25,11 +25,11 @@ var planCache sync.Map // map[reflect.Type]*planEntry
 // resolvedPlan bundles a built Plan with its section grouping. Both are
 // pure functions of the DTO type, so they are computed once per type and
 // cached together: Marshal, Unmarshal, and RowComposer all read the
-// shared groups instead of recomputing marshallgen.ComputeGroups per row
+// shared groups instead of recomputing mappingplan.ComputeGroups per row
 // / per call.
 type resolvedPlan struct {
-	plan   *marshallgen.Plan
-	groups []marshallgen.SectionGroup
+	plan   *mappingplan.Plan
+	groups []mappingplan.SectionGroup
 }
 
 // planEntry wraps the (resolvedPlan, err) result in a sync.OnceValues so
@@ -49,14 +49,14 @@ func resolveForType(rt reflect.Type) (*resolvedPlan, error) {
 			if err != nil {
 				return nil, err
 			}
-			return &resolvedPlan{plan: plan, groups: marshallgen.ComputeGroups(plan)}, nil
+			return &resolvedPlan{plan: plan, groups: mappingplan.ComputeGroups(plan)}, nil
 		}),
 	}
 	actual, _ := planCache.LoadOrStore(rt, entry)
 	return actual.(*planEntry).once()
 }
 
-func planForType(rt reflect.Type) (plan *marshallgen.Plan, err error) {
+func planForType(rt reflect.Type) (plan *mappingplan.Plan, err error) {
 	r, err := resolveForType(rt)
 	if err != nil {
 		return nil, err
@@ -65,18 +65,18 @@ func planForType(rt reflect.Type) (plan *marshallgen.Plan, err error) {
 }
 
 // buildPlan is the reflect front-end of the shared plan builder: it
-// classifies each struct field's reflect.Type into a marshallgen.FieldShape
-// and feeds it to marshallgen.PlanBuilder, which applies exactly the same
+// classifies each struct field's reflect.Type into a mappingplan.FieldShape
+// and feeds it to mappingplan.PlanBuilder, which applies exactly the same
 // per-field validation + assembly the codegen front-end (marshallgen.ParsePlan)
-// uses. The result is a marshallgen.Plan the Marshal / Unmarshal helpers
+// uses. The result is a mappingplan.Plan the Marshal / Unmarshal helpers
 // drive via the shared TaggedField vocabulary.
-func buildPlan(rt reflect.Type) (plan *marshallgen.Plan, err error) {
+func buildPlan(rt reflect.Type) (plan *mappingplan.Plan, err error) {
 	if rt.Kind() != reflect.Struct {
 		err = eb.Build().Str("type", rt.String()).Errorf("DTO must be a struct type")
 		return
 	}
 
-	b := marshallgen.NewPlanBuilder(rt.PkgPath()+"/"+rt.Name(), pkgLastSegment(rt.PkgPath()), rt.Name())
+	b := mappingplan.NewPlanBuilder(rt.PkgPath()+"/"+rt.Name(), pkgLastSegment(rt.PkgPath()), rt.Name())
 
 	for i := 0; i < rt.NumField(); i++ {
 		f := rt.Field(i)
@@ -97,7 +97,7 @@ func buildPlan(rt reflect.Type) (plan *marshallgen.Plan, err error) {
 			return
 		}
 
-		var shape marshallgen.FieldShape
+		var shape mappingplan.FieldShape
 		shape, err = classifyReflectType(f.Type)
 		if err != nil {
 			err = eb.Build().Str("field", f.Name).Errorf("classify field type: %w", err)

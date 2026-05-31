@@ -7,7 +7,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 
-	"github.com/stergiotis/boxer/public/semistructured/leeway/marshallgen"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 )
 
 // RowComposer drives the per-row stacked-entity emit pattern from
@@ -154,7 +154,7 @@ func (c *RowComposer) CommitRow() (err error) {
 // resolvePlan inspects a row value, ensuring it's a struct (not a
 // slice / map / pointer), and returns its reflect.Value plus the cached
 // Plan + section grouping for its type.
-func resolvePlan(row any) (rowVal reflect.Value, plan *marshallgen.Plan, groups []marshallgen.SectionGroup, err error) {
+func resolvePlan(row any) (rowVal reflect.Value, plan *mappingplan.Plan, groups []mappingplan.SectionGroup, err error) {
 	rowVal = reflect.ValueOf(row)
 	if rowVal.Kind() == reflect.Ptr {
 		rowVal = rowVal.Elem()
@@ -173,7 +173,7 @@ func resolvePlan(row any) (rowVal reflect.Value, plan *marshallgen.Plan, groups 
 	return
 }
 
-func marshalRowSectionsFiltered(dml, rowVal reflect.Value, groups []marshallgen.SectionGroup, lookup LookupI, filter cardFilter) (err error) {
+func marshalRowSectionsFiltered(dml, rowVal reflect.Value, groups []mappingplan.SectionGroup, lookup LookupI, filter cardFilter) (err error) {
 	for _, g := range groups {
 		err = marshalSection(dml, rowVal, g, lookup, filter)
 		if err != nil {
@@ -200,7 +200,7 @@ const (
 // would emit at least one attribute matching `filter`, given the
 // current row's values. Used to decide whether to open a
 // BeginSection frame for a filtered emit.
-func sectionHasMatchingField(row reflect.Value, g marshallgen.SectionGroup, filter cardFilter) bool {
+func sectionHasMatchingField(row reflect.Value, g mappingplan.SectionGroup, filter cardFilter) bool {
 	if filter == cardFilterAll {
 		return true
 	}
@@ -220,7 +220,7 @@ func sectionHasMatchingField(row reflect.Value, g marshallgen.SectionGroup, filt
 // one attribute matching the cardinality filter, given the row's
 // current values. Returns true for cardFilterAll so callers can use
 // the same predicate uniformly.
-func fieldEmitsForFilter(row reflect.Value, f marshallgen.TaggedField, filter cardFilter) bool {
+func fieldEmitsForFilter(row reflect.Value, f mappingplan.TaggedField, filter cardFilter) bool {
 	if filter == cardFilterAll {
 		return true
 	}
@@ -255,7 +255,7 @@ func fieldEmitsForFilter(row reflect.Value, f marshallgen.TaggedField, filter ca
 // field and a bool indicating whether the field has any data at
 // all. Used to decide cardFilter matching for non-explode multi-
 // shape fields.
-func containerSize(row reflect.Value, f marshallgen.TaggedField) (n int, hasData bool) {
+func containerSize(row reflect.Value, f mappingplan.TaggedField) (n int, hasData bool) {
 	fld := row.FieldByName(f.GoFieldName)
 	if f.IsRoaring {
 		if fld.IsNil() {

@@ -1,10 +1,11 @@
 //go:build llm_generated_opus47
 
 // Package marshallreflect is the runtime-reflection sibling of
-// boxer/public/semistructured/leeway/marshallgen. It parses the same `lw:` tag
-// vocabulary at runtime via reflect.StructTag (no go/ast), produces
-// the same marshallgen.Plan value, and drives a Go DTO ↔ leeway-DML
-// chain through reflect.Value method dispatch.
+// boxer/public/semistructured/leeway/marshallgen. Both build on the
+// shared mappingplan model: marshallreflect parses the same `lw:` tag
+// vocabulary at runtime via reflect.StructTag (no go/ast), produces the
+// same mappingplan.Plan value, and drives a Go DTO ↔ leeway-DML chain
+// through reflect.Value method dispatch.
 //
 // Use cases (per the slow-path / config-store rationale):
 //

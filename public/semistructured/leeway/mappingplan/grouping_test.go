@@ -1,11 +1,11 @@
-package marshallgen_test
+package mappingplan_test
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/stergiotis/boxer/public/semistructured/leeway/marshallgen"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 )
 
 // TestComputeGroups_ScalarFirstPartition locks ADR-0008 D2's
@@ -14,15 +14,15 @@ import (
 // order within each class is stable. Memberships are rebuilt to
 // reflect the post-partition first-seen order.
 func TestComputeGroups_ScalarFirstPartition(t *testing.T) {
-	plan := &marshallgen.Plan{
-		Fields: []marshallgen.TaggedField{
+	plan := &mappingplan.Plan{
+		Fields: []mappingplan.TaggedField{
 			{GoFieldName: "Bits", GoType: "*roaring.Bitmap", IsRoaring: true, LWMembership: "bits", LWSection: "u32Array"},
-			{GoFieldName: "Battery", GoType: "uint32", LWMembership: "battery", LWSection: "u32Array", Flags: marshallgen.FieldFlags{Unit: true}},
+			{GoFieldName: "Battery", GoType: "uint32", LWMembership: "battery", LWSection: "u32Array", Flags: mappingplan.FieldFlags{Unit: true}},
 			{GoFieldName: "Tags", GoType: "string", IsSlice: true, LWMembership: "tags", LWSection: "u32Array"},
 			{GoFieldName: "Volt", GoType: "uint32", LWMembership: "volt", LWSection: "u32Array"},
 		},
 	}
-	groups := marshallgen.ComputeGroups(plan)
+	groups := mappingplan.ComputeGroups(plan)
 	require.Len(t, groups, 1)
 	g := groups[0]
 	require.Len(t, g.SubColumns, 1)
@@ -45,14 +45,14 @@ func TestComputeGroups_ScalarFirstPartition(t *testing.T) {
 // is within-section only — section order in the output continues to
 // reflect DTO declaration order of the first field in each section.
 func TestComputeGroups_PreservesSectionOrder(t *testing.T) {
-	plan := &marshallgen.Plan{
-		Fields: []marshallgen.TaggedField{
+	plan := &mappingplan.Plan{
+		Fields: []mappingplan.TaggedField{
 			{GoFieldName: "Bits", IsRoaring: true, GoType: "*roaring.Bitmap", LWMembership: "bits", LWSection: "u32Array"},
 			{GoFieldName: "Color", GoType: "string", LWMembership: "color", LWSection: "symbol"},
-			{GoFieldName: "Battery", GoType: "uint32", LWMembership: "battery", LWSection: "u32Array", Flags: marshallgen.FieldFlags{Unit: true}},
+			{GoFieldName: "Battery", GoType: "uint32", LWMembership: "battery", LWSection: "u32Array", Flags: mappingplan.FieldFlags{Unit: true}},
 		},
 	}
-	groups := marshallgen.ComputeGroups(plan)
+	groups := mappingplan.ComputeGroups(plan)
 	require.Len(t, groups, 2)
 	require.Equal(t, "u32Array", groups[0].Section, "first-declared section keeps first slot")
 	require.Equal(t, "symbol", groups[1].Section)

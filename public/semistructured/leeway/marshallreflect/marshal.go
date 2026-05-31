@@ -8,7 +8,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 
-	"github.com/stergiotis/boxer/public/semistructured/leeway/marshallgen"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 )
 
 // Marshal drives `dml`'s reflected method chain to emit one entity
@@ -45,7 +45,7 @@ func Marshal[T any](dml any, rows []T, lookup LookupI) (err error) {
 	return
 }
 
-func marshalRow(dml, row reflect.Value, plan *marshallgen.Plan, groups []marshallgen.SectionGroup, lookup LookupI) (err error) {
+func marshalRow(dml, row reflect.Value, plan *mappingplan.Plan, groups []mappingplan.SectionGroup, lookup LookupI) (err error) {
 	mustCall(dml, "BeginEntity")
 	err = marshalPlain(dml, row, plan)
 	if err != nil {
@@ -64,11 +64,11 @@ func marshalRow(dml, row reflect.Value, plan *marshallgen.Plan, groups []marshal
 	return
 }
 
-func marshalPlain(dml, row reflect.Value, plan *marshallgen.Plan) (err error) {
-	idCol := marshallgen.FindPlainCol(plan, "id")
-	nkCol := marshallgen.FindPlainCol(plan, "naturalKey")
-	tsCol := marshallgen.FindPlainCol(plan, "ts")
-	lcCol := marshallgen.FindPlainCol(plan, "expiresAt")
+func marshalPlain(dml, row reflect.Value, plan *mappingplan.Plan) (err error) {
+	idCol := mappingplan.FindPlainCol(plan, "id")
+	nkCol := mappingplan.FindPlainCol(plan, "naturalKey")
+	tsCol := mappingplan.FindPlainCol(plan, "ts")
+	lcCol := mappingplan.FindPlainCol(plan, "expiresAt")
 
 	idVal := row.FieldByName(idCol.GoField)
 	var nkVal reflect.Value
@@ -107,7 +107,7 @@ func marshalPlain(dml, row reflect.Value, plan *marshallgen.Plan) (err error) {
 	return
 }
 
-func plainTimeReflect(row reflect.Value, p *marshallgen.PlainCol) (out reflect.Value, err error) {
+func plainTimeReflect(row reflect.Value, p *mappingplan.PlainCol) (out reflect.Value, err error) {
 	v := row.FieldByName(p.GoField)
 	switch p.GoType {
 	case "time.Time":
@@ -120,11 +120,11 @@ func plainTimeReflect(row reflect.Value, p *marshallgen.PlainCol) (out reflect.V
 	return
 }
 
-func marshalSection(dml, row reflect.Value, g marshallgen.SectionGroup, lookup LookupI, filter cardFilter) (err error) {
+func marshalSection(dml, row reflect.Value, g mappingplan.SectionGroup, lookup LookupI, filter cardFilter) (err error) {
 	if !sectionHasMatchingField(row, g, filter) {
 		return
 	}
-	method := marshallgen.UpperFirst(g.Section)
+	method := mappingplan.UpperFirst(g.Section)
 	sec := mustCall(dml, "GetSection"+method)[0]
 
 	if len(g.SubColumns) > 1 {
@@ -152,7 +152,7 @@ func marshalSection(dml, row reflect.Value, g marshallgen.SectionGroup, lookup L
 	return
 }
 
-func marshalMultiSubColumn(sec, row reflect.Value, g marshallgen.SectionGroup, lookup LookupI) (err error) {
+func marshalMultiSubColumn(sec, row reflect.Value, g mappingplan.SectionGroup, lookup LookupI) (err error) {
 	if len(g.Memberships) != 1 {
 		err = eb.Build().Str("section", g.Section).Errorf("multi-sub-column section with multiple memberships not supported")
 		return
@@ -171,24 +171,24 @@ func marshalMultiSubColumn(sec, row reflect.Value, g marshallgen.SectionGroup, l
 	return
 }
 
-func marshalField(sec, row reflect.Value, f marshallgen.TaggedField, lookup LookupI) (err error) {
-	shape := marshallgen.ClassifyBegin(f)
+func marshalField(sec, row reflect.Value, f mappingplan.TaggedField, lookup LookupI) (err error) {
+	shape := mappingplan.ClassifyBegin(f)
 	switch shape {
-	case marshallgen.ShapeScalarBegin:
+	case mappingplan.ShapeScalarBegin:
 		err = marshalScalarOne(sec, row, f, lookup, "BeginAttribute")
-	case marshallgen.ShapeScalarBeginSingle:
+	case mappingplan.ShapeScalarBeginSingle:
 		err = marshalScalarOne(sec, row, f, lookup, "BeginAttributeSingle")
-	case marshallgen.ShapeContainer:
+	case mappingplan.ShapeContainer:
 		err = marshalContainer(sec, row, f, lookup)
-	case marshallgen.ShapeExplodeBegin:
+	case mappingplan.ShapeExplodeBegin:
 		err = marshalExplode(sec, row, f, lookup, "BeginAttribute")
-	case marshallgen.ShapeExplodeBeginSingle:
+	case mappingplan.ShapeExplodeBeginSingle:
 		err = marshalExplode(sec, row, f, lookup, "BeginAttributeSingle")
 	}
 	return
 }
 
-func marshalScalarOne(sec, row reflect.Value, f marshallgen.TaggedField, lookup LookupI, beginMethod string) (err error) {
+func marshalScalarOne(sec, row reflect.Value, f mappingplan.TaggedField, lookup LookupI, beginMethod string) (err error) {
 	// Const: literal value, no Go-field read.
 	if f.IsConst {
 		attr := mustCall(sec, beginMethod, reflect.ValueOf(f.ConstValue))[0]
@@ -225,7 +225,7 @@ func marshalScalarOne(sec, row reflect.Value, f marshallgen.TaggedField, lookup 
 	return
 }
 
-func marshalContainer(sec, row reflect.Value, f marshallgen.TaggedField, lookup LookupI) (err error) {
+func marshalContainer(sec, row reflect.Value, f mappingplan.TaggedField, lookup LookupI) (err error) {
 	switch {
 	case f.IsRoaring:
 		bm := row.FieldByName(f.GoFieldName)
@@ -267,7 +267,7 @@ func marshalContainer(sec, row reflect.Value, f marshallgen.TaggedField, lookup 
 	return
 }
 
-func marshalExplode(sec, row reflect.Value, f marshallgen.TaggedField, lookup LookupI, beginMethod string) (err error) {
+func marshalExplode(sec, row reflect.Value, f mappingplan.TaggedField, lookup LookupI, beginMethod string) (err error) {
 	switch {
 	case f.IsRoaring:
 		bm := row.FieldByName(f.GoFieldName)
@@ -306,7 +306,7 @@ func marshalExplode(sec, row reflect.Value, f marshallgen.TaggedField, lookup Lo
 // as []byte; the Ref pair pushes the Lookup-resolved uint64. The
 // parametrized / mixed channels are rejected upstream by SplitLW, so
 // this function never sees them.
-func addMembership(attr reflect.Value, f marshallgen.TaggedField, lookup LookupI) (err error) {
+func addMembership(attr reflect.Value, f mappingplan.TaggedField, lookup LookupI) (err error) {
 	ch := f.Flags.Channel
 	method := "AddMembership" + ch.AddMethodSuffix() + "P"
 	if ch.EmbedsLiteralName() {
@@ -325,8 +325,8 @@ func addMembership(attr reflect.Value, f marshallgen.TaggedField, lookup LookupI
 // reslicedIfFixedByte converts a [N]byte field value to a []byte
 // slice reference, mirroring marshallgen's blobSliceMaybe. Returns
 // the value unchanged for any other shape.
-func reslicedIfFixedByte(v reflect.Value, f marshallgen.TaggedField) reflect.Value {
-	if marshallgen.IsFixedByteArray(f.GoType) {
+func reslicedIfFixedByte(v reflect.Value, f mappingplan.TaggedField) reflect.Value {
+	if mappingplan.IsFixedByteArray(f.GoType) {
 		// Take address-of element 0 + slice — reflect lacks a direct
 		// "convert array to slice" but Slice(v, 0, len) works on
 		// addressable arrays. Field values via FieldByName are not

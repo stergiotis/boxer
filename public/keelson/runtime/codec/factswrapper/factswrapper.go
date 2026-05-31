@@ -23,6 +23,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 
+	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshallgen"
 
 	cbdml "github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml_cbor"
@@ -39,7 +40,7 @@ var _ marshallgen.WrapperEmitterI = FactsWrapper{}
 // with this wrapper supplying the schema-coupled blocks. Returns the
 // rendered bytes; if outputPath is non-empty, also writes to disk.
 func (FactsWrapper) Generate(inputPath, outputPath string) (out []byte, err error) {
-	var plan *marshallgen.Plan
+	var plan *mappingplan.Plan
 	plan, err = marshallgen.ParsePlan(inputPath)
 	if err != nil {
 		return
@@ -65,7 +66,7 @@ func (FactsWrapper) Generate(inputPath, outputPath string) (out []byte, err erro
 // runtime.facts generator automatically picked BeginAttributeSingle for
 // scalar values landing in homogeneous-array section types. DTOs that
 // declare an explicit `,unit` or `,explode` are left untouched.
-func inferUnitFromSectionSuffix(plan *marshallgen.Plan) {
+func inferUnitFromSectionSuffix(plan *mappingplan.Plan) {
 	for i := range plan.Fields {
 		f := &plan.Fields[i]
 		if f.Flags.Unit || f.Flags.Explode {
@@ -93,7 +94,7 @@ func isNonScalarSectionName(s string) bool {
 // io.Writer), strings (ActiveFields prefix scan), sync (sync.Pool +
 // sync.OnceValue), arrow/arrow + ipc + memory (Allocator + IPC
 // reader), and the per-package codec / facts imports.
-func (FactsWrapper) Imports(plan *marshallgen.Plan) []string {
+func (FactsWrapper) Imports(plan *mappingplan.Plan) []string {
 	return []string{
 		`"bytes"`,
 		`"io"`,
@@ -117,7 +118,7 @@ func (FactsWrapper) Imports(plan *marshallgen.Plan) []string {
 // membership. Resolved in Init from vdd.MembXxx.GetId().Value().
 // Verbatim memberships are skipped — they embed the literal []byte
 // name at the call site, no uint64 lookup needed.
-func (FactsWrapper) KindVars(sb *strings.Builder, plan *marshallgen.Plan) {
+func (FactsWrapper) KindVars(sb *strings.Builder, plan *mappingplan.Plan) {
 	memberships := uniqueMemberships(plan)
 	if len(memberships) == 0 {
 		return
@@ -134,7 +135,7 @@ func (FactsWrapper) KindVars(sb *strings.Builder, plan *marshallgen.Plan) {
 // kind's CodecI with buscodec so any buscodec.Encode[<Kind>] /
 // Decode[<Kind>] call routes through this codec instead of the CBOR
 // fallback.
-func (FactsWrapper) Init(sb *strings.Builder, plan *marshallgen.Plan) {
+func (FactsWrapper) Init(sb *strings.Builder, plan *mappingplan.Plan) {
 	sb.WriteString("func init() {\n")
 	for _, f := range uniqueMemberships(plan) {
 		fmt.Fprintf(sb, "\t%s = vdd.Memb%s.GetId().Value()\n", f.KindVar(), upperFirst(f.LWMembership))
@@ -143,11 +144,10 @@ func (FactsWrapper) Init(sb *strings.Builder, plan *marshallgen.Plan) {
 	sb.WriteString("}\n\n")
 }
 
-
 // BeforeCore emits ActiveSections / ActiveFields hints + the
 // per-kind sync.Pool of dml_cbor.InEntityFacts builders. These wrap
 // the schema-agnostic Columns struct that marshallgen emits next.
-func (FactsWrapper) BeforeCore(sb *strings.Builder, plan *marshallgen.Plan) (err error) {
+func (FactsWrapper) BeforeCore(sb *strings.Builder, plan *mappingplan.Plan) (err error) {
 	err = writeActiveHints(sb, plan)
 	if err != nil {
 		return
@@ -160,7 +160,7 @@ func (FactsWrapper) BeforeCore(sb *strings.Builder, plan *marshallgen.Plan) (err
 // BuildEntities + TransferRecords + JoinRecords), the per-kind reader
 // composing the ra accessors, the Unmarshal method (driver around
 // FillFromArrow), and the buscodec.CodecI bridge with its singleton.
-func (FactsWrapper) AfterCore(sb *strings.Builder, plan *marshallgen.Plan) (err error) {
+func (FactsWrapper) AfterCore(sb *strings.Builder, plan *mappingplan.Plan) (err error) {
 	err = writeMarshal(sb, plan)
 	if err != nil {
 		return
@@ -175,7 +175,7 @@ func (FactsWrapper) AfterCore(sb *strings.Builder, plan *marshallgen.Plan) (err 
 
 // --- ActiveSections / ActiveFields. ---
 
-func writeActiveHints(sb *strings.Builder, plan *marshallgen.Plan) (err error) {
+func writeActiveHints(sb *strings.Builder, plan *mappingplan.Plan) (err error) {
 	indices, err := activeSectionIndices(plan)
 	if err != nil {
 		return
@@ -232,7 +232,7 @@ func writeActiveHints(sb *strings.Builder, plan *marshallgen.Plan) (err error) {
 	return
 }
 
-func writePool(sb *strings.Builder, plan *marshallgen.Plan) {
+func writePool(sb *strings.Builder, plan *mappingplan.Plan) {
 	pool := lowerFirst(plan.KindType) + "Pool"
 	sb.WriteString("// --- Per-kind InEntityFacts pool. ---\n\n")
 	fmt.Fprintf(sb, "// %s reuses dml_cbor.InEntityFacts instances across Marshal\n", pool)
@@ -249,7 +249,7 @@ func writePool(sb *strings.Builder, plan *marshallgen.Plan) {
 
 // --- Marshal driver wrapping BuildEntities. ---
 
-func writeMarshal(sb *strings.Builder, plan *marshallgen.Plan) (err error) {
+func writeMarshal(sb *strings.Builder, plan *mappingplan.Plan) (err error) {
 	pool := lowerFirst(plan.KindType) + "Pool"
 	sb.WriteString("// --- Sparse-CBOR write (ADR-0042 driver path). ---\n\n")
 	fmt.Fprintf(sb, "// Marshal writes the SoA buffer to w as the sparse-CBOR wire\n")
@@ -281,7 +281,7 @@ func writeMarshal(sb *strings.Builder, plan *marshallgen.Plan) (err error) {
 
 // --- Reader + Unmarshal driver wrapping FillFromArrow. ---
 
-func writeUnmarshal(sb *strings.Builder, plan *marshallgen.Plan) (err error) {
+func writeUnmarshal(sb *strings.Builder, plan *mappingplan.Plan) (err error) {
 	err = writeReaderType(sb, plan)
 	if err != nil {
 		return
@@ -293,11 +293,11 @@ func writeUnmarshal(sb *strings.Builder, plan *marshallgen.Plan) (err error) {
 	return
 }
 
-func readerTypeName(plan *marshallgen.Plan) string {
+func readerTypeName(plan *mappingplan.Plan) string {
 	return lowerFirst(plan.KindType) + "Reader"
 }
 
-func writeReaderType(sb *strings.Builder, plan *marshallgen.Plan) (err error) {
+func writeReaderType(sb *strings.Builder, plan *mappingplan.Plan) (err error) {
 	names := activeSectionNamesByDecl(plan)
 	rt := readerTypeName(plan)
 	sb.WriteString("// --- Read path (ra-based). ---\n\n")
@@ -317,7 +317,7 @@ func writeReaderType(sb *strings.Builder, plan *marshallgen.Plan) (err error) {
 	return
 }
 
-func writeReaderCtor(sb *strings.Builder, plan *marshallgen.Plan) {
+func writeReaderCtor(sb *strings.Builder, plan *mappingplan.Plan) {
 	names := activeSectionNamesByDecl(plan)
 	rt := readerTypeName(plan)
 	fmt.Fprintf(sb, "func new%s() *%s {\n", upperFirst(rt), rt)
@@ -334,7 +334,7 @@ func writeReaderCtor(sb *strings.Builder, plan *marshallgen.Plan) {
 	sb.WriteString("\t}\n}\n\n")
 }
 
-func writeReaderLoad(sb *strings.Builder, plan *marshallgen.Plan) {
+func writeReaderLoad(sb *strings.Builder, plan *mappingplan.Plan) {
 	names := activeSectionNamesByDecl(plan)
 	rt := readerTypeName(plan)
 	fmt.Fprintf(sb, "func (r *%s) loadFromRecord(rec arrow.Record) (err error) {\n", rt)
@@ -357,7 +357,7 @@ func writeReaderLoad(sb *strings.Builder, plan *marshallgen.Plan) {
 	sb.WriteString("\treturn\n}\n\n")
 }
 
-func writeReaderRelease(sb *strings.Builder, plan *marshallgen.Plan) {
+func writeReaderRelease(sb *strings.Builder, plan *mappingplan.Plan) {
 	names := activeSectionNamesByDecl(plan)
 	rt := readerTypeName(plan)
 	fmt.Fprintf(sb, "func (r *%s) release() {\n", rt)
@@ -376,7 +376,7 @@ func writeReaderRelease(sb *strings.Builder, plan *marshallgen.Plan) {
 	sb.WriteString("}\n\n")
 }
 
-func writeUnmarshalMethod(sb *strings.Builder, plan *marshallgen.Plan) (err error) {
+func writeUnmarshalMethod(sb *strings.Builder, plan *mappingplan.Plan) (err error) {
 	t := plan.KindType
 	rt := readerTypeName(plan)
 	names := activeSectionNamesByDecl(plan)
@@ -414,7 +414,7 @@ func writeUnmarshalMethod(sb *strings.Builder, plan *marshallgen.Plan) (err erro
 
 // --- buscodec.CodecI bridge. ---
 
-func writeCodec(sb *strings.Builder, plan *marshallgen.Plan) {
+func writeCodec(sb *strings.Builder, plan *mappingplan.Plan) {
 	t := plan.KindType
 	pkg := plan.PackageName
 	codecVar := lowerFirst(t) + "BusCodec"
@@ -500,7 +500,7 @@ func writeCodec(sb *strings.Builder, plan *marshallgen.Plan) {
 // either embed the literal name at the call site or carry the payload
 // directly. Generalised by boxer ADR-0057 D3 from the original
 // "Verbatim-only" skip.
-func uniqueMemberships(plan *marshallgen.Plan) (out []marshallgen.TaggedField) {
+func uniqueMemberships(plan *mappingplan.Plan) (out []mappingplan.TaggedField) {
 	seen := map[string]bool{}
 	for _, f := range plan.Fields {
 		if !f.Flags.Channel.NeedsKindVar() {
@@ -515,23 +515,23 @@ func uniqueMemberships(plan *marshallgen.Plan) (out []marshallgen.TaggedField) {
 	return
 }
 
-func planTsCol(plan *marshallgen.Plan) *marshallgen.PlainCol {
+func planTsCol(plan *mappingplan.Plan) *mappingplan.PlainCol {
 	return findPlainCol(plan, "ts")
 }
 
-func planNaturalKeyCol(plan *marshallgen.Plan) *marshallgen.PlainCol {
+func planNaturalKeyCol(plan *mappingplan.Plan) *mappingplan.PlainCol {
 	return findPlainCol(plan, "naturalKey")
 }
 
-func planExpiresAtCol(plan *marshallgen.Plan) *marshallgen.PlainCol {
+func planExpiresAtCol(plan *mappingplan.Plan) *mappingplan.PlainCol {
 	return findPlainCol(plan, "expiresAt")
 }
 
-func planHasLifecycle(plan *marshallgen.Plan) bool {
+func planHasLifecycle(plan *mappingplan.Plan) bool {
 	return planExpiresAtCol(plan) != nil
 }
 
-func findPlainCol(plan *marshallgen.Plan, col string) *marshallgen.PlainCol {
+func findPlainCol(plan *mappingplan.Plan, col string) *mappingplan.PlainCol {
 	for i := range plan.PlainCols {
 		if plan.PlainCols[i].Column == col {
 			return &plan.PlainCols[i]
@@ -542,7 +542,7 @@ func findPlainCol(plan *marshallgen.Plan, col string) *marshallgen.PlainCol {
 
 // activeSectionIndices returns the sorted dml_cbor section indices the
 // kind populates. Drives SetActiveSections at write time.
-func activeSectionIndices(plan *marshallgen.Plan) (out []int, err error) {
+func activeSectionIndices(plan *mappingplan.Plan) (out []int, err error) {
 	seen := map[int]bool{}
 	for _, f := range plan.Fields {
 		idx, ok := cbdml.InEntityFactsSectionIndices[f.LWSection]
@@ -564,7 +564,7 @@ func activeSectionIndices(plan *marshallgen.Plan) (out []int, err error) {
 // dml-index order. Only the ActiveFields scan body uses this — its
 // emitted lookup table is order-independent, but a deterministic
 // order keeps generator output stable across runs.
-func activeSectionNamesByIdx(plan *marshallgen.Plan) (out []string) {
+func activeSectionNamesByIdx(plan *mappingplan.Plan) (out []string) {
 	type entry struct {
 		idx  int
 		name string
@@ -595,7 +595,7 @@ func activeSectionNamesByIdx(plan *marshallgen.Plan) (out []string) {
 // order must match marshallgen's BuildEntities / FillFromArrow type-
 // parameter order, which is computeGroups order (first-seen, DTO
 // declaration order).
-func activeSectionNamesByDecl(plan *marshallgen.Plan) (out []string) {
+func activeSectionNamesByDecl(plan *mappingplan.Plan) (out []string) {
 	seen := map[string]bool{}
 	for _, f := range plan.Fields {
 		if seen[f.LWSection] {

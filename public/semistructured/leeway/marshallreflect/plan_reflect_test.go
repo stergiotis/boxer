@@ -7,19 +7,19 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/functional/option"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/marshallgen"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshallreflect"
 )
 
 // These tests exercise the reflect front-end (classifyReflectType +
-// buildPlan) feeding the shared marshallgen.PlanBuilder. The validation
+// buildPlan) feeding the shared mappingplan.PlanBuilder. The validation
 // RULES are covered exhaustively by marshallgen's parse_test.go against
 // the go/ast front-end; the cases here confirm the reflect front-end
 // classifies each Go shape identically and routes rejections through the
 // same shared validator. Before validation was factored into marshallgen,
 // the reflect plan-build path had no rejection-path coverage at all.
 
-func fieldByName(t *testing.T, plan *marshallgen.Plan, name string) marshallgen.TaggedField {
+func fieldByName(t *testing.T, plan *mappingplan.Plan, name string) mappingplan.TaggedField {
 	t.Helper()
 	for _, f := range plan.Fields {
 		if f.GoFieldName == name {
@@ -27,7 +27,7 @@ func fieldByName(t *testing.T, plan *marshallgen.Plan, name string) marshallgen.
 		}
 	}
 	t.Fatalf("field %q not found in plan", name)
-	return marshallgen.TaggedField{}
+	return mappingplan.TaggedField{}
 }
 
 type shapeMix struct {

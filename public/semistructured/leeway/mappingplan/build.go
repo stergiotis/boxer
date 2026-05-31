@@ -1,4 +1,4 @@
-package marshallgen
+package mappingplan
 
 import (
 	"strconv"
@@ -301,5 +301,31 @@ func (b *PlanBuilder) Finish() (plan *Plan, err error) {
 		}
 	}
 	plan = b.plan
+	return
+}
+
+// ValidatePlainColumnShape enforces the per-column type constraints
+// for the four fact-row plain columns (id / ts / naturalKey /
+// expiresAt). Plain columns map to physical row columns, not
+// tagged-value sections — their Go type is fixed by the runtime.facts
+// schema, not chosen by the DTO author. Exported for the sibling
+// marshallreflect package.
+func ValidatePlainColumnShape(column, goType string) (err error) {
+	switch column {
+	case "id":
+		if goType != "uint64" {
+			err = eb.Build().Str("column", column).Str("goType", goType).Errorf("plain column `id` must be uint64")
+		}
+	case "ts", "expiresAt":
+		if goType != "time.Time" && goType != "int64" {
+			err = eb.Build().Str("column", column).Str("goType", goType).Errorf("plain column `%s` must be time.Time or int64 (nanos)", column)
+		}
+	case "naturalKey":
+		if goType != "[]byte" && goType != "string" {
+			err = eb.Build().Str("column", column).Str("goType", goType).Errorf("plain column `naturalKey` must be []byte or string")
+		}
+	default:
+		err = eb.Build().Str("column", column).Errorf("unknown plain column (allowed: id, ts, naturalKey, expiresAt)")
+	}
 	return
 }

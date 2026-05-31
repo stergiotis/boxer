@@ -8,7 +8,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 
-	"github.com/stergiotis/boxer/public/semistructured/leeway/marshallgen"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 )
 
 // optionPkgPath is the import path of the new boxer-side Option type.
@@ -22,14 +22,14 @@ const optionPkgPath = "github.com/stergiotis/boxer/public/functional/option"
 const roaringPkgPath = "github.com/RoaringBitmap/roaring"
 
 // classifyReflectType inspects rt and returns the corresponding shared
-// marshallgen.FieldShape (consumed by marshallgen.PlanBuilder). Forbids
+// mappingplan.FieldShape (consumed by mappingplan.PlanBuilder). Forbids
 // the same Go shapes the codegen classifier forbids: Option[[]T] (except
 // Option[[]byte]), []Option[T], arbitrary pointers other than
 // *roaring.Bitmap, nested generics other than option.Option. The Go-side
 // spelling is recorded as a string so downstream comparisons use the
 // same go-type tokens the AST classifier produces ("uint64", "time.Time",
 // "[4]byte", "[]byte", "*roaring.Bitmap", …).
-func classifyReflectType(rt reflect.Type) (s marshallgen.FieldShape, err error) {
+func classifyReflectType(rt reflect.Type) (s mappingplan.FieldShape, err error) {
 	switch rt.Kind() {
 
 	case reflect.Ptr:
@@ -103,7 +103,7 @@ func classifyReflectType(rt reflect.Type) (s marshallgen.FieldShape, err error) 
 }
 
 // reflectGoTypeName produces the source-form Go type name that
-// marshallgen.classifyType would have emitted from go/ast for the
+// mappingplan.classifyType would have emitted from go/ast for the
 // same type. Used so downstream comparisons (against "uint64",
 // "time.Time", "[]byte", …) work without an extra translation table.
 func reflectGoTypeName(rt reflect.Type) string {

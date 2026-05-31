@@ -11,7 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 
-	"github.com/stergiotis/boxer/public/semistructured/leeway/marshallgen"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 )
 
 // UnmarshalArgs gathers the plain-column accessors and per-section
@@ -95,11 +95,11 @@ func Unmarshal[T any](args UnmarshalArgs, out *[]T, lookup LookupI) (err error) 
 	return
 }
 
-func unmarshalPlain(row reflect.Value, plan *marshallgen.Plan, args UnmarshalArgs, i int) (err error) {
-	idCol := marshallgen.FindPlainCol(plan, "id")
+func unmarshalPlain(row reflect.Value, plan *mappingplan.Plan, args UnmarshalArgs, i int) (err error) {
+	idCol := mappingplan.FindPlainCol(plan, "id")
 	row.FieldByName(idCol.GoField).SetUint(args.IdCol.Value(i))
 
-	if nkCol := marshallgen.FindPlainCol(plan, "naturalKey"); nkCol != nil {
+	if nkCol := mappingplan.FindPlainCol(plan, "naturalKey"); nkCol != nil {
 		raw := args.NkCol.Value(i)
 		switch nkCol.GoType {
 		case "[]byte":
@@ -113,11 +113,11 @@ func unmarshalPlain(row reflect.Value, plan *marshallgen.Plan, args UnmarshalArg
 			return
 		}
 	}
-	if tsCol := marshallgen.FindPlainCol(plan, "ts"); tsCol != nil {
+	if tsCol := mappingplan.FindPlainCol(plan, "ts"); tsCol != nil {
 		ns := int64(args.TsCol.Value(i))
 		setTimeColumn(row.FieldByName(tsCol.GoField), tsCol.GoType, ns)
 	}
-	if lcCol := marshallgen.FindPlainCol(plan, "expiresAt"); lcCol != nil {
+	if lcCol := mappingplan.FindPlainCol(plan, "expiresAt"); lcCol != nil {
 		ns := int64(args.LcCol.Value(i))
 		setTimeColumn(row.FieldByName(lcCol.GoField), lcCol.GoType, ns)
 	}
@@ -133,7 +133,7 @@ func setTimeColumn(fld reflect.Value, goType string, ns int64) {
 	}
 }
 
-func unmarshalSection(row reflect.Value, g marshallgen.SectionGroup, args UnmarshalArgs, i int, membIDs map[string]uint64) (err error) {
+func unmarshalSection(row reflect.Value, g mappingplan.SectionGroup, args UnmarshalArgs, i int, membIDs map[string]uint64) (err error) {
 	attrs := reflect.ValueOf(args.SectionAttrs(g.Section))
 	membs := reflect.ValueOf(args.SectionMembs(g.Section))
 	if !attrs.IsValid() || !membs.IsValid() {
@@ -217,14 +217,14 @@ func unmarshalSection(row reflect.Value, g marshallgen.SectionGroup, args Unmars
 // match, so only one field's accumulator increments.
 //
 // The divergence is unreachable through codec-written wire: both
-// marshallgen.BuildEntities and marshallreflect.Marshal emit
+// the marshallgen-emitted BuildEntities and marshallreflect.Marshal emit
 // exactly one membership per attribute. The asymmetry only surfaces
 // when a third-party producer of leeway-shaped data attaches
 // multiple memberships to the same attribute. Codec wire
 // compatibility (encode-then-decode through either path) is
 // preserved; cross-producer compatibility against multi-membership
 // attributes is not.
-func dispatchMembership(membs reflect.Value, i int, attrJ int64, fields []marshallgen.TaggedField, membIDs map[string]uint64, ch marshallgen.MembershipChannel) (matched marshallgen.TaggedField, found bool) {
+func dispatchMembership(membs reflect.Value, i int, attrJ int64, fields []mappingplan.TaggedField, membIDs map[string]uint64, ch mappingplan.MembershipChannel) (matched mappingplan.TaggedField, found bool) {
 	// ch is the section's (uniform) membership channel, resolved once by
 	// the caller — all fields in a section agree on it per the plan's
 	// channel-uniformity check.
@@ -261,14 +261,14 @@ func dispatchMembership(membs reflect.Value, i int, attrJ int64, fields []marsha
 }
 
 type accumulator struct {
-	Field  *marshallgen.TaggedField
+	Field  *mappingplan.TaggedField
 	Val    reflect.Value
 	Slice  reflect.Value
 	Bitmap reflect.Value
 	Count  int
 }
 
-func consumeValue(attrs reflect.Value, i int, attrJ int64, f marshallgen.TaggedField, a *accumulator) (err error) {
+func consumeValue(attrs reflect.Value, i int, attrJ int64, f mappingplan.TaggedField, a *accumulator) (err error) {
 	switch {
 	case f.IsRoaring:
 		seq := mustCall(attrs, "GetAttrValueValue", reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
@@ -296,13 +296,13 @@ func consumeValue(attrs reflect.Value, i int, attrJ int64, f marshallgen.TaggedF
 		// Single-value read — scalar section uses GetAttrValueValue
 		// returning T; non-scalar section uses GetAttrValueSingleOrDefault.
 		method := "GetAttrValueSingleOrDefault"
-		switch marshallgen.ClassifyBegin(f) {
-		case marshallgen.ShapeScalarBegin, marshallgen.ShapeExplodeBegin:
+		switch mappingplan.ClassifyBegin(f) {
+		case mappingplan.ShapeScalarBegin, mappingplan.ShapeExplodeBegin:
 			method = "GetAttrValueValue"
 		}
 		v := mustCall(attrs, method, reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
 		switch {
-		case marshallgen.IsFixedByteArray(f.GoType):
+		case mappingplan.IsFixedByteArray(f.GoType):
 			// Copy bytes into a fresh [N]byte array from the wire blob.
 			arrType := goTypeReflect(f.GoType)
 			arr := reflect.New(arrType).Elem()
@@ -349,7 +349,7 @@ func projectAccumulator(row reflect.Value, a *accumulator) (err error) {
 	return
 }
 
-func unmarshalMultiSubColumn(row reflect.Value, g marshallgen.SectionGroup, attrs, membs reflect.Value, i int, membIDs map[string]uint64) (err error) {
+func unmarshalMultiSubColumn(row reflect.Value, g mappingplan.SectionGroup, attrs, membs reflect.Value, i int, membIDs map[string]uint64) (err error) {
 	if len(g.Memberships) != 1 {
 		err = eb.Build().Str("section", g.Section).Errorf("multi-sub-column section with multiple memberships not supported")
 		return
@@ -358,7 +358,7 @@ func unmarshalMultiSubColumn(row reflect.Value, g marshallgen.SectionGroup, attr
 	expectedID, hasID := membIDs[memb.LWMembership]
 
 	type subAcc struct {
-		Field   *marshallgen.TaggedField
+		Field   *mappingplan.TaggedField
 		ColName string
 		Val     reflect.Value
 	}
@@ -374,7 +374,7 @@ func unmarshalMultiSubColumn(row reflect.Value, g marshallgen.SectionGroup, attr
 	for attrJ := int64(0); attrJ < n; attrJ++ {
 		locals := make([]reflect.Value, len(subs))
 		for k, s := range subs {
-			locals[k] = mustCall(attrs, "GetAttrValue"+marshallgen.UpperFirst(s.ColName), reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
+			locals[k] = mustCall(attrs, "GetAttrValue"+mappingplan.UpperFirst(s.ColName), reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
 		}
 		seq := mustCall(membs, "GetMembValueLowCardRef", reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
 		for _, v := range collectIterSeq(seq) {
@@ -401,7 +401,7 @@ func unmarshalMultiSubColumn(row reflect.Value, g marshallgen.SectionGroup, attr
 // corresponding reflect.Type. Inverse of reflectGoTypeName for the
 // types Unmarshal needs to instantiate accumulators for.
 func goTypeReflect(name string) reflect.Type {
-	if n, ok := marshallgen.FixedByteArrayLen(name); ok {
+	if n, ok := mappingplan.FixedByteArrayLen(name); ok {
 		return reflect.ArrayOf(n, reflect.TypeOf(byte(0)))
 	}
 	switch name {

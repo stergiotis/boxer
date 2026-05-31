@@ -5,6 +5,8 @@ package marshallgen
 import (
 	"fmt"
 	"strings"
+
+	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 )
 
 // WrapperEmitterI lets a target-specific layer inject schema-coupled
@@ -44,32 +46,32 @@ type WrapperEmitterI interface {
 	//	}
 	//
 	// NoOpWrapper returns nil.
-	Imports(plan *Plan) []string
+	Imports(plan *mappingplan.Plan) []string
 
 	// KindVars writes the package-level declarations for the kindXxx
 	// membership-id symbols every per-field driver in the core
 	// references. The set of names is determined by the plan
-	// (TaggedField.KindVar() per unique LWMembership) — the wrapper
+	// (mappingplan.TaggedField.KindVar() per unique LWMembership) — the wrapper
 	// only chooses storage:
 	//
 	//   - Facts target: `var kindXxx uint64` per name, resolved in
 	//     Init via `vdd.Memb<Name>.GetId().Value()`.
 	//   - Anchor target: `const kindXxx uint64 = N` per name, derived
 	//     from declaration order in the plan.
-	KindVars(sb *strings.Builder, plan *Plan)
+	KindVars(sb *strings.Builder, plan *mappingplan.Plan)
 
 	// Init writes the package init() body. May be empty (NoOpWrapper).
-	Init(sb *strings.Builder, plan *Plan)
+	Init(sb *strings.Builder, plan *mappingplan.Plan)
 
 	// BeforeCore writes any per-kind blocks that must precede the
 	// Columns struct (e.g. ActiveSections / ActiveFields sync.OnceValue
 	// declarations, sync.Pool of dml builders). Optional.
-	BeforeCore(sb *strings.Builder, plan *Plan) error
+	BeforeCore(sb *strings.Builder, plan *mappingplan.Plan) error
 
 	// AfterCore writes any per-kind blocks that follow the schema-
 	// agnostic core (Marshal / Unmarshal / Codec methods, bus-codec
 	// bridge registration helpers, schema-specific readers). Optional.
-	AfterCore(sb *strings.Builder, plan *Plan) error
+	AfterCore(sb *strings.Builder, plan *mappingplan.Plan) error
 }
 
 // NoOpWrapper emits the schema-agnostic core only: kindXxx as
@@ -82,13 +84,13 @@ var _ WrapperEmitterI = NoOpWrapper{}
 
 // Imports contributes no extra imports — the core emit covers
 // everything the schema-agnostic surface needs.
-func (NoOpWrapper) Imports(_ *Plan) []string { return nil }
+func (NoOpWrapper) Imports(_ *mappingplan.Plan) []string { return nil }
 
 // KindVars emits one `const kindXxx uint64 = N` per unique membership,
 // where N is the 1-based index in declaration order. Stable + self-
 // contained: no external registry consulted; membership identity is
 // local to the generated package.
-func (NoOpWrapper) KindVars(sb *strings.Builder, plan *Plan) {
+func (NoOpWrapper) KindVars(sb *strings.Builder, plan *mappingplan.Plan) {
 	sb.WriteString("// --- Package-local membership ids (schema-agnostic target). ---\n\n")
 	sb.WriteString("const (\n")
 	for i, f := range uniqueMemberships(plan) {
@@ -100,16 +102,16 @@ func (NoOpWrapper) KindVars(sb *strings.Builder, plan *Plan) {
 // Init writes nothing — anchor-style consts are init-time-resolved by
 // the language itself; there is no buscodec / runtime registry to wire
 // up.
-func (NoOpWrapper) Init(_ *strings.Builder, _ *Plan) {}
+func (NoOpWrapper) Init(_ *strings.Builder, _ *mappingplan.Plan) {}
 
 // BeforeCore writes nothing — no ActiveHints, no Pool, no per-kind
 // driver-state caching at the schema-agnostic altitude.
-func (NoOpWrapper) BeforeCore(_ *strings.Builder, _ *Plan) error { return nil }
+func (NoOpWrapper) BeforeCore(_ *strings.Builder, _ *mappingplan.Plan) error { return nil }
 
 // AfterCore writes nothing — Marshal / Unmarshal / Codec are the
 // caller's responsibility against the BuildEntities / FillFromArrow
 // helpers the core emits.
-func (NoOpWrapper) AfterCore(_ *strings.Builder, _ *Plan) error { return nil }
+func (NoOpWrapper) AfterCore(_ *strings.Builder, _ *mappingplan.Plan) error { return nil }
 
 // uniqueMemberships returns plan.Fields filtered so each LWMembership
 // appears at most once (first-seen wins), skipping channels that do
@@ -117,7 +119,7 @@ func (NoOpWrapper) AfterCore(_ *strings.Builder, _ *Plan) error { return nil }
 // call site, or the params-blob channels carry the wire payload
 // directly). Multi-sub-column sections share one membership across
 // two fields; KindVars decl per membership, not per field.
-func uniqueMemberships(plan *Plan) (out []TaggedField) {
+func uniqueMemberships(plan *mappingplan.Plan) (out []mappingplan.TaggedField) {
 	seen := map[string]bool{}
 	for _, f := range plan.Fields {
 		if !f.Flags.Channel.NeedsKindVar() {

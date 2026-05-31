@@ -8,13 +8,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshallgen"
 )
 
 // tryParse writes src to a temp file and calls marshallgen.ParsePlan.
 // The synthetic source only needs to be syntactically valid Go for
 // go/parser; it does not need to import-resolve.
-func tryParse(t *testing.T, src string) (*marshallgen.Plan, error) {
+func tryParse(t *testing.T, src string) (*mappingplan.Plan, error) {
 	t.Helper()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "dto.go")

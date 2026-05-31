@@ -1,24 +1,15 @@
-//go:build llm_generated_opus47
-
-// Package marshallgen is the generic Go DTO → leeway codec generator.
-// It parses an annotated Go DTO source file and emits a sibling
-// `.out.go` carrying the schema-agnostic core: <Kind>Columns SoA
-// storage, Append/Row adapters, derived per-section / per-membership
-// interfaces, and the generic <Kind>BuildEntities + <Kind>FillFromArrow
-// helpers that bind to any leeway DML / RA via Go type inference at
-// the call site.
+// Package mappingplan is the schema-agnostic model of a leeway DTO ↔
+// codec mapping: the parsed Plan (plain columns + tagged-value fields),
+// the lw: tag grammar (SplitLW), per-field validation and assembly
+// (PlanBuilder), the membership-channel enum, section grouping, and
+// field-shape classification.
 //
-// Anything schema-specific — kind-id resolution, dml backend pool,
-// per-kind active-fields hints, Marshal/Unmarshal methods, codec
-// bridge — lives behind WrapperEmitterI hooks the caller passes in.
-// NoOpWrapper produces the schema-agnostic surface only; consumers
-// layer their own wrapper for full-stack emit.
-//
-// The generator never inspects section names or canonical types. Wire
-// shape is determined entirely by (Go shape, lw: flag) tuples; the Go
-// compiler verifies section / type compatibility at the call site of
-// the generated BuildEntities / FillFromArrow against the typed DML.
-package marshallgen
+// Two front-ends produce a Plan and two back-ends drive it: marshallgen
+// (go/ast → Plan → generated codec) and marshallreflect (reflect → Plan
+// → runtime codec). Keeping the model here lets both depend on it as
+// siblings — with no dependency on the code generator and no go/ast or
+// reflect pulled into this package.
+package mappingplan
 
 // Plan is the parsed DTO ready for emission. ParsePlan produces it from
 // a single .go source file; EmitPlan consumes it.
@@ -244,3 +235,8 @@ func (f TaggedField) KindVar() string {
 	}
 	return "kind" + f.GoFieldName
 }
+
+// Section returns the trusted section name from the lw: tag — the
+// PascalCase seed for the DML's GetSection<X>() getter. The lw: string
+// is trusted verbatim; the Go compiler verifies the resulting call.
+func (f TaggedField) Section() string { return f.LWSection }

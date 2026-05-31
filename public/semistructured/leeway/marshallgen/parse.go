@@ -11,10 +11,12 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+
+	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 )
 
 // ParsePlan parses the DTO source file at inputPath and returns the
-// resolved Plan. The DTO must contain exactly one top-level struct
+// resolved mappingplan.Plan. The DTO must contain exactly one top-level struct
 // type declaration; that struct declares an `_` field carrying entity
 // metadata (`kind:"<name>" plain:"<col=Field,…>"`) plus zero or more
 // fields tagged with `lw:"<membership>[,<section>[:<column>]][,<flag>…]"`.
@@ -32,13 +34,13 @@ import (
 //   - lw: tag grammar (comma layout, optional section, optional sub-
 //     column, optional trailing flag tokens).
 //   - Recognised flag tokens (`unit`, `explode`).
-//   - Flag-vs-Go-shape consistency (see FieldFlags doc).
-//   - Plan completeness (kind name present, at least one plain column).
+//   - Flag-vs-Go-shape consistency (see mappingplan.FieldFlags doc).
+//   - mappingplan.Plan completeness (kind name present, at least one plain column).
 //   - In-DTO uniqueness of (membership, sub-column) pairs.
 //   - Forbidden Go shapes: Option[[]T] (except Option[[]byte]),
 //     []Option[T], multi-name fields, non-roaring pointer types, plain
 //     fields with non-scalar shapes.
-func ParsePlan(inputPath string) (plan *Plan, err error) {
+func ParsePlan(inputPath string) (plan *mappingplan.Plan, err error) {
 	fset := token.NewFileSet()
 	var file *ast.File
 	file, err = parser.ParseFile(fset, inputPath, nil, parser.ParseComments)
@@ -77,10 +79,10 @@ func ParsePlan(inputPath string) (plan *Plan, err error) {
 	}
 
 	// Per-field validation + plan assembly is shared with the reflect
-	// front-end (marshallreflect.buildPlan) via PlanBuilder; this loop
+	// front-end (marshallreflect.buildPlan) via mappingplan.PlanBuilder; this loop
 	// only handles the go/ast-specific concerns (tag extraction, the
 	// multi-name/anonymous-field check, type classification).
-	b := NewPlanBuilder(inputPath, file.Name.Name, kindType)
+	b := mappingplan.NewPlanBuilder(inputPath, file.Name.Name, kindType)
 
 	for _, field := range structType.Fields.List {
 		if field.Tag == nil {
@@ -111,7 +113,7 @@ func ParsePlan(inputPath string) (plan *Plan, err error) {
 		}
 		goFieldName := field.Names[0].Name
 
-		var shape FieldShape
+		var shape mappingplan.FieldShape
 		shape, err = classifyType(field.Type)
 		if err != nil {
 			err = eb.Build().Str("field", goFieldName).Errorf("classify field type: %w", err)
@@ -126,150 +128,10 @@ func ParsePlan(inputPath string) (plan *Plan, err error) {
 	return b.Finish()
 }
 
-// ValidatePlainColumnShape enforces the per-column type constraints
-// for the four fact-row plain columns (id / ts / naturalKey /
-// expiresAt). Plain columns map to physical row columns, not
-// tagged-value sections — their Go type is fixed by the runtime.facts
-// schema, not chosen by the DTO author. Exported for the sibling
-// marshallreflect package.
-func ValidatePlainColumnShape(column, goType string) (err error) {
-	switch column {
-	case "id":
-		if goType != "uint64" {
-			err = eb.Build().Str("column", column).Str("goType", goType).Errorf("plain column `id` must be uint64")
-		}
-	case "ts", "expiresAt":
-		if goType != "time.Time" && goType != "int64" {
-			err = eb.Build().Str("column", column).Str("goType", goType).Errorf("plain column `%s` must be time.Time or int64 (nanos)", column)
-		}
-	case "naturalKey":
-		if goType != "[]byte" && goType != "string" {
-			err = eb.Build().Str("column", column).Str("goType", goType).Errorf("plain column `naturalKey` must be []byte or string")
-		}
-	default:
-		err = eb.Build().Str("column", column).Errorf("unknown plain column (allowed: id, ts, naturalKey, expiresAt)")
-	}
-	return
-}
-
 func stripQuotes(s string) (out string) {
 	out, err := strconv.Unquote(s)
 	if err != nil {
 		out = s
-	}
-	return
-}
-
-// ParsedLWTag is the structured result of parsing an `lw:` tag value.
-// Returned by SplitLW; consumed by ParsePlan and the sibling
-// marshallreflect.buildPlan.
-type ParsedLWTag struct {
-	Membership string
-	Section    string
-	Column     string
-	Flags      FieldFlags
-}
-
-// setChannelFlag installs the parsed channel on the in-progress flag
-// set, rejecting two channel flags on one tag. Tokens like `,verbatim`
-// and `,lowCardVerbatim` both map to MembershipChannelLowCardVerbatim
-// (per ADR-0008 D3 SD9); attempting either after a different channel
-// already set raises the same "declared twice" error.
-func setChannelFlag(flags *FieldFlags, ch MembershipChannel, token string) (err error) {
-	if flags.Channel != MembershipChannelLowCardRef {
-		err = eb.Build().Str("flag", token).Str("alreadySet", flags.Channel.String()).Errorf("channel flag declared twice on one tag")
-		return
-	}
-	flags.Channel = ch
-	return
-}
-
-// SplitLW parses a value of the form
-//
-//	<membership>[,<section>[:<column>]][,<flag>][,<flag>…]
-//
-// into its components. Empty segments are tolerated and yield zero
-// values; unknown flag tokens are an error. Exported so the sibling
-// marshallreflect package can reuse the grammar without duplicating
-// the parser.
-func SplitLW(tag string) (out ParsedLWTag, err error) {
-	parts := strings.Split(tag, ",")
-	out.Membership = strings.TrimSpace(parts[0])
-	if len(parts) >= 2 {
-		s := strings.TrimSpace(parts[1])
-		if colonIdx := strings.IndexByte(s, ':'); colonIdx >= 0 {
-			out.Section = s[:colonIdx]
-			out.Column = s[colonIdx+1:]
-		} else {
-			out.Section = s
-		}
-	}
-	if len(parts) < 3 {
-		return
-	}
-	for _, raw := range parts[2:] {
-		token := strings.TrimSpace(raw)
-		if token == "" {
-			continue
-		}
-		// Key=value flags (currently only `const=<value>`).
-		if eq := strings.IndexByte(token, '='); eq > 0 {
-			key := token[:eq]
-			val := token[eq+1:]
-			switch key {
-			case "const":
-				if out.Flags.HasConst {
-					err = eb.Build().Str("flag", key).Errorf("flag declared twice")
-					return
-				}
-				out.Flags.HasConst = true
-				out.Flags.ConstValue = val
-			default:
-				err = eb.Build().Str("flag", key).Errorf("unknown key=value flag (recognised: const=<value>)")
-				return
-			}
-			continue
-		}
-		switch token {
-		case "unit":
-			if out.Flags.Unit {
-				err = eb.Build().Str("flag", token).Errorf("flag declared twice")
-				return
-			}
-			out.Flags.Unit = true
-		case "explode":
-			if out.Flags.Explode {
-				err = eb.Build().Str("flag", token).Errorf("flag declared twice")
-				return
-			}
-			out.Flags.Explode = true
-		case "verbatim", "lowCardVerbatim":
-			// `,verbatim` retained as alias for `,lowCardVerbatim` per
-			// ADR-0008 D3 SD9 — existing DTOs compile unchanged.
-			if err = setChannelFlag(&out.Flags, MembershipChannelLowCardVerbatim, token); err != nil {
-				return
-			}
-		case "highCardRef":
-			if err = setChannelFlag(&out.Flags, MembershipChannelHighCardRef, token); err != nil {
-				return
-			}
-		case "highCardVerbatim":
-			if err = setChannelFlag(&out.Flags, MembershipChannelHighCardVerbatim, token); err != nil {
-				return
-			}
-		case "lowCardRefParametrized", "highCardRefParametrized", "mixedLowCardRef", "mixedLowCardVerbatim":
-			// ADR-0008 D3 stages these four "complex" channels for a
-			// follow-up commit — the parametrized/mixed shapes require
-			// a two-field DTO pairing the section value with a sibling
-			// carrier, which is non-trivial. Parse-time rejection so
-			// DTO authors get a clear signal rather than misleading
-			// emit-time failures.
-			err = eb.Build().Str("flag", token).Errorf("lw: channel flag %q is recognised but not yet implemented — see ADR-0008 D3 staged-rollout note", token)
-			return
-		default:
-			err = eb.Build().Str("flag", token).Errorf("unknown flag token (recognised: unit, explode, verbatim / lowCardVerbatim, highCardRef, highCardVerbatim, const=<value>)")
-			return
-		}
 	}
 	return
 }
@@ -284,11 +146,11 @@ func fieldNamesString(field *ast.Field) (out string) {
 }
 
 // classifyType walks an AST type expression and reports its shape as a
-// shared FieldShape (consumed by PlanBuilder). Rejects forbidden shapes:
+// shared mappingplan.FieldShape (consumed by mappingplan.PlanBuilder). Rejects forbidden shapes:
 // `Option[[]T]` (except Option[[]byte]), `[]Option[T]`, arbitrary
 // pointers (other than `*roaring.Bitmap`), and nested generics other
 // than `option.Option`.
-func classifyType(expr ast.Expr) (shape FieldShape, err error) {
+func classifyType(expr ast.Expr) (shape mappingplan.FieldShape, err error) {
 	// option.Option[T] at the top level (functional.option in boxer).
 	if idx, ok := expr.(*ast.IndexExpr); ok {
 		sel, sok := idx.X.(*ast.SelectorExpr)
