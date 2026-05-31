@@ -52,6 +52,11 @@ func (inst *App) renderControls() {
 		r.RootModulePath, r.GoVersion, r.NumPackages, r.NumEdges, r.Scope)) {
 		rt.Strong()
 	}
+	tagsStr := "(inherited from GOFLAGS)"
+	if len(r.BuildTags) > 0 {
+		tagsStr = strings.Join(r.BuildTags, ", ")
+	}
+	c.Label("build tags: " + tagsStr).Send()
 	c.AddSpace(inst.spaceTight())
 	c.Separator().Horizontal().Send()
 	c.AddSpace(inst.spaceTight())

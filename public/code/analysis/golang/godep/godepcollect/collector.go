@@ -3,6 +3,7 @@ package godepcollect
 import (
 	"context"
 	"hash/fnv"
+	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -43,6 +44,24 @@ var _ godep.SourceI = (*LiveCollector)(nil)
 func New(cfg Config) (inst *LiveCollector) {
 	inst = &LiveCollector{cfg: cfg}
 	return
+}
+
+// ModuleRoot walks up from start to the nearest directory containing a
+// go.mod file and returns it. ok is false if the filesystem root is reached
+// without finding one. It lets a caller point the collector at the module
+// root regardless of the process working directory.
+func ModuleRoot(start string) (root string, ok bool) {
+	dir := start
+	for {
+		if fi, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil && !fi.IsDir() {
+			return dir, true
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", false
+		}
+		dir = parent
+	}
 }
 
 // Load collects the transitive package closure rooted at cfg.Patterns and

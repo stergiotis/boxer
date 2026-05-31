@@ -35,7 +35,7 @@ func init() {
 	// LiveCollector into the App's godep.SourceI port. The render path
 	// (godepview.go / godepview_view.go) never imports godepcollect.
 	err := app.DefaultRegistry.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
-		a = newApp(godepcollect.New(godepcollect.Config{}))
+		a = newApp(godepcollect.New(resolveCollectorConfig()))
 		return
 	})
 	if err != nil {

@@ -52,7 +52,24 @@ export HN_EXPLORER_CLICKHOUSE_URL="http://default:hack@localhost:8123/"
 # regex_explorer uses `clickhouse local` via subprocess — no server
 # needed. Set REGEX_EXPLORER_CLICKHOUSE_LOCAL_BIN to override the
 # binary path; default resolves "clickhouse-local" through $PATH.
-./main_go --logFormat=console \
+
+# Launch from the Go module root rather than rust/imzero2 so apps that
+# shell out to the toolchain at runtime (e.g. godepview's go/packages
+# collection) see the module. The build steps above ran relative to
+# $here; the launch below uses absolute binary paths and cd's to the
+# project root.
+projectRoot="$here"
+while [ "$projectRoot" != "/" ] && [ ! -f "$projectRoot/go.mod" ]; do
+	projectRoot=$(dirname "$projectRoot")
+done
+# godepview reads these via config/env so it collects the project's graph
+# under the repo's build tags regardless of how it is launched.
+export GODEPVIEW_ROOT="$projectRoot"
+if [ -f "$projectRoot/tags" ]; then
+	export GODEPVIEW_TAGS="$(tr -d '\n' < "$projectRoot/tags")"
+fi
+cd "$projectRoot"
+"$here/main_go" --logFormat=console \
 	--logLevel=info \
        	--pprofHttpListenAddress "localhost:6060" \
        	--flightRecorder --flightRecorderOutputFile="$flightRecord" --flightRecorderFlushOnSignal=SIGTERM,SIGINT \
