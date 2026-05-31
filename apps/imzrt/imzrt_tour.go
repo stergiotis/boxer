@@ -1,167 +1,105 @@
+// Demo-registry enrollment for imzrt (ADR-0057). This replaces the former
+// per-app screenshot tour: instead of a settle/capture/advance state machine
+// (with its own SIGTERM-on-complete exit) driven by a screenshot-mode
+// SeededFuncApp, each dashboard tab (heap / gc / sched) registers as its own
+// Demo whose body is one full-width panel rendered into the host Ui scope. The
+// central TestDriver (widgets) captures one PNG per tab.
+//
+// imzrt's values are the Go runtime's own live metrics, so captures are not
+// byte-stable across runs — every Demo is flagged NonDeterministic and the
+// TestDriver skips them under IMZERO2_SCREENSHOT_DETERMINISTIC. The shared
+// sampler is started/tuned at Init (which the TestDriver runs before the
+// capture loop), so the rings hold enough history to draw every plot by the
+// time a tab is captured.
+
 package imzrt
 
 import (
-	"os"
-	"path/filepath"
-	"sync"
-	"syscall"
 	"time"
 
-	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
 )
 
-// tourExitGraceDelay is the wait between deciding "done" and SIGTERMing the
-// process. The last RequestScreenshot is async (Rust writes the PNG a few frames
-// later), so an immediate exit would truncate the in-flight capture.
-const tourExitGraceDelay = 2 * time.Second
+// tourSamplerPeriod tightens the sampler cadence for capture: at 100 ms the
+// rings accumulate history fast enough that every line plot and a readable run
+// of spectrogram columns are populated before the shot.
+const tourSamplerPeriod = 100 * time.Millisecond
 
-var tourExitOnce sync.Once
-
-func scheduleTourExit(reason string) {
-	tourExitOnce.Do(func() {
-		log.Info().Str("reason", reason).Dur("after", tourExitGraceDelay).Msg("imzrt tour: SIGTERM scheduled")
-		go func() {
-			time.Sleep(tourExitGraceDelay)
-			_ = syscall.Kill(os.Getpid(), syscall.SIGTERM)
-		}()
-	})
+// imzrtScenes is one entry per registered Demo. scene selects which panel
+// renderTourScene draws full-width.
+var imzrtScenes = []struct {
+	name  string
+	scene string
+	title string
+	desc  string
+}{
+	{"imzrt-heap", "heap", icons.PhPulse + " imzrt — heap",
+		"imzrt's heap panel — live Go runtime heap metrics rendered as sliding-window line plots."},
+	{"imzrt-gc", "gc", icons.PhPulse + " imzrt — GC",
+		"imzrt's GC panel — live garbage-collector metrics over a sliding window."},
+	{"imzrt-sched", "sched", icons.PhPulse + " imzrt — scheduler",
+		"imzrt's scheduler panel — live scheduler-latency metrics, including the latency spectrogram."},
 }
 
-// At a 100 ms sampler interval and a ~1.5 s settle window the rings hold ~15
-// points before each capture — enough to draw every line plot and scroll a
-// readable run of spectrogram columns.
-const (
-	tourSettleFrames  int32         = 90
-	tourSamplerPeriod time.Duration = 100 * time.Millisecond
-)
-
-type tourPhaseE uint8
-
-const (
-	tourPhaseSettle tourPhaseE = iota
-	tourPhaseCapture
-	tourPhaseAdvance
-)
-
-// tourScenes capture each dashboard tab as its own full-panel PNG, so the
-// spectrogram and every plot are visible without programmatic dock-tab switching.
-var tourScenes = []string{"heap", "gc", "sched"}
-
-type tourStateS struct {
-	setupDone    bool
-	samplerTuned bool
-	doneAll      bool
-	sceneIdx     int32
-	phase        tourPhaseE
-	settleCnt    int32
-
-	// tourApp is the App the tour renders through, allocated once and reused so
-	// per-window state (the spectrogram texture) has a stable container.
-	tourApp *App
+func init() {
+	for _, sc := range imzrtScenes {
+		registry.Register(registry.Demo{
+			Name:           sc.name,
+			Category:       "Tools",
+			Title:          sc.title,
+			Stage:          [2]float32{1200, 800},
+			Flags:          registry.DemoFlagNonDeterministic | registry.DemoFlagNeedsLargeArea,
+			Kind:           registry.DemoKindUX,
+			Description:    sc.desc,
+			Init:           makeTourInit(sc.scene),
+			RenderStateful: tourRenderStateful,
+			SourceFunc:     (*App).renderTourScene,
+		})
+	}
 }
 
-var tourState tourStateS
+// imzrtDemoState is the per-Demo state: the App instance bound to the host id
+// stack plus the scene it renders. The Sampler is a process singleton reached
+// via ensureSampler, so it is not held here.
+type imzrtDemoState struct {
+	app   *App
+	scene string
+}
 
-// RenderLoopHandlerTour is the screenshot-tour entry point, registered via
-// NewSeededFuncApp when IMZERO2_SCREENSHOT_DIR is set. Like imztop, imzrt's
-// captures are live values (the Go runtime's own metrics), so they are not
-// byte-stable across runs; the IMZERO2_SCREENSHOT_DETERMINISTIC gate skips the
-// tour entirely rather than emit churning diffs.
-func RenderLoopHandlerTour(seed uint64) (err error) {
-	screenshotDir := imzero2env.ScreenshotDir.Get()
-	if screenshotDir == "" {
-		return
-	}
-	if imzero2env.ScreenshotDeterministic.Get() != "" {
-		if !tourState.doneAll {
-			log.Info().Str("dir", screenshotDir).Msg("imzrt tour: skipped (IMZERO2_SCREENSHOT_DETERMINISTIC set)")
-			tourState.doneAll = true
-			scheduleTourExit("deterministic skip")
+// makeTourInit returns an Init that builds an imzrt App bound to the host id
+// stack and tunes the shared sampler for capture cadence. ensureSampler starts
+// the sampler on first call; tuning once per Demo Init is harmless.
+func makeTourInit(scene string) func(ids *c.WidgetIdStack) (state any) {
+	return func(ids *c.WidgetIdStack) (state any) {
+		inst := newApp()
+		inst.ids = ids
+		if s, err := ensureSampler(); err == nil && s != nil {
+			s.SetInterval(tourSamplerPeriod)
 		}
+		state = &imzrtDemoState{app: inst, scene: scene}
 		return
 	}
-	if !tourState.setupDone {
-		if mkErr := os.MkdirAll(screenshotDir, 0o755); mkErr != nil {
-			log.Warn().Err(mkErr).Str("dir", screenshotDir).Msg("imzrt tour: unable to create output dir")
-		}
-		c.SetAnimationFreeze(true)
-		c.MemoryResetAreas()
-		log.Info().Int("scenes", len(tourScenes)).Str("dir", screenshotDir).Msg("imzrt tour: starting")
-		tourState.setupDone = true
-	}
-	c.RequestRepaint()
+}
 
-	if tourState.doneAll {
+func tourRenderStateful(ids *c.WidgetIdStack, state any) {
+	st, ok := state.(*imzrtDemoState)
+	if !ok || st == nil {
 		return
 	}
-	if int(tourState.sceneIdx) >= len(tourScenes) {
-		log.Info().Str("dir", screenshotDir).Msg("imzrt tour: complete")
-		tourState.doneAll = true
-		scheduleTourExit("tour complete")
+	st.app.ids = ids
+	s, err := ensureSampler()
+	if err != nil {
+		renderInitErrorPanel(err)
 		return
 	}
-
-	s, sErr := ensureSampler()
-	if sErr != nil {
-		renderInitErrorPanel(sErr)
-		if tourState.phase == tourPhaseCapture {
-			captureScene(screenshotDir, "init_error")
-			tourState.doneAll = true
-			scheduleTourExit("sampler init error")
-		} else {
-			tourState.phase = tourPhaseCapture
-		}
-		return
-	}
-
-	if !tourState.samplerTuned && s != nil {
-		s.SetInterval(tourSamplerPeriod)
-		tourState.samplerTuned = true
-	}
-
 	snap := s.Latest()
 	if snap == nil {
-		c.Label("imzrt tour: waiting for first sample…").Send()
+		c.Label("imzrt: waiting for first sample…").Send()
 		return
 	}
-
-	scene := tourScenes[tourState.sceneIdx]
-	if tourState.tourApp == nil {
-		tourState.tourApp = newApp()
-	}
-	tourState.tourApp.ids.Reset()
-	for range c.IdScope(tourState.tourApp.ids.PrepareSeq(seed)) {
-		tourState.tourApp.renderTourScene(snap, s, scene)
-	}
-
-	switch tourState.phase {
-	case tourPhaseSettle:
-		tourState.settleCnt++
-		if tourState.settleCnt >= tourSettleFrames {
-			tourState.phase = tourPhaseCapture
-		}
-	case tourPhaseCapture:
-		captureScene(screenshotDir, scene)
-		tourState.phase = tourPhaseAdvance
-	case tourPhaseAdvance:
-		tourState.sceneIdx++
-		tourState.phase = tourPhaseSettle
-		tourState.settleCnt = 0
-		c.MemoryResetAreas()
-	}
-	return
-}
-
-func captureScene(dir, name string) {
-	path := filepath.Join(dir, "imzrt_"+name+".png")
-	if w, h, ok := imzero2env.ScreenshotSizeWH(); ok {
-		c.RequestScreenshotRect(path, 0, 0, float32(w), float32(h))
-	} else {
-		c.RequestScreenshot(path)
-	}
-	log.Info().Str("path", path).Str("scene", name).Msg("imzrt tour: capture requested")
+	st.app.renderTourScene(snap, s, st.scene)
 }
 
 // renderTourScene draws the top bar plus one panel full-width (no dock), so each

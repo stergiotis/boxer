@@ -6,7 +6,6 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
 )
 
 // manifest is the static AppI descriptor every imztop instance
@@ -25,23 +24,14 @@ var manifest = app.Manifest{
 }
 
 func init() {
-	// Interactive mode registers the per-instance *App directly so each
-	// open window has its own UI state (currently the selected network
-	// interface). Tour mode goes through SeededFuncApp instead — tours
-	// are single-instance by design and don't need per-window state.
-	var ctor app.AppCtor
-	if imzero2env.ScreenshotDir.Get() != "" {
-		ctor = func() (a app.AppI, err error) {
-			a, err = app.NewSeededFuncApp(manifest, RenderLoopHandlerTour)
-			return
-		}
-	} else {
-		ctor = func() (a app.AppI, err error) {
-			a = newApp()
-			return
-		}
-	}
-	err := app.DefaultRegistry.RegisterFactory(manifest, ctor)
+	// imztop registers an interactive per-window *App (its own selected
+	// network interface, etc.). Screenshot capture is handled centrally by
+	// the widgets TestDriver via the Demos registered in imztop_tour.go
+	// (ADR-0057).
+	err := app.DefaultRegistry.RegisterFactory(manifest, func() (a app.AppI, err error) {
+		a = newApp()
+		return
+	})
 	if err != nil {
 		log.Warn().Err(err).Msg("imztop: failed to register factory")
 	}

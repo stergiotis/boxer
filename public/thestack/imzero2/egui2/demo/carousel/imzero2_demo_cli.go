@@ -311,12 +311,12 @@ func NewCommand() *cli.Command {
 					Errorf("--launch: %w", resolveErr)
 			}
 
-			// IMZERO2_SCREENSHOT_DIR mode uses the legacy renderer-slice
-			// path so per-app tour drivers (RenderLoopHandlerTour) keep
-			// running at top scope without WindowHost wrapping.
-			// Interactive mode (the common case) builds a WindowHost
-			// over app.Registry and seeds it with the resolved
-			// --launch apps.
+			// IMZERO2_SCREENSHOT_DIR mode uses the renderer-slice path so
+			// the widgets TestDriver runs at top scope without WindowHost
+			// wrapping (ADR-0057): launching `widgets` captures every
+			// registered Demo in one run. Interactive mode (the common
+			// case) builds a WindowHost over app.Registry and seeds it with
+			// the resolved --launch apps.
 			screenshotMode := imzero2env.ScreenshotDir.Get() != ""
 			renderers := make([]func() error, 0, 4)
 			var windowHostRef *windowhost.Inst

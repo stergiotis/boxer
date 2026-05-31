@@ -7,7 +7,6 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
 )
 
 // ManifestId is exported so callers can host.Open(configview.ManifestId)
@@ -32,23 +31,14 @@ var manifest = app.Manifest{
 }
 
 func init() {
-	// Tour mode (IMZERO2_SCREENSHOT_DIR set) routes Frame through
-	// the per-scene state machine in configview_tour.go via a
-	// SeededFuncApp; interactive mode hands back a regular per-window
-	// App. Same pattern as leewaywidgets / regex_explorer / widgets.
-	var ctor app.AppCtor
-	if imzero2env.ScreenshotDir.Get() != "" {
-		ctor = func() (a app.AppI, err error) {
-			a, err = app.NewSeededFuncApp(manifest, RenderLoopHandlerTour)
-			return
-		}
-	} else {
-		ctor = func() (a app.AppI, err error) {
-			a = newInstance(manifest)
-			return
-		}
-	}
-	err := app.DefaultRegistry.RegisterFactory(manifest, ctor)
+	// configview registers an interactive per-window App. Screenshot
+	// capture is handled centrally by the widgets TestDriver via the Demo
+	// registered in configview_tour.go (ADR-0057) — there is no per-app
+	// screenshot factory anymore.
+	err := app.DefaultRegistry.RegisterFactory(manifest, func() (a app.AppI, err error) {
+		a = newInstance(manifest)
+		return
+	})
 	if err != nil {
 		log.Warn().Err(err).Msg("configview: failed to register factory")
 	}

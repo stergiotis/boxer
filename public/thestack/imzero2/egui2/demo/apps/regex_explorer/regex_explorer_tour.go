@@ -1,165 +1,69 @@
-//go:build llm_generated_opus47
+// Demo-registry enrollment for the regex explorer (ADR-0057). This replaces
+// the former per-app screenshot tour: instead of a settle/capture/advance state
+// machine driven by a screenshot-mode SeededFuncApp, the empty and populated
+// scenes register as stateless Demos that render the explorer body into the
+// host Ui scope. The central TestDriver (widgets) captures one PNG per scene.
+//
+// regex_explorer keeps its package-level `app` singleton: tour mode has always
+// read/written it directly (see the AppInstance.Frame swap and the note above
+// RenderWindow), so each Demo pins the scene's pattern/haystack on `app` and
+// calls RenderWindow. The drivers render demos in isolation (the TestDriver one
+// per frame, the gallery in a per-demo id scope), so the shared singleton does
+// not collide across scenes. Flagged NonDeterministic — the explorer scans a
+// synthetic corpus whose byte output is not stable across runs.
 
 package regex_explorer
 
-// Screenshot tour for the regex explorer. Mirrors widgets.RenderLoopHandlerTestDriver
-// (public/thestack/imzero2/egui2/demo/apps/widgets/testdriver.go): a deterministic
-// 3-phase state machine — settle → capture → advance — that walks a fixed list of
-// scenes and writes one PNG per scene to $IMZERO2_SCREENSHOT_DIR. Animations are
-// frozen and area memory is reset between scenes for pixel-stable captures.
-
 import (
-	"os"
-	"path/filepath"
-
-	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
 )
 
-const tourSettleFrames int32 = 8
-
-type tourPhaseE uint8
-
-const (
-	tourPhaseSettle  tourPhaseE = 0
-	tourPhaseCapture tourPhaseE = 1
-	tourPhaseAdvance tourPhaseE = 2
-)
-
-// tourScene is one capture in the regex_explorer tour: a name (used as the PNG
-// filename stem) and a setup hook that mutates the package-global [App] before
-// the first settle frame of the scene.
-type tourScene struct {
-	Name  string
-	Setup func()
+// regexScenes is one entry per registered Demo: a name plus the pattern and
+// haystack to pin before rendering.
+var regexScenes = []struct {
+	name     string
+	title    string
+	desc     string
+	pattern  string
+	haystack string
+}{
+	{"regex-explorer-empty", icons.IconSearch + " Regex explorer — empty",
+		"The regex explorer with empty inputs — the pattern/haystack editors, cheatsheet panel, and result tabs in their initial state.", "", ""},
+	{"regex-explorer-populated", icons.IconSearch + " Regex explorer — populated",
+		"The regex explorer evaluating \\w+ against \"hello world 123\" — highlighted matches with the result tabs populated.", `\w+`, "hello world 123"},
 }
 
-// tourScenes is the fixed list of captures the tour produces. Kept small and
-// purely visual — the tour is for layout regression detection, not for
-// exercising the ClickHouse pipeline.
-var tourScenes = []tourScene{
-	{
-		Name: "empty",
-		Setup: func() {
-			app.mu.Lock()
-			app.pattern = ""
-			app.haystack = ""
-			app.patternList = ""
-			app.replacement = ""
-			app.mu.Unlock()
-		},
-	},
-	{
-		Name: "populated",
-		Setup: func() {
-			app.mu.Lock()
-			app.pattern = `\w+`
-			app.haystack = "hello world 123"
-			app.patternList = ""
-			app.replacement = ""
-			app.mu.Unlock()
-		},
-	},
+func init() {
+	for _, sc := range regexScenes {
+		registry.Register(registry.Demo{
+			Name:        sc.name,
+			Category:    "Tools",
+			Title:       sc.title,
+			Stage:       [2]float32{1100, 720},
+			Flags:       registry.DemoFlagNonDeterministic | registry.DemoFlagNeedsLargeArea,
+			Kind:        registry.DemoKindMixed,
+			Description: sc.desc,
+			Render:      makeTourRender(sc.pattern, sc.haystack),
+			SourceFunc:  RenderWindow,
+		})
+	}
 }
 
-type tourStateS struct {
-	setupDone       bool
-	doneAll         bool
-	sceneIdx        int32
-	sceneAppliedFor int32
-	phase           tourPhaseE
-	settleCnt       int32
-}
-
-var tourState = tourStateS{sceneAppliedFor: -1}
-
-// RenderLoopHandlerTour is the screenshot-tour entry point for the regex
-// explorer. Activates when IMZERO2_SCREENSHOT_DIR is set; the demo dispatcher
-// in imzero2_demo_resolve.go selects this handler over [RenderLoopHandlerDemo].
-//
-// Each frame: applies the current scene's setup once, renders the regex
-// explorer window, then advances the settle/capture/advance state machine.
-// Captures the full viewport via [c.RequestScreenshot] — the regex explorer
-// uses a floating Window so a fixed screenshot rect is not meaningful. The
-// seed is the per-instance SeededFuncApp value that scopes widget ids
-// under a private parent (multi-instance safety).
-func RenderLoopHandlerTour(seed uint64) (err error) {
-	screenshotDir := imzero2env.ScreenshotDir.Get()
-	if screenshotDir == "" {
-		return
-	}
-	// Honor IMZERO2_SCREENSHOT_DETERMINISTIC — the regex_explorer tour
-	// scans a synthetic corpus whose byte output isn't stable across
-	// runs (scan iteration order, internal state). Skip the whole tour
-	// when the deterministic gate is set; default mode (empty env var)
-	// still captures the two scenes as before.
-	if imzero2env.ScreenshotDeterministic.Get() != "" {
-		if !tourState.doneAll {
-			log.Info().Str("dir", screenshotDir).Msg("regex_explorer tour: skipped (IMZERO2_SCREENSHOT_DETERMINISTIC set)")
-			tourState.doneAll = true
-		}
-		return
-	}
-	if !tourState.setupDone {
-		err = os.MkdirAll(screenshotDir, 0o755)
-		if err != nil {
-			log.Warn().Err(err).Str("dir", screenshotDir).Msg("regex_explorer tour: unable to create output dir")
-			err = nil
-		}
-		c.SetAnimationFreeze(true)
-		c.MemoryResetAreas()
-		log.Info().Int("scenes", len(tourScenes)).Str("dir", screenshotDir).Msg("regex_explorer tour: starting")
-		tourState.setupDone = true
-	}
-	c.RequestRepaint()
-
-	if tourState.doneAll {
-		return
-	}
-	if int(tourState.sceneIdx) >= len(tourScenes) {
-		log.Info().Str("dir", screenshotDir).Msg("regex_explorer tour: complete")
-		tourState.doneAll = true
-		return
-	}
-
-	scene := &tourScenes[tourState.sceneIdx]
-	if tourState.sceneAppliedFor != tourState.sceneIdx {
-		scene.Setup()
-		tourState.sceneAppliedFor = tourState.sceneIdx
-	}
-
-	app.ids.Reset()
-	for range c.IdScope(app.ids.PrepareSeq(seed)) {
+// makeTourRender returns a stateless Render that pins the scene's inputs on the
+// package-level `app` (under app.mu, since a background scan goroutine reads
+// them) and binds app.ids to the host-supplied stack so widget ids derive from
+// the host scope, then draws the explorer body via RenderWindow.
+func makeTourRender(pattern, haystack string) func(ids *c.WidgetIdStack) {
+	return func(ids *c.WidgetIdStack) {
+		app.mu.Lock()
+		app.pattern = pattern
+		app.haystack = haystack
+		app.patternList = ""
+		app.replacement = ""
+		app.mu.Unlock()
+		app.ids = ids
 		RenderWindow()
 	}
-
-	switch tourState.phase {
-	case tourPhaseSettle:
-		tourState.settleCnt++
-		if tourState.settleCnt >= tourSettleFrames {
-			tourState.phase = tourPhaseCapture
-		}
-	case tourPhaseCapture:
-		path := filepath.Join(screenshotDir, "regex_explorer_"+scene.Name+".png")
-		// IMZERO2_SCREENSHOT_SIZE narrows the capture to a fixed WxH
-		// rect (matching the widgets TestDriver and imztop tour).
-		// hmi.sh resizes the eframe viewport to the same WxH so the
-		// regex explorer window fills the rect exactly. Empty /
-		// malformed env → keep the legacy full-viewport capture.
-		// ADR-0057 SD5.
-		if w, h, ok := imzero2env.ScreenshotSizeWH(); ok {
-			c.RequestScreenshotRect(path, 0, 0, float32(w), float32(h))
-		} else {
-			c.RequestScreenshot(path)
-		}
-		log.Info().Str("path", path).Str("scene", scene.Name).Msg("regex_explorer tour: capture requested")
-		tourState.phase = tourPhaseAdvance
-	case tourPhaseAdvance:
-		tourState.sceneIdx++
-		tourState.phase = tourPhaseSettle
-		tourState.settleCnt = 0
-		c.MemoryResetAreas()
-	}
-	return
 }

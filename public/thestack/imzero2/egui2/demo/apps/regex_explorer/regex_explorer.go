@@ -190,12 +190,11 @@ func (inst *AppInstance) Frame(ctx runtimeapp.FrameContextI) (err error) {
 	return
 }
 
-// RenderLoopHandlerTour is the screenshot-tour entry point.
-// Tour mode is single-instance (the dispatcher selects this handler
-// when IMZERO2_SCREENSHOT_DIR is set), so we don't allocate per-window
-// state — the tour reads/writes the package-level `app` directly via
-// its scene Setup hooks. The seed parameter is honoured for ID
-// scoping. Defined further down in regex_explorer_tour.go.
+// Screenshot capture is enrolled via registry.Register in
+// regex_explorer_tour.go (ADR-0057). Tour/gallery rendering is
+// single-instance per scene, so each Demo reads/writes the package-level
+// `app` directly (pinning its pattern/haystack) and draws through
+// RenderWindow below; the central widgets TestDriver captures the result.
 
 // RenderWindow draws the regex-explorer body into the caller's UI scope:
 // left cheatsheet panel, central body with pattern / haystack inputs and

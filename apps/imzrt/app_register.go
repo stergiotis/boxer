@@ -4,7 +4,6 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
 )
 
 // manifest is the static AppI descriptor every imzrt instance returns. imzrt is
@@ -23,22 +22,13 @@ var manifest = app.Manifest{
 }
 
 func init() {
-	// Interactive mode hands back a per-window *App. Under IMZERO2_SCREENSHOT_DIR
-	// the screenshot tour takes over via a single-instance SeededFuncApp, matching
-	// imztop's split (ADR-0061 SD15).
-	var ctor app.AppCtor
-	if imzero2env.ScreenshotDir.Get() != "" {
-		ctor = func() (a app.AppI, err error) {
-			a, err = app.NewSeededFuncApp(manifest, RenderLoopHandlerTour)
-			return
-		}
-	} else {
-		ctor = func() (a app.AppI, err error) {
-			a = newApp()
-			return
-		}
-	}
-	if err := app.DefaultRegistry.RegisterFactory(manifest, ctor); err != nil {
+	// imzrt registers an interactive per-window *App. Screenshot capture is
+	// handled centrally by the widgets TestDriver via the Demos registered
+	// in imzrt_tour.go (ADR-0057).
+	if err := app.DefaultRegistry.RegisterFactory(manifest, func() (a app.AppI, err error) {
+		a = newApp()
+		return
+	}); err != nil {
 		log.Warn().Err(err).Msg("imzrt: failed to register factory")
 	}
 }
