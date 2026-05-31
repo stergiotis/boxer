@@ -172,7 +172,7 @@ status: draft
 | TableCellText | BuilderFactory | No | 1 | 0 | 0 | Immediate, Retained |
 | TableColumn | BuilderFactory | No | 0 | 0 | 8 | Immediate, Retained |
 | TableHeaderText | BuilderFactory | No | 1 | 0 | 0 | Immediate, Retained |
-| TextEdit | BuilderFactory | Yes | 2 | 0 | 11 | Immediate |
+| TextEdit | BuilderFactory | Yes | 2 | 0 | 12 | Immediate |
 | TimeRangePicker | BuilderFactory | Yes | 2 | 0 | 4 | Immediate, Retained |
 | TintedScope | BuilderFactory | Yes | 1 | 0 | 4 | Immediate, Retained, BlockIterator |
 | Tree | BuilderFactory | Yes | 0 | 0 | 0 | Immediate |
@@ -2661,6 +2661,7 @@ TableHeaderText
 - **CursorAtEnd**(val: b)
 - **ClipText**(val: b)
 - **CharLimit**(chars: u32)
+- **InsertAtCursor**(snippet: s)
 
 #### Return Type
 

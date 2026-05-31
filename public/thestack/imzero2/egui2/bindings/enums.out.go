@@ -896,17 +896,18 @@ const (
 const (
 	TextEditMethodIdBuild TextEditMethodIdE = 0
 
-	TextEditMethodIdCodeEditor   TextEditMethodIdE = 1
-	TextEditMethodIdFrame        TextEditMethodIdE = 2
-	TextEditMethodIdHintText     TextEditMethodIdE = 3
-	TextEditMethodIdPassword     TextEditMethodIdE = 4
-	TextEditMethodIdInteractive  TextEditMethodIdE = 5
-	TextEditMethodIdDesiredWidth TextEditMethodIdE = 6
-	TextEditMethodIdDesiredRows  TextEditMethodIdE = 7
-	TextEditMethodIdLockFocus    TextEditMethodIdE = 8
-	TextEditMethodIdCursorAtEnd  TextEditMethodIdE = 9
-	TextEditMethodIdClipText     TextEditMethodIdE = 10
-	TextEditMethodIdCharLimit    TextEditMethodIdE = 11
+	TextEditMethodIdCodeEditor     TextEditMethodIdE = 1
+	TextEditMethodIdFrame          TextEditMethodIdE = 2
+	TextEditMethodIdHintText       TextEditMethodIdE = 3
+	TextEditMethodIdPassword       TextEditMethodIdE = 4
+	TextEditMethodIdInteractive    TextEditMethodIdE = 5
+	TextEditMethodIdDesiredWidth   TextEditMethodIdE = 6
+	TextEditMethodIdDesiredRows    TextEditMethodIdE = 7
+	TextEditMethodIdLockFocus      TextEditMethodIdE = 8
+	TextEditMethodIdCursorAtEnd    TextEditMethodIdE = 9
+	TextEditMethodIdClipText       TextEditMethodIdE = 10
+	TextEditMethodIdCharLimit      TextEditMethodIdE = 11
+	TextEditMethodIdInsertAtCursor TextEditMethodIdE = 12
 )
 
 const (

@@ -4556,6 +4556,14 @@ func (inst TextEditFluid) CharLimit(chars uint32) TextEditFluid {
 	return inst
 }
 
+func (inst TextEditFluid) InsertAtCursor(snippet string) TextEditFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TextEditMethodIdInsertAtCursor))
+	r.WriteString(snippet)
+
+	return inst
+}
+
 func (inst TextEditFluid) Send() {
 	r := inst.r
 	r.WriteOpCode(uint32(TextEditMethodIdBuild))

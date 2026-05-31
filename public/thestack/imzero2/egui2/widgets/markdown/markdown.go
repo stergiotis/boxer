@@ -103,19 +103,22 @@ func SlugHeading(text string) (slug string) {
 // usually does not need an extra wrap — the outer container already
 // scopes the ids.
 func (inst *Doc) Render(ids *c.WidgetIdStack, opts ...RenderOpt) {
-	inst.renderCollect(ids, "", false, opts)
+	inst.renderCollect(ids, nil, false, opts)
 }
 
 // CodeBlockAction is one code/verbatim block whose action button was
-// clicked during a [Doc.RenderActions] frame. Text is the block's
-// verbatim source (what the author wrote, before the highlighter's
-// canonicalisation); Lang is the normalised fence language ("go", "sql",
-// "" for an unlabelled/indented block); Index is the block's 0-based
-// ordinal among the code blocks in the document, stable across frames.
+// clicked during a [Doc.RenderActions]/[Doc.RenderActionsN] frame. Text is
+// the block's verbatim source (what the author wrote, before the
+// highlighter's canonicalisation); Lang is the normalised fence language
+// ("go", "sql", "" for an unlabelled/indented block); Index is the block's
+// 0-based ordinal among the code blocks in the document, stable across
+// frames. Button is the 0-based index of the clicked button within the
+// label list — always 0 for the single-button [Doc.RenderActions].
 type CodeBlockAction struct {
-	Text  string
-	Lang  string
-	Index int
+	Text   string
+	Lang   string
+	Index  int
+	Button int
 }
 
 // RenderActions renders the document like [Doc.Render] but additionally
@@ -140,16 +143,38 @@ type CodeBlockAction struct {
 // caller decides what a click means. CodeView's built-in selectable text
 // (Ctrl+C) is unaffected and present whether or not buttons are shown.
 func (inst *Doc) RenderActions(ids *c.WidgetIdStack, label string, opts ...RenderOpt) iter.Seq[CodeBlockAction] {
-	actions := inst.renderCollect(ids, label, true, opts)
+	actions := inst.renderCollect(ids, []string{label}, true, opts)
+	return slices.Values(actions)
+}
+
+// RenderActionsN is [Doc.RenderActions] with more than one button per
+// code/verbatim block: it places one small button for each entry of labels
+// (left to right, in a horizontal row) above every block, and returns the
+// blocks whose button was clicked this frame, each [CodeBlockAction]
+// carrying the 0-based index of the clicked button in its Button field.
+// [Doc.RenderActions] is the single-button special case. The same
+// immediate-mode contract applies — the document is drawn eagerly and the
+// sequence merely replays this frame's clicks.
+//
+//	for act := range doc.RenderActionsN(ids, []string{"Insert", "Replace"}) {
+//		switch act.Button {
+//		case 0:
+//			insertAtCursor(act.Text)
+//		case 1:
+//			replaceBuffer(act.Text)
+//		}
+//	}
+func (inst *Doc) RenderActionsN(ids *c.WidgetIdStack, labels []string, opts ...RenderOpt) iter.Seq[CodeBlockAction] {
+	actions := inst.renderCollect(ids, labels, true, opts)
 	return slices.Values(actions)
 }
 
 // renderCollect is the shared render core. actionsEnabled gates the
-// per-code-block action button (labelled actionLabel); when true the
-// returned slice holds every block whose button was clicked this frame,
-// in document order. [Doc.Render] calls it with actions disabled (nil
-// return); [Doc.RenderActions] wraps the slice as an iter.Seq.
-func (inst *Doc) renderCollect(ids *c.WidgetIdStack, actionLabel string, actionsEnabled bool, opts []RenderOpt) (actions []CodeBlockAction) {
+// per-code-block action buttons (one per actionLabels entry); when true the
+// returned slice holds every block whose button was clicked this frame, in
+// document order. [Doc.Render] calls it with actions disabled (nil return);
+// [Doc.RenderActions]/[Doc.RenderActionsN] wrap the slice as an iter.Seq.
+func (inst *Doc) renderCollect(ids *c.WidgetIdStack, actionLabels []string, actionsEnabled bool, opts []RenderOpt) (actions []CodeBlockAction) {
 	var ro renderOptions
 	for _, opt := range opts {
 		opt(&ro)
@@ -161,7 +186,7 @@ func (inst *Doc) renderCollect(ids *c.WidgetIdStack, actionLabel string, actions
 		scrollToSlug:   ro.scrollToSlug,
 		headings:       inst.headings,
 		actionsEnabled: actionsEnabled,
-		actionLabel:    actionLabel,
+		actionLabels:   actionLabels,
 	}
 	for i := range inst.segments {
 		inst.segments[i].render(&rc)
@@ -218,13 +243,15 @@ type renderCtx struct {
 	headings     []HeadingInfo
 	headingIdx   int
 
-	// Code-block action state ([Doc.RenderActions]). When actionsEnabled
-	// is set, each code block emits a small button labelled actionLabel;
-	// a click appends a [CodeBlockAction] to codeActions. codeBlockIdx is
-	// bumped per code block so each action carries a stable 0-based
-	// ordinal. All three are zero/empty under the plain [Doc.Render] path.
+	// Code-block action state ([Doc.RenderActions]/[Doc.RenderActionsN]).
+	// When actionsEnabled is set, each code block emits one small button per
+	// actionLabels entry (in a horizontal row); a click appends a
+	// [CodeBlockAction] (carrying the clicked button's 0-based index) to
+	// codeActions. codeBlockIdx is bumped per code block so each action
+	// carries a stable 0-based ordinal. All are zero/empty under the plain
+	// [Doc.Render] path.
 	actionsEnabled bool
-	actionLabel    string
+	actionLabels   []string
 	codeActions    []CodeBlockAction
 	codeBlockIdx   int
 }

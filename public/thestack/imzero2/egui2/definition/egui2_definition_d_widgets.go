@@ -444,11 +444,46 @@ func definitionsWidget() (widgets []*ir.BuilderFactoryNode) {
 				BeginMethod("cursor_at_end").Arg("val", ctabb.B).EndMethod().
 				BeginMethod("clip_text").Arg("val", ctabb.B).EndMethod().
 				BeginMethod("char_limit").Arg("chars", ctabb.U32).CodeClientRust(rustClientCode("{{Instance}} = {{Instance}}.char_limit(chars as usize);\n")).EndMethod().
+				BeginMethod("insertAtCursor").Arg("snippet", ctabb.S).CodeClientRust(rustClientCode("self.text_edit_pending_insert = Some(snippet);\n")).EndMethod().
 				Build()...).
 			WithConstructionCodeClientRust(rustClientCode("if multiline { egui::TextEdit::multiline(&mut text).id({{Id}}) } else { egui::TextEdit::singleline(&mut text).id({{Id}}) };\n")).
 			WithSettingImmediate(true).
-			WithApplyCodeClientRust(applyCodeWidgetRustOnEvent(true, respEventChanged,
-				rustClientCode("self.r9_s_push({{Id}}.value(),text);\n"))).
+			// Apply: keep the user-edit changed-push, and fold in the
+			// programmatic insert-at-cursor (TextEditFluid.InsertAtCursor).
+			// text is moved into r9_s_push, so push exactly once at the end
+			// gated on a single `changed` (user-edited OR snippet-inserted) —
+			// pushing twice would move text twice. See ADR-0063.
+			WithApplyCodeClientRust(ir.MergeVerbatimCode(
+				rustClientCode("let resp ="),
+				applyCodeWidgetRust(true),
+				rustClientCode(`
+let mut changed = resp.is_some() && resp.unwrap().changed();
+// A builder method stashed the snippet on self.text_edit_pending_insert.
+// Splice it at the editor's persisted caret (replacing any selection) and
+// force the push: a programmatic edit never sets egui's .changed(). With no
+// stored cursor (editor never focused) we append at end.
+if let Some(ins) = self.text_edit_pending_insert.take() {
+	let ctx_opt = {{EguiUiOptionalOuter}}.as_deref().map(|ui| ui.ctx().clone());
+	let end = text.chars().count();
+	let range = ctx_opt
+		.as_ref()
+		.and_then(|ctx| egui::text_edit::TextEditState::load(ctx, {{Id}}))
+		.and_then(|st| st.cursor.char_range())
+		.map(|cr| cr.as_sorted_char_range())
+		.unwrap_or(end..end);
+	let caret = splice_text_at_cursor(&mut text, &ins, range);
+	if let Some(ctx) = ctx_opt {
+		if let Some(mut st) = egui::text_edit::TextEditState::load(&ctx, {{Id}}) {
+			st.cursor.set_char_range(Some(egui::text::CCursorRange::one(egui::text::CCursor::new(caret))));
+			st.store(&ctx, {{Id}});
+		}
+	}
+	changed = true;
+}
+if changed {
+	self.r9_s_push({{Id}}.value(), text);
+}
+`))).
 			WithReturnType(structTextEdit()).
 			Build())
 	// datePickerButton wraps egui_extras::DatePickerButton. egui_extras

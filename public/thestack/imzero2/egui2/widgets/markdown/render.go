@@ -56,7 +56,7 @@ func (inst *segment) render(rc *renderCtx) {
 		// independent of this. codeBlockIdx advances per code block so the
 		// action's ordinal is stable regardless of whether buttons render.
 		if rc.actionsEnabled {
-			renderCodeActionButton(rc, inst.codeText, inst.codeLang, rc.codeBlockIdx)
+			renderCodeActionButtons(rc, inst.codeText, inst.codeLang, rc.codeBlockIdx)
 		}
 		rc.codeBlockIdx++
 		seq := rc.idSeq
@@ -85,20 +85,26 @@ func (inst *segment) render(rc *renderCtx) {
 	}
 }
 
-// renderCodeActionButton emits a small IDS button above a code block,
-// used only on the [Doc.RenderActions] path. It consumes one id-sequence
-// slot (so layout state keyed by id stays stable across frames) and, on
-// click, records a [CodeBlockAction] carrying the block's verbatim text,
-// fence language, and ordinal — the caller consumes these from the
-// returned iter.Seq and decides what the click means. text/lang/idx are
-// passed rather than read off rc so the call site stays adjacent to the
-// CodeView it labels.
-func renderCodeActionButton(rc *renderCtx, text, lang string, idx int) {
-	seq := rc.idSeq
-	rc.idSeq++
-	if c.Button(rc.ids.PrepareSeq(seq), c.Atoms().Text(rc.actionLabel).Keep()).
-		Small().SendResp().HasPrimaryClicked() {
-		rc.codeActions = append(rc.codeActions, CodeBlockAction{Text: text, Lang: lang, Index: idx})
+// renderCodeActionButtons emits a horizontal row of small IDS buttons above
+// a code block, one per rc.actionLabels entry — used only on the
+// [Doc.RenderActions]/[Doc.RenderActionsN] path. Each button consumes one
+// id-sequence slot (so layout state keyed by id stays stable across frames)
+// and, on click, records a [CodeBlockAction] carrying the block's verbatim
+// text, fence language, and ordinal, plus the 0-based index of the clicked
+// button — the caller consumes these from the returned iter.Seq and decides
+// what each click means. text/lang/idx are passed rather than read off rc so
+// the call site stays adjacent to the CodeView it labels.
+func renderCodeActionButtons(rc *renderCtx, text, lang string, idx int) {
+	for range c.Horizontal().KeepIter() {
+		for btn, label := range rc.actionLabels {
+			seq := rc.idSeq
+			rc.idSeq++
+			if c.Button(rc.ids.PrepareSeq(seq), c.Atoms().Text(label).Keep()).
+				Small().SendResp().HasPrimaryClicked() {
+				rc.codeActions = append(rc.codeActions,
+					CodeBlockAction{Text: text, Lang: lang, Index: idx, Button: btn})
+			}
+		}
 	}
 }
 

@@ -58,6 +58,7 @@ const (
 	dockTabDetail     uint64 = 5
 	dockTabPreview    uint64 = 6
 	dockTabTimeline   uint64 = 7
+	dockTabSnippets   uint64 = 8
 )
 
 type PlayApp struct {
@@ -71,6 +72,13 @@ type PlayApp struct {
 
 	sql         string
 	lastSentSql string
+	// pendingSnippetInsert / pendingSnippetReplace hold a snippet-library
+	// click until the editor consumes it on the next frame: Insert splices
+	// the snippet at the caret via TextEditFluid.InsertAtCursor (ADR-0063);
+	// Replace swaps the whole buffer (a plain Go assignment — no FFI). Set by
+	// renderSnippetsTab, captured-and-cleared by renderSqlEditor.
+	pendingSnippetInsert  string
+	pendingSnippetReplace string
 	requestRun  bool
 	selectedRow      int64
 	cards            *CardDriver
@@ -477,7 +485,7 @@ func (inst *PlayApp) Render() error {
 		for dock := range c.DockArea(ids.PrepareStr("play-dock")) {
 			editLeaf := dock.InitRoot(dockTabEditor, dockTabHistory)
 			bodyLeaf := dock.Split(editLeaf, c.DockBelow, 0.45,
-				dockTabTable, dockTabProjection, dockTabTimeline)
+				dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets)
 			_ = dock.Split(bodyLeaf, c.DockRight, 0.70, dockTabDetail)
 			_ = dock.Split(editLeaf, c.DockRight, 0.55, dockTabPreview)
 
@@ -502,6 +510,9 @@ func (inst *PlayApp) Render() error {
 			}
 			for range dock.Tab(dockTabTimeline, "Timeline") {
 				inst.renderTimelineTab(rec, schema, executed, err)
+			}
+			for range dock.Tab(dockTabSnippets, "Snippets") {
+				inst.renderSnippetsTab()
 			}
 			for range dock.Tab(dockTabDetail, "Detail") {
 				inst.renderDetailTab(rec, schema, inst.selectedRow)
@@ -735,13 +746,20 @@ func (inst *PlayApp) renderEditorTab() {
 // mirror in hide mode). idSlot keeps each instance's stable widget
 // id distinct; valuePtr is the bound buffer (both displayed value
 // and SendRespVal target); hint is the empty-buffer placeholder.
-func (inst *PlayApp) sqlTextEditField(idSlot string, valuePtr *string, hint string, rows uint32) {
-	c.TextEdit(inst.ids.PrepareStr(idSlot), *valuePtr, true).
+func (inst *PlayApp) sqlTextEditField(idSlot string, valuePtr *string, hint string, rows uint32, pendingInsert string) {
+	b := c.TextEdit(inst.ids.PrepareStr(idSlot), *valuePtr, true).
 		CodeEditor().
 		DesiredRows(rows).
 		DesiredWidth(float32(math.Inf(1))).
-		HintText(hint).
-		SendRespVal(valuePtr)
+		HintText(hint)
+	// Snippet-library Insert: hand the pending snippet to the editor so the
+	// Rust side splices it at the caret next frame (TextEditFluid.InsertAtCursor,
+	// ADR-0063). Only the visible editor is given the text, so it lands where
+	// the user is looking; empty means no insert this frame.
+	if pendingInsert != "" {
+		b = b.InsertAtCursor(pendingInsert)
+	}
+	b.SendRespVal(valuePtr)
 }
 
 // renderSqlEditor wires the main SQL TextEdit and the show/hide
@@ -752,8 +770,22 @@ func (inst *PlayApp) sqlTextEditField(idSlot string, valuePtr *string, hint stri
 // sliced-off prelude as a read-only label above the residual editor.
 func (inst *PlayApp) renderSqlEditor(rows uint32) {
 	const mainHint = "-- type SQL, press Run"
+	// Consume any pending snippet-library actions once per frame. Replace
+	// swaps the whole buffer — assign inst.sql before the mode branch so it
+	// works in both: non-hide binds inst.sql directly, and hide-mode
+	// recomposeMirror re-derives the residual from the new canonical. Insert
+	// is handed to whichever editor renders below (exactly one does); Replace
+	// supersedes a same-frame Insert. Cleared eagerly so each click applies
+	// exactly once.
+	pending := inst.pendingSnippetInsert
+	inst.pendingSnippetInsert = ""
+	if replace := inst.pendingSnippetReplace; replace != "" {
+		inst.pendingSnippetReplace = ""
+		inst.sql = replace
+		pending = ""
+	}
 	if !inst.paramHidePrelude {
-		inst.sqlTextEditField("sqlEditor", &inst.sql, mainHint, rows)
+		inst.sqlTextEditField("sqlEditor", &inst.sql, mainHint, rows, pending)
 		return
 	}
 
@@ -762,7 +794,7 @@ func (inst *PlayApp) renderSqlEditor(rows uint32) {
 		// Parse broken — fall back to the unsliced editor so the
 		// user can fix the syntax. Don't try to slice a buffer we
 		// don't understand.
-		inst.sqlTextEditField("sqlEditor", &inst.sql, mainHint, rows)
+		inst.sqlTextEditField("sqlEditor", &inst.sql, mainHint, rows, pending)
 		return
 	}
 	inst.sql = pre.Canonical
@@ -775,7 +807,7 @@ func (inst *PlayApp) renderSqlEditor(rows uint32) {
 		}
 	}
 	inst.sqlTextEditField("sqlEditorResidual", &inst.paramSqlEdit,
-		"-- type SQL (prelude hidden)", rows)
+		"-- type SQL (prelude hidden)", rows, pending)
 }
 
 // renderPreviewTab is the Preview dock tab body: the canonical-form

@@ -58,6 +58,58 @@ fn merge_left<T>(left: Option<T>, right: Option<T>) -> Option<T> {
         (Some(val1), Some(_)) => Some(val1),
     }
 }
+/// Splice `ins` into `text` over the char range `range` — a selection to
+/// replace, or an empty range used as a plain insertion point — returning the
+/// new caret as a char index just past the inserted text. Char-indexed
+/// throughout via egui's TextBuffer (UTF-8-safe); the caller maps egui's
+/// CCursorRange to `range`. Backs TextEditFluid.InsertAtCursor (ADR-0063).
+fn splice_text_at_cursor(text: &mut String, ins: &str, range: std::ops::Range<usize>) -> usize {
+    use egui::TextBuffer as _;
+    let start = range.start;
+    text.delete_char_range(range);
+    let n = text.insert_text(ins, start);
+    start + n
+}
+
+#[cfg(test)]
+mod insert_at_cursor_tests {
+    use super::splice_text_at_cursor;
+
+    #[test]
+    fn inserts_at_caret() {
+        let mut t = String::from("SELECT  FROM t");
+        let caret = splice_text_at_cursor(&mut t, "*", 7..7);
+        assert_eq!(t, "SELECT * FROM t");
+        assert_eq!(caret, 8);
+    }
+
+    #[test]
+    fn replaces_selection() {
+        let mut t = String::from("SELECT a FROM t");
+        // range 7..8 selects the 'a'
+        let caret = splice_text_at_cursor(&mut t, "bb", 7..8);
+        assert_eq!(t, "SELECT bb FROM t");
+        assert_eq!(caret, 9);
+    }
+
+    #[test]
+    fn appends_at_end() {
+        let mut t = String::from("abc");
+        let caret = splice_text_at_cursor(&mut t, "XYZ", 3..3);
+        assert_eq!(t, "abcXYZ");
+        assert_eq!(caret, 6);
+    }
+
+    #[test]
+    fn char_indexed_not_byte_indexed() {
+        // 'é' is one char but two UTF-8 bytes; a byte-indexed splice at 2
+        // would land mid-codepoint. Char index 2 is right after "hé".
+        let mut t = String::from("héllo");
+        let caret = splice_text_at_cursor(&mut t, "!", 2..2);
+        assert_eq!(t, "hé!llo");
+        assert_eq!(caret, 3);
+    }
+}
 fn color32_from_rgba_u32(v: u32) -> egui::Color32 {
     // Go-side packers (color.Hex, styletokens.AsHex) emit STRAIGHT alpha:
     // 0xRRGGBBAA where R/G/B are unscaled by A. Use from_rgba_unmultiplied
@@ -1772,6 +1824,12 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     r9_i64_values: Vec<i64>,
     r9_s_ids: Vec<u64>,
     r9_s_values: Vec<String>,
+    // Scratch slot for TextEditFluid.InsertAtCursor: the `insertAtCursor`
+    // builder-method arm stashes the snippet here; the TextEdit apply code
+    // splices it at the caret and clears the slot within the same handler
+    // invocation for the same widget id (so it never leaks across widgets,
+    // even when the editor is culled). See ADR-0063.
+    text_edit_pending_insert: Option<String>,
     // egui_table prefetch feedback: per-table visible range, filled by
     // EtStripedDelegate::prepare (declared in the endETable IDL apply
     // code) and drained by fetchR9EtPrefetch. 5 values per id:
@@ -2052,6 +2110,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             r9_i64_values: Vec::with_capacity(1024),
             r9_s_ids: Vec::with_capacity(1024),
             r9_s_values: Vec::with_capacity(1024),
+            text_edit_pending_insert: None,
             r9_et_prefetch_ids: Vec::with_capacity(8),
             r9_et_prefetch_values: Vec::with_capacity(32),
             r10_true_ids: Vec::with_capacity(1024),
@@ -11347,6 +11406,14 @@ let mut chars = self.io.read_plain_u32()?;
 w = w.char_limit(chars as usize);
 
 }
+TextEditBuilderMethodId::InsertAtCursor => {
+    #[cfg(feature = "puffin")]
+	puffin::profile_scope!("match TextEditBuilderMethodId::InsertAtCursor");
+#[allow(unused_mut)]
+let mut snippet = self.io.read_plain_s()?;
+self.text_edit_pending_insert = Some(snippet);
+
+}
 }
 }
 if d == 0 {
@@ -11356,10 +11423,35 @@ self.end_consume_message()?;
 let resp =
 // generating location: /home/spx/repo/boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.apply_widget(w,u,f,Some(i));
-if resp.is_some() && resp.unwrap().changed() {
 // generating location: /home/spx/repo/boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-self.r9_s_push(i.value(),text);
+
+let mut changed = resp.is_some() && resp.unwrap().changed();
+// A builder method stashed the snippet on self.text_edit_pending_insert.
+// Splice it at the editor's persisted caret (replacing any selection) and
+// force the push: a programmatic edit never sets egui's .changed(). With no
+// stored cursor (editor never focused) we append at end.
+if let Some(ins) = self.text_edit_pending_insert.take() {
+	let ctx_opt = u.as_deref().map(|ui| ui.ctx().clone());
+	let end = text.chars().count();
+	let range = ctx_opt
+		.as_ref()
+		.and_then(|ctx| egui::text_edit::TextEditState::load(ctx, i))
+		.and_then(|st| st.cursor.char_range())
+		.map(|cr| cr.as_sorted_char_range())
+		.unwrap_or(end..end);
+	let caret = splice_text_at_cursor(&mut text, &ins, range);
+	if let Some(ctx) = ctx_opt {
+		if let Some(mut st) = egui::text_edit::TextEditState::load(&ctx, i) {
+			st.cursor.set_char_range(Some(egui::text::CCursorRange::one(egui::text::CCursor::new(caret))));
+			st.store(&ctx, i);
+		}
+	}
+	changed = true;
 }
+if changed {
+	self.r9_s_push(i.value(), text);
+}
+
 }
 FuncProcId::TimeRangePicker => {
     #[cfg(feature = "puffin")]
