@@ -149,7 +149,8 @@ impl ImageCache {
 
     /// Compute the screen-space size for the allocated rect given the fit mode
     /// and native texture dims. `fixed_w/fixed_h` are inputs for FIXED and
-    /// ASPECT_MAX modes; `available` is `ui.available_size()` for FILL_RECT.
+    /// ASPECT_MAX modes; `available` is `ui.available_size()`, used by
+    /// FILL_RECT and as the ASPECT_MAX bounding box when a fixed dimension is 0.
     fn compute_size(
         fit: u8,
         native_w: u32,
@@ -162,13 +163,22 @@ impl ImageCache {
             FIT_FIXED => vec2(fixed_w as f32, fixed_h as f32),
             FIT_FILL_RECT => available,
             FIT_ASPECT_MAX => {
-                if native_w == 0 || native_h == 0 || fixed_w == 0 || fixed_h == 0 {
+                if native_w == 0 || native_h == 0 {
+                    return vec2(0.0, 0.0);
+                }
+                // A zero fixed_w / fixed_h means "fit to ui.available_size()":
+                // scale aspect-preserved into the local available rect. This
+                // lets a caller fill its layout slot without shipping a box
+                // size from the host, whose only available-size channel is a
+                // single global register that reads wrong when several windows
+                // render in one frame.
+                let fw = if fixed_w == 0 { available.x } else { fixed_w as f32 };
+                let fh = if fixed_h == 0 { available.y } else { fixed_h as f32 };
+                if fw <= 0.0 || fh <= 0.0 {
                     return vec2(0.0, 0.0);
                 }
                 let nw = native_w as f32;
                 let nh = native_h as f32;
-                let fw = fixed_w as f32;
-                let fh = fixed_h as f32;
                 let s = (fw / nw).min(fh / nh);
                 vec2(nw * s, nh * s)
             }
