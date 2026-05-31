@@ -31,6 +31,7 @@ import (
 	// M3-migrated apps; the dock host iterates the registry directly.
 	_ "github.com/stergiotis/boxer/apps/capdemo"
 	_ "github.com/stergiotis/boxer/apps/capinspector"
+	_ "github.com/stergiotis/boxer/apps/godepview"
 	_ "github.com/stergiotis/boxer/apps/imzrt"
 	_ "github.com/stergiotis/boxer/apps/imztop"
 	_ "github.com/stergiotis/boxer/apps/play"
