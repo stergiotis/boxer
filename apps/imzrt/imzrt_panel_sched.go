@@ -20,16 +20,24 @@ import (
 const spectroWidthSlots uint32 = 600
 
 // The /sched/latencies histogram spans sub-ns to ~1000s, but real scheduling
-// latencies live in a narrow band. Clip the spectrogram to [10ns, 100ms] so its
+// latencies live in a narrow band. Clip the spectrogram to [10ns, 1ms] so its
 // height is spent on the latencies that actually occur: the bottom carries the
-// normal fast schedules and the band climbs under scheduling pressure. Buckets
-// outside the window (including the runtime's open ±Inf end bins) are dropped.
+// normal fast schedules and the band climbs under scheduling pressure. p99 is
+// typically ~100µs, so a 1ms ceiling leaves headroom for pressure spikes while
+// dropping the perpetually-empty 1–100ms band (which rendered in the panel
+// background colour, reading as dead space above the data); the rarer >1ms tail
+// still shows on the p99 line plot below. Buckets outside the window (including
+// the runtime's open ±Inf end bins) are dropped.
 const (
-	spectroLoSec                 = 10e-9  // 10 ns
-	spectroHiSec                 = 100e-3 // 100 ms
+	spectroLoSec                 = 10e-9 // 10 ns
+	spectroHiSec                 = 1e-3  // 1 ms
 	spectroDisplayHeight float32 = 240
 	spectroLegendW       float32 = 280
-	spectroLegendH       float32 = 26
+	// The colorscale legend stacks a gradient (55% of height) + a 5 px tick
+	// strip + a label row; below ~40 px the labels paint past the canvas clip
+	// rect and disappear. 44 matches imztop's topology legend and clears that
+	// floor so the count ticks keep their labels.
+	spectroLegendH float32 = 44
 )
 
 // schedSpectroState is per-window state for the scheduling-latency spectrogram.
@@ -133,8 +141,14 @@ func (inst *App) renderSchedSpectrogram(snap *PublishedSnapshot) {
 		st.cfg.BadColor = bg
 		st.cfg.UnderflowColor = bg
 		st.hs = heatmapscroll.New(inst.ids, "sched-spectro", st.cfg, spectroWidthSlots, uint32(st.nDisplay))
-		// ScrollLeft — classical spectrogram: newest column on the right.
-		st.hs.SetOrientation(heatmapscroll.ScrollLeft)
+		// ScrollRight — newest column on the LEFT, ageing rightward. Matches
+		// imztop's CPU heatmap so the sibling dashboards scroll the same way
+		// and the x-tick labels (rendered newest-left below) line up with it.
+		// Deliberately opposite to this panel's Goroutines/p99 line plots
+		// (newest-right): we favour ADR-0061 SD10 (reuse imztop's pattern) over
+		// M3's "p99 aligns with the hot band" goal. Don't flip to newest-right
+		// without revisiting that trade-off.
+		st.hs.SetOrientation(heatmapscroll.ScrollRight)
 		st.colBuf = make([]float32, st.nDisplay)
 		// Prefill the ring so it opens as a full background rectangle.
 		for range spectroWidthSlots {
@@ -181,7 +195,7 @@ func (inst *App) renderSchedSpectrogram(snap *PublishedSnapshot) {
 	st.hs.SetDisplaySize(0, spectroDisplayHeight)
 	st.hs.Render()
 	renderSpectroXTicks(snap.HistTimeUnixSec)
-	c.Label(fmt.Sprintf("y: %s (bottom) → %s (top), log · x: time, newest right", st.loLabel, st.hiLabel)).Send()
+	c.Label(fmt.Sprintf("y: %s (bottom) → %s (top), log · x: time, newest left", st.loLabel, st.hiLabel)).Send()
 	c.Label("colour = goroutines waiting per interval (log):").Send()
 	st.legend.Render()
 }
@@ -204,8 +218,10 @@ func clipBucketRange(buckets []float64, loSec, hiSec float64) (lo, hi int) {
 }
 
 // renderSpectroXTicks draws calendar-aware time labels under the spectrogram.
-// ScrollLeft puts oldest on the left and newest on the right, so labels render in
-// ascending order. Mirrors imztop's heatmap x-axis (timeticks).
+// The spectrogram scrolls ScrollRight (newest column on the left), so labels
+// render newest → oldest with the leftmost label under the most-recent column.
+// timeticks returns ascending (oldest → newest); iterate in reverse to match.
+// Mirrors imztop's renderCPUHeatmapXTicks.
 func renderSpectroXTicks(timeUnixSec []float64) {
 	if len(timeUnixSec) < 2 {
 		return
@@ -223,10 +239,11 @@ func renderSpectroXTicks(timeUnixSec []float64) {
 	if len(layout.TickLabels) == 0 {
 		return
 	}
+	n := len(layout.TickLabels)
 	for range c.Horizontal().KeepIter() {
-		for i := range layout.TickLabels {
+		for i := n - 1; i >= 0; i-- {
 			c.Label(layout.TickLabels[i]).Send()
-			if i < len(layout.TickLabels)-1 {
+			if i > 0 {
 				c.AddSpace(24)
 			}
 		}
