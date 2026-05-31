@@ -4,6 +4,7 @@ package taskcreated_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/taskcreated"
@@ -12,7 +13,7 @@ import (
 func sampleCreated() taskcreated.TaskCreated {
 	return taskcreated.TaskCreated{
 		FactId:       7,
-		AtNs:         1_700_000_000_000_000_000,
+		At:           time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 		TaskId:       "task-abc123",
 		Kind:         "ch.export",
 		Title:        "Export rows",
@@ -46,8 +47,8 @@ func TestBuscodecRoundTrip(t *testing.T) {
 	if got.FactId != orig.FactId {
 		t.Errorf("FactId: got %v, want %v", got.FactId, orig.FactId)
 	}
-	if got.AtNs != orig.AtNs {
-		t.Errorf("AtNs: got %v, want %v", got.AtNs, orig.AtNs)
+	if !got.At.Equal(orig.At) {
+		t.Errorf("At: got %v, want %v", got.At, orig.At)
 	}
 	if got.TaskId != orig.TaskId {
 		t.Errorf("TaskId: got %q, want %q", got.TaskId, orig.TaskId)
@@ -83,7 +84,7 @@ func TestBuscodecRoundTripZeroValues(t *testing.T) {
 	// best-effort metadata.
 	orig := taskcreated.TaskCreated{
 		FactId:       1,
-		AtNs:         1_700_000_000_000_000_000,
+		At:           time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 		TaskId:       "task-bare",
 		Kind:         "ch.import",
 		CancellableB: false,
@@ -111,7 +112,7 @@ func TestBuscodecAtNsLosslessNanoPrecision(t *testing.T) {
 	// z64 wire → sub-second nanos round-trip losslessly.
 	orig := taskcreated.TaskCreated{
 		FactId: 1,
-		AtNs:   1_700_000_000_987_654_321,
+		At:     time.Unix(0, 1_700_000_000_987_654_321).UTC(),
 		TaskId: "task-precision",
 		Kind:   "ch.export",
 	}
@@ -123,7 +124,7 @@ func TestBuscodecAtNsLosslessNanoPrecision(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
-	if got.AtNs != orig.AtNs {
-		t.Errorf("AtNs: got %v, want %v (nanos must round-trip lossless)", got.AtNs, orig.AtNs)
+	if !got.At.Equal(orig.At) {
+		t.Errorf("At: got %v, want %v (nanos must round-trip lossless)", got.At, orig.At)
 	}
 }

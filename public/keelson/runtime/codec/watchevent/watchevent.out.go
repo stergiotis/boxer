@@ -101,8 +101,9 @@ var watchEventPool = sync.Pool{
 // WatchEventColumns is the SoA storage for batches of WatchEvent rows.
 // All slices grow in lockstep — Len returns the row count.
 type WatchEventColumns struct {
-	FactId []uint64
-	AtNs   []int64
+	FactId     []uint64
+	NaturalKey [][]byte
+	At         []time.Time
 
 	Kind   []string
 	Name   []string
@@ -120,7 +121,8 @@ func (c *WatchEventColumns) Len() int { return len(c.FactId) }
 // mutation. Scalar fields (T, Option[T]) are copied by value.
 func (c *WatchEventColumns) Append(row WatchEvent) {
 	c.FactId = append(c.FactId, row.FactId)
-	c.AtNs = append(c.AtNs, row.AtNs)
+	c.NaturalKey = append(c.NaturalKey, row.NaturalKey)
+	c.At = append(c.At, row.At)
 	c.Kind = append(c.Kind, row.Kind)
 	c.Name = append(c.Name, row.Name)
 	c.Cookie = append(c.Cookie, row.Cookie)
@@ -131,7 +133,8 @@ func (c *WatchEventColumns) Append(row WatchEvent) {
 // defensive copy); scalar fields and Option[T] are copied.
 func (c *WatchEventColumns) Row(i int) (row WatchEvent) {
 	row.FactId = c.FactId[i]
-	row.AtNs = c.AtNs[i]
+	row.NaturalKey = c.NaturalKey[i]
+	row.At = c.At[i]
 	row.Kind = c.Kind[i]
 	row.Name = c.Name[i]
 	row.Cookie = c.Cookie[i]
@@ -240,8 +243,8 @@ func WatchEventBuildEntities[
 	n := c.Len()
 	for i := 0; i < n; i++ {
 		dml.BeginEntity()
-		dml.SetId(c.FactId[i], nil)
-		dml.SetTimestamp(time.Unix(0, c.AtNs[i]).UTC())
+		dml.SetId(c.FactId[i], c.NaturalKey[i])
+		dml.SetTimestamp(c.At[i])
 		// --- symbol. ---
 		symbolSec := dml.GetSectionSymbol()
 		symbolSecAttr_Kind := symbolSec.BeginAttribute(c.Kind[i])
@@ -262,7 +265,7 @@ func WatchEventBuildEntities[
 		u32ArraySec.EndSection()
 		err = dml.CommitEntity()
 		if err != nil {
-			err = eh.Errorf("watchevent: commit row %d: %w", i, err)
+			err = eh.Errorf("commit row %d: %w", i, err)
 			return
 		}
 	}
@@ -324,6 +327,7 @@ func WatchEventFillFromArrow[
 	c *WatchEventColumns,
 	n int,
 	idCol *array.Uint64,
+	nkCol *array.Binary,
 	tsCol *array.Timestamp,
 	symbolAttrs SymbolAttrs,
 	symbolMembs SymbolMembs,
@@ -334,7 +338,13 @@ func WatchEventFillFromArrow[
 ) (err error) {
 	for i := 0; i < n; i++ {
 		c.FactId = append(c.FactId, idCol.Value(i))
-		c.AtNs = append(c.AtNs, int64(tsCol.Value(i)))
+		{
+			src := nkCol.Value(i)
+			cp := make([]byte, len(src))
+			copy(cp, src)
+			c.NaturalKey = append(c.NaturalKey, cp)
+		}
+		c.At = append(c.At, time.Unix(0, int64(tsCol.Value(i))).UTC())
 		// --- symbol. ---
 		var symbolKindVal string
 		var symbolKindCount int
@@ -350,7 +360,7 @@ func WatchEventFillFromArrow[
 			}
 		}
 		if symbolKindCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Kind").Errorf("watchevent: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "Kind").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.Kind = append(c.Kind, symbolKindVal)
@@ -369,7 +379,7 @@ func WatchEventFillFromArrow[
 			}
 		}
 		if stringArrayNameCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Name").Errorf("watchevent: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "Name").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.Name = append(c.Name, stringArrayNameVal)
@@ -388,7 +398,7 @@ func WatchEventFillFromArrow[
 			}
 		}
 		if u32ArrayCookieCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Cookie").Errorf("watchevent: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "Cookie").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.Cookie = append(c.Cookie, u32ArrayCookieVal)
@@ -513,6 +523,7 @@ func (c *WatchEventColumns) Unmarshal(rec arrow.Record) (err error) {
 		c,
 		n,
 		r.EntityId.ValueId,
+		r.EntityId.ValueNaturalKey,
 		r.EntityTimestamp.ValueTs,
 		r.Symbol.Attributes, r.Symbol.Memberships,
 		r.StringArray.Attributes, r.StringArray.Memberships,

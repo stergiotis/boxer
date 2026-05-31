@@ -17,11 +17,12 @@
 //     RenameFrom/RenameTo pairing cookie. Zero on poller-backed
 //     watches.
 //
-// The producer-side Ts field maps directly to the codec's plain
-// `ts=AtNs` (already unix nanoseconds — `watcher.go` uses
-// `time.Now().UnixNano()` everywhere); no unit conversion needed,
-// unlike the task.* migrations.
+// The producer-side Ts field (unix nanoseconds — `watcher.go` uses
+// `time.Now().UnixNano()` everywhere) maps to the codec's plain
+// `ts=At` via `time.Unix(0, Ts)` at the boundary.
 package watchevent
+
+import "time"
 
 // WatchEvent is the flat wire form of one filesystem event.
 type WatchEvent struct {
@@ -29,9 +30,14 @@ type WatchEvent struct {
 
 	FactId uint64 `lw:",id"`
 
-	// AtNs is the event capture timestamp; producer-side already
-	// unix nanoseconds (no ms → ns conversion needed).
-	AtNs int64 `lw:",ts"`
+	// NaturalKey is the entity natural key; the facts SetId is 2-arg.
+	// These bus DTOs carry no separate key, so it stays the nil default.
+	NaturalKey []byte `lw:",naturalKey"`
+
+	// At is the event timestamp. time.Time matches the facts
+	// SetTimestamp signature directly (strict 1:1); the leeway wire
+	// truncates to u32 seconds, while the bus preserves full nanos.
+	At time.Time `lw:",ts"`
 
 	// Kind is fsbroker.WatchEventKindE.String() — the canonical
 	// rendering of the event class.

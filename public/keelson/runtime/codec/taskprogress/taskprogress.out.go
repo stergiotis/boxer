@@ -109,8 +109,9 @@ var taskProgressPool = sync.Pool{
 // TaskProgressColumns is the SoA storage for batches of TaskProgress rows.
 // All slices grow in lockstep — Len returns the row count.
 type TaskProgressColumns struct {
-	FactId []uint64
-	AtNs   []int64
+	FactId     []uint64
+	NaturalKey [][]byte
+	At         []time.Time
 
 	TaskId           []string
 	Current          []uint64
@@ -132,7 +133,8 @@ func (c *TaskProgressColumns) Len() int { return len(c.FactId) }
 // mutation. Scalar fields (T, Option[T]) are copied by value.
 func (c *TaskProgressColumns) Append(row TaskProgress) {
 	c.FactId = append(c.FactId, row.FactId)
-	c.AtNs = append(c.AtNs, row.AtNs)
+	c.NaturalKey = append(c.NaturalKey, row.NaturalKey)
+	c.At = append(c.At, row.At)
 	c.TaskId = append(c.TaskId, row.TaskId)
 	c.Current = append(c.Current, row.Current)
 	c.Total = append(c.Total, row.Total)
@@ -147,7 +149,8 @@ func (c *TaskProgressColumns) Append(row TaskProgress) {
 // defensive copy); scalar fields and Option[T] are copied.
 func (c *TaskProgressColumns) Row(i int) (row TaskProgress) {
 	row.FactId = c.FactId[i]
-	row.AtNs = c.AtNs[i]
+	row.NaturalKey = c.NaturalKey[i]
+	row.At = c.At[i]
 	row.TaskId = c.TaskId[i]
 	row.Current = c.Current[i]
 	row.Total = c.Total[i]
@@ -323,8 +326,8 @@ func TaskProgressBuildEntities[
 	n := c.Len()
 	for i := 0; i < n; i++ {
 		dml.BeginEntity()
-		dml.SetId(c.FactId[i], nil)
-		dml.SetTimestamp(time.Unix(0, c.AtNs[i]).UTC())
+		dml.SetId(c.FactId[i], c.NaturalKey[i])
+		dml.SetTimestamp(c.At[i])
 		// --- stringArray. ---
 		stringArraySec := dml.GetSectionStringArray()
 		stringArraySecAttr_TaskId := stringArraySec.BeginAttributeSingle(c.TaskId[i])
@@ -366,7 +369,7 @@ func TaskProgressBuildEntities[
 		textArraySec.EndSection()
 		err = dml.CommitEntity()
 		if err != nil {
-			err = eh.Errorf("taskprogress: commit row %d: %w", i, err)
+			err = eh.Errorf("commit row %d: %w", i, err)
 			return
 		}
 	}
@@ -467,6 +470,7 @@ func TaskProgressFillFromArrow[
 	c *TaskProgressColumns,
 	n int,
 	idCol *array.Uint64,
+	nkCol *array.Binary,
 	tsCol *array.Timestamp,
 	stringArrayAttrs StringArrayAttrs,
 	stringArrayMembs StringArrayMembs,
@@ -483,7 +487,13 @@ func TaskProgressFillFromArrow[
 ) (err error) {
 	for i := 0; i < n; i++ {
 		c.FactId = append(c.FactId, idCol.Value(i))
-		c.AtNs = append(c.AtNs, int64(tsCol.Value(i)))
+		{
+			src := nkCol.Value(i)
+			cp := make([]byte, len(src))
+			copy(cp, src)
+			c.NaturalKey = append(c.NaturalKey, cp)
+		}
+		c.At = append(c.At, time.Unix(0, int64(tsCol.Value(i))).UTC())
 		// --- stringArray. ---
 		var stringArrayTaskIdVal string
 		var stringArrayTaskIdCount int
@@ -499,7 +509,7 @@ func TaskProgressFillFromArrow[
 			}
 		}
 		if stringArrayTaskIdCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "TaskId").Errorf("taskprogress: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "TaskId").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.TaskId = append(c.TaskId, stringArrayTaskIdVal)
@@ -524,12 +534,12 @@ func TaskProgressFillFromArrow[
 			}
 		}
 		if u64ArrayCurrentCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Current").Errorf("taskprogress: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "Current").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.Current = append(c.Current, u64ArrayCurrentVal)
 		if u64ArrayTotalCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Total").Errorf("taskprogress: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "Total").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.Total = append(c.Total, u64ArrayTotalVal)
@@ -548,7 +558,7 @@ func TaskProgressFillFromArrow[
 			}
 		}
 		if symbolUnitCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Unit").Errorf("taskprogress: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "Unit").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.Unit = append(c.Unit, symbolUnitVal)
@@ -567,7 +577,7 @@ func TaskProgressFillFromArrow[
 			}
 		}
 		if f64ArrayThroughputPerSecCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "ThroughputPerSec").Errorf("taskprogress: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "ThroughputPerSec").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.ThroughputPerSec = append(c.ThroughputPerSec, f64ArrayThroughputPerSecVal)
@@ -586,7 +596,7 @@ func TaskProgressFillFromArrow[
 			}
 		}
 		if i64ArrayEtaMsCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "EtaMs").Errorf("taskprogress: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "EtaMs").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.EtaMs = append(c.EtaMs, i64ArrayEtaMsVal)
@@ -605,7 +615,7 @@ func TaskProgressFillFromArrow[
 			}
 		}
 		if textArrayNoteCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Note").Errorf("taskprogress: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "Note").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.Note = append(c.Note, textArrayNoteVal)
@@ -760,6 +770,7 @@ func (c *TaskProgressColumns) Unmarshal(rec arrow.Record) (err error) {
 		c,
 		n,
 		r.EntityId.ValueId,
+		r.EntityId.ValueNaturalKey,
 		r.EntityTimestamp.ValueTs,
 		r.StringArray.Attributes, r.StringArray.Memberships,
 		r.U64Array.Attributes, r.U64Array.Memberships,

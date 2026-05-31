@@ -3,7 +3,9 @@
 package dialogreply_test
 
 import (
+	"reflect"
 	"testing"
+	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/dialogreply"
@@ -20,7 +22,7 @@ func TestBuscodecAutoRegistersDialogReply(t *testing.T) {
 func TestBuscodecRoundTripApproved(t *testing.T) {
 	orig := dialogreply.DialogReply{
 		FactId:              1,
-		AtNs:                1_700_000_000_000_000_000,
+		At:                  time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 		Approved:            true,
 		HandleSubjectPrefix: "fs.handle.deadbeef",
 	}
@@ -32,7 +34,15 @@ func TestBuscodecRoundTripApproved(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
-	if got != orig {
+	// NaturalKey is an unused entity-key column; the sparse codec
+	// canonicalises its nil default to empty []byte. At is compared by
+	// instant (reflect.DeepEqual on time.Time is unreliable).
+	orig.NaturalKey = got.NaturalKey
+	if !got.At.Equal(orig.At) {
+		t.Errorf("At: got %v, want %v", got.At, orig.At)
+	}
+	got.At, orig.At = time.Time{}, time.Time{}
+	if !reflect.DeepEqual(got, orig) {
 		t.Errorf("roundtrip: got %+v, want %+v", got, orig)
 	}
 }
@@ -40,7 +50,7 @@ func TestBuscodecRoundTripApproved(t *testing.T) {
 func TestBuscodecRoundTripDenied(t *testing.T) {
 	orig := dialogreply.DialogReply{
 		FactId:   2,
-		AtNs:     1_700_000_000_000_000_000,
+		At:       time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 		Approved: false,
 		Reason:   "user cancelled",
 	}

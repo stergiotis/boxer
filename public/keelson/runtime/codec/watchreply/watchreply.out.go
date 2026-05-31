@@ -103,8 +103,9 @@ var watchReplyPool = sync.Pool{
 // WatchReplyColumns is the SoA storage for batches of WatchReply rows.
 // All slices grow in lockstep — Len returns the row count.
 type WatchReplyColumns struct {
-	FactId []uint64
-	AtNs   []int64
+	FactId     []uint64
+	NaturalKey [][]byte
+	At         []time.Time
 
 	Started      []bool
 	EventSubject []string
@@ -123,7 +124,8 @@ func (c *WatchReplyColumns) Len() int { return len(c.FactId) }
 // mutation. Scalar fields (T, Option[T]) are copied by value.
 func (c *WatchReplyColumns) Append(row WatchReply) {
 	c.FactId = append(c.FactId, row.FactId)
-	c.AtNs = append(c.AtNs, row.AtNs)
+	c.NaturalKey = append(c.NaturalKey, row.NaturalKey)
+	c.At = append(c.At, row.At)
 	c.Started = append(c.Started, row.Started)
 	c.EventSubject = append(c.EventSubject, row.EventSubject)
 	c.Backend = append(c.Backend, row.Backend)
@@ -135,7 +137,8 @@ func (c *WatchReplyColumns) Append(row WatchReply) {
 // defensive copy); scalar fields and Option[T] are copied.
 func (c *WatchReplyColumns) Row(i int) (row WatchReply) {
 	row.FactId = c.FactId[i]
-	row.AtNs = c.AtNs[i]
+	row.NaturalKey = c.NaturalKey[i]
+	row.At = c.At[i]
 	row.Started = c.Started[i]
 	row.EventSubject = c.EventSubject[i]
 	row.Backend = c.Backend[i]
@@ -266,8 +269,8 @@ func WatchReplyBuildEntities[
 	n := c.Len()
 	for i := 0; i < n; i++ {
 		dml.BeginEntity()
-		dml.SetId(c.FactId[i], nil)
-		dml.SetTimestamp(time.Unix(0, c.AtNs[i]).UTC())
+		dml.SetId(c.FactId[i], c.NaturalKey[i])
+		dml.SetTimestamp(c.At[i])
 		// --- bool. ---
 		boolSec := dml.GetSectionBool()
 		boolSecAttr_Started := boolSec.BeginAttribute(c.Started[i])
@@ -294,7 +297,7 @@ func WatchReplyBuildEntities[
 		textArraySec.EndSection()
 		err = dml.CommitEntity()
 		if err != nil {
-			err = eh.Errorf("watchreply: commit row %d: %w", i, err)
+			err = eh.Errorf("commit row %d: %w", i, err)
 			return
 		}
 	}
@@ -369,6 +372,7 @@ func WatchReplyFillFromArrow[
 	c *WatchReplyColumns,
 	n int,
 	idCol *array.Uint64,
+	nkCol *array.Binary,
 	tsCol *array.Timestamp,
 	boolAttrs BoolAttrs,
 	boolMembs BoolMembs,
@@ -381,7 +385,13 @@ func WatchReplyFillFromArrow[
 ) (err error) {
 	for i := 0; i < n; i++ {
 		c.FactId = append(c.FactId, idCol.Value(i))
-		c.AtNs = append(c.AtNs, int64(tsCol.Value(i)))
+		{
+			src := nkCol.Value(i)
+			cp := make([]byte, len(src))
+			copy(cp, src)
+			c.NaturalKey = append(c.NaturalKey, cp)
+		}
+		c.At = append(c.At, time.Unix(0, int64(tsCol.Value(i))).UTC())
 		// --- bool. ---
 		var boolStartedVal bool
 		var boolStartedCount int
@@ -397,7 +407,7 @@ func WatchReplyFillFromArrow[
 			}
 		}
 		if boolStartedCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Started").Errorf("watchreply: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "Started").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.Started = append(c.Started, boolStartedVal)
@@ -416,7 +426,7 @@ func WatchReplyFillFromArrow[
 			}
 		}
 		if stringArrayEventSubjectCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "EventSubject").Errorf("watchreply: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "EventSubject").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.EventSubject = append(c.EventSubject, stringArrayEventSubjectVal)
@@ -435,7 +445,7 @@ func WatchReplyFillFromArrow[
 			}
 		}
 		if symbolBackendCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Backend").Errorf("watchreply: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "Backend").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.Backend = append(c.Backend, symbolBackendVal)
@@ -454,7 +464,7 @@ func WatchReplyFillFromArrow[
 			}
 		}
 		if textArrayReasonCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Reason").Errorf("watchreply: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "Reason").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.Reason = append(c.Reason, textArrayReasonVal)
@@ -589,6 +599,7 @@ func (c *WatchReplyColumns) Unmarshal(rec arrow.Record) (err error) {
 		c,
 		n,
 		r.EntityId.ValueId,
+		r.EntityId.ValueNaturalKey,
 		r.EntityTimestamp.ValueTs,
 		r.Bool.Attributes, r.Bool.Memberships,
 		r.StringArray.Attributes, r.StringArray.Memberships,

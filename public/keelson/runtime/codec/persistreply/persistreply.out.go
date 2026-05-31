@@ -101,8 +101,9 @@ var persistReplyPool = sync.Pool{
 // PersistReplyColumns is the SoA storage for batches of PersistReply rows.
 // All slices grow in lockstep — Len returns the row count.
 type PersistReplyColumns struct {
-	FactId []uint64
-	AtNs   []int64
+	FactId     []uint64
+	NaturalKey [][]byte
+	At         []time.Time
 
 	Found  []bool
 	Value  [][]byte
@@ -120,7 +121,8 @@ func (c *PersistReplyColumns) Len() int { return len(c.FactId) }
 // mutation. Scalar fields (T, Option[T]) are copied by value.
 func (c *PersistReplyColumns) Append(row PersistReply) {
 	c.FactId = append(c.FactId, row.FactId)
-	c.AtNs = append(c.AtNs, row.AtNs)
+	c.NaturalKey = append(c.NaturalKey, row.NaturalKey)
+	c.At = append(c.At, row.At)
 	c.Found = append(c.Found, row.Found)
 	c.Value = append(c.Value, row.Value)
 	c.Reason = append(c.Reason, row.Reason)
@@ -131,7 +133,8 @@ func (c *PersistReplyColumns) Append(row PersistReply) {
 // defensive copy); scalar fields and Option[T] are copied.
 func (c *PersistReplyColumns) Row(i int) (row PersistReply) {
 	row.FactId = c.FactId[i]
-	row.AtNs = c.AtNs[i]
+	row.NaturalKey = c.NaturalKey[i]
+	row.At = c.At[i]
 	row.Found = c.Found[i]
 	row.Value = c.Value[i]
 	row.Reason = c.Reason[i]
@@ -240,8 +243,8 @@ func PersistReplyBuildEntities[
 	n := c.Len()
 	for i := 0; i < n; i++ {
 		dml.BeginEntity()
-		dml.SetId(c.FactId[i], nil)
-		dml.SetTimestamp(time.Unix(0, c.AtNs[i]).UTC())
+		dml.SetId(c.FactId[i], c.NaturalKey[i])
+		dml.SetTimestamp(c.At[i])
 		// --- bool. ---
 		boolSec := dml.GetSectionBool()
 		boolSecAttr_Found := boolSec.BeginAttribute(c.Found[i])
@@ -262,7 +265,7 @@ func PersistReplyBuildEntities[
 		textArraySec.EndSection()
 		err = dml.CommitEntity()
 		if err != nil {
-			err = eh.Errorf("persistreply: commit row %d: %w", i, err)
+			err = eh.Errorf("commit row %d: %w", i, err)
 			return
 		}
 	}
@@ -324,6 +327,7 @@ func PersistReplyFillFromArrow[
 	c *PersistReplyColumns,
 	n int,
 	idCol *array.Uint64,
+	nkCol *array.Binary,
 	tsCol *array.Timestamp,
 	boolAttrs BoolAttrs,
 	boolMembs BoolMembs,
@@ -334,7 +338,13 @@ func PersistReplyFillFromArrow[
 ) (err error) {
 	for i := 0; i < n; i++ {
 		c.FactId = append(c.FactId, idCol.Value(i))
-		c.AtNs = append(c.AtNs, int64(tsCol.Value(i)))
+		{
+			src := nkCol.Value(i)
+			cp := make([]byte, len(src))
+			copy(cp, src)
+			c.NaturalKey = append(c.NaturalKey, cp)
+		}
+		c.At = append(c.At, time.Unix(0, int64(tsCol.Value(i))).UTC())
 		// --- bool. ---
 		var boolFoundVal bool
 		var boolFoundCount int
@@ -350,7 +360,7 @@ func PersistReplyFillFromArrow[
 			}
 		}
 		if boolFoundCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Found").Errorf("persistreply: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "Found").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.Found = append(c.Found, boolFoundVal)
@@ -371,7 +381,7 @@ func PersistReplyFillFromArrow[
 			}
 		}
 		if blobArrayValueCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Value").Errorf("persistreply: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "Value").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.Value = append(c.Value, blobArrayValueVal)
@@ -390,7 +400,7 @@ func PersistReplyFillFromArrow[
 			}
 		}
 		if textArrayReasonCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Reason").Errorf("persistreply: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "Reason").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.Reason = append(c.Reason, textArrayReasonVal)
@@ -515,6 +525,7 @@ func (c *PersistReplyColumns) Unmarshal(rec arrow.Record) (err error) {
 		c,
 		n,
 		r.EntityId.ValueId,
+		r.EntityId.ValueNaturalKey,
 		r.EntityTimestamp.ValueTs,
 		r.Bool.Attributes, r.Bool.Memberships,
 		r.BlobArray.Attributes, r.BlobArray.Memberships,

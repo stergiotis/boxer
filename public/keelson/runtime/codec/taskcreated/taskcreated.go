@@ -21,9 +21,9 @@
 //   - Field rename `Id TaskIdT` → `TaskId string` (subject id moves
 //     into a string-section tagged column; the plain `id` slot is
 //     the fact-row id).
-//   - Field rename `AtMs` → `AtNs` (codec plain `ts` is nanoseconds;
-//     producers multiply `time.Now().UnixMilli()` by 1e6 at the wire
-//     boundary).
+//   - Field rename `AtMs` → `At` (codec plain `ts` is a `time.Time`;
+//     producers convert `time.Now().UnixMilli()` via `time.UnixMilli`
+//     at the wire boundary).
 //   - New `FactId uint64` plain `id` (per-row event sequence; the
 //     existing producer leaves it zero until a real sequencer lands —
 //     matching the taskprogress precedent).
@@ -36,6 +36,8 @@
 // estimate, OwnerTileKey=0 ⇒ no tile context). Mirrors capabilitygrant's
 // ExpiresAt sentinel approach instead of `option.Option[T]`.
 package taskcreated
+
+import "time"
 
 // TaskCreated is the wire payload published once at task spawn on
 // subject `task.<id>.created`. Observers consume this to build their
@@ -54,9 +56,14 @@ type TaskCreated struct {
 	// subject of the fact).
 	FactId uint64 `lw:",id"`
 
-	// AtNs is the spawn-time capture timestamp in unix nanoseconds;
-	// emitted as u32 seconds on the wire (4-byte DateTime).
-	AtNs int64 `lw:",ts"`
+	// NaturalKey is the entity natural key; the facts SetId is 2-arg.
+	// These bus DTOs carry no separate key, so it stays the nil default.
+	NaturalKey []byte `lw:",naturalKey"`
+
+	// At is the event timestamp. time.Time matches the facts
+	// SetTimestamp signature directly (strict 1:1); the leeway wire
+	// truncates to u32 seconds, while the bus preserves full nanos.
+	At time.Time `lw:",ts"`
 
 	// TaskId is the per-task identifier (a nanoid by default; see
 	// task.TaskIdT). Shared string-section column across task.*

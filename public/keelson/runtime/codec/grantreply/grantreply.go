@@ -18,8 +18,10 @@
 //
 //   - `Granted` → `Approved` (the wire vocabulary names it
 //     `grantApproved`; the Go field follows). Same boolean semantics.
-//   - New `FactId uint64` plain `id` and `AtNs int64` plain `ts`.
+//   - New `FactId uint64` plain `id` and `At time.Time` plain `ts`.
 package grantreply
+
+import "time"
 
 // GrantReply is the wire form of a capability-grant reply. The
 // Go-level [capbroker.GrantReply] keeps its existing shape
@@ -31,9 +33,14 @@ type GrantReply struct {
 	// FactId is the per-row event id.
 	FactId uint64 `lw:",id"`
 
-	// AtNs is the reply timestamp in unix nanoseconds; emitted as
-	// u32 seconds on the wire.
-	AtNs int64 `lw:",ts"`
+	// NaturalKey is the entity natural key; the facts SetId is 2-arg.
+	// These bus DTOs carry no separate key, so it stays the nil default.
+	NaturalKey []byte `lw:",naturalKey"`
+
+	// At is the event timestamp. time.Time matches the facts
+	// SetTimestamp signature directly (strict 1:1); the leeway wire
+	// truncates to u32 seconds, while the bus preserves full nanos.
+	At time.Time `lw:",ts"`
 
 	// Approved carries the policy decision.
 	Approved bool `lw:"grantApproved,bool"`

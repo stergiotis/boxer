@@ -32,9 +32,11 @@
 //     `filter.Direction.String()` at construction; consumers parse
 //     back with `app.ParseCapDirection(...)` (added in this
 //     migration).
-//   - New `FactId uint64` plain `id` and `AtNs int64` plain `ts`
+//   - New `FactId uint64` plain `id` and `At time.Time` plain `ts`
 //     (per the leeway grammar contract — every fact has both).
 package grantrequest
+
+import "time"
 
 // GrantRequest is the flat wire form of a capability-grant request.
 // The Go-level [capbroker.GrantRequest] keeps its nested-struct shape;
@@ -47,9 +49,14 @@ type GrantRequest struct {
 	// the TaskProgress migration).
 	FactId uint64 `lw:",id"`
 
-	// AtNs is the request timestamp in unix nanoseconds; emitted as
-	// u32 seconds on the wire.
-	AtNs int64 `lw:",ts"`
+	// NaturalKey is the entity natural key; the facts SetId is 2-arg.
+	// These bus DTOs carry no separate key, so it stays the nil default.
+	NaturalKey []byte `lw:",naturalKey"`
+
+	// At is the event timestamp. time.Time matches the facts
+	// SetTimestamp signature directly (strict 1:1); the leeway wire
+	// truncates to u32 seconds, while the bus preserves full nanos.
+	At time.Time `lw:",ts"`
 
 	// AppId names the app the grant targets. M2.3 logs but does not
 	// enforce a mismatch between AppId and Msg.Sender; M4 NKey-based

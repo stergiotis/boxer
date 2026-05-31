@@ -101,8 +101,9 @@ var grantReplyPool = sync.Pool{
 // GrantReplyColumns is the SoA storage for batches of GrantReply rows.
 // All slices grow in lockstep — Len returns the row count.
 type GrantReplyColumns struct {
-	FactId []uint64
-	AtNs   []int64
+	FactId     []uint64
+	NaturalKey [][]byte
+	At         []time.Time
 
 	Approved []bool
 	GrantId  []string
@@ -120,7 +121,8 @@ func (c *GrantReplyColumns) Len() int { return len(c.FactId) }
 // mutation. Scalar fields (T, Option[T]) are copied by value.
 func (c *GrantReplyColumns) Append(row GrantReply) {
 	c.FactId = append(c.FactId, row.FactId)
-	c.AtNs = append(c.AtNs, row.AtNs)
+	c.NaturalKey = append(c.NaturalKey, row.NaturalKey)
+	c.At = append(c.At, row.At)
 	c.Approved = append(c.Approved, row.Approved)
 	c.GrantId = append(c.GrantId, row.GrantId)
 	c.Reason = append(c.Reason, row.Reason)
@@ -131,7 +133,8 @@ func (c *GrantReplyColumns) Append(row GrantReply) {
 // defensive copy); scalar fields and Option[T] are copied.
 func (c *GrantReplyColumns) Row(i int) (row GrantReply) {
 	row.FactId = c.FactId[i]
-	row.AtNs = c.AtNs[i]
+	row.NaturalKey = c.NaturalKey[i]
+	row.At = c.At[i]
 	row.Approved = c.Approved[i]
 	row.GrantId = c.GrantId[i]
 	row.Reason = c.Reason[i]
@@ -240,8 +243,8 @@ func GrantReplyBuildEntities[
 	n := c.Len()
 	for i := 0; i < n; i++ {
 		dml.BeginEntity()
-		dml.SetId(c.FactId[i], nil)
-		dml.SetTimestamp(time.Unix(0, c.AtNs[i]).UTC())
+		dml.SetId(c.FactId[i], c.NaturalKey[i])
+		dml.SetTimestamp(c.At[i])
 		// --- bool. ---
 		boolSec := dml.GetSectionBool()
 		boolSecAttr_Approved := boolSec.BeginAttribute(c.Approved[i])
@@ -262,7 +265,7 @@ func GrantReplyBuildEntities[
 		textArraySec.EndSection()
 		err = dml.CommitEntity()
 		if err != nil {
-			err = eh.Errorf("grantreply: commit row %d: %w", i, err)
+			err = eh.Errorf("commit row %d: %w", i, err)
 			return
 		}
 	}
@@ -324,6 +327,7 @@ func GrantReplyFillFromArrow[
 	c *GrantReplyColumns,
 	n int,
 	idCol *array.Uint64,
+	nkCol *array.Binary,
 	tsCol *array.Timestamp,
 	boolAttrs BoolAttrs,
 	boolMembs BoolMembs,
@@ -334,7 +338,13 @@ func GrantReplyFillFromArrow[
 ) (err error) {
 	for i := 0; i < n; i++ {
 		c.FactId = append(c.FactId, idCol.Value(i))
-		c.AtNs = append(c.AtNs, int64(tsCol.Value(i)))
+		{
+			src := nkCol.Value(i)
+			cp := make([]byte, len(src))
+			copy(cp, src)
+			c.NaturalKey = append(c.NaturalKey, cp)
+		}
+		c.At = append(c.At, time.Unix(0, int64(tsCol.Value(i))).UTC())
 		// --- bool. ---
 		var boolApprovedVal bool
 		var boolApprovedCount int
@@ -350,7 +360,7 @@ func GrantReplyFillFromArrow[
 			}
 		}
 		if boolApprovedCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Approved").Errorf("grantreply: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "Approved").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.Approved = append(c.Approved, boolApprovedVal)
@@ -369,7 +379,7 @@ func GrantReplyFillFromArrow[
 			}
 		}
 		if stringArrayGrantIdCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "GrantId").Errorf("grantreply: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "GrantId").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.GrantId = append(c.GrantId, stringArrayGrantIdVal)
@@ -388,7 +398,7 @@ func GrantReplyFillFromArrow[
 			}
 		}
 		if textArrayReasonCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Reason").Errorf("grantreply: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "Reason").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.Reason = append(c.Reason, textArrayReasonVal)
@@ -513,6 +523,7 @@ func (c *GrantReplyColumns) Unmarshal(rec arrow.Record) (err error) {
 		c,
 		n,
 		r.EntityId.ValueId,
+		r.EntityId.ValueNaturalKey,
 		r.EntityTimestamp.ValueTs,
 		r.Bool.Attributes, r.Bool.Memberships,
 		r.StringArray.Attributes, r.StringArray.Memberships,

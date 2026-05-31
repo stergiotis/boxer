@@ -101,8 +101,9 @@ var taskErrorPool = sync.Pool{
 // TaskErrorColumns is the SoA storage for batches of TaskError rows.
 // All slices grow in lockstep — Len returns the row count.
 type TaskErrorColumns struct {
-	FactId []uint64
-	AtNs   []int64
+	FactId     []uint64
+	NaturalKey [][]byte
+	At         []time.Time
 
 	TaskId    []string
 	Reason    []string
@@ -120,7 +121,8 @@ func (c *TaskErrorColumns) Len() int { return len(c.FactId) }
 // mutation. Scalar fields (T, Option[T]) are copied by value.
 func (c *TaskErrorColumns) Append(row TaskError) {
 	c.FactId = append(c.FactId, row.FactId)
-	c.AtNs = append(c.AtNs, row.AtNs)
+	c.NaturalKey = append(c.NaturalKey, row.NaturalKey)
+	c.At = append(c.At, row.At)
 	c.TaskId = append(c.TaskId, row.TaskId)
 	c.Reason = append(c.Reason, row.Reason)
 	c.ErrorText = append(c.ErrorText, row.ErrorText)
@@ -131,7 +133,8 @@ func (c *TaskErrorColumns) Append(row TaskError) {
 // defensive copy); scalar fields and Option[T] are copied.
 func (c *TaskErrorColumns) Row(i int) (row TaskError) {
 	row.FactId = c.FactId[i]
-	row.AtNs = c.AtNs[i]
+	row.NaturalKey = c.NaturalKey[i]
+	row.At = c.At[i]
 	row.TaskId = c.TaskId[i]
 	row.Reason = c.Reason[i]
 	row.ErrorText = c.ErrorText[i]
@@ -219,8 +222,8 @@ func TaskErrorBuildEntities[
 	n := c.Len()
 	for i := 0; i < n; i++ {
 		dml.BeginEntity()
-		dml.SetId(c.FactId[i], nil)
-		dml.SetTimestamp(time.Unix(0, c.AtNs[i]).UTC())
+		dml.SetId(c.FactId[i], c.NaturalKey[i])
+		dml.SetTimestamp(c.At[i])
 		// --- stringArray. ---
 		stringArraySec := dml.GetSectionStringArray()
 		stringArraySecAttr_TaskId := stringArraySec.BeginAttributeSingle(c.TaskId[i])
@@ -238,7 +241,7 @@ func TaskErrorBuildEntities[
 		textArraySec.EndSection()
 		err = dml.CommitEntity()
 		if err != nil {
-			err = eh.Errorf("taskerror: commit row %d: %w", i, err)
+			err = eh.Errorf("commit row %d: %w", i, err)
 			return
 		}
 	}
@@ -287,6 +290,7 @@ func TaskErrorFillFromArrow[
 	c *TaskErrorColumns,
 	n int,
 	idCol *array.Uint64,
+	nkCol *array.Binary,
 	tsCol *array.Timestamp,
 	stringArrayAttrs StringArrayAttrs,
 	stringArrayMembs StringArrayMembs,
@@ -295,7 +299,13 @@ func TaskErrorFillFromArrow[
 ) (err error) {
 	for i := 0; i < n; i++ {
 		c.FactId = append(c.FactId, idCol.Value(i))
-		c.AtNs = append(c.AtNs, int64(tsCol.Value(i)))
+		{
+			src := nkCol.Value(i)
+			cp := make([]byte, len(src))
+			copy(cp, src)
+			c.NaturalKey = append(c.NaturalKey, cp)
+		}
+		c.At = append(c.At, time.Unix(0, int64(tsCol.Value(i))).UTC())
 		// --- stringArray. ---
 		var stringArrayTaskIdVal string
 		var stringArrayTaskIdCount int
@@ -311,7 +321,7 @@ func TaskErrorFillFromArrow[
 			}
 		}
 		if stringArrayTaskIdCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "TaskId").Errorf("taskerror: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "TaskId").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.TaskId = append(c.TaskId, stringArrayTaskIdVal)
@@ -336,12 +346,12 @@ func TaskErrorFillFromArrow[
 			}
 		}
 		if textArrayReasonCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Reason").Errorf("taskerror: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "Reason").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.Reason = append(c.Reason, textArrayReasonVal)
 		if textArrayErrorTextCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "ErrorText").Errorf("taskerror: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "ErrorText").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.ErrorText = append(c.ErrorText, textArrayErrorTextVal)
@@ -456,6 +466,7 @@ func (c *TaskErrorColumns) Unmarshal(rec arrow.Record) (err error) {
 		c,
 		n,
 		r.EntityId.ValueId,
+		r.EntityId.ValueNaturalKey,
 		r.EntityTimestamp.ValueTs,
 		r.StringArray.Attributes, r.StringArray.Memberships,
 		r.TextArray.Attributes, r.TextArray.Memberships,

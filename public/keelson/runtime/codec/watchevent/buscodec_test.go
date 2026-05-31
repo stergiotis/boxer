@@ -3,7 +3,9 @@
 package watchevent_test
 
 import (
+	"reflect"
 	"testing"
+	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/watchevent"
@@ -20,7 +22,7 @@ func TestBuscodecAutoRegistersWatchEvent(t *testing.T) {
 func TestBuscodecRoundTrip(t *testing.T) {
 	orig := watchevent.WatchEvent{
 		FactId: 1,
-		AtNs:   1_700_000_000_000_000_000,
+		At:     time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 		Kind:   "create",
 		Name:   "sub/file.txt",
 		Cookie: 42,
@@ -33,7 +35,15 @@ func TestBuscodecRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
-	if got != orig {
+	// NaturalKey is an unused entity-key column; the sparse codec
+	// canonicalises its nil default to empty []byte. At is compared by
+	// instant (reflect.DeepEqual on time.Time is unreliable).
+	orig.NaturalKey = got.NaturalKey
+	if !got.At.Equal(orig.At) {
+		t.Errorf("At: got %v, want %v", got.At, orig.At)
+	}
+	got.At, orig.At = time.Time{}, time.Time{}
+	if !reflect.DeepEqual(got, orig) {
 		t.Errorf("roundtrip: got %+v, want %+v", got, orig)
 	}
 }
@@ -47,7 +57,7 @@ func TestBuscodecRoundTripKindVariants(t *testing.T) {
 		t.Run(k, func(t *testing.T) {
 			orig := watchevent.WatchEvent{
 				FactId: 1,
-				AtNs:   1_700_000_000_000_000_000,
+				At:     time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 				Kind:   k,
 			}
 			wire, err := buscodec.Encode(orig)
@@ -70,7 +80,7 @@ func TestBuscodecRoundTripRootEvent(t *testing.T) {
 	// the zero-value sentinel survives.
 	orig := watchevent.WatchEvent{
 		FactId: 2,
-		AtNs:   1_700_000_000_000_000_000,
+		At:     time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 		Kind:   "closed",
 	}
 	wire, err := buscodec.Encode(orig)

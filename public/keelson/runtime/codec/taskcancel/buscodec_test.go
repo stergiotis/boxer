@@ -4,6 +4,7 @@ package taskcancel_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/taskcancel"
@@ -12,7 +13,7 @@ import (
 func sampleCancel() taskcancel.TaskCancel {
 	return taskcancel.TaskCancel{
 		FactId: 9,
-		AtNs:   1_700_000_000_000_000_000,
+		At:     time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 		TaskId: "task-abc123",
 		Reason: "user clicked cancel",
 	}
@@ -40,8 +41,8 @@ func TestBuscodecRoundTrip(t *testing.T) {
 	if got.FactId != orig.FactId {
 		t.Errorf("FactId: got %v, want %v", got.FactId, orig.FactId)
 	}
-	if got.AtNs != orig.AtNs {
-		t.Errorf("AtNs: got %v, want %v", got.AtNs, orig.AtNs)
+	if !got.At.Equal(orig.At) {
+		t.Errorf("At: got %v, want %v", got.At, orig.At)
 	}
 	if got.TaskId != orig.TaskId {
 		t.Errorf("TaskId: got %q, want %q", got.TaskId, orig.TaskId)
@@ -57,7 +58,7 @@ func TestBuscodecRoundTripEmptyReason(t *testing.T) {
 	// reconstruct as the literal empty string.
 	orig := taskcancel.TaskCancel{
 		FactId: 1,
-		AtNs:   1_700_000_000_000_000_000,
+		At:     time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 		TaskId: "task-no-reason",
 	}
 	wire, err := buscodec.Encode(orig)
@@ -77,7 +78,7 @@ func TestBuscodecAtNsLosslessNanoPrecision(t *testing.T) {
 	// z64 wire → sub-second nanos round-trip losslessly.
 	orig := taskcancel.TaskCancel{
 		FactId: 1,
-		AtNs:   1_700_000_000_555_555_555,
+		At:     time.Unix(0, 1_700_000_000_555_555_555).UTC(),
 		TaskId: "task-precision",
 	}
 	wire, err := buscodec.Encode(orig)
@@ -88,7 +89,7 @@ func TestBuscodecAtNsLosslessNanoPrecision(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
-	if got.AtNs != orig.AtNs {
-		t.Errorf("AtNs: got %v, want %v (nanos must round-trip lossless)", got.AtNs, orig.AtNs)
+	if !got.At.Equal(orig.At) {
+		t.Errorf("At: got %v, want %v (nanos must round-trip lossless)", got.At, orig.At)
 	}
 }

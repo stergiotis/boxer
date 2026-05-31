@@ -14,14 +14,22 @@
 // callers that publish nil to use defaults stay wire-compatible.
 package watchrequest
 
+import "time"
+
 // WatchRequest is the flat wire form of a watch request.
 type WatchRequest struct {
 	_ struct{} `kind:"watchRequest"`
 
 	FactId uint64 `lw:",id"`
 
-	// AtNs is the request timestamp; stamped at marshal time.
-	AtNs int64 `lw:",ts"`
+	// NaturalKey is the entity natural key; the facts SetId is 2-arg.
+	// These bus DTOs carry no separate key, so it stays the nil default.
+	NaturalKey []byte `lw:",naturalKey"`
+
+	// At is the event timestamp. time.Time matches the facts
+	// SetTimestamp signature directly (strict 1:1); the leeway wire
+	// truncates to u32 seconds, while the bus preserves full nanos.
+	At time.Time `lw:",ts"`
 
 	// PollFallback forces the poller backend regardless of the
 	// underlying filesystem.

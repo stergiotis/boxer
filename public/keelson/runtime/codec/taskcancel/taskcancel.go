@@ -18,8 +18,8 @@
 //
 //   - `Id TaskIdT` → `TaskId string` (subject id moves out of the
 //     plain `id` slot into a string-section tagged column).
-//   - `AtMs` → `AtNs` (codec plain `ts` is nanoseconds; producers
-//     multiply UnixMilli by 1e6 at the wire boundary).
+//   - `AtMs` → `At` (codec plain `ts` is a `time.Time`; producers
+//     convert via `time.UnixMilli` at the wire boundary).
 //   - New `FactId uint64` plain `id` (per-row event sequence;
 //     currently left zero — see the TaskProgress migration entry for
 //     the producer-side sequencer follow-up).
@@ -29,6 +29,8 @@
 // nil-payload case keeps cancel-with-no-reason callers
 // wire-compatible across the migration.
 package taskcancel
+
+import "time"
 
 // TaskCancel is the wire payload a consumer publishes on
 // `task.<id>.cancel`. The producer's handle subscribes to this and
@@ -40,9 +42,14 @@ type TaskCancel struct {
 	// subject of the cancel request).
 	FactId uint64 `lw:",id"`
 
-	// AtNs is the cancellation timestamp in unix nanoseconds;
-	// emitted as u32 seconds on the wire.
-	AtNs int64 `lw:",ts"`
+	// NaturalKey is the entity natural key; the facts SetId is 2-arg.
+	// These bus DTOs carry no separate key, so it stays the nil default.
+	NaturalKey []byte `lw:",naturalKey"`
+
+	// At is the event timestamp. time.Time matches the facts
+	// SetTimestamp signature directly (strict 1:1); the leeway wire
+	// truncates to u32 seconds, while the bus preserves full nanos.
+	At time.Time `lw:",ts"`
 
 	// TaskId names the task whose cancellation is being requested.
 	TaskId string `lw:"taskId,stringArray"`

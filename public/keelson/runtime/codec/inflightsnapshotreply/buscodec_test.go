@@ -5,6 +5,7 @@ package inflightsnapshotreply_test
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/inflightsnapshotreply"
@@ -13,7 +14,7 @@ import (
 func sampleReply() inflightsnapshotreply.InflightSnapshotReply {
 	return inflightsnapshotreply.InflightSnapshotReply{
 		FactId:       1,
-		AtNs:         1_700_000_000_000_000_000,
+		At:           time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 		Ids:          []string{"task-a", "task-b", "task-c"},
 		Kinds:        []string{"ch.export", "ch.import", "ch.export"},
 		Titles:       []string{"Export A", "Import B", "Export C"},
@@ -93,7 +94,7 @@ func TestBuscodecRoundTripEmptySnapshot(t *testing.T) {
 	// state and decode back as zero entries.
 	orig := inflightsnapshotreply.InflightSnapshotReply{
 		FactId: 1,
-		AtNs:   1_700_000_000_000_000_000,
+		At:     time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 	}
 	wire, err := buscodec.Encode(orig)
 	if err != nil {
@@ -113,7 +114,7 @@ func TestBuscodecRoundTripSingleEntry(t *testing.T) {
 	// parallel-array pattern doesn't require N≥2 to round-trip.
 	orig := inflightsnapshotreply.InflightSnapshotReply{
 		FactId:       1,
-		AtNs:         1_700_000_000_000_000_000,
+		At:           time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 		Ids:          []string{"task-solo"},
 		Kinds:        []string{"ch.export"},
 		Titles:       []string{"Solo"},

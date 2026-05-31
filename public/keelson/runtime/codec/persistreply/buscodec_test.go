@@ -5,6 +5,7 @@ package persistreply_test
 import (
 	"bytes"
 	"testing"
+	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/persistreply"
@@ -22,7 +23,7 @@ func TestBuscodecRoundTripGetHit(t *testing.T) {
 	// Successful Get: Found=true, Value populated, Reason empty.
 	orig := persistreply.PersistReply{
 		FactId: 1,
-		AtNs:   1_700_000_000_000_000_000,
+		At:     time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 		Found:  true,
 		Value:  []byte{0x01, 0x02, 0xff, 0x00},
 	}
@@ -51,7 +52,7 @@ func TestBuscodecRoundTripGetMiss(t *testing.T) {
 	// success-with-no-value path doesn't confuse the failure path.
 	orig := persistreply.PersistReply{
 		FactId: 2,
-		AtNs:   1_700_000_000_000_000_000,
+		At:     time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 	}
 	wire, err := buscodec.Encode(orig)
 	if err != nil {
@@ -79,7 +80,7 @@ func TestBuscodecRoundTripFailure(t *testing.T) {
 	// WatchReply.Reason, etc.
 	orig := persistreply.PersistReply{
 		FactId: 3,
-		AtNs:   1_700_000_000_000_000_000,
+		At:     time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 		Reason: "backend: connection refused",
 	}
 	wire, err := buscodec.Encode(orig)
@@ -111,7 +112,7 @@ func TestBuscodecRoundTripBinaryValue(t *testing.T) {
 	}
 	orig := persistreply.PersistReply{
 		FactId: 4,
-		AtNs:   1_700_000_000_000_000_000,
+		At:     time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 		Found:  true,
 		Value:  payload,
 	}

@@ -24,6 +24,8 @@
 // vocabulary term.
 package persistreply
 
+import "time"
+
 // PersistReply is the flat wire form of a runtime.persist reply.
 type PersistReply struct {
 	_ struct{} `kind:"persistReply"`
@@ -31,9 +33,14 @@ type PersistReply struct {
 	// FactId is the per-row event id.
 	FactId uint64 `lw:",id"`
 
-	// AtNs is the reply timestamp in unix nanoseconds; stamped at
-	// marshal time inside persist.MarshalReply.
-	AtNs int64 `lw:",ts"`
+	// NaturalKey is the entity natural key; the facts SetId is 2-arg.
+	// These bus DTOs carry no separate key, so it stays the nil default.
+	NaturalKey []byte `lw:",naturalKey"`
+
+	// At is the event timestamp. time.Time matches the facts
+	// SetTimestamp signature directly (strict 1:1); the leeway wire
+	// truncates to u32 seconds, while the bus preserves full nanos.
+	At time.Time `lw:",ts"`
 
 	// Found is true when a Get located the requested key. False
 	// for missing keys on Get, and for Set / Delete replies in

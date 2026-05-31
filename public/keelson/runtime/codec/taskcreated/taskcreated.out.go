@@ -111,8 +111,9 @@ var taskCreatedPool = sync.Pool{
 // TaskCreatedColumns is the SoA storage for batches of TaskCreated rows.
 // All slices grow in lockstep — Len returns the row count.
 type TaskCreatedColumns struct {
-	FactId []uint64
-	AtNs   []int64
+	FactId     []uint64
+	NaturalKey [][]byte
+	At         []time.Time
 
 	TaskId       []string
 	Kind         []string
@@ -135,7 +136,8 @@ func (c *TaskCreatedColumns) Len() int { return len(c.FactId) }
 // mutation. Scalar fields (T, Option[T]) are copied by value.
 func (c *TaskCreatedColumns) Append(row TaskCreated) {
 	c.FactId = append(c.FactId, row.FactId)
-	c.AtNs = append(c.AtNs, row.AtNs)
+	c.NaturalKey = append(c.NaturalKey, row.NaturalKey)
+	c.At = append(c.At, row.At)
 	c.TaskId = append(c.TaskId, row.TaskId)
 	c.Kind = append(c.Kind, row.Kind)
 	c.Title = append(c.Title, row.Title)
@@ -151,7 +153,8 @@ func (c *TaskCreatedColumns) Append(row TaskCreated) {
 // defensive copy); scalar fields and Option[T] are copied.
 func (c *TaskCreatedColumns) Row(i int) (row TaskCreated) {
 	row.FactId = c.FactId[i]
-	row.AtNs = c.AtNs[i]
+	row.NaturalKey = c.NaturalKey[i]
+	row.At = c.At[i]
 	row.TaskId = c.TaskId[i]
 	row.Kind = c.Kind[i]
 	row.Title = c.Title[i]
@@ -328,8 +331,8 @@ func TaskCreatedBuildEntities[
 	n := c.Len()
 	for i := 0; i < n; i++ {
 		dml.BeginEntity()
-		dml.SetId(c.FactId[i], nil)
-		dml.SetTimestamp(time.Unix(0, c.AtNs[i]).UTC())
+		dml.SetId(c.FactId[i], c.NaturalKey[i])
+		dml.SetTimestamp(c.At[i])
 		// --- stringArray. ---
 		stringArraySec := dml.GetSectionStringArray()
 		stringArraySecAttr_TaskId := stringArraySec.BeginAttributeSingle(c.TaskId[i])
@@ -374,7 +377,7 @@ func TaskCreatedBuildEntities[
 		i64ArraySec.EndSection()
 		err = dml.CommitEntity()
 		if err != nil {
-			err = eh.Errorf("taskcreated: commit row %d: %w", i, err)
+			err = eh.Errorf("commit row %d: %w", i, err)
 			return
 		}
 	}
@@ -475,6 +478,7 @@ func TaskCreatedFillFromArrow[
 	c *TaskCreatedColumns,
 	n int,
 	idCol *array.Uint64,
+	nkCol *array.Binary,
 	tsCol *array.Timestamp,
 	stringArrayAttrs StringArrayAttrs,
 	stringArrayMembs StringArrayMembs,
@@ -491,7 +495,13 @@ func TaskCreatedFillFromArrow[
 ) (err error) {
 	for i := 0; i < n; i++ {
 		c.FactId = append(c.FactId, idCol.Value(i))
-		c.AtNs = append(c.AtNs, int64(tsCol.Value(i)))
+		{
+			src := nkCol.Value(i)
+			cp := make([]byte, len(src))
+			copy(cp, src)
+			c.NaturalKey = append(c.NaturalKey, cp)
+		}
+		c.At = append(c.At, time.Unix(0, int64(tsCol.Value(i))).UTC())
 		// --- stringArray. ---
 		var stringArrayTaskIdVal string
 		var stringArrayTaskIdCount int
@@ -519,17 +529,17 @@ func TaskCreatedFillFromArrow[
 			}
 		}
 		if stringArrayTaskIdCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "TaskId").Errorf("taskcreated: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "TaskId").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.TaskId = append(c.TaskId, stringArrayTaskIdVal)
 		if stringArrayOwnerAppIdCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "OwnerAppId").Errorf("taskcreated: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "OwnerAppId").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.OwnerAppId = append(c.OwnerAppId, stringArrayOwnerAppIdVal)
 		if stringArrayOwnerRunIdCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "OwnerRunId").Errorf("taskcreated: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "OwnerRunId").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.OwnerRunId = append(c.OwnerRunId, stringArrayOwnerRunIdVal)
@@ -548,7 +558,7 @@ func TaskCreatedFillFromArrow[
 			}
 		}
 		if symbolKindCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Kind").Errorf("taskcreated: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "Kind").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.Kind = append(c.Kind, symbolKindVal)
@@ -567,7 +577,7 @@ func TaskCreatedFillFromArrow[
 			}
 		}
 		if textArrayTitleCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Title").Errorf("taskcreated: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "Title").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.Title = append(c.Title, textArrayTitleVal)
@@ -586,7 +596,7 @@ func TaskCreatedFillFromArrow[
 			}
 		}
 		if u64ArrayOwnerTileKeyCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "OwnerTileKey").Errorf("taskcreated: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "OwnerTileKey").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.OwnerTileKey = append(c.OwnerTileKey, u64ArrayOwnerTileKeyVal)
@@ -605,7 +615,7 @@ func TaskCreatedFillFromArrow[
 			}
 		}
 		if boolCancellableBCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "CancellableB").Errorf("taskcreated: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "CancellableB").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.CancellableB = append(c.CancellableB, boolCancellableBVal)
@@ -624,7 +634,7 @@ func TaskCreatedFillFromArrow[
 			}
 		}
 		if i64ArrayEstimatedMsCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "EstimatedMs").Errorf("taskcreated: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "EstimatedMs").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.EstimatedMs = append(c.EstimatedMs, i64ArrayEstimatedMsVal)
@@ -779,6 +789,7 @@ func (c *TaskCreatedColumns) Unmarshal(rec arrow.Record) (err error) {
 		c,
 		n,
 		r.EntityId.ValueId,
+		r.EntityId.ValueNaturalKey,
 		r.EntityTimestamp.ValueTs,
 		r.StringArray.Attributes, r.StringArray.Memberships,
 		r.Symbol.Attributes, r.Symbol.Memberships,

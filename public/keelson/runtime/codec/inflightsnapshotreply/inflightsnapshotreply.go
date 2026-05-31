@@ -28,10 +28,12 @@
 //     existing `task.InflightSnapshotReply` Go shape stays unchanged;
 //     translation happens at the codec boundary in
 //     [task.MarshalInflightSnapshotReply] / `UnmarshalInflightSnapshotReply`.
-//   - `AtMs` → `AtNs` (codec plain `ts` is nanoseconds; producers
-//     multiply UnixMilli by 1e6 at the wire boundary).
+//   - `AtMs` → `At` (codec plain `ts` is a `time.Time`; producers
+//     convert via `time.UnixMilli` at the wire boundary).
 //   - New `FactId uint64` plain `id`.
 package inflightsnapshotreply
+
+import "time"
 
 // InflightSnapshotReply is the flat parallel-array wire form of the
 // supervisor's list-inflight reply. All eleven entry-field slices
@@ -43,8 +45,14 @@ type InflightSnapshotReply struct {
 
 	FactId uint64 `lw:",id"`
 
-	// AtNs is the snapshot-sampling timestamp in unix nanoseconds.
-	AtNs int64 `lw:",ts"`
+	// NaturalKey is the entity natural key; the facts SetId is 2-arg.
+	// These bus DTOs carry no separate key, so it stays the nil default.
+	NaturalKey []byte `lw:",naturalKey"`
+
+	// At is the event timestamp. time.Time matches the facts
+	// SetTimestamp signature directly (strict 1:1); the leeway wire
+	// truncates to u32 seconds, while the bus preserves full nanos.
+	At time.Time `lw:",ts"`
 
 	// Per-entry parallel arrays. Each slice's element at index i
 	// describes the i-th in-flight task.

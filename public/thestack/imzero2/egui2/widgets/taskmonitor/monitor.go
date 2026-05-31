@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/dustin/go-humanize"
 	"github.com/stergiotis/boxer/public/containers"
@@ -91,7 +92,7 @@ type inflightRow struct {
 type historyRow struct {
 	created   taskcreated.TaskCreated
 	progress  taskprogress.TaskProgress // last seen, may be zero
-	final     string            // "done" | "error" | "cancelled"
+	final     string                    // "done" | "error" | "cancelled"
 	finalAt   int64
 	reason    string
 	errorText string
@@ -185,7 +186,7 @@ func (inst *Inst) seedFromSnapshot(entries []task.InflightSnapshotEntry) {
 			Kind:       e.Kind,
 			Title:      e.Title,
 			OwnerAppId: string(e.OwnerAppId),
-			AtNs:       e.CreatedAtMs * 1_000_000,
+			At:         time.UnixMilli(e.CreatedAtMs).UTC(),
 		}
 		progress := taskprogress.TaskProgress{
 			TaskId:  string(e.Id),
@@ -193,7 +194,7 @@ func (inst *Inst) seedFromSnapshot(entries []task.InflightSnapshotEntry) {
 			Total:   e.Total,
 			Unit:    e.Unit,
 			EtaMs:   e.EtaMs,
-			AtNs:    e.LastEmitMs * 1_000_000,
+			At:      time.UnixMilli(e.LastEmitMs).UTC(),
 		}
 		inst.inflight.UpsertSingle(e.Id, &inflightRow{
 			created: created,
@@ -226,7 +227,7 @@ func (inst *Inst) OnCancel(cn taskcancel.TaskCancel) {
 	defer inst.mu.Unlock()
 	if row, ok := inst.inflight.Get(task.TaskIdT(cn.TaskId)); ok {
 		row.pending = true
-		row.cancelAt = cn.AtNs / 1_000_000
+		row.cancelAt = cn.At.UnixMilli()
 		if row.latest.Note == "" {
 			row.latest.Note = "cancelling…"
 		}
@@ -234,11 +235,11 @@ func (inst *Inst) OnCancel(cn taskcancel.TaskCancel) {
 }
 
 func (inst *Inst) OnDone(d taskdone.TaskDone) {
-	inst.terminal(task.TaskIdT(d.TaskId), "done", d.AtNs/1_000_000, "", nil)
+	inst.terminal(task.TaskIdT(d.TaskId), "done", d.At.UnixMilli(), "", nil)
 }
 
 func (inst *Inst) OnError(e taskerror.TaskError) {
-	inst.terminal(task.TaskIdT(e.TaskId), "error", e.AtNs/1_000_000, e.Reason, []byte(e.ErrorText))
+	inst.terminal(task.TaskIdT(e.TaskId), "error", e.At.UnixMilli(), e.Reason, []byte(e.ErrorText))
 }
 
 func (inst *Inst) terminal(id task.TaskIdT, final string, atMs int64, reason string, errorBytes []byte) {
@@ -386,7 +387,7 @@ func humanizeRow(p taskprogress.TaskProgress, pending bool) (s string) {
 		s = "cancelling…"
 		return
 	}
-	if p.AtNs == 0 {
+	if p.At.IsZero() {
 		s = "starting…"
 		return
 	}

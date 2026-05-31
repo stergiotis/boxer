@@ -9,7 +9,6 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/taskcancel"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/taskcreated"
@@ -18,6 +17,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/taskprogress"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // DefaultHeartbeatThresholdMs is the no-emission gap after which an
@@ -239,7 +239,7 @@ func (inst *Supervisor) identityFields(taskId task.TaskIdT, kind, title string, 
 }
 
 func (inst *Supervisor) OnCreated(c taskcreated.TaskCreated) {
-	createdAtMs := c.AtNs / 1_000_000
+	createdAtMs := c.At.UnixMilli()
 	taskId := task.TaskIdT(c.TaskId)
 	inst.mu.Lock()
 	inst.inflight[taskId] = &entry{
@@ -267,7 +267,7 @@ func (inst *Supervisor) OnProgress(p taskprogress.TaskProgress) {
 		return
 	}
 	e.progress = p
-	e.lastEmitMs = p.AtNs / 1_000_000
+	e.lastEmitMs = p.At.UnixMilli()
 	// Progress emission proves the producer is alive — clear any
 	// pending abandoned label so the snapshot reflects recovery.
 	if e.state == InflightStateAbandoned {
@@ -276,7 +276,7 @@ func (inst *Supervisor) OnProgress(p taskprogress.TaskProgress) {
 }
 
 func (inst *Supervisor) OnCancel(c taskcancel.TaskCancel) {
-	cancelAtMs := c.AtNs / 1_000_000
+	cancelAtMs := c.At.UnixMilli()
 	taskId := task.TaskIdT(c.TaskId)
 	inst.mu.Lock()
 	var owner app.AppIdT
@@ -310,7 +310,7 @@ func (inst *Supervisor) OnCancel(c taskcancel.TaskCancel) {
 }
 
 func (inst *Supervisor) OnDone(d taskdone.TaskDone) {
-	doneAtMs := d.AtNs / 1_000_000
+	doneAtMs := d.At.UnixMilli()
 	taskId := task.TaskIdT(d.TaskId)
 	inst.mu.Lock()
 	var kind, title, runId string
@@ -321,7 +321,7 @@ func (inst *Supervisor) OnDone(d taskdone.TaskDone) {
 		kind = e.created.Kind
 		title = e.created.Title
 		owner = app.AppIdT(e.created.OwnerAppId)
-		startedMs = e.created.AtNs / 1_000_000
+		startedMs = e.created.At.UnixMilli()
 		tileKey = e.created.OwnerTileKey
 		runId = e.created.OwnerRunId
 		delete(inst.inflight, taskId)
@@ -350,7 +350,7 @@ func (inst *Supervisor) OnDone(d taskdone.TaskDone) {
 }
 
 func (inst *Supervisor) OnError(e taskerror.TaskError) {
-	errAtMs := e.AtNs / 1_000_000
+	errAtMs := e.At.UnixMilli()
 	taskId := task.TaskIdT(e.TaskId)
 	inst.mu.Lock()
 	var kind, title, runId string
@@ -361,7 +361,7 @@ func (inst *Supervisor) OnError(e taskerror.TaskError) {
 		kind = ent.created.Kind
 		title = ent.created.Title
 		owner = app.AppIdT(ent.created.OwnerAppId)
-		startedMs = ent.created.AtNs / 1_000_000
+		startedMs = ent.created.At.UnixMilli()
 		tileKey = ent.created.OwnerTileKey
 		runId = ent.created.OwnerRunId
 		delete(inst.inflight, taskId)
@@ -472,10 +472,10 @@ func (inst *Supervisor) buildSnapshotReply() (reply task.InflightSnapshotReply) 
 			Title:       e.created.Title,
 			OwnerAppId:  app.AppIdT(e.created.OwnerAppId),
 			State:       e.state.String(),
-			CreatedAtMs: e.created.AtNs / 1_000_000,
+			CreatedAtMs: e.created.At.UnixMilli(),
 			LastEmitMs:  e.lastEmitMs,
 		}
-		if e.progress.AtNs > 0 {
+		if !e.progress.At.IsZero() {
 			entry.Current = e.progress.Current
 			entry.Total = e.progress.Total
 			entry.Unit = e.progress.Unit

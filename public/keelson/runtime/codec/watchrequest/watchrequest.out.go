@@ -101,8 +101,9 @@ var watchRequestPool = sync.Pool{
 // WatchRequestColumns is the SoA storage for batches of WatchRequest rows.
 // All slices grow in lockstep — Len returns the row count.
 type WatchRequestColumns struct {
-	FactId []uint64
-	AtNs   []int64
+	FactId     []uint64
+	NaturalKey [][]byte
+	At         []time.Time
 
 	PollFallback   []bool
 	PollIntervalMs []int32
@@ -120,7 +121,8 @@ func (c *WatchRequestColumns) Len() int { return len(c.FactId) }
 // mutation. Scalar fields (T, Option[T]) are copied by value.
 func (c *WatchRequestColumns) Append(row WatchRequest) {
 	c.FactId = append(c.FactId, row.FactId)
-	c.AtNs = append(c.AtNs, row.AtNs)
+	c.NaturalKey = append(c.NaturalKey, row.NaturalKey)
+	c.At = append(c.At, row.At)
 	c.PollFallback = append(c.PollFallback, row.PollFallback)
 	c.PollIntervalMs = append(c.PollIntervalMs, row.PollIntervalMs)
 	c.Recursive = append(c.Recursive, row.Recursive)
@@ -131,7 +133,8 @@ func (c *WatchRequestColumns) Append(row WatchRequest) {
 // defensive copy); scalar fields and Option[T] are copied.
 func (c *WatchRequestColumns) Row(i int) (row WatchRequest) {
 	row.FactId = c.FactId[i]
-	row.AtNs = c.AtNs[i]
+	row.NaturalKey = c.NaturalKey[i]
+	row.At = c.At[i]
 	row.PollFallback = c.PollFallback[i]
 	row.PollIntervalMs = c.PollIntervalMs[i]
 	row.Recursive = c.Recursive[i]
@@ -219,8 +222,8 @@ func WatchRequestBuildEntities[
 	n := c.Len()
 	for i := 0; i < n; i++ {
 		dml.BeginEntity()
-		dml.SetId(c.FactId[i], nil)
-		dml.SetTimestamp(time.Unix(0, c.AtNs[i]).UTC())
+		dml.SetId(c.FactId[i], c.NaturalKey[i])
+		dml.SetTimestamp(c.At[i])
 		// --- bool. ---
 		boolSec := dml.GetSectionBool()
 		boolSecAttr_PollFallback := boolSec.BeginAttribute(c.PollFallback[i])
@@ -238,7 +241,7 @@ func WatchRequestBuildEntities[
 		i32ArraySec.EndSection()
 		err = dml.CommitEntity()
 		if err != nil {
-			err = eh.Errorf("watchrequest: commit row %d: %w", i, err)
+			err = eh.Errorf("commit row %d: %w", i, err)
 			return
 		}
 	}
@@ -287,6 +290,7 @@ func WatchRequestFillFromArrow[
 	c *WatchRequestColumns,
 	n int,
 	idCol *array.Uint64,
+	nkCol *array.Binary,
 	tsCol *array.Timestamp,
 	boolAttrs BoolAttrs,
 	boolMembs BoolMembs,
@@ -295,7 +299,13 @@ func WatchRequestFillFromArrow[
 ) (err error) {
 	for i := 0; i < n; i++ {
 		c.FactId = append(c.FactId, idCol.Value(i))
-		c.AtNs = append(c.AtNs, int64(tsCol.Value(i)))
+		{
+			src := nkCol.Value(i)
+			cp := make([]byte, len(src))
+			copy(cp, src)
+			c.NaturalKey = append(c.NaturalKey, cp)
+		}
+		c.At = append(c.At, time.Unix(0, int64(tsCol.Value(i))).UTC())
 		// --- bool. ---
 		var boolPollFallbackVal bool
 		var boolPollFallbackCount int
@@ -317,12 +327,12 @@ func WatchRequestFillFromArrow[
 			}
 		}
 		if boolPollFallbackCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "PollFallback").Errorf("watchrequest: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "PollFallback").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.PollFallback = append(c.PollFallback, boolPollFallbackVal)
 		if boolRecursiveCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Recursive").Errorf("watchrequest: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "Recursive").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.Recursive = append(c.Recursive, boolRecursiveVal)
@@ -341,7 +351,7 @@ func WatchRequestFillFromArrow[
 			}
 		}
 		if i32ArrayPollIntervalMsCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "PollIntervalMs").Errorf("watchrequest: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "PollIntervalMs").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.PollIntervalMs = append(c.PollIntervalMs, i32ArrayPollIntervalMsVal)
@@ -456,6 +466,7 @@ func (c *WatchRequestColumns) Unmarshal(rec arrow.Record) (err error) {
 		c,
 		n,
 		r.EntityId.ValueId,
+		r.EntityId.ValueNaturalKey,
 		r.EntityTimestamp.ValueTs,
 		r.Bool.Attributes, r.Bool.Memberships,
 		r.I32Array.Attributes, r.I32Array.Memberships,

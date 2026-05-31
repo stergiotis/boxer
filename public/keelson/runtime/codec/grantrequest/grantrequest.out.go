@@ -105,8 +105,9 @@ var grantRequestPool = sync.Pool{
 // GrantRequestColumns is the SoA storage for batches of GrantRequest rows.
 // All slices grow in lockstep — Len returns the row count.
 type GrantRequestColumns struct {
-	FactId []uint64
-	AtNs   []int64
+	FactId     []uint64
+	NaturalKey [][]byte
+	At         []time.Time
 
 	AppId           []string
 	FilterPattern   []string
@@ -126,7 +127,8 @@ func (c *GrantRequestColumns) Len() int { return len(c.FactId) }
 // mutation. Scalar fields (T, Option[T]) are copied by value.
 func (c *GrantRequestColumns) Append(row GrantRequest) {
 	c.FactId = append(c.FactId, row.FactId)
-	c.AtNs = append(c.AtNs, row.AtNs)
+	c.NaturalKey = append(c.NaturalKey, row.NaturalKey)
+	c.At = append(c.At, row.At)
 	c.AppId = append(c.AppId, row.AppId)
 	c.FilterPattern = append(c.FilterPattern, row.FilterPattern)
 	c.FilterReason = append(c.FilterReason, row.FilterReason)
@@ -139,7 +141,8 @@ func (c *GrantRequestColumns) Append(row GrantRequest) {
 // defensive copy); scalar fields and Option[T] are copied.
 func (c *GrantRequestColumns) Row(i int) (row GrantRequest) {
 	row.FactId = c.FactId[i]
-	row.AtNs = c.AtNs[i]
+	row.NaturalKey = c.NaturalKey[i]
+	row.At = c.At[i]
 	row.AppId = c.AppId[i]
 	row.FilterPattern = c.FilterPattern[i]
 	row.FilterReason = c.FilterReason[i]
@@ -271,8 +274,8 @@ func GrantRequestBuildEntities[
 	n := c.Len()
 	for i := 0; i < n; i++ {
 		dml.BeginEntity()
-		dml.SetId(c.FactId[i], nil)
-		dml.SetTimestamp(time.Unix(0, c.AtNs[i]).UTC())
+		dml.SetId(c.FactId[i], c.NaturalKey[i])
+		dml.SetTimestamp(c.At[i])
 		// --- stringArray. ---
 		stringArraySec := dml.GetSectionStringArray()
 		stringArraySecAttr_AppId := stringArraySec.BeginAttributeSingle(c.AppId[i])
@@ -302,7 +305,7 @@ func GrantRequestBuildEntities[
 		boolSec.EndSection()
 		err = dml.CommitEntity()
 		if err != nil {
-			err = eh.Errorf("grantrequest: commit row %d: %w", i, err)
+			err = eh.Errorf("commit row %d: %w", i, err)
 			return
 		}
 	}
@@ -377,6 +380,7 @@ func GrantRequestFillFromArrow[
 	c *GrantRequestColumns,
 	n int,
 	idCol *array.Uint64,
+	nkCol *array.Binary,
 	tsCol *array.Timestamp,
 	stringArrayAttrs StringArrayAttrs,
 	stringArrayMembs StringArrayMembs,
@@ -389,7 +393,13 @@ func GrantRequestFillFromArrow[
 ) (err error) {
 	for i := 0; i < n; i++ {
 		c.FactId = append(c.FactId, idCol.Value(i))
-		c.AtNs = append(c.AtNs, int64(tsCol.Value(i)))
+		{
+			src := nkCol.Value(i)
+			cp := make([]byte, len(src))
+			copy(cp, src)
+			c.NaturalKey = append(c.NaturalKey, cp)
+		}
+		c.At = append(c.At, time.Unix(0, int64(tsCol.Value(i))).UTC())
 		// --- stringArray. ---
 		var stringArrayAppIdVal string
 		var stringArrayAppIdCount int
@@ -411,12 +421,12 @@ func GrantRequestFillFromArrow[
 			}
 		}
 		if stringArrayAppIdCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "AppId").Errorf("grantrequest: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "AppId").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.AppId = append(c.AppId, stringArrayAppIdVal)
 		if stringArrayFilterPatternCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "FilterPattern").Errorf("grantrequest: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "FilterPattern").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.FilterPattern = append(c.FilterPattern, stringArrayFilterPatternVal)
@@ -435,7 +445,7 @@ func GrantRequestFillFromArrow[
 			}
 		}
 		if textArrayFilterReasonCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "FilterReason").Errorf("grantrequest: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "FilterReason").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.FilterReason = append(c.FilterReason, textArrayFilterReasonVal)
@@ -454,7 +464,7 @@ func GrantRequestFillFromArrow[
 			}
 		}
 		if symbolFilterDirectionCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "FilterDirection").Errorf("grantrequest: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "FilterDirection").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.FilterDirection = append(c.FilterDirection, symbolFilterDirectionVal)
@@ -473,7 +483,7 @@ func GrantRequestFillFromArrow[
 			}
 		}
 		if boolFilterStickyCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "FilterSticky").Errorf("grantrequest: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "FilterSticky").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.FilterSticky = append(c.FilterSticky, boolFilterStickyVal)
@@ -608,6 +618,7 @@ func (c *GrantRequestColumns) Unmarshal(rec arrow.Record) (err error) {
 		c,
 		n,
 		r.EntityId.ValueId,
+		r.EntityId.ValueNaturalKey,
 		r.EntityTimestamp.ValueTs,
 		r.StringArray.Attributes, r.StringArray.Memberships,
 		r.TextArray.Attributes, r.TextArray.Memberships,

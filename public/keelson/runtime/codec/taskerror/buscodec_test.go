@@ -5,6 +5,7 @@ package taskerror_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/taskerror"
@@ -13,7 +14,7 @@ import (
 func sampleError() taskerror.TaskError {
 	return taskerror.TaskError{
 		FactId:    11,
-		AtNs:      1_700_000_000_000_000_000,
+		At:        time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 		TaskId:    "task-abc123",
 		Reason:    "connect timeout",
 		ErrorText: "*errors.errorString: connect timeout\n\tat foo.go:42",
@@ -42,8 +43,8 @@ func TestBuscodecRoundTrip(t *testing.T) {
 	if got.FactId != orig.FactId {
 		t.Errorf("FactId: got %v, want %v", got.FactId, orig.FactId)
 	}
-	if got.AtNs != orig.AtNs {
-		t.Errorf("AtNs: got %v, want %v", got.AtNs, orig.AtNs)
+	if !got.At.Equal(orig.At) {
+		t.Errorf("At: got %v, want %v", got.At, orig.At)
 	}
 	if got.TaskId != orig.TaskId {
 		t.Errorf("TaskId: got %q, want %q", got.TaskId, orig.TaskId)
@@ -62,7 +63,7 @@ func TestBuscodecRoundTripReasonOnly(t *testing.T) {
 	// empty must reconstruct as the literal empty string.
 	orig := taskerror.TaskError{
 		FactId: 1,
-		AtNs:   1_700_000_000_000_000_000,
+		At:     time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 		TaskId: "task-reason-only",
 		Reason: "permission denied",
 	}
@@ -91,7 +92,7 @@ func TestBuscodecRoundTripMultilineErrorText(t *testing.T) {
 		"  at bar.go:88\n"
 	orig := taskerror.TaskError{
 		FactId:    2,
-		AtNs:      1_700_000_000_000_000_000,
+		At:        time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 		TaskId:    "task-multiline",
 		Reason:    "i/o timeout",
 		ErrorText: rendering,
@@ -117,7 +118,7 @@ func TestBuscodecAtNsLosslessNanoPrecision(t *testing.T) {
 	// z64 wire → sub-second nanos round-trip losslessly.
 	orig := taskerror.TaskError{
 		FactId: 1,
-		AtNs:   1_700_000_000_111_222_333,
+		At:     time.Unix(0, 1_700_000_000_111_222_333).UTC(),
 		TaskId: "task-precision",
 		Reason: "tick",
 	}
@@ -129,7 +130,7 @@ func TestBuscodecAtNsLosslessNanoPrecision(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
-	if got.AtNs != orig.AtNs {
-		t.Errorf("AtNs: got %v, want %v (nanos must round-trip lossless)", got.AtNs, orig.AtNs)
+	if !got.At.Equal(orig.At) {
+		t.Errorf("At: got %v, want %v (nanos must round-trip lossless)", got.At, orig.At)
 	}
 }

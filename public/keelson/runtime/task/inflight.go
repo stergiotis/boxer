@@ -3,10 +3,12 @@
 package task
 
 import (
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"time"
+
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/inflightsnapshotreply"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // InflightSnapshotReply is the wire payload an M3 supervisor publishes on
@@ -50,7 +52,7 @@ type InflightSnapshotEntry struct {
 func MarshalInflightSnapshotReply(r InflightSnapshotReply) (b []byte, err error) {
 	n := len(r.Entries)
 	wire := inflightsnapshotreply.InflightSnapshotReply{
-		AtNs:         r.AtMs * 1_000_000,
+		At:           time.UnixMilli(r.AtMs).UTC(),
 		Ids:          make([]string, n),
 		Kinds:        make([]string, n),
 		Titles:       make([]string, n),
@@ -96,7 +98,7 @@ func UnmarshalInflightSnapshotReply(b []byte) (r InflightSnapshotReply, err erro
 		err = eh.Errorf("task: unmarshal inflight snapshot reply: %w", err)
 		return
 	}
-	r.AtMs = wire.AtNs / 1_000_000
+	r.AtMs = wire.At.UnixMilli()
 	n := len(wire.Ids)
 	r.Entries = make([]InflightSnapshotEntry, n)
 	for i := 0; i < n; i++ {

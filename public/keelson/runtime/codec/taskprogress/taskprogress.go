@@ -14,10 +14,10 @@
 //     keelson/vdd/keelson_dimdata_taskprogress.go.
 //
 // Wire shape vs. the legacy task.TaskProgress JSON form:
-//   - Field rename `AtMs` → `AtNs`. The codec's plain `ts` column
-//     expects int64 nanoseconds (matching capabilitygrant.Ts);
-//     producers that historically captured `time.Now().UnixMilli()`
-//     multiply by 1e6 at the codec boundary.
+//   - Field rename `AtMs` → `At`. The codec's plain `ts` column is a
+//     `time.Time` (strict 1:1 with the facts SetTimestamp); producers
+//     that historically captured `time.Now().UnixMilli()` convert via
+//     `time.UnixMilli` at the codec boundary.
 //   - `FactId uint64` synthesised plain `id` (event sequence). Distinct
 //     from `TaskId string`, which identifies the *subject* (the task)
 //     and is carried as a tagged-value column.
@@ -28,6 +28,8 @@
 // capabilitygrant.ExpiresAt's "0 = no TTL" sentinel pattern instead of
 // option.Option[T], keeping the wire compact for the common case.
 package taskprogress
+
+import "time"
 
 // TaskProgress is the periodic progress payload broadcast by the
 // task producer on subject `task.<id>.progress`. The estimator's
@@ -42,17 +44,21 @@ type TaskProgress struct {
 	// TaskId (which names the *subject* of the fact).
 	FactId uint64 `lw:",id"`
 
-	// AtNs is the producer-side capture timestamp in unix nanoseconds;
-	// the codec emits as u32 seconds on the wire (4-byte DateTime).
-	// Callers holding milliseconds should multiply by 1e6.
-	AtNs int64 `lw:",ts"`
+	// NaturalKey is the entity natural key; the facts SetId is 2-arg.
+	// These bus DTOs carry no separate key, so it stays the nil default.
+	NaturalKey []byte `lw:",naturalKey"`
+
+	// At is the event timestamp. time.Time matches the facts
+	// SetTimestamp signature directly (strict 1:1); the leeway wire
+	// truncates to u32 seconds, while the bus preserves full nanos.
+	At time.Time `lw:",ts"`
 
 	// TaskId is the per-task identifier (a nanoid by default; see
 	// task.TaskIdT). Carried as a string-section column so future
 	// task.* DTOs can share the membership and join on this column.
 	TaskId string `lw:"taskId,stringArray"`
 
-	// Current is the work-units-completed counter at AtNs.
+	// Current is the work-units-completed counter at the At timestamp.
 	Current uint64 `lw:"progressCurrent,u64Array"`
 
 	// Total is the work-units denominator. Zero marks an

@@ -24,13 +24,15 @@
 // Wire shape vs the legacy task.TaskDone JSON form:
 //
 //   - `Id TaskIdT` → `TaskId string`.
-//   - `AtMs` → `AtNs`.
+//   - `AtMs` → `At`.
 //   - New `FactId uint64` plain `id`.
 //   - `Result []byte` keeps the same Go shape; the codec now stores
 //     it as a single variable-length blob column instead of a CBOR
 //     bytes envelope. Empty Result reconstructs as an empty (non-nil)
 //     slice — observers should always presence-check via length.
 package taskdone
+
+import "time"
 
 // TaskDone is the wire payload published once at task success on
 // subject `task.<id>.done`. Result is opaque on the wire — observers
@@ -42,9 +44,14 @@ type TaskDone struct {
 	// subject of the success).
 	FactId uint64 `lw:",id"`
 
-	// AtNs is the completion timestamp in unix nanoseconds; emitted
-	// as u32 seconds on the wire.
-	AtNs int64 `lw:",ts"`
+	// NaturalKey is the entity natural key; the facts SetId is 2-arg.
+	// These bus DTOs carry no separate key, so it stays the nil default.
+	NaturalKey []byte `lw:",naturalKey"`
+
+	// At is the event timestamp. time.Time matches the facts
+	// SetTimestamp signature directly (strict 1:1); the leeway wire
+	// truncates to u32 seconds, while the bus preserves full nanos.
+	At time.Time `lw:",ts"`
 
 	// TaskId names the task that completed.
 	TaskId string `lw:"taskId,stringArray"`

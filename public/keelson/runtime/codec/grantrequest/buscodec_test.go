@@ -4,6 +4,7 @@ package grantrequest_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/grantrequest"
@@ -12,7 +13,7 @@ import (
 func sampleRequest() grantrequest.GrantRequest {
 	return grantrequest.GrantRequest{
 		FactId:          7,
-		AtNs:            1_700_000_000_000_000_000,
+		At:              time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 		AppId:           "test.app",
 		FilterPattern:   "task.*.cancel",
 		FilterReason:    "user clicked allow",
@@ -43,8 +44,8 @@ func TestBuscodecRoundTrip(t *testing.T) {
 	if got.FactId != orig.FactId {
 		t.Errorf("FactId: got %v, want %v", got.FactId, orig.FactId)
 	}
-	if got.AtNs != orig.AtNs {
-		t.Errorf("AtNs: got %v, want %v", got.AtNs, orig.AtNs)
+	if !got.At.Equal(orig.At) {
+		t.Errorf("At: got %v, want %v", got.At, orig.At)
 	}
 	if got.AppId != orig.AppId {
 		t.Errorf("AppId: got %q, want %q", got.AppId, orig.AppId)
@@ -73,7 +74,7 @@ func TestBuscodecRoundTripDirectionVariants(t *testing.T) {
 		t.Run(d, func(t *testing.T) {
 			orig := grantrequest.GrantRequest{
 				FactId:          1,
-				AtNs:            1_700_000_000_000_000_000,
+				At:              time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 				AppId:           "test.app",
 				FilterPattern:   "foo.>",
 				FilterDirection: d,

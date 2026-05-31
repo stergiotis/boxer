@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 
@@ -26,7 +27,7 @@ import (
 //     array shape rather than a mixed-membership shape.
 //   - Cross-membership separation inside a single row's section
 //     when multiple memberships share storage (stringArray for Ids
-//     + OwnerAppIds; symbol for Kinds + States + Units; i64Array
+//   - OwnerAppIds; symbol for Kinds + States + Units; i64Array
 //     for CreatedAtMss + LastEmitMss + EtaMss; u64Array for
 //     Currents + Totals). The classifier must split the parallel
 //     streams by membership-id; a regression that mis-attributes
@@ -35,7 +36,7 @@ func TestUnmarshal_RoundTrip_Batch(t *testing.T) {
 	rows := []InflightSnapshotReply{
 		{
 			FactId:       1,
-			AtNs:         1_700_000_000_000_000_000,
+			At:           time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 			Ids:          []string{"task-a", "task-b"},
 			Kinds:        []string{"ch.export", "ch.import"},
 			Titles:       []string{"Export A", "Import B"},
@@ -50,7 +51,7 @@ func TestUnmarshal_RoundTrip_Batch(t *testing.T) {
 		},
 		{
 			FactId:       2,
-			AtNs:         1_700_000_010_000_000_000,
+			At:           time.Unix(0, 1_700_000_010_000_000_000).UTC(),
 			Ids:          []string{"task-c", "task-d", "task-e"},
 			Kinds:        []string{"ch.export", "ch.import", "ch.export"},
 			Titles:       []string{"Export C", "Import D", "Export E"},
@@ -68,7 +69,7 @@ func TestUnmarshal_RoundTrip_Batch(t *testing.T) {
 			// where one wrapper row in a batch has no parallel-array
 			// content even though sibling rows do.
 			FactId: 3,
-			AtNs:   1_700_000_020_000_000_000,
+			At:     time.Unix(0, 1_700_000_020_000_000_000).UTC(),
 		},
 	}
 

@@ -5,13 +5,13 @@ package task
 import (
 	"time"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/taskcancel"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/taskcreated"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/taskdone"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/taskerror"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/taskprogress"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // ObserverI is the consumer-side contract: a visitor that receives one
@@ -107,7 +107,7 @@ func RequestCancel(bus app.BusI, id TaskIdT, reason string) (err error) {
 	msg := taskcancel.TaskCancel{
 		TaskId: string(id),
 		Reason: reason,
-		AtNs:   time.Now().UnixNano(),
+		At:     time.Now().UTC(),
 	}
 	var b []byte
 	b, err = MarshalTaskCancel(msg)

@@ -8,10 +8,10 @@ import (
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
 	"github.com/rs/zerolog"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/taskcreated"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task/estimator"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // nanoidLen is the number of characters in an auto-generated TaskIdT.
@@ -165,7 +165,7 @@ func SpawnWithClock(parent context.Context, bus app.BusI, opts SpawnOpts, nowFn 
 		title = opts.Kind
 	}
 
-	createdAtNs := nowFn().UnixNano()
+	createdAt := nowFn().UTC()
 	created := taskcreated.TaskCreated{
 		TaskId:       string(id),
 		Kind:         opts.Kind,
@@ -175,7 +175,7 @@ func SpawnWithClock(parent context.Context, bus app.BusI, opts SpawnOpts, nowFn 
 		OwnerRunId:   opts.OwnerRunId,
 		CancellableB: opts.Cancellable,
 		EstimatedMs:  opts.EstimatedMs,
-		AtNs:         createdAtNs,
+		At:           createdAt,
 	}
 	var b []byte
 	b, err = MarshalTaskCreated(created)

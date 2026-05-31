@@ -17,9 +17,11 @@
 // (Granted/HandleSubjectPrefix/Reason); this struct is the
 // codec-side projection only. Conversion lives in
 // `fsbroker.MarshalDialogReply` / `UnmarshalDialogReply`. New plain
-// columns (FactId/AtNs) are stamped at marshal time inside those
+// columns (FactId/At) are stamped at marshal time inside those
 // helpers; the broker's existing API is unchanged.
 package dialogreply
+
+import "time"
 
 // DialogReply is the flat wire form of a file-dialog reply.
 type DialogReply struct {
@@ -28,9 +30,14 @@ type DialogReply struct {
 	// FactId is the per-row event id.
 	FactId uint64 `lw:",id"`
 
-	// AtNs is the reply timestamp in unix nanoseconds; emitted as
-	// u32 seconds on the wire.
-	AtNs int64 `lw:",ts"`
+	// NaturalKey is the entity natural key; the facts SetId is 2-arg.
+	// These bus DTOs carry no separate key, so it stays the nil default.
+	NaturalKey []byte `lw:",naturalKey"`
+
+	// At is the event timestamp. time.Time matches the facts
+	// SetTimestamp signature directly (strict 1:1); the leeway wire
+	// truncates to u32 seconds, while the bus preserves full nanos.
+	At time.Time `lw:",ts"`
 
 	// Approved carries the user's accept/cancel decision (false also
 	// covers broker-side errors with Reason populated).

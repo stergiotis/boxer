@@ -8,12 +8,12 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/taskdone"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/taskerror"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/taskprogress"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task/estimator"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // HandleI is the producer-side contract returned by Spawn. Implementations
@@ -120,8 +120,8 @@ func (inst *Handle) Report(p ProgressReport) {
 		return
 	}
 
-	nowNs := inst.now().UnixNano()
-	nowMs := nowNs / 1_000_000
+	now := inst.now()
+	nowMs := now.UnixMilli()
 	inst.est.Add(p.Current, nowMs)
 	thr := inst.est.ThroughputPerSec()
 	eta := inst.est.EtaMs(p.Current, p.Total)
@@ -138,7 +138,7 @@ func (inst *Handle) Report(p ProgressReport) {
 		ThroughputPerSec: thr,
 		EtaMs:            eta,
 		Note:             p.Note,
-		AtNs:             nowNs,
+		At:               now.UTC(),
 	}
 	inst.lastReport = &progress
 	inst.indetMode = p.Total == 0
@@ -166,12 +166,12 @@ func (inst *Handle) Note(note string) {
 	if inst.terminated {
 		return
 	}
-	nowNs := inst.now().UnixNano()
-	nowMs := nowNs / 1_000_000
+	now := inst.now()
+	nowMs := now.UnixMilli()
 	progress := taskprogress.TaskProgress{
 		TaskId: string(inst.id),
 		Note:   note,
-		AtNs:   nowNs,
+		At:     now.UTC(),
 	}
 	if inst.lastReport != nil {
 		progress.Current = inst.lastReport.Current
@@ -200,11 +200,11 @@ func (inst *Handle) Done(result []byte) (err error) {
 		return
 	}
 	inst.flushPendingReportLocked()
-	nowNs := inst.now().UnixNano()
+	now := inst.now()
 	inst.logger.Debug().Int("resultBytes", len(result)).Msg("task done")
 	d := taskdone.TaskDone{
 		TaskId: string(inst.id),
-		AtNs:   nowNs,
+		At:     now.UTC(),
 		Result: result,
 	}
 	var b []byte
@@ -229,11 +229,11 @@ func (inst *Handle) Error(taskErr error, reason string) (rerr error) {
 		return
 	}
 	inst.flushPendingReportLocked()
-	nowNs := inst.now().UnixNano()
+	now := inst.now()
 	inst.logger.Warn().Err(taskErr).Str("reason", reason).Msg("task error")
 	e := taskerror.TaskError{
 		TaskId: string(inst.id),
-		AtNs:   nowNs,
+		At:     now.UTC(),
 		Reason: reason,
 	}
 	if taskErr != nil {
@@ -272,7 +272,7 @@ func (inst *Handle) flushPendingReportLocked() {
 	if inst.lastReport == nil {
 		return
 	}
-	lastMs := inst.lastReport.AtNs / 1_000_000
+	lastMs := inst.lastReport.At.UnixMilli()
 	if lastMs == inst.lastEmitMs {
 		return
 	}

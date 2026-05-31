@@ -5,6 +5,7 @@ package taskdone_test
 import (
 	"bytes"
 	"testing"
+	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/taskdone"
@@ -13,7 +14,7 @@ import (
 func sampleDone() taskdone.TaskDone {
 	return taskdone.TaskDone{
 		FactId: 5,
-		AtNs:   1_700_000_000_000_000_000,
+		At:     time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 		TaskId: "task-abc123",
 		Result: []byte{0x01, 0x02, 0xff, 0x00, 0xfe},
 	}
@@ -41,8 +42,8 @@ func TestBuscodecRoundTrip(t *testing.T) {
 	if got.FactId != orig.FactId {
 		t.Errorf("FactId: got %v, want %v", got.FactId, orig.FactId)
 	}
-	if got.AtNs != orig.AtNs {
-		t.Errorf("AtNs: got %v, want %v", got.AtNs, orig.AtNs)
+	if !got.At.Equal(orig.At) {
+		t.Errorf("At: got %v, want %v", got.At, orig.At)
 	}
 	if got.TaskId != orig.TaskId {
 		t.Errorf("TaskId: got %q, want %q", got.TaskId, orig.TaskId)
@@ -59,7 +60,7 @@ func TestBuscodecRoundTripEmptyResult(t *testing.T) {
 	// codec — observers should always presence-check via len.
 	orig := taskdone.TaskDone{
 		FactId: 1,
-		AtNs:   1_700_000_000_000_000_000,
+		At:     time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 		TaskId: "task-no-result",
 	}
 	wire, err := buscodec.Encode(orig)
@@ -86,7 +87,7 @@ func TestBuscodecRoundTripBinaryPayload(t *testing.T) {
 	}
 	orig := taskdone.TaskDone{
 		FactId: 2,
-		AtNs:   1_700_000_000_000_000_000,
+		At:     time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 		TaskId: "task-binary",
 		Result: payload,
 	}
@@ -114,7 +115,7 @@ func TestBuscodecRoundTripDefensiveCopy(t *testing.T) {
 	// round-trip — i.e. the second decode is independent of the first.
 	orig := taskdone.TaskDone{
 		FactId: 1,
-		AtNs:   1_700_000_000_000_000_000,
+		At:     time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 		TaskId: "task-aliased",
 		Result: []byte{0x11, 0x22, 0x33},
 	}
@@ -140,7 +141,7 @@ func TestBuscodecAtNsLosslessNanoPrecision(t *testing.T) {
 	// z64 wire → sub-second nanos round-trip losslessly.
 	orig := taskdone.TaskDone{
 		FactId: 1,
-		AtNs:   1_700_000_000_777_888_999,
+		At:     time.Unix(0, 1_700_000_000_777_888_999).UTC(),
 		TaskId: "task-precision",
 	}
 	wire, err := buscodec.Encode(orig)
@@ -151,7 +152,7 @@ func TestBuscodecAtNsLosslessNanoPrecision(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
-	if got.AtNs != orig.AtNs {
-		t.Errorf("AtNs: got %v, want %v (nanos must round-trip lossless)", got.AtNs, orig.AtNs)
+	if !got.At.Equal(orig.At) {
+		t.Errorf("At: got %v, want %v (nanos must round-trip lossless)", got.At, orig.At)
 	}
 }

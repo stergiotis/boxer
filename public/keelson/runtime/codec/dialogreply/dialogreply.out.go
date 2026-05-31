@@ -101,8 +101,9 @@ var dialogReplyPool = sync.Pool{
 // DialogReplyColumns is the SoA storage for batches of DialogReply rows.
 // All slices grow in lockstep — Len returns the row count.
 type DialogReplyColumns struct {
-	FactId []uint64
-	AtNs   []int64
+	FactId     []uint64
+	NaturalKey [][]byte
+	At         []time.Time
 
 	Approved            []bool
 	HandleSubjectPrefix []string
@@ -120,7 +121,8 @@ func (c *DialogReplyColumns) Len() int { return len(c.FactId) }
 // mutation. Scalar fields (T, Option[T]) are copied by value.
 func (c *DialogReplyColumns) Append(row DialogReply) {
 	c.FactId = append(c.FactId, row.FactId)
-	c.AtNs = append(c.AtNs, row.AtNs)
+	c.NaturalKey = append(c.NaturalKey, row.NaturalKey)
+	c.At = append(c.At, row.At)
 	c.Approved = append(c.Approved, row.Approved)
 	c.HandleSubjectPrefix = append(c.HandleSubjectPrefix, row.HandleSubjectPrefix)
 	c.Reason = append(c.Reason, row.Reason)
@@ -131,7 +133,8 @@ func (c *DialogReplyColumns) Append(row DialogReply) {
 // defensive copy); scalar fields and Option[T] are copied.
 func (c *DialogReplyColumns) Row(i int) (row DialogReply) {
 	row.FactId = c.FactId[i]
-	row.AtNs = c.AtNs[i]
+	row.NaturalKey = c.NaturalKey[i]
+	row.At = c.At[i]
 	row.Approved = c.Approved[i]
 	row.HandleSubjectPrefix = c.HandleSubjectPrefix[i]
 	row.Reason = c.Reason[i]
@@ -240,8 +243,8 @@ func DialogReplyBuildEntities[
 	n := c.Len()
 	for i := 0; i < n; i++ {
 		dml.BeginEntity()
-		dml.SetId(c.FactId[i], nil)
-		dml.SetTimestamp(time.Unix(0, c.AtNs[i]).UTC())
+		dml.SetId(c.FactId[i], c.NaturalKey[i])
+		dml.SetTimestamp(c.At[i])
 		// --- bool. ---
 		boolSec := dml.GetSectionBool()
 		boolSecAttr_Approved := boolSec.BeginAttribute(c.Approved[i])
@@ -262,7 +265,7 @@ func DialogReplyBuildEntities[
 		textArraySec.EndSection()
 		err = dml.CommitEntity()
 		if err != nil {
-			err = eh.Errorf("dialogreply: commit row %d: %w", i, err)
+			err = eh.Errorf("commit row %d: %w", i, err)
 			return
 		}
 	}
@@ -324,6 +327,7 @@ func DialogReplyFillFromArrow[
 	c *DialogReplyColumns,
 	n int,
 	idCol *array.Uint64,
+	nkCol *array.Binary,
 	tsCol *array.Timestamp,
 	boolAttrs BoolAttrs,
 	boolMembs BoolMembs,
@@ -334,7 +338,13 @@ func DialogReplyFillFromArrow[
 ) (err error) {
 	for i := 0; i < n; i++ {
 		c.FactId = append(c.FactId, idCol.Value(i))
-		c.AtNs = append(c.AtNs, int64(tsCol.Value(i)))
+		{
+			src := nkCol.Value(i)
+			cp := make([]byte, len(src))
+			copy(cp, src)
+			c.NaturalKey = append(c.NaturalKey, cp)
+		}
+		c.At = append(c.At, time.Unix(0, int64(tsCol.Value(i))).UTC())
 		// --- bool. ---
 		var boolApprovedVal bool
 		var boolApprovedCount int
@@ -350,7 +360,7 @@ func DialogReplyFillFromArrow[
 			}
 		}
 		if boolApprovedCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Approved").Errorf("dialogreply: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "Approved").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.Approved = append(c.Approved, boolApprovedVal)
@@ -369,7 +379,7 @@ func DialogReplyFillFromArrow[
 			}
 		}
 		if stringArrayHandleSubjectPrefixCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "HandleSubjectPrefix").Errorf("dialogreply: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "HandleSubjectPrefix").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.HandleSubjectPrefix = append(c.HandleSubjectPrefix, stringArrayHandleSubjectPrefixVal)
@@ -388,7 +398,7 @@ func DialogReplyFillFromArrow[
 			}
 		}
 		if textArrayReasonCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Reason").Errorf("dialogreply: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "Reason").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.Reason = append(c.Reason, textArrayReasonVal)
@@ -513,6 +523,7 @@ func (c *DialogReplyColumns) Unmarshal(rec arrow.Record) (err error) {
 		c,
 		n,
 		r.EntityId.ValueId,
+		r.EntityId.ValueNaturalKey,
 		r.EntityTimestamp.ValueTs,
 		r.Bool.Attributes, r.Bool.Memberships,
 		r.StringArray.Attributes, r.StringArray.Memberships,

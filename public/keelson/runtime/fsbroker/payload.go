@@ -3,12 +3,14 @@
 package fsbroker
 
 import (
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"time"
+
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/dialogreply"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/watchevent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/watchreply"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/watchrequest"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // MarshalDialogReply serialises a DialogReply via the canonical bus
@@ -118,7 +120,7 @@ func UnmarshalWatchReply(b []byte) (r WatchReply, err error) {
 // fs.handle.{uuid}.event.
 func MarshalWatchEvent(e WatchEvent) (b []byte, err error) {
 	wire := watchevent.WatchEvent{
-		AtNs:   e.Ts,
+		At:     time.Unix(0, e.Ts).UTC(),
 		Kind:   e.Kind.String(),
 		Name:   e.Name,
 		Cookie: e.Cookie,
@@ -142,7 +144,7 @@ func UnmarshalWatchEvent(b []byte) (e WatchEvent, err error) {
 		Kind:   ParseWatchEventKind(wire.Kind),
 		Name:   wire.Name,
 		Cookie: wire.Cookie,
-		Ts:     wire.AtNs,
+		Ts:     wire.At.UnixNano(),
 	}
 	return
 }
