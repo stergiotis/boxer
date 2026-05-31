@@ -43,6 +43,12 @@ const (
 	// its labels are power-of-10 latencies at spectroYAxisFont.
 	spectroYAxisW    float32 = 44
 	spectroYAxisFont float32 = 10
+	// spectroXAxisH is the x-axis tick+label row height; spectroAxisPad reserves
+	// width for item spacing/margin when stretching to fill; spectroMinTexW is
+	// the floor below which the native texture width is kept.
+	spectroXAxisH  float32 = 18
+	spectroAxisPad float32 = 16
+	spectroMinTexW float32 = 240
 )
 
 // schedSpectroState is per-window state for the scheduling-latency spectrogram.
@@ -197,12 +203,28 @@ func (inst *App) renderSchedSpectrogram(snap *PublishedSnapshot) {
 		st.lastPushedMs = snap.SampledAtUnixMs
 	}
 
-	st.hs.SetDisplaySize(0, spectroDisplayHeight)
+	// Stretch the texture to fill the panel width (minus the y-axis gutter) so
+	// the spectrogram and its x-axis use all available space, not the native
+	// 600 px. 0 keeps the native width as a fallback before the available size
+	// is known (one-frame lag on CaptureAvailableSize is fine for a stable dock).
+	texW := float32(0)
+	c.CaptureAvailableSize()
+	avail := c.CurrentApplicationState.StateManager.GetAvailableSize()
+	if avail.W > 0 && !math.IsNaN(float64(avail.W)) {
+		if cand := avail.W - spectroYAxisW - spectroAxisPad; cand > spectroMinTexW {
+			texW = cand
+		}
+	}
+	st.hs.SetDisplaySize(texW, spectroDisplayHeight)
 	for range c.Horizontal().KeepIter() {
 		inst.renderSpectroYTicks(st.loEdge, st.hiEdge, spectroDisplayHeight)
 		st.hs.Render()
 	}
-	renderSpectroXTicks(snap.HistTimeUnixSec)
+	xw := texW
+	if xw <= 0 {
+		xw = float32(spectroWidthSlots)
+	}
+	inst.renderSpectroXTicks(snap.HistTimeUnixSec, xw)
 	c.Label("y: latency (log) · x: time, newest left").Send()
 	c.Label("colour = goroutines waiting per interval (log):").Send()
 	st.legend.Render()
@@ -225,37 +247,60 @@ func clipBucketRange(buckets []float64, loSec, hiSec float64) (lo, hi int) {
 	return
 }
 
-// renderSpectroXTicks draws calendar-aware time labels under the spectrogram.
-// The spectrogram scrolls ScrollRight (newest column on the left), so labels
-// render newest → oldest with the leftmost label under the most-recent column.
-// timeticks returns ascending (oldest → newest); iterate in reverse to match.
-// Mirrors imztop's renderCPUHeatmapXTicks.
-func renderSpectroXTicks(timeUnixSec []float64) {
-	if len(timeUnixSec) < 2 {
+// renderSpectroXTicks paints calendar-aware time labels under the spectrogram,
+// spanning the texture width w. The spectrogram scrolls ScrollRight (newest on
+// the left), so the newest tick sits at x=0 and time increases right-to-left.
+// Labels are positioned by time across the full width (not fixed-gap), so the
+// axis is fully populated. Only the last spectroWidthSlots samples are visible,
+// so the range comes from that tail of the history. Edge ticks anchor inward to
+// avoid clipping; indented by spectroYAxisW to align under the texture.
+func (inst *App) renderSpectroXTicks(timeUnixSec []float64, w float32) {
+	n := len(timeUnixSec)
+	if n < 2 || w <= 0 {
 		return
 	}
-	minT := time.Unix(int64(timeUnixSec[0]), 0).Local()
-	maxT := time.Unix(int64(timeUnixSec[len(timeUnixSec)-1]), 0).Local()
-	if !maxT.After(minT) {
+	lo := 0
+	if n > int(spectroWidthSlots) {
+		lo = n - int(spectroWidthSlots)
+	}
+	minT := time.Unix(int64(timeUnixSec[lo]), 0).Local()
+	maxT := time.Unix(int64(timeUnixSec[n-1]), 0).Local()
+	minMS := minT.UnixMilli()
+	spanMS := maxT.UnixMilli() - minMS
+	if spanMS <= 0 {
 		return
 	}
 	layout := timeticks.TimeTicks(minT, maxT, timeticks.TimeTickOptions{
-		PanelWidthPx:    600,
+		PanelWidthPx:    int32(w),
 		TargetSpacingPx: 120,
 		Location:        time.Local,
 	})
-	if len(layout.TickLabels) == 0 {
-		return
-	}
-	n := len(layout.TickLabels)
+	const edgeGuard float32 = 18
 	for range c.Horizontal().KeepIter() {
-		c.AddSpace(spectroYAxisW) // clear the y-axis gutter so labels sit under the texture
-		for i := n - 1; i >= 0; i-- {
-			c.Label(layout.TickLabels[i]).Send()
-			if i > 0 {
-				c.AddSpace(24)
+		c.AddSpace(spectroYAxisW)
+		for i, tv := range layout.TickValues {
+			if i >= len(layout.TickLabels) {
+				break
 			}
+			// newest-left: oldest → right edge (x=w), newest → x=0.
+			norm := float64(tv.UnixMilli()-minMS) / float64(spanMS)
+			px := float32((1 - norm) * float64(w))
+			if px < 0 || px > w {
+				continue
+			}
+			c.PaintLine(px, 0, px, 4, colorAxisTick, 1.0).Send()
+			ah := uint8(1)
+			switch {
+			case px < edgeGuard:
+				ah = 0
+			case px > w-edgeGuard:
+				ah = 2
+			}
+			c.PaintText(px, 6, ah, 0, layout.TickLabels[i], spectroYAxisFont, colorAxisLabel).Send()
 		}
+		c.PaintCanvas(inst.ids.PrepareStr("sched-spectro-xaxis"), w, spectroXAxisH).
+			Background(colorBgClear).
+			Send()
 	}
 }
 
