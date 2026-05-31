@@ -10,11 +10,22 @@ status: draft
 
 # marshallgen — Explanation
 
-`marshallgen` is the schema-agnostic Go DTO → leeway codec generator.
-It parses an annotated Go struct (the DTO), produces a `Plan` value,
-and emits a `.out.go` carrying typed SoA columns plus generic
-`<Kind>BuildEntities` / `<Kind>FillFromArrow` helpers that bind to
-any leeway DML / RA via Go's type inference at the call site.
+`marshallgen` is the code generator for the leeway DTO codec: it reads an
+annotated Go struct (the DTO) via go/ast into a
+[`mappingplan.Plan`](../mappingplan/) and emits a `.out.go` carrying typed
+SoA columns plus generic `<Kind>BuildEntities` / `<Kind>FillFromArrow`
+helpers that bind to any leeway DML / RA via Go's type inference at the
+call site.
+
+The DTO model itself is not defined here. The `Plan`, the `lw:` tag
+grammar (`SplitLW`), per-field validation and assembly (`PlanBuilder`),
+the `MembershipChannel` enum, section grouping (`ComputeGroups`), and
+field-shape classification (`ClassifyBegin`) all live in the sibling
+[`mappingplan`](../mappingplan/) package. `marshallgen` is the go/ast
+front-end plus emitter over that model; the reflect-driven
+[`marshallreflect`](../marshallreflect/) is the other front-end and a
+runtime codec over the same model. The two front-ends share `mappingplan`
+and do not depend on each other.
 
 Schema-specific wiring (membership-id resolution, builder pools,
 Marshal / Unmarshal / bus-codec wrappers) lives behind a
@@ -65,7 +76,7 @@ optionally targeting a sub-column (`:<col>`, e.g. `u32Range:beginIncl`).
 
 The DTO field's Go type plus the trailing lw: flags determine the
 wire shape. There are five disjoint cases, classified by
-`classifyBegin`:
+`mappingplan.ClassifyBegin`:
 
 | Go shape                    | Flags          | Wire shape                                | Per-attribute call            |
 |-----------------------------|----------------|-------------------------------------------|-------------------------------|
@@ -135,7 +146,9 @@ the interfaces.
 - **Splice semantics.** Empty `[]T` / `Option[T].Has=false` /
   empty `*roaring.Bitmap` produce zero attributes on the wire.
   Leeway has no "present-but-empty" non-scalar representation.
-- **No registry consulted by the parser.** Membership-name typos,
+- **No registry consulted during parsing.** Neither `mappingplan`'s
+  grammar + validation (`SplitLW`, `PlanBuilder`) nor `marshallgen`'s
+  go/ast front-end consult a membership registry. Membership-name typos,
   section / Go-type incompatibilities, and verbatim-vs-ref channel
   mismatches surface at `go build` time of the generated code, not at
   codegen time. The wrapper's `vdd.MembXxx` reference, the typed
@@ -143,9 +156,9 @@ the interfaces.
   the chosen `dmlruntime.InAttributeMembership…PI` interface are the
   three compile-time gates.
 - **Section name → method PascalCase is convention-only.**
-  `methodFor(section)` = `upperFirst(section)`. The lw: section
-  string is trusted verbatim; the Go compiler verifies the resulting
-  `GetSection<X>()` call.
+  `methodFor(section)` = `mappingplan.UpperFirst(section)`. The lw:
+  section string is trusted verbatim; the Go compiler verifies the
+  resulting `GetSection<X>()` call.
 - **One channel per section.** All fields targeting a section must
   agree on `Verbatim`. The read-side decode iterates one channel and
   switches on one value type (uint64 or []byte).
@@ -179,12 +192,12 @@ consumer surfaces the need.
 
 - **Codegen vs reflect.** marshallgen emits typed code at build time
   — zero reflection on the hot path, type errors surface at compile
-  time. The sibling `marshallreflect` package uses the same `Plan` /
-  `TaggedField` vocabulary at runtime via `reflect`, accepting the
-  per-row cost and deferring "wrong type" errors to runtime. The
-  marshallgen wire output and a marshallreflect wire output must
-  round-trip through each other for the same DTO; verified by a
-  shared round-trip test.
+  time. The sibling `marshallreflect` package uses the same
+  `mappingplan.Plan` / `mappingplan.TaggedField` vocabulary at runtime
+  via `reflect`, accepting the per-row cost and deferring "wrong type"
+  errors to runtime. The marshallgen wire output and a marshallreflect
+  wire output must round-trip through each other for the same DTO;
+  verified by a shared round-trip test.
 - **Verbosity at the source level for the cost of zero-overhead
   binding at runtime.** EntityI for an N-section DTO carries 2N+1
   type parameters; BuildEntities mirrors. Generated code is verbose
@@ -202,7 +215,7 @@ consumer surfaces the need.
 
 ## Further reading
 
-- Reference: https://pkg.go.dev/github.com/stergiotis/pebble2impl/src/go/public/boxerstaging/leeway/marshallgen
-- Sibling: `marshallreflect/` — runtime-reflection codec over the same Plan grammar (planned).
+- Model: [`mappingplan/`](../mappingplan/) — the shared DTO model both front-ends build on: `Plan`, the `lw:` grammar (`SplitLW`), `PlanBuilder` validation, the membership channels, section grouping, and field-shape classification.
+- Sibling: [`marshallreflect/`](../marshallreflect/) — runtime-reflection codec over the same `mappingplan.Plan` model.
 - Wrapper consumer: `keelson/runtime/codec/factswrapper/` — facts target.
 - Splice semantics: project-memory note `reference_leeway_splice_semantics.md` — empty non-scalars vanish on the wire (codec authors must emit 0 attributes for empty collections).
