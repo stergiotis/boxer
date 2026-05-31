@@ -90,43 +90,17 @@ func (inst *App) renderNetPanel(snap *PublishedSnapshot) {
 
 	times := snap.HistoryTimeUnixSec
 	if len(times) >= 2 {
-		// Visual separator before the net-IO plot; without it the
-		// Y-axis labels read as part of the interface info above.
-		c.AddSpace(inst.spaceInner())
-		c.Separator().Horizontal().Send()
-		c.AddSpace(inst.spaceOuter())
-		for i, s := range snap.HistoryNetRxByIface {
-			if len(s.Y) != len(times) {
-				continue
-			}
-			c.PlotLine(fmt.Sprintf("%s rx", s.Name), times, s.Y).
-				Width(1.2).Color(markerColor(i)).Send()
-		}
-		for i, s := range snap.HistoryNetTxByIface {
-			if len(s.Y) != len(times) {
-				continue
-			}
-			c.PlotLine(fmt.Sprintf("%s tx", s.Name), times, s.Y).
-				Width(1.2).Color(markerColor(i)).Highlight(false).Send()
-		}
-		if len(snap.HistoryNetRx) == len(times) {
-			c.PlotLine("Σ rx", times, snap.HistoryNetRx).
-				Width(2.4).Color(markerColor(0)).Send()
-		}
-		if len(snap.HistoryNetTx) == len(times) {
-			c.PlotLine("Σ tx", times, snap.HistoryNetTx).
-				Width(2.4).Color(markerColor(1)).Send()
-		}
-		plot := c.Plot(inst.ids.PrepareStr("net-io-plot")).
-			Height(168).
-			YAxisLabel("MiB/s").
-			Legend().
-			IncludeY(0).
-			AllowZoom2(true, false).
-			AllowDrag2(true, false).
-			AllowScroll2(true, false)
-		plot = applyYTalbotTicks(plot, 0, rateUpperBound(snap.HistoryNetRx, snap.HistoryNetTx), 5)
-		plot.Send()
+		inst.renderRateHistoryPlot(times, ratePlotSpec{
+			plotID:            "net-io-plot",
+			primaryByDev:      snap.HistoryNetRxByIface,
+			secondaryByDev:    snap.HistoryNetTxByIface,
+			primaryDevLabel:   "rx",
+			secondaryDevLabel: "tx",
+			primarySum:        snap.HistoryNetRx,
+			secondarySum:      snap.HistoryNetTx,
+			primarySumLabel:   "Σ rx",
+			secondarySumLabel: "Σ tx",
+		})
 	}
 }
 

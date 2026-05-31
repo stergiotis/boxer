@@ -88,46 +88,17 @@ func (inst *App) renderDiskPanel(snap *PublishedSnapshot) {
 
 	times := snap.HistoryTimeUnixSec
 	if len(times) >= 2 {
-		// A separator + outer-padding gap keeps the disk-IO plot's
-		// Y-axis labels (which start at the very top edge of the plot
-		// rect) visually distinct from the Block-devices list above.
-		// Without it, "400" / "300" labels read as if they're attached
-		// to the device rows.
-		c.AddSpace(inst.spaceInner())
-		c.Separator().Horizontal().Send()
-		c.AddSpace(inst.spaceOuter())
-		for i, s := range snap.HistoryDiskReadByDev {
-			if len(s.Y) != len(times) {
-				continue
-			}
-			c.PlotLine(fmt.Sprintf("%s R", s.Name), times, s.Y).
-				Width(1.2).Color(markerColor(i)).Send()
-		}
-		for i, s := range snap.HistoryDiskWriteByDev {
-			if len(s.Y) != len(times) {
-				continue
-			}
-			c.PlotLine(fmt.Sprintf("%s W", s.Name), times, s.Y).
-				Width(1.2).Color(markerColor(i)).Highlight(false).Send()
-		}
-		if len(snap.HistoryDiskRead) == len(times) {
-			c.PlotLine("Σ read", times, snap.HistoryDiskRead).
-				Width(2.4).Color(markerColor(0)).Send()
-		}
-		if len(snap.HistoryDiskWrite) == len(times) {
-			c.PlotLine("Σ write", times, snap.HistoryDiskWrite).
-				Width(2.4).Color(markerColor(1)).Send()
-		}
-		plot := c.Plot(inst.ids.PrepareStr("disk-io-plot")).
-			Height(168).
-			YAxisLabel("MiB/s").
-			Legend().
-			IncludeY(0).
-			AllowZoom2(true, false).
-			AllowDrag2(true, false).
-			AllowScroll2(true, false)
-		plot = applyYTalbotTicks(plot, 0, rateUpperBound(snap.HistoryDiskRead, snap.HistoryDiskWrite), 5)
-		plot.Send()
+		inst.renderRateHistoryPlot(times, ratePlotSpec{
+			plotID:            "disk-io-plot",
+			primaryByDev:      snap.HistoryDiskReadByDev,
+			secondaryByDev:    snap.HistoryDiskWriteByDev,
+			primaryDevLabel:   "R",
+			secondaryDevLabel: "W",
+			primarySum:        snap.HistoryDiskRead,
+			secondarySum:      snap.HistoryDiskWrite,
+			primarySumLabel:   "Σ read",
+			secondarySumLabel: "Σ write",
+		})
 	}
 }
 
