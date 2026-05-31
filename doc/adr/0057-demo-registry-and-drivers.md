@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-04-23
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-05-31
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0057: Demo registry + split drivers (interactive / test / embed)
 
@@ -144,7 +142,7 @@ type Demo struct {
 
 ## Status
 
-Proposed — awaiting review by the repo owner.
+Accepted — 2026-05-31. Implemented across the registry, TestDriver, and gallery; see the 2026-05-31 Updates entry.
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
 ADRs are append-only; supersession is recorded, not deleted.
