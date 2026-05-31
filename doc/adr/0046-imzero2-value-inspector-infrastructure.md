@@ -441,6 +441,6 @@ The 2026-05-25 toggle update kept fsmview opted out of the disclosure affordance
 - [ADR-0036 — runtime buscodec](0036-runtime-buscodec.md) — codec the future `LiveSource[T]` will use to decode payloads.
 - [ADR-0044 — iconography](0044-imzero2-design-system-iconography.md) — Phosphor catalogue (alternative considered for the disclosure cue).
 - [ADR-0045 — fsmview widget](0045-imzero2-fsmview-widget.md) — the first widget to migrate to this infrastructure.
-- `src/go/public/thestack/imzero2/egui2/widgets/inspector/` — implementation.
-- `src/go/public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_bezier_connector_demo.go` — bezier-connector PoC that exercises both new FFFI2 primitives and the full chip + chevron vocabulary.
+- `public/thestack/imzero2/egui2/widgets/inspector/` — implementation.
+- `public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_bezier_connector_demo.go` — bezier-connector PoC that exercises both new FFFI2 primitives and the full chip + chevron vocabulary.
 - Commits: `2443eb0f` (FFFI2 primitives + PoC), `f5012da9` (inspector package + fsmview/distsummary migration), `9c68fbda` (AnchorChevron + distsummary application).

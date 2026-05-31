@@ -14,16 +14,16 @@ reviewed-date: 2026-05-04
 
 ImZero2 has no node-editor affordance. Several in-flight directions need one: the Grafana-replacement scope (memory `project_grafana_replacement`) implies a visual builder for query/transform pipelines; the spinnaker/play "affordance" line (memory `feedback_affordance_term`) hints at a visual-programming surface for SQL-side compositions; the M4-in-SQL upstream lane benefits from a DAG view of derived signals. The user's reference points are `thedmd/imgui-node-editor` (the production-grade C++ reference) and `Fattorino/ImNodeFlow` (a simpler MIT alternative).
 
-The existing `egui_graphs` binding (see [ADR-0056](./0007-walkers-map-h3-binding.md) for the binding-pattern precedent; the graph widget itself is unADR'd) is **visualization-only** — read-only positions, force-directed layout, no edit affordances, no typed pins, no connect/disconnect events surfaced back to Go. A node editor needs the inverse: Go authoritative for topology, Rust authoritative for layout/interaction, with a bidirectional event flow.
+The existing `egui_graphs` binding (see [ADR-0056](0056-walkers-map-h3-binding.md) for the binding-pattern precedent; the graph widget itself is unADR'd) is **visualization-only** — read-only positions, force-directed layout, no edit affordances, no typed pins, no connect/disconnect events surfaced back to Go. A node editor needs the inverse: Go authoritative for topology, Rust authoritative for layout/interaction, with a bidirectional event flow.
 
 Forces the design must respect:
 
 - **FFFI2 register-drain + opcode-stream protocol.** Any binding cooperates with deferred-block capture, frame-level culling ([ADR-0012](./0012-imzero2-collapsible-retained-bodies.md) drain-on-cull), and the stateful-widget contract ([ADR-0013](./0013-imzero2-stateful-widget-contract.md) gated `r10_push`). It cannot rely on synchronous call semantics or persistent stateful encoders on the Go side.
-- **egui 0.34.1 pin.** `src/rust/Cargo.toml` is on `egui >= 0.34.1` / `eframe 0.34.1` / glow backend. Any candidate must track current egui without forcing a backend switch.
+- **egui 0.34.1 pin.** `rust/imzero2/Cargo.toml` is on `egui >= 0.34.1` / `eframe 0.34.1` / glow backend. Any candidate must track current egui without forcing a backend switch.
 - **CGO-free Go build.** `build_go.sh` sets `CGO_ENABLED=0` deliberately. Pure-Rust crate; no Go-side native deps.
-- **Existing thick-client binding shape.** [`egui_dock 0.19`](../../src/go/public/thestack/imzero2/egui2/definition/egui2_definition_d_dock.go) (viewer-trait + retained `DockState<u64>` + deferred-block map for tab bodies) and the walkers binding ([ADR-0056](./0007-walkers-map-h3-binding.md)) define the proven pattern: hand-written `render_*` apply on `ImZeroFffi`, `HashMap<u64, *State>` retained state, register-drain accumulators for child entities, fetcher node for events.
+- **Existing thick-client binding shape.** [`egui_dock 0.19`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_dock.go) (viewer-trait + retained `DockState<u64>` + deferred-block map for tab bodies) and the walkers binding ([ADR-0056](0056-walkers-map-h3-binding.md)) define the proven pattern: hand-written `render_*` apply on `ImZeroFffi`, `HashMap<u64, *State>` retained state, register-drain accumulators for child entities, fetcher node for events.
 - **Screenshot-based testing.** Demos must tolerate the 4-frame `IMZERO2_SCREENSHOT_DIR` tour without animations stalling the capture (see memory `feedback_collapsingheader_tour`).
-- **License ergonomics.** Per [ADR-0005](./0015-streaming-persisted-kafka-from-connect.md), Apache-2.0 derivative tracking is non-trivial. Preference for MIT or MIT/Apache-2.0 dual-licensed deps where the choice exists.
+- **License ergonomics.** Per [ADR-0005](0005-streaming-persisted-kafka-from-connect.md), Apache-2.0 derivative tracking is non-trivial. Preference for MIT or MIT/Apache-2.0 dual-licensed deps where the choice exists.
 
 The C++ references are not realistic ports. `thedmd/imgui-node-editor` owns its own painter and runs a smooth-zoom transform pipeline that doesn't compose with egui's coordinate model — multiple egui community attempts have stalled at the zoom layer. `ImNodeFlow` is portable in principle but simpler than the egui-native crates already available. The decision is therefore between **egui community crates** and a **ground-up port**.
 
@@ -124,20 +124,20 @@ Pin identity is a packed `u64`: high 32 bits = port index, low 32 bits = node id
 
 ## Status
 
-Accepted — 2026-05-04 by @spx. M1 implementation underway in this branch: `egui-snarl 0.9` added to `src/rust/Cargo.toml`, IDL definition file `egui2_definition_d_snarl.go` alongside the other `egui2_definition_d_*.go` files, Rust apply (`render_snarl_editor`, `FffiSnarlViewer`, `SnarlState`) on `ImZeroFffi`. Default `PersistPositions=false` per the SD6 revision adopted at acceptance.
+Accepted — 2026-05-04 by @spx. M1 implementation underway in this branch: `egui-snarl 0.9` added to `rust/imzero2/Cargo.toml`, IDL definition file `egui2_definition_d_snarl.go` alongside the other `egui2_definition_d_*.go` files, Rust apply (`render_snarl_editor`, `FffiSnarlViewer`, `SnarlState`) on `ImZeroFffi`. Default `PersistPositions=false` per the SD6 revision adopted at acceptance.
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`. ADRs are append-only; supersession is recorded, not deleted.
 
 ## References
 
-- [ADR-0056 — Slippy map + H3 cell overlays via `walkers` + `h3o`](./0007-walkers-map-h3-binding.md) — sibling external-egui-crate binding ADR; same template shape.
+- [ADR-0056 — Slippy map + H3 cell overlays via `walkers` + `h3o`](0056-walkers-map-h3-binding.md) — sibling external-egui-crate binding ADR; same template shape.
 - [ADR-0012 — ImZero2 collapsible retained bodies](./0012-imzero2-collapsible-retained-bodies.md) — drain-on-cull invariant for the `nodeBody` deferred-block map.
 - [ADR-0013 — ImZero2 stateful widget contract](./0013-imzero2-stateful-widget-contract.md) — gated `r10_push` rule for node-position events.
-- [ADR-0005 — Streaming persisted Kafka from Connect](./0015-streaming-persisted-kafka-from-connect.md) — Apache-2.0 derivative-tracking precedent; not load-bearing here (snarl is dual-licensed).
+- [ADR-0005 — Streaming persisted Kafka from Connect](0005-streaming-persisted-kafka-from-connect.md) — Apache-2.0 derivative-tracking precedent; not load-bearing here (snarl is dual-licensed).
 - [`egui-snarl` on crates.io](https://crates.io/crates/egui-snarl) — v0.9.x; egui 0.34 compatible; MIT OR Apache-2.0.
 - [`egui-snarl` on GitHub](https://github.com/zakarumych/egui-snarl) — repo, demo, viewer-trait reference.
 - [`thedmd/imgui-node-editor`](https://github.com/thedmd/imgui-node-editor) — C++ reference cited in the request; not ported (see O3 in QOC).
 - [`Fattorino/ImNodeFlow`](https://github.com/Fattorino/ImNodeFlow) — simpler C++ reference cited in the request; covered by Snarl on functionality (see O3/O4 in QOC).
 - [`egui_xyflow`](https://github.com/avinkrisv/egui_xyflow) — alternative crate held in reserve as the O2 escape hatch.
-- [`src/go/public/thestack/imzero2/egui2/definition/egui2_definition_d_dock.go`](../../src/go/public/thestack/imzero2/egui2/definition/egui2_definition_d_dock.go) — viewer-trait + retained-state binding precedent that this ADR mirrors.
-- [`src/go/public/thestack/imzero2/egui2/definition/egui2_definition_d_walkers.go`](../../src/go/public/thestack/imzero2/egui2/definition/egui2_definition_d_walkers.go) — register-drain accumulator + thick-client apply precedent.
+- [`public/thestack/imzero2/egui2/definition/egui2_definition_d_dock.go`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_dock.go) — viewer-trait + retained-state binding precedent that this ADR mirrors.
+- [`public/thestack/imzero2/egui2/definition/egui2_definition_d_walkers.go`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_walkers.go) — register-drain accumulator + thick-client apply precedent.

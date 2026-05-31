@@ -12,7 +12,7 @@ date: 2026-05-10
 
 ## Context
 
-ImZero2 today is a desktop binary: `src/rust/hmi.sh` builds and launches the Rust process under `eframe + winit + wgpu`, with the Go side spawning it as a child over stdin/stdout (FFFI2). The Grafana-replacement scope (memory `project_grafana_replacement`) requires the same UI to reach users on machines without a native build — i.e. a browser tab — and ultimately to be deployable as a Kubernetes service. Neither shape is achievable on the existing eframe-driven path.
+ImZero2 today is a desktop binary: `rust/imzero2/hmi.sh` builds and launches the Rust process under `eframe + winit + wgpu`, with the Go side spawning it as a child over stdin/stdout (FFFI2). The Grafana-replacement scope (memory `project_grafana_replacement`) requires the same UI to reach users on machines without a native build — i.e. a browser tab — and ultimately to be deployable as a Kubernetes service. Neither shape is achievable on the existing eframe-driven path.
 
 ImZero1 (`~/repo/imzero_client_cpp`, user-authored prior art; memory `project_imzero1_video_prior_art`) demonstrated a working end-to-end remote-rendering pipeline: patched-ImGui hooks emitted FlatBuffers vector draw commands, a server-side Skia renderer rasterised those commands into a BGRA buffer, ffmpeg (`h264_vaapi -bf 0 -qp:v 26`, NUT container, `skia/video_local_h264.sh` driver) encoded the buffer through a named pipe, a libmpv-embedding desktop client (`video_player/sdl3_mpv/`, `imzero_video_play`) decoded and presented the stream, and SDL3-captured input flowed back as FlatBuffers `UserInteractionFB` events through a second named pipe. The architecture worked. Its brittleness — confirmed by the user — was in the patched-ImGui fork and the Skia-rasteriser middle layer, neither of which exists in ImZero2 because egui owns its own renderer.
 
@@ -134,7 +134,7 @@ The headless mode is gated by a Cargo feature; the existing interactive `hmi.sh`
 
 ### Derived practices
 
-- **Cargo features for deployment-shape variance.** Headless vs interactive is the first real example in `src/rust/`; future variants (a CLI-only test harness, a hypothetical embedded build, the eventual K8s container variant) follow the same pattern.
+- **Cargo features for deployment-shape variance.** Headless vs interactive is the first real example in `rust/imzero2/`; future variants (a CLI-only test harness, a hypothetical embedded build, the eventual K8s container variant) follow the same pattern.
 - **Wire-format ADRs document protobuf schema versioning policy explicitly.** This ADR establishes `pebble2impl/v1/...` as the namespace; future input-event additions are additive (new fields, new `oneof` variants) until a v2 is unavoidable.
 - **Encoder-as-subprocess is the default integration pattern for media tools in this stack.** ffmpeg is invoked, not linked. The same shape applies if WebRTC adds GStreamer or a future audio path adds another encoder.
 

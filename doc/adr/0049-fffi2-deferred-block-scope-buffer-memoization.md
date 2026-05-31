@@ -12,7 +12,7 @@ reviewed-date: 2026-05-26
 
 ### What `DeferredBlockScope` is and why it allocates
 
-[`src/go/public/thestack/fffi2/runtime/fffi2_rt_deferred.go`](../../src/go/public/thestack/fffi2/runtime/fffi2_rt_deferred.go) implements the per-frame capture buffer that backs every widget primitive whose body is emitted out of order from its header — `c.EndETable` (cells + headers), `c.DockArea` (per-tab bodies), `c.Window`/`c.Tooltip` (tip + target), `c.NodeDir` (node body), and so on. Each `DeferredBlockScope` owns two `*bytes.Buffer`:
+[`public/thestack/fffi2/runtime/fffi2_rt_deferred.go`](../../public/thestack/fffi2/runtime/fffi2_rt_deferred.go) implements the per-frame capture buffer that backs every widget primitive whose body is emitted out of order from its header — `c.EndETable` (cells + headers), `c.DockArea` (per-tab bodies), `c.Window`/`c.Tooltip` (tip + target), `c.NodeDir` (node body), and so on. Each `DeferredBlockScope` owns two `*bytes.Buffer`:
 
 - `dataBuf` — slab holding all block keys plus the captured opcode payload, constructed via `bytes.NewBuffer(make([]byte, 0, 64*1024))` (`fffi2_rt_deferred.go:77`)
 - `tempBuf` — capture target redirected from `Fffi2.SendIntermediate` between `Begin()` / `End()`, constructed via `bytes.NewBuffer(make([]byte, 0, 4096))` (`fffi2_rt_deferred.go:78`)
@@ -45,7 +45,7 @@ Scope-internal growth (`End` + `AppendRawToCapture` + `Begin`) — the bucket th
 
 ### Why we measure cost too, not just allocate
 
-The original presenting symptom was a visible imztop stutter. After fixing the proc-collector heap pressure (35 GB → 372 MB per 30 s in `proc.(*Collector).collectAll`, see the scratch-buffer refactor in [`src/go/public/observability/sysmetrics/proc/proc.go`](../../src/go/public/observability/sysmetrics/proc/proc.go)), the visible stutter persisted. Slow-frame instrumentation at [`src/go/public/thestack/imzero2/metrics/metrics.go`](../../src/go/public/thestack/imzero2/metrics/metrics.go) showed `sync_us` ≈ 25-32 ms on 5-10 % of frames, with `written_b` ≈ 250-330 KB per frame consistently across all frames (slow and fast). The stutter source turned out to be Rust paint occasionally overrunning the 16.6 ms vsync deadline — not heap pressure on the Go side.
+The original presenting symptom was a visible imztop stutter. After fixing the proc-collector heap pressure (35 GB → 372 MB per 30 s in `proc.(*Collector).collectAll`, see the scratch-buffer refactor in [`public/observability/sysmetrics/proc/proc.go`](../../public/observability/sysmetrics/proc/proc.go)), the visible stutter persisted. Slow-frame instrumentation at [`public/thestack/imzero2/metrics/metrics.go`](../../public/thestack/imzero2/metrics/metrics.go) showed `sync_us` ≈ 25-32 ms on 5-10 % of frames, with `written_b` ≈ 250-330 KB per frame consistently across all frames (slow and fast). The stutter source turned out to be Rust paint occasionally overrunning the 16.6 ms vsync deadline — not heap pressure on the Go side.
 
 That diagnosis taught us something the existing metrics don't surface: **per-widget-primitive wire-byte cost is not directly observable today**. We had to infer it by elimination from the slow-frame logger and grep through alloc profiles. A measurement primitive that reports "the cells scope cost 280 KB this frame; the tooltip target cost 0.5 KB" would have shortcut the entire investigation.
 
@@ -95,7 +95,7 @@ Concretely:
 1. **One `atomic.Uint64` per scope kind**, declared in a generated companion file. Scope kinds are taken from the IDL `deferredBlockMap` names that already exist in `fffi2/compiletime/goserver/fffi2_compiletime_go_server.go:624`'s emitter (`cells`, `headers`, `tabBody`, `nodeBody`, `tip`, `target`, `rows`, …):
 
    ```go
-   // src/go/public/thestack/imzero2/egui2/bindings/deferredhints.out.go — generated
+   // public/thestack/imzero2/egui2/bindings/deferredhints.out.go — generated
    package bindings
 
    import "sync/atomic"
@@ -111,7 +111,7 @@ Concretely:
    )
    ```
 
-2. **`NewDeferredBlockScopeHinted` constructor variant** in `src/go/public/thestack/fffi2/runtime/fffi2_rt_deferred.go` that takes a `dataHint *atomic.Uint64` and pre-sizes `dataBuf` from it (with a floor — `deferredDataBufFloor = 4 KiB` — to keep tiny scopes from triggering re-grow on their first byte). The legacy `NewDeferredBlockScope` remains as a thin shim wrapping a process-static hint, for non-codegen callers.
+2. **`NewDeferredBlockScopeHinted` constructor variant** in `public/thestack/fffi2/runtime/fffi2_rt_deferred.go` that takes a `dataHint *atomic.Uint64` and pre-sizes `dataBuf` from it (with a floor — `deferredDataBufFloor = 4 KiB` — to keep tiny scopes from triggering re-grow on their first byte). The legacy `NewDeferredBlockScope` remains as a thin shim wrapping a process-static hint, for non-codegen callers.
 
 3. **`(*DeferredBlockScope).ReleaseWithHint()` method** that folds the observed `dataBuf.Len()` back into the hint via a CAS loop with peak-and-slow-decay update rule:
 
@@ -124,10 +124,10 @@ Concretely:
 
 4. **Codegen emits the `ReleaseWithHint()` call** after the last `SpliceDeferredBlockMap` for each scope in every generated `Send()` method. The natural emitter slot is the same one that emits the existing `r.SpliceDeferredBlockMap(inst.deferredCells)` line at `methods.out.go:1220` and siblings.
 
-5. **`ScopeHintsSnapshot()` API** in `src/go/public/thestack/fffi2/runtime/` returning a `[]ScopeHintSnapshot` (kind name, observed high-water bytes). Wire it into:
+5. **`ScopeHintsSnapshot()` API** in `public/thestack/fffi2/runtime/` returning a `[]ScopeHintSnapshot` (kind name, observed high-water bytes). Wire it into:
    - **`/debug/pprof/custom/scopehints`** HTTP handler under the existing pprof listener (`--pprofHttpListenAddress`).
-   - **The slow-frame logger** at `src/go/public/thestack/imzero2/metrics/metrics.go`'s `RecordBytes`: when a frame exceeds `SlowFrameThresholdNs`, log the top-N scope kinds by current hint alongside the existing render/sync/interpret/written/read breakdown.
-   - **The metricsoverlay widget** (`src/go/public/thestack/imzero2/egui2/widgets/metricsoverlay/metricsoverlay.go`) as an opt-in column behind an env-toggle, so the dev demo can read per-kind cost without rebuilding.
+   - **The slow-frame logger** at `public/thestack/imzero2/metrics/metrics.go`'s `RecordBytes`: when a frame exceeds `SlowFrameThresholdNs`, log the top-N scope kinds by current hint alongside the existing render/sync/interpret/written/read breakdown.
+   - **The metricsoverlay widget** (`public/thestack/imzero2/egui2/widgets/metricsoverlay/metricsoverlay.go`) as an opt-in column behind an env-toggle, so the dev demo can read per-kind cost without rebuilding.
 
 Codegen change footprint, in lines, against `fffi2_compiletime_go_server.go`:
 

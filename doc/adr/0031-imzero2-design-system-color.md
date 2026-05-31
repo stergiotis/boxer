@@ -148,7 +148,7 @@ The default is `vik`; alternates reached for when a chart's semantic meaning ali
 
 **License and attribution.** Crameri palettes are MIT-licensed; viridis/cividis are CC0. Both require citation in scientific publications; IDS treats `INSPIRATIONS.md` plus a comment in the LUT file as the equivalent. Per [ADR-0029](./0029-imzero2-design-system-and-policy-as-code.md) §SD12 (updated), scientific palettes are pre-cleared for IP — adopting them is the more-original choice.
 
-**Vendoring details.** Each palette ships as a 256-entry `[(u8, u8, u8); 256]` static array in Rust (parallel `[256][3]uint8` in Go). One file per palette under `src/rust/imzero2_egui/src/style/data_encoding/`. Each file carries a header comment with the source DOI, version, and SHA-256 of the upstream `.txt`. Total size cost across all bundled palettes: ~50 KB Rust + ~50 KB Go.
+**Vendoring details.** Each palette ships as a 256-entry `[(u8, u8, u8); 256]` static array in Rust (parallel `[256][3]uint8` in Go). One file per palette under `rust/imzero2/imzero2_egui/src/style/data_encoding/`. Each file carries a header comment with the source DOI, version, and SHA-256 of the upstream `.txt`. Total size cost across all bundled palettes: ~50 KB Rust + ~50 KB Go.
 
 A small conversion script `scripts/ci/designcolors/vendor/main.go` reads upstream `.txt` files (one RGB triple per line; Crameri's published format; viridis matplotlib export format) and emits the Rust + Go source files deterministically. CI re-runs the script and verifies byte-equality against the committed files.
 
@@ -236,16 +236,16 @@ The companion patterns doc `patterns/plots.md` documents *when* to use which pal
 
 **Flow 1 — Semantic palette (constructed in OKLCh).**
 
-- **Source**: `src/rust/imzero2_egui/assets/colors/palette.toml` — OKLCh coordinates for every semantic token.
+- **Source**: `rust/imzero2/imzero2_egui/assets/colors/palette.toml` — OKLCh coordinates for every semantic token.
 - **Generator**: `scripts/ci/designcolors/gen/main.go` — reads `palette.toml`, performs OKLCh→sRGB gamut mapping (clip-to-gamut via chroma reduction; never lightness reduction, to preserve contrast), runs §SD5 contrast + CVD checks, writes:
-  - `src/rust/imzero2_egui/src/style/tokens/palette_generated.rs`
-  - `src/go/public/thestack/imzero2/egui2/styletokens/palette_generated.go`
+  - `rust/imzero2/imzero2_egui/src/style/tokens/palette_generated.rs`
+  - `public/thestack/imzero2/egui2/styletokens/palette_generated.go`
   - `doc/design-system/foundations/color.md` (semantic-palette section)
 - **Build artefacts committed**; CI verifies byte-equality on regen.
 
 **Flow 2 — Scientific palettes (vendored LUTs).**
 
-- **Sources**: Crameri palettes from Zenodo (DOI 10.5281/zenodo.1243862) and viridis family from matplotlib (CC0). Vendored as upstream `.txt` files under `src/rust/imzero2_egui/assets/colors/scientific/`.
+- **Sources**: Crameri palettes from Zenodo (DOI 10.5281/zenodo.1243862) and viridis family from matplotlib (CC0). Vendored as upstream `.txt` files under `rust/imzero2/imzero2_egui/assets/colors/scientific/`.
 - **Converter**: `scripts/ci/designcolors/vendor/main.go` — reads `.txt`, emits `data_encoding/<palette>.rs` (Rust) and `data_encoding/<palette>.go` (Go) with provenance comments (DOI, version, upstream SHA).
 - **Build artefacts committed**; CI verifies byte-equality on regen and verifies upstream SHA matches.
 

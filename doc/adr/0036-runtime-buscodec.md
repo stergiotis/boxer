@@ -65,7 +65,7 @@ The memory note `reference_clickhouse_local` records that CBOR is already the co
 
 ## Decision
 
-We introduce `src/go/public/keelson/runtime/buscodec/` as the single seam for serialising every bus payload. The package exports:
+We introduce `public/keelson/runtime/buscodec/` as the single seam for serialising every bus payload. The package exports:
 
 - A `CodecI` interface with `Encode(any) ([]byte, error)`, `Decode([]byte, any) error`, plus `Name()` and `ContentType()` for diagnostics.
 - A process-wide default codec accessed through `Default()` and replaced through `SetDefault(c CodecI)` — a single `atomic.Pointer` swap, safe for init-time use by tests and replay tools.
@@ -181,6 +181,6 @@ ADR-0042 owns the codec implementations that plug into it.
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — app runtime, in-proc bus, cap-as-subject taxonomy.
 - [ADR-0028](./0028-chlocal-low-latency-sql-cap.md) — chlocalbroker, one of the first consumers; its `V` field versioning illustrates the payload-side versioning pattern the codec deliberately does not subsume.
-- `src/go/public/keelson/runtime/buscodec/` — package source.
+- `public/keelson/runtime/buscodec/` — package source.
 - `fxamacker/cbor/v2` — the CBOR implementation (`CanonicalEncOptions` for deterministic output, `cbor:`-then-`json:` tag fallback).
 - Leeway fact-row codec workstream (parallel) — the second `CodecI` implementation this seam exists to accept.

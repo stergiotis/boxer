@@ -245,7 +245,7 @@ These trade-offs are structural, not implementation details. They follow from th
 
 - The Leeway protocol: [`doc/skills/leeway-advanced/SKILLS.md`](../SKILLS.md)
 - Boxer Leeway package source — `boxer/public/semistructured/leeway/` (resolve via `bash scripts/boxer-path.sh`)
-- Membership role classifier: boxer ADR-0007 (`$(boxer-path)/doc/adr/0007-leeway-membership-role-classifier.md`) and pebble2impl [ADR-0017](../../../adr/0017-leeway-membership-role-classifier.md)
+- Membership role classifier: boxer ADR-0007 (`$(boxer-path)/doc/adr/0007-leeway-membership-role-classifier.md`) and pebble2impl [ADR-0017](../../../adr/0007-leeway-membership-role-classifier.md)
 - Card-JSON canonical format: pebble2impl [ADR-0018](../../../adr/0018-leeway-card-json-canonical-format.md)
 - Snowflake VARIANT documentation: https://docs.snowflake.com/
 - ClickHouse documentation: https://clickhouse.com/docs/ (see SQL reference → data types → JSON for the v2 type and its `max_dynamic_paths` / `max_dynamic_types` parameters)

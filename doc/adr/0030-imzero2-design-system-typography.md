@@ -111,7 +111,7 @@ Variants justified:
 
 Weights shipped: **Regular (400)**, **Medium (500)**, **Bold (700)**, each with a matching italic. Variable axis not used initially — discrete weights keep `FontDefinitions` simple and binary size bounded; variable-axis migration is captured as Open Question Q5.
 
-Build artifact location: `src/rust/assets/fonts/ids-mono/IDSMono-{Regular,Italic,Medium,MediumItalic,Bold,BoldItalic}.ttf`. Build TOML committed at the same directory's `private-build-plans.toml`. SD9 describes the build pipeline.
+Build artifact location: `rust/imzero2/assets/fonts/ids-mono/IDSMono-{Regular,Italic,Medium,MediumItalic,Bold,BoldItalic}.ttf`. Build TOML committed at the same directory's `private-build-plans.toml`. SD9 describes the build pipeline.
 
 ### SD2 — Proportional: Iosevka Aile
 
@@ -126,7 +126,7 @@ Weights shipped: **Regular (400)**, **Medium (500)**, **SemiBold (600)**, **Bold
 
 **Risk acknowledgement.** Aile is less battle-tested than Inter for small-size UI hinting on mixed-DPI Windows / Linux / Mac targets. If real-world testing during M1 (token wiring) surfaces hinting issues at 11 pt or below, the fallback ladder is **Aile → Onest → Inter** (§SD10): Onest is the uniqueness-preserving first swap (OFL, less common than Inter, humanist grotesque); Inter is the bulletproof generic final fallback. The font slot in the typography token (`Body.family`) is a single string; each swap is a one-line change.
 
-Build artifact location: `src/rust/assets/fonts/iosevka-aile/IosevkaAile-{Regular,Italic,Medium,MediumItalic,SemiBold,SemiBoldItalic,Bold,BoldItalic}.ttf`. Binaries downloaded from the Iosevka project's GitHub releases page; no local rebuild required since Aile defaults are accepted as-is.
+Build artifact location: `rust/imzero2/assets/fonts/iosevka-aile/IosevkaAile-{Regular,Italic,Medium,MediumItalic,SemiBold,SemiBoldItalic,Bold,BoldItalic}.ttf`. Binaries downloaded from the Iosevka project's GitHub releases page; no local rebuild required since Aile defaults are accepted as-is.
 
 ### SD3 — Type scale
 
@@ -233,7 +233,7 @@ Acceptable for a desktop app; the alternative (load from `~/.fonts` or system pa
 Repo layout:
 
 ```
-src/rust/assets/fonts/
+rust/imzero2/assets/fonts/
 ├── ids-mono/
 │   ├── BUILD.md                       # how-to: bump the upstream pin
 │   ├── IDSMono-Regular.ttf            # release artefacts from ids-fonts <tag>
@@ -264,7 +264,7 @@ The font rasteriser (egui's via `epaint`) is deterministic for a given (font byt
 The build lives upstream in [`stergiotis/ids-fonts`](https://github.com/stergiotis/ids-fonts) — not in pebble2impl. CI there clones Iosevka at the pinned `IOSEVKA_VERSION`, applies the IDS Mono build plan, and publishes a tagged release with six `.ttf` files, `SHA256SUMS`, and the OFL `LICENSE`. See [ADR-0034 §SD2 pivot Amendment](./0034-imzero2-design-system-typography-m0.md#sd2-pivot--docker-on-ci-not-on-contributor-machine) for the architectural rationale.
 
 - **Build manifest upstream.** `private-build-plans.toml` lives in `ids-fonts/`; not duplicated here.
-- **Built artefacts vendored.** `IDSMono-*.ttf` are downloaded from a pinned `ids-fonts` release tag and committed under `src/rust/assets/fonts/ids-mono/`. Storage cost is ~56 MB at Iosevka v34.5.0 — the v34 line ships larger TTFs than this §SD7 estimate predicted; see [ADR-0034 §SD7-finding Amendment](./0034-imzero2-design-system-typography-m0.md#sd7-finding--aile-bundle-budget-overrun).
+- **Built artefacts vendored.** `IDSMono-*.ttf` are downloaded from a pinned `ids-fonts` release tag and committed under `rust/imzero2/assets/fonts/ids-mono/`. Storage cost is ~56 MB at Iosevka v34.5.0 — the v34 line ships larger TTFs than this §SD7 estimate predicted; see [ADR-0034 §SD7-finding Amendment](./0034-imzero2-design-system-typography-m0.md#sd7-finding--aile-bundle-budget-overrun).
 - **Pin discipline.** Each `ids-fonts` release tag pins one Iosevka version (upstream's `IOSEVKA_VERSION` file). Bumping the Iosevka pin means: bump upstream, push a new tag, re-vendor here against the new release URL.
 - **No font toolchain on contributor machines.** Re-vendoring is `curl` + `sha256sum -c`. No Docker, no Node.js, no ttfautohint.
 - **SHA-pinned.** Per-directory `SHA256SUMS` committed alongside the binaries; `scripts/ci/lint.sh` verifies on every build. The release's `LICENSE` file travels with the bytes per SIL OFL §2.
@@ -287,7 +287,7 @@ Font updates are Tier 3 ([ADR-0029](./0029-imzero2-design-system-and-policy-as-c
 1. **Aile → Onest** (preferred swap). Onest is OFL, less common than Inter in production UI (uniqueness preserved), and well-drawn for small-size hinting. Humanist grotesque rather than strictly Swiss-geometric — re-grade Tier 2 rubric V7 after the swap; if hierarchy and rhythm pass, accept.
 2. **Onest → Inter** (final fallback). Bulletproof, ubiquitous, defeats uniqueness — accept only if Onest also fails for the same reasons.
 
-Each swap is recorded as an Amendment to this ADR (no new ADR number) and lands as a one-line change to the `Body.family` / `Caption.family` token plus the binary swap in `src/rust/assets/fonts/`.
+Each swap is recorded as an Amendment to this ADR (no new ADR number) and lands as a one-line change to the `Body.family` / `Caption.family` token plus the binary swap in `rust/imzero2/assets/fonts/`.
 
 ### SD11 — Mono personal override slot (PragmataPro and others)
 
@@ -318,8 +318,8 @@ Only the *mono* slot supports the override at runtime in v1. Proportional fonts 
 
 **Amendment 2026-05-17 — v1 mechanism is a CLI flag, not the TOML surface.** The mechanism prose above describes a `$XDG_CONFIG_HOME/imzero2/fonts.toml` file plus an `IMZERO2_FONT_BODY_MONO` env var with `fontconfig` / `CTFontManager` / registry-walk discovery. The shipped v1 takes a simpler shape and folds the override into the existing imzero2 font-flag family alongside `--mainFontTTF` / `--nerdFontTTF` / `--fallbackFontTTF`:
 
-- **CLI surface**: `--monoFontTTF <path>` on the imzero2 subcommand (Go side: `application.Config.MonoFontTTF` + `MonoFontTweak`, see `src/go/public/thestack/imzero2/application/config.go`). The Rust loader at `src/rust/src/imzero2/app.rs::load_custom_fonts` registers the resulting face as the `FontFamily::Monospace` primary, keeping `--mainFontTTF` scoped to `FontFamily::Proportional`. `nerdfont` + `fallback` ride along in both family chains as coverage extenders.
-- **Shell surface**: `MONO_FONT` env var in `src/rust/hmi.sh`, conditionally passed through as `--monoFontTTF` when non-empty. The companion helper `src/rust/hmi-fonts-pragmatapro.sh` sets `MONO_FONT` (not `MAIN_FONT`) so PragmataPro is scoped to the mono slot as designed; the helper relies on `$PRAGMATA_DIR` (default `$HOME/.local/share/fonts/pragmatapro`) for discovery rather than the OS font-database walk originally specified.
+- **CLI surface**: `--monoFontTTF <path>` on the imzero2 subcommand (Go side: `application.Config.MonoFontTTF` + `MonoFontTweak`, see `public/thestack/imzero2/application/config.go`). The Rust loader at `rust/imzero2/src/imzero2/app.rs::load_custom_fonts` registers the resulting face as the `FontFamily::Monospace` primary, keeping `--mainFontTTF` scoped to `FontFamily::Proportional`. `nerdfont` + `fallback` ride along in both family chains as coverage extenders.
+- **Shell surface**: `MONO_FONT` env var in `rust/imzero2/hmi.sh`, conditionally passed through as `--monoFontTTF` when non-empty. The companion helper `rust/imzero2/hmi-fonts-pragmatapro.sh` sets `MONO_FONT` (not `MAIN_FONT`) so PragmataPro is scoped to the mono slot as designed; the helper relies on `$PRAGMATA_DIR` (default `$HOME/.local/share/fonts/pragmatapro`) for discovery rather than the OS font-database walk originally specified.
 - **Fallback behaviour**: when `--monoFontTTF` is unset, `main` doubles as the Monospace primary so the pre-split default UX (`MAIN_FONT=NotoSans` backing both families) is preserved; the strict family split only materialises when the user explicitly sets the mono slot. When `--monoFontTTF` is set but the file is missing/unreadable, the loader logs a structured error and `Monospace` falls through to egui's default (`Hack`) plus the shared coverage extenders. No fontconfig dependency.
 - **Discovery / branding-mode hooks deferred**: the originally specified `fonts.toml` config file and the `IMZERO2_FONT_BODY_MONO` / `IMZERO2_FONT_BODY_PROPORTIONAL` env-var family remain a forward-compatible extension point. The conformance-vs-branding split described above is unchanged at the screenshot-tour layer; the loader is mode-agnostic and applies whatever path it receives.
 - **Distribution invariant**: unchanged — PragmataPro (and any other paid font) is never in repo, binary, or build artefacts; the override is opt-in per-machine; license stays with the user.
@@ -354,7 +354,7 @@ Size cost: ~3 MB embedded (icon-only Mono variant). The full Nerd Fonts package 
 
 License: **MIT** for the Nerd Fonts project (the glyph-aggregation and patching work). The underlying glyph designs come from upstream icon fonts (Material Icons, FontAwesome, Octicons, Codicons, Powerline, Pomicons, Devicons, Weather Icons) which carry their own permissive licenses (Apache-2.0, OFL, MIT, CC-BY-4.0). The Nerd Fonts project documents per-glyph attribution; IDS cites the Nerd Fonts project in `INSPIRATIONS.md` and lets per-glyph attribution flow from there.
 
-Build artefact location: `src/rust/assets/fonts/symbols-nerd-font-mono/SymbolsNerdFontMono-Regular.ttf`, downloaded from the Nerd Fonts GitHub release page and SHA-256 pinned in `SHA256SUMS`. CI verifies the SHA on every build.
+Build artefact location: `rust/imzero2/assets/fonts/symbols-nerd-font-mono/SymbolsNerdFontMono-Regular.ttf`, downloaded from the Nerd Fonts GitHub release page and SHA-256 pinned in `SHA256SUMS`. CI verifies the SHA on every build.
 
 **Icon-coverage subsetting** is *deferred* — v1 ships the full ~3 MB icon-only file. If binary size ever becomes a real constraint (WASM or mobile in scope), a Tier 3 sub-decision can subset to only the codepoints IDS-conformant apps actually use, via the existing fontforge/Python tooling Nerd Fonts itself uses.
 

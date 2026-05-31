@@ -245,7 +245,7 @@ The full mapping is M1's deliverable in `policy/spacing-egui-binding.md`. Apps t
 
 ### SD8 — Source of truth: direct source constants
 
-No TOML pipeline. The ~30 values across spacing / rounding / stroke / motion live directly in Rust source under `src/rust/imzero2_egui/src/style/tokens/`:
+No TOML pipeline. The ~30 values across spacing / rounding / stroke / motion live directly in Rust source under `rust/imzero2/imzero2_egui/src/style/tokens/`:
 
 ```
 tokens/
@@ -256,7 +256,7 @@ tokens/
 └── motion.rs       # 3 const + reduced-motion flag + duration accessors
 ```
 
-Go-side mirror at `src/go/public/thestack/imzero2/egui2/styletokens/`; codegen-mirrored.
+Go-side mirror at `public/thestack/imzero2/egui2/styletokens/`; codegen-mirrored.
 
 Justification (vs. colour's TOML pipeline): the value count is small (~30) and the values are integer / fixed-point — there is no perceptual-space math at design time analogous to OKLCh→sRGB gamut mapping. Direct constants are simpler to review and require no generator.
 
@@ -341,7 +341,7 @@ The §SD7 table row updates accordingly:
 
 `padding_outer` retains its other uses (panel inner padding, card content, `Spacing.indent`); only the window-margin binding moves down one rung.
 
-**2. `window_corner_radius` drift recovery.** §SD7 specifies `ROUNDING_MD → window_corner_radius, menu_corner_radius`, but the apply path at `src/rust/imzero2_egui/src/style/tokens/mod.rs::apply_rounding` had drifted to `ROUNDING_LG` (6 px) for windows specifically — likely a manual override that pre-dated this ADR. The real-world feedback on "windows look quite round" surfaced the drift.
+**2. `window_corner_radius` drift recovery.** §SD7 specifies `ROUNDING_MD → window_corner_radius, menu_corner_radius`, but the apply path at `rust/imzero2/imzero2_egui/src/style/tokens/mod.rs::apply_rounding` had drifted to `ROUNDING_LG` (6 px) for windows specifically — likely a manual override that pre-dated this ADR. The real-world feedback on "windows look quite round" surfaced the drift.
 
 Recovery: `apply_rounding` now writes `ROUNDING_MD` (4 px) to both `window_corner_radius` and `menu_corner_radius`, matching the §SD7 spec and unifying the two surfaces' rounding tier. Side-effect: windows and menus now share the same rounding tier, which reads as a more coherent visual language than the previous LG-windows / MD-menus split.
 

@@ -10,7 +10,7 @@ reviewed-date: 2026-05-25
 
 ## Context
 
-Boxer's [`CODINGSTANDARDS.md`](../../../boxer/CODINGSTANDARDS.md) (canonical for new Go code per [CLAUDE.md](../../CLAUDE.md)) covers *symbol* naming exhaustively — interface `…I`, enum `…E`, `Set`/`Get`/`Is` prefixes, opposite verb pairs — but is silent on Go *file* and *package* names. Pebble2impl has nontheless converged on conventions through practice; a survey of 1062 Go files under `./src/go/` and `./apps/` (2026-05-25, branch `main`) shows:
+Boxer's [`CODINGSTANDARDS.md`](../../../boxer/CODINGSTANDARDS.md) (canonical for new Go code per CLAUDE.md) covers *symbol* naming exhaustively — interface `…I`, enum `…E`, `Set`/`Get`/`Is` prefixes, opposite verb pairs — but is silent on Go *file* and *package* names. Pebble2impl has nontheless converged on conventions through practice; a survey of 1062 Go files under `./public/` and `./apps/` (2026-05-25, branch `main`) shows:
 
 - **File basenames:** snake_case in 1051/1062 files (99 %). 11 outliers are camelCase (`encryptedHash.go`, `keyGenerator.go`, `parseTreeSexpr.go`, …) including one misspelling (`encyptedHash.go`).
 - **Package names:** lowercase no-underscore in ~98 %. 8 outliers carry either an underscore (`data_encoding`, `dml_cbor`, `hn_explorer`, `regex_explorer`, `leewaywidgets_demo`) or a capital (`encryptedHash`, `findAnchor`, `wrapInArray`).
@@ -55,7 +55,7 @@ O3 dominates O1 and O4 on drift prevention and migration without paying O2's coo
 
 ## Decision
 
-We will adopt the following naming rules for new Go files and packages under `./src/go/...` and `./apps/...`, enforced by `scripts/ci/file-naming.sh` with grandfathered exceptions in `scripts/ci/naming-baseline.txt`.
+We will adopt the following naming rules for new Go files and packages under `./public/...` and `./apps/...`, enforced by `scripts/ci/file-naming.sh` with grandfathered exceptions in `scripts/ci/naming-baseline.txt`.
 
 ### Rules
 
@@ -71,7 +71,7 @@ We will adopt the following naming rules for new Go files and packages under `./
 
 ### Scope
 
-- **In scope:** every `.go` file under `./src/go/...` and `./apps/...`.
+- **In scope:** every `.go` file under `./public/...` and `./apps/...`.
 - **Out of scope:** `experiments/*`, `scripts/dev/*`, `attic/`, vendored third-party code. Matches the audit scope in CLAUDE.md `Entry Points (audit + baseline)`.
 
 ### Enforcement
@@ -123,6 +123,6 @@ See [DOCUMENTATION_STANDARD §1 ADR](../../../boxer/doc/DOCUMENTATION_STANDARD.m
 
 - [ADR-0035 — keelson namespace introduction](0035-keelson-namespace-introduction.md) — motivates `apps/` top-level layout enforced by rule N7.
 - [`scripts/ci/entry-points-baseline.txt`](../../scripts/ci/entry-points-baseline.txt) — pattern this ADR mirrors for enforcement.
-- [CLAUDE.md "pebble2impl-local supplement"](../../CLAUDE.md) — the build-tags and Conventional-Commits rules sit alongside this naming spec as pebble-local extensions to boxer.
+- CLAUDE.md "pebble2impl-local supplement" — the build-tags and Conventional-Commits rules sit alongside this naming spec as pebble-local extensions to boxer.
 - [Effective Go — Package names](https://go.dev/doc/effective_go#package-names) — upstream authority for rule N6.
 - [boxer `CODINGSTANDARDS.md`](../../../boxer/CODINGSTANDARDS.md) — covers symbol naming; this ADR is the file/package counterpart.

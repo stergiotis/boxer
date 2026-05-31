@@ -12,7 +12,7 @@ date: 2026-05-17
 
 ## Context
 
-The `rowmarshall` package (`src/go/public/keelson/runtime/rowmarshall/`)
+The `rowmarshall` package (`public/keelson/runtime/rowmarshall/`)
 is a hand-coded ClickHouse RowBinary writer for `runtime.facts`. Until
 this ADR it carried one fact kind (`CapabilityGrant`); each writer
 produces one RowBinary row matching the producer-owned column subset
@@ -256,5 +256,5 @@ YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
 - [ADR-0026 — app runtime + cap subjects](0026-app-runtime-and-capability-subjects.md) — the runtime layer that originally motivated `runtime.facts` schema.
 - [`boxer/public/observability/eh/walk.go`](../../../boxer/public/observability/eh/walk.go) — the upstream `WalkStreams` accessor.
 - [`boxer/public/observability/eh/zerolog.go`](../../../boxer/public/observability/eh/zerolog.go) — `MarshalError` / `gatherFactsAndStacks` (lines 230–445).
-- [`src/go/public/keelson/runtime/codec/errkind/`](../../src/go/public/keelson/runtime/codec/errkind/) — successor package (ADR-0042 M11 retrofit). The hand-coded `rowmarshall.Error` types and RowBinary writer this ADR introduced were replaced by codegen-emitted `ErrorColumns` + `Marshal` here; the shredded parallel-array encoding survives unchanged. The original `rowmarshall/{error,error_from_boxer,error_rowbinary,colspec}.go` files are retired.
+- [`public/keelson/runtime/codec/errkind/`](../../public/keelson/runtime/codec/errkind) — successor package (ADR-0042 M11 retrofit). The hand-coded `rowmarshall.Error` types and RowBinary writer this ADR introduced were replaced by codegen-emitted `ErrorColumns` + `Marshal` here; the shredded parallel-array encoding survives unchanged. The original `rowmarshall/{error,error_from_boxer,error_rowbinary,colspec}.go` files are retired.
 - [`feedback_eh_dedup_strict_prefix`](../../) — agent memory documenting the PC-prefix dedup edge case.

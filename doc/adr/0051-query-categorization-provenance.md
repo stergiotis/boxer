@@ -10,7 +10,7 @@ date: 2026-04-21
 
 ## Context
 
-[ADR-0050](./0001-clickhouse-observability-pipeline.md) fixes the transport
+[ADR-0050](0050-clickhouse-observability-pipeline.md) fixes the transport
 and archive surface: ClickHouse produces progress, query_log, and result
 Arrow IPC streams; a bridge publishes them on NATS subjects; a canonical
 `facts` table plus opaque-blob archive together absorb durable storage.
@@ -409,7 +409,7 @@ facts rows. There is no path from whitelist admission to (a) or (b).
 #### Registry format
 
 The registry is a YAML file under version control
-(`src/go/public/.../categorizer/whitelist.yaml` by default). Entries:
+(`public/.../categorizer/whitelist.yaml` by default). Entries:
 
 ```yaml
 - id: daily_cohort_rollup              # unique, human-chosen identifier
@@ -871,7 +871,7 @@ in training material for reviewers:
 
 ### Module layout
 
-- `src/go/public/.../categorizer/` — new Go package.
+- `public/.../categorizer/` — new Go package.
   - `categorizer.go` — pipeline wiring; `Categorize(sql string) (*CategorizationReportLw, error)`.
   - `shape.go` — `Sh` type, `⊗̂`, `⊕̂` tables, propagation.
   - `whitelist_registry.go` — YAML registry loader; hash verification.
@@ -885,9 +885,9 @@ in training material for reviewers:
   - `pass_tag_lineage.go` — #10.
   - `pass_categorize.go` — #11.
   - `pass_rewrite.go` — #12 (emits ADR-0050 staging SQL).
-- `src/go/public/.../categorizer/whitelist.yaml` — registry of
+- `public/.../categorizer/whitelist.yaml` — registry of
   admitted data products.
-- `src/go/public/.../categorizer/testdata/` — golden-file corpus of
+- `public/.../categorizer/testdata/` — golden-file corpus of
   SQL → expected `CategorizationReportLw`, checked against published
   rules. Must include: every restricted-dialect example above, one
   rejected-by-`reject_disallowed_constructs` case per banned
@@ -1052,7 +1052,7 @@ ADRs are append-only; supersession is recorded, not deleted.
 
 ### Internal
 
-- [ADR-0050](./0001-clickhouse-observability-pipeline.md) —
+- [ADR-0050](0050-clickhouse-observability-pipeline.md) —
   transport and archive decisions this ADR's rewrite pass (#12)
   targets.
 

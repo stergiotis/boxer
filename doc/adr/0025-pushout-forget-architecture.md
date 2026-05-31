@@ -125,7 +125,7 @@ The decision is shaped by five primary instruments and one piece of jurisprudenc
 
 **Question.** What architecture should the pushout VCS adopt to honour data-subject erasure requests under GDPR Article 17 and the equivalent FADP rights, given the constraints above?
 
-**Taxonomy.** The vocabulary used below — architectural *families* (a)/(b)/(c1)/(c2)/(d), the two-store decomposition, operational modes, and the three operations (destruction / deletion / modification-rectification) — is defined in [doc/explanation/erasure-design-space.md](../explanation/erasure-design-space.md). The Architectures and Alternatives that follow are concrete instances within that framework; family labels are noted parenthetically. For a parallel FADP-scope analysis that exercises the same taxonomy with different trade-offs, see [ADR-0027](0027-pushout-forget-swiss-fadp.md).
+**Taxonomy.** The vocabulary used below — architectural *families* (a)/(b)/(c1)/(c2)/(d), the two-store decomposition, operational modes, and the three operations (destruction / deletion / modification-rectification) — is defined in doc/explanation/erasure-design-space.md. The Architectures and Alternatives that follow are concrete instances within that framework; family labels are noted parenthetically. For a parallel FADP-scope analysis that exercises the same taxonomy with different trade-offs, see [ADR-0027](0027-pushout-forget-swiss-fadp.md).
 
 **Options.**
 
@@ -175,7 +175,7 @@ The cost is twofold: every controller must run the vault, and the vault is a new
 
 **Architecture A — PII-segregation by design** (vault-by-design, no cooperative purge).
 
-Scope: greenfield deployment, multi-actor from day one, single-controller-per-tenant. The vault is realised as a **Leeway facts table in ClickHouse** (see [ADR-0060](./0011-leeway-data-contracts-odcs.md) for the data-contract envelope and [ADR-0018](./0018-leeway-card-json-canonical-format.md) for fact-shape conventions); per-actor HMAC-SHA-256 salts back the commitment scheme (SD6). The `Forget(actorID, vaultRef)` operation deletes the matching vault rows under SD11's CH-mutation-finality contract and rotates / destroys the actor's salt; salt destruction is the load-bearing anonymisation step.
+Scope: greenfield deployment, multi-actor from day one, single-controller-per-tenant. The vault is realised as a **Leeway facts table in ClickHouse** (see [ADR-0060](0060-leeway-data-contracts-odcs.md) for the data-contract envelope and [ADR-0018](./0018-leeway-card-json-canonical-format.md) for fact-shape conventions); per-actor HMAC-SHA-256 salts back the commitment scheme (SD6). The `Forget(actorID, vaultRef)` operation deletes the matching vault rows under SD11's CH-mutation-finality contract and rotates / destroys the actor's salt; salt destruction is the load-bearing anonymisation step.
 
 Architecture B (cooperative purge) and Architecture C (layered) are **not adopted**. With a greenfield corpus there is no legacy PII inside patch envelopes to reach back to, so C3 (retroactive coverage) is not engaged; A alone satisfies Art 17 + Art 25 under WP216's destroyed-salt-HMAC reading (subject to OQ1). The SD4 / SD7 / SD12 subsidiary decisions are marked *inapplicable* for traceability.
 
@@ -320,7 +320,7 @@ Background and context:
 
 In-repo siblings:
 
-- [doc/explanation/erasure-design-space.md](../explanation/erasure-design-space.md) — taxonomy (families, two-store decomposition, operational modes, three operations); referenced throughout this ADR for vocabulary.
+- doc/explanation/erasure-design-space.md — taxonomy (families, two-store decomposition, operational modes, three operations); referenced throughout this ADR for vocabulary.
 - [ADR-0027 — Swiss-Only Forget Architecture for the Pushout VCS](0027-pushout-forget-swiss-fadp.md) — FADP-scope variant; uses the same taxonomy with different trade-offs.
 
 Cross-repo (sibling repos under `..`; go.work resolves these locally):

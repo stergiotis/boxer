@@ -14,7 +14,7 @@ date: 2026-05-14
 
 [ADR-0030](./0030-imzero2-design-system-typography.md) commits the IDS typography slot picks (IDS Mono mono, Iosevka Aile proportional, Symbols Nerd Font Mono icons, Inter / Onest as the proportional fallback ladder) but defers the *version pinning* of each font artefact and the *build pipeline* details to a follow-on M0 ADR. This is that ADR.
 
-Per [tier3-human-review.md](../design-system/policy/tier3-human-review.md) §Pending decisions, this ADR resolves:
+Per tier3-human-review.md §Pending decisions, this ADR resolves:
 
 - **T3-001** — Iosevka release version pin.
 
@@ -78,13 +78,13 @@ We will:
 - **Not pre-ship Inter or Onest.** The proportional fallback ladder per [ADR-0030 §SD10](./0030-imzero2-design-system-typography.md) downloads its binary only when the swap trigger fires; the fallback PR ships the binary + SHA pin together.
 - Build IDS Mono via the **`iosevkadocker/build` container** (tag-pinned per [ADR-0030 §Status Q6](./0030-imzero2-design-system-typography.md); image SHA pinning deferred to T3 if drift incident occurs).
 - Verify all committed font binaries via per-directory `SHA256SUMS` files; CI fails on drift.
-- Audit Symbols Nerd Font Mono codepoints against the [patterns/iconography.md](../design-system/patterns/iconography.md) catalogue once at M0b; commit the audit log to the Amendment.
+- Audit Symbols Nerd Font Mono codepoints against the patterns/iconography.md catalogue once at M0b; commit the audit log to the Amendment.
 
 ## Subsidiary design decisions
 
 ### SD1 — IDS Mono build TOML (commit verbatim from ADR-0030 §SD1)
 
-The TOML lives at `src/rust/assets/fonts/ids-mono/private-build-plans.toml`:
+The TOML lives at `rust/imzero2/assets/fonts/ids-mono/private-build-plans.toml`:
 
 ```toml
 # iosevka-release: <pinned-version>   # filled in M0b Amendment
@@ -118,11 +118,11 @@ Current shape (post-pivot):
 
 1. `ids-fonts/` CI clones Iosevka at the pinned `IOSEVKA_VERSION`, applies the IDS Mono build plan from `private-build-plans.toml`, and runs `npm run build -- ttf::IDSMono` on `ubuntu-24.04` with `ttfautohint` / `p7zip-full` / `python3` from apt + Node.js 22.
 2. On `v*` tag push, the release attaches six `.ttf` files, `SHA256SUMS`, the build TOML, `IOSEVKA_VERSION`, and the OFL `LICENSE` to a versioned URL: `https://github.com/stergiotis/ids-fonts/releases/download/<tag>/`.
-3. pebble2impl re-vendors by `curl` + `sha256sum -c` into `src/rust/assets/fonts/ids-mono/`.
+3. pebble2impl re-vendors by `curl` + `sha256sum -c` into `rust/imzero2/assets/fonts/ids-mono/`.
 
 Output: six `.ttf` files (Regular, Italic, Medium, MediumItalic, Bold, BoldItalic). No Docker, Node.js, or font toolchain required on pebble2impl contributor machines.
 
-**Container tag pinning.** [ADR-0030 §Status Q6](./0030-imzero2-design-system-typography.md) frames the tag-vs-SHA choice; M0 ships with **tag-based pinning** (`iosevkadocker/build:latest` or a specific dated tag like `iosevkadocker/build:2026-04`). SHA-based pinning is reserved for the build-drift trigger ([T3-006](../design-system/policy/tier3-human-review.md)) — same rationale as the Iosevka version pin: bug fixes flow through latest-tag unless drift surfaces.
+**Container tag pinning.** [ADR-0030 §Status Q6](./0030-imzero2-design-system-typography.md) frames the tag-vs-SHA choice; M0 ships with **tag-based pinning** (`iosevkadocker/build:latest` or a specific dated tag like `iosevkadocker/build:2026-04`). SHA-based pinning is reserved for the build-drift trigger (T3-006) — same rationale as the Iosevka version pin: bug fixes flow through latest-tag unless drift surfaces.
 
 ### SD3 — Iosevka Aile binary download
 
@@ -132,7 +132,7 @@ Aile is published as part of the Iosevka release tarball, *not* built locally. D
 https://github.com/be5invis/Iosevka/releases/download/<version>/PkgWebFont-IosevkaAile-<version>.zip
 ```
 
-Subset extracted (matches [ADR-0030 §SD2](./0030-imzero2-design-system-typography.md) weight requirements): eight `.ttf` files (Regular, Italic, Medium, MediumItalic, SemiBold, SemiBoldItalic, Bold, BoldItalic) at ~200 KB each. Committed to `src/rust/assets/fonts/iosevka-aile/`.
+Subset extracted (matches [ADR-0030 §SD2](./0030-imzero2-design-system-typography.md) weight requirements): eight `.ttf` files (Regular, Italic, Medium, MediumItalic, SemiBold, SemiBoldItalic, Bold, BoldItalic) at ~200 KB each. Committed to `rust/imzero2/assets/fonts/iosevka-aile/`.
 
 Aile's version is bound to the Iosevka version (same release tarball); the Iosevka pin from §SD1 transitively pins Aile.
 
@@ -144,11 +144,11 @@ Per [ADR-0030 §SD12](./0030-imzero2-design-system-typography.md) the icon-only 
 https://github.com/ryanoasis/nerd-fonts/releases/download/<v3.x.x>/NerdFontsSymbolsOnly.zip
 ```
 
-Subset extracted: `SymbolsNerdFontMono-Regular.ttf` (~3 MB). Committed to `src/rust/assets/fonts/symbols-nerd-font-mono/`.
+Subset extracted: `SymbolsNerdFontMono-Regular.ttf` (~3 MB). Committed to `rust/imzero2/assets/fonts/symbols-nerd-font-mono/`.
 
 **Codepoint audit.** [ADR-0030 §SD12](./0030-imzero2-design-system-typography.md) notes that Nerd Fonts occasionally renumber individual glyphs between major versions. The M0b execution runs a one-time audit:
 
-- For each catalogue entry in [patterns/iconography.md](../design-system/patterns/iconography.md), render the glyph at the proposed codepoint using the pinned Symbols Nerd Font Mono.
+- For each catalogue entry in patterns/iconography.md, render the glyph at the proposed codepoint using the pinned Symbols Nerd Font Mono.
 - Visually confirm the glyph matches the intended meaning (or programmatically — extract the glyph name from the font's glyph table and compare to the catalogue label).
 - For any mismatch, either update the catalogue codepoint or pick a different glyph.
 
@@ -156,10 +156,10 @@ The audit log (mismatch count, fixes applied) lands in the M0b Amendment alongsi
 
 ### SD5 — `SHA256SUMS` per-directory verification
 
-Each font directory under `src/rust/assets/fonts/` carries a `SHA256SUMS` file:
+Each font directory under `rust/imzero2/assets/fonts/` carries a `SHA256SUMS` file:
 
 ```
-# src/rust/assets/fonts/ids-mono/SHA256SUMS
+# rust/imzero2/assets/fonts/ids-mono/SHA256SUMS
 abc123…  IDSMono-Regular.ttf
 def456…  IDSMono-Italic.ttf
 …
@@ -173,7 +173,7 @@ Per [ADR-0030 §SD10](./0030-imzero2-design-system-typography.md), the proportio
 
 When the trigger fires, a Tier 3 follow-on ADR (probably ADR-003N for N ≥ 35):
 
-- Downloads Onest from `https://github.com/TabularType/Onest/releases/<version>` and commits the binaries + `SHA256SUMS` to `src/rust/assets/fonts/onest/`.
+- Downloads Onest from `https://github.com/TabularType/Onest/releases/<version>` and commits the binaries + `SHA256SUMS` to `rust/imzero2/assets/fonts/onest/`.
 - Updates `Body.family` / `Caption.family` token references from `iosevka-aile` to `onest`.
 - Lands as an Amendment to ADR-0030 with a screenshot diff.
 - If Onest *also* fails (rare), a second Amendment swaps to Inter via `https://github.com/rsms/inter/releases/<v4.x.x>`.
@@ -183,7 +183,7 @@ M0 does *not* pre-ship Inter or Onest. Total binary footprint stays at ~6.1 MB p
 ### SD7 — Repo layout (committed artefacts)
 
 ```
-src/rust/assets/fonts/
+rust/imzero2/assets/fonts/
 ├── ids-mono/
 │   ├── BUILD.md                       # how-to: bump the upstream pin
 │   ├── IDSMono-Regular.ttf            # release artefacts from ids-fonts <tag>
@@ -237,7 +237,7 @@ M0a is implementable immediately on acceptance; M0b is gated on running the buil
 
 - **Build Iosevka from `main` branch** (O1c). Rejected at intake; non-deterministic.
 - **Use a pre-built Iosevka SS variant** (O1d). Already rejected by [ADR-0030 §Alternatives](./0030-imzero2-design-system-typography.md) for inheriting the "looks like \[famous font\]" critique.
-- **Pin a specific known-good earlier Iosevka version** (O1b). Considered for stability; rejected because the latest stable is well-tested and the build-drift trigger ([T3-006](../design-system/policy/tier3-human-review.md)) handles regressions if they appear.
+- **Pin a specific known-good earlier Iosevka version** (O1b). Considered for stability; rejected because the latest stable is well-tested and the build-drift trigger (T3-006) handles regressions if they appear.
 - **Bundle the full Nerd Fonts package** (O2b alternative). Rejected on binary footprint — 12 MB vs ~3 MB for the icon-only variant.
 - **Pre-ship Inter / Onest as part of M0** (O3b). Rejected on binary footprint; the fallback PR ships its own binary when the trigger fires.
 - **System-font fallback for the fallback ladder** (e.g., "use system Helvetica if Aile fails"). Rejected per [ADR-0030 §Alternatives](./0030-imzero2-design-system-typography.md) "System fonts via `fontconfig` lookup" — loses screenshot reproducibility, which is the whole point of embedding.
@@ -297,7 +297,7 @@ Closes §SD9 M0b. Lands the pinned version + downloaded artefacts the parent ADR
 
 **Aile downloaded but bundle reduced.** Iosevka Aile downloaded from `github.com/be5invis/Iosevka/releases/download/v34.5.0/PkgTTF-IosevkaAile-34.5.0.zip` — see [§SD7 finding](#sd7-finding-aile-bundle-budget-overrun) for why only Regular landed.
 
-**SHA-pinned bytes shipped in `pebble2impl`** at `src/rust/assets/fonts/`:
+**SHA-pinned bytes shipped in `pebble2impl`** at `rust/imzero2/assets/fonts/`:
 
 | File | SHA-256 |
 |---|---|
@@ -373,9 +373,9 @@ Fixed at `v0.1.1`: capitalized keys (`weights.Regular`, etc.) plus an explicit `
 
 **3. Rust-side assets lift** (this PR, pebble2impl side).
 
-Moved `src/rust/imzero2_egui/assets/` → `src/rust/assets/`. The fonts and color tokens are not egui-specific (TTFs, palette TOMLs, scientific colormap LUTs); they're project-wide Rust resources that any future crate can consume without depending on `imzero2_egui`. [ADR-0030 §SD7](./0030-imzero2-design-system-typography.md) and this ADR's §SD7 layout blocks updated; Go codegen paths (`gen.go`, `vendor.go`, `emit.go`) and `scripts/ci/lint.sh` SHA-verify path also updated.
+Moved `rust/imzero2/imzero2_egui/assets/` → `rust/imzero2/assets/`. The fonts and color tokens are not egui-specific (TTFs, palette TOMLs, scientific colormap LUTs); they're project-wide Rust resources that any future crate can consume without depending on `imzero2_egui`. [ADR-0030 §SD7](./0030-imzero2-design-system-typography.md) and this ADR's §SD7 layout blocks updated; Go codegen paths (`gen.go`, `vendor.go`, `emit.go`) and `scripts/ci/lint.sh` SHA-verify path also updated.
 
-**SHA-pinned bytes shipped** at `src/rust/assets/fonts/ids-mono/`:
+**SHA-pinned bytes shipped** at `rust/imzero2/assets/fonts/ids-mono/`:
 
 | File | SHA-256 |
 |---|---|
@@ -397,9 +397,9 @@ Moved `src/rust/imzero2_egui/assets/` → `src/rust/assets/`. The fonts and colo
 - [ADR-0029 — design system + policy-as-code](./0029-imzero2-design-system-and-policy-as-code.md) — IDS framework; §SD13 hard performance invariant (no runtime presence — font bytes are embedded; loading is a startup cost).
 - [ADR-0033 — IDS palette M0](./0033-imzero2-design-system-palette-m0.md) — sibling M0 ADR; same design-contract-then-execution-Amendment pattern reused here.
 - [ADR-0028 — `ch.local.exec` low-latency cap](./0028-chlocal-low-latency-sql-cap.md) — M0 spike Amendment pattern (original precedent).
-- [tier3-human-review.md](../design-system/policy/tier3-human-review.md) — resolves T3-001; partially anchors T3-006 (build-container SHA pinning deferred per trigger).
-- [INSPIRATIONS.md](../design-system/INSPIRATIONS.md) — attributions for Iosevka (Renzhi Li, OFL), Aile (same), Nerd Fonts (Ryan L. McIntyre + contributors, MIT), FontAwesome (free subset), Inter (Rasmus Andersson, OFL), Onest (Tabular Type Foundry, OFL).
-- [patterns/iconography.md](../design-system/patterns/iconography.md) — codepoint catalogue audited at M0b.
+- tier3-human-review.md — resolves T3-001; partially anchors T3-006 (build-container SHA pinning deferred per trigger).
+- INSPIRATIONS.md — attributions for Iosevka (Renzhi Li, OFL), Aile (same), Nerd Fonts (Ryan L. McIntyre + contributors, MIT), FontAwesome (free subset), Inter (Rasmus Andersson, OFL), Onest (Tabular Type Foundry, OFL).
+- patterns/iconography.md — codepoint catalogue audited at M0b.
 - [Iosevka GitHub releases](https://github.com/be5invis/Iosevka/releases) — source of IDS Mono build + Aile binary.
 - [Iosevka customizer](https://typeof.net/Iosevka/customizer) — variant-name verification at M0b.
 - [Nerd Fonts GitHub releases](https://github.com/ryanoasis/nerd-fonts/releases) — source of Symbols Nerd Font Mono.

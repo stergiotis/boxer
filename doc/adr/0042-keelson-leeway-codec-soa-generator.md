@@ -13,7 +13,7 @@ reviewed-date: 2026-05-18
 `runtime.facts` is the keelson-side tagged-value table introduced by
 ADR-0026 and shredded per ADR-0041. Today two fact kinds —
 `CapabilityGrant` and `Error` — are served by the hand-coded
-`src/go/public/keelson/runtime/rowmarshall/` package: per-type
+`public/keelson/runtime/rowmarshall/` package: per-type
 `MarshalRowBinaryRuntimeFacts()` methods, reflection only at init via
 `tagplan.go`, ~51 ns/op on the hot path. ADR-0041 spelled out the
 philosophy: no reflection on the row-emit path; each new fact kind is
@@ -37,7 +37,7 @@ Three forces motivate a codec generator now:
   the generator respects (two-axis schema model, DTO grammar, wire
   encodings, empty-as-absent rule, roaring-as-array, codegen-time
   consistency checks) is documented in
-  [`keelson/vdd/EXPLANATION.md`](../../src/go/public/keelson/vdd/EXPLANATION.md).
+  [`keelson/vdd/EXPLANATION.md`](../../public/keelson/vdd/EXPLANATION.md).
   This ADR records the decision to **generate** the codec; the
   EXPLANATION records the **model** the codec respects.
 
@@ -167,7 +167,7 @@ type CapabilityGrant struct {
 The supported field shapes (`T`, `Option[T]`, `[]T`, `*roaring.Bitmap`),
 the vdd-cardinality × sub-type matrix that maps them to wire encodings,
 and the four codegen-time consistency checks are documented in
-[`keelson/vdd/EXPLANATION.md`](../../src/go/public/keelson/vdd/EXPLANATION.md).
+[`keelson/vdd/EXPLANATION.md`](../../public/keelson/vdd/EXPLANATION.md).
 The ADR does not duplicate them.
 
 ### Trade-off pinned by the driver path
@@ -509,7 +509,7 @@ The split lets future task.\* DTOs reuse `taskId` without
 duplicating it under a kind prefix; it documents cross-cutting versus
 narrow terms.
 
-DTO at `src/go/public/keelson/runtime/codec/taskprogress/` (kind
+DTO at `public/keelson/runtime/codec/taskprogress/` (kind
 `taskProgress`, plain `id=FactId, ts=AtNs`). Every tagged field
 ExactlyOne — Go zero value carries the absence semantics (Total=0 ⇒
 indeterminate, EtaMs=0 ⇒ not-yet-computed, Note="" ⇒ no annotation),
@@ -561,7 +561,7 @@ Vocabulary extension:
   `MembTaskKind` (symbol), `MembTaskCancellableB` (bool),
   `MembTaskEstimatedMs` (i64).
 
-DTO at `src/go/public/keelson/runtime/codec/taskcreated/`. Same wire
+DTO at `public/keelson/runtime/codec/taskcreated/`. Same wire
 breaks as TaskProgress: `Id TaskIdT` → `TaskId string`, `AtMs` →
 `AtNs`, new `FactId uint64` plain id. `OwnerAppId app.AppIdT` flattens
 to plain `string` because the codec field type is `string`; callers
@@ -586,7 +586,7 @@ short `Reason` string). Shared vocab added:
   'why' annotation" — siblings of `MembNote` (annotation) and
   `MembTitle` (label).
 
-DTO at `src/go/public/keelson/runtime/codec/taskcancel/`. Same wire
+DTO at `public/keelson/runtime/codec/taskcancel/`. Same wire
 breaks as the prior migrations (`Id TaskIdT` → `TaskId string`,
 `AtMs` → `AtNs`, new `FactId uint64`). No narrow vocab — every
 field maps to an existing shared term, which is the test that the
@@ -627,7 +627,7 @@ Vocabulary addition:
   *separate* column (e.g. `errorStructured`) — `errorText` stays
   the human-readable surface.
 
-DTO at `src/go/public/keelson/runtime/codec/taskerror/`. The
+DTO at `public/keelson/runtime/codec/taskerror/`. The
 field-level wire breaks repeat the prior migrations plus one
 type rename: `Error []byte` → `ErrorText string`. The producer
 already captured `eh.FormatErrorWithStackS(taskErr)` (UTF-8
@@ -722,7 +722,7 @@ grammar. Vocabulary addition:
   introduce its own term then; better to start narrow than to
   retroactively split a too-broad shared term.
 
-DTO at `src/go/public/keelson/runtime/codec/taskdone/`. Same wire
+DTO at `public/keelson/runtime/codec/taskdone/`. Same wire
 breaks as the prior task.* migrations (`Id`→`TaskId`, `AtMs`→`AtNs`,
 new `FactId uint64`). `Result []byte` keeps the same Go shape; the
 codec replaces the CBOR bytes envelope with a single variable-length
@@ -1234,7 +1234,7 @@ removed from `factsschema/{dml*,ra,ddl}/*.out.go` net). Reproduction:
 ```bash
 go test -tags "$(cat tags | tr -d $'\n')" -bench . -benchmem \
         -count=10 -run='^$' \
-        ./src/go/public/keelson/runtime/factsschema/bench/ \
+        ./public/keelson/runtime/factsschema/bench/ \
         | tee /tmp/bench.log
 benchstat /tmp/bench.log
 ```
@@ -1421,15 +1421,15 @@ entry stands; cross-backend numbers in the 2026-05-22 sweep entry
 remain the canonical reference (re-running them would require
 restoring the deleted backends).
 
-- [`keelson/vdd/EXPLANATION.md`](../../src/go/public/keelson/vdd/EXPLANATION.md) — the schema model and codegen contract this ADR commits to generate against.
+- [`keelson/vdd/EXPLANATION.md`](../../public/keelson/vdd/EXPLANATION.md) — the schema model and codegen contract this ADR commits to generate against.
 - [ADR-0026 — app runtime + capability subjects](0026-app-runtime-and-capability-subjects.md) — introduced `runtime.facts`.
-- [ADR-0035 — keelson namespace introduction](0035-keelson-namespace-introduction.md) — situates this work under `src/go/public/keelson/`.
+- [ADR-0035 — keelson namespace introduction](0035-keelson-namespace-introduction.md) — situates this work under `public/keelson/`.
 - [ADR-0036 — runtime/buscodec](0036-runtime-buscodec.md) — sibling codec ADR; same `CodecI`-swap design philosophy applied to bus payloads.
 - [ADR-0041 — rowmarshall error shredding](0041-rowmarshall-error-shredding.md) — settled the no-reflection-on-hot-path rule and the parallel-array shape for tree-shaped fact kinds.
-- [`src/go/public/keelson/vdd/`](../../src/go/public/keelson/vdd/) — central membership registry consumed by the generator.
-- [`src/go/public/keelson/runtime/codec/capabilitygrant/`](../../src/go/public/keelson/runtime/codec/capabilitygrant/) and [`/errkind/`](../../src/go/public/keelson/runtime/codec/errkind/) — the retrofits that supersede the (now-deleted) hand-coded `rowmarshall` package per the Updates entry below.
-- [`src/go/public/keelson/runtime/factsschema/dml/`](../../src/go/public/keelson/runtime/factsschema/dml/) — Arrow-builder codegen target (chstore-ingest path).
-- [`src/go/public/keelson/runtime/factsschema/dml_cbor/`](../../src/go/public/keelson/runtime/factsschema/dml_cbor/) — sparse-CBOR codegen target (codec wire).
-- [`src/go/public/keelson/runtime/factsschema/cborarrow/`](../../src/go/public/keelson/runtime/factsschema/cborarrow/) — sparse-CBOR → Arrow bridge used by codec Decode.
-- [`src/go/public/keelson/runtime/factsschema/ra/`](../../src/go/public/keelson/runtime/factsschema/ra/) — Arrow-read codegen target.
-- [`src/go/public/boxerstaging/spinnaker/vdd/`](../../src/go/public/boxerstaging/spinnaker/vdd/) — prior-art registry pattern that `keelson/vdd` mirrors.
+- [`public/keelson/vdd/`](../../public/keelson/vdd) — central membership registry consumed by the generator.
+- [`public/keelson/runtime/codec/capabilitygrant/`](../../public/keelson/runtime/codec/capabilitygrant) and [`/errkind/`](../../public/keelson/runtime/codec/errkind) — the retrofits that supersede the (now-deleted) hand-coded `rowmarshall` package per the Updates entry below.
+- [`public/keelson/runtime/factsschema/dml/`](../../public/keelson/runtime/factsschema/dml) — Arrow-builder codegen target (chstore-ingest path).
+- [`public/keelson/runtime/factsschema/dml_cbor/`](../../public/keelson/runtime/factsschema/dml_cbor) — sparse-CBOR codegen target (codec wire).
+- [`public/keelson/runtime/factsschema/cborarrow/`](../../public/keelson/runtime/factsschema/cborarrow) — sparse-CBOR → Arrow bridge used by codec Decode.
+- [`public/keelson/runtime/factsschema/ra/`](../../public/keelson/runtime/factsschema/ra) — Arrow-read codegen target.
+- `public/spinnaker/vdd/` — prior-art registry pattern that `keelson/vdd` mirrors.

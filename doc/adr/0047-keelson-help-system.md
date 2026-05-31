@@ -308,8 +308,8 @@ shipped corpus.
 - [ADR-0026](0026-app-runtime-and-capability-subjects.md) — `app.AppI` + `Manifest` foundation that `Manifest.Help` extends.
 - [ADR-0035](0035-keelson-namespace-introduction.md) — `runtime/` namespace where both `help` and `helphost` live.
 - [ADR-0044](0044-imzero2-design-system-iconography.md) — `icons.PhBookOpen` used by HelpHost's manifest.
-- `src/go/public/keelson/runtime/help/` — library implementation + tests.
-- `src/go/public/keelson/runtime/helphost/` — reader app + tests.
+- `public/keelson/runtime/help/` — library implementation + tests.
+- `public/keelson/runtime/helphost/` — reader app + tests.
 - Commit chain shipping the system:
   - `92d05b66 feat(help): inline help library`
   - `dfe65d80 feat(helphost): windowed reader app`

@@ -16,7 +16,7 @@ date: 2026-05-19
 
 [ADR-0029](./0029-imzero2-design-system-and-policy-as-code.md) §SD5 defers the iconography choice; [ADR-0030](./0030-imzero2-design-system-typography.md) §SD12 picks **Symbols Nerd Font Mono** as a fallback family covering "arrows, status, file-types, tool indicators, file-system glyphs, Powerline separators" via the egui font-fallback chain, and promises a `patterns/iconography.md` catalogue documenting which IDS-conformant apps use which glyphs for which meanings. That catalogue was never written, and a survey of actual usage surfaces two problems with §SD12 as it stands.
 
-**Problem 1 — the ratio of payload to use.** A single `grep -rohE "nf\.[A-Z]\w+" src/go apps | sort -u` enumerates the universe of icon references the project actually makes: **44 unique <code>nf.\*</code> identifiers**, collapsing to **43 distinct semantic icons** after merging `nf.Check ≡ nf.CodCheck`. ADR-0030 §SD12 ships approximately **3 MB / >10 000 glyphs** to serve those 43 — a ~230× over-provision in glyph count and a ~4× over-provision in binary bytes relative to a focused subset built for the same purpose.
+**Problem 1 — the ratio of payload to use.** A single `grep -rohE "nf\.[A-Z]\w+" public apps | sort -u` enumerates the universe of icon references the project actually makes: **44 unique <code>nf.\*</code> identifiers**, collapsing to **43 distinct semantic icons** after merging `nf.Check ≡ nf.CodCheck`. ADR-0030 §SD12 ships approximately **3 MB / >10 000 glyphs** to serve those 43 — a ~230× over-provision in glyph count and a ~4× over-provision in binary bytes relative to a focused subset built for the same purpose.
 
 **Problem 2 — visual incoherence within the affordance set.** The 43 icons in use today span **five distinct upstream visual languages**:
 
@@ -111,7 +111,7 @@ Variant choice rationale (mirror of ADR-0030 §SD12's rationale, restated for Ph
 Build artifact location:
 
 ```
-src/rust/assets/fonts/phosphor/
+rust/imzero2/assets/fonts/phosphor/
 ├── BUILD.md                  # how-to: bump the upstream pin
 ├── Phosphor.ttf              # Regular weight, downloaded from @phosphor-icons/web release
 ├── LICENSE                   # MIT — must travel with the font
@@ -147,7 +147,7 @@ Subsetting approach:
 Build artifact location (pebble2impl side, post-M1 wire-up):
 
 ```
-src/rust/assets/fonts/nf-brand/
+rust/imzero2/assets/fonts/nf-brand/
 ├── BUILD.md         # how-to: bump the upstream pin in stergiotis/ids-fonts
 ├── NFBrand.ttf      # subsetted, SHA-pinned (~150 KB)
 ├── LICENSE          # MIT (Nerd Fonts) — must travel
@@ -158,12 +158,12 @@ The upstream `SymbolsNerdFontMono-Regular.ttf` is *not* vendored on pebble2impl 
 
 Size estimate: a 200-codepoint subset of a 10 000-glyph .ttf typically lands at 100–200 KB depending on glyph complexity; brand marks are visually richer than affordances, so the upper end is more likely. Empirical measurement during M1 will confirm.
 
-### SD3 — Go-side icons package: `src/go/public/keelson/runtime/icons/`
+### SD3 — Go-side icons package: `public/keelson/runtime/icons/`
 
-The Go-side surface for icon constants moves out of `src/go/public/thestack/imzero2/nerdfont/` (the now-archived ~10 000-glyph generated package, see §SD8) into a new package under the keelson namespace (per [ADR-0035](./0035-keelson-namespace-introduction.md)):
+The Go-side surface for icon constants moves out of `public/thestack/imzero2/nerdfont/` (the now-archived ~10 000-glyph generated package, see §SD8) into a new package under the keelson namespace (per [ADR-0035](./0035-keelson-namespace-introduction.md)):
 
 ```
-src/go/public/keelson/runtime/icons/
+public/keelson/runtime/icons/
 ├── doc.go                       # package overview; references this ADR
 ├── phosphor-icons.json          # VENDORED — from stergiotis/ids-fonts release (SHA-pinned)
 ├── SHA256SUMS                   # CI-verified on every build
@@ -177,7 +177,7 @@ src/go/public/keelson/runtime/icons/
     └── generator.go             # codegen library — reads phosphor-icons.json, emits phosphor*.out.go
 ```
 
-The cmd binary lives at `src/go/cmd/iconsgen/` (project convention, cf. `cmd/keelsoncodec`, `cmd/runtimecodegen`, `cmd/envgen`); it is a thin urfave/cli wrapper over the `icons/generator` package.
+The cmd binary lives at `public/app/commands/iconsgen/` (project convention, cf. `cmd/keelsoncodec`, `cmd/runtimecodegen`, `cmd/envgen`); it is a thin urfave/cli wrapper over the `icons/generator` package.
 
 Naming convention — two layers:
 
@@ -188,7 +188,7 @@ Generation discipline:
 
 - The vendored `phosphor-icons.json` is the source-of-truth for pebble2impl. The JSON is a release artefact of [`stergiotis/ids-fonts`](https://github.com/stergiotis/ids-fonts) — that repo owns the upstream `@phosphor-icons/core` pin, downloads `src/icons.ts`, runs `scripts/ts-to-json.py` against it, and attaches the result alongside `Phosphor.ttf` to each tagged release. This split follows the discipline ADR-0030 §SD9 established for IDS Mono: contributor machines need only `curl + sha256sum -c`; the font/JSON toolchain lives upstream.
 - The Go generator reads the vendored JSON via `encoding/json` and emits the two `.out.go` files. It consumes only four fields (`name`, `pascal_name`, `codepoint`, optional `alias`); all other catalogue metadata is dropped by the upstream TS→JSON step. If upstream renames any of the four fields, the JSON either omits the field (skipped entries surface as missing `PhXxx` constants) or fails to unmarshal (the generator exits non-zero with `unable to unmarshal phosphor-icons.json`) — both are the correct signal to re-evaluate the converter in `stergiotis/ids-fonts`.
-- Regen is `bash src/go/public/keelson/runtime/icons/generate.sh` (out-of-band). The `.out.go` outputs are checked in per the project's `.out.go` convention.
+- Regen is `bash public/keelson/runtime/icons/generate.sh` (out-of-band). The `.out.go` outputs are checked in per the project's `.out.go` convention.
 - Bumping the upstream pin happens in *two* places, in order: first bump `PHOSPHOR_VERSION` in `stergiotis/ids-fonts` and tag a release; then re-vendor the new release's `phosphor-icons.json` here, regenerate `SHA256SUMS`, rerun `generate.sh`. Any net rename of an icon between versions surfaces as a removed `PhXxx` constant; CI catches the resulting compile error in callers (or in the curated layer's alias). M3 may add an explicit drift-detection diff against a previous codepoint snapshot.
 
 API surface:
@@ -255,21 +255,21 @@ for family in [FontFamily::Proportional, FontFamily::Monospace] {
 
 Order matters: text codepoints route to IDS Mono / Iosevka Aile first; codepoints in Phosphor's range fall through to `phosphor`; codepoints in Devicons / Logos / Custom ranges fall through to `nf-brand`. There is no overlap between Phosphor's range and the NF brand-subset ranges — both live in PUA but in disjoint slices, so fallback ordering between the two is robust to glyph-set growth on either side.
 
-Loader location: `src/rust/src/imzero2/app.rs::load_custom_fonts`, alongside the existing IDS Mono / Aile / Symbols-Nerd-Font-Mono registrations. The §SD8 removal step deletes the Symbols-Nerd-Font-Mono registration in the same change.
+Loader location: `rust/imzero2/src/imzero2/app.rs::load_custom_fonts`, alongside the existing IDS Mono / Aile / Symbols-Nerd-Font-Mono registrations. The §SD8 removal step deletes the Symbols-Nerd-Font-Mono registration in the same change.
 
 ### SD6 — The legacy `nerdfont` package, the generator, and the upstream JSON catalogue
 
 The artefacts being decommissioned:
 
-- `src/go/public/thestack/imzero2/nerdfont/` — generated Go-side package with **~10 000** glyph constants emitted from the upstream Nerd Fonts JSON catalogue (`staticGlyphs.out.go` + `dynamicGlyphs.out.go`, ~1.1 MB of generated source).
-- `src/go/public/thestack/imzero2/nerdfont/generator/` — the codegen library that emits the above.
-- `src/go/public/thestack/cmd/nerdfontgen/` — the CLI wrapper around the generator.
-- `src/go/public/thestack/imzero2/nerdfont/glyphnames.json` — the upstream Nerd Fonts catalogue (~535 KB, vendored).
-- `src/go/public/thestack/imzero2/nerdfont/generate.sh` — the regen driver.
+- `public/thestack/imzero2/nerdfont/` — generated Go-side package with **~10 000** glyph constants emitted from the upstream Nerd Fonts JSON catalogue (`staticGlyphs.out.go` + `dynamicGlyphs.out.go`, ~1.1 MB of generated source).
+- `public/thestack/imzero2/nerdfont/generator/` — the codegen library that emits the above.
+- `public/thestack/cmd/nerdfontgen/` — the CLI wrapper around the generator.
+- `public/thestack/imzero2/nerdfont/glyphnames.json` — the upstream Nerd Fonts catalogue (~535 KB, vendored).
+- `public/thestack/imzero2/nerdfont/generate.sh` — the regen driver.
 
-All five move to `../boxer_attic/src/go/public/thestack/{imzero2/nerdfont, cmd/nerdfontgen}/`, preserving pebble's `src/go/public/...` layout under a sibling repository that exists specifically to archive decommissioned-but-historically-valuable code. The pebble2impl side deletes them outright — no shim is left at the old path.
+All five move to `../boxer_attic/public/thestack/{imzero2/nerdfont, cmd/nerdfontgen}/`, preserving pebble's `public/...` layout under a sibling repository that exists specifically to archive decommissioned-but-historically-valuable code. The pebble2impl side deletes them outright — no shim is left at the old path.
 
-The Rust-side `src/rust/assets/fonts/symbols-nerd-font-mono/` directory (Phosphor's predecessor in the egui atlas) is *not* moved to the attic; it is deleted from pebble2impl in the same M1 change that adds `phosphor/` and `nf-brand/`. The Rust-side LICENSE and SHA file lineage is preserved in git history; there is no value in archiving the upstream binary in a parallel repo.
+The Rust-side `rust/imzero2/assets/fonts/symbols-nerd-font-mono/` directory (Phosphor's predecessor in the egui atlas) is *not* moved to the attic; it is deleted from pebble2impl in the same M1 change that adds `phosphor/` and `nf-brand/`. The Rust-side LICENSE and SHA file lineage is preserved in git history; there is no value in archiving the upstream binary in a parallel repo.
 
 This deletion plus archive is the §SD1 / §SD2 implementation's final M2 step (§SD8). It is *not* part of M0 (this ADR) or M1 (Phosphor wiring) — call sites must migrate first before the legacy package can be removed.
 
@@ -277,7 +277,7 @@ This deletion plus archive is the §SD1 / §SD2 implementation's final M2 step (
 
 Both Phosphor and the Nerd Fonts subset follow ADR-0030 §SD7 / §SD9 / §SD10 discipline:
 
-- **Phosphor release pin.** Pinned to `@phosphor-icons/web` `vX.Y.Z` in `src/rust/assets/fonts/phosphor/BUILD.md`. Bumps are Tier 3 ([ADR-0029](./0029-imzero2-design-system-and-policy-as-code.md) §SD10), recorded as an Amendment to this ADR if codepoints renumber.
+- **Phosphor release pin.** Pinned to `@phosphor-icons/web` `vX.Y.Z` in `rust/imzero2/assets/fonts/phosphor/BUILD.md`. Bumps are Tier 3 ([ADR-0029](./0029-imzero2-design-system-and-policy-as-code.md) §SD10), recorded as an Amendment to this ADR if codepoints renumber.
 - **Nerd Fonts release pin.** The input `.ttf` is pinned to a Nerd Fonts release tag (currently `v3.4.1` at time of writing — verify at first M1). The subsetted output (`NFBrand.ttf`) is regenerated via `subset.sh` and SHA-pinned independently.
 - **Codepoint table changes.** If Phosphor renumbers any codepoint our Slot A constants reference, the change requires a same-commit update to `affordances.out.go` and a CI verification step.
 
@@ -288,7 +288,7 @@ This ADR is M0. Subsequent milestones land as separate commits with separate rev
 | Milestone | Scope | Deliverable | Status |
 |-----------|-------|-------------|--------|
 | **M0** | This ADR + decision recorded + full Go-side scaffold | `doc/adr/0044-*.md` (proposed) + `iconset-comparison.html` design aid + nerdfont packages mirrored to `../boxer_attic` + `keelson/runtime/icons/` package (curated `IconXxx` + full generated `PhXxx` for every Phosphor regular icon, vendored upstream catalogue + iconsgen generator + generate.sh) | **two commits: ADR + scaffold first; full Phosphor generator second** |
-| **M1** | Rust-side font embedding | Phosphor.ttf + NFBrand.ttf added to `src/rust/assets/fonts/{phosphor,nf-brand}/` with SHA pinning; `load_custom_fonts` updated; iconography catalogue verified against the actual TTF | next commit (after ADR review) |
+| **M1** | Rust-side font embedding | Phosphor.ttf + NFBrand.ttf added to `rust/imzero2/assets/fonts/{phosphor,nf-brand}/` with SHA pinning; `load_custom_fonts` updated; iconography catalogue verified against the actual TTF | next commit (after ADR review) |
 | **M2** | Call-site migration | The 15 files importing `nerdfont` migrate to `icons.*`; old `nerdfont` package deleted from pebble2impl (build green again); old Rust SymbolsNerdFontMono removed in the same change | follow-on commit |
 | **M3** | Cleanup + density-weight evaluation | Density-preset → Phosphor weight mapping (§SD4) tested under M1 screenshots; filled-variant decisions; `patterns/iconography.md` written (the catalogue ADR-0030 §SD12 promised) | as-needed |
 
@@ -343,14 +343,14 @@ Proposed — awaiting review by @spx. M0 lands across two commits:
 - This ADR file (proposed)
 - `iconset-comparison.html` at repo root (visual decision aid; can be moved or deleted post-acceptance)
 - Legacy `nerdfont` packages mirrored to `../boxer_attic` (initial commit there)
-- `src/go/public/keelson/runtime/icons/` package scaffold: hand-curated `affordances.out.go` (Slot A, 33 high-frequency icons with Phosphor codepoints from the public catalogue) + `brandmarks.out.go` (Slot B, 10 NF-subset codepoints preserved verbatim)
+- `public/keelson/runtime/icons/` package scaffold: hand-curated `affordances.out.go` (Slot A, 33 high-frequency icons with Phosphor codepoints from the public catalogue) + `brandmarks.out.go` (Slot B, 10 NF-subset codepoints preserved verbatim)
 - Legacy `nerdfont` packages deleted from pebble2impl
 
 **Second commit** (§SD3 generator addition):
 
 - `phosphor-icons.ts` (then) vendored from `@phosphor-icons/core` + local `tsToJson.py` converter
 - `keelson/runtime/icons/generator/` codegen library
-- `src/go/cmd/iconsgen/` cmd wrapper
+- `public/app/commands/iconsgen/` cmd wrapper
 - `keelson/runtime/icons/generate.sh` driver
 - `phosphor.out.go` + `phosphor_lookup.out.go` (generated — full ~1500 PhXxx constants + alias constants + name lookup)
 - `affordances.out.go` updated so `IconXxx` aliases to generated `PhXxx` (drift notes preserved)
@@ -362,12 +362,12 @@ Proposed — awaiting review by @spx. M0 lands across two commits:
 
 **Fourth commit** (M1 — Rust-side font embedding):
 
-- `Phosphor.ttf` + `NFBrand.ttf` vendored from the `stergiotis/ids-fonts` `v0.2.2` release into `src/rust/assets/fonts/{phosphor,nf-brand}/` (each with `LICENSE`, `SHA256SUMS`, and `BUILD.md` modelled on the existing `ids-mono/` layout).
-- `src/rust/src/imzero2/appconfig.rs` gains a `phosphor_font_ttf` slot + `--phosphorFontTTF` CLI flag + matching tweak fields, alongside the existing `nerd_font_ttf` slot (whose semantics shift from "Symbols Nerd Font Mono full blob" → "NFBrand subset", same Rust name for back-compat).
-- `src/rust/src/imzero2/app.rs::load_custom_fonts` registers the new `phosphor` font and inserts it into both `FontFamily::Proportional` and `FontFamily::Monospace` chains alongside the existing `nerdfont` slot (phosphor first, then nerdfont — disjoint PUA ranges so ordering is not load-bearing).
-- `src/rust/imzero2_egui/src/style/tokens/typography.rs` (the `IMZERO2_IDS_FONTS=on` overlay code path) replaces `SYMBOLS_NERD_FONT_MONO` / `FAMILY_ICONS` with `PHOSPHOR_REGULAR` + `NF_BRAND` / `FAMILY_ICONS_PHOSPHOR` + `FAMILY_ICONS_NF_BRAND`. Both are embedded via `include_bytes!` and registered as fallbacks in both family chains.
-- `src/rust/hmi.sh` defaults `PHOSPHOR_FONT` and `NERD_FONT` to the vendored paths (`$here/assets/fonts/{phosphor/Phosphor.ttf,nf-brand/NFBrand.ttf}`); the previous `NERD_FONT_URL` download-on-demand fallback is removed — both fonts are now always vendored.
-- `src/rust/assets/fonts/symbols-nerd-font-mono/` deleted (preserved in git history; not archived to `boxer_attic` because the Rust-side LICENSE + SHA file lineage doesn't merit a parallel-repo copy).
+- `Phosphor.ttf` + `NFBrand.ttf` vendored from the `stergiotis/ids-fonts` `v0.2.2` release into `rust/imzero2/assets/fonts/{phosphor,nf-brand}/` (each with `LICENSE`, `SHA256SUMS`, and `BUILD.md` modelled on the existing `ids-mono/` layout).
+- `rust/imzero2/src/imzero2/appconfig.rs` gains a `phosphor_font_ttf` slot + `--phosphorFontTTF` CLI flag + matching tweak fields, alongside the existing `nerd_font_ttf` slot (whose semantics shift from "Symbols Nerd Font Mono full blob" → "NFBrand subset", same Rust name for back-compat).
+- `rust/imzero2/src/imzero2/app.rs::load_custom_fonts` registers the new `phosphor` font and inserts it into both `FontFamily::Proportional` and `FontFamily::Monospace` chains alongside the existing `nerdfont` slot (phosphor first, then nerdfont — disjoint PUA ranges so ordering is not load-bearing).
+- `rust/imzero2/imzero2_egui/src/style/tokens/typography.rs` (the `IMZERO2_IDS_FONTS=on` overlay code path) replaces `SYMBOLS_NERD_FONT_MONO` / `FAMILY_ICONS` with `PHOSPHOR_REGULAR` + `NF_BRAND` / `FAMILY_ICONS_PHOSPHOR` + `FAMILY_ICONS_NF_BRAND`. Both are embedded via `include_bytes!` and registered as fallbacks in both family chains.
+- `rust/imzero2/hmi.sh` defaults `PHOSPHOR_FONT` and `NERD_FONT` to the vendored paths (`$here/assets/fonts/{phosphor/Phosphor.ttf,nf-brand/NFBrand.ttf}`); the previous `NERD_FONT_URL` download-on-demand fallback is removed — both fonts are now always vendored.
+- `rust/imzero2/assets/fonts/symbols-nerd-font-mono/` deleted (preserved in git history; not archived to `boxer_attic` because the Rust-side LICENSE + SHA file lineage doesn't merit a parallel-repo copy).
 
 Open questions:
 
@@ -391,5 +391,5 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 - [Nerd Fonts project](https://www.nerdfonts.com/) — icon aggregation; we keep only Devicons + Logos + Custom subsets.
 - [fonttools subset](https://fonttools.readthedocs.io/en/latest/subset/index.html) — subsetting toolchain for §SD2.
 - `iconset-comparison.html` (repo root, M0 design aid) — side-by-side rendering of all 43 current icons across Codicons / Phosphor / Lucide / Tabler at IDS Body and Caption sizes.
-- `../boxer_attic/src/go/public/thestack/imzero2/nerdfont/` — archived `nerdfont` package (post-M0).
-- `../boxer_attic/src/go/public/thestack/cmd/nerdfontgen/` — archived `nerdfontgen` cmd (post-M0).
+- `../boxer_attic/public/thestack/imzero2/nerdfont/` — archived `nerdfont` package (post-M0).
+- `../boxer_attic/public/thestack/cmd/nerdfontgen/` — archived `nerdfontgen` cmd (post-M0).

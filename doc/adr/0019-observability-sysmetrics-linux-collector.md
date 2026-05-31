@@ -61,13 +61,13 @@ Notes per cell:
 
 ## Decision
 
-We adopt **O1 — pure-Go reimplementation** under a new package tree `src/go/public/observability/sysmetrics/`, with vendor GPU SDKs loaded at runtime via [`github.com/ebitengine/purego`](https://github.com/ebitengine/purego) (no cgo) behind build tags `gpu_nvml`, `gpu_rocm`, `gpu_intel` listed in [`../../tags`](../../tags). Intel GPU is implemented directly against `golang.org/x/sys/unix.PerfEventOpen` (no library dependency). AMD GPU prefers pure-sysfs over ROCm-SMI. NPU support is out of scope for this ADR.
+We adopt **O1 — pure-Go reimplementation** under a new package tree `public/observability/sysmetrics/`, with vendor GPU SDKs loaded at runtime via [`github.com/ebitengine/purego`](https://github.com/ebitengine/purego) (no cgo) behind build tags `gpu_nvml`, `gpu_rocm`, `gpu_intel` listed in [`../../tags`](../../tags). Intel GPU is implemented directly against `golang.org/x/sys/unix.PerfEventOpen` (no library dependency). AMD GPU prefers pure-sysfs over ROCm-SMI. NPU support is out of scope for this ADR.
 
 The implementation is staged across six independently-shippable milestones (M1–M6 below).
 
 ## Subsidiary design decisions
 
-- **SD1 — Namespace `src/go/public/observability/sysmetrics/`.** Adjacent to existing observability assets (`observability/profile.proto`); signals "system metrics like Prometheus node-exporter" without claiming the `metrics` name. Considered alternatives: top-level `sysprobe/`, `boxerstaging/btoplike/`. Rejected — observability is the durable home; the others embed implementation provenance into the public namespace.
+- **SD1 — Namespace `public/observability/sysmetrics/`.** Adjacent to existing observability assets (`observability/profile.proto`); signals "system metrics like Prometheus node-exporter" without claiming the `metrics` name. Considered alternatives: top-level `sysprobe/`, `boxerstaging/btoplike/`. Rejected — observability is the durable home; the others embed implementation provenance into the public namespace.
 
 - **SD2 — Per-domain `Collector` types hold prior-tick state.** CPU (`/proc/stat` deltas), disk I/O rates, network byte counters with rollover, RAPL energy_uj deltas, and the process table all need monotonic-tick deltas. Each `Collector` owns its prior-sample state with `inst` receiver; calling `Sample(ctx)` returns the current `Snapshot` and updates state. Stateless domains (memory, battery, sensors) expose a free function or a `Collector` with no internal state, both shapes valid.
 
@@ -100,7 +100,7 @@ The implementation is staged across six independently-shippable milestones (M1�
 Illustrative only — not the implementation contract; the REFERENCE doc seeded in M1 will pin field-level shapes.
 
 ```go
-// src/go/public/observability/sysmetrics/cpu/cpu.go
+// public/observability/sysmetrics/cpu/cpu.go
 package cpu
 
 type Snapshot struct {
@@ -131,7 +131,7 @@ var _ CollectorI = (*Collector)(nil)
 ```
 
 ```go
-// src/go/public/observability/sysmetrics/proc/proc.go
+// public/observability/sysmetrics/proc/proc.go
 package proc
 
 type Info struct {

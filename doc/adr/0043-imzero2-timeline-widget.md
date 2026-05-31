@@ -56,7 +56,7 @@ Constraints inherited from the rest of the stack:
 
 ## Decision
 
-We build a custom composite widget at `src/go/public/thestack/imzero2/egui2/widgets/timeline/`, layered as:
+We build a custom composite widget at `public/thestack/imzero2/egui2/widgets/timeline/`, layered as:
 
 - **SD0 — Pure-Go layout package** (`widgets/timeline/layout/`). Wire types `PointEvent{TMS int64, KindID int32, Intensity float32}` and `IntervalEvent{FromMS, ToMS int64, KindID int32, Intensity float32, LaneHint string}`; algorithms `PackLanes` (greedy left-to-right), `LODIndex` (multi-resolution sparse bins), `TickMap` (wraps `boxer/public/math/numerical/timeticks` + maps to screen-x). 41 unit tests, `-race -count=2` clean. No UI dependency, fully testable from `go test`.
 
@@ -354,7 +354,7 @@ Drag, double-click, right-click, and keyboard activation remain unbuilt. Drag is
 - [ADR-0031 — Design system color foundations](./0031-imzero2-design-system-color.md) — provided the Crameri batlow sequential palette used for interval + rug-strip tinting.
 - [ADR-0032 — Design system spacing/density/motion](./0032-imzero2-design-system-spacing-density-motion.md) — motion ladder we would tap into if SD11 reverses.
 - [ADR-0035 — Keelson namespace](./0035-keelson-namespace-introduction.md) — explains why `styletokens` is imported from `keelson/designsystem/` rather than the local widget tree.
-- `src/go/public/thestack/imzero2/egui2/widgets/timeline/` — implementation.
+- `public/thestack/imzero2/egui2/widgets/timeline/` — implementation.
 - `boxer/public/math/numerical/timeticks` — calendar-aware tick generator (uPlot-derived ladder).
 - Plaisant, Milash, Rose, Widoff, Shneiderman, *LifeLines: Visualizing Personal Histories*, CHI '96 — canonical reference for mixed point + interval timelines.
 - Monroe, Lan, Lee, Plaisant, Shneiderman, *Temporal Event Sequence Simplification*, IEEE InfoVis 2013 — EventFlow successor; aggregation patterns.

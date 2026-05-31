@@ -90,8 +90,8 @@ This removes ~80% of a typical design-system's surface area, eliminates the poli
 
 Tokens live in two surfaces:
 
-- **Authoritative Rust module** at `src/rust/imzero2_egui/src/style/tokens/`. Each token is a named `const`; the module exposes a function `apply(visuals: &mut Visuals, spacing: &mut Spacing, density: Density)` that materialises the token set into egui's existing fields.
-- **Parallel Go enum surface** at `src/go/public/thestack/imzero2/egui2/styletokens/`, used by app authors writing the Go-side render code. Codegen via `./generate.sh` ([reference_generate_sh]) keeps the two in lockstep; drift is a build break.
+- **Authoritative Rust module** at `rust/imzero2/imzero2_egui/src/style/tokens/`. Each token is a named `const`; the module exposes a function `apply(visuals: &mut Visuals, spacing: &mut Spacing, density: Density)` that materialises the token set into egui's existing fields.
+- **Parallel Go enum surface** at `public/thestack/imzero2/egui2/styletokens/`, used by app authors writing the Go-side render code. Codegen via `./generate.sh` ([reference_generate_sh]) keeps the two in lockstep; drift is a build break.
 
 Apps call `apply` once on startup; IDS never reads from this module at render time — tokens are constants. Adding, removing, or renaming a token requires a Tier 3 ADR.
 
@@ -132,7 +132,7 @@ Tour-screenshot constraint: any animation that crosses a render-boundary must co
 
 ### SD8 — Policy-as-Code Tier 1: mechanical lints
 
-A new tool `src/go/cmd/designlint/` — a Go AST walker built on `golang.org/x/tools/go/analysis` — implements per-rule passes:
+A new tool `public/gov/codelint/` — a Go AST walker built on `golang.org/x/tools/go/analysis` — implements per-rule passes:
 
 - **L1 — Label casing.** Extracts string literals at call sites of `c.Button(...)`, `c.MenuItem(...)`, `c.Header(...)`, `c.SelectableLabel(...)`, etc.; classifies casing; flags violations against per-widget-class policy (e.g., Title Case for buttons, Sentence case for menu items, Section Case for panel headers — concrete policy in `policy/tier1-mechanical.md`).
 - **L2 — Token-only palette.** Flags `egui::Color32::from_rgb(...)`, `Color32::from_hex(...)`, and Go-side equivalents outside the token module.
@@ -217,9 +217,9 @@ doc/design-system/
 │   └── tier3-human-review.md   # SD10 — process and ADR list
 └── reviews/                    # SD9 LLM review reports, per CI run
 
-src/rust/imzero2_egui/src/style/tokens/             # Rust-authoritative tokens
-src/go/public/thestack/imzero2/egui2/styletokens/   # Go enum surface; codegen-mirrored
-src/go/cmd/designlint/                              # Tier 1 tool (Go AST walker)
+rust/imzero2/imzero2_egui/src/style/tokens/             # Rust-authoritative tokens
+public/thestack/imzero2/egui2/styletokens/   # Go enum surface; codegen-mirrored
+public/gov/codelint/                              # Tier 1 tool (Go AST walker)
 scripts/ci/designlint.sh                            # lint.sh integration
 scripts/ci/designreview/                            # Tier 2 driver
 ```
@@ -319,18 +319,18 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 
 Records three deviations from the §SD2 / §SD9 / §SD11 / §SD14 path proposals that landed during M1 / M2 implementation. No design decision in §SD1–§SD10 is modified; the §SD11 layout sketch is superseded by the paths recorded here.
 
-1. **Go token surface moved.** §SD2 / §SD11 specified `src/go/public/thestack/imzero2/egui2/styletokens/`. Actual landing is **`src/go/public/keelson/designsystem/styletokens/`** per [ADR-0035](./0035-keelson-namespace-introduction.md), which pulled cross-app platform packages out of `thestack/` into the `keelson/` namespace before this ADR's M1 wiring. Same package contents, different import path; codegen mirror against the Rust source-of-truth at `src/rust/imzero2_egui/src/style/tokens/` is unchanged. The drift guard `styletokens_drift_test.go` lives in the new location.
+1. **Go token surface moved.** §SD2 / §SD11 specified `public/thestack/imzero2/egui2/styletokens/`. Actual landing is **`public/keelson/designsystem/styletokens/`** per [ADR-0035](./0035-keelson-namespace-introduction.md), which pulled cross-app platform packages out of `thestack/` into the `keelson/` namespace before this ADR's M1 wiring. Same package contents, different import path; codegen mirror against the Rust source-of-truth at `rust/imzero2/imzero2_egui/src/style/tokens/` is unchanged. The drift guard `styletokens_drift_test.go` lives in the new location.
 
 2. **Tier 2 driver consolidated into the `cmd/designsystem` multi-tool.** §SD9 / §SD11 specified a standalone `scripts/ci/designreview/` driver with `manifest.go` adjacent. Actual landing:
-    - Library at **`src/go/public/keelson/designsystem/review/`** (today only `review/ssim/` exists; the driver itself awaits M4).
-    - CLI surface as a subcommand of the IDS multi-tool: **`./src/go/cmd/designsystem review …`**, sharing the binary that hosts `colors gen` / `colors vendor` and the provider abstraction (Anthropic / LM Studio).
-    - Manifest filter at `src/go/public/keelson/designsystem/review/manifest.go`.
+    - Library at **`public/keelson/designsystem/review/`** (today only `review/ssim/` exists; the driver itself awaits M4).
+    - CLI surface as a subcommand of the IDS multi-tool: **`./public/app/commands/designsystem review …`**, sharing the binary that hosts `colors gen` / `colors vendor` and the provider abstraction (Anthropic / LM Studio).
+    - Manifest filter at `public/keelson/designsystem/review/manifest.go`.
 
-    Rationale: a single Go binary with subcommands shares the IDS dependency surface and matches the way the palette / vendor generators are already invoked; a `scripts/ci/` shell wrapper added nothing. [tier2-llm-review.md](../design-system/policy/tier2-llm-review.md) already records the consolidated paths.
+    Rationale: a single Go binary with subcommands shares the IDS dependency surface and matches the way the palette / vendor generators are already invoked; a `scripts/ci/` shell wrapper added nothing. tier2-llm-review.md already records the consolidated paths.
 
 3. **`scripts/ci/designlint.sh` not split out.** §SD11 anticipated a separate shell wrapper invoked from `lint.sh`. Actual: `designlint` is wired directly into `scripts/ci/lint.sh` (the `step_begin "designlint"` block) and driven via **`go vet -vettool=`** over a tempfile-built binary. The `-tags` flag on `multichecker.Main` is documented "no effect (deprecated)" and silently no-ops; the `vettool` protocol is the supported tag-aware analyzer path, so the invocation lives in `lint.sh` rather than behind a wrapper. The `cmd/designlint/main.go` package doc reflects the corrected invocation contract ([feedback_multichecker_tags_deprecated]).
 
-Other proposed paths (`src/rust/imzero2_egui/src/style/tokens/`, `src/go/cmd/designlint/`, `doc/design-system/{foundations,patterns,policy}/`, the `doc/design-system/reviews/` output dir) landed as specified.
+Other proposed paths (`rust/imzero2/imzero2_egui/src/style/tokens/`, `public/gov/codelint/`, `doc/design-system/{foundations,patterns,policy}/`, the `doc/design-system/reviews/` output dir) landed as specified.
 
 `status` stays `proposed` per the ADR convention.
 

@@ -696,6 +696,6 @@ ADRs are append-only; supersession is recorded, not deleted.
 - [ADR-0022: leeway lwq — FLWOR-style query language for Leeway-stored data](0022-leeway-lwq-flwor-query-language.md) — the trajectory this ADR sequences.
 - Leeway `SinkI` / `Driver` substrate — `$(boxer-path)/public/semistructured/leeway/streamreadaccess/leeway_onlineapi_types.go`.
 - [Leeway protocol skill](../skills/leeway-advanced/SKILLS.md) — sections, memberships, aspects, co-sections, canonical types.
-- Boxer ADR-0056 / pebble2impl [ADR-0007](0017-leeway-membership-role-classifier.md) — primary/secondary role classifier consumed by `ForEachValueWithRoles`.
+- Boxer ADR-0056 / pebble2impl [ADR-0007](0007-leeway-membership-role-classifier.md) — primary/secondary role classifier consumed by `ForEachValueWithRoles`.
 - Pebble2impl [ADR-0018](0018-leeway-card-json-canonical-format.md) — a representative tree-shaped construction target.
 - Boxer CH DSL infrastructure — `$(boxer-path)/public/db/clickhouse/dsl/` (AST and `ToSQL` reused by the ClickHouse target; `astbuilder` is a precedent for fluent Go API at the lower CH-SQL level).

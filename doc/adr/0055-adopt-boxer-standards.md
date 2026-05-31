@@ -148,7 +148,7 @@ steps 3 and 4 actually need to drive down.
 
 | Rule  | Severity | Count | Notes |
 |-------|----------|-------|-------|
-| DL001 | error    | 30    | Missing/malformed front-matter; spans `doc/`, `doc/skills/*/`, `experiments/*/`, `src/go/public/.../README.md`, `src/rust/README.md`, `planning/`, `scripts/`, `sponsor_deps_out/` |
+| DL001 | error    | 30    | Missing/malformed front-matter; spans `doc/`, `doc/skills/*/`, `experiments/*/`, `public/.../README.md`, `rust/imzero2/README.md`, `planning/`, `scripts/`, `sponsor_deps_out/` |
 | DL007 | error    | 10    | Broken in-repo links; 9 in `doc/adr/0004-retire-alpha-cbor-for-jsonv2.md` (paths now under `attic/`), 1 in `doc/adr/0003-imzero2-unified-color-type.md` (refers to a `DOCUMENTATION_STANDARD.md` that does not exist locally — boxer's is the source) |
 | DL011 | info     | 7     | Open `status: draft` set: ADR-0054, the three step-1 EXPLANATION migrations, VALUE_PROPOSITION.md, and the present ADR draft |
 | DL005 | error    | 0     | Banned filenames cleared by step 1 |
@@ -166,7 +166,7 @@ Worst single files (DL009 post-exclusion): `cbor/kvh/kvh.go` (102), `imzero2/egu
 ### Convention divergences (sample-based, step 4 territory)
 
 - **Receiver names.** ~228 functions use `s` as receiver, 45 `f`, 20 `t`, 12 `m`, plus tens of others. The boxer standard mandates `inst`. Mass rename required, mechanical but high churn.
-- **Interface naming.** ~11 interfaces in `src/go/public` lack the mandatory `I` suffix (e.g. `Application`, `KeyGenerator`, `SliceEncoder`, `Style`, `Widget`). Manageable scale.
+- **Interface naming.** ~11 interfaces in `public` lack the mandatory `I` suffix (e.g. `Application`, `KeyGenerator`, `SliceEncoder`, `Style`, `Widget`). Manageable scale.
 - **Error pattern `if err := f(); err != nil`.** 81 occurrences across 26 files (excluding `attic`, `*.out.go`, `*.gen.go`). Mechanical conversion to named-return + naked-return.
 - **Enum `E` suffix, named return values, `eh.Errorf` adoption, `iter.Seq` iterators, sized-integer fields, SoA preference.** Not surveyed quantitatively in this pass; assume comparable scale and address opportunistically during code-migration sweeps.
 
@@ -203,7 +203,7 @@ once that lands.
 
 1. Fix the 10 DL007 broken-link errors in ADRs 0003 and 0004 — fast win,
    restores link integrity for the gate.
-2. Sweep `doc/`, `doc/skills/`, `src/go/public/.../*.md`, `src/rust/`,
+2. Sweep `doc/`, `doc/skills/`, `public/.../*.md`, `rust/imzero2/`,
    `experiments/`, `planning/`, `scripts/` adding front-matter and
    classifying each file into a Diátaxis quadrant. README files become
    `type: reference`; SKILLS.md and skill-attached assets need a
@@ -242,6 +242,6 @@ ADRs are append-only; supersession is recorded, not deleted.
 
 ## References
 
-- [ADR-0053](./0004-retire-alpha-cbor-for-jsonv2.md) — alpha/cbor retirement; the `attic/` paths created by this ADR are the source of the DL007 link breakage caught above.
+- [ADR-0053](0053-retire-alpha-cbor-for-jsonv2.md) — alpha/cbor retirement; the `attic/` paths created by this ADR are the source of the DL007 link breakage caught above.
 - [`github.com/stergiotis/boxer`](https://github.com/stergiotis/boxer) — canonical standards.
 - Step 1 commit: `2e38bf27 docs(standards): adopt boxer coding & doc standards (step 1)`.

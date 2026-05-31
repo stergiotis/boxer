@@ -93,7 +93,7 @@ The decision is two independent sub-questions. Each meets the ≥3 options × �
 
 **B3's costs and their mitigations.**
 
-- *Fork/exec latency (~50–200 ms)* — prohibitive on every keystroke. Mitigation: validation uses the in-tree ClickHouse SQL parser at [`src/go/public/db/clickhouse/dsl/`](../../src/go/public/db/clickhouse/dsl) (sub-millisecond, in-process). Evaluation is deferred to **Apply / focus-out** and uses a single long-running `clickhouse-local` subprocess for the picker's lifetime.
+- *Fork/exec latency (~50–200 ms)* — prohibitive on every keystroke. Mitigation: validation uses the in-tree ClickHouse SQL parser at [`public/db/clickhouse/dsl/`](../../public/db/clickhouse/dsl) (sub-millisecond, in-process). Evaluation is deferred to **Apply / focus-out** and uses a single long-running `clickhouse-local` subprocess for the picker's lifetime.
 - *Tool-availability variance* — `clickhouse-local` (or the older `clickhouse local` invocation) may not be on `PATH` in all CI / dev environments. Mitigation: the evaluator returns a sentinel `ErrEvaluatorUnavailable`; dependent tests SKIP via a build-flag-gated probe; production environments are expected to install it (it is already the project's offline-verification tool, per established practice).
 
 **B4's collapse.** Embedding a JS runtime to execute `datemath.ts` (or compiling it to wasm) imports a much larger runtime dependency than B3's subprocess and produces UX in TypeScript-idiomatic patterns rather than Go-idiomatic ones. C3 = `−−`.
@@ -103,8 +103,8 @@ The decision is two independent sub-questions. Each meets the ≥3 options × �
 We will:
 
 1. **License path (A2).** Adopt **Grafana v7.5.17** (last Apache-2.0 release) as the upstream pin. The port lives at:
-   - `src/go/public/thestack/imzero2/egui2/widgets/timerangepicker/` (Go side — multiple files justify a sub-package over the single-file convention used for the legacy date picker).
-   - `src/rust/src/imzero2/time_range_picker.rs` (Rust side, sibling to existing `date_picker_button.rs`).
+   - `public/thestack/imzero2/egui2/widgets/timerangepicker/` (Go side — multiple files justify a sub-package over the single-file convention used for the legacy date picker).
+   - `rust/imzero2/src/imzero2/time_range_picker.rs` (Rust side, sibling to existing `date_picker_button.rs`).
 
    Per-file Apache-2.0 headers (upstream copyright + pebble2impl modification copyright + §4.b modification line), a package-level `NOTICE`, and an entry in `doc/legal/third_party.md` mirror the [ADR-0005][adr-0015] pattern.
 
@@ -185,14 +185,14 @@ ADRs are append-only; supersession is recorded, not deleted.
 - Grafana v7.5.17 release page: [github.com/grafana/grafana/releases/tag/v7.5.17][grafana-7-5-17-release].
 - ClickHouse local docs: [clickhouse.com/docs/en/operations/utilities/clickhouse-local][ch-local-docs].
 - ClickHouse DateTime functions: [clickhouse.com/docs/en/sql-reference/functions/date-time-functions][ch-datetime-fns].
-- In-tree dsl ANTLR parser: [`src/go/public/db/clickhouse/dsl/`](../../src/go/public/db/clickhouse/dsl).
+- In-tree dsl ANTLR parser: [`public/db/clickhouse/dsl/`](../../public/db/clickhouse/dsl).
 - Existing single-date picker (kept for backward compatibility):
-  [Go wrapper](../../src/go/public/thestack/imzero2/egui2/bindings/egui2_datepicker.go),
-  [Rust apply](../../src/rust/src/imzero2/date_picker_button.rs),
-  [demo](../../src/go/public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_datepicker_demo.go).
-- Local license text: [`licenses/Apache-2.0.txt`](../../licenses/Apache-2.0.txt).
-- Aggregate third-party attribution: [`doc/legal/third_party.md`](../legal/third_party.md).
-- Related: [ADR-0055 — adopt boxer standards](0006-adopt-boxer-standards.md); [ADR-0013 — imzero2 stateful widget contract](0013-imzero2-stateful-widget-contract.md) (the picker is a stateful widget under that contract); [ADR-0005 — port Connect's franz-go Kafka I/O](0015-streaming-persisted-kafka-from-connect.md) (the Apache-2.0 derivative pattern this ADR mirrors).
+  [Go wrapper](../../public/thestack/imzero2/egui2/bindings/egui2_datepicker.go),
+  [Rust apply](../../rust/imzero2/src/imzero2/date_picker_button.rs),
+  [demo](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_datepicker_demo.go).
+- Local license text: `licenses/Apache-2.0.txt`.
+- Aggregate third-party attribution: `doc/legal/third_party.md`.
+- Related: [ADR-0055 — adopt boxer standards](0055-adopt-boxer-standards.md); [ADR-0013 — imzero2 stateful widget contract](0013-imzero2-stateful-widget-contract.md) (the picker is a stateful widget under that contract); [ADR-0005 — port Connect's franz-go Kafka I/O](0005-streaming-persisted-kafka-from-connect.md) (the Apache-2.0 derivative pattern this ADR mirrors).
 
 [egui-datepicker]: https://docs.rs/egui_extras/latest/egui_extras/struct.DatePickerButton.html
 [grafana-datemath]: https://github.com/grafana/grafana/blob/v7.5.17/packages/grafana-data/src/datetime/datemath.ts

@@ -10,7 +10,7 @@ reviewed-date: 2026-05-31
 
 ## Context
 
-The ImZero2 demo app currently renders as 17 top-level `egui::Window`s inside a single eframe viewport, driven by a hardcoded `[]windowEntry` and a 4-phase screenshot state machine at [`egui2_hl_demo.go:47-126`](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_demo.go). One loop body plays both roles: it is what a user interacts with via `bash src/rust/hmi.sh`, and it is what CI captures when `IMZERO2_SCREENSHOT_DIR` is set. Demo-level metadata (default size, resizable, default-open state) is scattered across fluent chains at the call sites rather than carried by a declared type.
+The ImZero2 demo app currently renders as 17 top-level `egui::Window`s inside a single eframe viewport, driven by a hardcoded `[]windowEntry` and a 4-phase screenshot state machine at [`egui2_hl_demo.go:47-126`](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_demo.go). One loop body plays both roles: it is what a user interacts with via `bash rust/imzero2/hmi.sh`, and it is what CI captures when `IMZERO2_SCREENSHOT_DIR` is set. Demo-level metadata (default size, resizable, default-open state) is scattered across fluent chains at the call sites rather than carried by a declared type.
 
 Forces that have accumulated:
 
@@ -64,7 +64,7 @@ O3 dominates O2 on every axis except migration cost, where O2 would rewrite the 
 
 Introduce a shared demo registry and three independent hosts that consume it.
 
-**The registry.** A new Go package `src/go/public/thestack/imzero2/egui2/demo/apps/registry/` exports a `Demo` value type and a `Register(Demo)` function. Each existing demo file adds an `init()` that registers its `Demo` entry. The registry is the single source of truth for the demo list, title, category, and render body.
+**The registry.** A new Go package `public/thestack/imzero2/egui2/demo/apps/registry/` exports a `Demo` value type and a `Register(Demo)` function. Each existing demo file adds an `init()` that registers its `Demo` entry. The registry is the single source of truth for the demo list, title, category, and render body.
 
 ```go
 type Demo struct {
@@ -159,11 +159,11 @@ The registry, the `TestDriver`, and the interactive gallery (which consumes the 
 
 ## References
 
-- [`src/go/public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_demo.go`](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_demo.go) — current closure-driven 17-window tour, the source of the problem.
-- [`src/rust/src/imzero2/interpreter.rs`](../../rust/imzero2/src/imzero2/interpreter.rs) — `handle_screenshot_event` at line 1734; site of the `RequestScreenshotRect` crop logic (SD1) and animation-freeze flag (SD2).
+- [`public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_demo.go`](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_demo.go) — current closure-driven 17-window tour, the source of the problem.
+- [`rust/imzero2/src/imzero2/interpreter.rs`](../../rust/imzero2/src/imzero2/interpreter.rs) — `handle_screenshot_event` at line 1734; site of the `RequestScreenshotRect` crop logic (SD1) and animation-freeze flag (SD2).
 - [`doc/skills/imzero2/SKILLS.md`](../skills/imzero2/SKILLS.md) §14 (screenshot infrastructure) and §12 (CollapsingHeader 4-frame tour pitfall) — existing documented hazards this ADR supersedes with structural fixes.
 - [ADR-0056](0056-walkers-map-h3-binding.md) — establishes the "4-frame tour is a constraint on widget design" precedent that SD2 (animation freeze) removes.
 - [ADR-0052](0052-imzero2-unified-color-type.md) — prior ImZero2 binding ADR; template shape followed here.
 - [Dear ImGui `imgui_demo.cpp`](https://github.com/ocornut/imgui/blob/master/imgui_demo.cpp) — UX reference for the interactive shell (SD10); one-window catalog with CollapsingHeader-per-topic + top-of-window filter.
-- [`src/go/public/thestack/imzero2/egui2/bindings/egui2_methods.go`](../../public/thestack/imzero2/egui2/bindings/egui2_methods.go) — `DockArea` component (line 127), candidate interactive-shell layout for a future iteration (SD10 alternative).
-- [`src/rust/hmi.sh`](../../rust/imzero2/hmi.sh) — launch script; unchanged by this ADR, dispatches to whichever driver based on `IMZERO2_SCREENSHOT_DIR`.
+- [`public/thestack/imzero2/egui2/bindings/egui2_methods.go`](../../public/thestack/imzero2/egui2/bindings/egui2_methods.go) — `DockArea` component (line 127), candidate interactive-shell layout for a future iteration (SD10 alternative).
+- [`rust/imzero2/hmi.sh`](../../rust/imzero2/hmi.sh) — launch script; unchanged by this ADR, dispatches to whichever driver based on `IMZERO2_SCREENSHOT_DIR`.

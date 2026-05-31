@@ -14,9 +14,9 @@ date: 2026-04-26
 
 ImZero2 widgets fall into two interaction classes: **event-only** (Button, NodeLeaf, SelectableLabel, Hyperlink) which emit a click signal but hold no internal state Go-side, and **stateful** (Checkbox, RadioButton, Slider, DragValue, TextEdit, DatePickerButton) which round-trip a typed value back to a Go-side `*T` via the FFFI2 r9_*/r10 databindings. The two classes need different orchestrators on the Go side (`SendResp() ResponseFlagsE` vs `SendRespVal(*T) ResponseFlagsE`) and different apply-block shapes on the Rust side (plain `apply_widget` vs `apply_widget` followed by a gated push).
 
-The contract was implicit until [commit 7a664db9](../../src/go/public/thestack/imzero2/egui2/definition/egui2_definition_d_codeblocks.go) — captured by convention rather than by tooling. RadioButton drifted: its spec at [`egui2_definition_d_widgets.go:251`](../../src/go/public/thestack/imzero2/egui2/definition/egui2_definition_d_widgets.go) hand-rolled the apply block via `ir.MergeVerbatimCode` instead of routing through the standard `applyCodeWidgetRustOnChange` helper. The hand-rolled form omitted the `if resp.is_some() && resp.unwrap().changed() { … }` gate, so the r10 push ran unconditionally every frame writing `checked || clicked` to the bound bool.
+The contract was implicit until [commit 7a664db9](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_codeblocks.go) — captured by convention rather than by tooling. RadioButton drifted: its spec at [`egui2_definition_d_widgets.go:251`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_widgets.go) hand-rolled the apply block via `ir.MergeVerbatimCode` instead of routing through the standard `applyCodeWidgetRustOnChange` helper. The hand-rolled form omitted the `if resp.is_some() && resp.unwrap().changed() { … }` gate, so the r10 push ran unconditionally every frame writing `checked || clicked` to the bound bool.
 
-This interacted with a second, pre-existing quirk: `StateManager.Sync()` at [`egui2_statemanagement.go:244`](../../src/go/public/thestack/imzero2/egui2/bindings/egui2_statemanagement.go) populates `responseFlags` via `UpsertBatch` and never clears the map between frames. Entries persist until overwritten. Buttons self-heal on hover (response carries hover flag → r7 push → upsert overwrites with current frame's flags), but a RadioButton whose cursor moves away after a click receives no further r7 entries, so `responseFlags[id]` retains `PrimaryClicked` indefinitely. `RadioButton(...).SendResp().HasPrimaryClicked()` consequently returned true on every subsequent frame, with no user input.
+This interacted with a second, pre-existing quirk: `StateManager.Sync()` at [`egui2_statemanagement.go:244`](../../public/thestack/imzero2/egui2/bindings/egui2_statemanagement.go) populates `responseFlags` via `UpsertBatch` and never clears the map between frames. Entries persist until overwritten. Buttons self-heal on hover (response carries hover flag → r7 push → upsert overwrites with current frame's flags), but a RadioButton whose cursor moves away after a click receives no further r7 entries, so `responseFlags[id]` retains `PrimaryClicked` indefinitely. `RadioButton(...).SendResp().HasPrimaryClicked()` consequently returned true on every subsequent frame, with no user input.
 
 The fix has to land at the *contract* level, not just for RadioButton: the same drift can recur for any future stateful widget whose spec author hand-rolls the apply block. Codifying the contract (and enforcing it at codegen-time) is the only durable defence.
 
@@ -35,7 +35,7 @@ WithApplyCodeClientRust(applyCodeWidgetRustOnEvent(true, respEventClicked,
     rustClientCode("self.r10_push({{Id}}.value(), true);\n"))).
 ```
 
-The push value is the literal `true`: inside the `clicked()` gate the radio is by definition newly selected, so the previous `checked || clicked` collapses to `true`. The bound `*bool` becomes `true` on the click frame and the user reads the rising edge against the current `walkersTileSrcIdx == i` predicate (or analogous). The walkers tile-server selector at [`egui2_hl_walkers_demo.go:225`](../../src/go/public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_walkers_demo.go) is the canonical migration: a persistent `walkersRadioBound []bool` plus a two-pass loop (edge-detect, then render) that avoids the one-frame visual artifact when selection changes.
+The push value is the literal `true`: inside the `clicked()` gate the radio is by definition newly selected, so the previous `checked || clicked` collapses to `true`. The bound `*bool` becomes `true` on the click frame and the user reads the rising edge against the current `walkersTileSrcIdx == i` predicate (or analogous). The walkers tile-server selector at [`egui2_hl_walkers_demo.go:225`](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_walkers_demo.go) is the canonical migration: a persistent `walkersRadioBound []bool` plus a two-pass loop (edge-detect, then render) that avoids the one-frame visual artifact when selection changes.
 
 ## Alternatives
 
@@ -73,7 +73,7 @@ ADRs are append-only; supersession is recorded, not deleted.
 ## References
 
 - Commit landing the contract: `7a664db9` — *fix(imzero2): gate RadioButton state push on .clicked() event*.
-- Helper: [`egui2_definition_d_codeblocks.go`](../../src/go/public/thestack/imzero2/egui2/definition/egui2_definition_d_codeblocks.go).
-- Drift guard: [`egui2_definition_d_widgets_test.go`](../../src/go/public/thestack/imzero2/egui2/definition/egui2_definition_d_widgets_test.go).
-- Migration example: [`egui2_hl_walkers_demo.go`](../../src/go/public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_walkers_demo.go).
-- Related: [ADR-0059 — declarative layouting](0010-imzero2-declarative-layouting-over-visual-builder.md), [ADR-0012 — collapsible retained bodies](0012-imzero2-collapsible-retained-bodies.md).
+- Helper: [`egui2_definition_d_codeblocks.go`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_codeblocks.go).
+- Drift guard: [`egui2_definition_d_widgets_test.go`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_widgets_test.go).
+- Migration example: [`egui2_hl_walkers_demo.go`](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_walkers_demo.go).
+- Related: [ADR-0059 — declarative layouting](0059-imzero2-declarative-layouting-over-visual-builder.md), [ADR-0012 — collapsible retained bodies](0012-imzero2-collapsible-retained-bodies.md).

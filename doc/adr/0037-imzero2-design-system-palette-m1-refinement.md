@@ -90,7 +90,7 @@ We will adopt **O2 — L=0.16 neutral-spine bump + text softening**, with `borde
 
 The semantic palette (info / success / warning / error / neutral / accent × 3 emphasis levels) is **untouched**. Scientific palette LUTs (Crameri, viridis family) are **untouched**.
 
-The change is implemented as edits to `src/rust/imzero2_egui/assets/colors/palette.toml` followed by regeneration via `scripts/designcolors.sh gen`. The regenerator emits new bytes for `palette_generated.{rs,go}`, `color.md`, and `ip-boundary-check.md` deterministically; CI byte-equality verification holds.
+The change is implemented as edits to `rust/imzero2/imzero2_egui/assets/colors/palette.toml` followed by regeneration via `scripts/designcolors.sh gen`. The regenerator emits new bytes for `palette_generated.{rs,go}`, `color.md`, and `ip-boundary-check.md` deterministically; CI byte-equality verification holds.
 
 ## Subsidiary design decisions
 
@@ -148,7 +148,7 @@ bash scripts/designcolors.sh gen
 bash scripts/dev/hmi_screenshots.sh   # or directly:
 # rm -f doc/screenshots/tour/*.png
 # IMZERO2_SCREENSHOT_DIR="$(pwd)/doc/screenshots/tour" timeout 60 \
-#   bash src/rust/hmi.sh --launch "subject_alias = 'widgets'"
+#   bash rust/imzero2/hmi.sh --launch "subject_alias = 'widgets'"
 # 5. Eyeball comparisons across configurations.
 # 6. Land final values + regenerated artefacts in one commit referencing the ADR.
 ```
@@ -163,7 +163,7 @@ The tour requires `--launch "subject_alias = 'widgets'"` to capture the widget-s
 - **O5 — APCA exemption on border (line softening).** Rejected at intake for this ADR; the cost (modifying the M0b APCA-as-primary-gate contract) is disproportionate to scope. Worth a separate Tier 3 ADR if real-world feedback under O2 still flags lines as too harsh.
 - **Bumping body font weight 400 → 500 in `pairs.toml`.** Would relax the APCA Lc-90 body gate, potentially allowing `text_primary` to drop further than 0.93. Rejected on C4 (out of scope — typography decisions live under ADR-0030, not here) and because the resulting text-weight shift is its own visible change requiring its own ADR.
 - **Increasing body font size 13pt → 14pt.** Same family as the weight bump; same rejection.
-- **Per-screen / per-app spine override.** Considered for cases where an app legitimately wants the original L=0.13 panel (e.g., a plot-canvas app where the data is meant to dominate). Rejected; the design system tokens are fleet-wide. Per-app deviations require a Tier 3 density-exemption-shaped ADR per [tier3-human-review.md](../design-system/policy/tier3-human-review.md) §Case classes.
+- **Per-screen / per-app spine override.** Considered for cases where an app legitimately wants the original L=0.13 panel (e.g., a plot-canvas app where the data is meant to dominate). Rejected; the design system tokens are fleet-wide. Per-app deviations require a Tier 3 density-exemption-shaped ADR per tier3-human-review.md §Case classes.
 
 ## Consequences
 
@@ -306,7 +306,7 @@ The pair count rises from 13 → 15. Both new pairs clear the APCA gate at the b
 - [ADR-0029 — design system + policy-as-code](./0029-imzero2-design-system-and-policy-as-code.md) — parent framework; §SD13 hard performance invariant (tokens apply once at startup, no render-path cost).
 - [ADR-0031 — color foundations](./0031-imzero2-design-system-color.md) — parent color ADR; §SD4 dark-theme neutral spine that this ADR refines; §SD2 semantic palette which is **not** touched here.
 - [ADR-0033 — palette M0](./0033-imzero2-design-system-palette-m0.md) — ADR that committed the originally-proposed spine; §SD3 OKLCh targets; §SD6 APCA-as-primary-gate contract; §SD7 IP-boundary check method; 2026-05-16 amendment that landed the M0b execution adjustments.
-- [tier3-human-review.md](../design-system/policy/tier3-human-review.md) — Tier 3 process; this ADR fits the "Foundation refinement" case class (palette nudge driven by real-world feedback).
-- [`scripts/designcolors.sh`](../../scripts/designcolors.sh) — regenerator entry point.
-- [`scripts/dev/hmi_screenshots.sh`](../../scripts/dev/hmi_screenshots.sh) — tour capture entry point.
+- tier3-human-review.md — Tier 3 process; this ADR fits the "Foundation refinement" case class (palette nudge driven by real-world feedback).
+- `scripts/designcolors.sh` — regenerator entry point.
+- `scripts/dev/hmi_screenshots.sh` — tour capture entry point.
 - [APCA / SAPC-APCA](https://git.apcacontrast.com/) — Andrew Somers' contrast model; the primary gate per ADR-0033 §SD6.

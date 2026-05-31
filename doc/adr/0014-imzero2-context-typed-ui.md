@@ -12,7 +12,7 @@ date: 2026-04-26
 
 ## Context
 
-ImZero2's widget surface is reached through a single Ui-shaped value (the `*c.WidgetIdStack` receiver in generated code, conventionally bound to the variable `c` at call sites). Every widget method is defined on this one type, and every widget therefore appears callable in every nesting context. Container preconditions exist — but only as runtime rules carried in CLAUDE.md and the per-frame visual-feedback loop. From the [pebble2impl-local supplement](../../CLAUDE.md):
+ImZero2's widget surface is reached through a single Ui-shaped value (the `*c.WidgetIdStack` receiver in generated code, conventionally bound to the variable `c` at call sites). Every widget method is defined on this one type, and every widget therefore appears callable in every nesting context. Container preconditions exist — but only as runtime rules carried in CLAUDE.md and the per-frame visual-feedback loop. From the pebble2impl-local supplement:
 
 - `AllocateUiAtRect` positions its child Ui at the parent's *absolute* coordinates and silently breaks an enclosing `Vertical` / `Horizontal` flow.
 - `c.PanelCentral()` is mandatory for full-screen apps; widgets emitted outside any panel have no Ui scope (flicker + lost input).
@@ -37,7 +37,7 @@ func (c *Ui) DockArea(...)
 func (c *Ui) PanelCentral(fn func(*Ui))
 ```
 
-Every container's callback receives the same `*Ui`. There is no encoding of "this Ui is inside a flow container" vs "this Ui is the root, before any panel" vs "this Ui is inside an absolute-positioning rect." The codegen DSL ([`egui2_definition_d_widgets.go`](../../src/go/public/thestack/imzero2/egui2/definition/egui2_definition_d_widgets.go)) emits all widget methods onto the same receiver regardless of the contexts where the widget is semantically valid.
+Every container's callback receives the same `*Ui`. There is no encoding of "this Ui is inside a flow container" vs "this Ui is the root, before any panel" vs "this Ui is inside an absolute-positioning rect." The codegen DSL ([`egui2_definition_d_widgets.go`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_widgets.go)) emits all widget methods onto the same receiver regardless of the contexts where the widget is semantically valid.
 
 ## Design space (QOC)
 
@@ -172,9 +172,9 @@ ADRs are append-only; supersession is recorded, not deleted.
 
 ## References
 
-- Cognitive-load driver 3 (container/layout preconditions outside the type system) and the broader survey of TUI library APIs: [Go TUI Library API Styles](../research/go-tui-apis/EXPLANATION.md).
+- Cognitive-load driver 3 (container/layout preconditions outside the type system) and the broader survey of TUI library APIs: Go TUI Library API Styles.
 - Go generics method-on-instantiation limitation: [The Go Programming Language Specification — Type parameters](https://go.dev/ref/spec#Type_parameter_declarations) (methods are declared on the generic type, not on instantiations).
 - Rust typestate prior art: hyper's `Connection` typestate, embedded-hal's ownership model, and the broader [typestate pattern](https://yoric.github.io/post/rust-typestate/).
 - Haskell precedent: indexed monads in PureScript Halogen and `Control.Monad.Indexed`.
-- Related ADRs: [ADR-0059 — declarative layouting over visual builder](0010-imzero2-declarative-layouting-over-visual-builder.md), [ADR-0013 — stateful-widget API contract](0013-imzero2-stateful-widget-contract.md).
+- Related ADRs: [ADR-0059 — declarative layouting over visual builder](0059-imzero2-declarative-layouting-over-visual-builder.md), [ADR-0013 — stateful-widget API contract](0013-imzero2-stateful-widget-contract.md).
 - Driver inventory: see `feedback_*` and `project_*` memory entries enumerating the runtime-discovered nesting rules this ADR proposes to elevate to compile-time.

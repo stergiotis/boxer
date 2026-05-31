@@ -12,14 +12,14 @@ reviewed-date: 2026-05-03
 
 ## Context
 
-[ADR-0019](./0019-observability-sysmetrics-linux-collector.md) just landed a pure-Go Linux metrics collector under [`../../src/go/public/observability/sysmetrics/`](../../public/observability/sysmetrics) — the data layer is a finished product. The natural follow-on is a graphical resource monitor that consumes it: replicate btop's user-facing experience as a desktop GUI without dragging in a TUI, ANSI escape sequences, or btop's globals. The repo already has the rendering host: [`../../src/go/public/thestack/imzero2/`](../../public/thestack/imzero2) plus the egui2 widget surface ([`../../src/go/public/thestack/imzero2/egui2/`](../../public/thestack/imzero2/egui2)). Existing demos under [`../../src/go/public/thestack/imzero2/egui2/demo/`](../../public/thestack/imzero2/egui2/demo) — `regex_explorer`, `hn_explorer`, `pijul`, `play` — establish the precedent for non-trivial multi-panel apps in this stack.
+[ADR-0019](./0019-observability-sysmetrics-linux-collector.md) just landed a pure-Go Linux metrics collector under [`../../public/observability/sysmetrics/`](../../public/observability/sysmetrics) — the data layer is a finished product. The natural follow-on is a graphical resource monitor that consumes it: replicate btop's user-facing experience as a desktop GUI without dragging in a TUI, ANSI escape sequences, or btop's globals. The repo already has the rendering host: [`../../public/thestack/imzero2/`](../../public/thestack/imzero2) plus the egui2 widget surface ([`../../public/thestack/imzero2/egui2/`](../../public/thestack/imzero2/egui2)). Existing demos under [`../../public/thestack/imzero2/egui2/demo/`](../../public/thestack/imzero2/egui2/demo) — `regex_explorer`, `hn_explorer`, `pijul`, `play` — establish the precedent for non-trivial multi-panel apps in this stack.
 
 Forces the design must respect:
 
 - **ImZero2 continuous rendering.** The Rust side's `logic()` calls `ctx.request_repaint()` every pass; the frame loop ticks at compositor cadence (typically 60 Hz). A frame must never block on an OS read. The collector loop and the render loop are therefore **decoupled** by construction.
 - **FFFI databindings reset every Sync.** `r9_*` bindings re-register every frame and carry a one-frame lag (see CLAUDE.md "FFFI databindings reset every Sync"). Slices passed to plot widgets must come from stable memory and be re-sliced, not re-allocated.
 - **~100k visible-points-per-pane budget.** Inherited from the Grafana-replacement scope target. At 1 Hz with a 10-minute history window, a 12-panel app stays well under it.
-- **Host shell wraps top + bottom panels.** [`../../src/go/public/thestack/imzero2/egui2/demo/carousel/imzero2_demo_resolve.go:24-66`](../../public/thestack/imzero2/egui2/demo/carousel/imzero2_demo_resolve.go) (`decorateRenderer`) provides `PanelTop` (menu bar with Quit / Layout / theme toggles) and `PanelBottom` (metrics overlay). Subcommand bodies fit **between** those — they must not double up.
+- **Host shell wraps top + bottom panels.** [`../../public/thestack/imzero2/egui2/demo/carousel/imzero2_demo_resolve.go:24-66`](../../public/thestack/imzero2/egui2/demo/carousel/imzero2_demo_resolve.go) (`decorateRenderer`) provides `PanelTop` (menu bar with Quit / Layout / theme toggles) and `PanelBottom` (metrics overlay). Subcommand bodies fit **between** those — they must not double up.
 - **Boxer conventions** (CLAUDE.md, [ADR-0055](0055-adopt-boxer-standards.md)) — `inst` receivers, `*I` interface suffix, `*E` enum suffix, `eh.Errorf` errors, sized integers, zero-value-usable structs.
 - **No process write-side.** ADR-0019 explicitly excludes `kill(pid)` / `set_priority(pid, nice)`. imztop is read-only against `sysmetrics`.
 
@@ -180,7 +180,7 @@ Five milestones, each independently shippable. A green `scripts/ci/lint.sh` and 
 
 `imztop_keybindings.go` (`q` quit, `space` pause, `+`/`-` interval, `1-7` panel toggle). `imztop_timeticks.go` — Go-side helper computing labels via [`boxer/public/math/numerical/timeticks`](../../../boxer/public/math/numerical/timeticks/) and rendering them with `PlotText` at the appropriate X positions. `imztop_tour.go` — deterministic 6-frame tour for `IMZERO2_SCREENSHOT_DIR` capture, mirroring [`regex_explorer_tour.go:74-96`](../../public/thestack/imzero2/egui2/demo/apps/regex_explorer/regex_explorer_tour.go).
 
-**Done when:** keybindings respond on the next frame; X axis tick labels read as `15:42:00` / `15:42:30` (not `1746635320`); `IMZERO2_SCREENSHOT_DIR=/tmp/imztop-tour ./src/rust/hmi.sh imzero2 7 --tour` produces 6 deterministic PNGs that survive a re-run.
+**Done when:** keybindings respond on the next frame; X axis tick labels read as `15:42:00` / `15:42:30` (not `1746635320`); `IMZERO2_SCREENSHOT_DIR=/tmp/imztop-tour ./rust/imzero2/hmi.sh imzero2 7 --tour` produces 6 deterministic PNGs that survive a re-run.
 
 ### Out of scope for this ADR (named follow-ons)
 
@@ -195,7 +195,7 @@ Five milestones, each independently shippable. A green `scripts/ci/lint.sh` and 
 
 ## Alternatives
 
-- **Top-level binary `cmd/imztop` instead of an `imzero2` subcommand.** Rejected — the host shell (`decorateRenderer`) already provides menu bar, theme toggles, metrics overlay, screenshot capture, and the entire egui2 wiring. Standing up a parallel `cmd/imztop` would duplicate all of that without benefit. Discoverability via `./src/rust/hmi.sh imzero2 7` is already the established pattern for non-trivial demos (regex_explorer = case 6).
+- **Top-level binary `cmd/imztop` instead of an `imzero2` subcommand.** Rejected — the host shell (`decorateRenderer`) already provides menu bar, theme toggles, metrics overlay, screenshot capture, and the entire egui2 wiring. Standing up a parallel `cmd/imztop` would duplicate all of that without benefit. Discoverability via `./rust/imzero2/hmi.sh imzero2 7` is already the established pattern for non-trivial demos (regex_explorer = case 6).
 
 - **Synchronous per-frame `Bundle.Sample` call (no goroutine).** Rejected — sysmetrics' `proc.Sample` walks `/proc/[pid]/` for every visible PID; on a 500-process box this is comfortably tens of milliseconds. At 60 fps the frame budget is 16.6 ms. Blocking the frame loop tears vsync. The cost of the goroutine is one channel-less `atomic.Pointer` swap per tick, which is free.
 
@@ -278,19 +278,19 @@ SD5 framed the per-series history buffer as "head + length tracked atomically" �
 
 ### 2026-05-15 — keelson namespace path migration (ADR-0035)
 
-Runtime-tree path references in this ADR were swept from `src/go/public/thestack/runtime/...` to `src/go/public/keelson/runtime/...` as part of the keelson namespace introduction ([ADR-0035](./0035-keelson-namespace-introduction.md)). The imztop app itself was moved from `src/go/public/thestack/imztop/` to `apps/imztop/` (Step 5 of the migration); per ADR-0026's `Manifest.Id`-equals-import-path rule, the AppId moved with it (historical fact rows under the old AppId are orphaned, accepted because the runtime is pre-stable). The decision recorded here is unchanged; only path strings reflect the new locations. `status` and `reviewed-date` are deliberately not re-stamped.
+Runtime-tree path references in this ADR were swept from `public/thestack/runtime/...` to `public/keelson/runtime/...` as part of the keelson namespace introduction ([ADR-0035](./0035-keelson-namespace-introduction.md)). The imztop app itself was moved from `public/thestack/imztop/` to `apps/imztop/` (Step 5 of the migration); per ADR-0026's `Manifest.Id`-equals-import-path rule, the AppId moved with it (historical fact rows under the old AppId are orphaned, accepted because the runtime is pre-stable). The decision recorded here is unchanged; only path strings reflect the new locations. `status` and `reviewed-date` are deliberately not re-stamped.
 
 ## References
 
 - [ADR-0019](./0019-observability-sysmetrics-linux-collector.md) — sysmetrics data layer (parent ADR; this ADR is the GUI consumer).
 - [`../../../contrib/btop/`](../../../contrib/btop/) — feature-parity reference; Apache 2.0.
 - [`../../../contrib/btop/LICENSE`](../../../contrib/btop/LICENSE) — license verification.
-- [`../../src/go/public/observability/sysmetrics/`](../../public/observability/sysmetrics) — data source.
+- [`../../public/observability/sysmetrics/`](../../public/observability/sysmetrics) — data source.
 - `../../doc/observability/sysmetrics/REFERENCE.md` — public API of sysmetrics.
-- [`../../src/go/public/thestack/imzero2/egui2/demo/carousel/imzero2_demo_resolve.go`](../../public/thestack/imzero2/egui2/demo/carousel/imzero2_demo_resolve.go) — host shell + subcommand registry.
-- [`../../src/go/public/thestack/imzero2/egui2/demo/apps/regex_explorer/regex_explorer.go`](../../public/thestack/imzero2/egui2/demo/apps/regex_explorer/regex_explorer.go) — multi-panel demo precedent.
-- [`../../src/go/public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_plot_demo.go`](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_plot_demo.go) — `PlotLine` / `PlotBars` usage.
-- [`../../src/go/public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_etable_demo.go`](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_etable_demo.go) — virtualized-table usage at 10k rows.
+- [`../../public/thestack/imzero2/egui2/demo/carousel/imzero2_demo_resolve.go`](../../public/thestack/imzero2/egui2/demo/carousel/imzero2_demo_resolve.go) — host shell + subcommand registry.
+- [`../../public/thestack/imzero2/egui2/demo/apps/regex_explorer/regex_explorer.go`](../../public/thestack/imzero2/egui2/demo/apps/regex_explorer/regex_explorer.go) — multi-panel demo precedent.
+- [`../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_plot_demo.go`](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_plot_demo.go) — `PlotLine` / `PlotBars` usage.
+- [`../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_etable_demo.go`](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_etable_demo.go) — virtualized-table usage at 10k rows.
 - [`../../../boxer/public/math/numerical/timeticks/`](../../../boxer/public/math/numerical/timeticks/) — calendar-aware time-axis tick generator (M5).
 - [`../../tags`](../../tags) — build-tag listing; `gpu_rocm` appended in M1.
 - [ADR-0055](0055-adopt-boxer-standards.md) — boxer coding/doc standards adoption.

@@ -70,7 +70,7 @@ Dependencies already present in `go.mod` (no new modules required):
 
 ## Decision
 
-We introduce `src/go/public/keelson/runtime/task/` as a bus-protocol primitive for long-running, cancellable, observable work. The package owns the subject taxonomy and wire schema; apps own the goroutines that do the work.
+We introduce `public/keelson/runtime/task/` as a bus-protocol primitive for long-running, cancellable, observable work. The package owns the subject taxonomy and wire schema; apps own the goroutines that do the work.
 
 ### Subject taxonomy
 
@@ -225,6 +225,6 @@ Source: [`../../public/analytics/stats/ecdfbands/`](../../public/analytics/stats
 - [ADR-0028](./0028-chlocal-low-latency-sql-cap.md) — `chlocalpool` worker pattern (sibling, domain-specific); a future consumer of the task primitive for export-style queries.
 - [ADR-0005](0005-streaming-persisted-kafka-from-connect.md) — Kafka catch-up reads, a candidate consumer.
 - [ADR-0020](./0020-imzero2-imztop-resource-monitor.md) — imztop sampling loop, a candidate consumer.
-- `src/go/public/keelson/runtime/task/` — package source (to land at M1).
+- `public/keelson/runtime/task/` — package source (to land at M1).
 - `github.com/matoous/go-nanoid/v2` — `gonanoid.New()` for task ids.
 - `github.com/dustin/go-humanize` — `BigBytes`, `RelTime`, `Comma` for the emission gate's visible-string computation.

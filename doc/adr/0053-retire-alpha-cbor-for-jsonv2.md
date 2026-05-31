@@ -10,7 +10,7 @@ reviewed-date: 2026-04-22
 
 ## Context
 
-The package `src/go/public/alpha/cbor` is a hand-written, pull-style CBOR parser stack (~3.3k LoC, 51% line coverage) layered on top of `github.com/stergiotis/boxer/public/semistructured/cbor`. It is imported by 20+ files across `public/semistructured/cbor`, `public/chunk`, `public/app/datasource/imap`, and the `app/commands/cbor/*` CLI tools. The components:
+The package `public/alpha/cbor` is a hand-written, pull-style CBOR parser stack (~3.3k LoC, 51% line coverage) layered on top of `github.com/stergiotis/boxer/public/semistructured/cbor`. It is imported by 20+ files across `public/semistructured/cbor`, `public/chunk`, `public/app/datasource/imap`, and the `app/commands/cbor/*` CLI tools. The components:
 
 - **`tokenizer.go`** — byte-level RFC 8949 lexer producing a flat `TokenE` stream.
 - **`pathstatemachine.go` (PSM)** — tracks container depth plus JSON-pointer-style path elements as tokens stream in.
@@ -82,7 +82,7 @@ O4 dominates on C1 and C3, is neutral on C2 (all options leave the flagship path
 
 ## Decision
 
-We move `src/go/public/alpha/cbor` to `src/go/public/attic/alpha/cbor` and migrate its 20+ consumers to the `jsonv2` + Leeway ingestion path over a bounded deprecation window. The package becomes read-only for historical reference; no further bug fixes, tests, or feature work land on the attic copy.
+We move `public/alpha/cbor` to `public/attic/alpha/cbor` and migrate its 20+ consumers to the `jsonv2` + Leeway ingestion path over a bounded deprecation window. The package becomes read-only for historical reference; no further bug fixes, tests, or feature work land on the attic copy.
 
 The CBOR-as-IR concept and the CBOR → columnar ingestion capability are *not* promised to be restored. If a future customer segment (IoT / edge / COSE-adjacent) requires native CBOR ingestion, it is rebuilt as a thin adapter against the Leeway event API, modelled on `jsontext`, not on `alpha/cbor`.
 
@@ -152,10 +152,10 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 
 ## References
 
-- [`doc/adr/0001-clickhouse-observability-pipeline.md`](./0001-clickhouse-observability-pipeline.md), [`0002-query-categorization-provenance.md`](./0002-query-categorization-provenance.md), [`0003-imzero2-unified-color-type.md`](./0003-imzero2-unified-color-type.md) — prior ADRs; template shape followed here.
+- [`doc/adr/0001-clickhouse-observability-pipeline.md`](0050-clickhouse-observability-pipeline.md), [`0002-query-categorization-provenance.md`](0051-query-categorization-provenance.md), [`0003-imzero2-unified-color-type.md`](0052-imzero2-unified-color-type.md) — prior ADRs; template shape followed here.
 - [`../boxer/doc/DOCUMENTATION_STANDARD.md`](../../../boxer/doc/DOCUMENTATION_STANDARD.md) — Diátaxis + ADR conventions this document follows.
 - [`../boxer/doc/adr/0002-nanopass-discipline.md`](../../../boxer/doc/adr/0002-nanopass-discipline.md) — retrospective-ADR style reference used here.
-- `src/go/public/alpha/cbor/` — package being retired, relocating to `src/go/public/attic/alpha/cbor/`.
-- [`src/go/public/semistructured/cbor/`](../../src/go/public/semistructured/cbor/) — downstream indexing subsystem; migrated off alpha/cbor during retirement.
+- `public/alpha/cbor/` — package being retired, relocating to `public/attic/alpha/cbor/`.
+- [`public/semistructured/cbor/`](../../public/semistructured/cbor) — downstream indexing subsystem; migrated off alpha/cbor during retirement.
 - `encoding/json/v2` / `encoding/json/jsontext` — Go experimental packages (enabled in this repo via `goexperiment.jsonv2`) providing the streaming-pull API that replaces alpha/cbor's role.
 - RFC 8949 — CBOR specification; cited for the wire-format properties enumerated in *Architectural benefits being retired*.

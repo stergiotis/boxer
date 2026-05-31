@@ -97,7 +97,7 @@ etable prefetch (`FetchR9EtPrefetch`), frame metrics
 1. Define the fetcher opcode in
    `public/thestack/imzero2/egui2/definition/egui2_definition_d_fetchers.go`
    (or another `egui2_definition_d_*.go` if it's feature-scoped) and
-   the Rust handler in `src/rust/src/imzero2/interpreter.rs`.
+   the Rust handler in `rust/imzero2/src/imzero2/interpreter.rs`.
 2. Run `./generate.sh` to refresh `fetchers.out.go`.
 3. In `bindings/egui2_statemanagement.go`:
    a. Add a value type — `XyzValue` — mirroring the fetcher's return

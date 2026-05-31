@@ -318,7 +318,7 @@ ADRs are append-only; supersession is recorded, not deleted.
     a typed handle.
   - Pebble2impl mirrored the §5 lint test rather than depending on
     boxer's `_test.go` helper. The mirror at
-    `src/go/public/config/envlint/envlint_test.go` skips nested
+    `public/config/envlint/envlint_test.go` skips nested
     `go.mod` sub-modules (the `scripts/dev/sponsor_deps` standalone
     tool, the `whole_program_fixture` test fixtures) by
     `os.Stat`-checking for `go.mod` in each directory. ADR §5 already
@@ -417,7 +417,7 @@ ADRs are append-only; supersession is recorded, not deleted.
 
 - **2026-05-17 — M6 shipped: pebble2impl envgen mirror.** The
   pebble2impl-side doc generator landed at
-  `src/go/cmd/envgen/main.go`, mirroring the boxer pattern. The
+  `public/app/commands/env/main.go`, mirroring the boxer pattern. The
   renderer was extracted from `internal/cmd/envgen` into a new
   importable package `public/config/env/envdoc` so both generators
   share one source of truth for the markdown layout; each cmd binds
@@ -429,7 +429,7 @@ ADRs are append-only; supersession is recorded, not deleted.
 
   - The cmd's main.go is gated on `llm_generated_opus47` so it can
     import the tag-gated owner packages (play, runinfo, windowhost,
-    elevation_profile_demo). A tag-less `go generate ./src/go/cmd/envgen/...`
+    elevation_profile_demo). A tag-less `go generate ./public/app/commands/env/...`
     would skip the directive in that file. Workaround: a sibling
     `generate.go` gated on the standard `generate` build tag
     (which `go generate` sets automatically) carries the directive.
@@ -437,7 +437,7 @@ ADRs are append-only; supersession is recorded, not deleted.
     ../../../../tags)\" . -out ../../../../doc/env-vars.md` so the
     full pebble2impl tag set travels through to the build.
   - `BOXER_LOG_FACTS` / `BOXER_LOG_FACTS_URL` declared in
-    `package main` at `src/go/public/thestack/cmd/imzero2/thestack_app.go`
+    `package main` at `public/thestack/cmd/imzero2/thestack_app.go`
     do not appear in the pebble2impl doc — package main is not
     importable from another main. A future refactor may relocate
     them to a non-main sibling package. The pebble2impl envgen
@@ -446,7 +446,7 @@ ADRs are append-only; supersession is recorded, not deleted.
 - **2026-05-17 — Closed: BOXER_LOG_FACTS gap.** The two specs
   documented as unreachable in the M6 entry above are no longer in
   `package main`. They moved to a new
-  `src/go/public/keelson/runtime/factsstore/chstore/envvars.go`
+  `public/keelson/runtime/factsstore/chstore/envvars.go`
   file as `chstore.LogFactsEnabled` / `chstore.LogFactsURL`, which
   is the natural home — chstore is the consumer of both
   (`LogFactsEnabled` decides whether the upper layer wires
@@ -462,7 +462,7 @@ ADRs are append-only; supersession is recorded, not deleted.
   binary actually consumes, not duplication of boxer's own
   doc/env-vars.md).
 
-- **2026-05-18 — §5 enforcement migrated to codelint CS011.** The bespoke `public/config/env/lint_test.go` AST walker that had enforced the no-stray-env rule since M1 is removed. Its successor is **codelint rule CS011** (ADR-0011), which runs against `./public/...` from `scripts/ci/lint.sh` at error severity and additionally covers `os.Environ` (which the original test had not modelled). The core decision (single-read-path lint enforced from day one) is unchanged; only the enforcer's location moved from an in-package `_test.go` to the project-wide governance lint suite. Downstream pebble2impl mirror at `src/go/public/config/envlint/envlint_test.go` is unaffected and continues to work independently.
+- **2026-05-18 — §5 enforcement migrated to codelint CS011.** The bespoke `public/config/env/lint_test.go` AST walker that had enforced the no-stray-env rule since M1 is removed. Its successor is **codelint rule CS011** (ADR-0011), which runs against `./public/...` from `scripts/ci/lint.sh` at error severity and additionally covers `os.Environ` (which the original test had not modelled). The core decision (single-read-path lint enforced from day one) is unchanged; only the enforcer's location moved from an in-package `_test.go` to the project-wide governance lint suite. Downstream pebble2impl mirror at `public/config/envlint/envlint_test.go` is unaffected and continues to work independently.
 
 - **2026-05-22 — Sixth typed var: `CategorialStringVar`.** Adds `NewCategorialString(spec, allowed []string) *CategorialStringVar` for strings constrained to a declared value set (e.g. log levels, log formats). `TypeE` gains `TypeCategorialString`; `Spec` gains an `Allowed []string` field that is empty for the five existing typed vars and populated by `NewCategorialString` at registration (alongside `Origin` / `Type`). At registration, an empty `allowed` or a `Default` outside `allowed` panics; at read time, an env value outside the set silently falls back to `Default` per the §3 update-2026-05-17 env-parse-failure convention. `AsCliFlag` appends `(one of: a|b|c)` to the cli.Flag `Usage` and validates membership in the chained Action before invoking any `WithStringAction` callback. Renderer surfaces — `envdoc.formatRow` appends `<br>**Allowed:** …` to the Description cell when `len(Spec.Allowed) > 0`; `boxer env list` appends `(one of: a|b|c)` to its Description column (subject to the existing 70-char truncation). Migrated `LogLevel` / `LogFormat` (the two pre-existing categorical specs identified by their `default:` rejection branches in `public/observability/logging/flags.go`); their `default:` "unhandled X" branches drop (unreachable post-validation) and the `BOXER_LOG_LEVEL` action drops the prior `strings.ToLower(s)` coercion — env values are now case-sensitive, matching the convention every other typed var follows. Core decision stands; the addition is a sixth scaffold entry in the §2 type table.
 

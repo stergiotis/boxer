@@ -17,7 +17,7 @@ superseded-by: ADR-0040
 - The generator pipeline that turns `palette.toml` into `palette_generated.{rs,go}` + `color.md` + the IP boundary log
 - Verifier passes — WCAG AA + CVD ΔE for the semantic palette; provenance + SHA pinning for the vendored scientific palettes
 
-This ADR is the Tier 3 follow-on that captures the *design-time decisions* the M0 work depends on: which OKLab implementation to use, which accent hue to pin, which concrete OKLCh coordinates the semantic palette commits to, and which Crameri / viridis palettes are bundled. Per [tier3-human-review.md](../design-system/policy/tier3-human-review.md) §Pending decisions, this ADR resolves:
+This ADR is the Tier 3 follow-on that captures the *design-time decisions* the M0 work depends on: which OKLab implementation to use, which accent hue to pin, which concrete OKLCh coordinates the semantic palette commits to, and which Crameri / viridis palettes are bundled. Per tier3-human-review.md §Pending decisions, this ADR resolves:
 
 - **T3-007** — Accent hue final pick (proposed `h = 295` violet; alternates considered)
 - **T3-010** — OKLab implementation pinning (`palette` crate vs in-repo port)
@@ -76,7 +76,7 @@ For Q1, O1a dominates O1b on hue-distinctness (further from `info` 240) and O1c 
 We will:
 
 - Pin the **accent hue at `h = 295`** (violet). The three emphasis levels (subtle / default / strong) follow ADR-0031 §SD2's L / C scheme.
-- Implement **OKLab as a small in-repo port** at `scripts/ci/designcolors/gen/oklab/` (Go) and at `src/rust/imzero2_egui/src/style/tokens/oklab.rs` (Rust mirror used by the Rust generator path). The math follows Ottosson 2020 verbatim; test vectors are checked in.
+- Implement **OKLab as a small in-repo port** at `scripts/ci/designcolors/gen/oklab/` (Go) and at `rust/imzero2/imzero2_egui/src/style/tokens/oklab.rs` (Rust mirror used by the Rust generator path). The math follows Ottosson 2020 verbatim; test vectors are checked in.
 - Commit the **semantic palette OKLCh coordinates** per §SD3 below to `palette.toml`.
 - Bundle a **scientific palette subset** per §SD4 — Crameri `batlow` / `vik` / `batlowS` defaults plus selected alternates, and the viridis family (van der Walt & Smith, plus Nuñez `cividis`).
 - Wire the **generator + verifier pipelines** per §SD5–§SD7. The generator is byte-deterministic; CI re-runs it and verifies the committed `palette_generated.*` files match.
@@ -117,7 +117,7 @@ The OKLab math (Ottosson 2020) is ~80 lines of vector operations:
 Locations:
 
 - **Go** (generator path): `scripts/ci/designcolors/gen/oklab/oklab.go` + `oklab_test.go` with vectors from Ottosson's reference blog post.
-- **Rust** (mirrored for the Rust-side `palette_generated.rs` emitter): `src/rust/imzero2_egui/src/style/tokens/oklab.rs`. The Rust file is *generated from* the Go source via the same `./generate.sh` codegen entry as the rest of the token cross-language mirroring ([`reference_generate_sh`]).
+- **Rust** (mirrored for the Rust-side `palette_generated.rs` emitter): `rust/imzero2/imzero2_egui/src/style/tokens/oklab.rs`. The Rust file is *generated from* the Go source via the same `./generate.sh` codegen entry as the rest of the token cross-language mirroring ([`reference_generate_sh`]).
 
 **Why not the `palette` crate** (O2b): it's Rust-only; we need Go for the generator (per the [ADR-0029 §SD8](./0029-imzero2-design-system-and-policy-as-code.md) tooling-in-Go convention). Splitting the math across two crates risks divergence.
 
@@ -215,14 +215,14 @@ Total: 14 vendored LUTs ≈ 14 × 256 × 3 ≈ 11 KB raw RGB data; ~50 KB after 
 
 Crameri version pinning: target the **latest stable Crameri release** as of the M0 execution date; SHA-pinned in the LUT file headers. Future bumps are amendments to this ADR.
 
-Subsetting note: Crameri publishes ~50 palettes; we bundle 9 (defaults + 6 alternates). Adding more is Tier 3 per [tier3-human-review.md](../design-system/policy/tier3-human-review.md) §T3-008 (deferred to M2 plot-integration testing).
+Subsetting note: Crameri publishes ~50 palettes; we bundle 9 (defaults + 6 alternates). Adding more is Tier 3 per tier3-human-review.md §T3-008 (deferred to M2 plot-integration testing).
 
 ### SD5 — Generator pipeline
 
 `scripts/ci/designcolors/gen/main.go` reads `palette.toml` and emits four artefacts:
 
-1. `src/rust/imzero2_egui/src/style/tokens/palette_generated.rs` — Rust `Color32` constants
-2. `src/go/public/thestack/imzero2/egui2/styletokens/palette_generated.go` — Go `color.RGBA` (or egui-equivalent) constants
+1. `rust/imzero2/imzero2_egui/src/style/tokens/palette_generated.rs` — Rust `Color32` constants
+2. `public/thestack/imzero2/egui2/styletokens/palette_generated.go` — Go `color.RGBA` (or egui-equivalent) constants
 3. `doc/design-system/foundations/color.md` — human-readable spec with hex values + contrast table
 4. `doc/design-system/foundations/ip-boundary-check.md` — verbatim-search log (§SD7)
 
@@ -279,7 +279,7 @@ M0a is implementable immediately on acceptance of this ADR; M0b is gated on runn
 - **Teal accent (`h = 180`).** Rejected on C7 — too close to `info` (Δh = 60° on a saturated palette risks reading as "another info").
 - **Pink accent (`h = 340`).** Rejected on C7 — Δh = 45° from `error` 25, perceptually adjacent under CVD.
 - **Swiss-flag red accent.** Rejected at intake — collides with `error`; overweights cultural reference over clarity.
-- **Bundling all ~50 Crameri palettes.** Rejected for v1 — bytes we don't need; Tier 3 to extend per [T3-008](../design-system/policy/tier3-human-review.md).
+- **Bundling all ~50 Crameri palettes.** Rejected for v1 — bytes we don't need; Tier 3 to extend per T3-008.
 - **OKLCh → sRGB clipping by L reduction.** Rejected — would degrade contrast guarantees. Chroma reduction is the standard fix.
 - **Light-theme spine in M0.** Rejected per [ADR-0031](./0031-imzero2-design-system-color.md) (dark only for v1); the framework supports adding it later as a separate spine without changing the OKLab math or the scientific palettes.
 
@@ -306,7 +306,7 @@ M0a is implementable immediately on acceptance of this ADR; M0b is gated on runn
 
 - **`palette.toml` is the public-stability surface for semantic palette OKLCh targets.** Renaming a role or shifting a hue requires a fleet sweep. Mitigation: changes flow through Tier 3.
 - **Generator artefacts (`palette_generated.{rs,go}`, `color.md`, `ip-boundary-check.md`) are checked in.** Generated bytes are auditable; CI verifies they match the source.
-- **The accent hue choice is fleet-wide.** Per-app accent overrides require Tier 3 escalation per [tier3-human-review.md](../design-system/policy/tier3-human-review.md) §Case classes — *Density-policy exemption*-shaped process for accent overrides if a real case emerges.
+- **The accent hue choice is fleet-wide.** Per-app accent overrides require Tier 3 escalation per tier3-human-review.md §Case classes — *Density-policy exemption*-shaped process for accent overrides if a real case emerges.
 
 ## Status
 
@@ -330,12 +330,12 @@ Closes §SD8 M0b. Lands the in-tree generator + verifiers + LUTs + the executed 
 
 **What landed verbatim from §SD8 M0b.**
 
-- OKLab Go port at `scripts/ci/designcolors/gen/oklab/` with Rust mirror at `src/rust/imzero2_egui/src/style/tokens/oklab.rs`. Test vectors from Ottosson 2020 + W3C CSS Color 4. Forward + inverse + gamma round-trip + OKLab↔OKLCh round-trip all pass.
-- `palette.toml` at `src/rust/imzero2_egui/assets/colors/palette.toml` carrying the §SD3 OKLCh targets (28 tokens: 10-step neutral spine plus 6 roles × 3 emphasis).
-- `pairs.toml` at `src/rust/imzero2_egui/assets/colors/pairs.toml` declaring the 12 contrast pairs the verifier reads.
+- OKLab Go port at `scripts/ci/designcolors/gen/oklab/` with Rust mirror at `rust/imzero2/imzero2_egui/src/style/tokens/oklab.rs`. Test vectors from Ottosson 2020 + W3C CSS Color 4. Forward + inverse + gamma round-trip + OKLab↔OKLCh round-trip all pass.
+- `palette.toml` at `rust/imzero2/imzero2_egui/assets/colors/palette.toml` carrying the §SD3 OKLCh targets (28 tokens: 10-step neutral spine plus 6 roles × 3 emphasis).
+- `pairs.toml` at `rust/imzero2/imzero2_egui/assets/colors/pairs.toml` declaring the 12 contrast pairs the verifier reads.
 - Generator at `scripts/ci/designcolors/gen/main.go` emits four artefacts deterministically: `palette_generated.{rs,go}`, `color.md`, `ip-boundary-check.md`. CI re-runs and compares byte-for-byte.
 - IP-boundary cache at `scripts/ci/designcolors/ip-refs/` with 8 published-system anchor JSONs (Spectrum / Material / Carbon / Tailwind / Radix / Fluent / Polaris / Bootstrap).
-- Vendor pipeline at `scripts/ci/designcolors/vendor/main.go` produces 13 scientific palette LUTs under `src/rust/imzero2_egui/src/style/data_encoding/` (Rust) and `src/go/public/thestack/imzero2/egui2/styletokens/data_encoding/` (Go).
+- Vendor pipeline at `scripts/ci/designcolors/vendor/main.go` produces 13 scientific palette LUTs under `rust/imzero2/imzero2_egui/src/style/data_encoding/` (Rust) and `public/thestack/imzero2/egui2/styletokens/data_encoding/` (Go).
 
 **Two contract refinements (adversarial-review-driven, mid-flight).**
 
@@ -404,9 +404,9 @@ default = { L = 0.80, C = 0.08 }       # C was 0.12
 strong  = { L = 0.90, C = 0.13 }       # unchanged
 ```
 
-**Why this is recorded as an Amendment, not a new ADR.** The change stays within the OKLCh framework, the role taxonomy, the emphasis-level structure, and the APCA-as-primary-gate contract — all of which ADR-0033 commits to. No tokens are added or removed; no new pair classes appear; the generator pipeline is unchanged. The change is a *refinement of two values inside the existing role*, fitting the [tier3-human-review.md](../design-system/policy/tier3-human-review.md) "Foundation refinement" case class and the M0b amendment precedent.
+**Why this is recorded as an Amendment, not a new ADR.** The change stays within the OKLCh framework, the role taxonomy, the emphasis-level structure, and the APCA-as-primary-gate contract — all of which ADR-0033 commits to. No tokens are added or removed; no new pair classes appear; the generator pipeline is unchanged. The change is a *refinement of two values inside the existing role*, fitting the tier3-human-review.md "Foundation refinement" case class and the M0b amendment precedent.
 
-**Closes [T3-007](../design-system/policy/tier3-human-review.md) (accent hue final pick) — revised.** The original M0a resolution of T3-007 at h=295 stands as the ADR's first answer; this amendment supersedes it with h=270 + C=0.08 based on real-world UX feedback. The pending-decisions table flips T3-007 from "resolved at h=295" to "amended to h=270 + accent.default C=0.08" with this ADR's date.
+**Closes T3-007 (accent hue final pick) — revised.** The original M0a resolution of T3-007 at h=295 stands as the ADR's first answer; this amendment supersedes it with h=270 + C=0.08 based on real-world UX feedback. The pending-decisions table flips T3-007 from "resolved at h=295" to "amended to h=270 + accent.default C=0.08" with this ADR's date.
 
 **Screenshot evidence.** The full screenshot tour at the new accent values is captured in `doc/screenshots/tour/` (37 PNGs as of the bundle that includes `idsshowcase.png`). The `idsshowcase.png` capture is the single-image proof: the accent row in the semantic-palette grid visibly reads quieter than info/success/warning/error. Earlier iterations preserved in `/tmp/tour-accent-*` were not committed (transient calibration evidence per the ADR-0037 §SD6 policy).
 
@@ -418,8 +418,8 @@ strong  = { L = 0.90, C = 0.13 }       # unchanged
 - [ADR-0030 — typography](./0030-imzero2-design-system-typography.md) — sibling foundations ADR; build-pipeline pattern (TOML source-of-truth + generator + committed artefacts) parallels §SD5 here.
 - [ADR-0031 — color foundations](./0031-imzero2-design-system-color.md) — parent ADR; §SD13 names M0 deliverables; §SD1 OKLCh; §SD2 semantic palette; §SD3 scientific palettes; §SD7 generator pipeline; §SD11 IP boundary.
 - [ADR-0028 — `ch.local.exec` low-latency cap](./0028-chlocal-low-latency-sql-cap.md) — M0 spike + Amendment pattern reused here.
-- [tier3-human-review.md](../design-system/policy/tier3-human-review.md) — resolves T3-007 (accent hue) + T3-010 (OKLab impl); T3-008 (Crameri subset) partially resolved (defaults committed; alternates list pending M2).
-- [INSPIRATIONS.md](../design-system/INSPIRATIONS.md) — attributions for Crameri (MIT), viridis (CC0), cividis (CC0), Ottosson (OKLab).
+- tier3-human-review.md — resolves T3-007 (accent hue) + T3-010 (OKLab impl); T3-008 (Crameri subset) partially resolved (defaults committed; alternates list pending M2).
+- INSPIRATIONS.md — attributions for Crameri (MIT), viridis (CC0), cividis (CC0), Ottosson (OKLab).
 - Crameri, F. (2018). *Scientific colour maps* (Version 8.0.1) [Zenodo](https://doi.org/10.5281/zenodo.1243862) — Crameri MIT family.
 - van der Walt, S. & Smith, N. (2015). *Default colors for matplotlib (the viridis family).* [bids.github.io/colormap](https://bids.github.io/colormap/) — viridis CC0.
 - Nuñez, J. R., Anderton, C. R., & Renslow, R. S. (2018). *Optimizing colormaps with consideration for color vision deficiency.* PLOS ONE 13(7): e0199239 — cividis CC0.

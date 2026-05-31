@@ -60,7 +60,7 @@ The structural difference is captured by di Tria's commentary on Art 30: **"En d
 
 ### Variants mapped onto the taxonomy
 
-The full erasure design-space taxonomy is defined in [doc/explanation/erasure-design-space.md](../explanation/erasure-design-space.md). The S-variants below were this ADR's concrete instances within that framework; included as a comparative inventory for the supersession trail.
+The full erasure design-space taxonomy is defined in doc/explanation/erasure-design-space.md. The S-variants below were this ADR's concrete instances within that framework; included as a comparative inventory for the supersession trail.
 
 | Variant | Family | Secret scope | Store-2 location | Propagation | Defensible under |
 |---|---|---|---|---|---|

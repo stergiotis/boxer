@@ -12,13 +12,13 @@ date: 2026-05-01
 
 ## Context
 
-[ADR-0060](./0011-leeway-data-contracts-odcs.md) names `JsonCardEmitter` ([`../../src/go/public/boxerstaging/leeway/card/leeway_card_json.go`](../../src/go/public/boxerstaging/leeway/card/leeway_card_json.go)) the canonical lossless JSON serialization for Leeway and slots it into ODCS as `format: leeway-card-json` (SD3). [ADR-0007](./0017-leeway-membership-role-classifier.md) (and boxer ADR-0056) introduce the `membershiprole.ClassifierI` abstraction that decides primary versus secondary memberships at value level. Neither pins the actual JSON shape: today's `JsonCardEmitter` is section-centric, repeats per-section schema on every entity, stringifies all scalar values, and does not consume the classifier at all. The format is lossless in principle but verbose in practice, contract-validator-hostile (stringified numbers defeat `type: integer`), and not yet isomorphic (no parser exists).
+[ADR-0060](0060-leeway-data-contracts-odcs.md) names `JsonCardEmitter` ([`../../public/semistructured/leeway/card/leeway_card_json.go`](../../public/semistructured/leeway/card/leeway_card_json.go)) the canonical lossless JSON serialization for Leeway and slots it into ODCS as `format: leeway-card-json` (SD3). [ADR-0007](0007-leeway-membership-role-classifier.md) (and boxer ADR-0056) introduce the `membershiprole.ClassifierI` abstraction that decides primary versus secondary memberships at value level. Neither pins the actual JSON shape: today's `JsonCardEmitter` is section-centric, repeats per-section schema on every entity, stringifies all scalar values, and does not consume the classifier at all. The format is lossless in principle but verbose in practice, contract-validator-hostile (stringified numbers defeat `type: integer`), and not yet isomorphic (no parser exists).
 
 This ADR pins the canonical JSON shape and the implementation plan to land it. The shape consumes `membershiprole.ClassifierI` to drive the primary/secondary split, separates schema from data into two artifacts (schema document + data document), and uses an attribute-centric per-entity layout rooted at primary memberships. The plan is staged so each milestone is independently shippable and the final artifact is reviewable against the existing `card_anchor_integration3_test.go` fixtures.
 
 Forces the format must respect:
 
-- **Lossless and isomorphic.** The format must round-trip Leeway state through a future parser ([ADR-0060](./0011-leeway-data-contracts-odcs.md) SD12). Multi-membership aliasing, co-section topology, set-vs-array distinction, ragged `value-card` tensors, and the membership graph all need representation.
+- **Lossless and isomorphic.** The format must round-trip Leeway state through a future parser ([ADR-0060](0060-leeway-data-contracts-odcs.md) SD12). Multi-membership aliasing, co-section topology, set-vs-array distinction, ragged `value-card` tensors, and the membership graph all need representation.
 - **Human readable.** Standard JSON tooling — `jq`, JSON Path, JSON Schema validators, browser dev tools — should read the format productively without leeway-specific knowledge for the common case.
 - **Data-contract amenable.** ODCS / JSON Schema generators consume the format directly; primary memberships map to `properties` + `required`, secondary memberships map to a scoped extension or `additionalProperties`. Stringified scalars are a non-starter.
 - **Streaming friendly.** NDJSON-shaped output (one entity per line) is mandatory for batch streaming validators and Kafka-like transports.
@@ -43,7 +43,7 @@ Two subtrees inside each entity object:
 - `byStructure` — section cardinalities, co-group topology, plain values. Schema-shape view; cheap to compute, cheap to validate.
 - `byAttribute` — attribute-centric, keyed by primary memberships. Authoritative; the parser reconstructs leeway state from it. Secondary memberships ride as a per-attribute `labels` slot. Multi-primary aliasing collapses into a single key with an `aliases` field.
 
-The previously-explored third subtree (`byMembership`) is dropped per [ADR-0007](./0017-leeway-membership-role-classifier.md) SD10 — once primary memberships are declared, the primary *is* the attribute key, so a third subtree adds no information.
+The previously-explored third subtree (`byMembership`) is dropped per [ADR-0007](0007-leeway-membership-role-classifier.md) SD10 — once primary memberships are declared, the primary *is* the attribute key, so a third subtree adds no information.
 
 ### Schema document shape
 
@@ -95,7 +95,7 @@ The previously-explored third subtree (`byMembership`) is dropped per [ADR-0007]
 ```
 
 Notes:
-- **Encoding aspects are absent by default** ([ADR-0060](./0011-leeway-data-contracts-odcs.md) SD6 — materialization choices, not interface concerns). `--include-encoding` flag opts in for debugging.
+- **Encoding aspects are absent by default** ([ADR-0060](0060-leeway-data-contracts-odcs.md) SD6 — materialization choices, not interface concerns). `--include-encoding` flag opts in for debugging.
 - **Membership roles** are recorded per-spec when known (uniformity hints declared, custom classifier marked the spec). When the classifier decides per-membership, the schema document still emits the spec without a `role` field; consumers run the classifier inline.
 - **Order**: `plainSections` follow `PlainItemTypeE` enum order; `taggedSections` ordered by section name (lexicographic StylableName); columns by IR order; `coSectionGroups` by `naming.Key`.
 - **Fingerprint**: blake3 of the canonicalized JSON with the `fingerprint` field set to the empty string. Stable under re-emission.
@@ -270,7 +270,7 @@ Eight milestones, each independently shippable. Round-trip and golden-file tests
 
 ### M1 — Bump boxer pin in pebble2impl
 
-`go get -u github.com/stergiotis/boxer` to pick up boxer commits `699e0a1` (membershiprole + use-aspects) and `ec97676` (`AspectSet.Contains`). Re-run `scripts/ci/lint.sh` per [`../../CLAUDE.md`](../../CLAUDE.md) ("Bumping boxer"). No code changes downstream of the bump in M1; this is the prerequisite for M2.
+`go get -u github.com/stergiotis/boxer` to pick up boxer commits `699e0a1` (membershiprole + use-aspects) and `ec97676` (`AspectSet.Contains`). Re-run `scripts/ci/lint.sh` per `../../CLAUDE.md` ("Bumping boxer"). No code changes downstream of the bump in M1; this is the prerequisite for M2.
 
 **Done when:** `go build ./...` succeeds with the new pin; `useaspects.AspectSectionMembershipsAllPrimary` resolves; `membershiprole.DefaultClassifier{}` is callable from pebble2impl.
 
@@ -334,11 +334,11 @@ Cutover: rename `JsonCardEmitterV2` → `JsonCardEmitter`, retire the old emitte
 
 ### Out of scope for this ADR (named follow-ons)
 
-- **Card-JSON parser** ([ADR-0060](./0011-leeway-data-contracts-odcs.md) SD12) — separate ADR. The format defined here is the parser's input contract.
+- **Card-JSON parser** ([ADR-0060](0060-leeway-data-contracts-odcs.md) SD12) — separate ADR. The format defined here is the parser's input contract.
 - **Other card emitter cutovers** — Unicode/HTML/SVG/Typst/ImZero2 each cut over on their own schedule.
 - **ODCS contract generator** — separate deliverable consuming the schema document.
 - **Mining drift report** — separate offline tool, never modifies the wire form.
-- **Reverse: ODCS → `TableDescDto`** — explicitly out of scope per [ADR-0060](./0011-leeway-data-contracts-odcs.md) SD2 (descriptive mode only).
+- **Reverse: ODCS → `TableDescDto`** — explicitly out of scope per [ADR-0060](0060-leeway-data-contracts-odcs.md) SD2 (descriptive mode only).
 
 ## Worked examples
 
@@ -463,7 +463,7 @@ Schema: section `float64` (no `h`), one membership `/measurements/_` declared as
 
 - **Section-centric layout retained.** Keep today's `taggedSections: [{section, attributes: [...]}, ...]` shape. Rejected as the canonical form: verbose, redundant per-entity schema, JSON-pretending-to-be-Arrow, contract-validator-hostile. Today's emitter remains until M8 cutover but is not the canonical shape.
 
-- **Three peer subtrees (`byStructure` + `byAttribute` + `byMembership`).** Earlier in the design space ([ADR-0007](./0017-leeway-membership-role-classifier.md) SD10). Rejected — once primary memberships are declared, the third subtree adds no information.
+- **Three peer subtrees (`byStructure` + `byAttribute` + `byMembership`).** Earlier in the design space ([ADR-0007](0007-leeway-membership-role-classifier.md) SD10). Rejected — once primary memberships are declared, the third subtree adds no information.
 
 - **Single combined document (schema embedded in data).** Inline the schema on entity 0 and suppress on subsequent entities. Rejected: makes parsing position-sensitive, breaks NDJSON streaming where lines may arrive out of order, and conflates two artifacts that consumers want separately (ODCS reads schema; quality SQL reads data).
 
@@ -475,7 +475,7 @@ Schema: section `float64` (no `h`), one membership `/measurements/_` declared as
 
 ### Positive
 
-- **Lossless and isomorphic by construction.** Once the parser lands ([ADR-0060](./0011-leeway-data-contracts-odcs.md) SD12), card-JSON round-trips Leeway state exactly.
+- **Lossless and isomorphic by construction.** Once the parser lands ([ADR-0060](0060-leeway-data-contracts-odcs.md) SD12), card-JSON round-trips Leeway state exactly.
 - **Standard JSON tooling reads the format productively.** `jq '.byAttribute["/hostname"].scalar'` works out of the box; JSON Schema validators with `properties` work directly against `byAttribute`.
 - **ODCS contract generation reads the schema document.** The schema-doc shape mirrors ODCS field structure (per-section column lists, role-tagged memberships); the generator's job is mostly translation.
 - **NDJSON-mode unblocks streaming validators and Kafka transport.** A producer streams entities; a consumer validates each line independently against the schema.
@@ -492,7 +492,7 @@ Schema: section `float64` (no `h`), one membership `/measurements/_` declared as
 ### Neutral
 
 - **Today's `JsonCardEmitter` remains until M8.** Both emitters coexist; consumer choice is by configuration.
-- **The schema document is fingerprint-addressed but not versioned.** Schema evolution is a separate concern (ODCS contract version, [ADR-0060](./0011-leeway-data-contracts-odcs.md) SD8); fingerprints differ when schemas differ.
+- **The schema document is fingerprint-addressed but not versioned.** Schema evolution is a separate concern (ODCS contract version, [ADR-0060](0060-leeway-data-contracts-odcs.md) SD8); fingerprints differ when schemas differ.
 - **`AspectSetEncoderConfig` and other emitter knobs (existing) carry forward unchanged.** This ADR only changes JSON-shape decisions, not encoding decisions like base62 column names.
 
 ### Derived practices
@@ -509,7 +509,7 @@ Tracked as named follow-ons:
 2. **JSON-Schema-of-the-format.** A meta-schema describing valid card-JSON data documents (independent of any specific `TableDesc`) is a useful CI artifact; deferred until M8.
 3. **`paramTreatmentIndex` declaration channel.** Currently the classifier returns it inline; whether a per-membership annotation channel should record it explicitly (so the schema document carries the answer without re-running the classifier) is open. Defer until a real consumer needs it.
 4. **Custom value-encoder hook.** Some applications want to emit `decimal128` as a typed JSON object `{"decimal": "19.99"}` rather than a string. A `ValueFormatterI`-style hook on V2 is plausible but not committed.
-5. **CBOR companion format.** [ADR-0060](./0011-leeway-data-contracts-odcs.md) hints at CBOR being the authoritative `TableDescDto` carrier; whether a card-CBOR mirror of card-JSON is worth building is an open architectural question.
+5. **CBOR companion format.** [ADR-0060](0060-leeway-data-contracts-odcs.md) hints at CBOR being the authoritative `TableDescDto` carrier; whether a card-CBOR mirror of card-JSON is worth building is an open architectural question.
 
 ## Status
 
@@ -520,10 +520,10 @@ ADRs are append-only; supersession is recorded, not deleted.
 
 ## References
 
-- [ADR-0060](./0011-leeway-data-contracts-odcs.md) — ODCS envelope, card-JSON's role, parser SD12, NDJSON SD11.
-- [ADR-0007](./0017-leeway-membership-role-classifier.md) — pebble2impl-side adoption pointer to boxer ADR-0056.
+- [ADR-0060](0060-leeway-data-contracts-odcs.md) — ODCS envelope, card-JSON's role, parser SD12, NDJSON SD11.
+- [ADR-0007](0007-leeway-membership-role-classifier.md) — pebble2impl-side adoption pointer to boxer ADR-0056.
 - Boxer ADR-0056 (`$(boxer-path)/doc/adr/0007-leeway-membership-role-classifier.md`) — classifier design.
-- [`../../src/go/public/boxerstaging/leeway/card/leeway_card_json.go`](../../src/go/public/boxerstaging/leeway/card/leeway_card_json.go) — current `JsonCardEmitter`; rewrite source.
-- [`../../src/go/public/boxerstaging/leeway/anchor/card_anchor_integration3_test.go`](../../src/go/public/boxerstaging/leeway/anchor/card_anchor_integration3_test.go) — existing fixtures.
+- [`../../public/semistructured/leeway/card/leeway_card_json.go`](../../public/semistructured/leeway/card/leeway_card_json.go) — current `JsonCardEmitter`; rewrite source.
+- [`../../public/semistructured/leeway/anchor/card_anchor_integration3_test.go`](../../public/semistructured/leeway/anchor/card_anchor_integration3_test.go) — existing fixtures.
 - [`../skills/leeway-advanced/SKILLS.md`](../skills/leeway-advanced/SKILLS.md) §"Membership roles" — primary/secondary semantics.
 - [`../skills/leeway-streamreadaccess/SKILLS.md`](../skills/leeway-streamreadaccess/SKILLS.md) §"Membership Role Classification" — classifier on the sink side.

@@ -10,7 +10,7 @@ status: draft
 
 # How to triage a frozen imzero2 demo (FFFI2 deadlock)
 
-Diagnose a hung `./src/rust/hmi.sh` (or any imzero2-based app — imztop,
+Diagnose a hung `./rust/imzero2/hmi.sh` (or any imzero2-based app — imztop,
 regex_explorer, leewaywidgets) when the Go server and the Rust client
 have both gone idle. The recipe pinpoints the offending FFFI2 opcode
 without bisecting widget code. Out of scope: render-side hangs where a
@@ -116,7 +116,7 @@ and Rust is patiently waiting for them.
    candidates for the implicated element type:
 
    ```bash
-   grep -n "read_plain_u8h" src/rust/src/imzero2/interpreter.rs    # adjust suffix
+   grep -n "read_plain_u8h" rust/imzero2/src/imzero2/interpreter.rs    # adjust suffix
    ```
 
    For each hit, read ~20 lines above to see which `FuncProcId::*`
@@ -168,7 +168,7 @@ After applying the fix, kill both processes and relaunch:
 
 ```bash
 kill $GO_PID $RUST_PID
-./src/rust/hmi.sh
+./rust/imzero2/hmi.sh
 ```
 
 The Go binary rebuilds incrementally; Rust does not need a rebuild if

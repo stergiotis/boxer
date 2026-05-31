@@ -16,7 +16,7 @@ CollapsingHeader and Window in imzero2 flicker on the closed→open transition a
 
 ### Today's mechanism
 
-The codegen template at [`fffi2_compiletime_go_server.go:682-692`](../../src/go/public/thestack/fffi2/compiletime/goserver/fffi2_compiletime_go_server.go) emits, for every block iterator with an id, a gated yield:
+The codegen template at [`fffi2_compiletime_go_server.go:682-692`](../../public/thestack/fffi2/compiletime/goserver/fffi2_compiletime_go_server.go) emits, for every block iterator with an id, a gated yield:
 
 ```go
 func (inst CollapsingHeaderFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
@@ -33,7 +33,7 @@ func (inst CollapsingHeaderFluid) KeepIter() iter.Seq[functional.NilIteratorValu
 }
 ```
 
-`HasBlockSkipped()` reads `responseFlags`, which `StateManager.Sync()` populates from the previous frame's `r7` register. Rust's CollapsingHeader handler at [`interpreter.rs:2700`](../../src/rust/src/imzero2/interpreter.rs) sets `BLOCK_SKIPPED` when egui's `CollapsingHeader::show()` returns `body_returned.is_none()`. Window has the matching pattern at [`interpreter.rs:3086`](../../src/rust/src/imzero2/interpreter.rs).
+`HasBlockSkipped()` reads `responseFlags`, which `StateManager.Sync()` populates from the previous frame's `r7` register. Rust's CollapsingHeader handler at [`interpreter.rs:2700`](../../rust/imzero2/src/imzero2/interpreter.rs) sets `BLOCK_SKIPPED` when egui's `CollapsingHeader::show()` returns `body_returned.is_none()`. Window has the matching pattern at [`interpreter.rs:3086`](../../rust/imzero2/src/imzero2/interpreter.rs).
 
 The same shape is generated for ~24 block iterators (CollapsingHeader, Window, ComboBox, MenuButton, HoverText, ScrollArea, Frame, Group, Horizontal*, Indent, MenuBar, Panel*, PushId, Scope, …); the gate is inert for layout-only blocks because their handlers never push `BLOCK_SKIPPED`, but it is load-bearing for the user-toggleable ones.
 
@@ -54,11 +54,11 @@ A block's `r7` only updates when Rust visited it last frame. If the parent was c
 
 ### Naive gate removal is insufficient
 
-Dropping the gate so every `KeepIter` always yields fixes click-to-open and nesting compounding, but reintroduces the stall pattern documented in [`demo/widgets/interactive_driver.go:19-29`](../../src/go/public/thestack/imzero2/egui2/demo/apps/widgets/interactive_driver.go) (the original ~11s ADR-0057 startup delay) at every frame, because heavy demo body lambdas (walkers tile fetch, graphs force-layout, treemap2 layout) would run unconditionally for ~17 collapsed demos. App-level `IsBlockSkipped` skips reintroduce the original lag at user-code granularity. The gate trades correctness for steady-state perf; we want both.
+Dropping the gate so every `KeepIter` always yields fixes click-to-open and nesting compounding, but reintroduces the stall pattern documented in [`demo/widgets/interactive_driver.go:19-29`](../../public/thestack/imzero2/egui2/demo/apps/widgets/interactive_driver.go) (the original ~11s ADR-0057 startup delay) at every frame, because heavy demo body lambdas (walkers tile fetch, graphs force-layout, treemap2 layout) would run unconditionally for ~17 collapsed demos. App-level `IsBlockSkipped` skips reintroduce the original lag at user-code granularity. The gate trades correctness for steady-state perf; we want both.
 
 ### The Rust side is not actually stateless
 
-The "stream is the source of truth, each frame can be rendered from its opcode stream" intuition is approximately right but incomplete. [`ImZeroFffi`](../../src/rust/src/imzero2/interpreter.rs) ([`:1469`](../../src/rust/src/imzero2/interpreter.rs)) already carries cross-frame state for five widget classes, with comments explicitly calling out why the field is **not** cleared in [`prepare_next_frame()`](../../src/rust/src/imzero2/interpreter.rs) (`:1691`):
+The "stream is the source of truth, each frame can be rendered from its opcode stream" intuition is approximately right but incomplete. [`ImZeroFffi`](../../rust/imzero2/src/imzero2/interpreter.rs) ([`:1469`](../../rust/imzero2/src/imzero2/interpreter.rs)) already carries cross-frame state for five widget classes, with comments explicitly calling out why the field is **not** cleared in [`prepare_next_frame()`](../../rust/imzero2/src/imzero2/interpreter.rs) (`:1691`):
 
 | Field | Persists | Reason |
 |---|---|---|
@@ -88,14 +88,14 @@ How does imzero2 eliminate the click-to-open flicker and nesting compounding for
 
 The first attempt at the stopgap — drop the `HasBlockSkipped` gate from the codegen and let Rust drain — uncovered a latent stream-framing bug in the Rust-side block handlers that the gate had been silently masking. The full chain:
 
-1. Every Go-side block emits `[Block opcode][...body messages...][End message]` as separate top-level FFI messages. `End` is a distinct opcode that, when read by Rust's `interpret_outer`, sets `r=true` and terminates the loop ([`interpreter.rs:3670`](../../src/rust/src/imzero2/interpreter.rs)).
-2. Layout blocks like `Horizontal`, `ScrollArea`, `Frame`, `Indent`, `Group`, `Vertical*`, `Panel*`, `PushId`, `Scope`, `MenuBar` — the long tail under [`egui2_definition_d_blocks.go`](../../src/go/public/thestack/imzero2/egui2/definition/egui2_definition_d_blocks.go) — guard their body handling with `if u.is_some() { … }` and have **no `else`**: when culled (parent passes `u=None`) they do nothing. The body messages and the block's own `End` stay in the stream.
+1. Every Go-side block emits `[Block opcode][...body messages...][End message]` as separate top-level FFI messages. `End` is a distinct opcode that, when read by Rust's `interpret_outer`, sets `r=true` and terminates the loop ([`interpreter.rs:3670`](../../rust/imzero2/src/imzero2/interpreter.rs)).
+2. Layout blocks like `Horizontal`, `ScrollArea`, `Frame`, `Indent`, `Group`, `Vertical*`, `Panel*`, `PushId`, `Scope`, `MenuBar` — the long tail under [`egui2_definition_d_blocks.go`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_blocks.go) — guard their body handling with `if u.is_some() { … }` and have **no `else`**: when culled (parent passes `u=None`) they do nothing. The body messages and the block's own `End` stay in the stream.
 3. The parent's drain loop (`interpret_outer(c, &mut None)`) keeps reading messages. When it hits the inner block's `End`, it terminates **one block too early** — leaving the parent's own body remainder and its own `End` unconsumed.
 4. The unconsumed messages bubble up to the next outer frame of `interpret_outer`, which itself sees an `End` it didn't intend to consume. Frame rendering corrupts from that point: collapsing a `Window` makes the entire window disappear (its `show()` already drew the title bar, but the closed-branch drain returned mid-body and the leftover messages took the top-level loop down with them).
 
 [`SKILLS.md` §13.3](../skills/imzero2/SKILLS.md) Scenario B previously claimed this nested-cull case was safe because "registers are global, drain semantics are preserved — just at the wrong nesting depth, which doesn't matter for register operations." That note covers register correctness but **not** `End`-sentinel framing. Pre-stopgap the gate prevented the scenario entirely (collapsed parents emitted no body messages, so there were no orphaned nested `End`s to leak), so the bug never surfaced. Removing the gate exposes it immediately and severely.
 
-The stopgap (O2) was therefore reverted. The gate is re-classified: **load-bearing for stream framing, not just a performance optimization**. Any future gate-removal must be paired with making every block's Rust apply code drain its own body when `u=None` (i.e. add `else { interpret_outer(c, &mut None)?; }` next to the existing `if u.is_some() { … }` in every block in [`egui2_definition_d_blocks.go`](../../src/go/public/thestack/imzero2/egui2/definition/egui2_definition_d_blocks.go)).
+The stopgap (O2) was therefore reverted. The gate is re-classified: **load-bearing for stream framing, not just a performance optimization**. Any future gate-removal must be paired with making every block's Rust apply code drain its own body when `u=None` (i.e. add `else { interpret_outer(c, &mut None)?; }` next to the existing `if u.is_some() { … }` in every block in [`egui2_definition_d_blocks.go`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_blocks.go)).
 
 ## Design space (QOC)
 
@@ -143,13 +143,13 @@ We will adopt **O4 — iterator-based retained bodies** as the long-term mechani
 
 The original plan had **O2 — gate removal** land first as a quick stopgap. After live testing the stopgap (`hmi.sh`) it was reverted because it triggered the framing bug described in *Discovery*. The stopgap is now **only viable after a prerequisite Rust-side change**:
 
-**Prerequisite step: drain-on-cull for every block.** Add `else { interpret_outer(c, &mut None)?; }` to every block's apply code in [`egui2_definition_d_blocks.go`](../../src/go/public/thestack/imzero2/egui2/definition/egui2_definition_d_blocks.go) so each block consumes its own body and `End` regardless of whether `u` is `Some(ui)` or `None`. Affects ~30 blocks: `Horizontal*`, `Vertical*`, `Frame`, `Group`, `Indent`, `ScrollArea`, `Panel*`, `PushId`, `Scope`, `MenuBar`, plus the existing ones (`CollapsingHeader`, `Window`, `ComboBox`, `MenuButton`, `HoverText`) which currently have an explicit drain only inside the `u.is_some()` branch and need a sibling drain in the `else`. After this change, [`SKILLS.md` §13.3](../skills/imzero2/SKILLS.md) Scenario B is no longer relied on; every block is self-contained for stream framing.
+**Prerequisite step: drain-on-cull for every block.** Add `else { interpret_outer(c, &mut None)?; }` to every block's apply code in [`egui2_definition_d_blocks.go`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_blocks.go) so each block consumes its own body and `End` regardless of whether `u` is `Some(ui)` or `None`. Affects ~30 blocks: `Horizontal*`, `Vertical*`, `Frame`, `Group`, `Indent`, `ScrollArea`, `Panel*`, `PushId`, `Scope`, `MenuBar`, plus the existing ones (`CollapsingHeader`, `Window`, `ComboBox`, `MenuButton`, `HoverText`) which currently have an explicit drain only inside the `u.is_some()` branch and need a sibling drain in the `else`. After this change, [`SKILLS.md` §13.3](../skills/imzero2/SKILLS.md) Scenario B is no longer relied on; every block is self-contained for stream framing.
 
 Once the drain-on-cull change is in place, **O2 (gate removal) becomes safe** and can be reapplied as the stopgap, on the same explicit understanding as before:
 
 - the stopgap fixes click-to-open flicker and nesting compounding immediately;
 - the steady-state cost is acceptable for the long tail of small-body collapsibles;
-- the demo shell ([`interactive_driver.go`](../../src/go/public/thestack/imzero2/egui2/demo/apps/widgets/interactive_driver.go)) and any other heavy-body host gets an app-level `IsBlockSkipped` guard in the interim, accepting one frame of empty body on click-to-open in those specific places;
+- the demo shell ([`interactive_driver.go`](../../public/thestack/imzero2/egui2/demo/apps/widgets/interactive_driver.go)) and any other heavy-body host gets an app-level `IsBlockSkipped` guard in the interim, accepting one frame of empty body on click-to-open in those specific places;
 - the gate-removal stopgap is removed when O4 lands.
 
 The long-term path to **O4 — iterator-based retained bodies** is unchanged. Concretely:
@@ -166,10 +166,10 @@ We explicitly do **not** adopt O3 (two-pass) at this time. It remains a viable f
 
 ### Status of this ADR's implementation
 
-- ✅ Drain-on-cull added to every block in [`egui2_definition_d_blocks.go`](../../src/go/public/thestack/imzero2/egui2/definition/egui2_definition_d_blocks.go). Each block now carries an explicit `else { interpret_outer(c, &mut None)?; }` arm that drains its own body + `End` when `u=None`. Affected: `Frame`, `ScrollArea`, `CollapsingHeader`, `ComboBox`, `MenuButton`, `MenuBar`, `Group`, `Scope`, `Indent`, `PushId`, `EnabledUi`, `Horizontal*`, `Vertical*`, `Grid`, `HoverText`, `AllocateUiAtRect`, `UiWithLayout`, `Panel*Inside`. Window and the panel root variants don't need it (they always render via `show(ctx)`); their existing post-`show()` drains cover the closed/collapsed branches.
+- ✅ Drain-on-cull added to every block in [`egui2_definition_d_blocks.go`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_blocks.go). Each block now carries an explicit `else { interpret_outer(c, &mut None)?; }` arm that drains its own body + `End` when `u=None`. Affected: `Frame`, `ScrollArea`, `CollapsingHeader`, `ComboBox`, `MenuButton`, `MenuBar`, `Group`, `Scope`, `Indent`, `PushId`, `EnabledUi`, `Horizontal*`, `Vertical*`, `Grid`, `HoverText`, `AllocateUiAtRect`, `UiWithLayout`, `Panel*Inside`. Window and the panel root variants don't need it (they always render via `show(ctx)`); their existing post-`show()` drains cover the closed/collapsed branches.
 - ✅ Codegen template gate-removal re-applied (`fffi2_compiletime_go_server.go`). Block iterators now always yield; ~15 generated `KeepIter` functions in `methods.out.go` no longer carry `HasBlockSkipped` checks.
-- ✅ `Handle()` method on user-toggleable block fluids + free `IsBlockSkipped()` helper in [`egui2_methods.go`](../../src/go/public/thestack/imzero2/egui2/bindings/egui2_methods.go).
-- ✅ Demo guard in [`interactive_driver.go`](../../src/go/public/thestack/imzero2/egui2/demo/apps/widgets/interactive_driver.go) uses the new helper to short-circuit heavy demo bodies.
+- ✅ `Handle()` method on user-toggleable block fluids + free `IsBlockSkipped()` helper in [`egui2_methods.go`](../../public/thestack/imzero2/egui2/bindings/egui2_methods.go).
+- ✅ Demo guard in [`interactive_driver.go`](../../public/thestack/imzero2/egui2/demo/apps/widgets/interactive_driver.go) uses the new helper to short-circuit heavy demo bodies.
 - ◻ Wire-level regression test was added under `egui2/widget/examples/adr0012_collapsible_no_skip_gate_test.go` and re-enabled, then retired in commit 85747b80 along with the surrounding `egui2/widget/` retained-mode harness ("low value, suggests a retained mode widget"). The drain-on-cull behaviour the test asserted is now covered indirectly by the demo guard above and the `IsBlockSkipped()` helper's runtime contract.
 - ⬜ O4 retained-body machinery — full Phase 2 still future work.
 
@@ -297,7 +297,7 @@ This survey also surfaces a question for the existing caches: should `dock_state
 - **Lifetime discipline tightens.** Cached bytes may carry handles to other Go-allocated state (font atlas IDs, retained text holders, color holders). The retained body's lifetime must be ≤ its referenced handles' lifetimes. Mitigation: document the contract explicitly; consider reference-counting referenced handles or invalidating the cache on handle release.
 - **Key derivation becomes user code.** The user must derive an invalidation key that hashes everything the body reads from. A wrong key produces stale content with no error. Same problem class as React/SwiftUI memoization keys; well-understood failure mode but a new burden for imzero2 authors.
 - **Implementation effort.** New IDL annotation + codegen path + Rust-side cache + eviction protocol + r7 flag + fetcher + docs + tests. Larger than O2 or O5; smaller than O3.
-- **Migration scope.** ~24 generated `KeepIter` callsites change behaviour. Existing user code that relies on the previous-frame `BLOCK_SKIPPED` value reaching `IsBlockSkipped` must be audited (current call sites: [`egui2_datepicker.go`](../../src/go/public/thestack/imzero2/egui2/bindings/egui2_datepicker.go), [`egui2_scrolling_texture.go`](../../src/go/public/thestack/imzero2/egui2/bindings/egui2_scrolling_texture.go), `egui2_badge.go` (since folded into `widgets/badge/`), [`interactive_driver.go`](../../src/go/public/thestack/imzero2/egui2/demo/apps/widgets/interactive_driver.go)).
+- **Migration scope.** ~24 generated `KeepIter` callsites change behaviour. Existing user code that relies on the previous-frame `BLOCK_SKIPPED` value reaching `IsBlockSkipped` must be audited (current call sites: [`egui2_datepicker.go`](../../public/thestack/imzero2/egui2/bindings/egui2_datepicker.go), [`egui2_scrolling_texture.go`](../../public/thestack/imzero2/egui2/bindings/egui2_scrolling_texture.go), `egui2_badge.go` (since folded into `widgets/badge/`), [`interactive_driver.go`](../../public/thestack/imzero2/egui2/demo/apps/widgets/interactive_driver.go)).
 
 ### Neutral
 
@@ -314,9 +314,9 @@ While investigating per-frame wire-byte growth in `imztop` (root cause traced vi
 
 The evidence chain:
 
-- [`fffi2_typed_impl.go:167-181`](../../src/go/public/thestack/fffi2/typed/fffi2_typed_impl.go) — `BuildRetained()` computes a content-addressed `RetainedElementId` via `xxh3.Hash(raw)` and interns the bytes through `unique.Make`. The stable id and the interned content are both ready.
-- [`fffi2_typed_impl.go:206-208`](../../src/go/public/thestack/fffi2/typed/fffi2_typed_impl.go) — `(*RetainedFffiHolder).SyncRetained()` exists as a distinct method from `SendIntermediate` and threads the id all the way down to the runtime.
-- [`fffi2_rt_impl.go:25-28`](../../src/go/public/thestack/fffi2/runtime/fffi2_rt_impl.go) — `Fffi2.SyncRetained(id, buf)` **comments out** the channel-level call and falls back to `SendIntermediate(buf)`:
+- [`fffi2_typed_impl.go:167-181`](../../public/thestack/fffi2/typed/fffi2_typed_impl.go) — `BuildRetained()` computes a content-addressed `RetainedElementId` via `xxh3.Hash(raw)` and interns the bytes through `unique.Make`. The stable id and the interned content are both ready.
+- [`fffi2_typed_impl.go:206-208`](../../public/thestack/fffi2/typed/fffi2_typed_impl.go) — `(*RetainedFffiHolder).SyncRetained()` exists as a distinct method from `SendIntermediate` and threads the id all the way down to the runtime.
+- [`fffi2_rt_impl.go:25-28`](../../public/thestack/fffi2/runtime/fffi2_rt_impl.go) — `Fffi2.SyncRetained(id, buf)` **comments out** the channel-level call and falls back to `SendIntermediate(buf)`:
 
   ```go
   func (inst *Fffi2[U]) SyncRetained(id uint64, buf []byte) (err error) {
@@ -341,7 +341,7 @@ Milestones, sized to land on the same review-per-milestone cadence as Phase 1/2:
   - `FuncProcIdReplay(id u64)` — subsequent arrivals. Rust looks `id` up in the cache and replays. Misses (cache evicted or never seen) signal a refetch via the existing register-drain path (see M3.3).
 - **Key-collision policy.** `xxh3` is 64-bit. Birthday at p=10⁻⁹ ≈ 1.5e5 entries. Budget under that with the byte-cap above. Document the floor; revisit if it bites.
 - **Frame-loop placement.** The cache lives next to the existing `ImZeroFffi` state (see `interpreter.rs:1469`); evicted alongside other id-keyed state at `prepare_next_frame`.
-- **Runtime feature gate.** The whole channel-level retention path is gated by a single `atomic.Bool` checked at the call chokepoint, so the feature can be flipped on or off mid-process at sub-nanosecond hot-path cost. The chokepoint is the existing `Fffi2.SyncRetained` stub at [`fffi2_rt_impl.go:25-28`](../../src/go/public/thestack/fffi2/runtime/fffi2_rt_impl.go); every `.Keep()`'d holder already routes through it via `(*RetainedFffiHolder).SyncRetained()`. Shape:
+- **Runtime feature gate.** The whole channel-level retention path is gated by a single `atomic.Bool` checked at the call chokepoint, so the feature can be flipped on or off mid-process at sub-nanosecond hot-path cost. The chokepoint is the existing `Fffi2.SyncRetained` stub at [`fffi2_rt_impl.go:25-28`](../../public/thestack/fffi2/runtime/fffi2_rt_impl.go); every `.Keep()`'d holder already routes through it via `(*RetainedFffiHolder).SyncRetained()`. Shape:
 
   ```go
   // fffi2/runtime — single package-level atomic, default false.
@@ -442,11 +442,11 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 
 ## References
 
-- Current gate template: [`fffi2_compiletime_go_server.go:682-692`](../../src/go/public/thestack/fffi2/compiletime/goserver/fffi2_compiletime_go_server.go).
-- Generated gate sites: [`components/methods.out.go`](../../src/go/public/thestack/imzero2/egui2/bindings/methods.out.go) (~24 `KeepIter` functions).
-- Rust-side block-skip handlers: [`interpreter.rs:2700`](../../src/rust/src/imzero2/interpreter.rs) (CollapsingHeader), [`:3086`](../../src/rust/src/imzero2/interpreter.rs) (Window).
-- Persistent-state catalogue: [`interpreter.rs:1469`](../../src/rust/src/imzero2/interpreter.rs) (`ImZeroFffi` fields), [`:1691`](../../src/rust/src/imzero2/interpreter.rs) (`prepare_next_frame`).
+- Current gate template: [`fffi2_compiletime_go_server.go:682-692`](../../public/thestack/fffi2/compiletime/goserver/fffi2_compiletime_go_server.go).
+- Generated gate sites: [`components/methods.out.go`](../../public/thestack/imzero2/egui2/bindings/methods.out.go) (~24 `KeepIter` functions).
+- Rust-side block-skip handlers: [`interpreter.rs:2700`](../../rust/imzero2/src/imzero2/interpreter.rs) (CollapsingHeader), [`:3086`](../../rust/imzero2/src/imzero2/interpreter.rs) (Window).
+- Persistent-state catalogue: [`interpreter.rs:1469`](../../rust/imzero2/src/imzero2/interpreter.rs) (`ImZeroFffi` fields), [`:1691`](../../rust/imzero2/src/imzero2/interpreter.rs) (`prepare_next_frame`).
 - Capture infrastructure and iter-scope idiom: [`SKILLS.md` §5](../skills/imzero2/SKILLS.md).
 - Frame-table for current gate semantics: [`SKILLS.md` §13.4](../skills/imzero2/SKILLS.md).
-- Demo shell stall workaround tied to current gate: [`demo/widgets/interactive_driver.go:19-29`](../../src/go/public/thestack/imzero2/egui2/demo/apps/widgets/interactive_driver.go).
-- Related ADRs: [ADR-0052 (unified color, deferred-block invariants)](./0003-imzero2-unified-color-type.md), [ADR-0057 (demo registry / drivers — origin of the ~11s stall context)](./0008-demo-registry-and-drivers.md), [ADR-0058 (scrolling-texture, persistent texture cache as precedent for id-keyed Rust-side state)](./0009-imzero2-scrolling-texture-widget.md).
+- Demo shell stall workaround tied to current gate: [`demo/widgets/interactive_driver.go:19-29`](../../public/thestack/imzero2/egui2/demo/apps/widgets/interactive_driver.go).
+- Related ADRs: [ADR-0052 (unified color, deferred-block invariants)](0052-imzero2-unified-color-type.md), [ADR-0057 (demo registry / drivers — origin of the ~11s stall context)](0057-demo-registry-and-drivers.md), [ADR-0058 (scrolling-texture, persistent texture cache as precedent for id-keyed Rust-side state)](0058-imzero2-scrolling-texture-widget.md).

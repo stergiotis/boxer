@@ -136,7 +136,7 @@ Rust side; Go decodes everything).
 - The "image" demo (`Name: "image"` in
   `egui2_hl_registrations.go`'s registry) renders an embedded checker in
   all four fit modes plus a per-frame gradient with hover read-back; run
-  `src/rust/hmi.sh` and pick it from the demo list.
+  `rust/imzero2/hmi.sh` and pick it from the demo list.
 - Set `IMZERO2_SCREENSHOT_DIR` to capture a per-window PNG and compare
   against the expected (4-frame tour is enough — there's no open
   animation to wait out).

@@ -27,7 +27,7 @@ Leeway has three structural features that interact with any contract standard:
 2. **Tagged value sections** — sparse, type-indexed containers of values carrying uniform column-wise aspects ([`../skills/leeway-advanced/SKILLS.md`](../skills/leeway-advanced/SKILLS.md)).
 3. **Tagged attributes** — individual tag paths within a section, with memberships (5 kinds), high-card parameters, multi-membership aliasing, co-occurrence, and per-attribute value constraints. Graph-shaped; no standard contract format expresses this directly.
 
-The physical naming convention (`tv:bool:lmvcard:lmvcard:u64:4gw:0:0:0::` and friends) already encodes schema in Base62-serialised column names — so schema discovery does not require an external registry. The lossless streaming JSON form is carried by `JsonCardEmitter` at [`../../src/go/public/boxerstaging/leeway/card/leeway_card_json.go`](../../src/go/public/boxerstaging/leeway/card/leeway_card_json.go); it is byte-deterministic (sorted co-groups, ordered sections/columns/tags) and a strict superset of native JSON. Reconstructed-document JSON (original `{"hostname": …, "metrics": {"cpu": …}}` shape) is not derivable in general — multi-membership, co-sections, sets-vs-arrays, and `value-card`-carried ragged tensors exceed what a JSON tree can express without loss.
+The physical naming convention (`tv:bool:lmvcard:lmvcard:u64:4gw:0:0:0::` and friends) already encodes schema in Base62-serialised column names — so schema discovery does not require an external registry. The lossless streaming JSON form is carried by `JsonCardEmitter` at [`../../public/semistructured/leeway/card/leeway_card_json.go`](../../public/semistructured/leeway/card/leeway_card_json.go); it is byte-deterministic (sorted co-groups, ordered sections/columns/tags) and a strict superset of native JSON. Reconstructed-document JSON (original `{"hostname": …, "metrics": {"cpu": …}}` shape) is not derivable in general — multi-membership, co-sections, sets-vs-arrays, and `value-card`-carried ragged tensors exceed what a JSON tree can express without loss.
 
 Forces the decision must respect:
 
@@ -84,7 +84,7 @@ We adopt **ODCS v3.1.0** as Leeway's canonical data-contract envelope, in descri
 5. **One-way derivation.** ODCS envelope is generated from `TableDescDto` + a small annotation file (ownership, SLA, attribute-scoped classifications). Reverse direction (ODCS → `TableDescDto`) is out of scope: Leeway's section assignment, membership-kind choice, and multi-membership semantics exceed ODCS's expressive reach.
 6. **Quality check emission as SQL over self-describing columns.** Tier-1 (per-batch vectorised) and Tier-2 (warehouse pushdown) checks are generated from attribute-level constraints and emitted into ODCS's `quality` blocks; `datacontract-cli` or any ODCS-aware runner executes them. Leeway's naming convention makes this possible without a Leeway-native runtime.
 7. **Confluent Data Contracts as complementary emission.** When a Leeway dataset is transported via Kafka streaming groups, the same generator emits a Confluent Data Contract form for the Kafka topics alongside the ODCS envelope. The two describe different layers (dataset vs. topic) and do not conflict.
-8. **Generator location.** Initial implementation lives in pebble2impl's staging tree next to the card emitter at `src/go/public/boxerstaging/leeway/`; upstreaming to `boxer/public/semistructured/leeway/` is a tracked follow-on.
+8. **Generator location.** Initial implementation lives in pebble2impl's staging tree next to the card emitter at `public/semistructured/leeway/`; upstreaming to `boxer/public/semistructured/leeway/` is a tracked follow-on.
 
 ### Subsidiary design decisions
 
@@ -201,5 +201,5 @@ ADRs are append-only; supersession is recorded, not deleted.
 - [`../skills/leeway-advanced/SKILLS.md`](../skills/leeway-advanced/SKILLS.md) — Leeway structural semantics, membership types, aspects
 - [`../skills/leeway-streamreadaccess/SKILLS.md`](../skills/leeway-streamreadaccess/SKILLS.md) — `SinkI` protocol, card-JSON emitter
 - [`../skills/canonicaltypes/SKILL.md`](../skills/canonicaltypes/SKILL.md) — canonical type signatures
-- [`../../src/go/public/boxerstaging/leeway/card/leeway_card_json.go`](../../src/go/public/boxerstaging/leeway/card/leeway_card_json.go) — current `JsonCardEmitter` location
-- [ADR-0055](./0006-adopt-boxer-standards.md) — pattern for "adopt external standard via pinned reference"
+- [`../../public/semistructured/leeway/card/leeway_card_json.go`](../../public/semistructured/leeway/card/leeway_card_json.go) — current `JsonCardEmitter` location
+- [ADR-0055](0055-adopt-boxer-standards.md) — pattern for "adopt external standard via pinned reference"

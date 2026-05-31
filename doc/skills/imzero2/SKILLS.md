@@ -1105,11 +1105,11 @@ This avoids sentinel-value fragility (`0.0` meaning "unset"?) and preserves any 
 ### 15.8 Verification shortcut
 
 - Add a short-lived `tracing::info!(…)` inside the drain/apply for the duration of bring-up (node count, pending lengths, edges added this frame). Remove before committing.
-- For visual checks, run `IMZERO2_SCREENSHOT_DIR=/tmp/verify bash src/rust/hmi.sh` and inspect `<window>.png`. Beware the 4-frame tour isn't enough for libraries that do first-frame geometry (force-directed convergence, etc.) — the screenshot captures an un-settled state; that doesn't mean the binding is broken.
+- For visual checks, run `IMZERO2_SCREENSHOT_DIR=/tmp/verify bash rust/imzero2/hmi.sh` and inspect `<window>.png`. Beware the 4-frame tour isn't enough for libraries that do first-frame geometry (force-directed convergence, etc.) — the screenshot captures an un-settled state; that doesn't mean the binding is broken.
 - A temporary revisit entry in `demoWindows` (same handle, different filename) lets the tour close and re-open a window to verify state persistence across hide/show cycles.
 ## 16. walkers map + H3 overlays — binding limitations & gotchas
 
-Companion notes for the bindings in [`egui2_definition_d_walkers.go`](../../../public/thestack/imzero2/egui2/definition/egui2_definition_d_walkers.go) and the Rust glue in [`interpreter.rs`](../../../src/rust/src/imzero2/interpreter.rs). Covers what works, what doesn't, and the shapes that cross the FFI. See ADR-0007 for the design rationale.
+Companion notes for the bindings in [`egui2_definition_d_walkers.go`](../../../public/thestack/imzero2/egui2/definition/egui2_definition_d_walkers.go) and the Rust glue in [`interpreter.rs`](../../../rust/imzero2/src/imzero2/interpreter.rs). Covers what works, what doesn't, and the shapes that cross the FFI. See ADR-0007 for the design rationale.
 
 ### 16.1 API surface, in one page
 

@@ -85,7 +85,7 @@ the widget.
 
 ## Decision
 
-We will add `src/go/public/thestack/imzero2/egui2/widgets/fsmview/`,
+We will add `public/thestack/imzero2/egui2/widgets/fsmview/`,
 exposing two generic types:
 
 - **`Machine[T comparable]`** — the visualization-aware wrapper around
@@ -321,8 +321,8 @@ converges deterministically before the operator sees the graph.
   FSM visualization for app lifecycle).
 - ADR-0031 §SD2 — IDS color (active state lights via `AccentDefault`,
   resting states via `NeutralSubtle`).
-- `src/go/public/thestack/imzero2/egui2/widgets/fsmview/` — M0
+- `public/thestack/imzero2/egui2/widgets/fsmview/` — M0
   implementation.
-- `src/go/public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_fsmview_demo.go`
+- `public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_fsmview_demo.go`
   — traffic-light demo registered in the widgets carousel.
 - `github.com/hishamk/statetrooper` — chosen FSM library.

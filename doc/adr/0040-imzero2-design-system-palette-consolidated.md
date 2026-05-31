@@ -93,7 +93,7 @@ Current state: **0 (hex, role) collisions** across all 8 cached systems. The one
 
 ### SD6 — OKLab implementation: in-repo Go + Rust port
 
-Ottosson 2020 reference math vendored as ~80 lines of Go at `scripts/ci/designcolors/gen/oklab/oklab.go`, mirrored to Rust at `src/rust/imzero2_egui/src/style/tokens/oklab.rs` via `./generate.sh`. The Rust file is generated from the Go source; CI verifies they match.
+Ottosson 2020 reference math vendored as ~80 lines of Go at `scripts/ci/designcolors/gen/oklab/oklab.go`, mirrored to Rust at `rust/imzero2/imzero2_egui/src/style/tokens/oklab.rs` via `./generate.sh`. The Rust file is generated from the Go source; CI verifies they match.
 
 Test vectors from Ottosson 2020 + W3C CSS Color Module Level 4. Forward + inverse + gamma round-trip + OKLab↔OKLCh round-trip all pass.
 
@@ -172,9 +172,9 @@ Open questions inherited from the predecessor ADRs:
 - [ADR-0031 — color foundations](./0031-imzero2-design-system-color.md) — parent color ADR; §SD1 OKLCh; §SD2 semantic palette; §SD3 scientific palettes; §SD4 dark-theme neutral spine; §SD7 generator pipeline; §SD11 IP boundary.
 - [ADR-0033 — palette M0](./0033-imzero2-design-system-palette-m0.md) — **superseded by this ADR**; historical record of the original design decisions + M0b execution + accent refinement.
 - [ADR-0037 — palette M1 refinement](./0037-imzero2-design-system-palette-m1-refinement.md) — **superseded by this ADR**; historical record of the L=0.13→0.16 spine bump + text softening + bg.surface 0.20→0.24 amendment.
-- [tier3-human-review.md](../design-system/policy/tier3-human-review.md) — Tier 3 process; T3-007 (accent hue) + T3-010 (OKLab impl) closed by the predecessor chain.
-- [`scripts/designcolors.sh`](../../scripts/designcolors.sh) — regenerator entry point.
-- [`scripts/dev/hmi_screenshots.sh`](../../scripts/dev/hmi_screenshots.sh) — tour capture entry point.
+- tier3-human-review.md — Tier 3 process; T3-007 (accent hue) + T3-010 (OKLab impl) closed by the predecessor chain.
+- `scripts/designcolors.sh` — regenerator entry point.
+- `scripts/dev/hmi_screenshots.sh` — tour capture entry point.
 - [APCA / SAPC-APCA](https://git.apcacontrast.com/) — Andrew Somers' contrast model; the primary gate per §SD3.
 - [CSS Color Module Level 4 §13](https://www.w3.org/TR/css-color-4/#binsearch) — gamut-mapping bisection algorithm per §SD4.
 - Crameri, F. (2018). *Scientific colour maps* (Version 8.0.1) — [Zenodo](https://doi.org/10.5281/zenodo.1243862).

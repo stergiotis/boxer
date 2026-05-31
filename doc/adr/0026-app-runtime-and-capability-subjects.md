@@ -12,8 +12,8 @@ reviewed-date: 2026-05-11
 
 The pebble2impl monolith hosts a growing collection of interactive programs — `play` (SQL playground), `imztop` (resource monitor, [ADR-0020](./0020-imzero2-imztop-resource-monitor.md)), the regex explorer, the Hacker News explorer, the leewaywidgets tour, the widgets showcase (under [ADR-0057](0057-demo-registry-and-drivers.md)) — plus a parallel collection of headless CLI subcommands (`kafka`, `gov`, `badger`, `funccharacterize`, the `spinnaker` tree, …). Three structural deficiencies have accumulated:
 
-- **No "app" type.** Graphical programs are wired as numbered render closures (`appCode` 1–7) in [`src/go/public/thestack/imzero2/egui2/demo/carousel/imzero2_demo_resolve.go`](../../public/thestack/imzero2/egui2/demo/carousel/imzero2_demo_resolve.go). `--launch a001,a005` accepts a comma list but resolves to sequential rendering in one CentralPanel, not coexistence. The only registry — `src/go/public/thestack/imzero2/egui2/demo/apps/registry/registry.go` — is consumed only by the widgets showcase. Adding an app means editing the switch.
-- **No capability mediation.** Every program reaches `os.Open`, `clickhouse.OpenDB`, `kafka.NewClient`, etc. directly. There is no broker between an app's intent and the system resource, no audit of which app touched what, no consistency in how a "file open" is requested. The file picker at `src/go/public/thestack/imzero2/egui2/widgets/filepicker/` is already backed by `io/fs.FS` — the substrate for a capability handle exists, but nothing uses it that way.
+- **No "app" type.** Graphical programs are wired as numbered render closures (`appCode` 1–7) in [`public/thestack/imzero2/egui2/demo/carousel/imzero2_demo_resolve.go`](../../public/thestack/imzero2/egui2/demo/carousel/imzero2_demo_resolve.go). `--launch a001,a005` accepts a comma list but resolves to sequential rendering in one CentralPanel, not coexistence. The only registry — `public/thestack/imzero2/egui2/demo/apps/registry/registry.go` — is consumed only by the widgets showcase. Adding an app means editing the switch.
+- **No capability mediation.** Every program reaches `os.Open`, `clickhouse.OpenDB`, `kafka.NewClient`, etc. directly. There is no broker between an app's intent and the system resource, no audit of which app touched what, no consistency in how a "file open" is requested. The file picker at `public/thestack/imzero2/egui2/widgets/filepicker/` is already backed by `io/fs.FS` — the substrate for a capability handle exists, but nothing uses it that way.
 - **NATS is forthcoming and will be the dominant inter-component transport.** Per stakeholder direction, NATS will serve the role HTTP serves in a browser tab — the ambient cold-path transport for everything that is not an egui draw call. The runtime architecture must absorb NATS coherently when it lands, rather than retrofit later.
 
 Adjacent forces:
@@ -69,7 +69,7 @@ O3 dominates O2 on every axis except migration cost, where the two tie. The diff
 
 We will introduce a first-class app runtime with three concrete pieces, and we will mediate every external resource access through a capability broker whose capability tokens are NATS subject filters.
 
-1. **`AppI` interface and `Registry`** (Go package `src/go/public/keelson/runtime/app/`). Apps register a static `Manifest` and implement `Mount`/`Frame`/`Unmount`. The numeric `appCode` switch and the screenshot-tour-specific `apps/registry/` are replaced by this single registry. The Hosts (`DockHost`, `InteractiveHost`, `ScreenshotHost`, eventually `CliHost`) consume the registry.
+1. **`AppI` interface and `Registry`** (Go package `public/keelson/runtime/app/`). Apps register a static `Manifest` and implement `Mount`/`Frame`/`Unmount`. The numeric `appCode` switch and the screenshot-tour-specific `apps/registry/` are replaced by this single registry. The Hosts (`DockHost`, `InteractiveHost`, `ScreenshotHost`, eventually `CliHost`) consume the registry.
 2. **Capabilities are NATS subject filters.** A capability is a set of subject patterns the holder may publish to and/or subscribe from. Every resource — filesystem reads, ClickHouse queries, Kafka produce/consume, inter-app events, persistence — is reached via a subject. The runtime hosts a capability broker that issues, records, and (later) revokes these filters.
 3. **One polymorphic facts table on ClickHouse + leeway** is the runtime's state layer. App state, capability grants, and audit records are leeway-encoded rows discriminated by a `kind` column. The single-table choice (over per-app tables) optimises for the data-centricity property — every fact is queryable from `play` without schema sprawl.
 
@@ -84,7 +84,7 @@ The threat model is **hygiene, not security**. Capability discipline is enforced
 The minimum static description of an app:
 
 ```go
-// src/go/public/keelson/runtime/app/manifest.go
+// public/keelson/runtime/app/manifest.go
 type Manifest struct {
     Id            AppIdT          // dotted, e.g. "org.pebble2.play"
     Version       string          // semver
@@ -201,7 +201,7 @@ The cap-broker subject handlers (`fs.dialog.*`, `fs.handle.*`, `ch.query.*`, etc
 
 ### SD6 — Leeway-shaped `runtime.facts` table, modelled on `spinnaker.facts`
 
-Runtime state, capability grants, and audit records all live in a single CH+leeway table named `runtime.facts`, modelled on the existing `spinnaker.facts` schema at `src/go/public/boxerstaging/spinnaker/schema/spinnaker_schema.go` and emitted by `spinnaker_sql_ch.go`. A naive single-`payload`-string column is rejected because it abandons every property the leeway encoding provides — typed columnar query, dictionary compression on low-cardinality values, membership-as-ACL, co-section streaming, subset-projection for hot readers. The vocabulary used here (plain values, tagged value sections, memberships, streaming groups, co-sections) is defined in [`doc/skills/leeway-advanced/SKILLS.md`](../skills/leeway-advanced/SKILLS.md).
+Runtime state, capability grants, and audit records all live in a single CH+leeway table named `runtime.facts`, modelled on the existing `spinnaker.facts` schema at `public/spinnaker/schema/spinnaker_schema.go` and emitted by `spinnaker_sql_ch.go`. A naive single-`payload`-string column is rejected because it abandons every property the leeway encoding provides — typed columnar query, dictionary compression on low-cardinality values, membership-as-ACL, co-section streaming, subset-projection for hot readers. The vocabulary used here (plain values, tagged value sections, memberships, streaming groups, co-sections) is defined in [`doc/skills/leeway-advanced/SKILLS.md`](../skills/leeway-advanced/SKILLS.md).
 
 **Plain values** (one instance per row, identifying the fact; written by the runtime, never by an app):
 
@@ -218,9 +218,9 @@ A `foreignKey` tagged section (`MembershipSpecLowCardRef`, streaming-group `"for
 
 **Fact "kind" is a membership, not a column.** A capability grant materialises as a row whose tagged values carry the memberships `runtime.kind.grant`, `runtime.app.{appId}` (where `{appId}` is a high-card parameter on `MembershipSpecMixedLowCardRefHighCardParameters`), plus value-bearing memberships such as `runtime.subjectFilter.pattern` on the `symbol` section, `runtime.subjectFilter.direction` (enum-as-low-card-ref), and `runtime.subjectFilter.reason` on `string`. An audit fact uses `runtime.kind.audit` with `runtime.audit.requestSubject`, `runtime.audit.result`, and `runtime.audit.latencyMs` on the `i64` section. Because membership is a *set* (not exclusive), a single row can carry several kinds when semantics overlap — a state-write fact is simultaneously an audit event without duplicating storage.
 
-**Logs are facts too (`runtime.kind.log`).** Every `zerolog` event emitted by the host or by any app is captured as a row tagged `runtime.kind.log`, carrying the same `runtime.app.{appId}` mixed membership as grants and audits plus a stable log-envelope vocabulary: `runtime.log.level` (low-card-ref on `symbol`), `runtime.log.message` (low-card-ref on `string`), `runtime.log.caller` and `runtime.log.service` (low-card-ref on `symbol`), `runtime.log.error` (low-card-ref on `string`), `runtime.log.stack` (low-card-ref on `text`). Arbitrary user-supplied context fields (`.Str(k,v)`, `.Int`, `.Float`, `.Bool`, …) become per-field `runtime.log.field` mixed-memberships whose high-card parameter is the field NAME and whose value lands in the typed section matching the field's CBOR-decoded Go type — preserving columnar query advantages over the entire log corpus, not just the envelope. The bridge from zerolog's wire format to runtime.facts lives in `src/go/public/keelson/runtime/logbridge/`; with the `binary_log` build tag (already on the project tag list) zerolog emits CBOR maps that the bridge decodes into typed `LogRow`s, queues in a fixed ring, and ships through `factsstore.FactsStoreI.WriteLog`. This makes `runtime.kind.log` the fourth peer of grant/audit/state under one query surface — operators no longer choose between "tail the log" and "tail the facts": `SELECT … WHERE has(symbol.lr, MembKindLog.id)` answers both.
+**Logs are facts too (`runtime.kind.log`).** Every `zerolog` event emitted by the host or by any app is captured as a row tagged `runtime.kind.log`, carrying the same `runtime.app.{appId}` mixed membership as grants and audits plus a stable log-envelope vocabulary: `runtime.log.level` (low-card-ref on `symbol`), `runtime.log.message` (low-card-ref on `string`), `runtime.log.caller` and `runtime.log.service` (low-card-ref on `symbol`), `runtime.log.error` (low-card-ref on `string`), `runtime.log.stack` (low-card-ref on `text`). Arbitrary user-supplied context fields (`.Str(k,v)`, `.Int`, `.Float`, `.Bool`, …) become per-field `runtime.log.field` mixed-memberships whose high-card parameter is the field NAME and whose value lands in the typed section matching the field's CBOR-decoded Go type — preserving columnar query advantages over the entire log corpus, not just the envelope. The bridge from zerolog's wire format to runtime.facts lives in `public/keelson/runtime/logbridge/`; with the `binary_log` build tag (already on the project tag list) zerolog emits CBOR maps that the bridge decodes into typed `LogRow`s, queues in a fixed ring, and ships through `factsstore.FactsStoreI.WriteLog`. This makes `runtime.kind.log` the fourth peer of grant/audit/state under one query surface — operators no longer choose between "tail the log" and "tail the facts": `SELECT … WHERE has(symbol.lr, MembKindLog.id)` answers both.
 
-**`LoadRuntimeFactsMapping`.** The runtime ships a `LoadRuntimeFactsMapping(manip common.TableManipulatorFluidI)` constructor mirroring spinnaker's `LoadSourceCodeMapping`. DDL emission goes through the existing `boxer/public/semistructured/leeway/ddl/clickhouse` code generator; no bespoke `CREATE TABLE` SQL. Membership identifiers (the `runtime.kind.*`, `runtime.app.*`, `runtime.subjectFilter.*` vocabulary) are declared as compile-time constants in `src/go/public/keelson/runtime/app/factsmemberships.go` so the publisher and consumer agree by reference, not by string.
+**`LoadRuntimeFactsMapping`.** The runtime ships a `LoadRuntimeFactsMapping(manip common.TableManipulatorFluidI)` constructor mirroring spinnaker's `LoadSourceCodeMapping`. DDL emission goes through the existing `boxer/public/semistructured/leeway/ddl/clickhouse` code generator; no bespoke `CREATE TABLE` SQL. Membership identifiers (the `runtime.kind.*`, `runtime.app.*`, `runtime.subjectFilter.*` vocabulary) are declared as compile-time constants in `public/keelson/runtime/app/factsmemberships.go` so the publisher and consumer agree by reference, not by string.
 
 **Why one table, not three.** Per-kind tables (state / grants / audit) impose a schema-migration discipline on every new app or new audit field; the leeway membership model collapses the discriminator into the existing tagged columns at zero schema cost. Cross-kind analytics ("every grant that has had an audit event in the last hour") become a normal join on `naturalKey` or `foreignKey` rather than a `UNION` over heterogeneous schemas. Hot-path readers that prefer a denormalised view materialise it over `runtime.facts`.
 
@@ -268,10 +268,10 @@ Capability discipline is enforced at lint time by [`google/capslock`](https://gi
 **Tooling integration.** A new `scripts/ci/capslock.sh` runs
 
 ```bash
-capslock -packages ./src/go/public/.../apps/... -output j
+capslock -packages ./public/.../apps/... -output j
 ```
 
-A thin Go wrapper at `src/go/cmd/capslock-check/` ingests the JSON, looks up each app's `Manifest.Caps` subject filter set, and verifies that capslock-reported capabilities for the app's package map onto subject patterns the manifest actually declares. The mapping (project convention, not a capslock feature):
+A thin Go wrapper at `public/app/commands/capslock/` ingests the JSON, looks up each app's `Manifest.Caps` subject filter set, and verifies that capslock-reported capabilities for the app's package map onto subject patterns the manifest actually declares. The mapping (project convention, not a capslock feature):
 
 | capslock capability                               | Allowed only when manifest declares                                  | Notes                                                                                              |
 |---------------------------------------------------|----------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|
@@ -285,7 +285,7 @@ A thin Go wrapper at `src/go/cmd/capslock-check/` ingests the JSON, looks up eac
 | `CAPABILITY_SAFE`, `CAPABILITY_UNSPECIFIED`       | Always allowed                                                       | No restriction.                                                                                    |
 | `CAPABILITY_UNANALYZED`                           | Investigation required                                               | Capslock could not analyse the package; treat as a build-system bug, not an allowed default.       |
 
-**Adoption mode.** Phased: advisory in M2 (capslock output posted to PR comments, no merge gate), `compare`-mode in M3 (CI fails when a PR introduces a new capability for an app package without a corresponding manifest change), hard-fail post-M4. The companion tool `capslock-git-diff main HEAD ./src/go/public/.../apps/...` surfaces capability deltas in PR checks.
+**Adoption mode.** Phased: advisory in M2 (capslock output posted to PR comments, no merge gate), `compare`-mode in M3 (CI fails when a PR introduces a new capability for an app package without a corresponding manifest change), hard-fail post-M4. The companion tool `capslock-git-diff main HEAD ./public/.../apps/...` surfaces capability deltas in PR checks.
 
 **Why capslock over a hand-rolled import linter.** A naive `import "os"` check misses indirect escapes (a dependency that calls `os.OpenFile`); capslock's call-graph analysis catches them. Google maintains capslock for production-grade Go supply-chain analysis (background at https://blog.deps.dev/capslock/), so adopting it costs less than carrying a bespoke `ast`-walking guard forever.
 
@@ -659,7 +659,7 @@ First piece of M2 wiring (the in-proc cap broker described by §SD12). Stages M2
 
 Closes follow-up (b) from the [2026-05-12 — Runtime-run identity & app-lifecycle audit events](#2026-05-12--runtime-run-identity--app-lifecycle-audit-events) amendment. With (a) and (c) landed, the last open follow-up was cross-process attribution: the Rust client and the Go parent both had to be readable as one run in a combined log stream, and any future Rust-side audit write needed a stable handle on the inherited identity.
 
-**New `src/rust/src/runinfo.rs` module.** Mirrors the Go-side `runtime/runinfo` package surface:
+**New `rust/imzero2/src/runinfo.rs` module.** Mirrors the Go-side `runtime/runinfo` package surface:
 
 - `runinfo::ENV_VAR` (= `"PEBBLE2_RUN_ID"`, kept in sync with `runinfo.EnvVar` on the Go side).
 - `runinfo::run_id() -> Option<&'static str>` — memoised env-var read via `OnceLock`. Empty values map to None so a consumer can rely on `Some(...) ⇒ non-empty`.
@@ -809,7 +809,7 @@ A `WindowTitle()` helper on `Manifest` composes the displayed string as `"{Icon}
 
 ### 2026-05-15 — keelson namespace path migration (ADR-0035)
 
-Runtime-tree path references in this ADR were swept from `src/go/public/thestack/runtime/...` to `src/go/public/keelson/runtime/...` as part of the keelson namespace introduction ([ADR-0035](./0035-keelson-namespace-introduction.md)). The decision recorded here (AppI/Manifest/Registry, cap-as-subject, §SD7 fsbroker, §SD10 capslock cross-check) is unchanged; only path strings reflect the new location. Per ADR-0026's own identity rule, `Manifest.Id` strings were also rewritten to match the new import paths: runtime-side AppIs (logviewer) follow the `keelson/runtime/...` paths; standalone apps moved to `apps/<name>/` (Step 5: imztop, capdemo, capinspector) follow the `apps/...` paths. Historical fact rows tagged by old AppIds are orphaned, accepted because the runtime is pre-stable. `status` and `reviewed-date` are deliberately not re-stamped. The capslock-check binary at `src/go/cmd/capslock-check/` is preserved as a thin shim; the cross-check library lives at `src/go/public/keelson/security/capslock/`.
+Runtime-tree path references in this ADR were swept from `public/thestack/runtime/...` to `public/keelson/runtime/...` as part of the keelson namespace introduction ([ADR-0035](./0035-keelson-namespace-introduction.md)). The decision recorded here (AppI/Manifest/Registry, cap-as-subject, §SD7 fsbroker, §SD10 capslock cross-check) is unchanged; only path strings reflect the new location. Per ADR-0026's own identity rule, `Manifest.Id` strings were also rewritten to match the new import paths: runtime-side AppIs (logviewer) follow the `keelson/runtime/...` paths; standalone apps moved to `apps/<name>/` (Step 5: imztop, capdemo, capinspector) follow the `apps/...` paths. Historical fact rows tagged by old AppIds are orphaned, accepted because the runtime is pre-stable. `status` and `reviewed-date` are deliberately not re-stamped. The capslock-check binary at `public/app/commands/capslock/` is preserved as a thin shim; the cross-check library lives at `public/keelson/security/capslock/`.
 
 ## References
 
@@ -821,12 +821,12 @@ Runtime-tree path references in this ADR were swept from `src/go/public/thestack
 - [ADR-0020](./0020-imzero2-imztop-resource-monitor.md) — imztop's existence as a CLI-launchable graphical app is one of the motivating examples.
 - [ADR-0024](./0024-imzero2-remote-access-browser-viewer.md) — Remote-access direction that establishes the single-viewport invariant.
 - [`doc/skills/leeway-advanced/SKILLS.md`](../skills/leeway-advanced/SKILLS.md) — Authoritative leeway vocabulary (plain values, tagged value sections, memberships, streaming groups, co-sections) used by `SD6`.
-- `src/go/public/boxerstaging/spinnaker/schema/spinnaker_schema.go` — `spinnaker.facts` mapping; the structural precedent `runtime.facts` follows.
-- `src/go/public/boxerstaging/spinnaker/sql/spinnaker_sql_ch.go` — Leeway → ClickHouse DDL emission used by `SD6`.
+- `public/spinnaker/schema/spinnaker_schema.go` — `spinnaker.facts` mapping; the structural precedent `runtime.facts` follows.
+- `public/spinnaker/sql/spinnaker_sql_ch.go` — Leeway → ClickHouse DDL emission used by `SD6`.
 - `boxer/public/semistructured/leeway/ddl/clickhouse` — Code generator that `LoadRuntimeFactsMapping` reuses.
 - `boxer/public/db/clickhouse/dsl` — DSL package available for cap-broker query-shape validation and for `play`-side fact querying.
 - `boxer/public/streaming/persisted/kafka` — Kafka client wrapper backing the `kafka.*` subject family.
-- [`src/go/public/thestack/imzero2/egui2/widgets/filepicker/`](../../public/thestack/imzero2/egui2/widgets/filepicker) — Powerbox substrate (`SD7`).
+- [`public/thestack/imzero2/egui2/widgets/filepicker/`](../../public/thestack/imzero2/egui2/widgets/filepicker) — Powerbox substrate (`SD7`).
 - [`google/capslock`](https://github.com/google/capslock) — Static-analysis tool used by `SD10`; deps.dev integration write-up at https://blog.deps.dev/capslock/.
 - NATS authorization model — https://docs.nats.io/running-a-nats-service/configuration/securing_nats/authorization (subject-permission semantics that `SubjectFilter` matches).
 - Sandstorm.io Powerbox — capability-broker prior art for the user-mediated grant flow.

@@ -16,7 +16,7 @@ date: 2026-05-14
 
 In parallel, a second SQL workload has accumulated and does *not* fit the server family:
 
-- **Interactive scratch.** The regex explorer at [`src/go/public/thestack/imzero2/egui2/demo/apps/regex_explorer/regex_explorer_chlocal.go`](../../src/go/public/thestack/imzero2/egui2/demo/apps/regex_explorer/regex_explorer_chlocal.go) shells out to `clickhouse-local --query <SQL> --format ArrowStream` once per query. Cold subprocess fork costs ~50–60 ms on a warm filesystem cache; for debounced typing this is tolerable, for a panel that emits a query per keystroke or per repaint it is the dominant latency. Future apps in the same shape — play scratchpad expressions, schema-conversion utilities, ad-hoc Pretty-format peeks — would multiply the cost.
+- **Interactive scratch.** The regex explorer at [`public/thestack/imzero2/egui2/demo/apps/regex_explorer/regex_explorer_chlocal.go`](../../public/thestack/imzero2/egui2/demo/apps/regex_explorer/regex_explorer_chlocal.go) shells out to `clickhouse-local --query <SQL> --format ArrowStream` once per query. Cold subprocess fork costs ~50–60 ms on a warm filesystem cache; for debounced typing this is tolerable, for a panel that emits a query per keystroke or per repaint it is the dominant latency. Future apps in the same shape — play scratchpad expressions, schema-conversion utilities, ad-hoc Pretty-format peeks — would multiply the cost.
 - **Format flexibility.** The CH server's native protocol (and `chclient`'s HTTP wrapper) is primarily a `Native`/`RowBinary`/`Arrow` carrier. Apps using `clickhouse-local` for *data-conversion* — read parquet, emit JSONEachRow; read CSV, emit Pretty for a debug pane; produce Markdown from a `system.*` table — need the full CH `FORMAT` surface (Pretty, JSONEachRow, CSV, TSVWithNamesAndTypes, Markdown, Vertical, …) that the server protocols do not naturally expose.
 - **No shared state with the server.** Local scratch queries read from `file()`, `url()`, `s3()`, ad-hoc `engine=Memory` tables, and `system.*`. None of it touches `runtime.facts` or `spinnaker.facts`; mixing it onto the `ch.query.*` family would conflate two trust boundaries (server-side ACLs vs. local-only) and two latency budgets.
 
@@ -227,7 +227,7 @@ The cache-hit row is distinguished by `cache_hit=true` and a `latency_ns` typica
 
 **Capslock.** The `keelson/data/chlocalpool/` package trips `CAPABILITY_EXEC` (`os/exec`) and `CAPABILITY_FILES` (tmpdir creation, `/tmp/p2i-chl-*`). Per ADR-0026 §SD10 these are *hard fail* for app packages — but the package is runtime-internal, not in any `apps/` tree. Like `inprocbus`, `fsbroker`, and the FFFI2 bridge, it sits on the privileged side of the cap boundary.
 
-Enforcement: the capslock-check library at [`src/go/public/keelson/security/capslock/`](../../src/go/public/keelson/security/capslock/) (thin binary shim at [`src/go/cmd/capslock-check/`](../../src/go/cmd/capslock-check/)) holds a `trustBoundaryPackages` allowlist plus a `pathTraversesTrustBoundary` filter in `aggregateByPackage`. Capslock-reported capabilities whose call path traverses one of `keelson/data/chlocalbroker`, `keelson/data/chlocalpool`, `keelson/runtime/fsbroker`, `keelson/runtime/inprocbus`, or `keelson/runtime/persist` are absorbed by the broker — the importing app sees only the bus subject. Apps that reach `os/exec` (or any disallowed capability) **without** going through one of these packages are still flagged.
+Enforcement: the capslock-check library at [`public/keelson/security/capslock/`](../../public/keelson/security/capslock) (thin binary shim at `public/app/commands/capslock/`) holds a `trustBoundaryPackages` allowlist plus a `pathTraversesTrustBoundary` filter in `aggregateByPackage`. Capslock-reported capabilities whose call path traverses one of `keelson/data/chlocalbroker`, `keelson/data/chlocalpool`, `keelson/runtime/fsbroker`, `keelson/runtime/inprocbus`, or `keelson/runtime/persist` are absorbed by the broker — the importing app sees only the bus subject. Apps that reach `os/exec` (or any disallowed capability) **without** going through one of these packages are still flagged.
 
 Apps remain clean: they `Publish` on `ch.local.exec.<pool>`, the bus client returns an `*ExecReply`, no app package imports `os/exec`. The capslock signal that would catch a regression — an app reaching `os/exec` directly — stays sharp.
 
@@ -259,7 +259,7 @@ Apps remain clean: they `Publish` on `ch.local.exec.<pool>`, the bus client retu
 ### SD10 — Package layout and dependencies
 
 ```
-src/go/public/keelson/data/
+public/keelson/data/
 ├── chlocalpool/                 # M1
 │   ├── pool.go                  # Pool type, Acquire, refill, watchdog
 │   ├── worker.go                # Worker spawn, stdin write, stdout drain, kill
@@ -338,7 +338,7 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 
 ### 2026-05-14 — M0 spike: preload semantics confirmed
 
-Closes open question Q1 from §Status. The spike harness at [`experiments/chlocal-preload/`](../../experiments/chlocal-preload/) measures three timing distributions for `clickhouse-local` invocations and concludes that the executor preloads at spawn, validating the warm-pool premise of §SD3.
+Closes open question Q1 from §Status. The spike harness at `experiments/chlocal-preload/` measures three timing distributions for `clickhouse-local` invocations and concludes that the executor preloads at spawn, validating the warm-pool premise of §SD3.
 
 **Method.** Three experiments, `n=25` measurements each, with 3 filesystem-cache warmup iterations discarded:
 
@@ -378,9 +378,9 @@ Closes most of §SD9's M2: the bus subject handler, the buffered execution path,
 
 **What landed.**
 
-- [`runtime/chlocalbroker/`](../../src/go/public/keelson/data/chlocalbroker/) — `Service` subscribes to `ch.local.exec.>`, lazy-creates a `chlocalpool.Pool` per subject suffix, drains the worker's stdout into a `valyala/bytebufferpool` buffer, copies out (so the pool buffer is safe to return) and publishes a JSON envelope `{Body, ContentType, ElapsedNs}` on the caller's reply inbox. Pre-spawn count, MaxConcurrent, and the rest of `chlocalpool.Config` are taken from the carousel's defaults.
+- [`runtime/chlocalbroker/`](../../public/keelson/data/chlocalbroker) — `Service` subscribes to `ch.local.exec.>`, lazy-creates a `chlocalpool.Pool` per subject suffix, drains the worker's stdout into a `valyala/bytebufferpool` buffer, copies out (so the pool buffer is safe to return) and publishes a JSON envelope `{Body, ContentType, ElapsedNs}` on the caller's reply inbox. Pre-spawn count, MaxConcurrent, and the rest of `chlocalpool.Config` are taken from the carousel's defaults.
 - Client helper `chlocalbroker.ExecOnPool(bus, poolName, ExecRequest) → *ExecReply`. The returned `*ExecReply` embeds `io.ReadCloser` (a `bytes.NewReader` over the reply body for M2) and exposes `Err()` for the worker's exit status / stderr tail; `Close()` is a no-op in M2 (the bytes already live in the caller's address space).
-- First consumer migrated: [`apps/regex_explorer`](../../src/go/public/thestack/imzero2/egui2/demo/apps/regex_explorer/). Manifest declares `ch.local.exec.regex_explorer` (Pub, sticky); `AppInstance.Mount` captures `ctx.Bus()`; the new `executeArrowStreamViaBus` replaces `executeArrowStreamLocal` at the five production call sites in `regex_explorer_job.go` and `regex_explorer_tripwire.go`. The original `executeArrowStreamLocal` is retained for unit tests that bypass the bus.
+- First consumer migrated: [`apps/regex_explorer`](../../public/thestack/imzero2/egui2/demo/apps/regex_explorer). Manifest declares `ch.local.exec.regex_explorer` (Pub, sticky); `AppInstance.Mount` captures `ctx.Bus()`; the new `executeArrowStreamViaBus` replaces `executeArrowStreamLocal` at the five production call sites in `regex_explorer_job.go` and `regex_explorer_tripwire.go`. The original `executeArrowStreamLocal` is retained for unit tests that bypass the bus.
 - Carousel boot site (`imzero2_demo_cli.go`) now calls `chlocalbroker.NewService(bus, chlocalpool.Config{}, log.Logger)` next to `fsbroker` and `persist`. Stop is deferred on shutdown alongside the existing service teardowns. The bottom-panel `runtimestatus.Snapshot` gained a `ChLocalActive` field so the status indicator surfaces the new broker.
 
 **Bug caught during M2 implementation.** The broker's bus client must declare `inprocbus.InboxPrefix + ">"` with `CapDirectionPub` in addition to `ch.local.exec.>` — otherwise every reply Publish to a caller's `_INBOX.*` fails the permission gate, the caller waits the full bus timeout, and every Request looks like a hang. `fsbroker` already had this pattern; the M2 broker now mirrors it.
@@ -438,7 +438,7 @@ Combined with the capslock trust-boundary work above, the regex_explorer app's p
 
 ### 2026-05-15 — keelson namespace path migration (ADR-0035)
 
-Runtime-tree path references in this ADR were swept from `src/go/public/thestack/runtime/...` to `src/go/public/keelson/runtime/...` as part of the keelson namespace introduction ([ADR-0035](./0035-keelson-namespace-introduction.md)), and then `chclient`, `chlocalbroker`, and `chlocalpool` were further lifted from `keelson/runtime/...` to `keelson/data/...` as siblings of `runtime/` (Step 4 of the migration). The decision recorded here (one-shot pre-spawned `clickhouse-local` workers, stdin/stdout, opt-in stream+cache) is unchanged; only path strings reflect the new location. `keelson/security/capslock/check.go`'s `trustBoundaryPackages` list was updated accordingly (chlocalbroker / chlocalpool entries reference `keelson/data/...`, the rest stay under `keelson/runtime/...`). `status` remains `proposed` — this update does not change it.
+Runtime-tree path references in this ADR were swept from `public/thestack/runtime/...` to `public/keelson/runtime/...` as part of the keelson namespace introduction ([ADR-0035](./0035-keelson-namespace-introduction.md)), and then `chclient`, `chlocalbroker`, and `chlocalpool` were further lifted from `keelson/runtime/...` to `keelson/data/...` as siblings of `runtime/` (Step 4 of the migration). The decision recorded here (one-shot pre-spawned `clickhouse-local` workers, stdin/stdout, opt-in stream+cache) is unchanged; only path strings reflect the new location. `keelson/security/capslock/check.go`'s `trustBoundaryPackages` list was updated accordingly (chlocalbroker / chlocalpool entries reference `keelson/data/...`, the rest stay under `keelson/runtime/...`). `status` remains `proposed` — this update does not change it.
 
 ### 2026-05-22 — Embedded chDB via purego: option noted, not scoped
 
@@ -472,11 +472,11 @@ The pattern: the chosen O3 design wins on isolation, lifecycle bounding, and cap
 ## References
 
 - [ADR-0026 — App runtime and capability subjects](./0026-app-runtime-and-capability-subjects.md) — parent framework; this ADR extends §SD3 (subject taxonomy) and §SD10 (capslock).
-- [`src/go/public/thestack/imzero2/egui2/demo/apps/regex_explorer/regex_explorer_chlocal.go`](../../src/go/public/thestack/imzero2/egui2/demo/apps/regex_explorer/regex_explorer_chlocal.go) — current per-query subprocess pattern; first consumer to migrate in M2.
-- [`src/go/public/keelson/runtime/heartbeat/heartbeat.go`](../../src/go/public/keelson/runtime/heartbeat/heartbeat.go) — long-lived goroutine + graceful Stop pattern reused by the pool refill / watchdog goroutines.
-- [`src/go/public/keelson/runtime/inprocbus/`](../../src/go/public/keelson/runtime/inprocbus/) — in-proc bus; broker subscribes here at M2.
-- [`src/go/public/keelson/runtime/factsstore/chstore/`](../../src/go/public/keelson/runtime/factsstore/chstore/) — audit/log write path used by §SD7.
-- [`src/go/cmd/capslock-check/main.go`](../../src/go/cmd/capslock-check/main.go) and [`scripts/ci/capslock.sh`](../../scripts/ci/capslock.sh) — capslock cross-check; allowlist extended in §SD7.
+- [`public/thestack/imzero2/egui2/demo/apps/regex_explorer/regex_explorer_chlocal.go`](../../public/thestack/imzero2/egui2/demo/apps/regex_explorer/regex_explorer_chlocal.go) — current per-query subprocess pattern; first consumer to migrate in M2.
+- [`public/keelson/runtime/heartbeat/heartbeat.go`](../../public/keelson/runtime/heartbeat/heartbeat.go) — long-lived goroutine + graceful Stop pattern reused by the pool refill / watchdog goroutines.
+- [`public/keelson/runtime/inprocbus/`](../../public/keelson/runtime/inprocbus) — in-proc bus; broker subscribes here at M2.
+- [`public/keelson/runtime/factsstore/chstore/`](../../public/keelson/runtime/factsstore/chstore) — audit/log write path used by §SD7.
+- `public/app/commands/capslock/main.go` and `scripts/ci/capslock.sh` — capslock cross-check; allowlist extended in §SD7.
 - [`github.com/valyala/bytebufferpool`](https://github.com/valyala/bytebufferpool) — tier-pooled byte buffer for §SD4.
 - [`github.com/hashicorp/golang-lru/v2`](https://github.com/hashicorp/golang-lru) — LRU cache for §SD5.
 - [`github.com/ebitengine/purego`](https://github.com/ebitengine/purego) — CGO-free FFI loader; powers `chdb-go/chdb-purego` (see §Updates 2026-05-22).

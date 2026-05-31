@@ -15,7 +15,7 @@ ImZero2 had no way to render geographic data. Several in-flight uses needed an i
 Constraints the design had to respect:
 
 - **FFFI2 execution model.** ImZero2 is a register-drain, opcode-stream protocol with deferred-block capture and frame-level culling (see [`SKILLS.md`](../skills/imzero2/SKILLS.md) §11). Any binding must cooperate with those invariants; it cannot rely on synchronous call semantics or persistent stateful encoders.
-- **CGO-free Go build.** `src/rust/build_go.sh` sets `CGO_ENABLED=0` deliberately. Go-side geospatial libraries that require CGO (notably `github.com/uber/h3-go/v4`) are out-of-bounds.
+- **CGO-free Go build.** `rust/imzero2/build_go.sh` sets `CGO_ENABLED=0` deliberately. Go-side geospatial libraries that require CGO (notably `github.com/uber/h3-go/v4`) are out-of-bounds.
 - **Eframe backend.** The repo uses eframe with the `glow` feature. Any map library requiring `wgpu` would force a backend switch with cross-cutting effects on every widget.
 - **Screenshot-based testing.** The demo test harness relies on headless `IMZERO2_SCREENSHOT_DIR` runs; animated / HTTP-async widgets need to tolerate the 4-frame tour without panicking.
 - **Non-UI consumers of H3.** H3 is used (or planned) in ETL pipelines, CLI tools, and services that never spin up a GUI. The binding must not tie H3 availability to a running Rust client process.
@@ -125,10 +125,10 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 ## References
 
 - [`doc/skills/imzero2/SKILLS.md`](../skills/imzero2/SKILLS.md) §16 — walkers binding limitations and gotchas (companion to this ADR).
-- [`doc/adr/0003-imzero2-unified-color-type.md`](./0003-imzero2-unified-color-type.md) — prior ImZero2 binding ADR; template shape followed here.
-- [`src/go/public/thestack/imzero2/egui2/definition/egui2_definition_d_walkers.go`](../../src/go/public/thestack/imzero2/egui2/definition/egui2_definition_d_walkers.go) — walkers IDL definitions (walkersMap, mapMarker, mapPolyline, h3CellsColored, h3Region, fetchR15WalkersCamera).
-- [`src/rust/src/imzero2/interpreter.rs`](../../src/rust/src/imzero2/interpreter.rs) — `WalkersState`, `CustomTileSource`, `OverlayPlugin`, `render_walkers_map`, `aggregate_h3_region`, `bbox_of_rings`.
-- [`src/go/public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_walkers_demo.go`](../../src/go/public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_walkers_demo.go) — reference demo including the uniform-heatmap challenger.
+- [`doc/adr/0003-imzero2-unified-color-type.md`](0052-imzero2-unified-color-type.md) — prior ImZero2 binding ADR; template shape followed here.
+- [`public/thestack/imzero2/egui2/definition/egui2_definition_d_walkers.go`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_walkers.go) — walkers IDL definitions (walkersMap, mapMarker, mapPolyline, h3CellsColored, h3Region, fetchR15WalkersCamera).
+- [`rust/imzero2/src/imzero2/interpreter.rs`](../../rust/imzero2/src/imzero2/interpreter.rs) — `WalkersState`, `CustomTileSource`, `OverlayPlugin`, `render_walkers_map`, `aggregate_h3_region`, `bbox_of_rings`.
+- [`public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_walkers_demo.go`](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_walkers_demo.go) — reference demo including the uniform-heatmap challenger.
 - [`boxer/public/science/geo/h3/`](https://github.com/stergiotis/boxer/tree/main/public/science/geo/h3) — h3o compiled to wasm + wazero runtime (Go-side H3 without CGO).
 - [`walkers = "0.53"`](https://crates.io/crates/walkers) — slippy map widget for egui.
 - [`h3o = "0.9"`](https://crates.io/crates/h3o) — pure-Rust H3 implementation (native + wasm).
