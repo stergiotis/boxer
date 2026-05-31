@@ -3,6 +3,7 @@ package imzrt
 import (
 	"fmt"
 	"image/color"
+	"math"
 	"runtime"
 	"time"
 
@@ -38,6 +39,10 @@ const (
 	// rect and disappear. 44 matches imztop's topology legend and clears that
 	// floor so the count ticks keep their labels.
 	spectroLegendH float32 = 44
+	// spectroYAxisW is the latency-axis gutter drawn left of the spectrogram;
+	// its labels are power-of-10 latencies at spectroYAxisFont.
+	spectroYAxisW    float32 = 44
+	spectroYAxisFont float32 = 10
 )
 
 // schedSpectroState is per-window state for the scheduling-latency spectrogram.
@@ -49,8 +54,8 @@ type schedSpectroState struct {
 	legend       *colorscale.ColorScale // colour→count legend bound to cfg
 	loIdx, hiIdx int                    // displayed bucket-index range [loIdx, hiIdx] after clipping
 	nDisplay     int                    // hiIdx - loIdx + 1
-	loLabel      string                 // latency at the bottom edge
-	hiLabel      string                 // latency at the top edge
+	loEdge       float64                // latency at the bottom edge of the displayed range
+	hiEdge       float64                // latency at the top edge of the displayed range
 	colBuf       []float32
 	lastPushedMs int64
 	smoothedMax  float64 // smoothed peak per-interval bucket count → colormap DataMax
@@ -125,8 +130,8 @@ func (inst *App) renderSchedSpectrogram(snap *PublishedSnapshot) {
 	if st.hs == nil {
 		st.loIdx, st.hiIdx = clipBucketRange(buckets, spectroLoSec, spectroHiSec)
 		st.nDisplay = st.hiIdx - st.loIdx + 1
-		st.loLabel = humanDuration(buckets[st.loIdx])
-		st.hiLabel = humanDuration(buckets[st.hiIdx+1])
+		st.loEdge = buckets[st.loIdx]
+		st.hiEdge = buckets[st.hiIdx+1]
 		// Log scale: count 1 at the palette floor, the smoothed peak at the
 		// ceiling; count 0 is non-positive → underflow → background. DataMax is
 		// rescaled live each tick (a plain mutable field).
@@ -193,9 +198,12 @@ func (inst *App) renderSchedSpectrogram(snap *PublishedSnapshot) {
 	}
 
 	st.hs.SetDisplaySize(0, spectroDisplayHeight)
-	st.hs.Render()
+	for range c.Horizontal().KeepIter() {
+		inst.renderSpectroYTicks(st.loEdge, st.hiEdge, spectroDisplayHeight)
+		st.hs.Render()
+	}
 	renderSpectroXTicks(snap.HistTimeUnixSec)
-	c.Label(fmt.Sprintf("y: %s (bottom) → %s (top), log · x: time, newest left", st.loLabel, st.hiLabel)).Send()
+	c.Label("y: latency (log) · x: time, newest left").Send()
 	c.Label("colour = goroutines waiting per interval (log):").Send()
 	st.legend.Render()
 }
@@ -241,6 +249,7 @@ func renderSpectroXTicks(timeUnixSec []float64) {
 	}
 	n := len(layout.TickLabels)
 	for range c.Horizontal().KeepIter() {
+		c.AddSpace(spectroYAxisW) // clear the y-axis gutter so labels sit under the texture
 		for i := n - 1; i >= 0; i-- {
 			c.Label(layout.TickLabels[i]).Send()
 			if i > 0 {
@@ -248,4 +257,57 @@ func renderSpectroXTicks(timeUnixSec []float64) {
 			}
 		}
 	}
+}
+
+// fmtLatencyTick renders an exact power-of-ten latency compactly for the y-axis,
+// dropping trailing zeros: 10ns, 100ns, 1µs, 100µs, 1ms.
+func fmtLatencyTick(sec float64) string {
+	switch {
+	case sec < 1e-6:
+		return fmt.Sprintf("%gns", sec*1e9)
+	case sec < 1e-3:
+		return fmt.Sprintf("%gµs", sec*1e6)
+	case sec < 1:
+		return fmt.Sprintf("%gms", sec*1e3)
+	default:
+		return fmt.Sprintf("%gs", sec)
+	}
+}
+
+// renderSpectroYTicks paints power-of-ten latency labels (log scale) in a gutter
+// to the left of the spectrogram, aligned to the texture's displayed height h.
+// loEdge / hiEdge are the bottom / top latency boundaries of the displayed bucket
+// range. The runtime buckets are ~geometric, so a value maps to a log fraction of
+// the range; low latency sits at the bottom, matching the texture's row flip.
+// loEdge can round to ~0 (the lowest bucket opens at zero), so the log floor is
+// clamped to spectroLoSec. Always emits the spectroYAxisW-wide canvas so the
+// texture beside it and the x-ticks below stay aligned.
+func (inst *App) renderSpectroYTicks(loEdge, hiEdge float64, h float32) {
+	lo := loEdge
+	if lo < spectroLoSec {
+		lo = spectroLoSec
+	}
+	if hiEdge > lo {
+		lmin, lmax := math.Log10(lo), math.Log10(hiEdge)
+		for e := math.Ceil(lmin); e <= lmax; e++ {
+			frac := (e - lmin) / (lmax - lmin)
+			y := h * float32(1-frac)
+			c.PaintLine(spectroYAxisW-3, y, spectroYAxisW, y, colorAxisTick, 1.0).Send()
+			// Center the label on its tick, except within a font height of the
+			// top/bottom edge, where a centered label would paint past the canvas
+			// clip rect — anchor it inward there (top edge → text below the line,
+			// bottom edge → text above the line).
+			av := uint8(1) // middle
+			switch {
+			case y < spectroYAxisFont:
+				av = 0 // top
+			case y > h-spectroYAxisFont:
+				av = 2 // bottom
+			}
+			c.PaintText(spectroYAxisW-5, y, 2, av, fmtLatencyTick(math.Pow(10, e)), spectroYAxisFont, colorAxisLabel).Send()
+		}
+	}
+	c.PaintCanvas(inst.ids.PrepareStr("sched-spectro-yaxis"), spectroYAxisW, h).
+		Background(colorBgClear).
+		Send()
 }

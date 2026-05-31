@@ -14,6 +14,8 @@ var (
 	colorHot           = color.Hex(styletokens.ErrorDefault.AsHex())
 	colorBgClear       = color.Transparent
 	colorMetricPrimary = color.Hex(styletokens.InfoDefault.AsHex())
+	colorAxisLabel     = color.Hex(styletokens.NeutralTextSecondary.AsHex())
+	colorAxisTick      = color.Hex(styletokens.NeutralBorderFaint.AsHex())
 )
 
 // qualitativeColor returns the idx-th colour of the IDS qualitative cycle
