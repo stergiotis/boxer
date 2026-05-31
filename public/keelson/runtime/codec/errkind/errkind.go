@@ -24,6 +24,8 @@
 // slices in the DTO have equal length N.
 package errkind
 
+import "time"
+
 // Error is one captured error-tree row, pre-shredded into parallel
 // arrays. Callers compute total fact count N (across all streams),
 // then populate each slice with N entries — StreamNames repeats the
@@ -37,9 +39,10 @@ type Error struct {
 	// NaturalKey is an optional opaque join key (may be nil).
 	NaturalKey []byte `lw:",naturalKey"`
 
-	// CapturedTs is wall-clock nanoseconds (truncated to seconds on the
-	// wire as DateTime UInt32).
-	CapturedTs int64 `lw:",ts"`
+	// CapturedTs is the wall-clock capture time (truncated to seconds on
+	// the wire as DateTime UInt32). time.Time matches the facts entity
+	// builder's SetTimestamp signature verbatim (strict 1:1).
+	CapturedTs time.Time `lw:",ts"`
 
 	// Per-fact parallel arrays — all same length N. See package doc
 	// for the section / membership routing.

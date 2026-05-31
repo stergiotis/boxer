@@ -76,8 +76,15 @@ func TestRoundTrip_AnchorDroneMission(t *testing.T) {
 
 	args := marshallreflect.UnmarshalArgs{
 		NumRows: idReader.Len(),
-		IdCol:   idReader.ValueId,
-		NkCol:   idReader.ValueNaturalKey,
+		PlainCol: func(name string) any {
+			switch name {
+			case "id":
+				return idReader.ValueId
+			case "naturalKey":
+				return idReader.ValueNaturalKey
+			}
+			return nil
+		},
 		SectionAttrs: func(name string) any {
 			switch name {
 			case "symbol":
@@ -183,8 +190,15 @@ func TestRoundTrip_ConstAndVerbatim(t *testing.T) {
 
 	args := marshallreflect.UnmarshalArgs{
 		NumRows: idReader.Len(),
-		IdCol:   idReader.ValueId,
-		NkCol:   idReader.ValueNaturalKey,
+		PlainCol: func(name string) any {
+			switch name {
+			case "id":
+				return idReader.ValueId
+			case "naturalKey":
+				return idReader.ValueNaturalKey
+			}
+			return nil
+		},
 		SectionAttrs: func(name string) any {
 			switch name {
 			case "symbol":
@@ -223,4 +237,3 @@ func TestRoundTrip_ConstAndVerbatim(t *testing.T) {
 	require.Equal(t, int64(2), symbolReader.GetAttributes().GetNumberOfAttributes(0))
 	require.Equal(t, int64(2), symbolArrayReader.GetAttributes().GetNumberOfAttributes(0))
 }
-

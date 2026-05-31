@@ -5,6 +5,7 @@ package capabilitygrant
 import (
 	"io"
 	"testing"
+	"time"
 
 	"github.com/stergiotis/boxer/public/functional/option"
 )
@@ -15,8 +16,8 @@ func sampleGrant() CapabilityGrant {
 	return CapabilityGrant{
 		Id:            12345,
 		NaturalKey:    []byte{0xa1, 0xb2, 0xc3, 0xd4},
-		Ts:            1_700_000_000_000_000_000,
-		ExpiresAt:     1_900_000_000_000_000_000,
+		Ts:            time.Unix(0, 1_700_000_000_000_000_000).UTC(),
+		ExpiresAt:     time.Unix(0, 1_900_000_000_000_000_000).UTC(),
 		Subject:       "user/alice/repo/foo",
 		Capability:    "read",
 		ValidityBegin: 1_700_000_000,

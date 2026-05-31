@@ -31,6 +31,7 @@ import (
 //
 // Plain columns:
 //   - `id` (uint64) — caller-supplied row id
+//   - `naturalKey` ([]byte) — entity natural key (facts SetId is 2-arg)
 //   - `ts` (time.Time) — capture timestamp (UTC, nano precision via z64)
 //
 // Tagged values:
@@ -43,8 +44,9 @@ import (
 type M1Sample struct {
 	_ struct{} `kind:"m1Sample"`
 
-	Id uint64    `lw:",id"`
-	Ts time.Time `lw:",ts"`
+	Id         uint64    `lw:",id"`
+	NaturalKey []byte    `lw:",naturalKey"`
+	Ts         time.Time `lw:",ts"`
 
 	Source       string  `lw:"m1Source,symbol"`
 	Severity     uint8   `lw:"m1Severity,u8Array"`
@@ -60,6 +62,6 @@ type M1Sample struct {
 
 	LastSuccess  option.Option[time.Time] `lw:"m1LastSuccess,timeArray"`
 	OperatorName option.Option[string]    `lw:"m1OperatorName,stringArray"`
-	Tags         []string                `lw:"m1Tags,textArray"`
-	CapBits      *roaring.Bitmap         `lw:"m1CapBits,u32Array"`
+	Tags         []string                 `lw:"m1Tags,textArray"`
+	CapBits      *roaring.Bitmap          `lw:"m1CapBits,u32Array"`
 }

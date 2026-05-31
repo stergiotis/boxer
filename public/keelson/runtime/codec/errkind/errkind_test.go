@@ -5,6 +5,7 @@ package errkind
 import (
 	"io"
 	"testing"
+	"time"
 )
 
 // sampleError builds a 4-fact error tree pre-shredded into parallel
@@ -14,7 +15,7 @@ func sampleError() Error {
 	return Error{
 		Id:          0xDEADBEEF,
 		NaturalKey:  []byte("trace-1234"),
-		CapturedTs:  1_700_000_000_000_000_000,
+		CapturedTs:  time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 		Messages:    []string{"outer wrap", "", "inner cause", ""},
 		Sources:     []string{"", "main.go", "", "lib.go"},
 		Funcs:       []string{"", "main.handle", "", "lib.parse"},

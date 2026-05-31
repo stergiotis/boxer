@@ -113,7 +113,7 @@ var errorPool = sync.Pool{
 type ErrorColumns struct {
 	Id         []uint64
 	NaturalKey [][]byte
-	CapturedTs []int64
+	CapturedTs []time.Time
 
 	Messages    [][]string
 	Sources     [][]string
@@ -316,7 +316,7 @@ func ErrorBuildEntities[
 	for i := 0; i < n; i++ {
 		dml.BeginEntity()
 		dml.SetId(c.Id[i], c.NaturalKey[i])
-		dml.SetTimestamp(time.Unix(0, c.CapturedTs[i]).UTC())
+		dml.SetTimestamp(c.CapturedTs[i])
 		// --- stringArray. ---
 		stringArraySec := dml.GetSectionStringArray()
 		if len(c.Messages[i]) > 0 {
@@ -398,7 +398,7 @@ func ErrorBuildEntities[
 		blobArraySec.EndSection()
 		err = dml.CommitEntity()
 		if err != nil {
-			err = eh.Errorf("errkind: commit row %d: %w", i, err)
+			err = eh.Errorf("commit row %d: %w", i, err)
 			return
 		}
 	}
@@ -507,7 +507,7 @@ func ErrorFillFromArrow[
 			copy(cp, src)
 			c.NaturalKey = append(c.NaturalKey, cp)
 		}
-		c.CapturedTs = append(c.CapturedTs, int64(tsCol.Value(i)))
+		c.CapturedTs = append(c.CapturedTs, time.Unix(0, int64(tsCol.Value(i))).UTC())
 		// --- stringArray. ---
 		var stringArrayMessagesSlice []string
 		var stringArraySourcesSlice []string

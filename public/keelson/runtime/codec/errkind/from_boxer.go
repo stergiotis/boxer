@@ -3,6 +3,8 @@
 package errkind
 
 import (
+	"time"
+
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
@@ -13,12 +15,12 @@ import (
 // pointer) and pre-shredded.
 //
 // id and naturalKey are caller-supplied: typical sources are a request
-// id, a trace id, or a monotonic counter. capturedTs is typically
-// time.Now().UnixNano() at the point of capture (callers control it so
-// tests can pin a deterministic value).
+// id, a trace id, or a monotonic counter. capturedTs is the capture
+// time (typically time.Now(); callers control it so tests can pin a
+// deterministic value).
 //
 // Returns zero-value Error if err is nil.
-func FromBoxerError(id uint64, naturalKey []byte, capturedTs int64, err error) (out Error) {
+func FromBoxerError(id uint64, naturalKey []byte, capturedTs time.Time, err error) (out Error) {
 	if err == nil {
 		return
 	}

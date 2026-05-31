@@ -124,8 +124,9 @@ var m1SamplePool = sync.Pool{
 // M1SampleColumns is the SoA storage for batches of M1Sample rows.
 // All slices grow in lockstep — Len returns the row count.
 type M1SampleColumns struct {
-	Id []uint64
-	Ts []time.Time
+	Id         []uint64
+	NaturalKey [][]byte
+	Ts         []time.Time
 
 	Source          []string
 	Severity        []uint8
@@ -156,6 +157,7 @@ func (c *M1SampleColumns) Len() int { return len(c.Id) }
 // mutation. Scalar fields (T, Option[T]) are copied by value.
 func (c *M1SampleColumns) Append(row M1Sample) {
 	c.Id = append(c.Id, row.Id)
+	c.NaturalKey = append(c.NaturalKey, row.NaturalKey)
 	c.Ts = append(c.Ts, row.Ts)
 	c.Source = append(c.Source, row.Source)
 	c.Severity = append(c.Severity, row.Severity)
@@ -180,6 +182,7 @@ func (c *M1SampleColumns) Append(row M1Sample) {
 // defensive copy); scalar fields and Option[T] are copied.
 func (c *M1SampleColumns) Row(i int) (row M1Sample) {
 	row.Id = c.Id[i]
+	row.NaturalKey = c.NaturalKey[i]
 	row.Ts = c.Ts[i]
 	row.Source = c.Source[i]
 	row.Severity = c.Severity[i]
@@ -494,7 +497,7 @@ func M1SampleBuildEntities[
 	n := c.Len()
 	for i := 0; i < n; i++ {
 		dml.BeginEntity()
-		dml.SetId(c.Id[i], nil)
+		dml.SetId(c.Id[i], c.NaturalKey[i])
 		dml.SetTimestamp(c.Ts[i])
 		// --- symbol. ---
 		symbolSec := dml.GetSectionSymbol()
@@ -591,7 +594,7 @@ func M1SampleBuildEntities[
 		textArraySec.EndSection()
 		err = dml.CommitEntity()
 		if err != nil {
-			err = eh.Errorf("m1fixture: commit row %d: %w", i, err)
+			err = eh.Errorf("commit row %d: %w", i, err)
 			return
 		}
 	}
@@ -771,6 +774,7 @@ func M1SampleFillFromArrow[
 	c *M1SampleColumns,
 	n int,
 	idCol *array.Uint64,
+	nkCol *array.Binary,
 	tsCol *array.Timestamp,
 	symbolAttrs SymbolAttrs,
 	symbolMembs SymbolMembs,
@@ -799,6 +803,12 @@ func M1SampleFillFromArrow[
 ) (err error) {
 	for i := 0; i < n; i++ {
 		c.Id = append(c.Id, idCol.Value(i))
+		{
+			src := nkCol.Value(i)
+			cp := make([]byte, len(src))
+			copy(cp, src)
+			c.NaturalKey = append(c.NaturalKey, cp)
+		}
 		c.Ts = append(c.Ts, time.Unix(0, int64(tsCol.Value(i))).UTC())
 		// --- symbol. ---
 		var symbolSourceVal string
@@ -815,7 +825,7 @@ func M1SampleFillFromArrow[
 			}
 		}
 		if symbolSourceCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Source").Errorf("m1fixture: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "Source").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.Source = append(c.Source, symbolSourceVal)
@@ -834,7 +844,7 @@ func M1SampleFillFromArrow[
 			}
 		}
 		if u8ArraySeverityCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Severity").Errorf("m1fixture: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "Severity").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.Severity = append(c.Severity, u8ArraySeverityVal)
@@ -853,7 +863,7 @@ func M1SampleFillFromArrow[
 			}
 		}
 		if u16ArrayMajorVerCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "MajorVer").Errorf("m1fixture: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "MajorVer").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.MajorVer = append(c.MajorVer, u16ArrayMajorVerVal)
@@ -880,7 +890,7 @@ func M1SampleFillFromArrow[
 			}
 		}
 		if u32ArraySequenceCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Sequence").Errorf("m1fixture: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "Sequence").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.Sequence = append(c.Sequence, u32ArraySequenceVal)
@@ -900,7 +910,7 @@ func M1SampleFillFromArrow[
 			}
 		}
 		if u64ArrayLatencyNanosCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "LatencyNanos").Errorf("m1fixture: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "LatencyNanos").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.LatencyNanos = append(c.LatencyNanos, u64ArrayLatencyNanosVal)
@@ -919,7 +929,7 @@ func M1SampleFillFromArrow[
 			}
 		}
 		if f32ArrayCpuPctCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "CpuPct").Errorf("m1fixture: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "CpuPct").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.CpuPct = append(c.CpuPct, f32ArrayCpuPctVal)
@@ -938,7 +948,7 @@ func M1SampleFillFromArrow[
 			}
 		}
 		if f64ArrayLoadAvg1Count != 1 {
-			err = eb.Build().Int("row", i).Str("field", "LoadAvg1").Errorf("m1fixture: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "LoadAvg1").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.LoadAvg1 = append(c.LoadAvg1, f64ArrayLoadAvg1Val)
@@ -957,7 +967,7 @@ func M1SampleFillFromArrow[
 			}
 		}
 		if boolHealthyCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Healthy").Errorf("m1fixture: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "Healthy").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.Healthy = append(c.Healthy, boolHealthyVal)
@@ -982,12 +992,12 @@ func M1SampleFillFromArrow[
 			}
 		}
 		if blobArrayPeerV4Count != 1 {
-			err = eb.Build().Int("row", i).Str("field", "PeerV4").Errorf("m1fixture: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "PeerV4").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.PeerV4 = append(c.PeerV4, blobArrayPeerV4Val)
 		if blobArrayPeerV6Count != 1 {
-			err = eb.Build().Int("row", i).Str("field", "PeerV6").Errorf("m1fixture: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "PeerV6").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.PeerV6 = append(c.PeerV6, blobArrayPeerV6Val)
@@ -1260,6 +1270,7 @@ func (c *M1SampleColumns) Unmarshal(rec arrow.Record) (err error) {
 		c,
 		n,
 		r.EntityId.ValueId,
+		r.EntityId.ValueNaturalKey,
 		r.EntityTimestamp.ValueTs,
 		r.Symbol.Attributes, r.Symbol.Memberships,
 		r.U8Array.Attributes, r.U8Array.Memberships,

@@ -142,11 +142,10 @@ func writeImports(sb *strings.Builder, plan *mappingplan.Plan, wrapper WrapperEm
 		}
 	}
 	for _, p := range plan.PlainCols {
-		// Any ts / expiresAt plain column drives a time.Time SetTimestamp /
-		// SetLifecycle call in BuildEntities, requiring the time import
-		// whether the underlying Go field is time.Time (passed straight
-		// through) or int64 nanos (wrapped in time.Unix(0, …).UTC()).
-		if p.GoType == "time.Time" || p.Column == "ts" || p.Column == "expiresAt" {
+		// A time.Time plain column needs the time import: read reconstructs
+		// it from Arrow nanos via time.Unix. Non-time columns (e.g. int64
+		// nanos) don't — strict 1:1 inserts no conversion.
+		if p.GoType == "time.Time" {
 			needsTime = true
 		}
 	}
@@ -278,20 +277,40 @@ func planExpiresAtCol(plan *mappingplan.Plan) *mappingplan.PlainCol {
 	return mappingplan.FindPlainCol(plan, "expiresAt")
 }
 
-// plainTimeExpr renders the expression that produces a time.Time from
-// the plain column's Go value at row i. Used by both BuildEntities
-// (SetTimestamp / SetLifecycle calls) and as documentation for the
-// FillFromArrow side.
-func plainTimeExpr(p *mappingplan.PlainCol) (expr string, err error) {
-	switch p.GoType {
-	case "time.Time":
-		expr = fmt.Sprintf("c.%s[i]", p.GoField)
-	case "int64":
-		expr = fmt.Sprintf("time.Unix(0, c.%s[i]).UTC()", p.GoField)
+// plainArrowParam renders the Arrow accessor parameter type for a plain
+// column in FillFromArrow, e.g. "*array.Uint64". The Go type was
+// validated as a supported plain type at parse time.
+func plainArrowParam(p *mappingplan.PlainCol) string {
+	at, _ := mappingplan.PlainArrowArrayType(p.GoType)
+	return "*" + at
+}
+
+// writePlainRead emits the append of colVar.Value(i) into c.<GoField> in
+// FillFromArrow, with the per-type read handling: defensive copy for
+// []byte, time.Time reconstruction from Arrow nanos, and a copy into a
+// fresh array for fixed-width [N]byte. Scalars pass straight through
+// (strict 1:1 — the column Go type is the value type).
+func writePlainRead(sb *strings.Builder, depth int, p *mappingplan.PlainCol, colVar string) {
+	f := p.GoField
+	switch {
+	case p.GoType == "time.Time":
+		linef(sb, depth, "c.%s = append(c.%s, time.Unix(0, int64(%s.Value(i))).UTC())", f, f, colVar)
+	case p.GoType == "[]byte":
+		line(sb, depth, "{")
+		linef(sb, depth+1, "src := %s.Value(i)", colVar)
+		line(sb, depth+1, "cp := make([]byte, len(src))")
+		line(sb, depth+1, "copy(cp, src)")
+		linef(sb, depth+1, "c.%s = append(c.%s, cp)", f, f)
+		line(sb, depth, "}")
+	case mappingplan.IsFixedByteArray(p.GoType):
+		line(sb, depth, "{")
+		linef(sb, depth+1, "var v %s", p.GoType)
+		linef(sb, depth+1, "copy(v[:], %s.Value(i))", colVar)
+		linef(sb, depth+1, "c.%s = append(c.%s, v)", f, f)
+		line(sb, depth, "}")
 	default:
-		err = eb.Build().Str("column", p.Column).Str("goType", p.GoType).Errorf("plain time column must be time.Time or int64 (nanos)")
+		linef(sb, depth, "c.%s = append(c.%s, %s.Value(i))", f, f, colVar)
 	}
-	return
 }
 
 // --- BuildEntities core + derived interfaces. ---
@@ -467,12 +486,16 @@ func writeEntityInterface(sb *strings.Builder, plan *mappingplan.Plan, groups []
 		err = eb.Build().Errorf("plain spec missing required `id` column")
 		return
 	}
-	line(sb, 1, "SetId(id uint64, naturalKey []byte) Ent")
-	if planTsCol(plan) != nil {
-		line(sb, 1, "SetTimestamp(ts time.Time) Ent")
+	if nkCol := planNaturalKeyCol(plan); nkCol != nil {
+		linef(sb, 1, "SetId(id %s, naturalKey %s) Ent", idCol.GoType, nkCol.GoType)
+	} else {
+		linef(sb, 1, "SetId(id %s) Ent", idCol.GoType)
 	}
-	if planExpiresAtCol(plan) != nil {
-		line(sb, 1, "SetLifecycle(expiresAt time.Time) Ent")
+	if tsCol := planTsCol(plan); tsCol != nil {
+		linef(sb, 1, "SetTimestamp(ts %s) Ent", tsCol.GoType)
+	}
+	if lcCol := planExpiresAtCol(plan); lcCol != nil {
+		linef(sb, 1, "SetLifecycle(expiresAt %s) Ent", lcCol.GoType)
 	}
 	for _, g := range groups {
 		method := methodFor(g.Section)
@@ -522,34 +545,16 @@ func writeBuildEntitiesFunc(sb *strings.Builder, plan *mappingplan.Plan, groups 
 		return
 	}
 	line(sb, 2, "dml.BeginEntity()")
-	nkExpr := "nil"
 	if nkCol != nil {
-		switch nkCol.GoType {
-		case "[]byte":
-			nkExpr = fmt.Sprintf("c.%s[i]", nkCol.GoField)
-		case "string":
-			nkExpr = fmt.Sprintf("[]byte(c.%s[i])", nkCol.GoField)
-		default:
-			err = eb.Build().Str("goType", nkCol.GoType).Errorf("plain naturalKey must be []byte or string")
-			return
-		}
+		linef(sb, 2, "dml.SetId(c.%s[i], c.%s[i])", idCol.GoField, nkCol.GoField)
+	} else {
+		linef(sb, 2, "dml.SetId(c.%s[i])", idCol.GoField)
 	}
-	linef(sb, 2, "dml.SetId(c.%s[i], %s)", idCol.GoField, nkExpr)
 	if tsCol != nil {
-		var tsExpr string
-		tsExpr, err = plainTimeExpr(tsCol)
-		if err != nil {
-			return
-		}
-		linef(sb, 2, "dml.SetTimestamp(%s)", tsExpr)
+		linef(sb, 2, "dml.SetTimestamp(c.%s[i])", tsCol.GoField)
 	}
 	if lcCol != nil {
-		var lcExpr string
-		lcExpr, err = plainTimeExpr(lcCol)
-		if err != nil {
-			return
-		}
-		linef(sb, 2, "dml.SetLifecycle(%s)", lcExpr)
+		linef(sb, 2, "dml.SetLifecycle(c.%s[i])", lcCol.GoField)
 	}
 
 	for _, g := range groups {
@@ -873,15 +878,15 @@ func writeFillFromArrowFunc(sb *strings.Builder, plan *mappingplan.Plan, groups 
 	line(sb, 0, "](")
 	linef(sb, 1, "c *%sColumns,", kind)
 	line(sb, 1, "n int,")
-	line(sb, 1, "idCol *array.Uint64,")
+	linef(sb, 1, "idCol %s,", plainArrowParam(idCol))
 	if nkCol != nil {
-		line(sb, 1, "nkCol *array.Binary,")
+		linef(sb, 1, "nkCol %s,", plainArrowParam(nkCol))
 	}
 	if tsCol != nil {
-		line(sb, 1, "tsCol *array.Timestamp,")
+		linef(sb, 1, "tsCol %s,", plainArrowParam(tsCol))
 	}
 	if lcCol != nil {
-		line(sb, 1, "lcCol *array.Timestamp,")
+		linef(sb, 1, "lcCol %s,", plainArrowParam(lcCol))
 	}
 	for _, g := range groups {
 		method := methodFor(g.Section)
@@ -891,44 +896,15 @@ func writeFillFromArrowFunc(sb *strings.Builder, plan *mappingplan.Plan, groups 
 	line(sb, 0, ") (err error) {")
 	line(sb, 1, "for i := 0; i < n; i++ {")
 
-	linef(sb, 2, "c.%s = append(c.%s, idCol.Value(i))", idCol.GoField, idCol.GoField)
+	writePlainRead(sb, 2, idCol, "idCol")
 	if nkCol != nil {
-		switch nkCol.GoType {
-		case "[]byte":
-			line(sb, 2, "{")
-			line(sb, 3, "src := nkCol.Value(i)")
-			line(sb, 3, "cp := make([]byte, len(src))")
-			line(sb, 3, "copy(cp, src)")
-			linef(sb, 3, "c.%s = append(c.%s, cp)", nkCol.GoField, nkCol.GoField)
-			line(sb, 2, "}")
-		case "string":
-			linef(sb, 2, "c.%s = append(c.%s, string(nkCol.Value(i)))", nkCol.GoField, nkCol.GoField)
-		default:
-			err = eb.Build().Str("goType", nkCol.GoType).Errorf("plain naturalKey must be []byte or string")
-			return
-		}
+		writePlainRead(sb, 2, nkCol, "nkCol")
 	}
 	if tsCol != nil {
-		switch tsCol.GoType {
-		case "time.Time":
-			linef(sb, 2, "c.%s = append(c.%s, time.Unix(0, int64(tsCol.Value(i))).UTC())", tsCol.GoField, tsCol.GoField)
-		case "int64":
-			linef(sb, 2, "c.%s = append(c.%s, int64(tsCol.Value(i)))", tsCol.GoField, tsCol.GoField)
-		default:
-			err = eb.Build().Str("goType", tsCol.GoType).Errorf("plain ts must be time.Time or int64 (nanos)")
-			return
-		}
+		writePlainRead(sb, 2, tsCol, "tsCol")
 	}
 	if lcCol != nil {
-		switch lcCol.GoType {
-		case "time.Time":
-			linef(sb, 2, "c.%s = append(c.%s, time.Unix(0, int64(lcCol.Value(i))).UTC())", lcCol.GoField, lcCol.GoField)
-		case "int64":
-			linef(sb, 2, "c.%s = append(c.%s, int64(lcCol.Value(i)))", lcCol.GoField, lcCol.GoField)
-		default:
-			err = eb.Build().Str("goType", lcCol.GoType).Errorf("plain expiresAt must be time.Time or int64 (nanos)")
-			return
-		}
+		writePlainRead(sb, 2, lcCol, "lcCol")
 	}
 
 	for _, g := range groups {

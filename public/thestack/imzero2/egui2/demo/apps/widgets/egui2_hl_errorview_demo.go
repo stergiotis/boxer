@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/fxamacker/cbor/v2"
-	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/errkind"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/errkind/leewayrender"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/errorview"
@@ -194,7 +194,7 @@ func buildEvRealRowmarshallError() (out errkind.Error) {
 		Uint64("attempt", 3).
 		Errorf("ingest failed: schema mismatch")
 	wrapped := eh.Errorf("commit %s: %w", "card-v1", leaf)
-	const fixedTs = int64(1_700_000_000_000_000_000)
+	fixedTs := time.Unix(0, 1_700_000_000_000_000_000).UTC()
 	out = errkind.FromBoxerError(
 		0xDEADBEEF_0001,
 		[]byte("ev-demo/realboxer"),
@@ -204,7 +204,7 @@ func buildEvRealRowmarshallError() (out errkind.Error) {
 	if len(out.Messages) == 0 {
 		// Defensive — keeps the init side total even if FromBoxerError
 		// ever returns an empty Error.
-		out = errkind.Error{Id: 0xDEADBEEF_0001, CapturedTs: time.Now().UnixNano()}
+		out = errkind.Error{Id: 0xDEADBEEF_0001, CapturedTs: time.Now()}
 	}
 	return
 }

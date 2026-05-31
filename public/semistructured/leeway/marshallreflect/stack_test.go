@@ -106,25 +106,28 @@ func (fakeLookup) LookupMembership(name string) (uint64, error) {
 // --- DTOs for per-row composer tests. ---
 
 type stackedA struct {
-	_     struct{} `kind:"a"`
-	Id    uint64   `lw:",id"`
-	Color string   `lw:"color,symbol"`
+	_          struct{} `kind:"a"`
+	Id         uint64   `lw:",id"`
+	NaturalKey []byte   `lw:",naturalKey"`
+	Color      string   `lw:"color,symbol"`
 }
 
 type stackedB struct {
-	_     struct{} `kind:"b"`
-	Id    uint64   `lw:",id"`
-	Label string   `lw:"label,symbol"`
+	_          struct{} `kind:"b"`
+	Id         uint64   `lw:",id"`
+	NaturalKey []byte   `lw:",naturalKey"`
+	Label      string   `lw:"label,symbol"`
 }
 
 // stackedMixed packs both a scalar and a container field into one
 // section so the per-attribute cardinality filter is observable in
 // test wire output.
 type stackedMixed struct {
-	_     struct{} `kind:"mixed"`
-	Id    uint64   `lw:",id"`
-	Color string   `lw:"color,symbol"`  // scalar → always size-1 attr
-	Brand []string `lw:"brand,symbol"`  // container → runtime size
+	_          struct{} `kind:"mixed"`
+	Id         uint64   `lw:",id"`
+	NaturalKey []byte   `lw:",naturalKey"`
+	Color      string   `lw:"color,symbol"` // scalar → always size-1 attr
+	Brand      []string `lw:"brand,symbol"` // container → runtime size
 }
 
 // TestRowComposer_SingleRow_PlainPlusSections confirms BeginRow opens

@@ -66,9 +66,13 @@ type MyDTO struct {
 }
 ```
 
-Plain columns are `id` / `ts` / `naturalKey` / `expiresAt` — fixed
-fact-row columns with constrained Go types (uint64 / time.Time|int64 /
-[]byte|string / time.Time|int64 respectively). Tagged-value fields
+Plain columns are `id` / `naturalKey` / `ts` / `expiresAt` — the
+entity-header roles that drive `SetId` / `SetTimestamp` / `SetLifecycle`.
+Their Go types map **1:1** onto the setter argument types (the codec
+inserts no conversion); `mappingplan.PlainArrowArrayType` is the single
+source of truth for the supported set. `naturalKey` is optional — its
+presence selects `SetId`'s two-argument form — and plain fields are
+mandatory (no `Option[T]` / slice / roaring). Tagged-value fields
 bind to a leeway membership (`<m>`) routing into a section (`<s>`)
 optionally targeting a sub-column (`:<col>`, e.g. `u32Range:beginIncl`).
 
@@ -207,11 +211,14 @@ consumer surfaces the need.
   picks the membership-id source, the dml builder type, the active-
   hints computation, and the buscodec wiring. Adding a new target
   schema is a new wrapper implementation, not a marshallgen patch.
-- **Plain columns are a closed set.** The four plain column names
-  (`id` / `ts` / `naturalKey` / `expiresAt`) reflect the runtime.facts
-  schema's fixed plain layout. Other schemas can declare per-field
-  tagged values for the same data, but the plain wiring is not
-  user-extensible.
+- **Plain columns are a closed set of roles, open in type.** The four
+  plain column names (`id` / `naturalKey` / `ts` / `expiresAt`) are the
+  fixed entity-header roles every leeway schema exposes via `SetId` /
+  `SetTimestamp` / `SetLifecycle`. The *names* are not user-extensible,
+  but the Go *types* are taken 1:1 from the DTO (constrained only to the
+  `mappingplan.PlainArrowArrayType` set), so the plain wiring is no
+  longer coupled to one schema's column types. Data outside these four
+  roles is carried as per-field tagged values.
 
 ## Further reading
 

@@ -107,8 +107,8 @@ var capabilityGrantPool = sync.Pool{
 type CapabilityGrantColumns struct {
 	Id         []uint64
 	NaturalKey [][]byte
-	Ts         []int64
-	ExpiresAt  []int64
+	Ts         []time.Time
+	ExpiresAt  []time.Time
 
 	Subject        []string
 	Capability     []string
@@ -306,8 +306,8 @@ func CapabilityGrantBuildEntities[
 	for i := 0; i < n; i++ {
 		dml.BeginEntity()
 		dml.SetId(c.Id[i], c.NaturalKey[i])
-		dml.SetTimestamp(time.Unix(0, c.Ts[i]).UTC())
-		dml.SetLifecycle(time.Unix(0, c.ExpiresAt[i]).UTC())
+		dml.SetTimestamp(c.Ts[i])
+		dml.SetLifecycle(c.ExpiresAt[i])
 		// --- stringArray. ---
 		stringArraySec := dml.GetSectionStringArray()
 		stringArraySecAttr_Subject := stringArraySec.BeginAttributeSingle(c.Subject[i])
@@ -342,7 +342,7 @@ func CapabilityGrantBuildEntities[
 		foreignKeySec.EndSection()
 		err = dml.CommitEntity()
 		if err != nil {
-			err = eh.Errorf("capabilitygrant: commit row %d: %w", i, err)
+			err = eh.Errorf("commit row %d: %w", i, err)
 			return
 		}
 	}
@@ -453,8 +453,8 @@ func CapabilityGrantFillFromArrow[
 			copy(cp, src)
 			c.NaturalKey = append(c.NaturalKey, cp)
 		}
-		c.Ts = append(c.Ts, int64(tsCol.Value(i)))
-		c.ExpiresAt = append(c.ExpiresAt, int64(lcCol.Value(i)))
+		c.Ts = append(c.Ts, time.Unix(0, int64(tsCol.Value(i))).UTC())
+		c.ExpiresAt = append(c.ExpiresAt, time.Unix(0, int64(lcCol.Value(i))).UTC())
 		// --- stringArray. ---
 		var stringArraySubjectVal string
 		var stringArraySubjectCount int
@@ -470,7 +470,7 @@ func CapabilityGrantFillFromArrow[
 			}
 		}
 		if stringArraySubjectCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Subject").Errorf("capabilitygrant: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "Subject").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.Subject = append(c.Subject, stringArraySubjectVal)
@@ -489,7 +489,7 @@ func CapabilityGrantFillFromArrow[
 			}
 		}
 		if symbolCapabilityCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Capability").Errorf("capabilitygrant: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "Capability").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.Capability = append(c.Capability, symbolCapabilityVal)
@@ -510,7 +510,7 @@ func CapabilityGrantFillFromArrow[
 			}
 		}
 		if u32RangeValidityBeginCount != 1 {
-			err = eb.Build().Int("row", i).Str("membership", "cgValidity").Errorf("capabilitygrant: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("membership", "cgValidity").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.ValidityBegin = append(c.ValidityBegin, u32RangeValidityBeginVal)
@@ -530,7 +530,7 @@ func CapabilityGrantFillFromArrow[
 			}
 		}
 		if boolActiveCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Active").Errorf("capabilitygrant: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "Active").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.Active = append(c.Active, boolActiveVal)

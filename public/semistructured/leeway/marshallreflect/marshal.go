@@ -4,7 +4,6 @@ package marshallreflect
 
 import (
 	"reflect"
-	"time"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 
@@ -64,58 +63,25 @@ func marshalRow(dml, row reflect.Value, plan *mappingplan.Plan, groups []mapping
 	return
 }
 
+// marshalPlain drives the entity-header setters from the DTO's plain
+// fields. Strict 1:1: each plain field's Go type already equals its
+// setter's argument type, so the field value is passed verbatim — the
+// codec inserts no conversion. SetId's arity follows the declared
+// columns: SetId(id) when no naturalKey is declared, SetId(id,
+// naturalKey) when it is.
 func marshalPlain(dml, row reflect.Value, plan *mappingplan.Plan) (err error) {
 	idCol := mappingplan.FindPlainCol(plan, "id")
-	nkCol := mappingplan.FindPlainCol(plan, "naturalKey")
-	tsCol := mappingplan.FindPlainCol(plan, "ts")
-	lcCol := mappingplan.FindPlainCol(plan, "expiresAt")
-
-	idVal := row.FieldByName(idCol.GoField)
-	var nkVal reflect.Value
-	if nkCol == nil {
-		nkVal = reflect.ValueOf([]byte(nil))
-	} else {
-		v := row.FieldByName(nkCol.GoField)
-		switch nkCol.GoType {
-		case "[]byte":
-			nkVal = v
-		case "string":
-			nkVal = reflect.ValueOf([]byte(v.String()))
-		default:
-			err = eb.Build().Str("type", nkCol.GoType).Errorf("naturalKey unsupported")
-			return
-		}
+	idArgs := []reflect.Value{row.FieldByName(idCol.GoField)}
+	if nkCol := mappingplan.FindPlainCol(plan, "naturalKey"); nkCol != nil {
+		idArgs = append(idArgs, row.FieldByName(nkCol.GoField))
 	}
-	mustCall(dml, "SetId", idVal, nkVal)
+	mustCall(dml, "SetId", idArgs...)
 
-	if tsCol != nil {
-		var tsVal reflect.Value
-		tsVal, err = plainTimeReflect(row, tsCol)
-		if err != nil {
-			return
-		}
-		mustCall(dml, "SetTimestamp", tsVal)
+	if tsCol := mappingplan.FindPlainCol(plan, "ts"); tsCol != nil {
+		mustCall(dml, "SetTimestamp", row.FieldByName(tsCol.GoField))
 	}
-	if lcCol != nil {
-		var lcVal reflect.Value
-		lcVal, err = plainTimeReflect(row, lcCol)
-		if err != nil {
-			return
-		}
-		mustCall(dml, "SetLifecycle", lcVal)
-	}
-	return
-}
-
-func plainTimeReflect(row reflect.Value, p *mappingplan.PlainCol) (out reflect.Value, err error) {
-	v := row.FieldByName(p.GoField)
-	switch p.GoType {
-	case "time.Time":
-		out = v
-	case "int64":
-		out = reflect.ValueOf(time.Unix(0, v.Int()).UTC())
-	default:
-		err = eb.Build().Str("type", p.GoType).Errorf("plain time column unsupported")
+	if lcCol := mappingplan.FindPlainCol(plan, "expiresAt"); lcCol != nil {
+		mustCall(dml, "SetLifecycle", row.FieldByName(lcCol.GoField))
 	}
 	return
 }

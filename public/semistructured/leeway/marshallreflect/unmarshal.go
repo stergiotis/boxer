@@ -20,15 +20,17 @@ import (
 // caller can populate the optional fields without positional empty
 // slots.
 type UnmarshalArgs struct {
-	// NumRows is the entity count to project. Typically idCol.Len().
+	// NumRows is the entity count to project. Typically the id column's Len().
 	NumRows int
 
-	// Plain accessors. IdCol is required; the others are required iff
-	// the DTO declares the corresponding plain column.
-	IdCol *array.Uint64
-	NkCol *array.Binary
-	TsCol *array.Timestamp
-	LcCol *array.Timestamp
+	// PlainCol returns the Arrow array backing a plain column, looked up
+	// by role name ("id" / "naturalKey" / "ts" / "expiresAt"). The
+	// concrete type must be the one mappingplan.PlainArrowArrayType maps
+	// the DTO field's Go type to (e.g. *array.Uint64 for a uint64 id,
+	// *array.Timestamp for a time.Time ts, *array.FixedSizeBinary for a
+	// [16]byte). Required for every plain column the DTO declares; "id"
+	// is always declared.
+	PlainCol func(name string) any
 
 	// SectionAttrs returns the per-section attribute reader (e.g.
 	// *ra.ReadAccessFactsTagged<X>.Attributes). Lookup-by-section-name.
@@ -95,42 +97,85 @@ func Unmarshal[T any](args UnmarshalArgs, out *[]T, lookup LookupI) (err error) 
 	return
 }
 
+// unmarshalPlain reads the declared plain (entity-header) columns into
+// the row. Strict 1:1: each column's Arrow array is read straight into
+// its DTO field, whose Go type the writer already matched to the
+// column. The four roles are read in fixed order; only those the DTO
+// declares are present.
 func unmarshalPlain(row reflect.Value, plan *mappingplan.Plan, args UnmarshalArgs, i int) (err error) {
-	idCol := mappingplan.FindPlainCol(plan, "id")
-	row.FieldByName(idCol.GoField).SetUint(args.IdCol.Value(i))
-
-	if nkCol := mappingplan.FindPlainCol(plan, "naturalKey"); nkCol != nil {
-		raw := args.NkCol.Value(i)
-		switch nkCol.GoType {
-		case "[]byte":
-			cp := make([]byte, len(raw))
-			copy(cp, raw)
-			row.FieldByName(nkCol.GoField).SetBytes(cp)
-		case "string":
-			row.FieldByName(nkCol.GoField).SetString(string(raw))
-		default:
-			err = eb.Build().Str("type", nkCol.GoType).Errorf("plain naturalKey unsupported")
+	if args.PlainCol == nil {
+		err = eb.Build().Errorf("UnmarshalArgs.PlainCol is required")
+		return
+	}
+	for _, role := range [...]string{"id", "naturalKey", "ts", "expiresAt"} {
+		p := mappingplan.FindPlainCol(plan, role)
+		if p == nil {
+			continue
+		}
+		col := args.PlainCol(role)
+		if col == nil {
+			err = eb.Build().Str("column", role).Errorf("plain column reader is nil")
 			return
 		}
-	}
-	if tsCol := mappingplan.FindPlainCol(plan, "ts"); tsCol != nil {
-		ns := int64(args.TsCol.Value(i))
-		setTimeColumn(row.FieldByName(tsCol.GoField), tsCol.GoType, ns)
-	}
-	if lcCol := mappingplan.FindPlainCol(plan, "expiresAt"); lcCol != nil {
-		ns := int64(args.LcCol.Value(i))
-		setTimeColumn(row.FieldByName(lcCol.GoField), lcCol.GoType, ns)
+		err = readPlainArrow(row.FieldByName(p.GoField), p.GoType, col, i)
+		if err != nil {
+			err = eb.Build().Str("column", role).Errorf("%w", err)
+			return
+		}
 	}
 	return
 }
 
-func setTimeColumn(fld reflect.Value, goType string, ns int64) {
+// readPlainArrow sets fld (a DTO plain field of source-form type goType)
+// from row i of its Arrow array col. col's concrete type must be the one
+// mappingplan.PlainArrowArrayType maps goType to. []byte / FixedSizeBinary
+// are defensively copied out of the Arrow buffer; time.Time is rebuilt
+// from int64 nanos (Arrow's physical timestamp form).
+func readPlainArrow(fld reflect.Value, goType string, col any, i int) (err error) {
 	switch goType {
-	case "time.Time":
-		fld.Set(reflect.ValueOf(time.Unix(0, ns).UTC()))
+	case "uint8":
+		fld.SetUint(uint64(col.(*array.Uint8).Value(i)))
+	case "uint16":
+		fld.SetUint(uint64(col.(*array.Uint16).Value(i)))
+	case "uint32":
+		fld.SetUint(uint64(col.(*array.Uint32).Value(i)))
+	case "uint64":
+		fld.SetUint(col.(*array.Uint64).Value(i))
+	case "int8":
+		fld.SetInt(int64(col.(*array.Int8).Value(i)))
+	case "int16":
+		fld.SetInt(int64(col.(*array.Int16).Value(i)))
+	case "int32":
+		fld.SetInt(int64(col.(*array.Int32).Value(i)))
 	case "int64":
-		fld.SetInt(ns)
+		fld.SetInt(col.(*array.Int64).Value(i))
+	case "float32":
+		fld.SetFloat(float64(col.(*array.Float32).Value(i)))
+	case "float64":
+		fld.SetFloat(col.(*array.Float64).Value(i))
+	case "bool":
+		fld.SetBool(col.(*array.Boolean).Value(i))
+	case "string":
+		fld.SetString(col.(*array.String).Value(i))
+	case "[]byte":
+		src := col.(*array.Binary).Value(i)
+		cp := make([]byte, len(src))
+		copy(cp, src)
+		fld.SetBytes(cp)
+	case "time.Time":
+		ns := int64(col.(*array.Timestamp).Value(i))
+		fld.Set(reflect.ValueOf(time.Unix(0, ns).UTC()))
+	default:
+		if _, ok := mappingplan.FixedByteArrayLen(goType); ok {
+			src := col.(*array.FixedSizeBinary).Value(i)
+			for k := 0; k < fld.Len() && k < len(src); k++ {
+				fld.Index(k).SetUint(uint64(src[k]))
+			}
+			return
+		}
+		err = eb.Build().Str("type", goType).Errorf("unsupported plain column type")
 	}
+	return
 }
 
 func unmarshalSection(row reflect.Value, g mappingplan.SectionGroup, args UnmarshalArgs, i int, membIDs map[string]uint64) (err error) {

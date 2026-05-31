@@ -58,7 +58,7 @@ func TestUnmarshal_RoundTrip(t *testing.T) {
 	if !bytes.Equal(got.NaturalKey[0], orig.NaturalKey) {
 		t.Errorf("NaturalKey: got %x, want %x", got.NaturalKey[0], orig.NaturalKey)
 	}
-	if got.CapturedTs[0] != orig.CapturedTs {
+	if !got.CapturedTs[0].Equal(orig.CapturedTs) {
 		t.Errorf("CapturedTs: got %v, want %v", got.CapturedTs[0], orig.CapturedTs)
 	}
 

@@ -359,15 +359,32 @@ type MyDTO struct {
 	assertErrContains(t, err, "unknown plain column")
 }
 
-func TestParse_RejectsPlainTypeMismatch(t *testing.T) {
+func TestParse_RejectsPlainUnsupportedType(t *testing.T) {
+	// Strict 1:1: a plain column's Go type IS its entity-setter argument
+	// type, but it must still be a type the codec can project to/from an
+	// Arrow array (see mappingplan.PlainArrowArrayType). complex128 is not.
+	// (A string id, by contrast, is now accepted — that is the point of 1:1.)
 	_, err := tryParse(t, `package foo
 type MyDTO struct {
-	_  struct{}  `+"`kind:\"my\"`"+`
-	Id string    `+"`lw:\",id\"`"+`
-	Ts time.Time `+"`lw:\",ts\"`"+`
+	_  struct{}   `+"`kind:\"my\"`"+`
+	Id complex128 `+"`lw:\",id\"`"+`
+	Ts time.Time  `+"`lw:\",ts\"`"+`
 }
 `)
-	assertErrContains(t, err, "plain column `id` must be uint64")
+	assertErrContains(t, err, "unsupported plain column Go type")
+}
+
+func TestParse_RejectsPlainOption(t *testing.T) {
+	// Plain (entity-header) columns are mandatory under strict 1:1;
+	// Option[T] (and slices / roaring) are forbidden on plain fields.
+	_, err := tryParse(t, `package foo
+type MyDTO struct {
+	_  struct{}              `+"`kind:\"my\"`"+`
+	Id option.Option[uint64] `+"`lw:\",id\"`"+`
+	Ts time.Time             `+"`lw:\",ts\"`"+`
+}
+`)
+	assertErrContains(t, err, "plain field must be a scalar T")
 }
 
 func TestParse_RejectsMissingId(t *testing.T) {

@@ -5,6 +5,7 @@ package errkind_test
 import (
 	"bytes"
 	"testing"
+	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/errkind"
@@ -14,7 +15,7 @@ func sampleErrorForBuscodec() errkind.Error {
 	return errkind.Error{
 		Id:          0xDEADBEEF,
 		NaturalKey:  []byte{0x01, 0x02},
-		CapturedTs:  1_700_000_000_000_000_000,
+		CapturedTs:  time.Unix(0, 1_700_000_000_000_000_000).UTC(),
 		Messages:    []string{"boom", "kapow"},
 		Sources:     []string{"main.go:12", "main.go:34"},
 		Funcs:       []string{"Run", "Init"},
@@ -50,7 +51,7 @@ func TestBuscodecRoundTrip(t *testing.T) {
 	if !bytes.Equal(got.NaturalKey, orig.NaturalKey) {
 		t.Errorf("NaturalKey: got %x, want %x", got.NaturalKey, orig.NaturalKey)
 	}
-	if got.CapturedTs != orig.CapturedTs {
+	if !got.CapturedTs.Equal(orig.CapturedTs) {
 		t.Errorf("CapturedTs: got %v, want %v", got.CapturedTs, orig.CapturedTs)
 	}
 	checkStringSlice := func(name string, got, want []string) {
