@@ -35,6 +35,7 @@ import (
 	_ "github.com/stergiotis/boxer/apps/imzrt"
 	_ "github.com/stergiotis/boxer/apps/imztop"
 	_ "github.com/stergiotis/boxer/apps/play"
+	_ "github.com/stergiotis/boxer/apps/splashscreen"
 	_ "github.com/stergiotis/boxer/apps/taskdemo"
 	_ "github.com/stergiotis/boxer/public/keelson/runtime/configview"
 	_ "github.com/stergiotis/boxer/public/keelson/runtime/logviewer"

@@ -1,0 +1,12 @@
+# Splash artwork is intentionally NOT committed yet (pending licensing
+# clearance). It is kept locally so the splash renders during development; the
+# app builds and runs without it — the splash pane shows an "image unavailable"
+# notice when the asset is absent (see app_register.go / splashscreen.go).
+#
+# assets/NOTICE (no extension) is committed and is not matched by these globs.
+/assets/patronus.png
+/assets/*.png
+/assets/*.jpg
+/assets/*.jpeg
+/assets/*.webp
+/assets/*.gif
