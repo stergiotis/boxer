@@ -52,7 +52,7 @@ require (
 	github.com/yuin/goldmark-meta v1.1.0
 	github.com/zeebo/xxh3 v1.1.0
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f
-	golang.org/x/image v0.40.0
+	golang.org/x/image v0.41.0
 	golang.org/x/sys v0.44.0
 	golang.org/x/term v0.43.0
 	golang.org/x/tools v0.45.0
