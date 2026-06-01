@@ -18,7 +18,7 @@ require (
 	github.com/dgraph-io/badger/v4 v4.9.1
 	github.com/dim13/colormap v1.1.0
 	github.com/dustin/go-humanize v1.0.1
-	github.com/ebitengine/purego v0.10.0
+	github.com/ebitengine/purego v0.10.1
 	github.com/ettle/strcase v0.2.0
 	github.com/fogleman/gg v1.3.0
 	github.com/fsnotify/fsnotify v1.10.1
