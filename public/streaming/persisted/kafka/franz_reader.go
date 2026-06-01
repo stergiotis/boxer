@@ -182,7 +182,7 @@ func (inst *FranzConsumerDetails) FranzOpts() (opts []kgo.Opt) {
 // errors arrive and the fetch is empty it sleeps for the next backoff interval,
 // returning abort=true if closeCtx fires during that wait so the caller's poll
 // loop exits promptly. Shared verbatim by the ordered and unordered readers.
-func handleFetchErrors(fetches kgo.Fetches, log *zerolog.Logger, connErrBackOff backoff.BackOff, closeCtx context.Context) (abort bool) {
+func handleFetchErrors(closeCtx context.Context, fetches kgo.Fetches, log *zerolog.Logger, connErrBackOff backoff.BackOff) (abort bool) {
 	errs := fetches.Errors()
 	if len(errs) == 0 {
 		connErrBackOff.Reset()

@@ -539,7 +539,7 @@ func (inst *FranzReaderOrdered) runPollLoop(checkpoints *partitionState, noActiv
 		fetches := inst.Client.PollFetches(stallCtx)
 		pollDone()
 
-		if handleFetchErrors(fetches, inst.log, connErrBackOff, closeCtx) {
+		if handleFetchErrors(closeCtx, fetches, inst.log, connErrBackOff) {
 			return
 		}
 

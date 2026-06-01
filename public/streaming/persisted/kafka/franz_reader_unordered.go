@@ -430,7 +430,7 @@ func (inst *FranzReaderUnordered) runPollLoop(cl *kgo.Client, batchChan chan bat
 		fetches := cl.PollFetches(stallCtx)
 		pollDone()
 
-		if handleFetchErrors(fetches, inst.log, connErrBackOff, closeCtx) {
+		if handleFetchErrors(closeCtx, fetches, inst.log, connErrBackOff) {
 			return
 		}
 
