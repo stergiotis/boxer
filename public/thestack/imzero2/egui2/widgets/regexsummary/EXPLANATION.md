@@ -291,6 +291,6 @@ lazy and costs zero until first open.
 
 ## Further reading
 
-- Decisions: [ADR-0046: imzero2 value-inspector infrastructure](../../../../../../../../doc/adr/0046-imzero2-value-inspector-infrastructure.md)
+- Decisions: [ADR-0046: imzero2 value-inspector infrastructure](../../../../../../doc/adr/0046-imzero2-value-inspector-infrastructure.md)
 - Sibling inspector pattern: [`widgets/distsummary/EXPLANATION.md`](../distsummary/EXPLANATION.md)
 - Embedded host pattern: [`demo/apps/regex_explorer/embedded.go`](../../demo/apps/regex_explorer/embedded.go)

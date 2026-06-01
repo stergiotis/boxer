@@ -92,7 +92,7 @@ Properties:
 
 The `WidgetHandle` type and its `Make` / `Resolve` functions live in
 `keelson/runtime/widgethandle`. The package was originally `thestack/internal/widgethandle`
-and was promoted to a public location under `keelson/runtime/` by [ADR-0035](../../../../../../doc/adr/0035-keelson-namespace-introduction.md)
+and was promoted to a public location under `keelson/runtime/` by [ADR-0035](../../../../doc/adr/0035-keelson-namespace-introduction.md)
 when `windowhost` (a runtime consumer outside `thestack/`) needed to depend on it.
 Opacity is now enforced by keeping the `secret` field unexported rather than by Go's
 `internal` mechanism — `Resolve()` is unexported and so cannot be called from outside

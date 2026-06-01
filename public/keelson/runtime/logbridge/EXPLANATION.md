@@ -115,8 +115,8 @@ overhead shift, but the flusher gets to do its work without re-parsing.
 
 ## Further reading
 
-- ADR-0026 §SD6 — [`doc/adr/0026-app-runtime-and-capability-subjects.md`](../../../../../../doc/adr/0026-app-runtime-and-capability-subjects.md)
+- ADR-0026 §SD6 — [`doc/adr/0026-app-runtime-and-capability-subjects.md`](../../../../doc/adr/0026-app-runtime-and-capability-subjects.md)
 - zerolog CBOR encoder — `internal/cbor/README.md` at
   `github.com/rs/zerolog/internal/cbor`
 - fxamacker/cbor decoder — https://github.com/fxamacker/cbor
-- Leeway membership vocabulary — [`doc/skills/leeway-advanced/SKILLS.md`](../../../../../../doc/skills/leeway-advanced/SKILLS.md)
+- Leeway membership vocabulary — [`doc/skills/leeway-advanced/SKILLS.md`](../../../../doc/skills/leeway-advanced/SKILLS.md)

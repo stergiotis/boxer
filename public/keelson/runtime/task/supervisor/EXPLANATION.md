@@ -14,7 +14,7 @@ This file explains *why* `keelson/runtime/task/supervisor` is shaped the
 way it is — what it persists, what it does not, how the heartbeat
 watchdog decides "abandoned," and the choices behind serving the
 in-flight snapshot over a bus request/reply rather than a Go API call.
-The decision record is [ADR-0038](../../../../../../../doc/adr/0038-keelson-background-task-primitive.md);
+The decision record is [ADR-0038](../../../../../doc/adr/0038-keelson-background-task-primitive.md);
 this document captures the engineering rationale that ADR readers will
 look for when the contract needs to evolve.
 

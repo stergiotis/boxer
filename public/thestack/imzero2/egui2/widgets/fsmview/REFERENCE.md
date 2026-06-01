@@ -10,7 +10,7 @@ status: draft
 
 # widgets/fsmview — public API reference
 
-Two-level finite-state-machine viewer for the ImZero2 framework. Level 1 is a compact chip showing the current state; level 2 is a click-to-pin floating popup with Table / Graph (egui_graphs FR+CG) / History views. Couples tightly to [`hishamk/statetrooper`](https://pkg.go.dev/github.com/hishamk/statetrooper) through a thin `Machine[T comparable]` wrapper — see [ADR-0045](../../../../../../../../doc/adr/0045-imzero2-fsmview-widget.md) for the design rationale and milestone plan.
+Two-level finite-state-machine viewer for the ImZero2 framework. Level 1 is a compact chip showing the current state; level 2 is a click-to-pin floating popup with Table / Graph (egui_graphs FR+CG) / History views. Couples tightly to [`hishamk/statetrooper`](https://pkg.go.dev/github.com/hishamk/statetrooper) through a thin `Machine[T comparable]` wrapper — see [ADR-0045](../../../../../../doc/adr/0045-imzero2-fsmview-widget.md) for the design rationale and milestone plan.
 
 ## Types
 
@@ -140,8 +140,8 @@ for range c.Window(...).KeepIter() {
 
 ## See also
 
-- [ADR-0045](../../../../../../../../doc/adr/0045-imzero2-fsmview-widget.md) — design rationale and milestone plan
-- [ADR-0013](../../../../../../../../doc/adr/0013-imzero2-stateful-widget-contract.md) — composite-widget pattern (fsmview is **not** an FFFI2 primitive; state lives on the receiver)
-- [ADR-0021](../../../../../../../../doc/adr/0021-imzero2-snarl-node-editor-binding.md) — egui-snarl (manual node editor; complementary, for editing FSM topology rather than visualising it)
-- [ADR-0026](../../../../../../../../doc/adr/0026-app-runtime-and-capability-subjects.md) — native title-bar X via `.OpenBound`/R10 (M2 lands the same pattern here)
+- [ADR-0045](../../../../../../doc/adr/0045-imzero2-fsmview-widget.md) — design rationale and milestone plan
+- [ADR-0013](../../../../../../doc/adr/0013-imzero2-stateful-widget-contract.md) — composite-widget pattern (fsmview is **not** an FFFI2 primitive; state lives on the receiver)
+- [ADR-0021](../../../../../../doc/adr/0021-imzero2-snarl-node-editor-binding.md) — egui-snarl (manual node editor; complementary, for editing FSM topology rather than visualising it)
+- [ADR-0026](../../../../../../doc/adr/0026-app-runtime-and-capability-subjects.md) — native title-bar X via `.OpenBound`/R10 (M2 lands the same pattern here)
 - [`github.com/hishamk/statetrooper`](https://pkg.go.dev/github.com/hishamk/statetrooper) — the chosen FSM library

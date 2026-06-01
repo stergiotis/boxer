@@ -19,9 +19,9 @@ vdd declaration: how cardinality and sub-type combine to dictate both
 the wire encoding and the Go-side type the DTO uses.
 
 The decision to generate codecs against this model lives in
-[ADR-0042](../../../../../doc/adr/0042-keelson-leeway-codec-soa-generator.md);
+[ADR-0042](../../../doc/adr/0042-keelson-leeway-codec-soa-generator.md);
 the parallel-array shredding the wire format inherits from sits in
-[ADR-0041](../../../../../doc/adr/0041-rowmarshall-error-shredding.md).
+[ADR-0041](../../../doc/adr/0041-rowmarshall-error-shredding.md).
 
 ## Background
 
@@ -381,12 +381,12 @@ Resolved during M2/M3 (recorded here for documentary continuity):
 
 ## Further reading
 
-- [ADR-0042 — Generated SoA codec for keelson runtime.facts rows](../../../../../doc/adr/0042-keelson-leeway-codec-soa-generator.md)
-- [ADR-0041 — rowmarshall: boxer error fully-shredded row layout](../../../../../doc/adr/0041-rowmarshall-error-shredding.md)
-- [ADR-0026 — app runtime + capability subjects](../../../../../doc/adr/0026-app-runtime-and-capability-subjects.md)
-- [ADR-0035 — keelson namespace introduction](../../../../../doc/adr/0035-keelson-namespace-introduction.md)
+- [ADR-0042 — Generated SoA codec for keelson runtime.facts rows](../../../doc/adr/0042-keelson-leeway-codec-soa-generator.md)
+- [ADR-0041 — rowmarshall: boxer error fully-shredded row layout](../../../doc/adr/0041-rowmarshall-error-shredding.md)
+- [ADR-0026 — app runtime + capability subjects](../../../doc/adr/0026-app-runtime-and-capability-subjects.md)
+- [ADR-0035 — keelson namespace introduction](../../../doc/adr/0035-keelson-namespace-introduction.md)
 - [`keelson_dimdata.go`](keelson_dimdata.go) — bootstrap memberships and the registry instances.
 - [`keelson_dimdata_lw.go`](keelson_dimdata_lw.go) — leeway-meta memberships and the `Resolve*` bridges.
-- [`src/go/public/boxerstaging/spinnaker/vdd/`](../../boxerstaging/spinnaker/vdd/) — prior-art registry the keelson layout mirrors.
+- `src/go/public/boxerstaging/spinnaker/vdd/` — prior-art registry the keelson layout mirrors.
 - [`src/go/public/keelson/runtime/codec/`](../runtime/codec/) — the ADR-0042 codec generator output (one subdirectory per fact-kind / broker DTO). Subsumed the hand-coded `rowmarshall/` reference codec in M11; the no-reflection-on-hot-path rule this vdd model inherits is now realized through the generator emit rather than hand-written.
 - [`src/go/public/keelson/runtime/factsschema/`](../runtime/factsschema/) — the DML/RA/RowBinaryArrow building blocks the codec generator targets.

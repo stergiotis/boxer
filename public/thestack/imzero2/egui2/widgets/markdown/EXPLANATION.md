@@ -249,4 +249,4 @@ should iterate `Frontmatter().IteratePairs()` directly.
 - Obsidian goldmark extender: [boxer/public/semistructured/markdown/obsidian](https://pkg.go.dev/github.com/stergiotis/boxer/public/semistructured/markdown/obsidian)
 - imzero2 retention pattern: [`bindings.CodeViewJob`](../../bindings/factories.out.go)
 - imzero2 widget id rules: [`keelson/runtime/widgethandle/EXPLANATION.md`](../../../../../keelson/runtime/widgethandle/EXPLANATION.md)
-- imzero2 architecture: [`../../EXPLANATION.md`](../../EXPLANATION.md)
+- imzero2 architecture: `../../EXPLANATION.md`

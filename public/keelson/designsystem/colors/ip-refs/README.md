@@ -8,7 +8,7 @@ status: draft
 
 # IP-boundary reference cache
 
-Per [ADR-0033 §SD7](../../../../../../../doc/adr/0033-imzero2-design-system-palette-m0.md) and [ADR-0029 §SD12](../../../../../../../doc/adr/0029-imzero2-design-system-and-policy-as-code.md), the color generator searches every emitted IDS semantic-palette hex value against published design-system palettes. Each `<system>.json` file caches the published anchor hex values as a `{"<role-or-token>": "#RRGGBB"}` map.
+Per [ADR-0033 §SD7](../../../../../doc/adr/0033-imzero2-design-system-palette-m0.md) and [ADR-0029 §SD12](../../../../../doc/adr/0029-imzero2-design-system-and-policy-as-code.md), the color generator searches every emitted IDS semantic-palette hex value against published design-system palettes. Each `<system>.json` file caches the published anchor hex values as a `{"<role-or-token>": "#RRGGBB"}` map.
 
 The cache is **non-exhaustive on purpose** — it covers the most-recognisable anchors of each system (the 500-tier of Tailwind, the primary Material 3 hues, the Spectrum global colors). When a real collision surfaces in `ip-boundary-check.md`, the entry is extended with the surrounding shades.
 

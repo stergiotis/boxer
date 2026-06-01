@@ -430,7 +430,7 @@ directly.
 
 ## Further reading
 
-- [ADR-0026](../../../../../../doc/adr/0026-app-runtime-and-capability-subjects.md)
+- [ADR-0026](../../../../doc/adr/0026-app-runtime-and-capability-subjects.md)
   — architecture, subject taxonomy, phasing.
 - [`registry.go`](./registry.go), [`manifest.go`](./manifest.go),
   [`app.go`](./app.go) — the contract surface and Go-doc reference.

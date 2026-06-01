@@ -13,7 +13,7 @@ status: draft
 This file explains *why* `keelson/runtime/task` is shaped the way it is —
 the contract, the cancellation semantics, the emission gate, and what
 intentionally lives outside the package. The decision record is
-[ADR-0038](../../../../../../doc/adr/0038-keelson-background-task-primitive.md);
+[ADR-0038](../../../../doc/adr/0038-keelson-background-task-primitive.md);
 this document captures the engineering reasoning that ADR readers will
 look for when they come back six months from now.
 
@@ -24,8 +24,8 @@ catch-up reads, imztop sampling, the M4 cross-process workers that NATS
 will eventually unlock — cannot live inside `AppI.Frame()`. The frame
 loop is a 16ms budget; tasks routinely run for seconds to hours.
 
-[ADR-0026](../../../../../../doc/adr/0026-app-runtime-and-capability-subjects.md)
-treats the bus as the universal transport. [ADR-0036](../../../../../../doc/adr/0036-runtime-buscodec.md)
+[ADR-0026](../../../../doc/adr/0026-app-runtime-and-capability-subjects.md)
+treats the bus as the universal transport. [ADR-0036](../../../../doc/adr/0036-runtime-buscodec.md)
 anchors every payload on a canonical-CBOR wire. The task package is the
 third leg: a *bus-protocol primitive* for the off-frame world. Apps own
 the goroutine that does the work; this package owns the subject
