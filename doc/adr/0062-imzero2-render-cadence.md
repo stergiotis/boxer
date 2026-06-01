@@ -112,6 +112,12 @@ O1 leaves C3 unaddressed: the flood remains regardless of cadence, because it is
 - The warmup and interval values are constants; SD8 leaves them un-exposed until a need appears.
 - The hidden-throttle option remains a documented, deferred possibility (SD6), not a closed door.
 
+## Status
+
+Accepted 2026-05-30 by @spx. Continuous default with reactive opt-in via `IMZERO2_RENDER_CADENCE`, the warmup-then-heartbeat reactive path, and the real-work slow-frame gate are implemented on both sides; the hidden-throttle option is deferred (SD6).
+
+Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`. See boxer's `DOCUMENTATION_STANDARD.md` §1 ADR for the edit-policy tiers (Tier 1 in-place / Tier 2 `## Updates` H3 / Tier 3 superseding ADR).
+
 ## References
 
 - [ADR-0009](0009-environment-variable-registry.md) — environment-variable registry; `CategorialStringVar` and the default-on-unrecognised-value convention used here.

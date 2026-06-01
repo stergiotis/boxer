@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package l3spacing implements IDS Tier 1 rule L3 — flag literal floats
 // in spacing-aware API calls outside the styletokens allowlist.
 //

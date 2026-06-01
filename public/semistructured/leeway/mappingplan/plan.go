@@ -1,3 +1,5 @@
+//go:build llm_generated_opus47
+
 // Package mappingplan is the schema-agnostic model of a leeway DTO ↔
 // codec mapping: the parsed Plan (plain columns + tagged-value fields),
 // the lw: tag grammar (SplitLW), per-field validation and assembly

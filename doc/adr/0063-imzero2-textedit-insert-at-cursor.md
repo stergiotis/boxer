@@ -113,6 +113,25 @@ snippet (appending at end, since there is no live Ui/caret).
 recorded, so the splice lands next frame); insert at the persisted caret, or
 append at end when the editor was never focused; selection is replaced.
 
+## Alternatives
+
+The QOC options above are the alternatives weighed; the three rejected ones, and
+why:
+
+- **O1 — Go-side append / replace-buffer.** On click, Go mutates the bound
+  string (append, or replace when empty), needing no FFI work. Rejected: it is
+  not at-cursor, it ignores any selection, and an append mid-edit reads as wrong
+  (C1 `−−`).
+- **O2 — Clipboard + manual paste.** Reuse the existing `clipboard.write` and let
+  the user press Ctrl+V. Already possible today, but it is not a *direct* insert
+  and it pollutes the system clipboard (C1 `−`).
+- **O3 — Cursor readback to Go.** Add an opcode plus register to ship
+  `cursor_range` back to Go, splice in Go, and push the new text and caret back.
+  True at-cursor (C1 `++`), but the largest surface (C2 `−−`): a new readback
+  register, char↔byte (UTF-8) handling in Go, and a second opcode to set the
+  caret. Not deleted — it remains the path if reading the caret is ever needed
+  (see Consequences).
+
 ## Consequences
 
 - First consumer: `play`'s Snippets tab (`renderSnippetsTab` →
@@ -128,3 +147,9 @@ append at end when the editor was never focused; selection is replaced.
   egui's persisted `TextEditState`; complements the code-block action surface of
   [ADR-0026](0026-app-runtime-and-capability-subjects.md) (Copy → now also
   Insert).
+
+## Status
+
+Accepted 2026-05-31 by @spx. Implemented on both sides (Go binding + Rust interpreter), unit-tested (the char-indexed splice), and shipped in play's snippet library.
+
+Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`. See boxer's `DOCUMENTATION_STANDARD.md` §1 ADR for the edit-policy tiers (Tier 1 in-place / Tier 2 `## Updates` H3 / Tier 3 superseding ADR).
