@@ -113,6 +113,14 @@ func ensureBandWarm(jobKey string, tasks task.TaskApiI, n int, alpha float64, me
 		bandJobs.Delete(jobKey)
 	}
 
+	// Already cached (e.g. warmed by another inspector, or by this one before
+	// the entry self-evicted on completion): report Done without spawning a
+	// redundant — if instant — cache-hit goroutine. Keeps ensureBandWarm
+	// idempotent across the self-eviction in runBandWarm.
+	if ecdfbands.BandReady(n, alpha, method) {
+		return BandJobSnapshot{State: BandJobDone, Fraction: 1, EtaMs: 0}
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	j := &bandJob{
 		cancel: cancel,
@@ -134,7 +142,7 @@ func ensureBandWarm(jobKey string, tasks task.TaskApiI, n int, alpha float64, me
 		cancel()
 		return actual.(*bandJob).read()
 	}
-	go runBandWarm(ctx, j, tasks, n, alpha, method)
+	go runBandWarm(ctx, jobKey, j, tasks, n, alpha, method)
 	return j.read()
 }
 
@@ -164,7 +172,7 @@ func cancelBandJob(jobKey string) {
 // inspector retracted, via [cancelBandJob]) propagates to the task handle
 // too, while the handle additionally folds in bus-cancel and the host's
 // mount-cancel.
-func runBandWarm(ctx context.Context, j *bandJob, tasks task.TaskApiI, n int, alpha float64, method ecdfbands.BandMethodE) {
+func runBandWarm(ctx context.Context, jobKey string, j *bandJob, tasks task.TaskApiI, n int, alpha float64, method ecdfbands.BandMethodE) {
 	var h task.HandleI
 	if tasks != nil {
 		h, _ = tasks.Spawn(ctx, task.SpawnOpts{
@@ -220,4 +228,17 @@ func runBandWarm(ctx context.Context, j *bandJob, tasks task.TaskApiI, n int, al
 	if h != nil {
 		_ = h.Done(nil)
 	}
+	// Self-evict on success so the registry entry does not outlive the
+	// warm-up it tracked — closing the inspector is no longer the only path
+	// that reclaims it, which plugs the leak when a pinned-but-warming
+	// inspector simply stops being rendered (row scrolled off, parent panel
+	// hidden) and its pinned==false cleanup never runs. Safe because once the
+	// ecdfbands cache is populated (above) BandReady is true and the
+	// inspector reads the band from the cache, never the snapshot, so the
+	// entry is dead weight. CompareAndDelete keys on this exact *bandJob, so a
+	// concurrent param-change replace (which stored a different job under
+	// jobKey) is left intact. Errored jobs are deliberately NOT evicted: their
+	// snapshot must persist so the inspector shows the failure instead of
+	// respawning the doomed solve every frame.
+	bandJobs.CompareAndDelete(jobKey, j)
 }

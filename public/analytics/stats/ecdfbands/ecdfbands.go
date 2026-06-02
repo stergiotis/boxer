@@ -160,6 +160,73 @@ func BandsForGrid(xs, fnAt []float64, n int, alpha float64, method BandMethodE) 
 	return
 }
 
+// DkwBandForGrid evaluates the Dvoretzky-Kiefer-Wolfowitz (Massart 1990)
+// simultaneous (1-α)·100% confidence band at the closed-form half-width
+//
+//	ε = √( ln(2/α) / (2n) )
+//
+// directly — with NO critical-value inversion. It is therefore O(len(xs))
+// and effectively instant at any n, where every exact family (Berk-Jones,
+// equal-precision, higher-criticism, and even DKW routed through
+// BandsForGrid, which bisection-refines ε against the crossing
+// probability) pays an O(n²)-per-eval inversion that runs into minutes at
+// n≈1e4.
+//
+// The result is the symmetric ε-strip around F_n clipped to [0,1]. It is
+// conservative — the asymptotic Massart ε is not refined down to exact
+// crossing probability — which is exactly what you want for a band drawn
+// immediately as a preview while a tighter exact band warms in the
+// background (see widgets/ecdf RenderGridPreview). xs/fnAt carry the same
+// contract as [BandsForGrid]: equal length, fnAt ∈ [0,1] non-decreasing; n
+// is the sample size F_n was built on.
+func DkwBandForGrid(xs, fnAt []float64, n int, alpha float64) (b GridBand, err error) {
+	if len(xs) != len(fnAt) {
+		err = eh.Errorf("xs and fnAt length mismatch (%d vs %d)", len(xs), len(fnAt))
+		return
+	}
+	if n <= 0 {
+		err = eh.Errorf("n must be positive, got %d", n)
+		return
+	}
+	if alpha <= 0 || alpha >= 1 || math.IsNaN(alpha) {
+		err = eh.Errorf("alpha must lie strictly inside (0, 1), got %v", alpha)
+		return
+	}
+	for i, v := range fnAt {
+		if math.IsNaN(v) || v < 0 || v > 1 {
+			err = eh.Errorf("fnAt[%d] out of [0,1]: %v", i, v)
+			return
+		}
+		if i > 0 && v < fnAt[i-1] {
+			err = eh.Errorf("fnAt not monotone at i=%d (%v < %v)", i, v, fnAt[i-1])
+			return
+		}
+	}
+	eps := dkwEpsilon(n, alpha)
+	fam := dkwFamily{}
+	lower := make([]float64, len(xs))
+	upper := make([]float64, len(xs))
+	for i, p := range fnAt {
+		lower[i], upper[i] = fam.bandAtP(n, eps, p)
+	}
+	b.Xs = append([]float64(nil), xs...)
+	b.LowerCDF = lower
+	b.UpperCDF = upper
+	b.Method = BandMethodDKW
+	b.Alpha = alpha
+	b.N = n
+	b.CritC = eps
+	return
+}
+
+// dkwEpsilon is the closed-form DKW-Massart band half-width
+// ε = √(ln(2/α)/(2n)). Shared by [DkwBandForGrid] and the dkwFamily
+// critical-value bracket so the instant preview and the bisection-refined
+// exact DKW band start from the same asymptotic value.
+func dkwEpsilon(n int, alpha float64) float64 {
+	return math.Sqrt(math.Log(2/alpha) / (2 * float64(n)))
+}
+
 // QuantileBoundaries returns the raw per-rank band edges
 // (lower[i], upper[i]) for the given (n, α, method). lower[i] /
 // upper[i] is the simultaneous (1-α)·100% interval on U_{(i+1)} —

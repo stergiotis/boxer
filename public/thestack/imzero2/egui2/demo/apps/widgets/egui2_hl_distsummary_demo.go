@@ -61,7 +61,9 @@ func init() {
 			"coloured arrow-square-out glyph on any row to open its inspector " +
 			"window — a bezier connector tethers the toggle to the open " +
 			"window. The window body is a two-tab surface: ECDF + " +
-			"simultaneous confidence band (Berk-Jones default, via ecdfbands) " +
+			"simultaneous confidence band — an instant DKW preview band with " +
+			"a Compute-exact-band affordance that warms the tighter Berk-Jones " +
+			"band on a cancellable background job (via ecdfbands) — " +
 			"as the default tab, plus the scientifically correct letter-value " +
 			"boxenplot in the second tab — both reading the same caller-owned " +
 			"tdigest per the ADR-0046 shared-sketch rule. Composes tdigest + " +
@@ -93,6 +95,11 @@ func demoDistsummary(ids *c.WidgetIdStack) {
 		// state lives in a package-level map keyed by the same string.
 		r := distsummary.New(row.idPrefix).
 			Tasks(distsumDemoTasks).
+			// Cap the exact band's effective n so the opt-in Berk-Jones solve
+			// at the demo's n=10 000 stays a ~30 s, cancellable job (it would
+			// otherwise run ~14 min) — the instant DKW preview band is always
+			// drawn at the true n meanwhile. See distsummary.ExactBandMaxN.
+			ExactBandMaxN(2000).
 			Provenance(inspector.Provenance{
 				Subject:   row.subject,
 				SampledAt: now,

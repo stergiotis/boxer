@@ -166,6 +166,28 @@ func (inst Renderer) RenderGrid(xs, fnAt []float64, n int) (err error) {
 	return
 }
 
+// RenderGridPreview draws the instant closed-form DKW preview band (via
+// [ecdfbands.DkwBandForGrid]) plus the ECDF grid curve. Unlike RenderGrid
+// it never blocks on the O(n²) inversion, so it is the band to draw every
+// frame while the tighter exact band (the renderer's configured Method)
+// warms in the background or waits behind an explicit compute request. The
+// conservative DKW strip is wider than the exact band — most visibly in
+// the tails — so swapping to the exact band reads as a tightening. The
+// caller must already be inside a c.Plot block.
+func (inst Renderer) RenderGridPreview(xs, fnAt []float64, n int) (err error) {
+	if len(xs) < 2 {
+		return
+	}
+	g, err := ecdfbands.DkwBandForGrid(xs, fnAt, n, inst.alpha)
+	if err != nil {
+		err = eh.Errorf("ecdf preview band: %w", err)
+		return
+	}
+	inst.emitBandRectangles(g.Xs, g.LowerCDF, g.UpperCDF)
+	inst.emitGridEcdfPolyline(g.Xs, fnAt)
+	return
+}
+
 // BandReady reports whether this renderer's (n, α, method) confidence
 // band is already cached — i.e. whether RenderGrid/AtGrid will draw
 // without blocking on the O(n²) inversion. Non-blocking probe; pair it
@@ -339,6 +361,37 @@ func (inst Renderer) AtGrid(plotID c.AbsoluteWidgetId, xs, fnAt []float64, n int
 		return
 	}
 	g, err := ecdfbands.BandsForGrid(xs, fnAt, n, inst.alpha, inst.method)
+	if err != nil {
+		return
+	}
+	x := hover.HoverX
+	nIdx := nearestIdx(xs, x)
+	out.Valid = true
+	out.X = x
+	out.Y = hover.HoverY
+	out.FnX = fnAtXGrid(xs, fnAt, x)
+	out.LowerX, out.UpperX = bandAtX(g.Xs, g.LowerCDF, g.UpperCDF, x)
+	out.NearestX = xs[nIdx]
+	out.NearestIdx = nIdx
+	return
+}
+
+// AtGridPreview mirrors AtGrid for the DKW preview band: it reads the band
+// edges at the cursor from the instant closed-form [ecdfbands.DkwBandForGrid]
+// rather than the warmed exact band, so a hover readout is available before
+// (or without) the exact inversion. Crosshair.Alpha echoes the renderer's
+// alpha as usual.
+func (inst Renderer) AtGridPreview(plotID c.AbsoluteWidgetId, xs, fnAt []float64, n int) (out Crosshair) {
+	out.NearestIdx = -1
+	out.Alpha = inst.alpha
+	if len(xs) < 1 {
+		return
+	}
+	hover := c.CurrentApplicationState.StateManager.GetPlotPointer()
+	if hover.HoverPlotId != plotID.Derive() || math.IsNaN(hover.HoverX) {
+		return
+	}
+	g, err := ecdfbands.DkwBandForGrid(xs, fnAt, n, inst.alpha)
 	if err != nil {
 		return
 	}

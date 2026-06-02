@@ -97,26 +97,50 @@ that ADR's shared-source-of-truth rule (see
   / `Quantiles([0.25, 0.5, 0.75])` once per frame.
 - ECDF tab (`renderEcdfBody`) calls
   `ecdfdigest.BuildDigestGrid(digest, gridN)` — `gridN`=128 by
-  default — to build the `(xs, fnAt)` grid. The simultaneous-band
-  inversion is an O(n²) Moscovich-Nadler solve far too slow for the
-  render thread at large n, so it never runs inline: a non-blocking
-  `ecdf.Renderer.BandReady(n)` probe picks the path each frame. Warm
-  → `RenderGrid` draws curve + band straight from the upstream
-  `ecdfbands` cache (keyed by `(n, α, method)`,
-  `boxer/public/analytics/stats/ecdfbands/invert.go:19`, so the solve
-  runs once per parameter combo and is reused on every subsequent
-  frame). Cold → `RenderGridCurveOnly` draws the curve immediately
-  while `ecdf.Renderer.EnsureBandJob(scope, tasks, n)` warms the band
-  on a background keelson job (ADR-0038) and a `widgets/jobprogress`
-  readout shows progress + ETA below the plot; a later frame finds
-  the cache warm and draws the band.
+  default — to build the `(xs, fnAt)` grid, then draws the band under
+  a **progressive-quality** scheme, because the exact simultaneous
+  band is an O(n²) Moscovich-Nadler inversion that runs into minutes
+  past a few thousand points and so must never block the render
+  thread:
+    - **Preview (always).** `ecdf.Renderer.RenderGridPreview` draws the
+      closed-form DKW-Massart band (`ecdfbands.DkwBandForGrid`,
+      ε = √(ln(2/α)/(2n)), no inversion — microseconds at any n)
+      immediately, so the inspector never opens to an empty or frozen
+      plot. The DKW strip is conservative (it encloses the exact band),
+      so the later swap reads as a tightening, most visibly in the
+      tails.
+    - **Exact (opt-in).** The tighter exact band (the renderer's
+      `Method`, Berk-Jones by default) is requested automatically when
+      its solve is cheap (effective n ≤ `exactBandAutoMaxN` = 500) and
+      otherwise behind a "Compute exact band" button. Once requested,
+      `ecdf.Renderer.EnsureBandJob(scope, tasks, nExact)` warms it on a
+      background keelson job (ADR-0038) while a `widgets/jobprogress`
+      readout shows progress + ETA + a **Cancel** button; a later frame
+      finds the `ecdfbands` cache warm (keyed by `(n, α, method)`,
+      `boxer/public/analytics/stats/ecdfbands/invert.go:19`) and
+      `RenderGrid` swaps in the exact band. Cancel drops back to the
+      preview + Compute affordance without respawning the solve.
+    - **Tractability.** `nExact = min(n, exactBandMaxN)` (see
+      `Renderer.ExactBandMaxN`; 0 = uncapped, the demos cap it at 2000)
+      bounds the opt-in solve's cost so it stays a cancellable
+      ~seconds-to-tens-of-seconds job at large n, at the price of a
+      slightly conservative (capped-n) exact band; the preview is
+      always computed at the true n.
+    - **Responsiveness.** While the exact band is unsettled
+      (`!exactReady`) the body requests `c.RequestRepaintAfter(0.05s)`
+      each frame so the background-fed progress bar animates and the
+      one-frame-lagged Cancel/Compute clicks land promptly even under
+      reactive render cadence.
 - Closing the inspector (title-bar X) or retracting it (anchor
   handle) — both land on `instanceState.pinned == false` — calls
-  `ecdf.CancelBandJob(scope)`, aborting an in-flight band solve
-  within one eval so it never outlives its window. The warm-up is
-  keyed by the per-call `scope`, so cancelling one inspector never
-  disturbs another; a solve that already finished stays in the
-  `ecdfbands` cache, so a reopen redraws the band instantly.
+  `ecdf.CancelBandJob(scope)`, aborting an in-flight exact-band solve
+  so it never outlives its window, and resets the per-open
+  `exactRequested`/`exactInit` seed. The warm-up is keyed by the
+  per-call `scope`, so cancelling one inspector never disturbs
+  another; a solve that already finished stays in the `ecdfbands`
+  cache (and its registry entry self-evicts on completion, so a
+  pinned-but-unrendered inspector no longer leaks it), so a reopen
+  redraws the exact band instantly.
 - Boxenplot tab (`renderBoxenplotBody`) calls
   `letterval.RecommendedLevels(digest)` (bounded by
   `RecommendedDepth(n)`, typically ~7 levels) and forwards the

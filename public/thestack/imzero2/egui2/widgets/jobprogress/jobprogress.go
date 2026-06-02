@@ -28,13 +28,32 @@ type Input struct {
 	EtaMs int64
 	// Note is optional trailing status text (e.g. an error reason).
 	Note string
+	// CancelId, when non-zero, renders a compact "Cancel" button on the
+	// status row; Render then returns true on the frame it is clicked. The
+	// id must be stable across frames and unique among sibling widgets — an
+	// AbsoluteWidgetId derived from the owning surface's scope is the usual
+	// source. The widget stays a pure display: it only reports the click,
+	// leaving the caller to decide what cancelling means (abort the
+	// producer, suppress its re-schedule, …). Zero hides the button.
+	CancelId c.AbsoluteWidgetId
 }
 
+// cancelGap is the inline space (points) between the status text and the
+// Cancel button. A small literal rather than a styletokens lookup keeps
+// this widget free of the design-system dependency, in line with its
+// "deliberately generic" charter.
+const cancelGap float32 = 8
+
 // Render emits the progress row in the current layout, top to bottom:
-// title, bar, status. Stateless — call once per frame with the latest
-// Input, inside an active layout scope (the caller controls placement,
-// e.g. after a c.Plot block plus a c.AddSpace).
-func Render(in Input) {
+// title, bar, then a status line optionally paired with a Cancel button.
+// Stateless — call once per frame with the latest Input, inside an active
+// layout scope (the caller controls placement, e.g. after a c.Plot block
+// plus a c.AddSpace).
+//
+// cancelClicked is true only on the frame the Cancel button (rendered when
+// Input.CancelId is non-zero) is clicked; it is always false when no
+// CancelId is supplied.
+func Render(in Input) (cancelClicked bool) {
 	if in.Title != "" {
 		c.Label(in.Title).Send()
 	}
@@ -43,9 +62,30 @@ func Render(in Input) {
 	} else {
 		c.ProgressBar(clampUnit(in.Fraction)).Send()
 	}
-	if status := statusLine(in); status != "" {
-		c.Label(status).Send()
+	status := statusLine(in)
+	if in.CancelId == 0 {
+		if status != "" {
+			c.Label(status).Send()
+		}
+		return
 	}
+	// Cancel affordance present: lay the status text and a compact Cancel
+	// button on one row so the control reads as part of the progress
+	// readout. The button carries the caller's AbsoluteWidgetId (a no-op on
+	// the WidgetIdStack), so it does not disturb a surrounding id scope.
+	for range c.Horizontal().KeepIter() {
+		if status != "" {
+			c.Label(status).Send()
+			c.AddSpace(cancelGap)
+		}
+		if c.Button(in.CancelId, c.Atoms().Text("Cancel").Keep()).
+			Small().
+			SendResp().
+			HasPrimaryClicked() {
+			cancelClicked = true
+		}
+	}
+	return
 }
 
 func clampUnit(f float32) float32 {

@@ -76,6 +76,31 @@ const (
 // of the canonical step function.
 const defaultEcdfGridN = 128
 
+// bandWarmRepaintIntervalSecs keeps frames flowing while the confidence
+// band is unsettled — warming on a background goroutine, or just-cancelled
+// and offering Compute. The warm-up goroutine advances the progress
+// snapshot with no input event, so absent an explicit repaint request the
+// bar stalls; and because button responses carry a one-frame lag, the
+// inline Cancel/Compute click is read only on a following frame, which
+// under reactive render cadence (IMZERO2_RENDER_CADENCE=reactive) arrives
+// only on the next user input — so a single click appears to do nothing.
+// Requesting a near-term repaint each unsettled frame makes the progress
+// animate and both clicks land promptly regardless of host cadence, and
+// stops once the band is cached (bandReady) so a settled inspector falls
+// back to the idle heartbeat. 0.05s (20fps) mirrors the background-progress
+// pattern in egui2_hl_progressbar_demo.go — smooth for a progress bar, well
+// below vsync so it costs little.
+const bandWarmRepaintIntervalSecs = 0.05
+
+// exactBandAutoMaxN is the largest effective (post-cap) sample size at
+// which renderEcdfBody auto-requests the exact confidence band when the
+// inspector opens, instead of waiting for a "Compute exact band" click.
+// The exact O(n²) inversion runs ~2 s at n≈500 on commodity hardware and
+// grows quadratically (≈8 s at 1000, minutes past a few thousand), so 500
+// keeps the auto path snappy while everything larger stays an explicit
+// opt-in — the instant DKW preview band covers the gap meanwhile.
+const exactBandAutoMaxN = 500
+
 // FormatFunc converts one of the summary's float values into a display
 // string for the level-1 label. The default uses strconv.FormatFloat
 // with verb 'g' and 4 significant digits — terse and human-readable
@@ -103,6 +128,17 @@ type Renderer struct {
 	// to ≥ 2 by the bridge but tuned higher (default
 	// [defaultEcdfGridN]) so the band reads as continuous.
 	gridN int
+
+	// exactBandMaxN caps the effective sample size at which the EXACT
+	// confidence band's O(n²) critical value is computed (the DKW preview
+	// is always drawn at the true n). Zero (default) means uncapped —
+	// statistically exact but minutes-long past a few thousand points. A
+	// positive cap keeps the opt-in solve tractable and cancellable at large
+	// n by computing a slightly-conservative band calibrated at min(n, cap)
+	// — the band converges as n grows, so the capped band is a tight
+	// over-cover. Set via ExactBandMaxN; the demos cap it so the exact path
+	// is demonstrable.
+	exactBandMaxN int
 
 	// provenance, when non-zero, renders the standard
 	// [inspector.ProvenanceChip] inside the inspector window's body so
@@ -134,6 +170,19 @@ type Renderer struct {
 type instanceState struct {
 	pinned bool
 	tab    tabE
+	// exactRequested drives the ECDF tab's confidence-band detail under the
+	// progressive-quality scheme (see renderEcdfBody): false draws only the
+	// instant closed-form DKW preview band and offers a "Compute exact band"
+	// affordance; true warms — and then shows — the tighter exact band (the
+	// renderer's Method) with progress + a Cancel button. Set by Compute and
+	// by the small-n auto-seed; cleared by Cancel and on inspector close.
+	exactRequested bool
+	// exactInit records whether exactRequested has been seeded for the
+	// current open yet. The seed (renderEcdfBody) auto-requests the exact
+	// band when its solve is cheap (small effective n) and leaves it opt-in
+	// otherwise; it runs once per open and is reset on close so a reopen
+	// re-evaluates against the current sample size.
+	exactInit bool
 }
 
 // instanceStates is the package-level pinned-state map, keyed by
@@ -219,6 +268,23 @@ func (inst Renderer) GridN(n int) (out Renderer) {
 		n = defaultEcdfGridN
 	}
 	inst.gridN = n
+	out = inst
+	return
+}
+
+// ExactBandMaxN caps the effective sample size at which the inspector's
+// EXACT confidence band is computed (see [Renderer.exactBandMaxN]). The
+// instant DKW preview band is always drawn at the true n; this only bounds
+// the opt-in exact solve. Pass a positive cap (e.g. ~2000) to keep that
+// solve tractable and cancellable on large samples at the cost of a
+// slightly conservative band; pass 0 (default) for the statistically exact
+// band at the true n, accepting an O(n²) solve that runs into minutes past
+// a few thousand points. Values below 0 are treated as 0.
+func (inst Renderer) ExactBandMaxN(n int) (out Renderer) {
+	if n < 0 {
+		n = 0
+	}
+	inst.exactBandMaxN = n
 	out = inst
 	return
 }
@@ -370,6 +436,11 @@ func (inst Renderer) Render(idGen c.WidgetIdCreatorI, digest *tdigest.TDigest, e
 		// job is in flight for this scope, and a band that already finished
 		// stays in the shared ecdfbands cache for an instant reopen.
 		ecdf.CancelBandJob(scope)
+		// Reset the progressive-band choice so a reopen re-seeds it against
+		// the current sample size (auto-request for a cheap solve, opt-in
+		// otherwise) rather than reviving the previous open's state.
+		state.exactRequested = false
+		state.exactInit = false
 		return
 	}
 	inst.renderPinnedWindow(scope, tether, state, digest, extremes)
@@ -408,7 +479,7 @@ func (inst Renderer) renderLevel2Body(scope string, state *instanceState, digest
 	case tabBoxenplot:
 		inst.renderBoxenplotBody(scope, digest, extremes)
 	default:
-		if !inst.renderEcdfBody(scope, digest) {
+		if !inst.renderEcdfBody(scope, state, digest) {
 			inst.renderBoxenplotBody(scope, digest, extremes)
 		}
 	}
@@ -487,20 +558,34 @@ func (inst Renderer) renderBoxenplotBody(scope string, digest *tdigest.TDigest, 
 	boxenplot.WriteStatusLine(ch)
 }
 
-// renderEcdfBody emits the ECDF + simultaneous confidence band body.
-// Returns false when the digest is too sparse for an ECDF (nil,
-// Count == 0, or support collapsed to a single value); the caller
-// then renders the boxenplot body in the same frame as a graceful
-// fallback. The plot id is a distinct AbsoluteWidgetId from the
-// boxenplot's so the r15 hover register stays per-tab and a cached
-// hover from the previous tab does not surface here as a stale
-// crosshair.
+// renderEcdfBody emits the ECDF + simultaneous confidence band body under
+// the progressive-quality scheme. Returns false when the digest is too
+// sparse for an ECDF (nil, Count == 0, or support collapsed to a single
+// value); the caller renders the boxenplot body in the same frame as a
+// graceful fallback. The plot id is a distinct AbsoluteWidgetId from the
+// boxenplot's so the r15 hover register stays per-tab and a cached hover
+// from the previous tab does not surface here as a stale crosshair.
 //
-// Order matters the same way as [renderBoxenplotBody]: At()
-// snapshots the hover before Render stages the band rectangles +
-// ECDF polyline, and PaintCrosshair piggybacks on the same plot
-// block so the vline lands on top of band and curve.
-func (inst Renderer) renderEcdfBody(scope string, digest *tdigest.TDigest) (rendered bool) {
+// The exact (1-α) band needs an O(n²) critical-value inversion that runs
+// into minutes past a few thousand points, so it is never on the critical
+// render path. The body always draws the instant closed-form DKW preview
+// band and layers the tighter exact band on top in one of three states,
+// mirrored in the status row below the plot:
+//   - exact: the exact band for this (capped n, α, method) is cached —
+//     draw it and the hover crosshair directly.
+//   - warming: the exact band was requested (auto for small n, else via
+//     the Compute button) and is warming on a keelson background job
+//     (ADR-0038); keep drawing the DKW preview meanwhile with progress +
+//     ETA + a Cancel button, and swap to the exact band once a later frame
+//     finds the cache warm.
+//   - preview: the exact band is opt-in and not yet requested — draw the
+//     DKW preview alone with a "Compute exact band" affordance.
+//
+// Order matters the same way as [renderBoxenplotBody]: At*() snapshots the
+// hover before Render* stages the band rectangles + ECDF polyline, and
+// PaintCrosshair piggybacks on the same plot block so the vline lands on
+// top of band and curve.
+func (inst Renderer) renderEcdfBody(scope string, state *instanceState, digest *tdigest.TDigest) (rendered bool) {
 	if digest == nil || digest.Count() == 0 {
 		return
 	}
@@ -513,23 +598,52 @@ func (inst Renderer) renderEcdfBody(scope string, digest *tdigest.TDigest) (rend
 	n := int(digest.Count())
 	xs, fn := ecdfdigest.BuildDigestGrid(digest, inst.gridN)
 
-	// The simultaneous band needs an O(n²) critical-value inversion far
-	// too slow for the render thread at large n (≈minutes at n=1e4).
-	// When the band for this (n, α, method) is already cached we draw it
-	// directly; otherwise draw the ECDF curve immediately, warm the band
-	// on a keelson background job (ADR-0038), and show its progress + ETA
-	// below the plot. A later frame finds the cache warm and renders the
-	// full band + hover crosshair.
-	bandReady := inst.ecdfPlot.BandReady(n)
+	// The exact band's critical value is computed at a capped n so the
+	// opt-in solve stays tractable + cancellable on large samples; the DKW
+	// preview is always drawn at the true n. See [Renderer.exactBandMaxN].
+	nExact := n
+	if inst.exactBandMaxN > 0 && nExact > inst.exactBandMaxN {
+		nExact = inst.exactBandMaxN
+	}
+
+	// Seed the exact-band choice once per open: auto-request when its solve
+	// is cheap (small effective n), opt-in above. Reset on close (see Render)
+	// so a reopen re-evaluates against the current sample size.
+	if !state.exactInit {
+		state.exactRequested = nExact <= exactBandAutoMaxN
+		state.exactInit = true
+	}
+
+	exactReady := inst.ecdfPlot.BandReady(nExact)
+	warming := !exactReady && state.exactRequested
 	var ch ecdf.Crosshair
-	var job ecdf.BandJobSnapshot
-	if bandReady {
-		ch = inst.ecdfPlot.AtGrid(plotID, xs, fn, n)
-		_ = inst.ecdfPlot.RenderGrid(xs, fn, n)
+	switch {
+	case exactReady:
+		ch = inst.ecdfPlot.AtGrid(plotID, xs, fn, nExact)
+		if err := inst.ecdfPlot.RenderGrid(xs, fn, nExact); err != nil {
+			// A grid the exact band rejects (e.g. a sub-ULP non-monotone F_n)
+			// must not blank the plot — fall back to the curve so the ECDF is
+			// still drawn instead of vanishing along with the band.
+			inst.ecdfPlot.RenderGridCurveOnly(xs, fn)
+		}
 		inst.ecdfPlot.PaintCrosshair(ch)
-	} else {
-		job = inst.ecdfPlot.EnsureBandJob(scope, inst.tasks, n)
-		inst.ecdfPlot.RenderGridCurveOnly(xs, fn)
+	default: // warming or preview — both draw the instant DKW preview band
+		ch = inst.ecdfPlot.AtGridPreview(plotID, xs, fn, n)
+		_ = inst.ecdfPlot.RenderGridPreview(xs, fn, n)
+		inst.ecdfPlot.PaintCrosshair(ch)
+	}
+
+	var job ecdf.BandJobSnapshot
+	if warming {
+		job = inst.ecdfPlot.EnsureBandJob(scope, inst.tasks, nExact)
+	}
+	if !exactReady {
+		// Heartbeat while the exact band is unsettled: animates the warming
+		// progress bar (fed by a background goroutine, no input event) and
+		// makes the one-frame-lagged Cancel (warming) / Compute (preview)
+		// clicks land promptly even under reactive render cadence. Stops once
+		// the exact band is cached. See [bandWarmRepaintIntervalSecs].
+		c.RequestRepaintAfter(bandWarmRepaintIntervalSecs)
 	}
 	pad := inst.popupPad
 	if pad > 0 {
@@ -560,19 +674,43 @@ func (inst Renderer) renderEcdfBody(scope string, digest *tdigest.TDigest) (rend
 	if pad > 0 {
 		c.AddSpace(pad)
 	}
-	if bandReady {
+	switch {
+	case exactReady:
 		ecdf.WriteStatusLine(ch)
-	} else {
+	case warming:
 		switch job.State {
 		case ecdf.BandJobError:
-			c.Label("confidence band unavailable: " + job.Note).Send()
+			c.Label("exact band unavailable: " + job.Note).Send()
 		case ecdf.BandJobRunning:
-			jobprogress.Render(jobprogress.Input{
-				Title:    "computing confidence band",
+			// The inline progress widget renders a Cancel button; a click
+			// aborts the exact solve and drops back to the DKW preview band +
+			// Compute affordance (exactRequested = false) rather than
+			// respawning the solve on the next frame.
+			if jobprogress.Render(jobprogress.Input{
+				Title:    "computing exact band",
 				Fraction: job.Fraction,
 				EtaMs:    job.EtaMs,
-			})
+				CancelId: c.MakeAbsoluteIdStr(scope + "-band-cancel"),
+			}) {
+				ecdf.CancelBandJob(scope)
+				state.exactRequested = false
+			}
 		}
+	default: // DKW preview shown — offer to upgrade to the exact band
+		for range c.Horizontal().KeepIter() {
+			c.LabelAtoms(
+				c.Atoms().BeginRichText("conservative DKW band").Small().Weak().End().Keep(),
+			).Send()
+			c.AddSpace(8)
+			if c.Button(c.MakeAbsoluteIdStr(scope+"-band-compute"), c.Atoms().Text("Compute exact band").Keep()).
+				Small().
+				SendResp().
+				HasPrimaryClicked() {
+				state.exactRequested = true
+			}
+		}
+		// Full hover readout below the affordance row (no-op when !Valid).
+		ecdf.WriteStatusLine(ch)
 	}
 	rendered = true
 	return

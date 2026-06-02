@@ -59,7 +59,7 @@ func (dkwFamily) bandAtP(n int, c, p float64) (lo, hi float64) {
 // DKW. The actual finite-sample-exact ε differs slightly from the
 // asymptotic formula by O(1/n) — the bisection refines it.
 func (dkwFamily) criticalValueBracket(n int, alpha float64) (lo, hi float64) {
-	eps := math.Sqrt(math.Log(2/alpha) / (2 * float64(n)))
+	eps := dkwEpsilon(n, alpha)
 	lo = math.Max(0, eps-0.05)
 	hi = math.Min(1, eps+0.05)
 	return
