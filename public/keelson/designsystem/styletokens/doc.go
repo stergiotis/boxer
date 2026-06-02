@@ -13,5 +13,9 @@
 // emitted by generators (ADR-0031 §SD8, ADR-0030 §SD7) — that side lands
 // later in the IDS phasing.
 //
+// Surface size archetypes (surface.go, ADR-0065) are Go-only: they size
+// host-created windows, never egui::Style, so they have no Rust mirror and
+// no drift test.
+//
 // Naming on the Go side follows boxer's enum-suffix convention (DensityE).
 package styletokens

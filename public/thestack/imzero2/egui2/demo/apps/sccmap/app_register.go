@@ -4,6 +4,7 @@ package sccmap
 
 import (
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 )
@@ -21,8 +22,8 @@ var manifest = runtimeapp.Manifest{
 	Category: "Tools",
 	Surface:  runtimeapp.SurfaceWindowed,
 	SurfaceHints: runtimeapp.SurfaceHints{
-		PreferredWidth:  1024,
-		PreferredHeight: 720,
+		PreferredWidth:  styletokens.SurfaceWorkspace.W,
+		PreferredHeight: styletokens.SurfaceWorkspace.H,
 	},
 }
 

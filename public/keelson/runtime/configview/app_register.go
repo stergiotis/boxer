@@ -5,6 +5,7 @@ package configview
 import (
 	"github.com/rs/zerolog/log"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 )
@@ -25,8 +26,8 @@ var manifest = app.Manifest{
 	Category: "Runtime",
 	Surface:  app.SurfaceWindowed,
 	SurfaceHints: app.SurfaceHints{
-		PreferredWidth:  720,
-		PreferredHeight: 600,
+		PreferredWidth:  styletokens.SurfaceTool.W,
+		PreferredHeight: styletokens.SurfaceTool.H,
 	},
 }
 

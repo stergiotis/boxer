@@ -4,6 +4,7 @@ package leewaywidgets_demo
 
 import (
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 )
 
@@ -19,8 +20,8 @@ var manifest = app.Manifest{
 	Category: "Demos",
 	Surface:  app.SurfaceWindowed,
 	SurfaceHints: app.SurfaceHints{
-		PreferredWidth:  1100,
-		PreferredHeight: 700,
+		PreferredWidth:  styletokens.SurfaceWorkspace.W,
+		PreferredHeight: styletokens.SurfaceWorkspace.H,
 	},
 }
 
