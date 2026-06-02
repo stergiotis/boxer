@@ -23,8 +23,8 @@ var manifest = runtimeapp.Manifest{
 	Category: "Demos",
 	Surface:  runtimeapp.SurfaceWindowed,
 	SurfaceHints: runtimeapp.SurfaceHints{
-		PreferredWidth:  860,
-		PreferredHeight: 620,
+		PreferredWidth:  styletokens.SurfaceApp.W,
+		PreferredHeight: styletokens.SurfaceApp.H,
 	},
 }
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 )
@@ -25,9 +26,12 @@ var manifest = runtimeapp.Manifest{
 	Icon:     "📜",
 	Category: "Runtime",
 	Surface:  runtimeapp.SurfaceWindowed,
+	// Width matches SurfaceWorkspace exactly; height rises 600→720 (a
+	// role-snap beyond the ±80 guide), accepted because a log table reads
+	// better with more rows. See ADR-0065 §SD6.
 	SurfaceHints: runtimeapp.SurfaceHints{
-		PreferredWidth:  1100,
-		PreferredHeight: 600,
+		PreferredWidth:  styletokens.SurfaceWorkspace.W,
+		PreferredHeight: styletokens.SurfaceWorkspace.H,
 	},
 	Help: help.MustSub(helpFS, "help"),
 }

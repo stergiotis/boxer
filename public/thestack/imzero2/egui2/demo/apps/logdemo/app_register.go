@@ -19,6 +19,9 @@ var manifest = runtimeapp.Manifest{
 	Icon:     icons.PhPaperPlaneTilt,
 	Category: "Demos",
 	Surface:  runtimeapp.SurfaceWindowed,
+	// Deliberate short, wide log strip — much shorter than any surface
+	// archetype (SurfaceTool is 720×600). Kept on literals as the documented
+	// exception to the styletokens.Surface* migration; see ADR-0065 §SD6.
 	SurfaceHints: runtimeapp.SurfaceHints{
 		PreferredWidth:  720,
 		PreferredHeight: 280,

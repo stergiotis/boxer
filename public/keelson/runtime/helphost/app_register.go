@@ -7,6 +7,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
@@ -38,8 +39,8 @@ var manifest = app.Manifest{
 	Category: "Runtime",
 	Surface:  app.SurfaceWindowed,
 	SurfaceHints: app.SurfaceHints{
-		PreferredWidth:  900,
-		PreferredHeight: 640,
+		PreferredWidth:  styletokens.SurfaceApp.W,
+		PreferredHeight: styletokens.SurfaceApp.H,
 	},
 	// The reader's one capability: copy a rendered code/verbatim block to
 	// the clipboard via the per-block copy button (ADR-0026 Update

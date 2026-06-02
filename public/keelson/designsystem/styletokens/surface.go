@@ -19,9 +19,9 @@ package styletokens
 // to the host window, so an archetype is a *preferred* open size with the
 // host as the hard ceiling. They are role-based presets / guidance, not a
 // straitjacket — an app with a genuinely content-driven size may still set
-// SurfaceHints literally. ADR-0065 records the deferred apps (logviewer,
-// helphost, idsshowcase, logdemo) and the host-relative + dimension-scale
-// options that were considered and parked.
+// SurfaceHints literally. ADR-0065 records the one deliberate exception
+// (logdemo — a 720×280 log strip no archetype fits) and the host-relative
+// + dimension-scale options that were considered and parked.
 //
 // Wire into a Manifest:
 //
@@ -47,6 +47,12 @@ var (
 	// SurfaceTool — a focused, single-purpose window (config inspector,
 	// small forms). The default for "one job, moderate content".
 	SurfaceTool = SurfaceSize{W: 720, H: 600}
+	// SurfaceApp — a medium application window sitting between Tool and
+	// Workspace (help centers, catalogue/showcase surfaces). Added to cover
+	// the ~860–960 pt middle band that neither Tool nor Workspace fits once
+	// every app is migrated; the host-side windowDefaultSize fallback
+	// resolves here too.
+	SurfaceApp = SurfaceSize{W: 900, H: 640}
 	// SurfaceWorkspace — a wide, data-dense workspace (tables, plots,
 	// multi-pane explorers). The widest archetype; egui still clamps it to
 	// the host window.

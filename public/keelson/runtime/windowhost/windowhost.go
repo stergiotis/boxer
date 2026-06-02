@@ -610,16 +610,18 @@ func openBindingIdFor(key WindowKeyT) (id uint64) {
 }
 
 // windowDefaultSize returns the initial size for a new window.
-// Honours SurfaceHints when set, falls back to a sensible pair that
-// fits most laptop screens without occupying the whole viewport.
+// Honours SurfaceHints when set, otherwise falls back to the medium
+// SurfaceApp archetype (ADR-0065) — a sensible pair that fits most laptop
+// screens without occupying the whole viewport. No registered app currently
+// hits this fallback; every windowed app sets hints.
 func windowDefaultSize(h app.SurfaceHints) (w, height float32) {
 	w = float32(h.PreferredWidth)
 	if w == 0 {
-		w = 960
+		w = float32(styletokens.SurfaceApp.W)
 	}
 	height = float32(h.PreferredHeight)
 	if height == 0 {
-		height = 720
+		height = float32(styletokens.SurfaceApp.H)
 	}
 	return
 }

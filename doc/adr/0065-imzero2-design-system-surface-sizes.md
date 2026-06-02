@@ -6,7 +6,7 @@ date: 2026-06-02
 # reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
 ---
 
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted. (The first-cut tokens + migration described in §SD3/§SD6 have landed in the working tree ahead of review, per the maintainer's request to write code then document; revert is a token-file delete + four one-line reverts.)
+> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted. (The tokens + migration described in §SD3/§SD6 have landed in the working tree ahead of review, per the maintainer's request to write code then document; revert is a token-file delete plus the per-app one-line reverts.)
 
 # ADR-0065: ImZero2 design system — surface size archetypes
 
@@ -33,7 +33,7 @@ Forces specific to sizing:
 
 ## Decision
 
-Introduce three role-based **surface size archetypes** in egui logical points as Go-only `styletokens`: `SurfaceInspector` (420×560), `SurfaceTool` (720×600), `SurfaceWorkspace` (1100×720). Apps set `SurfaceHints.PreferredWidth/Height` from them; egui's host-clamp remains the hard ceiling. Migrate the four apps that fit an archetype within ±80 pt on both axes; leave the rest on documented literals.
+Introduce four role-based **surface size archetypes** in egui logical points as Go-only `styletokens`: `SurfaceInspector` (420×560), `SurfaceTool` (720×600), `SurfaceApp` (900×640), `SurfaceWorkspace` (1100×720). Apps set `SurfaceHints.PreferredWidth/Height` from them; egui's host-clamp remains the hard ceiling. Migrate every windowed app onto an archetype (plus the host-side `windowDefaultSize` fallback); logdemo — a deliberate 720×280 strip — is the one documented literal exception.
 
 ## Subsidiary design decisions
 
@@ -45,13 +45,16 @@ Token values are egui logical points (`SurfaceSize{W,H uint16}`, matching `Surfa
 
 Because egui clamps every window to the host window, an archetype is the size the window *opens* at; on a smaller host egui shrinks it to fit, on a larger host it stays put (it does not grow to fill). No max-size enforcement is added here — the host clamp is the max.
 
-### SD3 — The three archetypes
+### SD3 — The archetypes
 
 | Token | Size (pt) | Role | Grounding |
 |-------|----------:|------|-----------|
 | `SurfaceInspector` | 420×560 | compact accessory surface that tethers to a caller widget (property inspectors; regex-as-inspector) | the tethered-inspector role that motivated this ADR; no current app is this small |
 | `SurfaceTool` | 720×600 | focused, single-purpose window | exact: configview |
-| `SurfaceWorkspace` | 1100×720 | wide, data-dense workspace (tables, plots, multi-pane) | exact: regex_explorer; near: logviewer, leewaywidgets, sccmap |
+| `SurfaceApp` | 900×640 | medium application window between Tool and Workspace (help centers, catalogues/showcases) | exact: helphost; near: idsshowcase; the `windowDefaultSize` fallback |
+| `SurfaceWorkspace` | 1100×720 | wide, data-dense workspace (tables, plots, multi-pane) | exact: regex_explorer; near: leewaywidgets, sccmap, logviewer |
+
+`SurfaceApp` was added so the ~860–960 pt middle band (helphost, idsshowcase, the fallback) maps cleanly rather than force-snapping to Tool or Workspace, once the decision was to migrate every app.
 
 ### SD4 — Go-only, no Rust mirror, no drift test
 
@@ -68,9 +71,9 @@ var SurfaceWorkspace = SurfaceSize{W: 1100, H: 720}
 
 Wiring is explicit at the call site (`PreferredWidth: styletokens.SurfaceWorkspace.W, …`); no `SurfaceHints` constructor is added, because `styletokens` sits below `runtime/app` in the layering and must not import it. Archetypes are **guidance, not a straitjacket**: an app with a genuinely content-driven size may still set literals.
 
-### SD6 — Migration (first cut)
+### SD6 — Migration
 
-Snapped to an archetype (within ±80 pt on both axes — behaviour change ≤ a few rows):
+All eight windowed apps are on archetypes except one deliberate exception:
 
 | App | Was | Now | Δ |
 |-----|----:|-----|---|
@@ -78,8 +81,13 @@ Snapped to an archetype (within ±80 pt on both axes — behaviour change ≤ a 
 | regex_explorer | 1100×720 | `SurfaceWorkspace` | 0 |
 | leewaywidgets | 1100×700 | `SurfaceWorkspace` | +20 h |
 | sccmap | 1024×720 | `SurfaceWorkspace` | +76 w |
+| helphost | 900×640 | `SurfaceApp` | 0 |
+| idsshowcase | 860×620 | `SurfaceApp` | +40 w, +20 h |
+| logviewer | 1100×600 | `SurfaceWorkspace` | +120 h |
 
-Left on literals (deferred — see Open Questions): logviewer (1100×600 — +120 h is too far), helphost (900×640) and idsshowcase (860×620) (both sit > 80 pt from Tool *and* Workspace widths), logdemo (720×280 — a deliberate short log strip), and the `windowDefaultSize` 960×720 fallback (a host-side neutral default matching no archetype).
+Most are within the ±80 pt guide. logviewer's +120 h is a role-snap beyond it, accepted because a log table reads better with more rows (noted at its call site). The `windowDefaultSize` fallback (was 960×720) now resolves to `SurfaceApp`; it is dead today (every app sets hints), so the change is cosmetic.
+
+**The one exception:** logdemo (720×280) stays on a literal — a deliberately short, wide log strip much shorter than any archetype (`SurfaceTool` is 720×600). A single-consumer `SurfaceStrip` token was rejected per the IDS "defer until a 2nd consumer" rule (Alternatives O6); the call site carries a comment pointing here.
 
 The regex_explorer content-width fix (`editorWidth = 800`) stays a local constant — content/component widths are the deferred "dimension scale" (Alternatives O3), not a window archetype.
 
@@ -102,8 +110,9 @@ The regex_explorer content-width fix (`editorWidth = 800`) stays a local constan
 
 ### Negative
 
-- Coarse: three archetypes don't fit the middle band (860–1024 pt), so four apps stay on literals — partial adoption.
+- One deliberate holdout: logdemo's 720×280 strip fits no archetype and stays on a literal (a single-consumer Strip token was not worth it).
 - No lint enforcement yet (cf. L3 for spacing), so new apps can still hardcode sizes and drift.
+- Four archetypes is already past the minimal three; adding `SurfaceApp` for a three-app middle band risks a slippery slope toward a per-size token. Held at four; a fifth needs a real unmet cluster.
 - `SurfaceInspector`'s value is unvalidated by a real consumer; it may need tuning when the first tethered inspector lands.
 
 ### Neutral
@@ -117,10 +126,8 @@ Proposed — awaiting review by @spx. Tokens + the four migrations have landed i
 
 Open questions:
 
-1. **Lint rule (L13?).** Should a Tier-1 rule flag integer literals in `SurfaceHints.PreferredWidth/Height` and require a `styletokens.Surface*` reference (mirroring L3 for spacing)? Needs an allowlist for the deferred apps and the host-side fallback. Defer until the archetype set stabilizes.
-2. **Deferred apps.** logviewer, helphost, idsshowcase — adopt a (possibly new) archetype, or keep as deliberate overrides? Each is a per-app UX call; revisit alongside Q3.
-3. **A middle archetype.** The 860–1024 pt band is unserved. Add a fourth role (e.g. a medium "App" surface ~960×640) or hold the line at three and accept overrides? Hold for now; let real need decide (cf. ADR-0032 §Q "magnitude ladder extension").
-4. **`windowDefaultSize` fallback.** Should the host-side 960×720 default reference a token, or stay a deliberately neutral non-archetype default? Left as-is pending Q3.
+1. **Lint rule (L13?).** Should a Tier-1 rule flag integer literals in `SurfaceHints.PreferredWidth/Height` and require a `styletokens.Surface*` reference (mirroring L3 for spacing)? Needs an allowlist for logdemo's deliberate strip. Defer until the archetype set stabilizes.
+2. **logdemo + a `SurfaceStrip` token.** logdemo's 720×280 strip is the lone literal holdout; add a `SurfaceStrip` token if a second short/strip surface appears, otherwise keep the override (Alternatives O6).
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`. ADRs are append-only.
 
