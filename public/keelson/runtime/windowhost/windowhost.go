@@ -10,8 +10,6 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/public/config/env"
-	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
@@ -19,6 +17,8 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/filepicker"
 )
@@ -495,7 +495,6 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 	// wrap here.
 	sm := c.CurrentApplicationState.StateManager
 	for _, w := range snapshot {
-		w := w // capture
 		title := w.manifest.WindowTitle()
 		if title == "" {
 			title = string(w.manifest.Id)
