@@ -5,7 +5,6 @@ package regex_explorer
 import (
 	"context"
 	"fmt"
-	"math"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -16,11 +15,23 @@ import (
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 )
 
-// fullWidth tells egui TextEdit to fill the available horizontal space in
-// its parent layout, rather than using egui's ~280-pixel default width.
-// Matches the float32::INFINITY convention used elsewhere in this repo
-// (see play_renderer.go's sqlEditor).
-var fullWidth = float32(math.Inf(1))
+// editorWidth is the desired width (egui points) for the pattern,
+// haystack, and replacement TextEdits. It is finite on purpose.
+//
+// egui's TextEdit allocates min(desired_width, available_width). The
+// previous value was float32::INFINITY — "take all available width" —
+// but inside the runtime-owned, resizable egui::Window, egui runs a
+// content-sizing pass in which available width is unbounded, so the
+// editors reported an unbounded desired size and the window auto-grew
+// out to the host-window edge. That balloon is undesirable in general
+// and especially when the explorer is embedded as a tethered inspector,
+// where it should stay compact near its anchor. A finite width caps the
+// editors — and therefore the window's natural width — while the min()
+// clamp still lets them shrink on a narrow host, so it never overflows.
+// ~800 fills the central panel at the manifest's 1100 preferred width
+// (minus the 280-pt cheatsheet panel); tune for readability. Compare
+// configview, which uses a finite DesiredWidth(280) for the same reason.
+const editorWidth = float32(800)
 
 // app is the *active* App state pointer the renderer reads from on
 // every frame. The factory ctor allocates a fresh App per Open() and
@@ -240,7 +251,7 @@ func renderBody() {
 
 	for range c.CollapsingHeader(app.ids.PrepareStr("hdr-pattern"), c.WidgetText().Text("Pattern (single regex — RE2 tabs)").Keep()).DefaultOpen(true).KeepIter() {
 		resp := c.TextEdit(app.ids.PrepareStr("pattern"), app.pattern, false).
-			DesiredWidth(fullWidth).
+			DesiredWidth(editorWidth).
 			HintText("regular expression").
 			SendRespVal(&app.pattern)
 		if resp.HasChanged() {
@@ -255,7 +266,7 @@ func renderBody() {
 	for range c.CollapsingHeader(app.ids.PrepareStr("hdr-patternlist"), c.WidgetText().Text("Multi patterns (one regex per line — VectorScan multiMatchAllIndices)").Keep()).DefaultOpen(true).KeepIter() {
 		listResp := c.TextEdit(app.ids.PrepareStr("patternList"), app.patternList, true).
 			CodeEditor().
-			DesiredWidth(fullWidth).
+			DesiredWidth(editorWidth).
 			DesiredRows(4).
 			HintText("pattern 1\npattern 2\n...").
 			SendRespVal(&app.patternList)
@@ -274,7 +285,7 @@ func renderBody() {
 	c.Label("Haystack (trial text):").Send()
 	haystackResp := c.TextEdit(app.ids.PrepareStr("haystack"), app.haystack, true).
 		CodeEditor().
-		DesiredWidth(fullWidth).
+		DesiredWidth(editorWidth).
 		DesiredRows(6).
 		HintText("test string").
 		SendRespVal(&app.haystack)
@@ -499,7 +510,7 @@ func renderReplaceTab() (changed bool) {
 	for range c.Horizontal().KeepIter() {
 		c.Label("Replacement:").Send()
 		resp := c.TextEdit(app.ids.PrepareStr("replacement"), app.replacement, false).
-			DesiredWidth(fullWidth).
+			DesiredWidth(editorWidth).
 			HintText("replacement pattern (use \\1, \\2, ... for capture groups)").
 			SendRespVal(&app.replacement)
 		if resp.HasChanged() {
