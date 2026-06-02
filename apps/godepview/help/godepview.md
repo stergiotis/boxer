@@ -1,3 +1,12 @@
+---
+type: explanation
+audience: end-user
+status: draft
+title: Go Dependency Explorer
+---
+
+> **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
+
 # Go Dependency Explorer
 
 Explores this module's Go dependency graph: every package in the transitive
