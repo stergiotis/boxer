@@ -41,36 +41,38 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colormap"
 )
 
-// Orientation re-exports c.OrientationE so callers of HeatmapScroll
-// don't need a second import for the scroll-direction enum.
-type Orientation = c.OrientationE
+// Orientation mirrors c.OrientationE so callers of HeatmapScroll don't
+// need a second import for the scroll-direction enum. A named type
+// (not an alias) per CODINGSTANDARDS CS008; values cross to the binding
+// layer via the uint8 conversion in Render.
+type Orientation c.OrientationE
 
-// Filter re-exports c.FilterE so callers of HeatmapScroll don't need a
-// second import for the texture-filter enum.
-type Filter = c.FilterE
+// Filter mirrors c.FilterE so callers of HeatmapScroll don't need a
+// second import for the texture-filter enum. Named type per CS008.
+type Filter c.FilterE
 
 // ScrollLeft — append right, scroll left; classical audio spectrogram.
 // Alias for c.OrientationScrollLeftE. See ADR-0058 SD8.
-const ScrollLeft Orientation = c.OrientationScrollLeftE
+const ScrollLeft Orientation = Orientation(c.OrientationScrollLeftE)
 
 // ScrollRight — append left, scroll right; mirror of ScrollLeft.
 // Alias for c.OrientationScrollRightE.
-const ScrollRight Orientation = c.OrientationScrollRightE
+const ScrollRight Orientation = Orientation(c.OrientationScrollRightE)
 
 // ScrollUp — append bottom, scroll up; vertical sibling of ScrollLeft.
 // Alias for c.OrientationScrollUpE.
-const ScrollUp Orientation = c.OrientationScrollUpE
+const ScrollUp Orientation = Orientation(c.OrientationScrollUpE)
 
 // ScrollDown — append top, scroll down; classical RF waterfall.
 // Alias for c.OrientationScrollDownE.
-const ScrollDown Orientation = c.OrientationScrollDownE
+const ScrollDown Orientation = Orientation(c.OrientationScrollDownE)
 
 // FilterNearest — nearest-neighbour sampling; default. See ADR-0058 SD3.
-const FilterNearest Filter = c.FilterNearestE
+const FilterNearest Filter = Filter(c.FilterNearestE)
 
 // FilterLinear — bilinear sampling; blurs across neighbouring columns.
 // See ADR-0058 SD3 for why the default is Nearest for scientific data.
-const FilterLinear Filter = c.FilterLinearE
+const FilterLinear Filter = Filter(c.FilterLinearE)
 
 // HeatmapScroll is a streaming-scalar heatmap widget. Construct once
 // with New, push columns each frame with PushColumn, and call Render
