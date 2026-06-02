@@ -16,11 +16,11 @@ import (
 
 type FileDumpService struct {
 	config *Config
-	n      uint64
+	n      atomic.Uint64
 }
 
 func (inst *FileDumpService) nextFilePath() string {
-	v := atomic.AddUint64(&inst.n, 1)
+	v := inst.n.Add(1)
 	return path.Join(inst.config.OutputDirectory, fmt.Sprintf(inst.config.FilePattern, v))
 }
 
@@ -34,8 +34,8 @@ func (inst *FileDumpService) skipExistingFiles() error {
 		_, err = os.Stat(p)
 		if os.IsNotExist(err) {
 			// no concurrency here
-			inst.n--
-			if inst.n > 0 {
+			inst.n.Add(^uint64(0)) // -1
+			if inst.n.Load() > 0 {
 				log.Info().Str("initialFilePath", p).Msg("found existing files")
 			}
 			return nil
