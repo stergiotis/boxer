@@ -279,12 +279,16 @@ func addMembership(attr, row reflect.Value, f mappingplan.TaggedField, lookup Lo
 	// from the sibling carrier field rather than from a lookup or a literal
 	// lw: name.
 	if ch.UsesCarrier() {
-		// Per-row membership data from the sibling carrier: the value field
-		// (Id uint64 / Name []byte) + Params. The method suffix already
-		// selects the right AddMembershipMixed…P; reflect passes each field
-		// by its own type, so one call shape serves both mixed channels.
+		// Per-row membership data from the sibling carrier. Mixed channels
+		// pass (value field Id/Name, Params); parametrized channels — whose
+		// membership is the opaque blob alone — pass (Params) only. The
+		// method suffix already selects the right AddMembership…P.
 		carrier := row.FieldByName(f.CarrierField)
-		mustCall(attr, method, carrier.FieldByName(ch.CarrierValueField()), carrier.FieldByName("Params"))
+		if vf := ch.CarrierValueField(); vf != "" {
+			mustCall(attr, method, carrier.FieldByName(vf), carrier.FieldByName("Params"))
+		} else {
+			mustCall(attr, method, carrier.FieldByName("Params"))
+		}
 		return
 	}
 	if ch.EmbedsLiteralName() {

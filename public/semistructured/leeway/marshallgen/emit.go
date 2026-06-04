@@ -643,10 +643,14 @@ func writeMembershipAdd(sb *strings.Builder, indent, attrVar string, f mappingpl
 	ch := f.Flags.Channel
 	method := "AddMembership" + ch.AddMethodSuffix() + "P"
 	if ch.UsesCarrier() {
-		// Cut-2: per-row membership data from the sibling carrier column —
-		// the value field (Id / Name) + Params; the method suffix selects
-		// the channel.
-		linef(sb, 0, "%s%s.%s(c.%s[i].%s, c.%s[i].Params)", indent, attrVar, method, f.CarrierField, ch.CarrierValueField(), f.CarrierField)
+		// Cut-2: per-row membership data from the sibling carrier column.
+		// Mixed channels pass (value field Id/Name, Params); parametrized
+		// channels pass (Params) only. The method suffix selects the channel.
+		if vf := ch.CarrierValueField(); vf != "" {
+			linef(sb, 0, "%s%s.%s(c.%s[i].%s, c.%s[i].Params)", indent, attrVar, method, f.CarrierField, vf, f.CarrierField)
+		} else {
+			linef(sb, 0, "%s%s.%s(c.%s[i].Params)", indent, attrVar, method, f.CarrierField)
+		}
 		return
 	}
 	if ch.EmbedsLiteralName() {
@@ -872,12 +876,17 @@ func writeSectionReadInterfaces(sb *strings.Builder, plan *mappingplan.Plan, g m
 
 	linef(sb, 0, "// %s%sMembsReadI is the Memberships-side view of the %s section.", kind, method, g.Section)
 	linef(sb, 0, "type %s%sMembsReadI interface {", kind, method)
-	if g.Channel().UsesCarrier() {
-		// Carrier channel: the combined Seq2 accessor yields the per-row
-		// membership data (id/name + params) together.
-		linef(sb, 1, "GetMembValue%s(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq2[%s]", g.Channel().CarrierReadMethodSuffix(), g.Channel().CarrierReadSeq2Types())
-	} else {
-		linef(sb, 1, "GetMembValue%s(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[%s]", g.Channel().AddMethodSuffix(), g.Channel().ReadIterElemType())
+	ch := g.Channel()
+	switch {
+	case ch.UsesCarrier() && ch.CarrierValueField() != "":
+		// Mixed channel: the combined Seq2 accessor yields the per-row
+		// membership value (id/name) + params together.
+		linef(sb, 1, "GetMembValue%s(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq2[%s]", ch.CarrierReadMethodSuffix(), ch.CarrierReadSeq2Types())
+	case ch.UsesCarrier():
+		// Parametrized channel: a single Seq of the opaque params blob.
+		linef(sb, 1, "GetMembValue%s(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[[]byte]", ch.CarrierReadMethodSuffix())
+	default:
+		linef(sb, 1, "GetMembValue%s(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[%s]", ch.AddMethodSuffix(), ch.ReadIterElemType())
 	}
 	line(sb, 0, "}\n")
 	return
@@ -1033,25 +1042,26 @@ func writeCarrierSectionDecode(sb *strings.Builder, g mappingplan.SectionGroup, 
 	linef(sb, 2, "var %s marshalltypes.%s", carrierVar, f.CarrierType)
 	linef(sb, 2, "%sCount := 0", prefix)
 	linef(sb, 2, "n%s := %s.GetNumberOfAttributes(raruntime.EntityIdx(i))", prefix, attrsVar)
-	// The Seq2 yields (membership-value, params); the value is the carrier's
-	// Id (uint64) or Name ([]byte, copied out of the Arrow buffer).
-	carrierValExpr := "mv"
-	if f.Flags.Channel.CarrierValueIsBytes() {
-		carrierValExpr = "append([]byte(nil), mv...)"
-	}
+	// Mixed channels read a Seq2 (value, params); parametrized read a single
+	// Seq of the opaque params blob.
 	linef(sb, 2, "for attrJ := int64(0); attrJ < n%s; attrJ++ {", prefix)
-	linef(sb, 3, "for mv, params := range %s.%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {", membsVar, readMethod)
-	switch {
-	case mappingplan.IsFixedByteArray(f.GoType):
-		linef(sb, 4, "copy(%s[:], %s)", valVar, valRead)
-	case f.GoType == "[]byte":
-		linef(sb, 4, "%s = append([]byte(nil), %s...)", valVar, valRead)
-	default:
-		linef(sb, 4, "%s = %s", valVar, valRead)
+	if f.Flags.Channel.CarrierValueField() == "" {
+		linef(sb, 3, "for params := range %s.%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {", membsVar, readMethod)
+		writeCarrierValueRead(sb, f, valVar, valRead)
+		linef(sb, 4, "%s = marshalltypes.%s{Params: append([]byte(nil), params...)}", carrierVar, f.CarrierType)
+		linef(sb, 4, "%sCount++", prefix)
+		line(sb, 3, "}")
+	} else {
+		carrierValExpr := "mv"
+		if f.Flags.Channel.CarrierValueIsBytes() {
+			carrierValExpr = "append([]byte(nil), mv...)"
+		}
+		linef(sb, 3, "for mv, params := range %s.%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {", membsVar, readMethod)
+		writeCarrierValueRead(sb, f, valVar, valRead)
+		linef(sb, 4, "%s = marshalltypes.%s{%s: %s, Params: append([]byte(nil), params...)}", carrierVar, f.CarrierType, f.Flags.Channel.CarrierValueField(), carrierValExpr)
+		linef(sb, 4, "%sCount++", prefix)
+		line(sb, 3, "}")
 	}
-	linef(sb, 4, "%s = marshalltypes.%s{%s: %s, Params: append([]byte(nil), params...)}", carrierVar, f.CarrierType, f.Flags.Channel.CarrierValueField(), carrierValExpr)
-	linef(sb, 4, "%sCount++", prefix)
-	line(sb, 3, "}")
 	line(sb, 2, "}")
 	linef(sb, 2, "if %sCount != 1 {", prefix)
 	linef(sb, 3, "err = eb.Build().Int(\"row\", i).Str(\"field\", %q).Errorf(\"expected exactly one occurrence per row\")", f.GoFieldName)
@@ -1060,6 +1070,20 @@ func writeCarrierSectionDecode(sb *strings.Builder, g mappingplan.SectionGroup, 
 	linef(sb, 2, "c.%s = append(c.%s, %s)", f.GoFieldName, f.GoFieldName, valVar)
 	linef(sb, 2, "c.%s = append(c.%s, %s)", f.CarrierField, f.CarrierField, carrierVar)
 	return
+}
+
+// writeCarrierValueRead emits the read of the section value into valVar for
+// a carrier section — a defensive copy for []byte / fixed-byte, straight
+// assignment otherwise. Shared by the parametrized and mixed decode loops.
+func writeCarrierValueRead(sb *strings.Builder, f mappingplan.TaggedField, valVar, valRead string) {
+	switch {
+	case mappingplan.IsFixedByteArray(f.GoType):
+		linef(sb, 4, "copy(%s[:], %s)", valVar, valRead)
+	case f.GoType == "[]byte":
+		linef(sb, 4, "%s = append([]byte(nil), %s...)", valVar, valRead)
+	default:
+		linef(sb, 4, "%s = %s", valVar, valRead)
+	}
 }
 
 func writeFieldAccumulatorDecl(sb *strings.Builder, f mappingplan.TaggedField, prefix string) {

@@ -117,13 +117,18 @@ func SplitLW(tag string) (out ParsedLWTag, err error) {
 			if err = setChannelFlag(&out.Flags, MembershipChannelMixedLowCardVerbatim, token); err != nil {
 				return
 			}
-		case "lowCardRefParametrized", "highCardRefParametrized":
-			// ADR-0008 D3 Cut-2: the two parametrized channels stay staged —
-			// the membership is a single opaque blob (no separate id/name),
-			// which needs its own carrier + read pairing. Parse-time
-			// rejection so DTO authors get a clear signal.
-			err = eb.Build().Str("flag", token).Errorf("lw: channel flag %q is recognised but not yet implemented — see ADR-0008 D3 Cut-2 staged-rollout note", token)
-			return
+		case "lowCardRefParametrized":
+			// ADR-0008 D3 Cut-2: opaque-blob membership — pairs with a
+			// marshalltypes.Parametrized sibling (params only; read via a
+			// single Seq[[]byte]).
+			if err = setChannelFlag(&out.Flags, MembershipChannelLowCardRefParametrized, token); err != nil {
+				return
+			}
+		case "highCardRefParametrized":
+			// ADR-0008 D3 Cut-2: high-card sibling of lowCardRefParametrized.
+			if err = setChannelFlag(&out.Flags, MembershipChannelHighCardRefParametrized, token); err != nil {
+				return
+			}
 		default:
 			err = eb.Build().Str("flag", token).Errorf("unknown flag token (recognised: unit, explode, verbatim / lowCardVerbatim, highCardRef, highCardVerbatim, const=<value>)")
 			return

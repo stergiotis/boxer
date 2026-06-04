@@ -77,6 +77,15 @@ const (
 	// carrier's []byte Name) rather than a uint64 id, but the carrier /
 	// one-membership-per-section dispatch model is identical to MixedLowCardRef.
 	MembershipChannelMixedLowCardVerbatim
+	// MembershipChannelLowCardRefParametrized and …HighCardRefParametrized
+	// are the Cut-2 parametrized channels: AddMembership<X>RefParametrizedP(blob
+	// []byte). The whole membership identity is an opaque per-row params blob
+	// (a marshalltypes.Parametrized carrier — no separate id/name field), so
+	// the read is a single Seq[[]byte] rather than the mixed channels' Seq2.
+	// CarrierValueField is "" for both, which discriminates them from the
+	// mixed channels everywhere the codec branches.
+	MembershipChannelLowCardRefParametrized
+	MembershipChannelHighCardRefParametrized
 )
 
 // String returns the lw: flag spelling for this channel. The default
@@ -95,6 +104,10 @@ func (c MembershipChannel) String() string {
 		return "mixedLowCardRef"
 	case MembershipChannelMixedLowCardVerbatim:
 		return "mixedLowCardVerbatim"
+	case MembershipChannelLowCardRefParametrized:
+		return "lowCardRefParametrized"
+	case MembershipChannelHighCardRefParametrized:
+		return "highCardRefParametrized"
 	}
 	return "unknown"
 }
@@ -107,7 +120,8 @@ func (c MembershipChannel) String() string {
 // from that carrier. False for the four Cut-1 channels.
 func (c MembershipChannel) UsesCarrier() bool {
 	switch c {
-	case MembershipChannelMixedLowCardRef, MembershipChannelMixedLowCardVerbatim:
+	case MembershipChannelMixedLowCardRef, MembershipChannelMixedLowCardVerbatim,
+		MembershipChannelLowCardRefParametrized, MembershipChannelHighCardRefParametrized:
 		return true
 	default:
 		return false
@@ -124,6 +138,8 @@ func (c MembershipChannel) CarrierTypeName() string {
 		return "MixedLowCardRef"
 	case MembershipChannelMixedLowCardVerbatim:
 		return "MixedLowCardVerbatim"
+	case MembershipChannelLowCardRefParametrized, MembershipChannelHighCardRefParametrized:
+		return "Parametrized"
 	default:
 		return ""
 	}
@@ -139,6 +155,10 @@ func (c MembershipChannel) CarrierReadMethodSuffix() string {
 		return "LowCardRefHighCardParams"
 	case MembershipChannelMixedLowCardVerbatim:
 		return "LowCardVerbatimHighCardParams"
+	case MembershipChannelLowCardRefParametrized:
+		return "LowCardRefParametrized"
+	case MembershipChannelHighCardRefParametrized:
+		return "HighCardRefParametrized"
 	default:
 		return ""
 	}
@@ -245,6 +265,10 @@ func (c MembershipChannel) AddMethodSuffix() string {
 		return "MixedLowCardRef"
 	case MembershipChannelMixedLowCardVerbatim:
 		return "MixedLowCardVerbatim"
+	case MembershipChannelLowCardRefParametrized:
+		return "LowCardRefParametrized"
+	case MembershipChannelHighCardRefParametrized:
+		return "HighCardRefParametrized"
 	}
 	return ""
 }

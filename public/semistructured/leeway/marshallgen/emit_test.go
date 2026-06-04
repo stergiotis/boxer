@@ -323,10 +323,11 @@ type MyDTO struct {
 // flags (lowCardRefParametrized, highCardRefParametrized,
 // mixedLowCardRef, mixedLowCardVerbatim) are recognised but rejected
 // at parse time with a clear ADR-0008 pointer per the staged rollout.
-func TestParse_RejectsStagedChannels(t *testing.T) {
-	// mixedLowCardRef + mixedLowCardVerbatim landed in Cut-2 (ADR-0008); the
-	// two parametrized channels stay parse-rejected.
-	for _, flag := range []string{"lowCardRefParametrized", "highCardRefParametrized"} {
+func TestParse_RejectsCarrierChannelWithoutSibling(t *testing.T) {
+	// All eight channels are implemented (ADR-0008 Cut-2 complete). A carrier
+	// channel value field declared without its marshalltypes sibling is
+	// rejected — there is no longer a "not yet implemented" staged set.
+	for _, flag := range []string{"mixedLowCardRef", "mixedLowCardVerbatim", "lowCardRefParametrized", "highCardRefParametrized"} {
 		src := `package demo
 type MyDTO struct {
 	_   struct{}  ` + "`kind:\"my\"`" + `
@@ -337,10 +338,10 @@ type MyDTO struct {
 `
 		_, err := generateMay(t, src)
 		if err == nil {
-			t.Fatalf("flag %q: expected parse rejection, got success", flag)
+			t.Fatalf("flag %q: expected rejection (no carrier sibling), got success", flag)
 		}
-		if !strings.Contains(err.Error(), "not yet implemented") {
-			t.Fatalf("flag %q: expected `not yet implemented` error, got: %v", flag, err)
+		if !strings.Contains(err.Error(), "needs a sibling carrier field") {
+			t.Fatalf("flag %q: expected `needs a sibling carrier field` error, got: %v", flag, err)
 		}
 	}
 }
@@ -555,4 +556,34 @@ type MyDTO struct {
 	mustContain(t, out, "AddMembershipMixedLowCardVerbatimP(c.ReadingC[i].Name, c.ReadingC[i].Params)")
 	// Name is []byte → defensively copied out of the Arrow buffer on read.
 	mustContain(t, out, "marshalltypes.MixedLowCardVerbatim{Name: append([]byte(nil), mv...), Params:")
+}
+
+func TestEmit_Parametrized(t *testing.T) {
+	// Cut-2 parametrized channels: the membership is an opaque params blob
+	// (a marshalltypes.Parametrized carrier — no id/name). One write arg, a
+	// single Seq[[]byte] read accessor.
+	for _, c := range []struct{ flag, suffix string }{
+		{"lowCardRefParametrized", "LowCardRefParametrized"},
+		{"highCardRefParametrized", "HighCardRefParametrized"},
+	} {
+		out := generate(t, `package demo
+type MyDTO struct {
+	_        struct{}                   `+"`kind:\"my\"`"+`
+	Id       uint64                     `+"`lw:\",id\"`"+`
+	Ts       time.Time                  `+"`lw:\",ts\"`"+`
+	Reading  string                     `+"`lw:\"sensor,symbol,"+c.flag+"\"`"+`
+	ReadingC marshalltypes.Parametrized `+"`lw:\"sensor,symbol,"+c.flag+"\"`"+`
+}
+`)
+		parseGo(t, out)
+		mustContain(t, out, "ReadingC []marshalltypes.Parametrized")
+		mustContain(t, out, "dmlruntime.InAttributeMembership"+c.suffix+"PI")
+		// Single Seq read accessor (not the mixed channels' Seq2).
+		mustContain(t, out, "GetMembValue"+c.suffix+"(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[[]byte]")
+		// Write driver: one arg (the params blob only).
+		mustContain(t, out, "AddMembership"+c.suffix+"P(c.ReadingC[i].Params)")
+		// Read reconstruction: params only.
+		mustContain(t, out, "marshalltypes.Parametrized{Params: append([]byte(nil), params...)}")
+		mustNotContain(t, out, "iter.Seq2")
+	}
 }

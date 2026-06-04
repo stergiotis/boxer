@@ -477,11 +477,32 @@ func unmarshalCarrierSection(row reflect.Value, g mappingplan.SectionGroup, attr
 		valMethod = "GetAttrValueValue"
 	}
 
+	// Parametrized channels read a single Seq[[]byte] (the opaque params
+	// blob, no separate value); mixed channels read the Seq2 (value, params).
+	isParam := f.Flags.Channel.CarrierValueField() == ""
+
 	n := mustCall(attrs, "GetNumberOfAttributes", reflect.ValueOf(entityIdx(i)))[0].Int()
 	count := 0
 	for attrJ := int64(0); attrJ < n; attrJ++ {
-		ids, params := collectIterSeq2(mustCall(membs, readMethod, reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0])
-		if len(ids) == 0 {
+		seq := mustCall(membs, readMethod, reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
+		matched := false
+		if isParam {
+			if blobs := collectIterSeq(seq); len(blobs) > 0 {
+				carrierVal.FieldByName("Params").SetBytes(append([]byte(nil), blobs[0].Bytes()...))
+				matched = true
+			}
+		} else if keys, params := collectIterSeq2(seq); len(keys) > 0 {
+			valField := carrierVal.FieldByName(f.Flags.Channel.CarrierValueField())
+			if f.Flags.Channel.CarrierValueIsBytes() {
+				// Verbatim name — copy out of the Arrow buffer.
+				valField.SetBytes(append([]byte(nil), keys[0].Bytes()...))
+			} else {
+				valField.SetUint(keys[0].Uint())
+			}
+			carrierVal.FieldByName("Params").SetBytes(append([]byte(nil), params[0].Bytes()...))
+			matched = true
+		}
+		if !matched {
 			continue
 		}
 		v := mustCall(attrs, valMethod, reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
@@ -498,14 +519,6 @@ func unmarshalCarrierSection(row reflect.Value, g mappingplan.SectionGroup, attr
 		default:
 			valAcc = v
 		}
-		valField := carrierVal.FieldByName(f.Flags.Channel.CarrierValueField())
-		if f.Flags.Channel.CarrierValueIsBytes() {
-			// Verbatim name — copy out of the Arrow buffer.
-			valField.SetBytes(append([]byte(nil), ids[0].Bytes()...))
-		} else {
-			valField.SetUint(ids[0].Uint())
-		}
-		carrierVal.FieldByName("Params").SetBytes(append([]byte(nil), params[0].Bytes()...))
 		count++
 	}
 	if count != 1 {

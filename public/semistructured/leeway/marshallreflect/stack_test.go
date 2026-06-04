@@ -88,6 +88,9 @@ func (a *recordingAttr) AddMembershipLowCardRefP(id uint64) {
 func (a *recordingAttr) AddMembershipMixedLowCardVerbatimP(name []byte, params []byte) {
 	a.root.record(fmt.Sprintf("AddMembershipMixedLowCardVerbatimP(%q, %q)", name, params))
 }
+func (a *recordingAttr) AddMembershipLowCardRefParametrizedP(params []byte) {
+	a.root.record(fmt.Sprintf("AddMembershipLowCardRefParametrizedP(%q)", params))
+}
 func (a *recordingAttr) EndAttributeP() {
 	a.root.record("EndAttributeP")
 }

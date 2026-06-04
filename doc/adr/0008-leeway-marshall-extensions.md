@@ -552,9 +552,10 @@ DateTime; only the bus path preserves nanos.
 
 Cut-2 of D3 — the four channels parse-rejected since the original decision
 (`lowCardRefParametrized`, `highCardRefParametrized`, `mixedLowCardRef`,
-`mixedLowCardVerbatim`) — is designed here. The first, `mixedLowCardRef`, is
-implemented end-to-end; the other three are specified but stay parse-rejected
-until a target schema and a consumer exist (see *Scope*).
+`mixedLowCardVerbatim`) — is designed and implemented here. All four now parse
+and drive through the shared carrier machinery; the staged-rollout parse
+rejection is removed entirely (every recognised `lw:` channel flag is now
+implemented).
 
 **Channel shapes (grounded in the runtime interfaces).** The write-side
 `InAttributeMembership…PI` constraints in `dml/runtime/lw_dml_types.go` and the
@@ -578,18 +579,18 @@ channel.
 
 **Carrier types (`marshalltypes`).** A new sibling package
 `public/semistructured/leeway/marshalltypes` holds the plain carriers (no
-generics, no methods) — one per implemented mixed channel:
+generics, no methods) — one per channel family:
 
 ```go
 type MixedLowCardRef      struct { Id   uint64; Params []byte }
 type MixedLowCardVerbatim struct { Name []byte; Params []byte }
+type Parametrized         struct { Params []byte }
 ```
 
-The deferred parametrized channels' carrier (`Parametrized{ Params []byte }`) is
-specified for when they land and added only then, so the package never carries a
-carrier no codec path references. Each front-end recognises a carrier by its Go
-type; the channel's `CarrierValueField` (`Id` / `Name`) selects which field
-holds the membership value.
+Each front-end recognises a carrier by its Go type; the channel's
+`CarrierValueField` (`Id` / `Name`, or `""` for the params-only `Parametrized`)
+selects which field holds the membership value and discriminates the mixed
+channels' `Seq2` read from the parametrized channels' single `Seq`.
 
 **DTO grammar (sibling pair).** A Cut-2 attribute is two Go fields sharing one
 `(membership, section, channel)` triple — a value field carrying the section's
@@ -618,17 +619,19 @@ accessor (`GetMembValueLowCardRefHighCardParams` for mixed-ref). `Finish`
 rejects a second membership in such a section. This is stricter than SD1's
 general per-section channel uniformity, which still holds.
 
-**Scope — both mixed channels landed, parametrized deferred.**
-`mixedLowCardRef` and `mixedLowCardVerbatim` are implemented (grammar +
-marshallgen emit + marshallreflect codec); the two parametrized channels stay
-parse-rejected. `mixedLowCardRef` round-trips end-to-end against anchor's
+**Scope — all four Cut-2 channels landed.** The mixed pair (value + params
+carrier, `Seq2` read) and the parametrized pair (params-only `Parametrized`
+carrier, single-`Seq` read) are implemented across mappingplan + marshallgen +
+marshallreflect. `mixedLowCardRef` round-trips end-to-end against anchor's
 `symbol` section (anchor declares `MembershipSpecMixedLowCardRefHighCardParameters`).
-No boxer schema pairs a *simple single-value* mixed-verbatim section with a
-matching RA reader — anchor lacks the channel, and the example testtable's
-verbatim sections are multi-sub-column / multi-membership with no string-section
-reader — so `mixedLowCardVerbatim` is verified by the marshallgen emit test plus
-marshallreflect write/read mock tests over the shared carrier path (it differs
-from mixed-ref only in the carrier's `Name []byte` value field).
+The other three have no boxer schema pairing a *simple single-value* section
+with a matching RA reader — anchor declares only mixed-ref; the example
+testtable's mixed-verbatim sections are multi-sub-column / multi-membership with
+no reader for its `string` section; and no generated schema declares a
+parametrized section at all — so they are verified by the marshallgen emit tests
+plus marshallreflect write/read mock tests over the shared carrier path (each
+differs from mixed-ref only in the carrier's value field: `Name []byte`, or
+params-only).
 
 **Interface fix applied for `mixedLowCardVerbatim`.** The hand-written
 `InAttributeMembershipMixedLowCardVerbatimPI` (and its `[A]` variant) declared a
