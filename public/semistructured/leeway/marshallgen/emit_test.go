@@ -229,8 +229,8 @@ type MyDTO struct {
 }
 `)
 	mustNotContain(t, out, "AttrI[Self any")
-	mustNotContain(t, out, "AddToContainer(value")  // chain method (no P)
-	mustNotContain(t, out, "EndAttribute()")        // chain method (no P)
+	mustNotContain(t, out, "AddToContainer(value") // chain method (no P)
+	mustNotContain(t, out, "EndAttribute()")       // chain method (no P)
 }
 
 func TestEmit_AnchorStyleKindConsts(t *testing.T) {
@@ -324,7 +324,9 @@ type MyDTO struct {
 // mixedLowCardRef, mixedLowCardVerbatim) are recognised but rejected
 // at parse time with a clear ADR-0008 pointer per the staged rollout.
 func TestParse_RejectsStagedChannels(t *testing.T) {
-	for _, flag := range []string{"lowCardRefParametrized", "highCardRefParametrized", "mixedLowCardRef", "mixedLowCardVerbatim"} {
+	// mixedLowCardRef landed in Cut-2 (ADR-0008); the remaining three stay
+	// parse-rejected.
+	for _, flag := range []string{"lowCardRefParametrized", "highCardRefParametrized", "mixedLowCardVerbatim"} {
 		src := `package demo
 type MyDTO struct {
 	_   struct{}  ` + "`kind:\"my\"`" + `
@@ -481,7 +483,7 @@ type MyDTO struct {
 	mustContain(t, out, "it := c.Bits[i].Iterator()")
 	mustContain(t, out, "for it.HasNext() {")
 	mustContain(t, out, "u32Sec.BeginAttribute(it.Next())")
-	mustNotContain(t, out, ".AddToContainerP(")             // explode does NOT use container append
+	mustNotContain(t, out, ".AddToContainerP(")              // explode does NOT use container append
 	mustContain(t, out, "BeginAttribute(value uint32) Attr") // scalar section signature
 }
 
@@ -500,4 +502,35 @@ type MyDTO struct {
 	parseGo(t, out)
 	mustContain(t, out, "BeginAttribute(beginIncl uint32, endExcl uint32) Attr")
 	mustContain(t, out, "u32RangeSec.BeginAttribute(c.RangeLo[i], c.RangeHi[i])")
+}
+
+func TestEmit_MixedLowCardRef(t *testing.T) {
+	// Cut-2 mixedLowCardRef: a value field paired with a
+	// marshalltypes.MixedLowCardRef carrier on one (membership, section,
+	// channel) triple. The carrier gets its own SoA column and supplies the
+	// per-row (id, params) to AddMembershipMixedLowCardRefP; the read side
+	// reconstructs it from the Seq2 combined accessor.
+	out := generate(t, `package demo
+type MyDTO struct {
+	_        struct{}                      `+"`kind:\"my\"`"+`
+	Id       uint64                        `+"`lw:\",id\"`"+`
+	Ts       time.Time                     `+"`lw:\",ts\"`"+`
+	Reading  string                        `+"`lw:\"sensor,symbol,mixedLowCardRef\"`"+`
+	ReadingC marshalltypes.MixedLowCardRef `+"`lw:\"sensor,symbol,mixedLowCardRef\"`"+`
+}
+`)
+	parseGo(t, out)
+	// Carrier gets its own SoA column; the package is imported.
+	mustContain(t, out, "ReadingC []marshalltypes.MixedLowCardRef")
+	mustContain(t, out, "leeway/marshalltypes")
+	// AttrI composes the runtime mixed-ref constraint (no per-DTO method).
+	mustContain(t, out, "dmlruntime.InAttributeMembershipMixedLowCardRefPI")
+	// MembsReadI exposes the Seq2 combined accessor, not the plain Seq.
+	mustContain(t, out, "GetMembValueLowCardRefHighCardParams(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq2[uint64, []byte]")
+	// Write driver: value + per-row carrier id/params, no kindXxx lookup.
+	mustContain(t, out, "symbolSecAttr_Reading := symbolSec.BeginAttribute(c.Reading[i])")
+	mustContain(t, out, "AddMembershipMixedLowCardRefP(c.ReadingC[i].Id, c.ReadingC[i].Params)")
+	mustNotContain(t, out, "kindReading")
+	// Read side: Seq2 accessor + carrier reconstruction.
+	mustContain(t, out, "marshalltypes.MixedLowCardRef{Id: id, Params:")
 }

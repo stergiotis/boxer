@@ -190,6 +190,10 @@ func unmarshalSection(row reflect.Value, g mappingplan.SectionGroup, args Unmars
 		return unmarshalMultiSubColumn(row, g, attrs, membs, i, membIDs)
 	}
 
+	if g.Channel().UsesCarrier() {
+		return unmarshalCarrierSection(row, g, attrs, membs, i)
+	}
+
 	fields := g.SubColumns[0].Fields
 
 	// Per-field accumulators (cardinality / count tracking).
@@ -442,6 +446,64 @@ func unmarshalMultiSubColumn(row reflect.Value, g mappingplan.SectionGroup, attr
 	return
 }
 
+// unmarshalCarrierSection decodes a mixed / parametrized section (ADR-0008
+// Cut-2). PlanBuilder guarantees one membership — one value+carrier field —
+// per such section, so every attribute belongs to that field and no id
+// matching is needed. The scalar value comes from GetAttrValueValue; the
+// carrier's per-row membership data (id + params) comes together from the
+// Seq2 combined accessor and is reconstructed into the carrier struct field.
+func unmarshalCarrierSection(row reflect.Value, g mappingplan.SectionGroup, attrs, membs reflect.Value, i int) (err error) {
+	var f *mappingplan.TaggedField
+	for j := range g.SubColumns[0].Fields {
+		if g.SubColumns[0].Fields[j].Flags.Channel.UsesCarrier() {
+			f = &g.SubColumns[0].Fields[j]
+			break
+		}
+	}
+	if f == nil {
+		err = eb.Build().Str("section", g.Section).Errorf("carrier section has no value field")
+		return
+	}
+
+	readMethod := "GetMembValue" + f.Flags.Channel.CarrierReadMethodSuffix()
+	carrierType := row.FieldByName(f.CarrierField).Type()
+	valAcc := reflect.New(goTypeReflect(f.GoType)).Elem()
+	carrierVal := reflect.New(carrierType).Elem()
+
+	n := mustCall(attrs, "GetNumberOfAttributes", reflect.ValueOf(entityIdx(i)))[0].Int()
+	count := 0
+	for attrJ := int64(0); attrJ < n; attrJ++ {
+		ids, params := collectIterSeq2(mustCall(membs, readMethod, reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0])
+		if len(ids) == 0 {
+			continue
+		}
+		v := mustCall(attrs, "GetAttrValueValue", reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
+		switch {
+		case mappingplan.IsFixedByteArray(f.GoType):
+			arr := reflect.New(goTypeReflect(f.GoType)).Elem()
+			src := v.Bytes()
+			for k := 0; k < arr.Len() && k < len(src); k++ {
+				arr.Index(k).SetUint(uint64(src[k]))
+			}
+			valAcc = arr
+		case f.GoType == "[]byte":
+			valAcc = reflect.ValueOf(append([]byte(nil), v.Bytes()...))
+		default:
+			valAcc = v
+		}
+		carrierVal.FieldByName("Id").SetUint(ids[0].Uint())
+		carrierVal.FieldByName("Params").SetBytes(append([]byte(nil), params[0].Bytes()...))
+		count++
+	}
+	if count != 1 {
+		err = eb.Build().Str("field", f.GoFieldName).Errorf("expected exactly one occurrence per row for a mixed/parametrized value")
+		return
+	}
+	row.FieldByName(f.GoFieldName).Set(valAcc)
+	row.FieldByName(f.CarrierField).Set(carrierVal)
+	return
+}
+
 // goTypeReflect maps the source-form Go type name back to the
 // corresponding reflect.Type. Inverse of reflectGoTypeName for the
 // types Unmarshal needs to instantiate accumulators for.
@@ -494,6 +556,20 @@ func collectIterSeq(seq reflect.Value) (out []reflect.Value) {
 	yieldType := seqType.In(0)
 	yield := reflect.MakeFunc(yieldType, func(args []reflect.Value) []reflect.Value {
 		out = append(out, args[0])
+		return []reflect.Value{reflect.ValueOf(true)}
+	})
+	seq.Call([]reflect.Value{yield})
+	return
+}
+
+// collectIterSeq2 drains an iter.Seq2[K, V] returned via reflect into
+// parallel key/value slices — the carrier channels' combined accessor
+// yields (membership-value, params) pairs this way.
+func collectIterSeq2(seq reflect.Value) (keys, vals []reflect.Value) {
+	yieldType := seq.Type().In(0) // func(K, V) bool
+	yield := reflect.MakeFunc(yieldType, func(args []reflect.Value) []reflect.Value {
+		keys = append(keys, args[0])
+		vals = append(vals, args[1])
 		return []reflect.Value{reflect.ValueOf(true)}
 	})
 	seq.Call([]reflect.Value{yield})

@@ -129,7 +129,7 @@ func marshalMultiSubColumn(sec, row reflect.Value, g mappingplan.SectionGroup, l
 		args = append(args, row.FieldByName(f.GoFieldName))
 	}
 	attr := mustCall(sec, "BeginAttribute", args...)[0]
-	err = addMembership(attr, g.Memberships[0], lookup)
+	err = addMembership(attr, row, g.Memberships[0], lookup)
 	if err != nil {
 		return
 	}
@@ -158,7 +158,7 @@ func marshalScalarOne(sec, row reflect.Value, f mappingplan.TaggedField, lookup 
 	// Const: literal value, no Go-field read.
 	if f.IsConst {
 		attr := mustCall(sec, beginMethod, reflect.ValueOf(f.ConstValue))[0]
-		err = addMembership(attr, f, lookup)
+		err = addMembership(attr, row, f, lookup)
 		if err != nil {
 			return
 		}
@@ -173,7 +173,7 @@ func marshalScalarOne(sec, row reflect.Value, f mappingplan.TaggedField, lookup 
 		}
 		val := reslicedIfFixedByte(fld.FieldByName("Val"), f)
 		attr := mustCall(sec, beginMethod, val)[0]
-		err = addMembership(attr, f, lookup)
+		err = addMembership(attr, row, f, lookup)
 		if err != nil {
 			return
 		}
@@ -183,7 +183,7 @@ func marshalScalarOne(sec, row reflect.Value, f mappingplan.TaggedField, lookup 
 	// Scalar T.
 	val := reslicedIfFixedByte(row.FieldByName(f.GoFieldName), f)
 	attr := mustCall(sec, beginMethod, val)[0]
-	err = addMembership(attr, f, lookup)
+	err = addMembership(attr, row, f, lookup)
 	if err != nil {
 		return
 	}
@@ -207,7 +207,7 @@ func marshalContainer(sec, row reflect.Value, f mappingplan.TaggedField, lookup 
 			v := mustCall(it, "Next")[0]
 			mustCall(attr, "AddToContainerP", v)
 		}
-		err = addMembership(attr, f, lookup)
+		err = addMembership(attr, row, f, lookup)
 		if err != nil {
 			return
 		}
@@ -222,7 +222,7 @@ func marshalContainer(sec, row reflect.Value, f mappingplan.TaggedField, lookup 
 			v := reslicedIfFixedByte(fld.Index(i), f)
 			mustCall(attr, "AddToContainerP", v)
 		}
-		err = addMembership(attr, f, lookup)
+		err = addMembership(attr, row, f, lookup)
 		if err != nil {
 			return
 		}
@@ -244,7 +244,7 @@ func marshalExplode(sec, row reflect.Value, f mappingplan.TaggedField, lookup Lo
 		for mustCall(it, "HasNext")[0].Bool() {
 			v := mustCall(it, "Next")[0]
 			attr := mustCall(sec, beginMethod, v)[0]
-			err = addMembership(attr, f, lookup)
+			err = addMembership(attr, row, f, lookup)
 			if err != nil {
 				return
 			}
@@ -255,7 +255,7 @@ func marshalExplode(sec, row reflect.Value, f mappingplan.TaggedField, lookup Lo
 		for i := 0; i < fld.Len(); i++ {
 			v := reslicedIfFixedByte(fld.Index(i), f)
 			attr := mustCall(sec, beginMethod, v)[0]
-			err = addMembership(attr, f, lookup)
+			err = addMembership(attr, row, f, lookup)
 			if err != nil {
 				return
 			}
@@ -272,9 +272,22 @@ func marshalExplode(sec, row reflect.Value, f mappingplan.TaggedField, lookup Lo
 // as []byte; the Ref pair pushes the Lookup-resolved uint64. The
 // parametrized / mixed channels are rejected upstream by SplitLW, so
 // this function never sees them.
-func addMembership(attr reflect.Value, f mappingplan.TaggedField, lookup LookupI) (err error) {
+func addMembership(attr, row reflect.Value, f mappingplan.TaggedField, lookup LookupI) (err error) {
 	ch := f.Flags.Channel
 	method := "AddMembership" + ch.AddMethodSuffix() + "P"
+	// Carrier channels (Cut-2): the membership-side data is per-row, read
+	// from the sibling carrier field rather than from a lookup or a literal
+	// lw: name.
+	if ch.UsesCarrier() {
+		carrier := row.FieldByName(f.CarrierField)
+		switch ch {
+		case mappingplan.MembershipChannelMixedLowCardRef:
+			mustCall(attr, method, carrier.FieldByName("Id"), carrier.FieldByName("Params"))
+		default:
+			err = eb.Build().Str("channel", ch.String()).Errorf("carrier channel not implemented in marshallreflect")
+		}
+		return
+	}
 	if ch.EmbedsLiteralName() {
 		mustCall(attr, method, reflect.ValueOf([]byte(f.LWMembership)))
 		return

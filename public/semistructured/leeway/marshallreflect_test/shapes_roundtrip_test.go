@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/functional/option"
 	anchor "github.com/stergiotis/boxer/public/semistructured/leeway/anchor"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshallreflect"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/marshalltypes"
 )
 
 // These round-trips cover the marshallreflect codec shapes the existing
@@ -562,4 +563,65 @@ func TestRoundTrip_OptionBlob(t *testing.T) {
 	require.Equal(t, []byte("payload-bytes"), got[0].Payload.Val)
 	require.False(t, got[1].Payload.Has, "row 1 absent — Has stays false")
 	require.Nil(t, got[1].Payload.Val, "absent blob leaves the zero value")
+}
+
+// --- Cut-2: mixedLowCardRef (value + per-row carrier id/params). ---
+
+// mixedDrone pairs a value field with a marshalltypes.MixedLowCardRef
+// carrier on one (membership, section, channel) triple. The membership
+// identity is per-row carrier data — no lookup — so the codec emits
+// AddMembershipMixedLowCardRefP(carrier.Id, carrier.Params) and reads both
+// back via the symbol section's Seq2 combined accessor.
+type mixedDrone struct {
+	_        struct{}                      `kind:"mixedDrone"`
+	ID       uint64                        `lw:",id"`
+	Tracking []byte                        `lw:",naturalKey"`
+	Reading  string                        `lw:"sensor,symbol,mixedLowCardRef"`
+	ReadingC marshalltypes.MixedLowCardRef `lw:"sensor,symbol,mixedLowCardRef"`
+}
+
+func TestRoundTrip_MixedLowCardRef(t *testing.T) {
+	original := []mixedDrone{
+		{ID: 1, Tracking: []byte("M1"), Reading: "alpha", ReadingC: marshalltypes.MixedLowCardRef{Id: 7, Params: []byte("p-one")}},
+		{ID: 2, Tracking: []byte("M2"), Reading: "beta", ReadingC: marshalltypes.MixedLowCardRef{Id: 9, Params: []byte("p-two")}},
+	}
+	// Per-row membership identity (carrier Id+Params) — no lookup consulted.
+	rec, release := marshalToRecord(t, original, marshallreflect.NoLookup{})
+	defer release()
+	idReader, relID := loadIdReader(t, rec)
+	defer relID()
+
+	symReader := anchor.NewReadAccessTestTableTaggedSymbol()
+	symReader.SetColumnIndices(symReader.GetColumnIndices())
+	require.NoError(t, symReader.LoadFromRecord(rec))
+	defer symReader.Release()
+
+	// One scalar attribute per row in the symbol section.
+	require.Equal(t, int64(1), symReader.GetAttributes().GetNumberOfAttributes(0))
+
+	args := marshallreflect.UnmarshalArgs{
+		NumRows:  idReader.Len(),
+		PlainCol: plainColFn(idReader),
+		SectionAttrs: func(name string) any {
+			if name == "symbol" {
+				return symReader.GetAttributes()
+			}
+			return nil
+		},
+		SectionMembs: func(name string) any {
+			if name == "symbol" {
+				return symReader.GetMemberships()
+			}
+			return nil
+		},
+	}
+	var got []mixedDrone
+	require.NoError(t, marshallreflect.Unmarshal(args, &got, marshallreflect.NoLookup{}))
+
+	require.Equal(t, len(original), len(got))
+	for i := range original {
+		require.Equal(t, original[i].Reading, got[i].Reading, "row %d value", i)
+		require.Equal(t, original[i].ReadingC.Id, got[i].ReadingC.Id, "row %d carrier id", i)
+		require.Equal(t, original[i].ReadingC.Params, got[i].ReadingC.Params, "row %d carrier params", i)
+	}
 }

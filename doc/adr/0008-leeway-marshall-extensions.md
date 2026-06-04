@@ -548,6 +548,97 @@ round-trip stays lossless (producers normalise to UTC to keep the encoding
 deterministic). The leeway facts wire still lands `ts` as a u32-seconds
 DateTime; only the bus path preserves nanos.
 
+### 2026-06-04 — Cut-2 design: parametrized / mixed channels (mixedLowCardRef landed first)
+
+Cut-2 of D3 — the four channels parse-rejected since the original decision
+(`lowCardRefParametrized`, `highCardRefParametrized`, `mixedLowCardRef`,
+`mixedLowCardVerbatim`) — is designed here. The first, `mixedLowCardRef`, is
+implemented end-to-end; the other three are specified but stay parse-rejected
+until a target schema and a consumer exist (see *Scope*).
+
+**Channel shapes (grounded in the runtime interfaces).** The write-side
+`InAttributeMembership…PI` constraints in `dml/runtime/lw_dml_types.go` and the
+read-side accessors in `readaccess/runtime/lw_ra_rt_types.go` give two distinct
+shapes:
+
+- *Parametrized* (`lowCardRefParametrized`, `highCardRefParametrized`): the
+  membership is a single opaque blob. Write
+  `AddMembership<X>ParametrizedP(blob []byte)`; read
+  `GetMembValue<X>Parametrized() iter.Seq[[]byte]`.
+- *Mixed* (`mixedLowCardRef`, `mixedLowCardVerbatim`): a `(value, params)`
+  pair. Write `AddMembershipMixed…P(idOrName, params []byte)`; read either the
+  split `GetMembValueMixed…` + `…HighCardParameters` accessors or the combined
+  `GetMembValue…HighCardParams() iter.Seq2`.
+
+This refines the original sketch: the membership identity for these channels is
+**per-row carrier data**, not a registry-resolved `kindXxx`. `mixedLowCardRef`
+emits `AddMembershipMixedLowCardRefP(carrier.Id, carrier.Params)` with both
+taken from the row — there is no lookup, and `KindVar()` returns "" for the
+channel.
+
+**Carrier types (`marshalltypes`).** A new sibling package
+`public/semistructured/leeway/marshalltypes` holds the plain carriers (no
+generics, no methods). It starts with the one the implemented channel needs:
+
+```go
+type MixedLowCardRef struct { Id uint64; Params []byte }
+```
+
+The deferred channels' carriers are specified for when they land —
+`Parametrized{ Params []byte }` (parametrized) and `MixedLowCardVerbatim{ Name
+[]byte; Params []byte }` (mixed-verbatim; shape provisional — see the
+precondition below). Each is added only when its channel is implemented, so the
+package never carries a carrier no codec path references.
+
+**DTO grammar (sibling pair).** A Cut-2 attribute is two Go fields sharing one
+`(membership, section, channel)` triple — a value field carrying the section's
+value type and a carrier field whose Go type is a `marshalltypes` struct:
+
+```go
+Reading  uint32                        `lw:"sensor,u32Array,mixedLowCardRef"`
+ReadingC marshalltypes.MixedLowCardRef `lw:"sensor,u32Array,mixedLowCardRef"`
+```
+
+`mappingplan.PlanBuilder` recognises the carrier by Go type, pairs it with the
+value field on the shared triple (the carrier occupies no value sub-column),
+and relaxes the in-DTO `(membership, sub-column)` uniqueness rule for exactly
+this pair. The pair becomes one `TaggedField` whose new `CarrierField` /
+`CarrierType` name the sibling; the carrier is stored as its own SoA column but
+emits no attribute of its own.
+
+**Read-side dispatch — one membership per mixed/parametrized section.** Cut-1's
+reader matches each attribute against a *known* membership id/name. A
+parametrized membership is an opaque per-row blob and a mixed membership's id is
+per-row carrier data, so neither can be matched against a fixed identity. Cut-2
+therefore constrains a mixed/parametrized section to a **single value+carrier
+membership**: every attribute belongs to that one field, and the reader consumes
+them in order — value via `GetAttrValueValue`, carrier via the `Seq2` combined
+accessor (`GetMembValueLowCardRefHighCardParams` for mixed-ref). `Finish`
+rejects a second membership in such a section. This is stricter than SD1's
+general per-section channel uniformity, which still holds.
+
+**Scope — `mixedLowCardRef` first.** Of the four, only `mixedLowCardRef` is
+round-trip-testable inside boxer: anchor's `InEntityTestTable` declares
+`MembershipSpecMixedLowCardRefHighCardParameters` on its data sections but not
+the parametrized or mixed-verbatim specs. So `mixedLowCardRef` lands end-to-end
+(grammar + marshallgen emit + marshallreflect codec + an anchor round-trip
+test); the other three keep the "not yet implemented" parse error, narrowed to
+the still-deferred set.
+
+**Precondition for `mixedLowCardVerbatim`.** The authoritative
+`InAttributeMembershipMixedLowCardVerbatimPI` declares
+`AddMembershipMixedLowCardVerbatimP(lowCardVerbatim uint64, params []byte)` — a
+`uint64` first argument — while some generated example schemas emit
+`([]byte, []byte)` and "verbatim" implies a `[]byte` name. Reconciling the
+leeway generator with this interface is a precondition for that channel and is
+tracked outside the marshall\* packages; until then its carrier shape is
+provisional.
+
+**Unchanged.** SD7 (one attribute per pair), SD8 (empty `Params` is wire-
+emitted, not spliced), and the value-side splice semantics hold as written. The
+flag table and the Cut-1 / Cut-2 staging mechanism (SD10) are unchanged except
+that `mixedLowCardRef` moves from rejected to implemented.
+
 ## References
 
 - [`../../public/semistructured/leeway/mappingplan/`](../../public/semistructured/leeway/mappingplan/) — shared DTO model: `Plan`, `lw:` grammar, `PlanBuilder`, membership channels, section grouping, shape classification.

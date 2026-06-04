@@ -133,12 +133,16 @@ func writeHeader(sb *strings.Builder, plan *mappingplan.Plan) {
 func writeImports(sb *strings.Builder, plan *mappingplan.Plan, wrapper WrapperEmitterI) {
 	needsRoaring := false
 	needsTime := false
+	needsMarshalltypes := false
 	for _, f := range plan.Fields {
 		if f.IsRoaring {
 			needsRoaring = true
 		}
 		if f.GoType == "time.Time" {
 			needsTime = true
+		}
+		if f.CarrierField != "" {
+			needsMarshalltypes = true
 		}
 	}
 	for _, p := range plan.PlainCols {
@@ -168,6 +172,9 @@ func writeImports(sb *strings.Builder, plan *mappingplan.Plan, wrapper WrapperEm
 	line(sb, 1, "\"github.com/stergiotis/boxer/public/observability/eh/eb\"")
 	line(sb, 1, "dmlruntime \"github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime\"")
 	line(sb, 1, "raruntime \"github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime\"")
+	if needsMarshalltypes {
+		line(sb, 1, "\"github.com/stergiotis/boxer/public/semistructured/leeway/marshalltypes\"")
+	}
 	if len(extra) > 0 {
 		blank(sb)
 		for _, imp := range extra {
@@ -207,6 +214,10 @@ func writeColumnsStruct(sb *strings.Builder, plan *mappingplan.Plan) {
 			continue
 		}
 		linef(sb, 1, "%s []%s", f.GoFieldName, f.GoType)
+		if f.CarrierField != "" {
+			// Cut-2 carrier sibling: its own SoA column, emits no attribute.
+			linef(sb, 1, "%s []marshalltypes.%s", f.CarrierField, f.CarrierType)
+		}
 	}
 	line(sb, 0, "}\n")
 }
@@ -236,6 +247,9 @@ func writeLenAndAppend(sb *strings.Builder, plan *mappingplan.Plan) {
 			continue
 		}
 		linef(sb, 1, "c.%s = append(c.%s, row.%s)", f.GoFieldName, f.GoFieldName, f.GoFieldName)
+		if f.CarrierField != "" {
+			linef(sb, 1, "c.%s = append(c.%s, row.%s)", f.CarrierField, f.CarrierField, f.CarrierField)
+		}
 	}
 	line(sb, 0, "}\n")
 }
@@ -258,6 +272,9 @@ func writeRowExtract(sb *strings.Builder, plan *mappingplan.Plan) {
 			continue
 		}
 		linef(sb, 1, "row.%s = c.%s[i]", f.GoFieldName, f.GoFieldName)
+		if f.CarrierField != "" {
+			linef(sb, 1, "row.%s = c.%s[i]", f.CarrierField, f.CarrierField)
+		}
 	}
 	line(sb, 1, "return\n}\n")
 }
@@ -625,6 +642,14 @@ func writeMultiSubColumnDriver(sb *strings.Builder, g mappingplan.SectionGroup, 
 func writeMembershipAdd(sb *strings.Builder, indent, attrVar string, f mappingplan.TaggedField) {
 	ch := f.Flags.Channel
 	method := "AddMembership" + ch.AddMethodSuffix() + "P"
+	if ch.UsesCarrier() {
+		// Cut-2: per-row membership data read from the sibling carrier column.
+		switch ch {
+		case mappingplan.MembershipChannelMixedLowCardRef:
+			linef(sb, 0, "%s%s.%s(c.%s[i].Id, c.%s[i].Params)", indent, attrVar, method, f.CarrierField, f.CarrierField)
+		}
+		return
+	}
 	if ch.EmbedsLiteralName() {
 		linef(sb, 0, "%s%s.%s([]byte(%q))", indent, attrVar, method, f.LWMembership)
 		return
@@ -848,7 +873,13 @@ func writeSectionReadInterfaces(sb *strings.Builder, plan *mappingplan.Plan, g m
 
 	linef(sb, 0, "// %s%sMembsReadI is the Memberships-side view of the %s section.", kind, method, g.Section)
 	linef(sb, 0, "type %s%sMembsReadI interface {", kind, method)
-	linef(sb, 1, "GetMembValue%s(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[%s]", g.Channel().AddMethodSuffix(), g.Channel().ReadIterElemType())
+	if g.Channel().UsesCarrier() {
+		// Carrier channel: the combined Seq2 accessor yields the per-row
+		// membership data (id/name + params) together.
+		linef(sb, 1, "GetMembValue%s(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq2[%s]", g.Channel().CarrierReadMethodSuffix(), g.Channel().CarrierReadSeq2Types())
+	} else {
+		linef(sb, 1, "GetMembValue%s(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[%s]", g.Channel().AddMethodSuffix(), g.Channel().ReadIterElemType())
+	}
 	line(sb, 0, "}\n")
 	return
 }
@@ -931,6 +962,10 @@ func writeSectionDecode(sb *strings.Builder, g mappingplan.SectionGroup) (err er
 		return writeMultiSubColumnDecode(sb, g, attrsVar, membsVar, prefix)
 	}
 
+	if g.Channel().UsesCarrier() {
+		return writeCarrierSectionDecode(sb, g, attrsVar, membsVar, prefix)
+	}
+
 	fields := g.SubColumns[0].Fields
 	for _, f := range fields {
 		if f.IsConst {
@@ -962,6 +997,63 @@ func writeSectionDecode(sb *strings.Builder, g mappingplan.SectionGroup) (err er
 		}
 		writeFieldAppend(sb, f, prefix)
 	}
+	return
+}
+
+// writeCarrierSectionDecode emits FillFromArrow decode for a mixed /
+// parametrized (carrier-channel) section. PlanBuilder guarantees one
+// membership — one value+carrier field — so every attribute belongs to it
+// and there is no membership-id switch. The scalar value comes from
+// GetAttrValueValue; the per-row carrier (id + params) comes together from
+// the Seq2 combined accessor and is reconstructed into the carrier column.
+func writeCarrierSectionDecode(sb *strings.Builder, g mappingplan.SectionGroup, attrsVar, membsVar, prefix string) (err error) {
+	var f mappingplan.TaggedField
+	found := false
+	for _, ff := range g.SubColumns[0].Fields {
+		if ff.Flags.Channel.UsesCarrier() {
+			f = ff
+			found = true
+			break
+		}
+	}
+	if !found {
+		err = eb.Build().Str("section", g.Section).Errorf("carrier section has no value field")
+		return
+	}
+
+	valVar := prefix + f.GoFieldName + "Val"
+	carrierVar := prefix + f.GoFieldName + "Carrier"
+	readMethod := "GetMembValue" + f.Flags.Channel.CarrierReadMethodSuffix()
+	getVal := "GetAttrValueSingleOrDefault"
+	if mappingplan.ClassifyBegin(f) == mappingplan.ShapeScalarBegin {
+		getVal = "GetAttrValueValue"
+	}
+	valRead := fmt.Sprintf("%s.%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))", attrsVar, getVal)
+
+	linef(sb, 2, "var %s %s", valVar, f.GoType)
+	linef(sb, 2, "var %s marshalltypes.%s", carrierVar, f.CarrierType)
+	linef(sb, 2, "%sCount := 0", prefix)
+	linef(sb, 2, "n%s := %s.GetNumberOfAttributes(raruntime.EntityIdx(i))", prefix, attrsVar)
+	linef(sb, 2, "for attrJ := int64(0); attrJ < n%s; attrJ++ {", prefix)
+	linef(sb, 3, "for id, params := range %s.%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {", membsVar, readMethod)
+	switch {
+	case mappingplan.IsFixedByteArray(f.GoType):
+		linef(sb, 4, "copy(%s[:], %s)", valVar, valRead)
+	case f.GoType == "[]byte":
+		linef(sb, 4, "%s = append([]byte(nil), %s...)", valVar, valRead)
+	default:
+		linef(sb, 4, "%s = %s", valVar, valRead)
+	}
+	linef(sb, 4, "%s = marshalltypes.%s{Id: id, Params: append([]byte(nil), params...)}", carrierVar, f.CarrierType)
+	linef(sb, 4, "%sCount++", prefix)
+	line(sb, 3, "}")
+	line(sb, 2, "}")
+	linef(sb, 2, "if %sCount != 1 {", prefix)
+	linef(sb, 3, "err = eb.Build().Int(\"row\", i).Str(\"field\", %q).Errorf(\"expected exactly one occurrence per row\")", f.GoFieldName)
+	line(sb, 3, "return")
+	line(sb, 2, "}")
+	linef(sb, 2, "c.%s = append(c.%s, %s)", f.GoFieldName, f.GoFieldName, valVar)
+	linef(sb, 2, "c.%s = append(c.%s, %s)", f.CarrierField, f.CarrierField, carrierVar)
 	return
 }
 

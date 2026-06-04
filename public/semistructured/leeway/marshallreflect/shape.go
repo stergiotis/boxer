@@ -21,6 +21,11 @@ const optionPkgPath = "github.com/stergiotis/boxer/public/functional/option"
 // field.
 const roaringPkgPath = "github.com/RoaringBitmap/roaring"
 
+// marshalltypesPkgPath is the import path of the Cut-2 carrier structs
+// (marshalltypes.MixedLowCardRef, …). A struct field from this package is
+// a carrier, paired with its value sibling by mappingplan.PlanBuilder.
+const marshalltypesPkgPath = "github.com/stergiotis/boxer/public/semistructured/leeway/marshalltypes"
+
 // classifyReflectType inspects rt and returns the corresponding shared
 // mappingplan.FieldShape (consumed by mappingplan.PlanBuilder). Forbids
 // the same Go shapes the codegen classifier forbids: Option[[]T] (except
@@ -43,6 +48,13 @@ func classifyReflectType(rt reflect.Type) (s mappingplan.FieldShape, err error) 
 		return
 
 	case reflect.Struct:
+		// marshalltypes carrier (Cut-2): recognised by package + name;
+		// paired with its value sibling in mappingplan.PlanBuilder.
+		if rt.PkgPath() == marshalltypesPkgPath {
+			s.CarrierType = rt.Name()
+			s.GoType = "marshalltypes." + rt.Name()
+			return
+		}
 		// option.Option[T] is the only struct shape the codec accepts
 		// on a tagged field. Pure-value types like time.Time get a
 		// fast-path further down via reflectGoTypeName.

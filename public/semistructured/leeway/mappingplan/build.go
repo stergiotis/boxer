@@ -18,6 +18,13 @@ type FieldShape struct {
 	IsOption  bool   // option.Option[T] wrapper
 	IsSlice   bool   // []T element-slice (top-level, non-byte)
 	IsRoaring bool   // *roaring.Bitmap
+
+	// CarrierType is the marshalltypes carrier struct name (e.g.
+	// "MixedLowCardRef") when the field's Go type is a Cut-2 carrier, or ""
+	// otherwise. Both front-ends set it by recognising the marshalltypes
+	// package + struct name; PlanBuilder pairs the carrier with its value
+	// sibling. A carrier field's other shape bits are unused.
+	CarrierType string
 }
 
 // FixedByteArrayLen reports the N in a fixed-length byte-array source-form
@@ -75,6 +82,15 @@ type PlanBuilder struct {
 	plan            *Plan
 	usedPlainCols   map[string]string
 	usedMemberships map[string]string
+	// carriers holds Cut-2 carrier fields awaiting pairing with their value
+	// sibling, keyed by membership+"\x00"+section. Resolved in Finish.
+	carriers map[string]carrierInfo
+}
+
+// carrierInfo records a parsed carrier field pending pairing in Finish.
+type carrierInfo struct {
+	goField     string
+	carrierType string
 }
 
 // NewPlanBuilder returns a builder seeded with the plan-level identity.
@@ -89,6 +105,7 @@ func NewPlanBuilder(inputPath, packageName, kindType string) *PlanBuilder {
 		},
 		usedPlainCols:   map[string]string{},
 		usedMemberships: map[string]string{},
+		carriers:        map[string]carrierInfo{},
 	}
 }
 
@@ -163,6 +180,14 @@ func (b *PlanBuilder) AddField(goFieldName, lwTag string, shape FieldShape) (err
 		return
 	}
 	membership, section, column, flags := pt.Membership, pt.Section, pt.Column, pt.Flags
+
+	// Cut-2 carrier field — recognised by its Go type (a marshalltypes
+	// struct), not by the lw: tag. It rides alongside a value field sharing
+	// the same (membership, section); recorded here and paired in Finish.
+	// It claims no value sub-column and emits no attribute of its own.
+	if shape.CarrierType != "" {
+		return b.addCarrierField(goFieldName, membership, section, column, flags, shape)
+	}
 
 	// Empty membership ⇒ plain row column. The section slot names the
 	// fact-row column (id / ts / naturalKey / expiresAt). Shape is
@@ -250,6 +275,10 @@ func (b *PlanBuilder) AddField(goFieldName, lwTag string, shape FieldShape) (err
 		err = eb.Build().Str("field", goFieldName).Errorf("`,const=<value>` only valid on `_` blank-identifier fields (carries no Go-side data)")
 		return
 	}
+	if flags.Channel.UsesCarrier() && (shape.IsOption || isMulti) {
+		err = eb.Build().Str("field", goFieldName).Str("channel", flags.Channel.String()).Errorf("mixed/parametrized value field must be a plain scalar (Cut-2 supports T, not Option / slice / roaring)")
+		return
+	}
 
 	b.plan.Fields = append(b.plan.Fields, TaggedField{
 		GoFieldName:  goFieldName,
@@ -262,6 +291,40 @@ func (b *PlanBuilder) AddField(goFieldName, lwTag string, shape FieldShape) (err
 		LWColumn:     column,
 		Flags:        flags,
 	})
+	return
+}
+
+// addCarrierField records a Cut-2 carrier field (its Go type is a
+// marshalltypes carrier struct) for pairing with its value sibling in
+// Finish. The carrier names the channel's membership-side data (id /
+// params); it occupies no value sub-column and emits no attribute.
+func (b *PlanBuilder) addCarrierField(goFieldName, membership, section, column string, flags FieldFlags, shape FieldShape) (err error) {
+	if membership == "" || section == "" {
+		err = eb.Build().Str("field", goFieldName).Str("carrier", shape.CarrierType).Errorf("carrier field needs a membership and section in its lw: tag")
+		return
+	}
+	if column != "" {
+		err = eb.Build().Str("field", goFieldName).Errorf("carrier field cannot target a sub-column (`:<col>`)")
+		return
+	}
+	if !flags.Channel.UsesCarrier() {
+		err = eb.Build().Str("field", goFieldName).Str("carrier", shape.CarrierType).Errorf("a marshalltypes carrier field requires a mixed/parametrized channel flag (e.g. `,mixedLowCardRef`)")
+		return
+	}
+	if want := flags.Channel.CarrierTypeName(); want != shape.CarrierType {
+		err = eb.Build().Str("field", goFieldName).Str("carrier", shape.CarrierType).Str("channel", flags.Channel.String()).Str("wantCarrier", want).Errorf("carrier type does not match the channel flag")
+		return
+	}
+	if flags.Unit || flags.Explode || flags.HasConst {
+		err = eb.Build().Str("field", goFieldName).Errorf("carrier field cannot carry `unit` / `explode` / `const` flags")
+		return
+	}
+	key := membership + "\x00" + section
+	if prev, dup := b.carriers[key]; dup {
+		err = eb.Build().Str("membership", membership).Str("section", section).Str("first", prev.goField).Str("second", goFieldName).Errorf("two carrier fields share one membership+section")
+		return
+	}
+	b.carriers[key] = carrierInfo{goField: goFieldName, carrierType: shape.CarrierType}
 	return
 }
 
@@ -288,7 +351,13 @@ func (b *PlanBuilder) Finish() (plan *Plan, err error) {
 	// from the original "all Verbatim or all Ref" bool.
 	bySection := map[string]MembershipChannel{}
 	bySectionFirst := map[string]string{}
+	membsBySection := map[string]map[string]bool{}
 	for _, f := range b.plan.Fields {
+		if membsBySection[f.LWSection] == nil {
+			membsBySection[f.LWSection] = map[string]bool{}
+		}
+		membsBySection[f.LWSection][f.LWMembership] = true
+
 		seen, ok := bySection[f.LWSection]
 		if !ok {
 			bySection[f.LWSection] = f.Flags.Channel
@@ -300,6 +369,36 @@ func (b *PlanBuilder) Finish() (plan *Plan, err error) {
 			return
 		}
 	}
+
+	// Cut-2: resolve each carrier-channel value field with its sibling
+	// carrier and enforce one membership per carrier (mixed/parametrized)
+	// section. Such a section's attributes carry per-row membership data
+	// (id/params), so a second membership could not be disambiguated on read.
+	for i := range b.plan.Fields {
+		f := &b.plan.Fields[i]
+		if !f.Flags.Channel.UsesCarrier() {
+			continue
+		}
+		if len(membsBySection[f.LWSection]) > 1 {
+			err = eb.Build().Str("section", f.LWSection).Str("channel", f.Flags.Channel.String()).Errorf("a carrier (mixed/parametrized) section may carry only one membership — its per-row attributes cannot be disambiguated on read")
+			return
+		}
+		key := f.LWMembership + "\x00" + f.LWSection
+		c, ok := b.carriers[key]
+		if !ok {
+			err = eb.Build().Str("field", f.GoFieldName).Str("channel", f.Flags.Channel.String()).Str("wantCarrier", f.Flags.Channel.CarrierTypeName()).Errorf("mixed/parametrized field needs a sibling carrier field with the same lw: membership+section")
+			return
+		}
+		f.CarrierField = c.goField
+		f.CarrierType = c.carrierType
+		delete(b.carriers, key)
+	}
+	for key, c := range b.carriers {
+		memb, sect, _ := strings.Cut(key, "\x00")
+		err = eb.Build().Str("field", c.goField).Str("membership", memb).Str("section", sect).Errorf("carrier field has no value sibling on the same membership+section")
+		return
+	}
+
 	plan = b.plan
 	return
 }

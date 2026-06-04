@@ -103,14 +103,20 @@ func SplitLW(tag string) (out ParsedLWTag, err error) {
 			if err = setChannelFlag(&out.Flags, MembershipChannelHighCardVerbatim, token); err != nil {
 				return
 			}
-		case "lowCardRefParametrized", "highCardRefParametrized", "mixedLowCardRef", "mixedLowCardVerbatim":
-			// ADR-0008 D3 stages these four "complex" channels for a
-			// follow-up commit — the parametrized/mixed shapes require
-			// a two-field DTO pairing the section value with a sibling
-			// carrier, which is non-trivial. Parse-time rejection so
-			// DTO authors get a clear signal rather than misleading
-			// emit-time failures.
-			err = eb.Build().Str("flag", token).Errorf("lw: channel flag %q is recognised but not yet implemented — see ADR-0008 D3 staged-rollout note", token)
+		case "mixedLowCardRef":
+			// ADR-0008 D3 Cut-2: the first carrier-paired channel. Pairs a
+			// value field with a marshalltypes.MixedLowCardRef sibling
+			// (id + params); see mappingplan.PlanBuilder + the Cut-2 update.
+			if err = setChannelFlag(&out.Flags, MembershipChannelMixedLowCardRef, token); err != nil {
+				return
+			}
+		case "lowCardRefParametrized", "highCardRefParametrized", "mixedLowCardVerbatim":
+			// ADR-0008 D3 Cut-2: mixedLowCardRef has landed; these three
+			// stay staged — parametrized carries no separate id, and
+			// mixed-verbatim has an unresolved interface/generator signature
+			// mismatch (uint64 vs []byte first arg). Parse-time rejection so
+			// DTO authors get a clear signal rather than emit-time failures.
+			err = eb.Build().Str("flag", token).Errorf("lw: channel flag %q is recognised but not yet implemented — see ADR-0008 D3 Cut-2 staged-rollout note", token)
 			return
 		default:
 			err = eb.Build().Str("flag", token).Errorf("unknown flag token (recognised: unit, explode, verbatim / lowCardVerbatim, highCardRef, highCardVerbatim, const=<value>)")

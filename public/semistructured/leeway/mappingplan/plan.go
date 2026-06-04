@@ -65,6 +65,12 @@ const (
 	// MembershipChannelHighCardVerbatim mirrors LowCardVerbatim on the
 	// high-card channel: AddMembershipHighCardVerbatimP([]byte).
 	MembershipChannelHighCardVerbatim
+	// MembershipChannelMixedLowCardRef is the first Cut-2 channel
+	// (ADR-0008 D3 Cut-2 update): AddMembershipMixedLowCardRefP(id uint64,
+	// params []byte). Both the id and the params are per-row carrier data
+	// (a marshalltypes.MixedLowCardRef sibling field), not a registry
+	// lookup — so NeedsKindVar is false. UsesCarrier reports true.
+	MembershipChannelMixedLowCardRef
 )
 
 // String returns the lw: flag spelling for this channel. The default
@@ -79,8 +85,63 @@ func (c MembershipChannel) String() string {
 		return "highCardRef"
 	case MembershipChannelHighCardVerbatim:
 		return "highCardVerbatim"
+	case MembershipChannelMixedLowCardRef:
+		return "mixedLowCardRef"
 	}
 	return "unknown"
+}
+
+// UsesCarrier reports whether the channel carries its membership identity
+// as per-row sibling data (a marshalltypes carrier struct) rather than a
+// registry id or a literal lw: name. True for the mixed / parametrized
+// channels; a field on such a channel pairs with a carrier field sharing
+// its (membership, section) and emits/decodes the membership-side data
+// from that carrier. False for the four Cut-1 channels.
+func (c MembershipChannel) UsesCarrier() bool {
+	switch c {
+	case MembershipChannelMixedLowCardRef:
+		return true
+	default:
+		return false
+	}
+}
+
+// CarrierTypeName returns the marshalltypes carrier struct name a field on
+// this channel must pair with (e.g. "MixedLowCardRef"), or "" for channels
+// that take no carrier. Used by the front-ends to check that a field's
+// channel flag and its sibling carrier's Go type agree.
+func (c MembershipChannel) CarrierTypeName() string {
+	switch c {
+	case MembershipChannelMixedLowCardRef:
+		return "MixedLowCardRef"
+	default:
+		return ""
+	}
+}
+
+// CarrierReadMethodSuffix returns the read-side combined-accessor suffix
+// for a carrier channel: the readaccess runtime exposes
+// GetMembValue<Suffix> returning an iter.Seq2 that yields the per-row
+// membership data (id/name + params) together. "" for non-carrier channels.
+func (c MembershipChannel) CarrierReadMethodSuffix() string {
+	switch c {
+	case MembershipChannelMixedLowCardRef:
+		return "LowCardRefHighCardParams"
+	default:
+		return ""
+	}
+}
+
+// CarrierReadSeq2Types returns the comma-separated iter.Seq2 element types
+// the carrier channel's combined read accessor yields — e.g. "uint64, []byte"
+// for mixedLowCardRef (an id and a params blob). "" for non-carrier channels.
+func (c MembershipChannel) CarrierReadSeq2Types() string {
+	switch c {
+	case MembershipChannelMixedLowCardRef:
+		return "uint64, []byte"
+	default:
+		return ""
+	}
 }
 
 // EmbedsLiteralName reports whether the channel's wire identity is the
@@ -139,6 +200,8 @@ func (c MembershipChannel) AddMethodSuffix() string {
 		return "HighCardRef"
 	case MembershipChannelHighCardVerbatim:
 		return "HighCardVerbatim"
+	case MembershipChannelMixedLowCardRef:
+		return "MixedLowCardRef"
 	}
 	return ""
 }
@@ -216,6 +279,16 @@ type TaggedField struct {
 	// strings (symbol / symbolArray / text / textArray / stringArray).
 	IsConst    bool
 	ConstValue string
+
+	// CarrierField / CarrierType wire a mixed / parametrized value field
+	// (Flags.Channel.UsesCarrier()) to its sibling carrier — the Go field
+	// name and the marshalltypes struct name (e.g. "MixedLowCardRef").
+	// PlanBuilder.Finish resolves them from the carrier field declared on
+	// the same (membership, section). The codec reads the membership-side
+	// data (id / params) from this carrier per row. Both are "" for the
+	// Cut-1 channels.
+	CarrierField string
+	CarrierType  string
 }
 
 // KindVar returns the package-level identifier holding the resolved

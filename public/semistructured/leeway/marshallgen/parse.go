@@ -211,6 +211,17 @@ func classifyType(expr ast.Expr) (shape mappingplan.FieldShape, err error) {
 		err = eb.Build().Errorf("pointer types forbidden except *roaring.Bitmap — use option.Option[T] for ZeroToOne fields")
 		return
 	}
+	// marshalltypes carrier (Cut-2) — a selector into the marshalltypes
+	// package (e.g. marshalltypes.MixedLowCardRef). Recognised by the
+	// source-level package identifier, like roaring / option above;
+	// PlanBuilder pairs it with its value sibling.
+	if sel, ok := expr.(*ast.SelectorExpr); ok {
+		if pkg, pkgOk := sel.X.(*ast.Ident); pkgOk && pkg.Name == "marshalltypes" {
+			shape.CarrierType = sel.Sel.Name
+			shape.GoType = "marshalltypes." + sel.Sel.Name
+			return
+		}
+	}
 	// Plain scalar (T, time.Time, fixed-length [N]byte).
 	shape.GoType, err = renderInner(expr)
 	return
