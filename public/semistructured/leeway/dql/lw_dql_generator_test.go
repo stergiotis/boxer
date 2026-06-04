@@ -58,6 +58,14 @@ func buildTestIR(t *testing.T) *InformationRetrieval {
 	tr.TaggedValueColumn("beginIncl", ctabb.Z64).AddColumnEncodingHints(easp.AspectLightGeneralCompression)
 	tr.TaggedValueColumn("endExcl", ctabb.Z64).AddColumnEncodingHints(easp.AspectLightGeneralCompression)
 
+	u32s := manip.TaggedValueSection("u32Set").SectionStreamingGroup("data").AddSectionMembership(membership...)
+	u32s.TaggedValueColumn("value", canonicaltypes.PromoteScalarPrim(ctabb.U32, canonicaltypes.ScalarModifierSet)).
+		AddColumnEncodingHints(easp.AspectLightGeneralCompression)
+
+	pair := manip.TaggedValueSection("pair").SectionStreamingGroup("data").AddSectionMembership(membership...)
+	pair.TaggedValueColumn("lo", ctabb.U64).AddColumnEncodingHints(easp.AspectLightGeneralCompression)
+	pair.TaggedValueColumn("hi", ctabb.U64).AddColumnEncodingHints(easp.AspectLightGeneralCompression)
+
 	tblDesc, err := manip.BuildTableDesc()
 	if err != nil {
 		t.Fatalf("BuildTableDesc: %v", err)
@@ -253,5 +261,65 @@ func TestGenerator_Exec(t *testing.T) {
 	}
 	if valid != "0" {
 		t.Errorf("non-matching row validator = %q, want 0", valid)
+	}
+}
+
+// TestGenerator_ExecSetAndMultiSubcol covers the set value path (LIST_BY_TAG
+// keyed on the section's `card` support column) and a multi-sub-column section
+// (two value columns sharing one membership: located once, projected twice,
+// the membership counted once in presence/validator).
+func TestGenerator_ExecSetAndMultiSubcol(t *testing.T) {
+	g := NewGenerator(buildTestIR(t), NewLookupResolver(mapLookup{"zones": 5, "span": 7}))
+	plan := &mappingplan.Plan{
+		KindName: "setmulti",
+		Fields: []mappingplan.TaggedField{
+			{GoFieldName: "Zones", IsRoaring: true, LWMembership: "zones", LWSection: "u32Set", Flags: mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardRef}},
+			{GoFieldName: "Lo", GoType: "uint64", LWMembership: "span", LWSection: "pair", LWColumn: "lo", Flags: mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardRef}},
+			{GoFieldName: "Hi", GoType: "uint64", LWMembership: "span", LWSection: "pair", LWColumn: "hi", Flags: mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardRef}},
+		},
+	}
+	a, err := g.Generate(plan)
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	// span is shared by Lo and Hi -> one membership term each in presence/validator.
+	if n := strings.Count(a.Presence, "has("); n != 2 {
+		t.Errorf("want 2 presence terms (zones + span), got %d:\n%s", n, a.Presence)
+	}
+	if n := strings.Count(a.Validator, "countEqual("); n != 2 {
+		t.Errorf("want 2 validator terms (span dedup'd), got %d:\n%s", n, a.Validator)
+	}
+
+	setVal := g.value["u32Set"]["value"].col
+	setCard := g.support["u32Set"][common.ColumnRoleCardinality]
+	setLr := g.support["u32Set"][common.ColumnRoleLowCardRef]
+	setLrCard := g.support["u32Set"][common.ColumnRoleLowCardRefCardinality]
+	pairLo := g.value["pair"]["lo"].col
+	pairHi := g.value["pair"]["hi"].col
+	pairLr := g.support["pair"][common.ColumnRoleLowCardRef]
+	pairLrCard := g.support["pair"][common.ColumnRoleLowCardRefCardinality]
+	for name, v := range map[string]string{"setVal": setVal, "setCard": setCard, "setLr": setLr, "setLrCard": setLrCard, "pairLo": pairLo, "pairHi": pairHi, "pairLr": pairLr, "pairLrCard": pairLrCard} {
+		if v == "" {
+			t.Fatalf("schema is missing the physical column for %s", name)
+		}
+	}
+
+	// One entity: u32Set attr holds the 3-element set tagged 5; pair attr holds
+	// (lo=10, hi=20) tagged 7.
+	row := map[string]string{
+		setVal: "[100,200,300]", setCard: "[3]", setLr: "[5]", setLrCard: "[1]",
+		pairLo: "[10]", pairHi: "[20]", pairLr: "[7]", pairLrCard: "[1]",
+	}
+	proj, pres, valid := runExec(t, row, a.Projection, a.Presence, a.Validator)
+	if pres != "1" {
+		t.Errorf("presence = %q, want 1", pres)
+	}
+	if valid != "1" {
+		t.Errorf("validator = %q, want 1", valid)
+	}
+	for _, want := range []string{"[100,200,300]", "10", "20"} {
+		if !strings.Contains(proj, want) {
+			t.Errorf("projection = %q, want set [100,200,300] and lo/hi 10/20", proj)
+		}
 	}
 }

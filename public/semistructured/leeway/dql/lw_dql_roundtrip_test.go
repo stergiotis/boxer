@@ -135,7 +135,7 @@ func TestRoundTrip_AnchorArrow(t *testing.T) {
 
 	type row struct{ id, tracking, status, path, pres, val string }
 	var got []row
-	for _, line := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
+	for line := range strings.SplitSeq(strings.TrimRight(out, "\n"), "\n") {
 		if line == "" {
 			continue
 		}
@@ -181,4 +181,91 @@ func formatUintArray(xs []uint64) string {
 		parts[i] = fmt.Sprintf("%d", x)
 	}
 	return "[" + strings.Join(parts, ",") + "]"
+}
+
+// rtConst carries a write-only const field (a fixed verbatim attribute emitted
+// on every row) alongside a regular verbatim field in the same section —
+// section uniformity holds (both verbatim).
+type rtConst struct {
+	_ struct{} `kind:"droneMissionExt"`
+	_ struct{} `lw:"appKind,symbol,verbatim,const=production"`
+
+	ID       uint64 `lw:",id"`
+	Tracking []byte `lw:",naturalKey"`
+	Tag      string `lw:"feature,symbol,verbatim"`
+}
+
+// TestRoundTrip_Const checks the const path on real data: the generated
+// validator must require the const membership present once and carrying the
+// fixed value, and that holds for every marshalled row. The const has no
+// projected slot (write-only); Tag projects normally.
+func TestRoundTrip_Const(t *testing.T) {
+	original := []rtConst{
+		{ID: 3001, Tracking: []byte("CON-A"), Tag: "edge"},
+		{ID: 3002, Tracking: []byte("CON-B"), Tag: "stable"},
+	}
+	lookup := marshallreflect.MapLookup{} // all verbatim; the const needs no id
+
+	table := anchor.NewInEntityTestTable(memory.NewGoAllocator(), len(original))
+	if err := marshallreflect.Marshal(table, original, lookup); err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	recs, err := table.TransferRecords(nil)
+	if err != nil {
+		t.Fatalf("TransferRecords: %v", err)
+	}
+	defer func() {
+		for _, r := range recs {
+			r.Release()
+		}
+	}()
+	if len(recs) == 0 {
+		t.Fatalf("no records produced")
+	}
+	arrowPath := writeArrowFile(t, recs[0])
+
+	plan, err := marshallreflect.PlanFor[rtConst]()
+	if err != nil {
+		t.Fatalf("PlanFor: %v", err)
+	}
+	g := NewGenerator(buildAnchorIR(t), NewLookupResolver(lookup))
+	a, err := g.Generate(plan)
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if !strings.Contains(a.Validator, "'production'") {
+		t.Errorf("validator should pin the const value:\n%s", a.Validator)
+	}
+
+	script := HelperUDFsSQL() + "\nSELECT p.ID, p.Tag, pres, val FROM (SELECT " +
+		a.Projection + " AS p, " + a.Presence + " AS pres, " + a.Validator + " AS val FROM file('" +
+		arrowPath + "', 'Arrow')) ORDER BY p.ID"
+	out := runClickHouseLocal(t, script)
+
+	var rows [][]string
+	for line := range strings.SplitSeq(strings.TrimRight(out, "\n"), "\n") {
+		if line == "" {
+			continue
+		}
+		rows = append(rows, strings.Split(line, "\t"))
+	}
+	if len(rows) != len(original) {
+		t.Fatalf("got %d rows, want %d:\n%s", len(rows), len(original), out)
+	}
+	sort.Slice(original, func(i, j int) bool { return original[i].ID < original[j].ID })
+	for i, w := range original {
+		r := rows[i]
+		if len(r) != 4 {
+			t.Fatalf("row %d: want 4 columns, got %d: %q", i, len(r), r)
+		}
+		if r[1] != w.Tag {
+			t.Errorf("row %d Tag = %q, want %q", i, r[1], w.Tag)
+		}
+		if r[2] != "1" {
+			t.Errorf("row %d presence = %q, want 1", i, r[2])
+		}
+		if r[3] != "1" {
+			t.Errorf("row %d validator = %q, want 1 (const present + value matches)", i, r[3])
+		}
+	}
 }
