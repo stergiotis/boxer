@@ -5,6 +5,25 @@ here=$(dirname "$(readlink -f "$BASH_SOURCE")")
 cd "$here"
 clientDir="$here/target/release/"
 VSYNC="${VSYNC:-on}"
+# Resolve a Noto font file via fontconfig so this works across distros
+# instead of hardcoding one layout: Fedora ships them under
+# google-noto-vf/, Arch under noto/ & noto-cjk/, Debian under
+# truetype/noto/ — each with different directory and file names. fc-match
+# is part of fontconfig and present on every mainstream desktop. It
+# always returns *some* font though, so each lookup is guarded by the
+# matched family name to reject a silent fallback to an unrelated font.
+resolve_noto() {
+    local family="$1" want="$2" line file fam
+    command -v fc-match >/dev/null 2>&1 || return 0
+    line=$(fc-match -f '%{file}\t%{family}\n' "$family" 2>/dev/null) || return 0
+    file="${line%%$'\t'*}"; fam="${line#*$'\t'}"
+    [[ "$fam" == *"$want"* && -f "$file" ]] && printf '%s' "$file"
+}
+
+# Proportional UI font: Noto Sans (base latin). Override MAIN_FONT to pin
+# a specific .ttf; otherwise detect, falling back to the Fedora path only
+# when fontconfig is unavailable.
+MAIN_FONT="${MAIN_FONT:-$(resolve_noto 'Noto Sans' 'Noto Sans')}"
 MAIN_FONT="${MAIN_FONT:-/usr/share/fonts/google-noto-vf/NotoSans[wght].ttf}"
 # MONO_FONT is empty by default; the Rust loader then re-uses MAIN_FONT
 # as the FontFamily::Monospace primary (preserves pre-split UX). Set it
@@ -14,7 +33,22 @@ MONO_FONT="${MONO_FONT:-}"
 # regular). Vendored from the `stergiotis/ids-fonts` v0.2.4 release at
 # `assets/fonts/phosphor/`. No download fallback needed.
 PHOSPHOR_FONT="${PHOSPHOR_FONT:-$here/assets/fonts/phosphor/Phosphor.ttf}"
+# CJK fallback: query a language-qualified family ('... CJK JP') because
+# the bare 'Noto Sans Mono CJK' is not a fontconfig family and silently
+# falls back to plain Noto Sans (no CJK glyphs); the 'CJK' guard rejects
+# that. Falls back to the Fedora path when fontconfig is unavailable.
+FALLBACK_FONT="${FALLBACK_FONT:-$(resolve_noto 'Noto Sans Mono CJK JP' 'CJK')}"
 FALLBACK_FONT="${FALLBACK_FONT:-/usr/share/fonts/google-noto-sans-mono-cjk-vf-fonts/NotoSansMonoCJK-VF.ttc}"
+
+# Best-effort heads-up: a missing MAIN_FONT means the app silently falls
+# back to egui's built-in font. The optional CJK FALLBACK_FONT may be
+# absent. Detection above keeps these pointing at real files wherever
+# Noto is installed; this only fires on a box that lacks it.
+if [[ -n "$MAIN_FONT" && ! -f "$MAIN_FONT" ]]; then
+    echo "hmi.sh: MAIN_FONT not found: $MAIN_FONT" >&2
+    echo "  install Noto Sans (Fedora: google-noto-sans-vf-fonts, Arch: noto-fonts," >&2
+    echo "  Debian/Ubuntu: fonts-noto-core) or set MAIN_FONT to an absolute .ttf." >&2
+fi
 
 # IMZERO2_SCREENSHOT_SIZE=WxH widens the eframe viewport to fit the
 # requested tour capture rect (ADR-0008 SD5). The Go-side parser is
