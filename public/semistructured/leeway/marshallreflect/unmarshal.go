@@ -469,6 +469,13 @@ func unmarshalCarrierSection(row reflect.Value, g mappingplan.SectionGroup, attr
 	carrierType := row.FieldByName(f.CarrierField).Type()
 	valAcc := reflect.New(goTypeReflect(f.GoType)).Elem()
 	carrierVal := reflect.New(carrierType).Elem()
+	// Scalar sections expose GetAttrValueValue (T); HA / single-slot sections
+	// expose GetAttrValueSingleOrDefault. Mirror marshallgen's choice so the
+	// two front-ends read the same accessor.
+	valMethod := "GetAttrValueSingleOrDefault"
+	if mappingplan.ClassifyBegin(*f) == mappingplan.ShapeScalarBegin {
+		valMethod = "GetAttrValueValue"
+	}
 
 	n := mustCall(attrs, "GetNumberOfAttributes", reflect.ValueOf(entityIdx(i)))[0].Int()
 	count := 0
@@ -477,7 +484,7 @@ func unmarshalCarrierSection(row reflect.Value, g mappingplan.SectionGroup, attr
 		if len(ids) == 0 {
 			continue
 		}
-		v := mustCall(attrs, "GetAttrValueValue", reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
+		v := mustCall(attrs, valMethod, reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
 		switch {
 		case mappingplan.IsFixedByteArray(f.GoType):
 			arr := reflect.New(goTypeReflect(f.GoType)).Elem()
@@ -491,7 +498,13 @@ func unmarshalCarrierSection(row reflect.Value, g mappingplan.SectionGroup, attr
 		default:
 			valAcc = v
 		}
-		carrierVal.FieldByName("Id").SetUint(ids[0].Uint())
+		valField := carrierVal.FieldByName(f.Flags.Channel.CarrierValueField())
+		if f.Flags.Channel.CarrierValueIsBytes() {
+			// Verbatim name — copy out of the Arrow buffer.
+			valField.SetBytes(append([]byte(nil), ids[0].Bytes()...))
+		} else {
+			valField.SetUint(ids[0].Uint())
+		}
 		carrierVal.FieldByName("Params").SetBytes(append([]byte(nil), params[0].Bytes()...))
 		count++
 	}

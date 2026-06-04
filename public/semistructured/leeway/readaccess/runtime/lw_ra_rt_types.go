@@ -147,7 +147,7 @@ type InAttributeMembershipMixedValueLowCardRefHighCardParamsI interface {
 	GetMembValueLowCardRefHighCardParams(entityIdx EntityIdx, attrIdx AttributeIdx) iter.Seq2[uint64, []byte]
 }
 type InAttributeMembershipMixedValueLowCardVerbatimHighCardParamsI interface {
-	InAttributeMembershipMixedLowCardRefI
+	InAttributeMembershipMixedLowCardVerbatimI
 	InAttributeMembershipMixedVerbatimHighCardParametersI
 	GetMembValueLowCardVerbatimHighCardParams(entityIdx EntityIdx, attrIdx AttributeIdx) iter.Seq2[[]byte, []byte]
 }

@@ -110,12 +110,18 @@ func SplitLW(tag string) (out ParsedLWTag, err error) {
 			if err = setChannelFlag(&out.Flags, MembershipChannelMixedLowCardRef, token); err != nil {
 				return
 			}
-		case "lowCardRefParametrized", "highCardRefParametrized", "mixedLowCardVerbatim":
-			// ADR-0008 D3 Cut-2: mixedLowCardRef has landed; these three
-			// stay staged — parametrized carries no separate id, and
-			// mixed-verbatim has an unresolved interface/generator signature
-			// mismatch (uint64 vs []byte first arg). Parse-time rejection so
-			// DTO authors get a clear signal rather than emit-time failures.
+		case "mixedLowCardVerbatim":
+			// ADR-0008 D3 Cut-2: the verbatim sibling of mixedLowCardRef —
+			// pairs a value field with a marshalltypes.MixedLowCardVerbatim
+			// sibling (name + params; the label embeds literally on the wire).
+			if err = setChannelFlag(&out.Flags, MembershipChannelMixedLowCardVerbatim, token); err != nil {
+				return
+			}
+		case "lowCardRefParametrized", "highCardRefParametrized":
+			// ADR-0008 D3 Cut-2: the two parametrized channels stay staged —
+			// the membership is a single opaque blob (no separate id/name),
+			// which needs its own carrier + read pairing. Parse-time
+			// rejection so DTO authors get a clear signal.
 			err = eb.Build().Str("flag", token).Errorf("lw: channel flag %q is recognised but not yet implemented — see ADR-0008 D3 Cut-2 staged-rollout note", token)
 			return
 		default:

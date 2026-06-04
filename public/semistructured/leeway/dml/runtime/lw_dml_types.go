@@ -32,7 +32,7 @@ type InAttributeMembershipMixedLowCardRefPI interface {
 	AddMembershipMixedLowCardRefP(lowCardRef uint64, params []byte)
 }
 type InAttributeMembershipMixedLowCardVerbatimPI interface {
-	AddMembershipMixedLowCardVerbatimP(lowCardVerbatim uint64, params []byte)
+	AddMembershipMixedLowCardVerbatimP(lowCardVerbatim []byte, params []byte)
 }
 
 type InAttributeMembershipHighCardRefI[A any] interface {
@@ -57,7 +57,7 @@ type InAttributeMembershipMixedLowCardRefI[A any] interface {
 	AddMembershipMixedLowCardRef(lowCardRef uint64, params []byte) A
 }
 type InAttributeMembershipMixedLowCardVerbatimI[A any] interface {
-	AddMembershipMixedLowCardVerbatim(lowCardVerbatim uint64, params []byte) A
+	AddMembershipMixedLowCardVerbatim(lowCardVerbatim []byte, params []byte) A
 }
 type ErrorAppenderI interface {
 	AppendError(err error)

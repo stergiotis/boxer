@@ -279,13 +279,12 @@ func addMembership(attr, row reflect.Value, f mappingplan.TaggedField, lookup Lo
 	// from the sibling carrier field rather than from a lookup or a literal
 	// lw: name.
 	if ch.UsesCarrier() {
+		// Per-row membership data from the sibling carrier: the value field
+		// (Id uint64 / Name []byte) + Params. The method suffix already
+		// selects the right AddMembershipMixed…P; reflect passes each field
+		// by its own type, so one call shape serves both mixed channels.
 		carrier := row.FieldByName(f.CarrierField)
-		switch ch {
-		case mappingplan.MembershipChannelMixedLowCardRef:
-			mustCall(attr, method, carrier.FieldByName("Id"), carrier.FieldByName("Params"))
-		default:
-			err = eb.Build().Str("channel", ch.String()).Errorf("carrier channel not implemented in marshallreflect")
-		}
+		mustCall(attr, method, carrier.FieldByName(ch.CarrierValueField()), carrier.FieldByName("Params"))
 		return
 	}
 	if ch.EmbedsLiteralName() {

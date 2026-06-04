@@ -71,6 +71,12 @@ const (
 	// (a marshalltypes.MixedLowCardRef sibling field), not a registry
 	// lookup — so NeedsKindVar is false. UsesCarrier reports true.
 	MembershipChannelMixedLowCardRef
+	// MembershipChannelMixedLowCardVerbatim is the verbatim sibling:
+	// AddMembershipMixedLowCardVerbatimP(name []byte, params []byte). The
+	// membership label is embedded literally (a marshalltypes.MixedLowCardVerbatim
+	// carrier's []byte Name) rather than a uint64 id, but the carrier /
+	// one-membership-per-section dispatch model is identical to MixedLowCardRef.
+	MembershipChannelMixedLowCardVerbatim
 )
 
 // String returns the lw: flag spelling for this channel. The default
@@ -87,6 +93,8 @@ func (c MembershipChannel) String() string {
 		return "highCardVerbatim"
 	case MembershipChannelMixedLowCardRef:
 		return "mixedLowCardRef"
+	case MembershipChannelMixedLowCardVerbatim:
+		return "mixedLowCardVerbatim"
 	}
 	return "unknown"
 }
@@ -99,7 +107,7 @@ func (c MembershipChannel) String() string {
 // from that carrier. False for the four Cut-1 channels.
 func (c MembershipChannel) UsesCarrier() bool {
 	switch c {
-	case MembershipChannelMixedLowCardRef:
+	case MembershipChannelMixedLowCardRef, MembershipChannelMixedLowCardVerbatim:
 		return true
 	default:
 		return false
@@ -114,6 +122,8 @@ func (c MembershipChannel) CarrierTypeName() string {
 	switch c {
 	case MembershipChannelMixedLowCardRef:
 		return "MixedLowCardRef"
+	case MembershipChannelMixedLowCardVerbatim:
+		return "MixedLowCardVerbatim"
 	default:
 		return ""
 	}
@@ -127,6 +137,8 @@ func (c MembershipChannel) CarrierReadMethodSuffix() string {
 	switch c {
 	case MembershipChannelMixedLowCardRef:
 		return "LowCardRefHighCardParams"
+	case MembershipChannelMixedLowCardVerbatim:
+		return "LowCardVerbatimHighCardParams"
 	default:
 		return ""
 	}
@@ -139,8 +151,37 @@ func (c MembershipChannel) CarrierReadSeq2Types() string {
 	switch c {
 	case MembershipChannelMixedLowCardRef:
 		return "uint64, []byte"
+	case MembershipChannelMixedLowCardVerbatim:
+		return "[]byte, []byte"
 	default:
 		return ""
+	}
+}
+
+// CarrierValueField returns the carrier struct field holding the membership
+// value for this channel — "Id" (uint64) for mixedLowCardRef, "Name"
+// ([]byte) for mixedLowCardVerbatim. "" for non-carrier channels. The
+// Params field name is uniform ("Params") across carriers.
+func (c MembershipChannel) CarrierValueField() string {
+	switch c {
+	case MembershipChannelMixedLowCardRef:
+		return "Id"
+	case MembershipChannelMixedLowCardVerbatim:
+		return "Name"
+	default:
+		return ""
+	}
+}
+
+// CarrierValueIsBytes reports whether the carrier's membership-value field
+// is a []byte (needing a defensive copy out of the Arrow buffer on read)
+// rather than a scalar id. True for mixedLowCardVerbatim.
+func (c MembershipChannel) CarrierValueIsBytes() bool {
+	switch c {
+	case MembershipChannelMixedLowCardVerbatim:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -202,6 +243,8 @@ func (c MembershipChannel) AddMethodSuffix() string {
 		return "HighCardVerbatim"
 	case MembershipChannelMixedLowCardRef:
 		return "MixedLowCardRef"
+	case MembershipChannelMixedLowCardVerbatim:
+		return "MixedLowCardVerbatim"
 	}
 	return ""
 }

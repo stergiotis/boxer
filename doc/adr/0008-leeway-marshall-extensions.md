@@ -578,17 +578,18 @@ channel.
 
 **Carrier types (`marshalltypes`).** A new sibling package
 `public/semistructured/leeway/marshalltypes` holds the plain carriers (no
-generics, no methods). It starts with the one the implemented channel needs:
+generics, no methods) — one per implemented mixed channel:
 
 ```go
-type MixedLowCardRef struct { Id uint64; Params []byte }
+type MixedLowCardRef      struct { Id   uint64; Params []byte }
+type MixedLowCardVerbatim struct { Name []byte; Params []byte }
 ```
 
-The deferred channels' carriers are specified for when they land —
-`Parametrized{ Params []byte }` (parametrized) and `MixedLowCardVerbatim{ Name
-[]byte; Params []byte }` (mixed-verbatim; shape provisional — see the
-precondition below). Each is added only when its channel is implemented, so the
-package never carries a carrier no codec path references.
+The deferred parametrized channels' carrier (`Parametrized{ Params []byte }`) is
+specified for when they land and added only then, so the package never carries a
+carrier no codec path references. Each front-end recognises a carrier by its Go
+type; the channel's `CarrierValueField` (`Id` / `Name`) selects which field
+holds the membership value.
 
 **DTO grammar (sibling pair).** A Cut-2 attribute is two Go fields sharing one
 `(membership, section, channel)` triple — a value field carrying the section's
@@ -617,22 +618,25 @@ accessor (`GetMembValueLowCardRefHighCardParams` for mixed-ref). `Finish`
 rejects a second membership in such a section. This is stricter than SD1's
 general per-section channel uniformity, which still holds.
 
-**Scope — `mixedLowCardRef` first.** Of the four, only `mixedLowCardRef` is
-round-trip-testable inside boxer: anchor's `InEntityTestTable` declares
-`MembershipSpecMixedLowCardRefHighCardParameters` on its data sections but not
-the parametrized or mixed-verbatim specs. So `mixedLowCardRef` lands end-to-end
-(grammar + marshallgen emit + marshallreflect codec + an anchor round-trip
-test); the other three keep the "not yet implemented" parse error, narrowed to
-the still-deferred set.
+**Scope — both mixed channels landed, parametrized deferred.**
+`mixedLowCardRef` and `mixedLowCardVerbatim` are implemented (grammar +
+marshallgen emit + marshallreflect codec); the two parametrized channels stay
+parse-rejected. `mixedLowCardRef` round-trips end-to-end against anchor's
+`symbol` section (anchor declares `MembershipSpecMixedLowCardRefHighCardParameters`).
+No boxer schema pairs a *simple single-value* mixed-verbatim section with a
+matching RA reader — anchor lacks the channel, and the example testtable's
+verbatim sections are multi-sub-column / multi-membership with no string-section
+reader — so `mixedLowCardVerbatim` is verified by the marshallgen emit test plus
+marshallreflect write/read mock tests over the shared carrier path (it differs
+from mixed-ref only in the carrier's `Name []byte` value field).
 
-**Precondition for `mixedLowCardVerbatim`.** The authoritative
-`InAttributeMembershipMixedLowCardVerbatimPI` declares
-`AddMembershipMixedLowCardVerbatimP(lowCardVerbatim uint64, params []byte)` — a
-`uint64` first argument — while some generated example schemas emit
-`([]byte, []byte)` and "verbatim" implies a `[]byte` name. Reconciling the
-leeway generator with this interface is a precondition for that channel and is
-tracked outside the marshall\* packages; until then its carrier shape is
-provisional.
+**Interface fix applied for `mixedLowCardVerbatim`.** The hand-written
+`InAttributeMembershipMixedLowCardVerbatimPI` (and its `[A]` variant) declared a
+`uint64` first argument, while the generated DML emits `([]byte, []byte)` and
+the read side is `Seq2[[]byte, []byte]` — a latent bug with zero users.
+Corrected to `([]byte, []byte)` here, alongside a copy-paste fix in the read
+interface `…LowCardVerbatimHighCardParamsI` (it embedded the Ref variant). The
+carrier is `marshalltypes.MixedLowCardVerbatim{Name []byte, Params []byte}`.
 
 **Unchanged.** SD7 (one attribute per pair), SD8 (empty `Params` is wire-
 emitted, not spliced), and the value-side splice semantics hold as written. The

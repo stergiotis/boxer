@@ -324,9 +324,9 @@ type MyDTO struct {
 // mixedLowCardRef, mixedLowCardVerbatim) are recognised but rejected
 // at parse time with a clear ADR-0008 pointer per the staged rollout.
 func TestParse_RejectsStagedChannels(t *testing.T) {
-	// mixedLowCardRef landed in Cut-2 (ADR-0008); the remaining three stay
-	// parse-rejected.
-	for _, flag := range []string{"lowCardRefParametrized", "highCardRefParametrized", "mixedLowCardVerbatim"} {
+	// mixedLowCardRef + mixedLowCardVerbatim landed in Cut-2 (ADR-0008); the
+	// two parametrized channels stay parse-rejected.
+	for _, flag := range []string{"lowCardRefParametrized", "highCardRefParametrized"} {
 		src := `package demo
 type MyDTO struct {
 	_   struct{}  ` + "`kind:\"my\"`" + `
@@ -532,5 +532,27 @@ type MyDTO struct {
 	mustContain(t, out, "AddMembershipMixedLowCardRefP(c.ReadingC[i].Id, c.ReadingC[i].Params)")
 	mustNotContain(t, out, "kindReading")
 	// Read side: Seq2 accessor + carrier reconstruction.
-	mustContain(t, out, "marshalltypes.MixedLowCardRef{Id: id, Params:")
+	mustContain(t, out, "marshalltypes.MixedLowCardRef{Id: mv, Params:")
+}
+
+func TestEmit_MixedLowCardVerbatim(t *testing.T) {
+	// Cut-2 mixedLowCardVerbatim: like mixedLowCardRef but the carrier's
+	// membership value is a []byte Name (embedded verbatim) rather than a
+	// uint64 Id — so the read copies it out of the Arrow buffer.
+	out := generate(t, `package demo
+type MyDTO struct {
+	_        struct{}                           `+"`kind:\"my\"`"+`
+	Id       uint64                             `+"`lw:\",id\"`"+`
+	Ts       time.Time                          `+"`lw:\",ts\"`"+`
+	Reading  string                             `+"`lw:\"sensor,symbol,mixedLowCardVerbatim\"`"+`
+	ReadingC marshalltypes.MixedLowCardVerbatim `+"`lw:\"sensor,symbol,mixedLowCardVerbatim\"`"+`
+}
+`)
+	parseGo(t, out)
+	mustContain(t, out, "ReadingC []marshalltypes.MixedLowCardVerbatim")
+	mustContain(t, out, "dmlruntime.InAttributeMembershipMixedLowCardVerbatimPI")
+	mustContain(t, out, "GetMembValueLowCardVerbatimHighCardParams(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq2[[]byte, []byte]")
+	mustContain(t, out, "AddMembershipMixedLowCardVerbatimP(c.ReadingC[i].Name, c.ReadingC[i].Params)")
+	// Name is []byte → defensively copied out of the Arrow buffer on read.
+	mustContain(t, out, "marshalltypes.MixedLowCardVerbatim{Name: append([]byte(nil), mv...), Params:")
 }

@@ -85,6 +85,9 @@ func (a *recordingAttr) AddToContainerP(value string) {
 func (a *recordingAttr) AddMembershipLowCardRefP(id uint64) {
 	a.root.record(fmt.Sprintf("AddMembershipLowCardRefP(%d)", id))
 }
+func (a *recordingAttr) AddMembershipMixedLowCardVerbatimP(name []byte, params []byte) {
+	a.root.record(fmt.Sprintf("AddMembershipMixedLowCardVerbatimP(%q, %q)", name, params))
+}
 func (a *recordingAttr) EndAttributeP() {
 	a.root.record("EndAttributeP")
 }

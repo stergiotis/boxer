@@ -643,11 +643,10 @@ func writeMembershipAdd(sb *strings.Builder, indent, attrVar string, f mappingpl
 	ch := f.Flags.Channel
 	method := "AddMembership" + ch.AddMethodSuffix() + "P"
 	if ch.UsesCarrier() {
-		// Cut-2: per-row membership data read from the sibling carrier column.
-		switch ch {
-		case mappingplan.MembershipChannelMixedLowCardRef:
-			linef(sb, 0, "%s%s.%s(c.%s[i].Id, c.%s[i].Params)", indent, attrVar, method, f.CarrierField, f.CarrierField)
-		}
+		// Cut-2: per-row membership data from the sibling carrier column —
+		// the value field (Id / Name) + Params; the method suffix selects
+		// the channel.
+		linef(sb, 0, "%s%s.%s(c.%s[i].%s, c.%s[i].Params)", indent, attrVar, method, f.CarrierField, ch.CarrierValueField(), f.CarrierField)
 		return
 	}
 	if ch.EmbedsLiteralName() {
@@ -1034,8 +1033,14 @@ func writeCarrierSectionDecode(sb *strings.Builder, g mappingplan.SectionGroup, 
 	linef(sb, 2, "var %s marshalltypes.%s", carrierVar, f.CarrierType)
 	linef(sb, 2, "%sCount := 0", prefix)
 	linef(sb, 2, "n%s := %s.GetNumberOfAttributes(raruntime.EntityIdx(i))", prefix, attrsVar)
+	// The Seq2 yields (membership-value, params); the value is the carrier's
+	// Id (uint64) or Name ([]byte, copied out of the Arrow buffer).
+	carrierValExpr := "mv"
+	if f.Flags.Channel.CarrierValueIsBytes() {
+		carrierValExpr = "append([]byte(nil), mv...)"
+	}
 	linef(sb, 2, "for attrJ := int64(0); attrJ < n%s; attrJ++ {", prefix)
-	linef(sb, 3, "for id, params := range %s.%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {", membsVar, readMethod)
+	linef(sb, 3, "for mv, params := range %s.%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {", membsVar, readMethod)
 	switch {
 	case mappingplan.IsFixedByteArray(f.GoType):
 		linef(sb, 4, "copy(%s[:], %s)", valVar, valRead)
@@ -1044,7 +1049,7 @@ func writeCarrierSectionDecode(sb *strings.Builder, g mappingplan.SectionGroup, 
 	default:
 		linef(sb, 4, "%s = %s", valVar, valRead)
 	}
-	linef(sb, 4, "%s = marshalltypes.%s{Id: id, Params: append([]byte(nil), params...)}", carrierVar, f.CarrierType)
+	linef(sb, 4, "%s = marshalltypes.%s{%s: %s, Params: append([]byte(nil), params...)}", carrierVar, f.CarrierType, f.Flags.Channel.CarrierValueField(), carrierValExpr)
 	linef(sb, 4, "%sCount++", prefix)
 	line(sb, 3, "}")
 	line(sb, 2, "}")
