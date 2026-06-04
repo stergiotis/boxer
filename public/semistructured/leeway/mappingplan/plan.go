@@ -40,10 +40,12 @@ type PlainCol struct {
 // field selects one channel; the section-level uniformity invariant
 // (one channel per section) holds across all channels.
 //
-// Only the four "simple" channels are implemented: LowCardRef (the
-// default), LowCardVerbatim, HighCardRef, and HighCardVerbatim. The
-// parametrized / mixed channels from ADR-0008 D3 (Cut 2) are recognised
-// as flag spellings but rejected by SplitLW until they are implemented.
+// All eight channels are implemented (ADR-0008 D3, Cut-2 complete): the
+// four "simple" channels — LowCardRef (the default), LowCardVerbatim,
+// HighCardRef, HighCardVerbatim — plus the four carrier channels —
+// MixedLowCardRef, MixedLowCardVerbatim, and the two parametrized
+// channels — which pair a value field with a marshalltypes carrier
+// sibling (UsesCarrier reports true).
 //
 // The default (zero value) is MembershipChannelLowCardRef so existing
 // DTOs without a channel flag continue to compile.

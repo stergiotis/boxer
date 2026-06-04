@@ -268,10 +268,10 @@ func marshalExplode(sec, row reflect.Value, f mappingplan.TaggedField, lookup Lo
 }
 
 // addMembership pushes the per-attribute membership, dispatching on the
-// field's MembershipChannel. The Verbatim pair embeds the lw: tag name
-// as []byte; the Ref pair pushes the Lookup-resolved uint64. The
-// parametrized / mixed channels are rejected upstream by SplitLW, so
-// this function never sees them.
+// field's MembershipChannel. Carrier channels (UsesCarrier) read the
+// membership-side data from the sibling carrier field — handled first
+// below. Otherwise the Verbatim pair embeds the lw: tag name as []byte
+// and the Ref pair pushes the Lookup-resolved uint64.
 func addMembership(attr, row reflect.Value, f mappingplan.TaggedField, lookup LookupI) (err error) {
 	ch := f.Flags.Channel
 	method := "AddMembership" + ch.AddMethodSuffix() + "P"

@@ -91,6 +91,7 @@ type PlanBuilder struct {
 type carrierInfo struct {
 	goField     string
 	carrierType string
+	channel     MembershipChannel
 }
 
 // NewPlanBuilder returns a builder seeded with the plan-level identity.
@@ -275,9 +276,19 @@ func (b *PlanBuilder) AddField(goFieldName, lwTag string, shape FieldShape) (err
 		err = eb.Build().Str("field", goFieldName).Errorf("`,const=<value>` only valid on `_` blank-identifier fields (carries no Go-side data)")
 		return
 	}
-	if flags.Channel.UsesCarrier() && (shape.IsOption || isMulti) {
-		err = eb.Build().Str("field", goFieldName).Str("channel", flags.Channel.String()).Errorf("mixed/parametrized value field must be a plain scalar (Cut-2 supports T, not Option / slice / roaring)")
-		return
+	if flags.Channel.UsesCarrier() {
+		if column != "" {
+			// A carrier channel carries a single scalar value into the
+			// section's value column; a `:<col>` sub-column (only meaningful
+			// for multi-sub-column sections like u32Range) would mis-shape
+			// the emit and panic at marshal time.
+			err = eb.Build().Str("field", goFieldName).Str("channel", flags.Channel.String()).Errorf("mixed/parametrized value field cannot target a sub-column (`:<col>`)")
+			return
+		}
+		if shape.IsOption || isMulti {
+			err = eb.Build().Str("field", goFieldName).Str("channel", flags.Channel.String()).Errorf("mixed/parametrized value field must be a plain scalar (Cut-2 supports T, not Option / slice / roaring)")
+			return
+		}
 	}
 
 	b.plan.Fields = append(b.plan.Fields, TaggedField{
@@ -324,7 +335,7 @@ func (b *PlanBuilder) addCarrierField(goFieldName, membership, section, column s
 		err = eb.Build().Str("membership", membership).Str("section", section).Str("first", prev.goField).Str("second", goFieldName).Errorf("two carrier fields share one membership+section")
 		return
 	}
-	b.carriers[key] = carrierInfo{goField: goFieldName, carrierType: shape.CarrierType}
+	b.carriers[key] = carrierInfo{goField: goFieldName, carrierType: shape.CarrierType, channel: flags.Channel}
 	return
 }
 
@@ -387,6 +398,16 @@ func (b *PlanBuilder) Finish() (plan *Plan, err error) {
 		c, ok := b.carriers[key]
 		if !ok {
 			err = eb.Build().Str("field", f.GoFieldName).Str("channel", f.Flags.Channel.String()).Str("wantCarrier", f.Flags.Channel.CarrierTypeName()).Errorf("mixed/parametrized field needs a sibling carrier field with the same lw: membership+section")
+			return
+		}
+		// The value field and its carrier must agree on the channel. They
+		// are paired by (membership, section) only — and the carrier is not
+		// a plan.Field, so the per-section channel-uniformity check above
+		// never sees it. Without this guard a mispaired channel (e.g. a
+		// mixedLowCardVerbatim value with a MixedLowCardRef carrier) builds
+		// clean and then panics / drops data at marshal time.
+		if c.channel != f.Flags.Channel {
+			err = eb.Build().Str("field", f.GoFieldName).Str("carrierField", c.goField).Str("valueChannel", f.Flags.Channel.String()).Str("carrierChannel", c.channel.String()).Errorf("value field and its carrier sibling declare different channels")
 			return
 		}
 		f.CarrierField = c.goField

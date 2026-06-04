@@ -407,3 +407,35 @@ type MyDTO struct {
 `)
 	assertErrContains(t, err, "`plain:` map is retired")
 }
+
+func TestParse_RejectsCarrierValueCarrierChannelMismatch(t *testing.T) {
+	// A value field and its carrier sibling must agree on the channel. A
+	// mispair (caught only because the carrier is not a plan.Field, so the
+	// per-section channel-uniformity check never sees it) is rejected at
+	// plan time rather than panicking at marshal.
+	_, err := tryParse(t, `package demo
+type MyDTO struct {
+	_   struct{}                      `+"`kind:\"my\"`"+`
+	Id  uint64                        `+"`lw:\",id\"`"+`
+	Ts  time.Time                     `+"`lw:\",ts\"`"+`
+	V   string                        `+"`lw:\"m,symbol,mixedLowCardVerbatim\"`"+`
+	C   marshalltypes.MixedLowCardRef `+"`lw:\"m,symbol,mixedLowCardRef\"`"+`
+}
+`)
+	assertErrContains(t, err, "different channels")
+}
+
+func TestParse_RejectsCarrierValueSubColumn(t *testing.T) {
+	// A carrier value carries one scalar into the section's value column;
+	// a `:<col>` sub-column would mis-shape the emit.
+	_, err := tryParse(t, `package demo
+type MyDTO struct {
+	_   struct{}                      `+"`kind:\"my\"`"+`
+	Id  uint64                        `+"`lw:\",id\"`"+`
+	Ts  time.Time                     `+"`lw:\",ts\"`"+`
+	V   string                        `+"`lw:\"m,symbol:sub,mixedLowCardRef\"`"+`
+	C   marshalltypes.MixedLowCardRef `+"`lw:\"m,symbol,mixedLowCardRef\"`"+`
+}
+`)
+	assertErrContains(t, err, "cannot target a sub-column")
+}
