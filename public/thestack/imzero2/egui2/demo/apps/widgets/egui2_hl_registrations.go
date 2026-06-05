@@ -19,6 +19,22 @@ import (
 
 func init() {
 	registry.Register(registry.Demo{
+		Name: "mappingplanview", Category: "Leeway", Title: icons.IconDatabase + " mappingplan playground",
+		Stage:       [2]float32{1200, 980},
+		Flags:       registry.DemoFlagNeedsLargeArea,
+		Kind:        registry.DemoKindMixed,
+		Description: "Author a leeway mappingplan spec — kind, plain columns, and lw:-tagged value/const fields with membership, section, channel and flags — and live-preview the schema-agnostic Go codec marshallgen emits, re-validated through PlanBuilder on every edit. Read-back SQL preview and carrier channels are planned next.",
+		Init: func(_ *c.WidgetIdStack) (state any) {
+			state = newMappingPlanViewState()
+			return
+		},
+		RenderStateful: func(ids *c.WidgetIdStack, state any) {
+			st := state.(*mappingPlanViewDemoState)
+			demoMappingPlanView(ids, st)
+		},
+		SourceFunc: demoMappingPlanView,
+	})
+	registry.Register(registry.Demo{
 		Name: "etables", Category: "Tables", Title: icons.IconTable + " etables (deferred)",
 		Stage:       [2]float32{1024, 700},
 		Kind:        registry.DemoKindUX,
