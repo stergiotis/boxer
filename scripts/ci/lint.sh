@@ -168,7 +168,15 @@ step_begin "llmtag"
 # from the earliest LLM-trailered commit), so legitimately-Gemini-authored
 # code is not flagged. A non-zero exit sets rc=1. Same `if out=$(...)`
 # pattern as doclint above — required because the script runs under `set -e`.
-if out=$("$here/../../boxer.sh" gov llmtag --diff --root . --repo . 2>/dev/null); then
+#
+# --trailer-cutoff: the pebble2impl import (merged to main 2026-05-29, see
+# doc/migration/2026-05-pebble2impl-import.md) landed ~600 already-tagged
+# files as fresh commits with no AI-attribution trailer. Auto-detect can't
+# anchor them (they have no LLM-trailered commit at all), so every preserved
+# tag would read as stale. The explicit cutoff attributes those pre-import
+# trailerless commits to their existing tag; genuinely human-authored work
+# committed after this date is still evaluated normally.
+if out=$("$here/../../boxer.sh" gov llmtag --diff --trailer-cutoff 2026-05-30T00:00:00Z --root . --repo . 2>/dev/null); then
     if [ -n "$out" ]; then
         echo "$out"
     else
