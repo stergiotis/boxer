@@ -65,17 +65,17 @@ func IsFixedByteArray(goType string) bool {
 	return ok
 }
 
-// CopyStrat names how a value of a given Go type is lifted out of an Arrow
+// CopyStratE names how a value of a given Go type is lifted out of an Arrow
 // buffer on the read side. The type→strategy decision is shared by both
 // back-ends so it lives in one place: the codegen emitter switches on it to
 // emit the right text; the reflect codec switches on it to perform the copy.
 // (The reflect plain-column reader keeps its own type→Arrow-accessor switch
 // in readPlainArrow — that is per-type value dispatch, a different concern.)
-type CopyStrat uint8
+type CopyStratE uint8
 
 const (
 	// CopyNone assigns the Arrow value straight through (scalars).
-	CopyNone CopyStrat = iota
+	CopyNone CopyStratE = iota
 	// CopyBytes defensively copies a []byte out of the Arrow buffer (the
 	// buffer is reused across rows, so the value must be copied to survive).
 	CopyBytes
@@ -87,8 +87,8 @@ const (
 )
 
 // CopyStrategy reports how a value of source-form Go type goType is lifted
-// out of its Arrow buffer on read. See CopyStrat.
-func CopyStrategy(goType string) CopyStrat {
+// out of its Arrow buffer on read. See CopyStratE.
+func CopyStrategy(goType string) CopyStratE {
 	switch {
 	case goType == "time.Time":
 		return CopyTime
