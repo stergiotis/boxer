@@ -7,11 +7,13 @@ import (
 	"io"
 	"os"
 	"slices"
-	"time"
 
-	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/dev"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/logbridge"
+	"github.com/stergiotis/boxer/public/keelson/runtime/logviewer"
 	"github.com/stergiotis/boxer/public/observability"
 	"github.com/stergiotis/boxer/public/observability/coverage"
 	"github.com/stergiotis/boxer/public/observability/logging"
@@ -20,10 +22,6 @@ import (
 	"github.com/stergiotis/boxer/public/observability/vcs"
 	demo2 "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/carousel"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/driver"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
-	"github.com/stergiotis/boxer/public/keelson/runtime/logbridge"
-	"github.com/stergiotis/boxer/public/keelson/runtime/logviewer"
 	"github.com/urfave/cli/v2"
 )
 
@@ -109,17 +107,16 @@ func installFactsLogBridge(c *cli.Context) (closer func() error) {
 		log.Warn().Err(serr).Msg("logbridge: NewSink failed — continuing without facts capture")
 		return
 	}
-	// Pretty-format the operator-facing passthrough so --logFormat is
-	// honoured even after the bridge wraps log.Logger. The bridge wire
-	// format is CBOR (binary_log build tag), which is unreadable on a
-	// raw terminal; zerolog.ConsoleWriter decodes the same payload it
-	// receives from MultiLevelWriter and prints the human-readable
-	// rendering operators expect. Selecting the writer here, in
-	// installFactsLogBridge, means we re-derive the format from the
-	// --logFormat flag value AFTER boxer's flag Action has parsed it,
-	// avoiding the v2 ordering hazard that put a stale ConsoleWriter on
-	// top of the bridge in the first place.
-	passthrough := buildPassthroughWriter(c)
+	// Reuse the writer logging.Apply already built (OperatorWriter) as the
+	// operator-facing passthrough, so --logFormat/--logFile/--logColor are
+	// honoured even after the bridge wraps log.Logger. The bridge feeds it
+	// the same wire payload the Sink decodes (CBOR under the binary_log
+	// build tag, JSON otherwise); the configured writer decodes that and
+	// renders the human-readable form operators expect. Installing the
+	// bridge here in the subcommand Before — after boxer's App.Before ran
+	// Apply — is what makes OperatorWriter available, and avoids the v2
+	// ordering hazard that put a stale writer on top of the bridge before.
+	passthrough := buildPassthroughWriter()
 	closer = logbridge.InstallGlobal(passthrough, sink)
 	// Hand the same Sink to the logviewer AppI so the operator can
 	// tail the live log stream from inside the running process. The
@@ -131,37 +128,26 @@ func installFactsLogBridge(c *cli.Context) (closer func() error) {
 	return
 }
 
-// buildPassthroughWriter chooses the operator-facing writer the
-// bridge fans events to alongside the Sink. Mirrors boxer's
-// SetupConsoleLogger so --logFormat=console (the hmi.sh default)
-// keeps its pretty rendering after the bridge install. Other formats
-// (json/cbor/diag/godump) fall through to raw os.Stderr — the bridge
-// always also tees to the Sink, so the viewer still works.
+// buildPassthroughWriter returns the operator-facing writer the bridge
+// fans events to alongside the Sink. It reuses logging.OperatorWriter()
+// — the exact writer logging.Apply configured from
+// --logFormat/--logFile/--logColor — so the operator stream renders
+// identically to the primary logger and honors the full logger config:
+// every format, the file destination, and color. Earlier this function
+// hand-rolled a console-only writer that silently dropped --logFile and
+// every non-console format, and once even drifted from the primary
+// console writer's field formatter (rendering bools as raw
+// `data:application/cbor;base64,…` blobs).
 //
-// Stays in sync with boxer's logging/flags.go ConsoleWriter config
-// (NoColor follows --logColor, time format RFC3339). We do not re-
-// honour --logFile here; the bridge passthrough is for the live
-// stream operators watch, persistent file capture is independent.
+// Falls back to raw os.Stderr only when Apply configured no writer (e.g.
+// a host that wires the bridge without logging.LoggingFlags) so the
+// bridge still installs and the operator sees something.
 //
-// The returned writer is wrapped in fullWriteAdapter so MultiLevelWriter
-// does NOT short-circuit the Sink. See fullWriteAdapter's doc for the
-// gory detail.
-func buildPassthroughWriter(c *cli.Context) (w io.Writer) {
-	format := c.String("logFormat")
-	if format == "" {
-		format = "default"
-	}
-	var inner io.Writer
-	if format == "console" {
-		inner = zerolog.ConsoleWriter{
-			Out:        os.Stderr,
-			NoColor:    !c.Bool("logColor"),
-			TimeFormat: time.RFC3339,
-		}
-	} else {
-		// json/cbor/diag/godump/default: pass raw bytes through. zerolog's
-		// CBOR-on-stderr is illegible but machine-parseable; users who want
-		// a different format choose --logFormat=console.
+// The writer is wrapped in fullWriteAdapter so MultiLevelWriter does NOT
+// short-circuit the Sink. See fullWriteAdapter's doc for the gory detail.
+func buildPassthroughWriter() (w io.Writer) {
+	inner := logging.OperatorWriter()
+	if inner == nil {
 		inner = os.Stderr
 	}
 	w = fullWriteAdapter{inner: inner}

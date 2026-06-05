@@ -28,13 +28,16 @@ import (
 // closer restores the previous marshaler so repeated test setups
 // don't leak the global mutation.
 //
-// Limitation: zerolog.Logger does not expose its underlying writer, so
-// any previous formatting configured by boxer's --logFormat flag is
-// dropped — the passthrough writer receives the same byte payload the
+// The previous logger's *context* (timestamp, the --logCaller frame, the
+// --logCorrelationId field) is preserved: we re-Output that logger onto
+// the fan-out writer instead of building a fresh one. Its *writer*,
+// however, cannot be — zerolog.Logger does not expose the underlying
+// writer — so the passthrough writer receives the same byte payload the
 // Sink decodes (CBOR with the `binary_log` build tag, JSON otherwise).
-// Hosts that need a specific operator-facing format must wrap
-// passthroughW themselves (e.g. zerolog.ConsoleWriter{Out: os.Stderr})
-// and hand the wrapped writer in.
+// Hosts that need a specific operator-facing format must hand in a
+// passthroughW that re-renders it (boxer's host passes
+// logging.OperatorWriter(), the exact writer --logFormat/--logFile/
+// --logColor configured for the primary logger).
 //
 // The caller is responsible for the order: InstallGlobal must run AFTER
 // any boxer-flag Actions that touch log.Logger (otherwise those will
@@ -42,7 +45,17 @@ import (
 func InstallGlobal(passthroughW io.Writer, sink *Sink) (closer func() error) {
 	prev := log.Logger
 	prevErrMarshal := zerolog.ErrorMarshalFunc
-	log.Logger = NewLogger(passthroughW, sink)
+	if w := fanOutWriter(passthroughW, sink); w == nil {
+		log.Logger = zerolog.Nop()
+	} else {
+		// Re-Output the *previous* logger onto the fan-out writer rather
+		// than building a fresh one (NewLogger). prev.Output copies prev's
+		// context, so the timestamp plus everything logging.Apply attached
+		// — the --logCaller frame and the --logCorrelationId field —
+		// survive the bridge install. A fresh NewLogger would silently
+		// drop them.
+		log.Logger = prev.Output(w)
+	}
 	zerolog.ErrorMarshalFunc = eh.MarshalError
 	closer = func() (err error) {
 		if sink != nil {

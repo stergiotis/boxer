@@ -14,11 +14,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/logbridge"
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // TestInstallGlobal_RewiresGlobalAndRestores guards the two contracts
@@ -218,4 +218,37 @@ func TestInstallGlobal_BoxerErrorPopulatesErrorContext(t *testing.T) {
 		"eb.Build()-attached structured data must surface as cbor.Diagnose output on a fact's DataDiag — otherwise the detail pane has nothing to show for the structured payload")
 	assert.True(t, sawStackName,
 		"chain with stacks must produce at least one 'stack-N' stream — 'no-stack' alone means runtime.Callers returned empty for every wrap level")
+}
+
+// TestInstallGlobal_PreservesPriorLoggerContext guards the contract that
+// InstallGlobal re-Outputs the *previous* logger onto the fan-out writer
+// rather than building a fresh one — so the context logging.Apply
+// attached (here a --logCorrelationId field) survives the bridge install.
+// A fresh NewLogger would silently drop it.
+func TestInstallGlobal_PreservesPriorLoggerContext(t *testing.T) {
+	store := factsstore.NewInMemoryFactsStore()
+	sink, err := logbridge.NewSink(store, logbridge.Config{
+		Capacity:      8,
+		FlushN:        1,
+		FlushInterval: 20 * time.Millisecond,
+	})
+	require.NoError(t, err)
+
+	// Stand in for logging.Apply having attached a correlation id to the
+	// global logger before the bridge runs.
+	prev := log.Logger
+	t.Cleanup(func() { log.Logger = prev })
+	log.Logger = log.Logger.With().Str("correlationId", "abc123").Logger()
+
+	var passthrough bytes.Buffer
+	closer := logbridge.InstallGlobal(&passthrough, sink)
+	defer closer()
+
+	log.Info().Msg("ctx-survives")
+	waitFor(t, func() bool { return len(store.Logs()) >= 1 }, time.Second)
+
+	assert.Contains(t, passthrough.String(), "correlationId",
+		"InstallGlobal must preserve the prior logger's context field name")
+	assert.Contains(t, passthrough.String(), "abc123",
+		"InstallGlobal must preserve the prior logger's context value — a fresh NewLogger would drop --logCorrelationId")
 }

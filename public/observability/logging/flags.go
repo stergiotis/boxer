@@ -12,6 +12,7 @@ import (
 
 	"github.com/fxamacker/cbor/v2"
 	gonanoid "github.com/matoous/go-nanoid/v2"
+	"github.com/mattn/go-isatty"
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -145,30 +146,141 @@ func formatFieldValue(i any, pp *cborConsolePrinter) (s string) {
 
 	return fmt.Sprintf("%s", i)
 }
-func SetupConsoleLogger(w io.Writer) (err error) {
+
+// consoleCborThreshold bounds the CBOR-diagnostic pretty-printer used by
+// the console writer: a diagnosis shorter than this prints inline, a
+// longer one falls back to a godump tree (see cborConsolePrinter). It is
+// shared by every console writer so rendering stays identical across the
+// primary logger and any passthrough that mirrors it.
+const consoleCborThreshold = 70
+
+// NewConsoleWriter builds the human-readable zerolog ConsoleWriter used
+// for --logFormat=console. It is the single source of truth for that
+// writer's configuration: every console writer in the process — notably
+// the facts-log-bridge operator passthrough (thestack/cmd/imzero2) —
+// must obtain its writer here rather than hand-rolling a
+// zerolog.ConsoleWriter.
+//
+// Why a shared constructor and not a copied struct literal:
+// SetupConsoleLogger installs a process-global InterfaceMarshalFunc
+// (embeddAsCbor) that CBOR-embeds every value zerolog's console writer
+// routes through the marshaler — which, per zerolog console.go
+// writeFields, is every field that is neither a string nor a
+// json.Number (bool, nil, slices, structs via .Interface). Only the
+// FormatFieldValue installed here expands those embedded
+// `data:application/cbor;base64,…` blobs back to a scalar. A console
+// writer that omits FormatFieldValue therefore prints the raw blob for
+// every bool. The marshal half and the format half are two ends of one
+// codec; this constructor keeps them coupled so they cannot drift.
+func NewConsoleWriter(out io.Writer, noColor bool) (cw zerolog.ConsoleWriter, err error) {
+	var pp *cborConsolePrinter
+	pp, err = newCborConsolePrinter(consoleCborThreshold)
+	if err != nil {
+		err = eh.Errorf("unable to create cbor console printer: %w", err)
+		return
+	}
+	fv := func(i any) string {
+		return formatFieldValue(i, pp)
+	}
+	cw = zerolog.ConsoleWriter{
+		Out:                 out,
+		NoColor:             noColor,
+		FormatFieldValue:    fv,
+		FormatErrFieldValue: fv,
+		FieldsExclude:       []string{zerolog.ErrorFieldName},
+		FormatExtra:         eh.ConsoleFormatErrorExtra(true),
+		TimeFormat:          time.RFC3339,
+	}
+	return
+}
+
+// NewFormatWriter builds the operator-facing writer for `format`,
+// wrapping `out`. It is the single source of truth for translating
+// --logFormat into a concrete io.Writer, shared by applyWriter (the
+// primary logger) and — via OperatorWriter — the facts-log-bridge
+// passthrough, so both render identically and honor --logFile/--logColor.
+//
+// Each non-raw format writer decodes the zerolog wire and reformats it,
+// which is exactly what lets the bridge reuse the same writer over its
+// own wire payload. "cbor" and "default" return `out` unchanged (raw
+// wire bytes); "cbor" additionally requires the binary_log build tag,
+// which the caller verifies (applyWriter calls checkZeroLogCborBuild).
+// The console writer carries the CBOR field-expansion formatter
+// (NewConsoleWriter); installing its process-global marshalers is the
+// caller's job (installConsoleCborMarshalers).
+func NewFormatWriter(format string, out io.Writer, noColor bool) (w io.Writer, err error) {
+	switch format {
+	case "console":
+		return NewConsoleWriter(out, noColor)
+	case "diag":
+		return NewCborDiagLogger(asStringWriter(out)), nil
+	case "godump":
+		return NewCborGodumpLogger(out), nil
+	case "json":
+		l := NewJsonIndentLogger(out)
+		l.Indent = ""
+		l.Prefix = ""
+		return l, nil
+	case "json-indent":
+		l := NewJsonIndentLogger(out)
+		l.Indent = "  "
+		l.Prefix = ""
+		return l, nil
+	case "cbor", "default":
+		return out, nil
+	default:
+		// Defense-in-depth: categorial validation rejects out-of-set
+		// values upstream. A reachable default signals Allowed/switch drift.
+		return nil, eb.Build().Str("format", format).Errorf("unhandled log format (Allowed/switch drift)")
+	}
+}
+
+// asStringWriter adapts an io.Writer to io.StringWriter for the CBOR-diag
+// logger. The real destinations (*os.File) already implement it; the
+// adapter only covers in-memory writers used in tests.
+func asStringWriter(w io.Writer) io.StringWriter {
+	if sw, ok := w.(io.StringWriter); ok {
+		return sw
+	}
+	return stringWriterAdapter{w: w}
+}
+
+type stringWriterAdapter struct{ w io.Writer }
+
+func (s stringWriterAdapter) WriteString(str string) (int, error) {
+	return s.w.Write([]byte(str))
+}
+
+// operatorWriter is the fully-configured operator-facing writer that
+// applyWriter built from --logFormat/--logFile/--logColor. It is set once
+// during Apply (urfave/cli App.Before) and read once during the
+// facts-log-bridge install (a subcommand Before), on the same goroutine,
+// so it needs no synchronization.
+var operatorWriter io.Writer
+
+func setOperatorWriter(w io.Writer) { operatorWriter = w }
+
+// OperatorWriter returns the writer Apply configured for operator-facing
+// output: the same --logFormat, --logFile destination, and --logColor as
+// the primary logger. The facts-log-bridge reuses it as its passthrough
+// so the operator stream honors the full logger config instead of
+// re-deriving a stderr console writer (which silently dropped --logFile
+// and every non-console format). Returns nil if Apply has not run.
+func OperatorWriter() io.Writer { return operatorWriter }
+
+// installConsoleCborMarshalers wires the process-global zerolog
+// marshalers the console format depends on: InterfaceMarshalFunc embeds
+// any non-string/number field value as a CBOR data URI (which
+// NewConsoleWriter's FormatFieldValue expands back to a scalar), and
+// ErrorMarshalFunc renders boxer error chains human-readably. Safe to
+// call from both SetupConsoleLogger and applyWriter.
+func installConsoleCborMarshalers() (err error) {
 	var cborEncMode cbor.EncMode
 	cborEncMode, err = cbor.CanonicalEncOptions().EncMode()
 	if err != nil {
 		return eh.Errorf("unable to create cbor encoding mode: %w", err)
 	}
-	const threshold = 70
-	var pp *cborConsolePrinter
-	pp, err = newCborConsolePrinter(threshold)
-	if err != nil {
-		return eh.Errorf("unable to create cbor console printer: %w", err)
-	}
 	zerolog.ErrorMarshalFunc = eh.ErrorMarshalFuncHuman
-	log.Logger = log.Output(zerolog.ConsoleWriter{
-		Out: w,
-		FormatFieldValue: func(i interface{}) string {
-			return formatFieldValue(i, pp)
-		},
-		FormatErrFieldValue: func(i interface{}) string {
-			return formatFieldValue(i, pp)
-		},
-		FieldsExclude: []string{zerolog.ErrorFieldName},
-		FormatExtra:   eh.ConsoleFormatErrorExtra(true),
-		TimeFormat:    time.RFC3339})
 	zerolog.InterfaceMarshalFunc = func(v any) (b []byte, err error) {
 		var se string
 		se, err = embeddAsCbor(cborEncMode, v)
@@ -177,6 +289,19 @@ func SetupConsoleLogger(w io.Writer) (err error) {
 		}
 		return []byte(se), nil
 	}
+	return
+}
+
+func SetupConsoleLogger(w io.Writer) (err error) {
+	if err = installConsoleCborMarshalers(); err != nil {
+		return
+	}
+	var cw zerolog.ConsoleWriter
+	cw, err = NewConsoleWriter(w, false)
+	if err != nil {
+		return
+	}
+	log.Logger = log.Output(cw)
 	return
 }
 func SetupCborDiagLogger(w io.StringWriter) (err error) {
@@ -288,6 +413,18 @@ var (
 		Category:    env.CategoryObservability,
 		CliFlagName: "logFormat",
 	}, []string{"default", "console", "diag", "godump", "json", "json-indent", "cbor"})
+
+	// LogColor is the BOXER_LOG_COLOR env-var spec. Honored by the
+	// console format. An explicit value wins; otherwise color auto-detects
+	// from whether stderr is a terminal, and a --logFile destination
+	// always disables it (ANSI escapes in a log file are noise).
+	LogColor = env.NewBool(env.Spec{
+		Name:        "BOXER_LOG_COLOR",
+		Default:     "true",
+		Description: "colorize console log output (auto-detects TTY when unset; off for file destinations)",
+		Category:    env.CategoryObservability,
+		CliFlagName: "logColor",
+	})
 )
 
 var LoggingFlags = []cli.Flag{
@@ -301,6 +438,7 @@ var LoggingFlags = []cli.Flag{
 	LogCorrelationId.AsCliFlag(),
 	LogLevel.AsCliFlag(),
 	LogFormat.AsCliFlag(),
+	LogColor.AsCliFlag(),
 }
 
 // Apply configures zerolog from the parsed cli.Context. Wire it as
@@ -350,42 +488,59 @@ func applyWriter(ctx *cli.Context) (err error) {
 	}
 
 	logFile := ctx.String("logFile")
-	var w *os.File
+	var dest io.Writer
+	destIsFile := false
 	if logFile == "" || logFile == "-" {
-		w = os.Stderr
+		dest = os.Stderr
 	} else {
-		w, err = os.OpenFile(logFile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o666)
+		var f *os.File
+		f, err = os.OpenFile(logFile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o666)
 		if err != nil {
 			return eb.Build().Str("logFile", logFile).Errorf("unable to open log file: %w", err)
 		}
+		dest = f
+		destIsFile = true
 	}
 
-	switch format {
-	case "default":
-		break
-	case "console":
-		err = SetupConsoleLogger(w)
-	case "diag":
-		err = SetupCborDiagLogger(w)
-	case "godump":
-		err = SetupGoDumpLogger(w)
-	case "json":
-		err = SetupJsonLogger(w)
-	case "json-indent":
-		err = SetupJsonIndentLogger(w)
-	case "cbor":
+	noColor := resolveNoColor(ctx, destIsFile)
+
+	if format == "cbor" {
 		checkZeroLogCborBuild()
-		log.Logger = log.Output(w)
-	default:
-		// Defense-in-depth: categorial validation rejects out-of-set
-		// values upstream. A reachable default signals Allowed/switch
-		// drift.
-		return eb.Build().Str("format", format).Errorf("unhandled log format (Allowed/switch drift)")
 	}
+	var w io.Writer
+	w, err = NewFormatWriter(format, dest, noColor)
 	if err != nil {
 		return eb.Build().Str("logger", format).Errorf("unable to setup logger: %w", err)
 	}
+	// The console format couples to a process-global CBOR field codec
+	// (see NewConsoleWriter / installConsoleCborMarshalers); install the
+	// marshalers before any event is emitted.
+	if format == "console" {
+		if err = installConsoleCborMarshalers(); err != nil {
+			return eb.Build().Str("logger", format).Errorf("unable to setup logger: %w", err)
+		}
+	}
+	log.Logger = log.Output(w)
+	// Remember the resolved writer so the facts-log-bridge passthrough
+	// (OperatorWriter) renders exactly like the primary logger — same
+	// format, --logFile destination, and color.
+	setOperatorWriter(w)
 	return
+}
+
+// resolveNoColor decides whether the console writer should suppress ANSI
+// color. An explicit --logColor / BOXER_LOG_COLOR wins; otherwise color
+// auto-detects from whether stderr is a terminal. A file destination
+// always forces no-color — color escapes in a log file are noise — which
+// also keeps piped/redirected output clean by default.
+func resolveNoColor(ctx *cli.Context, destIsFile bool) bool {
+	if destIsFile {
+		return true
+	}
+	if ctx.IsSet("logColor") {
+		return !ctx.Bool("logColor")
+	}
+	return !isatty.IsTerminal(os.Stderr.Fd())
 }
 
 func applyLevel(ctx *cli.Context) (err error) {

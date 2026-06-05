@@ -25,18 +25,29 @@ import (
 // MinLevel filter applies as configured at NewSink time without
 // affecting baseWriter.
 func NewLogger(baseWriter io.Writer, sink *Sink) (logger zerolog.Logger) {
+	w := fanOutWriter(baseWriter, sink)
+	if w == nil {
+		return zerolog.Nop()
+	}
+	return zerolog.New(w).With().Timestamp().Logger()
+}
+
+// fanOutWriter builds the writer that fans one event to baseWriter and/or
+// the Sink. Returns nil when both are nil (the caller substitutes a Nop
+// logger). Extracted from NewLogger so InstallGlobal can reuse the exact
+// same composition while re-Output-ing the *previous* logger onto it,
+// preserving that logger's context (see InstallGlobal).
+func fanOutWriter(baseWriter io.Writer, sink *Sink) io.Writer {
 	switch {
 	case baseWriter == nil && sink == nil:
-		logger = zerolog.Nop()
+		return nil
 	case baseWriter == nil:
-		logger = zerolog.New(sink).With().Timestamp().Logger()
+		return sink
 	case sink == nil:
-		logger = zerolog.New(baseWriter).With().Timestamp().Logger()
+		return baseWriter
 	default:
-		w := zerolog.MultiLevelWriter(toLevelWriter(baseWriter), sink)
-		logger = zerolog.New(w).With().Timestamp().Logger()
+		return zerolog.MultiLevelWriter(toLevelWriter(baseWriter), sink)
 	}
-	return
 }
 
 // toLevelWriter promotes a plain io.Writer into a zerolog.LevelWriter
