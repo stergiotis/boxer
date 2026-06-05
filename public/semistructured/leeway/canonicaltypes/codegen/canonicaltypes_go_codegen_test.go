@@ -43,8 +43,39 @@ func iterateTypes() iter.Seq[canonicaltypes2.PrimitiveAstNodeI] {
 				}
 			}
 		}
+		for i := uint64(0); i < sample.SampleNetworkTypeMaxExcl; i++ {
+			ct := sample.GenerateSampleNetworkType(i)
+			if ct.IsValid() {
+				if !yield(ct) {
+					return
+				}
+			}
+		}
 	}
 }
+func TestGenerateGoCode_Network(t *testing.T) {
+	cases := []struct {
+		sig      string
+		typeCode string
+		zero     string
+	}{
+		{"v", "[4]byte", "[4]byte{}"},     // IPv4 address
+		{"w", "[16]byte", "[16]byte{}"},   // IPv6 address
+		{"vc", "[5]byte", "[5]byte{}"},    // IPv4 CIDR (addr + prefix byte)
+		{"wc", "[17]byte", "[17]byte{}"},  // IPv6 CIDR (addr + prefix byte)
+		{"vh", "[][4]byte", "[][4]byte(nil)"},
+		{"wch", "[][17]byte", "[][17]byte(nil)"},
+	}
+	p := canonicaltypes2.NewParser()
+	for _, c := range cases {
+		ct := p.MustParsePrimitiveTypeAst(c.sig)
+		typeCode, zero, _, err := GenerateGoCode(ct, encodingaspects.EmptyAspectSet)
+		require.NoError(t, err, "sig %s", c.sig)
+		require.Equal(t, c.typeCode, typeCode, "typeCode for %s", c.sig)
+		require.Equal(t, c.zero, zero, "zeroValue for %s", c.sig)
+	}
+}
+
 func findGoModRootDir(p string) (r string, err error) {
 	start := p
 	for {

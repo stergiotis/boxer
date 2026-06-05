@@ -102,7 +102,7 @@ type Parser struct {
 }
 type NetworkTypeAstNode struct {
 	BaseType       BaseTypeNetworkE
-	CIDRWidth      uint8
+	CIDRModifier   CIDRModifierE
 	ScalarModifier ScalarModifierE
 }
 

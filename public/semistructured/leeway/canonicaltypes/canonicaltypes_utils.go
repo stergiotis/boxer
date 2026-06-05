@@ -14,6 +14,8 @@ func GetScalarModifier(s PrimitiveAstNodeI) (mod ScalarModifierE, notSupported b
 		mod = ct.ScalarModifier
 	case TemporalTypeAstNode:
 		mod = ct.ScalarModifier
+	case NetworkTypeAstNode:
+		mod = ct.ScalarModifier
 	}
 	return
 }
@@ -226,7 +228,7 @@ func getLeafKey(p PrimitiveAstNodeI) typeKey {
 	case TemporalTypeAstNode:
 		return typeKey{rune(v.BaseType), uint32(v.Width), 0, 0, rune(v.ScalarModifier)}
 	case NetworkTypeAstNode:
-		return typeKey{rune(v.BaseType), uint32(v.CIDRWidth), 0, 0, rune(v.ScalarModifier)}
+		return typeKey{rune(v.BaseType), 0, rune(v.CIDRModifier), 0, rune(v.ScalarModifier)}
 	default:
 		return typeKey{}
 	}

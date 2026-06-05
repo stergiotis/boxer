@@ -171,7 +171,7 @@ func (inst *Parser) antlrTreeCanonicalTypeToAst(context grammar2.ICanonicalTypeC
 	case *grammar2.CanonicalTypeNetworkContext:
 		p := NetworkTypeAstNode{
 			BaseType:       0,
-			CIDRWidth:      0,
+			CIDRModifier:   0,
 			ScalarModifier: 0,
 		}
 		baseNetwork := ct.BaseNetwork()
@@ -182,15 +182,8 @@ func (inst *Parser) antlrTreeCanonicalTypeToAst(context grammar2.ICanonicalTypeC
 				p.BaseType = BaseTypeNetworkIPv6
 			}
 		}
-		number := ct.NUMBER()
-		if number != nil {
-			var w uint64
-			w, err = strconv.ParseUint(number.GetText(), 10, 32)
-			if err != nil {
-				err = eb.Build().Str("text", number.GetText()).Errorf("unable to parse NUMBER literal: %w", err)
-				return
-			}
-			p.CIDRWidth = uint8(w)
+		if ct.CIDR_MODIFIER() != nil {
+			p.CIDRModifier = CIDRModifierVariable
 		}
 		scalarMod := ct.ScalarModifier()
 		if scalarMod != nil {

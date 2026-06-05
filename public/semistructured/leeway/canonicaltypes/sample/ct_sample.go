@@ -55,10 +55,10 @@ var SampleTemporalTypeMaxExcl = sliceProd(sampleTemporalTypeRadixii)
 
 var SampleNetworkTypeBaseType = []canonicaltypes2.BaseTypeNetworkE{canonicaltypes2.BaseTypeNetworkIPv4, canonicaltypes2.BaseTypeNetworkIPv6}
 
-// We sample common CIDR widths and 0.
+// Both forms: plain address and per-value CIDR.
 
-var SampleNetworkTypeCIDRWidth = []uint8{0, 8, 16, 24, 32, 48, 64, 128}
-var sampleNetworkTypeRadixii = []uint64{uint64(len(SampleNetworkTypeBaseType)), uint64(len(SampleNetworkTypeCIDRWidth)), uint64(len(SampleScalarModifier))}
+var SampleNetworkTypeCIDRModifier = []canonicaltypes2.CIDRModifierE{canonicaltypes2.CIDRModifierNone, canonicaltypes2.CIDRModifierVariable}
+var sampleNetworkTypeRadixii = []uint64{uint64(len(SampleNetworkTypeBaseType)), uint64(len(SampleNetworkTypeCIDRModifier)), uint64(len(SampleScalarModifier))}
 var SampleNetworkTypeMaxExcl = sliceProd(sampleNetworkTypeRadixii)
 
 // Updated Type Distribution
@@ -165,7 +165,7 @@ func GenerateSampleNetworkType(n uint64) (sample canonicaltypes2.NetworkTypeAstN
 	digits := mixedradix.ToDigits(sampleNetworkTypeRadixii, n)
 	return canonicaltypes2.NetworkTypeAstNode{
 		BaseType:       SampleNetworkTypeBaseType[digits[0]],
-		CIDRWidth:      SampleNetworkTypeCIDRWidth[digits[1]],
+		CIDRModifier:   SampleNetworkTypeCIDRModifier[digits[1]],
 		ScalarModifier: SampleScalarModifier[digits[2]],
 	}
 }

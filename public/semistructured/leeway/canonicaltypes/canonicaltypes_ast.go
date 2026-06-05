@@ -321,6 +321,23 @@ func NewSignatureAstNode(members []AstNodeI) SignatureAstNode {
 func (inst NetworkTypeAstNode) IsNetworkNode() bool {
 	return true
 }
+
+// ByteWidth is the packed physical width of one value: the address bytes
+// (4 for IPv4, 16 for IPv6) plus one trailing byte for the per-value prefix
+// length in the CIDR (CIDRModifierVariable) form.
+func (inst NetworkTypeAstNode) ByteWidth() int {
+	w := 0
+	switch inst.BaseType {
+	case BaseTypeNetworkIPv4:
+		w = 4
+	case BaseTypeNetworkIPv6:
+		w = 16
+	}
+	if inst.CIDRModifier == CIDRModifierVariable {
+		w++
+	}
+	return w
+}
 func (inst NetworkTypeAstNode) IsStringNode() bool {
 	return false
 }
@@ -347,14 +364,12 @@ func (inst NetworkTypeAstNode) IsPrimitive() bool {
 
 func (inst NetworkTypeAstNode) IsValid() bool {
 	switch inst.BaseType {
-	case BaseTypeNetworkIPv4:
-		if inst.CIDRWidth > 32 {
-			return false
-		}
-	case BaseTypeNetworkIPv6:
-		if inst.CIDRWidth > 128 {
-			return false
-		}
+	case BaseTypeNetworkIPv4, BaseTypeNetworkIPv6:
+	default:
+		return false
+	}
+	switch inst.CIDRModifier {
+	case CIDRModifierNone, CIDRModifierVariable:
 	default:
 		return false
 	}
@@ -369,7 +384,7 @@ func (inst NetworkTypeAstNode) IsValid() bool {
 func (inst NetworkTypeAstNode) String() string {
 	s := &strings.Builder{}
 	addIfNonzero(s, inst.BaseType)
-	addIfNonzeroNumber(s, inst.CIDRWidth)
+	addIfNonzero(s, inst.CIDRModifier)
 	addIfNonzero(s, inst.ScalarModifier)
 	return s.String()
 }
@@ -383,7 +398,7 @@ func (inst NetworkTypeAstNode) MarshalCBOR() (data []byte, err error) {
 }
 
 func (inst NetworkTypeAstNode) GenerateGoCode(w io.Writer) (err error) {
-	_, err = fmt.Fprintf(w, "NetworkTypeAstNode{BaseType: %s,CIDRWidth: %d, ScalarModifier: %s}",
-		formatGoRune(inst.BaseType), inst.CIDRWidth, formatGoRune(inst.ScalarModifier))
+	_, err = fmt.Fprintf(w, "NetworkTypeAstNode{BaseType: %s, CIDRModifier: %s, ScalarModifier: %s}",
+		formatGoRune(inst.BaseType), formatGoRune(inst.CIDRModifier), formatGoRune(inst.ScalarModifier))
 	return
 }

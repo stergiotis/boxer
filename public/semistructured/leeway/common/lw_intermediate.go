@@ -21,6 +21,8 @@ func ExtractScalarModifier(ct canonicaltypes2.PrimitiveAstNodeI) (scalarModifier
 		scalarModifier = ctt.ScalarModifier
 	case canonicaltypes2.TemporalTypeAstNode:
 		scalarModifier = ctt.ScalarModifier
+	case canonicaltypes2.NetworkTypeAstNode:
+		scalarModifier = ctt.ScalarModifier
 	default:
 		err = eb.Build().Type("ct", ct).Errorf("unable to extract scalar modifier")
 		return

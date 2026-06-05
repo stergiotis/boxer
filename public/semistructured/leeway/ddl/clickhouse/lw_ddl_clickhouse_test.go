@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/sample"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	ddl2 "github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
@@ -62,4 +63,25 @@ func TestTechnologySpecificCodeGenerator_GeneratedCode(t *testing.T) {
 	out, err = cmd.CombinedOutput()
 	require.NoError(t, err)
 	require.Empty(t, out)
+}
+
+func TestGenerateNetworkType(t *testing.T) {
+	gen := NewTechnologySpecificCodeGenerator()
+	b := &strings.Builder{}
+	gen.SetCodeBuilder(b)
+	p := canonicaltypes.NewParser()
+	cases := []struct{ sig, want string }{
+		{"v", "IPv4"},
+		{"w", "IPv6"},
+		{"vc", "FixedString(5)"},
+		{"wc", "FixedString(17)"},
+		{"vh", "Array(IPv4)"},
+		{"wch", "Array(FixedString(17))"},
+	}
+	for _, c := range cases {
+		b.Reset()
+		ct := p.MustParsePrimitiveTypeAst(c.sig)
+		require.NoError(t, gen.GenerateType(ct), "sig %s", c.sig)
+		require.Equal(t, c.want, b.String(), "sig %s", c.sig)
+	}
 }

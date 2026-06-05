@@ -26,6 +26,9 @@ func GenerateGoCode(canonicalType canonicaltypes.PrimitiveAstNodeI, hints encodi
 	case canonicaltypes.TemporalTypeAstNode:
 		typeCode, zeroValueLiteral, imports, err = generateTemporalType(ct.BaseType, ct.Width, ct.ScalarModifier, hints)
 		return
+	case canonicaltypes.NetworkTypeAstNode:
+		typeCode, zeroValueLiteral, imports, err = generateNetworkType(ct, hints)
+		return
 	default:
 		err = eb.Build().Stringer("canonicalType", canonicalType).Errorf("unable to generate go typeCode for type: %w", ErrNotImplemented)
 		return
@@ -191,6 +194,25 @@ func generateMachineNumericType(baseMachineNumber canonicaltypes.BaseTypeMachine
 	if err != nil {
 		err = eb.Build().Stringer("baseType", baseMachineNumber).Stringer("width", width).Stringer("byteOrderModifier", byteOrderModifier).Stringer("scalarModifier", scalarModifier).Errorf("%w", err)
 		return
+	}
+	return
+}
+
+func generateNetworkType(ct canonicaltypes.NetworkTypeAstNode, hints encodingaspects.AspectSet) (code string, zeroValueLiteral string, imports []string, err error) {
+	n := ct.ByteWidth()
+	code = fmt.Sprintf("[%d]byte", n)
+	zeroValueLiteral = fmt.Sprintf("[%d]byte{}", n)
+	switch ct.ScalarModifier {
+	case canonicaltypes.ScalarModifierNone:
+		break
+	case canonicaltypes.ScalarModifierHomogenousArray, canonicaltypes.ScalarModifierSet:
+		code = "[]" + code
+		zeroValueLiteral = code + "(nil)"
+	default:
+		err = common.ErrNotImplemented
+	}
+	if err != nil {
+		err = eb.Build().Stringer("baseType", ct.BaseType).Stringer("cidrModifier", ct.CIDRModifier).Stringer("scalarModifier", ct.ScalarModifier).Errorf("%w", err)
 	}
 	return
 }

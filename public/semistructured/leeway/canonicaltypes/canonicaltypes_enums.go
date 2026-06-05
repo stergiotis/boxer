@@ -109,4 +109,17 @@ func (inst BaseTypeNetworkE) String() string {
 	return string(inst)
 }
 
-const CIDRModifier rune = 'c'
+type CIDRModifierE rune
+
+const (
+	CIDRModifierNone     CIDRModifierE = 0
+	CIDRModifierVariable CIDRModifierE = 'c'
+)
+
+func (inst CIDRModifierE) String() string {
+	switch inst {
+	case CIDRModifierNone:
+		return "<none>"
+	}
+	return string(inst)
+}

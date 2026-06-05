@@ -20,9 +20,10 @@ func TestIsValidSemanticRules(t *testing.T) {
 		node  canonicaltypes.AstNodeI
 		valid bool
 	}{
-		{"Valid IPv4", canonicaltypes.NetworkTypeAstNode{BaseType: 'v', CIDRWidth: 32}, true},
-		{"Valid IPv4 CIDR", canonicaltypes.NetworkTypeAstNode{BaseType: 'v', CIDRWidth: 24}, true},
-		{"Valid IPv6 CIDR", canonicaltypes.NetworkTypeAstNode{BaseType: 'w', CIDRWidth: 64}, true},
+		{"Valid IPv4 address", canonicaltypes.NetworkTypeAstNode{BaseType: 'v'}, true},
+		{"Valid IPv4 CIDR", canonicaltypes.NetworkTypeAstNode{BaseType: 'v', CIDRModifier: 'c'}, true},
+		{"Valid IPv6 CIDR", canonicaltypes.NetworkTypeAstNode{BaseType: 'w', CIDRModifier: 'c'}, true},
+		{"Invalid CIDR modifier", canonicaltypes.NetworkTypeAstNode{BaseType: 'v', CIDRModifier: 'z'}, false},
 		{"Valid Fixed String", canonicaltypes.StringAstNode{BaseType: 's', Width: 32, WidthModifier: 'x'}, true},
 		{"Invalid Fixed String (Zero Width)", canonicaltypes.StringAstNode{BaseType: 's', Width: 0, WidthModifier: 'x'}, false},
 	}
@@ -105,23 +106,23 @@ func TestComplexStructureRoundtrip(t *testing.T) {
 	// 1. Create a Signature: Group(u8, ipv4) _ Group(s, ipv6c)
 	g1 := canonicaltypes.NewGroupAstNode([]canonicaltypes.PrimitiveAstNodeI{
 		canonicaltypes.MachineNumericTypeAstNode{BaseType: 'u', Width: 8},
-		canonicaltypes.NetworkTypeAstNode{BaseType: 'v', CIDRWidth: 32},
+		canonicaltypes.NetworkTypeAstNode{BaseType: 'v'},
 	})
 
 	g2 := canonicaltypes.NewGroupAstNode([]canonicaltypes.PrimitiveAstNodeI{
 		canonicaltypes.StringAstNode{BaseType: 's'},
-		canonicaltypes.NetworkTypeAstNode{BaseType: 'w', CIDRWidth: 64},
+		canonicaltypes.NetworkTypeAstNode{BaseType: 'w', CIDRModifier: 'c'},
 	})
 
 	sig := canonicaltypes.NewSignatureAstNode([]canonicaltypes.AstNodeI{g1, g2})
 
-	originalStr := sig.String() // Expect something like "u8-4_s-6c64"
+	originalStr := sig.String() // Expect "u8-v_s-wc"
 
 	// 2. Promote everything to Homogenous Arrays ('h')
 	promoted, _, _ := canonicaltypes.PromoteScalars(sig, canonicaltypes.ScalarModifierHomogenousArray)
 
 	pStr := promoted.String()
-	if !strings.Contains(pStr, "v32h") || !strings.Contains(pStr, "w64h") {
+	if !strings.Contains(pStr, "vh") || !strings.Contains(pStr, "wch") {
 		t.Errorf("Promotion failed to target Network nodes: %s", pStr)
 	}
 
@@ -140,14 +141,14 @@ func TestComplexStructureRoundtrip(t *testing.T) {
 
 // TestDeepEqualityProperties verifies the Equals() implementation.
 func TestDeepEqualityProperties(t *testing.T) {
-	n1 := canonicaltypes.NetworkTypeAstNode{BaseType: 'v', CIDRWidth: 24, ScalarModifier: 'h'}
-	n2 := canonicaltypes.NetworkTypeAstNode{BaseType: 'v', CIDRWidth: 24, ScalarModifier: 'h'}
-	n3 := canonicaltypes.NetworkTypeAstNode{BaseType: 'v', CIDRWidth: 32, ScalarModifier: 'h'}
+	n1 := canonicaltypes.NetworkTypeAstNode{BaseType: 'v', CIDRModifier: 'c', ScalarModifier: 'h'}
+	n2 := canonicaltypes.NetworkTypeAstNode{BaseType: 'v', CIDRModifier: 'c', ScalarModifier: 'h'}
+	n3 := canonicaltypes.NetworkTypeAstNode{BaseType: 'v', ScalarModifier: 'h'}
 
 	if n1.String() != n2.String() {
 		t.Error("Identical network nodes failed Equals()")
 	}
 	if n1.String() == n3.String() {
-		t.Error("Nodes with different CIDR widths should not be equal")
+		t.Error("CIDR and address forms should not be equal")
 	}
 }

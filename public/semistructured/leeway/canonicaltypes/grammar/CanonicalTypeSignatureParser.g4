@@ -44,7 +44,7 @@ canonicalType
     : baseString widthModifier? scalarModifier?                      # CanonicalTypeString
     | baseTemporal NUMBER scalarModifier?                            # CanonicalTypeTemporal
     | baseMachineNumeric NUMBER byteOrderModifier? scalarModifier?   # CanonicalTypeMachineNumeric
-    | baseNetwork NUMBER? scalarModifier?                            # CanonicalTypeNetwork
+    | baseNetwork CIDR_MODIFIER? scalarModifier?                     # CanonicalTypeNetwork
     ;
 
 canonicalTypeSequence

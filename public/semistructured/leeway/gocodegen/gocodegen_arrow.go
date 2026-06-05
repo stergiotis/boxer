@@ -80,6 +80,9 @@ func GoTypeToArrowType(ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspec
 			err = eb.Build().Stringer("baseType", ctt.BaseType).Errorf("unhandled base type")
 			return
 		}
+	case canonicaltypes2.NetworkTypeAstNode:
+		// packed [N]byte array: slice to []byte for the FixedSizeBinary builder
+		suffix = "[:]"
 	case canonicaltypes2.TemporalTypeAstNode:
 		var unit string
 		switch ctt.Width {
@@ -154,6 +157,8 @@ func CanonicalTypeToArrowBaseClassName(ct canonicaltypes2.PrimitiveAstNodeI, enc
 			err = eb.Build().Stringer("baseType", ctt.BaseType).Errorf("unhandled base type")
 			return
 		}
+	case canonicaltypes2.NetworkTypeAstNode:
+		name = "FixedSizeBinary"
 	default:
 		err = eb.Build().Type("type", ct).Errorf("unhandled canonical type")
 		return

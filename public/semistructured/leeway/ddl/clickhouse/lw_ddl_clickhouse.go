@@ -64,6 +64,8 @@ func (inst *TechnologySpecificCodeGenerator) GenerateType(canonicalType canonica
 		err = inst.generateStringType(ct.BaseType, ct.WidthModifier, ct.Width, ct.ScalarModifier)
 	case canonicaltypes.TemporalTypeAstNode:
 		err = inst.generateTemporalType(ct.BaseType, ct.Width, ct.ScalarModifier)
+	case canonicaltypes.NetworkTypeAstNode:
+		err = inst.generateNetworkType(ct)
 	default:
 		err = eb.Build().Stringer("canonicalType", canonicalType).Str("technology", inst.GetTechnology().Name).Type("canonicalType", canonicalType).Errorf("unable to generate ddl code: %w", common.ErrNotImplemented)
 	}
@@ -471,6 +473,51 @@ func (inst *TechnologySpecificCodeGenerator) generateMachineNumericType(baseMach
 		}
 	} else {
 		err = eb.Build().Stringer("baseType", baseMachineNumber).Stringer("width", width).Stringer("byteOrderModifier", byteOrderModifier).Stringer("scalarModifier", scalarModifier).Errorf("%w", err)
+	}
+	return
+}
+
+func (inst *TechnologySpecificCodeGenerator) generateNetworkType(ct canonicaltypes.NetworkTypeAstNode) (err error) {
+	b := inst.codeBuilder
+	if b == nil {
+		err = common.ErrNoBuilder
+		return
+	}
+	var code string
+	switch ct.CIDRModifier {
+	case canonicaltypes.CIDRModifierNone:
+		switch ct.BaseType {
+		case canonicaltypes.BaseTypeNetworkIPv4:
+			code = "IPv4"
+		case canonicaltypes.BaseTypeNetworkIPv6:
+			code = "IPv6"
+		default:
+			err = common.ErrNotImplemented
+		}
+	case canonicaltypes.CIDRModifierVariable:
+		code = fmt.Sprintf("FixedString(%d)", ct.ByteWidth())
+	default:
+		err = common.ErrNotImplemented
+	}
+	if err == nil {
+		code = inst.typeProlog + code + inst.typeEpilog
+		switch ct.ScalarModifier {
+		case canonicaltypes.ScalarModifierNone:
+			break
+		case canonicaltypes.ScalarModifierHomogenousArray, canonicaltypes.ScalarModifierSet:
+			code = fmt.Sprintf("Array(%s)", code)
+		default:
+			err = common.ErrNotImplemented
+		}
+	}
+	if err == nil {
+		_, err = b.WriteString(code)
+		if err != nil {
+			err = eh.Errorf("unable to write to code builder: %w", err)
+			return
+		}
+	} else {
+		err = eb.Build().Stringer("baseType", ct.BaseType).Stringer("cidrModifier", ct.CIDRModifier).Stringer("scalarModifier", ct.ScalarModifier).Errorf("%w", err)
 	}
 	return
 }

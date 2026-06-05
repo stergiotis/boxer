@@ -19,6 +19,7 @@ BIG_ENDIAN : 'n'; // network byte order
 FIXED_MODIFIER : 'x';
 IPV4 : 'v';
 IPV6 : 'w';
+CIDR_MODIFIER : 'c';
 
 /*NONZERO_DIGIT : '1'..'9';
 DIGITS : '0'..'9'+;

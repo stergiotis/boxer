@@ -116,6 +116,13 @@ func stripScalarModifier(ct canonicaltypes.PrimitiveAstNodeI) canonicaltypes.Pri
 		out := *n
 		out.ScalarModifier = canonicaltypes.ScalarModifierNone
 		return out
+	case canonicaltypes.NetworkTypeAstNode:
+		n.ScalarModifier = canonicaltypes.ScalarModifierNone
+		return n
+	case *canonicaltypes.NetworkTypeAstNode:
+		out := *n
+		out.ScalarModifier = canonicaltypes.ScalarModifierNone
+		return out
 	}
 	return ct
 }
