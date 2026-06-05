@@ -195,7 +195,7 @@ Lets now assume that we want to "label" error messages in the document without i
 
 In the labeling example above, `/metrics/error` and `errormsg` ride in the same `low-card-memberships` column with `membership-card: 2`. They are mechanically identical at the protocol layer but semantically different: `/metrics/error` *defines* what the attribute is, `errormsg` *annotates* it.
 
-This distinction matters for downstream tooling — JSON Schema generation, ODCS field declarations, quality SQL, PII classification — but the protocol does not carry it. Per boxer ADR-0007 (`$(boxer-path)/doc/adr/0007-leeway-membership-role-classifier.md`; see also [pebble2impl ADR-0017](../../adr/0007-leeway-membership-role-classifier.md)), the role is decided by an application-supplied classifier that consumes value-level membership instances and returns a `(role, paramTreatment)` pair.
+This distinction matters for downstream tooling — JSON Schema generation, data-contract field declarations, quality SQL, PII classification — but the protocol does not carry it. Per boxer ADR-0007 (`$(boxer-path)/doc/adr/0007-leeway-membership-role-classifier.md`; see also [pebble2impl ADR-0017](../../adr/0007-leeway-membership-role-classifier.md)), the role is decided by an application-supplied classifier that consumes value-level membership instances and returns a `(role, paramTreatment)` pair.
 
 ### Four-quadrant model
 
@@ -241,7 +241,7 @@ This pattern is *one* organizational option, not a requirement. Mixed-role secti
 
 ### Consequences for canonical JSON
 
-Under boxer ADR-0007 (and pebble2impl [ADR-0017](../../adr/0007-leeway-membership-role-classifier.md)) the canonical JSON layout is attribute-centric: primary memberships form attribute keys, secondary memberships ride in a per-attribute `labels` slot. Aliasing (multiple primary memberships on one value, e.g. `/price/current` ≡ `/stats/min`) collapses into one attribute object with an `aliases` field. ODCS / JSON Schema generation reads the classifier output to decide `properties` + `required` for primary versus `customProperties.x-leeway.labelInventory` for secondary.
+Under boxer ADR-0007 (and pebble2impl [ADR-0017](../../adr/0007-leeway-membership-role-classifier.md)) the canonical JSON layout is attribute-centric: primary memberships form attribute keys, secondary memberships ride in a per-attribute `labels` slot. Aliasing (multiple primary memberships on one value, e.g. `/price/current` ≡ `/stats/min`) collapses into one attribute object with an `aliases` field. JSON Schema / data-contract generation reads the classifier output to decide `properties` + `required` for primary versus a scoped extension slot for secondary.
 
 The classifier interface lives in boxer at `github.com/stergiotis/boxer/public/semistructured/leeway/membershiprole`.
 

@@ -12,7 +12,7 @@ reviewed-date: 2026-05-01
 
 Leeway's membership graph mixes two semantically distinct kinds of tag in one mechanism: those that *define* an attribute's identity (`/hostname`, `/metrics/cpu`, `/users/_/email` — what the document is *about*) and those that *annotate* an existing attribute (`errormsg`, classification flags, governance labels — metadata applied to a value). The protocol carries them uniformly: both end up as memberships in the same column with `membership-card` summing across them.
 
-Downstream tooling needs the distinction. JSON Schema generation maps primary memberships to `properties` + `required`, secondary memberships to either `additionalProperties` or `customProperties.x-leeway.labelInventory`. ODCS field declarations carry primary identities; PII / classification rules attach to attributes, not to whole sections. Quality SQL phrased per attribute presupposes attribute keys, which presuppose primary memberships. Without a first-class role distinction the contract surface either over-claims (every observed tag becomes `required`) or under-claims (everything is loose annotation).
+Downstream tooling needs the distinction. JSON Schema generation maps primary memberships to `properties` + `required`, secondary memberships to either `additionalProperties` or a scoped extension slot. Data-contract field declarations carry primary identities; PII / classification rules attach to attributes, not to whole sections. Quality SQL phrased per attribute presupposes attribute keys, which presuppose primary memberships. Without a first-class role distinction the contract surface either over-claims (every observed tag becomes `required`) or under-claims (everything is loose annotation).
 
 The leeway-advanced documentation already shows the labeling case (a `/metrics/error` value receiving a separate `errormsg` low-card-verbatim membership) but treats it as a section-level mechanic; the protocol provides no signal that one is the identity and the other is the annotation.
 
@@ -46,7 +46,7 @@ Concretely:
 
 6. **Mining is observability, not contract input.** Frequent-itemset mining stays as a drift-detection tool: changes in observed itemsets between result-sets become candidate signals for promoting a label to primary, splitting an attribute, or deprecating an unused tag. Mining never produces the wire-form classification.
 
-7. **Implementation location.** The classifier package lives at `public/semistructured/leeway/membershiprole/`. Card emitters, schema-document writers, and ODCS contract generators each accept a `ClassifierI`; default to `DefaultClassifier` when none is supplied.
+7. **Implementation location.** The classifier package lives at `public/semistructured/leeway/membershiprole/`. Card emitters, schema-document writers, and data-contract generators each accept a `ClassifierI`; default to `DefaultClassifier` when none is supplied.
 
 ### Subsidiary design decisions
 
@@ -90,7 +90,7 @@ Concretely:
 - **Classifier consistency is a per-application concern.** Two consumers reading the same data through different classifiers will produce different keying. Mitigation: schema documents may record the classifier identity (or its declared rules) so consumers can verify they're using the same policy.
 - **Default classifier is opinionated.** Path-prefix `/` is the convention in most leeway-advanced examples but is not universal. Configurable `PathPrefix` covers most variations; non-prefix-based applications need a custom classifier.
 - **`DefaultClassifier` lacks section-canonical-type access.** It cannot distinguish `Identity` versus `Index` param treatment for parametrized kinds; it defaults to `Identity` and applications wanting `Index` (e.g. `/embedding/_` on a homogenous-array section) wrap the default.
-- **Consumers (card emitters, ODCS generator, contract validators) need cutover.** Each consumer takes a classifier on its own schedule; until then they continue to operate without role distinction.
+- **Consumers (card emitters, contract/schema generators, contract validators) need cutover.** Each consumer takes a classifier on its own schedule; until then they continue to operate without role distinction.
 
 ### Neutral
 
@@ -108,7 +108,7 @@ Tracked as named follow-ons, not gates on this ADR:
 
 1. **`MembershipRoleE` annotation on `MembershipDesc`.** Whether the schema struct should eventually carry an explicit per-membership role override (in addition to the classifier's computed answer). Useful for tables where the convention's defaults need targeted overrides; defer until a real use case appears.
 2. **Mining tool scope.** What counts as a drift signal, what threshold triggers human review, and where the tool lives (boxer or downstream).
-3. **Consumer cutover.** Card emitters, JSON Schema / ODCS generators, contract validators — each consumes the classifier on its own schedule.
+3. **Consumer cutover.** Card emitters, JSON Schema / data-contract generators, contract validators — each consumes the classifier on its own schedule.
 4. **Section-canonical-type access in classifier.** Whether `SectionContext` should grow a canonical-type field so the default classifier can distinguish `ParamTreatmentIndex` (homogenous-array sections) from `ParamTreatmentIdentity`.
 5. **`AspectSet.Contains(AspectE) bool` helper.** A direct membership test (avoiding `IterateAspects`) is convenient enough that it likely belongs alongside `IterateAspects` / `MaxEncodedAspect`; deferred because the encoder file carries a "DO NOT EDIT" disclaimer suggesting copy-paste maintenance with sister packages.
 

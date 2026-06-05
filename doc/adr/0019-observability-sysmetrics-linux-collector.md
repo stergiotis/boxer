@@ -251,7 +251,7 @@ Tracked as named follow-ons; resolved at the milestone where they bind.
 2. **Network-interface filtering defaults** — loopback, virtual bridges (docker0, br-*), wg-*. btop hides these in the default UI but exposes them via a flag. Our default: emit all; provide an `Filter` option function. Decided in M2.
 3. **Container detection scope** — should `container.Detect()` also return cgroup limits (CPU quota, memory.max) so callers can scale percentages against the container's effective resources, not the host's? Decided in M4.
 4. **Sample timestamp source** — `time.Now()` vs `time.Now().UnixNano()` vs the kernel's `CLOCK_MONOTONIC`. btop uses wall-clock; for delta computations `CLOCK_MONOTONIC` is safer. Decided in M1, codified in `internal/deltaclock`.
-5. **Streaming sink contract** — should snapshots implement `streamreadaccess.SinkI` (the ADR-0060 / ADR-0018 sink protocol) so they flow into the leeway-card pipeline directly? Plausible; defer until a real consumer asks. Out of scope of this ADR.
+5. **Streaming sink contract** — should snapshots implement `streamreadaccess.SinkI` (the ADR-0018 sink protocol) so they flow into the leeway-card pipeline directly? Plausible; defer until a real consumer asks. Out of scope of this ADR.
 
 ## Status
 

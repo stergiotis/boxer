@@ -151,7 +151,7 @@ var _ SinkI = (*MySink)(nil)
 
 ## Membership Role Classification
 
-Per boxer ADR-0007 (and pebble2impl [ADR-0017](../../adr/0007-leeway-membership-role-classifier.md)), sinks that produce attribute-centric output (JSON, ODCS, anything with a "primary key + annotations" shape) consume a `membershiprole.ClassifierI` to decide whether each `AddMembership*` call delivers a primary or secondary tag.
+Per boxer ADR-0007 (and pebble2impl [ADR-0017](../../adr/0007-leeway-membership-role-classifier.md)), sinks that produce attribute-centric output (JSON, data contracts, anything with a "primary key + annotations" shape) consume a `membershiprole.ClassifierI` to decide whether each `AddMembership*` call delivers a primary or secondary tag.
 
 The classifier interface lives in boxer at `github.com/stergiotis/boxer/public/semistructured/leeway/membershiprole`. It takes a `MembershipValue` (which mirrors the `AddMembership*` payload shapes) plus a `SectionContext` (section name + `useaspects.AspectSet`) and returns `(MembershipRoleE, ParamTreatmentE)`.
 
@@ -182,7 +182,7 @@ The five `AddMembership*` shapes map onto the five `MembershipKindE` values one-
 
 ### When to use the classifier
 
-- **Attribute-centric data conversion emitters** (JSON, NDJSON, ODCS field lists, JSON-Schema generation): always — the role decides keying versus annotation.
+- **Attribute-centric data conversion emitters** (JSON, NDJSON, data-contract field lists, JSON-Schema generation): always — the role decides keying versus annotation.
 - **Schema document writers**: yes — section uniformity and per-section role inventory are emitted from the classifier output.
 - **Section-centric or row-oriented emitters** (Unicode tables, HTML cards, SVG): optional — the role information is useful for visual distinction (different cell style for labels) but not load-bearing.
 - **Wire-protocol emitters that mirror the IR** (raw Arrow round-trip, debug dumps): no — the protocol carries memberships uniformly; role classification is consumer policy.

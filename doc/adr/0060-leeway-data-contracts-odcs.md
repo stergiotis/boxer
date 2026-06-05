@@ -1,12 +1,13 @@
 ---
 type: adr
-status: proposed
+status: withdrawn
 date: 2026-04-24
+withdrawn-date: 2026-06-05
 # reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
 # reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
 ---
 
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
+> **Status: withdrawn (2026-06-05) — retracted before review, never implemented.** The data-contract publication direction described below was not pursued; see the [Status](#status) section for the rationale. Retained as a record of the option, per the append-only ADR convention. Do not implement.
 
 # ADR-0060: Adopt ODCS v3.1.0 as Leeway's Data-Contract Target
 
@@ -179,10 +180,14 @@ Tracked as named follow-ons, not gates on this ADR:
 
 ## Status
 
-Proposed — awaiting review by repo owner.
+**Withdrawn 2026-06-05** — retracted before human review; never implemented.
 
-Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
-ADRs are append-only; supersession is recorded, not deleted.
+The data-contract publication direction described above was not pursued. The schema-derivation, read-back, and query-generation needs that motivated it are being addressed directly by the `marshallgen`, `marshallreflect`, `mappingplan`, and `dql` line of work; the external-governance-interop layer (the ODCS envelope, catalog/quality-tool emission) is out of scope for now. No code was written against this ADR — the generator it described never left the design stage.
+
+This file is kept per the append-only ADR convention as a record of the option and why it was set aside. The cross-references that other ADRs and skills docs once carried to it have been removed, so this ADR now stands alone. Should a standards-based data-contract layer be revisited, this is the starting point.
+
+Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX) | Withdrawn`.
+ADRs are append-only; withdrawal is recorded, not deleted.
 
 ## References
 
