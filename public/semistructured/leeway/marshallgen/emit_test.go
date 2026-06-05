@@ -587,3 +587,71 @@ type MyDTO struct {
 		mustNotContain(t, out, "iter.Seq2")
 	}
 }
+
+// --- ADR-0008 OQ#4: carrier value shapes beyond scalar T. ---
+
+func TestEmit_CarrierOption_ScalarCarrier(t *testing.T) {
+	// An Option carrier value keeps a scalar carrier (one per attribute,
+	// emitted only when Has); the carrier column is appended every row.
+	out := generate(t, `package demo
+type MyDTO struct {
+	_        struct{}                      `+"`kind:\"my\"`"+`
+	Id       uint64                        `+"`lw:\",id\"`"+`
+	Reading  option.Option[uint32]         `+"`lw:\"sensor,symbol,mixedLowCardRef\"`"+`
+	ReadingC marshalltypes.MixedLowCardRef `+"`lw:\"sensor,symbol,mixedLowCardRef\"`"+`
+}
+`)
+	parseGo(t, out)
+	// Scalar carrier column (gofmt aligns the Val/Has/C struct fields, so
+	// match the type, not the name+spacing); not a slice carrier.
+	mustContain(t, out, "[]marshalltypes.MixedLowCardRef")
+	mustNotContain(t, out, "[][]marshalltypes.MixedLowCardRef")
+	mustContain(t, out, "if c.ReadingHas[i] {")
+	mustContain(t, out, "AddMembershipMixedLowCardRefP(c.ReadingC[i].Id, c.ReadingC[i].Params)")
+	// Read: present → Has=true, and the carrier column is appended every row.
+	mustContain(t, out, "c.ReadingHas = append(c.ReadingHas, true)")
+	mustContain(t, out, "c.ReadingC = append(c.ReadingC,")
+}
+
+func TestEmit_CarrierContainer_ScalarCarrier(t *testing.T) {
+	// A container ([]T) carrier value emits one attribute (N values) paired
+	// with a single scalar carrier.
+	out := generate(t, `package demo
+type MyDTO struct {
+	_         struct{}                      `+"`kind:\"my\"`"+`
+	Id        uint64                        `+"`lw:\",id\"`"+`
+	Readings  []uint32                      `+"`lw:\"sensor,u32Array,mixedLowCardRef\"`"+`
+	ReadingsC marshalltypes.MixedLowCardRef `+"`lw:\"sensor,u32Array,mixedLowCardRef\"`"+`
+}
+`)
+	parseGo(t, out)
+	mustContain(t, out, "ReadingsC []marshalltypes.MixedLowCardRef")
+	mustContain(t, out, "if len(c.Readings[i]) > 0 {")
+	mustContain(t, out, "AddToContainerP")
+	// One carrier for the whole container attribute (scalar index).
+	mustContain(t, out, "AddMembershipMixedLowCardRefP(c.ReadingsC[i].Id, c.ReadingsC[i].Params)")
+}
+
+func TestEmit_CarrierExplode_SliceCarrier(t *testing.T) {
+	// An exploded ([]T,explode) carrier value pairs a []marshalltypes.X slice
+	// carrier, one element per emitted attribute, with a runtime length guard.
+	out := generate(t, `package demo
+type MyDTO struct {
+	_         struct{}                        `+"`kind:\"my\"`"+`
+	Id        uint64                          `+"`lw:\",id\"`"+`
+	Readings  []uint32                        `+"`lw:\"sensor,u32Array,explode,mixedLowCardRef\"`"+`
+	ReadingsC []marshalltypes.MixedLowCardRef `+"`lw:\"sensor,u32Array,mixedLowCardRef\"`"+`
+}
+`)
+	parseGo(t, out)
+	// Slice carrier column (extra slice dimension).
+	mustContain(t, out, "ReadingsC [][]marshalltypes.MixedLowCardRef")
+	// Runtime length guard before the per-element loop.
+	mustContain(t, out, "if len(c.ReadingsC[i]) != len(c.Readings[i]) {")
+	mustContain(t, out, "different lengths")
+	// Per-element value loop + element-indexed carrier.
+	mustContain(t, out, "for k, v := range c.Readings[i] {")
+	mustContain(t, out, "AddMembershipMixedLowCardRefP(c.ReadingsC[i][k].Id, c.ReadingsC[i][k].Params)")
+	// Read accumulates parallel value + carrier slices.
+	mustContain(t, out, "c.ReadingsC = append(c.ReadingsC,")
+}

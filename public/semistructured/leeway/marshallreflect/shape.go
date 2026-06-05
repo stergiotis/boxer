@@ -90,6 +90,15 @@ func classifyReflectType(rt reflect.Type) (s mappingplan.FieldShape, err error) 
 			s.GoType = "[]byte"
 			return
 		}
+		// []marshalltypes.X — a slice carrier, paired element-wise with an
+		// exploded value field (mirrors the AST classifier). PlanBuilder pairs
+		// it and checks the value field is `,explode`.
+		if elem.Kind() == reflect.Struct && elem.PkgPath() == marshalltypesPkgPath {
+			s.CarrierType = elem.Name()
+			s.CarrierIsSlice = true
+			s.GoType = "marshalltypes." + elem.Name()
+			return
+		}
 		// []option.Option[T] forbidden.
 		if elem.Kind() == reflect.Struct && elem.PkgPath() == optionPkgPath {
 			err = eb.Build().Str("type", rt.String()).Errorf("[]option.Option[T] is forbidden — option.Option[T] is only allowed as a scalar field")

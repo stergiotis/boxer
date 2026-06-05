@@ -105,7 +105,37 @@ in declaration order). The `,verbatim` flag switches to
 literal name embeds directly on the wire and no kindXxx is declared.
 A section's fields must agree on the channel; mixing is rejected
 because the read-side dispatch iterator type differs (`iter.Seq[uint64]`
-vs `iter.Seq[[]byte]`).
+vs `iter.Seq[[]byte]`). The eight channels and their per-channel facts
+(method suffix, carrier struct, read accessor, …) live in one table on
+`mappingplan.MembershipChannel` — adding a channel is one row, not an
+edit across the accessor methods.
+
+### Carrier channels (mixed / parametrized)
+
+The four carrier channels (`mixedLowCardRef`, `mixedLowCardVerbatim`,
+`lowCardRefParametrized`, `highCardRefParametrized`) carry the membership
+identity as **per-row data** rather than a `kindXxx` id or a literal name.
+A carrier field pairs a value field with a `marshalltypes` carrier sibling
+on one `(membership, section, channel)` triple; the carrier supplies the
+id/name + params to the single `AddMembership…P` call of each attribute. A
+carrier section is restricted to one such membership (a per-row identity
+cannot be matched against a fixed id on read).
+
+The value field takes the same Go-shape × flag matrix as any other field —
+scalar `T`, `option.Option[T]`, a container `[]T`, or `[]T,explode`
+(ADR-0008 OQ#4) — with one rule: **the carrier's multiplicity mirrors the
+attribute count.** Every shape except `,explode` emits one carrier per
+attribute and pairs with a scalar carrier (`marshalltypes.X`); `,explode`
+emits one attribute per element and pairs with a slice carrier
+(`[]marshalltypes.X`) zipped element-wise with the value slice. The
+carrier's slice-ness is its Go type, not a flag — `,explode` stays on the
+value field. `PlanBuilder.Finish` rejects a multiplicity mismatch, and the
+per-row `len(value) == len(carrier)` agreement is a marshal-time check
+(both are independent Go fields). `*roaring.Bitmap` is not accepted on a
+carrier channel — a bitmap has no stable element index to pair with a
+carrier slice. An empty container value emits no attribute, so its carrier
+is not on the wire (splice semantics; SD8's carrier-presence signal is per
+*emitted* attribute).
 
 ### Constants
 

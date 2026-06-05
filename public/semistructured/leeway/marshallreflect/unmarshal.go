@@ -332,7 +332,7 @@ func consumeValue(attrs reflect.Value, i int, attrJ int64, f mappingplan.TaggedF
 		seq := mustCall(attrs, "GetAttrValueValue", reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
 		for _, v := range collectIterSeq(seq) {
 			// Defensive copy for []byte elements (Arrow buffer aliasing).
-			if f.GoType == "[]byte" {
+			if mappingplan.CopyStrategy(f.GoType) == mappingplan.CopyBytes {
 				src := v.Bytes()
 				cp := make([]byte, len(src))
 				copy(cp, src)
@@ -342,16 +342,11 @@ func consumeValue(attrs reflect.Value, i int, attrJ int64, f mappingplan.TaggedF
 			}
 		}
 	default:
-		// Single-value read — scalar section uses GetAttrValueValue
-		// returning T; non-scalar section uses GetAttrValueSingleOrDefault.
-		method := "GetAttrValueSingleOrDefault"
-		switch mappingplan.ClassifyBegin(f) {
-		case mappingplan.ShapeScalarBegin, mappingplan.ShapeExplodeBegin:
-			method = "GetAttrValueValue"
-		}
-		v := mustCall(attrs, method, reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
-		switch {
-		case mappingplan.IsFixedByteArray(f.GoType):
+		// Single-value read — accessor chosen by field shape, shared with
+		// the codegen emitter via mappingplan.SingleValueReadAccessor.
+		v := mustCall(attrs, mappingplan.SingleValueReadAccessor(f), reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
+		switch mappingplan.CopyStrategy(f.GoType) {
+		case mappingplan.CopyFixedByte:
 			// Copy bytes into a fresh [N]byte array from the wire blob.
 			arrType := goTypeReflect(f.GoType)
 			arr := reflect.New(arrType).Elem()
@@ -360,7 +355,7 @@ func consumeValue(attrs reflect.Value, i int, attrJ int64, f mappingplan.TaggedF
 				arr.Index(k).SetUint(uint64(src[k]))
 			}
 			a.Val = arr
-		case f.GoType == "[]byte":
+		case mappingplan.CopyBytes:
 			src := v.Bytes()
 			cp := make([]byte, len(src))
 			copy(cp, src)
@@ -447,11 +442,14 @@ func unmarshalMultiSubColumn(row reflect.Value, g mappingplan.SectionGroup, attr
 }
 
 // unmarshalCarrierSection decodes a mixed / parametrized section (ADR-0008
-// Cut-2). PlanBuilder guarantees one membership — one value+carrier field —
-// per such section, so every attribute belongs to that field and no id
-// matching is needed. The scalar value comes from GetAttrValueValue; the
-// carrier's per-row membership data (id + params) comes together from the
-// Seq2 combined accessor and is reconstructed into the carrier struct field.
+// Cut-2, value shapes lifted per OQ#4). PlanBuilder guarantees one membership
+// — one value+carrier field — per such section, so every attribute belongs to
+// that field and no id matching is needed. The value field's shape selects the
+// decode (mirroring the codegen emitter): scalar / Option pair one value with
+// a scalar carrier; a container []T pairs N values (one attribute) with a
+// scalar carrier; an exploded []T pairs N attributes (one value each) with a
+// slice carrier. The carrier's per-row membership data (id/name + params)
+// comes from the combined Seq2 (mixed) or Seq (parametrized) accessor.
 func unmarshalCarrierSection(row reflect.Value, g mappingplan.SectionGroup, attrs, membs reflect.Value, i int) (err error) {
 	var f *mappingplan.TaggedField
 	for j := range g.SubColumns[0].Fields {
@@ -466,68 +464,139 @@ func unmarshalCarrierSection(row reflect.Value, g mappingplan.SectionGroup, attr
 	}
 
 	readMethod := "GetMembValue" + f.Flags.Channel.CarrierReadMethodSuffix()
-	carrierType := row.FieldByName(f.CarrierField).Type()
-	valAcc := reflect.New(goTypeReflect(f.GoType)).Elem()
-	carrierVal := reflect.New(carrierType).Elem()
-	// Scalar sections expose GetAttrValueValue (T); HA / single-slot sections
-	// expose GetAttrValueSingleOrDefault. Mirror marshallgen's choice so the
-	// two front-ends read the same accessor.
-	valMethod := "GetAttrValueSingleOrDefault"
-	if mappingplan.ClassifyBegin(*f) == mappingplan.ShapeScalarBegin {
-		valMethod = "GetAttrValueValue"
-	}
-
-	// Parametrized channels read a single Seq[[]byte] (the opaque params
-	// blob, no separate value); mixed channels read the Seq2 (value, params).
-	isParam := f.Flags.Channel.CarrierValueField() == ""
-
+	carrierType := carrierStructType(row, f)
+	// Mirror the codegen emitter's accessor choice so the two front-ends read
+	// the same accessor (shared via mappingplan.SingleValueReadAccessor).
+	valMethod := mappingplan.SingleValueReadAccessor(*f)
 	n := mustCall(attrs, "GetNumberOfAttributes", reflect.ValueOf(entityIdx(i)))[0].Int()
-	count := 0
-	for attrJ := int64(0); attrJ < n; attrJ++ {
-		seq := mustCall(membs, readMethod, reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
-		matched := false
-		if isParam {
-			if blobs := collectIterSeq(seq); len(blobs) > 0 {
-				carrierVal.FieldByName("Params").SetBytes(append([]byte(nil), blobs[0].Bytes()...))
-				matched = true
+
+	switch {
+	case f.IsSlice && f.Flags.Explode:
+		// N attributes → a value slice paired with a carrier slice.
+		valSlice := reflect.MakeSlice(reflect.SliceOf(goTypeReflect(f.GoType)), 0, 0)
+		carrierSlice := reflect.MakeSlice(reflect.SliceOf(carrierType), 0, 0)
+		for attrJ := int64(0); attrJ < n; attrJ++ {
+			carrierVal, ok := readCarrierStruct(membs, f, carrierType, readMethod, i, attrJ)
+			if !ok {
+				continue
 			}
-		} else if keys, params := collectIterSeq2(seq); len(keys) > 0 {
-			valField := carrierVal.FieldByName(f.Flags.Channel.CarrierValueField())
-			if f.Flags.Channel.CarrierValueIsBytes() {
-				// Verbatim name — copy out of the Arrow buffer.
-				valField.SetBytes(append([]byte(nil), keys[0].Bytes()...))
-			} else {
-				valField.SetUint(keys[0].Uint())
+			valSlice = reflect.Append(valSlice, readCarrierValue(attrs, f, valMethod, i, attrJ))
+			carrierSlice = reflect.Append(carrierSlice, carrierVal)
+		}
+		row.FieldByName(f.GoFieldName).Set(valSlice)
+		row.FieldByName(f.CarrierField).Set(carrierSlice)
+
+	case f.IsSlice:
+		// Container: one attribute carrying N values (a Seq) + one carrier.
+		valSlice := reflect.MakeSlice(reflect.SliceOf(goTypeReflect(f.GoType)), 0, 0)
+		carrierVal := reflect.New(carrierType).Elem()
+		for attrJ := int64(0); attrJ < n; attrJ++ {
+			if cv, ok := readCarrierStruct(membs, f, carrierType, readMethod, i, attrJ); ok {
+				carrierVal = cv
 			}
-			carrierVal.FieldByName("Params").SetBytes(append([]byte(nil), params[0].Bytes()...))
-			matched = true
-		}
-		if !matched {
-			continue
-		}
-		v := mustCall(attrs, valMethod, reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
-		switch {
-		case mappingplan.IsFixedByteArray(f.GoType):
-			arr := reflect.New(goTypeReflect(f.GoType)).Elem()
-			src := v.Bytes()
-			for k := 0; k < arr.Len() && k < len(src); k++ {
-				arr.Index(k).SetUint(uint64(src[k]))
+			seq := mustCall(attrs, "GetAttrValueValue", reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
+			for _, v := range collectIterSeq(seq) {
+				if mappingplan.CopyStrategy(f.GoType) == mappingplan.CopyBytes {
+					valSlice = reflect.Append(valSlice, reflect.ValueOf(append([]byte(nil), v.Bytes()...)))
+				} else {
+					valSlice = reflect.Append(valSlice, v)
+				}
 			}
-			valAcc = arr
-		case f.GoType == "[]byte":
-			valAcc = reflect.ValueOf(append([]byte(nil), v.Bytes()...))
-		default:
-			valAcc = v
 		}
-		count++
+		row.FieldByName(f.GoFieldName).Set(valSlice)
+		row.FieldByName(f.CarrierField).Set(carrierVal)
+
+	default:
+		// Scalar value (exactly one attribute) or Option (zero or one). The
+		// carrier column gets one entry per row regardless (zero when absent).
+		valAcc := reflect.New(goTypeReflect(f.GoType)).Elem()
+		carrierVal := reflect.New(carrierType).Elem()
+		count := 0
+		for attrJ := int64(0); attrJ < n; attrJ++ {
+			cv, ok := readCarrierStruct(membs, f, carrierType, readMethod, i, attrJ)
+			if !ok {
+				continue
+			}
+			carrierVal = cv
+			valAcc = readCarrierValue(attrs, f, valMethod, i, attrJ)
+			count++
+		}
+		if f.IsOption {
+			optFld := row.FieldByName(f.GoFieldName)
+			if count == 1 {
+				optFld.FieldByName("Val").Set(valAcc)
+				optFld.FieldByName("Has").SetBool(true)
+			}
+			// else: leave the zero value (Has=false).
+		} else {
+			if count != 1 {
+				err = eb.Build().Str("field", f.GoFieldName).Errorf("expected exactly one occurrence per row for a mixed/parametrized value")
+				return
+			}
+			row.FieldByName(f.GoFieldName).Set(valAcc)
+		}
+		row.FieldByName(f.CarrierField).Set(carrierVal)
 	}
-	if count != 1 {
-		err = eb.Build().Str("field", f.GoFieldName).Errorf("expected exactly one occurrence per row for a mixed/parametrized value")
-		return
-	}
-	row.FieldByName(f.GoFieldName).Set(valAcc)
-	row.FieldByName(f.CarrierField).Set(carrierVal)
 	return
+}
+
+// carrierStructType returns the carrier *struct* reflect.Type: the field type
+// for a scalar carrier, or its element type for a slice carrier ([]X → X).
+func carrierStructType(row reflect.Value, f *mappingplan.TaggedField) reflect.Type {
+	t := row.FieldByName(f.CarrierField).Type()
+	if f.CarrierIsSlice {
+		return t.Elem()
+	}
+	return t
+}
+
+// readCarrierStruct reconstructs one carrier struct (value of carrierType)
+// from the per-attribute membership accessor. Returns ok=false when the
+// attribute carries no membership (e.g. an absent Option). Parametrized
+// channels read a single Seq[[]byte] (params only); mixed channels read the
+// Seq2 (membership value, params).
+func readCarrierStruct(membs reflect.Value, f *mappingplan.TaggedField, carrierType reflect.Type, readMethod string, i int, attrJ int64) (reflect.Value, bool) {
+	carrierVal := reflect.New(carrierType).Elem()
+	seq := mustCall(membs, readMethod, reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
+	if f.Flags.Channel.CarrierValueField() == "" {
+		blobs := collectIterSeq(seq)
+		if len(blobs) == 0 {
+			return reflect.Value{}, false
+		}
+		carrierVal.FieldByName("Params").SetBytes(append([]byte(nil), blobs[0].Bytes()...))
+		return carrierVal, true
+	}
+	keys, params := collectIterSeq2(seq)
+	if len(keys) == 0 {
+		return reflect.Value{}, false
+	}
+	valField := carrierVal.FieldByName(f.Flags.Channel.CarrierValueField())
+	if f.Flags.Channel.CarrierValueIsBytes() {
+		valField.SetBytes(append([]byte(nil), keys[0].Bytes()...)) // verbatim name — copy out of the Arrow buffer
+	} else {
+		valField.SetUint(keys[0].Uint())
+	}
+	carrierVal.FieldByName("Params").SetBytes(append([]byte(nil), params[0].Bytes()...))
+	return carrierVal, true
+}
+
+// readCarrierValue reads a single section value for attribute attrJ into a
+// value of f's Go type, applying the per-type copy strategy.
+func readCarrierValue(attrs reflect.Value, f *mappingplan.TaggedField, valMethod string, i int, attrJ int64) reflect.Value {
+	v := mustCall(attrs, valMethod, reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
+	switch mappingplan.CopyStrategy(f.GoType) {
+	case mappingplan.CopyFixedByte:
+		arr := reflect.New(goTypeReflect(f.GoType)).Elem()
+		src := v.Bytes()
+		for k := 0; k < arr.Len() && k < len(src); k++ {
+			arr.Index(k).SetUint(uint64(src[k]))
+		}
+		return arr
+	case mappingplan.CopyBytes:
+		return reflect.ValueOf(append([]byte(nil), v.Bytes()...))
+	default:
+		return v
+	}
 }
 
 // goTypeReflect maps the source-form Go type name back to the

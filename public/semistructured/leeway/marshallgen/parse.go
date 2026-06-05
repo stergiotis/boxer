@@ -193,6 +193,19 @@ func classifyType(expr ast.Expr) (shape mappingplan.FieldShape, err error) {
 			shape.GoType = "[]byte"
 			return
 		}
+		// []marshalltypes.X — a slice carrier, paired element-wise with an
+		// exploded value field (one carrier per emitted attribute). Recognised
+		// by the slice element being a marshalltypes selector, like the scalar
+		// carrier branch below; PlanBuilder pairs it and checks the value is
+		// `,explode`.
+		if sel, isSel := at.Elt.(*ast.SelectorExpr); isSel {
+			if pkg, pkgOk := sel.X.(*ast.Ident); pkgOk && pkg.Name == "marshalltypes" {
+				shape.CarrierType = sel.Sel.Name
+				shape.CarrierIsSlice = true
+				shape.GoType = "marshalltypes." + sel.Sel.Name
+				return
+			}
+		}
 		shape.IsSlice = true
 		shape.GoType, err = renderInner(at.Elt)
 		return

@@ -200,23 +200,26 @@ func writeColumnsStruct(sb *strings.Builder, plan *mappingplan.Plan) {
 		if f.IsConst {
 			continue // const fields have no Go-side storage
 		}
-		if f.IsOption {
+		switch {
+		case f.IsOption:
 			linef(sb, 1, "%sVal []%s", f.GoFieldName, f.GoType)
 			linef(sb, 1, "%sHas []bool", f.GoFieldName)
-			continue
-		}
-		if f.IsSlice {
+		case f.IsSlice:
 			linef(sb, 1, "%s [][]%s", f.GoFieldName, f.GoType)
-			continue
-		}
-		if f.IsRoaring {
+		case f.IsRoaring:
 			linef(sb, 1, "%s []*roaring.Bitmap", f.GoFieldName)
-			continue
+		default:
+			linef(sb, 1, "%s []%s", f.GoFieldName, f.GoType)
 		}
-		linef(sb, 1, "%s []%s", f.GoFieldName, f.GoType)
+		// Cut-2 carrier sibling: its own SoA column, emits no attribute. A
+		// scalar carrier is []X (one per attribute); an exploded value's slice
+		// carrier is [][]X (one carrier per emitted element).
 		if f.CarrierField != "" {
-			// Cut-2 carrier sibling: its own SoA column, emits no attribute.
-			linef(sb, 1, "%s []marshalltypes.%s", f.CarrierField, f.CarrierType)
+			if f.CarrierIsSlice {
+				linef(sb, 1, "%s [][]marshalltypes.%s", f.CarrierField, f.CarrierType)
+			} else {
+				linef(sb, 1, "%s []marshalltypes.%s", f.CarrierField, f.CarrierType)
+			}
 		}
 	}
 	line(sb, 0, "}\n")
@@ -244,9 +247,9 @@ func writeLenAndAppend(sb *strings.Builder, plan *mappingplan.Plan) {
 		if f.IsOption {
 			linef(sb, 1, "c.%sVal = append(c.%sVal, row.%s.Val)", f.GoFieldName, f.GoFieldName, f.GoFieldName)
 			linef(sb, 1, "c.%sHas = append(c.%sHas, row.%s.Has)", f.GoFieldName, f.GoFieldName, f.GoFieldName)
-			continue
+		} else {
+			linef(sb, 1, "c.%s = append(c.%s, row.%s)", f.GoFieldName, f.GoFieldName, f.GoFieldName)
 		}
-		linef(sb, 1, "c.%s = append(c.%s, row.%s)", f.GoFieldName, f.GoFieldName, f.GoFieldName)
 		if f.CarrierField != "" {
 			linef(sb, 1, "c.%s = append(c.%s, row.%s)", f.CarrierField, f.CarrierField, f.CarrierField)
 		}
@@ -269,9 +272,9 @@ func writeRowExtract(sb *strings.Builder, plan *mappingplan.Plan) {
 		if f.IsOption {
 			linef(sb, 1, "row.%s.Val = c.%sVal[i]", f.GoFieldName, f.GoFieldName)
 			linef(sb, 1, "row.%s.Has = c.%sHas[i]", f.GoFieldName, f.GoFieldName)
-			continue
+		} else {
+			linef(sb, 1, "row.%s = c.%s[i]", f.GoFieldName, f.GoFieldName)
 		}
-		linef(sb, 1, "row.%s = c.%s[i]", f.GoFieldName, f.GoFieldName)
 		if f.CarrierField != "" {
 			linef(sb, 1, "row.%s = c.%s[i]", f.CarrierField, f.CarrierField)
 		}
@@ -309,17 +312,17 @@ func plainArrowParam(p *mappingplan.PlainCol) string {
 // (strict 1:1 — the column Go type is the value type).
 func writePlainRead(sb *strings.Builder, depth int, p *mappingplan.PlainCol, colVar string) {
 	f := p.GoField
-	switch {
-	case p.GoType == "time.Time":
+	switch mappingplan.CopyStrategy(p.GoType) {
+	case mappingplan.CopyTime:
 		linef(sb, depth, "c.%s = append(c.%s, time.Unix(0, int64(%s.Value(i))).UTC())", f, f, colVar)
-	case p.GoType == "[]byte":
+	case mappingplan.CopyBytes:
 		line(sb, depth, "{")
 		linef(sb, depth+1, "src := %s.Value(i)", colVar)
 		line(sb, depth+1, "cp := make([]byte, len(src))")
 		line(sb, depth+1, "copy(cp, src)")
 		linef(sb, depth+1, "c.%s = append(c.%s, cp)", f, f)
 		line(sb, depth, "}")
-	case mappingplan.IsFixedByteArray(p.GoType):
+	case mappingplan.CopyFixedByte:
 		line(sb, depth, "{")
 		linef(sb, depth+1, "var v %s", p.GoType)
 		linef(sb, depth+1, "copy(v[:], %s.Value(i))", colVar)
@@ -628,28 +631,33 @@ func writeMultiSubColumnDriver(sb *strings.Builder, g mappingplan.SectionGroup, 
 	}
 	memb := g.Memberships[0]
 	linef(sb, 2, "%sAttr := %s.BeginAttribute(%s)", secVar, secVar, strings.Join(args, ", "))
-	writeMembershipAdd(sb, "\t\t", secVar+"Attr", memb)
+	writeMembershipAdd(sb, "\t\t", secVar+"Attr", memb, "")
 	linef(sb, 2, "%sAttr.EndAttributeP()", secVar)
 	return
 }
 
-// writeMembershipAdd emits the per-attribute membership push, choosing
-// the AddMembership<Channel>P method per ADR-0008 D3. Cut 1 supports
-// four channels: LowCardRef / HighCardRef (push the lookup-resolved
-// kindXxx symbol) and LowCardVerbatim / HighCardVerbatim (push the
-// literal lw: name as []byte). The four Cut-2 channels are rejected
-// upstream by SplitLW.
-func writeMembershipAdd(sb *strings.Builder, indent, attrVar string, f mappingplan.TaggedField) {
+// writeMembershipAdd emits the per-attribute membership push, choosing the
+// AddMembership<Channel>P method per ADR-0008 D3. Ref channels push the
+// lookup-resolved kindXxx symbol; Verbatim channels push the literal lw: name
+// as []byte; carrier (mixed / parametrized) channels read the per-row
+// membership data from the sibling carrier column. carrierIdx is "" for a
+// scalar carrier (`c.<C>[i]`) and the explode loop variable (e.g. "k") for a
+// slice carrier paired element-wise with an exploded value (`c.<C>[i][k]`).
+func writeMembershipAdd(sb *strings.Builder, indent, attrVar string, f mappingplan.TaggedField, carrierIdx string) {
 	ch := f.Flags.Channel
 	method := "AddMembership" + ch.AddMethodSuffix() + "P"
 	if ch.UsesCarrier() {
 		// Cut-2: per-row membership data from the sibling carrier column.
 		// Mixed channels pass (value field Id/Name, Params); parametrized
 		// channels pass (Params) only. The method suffix selects the channel.
+		carrier := fmt.Sprintf("c.%s[i]", f.CarrierField)
+		if carrierIdx != "" {
+			carrier = fmt.Sprintf("c.%s[i][%s]", f.CarrierField, carrierIdx)
+		}
 		if vf := ch.CarrierValueField(); vf != "" {
-			linef(sb, 0, "%s%s.%s(c.%s[i].%s, c.%s[i].Params)", indent, attrVar, method, f.CarrierField, vf, f.CarrierField)
+			linef(sb, 0, "%s%s.%s(%s.%s, %s.Params)", indent, attrVar, method, carrier, vf, carrier)
 		} else {
-			linef(sb, 0, "%s%s.%s(c.%s[i].Params)", indent, attrVar, method, f.CarrierField)
+			linef(sb, 0, "%s%s.%s(%s.Params)", indent, attrVar, method, carrier)
 		}
 		return
 	}
@@ -678,13 +686,13 @@ func writeFieldDriver(sb *strings.Builder, f mappingplan.TaggedField, secVar str
 		if f.IsOption {
 			linef(sb, 2, "if c.%sHas[i] {", f.GoFieldName)
 			linef(sb, 3, "%s := %s.BeginAttribute(%s)", attrVar, secVar, valExpr)
-			writeMembershipAdd(sb, "\t\t\t", attrVar, f)
+			writeMembershipAdd(sb, "\t\t\t", attrVar, f, "")
 			linef(sb, 3, "%s.EndAttributeP()", attrVar)
 			line(sb, 2, "}")
 			return
 		}
 		linef(sb, 2, "%s := %s.BeginAttribute(%s)", attrVar, secVar, valExpr)
-		writeMembershipAdd(sb, "\t\t", attrVar, f)
+		writeMembershipAdd(sb, "\t\t", attrVar, f, "")
 		linef(sb, 2, "%s.EndAttributeP()", attrVar)
 
 	case mappingplan.ShapeScalarBeginSingle:
@@ -692,18 +700,19 @@ func writeFieldDriver(sb *strings.Builder, f mappingplan.TaggedField, secVar str
 		if f.IsOption {
 			linef(sb, 2, "if c.%sHas[i] {", f.GoFieldName)
 			linef(sb, 3, "%s := %s.BeginAttributeSingle(%s)", attrVar, secVar, valExpr)
-			writeMembershipAdd(sb, "\t\t\t", attrVar, f)
+			writeMembershipAdd(sb, "\t\t\t", attrVar, f, "")
 			linef(sb, 3, "%s.EndAttributeP()", attrVar)
 			line(sb, 2, "}")
 			return
 		}
 		linef(sb, 2, "%s := %s.BeginAttributeSingle(%s)", attrVar, secVar, valExpr)
-		writeMembershipAdd(sb, "\t\t", attrVar, f)
+		writeMembershipAdd(sb, "\t\t", attrVar, f, "")
 		linef(sb, 2, "%s.EndAttributeP()", attrVar)
 
 	case mappingplan.ShapeContainer:
-		// 1 attribute, N values via AddToContainerP. Empty / nil skips
-		// (leeway splice semantics: empty non-scalars vanish).
+		// 1 attribute, N values via AddToContainerP, 1 carrier (if any). Empty
+		// / nil skips (leeway splice semantics: empty non-scalars vanish — the
+		// carrier of an empty container is therefore not emitted).
 		switch {
 		case f.IsRoaring:
 			linef(sb, 2, "if c.%s[i] != nil && !c.%s[i].IsEmpty() {", f.GoFieldName, f.GoFieldName)
@@ -712,7 +721,7 @@ func writeFieldDriver(sb *strings.Builder, f mappingplan.TaggedField, secVar str
 			line(sb, 3, "for it.HasNext() {")
 			linef(sb, 4, "%s.AddToContainerP(it.Next())", attrVar)
 			line(sb, 3, "}")
-			writeMembershipAdd(sb, "\t\t\t", attrVar, f)
+			writeMembershipAdd(sb, "\t\t\t", attrVar, f, "")
 			linef(sb, 3, "%s.EndAttributeP()", attrVar)
 			line(sb, 2, "}")
 		case f.IsSlice:
@@ -721,7 +730,7 @@ func writeFieldDriver(sb *strings.Builder, f mappingplan.TaggedField, secVar str
 			linef(sb, 3, "for _, v := range c.%s[i] {", f.GoFieldName)
 			linef(sb, 4, "%s.AddToContainerP(%s)", attrVar, sliceElemExpr(f, "v"))
 			line(sb, 3, "}")
-			writeMembershipAdd(sb, "\t\t\t", attrVar, f)
+			writeMembershipAdd(sb, "\t\t\t", attrVar, f, "")
 			linef(sb, 3, "%s.EndAttributeP()", attrVar)
 			line(sb, 2, "}")
 		default:
@@ -739,14 +748,26 @@ func writeFieldDriver(sb *strings.Builder, f mappingplan.TaggedField, secVar str
 			linef(sb, 3, "it := c.%s[i].Iterator()", f.GoFieldName)
 			line(sb, 3, "for it.HasNext() {")
 			linef(sb, 4, "%s := %s.%s(it.Next())", attrVar, secVar, beginMethod)
-			writeMembershipAdd(sb, "\t\t\t\t", attrVar, f)
+			writeMembershipAdd(sb, "\t\t\t\t", attrVar, f, "")
 			linef(sb, 4, "%s.EndAttributeP()", attrVar)
 			line(sb, 3, "}")
+			line(sb, 2, "}")
+		case f.IsSlice && f.CarrierField != "":
+			// Exploded value with a slice carrier: one attribute per element,
+			// each pairing value[k] with carrier[k]. Lengths must agree.
+			linef(sb, 2, "if len(c.%s[i]) != len(c.%s[i]) {", f.CarrierField, f.GoFieldName)
+			linef(sb, 3, "err = eb.Build().Int(\"row\", i).Str(\"field\", %q).Errorf(\"explode value and carrier slices have different lengths\")", f.GoFieldName)
+			line(sb, 3, "return")
+			line(sb, 2, "}")
+			linef(sb, 2, "for k, v := range c.%s[i] {", f.GoFieldName)
+			linef(sb, 3, "%s := %s.%s(%s)", attrVar, secVar, beginMethod, sliceElemExpr(f, "v"))
+			writeMembershipAdd(sb, "\t\t\t", attrVar, f, "k")
+			linef(sb, 3, "%s.EndAttributeP()", attrVar)
 			line(sb, 2, "}")
 		case f.IsSlice:
 			linef(sb, 2, "for _, v := range c.%s[i] {", f.GoFieldName)
 			linef(sb, 3, "%s := %s.%s(%s)", attrVar, secVar, beginMethod, sliceElemExpr(f, "v"))
-			writeMembershipAdd(sb, "\t\t\t", attrVar, f)
+			writeMembershipAdd(sb, "\t\t\t", attrVar, f, "")
 			linef(sb, 3, "%s.EndAttributeP()", attrVar)
 			line(sb, 2, "}")
 		default:
@@ -1010,10 +1031,14 @@ func writeSectionDecode(sb *strings.Builder, g mappingplan.SectionGroup) (err er
 
 // writeCarrierSectionDecode emits FillFromArrow decode for a mixed /
 // parametrized (carrier-channel) section. PlanBuilder guarantees one
-// membership — one value+carrier field — so every attribute belongs to it
-// and there is no membership-id switch. The scalar value comes from
-// GetAttrValueValue; the per-row carrier (id + params) comes together from
-// the Seq2 combined accessor and is reconstructed into the carrier column.
+// membership — one value+carrier field — so every attribute belongs to it and
+// there is no membership-id switch. The value comes from the section value
+// accessor; the per-row carrier (id/name + params) comes from the combined
+// Seq2 (mixed) or Seq (parametrized) membership accessor. The value field's
+// shape selects the decode (ADR-0008 OQ#4): scalar / Option pair a single
+// value with a scalar carrier; a container []T pairs N values (one attribute)
+// with a scalar carrier; an exploded []T pairs N attributes (one value each)
+// with a slice carrier.
 func writeCarrierSectionDecode(sb *strings.Builder, g mappingplan.SectionGroup, attrsVar, membsVar, prefix string) (err error) {
 	var f mappingplan.TaggedField
 	found := false
@@ -1029,39 +1054,86 @@ func writeCarrierSectionDecode(sb *strings.Builder, g mappingplan.SectionGroup, 
 		return
 	}
 
+	switch {
+	case f.IsSlice && f.Flags.Explode:
+		writeCarrierExplodeDecode(sb, f, attrsVar, membsVar, prefix)
+	case f.IsSlice:
+		writeCarrierContainerDecode(sb, f, attrsVar, membsVar, prefix)
+	case f.IsOption:
+		writeCarrierOptionDecode(sb, f, attrsVar, membsVar, prefix)
+	default:
+		writeCarrierScalarDecode(sb, f, attrsVar, membsVar, prefix)
+	}
+	return
+}
+
+// carrierStructLiteral renders the marshalltypes carrier struct literal
+// reconstructed from a per-attribute membership read. mvExpr is the
+// membership-value loop expression for mixed channels; ignored for
+// parametrized channels (whose CarrierValueField is "").
+func carrierStructLiteral(f mappingplan.TaggedField, mvExpr, paramsExpr string) string {
+	if vf := f.Flags.Channel.CarrierValueField(); vf != "" {
+		return fmt.Sprintf("marshalltypes.%s{%s: %s, Params: append([]byte(nil), %s...)}", f.CarrierType, vf, mvExpr, paramsExpr)
+	}
+	return fmt.Sprintf("marshalltypes.%s{Params: append([]byte(nil), %s...)}", f.CarrierType, paramsExpr)
+}
+
+// carrierMembValExpr is the membership-value loop expression for a mixed
+// channel ("mv", copied out of the Arrow buffer for verbatim []byte names),
+// or "" for a parametrized channel (no separate membership value).
+func carrierMembValExpr(f mappingplan.TaggedField) string {
+	if f.Flags.Channel.CarrierValueField() == "" {
+		return ""
+	}
+	if f.Flags.Channel.CarrierValueIsBytes() {
+		return "append([]byte(nil), mv...)"
+	}
+	return "mv"
+}
+
+// writeCarrierMembLoopHeader emits, at the given depth, the `for … := range
+// <membs>.<read>(…) {` line opening a per-attribute membership read. Mixed
+// channels range over (mv, params); parametrized over (params) only.
+func writeCarrierMembLoopHeader(sb *strings.Builder, depth int, f mappingplan.TaggedField, membsVar, readMethod string) {
+	if f.Flags.Channel.CarrierValueField() == "" {
+		linef(sb, depth, "for params := range %s.%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {", membsVar, readMethod)
+	} else {
+		linef(sb, depth, "for mv, params := range %s.%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {", membsVar, readMethod)
+	}
+}
+
+// writeCarrierValueRead emits the read of a single section value into valVar at
+// the given depth — a defensive copy for []byte / fixed-byte, straight
+// assignment otherwise.
+func writeCarrierValueRead(sb *strings.Builder, depth int, f mappingplan.TaggedField, valVar, valRead string) {
+	switch mappingplan.CopyStrategy(f.GoType) {
+	case mappingplan.CopyFixedByte:
+		linef(sb, depth, "copy(%s[:], %s)", valVar, valRead)
+	case mappingplan.CopyBytes:
+		linef(sb, depth, "%s = append([]byte(nil), %s...)", valVar, valRead)
+	default:
+		linef(sb, depth, "%s = %s", valVar, valRead)
+	}
+}
+
+// writeCarrierScalarDecode decodes a scalar carrier value: exactly one
+// attribute per row, value + carrier into scalar columns.
+func writeCarrierScalarDecode(sb *strings.Builder, f mappingplan.TaggedField, attrsVar, membsVar, prefix string) {
 	valVar := prefix + f.GoFieldName + "Val"
 	carrierVar := prefix + f.GoFieldName + "Carrier"
 	readMethod := "GetMembValue" + f.Flags.Channel.CarrierReadMethodSuffix()
-	getVal := "GetAttrValueSingleOrDefault"
-	if mappingplan.ClassifyBegin(f) == mappingplan.ShapeScalarBegin {
-		getVal = "GetAttrValueValue"
-	}
-	valRead := fmt.Sprintf("%s.%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))", attrsVar, getVal)
+	valRead := fmt.Sprintf("%s.%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))", attrsVar, mappingplan.SingleValueReadAccessor(f))
 
 	linef(sb, 2, "var %s %s", valVar, f.GoType)
 	linef(sb, 2, "var %s marshalltypes.%s", carrierVar, f.CarrierType)
 	linef(sb, 2, "%sCount := 0", prefix)
 	linef(sb, 2, "n%s := %s.GetNumberOfAttributes(raruntime.EntityIdx(i))", prefix, attrsVar)
-	// Mixed channels read a Seq2 (value, params); parametrized read a single
-	// Seq of the opaque params blob.
 	linef(sb, 2, "for attrJ := int64(0); attrJ < n%s; attrJ++ {", prefix)
-	if f.Flags.Channel.CarrierValueField() == "" {
-		linef(sb, 3, "for params := range %s.%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {", membsVar, readMethod)
-		writeCarrierValueRead(sb, f, valVar, valRead)
-		linef(sb, 4, "%s = marshalltypes.%s{Params: append([]byte(nil), params...)}", carrierVar, f.CarrierType)
-		linef(sb, 4, "%sCount++", prefix)
-		line(sb, 3, "}")
-	} else {
-		carrierValExpr := "mv"
-		if f.Flags.Channel.CarrierValueIsBytes() {
-			carrierValExpr = "append([]byte(nil), mv...)"
-		}
-		linef(sb, 3, "for mv, params := range %s.%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {", membsVar, readMethod)
-		writeCarrierValueRead(sb, f, valVar, valRead)
-		linef(sb, 4, "%s = marshalltypes.%s{%s: %s, Params: append([]byte(nil), params...)}", carrierVar, f.CarrierType, f.Flags.Channel.CarrierValueField(), carrierValExpr)
-		linef(sb, 4, "%sCount++", prefix)
-		line(sb, 3, "}")
-	}
+	writeCarrierMembLoopHeader(sb, 3, f, membsVar, readMethod)
+	writeCarrierValueRead(sb, 4, f, valVar, valRead)
+	linef(sb, 4, "%s = %s", carrierVar, carrierStructLiteral(f, carrierMembValExpr(f), "params"))
+	linef(sb, 4, "%sCount++", prefix)
+	line(sb, 3, "}")
 	line(sb, 2, "}")
 	linef(sb, 2, "if %sCount != 1 {", prefix)
 	linef(sb, 3, "err = eb.Build().Int(\"row\", i).Str(\"field\", %q).Errorf(\"expected exactly one occurrence per row\")", f.GoFieldName)
@@ -1069,33 +1141,106 @@ func writeCarrierSectionDecode(sb *strings.Builder, g mappingplan.SectionGroup, 
 	line(sb, 2, "}")
 	linef(sb, 2, "c.%s = append(c.%s, %s)", f.GoFieldName, f.GoFieldName, valVar)
 	linef(sb, 2, "c.%s = append(c.%s, %s)", f.CarrierField, f.CarrierField, carrierVar)
-	return
 }
 
-// writeCarrierValueRead emits the read of the section value into valVar for
-// a carrier section — a defensive copy for []byte / fixed-byte, straight
-// assignment otherwise. Shared by the parametrized and mixed decode loops.
-func writeCarrierValueRead(sb *strings.Builder, f mappingplan.TaggedField, valVar, valRead string) {
-	switch {
-	case mappingplan.IsFixedByteArray(f.GoType):
-		linef(sb, 4, "copy(%s[:], %s)", valVar, valRead)
-	case f.GoType == "[]byte":
-		linef(sb, 4, "%s = append([]byte(nil), %s...)", valVar, valRead)
-	default:
-		linef(sb, 4, "%s = %s", valVar, valRead)
+// writeCarrierOptionDecode decodes an Option carrier value: 0 or 1 attribute.
+// The carrier column gets one entry per row (zero when absent) to stay in
+// lockstep with the Val / Has columns.
+func writeCarrierOptionDecode(sb *strings.Builder, f mappingplan.TaggedField, attrsVar, membsVar, prefix string) {
+	valVar := prefix + f.GoFieldName + "Val"
+	carrierVar := prefix + f.GoFieldName + "Carrier"
+	readMethod := "GetMembValue" + f.Flags.Channel.CarrierReadMethodSuffix()
+	valRead := fmt.Sprintf("%s.%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))", attrsVar, mappingplan.SingleValueReadAccessor(f))
+
+	linef(sb, 2, "var %s %s", valVar, f.GoType)
+	linef(sb, 2, "var %s marshalltypes.%s", carrierVar, f.CarrierType)
+	linef(sb, 2, "%sCount := 0", prefix)
+	linef(sb, 2, "n%s := %s.GetNumberOfAttributes(raruntime.EntityIdx(i))", prefix, attrsVar)
+	linef(sb, 2, "for attrJ := int64(0); attrJ < n%s; attrJ++ {", prefix)
+	writeCarrierMembLoopHeader(sb, 3, f, membsVar, readMethod)
+	writeCarrierValueRead(sb, 4, f, valVar, valRead)
+	linef(sb, 4, "%s = %s", carrierVar, carrierStructLiteral(f, carrierMembValExpr(f), "params"))
+	linef(sb, 4, "%sCount++", prefix)
+	line(sb, 3, "}")
+	line(sb, 2, "}")
+	linef(sb, 2, "if %sCount == 1 {", prefix)
+	linef(sb, 3, "c.%sVal = append(c.%sVal, %s)", f.GoFieldName, f.GoFieldName, valVar)
+	linef(sb, 3, "c.%sHas = append(c.%sHas, true)", f.GoFieldName, f.GoFieldName)
+	line(sb, 2, "} else {")
+	linef(sb, 3, "var zero %s", f.GoType)
+	linef(sb, 3, "c.%sVal = append(c.%sVal, zero)", f.GoFieldName, f.GoFieldName)
+	linef(sb, 3, "c.%sHas = append(c.%sHas, false)", f.GoFieldName, f.GoFieldName)
+	line(sb, 2, "}")
+	linef(sb, 2, "c.%s = append(c.%s, %s)", f.CarrierField, f.CarrierField, carrierVar)
+}
+
+// writeCarrierContainerDecode decodes a container ([]T) carrier value: one
+// attribute carrying N values, paired with a single scalar carrier. An empty
+// container produces no attribute (splice) — the row gets an empty slice and a
+// zero carrier.
+func writeCarrierContainerDecode(sb *strings.Builder, f mappingplan.TaggedField, attrsVar, membsVar, prefix string) {
+	sliceVar := prefix + f.GoFieldName + "Slice"
+	carrierVar := prefix + f.GoFieldName + "Carrier"
+	readMethod := "GetMembValue" + f.Flags.Channel.CarrierReadMethodSuffix()
+
+	linef(sb, 2, "var %s []%s", sliceVar, f.GoType)
+	linef(sb, 2, "var %s marshalltypes.%s", carrierVar, f.CarrierType)
+	linef(sb, 2, "n%s := %s.GetNumberOfAttributes(raruntime.EntityIdx(i))", prefix, attrsVar)
+	linef(sb, 2, "for attrJ := int64(0); attrJ < n%s; attrJ++ {", prefix)
+	writeCarrierMembLoopHeader(sb, 3, f, membsVar, readMethod)
+	linef(sb, 4, "%s = %s", carrierVar, carrierStructLiteral(f, carrierMembValExpr(f), "params"))
+	line(sb, 3, "}")
+	linef(sb, 3, "for v := range %s.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {", attrsVar)
+	if mappingplan.CopyStrategy(f.GoType) == mappingplan.CopyBytes {
+		line(sb, 4, "cp := make([]byte, len(v))")
+		line(sb, 4, "copy(cp, v)")
+		linef(sb, 4, "%s = append(%s, cp)", sliceVar, sliceVar)
+	} else {
+		linef(sb, 4, "%s = append(%s, v)", sliceVar, sliceVar)
 	}
+	line(sb, 3, "}")
+	line(sb, 2, "}")
+	linef(sb, 2, "c.%s = append(c.%s, %s)", f.GoFieldName, f.GoFieldName, sliceVar)
+	linef(sb, 2, "c.%s = append(c.%s, %s)", f.CarrierField, f.CarrierField, carrierVar)
+}
+
+// writeCarrierExplodeDecode decodes an exploded ([]T,explode) carrier value: N
+// attributes, each one value + one carrier, accumulated into a value slice and
+// a parallel carrier slice.
+func writeCarrierExplodeDecode(sb *strings.Builder, f mappingplan.TaggedField, attrsVar, membsVar, prefix string) {
+	sliceVar := prefix + f.GoFieldName + "Slice"
+	carrierSliceVar := prefix + f.GoFieldName + "CarrierSlice"
+	elemVar := prefix + f.GoFieldName + "Elem"
+	elemCarrierVar := prefix + f.GoFieldName + "ElemCarrier"
+	readMethod := "GetMembValue" + f.Flags.Channel.CarrierReadMethodSuffix()
+	valRead := fmt.Sprintf("%s.%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))", attrsVar, mappingplan.SingleValueReadAccessor(f))
+
+	linef(sb, 2, "var %s []%s", sliceVar, f.GoType)
+	linef(sb, 2, "var %s []marshalltypes.%s", carrierSliceVar, f.CarrierType)
+	linef(sb, 2, "n%s := %s.GetNumberOfAttributes(raruntime.EntityIdx(i))", prefix, attrsVar)
+	linef(sb, 2, "for attrJ := int64(0); attrJ < n%s; attrJ++ {", prefix)
+	linef(sb, 3, "var %s %s", elemVar, f.GoType)
+	writeCarrierValueRead(sb, 3, f, elemVar, valRead)
+	linef(sb, 3, "var %s marshalltypes.%s", elemCarrierVar, f.CarrierType)
+	writeCarrierMembLoopHeader(sb, 3, f, membsVar, readMethod)
+	linef(sb, 4, "%s = %s", elemCarrierVar, carrierStructLiteral(f, carrierMembValExpr(f), "params"))
+	line(sb, 3, "}")
+	linef(sb, 3, "%s = append(%s, %s)", sliceVar, sliceVar, elemVar)
+	linef(sb, 3, "%s = append(%s, %s)", carrierSliceVar, carrierSliceVar, elemCarrierVar)
+	line(sb, 2, "}")
+	linef(sb, 2, "c.%s = append(c.%s, %s)", f.GoFieldName, f.GoFieldName, sliceVar)
+	linef(sb, 2, "c.%s = append(c.%s, %s)", f.CarrierField, f.CarrierField, carrierSliceVar)
 }
 
 func writeFieldAccumulatorDecl(sb *strings.Builder, f mappingplan.TaggedField, prefix string) {
 	switch {
-	case f.IsOption:
-		linef(sb, 2, "var %s%sVal %s", prefix, f.GoFieldName, f.GoType)
-		linef(sb, 2, "var %s%sCount int", prefix, f.GoFieldName)
 	case f.IsSlice:
 		linef(sb, 2, "var %s%sSlice []%s", prefix, f.GoFieldName, f.GoType)
 	case f.IsRoaring:
 		linef(sb, 2, "var %s%sBitmap *roaring.Bitmap", prefix, f.GoFieldName)
 	default:
+		// Scalar or Option value: a Val slot plus an occurrence Count
+		// (Option's Has bool is written at append time, not here).
 		linef(sb, 2, "var %s%sVal %s", prefix, f.GoFieldName, f.GoType)
 		linef(sb, 2, "var %s%sCount int", prefix, f.GoFieldName)
 	}
@@ -1130,35 +1275,16 @@ func writeFieldMembCase(sb *strings.Builder, f mappingplan.TaggedField, prefix, 
 	} else {
 		linef(sb, 4, "case %s:", f.KindVar())
 	}
-	// Single-value read pulls the value via GetAttrValueValue for
-	// scalar sections, GetAttrValueSingleOrDefault for non-scalar.
-	// Classifier on the field's Begin shape mirrors the write side:
-	// mappingplan.ShapeScalarBegin / mappingplan.ShapeExplodeBegin → scalar section.
+	// Single-value read accessor chosen by field shape, shared with the
+	// reflect codec via mappingplan.SingleValueReadAccessor so the two
+	// front-ends cannot pick different accessors for the same shape.
 	singleVal := func() string {
-		method := "GetAttrValueSingleOrDefault"
-		switch mappingplan.ClassifyBegin(f) {
-		case mappingplan.ShapeScalarBegin, mappingplan.ShapeExplodeBegin:
-			method = "GetAttrValueValue"
-		}
-		return fmt.Sprintf("%s.%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))", attrsVar, method)
+		return fmt.Sprintf("%s.%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))", attrsVar, mappingplan.SingleValueReadAccessor(f))
 	}
 	switch {
-	case f.IsOption:
-		linef(sb, 5, "val := %s", singleVal())
-		switch {
-		case mappingplan.IsFixedByteArray(f.GoType):
-			linef(sb, 5, "copy(%s%sVal[:], val)", prefix, f.GoFieldName)
-		case f.GoType == "[]byte":
-			line(sb, 5, "cp := make([]byte, len(val))")
-			line(sb, 5, "copy(cp, val)")
-			linef(sb, 5, "%s%sVal = cp", prefix, f.GoFieldName)
-		default:
-			linef(sb, 5, "%s%sVal = val", prefix, f.GoFieldName)
-		}
-		linef(sb, 5, "%s%sCount++", prefix, f.GoFieldName)
 	case f.IsSlice:
 		linef(sb, 5, "for v := range %s.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {", attrsVar)
-		if f.GoType == "[]byte" {
+		if mappingplan.CopyStrategy(f.GoType) == mappingplan.CopyBytes {
 			line(sb, 6, "cp := make([]byte, len(v))")
 			line(sb, 6, "copy(cp, v)")
 			linef(sb, 6, "%s%sSlice = append(%s%sSlice, cp)", prefix, f.GoFieldName, prefix, f.GoFieldName)
@@ -1174,11 +1300,15 @@ func writeFieldMembCase(sb *strings.Builder, f mappingplan.TaggedField, prefix, 
 		linef(sb, 6, "%s%sBitmap.Add(v)", prefix, f.GoFieldName)
 		line(sb, 5, "}")
 	default:
+		// Scalar or Option value. Option diverges from a bare scalar only at
+		// append time (writeFieldAppend writes the Has bool); the
+		// per-attribute fill into <prefix><Field>Val / Count is identical, so
+		// both shapes share this arm.
 		linef(sb, 5, "val := %s", singleVal())
-		switch {
-		case mappingplan.IsFixedByteArray(f.GoType):
+		switch mappingplan.CopyStrategy(f.GoType) {
+		case mappingplan.CopyFixedByte:
 			linef(sb, 5, "copy(%s%sVal[:], val)", prefix, f.GoFieldName)
-		case f.GoType == "[]byte":
+		case mappingplan.CopyBytes:
 			line(sb, 5, "cp := make([]byte, len(val))")
 			line(sb, 5, "copy(cp, val)")
 			linef(sb, 5, "%s%sVal = cp", prefix, f.GoFieldName)

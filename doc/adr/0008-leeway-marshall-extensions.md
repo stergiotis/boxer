@@ -450,10 +450,11 @@ Tracked as named follow-ons, not gates on this ADR:
    the matching Seq2 `GetMembValue<Chan>HighCardParams` iterator
    (or Seq for non-Mixed). Specified in this ADR's Cut-2 entry above;
    implementation lands in a follow-up commit.
-4. **Mixed channels under `,explode`.** The shape matrix admits
-   `,explode` on `[]MixedLowCardRef`; the per-element emit calls the
-   matching `AddMembershipMixed…P` once per element. Unexercised
-   until Cut 2 lands; first consumer to need it should add the test.
+4. **Mixed channels under `,explode`.** *(Resolved 2026-06-05 — see Updates;
+   lifted together with Option / container value shapes.)* The shape matrix
+   admits `,explode` on a value slice paired with a `[]MixedLowCardRef` slice
+   carrier; the per-element emit calls the matching `AddMembershipMixed…P` once
+   per element. Covered by marshallgen emit tests + marshallreflect round-trips.
 5. **Read-side multi-membership fix (the existing asymmetry).** Not in
    scope here; tracked in the EXPLANATION.md "Read-side asymmetry"
    section.
@@ -645,6 +646,54 @@ carrier is `marshalltypes.MixedLowCardVerbatim{Name []byte, Params []byte}`.
 emitted, not spliced), and the value-side splice semantics hold as written. The
 flag table and the Cut-1 / Cut-2 staging mechanism (SD10) are unchanged except
 that `mixedLowCardRef` moves from rejected to implemented.
+
+### 2026-06-05 — Carrier value shapes lifted beyond scalar T (resolves OQ#4)
+
+Open question #4 ("Mixed channels under `,explode`") is resolved, and the lift
+generalises past explode. A carrier (mixed / parametrized) value field may now
+be any of:
+
+- a scalar `T` (unchanged);
+- `option.Option[T]` (zero-or-one attribute);
+- a container `[]T` (one attribute carrying N values); or
+- `[]T,explode` (N attributes, one value each).
+
+`*roaring.Bitmap` stays rejected on a carrier channel: a bitmap iterates in
+sorted order with no stable element index, so there is no well-defined
+element-wise pairing with a carrier slice. Scalar / Option / container `[]T` /
+`,explode` cover the need; roaring does not.
+
+**Carrier multiplicity mirrors the attribute count.** Every shape except
+`,explode` emits one carrier per attribute and pairs with a scalar
+`marshalltypes.X` carrier field. `,explode` emits N attributes and pairs with a
+slice carrier `[]marshalltypes.X`, zipped element-wise with the value slice.
+The carrier's slice-ness comes from its Go *type*, not a flag — `,explode`
+stays on the value field only. `mappingplan.PlanBuilder.Finish` rejects a
+multiplicity mismatch (an exploded value without a slice carrier, or a
+non-explode value with a slice carrier).
+
+**Length agreement is a runtime check.** The value and carrier are independent
+Go fields, so `len(value) == len(carrier)` cannot be verified at plan time.
+Both the generated `<Kind>BuildEntities` and `marshallreflect.Marshal` guard it
+per row and return a clear error on mismatch rather than panicking.
+
+**Empty container + carrier follows splice, not SD8.** An empty `[]T` container
+value emits zero attributes (the existing splice rule), so its carrier is not
+observable on the wire — SD8's "carrier presence is the signal" applies per
+*emitted attribute*, and an empty container emits none. `,explode` is
+symmetric (empty value slice → zero attributes → empty carrier slice). Scalar
+and Option carriers are unaffected.
+
+**Scope.** Landed across `mappingplan` (a `CarrierIsSlice` bit on the shape /
+field, the `[]marshalltypes.X` classifier in both front-ends, the
+multiplicity + roaring checks in `Finish`) + `marshallgen` + `marshallreflect`.
+The change is **additive**: the four pre-existing scalar-carrier code paths
+emit byte-identically, so every checked-in `.out.go` regenerates unchanged; the
+new shapes are exercised by `marshallgen` emit tests and `marshallreflect`
+write/read round-trips over the shared carrier path (no generated boxer schema
+pairs a non-scalar value with a carrier reader yet). The one-membership-per-
+carrier-section rule (2026-06-04 Cut-2 update) and SD1's per-section channel
+uniformity are unchanged.
 
 ## References
 

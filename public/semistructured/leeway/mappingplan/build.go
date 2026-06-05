@@ -25,6 +25,14 @@ type FieldShape struct {
 	// package + struct name; PlanBuilder pairs the carrier with its value
 	// sibling. A carrier field's other shape bits are unused.
 	CarrierType string
+
+	// CarrierIsSlice is true when the carrier field's Go type is a slice of
+	// the carrier struct (`[]marshalltypes.X`) rather than a scalar
+	// (`marshalltypes.X`). A slice carrier pairs with an exploded value field
+	// — one carrier element per emitted attribute; a scalar carrier pairs with
+	// every other value shape (one carrier for the single / container
+	// attribute). PlanBuilder.Finish checks this matches the value shape.
+	CarrierIsSlice bool
 }
 
 // FixedByteArrayLen reports the N in a fixed-length byte-array source-form
@@ -55,6 +63,42 @@ func FixedByteArrayLen(goType string) (n int, ok bool) {
 func IsFixedByteArray(goType string) bool {
 	_, ok := FixedByteArrayLen(goType)
 	return ok
+}
+
+// CopyStrat names how a value of a given Go type is lifted out of an Arrow
+// buffer on the read side. The type→strategy decision is shared by both
+// back-ends so it lives in one place: the codegen emitter switches on it to
+// emit the right text; the reflect codec switches on it to perform the copy.
+// (The reflect plain-column reader keeps its own type→Arrow-accessor switch
+// in readPlainArrow — that is per-type value dispatch, a different concern.)
+type CopyStrat uint8
+
+const (
+	// CopyNone assigns the Arrow value straight through (scalars).
+	CopyNone CopyStrat = iota
+	// CopyBytes defensively copies a []byte out of the Arrow buffer (the
+	// buffer is reused across rows, so the value must be copied to survive).
+	CopyBytes
+	// CopyFixedByte copies the wire blob into a fresh [N]byte array.
+	CopyFixedByte
+	// CopyTime reconstructs a time.Time from Arrow's physical int64-nanos
+	// timestamp (Arrow has no native time.Time).
+	CopyTime
+)
+
+// CopyStrategy reports how a value of source-form Go type goType is lifted
+// out of its Arrow buffer on read. See CopyStrat.
+func CopyStrategy(goType string) CopyStrat {
+	switch {
+	case goType == "time.Time":
+		return CopyTime
+	case goType == "[]byte":
+		return CopyBytes
+	case IsFixedByteArray(goType):
+		return CopyFixedByte
+	default:
+		return CopyNone
+	}
 }
 
 // PlanBuilder accumulates validated fields into a Plan. It centralises
@@ -92,6 +136,7 @@ type carrierInfo struct {
 	goField     string
 	carrierType string
 	channel     MembershipChannel
+	isSlice     bool // []marshalltypes.X (pairs with an exploded value)
 }
 
 // NewPlanBuilder returns a builder seeded with the plan-level identity.
@@ -278,15 +323,18 @@ func (b *PlanBuilder) AddField(goFieldName, lwTag string, shape FieldShape) (err
 	}
 	if flags.Channel.UsesCarrier() {
 		if column != "" {
-			// A carrier channel carries a single scalar value into the
-			// section's value column; a `:<col>` sub-column (only meaningful
-			// for multi-sub-column sections like u32Range) would mis-shape
-			// the emit and panic at marshal time.
+			// A carrier channel carries the section's value column; a `:<col>`
+			// sub-column (only meaningful for multi-sub-column sections like
+			// u32Range) would mis-shape the emit and panic at marshal time.
 			err = eb.Build().Str("field", goFieldName).Str("channel", flags.Channel.String()).Errorf("mixed/parametrized value field cannot target a sub-column (`:<col>`)")
 			return
 		}
-		if shape.IsOption || isMulti {
-			err = eb.Build().Str("field", goFieldName).Str("channel", flags.Channel.String()).Errorf("mixed/parametrized value field must be a plain scalar (Cut-2 supports T, not Option / slice / roaring)")
+		if shape.IsRoaring {
+			// A roaring set iterates in sorted order with no stable element
+			// index, so there is no well-defined element-wise pairing with a
+			// carrier slice. Scalar / Option / []T (incl. `,explode`) are
+			// supported; roaring is not. (ADR-0008 OQ#4 lift.)
+			err = eb.Build().Str("field", goFieldName).Str("channel", flags.Channel.String()).Errorf("mixed/parametrized value field cannot be a roaring bitmap — no stable element index to pair with the carrier; use []T with `,explode`")
 			return
 		}
 	}
@@ -335,7 +383,7 @@ func (b *PlanBuilder) addCarrierField(goFieldName, membership, section, column s
 		err = eb.Build().Str("membership", membership).Str("section", section).Str("first", prev.goField).Str("second", goFieldName).Errorf("two carrier fields share one membership+section")
 		return
 	}
-	b.carriers[key] = carrierInfo{goField: goFieldName, carrierType: shape.CarrierType, channel: flags.Channel}
+	b.carriers[key] = carrierInfo{goField: goFieldName, carrierType: shape.CarrierType, channel: flags.Channel, isSlice: shape.CarrierIsSlice}
 	return
 }
 
@@ -381,6 +429,28 @@ func (b *PlanBuilder) Finish() (plan *Plan, err error) {
 		}
 	}
 
+	// KindVar keying guard. A const field keys its kindXxx on the membership
+	// name (so several consts on one membership share a symbol); a value field
+	// keys it on its Go field name. If a ref-channel membership is claimed by
+	// both a const and a value field, the two spellings differ — KindVars /
+	// uniqueMemberships declares one and the other reference is undefined, so
+	// the generated code would not compile. Reject it here with a clear
+	// message instead. Verbatim / parametrized channels declare no kindXxx, so
+	// the collision cannot arise there; sharing a *section* (different
+	// memberships) is fine — only a shared membership collides.
+	constRefMemb := map[string]bool{}
+	for _, f := range b.plan.Fields {
+		if f.IsConst && f.Flags.Channel.NeedsKindVar() {
+			constRefMemb[f.LWMembership] = true
+		}
+	}
+	for _, f := range b.plan.Fields {
+		if !f.IsConst && f.Flags.Channel.NeedsKindVar() && constRefMemb[f.LWMembership] {
+			err = eb.Build().Str("membership", f.LWMembership).Str("valueField", f.GoFieldName).Errorf("a const and a value field share a ref-channel membership — their kindXxx symbols would collide; give them distinct memberships or use a verbatim channel")
+			return
+		}
+	}
+
 	// Cut-2: resolve each carrier-channel value field with its sibling
 	// carrier and enforce one membership per carrier (mixed/parametrized)
 	// section. Such a section's attributes carry per-row membership data
@@ -410,8 +480,23 @@ func (b *PlanBuilder) Finish() (plan *Plan, err error) {
 			err = eb.Build().Str("field", f.GoFieldName).Str("carrierField", c.goField).Str("valueChannel", f.Flags.Channel.String()).Str("carrierChannel", c.channel.String()).Errorf("value field and its carrier sibling declare different channels")
 			return
 		}
+		// Carrier multiplicity must match the value shape: an exploded value
+		// emits N attributes (one carrier each → []marshalltypes.X); every
+		// other shape (scalar / Option / container) emits one carrier per
+		// attribute (scalar marshalltypes.X). Roaring values were rejected at
+		// AddField, so f.IsSlice fully determines the multi case here.
+		valueIsExplode := f.IsSlice && f.Flags.Explode
+		if valueIsExplode != c.isSlice {
+			want := "a scalar `marshalltypes." + c.carrierType + "`"
+			if valueIsExplode {
+				want = "a slice `[]marshalltypes." + c.carrierType + "`"
+			}
+			err = eb.Build().Str("field", f.GoFieldName).Str("carrierField", c.goField).Str("channel", f.Flags.Channel.String()).Errorf("carrier multiplicity must match the value shape: this value needs %s carrier", want)
+			return
+		}
 		f.CarrierField = c.goField
 		f.CarrierType = c.carrierType
+		f.CarrierIsSlice = c.isSlice
 		delete(b.carriers, key)
 	}
 	for key, c := range b.carriers {

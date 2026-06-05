@@ -47,6 +47,14 @@ type PlainCol struct {
 // channels — which pair a value field with a marshalltypes carrier
 // sibling (UsesCarrier reports true).
 //
+// Naming: a "mixed" channel pairs a low-card membership identity (a uint64
+// id or a verbatim []byte name) with a high-card per-row params blob. The
+// leeway DML protocol exposes no high-card-identity mixed method, so
+// MixedLowCardRef and MixedLowCardVerbatim are the only mixed channels;
+// high-card identities are reached via HighCardRef / HighCardVerbatim (no
+// params) or HighCardRefParametrized (opaque params-only). There is
+// deliberately no MixedHighCard* channel.
+//
 // The default (zero value) is MembershipChannelLowCardRef so existing
 // DTOs without a channel flag continue to compile.
 type MembershipChannel uint8
@@ -90,28 +98,69 @@ const (
 	MembershipChannelHighCardRefParametrized
 )
 
-// String returns the lw: flag spelling for this channel. The default
-// (LowCardRef) returns "" because it requires no flag in a tag.
-func (c MembershipChannel) String() string {
-	switch c {
-	case MembershipChannelLowCardRef:
-		return ""
-	case MembershipChannelLowCardVerbatim:
-		return "lowCardVerbatim"
-	case MembershipChannelHighCardRef:
-		return "highCardRef"
-	case MembershipChannelHighCardVerbatim:
-		return "highCardVerbatim"
-	case MembershipChannelMixedLowCardRef:
-		return "mixedLowCardRef"
-	case MembershipChannelMixedLowCardVerbatim:
-		return "mixedLowCardVerbatim"
-	case MembershipChannelLowCardRefParametrized:
-		return "lowCardRefParametrized"
-	case MembershipChannelHighCardRefParametrized:
-		return "highCardRefParametrized"
+// channelDescriptor is the single per-channel fact row. Every accessor
+// method on MembershipChannel reads exactly one field from here — adding
+// a channel is one new table entry, not an edit to N parallel switches.
+// This table is also the de-facto registry coupling the schema-agnostic
+// model to the leeway runtime's method-naming convention (the DML's
+// AddMembership<addMethodSuffix>P, the RA's GetMembValue<…> accessors,
+// and the marshalltypes carrier struct + field names).
+type channelDescriptor struct {
+	// flag is the lw: tag spelling (String). "" for the default LowCardRef.
+	flag string
+	// addMethodSuffix is the DML AddMembership<Suffix>P / RA GetMembValue<Suffix> suffix.
+	addMethodSuffix string
+	// carrierType is the marshalltypes carrier struct name a carrier channel pairs with.
+	carrierType string
+	// carrierReadSuffix is the RA combined-accessor suffix (GetMembValue<Suffix>) for carriers.
+	carrierReadSuffix string
+	// carrierSeq2Types is the iter.Seq2 element-type list for a mixed channel's combined read.
+	carrierSeq2Types string
+	// carrierValueField is the carrier struct field holding the membership value ("Id"/"Name").
+	carrierValueField string
+	// readIterElemType is the source-form element type of the read-side membership iterator.
+	readIterElemType string
+	// usesCarrier marks the mixed / parametrized channels (membership identity is per-row carrier data).
+	usesCarrier bool
+	// carrierValueBytes marks a []byte carrier value field (needs a defensive copy on read).
+	carrierValueBytes bool
+	// embedsLiteralName marks channels whose wire identity is the literal lw: name as []byte.
+	embedsLiteralName bool
+	// needsKindVar marks ref channels that require a package-level kindXxx resolved id symbol.
+	needsKindVar bool
+}
+
+// channelTable is keyed by the MembershipChannel constant, so reordering the
+// constants cannot misalign a row. Keep one entry per channel.
+var channelTable = [...]channelDescriptor{
+	MembershipChannelLowCardRef:              {flag: "", addMethodSuffix: "LowCardRef", readIterElemType: "uint64", needsKindVar: true},
+	MembershipChannelLowCardVerbatim:         {flag: "lowCardVerbatim", addMethodSuffix: "LowCardVerbatim", readIterElemType: "[]byte", embedsLiteralName: true},
+	MembershipChannelHighCardRef:             {flag: "highCardRef", addMethodSuffix: "HighCardRef", readIterElemType: "uint64", needsKindVar: true},
+	MembershipChannelHighCardVerbatim:        {flag: "highCardVerbatim", addMethodSuffix: "HighCardVerbatim", readIterElemType: "[]byte", embedsLiteralName: true},
+	MembershipChannelMixedLowCardRef:         {flag: "mixedLowCardRef", addMethodSuffix: "MixedLowCardRef", carrierType: "MixedLowCardRef", carrierReadSuffix: "LowCardRefHighCardParams", carrierSeq2Types: "uint64, []byte", carrierValueField: "Id", readIterElemType: "[]byte", usesCarrier: true},
+	MembershipChannelMixedLowCardVerbatim:    {flag: "mixedLowCardVerbatim", addMethodSuffix: "MixedLowCardVerbatim", carrierType: "MixedLowCardVerbatim", carrierReadSuffix: "LowCardVerbatimHighCardParams", carrierSeq2Types: "[]byte, []byte", carrierValueField: "Name", readIterElemType: "[]byte", usesCarrier: true, carrierValueBytes: true},
+	MembershipChannelLowCardRefParametrized:  {flag: "lowCardRefParametrized", addMethodSuffix: "LowCardRefParametrized", carrierType: "Parametrized", carrierReadSuffix: "LowCardRefParametrized", readIterElemType: "[]byte", usesCarrier: true},
+	MembershipChannelHighCardRefParametrized: {flag: "highCardRefParametrized", addMethodSuffix: "HighCardRefParametrized", carrierType: "Parametrized", carrierReadSuffix: "HighCardRefParametrized", readIterElemType: "[]byte", usesCarrier: true},
+}
+
+// desc returns the channel's descriptor row, or the zero descriptor for an
+// out-of-range value (no real enum value lands there; the zero row keeps the
+// accessors total).
+func (c MembershipChannel) desc() channelDescriptor {
+	if int(c) >= 0 && int(c) < len(channelTable) {
+		return channelTable[c]
 	}
-	return "unknown"
+	return channelDescriptor{}
+}
+
+// String returns the lw: flag spelling for this channel. The default
+// (LowCardRef) returns "" because it requires no flag in a tag; an
+// out-of-range value returns "unknown".
+func (c MembershipChannel) String() string {
+	if int(c) < 0 || int(c) >= len(channelTable) {
+		return "unknown"
+	}
+	return channelTable[c].flag
 }
 
 // UsesCarrier reports whether the channel carries its membership identity
@@ -120,160 +169,60 @@ func (c MembershipChannel) String() string {
 // channels; a field on such a channel pairs with a carrier field sharing
 // its (membership, section) and emits/decodes the membership-side data
 // from that carrier. False for the four Cut-1 channels.
-func (c MembershipChannel) UsesCarrier() bool {
-	switch c {
-	case MembershipChannelMixedLowCardRef, MembershipChannelMixedLowCardVerbatim,
-		MembershipChannelLowCardRefParametrized, MembershipChannelHighCardRefParametrized:
-		return true
-	default:
-		return false
-	}
-}
+func (c MembershipChannel) UsesCarrier() bool { return c.desc().usesCarrier }
 
 // CarrierTypeName returns the marshalltypes carrier struct name a field on
 // this channel must pair with (e.g. "MixedLowCardRef"), or "" for channels
 // that take no carrier. Used by the front-ends to check that a field's
 // channel flag and its sibling carrier's Go type agree.
-func (c MembershipChannel) CarrierTypeName() string {
-	switch c {
-	case MembershipChannelMixedLowCardRef:
-		return "MixedLowCardRef"
-	case MembershipChannelMixedLowCardVerbatim:
-		return "MixedLowCardVerbatim"
-	case MembershipChannelLowCardRefParametrized, MembershipChannelHighCardRefParametrized:
-		return "Parametrized"
-	default:
-		return ""
-	}
-}
+func (c MembershipChannel) CarrierTypeName() string { return c.desc().carrierType }
 
 // CarrierReadMethodSuffix returns the read-side combined-accessor suffix
 // for a carrier channel: the readaccess runtime exposes
 // GetMembValue<Suffix> returning an iter.Seq2 that yields the per-row
 // membership data (id/name + params) together. "" for non-carrier channels.
-func (c MembershipChannel) CarrierReadMethodSuffix() string {
-	switch c {
-	case MembershipChannelMixedLowCardRef:
-		return "LowCardRefHighCardParams"
-	case MembershipChannelMixedLowCardVerbatim:
-		return "LowCardVerbatimHighCardParams"
-	case MembershipChannelLowCardRefParametrized:
-		return "LowCardRefParametrized"
-	case MembershipChannelHighCardRefParametrized:
-		return "HighCardRefParametrized"
-	default:
-		return ""
-	}
-}
+func (c MembershipChannel) CarrierReadMethodSuffix() string { return c.desc().carrierReadSuffix }
 
 // CarrierReadSeq2Types returns the comma-separated iter.Seq2 element types
 // the carrier channel's combined read accessor yields — e.g. "uint64, []byte"
 // for mixedLowCardRef (an id and a params blob). "" for non-carrier channels.
-func (c MembershipChannel) CarrierReadSeq2Types() string {
-	switch c {
-	case MembershipChannelMixedLowCardRef:
-		return "uint64, []byte"
-	case MembershipChannelMixedLowCardVerbatim:
-		return "[]byte, []byte"
-	default:
-		return ""
-	}
-}
+func (c MembershipChannel) CarrierReadSeq2Types() string { return c.desc().carrierSeq2Types }
 
 // CarrierValueField returns the carrier struct field holding the membership
 // value for this channel — "Id" (uint64) for mixedLowCardRef, "Name"
 // ([]byte) for mixedLowCardVerbatim. "" for non-carrier channels. The
 // Params field name is uniform ("Params") across carriers.
-func (c MembershipChannel) CarrierValueField() string {
-	switch c {
-	case MembershipChannelMixedLowCardRef:
-		return "Id"
-	case MembershipChannelMixedLowCardVerbatim:
-		return "Name"
-	default:
-		return ""
-	}
-}
+func (c MembershipChannel) CarrierValueField() string { return c.desc().carrierValueField }
 
 // CarrierValueIsBytes reports whether the carrier's membership-value field
 // is a []byte (needing a defensive copy out of the Arrow buffer on read)
 // rather than a scalar id. True for mixedLowCardVerbatim.
-func (c MembershipChannel) CarrierValueIsBytes() bool {
-	switch c {
-	case MembershipChannelMixedLowCardVerbatim:
-		return true
-	default:
-		return false
-	}
-}
+func (c MembershipChannel) CarrierValueIsBytes() bool { return c.desc().carrierValueBytes }
 
 // EmbedsLiteralName reports whether the channel's wire identity is the
 // literal lw: membership name as []byte rather than a uint64 id from
 // the lookup registry. True for LowCardVerbatim and HighCardVerbatim.
-func (c MembershipChannel) EmbedsLiteralName() bool {
-	switch c {
-	case MembershipChannelLowCardVerbatim, MembershipChannelHighCardVerbatim:
-		return true
-	default:
-		return false
-	}
-}
+func (c MembershipChannel) EmbedsLiteralName() bool { return c.desc().embedsLiteralName }
 
 // NeedsKindVar reports whether emitted code requires a package-level
 // kindXxx symbol holding the resolved uint64 membership id for this
 // channel. True for the ref channels (LowCardRef, HighCardRef); false
 // for the verbatim channels, which embed a []byte name directly on the
 // wire.
-func (c MembershipChannel) NeedsKindVar() bool {
-	switch c {
-	case MembershipChannelLowCardRef,
-		MembershipChannelHighCardRef:
-		return true
-	default:
-		return false
-	}
-}
+func (c MembershipChannel) NeedsKindVar() bool { return c.desc().needsKindVar }
 
 // ReadIterElemType returns the source-form Go element type yielded by
 // the read-side `GetMembValue<Suffix>` iterator for this channel.
 // Used by the emitter to declare the right `iter.Seq[T]` type in the
 // generated <Sec>MembsReadI interface.
-func (c MembershipChannel) ReadIterElemType() string {
-	switch c {
-	case MembershipChannelLowCardRef,
-		MembershipChannelHighCardRef:
-		return "uint64"
-	default:
-		return "[]byte"
-	}
-}
+func (c MembershipChannel) ReadIterElemType() string { return c.desc().readIterElemType }
 
 // AddMethodSuffix returns the suffix used on the DML's per-channel
 // AddMembership<Suffix>P method names (e.g. "LowCardRef" →
 // "AddMembershipLowCardRefP"). The suffix also matches the prefix of
 // the read-side `GetMembValue<Suffix>` accessor on the readaccess
 // runtime.
-func (c MembershipChannel) AddMethodSuffix() string {
-	switch c {
-	case MembershipChannelLowCardRef:
-		return "LowCardRef"
-	case MembershipChannelLowCardVerbatim:
-		return "LowCardVerbatim"
-	case MembershipChannelHighCardRef:
-		return "HighCardRef"
-	case MembershipChannelHighCardVerbatim:
-		return "HighCardVerbatim"
-	case MembershipChannelMixedLowCardRef:
-		return "MixedLowCardRef"
-	case MembershipChannelMixedLowCardVerbatim:
-		return "MixedLowCardVerbatim"
-	case MembershipChannelLowCardRefParametrized:
-		return "LowCardRefParametrized"
-	case MembershipChannelHighCardRefParametrized:
-		return "HighCardRefParametrized"
-	}
-	return ""
-}
+func (c MembershipChannel) AddMethodSuffix() string { return c.desc().addMethodSuffix }
 
 // FieldFlags carries the boolean opt-ins parsed from the lw: tag's
 // trailing flag positions. They are orthogonal:
@@ -358,6 +307,12 @@ type TaggedField struct {
 	// Cut-1 channels.
 	CarrierField string
 	CarrierType  string
+
+	// CarrierIsSlice is true when the sibling carrier is a slice
+	// (`[]marshalltypes.X`), paired element-wise with an exploded value
+	// field; false for a scalar carrier paired with a scalar / Option /
+	// container value (one carrier per attribute). Set by PlanBuilder.Finish.
+	CarrierIsSlice bool
 }
 
 // KindVar returns the package-level identifier holding the resolved
@@ -367,9 +322,13 @@ type TaggedField struct {
 // The generated BuildEntities references it by name. Multi-sub-column
 // sections share a single KindVar per membership.
 //
-// For const fields the identifier is keyed on LWMembership (no Go
-// field name). Channels that do not consult the registry (Verbatim
-// and Parametrized non-mixed) return "" — no kindXxx is declared.
+// For const fields the identifier is keyed on LWMembership (no Go field
+// name), so several consts on one membership share a single symbol; value
+// fields key on the Go field name instead. PlanBuilder.Finish rejects a
+// const and a value field sharing one ref-channel membership, because the
+// two keyings would mint colliding kindXxx symbols. Channels that do not
+// consult the registry (Verbatim and Parametrized non-mixed) return "" —
+// no kindXxx is declared.
 func (f TaggedField) KindVar() string {
 	if !f.Flags.Channel.NeedsKindVar() {
 		return ""

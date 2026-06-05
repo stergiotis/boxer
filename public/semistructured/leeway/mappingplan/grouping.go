@@ -184,6 +184,24 @@ func ClassifyBegin(f TaggedField) FieldBeginShape {
 	}
 }
 
+// SingleValueReadAccessor returns the RA accessor that yields a field's
+// single per-attribute value: GetAttrValueValue for the scalar-section
+// shapes (ShapeScalarBegin / ShapeExplodeBegin, whose section exposes the
+// value directly), GetAttrValueSingleOrDefault otherwise (the HA /
+// single-slot sections). Both back-ends route their single-value reads
+// through here — the codegen emitter prints the returned name, the reflect
+// codec calls it via mustCall — so the accessor choice cannot drift between
+// them (it previously lived as four hand-copied switches, two of which
+// silently omitted ShapeExplodeBegin).
+func SingleValueReadAccessor(f TaggedField) string {
+	switch ClassifyBegin(f) {
+	case ShapeScalarBegin, ShapeExplodeBegin:
+		return "GetAttrValueValue"
+	default:
+		return "GetAttrValueSingleOrDefault"
+	}
+}
+
 // FindPlainCol returns the plan's plain column with the given wire name
 // (id / ts / naturalKey / expiresAt), or nil if the DTO does not
 // declare it.
