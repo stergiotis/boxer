@@ -154,7 +154,7 @@ func DroneMissionBuildEntities[
 		u64ArraySec.EndSection()
 		err = dml.CommitEntity()
 		if err != nil {
-			err = eh.Errorf("codecdemo: commit row %d: %w", i, err)
+			err = eh.Errorf("commit row %d: %w", i, err)
 			return
 		}
 	}
@@ -232,7 +232,7 @@ func DroneMissionFillFromArrow[
 			}
 		}
 		if symbolStatusCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Status").Errorf("codecdemo: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "Status").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.Status = append(c.Status, symbolStatusVal)
@@ -251,7 +251,7 @@ func DroneMissionFillFromArrow[
 			}
 		}
 		if u64ArrayBatteryCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Battery").Errorf("codecdemo: expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("field", "Battery").Errorf("expected exactly one occurrence per row")
 			return
 		}
 		c.Battery = append(c.Battery, u64ArrayBatteryVal)
