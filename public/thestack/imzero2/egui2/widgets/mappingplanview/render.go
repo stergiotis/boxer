@@ -30,7 +30,8 @@ type Input struct {
 const (
 	editorMinWidth = 560
 	outputMinWidth = 600
-	previewRows    = 30
+	previewRows    = 30  // error-text TextEdit height, in rows
+	previewHeight  = 520 // highlighted-code ScrollArea height, in px
 	rowBarWidth    = 4
 )
 
@@ -351,21 +352,25 @@ func renderOutput(ids *c.WidgetIdStack, m *Model) {
 	}
 	c.Separator().Send()
 
-	// Read-only monospace code view: a transient per-frame string (no retained
-	// codeview holder to recycle). DesiredRows sets the height; the multiline
-	// TextEdit scrolls internally for longer output. viewBuf is a stable
-	// backing field so any id-keyed edit state tracks the latest content.
-	if m.Valid {
-		m.viewBuf = m.GoPreview
+	if m.Valid && m.hasJob {
+		// Syntax-highlighted Go. The codeview job is rebuilt only on recompute
+		// (Model.SetValid); here it is just spliced into the frame. CodeView
+		// has no intrinsic height, so a ScrollArea + UiSetMaxHeight bounds it,
+		// and Wrap keeps long lines inside the column width.
+		for range c.ScrollArea().Vscroll(true).KeepIter() {
+			c.UiSetMaxHeight(previewHeight)
+			c.CodeView(ids.PrepareStr("preview"), m.goCodeJob).Wrap().Send()
+		}
 	} else {
+		// Invalid: show the PlanBuilder / emit error as plain read-only text.
+		// viewBuf is a stable backing field for the TextEdit's id-keyed state.
 		m.viewBuf = m.ErrText
+		c.TextEdit(ids.PrepareStr("err"), m.viewBuf, true).
+			Interactive(false).
+			DesiredRows(previewRows).
+			DesiredWidth(outputMinWidth - 16).
+			SendRespVal(&m.viewBuf)
 	}
-	c.TextEdit(ids.PrepareStr("preview"), m.viewBuf, true).
-		CodeEditor().
-		Interactive(false).
-		DesiredRows(previewRows).
-		DesiredWidth(outputMinWidth - 16).
-		SendRespVal(&m.viewBuf)
 }
 
 // firstLine returns the first line of s (the headline of a multi-line

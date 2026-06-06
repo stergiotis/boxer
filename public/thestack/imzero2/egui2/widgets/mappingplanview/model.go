@@ -4,6 +4,9 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
+	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 )
 
 // FieldRow is one editable row of a [Model]. Its fields mirror the inputs
@@ -102,8 +105,15 @@ type Model struct {
 	ErrText   string // PlanBuilder / emit error when !Valid
 	Valid     bool
 
+	// goCodeJob is the syntax-highlighted Go codeview job built from GoPreview.
+	// It is rebuilt only on a successful recompute (Model.SetValid) — never per
+	// frame — and c.CodeView splices its bytes into each frame, so there is no
+	// retained-element accumulation. hasJob guards it.
+	goCodeJob typed.RetainedFffiHolderTyped[c.CodeViewJobS]
+	hasJob    bool
+
 	dirty   bool   // an edit (or the initial seed) needs a Recompute
-	viewBuf string // stable backing string for the read-only preview TextEdit
+	viewBuf string // stable backing string for the read-only error TextEdit
 }
 
 // NewModel returns an empty Model marked dirty so the first frame computes a
@@ -134,9 +144,13 @@ func (m *Model) removeByUID(uid uint64) {
 }
 
 // SetValid records a successful recompute: the emitted Go source, no error,
-// valid verdict. Called by the host's Recompute.
+// valid verdict. It (re)builds the syntax-highlighted codeview job here — the
+// recompute is dirty-gated, so this is once per edit, not per frame. Called by
+// the host's Recompute.
 func (m *Model) SetValid(goSrc string) {
 	m.GoPreview = goSrc
+	m.goCodeJob = codeview.BuildGo(goSrc)
+	m.hasJob = true
 	m.ErrText = ""
 	m.Valid = true
 }
@@ -145,6 +159,7 @@ func (m *Model) SetValid(goSrc string) {
 // verdict. Called by the host's Recompute.
 func (m *Model) SetInvalid(err error) {
 	m.GoPreview = ""
+	m.hasJob = false
 	if err != nil {
 		m.ErrText = err.Error()
 	} else {
