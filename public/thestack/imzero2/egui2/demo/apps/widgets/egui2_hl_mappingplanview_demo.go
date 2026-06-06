@@ -173,13 +173,19 @@ func (st *mappingPlanViewDemoState) sqlOutputs(plan *mappingplan.Plan) []mapping
 				"-- and is unavailable for this plan:\n--   " + err.Error(),
 		}}
 	}
+	// Present each artefact as a runnable example query rather than a bare
+	// fragment: it doubles as usage docs (where the fragment embeds) AND lets
+	// the ClickHouse highlighter's semantic pass refine function / column
+	// tokens — a bare expression only lexes (every name an undifferentiated
+	// identifier), which reads as "unhighlighted".
+	const src = "file('rows.arrow', 'Arrow')"
 	return []mappingplanview.Output{
 		{TabID: 3, Title: "SQL · presence", Lang: mappingplanview.LangSQL,
-			Source: "-- Presence prefilter — embed in WHERE (necessary, not sufficient).\n" + a.Presence},
+			Source: "-- Presence prefilter (necessary, not sufficient).\nSELECT *\nFROM " + src + "\nWHERE " + a.Presence},
 		{TabID: 4, Title: "SQL · projection", Lang: mappingplanview.LangSQL,
-			Source: "-- Projection — CAST to a named Tuple (address slots as t.<field>); embed in SELECT.\n" + a.Projection},
+			Source: "-- Projection: a named Tuple; address slots as t.<field>.\nSELECT\n  " + a.Projection + " AS t\nFROM " + src},
 		{TabID: 5, Title: "SQL · validator", Lang: mappingplanview.LangSQL,
-			Source: "-- Validator — exact conformance check; embed in WHERE.\n" + a.Validator},
+			Source: "-- Validator: exact conformance check.\nSELECT *\nFROM " + src + "\nWHERE " + a.Validator},
 	}
 }
 

@@ -28,11 +28,10 @@ type Input struct {
 }
 
 const (
-	editorMinWidth = 560
-	outputMinWidth = 600
-	previewRows    = 30  // error-text TextEdit height, in rows
-	previewHeight  = 520 // highlighted-code ScrollArea height, in px
-	rowBarWidth    = 4
+	editorPanelWidth = 540 // left side-panel default width (resizable)
+	dockMinHeight    = 360 // floor for the output dock so it has a bounded rect in a scrolling host
+	previewRows      = 30  // error-text TextEdit height, in rows
+	rowBarWidth      = 4
 )
 
 // channelChoices is the v1 channel picker set — the four Cut-1 channels.
@@ -60,32 +59,25 @@ func channelLabel(ch mappingplan.MembershipChannel) string {
 func Render(in Input) {
 	m := in.Model
 	for range c.IdScope(in.Ids.PrepareStr(in.ScopeKey)) {
-		for range c.Horizontal().KeepIter() {
-			// Left: the editor, in an explicit Vertical column. A bare Group
-			// would inherit the surrounding Horizontal layout and stream its
-			// children rightward; a pinned-width Vertical fixes the column.
-			// Edits set m.dirty via the per-control HasChanged.
-			for range c.Vertical().KeepIter() {
-				c.UiSetMinWidth(editorMinWidth)
-				c.UiSetMaxWidth(editorMinWidth)
-				renderEditor(in.Ids, m)
-			}
+		// Left: the editor in a resizable side panel (its controls are
+		// fixed-width). PanelLeftInside + PanelCentralInside fill the host area
+		// responsively — fixed-width columns stranded the output at a fixed
+		// width in the wider interactive gallery window and left the dock
+		// without a bounded height.
+		for range c.PanelLeftInside(in.Ids.PrepareStr("editorpanel")).DefaultSize(editorPanelWidth).Resizable(true).KeepIter() {
+			renderEditor(in.Ids, m)
+		}
 
-			// Recompute between the panes — pure Go, emits no UI — so the right
-			// pane reflects this frame's edits rather than last frame's.
-			if m.dirty && in.Recompute != nil {
-				in.Recompute(m)
-				m.dirty = false
-			}
+		// Recompute between the panels — pure Go, emits no UI — so the output
+		// reflects this frame's edits rather than last frame's.
+		if m.dirty && in.Recompute != nil {
+			in.Recompute(m)
+			m.dirty = false
+		}
 
-			c.AddSpace(8)
-
-			// Right: the generated-code preview + verdict, in its own column.
-			for range c.Vertical().KeepIter() {
-				c.UiSetMinWidth(outputMinWidth)
-				c.UiSetMaxWidth(outputMinWidth)
-				renderOutput(in.Ids, m)
-			}
+		// Central: the output dock fills the remaining width and height.
+		for range c.PanelCentralInside().KeepIter() {
+			renderOutput(in.Ids, m)
 		}
 	}
 }
@@ -359,7 +351,6 @@ func renderOutput(ids *c.WidgetIdStack, m *Model) {
 		c.TextEdit(ids.PrepareStr("err"), m.viewBuf, true).
 			Interactive(false).
 			DesiredRows(previewRows).
-			DesiredWidth(outputMinWidth - 16).
 			SendRespVal(&m.viewBuf)
 		return
 	}
@@ -368,14 +359,16 @@ func renderOutput(ids *c.WidgetIdStack, m *Model) {
 	// persisted by egui_dock across frames. The loop is format-agnostic, so a
 	// new format (e.g. the dql SQL artefacts) is just another pane. Each job is
 	// rebuilt only on recompute (Model.SetOutputs); here CodeView splices its
-	// bytes into the frame. CodeView has no intrinsic height, so a ScrollArea +
-	// UiSetMaxHeight bounds it and Wrap keeps long lines inside the tab width.
+	// bytes into the frame. UiSetMinHeight gives the dock a bounded rect inside
+	// a scrolling host; AutoShrink(false,false) makes each tab's ScrollArea fill
+	// the pane (codeview uses the full width, scrollbar at the pane edge) and
+	// Wrap keeps long lines inside that width.
+	c.UiSetMinHeight(dockMinHeight)
 	for dock := range c.DockArea(ids.PrepareStr("outdock")) {
 		for i := range m.panes {
 			p := &m.panes[i]
 			for range dock.Tab(p.out.TabID, p.out.Title) {
-				for range c.ScrollArea().Vscroll(true).KeepIter() {
-					c.UiSetMaxHeight(previewHeight)
+				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
 					c.CodeView(ids.PrepareSeq(p.out.TabID), p.job).Wrap().Send()
 				}
 			}
