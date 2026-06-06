@@ -71,7 +71,7 @@ status: draft
 | FetchR9U64 | Fetcher | No | 0 | 0 | - | - |
 | FetchSnarlEvents | Fetcher | No | 0 | 0 | - | - |
 | Frame | BuilderFactory | Yes | 0 | 0 | 21 | Immediate, Retained, BlockIterator |
-| Graph | BuilderFactory | Yes | 0 | 0 | 30 | Immediate, Retained |
+| Graph | BuilderFactory | Yes | 0 | 0 | 31 | Immediate, Retained |
 | GraphEdge | BuilderFactory | No | 2 | 0 | 2 | Immediate |
 | GraphNode | BuilderFactory | No | 2 | 0 | 1 | Immediate |
 | Grid | BuilderFactory | Yes | 0 | 0 | 6 | Immediate, BlockIterator |
@@ -794,6 +794,7 @@ Block
 - **EdgeSelectionEnabled**(vl: b)
 - **EdgeSelectionMultiEnabled**(vl: b)
 - **FitToScreen**(vl: b)
+- **FitNow**()
 - **ZoomAndPan**(vl: b)
 - **FitPadding**(pd: f32)
 - **ZoomSpeed**(sp: f32)

@@ -62,7 +62,8 @@ type graphsHierState struct {
 type graphsGlobalState struct {
 	eventLog        []c.GraphEvent
 	showHoverEvents bool
-	fitToScreen     bool
+	fitToScreen     bool // continuous-fit override (off by default; the one-shot latch handles framing)
+	fitNowPending   bool // set by the "fit now" button, consumed by every graph this frame
 	fitPadding      float64
 	zoomSpeed       float64
 }
@@ -91,7 +92,7 @@ func newGraphsDemoState() (st *graphsDemoState) {
 			centerParent: true,
 		},
 		global: graphsGlobalState{
-			fitToScreen: true,
+			fitToScreen: false, // one-shot fit by default; toggle on for legacy continuous fit
 			fitPadding:  0.1,
 			zoomSpeed:   0.1,
 		},
@@ -156,6 +157,9 @@ func demoGraphBasic(ids *c.WidgetIdStack, st *graphsDemoState) {
 		LabelsAlways(bs.labelsAlways)
 	if bs.fixedWidth {
 		g = g.Width(float32(bs.fixedWidthVal))
+	}
+	if gs.fitNowPending {
+		g = g.FitNow()
 	}
 	g.Send()
 }
@@ -252,6 +256,9 @@ func demoGraphDynamic(ids *c.WidgetIdStack, st *graphsDemoState) {
 		g = g.FastForwardSteps(ds.fastForwardPending)
 		ds.fastForwardPending = 0
 	}
+	if gs.fitNowPending {
+		g = g.FitNow()
+	}
 	g.Send()
 }
 
@@ -287,7 +294,7 @@ func demoGraphHierarchical(ids *c.WidgetIdStack, st *graphsDemoState) {
 		c.GraphEdge(parent, i).Send()
 	}
 
-	c.Graph(ids.PrepareStr("graph-hierarchical")).
+	g := c.Graph(ids.PrepareStr("graph-hierarchical")).
 		Height(300).
 		FitToScreen(gs.fitToScreen).
 		FitPadding(float32(gs.fitPadding)).
@@ -303,8 +310,11 @@ func demoGraphHierarchical(ids *c.WidgetIdStack, st *graphsDemoState) {
 		NodeClickingEnabled(true).
 		NodeSelectionEnabled(true).
 		EdgeClickingEnabled(true).
-		LabelsAlways(true).
-		Send()
+		LabelsAlways(true)
+	if gs.fitNowPending {
+		g = g.FitNow()
+	}
+	g.Send()
 }
 
 // =============================================================================
@@ -345,7 +355,14 @@ func graphEventKindName(k c.GraphEventKindE) string {
 // graph that uses them.
 func demoGraphGlobalNavControls(ids *c.WidgetIdStack, st *graphsDemoState) {
 	gs := &st.global
-	c.Checkbox(ids.PrepareStr("graph-fit-to-screen"), gs.fitToScreen, "FitToScreen (all graphs)").
+	// One-shot fit: re-frames every graph once, then lets the layout
+	// settle and leaves manual pan/zoom alone. Consumed below by each
+	// graph's .FitNow() and cleared in demoGraphEventLog (rendered last).
+	fitAtoms := c.Atoms().Text("fit now (all graphs)").Keep()
+	if c.Button(ids.PrepareStr("graph-fit-now"), fitAtoms).SendResp().HasPrimaryClicked() {
+		gs.fitNowPending = true
+	}
+	c.Checkbox(ids.PrepareStr("graph-fit-to-screen"), gs.fitToScreen, "continuous fit (override, all graphs)").
 		SendRespVal(&gs.fitToScreen)
 	c.SliderF64(ids.PrepareStr("graph-fit-padding"), gs.fitPadding, 0.0, 0.5).
 		Text("fit_padding (all graphs)").SendRespVal(&gs.fitPadding)
@@ -355,6 +372,10 @@ func demoGraphGlobalNavControls(ids *c.WidgetIdStack, st *graphsDemoState) {
 
 func demoGraphEventLog(ids *c.WidgetIdStack, st *graphsDemoState) {
 	gs := &st.global
+
+	// This section renders after every graph, so a one-shot "fit now"
+	// request set this frame has been consumed by all of them by now.
+	gs.fitNowPending = false
 
 	c.Separator().Send()
 

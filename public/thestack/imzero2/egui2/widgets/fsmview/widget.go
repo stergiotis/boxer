@@ -492,7 +492,8 @@ func (inst *Widget[T]) renderGraph() {
 		LayoutCAttract(forceDirectedCAttract).
 		LayoutCRepulse(forceDirectedCRepulse).
 		LayoutRunning(true).
-		FitToScreen(true).
+		// One-shot fit (armed on creation + the prewarm ResetLayout below);
+		// no continuous fit, so the user's pan/zoom sticks after framing.
 		FitPadding(0.1).
 		ZoomAndPan(true).
 		DraggingEnabled(true).

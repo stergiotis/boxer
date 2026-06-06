@@ -112,8 +112,18 @@ func definitionsGraphBlock() []*ir.BuilderFactoryNode {
 			CodeClientRust(rustClientCode("edge_selection_enabled = vl;\n")).EndMethod().
 			BeginMethod("edgeSelectionMultiEnabled").Arg("vl", ctabb.B).
 			CodeClientRust(rustClientCode("edge_selection_multi_enabled = vl;\n")).EndMethod().
+			// fitToScreen forces *continuous* fit (re-fit every frame). Off
+			// by default. Prefer fitNow() for a one-shot fit — continuous
+			// fit fights manual pan/zoom and makes a still-settling
+			// force-directed layout visibly "breathe".
 			BeginMethod("fitToScreen").Arg("vl", ctabb.B).
 			CodeClientRust(rustClientCode("fit_to_screen = vl;\n")).EndMethod().
+			// fitNow requests a single fit pass that re-arms the one-shot
+			// latch: the view fits while the layout settles, then latches
+			// off so manual pan/zoom sticks. Fire once (e.g. on a button),
+			// like resetLayout.
+			BeginMethod("fitNow").
+			CodeClientRust(rustClientCode("fit_now_flag = true;\n")).EndMethod().
 			BeginMethod("zoomAndPan").Arg("vl", ctabb.B).
 			CodeClientRust(rustClientCode("zoom_and_pan = vl;\n")).EndMethod().
 			BeginMethod("fitPadding").Arg("pd", ctabb.F32).
@@ -190,7 +200,12 @@ let mut node_selection_multi_enabled = false;
 let mut edge_clicking_enabled = false;
 let mut edge_selection_enabled = false;
 let mut edge_selection_multi_enabled = false;
-let mut fit_to_screen = true;
+// fit_to_screen here means *continuous* fit — re-fit every frame. Off by
+// default; the one-shot fit latch (GraphState.fit_pending) handles the
+// initial framing and fitNow()/resetLayout re-fit on demand. Set true
+// only to force the legacy always-fit behaviour.
+let mut fit_to_screen = false;
+let mut fit_now_flag: bool = false;
 let mut zoom_and_pan = true;
 let mut fit_padding: f32 = 0.1;
 let mut zoom_speed: f32 = 0.1;
@@ -234,8 +249,14 @@ if {{EguiUiOptionalOuter}}.is_some() {
         .with_edge_clicking_enabled(edge_clicking_enabled)
         .with_edge_selection_enabled(edge_selection_enabled)
         .with_edge_selection_multi_enabled(edge_selection_multi_enabled);
+    // One-shot fit: fit only while a freshly (re)laid-out graph settles,
+    // then latch off so manual pan/zoom sticks and the view stops
+    // rescaling every frame. fit_to_screen forces legacy continuous
+    // fit; fitNow()/resetLayout re-arm the latch. See graph_fit_this_frame.
+    let layout_settled = graph_layout_settled(ui, gid, layout_kind);
+    let do_fit = graph_fit_this_frame(state, fit_to_screen, fit_now_flag || reset_layout_flag, layout_settled);
     let navigation = egui_graphs::SettingsNavigation::default()
-        .with_fit_to_screen_enabled(fit_to_screen)
+        .with_fit_to_screen_enabled(do_fit)
         .with_zoom_and_pan_enabled(zoom_and_pan)
         .with_fit_to_screen_padding(fit_padding)
         .with_zoom_speed(zoom_speed);
