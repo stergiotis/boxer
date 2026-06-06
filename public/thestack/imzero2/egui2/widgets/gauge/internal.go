@@ -21,7 +21,7 @@ const (
 	tickLabelGapFrac  float32 = 0.10
 	needleGapFrac     float32 = 0.04 // needle stops this far short of the band
 	hubRFrac          float32 = 0.08
-	readoutYFrac      float32 = 0.40 // value readout, below the hub (inside the dial)
+	readoutYFrac      float32 = 0.30 // value readout, below the hub (inside the dial) — kept high enough to clear the lower-left/right endpoint tick labels
 
 	// labelBottomInsetFrac places the metric label's baseline this far (of the
 	// canvas height) above the bottom edge — below the dial, clear of the
