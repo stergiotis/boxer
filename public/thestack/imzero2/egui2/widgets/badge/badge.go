@@ -27,22 +27,24 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )
 
-// ToneE is the semantic colour family of a badge. Values are resolved by
-// tonePalette against the IDS semantic palette (ADR-0031 §SD2) — info /
-// success / warning / error / neutral / accent — so a badge picks up the
-// same hues fleet-wide as plot annotations, status indicators, and other
-// IDS surfaces. TonePrimary maps to the accent role (ADR-0031 forbids
-// "primary" as a token name; the badge keeps the name for source-compat
-// with existing call sites).
-type ToneE uint8
+// ToneE aliases styletokens.Tone — the IDS semantic-role enumerator (info /
+// success / warning / error / neutral / accent) promoted out of this widget
+// into the design system (ADR-0031 §Updates 2026-06-06), where tone→token is
+// colour policy shared with other painters (the gauge widget, ADR-0068). The
+// alias plus the re-exported constants below keep badge's public surface and
+// every existing call site (badge.ToneError, …) unchanged, while a badge
+// picks up the same hues fleet-wide as plot annotations and status
+// indicators. TonePrimary is the accent role (ADR-0031 forbids "primary" as a
+// token name; the role enumerator keeps the name for source-compat).
+type ToneE = styletokens.Tone
 
 const (
-	ToneNeutral ToneE = iota
-	TonePrimary
-	ToneSuccess
-	ToneWarning
-	ToneError
-	ToneInfo
+	ToneNeutral = styletokens.ToneNeutral
+	TonePrimary = styletokens.TonePrimary
+	ToneSuccess = styletokens.ToneSuccess
+	ToneWarning = styletokens.ToneWarning
+	ToneError   = styletokens.ToneError
+	ToneInfo    = styletokens.ToneInfo
 )
 
 // VariantE chooses fill / stroke / fg combinations for a given tone.
@@ -171,50 +173,28 @@ func (inst Fluid) resolveTone() (fill color.Color, stroke color.Color, strokeW f
 	return
 }
 
-// tonePalette is the canonical colour table sourced from the IDS semantic
-// palette (ADR-0031 §SD2 — six roles × three emphasis levels in OKLCh).
+// tonePalette bridges a tone's IDS semantic-role tokens (now owned by
+// styletokens.Tone — ADR-0031 §Updates 2026-06-06) into drawable colours for
+// the badge's four slots:
 //
-// Per-tone mapping:
-//
-//   - base       — <role>.Default — the L≈0.80 light tint that drives the
-//     Solid / Selected fill.
-//   - soft       — <role>.Subtle  — the L≈0.20 dark tint used as the Soft
+//   - base       — Tone.Fill()       — <role>.Default (L≈0.80) — the light
+//     tint that drives the Solid / Selected fill.
+//   - soft       — Tone.Soft()       — <role>.Subtle  (L≈0.20) — the Soft
 //     variant fill; reads as a quiet tinted region on bg.panel.
-//   - fgOnSolid  — neutral.bg_extreme — high-contrast dark fg on the light
-//     Default fill (Lc ≈ -100 via APCA on the dark spine).
-//   - fgOnSoft   — <role>.Strong  — the L≈0.90 lighter tone-coloured fg
-//     that reads on the Subtle background.
+//   - fgOnSolid  — Tone.TextOnFill() — neutral.bg_extreme — high-contrast dark
+//     fg on the light Default fill (Lc ≈ -100 via APCA on the dark spine).
+//   - fgOnSoft   — Tone.Strong()     — <role>.Strong  (L≈0.90) — the lighter
+//     tone-coloured fg that reads on the Subtle background.
 //
 // The bridge from styletokens.RGBA8 to color.Color goes through
 // color.Hex(token.AsHex()) to avoid tripping designlint L2 — the lint
 // flags raw color.RGB / color.RGBA calls, not Hex, and styletokens cannot
 // import color directly per ADR-0035's keelson/thestack layering.
 func tonePalette(tone ToneE) (base, soft, fgOnSolid, fgOnSoft color.Color) {
-	var baseT, softT, fgOnSolidT, fgOnSoftT styletokens.RGBA8
-	switch tone {
-	case TonePrimary:
-		baseT, softT = styletokens.AccentDefault, styletokens.AccentSubtle
-		fgOnSolidT, fgOnSoftT = styletokens.NeutralBgExtreme, styletokens.AccentStrong
-	case ToneSuccess:
-		baseT, softT = styletokens.SuccessDefault, styletokens.SuccessSubtle
-		fgOnSolidT, fgOnSoftT = styletokens.NeutralBgExtreme, styletokens.SuccessStrong
-	case ToneWarning:
-		baseT, softT = styletokens.WarningDefault, styletokens.WarningSubtle
-		fgOnSolidT, fgOnSoftT = styletokens.NeutralBgExtreme, styletokens.WarningStrong
-	case ToneError:
-		baseT, softT = styletokens.ErrorDefault, styletokens.ErrorSubtle
-		fgOnSolidT, fgOnSoftT = styletokens.NeutralBgExtreme, styletokens.ErrorStrong
-	case ToneInfo:
-		baseT, softT = styletokens.InfoDefault, styletokens.InfoSubtle
-		fgOnSolidT, fgOnSoftT = styletokens.NeutralBgExtreme, styletokens.InfoStrong
-	default: // Neutral
-		baseT, softT = styletokens.NeutralDefault, styletokens.NeutralSubtle
-		fgOnSolidT, fgOnSoftT = styletokens.NeutralBgExtreme, styletokens.NeutralStrong
-	}
-	base = color.Hex(baseT.AsHex())
-	soft = color.Hex(softT.AsHex())
-	fgOnSolid = color.Hex(fgOnSolidT.AsHex())
-	fgOnSoft = color.Hex(fgOnSoftT.AsHex())
+	base = color.Hex(tone.Fill().AsHex())
+	soft = color.Hex(tone.Soft().AsHex())
+	fgOnSolid = color.Hex(tone.TextOnFill().AsHex())
+	fgOnSoft = color.Hex(tone.Strong().AsHex())
 	return
 }
 

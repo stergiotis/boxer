@@ -337,6 +337,63 @@ Open questions:
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`. ADRs are append-only; supersession is recorded, not deleted.
 
+## Updates
+
+### 2026-06-06 — Semantic tone *roles* promoted to a first-class IDS API (`styletokens.Tone`)
+
+**What this ADR named, and what was missing.** The Context above commits IDS to a *semantic* palette of roles — **info / success / warning / error / neutral / accent** — and the semantic-palette flow (§SD8) ships them as emphasis-leveled tokens (`SuccessSubtle/Default/Strong`, `AccentDefault`, the neutral spine, …). What it never gave a home to is the *role selector*: the small enumerator that says "paint this in the **error** role" and resolves that intent to the right token. That selector grew up inside a single widget — `badge.ToneE` plus an unexported `tonePalette()` — because the badge was the only consumer that needed it.
+
+**Why promote now.** The gauge widget ([ADR-0068](./0068-imzero2-gauge-widget.md)) is the second consumer, and a different *kind* of consumer: it **paints** a tone onto a canvas (a colored zone band) rather than handing a `ToneE` to `badge.New(...)` to render a chip. It needs the tone→color resolution directly. Per the IDS "defer until a second consumer, then promote" rule (the same rule that gated `SurfaceApp` in [ADR-0065](./0065-imzero2-design-system-surface-sizes.md) §SD3), the second consumer is the trigger; and the resolution is plainly IDS color *policy* — which token a role maps to — not a badge implementation detail. So the role enumerator + resolver move into `styletokens`, beside the tokens they select.
+
+**The API.** A new `styletokens/tone.go` (Go-only — see "no Rust mirror" below):
+
+```go
+type Tone uint8
+const ( ToneNeutral Tone = iota; TonePrimary; ToneSuccess; ToneWarning; ToneError; ToneInfo )
+
+func (t Tone) Fill()       RGBA8 // solid band / chip fill   — <role>.Default
+func (t Tone) Soft()       RGBA8 // quiet fill               — <role>.Subtle
+func (t Tone) Strong()     RGBA8 // tone-colored text/label  — <role>.Strong
+func (t Tone) TextOnFill() RGBA8 // contrast text on Fill    — neutral bg.extreme
+```
+
+The four methods are exactly the four colors `badge.tonePalette()` already computes; the role→token mapping is unchanged, only relocated:
+
+| `Tone` | `Fill()` | `Soft()` | `Strong()` | `TextOnFill()` |
+|---|---|---|---|---|
+| `ToneNeutral` | `NeutralDefault` | `NeutralSubtle` | `NeutralStrong` | `NeutralBgExtreme` |
+| `TonePrimary` (accent role) | `AccentDefault` | `AccentSubtle` | `AccentStrong` | `NeutralBgExtreme` |
+| `ToneSuccess` | `SuccessDefault` | `SuccessSubtle` | `SuccessStrong` | `NeutralBgExtreme` |
+| `ToneWarning` | `WarningDefault` | `WarningSubtle` | `WarningStrong` | `NeutralBgExtreme` |
+| `ToneError` | `ErrorDefault` | `ErrorSubtle` | `ErrorStrong` | `NeutralBgExtreme` |
+| `ToneInfo` | `InfoDefault` | `InfoSubtle` | `InfoStrong` | `NeutralBgExtreme` |
+
+`TonePrimary` keeps its name (it *is* the accent role); §SD10's "no `primary/secondary/tertiary`" rule governs *token* names in the generated ladder, not this role enumerator, which has carried the name in `badge` since it shipped. Methods return IDS-native `RGBA8`, never a drawable `color.Color`: `styletokens` sits on the keelson side of the [ADR-0035](./0035-keelson-namespace-introduction.md) layering and must not import the `thestack` widget `color` package. Widgets bridge at their own edge with `color.Hex(tone.Fill().AsHex())` — the designlint-L2-blessed path, identical to how `badge` already does it.
+
+**Back-compat: zero call-site churn.** `badge` aliases the moved type and re-exports the constants, and its `tonePalette()` collapses to a four-line bridge over the new methods:
+
+```go
+// badge keeps its public surface unchanged
+type ToneE = styletokens.Tone
+const (
+    ToneNeutral = styletokens.ToneNeutral; TonePrimary = styletokens.TonePrimary
+    ToneSuccess = styletokens.ToneSuccess; ToneWarning = styletokens.ToneWarning
+    ToneError   = styletokens.ToneError;   ToneInfo    = styletokens.ToneInfo
+)
+```
+
+The ~84 `badge.Tone*` references across six files (`fsmview`, `configview`, `logviewer`, and three demos) compile unchanged; new consumers (the gauge) import `styletokens.Tone` directly and skip the widget→widget dependency.
+
+**No Rust mirror, no drift test.** The resolver is Go-side policy over tokens that *already* have their Rust counterpart (`palette_generated.rs`); nothing new reaches `egui::Style`. So `tone.go` gets no `tone.rs` and no entry in `styletokens_drift_test.go` — the same intentional asymmetry [ADR-0065](./0065-imzero2-design-system-surface-sizes.md) §SD4 documents for `surface.go`. (If Rust-side code ever needs to resolve a tone, that is a later mirror, not part of this promotion.)
+
+**Scope boundary.** This is a relocation + exposure, not a redesign: no palette *value* changes, no generator/pipeline change (§SD8 untouched), and **no change to accessibility behavior** — semantic tones remain fixed, low-chroma hues. The monochrome / high-contrast adaptation stays where §SD5 and the data-encoding ramps put it (`SequentialDefault()` / `DivergingDefault()` resolve `IDS_ACCESSIBILITY`); a tone-painted surface stays accessible by *redundant encoding* (text labels alongside color), per §SD5's "color is never the sole encoding channel." [ADR-0068](./0068-imzero2-gauge-widget.md) §SD7 carries that obligation for the gauge's zones.
+
+**Note — package location.** §SD8 names the Go token path as `public/thestack/imzero2/egui2/styletokens/`; the package has since relocated to **`public/keelson/designsystem/styletokens/`** (the keelson side of the [ADR-0035](./0035-keelson-namespace-introduction.md) layering — which is precisely what lets a `thestack` widget like `badge` consume it). `tone.go` lands there.
+
+**Placement — resolved to `styletokens.Tone` (2026-06-06).** Tone lands in `styletokens` (file `tone.go`), co-located with the palette tokens it resolves, matching how typography / spacing / surface / rounding / stroke all live there. The considered alternative — a dedicated `public/keelson/designsystem/tone/` package importing `styletokens` — was set aside as a one-file package with extra import ceremony in `badge` for no real separation gain; the API and mapping above are identical either way.
+
+**Landed ahead of review.** `tone.go` (untagged, like `surface.go`) + a mapping test (`tone_test.go`) and the `badge` alias/bridge have landed in the working tree: `styletokens` `go test` green (tone mapping + the existing drift test), `badge` and the six tone consumers (`fsmview`, `configview`, `logviewer`, three demos) build, `go vet` clean, and the ~84 `badge.Tone*` call sites compile unchanged. `status` stays `proposed` — this Update joins the body owed a single human-review pass; revert is a `tone.go`/`tone_test.go` delete plus restoring `badge`'s switch.
+
 ## References
 
 - [ADR-0029 — ImZero2 design system: foundations, data-intensive patterns, policy-as-code](./0029-imzero2-design-system-and-policy-as-code.md) — parent ADR; this is the §SD4 color-foundations sub-decision.
