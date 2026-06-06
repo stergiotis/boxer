@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/goccy/go-graphviz"
 	"github.com/goccy/go-graphviz/cgraph"
@@ -47,6 +48,24 @@ func New(ctx context.Context) (*Engine, error) {
 // Close releases the embedded Graphviz runtime.
 func (e *Engine) Close() error {
 	return e.gv.Close()
+}
+
+var (
+	sharedOnce sync.Once
+	sharedEng  *Engine
+	sharedErr  error
+)
+
+// Shared returns a lazily-created, process-wide Engine, instantiated once with
+// context.Background(). It is intended for the single-threaded imzero2 render
+// loop — Engine is not safe for concurrent use, so do not call it from
+// multiple goroutines. The shared instance lives for the process and is never
+// Closed; this avoids spinning up a WebAssembly runtime per widget instance.
+func Shared() (*Engine, error) {
+	sharedOnce.Do(func() {
+		sharedEng, sharedErr = New(context.Background())
+	})
+	return sharedEng, sharedErr
 }
 
 // Layout builds the model as a Graphviz graph, runs `dot`, and parses the

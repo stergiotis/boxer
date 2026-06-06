@@ -33,7 +33,7 @@ func init() {
 		Title:    icons.IconTreeStructure + " fsmview",
 		Stage:    [2]float32{1024, 700},
 		Kind:     registry.DemoKindUX,
-		Description: "Two-level FSM viewer (statetrooper-backed). Level 1: compact chip showing the current state + an optional \"Xs ago\" subscript. Level 2 (click chip): floating popup with Table, Graph (egui_graphs force-directed), and History views. Init seeds a few transitions so all three tabs have content to render in the tour.",
+		Description: "Two-level FSM viewer (statetrooper-backed). Level 1: compact chip showing the current state + an optional \"Xs ago\" subscript. Level 2 (click chip): floating popup with Table, Graph (Graphviz layered / Sugiyama layout, in-process WASM — ADR-0069), and History views. Init seeds a few transitions so all three tabs have content to render in the tour.",
 		Init: func(ids *c.WidgetIdStack) (state any) {
 			m := fsmview.NewMachine("red", 16,
 				fsmview.WithStateOrder([]string{"red", "yellow", "green"}),
@@ -61,6 +61,9 @@ func init() {
 				AutoAnchor(true).
 				PopupAnchor(60, 220)
 			w.Open()
+			// Default to the Graph tab to showcase the layered (Graphviz)
+			// layout (ADR-0069); Table/History stay one click away.
+			w.SetRenderer(fsmview.RendererGraph)
 			state = &fsmviewDemoState{tl: w, m: m}
 			return
 		},

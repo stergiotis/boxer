@@ -3,7 +3,10 @@
 package fsmview
 
 import (
+	"context"
 	"fmt"
+	"hash/fnv"
+	"strconv"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -12,12 +15,16 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/inspector"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph/goccyengine"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph/view"
 )
 
 // RendererE selects which level-2 view is rendered inside the popup. The
 // table is cheaper at small N; the graph reads better once edges outnumber
-// states (force-directed layout via egui_graphs, see [c.GraphLayoutForceDirectedCG]);
-// history shows the transition log from oldest to newest.
+// states (static layered / Sugiyama layout via Graphviz in-process, see the
+// layeredgraph package and ADR-0069); history shows the transition log from
+// oldest to newest.
 type RendererE uint8
 
 const (
@@ -67,13 +74,13 @@ type Widget[T comparable] struct {
 	// (R20), so requires the matching FFFI2 binding (added M3a-ii).
 	autoAnchor bool
 
-	// graphPrewarmed flips to true after the first renderGraph call has
-	// fired .ResetLayout()+.FastForwardSteps(N). egui_graphs's FR layout
-	// initialises node positions coincident at (0, 0), so forces cancel
-	// and the simulation appears frozen until a user interaction breaks
-	// the symmetry; pre-warming converges the layout deterministically
-	// before the operator sees the graph for the first time.
-	graphPrewarmed bool
+	// graphLayout caches the static layered layout (states + transitions)
+	// computed once via the layeredgraph engine: the FSM topology does not
+	// change, so only the current-state highlight varies per frame, applied
+	// at paint time through view.RenderOpts colour hooks. graphLayoutErr
+	// records a layout failure so renderGraph can degrade to a message.
+	graphLayout    *layeredgraph.Layout
+	graphLayoutErr error
 
 	density styletokens.DensityE
 
@@ -453,79 +460,104 @@ func (inst *Widget[T]) renderTable() {
 	}
 }
 
-// renderGraph emits one GraphNode per state and one GraphEdge per
-// transition, then closes with a Graph block running the force-directed-
-// with-centre-gravity layout (egui_graphs FR+CG). The active state is
-// tinted via the Machine's StateColorFn; edges leaving the current state
-// light up with AccentSubtle so the operator reads the next-possible
-// transitions at a glance, the rest sit in NeutralBorderFaint.
+// renderGraph draws the FSM as a static layered (Sugiyama) graph: Graphviz
+// lays out states + transitions in-process (layeredgraph + goccyengine,
+// ADR-0069) and view.Render paints the result through the painter binding —
+// no egui_graphs and no force simulation. The layout is computed once and
+// cached (topology is static); per frame only the colours change — the active
+// state keeps the Machine's StateColorFn tint, edges leaving the current state
+// light up with AccentSubtle (the next-possible transitions) and the rest sit
+// in NeutralBorderFaint.
 func (inst *Widget[T]) renderGraph() {
+	if inst.graphLayout == nil && inst.graphLayoutErr == nil {
+		inst.graphLayout, inst.graphLayoutErr = inst.computeGraphLayout()
+	}
+	if inst.graphLayoutErr != nil {
+		c.Label("graph layout unavailable: " + inst.graphLayoutErr.Error()).Send()
+		return
+	}
+	if inst.graphLayout == nil {
+		return
+	}
+
 	current := inst.machine.Current()
+	currentID := inst.stateNodeID(current)
+	// Reverse map node-id → state so the colour hooks can reach the Machine's
+	// per-state colour. Cheap to rebuild each frame (few states).
+	idToState := make(map[string]T)
 	for s := range inst.machine.States() {
-		rgba := inst.machine.Color(s)
-		c.GraphNode(inst.machine.NodeId(s), inst.machine.Label(s)).
-			Color(color.Hex(rgba.AsHex())).
-			Send()
+		idToState[inst.stateNodeID(s)] = s
 	}
 	nextEdgeColor := color.Hex(styletokens.AccentSubtle.AsHex())
 	restEdgeColor := color.Hex(styletokens.NeutralBorderFaint.AsHex())
-	for k, label := range inst.machine.Edges() {
-		e := c.GraphEdge(inst.machine.NodeId(k.From), inst.machine.NodeId(k.To))
-		if k.From == current {
-			e = e.Color(nextEdgeColor)
-		} else {
-			e = e.Color(restEdgeColor)
-		}
-		if label != "" {
-			e = e.Label(label)
-		}
-		e.Send()
-	}
-	g := c.Graph(inst.ids.PrepareStr("graph")).
-		Height(320).
-		Layout(uint8(c.GraphLayoutForceDirectedCG)).
-		LayoutDt(forceDirectedDt).
-		LayoutDamping(forceDirectedDamping).
-		LayoutEpsilon(forceDirectedEpsilon).
-		LayoutMaxStep(forceDirectedMaxStep).
-		LayoutKScale(forceDirectedKScale).
-		LayoutCAttract(forceDirectedCAttract).
-		LayoutCRepulse(forceDirectedCRepulse).
-		LayoutRunning(true).
-		// One-shot fit (armed on creation + the prewarm ResetLayout below);
-		// no continuous fit, so the user's pan/zoom sticks after framing.
-		FitPadding(0.1).
-		ZoomAndPan(true).
-		DraggingEnabled(true).
-		HoverEnabled(true).
-		LabelsAlways(true)
-	if !inst.graphPrewarmed {
-		g = g.ResetLayout().FastForwardSteps(forceDirectedPrewarmSteps)
-		inst.graphPrewarmed = true
-	}
-	g.Send()
+
+	view.Render(inst.graphIDBase(), inst.graphLayout, view.RenderOpts{
+		CanvasW: fsmGraphCanvasW,
+		CanvasH: fsmGraphCanvasH,
+		NodeFill: func(id string) (color.Color, bool) {
+			if s, ok := idToState[id]; ok {
+				return color.Hex(inst.machine.Color(s).AsHex()), true
+			}
+			return color.Hex(0), false
+		},
+		EdgeStroke: func(from, _ string) (color.Color, bool) {
+			if from == currentID {
+				return nextEdgeColor, true
+			}
+			return restEdgeColor, true
+		},
+	})
 }
 
-// FR (Fruchterman-Reingold) defaults for the level-2 graph. egui_graphs
-// integrates Verlet-style per-frame; without explicit values these fields
-// default to 0 and the simulation never advances. The numbers mirror the
-// graphs-demo defaults (egui2_hl_graphs_demo.go) which converge cleanly on
-// small graphs (≤20 nodes). Knobs aren't yet surfaced on the public API —
-// promote to widget options if a caller needs to tune them.
+// computeGraphLayout builds the GraphModel from the Machine (states → nodes,
+// transitions → edges) and lays it out with the process-shared Graphviz
+// engine. Called once per widget; the result is cached on the receiver.
+func (inst *Widget[T]) computeGraphLayout() (*layeredgraph.Layout, error) {
+	eng, err := goccyengine.Shared()
+	if err != nil {
+		return nil, err
+	}
+	var m layeredgraph.GraphModel
+	for s := range inst.machine.States() {
+		m.Nodes = append(m.Nodes, layeredgraph.Node{
+			ID:    inst.stateNodeID(s),
+			Label: inst.machine.Label(s),
+		})
+	}
+	for k, label := range inst.machine.Edges() {
+		m.Edges = append(m.Edges, layeredgraph.Edge{
+			From:  inst.stateNodeID(k.From),
+			To:    inst.stateNodeID(k.To),
+			Label: label,
+		})
+	}
+	return eng.Layout(context.Background(), m, layeredgraph.LayoutOpts{
+		RankDir:  layeredgraph.RankDirTopBottom,
+		FontSize: 14,
+	})
+}
+
+// stateNodeID is the layeredgraph node id for a state: the Machine's stable
+// per-state NodeId as a string (Graphviz node names are strings).
+func (inst *Widget[T]) stateNodeID(s T) string {
+	return strconv.FormatUint(inst.machine.NodeId(s), 10)
+}
+
+// graphIDBase namespaces this widget's canvas + sense-region ids so two FSM
+// graphs on screen do not collide. Derived from the per-instance scopeKey.
+func (inst *Widget[T]) graphIDBase() uint64 {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(inst.scopeKey))
+	return h.Sum64()
+}
+
+// fsmGraphCanvas{W,H} size the painter canvas the layered graph is drawn into
+// inside the level-2 popup. Fixed for v1 (the height matches the prior graph's
+// 320px); the layout is fit-to-view into this rect. Responsive width tracking
+// is a follow-up.
 const (
-	forceDirectedDt       float32 = 0.05
-	forceDirectedDamping  float32 = 0.3
-	forceDirectedEpsilon  float32 = 0.1
-	forceDirectedMaxStep  float32 = 20.0
-	forceDirectedKScale   float32 = 1.0
-	forceDirectedCAttract float32 = 1.0
-	forceDirectedCRepulse float32 = 1.0
-	// forceDirectedPrewarmSteps is the number of FR simulation iterations
-	// emitted via .FastForwardSteps on the first Graph-view frame so the
-	// layout is converged before the operator looks. 200 is the value the
-	// graphs demo's "fast-forward" button uses and converges small (≤20-
-	// node) graphs to a stable shape; tune if larger FSMs settle slowly.
-	forceDirectedPrewarmSteps uint32 = 200
+	fsmGraphCanvasW float32 = 400
+	fsmGraphCanvasH float32 = 320
 )
 
 // renderHistory emits the transition log newest-first. Each row reads as
