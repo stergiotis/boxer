@@ -783,6 +783,26 @@ APIs with `egui::Ui` callbacks (like `egui_table::TableDelegate`) use `WithDefer
   hover_resp.on_hover_text(text);
   ```
 
+## Ragged Control Row (First Item in a Centered Horizontal Row)
+* **The Symptom:** A toolbar of mixed controls — combo boxes, checkboxes, labels — laid out with `c.Horizontal()` does not sit on a single baseline. The *first* widget in the row renders a few pixels higher than everything after it, so the row reads as vertically "unstable" / ragged even though every control is the same height.
+* **The Cause:** `c.Horizontal()` maps to egui's `ui.horizontal()` = `Layout::left_to_right(Align::Center)`, which vertically centers each item against the row. In immediate mode egui fixes the row's cross-axis line from the first item and anchors it differently from the items that follow; when the controls are all `interact_size.y` tall (combos, checkboxes, sliders) the leading widget lands a few px *above* its neighbours instead of on the shared centre line. (Observed against egui 0.34; the `sccmap` app's control row hit this exact issue.)
+* **The Pattern:** **Top-Align Equal-Height Control Rows**. When every control in the row is the same height, use `c.HorizontalTop()` (`Align::Min`) instead of `c.Horizontal()`. Top-aligning skips the per-item cross-axis centering, so identical-height controls all land on one stable line. Reserve `c.Horizontal()` (centered) for rows that deliberately mix tall and short widgets and want them centred relative to one another.
+  ```go
+  // WRONG: centered row — the first control anchors a few px above the rest
+  for range c.Horizontal().KeepIter() {
+      sizeIdx = renderMetricCombo(ids, "size", "Size", sizeIdx)
+      colorIdx = renderMetricCombo(ids, "color", "Color", colorIdx)
+      c.Checkbox(ids.PrepareStr("tests"), incTests, "Include tests").SendRespVal(&incTests)
+  }
+
+  // RIGHT: equal-height controls top-aligned → one stable baseline
+  for range c.HorizontalTop().KeepIter() {
+      sizeIdx = renderMetricCombo(ids, "size", "Size", sizeIdx)
+      colorIdx = renderMetricCombo(ids, "color", "Color", colorIdx)
+      c.Checkbox(ids.PrepareStr("tests"), incTests, "Include tests").SendRespVal(&incTests)
+  }
+  ```
+
 ---
 
 # 13. Culling, Block Skipping, and Register Mechanics
