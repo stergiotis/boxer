@@ -803,6 +803,32 @@ APIs with `egui::Ui` callbacks (like `egui_table::TableDelegate`) use `WithDefer
   }
   ```
 
+## Gallery Scroll-Host Layout — Side Panels Collapse, and the Tour Hides It
+* **The Symptom:** A widget-gallery demo puts a control column beside a filling content area with `c.PanelLeftInside(...)` + `c.PanelCentralInside()`. The screenshot tour looks perfect, but in the *interactive* gallery the left panel collapses to a sliver and clips its controls while the central area fills wide. Related symptoms from the same layout: a fixed-width output column (`UiSetMaxWidth`) strands dead space on the right of a wide window with its scrollbar floating mid-pane, and a `DockArea` overflows / clips instead of scrolling.
+* **The Cause:** The two demo hosts are not equivalent. The **TestDriver** (tour; `IMZERO2_SCREENSHOT_DIR` set) wraps each demo in a bounded `c.AllocateUiAtRect(0, 0, stageW, stageH)` — finite width **and** height, with a real region for side panels to claim. The **InteractiveDriver** (the gallery you click around in) wraps each demo in `c.ScrollArea().Vscroll(true).AutoShrink(false, false)` — full host width but **unbounded, scrollable height**, and **no CentralPanel region**. egui side panels (`SidePanel` / the `*Inside` variants) size against a CentralPanel region; inside a bare scroll area they get a degenerate width and clip. A `DockArea` (egui_dock fills its allocated rect) has no finite height to fill in the vscroll, so it clips. The tour's bounded rect papers over both — which is exactly why a tour-only "fix" readily regresses the gallery.
+* **The Pattern:** **Author gallery-demo layouts for an unbounded-height, full-width scroll host.**
+  - Top-level split: a plain `c.Horizontal()` — pin the control column to its fixed-control width (`UiSetMinWidth` + `UiSetMaxWidth`) and leave the content column **unconstrained** so the dock / scroll area inside fills the remaining width. Do **not** use `*Inside` side panels in a gallery demo. (A standalone *app* with its own `c.Window` may use them — the Window supplies the region the gallery's scroll host lacks; cf. `regex_explorer`.)
+  - Give any `DockArea` / canvas a **bounded height** via `c.UiSetMinHeight(...)` before it, so it has a finite rect in the vscroll.
+  - Fill content panes with `c.ScrollArea().AutoShrink(false, false)` so they occupy the full pane width (scrollbar at the pane edge, not mid-pane).
+  - **Verify host-dependent layout in the interactive gallery, not the tour.** The tour is ideal for deterministic *content* checks (syntax highlighting, per-widget rendering) but a poor proxy for fill / clipping / bounded-height behaviour.
+  ```go
+  // WRONG — side panels collapse in the gallery's scroll host, clipping the editor
+  for range c.PanelLeftInside(ids.PrepareStr("editor")).DefaultSize(540).Resizable(true).KeepIter() { renderEditor() }
+  for range c.PanelCentralInside().KeepIter() { renderOutput() }
+
+  // RIGHT — fixed control column + unconstrained fill column + bounded dock
+  for range c.Horizontal().KeepIter() {
+      for range c.Vertical().KeepIter() {
+          c.UiSetMinWidth(560); c.UiSetMaxWidth(560)   // controls are fixed-width
+          renderEditor()
+      }
+      for range c.Vertical().KeepIter() {              // unconstrained → fills remaining width
+          c.UiSetMinHeight(360)                        // a DockArea needs a finite rect in the vscroll
+          renderOutput()                               // DockArea + ScrollArea(AutoShrink(false,false)) fill the pane
+      }
+  }
+  ```
+
 ---
 
 # 13. Culling, Block Skipping, and Register Mechanics
