@@ -19,10 +19,8 @@ import (
 const layeredGraphDemoIDBase uint64 = 0xab12cd34ef000000
 
 type layeredGraphDemoState struct {
-	engine      *goccyengine.Engine
 	layout      *layeredgraph.Layout
 	err         error
-	initialised bool
 	lastClicked string
 	gvState     view.ViewState // interactive pan/zoom
 }
@@ -65,16 +63,14 @@ func trafficLightModel() layeredgraph.GraphModel {
 }
 
 func demoLayeredGraph(ids *c.WidgetIdStack, st *layeredGraphDemoState) {
-	// Lazily build the engine + layout the first time the demo renders, so no
-	// WASM runtime spins up for a demo that is never opened. The layout is
-	// static, so it is computed once and reused.
-	if !st.initialised {
-		st.initialised = true
-		eng, err := goccyengine.New(context.Background())
-		if err != nil {
+	// Lazily lay out the (static) graph the first time the demo renders — no
+	// WASM runtime spins up for a demo that's never opened — using the
+	// process-shared engine. Retried while no layout exists, so a transient
+	// engine failure recovers instead of sticking.
+	if st.layout == nil {
+		if eng, err := goccyengine.Shared(); err != nil {
 			st.err = err
 		} else {
-			st.engine = eng
 			st.layout, st.err = eng.Layout(context.Background(), trafficLightModel(),
 				layeredgraph.LayoutOpts{RankDir: layeredgraph.RankDirTopBottom, FontSize: 14})
 		}

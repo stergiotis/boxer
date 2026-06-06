@@ -51,21 +51,28 @@ func (e *Engine) Close() error {
 }
 
 var (
-	sharedOnce sync.Once
-	sharedEng  *Engine
-	sharedErr  error
+	sharedMu  sync.Mutex
+	sharedEng *Engine
 )
 
-// Shared returns a lazily-created, process-wide Engine, instantiated once with
-// context.Background(). It is intended for the single-threaded imzero2 render
-// loop — Engine is not safe for concurrent use, so do not call it from
-// multiple goroutines. The shared instance lives for the process and is never
+// Shared returns a lazily-created, process-wide Engine built with
+// context.Background(). The successful instance is created once and reused; a
+// failed instantiation is NOT cached, so a transient failure is retried on the
+// next call. Intended for the single-threaded imzero2 render loop — Engine is
+// not safe for concurrent use. The instance lives for the process and is never
 // Closed; this avoids spinning up a WebAssembly runtime per widget instance.
 func Shared() (*Engine, error) {
-	sharedOnce.Do(func() {
-		sharedEng, sharedErr = New(context.Background())
-	})
-	return sharedEng, sharedErr
+	sharedMu.Lock()
+	defer sharedMu.Unlock()
+	if sharedEng != nil {
+		return sharedEng, nil
+	}
+	eng, err := New(context.Background())
+	if err != nil {
+		return nil, err // don't cache the failure — retry on the next call
+	}
+	sharedEng = eng
+	return sharedEng, nil
 }
 
 // Layout builds the model as a Graphviz graph, runs `dot`, and parses the
@@ -102,7 +109,10 @@ func (e *Engine) renderLaidOutDot(ctx context.Context, m layeredgraph.GraphModel
 	gnodes := make(map[string]*cgraph.Node, len(m.Nodes))
 	for _, n := range m.Nodes {
 		if _, dup := gnodes[n.ID]; dup {
-			return nil, fmt.Errorf("goccyengine: duplicate node id %q", n.ID)
+			// Same id = same node (e.g. fsmview states that share a label):
+			// merge rather than fail, matching Graphviz's idempotent
+			// CreateNodeByName. The first occurrence's label/shape wins.
+			continue
 		}
 		gn, err := graph.CreateNodeByName(n.ID)
 		if err != nil {

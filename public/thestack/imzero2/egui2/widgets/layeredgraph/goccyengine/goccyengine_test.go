@@ -118,3 +118,26 @@ func TestLayout_UnknownEdgeNodeErrors(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "ghost")
 }
+
+// Nodes that share an ID (e.g. fsmview states with the same label) must merge
+// into one node, not fail the whole layout — see the code-review #1 regression.
+func TestLayout_DuplicateNodeIDMerges(t *testing.T) {
+	e := newEngine(t)
+	m := layeredgraph.GraphModel{
+		Nodes: []layeredgraph.Node{
+			{ID: "x", Label: "X"},
+			{ID: "x", Label: "X again"},
+			{ID: "y", Label: "Y"},
+		},
+		Edges: []layeredgraph.Edge{{From: "x", To: "y"}},
+	}
+	lay, err := e.Layout(context.Background(), m, layeredgraph.LayoutOpts{})
+	require.NoError(t, err)
+	require.NotNil(t, lay)
+	require.Len(t, lay.Nodes, 2, "duplicate id collapses to one node")
+	ids := map[string]bool{}
+	for _, n := range lay.Nodes {
+		ids[n.ID] = true
+	}
+	assert.True(t, ids["x"] && ids["y"], "both distinct ids present")
+}

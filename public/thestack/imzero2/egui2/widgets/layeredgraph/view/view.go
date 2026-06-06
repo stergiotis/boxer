@@ -13,7 +13,6 @@
 package view
 
 import (
-	"hash/fnv"
 	"math"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
@@ -21,6 +20,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph"
+	"github.com/zeebo/xxh3"
 )
 
 // Style holds the colours and metrics used to paint a Layout. A zero Style is
@@ -122,24 +122,31 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 	zoom, panX, panY := 1.0, 0.0, 0.0
 	if vs := opts.State; vs != nil {
 		resp := sm.GetResponse(widgethandle.Make(canvasID.Derive()))
+		// Zoom only while the pointer is over this canvas (don't hijack a scroll
+		// meant for something else). GetZoomDelta is egui's combined gesture
+		// (Ctrl+scroll / pinch / +-).
 		if resp.HasContainsPointer() {
 			if zd := sm.GetZoomDelta().Zoom; zd > 0 && zd != 1 {
 				z := vs.Zoom
 				if z <= 0 {
 					z = 1
 				}
-				vs.Zoom = clampF64(z*float64(zd), 0.2, 5.0)
+				vs.Zoom = min(max(z*float64(zd), 0.2), 5.0)
 			}
 		}
-		cp := sm.GetCanvasPointer()
-		ptrValid := cp.HoverX == cp.HoverX && cp.HoverY == cp.HoverY // == rejects NaN
-		if resp.HasIsPointerButtonDown() && resp.HasContainsPointer() && ptrValid {
+		// Pan while the primary button is held after a press that began on this
+		// canvas. HasIsPointerButtonDown stays true even once the cursor leaves
+		// the rect, and we track the GLOBAL pointer (GetPointer) — not the
+		// per-canvas hover register — so the drag continues past the canvas edge
+		// and isn't clobbered by another canvas drained later in the frame.
+		gp := sm.GetPointer()
+		if resp.HasIsPointerButtonDown() && gp.Valid {
 			if vs.dragging {
-				vs.PanX += float64(cp.HoverX - vs.lastPtrX)
-				vs.PanY += float64(cp.HoverY - vs.lastPtrY)
+				vs.PanX += float64(gp.X - vs.lastPtrX)
+				vs.PanY += float64(gp.Y - vs.lastPtrY)
 			}
 			vs.dragging = true
-			vs.lastPtrX, vs.lastPtrY = cp.HoverX, cp.HoverY
+			vs.lastPtrX, vs.lastPtrY = gp.X, gp.Y
 		} else {
 			vs.dragging = false
 		}
@@ -155,19 +162,19 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 	tf := func(p layeredgraph.Point) (x, y float32) {
 		return float32(p.X*escale + ox), float32(p.Y*escale + oy)
 	}
-	nodeKey := func(id string) uint64 {
-		h := fnv.New64a()
-		_, _ = h.Write([]byte(id))
-		// <<1 keeps bit 0 clear so the |1 that Derive applies cannot collapse
-		// two distinct keys (their high bits still differ).
-		return idBase + (h.Sum64() << 1)
+	// Per-node sense-region ids, computed once and reused by the read + draw
+	// loops below (avoids hashing each id twice per frame). <<1 keeps bit 0
+	// clear so the |1 that Derive applies cannot collapse two distinct keys.
+	senseIDs := make([]c.AbsoluteWidgetId, len(lay.Nodes))
+	for i, n := range lay.Nodes {
+		senseIDs[i] = c.MakeAbsoluteIdHighEntropy(idBase + (xxh3.HashString(n.ID) << 1))
 	}
 
 	// Read previous-frame node interaction; it drives this frame's highlight.
 	hovered := make(map[string]bool, len(lay.Nodes))
 	var res RenderResult
-	for _, n := range lay.Nodes {
-		resp := sm.GetResponse(widgethandle.Make(c.MakeAbsoluteIdHighEntropy(nodeKey(n.ID)).Derive()))
+	for i, n := range lay.Nodes {
+		resp := sm.GetResponse(widgethandle.Make(senseIDs[i].Derive()))
 		if resp.HasHovered() {
 			hovered[n.ID] = true
 			res.Hovered = n.ID
@@ -193,7 +200,7 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 	}
 
 	// Nodes.
-	for _, n := range lay.Nodes {
+	for i, n := range lay.Nodes {
 		cx, cy := tf(n.Center)
 		w := float32(n.W * escale)
 		h := float32(n.H * escale)
@@ -205,7 +212,7 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 		}
 		drawNode(n.Shape, cx, cy, w, h, st, fill, hovered[n.ID])
 		c.PaintText(cx, cy, 1, 1, n.Label, st.NodeFontSize*float32(escale), st.NodeText).Send()
-		c.PaintSenseRegion(c.MakeAbsoluteIdHighEntropy(nodeKey(n.ID)), cx-w/2, cy-h/2, w, h).Send()
+		c.PaintSenseRegion(senseIDs[i], cx-w/2, cy-h/2, w, h).Send()
 	}
 
 	// Drain into the canvas. Sense click/drag/hover only when pan/zoom is
@@ -217,16 +224,6 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 	cv.Send()
 
 	return res
-}
-
-func clampF64(v, lo, hi float64) float64 {
-	if v < lo {
-		return lo
-	}
-	if v > hi {
-		return hi
-	}
-	return v
 }
 
 // fitPad is the fraction of the canvas kept clear on each side when fitting,
@@ -249,12 +246,7 @@ func fit(lay *layeredgraph.Layout, targetW, targetH float32) (scale, offX, offY 
 		}
 		return 1, 0, 0, float32(w), float32(h)
 	}
-	sx := float64(targetW) / w
-	sy := float64(targetH) / h
-	scale = sx
-	if sy < sx {
-		scale = sy
-	}
+	scale = min(float64(targetW)/w, float64(targetH)/h)
 	scale *= 1 - 2*fitPad // leave a margin on every side
 	// Centring uses the padded scale, so the margin is split evenly.
 	offX = (float64(targetW) - w*scale) / 2

@@ -5,7 +5,6 @@ package fsmview
 import (
 	"context"
 	"fmt"
-	"hash/fnv"
 	"strconv"
 	"time"
 
@@ -18,6 +17,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph/goccyengine"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph/view"
+	"github.com/zeebo/xxh3"
 )
 
 // RendererE selects which level-2 view is rendered inside the popup. The
@@ -81,6 +81,14 @@ type Widget[T comparable] struct {
 	// records a layout failure so renderGraph can degrade to a message.
 	graphLayout    *layeredgraph.Layout
 	graphLayoutErr error
+	// graphTopoN/graphTopoE are the state/edge counts the cached graphLayout was
+	// built from; a change (Mirror/AddRule grows the Machine at runtime)
+	// invalidates the cache. graphIDToState is the node-id→state reverse map,
+	// rebuilt alongside the layout and reused each frame by the colour/click
+	// hooks (so the hot path doesn't rebuild it).
+	graphTopoN     int
+	graphTopoE     int
+	graphIDToState map[string]T
 	// graphViewState carries interactive pan/zoom for the Graph tab across
 	// frames (view.Render reads drag/zoom over the canvas and updates it).
 	graphViewState view.ViewState
@@ -472,8 +480,15 @@ func (inst *Widget[T]) renderTable() {
 // light up with AccentSubtle (the next-possible transitions) and the rest sit
 // in NeutralBorderFaint.
 func (inst *Widget[T]) renderGraph() {
-	if inst.graphLayout == nil && inst.graphLayoutErr == nil {
+	// The Machine topology can grow at runtime (Mirror/AddRule), so recompute
+	// the cached layout when the state/edge counts change. The `graphLayout ==
+	// nil` term also retries while no layout has been built yet, so a transient
+	// engine failure recovers on a later frame instead of sticking forever.
+	nodeN, edgeN := inst.machineTopology()
+	if inst.graphLayout == nil || nodeN != inst.graphTopoN || edgeN != inst.graphTopoE {
 		inst.graphLayout, inst.graphLayoutErr = inst.computeGraphLayout()
+		inst.graphTopoN, inst.graphTopoE = nodeN, edgeN
+		inst.graphIDToState = inst.buildIDToState()
 	}
 	if inst.graphLayoutErr != nil {
 		c.Label("graph layout unavailable: " + inst.graphLayoutErr.Error()).Send()
@@ -485,12 +500,7 @@ func (inst *Widget[T]) renderGraph() {
 
 	current := inst.machine.Current()
 	currentID := inst.stateNodeID(current)
-	// Reverse map node-id → state so the colour hooks can reach the Machine's
-	// per-state colour. Cheap to rebuild each frame (few states).
-	idToState := make(map[string]T)
-	for s := range inst.machine.States() {
-		idToState[inst.stateNodeID(s)] = s
-	}
+	idToState := inst.graphIDToState
 	nextEdgeColor := color.Hex(styletokens.AccentSubtle.AsHex())
 	restEdgeColor := color.Hex(styletokens.NeutralBorderFaint.AsHex())
 
@@ -523,7 +533,10 @@ func (inst *Widget[T]) renderGraph() {
 
 // computeGraphLayout builds the GraphModel from the Machine (states → nodes,
 // transitions → edges) and lays it out with the process-shared Graphviz
-// engine. Called once per widget; the result is cached on the receiver.
+// engine. Called by renderGraph whenever the cached layout is missing or the
+// topology changed; the result is cached on the receiver. States that share a
+// node id (same label) are merged by the engine, mirroring how the user reads
+// them as one state.
 func (inst *Widget[T]) computeGraphLayout() (*layeredgraph.Layout, error) {
 	eng, err := goccyengine.Shared()
 	if err != nil {
@@ -558,9 +571,31 @@ func (inst *Widget[T]) stateNodeID(s T) string {
 // graphIDBase namespaces this widget's canvas + sense-region ids so two FSM
 // graphs on screen do not collide. Derived from the per-instance scopeKey.
 func (inst *Widget[T]) graphIDBase() uint64 {
-	h := fnv.New64a()
-	_, _ = h.Write([]byte(inst.scopeKey))
-	return h.Sum64()
+	return xxh3.HashString(inst.scopeKey)
+}
+
+// machineTopology returns the current state and edge counts — a cheap,
+// allocation-free signal for detecting runtime topology growth (Mirror /
+// AddRule) so renderGraph can invalidate the cached layout.
+func (inst *Widget[T]) machineTopology() (nodes, edges int) {
+	for range inst.machine.States() {
+		nodes++
+	}
+	for range inst.machine.Edges() {
+		edges++
+	}
+	return
+}
+
+// buildIDToState maps each state's node id back to the state for the colour and
+// click hooks. Rebuilt only when the cached layout is (re)computed, not per
+// frame.
+func (inst *Widget[T]) buildIDToState() map[string]T {
+	m := make(map[string]T, inst.graphTopoN)
+	for s := range inst.machine.States() {
+		m[inst.stateNodeID(s)] = s
+	}
+	return m
 }
 
 // fsmGraphCanvas{W,H} size the painter canvas the layered graph is drawn into
