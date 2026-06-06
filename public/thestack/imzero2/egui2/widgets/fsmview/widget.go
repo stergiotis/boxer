@@ -491,7 +491,7 @@ func (inst *Widget[T]) renderGraph() {
 	nextEdgeColor := color.Hex(styletokens.AccentSubtle.AsHex())
 	restEdgeColor := color.Hex(styletokens.NeutralBorderFaint.AsHex())
 
-	view.Render(inst.graphIDBase(), inst.graphLayout, view.RenderOpts{
+	res := view.Render(inst.graphIDBase(), inst.graphLayout, view.RenderOpts{
 		CanvasW: fsmGraphCanvasW,
 		CanvasH: fsmGraphCanvasH,
 		NodeFill: func(id string) (color.Color, bool) {
@@ -507,6 +507,14 @@ func (inst *Widget[T]) renderGraph() {
 			return restEdgeColor, true
 		},
 	})
+
+	// Click a state node to drive the FSM to it, when that transition is
+	// declared from the current state (mirrors the "Drive the FSM" buttons).
+	if res.Clicked != "" {
+		if s, ok := idToState[res.Clicked]; ok && s != current && inst.machine.CanTransition(s) {
+			_ = inst.machine.Transition(s)
+		}
+	}
 }
 
 // computeGraphLayout builds the GraphModel from the Machine (states → nodes,
@@ -556,8 +564,8 @@ func (inst *Widget[T]) graphIDBase() uint64 {
 // 320px); the layout is fit-to-view into this rect. Responsive width tracking
 // is a follow-up.
 const (
-	fsmGraphCanvasW float32 = 400
-	fsmGraphCanvasH float32 = 320
+	fsmGraphCanvasW float32 = 380
+	fsmGraphCanvasH float32 = 280
 )
 
 // renderHistory emits the transition log newest-first. Each row reads as

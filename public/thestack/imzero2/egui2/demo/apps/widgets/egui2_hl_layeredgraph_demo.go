@@ -87,8 +87,18 @@ func demoLayeredGraph(ids *c.WidgetIdStack, st *layeredGraphDemoState) {
 		return
 	}
 
+	// Responsive width: fill the gallery panel's available width (captured
+	// from the previous frame; NaN until the first capture lands).
+	sm := c.CurrentApplicationState.StateManager
+	avail := sm.GetAvailableSize()
+	c.CaptureAvailableSize()
+	canvasW := float32(760)
+	if avail.W == avail.W && avail.W > 16 { // avail.W == avail.W rejects NaN
+		canvasW = avail.W - 8
+	}
+
 	res := view.Render(layeredGraphDemoIDBase, st.layout, view.RenderOpts{
-		CanvasW: 760,
+		CanvasW: canvasW,
 		CanvasH: 440,
 	})
 	if res.Clicked != "" {
