@@ -8,15 +8,16 @@ import (
 )
 
 // =============================================================================
-// canonicaltypeedit widget demo — canonical-type signature editor (ADR-0067
-// group/signature cut). A chip strip of primitive elements joined by '-'/'_'
-// separators; click a chip to edit that primitive in the shared bar+form
-// below; the 'live signature' chip is the embedded canonicaltypesummary
-// level-1, whose anchor toggle pops the full tethered inspector.
+// canonicaltypeedit widget demo — canonical-type editor (ADR-0067). It opens
+// on the common single-primitive case (bar + grammar-mirroring form, no
+// sequence chrome); '+ element' grows it into a group/signature, where a chip
+// strip with '-'/'_' separators appears (progressive disclosure). The 'live
+// type' row is the embedded canonicaltypesummary level-1 chip, whose anchor
+// toggle pops the full tethered inspector.
 //
 // Stateful: the SignatureModel is caller-owned, built in Init and rendered in
-// RenderStateful. Seeded to `u32-s_vc` (a two-group signature) so the chip
-// strip, separators, and a populated per-chip form all show.
+// RenderStateful. Seeded to `u32l` so the simple primitive view shows its
+// numeric controls populated (width, byte order = LE).
 // =============================================================================
 
 type ctEditDemoState struct {
@@ -28,21 +29,20 @@ func init() {
 		Name:     "canonicaltypeedit",
 		Category: "Leeway",
 		Title:    icons.PhBracketsAngle + " canonicaltypeedit",
-		Stage:    [2]float32{900, 640},
-		Flags:    registry.DemoFlagNeedsLargeArea,
+		Stage:    [2]float32{840, 580},
 		Kind:     registry.DemoKindMixed,
-		Description: "Editor for a leeway canonical-type signature (ADR-0067). " +
-			"A chip strip of primitive elements joined by '-' (same group) or '_' " +
-			"(new group); click a chip to edit that primitive in the shared bar+form " +
-			"below, where the free-text bar and the grammar-mirroring controls stay " +
-			"in sync (§SD2). Add / remove / select / separator-toggle build the " +
-			"signature; per-chip editing stays bidirectional. The 'live signature' " +
-			"row is the embedded canonicaltypesummary level-1 chip — validity dot + " +
-			"footprint over the whole signature, with an anchor toggle that pops the " +
-			"full tethered inspector. Chip reorder is deferred.",
+		Description: "Editor for a leeway canonical type (ADR-0067). It opens as a " +
+			"single primitive — just the free-text bar and the grammar-mirroring " +
+			"form, kept in sync (§SD2) — so the common case carries no sequence " +
+			"chrome. Click '+ element' to grow it into a group/signature: a chip " +
+			"strip appears with '-' (same group) / '_' (new group) separators, " +
+			"add / remove / select, and one shared bar+form editing the selected " +
+			"chip (bidirectional per chip). The 'live type' row is the embedded " +
+			"canonicaltypesummary level-1 chip, whose anchor toggle pops the full " +
+			"tethered inspector. Chip reorder is deferred.",
 		Init: func(_ *c.WidgetIdStack) (state any) {
 			m := canonicaltypeedit.NewSignatureModel()
-			m.SetCanonical("u32-s_vc")
+			m.SetCanonical("u32l")
 			return &ctEditDemoState{model: m}
 		},
 		RenderStateful: func(ids *c.WidgetIdStack, state any) {
@@ -53,7 +53,7 @@ func init() {
 }
 
 func demoCanonicalTypeEdit(ids *c.WidgetIdStack, st *ctEditDemoState) {
-	c.Label("Build a canonical-type signature — chips are elements, toggle '-'/'_' between them, click a chip to edit it; the 'live signature' chip pops the full inspector:").Send()
+	c.Label("Edit a canonical type — it opens as a single primitive (bar + form); click '+ element' to grow it into a group/signature (chips with '-'/'_' separators):").Send()
 	c.Separator().Horizontal().Send()
 	c.AddSpace(6)
 	st.model.Render(ids, "ctedit-demo")

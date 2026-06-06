@@ -89,6 +89,14 @@ is built structurally — `-`-runs become `NewGroupAstNode`, `_` splits into a
 `NewSignatureAstNode` — and the assembled canonical string drives the embedded
 summary chip. `SetCanonical` seeds the strip by splitting on `_` then `-`.
 
+**Progressive disclosure keeps the primitive case simple.** A single-element
+`SignatureModel` renders no sequence chrome at all — just the bar+form and a
+small `+ element` affordance — so editing one primitive (the common, important
+case) is indistinguishable from the bare `Model`. The chip strip (selector,
+separators, remove) appears only once a second element exists, and collapses
+back when removal returns the editor to one element. The status label likewise
+reads "live type" for a lone primitive and "live signature" once it grows.
+
 ## Deferred (ADR-0067)
 
 - **Groups / signatures.** The draft is one primitive; the planned next cut

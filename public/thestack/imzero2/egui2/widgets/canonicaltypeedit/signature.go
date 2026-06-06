@@ -161,8 +161,15 @@ func (sm *SignatureModel) Render(ids *c.WidgetIdStack, scopeKey string) {
 	for range c.IdScope(ids.PrepareStr(scopeKey)) {
 		for range c.Vertical().KeepIter() {
 			c.UiSetMinWidth(editorMinWidth)
-			changed := sm.renderChipStrip(ids)
-			c.Separator().Send()
+			var changed bool
+			// Progressive disclosure: the chip strip (selector + separators +
+			// remove) appears only once there is more than one element, so the
+			// common single-primitive case stays a bare bar+form editor with no
+			// sequence chrome.
+			if len(sm.elems) > 1 {
+				changed = sm.renderChipStrip(ids)
+				c.Separator().Send()
+			}
 			if sm.sel >= 0 && sm.sel < len(sm.elems) {
 				// Each element edits under its own id scope so switching the
 				// selected chip swaps the bar/form widget-id namespace (and thus
@@ -171,6 +178,18 @@ func (sm *SignatureModel) Render(ids *c.WidgetIdStack, scopeKey string) {
 					if sm.elems[sm.sel].prim.renderEditBody(ids) {
 						changed = true
 					}
+				}
+			}
+			if len(sm.elems) == 1 {
+				// A single, unobtrusive affordance to grow the lone primitive
+				// into a group/signature on demand — the chip strip then takes
+				// over from the next frame (and collapses back on remove).
+				c.AddSpace(4)
+				if c.Button(ids.PrepareStr("grow"), c.Atoms().Text("+ element").Keep()).
+					Small().SendResp().HasPrimaryClicked() {
+					sm.elems = append(sm.elems, &sigElem{prim: NewModel(), sep: grpSepByte})
+					sm.sel = len(sm.elems) - 1
+					changed = true
 				}
 			}
 			if changed {
@@ -234,6 +253,12 @@ func (sm *SignatureModel) renderChipStrip(ids *c.WidgetIdStack) (structureChange
 // canonicaltypesummary level-1 chip (validity dot + footprint + inspector
 // toggle over the whole signature).
 func (sm *SignatureModel) renderStatus(ids *c.WidgetIdStack) {
-	smallLabel("live signature")
+	// Name the readout for what it currently is: a single primitive until the
+	// editor grows into a multi-element group/signature.
+	label := "live type"
+	if len(sm.elems) > 1 {
+		label = "live signature"
+	}
+	smallLabel(label)
 	canonicaltypesummary.New("ctedit-sig-sum").Render(ids.PrepareSeq(sigSummarySeq), sm.canonical)
 }
