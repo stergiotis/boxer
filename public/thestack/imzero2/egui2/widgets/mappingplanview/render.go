@@ -117,7 +117,7 @@ func renderEditor(ids *c.WidgetIdStack, m *Model) {
 				hasRemove = true
 			}
 		}
-		c.AddSpace(4)
+		c.AddSpace(6)
 	}
 	if hasRemove {
 		m.removeByUID(removeUID)
@@ -150,10 +150,13 @@ func renderRow(ids *c.WidgetIdStack, m *Model, r *FieldRow) (remove bool) {
 		}
 		c.AddSpace(6)
 
-		// Framed body. The Vertical pins line stacking (a Frame inherits the
-		// surrounding Horizontal otherwise).
+		// Framed body — a bordered card so adjacent fields read as distinct
+		// (the category bar tints the left edge; the stroke closes the card).
+		// The Vertical pins line stacking (a Frame inherits the surrounding
+		// Horizontal otherwise).
 		for range c.Frame(ids.PrepareStr("body")).
 			Fill(color.Hex(styletokens.NeutralBgSurface.AsHex())).
+			Stroke(1, color.Hex(styletokens.NeutralBorderDefault.AsHex())).
 			InnerMargin(8).
 			CornerRadius(4).
 			KeepIter() {
