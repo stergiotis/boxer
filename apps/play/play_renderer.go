@@ -19,6 +19,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/inspector"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/pager"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker/evaluator"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -128,7 +129,7 @@ type PlayApp struct {
 	// Results pagination. pagerSeenExecuted tracks the QueryStore's
 	// "executed" timestamp — when it advances, the pager snaps back to
 	// page 0 because the dataset changed.
-	pager             *Pager
+	pager             *pager.Pager
 	pagerSeenExecuted time.Time
 
 	// Column-width cache, keyed by Arrow *Schema pointer. Widths are sampled
@@ -384,7 +385,7 @@ func NewPlayApp(client *Client, store *QueryStore, initialSQL string) *PlayApp {
 			BadgeTone(queryStateTone).
 			AutoAnchor(true),
 		colorByFeature: -1,
-		pager:          NewPager(pagerIds, int64(defaultPageSize)),
+		pager:          pager.New(pagerIds, int64(defaultPageSize)),
 		affordances: []sqlAffordanceI{
 			&multiMatchAffordance{},
 		},
