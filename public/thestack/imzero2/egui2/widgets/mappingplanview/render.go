@@ -20,17 +20,24 @@ type Input struct {
 	ScopeKey string
 	// Model is the editable state, mutated in place by the editor controls.
 	Model *Model
-	// Recompute rebuilds the preview from the Model. The host supplies it (it
-	// owns the mappingplan / marshallgen wiring); Render calls it at most once
-	// per frame, only when the Model is dirty, and the implementation reports
-	// back through Model.SetValid / Model.SetInvalid. May be nil (no preview).
+	// Recompute rebuilds the output panes from the Model. The host supplies it
+	// (it owns the mappingplan / marshallgen / dql wiring); Render calls it at
+	// most once per frame, only when the Model is dirty, reporting back through
+	// Model.SetOutputs / Model.SetInvalid. The host must also call it once at
+	// init so the dock's initial split has the output tab ids to place.
 	Recompute func(*Model)
 }
 
 const (
-	editorWidth   = 560 // left editor column width (its controls are fixed-width)
-	dockMinHeight = 360 // floor for the output dock so it has a bounded rect in a scrolling host
-	previewRows   = 30  // error-text TextEdit height, in rows
+	// editorTabID is the dock tab id of the editor pane. Reserved high so it
+	// never collides with host-supplied Output.TabID values (which start at 1).
+	editorTabID uint64 = 1 << 62
+
+	editorFrac    = 0.40 // fraction of the dock width the editor leaf keeps (left); outputs take the rest
+	dockMinHeight = 460  // floor so the dock has a bounded rect in the gallery's scroll host
+	fieldsPerPage = 3    // field cards shown per page before pagination controls appear
+	cardWidth     = 430  // uniform field-card content width
+	cardMinHeight = 128  // uniform field-card content min height (shorter cards pad up to it)
 	rowBarWidth   = 4
 )
 
@@ -53,43 +60,68 @@ func channelLabel(ch mappingplan.MembershipChannel) string {
 	return "lowCardRef"
 }
 
-// Render draws the playground and runs the host's Recompute when the Model has
-// changed since the last frame. Stateless apart from the Model it is handed;
-// call once per frame.
+// Render draws the whole widget as a single dock area: the editor pane on the
+// left and one generated-output pane (Go / SQL / JSON) per Output on the right.
+// The split is the initial preset — the user can drag panes around and the
+// layout persists (egui_dock). Call once per frame.
 func Render(in Input) {
 	m := in.Model
 	for range c.IdScope(in.Ids.PrepareStr(in.ScopeKey)) {
-		// Two columns in a plain Horizontal. Side panels (PanelLeftInside/
-		// PanelCentralInside) collapse inside the gallery's ScrollArea host —
-		// they need a CentralPanel-style region to claim space, which a scroll
-		// area doesn't provide — so the left panel took a degenerate width and
-		// clipped the editor. Instead: pin the editor column to its
-		// fixed-control width and leave the output column unconstrained, so the
-		// dock fills the remaining width (tour and wider gallery alike).
-		for range c.Horizontal().KeepIter() {
-			for range c.Vertical().KeepIter() {
-				c.UiSetMinWidth(editorWidth)
-				c.UiSetMaxWidth(editorWidth)
+		c.UiSetMinHeight(dockMinHeight) // bound the dock in a scrolling host (gallery)
+		for dock := range c.DockArea(in.Ids.PrepareStr("mpvdock")) {
+			// Initial layout (honoured once, on first dock_state construction):
+			// editor in the root leaf, the output panes split off to its right.
+			// The output ids come from the panes the host produced — populated
+			// by an initial Recompute before the first frame (see the demo Init);
+			// without that they would be empty here and the split would be lost.
+			root := dock.InitRoot(editorTabID)
+			if outIDs := paneTabIDs(m); len(outIDs) > 0 {
+				dock.Split(root, c.DockRight, editorFrac, outIDs...)
+			}
+
+			// Editor pane. SendRespVal bindings inside apply this frame's input
+			// during this tab's capture (pure-Go pointer writes), so the model
+			// reflects the edits before the recompute below.
+			for range dock.Tab(editorTabID, "plan") {
 				renderEditor(in.Ids, m)
 			}
 
-			// Recompute between the columns — pure Go, emits no UI — so the
-			// output reflects this frame's edits rather than last frame's.
+			// Recompute between the editor tab and the output tabs — pure Go,
+			// emits no UI — so the output panes show this frame's edits.
 			if m.dirty && in.Recompute != nil {
 				in.Recompute(m)
 				m.dirty = false
 			}
 
-			c.AddSpace(8)
-
-			for range c.Vertical().KeepIter() {
-				renderOutput(in.Ids, m)
+			// One dock tab per output pane. Format-agnostic: a new format is
+			// just another pane. The codeview job is rebuilt only on recompute
+			// (Model.SetOutputs); here CodeView splices its bytes into the frame.
+			for i := range m.panes {
+				p := &m.panes[i]
+				for range dock.Tab(p.out.TabID, p.out.Title) {
+					for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+						c.CodeView(in.Ids.PrepareSeq(p.out.TabID), p.job).Wrap().Send()
+					}
+				}
 			}
 		}
 	}
 }
 
+// paneTabIDs collects the current output pane tab ids for the initial split.
+func paneTabIDs(m *Model) []uint64 {
+	out := make([]uint64, 0, len(m.panes))
+	for i := range m.panes {
+		out = append(out, m.panes[i].out.TabID)
+	}
+	return out
+}
+
 func renderEditor(ids *c.WidgetIdStack, m *Model) {
+	renderVerdict(ids, m)
+	c.Separator().Send()
+
+	// Plan identity.
 	for rt := range c.RichTextLabel("plan") {
 		rt.Strong()
 	}
@@ -106,11 +138,36 @@ func renderEditor(ids *c.WidgetIdStack, m *Model) {
 	}
 	c.Separator().Send()
 
-	// Field rows, stacked directly in the column. (A bounded scroll area for
-	// long field lists is a v2 refinement.)
+	// Pagination: clamp the page, show controls only when there is more than
+	// one page, and render just the current page's field cards.
+	total := len(m.Fields)
+	pages := max((total+fieldsPerPage-1)/fieldsPerPage, 1)
+	if m.page >= pages {
+		m.page = pages - 1
+	}
+	if m.page < 0 {
+		m.page = 0
+	}
+	if pages > 1 {
+		for range c.Horizontal().KeepIter() {
+			if c.Button(ids.PrepareStr("pgprev"), c.Atoms().Text("prev").Keep()).SendResp().HasPrimaryClicked() && m.page > 0 {
+				m.page--
+			}
+			for rt := range c.RichTextLabel(fmt.Sprintf("page %d / %d  (%d fields)", m.page+1, pages, total)) {
+				rt.Small()
+			}
+			if c.Button(ids.PrepareStr("pgnext"), c.Atoms().Text("next").Keep()).SendResp().HasPrimaryClicked() && m.page < pages-1 {
+				m.page++
+			}
+		}
+	}
+
+	start := m.page * fieldsPerPage
+	end := min(start+fieldsPerPage, total)
 	var removeUID uint64
 	hasRemove := false
-	for _, r := range m.Fields {
+	for i := start; i < end; i++ {
+		r := m.Fields[i]
 		for range c.IdScope(ids.PrepareSeq(r.uid)) {
 			if renderRow(ids, m, r) {
 				removeUID = r.uid
@@ -125,12 +182,37 @@ func renderEditor(ids *c.WidgetIdStack, m *Model) {
 
 	if c.Button(ids.PrepareStr("add-field"), c.Atoms().Text("+ field").Keep()).SendResp().HasPrimaryClicked() {
 		m.AddRow()
+		m.page = (len(m.Fields) - 1) / fieldsPerPage // jump to the new field's page
 	}
 }
 
-// renderRow draws one field row — a category colour-bar + a framed body whose
-// header names the field and shows its assembled lw: tag — and returns true if
-// its remove button fired.
+// renderVerdict draws the PlanBuilder verdict at the top of the editor pane —
+// green "valid" or red "invalid" plus the full error text (read-only).
+func renderVerdict(ids *c.WidgetIdStack, m *Model) {
+	if m.Valid {
+		for rt := range c.RichTextLabelColored(
+			color.Hex(styletokens.SuccessDefault.AsHex()).Keep(),
+			color.Transparent.Keep(),
+			fmt.Sprintf("valid plan — %d field(s)", len(m.Fields))) {
+			rt.Strong()
+		}
+		return
+	}
+	for rt := range c.RichTextLabelColored(
+		color.Hex(styletokens.ErrorDefault.AsHex()).Keep(),
+		color.Transparent.Keep(),
+		"invalid: "+firstLine(m.ErrText)) {
+		rt.Strong()
+	}
+	m.viewBuf = m.ErrText
+	c.TextEdit(ids.PrepareStr("err"), m.viewBuf, true).
+		Interactive(false).
+		DesiredRows(4).
+		SendRespVal(&m.viewBuf)
+}
+
+// renderRow draws one field row as a fixed-size bordered card (uniform width +
+// min height so the cards line up) and returns true if its remove button fired.
 func renderRow(ids *c.WidgetIdStack, m *Model, r *FieldRow) (remove bool) {
 	// A const is a fixed scalar string declared on a `_` field: no Go field,
 	// no element shape, no explode. Normalise those off so the row stays valid
@@ -150,10 +232,10 @@ func renderRow(ids *c.WidgetIdStack, m *Model, r *FieldRow) (remove bool) {
 		}
 		c.AddSpace(6)
 
-		// Framed body — a bordered card so adjacent fields read as distinct
-		// (the category bar tints the left edge; the stroke closes the card).
-		// The Vertical pins line stacking (a Frame inherits the surrounding
-		// Horizontal otherwise).
+		// Framed body — a bordered, fixed-size card. UiSetMin/MaxWidth pins the
+		// width and UiSetMinHeight pads shorter cards so every field is the same
+		// size. The Vertical pins line stacking (a Frame inherits the
+		// surrounding Horizontal otherwise).
 		for range c.Frame(ids.PrepareStr("body")).
 			Fill(color.Hex(styletokens.NeutralBgSurface.AsHex())).
 			Stroke(1, color.Hex(styletokens.NeutralBorderDefault.AsHex())).
@@ -161,6 +243,9 @@ func renderRow(ids *c.WidgetIdStack, m *Model, r *FieldRow) (remove bool) {
 			CornerRadius(4).
 			KeepIter() {
 			for range c.Vertical().KeepIter() {
+				c.UiSetMinWidth(cardWidth)
+				c.UiSetMaxWidth(cardWidth)
+				c.UiSetMinHeight(cardMinHeight)
 				renderRowHeader(r, word, catCol)
 
 				// Go field + type (both meaningless for a const), and remove.
@@ -230,8 +315,6 @@ func renderRowHeader(r *FieldRow, word string, catCol styletokens.RGBA8) {
 // became invalid (e.g. by changing the shape) can always be backed out.
 func renderRowFlags(ids *c.WidgetIdStack, m *Model, r *FieldRow) {
 	isMulti := r.IsSlice || r.IsRoaring
-	// Shape is mutually exclusive (scalar / Option[T] / []T / roaring) and a
-	// const carries none of it.
 	optEnabled := !r.IsConst && (r.IsOption || (!r.IsSlice && !r.IsRoaring))
 	sliceEnabled := !r.IsConst && (r.IsSlice || (!r.IsOption && !r.IsRoaring))
 	roarEnabled := !r.IsConst && (r.IsRoaring || (!r.IsOption && !r.IsSlice))
@@ -330,56 +413,6 @@ func renderChannelCombo(ids *c.WidgetIdStack, m *Model, r *FieldRow) {
 				if r.Channel != ch {
 					r.Channel = ch
 					m.dirty = true
-				}
-			}
-		}
-	}
-}
-
-func renderOutput(ids *c.WidgetIdStack, m *Model) {
-	if m.Valid {
-		for rt := range c.RichTextLabelColored(
-			color.Hex(styletokens.SuccessDefault.AsHex()).Keep(),
-			color.Transparent.Keep(),
-			fmt.Sprintf("valid plan — %d field(s)", len(m.Fields))) {
-			rt.Strong()
-		}
-	} else {
-		for rt := range c.RichTextLabelColored(
-			color.Hex(styletokens.ErrorDefault.AsHex()).Keep(),
-			color.Transparent.Keep(),
-			"invalid: "+firstLine(m.ErrText)) {
-			rt.Strong()
-		}
-	}
-	c.Separator().Send()
-
-	if !m.Valid || len(m.panes) == 0 {
-		// Invalid: show the PlanBuilder / emit error as plain read-only text.
-		// viewBuf is a stable backing field for the TextEdit's id-keyed state.
-		m.viewBuf = m.ErrText
-		c.TextEdit(ids.PrepareStr("err"), m.viewBuf, true).
-			Interactive(false).
-			DesiredRows(previewRows).
-			SendRespVal(&m.viewBuf)
-		return
-	}
-
-	// Each generated output is a dock tab — draggable / splittable, layout
-	// persisted by egui_dock across frames. The loop is format-agnostic, so a
-	// new format (e.g. the dql SQL artefacts) is just another pane. Each job is
-	// rebuilt only on recompute (Model.SetOutputs); here CodeView splices its
-	// bytes into the frame. UiSetMinHeight gives the dock a bounded rect inside
-	// a scrolling host; AutoShrink(false,false) makes each tab's ScrollArea fill
-	// the pane (codeview uses the full width, scrollbar at the pane edge) and
-	// Wrap keeps long lines inside that width.
-	c.UiSetMinHeight(dockMinHeight)
-	for dock := range c.DockArea(ids.PrepareStr("outdock")) {
-		for i := range m.panes {
-			p := &m.panes[i]
-			for range dock.Tab(p.out.TabID, p.out.Title) {
-				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
-					c.CodeView(ids.PrepareSeq(p.out.TabID), p.job).Wrap().Send()
 				}
 			}
 		}

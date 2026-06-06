@@ -108,6 +108,7 @@ type Model struct {
 
 	dirty   bool   // an edit (or the initial seed) needs a Recompute
 	viewBuf string // stable backing string for the read-only error TextEdit
+	page    int    // current field-list page (pagination)
 }
 
 // NewModel returns an empty Model marked dirty so the first frame computes a

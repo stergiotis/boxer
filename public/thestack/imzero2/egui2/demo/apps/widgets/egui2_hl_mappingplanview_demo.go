@@ -47,6 +47,9 @@ func newMappingPlanViewState() *mappingPlanViewDemoState {
 
 	st := &mappingPlanViewDemoState{model: m}
 	st.ir, st.irErr = buildAnchorIR()
+	// Populate the output panes once up front so the dock's initial split (on
+	// the widget's first frame) has the output tab ids to place on the right.
+	st.recompute(m)
 	return st
 }
 
