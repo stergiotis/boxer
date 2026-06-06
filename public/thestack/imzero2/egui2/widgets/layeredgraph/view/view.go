@@ -229,9 +229,15 @@ func clampF64(v, lo, hi float64) float64 {
 	return v
 }
 
+// fitPad is the fraction of the canvas kept clear on each side when fitting,
+// so node strokes, the self-loop and edge labels (whose egui font metrics
+// differ slightly from Graphviz's layout estimate) don't clip at the edges.
+const fitPad = 0.06
+
 // fit computes the uniform scale + centring offset to map the layout's bounding
-// box into the target canvas, and the resulting canvas size. A non-positive or
-// degenerate target falls back to the layout's natural size at 1:1.
+// box into the target canvas (less a fitPad margin), and the resulting canvas
+// size. A non-positive or degenerate target falls back to the layout's natural
+// size at 1:1.
 func fit(lay *layeredgraph.Layout, targetW, targetH float32) (scale, offX, offY float64, canvasW, canvasH float32) {
 	w, h := lay.Width, lay.Height
 	if targetW <= 0 || targetH <= 0 || w <= 0 || h <= 0 {
@@ -249,6 +255,8 @@ func fit(lay *layeredgraph.Layout, targetW, targetH float32) (scale, offX, offY 
 	if sy < sx {
 		scale = sy
 	}
+	scale *= 1 - 2*fitPad // leave a margin on every side
+	// Centring uses the padded scale, so the margin is split evenly.
 	offX = (float64(targetW) - w*scale) / 2
 	offY = (float64(targetH) - h*scale) / 2
 	return scale, offX, offY, targetW, targetH
