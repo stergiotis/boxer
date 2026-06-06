@@ -7,6 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/pager"
 )
 
 // FieldRow is one editable row of a [Model]. Its fields mirror the inputs
@@ -108,13 +109,21 @@ type Model struct {
 
 	dirty   bool   // an edit (or the initial seed) needs a Recompute
 	viewBuf string // stable backing string for the read-only error TextEdit
-	page    int    // current field-list page (pagination)
+
+	// pager paginates the field list — the shared widget extracted from
+	// apps/play, configured for a short list: a small fixed page (cards don't
+	// virtualise, so a page must fit the editor pane), no page-size combo,
+	// "fields" unit.
+	pager *pager.Pager
 }
 
 // NewModel returns an empty Model marked dirty so the first frame computes a
 // preview. Seed it with AddRow.
 func NewModel(kind, packageName, kindType string) *Model {
-	return &Model{Kind: kind, PackageName: packageName, KindType: kindType, dirty: true}
+	return &Model{
+		Kind: kind, PackageName: packageName, KindType: kindType, dirty: true,
+		pager: pager.New(c.NewWidgetIdStack(), 3).WithUnit("fields").WithPageSizeCombo(false),
+	}
 }
 
 // AddRow appends a fresh row with a stable uid and returns it for the caller

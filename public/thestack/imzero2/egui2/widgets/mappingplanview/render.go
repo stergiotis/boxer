@@ -35,7 +35,6 @@ const (
 
 	editorFrac    = 0.40 // fraction of the dock width the editor leaf keeps (left); outputs take the rest
 	dockMinHeight = 460  // floor so the dock has a bounded rect in the gallery's scroll host
-	fieldsPerPage = 3    // field cards shown per page before pagination controls appear
 	cardWidth     = 430  // uniform field-card content width
 	cardMinHeight = 128  // uniform field-card content min height (shorter cards pad up to it)
 	rowBarWidth   = 4
@@ -138,32 +137,12 @@ func renderEditor(ids *c.WidgetIdStack, m *Model) {
 	}
 	c.Separator().Send()
 
-	// Pagination: clamp the page, show controls only when there is more than
-	// one page, and render just the current page's field cards.
-	total := len(m.Fields)
-	pages := max((total+fieldsPerPage-1)/fieldsPerPage, 1)
-	if m.page >= pages {
-		m.page = pages - 1
-	}
-	if m.page < 0 {
-		m.page = 0
-	}
-	if pages > 1 {
-		for range c.Horizontal().KeepIter() {
-			if c.Button(ids.PrepareStr("pgprev"), c.Atoms().Text("prev").Keep()).SendResp().HasPrimaryClicked() && m.page > 0 {
-				m.page--
-			}
-			for rt := range c.RichTextLabel(fmt.Sprintf("page %d / %d  (%d fields)", m.page+1, pages, total)) {
-				rt.Small()
-			}
-			if c.Button(ids.PrepareStr("pgnext"), c.Atoms().Text("next").Keep()).SendResp().HasPrimaryClicked() && m.page < pages-1 {
-				m.page++
-			}
-		}
-	}
-
-	start := m.page * fieldsPerPage
-	end := min(start+fieldsPerPage, total)
+	// Pagination via the shared pager widget (extracted from apps/play):
+	// Configure with the field total, draw the bar, then render the current
+	// page's cards from the pager's Range.
+	m.pager.Configure(int64(len(m.Fields)))
+	m.pager.Render()
+	start, end := m.pager.Range()
 	var removeUID uint64
 	hasRemove := false
 	for i := start; i < end; i++ {
@@ -182,7 +161,7 @@ func renderEditor(ids *c.WidgetIdStack, m *Model) {
 
 	if c.Button(ids.PrepareStr("add-field"), c.Atoms().Text("+ field").Keep()).SendResp().HasPrimaryClicked() {
 		m.AddRow()
-		m.page = (len(m.Fields) - 1) / fieldsPerPage // jump to the new field's page
+		m.pager.GoToLast() // jump to the new field's page
 	}
 }
 
