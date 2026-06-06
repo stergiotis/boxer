@@ -1,6 +1,8 @@
 package widgets
 
 import (
+	"encoding/json"
+
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshallgen"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -70,7 +72,18 @@ func recomputeMappingPlan(m *mappingplanview.Model) {
 		m.SetInvalid(err)
 		return
 	}
-	m.SetValid(string(out))
+	planJSON, err := json.MarshalIndent(plan, "", "  ")
+	if err != nil {
+		m.SetInvalid(err)
+		return
+	}
+	// Go codec now; the dql read-back artefacts (SQL presence / projection /
+	// validator) will slot in as further Outputs once that generator is wired
+	// (it needs an IR the Plan alone doesn't carry — see ADR-0066).
+	m.SetOutputs(
+		mappingplanview.Output{TabID: 1, Title: "Go codec", Lang: mappingplanview.LangGo, Source: string(out)},
+		mappingplanview.Output{TabID: 2, Title: "Plan IR", Lang: mappingplanview.LangJSON, Source: string(planJSON)},
+	)
 }
 
 // demoMappingPlanView renders the playground for the given per-window state.

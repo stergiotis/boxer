@@ -352,16 +352,7 @@ func renderOutput(ids *c.WidgetIdStack, m *Model) {
 	}
 	c.Separator().Send()
 
-	if m.Valid && m.hasJob {
-		// Syntax-highlighted Go. The codeview job is rebuilt only on recompute
-		// (Model.SetValid); here it is just spliced into the frame. CodeView
-		// has no intrinsic height, so a ScrollArea + UiSetMaxHeight bounds it,
-		// and Wrap keeps long lines inside the column width.
-		for range c.ScrollArea().Vscroll(true).KeepIter() {
-			c.UiSetMaxHeight(previewHeight)
-			c.CodeView(ids.PrepareStr("preview"), m.goCodeJob).Wrap().Send()
-		}
-	} else {
+	if !m.Valid || len(m.panes) == 0 {
 		// Invalid: show the PlanBuilder / emit error as plain read-only text.
 		// viewBuf is a stable backing field for the TextEdit's id-keyed state.
 		m.viewBuf = m.ErrText
@@ -370,6 +361,25 @@ func renderOutput(ids *c.WidgetIdStack, m *Model) {
 			DesiredRows(previewRows).
 			DesiredWidth(outputMinWidth - 16).
 			SendRespVal(&m.viewBuf)
+		return
+	}
+
+	// Each generated output is a dock tab — draggable / splittable, layout
+	// persisted by egui_dock across frames. The loop is format-agnostic, so a
+	// new format (e.g. the dql SQL artefacts) is just another pane. Each job is
+	// rebuilt only on recompute (Model.SetOutputs); here CodeView splices its
+	// bytes into the frame. CodeView has no intrinsic height, so a ScrollArea +
+	// UiSetMaxHeight bounds it and Wrap keeps long lines inside the tab width.
+	for dock := range c.DockArea(ids.PrepareStr("outdock")) {
+		for i := range m.panes {
+			p := &m.panes[i]
+			for range dock.Tab(p.out.TabID, p.out.Title) {
+				for range c.ScrollArea().Vscroll(true).KeepIter() {
+					c.UiSetMaxHeight(previewHeight)
+					c.CodeView(ids.PrepareSeq(p.out.TabID), p.job).Wrap().Send()
+				}
+			}
+		}
 	}
 }
 

@@ -100,17 +100,11 @@ type Model struct {
 
 	nextUID uint64
 
-	// Preview outputs, written by the host's Recompute via SetValid / SetInvalid.
-	GoPreview string // emitted Go source when Valid
-	ErrText   string // PlanBuilder / emit error when !Valid
-	Valid     bool
-
-	// goCodeJob is the syntax-highlighted Go codeview job built from GoPreview.
-	// It is rebuilt only on a successful recompute (Model.SetValid) — never per
-	// frame — and c.CodeView splices its bytes into each frame, so there is no
-	// retained-element accumulation. hasJob guards it.
-	goCodeJob typed.RetainedFffiHolderTyped[c.CodeViewJobS]
-	hasJob    bool
+	// panes are the generated output artifacts shown as dock tabs, set by the
+	// host's Recompute via SetOutputs; ErrText/Valid carry the verdict.
+	ErrText string // PlanBuilder / emit error when !Valid
+	Valid   bool
+	panes   []outputPane
 
 	dirty   bool   // an edit (or the initial seed) needs a Recompute
 	viewBuf string // stable backing string for the read-only error TextEdit
@@ -143,14 +137,55 @@ func (m *Model) removeByUID(uid uint64) {
 	}
 }
 
-// SetValid records a successful recompute: the emitted Go source, no error,
-// valid verdict. It (re)builds the syntax-highlighted codeview job here — the
-// recompute is dirty-gated, so this is once per edit, not per frame. Called by
-// the host's Recompute.
-func (m *Model) SetValid(goSrc string) {
-	m.GoPreview = goSrc
-	m.goCodeJob = codeview.BuildGo(goSrc)
-	m.hasJob = true
+// OutputLang selects the codeview syntax highlighter for an output pane.
+type OutputLang uint8
+
+const (
+	LangGo OutputLang = iota
+	LangSQL
+	LangJSON
+)
+
+// Output is one generated artifact the host hands the widget to show as a dock
+// tab. TabID must be stable across frames — it keys the persistent dock layout.
+// Adding a new output format (e.g. the dql SQL artefacts) is just another
+// Output; the widget code is format-agnostic.
+type Output struct {
+	TabID  uint64
+	Title  string
+	Lang   OutputLang
+	Source string
+}
+
+// outputPane pairs a host-declared Output with its built (highlighted) codeview
+// job.
+type outputPane struct {
+	out Output
+	job typed.RetainedFffiHolderTyped[c.CodeViewJobS]
+}
+
+// buildJob highlights src with the codeview highlighter for lang.
+func buildJob(lang OutputLang, src string) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
+	switch lang {
+	case LangSQL:
+		return codeview.BuildSql(src)
+	case LangJSON:
+		return codeview.BuildJson(src)
+	default:
+		return codeview.BuildGo(src)
+	}
+}
+
+// SetOutputs records a successful recompute: the generated output panes and a
+// valid verdict. The highlighted codeview job per pane is built here — the
+// recompute is dirty-gated, so once per edit, not per frame, and c.CodeView
+// splices each job's bytes into the frame (no retained-element accumulation).
+// Called by the host's Recompute.
+func (m *Model) SetOutputs(outs ...Output) {
+	m.panes = m.panes[:0]
+	for _, o := range outs {
+		m.panes = append(m.panes, outputPane{out: o, job: buildJob(o.Lang, o.Source)})
+	}
 	m.ErrText = ""
 	m.Valid = true
 }
@@ -158,8 +193,7 @@ func (m *Model) SetValid(goSrc string) {
 // SetInvalid records a failed recompute: the error text, no source, invalid
 // verdict. Called by the host's Recompute.
 func (m *Model) SetInvalid(err error) {
-	m.GoPreview = ""
-	m.hasJob = false
+	m.panes = m.panes[:0]
 	if err != nil {
 		m.ErrText = err.Error()
 	} else {
