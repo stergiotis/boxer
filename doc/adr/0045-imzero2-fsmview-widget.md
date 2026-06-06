@@ -198,6 +198,26 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 
 ## Updates
 
+### 2026-06-07 — Graph tab migrated to the layeredgraph engine (ADR-0069)
+
+The Graph view no longer uses the `egui_graphs` force-directed (FR+CG)
+binding. It now renders a **static layered (Sugiyama) layout** computed by
+Graphviz `dot` in-process (WebAssembly, cgo-free) via the `layeredgraph`
+package + `goccyengine`, painted through the existing painter binding
+([ADR-0069](0069-imzero2-layeredgraph-widget.md)). This realises the *layout*
+half of M4 (a richer graph layout) without forking statetrooper; the
+two-level chip + popup design — the core of this ADR — is unchanged. The
+references to `egui_graphs`, the FR/CG tunables and the first-frame pre-warm
+in the body above are superseded for the Graph tab.
+
+`renderGraph` builds a `layeredgraph.GraphModel` from the Machine
+(states→nodes by `NodeId`, transitions→edges), lays it out once and caches it
+— invalidated when the state/edge count changes, since `Mirror`/`AddRule` can
+grow the machine at runtime — and paints via `view.Render`, which adds
+interactive pan/zoom, hover/click hit-testing and click-to-transition.
+Same-label states (colliding `NodeId`) merge to one node rather than failing
+the view. The `graphPrewarmed` flag and the FR constants are removed.
+
 ### 2026-05-23 — M3a-ii landed (auto-anchor via R20 pointer)
 
 `fetchR20Pointer` added in `egui2_definition_d_fetchers.go`. Returns

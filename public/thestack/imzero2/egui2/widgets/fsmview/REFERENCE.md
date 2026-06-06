@@ -10,7 +10,7 @@ status: draft
 
 # widgets/fsmview — public API reference
 
-Two-level finite-state-machine viewer for the ImZero2 framework. Level 1 is a compact chip showing the current state; level 2 is a click-to-pin floating popup with Table / Graph (egui_graphs FR+CG) / History views. Couples tightly to [`hishamk/statetrooper`](https://pkg.go.dev/github.com/hishamk/statetrooper) through a thin `Machine[T comparable]` wrapper — see [ADR-0045](../../../../../../doc/adr/0045-imzero2-fsmview-widget.md) for the design rationale and milestone plan.
+Two-level finite-state-machine viewer for the ImZero2 framework. Level 1 is a compact chip showing the current state; level 2 is a click-to-pin floating popup with Table / Graph (static Graphviz layered layout, in-process WASM — [ADR-0069](../../../../../../doc/adr/0069-imzero2-layeredgraph-widget.md)) / History views. Couples tightly to [`hishamk/statetrooper`](https://pkg.go.dev/github.com/hishamk/statetrooper) through a thin `Machine[T comparable]` wrapper — see [ADR-0045](../../../../../../doc/adr/0045-imzero2-fsmview-widget.md) for the design rationale and milestone plan.
 
 ## Types
 
@@ -97,10 +97,11 @@ Build a viewer bound to the given machine. Panics on nil `ids`, nil `m`, or empt
 | Chip click | `widgets/badge` `.SendResp().HasPrimaryClicked()`; toggles `popupOpen`. | one frame |
 | Popup title-bar X | `c.Window.OpenBound(win.Id())` + per-frame `StateManager.AddR10Databinding(win.Id(), &popupOpen)`. egui-native two-way binding (per `feedback_egui_native_affordances`). | one frame |
 | Tab switch | `c.SelectableLabel(...).SendResp().HasPrimaryClicked()`. | one frame |
-| Graph drag / hover / pan / zoom | `c.Graph` interaction flags. | per egui_graphs |
+| Graph node hover / click | per-node `PaintSenseRegion` in `layeredgraph/view`; clicking a state drives the FSM there when that transition is declared. | one frame |
+| Graph pan / zoom | drag (global pointer) + zoom gesture (`GetZoomDelta`) over the painter canvas. | one frame |
 | Active state highlight | `defaultStateColor` returns `AccentDefault` for current, `NeutralSubtle` otherwise. Overridable via [`WithStateColor`]. | none |
 | Next-possible edge highlight | Edges leaving the current state are tinted `AccentSubtle`; others tinted `NeutralBorderFaint`. | none |
-| Graph pre-warm | First-frame `.ResetLayout().FastForwardSteps(200)` (tracked via per-Widget `graphPrewarmed` flag) so FR converges before the operator sees the graph. | none |
+| Graph layout | Static Graphviz layout computed once via `layeredgraph`/`goccyengine`, cached on the Widget and recomputed only when the state/edge count changes. | none |
 
 ## Conventions
 
@@ -136,7 +137,7 @@ for range c.Window(...).KeepIter() {
 
 - **AutoAnchor follows the cursor, not the chip's bottom-left** — the R20 pointer fetcher gives us the click position, which is *near* the chip but not its precise bottom-left corner. True bottom-left anchoring would need a widget-rect fetcher (recording every widget's `response.rect` keyed by id) — substantial Rust-side change; not yet scoped.
 - **statetrooper is not hierarchical** — surfaces that need substates (nested workflows) will either fork statetrooper locally or migrate to a richer FSM lib. M4 in the ADR.
-- **Per-frame egui_graphs cost** — when the Graph tab is selected, force-directed simulation runs every frame even after convergence. Acceptable at <20 nodes; promote `LayoutRunning` to a knob if a caller needs to pin a converged layout.
+- **Graph layout is static** — the Graph tab lays out via Graphviz (in-process WASM) once and caches it, recomputing only when the topology (state/edge count) changes; there is no per-frame simulation. Pan/zoom is interactive; states sharing a label merge to one node (see [ADR-0069](../../../../../../doc/adr/0069-imzero2-layeredgraph-widget.md)).
 
 ## See also
 
