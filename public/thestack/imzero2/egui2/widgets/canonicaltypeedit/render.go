@@ -79,33 +79,43 @@ func (m *Model) Render(ids *c.WidgetIdStack, scopeKey string) {
 	for range c.IdScope(ids.PrepareStr(scopeKey)) {
 		for range c.Vertical().KeepIter() {
 			c.UiSetMinWidth(editorMinWidth)
-
-			barChanged := m.renderBar(ids)
-			c.Separator().Send()
-			formChanged := m.renderForm(ids)
-
-			// Edge ownership: at most one side was edited this frame.
-			switch {
-			case barChanged:
-				if n, err := parsePrimitive(m.barBuf); err != nil {
-					// Keep the draft + buffer so a mid-typing intermediate
-					// survives; just surface the headline.
-					m.barErr = firstLine(err.Error())
-				} else {
-					m.barErr = ""
-					m.nodeToDraft(n)
-					m.rebuildFromDraft()
-				}
-			case formChanged:
-				m.barErr = ""
-				m.rebuildFromDraft()
-				m.barBuf = m.canonical
-			}
-
+			m.renderEditBody(ids)
 			c.Separator().Send()
 			m.renderStatus(ids)
 		}
 	}
+}
+
+// renderEditBody draws the formula bar + structured form and applies the
+// ADR-0067 §SD2 edge-ownership sync, mutating the draft in place. It assumes
+// the caller has already opened an IdScope and a layout container. Returns
+// whether the type changed this frame — the signature editor uses this to know
+// when to reassemble.
+func (m *Model) renderEditBody(ids *c.WidgetIdStack) (changed bool) {
+	barChanged := m.renderBar(ids)
+	c.Separator().Send()
+	formChanged := m.renderForm(ids)
+
+	// Edge ownership: at most one side was edited this frame.
+	switch {
+	case barChanged:
+		if n, err := parsePrimitive(m.barBuf); err != nil {
+			// Keep the draft + buffer so a mid-typing intermediate survives;
+			// just surface the headline.
+			m.barErr = firstLine(err.Error())
+		} else {
+			m.barErr = ""
+			m.nodeToDraft(n)
+			m.rebuildFromDraft()
+		}
+		changed = true
+	case formChanged:
+		m.barErr = ""
+		m.rebuildFromDraft()
+		m.barBuf = m.canonical
+		changed = true
+	}
+	return
 }
 
 // renderBar draws the free-text formula bar and reports whether it changed

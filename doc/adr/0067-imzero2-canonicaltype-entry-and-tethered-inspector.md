@@ -132,3 +132,14 @@ Two `registry.Demo{}` entries, Category `"Leeway"`, seeded from `sample/ct_sampl
 - **Level-2 tab set** — Layout + Members + Go-codec. Grammar parse-tree deferred. A CBOR/wire-hex tab was considered and **dropped as unnecessary** — not planned.
 - **Names** — `canonicaltypeedit` / `canonicaltypesummary` (the `*summary` suffix matches distsummary/regexsummary; the `canonicaltype*` prefix stays greppable to the package).
 - **Summary input** — canonical `string` primary (regexsummary-style); an `AstNodeI` overload (`.Ast()`) is deferred until a caller holds a parsed node.
+
+## Updates
+
+### 2026-06-06 — group/signature cut implemented
+
+The deferred composition cut landed; the core design above is unchanged.
+
+- **`canonicaltypesummary`** now parses full signatures: `parseType` splits the canonical string on the `_` separator, parses each segment as a primitive-or-group, and wraps them in `NewSignatureAstNode` (staying on the exported API — no grammar-internal walk; it assumes the canonical `_` form, which is what `String()` and the editor emit). `generateGoSource` emits a `NewSignatureAstNode` over `NewGroupAstNode`/primitive literals. The Layout/Members tabs flatten members via `IterateMembers` (the total footprint stays correct); **drawing the `-`/`_` boundaries in the strip is deferred**.
+- **`canonicaltypeedit`** gains `SignatureModel`: a **chip strip** of primitive elements joined by `-`/`_` separators, with one shared bar+form editing the selected chip. The interaction is the **chip/pill builder** option (builder-primary outer; per-chip editing stays bidirectional). The single-primitive `Model` is retained and reused as each element's editor — its bar+form+sync was extracted into `renderEditBody`. The assembled AST is built structurally on `rebuild` (`-`-runs → groups, `_` → signature).
+- **Still deferred:** chip **reorder** (add/remove/select/separator-toggle are in); full bidirectional sync at the whole-signature scale (the outer level is builder-primary); the `AstNodeI` (`.Ast()`) summary overload; drawing group boundaries in the Layout strip; copy-to-clipboard.
+- **Verified** by the gallery capture: `canonicaltypeedit.png` shows `[u32]-[s]_[vc]` with the `u32` element's numeric form and a live `u32-s_vc · 3 fields · 9 B+var` summary chip.

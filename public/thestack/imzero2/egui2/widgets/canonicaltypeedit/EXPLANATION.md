@@ -68,9 +68,26 @@ inspector for the type being edited. The editor thus consumes step 1 directly.
 
 ## API
 
-Caller-owned `Model`: `NewModel()` (seeded `u32`), `Render(ids, scopeKey)`
-once per frame, and the read-backs `Canonical()`, `Node()`, `Valid()`.
-`SetCanonical(s)` seeds from a string (no-op on parse failure).
+Two caller-owned models:
+
+- `Model` — the single-primitive editor: `NewModel()` (seeded `u32`),
+  `Render(ids, scopeKey)`, the read-backs `Canonical()` / `Node()` / `Valid()`,
+  and `SetCanonical(s)` (no-op on parse failure).
+- `SignatureModel` — the composition editor (group/signature cut). Same
+  `NewSignatureModel()` / `Render` / `Canonical` / `Node` / `Valid` /
+  `SetCanonical` surface; it reuses `Model` as each element's editor (the
+  bar+form `renderEditBody` is shared).
+
+## Composition: groups & signatures (SignatureModel)
+
+`SignatureModel` builds a signature as a **chip strip**: each chip is a
+primitive element (edited by the shared `Model` bar+form when selected),
+separated from the next by `-` (same group) or `_` (new group), with add /
+remove / select / separator-toggle. The outer level is builder-primary (you
+assemble via chips); per-chip editing stays bidirectional. On `rebuild` the AST
+is built structurally — `-`-runs become `NewGroupAstNode`, `_` splits into a
+`NewSignatureAstNode` — and the assembled canonical string drives the embedded
+summary chip. `SetCanonical` seeds the strip by splitting on `_` then `-`.
 
 ## Deferred (ADR-0067)
 

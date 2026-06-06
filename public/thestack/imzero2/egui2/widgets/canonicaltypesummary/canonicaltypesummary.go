@@ -20,11 +20,10 @@
 //     [inspector.ProvenanceChip]. A bezier connector (via
 //     [inspector.AnchorTether]) tethers the toggle to the open window.
 //
-// Input is the canonical string; it is parsed once per change via
-// [canonicaltypes.Parser.ParsePrimitiveTypeOrGroupAst] (primitive or flat
-// group). A full-signature ('_'-separated) parse path and an AstNodeI
-// overload are deferred per ADR-0067. The widget is read-only — editing a
-// type is [canonicaltypeedit]'s job.
+// Input is the canonical string; it is parsed once per change into a primitive,
+// a flat group, or a signature (groups joined by '_'). An AstNodeI overload is
+// deferred per ADR-0067. The widget is read-only — editing a type is
+// [canonicaltypeedit]'s job.
 //
 // Each idPrefix combined with the per-call idGen scope names one logical
 // instance: the pinned open/closed flag, the selected tab, the cached parse,

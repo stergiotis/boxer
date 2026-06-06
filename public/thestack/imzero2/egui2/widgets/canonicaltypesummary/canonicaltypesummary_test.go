@@ -103,6 +103,37 @@ func TestParseTypeRejectsGarbage(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// TestParseTypeSignature pins the signature (group-joined-by-'_') parse path:
+// "u32-s_v" is two groups (u32-s and v) and round-trips through String().
+func TestParseTypeSignature(t *testing.T) {
+	ast, err := parseType("u32-s_v")
+	require.NoError(t, err)
+	assert.True(t, ast.IsSignature())
+	assert.Equal(t, "u32-s_v", ast.String())
+}
+
+// TestFootprintSignature confirms members are summed across group boundaries:
+// u32(4) + s(var) + v(4) → 8 B fixed + variable, 3 members.
+func TestFootprintSignature(t *testing.T) {
+	ast, err := parseType("u32-s_v")
+	require.NoError(t, err)
+	fixedBytes, anyVar, count := footprint(ast)
+	assert.Equal(t, 8, fixedBytes)
+	assert.True(t, anyVar)
+	assert.Equal(t, 3, count)
+}
+
+// TestGenerateGoSourceSignature pins the signature codegen shape: a
+// NewSignatureAstNode wrapping a NewGroupAstNode and a bare primitive.
+func TestGenerateGoSourceSignature(t *testing.T) {
+	ast, err := parseType("u32-s_v")
+	require.NoError(t, err)
+	src := generateGoSource(ast)
+	assert.True(t, strings.HasPrefix(src, "canonicaltypes.NewSignatureAstNode([]canonicaltypes.AstNodeI{"), "src=%q", src)
+	assert.Contains(t, src, "canonicaltypes.NewGroupAstNode(")
+	assert.Contains(t, src, "canonicaltypes.NetworkTypeAstNode{")
+}
+
 // TestGenerateGoSourcePrimitive pins the primitive codegen shape: one
 // qualified struct literal carrying the decoded fields.
 func TestGenerateGoSourcePrimitive(t *testing.T) {

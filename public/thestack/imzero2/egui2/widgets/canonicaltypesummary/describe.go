@@ -17,14 +17,30 @@ var (
 	pkgParserMu sync.Mutex
 )
 
-// parseType parses a canonical string into an AST. It accepts a single
-// primitive or a flat group ('-'-separated); full '_'-separated signatures
-// are not parsed from a string in this cut (ADR-0067 defers the signature /
-// AstNodeI path).
+// parseType parses a canonical string into an AST: a single primitive, a flat
+// group ('-'-separated), or a signature (groups joined by the canonical '_'
+// separator). The signature case is handled by splitting on the separator and
+// parsing each segment as a primitive-or-group, which keeps this widget on the
+// exported API (no grammar-internal walk); it assumes the canonical '_' form,
+// which is what String() and the editor emit.
 func parseType(s string) (ast canonicaltypes.AstNodeI, err error) {
 	pkgParserMu.Lock()
 	defer pkgParserMu.Unlock()
-	ast, err = pkgParser.ParsePrimitiveTypeOrGroupAst(s)
+	if !strings.Contains(s, canonicaltypes.SignatureSeparator) {
+		ast, err = pkgParser.ParsePrimitiveTypeOrGroupAst(s)
+		return
+	}
+	parts := strings.Split(s, canonicaltypes.SignatureSeparator)
+	members := make([]canonicaltypes.AstNodeI, 0, len(parts))
+	for _, p := range parts {
+		var n canonicaltypes.AstNodeI
+		n, err = pkgParser.ParsePrimitiveTypeOrGroupAst(p)
+		if err != nil {
+			return
+		}
+		members = append(members, n)
+	}
+	ast = canonicaltypes.NewSignatureAstNode(members)
 	return
 }
 
@@ -144,22 +160,45 @@ func footprint(ast canonicaltypes.AstNodeI) (fixedBytes int, anyVar bool, count 
 	return
 }
 
-// generateGoSource renders the AST as compilable Go using each primitive's
-// [canonicaltypes.PrimitiveAstNodeI.GenerateGoCode]. A bare primitive emits a
-// single qualified struct literal; a group is wrapped in
-// [canonicaltypes.NewGroupAstNode].
+// generateGoSource renders the AST as compilable Go. A signature becomes a
+// [canonicaltypes.NewSignatureAstNode] over its group/primitive members; a
+// group becomes a [canonicaltypes.NewGroupAstNode] over primitive literals; a
+// bare primitive becomes a single qualified struct literal (each primitive via
+// [canonicaltypes.PrimitiveAstNodeI.GenerateGoCode]).
 func generateGoSource(ast canonicaltypes.AstNodeI) string {
+	sig, ok := ast.(canonicaltypes.SignatureAstNode)
+	if !ok {
+		return goGroupOrPrimitive(ast)
+	}
+	var b strings.Builder
+	b.WriteString("canonicaltypes.NewSignatureAstNode([]canonicaltypes.AstNodeI{\n")
+	for g := range sig.IterateGroupMembers() {
+		b.WriteString("\t")
+		b.WriteString(goGroupOrPrimitive(g))
+		b.WriteString(",\n")
+	}
+	b.WriteString("})")
+	return b.String()
+}
+
+// goGroupOrPrimitive renders one signature element: a primitive as a qualified
+// struct literal, or a group as a NewGroupAstNode over its primitive literals.
+func goGroupOrPrimitive(ast canonicaltypes.AstNodeI) string {
 	var b strings.Builder
 	if p, ok := ast.(canonicaltypes.PrimitiveAstNodeI); ok {
 		b.WriteString("canonicaltypes.")
 		_ = p.GenerateGoCode(&b)
 		return b.String()
 	}
-	b.WriteString("canonicaltypes.NewGroupAstNode([]canonicaltypes.PrimitiveAstNodeI{\n")
+	b.WriteString("canonicaltypes.NewGroupAstNode([]canonicaltypes.PrimitiveAstNodeI{")
+	first := true
 	for m := range ast.IterateMembers() {
-		b.WriteString("\tcanonicaltypes.")
+		if !first {
+			b.WriteString(", ")
+		}
+		first = false
+		b.WriteString("canonicaltypes.")
 		_ = m.GenerateGoCode(&b)
-		b.WriteString(",\n")
 	}
 	b.WriteString("})")
 	return b.String()
