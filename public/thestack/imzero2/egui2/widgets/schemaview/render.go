@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/canonicaltypesummary"
 )
 
 // Input is the per-frame render request. The widget is pure: it renders the
@@ -156,73 +157,101 @@ func colRow(ids *c.WidgetIdStack, m *Model, id, text string, sel selection) {
 	}
 }
 
-// renderDetail draws the property pane for the current selection as a
-// two-column grid (weak label · monospace value).
+// renderDetail draws the property pane for the current selection: a name
+// header, the canonical-type inspector (for columns), and a two-column grid
+// of the remaining facts (weak label · monospace value).
 func renderDetail(ids *c.WidgetIdStack, m *Model) {
 	t := m.Table
-	for range c.Grid(ids.PrepareStr("detail")).NumColumns(2).KeepIter() {
-		switch m.sel.kind {
-		case selPlainColumn:
-			i := m.sel.plainCol
-			if i < 0 || i >= len(t.PlainValuesNames) {
-				gridRow("selection", "—")
-				break
-			}
-			it := t.PlainValuesItemTypes[i]
-			ct := t.PlainValuesTypes[i]
-			gridRow("name", t.PlainValuesNames[i].String())
+	switch m.sel.kind {
+	case selPlainColumn:
+		i := m.sel.plainCol
+		if i < 0 || i >= len(t.PlainValuesNames) {
+			detailEmpty()
+			return
+		}
+		it := t.PlainValuesItemTypes[i]
+		detailHeader(t.PlainValuesNames[i].String())
+		renderTypeBlock(ids, t.PlainValuesTypes[i])
+		for range c.Grid(ids.PrepareStr("detail")).NumColumns(2).KeepIter() {
 			gridRow("scope", plainScope(it))
 			gridRow("item type", it.String())
 			gridRow("kind", "value column")
-			gridRow("type", typeChip(ct))
-			gridRow("decoded", typeDecompose(ct))
-			gridRow("shape", scalarShape(ct))
 			gridRow("enc hints", joinAspects(encHintList(t.PlainValuesEncodingHints[i])))
 			gridRow("semantics", joinAspects(valSemList(t.PlainValuesValueSemantics[i])))
+		}
 
-		case selSectionColumn:
-			si, ci := m.sel.section, m.sel.col
-			if si < 0 || si >= len(t.TaggedValuesSections) {
-				gridRow("selection", "—")
-				break
-			}
-			sec := &t.TaggedValuesSections[si]
-			if ci < 0 || ci >= len(sec.ValueColumnNames) {
-				gridRow("selection", "—")
-				break
-			}
-			ct := sec.ValueColumnTypes[ci]
-			gridRow("name", sec.ValueColumnNames[ci].String())
+	case selSectionColumn:
+		si, ci := m.sel.section, m.sel.col
+		if si < 0 || si >= len(t.TaggedValuesSections) {
+			detailEmpty()
+			return
+		}
+		sec := &t.TaggedValuesSections[si]
+		if ci < 0 || ci >= len(sec.ValueColumnNames) {
+			detailEmpty()
+			return
+		}
+		detailHeader(sec.ValueColumnNames[ci].String())
+		renderTypeBlock(ids, sec.ValueColumnTypes[ci])
+		for range c.Grid(ids.PrepareStr("detail")).NumColumns(2).KeepIter() {
 			gridRow("scope", "tagged")
 			gridRow("kind", "value column")
-			gridRow("type", typeChip(ct))
-			gridRow("decoded", typeDecompose(ct))
-			gridRow("shape", scalarShape(ct))
 			gridRow("enc hints", joinAspects(encHintList(sec.ValueEncodingHints[ci])))
 			gridRow("semantics", joinAspects(valSemList(sec.ValueSemantics[ci])))
 			gridRow("— section —", sec.Name.String())
 			gridRow("membership", sec.MembershipSpec.String())
 			gridRow("co-group", strOrDash(string(sec.CoSectionGroup)))
 			gridRow("streaming", strOrDash(string(sec.StreamingGroup)))
+		}
 
-		case selSection:
-			si := m.sel.section
-			if si < 0 || si >= len(t.TaggedValuesSections) {
-				gridRow("selection", "—")
-				break
-			}
-			sec := &t.TaggedValuesSections[si]
-			gridRow("section", sec.Name.String())
+	case selSection:
+		si := m.sel.section
+		if si < 0 || si >= len(t.TaggedValuesSections) {
+			detailEmpty()
+			return
+		}
+		sec := &t.TaggedValuesSections[si]
+		detailHeader(sec.Name.String())
+		for range c.Grid(ids.PrepareStr("detail")).NumColumns(2).KeepIter() {
+			gridRow("kind", "tagged section")
 			gridRow("membership", sec.MembershipSpec.String())
 			gridRow("use aspects", joinAspects(useAspList(sec.UseAspects)))
 			gridRow("co-group", strOrDash(string(sec.CoSectionGroup)))
 			gridRow("streaming", strOrDash(string(sec.StreamingGroup)))
 			gridRow("value cols", strconv.Itoa(len(sec.ValueColumnNames)))
-
-		default:
-			gridRow("selection", "select a node")
 		}
+
+	default:
+		detailEmpty()
 	}
+}
+
+func detailHeader(name string) {
+	for rt := range c.RichTextLabel(name) {
+		rt.Strong().Size(15)
+	}
+}
+
+func detailEmpty() {
+	for rt := range c.RichTextLabel("select a node") {
+		rt.Weak()
+	}
+}
+
+// renderTypeBlock shows the column's canonical type via the
+// canonicaltypesummary inspector (ADR-0067): a compact level-1 line —
+// canonical string · validity dot · footprint trailer — that tethers into a
+// Layout / Members / Go-codec popup, replacing a hand-rolled decomposition.
+// One persistent instance (stable idPrefix + idGen) tracks whichever column
+// is selected.
+func renderTypeBlock(ids *c.WidgetIdStack, ct canonicaltypes.PrimitiveAstNodeI) {
+	for rt := range c.RichTextLabel("canonical type") {
+		rt.Weak().Small()
+	}
+	for range c.Horizontal().KeepIter() {
+		canonicaltypesummary.New("schemaview-coltype").Render(ids.PrepareStr("cts-col"), canonicalOf(ct))
+	}
+	c.AddSpace(4)
 }
 
 // --- formatting helpers ---
@@ -245,7 +274,7 @@ func gridRow(lbl, value string) {
 	c.EndRow()
 }
 
-// typeChip is the terse canonical-type form shown on a column row.
+// typeChip is the terse canonical-type form shown on a navigator row.
 func typeChip(ct canonicaltypes.PrimitiveAstNodeI) string {
 	if ct == nil {
 		return "—"
@@ -253,65 +282,14 @@ func typeChip(ct canonicaltypes.PrimitiveAstNodeI) string {
 	return ct.String()
 }
 
-// typeFamily names the canonical-type family via the interface predicates.
-func typeFamily(ct canonicaltypes.PrimitiveAstNodeI) string {
-	switch {
-	case ct == nil:
-		return ""
-	case ct.IsMachineNumericNode():
-		return "machine-numeric"
-	case ct.IsStringNode():
-		return "string"
-	case ct.IsTemporalNode():
-		return "temporal"
-	case ct.IsNetworkNode():
-		return "network"
-	}
-	return "unknown"
-}
-
-// typeDecompose breaks a canonical type into its components, family-specific.
-// Falls back to the family name when the concrete node type is unrecognised.
-func typeDecompose(ct canonicaltypes.PrimitiveAstNodeI) string {
+// canonicalOf is the terse canonical string handed to the type inspector;
+// "" for a nil type, which canonicaltypesummary renders as an empty-type
+// placeholder.
+func canonicalOf(ct canonicaltypes.PrimitiveAstNodeI) string {
 	if ct == nil {
 		return ""
 	}
-	var parts []string
-	switch n := ct.(type) {
-	case canonicaltypes.MachineNumericTypeAstNode:
-		parts = nonEmpty(n.BaseType.String(), n.Width.String(), n.ByteOrderModifier.String(), n.ScalarModifier.String())
-	case canonicaltypes.StringAstNode:
-		parts = nonEmpty(n.BaseType.String(), n.WidthModifier.String(), n.Width.String(), n.ScalarModifier.String())
-	case canonicaltypes.TemporalTypeAstNode:
-		parts = nonEmpty(n.BaseType.String(), n.Width.String(), n.ScalarModifier.String())
-	case canonicaltypes.NetworkTypeAstNode:
-		parts = nonEmpty(n.BaseType.String(), n.CIDRModifier.String(), n.ScalarModifier.String())
-	}
-	if len(parts) == 0 {
-		return typeFamily(ct)
-	}
-	return strings.Join(parts, " · ")
-}
-
-// scalarShape reports scalar / homogenous array / set, derived from the
-// canonical type's trailing scalar-modifier in its terse form.
-func scalarShape(ct canonicaltypes.PrimitiveAstNodeI) string {
-	if ct == nil {
-		return "—"
-	}
-	if ct.IsScalar() {
-		return "scalar"
-	}
-	s := ct.String()
-	if len(s) > 0 {
-		switch s[len(s)-1] {
-		case 'h':
-			return "homogenous array"
-		case 'm':
-			return "set"
-		}
-	}
-	return "non-scalar"
+	return ct.String()
 }
 
 // membershipBadge renders the section's MembershipSpec cardinality classes
@@ -397,17 +375,4 @@ func strOrDash(s string) string {
 		return "—"
 	}
 	return s
-}
-
-// nonEmpty drops empty / none-marker components ("", "-", "0", "<none>") so a
-// decomposed type line reads cleanly.
-func nonEmpty(parts ...string) (out []string) {
-	for _, p := range parts {
-		switch p {
-		case "", "-", "0", "<none>":
-			continue
-		}
-		out = append(out, p)
-	}
-	return
 }
