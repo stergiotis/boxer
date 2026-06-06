@@ -28,10 +28,10 @@ type Input struct {
 }
 
 const (
-	editorPanelWidth = 540 // left side-panel default width (resizable)
-	dockMinHeight    = 360 // floor for the output dock so it has a bounded rect in a scrolling host
-	previewRows      = 30  // error-text TextEdit height, in rows
-	rowBarWidth      = 4
+	editorWidth   = 560 // left editor column width (its controls are fixed-width)
+	dockMinHeight = 360 // floor for the output dock so it has a bounded rect in a scrolling host
+	previewRows   = 30  // error-text TextEdit height, in rows
+	rowBarWidth   = 4
 )
 
 // channelChoices is the v1 channel picker set — the four Cut-1 channels.
@@ -59,25 +59,32 @@ func channelLabel(ch mappingplan.MembershipChannel) string {
 func Render(in Input) {
 	m := in.Model
 	for range c.IdScope(in.Ids.PrepareStr(in.ScopeKey)) {
-		// Left: the editor in a resizable side panel (its controls are
-		// fixed-width). PanelLeftInside + PanelCentralInside fill the host area
-		// responsively — fixed-width columns stranded the output at a fixed
-		// width in the wider interactive gallery window and left the dock
-		// without a bounded height.
-		for range c.PanelLeftInside(in.Ids.PrepareStr("editorpanel")).DefaultSize(editorPanelWidth).Resizable(true).KeepIter() {
-			renderEditor(in.Ids, m)
-		}
+		// Two columns in a plain Horizontal. Side panels (PanelLeftInside/
+		// PanelCentralInside) collapse inside the gallery's ScrollArea host —
+		// they need a CentralPanel-style region to claim space, which a scroll
+		// area doesn't provide — so the left panel took a degenerate width and
+		// clipped the editor. Instead: pin the editor column to its
+		// fixed-control width and leave the output column unconstrained, so the
+		// dock fills the remaining width (tour and wider gallery alike).
+		for range c.Horizontal().KeepIter() {
+			for range c.Vertical().KeepIter() {
+				c.UiSetMinWidth(editorWidth)
+				c.UiSetMaxWidth(editorWidth)
+				renderEditor(in.Ids, m)
+			}
 
-		// Recompute between the panels — pure Go, emits no UI — so the output
-		// reflects this frame's edits rather than last frame's.
-		if m.dirty && in.Recompute != nil {
-			in.Recompute(m)
-			m.dirty = false
-		}
+			// Recompute between the columns — pure Go, emits no UI — so the
+			// output reflects this frame's edits rather than last frame's.
+			if m.dirty && in.Recompute != nil {
+				in.Recompute(m)
+				m.dirty = false
+			}
 
-		// Central: the output dock fills the remaining width and height.
-		for range c.PanelCentralInside().KeepIter() {
-			renderOutput(in.Ids, m)
+			c.AddSpace(8)
+
+			for range c.Vertical().KeepIter() {
+				renderOutput(in.Ids, m)
+			}
 		}
 	}
 }
