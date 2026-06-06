@@ -85,17 +85,11 @@ func diameterFor(size SizeE, density styletokens.DensityE) float32 {
 // valueToAngle maps v on [min,max] to an angle on [startDeg,endDeg], clamping
 // v into range so the needle never leaves the sweep. A degenerate range parks
 // at startDeg.
-func valueToAngle(v, min, max float64, startDeg, endDeg float32) float32 {
-	if max <= min {
+func valueToAngle(v, lo, hi float64, startDeg, endDeg float32) float32 {
+	if hi <= lo {
 		return startDeg
 	}
-	t := (v - min) / (max - min)
-	if t < 0 {
-		t = 0
-	}
-	if t > 1 {
-		t = 1
-	}
+	t := min(1, max(0, (v-lo)/(hi-lo)))
 	return startDeg + float32(t)*(endDeg-startDeg)
 }
 
@@ -116,10 +110,7 @@ func arcPoints(cx, cy, r, startDeg, endDeg, stepDeg float32) (xs, ys []float32) 
 		stepDeg = arcStepDeg
 	}
 	span := endDeg - startDeg
-	n := int(math.Ceil(math.Abs(float64(span)) / float64(stepDeg)))
-	if n < 1 {
-		n = 1
-	}
+	n := max(1, int(math.Ceil(math.Abs(float64(span))/float64(stepDeg))))
 	xs = make([]float32, 0, n+1)
 	ys = make([]float32, 0, n+1)
 	for i := 0; i <= n; i++ {
@@ -133,16 +124,16 @@ func arcPoints(cx, cy, r, startDeg, endDeg, stepDeg float32) (xs, ys []float32) 
 
 // resolveZones converts zones to absolute [min,max] bounds, expanding
 // percentage-mode fractions. Returns nil for an empty input.
-func resolveZones(zones []Zone, mode ZoneModeE, min, max float64) []Zone {
+func resolveZones(zones []Zone, mode ZoneModeE, lo, hi float64) []Zone {
 	if len(zones) == 0 {
 		return nil
 	}
 	out := make([]Zone, 0, len(zones))
-	span := max - min
+	span := hi - lo
 	for _, z := range zones {
 		if mode == ZonePercentage {
-			z.From = min + z.From*span
-			z.To = min + z.To*span
+			z.From = lo + z.From*span
+			z.To = lo + z.To*span
 		}
 		out = append(out, z)
 	}
@@ -167,21 +158,21 @@ func zoneAt(v float64, zones []Zone) (Zone, bool) {
 // and the minor subdivisions between them. major < 2 falls back to the
 // derived default. Even spacing (not "nice" rounding) is the v1 behavior;
 // callers wanting round numbers set an explicit range and major count.
-func tickValues(min, max float64, major, minor int) (majors, minors []float64) {
+func tickValues(lo, hi float64, major, minor int) (majors, minors []float64) {
 	if major < 2 {
 		major = defaultMajorTicks
 	}
-	span := max - min
+	span := hi - lo
 	for i := 0; i < major; i++ {
 		t := float64(i) / float64(major-1)
-		majors = append(majors, min+t*span)
+		majors = append(majors, lo+t*span)
 	}
 	if minor > 0 {
 		for i := 0; i+1 < len(majors); i++ {
-			lo, hi := majors[i], majors[i+1]
+			a, b := majors[i], majors[i+1]
 			for j := 1; j <= minor; j++ {
 				f := float64(j) / float64(minor+1)
-				minors = append(minors, lo+f*(hi-lo))
+				minors = append(minors, a+f*(b-a))
 			}
 		}
 	}

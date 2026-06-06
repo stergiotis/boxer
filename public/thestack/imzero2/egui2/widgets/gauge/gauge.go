@@ -312,9 +312,10 @@ func (inst Renderer) paintBands(cx, cy, zoneR, bandT float32, zones []Zone) {
 	}
 }
 
-// paintTicks draws major tick marks (with labels) and minor tick marks,
-// radially inside the band. innerR is the band's inner edge; r is the outer
-// radius (used only to scale tick lengths).
+// paintTicks draws major tick marks (labeled — except the min/max endpoints
+// when a readout is shown, see below) and minor tick marks, radially inside
+// the band. innerR is the band's inner edge; r is the outer radius (used only
+// to scale tick lengths).
 func (inst Renderer) paintTicks(cx, cy, innerR, r float32) {
 	majors, minors := tickValues(inst.min, inst.max, inst.majorTicks, inst.minorTicks)
 	minorCol := color.Hex(styletokens.NeutralBorderFaint.AsHex())

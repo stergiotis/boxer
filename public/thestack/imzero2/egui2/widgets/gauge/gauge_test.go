@@ -182,3 +182,48 @@ func TestResolveDiameterOverride(t *testing.T) {
 		t.Errorf("cleared override = %v, want Size preset", got)
 	}
 }
+
+func TestPolarCardinals(t *testing.T) {
+	// Convention: 0° = 3 o'clock, CCW positive, screen y down (sine negated).
+	const cx, cy, r float32 = 100, 100, 50
+	cases := []struct {
+		name         string
+		deg          float32
+		wantX, wantY float32
+	}{
+		{"east (3 o'clock)", 0, 150, 100},
+		{"top (12 o'clock)", 90, 100, 50},
+		{"west (9 o'clock)", 180, 50, 100},
+		{"bottom (6 o'clock)", 270, 100, 150},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			x, y := polar(cx, cy, r, c.deg)
+			if !approx(x, c.wantX) || !approx(y, c.wantY) {
+				t.Errorf("polar(%v°) = (%v,%v), want (%v,%v)", c.deg, x, y, c.wantX, c.wantY)
+			}
+		})
+	}
+}
+
+func TestArcPoints(t *testing.T) {
+	const cx, cy, r float32 = 100, 100, 50
+	// Default sweep 225 -> -45 at 2°/step: n = ceil(270/2) = 135 -> 136 points,
+	// running from startDeg to endDeg inclusive.
+	xs, ys := arcPoints(cx, cy, r, defaultStartDeg, defaultEndDeg, arcStepDeg)
+	if len(xs) != len(ys) || len(xs) != 136 {
+		t.Fatalf("len = %d/%d, want 136", len(xs), len(ys))
+	}
+	x0, y0 := polar(cx, cy, r, defaultStartDeg)
+	if !approx(xs[0], x0) || !approx(ys[0], y0) {
+		t.Errorf("first point = (%v,%v), want start (%v,%v)", xs[0], ys[0], x0, y0)
+	}
+	xn, yn := polar(cx, cy, r, defaultEndDeg)
+	if !approx(xs[len(xs)-1], xn) || !approx(ys[len(ys)-1], yn) {
+		t.Errorf("last point = (%v,%v), want end (%v,%v)", xs[len(xs)-1], ys[len(ys)-1], xn, yn)
+	}
+	// Zero-span arc still yields >= 2 points (the n = max(1, …) clamp).
+	if xs2, _ := arcPoints(cx, cy, r, 90, 90, arcStepDeg); len(xs2) < 2 {
+		t.Errorf("zero-span arc len = %d, want >= 2", len(xs2))
+	}
+}
