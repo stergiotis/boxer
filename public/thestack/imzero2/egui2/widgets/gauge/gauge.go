@@ -329,11 +329,18 @@ func (inst Renderer) paintTicks(cx, cy, innerR, r float32) {
 		c.PaintLine(x0, y0, x1, y1, minorCol, styletokens.StrokeHair).Send()
 	}
 	labelR := innerR - r*majorTickLenFrac - r*tickLabelGapFrac
-	for _, mv := range majors {
+	for i, mv := range majors {
 		a := valueToAngle(mv, inst.min, inst.max, inst.startDeg, inst.endDeg)
 		x0, y0 := polar(cx, cy, innerR, a)
 		x1, y1 := polar(cx, cy, innerR-r*majorTickLenFrac, a)
 		c.PaintLine(x0, y0, x1, y1, majorCol, styletokens.StrokeRegular).Send()
+		// Drop the min/max endpoint labels when a centre readout is shown: they
+		// sit at the bottom corners — exactly where the wide readout lives — so
+		// on medium dials the readout crowds them. The arc ends and zones still
+		// imply the range, and the endpoint tick marks remain.
+		if inst.showValue && (i == 0 || i == len(majors)-1) {
+			continue
+		}
 		lx, ly := polar(cx, cy, labelR, a)
 		c.PaintText(lx, ly, anchorCenter, anchorCenter, inst.formatFunc(mv), labelFont, labelCol).Send()
 	}
