@@ -2,21 +2,31 @@ package widgets
 
 import (
 	"encoding/json"
+	"fmt"
 
+	"github.com/stergiotis/boxer/public/semistructured/leeway/anchor"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/dql"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshallgen"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/mappingplanview"
 )
 
-// mappingPlanViewDemoState holds the playground's editable model across frames.
+// mappingPlanViewDemoState holds the playground's editable model plus the
+// anchor example schema's IR, which the dql read-back generator joins each
+// edited plan against to produce the SQL artefact panes.
 type mappingPlanViewDemoState struct {
 	model *mappingplanview.Model
+	ir    *dql.InformationRetrieval // anchor example schema; nil if it failed to load
+	irErr error
 }
 
 // newMappingPlanViewState seeds the playground with the DroneMission DTO
-// (anchor/codecdemo/dronemission.go): the id + naturalKey plain columns, a
-// scalar `droneStatus,symbol`, and a unit `battery,u64Array`.
+// (anchor/codecdemo/dronemission.go) and loads the anchor example schema so the
+// SQL read-back panes have a physical schema to generate against.
 func newMappingPlanViewState() *mappingPlanViewDemoState {
 	m := mappingplanview.NewModel("droneMission", "codecdemo", "DroneMission")
 
@@ -35,15 +45,57 @@ func newMappingPlanViewState() *mappingPlanViewDemoState {
 	battery.Membership, battery.Section = "battery", "u64Array"
 	battery.Unit = true
 
-	return &mappingPlanViewDemoState{model: m}
+	st := &mappingPlanViewDemoState{model: m}
+	st.ir, st.irErr = buildAnchorIR()
+	return st
 }
 
-// recomputeMappingPlan rebuilds the plan from the model and renders the
-// schema-agnostic Go codec marshallgen emits — the host-injected Recompute the
-// widget runs on every edit. Any PlanBuilder / emit error becomes the widget's
-// invalid verdict. Keeping this in the demo (not the widget package) confines
-// the marshallgen dependency to the host.
-func recomputeMappingPlan(m *mappingplanview.Model) {
+// buildAnchorIR loads the anchor example schema into a dql InformationRetrieval
+// — the physical schema the read-back generator joins plans against. All public
+// API; mirrors dql's round-trip test. The SQL panes are bound to this schema,
+// so plan fields targeting sections it doesn't define surface a generation
+// error in the SQL tab rather than SQL.
+func buildAnchorIR() (*dql.InformationRetrieval, error) {
+	manip, err := anchor.GetSchemaInManipulator()
+	if err != nil {
+		return nil, err
+	}
+	tblDesc, err := manip.BuildTableDesc()
+	if err != nil {
+		return nil, err
+	}
+	conv, err := ddl.NewHumanReadableNamingConvention(":")
+	if err != nil {
+		return nil, err
+	}
+	ir := common.NewIntermediateTableRepresentation()
+	if err = ir.LoadFromTable(&tblDesc, clickhouse.NewTechnologySpecificCodeGenerator()); err != nil {
+		return nil, err
+	}
+	info := dql.NewInformationRetrieval(conv)
+	if err = info.LoadTable(ir, anchor.TableRowConfig); err != nil {
+		return nil, err
+	}
+	return info, nil
+}
+
+// idLookup is a dql.IdLookup backed by a name→id map built from the plan, so
+// every ref membership resolves to a stable (illustrative) id embedded in the
+// generated SQL.
+type idLookup map[string]uint64
+
+func (l idLookup) LookupMembership(name string) (uint64, error) {
+	if id, ok := l[name]; ok {
+		return id, nil
+	}
+	return 0, fmt.Errorf("membership %q not in lookup", name)
+}
+
+// recompute rebuilds the plan from the model and produces the dock's output
+// panes: the Go codec (marshallgen), the parsed Plan IR (JSON), and the dql SQL
+// read-back artefacts. This host-injected Recompute runs on every edit; keeping
+// it here confines the marshallgen/dql back-ends to the demo, not the widget.
+func (st *mappingPlanViewDemoState) recompute(m *mappingplanview.Model) {
 	b := mappingplan.NewPlanBuilder("playground", m.PackageName, m.KindType)
 	if err := b.AddUnderscoreField(m.Kind, "", ""); err != nil {
 		m.SetInvalid(err)
@@ -67,7 +119,7 @@ func recomputeMappingPlan(m *mappingplanview.Model) {
 		m.SetInvalid(err)
 		return
 	}
-	out, err := marshallgen.EmitPlan(plan, marshallgen.NoOpWrapper{})
+	goSrc, err := marshallgen.EmitPlan(plan, marshallgen.NoOpWrapper{})
 	if err != nil {
 		m.SetInvalid(err)
 		return
@@ -77,13 +129,58 @@ func recomputeMappingPlan(m *mappingplanview.Model) {
 		m.SetInvalid(err)
 		return
 	}
-	// Go codec now; the dql read-back artefacts (SQL presence / projection /
-	// validator) will slot in as further Outputs once that generator is wired
-	// (it needs an IR the Plan alone doesn't carry — see ADR-0066).
-	m.SetOutputs(
-		mappingplanview.Output{TabID: 1, Title: "Go codec", Lang: mappingplanview.LangGo, Source: string(out)},
-		mappingplanview.Output{TabID: 2, Title: "Plan IR", Lang: mappingplanview.LangJSON, Source: string(planJSON)},
-	)
+
+	outs := []mappingplanview.Output{
+		{TabID: 1, Title: "Go codec", Lang: mappingplanview.LangGo, Source: string(goSrc)},
+		{TabID: 2, Title: "Plan IR", Lang: mappingplanview.LangJSON, Source: string(planJSON)},
+	}
+	outs = append(outs, st.sqlOutputs(plan)...)
+	m.SetOutputs(outs...)
+}
+
+// sqlOutputs runs the dql read-back generator against the anchor IR and returns
+// the SQL artefact panes (presence / projection / validator). The membership
+// lookup is built from the plan so every ref membership resolves to a stable
+// id. A generation error — e.g. a section the anchor schema doesn't define, or
+// a missing IR — becomes a single explanatory SQL pane rather than failing the
+// whole plan (the Go + JSON panes still render).
+func (st *mappingPlanViewDemoState) sqlOutputs(plan *mappingplan.Plan) []mappingplanview.Output {
+	if st.ir == nil {
+		msg := "-- SQL read-back preview unavailable: anchor example schema failed to load."
+		if st.irErr != nil {
+			msg += "\n--   " + st.irErr.Error()
+		}
+		return []mappingplanview.Output{{TabID: 3, Title: "SQL", Lang: mappingplanview.LangSQL, Source: msg}}
+	}
+
+	lookup := idLookup{}
+	var next uint64 = 1
+	for _, f := range plan.Fields {
+		if f.LWMembership == "" {
+			continue
+		}
+		if _, ok := lookup[f.LWMembership]; !ok {
+			lookup[f.LWMembership] = next
+			next++
+		}
+	}
+
+	a, err := dql.NewGenerator(st.ir, dql.NewLookupResolver(lookup)).Generate(plan)
+	if err != nil {
+		return []mappingplanview.Output{{
+			TabID: 3, Title: "SQL", Lang: mappingplanview.LangSQL,
+			Source: "-- SQL read-back preview is bound to the anchor example schema\n" +
+				"-- and is unavailable for this plan:\n--   " + err.Error(),
+		}}
+	}
+	return []mappingplanview.Output{
+		{TabID: 3, Title: "SQL · presence", Lang: mappingplanview.LangSQL,
+			Source: "-- Presence prefilter — embed in WHERE (necessary, not sufficient).\n" + a.Presence},
+		{TabID: 4, Title: "SQL · projection", Lang: mappingplanview.LangSQL,
+			Source: "-- Projection — CAST to a named Tuple (address slots as t.<field>); embed in SELECT.\n" + a.Projection},
+		{TabID: 5, Title: "SQL · validator", Lang: mappingplanview.LangSQL,
+			Source: "-- Validator — exact conformance check; embed in WHERE.\n" + a.Validator},
+	}
 }
 
 // demoMappingPlanView renders the playground for the given per-window state.
@@ -92,6 +189,6 @@ func demoMappingPlanView(ids *c.WidgetIdStack, st *mappingPlanViewDemoState) {
 		Ids:       ids,
 		ScopeKey:  "mpv",
 		Model:     st.model,
-		Recompute: recomputeMappingPlan,
+		Recompute: st.recompute,
 	})
 }
