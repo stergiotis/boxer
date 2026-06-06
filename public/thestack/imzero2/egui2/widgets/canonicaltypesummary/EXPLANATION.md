@@ -37,11 +37,11 @@ The toggle / window / tether / R10-databinding wiring is a direct port of
 
 ## The three tabs
 
-- **Layout** — a left-to-right strip of framed segments, one per member,
-  interleaved with the structural boundary markers (`-` between members of a
-  group, an accent `_` between groups of a signature). Fixed-width members are
-  sized roughly in proportion to their byte footprint; variable-length members
-  render at a fixed width with a muted "var" label.
+- **Layout** — a left-to-right reel of uniform fixed-width "slot-machine" cells,
+  one per member, each split by a rule into a canonical register over a
+  byte-size register ("4 B" / "var"), interleaved with the structural boundary
+  markers (`-` between members of a group, an accent `_` between groups of a
+  signature) and closed by a baseline rule.
 - **Members** — a decomposed table, one row per `IterateMembers()` entry:
   canonical string, family, base, bit width, byte order, shape
   (scalar/array/set), byte footprint, and a short note. Columns are pinned to

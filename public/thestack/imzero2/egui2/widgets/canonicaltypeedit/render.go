@@ -122,10 +122,7 @@ func (m *Model) renderEditBody(ids *c.WidgetIdStack) (changed bool) {
 // this frame.
 func (m *Model) renderBar(ids *c.WidgetIdStack) (changed bool) {
 	for range c.Horizontal().KeepIter() {
-		for rt := range c.RichTextLabel("type") {
-			rt.Strong()
-		}
-		c.AddSpace(6)
+		rowLabel("type")
 		changed = c.TextEdit(ids.PrepareStr("bar"), m.barBuf, false).
 			HintText("canonical, e.g. u32l").
 			DesiredWidth(240).
@@ -151,8 +148,7 @@ func (m *Model) renderForm(ids *c.WidgetIdStack) (changed bool) {
 
 	// Family selector.
 	for range c.Horizontal().KeepIter() {
-		smallLabel("family")
-		c.AddSpace(6)
+		rowLabel("family")
 		for _, f := range familyOrder {
 			if c.SelectableLabel(ids.PrepareStr("fam-"+f.key), fam == f.fam, f.label).
 				SendResp().HasPrimaryClicked() {
@@ -170,8 +166,7 @@ func (m *Model) renderForm(ids *c.WidgetIdStack) (changed bool) {
 
 	// Base selector for the current family.
 	for range c.Horizontal().KeepIter() {
-		smallLabel("base")
-		c.AddSpace(6)
+		rowLabel("base")
 		for _, b := range familyBases[fam] {
 			if c.SelectableLabel(ids.PrepareStr("base-"+b.label), m.base == b.r, b.label).
 				SendResp().HasPrimaryClicked() {
@@ -188,6 +183,7 @@ func (m *Model) renderForm(ids *c.WidgetIdStack) (changed bool) {
 	// String fixed-width toggle (bool carries no width).
 	if fam == familyString && !isBool {
 		for range c.Horizontal().KeepIter() {
+			rowLabel("")
 			if c.Checkbox(ids.PrepareStr("fixedw"), m.fixedWidth, "fixed width").
 				SendRespVal(&m.fixedWidth).HasChanged() {
 				if m.fixedWidth && m.width == 0 {
@@ -203,8 +199,7 @@ func (m *Model) renderForm(ids *c.WidgetIdStack) (changed bool) {
 		(fam == familyString && m.fixedWidth && !isBool)
 	if showWidth {
 		for range c.Horizontal().KeepIter() {
-			smallLabel("width")
-			c.AddSpace(6)
+			rowLabel("width")
 			w := uint64(m.width)
 			c.DragValueU64(ids.PrepareStr("width"), w).
 				Speed(1).
@@ -220,8 +215,7 @@ func (m *Model) renderForm(ids *c.WidgetIdStack) (changed bool) {
 	// Byte order (numeric only).
 	if fam == familyNumeric {
 		for range c.Horizontal().KeepIter() {
-			smallLabel("byte order")
-			c.AddSpace(6)
+			rowLabel("byte order")
 			for _, bo := range byteOrderOrder {
 				if c.SelectableLabel(ids.PrepareStr("bo-"+bo.key), m.byteOrder == bo.mod, bo.label).
 					SendResp().HasPrimaryClicked() {
@@ -237,6 +231,7 @@ func (m *Model) renderForm(ids *c.WidgetIdStack) (changed bool) {
 	// CIDR (network only).
 	if fam == familyNetwork {
 		for range c.Horizontal().KeepIter() {
+			rowLabel("")
 			if c.Checkbox(ids.PrepareStr("cidr"), m.cidr, "CIDR (per-value prefix)").
 				SendRespVal(&m.cidr).HasChanged() {
 				changed = true
@@ -246,8 +241,7 @@ func (m *Model) renderForm(ids *c.WidgetIdStack) (changed bool) {
 
 	// Scalar shape (all families).
 	for range c.Horizontal().KeepIter() {
-		smallLabel("shape")
-		c.AddSpace(6)
+		rowLabel("shape")
 		for _, sh := range scalarOrder {
 			if c.SelectableLabel(ids.PrepareStr("sh-"+sh.key), m.scalarMod == sh.mod, sh.label).
 				SendResp().HasPrimaryClicked() {
@@ -268,6 +262,20 @@ func (m *Model) renderForm(ids *c.WidgetIdStack) (changed bool) {
 func (m *Model) renderStatus(ids *c.WidgetIdStack) {
 	smallLabel("live type")
 	canonicaltypesummary.New("ctedit-sum").Render(ids.PrepareSeq(0xC7ED17), m.canonical)
+}
+
+// rowLabelWidth pins the editor's left label column so the controls that follow
+// align vertically across the whole form (a tabular layout).
+const rowLabelWidth = 92
+
+// rowLabel emits a small label in the fixed-width left column, so the controls
+// after it sit at the same x on every row.
+func rowLabel(text string) {
+	for range c.Vertical().KeepIter() {
+		c.UiSetMinWidth(rowLabelWidth)
+		c.UiSetMaxWidth(rowLabelWidth)
+		smallLabel(text)
+	}
 }
 
 // smallLabel emits a small de-emphasised inline label.

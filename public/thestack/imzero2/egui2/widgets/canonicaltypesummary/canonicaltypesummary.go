@@ -384,41 +384,42 @@ func renderLayoutTab(scope string, ast canonicaltypes.AstNodeI) {
 	muted := color.Hex(styletokens.NeutralTextSecondary.AsHex())
 	accent := color.Hex(styletokens.AccentDefault.AsHex())
 	transparentBg := color.Transparent
+	// A compact "slot-machine" reel: every member is a uniform fixed-width cell
+	// split by a rule into a canonical register over a byte-size register, so
+	// the strip reads as a rhythmic packed row rather than a ragged run. The
+	// '-'/'_' boundaries sit between cells as reel dividers.
+	const slotW float32 = 80
 	for range c.Horizontal().KeepIter() {
 		for i, it := range stripItems(ast) {
 			if it.sep != "" {
-				// Boundary marker between segments: a group '-' is muted; a
-				// signature '_' takes the accent hue so the stronger split reads
-				// at a glance.
 				col := muted
 				if it.sep == canonicaltypes.SignatureSeparator {
 					col = accent
 				}
+				c.AddSpace(2)
 				c.LabelAtoms(c.Atoms().BeginRichTextColored(col, transparentBg, it.sep).Monospace().Strong().End().Keep()).Send()
+				c.AddSpace(2)
 				continue
 			}
 			info := it.info
 			segId := c.MakeAbsoluteIdStr(scope + "-seg-" + strconv.Itoa(i))
-			w := float32(64)
-			if !info.variable && info.bytes > 0 {
-				w = float32(40 + info.bytes*16)
-				if w > 240 {
-					w = 240
-				}
-			}
 			for range c.Frame(segId).Fill(fill).InnerMargin(6).CornerRadius(4).KeepIter() {
 				for range c.Vertical().KeepIter() {
-					c.UiSetMinWidth(w)
+					c.UiSetMinWidth(slotW)
+					c.UiSetMaxWidth(slotW)
 					c.LabelAtoms(c.Atoms().BeginRichText(info.canonical).Monospace().Strong().End().Keep()).Send()
-					if info.variable || info.bytes == 0 {
-						c.LabelAtoms(c.Atoms().BeginRichTextColored(muted, transparentBg, "var").Small().End().Keep()).Send()
-					} else {
-						c.LabelAtoms(c.Atoms().BeginRichText(strconv.Itoa(info.bytes) + " B").Small().Weak().End().Keep()).Send()
+					c.Separator().Horizontal().Send()
+					sizeLbl := "var"
+					if !info.variable && info.bytes > 0 {
+						sizeLbl = strconv.Itoa(info.bytes) + " B"
 					}
+					c.LabelAtoms(c.Atoms().BeginRichTextColored(muted, transparentBg, sizeLbl).Small().End().Keep()).Send()
 				}
 			}
 		}
 	}
+	c.AddSpace(2)
+	c.Separator().Horizontal().Send()
 	c.AddSpace(4)
 	c.LabelAtoms(c.Atoms().BeginRichTextColored(muted, transparentBg, "footprint is type-level; non-network runtime encoding may differ").Small().End().Keep()).Send()
 }
