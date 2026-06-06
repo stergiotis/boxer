@@ -24,6 +24,7 @@ type layeredGraphDemoState struct {
 	err         error
 	initialised bool
 	lastClicked string
+	gvState     view.ViewState // interactive pan/zoom
 }
 
 func init() {
@@ -100,6 +101,7 @@ func demoLayeredGraph(ids *c.WidgetIdStack, st *layeredGraphDemoState) {
 	res := view.Render(layeredGraphDemoIDBase, st.layout, view.RenderOpts{
 		CanvasW: canvasW,
 		CanvasH: 440,
+		State:   &st.gvState,
 	})
 	if res.Clicked != "" {
 		st.lastClicked = res.Clicked

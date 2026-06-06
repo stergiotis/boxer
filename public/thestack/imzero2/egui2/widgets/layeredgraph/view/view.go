@@ -73,6 +73,24 @@ type RenderOpts struct {
 	// EdgeStroke overrides an edge's stroke colour by endpoints (e.g. to mark
 	// the active transition). Returning ok=false keeps the style default.
 	EdgeStroke func(from, to string) (col color.Color, ok bool)
+	// State, when non-nil, enables interactive pan/zoom: Render reads pointer
+	// drag (pan) and the zoom gesture (Ctrl+scroll / pinch / +/-) over the
+	// canvas and updates it in place. The caller holds one ViewState per graph
+	// across frames and passes its address. Nil keeps the static fit-to-view.
+	State *ViewState
+}
+
+// ViewState carries interactive pan/zoom across frames for one graph. The
+// caller owns it (one per graph instance) and passes &it via RenderOpts.State;
+// Render mutates Zoom/PanX/PanY from user input. Zoom 0 is treated as 1, so the
+// zero value starts at the fitted view — reset to the zero value to recentre.
+type ViewState struct {
+	Zoom       float64 // multiplicative, composed on top of fit-to-view (0 → 1)
+	PanX, PanY float64 // screen-pixel offset
+
+	lastPtrX float32
+	lastPtrY float32
+	dragging bool
 }
 
 // RenderResult reports hit-testing from the previous frame: the node currently
@@ -92,9 +110,49 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 		st = DefaultStyle()
 	}
 
+	sm := c.CurrentApplicationState.StateManager
+	canvasID := c.MakeAbsoluteIdHighEntropy(idBase + 1)
 	scale, offX, offY, canvasW, canvasH := fit(lay, opts.CanvasW, opts.CanvasH)
+
+	// User pan/zoom (opt-in via opts.State) composes on top of fit-to-view as a
+	// single affine: screen = p*(scale*zoom) + offset, zoom about the canvas
+	// centre, then panned. Input is read from the previous frame's canvas
+	// response (drag) and the zoom-gesture register, both scoped to the canvas.
+	zoom, panX, panY := 1.0, 0.0, 0.0
+	if vs := opts.State; vs != nil {
+		resp := sm.GetResponse(widgethandle.Make(canvasID.Derive()))
+		if resp.HasContainsPointer() {
+			if zd := sm.GetZoomDelta().Zoom; zd > 0 && zd != 1 {
+				z := vs.Zoom
+				if z <= 0 {
+					z = 1
+				}
+				vs.Zoom = clampF64(z*float64(zd), 0.2, 5.0)
+			}
+		}
+		cp := sm.GetCanvasPointer()
+		ptrValid := cp.HoverX == cp.HoverX && cp.HoverY == cp.HoverY // == rejects NaN
+		if resp.HasIsPointerButtonDown() && resp.HasContainsPointer() && ptrValid {
+			if vs.dragging {
+				vs.PanX += float64(cp.HoverX - vs.lastPtrX)
+				vs.PanY += float64(cp.HoverY - vs.lastPtrY)
+			}
+			vs.dragging = true
+			vs.lastPtrX, vs.lastPtrY = cp.HoverX, cp.HoverY
+		} else {
+			vs.dragging = false
+		}
+		if vs.Zoom <= 0 {
+			vs.Zoom = 1
+		}
+		zoom, panX, panY = vs.Zoom, vs.PanX, vs.PanY
+	}
+	ccx, ccy := float64(canvasW)/2, float64(canvasH)/2
+	escale := scale * zoom
+	ox := (offX-ccx)*zoom + ccx + panX
+	oy := (offY-ccy)*zoom + ccy + panY
 	tf := func(p layeredgraph.Point) (x, y float32) {
-		return float32(p.X*scale + offX), float32(p.Y*scale + offY)
+		return float32(p.X*escale + ox), float32(p.Y*escale + oy)
 	}
 	nodeKey := func(id string) uint64 {
 		h := fnv.New64a()
@@ -104,8 +162,7 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 		return idBase + (h.Sum64() << 1)
 	}
 
-	// Read previous-frame interaction first; it drives this frame's highlight.
-	sm := c.CurrentApplicationState.StateManager
+	// Read previous-frame node interaction; it drives this frame's highlight.
 	hovered := make(map[string]bool, len(lay.Nodes))
 	var res RenderResult
 	for _, n := range lay.Nodes {
@@ -130,15 +187,15 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 		drawEdge(e, tf, col, st.EdgeStrokeW)
 		if e.LabelPos != nil && e.Label != "" {
 			lx, ly := tf(*e.LabelPos)
-			c.PaintText(lx, ly, 1, 1, e.Label, st.EdgeFontSize*float32(scale), st.EdgeText).Send()
+			c.PaintText(lx, ly, 1, 1, e.Label, st.EdgeFontSize*float32(escale), st.EdgeText).Send()
 		}
 	}
 
 	// Nodes.
 	for _, n := range lay.Nodes {
 		cx, cy := tf(n.Center)
-		w := float32(n.W * scale)
-		h := float32(n.H * scale)
+		w := float32(n.W * escale)
+		h := float32(n.H * escale)
 		fill := st.NodeFill
 		if opts.NodeFill != nil {
 			if c2, ok := opts.NodeFill(n.ID); ok {
@@ -146,16 +203,29 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 			}
 		}
 		drawNode(n.Shape, cx, cy, w, h, st, fill, hovered[n.ID])
-		c.PaintText(cx, cy, 1, 1, n.Label, st.NodeFontSize*float32(scale), st.NodeText).Send()
+		c.PaintText(cx, cy, 1, 1, n.Label, st.NodeFontSize*float32(escale), st.NodeText).Send()
 		c.PaintSenseRegion(c.MakeAbsoluteIdHighEntropy(nodeKey(n.ID)), cx-w/2, cy-h/2, w, h).Send()
 	}
 
-	// Drain into the canvas (namespaced by idBase, distinct from node keys).
-	c.PaintCanvas(c.MakeAbsoluteIdHighEntropy(idBase+1), canvasW, canvasH).
-		Background(st.Background).
-		Send()
+	// Drain into the canvas. Sense click/drag/hover only when pan/zoom is
+	// enabled, so Render can read drag + zoom over the canvas.
+	cv := c.PaintCanvas(canvasID, canvasW, canvasH).Background(st.Background)
+	if opts.State != nil {
+		cv = cv.Sense(true, true, true)
+	}
+	cv.Send()
 
 	return res
+}
+
+func clampF64(v, lo, hi float64) float64 {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
 }
 
 // fit computes the uniform scale + centring offset to map the layout's bounding

@@ -81,6 +81,9 @@ type Widget[T comparable] struct {
 	// records a layout failure so renderGraph can degrade to a message.
 	graphLayout    *layeredgraph.Layout
 	graphLayoutErr error
+	// graphViewState carries interactive pan/zoom for the Graph tab across
+	// frames (view.Render reads drag/zoom over the canvas and updates it).
+	graphViewState view.ViewState
 
 	density styletokens.DensityE
 
@@ -494,6 +497,7 @@ func (inst *Widget[T]) renderGraph() {
 	res := view.Render(inst.graphIDBase(), inst.graphLayout, view.RenderOpts{
 		CanvasW: fsmGraphCanvasW,
 		CanvasH: fsmGraphCanvasH,
+		State:   &inst.graphViewState,
 		NodeFill: func(id string) (color.Color, bool) {
 			if s, ok := idToState[id]; ok {
 				return color.Hex(inst.machine.Color(s).AsHex()), true
