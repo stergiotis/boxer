@@ -658,6 +658,29 @@ func TestWithMaxNestingDepth_SetsField(t *testing.T) {
 	}
 }
 
+func TestWithCellLabel_SetAndClear(t *testing.T) {
+	tm := &Treemap{}
+	if tm.cellLabelFn != nil {
+		t.Fatal("zero Treemap should have a nil cellLabelFn")
+	}
+	WithCellLabel(func(n *layout.Node) string { return "v:" + n.Name })(tm)
+	if tm.cellLabelFn == nil {
+		t.Fatal("WithCellLabel should set cellLabelFn")
+	}
+	if got := tm.cellLabelFn(&layout.Node{Name: "x"}); got != "v:x" {
+		t.Fatalf("cellLabelFn not wired: got %q want %q", got, "v:x")
+	}
+	// SetCellLabel mirrors the option and accepts nil to disable.
+	tm.SetCellLabel(func(*layout.Node) string { return "y" })
+	if got := tm.cellLabelFn(&layout.Node{}); got != "y" {
+		t.Fatalf("SetCellLabel did not replace fn: got %q want %q", got, "y")
+	}
+	tm.SetCellLabel(nil)
+	if tm.cellLabelFn != nil {
+		t.Fatal("SetCellLabel(nil) should clear cellLabelFn")
+	}
+}
+
 func TestPreviewDepth(t *testing.T) {
 	cases := []struct {
 		name string

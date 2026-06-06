@@ -100,6 +100,75 @@ func IsGenerated(f *SccFile) (yes bool) {
 	return
 }
 
+// IsTest reports whether f looks like a test file. scc reports no "is test"
+// flag, so detection — like [IsGenerated] — is convention-based: well-known
+// test filename patterns plus canonical test directory names.
+//
+// Filename patterns (matched case-insensitively; the embedded separator —
+// '_' or '.' — keeps words that merely end in "test", e.g. latest.go or
+// greatest.py, from matching):
+//
+//   - *_test.go                                Go
+//   - *_test.py, test_*.py, conftest.py        Python (pytest / unittest)
+//   - *_test.rb, *_spec.rb                      Ruby (minitest / RSpec)
+//   - *_test.{c,cc,cpp,cxx}                      C / C++
+//   - *.{test,spec}.{js,jsx,mjs,cjs,ts,tsx}      JavaScript / TypeScript
+//
+// Directory patterns: any path component above the file equal to test,
+// tests, testdata, __tests__, spec, or specs. This catches layouts whose
+// test marker is on the directory rather than the filename — Go's testdata/,
+// Maven/Gradle src/test/, Rust tests/, Jest __tests__/, RSpec spec/ —
+// including PascalCase-only conventions (Java FooTest.java) that the
+// filename patterns above deliberately skip to avoid flagging non-tests
+// (e.g. TestUtils.java, latest.java).
+func IsTest(f *SccFile) (yes bool) {
+	if f == nil {
+		return
+	}
+	name := strings.ToLower(f.Filename)
+	ext := strings.ToLower(f.Extension)
+	switch {
+	case strings.HasSuffix(name, "_test.go"),
+		strings.HasSuffix(name, "_test.py"),
+		ext == "py" && strings.HasPrefix(name, "test_"),
+		name == "conftest.py",
+		strings.HasSuffix(name, "_test.rb"),
+		strings.HasSuffix(name, "_spec.rb"),
+		strings.HasSuffix(name, "_test.c"),
+		strings.HasSuffix(name, "_test.cc"),
+		strings.HasSuffix(name, "_test.cpp"),
+		strings.HasSuffix(name, "_test.cxx"),
+		isJsTsTestName(name):
+		yes = true
+		return
+	}
+	dir := strings.ToLower(filepath.ToSlash(filepath.Dir(f.Location)))
+	if dir == "" || dir == "." {
+		return
+	}
+	for part := range strings.SplitSeq(dir, "/") {
+		switch part {
+		case "test", "tests", "testdata", "__tests__", "spec", "specs":
+			yes = true
+			return
+		}
+	}
+	return
+}
+
+// isJsTsTestName reports whether a lowercased filename matches the
+// JavaScript / TypeScript test convention foo.test.js / foo.spec.ts across
+// the common module extensions.
+func isJsTsTestName(name string) (yes bool) {
+	for _, ext := range [...]string{".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"} {
+		if strings.HasSuffix(name, ".test"+ext) || strings.HasSuffix(name, ".spec"+ext) {
+			yes = true
+			return
+		}
+	}
+	return
+}
+
 // RepoRoot returns the git top-level directory for the current working directory.
 func RepoRoot() (root string, err error) {
 	var out []byte

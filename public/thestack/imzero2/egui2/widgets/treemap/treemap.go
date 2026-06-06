@@ -314,6 +314,23 @@ func WithStyle(s StyleI) Option {
 	return func(t *Treemap) { t.style = s }
 }
 
+// WithCellLabel sets an optional per-cell secondary label. When non-nil,
+// fn(node) is rendered on a second, de-emphasized (small + weak) line
+// beneath each cell's name — the place to surface a humanized metric value
+// (size, weight, …) directly on the tile. fn returning "" suppresses the
+// line for that cell, so callers can gate the label on a runtime toggle
+// without rebuilding the widget (see SetCellLabel).
+//
+// The line is painted only on cells that do not already display their own
+// children inside them (leaves, and collapsed / off-path blocks), so it
+// never overruns a drilled-in container's header into the nested content,
+// and only when the cell is tall enough for a second text line.
+//
+// Validation tier: none — a nil fn (the default) simply disables the label.
+func WithCellLabel(fn func(*layout.Node) string) Option {
+	return func(t *Treemap) { t.cellLabelFn = fn }
+}
+
 // cellDesc captures the per-frame state needed for the post-render
 // interaction pass. At most one of drillable (down) or drillUpTo>0 (up).
 type cellDesc struct {
@@ -348,6 +365,10 @@ type Treemap struct {
 	// maxNestingDepth: preview levels rendered below the frontier (1 = the
 	// historic single preview level; <=0 = all, capped by maxPreviewRecursion).
 	maxNestingDepth int
+	// cellLabelFn, when non-nil, supplies an optional secondary label
+	// rendered on a second de-emphasized line beneath each cell's name (see
+	// WithCellLabel). Returning "" suppresses the line for that cell.
+	cellLabelFn func(*layout.Node) string
 
 	// Retained chrome colors (breadcrumb / container / leaf-view backgrounds)
 	colorBreadcrumbBg  color.Color
@@ -431,6 +452,15 @@ func (t *Treemap) SetContainerSize(w, h float32) {
 		panic(fmt.Sprintf("treemap: SetContainerSize requires positive w,h (got %v,%v)", w, h))
 	}
 	t.containerW, t.containerH = w, h
+}
+
+// SetCellLabel updates the per-cell secondary-label function after
+// construction (see WithCellLabel); pass nil to disable. Cheap enough to
+// call every frame, and — unlike re-running New — it preserves the
+// breadcrumb and zoom state, so a caller toggling the label on and off
+// does not reset the user's drill position.
+func (t *Treemap) SetCellLabel(fn func(*layout.Node) string) {
+	t.cellLabelFn = fn
 }
 
 // Focused returns the current tail of the breadcrumb.
@@ -607,6 +637,29 @@ func (t *Treemap) paintHatch(r layout.Rect, seq uint64, spec HatchSpec) {
 	}
 }
 
+// paintCellValue renders the optional secondary value label beneath a
+// cell's name. It is a no-op unless a cellLabelFn is set, the cell is tall
+// enough for a second line (r.H > minH), the cell is not a container
+// already showing its own children (rendersInner — the value would push
+// into the nested content), and fn returns a non-empty string. textColor
+// matches the name so the WCAG-picked contrast against the resolved fill
+// holds; Small + Weak de-emphasizes the value relative to the name. Must be
+// called inside the cell's Frame body, after the name label, so the value
+// flows directly below it.
+func (t *Treemap) paintCellValue(node *layout.Node, r layout.Rect, textColor color.Color, rendersInner bool, minH float64) {
+	if t.cellLabelFn == nil || rendersInner || r.H <= minH {
+		return
+	}
+	sub := t.cellLabelFn(node)
+	if sub == "" {
+		return
+	}
+	c.LabelAtoms(c.Atoms().
+		BeginRichTextColored(textColor, t.colorTransparentBg, sub).
+		Small().Weak().End().Keep()).
+		Truncate().Send()
+}
+
 // renderZoom recursively paints cells following the breadcrumb path.
 func (t *Treemap) renderZoom(node *layout.Node, bounds layout.Rect, depth, bcLevel int, cellSeq *uint64) {
 	if len(node.Children) == 0 {
@@ -665,6 +718,11 @@ func (t *Treemap) renderZoom(node *layout.Node, bounds layout.Rect, depth, bcLev
 			if drillable || drillUpTo > 0 {
 				frame = frame.SenseClick()
 			}
+			// A cell shows its own children inside it when it's the drilled-in
+			// (active) container or a frontier container rendering a preview;
+			// such cells skip the secondary value line so it doesn't overrun
+			// the header into the nested content.
+			rendersInner := hasChildren && (isActive || atFrontier)
 			for range frame.KeepIter() {
 				c.UiSetMinWidth(cellW - 7)
 				c.UiSetMinHeight(cellH - 5)
@@ -680,6 +738,7 @@ func (t *Treemap) renderZoom(node *layout.Node, bounds layout.Rect, depth, bcLev
 						BeginRichTextColored(textColor, t.colorTransparentBg, child.Name).
 						End().Keep()).
 						Truncate().Send()
+					t.paintCellValue(child, r, textColor, rendersInner, 34)
 				}
 			}
 		}
@@ -765,6 +824,11 @@ func (t *Treemap) renderLeafChildren(node *layout.Node, bounds layout.Rect, dept
 						BeginRichTextColored(textColor, t.colorTransparentBg, child.Name).
 						End().Keep()).
 						Truncate().Send()
+					// A preview cell renders its own children inside it only when
+					// the nesting budget allows another level; below the budget
+					// it's a terminal block, so the value line is safe to draw.
+					rendersInner := remaining > 1 && len(child.Children) > 0
+					t.paintCellValue(child, r, textColor, rendersInner, 30)
 				}
 			}
 		}

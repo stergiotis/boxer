@@ -6,13 +6,16 @@ import (
 	"fmt"
 	"math"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 
+	"github.com/dustin/go-humanize"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/analytics/stats/tdigest"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/observability/eh"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colorscale"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/distsummary"
@@ -28,16 +31,56 @@ import (
 type sccMetric struct {
 	Name string
 	W    scctree.Weight
+	// Humanize renders a value of this metric for compact in-cell display
+	// (the treemap secondary label): counts use a terse SI form (1.5k),
+	// bytes use dustin/go-humanize's decimal units (1.2 MB).
+	Humanize func(float64) string
 }
 
 // sccMetrics is the registry surfaced by the metric ComboBoxes. The
 // fallback fill metric ("Code lines") is index 0; "Complexity" is last
 // to mirror the historical default colorWeight.
 var sccMetrics = []sccMetric{
-	{"Code lines", scctree.WeightCode},
-	{"Total lines", scctree.WeightLines},
-	{"Bytes", scctree.WeightBytes},
-	{"Complexity", scctree.WeightComplexity},
+	{"Code lines", scctree.WeightCode, humanizeCount},
+	{"Total lines", scctree.WeightLines, humanizeCount},
+	{"Bytes", scctree.WeightBytes, humanizeBytes},
+	{"Complexity", scctree.WeightComplexity, humanizeCount},
+}
+
+// humanizeCount renders a non-negative count compactly for an in-cell
+// label: a bare integer below 1000, otherwise one fractional digit with a
+// k / M / G suffix (1500 → "1.5k", 12000 → "12k", 2e9 → "2G"). A trailing
+// ".0" is trimmed so round values read cleanly. Negatives clamp to "0".
+func humanizeCount(v float64) (s string) {
+	if v < 1000 {
+		if v < 0 {
+			v = 0
+		}
+		return strconv.FormatFloat(v, 'f', 0, 64)
+	}
+	var div float64
+	var suffix string
+	switch {
+	case v < 1e6:
+		div, suffix = 1e3, "k"
+	case v < 1e9:
+		div, suffix = 1e6, "M"
+	default:
+		div, suffix = 1e9, "G"
+	}
+	s = strconv.FormatFloat(v/div, 'f', 1, 64)
+	s = strings.TrimSuffix(s, ".0")
+	return s + suffix
+}
+
+// humanizeBytes renders a byte count via dustin/go-humanize (decimal SI:
+// "1.2 kB", "3.4 MB"), matching the filepicker's size readout. Negative or
+// fractional inputs are floored to a uint64 first.
+func humanizeBytes(v float64) string {
+	if v < 0 {
+		v = 0
+	}
+	return humanize.Bytes(uint64(v))
 }
 
 const (
@@ -91,8 +134,8 @@ const (
 	// loose enough to hold "Size & color (Complexity):" (the widest of
 	// the three forms) at the default font without truncation, so the
 	// inline summary lines start at the same x across metric switches.
-	distGutterW float32 = 200
-	treemapChromeH  float32 = 96 + 56 + 8 + distSummaryRowH // chrome + colorscale + inter-row gap + dist row
+	distGutterW    float32 = 200
+	treemapChromeH float32 = 96 + 56 + 8 + distSummaryRowH // chrome + colorscale + inter-row gap + dist row
 	// containerGrowGuardPx is the anti-ratchet deadband applied to
 	// both axes of SetContainerSize. Frame-over-frame upward deltas
 	// smaller than this are almost always chrome-budget mis-estimates
@@ -142,15 +185,15 @@ func ensureSccData() {
 // (non-nil) root so the widget never sees nil — error and empty-tree cases
 // collapse to a single-leaf placeholder.
 //
-// includeGenerated toggles whether scc files that scctree.IsGenerated
-// flags (scc's --gen heuristic OR the project's .gen.go / .out.go /
-// golay24 conventions) are included in the tree. False (default) keeps
-// the historical sccmap view focused on hand-written code.
+// keep is the leaf-inclusion predicate (see App.keepFunc): nil keeps every
+// file, otherwise a file is included only when keep(f) is true. The same
+// predicate is fed to computeMetricDigest so the treemap and the distsummary
+// digests survey the identical leaf set.
 //
 // maxValue is the colormap upper bound. minValue is fixed at 1 to keep
 // NewLogColormap valid; raw values below 1 (or zero-complexity leaves)
 // clamp to palette[0] on the legend.
-func buildTreeForMetrics(sizeIdx, colorIdx int, includeGenerated bool) (root *layout.Node, valueFn func(*layout.Node) float64, maxValue float64) {
+func buildTreeForMetrics(sizeIdx, colorIdx int, keep func(*scctree.SccFile) bool) (root *layout.Node, valueFn func(*layout.Node) float64, maxValue float64) {
 	if sccDataErr != nil {
 		root = &layout.Node{Name: fmt.Sprintf("scc failed: %v", sccDataErr), Size: 1}
 		valueFn = func(*layout.Node) float64 { return 0 }
@@ -159,10 +202,6 @@ func buildTreeForMetrics(sizeIdx, colorIdx int, includeGenerated bool) (root *la
 	}
 	sizeW := sccMetrics[sizeIdx].W
 	colorW := sccMetrics[colorIdx].W
-	var keep func(*scctree.SccFile) bool
-	if !includeGenerated {
-		keep = func(f *scctree.SccFile) bool { return !scctree.IsGenerated(f) }
-	}
 	root, valueFn, maxValue = scctree.BuildColormappedTree(
 		sccGroups, sccRootName,
 		sizeW, colorW,
@@ -201,6 +240,16 @@ type App struct {
 	sizeMetricIdx    int
 	colorMetricIdx   int
 	includeGenerated bool
+	// includeTests toggles whether files scctree.IsTest flags (test naming
+	// conventions + canonical test directories) are surveyed. False
+	// (default) keeps the view focused on non-test code, mirroring
+	// includeGenerated. Changing it rebuilds the tree and digests.
+	includeTests bool
+	// showValues toggles the per-cell humanized size/color value label
+	// drawn under each tile name (treemap.SetCellLabel). It does NOT trigger
+	// a rebuild — the label closure reads this flag live — so flipping it
+	// preserves the user's drill position.
+	showValues bool
 
 	// sizeDigest / colorDigest summarise the per-file weight under the
 	// currently-selected size and color metrics across every leaf the
@@ -240,6 +289,7 @@ func newApp() (inst *App) {
 		ids:            c.NewWidgetIdStack(),
 		sizeMetricIdx:  defaultSizeMetricIdx,
 		colorMetricIdx: defaultColorMetricIdx,
+		showValues:     true,
 		density:        styletokens.DensityFromEnv(),
 		distRenderer:   distsummary.New("scc-dist"),
 	}
@@ -269,6 +319,53 @@ func computeMetricDigest(groups []scctree.SccGroup, w scctree.Weight, keep func(
 	return
 }
 
+// keepFunc returns the leaf-inclusion predicate matching the current
+// include-generated / include-tests toggles, or nil when both are enabled
+// (keep every file — the BuildColormappedTree / computeMetricDigest fast
+// path). A file is dropped when it is generated and generated files are
+// excluded, or a test and test files are excluded. The single predicate is
+// shared by the treemap build and both distsummary digests so every surface
+// surveys the identical leaf set.
+func (inst *App) keepFunc() (keep func(*scctree.SccFile) bool) {
+	incGen := inst.includeGenerated
+	incTest := inst.includeTests
+	if incGen && incTest {
+		return nil
+	}
+	return func(f *scctree.SccFile) bool {
+		if !incGen && scctree.IsGenerated(f) {
+			return false
+		}
+		if !incTest && scctree.IsTest(f) {
+			return false
+		}
+		return true
+	}
+}
+
+// makeCellLabelFn builds the treemap's per-cell secondary-label closure:
+// the cell's size-metric and color-metric values in humanized form
+// ("1.2k · 34"). It returns "" when the Show values toggle is off, so the
+// toggle takes effect without a rebuild (preserving the drill position).
+// The size dimension reads the node's own aggregated area (TotalSize); the
+// color dimension reads valueFn, the extractor captured from this build. The
+// two collapse to a single value when the size and color metrics coincide.
+func (inst *App) makeCellLabelFn(valueFn func(*layout.Node) float64) func(*layout.Node) string {
+	sizeM := sccMetrics[inst.sizeMetricIdx]
+	colorM := sccMetrics[inst.colorMetricIdx]
+	sameMetric := inst.sizeMetricIdx == inst.colorMetricIdx
+	return func(n *layout.Node) string {
+		if !inst.showValues {
+			return ""
+		}
+		sizeStr := sizeM.Humanize(n.TotalSize())
+		if sameMetric {
+			return sizeStr
+		}
+		return sizeStr + " · " + colorM.Humanize(valueFn(n))
+	}
+}
+
 // rebuildTreemap constructs a fresh *Treemap and a matching ColorScale
 // legend for the current (sizeMetricIdx, colorMetricIdx). Replaces
 // inst.tm wholesale so the breadcrumb resets to root — the file ordering
@@ -277,16 +374,8 @@ func computeMetricDigest(groups []scctree.SccGroup, w scctree.Weight, keep func(
 // treemap.ContinuousColoringFromMap and colorscale.New so the legend
 // gradient and the treemap cell colors are guaranteed to agree.
 func (inst *App) rebuildTreemap() {
-	root, valueFn, maxValue := buildTreeForMetrics(inst.sizeMetricIdx, inst.colorMetricIdx, inst.includeGenerated)
-	// Same keep predicate buildTreeForMetrics uses internally so the
-	// distsummary digests survey the identical leaf set the treemap
-	// renders. Kept local rather than threaded out of buildTreeForMetrics
-	// because the function already returns three values and threading a
-	// fourth (the predicate) would not help any other caller.
-	var keep func(*scctree.SccFile) bool
-	if !inst.includeGenerated {
-		keep = func(f *scctree.SccFile) bool { return !scctree.IsGenerated(f) }
-	}
+	keep := inst.keepFunc()
+	root, valueFn, maxValue := buildTreeForMetrics(inst.sizeMetricIdx, inst.colorMetricIdx, keep)
 	inst.sizeDigest = computeMetricDigest(sccGroups, sccMetrics[inst.sizeMetricIdx].W, keep)
 	if inst.colorMetricIdx == inst.sizeMetricIdx {
 		// Both axes share a single distribution — alias the pointer so
@@ -308,6 +397,10 @@ func (inst *App) rebuildTreemap() {
 			inst.hoverBand,
 		)),
 	)
+	// Secondary in-cell label: humanized size/color values, gated live on
+	// inst.showValues so toggling needs no rebuild. Captures this build's
+	// valueFn so it tracks the current color metric.
+	inst.tm.SetCellLabel(inst.makeCellLabelFn(valueFn))
 	// ColorScale layout: gradient = 55% of height, then a 5 px tick row +
 	// 2 px gap + fontSize-10 labels = ~17 px of axis chrome. h=32 placed
 	// the label baseline at ~25, with text descending past the canvas's
@@ -350,7 +443,14 @@ func (inst *App) Frame(ctx runtimeapp.FrameContextI) (err error) {
 	// response changed on toggle (unlike RadioButton; see
 	// [[feedback-radio-haspricked]]).
 	genChanged := false
-	for range c.Horizontal().KeepIter() {
+	testsChanged := false
+	// HorizontalTop (Align::Min), not Horizontal (Align::Center): the combos
+	// and checkboxes are all interact_size.y tall, but egui's centered
+	// horizontal layout anchors the *first* item in the row a few pixels
+	// higher than the rest, leaving the control row with a ragged baseline.
+	// Top-aligning equal-height items sidesteps that per-item centering and
+	// lands every control on one stable line.
+	for range c.HorizontalTop().KeepIter() {
 		inst.sizeMetricIdx = renderMetricCombo(inst.ids, "size-metric", "Size", inst.sizeMetricIdx)
 		c.AddSpace(styletokens.GapItems(inst.density))
 		inst.colorMetricIdx = renderMetricCombo(inst.ids, "color-metric", "Color", inst.colorMetricIdx)
@@ -359,8 +459,19 @@ func (inst *App) Frame(ctx runtimeapp.FrameContextI) (err error) {
 			SendRespVal(&inst.includeGenerated).HasChanged() {
 			genChanged = true
 		}
+		c.AddSpace(styletokens.GapItems(inst.density))
+		if c.Checkbox(inst.ids.PrepareStr("include-tests"), inst.includeTests, "Include tests").
+			SendRespVal(&inst.includeTests).HasChanged() {
+			testsChanged = true
+		}
+		c.AddSpace(styletokens.GapSections(inst.density))
+		// Show values flips the in-cell label live (the closure reads
+		// inst.showValues), so unlike the metric/filter controls it needs no
+		// rebuild — toggling it preserves the user's drill position.
+		c.Checkbox(inst.ids.PrepareStr("show-values"), inst.showValues, "Show values").
+			SendRespVal(&inst.showValues)
 	}
-	if inst.sizeMetricIdx != prevSize || inst.colorMetricIdx != prevColor || genChanged {
+	if inst.sizeMetricIdx != prevSize || inst.colorMetricIdx != prevColor || genChanged || testsChanged {
 		inst.rebuildTreemap()
 	}
 

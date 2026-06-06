@@ -317,6 +317,56 @@ func TestRepoRoot_ResolvesGitToplevel(t *testing.T) {
 	}
 }
 
+func TestIsTest(t *testing.T) {
+	cases := []struct {
+		name string
+		f    SccFile
+		want bool
+	}{
+		// Go.
+		{"go _test.go", SccFile{Filename: "foo_test.go", Extension: "go", Location: "pkg/foo_test.go"}, true},
+		{"go plain", SccFile{Filename: "foo.go", Extension: "go", Location: "pkg/foo.go"}, false},
+		{"go latest.go is not a test", SccFile{Filename: "latest.go", Extension: "go", Location: "pkg/latest.go"}, false},
+		{"go testing.go is not a test", SccFile{Filename: "testing.go", Extension: "go", Location: "pkg/testing.go"}, false},
+		// Python.
+		{"py *_test.py", SccFile{Filename: "thing_test.py", Extension: "py", Location: "a/thing_test.py"}, true},
+		{"py test_*.py", SccFile{Filename: "test_thing.py", Extension: "py", Location: "a/test_thing.py"}, true},
+		{"py conftest.py", SccFile{Filename: "conftest.py", Extension: "py", Location: "a/conftest.py"}, true},
+		{"py greatest.py is not a test", SccFile{Filename: "greatest.py", Extension: "py", Location: "a/greatest.py"}, false},
+		// Ruby.
+		{"rb *_test.rb", SccFile{Filename: "foo_test.rb", Extension: "rb", Location: "a/foo_test.rb"}, true},
+		{"rb *_spec.rb", SccFile{Filename: "foo_spec.rb", Extension: "rb", Location: "a/foo_spec.rb"}, true},
+		// C / C++.
+		{"cc _test.cc", SccFile{Filename: "foo_test.cc", Extension: "cc", Location: "a/foo_test.cc"}, true},
+		{"cpp _test.cpp", SccFile{Filename: "foo_test.cpp", Extension: "cpp", Location: "a/foo_test.cpp"}, true},
+		// JavaScript / TypeScript.
+		{"js .test.js", SccFile{Filename: "foo.test.js", Extension: "js", Location: "a/foo.test.js"}, true},
+		{"ts .spec.ts", SccFile{Filename: "foo.spec.ts", Extension: "ts", Location: "a/foo.spec.ts"}, true},
+		{"tsx .test.tsx", SccFile{Filename: "Comp.test.tsx", Extension: "tsx", Location: "a/Comp.test.tsx"}, true},
+		{"ts plain", SccFile{Filename: "foo.ts", Extension: "ts", Location: "a/foo.ts"}, false},
+		// Directory conventions.
+		{"java under src/test", SccFile{Filename: "FooTest.java", Extension: "java", Location: "src/test/java/FooTest.java"}, true},
+		{"rust tests/ dir", SccFile{Filename: "integration.rs", Extension: "rs", Location: "tests/integration.rs"}, true},
+		{"go testdata/ dir", SccFile{Filename: "golden.go", Extension: "go", Location: "pkg/testdata/golden.go"}, true},
+		{"js __tests__/ dir", SccFile{Filename: "comp.js", Extension: "js", Location: "src/__tests__/comp.js"}, true},
+		{"spec/ dir", SccFile{Filename: "thing.rb", Extension: "rb", Location: "spec/thing.rb"}, true},
+		// False-positive guards.
+		{"java FooTest outside a test dir (filename pattern skipped)", SccFile{Filename: "FooTest.java", Extension: "java", Location: "src/main/java/FooTest.java"}, false},
+		{"contest/ is not a test dir", SccFile{Filename: "a.go", Extension: "go", Location: "contest/a.go"}, false},
+		{"root-level plain file", SccFile{Filename: "x.go", Extension: "go", Location: "x.go"}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsTest(&tc.f); got != tc.want {
+				t.Errorf("IsTest(%q @ %q): got %v want %v", tc.f.Filename, tc.f.Location, got, tc.want)
+			}
+		})
+	}
+	if IsTest(nil) {
+		t.Error("IsTest(nil): got true want false")
+	}
+}
+
 func TestComplexityPalette_NineStops(t *testing.T) {
 	// Sanity: the palette length is the canonical 9-stop ColorBrewer RdYlGn.
 	if got := len(ComplexityPalette); got != 9 {

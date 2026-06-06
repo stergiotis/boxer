@@ -7,6 +7,15 @@
 // metrics. Cell area defaults to lines-of-code, cell colour to
 // log-scaled cyclomatic complexity (green → yellow → red).
 //
+// Two checkboxes filter what the statistics survey: "Include generated"
+// (scctree.IsGenerated) and "Include tests" (scctree.IsTest); both default
+// off so the view starts focused on hand-written, non-test code. The
+// filter feeds the treemap tree and both distsummary digests from one
+// shared predicate, so toggling either reshapes every surface together. A
+// "Show values" checkbox draws the humanized size- and color-metric value
+// of each tile directly under its name (e.g. "1.2k · 34"); it reads live so
+// toggling it preserves the current drill position.
+//
 // Migrated out of the gallery demo set (formerly `treemap2-scc`) into
 // a standalone AppI so it can be opened directly from the Apps menu
 // and so its scc-subprocess side effects are not entangled with the
