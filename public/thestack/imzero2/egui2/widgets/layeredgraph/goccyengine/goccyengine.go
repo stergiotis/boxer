@@ -253,10 +253,14 @@ func rankDir(r layeredgraph.RankDir) cgraph.RankDir {
 }
 
 func shape(s layeredgraph.NodeShape) cgraph.Shape {
-	if s == layeredgraph.NodeShapeCircle {
+	switch s {
+	case layeredgraph.NodeShapeCircle:
 		return cgraph.CircleShape
+	case layeredgraph.NodeShapeEllipse:
+		return cgraph.EllipseShape
+	default:
+		return cgraph.BoxShape
 	}
-	return cgraph.BoxShape
 }
 
 // inchesToPoints converts a Graphviz size attribute (inches) to points.

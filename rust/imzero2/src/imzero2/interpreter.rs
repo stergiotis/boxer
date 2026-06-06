@@ -875,6 +875,9 @@ pub enum PaintCmd {
     Arrow { ox: f32, oy: f32, dx: f32, dy: f32, stroke: egui::Stroke },
     Text { px: f32, py: f32, anchor_h: u8, anchor_v: u8, text: String, font_size: f32, color: egui::Color32, monospace: bool },
     Polyline { points: Vec<[f32; 2]>, stroke: egui::Stroke },
+    PolygonFilled { points: Vec<[f32; 2]>, fill: egui::Color32 },
+    EllipseFilled { cx: f32, cy: f32, rx: f32, ry: f32, fill: egui::Color32 },
+    EllipseStroke { cx: f32, cy: f32, rx: f32, ry: f32, stroke: egui::Stroke },
     CubicBezier { x0: f32, y0: f32, x1: f32, y1: f32, x2: f32, y2: f32, x3: f32, y3: f32, stroke: egui::Stroke },
     SenseRegion { id: egui::Id, px: f32, py: f32, sw: f32, sh: f32 },
 }
@@ -7961,6 +7964,52 @@ self.end_consume_message()?;
 self.paint_cmds.push(PaintCmd::DashedLine { from_x, from_y, to_x, to_y, dash_len, gap_len, stroke: egui::Stroke::new(stroke_width, color32_from_rgba_u32(col)) });
 
 }
+FuncProcId::PaintEllipseFilled => {
+    #[cfg(feature = "puffin")]
+	puffin::profile_scope!("match FuncProcId::PaintEllipseFilled");
+// arguments
+#[allow(unused_mut)]
+let mut cx = self.io.read_plain_f32()?;
+#[allow(unused_mut)]
+let mut cy = self.io.read_plain_f32()?;
+#[allow(unused_mut)]
+let mut rx = self.io.read_plain_f32()?;
+#[allow(unused_mut)]
+let mut ry = self.io.read_plain_f32()?;
+#[allow(unused_mut)]
+let mut col = self.io.read_plain_u32()?;
+// construct
+if d == 0 {
+self.end_consume_message()?;
+}
+// apply
+self.paint_cmds.push(PaintCmd::EllipseFilled { cx, cy, rx, ry, fill: color32_from_rgba_u32(col) });
+
+}
+FuncProcId::PaintEllipseStroke => {
+    #[cfg(feature = "puffin")]
+	puffin::profile_scope!("match FuncProcId::PaintEllipseStroke");
+// arguments
+#[allow(unused_mut)]
+let mut cx = self.io.read_plain_f32()?;
+#[allow(unused_mut)]
+let mut cy = self.io.read_plain_f32()?;
+#[allow(unused_mut)]
+let mut rx = self.io.read_plain_f32()?;
+#[allow(unused_mut)]
+let mut ry = self.io.read_plain_f32()?;
+#[allow(unused_mut)]
+let mut col = self.io.read_plain_u32()?;
+#[allow(unused_mut)]
+let mut stroke_width = self.io.read_plain_f32()?;
+// construct
+if d == 0 {
+self.end_consume_message()?;
+}
+// apply
+self.paint_cmds.push(PaintCmd::EllipseStroke { cx, cy, rx, ry, stroke: egui::Stroke::new(stroke_width, color32_from_rgba_u32(col)) });
+
+}
 FuncProcId::PaintLine => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match FuncProcId::PaintLine");
@@ -7983,6 +8032,29 @@ self.end_consume_message()?;
 }
 // apply
 self.paint_cmds.push(PaintCmd::Line { from_x, from_y, to_x, to_y, stroke: egui::Stroke::new(stroke_width, color32_from_rgba_u32(col)) });
+
+}
+FuncProcId::PaintPolygonFilled => {
+    #[cfg(feature = "puffin")]
+	puffin::profile_scope!("match FuncProcId::PaintPolygonFilled");
+// arguments
+#[allow(unused_mut)]
+let mut xs = self.io.read_plain_f32h()?;
+#[allow(unused_mut)]
+let mut ys = self.io.read_plain_f32h()?;
+#[allow(unused_mut)]
+let mut col = self.io.read_plain_u32()?;
+// construct
+if d == 0 {
+self.end_consume_message()?;
+}
+// apply
+{
+let n = xs.len().min(ys.len());
+let mut points: Vec<[f32; 2]> = Vec::with_capacity(n);
+for i in 0..n { points.push([xs[i], ys[i]]); }
+self.paint_cmds.push(PaintCmd::PolygonFilled { points, fill: color32_from_rgba_u32(col) });
+}
 
 }
 FuncProcId::PaintPolyline => {
@@ -13188,6 +13260,24 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
                 PaintCmd::Polyline { points, stroke } => {
                     let pts: Vec<egui::Pos2> = points.iter().map(|p| egui::Pos2::new(origin.x + p[0], origin.y + p[1])).collect();
                     painter.line(pts, *stroke);
+                }
+                PaintCmd::PolygonFilled { points, fill } => {
+                    let pts: Vec<egui::Pos2> = points.iter().map(|p| egui::Pos2::new(origin.x + p[0], origin.y + p[1])).collect();
+                    painter.add(egui::Shape::convex_polygon(pts, *fill, egui::Stroke::NONE));
+                }
+                PaintCmd::EllipseFilled { cx, cy, rx, ry, fill } => {
+                    painter.add(egui::Shape::ellipse_filled(
+                        egui::Pos2::new(origin.x + cx, origin.y + cy),
+                        egui::Vec2::new(*rx, *ry),
+                        *fill,
+                    ));
+                }
+                PaintCmd::EllipseStroke { cx, cy, rx, ry, stroke } => {
+                    painter.add(egui::Shape::ellipse_stroke(
+                        egui::Pos2::new(origin.x + cx, origin.y + cy),
+                        egui::Vec2::new(*rx, *ry),
+                        *stroke,
+                    ));
                 }
                 PaintCmd::Text { px, py, anchor_h, anchor_v, text, font_size, color, monospace } => {
                     let align2 = match (anchor_h, anchor_v) {

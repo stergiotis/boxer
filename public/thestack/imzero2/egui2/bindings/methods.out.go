@@ -2535,7 +2535,22 @@ func (inst PaintDashedLineFluid) Send() {
 
 	r.SendIntermediate()
 }
+func (inst PaintEllipseFilledFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst PaintEllipseStrokeFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
 func (inst PaintLineFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst PaintPolygonFilledFluid) Send() {
 	r := inst.r
 
 	r.SendIntermediate()

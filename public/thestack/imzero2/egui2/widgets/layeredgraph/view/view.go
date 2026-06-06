@@ -14,6 +14,7 @@ package view
 
 import (
 	"hash/fnv"
+	"math"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
@@ -266,6 +267,13 @@ func drawNode(sh layeredgraph.NodeShape, cx, cy, w, h float32, st Style, fill co
 		if hovered {
 			c.PaintCircleStroke(cx, cy, r+2, st.Highlight, st.NodeStrokeW+1.5).Send()
 		}
+	case layeredgraph.NodeShapeEllipse:
+		rx, ry := w/2, h/2
+		c.PaintEllipseFilled(cx, cy, rx, ry, fill).Send()
+		c.PaintEllipseStroke(cx, cy, rx, ry, st.NodeStroke, st.NodeStrokeW).Send()
+		if hovered {
+			c.PaintEllipseStroke(cx, cy, rx+2, ry+2, st.Highlight, st.NodeStrokeW+1.5).Send()
+		}
 	default: // box
 		minX, minY, maxX, maxY := cx-w/2, cy-h/2, cx+w/2, cy+h/2
 		c.PaintRectFilled(minX, minY, maxX, maxY, st.Rounding, fill).Send()
@@ -296,11 +304,23 @@ func drawEdge(e layeredgraph.EdgeLayout, tf func(layeredgraph.Point) (float32, f
 		}
 		c.PaintPolyline(xs, ys, col, strokeW).Send()
 	}
-	// Arrow head: a short shaft from the spline end to the head tip, with the
-	// arrow glyph at the tip (the existing painter Arrow primitive).
+	// Arrow head: a solid triangle from the spline end (base) to the head tip,
+	// drawn with the filled-polygon primitive for a clean Graphviz-style head.
 	if e.ArrowHead != nil && len(pts) >= 1 {
-		bx, by := tf(pts[len(pts)-1])
-		hx, hy := tf(*e.ArrowHead)
-		c.PaintArrow(bx, by, hx-bx, hy-by, col, strokeW).Send()
+		bx, by := tf(pts[len(pts)-1]) // spline end = arrow base
+		hx, hy := tf(*e.ArrowHead)    // arrow tip
+		dx, dy := hx-bx, hy-by
+		l := float32(math.Hypot(float64(dx), float64(dy)))
+		if l > 0.5 {
+			ux, uy := dx/l, dy/l    // shaft direction (unit)
+			hw := l * 0.35          // half-width of the head base
+			if hw < 2 {
+				hw = 2
+			}
+			px, py := -uy*hw, ux*hw // perpendicular to the shaft
+			xs := []float32{hx, bx + px, bx - px}
+			ys := []float32{hy, by + py, by - py}
+			c.PaintPolygonFilled(xs, ys, col).Send()
+		}
 	}
 }

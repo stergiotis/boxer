@@ -51,9 +51,9 @@ func init() {
 func trafficLightModel() layeredgraph.GraphModel {
 	return layeredgraph.GraphModel{
 		Nodes: []layeredgraph.Node{
-			{ID: "red", Label: "Red"},
-			{ID: "green", Label: "Green"},
-			{ID: "yellow", Label: "Yellow"},
+			{ID: "red", Label: "Red", Shape: layeredgraph.NodeShapeEllipse},
+			{ID: "green", Label: "Green", Shape: layeredgraph.NodeShapeEllipse},
+			{ID: "yellow", Label: "Yellow", Shape: layeredgraph.NodeShapeEllipse},
 		},
 		Edges: []layeredgraph.Edge{
 			{From: "red", To: "green", Label: "go"},

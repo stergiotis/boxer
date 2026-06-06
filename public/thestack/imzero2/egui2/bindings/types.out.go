@@ -347,10 +347,25 @@ type PaintDashedLineFluid struct {
 }
 type PaintDashedLineMethodIdE uint32
 
+type PaintEllipseFilledFluid struct {
+	r *typed.RetainedFffiBuilder
+}
+type PaintEllipseFilledMethodIdE uint32
+
+type PaintEllipseStrokeFluid struct {
+	r *typed.RetainedFffiBuilder
+}
+type PaintEllipseStrokeMethodIdE uint32
+
 type PaintLineFluid struct {
 	r *typed.RetainedFffiBuilder
 }
 type PaintLineMethodIdE uint32
+
+type PaintPolygonFilledFluid struct {
+	r *typed.RetainedFffiBuilder
+}
+type PaintPolygonFilledMethodIdE uint32
 
 type PaintPolylineFluid struct {
 	r *typed.RetainedFffiBuilder

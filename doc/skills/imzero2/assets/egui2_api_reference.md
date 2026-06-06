@@ -113,7 +113,10 @@ status: draft
 | PaintCircleStroke | BuilderFactory | No | 5 | 0 | 0 | Immediate |
 | PaintCubicBezier | BuilderFactory | No | 10 | 0 | 0 | Immediate |
 | PaintDashedLine | BuilderFactory | No | 8 | 0 | 0 | Immediate |
+| PaintEllipseFilled | BuilderFactory | No | 5 | 0 | 0 | Immediate |
+| PaintEllipseStroke | BuilderFactory | No | 6 | 0 | 0 | Immediate |
 | PaintLine | BuilderFactory | No | 6 | 0 | 0 | Immediate |
+| PaintPolygonFilled | BuilderFactory | No | 3 | 0 | 0 | Immediate |
 | PaintPolyline | BuilderFactory | No | 4 | 0 | 0 | Immediate |
 | PaintRectFilled | BuilderFactory | No | 6 | 0 | 0 | Immediate |
 | PaintRectStroke | BuilderFactory | No | 7 | 0 | 0 | Immediate |
@@ -1539,6 +1542,51 @@ PaintCmd
 
 ---
 
+### PaintEllipseFilled
+
+- **Type:** BuilderFactory
+- **Identity:** No
+- **Features:** Immediate
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| cx | plain | f32 |
+| cy | plain | f32 |
+| rx | plain | f32 |
+| ry | plain | f32 |
+| col | plain | u32 |
+
+#### Return Type
+
+PaintCmd
+
+---
+
+### PaintEllipseStroke
+
+- **Type:** BuilderFactory
+- **Identity:** No
+- **Features:** Immediate
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| cx | plain | f32 |
+| cy | plain | f32 |
+| rx | plain | f32 |
+| ry | plain | f32 |
+| col | plain | u32 |
+| strokeWidth | plain | f32 |
+
+#### Return Type
+
+PaintCmd
+
+---
+
 ### PaintLine
 
 - **Type:** BuilderFactory
@@ -1555,6 +1603,26 @@ PaintCmd
 | toY | plain | f32 |
 | col | plain | u32 |
 | strokeWidth | plain | f32 |
+
+#### Return Type
+
+PaintCmd
+
+---
+
+### PaintPolygonFilled
+
+- **Type:** BuilderFactory
+- **Identity:** No
+- **Features:** Immediate
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| xs | plain | f32h |
+| ys | plain | f32h |
+| col | plain | u32 |
 
 #### Return Type
 

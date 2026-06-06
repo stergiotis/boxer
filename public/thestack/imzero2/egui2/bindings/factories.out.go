@@ -1013,6 +1013,39 @@ func PaintDashedLine(fromX float32, fromY float32, toX float32, toY float32, das
 	return
 }
 
+func PaintEllipseFilled(cx float32, cy float32, rx float32, ry float32, col color.Color) (inst PaintEllipseFilledFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPaintEllipseFilled))
+	r.WriteFloat32(cx)
+	r.WriteFloat32(cy)
+	r.WriteFloat32(rx)
+	r.WriteFloat32(ry)
+	color.PutAsU32(r, col)
+
+	inst = PaintEllipseFilledFluid{
+		r: r,
+	}
+
+	return
+}
+
+func PaintEllipseStroke(cx float32, cy float32, rx float32, ry float32, col color.Color, strokeWidth float32) (inst PaintEllipseStrokeFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPaintEllipseStroke))
+	r.WriteFloat32(cx)
+	r.WriteFloat32(cy)
+	r.WriteFloat32(rx)
+	r.WriteFloat32(ry)
+	color.PutAsU32(r, col)
+	r.WriteFloat32(strokeWidth)
+
+	inst = PaintEllipseStrokeFluid{
+		r: r,
+	}
+
+	return
+}
+
 func PaintLine(fromX float32, fromY float32, toX float32, toY float32, col color.Color, strokeWidth float32) (inst PaintLineFluid) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteOpCode(uint32(FuncProcIdPaintLine))
@@ -1024,6 +1057,20 @@ func PaintLine(fromX float32, fromY float32, toX float32, toY float32, col color
 	r.WriteFloat32(strokeWidth)
 
 	inst = PaintLineFluid{
+		r: r,
+	}
+
+	return
+}
+
+func PaintPolygonFilled(xs []float32, ys []float32, col color.Color) (inst PaintPolygonFilledFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPaintPolygonFilled))
+	runtime.PutFloat32SliceArg(r, xs)
+	runtime.PutFloat32SliceArg(r, ys)
+	color.PutAsU32(r, col)
+
+	inst = PaintPolygonFilledFluid{
 		r: r,
 	}
 

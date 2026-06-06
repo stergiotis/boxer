@@ -227,6 +227,58 @@ self.paint_cmds.push(PaintCmd::Polyline { points, stroke: egui::Stroke::new(stro
 		WithReturnType(structPaintCmd()).
 		Build())
 
+	// paintPolygonFilled — filled convex polygon (e.g. solid arrow heads)
+	registered = append(registered, idl.NewBuilderFactoryNode("paintPolygonFilled").
+		AddArguments(idl.NewArgumentsBuilder().
+			PlainArg("xs", ctabb.F32h).
+			PlainArg("ys", ctabb.F32h).
+			PlainArg("col", ctabb.U32).AsColor().
+			Build()).
+		WithConstructionCodeClientRust(ir.EmptyCode).
+		WithApplyCodeClientRust(rustClientCode(`{
+let n = xs.len().min(ys.len());
+let mut points: Vec<[f32; 2]> = Vec::with_capacity(n);
+for i in 0..n { points.push([xs[i], ys[i]]); }
+self.paint_cmds.push(PaintCmd::PolygonFilled { points, fill: color32_from_rgba_u32(col) });
+}
+`)).
+		WithSettingImmediate(true).
+		WithReturnType(structPaintCmd()).
+		Build())
+
+	// paintEllipseFilled — filled ellipse (rx, ry are the half-width / half-height)
+	registered = append(registered, idl.NewBuilderFactoryNode("paintEllipseFilled").
+		AddArguments(idl.NewArgumentsBuilder().
+			PlainArg("cx", ctabb.F32).
+			PlainArg("cy", ctabb.F32).
+			PlainArg("rx", ctabb.F32).
+			PlainArg("ry", ctabb.F32).
+			PlainArg("col", ctabb.U32).AsColor().
+			Build()).
+		WithConstructionCodeClientRust(ir.EmptyCode).
+		WithApplyCodeClientRust(rustClientCode(`self.paint_cmds.push(PaintCmd::EllipseFilled { cx, cy, rx, ry, fill: color32_from_rgba_u32(col) });
+`)).
+		WithSettingImmediate(true).
+		WithReturnType(structPaintCmd()).
+		Build())
+
+	// paintEllipseStroke — stroked ellipse
+	registered = append(registered, idl.NewBuilderFactoryNode("paintEllipseStroke").
+		AddArguments(idl.NewArgumentsBuilder().
+			PlainArg("cx", ctabb.F32).
+			PlainArg("cy", ctabb.F32).
+			PlainArg("rx", ctabb.F32).
+			PlainArg("ry", ctabb.F32).
+			PlainArg("col", ctabb.U32).AsColor().
+			PlainArg("strokeWidth", ctabb.F32).
+			Build()).
+		WithConstructionCodeClientRust(ir.EmptyCode).
+		WithApplyCodeClientRust(rustClientCode(`self.paint_cmds.push(PaintCmd::EllipseStroke { cx, cy, rx, ry, stroke: egui::Stroke::new(stroke_width, color32_from_rgba_u32(col)) });
+`)).
+		WithSettingImmediate(true).
+		WithReturnType(structPaintCmd()).
+		Build())
+
 	// paintSenseRegion — invisible interaction region, drained by PaintCanvas
 	registered = append(registered, idl.NewBuilderFactoryNode("paintSenseRegion").
 		WithIdentityId(true).

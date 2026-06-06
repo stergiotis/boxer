@@ -16,10 +16,7 @@ package layeredgraph
 
 import "context"
 
-// NodeShape is the drawn boundary of a node. v1 is limited to the shapes the
-// imzero2 painter already renders without new primitives (ADR-0069): a
-// rounded rectangle and a circle. Richer shapes (ellipse, polygon) are
-// deferred until the painter grows the matching primitives.
+// NodeShape is the drawn boundary of a node, rendered by the imzero2 painter.
 type NodeShape uint8
 
 const (
@@ -28,6 +25,9 @@ const (
 	NodeShapeBox NodeShape = iota
 	// NodeShapeCircle is a circle.
 	NodeShapeCircle
+	// NodeShapeEllipse is an oval — Graphviz's natural node shape, which fits a
+	// label more compactly than a circle.
+	NodeShapeEllipse
 )
 
 // RankDir is the primary flow direction of the layered layout: the axis along
