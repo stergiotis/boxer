@@ -282,11 +282,17 @@ func rowCategory(r *FieldRow) (word string, col styletokens.RGBA8) {
 	}
 }
 
-// editField renders a single-line text edit with hint text, in its own
-// Horizontal scope so it can be greyed out independently (c.UiDisable applies
-// to the whole current Ui). Returns true if the value changed this frame.
+// editField renders a single-line text edit with hint text, optionally greyed
+// out. The disable is localised with c.Scope() — egui's layout-transparent
+// localization wrapper — not c.Horizontal(): a nested horizontal is a layout
+// *container*, so each one is allocated as its own sub-region that does not
+// share the parent row's vertical baseline, which drifts successive controls
+// downward into a staircase. A Scope shares the parent cursor/layout, so the
+// control sits on the row baseline exactly as a bare widget would, while
+// c.UiDisable() inside it still only affects that one control. Returns true if
+// the value changed this frame.
 func editField(ids *c.WidgetIdStack, key, hint string, val *string, width float32, enabled bool) (changed bool) {
-	for range c.Horizontal().KeepIter() {
+	for range c.Scope().KeepIter() {
 		if !enabled {
 			c.UiDisable()
 		}
@@ -295,10 +301,11 @@ func editField(ids *c.WidgetIdStack, key, hint string, val *string, width float3
 	return
 }
 
-// toggle renders a checkbox in its own Horizontal scope so it can be greyed out
-// + made non-interactive when the combination it represents would be invalid.
+// toggle renders a checkbox, optionally greyed out + non-interactive when the
+// combination it represents would be invalid. Scoped with c.Scope() for the
+// same baseline reason as editField.
 func toggle(ids *c.WidgetIdStack, key, label string, val *bool, enabled bool) (changed bool) {
-	for range c.Horizontal().KeepIter() {
+	for range c.Scope().KeepIter() {
 		if !enabled {
 			c.UiDisable()
 		}
