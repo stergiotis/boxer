@@ -382,11 +382,22 @@ func renderLayoutTab(scope string, ast canonicaltypes.AstNodeI) {
 
 	fill := color.Hex(styletokens.AccentSubtle.AsHex())
 	muted := color.Hex(styletokens.NeutralTextSecondary.AsHex())
+	accent := color.Hex(styletokens.AccentDefault.AsHex())
 	transparentBg := color.Transparent
 	for range c.Horizontal().KeepIter() {
-		i := 0
-		for m := range ast.IterateMembers() {
-			info := describeMember(m)
+		for i, it := range stripItems(ast) {
+			if it.sep != "" {
+				// Boundary marker between segments: a group '-' is muted; a
+				// signature '_' takes the accent hue so the stronger split reads
+				// at a glance.
+				col := muted
+				if it.sep == canonicaltypes.SignatureSeparator {
+					col = accent
+				}
+				c.LabelAtoms(c.Atoms().BeginRichTextColored(col, transparentBg, it.sep).Monospace().Strong().End().Keep()).Send()
+				continue
+			}
+			info := it.info
 			segId := c.MakeAbsoluteIdStr(scope + "-seg-" + strconv.Itoa(i))
 			w := float32(64)
 			if !info.variable && info.bytes > 0 {
@@ -406,8 +417,6 @@ func renderLayoutTab(scope string, ast canonicaltypes.AstNodeI) {
 					}
 				}
 			}
-			c.AddSpace(4)
-			i++
 		}
 	}
 	c.AddSpace(4)

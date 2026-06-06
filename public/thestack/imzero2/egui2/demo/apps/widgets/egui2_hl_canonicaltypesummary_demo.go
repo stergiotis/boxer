@@ -39,7 +39,7 @@ var ctSumDemoRows = []ctSumDemoRow{
 	{name: "variable utf8", canonical: "s", subject: "leeway.type.col.name", idPrefix: "cts-demo-3"},
 	{name: "ipv4 + CIDR", canonical: "vc", subject: "leeway.type.col.cidr", idPrefix: "cts-demo-4"},
 	{name: "ipv6 CIDR set", canonical: "wcm", subject: "leeway.type.col.subnets", idPrefix: "cts-demo-5"},
-	{name: "group u32-s-vc", canonical: "u32-s-vc", subject: "leeway.type.row.key", idPrefix: "cts-demo-6", open: true},
+	{name: "signature u32-s_vc", canonical: "u32-s_vc", subject: "leeway.type.row.key", idPrefix: "cts-demo-6", open: true},
 }
 
 func init() {

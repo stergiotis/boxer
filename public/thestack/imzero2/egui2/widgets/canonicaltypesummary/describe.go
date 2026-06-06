@@ -160,6 +160,47 @@ func footprint(ast canonicaltypes.AstNodeI) (fixedBytes int, anyVar bool, count 
 	return
 }
 
+// stripItem is one cell of the Layout strip: a segment (info, with sep == "")
+// or a boundary marker between segments — sep is [canonicaltypes.GroupSeparator]
+// ("-", a within-group boundary) or [canonicaltypes.SignatureSeparator] ("_", a
+// between-group boundary).
+type stripItem struct {
+	sep  string
+	info memberInfo
+}
+
+// stripItems walks the AST structure (signature → groups → primitives) into an
+// ordered segment/boundary list, so the Layout strip can show the '-'/'_'
+// boundaries instead of a flat run of members.
+func stripItems(ast canonicaltypes.AstNodeI) (items []stripItem) {
+	if sig, ok := ast.(canonicaltypes.SignatureAstNode); ok {
+		first := true
+		for g := range sig.IterateGroupMembers() {
+			if !first {
+				items = append(items, stripItem{sep: canonicaltypes.SignatureSeparator})
+			}
+			first = false
+			items = append(items, groupStripItems(g)...)
+		}
+		return
+	}
+	return groupStripItems(ast)
+}
+
+// groupStripItems expands a group (or a bare primitive) into segments separated
+// by the group separator.
+func groupStripItems(ast canonicaltypes.AstNodeI) (items []stripItem) {
+	first := true
+	for m := range ast.IterateMembers() {
+		if !first {
+			items = append(items, stripItem{sep: canonicaltypes.GroupSeparator})
+		}
+		first = false
+		items = append(items, stripItem{info: describeMember(m)})
+	}
+	return
+}
+
 // generateGoSource renders the AST as compilable Go. A signature becomes a
 // [canonicaltypes.NewSignatureAstNode] over its group/primitive members; a
 // group becomes a [canonicaltypes.NewGroupAstNode] over primitive literals; a

@@ -134,6 +134,41 @@ func TestGenerateGoSourceSignature(t *testing.T) {
 	assert.Contains(t, src, "canonicaltypes.NetworkTypeAstNode{")
 }
 
+// TestStripItems pins the Layout-strip structural walk: a signature expands to
+// segments interleaved with the right '-'/'_' boundary markers.
+func TestStripItems(t *testing.T) {
+	ast, err := parseType("u32-s_vc")
+	require.NoError(t, err)
+	items := stripItems(ast)
+	require.Len(t, items, 5)
+	assert.Equal(t, "u32", items[0].info.canonical)
+	assert.Equal(t, "-", items[1].sep)
+	assert.Equal(t, "s", items[2].info.canonical)
+	assert.Equal(t, "_", items[3].sep)
+	assert.Equal(t, "vc", items[4].info.canonical)
+}
+
+// TestStripItemsPrimitive: a bare primitive is a single segment, no boundaries.
+func TestStripItemsPrimitive(t *testing.T) {
+	ast, err := parseType("u32")
+	require.NoError(t, err)
+	items := stripItems(ast)
+	require.Len(t, items, 1)
+	assert.Equal(t, "", items[0].sep)
+	assert.Equal(t, "u32", items[0].info.canonical)
+}
+
+// TestStripItemsGroup: a flat group uses only '-' boundaries.
+func TestStripItemsGroup(t *testing.T) {
+	ast, err := parseType("u32-s-v")
+	require.NoError(t, err)
+	items := stripItems(ast)
+	require.Len(t, items, 5)
+	assert.Equal(t, "-", items[1].sep)
+	assert.Equal(t, "-", items[3].sep)
+	assert.Equal(t, "v", items[4].info.canonical)
+}
+
 // TestGenerateGoSourcePrimitive pins the primitive codegen shape: one
 // qualified struct literal carrying the decoded fields.
 func TestGenerateGoSourcePrimitive(t *testing.T) {
