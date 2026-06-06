@@ -74,6 +74,42 @@ func TestSignatureRemoveAtGuard(t *testing.T) {
 	assert.Len(t, sm.elems, 1)
 }
 
+// TestSignatureMoveSelected pins the positional-separator reorder semantics:
+// moving `s` left in `u32-s_vc` slides it through the fixed '-'/'_' gaps to
+// `s-u32_vc` (NOT `s_u32-vc`), and the selection follows the moved element.
+func TestSignatureMoveSelected(t *testing.T) {
+	sm := NewSignatureModel()
+	sm.SetCanonical("u32-s_vc")
+	sm.sel = 1 // select s
+	sm.moveSelected(-1)
+	sm.rebuild()
+	assert.Equal(t, "s-u32_vc", sm.Canonical())
+	assert.Equal(t, 0, sm.sel)
+
+	// Move it back to where it started.
+	sm.moveSelected(1)
+	sm.rebuild()
+	assert.Equal(t, "u32-s_vc", sm.Canonical())
+	assert.Equal(t, 1, sm.sel)
+}
+
+// TestSignatureMoveSelectedEdges confirms moves past either end are no-ops.
+func TestSignatureMoveSelectedEdges(t *testing.T) {
+	sm := NewSignatureModel()
+	sm.SetCanonical("u32-s")
+	sm.sel = 0
+	sm.moveSelected(-1) // already leftmost
+	sm.rebuild()
+	assert.Equal(t, "u32-s", sm.Canonical())
+	assert.Equal(t, 0, sm.sel)
+
+	sm.sel = 1
+	sm.moveSelected(1) // already rightmost
+	sm.rebuild()
+	assert.Equal(t, "u32-s", sm.Canonical())
+	assert.Equal(t, 1, sm.sel)
+}
+
 // TestSignatureInvalidElement propagates element invalidity to the whole
 // signature. A fixed-width string with width 0 (sx0) is invalid AND
 // unparseable, so the element is built directly rather than via SetCanonical.

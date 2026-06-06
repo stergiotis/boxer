@@ -3,6 +3,7 @@ package canonicaltypeedit
 import (
 	"strings"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/canonicaltypesummary"
@@ -154,6 +155,21 @@ func (sm *SignatureModel) removeAt(i int) {
 	}
 }
 
+// moveSelected swaps the selected element's content with its neighbour `delta`
+// steps away and follows it with the selection. Only the primitive content
+// moves — the separators stay in their positional gap slots, so a chip slides
+// through the existing `-`/`_` structure rather than dragging its separator
+// along (e.g. moving `s` left in `u32-s_vc` yields `s-u32_vc`, not `s_u32-vc`).
+// A no-op at the ends.
+func (sm *SignatureModel) moveSelected(delta int) {
+	j := sm.sel + delta
+	if sm.sel < 0 || sm.sel >= len(sm.elems) || j < 0 || j >= len(sm.elems) {
+		return
+	}
+	sm.elems[sm.sel].prim, sm.elems[j].prim = sm.elems[j].prim, sm.elems[sm.sel].prim
+	sm.sel = j
+}
+
 // Render draws the chip strip, the selected element's editor, and the assembled
 // signature status. Call once per frame; scopeKey scopes every widget id. All
 // edits mutate the receiver in place.
@@ -235,11 +251,34 @@ func (sm *SignatureModel) renderChipStrip(ids *c.WidgetIdStack) (structureChange
 			sm.sel = len(sm.elems) - 1
 			structureChanged = true
 		}
-		if len(sm.elems) > 1 {
-			if c.Button(ids.PrepareStr("rm-elem"), c.Atoms().Text("× remove").Keep()).
-				SendResp().HasPrimaryClicked() {
-				removeReq = sm.sel
+		// Reorder the selected element through the positional separator gaps.
+		// The buttons grey out at the ends; the click guard also rejects an
+		// out-of-range move so a greyed button can never act.
+		leftDisabled := sm.sel <= 0
+		for range c.Scope().KeepIter() {
+			if leftDisabled {
+				c.UiDisable()
 			}
+			if c.Button(ids.PrepareStr("move-left"), c.Atoms().Text(icons.PhCaretLeft).Keep()).
+				SendResp().HasPrimaryClicked() && !leftDisabled {
+				sm.moveSelected(-1)
+				structureChanged = true
+			}
+		}
+		rightDisabled := sm.sel >= len(sm.elems)-1
+		for range c.Scope().KeepIter() {
+			if rightDisabled {
+				c.UiDisable()
+			}
+			if c.Button(ids.PrepareStr("move-right"), c.Atoms().Text(icons.PhCaretRight).Keep()).
+				SendResp().HasPrimaryClicked() && !rightDisabled {
+				sm.moveSelected(1)
+				structureChanged = true
+			}
+		}
+		if c.Button(ids.PrepareStr("rm-elem"), c.Atoms().Text("× remove").Keep()).
+			SendResp().HasPrimaryClicked() {
+			removeReq = sm.sel
 		}
 	}
 	if removeReq >= 0 {

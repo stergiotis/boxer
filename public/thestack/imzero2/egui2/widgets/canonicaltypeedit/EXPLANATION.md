@@ -83,8 +83,11 @@ Two caller-owned models:
 `SignatureModel` builds a signature as a **chip strip**: each chip is a
 primitive element (edited by the shared `Model` bar+form when selected),
 separated from the next by `-` (same group) or `_` (new group), with add /
-remove / select / separator-toggle. The outer level is builder-primary (you
-assemble via chips); per-chip editing stays bidirectional. On `rebuild` the AST
+remove / select / separator-toggle / reorder (`◀`/`▶`). Reorder is
+**positional** — the separators stay in their gap slots and the chip slides
+through, so moving `s` left in `u32-s_vc` yields `s-u32_vc` (not `s_u32-vc`).
+The outer level is builder-primary (you assemble via chips); per-chip editing
+stays bidirectional. On `rebuild` the AST
 is built structurally — `-`-runs become `NewGroupAstNode`, `_` splits into a
 `NewSignatureAstNode` — and the assembled canonical string drives the embedded
 summary chip. `SetCanonical` seeds the strip by splitting on `_` then `-`.
@@ -99,11 +102,12 @@ reads "live type" for a lone primitive and "live signature" once it grows.
 
 ## Deferred (ADR-0067)
 
-- **Groups / signatures.** The draft is one primitive; the planned next cut
-  wraps it as one element of a chip list (`-` groups, `_` signatures), at which
-  point the outer level likely goes builder-primary while each chip keeps the
-  bidirectional bar.
+Groups / signatures and chip reorder have landed (see Composition above). Still
+deferred:
+
 - **Copy-to-clipboard** on the canonical readout, and richer width affordances.
+- Full bidirectional sync at the whole-signature scale (the outer level is
+  builder-primary by design).
 
 ## Tests
 
