@@ -28,9 +28,10 @@ type Input struct {
 }
 
 const (
-	editorMinWidth = 470
-	outputMinWidth = 560
+	editorMinWidth = 560
+	outputMinWidth = 600
 	previewRows    = 30
+	rowBarWidth    = 4
 )
 
 // channelChoices is the v1 channel picker set — the four Cut-1 channels.
@@ -93,17 +94,16 @@ func renderEditor(ids *c.WidgetIdStack, m *Model) {
 		rt.Strong()
 	}
 	for range c.Horizontal().KeepIter() {
-		if c.TextEdit(ids.PrepareStr("kind"), m.Kind, false).DesiredWidth(150).SendRespVal(&m.Kind).HasChanged() {
+		if editField(ids, "kind", "kind", &m.Kind, 150, true) {
 			m.dirty = true
 		}
-		if c.TextEdit(ids.PrepareStr("pkg"), m.PackageName, false).DesiredWidth(130).SendRespVal(&m.PackageName).HasChanged() {
+		if editField(ids, "pkg", "package", &m.PackageName, 130, true) {
 			m.dirty = true
 		}
-		if c.TextEdit(ids.PrepareStr("type"), m.KindType, false).DesiredWidth(150).SendRespVal(&m.KindType).HasChanged() {
+		if editField(ids, "type", "Go type", &m.KindType, 150, true) {
 			m.dirty = true
 		}
 	}
-	c.Label("kind / package / type").Send()
 	c.Separator().Send()
 
 	// Field rows, stacked directly in the column. (A bounded scroll area for
@@ -117,88 +117,192 @@ func renderEditor(ids *c.WidgetIdStack, m *Model) {
 				hasRemove = true
 			}
 		}
+		c.AddSpace(4)
 	}
 	if hasRemove {
 		m.removeByUID(removeUID)
 	}
 
-	c.AddSpace(4)
 	if c.Button(ids.PrepareStr("add-field"), c.Atoms().Text("+ field").Keep()).SendResp().HasPrimaryClicked() {
 		m.AddRow()
 	}
 }
 
-// renderRow draws one field row and returns true if its remove button fired.
+// renderRow draws one field row — a category colour-bar + a framed body whose
+// header names the field and shows its assembled lw: tag — and returns true if
+// its remove button fired.
 func renderRow(ids *c.WidgetIdStack, m *Model, r *FieldRow) (remove bool) {
-	for range c.Frame(ids.PrepareStr("rowframe")).
-		Fill(color.Hex(styletokens.NeutralBgSurface.AsHex())).
-		InnerMargin(6).
-		CornerRadius(4).
-		KeepIter() {
+	// A const is a fixed scalar string declared on a `_` field: no Go field,
+	// no element shape, no explode. Normalise those off so the row stays valid
+	// and the shape toggles below render disabled.
+	if r.IsConst && (r.IsOption || r.IsSlice || r.IsRoaring || r.Explode) {
+		r.IsOption, r.IsSlice, r.IsRoaring, r.Explode = false, false, false, false
+		m.dirty = true
+	}
 
-		// Go field name, Go type, remove.
-		for range c.Horizontal().KeepIter() {
-			if c.TextEdit(ids.PrepareStr("gofield"), r.GoField, false).DesiredWidth(120).SendRespVal(&r.GoField).HasChanged() {
-				m.dirty = true
-			}
-			if c.TextEdit(ids.PrepareStr("gotype"), r.GoType, false).DesiredWidth(110).SendRespVal(&r.GoType).HasChanged() {
-				m.dirty = true
-			}
-			if c.Button(ids.PrepareStr("rm"), c.Atoms().Text("remove").Keep()).SendResp().HasPrimaryClicked() {
-				remove = true
-			}
+	word, catCol := rowCategory(r)
+	tagged := r.Membership != ""
+
+	for range c.Horizontal().KeepIter() {
+		// Category colour bar — plain / value / const at a glance.
+		for range c.Frame(ids.PrepareStr("bar")).Fill(color.Hex(catCol.AsHex())).CornerRadius(3).KeepIter() {
+			c.AddSpace(rowBarWidth)
 		}
+		c.AddSpace(6)
 
-		// Membership, section, sub-column.
-		for range c.Horizontal().KeepIter() {
-			if c.TextEdit(ids.PrepareStr("memb"), r.Membership, false).DesiredWidth(120).SendRespVal(&r.Membership).HasChanged() {
-				m.dirty = true
-			}
-			if c.TextEdit(ids.PrepareStr("sec"), r.Section, false).DesiredWidth(110).SendRespVal(&r.Section).HasChanged() {
-				m.dirty = true
-			}
-			if c.TextEdit(ids.PrepareStr("col"), r.Column, false).DesiredWidth(90).SendRespVal(&r.Column).HasChanged() {
-				m.dirty = true
-			}
-		}
+		// Framed body. The Vertical pins line stacking (a Frame inherits the
+		// surrounding Horizontal otherwise).
+		for range c.Frame(ids.PrepareStr("body")).
+			Fill(color.Hex(styletokens.NeutralBgSurface.AsHex())).
+			InnerMargin(8).
+			CornerRadius(4).
+			KeepIter() {
+			for range c.Vertical().KeepIter() {
+				renderRowHeader(r, word, catCol)
 
-		// Channel + flags + shape — only meaningful on tagged value/const
-		// fields; a plain column (empty membership) carries none of them.
-		if r.Membership != "" {
-			for range c.Horizontal().KeepIter() {
-				renderChannelCombo(ids, m, r)
-				if c.Checkbox(ids.PrepareStr("unit"), r.Unit, "unit").SendRespVal(&r.Unit).HasChanged() {
-					m.dirty = true
+				// Go field + type (both meaningless for a const), and remove.
+				for range c.Horizontal().KeepIter() {
+					if editField(ids, "gofield", "Go field", &r.GoField, 120, !r.IsConst) {
+						m.dirty = true
+					}
+					if editField(ids, "gotype", "type", &r.GoType, 110, !r.IsConst) {
+						m.dirty = true
+					}
+					if c.Button(ids.PrepareStr("rm"), c.Atoms().Text("remove").Keep()).SendResp().HasPrimaryClicked() {
+						remove = true
+					}
 				}
-				if c.Checkbox(ids.PrepareStr("explode"), r.Explode, "explode").SendRespVal(&r.Explode).HasChanged() {
-					m.dirty = true
-				}
-				if c.Checkbox(ids.PrepareStr("const"), r.IsConst, "const").SendRespVal(&r.IsConst).HasChanged() {
-					m.dirty = true
-				}
-				if r.IsConst {
-					if c.TextEdit(ids.PrepareStr("constval"), r.ConstValue, false).DesiredWidth(100).SendRespVal(&r.ConstValue).HasChanged() {
+
+				// Binding: membership, section, sub-column. A sub-column only
+				// applies to a tagged value field (not plain, not const).
+				for range c.Horizontal().KeepIter() {
+					if editField(ids, "memb", "membership", &r.Membership, 120, true) {
+						m.dirty = true
+					}
+					if editField(ids, "sec", "section", &r.Section, 110, true) {
+						m.dirty = true
+					}
+					if editField(ids, "col", "sub-col", &r.Column, 90, tagged && !r.IsConst) {
 						m.dirty = true
 					}
 				}
-			}
-			for range c.Horizontal().KeepIter() {
-				if c.Checkbox(ids.PrepareStr("opt"), r.IsOption, "option").SendRespVal(&r.IsOption).HasChanged() {
-					m.dirty = true
-				}
-				if c.Checkbox(ids.PrepareStr("slice"), r.IsSlice, "slice").SendRespVal(&r.IsSlice).HasChanged() {
-					m.dirty = true
-				}
-				if c.Checkbox(ids.PrepareStr("roaring"), r.IsRoaring, "roaring").SendRespVal(&r.IsRoaring).HasChanged() {
-					m.dirty = true
+
+				if tagged {
+					renderRowFlags(ids, m, r)
 				}
 			}
 		}
+	}
+	return
+}
 
-		// The assembled lw: tag, read-only — what PlanBuilder actually parses.
+// renderRowHeader draws the category word (coloured), the field name, and the
+// live assembled lw: tag.
+func renderRowHeader(r *FieldRow, word string, catCol styletokens.RGBA8) {
+	name := r.GoField
+	if name == "" {
+		name = r.Section
+	}
+	if name == "" {
+		name = "field"
+	}
+	for range c.Horizontal().KeepIter() {
+		for rt := range c.RichTextLabelColored(color.Hex(catCol.AsHex()).Keep(), color.Transparent.Keep(), word) {
+			rt.Small()
+		}
+		c.AddSpace(6)
+		for rt := range c.RichTextLabel(name) {
+			rt.Strong()
+		}
+		c.AddSpace(8)
 		for rt := range c.RichTextLabel(`lw:"` + r.LWTag() + `"`) {
 			rt.Small()
 		}
+	}
+}
+
+// renderRowFlags draws the channel picker, the unit/explode/const flags, and
+// the element-shape toggles, disabling every control whose toggle would compose
+// an invalid field. A control stays interactive while it is on, so a state that
+// became invalid (e.g. by changing the shape) can always be backed out.
+func renderRowFlags(ids *c.WidgetIdStack, m *Model, r *FieldRow) {
+	isMulti := r.IsSlice || r.IsRoaring
+	// Shape is mutually exclusive (scalar / Option[T] / []T / roaring) and a
+	// const carries none of it.
+	optEnabled := !r.IsConst && (r.IsOption || (!r.IsSlice && !r.IsRoaring))
+	sliceEnabled := !r.IsConst && (r.IsSlice || (!r.IsOption && !r.IsRoaring))
+	roarEnabled := !r.IsConst && (r.IsRoaring || (!r.IsOption && !r.IsSlice))
+	explodeEnabled := !r.IsConst && (r.Explode || isMulti) // explode requires a multi shape
+	unitEnabled := r.Unit || !(isMulti && !r.Explode)      // unit on a multi shape requires explode
+
+	for range c.Horizontal().KeepIter() {
+		renderChannelCombo(ids, m, r)
+		if toggle(ids, "unit", "unit", &r.Unit, unitEnabled) {
+			m.dirty = true
+		}
+		if toggle(ids, "explode", "explode", &r.Explode, explodeEnabled) {
+			m.dirty = true
+		}
+		if toggle(ids, "const", "const", &r.IsConst, true) {
+			m.dirty = true
+		}
+		if r.IsConst {
+			if editField(ids, "constval", "const value", &r.ConstValue, 120, true) {
+				m.dirty = true
+			}
+		}
+	}
+
+	for range c.Horizontal().KeepIter() {
+		for rt := range c.RichTextLabel("shape") {
+			rt.Small()
+		}
+		c.AddSpace(4)
+		if toggle(ids, "opt", "Option[T]", &r.IsOption, optEnabled) {
+			m.dirty = true
+		}
+		if toggle(ids, "slice", "[]T", &r.IsSlice, sliceEnabled) {
+			m.dirty = true
+		}
+		if toggle(ids, "roaring", "roaring", &r.IsRoaring, roarEnabled) {
+			m.dirty = true
+		}
+	}
+}
+
+// rowCategory classifies a row for the header colour-bar / word.
+func rowCategory(r *FieldRow) (word string, col styletokens.RGBA8) {
+	switch {
+	case r.IsConst:
+		return "const", styletokens.WarningDefault
+	case r.Membership == "":
+		return "plain", styletokens.InfoDefault
+	default:
+		return "value", styletokens.AccentDefault
+	}
+}
+
+// editField renders a single-line text edit with hint text, in its own
+// Horizontal scope so it can be greyed out independently (c.UiDisable applies
+// to the whole current Ui). Returns true if the value changed this frame.
+func editField(ids *c.WidgetIdStack, key, hint string, val *string, width float32, enabled bool) (changed bool) {
+	for range c.Horizontal().KeepIter() {
+		if !enabled {
+			c.UiDisable()
+		}
+		changed = c.TextEdit(ids.PrepareStr(key), *val, false).HintText(hint).DesiredWidth(width).SendRespVal(val).HasChanged()
+	}
+	return
+}
+
+// toggle renders a checkbox in its own Horizontal scope so it can be greyed out
+// + made non-interactive when the combination it represents would be invalid.
+func toggle(ids *c.WidgetIdStack, key, label string, val *bool, enabled bool) (changed bool) {
+	for range c.Horizontal().KeepIter() {
+		if !enabled {
+			c.UiDisable()
+		}
+		changed = c.Checkbox(ids.PrepareStr(key), *val, label).SendRespVal(val).HasChanged()
 	}
 	return
 }
