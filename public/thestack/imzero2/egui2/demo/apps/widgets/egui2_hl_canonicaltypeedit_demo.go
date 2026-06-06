@@ -36,10 +36,11 @@ func init() {
 			"form, kept in sync (§SD2) — so the common case carries no sequence " +
 			"chrome. Click '+ element' to grow it into a group/signature: a chip " +
 			"strip appears with '-' (same group) / '_' (new group) separators, " +
-			"add / remove / select, and one shared bar+form editing the selected " +
-			"chip (bidirectional per chip). The 'live type' row is the embedded " +
-			"canonicaltypesummary level-1 chip, whose anchor toggle pops the full " +
-			"tethered inspector. Chip reorder is deferred.",
+			"add / remove / select / reorder, and one shared bar+form editing the " +
+			"selected chip (bidirectional per chip). Reorder moves a chip through " +
+			"the fixed '-'/'_' gaps (positional separators). The 'live type' row is " +
+			"the embedded canonicaltypesummary level-1 chip, whose anchor toggle " +
+			"pops the full tethered inspector.",
 		Init: func(_ *c.WidgetIdStack) (state any) {
 			m := canonicaltypeedit.NewSignatureModel()
 			m.SetCanonical("u32l")
