@@ -3,6 +3,7 @@
 package distsummary
 
 import (
+	"math"
 	"strconv"
 	"strings"
 	"testing"
@@ -58,7 +59,7 @@ func TestComputeFiveNumberSummaryUniform(t *testing.T) {
 
 func TestFormatSummaryFullLayout(t *testing.T) {
 	s := fiveNumberSummary{n: 1024, min: 0.1, q1: 12.5, median: 18, q3: 24, max: 89.2}
-	label := formatSummary(s, true, true, defaultFormat)
+	label := formatSummary(s, true, true, humanizeValue)
 	assert.True(t, strings.HasPrefix(label, icons.IconChartLine), "icon prefix missing: %q", label)
 	assert.Contains(t, label, "n=1024")
 	assert.Contains(t, label, "│")
@@ -70,7 +71,7 @@ func TestFormatSummaryFullLayout(t *testing.T) {
 
 func TestFormatSummaryNoData(t *testing.T) {
 	s := fiveNumberSummary{}
-	label := formatSummary(s, true, true, defaultFormat)
+	label := formatSummary(s, true, true, humanizeValue)
 	assert.Contains(t, label, "(no data)")
 	// n= and the quartile separator must not leak into the empty path.
 	assert.NotContains(t, label, "n=")
@@ -118,7 +119,7 @@ func TestRendererFluentSettersReturnCopies(t *testing.T) {
 func TestRendererFormatNilIsNoop(t *testing.T) {
 	r := New("test").Format(nil)
 	require.NotNil(t, r.formatFunc)
-	assert.Equal(t, defaultFormat(0.5), r.formatFunc(0.5))
+	assert.Equal(t, humanizeValue(0.5), r.formatFunc(0.5))
 }
 
 // TestRendererEcdfSetterReturnsCopy locks the value-receiver contract
@@ -154,6 +155,62 @@ func TestRendererGridNClampsBelowMinimum(t *testing.T) {
 func TestRendererGridNAcceptsValid(t *testing.T) {
 	r := New("test").GridN(64)
 	assert.Equal(t, 64, r.gridN)
+}
+
+// TestHumanizeValue pins the default formatter's contract: plain
+// ~3-significant-figure decimals inside the comfortable [0.001, 1000)
+// band, SI metric prefixes outside it, and never scientific notation.
+// The boundary rows (999 999 rolling up to "1M", the band edges) guard
+// the round-first prefix selection.
+func TestHumanizeValue(t *testing.T) {
+	cases := []struct {
+		in   float64
+		want string
+	}{
+		// comfortable band: plain decimals, trailing zeros trimmed
+		{0, "0"},
+		{1, "1"},
+		{3, "3"},
+		{18, "18"},
+		{89.2, "89.2"},
+		{12.5, "12.5"},
+		{2.66, "2.66"},
+		{999, "999"},
+		{0.1, "0.1"},      // not "100m" — fractions stay plain
+		{0.093, "0.093"},
+		{0.005, "0.005"},
+		{0.001, "0.001"}, // lower band edge stays plain
+		// negatives keep the sign, no prefix in-band
+		{-8, "-8"},
+		{-2.5, "-2.5"},
+		// large magnitudes: SI up-prefixes instead of 1.2e+06
+		{1000, "1k"},
+		{1234, "1.23k"},
+		{12345, "12.3k"},
+		{123456, "123k"},
+		{999999, "1M"}, // rounds up across the k→M boundary
+		{1_000_000, "1M"},
+		{4_500_000, "4.5M"},
+		{2_000_000_000, "2G"},
+		{-2.5e9, "-2.5G"},
+		// small magnitudes: SI down-prefixes instead of 1.2e-05
+		{5e-5, "50µ"},
+		{1.2e-5, "12µ"},
+		{0.0001234, "123µ"},
+		{0.0009, "900µ"},
+		{1e-9, "1n"},
+		{-1.2e-5, "-12µ"},
+	}
+	for _, tc := range cases {
+		got := humanizeValue(tc.in)
+		assert.Equal(t, tc.want, got, "humanizeValue(%v)", tc.in)
+		// The whole point: a summary token never carries an exponent marker.
+		assert.NotContains(t, got, "e", "scientific notation leaked for %v", tc.in)
+	}
+	// Non-finite inputs degrade to strconv's 'g' form rather than panicking.
+	assert.Equal(t, "NaN", humanizeValue(math.NaN()))
+	assert.Equal(t, "+Inf", humanizeValue(math.Inf(1)))
+	assert.Equal(t, "-Inf", humanizeValue(math.Inf(-1)))
 }
 
 // TestInstanceStateDefaultsToEcdfTab pins the zero-value contract:

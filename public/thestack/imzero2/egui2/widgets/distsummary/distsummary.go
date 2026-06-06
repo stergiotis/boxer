@@ -102,9 +102,12 @@ const bandWarmRepaintIntervalSecs = 0.05
 const exactBandAutoMaxN = 500
 
 // FormatFunc converts one of the summary's float values into a display
-// string for the level-1 label. The default uses strconv.FormatFloat
-// with verb 'g' and 4 significant digits — terse and human-readable
-// across unbounded value ranges.
+// string for the level-1 label. The default ([humanizeValue]) prints
+// plain ~3-significant-figure decimals in the comfortable [0.001, 1000)
+// band and switches to SI metric prefixes outside it (1.23k, 4.5M, 12µ)
+// so the inline summary stays compact and never falls back to
+// scientific notation. Override via [Renderer.Format] for unit suffixes
+// or domain-specific precision.
 type FormatFunc func(float64) string
 
 // Renderer is the configured distsummary widget. Values are immutable
@@ -213,7 +216,8 @@ func getInstanceState(idPrefix string) *instanceState {
 //     compensate for tooltip clipping)
 //   - n is shown
 //   - chart-line icon (Phosphor) is shown
-//   - format uses strconv.FormatFloat('g', 4)
+//   - format humanizes values with SI metric prefixes outside the
+//     [0.001, 1000) band (1.23k, 4.5M, 12µ); override via Format
 //   - embedded boxenplot uses its own defaults; override via Boxenplot.
 //   - embedded ECDF uses [ecdf.New] defaults (Berk-Jones, α=0.05);
 //     override via Ecdf. Grid resolution defaults to
@@ -229,7 +233,7 @@ func New(idPrefix string) (inst Renderer) {
 		popupPad:    4,
 		showN:       true,
 		showIcon:    true,
-		formatFunc:  defaultFormat,
+		formatFunc:  humanizeValue,
 		plot:        boxenplot.New(idPrefix + "-bp"),
 		ecdfPlot:    ecdf.New(),
 		gridN:       defaultEcdfGridN,

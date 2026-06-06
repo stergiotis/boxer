@@ -20,10 +20,14 @@ import (
 // =============================================================================
 // distsummary widget demo — two-level distribution summary
 //
-// Four synthetic distributions are pre-fed into TDigests at init. Each
-// row in the demo renders a labelled distsummary: level 1 is the
-// in-flow 5-number-summary line; hover any row to reveal the level-2
-// boxenplot rendered inside an egui tooltip via c.HoverUi.
+// Six synthetic distributions are pre-fed into TDigests at init,
+// deliberately spanning scales from microseconds to gigabytes so the
+// level-1 label's humanized formatting is visible: in-band values print
+// as plain decimals while large / small ones take SI metric prefixes
+// (400M, 2G, 50µ) instead of scientific notation. Each row renders a
+// labelled distsummary: level 1 is the in-flow 5-number-summary line;
+// hover any row to reveal the level-2 boxenplot rendered inside an egui
+// tooltip via c.HoverUi.
 // =============================================================================
 
 type distsumDemoRow struct {
@@ -126,11 +130,13 @@ func demoDistsummary(ids *c.WidgetIdStack) {
 	).Send()
 }
 
-// buildDistsumDemoRows seeds four TDigests with synthetic samples
-// covering distinct shapes (narrow, wide, skewed, heavy-tailed) so the
-// hover popup visibly differs from row to row. K=8 matches
-// letterval.MinTailCount; the extremes feed OutlierModeAuto when n is
-// small (synthetic data here is large so Count mode wins).
+// buildDistsumDemoRows seeds six TDigests with synthetic samples
+// covering distinct shapes (narrow, wide, skewed, heavy-tailed) and a
+// wide span of magnitudes (sub-millisecond to gigabyte) so both the
+// hover popup and the level-1 label's SI formatting visibly differ from
+// row to row. K=8 matches letterval.MinTailCount; the extremes feed
+// OutlierModeAuto when n is small (synthetic data here is large so Count
+// mode wins).
 func buildDistsumDemoRows() (out []*distsumDemoRow) {
 	type variant struct {
 		name string
@@ -143,6 +149,11 @@ func buildDistsumDemoRows() (out []*distsumDemoRow) {
 		{"p50 ≈ 12 ms", 12.0, 2.0, 22},
 		{"heavy-tailed", 50.0, 15.0, 33},
 		{"narrow", 0.10, 0.01, 44},
+		// Large- and small-scale rows exercise the humanized formatter's SI
+		// metric prefixes (up: 400M / 2G; down: ~10–90µ) — the in-band rows
+		// above stay plain, so the two groups read side by side.
+		{"payload ≈ 2 GB", 2.0e9, 4.0e8, 55},
+		{"jitter ≈ 50 µs", 5.0e-5, 1.0e-5, 66},
 	}
 	// Per-row provenance subjects — exercise the inspector.ProvenanceChip
 	// migration on the level-2 hover popup. Subjects shaped like the
@@ -153,6 +164,8 @@ func buildDistsumDemoRows() (out []*distsumDemoRow) {
 		"app.play.event.latency.median.ms",
 		"app.spinnaker.event.dist.bursty",
 		"app.imztop.event.cpu.idle.frac",
+		"app.store.event.payload.bytes",
+		"app.play.event.jitter.s",
 	}
 	// Per-row idPrefix — required for distsummary.Pinned's absolute-id
 	// derivation contract. Unique per row so multi-row pinning would
@@ -162,6 +175,8 @@ func buildDistsumDemoRows() (out []*distsumDemoRow) {
 		"ds-demo-row1",
 		"ds-demo-row2",
 		"ds-demo-row3",
+		"ds-demo-row4",
+		"ds-demo-row5",
 	}
 	const n = 10_000
 	const k = 8
