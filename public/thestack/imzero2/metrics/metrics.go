@@ -14,9 +14,6 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
 )
 
-// FrameBudgetNs is the wall-clock budget for a single 60 Hz frame.
-const FrameBudgetNs int64 = 16_666_667
-
 // SlowFrameThresholdNs is the real-work budget at or above which
 // [FrameMetrics.RecordBytes] emits a structured warning. "Real work" is the
 // Go-side widget build (render) plus the Rust-side interpret — the two slots
@@ -313,17 +310,16 @@ func (inst *FrameMetrics) RecordRust(interpretUs uint64, passNr uint64) {
 // InterpretNs (Rust compute). It captures how much of the 16.6 ms budget
 // is spent waiting on the next vsync rather than on either side's work.
 type Snapshot struct {
-	FrameCounter   uint64
-	RenderNs       int64
-	SyncNs         int64
-	TotalNs        int64
-	RawTotalNs     int64
-	InterpretNs    int64
-	SlackNs        int64
-	WrittenBytes   int64
-	ReadBytes      int64
-	RustPassNr     uint64
-	BudgetFraction float64
+	FrameCounter uint64
+	RenderNs     int64
+	SyncNs       int64
+	TotalNs      int64
+	RawTotalNs   int64
+	InterpretNs  int64
+	SlackNs      int64
+	WrittenBytes int64
+	ReadBytes    int64
+	RustPassNr   uint64
 }
 
 func (inst *FrameMetrics) Snapshot() (s Snapshot) {
@@ -340,9 +336,6 @@ func (inst *FrameMetrics) Snapshot() (s Snapshot) {
 	s.WrittenBytes = int64(inst.EmaWritten)
 	s.ReadBytes = int64(inst.EmaRead)
 	s.RustPassNr = inst.LastPassNr
-	if FrameBudgetNs > 0 {
-		s.BudgetFraction = float64(s.TotalNs) / float64(FrameBudgetNs)
-	}
 	return
 }
 

@@ -267,10 +267,6 @@ func TestSnapshot_FieldsMappedFromEmas(t *testing.T) {
 	if s.FrameCounter != 17 {
 		t.Errorf("FrameCounter: got %d want 17", s.FrameCounter)
 	}
-	wantBudget := float64(10_000_000) / float64(FrameBudgetNs)
-	if math.Abs(s.BudgetFraction-wantBudget) > 1e-9 {
-		t.Errorf("BudgetFraction: got %v want %v", s.BudgetFraction, wantBudget)
-	}
 }
 
 func TestSnapshot_SlackClampsToZeroWhenInterpretExceedsTotal(t *testing.T) {
@@ -281,14 +277,6 @@ func TestSnapshot_SlackClampsToZeroWhenInterpretExceedsTotal(t *testing.T) {
 	s := fm.Snapshot()
 	if s.SlackNs != 0 {
 		t.Errorf("SlackNs should clamp to 0 when InterpretNs > TotalNs; got %d", s.SlackNs)
-	}
-}
-
-func TestFrameBudgetNs_Is60Hz(t *testing.T) {
-	// Documents the constant so a future tweak shows up as a test failure.
-	const want int64 = 16_666_667
-	if FrameBudgetNs != want {
-		t.Errorf("FrameBudgetNs: got %d want %d", FrameBudgetNs, want)
 	}
 }
 

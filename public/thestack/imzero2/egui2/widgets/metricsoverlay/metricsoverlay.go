@@ -1,6 +1,6 @@
 //go:build llm_generated_opus47
 
-// Package metricsoverlay renders frame-budget readouts suitable for
+// Package metricsoverlay renders frame-timing readouts suitable for
 // embedding in a menu or status bar. The time/byte values reflect the
 // previous completed frame (one-frame display lag, invisible at 60 Hz) and
 // are EMA-smoothed by the metrics package so they are stable enough to read
@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/distsummary"
@@ -44,7 +43,7 @@ func formatFps(v float64) string {
 // Layout (monospace, fixed column widths so the bar doesn't shimmy as values
 // change), followed by the frame-rate distribution anchor:
 //
-//	Go XX.Xms  Rust XX.Xms  vsync XX.Xms  ↑XXXXXKB ↓XXXXXKB  XXX%/16.6ms  n=N p0 .. p50 .. p100 .. fps
+//	Go XX.Xms  Rust XX.Xms  vsync XX.Xms  ↑XXXXXKB ↓XXXXXKB  n=N p0 .. p50 .. p100 .. fps
 //
 // The three time slots are honest about what they each measure:
 //   - Go render: pure Go widget code time (StartServersideFrame → Sync entry)
@@ -66,17 +65,14 @@ func RenderInline(fpsId c.WidgetIdCreatorI) {
 	renderMs := float64(s.RenderNs) / 1e6
 	interpretMs := float64(s.InterpretNs) / 1e6
 	slackMs := float64(s.SlackNs) / 1e6
-	pct := s.BudgetFraction * 100.0
+	// The trailing two spaces are the gap before the frame-rate anchor; the
+	// distsummary widget renders the chart-line icon, the percentile-labelled
+	// summary, the "fps" unit, and the inspector toggle itself.
 	body := fmt.Sprintf("Go %5.1fms  Rust %5.1fms  vsync %5.1fms  ↑%s ↓%s  ",
 		renderMs, interpretMs, slackMs,
 		formatBytesFixed(s.WrittenBytes), formatBytesFixed(s.ReadBytes),
 	)
 	monoLabel(body, color.Color{}, false)
-	monoLabel(fmt.Sprintf("%03.0f%%/16.6ms", pct), budgetColor(s.BudgetFraction), true)
-	// Spacer before the frame-rate anchor; the distsummary widget renders the
-	// chart-line icon, the percentile-labelled summary, the "fps" unit, and
-	// the inspector toggle itself.
-	monoLabel("  ", color.Color{}, false)
 	fpsDist.Render(fpsId, metrics.Current.FpsDigest(), nil)
 }
 
@@ -100,27 +96,5 @@ func monoLabel(text string, col color.Color, colored bool) {
 // matters more for layout stability than human-friendly unit selection.
 func formatBytesFixed(n int64) (s string) {
 	s = fmt.Sprintf("%5.1fKB", float64(n)/1024.0)
-	return
-}
-
-// budgetColor maps a 0..1 frame-budget fraction to a traffic-light colour
-// sourced from the IDS semantic palette (ADR-0031 §SD2):
-//
-//   - frac < 0.5  → Success (healthy headroom)
-//   - frac < 0.8  → Warning (degraded; budget tightening)
-//   - frac ≥ 0.8  → Error   (at or over budget)
-//
-// Saturation caps at 1.0 — any value past full budget reads the same
-// Error red, matching the operator's mental model that "over budget is
-// over budget."
-func budgetColor(frac float64) (col color.Color) {
-	switch {
-	case frac < 0.5:
-		col = color.Hex(styletokens.SuccessDefault.AsHex())
-	case frac < 0.8:
-		col = color.Hex(styletokens.WarningDefault.AsHex())
-	default:
-		col = color.Hex(styletokens.ErrorDefault.AsHex())
-	}
 	return
 }
