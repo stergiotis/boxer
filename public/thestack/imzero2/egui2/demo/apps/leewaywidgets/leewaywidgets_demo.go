@@ -89,10 +89,17 @@ func (inst *App) Mount(ctx runtimeapp.MountContextI) (err error) {
 }
 func (inst *App) Unmount(ctx runtimeapp.MountContextI) (err error) { return }
 
-// Frame is the per-frame entry: IDE-style layout (left tree picks a
-// view, central panel renders it). Per ADR-0026 Amendment 2026-05-12
-// the host wraps this in a runtime-created c.Window using
-// Manifest.WindowTitle/Icon; the body uses only *Inside panels.
+// Frame is the per-frame entry for the standalone windowed app: IDE-style
+// layout (left tree picks a view, central panel renders it). Per ADR-0026
+// Amendment 2026-05-12 the host wraps this in a runtime-created c.Window
+// using Manifest.WindowTitle/Icon; the body uses only *Inside panels, which
+// is correct here because the Window supplies the CentralPanel region the
+// side panel sizes against.
+//
+// The screenshot tour and interactive widget gallery use renderGallery
+// instead — those hosts wrap the demo in a bare scroll area with no such
+// region, where these *Inside panels collapse (SKILLS.md §"Gallery
+// Scroll-Host Layout").
 //
 // The host has already pre-pushed a window-unique salt onto inst.ids
 // via c.IdScope (windowhost.renderWindowBody) so widget ids derived
@@ -107,27 +114,71 @@ func (inst *App) Frame(ctx runtimeapp.FrameContextI) (err error) {
 	return
 }
 
-// renderViewTree draws a 3-category tree on the left. Selecting a leaf flips
-// inst.selectedView; the central panel reads that on the next frame.
-func (inst *App) renderViewTree() {
-	for range c.ScrollArea().Vscroll(true).KeepIter() {
-		for range c.NodeDir(inst.ids.PrepareStr("catVisual"), c.WidgetText().Text("Visual").Keep()).SendIter() {
-			inst.renderViewLeaf(viewKeyTable2, "leafTable2", "table2")
+const (
+	// galleryTreeWidth pins the picker column so the side-by-side gallery
+	// layout is stable across hosts; matches Frame's PanelLeftInside size.
+	galleryTreeWidth float32 = 220
+	// galleryContentH bounds the central pane height. The gallery host is an
+	// unbounded-height vscroll ScrollArea (no CentralPanel region), so the
+	// table2 TableBuilder and the codeview ScrollArea — each owning an inner
+	// ScrollArea that reads available_height — would otherwise get no finite
+	// rect and crop their tail. A fixed height gives them one and still fits
+	// the tour stage (700) under the per-demo intro + outro chrome.
+	galleryContentH float32 = 500
+)
+
+// renderGallery is the demo-registry layout used by the tour and the
+// interactive widget gallery (leewaywidgets_tour.go). Unlike Frame it does
+// NOT use PanelLeftInside/PanelCentralInside: the gallery host wraps each
+// demo in an unbounded-height vscroll ScrollArea with no CentralPanel
+// region, where egui side panels collapse to a sliver and the central
+// content has no bounded height to fill (SKILLS.md §"Gallery Scroll-Host
+// Layout"). Mirror schemaview instead — a fixed-width picker column beside a
+// height-bounded content pane, both rendered directly into the scroll host.
+func (inst *App) renderGallery() {
+	for range c.Horizontal().KeepIter() {
+		for range c.Vertical().KeepIter() {
+			c.UiSetMinWidth(galleryTreeWidth)
+			c.UiSetMaxWidth(galleryTreeWidth)
+			inst.renderViewTree()
 		}
-		for range c.NodeDir(inst.ids.PrepareStr("catCanonical"), c.WidgetText().Text("Canonical").Keep()).SendIter() {
-			inst.renderViewLeaf(viewKeyJSON, "leafJson", "json")
+		c.AddSpace(8)
+		for range c.Vertical().KeepIter() {
+			c.UiSetMinHeight(galleryContentH)
+			c.UiSetMaxHeight(galleryContentH)
+			inst.renderActiveView()
 		}
-		for range c.NodeDir(inst.ids.PrepareStr("catSource"), c.WidgetText().Text("Source").Keep()).SendIter() {
-			inst.renderViewLeaf(viewKeySchemaGo, "leafSchemaGo", "schema.go")
-			inst.renderViewLeaf(viewKeyFixtureGo, "leafFixtureGo", "fixture.go")
-		}
-		c.Tree(inst.ids.PrepareStr("viewTree")).Send()
 	}
 }
 
+// renderViewTree draws the view picker as three collapsible category headers
+// with selectable leaves. Selecting a leaf flips inst.selectedView; the
+// central pane reads that on the next frame.
+//
+// CollapsingHeader + SelectableLabel rather than the egui_ltreeview
+// flat-drain (NodeDir/NodeLeaf/Tree): that surface mis-renders a wide,
+// multi-root tree like this one (three top-level categories), and it is
+// wrapped in no ScrollArea so it survives a width-pinned gallery column,
+// where a ScrollArea collapses to its first child (SKILLS.md nav-layout
+// gotchas). The list is tiny — 3 groups, 4 leaves — so a host-level scroll
+// is enough for tall windows.
+func (inst *App) renderViewTree() {
+	for range c.CollapsingHeader(inst.ids.PrepareStr("catVisual"), c.WidgetText().Text("Visual").Keep()).DefaultOpen(true).KeepIter() {
+		inst.renderViewLeaf(viewKeyTable2, "leafTable2", "table2")
+	}
+	for range c.CollapsingHeader(inst.ids.PrepareStr("catCanonical"), c.WidgetText().Text("Canonical").Keep()).DefaultOpen(true).KeepIter() {
+		inst.renderViewLeaf(viewKeyJSON, "leafJson", "json")
+	}
+	for range c.CollapsingHeader(inst.ids.PrepareStr("catSource"), c.WidgetText().Text("Source").Keep()).DefaultOpen(true).KeepIter() {
+		inst.renderViewLeaf(viewKeySchemaGo, "leafSchemaGo", "schema.go")
+		inst.renderViewLeaf(viewKeyFixtureGo, "leafFixtureGo", "fixture.go")
+	}
+}
+
+// renderViewLeaf renders one selectable picker row; a primary click flips the
+// active view the central pane reads on the next frame.
 func (inst *App) renderViewLeaf(key viewKeyE, idStr string, label string) {
-	resp := c.NodeLeaf(inst.ids.PrepareStr(idStr), c.WidgetText().Text(label).Keep()).SendResp()
-	if resp.HasNodelikeSelected() {
+	if c.SelectableLabel(inst.ids.PrepareStr(idStr), inst.selectedView == key, label).SendResp().HasPrimaryClicked() {
 		inst.selectedView = key
 	}
 }
@@ -136,21 +187,28 @@ func (inst *App) renderViewLeaf(key viewKeyE, idStr string, label string) {
 // JSON and Go views build their highlighted holders lazily on first access
 // and reuse them across frames; the table2 emitter re-runs RunFixture each
 // frame because its output is widget commands, not text.
+//
+// The code views scroll with AutoShrink(false, false): egui's default
+// auto_shrink shrinks a ScrollArea to its content, so a short source
+// (schema.go, fixture.go) collapsed to a few lines and left the rest of
+// the pane as dead "y space" below. Disabling shrink on both axes makes
+// each view fill the bounded pane its caller supplies (the central panel
+// for the windowed app, the height-clamped column for the gallery).
 func (inst *App) renderActiveView() {
 	switch inst.selectedView {
 	case viewKeyJSON:
 		ensureJSONView()
-		for range c.ScrollArea().Vscroll(true).Hscroll(true).KeepIter() {
+		for range c.ScrollArea().Vscroll(true).Hscroll(true).AutoShrink(false, false).KeepIter() {
 			c.CodeView(inst.ids.PrepareStr("jsonView"), jsonView).Wrap().Send()
 		}
 	case viewKeySchemaGo:
 		ensureSchemaGoView()
-		for range c.ScrollArea().Vscroll(true).Hscroll(true).KeepIter() {
+		for range c.ScrollArea().Vscroll(true).Hscroll(true).AutoShrink(false, false).KeepIter() {
 			c.CodeView(inst.ids.PrepareStr("schemaGoView"), schemaGoView).Wrap().Send()
 		}
 	case viewKeyFixtureGo:
 		ensureFixtureGoView()
-		for range c.ScrollArea().Vscroll(true).Hscroll(true).KeepIter() {
+		for range c.ScrollArea().Vscroll(true).Hscroll(true).AutoShrink(false, false).KeepIter() {
 			c.CodeView(inst.ids.PrepareStr("fixtureGoView"), fixtureGoView).Wrap().Send()
 		}
 	default: // viewKeyTable2

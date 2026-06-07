@@ -72,5 +72,9 @@ func tourRenderStateful(ids *c.WidgetIdStack, state any) {
 		return
 	}
 	inst.ids = ids
-	_ = inst.Frame(nil)
+	// Gallery layout, not Frame: the tour (and interactive gallery) host the
+	// demo body in a bare, unbounded-height scroll area with no CentralPanel
+	// region, where Frame's *Inside side panels collapse and the central
+	// content clips vertically (SKILLS.md §"Gallery Scroll-Host Layout").
+	inst.renderGallery()
 }
