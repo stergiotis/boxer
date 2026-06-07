@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package distsummary implements a two-level summarisation widget for a
 // single statistical distribution.
 //
