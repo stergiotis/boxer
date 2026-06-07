@@ -141,3 +141,62 @@ func TestShortAppName(t *testing.T) {
 		assert.Equal(t, want, got, "in=%q", in)
 	}
 }
+
+func TestCapGraphModel_NodesUniqueAndComplete(t *testing.T) {
+	m := capGraphModel()
+
+	// Expected counts derived from the registry: one App root, one node per
+	// cap, one per backend; edges App→cap and cap→backend.
+	wantNodes := 1
+	wantEdges := 0
+	for _, capId := range allCapIdsOrdered() {
+		wantNodes += 1 + len(Registry[capId].Backends)
+		wantEdges += 1 + len(Registry[capId].Backends)
+	}
+	assert.Len(t, m.Nodes, wantNodes)
+	assert.Len(t, m.Edges, wantEdges)
+
+	// Node ids must be globally unique — this guards the real collision the
+	// "cap/"/"be/" namespacing exists for: CapTask ships a backend whose Id is
+	// "task", which would otherwise alias the "task" cap id in the flat space.
+	seen := map[string]bool{}
+	for _, n := range m.Nodes {
+		assert.False(t, seen[n.ID], "duplicate node id %q", n.ID)
+		seen[n.ID] = true
+		assert.NotEmpty(t, n.Label, "node %q needs a label", n.ID)
+	}
+	for _, e := range m.Edges {
+		assert.True(t, seen[e.From], "edge from undeclared node %q", e.From)
+		assert.True(t, seen[e.To], "edge to undeclared node %q", e.To)
+	}
+}
+
+func TestBuildNodeMeta_ResolvesEveryNode(t *testing.T) {
+	m := capGraphModel()
+	meta := buildNodeMeta()
+	assert.Len(t, meta, len(m.Nodes), "one meta entry per node")
+
+	for _, n := range m.Nodes {
+		md, ok := meta[n.ID]
+		require.True(t, ok, "no meta for node %q", n.ID)
+		switch md.kind {
+		case nodeApp:
+			assert.Equal(t, appNodeID, n.ID)
+		case nodeCap:
+			assert.Equal(t, capNodeID(md.cap), n.ID)
+			_, isCap := Registry[md.cap]
+			assert.True(t, isCap, "cap node %q resolves to a real cap", n.ID)
+		case nodeBackend:
+			assert.Equal(t, backendNodeID(md.cap, md.backendID), n.ID)
+			found := false
+			for _, b := range Registry[md.cap].Backends {
+				if b.Id == md.backendID {
+					found = true
+				}
+			}
+			assert.True(t, found, "backend %q belongs to cap %q", md.backendID, md.cap)
+		default:
+			t.Fatalf("node %q has unknown kind %d", n.ID, md.kind)
+		}
+	}
+}
