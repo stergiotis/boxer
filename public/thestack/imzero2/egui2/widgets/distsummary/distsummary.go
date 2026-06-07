@@ -124,8 +124,12 @@ type Renderer struct {
 	showN       bool
 	showIcon    bool
 	formatFunc  FormatFunc
-	plot        boxenplot.Renderer
-	ecdfPlot    ecdf.Renderer
+	// unit, when non-empty, is written once after the last quantile value
+	// (e.g. "fps", "ms", "MB") so the level-1 summary reads as a dimensioned
+	// line. Empty (default) appends nothing. Set via Unit.
+	unit     string
+	plot     boxenplot.Renderer
+	ecdfPlot ecdf.Renderer
 	// gridN is the uniform sample count forwarded to
 	// [ecdfdigest.RenderDigest] when rendering the ECDF tab. Clamped
 	// to ≥ 2 by the bridge but tuned higher (default
@@ -358,6 +362,17 @@ func (inst Renderer) Format(f FormatFunc) (out Renderer) {
 	return
 }
 
+// Unit sets a unit string written once after the last quantile value in the
+// level-1 summary (e.g. "fps", "ms", "MB"), so the labelled five-number line
+// reads as dimensioned: "… · p100 67 fps". Empty (the default) appends
+// nothing. The unit is not applied per-value — for unit-suffixed individual
+// numbers use [Renderer.Format] instead.
+func (inst Renderer) Unit(u string) (out Renderer) {
+	inst.unit = u
+	out = inst
+	return
+}
+
 // Provenance binds the distribution to its source value's
 // [inspector.Provenance] identity card. When set (non-zero), the
 // inspector window renders the standard [inspector.ProvenanceChip]
@@ -404,7 +419,7 @@ func (inst Renderer) Render(idGen c.WidgetIdCreatorI, digest *tdigest.TDigest, e
 	// call-site scope disambiguator (see [callScope]).
 	callId := idGen.Derive()
 	summary := computeFiveNumberSummary(digest)
-	label := formatSummary(summary, inst.showN, inst.showIcon, inst.formatFunc)
+	label := formatSummary(summary, inst.showN, inst.showIcon, inst.formatFunc, inst.unit)
 
 	if summary.n == 0 {
 		c.LabelAtoms(

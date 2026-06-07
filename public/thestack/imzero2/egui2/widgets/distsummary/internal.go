@@ -143,7 +143,7 @@ func sigFig(x float64, sig int) string {
 //
 // On n==0 the label degenerates to "(no data)" (with the icon when
 // requested) so the affordance keeps a stable cell width across rows.
-func formatSummary(s fiveNumberSummary, showN, showIcon bool, fn FormatFunc) string {
+func formatSummary(s fiveNumberSummary, showN, showIcon bool, fn FormatFunc, unit string) string {
 	var b strings.Builder
 	if showIcon {
 		b.WriteString(icons.IconChartLine)
@@ -158,14 +158,19 @@ func formatSummary(s fiveNumberSummary, showN, showIcon bool, fn FormatFunc) str
 		b.WriteString(strconv.FormatInt(s.n, 10))
 		b.WriteString("  ")
 	}
+	b.WriteString("p0 ")
 	b.WriteString(fn(s.min))
-	b.WriteString(" │ ")
+	b.WriteString(" · p25 ")
 	b.WriteString(fn(s.q1))
-	b.WriteString(" ")
+	b.WriteString(" · p50 ")
 	b.WriteString(fn(s.median))
-	b.WriteString(" ")
+	b.WriteString(" · p75 ")
 	b.WriteString(fn(s.q3))
-	b.WriteString(" │ ")
+	b.WriteString(" · p100 ")
 	b.WriteString(fn(s.max))
+	if unit != "" {
+		b.WriteString(" ")
+		b.WriteString(unit)
+	}
 	return b.String()
 }

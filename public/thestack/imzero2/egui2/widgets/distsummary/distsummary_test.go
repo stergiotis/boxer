@@ -59,34 +59,57 @@ func TestComputeFiveNumberSummaryUniform(t *testing.T) {
 
 func TestFormatSummaryFullLayout(t *testing.T) {
 	s := fiveNumberSummary{n: 1024, min: 0.1, q1: 12.5, median: 18, q3: 24, max: 89.2}
-	label := formatSummary(s, true, true, humanizeValue)
+	label := formatSummary(s, true, true, humanizeValue, "fps")
 	assert.True(t, strings.HasPrefix(label, icons.IconChartLine), "icon prefix missing: %q", label)
 	assert.Contains(t, label, "n=1024")
-	assert.Contains(t, label, "│")
-	// Box separator appears twice — once before Q1, once after Q3.
-	assert.Equal(t, 2, strings.Count(label, "│"))
+	// Every quantile is labelled with its percentile rank.
+	for _, p := range []string{"p0", "p25", "p50", "p75", "p100"} {
+		assert.Contains(t, label, p)
+	}
+	// Four middle-dot separators between the five label-value pairs.
+	assert.Equal(t, 4, strings.Count(label, "·"))
 	assert.Contains(t, label, "0.1")
 	assert.Contains(t, label, "89.2")
+	// Unit written once after the last value.
+	assert.True(t, strings.HasSuffix(label, "fps"), "unit suffix missing: %q", label)
 }
 
 func TestFormatSummaryNoData(t *testing.T) {
 	s := fiveNumberSummary{}
-	label := formatSummary(s, true, true, humanizeValue)
+	label := formatSummary(s, true, true, humanizeValue, "fps")
 	assert.Contains(t, label, "(no data)")
-	// n= and the quartile separator must not leak into the empty path.
+	// n=, the percentile labels, and the unit must not leak into the empty path.
 	assert.NotContains(t, label, "n=")
-	assert.NotContains(t, label, "│")
+	assert.NotContains(t, label, "p50")
+	assert.NotContains(t, label, "fps")
 }
 
 func TestFormatSummaryHonoursFormatter(t *testing.T) {
 	s := fiveNumberSummary{n: 3, min: 0.001, q1: 0.5, median: 1.0, q3: 1.5, max: 2.0}
 	fixed := func(v float64) string { return strconv.FormatFloat(v, 'f', 3, 64) }
-	label := formatSummary(s, false, false, fixed)
+	label := formatSummary(s, false, false, fixed, "")
 	assert.Contains(t, label, "0.001")
 	assert.Contains(t, label, "2.000")
 	// showIcon=false, showN=false — no icon glyph, no n= term.
 	assert.NotContains(t, label, icons.IconChartLine)
 	assert.NotContains(t, label, "n=")
+}
+
+func TestFormatSummaryUnitOptional(t *testing.T) {
+	s := fiveNumberSummary{n: 10, min: 1, q1: 2, median: 3, q3: 4, max: 5}
+	intFmt := func(v float64) string { return strconv.FormatFloat(v, 'f', 0, 64) }
+	withUnit := formatSummary(s, false, false, intFmt, "fps")
+	assert.True(t, strings.HasSuffix(withUnit, "p100 5 fps"), "unit not appended after last value: %q", withUnit)
+	noUnit := formatSummary(s, false, false, intFmt, "")
+	assert.True(t, strings.HasSuffix(noUnit, "p100 5"), "empty unit should append nothing: %q", noUnit)
+	assert.NotContains(t, noUnit, "fps")
+}
+
+func TestRendererUnitSetter(t *testing.T) {
+	r := New("u").Unit("ms")
+	assert.Equal(t, "ms", r.unit)
+	// Value-receiver builder: setting Unit on a copy leaves the original empty.
+	assert.Equal(t, "", New("u").unit)
 }
 
 func TestRendererDefaultsAreUsable(t *testing.T) {
