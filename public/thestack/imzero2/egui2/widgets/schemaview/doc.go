@@ -1,7 +1,9 @@
 // Package schemaview is an imzero2 widget that renders a leeway schema —
-// a [common.TableDesc] — as a master-detail inspector: a collapsible
-// section tree on the left, a decoded property pane for the selected node
-// on the right.
+// a [common.TableDesc] — as a master-detail inspector across two dock panes:
+// a collapsible section navigator ("structure") and a decoded property pane
+// ("detail"). The panes are draggable / resizable (egui_dock persists the
+// layout) and each scrolls independently, so a tall schema no longer relies on
+// the host window's scroll.
 //
 // It is a read-only structure view. TableDesc carries no entity values, so
 // this widget shows shape, not data: plain item-types, tagged sections,
@@ -39,14 +41,20 @@
 // type, a section node shows the accepted membership spec as a badge, and
 // the full MembershipSpec / aspect / type decodes live in the detail pane.
 //
+// The vocabulary travels with the widget: a "?" toggle in the navigator
+// header opens a tethered legend window (the canonicaltypesummary inspector
+// idiom — anchor + bezier connector) keying every glyph, so a reader needs
+// neither the demo description nor this doc to decode the tree.
+//
 // # Detail pane
 //
-// Polymorphic on the selected node. A column leaf shows name, scope,
-// item-type, canonical type (terse plus a decomposed line and the
-// scalar/array/set shape), encoding hints and value semantics. A section —
-// reached via its "properties" leaf, or directly when it is value-less —
-// shows its membership spec decoded, use aspects, co-section + streaming
-// groups, and value-column count.
+// Polymorphic on the selected node, headed by the node's navigator glyph (in
+// its category tone) and a kind chip. A column leaf shows scope, item-type,
+// the canonical type via the [canonicaltypesummary] inspector, and its
+// encoding hints / value semantics. A section — reached via its "properties"
+// leaf, or directly when it is value-less — shows its membership spec decoded,
+// use aspects, co-section + streaming groups, and value-column count. Aspect
+// sets render as toned chips (one per aspect) rather than comma-joined text.
 //
 // # Scope
 //
@@ -55,8 +63,8 @@
 // DDL coverage, and rendering sample data through a Driver are out of scope
 // — natural later tabs, not v1.
 //
-// The widget takes a [*common.TableDesc] and owns only selection + filter
-// state; the host supplies the schema. The demo wires the fixtures
+// The widget takes a [*common.TableDesc] and owns only selection, filter, and
+// legend-popup state; the host supplies the schema. The demo wires the fixtures
 // (leewaywidgets.BuildFixtureTableDesc, mapping.NewJsonMapping) and the
 // chooser, keeping this package free of fixture and mapping imports.
 package schemaview

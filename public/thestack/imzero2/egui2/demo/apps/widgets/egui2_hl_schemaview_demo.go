@@ -16,7 +16,7 @@ func init() {
 		Stage:       [2]float32{1100, 760},
 		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindMixed,
-		Description: "Inspect a leeway TableDesc as a master-detail view: a section tree (plain item-types ◆, tagged sections ◇, co-section groups ◈, with a ˡ/ʰ/ᵐ membership-spec badge) on the left, a decoded property pane (canonical type + decomposition, encoding hints, value semantics, membership spec, groups) on the right. Reads the authored schema directly; IR expansion, the physical/DDL descent and sample data are out of scope.",
+		Description: "Inspect a leeway TableDesc as a master-detail view across two dock panes: a section navigator on the left, a decoded property pane (canonical type, encoding hints, value semantics, membership spec, groups) on the right. The glyph vocabulary is keyed by the \"?\" legend popup in the navigator header. Reads the authored schema directly; IR expansion, the physical/DDL descent and sample data are out of scope.",
 		Init: func(_ *c.WidgetIdStack) (state any) {
 			state = newSchemaViewState()
 			return

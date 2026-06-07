@@ -29,13 +29,17 @@ type selection struct {
 }
 
 // Model is the editable state of the inspector: the schema under view plus
-// the navigator's selection and filter. The schema is owned by the host (a
-// [*common.TableDesc] handed in at construction); the widget mutates only
-// sel and filter.
+// the navigator's selection, filter, and legend-popup flag. The schema is
+// owned by the host (a [*common.TableDesc] handed in at construction); the
+// widget mutates only sel, filter, and legendOpen.
 type Model struct {
 	Table  *common.TableDesc
 	sel    selection
 	filter string // case-insensitive substring; "" shows everything
+	// legendOpen pins the tethered glyph-legend window (the "?" affordance in
+	// the navigator header). The window's title-bar close writes back here via
+	// an R10 databinding, so it stays a plain widget-owned bool.
+	legendOpen bool
 }
 
 // NewModel binds a schema and selects a sensible default node so the detail

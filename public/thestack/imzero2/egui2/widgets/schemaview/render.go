@@ -2,8 +2,8 @@ package schemaview
 
 import (
 	"strconv"
-	"strings"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
@@ -11,7 +11,9 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/canonicaltypesummary"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )
 
 // Input is the per-frame render request. The widget is pure: it renders the
@@ -31,38 +33,64 @@ type Input struct {
 }
 
 const (
-	navWidth    = 340.0
-	detailWidth = 420.0
+	navWidth = 340.0 // filter-box width hint inside the (now resizable) navigator pane
+
+	// Dock tab ids — reserved high so they never collide with anything the
+	// host might add. The navigator leaf splits the detail leaf off to its
+	// right at navFrac of the width.
+	navTabID    uint64 = 1 << 62
+	detailTabID uint64 = 1<<62 | 1
+	navFrac            = 0.40
+
+	// dockMinHeight floors the dock so it has a bounded rect inside the
+	// gallery's scroll host — mappingplanview's idiom. A bounded leaf is also
+	// what lets each pane's ScrollArea actually scroll (see renderNavigator).
+	dockMinHeight = 620
 )
 
-// Render lays the inspector out as two pinned columns: the section navigator
-// on the left, the decoded detail pane on the right.
+// Render lays the inspector out as a two-leaf dock area: the section navigator
+// ("structure") on the left and the decoded detail pane ("detail") on the
+// right. Both leaves are draggable / resizable (egui_dock persists the layout)
+// and each scrolls independently. The tethered glyph-legend window is rendered
+// outside the dock — see renderLegendWindow.
 func Render(in Input) {
 	m := in.Model
 	if m == nil || m.Table == nil {
 		return
 	}
-	for range c.Horizontal().KeepIter() {
-		for range c.Vertical().KeepIter() {
-			c.UiSetMinWidth(navWidth)
-			c.UiSetMaxWidth(navWidth)
-			renderNavigator(in.Ids, m)
+	scope := legendScope(in.ScopeKey)
+	for range c.IdScope(in.Ids.PrepareStr(in.ScopeKey)) {
+		c.UiSetMinHeight(dockMinHeight)
+		for dock := range c.DockArea(in.Ids.PrepareStr("svdock")) {
+			root := dock.InitRoot(navTabID)
+			dock.Split(root, c.DockRight, navFrac, detailTabID)
+
+			for range dock.Tab(navTabID, "structure") {
+				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+					renderNavigator(in.Ids, m, scope)
+				}
+			}
+			for range dock.Tab(detailTabID, "detail") {
+				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+					renderDetail(in.Ids, m)
+				}
+			}
 		}
-		c.AddSpace(8)
-		for range c.Vertical().KeepIter() {
-			c.UiSetMinWidth(detailWidth)
-			c.UiSetMaxWidth(detailWidth)
-			renderDetail(in.Ids, m)
-		}
+		renderLegendWindow(in.Ids, m, scope)
 	}
 }
 
-// renderNavigator draws the table header, the filter box, and the scrollable
-// section list.
-func renderNavigator(ids *c.WidgetIdStack, m *Model) {
+// renderNavigator draws the table header (title + glyph-legend toggle), the
+// filter box, and the section list. The caller wraps this in the navigator
+// leaf's ScrollArea, so the list scrolls within the resizable pane.
+func renderNavigator(ids *c.WidgetIdStack, m *Model, scope string) {
 	t := m.Table
-	for rt := range c.RichTextLabel(t.DictionaryEntry.Name.String()) {
-		rt.Strong().Size(15)
+	for range c.Horizontal().KeepIter() {
+		for rt := range c.RichTextLabel(t.DictionaryEntry.Name.String()) {
+			rt.Strong().Size(15)
+		}
+		c.AddSpace(6)
+		renderLegendToggle(m, scope)
 	}
 	if cmt := t.DictionaryEntry.Comment; cmt != "" {
 		for rt := range c.RichTextLabel(cmt) {
@@ -75,12 +103,11 @@ func renderNavigator(ids *c.WidgetIdStack, m *Model) {
 		SendRespVal(&m.filter)
 	c.AddSpace(4)
 
-	// Rendered directly in the pinned column (no ScrollArea). A ScrollArea
-	// here — inside a width-pinned Vertical inside a Horizontal — rendered
-	// only its first child; mappingplanview's editor stacks rows the same
-	// way and is the proven pattern. Long schemas rely on the host window's
-	// own scroll; an in-widget scroll can return once that combination is
-	// understood.
+	// The section list scrolls via the ScrollArea the dock-tab call site wraps
+	// it in. That works here where the old pinned-column layout could not: a
+	// dock leaf hands content a bounded child rect, so the ScrollArea fills and
+	// clips it (a ScrollArea inside the former width-pinned Vertical-in-
+	// Horizontal collapsed to its first child — see the package history).
 	renderSections(ids, m)
 }
 
@@ -157,9 +184,11 @@ func colRow(ids *c.WidgetIdStack, m *Model, id, text string, sel selection) {
 	}
 }
 
-// renderDetail draws the property pane for the current selection: a name
-// header, the canonical-type inspector (for columns), and a two-column grid
-// of the remaining facts (weak label · monospace value).
+// renderDetail draws the property pane for the current selection: a
+// category-accented name header (the navigator glyph in its tone + a kind
+// chip), the canonical-type inspector (for columns), and a two-column grid of
+// the remaining facts — scalars as monospace values, aspect sets as toned
+// chips.
 func renderDetail(ids *c.WidgetIdStack, m *Model) {
 	t := m.Table
 	switch m.sel.kind {
@@ -170,14 +199,13 @@ func renderDetail(ids *c.WidgetIdStack, m *Model) {
 			return
 		}
 		it := t.PlainValuesItemTypes[i]
-		detailHeader(t.PlainValuesNames[i].String())
+		detailHeaderCat(ids, t.PlainValuesNames[i].String(), "◆", styletokens.InfoDefault, "value column", badge.ToneInfo)
 		renderTypeBlock(ids, t.PlainValuesTypes[i])
 		for range c.Grid(ids.PrepareStr("detail")).NumColumns(2).KeepIter() {
 			gridRow("scope", plainScope(it))
 			gridRow("item type", it.String())
-			gridRow("kind", "value column")
-			gridRow("enc hints", joinAspects(encHintList(t.PlainValuesEncodingHints[i])))
-			gridRow("semantics", joinAspects(valSemList(t.PlainValuesValueSemantics[i])))
+			chipRow(ids, "enc", "enc hints", encHintList(t.PlainValuesEncodingHints[i]), badge.ToneInfo)
+			chipRow(ids, "sem", "semantics", valSemList(t.PlainValuesValueSemantics[i]), badge.TonePrimary)
 		}
 
 	case selSectionColumn:
@@ -191,17 +219,17 @@ func renderDetail(ids *c.WidgetIdStack, m *Model) {
 			detailEmpty()
 			return
 		}
-		detailHeader(sec.ValueColumnNames[ci].String())
+		glyph, gtone := sectionGlyph(sec)
+		detailHeaderCat(ids, sec.ValueColumnNames[ci].String(), glyph, gtone, "value column", badge.TonePrimary)
 		renderTypeBlock(ids, sec.ValueColumnTypes[ci])
 		for range c.Grid(ids.PrepareStr("detail")).NumColumns(2).KeepIter() {
 			gridRow("scope", "tagged")
-			gridRow("kind", "value column")
-			gridRow("enc hints", joinAspects(encHintList(sec.ValueEncodingHints[ci])))
-			gridRow("semantics", joinAspects(valSemList(sec.ValueSemantics[ci])))
-			gridRow("— section —", sec.Name.String())
-			gridRow("membership", sec.MembershipSpec.String())
-			gridRow("co-group", strOrDash(string(sec.CoSectionGroup)))
-			gridRow("streaming", strOrDash(string(sec.StreamingGroup)))
+			gridRow("section", sec.Name.String())
+			chipRow(ids, "enc", "enc hints", encHintList(sec.ValueEncodingHints[ci]), badge.ToneInfo)
+			chipRow(ids, "sem", "semantics", valSemList(sec.ValueSemantics[ci]), badge.TonePrimary)
+			chipRow(ids, "memb", "membership", membershipSpecList(sec.MembershipSpec), badge.ToneNeutral)
+			chipRow(ids, "cog", "co-group", oneOrNone(string(sec.CoSectionGroup)), badge.ToneNeutral)
+			chipRow(ids, "str", "streaming", oneOrNone(string(sec.StreamingGroup)), badge.ToneNeutral)
 		}
 
 	case selSection:
@@ -211,13 +239,13 @@ func renderDetail(ids *c.WidgetIdStack, m *Model) {
 			return
 		}
 		sec := &t.TaggedValuesSections[si]
-		detailHeader(sec.Name.String())
+		glyph, gtone := sectionGlyph(sec)
+		detailHeaderCat(ids, sec.Name.String(), glyph, gtone, "tagged section", badge.TonePrimary)
 		for range c.Grid(ids.PrepareStr("detail")).NumColumns(2).KeepIter() {
-			gridRow("kind", "tagged section")
-			gridRow("membership", sec.MembershipSpec.String())
-			gridRow("use aspects", joinAspects(useAspList(sec.UseAspects)))
-			gridRow("co-group", strOrDash(string(sec.CoSectionGroup)))
-			gridRow("streaming", strOrDash(string(sec.StreamingGroup)))
+			chipRow(ids, "memb", "membership", membershipSpecList(sec.MembershipSpec), badge.ToneNeutral)
+			chipRow(ids, "use", "use aspects", useAspList(sec.UseAspects), badge.ToneNeutral)
+			chipRow(ids, "cog", "co-group", oneOrNone(string(sec.CoSectionGroup)), badge.ToneNeutral)
+			chipRow(ids, "str", "streaming", oneOrNone(string(sec.StreamingGroup)), badge.ToneNeutral)
 			gridRow("value cols", strconv.Itoa(len(sec.ValueColumnNames)))
 		}
 
@@ -226,10 +254,80 @@ func renderDetail(ids *c.WidgetIdStack, m *Model) {
 	}
 }
 
-func detailHeader(name string) {
-	for rt := range c.RichTextLabel(name) {
-		rt.Strong().Size(15)
+// detailHeaderCat draws the selection's name preceded by its navigator glyph
+// (in the category tone) and trailed by a small kind chip, so the detail header
+// echoes the tree at a glance.
+func detailHeaderCat(ids *c.WidgetIdStack, name, glyph string, glyphTone styletokens.RGBA8, kind string, kindTone badge.ToneE) {
+	for range c.Horizontal().KeepIter() {
+		for rt := range c.RichTextLabelColored(color.Hex(glyphTone.AsHex()).Keep(), color.Transparent.Keep(), glyph) {
+			rt.Strong().Size(15)
+		}
+		c.AddSpace(4)
+		for rt := range c.RichTextLabel(name) {
+			rt.Strong().Size(15)
+		}
+		c.AddSpace(8)
+		badge.New(ids.PrepareStr("detail-kind"), kind).Tone(kindTone).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
 	}
+	c.AddSpace(2)
+}
+
+// chipRow is a grid row whose value cell is a run of toned chips, one per
+// aspect — replacing the old comma-joined gray string. An empty set renders a
+// weak "—" so the row still reads.
+func chipRow(ids *c.WidgetIdStack, key, label string, items []string, tone badge.ToneE) {
+	for rt := range c.RichTextLabel(label) {
+		rt.Weak()
+	}
+	if len(items) == 0 {
+		for rt := range c.RichTextLabel("—") {
+			rt.Weak()
+		}
+		c.EndRow()
+		return
+	}
+	for range c.Horizontal().KeepIter() {
+		for i, it := range items {
+			badge.New(ids.PrepareStr(key+"/"+strconv.Itoa(i)), it).
+				Tone(tone).
+				Variant(badge.VariantSoft).
+				Size(badge.SizeSm).
+				Send()
+		}
+	}
+	c.EndRow()
+}
+
+// sectionGlyph picks the navigator glyph + tone for a tagged section: ◈ when it
+// belongs to a co-section group, ◇ otherwise. Both carry the accent tone (the
+// tagged category colour).
+func sectionGlyph(sec *common.TaggedValuesSection) (glyph string, tone styletokens.RGBA8) {
+	if string(sec.CoSectionGroup) != "" {
+		return "◈", styletokens.AccentDefault
+	}
+	return "◇", styletokens.AccentDefault
+}
+
+// membershipSpecList decomposes a MembershipSpec set into one label per
+// cardinality channel (the same channels membershipBadge condenses to ˡ/ʰ/ᵐ),
+// for rendering as chips. Empty for MembershipSpecNone.
+func membershipSpecList(spec common.MembershipSpecE) (out []string) {
+	if spec == common.MembershipSpecNone {
+		return nil
+	}
+	for s := range spec.Iterate() {
+		out = append(out, s.String())
+	}
+	return
+}
+
+// oneOrNone wraps a possibly-empty identifier as a 0- or 1-element slice, so a
+// single-valued field (co-group, streaming group) flows through chipRow.
+func oneOrNone(s string) []string {
+	if s == "" {
+		return nil
+	}
+	return []string{s}
 }
 
 func detailEmpty() {
@@ -348,13 +446,6 @@ func useAspList(s useaspects.AspectSet) (out []string) {
 	return
 }
 
-func joinAspects(l []string) string {
-	if len(l) == 0 {
-		return "—"
-	}
-	return strings.Join(l, ", ")
-}
-
 func plainScope(it common.PlainItemTypeE) string {
 	switch it {
 	case common.PlainItemTypeEntityId,
@@ -368,11 +459,4 @@ func plainScope(it common.PlainItemTypeE) string {
 		return "opaque"
 	}
 	return "—"
-}
-
-func strOrDash(s string) string {
-	if s == "" {
-		return "—"
-	}
-	return s
 }
