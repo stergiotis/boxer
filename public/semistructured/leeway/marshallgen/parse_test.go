@@ -103,7 +103,7 @@ type MyDTO struct {
 	if err != nil {
 		t.Fatalf("expected success, got: %v", err)
 	}
-	if !plan.Fields[0].IsSlice || plan.Fields[0].Flags.Explode {
+	if !plan.Fields[0].IsSlice() || plan.Fields[0].Flags.Explode {
 		t.Fatalf("expected slice default (no flags), got %+v", plan.Fields[0])
 	}
 }
@@ -154,7 +154,7 @@ type MyDTO struct {
 	if err != nil {
 		t.Fatalf("expected success, got: %v", err)
 	}
-	if !plan.Fields[0].IsRoaring || plan.Fields[0].Flags.Explode {
+	if !plan.Fields[0].IsRoaring() || plan.Fields[0].Flags.Explode {
 		t.Fatalf("expected roaring default, got %+v", plan.Fields[0])
 	}
 }
@@ -171,7 +171,7 @@ type MyDTO struct {
 	if err != nil {
 		t.Fatalf("expected success, got: %v", err)
 	}
-	if plan.Fields[0].GoType != "[]byte" || !plan.Fields[0].IsOption {
+	if plan.Fields[0].GoType() != "[]byte" || !plan.Fields[0].IsOption {
 		t.Fatalf("expected Option[[]byte] scalar blob, got %+v", plan.Fields[0])
 	}
 }

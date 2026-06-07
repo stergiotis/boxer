@@ -32,13 +32,21 @@ type Plan struct {
 type PlainCol struct {
 	Column  string // wire column name: id / ts / naturalKey / expiresAt
 	GoField string // matching DTO struct field name
-	GoType  string // matching DTO field Go type, e.g. "uint64" / "time.Time" / "[]byte"
 
-	// Canonical is the authoritative leeway canonical type the front-end
-	// classified the field's Go type into; GoType above is derived from it
-	// by PlanBuilder. Carried through for the canonical-native model and
-	// future schema-side use.
+	// Canonical is the authoritative leeway canonical type for this column's
+	// value — the single source of truth. The Go-facing type is derived from
+	// it on demand by GoType(), never stored. Plain columns are always scalar.
 	Canonical canonicaltypes.PrimitiveAstNodeI
+}
+
+// GoType returns the plain column's Go type in source form (e.g. "uint64",
+// "time.Time", "[]byte"), derived from Canonical — the single source of truth.
+func (p PlainCol) GoType() string {
+	goType, _, _, err := deriveGoShape(p.Canonical)
+	if err != nil {
+		panic("mappingplan: PlainCol.GoType on a column with no canonical type — corrupt plan: " + err.Error())
+	}
+	return goType
 }
 
 // MembershipChannel selects one of the leeway membership channels the
@@ -281,19 +289,12 @@ type FieldFlags struct {
 type TaggedField struct {
 	GoFieldName string // DTO struct field name; "" when IsConst is true
 
-	// GoType is the inner element type in source form. For Option[T] it
-	// is T; for []T it is T; for *roaring.Bitmap it is "*roaring.Bitmap".
-	// For constant fields it is "string" — constant values are always
-	// string-typed in this version.
-	GoType    string
-	IsOption  bool // option.Option[T] wrapper — Option[[]byte] uses the scalar-blob lane
-	IsSlice   bool // []T element-slice (top-level, non-byte)
-	IsRoaring bool // *roaring.Bitmap
+	IsOption bool // option.Option[T] wrapper — Option[[]byte] uses the scalar-blob lane
 
-	// Canonical is the authoritative leeway canonical type the front-end
-	// classified the field's value type into; GoType / IsSlice / IsRoaring
-	// above are derived from it by PlanBuilder. Carried through for the
-	// canonical-native model and future schema-side use. "" for const fields.
+	// Canonical is the authoritative leeway canonical type the field's value
+	// maps to — the single source of truth for the value type. The Go-facing
+	// forms (GoType / IsSlice / IsRoaring) are derived from it on demand by the
+	// methods below, never stored. nil for const fields (GoType() → "string").
 	Canonical canonicaltypes.PrimitiveAstNodeI
 
 	LWMembership string // first comma-segment of the lw: tag
@@ -325,6 +326,49 @@ type TaggedField struct {
 	// field; false for a scalar carrier paired with a scalar / Option /
 	// container value (one carrier per attribute). Set by PlanBuilder.Finish.
 	CarrierIsSlice bool
+}
+
+// GoType returns the field's value type in Go source form (e.g. "uint64",
+// "string", "[]byte", "[16]byte", "time.Time", "*roaring.Bitmap"), derived
+// from Canonical via the single canonical→Go rule (deriveGoShape) — the inner
+// element type for []T / Option[T]. Const fields are always "string". Canonical
+// is the plan's source of truth; this is a derived view, never stored.
+func (f TaggedField) GoType() string {
+	if f.IsConst {
+		return "string"
+	}
+	goType, _, _, err := deriveGoShape(f.Canonical)
+	if err != nil {
+		panic("mappingplan: TaggedField.GoType on a field with no canonical type — corrupt plan (PlanBuilder validates this at AddField): " + err.Error())
+	}
+	return goType
+}
+
+// IsSlice reports whether the field's value is a top-level []T element-slice
+// (the canonical HomogenousArray modifier). Derived from Canonical; false for
+// const / nil-canonical fields.
+func (f TaggedField) IsSlice() bool {
+	if f.Canonical == nil {
+		return false
+	}
+	mod, _ := canonicaltypes.GetScalarModifier(f.Canonical)
+	return mod == canonicaltypes.ScalarModifierHomogenousArray
+}
+
+// IsRoaring reports whether the field's value is a *roaring.Bitmap (the
+// canonical Set modifier). Derived from Canonical; false for const / nil.
+func (f TaggedField) IsRoaring() bool {
+	if f.Canonical == nil {
+		return false
+	}
+	mod, _ := canonicaltypes.GetScalarModifier(f.Canonical)
+	return mod == canonicaltypes.ScalarModifierSet
+}
+
+// IsMulti reports whether the field emits multiple values (a []T container or
+// a roaring set) rather than a single scalar attribute.
+func (f TaggedField) IsMulti() bool {
+	return f.IsSlice() || f.IsRoaring()
 }
 
 // KindVar returns the package-level identifier holding the resolved

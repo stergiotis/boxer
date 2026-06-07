@@ -72,7 +72,7 @@ func inferUnitFromSectionSuffix(plan *mappingplan.Plan) {
 		if f.Flags.Unit || f.Flags.Explode {
 			continue
 		}
-		if f.IsSlice || f.IsRoaring {
+		if f.IsSlice() || f.IsRoaring() {
 			continue
 		}
 		if isNonScalarSectionName(f.LWSection) {

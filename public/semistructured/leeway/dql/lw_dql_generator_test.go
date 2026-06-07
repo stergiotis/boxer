@@ -114,12 +114,12 @@ func TestGenerator_Golden(t *testing.T) {
 	g := NewGenerator(buildTestIR(t), NewLookupResolver(mapLookup{"myNums": 42, "window": 7}))
 	plan := &mappingplan.Plan{
 		KindName:  "myDto",
-		PlainCols: []mappingplan.PlainCol{{Column: "id", GoField: "Id", GoType: "uint64"}, {Column: "naturalKey", GoField: "NK", GoType: "[]byte"}},
+		PlainCols: []mappingplan.PlainCol{{Column: "id", GoField: "Id", Canonical: ctabb.U64}, {Column: "naturalKey", GoField: "NK", Canonical: ctabb.Y}},
 		Fields: []mappingplan.TaggedField{
-			{GoFieldName: "Sym", GoType: "string", LWMembership: "mySym", LWSection: "symbol", Flags: mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardVerbatim}},
-			{GoFieldName: "Nums", GoType: "uint64", IsSlice: true, LWMembership: "myNums", LWSection: "u64Array", Flags: mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardRef}},
-			{GoFieldName: "WinBegin", GoType: "time.Time", LWMembership: "window", LWSection: "timeRange", LWColumn: "beginIncl", Flags: mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardRef}},
-			{GoFieldName: "WinEnd", GoType: "time.Time", LWMembership: "window", LWSection: "timeRange", LWColumn: "endExcl", Flags: mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardRef}},
+			{GoFieldName: "Sym", Canonical: ctabb.S, LWMembership: "mySym", LWSection: "symbol", Flags: mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardVerbatim}},
+			{GoFieldName: "Nums", Canonical: canonicaltypes.PromoteScalarPrim(ctabb.U64, canonicaltypes.ScalarModifierHomogenousArray), LWMembership: "myNums", LWSection: "u64Array", Flags: mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardRef}},
+			{GoFieldName: "WinBegin", Canonical: ctabb.Z64, LWMembership: "window", LWSection: "timeRange", LWColumn: "beginIncl", Flags: mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardRef}},
+			{GoFieldName: "WinEnd", Canonical: ctabb.Z64, LWMembership: "window", LWSection: "timeRange", LWColumn: "endExcl", Flags: mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardRef}},
 		},
 	}
 	a, err := g.Generate(plan)
@@ -196,10 +196,10 @@ func TestGenerator_Exec(t *testing.T) {
 	g := NewGenerator(buildTestIR(t), NewLookupResolver(mapLookup{"myNums": 42}))
 	plan := &mappingplan.Plan{
 		KindName:  "exec",
-		PlainCols: []mappingplan.PlainCol{{Column: "id", GoField: "Id", GoType: "uint64"}},
+		PlainCols: []mappingplan.PlainCol{{Column: "id", GoField: "Id", Canonical: ctabb.U64}},
 		Fields: []mappingplan.TaggedField{
-			{GoFieldName: "Sym", GoType: "string", LWMembership: "mySym", LWSection: "symbol", Flags: mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardVerbatim}},
-			{GoFieldName: "Nums", GoType: "uint64", IsSlice: true, LWMembership: "myNums", LWSection: "u64Array", Flags: mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardRef}},
+			{GoFieldName: "Sym", Canonical: ctabb.S, LWMembership: "mySym", LWSection: "symbol", Flags: mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardVerbatim}},
+			{GoFieldName: "Nums", Canonical: canonicaltypes.PromoteScalarPrim(ctabb.U64, canonicaltypes.ScalarModifierHomogenousArray), LWMembership: "myNums", LWSection: "u64Array", Flags: mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardRef}},
 		},
 	}
 	a, err := g.Generate(plan)
@@ -273,9 +273,9 @@ func TestGenerator_ExecSetAndMultiSubcol(t *testing.T) {
 	plan := &mappingplan.Plan{
 		KindName: "setmulti",
 		Fields: []mappingplan.TaggedField{
-			{GoFieldName: "Zones", IsRoaring: true, LWMembership: "zones", LWSection: "u32Set", Flags: mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardRef}},
-			{GoFieldName: "Lo", GoType: "uint64", LWMembership: "span", LWSection: "pair", LWColumn: "lo", Flags: mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardRef}},
-			{GoFieldName: "Hi", GoType: "uint64", LWMembership: "span", LWSection: "pair", LWColumn: "hi", Flags: mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardRef}},
+			{GoFieldName: "Zones", Canonical: canonicaltypes.PromoteScalarPrim(ctabb.U32, canonicaltypes.ScalarModifierSet), LWMembership: "zones", LWSection: "u32Set", Flags: mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardRef}},
+			{GoFieldName: "Lo", Canonical: ctabb.U64, LWMembership: "span", LWSection: "pair", LWColumn: "lo", Flags: mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardRef}},
+			{GoFieldName: "Hi", Canonical: ctabb.U64, LWMembership: "span", LWSection: "pair", LWColumn: "hi", Flags: mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardRef}},
 		},
 	}
 	a, err := g.Generate(plan)

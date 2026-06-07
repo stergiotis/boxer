@@ -133,10 +133,10 @@ func writeImports(sb *strings.Builder, plan *mappingplan.Plan, wrapper WrapperEm
 	needsTime := false
 	needsMarshalltypes := false
 	for _, f := range plan.Fields {
-		if f.IsRoaring {
+		if f.IsRoaring() {
 			needsRoaring = true
 		}
-		if f.GoType == "time.Time" {
+		if f.GoType() == "time.Time" {
 			needsTime = true
 		}
 		if f.CarrierField != "" {
@@ -147,7 +147,7 @@ func writeImports(sb *strings.Builder, plan *mappingplan.Plan, wrapper WrapperEm
 		// A time.Time plain column needs the time import: read reconstructs
 		// it from Arrow nanos via time.Unix. Non-time columns (e.g. int64
 		// nanos) don't — strict 1:1 inserts no conversion.
-		if p.GoType == "time.Time" {
+		if p.GoType() == "time.Time" {
 			needsTime = true
 		}
 	}
@@ -191,7 +191,7 @@ func writeColumnsStruct(sb *strings.Builder, plan *mappingplan.Plan) {
 	line(sb, 0, "// All slices grow in lockstep — Len returns the row count.")
 	linef(sb, 0, "type %sColumns struct {", plan.KindType)
 	for _, p := range plan.PlainCols {
-		linef(sb, 1, "%s []%s", p.GoField, p.GoType)
+		linef(sb, 1, "%s []%s", p.GoField, p.GoType())
 	}
 	blank(sb)
 	for _, f := range plan.Fields {
@@ -200,14 +200,14 @@ func writeColumnsStruct(sb *strings.Builder, plan *mappingplan.Plan) {
 		}
 		switch {
 		case f.IsOption:
-			linef(sb, 1, "%sVal []%s", f.GoFieldName, f.GoType)
+			linef(sb, 1, "%sVal []%s", f.GoFieldName, f.GoType())
 			linef(sb, 1, "%sHas []bool", f.GoFieldName)
-		case f.IsSlice:
-			linef(sb, 1, "%s [][]%s", f.GoFieldName, f.GoType)
-		case f.IsRoaring:
+		case f.IsSlice():
+			linef(sb, 1, "%s [][]%s", f.GoFieldName, f.GoType())
+		case f.IsRoaring():
 			linef(sb, 1, "%s []*roaring.Bitmap", f.GoFieldName)
 		default:
-			linef(sb, 1, "%s []%s", f.GoFieldName, f.GoType)
+			linef(sb, 1, "%s []%s", f.GoFieldName, f.GoType())
 		}
 		// Cut-2 carrier sibling: its own SoA column, emits no attribute. A
 		// scalar carrier is []X (one per attribute); an exploded value's slice
@@ -299,7 +299,7 @@ func planExpiresAtCol(plan *mappingplan.Plan) *mappingplan.PlainCol {
 // column in FillFromArrow, e.g. "*array.Uint64". The Go type was
 // validated as a supported plain type at parse time.
 func plainArrowParam(p *mappingplan.PlainCol) string {
-	at, _ := mappingplan.PlainArrowArrayType(p.GoType)
+	at, _ := mappingplan.PlainArrowArrayType(p.GoType())
 	return "*" + at
 }
 
@@ -310,7 +310,7 @@ func plainArrowParam(p *mappingplan.PlainCol) string {
 // (strict 1:1 — the column Go type is the value type).
 func writePlainRead(sb *strings.Builder, depth int, p *mappingplan.PlainCol, colVar string) {
 	f := p.GoField
-	switch mappingplan.CopyStrategy(p.GoType) {
+	switch mappingplan.CopyStrategy(p.GoType()) {
 	case mappingplan.CopyTime:
 		linef(sb, depth, "c.%s = append(c.%s, time.Unix(0, int64(%s.Value(i))).UTC())", f, f, colVar)
 	case mappingplan.CopyBytes:
@@ -322,7 +322,7 @@ func writePlainRead(sb *strings.Builder, depth int, p *mappingplan.PlainCol, col
 		line(sb, depth, "}")
 	case mappingplan.CopyFixedByte:
 		line(sb, depth, "{")
-		linef(sb, depth+1, "var v %s", p.GoType)
+		linef(sb, depth+1, "var v %s", p.GoType())
 		linef(sb, depth+1, "copy(v[:], %s.Value(i))", colVar)
 		linef(sb, depth+1, "c.%s = append(c.%s, v)", f, f)
 		line(sb, depth, "}")
@@ -369,13 +369,13 @@ func writeBuildHelper(sb *strings.Builder, plan *mappingplan.Plan) (err error) {
 // columns — tagged-value fixed-width blobs always re-slice into
 // `[]byte`).
 func elemType(f mappingplan.TaggedField) string {
-	if f.IsRoaring {
+	if f.IsRoaring() {
 		return "uint32"
 	}
-	if mappingplan.IsFixedByteArray(f.GoType) {
+	if mappingplan.IsFixedByteArray(f.GoType()) {
 		return "[]byte"
 	}
-	return f.GoType
+	return f.GoType()
 }
 
 // writeSectionInterfaces emits the per-section AttrI + SecI interface
@@ -409,11 +409,11 @@ func writeSectionInterfaces(sb *strings.Builder, plan *mappingplan.Plan, g mappi
 				return
 			}
 			f := sc.Fields[0]
-			if f.IsOption || f.IsSlice || f.IsRoaring {
+			if f.IsOption || f.IsSlice() || f.IsRoaring() {
 				err = eb.Build().Str("section", g.Section).Str("field", f.GoFieldName).Errorf("non-scalar field in multi-sub-column section not supported")
 				return
 			}
-			multiSubColPairs = append(multiSubColPairs, argPair{Name: sc.Name, Type: f.GoType})
+			multiSubColPairs = append(multiSubColPairs, argPair{Name: sc.Name, Type: f.GoType()})
 		}
 	} else {
 		for _, f := range g.SubColumns[0].Fields {
@@ -505,15 +505,15 @@ func writeEntityInterface(sb *strings.Builder, plan *mappingplan.Plan, groups []
 		return
 	}
 	if nkCol := planNaturalKeyCol(plan); nkCol != nil {
-		linef(sb, 1, "SetId(id %s, naturalKey %s) Ent", idCol.GoType, nkCol.GoType)
+		linef(sb, 1, "SetId(id %s, naturalKey %s) Ent", idCol.GoType(), nkCol.GoType())
 	} else {
-		linef(sb, 1, "SetId(id %s) Ent", idCol.GoType)
+		linef(sb, 1, "SetId(id %s) Ent", idCol.GoType())
 	}
 	if tsCol := planTsCol(plan); tsCol != nil {
-		linef(sb, 1, "SetTimestamp(ts %s) Ent", tsCol.GoType)
+		linef(sb, 1, "SetTimestamp(ts %s) Ent", tsCol.GoType())
 	}
 	if lcCol := planExpiresAtCol(plan); lcCol != nil {
-		linef(sb, 1, "SetLifecycle(expiresAt %s) Ent", lcCol.GoType)
+		linef(sb, 1, "SetLifecycle(expiresAt %s) Ent", lcCol.GoType())
 	}
 	for _, g := range groups {
 		method := methodFor(g.Section)
@@ -712,7 +712,7 @@ func writeFieldDriver(sb *strings.Builder, f mappingplan.TaggedField, secVar str
 		// / nil skips (leeway splice semantics: empty non-scalars vanish — the
 		// carrier of an empty container is therefore not emitted).
 		switch {
-		case f.IsRoaring:
+		case f.IsRoaring():
 			linef(sb, 2, "if c.%s[i] != nil && !c.%s[i].IsEmpty() {", f.GoFieldName, f.GoFieldName)
 			linef(sb, 3, "%s := %s.BeginAttribute()", attrVar, secVar)
 			linef(sb, 3, "it := c.%s[i].Iterator()", f.GoFieldName)
@@ -722,7 +722,7 @@ func writeFieldDriver(sb *strings.Builder, f mappingplan.TaggedField, secVar str
 			writeMembershipAdd(sb, "\t\t\t", attrVar, f, "")
 			linef(sb, 3, "%s.EndAttributeP()", attrVar)
 			line(sb, 2, "}")
-		case f.IsSlice:
+		case f.IsSlice():
 			linef(sb, 2, "if len(c.%s[i]) > 0 {", f.GoFieldName)
 			linef(sb, 3, "%s := %s.BeginAttribute()", attrVar, secVar)
 			linef(sb, 3, "for _, v := range c.%s[i] {", f.GoFieldName)
@@ -741,7 +741,7 @@ func writeFieldDriver(sb *strings.Builder, f mappingplan.TaggedField, secVar str
 			beginMethod = "BeginAttributeSingle"
 		}
 		switch {
-		case f.IsRoaring:
+		case f.IsRoaring():
 			linef(sb, 2, "if c.%s[i] != nil {", f.GoFieldName)
 			linef(sb, 3, "it := c.%s[i].Iterator()", f.GoFieldName)
 			line(sb, 3, "for it.HasNext() {")
@@ -750,7 +750,7 @@ func writeFieldDriver(sb *strings.Builder, f mappingplan.TaggedField, secVar str
 			linef(sb, 4, "%s.EndAttributeP()", attrVar)
 			line(sb, 3, "}")
 			line(sb, 2, "}")
-		case f.IsSlice && f.CarrierField != "":
+		case f.IsSlice() && f.CarrierField != "":
 			// Exploded value with a slice carrier: one attribute per element,
 			// each pairing value[k] with carrier[k]. Lengths must agree.
 			linef(sb, 2, "if len(c.%s[i]) != len(c.%s[i]) {", f.CarrierField, f.GoFieldName)
@@ -762,7 +762,7 @@ func writeFieldDriver(sb *strings.Builder, f mappingplan.TaggedField, secVar str
 			writeMembershipAdd(sb, "\t\t\t", attrVar, f, "k")
 			linef(sb, 3, "%s.EndAttributeP()", attrVar)
 			line(sb, 2, "}")
-		case f.IsSlice:
+		case f.IsSlice():
 			linef(sb, 2, "for _, v := range c.%s[i] {", f.GoFieldName)
 			linef(sb, 3, "%s := %s.%s(%s)", attrVar, secVar, beginMethod, sliceElemExpr(f, "v"))
 			writeMembershipAdd(sb, "\t\t\t", attrVar, f, "")
@@ -796,7 +796,7 @@ func scalarValueExpr(f mappingplan.TaggedField) string {
 // AddToContainerP / SecI's BeginAttribute (which take []byte for blob
 // sections) accepts them.
 func sliceElemExpr(f mappingplan.TaggedField, elemVar string) string {
-	if mappingplan.IsFixedByteArray(f.GoType) {
+	if mappingplan.IsFixedByteArray(f.GoType()) {
 		return elemVar + "[:]"
 	}
 	return elemVar
@@ -806,7 +806,7 @@ func sliceElemExpr(f mappingplan.TaggedField, elemVar string) string {
 // []byte the blob-section BeginAttribute expects. No-op for any other
 // type.
 func blobSliceMaybe(f mappingplan.TaggedField, base string) string {
-	if mappingplan.IsFixedByteArray(f.GoType) {
+	if mappingplan.IsFixedByteArray(f.GoType()) {
 		return base + "[:]"
 	}
 	return base
@@ -871,7 +871,7 @@ func writeSectionReadInterfaces(sb *strings.Builder, plan *mappingplan.Plan, g m
 	if len(g.SubColumns) > 1 {
 		for _, sc := range g.SubColumns {
 			f := sc.Fields[0]
-			linef(sb, 1, "GetAttrValue%s(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) %s", mappingplan.UpperFirst(sc.Name), f.GoType)
+			linef(sb, 1, "GetAttrValue%s(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) %s", mappingplan.UpperFirst(sc.Name), f.GoType())
 		}
 	} else {
 		f := g.SubColumns[0].Fields[0]
@@ -1053,9 +1053,9 @@ func writeCarrierSectionDecode(sb *strings.Builder, g mappingplan.SectionGroup, 
 	}
 
 	switch {
-	case f.IsSlice && f.Flags.Explode:
+	case f.IsSlice() && f.Flags.Explode:
 		writeCarrierExplodeDecode(sb, f, attrsVar, membsVar, prefix)
-	case f.IsSlice:
+	case f.IsSlice():
 		writeCarrierContainerDecode(sb, f, attrsVar, membsVar, prefix)
 	case f.IsOption:
 		writeCarrierOptionDecode(sb, f, attrsVar, membsVar, prefix)
@@ -1104,7 +1104,7 @@ func writeCarrierMembLoopHeader(sb *strings.Builder, depth int, f mappingplan.Ta
 // the given depth — a defensive copy for []byte / fixed-byte, straight
 // assignment otherwise.
 func writeCarrierValueRead(sb *strings.Builder, depth int, f mappingplan.TaggedField, valVar, valRead string) {
-	switch mappingplan.CopyStrategy(f.GoType) {
+	switch mappingplan.CopyStrategy(f.GoType()) {
 	case mappingplan.CopyFixedByte:
 		linef(sb, depth, "copy(%s[:], %s)", valVar, valRead)
 	case mappingplan.CopyBytes:
@@ -1122,7 +1122,7 @@ func writeCarrierScalarDecode(sb *strings.Builder, f mappingplan.TaggedField, at
 	readMethod := "GetMembValue" + f.Flags.Channel.CarrierReadMethodSuffix()
 	valRead := fmt.Sprintf("%s.%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))", attrsVar, mappingplan.SingleValueReadAccessor(f))
 
-	linef(sb, 2, "var %s %s", valVar, f.GoType)
+	linef(sb, 2, "var %s %s", valVar, f.GoType())
 	linef(sb, 2, "var %s marshalltypes.%s", carrierVar, f.CarrierType)
 	linef(sb, 2, "%sCount := 0", prefix)
 	linef(sb, 2, "n%s := %s.GetNumberOfAttributes(raruntime.EntityIdx(i))", prefix, attrsVar)
@@ -1150,7 +1150,7 @@ func writeCarrierOptionDecode(sb *strings.Builder, f mappingplan.TaggedField, at
 	readMethod := "GetMembValue" + f.Flags.Channel.CarrierReadMethodSuffix()
 	valRead := fmt.Sprintf("%s.%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))", attrsVar, mappingplan.SingleValueReadAccessor(f))
 
-	linef(sb, 2, "var %s %s", valVar, f.GoType)
+	linef(sb, 2, "var %s %s", valVar, f.GoType())
 	linef(sb, 2, "var %s marshalltypes.%s", carrierVar, f.CarrierType)
 	linef(sb, 2, "%sCount := 0", prefix)
 	linef(sb, 2, "n%s := %s.GetNumberOfAttributes(raruntime.EntityIdx(i))", prefix, attrsVar)
@@ -1165,7 +1165,7 @@ func writeCarrierOptionDecode(sb *strings.Builder, f mappingplan.TaggedField, at
 	linef(sb, 3, "c.%sVal = append(c.%sVal, %s)", f.GoFieldName, f.GoFieldName, valVar)
 	linef(sb, 3, "c.%sHas = append(c.%sHas, true)", f.GoFieldName, f.GoFieldName)
 	line(sb, 2, "} else {")
-	linef(sb, 3, "var zero %s", f.GoType)
+	linef(sb, 3, "var zero %s", f.GoType())
 	linef(sb, 3, "c.%sVal = append(c.%sVal, zero)", f.GoFieldName, f.GoFieldName)
 	linef(sb, 3, "c.%sHas = append(c.%sHas, false)", f.GoFieldName, f.GoFieldName)
 	line(sb, 2, "}")
@@ -1181,7 +1181,7 @@ func writeCarrierContainerDecode(sb *strings.Builder, f mappingplan.TaggedField,
 	carrierVar := prefix + f.GoFieldName + "Carrier"
 	readMethod := "GetMembValue" + f.Flags.Channel.CarrierReadMethodSuffix()
 
-	linef(sb, 2, "var %s []%s", sliceVar, f.GoType)
+	linef(sb, 2, "var %s []%s", sliceVar, f.GoType())
 	linef(sb, 2, "var %s marshalltypes.%s", carrierVar, f.CarrierType)
 	linef(sb, 2, "n%s := %s.GetNumberOfAttributes(raruntime.EntityIdx(i))", prefix, attrsVar)
 	linef(sb, 2, "for attrJ := int64(0); attrJ < n%s; attrJ++ {", prefix)
@@ -1189,7 +1189,7 @@ func writeCarrierContainerDecode(sb *strings.Builder, f mappingplan.TaggedField,
 	linef(sb, 4, "%s = %s", carrierVar, carrierStructLiteral(f, carrierMembValExpr(f), "params"))
 	line(sb, 3, "}")
 	linef(sb, 3, "for v := range %s.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {", attrsVar)
-	if mappingplan.CopyStrategy(f.GoType) == mappingplan.CopyBytes {
+	if mappingplan.CopyStrategy(f.GoType()) == mappingplan.CopyBytes {
 		line(sb, 4, "cp := make([]byte, len(v))")
 		line(sb, 4, "copy(cp, v)")
 		linef(sb, 4, "%s = append(%s, cp)", sliceVar, sliceVar)
@@ -1213,11 +1213,11 @@ func writeCarrierExplodeDecode(sb *strings.Builder, f mappingplan.TaggedField, a
 	readMethod := "GetMembValue" + f.Flags.Channel.CarrierReadMethodSuffix()
 	valRead := fmt.Sprintf("%s.%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))", attrsVar, mappingplan.SingleValueReadAccessor(f))
 
-	linef(sb, 2, "var %s []%s", sliceVar, f.GoType)
+	linef(sb, 2, "var %s []%s", sliceVar, f.GoType())
 	linef(sb, 2, "var %s []marshalltypes.%s", carrierSliceVar, f.CarrierType)
 	linef(sb, 2, "n%s := %s.GetNumberOfAttributes(raruntime.EntityIdx(i))", prefix, attrsVar)
 	linef(sb, 2, "for attrJ := int64(0); attrJ < n%s; attrJ++ {", prefix)
-	linef(sb, 3, "var %s %s", elemVar, f.GoType)
+	linef(sb, 3, "var %s %s", elemVar, f.GoType())
 	writeCarrierValueRead(sb, 3, f, elemVar, valRead)
 	linef(sb, 3, "var %s marshalltypes.%s", elemCarrierVar, f.CarrierType)
 	writeCarrierMembLoopHeader(sb, 3, f, membsVar, readMethod)
@@ -1232,14 +1232,14 @@ func writeCarrierExplodeDecode(sb *strings.Builder, f mappingplan.TaggedField, a
 
 func writeFieldAccumulatorDecl(sb *strings.Builder, f mappingplan.TaggedField, prefix string) {
 	switch {
-	case f.IsSlice:
-		linef(sb, 2, "var %s%sSlice []%s", prefix, f.GoFieldName, f.GoType)
-	case f.IsRoaring:
+	case f.IsSlice():
+		linef(sb, 2, "var %s%sSlice []%s", prefix, f.GoFieldName, f.GoType())
+	case f.IsRoaring():
 		linef(sb, 2, "var %s%sBitmap *roaring.Bitmap", prefix, f.GoFieldName)
 	default:
 		// Scalar or Option value: a Val slot plus an occurrence Count
 		// (Option's Has bool is written at append time, not here).
-		linef(sb, 2, "var %s%sVal %s", prefix, f.GoFieldName, f.GoType)
+		linef(sb, 2, "var %s%sVal %s", prefix, f.GoFieldName, f.GoType())
 		linef(sb, 2, "var %s%sCount int", prefix, f.GoFieldName)
 	}
 }
@@ -1251,13 +1251,13 @@ func writeFieldAppend(sb *strings.Builder, f mappingplan.TaggedField, prefix str
 		linef(sb, 3, "c.%sVal = append(c.%sVal, %s%sVal)", f.GoFieldName, f.GoFieldName, prefix, f.GoFieldName)
 		linef(sb, 3, "c.%sHas = append(c.%sHas, true)", f.GoFieldName, f.GoFieldName)
 		line(sb, 2, "} else {")
-		linef(sb, 3, "var zero %s", f.GoType)
+		linef(sb, 3, "var zero %s", f.GoType())
 		linef(sb, 3, "c.%sVal = append(c.%sVal, zero)", f.GoFieldName, f.GoFieldName)
 		linef(sb, 3, "c.%sHas = append(c.%sHas, false)", f.GoFieldName, f.GoFieldName)
 		line(sb, 2, "}")
-	case f.IsSlice:
+	case f.IsSlice():
 		linef(sb, 2, "c.%s = append(c.%s, %s%sSlice)", f.GoFieldName, f.GoFieldName, prefix, f.GoFieldName)
-	case f.IsRoaring:
+	case f.IsRoaring():
 		linef(sb, 2, "c.%s = append(c.%s, %s%sBitmap)", f.GoFieldName, f.GoFieldName, prefix, f.GoFieldName)
 	default:
 		linef(sb, 2, "if %s%sCount != 1 {", prefix, f.GoFieldName)
@@ -1280,9 +1280,9 @@ func writeFieldMembCase(sb *strings.Builder, f mappingplan.TaggedField, prefix, 
 		return fmt.Sprintf("%s.%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))", attrsVar, mappingplan.SingleValueReadAccessor(f))
 	}
 	switch {
-	case f.IsSlice:
+	case f.IsSlice():
 		linef(sb, 5, "for v := range %s.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {", attrsVar)
-		if mappingplan.CopyStrategy(f.GoType) == mappingplan.CopyBytes {
+		if mappingplan.CopyStrategy(f.GoType()) == mappingplan.CopyBytes {
 			line(sb, 6, "cp := make([]byte, len(v))")
 			line(sb, 6, "copy(cp, v)")
 			linef(sb, 6, "%s%sSlice = append(%s%sSlice, cp)", prefix, f.GoFieldName, prefix, f.GoFieldName)
@@ -1290,7 +1290,7 @@ func writeFieldMembCase(sb *strings.Builder, f mappingplan.TaggedField, prefix, 
 			linef(sb, 6, "%s%sSlice = append(%s%sSlice, v)", prefix, f.GoFieldName, prefix, f.GoFieldName)
 		}
 		line(sb, 5, "}")
-	case f.IsRoaring:
+	case f.IsRoaring():
 		linef(sb, 5, "for v := range %s.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {", attrsVar)
 		linef(sb, 6, "if %s%sBitmap == nil {", prefix, f.GoFieldName)
 		linef(sb, 7, "%s%sBitmap = roaring.New()", prefix, f.GoFieldName)
@@ -1303,7 +1303,7 @@ func writeFieldMembCase(sb *strings.Builder, f mappingplan.TaggedField, prefix, 
 		// per-attribute fill into <prefix><Field>Val / Count is identical, so
 		// both shapes share this arm.
 		linef(sb, 5, "val := %s", singleVal())
-		switch mappingplan.CopyStrategy(f.GoType) {
+		switch mappingplan.CopyStrategy(f.GoType()) {
 		case mappingplan.CopyFixedByte:
 			linef(sb, 5, "copy(%s%sVal[:], val)", prefix, f.GoFieldName)
 		case mappingplan.CopyBytes:
@@ -1332,7 +1332,7 @@ func writeMultiSubColumnDecode(sb *strings.Builder, g mappingplan.SectionGroup, 
 	}
 	memb := g.Memberships[0]
 	for _, s := range subs {
-		linef(sb, 2, "var %s%sVal %s", prefix, s.Field.GoFieldName, s.Field.GoType)
+		linef(sb, 2, "var %s%sVal %s", prefix, s.Field.GoFieldName, s.Field.GoType())
 	}
 	linef(sb, 2, "var %s%sCount int", prefix, memb.GoFieldName)
 	linef(sb, 2, "n%s := %s.GetNumberOfAttributes(raruntime.EntityIdx(i))", prefix, attrsVar)

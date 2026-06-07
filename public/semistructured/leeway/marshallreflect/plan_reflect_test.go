@@ -52,15 +52,15 @@ func TestPlanFor_ClassifiesShapes(t *testing.T) {
 	require.Len(t, plan.Fields, 6)
 
 	require.True(t, fieldByName(t, plan, "Opt").IsOption)
-	require.Equal(t, "int64", fieldByName(t, plan, "Opt").GoType)
-	require.True(t, fieldByName(t, plan, "Slice").IsSlice)
-	require.True(t, fieldByName(t, plan, "Bits").IsRoaring)
+	require.Equal(t, "int64", fieldByName(t, plan, "Opt").GoType())
+	require.True(t, fieldByName(t, plan, "Slice").IsSlice())
+	require.True(t, fieldByName(t, plan, "Bits").IsRoaring())
 
 	blob := fieldByName(t, plan, "Blob")
 	require.True(t, blob.IsOption)
-	require.Equal(t, "[]byte", blob.GoType, "Option[[]byte] is the scalar-blob lane")
+	require.Equal(t, "[]byte", blob.GoType(), "Option[[]byte] is the scalar-blob lane")
 
-	require.Equal(t, "[16]byte", fieldByName(t, plan, "Fixed").GoType)
+	require.Equal(t, "[16]byte", fieldByName(t, plan, "Fixed").GoType())
 }
 
 // --- Rejections routed through the shared validator. ---

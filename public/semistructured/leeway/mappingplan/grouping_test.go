@@ -7,8 +7,19 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 )
+
+// sliceCanon / roaringCanon rebuild the canonical types these grouping tests
+// previously expressed via the removed GoType/IsSlice/IsRoaring fields
+// (scalarCanon is shared from build_test.go, same test package).
+func sliceCanon(elem string) canonicaltypes.PrimitiveAstNodeI {
+	return canonicaltypes.PromoteScalarPrim(scalarCanon(elem), canonicaltypes.ScalarModifierHomogenousArray)
+}
+func roaringCanon() canonicaltypes.PrimitiveAstNodeI {
+	return canonicaltypes.PromoteScalarPrim(mappingplan.RoaringElemCanonical(), canonicaltypes.ScalarModifierSet)
+}
 
 // TestComputeGroups_ScalarFirstPartition locks ADR-0008 D2's
 // behaviour: within one section, scalar-shaped fields land ahead of
@@ -18,10 +29,10 @@ import (
 func TestComputeGroups_ScalarFirstPartition(t *testing.T) {
 	plan := &mappingplan.Plan{
 		Fields: []mappingplan.TaggedField{
-			{GoFieldName: "Bits", GoType: "*roaring.Bitmap", IsRoaring: true, LWMembership: "bits", LWSection: "u32Array"},
-			{GoFieldName: "Battery", GoType: "uint32", LWMembership: "battery", LWSection: "u32Array", Flags: mappingplan.FieldFlags{Unit: true}},
-			{GoFieldName: "Tags", GoType: "string", IsSlice: true, LWMembership: "tags", LWSection: "u32Array"},
-			{GoFieldName: "Volt", GoType: "uint32", LWMembership: "volt", LWSection: "u32Array"},
+			{GoFieldName: "Bits", Canonical: roaringCanon(), LWMembership: "bits", LWSection: "u32Array"},
+			{GoFieldName: "Battery", Canonical: scalarCanon("uint32"), LWMembership: "battery", LWSection: "u32Array", Flags: mappingplan.FieldFlags{Unit: true}},
+			{GoFieldName: "Tags", Canonical: sliceCanon("string"), LWMembership: "tags", LWSection: "u32Array"},
+			{GoFieldName: "Volt", Canonical: scalarCanon("uint32"), LWMembership: "volt", LWSection: "u32Array"},
 		},
 	}
 	groups := mappingplan.ComputeGroups(plan)
@@ -49,9 +60,9 @@ func TestComputeGroups_ScalarFirstPartition(t *testing.T) {
 func TestComputeGroups_PreservesSectionOrder(t *testing.T) {
 	plan := &mappingplan.Plan{
 		Fields: []mappingplan.TaggedField{
-			{GoFieldName: "Bits", IsRoaring: true, GoType: "*roaring.Bitmap", LWMembership: "bits", LWSection: "u32Array"},
-			{GoFieldName: "Color", GoType: "string", LWMembership: "color", LWSection: "symbol"},
-			{GoFieldName: "Battery", GoType: "uint32", LWMembership: "battery", LWSection: "u32Array", Flags: mappingplan.FieldFlags{Unit: true}},
+			{GoFieldName: "Bits", Canonical: roaringCanon(), LWMembership: "bits", LWSection: "u32Array"},
+			{GoFieldName: "Color", Canonical: scalarCanon("string"), LWMembership: "color", LWSection: "symbol"},
+			{GoFieldName: "Battery", Canonical: scalarCanon("uint32"), LWMembership: "battery", LWSection: "u32Array", Flags: mappingplan.FieldFlags{Unit: true}},
 		},
 	}
 	groups := mappingplan.ComputeGroups(plan)

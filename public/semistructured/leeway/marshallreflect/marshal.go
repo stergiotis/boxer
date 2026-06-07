@@ -181,7 +181,7 @@ func marshalScalarOne(sec, row reflect.Value, f mappingplan.TaggedField, lookup 
 
 func marshalContainer(sec, row reflect.Value, f mappingplan.TaggedField, lookup LookupI) (err error) {
 	switch {
-	case f.IsRoaring:
+	case f.IsRoaring():
 		bm := row.FieldByName(f.GoFieldName)
 		if bm.IsNil() {
 			return
@@ -201,7 +201,7 @@ func marshalContainer(sec, row reflect.Value, f mappingplan.TaggedField, lookup 
 			return
 		}
 		mustCall(attr, "EndAttributeP")
-	case f.IsSlice:
+	case f.IsSlice():
 		fld := row.FieldByName(f.GoFieldName)
 		if fld.Len() == 0 {
 			return
@@ -224,7 +224,7 @@ func marshalContainer(sec, row reflect.Value, f mappingplan.TaggedField, lookup 
 
 func marshalExplode(sec, row reflect.Value, f mappingplan.TaggedField, lookup LookupI, beginMethod string) (err error) {
 	switch {
-	case f.IsRoaring:
+	case f.IsRoaring():
 		// Roaring carriers are rejected by PlanBuilder, so there is never a
 		// carrier to index in this arm.
 		bm := row.FieldByName(f.GoFieldName)
@@ -241,7 +241,7 @@ func marshalExplode(sec, row reflect.Value, f mappingplan.TaggedField, lookup Lo
 			}
 			mustCall(attr, "EndAttributeP")
 		}
-	case f.IsSlice:
+	case f.IsSlice():
 		fld := row.FieldByName(f.GoFieldName)
 		// A slice carrier pairs element-wise with the value slice; the two are
 		// independent Go fields, so their lengths must agree at runtime.
@@ -320,7 +320,7 @@ func addMembership(attr, row reflect.Value, f mappingplan.TaggedField, lookup Lo
 // slice reference, mirroring marshallgen's blobSliceMaybe. Returns
 // the value unchanged for any other shape.
 func reslicedIfFixedByte(v reflect.Value, f mappingplan.TaggedField) reflect.Value {
-	if mappingplan.IsFixedByteArray(f.GoType) {
+	if mappingplan.IsFixedByteArray(f.GoType()) {
 		// Take address-of element 0 + slice — reflect lacks a direct
 		// "convert array to slice" but Slice(v, 0, len) works on
 		// addressable arrays. Field values via FieldByName are not

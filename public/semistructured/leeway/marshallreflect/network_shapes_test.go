@@ -33,6 +33,6 @@ func TestPlanFor_NetworkPackedWidths(t *testing.T) {
 		"V6":  "[16]byte",
 		"V6C": "[17]byte",
 	} {
-		require.Equal(t, want, fieldByName(t, plan, name).GoType, "field %s", name)
+		require.Equal(t, want, fieldByName(t, plan, name).GoType(), "field %s", name)
 	}
 }

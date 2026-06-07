@@ -233,7 +233,7 @@ func fieldEmitsForFilter(row reflect.Value, f mappingplan.TaggedField, filter ca
 		}
 		return row.FieldByName(f.GoFieldName).FieldByName("Has").Bool()
 	}
-	isMulti := f.IsSlice || f.IsRoaring
+	isMulti := f.IsSlice() || f.IsRoaring()
 	if !isMulti {
 		return filter == cardFilterSingleValue
 	}
@@ -257,7 +257,7 @@ func fieldEmitsForFilter(row reflect.Value, f mappingplan.TaggedField, filter ca
 // shape fields.
 func containerSize(row reflect.Value, f mappingplan.TaggedField) (n int, hasData bool) {
 	fld := row.FieldByName(f.GoFieldName)
-	if f.IsRoaring {
+	if f.IsRoaring() {
 		if fld.IsNil() {
 			return 0, false
 		}
@@ -267,7 +267,7 @@ func containerSize(row reflect.Value, f mappingplan.TaggedField) (n int, hasData
 		card := mustCall(fld, "GetCardinality")[0].Uint()
 		return int(card), card > 0
 	}
-	if f.IsSlice {
+	if f.IsSlice() {
 		n = fld.Len()
 		return n, n > 0
 	}

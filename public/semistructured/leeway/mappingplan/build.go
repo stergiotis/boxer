@@ -313,7 +313,6 @@ func (b *PlanBuilder) AddUnderscoreField(kindTag, plainTag, lwTag string) (err e
 	}
 	b.plan.Fields = append(b.plan.Fields, TaggedField{
 		GoFieldName:  "", // synthetic — no Go field
-		GoType:       "string",
 		LWMembership: pt.Membership,
 		LWSection:    pt.Section,
 		Flags:        pt.Flags,
@@ -392,7 +391,6 @@ func (b *PlanBuilder) AddField(goFieldName, lwTag string, shape FieldShape) (err
 		b.plan.PlainCols = append(b.plan.PlainCols, PlainCol{
 			Column:    section,
 			GoField:   goFieldName,
-			GoType:    goType,
 			Canonical: shape.Canonical,
 		})
 		return
@@ -463,10 +461,7 @@ func (b *PlanBuilder) AddField(goFieldName, lwTag string, shape FieldShape) (err
 
 	b.plan.Fields = append(b.plan.Fields, TaggedField{
 		GoFieldName:  goFieldName,
-		GoType:       goType,
 		IsOption:     shape.IsOption,
-		IsSlice:      isSlice,
-		IsRoaring:    isRoaring,
 		Canonical:    shape.Canonical,
 		LWMembership: membership,
 		LWSection:    section,
@@ -608,7 +603,7 @@ func (b *PlanBuilder) Finish() (plan *Plan, err error) {
 		// other shape (scalar / Option / container) emits one carrier per
 		// attribute (scalar marshalltypes.X). Roaring values were rejected at
 		// AddField, so f.IsSlice fully determines the multi case here.
-		valueIsExplode := f.IsSlice && f.Flags.Explode
+		valueIsExplode := f.IsSlice() && f.Flags.Explode
 		if valueIsExplode != c.isSlice {
 			want := "a scalar `marshalltypes." + c.carrierType + "`"
 			if valueIsExplode {

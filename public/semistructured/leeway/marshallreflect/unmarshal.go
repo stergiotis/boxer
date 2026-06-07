@@ -117,7 +117,7 @@ func unmarshalPlain(row reflect.Value, plan *mappingplan.Plan, args UnmarshalArg
 			err = eb.Build().Str("column", role).Errorf("plain column reader is nil")
 			return
 		}
-		err = readPlainArrow(row.FieldByName(p.GoField), p.GoType, col, i)
+		err = readPlainArrow(row.FieldByName(p.GoField), p.GoType(), col, i)
 		if err != nil {
 			err = eb.Build().Str("column", role).Errorf("%w", err)
 			return
@@ -205,12 +205,12 @@ func unmarshalSection(row reflect.Value, g mappingplan.SectionGroup, args Unmars
 		}
 		a := &accumulator{Field: f}
 		switch {
-		case f.IsRoaring:
+		case f.IsRoaring():
 			// Bitmap lazily allocated on first value.
-		case f.IsSlice:
-			a.Slice = reflect.MakeSlice(reflect.SliceOf(goTypeReflect(f.GoType)), 0, 0)
+		case f.IsSlice():
+			a.Slice = reflect.MakeSlice(reflect.SliceOf(goTypeReflect(f.GoType())), 0, 0)
 		default:
-			a.Val = reflect.New(goTypeReflect(f.GoType)).Elem()
+			a.Val = reflect.New(goTypeReflect(f.GoType())).Elem()
 		}
 		accs[f.GoFieldName] = a
 	}
@@ -319,7 +319,7 @@ type accumulator struct {
 
 func consumeValue(attrs reflect.Value, i int, attrJ int64, f mappingplan.TaggedField, a *accumulator) (err error) {
 	switch {
-	case f.IsRoaring:
+	case f.IsRoaring():
 		seq := mustCall(attrs, "GetAttrValueValue", reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
 		for _, v := range collectIterSeq(seq) {
 			if !a.Bitmap.IsValid() {
@@ -328,11 +328,11 @@ func consumeValue(attrs reflect.Value, i int, attrJ int64, f mappingplan.TaggedF
 			}
 			mustCall(a.Bitmap, "Add", v)
 		}
-	case f.IsSlice:
+	case f.IsSlice():
 		seq := mustCall(attrs, "GetAttrValueValue", reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
 		for _, v := range collectIterSeq(seq) {
 			// Defensive copy for []byte elements (Arrow buffer aliasing).
-			if mappingplan.CopyStrategy(f.GoType) == mappingplan.CopyBytes {
+			if mappingplan.CopyStrategy(f.GoType()) == mappingplan.CopyBytes {
 				src := v.Bytes()
 				cp := make([]byte, len(src))
 				copy(cp, src)
@@ -345,10 +345,10 @@ func consumeValue(attrs reflect.Value, i int, attrJ int64, f mappingplan.TaggedF
 		// Single-value read — accessor chosen by field shape, shared with
 		// the codegen emitter via mappingplan.SingleValueReadAccessor.
 		v := mustCall(attrs, mappingplan.SingleValueReadAccessor(f), reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
-		switch mappingplan.CopyStrategy(f.GoType) {
+		switch mappingplan.CopyStrategy(f.GoType()) {
 		case mappingplan.CopyFixedByte:
 			// Copy bytes into a fresh [N]byte array from the wire blob.
-			arrType := goTypeReflect(f.GoType)
+			arrType := goTypeReflect(f.GoType())
 			arr := reflect.New(arrType).Elem()
 			src := v.Bytes()
 			for k := 0; k < arr.Len() && k < len(src); k++ {
@@ -377,9 +377,9 @@ func projectAccumulator(row reflect.Value, a *accumulator) (err error) {
 			fld.FieldByName("Has").SetBool(true)
 		}
 		// Else: leave as zero-value (Has=false).
-	case a.Field.IsSlice:
+	case a.Field.IsSlice():
 		fld.Set(a.Slice)
-	case a.Field.IsRoaring:
+	case a.Field.IsRoaring():
 		if a.Bitmap.IsValid() {
 			fld.Set(a.Bitmap)
 		}
@@ -410,7 +410,7 @@ func unmarshalMultiSubColumn(row reflect.Value, g mappingplan.SectionGroup, attr
 	for j := range g.SubColumns {
 		sc := &g.SubColumns[j]
 		f := &sc.Fields[0]
-		subs = append(subs, subAcc{Field: f, ColName: sc.Name, Val: reflect.New(goTypeReflect(f.GoType)).Elem()})
+		subs = append(subs, subAcc{Field: f, ColName: sc.Name, Val: reflect.New(goTypeReflect(f.GoType())).Elem()})
 	}
 
 	n := mustCall(attrs, "GetNumberOfAttributes", reflect.ValueOf(entityIdx(i)))[0].Int()
@@ -471,9 +471,9 @@ func unmarshalCarrierSection(row reflect.Value, g mappingplan.SectionGroup, attr
 	n := mustCall(attrs, "GetNumberOfAttributes", reflect.ValueOf(entityIdx(i)))[0].Int()
 
 	switch {
-	case f.IsSlice && f.Flags.Explode:
+	case f.IsSlice() && f.Flags.Explode:
 		// N attributes → a value slice paired with a carrier slice.
-		valSlice := reflect.MakeSlice(reflect.SliceOf(goTypeReflect(f.GoType)), 0, 0)
+		valSlice := reflect.MakeSlice(reflect.SliceOf(goTypeReflect(f.GoType())), 0, 0)
 		carrierSlice := reflect.MakeSlice(reflect.SliceOf(carrierType), 0, 0)
 		for attrJ := int64(0); attrJ < n; attrJ++ {
 			carrierVal, ok := readCarrierStruct(membs, f, carrierType, readMethod, i, attrJ)
@@ -486,9 +486,9 @@ func unmarshalCarrierSection(row reflect.Value, g mappingplan.SectionGroup, attr
 		row.FieldByName(f.GoFieldName).Set(valSlice)
 		row.FieldByName(f.CarrierField).Set(carrierSlice)
 
-	case f.IsSlice:
+	case f.IsSlice():
 		// Container: one attribute carrying N values (a Seq) + one carrier.
-		valSlice := reflect.MakeSlice(reflect.SliceOf(goTypeReflect(f.GoType)), 0, 0)
+		valSlice := reflect.MakeSlice(reflect.SliceOf(goTypeReflect(f.GoType())), 0, 0)
 		carrierVal := reflect.New(carrierType).Elem()
 		for attrJ := int64(0); attrJ < n; attrJ++ {
 			if cv, ok := readCarrierStruct(membs, f, carrierType, readMethod, i, attrJ); ok {
@@ -496,7 +496,7 @@ func unmarshalCarrierSection(row reflect.Value, g mappingplan.SectionGroup, attr
 			}
 			seq := mustCall(attrs, "GetAttrValueValue", reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
 			for _, v := range collectIterSeq(seq) {
-				if mappingplan.CopyStrategy(f.GoType) == mappingplan.CopyBytes {
+				if mappingplan.CopyStrategy(f.GoType()) == mappingplan.CopyBytes {
 					valSlice = reflect.Append(valSlice, reflect.ValueOf(append([]byte(nil), v.Bytes()...)))
 				} else {
 					valSlice = reflect.Append(valSlice, v)
@@ -509,7 +509,7 @@ func unmarshalCarrierSection(row reflect.Value, g mappingplan.SectionGroup, attr
 	default:
 		// Scalar value (exactly one attribute) or Option (zero or one). The
 		// carrier column gets one entry per row regardless (zero when absent).
-		valAcc := reflect.New(goTypeReflect(f.GoType)).Elem()
+		valAcc := reflect.New(goTypeReflect(f.GoType())).Elem()
 		carrierVal := reflect.New(carrierType).Elem()
 		count := 0
 		for attrJ := int64(0); attrJ < n; attrJ++ {
@@ -584,9 +584,9 @@ func readCarrierStruct(membs reflect.Value, f *mappingplan.TaggedField, carrierT
 // value of f's Go type, applying the per-type copy strategy.
 func readCarrierValue(attrs reflect.Value, f *mappingplan.TaggedField, valMethod string, i int, attrJ int64) reflect.Value {
 	v := mustCall(attrs, valMethod, reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
-	switch mappingplan.CopyStrategy(f.GoType) {
+	switch mappingplan.CopyStrategy(f.GoType()) {
 	case mappingplan.CopyFixedByte:
-		arr := reflect.New(goTypeReflect(f.GoType)).Elem()
+		arr := reflect.New(goTypeReflect(f.GoType())).Elem()
 		src := v.Bytes()
 		for k := 0; k < arr.Len() && k < len(src); k++ {
 			arr.Index(k).SetUint(uint64(src[k]))

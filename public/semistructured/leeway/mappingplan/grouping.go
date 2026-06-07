@@ -169,7 +169,7 @@ const (
 
 // ClassifyBegin maps a TaggedField to its FieldBeginShape.
 func ClassifyBegin(f TaggedField) FieldBeginShape {
-	isMulti := f.IsSlice || f.IsRoaring
+	isMulti := f.IsMulti()
 	switch {
 	case isMulti && f.Flags.Explode && f.Flags.Unit:
 		return ShapeExplodeBeginSingle
