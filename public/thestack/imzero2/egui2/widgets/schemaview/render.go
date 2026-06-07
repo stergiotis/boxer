@@ -66,8 +66,12 @@ func Render(in Input) {
 			dock.Split(root, c.DockRight, navFrac, detailTabID)
 
 			for range dock.Tab(navTabID, "structure") {
+				// Header (title + legend toggle + filter) is pinned above the
+				// scroll so the filter stays usable while a long schema scrolls;
+				// only the section list lives inside the ScrollArea.
+				renderNavHeader(in.Ids, m, scope)
 				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
-					renderNavigator(in.Ids, m, scope)
+					renderSections(in.Ids, m)
 				}
 			}
 			for range dock.Tab(detailTabID, "detail") {
@@ -80,10 +84,14 @@ func Render(in Input) {
 	}
 }
 
-// renderNavigator draws the table header (title + glyph-legend toggle), the
-// filter box, and the section list. The caller wraps this in the navigator
-// leaf's ScrollArea, so the list scrolls within the resizable pane.
-func renderNavigator(ids *c.WidgetIdStack, m *Model, scope string) {
+// renderNavHeader draws the pinned navigator header — table title + glyph-legend
+// toggle, the optional comment, and the filter box. The dock-tab call site
+// renders it above the section ScrollArea, so the filter stays in view while a
+// long schema scrolls. The section list itself (renderSections) lives inside
+// that ScrollArea: a dock leaf hands its content a bounded child rect, so the
+// ScrollArea fills and clips it (a ScrollArea inside the former width-pinned
+// Vertical-in-Horizontal collapsed to its first child — see the package history).
+func renderNavHeader(ids *c.WidgetIdStack, m *Model, scope string) {
 	t := m.Table
 	for range c.Horizontal().KeepIter() {
 		for rt := range c.RichTextLabel(t.DictionaryEntry.Name.String()) {
@@ -102,13 +110,6 @@ func renderNavigator(ids *c.WidgetIdStack, m *Model, scope string) {
 		DesiredWidth(navWidth - 16).
 		SendRespVal(&m.filter)
 	c.AddSpace(4)
-
-	// The section list scrolls via the ScrollArea the dock-tab call site wraps
-	// it in. That works here where the old pinned-column layout could not: a
-	// dock leaf hands content a bounded child rect, so the ScrollArea fills and
-	// clips it (a ScrollArea inside the former width-pinned Vertical-in-
-	// Horizontal collapsed to its first child — see the package history).
-	renderSections(ids, m)
 }
 
 // renderSections draws the navigator as a flat list of collapsible headers:
