@@ -162,6 +162,16 @@ One `registry.Demo{}`, Category `"Widgets"`, showing a row of dials: a bare `Gau
 - **Monochrome / high-contrast zone remap** to `SequentialDefault()` (SD7).
 - **Tethered inspector / value history** ([ADR-0046](./0046-imzero2-value-inspector-infrastructure.md)) — a dial has no hidden depth in v1; add only if a value's provenance/history needs popping.
 
+## Alternatives
+
+The options are weighed per-question in [Design space (compact)](#design-space-compact); the rejected/deferred ones, and why:
+
+- **Linear / bullet gauge** (Q1a) — the data-ink-optimal, accessibility-preferred form (Few). Not chosen for v1 by maintainer preference for the recognizable radial KPI form, but kept as the most likely *second* renderer behind a `style` switch (see Deferred).
+- **180° semicircle / progress-ring geometry** (Q1c/d) — narrower variants of the same value-on-range model; no advantage over the 270° dial for v1.
+- **Interactive knob** (Q2b/c) — rotary *input* is already covered by the maintainer's `imgui_knobs` port, so the gauge stays read-only and `Render(idGen, value)` mutates nothing.
+- **`egui_plot` substrate with filled wedges** (Q3b) — crisp annular sectors and round caps, but a needle dial needs only the stroked arc bands the painter draws directly; filled-wedge zones are deferred.
+- **Raw `color.Color` zones** (Q4a) — rejected for semantic `styletokens.Tone` + `Label`, which is IDS-idiomatic, theme-aware, and carries the WCAG-required redundant channel.
+
 ## Consequences
 
 ### Positive
@@ -195,6 +205,17 @@ Open questions:
 5. **Band cap aesthetics.** If butt-capped polyline bands read poorly at `SizeLg`, the Plot-substrate wedge path (Deferred) is the escalation, not a per-segment hack.
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`. ADRs are append-only.
+
+## Updates
+
+### 2026-06-07 — needle reshaped to a neutral rhomboid; `needleFollowsZone` removed
+
+Two changes to the needle; the radial-dial decision and everything else above stand.
+
+- **Shape.** The needle is now a **filled rhomboid silhouette** — a long thin kite (tip at the band, widest at the shoulders just past the hub, a short counterweight tail behind it) — instead of a single stroked `PaintLine`. It is emitted as one `PaintPolygonFilled` in canvas-relative coordinates via a new `needlePolygon` helper (`internal.go`; geometry as `needleHalfWidthFrac` / `needleShoulderFrac` / `needleTailFrac` of the radius), drawn behind the hub cap. This **corrects a premise** in the body: the painter *does* expose a filled-polygon primitive — `PaintPolygonFilled` (also used by `layeredgraph`'s arrowheads) — so the §Design-space "no arc and no filled-polygon primitive" note and SD6's "the needle is `PaintArrow` (or `PaintLine`)" hold only for the *arc bands* now (still stroked `PaintPolyline`, because there is genuinely no native **arc**); the needle is filled geometry.
+- **Color.** `needleFollowsZone` — the struct field, the `NeedleFollowsZone` setter, and its demo/test uses — is **removed**. The needle is now **always** neutral `NeutralTextPrimary` ink and encodes the value by **angle and shape only**; color stays a single, band-only channel. This resolves **Open question #4** in the permanent-neutral direction: color-by-value on the needle is redundant with the labeled zone bands and adds a second, weaker color channel that cuts against the SD7 "color is never the sole signal" discipline. The SD2 table's "Needle" row is now simply `NeutralTextPrimary`, *filled* (not `StrokeStrong`).
+
+Built, `go test` / `go vet` green, and screenshot-verified via the widgets TestDriver (ADR-0057) at all three demo dials (plain / TrafficLight / large tone-zoned) — the needle reads as a neutral monochrome pointer in every case, including when it points into a colored zone.
 
 ## References
 

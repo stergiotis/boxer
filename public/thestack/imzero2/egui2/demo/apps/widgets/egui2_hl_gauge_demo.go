@@ -12,13 +12,14 @@ import (
 // gauge widget demo — read-only radial dials (ADR-0068)
 //
 // Three dials in a row exercise the gauge's range of configuration against
-// the IDS design system: a plain neutral track, the TrafficLight preset with
-// a colour-by-value needle, and explicit semantic-tone zones at the large
-// size preset. The 270° sweep, painter-drawn arc bands (thick stroked
-// polylines — the painter has no native arc), needle, ticks, and centre
-// readout are all the gauge widget; every colour / size / stroke is an IDS
-// token and zones are semantic styletokens.Tone values carrying labels so
-// colour is never the sole encoding channel (ADR-0031 §SD5).
+// the IDS design system: a plain neutral track, the TrafficLight preset, and
+// explicit semantic-tone zones at the large size preset. The 270° sweep,
+// painter-drawn arc bands (thick stroked polylines — the painter has no native
+// arc), rhomboid needle, ticks, and centre readout are all the gauge widget;
+// every colour / size / stroke is an IDS token and zones are semantic
+// styletokens.Tone values carrying labels so colour is never the sole encoding
+// channel (ADR-0031 §SD5). The needle is a neutral monochrome shape — it
+// encodes the value by angle, not colour.
 // =============================================================================
 
 func init() {
@@ -32,15 +33,15 @@ func init() {
 			"[min,max] range and drawn as a ~270° needle dial with optional " +
 			"colored zones, ticks, and a centre value readout. The painter has no " +
 			"native arc primitive, so each zone band is a thick stroked polyline " +
-			"sampled along the arc; the needle, hub, ticks, and text are lines / a " +
+			"sampled along the arc; the needle is a filled rhomboid polygon; the hub, ticks, and text are lines, a" +
 			"circle / PaintText, flushed into an inline canvas with PaintCanvas " +
 			"(the treemap / colorscale substrate). Every colour, type size, and " +
 			"stroke width is an IDS token; zones are semantic styletokens.Tone " +
 			"values, each with a Label so colour is never the sole signal " +
 			"(ADR-0031 §SD5). Read-only by design — rotary input is the " +
 			"imgui_knobs widget. Demonstrated: a plain neutral track, the " +
-			"TrafficLight preset with a colour-by-value needle, and explicit " +
-			"Success/Warning/Error tone zones at the large size preset.",
+			"TrafficLight preset, and explicit " +
+			"Success/Warning/Error tone zones at the large size preset. The needle is a neutral monochrome shape — the value is read from its angle, not its colour.",
 		Render: demoGauge,
 	})
 }
@@ -63,7 +64,6 @@ func demoGauge(ids *c.WidgetIdStack) {
 		gauge.New("gauge-cpu").
 			Range(0, 100).
 			Zones(gauge.TrafficLight(0, 100)...).
-			NeedleFollowsZone(true).
 			Suffix("%").
 			Label("CPU").
 			Render(ids.PrepareSeq(0x6A0302), 78)
@@ -79,7 +79,6 @@ func demoGauge(ids *c.WidgetIdStack) {
 				gauge.Zone{From: 60, To: 90, Tone: styletokens.ToneWarning, Label: "warm"},
 				gauge.Zone{From: 90, To: 120, Tone: styletokens.ToneError, Label: "hot"},
 			).
-			NeedleFollowsZone(true).
 			Suffix("°C").
 			Label("Temp").
 			Render(ids.PrepareSeq(0x6A0303), 88)

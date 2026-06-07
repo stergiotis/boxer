@@ -36,18 +36,18 @@ func TestNewDefaults(t *testing.T) {
 
 func TestFluentSettersReturnCopies(t *testing.T) {
 	base := New("g")
-	mod := base.Range(10, 20).Size(SizeLg).Suffix("%").ShowTicks(false).NeedleFollowsZone(true)
+	mod := base.Range(10, 20).Size(SizeLg).Suffix("%").ShowTicks(false)
 
 	// Originals untouched (value-receiver contract).
 	if base.min != 0 || base.max != 100 {
 		t.Errorf("base range mutated: [%v,%v]", base.min, base.max)
 	}
-	if base.size != SizeMd || base.suffix != "" || !base.showTicks || base.needleFollowsZone {
+	if base.size != SizeMd || base.suffix != "" || !base.showTicks {
 		t.Error("base mutated by setters on a copy")
 	}
 	// Copy carries the changes.
 	if mod.min != 10 || mod.max != 20 || mod.size != SizeLg || mod.suffix != "%" ||
-		mod.showTicks || !mod.needleFollowsZone {
+		mod.showTicks {
 		t.Errorf("copy missing changes: %+v", mod)
 	}
 }

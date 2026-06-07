@@ -8,14 +8,17 @@
 // It is painted on the egui2 painter substrate (the treemap / colorscale
 // idiom): a sequence of Paint* commands in canvas-relative coordinates,
 // flushed into an inline canvas with PaintCanvas. The painter has no native
-// arc or filled-polygon primitive, so each zone band and the unzoned track is
-// a thick stroked PaintPolyline sampled along the arc; the needle, hub, ticks,
-// and text are lines / a circle / PaintText.
+// arc primitive, so each zone band and the unzoned track is a thick stroked
+// PaintPolyline sampled along the arc; the needle is a filled rhomboid polygon
+// (PaintPolygonFilled), and the hub, ticks, and text are a circle / lines /
+// PaintText.
 //
 // Every color, type size, and stroke width comes from the IDS design system
 // (styletokens) — nothing is hardcoded. Zones are semantic styletokens.Tone
 // values, each carrying a Label so color is never the sole encoding channel
-// (ADR-0031 §SD5). The widget is read-only and stateless: Render takes the
+// (ADR-0031 §SD5); the needle itself is a neutral monochrome silhouette,
+// encoding the value by its angle alone. The widget is read-only and stateless:
+// Render takes the
 // value by copy, keeps nothing across frames, and mutates nothing.
 //
 // Usage follows the distsummary value-receiver idiom — a New(idPrefix)
@@ -101,11 +104,10 @@ type Renderer struct {
 	minorTicks int
 	showTicks  bool
 
-	label             string
-	formatFunc        FormatFunc
-	suffix            string
-	showValue         bool
-	needleFollowsZone bool
+	label      string
+	formatFunc FormatFunc
+	suffix     string
+	showValue  bool
 
 	density styletokens.DensityE
 }
@@ -230,14 +232,6 @@ func (inst Renderer) ShowValue(b bool) (out Renderer) {
 	return
 }
 
-// NeedleFollowsZone colors the needle with the active zone's tone (color by
-// value) instead of the neutral foreground. Default off.
-func (inst Renderer) NeedleFollowsZone(b bool) (out Renderer) {
-	inst.needleFollowsZone = b
-	out = inst
-	return
-}
-
 // TrafficLight returns three equal Success/Warning/Error bands across
 // [min,max], each carrying a default label so the classic dial stays
 // WCAG-safe (color is not the sole signal). Low reads as "ok"; pass reversed
@@ -277,7 +271,7 @@ func (inst Renderer) Render(idGen c.WidgetIdCreatorI, value float64) {
 	if inst.showTicks {
 		inst.paintTicks(cx, cy, zoneR-bandT/2, r)
 	}
-	inst.paintNeedleHub(cx, cy, r, bandT, value, zones)
+	inst.paintNeedleHub(cx, cy, r, bandT, value)
 	inst.paintValue(cx, cy, r, value)
 	// Metric label below the dial, anchored to the canvas bottom so it never
 	// overlaps the readout or the arc ends (even at the small size preset).
@@ -347,20 +341,15 @@ func (inst Renderer) paintTicks(cx, cy, innerR, r float32) {
 	}
 }
 
-// paintNeedleHub draws the needle from the hub to the value angle, then the
-// hub cap on top.
-func (inst Renderer) paintNeedleHub(cx, cy, r, bandT float32, value float64, zones []Zone) {
+// paintNeedleHub draws the rhomboid needle pointing at the value angle, then
+// the hub cap on top of its base. The needle is a neutral monochrome silhouette
+// (PaintPolygonFilled in NeutralTextPrimary): the value is encoded by angle and
+// shape, never by color — the colored zone bands carry the qualitative reading.
+func (inst Renderer) paintNeedleHub(cx, cy, r, bandT float32, value float64) {
 	a := valueToAngle(value, inst.min, inst.max, inst.startDeg, inst.endDeg)
 	tipR := r - bandT - r*needleGapFrac
-	tx, ty := polar(cx, cy, tipR, a)
-
-	needleCol := color.Hex(styletokens.NeutralTextPrimary.AsHex())
-	if inst.needleFollowsZone {
-		if z, ok := zoneAt(value, zones); ok {
-			needleCol = color.Hex(z.Tone.Fill().AsHex())
-		}
-	}
-	c.PaintLine(cx, cy, tx, ty, needleCol, styletokens.StrokeStrong).Send()
+	xs, ys := needlePolygon(cx, cy, a, tipR, r*needleShoulderFrac, r*needleTailFrac, r*needleHalfWidthFrac)
+	c.PaintPolygonFilled(xs, ys, color.Hex(styletokens.NeutralTextPrimary.AsHex())).Send()
 
 	hubR := r * hubRFrac
 	c.PaintCircleFilled(cx, cy, hubR, color.Hex(styletokens.NeutralBgSurface.AsHex())).Send()

@@ -19,9 +19,15 @@ const (
 	majorTickLenFrac  float32 = 0.10
 	minorTickLenFrac  float32 = 0.06
 	tickLabelGapFrac  float32 = 0.10
-	needleGapFrac     float32 = 0.04 // needle stops this far short of the band
-	hubRFrac          float32 = 0.08
-	readoutYFrac      float32 = 0.30 // value readout, below the hub (inside the dial) — kept high enough to clear the lower-left/right endpoint tick labels
+	needleGapFrac     float32 = 0.04 // needle tip stops this far short of the band
+	// Rhomboid needle silhouette (a neutral monochrome kite — the value is
+	// encoded by angle and shape, never color): tip at tipR, widest at the
+	// shoulders just past the hub, a short counterweight tail behind it.
+	needleHalfWidthFrac float32 = 0.05 // half-width at the shoulders (widest point)
+	needleShoulderFrac  float32 = 0.13 // shoulder (widest point) distance ahead of the hub
+	needleTailFrac      float32 = 0.14 // counterweight tail length behind the hub
+	hubRFrac            float32 = 0.08
+	readoutYFrac        float32 = 0.30 // value readout, below the hub (inside the dial) — kept high enough to clear the lower-left/right endpoint tick labels
 
 	// labelBottomInsetFrac places the metric label's baseline this far (of the
 	// canvas height) above the bottom edge — below the dial, clear of the
@@ -100,6 +106,27 @@ func polar(cx, cy, r, angleDeg float32) (x, y float32) {
 	a := float64(angleDeg) * math.Pi / 180
 	x = cx + r*float32(math.Cos(a))
 	y = cy - r*float32(math.Sin(a))
+	return
+}
+
+// needlePolygon builds the rhomboid needle silhouette pointing along angleDeg
+// (same angle convention as polar): a long thin kite with its tip at tipR, the
+// two shoulders (widest point) at shoulderR offset ±halfWidth perpendicular to
+// the needle axis, and a short counterweight tail at tailR behind the hub.
+// Returned as parallel xs/ys for a single PaintPolygonFilled. The shape is the
+// sole value cue the needle carries — it is painted in neutral ink, never a
+// zone color.
+func needlePolygon(cx, cy, angleDeg, tipR, shoulderR, tailR, halfWidth float32) (xs, ys []float32) {
+	a := float64(angleDeg) * math.Pi / 180
+	ca := float32(math.Cos(a))
+	sa := float32(math.Sin(a))
+	// Outward unit vector (ca,-sa); its perpendicular (sa,ca) spreads the shoulders.
+	tipX, tipY := cx+tipR*ca, cy-tipR*sa
+	tailX, tailY := cx-tailR*ca, cy+tailR*sa
+	leftX, leftY := cx+shoulderR*ca+halfWidth*sa, cy-shoulderR*sa+halfWidth*ca
+	rightX, rightY := cx+shoulderR*ca-halfWidth*sa, cy-shoulderR*sa-halfWidth*ca
+	xs = []float32{tipX, leftX, tailX, rightX}
+	ys = []float32{tipY, leftY, tailY, rightY}
 	return
 }
 
