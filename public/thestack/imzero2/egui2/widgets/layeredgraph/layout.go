@@ -112,6 +112,12 @@ type Layout struct {
 	Edges  []EdgeLayout
 	Width  float64
 	Height float64
+	// FontSize is the node-label font size (points) the engine sized the boxes
+	// to fit. A renderer should paint node labels at this size (before its own
+	// fit scale) so the text matches the boxes — this is what keeps the layout
+	// font and the render font from drifting apart. 0 means the engine reported
+	// none (e.g. a hand-built Layout); a renderer then falls back to its style.
+	FontSize float64
 }
 
 // Engine computes a static layered layout for a GraphModel. Implementations

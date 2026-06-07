@@ -37,7 +37,7 @@ type Style struct {
 	NodeStrokeW float32
 	EdgeStrokeW float32
 	Rounding    float32 // box-node corner rounding (points, pre-scale)
-	NodeFontSize float32 // points, pre-scale
+	NodeFontSize float32 // points, pre-scale; node-label fallback when Layout.FontSize == 0
 	EdgeFontSize float32 // points, pre-scale
 }
 
@@ -204,7 +204,13 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 		}
 	}
 
-	// Nodes.
+	// Nodes. Paint node labels at the layout's font size when the engine
+	// reported one, so the text matches the boxes it was sized to fit;
+	// Style.NodeFontSize is the fallback for a Layout without one.
+	nodeFontPt := st.NodeFontSize
+	if lay.FontSize > 0 {
+		nodeFontPt = float32(lay.FontSize)
+	}
 	for i, n := range lay.Nodes {
 		cx, cy := tf(n.Center)
 		w := float32(n.W * escale)
@@ -222,7 +228,7 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 			}
 		}
 		drawNode(n.Shape, cx, cy, w, h, st, fill, hovered[n.ID])
-		c.PaintText(cx, cy, 1, 1, n.Label, st.NodeFontSize*float32(escale), txt).Send()
+		c.PaintText(cx, cy, 1, 1, n.Label, nodeFontPt*float32(escale), txt).Send()
 		c.PaintSenseRegion(senseIDs[i], cx-w/2, cy-h/2, w, h).Send()
 	}
 

@@ -141,3 +141,20 @@ func TestLayout_DuplicateNodeIDMerges(t *testing.T) {
 	}
 	assert.True(t, ids["x"] && ids["y"], "both distinct ids present")
 }
+
+// The Layout reports the node font size the boxes were sized to fit, so a
+// renderer paints labels at the same size and the layout/render fonts cannot
+// drift (the single-source-of-truth contract). An explicit FontSize is echoed
+// back; an unset one reports the Graphviz default.
+func TestLayout_ReportsFontSize(t *testing.T) {
+	e := newEngine(t)
+	m := layeredgraph.GraphModel{Nodes: []layeredgraph.Node{{ID: "a", Label: "A"}}}
+
+	explicit, err := e.Layout(context.Background(), m, layeredgraph.LayoutOpts{FontSize: 18})
+	require.NoError(t, err)
+	assert.Equal(t, 18.0, explicit.FontSize, "explicit font size is echoed on the Layout")
+
+	def, err := e.Layout(context.Background(), m, layeredgraph.LayoutOpts{})
+	require.NoError(t, err)
+	assert.Equal(t, 14.0, def.FontSize, "unset font size reports the Graphviz default")
+}

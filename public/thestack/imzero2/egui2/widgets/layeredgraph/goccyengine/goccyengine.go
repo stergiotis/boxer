@@ -84,7 +84,14 @@ func (e *Engine) Layout(ctx context.Context, m layeredgraph.GraphModel, opts lay
 	if err != nil {
 		return nil, err
 	}
-	return parseLayout(dot, m)
+	lay, err := parseLayout(dot, m)
+	if err != nil {
+		return nil, err
+	}
+	// Report the size the boxes were sized to fit so a renderer paints node
+	// labels at the same size — no layout/render font drift.
+	lay.FontSize = effectiveFontSize(opts.FontSize)
+	return lay, nil
 }
 
 // nodeMargin is the Graphviz node `margin` (inches, "x,y") applied to every
@@ -92,6 +99,20 @@ func (e *Engine) Layout(ctx context.Context, m layeredgraph.GraphModel, opts lay
 // sans-metric label keeps a clear, consistent gap from the box border once the
 // painter draws it; the vertical component stays at the default.
 const nodeMargin = "0.16,0.055"
+
+// defaultFontSize mirrors Graphviz's own default node font size (points). Used
+// when LayoutOpts.FontSize is unset, so Layout.FontSize reports exactly the size
+// Graphviz laid the boxes out with.
+const defaultFontSize = 14.0
+
+// effectiveFontSize resolves the node font size used for layout: the caller's
+// value when positive, else the Graphviz default.
+func effectiveFontSize(f float64) float64 {
+	if f > 0 {
+		return f
+	}
+	return defaultFontSize
+}
 
 // renderLaidOutDot constructs the Graphviz graph from the model and renders it
 // to the canonical DOT format. graphviz.XDOT is the "dot" format: after
@@ -139,9 +160,7 @@ func (e *Engine) renderLaidOutDot(ctx context.Context, m layeredgraph.GraphModel
 		// leaves a consistent gap so text never touches the frame.
 		gn.SetFontName("Helvetica")
 		_ = gn.SafeSet("margin", nodeMargin, "")
-		if opts.FontSize > 0 {
-			gn.SetFontSize(opts.FontSize)
-		}
+		gn.SetFontSize(effectiveFontSize(opts.FontSize))
 		gnodes[n.ID] = gn
 	}
 
