@@ -15,8 +15,10 @@
 //     plus the standard [inspector.ProvenanceChip], opened by clicking
 //     the toggle and closed by clicking it again or the window's
 //     title-bar X. The active tab is held per-instance in
-//     [instanceStates]; tabs share the same plot extent so swapping
-//     does not reflow the window. A bezier connector (via
+//     [instanceStates]; the window keeps a fixed size across tab swaps
+//     — the ECDF curve fills the content width while the narrow
+//     letter-value plot stays centred — so swapping does not reflow the
+//     window. A bezier connector (via
 //     [inspector.AnchorTether]) visually tethers the toggle to the
 //     open window. When the digest is too sparse for an ECDF
 //     (Count==0 or Min==Max) the ECDF tab silently falls back to the
@@ -75,6 +77,49 @@ const (
 // showing the piecewise-linear segments the grid path emits in place
 // of the canonical step function.
 const defaultEcdfGridN = 128
+
+// defaultEcdfPlotWidth is the level-2 window's first-open content width in
+// points. The default tab is the ECDF, whose body fills the window's
+// content width; opening at this width rather than the boxenplot-sized
+// popupWidth gives egui_plot the horizontal room it needs to draw x-axis
+// tick labels. egui_plot culls any X label whose inter-mark pixel spacing
+// falls under its 60 px minimum (axis.rs add_tick_labels), so at popupWidth
+// (320) a wide-range distribution renders grid lines with no numbers under
+// them. The user can still resize; the ECDF tracks the new width and the
+// narrow boxenplot tab stays centred in whatever room there is.
+const defaultEcdfPlotWidth float32 = 560
+
+// ecdfPlotChromeW is the horizontal slack the ECDF body leaves between the
+// captured content width and the plot's requested Width. The plot is rendered
+// inside a Horizontal row flanked by two popupPad AddSpace insets, and egui
+// inserts an item_spacing (≈8 pt) between each of the row's items; a plot sized
+// to exactly avail.W-2*pad therefore makes the row measure those ~2 spacings
+// WIDER than the avail.W it was derived from every frame. The resizable
+// inspector Window grows to fit that overflow, which re-inflates next frame's
+// captured avail.W, which re-enlarges plotW — the monotonic host-window
+// auto-grow loop sccmap's treemapChromeW guards the same way. Sized to cover
+// the two item_spacings with a little margin so the row fits strictly inside
+// avail.W and the window stops growing.
+const ecdfPlotChromeW float32 = 18
+
+// ecdfPlotGrowGuardPx is the anti-ratchet deadband on the ECDF plot width.
+// Frame-over-frame upward deltas smaller than this are almost always
+// [ecdfPlotChromeW] mis-estimates rather than user intent and would resurrect
+// the growth loop, so they are clamped to the previous applied width; a real
+// resize moves in larger steps and passes through, as do downward deltas
+// (window shrink, tab/close reset). Belt-and-suspenders behind the chrome
+// budget — matches sccmap's containerGrowGuardPx.
+const ecdfPlotGrowGuardPx float32 = 24
+
+// ecdfYTickVals / ecdfYTickLabels pin the F(x) axis to quarter-point ticks.
+// egui_plot's default logarithmic grid spacer only lands marks on powers of
+// ten, so over the CDF's [0,1] range at the inspector's height it labels
+// just 0 and 1; the explicit quartile marks keep the probability axis
+// readable independent of window height. Forwarded via [c.PlotFluid.YGridMarks].
+var (
+	ecdfYTickVals   = []float64{0, 0.25, 0.5, 0.75, 1}
+	ecdfYTickLabels = []string{"0", "0.25", "0.5", "0.75", "1"}
+)
 
 // bandWarmRepaintIntervalSecs keeps frames flowing while the confidence
 // band is unsettled — warming on a background goroutine, or just-cancelled
@@ -190,6 +235,11 @@ type instanceState struct {
 	// otherwise; it runs once per open and is reset on close so a reopen
 	// re-evaluates against the current sample size.
 	exactInit bool
+	// lastEcdfPlotW caches the ECDF tab's last applied plot width so the
+	// grow guard in renderEcdfBody (see [ecdfPlotGrowGuardPx]) can damp the
+	// host Window's auto-grow loop. 0 until the first ECDF frame; reset on
+	// close so a reopen re-fills from the popupWidth floor.
+	lastEcdfPlotW float32
 }
 
 // instanceStates is the package-level pinned-state map, keyed by
@@ -311,9 +361,11 @@ func (inst Renderer) Tasks(api task.TaskApiI) (out Renderer) {
 	return
 }
 
-// PopupSize sets the level-2 plot's width and height in points. The
-// tooltip envelope grows to roughly (w+2*pad, h+2*pad) plus the bottom
-// status line so the plot keeps the requested extent. Default 320×200.
+// PopupSize sets the level-2 plot extent in points. Height applies to both
+// tabs. Width is the boxenplot tab's fixed width and the ECDF tab's lower
+// bound — the ECDF curve fills the window's content width above that floor,
+// and the window first opens at [defaultEcdfPlotWidth] (or w, whichever is
+// larger) so the curve has room for axis ticks. Default 320×200.
 func (inst Renderer) PopupSize(w, h float32) (out Renderer) {
 	inst.popupWidth = w
 	inst.popupHeight = h
@@ -460,6 +512,10 @@ func (inst Renderer) Render(idGen c.WidgetIdCreatorI, digest *tdigest.TDigest, e
 		// otherwise) rather than reviving the previous open's state.
 		state.exactRequested = false
 		state.exactInit = false
+		// Drop the cached ECDF width so a reopen re-fills from the popupWidth
+		// floor up to the (possibly resized) window rather than the grow guard
+		// pinning it to a stale value.
+		state.lastEcdfPlotW = 0
 		return
 	}
 	inst.renderPinnedWindow(scope, tether, state, digest, extremes)
@@ -547,12 +603,26 @@ func (inst Renderer) renderBoxenplotBody(scope string, digest *tdigest.TDigest, 
 	inst.plot.Render(0.0, levels, extremes, -1)
 	inst.plot.PaintCrosshair(ch)
 	pad := inst.popupPad
+	// Centre the fixed-width boxenplot horizontally: the window opens wide for
+	// the ECDF tab (see [defaultEcdfPlotWidth]), so without a centring lead the
+	// narrow letter-value plot would hug the left edge with dead space to its
+	// right. avail.W is last frame's captured content width (NaN until the
+	// first capture) — fall back to the plain pad when it is unavailable.
+	sm := c.CurrentApplicationState.StateManager
+	avail := sm.GetAvailableSize()
+	c.CaptureAvailableSize()
+	lead := pad
+	if avail.W == avail.W { // reject NaN
+		if centred := (avail.W - inst.popupWidth) / 2; centred > lead {
+			lead = centred
+		}
+	}
 	if pad > 0 {
 		c.AddSpace(pad)
 	}
 	for range c.Horizontal().KeepIter() {
-		if pad > 0 {
-			c.AddSpace(pad)
+		if lead > 0 {
+			c.AddSpace(lead)
 		}
 		c.Plot(plotID).
 			Width(inst.popupWidth).
@@ -664,7 +734,37 @@ func (inst Renderer) renderEcdfBody(scope string, state *instanceState, digest *
 		// the exact band is cached. See [bandWarmRepaintIntervalSecs].
 		c.RequestRepaintAfter(bandWarmRepaintIntervalSecs)
 	}
+	// Responsive width: the ECDF reads as a wide 2-D curve, so it fills the
+	// window's content width instead of the fixed popupWidth the narrow
+	// boxenplot tab keeps. avail is last frame's captured content size (one-
+	// frame lag; W is NaN until the first capture lands), and popupWidth is
+	// the floor so a just-opened or shrunk-narrow window never collapses the
+	// curve. Widening is also what restores the x-axis ticks: egui_plot culls
+	// any X label whose inter-mark spacing drops under 60 px, which starves a
+	// fixed popupWidth plot of a wide-range distribution (the window opens at
+	// [defaultEcdfPlotWidth] so the fresh view already clears that bar).
+	sm := c.CurrentApplicationState.StateManager
+	avail := sm.GetAvailableSize()
+	c.CaptureAvailableSize()
 	pad := inst.popupPad
+	plotW := inst.popupWidth
+	// Subtract a chrome budget beyond the two pad insets so the rendered row
+	// (pad + plot + pad + egui's inter-item spacings) fits strictly inside the
+	// width it was measured from, instead of overflowing it by ~2 item_spacings
+	// and ratcheting the host Window wider every frame. See [ecdfPlotChromeW].
+	if avail.W == avail.W { // avail.W == avail.W rejects NaN
+		if fill := avail.W - 2*pad - ecdfPlotChromeW; fill > plotW {
+			plotW = fill
+		}
+	}
+	// Grow guard: clamp sub-deadband frame-over-frame upticks (chrome-budget
+	// mis-estimates) to last frame's width so any residual overflow can't
+	// resurrect the auto-grow loop; a real resize moves in larger steps. See
+	// [ecdfPlotGrowGuardPx]. Downward deltas pass through (window shrink).
+	if state.lastEcdfPlotW > 0 && plotW > state.lastEcdfPlotW && plotW-state.lastEcdfPlotW < ecdfPlotGrowGuardPx {
+		plotW = state.lastEcdfPlotW
+	}
+	state.lastEcdfPlotW = plotW
 	if pad > 0 {
 		c.AddSpace(pad)
 	}
@@ -673,11 +773,12 @@ func (inst Renderer) renderEcdfBody(scope string, state *instanceState, digest *
 			c.AddSpace(pad)
 		}
 		c.Plot(plotID).
-			Width(inst.popupWidth).
+			Width(plotW).
 			Height(inst.popupHeight).
 			XAxisLabel("value").
 			YAxisLabel("F(x)").
 			ShowGrid(true, true).
+			YGridMarks(ecdfYTickVals, ecdfYTickLabels).
 			AllowZoom(true).
 			AllowDrag(false).
 			AllowScroll(false).
@@ -757,7 +858,15 @@ func (inst Renderer) renderPinnedWindow(scope string, tether inspector.AnchorTet
 	const tabBarBudget float32 = 32
 	winId := c.MakeAbsoluteIdStr(scope + "-anchor-window")
 	title := "distribution: " + inst.idPrefix
-	envW := inst.popupWidth + 2*inst.popupPad + 24
+	// First-open width targets the default tab (the ECDF curve), which fills
+	// the window's content width and needs room for x-axis ticks — see
+	// [defaultEcdfPlotWidth]. max() so an explicit oversized PopupSize still
+	// wins; the narrow boxenplot tab keeps popupWidth and sits centred.
+	bodyW := inst.popupWidth
+	if defaultEcdfPlotWidth > bodyW {
+		bodyW = defaultEcdfPlotWidth
+	}
+	envW := bodyW + 2*inst.popupPad + 24
 	envH := inst.popupHeight + 2*inst.popupPad + 40 + tabBarBudget
 	win := c.Window(winId, c.WidgetText().Text(title).Keep()).
 		DefaultOpen(true).
