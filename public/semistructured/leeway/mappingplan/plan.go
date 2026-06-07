@@ -11,7 +11,10 @@
 // reflect pulled into this package.
 package mappingplan
 
-import "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+import (
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+)
 
 // Plan is the parsed DTO ready for emission. ParsePlan produces it from
 // a single .go source file; EmitPlan consumes it.
@@ -112,6 +115,32 @@ const (
 	MembershipChannelHighCardRefParametrized
 )
 
+// The three carriage axes of a membership channel (ADR-0072 plane D). The flat
+// MembershipChannel enum stays the dispatch key; these make the product it
+// encodes — cardinality × identity × params — first-class and queryable. The
+// realized eight channels are a sparse subset of the grid, validated below.
+
+// ChannelCardinalityE is the dictionary-cardinality axis: Low (dictionary-
+// encodable) or High.
+type ChannelCardinalityE uint8
+
+const (
+	ChannelCardinalityLow ChannelCardinalityE = iota
+	ChannelCardinalityHigh
+)
+
+// ChannelIdentityE is the identity-encoding axis. Ref resolves a registry
+// uint64 id; Verbatim embeds the literal lw: name as []byte; PerRow carries the
+// identity as per-row carrier data (a uint64 id, a []byte name, or the opaque
+// params blob — CarrierValueField holds the sub-distinction).
+type ChannelIdentityE uint8
+
+const (
+	ChannelIdentityRef ChannelIdentityE = iota
+	ChannelIdentityVerbatim
+	ChannelIdentityPerRow
+)
+
 // channelDescriptor is the single per-channel fact row. Every accessor
 // method on MembershipChannel reads exactly one field from here — adding
 // a channel is one new table entry, not an edit to N parallel switches.
@@ -142,19 +171,26 @@ type channelDescriptor struct {
 	embedsLiteralName bool
 	// needsKindVar marks ref channels that require a package-level kindXxx resolved id symbol.
 	needsKindVar bool
+
+	// The three ADR-0072 carriage axes, made explicit (plane D). The enum value
+	// stays the dispatch key; these summarise its product. validateChannelTable
+	// asserts they cannot drift from the behavioural fields above.
+	cardinality ChannelCardinalityE
+	identity    ChannelIdentityE
+	hasParams   bool
 }
 
 // channelTable is keyed by the MembershipChannel constant, so reordering the
 // constants cannot misalign a row. Keep one entry per channel.
 var channelTable = [...]channelDescriptor{
-	MembershipChannelLowCardRef:              {flag: "", addMethodSuffix: "LowCardRef", readIterElemType: "uint64", needsKindVar: true},
-	MembershipChannelLowCardVerbatim:         {flag: "lowCardVerbatim", addMethodSuffix: "LowCardVerbatim", readIterElemType: "[]byte", embedsLiteralName: true},
-	MembershipChannelHighCardRef:             {flag: "highCardRef", addMethodSuffix: "HighCardRef", readIterElemType: "uint64", needsKindVar: true},
-	MembershipChannelHighCardVerbatim:        {flag: "highCardVerbatim", addMethodSuffix: "HighCardVerbatim", readIterElemType: "[]byte", embedsLiteralName: true},
-	MembershipChannelMixedLowCardRef:         {flag: "mixedLowCardRef", addMethodSuffix: "MixedLowCardRef", carrierType: "MixedLowCardRef", carrierReadSuffix: "LowCardRefHighCardParams", carrierSeq2Types: "uint64, []byte", carrierValueField: "Id", readIterElemType: "[]byte", usesCarrier: true},
-	MembershipChannelMixedLowCardVerbatim:    {flag: "mixedLowCardVerbatim", addMethodSuffix: "MixedLowCardVerbatim", carrierType: "MixedLowCardVerbatim", carrierReadSuffix: "LowCardVerbatimHighCardParams", carrierSeq2Types: "[]byte, []byte", carrierValueField: "Name", readIterElemType: "[]byte", usesCarrier: true, carrierValueBytes: true},
-	MembershipChannelLowCardRefParametrized:  {flag: "lowCardRefParametrized", addMethodSuffix: "LowCardRefParametrized", carrierType: "Parametrized", carrierReadSuffix: "LowCardRefParametrized", readIterElemType: "[]byte", usesCarrier: true},
-	MembershipChannelHighCardRefParametrized: {flag: "highCardRefParametrized", addMethodSuffix: "HighCardRefParametrized", carrierType: "Parametrized", carrierReadSuffix: "HighCardRefParametrized", readIterElemType: "[]byte", usesCarrier: true},
+	MembershipChannelLowCardRef:              {flag: "", addMethodSuffix: "LowCardRef", readIterElemType: "uint64", needsKindVar: true, cardinality: ChannelCardinalityLow, identity: ChannelIdentityRef},
+	MembershipChannelLowCardVerbatim:         {flag: "lowCardVerbatim", addMethodSuffix: "LowCardVerbatim", readIterElemType: "[]byte", embedsLiteralName: true, cardinality: ChannelCardinalityLow, identity: ChannelIdentityVerbatim},
+	MembershipChannelHighCardRef:             {flag: "highCardRef", addMethodSuffix: "HighCardRef", readIterElemType: "uint64", needsKindVar: true, cardinality: ChannelCardinalityHigh, identity: ChannelIdentityRef},
+	MembershipChannelHighCardVerbatim:        {flag: "highCardVerbatim", addMethodSuffix: "HighCardVerbatim", readIterElemType: "[]byte", embedsLiteralName: true, cardinality: ChannelCardinalityHigh, identity: ChannelIdentityVerbatim},
+	MembershipChannelMixedLowCardRef:         {flag: "mixedLowCardRef", addMethodSuffix: "MixedLowCardRef", carrierType: "MixedLowCardRef", carrierReadSuffix: "LowCardRefHighCardParams", carrierSeq2Types: "uint64, []byte", carrierValueField: "Id", readIterElemType: "[]byte", usesCarrier: true, cardinality: ChannelCardinalityLow, identity: ChannelIdentityPerRow, hasParams: true},
+	MembershipChannelMixedLowCardVerbatim:    {flag: "mixedLowCardVerbatim", addMethodSuffix: "MixedLowCardVerbatim", carrierType: "MixedLowCardVerbatim", carrierReadSuffix: "LowCardVerbatimHighCardParams", carrierSeq2Types: "[]byte, []byte", carrierValueField: "Name", readIterElemType: "[]byte", usesCarrier: true, carrierValueBytes: true, cardinality: ChannelCardinalityLow, identity: ChannelIdentityPerRow, hasParams: true},
+	MembershipChannelLowCardRefParametrized:  {flag: "lowCardRefParametrized", addMethodSuffix: "LowCardRefParametrized", carrierType: "Parametrized", carrierReadSuffix: "LowCardRefParametrized", readIterElemType: "[]byte", usesCarrier: true, cardinality: ChannelCardinalityLow, identity: ChannelIdentityPerRow, hasParams: true},
+	MembershipChannelHighCardRefParametrized: {flag: "highCardRefParametrized", addMethodSuffix: "HighCardRefParametrized", carrierType: "Parametrized", carrierReadSuffix: "HighCardRefParametrized", readIterElemType: "[]byte", usesCarrier: true, cardinality: ChannelCardinalityHigh, identity: ChannelIdentityPerRow, hasParams: true},
 }
 
 // desc returns the channel's descriptor row, or the zero descriptor for an
@@ -237,6 +273,48 @@ func (c MembershipChannel) ReadIterElemType() string { return c.desc().readIterE
 // the read-side `GetMembValue<Suffix>` accessor on the readaccess
 // runtime.
 func (c MembershipChannel) AddMethodSuffix() string { return c.desc().addMethodSuffix }
+
+// Cardinality / Identity / HasParams expose the channel's three ADR-0072
+// carriage axes (plane D). The flat enum stays the dispatch key; these answer
+// "where on the product grid is this channel" for callers that reason about the
+// axes (schema docs, the playground) rather than a specific channel.
+func (c MembershipChannel) Cardinality() ChannelCardinalityE { return c.desc().cardinality }
+func (c MembershipChannel) Identity() ChannelIdentityE       { return c.desc().identity }
+func (c MembershipChannel) HasParams() bool                  { return c.desc().hasParams }
+
+// validateChannelTable asserts the carriage-axis fields stay consistent with
+// the behavioural dispatch fields they summarise, so the ADR-0072 product and
+// the method-dispatch facts cannot drift as channels are added. A static-table
+// invariant check (see TestChannelTableAxes), not a runtime path.
+func validateChannelTable() (err error) {
+	for i := range channelTable {
+		c := MembershipChannel(i)
+		d := channelTable[i]
+		if (d.identity == ChannelIdentityRef) != d.needsKindVar {
+			return eb.Build().Str("channel", c.String()).Errorf("identity=Ref must match needsKindVar")
+		}
+		if (d.identity == ChannelIdentityVerbatim) != d.embedsLiteralName {
+			return eb.Build().Str("channel", c.String()).Errorf("identity=Verbatim must match embedsLiteralName")
+		}
+		perRow := d.identity == ChannelIdentityPerRow
+		if perRow != d.usesCarrier {
+			return eb.Build().Str("channel", c.String()).Errorf("identity=PerRow must match usesCarrier")
+		}
+		if perRow != d.hasParams {
+			return eb.Build().Str("channel", c.String()).Errorf("hasParams must match the PerRow (carrier) identity")
+		}
+	}
+	return nil
+}
+
+// init fail-fasts if the static channelTable's carriage axes are inconsistent
+// with its dispatch fields — a mis-edit is a programming error, caught at load
+// for every importer rather than only under test.
+func init() {
+	if err := validateChannelTable(); err != nil {
+		panic("mappingplan: inconsistent channelTable — " + err.Error())
+	}
+}
 
 // FieldFlags carries the boolean opt-ins parsed from the lw: tag's
 // trailing flag positions. They are orthogonal:

@@ -90,9 +90,12 @@ Accepted on 2026-06-07. Re-cuts and supersedes parts of ADR-0008 and the
 membership-value/representation half of ADR-0007's late update.
 
 Implementation status (2026-06-07): all eight channels, the `MembershipValue` identity,
-and the per-section channel coupling are **implemented**; expressing the channel as the
-three-axis product, extracting the low-level `membership` package, and moving
-representation into a renderer are **pending** (refactor Phases 2–3).
+and the per-section channel coupling are **implemented**. The channel now exposes its
+three carriage axes (`Cardinality` / `Identity` / `HasParams`) on the descriptor table,
+init-validated against the dispatch fields, while the flat enum stays the dispatch key —
+the explicit-product-without-rewrite form (a flat enum is a fine internal representation,
+per Alternatives). Extracting the low-level `membership` package and moving representation
+into a renderer remain **pending** (refactor Phase 3).
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`. ADRs are
 append-only; supersession is recorded, not deleted.
