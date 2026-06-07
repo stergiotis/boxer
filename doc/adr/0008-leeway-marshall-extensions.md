@@ -1,12 +1,12 @@
 ---
 type: adr
-status: proposed
+status: superseded
 date: 2026-05-26
 # reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
 # reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
 ---
 
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
+> **Superseded by [ADR-0070](0070-leeway-entity-assembly.md)–[ADR-0073](0073-leeway-membership-role.md) (2026-06-07).** The decisions here stand but have been re-cut onto an orthogonal basis (see [ADR-0070 §Concept basis](0070-leeway-entity-assembly.md)): entity assembly → ADR-0070; value & emission → [ADR-0071](0071-leeway-value-and-emission.md); membership carriage & representation → [ADR-0072](0072-leeway-membership-carriage.md); membership role & param-treatment → ADR-0073. Retained for history; new work references the plane-ADRs.
 
 # ADR-0008: leeway marshall\* extensions — stacked entities, attribute ordering, full channel coverage
 

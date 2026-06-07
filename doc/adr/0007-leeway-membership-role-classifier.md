@@ -1,10 +1,18 @@
 ---
 type: adr
-status: accepted
+status: superseded
 date: 2026-05-01
 reviewed-by: "p@stergiotis"
 reviewed-date: 2026-05-01
 ---
+
+> **Superseded by [ADR-0073](0073-leeway-membership-role.md) (2026-06-07).** The decision
+> here stands but has been re-cut onto an orthogonal basis (see
+> [ADR-0070 §Concept basis](0070-leeway-entity-assembly.md)): membership **meaning** —
+> role, param-treatment, and the classifier mechanism — moves to ADR-0073; the
+> `MembershipValue` identity it classifies moves to
+> [ADR-0072](0072-leeway-membership-carriage.md). Retained for history; new work
+> references the plane-ADRs.
 
 # ADR-0007: Membership Role Classifier and Section Uniformity Use-Aspects
 

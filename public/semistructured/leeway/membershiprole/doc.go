@@ -16,6 +16,6 @@
 // [useaspects.AspectSectionMembershipsAllSecondary] hints and falls back to a
 // path-prefix naming convention for verbatim-shaped memberships.
 //
-// See ADR-0007 (`doc/adr/0007-leeway-membership-role-classifier.md`) for the
-// design rationale.
+// See ADR-0073 (`doc/adr/0073-leeway-membership-role.md`) for the design
+// rationale; it supersedes ADR-0007.
 package membershiprole
