@@ -192,12 +192,24 @@ func (inst *App) Frame(ctx runtimeapp.FrameContextI) (err error) {
 	// rest of the Window's width as empty dark space to the right.
 	for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
 		for _, group := range grouped {
-			for range c.CollapsingHeader(
+			// Capture the category header's own collapse state and propagate it
+			// into each entry. Per ADR-0012 the KeepIter body still runs once
+			// when the header is collapsed, so without this gate every demo in a
+			// collapsed category keeps emitting its body — and any pinned
+			// tethered inspector (a top-level c.Window) keeps floating, escaping
+			// the header's clip while its anchor toggle is hidden. The window
+			// then "pops up" over the collapsed tree with no bezier tether (the
+			// toggle rect is never captured, so AnchorTether.Paint short-
+			// circuits). IsBlockSkipped is the same previous-frame advisory the
+			// per-demo gate inside renderGalleryEntry already reads.
+			cat := c.CollapsingHeader(
 				inst.ids.PrepareStr("cat-"+group.category),
 				c.WidgetText().Text(categoryHeader(group.category)).Keep(),
-			).DefaultOpen(true).KeepIter() {
+			).DefaultOpen(true)
+			categoryCollapsed := c.IsBlockSkipped(cat.Handle())
+			for range cat.KeepIter() {
 				for _, d := range group.demos {
-					inst.renderGalleryEntry(d)
+					inst.renderGalleryEntry(d, categoryCollapsed)
 				}
 			}
 		}
@@ -205,14 +217,22 @@ func (inst *App) Frame(ctx runtimeapp.FrameContextI) (err error) {
 	return
 }
 
-func (inst *App) renderGalleryEntry(d registry.Demo) {
+// renderGalleryEntry emits one demo's CollapsingHeader and, when its body
+// should render, the demo itself. categoryCollapsed carries the parent
+// category header's collapse state: a collapsed category must suppress every
+// demo body it contains — not merely stop drawing the header chrome — because a
+// pinned tethered-inspector window is a top-level c.Window that would otherwise
+// keep floating after the category collapses, untethered (its anchor toggle is
+// hidden, so the bezier never paints). It folds into the same skip condition as
+// the per-demo IsBlockSkipped advisory.
+func (inst *App) renderGalleryEntry(d registry.Demo, categoryCollapsed bool) {
 	ch := c.CollapsingHeader(
 		inst.ids.PrepareStr("demo-"+d.Name),
 		c.WidgetText().Text(displayTitle(d)).Keep(),
 	)
 	handle := ch.Handle()
 	for range ch.KeepIter() {
-		if inst.frame < interactiveEmbedFirstFrame || c.IsBlockSkipped(handle) {
+		if inst.frame < interactiveEmbedFirstFrame || categoryCollapsed || c.IsBlockSkipped(handle) {
 			continue
 		}
 		RenderDemoIntro(inst.ids, &d)
