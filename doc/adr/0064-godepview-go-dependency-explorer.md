@@ -228,6 +228,41 @@ remains the code generator that consumes a `mappingplan.Plan`, and the
 deferred `factswrapper` codegen step is unchanged. The manifest DTOs are
 unaffected.
 
+### 2026-06-07 — graph guardrails, detail pane, layered-engine option
+
+Three enhancements within the existing design; no change to the seam, the
+manifest DTOs, or the deferred facts path.
+
+- **SD5 is now enforced, not just intended.** `godep.Index` gains
+  `BoundedNeighborhood(root, NeighborhoodOpts{MaxDepth, Dir, MaxNodes,
+  Include})`, a breadth-first walk that caps the reached set (closest-first)
+  and filters nodes by a predicate, returning a `truncated` count. The app
+  caps the graph at `maxGraphNodes` (200) and, by default, excludes stdlib via
+  `Include` — both load-bearing because a hub package (`fmt`, `errors`)
+  reachable by an "importers" walk would otherwise emit thousands of opcodes
+  per frame, which SD5 only asserted would not happen. `Neighborhood` is now
+  the unbounded/unfiltered case of `BoundedNeighborhood`. The neighborhood is
+  cached against a `{focus, depth, dir, hideStd}` signature, so the BFS runs
+  once per change, not once per frame.
+- **The master–detail layout is realized as a `DockArea`** (packages table /
+  neighborhood graph / detail pane), following the schemaview/mappingplanview
+  house idiom (a bounded dock leaf lets each pane's `ScrollArea` scroll). The
+  new **detail pane** shows the focused package's metadata plus its direct
+  Imports and Imported-by lists as click-to-focus entries — the navigation
+  that still works when a neighborhood is too large to draw (the lists are
+  complete, only display-bounded), complementing the capped graph.
+- **A second graph engine is available behind a toggle.** The neighborhood can
+  render with the existing **live** egui_graphs widget (default, interactive
+  hierarchical layout) or with the **layered** widget from
+  [ADR-0069](0069-imzero2-layeredgraph-widget.md): a Graphviz-`dot` Sugiyama
+  layout of the same bounded neighborhood, computed in-process (cgo-free WASM)
+  and cached against the neighborhood signature, with arrow-headed edges and
+  pan/zoom. The dependency neighborhood is a DAG, which `dot` lays out well.
+  This does not revisit SD10: the live engine remains hierarchical-on-an-acyclic
+  graph; the layered engine simply uses a different layout backend for the same
+  edges. Edge attributes are still not modelled (SD2), so the layered edges
+  carry direction only.
+
 ## References
 
 - [ADR-0042](0042-keelson-leeway-codec-soa-generator.md) — `marshallgen` SoA codec generator; the grammar the manifest DTOs target.

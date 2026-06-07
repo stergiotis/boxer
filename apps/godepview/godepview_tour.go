@@ -26,39 +26,56 @@ func init() {
 		Stage:          [2]float32{registry.StandardStageMaxW, registry.LargeAreaStageMaxH},
 		Flags:          registry.DemoFlagNeedsLargeArea,
 		Kind:           registry.DemoKindMixed,
-		Description:    "godepview's master-detail explorer rendered from a seeded fixture dependency graph (no live go/packages collection): the package etable plus the focused package's import-neighborhood graph. ADR-0064.",
-		Init:           tourInit,
+		Description:    "godepview's master-detail explorer rendered from a seeded fixture dependency graph (no live go/packages collection): a dock of the package etable (master), the focused package's bounded import-neighborhood graph (live egui_graphs engine), and the focus detail pane with click-to-focus import/importer lists. ADR-0064.",
+		Init:           makeTourInit(false),
 		RenderStateful: tourRenderStateful,
 		SourceFunc:     (*App).renderExplorer,
 	})
+	registry.Register(registry.Demo{
+		Name:           "godepview-layered",
+		Category:       "Tools",
+		Title:          "🕸 Go Dependency Explorer (layered engine)",
+		Stage:          [2]float32{registry.StandardStageMaxW, registry.LargeAreaStageMaxH},
+		Flags:          registry.DemoFlagNeedsLargeArea,
+		Kind:           registry.DemoKindMixed,
+		Description:    "The same explorer with the focus neighborhood rendered by the layeredgraph widget (ADR-0069): a Graphviz-dot Sugiyama layout painted in-process, with arrow-headed edges. The 'engine' toggle in the running app switches between this and the live egui_graphs engine.",
+		Init:           makeTourInit(true),
+		RenderStateful: tourRenderStateful,
+		SourceFunc:     (*App).renderGraphLayered,
+	})
 }
 
-// tourInit builds the seeded explorer instance once per gallery/tour
-// instance. It bypasses Mount and collection: the fixture manifest is
-// assigned directly, the index is built from it, and a focus is preset so the
-// neighborhood graph is populated at capture time.
-func tourInit(ids *c.WidgetIdStack) (state any) {
-	inst := &App{
-		ids:       ids,
-		density:   styletokens.DensityFromEnv(),
-		man:       fixtureManifest(),
-		showStd:   true,
-		showInt:   true,
-		showExt:   true,
-		sortCol:   colImportedBy,
-		sortDesc:  true,
-		depth:     2,
-		dir:       godep.DirBoth,
-		viewDirty: true,
+// makeTourInit builds the seeded explorer instance once per gallery/tour
+// instance, pinned to the given graph engine. It bypasses Mount and collection:
+// the fixture manifest is assigned directly, the index is built from it, and a
+// focus is preset so the neighborhood graph is populated at capture time.
+func makeTourInit(layered bool) func(ids *c.WidgetIdStack) (state any) {
+	return func(ids *c.WidgetIdStack) (state any) {
+		inst := &App{
+			ids:          ids,
+			density:      styletokens.DensityFromEnv(),
+			man:          fixtureManifest(),
+			showStd:      true,
+			showInt:      true,
+			showExt:      true,
+			sortCol:      colImportedBy,
+			sortDesc:     true,
+			depth:        2,
+			dir:          godep.DirBoth,
+			graphHideStd: false, // the fixture includes stdlib; show it for a richer capture
+			useLayered:   layered,
+			seed:         instanceCounter.Add(1),
+			viewDirty:    true,
+		}
+		inst.idx = inst.man.BuildIndex()
+		// Focus a package with both importers and imports so the neighborhood
+		// graph shows edges in both directions (index 2 == "store").
+		if len(inst.man.Packages) > 2 {
+			inst.focus = inst.man.Packages[2].Id
+		}
+		state = inst
+		return
 	}
-	inst.idx = inst.man.BuildIndex()
-	// Focus a package with both importers and imports so the neighborhood
-	// graph shows edges in both directions (index 2 == "store").
-	if len(inst.man.Packages) > 2 {
-		inst.focus = inst.man.Packages[2].Id
-	}
-	state = inst
-	return
 }
 
 func tourRenderStateful(ids *c.WidgetIdStack, state any) {

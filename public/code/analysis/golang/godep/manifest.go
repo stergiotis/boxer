@@ -128,41 +128,88 @@ func (idx *Index) Len() (n int) {
 	return
 }
 
+// NeighborhoodOpts bounds and filters a BoundedNeighborhood walk. The zero
+// value is an unbounded, unfiltered import-direction walk of depth 0 (just the
+// root) — set MaxDepth to expand.
+type NeighborhoodOpts struct {
+	MaxDepth int       // hops to expand from root; < 1 yields just {root: 0}
+	Dir      Direction // which edges to follow
+	// MaxNodes caps the reached set (root included). 0 means unbounded. The
+	// walk is breadth-first, so the cap keeps the nodes closest to root and
+	// drops the farther frontier — the legibility lever for hub packages
+	// whose raw neighborhood is most of the closure (ADR-0064 SD5).
+	MaxNodes int
+	// Include, when non-nil, filters which packages may enter the reached set
+	// (e.g. to drop stdlib from the graph). A filtered node is pruned: neither
+	// it nor anything reachable only through it is admitted. The root is always
+	// admitted regardless of Include, so focusing a filtered package still
+	// shows it.
+	Include func(p *PackageNode) bool
+}
+
 // Neighborhood returns the package ids reachable from root within maxDepth
 // hops, following edges per dir. The result maps each reached id to its hop
 // distance from root (root itself at distance 0). maxDepth < 1 yields just
-// {root: 0}. Because the collected production-import graph is acyclic (Go
-// forbids import cycles; test edges are not collected — ADR-0064 SD10), the
-// walk terminates without an explicit visited-cycle guard beyond the
-// reached set.
+// {root: 0}. It is the unbounded, unfiltered case of BoundedNeighborhood.
 func (idx *Index) Neighborhood(root uint64, maxDepth int, dir Direction) (reached map[uint64]int) {
+	reached, _ = idx.BoundedNeighborhood(root, NeighborhoodOpts{MaxDepth: maxDepth, Dir: dir})
+	return
+}
+
+// BoundedNeighborhood is Neighborhood with a node cap and a class/predicate
+// filter. It returns the reached set (id → hop distance, root at 0) and
+// truncated: the number of distinct packages that the walk would have admitted
+// but dropped because MaxNodes was hit (a lower bound — the cap also stops
+// those nodes' descendants from being discovered). truncated > 0 is the signal
+// the view shows as "graph capped — narrow the neighborhood".
+//
+// Because the collected production-import graph is acyclic (Go forbids import
+// cycles; test edges are not collected — ADR-0064 SD10), the walk terminates
+// without an explicit visited-cycle guard beyond the reached set.
+func (idx *Index) BoundedNeighborhood(root uint64, opts NeighborhoodOpts) (reached map[uint64]int, truncated int) {
 	reached = map[uint64]int{root: 0}
+	capped := opts.MaxNodes > 0
+	var elided map[uint64]struct{}
 	frontier := []uint64{root}
-	for d := 1; d <= maxDepth && len(frontier) > 0; d++ {
+	for d := 1; d <= opts.MaxDepth && len(frontier) > 0; d++ {
 		var next []uint64
+		visit := func(to uint64, d int) {
+			if _, seen := reached[to]; seen {
+				return
+			}
+			if opts.Include != nil {
+				if p, ok := idx.byID[to]; ok && !opts.Include(p) {
+					return // intentionally filtered out — not a truncation
+				}
+			}
+			if capped && len(reached) >= opts.MaxNodes {
+				if elided == nil {
+					elided = make(map[uint64]struct{})
+				}
+				elided[to] = struct{}{}
+				return
+			}
+			reached[to] = d
+			next = append(next, to)
+		}
 		for _, id := range frontier {
 			p, ok := idx.byID[id]
 			if !ok {
 				continue
 			}
-			if dir == DirImports || dir == DirBoth {
+			if opts.Dir == DirImports || opts.Dir == DirBoth {
 				for _, to := range p.Imports {
-					if _, seen := reached[to]; !seen {
-						reached[to] = d
-						next = append(next, to)
-					}
+					visit(to, d)
 				}
 			}
-			if dir == DirImporters || dir == DirBoth {
+			if opts.Dir == DirImporters || opts.Dir == DirBoth {
 				for _, from := range idx.importers[id] {
-					if _, seen := reached[from]; !seen {
-						reached[from] = d
-						next = append(next, from)
-					}
+					visit(from, d)
 				}
 			}
 		}
 		frontier = next
 	}
+	truncated = len(elided)
 	return
 }

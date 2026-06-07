@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/code/analysis/golang/godep"
@@ -37,13 +38,37 @@ func (inst *App) renderExplorer() {
 	if inst.viewDirty {
 		inst.rebuildView()
 	}
+	inst.ensureNeighborhood()
 	inst.renderControls()
 	c.AddSpace(inst.spaceTight())
-	inst.renderGraph()
-	c.AddSpace(inst.spaceTight())
-	c.Separator().Horizontal().Send()
-	c.AddSpace(inst.spaceTight())
-	inst.renderTable()
+
+	// Master–detail as a three-leaf dock: the package table (master) on the
+	// left, the focus-neighborhood graph top-right, and the focus detail pane
+	// bottom-right. A dock leaf hands its content a bounded rect, which is what
+	// lets the detail pane's ScrollArea clip+scroll and the graph fill its pane
+	// (a width-pinned column would collapse a ScrollArea to its first child —
+	// schemaview's hard-won idiom).
+	c.UiSetMinHeight(dockMinHeight)
+	for dock := range c.DockArea(inst.ids.PrepareStr("dock")) {
+		root := dock.InitRoot(tabPackages)
+		// Table keeps 55% of the width (seven columns); the graph and detail
+		// pane split the right column evenly so the detail lists are visible
+		// without scrolling. All leaves are drag-resizable and persist.
+		graphLeaf := dock.Split(root, c.DockRight, 0.55, tabGraph)
+		dock.Split(graphLeaf, c.DockBelow, 0.50, tabDetail)
+
+		for range dock.Tab(tabPackages, "packages") {
+			inst.renderTable()
+		}
+		for range dock.Tab(tabGraph, "neighborhood") {
+			inst.renderNeighborhoodGraph()
+		}
+		for range dock.Tab(tabDetail, "detail") {
+			for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+				inst.renderDetail()
+			}
+		}
+	}
 }
 
 func (inst *App) renderControls() {
@@ -81,7 +106,8 @@ func (inst *App) renderControls() {
 	}
 	c.AddSpace(inst.spaceTight())
 
-	// Row 2: neighborhood (graph) controls.
+	// Row 2: neighborhood (graph) controls. The focused package is shown in the
+	// detail pane (with its own clear button), not here.
 	for range c.Horizontal().KeepIter() {
 		c.Label("Neighborhood").Send()
 		c.AddSpace(inst.spaceInner())
@@ -93,20 +119,31 @@ func (inst *App) renderControls() {
 		inst.dirToggle("dir-impd", "importers ◂", godep.DirImporters)
 		inst.dirToggle("dir-both", "both", godep.DirBoth)
 		c.AddSpace(inst.spaceOuter())
-		if inst.focus != 0 {
-			focusPath := fmt.Sprintf("#%d", inst.focus)
-			if p, ok := inst.idx.Node(inst.focus); ok {
-				focusPath = p.ImportPath
-			}
-			c.Label("focus: " + focusPath).Send()
-			c.AddSpace(inst.spaceInner())
-			if c.Button(inst.ids.PrepareStr("clear-focus"), c.Atoms().Text("clear").Keep()).
-				SendResp().HasPrimaryClicked() {
-				inst.focus = 0
-			}
-		} else {
-			c.Label("focus: (none — click a row or graph node)").Send()
-		}
+		inst.boolToggle("hide-std", "hide stdlib", &inst.graphHideStd)
+		c.AddSpace(inst.spaceOuter())
+		c.Label("engine").Send()
+		inst.engineToggle("eng-live", "live", false)
+		inst.engineToggle("eng-layered", "layered", true)
+	}
+}
+
+// boolToggle is a framed on/off button bound to *on.
+func (inst *App) boolToggle(id string, label string, on *bool) {
+	if c.Button(inst.ids.PrepareStr(id), c.Atoms().Text(label).Keep()).
+		Selected(*on).
+		Frame(true).
+		SendResp().HasPrimaryClicked() {
+		*on = !*on
+	}
+}
+
+// engineToggle is one segment of the live/layered graph-engine switch.
+func (inst *App) engineToggle(id string, label string, layered bool) {
+	if c.Button(inst.ids.PrepareStr(id), c.Atoms().Text(label).Keep()).
+		Selected(inst.useLayered == layered).
+		Frame(true).
+		SendResp().HasPrimaryClicked() {
+		inst.useLayered = layered
 	}
 }
 
@@ -129,18 +166,38 @@ func (inst *App) dirToggle(id string, label string, dir godep.Direction) {
 	}
 }
 
-// renderGraph draws the focused package's import neighborhood. The full
-// closure is never drawn — only the focus node's local neighborhood (depth
-// + direction), which is what keeps thousands of nodes legible (ADR-0064
-// SD5). The collected production-import graph is acyclic, so the
-// hierarchical layout is always well-defined (ADR-0064 SD10).
-func (inst *App) renderGraph() {
+// renderNeighborhoodGraph draws the focused package's import neighborhood with
+// the selected engine. The full closure is never drawn — only the focus node's
+// bounded local neighborhood (depth + direction + cap), which is what keeps
+// thousands of nodes legible (ADR-0064 SD5). The neighborhood is computed once
+// per change by ensureNeighborhood; this only renders inst.graphReached.
+func (inst *App) renderNeighborhoodGraph() {
 	if inst.focus == 0 || inst.idx == nil {
-		c.Label("Select a package below to view its dependency neighborhood.").Send()
+		c.Label("Select a package — click a table row, a graph node, or a detail-pane entry.").Send()
 		return
 	}
-	depth := max(int(inst.depth+0.5), 1)
-	reached := inst.idx.Neighborhood(inst.focus, depth, inst.dir)
+	if inst.graphTruncated > 0 {
+		hint := "depth / direction"
+		if !inst.graphHideStd {
+			hint += " / hide stdlib"
+		}
+		for rt := range c.RichTextLabel(fmt.Sprintf("neighborhood capped at %d nodes — narrow with %s", len(inst.graphReached), hint)) {
+			rt.Weak().Small()
+		}
+	}
+	if inst.useLayered {
+		inst.renderGraphLayered()
+		return
+	}
+	inst.renderGraphLive()
+}
+
+// renderGraphLive draws the neighborhood with the egui_graphs Graph widget
+// (hierarchical layout, live pan/zoom/drag). It reads the cached reached set;
+// the collected production-import graph is acyclic, so the hierarchical layout
+// is well-defined (ADR-0064 SD10).
+func (inst *App) renderGraphLive() {
+	reached := inst.graphReached
 
 	// Emit in sorted id order: Go map iteration is randomized, and a stable
 	// emission order keeps the layout (and tour captures) reproducible.
@@ -170,8 +227,9 @@ func (inst *App) renderGraph() {
 		}
 	}
 
+	_, h := inst.paneAvail(640, 320)
 	c.Graph(inst.ids.PrepareStr("dep-graph")).
-		Height(360).
+		Height(h - 6).
 		Layout(uint8(c.GraphLayoutHierarchical)).
 		LayoutOrientation(uint8(c.GraphHierarchicalOrientationLeftRight)).
 		LayoutCenterParent(true).
@@ -192,6 +250,22 @@ func (inst *App) renderGraph() {
 			inst.focus = e.KeyA
 		}
 	}
+}
+
+// paneAvail returns the current dock pane's available size (one-frame-lagged),
+// capturing it for next frame. Falls back to fbW/fbH when the capture is
+// NaN/too-small (e.g. the first frame before any capture lands).
+func (inst *App) paneAvail(fbW float32, fbH float32) (w float32, h float32) {
+	avail := c.CurrentApplicationState.StateManager.GetAvailableSize()
+	c.CaptureAvailableSize()
+	w, h = fbW, fbH
+	if avail.W == avail.W && avail.W > 80 { // == rejects NaN
+		w = avail.W
+	}
+	if avail.H == avail.H && avail.H > 80 {
+		h = avail.H
+	}
+	return
 }
 
 func (inst *App) renderTable() {
@@ -384,4 +458,132 @@ func shortPath(p string) (s string) {
 		return p
 	}
 	return ".../" + strings.Join(segs[len(segs)-2:], "/")
+}
+
+// maxDetailListRows bounds how many entries each detail list renders (sorted by
+// path); the rest collapse into a "+N more" note. A hub package's importer set
+// can be thousands — the table is where you browse those, not this pane.
+const maxDetailListRows = 80
+
+// ensureDetail rebuilds the focused package's path-sorted import / importer
+// lists, but only when the focus changes (the lists are focus-only, independent
+// of the graph's depth/dir/hideStd), so a hub package's large importer set is
+// sorted once per selection, not once per frame.
+func (inst *App) ensureDetail() {
+	if inst.detailReady && inst.detailFocus == inst.focus {
+		return
+	}
+	inst.detailReady = true
+	inst.detailFocus = inst.focus
+	inst.detailImports = nil
+	inst.detailImporters = nil
+	if inst.focus == 0 || inst.idx == nil {
+		return
+	}
+	if p, ok := inst.idx.Node(inst.focus); ok {
+		inst.detailImports = inst.sortedByPath(p.Imports)
+	}
+	inst.detailImporters = inst.sortedByPath(inst.idx.Importers(inst.focus))
+}
+
+// sortedByPath copies ids and sorts them by import path for a stable, readable
+// list order.
+func (inst *App) sortedByPath(ids []uint64) (out []uint64) {
+	out = append([]uint64(nil), ids...)
+	slices.SortFunc(out, func(a uint64, b uint64) int {
+		return strings.Compare(inst.pathOf(a), inst.pathOf(b))
+	})
+	return
+}
+
+// pathOf returns a package id's import path, or a "#id" placeholder if the id
+// is not in this collection.
+func (inst *App) pathOf(id uint64) (path string) {
+	if p, ok := inst.idx.Node(id); ok {
+		return p.ImportPath
+	}
+	return "#" + strconv.FormatUint(id, 10)
+}
+
+// renderDetail is the focus pane: the focused package's metadata plus its direct
+// Imports and Imported-by lists. The lists are click-to-focus, so they are the
+// navigation that still works when the neighborhood is too large to graph — the
+// graph is capped, but these lists are complete (only display-bounded).
+func (inst *App) renderDetail() {
+	inst.ensureDetail()
+	if inst.focus == 0 || inst.idx == nil {
+		for rt := range c.RichTextLabel("No package focused. Click a table row, a graph node, or a list entry.") {
+			rt.Weak()
+		}
+		return
+	}
+	p, ok := inst.idx.Node(inst.focus)
+	if !ok {
+		for rt := range c.RichTextLabel(fmt.Sprintf("focused id #%d not found in this collection", inst.focus)) {
+			rt.Weak()
+		}
+		return
+	}
+
+	for range c.Horizontal().KeepIter() {
+		for rt := range c.RichTextLabel(p.ImportPath) {
+			rt.Strong().Size(14)
+		}
+		c.AddSpace(inst.spaceInner())
+		if c.Button(inst.ids.PrepareStr("detail-clear"), c.Atoms().Text("clear").Keep()).
+			SendResp().HasPrimaryClicked() {
+			inst.focus = 0
+		}
+	}
+	for range c.Horizontal().KeepIter() {
+		c.Label("class: " + p.Class).Send()
+		c.AddSpace(inst.spaceInner())
+		c.Label("module: " + p.ModulePath).Send()
+	}
+	for range c.Horizontal().KeepIter() {
+		c.Label("name: " + p.Name).Send()
+		c.AddSpace(inst.spaceInner())
+		c.Label(fmt.Sprintf("files: %d", p.NumGoFiles)).Send()
+		c.AddSpace(inst.spaceInner())
+		c.Label(fmt.Sprintf("out: %d  in: %d", p.NumImports, p.NumImportedBy)).Send()
+	}
+	if p.Dir != "" {
+		for rt := range c.RichTextLabel(p.Dir) {
+			rt.Weak().Small()
+		}
+	}
+
+	c.AddSpace(inst.spaceTight())
+	c.Separator().Horizontal().Send()
+	c.AddSpace(inst.spaceTight())
+	inst.renderDepList("imp", fmt.Sprintf("Imports (%d)", len(inst.detailImports)), inst.detailImports)
+	c.AddSpace(inst.spaceInner())
+	inst.renderDepList("impby", fmt.Sprintf("Imported by (%d)", len(inst.detailImporters)), inst.detailImporters)
+}
+
+// renderDepList renders one path-sorted, click-to-focus dependency list,
+// bounded to maxDetailListRows with a "+N more" trailer.
+func (inst *App) renderDepList(idkey string, title string, sorted []uint64) {
+	for rt := range c.RichTextLabel(title) {
+		rt.Strong()
+	}
+	if len(sorted) == 0 {
+		for rt := range c.RichTextLabel("— none") {
+			rt.Weak()
+		}
+		return
+	}
+	shown := min(len(sorted), maxDetailListRows)
+	for i := range shown {
+		id := sorted[i]
+		if c.SelectableLabel(inst.ids.PrepareStr(idkey+":"+strconv.FormatUint(id, 10)), id == inst.focus, inst.pathOf(id)).
+			SendResp().HasPrimaryClicked() {
+			inst.focus = id
+		}
+	}
+	if len(sorted) > shown {
+		for rt := range c.RichTextLabel(fmt.Sprintf("… +%d more (browse in the table)", len(sorted)-shown)) {
+			rt.Weak().Small()
+		}
+	}
 }
