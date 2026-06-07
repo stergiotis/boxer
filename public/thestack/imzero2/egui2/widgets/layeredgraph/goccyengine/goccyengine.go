@@ -87,6 +87,12 @@ func (e *Engine) Layout(ctx context.Context, m layeredgraph.GraphModel, opts lay
 	return parseLayout(dot, m)
 }
 
+// nodeMargin is the Graphviz node `margin` (inches, "x,y") applied to every
+// node. The horizontal component is bumped above Graphviz's 0.11 default so the
+// sans-metric label keeps a clear, consistent gap from the box border once the
+// painter draws it; the vertical component stays at the default.
+const nodeMargin = "0.16,0.055"
+
 // renderLaidOutDot constructs the Graphviz graph from the model and renders it
 // to the canonical DOT format. graphviz.XDOT is the "dot" format: after
 // layout it carries computed pos/width/height on nodes, pos (the spline) on
@@ -124,6 +130,15 @@ func (e *Engine) renderLaidOutDot(ctx context.Context, m layeredgraph.GraphModel
 		}
 		gn.SetLabel(label)
 		gn.SetShape(shape(n.Shape))
+		// Size boxes with sans-serif metrics. The imzero2 painter draws labels
+		// in the UI sans font (Noto), but Graphviz defaults to Times — a narrow
+		// serif — so it under-measures the label and long ones overflow the box
+		// in the painter (worse the longer the label, which also reads as
+		// non-uniform). Helvetica is the closest built-in metric family to the
+		// rendered font; the inner-margin bump (default is 0.11,0.055) then
+		// leaves a consistent gap so text never touches the frame.
+		gn.SetFontName("Helvetica")
+		_ = gn.SafeSet("margin", nodeMargin, "")
 		if opts.FontSize > 0 {
 			gn.SetFontSize(opts.FontSize)
 		}
