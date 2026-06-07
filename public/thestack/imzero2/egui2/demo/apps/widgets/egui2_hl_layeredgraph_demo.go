@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph/goccyengine"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph/view"
@@ -33,7 +35,7 @@ func init() {
 		Stage:       [2]float32{820, 700},
 		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindUX,
-		Description: "Static layered (hierarchical / Sugiyama) graph laid out by Graphviz dot in-process via WASM, drawn through the painter. Hover or click a node.",
+		Description: "Static layered (hierarchical / Sugiyama) graph laid out by Graphviz dot in-process via WASM, drawn through the painter. Nodes are filled with IDS semantic tones (error/warning/success). Hover or click a node.",
 		Init: func(_ *c.WidgetIdStack) (state any) {
 			return &layeredGraphDemoState{}
 		},
@@ -60,6 +62,33 @@ func trafficLightModel() layeredgraph.GraphModel {
 			{From: "red", To: "red", Label: "flash"},
 		},
 	}
+}
+
+// idsNodeFill colours each traffic-light state with its IDS semantic tone,
+// demonstrating the view's per-node fill override (RenderOpts.NodeFill). The
+// vivid *Default tones are used (the recognisable error/warning/success
+// colours); idsNodeStyle flips the label ink dark to stay legible on them.
+// Red→Error, Green→Success, Yellow→Warning; unknown ids keep the style default.
+func idsNodeFill(id string) (col color.Color, ok bool) {
+	switch id {
+	case "red":
+		return color.Hex(styletokens.ErrorDefault.AsHex()), true
+	case "green":
+		return color.Hex(styletokens.SuccessDefault.AsHex()), true
+	case "yellow":
+		return color.Hex(styletokens.WarningDefault.AsHex()), true
+	}
+	return color.Color{}, false
+}
+
+// idsNodeStyle is DefaultStyle with the node label ink darkened to the near-black
+// NeutralBgExtreme: the *Default semantic fills are light foreground tones, so
+// the default light NodeText would wash out on them. IDS has no on-colour text
+// token, so the darkest neutral is the standard ink for a light semantic surface.
+func idsNodeStyle() view.Style {
+	st := view.DefaultStyle()
+	st.NodeText = color.Hex(styletokens.NeutralBgExtreme.AsHex())
+	return st
 }
 
 func demoLayeredGraph(ids *c.WidgetIdStack, st *layeredGraphDemoState) {
@@ -95,9 +124,11 @@ func demoLayeredGraph(ids *c.WidgetIdStack, st *layeredGraphDemoState) {
 	}
 
 	res := view.Render(layeredGraphDemoIDBase, st.layout, view.RenderOpts{
-		CanvasW: canvasW,
-		CanvasH: 440,
-		State:   &st.gvState,
+		Style:    idsNodeStyle(),
+		CanvasW:  canvasW,
+		CanvasH:  440,
+		NodeFill: idsNodeFill,
+		State:    &st.gvState,
 	})
 	if res.Clicked != "" {
 		st.lastClicked = res.Clicked
