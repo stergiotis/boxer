@@ -31,17 +31,21 @@ func newMappingPlanViewState() *mappingPlanViewDemoState {
 	m := mappingplanview.NewModel("droneMission", "codecdemo", "DroneMission")
 
 	id := m.AddRow()
-	id.GoField, id.GoType, id.Section = "ID", "uint64", "id"
+	id.GoField, id.Section = "ID", "id"
+	id.SetGoType("uint64")
 
 	track := m.AddRow()
-	track.GoField, track.GoType, track.Section = "Tracking", "[]byte", "naturalKey"
+	track.GoField, track.Section = "Tracking", "naturalKey"
+	track.SetGoType("[]byte")
 
 	status := m.AddRow()
-	status.GoField, status.GoType = "Status", "string"
+	status.GoField = "Status"
+	status.SetGoType("string")
 	status.Membership, status.Section = "droneStatus", "symbol"
 
 	battery := m.AddRow()
-	battery.GoField, battery.GoType = "Battery", "uint64"
+	battery.GoField = "Battery"
+	battery.SetGoType("uint64")
 	battery.Membership, battery.Section = "battery", "u64Array"
 	battery.Unit = true
 

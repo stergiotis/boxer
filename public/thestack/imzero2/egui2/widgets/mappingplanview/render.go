@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -120,18 +122,30 @@ func renderEditor(ids *c.WidgetIdStack, m *Model) {
 	renderVerdict(ids, m)
 	c.Separator().Send()
 
-	// Plan identity.
+	// Plan identity — the `_`-field's kind / package / Go type. Styled like the
+	// schemaview header (Strong + Size(15) title, weak caption) with each input
+	// labelled and tooltip-described so the trio reads unambiguously.
 	for rt := range c.RichTextLabel("plan") {
-		rt.Strong()
+		rt.Strong().Size(15)
 	}
+	for rt := range c.RichTextLabel("the _-field identity the generated codec & SQL are built for") {
+		rt.Weak().Small()
+	}
+	c.AddSpace(2)
 	for range c.Horizontal().KeepIter() {
-		if editField(ids, "kind", "kind", &m.Kind, 150, true) {
+		if labeledField(ids, "kind", "entity kind",
+			"entity kind — the kind: declared on the _ field; names the entity this plan maps",
+			"kind: tag", &m.Kind, 150) {
 			m.dirty = true
 		}
-		if editField(ids, "pkg", "package", &m.PackageName, 130, true) {
+		if labeledField(ids, "pkg", "Go package",
+			"package of the generated DTO; cosmetic — it only sets the package header in the Go preview",
+			"DTO package", &m.PackageName, 130) {
 			m.dirty = true
 		}
-		if editField(ids, "type", "Go type", &m.KindType, 150, true) {
+		if labeledField(ids, "type", "DTO type",
+			"Go struct type the codec marshals — the DTO whose fields the rows below describe",
+			"struct name", &m.KindType, 150) {
 			m.dirty = true
 		}
 	}
@@ -193,15 +207,15 @@ func renderVerdict(ids *c.WidgetIdStack, m *Model) {
 // renderRow draws one field row as a fixed-size bordered card (uniform width +
 // min height so the cards line up) and returns true if its remove button fired.
 func renderRow(ids *c.WidgetIdStack, m *Model, r *FieldRow) (remove bool) {
-	// A const is a fixed scalar string declared on a `_` field: no Go field,
-	// no element shape, no explode. Normalise those off so the row stays valid
-	// and the shape toggles below render disabled.
-	if r.IsConst && (r.IsOption || r.IsSlice || r.IsRoaring || r.Explode) {
-		r.IsOption, r.IsSlice, r.IsRoaring, r.Explode = false, false, false, false
+	// A const is a fixed literal declared on a `_` field: no Go field, no
+	// Option, no explode. Normalise those off so the row stays valid and the
+	// type editor + flags below render disabled.
+	if r.IsConst && (r.IsOption || r.Explode) {
+		r.IsOption, r.Explode = false, false
 		m.dirty = true
 	}
 
-	word, catCol := rowCategory(r)
+	glyph, word, catCol := rowCategory(r)
 	tagged := r.Membership != ""
 
 	for range c.Horizontal().KeepIter() {
@@ -225,20 +239,26 @@ func renderRow(ids *c.WidgetIdStack, m *Model, r *FieldRow) (remove bool) {
 				c.UiSetMinWidth(cardWidth)
 				c.UiSetMaxWidth(cardWidth)
 				c.UiSetMinHeight(cardMinHeight)
-				renderRowHeader(r, word, catCol)
+				renderRowHeader(r, glyph, word, catCol)
 
-				// Go field + type (both meaningless for a const), and remove.
+				// Go field + remove (the value type is its own editor below).
 				for range c.Horizontal().KeepIter() {
 					if editField(ids, "gofield", "Go field", &r.GoField, 120, !r.IsConst) {
 						m.dirty = true
 					}
-					if editField(ids, "gotype", "type", &r.GoType, 110, !r.IsConst) {
-						m.dirty = true
-					}
-					if c.Button(ids.PrepareStr("rm"), c.Atoms().Text("remove").Keep()).SendResp().HasPrimaryClicked() {
-						remove = true
+					// Icon-only remove (× via IconClose), tooltip-described for
+					// discoverability — matches the inspector's icon-affordance style.
+					for range c.HoverText("remove field").KeepIter() {
+						if c.Button(ids.PrepareStr("rm"), c.Atoms().Text(icons.IconClose).Keep()).Small().SendResp().HasPrimaryClicked() {
+							remove = true
+						}
 					}
 				}
+
+				// Value type — authored as a leeway canonical (ADR-0008) via the
+				// canonicaltypeedit bar/form, in place of a Go-type text box. Greyed
+				// for a const (a const carries a literal, not a value-type field).
+				renderTypeEditor(ids, m, r)
 
 				// Binding: membership, section, sub-column. A sub-column only
 				// applies to a tagged value field (not plain, not const).
@@ -263,9 +283,10 @@ func renderRow(ids *c.WidgetIdStack, m *Model, r *FieldRow) (remove bool) {
 	return
 }
 
-// renderRowHeader draws the category word (coloured), the field name, and the
-// live assembled lw: tag.
-func renderRowHeader(r *FieldRow, word string, catCol styletokens.RGBA8) {
+// renderRowHeader draws the category glyph + word (coloured, echoing the
+// schemaview navigator), the field name, and the live assembled lw: tag
+// (monospace, since it is a code string).
+func renderRowHeader(r *FieldRow, glyph, word string, catCol styletokens.RGBA8) {
 	name := r.GoField
 	if name == "" {
 		name = r.Section
@@ -274,7 +295,7 @@ func renderRowHeader(r *FieldRow, word string, catCol styletokens.RGBA8) {
 		name = "field"
 	}
 	for range c.Horizontal().KeepIter() {
-		for rt := range c.RichTextLabelColored(color.Hex(catCol.AsHex()).Keep(), color.Transparent.Keep(), word) {
+		for rt := range c.RichTextLabelColored(color.Hex(catCol.AsHex()).Keep(), color.Transparent.Keep(), glyph+" "+word) {
 			rt.Small()
 		}
 		c.AddSpace(6)
@@ -283,25 +304,46 @@ func renderRowHeader(r *FieldRow, word string, catCol styletokens.RGBA8) {
 		}
 		c.AddSpace(8)
 		for rt := range c.RichTextLabel(`lw:"` + r.LWTag() + `"`) {
-			rt.Small()
+			rt.Weak().Small().Monospace()
 		}
 	}
 }
 
-// renderRowFlags draws the channel picker, the unit/explode/const flags, and
-// the element-shape toggles, disabling every control whose toggle would compose
-// an invalid field. A control stays interactive while it is on, so a state that
-// became invalid (e.g. by changing the shape) can always be backed out.
+// renderTypeEditor renders the per-row canonical type editor (the
+// canonicaltypeedit bar/form), greyed for a const row, and marks the model
+// dirty when the canonical changes (the editor exposes no change signal, so we
+// compare it frame-to-frame).
+func renderTypeEditor(ids *c.WidgetIdStack, m *Model, r *FieldRow) {
+	for range c.Scope().KeepIter() {
+		if r.IsConst {
+			c.UiDisable()
+		}
+		r.typeModel.Render(ids, "ctype")
+	}
+	if cur := r.typeModel.Canonical(); cur != r.lastCanonical {
+		r.lastCanonical = cur
+		m.dirty = true
+	}
+}
+
+// renderRowFlags draws the channel picker, the Option[T] presence flag, and the
+// unit/explode/const flags, disabling any control whose toggle would compose an
+// invalid field. Multiplicity ([]T / roaring) now lives in the canonical type
+// (HomogenousArray / Set modifier), not separate toggles; it is read back here
+// to gate explode/unit/Option. A control stays interactive while on, so a state
+// that became invalid (e.g. by editing the type) can always be backed out.
 func renderRowFlags(ids *c.WidgetIdStack, m *Model, r *FieldRow) {
-	isMulti := r.IsSlice || r.IsRoaring
-	optEnabled := !r.IsConst && (r.IsOption || (!r.IsSlice && !r.IsRoaring))
-	sliceEnabled := !r.IsConst && (r.IsSlice || (!r.IsOption && !r.IsRoaring))
-	roarEnabled := !r.IsConst && (r.IsRoaring || (!r.IsOption && !r.IsSlice))
+	mod, _ := canonicaltypes.GetScalarModifier(r.typeModel.Node())
+	isMulti := mod == canonicaltypes.ScalarModifierHomogenousArray || mod == canonicaltypes.ScalarModifierSet
+	optEnabled := !r.IsConst && (r.IsOption || !isMulti)   // Option only over a scalar value type
 	explodeEnabled := !r.IsConst && (r.Explode || isMulti) // explode requires a multi shape
 	unitEnabled := r.Unit || !(isMulti && !r.Explode)      // unit on a multi shape requires explode
 
 	for range c.Horizontal().KeepIter() {
 		renderChannelCombo(ids, m, r)
+		if toggle(ids, "opt", "Option[T]", &r.IsOption, optEnabled) {
+			m.dirty = true
+		}
 		if toggle(ids, "unit", "unit", &r.Unit, unitEnabled) {
 			m.dirty = true
 		}
@@ -317,33 +359,21 @@ func renderRowFlags(ids *c.WidgetIdStack, m *Model, r *FieldRow) {
 			}
 		}
 	}
-
-	for range c.Horizontal().KeepIter() {
-		for rt := range c.RichTextLabel("shape") {
-			rt.Small()
-		}
-		c.AddSpace(4)
-		if toggle(ids, "opt", "Option[T]", &r.IsOption, optEnabled) {
-			m.dirty = true
-		}
-		if toggle(ids, "slice", "[]T", &r.IsSlice, sliceEnabled) {
-			m.dirty = true
-		}
-		if toggle(ids, "roaring", "roaring", &r.IsRoaring, roarEnabled) {
-			m.dirty = true
-		}
-	}
 }
 
-// rowCategory classifies a row for the header colour-bar / word.
-func rowCategory(r *FieldRow) (word string, col styletokens.RGBA8) {
+// rowCategory classifies a row in leeway's own vocabulary: plain (◆) and
+// tagged (◇) are leeway's two membership categories — matching the schemaview
+// navigator's glyphs (◆ plain item-types, ◇ tagged sections) — while const (▪)
+// is a mappingplan refinement (a constant declared on a tagged `_` field). The
+// colour tints the header bar and category word.
+func rowCategory(r *FieldRow) (glyph, word string, col styletokens.RGBA8) {
 	switch {
 	case r.IsConst:
-		return "const", styletokens.WarningDefault
+		return "▪", "const", styletokens.WarningDefault
 	case r.Membership == "":
-		return "plain", styletokens.InfoDefault
+		return "◆", "plain", styletokens.InfoDefault
 	default:
-		return "value", styletokens.AccentDefault
+		return "◇", "tagged", styletokens.AccentDefault
 	}
 }
 
@@ -362,6 +392,22 @@ func editField(ids *c.WidgetIdStack, key, hint string, val *string, width float3
 			c.UiDisable()
 		}
 		changed = c.TextEdit(ids.PrepareStr(key), *val, false).HintText(hint).DesiredWidth(width).SendRespVal(val).HasChanged()
+	}
+	return
+}
+
+// labeledField stacks a weak caption above a text field — schemaview's
+// label-over-value rhythm — and wraps the input in a HoverText scope so the
+// fuller tip describes its role on hover. The plan-identity inputs are always
+// editable, so there is no disable path.
+func labeledField(ids *c.WidgetIdStack, key, label, tip, hint string, val *string, width float32) (changed bool) {
+	for range c.Vertical().KeepIter() {
+		for rt := range c.RichTextLabel(label) {
+			rt.Weak().Small()
+		}
+		for range c.HoverText(tip).KeepIter() {
+			changed = editField(ids, key, hint, val, width, true)
+		}
 	}
 	return
 }

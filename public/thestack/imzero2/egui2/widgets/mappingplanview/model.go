@@ -3,10 +3,10 @@ package mappingplanview
 import (
 	"strings"
 
-	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/canonicaltypeedit"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/pager"
 )
@@ -26,11 +26,14 @@ type FieldRow struct {
 	uid uint64
 
 	GoField string // DTO field name (ignored for IsConst rows)
-	GoType  string // inner element source-form type: uint64 / string / []byte / [16]byte / time.Time / *roaring.Bitmap / ...
 
-	IsOption  bool // option.Option[T]
-	IsSlice   bool // []T element slice
-	IsRoaring bool // *roaring.Bitmap
+	// typeModel authors the field's value type as a leeway canonical
+	// (ADR-0008): the bar accepts e.g. "u64" / "u64h" (array) / "u32s"
+	// (roaring set); PlanBuilder derives the Go type + multiplicity from it.
+	typeModel     *canonicaltypeedit.Model
+	lastCanonical string // last canonical seen, to mark the model dirty on edit
+
+	IsOption bool // option.Option[T] — presence, orthogonal to the value type
 
 	Membership string // lw: first segment; "" ⇒ plain column
 	Section    string // lw: second segment (plain column name when Membership == "")
@@ -79,34 +82,29 @@ func (r *FieldRow) LWTag() string {
 	return sb.String()
 }
 
-// Shape returns the FieldShape this row's type bits describe, ready to hand to
-// PlanBuilder.AddField. The shape is canonical-native, so the row's GoType /
-// IsSlice / IsRoaring bits are mapped to a leeway canonical here (the inverse
-// of PlanBuilder's canonical→Go derivation); an unrecognised GoType yields a
-// nil Canonical, which AddField rejects with a clear error the host surfaces.
-// Carrier types are not modelled in v1, so CarrierType stays "".
+// Shape returns the FieldShape this row describes, ready to hand to
+// PlanBuilder.AddField. The value type is authored canonically (typeModel), so
+// Shape just forwards its node; an invalid/empty editor yields a nil Canonical,
+// which AddField rejects with a clear error the host surfaces. Carrier types
+// are not modelled in v1, so CarrierType stays "".
 func (r *FieldRow) Shape() mappingplan.FieldShape {
-	if r.IsRoaring {
-		// A roaring bitmap is a Set of uint32; GoType is "*roaring.Bitmap".
-		return mappingplan.FieldShape{
-			Canonical: canonicaltypes.PromoteScalarPrim(mappingplan.RoaringElemCanonical(), canonicaltypes.ScalarModifierSet),
-			IsOption:  r.IsOption,
-		}
-	}
-	// GoType is the scalar element spelling (uint64 / string / []byte /
-	// [16]byte / time.Time / …). An unmapped spelling leaves Canonical nil.
-	scalar, err := mappingplan.ScalarCanonicalForGoType(r.GoType)
-	if err != nil {
-		return mappingplan.FieldShape{IsOption: r.IsOption}
-	}
-	canonical := scalar
-	if r.IsSlice {
-		canonical = canonicaltypes.PromoteScalarPrim(scalar, canonicaltypes.ScalarModifierHomogenousArray)
-	}
 	return mappingplan.FieldShape{
-		Canonical: canonical,
+		Canonical: r.typeModel.Node(),
 		IsOption:  r.IsOption,
 	}
+}
+
+// SetGoType seeds the row's value type from a Go source-type spelling — a
+// convenience for examples and the default new-row type that mirror a Go DTO;
+// the editor itself authors the canonical directly. An unmapped spelling leaves
+// the type empty (the editor then shows it invalid).
+func (r *FieldRow) SetGoType(goType string) {
+	cn, err := mappingplan.ScalarCanonicalForGoType(goType)
+	if err != nil {
+		return
+	}
+	r.typeModel.SetCanonical(cn.String())
+	r.lastCanonical = r.typeModel.Canonical()
 }
 
 // Model is the editable state of the playground: the plan identity, the
@@ -149,7 +147,8 @@ func NewModel(kind, packageName, kindType string) *Model {
 // to populate. Marks the model dirty.
 func (m *Model) AddRow() *FieldRow {
 	m.nextUID++
-	r := &FieldRow{uid: m.nextUID}
+	r := &FieldRow{uid: m.nextUID, typeModel: canonicaltypeedit.NewModel()}
+	r.SetGoType("uint64") // sensible default value type
 	m.Fields = append(m.Fields, r)
 	m.dirty = true
 	return r
