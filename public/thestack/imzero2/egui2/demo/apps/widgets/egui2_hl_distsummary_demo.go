@@ -143,17 +143,21 @@ func buildDistsumDemoRows() (out []*distsumDemoRow) {
 		mu   float64
 		sig  float64
 		seed int64
+		// skewed swaps the symmetric Gaussian for a right-skewed burst shape —
+		// a tight cluster at mu±sig punctuated by periodic high spikes — so one
+		// row exercises the long-tailed ECDF the inspector is built to read.
+		skewed bool
 	}
 	variants := []variant{
-		{"p50 ≈ 3 ms", 3.0, 0.5, 11},
-		{"p50 ≈ 12 ms", 12.0, 2.0, 22},
-		{"heavy-tailed", 50.0, 15.0, 33},
-		{"narrow", 0.10, 0.01, 44},
+		{name: "p50 ≈ 3 ms", mu: 3.0, sig: 0.5, seed: 11},
+		{name: "p50 ≈ 12 ms", mu: 12.0, sig: 2.0, seed: 22},
+		{name: "heavy-tailed", mu: 60.0, sig: 1.5, seed: 33, skewed: true},
+		{name: "narrow", mu: 0.10, sig: 0.01, seed: 44},
 		// Large- and small-scale rows exercise the humanized formatter's SI
 		// metric prefixes (up: 400M / 2G; down: ~10–90µ) — the in-band rows
 		// above stay plain, so the two groups read side by side.
-		{"payload ≈ 2 GB", 2.0e9, 4.0e8, 55},
-		{"jitter ≈ 50 µs", 5.0e-5, 1.0e-5, 66},
+		{name: "payload ≈ 2 GB", mu: 2.0e9, sig: 4.0e8, seed: 55},
+		{name: "jitter ≈ 50 µs", mu: 5.0e-5, sig: 1.0e-5, seed: 66},
 	}
 	// Per-row provenance subjects — exercise the inspector.ProvenanceChip
 	// migration on the level-2 hover popup. Subjects shaped like the
@@ -186,6 +190,11 @@ func buildDistsumDemoRows() (out []*distsumDemoRow) {
 		data := make([]float64, n)
 		for i := range data {
 			data[i] = v.mu + v.sig*rnd.NormFloat64()
+			// Skewed variant: replace every 40th draw with a high burst
+			// (≈200–735) so the tight cluster at mu grows a long upper tail.
+			if v.skewed && i%40 == 0 {
+				data[i] = 200 + 535*rnd.Float64()
+			}
 		}
 		d := tdigest.NewTDigest()
 		for _, x := range data {
