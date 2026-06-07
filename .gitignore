@@ -8,6 +8,15 @@
 *.so
 *.dylib
 
+# Compiled Go command binaries built at repo root (extensionless on Linux, so
+# the *.exe/*.so patterns above don't catch them — listed explicitly, anchored
+# so identically-named subdirs/packages are unaffected).
+/app
+/boxer
+/envgen
+/imzero2
+/licensegate
+
 # Test binary, built with `go test -c`
 *.test
 
@@ -26,6 +35,9 @@ go.work
 # Local analysis outputs at repo root (anchored so subdirs are unaffected).
 /report.md
 /summary.md
+/assessment.gen.md
+/out.json
+/results.json
 
 # Rust build artifacts — cargo target directories under rust/<crate>/target.
 rust/*/target/
