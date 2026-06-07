@@ -78,6 +78,16 @@ The clean-room path (D2) and the small pure-Go Sugiyama dep (D3) are **explicitl
 - **Engine swap** to a pure-Go Sugiyama (D3) or clean-room (D2) — gated on blob-size/quality pressure; non-breaking via the seam.
 - **SVG/PNG export/preview mode** (R3) — cheap given `goccy` renders these directly; useful for docs/headless, not the interactive widget.
 
+## Alternatives
+
+The options are weighed per-question in [Design space (compact)](#design-space-compact); the rejected/deferred ones, and why:
+
+- **Client-side layout** (Q1-β) — ship the graph to Rust and run a layout engine there. Rejected: it duplicates capability the Go host already has (the DOT emitter is in Go), and host-side layout is deterministic and testable in Go.
+- **Clean-room Sugiyama in Go** (Q2-D2) — sovereign and tailored, but layered layout done *well* is a large, deep effort, and a v1 would ship visibly worse than Graphviz. Boxer's bar for reimplementation is isomorphism or closed-loop observability, neither of which generic graph layout has — so it is deferred behind the seam, not adopted for v1.
+- **Small pure-Go Sugiyama dependency** (Q2-D3, e.g. `gverger/go-graph-layout`) — cgo-free and tiny, but immature and well below Graphviz quality. Kept as the fallback the `LayoutEngine` seam can swap to under blob-size/quality pressure.
+- **Replay Graphviz draw-ops / `xdot`** (Q3-R2) — higher fidelity, but needs new filled-polygon and ellipse `PaintCmd`s; deferred as a fidelity upgrade.
+- **Render SVG/PNG and show as an image** (Q3-R3) — simplest, but loses interactivity; a possible export/preview mode, not the primary widget.
+
 ## Consequences
 
 - **+** Correct layout semantics for directed flow graphs (FSM, DAG, leeway pipeline) — the actual fix for "the state-machine view is hard to read", not just framing.
@@ -93,6 +103,24 @@ The clean-room path (D2) and the small pure-Go Sugiyama dep (D3) are **explicitl
 2. **First consumer** → `fsmview`'s Graph tab adopts `layeredgraph` (the canonical directed-flow demonstration).
 3. **Interactivity** → v1 ships fit-to-view + hover/click; **pan/zoom deferred to v2**; node dragging out of scope.
 4. **License** → accepted; `goccy/go-graphviz` handles the EPL↔MIT compatibility (MIT wrapper + unmodified EPL `graphviz.wasm` artifact).
+
+## Status
+
+Accepted (2026-06-06, reviewed by p@stergiotis). The decision is in force; the `LayoutEngine` seam keeps the engine choice (Graphviz → D3/D2) swappable without breaking consumers, and `fsmview`'s Graph tab is the first consumer (see [Resolutions at acceptance](#resolutions-at-acceptance-2026-06-06)). ADRs are append-only; a later engine or rendering change is a Tier 1/2 edit unless it reverses the decision, which would be a superseding ADR.
+
+## Updates
+
+### 2026-06-07 — why box metrics use Helvetica, not the render font
+
+`goccyengine` lays out every node with `fontname=Helvetica` while the painter draws the label in the UI sans font (Noto Sans). This is a **constraint of the embedded engine, not a free choice** — recorded so it is not re-investigated:
+
+- The embedded `graphviz.wasm` measures text during `dot` with its **built-in PostScript estimator**: average-character-width tables for the standard-35 PS families (Times, **Helvetica**, Courier, Symbol). `goccy` registers **no** Go-side text-layout engine (the `TextLayoutEngine` WASM bridge is generated but never wired), and no pango/cairo/gd plugin is compiled in — so nothing can make the WASM engine shape a real TrueType font; an unknown `fontname` (`NotoSans`) just maps back to a default PS family.
+- `goccy`'s TrueType/freetype `FontLoader` lives only in the **PNG raster path** (`gvc/image_renderer.go`). We consume `XDOT` *geometry* (Q3-R1) and never call `RenderImage`, so a loaded font cannot reach our box sizes.
+- Of the families the estimator knows, **Helvetica** (sans) is closest to Noto Sans; the default **Times** (a narrow serif) under-measures the wider sans and long labels overflow the box in the painter. A small node-`margin` bump absorbs the residual Helvetica↔Noto difference. See [`goccyengine.go`](../../public/thestack/imzero2/egui2/widgets/layeredgraph/goccyengine/goccyengine.go).
+
+**Exact alignment would mean bypassing the estimator**: plumb the configured main-font TTF into the Go render loop (today it reaches only the Rust client, as a launch arg — [`application.go`](../../public/thestack/imzero2/application/application.go)), measure each label with a Go shaper matching egui's `ab_glyph`/`rustybuzz` advances (still approximate, cross-language), bake the variable font (`NotoSans[wght]`) to egui's weight, and feed Graphviz fixed `width`/`height` + `fixedsize=true`. A real project with cross-engine metric risk, for a gap the margin already hides — **deferred** behind the `LayoutEngine` seam (the natural home is a pure-Go Sugiyama that could share the renderer's shaper).
+
+Also recorded (append-only, non-reversing): the view gained a per-node `NodeText` hook so a graph mixing light/dark node fills can pair label ink per node; `Layout` now reports the `FontSize` it sized boxes to and the view paints node labels at it — single-sourcing the box-metric and render font sizes so they cannot drift. `apps/capinspector`'s broker schematic is the **second consumer** after `fsmview`.
 
 ## References
 
