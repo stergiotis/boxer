@@ -27,6 +27,16 @@ This carries a few obligations:
 
 The "no PR branches" assumption is shared with the [documentation standard](./doc/DOCUMENTATION_STANDARD.md) and suits a small, AI-assisted team where review happens as work lands rather than at a merge gate.
 
+## Design Before Code
+
+For a **new package or a significant architectural change**, the first deliverable is a design, not an implementation. Sketch the package layout, the key interfaces, and the trade-offs; iterate over a few short rounds; and freeze the result as an ADR under `doc/adr/` before writing the code it describes.
+
+This holds even when the request reads as "add a package that does X" or "integrate Y" — the response is a design to review, not a finished package. Trunk-based development has no merge gate to catch a wrong direction late (see [Version Control](#version-control)), so the alignment happens up front and is recorded where the next reader will look.
+
+*   **Iterate, then freeze.** Present concrete options with their trade-offs and let the decision settle before implementing. Capture it with the ADR template at [`doc/templates/adr/0000-template.md`](./doc/templates/adr/0000-template.md); use a QOC matrix when there are ≥3 viable options against ≥3 criteria (see [§1 of DOCUMENTATION_STANDARD.md](./doc/DOCUMENTATION_STANDARD.md#1-artifact-types--where-they-belong)).
+*   **Implement against the accepted decision.** Start coding once the ADR is `accepted`; the ADR is then the contract the code follows. A later change of direction is a new or superseding ADR, not a silent divergence in the implementation.
+*   **Scope.** This covers new packages, new subsystems, and changes that cross package boundaries or revise a cross-cutting contract. Bug fixes, local refactors, and additions that fit an existing package's established shape do not need an ADR first.
+
 ## Go Version
 Target the most recent stable go version available.
 
