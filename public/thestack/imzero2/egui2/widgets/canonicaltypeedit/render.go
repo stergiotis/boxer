@@ -10,6 +10,11 @@ import (
 
 const editorMinWidth = 460
 
+// formHeaderLabel titles the collapsing disclosure that hides the structured
+// form, keeping the editor compact (only the formula bar shows until the user
+// un-collapses it).
+const formHeaderLabel = "structured editor"
+
 type familyOpt struct {
 	key, label string
 	fam        familyE
@@ -86,15 +91,26 @@ func (m *Model) Render(ids *c.WidgetIdStack, scopeKey string) {
 	}
 }
 
-// renderEditBody draws the formula bar + structured form and applies the
-// ADR-0067 §SD2 edge-ownership sync, mutating the draft in place. It assumes
-// the caller has already opened an IdScope and a layout container. Returns
-// whether the type changed this frame — the signature editor uses this to know
-// when to reassemble.
+// renderEditBody draws the formula bar + collapsible structured form and
+// applies the ADR-0067 §SD2 edge-ownership sync, mutating the draft in place.
+// It assumes the caller has already opened an IdScope and a layout container.
+// Returns whether the type changed this frame — the signature editor uses this
+// to know when to reassemble.
 func (m *Model) renderEditBody(ids *c.WidgetIdStack) (changed bool) {
 	barChanged := m.renderBar(ids)
-	c.Separator().Send()
-	formChanged := m.renderForm(ids)
+
+	// The grammar-mirroring form lives behind a disclosure so the editor opens
+	// compact — only the formula bar shows until the user un-collapses it. The
+	// body still emits its opcodes every frame while collapsed (ADR-0012), but
+	// that cannot clobber the draft: the FFI writes databindings back only for
+	// Rust-rendered widgets, so a hidden control reports neither a value nor a
+	// change and the edge-ownership rule below still reads formChanged=false.
+	var formChanged bool
+	for range c.CollapsingHeader(ids.PrepareStr("form"), c.WidgetText().Text(formHeaderLabel).Keep()).
+		DefaultOpen(false).
+		KeepIter() {
+		formChanged = m.renderForm(ids)
+	}
 
 	// Edge ownership: at most one side was edited this frame.
 	switch {
