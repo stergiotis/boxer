@@ -322,3 +322,71 @@ func TestShouldWarnSlowFrame_GatesOnWorkNotTotal(t *testing.T) {
 		})
 	}
 }
+
+func TestPushFps_RefreshesOnCadence(t *testing.T) {
+	fm := NewFrameMetrics()
+	// No rebuild until the cadence boundary is crossed: the digest stays empty.
+	for range fpsDigestRefreshFrames - 1 {
+		fm.pushFps(60)
+	}
+	if got := fm.FpsDigest().Count(); got != 0 {
+		t.Errorf("digest Count before first refresh: got %d want 0", got)
+	}
+	fm.pushFps(60) // crosses the boundary -> first rebuild
+	if got := fm.FpsDigest().Count(); got != int64(fpsDigestRefreshFrames) {
+		t.Errorf("digest Count after first refresh: got %d want %d", got, fpsDigestRefreshFrames)
+	}
+}
+
+func TestPushFps_WindowCapsCount(t *testing.T) {
+	fm := NewFrameMetrics()
+	// Push well past the window, landing on a cadence boundary so the final
+	// rebuild reflects the full (capped) window rather than an all-time count.
+	n := fpsWindowFrames + 5*fpsDigestRefreshFrames
+	for range n {
+		fm.pushFps(60)
+	}
+	if fm.fpsRingLen != fpsWindowFrames {
+		t.Errorf("fpsRingLen: got %d want %d (window must cap)", fm.fpsRingLen, fpsWindowFrames)
+	}
+	if got := fm.FpsDigest().Count(); got != int64(fpsWindowFrames) {
+		t.Errorf("digest Count: got %d want %d (windowed, not all-time)", got, fpsWindowFrames)
+	}
+}
+
+func TestPushFps_MedianRobustToSlowFrame(t *testing.T) {
+	// The headline median must not lurch when a single frame stalls — the
+	// failure mode of 1/EMA(period). One 10 fps hitch in an otherwise steady
+	// 60 fps window leaves the median near 60; the hitch lives in the tail.
+	fm := NewFrameMetrics()
+	fm.pushFps(10) // the stall
+	for range fpsWindowFrames - 1 {
+		fm.pushFps(60)
+	}
+	d := fm.FpsDigest()
+	if med := d.Quantile(0.5); med < 55 {
+		t.Errorf("median fps with one slow frame: got %v want ~60 (robust, not dragged toward 10)", med)
+	}
+	if mn := d.Min(); math.Abs(mn-10) > 1e-6 {
+		t.Errorf("min fps should retain the hitch in the tail: got %v want 10", mn)
+	}
+}
+
+func TestPushFps_WindowEvictsOldSamples(t *testing.T) {
+	// Recency: once the window turns over, the old regime is gone entirely —
+	// the property an all-time (non-forgetting) digest cannot provide.
+	fm := NewFrameMetrics()
+	for range fpsWindowFrames {
+		fm.pushFps(30) // old regime
+	}
+	for range fpsWindowFrames {
+		fm.pushFps(90) // new regime fully displaces the old
+	}
+	d := fm.FpsDigest()
+	if med := d.Quantile(0.5); math.Abs(med-90) > 1e-6 {
+		t.Errorf("median after window turnover: got %v want 90 (old 30 fps regime evicted)", med)
+	}
+	if mn := d.Min(); math.Abs(mn-90) > 1e-6 {
+		t.Errorf("min after turnover should see the new regime only: got %v want 90", mn)
+	}
+}

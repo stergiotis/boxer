@@ -10,6 +10,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
+	"github.com/stergiotis/boxer/public/analytics/stats/tdigest"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
 )
 
@@ -44,6 +45,19 @@ const slowFrameTopNScopes = 4
 // the overlay. 0.1 ≈ 10-frame effective window — stable enough to read at
 // 60 Hz, responsive enough that a regression shows up within ~150 ms.
 const emaAlpha float64 = 0.1
+
+// fpsWindowFrames is the size of the sliding window backing the overlay's
+// frame-rate distribution. 240 ≈ 4 s at 60 Hz — long enough for stable
+// quantiles, short enough that during interaction the window is all-active
+// so idle-heartbeat frames (reactive cadence) don't dominate the median.
+const fpsWindowFrames = 240
+
+// fpsDigestRefreshFrames is how often the windowed t-digest is rebuilt from
+// the ring. The distribution barely moves frame-to-frame, so rebuilding
+// every 6 frames (~10 Hz) keeps the overlay current at negligible cost; the
+// overlay reads the persistent digest every frame regardless, so the
+// 5-number anchor never looks stale.
+const fpsDigestRefreshFrames = 6
 
 // FrameMetrics holds per-frame counters captured on the Go side. The struct
 // is single-threaded by construction: the imzero2 frame loop runs in one
@@ -81,10 +95,25 @@ type FrameMetrics struct {
 	EmaInterpretNs float64
 
 	emaInitialized bool
+
+	// Sliding-window frame-rate distribution. Raw per-frame fps samples live
+	// in a fixed-N ring; fpsDigest is rebuilt from the ring every
+	// fpsDigestRefreshFrames and handed to the overlay's distsummary widget.
+	// The ring evicts the oldest sample exactly, so Min/Max/Count over the
+	// digest stay windowed — the recency a weight-decaying digest can't give
+	// (merged centroids can't be un-merged, and its extrema never age out).
+	fpsRing      []float64
+	fpsRingIdx   int
+	fpsRingLen   int
+	fpsRefreshCt int
+	fpsDigest    *tdigest.TDigest
 }
 
 func NewFrameMetrics() *FrameMetrics {
-	return &FrameMetrics{}
+	return &FrameMetrics{
+		fpsRing:   make([]float64, fpsWindowFrames),
+		fpsDigest: tdigest.NewTDigest(),
+	}
 }
 
 // Current is the singleton consumed by the overlay widget and written to
@@ -136,8 +165,64 @@ func (inst *FrameMetrics) EndFrame() {
 		inst.EmaTotalNs = ema(inst.EmaTotalNs, float64(totalNs))
 	}
 
+	// Feed the sliding-window frame-rate distribution with this frame's raw
+	// instantaneous fps (not the EMA): the window's quantiles then capture
+	// true frame-to-frame spread, and a single slow frame lands in the
+	// max/p99 tail instead of dragging a smoothed scalar — the failure mode
+	// of the former 1/EMA(period) readout.
+	if totalNs > 0 {
+		inst.pushFps(1e9 / float64(totalNs))
+	}
+
 	inst.tStart = time.Time{}
 	inst.tBeforeSync = time.Time{}
+}
+
+// pushFps records one frame's instantaneous fps into the sliding window and
+// rebuilds the windowed digest every fpsDigestRefreshFrames. The ring is a
+// plain circular buffer; a t-digest is order-insensitive, so the rebuild
+// just repushes the live entries. Lazily initialises its backing storage so
+// a zero-value FrameMetrics stays usable.
+func (inst *FrameMetrics) pushFps(fps float64) {
+	if inst.fpsRing == nil {
+		inst.fpsRing = make([]float64, fpsWindowFrames)
+	}
+	inst.fpsRing[inst.fpsRingIdx] = fps
+	inst.fpsRingIdx++
+	if inst.fpsRingIdx >= len(inst.fpsRing) {
+		inst.fpsRingIdx = 0
+	}
+	inst.fpsRingLen = min(inst.fpsRingLen+1, len(inst.fpsRing))
+	inst.fpsRefreshCt++
+	if inst.fpsRefreshCt >= fpsDigestRefreshFrames {
+		inst.fpsRefreshCt = 0
+		inst.rebuildFpsDigest()
+	}
+}
+
+// rebuildFpsDigest resets the persistent digest and repushes the current
+// window. Reset + repush of ≤fpsWindowFrames points is microseconds and,
+// unlike weight-decay, yields exact windowed Min/Max/Count for the
+// distsummary 5-number readout.
+func (inst *FrameMetrics) rebuildFpsDigest() {
+	if inst.fpsDigest == nil {
+		inst.fpsDigest = tdigest.NewTDigest()
+	}
+	inst.fpsDigest.Reset()
+	for i := range inst.fpsRingLen {
+		inst.fpsDigest.Push(inst.fpsRing[i])
+	}
+}
+
+// FpsDigest returns the windowed frame-rate distribution for the overlay to
+// hand to a distsummary widget. The pointer is stable across frames; the
+// digest is rebuilt in place by rebuildFpsDigest. Single-threaded with the
+// frame loop (same goroutine), so no synchronisation is required.
+func (inst *FrameMetrics) FpsDigest() *tdigest.TDigest {
+	if inst.fpsDigest == nil {
+		inst.fpsDigest = tdigest.NewTDigest()
+	}
+	return inst.fpsDigest
 }
 
 // RecordBytes is called from the outer frame loop once the just-finished
