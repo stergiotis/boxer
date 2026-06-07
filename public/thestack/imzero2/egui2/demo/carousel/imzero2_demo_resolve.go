@@ -161,7 +161,7 @@ func decorateRenderer(r func() error, extraMenus func(), status *runtimestatus.S
 						// shift in cadence.
 						c.AddSpace(styletokens.GapSections(density))
 					}
-					metricsoverlay.RenderInline()
+					metricsoverlay.RenderInline(ids.PrepareStr("fps"))
 				}
 			}
 		}
