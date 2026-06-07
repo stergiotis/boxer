@@ -119,6 +119,20 @@ Accepted on 2026-05-01.
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
 ADRs are append-only; supersession is recorded, not deleted.
 
+## Updates
+
+### 2026-06-07 — `MembershipValue` moves to the `membership` package; this classifier stays the policy on top
+
+`MembershipValue`, `MembershipKindE`, and `IsPlaceholder` move to a new
+`membership` package (slimmed to the wire identity; the `HumanReadable*` fields
+become a renderer's output), together with the string↔value mapping — see
+ADR-0008. This classifier is unchanged in intent but now classifies
+`membership.MembershipValue`: `MembershipRoleE` (primary/secondary) and
+`ParamTreatmentE` stay here as the discrimination policy. The read-path
+assumption is sharpened — only **primary** memberships are discriminative and
+any one of them locates its attribute; secondaries annotate (ADR-0008).
+Layering is `membership` ← `membershiprole` ← consumers.
+
 ## References
 
 - [`../../public/semistructured/leeway/membershiprole/`](../../public/semistructured/leeway/membershiprole/) — classifier package introduced by this ADR.

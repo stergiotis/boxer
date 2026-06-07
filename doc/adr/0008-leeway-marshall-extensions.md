@@ -695,6 +695,84 @@ pairs a non-scalar value with a carrier reader yet). The one-membership-per-
 carrier-section rule (2026-06-04 Cut-2 update) and SD1's per-section channel
 uniformity are unchanged.
 
+### 2026-06-07 — Canonical-native field types (the Go DTO becomes one front-end)
+
+*No codec has a persisted or in-tree consumer that must survive, so this is a
+clean teardown of the Go-type field model — not a migration. Everything below
+deletes API rather than bridging to it.*
+
+A plan field's value type **is a canonical type** (`canonicaltypes.PrimitiveAstNodeI`).
+The struct-tag and reflect paths are two front-ends that produce it; the Go DTO
+is one implementation, not the definition of a plan's types.
+
+`FieldShape` collapses to the canonical type plus presence — `GoType`,
+`IsSlice`, and `IsRoaring` are **removed**:
+
+- array (`[]T`) and set (`*roaring.Bitmap`) are the canonical `ScalarModifier`
+  (`HomogenousArray` / `Set`);
+- the Go type is *derived* 1:1 from the canonical via
+  `canonicaltypes/codegen.GenerateGoCode` — the codec emitter and the playground's
+  Go preview both call it, so no Go type is stored anywhere in the plan;
+- `IsOption` stays: presence / cardinality is not a value type (there is no
+  nullable `ScalarModifier`).
+
+`PlanBuilder.AddField` takes a canonical node, not a Go type. The front-ends do
+the Go→canonical (N:1) classification (`marshallgen.classifyType` /
+`marshallreflect.classifyReflectType` yield a canonical + the option flag);
+`GenerateGoCode` is the canonical→Go (1:1) inverse. Both directions already
+exist — the rewiring deletes the Go-type/shape-flag triplet rather than adding
+machinery.
+
+Only the **type** axis changes here. `section` (`symbol` / `text` / `blob` / …,
+the `<section>` lw segment) and `valueaspects` (value semantics) are untouched;
+the orthogonal membership axis is reworked in the next entry.
+
+**Why this is simpler, not more.** Today a field's type is a Go string whose
+canonical meaning is resolved downstream against a target schema; canonical-native
+puts the one authoritative type *in the plan*, deletes the Go-type + two shape
+bits, and reuses two mappings that already exist (`GenerateGoCode` canonical→Go;
+front-end classification Go→canonical). The `mappingplanview` editor then authors
+the canonical type directly via `canonicaltypeedit` (ADR-0067) — no bridge, no
+decomposition.
+
+**Implementation.** `mappingplan` (`FieldShape` / `PlanBuilder` / `Plan`), both
+front-ends, and the codec emit are rewritten canonical-native in one pass (no
+consumers to migrate; checked-in `.out.go` regenerate). The editor change falls
+out of the core change rather than prototyping a separate bridge.
+
+### 2026-06-07 — `membership` package: value vs. representation; primary-locates read
+
+The membership axis is split so the delicate part — mapping strings to
+membership values — lives alone, and the write and read paths take their
+simplest shapes.
+
+**New `membership` package (value + representation, role-agnostic).** Promote
+`MembershipValue` out of `membershiprole`, slimmed to the wire identity
+(`Kind` / `LowCard` / `Ref` / `Verbatim` / `Params`) — a comparable struct that
+*is* the attribute locator key — with `MembershipKindE` and `IsPlaceholder`.
+Add its reason for being: the **string↔value mapping** — a *resolver*
+(0..n strings → values) and a *renderer* (value → string, with the
+`RefFormatter` / `VerbatimFormatter` injected here). The `HumanReadable*` fields
+leave the struct; representation is the renderer's output, not stored state.
+That is the value-population vs. string-representation split.
+
+**Write — one membership specifier per field** (already enforced: per-field
+uniqueness + per-section channel uniformity; canonical-native plans keep it).
+No 0..n on the write path.
+
+**Read — primary locates, secondary annotates.** Only primary memberships are
+discriminative, and any one of them locates its attribute by key
+`(Kind, Ref | Verbatim [, Params when ParamTreatmentIdentity])`; the reader keys
+on the first primary it sees and hangs the value plus secondary memberships off
+it. This retires the multi-membership read asymmetry the package carried.
+
+**Role stays in ADR-0007** — primary/secondary (`MembershipRoleE`) and param
+treatment (`ParamTreatmentE`), the policy that decides discrimination and what
+joins the key, remain the `membershiprole` classifier, now over
+`membership.MembershipValue`. Layering is acyclic: `membership` ←
+`membershiprole` ← consumers (card / streamreadaccess driver / leewaywidgets).
+See [ADR-0007](0007-leeway-membership-role-classifier.md).
+
 ## References
 
 - [`../../public/semistructured/leeway/mappingplan/`](../../public/semistructured/leeway/mappingplan/) — shared DTO model: `Plan`, `lw:` grammar, `PlanBuilder`, membership channels, section grouping, shape classification.
