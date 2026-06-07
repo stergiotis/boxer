@@ -71,6 +71,11 @@ type RenderOpts struct {
 	// NodeFill overrides a node's fill by id (e.g. to mark the current FSM
 	// state). Returning ok=false keeps the style default. Optional.
 	NodeFill func(id string) (col color.Color, ok bool)
+	// NodeText overrides a node's label colour by id, paired with NodeFill so a
+	// light fill can carry dark ink and a dark fill light ink — the single global
+	// Style.NodeText cannot serve both. Returning ok=false keeps Style.NodeText.
+	// Optional.
+	NodeText func(id string) (col color.Color, ok bool)
 	// EdgeStroke overrides an edge's stroke colour by endpoints (e.g. to mark
 	// the active transition). Returning ok=false keeps the style default.
 	EdgeStroke func(from, to string) (col color.Color, ok bool)
@@ -210,8 +215,14 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 				fill = c2
 			}
 		}
+		txt := st.NodeText
+		if opts.NodeText != nil {
+			if c2, ok := opts.NodeText(n.ID); ok {
+				txt = c2
+			}
+		}
 		drawNode(n.Shape, cx, cy, w, h, st, fill, hovered[n.ID])
-		c.PaintText(cx, cy, 1, 1, n.Label, st.NodeFontSize*float32(escale), st.NodeText).Send()
+		c.PaintText(cx, cy, 1, 1, n.Label, st.NodeFontSize*float32(escale), txt).Send()
 		c.PaintSenseRegion(senseIDs[i], cx-w/2, cy-h/2, w, h).Send()
 	}
 
