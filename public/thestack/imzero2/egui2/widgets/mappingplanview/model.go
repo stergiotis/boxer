@@ -3,6 +3,7 @@ package mappingplanview
 import (
 	"strings"
 
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -79,14 +80,32 @@ func (r *FieldRow) LWTag() string {
 }
 
 // Shape returns the FieldShape this row's type bits describe, ready to hand to
-// PlanBuilder.AddField. Carrier types are not modelled in v1, so CarrierType
-// stays "".
+// PlanBuilder.AddField. The shape is canonical-native, so the row's GoType /
+// IsSlice / IsRoaring bits are mapped to a leeway canonical here (the inverse
+// of PlanBuilder's canonical→Go derivation); an unrecognised GoType yields a
+// nil Canonical, which AddField rejects with a clear error the host surfaces.
+// Carrier types are not modelled in v1, so CarrierType stays "".
 func (r *FieldRow) Shape() mappingplan.FieldShape {
+	if r.IsRoaring {
+		// A roaring bitmap is a Set of uint32; GoType is "*roaring.Bitmap".
+		return mappingplan.FieldShape{
+			Canonical: canonicaltypes.PromoteScalarPrim(mappingplan.RoaringElemCanonical(), canonicaltypes.ScalarModifierSet),
+			IsOption:  r.IsOption,
+		}
+	}
+	// GoType is the scalar element spelling (uint64 / string / []byte /
+	// [16]byte / time.Time / …). An unmapped spelling leaves Canonical nil.
+	scalar, err := mappingplan.ScalarCanonicalForGoType(r.GoType)
+	if err != nil {
+		return mappingplan.FieldShape{IsOption: r.IsOption}
+	}
+	canonical := scalar
+	if r.IsSlice {
+		canonical = canonicaltypes.PromoteScalarPrim(scalar, canonicaltypes.ScalarModifierHomogenousArray)
+	}
 	return mappingplan.FieldShape{
-		GoType:    r.GoType,
+		Canonical: canonical,
 		IsOption:  r.IsOption,
-		IsSlice:   r.IsSlice,
-		IsRoaring: r.IsRoaring,
 	}
 }
 

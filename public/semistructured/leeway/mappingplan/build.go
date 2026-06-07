@@ -5,19 +5,32 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/codegen"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 )
 
 // FieldShape is the front-end-agnostic classification of a DTO field's
-// Go type. The codegen front-end (ParsePlan, walking go/ast) and the
+// value type. The codegen front-end (ParsePlan, walking go/ast) and the
 // reflect front-end (marshallreflect.buildPlan, walking reflect.Type)
 // each classify a field into this shape; every validation rule applied
 // afterwards is shared via PlanBuilder, so the two front-ends cannot
 // drift on what they accept.
+//
+// The shape is canonical-native: a field's value type is authored as a
+// leeway Canonical (canonicaltypes.PrimitiveAstNodeI). PlanBuilder derives
+// the Go-facing fields (GoType / IsSlice / IsRoaring on PlainCol /
+// TaggedField) from Canonical once via the canonical→Go rule (see
+// deriveGoShape); the rest of the pipeline keeps reading those derived
+// fields.
 type FieldShape struct {
-	GoType    string // inner element type, source-form ("uint64", "time.Time", "[4]byte", "[]byte", "*roaring.Bitmap")
-	IsOption  bool   // option.Option[T] wrapper
-	IsSlice   bool   // []T element-slice (top-level, non-byte)
-	IsRoaring bool   // *roaring.Bitmap
+	// Canonical is the leeway canonical type the field's value type maps to.
+	// For a multi-element membership it carries the HomogenousArray scalar
+	// modifier ([]T) or Set modifier (*roaring.Bitmap); for a ZeroToOne
+	// field IsOption is set alongside a scalar Canonical. "" for a carrier
+	// field (its CarrierType drives the carrier path instead).
+	Canonical canonicaltypes.PrimitiveAstNodeI
+	IsOption  bool // option.Option[T] wrapper
 
 	// CarrierType is the marshalltypes carrier struct name (e.g.
 	// "MixedLowCardRef") when the field's Go type is a Cut-2 carrier, or ""
@@ -33,6 +46,101 @@ type FieldShape struct {
 	// every other value shape (one carrier for the single / container
 	// attribute). PlanBuilder.Finish checks this matches the value shape.
 	CarrierIsSlice bool
+}
+
+// deriveGoShape maps a field's canonical value type back to the Go-facing
+// fields the rest of the pipeline reads. It is the single canonical→Go
+// rule, applied once per field in PlanBuilder.AddField / addCarrierField:
+//
+//   - The scalar modifier picks the multiplicity: HomogenousArray ⟺ a
+//     top-level `[]T` element-slice (IsSlice), Set ⟺ `*roaring.Bitmap`
+//     (IsRoaring), None ⟺ a scalar T.
+//   - goType is the element type's Go spelling, produced by the canonical
+//     code generator from the demoted (scalar) canonical — e.g. "uint64",
+//     "string", "[]byte", "[16]byte", "time.Time". The Set case is special:
+//     a roaring bitmap, not the generator's []uint32.
+//
+// This is the inverse of the front-end classifiers, so the derived
+// goType / isSlice / isRoaring equal what the old Go-type front-ends
+// produced for every supported type (keeping emitted codecs byte-identical).
+func deriveGoShape(canonical canonicaltypes.PrimitiveAstNodeI) (goType string, isSlice bool, isRoaring bool, err error) {
+	if canonical == nil {
+		err = eb.Build().Errorf("field has no canonical type — the front-end must classify the field's value type into a canonical (or set CarrierType)")
+		return
+	}
+	mod, _ := canonicaltypes.GetScalarModifier(canonical)
+	isSlice = mod == canonicaltypes.ScalarModifierHomogenousArray
+	isRoaring = mod == canonicaltypes.ScalarModifierSet
+	if isRoaring {
+		// A Set canonical's element generator would say []uint32; the codec
+		// carries it as a roaring bitmap instead.
+		goType = "*roaring.Bitmap"
+		return
+	}
+	goType, _, _, err = codegen.GenerateGoCode(canonicaltypes.DemoteToScalarPrim(canonical), encodingaspects.EmptyAspectSet)
+	return
+}
+
+// ScalarCanonicalForGoType maps a scalar Go-type spelling to its leeway
+// canonical node — the Go→canonical half of the front-end classifiers,
+// shared so the go/ast and reflect paths cannot drift. It is the exact
+// inverse of deriveGoShape's scalar (None-modifier) case: for every goType
+// it returns, GenerateGoCode(canonical, EmptyAspectSet) reproduces goType,
+// which keeps emitted codecs byte-identical.
+//
+// The front-ends handle multiplicity themselves: a `[]T` element-slice
+// promotes the returned scalar with ScalarModifierHomogenousArray, and a
+// roaring bitmap promotes a u32 scalar with ScalarModifierSet. The byte
+// shapes `[]byte` (variable blob) and `[N]byte` (fixed array) are scalar
+// byte-strings handled here directly, not slice promotions.
+func ScalarCanonicalForGoType(goType string) (c canonicaltypes.PrimitiveAstNodeI, err error) {
+	switch goType {
+	case "uint8":
+		c = canonicaltypes.MachineNumericTypeAstNode{BaseType: canonicaltypes.BaseTypeMachineNumericUnsigned, Width: 8}
+	case "uint16":
+		c = canonicaltypes.MachineNumericTypeAstNode{BaseType: canonicaltypes.BaseTypeMachineNumericUnsigned, Width: 16}
+	case "uint32":
+		c = canonicaltypes.MachineNumericTypeAstNode{BaseType: canonicaltypes.BaseTypeMachineNumericUnsigned, Width: 32}
+	case "uint64":
+		c = canonicaltypes.MachineNumericTypeAstNode{BaseType: canonicaltypes.BaseTypeMachineNumericUnsigned, Width: 64}
+	case "int8":
+		c = canonicaltypes.MachineNumericTypeAstNode{BaseType: canonicaltypes.BaseTypeMachineNumericSigned, Width: 8}
+	case "int16":
+		c = canonicaltypes.MachineNumericTypeAstNode{BaseType: canonicaltypes.BaseTypeMachineNumericSigned, Width: 16}
+	case "int32":
+		c = canonicaltypes.MachineNumericTypeAstNode{BaseType: canonicaltypes.BaseTypeMachineNumericSigned, Width: 32}
+	case "int64":
+		c = canonicaltypes.MachineNumericTypeAstNode{BaseType: canonicaltypes.BaseTypeMachineNumericSigned, Width: 64}
+	case "float32":
+		c = canonicaltypes.MachineNumericTypeAstNode{BaseType: canonicaltypes.BaseTypeMachineNumericFloat, Width: 32}
+	case "float64":
+		c = canonicaltypes.MachineNumericTypeAstNode{BaseType: canonicaltypes.BaseTypeMachineNumericFloat, Width: 64}
+	case "bool":
+		c = canonicaltypes.StringAstNode{BaseType: canonicaltypes.BaseTypeStringBool}
+	case "string":
+		c = canonicaltypes.StringAstNode{BaseType: canonicaltypes.BaseTypeStringUtf8}
+	case "[]byte":
+		// Scalar variable-length byte-string, NOT a HomogenousArray of u8.
+		c = canonicaltypes.StringAstNode{BaseType: canonicaltypes.BaseTypeStringBytes}
+	case "time.Time":
+		c = canonicaltypes.TemporalTypeAstNode{BaseType: canonicaltypes.BaseTypeTemporalUtcDatetime, Width: 64}
+	default:
+		if n, ok := FixedByteArrayLen(goType); ok {
+			// `[N]byte` — a fixed-width byte-string.
+			c = canonicaltypes.StringAstNode{BaseType: canonicaltypes.BaseTypeStringBytes, WidthModifier: canonicaltypes.WidthModifierFixed, Width: canonicaltypes.Width(n)}
+			return
+		}
+		err = eb.Build().Str("goType", goType).Errorf("no leeway canonical type for Go type")
+	}
+	return
+}
+
+// RoaringElemCanonical is the scalar element a `*roaring.Bitmap` field's
+// canonical promotes from: an unsigned 32-bit machine number (a roaring
+// bitmap is a set of uint32). PromoteScalarPrim(…, ScalarModifierSet) over
+// this is the canonical the front-ends record for roaring fields.
+func RoaringElemCanonical() canonicaltypes.PrimitiveAstNodeI {
+	return canonicaltypes.MachineNumericTypeAstNode{BaseType: canonicaltypes.BaseTypeMachineNumericUnsigned, Width: 32}
 }
 
 // FixedByteArrayLen reports the N in a fixed-length byte-array source-form
@@ -235,6 +343,18 @@ func (b *PlanBuilder) AddField(goFieldName, lwTag string, shape FieldShape) (err
 		return b.addCarrierField(goFieldName, membership, section, column, flags, shape)
 	}
 
+	// Canonical-native: derive the Go-facing shape (element type +
+	// multiplicity) once from the field's canonical value type. Every check
+	// and the appended PlainCol / TaggedField below read these derived
+	// locals; the canonical itself is carried through verbatim.
+	goType, isSlice, isRoaring, err := deriveGoShape(shape.Canonical)
+	if err != nil {
+		// shape.Canonical may be nil here (an unclassified field), so the
+		// error context must not stringify it; the wrapped error explains it.
+		err = eb.Build().Str("field", goFieldName).Errorf("derive Go type from canonical: %w", err)
+		return
+	}
+
 	// Empty membership ⇒ plain row column. The section slot names the
 	// fact-row column (id / ts / naturalKey / expiresAt). Shape is
 	// constrained per-column; flags are not allowed (plain columns have
@@ -252,9 +372,10 @@ func (b *PlanBuilder) AddField(goFieldName, lwTag string, shape FieldShape) (err
 			err = eb.Build().Str("field", goFieldName).Errorf("plain field cannot carry channel / `unit` / `explode` / `const` flags (flags apply to tagged-value attributes only)")
 			return
 		}
-		if shape.IsOption || shape.IsRoaring || shape.IsSlice {
-			// Top-level `[]byte` is recognised by the classifier as
-			// IsSlice=false GoType="[]byte", so naturalKey still passes.
+		if shape.IsOption || isRoaring || isSlice {
+			// Top-level `[]byte` is recognised by the classifier as a scalar
+			// byte-string (isSlice=false, goType="[]byte"), so naturalKey still
+			// passes.
 			err = eb.Build().Str("field", goFieldName).Errorf("plain field must be a scalar T (no Option / no slice / no roaring; top-level `[]byte` for naturalKey is allowed)")
 			return
 		}
@@ -263,15 +384,16 @@ func (b *PlanBuilder) AddField(goFieldName, lwTag string, shape FieldShape) (err
 			return
 		}
 		b.usedPlainCols[section] = goFieldName
-		err = ValidatePlainColumnShape(section, shape.GoType)
+		err = ValidatePlainColumnShape(section, goType)
 		if err != nil {
 			err = eb.Build().Str("field", goFieldName).Errorf("%w", err)
 			return
 		}
 		b.plan.PlainCols = append(b.plan.PlainCols, PlainCol{
-			Column:  section,
-			GoField: goFieldName,
-			GoType:  shape.GoType,
+			Column:    section,
+			GoField:   goFieldName,
+			GoType:    goType,
+			Canonical: shape.Canonical,
 		})
 		return
 	}
@@ -280,8 +402,8 @@ func (b *PlanBuilder) AddField(goFieldName, lwTag string, shape FieldShape) (err
 	// (per-element identity conversion in the emitted code); schema-
 	// specific section compatibility is the Go compiler's job at the
 	// BuildEntities call site.
-	if shape.IsSlice {
-		switch shape.GoType {
+	if isSlice {
+		switch goType {
 		case "string",
 			"uint8", "uint16", "uint32", "uint64",
 			"int8", "int16", "int32", "int64",
@@ -289,7 +411,7 @@ func (b *PlanBuilder) AddField(goFieldName, lwTag string, shape FieldShape) (err
 			"[]byte":
 			// OK — identity-conversion primitives, plus [][]byte.
 		default:
-			err = eb.Build().Str("field", goFieldName).Str("elemType", shape.GoType).Errorf("slice element type not yet supported")
+			err = eb.Build().Str("field", goFieldName).Str("elemType", goType).Errorf("slice element type not yet supported")
 			return
 		}
 	}
@@ -308,7 +430,7 @@ func (b *PlanBuilder) AddField(goFieldName, lwTag string, shape FieldShape) (err
 	b.usedMemberships[dupKey] = goFieldName
 
 	// Flag × shape consistency.
-	isMulti := shape.IsSlice || shape.IsRoaring
+	isMulti := isSlice || isRoaring
 	if flags.Explode && !isMulti {
 		err = eb.Build().Str("field", goFieldName).Str("flag", "explode").Errorf("`explode` requires a multi-element shape (`[]T`, `*roaring.Bitmap`, `[][]byte`)")
 		return
@@ -329,7 +451,7 @@ func (b *PlanBuilder) AddField(goFieldName, lwTag string, shape FieldShape) (err
 			err = eb.Build().Str("field", goFieldName).Str("channel", flags.Channel.String()).Errorf("mixed/parametrized value field cannot target a sub-column (`:<col>`)")
 			return
 		}
-		if shape.IsRoaring {
+		if isRoaring {
 			// A roaring set iterates in sorted order with no stable element
 			// index, so there is no well-defined element-wise pairing with a
 			// carrier slice. Scalar / Option / []T (incl. `,explode`) are
@@ -341,10 +463,11 @@ func (b *PlanBuilder) AddField(goFieldName, lwTag string, shape FieldShape) (err
 
 	b.plan.Fields = append(b.plan.Fields, TaggedField{
 		GoFieldName:  goFieldName,
-		GoType:       shape.GoType,
+		GoType:       goType,
 		IsOption:     shape.IsOption,
-		IsSlice:      shape.IsSlice,
-		IsRoaring:    shape.IsRoaring,
+		IsSlice:      isSlice,
+		IsRoaring:    isRoaring,
+		Canonical:    shape.Canonical,
 		LWMembership: membership,
 		LWSection:    section,
 		LWColumn:     column,

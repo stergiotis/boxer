@@ -360,10 +360,13 @@ type MyDTO struct {
 }
 
 func TestParse_RejectsPlainUnsupportedType(t *testing.T) {
-	// Strict 1:1: a plain column's Go type IS its entity-setter argument
-	// type, but it must still be a type the codec can project to/from an
-	// Arrow array (see mappingplan.PlainArrowArrayType). complex128 is not.
-	// (A string id, by contrast, is now accepted — that is the point of 1:1.)
+	// Canonical-native: a field's value type is classified into a leeway
+	// canonical first. complex128 has no canonical, so the front-end rejects
+	// it during type classification — before the plain-column shape check.
+	// (A string id, by contrast, is accepted — it has a canonical and is a
+	// supported plain type.) The plain-column-validation path itself (a valid
+	// canonical whose derived Go type is not a supported plain column) is
+	// covered by mappingplan's PlanBuilder unit test.
 	_, err := tryParse(t, `package foo
 type MyDTO struct {
 	_  struct{}   `+"`kind:\"my\"`"+`
@@ -371,7 +374,7 @@ type MyDTO struct {
 	Ts time.Time  `+"`lw:\",ts\"`"+`
 }
 `)
-	assertErrContains(t, err, "unsupported plain column Go type")
+	assertErrContains(t, err, "no leeway canonical type for Go type")
 }
 
 func TestParse_RejectsPlainOption(t *testing.T) {

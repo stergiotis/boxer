@@ -11,6 +11,8 @@
 // reflect pulled into this package.
 package mappingplan
 
+import "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+
 // Plan is the parsed DTO ready for emission. ParsePlan produces it from
 // a single .go source file; EmitPlan consumes it.
 type Plan struct {
@@ -31,6 +33,12 @@ type PlainCol struct {
 	Column  string // wire column name: id / ts / naturalKey / expiresAt
 	GoField string // matching DTO struct field name
 	GoType  string // matching DTO field Go type, e.g. "uint64" / "time.Time" / "[]byte"
+
+	// Canonical is the authoritative leeway canonical type the front-end
+	// classified the field's Go type into; GoType above is derived from it
+	// by PlanBuilder. Carried through for the canonical-native model and
+	// future schema-side use.
+	Canonical canonicaltypes.PrimitiveAstNodeI
 }
 
 // MembershipChannel selects one of the leeway membership channels the
@@ -281,6 +289,12 @@ type TaggedField struct {
 	IsOption  bool // option.Option[T] wrapper — Option[[]byte] uses the scalar-blob lane
 	IsSlice   bool // []T element-slice (top-level, non-byte)
 	IsRoaring bool // *roaring.Bitmap
+
+	// Canonical is the authoritative leeway canonical type the front-end
+	// classified the field's value type into; GoType / IsSlice / IsRoaring
+	// above are derived from it by PlanBuilder. Carried through for the
+	// canonical-native model and future schema-side use. "" for const fields.
+	Canonical canonicaltypes.PrimitiveAstNodeI
 
 	LWMembership string // first comma-segment of the lw: tag
 	LWSection    string // second comma-segment ("" if author omitted; section[:column])

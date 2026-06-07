@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 )
 
@@ -40,18 +41,32 @@ func buildPlan(specs ...fld) (*mappingplan.Plan, error) {
 	return b.Finish()
 }
 
-func shp(goType string) mappingplan.FieldShape { return mappingplan.FieldShape{GoType: goType} }
+// scalarCanon mirrors the front-ends: it maps a scalar Go-type spelling to
+// its leeway canonical, panicking on an unmapped type (tests pass only
+// mapped spellings; the unsupported-plain-type case builds its canonical
+// directly). PlanBuilder derives GoType / IsSlice / IsRoaring back from it.
+func scalarCanon(goType string) canonicaltypes.PrimitiveAstNodeI {
+	c, err := mappingplan.ScalarCanonicalForGoType(goType)
+	if err != nil {
+		panic(err)
+	}
+	return c
+}
+
+func shp(goType string) mappingplan.FieldShape {
+	return mappingplan.FieldShape{Canonical: scalarCanon(goType)}
+}
 func sliceShp(elem string) mappingplan.FieldShape {
-	return mappingplan.FieldShape{GoType: elem, IsSlice: true}
+	return mappingplan.FieldShape{Canonical: canonicaltypes.PromoteScalarPrim(scalarCanon(elem), canonicaltypes.ScalarModifierHomogenousArray)}
 }
 func optionShp(goType string) mappingplan.FieldShape {
-	return mappingplan.FieldShape{GoType: goType, IsOption: true}
+	return mappingplan.FieldShape{Canonical: scalarCanon(goType), IsOption: true}
 }
 func carrierShp(name string) mappingplan.FieldShape {
-	return mappingplan.FieldShape{CarrierType: name, GoType: "marshalltypes." + name}
+	return mappingplan.FieldShape{CarrierType: name}
 }
 func carrierSliceShp(name string) mappingplan.FieldShape {
-	return mappingplan.FieldShape{CarrierType: name, CarrierIsSlice: true, GoType: "marshalltypes." + name}
+	return mappingplan.FieldShape{CarrierType: name, CarrierIsSlice: true}
 }
 
 // Common building blocks.
@@ -177,7 +192,9 @@ func TestPlanBuilder_Reject(t *testing.T) {
 		{"missing kind", []fld{idCol}, "missing the `_` entity-level field"},
 		{"no plain cols", []fld{kindUS, {name: "V", lw: "v,sym", shape: shp("string")}}, "declares no plain columns"},
 		{"missing id plain", []fld{kindUS, {name: "Ts", lw: ",ts", shape: shp("time.Time")}}, "missing required plain column `id`"},
-		{"plain unsupported type", []fld{kindUS, {name: "Id", lw: ",id", shape: shp("complex128")}}, "unsupported plain column Go type"},
+		// A scalar canonical whose derived Go type (uint128) round-trips but is
+		// not a supported plain-column type — exercises ValidatePlainColumnShape.
+		{"plain unsupported type", []fld{kindUS, {name: "Id", lw: ",id", shape: mappingplan.FieldShape{Canonical: canonicaltypes.MachineNumericTypeAstNode{BaseType: canonicaltypes.BaseTypeMachineNumericUnsigned, Width: 128}}}}, "unsupported plain column Go type"},
 		{"plain unknown column", []fld{kindUS, idCol, {name: "X", lw: ",bogus", shape: shp("uint64")}}, "unknown plain column"},
 		{"plain carries a flag", []fld{kindUS, idCol, {name: "X", lw: ",ts,unit", shape: shp("time.Time")}}, "plain field cannot carry"},
 		{"plain non-scalar", []fld{kindUS, {name: "Id", lw: ",id", shape: sliceShp("uint64")}}, "plain field must be a scalar"},
@@ -200,7 +217,7 @@ func TestPlanBuilder_Reject(t *testing.T) {
 
 		// Carrier (mixed / parametrized) pairing.
 		{"carrier value with sub-column", []fld{kindUS, idCol, {name: "V", lw: "m,sec:col,mixedLowCardRef", shape: shp("uint32")}}, "cannot target a sub-column"},
-		{"carrier value roaring forbidden", []fld{kindUS, idCol, {name: "V", lw: "m,sec,mixedLowCardRef", shape: mappingplan.FieldShape{GoType: "*roaring.Bitmap", IsRoaring: true}}, {name: "C", lw: "m,sec,mixedLowCardRef", shape: carrierShp("MixedLowCardRef")}}, "cannot be a roaring bitmap"},
+		{"carrier value roaring forbidden", []fld{kindUS, idCol, {name: "V", lw: "m,sec,mixedLowCardRef", shape: mappingplan.FieldShape{Canonical: canonicaltypes.PromoteScalarPrim(mappingplan.RoaringElemCanonical(), canonicaltypes.ScalarModifierSet)}}, {name: "C", lw: "m,sec,mixedLowCardRef", shape: carrierShp("MixedLowCardRef")}}, "cannot be a roaring bitmap"},
 		{"exploded value needs slice carrier", []fld{kindUS, idCol, {name: "V", lw: "m,sec,explode,mixedLowCardRef", shape: sliceShp("uint32")}, {name: "C", lw: "m,sec,mixedLowCardRef", shape: carrierShp("MixedLowCardRef")}}, "carrier multiplicity must match"},
 		{"container value needs scalar carrier", []fld{kindUS, idCol, {name: "V", lw: "m,sec,mixedLowCardRef", shape: sliceShp("uint32")}, {name: "C", lw: "m,sec,mixedLowCardRef", shape: carrierSliceShp("MixedLowCardRef")}}, "carrier multiplicity must match"},
 		{"value carrier-channel without carrier", []fld{kindUS, idCol, {name: "V", lw: "m,sec,mixedLowCardRef", shape: shp("uint32")}}, "needs a sibling carrier"},

@@ -12,6 +12,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 )
 
@@ -146,10 +147,12 @@ func fieldNamesString(field *ast.Field) (out string) {
 }
 
 // classifyType walks an AST type expression and reports its shape as a
-// shared mappingplan.FieldShape (consumed by mappingplan.PlanBuilder). Rejects forbidden shapes:
-// `Option[[]T]` (except Option[[]byte]), `[]Option[T]`, arbitrary
-// pointers (other than `*roaring.Bitmap`), and nested generics other
-// than `option.Option`.
+// shared mappingplan.FieldShape (consumed by mappingplan.PlanBuilder).
+// It is canonical-native: the shape's value type is a leeway Canonical
+// (the Go-facing GoType / IsSlice / IsRoaring are derived from it by
+// PlanBuilder). Rejects forbidden shapes: `Option[[]T]` (except
+// Option[[]byte]), `[]Option[T]`, arbitrary pointers (other than
+// `*roaring.Bitmap`), and nested generics other than `option.Option`.
 func classifyType(expr ast.Expr) (shape mappingplan.FieldShape, err error) {
 	// option.Option[T] at the top level (functional.option in boxer).
 	if idx, ok := expr.(*ast.IndexExpr); ok {
@@ -170,10 +173,15 @@ func classifyType(expr ast.Expr) (shape mappingplan.FieldShape, err error) {
 				err = eb.Build().Errorf("option.Option[[]T] is forbidden — use []T for multi-element membership (option.Option[[]byte] is allowed as a scalar blob)")
 				return
 			}
-			shape.GoType = "[]byte"
+			shape.Canonical, err = mappingplan.ScalarCanonicalForGoType("[]byte")
 			return
 		}
-		shape.GoType, err = renderInner(idx.Index)
+		var inner string
+		inner, err = renderInner(idx.Index)
+		if err != nil {
+			return
+		}
+		shape.Canonical, err = mappingplan.ScalarCanonicalForGoType(inner)
 		return
 	}
 	// []T at the top level.
@@ -190,7 +198,7 @@ func classifyType(expr ast.Expr) (shape mappingplan.FieldShape, err error) {
 		// recursion only collapses to `*ast.Ident{byte}` when the top
 		// level is exactly `[]byte`.
 		if id, isIdent := at.Elt.(*ast.Ident); isIdent && id.Name == "byte" {
-			shape.GoType = "[]byte"
+			shape.Canonical, err = mappingplan.ScalarCanonicalForGoType("[]byte")
 			return
 		}
 		// []marshalltypes.X — a slice carrier, paired element-wise with an
@@ -202,22 +210,32 @@ func classifyType(expr ast.Expr) (shape mappingplan.FieldShape, err error) {
 			if pkg, pkgOk := sel.X.(*ast.Ident); pkgOk && pkg.Name == "marshalltypes" {
 				shape.CarrierType = sel.Sel.Name
 				shape.CarrierIsSlice = true
-				shape.GoType = "marshalltypes." + sel.Sel.Name
 				return
 			}
 		}
-		shape.IsSlice = true
-		shape.GoType, err = renderInner(at.Elt)
+		// A homogenous-array membership: classify the element to a scalar
+		// canonical, then promote it with the HomogenousArray modifier.
+		var elem string
+		elem, err = renderInner(at.Elt)
+		if err != nil {
+			return
+		}
+		var scalar canonicaltypes.PrimitiveAstNodeI
+		scalar, err = mappingplan.ScalarCanonicalForGoType(elem)
+		if err != nil {
+			return
+		}
+		shape.Canonical = canonicaltypes.PromoteScalarPrim(scalar, canonicaltypes.ScalarModifierHomogenousArray)
 		return
 	}
-	// *roaring.Bitmap — the only allowed pointer-typed field.
+	// *roaring.Bitmap — the only allowed pointer-typed field. A roaring
+	// bitmap is a Set of uint32 in the canonical model.
 	if se, ok := expr.(*ast.StarExpr); ok {
 		sel, sok := se.X.(*ast.SelectorExpr)
 		if sok {
 			pkg, pkgOk := sel.X.(*ast.Ident)
 			if pkgOk && pkg.Name == "roaring" && sel.Sel.Name == "Bitmap" {
-				shape.IsRoaring = true
-				shape.GoType = "*roaring.Bitmap"
+				shape.Canonical = canonicaltypes.PromoteScalarPrim(mappingplan.RoaringElemCanonical(), canonicaltypes.ScalarModifierSet)
 				return
 			}
 		}
@@ -231,12 +249,16 @@ func classifyType(expr ast.Expr) (shape mappingplan.FieldShape, err error) {
 	if sel, ok := expr.(*ast.SelectorExpr); ok {
 		if pkg, pkgOk := sel.X.(*ast.Ident); pkgOk && pkg.Name == "marshalltypes" {
 			shape.CarrierType = sel.Sel.Name
-			shape.GoType = "marshalltypes." + sel.Sel.Name
 			return
 		}
 	}
 	// Plain scalar (T, time.Time, fixed-length [N]byte).
-	shape.GoType, err = renderInner(expr)
+	var scalar string
+	scalar, err = renderInner(expr)
+	if err != nil {
+		return
+	}
+	shape.Canonical, err = mappingplan.ScalarCanonicalForGoType(scalar)
 	return
 }
 

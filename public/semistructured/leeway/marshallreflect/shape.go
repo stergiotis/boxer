@@ -8,6 +8,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 )
 
@@ -27,21 +28,24 @@ const roaringPkgPath = "github.com/RoaringBitmap/roaring"
 const marshalltypesPkgPath = "github.com/stergiotis/boxer/public/semistructured/leeway/marshalltypes"
 
 // classifyReflectType inspects rt and returns the corresponding shared
-// mappingplan.FieldShape (consumed by mappingplan.PlanBuilder). Forbids
-// the same Go shapes the codegen classifier forbids: Option[[]T] (except
-// Option[[]byte]), []Option[T], arbitrary pointers other than
-// *roaring.Bitmap, nested generics other than option.Option. The Go-side
-// spelling is recorded as a string so downstream comparisons use the
-// same go-type tokens the AST classifier produces ("uint64", "time.Time",
-// "[4]byte", "[]byte", "*roaring.Bitmap", …).
+// mappingplan.FieldShape (consumed by mappingplan.PlanBuilder). It is
+// canonical-native: the shape's value type is a leeway Canonical (the
+// Go-facing GoType / IsSlice / IsRoaring are derived from it by
+// PlanBuilder). Forbids the same Go shapes the codegen classifier forbids:
+// Option[[]T] (except Option[[]byte]), []Option[T], arbitrary pointers
+// other than *roaring.Bitmap, nested generics other than option.Option.
+// The Go-side spelling each reflect kind maps to is the same go-type token
+// the AST classifier produces ("uint64", "time.Time", "[4]byte", "[]byte",
+// …); both front-ends funnel those tokens through
+// mappingplan.ScalarCanonicalForGoType so they cannot drift.
 func classifyReflectType(rt reflect.Type) (s mappingplan.FieldShape, err error) {
 	switch rt.Kind() {
 
 	case reflect.Ptr:
 		elem := rt.Elem()
 		if elem.PkgPath() == roaringPkgPath && elem.Name() == "Bitmap" {
-			s.IsRoaring = true
-			s.GoType = "*roaring.Bitmap"
+			// A roaring bitmap is a Set of uint32 in the canonical model.
+			s.Canonical = canonicaltypes.PromoteScalarPrim(mappingplan.RoaringElemCanonical(), canonicaltypes.ScalarModifierSet)
 			return
 		}
 		err = eb.Build().Str("type", rt.String()).Errorf("pointer types forbidden except *roaring.Bitmap — use option.Option[T] for ZeroToOne fields")
@@ -52,7 +56,6 @@ func classifyReflectType(rt reflect.Type) (s mappingplan.FieldShape, err error) 
 		// paired with its value sibling in mappingplan.PlanBuilder.
 		if rt.PkgPath() == marshalltypesPkgPath {
 			s.CarrierType = rt.Name()
-			s.GoType = "marshalltypes." + rt.Name()
 			return
 		}
 		// option.Option[T] is the only struct shape the codec accepts
@@ -69,25 +72,25 @@ func classifyReflectType(rt reflect.Type) (s mappingplan.FieldShape, err error) 
 			vt := valField.Type
 			if vt.Kind() == reflect.Slice {
 				if vt.Elem().Kind() == reflect.Uint8 {
-					s.GoType = "[]byte"
+					s.Canonical, err = mappingplan.ScalarCanonicalForGoType("[]byte")
 					return
 				}
 				err = eb.Build().Str("type", rt.String()).Errorf("option.Option[[]T] is forbidden — use []T for multi-element membership (option.Option[[]byte] is allowed as a scalar blob)")
 				return
 			}
-			s.GoType = reflectGoTypeName(vt)
+			s.Canonical, err = mappingplan.ScalarCanonicalForGoType(reflectGoTypeName(vt))
 			return
 		}
 		// time.Time and any other pure-value struct routes through
 		// reflectGoTypeName below.
-		s.GoType = reflectGoTypeName(rt)
+		s.Canonical, err = mappingplan.ScalarCanonicalForGoType(reflectGoTypeName(rt))
 		return
 
 	case reflect.Slice:
 		elem := rt.Elem()
 		// []byte: scalar blob lane.
 		if elem.Kind() == reflect.Uint8 {
-			s.GoType = "[]byte"
+			s.Canonical, err = mappingplan.ScalarCanonicalForGoType("[]byte")
 			return
 		}
 		// []marshalltypes.X — a slice carrier, paired element-wise with an
@@ -96,7 +99,6 @@ func classifyReflectType(rt reflect.Type) (s mappingplan.FieldShape, err error) 
 		if elem.Kind() == reflect.Struct && elem.PkgPath() == marshalltypesPkgPath {
 			s.CarrierType = elem.Name()
 			s.CarrierIsSlice = true
-			s.GoType = "marshalltypes." + elem.Name()
 			return
 		}
 		// []option.Option[T] forbidden.
@@ -104,8 +106,14 @@ func classifyReflectType(rt reflect.Type) (s mappingplan.FieldShape, err error) 
 			err = eb.Build().Str("type", rt.String()).Errorf("[]option.Option[T] is forbidden — option.Option[T] is only allowed as a scalar field")
 			return
 		}
-		s.IsSlice = true
-		s.GoType = reflectGoTypeName(elem)
+		// A homogenous-array membership: classify the element to a scalar
+		// canonical, then promote it with the HomogenousArray modifier.
+		var scalar canonicaltypes.PrimitiveAstNodeI
+		scalar, err = mappingplan.ScalarCanonicalForGoType(reflectGoTypeName(elem))
+		if err != nil {
+			return
+		}
+		s.Canonical = canonicaltypes.PromoteScalarPrim(scalar, canonicaltypes.ScalarModifierHomogenousArray)
 		return
 
 	case reflect.Array:
@@ -114,11 +122,11 @@ func classifyReflectType(rt reflect.Type) (s mappingplan.FieldShape, err error) 
 			err = eb.Build().Str("type", rt.String()).Errorf("only fixed-length `[N]byte` arrays supported (e.g. [4]byte, [16]byte)")
 			return
 		}
-		s.GoType = fmt.Sprintf("[%d]byte", rt.Len())
+		s.Canonical, err = mappingplan.ScalarCanonicalForGoType(fmt.Sprintf("[%d]byte", rt.Len()))
 		return
 
 	default:
-		s.GoType = reflectGoTypeName(rt)
+		s.Canonical, err = mappingplan.ScalarCanonicalForGoType(reflectGoTypeName(rt))
 	}
 	return
 }
