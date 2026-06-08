@@ -151,7 +151,7 @@ var _ SinkI = (*MySink)(nil)
 
 ## Membership Role Classification
 
-Per boxer ADR-0007 (and pebble2impl [ADR-0017](../../adr/0007-leeway-membership-role-classifier.md)), sinks that produce attribute-centric output (JSON, data contracts, anything with a "primary key + annotations" shape) consume a `membershiprole.ClassifierI` to decide whether each `AddMembership*` call delivers a primary or secondary tag.
+Per boxer ADR-0007, sinks that produce attribute-centric output (JSON, data contracts, anything with a "primary key + annotations" shape) consume a `membershiprole.ClassifierI` to decide whether each `AddMembership*` call delivers a primary or secondary tag.
 
 The classifier interface lives in boxer at `github.com/stergiotis/boxer/public/semistructured/leeway/membershiprole`. It takes a `MembershipValue` (which mirrors the `AddMembership*` payload shapes) plus a `SectionContext` (section name + `useaspects.AspectSet`) and returns `(MembershipRoleE, ParamTreatmentE)`.
 
