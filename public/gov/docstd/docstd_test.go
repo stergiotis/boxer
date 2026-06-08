@@ -20,6 +20,7 @@ func TestValidateFrontmatter_Conformant(t *testing.T) {
 		{TypeTutorial, StatusSuperseded, false},
 		{TypeADR, StatusAccepted, true},
 		{TypeADR, StatusDeprecated, true}, // deprecated shared with descriptive set
+		{TypeADR, StatusWithdrawn, true},  // withdrawn: proposal retracted before acceptance
 	}
 	for _, c := range cases {
 		t.Run(c.docType+"/"+c.status, func(t *testing.T) {
@@ -101,6 +102,8 @@ func TestMembership(t *testing.T) {
 	require.False(t, IsType("bogus"))
 
 	require.True(t, IsStatusForType(TypeADR, StatusAccepted))
+	require.True(t, IsStatusForType(TypeADR, StatusWithdrawn))
+	require.False(t, IsStatusForType(TypeExplanation, StatusWithdrawn)) // ADR-only
 	require.False(t, IsStatusForType(TypeADR, StatusDraft))
 	require.True(t, IsStatusForType(TypeExplanation, StatusDraft))
 	require.False(t, IsStatusForType(TypeExplanation, StatusAccepted))

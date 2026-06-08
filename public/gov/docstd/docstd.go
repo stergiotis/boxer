@@ -28,11 +28,15 @@ const (
 )
 
 // ADR-only lifecycle statuses. [StatusDeprecated] and [StatusSuperseded]
-// from the descriptive set are also valid for ADRs.
+// from the descriptive set are also valid for ADRs. [StatusWithdrawn]
+// records a proposal retracted before it was ever accepted or implemented
+// — distinct from deprecated, which implies prior adoption; the ADR is
+// kept under the append-only convention as a record of the rejected option.
 const (
-	StatusProposed = "proposed"
-	StatusAccepted = "accepted"
-	StatusDeferred = "deferred"
+	StatusProposed  = "proposed"
+	StatusAccepted  = "accepted"
+	StatusDeferred  = "deferred"
+	StatusWithdrawn = "withdrawn"
 )
 
 // contentTypes is the reader-facing quadrant set (no adr), in the order
@@ -46,7 +50,7 @@ var allTypes = []string{TypeReference, TypeHowTo, TypeExplanation, TypeTutorial,
 // document type. deprecated/superseded appear in both.
 var (
 	descriptiveStatuses = []string{StatusDraft, StatusStable, StatusDeprecated, StatusSuperseded}
-	adrStatuses         = []string{StatusProposed, StatusAccepted, StatusDeferred, StatusDeprecated, StatusSuperseded}
+	adrStatuses         = []string{StatusProposed, StatusAccepted, StatusDeferred, StatusWithdrawn, StatusDeprecated, StatusSuperseded}
 )
 
 // IsContentType reports whether t is a Diátaxis content type — one of the
@@ -66,8 +70,9 @@ func IsType(t string) (ok bool) {
 
 // IsStatusForType reports whether status is a valid lifecycle state for a
 // doc of the given type. ADRs ([TypeADR]) use the proposed/accepted/
-// deferred set; every other type (including an empty or unknown one) uses
-// the descriptive set, matching the standard's required-field precedence.
+// deferred/withdrawn set (plus the shared deprecated/superseded); every
+// other type (including an empty or unknown one) uses the descriptive
+// set, matching the standard's required-field precedence.
 func IsStatusForType(docType string, status string) (ok bool) {
 	if docType == TypeADR {
 		ok = slices.Contains(adrStatuses, status)
