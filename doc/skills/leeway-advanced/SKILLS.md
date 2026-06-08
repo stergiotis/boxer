@@ -245,6 +245,49 @@ Under boxer ADR-0007 (and pebble2impl [ADR-0017](../../adr/0007-leeway-membershi
 
 The classifier interface lives in boxer at `github.com/stergiotis/boxer/public/semistructured/leeway/membershiprole`.
 
+## The membership model: three orthogonal planes
+
+The section above covers *meaning*; this places it in the full model and shows how the two catalogs that follow (Column roles, Membership types) relate to the in-memory **channel** a codec dispatches on. A membership decomposes into three independent planes — carriage ⟂ meaning ⟂ representation — with a single coupling (boxer ADR-0070 §Concept basis; carriage in boxer ADR-0072 (`$(boxer-path)/doc/adr/0072-leeway-membership-carriage.md`), role in boxer ADR-0073, which supersedes ADR-0007):
+
+- **Carriage** — how the identity rides the wire: the *channel*.
+- **Meaning** — *role* (primary defines an attribute / secondary annotates) and *param-treatment* (Identity / Index / None), decided by the classifier (see "Membership roles" above).
+- **Representation** — identity → display string, rendered read-time by a `membership.Renderer` (ref id → hex/name, verbatim → bytes, params → text). Distinct from scalar *value* formatting, which stays driver-side.
+
+The one cross-plane coupling: **a section carries a single channel**, so the reader resolves one accessor per section instead of probing every channel.
+
+### Carriage: the channel is a product
+
+A channel is `cardinality × identity × params`; the realized set is eight cells of that grid. The *identity* axis is `membership.IdentityEncoding`, the one vocabulary shared by the write-side channel and the read-side value:
+
+| Channel (`mappingplan.MembershipChannel`) | card. | identity (`IdentityEncoding`) | params | Schema spec (`MembershipSpecE`) | Physical cols (`ColumnRoleE`) |
+|---|---|---|---|---|---|
+| `LowCardRef` *(default)* | Low | `IdentityRef` | — | `LowCardRef` | `lr` |
+| `LowCardVerbatim` | Low | `IdentityVerbatim` | — | `LowCardVerbatim` | `lv` |
+| `HighCardRef` | High | `IdentityRef` | — | `HighCardRef` | `hr` |
+| `HighCardVerbatim` | High | `IdentityVerbatim` | — | `HighCardVerbatim` | `hv` |
+| `MixedLowCardRef` | Low | `IdentityPerRowId` | ✓ | `MixedLowCardRefHighCardParameters` | `lmr` + `mrhp` |
+| `MixedLowCardVerbatim` | Low | `IdentityPerRowName` | ✓ | `MixedLowCardVerbatimHighCardParameters` | `lmv` + `mvhp` |
+| `LowCardRefParametrized` | Low | `IdentityPerRowBlob` | ✓ | `LowCardRefParametrized` | `lp` |
+| `HighCardRefParametrized` | High | `IdentityPerRowBlob` | ✓ | `HighCardRefParametrized` | `hp` |
+
+A repeating membership adds a `…card` cardinality column (e.g. `lrcard`). The carrier channels (mixed / parametrized) split their per-row data across the two physical columns shown — a value half and a params half — which the driver recombines. So the `MembershipSpecE` bitfield (a section's *accepted* kinds) and the `ColumnRoleE` strings (physical Arrow columns) catalogued below are two projections of one channel.
+
+### One identity vocabulary, read and write
+
+`mappingplan.ChannelIdentityE` aliases `membership.IdentityEncoding`, and the read-side `membership.MembershipValue.Kind` *is* an `IdentityEncoding` — value and channel speak one language. The read value is **the channel minus cardinality**: each High/Low pair collapses to one of five shapes.
+
+| Read value `Kind` | from channels | live fields |
+|---|---|---|
+| `IdentityRef` | LowCardRef, HighCardRef | `Ref` |
+| `IdentityVerbatim` | LowCard/HighCardVerbatim | `Verbatim` |
+| `IdentityPerRowId` | MixedLowCardRef | `Ref`, `Params` |
+| `IdentityPerRowName` | MixedLowCardVerbatim | `Verbatim`, `Params` |
+| `IdentityPerRowBlob` | …RefParametrized | `Params` (`Ref` = 0) |
+
+`IdentityEncoding.HasParams()` is true for exactly the three `PerRow…` encodings, so the classifier derives param-treatment from it rather than re-listing them; the zero value `IdentityNone` marks an empty slot.
+
+> Two `AddMembership*` families are easy to conflate: the DML *write builder* `AddMembership<Channel>P` (channel-keyed, e.g. `AddMembershipLowCardRefP`) and the read-out sink's `AddMembership<Shape>` (the five shapes that populate `MembershipValue.Kind`).
+
 ## Column roles
 Here is a complete list of all column roles needed in leeway tables:
 ```go
