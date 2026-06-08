@@ -423,9 +423,9 @@ type indexClassifier struct{}
 func (indexClassifier) Classify(sec membershiprole.SectionContext, mv membership.MembershipValue) (role membershiprole.MembershipRoleE, pt membershiprole.ParamTreatmentE) {
 	role = membershiprole.MembershipRolePrimary
 	switch mv.Kind {
-	case membership.MembershipKindRefParametrized,
-		membership.MembershipKindMixedLowCardRefHighCardParam,
-		membership.MembershipKindMixedLowCardVerbatimHighCardParam:
+	case membership.IdentityPerRowBlob,
+		membership.IdentityPerRowId,
+		membership.IdentityPerRowName:
 		pt = membershiprole.ParamTreatmentIndex
 	default:
 		pt = membershiprole.ParamTreatmentNone

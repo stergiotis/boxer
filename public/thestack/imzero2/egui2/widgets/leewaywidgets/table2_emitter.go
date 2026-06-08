@@ -523,27 +523,27 @@ func (inst *Table2CardEmitter) BeginTags(_ int) {}
 func (inst *Table2CardEmitter) EndTags()        {}
 
 func (inst *Table2CardEmitter) AddMembershipRef(lowCard bool, ref uint64) {
-	mv := membership.MembershipValue{Kind: membership.MembershipKindRef, LowCard: lowCard, Ref: ref}
+	mv := membership.MembershipValue{Kind: membership.IdentityRef, LowCard: lowCard, Ref: ref}
 	inst.addMembership(mv, inst.renderer.RenderRef(ref), "", fmt.Sprintf("Ref ref=0x%x", ref))
 }
 
 func (inst *Table2CardEmitter) AddMembershipVerbatim(lowCard bool, verbatim string) {
-	mv := membership.MembershipValue{Kind: membership.MembershipKindVerbatim, LowCard: lowCard, Verbatim: verbatim}
+	mv := membership.MembershipValue{Kind: membership.IdentityVerbatim, LowCard: lowCard, Verbatim: verbatim}
 	inst.addMembership(mv, inst.renderer.RenderVerbatim(verbatim), "", fmt.Sprintf("Verbatim value=%q", verbatim))
 }
 
 func (inst *Table2CardEmitter) AddMembershipRefParametrized(lowCard bool, ref uint64, params string) {
-	mv := membership.MembershipValue{Kind: membership.MembershipKindRefParametrized, LowCard: lowCard, Ref: ref, Params: params}
+	mv := membership.MembershipValue{Kind: membership.IdentityPerRowBlob, LowCard: lowCard, Ref: ref, Params: params}
 	inst.addMembership(mv, inst.renderer.RenderRef(ref), inst.renderer.RenderParams(params), fmt.Sprintf("RefParametrized ref=0x%x params=%q", ref, params))
 }
 
 func (inst *Table2CardEmitter) AddMembershipMixedLowCardRefHighCardParam(ref uint64, params string) {
-	mv := membership.MembershipValue{Kind: membership.MembershipKindMixedLowCardRefHighCardParam, Ref: ref, Params: params}
+	mv := membership.MembershipValue{Kind: membership.IdentityPerRowId, Ref: ref, Params: params}
 	inst.addMembership(mv, inst.renderer.RenderRef(ref), inst.renderer.RenderParams(params), fmt.Sprintf("MixedLowCardRefHighCardParam ref=0x%x params=%q", ref, params))
 }
 
 func (inst *Table2CardEmitter) AddMembershipMixedLowCardVerbatimHighCardParam(verbatim string, params string) {
-	mv := membership.MembershipValue{Kind: membership.MembershipKindMixedLowCardVerbatimHighCardParam, Verbatim: verbatim, Params: params}
+	mv := membership.MembershipValue{Kind: membership.IdentityPerRowName, Verbatim: verbatim, Params: params}
 	inst.addMembership(mv, inst.renderer.RenderVerbatim(verbatim), inst.renderer.RenderParams(params), fmt.Sprintf("MixedLowCardVerbatimHighCardParam value=%q params=%q", verbatim, params))
 }
 

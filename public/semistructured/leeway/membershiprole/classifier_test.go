@@ -30,13 +30,13 @@ func TestDefaultClassifier_UseAspectShortCircuits(t *testing.T) {
 		{
 			name:    "AllPrimary forces primary even on plain identifier",
 			aspects: []useaspects.AspectE{useaspects.AspectSectionMembershipsAllPrimary},
-			mv:      membership.MembershipValue{Kind: membership.MembershipKindVerbatim, Verbatim: "errormsg"},
+			mv:      membership.MembershipValue{Kind: membership.IdentityVerbatim, Verbatim: "errormsg"},
 			want:    MembershipRolePrimary,
 		},
 		{
 			name:    "AllSecondary forces secondary even on path-shaped",
 			aspects: []useaspects.AspectE{useaspects.AspectSectionMembershipsAllSecondary},
-			mv:      membership.MembershipValue{Kind: membership.MembershipKindVerbatim, Verbatim: "/hostname"},
+			mv:      membership.MembershipValue{Kind: membership.IdentityVerbatim, Verbatim: "/hostname"},
 			want:    MembershipRoleSecondary,
 		},
 	}
@@ -61,27 +61,27 @@ func TestDefaultClassifier_VerbatimNamingConvention(t *testing.T) {
 	}{
 		{
 			name: "leading slash → primary",
-			mv:   membership.MembershipValue{Kind: membership.MembershipKindVerbatim, Verbatim: "/hostname"},
+			mv:   membership.MembershipValue{Kind: membership.IdentityVerbatim, Verbatim: "/hostname"},
 			want: MembershipRolePrimary,
 		},
 		{
 			name: "deep path → primary",
-			mv:   membership.MembershipValue{Kind: membership.MembershipKindVerbatim, Verbatim: "/metrics/cpu"},
+			mv:   membership.MembershipValue{Kind: membership.IdentityVerbatim, Verbatim: "/metrics/cpu"},
 			want: MembershipRolePrimary,
 		},
 		{
 			name: "plain identifier → secondary",
-			mv:   membership.MembershipValue{Kind: membership.MembershipKindVerbatim, Verbatim: "errormsg"},
+			mv:   membership.MembershipValue{Kind: membership.IdentityVerbatim, Verbatim: "errormsg"},
 			want: MembershipRoleSecondary,
 		},
 		{
 			name: "mixed-low-verbatim with path skeleton → primary",
-			mv:   membership.MembershipValue{Kind: membership.MembershipKindMixedLowCardVerbatimHighCardParam, Verbatim: "/tags/_", Params: "0"},
+			mv:   membership.MembershipValue{Kind: membership.IdentityPerRowName, Verbatim: "/tags/_", Params: "0"},
 			want: MembershipRolePrimary,
 		},
 		{
 			name: "mixed-low-verbatim with plain skeleton → secondary",
-			mv:   membership.MembershipValue{Kind: membership.MembershipKindMixedLowCardVerbatimHighCardParam, Verbatim: "annotations", Params: "severity"},
+			mv:   membership.MembershipValue{Kind: membership.IdentityPerRowName, Verbatim: "annotations", Params: "severity"},
 			want: MembershipRoleSecondary,
 		},
 	}
@@ -98,10 +98,10 @@ func TestDefaultClassifier_VerbatimNamingConvention(t *testing.T) {
 func TestDefaultClassifier_RefShapedDefaultPrimary(t *testing.T) {
 	cls := DefaultClassifier{}
 
-	for _, kind := range []membership.MembershipKindE{
-		membership.MembershipKindRef,
-		membership.MembershipKindRefParametrized,
-		membership.MembershipKindMixedLowCardRefHighCardParam,
+	for _, kind := range []membership.IdentityEncoding{
+		membership.IdentityRef,
+		membership.IdentityPerRowBlob,
+		membership.IdentityPerRowId,
 	} {
 		mv := membership.MembershipValue{Kind: kind, Ref: 42}
 		got, _ := cls.Classify(SectionContext{}, mv)
@@ -116,14 +116,14 @@ func TestDefaultClassifier_ParamTreatment(t *testing.T) {
 
 	cases := []struct {
 		name string
-		kind membership.MembershipKindE
+		kind membership.IdentityEncoding
 		want ParamTreatmentE
 	}{
-		{"ref → none", membership.MembershipKindRef, ParamTreatmentNone},
-		{"verbatim → none", membership.MembershipKindVerbatim, ParamTreatmentNone},
-		{"refParametrized → identity", membership.MembershipKindRefParametrized, ParamTreatmentIdentity},
-		{"mixedRef → identity", membership.MembershipKindMixedLowCardRefHighCardParam, ParamTreatmentIdentity},
-		{"mixedVerbatim → identity", membership.MembershipKindMixedLowCardVerbatimHighCardParam, ParamTreatmentIdentity},
+		{"ref → none", membership.IdentityRef, ParamTreatmentNone},
+		{"verbatim → none", membership.IdentityVerbatim, ParamTreatmentNone},
+		{"refParametrized → identity", membership.IdentityPerRowBlob, ParamTreatmentIdentity},
+		{"mixedRef → identity", membership.IdentityPerRowId, ParamTreatmentIdentity},
+		{"mixedVerbatim → identity", membership.IdentityPerRowName, ParamTreatmentIdentity},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -139,8 +139,8 @@ func TestDefaultClassifier_ParamTreatment(t *testing.T) {
 func TestDefaultClassifier_PathPrefixOverride(t *testing.T) {
 	cls := DefaultClassifier{PathPrefix: "tag:"}
 
-	primary := membership.MembershipValue{Kind: membership.MembershipKindVerbatim, Verbatim: "tag:hostname"}
-	secondary := membership.MembershipValue{Kind: membership.MembershipKindVerbatim, Verbatim: "/hostname"}
+	primary := membership.MembershipValue{Kind: membership.IdentityVerbatim, Verbatim: "tag:hostname"}
+	secondary := membership.MembershipValue{Kind: membership.IdentityVerbatim, Verbatim: "/hostname"}
 
 	if got, _ := cls.Classify(SectionContext{}, primary); got != MembershipRolePrimary {
 		t.Fatalf("custom prefix not honoured for primary input: got %d", got)

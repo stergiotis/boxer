@@ -7,35 +7,23 @@
 // (role); layering is membership ← membershiprole ← consumers.
 package membership
 
-// MembershipKindE discriminates the five SinkI.AddMembership* shapes. The zero
-// value is MembershipKindNone.
-type MembershipKindE uint8
-
-const (
-	MembershipKindNone                              MembershipKindE = 0
-	MembershipKindRef                               MembershipKindE = 1
-	MembershipKindVerbatim                          MembershipKindE = 2
-	MembershipKindRefParametrized                   MembershipKindE = 3
-	MembershipKindMixedLowCardRefHighCardParam      MembershipKindE = 4
-	MembershipKindMixedLowCardVerbatimHighCardParam MembershipKindE = 5
-)
-
 // MembershipValue is the slim wire identity of one membership — a comparable
 // struct that IS the attribute locator key (ADR-0072). Representation (the
 // human-readable string) is the Renderer's output, not stored here.
 //
-// Field validity depends on Kind:
+// Field validity depends on Kind — an IdentityEncoding, the vocabulary shared
+// with the write-side channel (see identity.go):
 //
-//   - MembershipKindRef:                              LowCard, Ref.
-//   - MembershipKindVerbatim:                         LowCard, Verbatim.
-//   - MembershipKindRefParametrized:                  LowCard, Ref, Params.
-//   - MembershipKindMixedLowCardRefHighCardParam:     Ref, Params.
-//   - MembershipKindMixedLowCardVerbatimHighCardParam: Verbatim, Params.
+//   - IdentityRef:        LowCard, Ref.
+//   - IdentityVerbatim:   LowCard, Verbatim.
+//   - IdentityPerRowBlob: LowCard, Params (the parametrized carrier; Ref is always 0).
+//   - IdentityPerRowId:   Ref, Params (the mixed-ref carrier).
+//   - IdentityPerRowName: Verbatim, Params (the mixed-verbatim carrier).
 //
-// A zero-valued MembershipValue has Kind == MembershipKindNone and reads as "no
+// A zero-valued MembershipValue has Kind == IdentityNone and reads as "no
 // membership"; consumers treat it as empty input rather than panicking.
 type MembershipValue struct {
-	Kind     MembershipKindE
+	Kind     IdentityEncoding
 	LowCard  bool
 	Ref      uint64
 	Verbatim string
@@ -54,11 +42,11 @@ type MembershipValue struct {
 // redundant with these (an empty slot formats to an empty string).
 func IsPlaceholder(mv MembershipValue) (placeholder bool) {
 	switch mv.Kind {
-	case MembershipKindRef, MembershipKindRefParametrized, MembershipKindMixedLowCardRefHighCardParam:
+	case IdentityRef, IdentityPerRowBlob, IdentityPerRowId:
 		placeholder = mv.Ref == 0 && mv.Params == ""
-	case MembershipKindMixedLowCardVerbatimHighCardParam:
+	case IdentityPerRowName:
 		placeholder = mv.Verbatim == "" && mv.Params == ""
-	case MembershipKindVerbatim:
+	case IdentityVerbatim:
 		placeholder = mv.Verbatim == ""
 	}
 	return

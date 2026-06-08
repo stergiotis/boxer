@@ -60,13 +60,13 @@ func (inst DefaultClassifier) classifyRole(sec SectionContext, mv membership.Mem
 		return
 	}
 	switch mv.Kind {
-	case membership.MembershipKindVerbatim, membership.MembershipKindMixedLowCardVerbatimHighCardParam:
+	case membership.IdentityVerbatim, membership.IdentityPerRowName:
 		if strings.HasPrefix(mv.Verbatim, inst.effectivePrefix()) {
 			role = MembershipRolePrimary
 		} else {
 			role = MembershipRoleSecondary
 		}
-	case membership.MembershipKindRef, membership.MembershipKindRefParametrized, membership.MembershipKindMixedLowCardRefHighCardParam:
+	case membership.IdentityRef, membership.IdentityPerRowBlob, membership.IdentityPerRowId:
 		role = MembershipRolePrimary
 	default:
 		role = MembershipRoleNone
@@ -75,13 +75,10 @@ func (inst DefaultClassifier) classifyRole(sec SectionContext, mv membership.Mem
 }
 
 func (inst DefaultClassifier) classifyParamTreatment(mv membership.MembershipValue) (paramTreatment ParamTreatmentE) {
-	switch mv.Kind {
-	case membership.MembershipKindRefParametrized,
-		membership.MembershipKindMixedLowCardRefHighCardParam,
-		membership.MembershipKindMixedLowCardVerbatimHighCardParam:
+	// A params blob is present exactly for the three per-row identity encodings
+	// (ADR-0072) — derive it rather than re-enumerating them.
+	if mv.Kind.HasParams() {
 		paramTreatment = ParamTreatmentIdentity
-	default:
-		paramTreatment = ParamTreatmentNone
 	}
 	return
 }

@@ -175,21 +175,21 @@ func sortJsonValues(items []jsontext.Value) {
 func (inst *JsonCardEmitter) resolveKey(rec membershipRec) (key string) {
 	mv := rec.value
 	switch mv.Kind {
-	case membership.MembershipKindVerbatim:
+	case membership.IdentityVerbatim:
 		key = inst.chooseVerbatim(mv)
-	case membership.MembershipKindMixedLowCardVerbatimHighCardParam:
+	case membership.IdentityPerRowName:
 		key = inst.chooseVerbatim(mv)
 		if rec.paramTreatment == membershiprole.ParamTreatmentIdentity && mv.Params != "" {
 			key = substituteParam(key, mv.Params)
 		}
-	case membership.MembershipKindRef:
+	case membership.IdentityRef:
 		key = inst.chooseRef(mv)
-	case membership.MembershipKindRefParametrized:
+	case membership.IdentityPerRowBlob:
 		key = inst.chooseRef(mv)
 		if rec.paramTreatment == membershiprole.ParamTreatmentIdentity && mv.Params != "" {
 			key = key + "/" + inst.renderer.RenderParams(mv.Params)
 		}
-	case membership.MembershipKindMixedLowCardRefHighCardParam:
+	case membership.IdentityPerRowId:
 		key = inst.chooseRef(mv)
 		if rec.paramTreatment == membershiprole.ParamTreatmentIdentity && mv.Params != "" {
 			key = key + "/" + inst.renderer.RenderParams(mv.Params)
@@ -251,7 +251,7 @@ func encodeParamsValue(params string) (v jsontext.Value) {
 
 func (inst *JsonCardEmitter) labelName(mv membership.MembershipValue) (s string) {
 	switch mv.Kind {
-	case membership.MembershipKindVerbatim, membership.MembershipKindMixedLowCardVerbatimHighCardParam:
+	case membership.IdentityVerbatim, membership.IdentityPerRowName:
 		return inst.chooseVerbatim(mv)
 	default:
 		return inst.chooseRef(mv)

@@ -120,7 +120,11 @@ Tracked as named follow-ons, not gates on this ADR:
    channel minus cardinality. One shared identity-encoding type (plus a params
    bool), with `Kind` *derived* rather than re-declared, would retire the second
    enumeration and the hand-maintained correspondence. Pairs with #2 (the same
-   five-way identity distinction).
+   five-way identity distinction). *(Resolved 2026-06-08 — `MembershipKindE` is
+   retired; `MembershipValue.Kind` is now a `membership.IdentityEncoding`, the
+   single five-way vocabulary the channel's `ChannelIdentityE` also aliases.
+   `IdentityEncoding.HasParams` supplies the params bool, collapsing the
+   classifier's param-treatment switch to a derivation.)*
 
 ## Status
 

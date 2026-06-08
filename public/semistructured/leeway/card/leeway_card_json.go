@@ -512,7 +512,7 @@ func (inst *JsonCardEmitter) EndTags() {}
 
 func (inst *JsonCardEmitter) AddMembershipRef(lowCard bool, ref uint64) {
 	inst.classifyAndAdd(membership.MembershipValue{
-		Kind:    membership.MembershipKindRef,
+		Kind:    membership.IdentityRef,
 		LowCard: lowCard,
 		Ref:     ref,
 	})
@@ -520,7 +520,7 @@ func (inst *JsonCardEmitter) AddMembershipRef(lowCard bool, ref uint64) {
 
 func (inst *JsonCardEmitter) AddMembershipVerbatim(lowCard bool, verbatim string) {
 	inst.classifyAndAdd(membership.MembershipValue{
-		Kind:     membership.MembershipKindVerbatim,
+		Kind:     membership.IdentityVerbatim,
 		LowCard:  lowCard,
 		Verbatim: verbatim,
 	})
@@ -528,7 +528,7 @@ func (inst *JsonCardEmitter) AddMembershipVerbatim(lowCard bool, verbatim string
 
 func (inst *JsonCardEmitter) AddMembershipRefParametrized(lowCard bool, ref uint64, params string) {
 	inst.classifyAndAdd(membership.MembershipValue{
-		Kind:    membership.MembershipKindRefParametrized,
+		Kind:    membership.IdentityPerRowBlob,
 		LowCard: lowCard,
 		Ref:     ref,
 		Params:  params,
@@ -537,7 +537,7 @@ func (inst *JsonCardEmitter) AddMembershipRefParametrized(lowCard bool, ref uint
 
 func (inst *JsonCardEmitter) AddMembershipMixedLowCardRefHighCardParam(ref uint64, params string) {
 	inst.classifyAndAdd(membership.MembershipValue{
-		Kind:   membership.MembershipKindMixedLowCardRefHighCardParam,
+		Kind:   membership.IdentityPerRowId,
 		Ref:    ref,
 		Params: params,
 	})
@@ -545,7 +545,7 @@ func (inst *JsonCardEmitter) AddMembershipMixedLowCardRefHighCardParam(ref uint6
 
 func (inst *JsonCardEmitter) AddMembershipMixedLowCardVerbatimHighCardParam(verbatim string, params string) {
 	inst.classifyAndAdd(membership.MembershipValue{
-		Kind:     membership.MembershipKindMixedLowCardVerbatimHighCardParam,
+		Kind:     membership.IdentityPerRowName,
 		Verbatim: verbatim,
 		Params:   params,
 	})

@@ -56,9 +56,9 @@ func (r *Renderer) RenderParams(params string) string {
 // on params compose RenderParams themselves.
 func (r *Renderer) Render(mv MembershipValue) string {
 	switch mv.Kind {
-	case MembershipKindRef, MembershipKindRefParametrized, MembershipKindMixedLowCardRefHighCardParam:
+	case IdentityRef, IdentityPerRowBlob, IdentityPerRowId:
 		return r.RenderRef(mv.Ref)
-	case MembershipKindVerbatim, MembershipKindMixedLowCardVerbatimHighCardParam:
+	case IdentityVerbatim, IdentityPerRowName:
 		return r.RenderVerbatim(mv.Verbatim)
 	}
 	return ""

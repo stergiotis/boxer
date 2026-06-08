@@ -97,7 +97,10 @@ Tracked as named follow-ons, not gates on this ADR:
    `mappingplan.MembershipChannel` (ADR-0072 Open question 3). Deriving `Kind`
    from one shared identity-encoding type upstream would let the classifier and
    the attribute-key builder consume a single vocabulary instead of mapping
-   between two.
+   between two. *(Resolved 2026-06-08 — `MembershipValue.Kind` is now a
+   `membership.IdentityEncoding`, the shared vocabulary; the classifier and key
+   builder consume it directly, and `classifyParamTreatment` derives from
+   `Kind.HasParams()`. See ADR-0072 Open question 3.)*
 
 ## Status
 
