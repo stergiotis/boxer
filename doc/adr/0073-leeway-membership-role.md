@@ -87,6 +87,18 @@ place role lives; nothing below it knows primary from secondary.
   classifiers key differently. Schema documents may record the classifier identity so
   consumers can verify they share a policy.
 
+## Open questions
+
+Tracked as named follow-ons, not gates on this ADR:
+
+1. **The classifier keys off a duplicated identity encoding.** The primary-key
+   `(Kind, Ref | Verbatim [, Params])` reads `membership.MembershipKindE`, which
+   re-encodes the channel's identity × params independently of the write-side
+   `mappingplan.MembershipChannel` (ADR-0072 Open question 3). Deriving `Kind`
+   from one shared identity-encoding type upstream would let the classifier and
+   the attribute-key builder consume a single vocabulary instead of mapping
+   between two.
+
 ## Status
 
 Accepted on 2026-06-07. Re-cuts and supersedes ADR-0007.

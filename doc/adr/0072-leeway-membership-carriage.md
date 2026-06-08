@@ -84,6 +84,37 @@ coupling in the model.
 - Representation moving to a renderer relocates formatter injection from produce-time to
   read-time; consumers hold a renderer constructed with the appropriate formatters.
 
+## Open questions
+
+Tracked as named follow-ons, not gates on this ADR:
+
+1. **The carriage axes are a queryable product, not a dispatch key.**
+   `Cardinality` / `Identity` / `HasParams` name the channel's position on the
+   three-axis grid, but every behavioural branch dispatches on the flat
+   `MembershipChannel` enum through the denormalised `UsesCarrier` /
+   `EmbedsLiteralName` / `NeedsKindVar` booleans (each equivalent to one identity
+   value). The axis methods are consumed only by their own consistency test; the
+   table validator keeps the booleans and the axes from drifting but reads the
+   descriptor fields, not these methods. Either route one real dispatch site
+   through the axes — the carrier-vs-simple branch (`Identity == PerRow` in place
+   of `UsesCarrier`) or `dql.channelSpec` — or state plainly that they are a
+   documented product, not a dispatch input.
+2. **The identity axis is not bijective.** `ChannelIdentity.PerRow` collapses
+   three distinct per-row encodings — a uint64 id, a `[]byte` name, and an opaque
+   params blob — disambiguated only by the separate `carrierValueField` ("Id" /
+   "Name" / ""). So `(cardinality, identity, params)` does not yet key the
+   channel. Splitting `PerRow` into `PerRowId` / `PerRowName` / `PerRowBlob` would
+   make the triple a true key and fold `carrierValueField` (and
+   `CarrierValueIsBytes`) away.
+3. **`MembershipKindE` duplicates the channel's identity × params.** The
+   read-side `membership.MembershipKindE` (Ref / Verbatim / RefParametrized / the
+   two Mixed shapes) and the write-side `mappingplan.MembershipChannel`
+   independently re-encode ref / verbatim / parametrized / mixed — `Kind` is the
+   channel minus cardinality. One shared identity-encoding type (plus a params
+   bool), with `Kind` *derived* rather than re-declared, would retire the second
+   enumeration and the hand-maintained correspondence. Pairs with #2 (the same
+   five-way identity distinction).
+
 ## Status
 
 Accepted on 2026-06-07. Re-cuts and supersedes parts of ADR-0008 and the
