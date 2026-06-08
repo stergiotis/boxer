@@ -19,6 +19,7 @@ import (
 )
 
 var _ streamreadaccess.SinkI = (*TypstCardEmitter)(nil)
+var _ streamreadaccess.MembershipSinkI = (*TypstCardEmitter)(nil)
 
 // TypstCardEmitter produces Typst markup (.typ) that compiles to a well-laid-out A4 landscape PDF.
 //

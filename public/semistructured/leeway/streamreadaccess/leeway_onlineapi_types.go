@@ -89,7 +89,18 @@ type SinkI interface {
 
 	BeginTags(nTags int)
 	EndTags()
+}
 
+// MembershipSinkI is the optional membership-rendering capability of a SinkI.
+// Per ADR-0070 membership identity is orthogonal to the structural/value
+// protocol (carriage ⟂ meaning ⟂ representation), so rendering per-tag
+// membership is a separable concern. Sinks that visualise memberships implement
+// it; non-rendering sinks (the sparkline / treemap / schema emitters) omit it
+// entirely rather than stubbing five no-ops. The Driver type-asserts for it
+// once per membership emission and skips membership when the sink lacks it — a
+// dropped implementation therefore fails silently, so renderers pin the
+// capability with a compile-time `var _ MembershipSinkI` assertion.
+type MembershipSinkI interface {
 	AddMembershipRef(lowCard bool, ref uint64)
 	AddMembershipVerbatim(lowCard bool, verbatim string)
 	AddMembershipRefParametrized(lowCard bool, ref uint64, params string)

@@ -228,3 +228,4 @@ func (inst *DebugSink) AddMembershipMixedLowCardVerbatimHighCardParam(verbatim s
 }
 
 var _ SinkI = (*DebugSink)(nil)
+var _ MembershipSinkI = (*DebugSink)(nil)

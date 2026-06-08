@@ -16,6 +16,7 @@ import (
 )
 
 var _ streamreadaccess.SinkI = (*JsonCardEmitter)(nil)
+var _ streamreadaccess.MembershipSinkI = (*JsonCardEmitter)(nil)
 
 // JsonCardEmitterOption configures a JsonCardEmitter.
 type JsonCardEmitterOption func(*JsonCardEmitter)

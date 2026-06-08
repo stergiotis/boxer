@@ -147,6 +147,8 @@ type SvgCardEmitter struct {
 	coGroupID string
 }
 
+var _ streamreadaccess.MembershipSinkI = (*SvgCardEmitter)(nil)
+
 func NewSvgCardEmitter(w io.Writer, palette SvgCardPaletteE) *SvgCardEmitter {
 	pal := defaultPalette(palette)
 	return &SvgCardEmitter{

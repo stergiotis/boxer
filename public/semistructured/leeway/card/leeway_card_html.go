@@ -20,6 +20,7 @@ import (
 )
 
 var _ streamreadaccess.SinkI = (*HtmlCardEmitter)(nil)
+var _ streamreadaccess.MembershipSinkI = (*HtmlCardEmitter)(nil)
 
 // HtmlCardEmitter renders Leeway entities using an "attribute card" layout.
 // Implements StructuredOutput2I.

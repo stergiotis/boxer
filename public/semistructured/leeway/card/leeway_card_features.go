@@ -142,6 +142,8 @@ type FeatureExtractor struct {
 	curValueLen   int
 }
 
+var _ streamreadaccess.MembershipSinkI = (*FeatureExtractor)(nil)
+
 func NewFeatureExtractor() (*FeatureExtractor, error) {
 	d := ea.SizeMeasureWriter{
 		Size: 0,

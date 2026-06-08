@@ -411,16 +411,6 @@ func (s *TreemapSpark) BeginTags(nTags int) {
 
 func (s *TreemapSpark) EndTags() {}
 
-func (s *TreemapSpark) AddMembershipRef(lowCard bool, ref uint64) {}
-func (s *TreemapSpark) AddMembershipVerbatim(lowCard bool, verbatim string) {
-}
-func (s *TreemapSpark) AddMembershipRefParametrized(lowCard bool, ref uint64, params string) {
-}
-func (s *TreemapSpark) AddMembershipMixedLowCardRefHighCardParam(ref uint64, params string) {
-}
-func (s *TreemapSpark) AddMembershipMixedLowCardVerbatimHighCardParam(verbatim string, params string) {
-}
-
 // shortItemType is shared with TopologySpark — duplicated here to keep
 // the file self-contained. In production, extract to a shared helper.
 func shortItemTypeTreemap(t common.PlainItemTypeE) string {

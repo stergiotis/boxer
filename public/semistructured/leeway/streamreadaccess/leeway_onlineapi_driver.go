@@ -914,6 +914,13 @@ func (inst *Driver) emitMemberships(sink SinkI, rec arrow.RecordBatch, entityIdx
 		return
 	}
 
+	// Membership rendering is an optional sink capability (ADR-0072): the tag
+	// frame (BeginTags/EndTags) is always driven so structural sinks see the
+	// tag count, but per-tag identities are emitted only when the sink
+	// implements MembershipSinkI. Non-rendering sinks leave ms nil and
+	// emitOneMembership early-returns.
+	ms, _ := sink.(MembershipSinkI)
+
 	hasMemberCards := len(sec.memberCardDetails) > 0
 
 	if !hasMemberCards {
@@ -921,7 +928,7 @@ func (inst *Driver) emitMemberships(sink SinkI, rec arrow.RecordBatch, entityIdx
 		sink.BeginTags(nTags)
 		for _, mc := range sec.memberCols {
 			flatIdx := inst.listFlatIndex(rec, mc.arrowIdx, entityIdx, attrIdx)
-			inst.emitOneMembership(sink, rec, mc, flatIdx)
+			inst.emitOneMembership(ms, rec, mc, flatIdx)
 		}
 		sink.EndTags()
 		return
@@ -947,32 +954,35 @@ func (inst *Driver) emitMemberships(sink SinkI, rec arrow.RecordBatch, entityIdx
 			mbrEnd = mbrStart + slot.card
 		}
 		for flatIdx := mbrStart; flatIdx < mbrEnd; flatIdx++ {
-			inst.emitOneMembership(sink, rec, mc, flatIdx)
+			inst.emitOneMembership(ms, rec, mc, flatIdx)
 		}
 	}
 
 	sink.EndTags()
 }
 
-func (inst *Driver) emitOneMembership(sink SinkI, rec arrow.RecordBatch, mc memberColLayout, flatIdx int) {
+func (inst *Driver) emitOneMembership(ms MembershipSinkI, rec arrow.RecordBatch, mc memberColLayout, flatIdx int) {
+	if ms == nil {
+		return // sink does not implement MembershipSinkI (ADR-0072)
+	}
 	// Identities only — the driver no longer formats memberships; consumers
 	// render them at read time via a membership.Renderer (ADR-0072).
 	switch mc.role {
 	case common.ColumnRoleHighCardRef:
 		ref := inst.readListInnerUint64(rec, mc.arrowIdx, flatIdx)
-		sink.AddMembershipRef(false, ref)
+		ms.AddMembershipRef(false, ref)
 
 	case common.ColumnRoleLowCardRef:
 		ref := inst.readListInnerUint64(rec, mc.arrowIdx, flatIdx)
-		sink.AddMembershipRef(true, ref)
+		ms.AddMembershipRef(true, ref)
 
 	case common.ColumnRoleHighCardVerbatim:
 		raw := inst.readListInnerBytes(rec, mc.arrowIdx, flatIdx)
-		sink.AddMembershipVerbatim(false, unsafeperf.UnsafeBytesToString(raw))
+		ms.AddMembershipVerbatim(false, unsafeperf.UnsafeBytesToString(raw))
 
 	case common.ColumnRoleLowCardVerbatim:
 		raw := inst.readListInnerBytes(rec, mc.arrowIdx, flatIdx)
-		sink.AddMembershipVerbatim(true, unsafeperf.UnsafeBytesToString(raw))
+		ms.AddMembershipVerbatim(true, unsafeperf.UnsafeBytesToString(raw))
 
 	case common.ColumnRoleHighCardRefParametrized:
 		// Canonical type (lw_ddl_tech_common.go: membershipSerializedType) is
@@ -983,27 +993,27 @@ func (inst *Driver) emitOneMembership(sink SinkI, rec arrow.RecordBatch, mc memb
 		// stored separately for this role; emit ref=0 and forward the bytes
 		// as params, mirroring the params half of the Mixed pattern below.
 		raw := inst.readListInnerBytes(rec, mc.arrowIdx, flatIdx)
-		sink.AddMembershipRefParametrized(false, 0, unsafeperf.UnsafeBytesToString(raw))
+		ms.AddMembershipRefParametrized(false, 0, unsafeperf.UnsafeBytesToString(raw))
 
 	case common.ColumnRoleLowCardRefParametrized:
 		raw := inst.readListInnerBytes(rec, mc.arrowIdx, flatIdx)
-		sink.AddMembershipRefParametrized(true, 0, unsafeperf.UnsafeBytesToString(raw))
+		ms.AddMembershipRefParametrized(true, 0, unsafeperf.UnsafeBytesToString(raw))
 
 	case common.ColumnRoleMixedLowCardRef:
 		ref := inst.readListInnerUint64(rec, mc.arrowIdx, flatIdx)
-		sink.AddMembershipMixedLowCardRefHighCardParam(ref, "")
+		ms.AddMembershipMixedLowCardRefHighCardParam(ref, "")
 
 	case common.ColumnRoleMixedLowCardVerbatim:
 		raw := inst.readListInnerBytes(rec, mc.arrowIdx, flatIdx)
-		sink.AddMembershipMixedLowCardVerbatimHighCardParam(unsafeperf.UnsafeBytesToString(raw), "")
+		ms.AddMembershipMixedLowCardVerbatimHighCardParam(unsafeperf.UnsafeBytesToString(raw), "")
 
 	case common.ColumnRoleMixedVerbatimHighCardParameters:
 		raw := inst.readListInnerBytes(rec, mc.arrowIdx, flatIdx)
-		sink.AddMembershipMixedLowCardVerbatimHighCardParam("", unsafeperf.UnsafeBytesToString(raw))
+		ms.AddMembershipMixedLowCardVerbatimHighCardParam("", unsafeperf.UnsafeBytesToString(raw))
 
 	case common.ColumnRoleMixedRefHighCardParameters:
 		raw := inst.readListInnerBytes(rec, mc.arrowIdx, flatIdx)
-		sink.AddMembershipMixedLowCardRefHighCardParam(0, unsafeperf.UnsafeBytesToString(raw))
+		ms.AddMembershipMixedLowCardRefHighCardParam(0, unsafeperf.UnsafeBytesToString(raw))
 
 	default:
 		log.Panic().Stringer("role", mc.role).Msg("unimplemented column role")

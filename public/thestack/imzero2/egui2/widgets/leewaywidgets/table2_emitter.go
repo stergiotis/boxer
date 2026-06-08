@@ -24,6 +24,7 @@ import (
 )
 
 var _ streamreadaccess.SinkI = (*Table2CardEmitter)(nil)
+var _ streamreadaccess.MembershipSinkI = (*Table2CardEmitter)(nil)
 
 // Table2CardEmitter renders an entire leeway batch as ONE table (egui_extras::TableBuilder
 // via the c.NewTable row-iterator surface). Every entity, every section,

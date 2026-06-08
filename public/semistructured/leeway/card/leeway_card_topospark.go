@@ -56,6 +56,8 @@ type TopologySpark struct {
 	nTags   int
 }
 
+var _ streamreadaccess.MembershipSinkI = (*TopologySpark)(nil)
+
 func NewTopologySpark(w io.Writer) *TopologySpark {
 	return &TopologySpark{w: w}
 }

@@ -19,6 +19,7 @@ import (
 )
 
 var _ streamreadaccess.SinkI = (*UnicodeCardEmitter)(nil)
+var _ streamreadaccess.MembershipSinkI = (*UnicodeCardEmitter)(nil)
 
 // UnicodeEmitterConfig controls rendering limits and appearance.
 type UnicodeEmitterConfig struct {
