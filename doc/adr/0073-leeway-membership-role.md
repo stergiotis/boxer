@@ -92,8 +92,9 @@ place role lives; nothing below it knows primary from secondary.
 Accepted on 2026-06-07. Re-cuts and supersedes ADR-0007.
 
 Implementation status (2026-06-07): the classifier, default policy, and section
-use-aspects are **implemented** over the current `MembershipValue`; re-targeting them onto
-the extracted `membership` package (ADR-0072) is **pending** (refactor Phase 3).
+use-aspects are **implemented**, and now classify the `membership.MembershipValue` from the
+extracted package (ADR-0072); `IsPlaceholder` moved to `membership`, keyed off the wire
+identity. **Implemented** (refactor Phase 3b, 2026-06-08).
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`. ADRs are
 append-only; supersession is recorded, not deleted.

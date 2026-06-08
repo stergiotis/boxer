@@ -94,8 +94,10 @@ and the per-section channel coupling are **implemented**. The channel now expose
 three carriage axes (`Cardinality` / `Identity` / `HasParams`) on the descriptor table,
 init-validated against the dispatch fields, while the flat enum stays the dispatch key —
 the explicit-product-without-rewrite form (a flat enum is a fine internal representation,
-per Alternatives). Extracting the low-level `membership` package and moving representation
-into a renderer remain **pending** (refactor Phase 3).
+per Alternatives). The low-level `membership` package is **extracted** (the slim, comparable
+`MembershipValue` + a `Renderer`); representation moved to read-time rendering — the driver
+emits identities only and consumers (card emitters, the leeway widget) render via a
+`membership.Renderer`. **Implemented** (refactor Phase 3b, 2026-06-08).
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`. ADRs are
 append-only; supersession is recorded, not deleted.
