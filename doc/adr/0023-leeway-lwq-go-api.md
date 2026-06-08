@@ -84,7 +84,7 @@ type Binder struct { /* internal */ }
 type Target interface { /* internal */ }
 
 // RoleKindE distinguishes the membership-role classifier output
-// (per boxer ADR-0056 / pebble2impl ADR-0007). This is orthogonal to
+// (per boxer ADR-0007). This is orthogonal to
 // MembershipSpec — every membership has both a kind and a spec.
 type RoleKindE uint8
 
@@ -222,7 +222,7 @@ func (p *Plan) ForEachInSection(name string) *Plan
 
 // ForEachValueWithMembership iterates values whose memberships satisfy
 // the matcher. The role kind further constrains by primary/secondary
-// classification (per boxer ADR-0056). The matcher carries the
+// classification (per boxer ADR-0007). The matcher carries the
 // MembershipSpec it targets, so the lowerer pushes the correct
 // cardinality- and spec-aware predicate into the section's columns.
 func (p *Plan) ForEachValueWithMembership(kind RoleKindE, m MembershipMatcher) *Plan
@@ -694,8 +694,8 @@ ADRs are append-only; supersession is recorded, not deleted.
 ## References
 
 - [ADR-0022: leeway lwq — FLWOR-style query language for Leeway-stored data](0022-leeway-lwq-flwor-query-language.md) — the trajectory this ADR sequences.
-- Leeway `SinkI` / `Driver` substrate — `$(boxer-path)/public/semistructured/leeway/streamreadaccess/leeway_onlineapi_types.go`.
+- Leeway `SinkI` / `Driver` substrate — [`../../public/semistructured/leeway/streamreadaccess/leeway_onlineapi_types.go`](../../public/semistructured/leeway/streamreadaccess/leeway_onlineapi_types.go).
 - [Leeway protocol skill](../skills/leeway-advanced/SKILLS.md) — sections, memberships, aspects, co-sections, canonical types.
-- Boxer ADR-0056 / pebble2impl [ADR-0007](0007-leeway-membership-role-classifier.md) — primary/secondary role classifier consumed by `ForEachValueWithRoles`.
-- Pebble2impl [ADR-0018](0018-leeway-card-json-canonical-format.md) — a representative tree-shaped construction target.
-- Boxer CH DSL infrastructure — `$(boxer-path)/public/db/clickhouse/dsl/` (AST and `ToSQL` reused by the ClickHouse target; `astbuilder` is a precedent for fluent Go API at the lower CH-SQL level).
+- [ADR-0007](0007-leeway-membership-role-classifier.md) — primary/secondary role classifier consumed by `ForEachValueWithRoles`.
+- [ADR-0018](0018-leeway-card-json-canonical-format.md) — a representative tree-shaped construction target.
+- Boxer CH DSL infrastructure — [`../../public/db/clickhouse/dsl/`](../../public/db/clickhouse/dsl/) (AST and `ToSQL` reused by the ClickHouse target; `astbuilder` is a precedent for fluent Go API at the lower CH-SQL level).

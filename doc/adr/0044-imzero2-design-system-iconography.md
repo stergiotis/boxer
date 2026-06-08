@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-05-19
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-06-08
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 > **Amendment 2026-05-19 — Slot B removed; single-slot iconography.** The originally-proposed two-slot design (Phosphor for affordances + a subsetted Nerd Fonts blob "NFBrand" for brand marks) collapsed to a single Phosphor slot. The brand-mark slot served 10 glyphs total, 8 of which had no caller outside a single demo collapsible section; the remaining two (database, git-branch) had Phosphor equivalents and were reclassified as affordances. Dropping the second font also eliminates the awkward "NFBrand" name (introduced ad-hoc in §SD2 as originally written, never reviewed). Brand-mark glyphs that Phosphor does ship (Linux, GitHub, Apple, Google, …) remain available via the generated `PhXxxLogo` constants; the rest (Rust, Docker, Go, JavaScript, …) are gone — apps that need them reach for plain text. §SD2 is superseded by this amendment in full; §SD3/§SD5/§SD6/§SD8 references to "Slot B" / "NFBrand" / "nerd-font" are obsoleted; the keep-the-slot-name decision recorded in M1 prose is also obsoleted (the `--nerdFontTTF` flag + `nerd_font_ttf` AppConfig slot + egui `nerdfont` family name + `NERD_FONT` env var are all removed).
 
@@ -283,6 +281,8 @@ Both Phosphor and the Nerd Fonts subset follow ADR-0030 §SD7 / §SD9 / §SD10 d
 
 ### SD8 — Migration plan (M0 → M3)
 
+> **Landed as of 2026-06-08:** M0–M2 — `keelson/runtime/icons` package, Rust-side Phosphor embed, call-site migration. M3 (cleanup + density-weight eval) is as-needed.
+
 This ADR is M0. Subsequent milestones land as separate commits with separate review:
 
 | Milestone | Scope | Deliverable | Status |
@@ -336,7 +336,7 @@ The choice not to leave a backwards-compat shim is deliberate: a shim ties the n
 
 ## Status
 
-Proposed — awaiting review by @spx. M0 lands across two commits:
+Accepted — 2026-06-08 (reviewed by p@stergiotis). The single-slot Phosphor iconography has shipped (M0–M2): the `keelson/runtime/icons` package, the Rust-side Phosphor embed, and call-site migration; M3 (cleanup + density-weight eval) is as-needed. M0 landed across two commits:
 
 **First commit** (already landed):
 

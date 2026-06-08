@@ -12,7 +12,7 @@ date: 2026-05-01
 
 ## Context
 
-`JsonCardEmitter` ([`../../public/semistructured/leeway/card/leeway_card_json.go`](../../public/semistructured/leeway/card/leeway_card_json.go)) is Leeway's canonical lossless JSON serialization. [ADR-0007](0007-leeway-membership-role-classifier.md) (and boxer ADR-0056) introduce the `membershiprole.ClassifierI` abstraction that decides primary versus secondary memberships at value level, but pins no JSON shape. Today's `JsonCardEmitter` is section-centric, repeats per-section schema on every entity, stringifies all scalar values, and does not consume the classifier at all. The format is lossless in principle but verbose in practice, validator-hostile (stringified numbers defeat `type: integer`), and not yet isomorphic (no parser exists).
+`JsonCardEmitter` ([`../../public/semistructured/leeway/card/leeway_card_json.go`](../../public/semistructured/leeway/card/leeway_card_json.go)) is Leeway's canonical lossless JSON serialization. [ADR-0007](0007-leeway-membership-role-classifier.md) introduces the `membershiprole.ClassifierI` abstraction that decides primary versus secondary memberships at value level, but pins no JSON shape. Today's `JsonCardEmitter` is section-centric, repeats per-section schema on every entity, stringifies all scalar values, and does not consume the classifier at all. The format is lossless in principle but verbose in practice, validator-hostile (stringified numbers defeat `type: integer`), and not yet isomorphic (no parser exists).
 
 This ADR pins the canonical JSON shape and the implementation plan to land it. The shape consumes `membershiprole.ClassifierI` to drive the primary/secondary split, separates schema from data into two artifacts (schema document + data document), and uses an attribute-centric per-entity layout rooted at primary memberships. The plan is staged so each milestone is independently shippable and the final artifact is reviewable against the existing `card_anchor_integration3_test.go` fixtures.
 
@@ -519,8 +519,7 @@ ADRs are append-only; supersession is recorded, not deleted.
 
 ## References
 
-- [ADR-0007](0007-leeway-membership-role-classifier.md) — pebble2impl-side adoption pointer to boxer ADR-0056.
-- Boxer ADR-0056 (`$(boxer-path)/doc/adr/0007-leeway-membership-role-classifier.md`) — classifier design.
+- [ADR-0007](0007-leeway-membership-role-classifier.md) — membership-role classifier design.
 - [`../../public/semistructured/leeway/card/leeway_card_json.go`](../../public/semistructured/leeway/card/leeway_card_json.go) — current `JsonCardEmitter`; rewrite source.
 - [`../../public/semistructured/leeway/anchor/card_anchor_integration3_test.go`](../../public/semistructured/leeway/anchor/card_anchor_integration3_test.go) — existing fixtures.
 - [`../skills/leeway-advanced/SKILLS.md`](../skills/leeway-advanced/SKILLS.md) §"Membership roles" — primary/secondary semantics.

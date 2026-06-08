@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-06-03
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-06-08
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0066: leeway dql — ClickHouse read-back generator from `mappingplan`
 
@@ -358,7 +356,7 @@ test matrix — is drafted in [`dql/EXPLANATION.md`](../../public/semistructured
 
 ## Status
 
-Proposed — awaiting review by @spx.
+Accepted — 2026-06-08 (reviewed by p@stergiotis). The scalar read-back path has landed in [`leeway/dql`](../../public/semistructured/leeway/dql/) with round-trip tests; the non-scalar open questions below are post-acceptance refinements.
 
 Open questions:
 

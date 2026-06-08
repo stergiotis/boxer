@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-05-16
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-06-08
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0038: Background task primitive in keelson/runtime/task
 
@@ -152,6 +150,8 @@ Apps that publish *and* observe the world (producer + UI panel in one binary) de
 
 ### Milestones
 
+> **Landed as of 2026-06-08:** all milestones — `keelson/runtime/task`, the demo, the supervisor, and the `taskmonitor` widget.
+
 - **M1.** `keelson/runtime/task/` + `task/estimator/` subpackage; producer, observer helper, `RequestCancel`, cap helpers; unit tests over `inprocbus`; REFERENCE.md + EXPLANATION.md.
 - **M2.** Demo app (`apps/taskdemo/`) wired through `c.PanelCentral()` with a cancel button.
 - **M3.** Opt-in `keelson/runtime/task/supervisor/` — subscribes `task.>`, persists Created/Done/Error/Cancel into `runtime.facts` via `factsstore`, marks tasks abandoned when no emission within N seconds, exposes `task.list.inflight` request/reply.
@@ -195,7 +195,7 @@ Implementation order: M1 is a precondition for any consumer; M2-M4 are independe
 
 ## Status
 
-Proposed — awaiting review.
+Accepted — 2026-06-08 (reviewed by p@stergiotis). All milestones have shipped — `keelson/runtime/task`, the task demo, the supervisor, and the `taskmonitor` widget.
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
 ADRs are append-only; supersession is recorded, not deleted.

@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-05-14
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-06-08
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0029: ImZero2 design system — foundations, data-intensive patterns, and policy-as-code
 
@@ -248,6 +246,8 @@ This is non-negotiable for the data-intensive 60–120 Hz use case. Any future p
 
 ### SD14 — Phasing
 
+> **Landed as of 2026-06-08:** M0 (inspirations) + M1 (`styletokens`) + M2 (the Tier-1 lint suite, L1–L12 in `designsystem/lint`). Deferred: M3 (pattern docs), M4 (Tier-2 LLM review), M5 (fleet backfill).
+
 - **M0 — Inspirations + boundary check.** Write `INSPIRATIONS.md`; verify proposed naming conventions are free of substantial-similarity issues across the major systems listed in SD12. ~half a day.
 - **M1 — Tokens module + density preset.** SD2 / SD3 / SD4 / SD5 / SD6 / SD7. Both Rust and Go surfaces; codegen via `./generate.sh`. One pilot app (carousel demo) wired to use the tokens. Lints not yet enforced.
 - **M2 — Tier 1 mechanical lints.** SD8. `designlint` tool, integration into `lint.sh`. Rules ship as `warn`; per-app graduation to `error` is opt-in via a `// designlint:strict` annotation that flips all rules for that app.
@@ -300,7 +300,7 @@ Each milestone is independently shippable; M2 does not gate M3; M4 does not gate
 
 ## Status
 
-Proposed — awaiting review by @spx. M0 (inspirations + boundary check) and M1 (tokens module) can begin as soon as accepted; M4 (Tier 2 LLM review) depends on the cost-cap policy and the screenshot-tour pipeline being CI-integrated.
+Accepted — 2026-06-08 (reviewed by p@stergiotis). The foundation has shipped: M0 (inspirations + boundary check), M1 (the `styletokens` token module), and M2 (the Tier-1 lint suite — L1–L12 in `designsystem/lint`). M3 (pattern docs), M4 (Tier-2 LLM review), and M5 (fleet backfill) remain deferred — see the open questions below.
 
 Open questions:
 

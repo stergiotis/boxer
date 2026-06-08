@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-05-14
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-06-08
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0034: IDS typography M0 — Iosevka pin, font binaries, build pipeline
 
@@ -227,6 +225,8 @@ This ADR doesn't re-decide the embed strategy; it just *materialises* the bytes 
 
 ### SD9 — Phasing
 
+> **Landed as of 2026-06-08:** M0a/M0b — Iosevka pin, SHA-pinned IDS Mono binaries, build pipeline. M1 (token wiring) belongs to ADR-0030.
+
 - **M0a — Design + scaffolding (this ADR's proposed scope).** Land the build TOML + Makefile target + the empty per-directory layout (no `.ttf` files yet) + the `SHA256SUMS` verification step in `scripts/ci/lint.sh`.
 - **M0b — Execute + Amend (follow-on PR).** Pin specific Iosevka, Nerd Fonts versions. Run the Iosevka build container. Download Aile + Symbols Nerd Font Mono. Compute SHA-256s. Run codepoint audit. Verify TOML variant names against the customizer (and patch if any renamed). Land all artefacts in one PR with an Amendment to this ADR.
 - **M1 — Wire into apps** (resumes [ADR-0030](./0030-imzero2-design-system-typography.md) M1 phasing). Pilot app (carousel) reads the embedded bytes via `FontDefinitions`.
@@ -271,7 +271,7 @@ M0a is implementable immediately on acceptance; M0b is gated on running the buil
 
 ## Status
 
-Proposed — awaiting review by @spx.
+Accepted — 2026-06-08 (reviewed by p@stergiotis). M0a/M0b have shipped — the Iosevka pin, the SHA-pinned IDS Mono binaries (`rust/imzero2/assets/fonts/ids-mono/`), and the build pipeline. M1 (token-path wiring) belongs to ADR-0030. The open questions below are version-pin refinements.
 
 Open questions:
 

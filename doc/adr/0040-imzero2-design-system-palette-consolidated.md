@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-05-17
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-06-08
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0040: IDS palette (consolidated) — current OKLCh spine, semantic roles, and contracts
 
@@ -148,7 +146,7 @@ Within the consolidated scope here, the relevant new alternative is **whether to
 
 ## Status
 
-Proposed — awaiting review by @spx.
+Accepted — 2026-06-08 (reviewed by p@stergiotis). This ADR is the current authoritative IDS palette; ADR-0033 and ADR-0037 remain superseded by it.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`. See boxer's `DOCUMENTATION_STANDARD.md` §1 ADR for the edit-policy tiers (Tier 1 in-place / Tier 2 `## Updates` H3 / Tier 3 superseding ADR).
 

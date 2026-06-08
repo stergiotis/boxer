@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-05-22
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-06-08
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0045: Two-level FSM visualization widget (fsmview)
 
@@ -178,6 +176,8 @@ breaking the widget's public API.
 
 ## Milestones
 
+> **Landed as of 2026-06-08:** M0–M3 incl. M3a (details in Updates below). M4 is an explicit deferral.
+
 | M  | Scope                                                                                          | Exit criterion                                                              |
 |----|------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------|
 | M0 | `Machine[T]` + `Widget[T]` skeleton, chip + popup, Table view, Graph view, demo registered.    | `go build -tags "$(cat tags)"` green; demo appears in widgets carousel.     |
@@ -190,9 +190,7 @@ breaking the widget's public API.
 
 ## Status
 
-Proposed — awaiting review by code owner. Implementation of M0 has
-landed alongside this ADR (see references); flip to **accepted** once
-the design is reviewed and M3 finishes.
+Accepted — 2026-06-08 (reviewed by p@stergiotis). This meets the ADR's own flip criterion — the design is reviewed and M3 has landed (see Updates). M0–M3 incl. M3a are shipped; M4 is an explicit, use-case-driven deferral.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`. ADRs are append-only; supersession is recorded, not deleted.
 

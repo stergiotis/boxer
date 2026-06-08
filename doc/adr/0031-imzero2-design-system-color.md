@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-05-14
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-06-08
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0031: ImZero2 design system — color foundations (OKLCh semantic + scientific data-encoding, dark theme)
 
@@ -272,6 +270,8 @@ The boundary-check log is committed to `doc/design-system/foundations/ip-boundar
 
 ### SD11 — Phasing
 
+> **Landed as of 2026-06-08:** M0 — OKLCh semantic palette, scientific data-encoding LUTs, and the `styletokens.Tone` promotion (`palette.toml` carries the committed accent). Later phases are post-acceptance refinements.
+
 - **M0 — Generate semantic palette + vendor scientific palettes.** Define `palette.toml`; run generator; run contrast + CVD verifiers; run IP boundary search. Vendor `batlow`, `vik`, `batlowS`, `viridis`, `cividis` LUTs with provenance. Output: committed `palette.toml`, generated tokens, vendored LUTs, `ip-boundary-check.md`, `color.md`. Plan ~1 day plus iteration.
 - **M1 — `egui::Visuals` binding + pilot app.** Implement `apply(visuals, density)` per §SD6. Wire pilot app (carousel demo) to use the tokens. Capture screenshots for [ADR-0029](./0029-imzero2-design-system-and-policy-as-code.md) M4 Tier 2 calibration.
 - **M2 — `egui_plot` integration.** Implement `qualitative_cycle` / `sequential` / `diverging` per §SD7. Migrate one plot consumer (a Grafana-replacement panel or the imztop CPU/memory plots) to the data-encoding palette. Document patterns in `patterns/plots.md`.
@@ -321,7 +321,7 @@ Each milestone is independently shippable. No theme-switching milestone — dark
 
 ## Status
 
-Proposed — awaiting review by @spx. M0 (semantic palette generation + scientific palette vendoring + IP check) can begin immediately upon acceptance.
+Accepted — 2026-06-08 (reviewed by p@stergiotis). M0 has shipped — the OKLCh semantic palette, the scientific data-encoding LUTs, and the `styletokens.Tone` promotion; `palette.toml` carries the committed accent. The open questions below are post-acceptance refinements.
 
 Open questions:
 

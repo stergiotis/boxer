@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-05-15
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-06-08
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0036: Canonical bus codec via runtime/buscodec
 
@@ -105,7 +103,7 @@ Every broker exposes typed `Marshal{Name}`/`Unmarshal{Name}` one-liners in its o
 
 ## Status
 
-Proposed — awaiting review. Implementation has landed (commit `03c2f95b`) so the contract is concrete and the leeway-row codec workstream has a stable target; the ADR is filed retrospectively so the *decision* can be reviewed independently of the diff.
+Accepted — 2026-06-08 (reviewed by p@stergiotis). Filed retrospectively: the codec landed in [`runtime/buscodec`](../../public/keelson/runtime/buscodec/) ahead of review, so the *decision* is recorded here independently of the diff.
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
 ADRs are append-only; supersession is recorded, not deleted.

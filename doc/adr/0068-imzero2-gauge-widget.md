@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-06-06
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-06-08
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted. No widget code until this is accepted (design-first for new packages).
 
 # ADR-0068: ImZero2 gauge widget — radial read-only dial
 
@@ -194,7 +192,7 @@ The options are weighed per-question in [Design space (compact)](#design-space-c
 
 ## Status
 
-Proposed — awaiting review by @spx. Implementation is gated on (a) acceptance of this ADR and (b) the [ADR-0031](./0031-imzero2-design-system-color.md) §Updates tone promotion landing (the gauge consumes `styletokens.Tone`).
+Accepted — 2026-06-08 (reviewed by p@stergiotis). The gauge has landed in [`widgets/gauge`](../../public/thestack/imzero2/egui2/widgets/gauge/) (build/test/vet green, screenshot-verified); the ADR-0031 §Updates tone promotion it depends on landed 2026-06-06.
 
 Open questions:
 

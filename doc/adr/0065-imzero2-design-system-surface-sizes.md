@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-06-02
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-06-08
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted. (The tokens + migration described in §SD3/§SD6 have landed in the working tree ahead of review, per the maintainer's request to write code then document; revert is a token-file delete plus the per-app one-line reverts.)
 
 # ADR-0065: ImZero2 design system — surface size archetypes
 
@@ -122,7 +120,7 @@ The regex_explorer content-width fix (`editorWidth = 800`) stays a local constan
 
 ## Status
 
-Proposed — awaiting review by @spx. Tokens + the four migrations have landed in the working tree (build/vet/gofmt/drift-test green).
+Accepted — 2026-06-08 (reviewed by p@stergiotis). Tokens + the four app migrations have landed (build/vet/gofmt/drift-test green).
 
 Open questions:
 

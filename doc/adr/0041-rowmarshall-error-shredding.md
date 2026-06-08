@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-05-17
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-06-08
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0041: rowmarshall — boxer error fully-shredded row layout
 
@@ -237,7 +235,7 @@ egress.
 
 ## Status
 
-Proposed — awaiting review.
+Accepted — 2026-06-08 (reviewed by p@stergiotis). The no-reflection-on-hot-path rule and the shredded parallel-array error layout are in force. The original hand-coded `rowmarshall` package was retired by ADR-0042's codegen retrofit; the encoding survives unchanged in [`codec/errkind`](../../public/keelson/runtime/codec/errkind/) and [`codec/capabilitygrant`](../../public/keelson/runtime/codec/capabilitygrant/).
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See boxer's `doc/DOCUMENTATION_STANDARD.md` (resolve via `bash scripts/boxer-path.sh`) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

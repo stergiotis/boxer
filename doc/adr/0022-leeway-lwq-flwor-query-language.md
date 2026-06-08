@@ -111,7 +111,7 @@ Beyond the syntactic ergonomics gap, `lwq` is justified by the set of Leeway cap
 - *Filtering by cardinality* — `where membership_card($v) >= 2` selects values playing multiple roles regardless of which. Compiles to a predicate on the section's `mvhp_card` column (or the equivalent under whichever MembershipSpec is in play).
 - *Reading the role-set* — `$v.roles` returns the membership array as a sequence; usable in `return` constructors (`return { roles: $v.roles }`) and in further predicates.
 
-The membership-role classifier from boxer ADR-0056 / pebble2impl ADR-0007 splits memberships into **primary** (defining the attribute) and **secondary** (annotating it). `lwq` honours this distinction: `with primary roles [...]` filters only on primary memberships, `with secondary roles [...]` only on secondary, and the unqualified `with roles [...]` operates on the union. Section uniformity hints (`AspectSectionMembershipsAllPrimary` and the `Secondary` peer) drive short-circuit dispatch in the lowerer so uniform-role sections skip the per-membership classifier call.
+The membership-role classifier from boxer ADR-0007 splits memberships into **primary** (defining the attribute) and **secondary** (annotating it). `lwq` honours this distinction: `with primary roles [...]` filters only on primary memberships, `with secondary roles [...]` only on secondary, and the unqualified `with roles [...]` operates on the union. Section uniformity hints (`AspectSectionMembershipsAllPrimary` and the `Secondary` peer) drive short-circuit dispatch in the lowerer so uniform-role sections skip the per-membership classifier call.
 
 **Co-value.** Sections that share a parameter scope are co — their attributes belong together at the corresponding scope grain. `lwq` exposes co-value semantics in two complementary forms:
 
@@ -164,7 +164,7 @@ The point of enumerating these is to record what specifically would be lost unde
 
 ### Neutral
 
-- The package boundary places `lwq` in boxer, not pebble2impl. Pebble2impl will be the first consumer but will not own the implementation — analogous to the relationship between pebble2impl ADR-0007 and boxer ADR-0056.
+- The package boundary places `lwq` in boxer, not pebble2impl. Pebble2impl will be the first consumer but will not own the implementation — the same boxer-owns / pebble2impl-consumes split as the membership-role classifier (boxer ADR-0007).
 - The decision to start with CH as the only backend (Arrow and DuckDB deferred to v3) commits the lowerer to CH semantics. Generalising later requires lifting the lowerer to a target-agnostic IR — a reasonable but non-trivial refactor that should be planned before v2 if multi-backend looks likely.
 - The `lvar_*` pseudo-function family remains valid post-`lwq` v0; users who prefer SQL-embedded form continue with them, while users who prefer FLWOR-shape adopt `lwq`. Maintaining both is a small additional surface but a meaningful ergonomic choice.
 
@@ -179,8 +179,8 @@ ADRs are append-only; supersession is recorded, not deleted.
 
 - [Leeway protocol skill](../skills/leeway-advanced/SKILLS.md) — canonical types, sections, memberships, aspects, co-sections.
 - [Leeway vs Snowflake VARIANT vs CH JSON v2 comparison](../skills/leeway-advanced/references/leeway-vs-snowflake.md) — the syntactic and structural gap this ADR addresses.
-- Boxer ADR-0056 (`$(boxer-path)/doc/adr/0007-leeway-membership-role-classifier.md`) and pebble2impl [ADR-0007](0007-leeway-membership-role-classifier.md) — membership-role classifier; the basis for `with roles` semantics.
-- Pebble2impl [ADR-0018](0018-leeway-card-json-canonical-format.md) — card-JSON canonical format; a representative tree-shaped construction target.
-- Boxer CH DSL EXPLANATION (`$(boxer-path)/public/db/clickhouse/dsl/EXPLANATION.md`) — the parsing, AST, and nanopass infrastructure the lowerer reuses.
+- [ADR-0007](0007-leeway-membership-role-classifier.md) — membership-role classifier; the basis for `with roles` semantics.
+- [ADR-0018](0018-leeway-card-json-canonical-format.md) — card-JSON canonical format; a representative tree-shaped construction target.
+- Boxer CH DSL EXPLANATION ([`../../public/db/clickhouse/dsl/EXPLANATION.md`](../../public/db/clickhouse/dsl/EXPLANATION.md)) — the parsing, AST, and nanopass infrastructure the lowerer reuses.
 - W3C XQuery 3.1 (FLWOR semantics): https://www.w3.org/TR/xquery-31/
 - MacLean, Bellotti, Young, Moran, "Questions, Options and Criteria: Elements of Design Space Analysis," *Human-Computer Interaction*, 1991 — the QOC notation used above.

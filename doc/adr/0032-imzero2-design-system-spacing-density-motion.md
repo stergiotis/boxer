@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-05-14
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-06-08
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0032: ImZero2 design system — spacing, density, and motion
 
@@ -262,6 +260,8 @@ Justification (vs. colour's TOML pipeline): the value count is small (~30) and t
 
 ### SD9 — Phasing
 
+> **Landed as of 2026-06-08:** M0–M1 (tokens + density binding) + the L3/L10/L11 lint rules in `designsystem/lint`. Deferred: M2 (pattern docs), M3 (reduced-motion plumbing), full Tier-1 lint graduation (M4).
+
 - **M0 — Commit token values + egui binding.** Land the const tables and the §SD7 binding in Rust + Go. Pilot app (carousel demo) uses the tokens. Density resolution at startup; no reduced-motion handling yet.
 - **M1 — Density preset wiring.** Per-user config + env-var override; verify visual results in carousel demo across Tight / Standard / Roomy.
 - **M2 — Pattern docs.** `foundations/spacing.md`, `foundations/density.md`, `foundations/motion.md`. Document the grid-alignment doc-rule, the tour-budget constraint for motion, and per-widget motion-mechanism catalogue.
@@ -308,7 +308,7 @@ Each milestone is independently shippable.
 
 ## Status
 
-Proposed — awaiting review by @spx. M0 (token values + egui binding) can begin immediately on acceptance.
+Accepted — 2026-06-08 (reviewed by p@stergiotis). M0–M1 have shipped — the spacing/density/motion tokens and the density-preset binding — and the spacing/stroke/motion lint rules (L3/L10/L11) are built in `designsystem/lint`. M2 (pattern docs), M3 (reduced-motion plumbing), and the lints' full Tier-1 graduation (M4) remain deferred — see the open questions below.
 
 Open questions:
 
