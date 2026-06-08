@@ -4,6 +4,14 @@ package membership
 // injectable formatters. Representation is the Renderer's output — producers
 // emit identities, consumers render them (ADR-0072). Construct via NewRenderer
 // or DefaultRenderer; the zero value is not usable.
+//
+// The injectable-formatter seam (RefFormatterI / VerbatimFormatterI /
+// ParamsFormatterI) is deliberately retained even though every current consumer
+// uses DefaultRenderer: it is ADR-0072's representation plane, and the first
+// real injector — a registry-backed RefFormatter rendering low-card refs as
+// their human names, the inverse of the write-side name→id lookup registry — is
+// deferred, not abandoned (decided 2026-06-08). Do not collapse the seam to
+// package functions on the assumption it is dead code.
 type Renderer struct {
 	ref      RefFormatterI
 	verbatim VerbatimFormatterI
