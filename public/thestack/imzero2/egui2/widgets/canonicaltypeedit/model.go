@@ -57,6 +57,12 @@ type Model struct {
 	barBuf string
 	barErr string
 
+	// formOpen drives the structured-form disclosure: false (the default)
+	// keeps the editor a single bar row with just the inline toggle; true
+	// reveals the grammar controls below it. View state only — it has no
+	// bearing on the draft, the canonical string, or validity.
+	formOpen bool
+
 	// Derived cache, refreshed by rebuildFromDraft.
 	ast       canonicaltypes.PrimitiveAstNodeI
 	canonical string

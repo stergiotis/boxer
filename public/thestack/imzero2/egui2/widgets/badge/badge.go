@@ -36,7 +36,7 @@ import (
 // picks up the same hues fleet-wide as plot annotations and status
 // indicators. TonePrimary is the accent role (ADR-0031 forbids "primary" as a
 // token name; the role enumerator keeps the name for source-compat).
-type ToneE = styletokens.Tone
+type ToneE = styletokens.Tone //boxer:lint disable=CS008 reason="deliberate re-export alias of the promoted styletokens.Tone (ADR-0031 §Updates); keeps badge.ToneE and the badge.Tone* constants source-compatible across existing call sites — the textbook re-export use of a type alias"
 
 const (
 	ToneNeutral = styletokens.ToneNeutral

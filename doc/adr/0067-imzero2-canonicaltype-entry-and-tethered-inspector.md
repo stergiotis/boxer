@@ -55,6 +55,14 @@ Build **two widgets** under `public/thestack/imzero2/egui2/widgets/`:
 
 Both register screenshot demos (SD8). The inspector reads **any** canonical type (primitive / group / signature); the editor v1 *writes* a single primitive (SD7).
 
+## Alternatives
+
+The options are weighed per-question in [Design space (compact)](#design-space-compact); the rejected/deferred ones, and why:
+
+- **Entry modality** (Q1): builder-primary with a read-only canonical string (a) — the safe fallback if bidirectional proves annoying; text-only formula bar (c) — undiscoverable and leaks raw parser errors. Rejected for the full bidirectional bar ⇄ form (b), which single-primitive scope makes safe (SD2).
+- **Composition scope** (Q2): primitive + flat group (b) or full signature (c) up front — deferred in favour of the single-primitive v1 (a), the smallest correct cut and the precondition that makes bidirectional sync safe. (The group/signature cut has since landed — see [Updates](#updates).)
+- **Summary/inspector packaging** (Q3): an analysis pane inlined into the editor (b) — traps the analysis where nothing else can reuse it; deferring the inspector (c) — leaves the maintainer's stated want unbuilt. Rejected for a standalone, reusable tethered inspector (a) any schema view can embed.
+
 ## Subsidiary design decisions
 
 ### SD1 — Editor model: one flat `primitiveDraft`, not the four AST structs
@@ -127,11 +135,24 @@ Two `registry.Demo{}` entries, Category `"Leeway"`, seeded from `sample/ct_sampl
 - **Grammar parse-tree tab**: an additive level-2 view; add on request.
 - **`LiveSource[T]` provenance** (bus-bound): inherits ADR-0046's deferral.
 
+## Consequences
+
+- **+** A reusable type inspector (`canonicaltypesummary`) usable anywhere a canonical type appears — schema views, codec previews, contract docs — built on the existing [ADR-0046](0046-imzero2-value-inspector-infrastructure.md) tethered-inspector infrastructure, so no new inspector machinery.
+- **+** A bidirectional editor that teaches the grammar (the form) while keeping the expert path and clipboard artefact (the bar), with a single flat `primitiveDraft` as the source of truth and per-frame edge ownership defusing the usual sync clobber war (SD1–SD2).
+- **+** Deterministic, capture-stable demos via the [ADR-0057](0057-demo-registry-and-drivers.md) registry (SD8).
+- **−** The v1 editor *writes* only single primitives; composition was deferred (now landed — see [Updates](#updates)). The inspector reads any primitive/group/signature from the start, so the asymmetry is deliberate (SD7).
+- **−** The Layout tab shows the *type-level* footprint (fixed vs variable + known widths), not a byte-exact runtime layout — the precise serialized encoding is owned by the runtime serialization layer, stated honestly in the tab (SD6).
+- **Neutral** The summary takes the canonical `string` as its primary input (regexsummary-style); an `AstNodeI` overload is deferred until a caller already holds a parsed node.
+
 ## Resolutions at acceptance (2026-06-06)
 
 - **Level-2 tab set** — Layout + Members + Go-codec. Grammar parse-tree deferred. A CBOR/wire-hex tab was considered and **dropped as unnecessary** — not planned.
 - **Names** — `canonicaltypeedit` / `canonicaltypesummary` (the `*summary` suffix matches distsummary/regexsummary; the `canonicaltype*` prefix stays greppable to the package).
 - **Summary input** — canonical `string` primary (regexsummary-style); an `AstNodeI` overload (`.Ast()`) is deferred until a caller holds a parsed node.
+
+## Status
+
+Accepted (2026-06-06, reviewed by p@stergiotis). Both widgets are built; the deferred group/signature cut subsequently landed (see [Updates](#updates) and [Resolutions at acceptance](#resolutions-at-acceptance-2026-06-06)). ADRs are append-only; further additions (the grammar parse-tree tab, the `AstNodeI` overload) are Tier 1/2 edits, not re-reviews.
 
 ## Updates
 

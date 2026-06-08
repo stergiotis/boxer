@@ -24,15 +24,16 @@ The editor shows the same type two ways:
 - a **structured form** whose controls follow the grammar productions
   (family → base → family-specific modifiers → scalar shape).
 
-The form sits behind a **collapsing disclosure ("structured editor"), closed by
-default**, so the editor opens compact — just the formula bar — and the
-structured controls appear only when the user un-collapses it. The disclosure
-body still emits its widget opcodes every frame while collapsed (ADR-0012), but
-that is harmless: the FFI writes data-bindings back only for the widgets Rust
-actually rendered, so a hidden control reports neither a value nor a change, and
-the edge-ownership rule below reads `formChanged = false`. egui keeps the
-open/closed state in its own memory, keyed by the widget id (per element in a
-`SignatureModel`).
+The form is hidden by default behind a **small inline disclosure caret** that
+sits on the bar row, just right of the formula bar, so a collapsed editor is a
+**single line** — `type [ bar ] ▸` — and the structured controls appear below it
+only after the user clicks the caret (▸ collapsed → ▾ open; a hover tooltip names
+it). The open/closed flag is an explicit `Model` field (`formOpen`, default
+`false`) — view state, with no bearing on the draft, the canonical string, or
+validity. While collapsed the form is **not rendered at all**, so a hidden form
+emits no widgets and cannot report a stray edit; the edge-ownership rule then
+simply reads `formChanged = false`. Each `SignatureModel` element is its own
+`Model`, so each chip remembers its own disclosure state.
 
 The single source of truth is a **flat draft** (the unexported `Model` fields:
 `base`, `fixedWidth`, `width`, `byteOrder`, `cidr`, `scalarMod`). The family is

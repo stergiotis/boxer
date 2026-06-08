@@ -2,6 +2,7 @@ package canonicaltypeedit
 
 import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/canonicaltypesummary"
@@ -10,10 +11,10 @@ import (
 
 const editorMinWidth = 460
 
-// formHeaderLabel titles the collapsing disclosure that hides the structured
-// form, keeping the editor compact (only the formula bar shows until the user
-// un-collapses it).
-const formHeaderLabel = "structured editor"
+// formToggleTip is the hover tooltip on the inline disclosure caret that
+// reveals/hides the structured form, keeping the editor a single bar row when
+// collapsed.
+const formToggleTip = "structured editor"
 
 type familyOpt struct {
 	key, label string
@@ -91,24 +92,22 @@ func (m *Model) Render(ids *c.WidgetIdStack, scopeKey string) {
 	}
 }
 
-// renderEditBody draws the formula bar + collapsible structured form and
-// applies the ADR-0067 §SD2 edge-ownership sync, mutating the draft in place.
-// It assumes the caller has already opened an IdScope and a layout container.
-// Returns whether the type changed this frame — the signature editor uses this
-// to know when to reassemble.
+// renderEditBody draws the formula bar (with its inline form-disclosure caret)
+// and, when expanded, the structured form below it, applying the ADR-0067 §SD2
+// edge-ownership sync and mutating the draft in place. It assumes the caller has
+// already opened an IdScope and a layout container. Returns whether the type
+// changed this frame — the signature editor uses this to know when to reassemble.
 func (m *Model) renderEditBody(ids *c.WidgetIdStack) (changed bool) {
 	barChanged := m.renderBar(ids)
 
-	// The grammar-mirroring form lives behind a disclosure so the editor opens
-	// compact — only the formula bar shows until the user un-collapses it. The
-	// body still emits its opcodes every frame while collapsed (ADR-0012), but
-	// that cannot clobber the draft: the FFI writes databindings back only for
-	// Rust-rendered widgets, so a hidden control reports neither a value nor a
-	// change and the edge-ownership rule below still reads formChanged=false.
+	// The grammar-mirroring form is gated behind the bar's inline disclosure
+	// caret (drawn by renderBar), so a collapsed editor stays a single bar row:
+	// the form is simply not rendered until m.formOpen. That also means a hidden
+	// form emits no widgets and cannot report a stray edit, so the edge-ownership
+	// rule below reads formChanged=false whenever it is collapsed.
 	var formChanged bool
-	for range c.CollapsingHeader(ids.PrepareStr("form"), c.WidgetText().Text(formHeaderLabel).Keep()).
-		DefaultOpen(false).
-		KeepIter() {
+	if m.formOpen {
+		c.AddSpace(4)
 		formChanged = m.renderForm(ids)
 	}
 
@@ -134,8 +133,9 @@ func (m *Model) renderEditBody(ids *c.WidgetIdStack) (changed bool) {
 	return
 }
 
-// renderBar draws the free-text formula bar and reports whether it changed
-// this frame.
+// renderBar draws the free-text formula bar plus the trailing inline disclosure
+// caret (renderFormToggle) on one row, and reports whether the bar text changed
+// this frame (the caret toggles form visibility, not the bar, so it is excluded).
 func (m *Model) renderBar(ids *c.WidgetIdStack) (changed bool) {
 	for range c.Horizontal().KeepIter() {
 		rowLabel("type")
@@ -144,6 +144,7 @@ func (m *Model) renderBar(ids *c.WidgetIdStack) (changed bool) {
 			DesiredWidth(240).
 			SendRespVal(&m.barBuf).
 			HasChanged()
+		m.renderFormToggle(ids)
 	}
 	if m.barErr != "" {
 		for rt := range c.RichTextLabelColored(
@@ -154,6 +155,24 @@ func (m *Model) renderBar(ids *c.WidgetIdStack) (changed bool) {
 		}
 	}
 	return
+}
+
+// renderFormToggle draws the small inline disclosure caret that shows/hides the
+// structured form. It sits on the bar row, to the right of the formula bar, so a
+// collapsed editor is a single line. The caret points right when collapsed and
+// down when open (the usual tree-disclosure convention); the hover tooltip names
+// what it reveals.
+func (m *Model) renderFormToggle(ids *c.WidgetIdStack) {
+	caret := icons.PhCaretRight
+	if m.formOpen {
+		caret = icons.PhCaretDown
+	}
+	for range c.HoverText(formToggleTip).KeepIter() {
+		if c.Button(ids.PrepareStr("form-toggle"), c.Atoms().Text(caret).Keep()).
+			Small().SendResp().HasPrimaryClicked() {
+			m.formOpen = !m.formOpen
+		}
+	}
 }
 
 // renderForm draws the structured controls. Each control sits on the grammar
