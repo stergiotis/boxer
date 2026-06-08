@@ -275,9 +275,16 @@ func (c MembershipChannel) ReadIterElemType() string { return c.desc().readIterE
 func (c MembershipChannel) AddMethodSuffix() string { return c.desc().addMethodSuffix }
 
 // Cardinality / Identity / HasParams expose the channel's three ADR-0072
-// carriage axes (plane D). The flat enum stays the dispatch key; these answer
-// "where on the product grid is this channel" for callers that reason about the
-// axes (schema docs, the playground) rather than a specific channel.
+// carriage axes (plane D) as a queryable product. They are documentation, not
+// dispatch: every behavioural branch switches the flat enum via the
+// denormalised UsesCarrier / EmbedsLiteralName / NeedsKindVar booleans (each
+// equivalent to one Identity value), and these accessors are currently read
+// only by TestChannelTableAxes — validateChannelTable keeps the two consistent
+// but reads the descriptor fields, not these methods. Wiring dispatch through
+// the axes is gated on the identity axis becoming bijective (ADR-0072 Open
+// question 2: split PerRow into PerRowId/PerRowName/PerRowBlob so the triple
+// keys the channel); until then they answer "where on the product grid is this
+// channel" for humans and schema/playground tooling, not the codec.
 func (c MembershipChannel) Cardinality() ChannelCardinalityE { return c.desc().cardinality }
 func (c MembershipChannel) Identity() ChannelIdentityE       { return c.desc().identity }
 func (c MembershipChannel) HasParams() bool                  { return c.desc().hasParams }

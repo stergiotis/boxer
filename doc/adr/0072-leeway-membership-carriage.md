@@ -98,7 +98,11 @@ Tracked as named follow-ons, not gates on this ADR:
    descriptor fields, not these methods. Either route one real dispatch site
    through the axes — the carrier-vs-simple branch (`Identity == PerRow` in place
    of `UsesCarrier`) or `dql.channelSpec` — or state plainly that they are a
-   documented product, not a dispatch input.
+   documented product, not a dispatch input. *(Decided 2026-06-08 — documented,
+   not routed: labelled a product-for-reasoning at the accessor definition, since
+   piecemeal routing relocates the denormalisation rather than removing it.
+   Wiring dispatch through the axes is deferred to Open question 2, where it pays
+   off once the identity axis is bijective.)*
 2. **The identity axis is not bijective.** `ChannelIdentity.PerRow` collapses
    three distinct per-row encodings — a uint64 id, a `[]byte` name, and an opaque
    params blob — disambiguated only by the separate `carrierValueField` ("Id" /
