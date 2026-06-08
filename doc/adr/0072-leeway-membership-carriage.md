@@ -109,7 +109,10 @@ Tracked as named follow-ons, not gates on this ADR:
    "Name" / ""). So `(cardinality, identity, params)` does not yet key the
    channel. Splitting `PerRow` into `PerRowId` / `PerRowName` / `PerRowBlob` would
    make the triple a true key and fold `carrierValueField` (and
-   `CarrierValueIsBytes`) away.
+   `CarrierValueIsBytes`) away. *(Resolved 2026-06-08 — `ChannelIdentityE` now
+   aliases the shared five-way `membership.IdentityEncoding`; `CarrierValueField`
+   / `CarrierValueIsBytes` derive from it and the `carrierValueField` /
+   `carrierValueBytes` descriptor fields are gone.)*
 3. **`MembershipKindE` duplicates the channel's identity × params.** The
    read-side `membership.MembershipKindE` (Ref / Verbatim / RefParametrized / the
    two Mixed shapes) and the write-side `mappingplan.MembershipChannel`

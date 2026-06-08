@@ -17,10 +17,10 @@ func TestChannelAxes_Spot(t *testing.T) {
 		{MembershipChannelLowCardVerbatim, ChannelCardinalityLow, ChannelIdentityVerbatim, false},
 		{MembershipChannelHighCardRef, ChannelCardinalityHigh, ChannelIdentityRef, false},
 		{MembershipChannelHighCardVerbatim, ChannelCardinalityHigh, ChannelIdentityVerbatim, false},
-		{MembershipChannelMixedLowCardRef, ChannelCardinalityLow, ChannelIdentityPerRow, true},
-		{MembershipChannelMixedLowCardVerbatim, ChannelCardinalityLow, ChannelIdentityPerRow, true},
-		{MembershipChannelLowCardRefParametrized, ChannelCardinalityLow, ChannelIdentityPerRow, true},
-		{MembershipChannelHighCardRefParametrized, ChannelCardinalityHigh, ChannelIdentityPerRow, true},
+		{MembershipChannelMixedLowCardRef, ChannelCardinalityLow, ChannelIdentityPerRowId, true},
+		{MembershipChannelMixedLowCardVerbatim, ChannelCardinalityLow, ChannelIdentityPerRowName, true},
+		{MembershipChannelLowCardRefParametrized, ChannelCardinalityLow, ChannelIdentityPerRowBlob, true},
+		{MembershipChannelHighCardRefParametrized, ChannelCardinalityHigh, ChannelIdentityPerRowBlob, true},
 	}
 	for _, tc := range cases {
 		if tc.ch.Cardinality() != tc.card || tc.ch.Identity() != tc.ident || tc.ch.HasParams() != tc.params {

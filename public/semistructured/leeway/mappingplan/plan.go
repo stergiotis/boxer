@@ -14,6 +14,7 @@ package mappingplan
 import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/membership"
 )
 
 // Plan is the parsed DTO ready for emission. ParsePlan produces it from
@@ -129,16 +130,22 @@ const (
 	ChannelCardinalityHigh
 )
 
-// ChannelIdentityE is the identity-encoding axis. Ref resolves a registry
-// uint64 id; Verbatim embeds the literal lw: name as []byte; PerRow carries the
-// identity as per-row carrier data (a uint64 id, a []byte name, or the opaque
-// params blob — CarrierValueField holds the sub-distinction).
-type ChannelIdentityE uint8
+// ChannelIdentityE is the identity-encoding axis. It aliases the shared
+// membership.IdentityEncoding (ADR-0072 Open question 3): Ref resolves a
+// registry uint64 id; Verbatim embeds the literal lw: name as []byte; the three
+// PerRow encodings carry the identity as per-row carrier data — PerRowId a
+// uint64 id, PerRowName a []byte name, PerRowBlob an opaque params blob. The
+// five-way split makes the axis bijective with the realized channels, so
+// CarrierValueField / CarrierValueIsBytes derive from it rather than from
+// separate descriptor fields. Channels never use the IdentityNone zero value.
+type ChannelIdentityE = membership.IdentityEncoding
 
 const (
-	ChannelIdentityRef ChannelIdentityE = iota
-	ChannelIdentityVerbatim
-	ChannelIdentityPerRow
+	ChannelIdentityRef        = membership.IdentityRef
+	ChannelIdentityVerbatim   = membership.IdentityVerbatim
+	ChannelIdentityPerRowId   = membership.IdentityPerRowId
+	ChannelIdentityPerRowName = membership.IdentityPerRowName
+	ChannelIdentityPerRowBlob = membership.IdentityPerRowBlob
 )
 
 // channelDescriptor is the single per-channel fact row. Every accessor
@@ -159,14 +166,10 @@ type channelDescriptor struct {
 	carrierReadSuffix string
 	// carrierSeq2Types is the iter.Seq2 element-type list for a mixed channel's combined read.
 	carrierSeq2Types string
-	// carrierValueField is the carrier struct field holding the membership value ("Id"/"Name").
-	carrierValueField string
 	// readIterElemType is the source-form element type of the read-side membership iterator.
 	readIterElemType string
 	// usesCarrier marks the mixed / parametrized channels (membership identity is per-row carrier data).
 	usesCarrier bool
-	// carrierValueBytes marks a []byte carrier value field (needs a defensive copy on read).
-	carrierValueBytes bool
 	// embedsLiteralName marks channels whose wire identity is the literal lw: name as []byte.
 	embedsLiteralName bool
 	// needsKindVar marks ref channels that require a package-level kindXxx resolved id symbol.
@@ -187,10 +190,10 @@ var channelTable = [...]channelDescriptor{
 	MembershipChannelLowCardVerbatim:         {flag: "lowCardVerbatim", addMethodSuffix: "LowCardVerbatim", readIterElemType: "[]byte", embedsLiteralName: true, cardinality: ChannelCardinalityLow, identity: ChannelIdentityVerbatim},
 	MembershipChannelHighCardRef:             {flag: "highCardRef", addMethodSuffix: "HighCardRef", readIterElemType: "uint64", needsKindVar: true, cardinality: ChannelCardinalityHigh, identity: ChannelIdentityRef},
 	MembershipChannelHighCardVerbatim:        {flag: "highCardVerbatim", addMethodSuffix: "HighCardVerbatim", readIterElemType: "[]byte", embedsLiteralName: true, cardinality: ChannelCardinalityHigh, identity: ChannelIdentityVerbatim},
-	MembershipChannelMixedLowCardRef:         {flag: "mixedLowCardRef", addMethodSuffix: "MixedLowCardRef", carrierType: "MixedLowCardRef", carrierReadSuffix: "LowCardRefHighCardParams", carrierSeq2Types: "uint64, []byte", carrierValueField: "Id", readIterElemType: "[]byte", usesCarrier: true, cardinality: ChannelCardinalityLow, identity: ChannelIdentityPerRow, hasParams: true},
-	MembershipChannelMixedLowCardVerbatim:    {flag: "mixedLowCardVerbatim", addMethodSuffix: "MixedLowCardVerbatim", carrierType: "MixedLowCardVerbatim", carrierReadSuffix: "LowCardVerbatimHighCardParams", carrierSeq2Types: "[]byte, []byte", carrierValueField: "Name", readIterElemType: "[]byte", usesCarrier: true, carrierValueBytes: true, cardinality: ChannelCardinalityLow, identity: ChannelIdentityPerRow, hasParams: true},
-	MembershipChannelLowCardRefParametrized:  {flag: "lowCardRefParametrized", addMethodSuffix: "LowCardRefParametrized", carrierType: "Parametrized", carrierReadSuffix: "LowCardRefParametrized", readIterElemType: "[]byte", usesCarrier: true, cardinality: ChannelCardinalityLow, identity: ChannelIdentityPerRow, hasParams: true},
-	MembershipChannelHighCardRefParametrized: {flag: "highCardRefParametrized", addMethodSuffix: "HighCardRefParametrized", carrierType: "Parametrized", carrierReadSuffix: "HighCardRefParametrized", readIterElemType: "[]byte", usesCarrier: true, cardinality: ChannelCardinalityHigh, identity: ChannelIdentityPerRow, hasParams: true},
+	MembershipChannelMixedLowCardRef:         {flag: "mixedLowCardRef", addMethodSuffix: "MixedLowCardRef", carrierType: "MixedLowCardRef", carrierReadSuffix: "LowCardRefHighCardParams", carrierSeq2Types: "uint64, []byte", readIterElemType: "[]byte", usesCarrier: true, cardinality: ChannelCardinalityLow, identity: ChannelIdentityPerRowId, hasParams: true},
+	MembershipChannelMixedLowCardVerbatim:    {flag: "mixedLowCardVerbatim", addMethodSuffix: "MixedLowCardVerbatim", carrierType: "MixedLowCardVerbatim", carrierReadSuffix: "LowCardVerbatimHighCardParams", carrierSeq2Types: "[]byte, []byte", readIterElemType: "[]byte", usesCarrier: true, cardinality: ChannelCardinalityLow, identity: ChannelIdentityPerRowName, hasParams: true},
+	MembershipChannelLowCardRefParametrized:  {flag: "lowCardRefParametrized", addMethodSuffix: "LowCardRefParametrized", carrierType: "Parametrized", carrierReadSuffix: "LowCardRefParametrized", readIterElemType: "[]byte", usesCarrier: true, cardinality: ChannelCardinalityLow, identity: ChannelIdentityPerRowBlob, hasParams: true},
+	MembershipChannelHighCardRefParametrized: {flag: "highCardRefParametrized", addMethodSuffix: "HighCardRefParametrized", carrierType: "Parametrized", carrierReadSuffix: "HighCardRefParametrized", readIterElemType: "[]byte", usesCarrier: true, cardinality: ChannelCardinalityHigh, identity: ChannelIdentityPerRowBlob, hasParams: true},
 }
 
 // desc returns the channel's descriptor row, or the zero descriptor for an
@@ -242,12 +245,23 @@ func (c MembershipChannel) CarrierReadSeq2Types() string { return c.desc().carri
 // value for this channel — "Id" (uint64) for mixedLowCardRef, "Name"
 // ([]byte) for mixedLowCardVerbatim. "" for non-carrier channels. The
 // Params field name is uniform ("Params") across carriers.
-func (c MembershipChannel) CarrierValueField() string { return c.desc().carrierValueField }
+func (c MembershipChannel) CarrierValueField() string {
+	switch c.desc().identity {
+	case ChannelIdentityPerRowId:
+		return "Id"
+	case ChannelIdentityPerRowName:
+		return "Name"
+	default:
+		return ""
+	}
+}
 
 // CarrierValueIsBytes reports whether the carrier's membership-value field
 // is a []byte (needing a defensive copy out of the Arrow buffer on read)
 // rather than a scalar id. True for mixedLowCardVerbatim.
-func (c MembershipChannel) CarrierValueIsBytes() bool { return c.desc().carrierValueBytes }
+func (c MembershipChannel) CarrierValueIsBytes() bool {
+	return c.desc().identity == ChannelIdentityPerRowName
+}
 
 // EmbedsLiteralName reports whether the channel's wire identity is the
 // literal lw: membership name as []byte rather than a uint64 id from
@@ -276,15 +290,15 @@ func (c MembershipChannel) AddMethodSuffix() string { return c.desc().addMethodS
 
 // Cardinality / Identity / HasParams expose the channel's three ADR-0072
 // carriage axes (plane D) as a queryable product. They are documentation, not
-// dispatch: every behavioural branch switches the flat enum via the
-// denormalised UsesCarrier / EmbedsLiteralName / NeedsKindVar booleans (each
-// equivalent to one Identity value), and these accessors are currently read
-// only by TestChannelTableAxes — validateChannelTable keeps the two consistent
-// but reads the descriptor fields, not these methods. Wiring dispatch through
-// the axes is gated on the identity axis becoming bijective (ADR-0072 Open
-// question 2: split PerRow into PerRowId/PerRowName/PerRowBlob so the triple
-// keys the channel); until then they answer "where on the product grid is this
-// channel" for humans and schema/playground tooling, not the codec.
+// dispatch: most behavioural branches switch the flat enum via the denormalised
+// UsesCarrier / EmbedsLiteralName / NeedsKindVar booleans (each equivalent to
+// one Identity value), and these accessors are otherwise read only by
+// TestChannelTableAxes. The identity axis is now bijective (PerRowId /
+// PerRowName / PerRowBlob), so CarrierValueField and CarrierValueIsBytes already
+// derive from Identity; routing the remaining dispatch through the axes is now
+// possible but deferred (the denormalised booleans stay the dispatch key). They
+// answer "where on the product grid is this channel" for humans and
+// schema/playground tooling.
 func (c MembershipChannel) Cardinality() ChannelCardinalityE { return c.desc().cardinality }
 func (c MembershipChannel) Identity() ChannelIdentityE       { return c.desc().identity }
 func (c MembershipChannel) HasParams() bool                  { return c.desc().hasParams }
@@ -303,12 +317,12 @@ func validateChannelTable() (err error) {
 		if (d.identity == ChannelIdentityVerbatim) != d.embedsLiteralName {
 			return eb.Build().Str("channel", c.String()).Errorf("identity=Verbatim must match embedsLiteralName")
 		}
-		perRow := d.identity == ChannelIdentityPerRow
-		if perRow != d.usesCarrier {
-			return eb.Build().Str("channel", c.String()).Errorf("identity=PerRow must match usesCarrier")
+		carrier := d.identity.HasParams()
+		if carrier != d.usesCarrier {
+			return eb.Build().Str("channel", c.String()).Errorf("a per-row identity must match usesCarrier")
 		}
-		if perRow != d.hasParams {
-			return eb.Build().Str("channel", c.String()).Errorf("hasParams must match the PerRow (carrier) identity")
+		if carrier != d.hasParams {
+			return eb.Build().Str("channel", c.String()).Errorf("hasParams must match the per-row (carrier) identity")
 		}
 	}
 	return nil
