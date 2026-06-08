@@ -17,7 +17,7 @@ description: "Use this skill when writing ClickHouse SQL transformation passes, 
 ## Module Layout
 
 ```
-github.com/stergiotis/pebble2impl/public/db/clickhouse/dsl/nanopass/
+github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/
 ├── parse.go          # Parse(sql) → *ParseResult
 ├── walk.go           # WalkCST, FindAll, FindFirst
 ├── rewrite.go        # NewRewriter, ReplaceNode, DeleteNode, InsertBefore, InsertAfter, etc.
@@ -52,7 +52,7 @@ import (
     "github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
     "github.com/stergiotis/boxer/public/observability/eh"
     "github.com/rs/zerolog"
-    "github.com/stergiotis/pebble2impl/public/db/clickhouse/dsl/nanopass"
+    "github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 )
 ```
 
@@ -79,7 +79,7 @@ package passes
 import (
     "github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
     "github.com/stergiotis/boxer/public/observability/eh"
-    "github.com/stergiotis/pebble2impl/public/db/clickhouse/dsl/nanopass"
+    "github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 )
 
 func MyTokenPass(sql string) (result string, err error) {

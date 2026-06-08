@@ -475,7 +475,7 @@ import (
 	"fmt"
 	"time"
 	"github.com/rs/zerolog/log"
-	c "github.com/stergiotis/pebble2impl/public/thestack/imzero2/egui2/bindings"
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
 var n int
