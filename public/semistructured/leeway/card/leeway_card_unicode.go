@@ -11,6 +11,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/membership"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
@@ -50,9 +51,10 @@ func DefaultUnicodeEmitterConfig() UnicodeEmitterConfig {
 // Names are emitted using StylableName.String() — the IR is assumed to carry
 // the desired naming style already.
 type UnicodeCardEmitter struct {
-	w     io.Writer
-	width int
-	cfg   UnicodeEmitterConfig
+	w        io.Writer
+	width    int
+	cfg      UnicodeEmitterConfig
+	renderer *membership.Renderer
 
 	// Per-section accumulation
 	sectionName string
@@ -99,11 +101,12 @@ func NewUnicodeCardEmitter(w io.Writer, width int) *UnicodeCardEmitter {
 
 func NewUnicodeCardEmitterWithConfig(w io.Writer, width int, cfg UnicodeEmitterConfig) *UnicodeCardEmitter {
 	return &UnicodeCardEmitter{
-		w:       w,
-		width:   width,
-		cfg:     cfg,
-		lineBuf: make([]byte, 0, 512),
-		rows:    make([]textRow, 0, 16),
+		w:        w,
+		width:    width,
+		cfg:      cfg,
+		renderer: membership.DefaultRenderer(),
+		lineBuf:  make([]byte, 0, 512),
+		rows:     make([]textRow, 0, 16),
 	}
 }
 
@@ -349,7 +352,7 @@ func (inst *UnicodeCardEmitter) WriteString(s string) (n int, err error) {
 func (inst *UnicodeCardEmitter) BeginTags(nTags int) {}
 func (inst *UnicodeCardEmitter) EndTags()            {}
 
-func (inst *UnicodeCardEmitter) AddMembershipRef(lowCard bool, ref uint64, humanReadableRef string) {
+func (inst *UnicodeCardEmitter) AddMembershipRef(lowCard bool, ref uint64) {
 	if inst.currentRow == nil {
 		return
 	}
@@ -357,10 +360,10 @@ func (inst *UnicodeCardEmitter) AddMembershipRef(lowCard bool, ref uint64, human
 	if lowCard {
 		card = "L"
 	}
-	inst.currentRow.tags = append(inst.currentRow.tags, fmt.Sprintf("ref(%s):%s", card, sanitize(humanReadableRef)))
+	inst.currentRow.tags = append(inst.currentRow.tags, fmt.Sprintf("ref(%s):%s", card, sanitize(inst.renderer.RenderRef(ref))))
 }
 
-func (inst *UnicodeCardEmitter) AddMembershipVerbatim(lowCard bool, verbatim string, humanReadableVerbatim string) {
+func (inst *UnicodeCardEmitter) AddMembershipVerbatim(lowCard bool, verbatim string) {
 	if inst.currentRow == nil {
 		return
 	}
@@ -368,10 +371,10 @@ func (inst *UnicodeCardEmitter) AddMembershipVerbatim(lowCard bool, verbatim str
 	if lowCard {
 		card = "L"
 	}
-	inst.currentRow.tags = append(inst.currentRow.tags, fmt.Sprintf("v(%s):%s", card, sanitize(humanReadableVerbatim)))
+	inst.currentRow.tags = append(inst.currentRow.tags, fmt.Sprintf("v(%s):%s", card, sanitize(inst.renderer.RenderVerbatim(verbatim))))
 }
 
-func (inst *UnicodeCardEmitter) AddMembershipRefParametrized(lowCard bool, ref uint64, humanReadableRef string, params string, humanReadableParams string) {
+func (inst *UnicodeCardEmitter) AddMembershipRefParametrized(lowCard bool, ref uint64, params string) {
 	if inst.currentRow == nil {
 		return
 	}
@@ -379,32 +382,32 @@ func (inst *UnicodeCardEmitter) AddMembershipRefParametrized(lowCard bool, ref u
 	if lowCard {
 		card = "L"
 	}
-	if humanReadableParams != "" {
-		inst.currentRow.tags = append(inst.currentRow.tags, fmt.Sprintf("rp(%s):%s(%s)", card, sanitize(humanReadableRef), sanitize(humanReadableParams)))
+	if params != "" {
+		inst.currentRow.tags = append(inst.currentRow.tags, fmt.Sprintf("rp(%s):%s(%s)", card, sanitize(inst.renderer.RenderRef(ref)), sanitize(inst.renderer.RenderParams(params))))
 	} else {
-		inst.currentRow.tags = append(inst.currentRow.tags, fmt.Sprintf("rp(%s):%s", card, sanitize(humanReadableRef)))
+		inst.currentRow.tags = append(inst.currentRow.tags, fmt.Sprintf("rp(%s):%s", card, sanitize(inst.renderer.RenderRef(ref))))
 	}
 }
 
-func (inst *UnicodeCardEmitter) AddMembershipMixedLowCardRefHighCardParam(ref uint64, humanReadableRef string, params string, humanReadableParams string) {
+func (inst *UnicodeCardEmitter) AddMembershipMixedLowCardRefHighCardParam(ref uint64, params string) {
 	if inst.currentRow == nil {
 		return
 	}
-	if humanReadableParams != "" {
-		inst.currentRow.tags = append(inst.currentRow.tags, fmt.Sprintf("mr:%s(%s)", sanitize(humanReadableRef), sanitize(humanReadableParams)))
+	if params != "" {
+		inst.currentRow.tags = append(inst.currentRow.tags, fmt.Sprintf("mr:%s(%s)", sanitize(inst.renderer.RenderRef(ref)), sanitize(inst.renderer.RenderParams(params))))
 	} else {
-		inst.currentRow.tags = append(inst.currentRow.tags, fmt.Sprintf("mr:%s", sanitize(humanReadableRef)))
+		inst.currentRow.tags = append(inst.currentRow.tags, fmt.Sprintf("mr:%s", sanitize(inst.renderer.RenderRef(ref))))
 	}
 }
 
-func (inst *UnicodeCardEmitter) AddMembershipMixedLowCardVerbatimHighCardParam(verbatim string, humanReadableVerbatim string, params string, humanReadableParams string) {
+func (inst *UnicodeCardEmitter) AddMembershipMixedLowCardVerbatimHighCardParam(verbatim string, params string) {
 	if inst.currentRow == nil {
 		return
 	}
-	if humanReadableParams != "" {
-		inst.currentRow.tags = append(inst.currentRow.tags, fmt.Sprintf("mv:%s(%s)", sanitize(humanReadableVerbatim), sanitize(humanReadableParams)))
+	if params != "" {
+		inst.currentRow.tags = append(inst.currentRow.tags, fmt.Sprintf("mv:%s(%s)", sanitize(inst.renderer.RenderVerbatim(verbatim)), sanitize(inst.renderer.RenderParams(params))))
 	} else {
-		inst.currentRow.tags = append(inst.currentRow.tags, fmt.Sprintf("mv:%s", sanitize(humanReadableVerbatim)))
+		inst.currentRow.tags = append(inst.currentRow.tags, fmt.Sprintf("mv:%s", sanitize(inst.renderer.RenderVerbatim(verbatim))))
 	}
 }
 

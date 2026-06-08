@@ -11,6 +11,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/membership"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/membershiprole"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
@@ -58,9 +59,9 @@ func TestJsonCardEmitter_AliasingMultiPrimary(t *testing.T) {
 	sink.BeginEntity()
 	sink.BeginTaggedSections()
 	driveOneAttribute(t, sink, "float64", "value", "19.99", func() {
-		sink.AddMembershipVerbatim(true, "/price/current", "/price/current")
-		sink.AddMembershipVerbatim(true, "/promo/flash_sale", "/promo/flash_sale")
-		sink.AddMembershipVerbatim(true, "/stats/min", "/stats/min")
+		sink.AddMembershipVerbatim(true, "/price/current")
+		sink.AddMembershipVerbatim(true, "/promo/flash_sale")
+		sink.AddMembershipVerbatim(true, "/stats/min")
 	})
 	_ = sink.EndTaggedSections()
 	_ = sink.EndEntity()
@@ -85,9 +86,9 @@ func TestJsonCardEmitter_SecondaryLabels(t *testing.T) {
 	sink.BeginEntity()
 	sink.BeginTaggedSections()
 	driveOneAttribute(t, sink, "null", "value", "", func() {
-		sink.AddMembershipVerbatim(true, "/metrics/error", "/metrics/error")
+		sink.AddMembershipVerbatim(true, "/metrics/error")
 		// Plain identifier verbatim → secondary under DefaultClassifier.
-		sink.AddMembershipVerbatim(true, "errormsg", "errormsg")
+		sink.AddMembershipVerbatim(true, "errormsg")
 	})
 	_ = sink.EndTaggedSections()
 	_ = sink.EndEntity()
@@ -113,7 +114,7 @@ func TestJsonCardEmitter_NDJSONHeaderAndOneEntityPerLine(t *testing.T) {
 		sink.BeginEntity()
 		sink.BeginTaggedSections()
 		driveOneAttribute(t, sink, "string", "value", val, func() {
-			sink.AddMembershipVerbatim(true, "/x", "/x")
+			sink.AddMembershipVerbatim(true, "/x")
 		})
 		_ = sink.EndTaggedSections()
 		_ = sink.EndEntity()
@@ -160,7 +161,7 @@ func TestJsonCardEmitter_TypeAwareScalars(t *testing.T) {
 	_ = sink.EndScalarValue()
 	sink.EndColumn()
 	sink.BeginTags(0)
-	sink.AddMembershipVerbatim(true, "/x", "/x")
+	sink.AddMembershipVerbatim(true, "/x")
 	sink.EndTags()
 	_ = sink.EndTaggedValue()
 	_ = sink.EndSection()
@@ -176,7 +177,7 @@ func TestJsonCardEmitter_TypeAwareScalars(t *testing.T) {
 	_ = sink.EndScalarValue()
 	sink.EndColumn()
 	sink.BeginTags(0)
-	sink.AddMembershipVerbatim(true, "/y", "/y")
+	sink.AddMembershipVerbatim(true, "/y")
 	sink.EndTags()
 	_ = sink.EndTaggedValue()
 	_ = sink.EndSection()
@@ -213,11 +214,11 @@ func TestJsonCardEmitter_Determinism(t *testing.T) {
 		sink.BeginEntity()
 		sink.BeginTaggedSections()
 		driveOneAttribute(t, sink, "string", "value", "alpha", func() {
-			sink.AddMembershipVerbatim(true, "/c", "/c")
-			sink.AddMembershipVerbatim(true, "/a", "/a")
-			sink.AddMembershipVerbatim(true, "/b", "/b")
-			sink.AddMembershipVerbatim(true, "labelTwo", "labelTwo")
-			sink.AddMembershipVerbatim(true, "labelOne", "labelOne")
+			sink.AddMembershipVerbatim(true, "/c")
+			sink.AddMembershipVerbatim(true, "/a")
+			sink.AddMembershipVerbatim(true, "/b")
+			sink.AddMembershipVerbatim(true, "labelTwo")
+			sink.AddMembershipVerbatim(true, "labelOne")
 		})
 		_ = sink.EndTaggedSections()
 		_ = sink.EndEntity()
@@ -288,7 +289,7 @@ func TestJsonCardEmitter_SetWrapper(t *testing.T) {
 	sink.EndSetValue()
 	sink.EndColumn()
 	sink.BeginTags(0)
-	sink.AddMembershipVerbatim(true, "/tags", "/tags")
+	sink.AddMembershipVerbatim(true, "/tags")
 	sink.EndTags()
 	_ = sink.EndTaggedValue()
 	_ = sink.EndSection()
@@ -314,7 +315,7 @@ func TestJsonCardEmitter_HomogenousArrayItemsTyped(t *testing.T) {
 	sink.BeginEntity()
 	sink.BeginTaggedSections()
 	driveOneAttributeArray(t, sink, "u32array", intArrayCt, []string{"1", "2", "3"}, func() {
-		sink.AddMembershipVerbatim(true, "/wordLength", "/wordLength")
+		sink.AddMembershipVerbatim(true, "/wordLength")
 	})
 	_ = sink.EndTaggedSections()
 	_ = sink.EndEntity()
@@ -347,7 +348,7 @@ func TestJsonCardEmitter_NaNAndInf(t *testing.T) {
 		_ = sink.EndScalarValue()
 		sink.EndColumn()
 		sink.BeginTags(0)
-		sink.AddMembershipVerbatim(true, "/x_"+s, "/x_"+s)
+		sink.AddMembershipVerbatim(true, "/x_"+s)
 		sink.EndTags()
 		_ = sink.EndTaggedValue()
 		_ = sink.EndSection()
@@ -391,7 +392,7 @@ func TestJsonCardEmitter_ParamTreatmentIndex(t *testing.T) {
 		_ = sink.EndScalarValue()
 		sink.EndColumn()
 		sink.BeginTags(0)
-		sink.AddMembershipMixedLowCardVerbatimHighCardParam("/measurements/_", "/measurements/_", strconv.Itoa(i), strconv.Itoa(i))
+		sink.AddMembershipMixedLowCardVerbatimHighCardParam("/measurements/_", strconv.Itoa(i))
 		sink.EndTags()
 		_ = sink.EndTaggedValue()
 		_ = sink.EndSection()
@@ -419,12 +420,12 @@ func TestJsonCardEmitter_ParamTreatmentIndex(t *testing.T) {
 // any parametrized membership; used to exercise the indexed projection path.
 type indexClassifier struct{}
 
-func (indexClassifier) Classify(sec membershiprole.SectionContext, mv membershiprole.MembershipValue) (role membershiprole.MembershipRoleE, pt membershiprole.ParamTreatmentE) {
+func (indexClassifier) Classify(sec membershiprole.SectionContext, mv membership.MembershipValue) (role membershiprole.MembershipRoleE, pt membershiprole.ParamTreatmentE) {
 	role = membershiprole.MembershipRolePrimary
 	switch mv.Kind {
-	case membershiprole.MembershipKindRefParametrized,
-		membershiprole.MembershipKindMixedLowCardRefHighCardParam,
-		membershiprole.MembershipKindMixedLowCardVerbatimHighCardParam:
+	case membership.MembershipKindRefParametrized,
+		membership.MembershipKindMixedLowCardRefHighCardParam,
+		membership.MembershipKindMixedLowCardVerbatimHighCardParam:
 		pt = membershiprole.ParamTreatmentIndex
 	default:
 		pt = membershiprole.ParamTreatmentNone

@@ -10,6 +10,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/membership"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
@@ -115,9 +116,10 @@ type svgcEntity struct {
 // --- Sink ---
 
 type SvgCardEmitter struct {
-	w       io.Writer
-	palette []color.Color
-	err     error
+	w        io.Writer
+	palette  []color.Color
+	renderer *membership.Renderer
+	err      error
 
 	entities []svgcEntity
 
@@ -148,8 +150,9 @@ type SvgCardEmitter struct {
 func NewSvgCardEmitter(w io.Writer, palette SvgCardPaletteE) *SvgCardEmitter {
 	pal := defaultPalette(palette)
 	return &SvgCardEmitter{
-		w:       w,
-		palette: pal,
+		w:        w,
+		palette:  pal,
+		renderer: membership.DefaultRenderer(),
 	}
 }
 
@@ -382,36 +385,36 @@ func (s *SvgCardEmitter) WriteString(str string) (n int, err error) {
 func (s *SvgCardEmitter) BeginTags(nTags int) {}
 func (s *SvgCardEmitter) EndTags()            {}
 
-func (s *SvgCardEmitter) AddMembershipRef(lowCard bool, ref uint64, humanReadableRef string) {
+func (s *SvgCardEmitter) AddMembershipRef(lowCard bool, ref uint64) {
 	c := "H"
 	if lowCard {
 		c = "L"
 	}
-	s.curTags = append(s.curTags, svgcTag{prefix: "ref(" + c + ")", text: humanReadableRef})
+	s.curTags = append(s.curTags, svgcTag{prefix: "ref(" + c + ")", text: s.renderer.RenderRef(ref)})
 }
 
-func (s *SvgCardEmitter) AddMembershipVerbatim(lowCard bool, verbatim string, humanReadableVerbatim string) {
+func (s *SvgCardEmitter) AddMembershipVerbatim(lowCard bool, verbatim string) {
 	c := "H"
 	if lowCard {
 		c = "L"
 	}
-	s.curTags = append(s.curTags, svgcTag{prefix: "v(" + c + ")", text: humanReadableVerbatim})
+	s.curTags = append(s.curTags, svgcTag{prefix: "v(" + c + ")", text: s.renderer.RenderVerbatim(verbatim)})
 }
 
-func (s *SvgCardEmitter) AddMembershipRefParametrized(lowCard bool, ref uint64, humanReadableRef string, params string, humanReadableParams string) {
+func (s *SvgCardEmitter) AddMembershipRefParametrized(lowCard bool, ref uint64, params string) {
 	c := "H"
 	if lowCard {
 		c = "L"
 	}
-	s.curTags = append(s.curTags, svgcTag{prefix: "rp(" + c + ")", text: humanReadableRef, params: humanReadableParams})
+	s.curTags = append(s.curTags, svgcTag{prefix: "rp(" + c + ")", text: s.renderer.RenderRef(ref), params: s.renderer.RenderParams(params)})
 }
 
-func (s *SvgCardEmitter) AddMembershipMixedLowCardRefHighCardParam(ref uint64, humanReadableRef string, params string, humanReadableParams string) {
-	s.curTags = append(s.curTags, svgcTag{prefix: "mr", text: humanReadableRef, params: humanReadableParams})
+func (s *SvgCardEmitter) AddMembershipMixedLowCardRefHighCardParam(ref uint64, params string) {
+	s.curTags = append(s.curTags, svgcTag{prefix: "mr", text: s.renderer.RenderRef(ref), params: s.renderer.RenderParams(params)})
 }
 
-func (s *SvgCardEmitter) AddMembershipMixedLowCardVerbatimHighCardParam(verbatim string, humanReadableVerbatim string, params string, humanReadableParams string) {
-	s.curTags = append(s.curTags, svgcTag{prefix: "mv", text: humanReadableVerbatim, params: humanReadableParams})
+func (s *SvgCardEmitter) AddMembershipMixedLowCardVerbatimHighCardParam(verbatim string, params string) {
+	s.curTags = append(s.curTags, svgcTag{prefix: "mv", text: s.renderer.RenderVerbatim(verbatim), params: s.renderer.RenderParams(params)})
 }
 
 // ============================================================================

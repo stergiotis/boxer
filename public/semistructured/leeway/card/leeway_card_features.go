@@ -493,7 +493,7 @@ func (f *FeatureExtractor) addTag(roleIdx int) {
 	f.roleCounts[roleIdx]++
 }
 
-func (f *FeatureExtractor) AddMembershipRef(lowCard bool, ref uint64, humanReadableRef string) {
+func (f *FeatureExtractor) AddMembershipRef(lowCard bool, ref uint64) {
 	if lowCard {
 		f.addTag(roleIdxLowCardRef)
 	} else {
@@ -502,7 +502,7 @@ func (f *FeatureExtractor) AddMembershipRef(lowCard bool, ref uint64, humanReada
 	f.topoWriteTag('R')
 }
 
-func (f *FeatureExtractor) AddMembershipVerbatim(lowCard bool, verbatim string, humanReadableVerbatim string) {
+func (f *FeatureExtractor) AddMembershipVerbatim(lowCard bool, verbatim string) {
 	if lowCard {
 		f.addTag(roleIdxLowCardVerbatim)
 	} else {
@@ -511,7 +511,7 @@ func (f *FeatureExtractor) AddMembershipVerbatim(lowCard bool, verbatim string, 
 	f.topoWriteTag('W')
 }
 
-func (f *FeatureExtractor) AddMembershipRefParametrized(lowCard bool, ref uint64, humanReadableRef string, params string, humanReadableParams string) {
+func (f *FeatureExtractor) AddMembershipRefParametrized(lowCard bool, ref uint64, params string) {
 	if lowCard {
 		f.addTag(roleIdxLowCardRefParam)
 	} else {
@@ -520,12 +520,12 @@ func (f *FeatureExtractor) AddMembershipRefParametrized(lowCard bool, ref uint64
 	f.topoWriteTag('Q')
 }
 
-func (f *FeatureExtractor) AddMembershipMixedLowCardRefHighCardParam(ref uint64, humanReadableRef string, params string, humanReadableParams string) {
+func (f *FeatureExtractor) AddMembershipMixedLowCardRefHighCardParam(ref uint64, params string) {
 	f.addTag(roleIdxMixedLowCardRef)
 	f.topoWriteTag('X')
 }
 
-func (f *FeatureExtractor) AddMembershipMixedLowCardVerbatimHighCardParam(verbatim string, humanReadableVerbatim string, params string, humanReadableParams string) {
+func (f *FeatureExtractor) AddMembershipMixedLowCardVerbatimHighCardParam(verbatim string, params string) {
 	f.addTag(roleIdxMixedLowCardVerb)
 	f.topoWriteTag('Y')
 }

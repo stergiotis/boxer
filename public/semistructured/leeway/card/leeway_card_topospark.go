@@ -264,7 +264,7 @@ func (s *TopologySpark) addMemberMarker(marker rune) {
 	s.tagsBuf.WriteRune(marker)
 }
 
-func (s *TopologySpark) AddMembershipRef(lowCard bool, ref uint64, humanReadableRef string) {
+func (s *TopologySpark) AddMembershipRef(lowCard bool, ref uint64) {
 	if lowCard {
 		s.addMemberMarker('ˡ')
 	} else {
@@ -272,7 +272,7 @@ func (s *TopologySpark) AddMembershipRef(lowCard bool, ref uint64, humanReadable
 	}
 }
 
-func (s *TopologySpark) AddMembershipVerbatim(lowCard bool, verbatim string, humanReadableVerbatim string) {
+func (s *TopologySpark) AddMembershipVerbatim(lowCard bool, verbatim string) {
 	if lowCard {
 		s.addMemberMarker('ˡ')
 	} else {
@@ -280,7 +280,7 @@ func (s *TopologySpark) AddMembershipVerbatim(lowCard bool, verbatim string, hum
 	}
 }
 
-func (s *TopologySpark) AddMembershipRefParametrized(lowCard bool, ref uint64, humanReadableRef string, params string, humanReadableParams string) {
+func (s *TopologySpark) AddMembershipRefParametrized(lowCard bool, ref uint64, params string) {
 	if lowCard {
 		s.addMemberMarker('ˡ')
 	} else {
@@ -288,11 +288,11 @@ func (s *TopologySpark) AddMembershipRefParametrized(lowCard bool, ref uint64, h
 	}
 }
 
-func (s *TopologySpark) AddMembershipMixedLowCardRefHighCardParam(ref uint64, humanReadableRef string, params string, humanReadableParams string) {
+func (s *TopologySpark) AddMembershipMixedLowCardRefHighCardParam(ref uint64, params string) {
 	s.addMemberMarker('ᵐ')
 }
 
-func (s *TopologySpark) AddMembershipMixedLowCardVerbatimHighCardParam(verbatim string, humanReadableVerbatim string, params string, humanReadableParams string) {
+func (s *TopologySpark) AddMembershipMixedLowCardVerbatimHighCardParam(verbatim string, params string) {
 	s.addMemberMarker('ᵐ')
 }
 

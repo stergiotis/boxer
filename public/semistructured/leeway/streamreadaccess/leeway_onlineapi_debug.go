@@ -202,28 +202,28 @@ func (inst *DebugSink) EndTags() {
 	inst.check()
 }
 
-func (inst *DebugSink) AddMembershipRef(lowCard bool, ref uint64, humanReadableRef string) {
-	fmt.Fprintf(inst.s, "\t\t\t\t\t\t\t\t\tAddMembershipRef(lowCard=%v,ref=0x%x,humanReadableRef=%q)\n", lowCard, ref, humanReadableRef)
+func (inst *DebugSink) AddMembershipRef(lowCard bool, ref uint64) {
+	fmt.Fprintf(inst.s, "\t\t\t\t\t\t\t\t\tAddMembershipRef(lowCard=%v,ref=0x%x)\n", lowCard, ref)
 	inst.check()
 }
 
-func (inst *DebugSink) AddMembershipVerbatim(lowCard bool, value string, humanReadableVerbatim string) {
-	fmt.Fprintf(inst.s, "\t\t\t\t\t\t\t\t\tAddMembershipVerbatim(lowCard=%v,value=%q,humanReadableVerbatim=%q)\n", lowCard, value, humanReadableVerbatim)
+func (inst *DebugSink) AddMembershipVerbatim(lowCard bool, value string) {
+	fmt.Fprintf(inst.s, "\t\t\t\t\t\t\t\t\tAddMembershipVerbatim(lowCard=%v,value=%q)\n", lowCard, value)
 	inst.check()
 }
 
-func (inst *DebugSink) AddMembershipRefParametrized(lowCard bool, ref uint64, humanReadableRef string, params string, humanReadableParams string) {
-	fmt.Fprintf(inst.s, "\t\t\t\t\t\t\t\t\tAddMembershipRefParametrized(lowCard=%v,ref=0x%x,humanReadableRef=%q,params=%q,humanReadableParams=%q)\n", lowCard, ref, humanReadableRef, params, humanReadableParams)
+func (inst *DebugSink) AddMembershipRefParametrized(lowCard bool, ref uint64, params string) {
+	fmt.Fprintf(inst.s, "\t\t\t\t\t\t\t\t\tAddMembershipRefParametrized(lowCard=%v,ref=0x%x,params=%q)\n", lowCard, ref, params)
 	inst.check()
 }
 
-func (inst *DebugSink) AddMembershipMixedLowCardRefHighCardParam(ref uint64, humanReadableRef string, params string, humanReadableParams string) {
-	fmt.Fprintf(inst.s, "\t\t\t\t\t\t\t\t\tAddMembershipMixedLowCardRefHighCardParam(ref=0x%x,humanReadableRef=%q,params=%q,humanReadableParams=%q)\n", ref, humanReadableRef, params, humanReadableParams)
+func (inst *DebugSink) AddMembershipMixedLowCardRefHighCardParam(ref uint64, params string) {
+	fmt.Fprintf(inst.s, "\t\t\t\t\t\t\t\t\tAddMembershipMixedLowCardRefHighCardParam(ref=0x%x,params=%q)\n", ref, params)
 	inst.check()
 }
 
-func (inst *DebugSink) AddMembershipMixedLowCardVerbatimHighCardParam(verbatim string, humanReadableVerbatim string, params string, humanReadableParams string) {
-	fmt.Fprintf(inst.s, "\t\t\t\t\t\t\t\t\tAddMembershipMixedLowCardVerbatimHighCardParam(verbatim=%q,humanReadableVerbatim=%q,params=%q,humanReadableParams=%q)\n", verbatim, humanReadableVerbatim, params, humanReadableParams)
+func (inst *DebugSink) AddMembershipMixedLowCardVerbatimHighCardParam(verbatim string, params string) {
+	fmt.Fprintf(inst.s, "\t\t\t\t\t\t\t\t\tAddMembershipMixedLowCardVerbatimHighCardParam(verbatim=%q,params=%q)\n", verbatim, params)
 	inst.check()
 }
 

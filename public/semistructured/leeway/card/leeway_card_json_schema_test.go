@@ -248,7 +248,7 @@ func TestJsonCardEmitter_DataDocumentSchemaFingerprint(t *testing.T) {
 	dataSink.BeginEntity()
 	dataSink.BeginTaggedSections()
 	driveOneAttribute(t, dataSink, "string", "value", "alpha", func() {
-		dataSink.AddMembershipVerbatim(true, "/x", "/x")
+		dataSink.AddMembershipVerbatim(true, "/x")
 	})
 	_ = dataSink.EndTaggedSections()
 	_ = dataSink.EndEntity()
@@ -288,7 +288,7 @@ func TestJsonCardEmitter_NDJSONEmbedsSchemaDocument(t *testing.T) {
 	dataSink.BeginEntity()
 	dataSink.BeginTaggedSections()
 	driveOneAttribute(t, dataSink, "string", "value", "alpha", func() {
-		dataSink.AddMembershipVerbatim(true, "/x", "/x")
+		dataSink.AddMembershipVerbatim(true, "/x")
 	})
 	_ = dataSink.EndTaggedSections()
 	_ = dataSink.EndEntity()

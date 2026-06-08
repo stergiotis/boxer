@@ -11,6 +11,7 @@ import (
 	"github.com/dim13/colormap"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/membership"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
@@ -27,8 +28,9 @@ var _ streamreadaccess.SinkI = (*TypstCardEmitter)(nil)
 //
 // Compile the output with: typst compile output.typ output.pdf
 type TypstCardEmitter struct {
-	w       io.Writer
-	palette color.Palette
+	w        io.Writer
+	palette  color.Palette
+	renderer *membership.Renderer
 
 	// Per-section state
 	sectionName string
@@ -81,9 +83,10 @@ func NewTypstCardEmitter(w io.Writer, palette ColorPaletteE) (inst *TypstCardEmi
 		pal = colormap.Inferno
 	}
 	inst = &TypstCardEmitter{
-		w:       w,
-		palette: pal,
-		cards:   make([]typstCard, 0, 16),
+		w:        w,
+		palette:  pal,
+		renderer: membership.DefaultRenderer(),
+		cards:    make([]typstCard, 0, 16),
 	}
 	return
 }
@@ -393,7 +396,7 @@ func (inst *TypstCardEmitter) WriteString(s string) (n int, err error) {
 func (inst *TypstCardEmitter) BeginTags(nTags int) {}
 func (inst *TypstCardEmitter) EndTags()            {}
 
-func (inst *TypstCardEmitter) AddMembershipRef(lowCard bool, ref uint64, humanReadableRef string) {
+func (inst *TypstCardEmitter) AddMembershipRef(lowCard bool, ref uint64) {
 	if inst.currentCard == nil {
 		return
 	}
@@ -402,11 +405,11 @@ func (inst *TypstCardEmitter) AddMembershipRef(lowCard bool, ref uint64, humanRe
 		c = "L"
 	}
 	inst.currentCard.tags = append(inst.currentCard.tags, typstTag{
-		display: fmt.Sprintf("ref(%s):%s", c, humanReadableRef),
+		display: fmt.Sprintf("ref(%s):%s", c, inst.renderer.RenderRef(ref)),
 	})
 }
 
-func (inst *TypstCardEmitter) AddMembershipVerbatim(lowCard bool, verbatim string, humanReadableVerbatim string) {
+func (inst *TypstCardEmitter) AddMembershipVerbatim(lowCard bool, verbatim string) {
 	if inst.currentCard == nil {
 		return
 	}
@@ -415,11 +418,11 @@ func (inst *TypstCardEmitter) AddMembershipVerbatim(lowCard bool, verbatim strin
 		ca = "L"
 	}
 	inst.currentCard.tags = append(inst.currentCard.tags, typstTag{
-		display: fmt.Sprintf("v(%s):%s", ca, humanReadableVerbatim),
+		display: fmt.Sprintf("v(%s):%s", ca, inst.renderer.RenderVerbatim(verbatim)),
 	})
 }
 
-func (inst *TypstCardEmitter) AddMembershipRefParametrized(lowCard bool, ref uint64, humanReadableRef string, params string, humanReadableParams string) {
+func (inst *TypstCardEmitter) AddMembershipRefParametrized(lowCard bool, ref uint64, params string) {
 	if inst.currentCard == nil {
 		return
 	}
@@ -427,31 +430,31 @@ func (inst *TypstCardEmitter) AddMembershipRefParametrized(lowCard bool, ref uin
 	if lowCard {
 		ca = "L"
 	}
-	d := fmt.Sprintf("rp(%s):%s", ca, humanReadableRef)
-	if humanReadableParams != "" {
-		d = fmt.Sprintf("rp(%s):%s(%s)", ca, humanReadableRef, humanReadableParams)
+	d := fmt.Sprintf("rp(%s):%s", ca, inst.renderer.RenderRef(ref))
+	if params != "" {
+		d = fmt.Sprintf("rp(%s):%s(%s)", ca, inst.renderer.RenderRef(ref), inst.renderer.RenderParams(params))
 	}
 	inst.currentCard.tags = append(inst.currentCard.tags, typstTag{display: d})
 }
 
-func (inst *TypstCardEmitter) AddMembershipMixedLowCardRefHighCardParam(ref uint64, humanReadableRef string, params string, humanReadableParams string) {
+func (inst *TypstCardEmitter) AddMembershipMixedLowCardRefHighCardParam(ref uint64, params string) {
 	if inst.currentCard == nil {
 		return
 	}
-	d := fmt.Sprintf("mr:%s", humanReadableRef)
-	if humanReadableParams != "" {
-		d = fmt.Sprintf("mr:%s(%s)", humanReadableRef, humanReadableParams)
+	d := fmt.Sprintf("mr:%s", inst.renderer.RenderRef(ref))
+	if params != "" {
+		d = fmt.Sprintf("mr:%s(%s)", inst.renderer.RenderRef(ref), inst.renderer.RenderParams(params))
 	}
 	inst.currentCard.tags = append(inst.currentCard.tags, typstTag{display: d})
 }
 
-func (inst *TypstCardEmitter) AddMembershipMixedLowCardVerbatimHighCardParam(verbatim string, humanReadableVerbatim string, params string, humanReadableParams string) {
+func (inst *TypstCardEmitter) AddMembershipMixedLowCardVerbatimHighCardParam(verbatim string, params string) {
 	if inst.currentCard == nil {
 		return
 	}
-	d := fmt.Sprintf("mv:%s", humanReadableVerbatim)
-	if humanReadableParams != "" {
-		d = fmt.Sprintf("mv:%s(%s)", humanReadableVerbatim, humanReadableParams)
+	d := fmt.Sprintf("mv:%s", inst.renderer.RenderVerbatim(verbatim))
+	if params != "" {
+		d = fmt.Sprintf("mv:%s(%s)", inst.renderer.RenderVerbatim(verbatim), inst.renderer.RenderParams(params))
 	}
 	inst.currentCard.tags = append(inst.currentCard.tags, typstTag{display: d})
 }

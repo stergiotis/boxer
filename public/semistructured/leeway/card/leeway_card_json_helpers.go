@@ -12,6 +12,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/membership"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/membershiprole"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
@@ -171,47 +172,38 @@ func sortJsonValues(items []jsontext.Value) {
 // Verbatim with paramsInIdentity: substitute "_" placeholders in path with params.
 // Verbatim without params: use the verbatim string.
 // Ref-shaped: use the human-readable form when present, otherwise "ref:N".
-func resolveKey(rec membershipRec) (key string) {
+func (inst *JsonCardEmitter) resolveKey(rec membershipRec) (key string) {
 	mv := rec.value
 	switch mv.Kind {
-	case membershiprole.MembershipKindVerbatim:
-		key = chooseVerbatim(mv)
-	case membershiprole.MembershipKindMixedLowCardVerbatimHighCardParam:
-		key = chooseVerbatim(mv)
+	case membership.MembershipKindVerbatim:
+		key = inst.chooseVerbatim(mv)
+	case membership.MembershipKindMixedLowCardVerbatimHighCardParam:
+		key = inst.chooseVerbatim(mv)
 		if rec.paramTreatment == membershiprole.ParamTreatmentIdentity && mv.Params != "" {
 			key = substituteParam(key, mv.Params)
 		}
-	case membershiprole.MembershipKindRef:
-		key = chooseRef(mv)
-	case membershiprole.MembershipKindRefParametrized:
-		key = chooseRef(mv)
-		if rec.paramTreatment == membershiprole.ParamTreatmentIdentity && mv.HumanReadableParams != "" {
-			key = key + "/" + mv.HumanReadableParams
+	case membership.MembershipKindRef:
+		key = inst.chooseRef(mv)
+	case membership.MembershipKindRefParametrized:
+		key = inst.chooseRef(mv)
+		if rec.paramTreatment == membershiprole.ParamTreatmentIdentity && mv.Params != "" {
+			key = key + "/" + inst.renderer.RenderParams(mv.Params)
 		}
-	case membershiprole.MembershipKindMixedLowCardRefHighCardParam:
-		key = chooseRef(mv)
-		if rec.paramTreatment == membershiprole.ParamTreatmentIdentity && mv.HumanReadableParams != "" {
-			key = key + "/" + mv.HumanReadableParams
+	case membership.MembershipKindMixedLowCardRefHighCardParam:
+		key = inst.chooseRef(mv)
+		if rec.paramTreatment == membershiprole.ParamTreatmentIdentity && mv.Params != "" {
+			key = key + "/" + inst.renderer.RenderParams(mv.Params)
 		}
 	}
 	return
 }
 
-func chooseVerbatim(mv membershiprole.MembershipValue) (s string) {
-	if mv.Verbatim != "" {
-		return mv.Verbatim
-	}
-	return mv.HumanReadableValue
+func (inst *JsonCardEmitter) chooseVerbatim(mv membership.MembershipValue) (s string) {
+	return inst.renderer.RenderVerbatim(mv.Verbatim)
 }
 
-func chooseRef(mv membershiprole.MembershipValue) (s string) {
-	if mv.HumanReadableRef != "" {
-		return mv.HumanReadableRef
-	}
-	if mv.HumanReadableValue != "" {
-		return mv.HumanReadableValue
-	}
-	return "ref:" + strconv.FormatUint(mv.Ref, 10)
+func (inst *JsonCardEmitter) chooseRef(mv membership.MembershipValue) (s string) {
+	return inst.renderer.RenderRef(mv.Ref)
 }
 
 func substituteParam(path string, param string) (out string) {
@@ -223,17 +215,13 @@ func substituteParam(path string, param string) (out string) {
 }
 
 // labelObject serializes a secondary membership as a label object.
-func labelObject(mv membershiprole.MembershipValue) (v jsontext.Value) {
+func (inst *JsonCardEmitter) labelObject(mv membership.MembershipValue) (v jsontext.Value) {
 	buf := &bytes.Buffer{}
 	buf.WriteString(`{"name":`)
-	buf.Write(mustQuote(labelName(mv)))
-	if mv.Params != "" || mv.HumanReadableParams != "" {
+	buf.Write(mustQuote(inst.labelName(mv)))
+	if mv.Params != "" {
 		buf.WriteString(`,"params":`)
-		params := mv.HumanReadableParams
-		if params == "" {
-			params = mv.Params
-		}
-		buf.Write(mustQuote(params))
+		buf.Write(mustQuote(inst.renderer.RenderParams(mv.Params)))
 	}
 	buf.WriteByte('}')
 	return jsontext.Value(buf.Bytes())
@@ -261,12 +249,12 @@ func encodeParamsValue(params string) (v jsontext.Value) {
 	return jsontext.Value(buf.Bytes())
 }
 
-func labelName(mv membershiprole.MembershipValue) (s string) {
+func (inst *JsonCardEmitter) labelName(mv membership.MembershipValue) (s string) {
 	switch mv.Kind {
-	case membershiprole.MembershipKindVerbatim, membershiprole.MembershipKindMixedLowCardVerbatimHighCardParam:
-		return chooseVerbatim(mv)
+	case membership.MembershipKindVerbatim, membership.MembershipKindMixedLowCardVerbatimHighCardParam:
+		return inst.chooseVerbatim(mv)
 	default:
-		return chooseRef(mv)
+		return inst.chooseRef(mv)
 	}
 }
 
@@ -427,7 +415,7 @@ func (inst *JsonCardEmitter) projectAttributes() (projs []projectedAttribute) {
 
 		var keys []string
 		for _, p := range primaries {
-			keys = append(keys, resolveKey(p))
+			keys = append(keys, inst.resolveKey(p))
 		}
 		var canonicalKey string
 		var canonicalRec membershipRec
@@ -487,7 +475,7 @@ func (inst *JsonCardEmitter) projectAttributes() (projs []projectedAttribute) {
 
 		if indexed {
 			row := indexedRow{
-				params:   canonicalRec.value.HumanReadableParams,
+				params:   inst.renderer.RenderParams(canonicalRec.value.Params),
 				colShape: attr.colShape,
 				colOrder: colOrder,
 				colVals:  attr.colValues,
@@ -669,13 +657,13 @@ func (inst *JsonCardEmitter) writeAttribute(p projectedAttribute) {
 		var aliases []string
 		canonical := ""
 		for _, m := range p.primary {
-			k := resolveKey(m)
+			k := inst.resolveKey(m)
 			if canonical == "" || k < canonical {
 				canonical = k
 			}
 		}
 		for _, m := range p.primary {
-			k := resolveKey(m)
+			k := inst.resolveKey(m)
 			if k != canonical {
 				aliases = append(aliases, k)
 			}
@@ -692,7 +680,7 @@ func (inst *JsonCardEmitter) writeAttribute(p projectedAttribute) {
 	if len(p.labels) > 0 {
 		labelVals := make([]jsontext.Value, 0, len(p.labels))
 		for _, l := range p.labels {
-			labelVals = append(labelVals, labelObject(l.value))
+			labelVals = append(labelVals, inst.labelObject(l.value))
 		}
 		// stable order: by name then params (encoded form already includes both)
 		sort.Slice(labelVals, func(i, j int) bool { return bytes.Compare(labelVals[i], labelVals[j]) < 0 })

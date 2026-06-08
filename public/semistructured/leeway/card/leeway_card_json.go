@@ -7,6 +7,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/membership"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/membershiprole"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
@@ -22,6 +23,11 @@ type JsonCardEmitterOption func(*JsonCardEmitter)
 // WithClassifier overrides the default membership-role classifier.
 func WithClassifier(c membershiprole.ClassifierI) JsonCardEmitterOption {
 	return func(inst *JsonCardEmitter) { inst.classifier = c }
+}
+
+// WithRenderer overrides the default membership renderer (value→string).
+func WithRenderer(r *membership.Renderer) JsonCardEmitterOption {
+	return func(inst *JsonCardEmitter) { inst.renderer = r }
 }
 
 // WithNDJSON emits a header object on the first line followed by one entity
@@ -77,6 +83,7 @@ func WithSchemaDocument(doc []byte) JsonCardEmitterOption {
 type JsonCardEmitter struct {
 	enc               *jsontext.Encoder
 	classifier        membershiprole.ClassifierI
+	renderer          *membership.Renderer
 	schemaFingerprint string
 	schemaDocument    []byte // pre-encoded schema bytes; embedded as first NDJSON line when set
 	ndjson            bool
@@ -157,7 +164,7 @@ type attributeRec struct {
 }
 
 type membershipRec struct {
-	value          membershiprole.MembershipValue
+	value          membership.MembershipValue
 	role           membershiprole.MembershipRoleE
 	paramTreatment membershiprole.ParamTreatmentE
 }
@@ -171,6 +178,7 @@ func NewJsonCardEmitter(enc *jsontext.Encoder, _ *common.IntermediateTableRepres
 	inst = &JsonCardEmitter{
 		enc:        enc,
 		classifier: membershiprole.DefaultClassifier{},
+		renderer:   membership.DefaultRenderer(),
 	}
 	for _, o := range opts {
 		o(inst)
@@ -501,68 +509,52 @@ func (inst *JsonCardEmitter) BeginTags(nTags int) {
 
 func (inst *JsonCardEmitter) EndTags() {}
 
-func (inst *JsonCardEmitter) AddMembershipRef(lowCard bool, ref uint64, humanReadableRef string) {
-	mv := membershiprole.MembershipValue{
-		Kind:               membershiprole.MembershipKindRef,
-		LowCard:            lowCard,
-		Ref:                ref,
-		HumanReadableRef:   humanReadableRef,
-		HumanReadableValue: humanReadableRef,
-	}
-	inst.classifyAndAdd(mv)
+func (inst *JsonCardEmitter) AddMembershipRef(lowCard bool, ref uint64) {
+	inst.classifyAndAdd(membership.MembershipValue{
+		Kind:    membership.MembershipKindRef,
+		LowCard: lowCard,
+		Ref:     ref,
+	})
 }
 
-func (inst *JsonCardEmitter) AddMembershipVerbatim(lowCard bool, verbatim string, humanReadableVerbatim string) {
-	mv := membershiprole.MembershipValue{
-		Kind:               membershiprole.MembershipKindVerbatim,
-		LowCard:            lowCard,
-		Verbatim:           verbatim,
-		HumanReadableValue: humanReadableVerbatim,
-	}
-	inst.classifyAndAdd(mv)
+func (inst *JsonCardEmitter) AddMembershipVerbatim(lowCard bool, verbatim string) {
+	inst.classifyAndAdd(membership.MembershipValue{
+		Kind:     membership.MembershipKindVerbatim,
+		LowCard:  lowCard,
+		Verbatim: verbatim,
+	})
 }
 
-func (inst *JsonCardEmitter) AddMembershipRefParametrized(lowCard bool, ref uint64, humanReadableRef string, params string, humanReadableParams string) {
-	mv := membershiprole.MembershipValue{
-		Kind:                membershiprole.MembershipKindRefParametrized,
-		LowCard:             lowCard,
-		Ref:                 ref,
-		Params:              params,
-		HumanReadableRef:    humanReadableRef,
-		HumanReadableValue:  humanReadableRef,
-		HumanReadableParams: humanReadableParams,
-	}
-	inst.classifyAndAdd(mv)
+func (inst *JsonCardEmitter) AddMembershipRefParametrized(lowCard bool, ref uint64, params string) {
+	inst.classifyAndAdd(membership.MembershipValue{
+		Kind:    membership.MembershipKindRefParametrized,
+		LowCard: lowCard,
+		Ref:     ref,
+		Params:  params,
+	})
 }
 
-func (inst *JsonCardEmitter) AddMembershipMixedLowCardRefHighCardParam(ref uint64, humanReadableRef string, params string, humanReadableParams string) {
-	mv := membershiprole.MembershipValue{
-		Kind:                membershiprole.MembershipKindMixedLowCardRefHighCardParam,
-		Ref:                 ref,
-		Params:              params,
-		HumanReadableRef:    humanReadableRef,
-		HumanReadableValue:  humanReadableRef,
-		HumanReadableParams: humanReadableParams,
-	}
-	inst.classifyAndAdd(mv)
+func (inst *JsonCardEmitter) AddMembershipMixedLowCardRefHighCardParam(ref uint64, params string) {
+	inst.classifyAndAdd(membership.MembershipValue{
+		Kind:   membership.MembershipKindMixedLowCardRefHighCardParam,
+		Ref:    ref,
+		Params: params,
+	})
 }
 
-func (inst *JsonCardEmitter) AddMembershipMixedLowCardVerbatimHighCardParam(verbatim string, humanReadableVerbatim string, params string, humanReadableParams string) {
-	mv := membershiprole.MembershipValue{
-		Kind:                membershiprole.MembershipKindMixedLowCardVerbatimHighCardParam,
-		Verbatim:            verbatim,
-		Params:              params,
-		HumanReadableValue:  humanReadableVerbatim,
-		HumanReadableParams: humanReadableParams,
-	}
-	inst.classifyAndAdd(mv)
+func (inst *JsonCardEmitter) AddMembershipMixedLowCardVerbatimHighCardParam(verbatim string, params string) {
+	inst.classifyAndAdd(membership.MembershipValue{
+		Kind:     membership.MembershipKindMixedLowCardVerbatimHighCardParam,
+		Verbatim: verbatim,
+		Params:   params,
+	})
 }
 
-func (inst *JsonCardEmitter) classifyAndAdd(mv membershiprole.MembershipValue) {
+func (inst *JsonCardEmitter) classifyAndAdd(mv membership.MembershipValue) {
 	if inst.curAttr == nil {
 		return
 	}
-	if membershiprole.IsPlaceholder(mv) {
+	if membership.IsPlaceholder(mv) {
 		return
 	}
 	role, pt := inst.classifier.Classify(inst.sectionContext(), mv)

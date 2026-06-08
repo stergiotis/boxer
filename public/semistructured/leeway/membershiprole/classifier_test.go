@@ -5,6 +5,7 @@ package membershiprole
 import (
 	"testing"
 
+	"github.com/stergiotis/boxer/public/semistructured/leeway/membership"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
 )
 
@@ -23,19 +24,19 @@ func TestDefaultClassifier_UseAspectShortCircuits(t *testing.T) {
 	cases := []struct {
 		name    string
 		aspects []useaspects.AspectE
-		mv      MembershipValue
+		mv      membership.MembershipValue
 		want    MembershipRoleE
 	}{
 		{
 			name:    "AllPrimary forces primary even on plain identifier",
 			aspects: []useaspects.AspectE{useaspects.AspectSectionMembershipsAllPrimary},
-			mv:      MembershipValue{Kind: MembershipKindVerbatim, Verbatim: "errormsg"},
+			mv:      membership.MembershipValue{Kind: membership.MembershipKindVerbatim, Verbatim: "errormsg"},
 			want:    MembershipRolePrimary,
 		},
 		{
 			name:    "AllSecondary forces secondary even on path-shaped",
 			aspects: []useaspects.AspectE{useaspects.AspectSectionMembershipsAllSecondary},
-			mv:      MembershipValue{Kind: MembershipKindVerbatim, Verbatim: "/hostname"},
+			mv:      membership.MembershipValue{Kind: membership.MembershipKindVerbatim, Verbatim: "/hostname"},
 			want:    MembershipRoleSecondary,
 		},
 	}
@@ -55,32 +56,32 @@ func TestDefaultClassifier_VerbatimNamingConvention(t *testing.T) {
 
 	cases := []struct {
 		name string
-		mv   MembershipValue
+		mv   membership.MembershipValue
 		want MembershipRoleE
 	}{
 		{
 			name: "leading slash → primary",
-			mv:   MembershipValue{Kind: MembershipKindVerbatim, Verbatim: "/hostname"},
+			mv:   membership.MembershipValue{Kind: membership.MembershipKindVerbatim, Verbatim: "/hostname"},
 			want: MembershipRolePrimary,
 		},
 		{
 			name: "deep path → primary",
-			mv:   MembershipValue{Kind: MembershipKindVerbatim, Verbatim: "/metrics/cpu"},
+			mv:   membership.MembershipValue{Kind: membership.MembershipKindVerbatim, Verbatim: "/metrics/cpu"},
 			want: MembershipRolePrimary,
 		},
 		{
 			name: "plain identifier → secondary",
-			mv:   MembershipValue{Kind: MembershipKindVerbatim, Verbatim: "errormsg"},
+			mv:   membership.MembershipValue{Kind: membership.MembershipKindVerbatim, Verbatim: "errormsg"},
 			want: MembershipRoleSecondary,
 		},
 		{
 			name: "mixed-low-verbatim with path skeleton → primary",
-			mv:   MembershipValue{Kind: MembershipKindMixedLowCardVerbatimHighCardParam, Verbatim: "/tags/_", Params: "0"},
+			mv:   membership.MembershipValue{Kind: membership.MembershipKindMixedLowCardVerbatimHighCardParam, Verbatim: "/tags/_", Params: "0"},
 			want: MembershipRolePrimary,
 		},
 		{
 			name: "mixed-low-verbatim with plain skeleton → secondary",
-			mv:   MembershipValue{Kind: MembershipKindMixedLowCardVerbatimHighCardParam, Verbatim: "annotations", Params: "severity"},
+			mv:   membership.MembershipValue{Kind: membership.MembershipKindMixedLowCardVerbatimHighCardParam, Verbatim: "annotations", Params: "severity"},
 			want: MembershipRoleSecondary,
 		},
 	}
@@ -97,12 +98,12 @@ func TestDefaultClassifier_VerbatimNamingConvention(t *testing.T) {
 func TestDefaultClassifier_RefShapedDefaultPrimary(t *testing.T) {
 	cls := DefaultClassifier{}
 
-	for _, kind := range []MembershipKindE{
-		MembershipKindRef,
-		MembershipKindRefParametrized,
-		MembershipKindMixedLowCardRefHighCardParam,
+	for _, kind := range []membership.MembershipKindE{
+		membership.MembershipKindRef,
+		membership.MembershipKindRefParametrized,
+		membership.MembershipKindMixedLowCardRefHighCardParam,
 	} {
-		mv := MembershipValue{Kind: kind, Ref: 42}
+		mv := membership.MembershipValue{Kind: kind, Ref: 42}
 		got, _ := cls.Classify(SectionContext{}, mv)
 		if got != MembershipRolePrimary {
 			t.Fatalf("kind=%d role=%d want %d", kind, got, MembershipRolePrimary)
@@ -115,18 +116,18 @@ func TestDefaultClassifier_ParamTreatment(t *testing.T) {
 
 	cases := []struct {
 		name string
-		kind MembershipKindE
+		kind membership.MembershipKindE
 		want ParamTreatmentE
 	}{
-		{"ref → none", MembershipKindRef, ParamTreatmentNone},
-		{"verbatim → none", MembershipKindVerbatim, ParamTreatmentNone},
-		{"refParametrized → identity", MembershipKindRefParametrized, ParamTreatmentIdentity},
-		{"mixedRef → identity", MembershipKindMixedLowCardRefHighCardParam, ParamTreatmentIdentity},
-		{"mixedVerbatim → identity", MembershipKindMixedLowCardVerbatimHighCardParam, ParamTreatmentIdentity},
+		{"ref → none", membership.MembershipKindRef, ParamTreatmentNone},
+		{"verbatim → none", membership.MembershipKindVerbatim, ParamTreatmentNone},
+		{"refParametrized → identity", membership.MembershipKindRefParametrized, ParamTreatmentIdentity},
+		{"mixedRef → identity", membership.MembershipKindMixedLowCardRefHighCardParam, ParamTreatmentIdentity},
+		{"mixedVerbatim → identity", membership.MembershipKindMixedLowCardVerbatimHighCardParam, ParamTreatmentIdentity},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			mv := MembershipValue{Kind: tc.kind, Verbatim: "/tags/_"}
+			mv := membership.MembershipValue{Kind: tc.kind, Verbatim: "/tags/_"}
 			_, got := cls.Classify(SectionContext{}, mv)
 			if got != tc.want {
 				t.Fatalf("paramTreatment=%d want %d", got, tc.want)
@@ -138,8 +139,8 @@ func TestDefaultClassifier_ParamTreatment(t *testing.T) {
 func TestDefaultClassifier_PathPrefixOverride(t *testing.T) {
 	cls := DefaultClassifier{PathPrefix: "tag:"}
 
-	primary := MembershipValue{Kind: MembershipKindVerbatim, Verbatim: "tag:hostname"}
-	secondary := MembershipValue{Kind: MembershipKindVerbatim, Verbatim: "/hostname"}
+	primary := membership.MembershipValue{Kind: membership.MembershipKindVerbatim, Verbatim: "tag:hostname"}
+	secondary := membership.MembershipValue{Kind: membership.MembershipKindVerbatim, Verbatim: "/hostname"}
 
 	if got, _ := cls.Classify(SectionContext{}, primary); got != MembershipRolePrimary {
 		t.Fatalf("custom prefix not honoured for primary input: got %d", got)
@@ -151,12 +152,12 @@ func TestDefaultClassifier_PathPrefixOverride(t *testing.T) {
 
 func TestDefaultClassifier_NoneKindReturnsNoneRole(t *testing.T) {
 	cls := DefaultClassifier{}
-	got, pt := cls.Classify(SectionContext{}, MembershipValue{})
+	got, pt := cls.Classify(SectionContext{}, membership.MembershipValue{})
 	if got != MembershipRoleNone {
-		t.Fatalf("zero MembershipValue should classify as None: got %d", got)
+		t.Fatalf("zero membership.MembershipValue should classify as None: got %d", got)
 	}
 	if pt != ParamTreatmentNone {
-		t.Fatalf("zero MembershipValue should have no param treatment: got %d", pt)
+		t.Fatalf("zero membership.MembershipValue should have no param treatment: got %d", pt)
 	}
 }
 

@@ -275,12 +275,12 @@ func (s *BrailleSpark) BeginTags(nTags int) {
 
 func (s *BrailleSpark) EndTags() {}
 
-func (s *BrailleSpark) AddMembershipRef(lowCard bool, ref uint64, humanReadableRef string) {}
-func (s *BrailleSpark) AddMembershipVerbatim(lowCard bool, verbatim string, humanReadableVerbatim string) {
+func (s *BrailleSpark) AddMembershipRef(lowCard bool, ref uint64) {}
+func (s *BrailleSpark) AddMembershipVerbatim(lowCard bool, verbatim string) {
 }
-func (s *BrailleSpark) AddMembershipRefParametrized(lowCard bool, ref uint64, humanReadableRef string, params string, humanReadableParams string) {
+func (s *BrailleSpark) AddMembershipRefParametrized(lowCard bool, ref uint64, params string) {
 }
-func (s *BrailleSpark) AddMembershipMixedLowCardRefHighCardParam(ref uint64, humanReadableRef string, params string, humanReadableParams string) {
+func (s *BrailleSpark) AddMembershipMixedLowCardRefHighCardParam(ref uint64, params string) {
 }
-func (s *BrailleSpark) AddMembershipMixedLowCardVerbatimHighCardParam(verbatim string, humanReadableVerbatim string, params string, humanReadableParams string) {
+func (s *BrailleSpark) AddMembershipMixedLowCardVerbatimHighCardParam(verbatim string, params string) {
 }

@@ -229,14 +229,14 @@ func (inst *JsonCardSchemaEmitter) WriteString(s string) (n int, err error) { re
 func (inst *JsonCardSchemaEmitter) BeginTags(_ int) {}
 func (inst *JsonCardSchemaEmitter) EndTags()        {}
 
-func (inst *JsonCardSchemaEmitter) AddMembershipRef(_ bool, _ uint64, _ string) {}
-func (inst *JsonCardSchemaEmitter) AddMembershipVerbatim(_ bool, _ string, _ string) {
+func (inst *JsonCardSchemaEmitter) AddMembershipRef(_ bool, _ uint64) {}
+func (inst *JsonCardSchemaEmitter) AddMembershipVerbatim(_ bool, _ string) {
 }
-func (inst *JsonCardSchemaEmitter) AddMembershipRefParametrized(_ bool, _ uint64, _ string, _ string, _ string) {
+func (inst *JsonCardSchemaEmitter) AddMembershipRefParametrized(_ bool, _ uint64, _ string) {
 }
-func (inst *JsonCardSchemaEmitter) AddMembershipMixedLowCardRefHighCardParam(_ uint64, _ string, _ string, _ string) {
+func (inst *JsonCardSchemaEmitter) AddMembershipMixedLowCardRefHighCardParam(_ uint64, _ string) {
 }
-func (inst *JsonCardSchemaEmitter) AddMembershipMixedLowCardVerbatimHighCardParam(_ string, _ string, _ string, _ string) {
+func (inst *JsonCardSchemaEmitter) AddMembershipMixedLowCardVerbatimHighCardParam(_ string, _ string) {
 }
 
 // --- Document materialisation + fingerprint ---

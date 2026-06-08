@@ -9,14 +9,15 @@ import (
 	"strings"
 
 	"github.com/dim13/colormap"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/membership"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/membershiprole"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
-	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/utfsafe"
@@ -77,6 +78,7 @@ var _ streamreadaccess.SinkI = (*Table2CardEmitter)(nil)
 type Table2CardEmitter struct {
 	ids        *c.WidgetIdStack
 	classifier membershiprole.ClassifierI
+	renderer   *membership.Renderer
 	palette    imgcolor.Palette
 
 	idCounter uint64
@@ -217,6 +219,7 @@ func NewTable2CardEmitter(ids *c.WidgetIdStack, palette ColorPaletteE, classifie
 	inst = &Table2CardEmitter{
 		ids:               ids,
 		classifier:        classifier,
+		renderer:          membership.DefaultRenderer(),
 		palette:           pal,
 		unified:           make([]table2UnifiedRow, 0, 16),
 		collapsedSections: make(map[string]bool, 8),
@@ -518,66 +521,36 @@ func (inst *Table2CardEmitter) WriteString(s string) (n int, err error) {
 func (inst *Table2CardEmitter) BeginTags(_ int) {}
 func (inst *Table2CardEmitter) EndTags()        {}
 
-func (inst *Table2CardEmitter) AddMembershipRef(lowCard bool, ref uint64, humanReadableRef string) {
-	mv := membershiprole.MembershipValue{
-		Kind:             membershiprole.MembershipKindRef,
-		LowCard:          lowCard,
-		Ref:              ref,
-		HumanReadableRef: humanReadableRef,
-	}
-	inst.addMembership(mv, humanReadableRef, "", fmt.Sprintf("Ref ref=0x%x", ref))
+func (inst *Table2CardEmitter) AddMembershipRef(lowCard bool, ref uint64) {
+	mv := membership.MembershipValue{Kind: membership.MembershipKindRef, LowCard: lowCard, Ref: ref}
+	inst.addMembership(mv, inst.renderer.RenderRef(ref), "", fmt.Sprintf("Ref ref=0x%x", ref))
 }
 
-func (inst *Table2CardEmitter) AddMembershipVerbatim(lowCard bool, verbatim string, humanReadableVerbatim string) {
-	mv := membershiprole.MembershipValue{
-		Kind:               membershiprole.MembershipKindVerbatim,
-		LowCard:            lowCard,
-		Verbatim:           verbatim,
-		HumanReadableValue: humanReadableVerbatim,
-	}
-	inst.addMembership(mv, humanReadableVerbatim, "", fmt.Sprintf("Verbatim value=%q", verbatim))
+func (inst *Table2CardEmitter) AddMembershipVerbatim(lowCard bool, verbatim string) {
+	mv := membership.MembershipValue{Kind: membership.MembershipKindVerbatim, LowCard: lowCard, Verbatim: verbatim}
+	inst.addMembership(mv, inst.renderer.RenderVerbatim(verbatim), "", fmt.Sprintf("Verbatim value=%q", verbatim))
 }
 
-func (inst *Table2CardEmitter) AddMembershipRefParametrized(lowCard bool, ref uint64, humanReadableRef string, params string, humanReadableParams string) {
-	mv := membershiprole.MembershipValue{
-		Kind:                membershiprole.MembershipKindRefParametrized,
-		LowCard:             lowCard,
-		Ref:                 ref,
-		Params:              params,
-		HumanReadableRef:    humanReadableRef,
-		HumanReadableParams: humanReadableParams,
-	}
-	inst.addMembership(mv, humanReadableRef, humanReadableParams, fmt.Sprintf("RefParametrized ref=0x%x params=%q", ref, params))
+func (inst *Table2CardEmitter) AddMembershipRefParametrized(lowCard bool, ref uint64, params string) {
+	mv := membership.MembershipValue{Kind: membership.MembershipKindRefParametrized, LowCard: lowCard, Ref: ref, Params: params}
+	inst.addMembership(mv, inst.renderer.RenderRef(ref), inst.renderer.RenderParams(params), fmt.Sprintf("RefParametrized ref=0x%x params=%q", ref, params))
 }
 
-func (inst *Table2CardEmitter) AddMembershipMixedLowCardRefHighCardParam(ref uint64, humanReadableRef string, params string, humanReadableParams string) {
-	mv := membershiprole.MembershipValue{
-		Kind:                membershiprole.MembershipKindMixedLowCardRefHighCardParam,
-		Ref:                 ref,
-		Params:              params,
-		HumanReadableRef:    humanReadableRef,
-		HumanReadableValue:  humanReadableRef,
-		HumanReadableParams: humanReadableParams,
-	}
-	inst.addMembership(mv, humanReadableRef, humanReadableParams, fmt.Sprintf("MixedLowCardRefHighCardParam ref=0x%x params=%q", ref, params))
+func (inst *Table2CardEmitter) AddMembershipMixedLowCardRefHighCardParam(ref uint64, params string) {
+	mv := membership.MembershipValue{Kind: membership.MembershipKindMixedLowCardRefHighCardParam, Ref: ref, Params: params}
+	inst.addMembership(mv, inst.renderer.RenderRef(ref), inst.renderer.RenderParams(params), fmt.Sprintf("MixedLowCardRefHighCardParam ref=0x%x params=%q", ref, params))
 }
 
-func (inst *Table2CardEmitter) AddMembershipMixedLowCardVerbatimHighCardParam(verbatim string, humanReadableVerbatim string, params string, humanReadableParams string) {
-	mv := membershiprole.MembershipValue{
-		Kind:                membershiprole.MembershipKindMixedLowCardVerbatimHighCardParam,
-		Verbatim:            verbatim,
-		HumanReadableValue:  humanReadableVerbatim,
-		Params:              params,
-		HumanReadableParams: humanReadableParams,
-	}
-	inst.addMembership(mv, humanReadableVerbatim, humanReadableParams, fmt.Sprintf("MixedLowCardVerbatimHighCardParam value=%q params=%q", verbatim, params))
+func (inst *Table2CardEmitter) AddMembershipMixedLowCardVerbatimHighCardParam(verbatim string, params string) {
+	mv := membership.MembershipValue{Kind: membership.MembershipKindMixedLowCardVerbatimHighCardParam, Verbatim: verbatim, Params: params}
+	inst.addMembership(mv, inst.renderer.RenderVerbatim(verbatim), inst.renderer.RenderParams(params), fmt.Sprintf("MixedLowCardVerbatimHighCardParam value=%q params=%q", verbatim, params))
 }
 
-func (inst *Table2CardEmitter) addMembership(mv membershiprole.MembershipValue, label string, params string, detail string) {
+func (inst *Table2CardEmitter) addMembership(mv membership.MembershipValue, label string, params string, detail string) {
 	if inst.currentRow == nil {
 		return
 	}
-	if membershiprole.IsPlaceholder(mv) {
+	if membership.IsPlaceholder(mv) {
 		return
 	}
 	display := label
@@ -597,10 +570,10 @@ func (inst *Table2CardEmitter) addMembership(mv membershiprole.MembershipValue, 
 // --- rendering (egui_extras::TableBuilder via c.NewTable) ---
 
 const (
-	table2RowHeightSingle        = 24.0
-	table2RowHeightDouble        = 38.0
-	table2RowHeightTriple        = 54.0
-	table2RowHeightSep           = 8.0
+	table2RowHeightSingle = 24.0
+	table2RowHeightDouble = 38.0
+	table2RowHeightTriple = 54.0
+	table2RowHeightSep    = 8.0
 	// Section-header row height accounts for: outer margin top+bottom,
 	// stroke width (drawn inside the outer rect), inner margin
 	// top+bottom, and the Size(14) section-name galley (≈ 17 px of

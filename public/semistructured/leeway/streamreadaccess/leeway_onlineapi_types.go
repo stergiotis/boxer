@@ -90,34 +90,22 @@ type SinkI interface {
 	BeginTags(nTags int)
 	EndTags()
 
-	AddMembershipRef(lowCard bool, ref uint64, humanReadableRef string)
-	AddMembershipVerbatim(lowCard bool, verbatim string, humanReadableVerbatim string)
-	AddMembershipRefParametrized(lowCard bool, ref uint64, humanReadableRef string, params string, humanReadableParams string)
-	AddMembershipMixedLowCardRefHighCardParam(ref uint64, humanReadableRef string, params string, humanReadableParams string)
-	AddMembershipMixedLowCardVerbatimHighCardParam(verbatim string, humanReadableVerbatim string, params string, humanReadableParams string)
+	AddMembershipRef(lowCard bool, ref uint64)
+	AddMembershipVerbatim(lowCard bool, verbatim string)
+	AddMembershipRefParametrized(lowCard bool, ref uint64, params string)
+	AddMembershipMixedLowCardRefHighCardParam(ref uint64, params string)
+	AddMembershipMixedLowCardVerbatimHighCardParam(verbatim string, params string)
 }
 
-// --- Formatter interfaces ---
+// --- Value formatter. The membership formatters (ref / verbatim / params)
+// moved to the membership package per ADR-0072: the driver no longer formats
+// memberships produce-side; consumers render them at read time via a
+// membership.Renderer. Only value formatting stays here. ---
 
 type ValueFormatterI interface {
 	FormatValue(arrowValueStr string, canonicalType canonicaltypes.PrimitiveAstNodeI) (formatted string)
 }
 
-type RefFormatterI interface {
-	FormatRef(ref uint64) (humanReadable string)
-}
-
-type VerbatimFormatterI interface {
-	FormatVerbatim(raw []byte) (humanReadable string)
-}
-
-type ParamsFormatterI interface {
-	FormatParams(raw []byte) (humanReadable string)
-}
-
 type Formatters struct {
-	ValueFormatter    ValueFormatterI
-	RefFormatter      RefFormatterI
-	VerbatimFormatter VerbatimFormatterI
-	ParamsFormatter   ParamsFormatterI
+	ValueFormatter ValueFormatterI
 }

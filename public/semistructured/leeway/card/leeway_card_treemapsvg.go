@@ -262,12 +262,12 @@ func (s *SvgTopologySink) BeginTags(nTags int) {
 }
 func (s *SvgTopologySink) EndTags() {}
 
-func (s *SvgTopologySink) AddMembershipRef(bool, uint64, string)                             {}
-func (s *SvgTopologySink) AddMembershipVerbatim(bool, string, string)                        {}
-func (s *SvgTopologySink) AddMembershipRefParametrized(bool, uint64, string, string, string) {}
-func (s *SvgTopologySink) AddMembershipMixedLowCardRefHighCardParam(uint64, string, string, string) {
+func (s *SvgTopologySink) AddMembershipRef(bool, uint64)                     {}
+func (s *SvgTopologySink) AddMembershipVerbatim(bool, string)                {}
+func (s *SvgTopologySink) AddMembershipRefParametrized(bool, uint64, string) {}
+func (s *SvgTopologySink) AddMembershipMixedLowCardRefHighCardParam(uint64, string) {
 }
-func (s *SvgTopologySink) AddMembershipMixedLowCardVerbatimHighCardParam(string, string, string, string) {
+func (s *SvgTopologySink) AddMembershipMixedLowCardVerbatimHighCardParam(string, string) {
 }
 
 // ============================================================================

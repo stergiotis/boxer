@@ -3,21 +3,9 @@
 package membershiprole
 
 import (
+	"github.com/stergiotis/boxer/public/semistructured/leeway/membership"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
-)
-
-// MembershipKindE discriminates the five SinkI.AddMembership* shapes.
-// The zero value is [MembershipKindNone].
-type MembershipKindE uint8
-
-const (
-	MembershipKindNone                              MembershipKindE = 0
-	MembershipKindRef                               MembershipKindE = 1
-	MembershipKindVerbatim                          MembershipKindE = 2
-	MembershipKindRefParametrized                   MembershipKindE = 3
-	MembershipKindMixedLowCardRefHighCardParam      MembershipKindE = 4
-	MembershipKindMixedLowCardVerbatimHighCardParam MembershipKindE = 5
 )
 
 // MembershipRoleE answers whether a membership defines an attribute's identity
@@ -40,54 +28,6 @@ const (
 	ParamTreatmentIdentity ParamTreatmentE = 1
 	ParamTreatmentIndex    ParamTreatmentE = 2
 )
-
-// MembershipValue carries the payload of one SinkI.AddMembership* call in
-// struct form.
-//
-// Field validity depends on Kind:
-//
-//   - MembershipKindRef:                              LowCard, Ref, HumanReadableRef.
-//   - MembershipKindVerbatim:                         LowCard, Verbatim, HumanReadableValue.
-//   - MembershipKindRefParametrized:                  LowCard, Ref, HumanReadableRef, Params, HumanReadableParams.
-//   - MembershipKindMixedLowCardRefHighCardParam:     Ref, HumanReadableRef, Params, HumanReadableParams.
-//   - MembershipKindMixedLowCardVerbatimHighCardParam: Verbatim, HumanReadableValue, Params, HumanReadableParams.
-//
-// Zero-valued MembershipValue has Kind == MembershipKindNone and reads as
-// "no membership"; classifiers should treat it as an empty input rather than
-// panicking.
-type MembershipValue struct {
-	Kind                MembershipKindE
-	LowCard             bool
-	Ref                 uint64
-	Verbatim            string
-	Params              string
-	HumanReadableRef    string
-	HumanReadableValue  string
-	HumanReadableParams string
-}
-
-// IsPlaceholder reports whether mv is a driver-emitted "spec-slot is empty" tag
-// rather than a real membership.
-//
-// The Leeway driver emits one AddMembership* call per membership-spec slot
-// declared on a section, regardless of whether the slot carries data for the
-// current attribute. Empty slots manifest as zero-ref / empty-verbatim /
-// empty-params payloads; treating them as real memberships would make every
-// such attribute resolve to the same "ref:0" key. Callers (the card JSON
-// emitter, the leewaywidgets table emitter) skip placeholders.
-func IsPlaceholder(mv MembershipValue) (placeholder bool) {
-	switch mv.Kind {
-	case MembershipKindRef, MembershipKindRefParametrized:
-		placeholder = mv.Ref == 0 && mv.HumanReadableRef == "" && mv.Params == "" && mv.HumanReadableParams == ""
-	case MembershipKindMixedLowCardRefHighCardParam:
-		placeholder = mv.Ref == 0 && mv.HumanReadableRef == "" && mv.Params == "" && mv.HumanReadableParams == ""
-	case MembershipKindMixedLowCardVerbatimHighCardParam:
-		placeholder = mv.Verbatim == "" && mv.HumanReadableValue == "" && mv.Params == "" && mv.HumanReadableParams == ""
-	case MembershipKindVerbatim:
-		placeholder = mv.Verbatim == "" && mv.HumanReadableValue == ""
-	}
-	return
-}
 
 // SectionContext provides per-section state that a classifier may consult.
 // UseAspects carries the section-level uniformity hints
@@ -113,5 +53,5 @@ func (inst SectionContext) HasUseAspect(target useaspects.AspectE) (has bool) {
 // the same input is a contract violation that produces inconsistent
 // downstream output (mixed byAttribute keys, drifting labels, etc.).
 type ClassifierI interface {
-	Classify(sec SectionContext, mv MembershipValue) (role MembershipRoleE, paramTreatment ParamTreatmentE)
+	Classify(sec SectionContext, mv membership.MembershipValue) (role MembershipRoleE, paramTreatment ParamTreatmentE)
 }

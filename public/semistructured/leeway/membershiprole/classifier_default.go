@@ -5,6 +5,7 @@ package membershiprole
 import (
 	"strings"
 
+	"github.com/stergiotis/boxer/public/semistructured/leeway/membership"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
 )
 
@@ -35,7 +36,7 @@ type DefaultClassifier struct {
 
 var _ ClassifierI = DefaultClassifier{}
 
-func (inst DefaultClassifier) Classify(sec SectionContext, mv MembershipValue) (role MembershipRoleE, paramTreatment ParamTreatmentE) {
+func (inst DefaultClassifier) Classify(sec SectionContext, mv membership.MembershipValue) (role MembershipRoleE, paramTreatment ParamTreatmentE) {
 	role = inst.classifyRole(sec, mv)
 	paramTreatment = inst.classifyParamTreatment(mv)
 	return
@@ -49,7 +50,7 @@ func (inst DefaultClassifier) effectivePrefix() (prefix string) {
 	return
 }
 
-func (inst DefaultClassifier) classifyRole(sec SectionContext, mv MembershipValue) (role MembershipRoleE) {
+func (inst DefaultClassifier) classifyRole(sec SectionContext, mv membership.MembershipValue) (role MembershipRoleE) {
 	if sec.HasUseAspect(useaspects.AspectSectionMembershipsAllPrimary) {
 		role = MembershipRolePrimary
 		return
@@ -59,13 +60,13 @@ func (inst DefaultClassifier) classifyRole(sec SectionContext, mv MembershipValu
 		return
 	}
 	switch mv.Kind {
-	case MembershipKindVerbatim, MembershipKindMixedLowCardVerbatimHighCardParam:
+	case membership.MembershipKindVerbatim, membership.MembershipKindMixedLowCardVerbatimHighCardParam:
 		if strings.HasPrefix(mv.Verbatim, inst.effectivePrefix()) {
 			role = MembershipRolePrimary
 		} else {
 			role = MembershipRoleSecondary
 		}
-	case MembershipKindRef, MembershipKindRefParametrized, MembershipKindMixedLowCardRefHighCardParam:
+	case membership.MembershipKindRef, membership.MembershipKindRefParametrized, membership.MembershipKindMixedLowCardRefHighCardParam:
 		role = MembershipRolePrimary
 	default:
 		role = MembershipRoleNone
@@ -73,11 +74,11 @@ func (inst DefaultClassifier) classifyRole(sec SectionContext, mv MembershipValu
 	return
 }
 
-func (inst DefaultClassifier) classifyParamTreatment(mv MembershipValue) (paramTreatment ParamTreatmentE) {
+func (inst DefaultClassifier) classifyParamTreatment(mv membership.MembershipValue) (paramTreatment ParamTreatmentE) {
 	switch mv.Kind {
-	case MembershipKindRefParametrized,
-		MembershipKindMixedLowCardRefHighCardParam,
-		MembershipKindMixedLowCardVerbatimHighCardParam:
+	case membership.MembershipKindRefParametrized,
+		membership.MembershipKindMixedLowCardRefHighCardParam,
+		membership.MembershipKindMixedLowCardVerbatimHighCardParam:
 		paramTreatment = ParamTreatmentIdentity
 	default:
 		paramTreatment = ParamTreatmentNone

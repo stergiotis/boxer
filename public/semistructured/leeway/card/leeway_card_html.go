@@ -12,6 +12,7 @@ import (
 	"github.com/dim13/colormap"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/membership"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
@@ -26,8 +27,9 @@ var _ streamreadaccess.SinkI = (*HtmlCardEmitter)(nil)
 // Names are emitted via StylableName.String() — the IR is assumed to carry
 // the desired naming style already.
 type HtmlCardEmitter struct {
-	w       io.Writer
-	palette color.Palette
+	w        io.Writer
+	palette  color.Palette
+	renderer *membership.Renderer
 
 	entityIdx   int
 	sectionIdx  int
@@ -73,8 +75,9 @@ func NewHtmlCardEmitter(w io.Writer, palette ColorPaletteE) (inst *HtmlCardEmitt
 		pal = colormap.Inferno
 	}
 	inst = &HtmlCardEmitter{
-		w:       w,
-		palette: pal,
+		renderer: membership.DefaultRenderer(),
+		w:        w,
+		palette:  pal,
 	}
 	return
 }
@@ -531,49 +534,49 @@ func (inst *HtmlCardEmitter) WriteString(s string) (n int, err error) {
 func (inst *HtmlCardEmitter) BeginTags(nTags int) {}
 func (inst *HtmlCardEmitter) EndTags()            {}
 
-func (inst *HtmlCardEmitter) AddMembershipRef(lowCard bool, ref uint64, humanReadableRef string) {
+func (inst *HtmlCardEmitter) AddMembershipRef(lowCard bool, ref uint64) {
 	c := "H"
 	if lowCard {
 		c = "L"
 	}
-	fmt.Fprintf(&inst.tagBuf, "<span class=\"tag\"><span class=\"tag-t\">ref(%s)</span> %s</span>", c, html.EscapeString(humanReadableRef))
+	fmt.Fprintf(&inst.tagBuf, "<span class=\"tag\"><span class=\"tag-t\">ref(%s)</span> %s</span>", c, html.EscapeString(inst.renderer.RenderRef(ref)))
 }
 
-func (inst *HtmlCardEmitter) AddMembershipVerbatim(lowCard bool, verbatim string, humanReadableVerbatim string) {
+func (inst *HtmlCardEmitter) AddMembershipVerbatim(lowCard bool, verbatim string) {
 	c := "H"
 	if lowCard {
 		c = "L"
 	}
-	fmt.Fprintf(&inst.tagBuf, "<span class=\"tag\"><span class=\"tag-t\">v(%s)</span> %s</span>", c, html.EscapeString(humanReadableVerbatim))
+	fmt.Fprintf(&inst.tagBuf, "<span class=\"tag\"><span class=\"tag-t\">v(%s)</span> %s</span>", c, html.EscapeString(inst.renderer.RenderVerbatim(verbatim)))
 }
 
-func (inst *HtmlCardEmitter) AddMembershipRefParametrized(lowCard bool, ref uint64, humanReadableRef string, params string, humanReadableParams string) {
+func (inst *HtmlCardEmitter) AddMembershipRefParametrized(lowCard bool, ref uint64, params string) {
 	c := "H"
 	if lowCard {
 		c = "L"
 	}
-	if humanReadableParams != "" {
+	if params != "" {
 		fmt.Fprintf(&inst.tagBuf, "<span class=\"tag\"><span class=\"tag-t\">rp(%s)</span> %s<span class=\"tag-t\">(%s)</span></span>",
-			c, html.EscapeString(humanReadableRef), html.EscapeString(humanReadableParams))
+			c, html.EscapeString(inst.renderer.RenderRef(ref)), html.EscapeString(inst.renderer.RenderParams(params)))
 	} else {
-		fmt.Fprintf(&inst.tagBuf, "<span class=\"tag\"><span class=\"tag-t\">rp(%s)</span> %s</span>", c, html.EscapeString(humanReadableRef))
+		fmt.Fprintf(&inst.tagBuf, "<span class=\"tag\"><span class=\"tag-t\">rp(%s)</span> %s</span>", c, html.EscapeString(inst.renderer.RenderRef(ref)))
 	}
 }
 
-func (inst *HtmlCardEmitter) AddMembershipMixedLowCardRefHighCardParam(ref uint64, humanReadableRef string, params string, humanReadableParams string) {
-	if humanReadableParams != "" {
+func (inst *HtmlCardEmitter) AddMembershipMixedLowCardRefHighCardParam(ref uint64, params string) {
+	if params != "" {
 		fmt.Fprintf(&inst.tagBuf, "<span class=\"tag\"><span class=\"tag-t\">mr</span> %s<span class=\"tag-t\">(%s)</span></span>",
-			html.EscapeString(humanReadableRef), html.EscapeString(humanReadableParams))
+			html.EscapeString(inst.renderer.RenderRef(ref)), html.EscapeString(inst.renderer.RenderParams(params)))
 	} else {
-		fmt.Fprintf(&inst.tagBuf, "<span class=\"tag\"><span class=\"tag-t\">mr</span> %s</span>", html.EscapeString(humanReadableRef))
+		fmt.Fprintf(&inst.tagBuf, "<span class=\"tag\"><span class=\"tag-t\">mr</span> %s</span>", html.EscapeString(inst.renderer.RenderRef(ref)))
 	}
 }
 
-func (inst *HtmlCardEmitter) AddMembershipMixedLowCardVerbatimHighCardParam(verbatim string, humanReadableVerbatim string, params string, humanReadableParams string) {
-	if humanReadableParams != "" {
+func (inst *HtmlCardEmitter) AddMembershipMixedLowCardVerbatimHighCardParam(verbatim string, params string) {
+	if params != "" {
 		fmt.Fprintf(&inst.tagBuf, "<span class=\"tag\"><span class=\"tag-t\">mv</span> %s<span class=\"tag-t\">(%s)</span></span>",
-			html.EscapeString(humanReadableVerbatim), html.EscapeString(humanReadableParams))
+			html.EscapeString(inst.renderer.RenderVerbatim(verbatim)), html.EscapeString(inst.renderer.RenderParams(params)))
 	} else {
-		fmt.Fprintf(&inst.tagBuf, "<span class=\"tag\"><span class=\"tag-t\">mv</span> %s</span>", html.EscapeString(humanReadableVerbatim))
+		fmt.Fprintf(&inst.tagBuf, "<span class=\"tag\"><span class=\"tag-t\">mv</span> %s</span>", html.EscapeString(inst.renderer.RenderVerbatim(verbatim)))
 	}
 }
