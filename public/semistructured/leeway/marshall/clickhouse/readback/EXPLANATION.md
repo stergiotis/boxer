@@ -121,10 +121,13 @@ out := LEEWAY_VALUE_BY_TAG_EQUAL(V, M_R, L, m2v)         (scalar:    V[a])
      | LEEWAY_LIST_BY_TAG_EQUAL(V, SETCARD, M_R, L, m2v) (set)
 ```
 
-**Multi-subcolumn sections.** All subcolumns of one section share one membership grain, so the
-generator groups a kind's `TaggedField`s by `(section, membership)`, locates `a` **once**, and
-projects each subcolumn at that `a` (e.g. `timeRange` → `beginIncl[a]`, `endExcl[a]`). The
-emitted SQL binds `a` in a `WITH` clause to avoid recomputation.
+**Multi-subcolumn sections.** All subcolumns of one section share one membership grain, so
+locating `a` once and projecting each subcolumn at that `a` (e.g. `timeRange` → `beginIncl[a]`,
+`endExcl[a]`) is the intended evaluation. The generator does **not** emit a `WITH` binding for
+this: it re-embeds the byte-identical locate expression per subcolumn, and ClickHouse's
+ActionsDAG deduplicates identical subexpressions within a stage — `EXPLAIN actions=1` (26.5)
+shows one `indexOf` node, one materialized `m2v`, and one located-attribute node shared by all
+of a section's slots. Identical emitted text is therefore load-bearing for performance.
 
 ### Miss handling
 
@@ -178,16 +181,28 @@ LEEWAY_LIST_BY_TAG_EQUAL(
 
 **Generated artefacts** (`lw_readback_generator.go`, `Generator.Generate`):
 
-- *presence* — `has(idCol, lit) AND …` over mandatory fields (no false negatives).
+- *presence* — per physical column one `has(col, lit)` / `hasAll(col, [lits…])` term over
+  mandatory fields (no false negatives): one array scan and one skip-index condition per
+  column. Const fields on scalar **string** value columns additionally contribute the pinned
+  value as a value-column term (`has(valCol, 'const')` — a second necessary condition; string
+  columns only, since `has` does not coerce a string literal to a numeric array, unlike the
+  validator's equality). `has`/`hasAll` are the index-eligible part: a `bloom_filter` skip
+  index prunes granules for them but never for `countEqual`/`indexOf` (verified on 26.5,
+  `EXPLAIN indexes=1`).
 - *projection* — a **named** tuple: `CAST(tuple(<extract>, …), 'Tuple(<GoField> <chType>, …)')`.
   The `CAST` is required: `tuple(x AS name)` does **not** expose `name` for element access in
   ClickHouse (verified — `tupleElement` by name errors), so a downstream UDF cannot address
   slots by name without it. Slot types come from each value column's canonical type via the
   ddl/clickhouse type generator.
 - *validator* — `countEqual(idCol, lit) = 1` per mandatory field (`<= 1` for Option; const adds
-  a sub-array/value equality check). `LEEWAY_LU_VAL_IDX_TO_MEMB_IDX_BEGIN_INCL/END_EXCL` give the
-  per-attribute membership ranges the exact path uses; mixed/parametrized channels add the
-  aligned parameter match (§Trade-offs).
+  a sub-array/value equality check). Exact but **index-blind**: embedded alone it forces a
+  full scan. `LEEWAY_LU_VAL_IDX_TO_MEMB_IDX_BEGIN_INCL/END_EXCL` give the per-attribute
+  membership ranges the exact path uses; mixed/parametrized channels add the aligned parameter
+  match (§Trade-offs).
+- *filter* — `presence AND validator`, the form to embed in WHERE: still the exact check, and
+  the redundant-looking presence conjuncts are what carry skip-index pruning (the conjunction
+  was verified to prune through the `has` terms). ClickHouse's automatic PREWHERE picks the
+  filter up, reading the membership/cardinality columns before the wide value columns.
 
 ## Invariants
 
@@ -269,6 +284,13 @@ CI-friendly variant when no server is present.
   membership lookup. Materializing `cusumlen` / `cusumcard` turns both into an `O(1)` index.
   Measure before optimizing; the fast path (I5) already avoids the cumulative sum for the common
   single-membership case.
+- **Index use.** The presence terms are the only granule-pruning handle, and they prune only if
+  a skip index exists on the membership (and, for consts, value) columns. Nothing in leeway
+  emits one today — `ddl/clickhouse` produces no `INDEX` clauses and `encodingaspects` has no
+  index vocabulary — so on a plain MergeTree the presence terms cost one array scan per column
+  and prune nothing. The schema-side design (an aspect mapping to
+  `INDEX … TYPE bloom_filter(p) GRANULARITY g`) is open; see ADR-0066's 2026-06-09 update for
+  the verified eligibility matrix.
 - **Fast-path detection.** Proving `MC_R ≡ 1` at generation time (to emit bare `indexOf`) needs a
   schema signal — a section use-aspect asserting single-membership uniformity, or a per-channel
   invariant on the `Plan`. Open; until then the safe `leeway_attr_of_member` form is emitted

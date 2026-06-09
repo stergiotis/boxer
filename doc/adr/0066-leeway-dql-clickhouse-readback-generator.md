@@ -390,6 +390,40 @@ The core shape (Plan ↔ IR join, three artefacts, generation-time id resolution
 
 [ADR-0074](0074-leeway-marshall-package-layout.md) re-homed the leeway marshall packages onto a target-namespaced layout. This generator moved from `leeway/dql/` (package `dql`) to `leeway/marshall/clickhouse/readback/` (package `readback`), reframed as the ClickHouse-SQL **marshall target** beside the Go target (`marshall/go/…`). The design is unchanged — same `Generator` / `Artefacts` / `InformationRetrieval` / `MembershipResolver`, the three artefacts, and the helper UDFs; the `lw_dql_*` files became `lw_readback_*`. The Plan IR it consumes stays in `mappingplan`; the Go-DTO construction machinery it does not use now lives in `marshall/go/goplan`.
 
+### 2026-06-09 — index-aware filter artefacts
+
+An index-use analysis of the generated SQL, verified on ClickHouse 26.5 via `clickhouse-local`
+(`EXPLAIN indexes=1`, 1M rows / 123 granules): `has`/`hasAll` over Array columns prune granules
+through a `bloom_filter` skip index; `indexOf` and `countEqual` never use one. A WHERE of
+`presence AND validator` prunes via the presence conjuncts even though the validator is
+index-blind — the validator alone forces a full scan. Two supporting facts: lambda UDFs are
+inlined before index analysis, so wrapping artefacts in `leeway_has_<K>` keeps pruning intact;
+and the analyzer's ActionsDAG deduplicates byte-identical inlined subexpressions within a
+stage, so the per-(section, membership) locate work is computed once across a kind's
+projection slots without any `WITH` binding (the sketched `WITH` emission is dropped from the
+sub-design).
+
+Three generator changes followed:
+
+- **`Artefacts.Filter`** — the pre-ANDed `Presence AND Validator`, now the documented WHERE
+  embed. The contract is explicit: Validator alone is exact but unprunable; the
+  redundant-looking Presence conjuncts are the index carriers.
+- **Presence grouping.** Presence literals are grouped per physical column — `has(col, lit)`
+  for one literal, `hasAll(col, [lits…])` for several — one array scan and one skip-index
+  condition per column instead of one `has` per mandatory field.
+- **Const value-side presence.** A const field also contributes its pinned value as a presence
+  term on the **value** column (`has(valCol, 'const')`, a necessary condition — pruning-relevant
+  for selective kind discriminators), guarded to scalar string-typed value columns: `has` does
+  not coerce a string literal to a numeric array (`NO_COMMON_TYPE`), unlike the validator's
+  equality.
+
+Still open on the schema side: nothing emits the skip indexes these terms would prune with —
+`ddl/clickhouse` produces no `INDEX` clauses and `encodingaspects` has no index vocabulary. An
+encoding/section aspect mapping to `INDEX … TYPE bloom_filter(p) GRANULARITY g` on the
+membership (and const-bearing value) columns is the candidate design; a `set(N)` index
+additionally serves `countEqual`/`indexOf` while per-granule distinct membership-array values
+stay ≤ N (verified), which fits homogeneous-ingest tables.
+
 ## References
 
 - [ADR-0008 — leeway marshall extensions](./0008-leeway-marshall-extensions.md) — the `Plan`, the `lw:` tag grammar, membership channels (D3), the Cut-2 parametrized/mixed channels the resolver anticipates.

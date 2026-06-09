@@ -1,6 +1,7 @@
 package readback
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
@@ -12,22 +13,31 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 )
 
-// Artefacts are the three ClickHouse read-back fragments generated for one DTO
-// kind (a mappingplan.Plan):
+// Artefacts are the ClickHouse read-back fragments generated for one DTO kind
+// (a mappingplan.Plan):
 //
 //   - Presence — a boolean expression over the physical columns: a cheap
-//     necessary-but-not-sufficient prefilter (no false negatives). Embed in WHERE.
+//     necessary-but-not-sufficient prefilter (no false negatives). Its
+//     has/hasAll terms are the only index-eligible part of the artefacts:
+//     ClickHouse prunes granules for them through a bloom_filter skip index,
+//     which it never does for the validator's countEqual (verified on 26.5).
 //   - Projection — a CAST to a named Tuple extracting every field, so a
 //     downstream UDF can address slots by name (t.<GoFieldName>). Embed in SELECT.
-//   - Validator — a boolean expression: the exact conformance check. Embed in WHERE.
+//   - Validator — a boolean expression: the exact conformance check. It is
+//     semantically complete on its own but index-blind; embedded without the
+//     Presence terms it forces a full scan.
+//   - Filter — Presence AND Validator, the form to embed in WHERE: still the
+//     exact check, and the redundant-looking Presence conjuncts are what carry
+//     skip-index pruning.
 //
-// All three reference the leeway DQL helper UDFs (HelperUDFsSQL). See ADR-0066
-// and EXPLANATION.md.
+// All fragments reference the leeway DQL helper UDFs (HelperUDFsSQL). See
+// ADR-0066 and EXPLANATION.md.
 type Artefacts struct {
 	Kind       string
 	Presence   string
 	Projection string
 	Validator  string
+	Filter     string
 }
 
 // Generator turns a mappingplan.Plan into Artefacts by joining the Plan's
@@ -82,18 +92,22 @@ func NewGenerator(ir *InformationRetrieval, resolver MembershipResolver) *Genera
 	return g
 }
 
-// Generate emits the three artefacts for plan. Plain columns project directly
-// and are assumed present; tagged fields are located by membership. Mandatory
-// fields (non-Option) contribute a presence term and a "exactly once"
+// Generate emits the artefacts for plan. Plain columns project directly and
+// are assumed present; tagged fields are located by membership. Mandatory
+// fields (non-Option) contribute a presence literal and a "exactly once"
 // validator term; Option fields contribute only an "at most once" term; const
-// fields additionally pin the value. Presence/validator terms are deduplicated
-// so multi-sub-column sections (one membership, several value columns) count
-// the membership once.
+// fields additionally pin the value — and, on scalar string value columns,
+// contribute the pinned value as a second presence literal. Presence literals
+// are deduplicated and grouped per physical column — has(col, lit) for one
+// literal, hasAll(col, [lits...]) for several — so each column costs one array
+// scan and one skip-index condition; validator terms are deduplicated so
+// multi-sub-column sections (one membership, several value columns) count the
+// membership once.
 func (g *Generator) Generate(plan *mappingplan.Plan) (a Artefacts, err error) {
 	a.Kind = plan.KindName
 
 	var exprs, slotTypes []string
-	presence := newTermSet()
+	presence := newPresenceSet()
 	validator := newTermSet()
 
 	addSlot := func(name, expr string, ct canonicaltypes.PrimitiveAstNodeI) error {
@@ -134,8 +148,10 @@ func (g *Generator) Generate(plan *mappingplan.Plan) (a Artefacts, err error) {
 	}
 
 	a.Projection = "CAST(tuple(" + strings.Join(exprs, ", ") + "), " + marshalling.EscapeString("Tuple("+strings.Join(slotTypes, ", ")+")") + ")"
-	a.Presence = joinAnd(presence.terms)
+	presenceTerms := presence.terms()
+	a.Presence = joinAnd(presenceTerms)
 	a.Validator = joinAnd(validator.terms)
+	a.Filter = joinAnd(slices.Concat(presenceTerms, validator.terms))
 	return
 }
 
@@ -153,8 +169,15 @@ func (g *Generator) chType(ct canonicaltypes.PrimitiveAstNodeI) (string, error) 
 type fieldArtefacts struct {
 	valExpr       string // "" for const fields (validation-only)
 	canonicalType canonicaltypes.PrimitiveAstNodeI
-	presence      string // "" for Option fields
+	presence      []presenceTerm // empty for Option fields
 	validator     string
+}
+
+// presenceTerm is one necessary-condition literal on a physical column;
+// presenceSet groups terms per column into a has/hasAll expression.
+type presenceTerm struct {
+	col string
+	lit string
 }
 
 func (g *Generator) field(f *mappingplan.TaggedField) (res fieldArtefacts, err error) {
@@ -219,15 +242,22 @@ func (g *Generator) field(f *mappingplan.TaggedField) (res fieldArtefacts, err e
 		return
 	}
 
-	hasExpr := "has(" + idCol + ", " + lit + ")"
 	countExpr := "countEqual(" + idCol + ", " + lit + ")"
 
 	switch {
 	case f.IsConst:
 		// Fixed value: the membership is present exactly once and carries the
 		// constant. Const fields are validation-only (no projected slot).
-		res.presence = hasExpr
-		res.validator = countExpr + " = 1 AND " + valExpr + " = " + marshalling.EscapeString(f.ConstValue)
+		constLit := marshalling.EscapeString(f.ConstValue)
+		res.presence = []presenceTerm{{col: idCol, lit: lit}}
+		if _, isString := vinfo.canonicalType.(canonicaltypes.StringAstNode); isString && vinfo.subType == common.IntermediateColumnsSubTypeScalar {
+			// The pinned value must occur somewhere in the value column — a
+			// second necessary condition, skip-index-eligible there. String
+			// columns only: has() does not coerce a string literal to a
+			// numeric array (NO_COMMON_TYPE), unlike the validator's equality.
+			res.presence = append(res.presence, presenceTerm{col: vinfo.col, lit: constLit})
+		}
+		res.validator = countExpr + " = 1 AND " + valExpr + " = " + constLit
 	case f.IsOption:
 		// Optional: no presence requirement; if present, the membership must
 		// identify a single attribute.
@@ -235,10 +265,52 @@ func (g *Generator) field(f *mappingplan.TaggedField) (res fieldArtefacts, err e
 		res.validator = countExpr + " <= 1"
 	default:
 		res.valExpr = valExpr
-		res.presence = hasExpr
+		res.presence = []presenceTerm{{col: idCol, lit: lit}}
 		res.validator = countExpr + " = 1"
 	}
 	return
+}
+
+// presenceSet collects presence literals, dropping duplicates while preserving
+// order, grouped per physical column: a column with one literal emits
+// has(col, lit), one with several emits hasAll(col, [lits...]). Both forms can
+// prune granules through a bloom_filter skip index (countEqual/indexOf cannot),
+// and grouping costs one array scan and one index condition per column instead
+// of one per literal.
+type presenceSet struct {
+	seen map[presenceTerm]struct{}
+	cols []string            // first-seen column order
+	lits map[string][]string // column -> literals, first-seen order
+}
+
+func newPresenceSet() *presenceSet {
+	return &presenceSet{seen: make(map[presenceTerm]struct{}, 8), lits: make(map[string][]string, 8)}
+}
+
+func (s *presenceSet) add(terms []presenceTerm) {
+	for _, t := range terms {
+		if _, ok := s.seen[t]; ok {
+			continue
+		}
+		s.seen[t] = struct{}{}
+		if _, ok := s.lits[t.col]; !ok {
+			s.cols = append(s.cols, t.col)
+		}
+		s.lits[t.col] = append(s.lits[t.col], t.lit)
+	}
+}
+
+func (s *presenceSet) terms() []string {
+	out := make([]string, 0, len(s.cols))
+	for _, col := range s.cols {
+		lits := s.lits[col]
+		if len(lits) == 1 {
+			out = append(out, "has("+col+", "+lits[0]+")")
+		} else {
+			out = append(out, "hasAll("+col+", ["+strings.Join(lits, ", ")+"])")
+		}
+	}
+	return out
 }
 
 // termSet collects boolean terms, dropping duplicates while preserving order.

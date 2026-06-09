@@ -153,6 +153,163 @@ func TestGenerator_Golden(t *testing.T) {
 	if !strings.Contains(a.Presence, "'mySym'") || !strings.Contains(a.Presence, "42") || !strings.Contains(a.Presence, "7") {
 		t.Errorf("presence missing a resolved literal:\n%s", a.Presence)
 	}
+	// Filter is the WHERE embed: presence (index carrier) AND validator (exact).
+	if want := a.Presence + " AND " + a.Validator; a.Filter != want {
+		t.Errorf("filter = %q, want presence AND validator:\n%s", a.Filter, want)
+	}
+}
+
+// TestGenerator_FilterArtefact pins the Filter composition at the edges: no
+// presence terms (Option-only) degrades to the bare validator, an empty plan
+// to the trivial filter.
+func TestGenerator_FilterArtefact(t *testing.T) {
+	g := NewGenerator(buildTestIR(t), NewLookupResolver(mapLookup{}))
+
+	optPlan := &mappingplan.Plan{
+		KindName: "optOnly",
+		Fields: []mappingplan.TaggedField{
+			{GoFieldName: "Sym", Canonical: ctabb.S, LWMembership: "maybe", LWSection: "symbol", IsOption: true, Flags: mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardVerbatim}},
+		},
+	}
+	a, err := g.Generate(optPlan)
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if a.Presence != "1" {
+		t.Errorf("Option-only presence = %q, want 1", a.Presence)
+	}
+	if a.Filter != a.Validator {
+		t.Errorf("Option-only filter = %q, want bare validator %q", a.Filter, a.Validator)
+	}
+
+	a, err = g.Generate(&mappingplan.Plan{KindName: "empty"})
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if a.Presence != "1" || a.Validator != "1" || a.Filter != "1" {
+		t.Errorf("empty plan artefacts = %q/%q/%q, want 1/1/1", a.Presence, a.Validator, a.Filter)
+	}
+}
+
+// TestGenerator_HasAllGrouping checks that several mandatory memberships on
+// one physical column group into a single hasAll term (one array scan, one
+// skip-index condition) and that the grouped form evaluates correctly.
+func TestGenerator_HasAllGrouping(t *testing.T) {
+	g := NewGenerator(buildTestIR(t), NewLookupResolver(mapLookup{}))
+	plan := &mappingplan.Plan{
+		KindName: "grouped",
+		Fields: []mappingplan.TaggedField{
+			{GoFieldName: "A", Canonical: ctabb.S, LWMembership: "alpha", LWSection: "symbol", Flags: mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardVerbatim}},
+			{GoFieldName: "B", Canonical: ctabb.S, LWMembership: "beta", LWSection: "symbol", Flags: mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardVerbatim}},
+		},
+	}
+	a, err := g.Generate(plan)
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	symLv := g.support["symbol"][common.ColumnRoleLowCardVerbatim]
+	if want := "hasAll(" + symLv + ", ['alpha', 'beta'])"; a.Presence != want {
+		t.Errorf("presence = %q, want single grouped term %q", a.Presence, want)
+	}
+	if n := strings.Count(a.Validator, "countEqual("); n != 2 {
+		t.Errorf("want 2 validator terms, got %d:\n%s", n, a.Validator)
+	}
+
+	symVal := g.value["symbol"]["value"].col
+	symLvCard := g.support["symbol"][common.ColumnRoleLowCardVerbatimCardinality]
+	both := map[string]string{
+		symVal:    "['x','y']",
+		symLv:     "['alpha','beta']",
+		symLvCard: "[1,1]",
+	}
+	proj, pres, valid := runExec(t, both, a.Projection, a.Presence, a.Validator)
+	if pres != "1" || valid != "1" {
+		t.Errorf("both-present row: presence=%q validator=%q, want 1/1", pres, valid)
+	}
+	if !strings.Contains(proj, "x") || !strings.Contains(proj, "y") {
+		t.Errorf("projection = %q, want both x and y", proj)
+	}
+
+	// beta absent: hasAll must reject without a false negative on alpha.
+	oneMissing := map[string]string{
+		symVal:    "['x','y']",
+		symLv:     "['alpha','other']",
+		symLvCard: "[1,1]",
+	}
+	_, pres, valid = runExec(t, oneMissing, a.Projection, a.Presence, a.Validator)
+	if pres != "0" || valid != "0" {
+		t.Errorf("beta-missing row: presence=%q validator=%q, want 0/0", pres, valid)
+	}
+}
+
+// TestGenerator_ConstValuePresence checks that a const field contributes its
+// pinned value as a presence term on the value column (a second necessary
+// condition, skip-index-eligible there) — for scalar string columns only,
+// since has() does not coerce a string literal to a numeric array — and that
+// a row carrying the membership with the wrong value is pruned by presence.
+func TestGenerator_ConstValuePresence(t *testing.T) {
+	g := NewGenerator(buildTestIR(t), NewLookupResolver(mapLookup{"answer": 9}))
+	plan := &mappingplan.Plan{
+		KindName: "constKind",
+		Fields: []mappingplan.TaggedField{
+			{LWMembership: "appKind", LWSection: "symbol", IsConst: true, ConstValue: "production", Flags: mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardVerbatim}},
+			{GoFieldName: "Tag", Canonical: ctabb.S, LWMembership: "feature", LWSection: "symbol", Flags: mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardVerbatim}},
+		},
+	}
+	a, err := g.Generate(plan)
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	symVal := g.value["symbol"]["value"].col
+	symLv := g.support["symbol"][common.ColumnRoleLowCardVerbatim]
+	symLvCard := g.support["symbol"][common.ColumnRoleLowCardVerbatimCardinality]
+	// Memberships group on the lv column; the const value lands on the value column.
+	if want := "hasAll(" + symLv + ", ['appKind', 'feature']) AND has(" + symVal + ", 'production')"; a.Presence != want {
+		t.Errorf("presence = %q, want %q", a.Presence, want)
+	}
+
+	match := map[string]string{
+		symVal:    "['production','edge']",
+		symLv:     "['appKind','feature']",
+		symLvCard: "[1,1]",
+	}
+	_, pres, valid := runExec(t, match, a.Projection, a.Presence, a.Validator)
+	if pres != "1" || valid != "1" {
+		t.Errorf("conforming row: presence=%q validator=%q, want 1/1", pres, valid)
+	}
+
+	// Membership present but the const value wrong: presence already rejects
+	// (the value-column term), and the validator agrees — no false negative.
+	wrongValue := map[string]string{
+		symVal:    "['staging','edge']",
+		symLv:     "['appKind','feature']",
+		symLvCard: "[1,1]",
+	}
+	_, pres, valid = runExec(t, wrongValue, a.Projection, a.Presence, a.Validator)
+	if pres != "0" || valid != "0" {
+		t.Errorf("wrong-const-value row: presence=%q validator=%q, want 0/0", pres, valid)
+	}
+
+	// A const on a numeric value column must not emit the value-side term:
+	// has(Array(UInt64), '42') is a ClickHouse type error (NO_COMMON_TYPE).
+	numPlan := &mappingplan.Plan{
+		KindName: "constNum",
+		Fields: []mappingplan.TaggedField{
+			{LWMembership: "answer", LWSection: "pair", LWColumn: "lo", IsConst: true, ConstValue: "42", Flags: mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardRef}},
+		},
+	}
+	a, err = g.Generate(numPlan)
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	pairLo := g.value["pair"]["lo"].col
+	pairLr := g.support["pair"][common.ColumnRoleLowCardRef]
+	if want := "has(" + pairLr + ", 9)"; a.Presence != want {
+		t.Errorf("numeric-const presence = %q, want membership term only %q", a.Presence, want)
+	}
+	if strings.Contains(a.Presence, pairLo) {
+		t.Errorf("numeric-const presence must not reference the value column %s:\n%s", pairLo, a.Presence)
+	}
 }
 
 // runExec injects the helper UDFs, then runs proj/presence/validator over a
