@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
 	"slices"
+	"time"
 )
 
 ///////////////////////////////////////////////////////////////////
@@ -55,6 +56,29 @@ func CreateSchemaDroneTable() (schema *arrow.Schema) {
 		/* 030 */ arrow.Field{Name: "tv:symbolArray:lrcard:lrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 		/* 031 */ arrow.Field{Name: "tv:symbolArray:lvcard:lvcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 		/* 032 */ arrow.Field{Name: "tv:symbolArray:lmrcard:lmrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 033 */ arrow.Field{Name: "tv:geoPoint:pointLat:val:f32:g:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Float32)},
+		/* 034 */ arrow.Field{Name: "tv:geoPoint:pointLng:val:f32:g:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Float32)},
+		/* 035 */ arrow.Field{Name: "tv:geoPoint:h3:val:u64:g:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 036 */ arrow.Field{Name: "tv:geoPoint:hr:hr:u64:2k:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 037 */ arrow.Field{Name: "tv:geoPoint:lr:lr:u64:2q:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 038 */ arrow.Field{Name: "tv:geoPoint:lv:lv:y:m:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 039 */ arrow.Field{Name: "tv:geoPoint:lmr:lmr:u64:2q:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 040 */ arrow.Field{Name: "tv:geoPoint:mrhp:mrhp:y:g:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 041 */ arrow.Field{Name: "tv:geoPoint:hrcard:hrcard:u64:4gw:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 042 */ arrow.Field{Name: "tv:geoPoint:lrcard:lrcard:u64:4gw:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 043 */ arrow.Field{Name: "tv:geoPoint:lvcard:lvcard:u64:4gw:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 044 */ arrow.Field{Name: "tv:geoPoint:lmrcard:lmrcard:u64:4gw:0:0:0::geo", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 045 */ arrow.Field{Name: "tv:timeRange:beginIncl:val:z64:2k:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.TimestampType{Unit: arrow.Nanosecond})},
+		/* 046 */ arrow.Field{Name: "tv:timeRange:endExcl:val:z64:2k:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.TimestampType{Unit: arrow.Nanosecond})},
+		/* 047 */ arrow.Field{Name: "tv:timeRange:hr:hr:u64:2k:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 048 */ arrow.Field{Name: "tv:timeRange:lr:lr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 049 */ arrow.Field{Name: "tv:timeRange:lv:lv:y:m:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 050 */ arrow.Field{Name: "tv:timeRange:lmr:lmr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 051 */ arrow.Field{Name: "tv:timeRange:mrhp:mrhp:y:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 052 */ arrow.Field{Name: "tv:timeRange:hrcard:hrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 053 */ arrow.Field{Name: "tv:timeRange:lrcard:lrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 054 */ arrow.Field{Name: "tv:timeRange:lvcard:lvcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 055 */ arrow.Field{Name: "tv:timeRange:lmrcard:lmrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 	}, nil)
 	return
 }
@@ -70,13 +94,17 @@ type InEntityDroneTable struct {
 	allocator             memory.Allocator
 	builder               *array.RecordBuilder
 	records               []arrow.RecordBatch
-	section00Inst         *InEntityDroneTableSectionSymbol
+	section00Inst         *InEntityDroneTableSectionGeoPoint
 	section00State        runtime.EntityStateE
-	section01Inst         *InEntityDroneTableSectionSymbolArray
+	section01Inst         *InEntityDroneTableSectionSymbol
 	section01State        runtime.EntityStateE
-	section02Inst         *InEntityDroneTableSectionU64Array
+	section02Inst         *InEntityDroneTableSectionSymbolArray
 	section02State        runtime.EntityStateE
-	activeSections        *[3]bool
+	section03Inst         *InEntityDroneTableSectionTimeRange
+	section03State        runtime.EntityStateE
+	section04Inst         *InEntityDroneTableSectionU64Array
+	section04State        runtime.EntityStateE
+	activeSections        *[5]bool
 	plainId0              uint64
 	scalarFieldBuilder000 *array.Uint64Builder
 }
@@ -105,7 +133,7 @@ func (inst *InEntityDroneTable) SetActiveSections(idxs []int) {
 		inst.activeSections = nil
 		return
 	}
-	var mask [3]bool
+	var mask [5]bool
 	for _, i := range idxs {
 		if i >= 0 && i < len(mask) {
 			mask[i] = true
@@ -124,9 +152,11 @@ func (inst *InEntityDroneTable) Builder() *array.RecordBuilder { return inst.bui
 // SetActiveSections inputs from section names — for example, the
 // marshallgen-driven keelson codec wrappers.
 var InEntityDroneTableSectionIndices = map[string]int{
-	"symbol":      0,
-	"symbolArray": 1,
-	"u64Array":    2,
+	"geoPoint":    0,
+	"symbol":      1,
+	"symbolArray": 2,
+	"timeRange":   3,
+	"u64Array":    4,
 }
 
 ///////////////////////////////////////////////////////////////////
@@ -150,9 +180,11 @@ func (inst *InEntityDroneTable) resetPlainValues() {
 	inst.plainId0 = uint64(0)
 }
 func (inst *InEntityDroneTable) initSections(builder *array.RecordBuilder) {
-	inst.section00Inst = NewInEntityDroneTableSectionSymbol(builder, inst)
-	inst.section01Inst = NewInEntityDroneTableSectionSymbolArray(builder, inst)
-	inst.section02Inst = NewInEntityDroneTableSectionU64Array(builder, inst)
+	inst.section00Inst = NewInEntityDroneTableSectionGeoPoint(builder, inst)
+	inst.section01Inst = NewInEntityDroneTableSectionSymbol(builder, inst)
+	inst.section02Inst = NewInEntityDroneTableSectionSymbolArray(builder, inst)
+	inst.section03Inst = NewInEntityDroneTableSectionTimeRange(builder, inst)
+	inst.section04Inst = NewInEntityDroneTableSectionU64Array(builder, inst)
 }
 func (inst *InEntityDroneTable) beginSections() {
 	if mask := inst.activeSections; mask != nil {
@@ -165,33 +197,51 @@ func (inst *InEntityDroneTable) beginSections() {
 		if mask[2] {
 			inst.section02Inst.beginSection()
 		}
+		if mask[3] {
+			inst.section03Inst.beginSection()
+		}
+		if mask[4] {
+			inst.section04Inst.beginSection()
+		}
 		return
 	}
 	inst.section00Inst.beginSection()
 	inst.section01Inst.beginSection()
 	inst.section02Inst.beginSection()
+	inst.section03Inst.beginSection()
+	inst.section04Inst.beginSection()
 }
 func (inst *InEntityDroneTable) resetSections() {
 	inst.section00Inst.resetSection()
 	inst.section01Inst.resetSection()
 	inst.section02Inst.resetSection()
+	inst.section03Inst.resetSection()
+	inst.section04Inst.resetSection()
 }
 func (inst *InEntityDroneTable) CheckErrors() (err error) {
 	err = eh.CheckErrors(inst.errs)
 	err = errors.Join(err, inst.section00Inst.CheckErrors())
 	err = errors.Join(err, inst.section01Inst.CheckErrors())
 	err = errors.Join(err, inst.section02Inst.CheckErrors())
+	err = errors.Join(err, inst.section03Inst.CheckErrors())
+	err = errors.Join(err, inst.section04Inst.CheckErrors())
 
 	return
 }
-func (inst *InEntityDroneTable) GetSectionSymbol() *InEntityDroneTableSectionSymbol {
+func (inst *InEntityDroneTable) GetSectionGeoPoint() *InEntityDroneTableSectionGeoPoint {
 	return inst.section00Inst
 }
-func (inst *InEntityDroneTable) GetSectionSymbolArray() *InEntityDroneTableSectionSymbolArray {
+func (inst *InEntityDroneTable) GetSectionSymbol() *InEntityDroneTableSectionSymbol {
 	return inst.section01Inst
 }
-func (inst *InEntityDroneTable) GetSectionU64Array() *InEntityDroneTableSectionU64Array {
+func (inst *InEntityDroneTable) GetSectionSymbolArray() *InEntityDroneTableSectionSymbolArray {
 	return inst.section02Inst
+}
+func (inst *InEntityDroneTable) GetSectionTimeRange() *InEntityDroneTableSectionTimeRange {
+	return inst.section03Inst
+}
+func (inst *InEntityDroneTable) GetSectionU64Array() *InEntityDroneTableSectionU64Array {
+	return inst.section04Inst
 }
 func (inst *InEntityDroneTable) BeginEntity() *InEntityDroneTable {
 	switch inst.state {
@@ -211,7 +261,7 @@ func (inst *InEntityDroneTable) validateEntity() {
 		state := inst.section00Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "symbol").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "geoPoint").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -219,12 +269,28 @@ func (inst *InEntityDroneTable) validateEntity() {
 		state := inst.section01Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "symbolArray").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "symbol").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
 	{
 		state := inst.section02Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "symbolArray").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section03Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "timeRange").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section04Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
 			inst.AppendError(eb.Build().Str("section", "u64Array").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
@@ -306,6 +372,327 @@ func (inst *InEntityDroneTable) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityDroneTable) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityDroneTableSectionGeoPoint struct {
+	errs                  []error
+	inAttr                *InEntityDroneTableSectionGeoPointInAttr
+	state                 runtime.EntityStateE
+	parent                *InEntityDroneTable
+	scalarFieldBuilder033 *array.Float32Builder
+	scalarListBuilder033  *array.ListBuilder
+	scalarFieldBuilder034 *array.Float32Builder
+	scalarListBuilder034  *array.ListBuilder
+	scalarFieldBuilder035 *array.Uint64Builder
+	scalarListBuilder035  *array.ListBuilder
+}
+
+func NewInEntityDroneTableSectionGeoPoint(builder *array.RecordBuilder, parent *InEntityDroneTable) (inst *InEntityDroneTableSectionGeoPoint) {
+	inst = &InEntityDroneTableSectionGeoPoint{}
+	inAttr := NewInEntityDroneTableSectionGeoPointInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.scalarFieldBuilder033 = builder.Field(33).(*array.ListBuilder).ValueBuilder().(*array.Float32Builder)
+	inst.scalarListBuilder033 = builder.Field(33).(*array.ListBuilder)
+	inst.scalarFieldBuilder034 = builder.Field(34).(*array.ListBuilder).ValueBuilder().(*array.Float32Builder)
+	inst.scalarListBuilder034 = builder.Field(34).(*array.ListBuilder)
+	inst.scalarFieldBuilder035 = builder.Field(35).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.scalarListBuilder035 = builder.Field(35).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityDroneTableSectionGeoPoint) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityDroneTableSectionGeoPoint) BeginAttribute(pointLat33 float32, pointLng34 float32, h335 uint64) *InEntityDroneTableSectionGeoPointInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+	inst.scalarFieldBuilder033.Append(pointLat33)
+	inst.scalarFieldBuilder034.Append(pointLng34)
+	inst.scalarFieldBuilder035.Append(h335)
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityDroneTableSectionGeoPoint) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityDroneTableSectionGeoPoint) EndSection() *InEntityDroneTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityDroneTableSectionGeoPoint) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityDroneTableSectionGeoPoint) resetSection() {
+	inst.clearErrors()
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityDroneTableSectionGeoPoint) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityDroneTableSectionGeoPoint) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityDroneTableSectionGeoPointInAttr struct {
+	errs                             []error
+	state                            runtime.EntityStateE
+	parent                           *InEntityDroneTableSectionGeoPoint
+	scalarFieldBuilder033            *array.Float32Builder
+	scalarListBuilder033             *array.ListBuilder
+	scalarFieldBuilder034            *array.Float32Builder
+	scalarListBuilder034             *array.ListBuilder
+	scalarFieldBuilder035            *array.Uint64Builder
+	scalarListBuilder035             *array.ListBuilder
+	membershipFieldBuilder036        *array.Uint64Builder
+	membershipListBuilder036         *array.ListBuilder
+	membershipFieldBuilder037        *array.Uint64Builder
+	membershipListBuilder037         *array.ListBuilder
+	membershipFieldBuilder038        *array.BinaryBuilder
+	membershipListBuilder038         *array.ListBuilder
+	membershipFieldBuilder039        *array.Uint64Builder
+	membershipListBuilder039         *array.ListBuilder
+	membershipFieldBuilder040        *array.BinaryBuilder
+	membershipListBuilder040         *array.ListBuilder
+	membershipSupportFieldBuilder041 *array.Uint64Builder
+	membershipSupportListBuilder041  *array.ListBuilder
+	membershipSupportFieldBuilder042 *array.Uint64Builder
+	membershipSupportListBuilder042  *array.ListBuilder
+	membershipSupportFieldBuilder043 *array.Uint64Builder
+	membershipSupportListBuilder043  *array.ListBuilder
+	membershipSupportFieldBuilder044 *array.Uint64Builder
+	membershipSupportListBuilder044  *array.ListBuilder
+
+	membershipContainerLength036 int
+
+	membershipContainerLength037 int
+
+	membershipContainerLength038 int
+
+	membershipContainerLength039 int
+
+	membershipContainerLength040 int
+}
+
+func NewInEntityDroneTableSectionGeoPointInAttr(builder *array.RecordBuilder, parent *InEntityDroneTableSectionGeoPoint) (inst *InEntityDroneTableSectionGeoPointInAttr) {
+	inst = &InEntityDroneTableSectionGeoPointInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.scalarFieldBuilder033 = builder.Field(33).(*array.ListBuilder).ValueBuilder().(*array.Float32Builder)
+	inst.scalarListBuilder033 = builder.Field(33).(*array.ListBuilder)
+	inst.scalarFieldBuilder034 = builder.Field(34).(*array.ListBuilder).ValueBuilder().(*array.Float32Builder)
+	inst.scalarListBuilder034 = builder.Field(34).(*array.ListBuilder)
+	inst.scalarFieldBuilder035 = builder.Field(35).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.scalarListBuilder035 = builder.Field(35).(*array.ListBuilder)
+	inst.membershipFieldBuilder036 = builder.Field(36).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder036 = builder.Field(36).(*array.ListBuilder)
+	inst.membershipFieldBuilder037 = builder.Field(37).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder037 = builder.Field(37).(*array.ListBuilder)
+	inst.membershipFieldBuilder038 = builder.Field(38).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder038 = builder.Field(38).(*array.ListBuilder)
+	inst.membershipFieldBuilder039 = builder.Field(39).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder039 = builder.Field(39).(*array.ListBuilder)
+	inst.membershipFieldBuilder040 = builder.Field(40).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder040 = builder.Field(40).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder041 = builder.Field(41).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder041 = builder.Field(41).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder042 = builder.Field(42).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder042 = builder.Field(42).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder043 = builder.Field(43).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder043 = builder.Field(43).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder044 = builder.Field(44).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder044 = builder.Field(44).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityDroneTableSectionGeoPointInAttr) beginAttribute() {
+	inst.membershipListBuilder036.Append(true)
+	inst.membershipListBuilder037.Append(true)
+	inst.membershipListBuilder038.Append(true)
+	inst.membershipListBuilder039.Append(true)
+	inst.membershipListBuilder040.Append(true)
+	inst.membershipContainerLength036 = 0
+	inst.membershipContainerLength037 = 0
+	inst.membershipContainerLength038 = 0
+	inst.membershipContainerLength039 = 0
+	inst.membershipContainerLength040 = 0
+	inst.scalarListBuilder033.Append(true)
+	inst.scalarListBuilder034.Append(true)
+	inst.scalarListBuilder035.Append(true)
+	inst.membershipSupportListBuilder041.Append(true)
+	inst.membershipSupportListBuilder042.Append(true)
+	inst.membershipSupportListBuilder043.Append(true)
+	inst.membershipSupportListBuilder044.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityDroneTableSectionGeoPointInAttr) AddMembershipHighCardRef(hr36 uint64) *InEntityDroneTableSectionGeoPointInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder036.Append(hr36)
+	inst.membershipContainerLength036++
+	return inst
+}
+func (inst *InEntityDroneTableSectionGeoPointInAttr) AddMembershipHighCardRefP(hr36 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder036.Append(hr36)
+	inst.membershipContainerLength036++
+	return
+}
+func (inst *InEntityDroneTableSectionGeoPointInAttr) AddMembershipLowCardRef(lr37 uint64) *InEntityDroneTableSectionGeoPointInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder037.Append(lr37)
+	inst.membershipContainerLength037++
+	return inst
+}
+func (inst *InEntityDroneTableSectionGeoPointInAttr) AddMembershipLowCardRefP(lr37 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder037.Append(lr37)
+	inst.membershipContainerLength037++
+	return
+}
+func (inst *InEntityDroneTableSectionGeoPointInAttr) AddMembershipLowCardVerbatim(lv38 []byte) *InEntityDroneTableSectionGeoPointInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder038.Append(lv38)
+	inst.membershipContainerLength038++
+	return inst
+}
+func (inst *InEntityDroneTableSectionGeoPointInAttr) AddMembershipLowCardVerbatimP(lv38 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder038.Append(lv38)
+	inst.membershipContainerLength038++
+	return
+}
+func (inst *InEntityDroneTableSectionGeoPointInAttr) AddMembershipMixedLowCardRef(lmr39 uint64, mrhp40 []byte) *InEntityDroneTableSectionGeoPointInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder039.Append(lmr39)
+	inst.membershipFieldBuilder040.Append(mrhp40)
+	inst.membershipContainerLength039++
+	inst.membershipContainerLength040++
+	return inst
+}
+func (inst *InEntityDroneTableSectionGeoPointInAttr) AddMembershipMixedLowCardRefP(lmr39 uint64, mrhp40 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder039.Append(lmr39)
+	inst.membershipFieldBuilder040.Append(mrhp40)
+	inst.membershipContainerLength039++
+	inst.membershipContainerLength040++
+	return
+}
+func (inst *InEntityDroneTableSectionGeoPointInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength036
+	inst.membershipContainerLength036 = 0
+	inst.membershipSupportFieldBuilder041.Append(uint64(l))
+	l = inst.membershipContainerLength037
+	inst.membershipContainerLength037 = 0
+	inst.membershipSupportFieldBuilder042.Append(uint64(l))
+	l = inst.membershipContainerLength038
+	inst.membershipContainerLength038 = 0
+	inst.membershipSupportFieldBuilder043.Append(uint64(l))
+	l = inst.membershipContainerLength039
+	inst.membershipContainerLength039 = 0
+	inst.membershipSupportFieldBuilder044.Append(uint64(l))
+}
+func (inst *InEntityDroneTableSectionGeoPointInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+}
+func (inst *InEntityDroneTableSectionGeoPointInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityDroneTableSectionGeoPointInAttr) EndSection() *InEntityDroneTable {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityDroneTableSectionGeoPointInAttr) EndAttribute() *InEntityDroneTableSectionGeoPoint {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityDroneTableSectionGeoPointInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityDroneTableSectionGeoPointInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityDroneTableSectionGeoPointInAttr) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 
@@ -933,6 +1320,317 @@ func (inst *InEntityDroneTableSectionSymbolArrayInAttr) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityDroneTableSectionSymbolArrayInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityDroneTableSectionTimeRange struct {
+	errs                  []error
+	inAttr                *InEntityDroneTableSectionTimeRangeInAttr
+	state                 runtime.EntityStateE
+	parent                *InEntityDroneTable
+	scalarFieldBuilder045 *array.TimestampBuilder
+	scalarListBuilder045  *array.ListBuilder
+	scalarFieldBuilder046 *array.TimestampBuilder
+	scalarListBuilder046  *array.ListBuilder
+}
+
+func NewInEntityDroneTableSectionTimeRange(builder *array.RecordBuilder, parent *InEntityDroneTable) (inst *InEntityDroneTableSectionTimeRange) {
+	inst = &InEntityDroneTableSectionTimeRange{}
+	inAttr := NewInEntityDroneTableSectionTimeRangeInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.scalarFieldBuilder045 = builder.Field(45).(*array.ListBuilder).ValueBuilder().(*array.TimestampBuilder)
+	inst.scalarListBuilder045 = builder.Field(45).(*array.ListBuilder)
+	inst.scalarFieldBuilder046 = builder.Field(46).(*array.ListBuilder).ValueBuilder().(*array.TimestampBuilder)
+	inst.scalarListBuilder046 = builder.Field(46).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityDroneTableSectionTimeRange) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityDroneTableSectionTimeRange) BeginAttribute(beginIncl45 time.Time, endExcl46 time.Time) *InEntityDroneTableSectionTimeRangeInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+	inst.scalarFieldBuilder045.Append(arrow.Timestamp(beginIncl45.UnixNano()))
+	inst.scalarFieldBuilder046.Append(arrow.Timestamp(endExcl46.UnixNano()))
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityDroneTableSectionTimeRange) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityDroneTableSectionTimeRange) EndSection() *InEntityDroneTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityDroneTableSectionTimeRange) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityDroneTableSectionTimeRange) resetSection() {
+	inst.clearErrors()
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityDroneTableSectionTimeRange) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityDroneTableSectionTimeRange) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityDroneTableSectionTimeRangeInAttr struct {
+	errs                             []error
+	state                            runtime.EntityStateE
+	parent                           *InEntityDroneTableSectionTimeRange
+	scalarFieldBuilder045            *array.TimestampBuilder
+	scalarListBuilder045             *array.ListBuilder
+	scalarFieldBuilder046            *array.TimestampBuilder
+	scalarListBuilder046             *array.ListBuilder
+	membershipFieldBuilder047        *array.Uint64Builder
+	membershipListBuilder047         *array.ListBuilder
+	membershipFieldBuilder048        *array.Uint64Builder
+	membershipListBuilder048         *array.ListBuilder
+	membershipFieldBuilder049        *array.BinaryBuilder
+	membershipListBuilder049         *array.ListBuilder
+	membershipFieldBuilder050        *array.Uint64Builder
+	membershipListBuilder050         *array.ListBuilder
+	membershipFieldBuilder051        *array.BinaryBuilder
+	membershipListBuilder051         *array.ListBuilder
+	membershipSupportFieldBuilder052 *array.Uint64Builder
+	membershipSupportListBuilder052  *array.ListBuilder
+	membershipSupportFieldBuilder053 *array.Uint64Builder
+	membershipSupportListBuilder053  *array.ListBuilder
+	membershipSupportFieldBuilder054 *array.Uint64Builder
+	membershipSupportListBuilder054  *array.ListBuilder
+	membershipSupportFieldBuilder055 *array.Uint64Builder
+	membershipSupportListBuilder055  *array.ListBuilder
+
+	membershipContainerLength047 int
+
+	membershipContainerLength048 int
+
+	membershipContainerLength049 int
+
+	membershipContainerLength050 int
+
+	membershipContainerLength051 int
+}
+
+func NewInEntityDroneTableSectionTimeRangeInAttr(builder *array.RecordBuilder, parent *InEntityDroneTableSectionTimeRange) (inst *InEntityDroneTableSectionTimeRangeInAttr) {
+	inst = &InEntityDroneTableSectionTimeRangeInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.scalarFieldBuilder045 = builder.Field(45).(*array.ListBuilder).ValueBuilder().(*array.TimestampBuilder)
+	inst.scalarListBuilder045 = builder.Field(45).(*array.ListBuilder)
+	inst.scalarFieldBuilder046 = builder.Field(46).(*array.ListBuilder).ValueBuilder().(*array.TimestampBuilder)
+	inst.scalarListBuilder046 = builder.Field(46).(*array.ListBuilder)
+	inst.membershipFieldBuilder047 = builder.Field(47).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder047 = builder.Field(47).(*array.ListBuilder)
+	inst.membershipFieldBuilder048 = builder.Field(48).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder048 = builder.Field(48).(*array.ListBuilder)
+	inst.membershipFieldBuilder049 = builder.Field(49).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder049 = builder.Field(49).(*array.ListBuilder)
+	inst.membershipFieldBuilder050 = builder.Field(50).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder050 = builder.Field(50).(*array.ListBuilder)
+	inst.membershipFieldBuilder051 = builder.Field(51).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder051 = builder.Field(51).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder052 = builder.Field(52).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder052 = builder.Field(52).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder053 = builder.Field(53).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder053 = builder.Field(53).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder054 = builder.Field(54).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder054 = builder.Field(54).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder055 = builder.Field(55).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder055 = builder.Field(55).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityDroneTableSectionTimeRangeInAttr) beginAttribute() {
+	inst.membershipListBuilder047.Append(true)
+	inst.membershipListBuilder048.Append(true)
+	inst.membershipListBuilder049.Append(true)
+	inst.membershipListBuilder050.Append(true)
+	inst.membershipListBuilder051.Append(true)
+	inst.membershipContainerLength047 = 0
+	inst.membershipContainerLength048 = 0
+	inst.membershipContainerLength049 = 0
+	inst.membershipContainerLength050 = 0
+	inst.membershipContainerLength051 = 0
+	inst.scalarListBuilder045.Append(true)
+	inst.scalarListBuilder046.Append(true)
+	inst.membershipSupportListBuilder052.Append(true)
+	inst.membershipSupportListBuilder053.Append(true)
+	inst.membershipSupportListBuilder054.Append(true)
+	inst.membershipSupportListBuilder055.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityDroneTableSectionTimeRangeInAttr) AddMembershipHighCardRef(hr47 uint64) *InEntityDroneTableSectionTimeRangeInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder047.Append(hr47)
+	inst.membershipContainerLength047++
+	return inst
+}
+func (inst *InEntityDroneTableSectionTimeRangeInAttr) AddMembershipHighCardRefP(hr47 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder047.Append(hr47)
+	inst.membershipContainerLength047++
+	return
+}
+func (inst *InEntityDroneTableSectionTimeRangeInAttr) AddMembershipLowCardRef(lr48 uint64) *InEntityDroneTableSectionTimeRangeInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder048.Append(lr48)
+	inst.membershipContainerLength048++
+	return inst
+}
+func (inst *InEntityDroneTableSectionTimeRangeInAttr) AddMembershipLowCardRefP(lr48 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder048.Append(lr48)
+	inst.membershipContainerLength048++
+	return
+}
+func (inst *InEntityDroneTableSectionTimeRangeInAttr) AddMembershipLowCardVerbatim(lv49 []byte) *InEntityDroneTableSectionTimeRangeInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder049.Append(lv49)
+	inst.membershipContainerLength049++
+	return inst
+}
+func (inst *InEntityDroneTableSectionTimeRangeInAttr) AddMembershipLowCardVerbatimP(lv49 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder049.Append(lv49)
+	inst.membershipContainerLength049++
+	return
+}
+func (inst *InEntityDroneTableSectionTimeRangeInAttr) AddMembershipMixedLowCardRef(lmr50 uint64, mrhp51 []byte) *InEntityDroneTableSectionTimeRangeInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder050.Append(lmr50)
+	inst.membershipFieldBuilder051.Append(mrhp51)
+	inst.membershipContainerLength050++
+	inst.membershipContainerLength051++
+	return inst
+}
+func (inst *InEntityDroneTableSectionTimeRangeInAttr) AddMembershipMixedLowCardRefP(lmr50 uint64, mrhp51 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder050.Append(lmr50)
+	inst.membershipFieldBuilder051.Append(mrhp51)
+	inst.membershipContainerLength050++
+	inst.membershipContainerLength051++
+	return
+}
+func (inst *InEntityDroneTableSectionTimeRangeInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength047
+	inst.membershipContainerLength047 = 0
+	inst.membershipSupportFieldBuilder052.Append(uint64(l))
+	l = inst.membershipContainerLength048
+	inst.membershipContainerLength048 = 0
+	inst.membershipSupportFieldBuilder053.Append(uint64(l))
+	l = inst.membershipContainerLength049
+	inst.membershipContainerLength049 = 0
+	inst.membershipSupportFieldBuilder054.Append(uint64(l))
+	l = inst.membershipContainerLength050
+	inst.membershipContainerLength050 = 0
+	inst.membershipSupportFieldBuilder055.Append(uint64(l))
+}
+func (inst *InEntityDroneTableSectionTimeRangeInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+}
+func (inst *InEntityDroneTableSectionTimeRangeInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityDroneTableSectionTimeRangeInAttr) EndSection() *InEntityDroneTable {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityDroneTableSectionTimeRangeInAttr) EndAttribute() *InEntityDroneTableSectionTimeRange {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityDroneTableSectionTimeRangeInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityDroneTableSectionTimeRangeInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityDroneTableSectionTimeRangeInAttr) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 

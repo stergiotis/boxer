@@ -70,4 +70,25 @@ func loadDroneSchema(manip common.TableManipulatorFluidI) {
 	secSymArray.TaggedValueColumn("value", ctabb.Sh).
 		AddColumnValueSemantics(valueaspects.AspectCanonicalizedValue).
 		AddColumnEncodingHints(easp.AspectLightGeneralCompression)
+
+	// geoPoint and timeRange are multi-sub-column scalar sections: one
+	// membership per entity carrying several aligned value columns. Sub-column
+	// declaration order must match the DTO's field order (see dto.go).
+	secGeo := manip.TaggedValueSection("geoPoint").
+		SectionStreamingGroup("geo").
+		AddSectionMembership(channels...)
+	secGeo.TaggedValueColumn("pointLat", ctabb.F32).
+		AddColumnEncodingHints(easp.AspectLightGeneralCompression)
+	secGeo.TaggedValueColumn("pointLng", ctabb.F32).
+		AddColumnEncodingHints(easp.AspectLightGeneralCompression)
+	secGeo.TaggedValueColumn("h3", ctabb.U64).
+		AddColumnEncodingHints(easp.AspectLightGeneralCompression)
+
+	secTime := manip.TaggedValueSection("timeRange").
+		SectionStreamingGroup("data").
+		AddSectionMembership(channels...)
+	secTime.TaggedValueColumn("beginIncl", ctabb.Z64).
+		AddColumnEncodingHints(easp.AspectDeltaEncoding, easp.AspectLightGeneralCompression)
+	secTime.TaggedValueColumn("endExcl", ctabb.Z64).
+		AddColumnEncodingHints(easp.AspectDeltaEncoding, easp.AspectLightGeneralCompression)
 }

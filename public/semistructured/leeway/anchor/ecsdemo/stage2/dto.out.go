@@ -4,6 +4,7 @@ package stage2
 
 import (
 	"iter"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow/array"
 
@@ -16,9 +17,11 @@ import (
 // --- Package-local membership ids (schema-agnostic target). ---
 
 const (
-	kindStatus  uint64 = 1
-	kindBattery uint64 = 2
-	kindTags    uint64 = 3
+	kindStatus      uint64 = 1
+	kindBattery     uint64 = 2
+	kindTags        uint64 = 3
+	kindLat         uint64 = 4
+	kindWindowBegin uint64 = 5
 )
 
 // --- SoA columns + AoS Append adapter. ---
@@ -28,9 +31,14 @@ const (
 type DroneEntityColumns struct {
 	ID []uint64
 
-	Status  []string
-	Battery []uint64
-	Tags    [][]string
+	Status      []string
+	Battery     []uint64
+	Tags        [][]string
+	Lat         []float32
+	Lng         []float32
+	Cell        []uint64
+	WindowBegin []time.Time
+	WindowEnd   []time.Time
 }
 
 // Len returns the number of rows currently in the batch.
@@ -47,6 +55,11 @@ func (c *DroneEntityColumns) Append(row DroneEntity) {
 	c.Status = append(c.Status, row.Status)
 	c.Battery = append(c.Battery, row.Battery)
 	c.Tags = append(c.Tags, row.Tags)
+	c.Lat = append(c.Lat, row.Lat)
+	c.Lng = append(c.Lng, row.Lng)
+	c.Cell = append(c.Cell, row.Cell)
+	c.WindowBegin = append(c.WindowBegin, row.WindowBegin)
+	c.WindowEnd = append(c.WindowEnd, row.WindowEnd)
 }
 
 // Row reconstructs entity i as an AoS DroneEntity record. Inverse of
@@ -57,6 +70,11 @@ func (c *DroneEntityColumns) Row(i int) (row DroneEntity) {
 	row.Status = c.Status[i]
 	row.Battery = c.Battery[i]
 	row.Tags = c.Tags[i]
+	row.Lat = c.Lat[i]
+	row.Lng = c.Lng[i]
+	row.Cell = c.Cell[i]
+	row.WindowBegin = c.WindowBegin[i]
+	row.WindowEnd = c.WindowEnd[i]
 	return
 }
 
@@ -119,6 +137,36 @@ type DroneEntitySymbolArraySecI[Attr any, Ent any] interface {
 	EndSection() Ent
 }
 
+// DroneEntityGeoPointAttrI is the InAttr-side view of the geoPoint section. P-variants only —
+// every method returns void so no F-bounded `[Self]` parameter is
+// needed.
+type DroneEntityGeoPointAttrI interface {
+	dmlruntime.InAttributeMembershipLowCardRefPI
+	EndAttributeP()
+}
+
+// DroneEntityGeoPointSecI is the Section-side view: opens an attribute and closes
+// the section. Attr and Ent are bound at the call site by inference.
+type DroneEntityGeoPointSecI[Attr any, Ent any] interface {
+	BeginAttribute(pointLat float32, pointLng float32, h3 uint64) Attr
+	EndSection() Ent
+}
+
+// DroneEntityTimeRangeAttrI is the InAttr-side view of the timeRange section. P-variants only —
+// every method returns void so no F-bounded `[Self]` parameter is
+// needed.
+type DroneEntityTimeRangeAttrI interface {
+	dmlruntime.InAttributeMembershipLowCardRefPI
+	EndAttributeP()
+}
+
+// DroneEntityTimeRangeSecI is the Section-side view: opens an attribute and closes
+// the section. Attr and Ent are bound at the call site by inference.
+type DroneEntityTimeRangeSecI[Attr any, Ent any] interface {
+	BeginAttribute(beginIncl time.Time, endExcl time.Time) Attr
+	EndSection() Ent
+}
+
 // DroneEntityEntityI lists exactly the entity-level methods DroneEntity uses.
 // Type parameters compose the per-section Attr + Sec interfaces; Ent
 // is the entity type itself (return type of BeginEntity / SetId /
@@ -130,6 +178,10 @@ type DroneEntityEntityI[
 	U64ArraySec DroneEntityU64ArraySecI[U64ArrayAttr, Ent],
 	SymbolArrayAttr DroneEntitySymbolArrayAttrI,
 	SymbolArraySec DroneEntitySymbolArraySecI[SymbolArrayAttr, Ent],
+	GeoPointAttr DroneEntityGeoPointAttrI,
+	GeoPointSec DroneEntityGeoPointSecI[GeoPointAttr, Ent],
+	TimeRangeAttr DroneEntityTimeRangeAttrI,
+	TimeRangeSec DroneEntityTimeRangeSecI[TimeRangeAttr, Ent],
 	Ent any,
 ] interface {
 	BeginEntity() Ent
@@ -137,6 +189,8 @@ type DroneEntityEntityI[
 	GetSectionSymbol() SymbolSec
 	GetSectionU64Array() U64ArraySec
 	GetSectionSymbolArray() SymbolArraySec
+	GetSectionGeoPoint() GeoPointSec
+	GetSectionTimeRange() TimeRangeSec
 	CommitEntity() (err error)
 }
 
@@ -151,11 +205,17 @@ func DroneEntityBuildEntities[
 	U64ArraySec DroneEntityU64ArraySecI[U64ArrayAttr, Ent],
 	SymbolArrayAttr DroneEntitySymbolArrayAttrI,
 	SymbolArraySec DroneEntitySymbolArraySecI[SymbolArrayAttr, Ent],
+	GeoPointAttr DroneEntityGeoPointAttrI,
+	GeoPointSec DroneEntityGeoPointSecI[GeoPointAttr, Ent],
+	TimeRangeAttr DroneEntityTimeRangeAttrI,
+	TimeRangeSec DroneEntityTimeRangeSecI[TimeRangeAttr, Ent],
 	Ent any,
 	DML DroneEntityEntityI[
 		SymbolAttr, SymbolSec,
 		U64ArrayAttr, U64ArraySec,
 		SymbolArrayAttr, SymbolArraySec,
+		GeoPointAttr, GeoPointSec,
+		TimeRangeAttr, TimeRangeSec,
 		Ent,
 	],
 ](dml DML, c *DroneEntityColumns) (err error) {
@@ -186,6 +246,18 @@ func DroneEntityBuildEntities[
 			symbolArraySecAttr_Tags.EndAttributeP()
 		}
 		symbolArraySec.EndSection()
+		// --- geoPoint. ---
+		geoPointSec := dml.GetSectionGeoPoint()
+		geoPointSecAttr := geoPointSec.BeginAttribute(c.Lat[i], c.Lng[i], c.Cell[i])
+		geoPointSecAttr.AddMembershipLowCardRefP(kindLat)
+		geoPointSecAttr.EndAttributeP()
+		geoPointSec.EndSection()
+		// --- timeRange. ---
+		timeRangeSec := dml.GetSectionTimeRange()
+		timeRangeSecAttr := timeRangeSec.BeginAttribute(c.WindowBegin[i], c.WindowEnd[i])
+		timeRangeSecAttr.AddMembershipLowCardRefP(kindWindowBegin)
+		timeRangeSecAttr.EndAttributeP()
+		timeRangeSec.EndSection()
 		err = dml.CommitEntity()
 		if err != nil {
 			err = eh.Errorf("commit row %d: %w", i, err)
@@ -235,6 +307,31 @@ type DroneEntitySymbolArrayMembsReadI interface {
 	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
+// DroneEntityGeoPointAttrsReadI is the Attributes-side view of the geoPoint section.
+type DroneEntityGeoPointAttrsReadI interface {
+	GetAttrValuePointLat(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) float32
+	GetAttrValuePointLng(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) float32
+	GetAttrValueH3(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint64
+	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
+}
+
+// DroneEntityGeoPointMembsReadI is the Memberships-side view of the geoPoint section.
+type DroneEntityGeoPointMembsReadI interface {
+	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
+}
+
+// DroneEntityTimeRangeAttrsReadI is the Attributes-side view of the timeRange section.
+type DroneEntityTimeRangeAttrsReadI interface {
+	GetAttrValueBeginIncl(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) time.Time
+	GetAttrValueEndExcl(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) time.Time
+	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
+}
+
+// DroneEntityTimeRangeMembsReadI is the Memberships-side view of the timeRange section.
+type DroneEntityTimeRangeMembsReadI interface {
+	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
+}
+
 // DroneEntityFillFromArrow walks rec row-by-row and appends each entity's
 // plain + tagged-section values into c. Plain columns enter as
 // concrete Arrow accessors; per-section Attrs + Membs bind through
@@ -246,6 +343,10 @@ func DroneEntityFillFromArrow[
 	U64ArrayMembs DroneEntityU64ArrayMembsReadI,
 	SymbolArrayAttrs DroneEntitySymbolArrayAttrsReadI,
 	SymbolArrayMembs DroneEntitySymbolArrayMembsReadI,
+	GeoPointAttrs DroneEntityGeoPointAttrsReadI,
+	GeoPointMembs DroneEntityGeoPointMembsReadI,
+	TimeRangeAttrs DroneEntityTimeRangeAttrsReadI,
+	TimeRangeMembs DroneEntityTimeRangeMembsReadI,
 ](
 	c *DroneEntityColumns,
 	n int,
@@ -256,6 +357,10 @@ func DroneEntityFillFromArrow[
 	u64ArrayMembs U64ArrayMembs,
 	symbolArrayAttrs SymbolArrayAttrs,
 	symbolArrayMembs SymbolArrayMembs,
+	geoPointAttrs GeoPointAttrs,
+	geoPointMembs GeoPointMembs,
+	timeRangeAttrs TimeRangeAttrs,
+	timeRangeMembs TimeRangeMembs,
 ) (err error) {
 	for i := 0; i < n; i++ {
 		c.ID = append(c.ID, idCol.Value(i))
@@ -311,6 +416,54 @@ func DroneEntityFillFromArrow[
 			}
 		}
 		c.Tags = append(c.Tags, symbolArrayTagsSlice)
+		// --- geoPoint. ---
+		var geoPointLatVal float32
+		var geoPointLngVal float32
+		var geoPointCellVal uint64
+		var geoPointLatCount int
+		ngeoPoint := geoPointAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+		for attrJ := int64(0); attrJ < ngeoPoint; attrJ++ {
+			geoPointLatLocal := geoPointAttrs.GetAttrValuePointLat(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+			geoPointLngLocal := geoPointAttrs.GetAttrValuePointLng(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+			geoPointCellLocal := geoPointAttrs.GetAttrValueH3(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+			for membID := range geoPointMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+				if membID == kindLat {
+					geoPointLatVal = geoPointLatLocal
+					geoPointLngVal = geoPointLngLocal
+					geoPointCellVal = geoPointCellLocal
+					geoPointLatCount++
+				}
+			}
+		}
+		if geoPointLatCount != 1 {
+			err = eb.Build().Int("row", i).Str("membership", "droneLoc").Errorf("expected exactly one occurrence per row")
+			return
+		}
+		c.Lat = append(c.Lat, geoPointLatVal)
+		c.Lng = append(c.Lng, geoPointLngVal)
+		c.Cell = append(c.Cell, geoPointCellVal)
+		// --- timeRange. ---
+		var timeRangeWindowBeginVal time.Time
+		var timeRangeWindowEndVal time.Time
+		var timeRangeWindowBeginCount int
+		ntimeRange := timeRangeAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+		for attrJ := int64(0); attrJ < ntimeRange; attrJ++ {
+			timeRangeWindowBeginLocal := timeRangeAttrs.GetAttrValueBeginIncl(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+			timeRangeWindowEndLocal := timeRangeAttrs.GetAttrValueEndExcl(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+			for membID := range timeRangeMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+				if membID == kindWindowBegin {
+					timeRangeWindowBeginVal = timeRangeWindowBeginLocal
+					timeRangeWindowEndVal = timeRangeWindowEndLocal
+					timeRangeWindowBeginCount++
+				}
+			}
+		}
+		if timeRangeWindowBeginCount != 1 {
+			err = eb.Build().Int("row", i).Str("membership", "droneWindow").Errorf("expected exactly one occurrence per row")
+			return
+		}
+		c.WindowBegin = append(c.WindowBegin, timeRangeWindowBeginVal)
+		c.WindowEnd = append(c.WindowEnd, timeRangeWindowEndVal)
 	}
 	return
 }
