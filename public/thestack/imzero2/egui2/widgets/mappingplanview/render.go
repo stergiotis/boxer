@@ -206,9 +206,21 @@ func renderEditor(ids *c.WidgetIdStack, m *Model) {
 		m.removeByUID(removeUID)
 	}
 
-	if c.Button(ids.PrepareStr("add-field"), c.Atoms().Text("+ field").Keep()).SendResp().HasPrimaryClicked() {
-		m.AddRow()
-		m.pager.GoToLast() // jump to the new field's page
+	// Separate add buttons for the two field kinds: a plain column (empty
+	// membership → the plain-column combo) and a tagged value field (a
+	// placeholder membership makes it tagged; the user renames it). HorizontalTop
+	// keeps the two equal-height buttons on one baseline (Ragged Control Row).
+	for range c.HorizontalTop().KeepIter() {
+		if c.Button(ids.PrepareStr("add-plain"), c.Atoms().Text("+ plain column").Keep()).SendResp().HasPrimaryClicked() {
+			m.AddRow() // empty membership ⇒ plain column
+			m.pager.GoToLast()
+		}
+		c.AddSpace(6)
+		if c.Button(ids.PrepareStr("add-tagged"), c.Atoms().Text("+ tagged field").Keep()).SendResp().HasPrimaryClicked() {
+			r := m.AddRow()
+			r.Membership = "membership" // non-empty ⇒ tagged value field; placeholder to rename
+			m.pager.GoToLast()
+		}
 	}
 }
 
@@ -321,7 +333,10 @@ func renderRow(ids *c.WidgetIdStack, m *Model, r *FieldRow) (remove bool) {
 
 				// Binding: membership, section, sub-column. A sub-column only
 				// applies to a tagged value field (not plain, not const).
-				for range c.Horizontal().KeepIter() {
+				// HorizontalTop (Align::Min) keeps the mixed text-field + combo row
+				// on one baseline — a centered c.Horizontal() floats the leading
+				// control a few px high (imzero2 SKILLS.md "Ragged Control Row").
+				for range c.HorizontalTop().KeepIter() {
 					if editField(ids, "memb", "membership", &r.Membership, 120, true) {
 						m.dirty = true
 					}
