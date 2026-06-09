@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-06-09
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-06-09
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0074: Leeway marshall package layout
 
@@ -193,7 +191,11 @@ naming "the Go-DTO plan builder."
 
 ## Status
 
-Proposed — awaiting review by the leeway code owner.
+Accepted on 2026-06-09 (reviewed by p@stergiotis). Implemented in commit `5f52781` — the
+split-by-tier layout is live and green: `mappingplan` keeps the Plan IR; the Go-DTO
+construction machinery is `marshall/go/goplan`; `marshallgen` / `marshallreflect` reparent
+under `marshall/go/`; the carrier structs move to `marshall/marshalltypes`; and the
+ClickHouse read-back generator becomes `marshall/clickhouse/readback`.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
