@@ -23,18 +23,6 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallreflect"
 )
 
-// droneLookup maps each membership name to the id the generated codec writes
-// (kindStatus/…/kindWindowBegin = 1..5 in dto.out.go; the geoPoint and timeRange
-// groups each share one membership). The readback resolver must agree so its SQL
-// queries the same ids the Arrow batch carries.
-var droneLookup = marshallreflect.MapLookup{
-	"droneStatus":  1,
-	"droneBattery": 2,
-	"droneTags":    3,
-	"droneLoc":     4,
-	"droneWindow":  5,
-}
-
 func buildDroneIR(t *testing.T) *readback.InformationRetrieval {
 	t.Helper()
 	td := droneTableDesc(t)

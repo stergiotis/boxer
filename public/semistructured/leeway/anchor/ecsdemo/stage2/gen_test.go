@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/gocodegen"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallgen"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/readaccess"
 	"github.com/stergiotis/boxer/public/unsafeperf"
 	"github.com/stretchr/testify/require"
 )
@@ -73,4 +74,18 @@ func TestGenerateDroneDDL(t *testing.T) {
 func TestGenerateDroneDTOCodec(t *testing.T) {
 	_, err := marshallgen.Generate("./dto.go", "./dto.out.go", marshallgen.NoOpWrapper{})
 	require.NoError(t, err)
+}
+
+// TestGenerateDroneRA emits the read-access classes (per-section Attributes /
+// Memberships readers + plain id reader) used to extract typed components from a
+// marshalled Arrow batch.
+func TestGenerateDroneRA(t *testing.T) {
+	td := droneTableDesc(t)
+	conv, err := ddl.NewHumanReadableNamingConvention(":")
+	require.NoError(t, err)
+	driver := readaccess.NewGoCodeGeneratorDriver(conv, clickhouse.NewTechnologySpecificCodeGenerator(), true)
+	namer := gocodegen.NewMultiTablePerPackageGoClassNamer()
+	code, _, err := driver.GenerateGoClasses("stage2", naming.MustBeValidStylableName("drone_table"), td, TableRowConfig, namer)
+	require.NoError(t, err)
+	writeGenFile(t, "./drone_ra.out.go", unsafeperf.UnsafeBytesToString(code))
 }
