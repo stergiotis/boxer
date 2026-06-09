@@ -49,7 +49,11 @@ func (identityRenderer) Render(ids *c.WidgetIdStack, value any) {
 	badge.New(ids.PrepareStr("status"), label).Tone(tone).Variant(badge.VariantSoft).Pill().Send()
 }
 
-// batteryRenderer shows the battery charge on a radial charge gauge.
+// batteryRenderer shows the battery charge on a radial charge gauge. The dial
+// caption carries the unit ("mAh"), not the component name: the Dispatcher
+// already draws a "battery" section header above the dial, so a "battery"
+// caption would be a redundant double-label. With the unit in the caption the
+// readout itself is just the number (and is no longer widened by the suffix).
 type batteryRenderer struct{}
 
 func (batteryRenderer) Kind() ComponentKindE { return KindBattery }
@@ -58,9 +62,8 @@ func (batteryRenderer) Render(ids *c.WidgetIdStack, value any) {
 	v, _ := value.(BatteryVal)
 	gauge.New("battery").
 		Range(0, batteryMaxMAh).
-		Label("battery").
+		Label("mAh").
 		Diameter(115).
-		Suffix(" mAh").
 		ZoneMode(gauge.ZonePercentage).
 		Zones(batteryChargeZones()...).
 		Render(ids.PrepareStr("dial"), float64(v.Charge))
