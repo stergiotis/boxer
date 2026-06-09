@@ -74,6 +74,30 @@ func (inst *FatRow) Release() {
 // NumRows is the number of entities in the row batch.
 func (inst *FatRow) NumRows() int { return inst.id.Len() }
 
+// Archetype reports which components the entity at idx carries, in a fixed order
+// — the stage-2 analogue of stage-1's Entity.Components(). A component is present
+// iff its primary section is populated for the entity (the leeway approximate
+// presence: GetNumberOfAttributes > 0). Each component is keyed on one section
+// (identity→symbol, battery→u64Array, located→geoPoint, tasked→timeRange); the
+// symbolArray that also backs Tasked.Tags is optional and not part of detection.
+func (inst *FatRow) Archetype(idx int) []string {
+	ei := runtime.EntityIdx(idx)
+	var a []string
+	if inst.symbol.GetAttributes().GetNumberOfAttributes(ei) > 0 {
+		a = append(a, "identity")
+	}
+	if inst.u64Array.GetAttributes().GetNumberOfAttributes(ei) > 0 {
+		a = append(a, "battery")
+	}
+	if inst.geoPoint.GetAttributes().GetNumberOfAttributes(ei) > 0 {
+		a = append(a, "located")
+	}
+	if inst.timeRange.GetAttributes().GetNumberOfAttributes(ei) > 0 {
+		a = append(a, "tasked")
+	}
+	return a
+}
+
 func (inst *FatRow) args() marshallreflect.UnmarshalArgs {
 	return marshallreflect.UnmarshalArgs{
 		NumRows: inst.id.Len(),

@@ -6,7 +6,47 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stretchr/testify/require"
+
+	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallreflect"
 )
+
+// marshalFatRow marshals rows (any lw:-tagged drone DTO) into the bespoke schema
+// and wraps the resulting batch in a FatRow. The returned cleanup releases both.
+func marshalFatRow[T any](t *testing.T, rows []T) (*FatRow, func()) {
+	t.Helper()
+	table := NewInEntityDroneTable(memory.NewGoAllocator(), len(rows))
+	require.NoError(t, marshallreflect.Marshal(table, rows, droneLookup))
+	recs, err := table.TransferRecords(nil)
+	require.NoError(t, err)
+	require.NotEmpty(t, recs)
+	fr, err := NewFatRow(recs[0])
+	require.NoError(t, err)
+	return fr, func() {
+		fr.Release()
+		for _, r := range recs {
+			r.Release()
+		}
+	}
+}
+
+// TestFatRowArchetype checks the detection helper: a full entity reports all four
+// components, while a droneCore (no geoPoint) reports located absent — the
+// stage-2 mirror of stage-1's Entity.Components() over present/absent sections.
+func TestFatRowArchetype(t *testing.T) {
+	t0 := time.Unix(1_600_000_000, 0).UTC()
+
+	full, releaseFull := marshalFatRow(t, []DroneEntity{
+		{ID: 1, Status: "IDLE", Battery: 9000, Tags: []string{"a"}, Lat: 47.5, Lng: 8.5, Cell: 1, WindowBegin: t0, WindowEnd: t0.Add(time.Hour)},
+	})
+	defer releaseFull()
+	require.Equal(t, []string{"identity", "battery", "located", "tasked"}, full.Archetype(0))
+
+	core, releaseCore := marshalFatRow(t, []droneCore{
+		{ID: 2, Status: "IDLE", Battery: 9000, Tags: []string{"a"}, WindowBegin: t0, WindowEnd: t0.Add(time.Hour)},
+	})
+	defer releaseCore()
+	require.Equal(t, []string{"identity", "battery", "tasked"}, core.Archetype(0))
+}
 
 // TestExtractComponentsFromRow marshals fat DroneEntity rows to a single Arrow
 // batch, then extracts each typed component (Identity, Battery, Located, Tasked)
