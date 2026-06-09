@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-06-09
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-06-09
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0075: Typed per-component views for leeway records
 
@@ -222,10 +220,21 @@ screenshot capture.
 
 ## Status
 
-Proposed — awaiting review by the leeway / imzero2 owner. Scope-one is the **light
-version**: the three reuse-widget components + the registry + the detection helper + the
-report shell + a `play` toggle. The `Located` **map** and its basemap-provenance choice
-(offline-bundled raster / online tiles / projected-vector) are **deferred** to a follow-up.
+Accepted on 2026-06-09.
+
+Implementation status (2026-06-09, commit `94aa66c`): the **light version is built and
+screenshot-verified** — the `componentview` package (open `RendererI` registry +
+collapsing dispatcher with `ShowAbsent` and a generic-fallback hook; identity→badge,
+battery→gauge, tasked→chips), the headless detect+decode proof
+(`marshallreflect_test/component_detect_test.go`), and two demos (`componentview`, a paged
+single-record typed report above the generic `Table2CardEmitter`; `componentview-schema`,
+schemaview over the same `TableDesc`). Refinements during implementation, consistent with
+the decision: the consumer is the demo tour, **not a `play` toggle** (demo-only, by
+direction); full struct unification is **deferred behind a `marshallreflect` nested-struct
+feature** (the codec is flat-only, so the seed DTO stays flat and `ecsdemo`'s nested
+components are not flattened); `Tasked` is tags-only and its **timeline is deferred** with
+`timeRange`; and the **`Located` map** plus its basemap-provenance choice remain deferred
+to a follow-up.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
