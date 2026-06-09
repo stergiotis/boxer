@@ -3,12 +3,28 @@
 //
 // # What it is
 //
-// A two-pane playground. The left pane edits a [Model] — the entity kind,
-// plain columns, and lw:-tagged value/const fields with their membership,
-// section, sub-column, channel and flags. The right pane shows the
-// schema-agnostic Go codec that marshallgen emits for the resulting plan,
-// re-validated through mappingplan.PlanBuilder on every edit. A status line
-// reports the PlanBuilder verdict — valid, or the exact rejection reason.
+// A dockable playground. The editor pane (left) edits a [Model] — the entity
+// kind, plain columns, and lw:-tagged value/const fields with their membership,
+// section, sub-column, channel and flags. The output panes (right, one dock tab
+// each) show what the resulting plan compiles to: the schema-agnostic Go codec
+// (marshallgen), the parsed Plan IR (JSON), and the dql SQL read-back artefacts
+// (presence / projection / validator, bound to a seeded schema). The whole plan
+// is re-validated through mappingplan.PlanBuilder on every edit; a status line
+// reports the plan-level verdict plus a per-field roll-up.
+//
+// # Per-field validity
+//
+// Every field card carries its own validity state machine ([FieldState]) shown
+// as a tethered inspector chip (built on [fsmview]): a colour-coded badge
+// (empty / incomplete / valid / rejected / conflict / blocked) you click to open
+// a floating window with the state graph, the transition history (each move
+// tagged with the reason it fired), and the rejection text. The widget decides
+// Empty / Incomplete from the row alone; Valid / Rejected / Conflicting /
+// Blocked come from the host's sequential build report ([BuildResult]) —
+// PlanBuilder is fail-fast and stateful, so the first bad field is Rejected /
+// Conflicting and every later field is Blocked. Rejected (the field's own
+// shape / tag) is told apart from Conflicting (a clash with another field) by
+// the rejection message ([classifyConflict]).
 //
 // # Why a Model instead of a *mappingplan.Plan
 //
@@ -31,18 +47,18 @@
 // runtime, so round-tripping edits to source is out of scope; the value here
 // is seeing what a given lw: tagging validates to and compiles to.
 //
-// # Deferred to v2
+// # Still deferred
 //
-//   - SQL read-back preview (dql.Generator) — needs an IR (physical schema) +
-//     a membership resolver that a Plan does not carry (Plan ⊄ physical
-//     schema), so it is bound to a seeded schema rather than any edited plan.
-//     See ADR-0066.
 //   - Carrier channels (mixed* / *parametrized) — require a paired carrier
 //     sibling field the editor does not model yet; the channel picker offers
 //     the four Cut-1 channels only.
-//   - Syntax-highlighted codeview for the preview — codeview retained holders
-//     are built once at init() and reused across frames; the live preview
-//     re-renders on every edit, so v1 uses a read-only multiline TextEdit
-//     (a transient per-frame string, no retained-element churn). Revisit once
-//     the retained-element lifecycle for dynamic content is settled.
+//   - Per-field Conflicting attribution for cross-field failures that surface
+//     only at Finish (channel mixing, carrier pairing): the builder error names
+//     the field in structured data the rendered message drops, so those stay
+//     plan-level in the global verdict rather than colouring one card.
+//
+// (The SQL read-back preview and the syntax-highlighted codeview panes, once
+// listed here as v2 work, have since shipped: the output panes are highlighted
+// [codeview] jobs rebuilt per recompute, and the SQL artefacts come from
+// dql.Generate against a seeded schema. See ADR-0066.)
 package mappingplanview

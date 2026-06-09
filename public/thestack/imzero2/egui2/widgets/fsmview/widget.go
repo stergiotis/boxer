@@ -269,8 +269,13 @@ func (inst *Widget[T]) BadgeTone(fn func(T) badge.ToneE) *Widget[T] {
 	return inst
 }
 
-// Render emits the level-1 chip and, when open, the level-2 popup. Call
-// once per frame inside an active egui surface (panel or window).
+// Render emits the level-1 chip and, when open, the level-2 popup (window +
+// tether). Call once per frame inside an active egui surface (panel or window).
+// It is exactly [Widget.RenderChip] followed by [Widget.RenderPopup] in one id
+// scope — reach for those two directly only when the chip and the window must
+// render at different points in the frame, e.g. the chip inside a dock-tab body
+// and the window AFTER the DockArea block (a floating window cannot be spawned
+// from inside a dock tab — see schemaview's glyph legend for the same pattern).
 //
 // The chip renders inline at the current cursor — embed it inside a
 // [c.Horizontal] flow or a panel. The popup spawns at egui's default
@@ -279,15 +284,44 @@ func (inst *Widget[T]) BadgeTone(fn func(T) badge.ToneE) *Widget[T] {
 func (inst *Widget[T]) Render() {
 	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
 		inst.renderChip()
-		if inst.popupOpen {
-			inst.renderPopup()
-		}
-		// Tethered mode: draw the bezier from the level-1 toggle to the open
-		// window above everything (PaintAbsoluteOverlay). One-frame lag on
-		// first open; gated on popupOpen so the curve vanishes with it.
-		if inst.tethered && inst.popupOpen {
-			inst.tether.Paint()
-		}
+		inst.renderPopupAndTether()
+	}
+}
+
+// RenderChip emits only the level-1 chip: the state badge, and in tethered mode
+// the [inspector.AnchorToggle] plus the toggle-rect capture the bezier anchors
+// on. Pair with [Widget.RenderPopup] later in the same frame when the window
+// must be emitted away from the chip's call site (the dock-tab case). Callers
+// using all-in-one [Widget.Render] never need this.
+func (inst *Widget[T]) RenderChip() {
+	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
+		inst.renderChip()
+	}
+}
+
+// RenderPopup emits the level-2 popup window (when open) and, in tethered mode,
+// paints the bezier connector back to the toggle captured by [Widget.RenderChip].
+// Call it where a floating window is legal — notably AFTER a DockArea block,
+// never inside a dock-tab body. No-op when the popup is closed. The toggle↔window
+// link is by scope (the tether), so the two calls need not be nested.
+func (inst *Widget[T]) RenderPopup() {
+	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
+		inst.renderPopupAndTether()
+	}
+}
+
+// renderPopupAndTether is the shared popup half: the window when open, then the
+// bezier (tethered + open). Factored out so [Widget.Render] and
+// [Widget.RenderPopup] stay in lock-step.
+func (inst *Widget[T]) renderPopupAndTether() {
+	if inst.popupOpen {
+		inst.renderPopup()
+	}
+	// Tethered mode: draw the bezier from the level-1 toggle to the open
+	// window above everything (PaintAbsoluteOverlay). One-frame lag on
+	// first open; gated on popupOpen so the curve vanishes with it.
+	if inst.tethered && inst.popupOpen {
+		inst.tether.Paint()
 	}
 }
 
@@ -650,6 +684,15 @@ func (inst *Widget[T]) renderHistory() {
 			whenAtoms := c.Atoms().BeginRichTextColored(mutedFg, color.Transparent, when).
 				Small().End().Keep()
 			c.LabelAtoms(whenAtoms).Send()
+			// Optional "why": the reason a mirrored transition recorded via
+			// [Machine.MirrorWithMetadata] (e.g. a validity FSM's rejection
+			// text). Absent/empty for plain Transition / Mirror history rows.
+			if reason := t.Metadata["reason"]; reason != "" {
+				c.AddSpace(styletokens.GapInline(inst.density))
+				reasonAtoms := c.Atoms().BeginRichTextColored(mutedFg, color.Transparent, "· "+reason).
+					Small().End().Keep()
+				c.LabelAtoms(reasonAtoms).Send()
+			}
 		}
 		idx++
 	}

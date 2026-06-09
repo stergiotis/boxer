@@ -9,6 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
 )
 
 // Input is the per-frame render state for the mappingplan playground.
@@ -106,6 +107,27 @@ func Render(in Input) {
 				}
 			}
 		}
+		// Per-field inspector windows are spawned AFTER the DockArea block: a
+		// floating window cannot be created from inside a dock-tab body. The
+		// chips in the editor tab only captured their toggle rects; the tether
+		// bridges toggle ↔ window by scope. Mirrors schemaview's glyph-legend.
+		renderFieldPopups(in.Ids, m)
+	}
+}
+
+// renderFieldPopups draws the open per-field inspector windows for the rows on
+// the current page — the only rows whose chips (hence toggle rects) were emitted
+// this frame. A field whose inspector is left open while you page away is simply
+// not drawn until you page back; its open flag is retained on the Widget.
+func renderFieldPopups(ids *c.WidgetIdStack, m *Model) {
+	start, end := m.pager.Range()
+	for i := start; i < end && i < int64(len(m.Fields)); i++ {
+		r := m.Fields[i]
+		if r.fsmW != nil && r.fsmW.IsOpen() {
+			for range c.IdScope(ids.PrepareSeq(r.uid)) {
+				r.fsmW.RenderPopup()
+			}
+		}
 	}
 }
 
@@ -189,19 +211,28 @@ func renderVerdict(ids *c.WidgetIdStack, m *Model) {
 			fmt.Sprintf("valid plan — %d field(s)", len(m.Fields))) {
 			rt.Strong()
 		}
-		return
+	} else {
+		for rt := range c.RichTextLabelColored(
+			color.Hex(styletokens.ErrorDefault.AsHex()).Keep(),
+			color.Transparent.Keep(),
+			"invalid: "+firstLine(m.ErrText)) {
+			rt.Strong()
+		}
+		m.viewBuf = m.ErrText
+		c.TextEdit(ids.PrepareStr("err"), m.viewBuf, true).
+			Interactive(false).
+			DesiredRows(4).
+			SendRespVal(&m.viewBuf)
 	}
-	for rt := range c.RichTextLabelColored(
-		color.Hex(styletokens.ErrorDefault.AsHex()).Keep(),
-		color.Transparent.Keep(),
-		"invalid: "+firstLine(m.ErrText)) {
-		rt.Strong()
+	// Per-field roll-up — how many fields sit in each validity state — so the
+	// editor reads at a glance before scanning individual chips. (A plan-level
+	// Finish conflict shows in the invalid headline above; per-field Conflicting
+	// counts here come from AddField-time collisions.)
+	if summary := m.stateRollup(); summary != "" {
+		for rt := range c.RichTextLabel(summary) {
+			rt.Weak().Small()
+		}
 	}
-	m.viewBuf = m.ErrText
-	c.TextEdit(ids.PrepareStr("err"), m.viewBuf, true).
-		Interactive(false).
-		DesiredRows(4).
-		SendRespVal(&m.viewBuf)
 }
 
 // renderRow draws one field row as a fixed-size bordered card (uniform width +
@@ -239,7 +270,8 @@ func renderRow(ids *c.WidgetIdStack, m *Model, r *FieldRow) (remove bool) {
 				c.UiSetMinWidth(cardWidth)
 				c.UiSetMaxWidth(cardWidth)
 				c.UiSetMinHeight(cardMinHeight)
-				renderRowHeader(r, glyph, word, catCol)
+				renderRowHeader(ids, r, glyph, word, catCol)
+				renderRowReason(r)
 
 				// Go field + remove (the value type is its own editor below).
 				for range c.Horizontal().KeepIter() {
@@ -286,14 +318,32 @@ func renderRow(ids *c.WidgetIdStack, m *Model, r *FieldRow) (remove bool) {
 // renderRowHeader draws the category glyph + word (coloured, echoing the
 // schemaview navigator), the field name, and the live assembled lw: tag
 // (monospace, since it is a code string).
-func renderRowHeader(r *FieldRow, glyph, word string, catCol styletokens.RGBA8) {
-	name := r.GoField
-	if name == "" {
-		name = r.Section
+func renderRowHeader(ids *c.WidgetIdStack, r *FieldRow, glyph, word string, catCol styletokens.RGBA8) {
+	name := rowDisplayName(r)
+
+	// Per-field validity chip on its own row (validity-first; a chip is itself a
+	// nested Horizontal, so keeping it off the identity row avoids the baseline
+	// staircase nested layout containers cause — see editField). The
+	// fsmview.Widget is lazily built (it needs the frame's id stack); its title
+	// tracks the field name; the machine is mirrored to this row's derived state
+	// each frame, carrying the reason so the inspector History shows *why* it
+	// moved. Same-state mirrors are no-ops, so a steady field records nothing.
+	if r.fsm != nil {
+		if r.fsmW == nil {
+			r.fsmW = fsmview.New(ids, fieldFSMScope(r.uid), r.fsm).Tethered().BadgeTone(FieldState.tone)
+			if r.seedOpen {
+				r.fsmW.Open()
+			}
+		}
+		r.fsmW.Title("field: " + name)
+		var md map[string]string
+		if r.reason != "" {
+			md = map[string]string{"reason": r.reason}
+		}
+		r.fsm.MirrorWithMetadata(r.state, md)
+		r.fsmW.RenderChip()
 	}
-	if name == "" {
-		name = "field"
-	}
+
 	for range c.Horizontal().KeepIter() {
 		for rt := range c.RichTextLabelColored(color.Hex(catCol.AsHex()).Keep(), color.Transparent.Keep(), glyph+" "+word) {
 			rt.Small()
@@ -306,6 +356,38 @@ func renderRowHeader(r *FieldRow, glyph, word string, catCol styletokens.RGBA8) 
 		for rt := range c.RichTextLabel(`lw:"` + r.LWTag() + `"`) {
 			rt.Weak().Small().Monospace()
 		}
+	}
+}
+
+// rowDisplayName is the field's human label: the Go field name, else the section
+// (for plain columns / value-less rows), else a placeholder.
+func rowDisplayName(r *FieldRow) string {
+	if r.GoField != "" {
+		return r.GoField
+	}
+	if r.Section != "" {
+		return r.Section
+	}
+	return "field"
+}
+
+// fieldFSMScope is the per-row fsmview scope key — stable (keyed by the row's
+// uid) and unique, so each field's chip / inspector / tether stay independent.
+func fieldFSMScope(uid uint64) string {
+	return fmt.Sprintf("mpv-fld-%d", uid)
+}
+
+// renderRowReason shows a terse "<state>: <why>" line under the header for any
+// field that isn't cleanly Valid or Empty — the at-a-glance "why" without
+// opening the inspector. Coloured by state severity; the full reason + the
+// transition history live in the tethered inspector.
+func renderRowReason(r *FieldRow) {
+	if r.reason == "" || r.state == StateValid || r.state == StateEmpty {
+		return
+	}
+	col := stateColor(r.state, true)
+	for rt := range c.RichTextLabelColored(color.Hex(col.AsHex()).Keep(), color.Transparent.Keep(), r.state.label()+": "+r.reason) {
+		rt.Small()
 	}
 }
 

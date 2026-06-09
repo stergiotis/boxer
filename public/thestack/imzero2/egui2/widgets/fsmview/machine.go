@@ -172,6 +172,17 @@ func (inst *Machine[T]) Transition(target T) error {
 // Prefer [Machine.Transition] when the machine itself is authoritative and
 // an illegal edge is a real error the caller must handle.
 func (inst *Machine[T]) Mirror(target T) (declared bool) {
+	return inst.MirrorWithMetadata(target, nil)
+}
+
+// MirrorWithMetadata behaves exactly like [Machine.Mirror] — a never-failing
+// move suited to a passive mirror of externally-derived state — but attaches md
+// to the recorded transition. Consumers of [Machine.History] /
+// [Machine.LastTransition] (notably the History view) can then show *why* the
+// move happened, e.g. {"reason": "<builder rejection>"} for a validity mirror.
+// md may be nil (equivalent to Mirror). A same-state call is a no-op and records
+// nothing, matching Mirror's no-self-loop contract.
+func (inst *Machine[T]) MirrorWithMetadata(target T, md map[string]string) (declared bool) {
 	cur := inst.Current()
 	if cur == target {
 		return true
@@ -181,7 +192,7 @@ func (inst *Machine[T]) Mirror(target T) (declared bool) {
 		inst.observe(target)
 		inst.fsm.AddRule(cur, target)
 	}
-	_, _ = inst.fsm.Transition(target, nil)
+	_, _ = inst.fsm.Transition(target, md)
 	return declared
 }
 

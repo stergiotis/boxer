@@ -165,6 +165,38 @@ func TestMirror_sameStateNoop(t *testing.T) {
 	assert.Equal(t, 0, m.HistoryLen(), "same-state Mirror must not record a self-loop")
 }
 
+// TestMirrorWithMetadata_recordsReason confirms the metadata attached to a
+// mirrored transition surfaces on the recorded Transition — the History view's
+// "why did this fire" reading (e.g. a validity mirror's rejection reason).
+func TestMirrorWithMetadata_recordsReason(t *testing.T) {
+	m := NewMachine("red", 4).AddRule("red", "green")
+	assert.True(t, m.MirrorWithMetadata("green", map[string]string{"reason": "light cycled"}),
+		"declared edge must still report declared=true with metadata")
+	assert.Equal(t, "green", m.Current())
+	last, ok := m.LastTransition()
+	require.True(t, ok)
+	assert.Equal(t, "light cycled", last.Metadata["reason"],
+		"mirrored metadata must surface on the recorded transition")
+}
+
+// TestMirrorWithMetadata_undeclaredCarriesMetadata confirms a forced
+// (undeclared) edge records its metadata too, and still reports declared=false.
+func TestMirrorWithMetadata_undeclaredCarriesMetadata(t *testing.T) {
+	m := NewMachine("red", 4).AddRule("red", "green")
+	assert.False(t, m.MirrorWithMetadata("yellow", map[string]string{"reason": "forced"}))
+	last, ok := m.LastTransition()
+	require.True(t, ok)
+	assert.Equal(t, "forced", last.Metadata["reason"])
+}
+
+// TestMirrorWithMetadata_sameStateNoop confirms a same-state mirror records
+// nothing even with metadata (no self-loop spam), matching Mirror.
+func TestMirrorWithMetadata_sameStateNoop(t *testing.T) {
+	m := NewMachine("red", 4)
+	assert.True(t, m.MirrorWithMetadata("red", map[string]string{"reason": "x"}))
+	assert.Equal(t, 0, m.HistoryLen(), "same-state mirror must not record even with metadata")
+}
+
 // TestHistory_orderChronological iterates oldest → newest, mirroring
 // statetrooper's append-only ordering. Used by the History tab's "scroll
 // back through time" reading.

@@ -23,7 +23,7 @@ func init() {
 		Stage:       [2]float32{1200, 980},
 		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindMixed,
-		Description: "Author a leeway mappingplan spec — kind, plain columns, and lw:-tagged value/const fields with membership, section, channel and flags — and live-preview the schema-agnostic Go codec marshallgen emits, re-validated through PlanBuilder on every edit. Read-back SQL preview and carrier channels are planned next.",
+		Description: "Author a leeway mappingplan spec — kind, plain columns, and lw:-tagged value/const fields with membership, section, channel and flags — and live-preview what it compiles to: the schema-agnostic Go codec, the Plan IR, and the dql SQL read-back. Each field carries its own validity state machine (empty / incomplete / valid / rejected / conflict / blocked) as a tethered inspector chip — click it for the state graph, transition history, and rejection reason. Carrier channels are planned next.",
 		Init: func(_ *c.WidgetIdStack) (state any) {
 			state = newMappingPlanViewState()
 			return

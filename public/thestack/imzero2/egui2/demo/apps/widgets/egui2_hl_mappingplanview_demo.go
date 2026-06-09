@@ -42,6 +42,7 @@ func newMappingPlanViewState() *mappingPlanViewDemoState {
 	status.GoField = "Status"
 	status.SetGoType("string")
 	status.Membership, status.Section = "droneStatus", "symbol"
+	status.OpenInspector() // seed one tethered validity inspector open for the tour
 
 	battery := m.AddRow()
 	battery.GoField = "Battery"
@@ -104,26 +105,46 @@ func (l idLookup) LookupMembership(name string) (uint64, error) {
 // it here confines the marshallgen/dql back-ends to the demo, not the widget.
 func (st *mappingPlanViewDemoState) recompute(m *mappingplanview.Model) {
 	b := mappingplan.NewPlanBuilder("playground", m.PackageName, m.KindType)
-	if err := b.AddUnderscoreField(m.Kind, "", ""); err != nil {
-		m.SetInvalid(err)
-		return
-	}
-	for _, r := range m.Fields {
+	// The kind `_` field never errors at add-time (an empty/odd kind is caught
+	// at Finish, surfacing as a plan-level FinishErr below), so the per-field
+	// pass can always run and report real per-field verdicts.
+	_ = b.AddUnderscoreField(m.Kind, "", "")
+
+	// Sequential per-field pass — the input the widget's per-field state
+	// machines derive from. PlanBuilder is fail-fast and stateful: record the
+	// first rejection (index + error) and stop; every later field is unreached
+	// (the widget marks them Blocked).
+	br := mappingplanview.BuildResult{FirstFailIdx: -1}
+	for i, r := range m.Fields {
+		var err error
 		if r.IsConst {
-			if err := b.AddUnderscoreField("", "", r.LWTag()); err != nil {
-				m.SetInvalid(err)
-				return
-			}
-			continue
+			err = b.AddUnderscoreField("", "", r.LWTag())
+		} else {
+			err = b.AddField(r.GoField, r.LWTag(), r.Shape())
 		}
-		if err := b.AddField(r.GoField, r.LWTag(), r.Shape()); err != nil {
-			m.SetInvalid(err)
-			return
+		if err != nil {
+			br.FirstFailIdx, br.FirstFailErr = i, err
+			break
 		}
 	}
-	plan, err := b.Finish()
-	if err != nil {
-		m.SetInvalid(err)
+
+	// Finish (cross-field checks) only when every AddField was accepted.
+	var plan *mappingplan.Plan
+	if br.FirstFailIdx < 0 {
+		var finishErr error
+		plan, finishErr = b.Finish()
+		br.FinishErr = finishErr
+	}
+	m.SetBuildResult(br)
+
+	// Global verdict + output panes. A per-field rejection, a plan-level Finish
+	// error, or an emit error all clear the panes and headline the verdict.
+	switch {
+	case br.FirstFailIdx >= 0:
+		m.SetInvalid(br.FirstFailErr)
+		return
+	case br.FinishErr != nil:
+		m.SetInvalid(br.FinishErr)
 		return
 	}
 	goSrc, err := marshallgen.EmitPlan(plan, marshallgen.NoOpWrapper{})
