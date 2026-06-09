@@ -36,6 +36,7 @@ type FieldRow struct {
 	// (roaring set); PlanBuilder derives the Go type + multiplicity from it.
 	typeModel     *canonicaltypeedit.Model
 	lastCanonical string // last canonical seen, to mark the model dirty on edit
+	lastBarErr    string // last type-editor bar parse-error seen — unparseable input leaves Canonical() unchanged, so it is watched separately
 
 	IsOption bool // option.Option[T] — presence, orthogonal to the value type
 
@@ -468,6 +469,9 @@ func rowIncompleteReason(row *FieldRow) string {
 			return "const needs a value"
 		}
 		return ""
+	}
+	if row.typeModel.BarError() != "" {
+		return "value type does not parse"
 	}
 	if !row.typeModel.Valid() {
 		return "value type is empty or invalid"

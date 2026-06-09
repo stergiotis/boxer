@@ -402,8 +402,13 @@ func renderTypeEditor(ids *c.WidgetIdStack, m *Model, r *FieldRow) {
 		}
 		r.typeModel.Render(ids, "ctype")
 	}
-	if cur := r.typeModel.Canonical(); cur != r.lastCanonical {
-		r.lastCanonical = cur
+	// An unparseable bar entry keeps Canonical()/Valid() at the last good value
+	// (canonicaltypeedit retains the draft on a parse failure), so watch the bar
+	// error too — otherwise entering an invalid type triggers no recompute and
+	// the field's validity state never updates.
+	cur, barErr := r.typeModel.Canonical(), r.typeModel.BarError()
+	if cur != r.lastCanonical || barErr != r.lastBarErr {
+		r.lastCanonical, r.lastBarErr = cur, barErr
 		m.dirty = true
 	}
 }

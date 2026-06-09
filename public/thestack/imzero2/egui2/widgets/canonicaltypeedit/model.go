@@ -86,6 +86,14 @@ func (m *Model) Canonical() string { return m.canonical }
 // Valid reports whether the current type passes [canonicaltypes.AstNodeI.IsValid].
 func (m *Model) Valid() bool { return m.valid }
 
+// BarError reports the formula-bar parse-error headline, or "" when the bar
+// parses. A non-empty result means the editor is showing an unparseable
+// in-progress entry, so [Model.Canonical] / [Model.Node] / [Model.Valid] are
+// stale (they hold the last type that parsed, since a parse failure keeps the
+// draft) — a consumer gating on the edited type should treat a non-empty
+// BarError as "not a usable type right now".
+func (m *Model) BarError() string { return m.barErr }
+
 // Node returns the current primitive AST node. It is constructed even when the
 // type is invalid (e.g. a fixed-width string with width 0), so pair it with
 // [Model.Valid] before relying on it.
