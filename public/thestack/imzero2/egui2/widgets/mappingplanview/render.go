@@ -218,7 +218,10 @@ func renderEditor(ids *c.WidgetIdStack, m *Model) {
 		c.AddSpace(6)
 		if c.Button(ids.PrepareStr("add-tagged"), c.Atoms().Text("+ tagged field").Keep()).SendResp().HasPrimaryClicked() {
 			r := m.AddRow()
-			r.Membership = "membership" // non-empty ⇒ tagged value field; placeholder to rename
+			// Seed a clearly-placeholder tagged value field (non-empty membership
+			// ⇒ tagged); reads as an intentional new field to rename, and stays
+			// incomplete (no section yet) to guide the next step.
+			r.GoField, r.Membership = "NewField", "newMembership"
 			m.pager.GoToLast()
 		}
 	}
@@ -234,6 +237,7 @@ func renderVerdict(ids *c.WidgetIdStack, m *Model) {
 	if m.planFSM != nil {
 		if m.planFSMW == nil {
 			m.planFSMW = fsmview.New(ids, "mpv-plan", m.planFSM).Tethered().BadgeTone(PlanState.tone).Title("plan")
+			m.planFSMW.SetRenderer(fsmview.RendererGraph) // open to the state graph (most visual)
 		}
 		st, reason := m.planState()
 		var md map[string]string
@@ -378,6 +382,7 @@ func renderRowHeader(ids *c.WidgetIdStack, r *FieldRow, glyph, word string, catC
 	if r.fsm != nil {
 		if r.fsmW == nil {
 			r.fsmW = fsmview.New(ids, fieldFSMScope(r.uid), r.fsm).Tethered().BadgeTone(FieldState.tone)
+			r.fsmW.SetRenderer(fsmview.RendererGraph) // open to the state graph (most visual)
 		}
 		r.fsmW.Title("field: " + name)
 		var md map[string]string
