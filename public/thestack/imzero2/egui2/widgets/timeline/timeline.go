@@ -109,6 +109,17 @@ type Visuals struct {
 	NowLineColor         color.Color
 	AnnotationFgColor    color.Color
 
+	// Flat event fills — used for interval bars and raw rug marks when
+	// intensity is NOT the encoded dimension (see WithIntensityEncoding).
+	// A sequential colormap is lightness-monotonic from its dark end, so an
+	// all-zero-intensity dataset (the common case when the caller never
+	// attached an intensity column) would otherwise paint every glyph at the
+	// near-background dark end and vanish against BgColor. These flat,
+	// legible accent fills keep events readable; they are ignored entirely
+	// while intensity encoding is on.
+	IntervalColor color.Color
+	PointColor    color.Color
+
 	// Categorical colormaps
 	IntensityColormap styletokens.SequentialE
 	RugColormap       styletokens.SequentialE
@@ -145,6 +156,12 @@ func DefaultVisuals() (v Visuals) {
 	v.SelectionStrokeColor = color.Hex(styletokens.NeutralTextExtreme.AsHex()).Keep()
 	v.NowLineColor = color.Hex(styletokens.NeutralTextExtreme.AsHex()).Keep()
 	v.AnnotationFgColor = color.Hex(styletokens.NeutralTextExtreme.AsHex()).Keep()
+	// Flat fills for the intensity-off path: the soft accent for the larger
+	// bar areas, the brighter info hue for the thin 1-px rug marks that need
+	// more punch to read. Both sit at IDS lightness ~0.80 — high contrast
+	// against the ~0.24 NeutralBgSurface canvas.
+	v.IntervalColor = color.Hex(styletokens.AccentDefault.AsHex()).Keep()
+	v.PointColor = color.Hex(styletokens.InfoDefault.AsHex()).Keep()
 	return
 }
 
@@ -304,8 +321,9 @@ type Timeline struct {
 
 	onSelection SelectionListener
 
-	backgroundBands BackgroundBandProducer
-	nowLineEnabled  bool
+	backgroundBands  BackgroundBandProducer
+	nowLineEnabled   bool
+	intensityEncoded bool
 
 	selection SelectionInfo
 
@@ -423,6 +441,22 @@ func WithNowLine(enabled bool) Option {
 	}
 }
 
+// WithIntensityEncoding toggles whether interval bars and raw rug marks
+// derive their fill from the per-event Intensity via IntensityColormap /
+// RugColormap (true, the default) or from the flat Visuals.IntervalColor /
+// Visuals.PointColor (false). Turn it OFF when the data carries no intensity
+// dimension: a sequential colormap is lightness-monotonic from its dark end,
+// so an all-zero-intensity dataset would otherwise paint every glyph at the
+// near-background dark end and vanish against BgColor. The density rug always
+// encodes bucket count and is unaffected by this toggle.
+//
+// Validation: none — both true and false are valid.
+func WithIntensityEncoding(enabled bool) Option {
+	return func(inst *Timeline) {
+		inst.intensityEncoded = enabled
+	}
+}
+
 // WithRange forces an explicit [t0,t1] viewport instead of auto-fitting to
 // data extent. t1 must be after t0; both are interpreted as UTC moments
 // (timezone handling on the tick axis is the timeticks layer's concern).
@@ -523,6 +557,7 @@ func New(ids *c.WidgetIdStack, scopeKey string, intervals []*layout.IntervalEven
 		rawPointThreshold:  defaultRawPointThreshold,
 		containerW:         defaultContainerW,
 		interactionEnabled: true,
+		intensityEncoded:   true,
 		visuals:            DefaultVisuals(),
 	}
 	for _, opt := range opts {
@@ -586,6 +621,19 @@ func (inst *Timeline) SetPoints(points []*layout.PointEvent) {
 // Validation: none — both true and false are valid.
 func (inst *Timeline) SetNowLine(enabled bool) {
 	inst.nowLineEnabled = enabled
+}
+
+// SetIntensityEncoding toggles intensity-driven fills at runtime — runtime
+// counterpart to [WithIntensityEncoding]. Use this when the caller's data
+// shape varies between frames (e.g. a SQL playground re-resolving its column
+// contract per query): flip it off when the new result has no intensity
+// column so bars/marks fall back to the flat Visuals.IntervalColor /
+// Visuals.PointColor instead of collapsing to the colormap's dark end. Cheap
+// flag flip; no selection mutation, no LOD rebuild.
+//
+// Validation: none — both true and false are valid.
+func (inst *Timeline) SetIntensityEncoding(enabled bool) {
+	inst.intensityEncoded = enabled
 }
 
 // SetAnnotations replaces the annotations shown by this timeline. Safe
@@ -1085,9 +1133,12 @@ func (inst *Timeline) paintLanes(tm layout.TickMap, vl verticalLayout) {
 			if x1-x0 < inst.visuals.BarMinPx {
 				x1 = min(x0+inst.visuals.BarMinPx, vl.axisEndPx)
 			}
-			tint := clamp01(ev.Intensity)
-			rgba := styletokens.Sequential(inst.visuals.IntensityColormap, tint)
-			c.PaintRectFilled(x0, y0, x1, y1, inst.visuals.CornerRadius, color.Hex(rgba.AsHex())).Send()
+			fill := inst.visuals.IntervalColor
+			if inst.intensityEncoded {
+				rgba := styletokens.Sequential(inst.visuals.IntensityColormap, clamp01(ev.Intensity))
+				fill = color.Hex(rgba.AsHex())
+			}
+			c.PaintRectFilled(x0, y0, x1, y1, inst.visuals.CornerRadius, fill).Send()
 			if inst.selection.Kind == SelectionInterval && inst.selection.Interval == ev {
 				c.PaintRectStroke(x0, y0, x1, y1, inst.visuals.CornerRadius, inst.visuals.SelectionStrokeColor, selectionStrokeWidthPx).Send()
 			}
@@ -1290,9 +1341,12 @@ func (inst *Timeline) paintRugRaw(tm layout.TickMap, vl verticalLayout, rugY0, r
 		if x < vl.axisStartPx || x > vl.axisEndPx {
 			continue
 		}
-		tint := clamp01(p.Intensity)
-		rgba := styletokens.Sequential(inst.visuals.RugColormap, tint)
-		c.PaintLine(x, rugY0, x, rugY1, color.Hex(rgba.AsHex()), rugMarkWidthPx).Send()
+		mark := inst.visuals.PointColor
+		if inst.intensityEncoded {
+			rgba := styletokens.Sequential(inst.visuals.RugColormap, clamp01(p.Intensity))
+			mark = color.Hex(rgba.AsHex())
+		}
+		c.PaintLine(x, rugY0, x, rugY1, mark, rugMarkWidthPx).Send()
 	}
 }
 

@@ -161,6 +161,12 @@ func (inst *TimelineDriver) Render(rec arrow.RecordBatch, schema *arrow.Schema, 
 		inst.tl.SetIntervals(ivs)
 		inst.tl.SetPoints(pts)
 		inst.tl.SetAnnotations(anns)
+		// Only drive the intensity colormap when the query actually projected
+		// an _tl_intensity column; otherwise every event carries Intensity==0
+		// and the sequential colormap collapses to its near-invisible dark end
+		// against the dark canvas. Without intensity, the widget paints flat
+		// legible accent fills instead.
+		inst.tl.SetIntensityEncoding(inst.contract.ColIntensity >= 0)
 		inst.dataMinMS, inst.dataMaxMS, inst.dataExtentValid = extentOfEvents(ivs, pts, anns)
 	}
 	if inst.contract.Mode == timelineModeNone {

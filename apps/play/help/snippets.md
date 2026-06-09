@@ -57,6 +57,28 @@ WHERE length(`tv:timeRange:beginIncl:val:z64:2k:0:0:0::data`) > 0
 ORDER BY _tl_time
 ```
 
+## Timeline regions (background bands)
+
+Unlike the others, this block belongs in the Timeline tab's **Background bands**
+editor, not the main editor — Insert here would put it in the wrong box. Bands
+return the `_tl_band_*` slots: a `from`/`to` `DateTime64` pair, a
+`_tl_band_color` that must be an IDS token name (`neutral.default`,
+`accent.default`, `warning.default`, `error.default`, …), and an optional
+`_tl_band_label`. The `_time_data_min` / `_time_data_max` tokens are replaced
+with the main result's time extent, so a band can be sized relative to whatever
+the query returned. This one shades the middle 50% of the visible window —
+adjust the `0.25` / `0.75` fractions to move or resize the region.
+
+```sql
+WITH _time_data_min AS lo,
+     _time_data_max AS hi
+SELECT
+  addMilliseconds(lo, toInt64(0.25 * dateDiff('millisecond', lo, hi))) AS _tl_band_from,
+  addMilliseconds(lo, toInt64(0.75 * dateDiff('millisecond', lo, hi))) AS _tl_band_to,
+  'accent.default'                                                     AS _tl_band_color,
+  'mid 50% of window'                                                  AS _tl_band_label
+```
+
 ## Ad-hoc columns
 
 Aliased columns are not leeway-shaped, so Detail falls back to prefix grouping

@@ -7,7 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline/layout"
 )
 
@@ -152,6 +154,37 @@ func TestNew_DefaultsApplied(t *testing.T) {
 	}
 	if tl.visuals.LaneHeight == 0 {
 		t.Error("DefaultVisuals not applied (LaneHeight zero)")
+	}
+	if !tl.intensityEncoded {
+		t.Error("intensityEncoded should default true")
+	}
+	wantInterval := color.Hex(styletokens.AccentDefault.AsHex()).Keep()
+	if tl.visuals.IntervalColor != wantInterval {
+		t.Errorf("IntervalColor default: got %+v want %+v", tl.visuals.IntervalColor, wantInterval)
+	}
+	wantPoint := color.Hex(styletokens.InfoDefault.AsHex()).Keep()
+	if tl.visuals.PointColor != wantPoint {
+		t.Errorf("PointColor default: got %+v want %+v", tl.visuals.PointColor, wantPoint)
+	}
+}
+
+// TestIntensityEncoding_OptionAndSetter locks in the construction-time
+// option and the runtime setter that the play HMI flips per query: with no
+// _tl_intensity column the colormap would collapse every glyph to its dark,
+// near-invisible end, so the host turns encoding off to fall back to the
+// flat IntervalColor / PointColor fills.
+func TestIntensityEncoding_OptionAndSetter(t *testing.T) {
+	tl := newTestTimeline(t, nil, WithIntensityEncoding(false))
+	if tl.intensityEncoded {
+		t.Error("WithIntensityEncoding(false) should clear intensityEncoded")
+	}
+	tl.SetIntensityEncoding(true)
+	if !tl.intensityEncoded {
+		t.Error("SetIntensityEncoding(true) should set intensityEncoded")
+	}
+	tl.SetIntensityEncoding(false)
+	if tl.intensityEncoded {
+		t.Error("SetIntensityEncoding(false) should clear intensityEncoded")
 	}
 }
 
