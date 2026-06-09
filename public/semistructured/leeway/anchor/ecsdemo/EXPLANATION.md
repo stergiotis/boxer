@@ -12,8 +12,9 @@ status: draft
 
 `ecsdemo` is a small, didactic Entity-Component-System used as a two-stage
 example under `anchor/`: stage 1 (the committed code) serializes the model with
-`encoding/json/v2`; stage 2 (planned) expresses the same model through leeway's
-`mappingplan → marshallingen → dml/ra` pipeline. The mechanics of the two stages
+`encoding/json/v2`; stage 2 (the `stage2/` subpackage) expresses the same model
+through a bespoke leeway `TableDesc`, a `marshallgen` codec, and a real
+`clickhouse-local` roundtrip. The mechanics of the two stages
 live in the package doc comment in `ecsdemo.go`. This file supplies the *why*
 behind them: what ECS is, and how the package's types embody it. It assumes a
 technical reader who has not necessarily met ECS before.

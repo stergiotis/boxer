@@ -1,7 +1,8 @@
 // Package ecsdemo is a small, didactic Entity-Component-System and the first
 // stage of a two-stage example under anchor/. Stage 1 (here) serializes the
-// model with encoding/json/v2; stage 2 (planned) mirrors it through leeway's
-// mappingplan -> marshallingen -> dml/ra pipeline against anchor's schema.
+// model with encoding/json/v2; stage 2 (the stage2/ subpackage) mirrors it
+// through a bespoke leeway TableDesc + marshallgen codec, with a real
+// clickhouse-local roundtrip.
 //
 // An entity is just an id; components (Identity, Battery, Located, Tasked) are
 // pure id-free data. A World stores them column-per-type (structure of arrays);
