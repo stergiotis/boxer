@@ -4,95 +4,72 @@ import (
 	"bytes"
 	"encoding/json/jsontext"
 	json "encoding/json/v2"
-	"fmt"
 	"reflect"
+	"slices"
 	"strings"
-	"sync"
+
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// kindAny marks a field whose value kind we do not constrain (interfaces and
-// the like): any incoming token kind is accepted by the approximate check.
-const kindAny jsontext.Kind = 0
+// invalidKind is jsontext's zero Kind; kindOf returns it for types whose value
+// kind we do not constrain (interfaces).
+const invalidKind jsontext.Kind = 0
 
-// fieldSpec is the reflected, json-visible description of one struct field used
-// by the shape checks. It is derived once per type and cached.
-type fieldSpec struct {
-	name     string        // json member name
-	kind     jsontext.Kind // expected top-level token kind of the value
-	optional bool          // omitzero/omitempty/pointer ⇒ the key may be absent
-	typ      reflect.Type  // concrete Go type, for Subset's structural comparison
+// jsonField is the json-visible shape of one struct field.
+type jsonField struct {
+	name     string
+	required bool          // not a pointer and no omitzero/omitempty
+	kind     jsontext.Kind // value kind json/v2 emits for the Go type
+	typ      reflect.Type  // for Subset's structural comparison
 }
 
-// typeSpec is the cached shape of a component struct type.
-type typeSpec struct {
-	byName       map[string]fieldSpec // json name -> field
-	fields       []fieldSpec          // declaration order
-	mandatoryLen int                  // count of non-optional fields
-}
-
-var specCache sync.Map // reflect.Type -> *typeSpec
-
-// specOf returns the cached shape of component type T. T must be a struct.
-func specOf[T any]() *typeSpec {
+// jsonFields reflects T's json-visible fields. T must be a struct.
+func jsonFields[T any]() (out []jsonField) {
 	t := reflect.TypeFor[T]()
-	if t.Kind() != reflect.Struct {
-		panic("ecsdemo: component type must be a struct, got " + t.String())
-	}
-	if s, ok := specCache.Load(t); ok {
-		return s.(*typeSpec)
-	}
-	s := buildSpec(t)
-	specCache.Store(t, s)
-	return s
-}
-
-func buildSpec(t reflect.Type) *typeSpec {
-	s := &typeSpec{byName: make(map[string]fieldSpec, t.NumField())}
+	out = make([]jsonField, 0, t.NumField())
 	for f := range t.Fields() {
-		if !f.IsExported() {
+		name, opts, ok := jsonName(f)
+		if !f.IsExported() || !ok {
 			continue
 		}
-		name, opts, skip := parseJSONTag(f)
-		if skip {
-			continue
-		}
-		fs := fieldSpec{
+		out = append(out, jsonField{
 			name:     name,
-			kind:     expectedKind(f.Type),
-			optional: isOptional(f.Type, opts),
+			required: !isOptional(f.Type, opts),
+			kind:     kindOf(f.Type),
 			typ:      f.Type,
-		}
-		s.fields = append(s.fields, fs)
-		s.byName[name] = fs
-		if !fs.optional {
-			s.mandatoryLen++
-		}
+		})
 	}
-	return s
+	return
 }
 
-// parseJSONTag extracts the json member name and tag options. A `json:"-"` tag
-// (without a trailing comma) marks the field as not serialized.
-func parseJSONTag(f reflect.StructField) (name string, opts []string, skip bool) {
-	tag, ok := f.Tag.Lookup("json")
-	if !ok {
-		return f.Name, nil, false
+// jsonName returns f's json member name and tag options; ok is false for json:"-".
+func jsonName(f reflect.StructField) (name string, opts []string, ok bool) {
+	tag, tagged := f.Tag.Lookup("json")
+	if !tagged {
+		return f.Name, nil, true
 	}
 	if tag == "-" {
-		return "", nil, true
+		return "", nil, false
 	}
 	parts := strings.Split(tag, ",")
 	name = parts[0]
 	if name == "" {
 		name = f.Name
 	}
-	return name, parts[1:], false
+	return name, parts[1:], true
 }
 
-// expectedKind maps a Go type to the JSON token kind json/v2 emits for it. A
-// boolean is reported as KindTrue and treated as {true,false} by kindCompatible.
-// []byte / [N]byte encode as base64 strings, not arrays.
-func expectedKind(t reflect.Type) jsontext.Kind {
+// isOptional reports whether a field's key may be absent (pointer, omitzero or
+// omitempty) — the json/v2 analogue of leeway option.Option.
+func isOptional(t reflect.Type, opts []string) bool {
+	return t.Kind() == reflect.Pointer || slices.Contains(opts, "omitzero") || slices.Contains(opts, "omitempty")
+}
+
+// kindOf is the json/v2 token kind a value of type t serializes to. Bool is
+// reported as KindTrue (kindOK accepts either literal); []byte/[N]byte encode as
+// base64 strings.
+func kindOf(t reflect.Type) jsontext.Kind {
 	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
@@ -107,125 +84,101 @@ func expectedKind(t reflect.Type) jsontext.Kind {
 		return jsontext.KindNumber
 	case reflect.Slice, reflect.Array:
 		if t.Elem().Kind() == reflect.Uint8 {
-			return jsontext.KindString // base64
+			return jsontext.KindString
 		}
 		return jsontext.KindBeginArray
 	case reflect.Map, reflect.Struct:
 		return jsontext.KindBeginObject
 	default:
-		return kindAny
+		return invalidKind
 	}
 }
 
-// isOptional reports whether a field's key may be absent: pointers are always
-// optional, and the omitzero / omitempty tag options make any field optional.
-func isOptional(t reflect.Type, opts []string) bool {
-	if t.Kind() == reflect.Pointer {
-		return true
-	}
-	for _, o := range opts {
-		if o == "omitzero" || o == "omitempty" {
-			return true
-		}
-	}
-	return false
-}
-
-// kindCompatible reports whether an observed value kind could decode into the
-// field. It accepts null universally because json/v2 accepts null for any type
-// (resetting it to the zero value), so rejecting null would make the
-// approximate check unsound (it would report a false where the exact check
-// succeeds).
-func kindCompatible(fs fieldSpec, k jsontext.Kind) bool {
+// kindOK reports whether an observed value kind could decode into a field whose
+// type maps to want. null is always accepted (json/v2 resets any type to its
+// zero value), so the approximate check never rejects what the exact check admits.
+func kindOK(want, got jsontext.Kind) bool {
 	switch {
-	case k == jsontext.KindNull:
+	case got == jsontext.KindNull, want == invalidKind:
 		return true
-	case fs.kind == kindAny:
-		return true
-	case fs.kind == jsontext.KindTrue: // boolean
-		return k == jsontext.KindTrue || k == jsontext.KindFalse
+	case want == jsontext.KindTrue:
+		return got == jsontext.KindTrue || got == jsontext.KindFalse
 	default:
-		return k == fs.kind
+		return want == got
 	}
 }
 
-// Presence is the APPROXIMATE per-component check: it reports whether data could
-// be unserialized into component T using a single jsontext token scan, without
-// ever materializing a T. It confirms data is a JSON object whose top-level
-// members include every mandatory field of T with a compatible value kind.
+// Presence is the APPROXIMATE per-component check: a single jsontext scan
+// reporting whether data is an object carrying every mandatory field of
+// component T with a compatible value kind, without materializing a T.
 //
-// The guarantee is one-sided, like leeway's ADR-0066 presence prefilter: if
-// Presence returns false, Validate[T] is guaranteed to fail too; if it returns
-// true, Validate[T] may still fail (a nested object may be malformed, a number
-// may overflow, an unknown member may be present).
+// One-sided, like leeway ADR-0066's presence prefilter: a false result
+// guarantees Validate[T] also fails; a true result does not guarantee it passes
+// (a nested object may be malformed, a number may overflow, a member unknown).
 func Presence[T any](data []byte) bool {
-	spec := specOf[T]()
 	dec := jsontext.NewDecoder(bytes.NewReader(data))
-
-	tok, err := dec.ReadToken()
-	if err != nil || tok.Kind() != jsontext.KindBeginObject {
+	if tok, err := dec.ReadToken(); err != nil || tok.Kind() != jsontext.KindBeginObject {
 		return false
 	}
-	seen := 0
-	for {
-		nameTok, err := dec.ReadToken()
+	present := make(map[string]jsontext.Kind, 8)
+	for dec.PeekKind() != jsontext.KindEndObject {
+		name, err := dec.ReadToken()
 		if err != nil {
-			return false // malformed, or a duplicate member name (rejected by default)
+			return false
 		}
-		if nameTok.Kind() == jsontext.KindEndObject {
-			break
-		}
-		fs, isField := spec.byName[nameTok.String()]
-		valueKind := dec.PeekKind()
-		if isField && !fs.optional && kindCompatible(fs, valueKind) {
-			seen++
-		}
-		if err := dec.SkipValue(); err != nil {
+		key := name.String() // capture before the next decoder call voids the token
+		present[key] = dec.PeekKind()
+		if dec.SkipValue() != nil {
 			return false
 		}
 	}
-	return seen == spec.mandatoryLen
+	for _, f := range jsonFields[T]() {
+		if !f.required {
+			continue
+		}
+		if k, ok := present[f.name]; !ok || !kindOK(f.kind, k) {
+			return false
+		}
+	}
+	return true
 }
 
-// Validate is the EXACT per-component check: it returns nil exactly when data is
-// a JSON object that (a) carries every mandatory field of T — the Presence
-// precondition — and (b) strictly unmarshals into a T with no unknown members.
-//
-// Presence runs first, so it is a strict sub-computation: when the approximate
-// check fails, Validate fails without attempting the full decode. This is the
-// Validator ⊇ Presence layering of ADR-0066.
+// Validate is the EXACT per-component check: nil iff data carries every
+// mandatory field of T (the Presence precondition) and strictly unmarshals into
+// a T with no unknown members. Presence runs first, so a failing approximate
+// check short-circuits — the Validator ⊇ Presence layering of ADR-0066.
 func Validate[T any](data []byte) error {
 	if !Presence[T](data) {
-		return fmt.Errorf("ecsdemo: presence check failed: data is not an object carrying every mandatory field of %s", typeName[T]())
+		return eb.Build().Str("type", typeName[T]()).Errorf("document lacks a mandatory field")
 	}
 	var v T
 	if err := json.Unmarshal(data, &v, json.RejectUnknownMembers(true)); err != nil {
-		return fmt.Errorf("ecsdemo: strict unmarshal into %s: %w", typeName[T](), err)
+		return eb.Build().Str("type", typeName[T]()).Errorf("strict unmarshal: %w", err)
 	}
 	return nil
 }
 
-// Unmarshal is the PROJECTION: it deserializes data into a component T with the
-// same strict options Validate uses. It does not enforce mandatory-field
-// presence; pair it with Validate for the exact gate.
-func Unmarshal[T any](data []byte) (T, error) {
-	var v T
-	if err := json.Unmarshal(data, &v, json.RejectUnknownMembers(true)); err != nil {
-		return v, fmt.Errorf("ecsdemo: unmarshal into %s: %w", typeName[T](), err)
+// Unmarshal is the PROJECTION: a strict decode of data into component T. It does
+// not enforce mandatory-field presence; gate with Validate for the exact check.
+func Unmarshal[T any](data []byte) (v T, err error) {
+	if err = json.Unmarshal(data, &v, json.RejectUnknownMembers(true)); err != nil {
+		err = eb.Build().Str("type", typeName[T]()).Errorf("unmarshal: %w", err)
 	}
-	return v, nil
+	return
 }
 
-// Subset reports whether component A is a structural (field) subset of component
-// B: every json-visible field of A appears in B under the same json name and
-// with an identical Go type (A ⊆ B). It is the pure-reflection analogue of
-// leeway's common.TableOperations.Subset, and the field-level granularity that
-// Archetype.SubsetOf lifts to the component-set level.
+// Subset reports whether component A is a field-subset of B: every json field of
+// A appears in B under the same name and Go type (A ⊆ B). It is the
+// pure-reflection analogue of leeway's TableOperations.Subset, and the level
+// Archetype.SubsetOf lifts to component sets.
 func Subset[A, B any]() bool {
-	sa, sb := specOf[A](), specOf[B]()
-	for _, fa := range sa.fields {
-		fb, ok := sb.byName[fa.name]
-		if !ok || fb.typ != fa.typ {
+	fieldsB := jsonFields[B]()
+	inB := make(map[string]reflect.Type, len(fieldsB))
+	for _, f := range fieldsB {
+		inB[f.name] = f.typ
+	}
+	for _, f := range jsonFields[A]() {
+		if inB[f.name] != f.typ {
 			return false
 		}
 	}
@@ -236,60 +189,49 @@ func typeName[T any]() string {
 	return reflect.TypeFor[T]().Name()
 }
 
-// --- archetype-level checks: the per-component pair, lifted to component sets ---
-
-// rawComponent is one top-level member of an entity document: its raw JSON bytes
-// and value kind, captured in a single scan.
+// rawComponent is one entity-document member: its raw bytes and value kind.
 type rawComponent struct {
 	value []byte
 	kind  jsontext.Kind
 }
 
 // entityMembers scans an entity document into its component members keyed by
-// kind, dropping the "id" member (the entity's join key, not a component).
-func entityMembers(doc []byte) (map[ComponentKind]rawComponent, error) {
+// kind, dropping the "id" join key.
+func entityMembers(doc []byte) (map[ComponentKindE]rawComponent, error) {
 	dec := jsontext.NewDecoder(bytes.NewReader(doc))
-	tok, err := dec.ReadToken()
-	if err != nil || tok.Kind() != jsontext.KindBeginObject {
-		return nil, fmt.Errorf("ecsdemo: entity document is not a JSON object")
+	if tok, err := dec.ReadToken(); err != nil || tok.Kind() != jsontext.KindBeginObject {
+		return nil, eh.New("entity document is not a JSON object")
 	}
-	out := make(map[ComponentKind]rawComponent)
-	for {
-		nameTok, err := dec.ReadToken()
+	out := make(map[ComponentKindE]rawComponent, 4)
+	for dec.PeekKind() != jsontext.KindEndObject {
+		name, err := dec.ReadToken()
 		if err != nil {
-			return nil, err
+			return nil, eh.Errorf("read entity member: %w", err)
 		}
-		if nameTok.Kind() == jsontext.KindEndObject {
-			break
-		}
-		name := nameTok.String()
+		key := name.String() // capture before the next decoder call voids the token
 		kind := dec.PeekKind()
 		val, err := dec.ReadValue()
 		if err != nil {
-			return nil, err
+			return nil, eh.Errorf("read entity member value: %w", err)
 		}
-		if name == "id" {
-			continue
+		if key != "id" {
+			out[ComponentKindE(key)] = rawComponent{value: bytes.Clone(val), kind: kind}
 		}
-		out[ComponentKind(name)] = rawComponent{value: append([]byte(nil), val...), kind: kind}
 	}
 	return out, nil
 }
 
-// componentValidators binds each component kind to its exact per-component check,
-// so the archetype checks can validate components generically.
-var componentValidators = map[ComponentKind]func([]byte) error{
+// componentValidators binds each kind to its exact per-component check.
+var componentValidators = map[ComponentKindE]func([]byte) error{
 	KindIdentity: Validate[Identity],
 	KindBattery:  Validate[Battery],
 	KindLocated:  Validate[Located],
 	KindTasked:   Validate[Tasked],
 }
 
-// ArchetypePresence is the APPROXIMATE archetype check: it reports whether doc
-// could be an entity of archetype arch, by confirming every required component
-// appears as a top-level object member. It does not look inside the components,
-// so it is necessary but not sufficient — the per-component Presence guarantee,
-// lifted to the component-set level.
+// ArchetypePresence is the APPROXIMATE archetype check: every required component
+// of arch appears as a top-level object member. Necessary, not sufficient — the
+// per-component Presence guarantee lifted to the component set.
 func ArchetypePresence(doc []byte, arch Archetype) bool {
 	m, err := entityMembers(doc)
 	if err != nil {
@@ -297,45 +239,39 @@ func ArchetypePresence(doc []byte, arch Archetype) bool {
 	}
 	for _, k := range arch {
 		rc, ok := m[k]
-		if !ok {
-			return false
-		}
-		if rc.kind != jsontext.KindBeginObject && rc.kind != jsontext.KindNull {
+		if !ok || (rc.kind != jsontext.KindBeginObject && rc.kind != jsontext.KindNull) {
 			return false
 		}
 	}
 	return true
 }
 
-// ArchetypeValidate is the EXACT archetype check: doc is a valid entity of
-// archetype arch iff every required component is present and individually Valid,
-// and no component outside arch is present (reject-unknown lifted to the
-// component-set level). It returns nil on success, else the first failure.
-//
-// As with the per-component pair, ArchetypePresence is the necessary precheck:
-// when it fails, ArchetypeValidate fails without decoding any component.
+// ArchetypeValidate is the EXACT archetype check: nil iff every required
+// component is present and individually Valid, with no component outside arch
+// (reject-unknown lifted to the component set). ArchetypePresence is the
+// necessary precheck.
 func ArchetypeValidate(doc []byte, arch Archetype) error {
 	if !ArchetypePresence(doc, arch) {
-		return fmt.Errorf("ecsdemo: archetype %v: presence check failed", arch)
+		return eh.New("approximate archetype presence check failed")
 	}
 	m, err := entityMembers(doc)
 	if err != nil {
 		return err
 	}
-	want := make(map[ComponentKind]bool, len(arch))
+	required := make(map[ComponentKindE]bool, len(arch))
 	for _, k := range arch {
-		want[k] = true
-		validate, known := componentValidators[k]
-		if !known {
-			return fmt.Errorf("ecsdemo: archetype %v: no validator for component %q", arch, k)
+		required[k] = true
+		validate, ok := componentValidators[k]
+		if !ok {
+			return eb.Build().Str("component", string(k)).Errorf("no validator for component")
 		}
 		if err := validate(m[k].value); err != nil {
-			return fmt.Errorf("ecsdemo: archetype %v: component %q: %w", arch, k, err)
+			return eb.Build().Str("component", string(k)).Errorf("invalid component: %w", err)
 		}
 	}
 	for k := range m {
-		if !want[k] {
-			return fmt.Errorf("ecsdemo: archetype %v: unexpected component %q", arch, k)
+		if !required[k] {
+			return eb.Build().Str("component", string(k)).Errorf("unexpected component")
 		}
 	}
 	return nil

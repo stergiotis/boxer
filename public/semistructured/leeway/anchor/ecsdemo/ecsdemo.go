@@ -1,111 +1,72 @@
-// Package ecsdemo is a two-stage, end-to-end example built on anchor's example
-// schema. It models a small Entity-Component-System (ECS) and asks one question
-// two different ways: "can this JSON document be unserialized into this shape?"
+// Package ecsdemo is a small, didactic Entity-Component-System and the first
+// stage of a two-stage example under anchor/. Stage 1 (here) serializes the
+// model with encoding/json/v2; stage 2 (planned) mirrors it through leeway's
+// mappingplan -> marshallingen -> dml/ra pipeline against anchor's schema.
 //
-// Stage 1 (this file plus ecsdemo_json.go) answers with encoding/json/v2 and
-// reflection only — no leeway runtime. Stage 2 (added later as ecsdemo_leeway.go)
-// answers the same question through leeway's mappingplan -> marshallingen ->
-// dml/ra pipeline, binding the same components to anchor's TableDesc sections.
-// Both stages share the types declared here, so they stay in agreement.
+// An entity is just an id; components (Identity, Battery, Located, Tasked) are
+// pure id-free data. A World stores them column-per-type (structure of arrays);
+// an Entity is the gathered bundle for one id. Gather/Scatter join the two
+// views, mirroring leeway RA/DML.
 //
-// # The entity is the join key
-//
-// A component (Identity, Battery, Located, Tasked) is pure, id-free data — one
-// aspect of an entity. An entity is *only* an id; what it "is" emerges from the
-// components attached to that id. That gives two views of the same thing, joined
-// on the id:
-//
-//   - World (storage / structure-of-arrays): one column per component type,
-//     each keyed by entity id. Systems iterate these columns.
-//   - Entity (gathered / array-of-structs): an id plus the components present
-//     for it. This bundle is the "entity composed of components".
-//
-// Gather builds the Entity view from the World; Scatter writes it back. Those
-// are the stage-1 analogues of leeway RA (FillFromArrow) and DML
-// (BuildEntities), and an Entity is the analogue of a leeway DTO row: an id
-// plain column plus populated sections.
-//
-// # Tree via nesting
-//
-// GeoPoint and TimeRange are nested value structs; that nesting is what becomes
-// a leeway multi-sub-column section (geoPoint, timeRange) in stage 2. The ECS
-// storage itself is flat.
-//
-// # Subset at two granularities
-//
-// The subset relation appears twice, as the same width-subtyping idea at two
-// levels:
-//
-//   - field-subset (Subset[A,B]): within one component, A's fields ⊆ B's fields
-//     (e.g. Schedule ⊆ Tasked).
-//   - archetype-subset (Archetype.SubsetOf): across an entity's component set
-//     (e.g. Grounded ⊆ Flying ⊆ Operating).
-//
-// # Two strengths of "can this be unserialized?"
-//
-// Mirroring leeway's ADR-0066 read-back artefacts (Presence / Validator /
-// Projection), the check comes approximate-and-exact, at both the per-component
-// level (Presence/Validate, see ecsdemo_json.go) and the archetype level
-// (ArchetypePresence/ArchetypeValidate). The approximate check is always a
-// necessary, not sufficient, sub-computation of the exact one.
+// "Can this document be unserialized into this shape?" is answered two ways at
+// two levels, mirroring leeway ADR-0066's Presence/Validator/Projection: an
+// approximate jsontext shape-scan (Presence, ArchetypePresence) that is
+// necessary but not sufficient, and an exact strict decode (Validate,
+// ArchetypeValidate). See EXPLANATION.md for the ECS background.
 package ecsdemo
 
 import (
 	json "encoding/json/v2"
+	"iter"
+	"maps"
 	"slices"
 )
 
-// EntityID identifies an entity. An entity owns no data of its own; it is just
-// this id, and the components attached to it across the World's columns.
+// EntityID identifies an entity. The entity owns no data; it is just this id and
+// the components attached to it across the World's columns.
 type EntityID uint64
 
-// GeoPoint is a nested value type. Its fields map onto anchor's "geoPoint"
-// multi-sub-column section (pointLat, pointLng, h3) in stage 2.
-type GeoPoint struct {
-	Lat  float32 `json:"lat"`
-	Lng  float32 `json:"lng"`
-	Cell uint64  `json:"cell"`
-}
+// GeoPoint and TimeRange are nested value types; the nesting becomes a leeway
+// multi-sub-column section (geoPoint, timeRange) in stage 2.
+type (
+	GeoPoint struct {
+		Lat  float32 `json:"lat"`
+		Lng  float32 `json:"lng"`
+		Cell uint64  `json:"cell"`
+	}
+	TimeRange struct {
+		BeginIncl int64 `json:"beginIncl"`
+		EndExcl   int64 `json:"endExcl"`
+	}
+)
 
-// TimeRange is a nested value type mapping onto anchor's "timeRange" section
-// (beginIncl, endExcl) in stage 2.
-type TimeRange struct {
-	BeginIncl int64 `json:"beginIncl"`
-	EndExcl   int64 `json:"endExcl"`
-}
+// Identity, Battery, Located and Tasked are the components: plain id-free data,
+// each mapping onto an anchor section (symbol, u64Array, geoPoint,
+// timeRange+symbolArray) in stage 2.
+type (
+	Identity struct {
+		Status string `json:"status"`
+	}
+	Battery struct {
+		Charge uint64 `json:"charge"`
+	}
+	Located struct {
+		At GeoPoint `json:"at"`
+	}
+	Tasked struct {
+		Window TimeRange `json:"window"`
+		Tags   []string  `json:"tags,omitzero"`
+	}
+)
 
-// Identity is the component every active entity carries. ↔ section "symbol".
-type Identity struct {
-	Status string `json:"status"`
-}
-
-// Battery is an entity's charge level. ↔ section "u64Array" (unit).
-type Battery struct {
-	Charge uint64 `json:"charge"`
-}
-
-// Located places an entity in space. ↔ section "geoPoint".
-type Located struct {
-	At GeoPoint `json:"at"`
-}
-
-// Tasked records an entity's assignment. ↔ sections "timeRange" + "symbolArray".
-type Tasked struct {
-	Window TimeRange `json:"window"`
-	Tags   []string  `json:"tags,omitzero"`
-}
-
-// Schedule is a narrower view of Tasked — a window with no tags — so
-// Schedule ⊆ Tasked at the field level (Subset[Schedule, Tasked] is true). It
-// illustrates that the subset relation lives one granularity below
-// archetype-subset; it is not itself stored as a World column.
+// Schedule is a narrower view of Tasked (a window, no tags), so Schedule ⊆ Tasked
+// at the field level — see Subset.
 type Schedule struct {
 	Window TimeRange `json:"window"`
 }
 
-// World is the storage view (structure-of-arrays): one column per component
-// type, each keyed by entity id. It is the stage-2 analogue of leeway's Arrow
-// columns.
+// World stores components column-per-type, keyed by entity id (structure of
+// arrays). ≈ leeway's Arrow columns in stage 2.
 type World struct {
 	Identity map[EntityID]Identity `json:"identity,omitzero"`
 	Battery  map[EntityID]Battery  `json:"battery,omitzero"`
@@ -113,7 +74,8 @@ type World struct {
 	Tasked   map[EntityID]Tasked   `json:"tasked,omitzero"`
 }
 
-// NewWorld returns a World with every component column initialized.
+// NewWorld returns a World with every column initialized; the zero World also
+// works, since Scatter allocates columns lazily.
 func NewWorld() *World {
 	return &World{
 		Identity: make(map[EntityID]Identity),
@@ -123,10 +85,9 @@ func NewWorld() *World {
 	}
 }
 
-// Entity is the gathered view (array-of-structs): an id plus the components
-// present for it. A nil component pointer means the entity does not have that
-// component. This is the "entity composed of components", and the stage-2
-// analogue of a leeway DTO row (id plain column + populated sections).
+// Entity is the gathered (array-of-structs) view of one id: the id plus the
+// components present for it (a nil pointer means "not attached"). ≈ a leeway DTO
+// row (id plain column + populated sections) in stage 2.
 type Entity struct {
 	ID       EntityID  `json:"id"`
 	Identity *Identity `json:"identity,omitzero"`
@@ -135,99 +96,89 @@ type Entity struct {
 	Tasked   *Tasked   `json:"tasked,omitzero"`
 }
 
-// Gather joins the World's columns on id into the Entity view. ≈ leeway RA.
-func (w *World) Gather(id EntityID) Entity {
-	e := Entity{ID: id}
-	if c, ok := w.Identity[id]; ok {
-		e.Identity = &c
-	}
-	if c, ok := w.Battery[id]; ok {
-		e.Battery = &c
-	}
-	if c, ok := w.Located[id]; ok {
-		e.Located = &c
-	}
-	if c, ok := w.Tasked[id]; ok {
-		e.Tasked = &c
-	}
-	return e
-}
-
-// Scatter writes an Entity's present components into the World's columns, the
-// inverse of Gather. ≈ leeway DML.
-func (w *World) Scatter(e Entity) {
-	if e.Identity != nil {
-		if w.Identity == nil {
-			w.Identity = make(map[EntityID]Identity)
-		}
-		w.Identity[e.ID] = *e.Identity
-	}
-	if e.Battery != nil {
-		if w.Battery == nil {
-			w.Battery = make(map[EntityID]Battery)
-		}
-		w.Battery[e.ID] = *e.Battery
-	}
-	if e.Located != nil {
-		if w.Located == nil {
-			w.Located = make(map[EntityID]Located)
-		}
-		w.Located[e.ID] = *e.Located
-	}
-	if e.Tasked != nil {
-		if w.Tasked == nil {
-			w.Tasked = make(map[EntityID]Tasked)
-		}
-		w.Tasked[e.ID] = *e.Tasked
+// Gather joins the columns on id into the Entity view. ≈ leeway RA.
+func (inst *World) Gather(id EntityID) Entity {
+	return Entity{
+		ID:       id,
+		Identity: getComp(inst.Identity, id),
+		Battery:  getComp(inst.Battery, id),
+		Located:  getComp(inst.Located, id),
+		Tasked:   getComp(inst.Tasked, id),
 	}
 }
 
-// Components returns the entity's archetype: the kinds it currently has, in a
-// fixed (declaration) order. The archetype is what the entity "is".
-func (e Entity) Components() Archetype {
+// Scatter writes an entity's present components back into the columns. ≈ leeway DML.
+func (inst *World) Scatter(e Entity) {
+	putComp(&inst.Identity, e.ID, e.Identity)
+	putComp(&inst.Battery, e.ID, e.Battery)
+	putComp(&inst.Located, e.ID, e.Located)
+	putComp(&inst.Tasked, e.ID, e.Tasked)
+}
+
+// All iterates every entity (any id with at least one component) as a gathered
+// view, ids ascending. It is the SoA→AoS traversal a "system" ranges over.
+func (inst *World) All() iter.Seq2[EntityID, Entity] {
+	return func(yield func(EntityID, Entity) bool) {
+		for _, id := range inst.ids() {
+			if !yield(id, inst.Gather(id)) {
+				return
+			}
+		}
+	}
+}
+
+func (inst *World) ids() []EntityID {
+	set := make(map[EntityID]struct{}, len(inst.Identity))
+	for id := range inst.Identity {
+		set[id] = struct{}{}
+	}
+	for id := range inst.Battery {
+		set[id] = struct{}{}
+	}
+	for id := range inst.Located {
+		set[id] = struct{}{}
+	}
+	for id := range inst.Tasked {
+		set[id] = struct{}{}
+	}
+	return slices.Sorted(maps.Keys(set))
+}
+
+// Components reports the entity's archetype: the kinds attached, in a fixed
+// order. This set — computed at runtime, free to change — is what the entity
+// "is" (composition over inheritance).
+func (inst Entity) Components() Archetype {
 	var a Archetype
-	if e.Identity != nil {
+	if inst.Identity != nil {
 		a = append(a, KindIdentity)
 	}
-	if e.Battery != nil {
+	if inst.Battery != nil {
 		a = append(a, KindBattery)
 	}
-	if e.Located != nil {
+	if inst.Located != nil {
 		a = append(a, KindLocated)
 	}
-	if e.Tasked != nil {
+	if inst.Tasked != nil {
 		a = append(a, KindTasked)
 	}
 	return a
 }
 
-// LowBattery is a trivial system over the Battery column: the ids charged below
-// threshold, sorted for determinism.
-func (w *World) LowBattery(threshold uint64) []EntityID {
-	var out []EntityID
-	for id, b := range w.Battery {
-		if b.Charge < threshold {
-			out = append(out, id)
-		}
-	}
-	slices.Sort(out)
-	return out
-}
-
-// ComponentKind names a component by its json member in Entity.
-type ComponentKind string
+// ComponentKindE names a component by its json member name in an Entity.
+//
+//codelint:enum-prefix=Kind
+type ComponentKindE string
 
 const (
-	KindIdentity ComponentKind = "identity"
-	KindBattery  ComponentKind = "battery"
-	KindLocated  ComponentKind = "located"
-	KindTasked   ComponentKind = "tasked"
+	KindIdentity ComponentKindE = "identity"
+	KindBattery  ComponentKindE = "battery"
+	KindLocated  ComponentKindE = "located"
+	KindTasked   ComponentKindE = "tasked"
 )
 
-// Archetype is the set of component kinds an entity is required to have — the
-// composition contract. Subset over archetypes is the ECS-level lifting of the
-// field-level Subset relation.
-type Archetype []ComponentKind
+// Archetype is a set of component kinds — a composition contract. SubsetOf is
+// the component-set lifting of the field-level Subset relation.
+type Archetype []ComponentKindE
 
 // Grounded ⊆ Flying ⊆ Operating.
 var (
@@ -236,9 +187,9 @@ var (
 	Operating = Archetype{KindIdentity, KindBattery, KindLocated, KindTasked}
 )
 
-// SubsetOf reports whether every kind in a also appears in b (a ⊆ b).
-func (a Archetype) SubsetOf(b Archetype) bool {
-	for _, k := range a {
+// SubsetOf reports whether every kind in inst also appears in b (inst ⊆ b).
+func (inst Archetype) SubsetOf(b Archetype) bool {
+	for _, k := range inst {
 		if !slices.Contains(b, k) {
 			return false
 		}
@@ -246,19 +197,16 @@ func (a Archetype) SubsetOf(b Archetype) bool {
 	return true
 }
 
-// MarshalWorld serializes the whole store. Deterministic gives stable map key
-// ordering so the bytes are reproducible.
-func MarshalWorld(w *World) ([]byte, error) {
-	return json.Marshal(w, json.Deterministic(true))
+// MarshalWorld serializes the store; Deterministic gives stable map-key order.
+func MarshalWorld(inst *World) ([]byte, error) {
+	return json.Marshal(inst, json.Deterministic(true))
 }
 
 // UnmarshalWorld is the inverse of MarshalWorld.
-func UnmarshalWorld(data []byte) (*World, error) {
-	var w World
-	if err := json.Unmarshal(data, &w); err != nil {
-		return nil, err
-	}
-	return &w, nil
+func UnmarshalWorld(data []byte) (inst *World, err error) {
+	inst = &World{}
+	err = json.Unmarshal(data, inst)
+	return
 }
 
 // MarshalEntity serializes one gathered entity.
@@ -266,12 +214,25 @@ func MarshalEntity(e Entity) ([]byte, error) {
 	return json.Marshal(e)
 }
 
-// UnmarshalEntity is the strict projection of an entity document into an Entity,
-// rejecting unknown members (components or fields not in the model).
-func UnmarshalEntity(data []byte) (Entity, error) {
-	var e Entity
-	if err := json.Unmarshal(data, &e, json.RejectUnknownMembers(true)); err != nil {
-		return e, err
+// UnmarshalEntity strictly decodes an entity document, rejecting unknown members.
+func UnmarshalEntity(data []byte) (e Entity, err error) {
+	err = json.Unmarshal(data, &e, json.RejectUnknownMembers(true))
+	return
+}
+
+func getComp[C any](m map[EntityID]C, id EntityID) *C {
+	if c, ok := m[id]; ok {
+		return &c
 	}
-	return e, nil
+	return nil
+}
+
+func putComp[C any](m *map[EntityID]C, id EntityID, c *C) {
+	if c == nil {
+		return
+	}
+	if *m == nil {
+		*m = make(map[EntityID]C)
+	}
+	(*m)[id] = *c
 }

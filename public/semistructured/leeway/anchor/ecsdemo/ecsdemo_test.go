@@ -108,6 +108,13 @@ func TestGatherScatterRoundTrip(t *testing.T) {
 	require.Equal(t, "X", got.Identity.Status)
 	require.Equal(t, uint64(3), got.Located.At.Cell)
 	require.Nil(t, got.Tasked, "entity 7 never had a Tasked component")
+
+	// The gathered entity round-trips through its own document too.
+	doc, err := ecsdemo.MarshalEntity(got)
+	require.NoError(t, err)
+	back, err := ecsdemo.UnmarshalEntity(doc)
+	require.NoError(t, err)
+	require.Equal(t, got, back)
 }
 
 // TestComponentNecessaryNotSufficient pins the per-component property: the
@@ -138,11 +145,19 @@ func TestArchetypeRejectsExtraComponents(t *testing.T) {
 	require.Error(t, ecsdemo.ArchetypeValidate(operating, ecsdemo.Grounded), "located/tasked are unexpected under Grounded")
 }
 
-// TestLowBatterySystem exercises a system iterating one component column.
-func TestLowBatterySystem(t *testing.T) {
+// TestSystemOverAll shows a "system": a query that ranges the World's entities
+// (World.All yields them id-ascending) and selects those matching a predicate.
+func TestSystemOverAll(t *testing.T) {
 	w := ecsdemo.NewWorld()
 	w.Scatter(ecsdemo.Entity{ID: 1, Battery: &ecsdemo.Battery{Charge: 50}})
 	w.Scatter(ecsdemo.Entity{ID: 2, Battery: &ecsdemo.Battery{Charge: 9000}})
 	w.Scatter(ecsdemo.Entity{ID: 3, Battery: &ecsdemo.Battery{Charge: 10}})
-	require.Equal(t, []ecsdemo.EntityID{1, 3}, w.LowBattery(1000))
+
+	var low []ecsdemo.EntityID
+	for id, e := range w.All() {
+		if e.Battery != nil && e.Battery.Charge < 1000 {
+			low = append(low, id)
+		}
+	}
+	require.Equal(t, []ecsdemo.EntityID{1, 3}, low)
 }
