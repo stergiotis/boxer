@@ -294,7 +294,7 @@ cell-by-cell against `marshallreflect` reading the same batches — the validato
 must accept exactly the rows `marshallreflect` decodes without error. The
 non-scalar path (v1) is gated on this harness passing. The detailed sub-design —
 the two flatten inversions, the exact helper-UDF bodies, the invariants, and the
-test matrix — is drafted in [`dql/EXPLANATION.md`](../../public/semistructured/leeway/dql/EXPLANATION.md).
+test matrix — is drafted in [`dql/EXPLANATION.md`](../../public/semistructured/leeway/marshall/clickhouse/readback/EXPLANATION.md).
 
 ### Scope and phasing
 
@@ -356,12 +356,12 @@ test matrix — is drafted in [`dql/EXPLANATION.md`](../../public/semistructured
 
 ## Status
 
-Accepted — 2026-06-08 (reviewed by p@stergiotis). The scalar read-back path has landed in [`leeway/dql`](../../public/semistructured/leeway/dql/) with round-trip tests; the non-scalar open questions below are post-acceptance refinements.
+Accepted — 2026-06-08 (reviewed by p@stergiotis). The scalar read-back path has landed in [`leeway/dql`](../../public/semistructured/leeway/marshall/clickhouse/readback/) with round-trip tests; the non-scalar open questions below are post-acceptance refinements.
 
 Open questions:
 
 1. **Validator body for non-scalar (decision 2).** Drafted in
-   [`dql/EXPLANATION.md`](../../public/semistructured/leeway/dql/EXPLANATION.md);
+   [`dql/EXPLANATION.md`](../../public/semistructured/leeway/marshall/clickhouse/readback/EXPLANATION.md);
    the fast-path detection (when `MC_R ≡ 1` lets the generator emit bare `indexOf`)
    and the mixed/parametrized parameter recursion remain open within it.
 2. **Named-tuple emission form.** `tuple(expr AS slot, …)` vs the explicit
@@ -386,6 +386,10 @@ The core shape (Plan ↔ IR join, three artefacts, generation-time id resolution
 - **Verification.** `clickhouse-local` (no server) is the oracle: a UDF truth-table (`lw_dql_udfs_test.go`) and a real-data round-trip (`lw_dql_roundtrip_test.go`) that marshals DTOs through anchor's write path to an Arrow file, runs the generated artefacts over it, and asserts the read-back equals the originals with presence = validator = 1.
 - **Still open:** the mixed/parametrized channels on the Plan front-end (ADR-0008 Cut 2); aligned-fast-path detection (I5); named-tuple slot types across the full canonical-type range.
 
+### 2026-06-09 — relocated to `marshall/clickhouse/readback` (ADR-0074)
+
+[ADR-0074](0074-leeway-marshall-package-layout.md) re-homed the leeway marshall packages onto a target-namespaced layout. This generator moved from `leeway/dql/` (package `dql`) to `leeway/marshall/clickhouse/readback/` (package `readback`), reframed as the ClickHouse-SQL **marshall target** beside the Go target (`marshall/go/…`). The design is unchanged — same `Generator` / `Artefacts` / `InformationRetrieval` / `MembershipResolver`, the three artefacts, and the helper UDFs; the `lw_dql_*` files became `lw_readback_*`. The Plan IR it consumes stays in `mappingplan`; the Go-DTO construction machinery it does not use now lives in `marshall/go/goplan`.
+
 ## References
 
 - [ADR-0008 — leeway marshall extensions](./0008-leeway-marshall-extensions.md) — the `Plan`, the `lw:` tag grammar, membership channels (D3), the Cut-2 parametrized/mixed channels the resolver anticipates.
@@ -393,8 +397,8 @@ The core shape (Plan ↔ IR join, three artefacts, generation-time id resolution
 - [ADR-0022 — leeway lwq FLWOR query language](./0022-leeway-lwq-flwor-query-language.md) — the query *language*; this ADR is the mechanical per-kind read-back, deliberately not that.
 - [ADR-0018 — leeway card-JSON canonical format](./0018-leeway-card-json-canonical-format.md) — attribute-centric layout and multi-membership aliasing.
 - [ADR-0010 — leeway CBOR RPC codec](./0010-leeway-cbor-rpc-codec.md) — the single-entity transport; deferred, but the same flatten/shred concerns recur.
-- `public/semistructured/leeway/dql/lw_dql_ir.go` — `InformationRetrieval`, the metadata layer this generator consumes.
-- [`dql/EXPLANATION.md`](../../public/semistructured/leeway/dql/EXPLANATION.md) — the decision-2 sub-design: the non-scalar flatten inversions, helper-UDF bodies, invariants, and the round-trip oracle.
+- `public/semistructured/leeway/marshall/clickhouse/readback/lw_readback_ir.go` — `InformationRetrieval`, the metadata layer this generator consumes.
+- [`readback/EXPLANATION.md`](../../public/semistructured/leeway/marshall/clickhouse/readback/EXPLANATION.md) — the decision-2 sub-design: the non-scalar flatten inversions, helper-UDF bodies, invariants, and the round-trip oracle.
 - `public/semistructured/leeway/anchor/` — `card_anchor_schema.go` (physical schema), `card_anchor_dql_query*.sql` (hand-written queries this generalizes), and the avalanche/cyber/drone datasets used as the correctness oracle.
-- `public/semistructured/leeway/marshallreflect/` — `unmarshal.go`, the read-back behaviour the generated SQL must agree with.
+- `public/semistructured/leeway/marshall/go/marshallreflect/` — `unmarshal.go`, the read-back behaviour the generated SQL must agree with.
 - `public/semistructured/leeway/common/lw_enums.go` — `ColumnRoleE`, `MembershipSpecE`, the support-column role taxonomy (`*card`, `len`, `cusum*`).

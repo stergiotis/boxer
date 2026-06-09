@@ -46,7 +46,7 @@ type PlainCol struct {
 // GoType returns the plain column's Go type in source form (e.g. "uint64",
 // "time.Time", "[]byte"), derived from Canonical — the single source of truth.
 func (p PlainCol) GoType() string {
-	goType, _, _, err := deriveGoShape(p.Canonical)
+	goType, _, _, err := DeriveGoShape(p.Canonical)
 	if err != nil {
 		panic("mappingplan: PlainCol.GoType on a column with no canonical type — corrupt plan: " + err.Error())
 	}
@@ -429,14 +429,14 @@ type TaggedField struct {
 
 // GoType returns the field's value type in Go source form (e.g. "uint64",
 // "string", "[]byte", "[16]byte", "time.Time", "*roaring.Bitmap"), derived
-// from Canonical via the single canonical→Go rule (deriveGoShape) — the inner
+// from Canonical via the single canonical→Go rule (DeriveGoShape) — the inner
 // element type for []T / Option[T]. Const fields are always "string". Canonical
 // is the plan's source of truth; this is a derived view, never stored.
 func (f TaggedField) GoType() string {
 	if f.IsConst {
 		return "string"
 	}
-	goType, _, _, err := deriveGoShape(f.Canonical)
+	goType, _, _, err := DeriveGoShape(f.Canonical)
 	if err != nil {
 		panic("mappingplan: TaggedField.GoType on a field with no canonical type — corrupt plan (PlanBuilder validates this at AddField): " + err.Error())
 	}

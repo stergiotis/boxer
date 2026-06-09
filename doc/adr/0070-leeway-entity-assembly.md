@@ -105,5 +105,5 @@ append-only; supersession is recorded, not deleted.
 
 - [ADR-0008](0008-leeway-marshall-extensions.md) — superseded; D1/SD3 re-cut here.
 - [ADR-0071](0071-leeway-value-and-emission.md) · [ADR-0072](0072-leeway-membership-carriage.md) · [ADR-0073](0073-leeway-membership-role.md) — the other three planes.
-- [`../../public/semistructured/leeway/marshallreflect/stack.go`](../../public/semistructured/leeway/marshallreflect/stack.go) — `RowComposer`.
+- [`../../public/semistructured/leeway/marshallreflect/stack.go`](../../public/semistructured/leeway/marshall/go/marshallreflect/stack.go) — `RowComposer`.
 - [`../../public/semistructured/leeway/dml/statemachine.dot`](../../public/semistructured/leeway/dml/statemachine.dot) — the `InEntity → InSection → InEntity` cycle.

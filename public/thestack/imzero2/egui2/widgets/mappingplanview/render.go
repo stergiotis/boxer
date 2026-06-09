@@ -112,6 +112,7 @@ func Render(in Input) {
 		// chips in the editor tab only captured their toggle rects; the tether
 		// bridges toggle ↔ window by scope. Mirrors schemaview's glyph-legend.
 		renderFieldPopups(in.Ids, m)
+		renderPlanPopup(m)
 	}
 }
 
@@ -128,6 +129,16 @@ func renderFieldPopups(ids *c.WidgetIdStack, m *Model) {
 				r.fsmW.RenderPopup()
 			}
 		}
+	}
+}
+
+// renderPlanPopup draws the plan-level inspector window when open, after the
+// DockArea block (same window-cannot-spawn-in-a-dock-tab rule as the field
+// popups: the chip + toggle were emitted in renderVerdict inside the editor
+// tab, and the tether bridges them by scope).
+func renderPlanPopup(m *Model) {
+	if m.planFSMW != nil && m.planFSMW.IsOpen() {
+		m.planFSMW.RenderPopup()
 	}
 }
 
@@ -204,6 +215,22 @@ func renderEditor(ids *c.WidgetIdStack, m *Model) {
 // renderVerdict draws the PlanBuilder verdict at the top of the editor pane —
 // green "valid" or red "invalid" plus the full error text (read-only).
 func renderVerdict(ids *c.WidgetIdStack, m *Model) {
+	// Plan-level compile-pipeline chip (empty → incomplete → invalid /
+	// schema-mismatch / queryable), tethered like the per-field chips; its
+	// window is emitted after the DockArea block (renderPlanPopup). Driven from
+	// the last recompute's verdict — same one-frame lag as the text below.
+	if m.planFSM != nil {
+		if m.planFSMW == nil {
+			m.planFSMW = fsmview.New(ids, "mpv-plan", m.planFSM).Tethered().BadgeTone(PlanState.tone).Title("plan")
+		}
+		st, reason := m.planState()
+		var md map[string]string
+		if reason != "" {
+			md = map[string]string{"reason": reason}
+		}
+		m.planFSM.MirrorWithMetadata(st, md)
+		m.planFSMW.RenderChip()
+	}
 	if m.Valid {
 		for rt := range c.RichTextLabelColored(
 			color.Hex(styletokens.SuccessDefault.AsHex()).Keep(),

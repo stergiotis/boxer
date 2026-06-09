@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/goplan"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/canonicaltypeedit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -115,11 +115,11 @@ func TestClassifyConflict_phrases(t *testing.T) {
 
 // shp builds a scalar FieldShape from a Go type, mirroring mappingplan's own
 // build_test idiom.
-func shp(t *testing.T, goType string) mappingplan.FieldShape {
+func shp(t *testing.T, goType string) goplan.FieldShape {
 	t.Helper()
-	cn, err := mappingplan.ScalarCanonicalForGoType(goType)
+	cn, err := goplan.ScalarCanonicalForGoType(goType)
 	require.NoError(t, err)
-	return mappingplan.FieldShape{Canonical: cn}
+	return goplan.FieldShape{Canonical: cn}
 }
 
 // TestClassifyConflict_realErrors is the drift guard: it builds plans that trip
@@ -128,7 +128,7 @@ func shp(t *testing.T, goType string) mappingplan.FieldShape {
 // crossFieldPhrases, this fails rather than silently misclassifying.
 func TestClassifyConflict_realErrors(t *testing.T) {
 	// Duplicate plain column — a real AddField-time cross-field rejection.
-	b := mappingplan.NewPlanBuilder("t", "p", "T")
+	b := goplan.NewPlanBuilder("t", "p", "T")
 	require.NoError(t, b.AddUnderscoreField("k", "", ""))
 	require.NoError(t, b.AddField("Id", ",id", shp(t, "uint64")))
 	dupErr := b.AddField("Id2", ",id", shp(t, "uint64"))
@@ -136,7 +136,7 @@ func TestClassifyConflict_realErrors(t *testing.T) {
 	assert.Truef(t, classifyConflict(dupErr), "duplicate plain column must classify as conflict: %v", dupErr)
 
 	// explode without a multi shape — a real local (own-fault) rejection.
-	b2 := mappingplan.NewPlanBuilder("t", "p", "T")
+	b2 := goplan.NewPlanBuilder("t", "p", "T")
 	require.NoError(t, b2.AddUnderscoreField("k", "", ""))
 	localErr := b2.AddField("V", "m,sec,explode", shp(t, "uint64"))
 	require.Error(t, localErr)

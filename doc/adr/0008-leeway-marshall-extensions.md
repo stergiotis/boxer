@@ -776,9 +776,9 @@ See [ADR-0007](0007-leeway-membership-role-classifier.md).
 ## References
 
 - [`../../public/semistructured/leeway/mappingplan/`](../../public/semistructured/leeway/mappingplan/) — shared DTO model: `Plan`, `lw:` grammar, `PlanBuilder`, membership channels, section grouping, shape classification.
-- [`../../public/semistructured/leeway/marshallgen/`](../../public/semistructured/leeway/marshallgen/) — codegen front-end + emitter over `mappingplan`.
-- [`../../public/semistructured/leeway/marshallreflect/`](../../public/semistructured/leeway/marshallreflect/) — runtime-reflection front-end + codec over `mappingplan`.
-- [`../../public/semistructured/leeway/marshallgen/EXPLANATION.md`](../../public/semistructured/leeway/marshallgen/EXPLANATION.md) — package-level explainer, including the existing multi-membership read asymmetry note.
+- [`../../public/semistructured/leeway/marshallgen/`](../../public/semistructured/leeway/marshall/go/marshallgen/) — codegen front-end + emitter over `mappingplan`.
+- [`../../public/semistructured/leeway/marshallreflect/`](../../public/semistructured/leeway/marshall/go/marshallreflect/) — runtime-reflection front-end + codec over `mappingplan`.
+- [`../../public/semistructured/leeway/marshallgen/EXPLANATION.md`](../../public/semistructured/leeway/marshall/go/marshallgen/EXPLANATION.md) — package-level explainer, including the existing multi-membership read asymmetry note.
 - [`../../public/semistructured/leeway/dml/runtime/lw_dml_types.go`](../../public/semistructured/leeway/dml/runtime/lw_dml_types.go) — write-side membership channel interface (`AddMembership*P`).
 - [`../../public/semistructured/leeway/readaccess/runtime/lw_ra_rt_types.go`](../../public/semistructured/leeway/readaccess/runtime/lw_ra_rt_types.go) — read-side `GetMembValue*` accessors that D3's read-side dispatch consumes.
 - [`../../public/semistructured/leeway/dml/statemachine.dot`](../../public/semistructured/leeway/dml/statemachine.dot) — DML state machine; the `InEntity → InSection → InEntity` cycle is the protocol basis for D1's repeating-section behaviour (SD4).

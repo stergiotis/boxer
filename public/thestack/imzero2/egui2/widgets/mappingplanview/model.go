@@ -6,6 +6,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/goplan"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
@@ -106,11 +107,11 @@ func (r *FieldRow) LWTag() string {
 // blocked, rather than the build silently proceeding on the last type that
 // happened to parse. Carrier types are not modelled in v1, so CarrierType
 // stays "".
-func (r *FieldRow) Shape() mappingplan.FieldShape {
+func (r *FieldRow) Shape() goplan.FieldShape {
 	if !r.IsConst && (r.typeModel.BarError() != "" || !r.typeModel.Valid()) {
-		return mappingplan.FieldShape{IsOption: r.IsOption}
+		return goplan.FieldShape{IsOption: r.IsOption}
 	}
-	return mappingplan.FieldShape{
+	return goplan.FieldShape{
 		Canonical: r.typeModel.Node(),
 		IsOption:  r.IsOption,
 	}
@@ -121,7 +122,7 @@ func (r *FieldRow) Shape() mappingplan.FieldShape {
 // the editor itself authors the canonical directly. An unmapped spelling leaves
 // the type empty (the editor then shows it invalid).
 func (r *FieldRow) SetGoType(goType string) {
-	cn, err := mappingplan.ScalarCanonicalForGoType(goType)
+	cn, err := goplan.ScalarCanonicalForGoType(goType)
 	if err != nil {
 		return
 	}
@@ -154,6 +155,15 @@ type Model struct {
 	// virtualise, so a page must fit the editor pane), no page-size combo,
 	// "fields" unit.
 	pager *pager.Pager
+
+	// planFSM / planFSMW are the plan-level compile-pipeline state machine and
+	// its tethered inspector chip (shown beside the verdict); planFSMW is built
+	// lazily on first render. queryable is the host's read-back-availability
+	// signal (the dql SQL artefacts in the demo) feeding PlanQueryable vs
+	// PlanSchemaMismatch.
+	planFSM   *fsmview.Machine[PlanState]
+	planFSMW  *fsmview.Widget[PlanState]
+	queryable bool
 }
 
 // NewModel returns an empty Model marked dirty so the first frame computes a
@@ -161,7 +171,8 @@ type Model struct {
 func NewModel(kind, packageName, kindType string) *Model {
 	return &Model{
 		Kind: kind, PackageName: packageName, KindType: kindType, dirty: true,
-		pager: pager.New(c.NewWidgetIdStack(), 3).WithUnit("fields").WithPageSizeCombo(false),
+		pager:   pager.New(c.NewWidgetIdStack(), 3).WithUnit("fields").WithPageSizeCombo(false),
+		planFSM: newPlanFSM(),
 	}
 }
 
@@ -250,6 +261,7 @@ func (m *Model) SetInvalid(err error) {
 		m.ErrText = "invalid plan"
 	}
 	m.Valid = false
+	m.queryable = false // a plan that doesn't build isn't queryable
 }
 
 // FieldState is one field's validity standing — the state space of its
@@ -455,7 +467,7 @@ func rowIsEmpty(row *FieldRow) bool {
 // PlanBuilder would reject, surfaced per-field and earlier so the chip reads
 // "incomplete: <why>" instead of the field going Blocked behind a builder error.
 func rowIncompleteReason(row *FieldRow) string {
-	if _, err := mappingplan.SplitLW(row.LWTag()); err != nil {
+	if _, err := goplan.SplitLW(row.LWTag()); err != nil {
 		return "lw tag does not parse"
 	}
 	if row.IsConst {
@@ -524,4 +536,134 @@ func classifyConflict(err error) bool {
 		}
 	}
 	return false
+}
+
+// PlanState is the whole plan's standing in the compile pipeline — the state
+// space of the plan-level [fsmview.Machine] shown beside the verdict. It tracks
+// how far the plan gets through build → marshal → query:
+//
+//   - Empty: no fields.
+//   - Incomplete: a field isn't ready (Empty/Incomplete), so the plan can't build.
+//   - Invalid: the build failed — a field is rejected/conflicting, or Finish
+//     (cross-field) / emit failed; there is no usable Plan.
+//   - SchemaMismatch: a valid Plan that emits a Go codec + Plan IR, but the SQL
+//     read-back does not generate against the bound schema (Plan ⊄ schema,
+//     ADR-0066) — built, but not queryable.
+//   - Queryable: the whole pipeline succeeds — builds, emits, AND the read-back
+//     generates.
+//
+// The intermediate build/emit micro-stages are not separate states: recompute
+// runs the pipeline synchronously, so the plan settles directly into one of
+// these terminal conditions each edit. SchemaMismatch vs Queryable needs a host
+// signal (the host owns the read-back); see [Model.SetQueryable].
+type PlanState uint8
+
+const (
+	PlanEmpty PlanState = iota
+	PlanIncomplete
+	PlanInvalid
+	PlanSchemaMismatch
+	PlanQueryable
+)
+
+// planStateOrder pins the level-2 table / graph order to the pipeline flow.
+var planStateOrder = []PlanState{PlanEmpty, PlanIncomplete, PlanInvalid, PlanSchemaMismatch, PlanQueryable}
+
+func (s PlanState) label() string {
+	switch s {
+	case PlanEmpty:
+		return "empty"
+	case PlanIncomplete:
+		return "incomplete"
+	case PlanInvalid:
+		return "invalid"
+	case PlanSchemaMismatch:
+		return "schema-mismatch"
+	case PlanQueryable:
+		return "queryable"
+	}
+	return "?"
+}
+
+func (s PlanState) tone() badge.ToneE {
+	switch s {
+	case PlanQueryable:
+		return badge.ToneSuccess
+	case PlanIncomplete:
+		return badge.ToneWarning
+	case PlanInvalid:
+		return badge.ToneError
+	case PlanSchemaMismatch:
+		return badge.ToneInfo // valid plan, just not queryable — informational, not an error
+	default: // PlanEmpty
+		return badge.ToneNeutral
+	}
+}
+
+func planStateColor(s PlanState, isCurrent bool) styletokens.RGBA8 {
+	if !isCurrent {
+		return styletokens.NeutralSubtle
+	}
+	switch s {
+	case PlanQueryable:
+		return styletokens.SuccessDefault
+	case PlanIncomplete:
+		return styletokens.WarningDefault
+	case PlanInvalid:
+		return styletokens.ErrorDefault
+	case PlanSchemaMismatch:
+		return styletokens.InfoDefault
+	default: // PlanEmpty
+		return styletokens.NeutralTextSecondary
+	}
+}
+
+// newPlanFSM builds the plan-level machine. The declared lattice is the
+// pipeline's happy path (empty → incomplete → schema-mismatch → queryable) plus
+// the failure branches; edits are arbitrary, so the per-frame driver mirrors
+// (never errors) for any undeclared jump.
+func newPlanFSM() *fsmview.Machine[PlanState] {
+	m := fsmview.NewMachine(PlanEmpty, fieldFSMHistory,
+		fsmview.WithLabel(PlanState.label),
+		fsmview.WithStateOrder(planStateOrder),
+		fsmview.WithStateColor(planStateColor),
+	)
+	m.AddRule(PlanEmpty, PlanIncomplete, PlanSchemaMismatch, PlanQueryable)
+	m.AddRule(PlanIncomplete, PlanInvalid, PlanSchemaMismatch, PlanQueryable)
+	m.AddRule(PlanInvalid, PlanIncomplete, PlanSchemaMismatch, PlanQueryable)
+	m.AddRule(PlanSchemaMismatch, PlanQueryable, PlanInvalid, PlanIncomplete)
+	m.AddRule(PlanQueryable, PlanSchemaMismatch, PlanInvalid, PlanIncomplete)
+	return m
+}
+
+// SetQueryable records whether the host's read-back (the dql SQL artefacts in
+// the demo) generated for the current plan — it refines a valid plan into
+// PlanQueryable (true) vs PlanSchemaMismatch (false). The host's Recompute calls
+// it on the success path; SetInvalid resets it. A host with no read-back stage
+// simply never sets it, so its valid plans read SchemaMismatch.
+func (m *Model) SetQueryable(b bool) { m.queryable = b }
+
+// planState derives the plan-level pipeline state + a reason from the per-field
+// states (set by SetBuildResult), the global verdict, and the queryable signal.
+// Pure; driven into the plan machine each frame by renderVerdict.
+func (m *Model) planState() (PlanState, string) {
+	if len(m.Fields) == 0 {
+		return PlanEmpty, ""
+	}
+	notReady := 0
+	for _, r := range m.Fields {
+		if r.state == StateEmpty || r.state == StateIncomplete {
+			notReady++
+		}
+	}
+	if notReady > 0 {
+		return PlanIncomplete, fmt.Sprintf("%d field(s) not ready", notReady)
+	}
+	if !m.Valid {
+		return PlanInvalid, firstLine(m.ErrText)
+	}
+	if m.queryable {
+		return PlanQueryable, ""
+	}
+	return PlanSchemaMismatch, "valid plan; SQL read-back unavailable for the bound schema"
 }

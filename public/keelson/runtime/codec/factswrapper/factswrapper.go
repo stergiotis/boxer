@@ -24,7 +24,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/marshallgen"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallgen"
 
 	cbdml "github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml_cbor"
 )
