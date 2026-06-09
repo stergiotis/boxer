@@ -119,6 +119,52 @@ keep track of which entities match systems/queries. An example is Entitas.
 * **Registry** Same as world.
 * **Archetype** A data structure that stores entities for a specific set of components. Components are stored as columns in contiguous arrays.
 
+## How it works — one model, two stages
+
+Both stages serialize the *same* ECS model — entities (`EntityID`), id-free
+components (`Identity`, `Battery`, `Located`, `Tasked`), an archetype = the set of
+components present — and answer one question, "can this document be unserialized
+into this shape?", as the same trichotomy (mirroring [ADR-0066](../../../../../doc/adr/0066-leeway-dql-clickhouse-readback-generator.md)):
+
+| ECS concept             | stage 1 — `stage1` (json/v2)         | stage 2 — `stage2` (leeway → ClickHouse)   |
+| ----------------------- | ------------------------------------ | ------------------------------------------ |
+| entity = id             | `EntityID` (World key / `Entity.ID`) | `id` plain column                          |
+| component = POD         | `Identity` … `Tasked` (id-free)      | a section / sub-column bundle              |
+| storage                 | `World` (a map per component)        | a columnar Arrow table (bespoke `TableDesc`) |
+| gather one entity       | `World.Gather` → `Entity`            | `FatRow.Extract[T]` over one row           |
+| archetype = present set | `Entity.Components()`                | `FatRow.Archetype` (RA population counts)  |
+| approximate check       | `Presence` / `ArchetypePresence`     | readback `presence` SQL                    |
+| exact check             | `Validate` / `ArchetypeValidate`     | readback `validator` SQL                   |
+| projection              | `Unmarshal`                          | readback `projection` SQL                  |
+
+The approximate check is a *necessary, not sufficient* sub-computation of the
+exact one, at both the per-component and archetype level.
+
+Stage 2 carries this end to end: a fat `DroneEntity` is marshalled (the
+`marshallgen` codec) to Arrow, the readback presence/validator/projection run in
+`clickhouse-local`, and every row reads back — all five sections, including the
+multi-sub-column `geoPoint` and `timeRange`. The fat row is then split back into
+the four typed components via `Extract[T]`. `stage2/cross_test.go` asserts the two
+stages return the *same* verdict on corresponding data, in both directions.
+
+## Complexity — the inversion
+
+|                  | stage 1                 | stage 2                          |
+| ---------------- | ----------------------- | -------------------------------- |
+| hand-written Go  | ~520 LOC                | ~320 LOC                         |
+| generated Go     | none                    | ~4,100 LOC (DML / RA / codec)    |
+| external deps    | stdlib + `eh`           | Arrow + ~18 leeway packages      |
+| runtime          | `go test`, nothing else | also needs `clickhouse-local`    |
+
+Stage 2 writes *less* bespoke code, yet its cognitive load is far higher: it
+rides the leeway pipeline (`TableDesc` → DDL/DML/RA codegen → Arrow layout →
+readback SQL), a large generated-code body you must trust, the `lw:` tag grammar
+and membership ids, and an external SQL engine. Stage 1's complexity is
+self-contained — every line is in those ~520, it runs anywhere under `go test`,
+and the one idea is "reflect the struct, scan the json". Stage 2 trades that
+transparency for production realism (columnar storage, a real SQL engine) and an
+open, codegen-free read path (`marshallreflect.Unmarshal`).
+
 ## Invariants
 
 - An entity owns no data of its own; it is only an id. All data lives in
