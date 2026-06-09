@@ -227,3 +227,70 @@ func TestArcPoints(t *testing.T) {
 		t.Errorf("zero-span arc len = %d, want >= 2", len(xs2))
 	}
 }
+
+func TestFitFontForWidth(t *testing.T) {
+	const base float32 = 22
+	// Fits already (measured <= avail): no shrink, and never upscale.
+	if got := fitFontForWidth(60, base, 100); got != base {
+		t.Errorf("fits: got %v, want base %v (no upscale)", got, base)
+	}
+	if got := fitFontForWidth(100, base, 100); got != base {
+		t.Errorf("exact fit: got %v, want base %v", got, base)
+	}
+	// Overflows: shrink proportionally to avail/measured.
+	if got := fitFontForWidth(120, base, 90); !approx(got, base*90.0/120.0) {
+		t.Errorf("overflow: got %v, want %v", got, base*90.0/120.0)
+	}
+	// Extreme overflow clamps at the min-font floor, never below.
+	if got := fitFontForWidth(1000, base, 50); !approx(got, base*readoutMinFontFrac) {
+		t.Errorf("clamp: got %v, want floor %v", got, base*readoutMinFontFrac)
+	}
+	// Degenerate inputs leave the font untouched (width not yet measured, or a
+	// dial with no inner room).
+	if got := fitFontForWidth(0, base, 100); got != base {
+		t.Errorf("unmeasured width: got %v, want base %v", got, base)
+	}
+	if got := fitFontForWidth(120, base, 0); got != base {
+		t.Errorf("zero avail: got %v, want base %v", got, base)
+	}
+}
+
+func TestReadoutAvailWidth(t *testing.T) {
+	// The usable width is readoutFitSafety × the inner-edge chord at yOff.
+	const innerR, yOff float32 = 54, 18
+	wantChord := 2 * float32(math.Sqrt(float64(innerR*innerR-yOff*yOff)))
+	if got := readoutAvailWidth(innerR, yOff); !approx(got, wantChord*readoutFitSafety) {
+		t.Errorf("avail = %v, want %v", got, wantChord*readoutFitSafety)
+	}
+	// A readout offset at or beyond the inner radius has no room: returns 0.
+	if got := readoutAvailWidth(20, 20); got != 0 {
+		t.Errorf("degenerate avail = %v, want 0", got)
+	}
+	if got := readoutAvailWidth(20, 30); got != 0 {
+		t.Errorf("offset past inner radius avail = %v, want 0", got)
+	}
+}
+
+func TestReadoutMeasureIdStableAndDistinct(t *testing.T) {
+	// Stable across calls for the same identity (frame-to-frame stability is
+	// what the MeasureText databinding relies on).
+	first := readoutMeasureId("battery", 0x1f)
+	again := readoutMeasureId("battery", 0x1f)
+	if first != again {
+		t.Error("measureId not stable for the same (prefix, callId)")
+	}
+	// Distinct per instance (prefix or callId), so two dials never share a slot.
+	if readoutMeasureId("battery", 0x1f) == readoutMeasureId("battery", 0x20) {
+		t.Error("measureId collides across callId")
+	}
+	if readoutMeasureId("battery", 0x1f) == readoutMeasureId("cpu", 0x1f) {
+		t.Error("measureId collides across idPrefix")
+	}
+}
+
+func TestApproxReadoutWidthCountsRunes(t *testing.T) {
+	// Rune-counted, not byte-counted: "88°C" is 4 runes though "°" is 2 bytes.
+	if got, want := approxReadoutWidth("88°C", 10), 4*approxGlyphFrac*10; !approx(float32(got), float32(want)) {
+		t.Errorf("approx(\"88°C\") = %v, want %v (4 runes)", got, want)
+	}
+}

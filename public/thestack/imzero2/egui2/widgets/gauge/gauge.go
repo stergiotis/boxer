@@ -17,9 +17,11 @@
 // (styletokens) — nothing is hardcoded. Zones are semantic styletokens.Tone
 // values, each carrying a Label so color is never the sole encoding channel
 // (ADR-0031 §SD5); the needle itself is a neutral monochrome silhouette,
-// encoding the value by its angle alone. The widget is read-only and stateless:
-// Render takes the
-// value by copy, keeps nothing across frames, and mutates nothing.
+// encoding the value by its angle alone. The widget is read-only — Render takes
+// the value by copy and mutates none of its inputs. The one piece of state it
+// keeps across frames is a per-instance text-measurement cache for the readout
+// auto-fit (fit.go), so the center value shrinks to fit the dial; nothing else
+// persists between frames.
 //
 // Usage follows the distsummary value-receiver idiom — a New(idPrefix)
 // constructor, fluent copy-returning setters, and Render(idGen, value):
@@ -84,9 +86,10 @@ type Zone struct {
 }
 
 // Renderer is the configured gauge. Values are immutable after construction;
-// fluent setters return modified copies. The widget is stateless across
-// frames — no package-level instance map — because a read-only dial keeps
-// nothing between frames.
+// fluent setters return modified copies. The configured Renderer carries no
+// per-frame state; the only cross-frame state in the package is the readout
+// auto-fit measurement cache (fit.go), keyed by instance id, not held on the
+// Renderer.
 type Renderer struct {
 	idPrefix string
 
@@ -272,7 +275,7 @@ func (inst Renderer) Render(idGen c.WidgetIdCreatorI, value float64) {
 		inst.paintTicks(cx, cy, zoneR-bandT/2, r)
 	}
 	inst.paintNeedleHub(cx, cy, r, bandT, value)
-	inst.paintValue(cx, cy, r, value)
+	inst.paintValue(cx, cy, r, bandT, value, readoutMeasureId(inst.idPrefix, callId))
 	// Metric label below the dial, anchored to the canvas bottom so it never
 	// overlaps the readout or the arc ends (even at the small size preset).
 	if inst.label != "" {
@@ -356,14 +359,20 @@ func (inst Renderer) paintNeedleHub(cx, cy, r, bandT float32, value float64) {
 	c.PaintCircleStroke(cx, cy, hubR, color.Hex(styletokens.NeutralBorderDefault.AsHex()), styletokens.StrokeRegular).Send()
 }
 
-// paintValue draws the center value readout inside the dial. The metric label
-// is drawn separately at the canvas bottom (see Render) so it cannot overlap
-// the readout or arc ends on small dials.
-func (inst Renderer) paintValue(cx, cy, r float32, value float64) {
+// paintValue draws the center value readout inside the dial, shrinking its font
+// so the string fits the dial's inner opening (see fit.go): a wide readout — a
+// multi-digit value plus a unit suffix, e.g. "8500 mAh" — at the full display
+// size would otherwise overrun the arc and collide with the interior tick
+// labels. The metric label is drawn separately at the canvas bottom (see
+// Render) so it cannot overlap the readout or arc ends on small dials.
+func (inst Renderer) paintValue(cx, cy, r, bandT float32, value float64, measureId uint64) {
 	if !inst.showValue {
 		return
 	}
-	valueFont, _ := inst.fonts()
-	c.PaintText(cx, cy+r*readoutYFrac, anchorCenter, anchorCenter, inst.formatValue(value), valueFont,
+	baseFont, _ := inst.fonts()
+	text := inst.formatValue(value)
+	yOff := r * readoutYFrac
+	font := fitReadoutFont(measureId, text, baseFont, readoutAvailWidth(r-bandT, yOff))
+	c.PaintText(cx, cy+yOff, anchorCenter, anchorCenter, text, font,
 		color.Hex(styletokens.NeutralTextExtreme.AsHex())).Send()
 }
