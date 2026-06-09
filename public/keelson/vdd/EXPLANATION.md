@@ -387,6 +387,6 @@ Resolved during M2/M3 (recorded here for documentary continuity):
 - [ADR-0035 — keelson namespace introduction](../../../doc/adr/0035-keelson-namespace-introduction.md)
 - [`keelson_dimdata.go`](keelson_dimdata.go) — bootstrap memberships and the registry instances.
 - [`keelson_dimdata_lw.go`](keelson_dimdata_lw.go) — leeway-meta memberships and the `Resolve*` bridges.
-- `src/go/public/boxerstaging/spinnaker/vdd/` — prior-art registry the keelson layout mirrors.
-- [`src/go/public/keelson/runtime/codec/`](../runtime/codec/) — the ADR-0042 codec generator output (one subdirectory per fact-kind / broker DTO). Subsumed the hand-coded `rowmarshall/` reference codec in M11; the no-reflection-on-hot-path rule this vdd model inherits is now realized through the generator emit rather than hand-written.
-- [`src/go/public/keelson/runtime/factsschema/`](../runtime/factsschema/) — the DML/RA/RowBinaryArrow building blocks the codec generator targets.
+- pebble2impl's spinnaker `vdd/` registry — prior-art the keelson layout mirrors (not present in boxer).
+- [`public/keelson/runtime/codec/`](../runtime/codec/) — the ADR-0042 codec generator output (one subdirectory per fact-kind / broker DTO). Subsumed the hand-coded `rowmarshall/` reference codec in M11; the no-reflection-on-hot-path rule this vdd model inherits is now realized through the generator emit rather than hand-written.
+- [`public/keelson/runtime/factsschema/`](../runtime/factsschema/) — the DML/RA/RowBinaryArrow building blocks the codec generator targets.

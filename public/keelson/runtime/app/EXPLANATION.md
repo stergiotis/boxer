@@ -10,7 +10,7 @@ status: draft
 
 # `runtime/app` — App author guide
 
-The `runtime/app` package is the contract every program in the pebble2impl
+The `runtime/app` package is the contract every program in the boxer
 monolith implements: a small interface (`AppI`), a static description
 (`Manifest`), and a process-wide registry. ADR-0026 spelled out the
 architecture; this file is the day-to-day guide for someone *writing* an
@@ -31,7 +31,7 @@ Three keystone decisions shape the contract you implement:
 
 - **Identity is the Go import path.** `Manifest.Id` is the package path
   that owns the app's primary code (e.g.
-  `github.com/stergiotis/pebble2impl/src/go/public/boxerstaging/spinnaker/hmi/play`).
+  `github.com/stergiotis/boxer/apps/play`).
   This is stable across implementation churn and naturally unique within a
   module graph. Demos that ship as one logical entry inside a larger
   package extend the path with a synthetic basename
@@ -194,7 +194,7 @@ package myapp
 
 import (
     "github.com/rs/zerolog/log"
-    "github.com/stergiotis/pebble2impl/src/go/public/keelson/runtime/app"
+    "github.com/stergiotis/boxer/public/keelson/runtime/app"
 )
 
 func init() {
@@ -304,7 +304,7 @@ reached exclusively through this window, not the WindowHost Apps menu.
 
 ### Run identity & audit trail
 
-Every pebble2impl process boot is a *run*, identified by a 16-character
+Every boxer process boot is a *run*, identified by a 16-character
 nanoid (the `run_id`). The carousel initialises it at startup via
 `runtime/runinfo.Init()`, which:
 

@@ -35,7 +35,7 @@ Steps:
    ```go
    import (
        "embed"
-       "github.com/stergiotis/pebble2impl/src/go/public/keelson/runtime/help"
+       "github.com/stergiotis/boxer/public/keelson/runtime/help"
    )
 
    //go:embed help

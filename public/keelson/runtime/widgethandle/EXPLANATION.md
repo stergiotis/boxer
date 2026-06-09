@@ -203,6 +203,6 @@ the widget ID offset so `GetWidgetHandle()` can find the bytes later. It
 does not change the wire format or the semantics of the ID itself.
 
 The generator emitting this code lives in
-`src/go/public/thestack/fffi2/compiletime/goserver/fffi2_compiletime_go_server.go`
+`public/thestack/fffi2/compiletime/goserver/fffi2_compiletime_go_server.go`
 (`generateIdentityHandling`). Regenerate `factories.out.go` via
 `egui2gen generate go --goOutputBasePath <dir>`.

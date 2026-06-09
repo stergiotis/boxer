@@ -13,7 +13,7 @@ keelson runtime layer (runtime.facts producers and consumers, the
 forthcoming Go↔leeway codec generator, and any keelson-side fact-kind
 that needs a stable membership identity).
 
-Pattern mirrors `src/go/public/boxerstaging/spinnaker/vdd/`. Memberships
+Pattern mirrors pebble2impl's spinnaker `vdd/` registry. Memberships
 are declared as `Memb*` package-level vars built through
 `KeelsonHrNkRegistry.MustBegin(...).End()`; their `TaggedId` is stable
 across rebuilds and survives in RowBinary/Arrow wire payloads.
