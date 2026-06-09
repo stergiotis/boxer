@@ -11,13 +11,13 @@ status: draft
 # ecsdemo — Entity-Component-System, and how this example realizes it
 
 `ecsdemo` is a small, didactic Entity-Component-System used as a two-stage
-example under `anchor/`: stage 1 (the committed code) serializes the model with
-`encoding/json/v2`; stage 2 (the `stage2/` subpackage) expresses the same model
-through a bespoke leeway `TableDesc`, a `marshallgen` codec, and a real
-`clickhouse-local` roundtrip. The mechanics of the two stages
-live in the package doc comment in `ecsdemo.go`. This file supplies the *why*
-behind them: what ECS is, and how the package's types embody it. It assumes a
-technical reader who has not necessarily met ECS before.
+example under `anchor/`: stage 1 (the `stage1/` subpackage) serializes the model
+with `encoding/json/v2`; stage 2 (the `stage2/` subpackage) expresses the same
+model through a bespoke leeway `TableDesc`, a `marshallgen` codec, and a real
+`clickhouse-local` roundtrip. The mechanics of the two stages live in the package
+doc comments of `stage1/` and `stage2/`. This file supplies the *why* behind
+them: what ECS is, and how the types embody it. It assumes a technical reader who
+has not necessarily met ECS before.
 
 ## Background
 
@@ -142,5 +142,5 @@ keep track of which entities match systems/queries. An example is Entitas.
   <https://www.gamedev.net/blogs/entry/2265481-oop-is-dead-long-live-oop/>
 - Decisions: [ADR-0066: leeway DQL ClickHouse read-back generator](../../../../../doc/adr/0066-leeway-dql-clickhouse-readback-generator.md)
   — the Presence / Validator / Projection trichotomy the unserializability checks mirror.
-- Reference: the package doc comment in `ecsdemo.go`, and
-  <https://pkg.go.dev/github.com/stergiotis/boxer/public/semistructured/leeway/anchor/ecsdemo>
+- Reference: the `stage1/` and `stage2/` package doc comments, and
+  <https://pkg.go.dev/github.com/stergiotis/boxer/public/semistructured/leeway/anchor/ecsdemo/stage1>

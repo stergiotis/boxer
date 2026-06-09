@@ -10,7 +10,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stretchr/testify/require"
 
-	"github.com/stergiotis/boxer/public/semistructured/leeway/anchor/ecsdemo"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/anchor/ecsdemo/stage1"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/readback"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallreflect"
 )
@@ -86,15 +86,15 @@ type geo struct {
 // asEntity rebuilds the stage-1 Entity for a drone. A nil geo means the entity
 // has no Located component (the Flying archetype), the stage-1 counterpart of an
 // empty geoPoint section.
-func asEntity(id uint64, status string, battery uint64, tags []string, g *geo, begin, end time.Time) ecsdemo.Entity {
-	e := ecsdemo.Entity{
-		ID:       ecsdemo.EntityID(id),
-		Identity: &ecsdemo.Identity{Status: status},
-		Battery:  &ecsdemo.Battery{Charge: battery},
-		Tasked:   &ecsdemo.Tasked{Window: ecsdemo.TimeRange{BeginIncl: begin.UnixNano(), EndExcl: end.UnixNano()}, Tags: tags},
+func asEntity(id uint64, status string, battery uint64, tags []string, g *geo, begin, end time.Time) stage1.Entity {
+	e := stage1.Entity{
+		ID:       stage1.EntityID(id),
+		Identity: &stage1.Identity{Status: status},
+		Battery:  &stage1.Battery{Charge: battery},
+		Tasked:   &stage1.Tasked{Window: stage1.TimeRange{BeginIncl: begin.UnixNano(), EndExcl: end.UnixNano()}, Tags: tags},
 	}
 	if g != nil {
-		e.Located = &ecsdemo.Located{At: ecsdemo.GeoPoint{Lat: g.lat, Lng: g.lng, Cell: g.cell}}
+		e.Located = &stage1.Located{At: stage1.GeoPoint{Lat: g.lat, Lng: g.lng, Cell: g.cell}}
 	}
 	return e
 }
@@ -118,11 +118,11 @@ func TestCrossCheck_Stage1Stage2Agree(t *testing.T) {
 	leeway := leewayVerdicts(t, full)
 	maps.Copy(leeway, leewayVerdicts(t, core))
 
-	check := func(e ecsdemo.Entity) {
-		doc, err := ecsdemo.MarshalEntity(e)
+	check := func(e stage1.Entity) {
+		doc, err := stage1.MarshalEntity(e)
 		require.NoError(t, err)
-		s1Present := ecsdemo.ArchetypePresence(doc, ecsdemo.Operating)
-		s1Valid := ecsdemo.ArchetypeValidate(doc, ecsdemo.Operating) == nil
+		s1Present := stage1.ArchetypePresence(doc, stage1.Operating)
+		s1Valid := stage1.ArchetypeValidate(doc, stage1.Operating) == nil
 		v, ok := leeway[uint64(e.ID)]
 		require.Truef(t, ok, "no leeway verdict for entity %d", e.ID)
 		require.Equalf(t, s1Present, v.presence, "presence must agree for entity %d (stage1=%v stage2=%v)", e.ID, s1Present, v.presence)

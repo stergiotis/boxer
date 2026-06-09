@@ -1,4 +1,4 @@
-package ecsdemo
+package stage1
 
 import (
 	"bytes"
