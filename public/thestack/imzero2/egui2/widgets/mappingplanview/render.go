@@ -325,7 +325,12 @@ func renderRow(ids *c.WidgetIdStack, m *Model, r *FieldRow) (remove bool) {
 					if editField(ids, "memb", "membership", &r.Membership, 120, true) {
 						m.dirty = true
 					}
-					if editField(ids, "sec", "section", &r.Section, 110, true) {
+					// Plain columns (empty membership) name one of leeway's fixed
+					// entity-header roles, so they pick from a combo (which also seeds
+					// the role's conventional value type); tagged sections are free text.
+					if r.Membership == "" {
+						renderPlainColumnCombo(ids, m, r)
+					} else if editField(ids, "sec", "section", &r.Section, 110, true) {
 						m.dirty = true
 					}
 					if editField(ids, "col", "sub-col", &r.Column, 90, tagged && !r.IsConst) {
@@ -548,6 +553,61 @@ func renderChannelCombo(ids *c.WidgetIdStack, m *Model, r *FieldRow) {
 				SendResp().HasPrimaryClicked() {
 				if r.Channel != ch {
 					r.Channel = ch
+					m.dirty = true
+				}
+			}
+		}
+	}
+}
+
+// plainColumns are leeway's fixed entity-header roles a plain column (empty
+// membership) may name — the closed set goplan.ValidatePlainColumnShape accepts
+// (id / naturalKey / ts / expiresAt → SetId / SetTimestamp / SetLifecycle). Keep
+// in sync with it. label is the friendly picker text; goType is the conventional
+// type selecting the role seeds into the value editor (the role accepts any
+// supported plain type, but these are the idiomatic ones).
+var plainColumns = []struct {
+	section string
+	label   string
+	goType  string
+}{
+	{"id", "id", "uint64"},
+	{"naturalKey", "naturalKey", "[]byte"},
+	{"ts", "timestamp (ts)", "time.Time"},
+	{"expiresAt", "lifecycle (expiresAt)", "time.Time"},
+}
+
+// plainColumnLabel is the combo's display text for the current section: the
+// friendly label for a recognized role, a "(choose)" placeholder when empty, or
+// the raw (unrecognized) value otherwise.
+func plainColumnLabel(section string) string {
+	for _, pc := range plainColumns {
+		if pc.section == section {
+			return pc.label
+		}
+	}
+	if section == "" {
+		return "(choose)"
+	}
+	return section
+}
+
+// renderPlainColumnCombo lets a plain row pick its entity-header role from the
+// fixed set; selecting one sets the section and seeds the role's conventional
+// value type (so e.g. picking "timestamp" makes the value type temporal).
+func renderPlainColumnCombo(ids *c.WidgetIdStack, m *Model, r *FieldRow) {
+	for range c.ComboBox(ids.PrepareStr("plaincol"),
+		c.WidgetText().Text("plain column").Keep(),
+		c.WidgetText().Text(plainColumnLabel(r.Section)).Keep()).KeepIter() {
+		for i, pc := range plainColumns {
+			selected := pc.section == r.Section
+			if c.Button(ids.PrepareSeq(uint64(0x706c6e00)+uint64(i)),
+				c.Atoms().Text(pc.label).Keep()).
+				Selected(selected).
+				SendResp().HasPrimaryClicked() {
+				if r.Section != pc.section {
+					r.Section = pc.section
+					r.SetGoType(pc.goType)
 					m.dirty = true
 				}
 			}
