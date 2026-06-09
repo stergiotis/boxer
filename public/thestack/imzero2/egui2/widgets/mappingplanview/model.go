@@ -60,11 +60,6 @@ type FieldRow struct {
 	fsmW   *fsmview.Widget[FieldState]
 	state  FieldState
 	reason string
-
-	// seedOpen requests the inspector window open the first frame the chip is
-	// built — a convenience for demos / screenshot tours. Set via
-	// [FieldRow.OpenInspector].
-	seedOpen bool
 }
 
 // LWTag assembles the lw: struct-tag *value* this row represents — the string
@@ -103,11 +98,18 @@ func (r *FieldRow) LWTag() string {
 }
 
 // Shape returns the FieldShape this row describes, ready to hand to
-// PlanBuilder.AddField. The value type is authored canonically (typeModel), so
-// Shape just forwards its node; an invalid/empty editor yields a nil Canonical,
-// which AddField rejects with a clear error the host surfaces. Carrier types
-// are not modelled in v1, so CarrierType stays "".
+// PlanBuilder.AddField. The value type is authored canonically (typeModel).
+// When the type is not currently usable — the formula bar does not parse
+// ([canonicaltypeedit.Model.BarError]), or the parsed type fails IsValid —
+// Shape yields a nil Canonical so AddField rejects the field and the sequential
+// build halts here: the field then reads incomplete and every field after it
+// blocked, rather than the build silently proceeding on the last type that
+// happened to parse. Carrier types are not modelled in v1, so CarrierType
+// stays "".
 func (r *FieldRow) Shape() mappingplan.FieldShape {
+	if !r.IsConst && (r.typeModel.BarError() != "" || !r.typeModel.Valid()) {
+		return mappingplan.FieldShape{IsOption: r.IsOption}
+	}
 	return mappingplan.FieldShape{
 		Canonical: r.typeModel.Node(),
 		IsOption:  r.IsOption,
@@ -126,11 +128,6 @@ func (r *FieldRow) SetGoType(goType string) {
 	r.typeModel.SetCanonical(cn.String())
 	r.lastCanonical = r.typeModel.Canonical()
 }
-
-// OpenInspector requests this field's tethered validity inspector open on the
-// first frame it renders — a convenience for demos and screenshot tours. The
-// user can close it afterwards like any inspector.
-func (r *FieldRow) OpenInspector() { r.seedOpen = true }
 
 // Model is the editable state of the playground: the plan identity, the
 // ordered field rows, and the most recent preview the host computed.

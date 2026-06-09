@@ -42,7 +42,6 @@ func newMappingPlanViewState() *mappingPlanViewDemoState {
 	status.GoField = "Status"
 	status.SetGoType("string")
 	status.Membership, status.Section = "droneStatus", "symbol"
-	status.OpenInspector() // seed one tethered validity inspector open for the tour
 
 	battery := m.AddRow()
 	battery.GoField = "Battery"

@@ -331,9 +331,6 @@ func renderRowHeader(ids *c.WidgetIdStack, r *FieldRow, glyph, word string, catC
 	if r.fsm != nil {
 		if r.fsmW == nil {
 			r.fsmW = fsmview.New(ids, fieldFSMScope(r.uid), r.fsm).Tethered().BadgeTone(FieldState.tone)
-			if r.seedOpen {
-				r.fsmW.Open()
-			}
 		}
 		r.fsmW.Title("field: " + name)
 		var md map[string]string
