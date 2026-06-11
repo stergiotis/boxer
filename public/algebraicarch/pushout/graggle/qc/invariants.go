@@ -15,6 +15,10 @@ import (
 // CheckInvariants verifies structural invariants of the graggle and returns
 // all violations found. An empty slice means the graggle is consistent.
 // Call this after ResolvePseudoEdges() for full coverage.
+//
+// CheckInvariants never mutates g: the idempotence check (invariant 10)
+// runs its redundant resolution on a clone, so the checker is safe to call
+// on live state from tests and assertions.
 func CheckInvariants(g t.InspectableI) []error {
 	var errs []error
 	errs = append(errs, checkRootNodeInvariant(g)...)
@@ -264,22 +268,36 @@ func checkPseudoEdgeCompleteness(g t.InspectableI) []error {
 }
 
 // Invariant 10: Calling ResolvePseudoEdges a second time is a no-op.
+//
+// The redundant resolution runs on a clone so that CheckInvariants never
+// mutates the graggle under inspection. Graggles that cannot produce a
+// clone skip this check — running it in place would turn the checker into
+// a mutator and could mask dirty-rep state for whoever inspects next.
 func checkPseudoEdgeIdempotence(g t.InspectableI) []error {
+	cloner, ok := g.(interface{ CloneStore() t.GraphStoreI })
+	if !ok {
+		return nil
+	}
+	clone, ok := cloner.CloneStore().(t.InspectableI)
+	if !ok {
+		return nil
+	}
+
 	type pe struct{ src, dest t.NodeID }
 	before := make(map[pe]struct{})
-	for src := range g.ForwardEdgeSources() {
-		for e := range g.ForwardEdges(src) {
+	for src := range clone.ForwardEdgeSources() {
+		for e := range clone.ForwardEdges(src) {
 			if e.Kind == t.EdgeKindPseudo {
 				before[pe{src, e.Dest}] = struct{}{}
 			}
 		}
 	}
 
-	g.ResolvePseudoEdges()
+	clone.ResolvePseudoEdges()
 
 	after := make(map[pe]struct{})
-	for src := range g.ForwardEdgeSources() {
-		for e := range g.ForwardEdges(src) {
+	for src := range clone.ForwardEdgeSources() {
+		for e := range clone.ForwardEdges(src) {
 			if e.Kind == t.EdgeKindPseudo {
 				after[pe{src, e.Dest}] = struct{}{}
 			}
@@ -370,14 +388,32 @@ func checkLiveSubgraphConnectivity(g t.InspectableI) []error {
 	return errs
 }
 
-// Invariant 13: HasConflicts() == (LinearOrder() == nil).
+// Invariant 13: LinearOrder and DetectConflicts agree on linearity.
+//
+// LinearOrder()==nil must coincide with DetectConflicts reporting at least
+// one linearity-breaking conflict — kind "order", "cycle", or "orphan".
+// Zombie conflicts are excluded: a zombie does not break the linear order.
+// The two sides are computed by independent code paths (Kahn + uniqueness
+// check vs. Tarjan + fork/anchor scans), so drift between them is caught
+// here. The previous formulation compared HasConflicts against
+// LinearOrder()==nil, but HasConflicts is *defined* as LinearOrder()==nil,
+// so it could never fire.
 func checkConflictConsistency(g t.InspectableI) []error {
-	hasConflicts := algo.HasConflicts(g)
-	linearOrder := algo.LinearOrder(g)
-	isLinear := linearOrder != nil
-
-	if hasConflicts == isLinear {
-		return []error{eh.Errorf("HasConflicts()=%v but LinearOrder() returned nil=%v (should be opposites)", hasConflicts, linearOrder == nil)}
+	isLinear := algo.LinearOrder(g) != nil
+	breaking := 0
+	for _, c := range algo.DetectConflicts(g) {
+		switch c.Kind {
+		case "order", "cycle", "orphan":
+			breaking++
+		}
 	}
-	return nil
+
+	var errs []error
+	if isLinear && breaking > 0 {
+		errs = append(errs, eh.Errorf("LinearOrder succeeded but DetectConflicts reports %d linearity-breaking conflicts", breaking))
+	}
+	if !isLinear && breaking == 0 {
+		errs = append(errs, eh.Errorf("LinearOrder()==nil but DetectConflicts reports no order/cycle/orphan conflict — conflict detector is incomplete for this graph"))
+	}
+	return errs
 }

@@ -220,3 +220,64 @@ func TestInvariant_LiveNodeUnreachable(tt *testing.T) {
 	g.contents[stranded] = []byte("x")
 	hasErrorContaining(tt, qc.CheckInvariants(g), "unreachable from root")
 }
+
+// 13. LinearOrder vs DetectConflicts cross-check: a stranded live node makes
+// LinearOrder fail while the conflict detector (pre-"orphan" kind) reports
+// nothing — the invariant must surface that incompleteness.
+//
+// NOTE: once algo.DetectConflicts gains the "orphan" conflict kind, this
+// fixture becomes a detected orphan conflict and invariant 13 goes silent
+// for it; update this test to assert the orphan detection instead.
+func TestInvariant_ConflictDetectorIncomplete(tt *testing.T) {
+	g := New()
+	stranded := nid("stranded", 0)
+	g.nodes.Add(stranded)
+	g.contents[stranded] = []byte("x")
+	hasErrorContaining(tt, qc.CheckInvariants(g), "conflict detector is incomplete")
+}
+
+// CheckInvariants must not mutate the graggle it inspects. The idempotence
+// check used to call ResolvePseudoEdges in place, which silently resolved
+// dirty components during "read-only" checking.
+func TestCheckInvariants_DoesNotMutate(tt *testing.T) {
+	g := New()
+	a := nid("p", 0)
+	b := nid("p", 1)
+	c := nid("p", 2)
+	for _, n := range []struct {
+		id t.NodeID
+		up t.NodeID
+	}{{a, t.RootNodeID}, {b, a}, {c, b}} {
+		if err := g.AddNode(n.id, []byte("x"), ph("p"), []t.NodeID{n.up}, nil); err != nil {
+			tt.Fatal(err)
+		}
+	}
+	if err := g.DeleteNode(b); err != nil {
+		tt.Fatal(err)
+	}
+	// Deliberately dirty: no ResolvePseudoEdges yet.
+	if g.DirtyRepCount() == 0 {
+		tt.Fatal("setup: expected dirty reps before resolution")
+	}
+	errs := qc.CheckInvariants(g)
+	hasErrorContaining(tt, errs, "dirty reps remain")
+	if g.DirtyRepCount() == 0 {
+		tt.Fatal("CheckInvariants resolved dirty reps — checker mutated the graggle")
+	}
+
+	// And on a clean graggle the full state must be untouched bit for bit.
+	g.ResolvePseudoEdges()
+	want := g.Debug()
+	wantDirty := g.DirtyRepCount()
+	wantReasons := len(g.reasonPseudoEdges)
+	wantTracked := len(g.pseudoEdgeReasons)
+	if errs := qc.CheckInvariants(g); len(errs) != 0 {
+		tt.Fatalf("expected clean graggle, got: %v", errs)
+	}
+	if got := g.Debug(); got != want {
+		tt.Fatalf("CheckInvariants mutated graph state:\nbefore:\n%s\nafter:\n%s", want, got)
+	}
+	if g.DirtyRepCount() != wantDirty || len(g.reasonPseudoEdges) != wantReasons || len(g.pseudoEdgeReasons) != wantTracked {
+		tt.Fatal("CheckInvariants mutated pseudo-edge bookkeeping")
+	}
+}
