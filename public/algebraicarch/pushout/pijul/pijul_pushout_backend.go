@@ -26,7 +26,7 @@ import (
 )
 
 // pushoutBackend is the native realisation of [BackendI]: per-actor
-// graggles backed by the vendored pushout package, with on-disk patch
+// graggles backed by the sibling graggle packages, with on-disk patch
 // envelopes used as the peer-to-peer transport. There is no `pijul`
 // binary involved.
 type pushoutBackend struct{}

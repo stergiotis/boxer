@@ -1,9 +1,10 @@
 //go:build llm_generated_opus47
 
-// Package pijul wraps a patch-theory event-store as a multi-actor demo:
-// it spawns four working copies (Server + Alice/Bob/Charlie) backed by
-// a [BackendI], drives them through the [RepoI] interface, and renders
-// the resulting state through the imzero2/egui2 UI.
+// Package pijul is the domain half of a multi-actor patch-theory
+// event-store demo: four working copies (Server + Alice/Bob/Charlie)
+// backed by a [BackendI] and driven through the [RepoI] interface. The
+// imzero2/egui2 GUI consumer lives in hackathon_2026's pijuldemo
+// package, which imports this one.
 //
 // The package is structured around two seams:
 //

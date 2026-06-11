@@ -47,8 +47,9 @@ redistributed; the upstream repo SHA and the Wayback snapshots above
 provide archival pointers without re-hosting.
 
 The Go code in this subtree was first authored in the sister project
-`hackathon_2026` and vendored into boxer at upstream commit `cd992b1`
-under the import-rewrite recorded in commit `c6b802a`.
+`hackathon_2026` and moved into boxer (commit `c6b802a`); boxer is the
+canonical implementation, and `hackathon_2026` consumes it as a module
+dependency.
 
 ----------------------------------------------------------------------
 SCOPE OF THE BORROWING
@@ -68,18 +69,17 @@ blog series:
   * The patch-with-placeholder-hashes construction: changes are
     hashed with self-references replaced by a sentinel placeholder,
     then the placeholders are rewritten to the resulting patch hash.
-    See `patch.NewPatch` and the comment at `patch.go:159`.
+    See `patch.NewPatch`.
 
   * The apply / unapply / reapply round-trip test pattern used in
-    the property-based test suite. See `store/property_test.go:386`.
+    the property-based test suite (`store/property_test.go`).
 
 The Go implementation is an independent re-implementation guided by
 the blog series, not a line-by-line port of ojo's Rust source. No
-ojo code was copied verbatim. Several local design choices diverge
-from ojo and from the upstream `hackathon_2026` snapshot; these are
-flagged inline with `VENDOR DEVIATION:` comments — currently the
-BLAKE3 hash function (versus crypto/sha256), idempotent
-`store.Graggle.DeleteNode`, the de-fixup step in
+ojo code was copied verbatim. Several design choices diverge from
+ojo: the BLAKE3 hash function (versus crypto/sha256), patch identity
+covering the canonicalized dependency set, deleter-set tombstones in
+`store.Graggle.DeleteNode`/`UndeleteNode`, the de-fixup step in
 `patch.Patch.ComputeHash`, and the hex `MarshalText` / `UnmarshalText`
 on `types.PatchHash`.
 
@@ -91,8 +91,8 @@ The sibling package `public/algebraicarch/pushout/pijul/` wraps the
 Pijul VCS (a production patch-theory VCS that ojo prototypes ideas
 for) as a four-actor demo. It defines a `BackendI`/`RepoI` seam with
 two realisations: `pijulTextBackend` shells out to a real `pijul`
-binary; `pijulPushoutBackend` uses the graggle subtree directly
-without invoking an external binary. Pijul itself is GPL-2.0 and is
+binary; the pushout-native backend (`NewPushoutBackend`) uses the
+graggle subtree directly without invoking an external binary. Pijul itself is GPL-2.0 and is
 not redistributed by boxer — only invoked at runtime when the text
 backend is selected.
 

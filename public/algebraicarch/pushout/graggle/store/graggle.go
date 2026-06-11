@@ -191,10 +191,9 @@ func (inst *Graggle) AddNode(id t.NodeID, content []byte, patch t.PatchHash, upC
 // applying both patches must succeed in either order. The deleter is
 // recorded either way; the tombstone survives until UndeleteNode has
 // removed every recorded deleter, so unapplying one of two convergent
-// edits does not resurrect the node out from under the other.
-// (Replaces the earlier VENDOR DEVIATION that made DeleteNode a bare
-// no-op on tombstones — that fixed apply-commutativity but left the
-// inverse direction unsound.)
+// edits does not resurrect the node out from under the other. (An
+// earlier revision made DeleteNode a bare no-op on tombstones — that
+// fixed apply-commutativity but left the inverse direction unsound.)
 func (inst *Graggle) DeleteNode(id t.NodeID, deleter t.PatchHash) error {
 	if inst.deletedNodes.Contains(id) {
 		inst.addDeleter(id, deleter)

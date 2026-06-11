@@ -38,15 +38,16 @@ External references:
   [ids](https://jneem.github.io/ids/) /
   [cycles](https://jneem.github.io/cycles/) blog series.
 - Pijul user manual: <https://pijul.org/manual/>.
-- Native-Go reference implementation (planned migration target):
-  `../../../../../../hackathon_2026/src/go/public/pushout/graggle/`.
+- GUI demo consumer: `hackathon_2026/src/go/public/pijuldemo`, which
+  imports this repo's pushout packages as a module dependency.
 
 ## How it works
 
-This repo holds the *domain* half of the demo: backends, parsers, and
-the vendored graggle engine. The GUI/orchestration half (`DemoStore`,
-the task worker, egui2 windows and playbooks) lives in pebble2impl and
-is not part of this tree.
+This repo holds the *domain* half of the demo — backends, parsers, and
+the graggle engine — and is the canonical implementation. The
+GUI/orchestration half (`DemoStore`, the task worker, egui2 windows and
+playbooks) lives in `hackathon_2026/src/go/public/pijuldemo`, which
+depends on this repo.
 
 - **`pijul_backend.go`** — defines the *domain* seam: `BackendI` (a
   factory for `RepoI` handles) and `RepoI` (one actor's working copy).
@@ -203,7 +204,7 @@ Demo-level invariants (visible to anyone using `BackendI`/`RepoI`):
   order means no reliable anchor for a new row).
 
 (UI-level invariants — `PendingOverrides` keying, the `CliLogs` ring
-buffer — belong to the GUI half in pebble2impl.)
+buffer — belong to the GUI half in `hackathon_2026`'s `pijuldemo`.)
 
 Text-backend internal invariants (no longer visible to the demo, but
 still load-bearing for the `pijul-text` realisation):
@@ -364,6 +365,5 @@ OQ1–OQ6 for the enumerated options and the engineering recommendation
 ## Further reading
 
 - Theory: [A Categorical Theory of Patches](https://arxiv.org/abs/1311.3903).
-- Native Go target: `../../../../../../hackathon_2026/src/go/public/pushout/DESIGN.md`.
 - Decisions: ADRs may be added under `doc/adr/` once this experiment
   graduates from `llm_generated_*` provenance.
