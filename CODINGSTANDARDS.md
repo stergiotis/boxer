@@ -3,7 +3,7 @@ type: reference
 audience: contributor
 status: stable
 reviewed-by: "p@stergiotis"
-reviewed-date: 2026-05-21
+reviewed-date: 2026-06-12
 ---
 
 # Go Coding Standard
@@ -47,6 +47,7 @@ Target the most recent stable go version available.
 * Use `github.com/matoous/go-nanoid/v2` in place of uuids.
 * Use `github.com/rs/zerolog` for structured logging.
 * Use `github.com/stretchr/testify` for unittest assertions.
+* Use `pgregory.net/rapid` for property-based testing.
 * Use `github.com/zeebo/xxh3` as 64-bit non-cryptographic hash function.
 * Use `github.com/stergiotis/boxer/public/config/env` for environment-variable access (see [Configuration](#configuration)).
 * Use `github.com/stergiotis/boxer/public/observability/eh` for error construction and wrapping.
@@ -212,6 +213,7 @@ Use these canonical verb pairs rather than invented synonyms, so that symmetrica
 ## Testing
 
 *   **Assertions:** use `github.com/stretchr/testify` (see [Packages to Use](#packages-to-use)).
+*   **Property-based testing:** use `pgregory.net/rapid` (see [Packages to Use](#packages-to-use)) for invariant and round-trip properties, and its `rapid.StateMachine` / `t.Repeat` support for stateful command sequences. Go's native fuzzing (`testing.F`) stays appropriate for byte- and string-shaped inputs and composes with rapid via `rapid.MakeFuzz`.
 *   **Heavy test-only dependencies must be build-tag-gated.** If a test
     introduces a non-trivial dependency chain — containers (testcontainers-go),
     browser drivers, network harnesses, large fixture or model loaders — the
