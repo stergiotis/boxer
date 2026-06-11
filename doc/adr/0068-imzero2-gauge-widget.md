@@ -225,6 +225,19 @@ Independently, the battery consumer (`componentview/renderers.go`) switched off 
 
 Built, `go test` / `go vet` green (with new `fit.go` pure-helper tests), and screenshot-verified via the widgets TestDriver: the gauge demo's three dials (240 ms / 78% / 88°C) are unchanged, and the componentview battery dials fit "8500 mAh" / "900 mAh" inside the dial at both the default and the 115 px diameter — full charge green, low charge red.
 
+### 2026-06-11 — readout `MeasureText` reviewed against fetcher discipline: reads only in `Sync`, in bulk
+
+The auto-fit path added 2026-06-09 was reviewed against the imzero2 **fetcher discipline** (`doc/skills/imzero2-fetchers/SKILLS.md`); the finding is recorded here, no code changed. The rule that discipline enforces: every `Fetcher.Fetch*` opcode must originate from `StateManager.Sync()` at frame end. An inline fetch from a widget render body is silent at top scope but **deadlocks** the render loop the moment that body runs inside a deferred-block capture (a `dock.Tab` body, an `etable` row) — the fetch request sits unflushed in the capture buffer while its synchronous response read blocks on an empty pipe.
+
+The readout fit stays on the right side of that rule: it reads nothing back itself. Per frame `fitReadoutFont` (`fit.go`) does two non-blocking things —
+
+- `c.MeasureTextBind` emits `MeasureText` as an ordinary **buffered** command (`SendIntermediate`, *not* a `Fetch*`); Rust lays the string out and pushes its width into the `r9_f64` register.
+- it registers the `fitState.width` pointer as an r9_f64 databinding (`StateManager.AddR9F64Databinding`).
+
+The sole Rust→Go read is the single `FetchR9F64` drain inside `StateManager.Sync()` at frame end — one opcode returning every r9_f64 id+value for the whole frame at once (every gauge readout, every `colorscale` tick width, every animation tween), written into the registered pointers and then `Reset()`. The dial fetches nothing of its own; its measurement rides the one bulk, end-of-frame fetch the whole UI already shares.
+
+Two properties the 2026-06-09 entry noted are **consequences** of this discipline, not defects. The one-frame lag — the width lands the Sync *after* the call, so the first frame of a new readout string falls back to `approxReadoutWidth` — exists precisely because mid-frame reads are disallowed. And re-emitting the bind every frame is required upkeep, since `Sync` `Reset()`s the databindings: one buffered command per live dial. A corollary worth recording: because the read is deferred to `Sync`, the dial is safe to render *inside* a deferred-block capture (a dock tab, a table row), where a measure-then-use-synchronously implementation would deadlock — the gauge avoids that class of bug structurally rather than by convention.
+
 ## References
 
 - [ADR-0031 — ImZero2 design system: color foundations](./0031-imzero2-design-system-color.md) — §Updates 2026-06-06 promotes `styletokens.Tone`, which this widget consumes for zones; §SD5 is the accessibility rule SD7 carries.
