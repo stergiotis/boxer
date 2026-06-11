@@ -111,12 +111,12 @@ func (inst *pushoutBackend) Clone(ctx context.Context, src RepoI, destPath strin
 	srcRepo.Mu.Unlock()
 
 	dest = &PushoutRepo{
-		actor:        destActor,
-		path:         destPath,
-		Graggle:      cloned,
-		appliedHash:  clonedApplied,
-		MetaByHash:   clonedMeta,
-		writtenInit:  true,
+		actor:       destActor,
+		path:        destPath,
+		Graggle:     cloned,
+		appliedHash: clonedApplied,
+		MetaByHash:  clonedMeta,
+		writtenInit: true,
 	}
 	audit = fmt.Sprintf("[pushout-native] clone %s → %s", srcRepo.path, destPath)
 	return
@@ -817,4 +817,3 @@ func formatCellLine(c KVLine) (s string) {
 	s = fmt.Sprintf("%s \"%s\"\n", c.Path, c.Value)
 	return
 }
-

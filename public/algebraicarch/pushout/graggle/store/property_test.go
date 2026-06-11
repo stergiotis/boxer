@@ -190,10 +190,10 @@ func TestProperty_IncrementalVsBatch(tt *testing.T) {
 				downCtx = []t.NodeID{{Patch: base.Hash, Index: uint64(pos + 1)}}
 			}
 			c := patch.Change{
-				Kind:       patch.ChangeKindNewNode,
-				NodeID:     t.NodeID{Patch: t.PlaceholderHash, Index: uint64(i)},
-				Content:    []byte(fmt.Sprintf("ins_%d_%d\n", seed, i)),
-				UpContext:  []t.NodeID{upCtx},
+				Kind:        patch.ChangeKindNewNode,
+				NodeID:      t.NodeID{Patch: t.PlaceholderHash, Index: uint64(i)},
+				Content:     []byte(fmt.Sprintf("ins_%d_%d\n", seed, i)),
+				UpContext:   []t.NodeID{upCtx},
 				DownContext: downCtx,
 			}
 			allChanges = append(allChanges, c)
@@ -209,10 +209,10 @@ func TestProperty_IncrementalVsBatch(tt *testing.T) {
 		for i, c := range allChanges {
 			// Fix up placeholder to use unique per-change hash.
 			singleChange := patch.Change{
-				Kind:       c.Kind,
-				NodeID:     t.NodeID{Patch: t.PlaceholderHash, Index: 0},
-				Content:    c.Content,
-				UpContext:  c.UpContext,
+				Kind:        c.Kind,
+				NodeID:      t.NodeID{Patch: t.PlaceholderHash, Index: 0},
+				Content:     c.Content,
+				UpContext:   c.UpContext,
 				DownContext: c.DownContext,
 			}
 			pSingle := patch.NewPatch(fmt.Sprintf("incr_%d", i), baseSeed, []t.PatchHash{base.Hash}, []patch.Change{singleChange})

@@ -96,8 +96,8 @@ func FuzzPatchApplyUnapply(f *testing.F) {
 				Kind:        ChangeKindNewNode,
 				NodeID:      t.NodeID{Patch: t.PlaceholderHash, Index: 0},
 				Content:     content,
-				UpContext:    []t.NodeID{upCtx},
-				DownContext:  downCtx,
+				UpContext:   []t.NodeID{upCtx},
+				DownContext: downCtx,
 			},
 		})
 
