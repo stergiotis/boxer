@@ -64,6 +64,14 @@ Per the M0b refinement of [ADR-0031 §SD5](../../adr/0031-imzero2-design-system-
 | `border-faint-on-surface` | ui | floating | -17.5 | 15 | pass |
 | `border-faint-on-panel` | ui | floating | -19.2 | 15 | pass |
 | `body-on-selection` | text | 13pt/400 | -91.8 | 90 | pass |
+| `info-default-on-surface` | ui | meaningful | -66.0 | 60 | pass |
+| `success-default-on-surface` | ui | meaningful | -67.5 | 60 | pass |
+| `warning-default-on-surface` | ui | meaningful | -64.8 | 60 | pass |
+| `error-default-on-surface` | ui | meaningful | -62.2 | 60 | pass |
+| `accent-default-on-surface` | ui | meaningful | -64.8 | 60 | pass |
+| `secondary-on-surface` | text | 11pt/500 | -54.5 | 100 | **fail** |
+| `extreme-on-surface` | text | 13pt/600 | -101.5 | 85 | pass |
+| `mark-text-on-highlight` | text | 13pt/400 | -91.8 | 90 | pass |
 
 ## WCAG 2.1 contrast pairs (advisory)
 
@@ -86,4 +94,12 @@ Kept as a secondary signal — WCAG 2.1's relative-luminance math is known to mi
 | `border-faint-on-surface` | ui | 2.51:1 | fail | n/a |
 | `border-faint-on-panel` | ui | 2.97:1 | fail | n/a |
 | `body-on-selection` | body | 14.76:1 | pass | pass |
+| `info-default-on-surface` | ui | 8.89:1 | pass | n/a |
+| `success-default-on-surface` | ui | 9.14:1 | pass | n/a |
+| `warning-default-on-surface` | ui | 8.69:1 | pass | n/a |
+| `error-default-on-surface` | ui | 8.26:1 | pass | n/a |
+| `accent-default-on-surface` | ui | 8.72:1 | pass | n/a |
+| `secondary-on-surface` | body | 7.11:1 | pass | pass |
+| `extreme-on-surface` | body | 15.51:1 | pass | pass |
+| `mark-text-on-highlight` | body | 14.78:1 | pass | pass |
 

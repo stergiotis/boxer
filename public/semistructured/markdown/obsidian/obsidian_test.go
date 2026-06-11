@@ -7,6 +7,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -29,6 +30,27 @@ func TestStylesheet_Selectable(t *testing.T) {
 	require.Contains(t, ids, ".callout-title")  // obsidian-class coverage
 	require.Contains(t, ids, "max-width: 50em")               // reading column
 	require.NotContains(t, ids, "@import \"ids-palette.css\"") // statement folded in for inlining
+}
+
+// TestStylesheet_IDSCoversObsidianClasses guards that the IDS theme stays a
+// complete drop-in: every CSS class the renderer's default stylesheet styles
+// (which is exactly the class set the renderer emits) must also be covered by
+// the IDS stylesheet. A new callout type or feature class fails here instead of
+// rendering unstyled.
+func TestStylesheet_IDSCoversObsidianClasses(t *testing.T) {
+	obCSS := DefaultStylesheet()
+	idsCSS := Stylesheet(StylesheetIDS)
+
+	classRe := regexp.MustCompile(`\.[a-z][a-z0-9_-]+`)
+	seen := map[string]bool{}
+	for _, cls := range classRe.FindAllString(obCSS, -1) {
+		if seen[cls] {
+			continue
+		}
+		seen[cls] = true
+		require.Containsf(t, idsCSS, cls, "IDS stylesheet does not cover obsidian class %q", cls)
+	}
+	require.NotEmpty(t, seen, "no classes extracted from the default stylesheet")
 }
 
 func render(t *testing.T, opts Options, input string) string {

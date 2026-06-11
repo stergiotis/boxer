@@ -280,8 +280,9 @@ func runContrast(pf pairsFile, lookup map[string]palette.Token) (
 		// sits below APCA's body-text gate (Lc≥90 requires ≥12pt or
 		// heavier weights). Documented in color.md.
 		exempt := map[string]bool{
-			"disabled-on-panel":  true,
-			"secondary-on-panel": true,
+			"disabled-on-panel":    true,
+			"secondary-on-panel":   true,
+			"secondary-on-surface": true,
 		}
 		if !ar.Pass && !exempt[p.Name] {
 			apcaFailures = append(apcaFailures, fmt.Sprintf(

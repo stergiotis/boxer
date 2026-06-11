@@ -73,6 +73,7 @@
 *, *::before, *::after { box-sizing: border-box; }
 
 html {
+  color-scheme: dark; /* native scrollbars, form controls, spinners render dark */
   font-size: 100%;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
@@ -141,8 +142,8 @@ hr {
 }
 
 mark {
-  background: var(--ids-warning-strong);
-  color: var(--ids-bg-extreme);
+  background: var(--ids-warning-subtle);
+  color: var(--ids-text-primary);
   padding: 0.05em 0.2em;
   border-radius: var(--ids-radius-sm);
 }

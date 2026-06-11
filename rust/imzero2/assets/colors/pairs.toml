@@ -149,3 +149,71 @@ bg          = "semantic.accent.subtle"
 category    = "text"
 font_pt     = 13.0
 font_weight = 400
+
+# ---- ADR-0076: combinations the lean classless CSS target surfaces that the
+# egui pairs above don't already cover. The CSS draws tone titles and
+# secondary / extreme text on the RAISED bg_surface (callouts, embed-notes,
+# tags, table headers), plus the `mark` highlight (dark text on a light
+# warning fill). These are not web-only — any tone-on-surface egui usage is
+# the same combination; they were simply never gated.
+
+[[pair]]
+name        = "info-default-on-surface"
+fg          = "semantic.info.default"
+bg          = "neutral.spine.bg_surface"
+category    = "ui"
+ui_kind     = "meaningful"
+
+[[pair]]
+name        = "success-default-on-surface"
+fg          = "semantic.success.default"
+bg          = "neutral.spine.bg_surface"
+category    = "ui"
+ui_kind     = "meaningful"
+
+[[pair]]
+name        = "warning-default-on-surface"
+fg          = "semantic.warning.default"
+bg          = "neutral.spine.bg_surface"
+category    = "ui"
+ui_kind     = "meaningful"
+
+[[pair]]
+name        = "error-default-on-surface"
+fg          = "semantic.error.default"
+bg          = "neutral.spine.bg_surface"
+category    = "ui"
+ui_kind     = "meaningful"
+
+[[pair]]
+name        = "accent-default-on-surface"
+fg          = "semantic.accent.default"
+bg          = "neutral.spine.bg_surface"
+category    = "ui"
+ui_kind     = "meaningful"
+
+[[pair]]
+name        = "secondary-on-surface"
+fg          = "neutral.spine.text_secondary"
+bg          = "neutral.spine.bg_surface"
+category    = "text"
+font_pt     = 11.0
+font_weight = 500
+# Muted secondary text on a card — exempt like secondary-on-panel (ADR-0031
+# §SD5: Caption-tier secondary sits below the APCA body floor by design).
+
+[[pair]]
+name        = "extreme-on-surface"
+fg          = "neutral.spine.text_extreme"
+bg          = "neutral.spine.bg_surface"
+category    = "text"
+font_pt     = 13.0
+font_weight = 600   # table headers (th) render at 600
+
+[[pair]]
+name        = "mark-text-on-highlight"
+fg          = "neutral.spine.text_primary"
+bg          = "semantic.warning.subtle"
+category    = "text"
+font_pt     = 13.0
+font_weight = 400
