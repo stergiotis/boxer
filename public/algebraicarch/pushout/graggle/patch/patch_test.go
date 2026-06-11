@@ -199,7 +199,7 @@ func TestPatchApply_DeleteAlreadyDeleted(tt *testing.T) {
 	p1.Apply(g)
 
 	nodeID := t.NodeID{Patch: p1.Hash, Index: 0}
-	if err := g.DeleteNode(nodeID); err != nil {
+	if err := g.DeleteNode(nodeID, ph("p1_deleter")); err != nil {
 		tt.Fatalf("first delete failed: %v", err)
 	}
 	if !g.IsDeleted(nodeID) {

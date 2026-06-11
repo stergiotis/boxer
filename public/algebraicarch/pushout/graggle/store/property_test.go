@@ -130,7 +130,7 @@ func TestProperty_PseudoEdgeIdempotent(tt *testing.T) {
 			delIdx = lineCount - 1
 		}
 		nodeID := t.NodeID{Patch: base.Hash, Index: uint64(delIdx)}
-		g.DeleteNode(nodeID)
+		g.DeleteNode(nodeID, testDeleter)
 		g.ResolvePseudoEdges()
 
 		r1 := g.Render()
@@ -328,7 +328,7 @@ func TestProperty_RandomMixedSequence(tt *testing.T) {
 				p := patch.NewPatch(fmt.Sprintf("op_%d", op), "insert", nil, []patch.Change{c})
 				p.Apply(g)
 			case patch.ChangeKindDeleteNode:
-				g.DeleteNode(c.NodeID)
+				g.DeleteNode(c.NodeID, testDeleter)
 				g.ResolvePseudoEdges()
 			case patch.ChangeKindNewEdge:
 				g.AddEdge(c.Src, c.Dest, ph(fmt.Sprintf("edge_%d_%d", seed, op)))
@@ -429,7 +429,7 @@ func TestProperty_GhostMonotonicity(tt *testing.T) {
 			delIdx = lineCount - 1
 		}
 		deletedID := t.NodeID{Patch: base.Hash, Index: uint64(delIdx)}
-		g.DeleteNode(deletedID)
+		g.DeleteNode(deletedID, testDeleter)
 		g.ResolvePseudoEdges()
 
 		if !g.IsDeleted(deletedID) {

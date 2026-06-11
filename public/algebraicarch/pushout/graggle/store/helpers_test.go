@@ -73,3 +73,8 @@ func randomInsertPatch(base *patch.Patch, rng *rand.Rand, label string, lineCoun
 		},
 	})
 }
+
+// testDeleter is the deleter hash used by white-box tests that tombstone
+// nodes directly rather than through a patch. Tests that undelete must
+// pass the same hash back — UndeleteNode rejects unknown undeleters.
+var testDeleter = ph("test_deleter")

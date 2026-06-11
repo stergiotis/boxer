@@ -34,6 +34,7 @@ func CheckInvariants(g t.InspectableI) []error {
 	errs = append(errs, checkReasonTrackingConsistency(g)...)
 	errs = append(errs, checkLiveSubgraphConnectivity(g)...)
 	errs = append(errs, checkConflictConsistency(g)...)
+	errs = append(errs, checkTombstoneDeleters(g)...)
 	return errs
 }
 
@@ -414,6 +415,24 @@ func checkConflictConsistency(g t.InspectableI) []error {
 	}
 	if !isLinear && breaking == 0 {
 		errs = append(errs, eh.Errorf("LinearOrder()==nil but DetectConflicts reports no order/cycle/orphan conflict — conflict detector is incomplete for this graph"))
+	}
+	return errs
+}
+
+// Invariant 14: tombstones track their deleters. Every deleted node must
+// carry at least one recorded deleting patch (UndeleteNode resurrects on
+// the last one), and no live node may carry any.
+func checkTombstoneDeleters(g t.InspectableI) []error {
+	var errs []error
+	for id := range g.AllDeletedNodes() {
+		if g.NodeDeleterCount(id) == 0 {
+			errs = append(errs, eh.Errorf("deleted node %v has no recorded deleter", id))
+		}
+	}
+	for id := range g.AllLiveNodes() {
+		if g.NodeDeleterCount(id) != 0 {
+			errs = append(errs, eh.Errorf("live node %v has %d recorded deleters", id, g.NodeDeleterCount(id)))
+		}
 	}
 	return errs
 }

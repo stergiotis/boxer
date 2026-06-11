@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/qc"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/store"
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
 )
@@ -112,6 +113,28 @@ func FuzzPatchApplyUnapply(f *testing.F) {
 		restored := g.Render()
 		if !bytes.Equal(origRender, restored) {
 			tt.Fatalf("roundtrip failed: orig=%q restored=%q", origRender, restored)
+		}
+		if errs := qc.CheckInvariants(g); len(errs) != 0 {
+			tt.Fatalf("invariants violated after insert unapply: %v", errs)
+		}
+
+		// Delete leg: tombstone a fuzzed base node, unapply, and the
+		// render plus the structural invariants must be restored.
+		del := NewPatch("fuzz", "delete", []t.PatchHash{base.Hash}, []Change{
+			{Kind: ChangeKindDeleteNode, NodeID: t.NodeID{Patch: base.Hash, Index: idx}},
+		})
+		if err := del.Apply(g); err != nil {
+			tt.Fatalf("delete apply failed: %v", err)
+		}
+		if err := del.Unapply(g); err != nil {
+			tt.Fatalf("delete unapply failed: %v", err)
+		}
+		restored = g.Render()
+		if !bytes.Equal(origRender, restored) {
+			tt.Fatalf("delete roundtrip failed: orig=%q restored=%q", origRender, restored)
+		}
+		if errs := qc.CheckInvariants(g); len(errs) != 0 {
+			tt.Fatalf("invariants violated after delete unapply: %v", errs)
 		}
 	})
 }

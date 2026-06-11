@@ -59,7 +59,7 @@ func TestDeleteNode(tt *testing.T) {
 	g := New()
 	id := nid("p1", 0)
 	g.AddNode(id, []byte("hello\n"), ph("p1"), []t.NodeID{t.RootNodeID}, nil)
-	err := g.DeleteNode(id)
+	err := g.DeleteNode(id, testDeleter)
 	if err != nil {
 		tt.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestDeleteNode(tt *testing.T) {
 
 func TestDeleteRootFails(tt *testing.T) {
 	g := New()
-	err := g.DeleteNode(t.RootNodeID)
+	err := g.DeleteNode(t.RootNodeID, testDeleter)
 	if err == nil {
 		tt.Fatal("should not be able to delete root")
 	}
@@ -83,8 +83,8 @@ func TestUndeleteNode(tt *testing.T) {
 	g := New()
 	id := nid("p1", 0)
 	g.AddNode(id, []byte("hello\n"), ph("p1"), []t.NodeID{t.RootNodeID}, nil)
-	g.DeleteNode(id)
-	err := g.UndeleteNode(id)
+	g.DeleteNode(id, testDeleter)
+	err := g.UndeleteNode(id, testDeleter)
 	if err != nil {
 		tt.Fatal(err)
 	}
@@ -110,7 +110,7 @@ func TestClone_DeepCopy(tt *testing.T) {
 
 	// Mutate original: delete a node.
 	nodeID := t.NodeID{Patch: p.Hash, Index: 0}
-	g.DeleteNode(nodeID)
+	g.DeleteNode(nodeID, testDeleter)
 	g.ResolvePseudoEdges()
 
 	// Clone should be unaffected.
@@ -138,7 +138,7 @@ func TestClone_PreservesEdges(tt *testing.T) {
 	g.AddNode(c, []byte("c\n"), ph("clone_edge"), []t.NodeID{b}, nil)
 
 	// Delete middle to create pseudo-edges.
-	g.DeleteNode(b)
+	g.DeleteNode(b, testDeleter)
 	g.ResolvePseudoEdges()
 
 	clone := g.Clone()
@@ -163,7 +163,7 @@ func TestClone_PreservesDeletedNodes(tt *testing.T) {
 	g := New()
 	a := nid("clone_del", 0)
 	g.AddNode(a, []byte("a\n"), ph("clone_del"), []t.NodeID{t.RootNodeID}, nil)
-	g.DeleteNode(a)
+	g.DeleteNode(a, testDeleter)
 
 	clone := g.Clone()
 	if !clone.IsDeleted(a) {
@@ -240,7 +240,7 @@ func TestPseudoEdge_DeleteMiddle(tt *testing.T) {
 	g.AddNode(b, []byte("b\n"), ph("p1"), []t.NodeID{a}, nil)
 	g.AddNode(c, []byte("c\n"), ph("p1"), []t.NodeID{b}, nil)
 
-	g.DeleteNode(b)
+	g.DeleteNode(b, testDeleter)
 	g.ResolvePseudoEdges()
 
 	// Check that a has a child c (via pseudo-edge).
@@ -281,9 +281,9 @@ func TestPseudoEdge_DeleteLongMiddle(tt *testing.T) {
 	g.AddNode(d, []byte("d\n"), ph("p1"), []t.NodeID{c}, nil)
 	g.AddNode(e, []byte("e\n"), ph("p1"), []t.NodeID{d}, nil)
 
-	g.DeleteNode(b)
-	g.DeleteNode(c)
-	g.DeleteNode(d)
+	g.DeleteNode(b, testDeleter)
+	g.DeleteNode(c, testDeleter)
+	g.DeleteNode(d, testDeleter)
 	g.ResolvePseudoEdges()
 
 	order := algo.LinearOrder(g)
@@ -309,9 +309,9 @@ func TestPseudoEdge_UndeleteRemovesPseudo(tt *testing.T) {
 	g.AddNode(b, []byte("b\n"), ph("p1"), []t.NodeID{a}, nil)
 	g.AddNode(c, []byte("c\n"), ph("p1"), []t.NodeID{b}, nil)
 
-	g.DeleteNode(b)
+	g.DeleteNode(b, testDeleter)
 	g.ResolvePseudoEdges()
-	g.UndeleteNode(b)
+	g.UndeleteNode(b, testDeleter)
 	g.ResolvePseudoEdges()
 
 	order := algo.LinearOrder(g)

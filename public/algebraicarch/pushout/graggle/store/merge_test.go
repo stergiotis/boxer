@@ -27,7 +27,7 @@ func TestPseudoEdge_BranchingDeletion(tt *testing.T) {
 	g.AddNode(c, []byte("c\n"), ph("pe_branch"), []t.NodeID{a}, []t.NodeID{})
 	g.AddNode(d, []byte("d\n"), ph("pe_branch"), []t.NodeID{b, c}, nil)
 
-	g.DeleteNode(a)
+	g.DeleteNode(a, testDeleter)
 	g.ResolvePseudoEdges()
 
 	// root should now reach b and c.
@@ -52,7 +52,7 @@ func TestPseudoEdge_IdempotentResolve(tt *testing.T) {
 	g.AddNode(b, []byte("b\n"), ph("pe_idem"), []t.NodeID{a}, nil)
 	g.AddNode(c, []byte("c\n"), ph("pe_idem"), []t.NodeID{b}, nil)
 
-	g.DeleteNode(b)
+	g.DeleteNode(b, testDeleter)
 	g.ResolvePseudoEdges()
 
 	r1 := string(g.Render())
@@ -81,9 +81,9 @@ func TestPseudoEdge_MultipleUndeletions(tt *testing.T) {
 	g.AddNode(d, []byte("d\n"), ph("pe_multi"), []t.NodeID{c}, nil)
 	g.AddNode(e, []byte("e\n"), ph("pe_multi"), []t.NodeID{d}, nil)
 
-	g.DeleteNode(b)
-	g.DeleteNode(c)
-	g.DeleteNode(d)
+	g.DeleteNode(b, testDeleter)
+	g.DeleteNode(c, testDeleter)
+	g.DeleteNode(d, testDeleter)
 	g.ResolvePseudoEdges()
 
 	// Should be root -> a -> e.
@@ -93,7 +93,7 @@ func TestPseudoEdge_MultipleUndeletions(tt *testing.T) {
 	}
 
 	// Undelete c (splits deleted component {b,c,d} into {b} and {d}).
-	g.UndeleteNode(c)
+	g.UndeleteNode(c, testDeleter)
 	g.ResolvePseudoEdges()
 
 	// After undeletion, the live nodes should be: root, a, c, e.
@@ -137,11 +137,11 @@ func TestPseudoEdge_TwoReasons(tt *testing.T) {
 	g.AddNode(d, []byte("d\n"), ph("pe_2r"), []t.NodeID{c}, nil)
 	g.AddNode(e, []byte("e\n"), ph("pe_2r"), []t.NodeID{d}, nil)
 
-	g.DeleteNode(b)
+	g.DeleteNode(b, testDeleter)
 	g.ResolvePseudoEdges()
 	assertNoInvariantViolations(tt, g)
 
-	g.DeleteNode(d)
+	g.DeleteNode(d, testDeleter)
 	g.ResolvePseudoEdges()
 	assertNoInvariantViolations(tt, g)
 
@@ -152,7 +152,7 @@ func TestPseudoEdge_TwoReasons(tt *testing.T) {
 	}
 
 	// Now delete c — merges all into one component {b,c,d}.
-	g.DeleteNode(c)
+	g.DeleteNode(c, testDeleter)
 	g.ResolvePseudoEdges()
 	assertNoInvariantViolations(tt, g)
 
@@ -183,11 +183,11 @@ func TestPseudoEdge_DoubleReason(tt *testing.T) {
 	g.AddNode(b2, []byte("b2\n"), ph("pe_dr"), []t.NodeID{a}, nil)
 	g.AddNode(c, []byte("c\n"), ph("pe_dr"), []t.NodeID{b1, b2}, nil)
 
-	g.DeleteNode(b1)
+	g.DeleteNode(b1, testDeleter)
 	g.ResolvePseudoEdges()
 	assertNoInvariantViolations(tt, g)
 
-	g.DeleteNode(b2)
+	g.DeleteNode(b2, testDeleter)
 	g.ResolvePseudoEdges()
 	assertNoInvariantViolations(tt, g)
 
@@ -202,7 +202,7 @@ func TestPseudoEdge_DoubleReason(tt *testing.T) {
 	}
 
 	// Undelete b1 — pseudo-edge should survive because b2 still justifies it.
-	g.UndeleteNode(b1)
+	g.UndeleteNode(b1, testDeleter)
 	g.ResolvePseudoEdges()
 	assertNoInvariantViolations(tt, g)
 
@@ -218,7 +218,7 @@ func TestPseudoEdge_DoubleReason(tt *testing.T) {
 	}
 
 	// Undelete b2 — now no reason remains, pseudo-edge should be removed.
-	g.UndeleteNode(b2)
+	g.UndeleteNode(b2, testDeleter)
 	g.ResolvePseudoEdges()
 	assertNoInvariantViolations(tt, g)
 
@@ -244,8 +244,8 @@ func TestPseudoEdge_ReasonSurvivesPartialUndelete(tt *testing.T) {
 	g.AddNode(y, []byte("y\n"), ph("pe_partial"), []t.NodeID{x}, nil)
 	g.AddNode(b, []byte("b\n"), ph("pe_partial"), []t.NodeID{y}, nil)
 
-	g.DeleteNode(x)
-	g.DeleteNode(y)
+	g.DeleteNode(x, testDeleter)
+	g.DeleteNode(y, testDeleter)
 	g.ResolvePseudoEdges()
 	assertNoInvariantViolations(tt, g)
 
@@ -256,7 +256,7 @@ func TestPseudoEdge_ReasonSurvivesPartialUndelete(tt *testing.T) {
 	}
 
 	// Undelete x.
-	g.UndeleteNode(x)
+	g.UndeleteNode(x, testDeleter)
 	g.ResolvePseudoEdges()
 
 	// Now live nodes: root, a, x, b. Deleted: {y}.

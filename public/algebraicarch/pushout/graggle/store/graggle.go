@@ -5,9 +5,11 @@
 package store
 
 import (
+	"bytes"
 	"fmt"
 	"iter"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -33,6 +35,13 @@ type Graggle struct {
 
 	// Tombstoned (ghost/deleted) nodes — still in the graph, marked dead.
 	deletedNodes *t.NodeSet
+
+	// deleters[id] is the set of patches that tombstoned id. Two patches
+	// deleting the same node is the normal convergent-edit case; the
+	// tombstone must survive until the LAST deleting patch is unapplied,
+	// so UndeleteNode resurrects only when this set empties. Populated by
+	// DeleteNode, drained by UndeleteNode, cleared by RemoveNode.
+	deleters map[t.NodeID]map[t.PatchHash]struct{}
 
 	// Forward and backward adjacency lists.
 	edges     *t.MultiMap // src -> []Edge
@@ -82,6 +91,7 @@ func New() *Graggle {
 		nodes:             t.NewNodeSet(),
 		contents:          make(map[t.NodeID][]byte),
 		deletedNodes:      t.NewNodeSet(),
+		deleters:          make(map[t.NodeID]map[t.PatchHash]struct{}),
 		edges:             t.NewMultiMap(),
 		backEdges:         t.NewMultiMap(),
 		deletedPartition:  t.NewUnionFind(),
@@ -173,14 +183,21 @@ func (inst *Graggle) AddNode(id t.NodeID, content []byte, patch t.PatchHash, upC
 	return nil
 }
 
-// DeleteNode is idempotent on already-deleted nodes
-// (returns nil instead of an error). Two patches can legitimately delete
-// the same node — e.g. two actors editing the same line, where LineDiff
-// produces a delete+insert pair on each side. Applying both patches must
-// succeed in either order; the upstream "already deleted" error breaks
-// the merge model.
-func (inst *Graggle) DeleteNode(id t.NodeID) error {
+// DeleteNode tombstones a node on behalf of the given patch.
+//
+// Deleting an already-deleted node is not an error: two patches can
+// legitimately delete the same node — e.g. two actors editing the same
+// line, where LineDiff produces a delete+insert pair on each side, and
+// applying both patches must succeed in either order. The deleter is
+// recorded either way; the tombstone survives until UndeleteNode has
+// removed every recorded deleter, so unapplying one of two convergent
+// edits does not resurrect the node out from under the other.
+// (Replaces the earlier VENDOR DEVIATION that made DeleteNode a bare
+// no-op on tombstones — that fixed apply-commutativity but left the
+// inverse direction unsound.)
+func (inst *Graggle) DeleteNode(id t.NodeID, deleter t.PatchHash) error {
 	if inst.deletedNodes.Contains(id) {
+		inst.addDeleter(id, deleter)
 		return nil
 	}
 	if !inst.nodes.Contains(id) {
@@ -193,6 +210,7 @@ func (inst *Graggle) DeleteNode(id t.NodeID) error {
 	// Move from live to deleted.
 	inst.nodes.Remove(id)
 	inst.deletedNodes.Add(id)
+	inst.addDeleter(id, deleter)
 
 	// Record when the tombstone entered this graggle session, for
 	// SweepTombstones' retention-horizon decisions.
@@ -212,7 +230,13 @@ func (inst *Graggle) DeleteNode(id t.NodeID) error {
 	return nil
 }
 
-// UndeleteNode resurrects a tombstoned node.
+// UndeleteNode removes one deleter from a tombstoned node and resurrects
+// the node when (and only when) that was the last recorded deleter.
+//
+// The undeleter must be one of the patches that deleted the node —
+// anything else is a sequencing bug at the caller. While other deleters
+// remain, the call only shrinks the deleter set: the node stays
+// tombstoned because a still-applied patch wants it dead.
 //
 // Undeletion can split a deleted component into several. Union-find is
 // merge-only, so this method snapshots the component, drops every member
@@ -220,13 +244,25 @@ func (inst *Graggle) DeleteNode(id t.NodeID) error {
 // rep), then rebuilds new sub-components via recomputeDeletedComponents.
 // Each sub-component is marked dirty under its own rep so resolve-time
 // pseudo-edge recomputation handles each independently.
-func (inst *Graggle) UndeleteNode(id t.NodeID) error {
+func (inst *Graggle) UndeleteNode(id t.NodeID, undeleter t.PatchHash) error {
 	if !inst.deletedNodes.Contains(id) {
 		return eh.Errorf("node %v is not deleted", id)
 	}
+	set := inst.deleters[id]
+	if _, ok := set[undeleter]; !ok {
+		return eh.Errorf("node %v was not deleted by patch %s (deleters: %s)", id, undeleter, deleterList(set))
+	}
+	if len(set) > 1 {
+		// Other still-applied patches keep the tombstone alive.
+		delete(set, undeleter)
+		return nil
+	}
+	// Last deleter: actual resurrection. The purge check applies only
+	// here — removing a non-final deleter never needs the content back.
 	if _, purged := inst.contentPurged[id]; purged {
 		return eh.Errorf("node %v has been swept (content purged past retention horizon); patch is permanent past retention", id)
 	}
+	delete(inst.deleters, id)
 
 	// Snapshot the original component before any mutation. Members may
 	// include id itself.
@@ -271,6 +307,37 @@ func (inst *Graggle) UndeleteNode(id t.NodeID) error {
 	}
 
 	return nil
+}
+
+// addDeleter records that deleter tombstoned id.
+func (inst *Graggle) addDeleter(id t.NodeID, deleter t.PatchHash) {
+	set := inst.deleters[id]
+	if set == nil {
+		set = make(map[t.PatchHash]struct{}, 1)
+		inst.deleters[id] = set
+	}
+	set[deleter] = struct{}{}
+}
+
+// NodeDeleterCount returns how many patches currently hold id tombstoned.
+// Zero for live (or unknown) nodes.
+func (inst *Graggle) NodeDeleterCount(id t.NodeID) int {
+	return len(inst.deleters[id])
+}
+
+// deleterList renders a deleter set for error messages, in deterministic
+// order.
+func deleterList(set map[t.PatchHash]struct{}) string {
+	hs := make([]t.PatchHash, 0, len(set))
+	for h := range set {
+		hs = append(hs, h)
+	}
+	slices.SortFunc(hs, func(a, b t.PatchHash) int { return bytes.Compare(a[:], b[:]) })
+	parts := make([]string, len(hs))
+	for i, h := range hs {
+		parts[i] = h.String()
+	}
+	return strings.Join(parts, ", ")
 }
 
 // dropReasonsForRep removes pseudo-edge bookkeeping (and the corresponding
@@ -326,11 +393,45 @@ func (inst *Graggle) AddEdge(src, dest t.NodeID, patch t.PatchHash) error {
 }
 
 // RemoveEdge removes a specific edge.
+//
+// Removing a live or deleted-kind edge can invalidate derived pseudo-edge
+// state: a removed live edge may have been shadowing a pseudo-edge that a
+// neighbouring deleted component still justifies, and a removed
+// deleted-kind edge can split a deleted component. Every deleted
+// component adjacent to either endpoint is therefore marked dirty for
+// re-resolution. Pseudo-kind removals are resolution-internal bookkeeping
+// and must not re-dirty the components being resolved.
 func (inst *Graggle) RemoveEdge(src, dest t.NodeID, kind t.EdgeKindE, patch t.PatchHash) {
 	e := t.Edge{Dest: dest, Kind: kind, IntroducedBy: patch}
 	inst.edges.Remove(src, e)
 	backE := t.Edge{Dest: src, Kind: kind, IntroducedBy: patch}
 	inst.backEdges.Remove(dest, backE)
+	if kind != t.EdgeKindPseudo {
+		inst.markDirtyAroundEdgeRemoval(src, dest)
+	}
+}
+
+// markDirtyAroundEdgeRemoval flags the deleted components of both
+// endpoints and of every deleted neighbour of either endpoint.
+func (inst *Graggle) markDirtyAroundEdgeRemoval(src, dest t.NodeID) {
+	mark := func(id t.NodeID) {
+		if inst.deletedPartition.Contains(id) {
+			inst.dirtyReps[inst.deletedPartition.Find(id)] = struct{}{}
+		}
+	}
+	for _, endpoint := range [2]t.NodeID{src, dest} {
+		mark(endpoint)
+		for _, e := range inst.edges.Get(endpoint) {
+			if inst.IsDeleted(e.Dest) {
+				mark(e.Dest)
+			}
+		}
+		for _, be := range inst.backEdges.Get(endpoint) {
+			if inst.IsDeleted(be.Dest) {
+				mark(be.Dest)
+			}
+		}
+	}
 }
 
 // addEdgeInternal adds an edge and its reverse without validation.
@@ -453,11 +554,19 @@ func (inst *Graggle) mergeAdjacentDeleted(id t.NodeID) {
 // ResolvePseudoEdges recomputes pseudo-edges for all dirty deleted components.
 // For each connected component of deleted nodes, it finds the live "boundary"
 // nodes and adds pseudo-edges between them to keep the live subgraph connected.
+//
+// The dirty set is swapped out before iterating and the loop repeats until
+// no new dirt appears, so resolution work that flags further components
+// (rather than mutating the map under iteration) is handled in a
+// follow-up round instead of being silently discarded.
 func (inst *Graggle) ResolvePseudoEdges() {
-	for dirtyRep := range inst.dirtyReps {
-		inst.resolveComponent(dirtyRep)
+	for len(inst.dirtyReps) > 0 {
+		dirty := inst.dirtyReps
+		inst.dirtyReps = make(map[t.NodeID]struct{})
+		for dirtyRep := range dirty {
+			inst.resolveComponent(dirtyRep)
+		}
 	}
-	inst.dirtyReps = make(map[t.NodeID]struct{})
 }
 
 func (inst *Graggle) resolveComponent(rep t.NodeID) {
@@ -484,9 +593,32 @@ func (inst *Graggle) resolveComponent(rep t.NodeID) {
 		return
 	}
 
+	// Drop reason entries keyed under ANY member, not just the current
+	// rep: representatives shift as components merge, and entries keyed
+	// under a node that has since stopped being a representative would
+	// otherwise never be cleaned up.
+	for _, m := range members {
+		inst.dropReasonsForRep(m)
+	}
+
 	// Recompute connected components via DFS on the full graph (deleted subgraph).
 	// This handles the case where undeletion split a component.
 	components := inst.recomputeDeletedComponents(members)
+
+	// If the component split (e.g. RemoveEdge dropped a deleted-kind edge
+	// during Unapply), the merge-only union-find still holds one merged
+	// set; rebuild the partition for these members so each sub-component
+	// gets its own representative. Without this, every sub-component
+	// below resolves under the same Find() result and the last one
+	// overwrites the others' reasonPseudoEdges entry.
+	if len(components) > 1 {
+		for _, m := range members {
+			inst.deletedPartition.Remove(m)
+		}
+		for _, m := range members {
+			inst.deletedPartition.Add(m)
+		}
+	}
 
 	for newRep, component := range components {
 		// Update partition: all members point to new representative.
@@ -702,12 +834,16 @@ func (inst *Graggle) AllLiveNodes() iter.Seq[t.NodeID] {
 }
 
 // RemoveNode removes a node and its content from the live set.
-// Used by Unapply to clean up nodes added by a patch.
+// Used by Unapply to clean up nodes added by a patch. The caller must
+// ensure the node is not tombstoned (Patch.Unapply pre-flights this);
+// the deleter entry is cleared defensively so misuse surfaces through
+// the tombstone invariants rather than as stale bookkeeping.
 func (inst *Graggle) RemoveNode(id t.NodeID) {
 	inst.nodes.Remove(id)
 	delete(inst.contents, id)
 	delete(inst.tombstoneAt, id)
 	delete(inst.contentPurged, id)
+	delete(inst.deleters, id)
 }
 
 // NodeContent returns the content of a node, or nil if not found.
@@ -1005,6 +1141,14 @@ func (inst *Graggle) Clone() *Graggle {
 	}
 	for rep := range inst.dirtyReps {
 		ng.dirtyReps[rep] = struct{}{}
+	}
+	// Copy deleter sets.
+	for id, set := range inst.deleters {
+		cp := make(map[t.PatchHash]struct{}, len(set))
+		for h := range set {
+			cp[h] = struct{}{}
+		}
+		ng.deleters[id] = cp
 	}
 	// Copy tombstone retention bookkeeping.
 	for id, when := range inst.tombstoneAt {

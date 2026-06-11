@@ -47,7 +47,7 @@ func TestInvariants_AfterDeletion(tt *testing.T) {
 	p.Apply(g)
 
 	// Delete middle node.
-	g.DeleteNode(t.NodeID{Patch: p.Hash, Index: 1})
+	g.DeleteNode(t.NodeID{Patch: p.Hash, Index: 1}, testDeleter)
 	g.ResolvePseudoEdges()
 	assertNoInvariantViolations(tt, g)
 }
@@ -62,9 +62,9 @@ func TestInvariants_AfterUndeletion(tt *testing.T) {
 	p.Apply(g)
 
 	mid := t.NodeID{Patch: p.Hash, Index: 1}
-	g.DeleteNode(mid)
+	g.DeleteNode(mid, testDeleter)
 	g.ResolvePseudoEdges()
-	g.UndeleteNode(mid)
+	g.UndeleteNode(mid, testDeleter)
 	g.ResolvePseudoEdges()
 	assertNoInvariantViolations(tt, g)
 }
@@ -223,7 +223,7 @@ func TestInvariants_RandomDeleteSequence(tt *testing.T) {
 				idx := rng.Intn(lineCount)
 				if _, ok := deleted[idx]; !ok {
 					deleted[idx] = struct{}{}
-					g.DeleteNode(t.NodeID{Patch: base.Hash, Index: uint64(idx)})
+					g.DeleteNode(t.NodeID{Patch: base.Hash, Index: uint64(idx)}, testDeleter)
 					break
 				}
 			}

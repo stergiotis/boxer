@@ -7,6 +7,7 @@ package patch
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 
@@ -120,19 +121,34 @@ func (inst *Patch) changesForHash() (out []Change) {
 }
 
 // NewPatch creates a patch from a list of changes, computing its hash.
+//
+// The changes (and their context slices) are deep-copied before the
+// placeholder fixup below rewrites NodeIDs: callers keep ownership of
+// their slice and can reuse it — building a second patch from the same
+// changes must see the original placeholders, not this patch's hash.
+// Content byte slices are shared and treated as immutable.
 func NewPatch(author string, description string, deps []t.PatchHash, changes []Change) (inst *Patch) {
+	owned := make([]Change, len(changes))
+	for i, c := range changes {
+		owned[i] = c
+		owned[i].UpContext = slices.Clone(c.UpContext)
+		owned[i].DownContext = slices.Clone(c.DownContext)
+	}
 	inst = &Patch{
 		Author:       author,
 		Description:  description,
-		Dependencies: deps,
-		Changes:      changes,
+		Dependencies: slices.Clone(deps),
+		Changes:      owned,
 	}
 	inst.Hash = inst.ComputeHash()
 
-	// Fix up NodeIDs: replace placeholder hashes (0xFF...) with the real hash.
+	// Fix up NodeIDs: replace placeholder hashes (0xFF...) with the real
+	// hash — for every change kind, mirroring changesForHash's
+	// unconditional de-fixup (a DeleteNode aimed at a node introduced by
+	// this same patch must resolve too).
 	for i := range inst.Changes {
 		c := &inst.Changes[i]
-		if c.Kind == ChangeKindNewNode && c.NodeID.Patch.IsPlaceholder() {
+		if c.NodeID.Patch.IsPlaceholder() {
 			c.NodeID.Patch = inst.Hash
 		}
 		for j := range c.UpContext {
@@ -145,13 +161,11 @@ func NewPatch(author string, description string, deps []t.PatchHash, changes []C
 				c.DownContext[j].Patch = inst.Hash
 			}
 		}
-		if c.Kind == ChangeKindNewEdge {
-			if c.Src.Patch.IsPlaceholder() {
-				c.Src.Patch = inst.Hash
-			}
-			if c.Dest.Patch.IsPlaceholder() {
-				c.Dest.Patch = inst.Hash
-			}
+		if c.Src.Patch.IsPlaceholder() {
+			c.Src.Patch = inst.Hash
+		}
+		if c.Dest.Patch.IsPlaceholder() {
+			c.Dest.Patch = inst.Hash
 		}
 	}
 
@@ -165,7 +179,17 @@ func NewPatch(author string, description string, deps []t.PatchHash, changes []C
 // Apply applies the patch to a graph store.
 // Changes are applied in order: NewNode and NewEdge first, then DeleteNode.
 // After applying, ResolvePseudoEdges is called.
+//
+// Apply is all-or-nothing with respect to the failure modes it can
+// detect: every change is validated against the store (pass 0) before
+// the first mutation, so a patch with a missing context or dangling
+// delete target leaves the store untouched instead of half-applied.
 func (inst *Patch) Apply(g t.GraphStoreI) (err error) {
+	err = inst.validateAgainst(g)
+	if err != nil {
+		err = eh.Errorf("apply %s: %w", inst.Hash, err)
+		return
+	}
 	// Pass 1: non-deletion changes.
 	for _, c := range inst.Changes {
 		switch c.Kind {
@@ -188,7 +212,7 @@ func (inst *Patch) Apply(g t.GraphStoreI) (err error) {
 		if c.Kind != ChangeKindDeleteNode {
 			continue
 		}
-		err = g.DeleteNode(c.NodeID)
+		err = g.DeleteNode(c.NodeID, inst.Hash)
 		if err != nil {
 			err = eh.Errorf("apply DeleteNode %v: %w", c.NodeID, err)
 			return
@@ -198,19 +222,77 @@ func (inst *Patch) Apply(g t.GraphStoreI) (err error) {
 	return
 }
 
+// validateAgainst checks every change against the current graph state
+// before any mutation, accounting for nodes this patch itself introduces
+// earlier in the change list. Error wording mirrors the store's own
+// messages so callers match on the same strings either way.
+func (inst *Patch) validateAgainst(g t.GraphReaderI) (err error) {
+	willExist := make(map[t.NodeID]struct{})
+	exists := func(id t.NodeID) bool {
+		if _, ok := willExist[id]; ok {
+			return true
+		}
+		return g.HasNode(id)
+	}
+	for _, c := range inst.Changes {
+		switch c.Kind {
+		case ChangeKindNewNode:
+			if exists(c.NodeID) {
+				err = eh.Errorf("node %v already exists", c.NodeID)
+				return
+			}
+			for _, up := range c.UpContext {
+				if !exists(up) {
+					err = eh.Errorf("up-context node %v does not exist", up)
+					return
+				}
+			}
+			for _, down := range c.DownContext {
+				if !exists(down) {
+					err = eh.Errorf("down-context node %v does not exist", down)
+					return
+				}
+			}
+			willExist[c.NodeID] = struct{}{}
+		case ChangeKindNewEdge:
+			if !exists(c.Src) {
+				err = eh.Errorf("source node %v does not exist", c.Src)
+				return
+			}
+			if !exists(c.Dest) {
+				err = eh.Errorf("dest node %v does not exist", c.Dest)
+				return
+			}
+		case ChangeKindDeleteNode:
+			if c.NodeID == t.RootNodeID {
+				err = eh.Errorf("cannot delete root node")
+				return
+			}
+			if !exists(c.NodeID) {
+				err = eh.Errorf("node %v does not exist", c.NodeID)
+				return
+			}
+		}
+	}
+	return
+}
+
 // Unapply reverses the patch. Changes are reversed in reverse order:
 // first undelete, then remove edges, then remove nodes.
 //
 // Returns an error if any node introduced by this patch still has
 // incident edges that were introduced by a different patch — removing
-// the node would leave those edges dangling. Callers must unapply
-// dependents first.
+// the node would leave those edges dangling — or is tombstoned by a
+// still-applied patch (a delete-only dependent introduces no edges, so
+// the edge check alone cannot see it). Callers must unapply dependents
+// first.
 //
-// Also returns an error if any node this patch tombstoned has had its
-// content purged by SweepTombstones (or, in future, Forget): the
-// resurrection would produce a node with no recoverable bytes, which
-// breaks the system's content guarantees. Past the retention horizon,
-// the patch is effectively permanent.
+// Also returns an error if any node this patch tombstoned — and would
+// actually resurrect, being its last deleter — has had its content
+// purged by SweepTombstones (or, in future, Forget): the resurrection
+// would produce a node with no recoverable bytes, which breaks the
+// system's content guarantees. Past the retention horizon, the patch is
+// effectively permanent.
 func (inst *Patch) Unapply(g t.GraphStoreI) (err error) {
 	// Pre-flight: every node we are about to remove must have no incident
 	// edges from other patches.
@@ -224,18 +306,59 @@ func (inst *Patch) Unapply(g t.GraphStoreI) (err error) {
 			return
 		}
 	}
-	// Pre-flight: every node we are about to undelete must still have
-	// reconstructible content. If the sweep dropped it, the patch can no
-	// longer be unapplied; surface a clear error rather than producing
-	// an empty-content node.
+
+	// deleterCount reports how many patches currently hold a node
+	// tombstoned, when the store can tell us (the concrete Graggle can).
+	deleterCount := func(id t.NodeID) (n int, known bool) {
+		if dc, ok := g.(interface{ NodeDeleterCount(id t.NodeID) int }); ok {
+			n, known = dc.NodeDeleterCount(id), true
+		}
+		return
+	}
+	ownDeletes := make(map[t.NodeID]struct{})
+	for _, c := range inst.Changes {
+		if c.Kind == ChangeKindDeleteNode {
+			ownDeletes[c.NodeID] = struct{}{}
+		}
+	}
+
+	// Pre-flight: every node we are about to remove must not be tombstoned
+	// by another still-applied patch. A DeleteNode-only dependent
+	// introduces no edges, so the foreign-edge check above cannot see it —
+	// and RemoveNode on a tombstone would rip the node out from under the
+	// patch that deleted it.
+	for _, c := range inst.Changes {
+		if c.Kind != ChangeKindNewNode || !g.IsDeleted(c.NodeID) {
+			continue
+		}
+		if _, own := ownDeletes[c.NodeID]; !own {
+			err = eh.Errorf("unapply %s: node %v is tombstoned by another still-applied patch; unapply dependents first", inst.Hash, c.NodeID)
+			return
+		}
+		if n, known := deleterCount(c.NodeID); known && n > 1 {
+			err = eh.Errorf("unapply %s: node %v is tombstoned by %d patches; unapply dependents first", inst.Hash, c.NodeID, n)
+			return
+		}
+	}
+
+	// Pre-flight: every node whose undeletion would actually resurrect it
+	// (we are its last deleter) must still have reconstructible content.
+	// If the sweep dropped it, the patch can no longer be unapplied;
+	// surface a clear error rather than producing an empty-content node.
+	// While other deleters remain, no resurrection happens and the purge
+	// is irrelevant to this unapply.
 	for _, c := range inst.Changes {
 		if c.Kind != ChangeKindDeleteNode {
 			continue
 		}
-		if g.NodeContentStatus(c.NodeID) == t.NodeContentStatusPurged {
-			err = eh.Errorf("unapply %s: node %v has been swept (content purged past retention horizon); patch is permanent past retention", inst.Hash, c.NodeID)
-			return
+		if g.NodeContentStatus(c.NodeID) != t.NodeContentStatusPurged {
+			continue
 		}
+		if n, known := deleterCount(c.NodeID); known && n > 1 {
+			continue
+		}
+		err = eh.Errorf("unapply %s: node %v has been swept (content purged past retention horizon); patch is permanent past retention", inst.Hash, c.NodeID)
+		return
 	}
 
 	// Pass 1: undelete nodes.
@@ -244,7 +367,7 @@ func (inst *Patch) Unapply(g t.GraphStoreI) (err error) {
 		if c.Kind != ChangeKindDeleteNode {
 			continue
 		}
-		err = g.UndeleteNode(c.NodeID)
+		err = g.UndeleteNode(c.NodeID, inst.Hash)
 		if err != nil {
 			err = eh.Errorf("unapply DeleteNode %v: %w", c.NodeID, err)
 			return

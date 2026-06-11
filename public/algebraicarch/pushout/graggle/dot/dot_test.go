@@ -46,7 +46,7 @@ func TestDot_WithDeletedAndPseudo(tt *testing.T) {
 	g.AddNode(b, []byte("b\n"), ph("dot1"), []t.NodeID{a}, nil)
 	g.AddNode(c, []byte("c\n"), ph("dot1"), []t.NodeID{b}, nil)
 
-	g.DeleteNode(b)
+	g.DeleteNode(b, ph("dot1_del"))
 	g.ResolvePseudoEdges()
 
 	d := dot.Dot(g)

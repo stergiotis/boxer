@@ -31,10 +31,16 @@ type GraphReaderI interface {
 
 // GraphWriterI provides mutation access to the graph.
 // Used by Patch.Apply and Patch.Unapply.
+//
+// DeleteNode and UndeleteNode carry the identity of the deleting /
+// undeleting patch: tombstones track the set of patches that deleted them,
+// and a node is resurrected only when its last deleter is unapplied. Two
+// patches deleting the same node is the normal convergent-edit case, so
+// the tombstone must survive until both are gone.
 type GraphWriterI interface {
 	AddNode(id NodeID, content []byte, patch PatchHash, upContext, downContext []NodeID) error
-	DeleteNode(id NodeID) error
-	UndeleteNode(id NodeID) error
+	DeleteNode(id NodeID, deleter PatchHash) error
+	UndeleteNode(id NodeID, undeleter PatchHash) error
 	AddEdge(src, dest NodeID, patch PatchHash) error
 	RemoveEdge(src, dest NodeID, kind EdgeKindE, patch PatchHash)
 	RemoveNode(id NodeID)
@@ -62,6 +68,9 @@ type InspectableI interface {
 	ForwardEdgeSources() iter.Seq[NodeID]
 	BackwardEdgeSources() iter.Seq[NodeID]
 	HasLiveEdgeTo(src, dest NodeID) bool
+
+	// Tombstone deleter bookkeeping.
+	NodeDeleterCount(id NodeID) int
 
 	// Deleted partition inspection.
 	DeletedPartitionContains(id NodeID) bool

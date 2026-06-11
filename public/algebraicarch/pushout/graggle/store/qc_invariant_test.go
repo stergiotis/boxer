@@ -87,7 +87,7 @@ func TestInvariant_LiveEdgeToDeletedNode(tt *testing.T) {
 	if err := g.AddNode(b, []byte("b"), ph("p"), []t.NodeID{a}, nil); err != nil {
 		tt.Fatal(err)
 	}
-	if err := g.DeleteNode(b); err != nil {
+	if err := g.DeleteNode(b, testDeleter); err != nil {
 		tt.Fatal(err)
 	}
 	g.ResolvePseudoEdges()
@@ -103,7 +103,7 @@ func TestInvariant_DeletedNodeMissingFromPartition(tt *testing.T) {
 	if err := g.AddNode(a, []byte("a"), ph("p"), []t.NodeID{t.RootNodeID}, nil); err != nil {
 		tt.Fatal(err)
 	}
-	if err := g.DeleteNode(a); err != nil {
+	if err := g.DeleteNode(a, testDeleter); err != nil {
 		tt.Fatal(err)
 	}
 	g.deletedPartition.Remove(a)
@@ -127,7 +127,7 @@ func TestInvariant_DirtyRepRemains(tt *testing.T) {
 	if err := g.AddNode(a, []byte("a"), ph("p"), []t.NodeID{t.RootNodeID}, nil); err != nil {
 		tt.Fatal(err)
 	}
-	if err := g.DeleteNode(a); err != nil {
+	if err := g.DeleteNode(a, testDeleter); err != nil {
 		tt.Fatal(err)
 	}
 	// Skip ResolvePseudoEdges so dirty reps remain.
@@ -179,7 +179,7 @@ func TestInvariant_PseudoEdgeMissing(tt *testing.T) {
 	if err := g.AddNode(c, []byte("c"), ph("p"), []t.NodeID{b}, nil); err != nil {
 		tt.Fatal(err)
 	}
-	if err := g.DeleteNode(b); err != nil {
+	if err := g.DeleteNode(b, testDeleter); err != nil {
 		tt.Fatal(err)
 	}
 	g.ResolvePseudoEdges()
@@ -203,7 +203,7 @@ func TestInvariant_PseudoEdgeTrackedButMissing(tt *testing.T) {
 	if err := g.AddNode(c, []byte("c"), ph("p"), []t.NodeID{b}, nil); err != nil {
 		tt.Fatal(err)
 	}
-	if err := g.DeleteNode(b); err != nil {
+	if err := g.DeleteNode(b, testDeleter); err != nil {
 		tt.Fatal(err)
 	}
 	g.ResolvePseudoEdges()
@@ -252,7 +252,7 @@ func TestCheckInvariants_DoesNotMutate(tt *testing.T) {
 			tt.Fatal(err)
 		}
 	}
-	if err := g.DeleteNode(b); err != nil {
+	if err := g.DeleteNode(b, testDeleter); err != nil {
 		tt.Fatal(err)
 	}
 	// Deliberately dirty: no ResolvePseudoEdges yet.
@@ -280,4 +280,30 @@ func TestCheckInvariants_DoesNotMutate(tt *testing.T) {
 	if g.DirtyRepCount() != wantDirty || len(g.reasonPseudoEdges) != wantReasons || len(g.pseudoEdgeReasons) != wantTracked {
 		tt.Fatal("CheckInvariants mutated pseudo-edge bookkeeping")
 	}
+}
+
+// 14. Tombstone deleter tracking: a deleted node without a recorded
+// deleter, and a live node carrying one, must both be reported.
+func TestInvariant_TombstoneWithoutDeleter(tt *testing.T) {
+	g := New()
+	a := nid("p", 0)
+	if err := g.AddNode(a, []byte("a"), ph("p"), []t.NodeID{t.RootNodeID}, nil); err != nil {
+		tt.Fatal(err)
+	}
+	if err := g.DeleteNode(a, testDeleter); err != nil {
+		tt.Fatal(err)
+	}
+	g.ResolvePseudoEdges()
+	delete(g.deleters, a)
+	hasErrorContaining(tt, qc.CheckInvariants(g), "no recorded deleter")
+}
+
+func TestInvariant_LiveNodeWithDeleter(tt *testing.T) {
+	g := New()
+	a := nid("p", 0)
+	if err := g.AddNode(a, []byte("a"), ph("p"), []t.NodeID{t.RootNodeID}, nil); err != nil {
+		tt.Fatal(err)
+	}
+	g.addDeleter(a, testDeleter)
+	hasErrorContaining(tt, qc.CheckInvariants(g), "recorded deleters")
 }

@@ -77,7 +77,7 @@ func BenchmarkResolvePseudoEdges_100Deleted(b *testing.B) {
 	// Create 102 nodes, delete the middle 100.
 	g, base := benchmarkBase(b, 102)
 	for i := 1; i <= 100; i++ {
-		g.DeleteNode(t.NodeID{Patch: base.Hash, Index: uint64(i)})
+		g.DeleteNode(t.NodeID{Patch: base.Hash, Index: uint64(i)}, ph("bench_del"))
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

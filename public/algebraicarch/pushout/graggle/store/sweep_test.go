@@ -41,7 +41,7 @@ func TestSweepTombstones_PurgePastHorizon(tt *testing.T) {
 	if err := g.AddNode(id, []byte("hello\n"), ph("p1"), []t.NodeID{t.RootNodeID}, nil); err != nil {
 		tt.Fatal(err)
 	}
-	if err := g.DeleteNode(id); err != nil {
+	if err := g.DeleteNode(id, testDeleter); err != nil {
 		tt.Fatal(err)
 	}
 	// Sweep at t=2000 with horizon=500s; tombstone is at 1000, cutoff is 1500 → purged.
@@ -67,7 +67,7 @@ func TestSweepTombstones_PreserveWithinHorizon(tt *testing.T) {
 	if err := g.AddNode(id, []byte("hello\n"), ph("p1"), []t.NodeID{t.RootNodeID}, nil); err != nil {
 		tt.Fatal(err)
 	}
-	if err := g.DeleteNode(id); err != nil {
+	if err := g.DeleteNode(id, testDeleter); err != nil {
 		tt.Fatal(err)
 	}
 	// Sweep at t=1200 with horizon=500s; cutoff is 700, tombstone at 1000 is newer → preserved.
@@ -90,7 +90,7 @@ func TestSweepTombstones_Idempotent(tt *testing.T) {
 	if err := g.AddNode(id, []byte("x"), ph("p1"), []t.NodeID{t.RootNodeID}, nil); err != nil {
 		tt.Fatal(err)
 	}
-	if err := g.DeleteNode(id); err != nil {
+	if err := g.DeleteNode(id, testDeleter); err != nil {
 		tt.Fatal(err)
 	}
 	first, _ := g.SweepTombstones(time.Unix(2000, 0), 500*time.Second)
@@ -114,7 +114,7 @@ func TestSweepTombstones_DoesNotTouchLiveNodes(tt *testing.T) {
 	if err := g.AddNode(deleted, []byte("dead\n"), ph("p1"), []t.NodeID{live}, nil); err != nil {
 		tt.Fatal(err)
 	}
-	if err := g.DeleteNode(deleted); err != nil {
+	if err := g.DeleteNode(deleted, testDeleter); err != nil {
 		tt.Fatal(err)
 	}
 	g.SweepTombstones(time.Unix(9999, 0), time.Second)
@@ -138,7 +138,7 @@ func TestSweepTombstones_ReturnsSortedIDs(tt *testing.T) {
 		}
 	}
 	for _, id := range []t.NodeID{a, b, c} {
-		if err := g.DeleteNode(id); err != nil {
+		if err := g.DeleteNode(id, testDeleter); err != nil {
 			tt.Fatal(err)
 		}
 	}
@@ -155,11 +155,11 @@ func TestUndeleteNode_RefusesWhenPurged(tt *testing.T) {
 	if err := g.AddNode(id, []byte("x"), ph("p1"), []t.NodeID{t.RootNodeID}, nil); err != nil {
 		tt.Fatal(err)
 	}
-	if err := g.DeleteNode(id); err != nil {
+	if err := g.DeleteNode(id, testDeleter); err != nil {
 		tt.Fatal(err)
 	}
 	g.SweepTombstones(time.Unix(2000, 0), time.Second)
-	err := g.UndeleteNode(id)
+	err := g.UndeleteNode(id, testDeleter)
 	if err == nil || !strings.Contains(err.Error(), "purged past retention horizon") {
 		tt.Fatalf("expected purged-content error from UndeleteNode, got %v", err)
 	}
@@ -172,13 +172,13 @@ func TestUndeleteNode_ClearsTombstoneAtAndContent(tt *testing.T) {
 	if err := g.AddNode(id, []byte("x"), ph("p1"), []t.NodeID{t.RootNodeID}, nil); err != nil {
 		tt.Fatal(err)
 	}
-	if err := g.DeleteNode(id); err != nil {
+	if err := g.DeleteNode(id, testDeleter); err != nil {
 		tt.Fatal(err)
 	}
 	if _, ok := g.tombstoneAt[id]; !ok {
 		tt.Fatal("DeleteNode should record tombstoneAt")
 	}
-	if err := g.UndeleteNode(id); err != nil {
+	if err := g.UndeleteNode(id, testDeleter); err != nil {
 		tt.Fatal(err)
 	}
 	if _, ok := g.tombstoneAt[id]; ok {
@@ -207,7 +207,7 @@ func TestNodeContentStatus_AllThreeStates(tt *testing.T) {
 	if err := g.AddNode(purged, []byte("p"), ph("p1"), []t.NodeID{present}, nil); err != nil {
 		tt.Fatal(err)
 	}
-	if err := g.DeleteNode(purged); err != nil {
+	if err := g.DeleteNode(purged, testDeleter); err != nil {
 		tt.Fatal(err)
 	}
 	g.SweepTombstones(time.Unix(9999, 0), time.Second)
@@ -223,7 +223,7 @@ func TestClone_PreservesTombstoneBookkeeping(tt *testing.T) {
 	if err := g.AddNode(id, []byte("x"), ph("p1"), []t.NodeID{t.RootNodeID}, nil); err != nil {
 		tt.Fatal(err)
 	}
-	if err := g.DeleteNode(id); err != nil {
+	if err := g.DeleteNode(id, testDeleter); err != nil {
 		tt.Fatal(err)
 	}
 	g.SweepTombstones(time.Unix(2000, 0), time.Second)
@@ -301,7 +301,7 @@ func TestSweepTombstones_NoTimeAdvanceMeansNoPurges(tt *testing.T) {
 	if err := g.AddNode(id, []byte("x"), ph("p1"), []t.NodeID{t.RootNodeID}, nil); err != nil {
 		tt.Fatal(err)
 	}
-	if err := g.DeleteNode(id); err != nil {
+	if err := g.DeleteNode(id, testDeleter); err != nil {
 		tt.Fatal(err)
 	}
 	// Sweep with now == tombstone time, horizon 0: tombstone is at cutoff,

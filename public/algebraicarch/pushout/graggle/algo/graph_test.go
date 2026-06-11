@@ -245,7 +245,7 @@ func TestDetectConflicts_ZombieConflict(tt *testing.T) {
 
 	x := nid("dc_zomb_x", 0)
 	g.AddNode(x, []byte("X\n"), ph("dc_zomb_x"), []t.NodeID{b}, []t.NodeID{c})
-	if err := g.DeleteNode(b); err != nil {
+	if err := g.DeleteNode(b, ph("dc_zomb_del")); err != nil {
 		tt.Fatalf("DeleteNode(b): %v", err)
 	}
 	g.ResolvePseudoEdges()
@@ -287,10 +287,10 @@ func TestDetectConflicts_NoZombieAfterUndelete(tt *testing.T) {
 	g.AddNode(c, []byte("c\n"), ph("dc_zomb_undel"), []t.NodeID{b}, nil)
 	x := nid("dc_zomb_undel_x", 0)
 	g.AddNode(x, []byte("X\n"), ph("dc_zomb_undel_x"), []t.NodeID{b}, []t.NodeID{c})
-	if err := g.DeleteNode(b); err != nil {
+	if err := g.DeleteNode(b, ph("dc_zomb_undel_del")); err != nil {
 		tt.Fatalf("DeleteNode(b): %v", err)
 	}
-	if err := g.UndeleteNode(b); err != nil {
+	if err := g.UndeleteNode(b, ph("dc_zomb_undel_del")); err != nil {
 		tt.Fatalf("UndeleteNode(b): %v", err)
 	}
 	g.ResolvePseudoEdges()
