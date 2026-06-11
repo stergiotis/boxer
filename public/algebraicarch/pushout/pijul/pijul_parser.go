@@ -123,8 +123,9 @@ func buildShortHashIndex(entries []LogEntry) (idx map[string]LogEntry) {
 	for _, e := range entries {
 		full := e.Hash
 		// Index every prefix from 8 chars up to the full hash.
-		// Cost is O(L*N) keys; L is fixed (44 for SHA-256 b64)
-		// and N is the number of patches, both small for the demo.
+		// Cost is O(L*N) keys; L is the fixed hash-string length
+		// (pijul emits 53-char base32) and N the number of patches,
+		// both small for the demo.
 		for n := 8; n <= len(full); n++ {
 			idx[full[:n]] = e
 		}

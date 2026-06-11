@@ -60,6 +60,7 @@ func (inst PatchHash) IsZero() (b bool) {
 
 // PlaceholderHash is a sentinel used in patch construction to mean
 // "this patch" — distinct from the zero hash (which is the root/genesis).
+// Package-level var for addressability only; treat as immutable.
 var PlaceholderHash = func() (h PatchHash) {
 	for i := range h {
 		h[i] = 0xFF
@@ -88,6 +89,7 @@ func (inst NodeID) String() (s string) {
 
 // RootNodeID is the sentinel root node present in every graggle.
 // All top-level content is ordered after this node.
+// Package-level var for convenience only; treat as immutable.
 var RootNodeID = NodeID{}
 
 // EdgeKindE classifies edges in the graggle.

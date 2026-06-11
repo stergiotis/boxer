@@ -8,8 +8,8 @@ import (
 )
 
 // PatchID identifies a patch in a backend-defined opaque encoding.
-// The text backend uses pijul's short hash; the future native backend
-// will use a hex-encoded SHA-256 prefix. Comparison is by Hex string;
+// The text backend uses pijul's own hash string; the native backend uses
+// the hex-encoded BLAKE3 patch hash. Comparison is by Hex string;
 // equality is meaningful only within a single backend.
 type PatchID struct {
 	Hex string
@@ -65,8 +65,8 @@ type PatchEnvelope struct {
 // interface deals in [KVLine] cells and [PatchEnvelope] blobs, never
 // in raw text bytes or pijul-specific format details. The text
 // backend serialises cells to pijul's flat-KV format internally; the
-// future native backend will translate cells directly into
-// pushout/graggle patch operations without ever materialising text.
+// native backend translates cells directly into pushout/graggle patch
+// operations without ever materialising text.
 //
 // Every method returns a single audit string — a one-shot human
 // readable line summarising what the backend did, suitable for

@@ -43,7 +43,10 @@ External references:
 
 ## How it works
 
-The package is layered around two seams:
+This repo holds the *domain* half of the demo: backends, parsers, and
+the vendored graggle engine. The GUI/orchestration half (`DemoStore`,
+the task worker, egui2 windows and playbooks) lives in pebble2impl and
+is not part of this tree.
 
 - **`pijul_backend.go`** — defines the *domain* seam: `BackendI` (a
   factory for `RepoI` handles) and `RepoI` (one actor's working copy).
@@ -56,40 +59,27 @@ The package is layered around two seams:
   `pijulTextRepo` serialise cells to pijul's textual working-copy
   format on the way down and parse them back on the way up.
 - **`pijul_pushout_backend.go`** — the `pushout-native` realisation of
-  `BackendI` that uses the vendored `algebraicarch/pushout/graggle`
-  package directly. Each actor holds an in-memory `*store.Graggle` plus
+  `BackendI` that uses the sibling `algebraicarch/pushout/graggle`
+  packages directly. Each actor holds an in-memory `*store.Graggle` plus
   an on-disk patch log under `<repoDir>/.pushout/`; `SetAndRecord` runs
   `patch.LineDiff` over the live subgraph and constructs a `Patch`
   natively; `State` walks `algo.LinearOrder()` (or, in conflict mode,
   groups live nodes by cell path) without any text round-trip. No
-  `pijul` binary is involved. Selected at construction via
-  `Config.Backend = pijul.NewPushoutBackend()` or by setting
-  `PIJUL_BACKEND=pushout` before launching the demo.
-- **`pijul_runner.go`** — the *CLI-verb* seam: `pijulRunnerI` is one
+  `pijul` binary is involved. All mutating verbs (`SetAndRecord`,
+  `Apply`, `Unrecord`) are transactional: the patch applies to a clone
+  of the graggle and the working state plus the on-disk log advance
+  only after every step succeeded.
+- **`pijul_runner.go`** — the *CLI-verb* seam: `RunnerI` is one
   method per `pijul` subcommand (Init, Clone, Add, Record, Push, Pull,
-  ApplyPatch, Log, LatestHash, Credit, LatestChangeFile). It is
-  unexported; only `pijulTextBackend` consumes it. `cliRunner` is the
-  concrete implementation backed by `os/exec`.
+  ApplyPatch, Log, LatestHash, Credit, LatestChangeFile). Only
+  `pijulTextBackend` consumes it; the interface is exported so test
+  fakes can satisfy it. `cliRunner` is the concrete implementation
+  backed by `os/exec`.
 - **`pijul_parser.go`** — pure parsers and serialisers for pijul's
-  textual outputs (`parseRecordText`, `serializeRecordText`,
-  `parseLogJSON`, `applyCreditToCells`). All package-private because
-  they are text-backend internals.
-- **`pijul_store.go`** — orchestration: per-actor state, the background
-  task worker, and the parallel reload via `errgroup`. `DemoStore`
-  composes a single `BackendI` + per-actor `RepoI` instances; demo
-  actions (`SaveEdit`, `ResolveConflict`, `DeleteCell`, `CreateCell`)
-  funnel through one `recordWithCellsTransform` helper that reads the
-  repo's live cells, applies a transform, and calls
-  `state.Repo.SetAndRecord(...)`. `EmailPatch` similarly wraps
-  `state.Repo.ExportLatest(...)`.
-- **`pijul_render.go`** / **`pijul_playbook.go`** — egui2 view layer.
-  Per-actor edit windows, central server/inbox window, and a
-  storyboard window with five canned playbooks.
-
-UI databindings are mediated through `UIState`: the renderer reserves
-a stable `*string` per `<actor>_<path>` input key, and the worker
-queues value overrides by *key* (not pointer) so that any later
-re-allocation of the binding pointer does not strand pending overrides.
+  textual formats (`ParseRecordText`, `SerializeRecordText`,
+  `ParseLogJSON`, `ApplyCreditToCells`, plus the shared cell-line
+  codec `formatCellLine`/`splitKVLine` — values are `strconv`-quoted
+  so quotes, backslashes, and newlines round-trip byte-exactly).
 
 ### Pitfall: the "Graph Context Ambiguity" pattern
 
@@ -125,26 +115,27 @@ than surfacing a fatal-error block in the UI.
 
 ### Pitfall: `Unrecord` is local rollback, not erasure
 
-An operator invokes `PushoutRepo.Unrecord(hash)`
-(`pijul_pushout_backend.go:505`) on a patch carrying personal data,
-expecting the data to be gone. The graggle's live subgraph no longer
-shows the patch's effect — but the envelope file at
-`.pushout/changes/<short>.json` and the `MetaByHash[hash]` entry are
+An operator invokes `PushoutRepo.Unrecord(hash)` on a patch carrying
+personal data, expecting the data to be gone. The graggle's live
+subgraph no longer shows the patch's effect — but the envelope file at
+`.pushout/changes/<hash>.json` and the `MetaByHash[hash]` entry are
 still present, and a future `Pull` from any peer that still has the
 patch will reapply it cleanly.
 
-**Cause.** `Unrecord` is designed to be round-trippable. It calls
-`Patch.Unapply` to rewind the graggle (un-deletes tombstones, removes
-edges and nodes the patch added), removes the hash from `appliedHash`,
-and rewrites `applied.txt`. It deliberately does *not* delete the
-envelope, because the typical use case is "back out a local change so
-a peer's newer version can be pulled in cleanly" — without the
-preserved envelope, a subsequent re-apply would have to re-fetch the
-bytes from a peer. Personal data carried in the patch's `Change.Content`
-therefore survives on disk after `Unrecord`, and on every peer that
-pulled the patch and has not itself run `Unrecord`. This is **not
-erasure** under GDPR Art 17, FADP Art 32 al. 2(c), or ICO "put beyond
-use".
+**Cause.** `Unrecord` is designed to be round-trippable
+(`TestClaim_UnrecordRoundTripViaPull` pins this). It refuses while any
+applied patch declares the target as a dependency ("unrecord dependents
+first"), then calls `Patch.Unapply` against a clone (un-deletes
+tombstones it holds the last deleter for, removes edges and nodes the
+patch added), removes the hash from `appliedHash`, and rewrites
+`applied.txt`. It deliberately does *not* delete the envelope, because
+the typical use case is "back out a local change so a peer's newer
+version can be pulled in cleanly" — without the preserved envelope, a
+subsequent re-apply would have to re-fetch the bytes from a peer.
+Personal data carried in the patch's `Change.Content` therefore
+survives on disk after `Unrecord`, and on every peer that pulled the
+patch and has not itself run `Unrecord`. This is **not erasure** under
+GDPR Art 17, FADP Art 32 al. 2(c), or ICO "put beyond use".
 
 **Git analogy.** Pushout has no equivalent of git's staging area or
 dirty working tree — every `SetAndRecord` immediately produces a
@@ -203,12 +194,16 @@ Demo-level invariants (visible to anyone using `BackendI`/`RepoI`):
 - `Pull`'s `(hadConflict=true, err=nil)` return signals "applied with
   conflict markers", not failure. The orchestrator records an `[INFO]`
   audit line; the UI does not show a fatal-error block.
-- `PendingOverrides` is keyed by inputKey string, never by `*string`,
-  so overrides survive any pointer churn between the frame that
-  queued them and the frame that applies them.
-- The per-actor `CliLogs` ring buffer copies into a fresh slice when
-  it overflows so the previously-grown backing array becomes garbage;
-  a long demo session does not retain unbounded log memory.
+- Cell paths are validated up front (non-empty, no spaces, quotes, or
+  newlines); values are unrestricted — the quoted line format
+  round-trips any byte sequence.
+- While the graggle is conflicted, `SetAndRecord` records conflict
+  resolutions *and* edits/deletions of clean cells in one patch;
+  creating a brand-new cell is rejected with a clear error (no linear
+  order means no reliable anchor for a new row).
+
+(UI-level invariants — `PendingOverrides` keying, the `CliLogs` ring
+buffer — belong to the GUI half in pebble2impl.)
 
 Text-backend internal invariants (no longer visible to the demo, but
 still load-bearing for the `pijul-text` realisation):
@@ -223,27 +218,33 @@ still load-bearing for the `pijul-text` realisation):
 
 Pushout-native backend internal invariants:
 
-- The on-disk layout is `<repoDir>/.pushout/changes/<short-hex>.json`
+- The on-disk layout is `<repoDir>/.pushout/changes/<full-hex-hash>.json`
   for envelope files plus `<repoDir>/.pushout/applied.txt` listing
   hashes in apply order (one per line). `applied.txt` is the apply
   *log*; the in-memory `*Graggle` is the apply *result*. Push/Pull
-  computes a set-difference over `applied.txt` and ships envelopes in
-  apply-log order so dependencies always precede dependents.
-- `store.Graggle.DeleteNode` is idempotent: deleting an already-deleted
-  node is a no-op. Two actors can independently delete the same node
-  (the typical "both edited the same line" merge); without this, the
-  second patch in a converged pair would fail to apply. The fix lives
-  in the vendored `store/graggle.go` behind a `VENDOR DEVIATION:`
-  comment so re-vendor reviewers can spot it; will be upstreamed to
-  hackathon_2026 pushout. AddNode/AddEdge identities are patch-scoped
-  so they do not need the same relaxation.
-- `types.HashBytes` uses BLAKE3 (not SHA-256). pushout's hash is purely
-  a content-addressed identity — both algorithms give the same 32-byte
-  output and equivalent collision resistance, but BLAKE3 is what the
-  rest of pebble2impl already uses (leeway/card schema fingerprint,
-  IMAP client). Marked `VENDOR DEVIATION:` in the vendored types
-  package. Switching changes every patch hash; envelope files written
-  by a SHA-256 build will fail Decode's hash-validation guard.
+  computes a set-difference over the applied lists and ships envelopes
+  in apply-log order so dependencies always precede dependents
+  (`TestClaim_PushShipsDepsFirst`). Envelope files are content-addressed
+  and first-writer-wins; `readEnvelope` verifies the decoded patch is
+  the one asked for.
+- Patch identity is the BLAKE3 hash of the canonicalized dependency
+  set plus the changes. Author and description stay envelope-level
+  provenance, so two actors recording the identical edit against the
+  same state converge on one patch. Dependency tampering fails the
+  hash check at `envelope.Decode`. Changing either the hash function
+  or its scope invalidates previously persisted envelope files.
+- Tombstones track their deleters: `store.Graggle.DeleteNode` records
+  the deleting patch and tolerates further deleters (two actors
+  editing the same line is the normal convergent case); a node is
+  resurrected only when its *last* deleter is unapplied. `Apply` gates
+  dependencies on the *applied* set (not merely seen envelopes), and
+  `Unrecord` refuses while a dependent is applied — together these
+  keep the unapply direction sound.
+- When a freshly recorded patch's identity collides with an applied
+  patch (re-creating a deleted cell with identical content),
+  `SetAndRecord` deterministically shifts the new nodes' identity
+  space so the patch stays applicable while concurrent identical
+  re-creations still converge.
 - Conflict cells are derived in `cellsFromConflictedGraggle` by
   grouping live nodes by their cell path. Every live node for a given
   path becomes one side of the resulting `ConflictData`: the first
@@ -252,13 +253,23 @@ Pushout-native backend internal invariants:
   cycle conflicts that surface as N live nodes for one path) render
   one Keep button per side. Cell ordering in conflict mode is
   alphabetical (the linear case preserves user order).
-- `changesForResolution` accepts arbitrary chosen values: per
-  conflicted path, every live sibling whose content does not match
-  the chosen value is deleted, and the chosen value's existing node
-  (if any) is kept. If no existing sibling matches — the user typed
-  a brand-new value — every sibling is deleted and a new node is
-  added carrying the chosen value, anchored to a parent / downstream
-  shared by the conflict siblings via `commonAnchors`.
+- `changesForResolution` classifies conflicted paths via
+  `algo.DetectConflicts` order/cycle membership (bare path
+  multiplicity would misclassify linearly-ordered duplicate keys) and
+  accepts arbitrary chosen values: per conflicted path, every live
+  sibling whose content does not match the chosen value is deleted,
+  and the chosen value's existing node (if any) is kept. If no
+  existing sibling matches — the user typed a brand-new value — every
+  sibling is deleted and a new node is added carrying the chosen
+  value, anchored to a parent / downstream shared by the conflict
+  siblings via `commonAnchors`.
+
+These properties are exercised continuously by a rapid state machine
+(`pushout_statemachine_test.go`) that drives random verb sequences over
+three repos and checks graggle invariants, content conservation, and
+post-sync convergence after every action;
+`scripts/dev/cover_pushout.sh` enforces a per-package coverage floor
+over the tree.
 
 ## Open design questions
 
@@ -292,7 +303,7 @@ pass that rewrites changes to reduce the dependency set. `LineDiff`
 neighbours, so it tends to produce near-antique patches when the diff is
 localised — but that is an accidental property of the LCS choice, not a
 guarantee. `changesForResolution`'s `commonAnchors`
-(`pijul_pushout_backend.go:471`) picks the first live parent and child, which
+(`pijul_pushout_backend.go`) picks the first live parent and child, which
 can be more conservative than the antique form requires.
 
 **Observed gap.** A patch may declare dependencies on patches it does not
@@ -338,17 +349,17 @@ OQ1–OQ6 for the enumerated options and the engineering recommendation
 - The CLI runner has a 15-second timeout per mutating command and a
   5-second timeout for log/credit reads. These are generous for the
   demo's small dataset but would not survive on a production-scale
-  repo; the planned native runner has no such bound.
+  repo; the native backend has no such bound.
 - The demo serialises all mutating actions through a single worker
   goroutine. This is intentional — it reflects how a real
   multi-actor workflow treats each working copy as a serialised
   resource — but it means the UI shows a "processing" indicator for
   the slowest of the four actors during reload.
-- `Email Patch` extracts the most recently modified file under
-  `.pijul/changes/` rather than parsing Pijul's transactional state.
-  This is a portable approximation that breaks if the user records
-  multiple patches faster than mod-time resolution; the native runner
-  will track patch identity directly.
+- On the text backend, `Email Patch` extracts the most recently
+  modified file under `.pijul/changes/` rather than parsing Pijul's
+  transactional state. This is a portable approximation that breaks if
+  the user records multiple patches faster than mod-time resolution;
+  the native backend reads the envelope by patch hash directly.
 
 ## Further reading
 

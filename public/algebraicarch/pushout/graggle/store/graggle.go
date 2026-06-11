@@ -911,7 +911,7 @@ func (inst *Graggle) NodeContentStatus(id t.NodeID) (status t.NodeContentStatusE
 // Returns the count of nodes whose content was newly purged, and the
 // list of their NodeIDs in deterministic order (sorted via
 // t.CompareNodeID) so callers can write structured audit log entries.
-func (inst *Graggle) SweepTombstones(now time.Time, horizon time.Duration) (purgedCount int32, purgedIDs []t.NodeID) {
+func (inst *Graggle) SweepTombstones(now time.Time, horizon time.Duration) (purgedCount int, purgedIDs []t.NodeID) {
 	cutoff := now.Add(-horizon)
 	for id, when := range inst.tombstoneAt {
 		if !when.Before(cutoff) {

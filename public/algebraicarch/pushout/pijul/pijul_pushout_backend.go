@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -100,7 +99,6 @@ func (inst *pushoutBackend) Clone(ctx context.Context, src RepoI, destPath strin
 		Graggle:     cloned,
 		appliedHash: clonedApplied,
 		MetaByHash:  clonedMeta,
-		writtenInit: true,
 	}
 	audit = fmt.Sprintf("[pushout-native] clone %s → %s", srcRepo.path, destPath)
 	return
@@ -118,7 +116,6 @@ type PushoutRepo struct {
 	Graggle     *store.Graggle
 	appliedHash []t.PatchHash
 	MetaByHash  map[t.PatchHash]envelope.EnvelopeV1
-	writtenInit bool
 }
 
 var _ RepoI = (*PushoutRepo)(nil)
@@ -145,7 +142,6 @@ func (inst *PushoutRepo) Init(ctx context.Context) (audit string, err error) {
 	inst.Graggle = store.New()
 	inst.appliedHash = nil
 	inst.MetaByHash = make(map[t.PatchHash]envelope.EnvelopeV1)
-	inst.writtenInit = true
 	audit = fmt.Sprintf("[pushout-native] init %s", inst.path)
 	return
 }
@@ -227,7 +223,7 @@ func (inst *PushoutRepo) cellsFromConflictedGraggle() (cells []KVLine) {
 		}
 		byPath[p] = append(byPath[p], n)
 	}
-	sort.Strings(paths)
+	slices.Sort(paths)
 	for _, p := range paths {
 		nodes := byPath[p]
 		switch len(nodes) {
@@ -437,7 +433,7 @@ func (inst *PushoutRepo) changesForResolution(cells []KVLine) (changes []patch.C
 		}
 		byPath[path] = append(byPath[path], n)
 	}
-	sort.Strings(paths)
+	slices.Sort(paths)
 
 	// Reject creation attempts before emitting any change.
 	for _, c := range cells {

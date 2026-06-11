@@ -251,11 +251,15 @@ func (inst *cliRunner) Credit(ctx context.Context, repoDir string, file string) 
 func (inst *cliRunner) LatestChangeFile(ctx context.Context, repoDir string) (patchPath string, err error) {
 	changeDir := filepath.Join(repoDir, ".pijul", "changes")
 	var maxTime time.Time
-	werr := filepath.Walk(changeDir, func(p string, info os.FileInfo, e error) (rerr error) {
-		if e != nil {
+	werr := filepath.WalkDir(changeDir, func(p string, d os.DirEntry, e error) (rerr error) {
+		if e != nil || d.IsDir() {
 			return
 		}
-		if !info.IsDir() && info.ModTime().After(maxTime) {
+		info, ierr := d.Info()
+		if ierr != nil {
+			return
+		}
+		if info.ModTime().After(maxTime) {
 			maxTime = info.ModTime()
 			patchPath = p
 		}
