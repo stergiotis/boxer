@@ -60,6 +60,7 @@ require (
 	gonum.org/v1/gonum v0.17.0
 	gopkg.in/yaml.v3 v3.0.1
 	lukechampine.com/blake3 v1.4.1
+	pgregory.net/rapid v1.2.0
 )
 
 require github.com/dlclark/regexp2 v1.11.5 // indirect

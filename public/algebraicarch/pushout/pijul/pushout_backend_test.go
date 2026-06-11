@@ -332,3 +332,67 @@ func TestConcurrentPushPullRecord(tt *testing.T) {
 	assertRepoInvariants(tt, alice)
 	assertRepoInvariants(tt, bob)
 }
+
+// Re-creating a previously deleted cell with identical content used to
+// reproduce the identical {deps, changes} and therefore the same patch
+// hash as the applied-but-tombstoned original — which can never re-apply
+// ("node already exists"). SetAndRecord must disambiguate node identity
+// deterministically. Found by the rapid state machine.
+func TestSetAndRecord_RecreateDeletedCell(tt *testing.T) {
+	ctx := context.Background()
+	b := NewPushoutBackend()
+	alice := newTestRepo(tt, b, "alice")
+	mustRecord(tt, alice, []KVLine{{Path: "k", Value: "v"}}, "alice", "create")
+	mustRecord(tt, alice, nil, "alice", "delete k")
+	mustRecord(tt, alice, []KVLine{{Path: "k", Value: "v"}}, "alice", "recreate")
+
+	cells, log := stateCells(tt, alice)
+	if len(cells) != 1 || cells[0].Value != "v" {
+		tt.Fatalf("recreated cell missing: %+v", cells)
+	}
+	if len(log) != 3 {
+		tt.Fatalf("expected 3 patches, got %d", len(log))
+	}
+	assertRepoInvariants(tt, alice)
+
+	// And the disambiguated patch must ship cleanly.
+	bob := newTestRepo(tt, b, "bob")
+	if _, err := alice.Push(ctx, bob); err != nil {
+		tt.Fatal(err)
+	}
+	bcells, _ := stateCells(tt, bob)
+	if len(bcells) != 1 || bcells[0].Value != "v" {
+		tt.Fatalf("bob state after push: %+v", bcells)
+	}
+	assertRepoInvariants(tt, bob)
+}
+
+// EXPLANATION.md claim: Push ships envelopes in apply-log order, so
+// dependencies always precede dependents — a fresh repo receives a
+// three-deep dependency chain in one Push without rejections.
+func TestClaim_PushShipsDepsFirst(tt *testing.T) {
+	ctx := context.Background()
+	b := NewPushoutBackend()
+	alice := newTestRepo(tt, b, "alice")
+	mustRecord(tt, alice, []KVLine{{Path: "k", Value: "v1"}}, "alice", "P")
+	mustRecord(tt, alice, []KVLine{{Path: "k", Value: "v2"}}, "alice", "Q")
+	mustRecord(tt, alice, []KVLine{{Path: "k", Value: "v3"}}, "alice", "R")
+
+	bob := newTestRepo(tt, b, "bob")
+	if _, err := alice.Push(ctx, bob); err != nil {
+		tt.Fatalf("push of dependency chain failed: %v", err)
+	}
+	_, alog := stateCells(tt, alice)
+	bcells, blog := stateCells(tt, bob)
+	if len(blog) != len(alog) {
+		tt.Fatalf("log length: got %d want %d", len(blog), len(alog))
+	}
+	for i := range alog {
+		if alog[i].ID != blog[i].ID {
+			tt.Fatalf("apply order diverged at %d: %s vs %s", i, alog[i].ID.Short(), blog[i].ID.Short())
+		}
+	}
+	if len(bcells) != 1 || bcells[0].Value != "v3" {
+		tt.Fatalf("bob final state: %+v", bcells)
+	}
+}

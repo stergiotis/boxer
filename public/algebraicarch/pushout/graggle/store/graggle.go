@@ -269,9 +269,16 @@ func (inst *Graggle) UndeleteNode(id t.NodeID, undeleter t.PatchHash) error {
 	rep := inst.deletedPartition.Find(id)
 	peers := inst.deletedPartition.Members(rep)
 
-	// Drop pseudo-edge bookkeeping rooted at the old rep — the component is
-	// about to be partitioned, so the old reasons are no longer valid.
-	inst.dropReasonsForRep(rep)
+	// Drop pseudo-edge bookkeeping keyed under ANY member of the
+	// component, not just its current representative: representatives
+	// shift as components merge, and a reason recorded under an earlier
+	// rep would survive a rep-keyed drop — leaving a pseudo-edge in the
+	// graph that nothing justifies once this undeletion makes the path
+	// live again. (Found by the multi-repo state-machine harness: a
+	// pull/unrecord sequence left an unjustified root→node pseudo-edge.)
+	for _, m := range peers {
+		inst.dropReasonsForRep(m)
+	}
 
 	// Move id from deleted to live and retag its edges accordingly.
 	inst.deletedNodes.Remove(id)

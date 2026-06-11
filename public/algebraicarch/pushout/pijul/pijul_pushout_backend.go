@@ -326,6 +326,21 @@ func (inst *PushoutRepo) SetAndRecord(ctx context.Context, cells []KVLine, autho
 
 	deps := patch.ComputeDependencies(changes)
 	p := patch.NewPatch(author, message, deps, changes)
+	// Identity collision with an APPLIED patch: identical changes against
+	// identical anchors reproduce the same hash — typical when re-creating
+	// a previously deleted cell with the same content. That patch's nodes
+	// already exist (tombstoned), so it cannot re-apply. Shift the
+	// placeholder index space and rebuild: node identities change while
+	// content, anchors, and dependencies stay put — and the derivation is
+	// deterministic, so two actors re-creating the same cell concurrently
+	// still converge on one patch.
+	for attempt := uint64(1); slices.Contains(inst.appliedHash, p.Hash); attempt++ {
+		if attempt > 16 {
+			err = eh.Errorf("could not disambiguate patch identity from applied patch %s", p.Hash)
+			return
+		}
+		p = patch.NewPatch(author, message, deps, shiftPlaceholderIndexes(changes, attempt<<32))
+	}
 	next := inst.Graggle.Clone()
 	if aerr := p.Apply(next); aerr != nil {
 		err = eh.Errorf("apply new patch: %w", aerr)
@@ -528,6 +543,36 @@ func (inst *PushoutRepo) changesForResolution(cells []KVLine) (changes []patch.C
 			DownContext: downCtx,
 		})
 		newNodeIndex++
+	}
+	return
+}
+
+// shiftPlaceholderIndexes returns a copy of changes with every
+// placeholder NodeID's Index raised by offset — including placeholder
+// references inside contexts and edge endpoints, so chained inserts stay
+// consistent. Used to give a patch fresh node identities when its
+// natural identity collides with an already-applied patch.
+func shiftPlaceholderIndexes(changes []patch.Change, offset uint64) (out []patch.Change) {
+	shift := func(id t.NodeID) t.NodeID {
+		if id.Patch.IsPlaceholder() {
+			id.Index += offset
+		}
+		return id
+	}
+	out = make([]patch.Change, len(changes))
+	for i, c := range changes {
+		out[i] = c
+		out[i].NodeID = shift(c.NodeID)
+		out[i].Src = shift(c.Src)
+		out[i].Dest = shift(c.Dest)
+		out[i].UpContext = slices.Clone(c.UpContext)
+		for j := range out[i].UpContext {
+			out[i].UpContext[j] = shift(out[i].UpContext[j])
+		}
+		out[i].DownContext = slices.Clone(c.DownContext)
+		for j := range out[i].DownContext {
+			out[i].DownContext[j] = shift(out[i].DownContext[j])
+		}
 	}
 	return
 }
