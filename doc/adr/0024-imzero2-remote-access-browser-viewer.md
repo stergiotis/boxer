@@ -144,6 +144,12 @@ Proposed — awaiting review by @spx. Implementation phasing per the design conv
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`. ADRs are append-only; supersession is recorded, not deleted.
 
+## Updates
+
+### 2026-06-12 — In-browser *execution* split out to ADR-0077; this ADR's decision stands for remote access
+
+The design dialogue behind [ADR-0077](./0077-keelson-browser-wasm-execution.md) re-examined option **O5** (compile the Rust interpreter to wasm) under a different question — executing keelson itself client-side in a tab, rather than reaching a server-resident instance. Two of O5's three kill-reasons do not carry over to that question: wasm bundle size is voided by ADR-0077's LAN-cacheable premise, and the synchronous `Sync()` RTT is voided when both halves share a page (a round-trip becomes a function call). The third (state replication / reconnection) becomes moot when there is no server. For the *remote-access* question this ADR answers, **O1 (pixel streaming) remains the chosen path and was reaffirmed in that dialogue**; the O5-shaped "renderer-only in browser + FFFI2 over WebSocket" middle form is recorded in ADR-0077 §Alternatives as redundant between the two ADRs. One cross-cutting improvement adopted there benefits a socket-carried FFFI2 if ever revisited: ADR-0077 §SD3 coalesces the ~14 sequential per-frame fetches into one round-trip.
+
 ## References
 
 - ImZero1 prior-art prototype: `~/repo/imzero_client_cpp` (memory `project_imzero1_video_prior_art`); video pipeline driver `skia/video_local_h264.sh`; `UserInteractionFB` and `DrawList` schemas in `spec/ImZeroFB.fbs`; libmpv-embedding client at `video_player/sdl3_mpv/`.
