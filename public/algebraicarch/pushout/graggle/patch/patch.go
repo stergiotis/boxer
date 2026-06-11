@@ -5,6 +5,7 @@
 package patch
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -42,7 +43,8 @@ type Change struct {
 }
 
 // Patch is a set of changes with metadata and dependency tracking.
-// A patch's identity is the SHA-256 hash of its serialized changes.
+// A patch's identity is the BLAKE3 hash of its canonicalized dependency
+// set plus its serialized changes (see ComputeHash).
 type Patch struct {
 	Hash         t.PatchHash
 	Author       string
@@ -51,32 +53,49 @@ type Patch struct {
 	Changes      []Change
 }
 
-// ComputeHash now de-fixes-up self-references before
-// hashing so it is idempotent across NewPatch's pre-/post-fixup states.
-// The envelope codec relies on Decode(env).Patch.ComputeHash() reproducing
-// the stored Hash; without this normalization that check would always fail
-// for any patch that introduces nodes (the NodeIDs would carry inst.Hash
-// post-fixup but PlaceholderHash pre-fixup).
-
-// ComputeHash computes the patch hash from its changes.
-// Dependencies, author, and description are NOT part of the hash — only
-// the actual graph operations matter for identity.
+// ComputeHash computes the patch hash from its dependencies and changes.
+//
+// The hashed payload is {canonicalized Dependencies, Changes}: the
+// dependency set is part of patch identity, so an envelope whose
+// dependency list was stripped or extended no longer validates against
+// the stored hash. The list is canonicalized (sorted, deduplicated)
+// before hashing — dependencies are semantically a set, and identity
+// must not depend on declaration order. Author and description stay
+// OUTSIDE the hash: they are provenance, carried at the envelope level,
+// and two actors independently recording the same edit against the same
+// state still converge on the same patch.
 //
 // Idempotence: NewPatch first hashes the changes with PlaceholderHash
 // self-references, then rewrites those placeholders to the resulting
-// patch hash. ComputeHash undoes that rewrite before marshaling so
-// repeated calls return the same value, regardless of fixup state.
+// patch hash. ComputeHash undoes that rewrite (changesForHash) before
+// marshaling so repeated calls return the same value, regardless of
+// fixup state.
 //
-// json.Marshal on []Change cannot fail in practice (all fields are types
-// that the encoder supports), so a marshal error indicates a programmer
+// json.Marshal on the payload cannot fail in practice (all fields are
+// types the encoder supports), so a marshal error indicates a programmer
 // error in extending Change — panic rather than produce a silently bogus
 // hash that breaks patch identity downstream.
 func (inst *Patch) ComputeHash() (h t.PatchHash) {
-	data, err := json.Marshal(inst.changesForHash())
+	payload := struct {
+		Dependencies []t.PatchHash
+		Changes      []Change
+	}{
+		Dependencies: canonicalDeps(inst.Dependencies),
+		Changes:      inst.changesForHash(),
+	}
+	data, err := json.Marshal(payload)
 	if err != nil {
-		panic(fmt.Errorf("patch.ComputeHash: marshal changes: %w", err))
+		panic(fmt.Errorf("patch.ComputeHash: marshal payload: %w", err))
 	}
 	h = t.HashBytes(data)
+	return
+}
+
+// canonicalDeps returns a sorted, deduplicated copy of deps.
+func canonicalDeps(deps []t.PatchHash) (out []t.PatchHash) {
+	out = slices.Clone(deps)
+	slices.SortFunc(out, func(a, b t.PatchHash) int { return bytes.Compare(a[:], b[:]) })
+	out = slices.Compact(out)
 	return
 }
 
@@ -137,7 +156,7 @@ func NewPatch(author string, description string, deps []t.PatchHash, changes []C
 	inst = &Patch{
 		Author:       author,
 		Description:  description,
-		Dependencies: slices.Clone(deps),
+		Dependencies: canonicalDeps(deps),
 		Changes:      owned,
 	}
 	inst.Hash = inst.ComputeHash()

@@ -14,11 +14,13 @@ package envelope
 
 import (
 	"encoding/json"
+	"slices"
 	"time"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/patch"
+	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
 )
 
 // EnvelopeV1 is the v1 transmissible form of a patch. Producer and
@@ -47,8 +49,14 @@ func Encode(env EnvelopeV1) (data []byte, err error) {
 }
 
 // Decode parses an envelope and verifies that the stored patch hash matches
-// a freshly computed hash. Returns an error if the patch is missing, the
-// JSON is malformed, or the hash check fails.
+// a freshly computed hash. The hash covers the patch's canonicalized
+// dependency set plus its changes, so dependency tampering fails the check
+// too. Two further structural guards reject patches that hash consistently
+// but were authored broken: changes referencing a patch the dependency
+// list does not declare, and placeholder NodeIDs (which only exist in the
+// pre-fixup form and can never apply meaningfully). Author, description,
+// Producer, and Timestamp remain outside the hash — they are provenance,
+// not identity, and are NOT tamper-evident.
 func Decode(data []byte) (env EnvelopeV1, err error) {
 	if err = json.Unmarshal(data, &env); err != nil {
 		err = eh.Errorf("envelope: unmarshal: %w", err)
@@ -63,5 +71,33 @@ func Decode(data []byte) (env EnvelopeV1, err error) {
 		err = eh.Errorf("envelope: hash mismatch (stored %s, computed %s) — envelope was tampered or truncated", env.Patch.Hash, computed)
 		return
 	}
+	declared := make(map[t.PatchHash]struct{}, len(env.Patch.Dependencies))
+	for _, d := range env.Patch.Dependencies {
+		declared[d] = struct{}{}
+	}
+	for _, d := range patch.ComputeDependencies(env.Patch.Changes) {
+		if d == env.Patch.Hash {
+			// Post-fixup self-reference (a node anchored on a sibling
+			// from the same patch), not a dependency.
+			continue
+		}
+		if _, ok := declared[d]; !ok {
+			err = eh.Errorf("envelope: patch %s references %s but does not declare it as a dependency", env.Patch.Hash, d)
+			return
+		}
+	}
+	if slices.ContainsFunc(env.Patch.Changes, changeHasPlaceholder) {
+		err = eh.Errorf("envelope: patch %s carries a placeholder NodeID — pre-fixup form cannot be applied", env.Patch.Hash)
+		return
+	}
 	return
+}
+
+// changeHasPlaceholder reports whether any NodeID field of the change
+// still carries the pre-fixup placeholder hash.
+func changeHasPlaceholder(c patch.Change) bool {
+	isPlc := func(id t.NodeID) bool { return id.Patch.IsPlaceholder() }
+	return isPlc(c.NodeID) || isPlc(c.Src) || isPlc(c.Dest) ||
+		slices.ContainsFunc(c.UpContext, isPlc) ||
+		slices.ContainsFunc(c.DownContext, isPlc)
 }

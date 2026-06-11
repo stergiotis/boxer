@@ -169,3 +169,93 @@ func TestEnvelope_EncodeRejectsNilPatch(tt *testing.T) {
 		tt.Fatal("expected error for nil patch, got nil")
 	}
 }
+
+// Dependency tampering must fail the hash check: the dependency set is
+// part of patch identity. Both stripping and extending the list are
+// covered.
+func TestEnvelope_DecodeRejectsTamperedDependencies(tt *testing.T) {
+	dep := patch.NewPatch("alice", "dep", nil, []patch.Change{{
+		Kind:      patch.ChangeKindNewNode,
+		NodeID:    t.NodeID{Patch: t.PlaceholderHash, Index: 0},
+		Content:   []byte("base\n"),
+		UpContext: []t.NodeID{t.RootNodeID},
+	}})
+	p := patch.NewPatch("alice", "edit", []t.PatchHash{dep.Hash}, []patch.Change{{
+		Kind: patch.ChangeKindDeleteNode, NodeID: t.NodeID{Patch: dep.Hash, Index: 0},
+	}})
+	env := EnvelopeV1{Patch: p, Producer: "alice", Timestamp: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)}
+	data, err := Encode(env)
+	if err != nil {
+		tt.Fatal(err)
+	}
+
+	mutate := func(edit func(patchObj map[string]any)) []byte {
+		var raw map[string]any
+		if err := json.Unmarshal(data, &raw); err != nil {
+			tt.Fatal(err)
+		}
+		patchObj := raw["patch"].(map[string]any)
+		edit(patchObj)
+		out, err := json.Marshal(raw)
+		if err != nil {
+			tt.Fatal(err)
+		}
+		return out
+	}
+
+	stripped := mutate(func(po map[string]any) { po["Dependencies"] = []any{} })
+	if _, err := Decode(stripped); err == nil || !strings.Contains(err.Error(), "hash mismatch") {
+		tt.Fatalf("stripped dependencies must fail the hash check, got: %v", err)
+	}
+
+	bogus := t.PatchHash{9, 9, 9}
+	bogusHex, _ := bogus.MarshalText()
+	extended := mutate(func(po map[string]any) {
+		deps := po["Dependencies"].([]any)
+		po["Dependencies"] = append(deps, string(bogusHex))
+	})
+	if _, err := Decode(extended); err == nil || !strings.Contains(err.Error(), "hash mismatch") {
+		tt.Fatalf("extended dependencies must fail the hash check, got: %v", err)
+	}
+}
+
+// A patch that hashes consistently but whose changes reference a patch the
+// dependency list does not declare was authored broken — Decode rejects it
+// before it can hit Apply's dependency gate with a vacuous list.
+func TestEnvelope_DecodeRejectsUndeclaredDependency(tt *testing.T) {
+	foreign := t.PatchHash{42}
+	p := patch.NewPatch("mallory", "deps stripped at authoring time", nil /* no deps */, []patch.Change{{
+		Kind: patch.ChangeKindDeleteNode, NodeID: t.NodeID{Patch: foreign, Index: 0},
+	}})
+	data, err := Encode(EnvelopeV1{Patch: p, Producer: "mallory", Timestamp: time.Unix(0, 0).UTC()})
+	if err != nil {
+		tt.Fatal(err)
+	}
+	_, err = Decode(data)
+	if err == nil || !strings.Contains(err.Error(), "does not declare it as a dependency") {
+		tt.Fatalf("expected undeclared-dependency rejection, got: %v", err)
+	}
+}
+
+// Placeholder NodeIDs exist only in the pre-fixup form; a stored patch
+// carrying one cannot be applied meaningfully and must be rejected.
+func TestEnvelope_DecodeRejectsPlaceholderNodeIDs(tt *testing.T) {
+	p := &patch.Patch{
+		Author: "mallory",
+		Changes: []patch.Change{{
+			Kind:      patch.ChangeKindNewNode,
+			NodeID:    t.NodeID{Patch: t.PlaceholderHash, Index: 0},
+			Content:   []byte("x\n"),
+			UpContext: []t.NodeID{t.RootNodeID},
+		}},
+	}
+	p.Hash = p.ComputeHash() // self-consistent hash over the pre-fixup form
+	data, err := Encode(EnvelopeV1{Patch: p, Producer: "mallory", Timestamp: time.Unix(0, 0).UTC()})
+	if err != nil {
+		tt.Fatal(err)
+	}
+	_, err = Decode(data)
+	if err == nil || !strings.Contains(err.Error(), "placeholder NodeID") {
+		tt.Fatalf("expected placeholder rejection, got: %v", err)
+	}
+}

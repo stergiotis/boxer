@@ -347,7 +347,12 @@ func (inst *PushoutRepo) SetAndRecord(ctx context.Context, cells []KVLine, autho
 	if err = appendApplied(inst.path, p.Hash); err != nil {
 		return
 	}
-	inst.MetaByHash[p.Hash] = env
+	if _, exists := inst.MetaByHash[p.Hash]; !exists {
+		// First-writer-wins, matching writeEnvelope: identical changes
+		// and deps recorded by another author share the hash; keep the
+		// provenance that landed first.
+		inst.MetaByHash[p.Hash] = env
+	}
 	inst.appliedHash = append(inst.appliedHash, p.Hash)
 
 	short := hex.EncodeToString(p.Hash[:8])
@@ -598,7 +603,9 @@ func (inst *PushoutRepo) Apply(ctx context.Context, env PatchEnvelope) (audit st
 	if err = appendApplied(inst.path, decoded.Patch.Hash); err != nil {
 		return
 	}
-	inst.MetaByHash[decoded.Patch.Hash] = decoded
+	if _, exists := inst.MetaByHash[decoded.Patch.Hash]; !exists {
+		inst.MetaByHash[decoded.Patch.Hash] = decoded
+	}
 	inst.appliedHash = append(inst.appliedHash, decoded.Patch.Hash)
 	audit = fmt.Sprintf("[pushout-native] apply %s by %s", PatchID{Hex: hex.EncodeToString(decoded.Patch.Hash[:])}.Short(), decoded.Patch.Author)
 	return
@@ -749,19 +756,31 @@ func changesDir(repoPath string) (p string) {
 	return
 }
 
+// envelopeFilePath names envelope files by the FULL hex hash. A truncated
+// name would let a prefix collision silently overwrite one envelope with
+// another — readEnvelope would then hand back the wrong patch with no
+// error naming the cause.
 func envelopeFilePath(repoPath string, h t.PatchHash) (p string) {
-	short := hex.EncodeToString(h[:8])
-	p = filepath.Join(changesDir(repoPath), short+".json")
+	p = filepath.Join(changesDir(repoPath), hex.EncodeToString(h[:])+".json")
 	return
 }
 
+// writeEnvelope persists an envelope, first-writer-wins: the file is
+// content-addressed by the patch hash (which covers changes plus
+// dependencies), so an existing file already carries the same patch.
+// Envelope-level provenance (Producer, Timestamp, author) may differ
+// between writers; whichever landed locally first is kept.
 func writeEnvelope(repoPath string, env envelope.EnvelopeV1) (err error) {
+	path := envelopeFilePath(repoPath, env.Patch.Hash)
+	if _, serr := os.Stat(path); serr == nil {
+		return
+	}
 	bytes, eerr := envelope.Encode(env)
 	if eerr != nil {
 		err = eerr
 		return
 	}
-	werr := os.WriteFile(envelopeFilePath(repoPath, env.Patch.Hash), bytes, 0644)
+	werr := os.WriteFile(path, bytes, 0644)
 	if werr != nil {
 		err = eh.Errorf("write envelope %s: %w", env.Patch.Hash, werr)
 		return
@@ -776,6 +795,12 @@ func readEnvelope(repoPath string, h t.PatchHash) (env envelope.EnvelopeV1, err 
 		return
 	}
 	env, err = envelope.Decode(bytes)
+	if err != nil {
+		return
+	}
+	if env.Patch.Hash != h {
+		err = eh.Errorf("envelope file for %s contains patch %s — store corrupted", h, env.Patch.Hash)
+	}
 	return
 }
 
