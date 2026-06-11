@@ -1,0 +1,27 @@
+# 2026/06/12 01:07:38.695069 [TestModelOracle_EditUndoSession] [rapid] draw action: "edit"
+# 2026/06/12 01:07:38.695075 [TestModelOracle_EditUndoSession] [rapid] draw target: []string{"beta\n"}
+# 2026/06/12 01:07:38.695098 [TestModelOracle_EditUndoSession] [rapid] draw action: "edit"
+# 2026/06/12 01:07:38.695101 [TestModelOracle_EditUndoSession] [rapid] draw target: []string{}
+# 2026/06/12 01:07:38.695150 [TestModelOracle_EditUndoSession] [rapid] draw action: "edit"
+# 2026/06/12 01:07:38.695152 [TestModelOracle_EditUndoSession] [rapid] draw target: []string{"beta\n"}
+# 2026/06/12 01:07:38.695181 [TestModelOracle_EditUndoSession] apply: apply 50a89c542eb3f5fe: node 50a89c542eb3f5fe/0 already exists
+# 
+v0.4.8#1507158840993803086
+0x1084210842108
+0x0
+0x0
+0x8000000000000
+0x0
+0x1
+0x0
+0x1084210842108
+0x0
+0x0
+0x0
+0x1084210842108
+0x0
+0x0
+0x8000000000000
+0x0
+0x1
+0x0
