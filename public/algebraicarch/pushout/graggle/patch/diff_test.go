@@ -9,7 +9,7 @@ import (
 )
 
 func TestLineDiff_BothEmpty(tt *testing.T) {
-	result := LineDiff(nil, nil, nil)
+	result := mustLineDiff(tt, nil, nil, nil)
 	if len(result.Changes) != 0 {
 		tt.Fatalf("expected no changes, got %d", len(result.Changes))
 	}
@@ -18,7 +18,7 @@ func TestLineDiff_BothEmpty(tt *testing.T) {
 func TestLineDiff_OldOnly(tt *testing.T) {
 	oldIDs := []t.NodeID{nid("diff1", 0), nid("diff1", 1)}
 	oldContents := [][]byte{[]byte("a\n"), []byte("b\n")}
-	result := LineDiff(oldIDs, oldContents, nil)
+	result := mustLineDiff(tt, oldIDs, oldContents, nil)
 
 	deletes := 0
 	for _, c := range result.Changes {
@@ -33,7 +33,7 @@ func TestLineDiff_OldOnly(tt *testing.T) {
 
 func TestLineDiff_NewOnly(tt *testing.T) {
 	newLines := [][]byte{[]byte("a\n"), []byte("b\n")}
-	result := LineDiff(nil, nil, newLines)
+	result := mustLineDiff(tt, nil, nil, newLines)
 
 	inserts := 0
 	for _, c := range result.Changes {
@@ -51,14 +51,14 @@ func TestLineDiff_Identical(tt *testing.T) {
 	oldContents := [][]byte{[]byte("a\n"), []byte("b\n")}
 	newLines := [][]byte{[]byte("a\n"), []byte("b\n")}
 
-	result := LineDiff(oldIDs, oldContents, newLines)
+	result := mustLineDiff(tt, oldIDs, oldContents, newLines)
 	if len(result.Changes) != 0 {
 		tt.Fatalf("expected no changes for identical content, got %d", len(result.Changes))
 	}
 }
 
 func TestLineDiff_SingleLineInsert(tt *testing.T) {
-	result := LineDiff(nil, nil, [][]byte{[]byte("new\n")})
+	result := mustLineDiff(tt, nil, nil, [][]byte{[]byte("new\n")})
 	if len(result.Changes) != 1 || result.Changes[0].Kind != ChangeKindNewNode {
 		tt.Fatalf("expected 1 insertion, got %v", result.Changes)
 	}
@@ -70,7 +70,7 @@ func TestLineDiff_SingleLineInsert(tt *testing.T) {
 func TestLineDiff_SingleLineDelete(tt *testing.T) {
 	oldIDs := []t.NodeID{nid("diff3", 0)}
 	oldContents := [][]byte{[]byte("old\n")}
-	result := LineDiff(oldIDs, oldContents, nil)
+	result := mustLineDiff(tt, oldIDs, oldContents, nil)
 	if len(result.Changes) != 1 || result.Changes[0].Kind != ChangeKindDeleteNode {
 		tt.Fatalf("expected 1 deletion, got %v", result.Changes)
 	}
@@ -82,7 +82,7 @@ func TestLineDiff_RepeatedLines(tt *testing.T) {
 	oldContents := [][]byte{[]byte("x\n"), []byte("x\n"), []byte("x\n")}
 	newLines := [][]byte{[]byte("x\n"), []byte("x\n")}
 
-	result := LineDiff(oldIDs, oldContents, newLines)
+	result := mustLineDiff(tt, oldIDs, oldContents, newLines)
 	deletes := 0
 	for _, c := range result.Changes {
 		if c.Kind == ChangeKindDeleteNode {
@@ -100,7 +100,7 @@ func TestLineDiff_LargeReplacement(tt *testing.T) {
 	oldContents := [][]byte{[]byte("a\n"), []byte("b\n")}
 	newLines := [][]byte{[]byte("x\n"), []byte("y\n")}
 
-	result := LineDiff(oldIDs, oldContents, newLines)
+	result := mustLineDiff(tt, oldIDs, oldContents, newLines)
 	deletes, inserts := 0, 0
 	for _, c := range result.Changes {
 		switch c.Kind {
@@ -120,7 +120,7 @@ func TestLineDiff_LargeReplacement(tt *testing.T) {
 // the resulting patch produces an order conflict for trivial inputs.
 func TestLineDiff_ConsecutiveInsertsAreChained(tt *testing.T) {
 	// Insert ["a", "b"] into an empty file.
-	res := LineDiff(nil, nil, [][]byte{[]byte("a\n"), []byte("b\n")})
+	res := mustLineDiff(tt, nil, nil, [][]byte{[]byte("a\n"), []byte("b\n")})
 	if len(res.Changes) != 2 {
 		tt.Fatalf("expected 2 changes, got %d", len(res.Changes))
 	}
@@ -141,7 +141,7 @@ func TestLineDiff_ChainedInsertsBetweenKeptLines(tt *testing.T) {
 	oldContents := [][]byte{[]byte("a\n"), []byte("d\n")}
 	newLines := [][]byte{[]byte("a\n"), []byte("b\n"), []byte("c\n"), []byte("d\n")}
 
-	res := LineDiff(oldIDs, oldContents, newLines)
+	res := mustLineDiff(tt, oldIDs, oldContents, newLines)
 
 	var inserts []Change
 	for _, c := range res.Changes {
@@ -175,7 +175,7 @@ func TestLineDiff_ContextCorrectness(tt *testing.T) {
 	oldContents := [][]byte{[]byte("a\n"), []byte("c\n")}
 	newLines := [][]byte{[]byte("a\n"), []byte("b\n"), []byte("c\n")}
 
-	result := LineDiff(oldIDs, oldContents, newLines)
+	result := mustLineDiff(tt, oldIDs, oldContents, newLines)
 	for _, c := range result.Changes {
 		if c.Kind == ChangeKindNewNode {
 			if string(c.Content) != "b\n" {

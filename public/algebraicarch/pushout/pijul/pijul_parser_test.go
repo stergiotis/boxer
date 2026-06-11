@@ -49,7 +49,10 @@ EYPWGEPXCHFD, JYS6SYSP25AS
 	if err != nil {
 		t.Fatalf("ParseLogJSON: %v", err)
 	}
-	processed := ApplyCreditToCells(mockCreditOut, cells, entries)
+	processed, cerr := ApplyCreditToCells(mockCreditOut, cells, entries)
+	if cerr != nil {
+		t.Fatalf("ApplyCreditToCells: %v", cerr)
+	}
 
 	for i := range processed {
 		if processed[i].Credit == nil {
@@ -68,7 +71,7 @@ func TestParseRecordText_CleanFile(t *testing.T) {
 /contact/email "jane@example.com"
 /account/status "Active"
 `
-	cells, hasConflict := ParseRecordText(in)
+	cells, hasConflict, _ := ParseRecordText(in)
 	if hasConflict {
 		t.Fatalf("clean file flagged as conflict")
 	}
@@ -89,7 +92,7 @@ func TestParseRecordText_ConflictBlock(t *testing.T) {
 <<<<<<< 2
 /contact/email "jane@example.com"
 `
-	cells, hasConflict := ParseRecordText(in)
+	cells, hasConflict, _ := ParseRecordText(in)
 	if !hasConflict {
 		t.Fatalf("conflict block not detected")
 	}
@@ -118,7 +121,7 @@ func TestParseRecordText_ThreeWayConflict(t *testing.T) {
 /account/status "C-side"
 <<<<<<< 3
 `
-	cells, hasConflict := ParseRecordText(in)
+	cells, hasConflict, _ := ParseRecordText(in)
 	if !hasConflict {
 		t.Fatalf("3-way conflict not detected")
 	}
@@ -151,7 +154,7 @@ func TestSerializeRecordText_ThreeWayRoundtrip(t *testing.T) {
 		}},
 	}
 	raw := SerializeRecordText(cells)
-	parsed, hasConflict := ParseRecordText(string(raw))
+	parsed, hasConflict, _ := ParseRecordText(string(raw))
 	if !hasConflict {
 		t.Fatalf("4-way conflict marker round-trip failed")
 	}
@@ -176,7 +179,7 @@ func TestSerializeRecordText_ThreeWayRoundtrip(t *testing.T) {
 func TestParseRecordText_EOFNewline(t *testing.T) {
 	in := `/id "CUST-100"
 /account/status "Active"`
-	cells, _ := ParseRecordText(in)
+	cells, _, _ := ParseRecordText(in)
 	if len(cells) != 2 {
 		t.Fatalf("got %d cells, want 2", len(cells))
 	}
@@ -191,7 +194,7 @@ func TestParseRecordText_BlankLinesIgnored(t *testing.T) {
 /account/status "Active"
 
 `
-	cells, _ := ParseRecordText(in)
+	cells, _, _ := ParseRecordText(in)
 	if len(cells) != 2 {
 		t.Fatalf("got %d cells, want 2", len(cells))
 	}
@@ -204,7 +207,7 @@ func TestSerializeRecordText_Roundtrip(t *testing.T) {
 		{Path: "/baz", Value: "qux"},
 	}
 	raw := SerializeRecordText(cells)
-	parsed, hasConflict := ParseRecordText(string(raw))
+	parsed, hasConflict, _ := ParseRecordText(string(raw))
 	if !hasConflict {
 		t.Fatalf("conflict marker round-trip failed")
 	}

@@ -68,20 +68,24 @@ func (e LogEntry) toPatchMetadata() (m PatchMetadata) {
 // introduced by multiple patches (a "context node" on a graph edge),
 // the OLDEST patch wins by graph-age resolution — that yields stable
 // authorship across rebases and channel mixing.
-func ApplyCreditToCells(creditOut string, cells []KVLine, entries []LogEntry) (out []KVLine) {
+//
+// A scanner error (e.g. a line beyond the buffer cap) is returned
+// instead of silently truncating the credit data.
+func ApplyCreditToCells(creditOut string, cells []KVLine, entries []LogEntry) (out []KVLine, err error) {
 	shortToEntry := buildShortHashIndex(entries)
 
 	contentToEntry := make(map[string]LogEntry)
 	var currentHashes []string
 
 	scanner := bufio.NewScanner(strings.NewReader(creditOut))
+	scanner.Buffer(make([]byte, 64*1024), maxScanLineBytes)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
 			continue
 		}
-		if strings.HasPrefix(line, "> ") {
-			content := strings.TrimSpace(strings.TrimPrefix(line, "> "))
+		if content, isContent := strings.CutPrefix(line, "> "); isContent {
+			content = strings.TrimSpace(content)
 			oldest, found := oldestEntry(currentHashes, shortToEntry)
 			if found {
 				contentToEntry[content] = oldest
@@ -90,6 +94,10 @@ func ApplyCreditToCells(creditOut string, cells []KVLine, entries []LogEntry) (o
 		}
 		// Header block, e.g. "EYPWGEPXCHFD, JYS6SYSP25AS"
 		currentHashes = splitAndTrim(line, ",")
+	}
+	if serr := scanner.Err(); serr != nil {
+		err = eh.Errorf("scan pijul credit output: %w", serr)
+		return
 	}
 
 	out = cells
@@ -154,15 +162,26 @@ func splitAndTrim(s string, sep string) (out []string) {
 	return
 }
 
+// maxScanLineBytes caps a single scanned line at 1 MiB. The default
+// bufio.Scanner limit is 64 KiB and an over-long line used to stop the
+// scan silently — the parse returned a truncated cell list with no
+// error, and the next record would then delete the unseen cells.
+const maxScanLineBytes = 1 << 20
+
 // ParseRecordText parses pijul's textual working-copy format into the
 // package's domain [KVLine] slice. Conflict blocks become cells with a
 // non-nil Conflict; clean rows become cells with Value populated.
 //
+// A conflict block left open at EOF (`>>>>>>>` without `<<<<<<<`) is
+// flushed as a conflict cell rather than dropped. A scanner error is
+// returned instead of a silently truncated cell list.
+//
 // Limitation: conflict blocks are assumed to span a single key. Values
 // are strconv.Quote'd literals (see [splitKVLine]) and round-trip
 // byte-exactly.
-func ParseRecordText(content string) (cells []KVLine, hasConflict bool) {
+func ParseRecordText(content string) (cells []KVLine, hasConflict bool, err error) {
 	scanner := bufio.NewScanner(strings.NewReader(content))
+	scanner.Buffer(make([]byte, 64*1024), maxScanLineBytes)
 
 	var (
 		inConflict   bool
@@ -210,6 +229,14 @@ func ParseRecordText(content string) (cells []KVLine, hasConflict bool) {
 				cells = append(cells, KVLine{Path: path, Value: val})
 			}
 		}
+	}
+	if serr := scanner.Err(); serr != nil {
+		err = eh.Errorf("scan record text: %w", serr)
+		return
+	}
+	if inConflict && cd != nil {
+		// Unterminated conflict block at EOF: keep what was read.
+		cells = append(cells, KVLine{Path: conflictPath, Conflict: cd})
 	}
 	return
 }

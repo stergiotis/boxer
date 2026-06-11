@@ -3,6 +3,7 @@
 package algo_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/algo"
@@ -340,5 +341,58 @@ func TestTarjan_DeepChainNoStackOverflow(tt *testing.T) {
 	// Linear chain: every SCC is a singleton; total n+1 (root included).
 	if len(sccs) != n+1 {
 		tt.Fatalf("expected %d SCCs, got %d", n+1, len(sccs))
+	}
+}
+
+// A live node unreachable from root must be reported as an "orphan"
+// conflict: it breaks the linear order without forking or cycling, so
+// without this kind HasConflicts()==true came with an empty conflict
+// list and the UI had nothing to show.
+func TestDetectConflicts_Orphan(tt *testing.T) {
+	g := store.New()
+	a := nid("orph", 0)
+	if err := g.AddNode(a, []byte("anchored\n"), ph("orph"), []t.NodeID{t.RootNodeID}, nil); err != nil {
+		tt.Fatal(err)
+	}
+	stranded := nid("orph_stranded", 0)
+	if err := g.AddNode(stranded, []byte("stranded\n"), ph("orph_stranded"), nil, nil); err != nil {
+		tt.Fatal(err)
+	}
+	g.ResolvePseudoEdges()
+
+	if algo.LinearOrder(g) != nil {
+		tt.Fatal("setup: a stranded node must break the linear order")
+	}
+	found := false
+	for _, c := range algo.DetectConflicts(g) {
+		if c.Kind == "orphan" && len(c.Nodes) == 1 && c.Nodes[0] == stranded {
+			found = true
+		}
+	}
+	if !found {
+		tt.Fatalf("expected an orphan conflict for %v, got %v", stranded, algo.DetectConflicts(g))
+	}
+}
+
+// TopoSort output must not depend on map iteration order: repeated runs
+// over the same non-uniquely-ordered graph yield the same sequence.
+func TestTopoSort_Deterministic(tt *testing.T) {
+	g := store.New()
+	// A fork: root -> {x, y} with no order between x and y.
+	x := nid("det", 0)
+	y := nid("det", 1)
+	if err := g.AddNode(x, []byte("x\n"), ph("det"), []t.NodeID{t.RootNodeID}, nil); err != nil {
+		tt.Fatal(err)
+	}
+	if err := g.AddNode(y, []byte("y\n"), ph("det"), []t.NodeID{t.RootNodeID}, nil); err != nil {
+		tt.Fatal(err)
+	}
+	g.ResolvePseudoEdges()
+
+	first := algo.TopoSort(g)
+	for range 32 {
+		if got := algo.TopoSort(g); !slices.Equal(got, first) {
+			tt.Fatalf("TopoSort not deterministic: %v vs %v", got, first)
+		}
 	}
 }

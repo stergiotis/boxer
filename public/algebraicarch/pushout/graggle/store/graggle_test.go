@@ -671,7 +671,7 @@ func TestLineDiff_Insert(tt *testing.T) {
 	oldContents := [][]byte{[]byte("a\n"), []byte("c\n")}
 	newLines := [][]byte{[]byte("a\n"), []byte("b\n"), []byte("c\n")}
 
-	result := patch.LineDiff(oldIDs, oldContents, newLines)
+	result := mustLineDiff(tt, oldIDs, oldContents, newLines)
 	// Should have one NewNode for "b\n".
 	newNodes := 0
 	for _, c := range result.Changes {
@@ -692,7 +692,7 @@ func TestLineDiff_Delete(tt *testing.T) {
 	oldContents := [][]byte{[]byte("a\n"), []byte("b\n"), []byte("c\n")}
 	newLines := [][]byte{[]byte("a\n"), []byte("c\n")}
 
-	result := patch.LineDiff(oldIDs, oldContents, newLines)
+	result := mustLineDiff(tt, oldIDs, oldContents, newLines)
 	deletes := 0
 	for _, c := range result.Changes {
 		if c.Kind == patch.ChangeKindDeleteNode {
@@ -712,7 +712,7 @@ func TestLineDiff_Replace(tt *testing.T) {
 	oldContents := [][]byte{[]byte("a\n"), []byte("b\n"), []byte("c\n")}
 	newLines := [][]byte{[]byte("a\n"), []byte("X\n"), []byte("c\n")}
 
-	result := patch.LineDiff(oldIDs, oldContents, newLines)
+	result := mustLineDiff(tt, oldIDs, oldContents, newLines)
 	deletes := 0
 	inserts := 0
 	for _, c := range result.Changes {

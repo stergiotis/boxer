@@ -221,19 +221,23 @@ func TestInvariant_LiveNodeUnreachable(tt *testing.T) {
 	hasErrorContaining(tt, qc.CheckInvariants(g), "unreachable from root")
 }
 
-// 13. LinearOrder vs DetectConflicts cross-check: a stranded live node makes
-// LinearOrder fail while the conflict detector (pre-"orphan" kind) reports
-// nothing — the invariant must surface that incompleteness.
-//
-// NOTE: once algo.DetectConflicts gains the "orphan" conflict kind, this
-// fixture becomes a detected orphan conflict and invariant 13 goes silent
-// for it; update this test to assert the orphan detection instead.
-func TestInvariant_ConflictDetectorIncomplete(tt *testing.T) {
+// 13. LinearOrder vs DetectConflicts cross-check: a stranded live node
+// breaks the linear order AND is reported by the detector (as an
+// "orphan" conflict), so invariant 13 stays silent while connectivity
+// (invariant 12) still flags the node. Before the orphan kind existed,
+// this fixture made HasConflicts()==true with an empty conflict list.
+func TestInvariant_ConflictDetectorCoversOrphans(tt *testing.T) {
 	g := New()
 	stranded := nid("stranded", 0)
 	g.nodes.Add(stranded)
 	g.contents[stranded] = []byte("x")
-	hasErrorContaining(tt, qc.CheckInvariants(g), "conflict detector is incomplete")
+	errs := qc.CheckInvariants(g)
+	for _, e := range errs {
+		if strings.Contains(e.Error(), "conflict detector is incomplete") {
+			tt.Fatalf("invariant 13 fired although the orphan kind covers this graph: %v", e)
+		}
+	}
+	hasErrorContaining(tt, errs, "unreachable from root")
 }
 
 // CheckInvariants must not mutate the graggle it inspects. The idempotence

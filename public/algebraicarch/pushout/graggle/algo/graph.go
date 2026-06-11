@@ -102,6 +102,10 @@ func Tarjan(g t.GraphReaderI) [][]t.NodeID {
 // TopoSort returns a topological ordering of the live subgraph.
 // Returns nil if the graph contains cycles.
 //
+// The result is deterministic: the initial zero-in-degree queue is
+// seeded in CompareNodeID order — map iteration order would otherwise
+// leak into the output whenever the topological order is not unique.
+//
 // Precondition: ResolvePseudoEdges must have been called.
 func TopoSort(g t.GraphReaderI) []t.NodeID {
 	// Kahn's algorithm.
@@ -123,6 +127,7 @@ func TopoSort(g t.GraphReaderI) []t.NodeID {
 			queue = append(queue, v)
 		}
 	}
+	slices.SortFunc(queue, t.CompareNodeID)
 
 	var order []t.NodeID
 	for len(queue) > 0 {
@@ -183,11 +188,19 @@ func HasConflicts(g t.GraphReaderI) bool {
 
 // ConflictInfo describes a detected conflict.
 //
-// For "zombie" conflicts, Nodes[0] is the live zombie node and Nodes[1:]
-// are its deleted context nodes (parents and/or children); the other kinds
-// list co-equal participants.
+// For "order" conflicts, Nodes[0] is the common parent and Nodes[1:] the
+// incomparable children. For "zombie" conflicts, Nodes[0] is the live
+// zombie node and Nodes[1:] are its deleted context nodes (parents and/or
+// children). "cycle" lists the SCC members and "orphan" the single
+// unreachable node.
+//
+// "order", "cycle", and "orphan" break the linear order; "zombie" does
+// not (the node stays positioned via pseudo-edges, it merely lost its
+// anchoring context). Invariant 13 in graggle/qc relies on this split:
+// LinearOrder()==nil must coincide with at least one linearity-breaking
+// conflict being reported.
 type ConflictInfo struct {
-	Kind  string     // "order" (fork), "cycle", "zombie"
+	Kind  string     // "order" (fork), "cycle", "zombie", "orphan"
 	Nodes []t.NodeID // involved nodes
 }
 
@@ -215,7 +228,7 @@ func DetectConflicts(g t.GraphReaderI) []ConflictInfo {
 		if len(children) <= 1 {
 			continue
 		}
-		for i := 0; i < len(children); i++ {
+		for i := range len(children) {
 			for j := i + 1; j < len(children); j++ {
 				if !hasPath(g, children[i], children[j]) && !hasPath(g, children[j], children[i]) {
 					conflicts = append(conflicts, ConflictInfo{
@@ -224,6 +237,35 @@ func DetectConflicts(g t.GraphReaderI) []ConflictInfo {
 					})
 				}
 			}
+		}
+	}
+
+	// Orphan conflicts: live nodes unreachable from the root through
+	// live+pseudo edges. They have no anchored position, so no linear
+	// order exists — yet they fork nothing and cycle nowhere, which made
+	// the detector incomplete with respect to LinearOrder before this
+	// kind existed (HasConflicts()==true with an empty conflict list).
+	reachable := make(map[t.NodeID]struct{})
+	stack := []t.NodeID{t.RootNodeID}
+	for len(stack) > 0 {
+		v := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if _, ok := reachable[v]; ok {
+			continue
+		}
+		reachable[v] = struct{}{}
+		for w := range g.LiveChildren(v) {
+			if g.IsLive(w) {
+				stack = append(stack, w)
+			}
+		}
+	}
+	for v := range g.AllLiveNodes() {
+		if _, ok := reachable[v]; !ok {
+			conflicts = append(conflicts, ConflictInfo{
+				Kind:  "orphan",
+				Nodes: []t.NodeID{v},
+			})
 		}
 	}
 

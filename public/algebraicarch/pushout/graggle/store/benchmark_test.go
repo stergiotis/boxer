@@ -150,7 +150,7 @@ func BenchmarkLineDiff_100Lines(b *testing.B) {
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		patch.LineDiff(oldIDs, oldContents, newLines)
+		_, _ = patch.LineDiff(oldIDs, oldContents, newLines)
 	}
 }
 
@@ -170,6 +170,6 @@ func BenchmarkLineDiff_1000Lines(b *testing.B) {
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		patch.LineDiff(oldIDs, oldContents, newLines)
+		_, _ = patch.LineDiff(oldIDs, oldContents, newLines)
 	}
 }

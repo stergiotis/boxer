@@ -28,7 +28,10 @@ func FuzzLineDiff(f *testing.F) {
 		}
 
 		// Should not panic.
-		result := LineDiff(oldIDs, oldLines, newLines)
+		result, derr := LineDiff(oldIDs, oldLines, newLines)
+		if derr != nil {
+			tt.Skipf("LineDiff rejected input: %v", derr)
+		}
 
 		// Basic invariant: deletions reference existing old IDs.
 		oldIDSet := make(map[t.NodeID]struct{})

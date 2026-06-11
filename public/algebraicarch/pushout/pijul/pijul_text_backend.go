@@ -121,7 +121,11 @@ func (inst *pijulTextRepo) State(ctx context.Context) (cells []KVLine, log []Pat
 		return
 	}
 
-	parsed, hasConflict := ParseRecordText(string(content))
+	parsed, hasConflict, perr := ParseRecordText(string(content))
+	if perr != nil {
+		err = perr
+		return
+	}
 	cells = parsed
 
 	entries, logAudit, lerr := inst.runner.Log(ctx, inst.path)
@@ -142,7 +146,10 @@ func (inst *pijulTextRepo) State(ctx context.Context) (cells []KVLine, log []Pat
 			err = cerr
 			return
 		}
-		cells = ApplyCreditToCells(creditOut, cells, entries)
+		cells, err = ApplyCreditToCells(creditOut, cells, entries)
+		if err != nil {
+			return
+		}
 	}
 	return
 }

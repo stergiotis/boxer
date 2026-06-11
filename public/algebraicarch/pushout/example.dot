@@ -4,12 +4,12 @@ digraph graggle {
   edge [fontname="monospace", fontsize=8];
 
   root [label="root", shape=diamond, style=filled, fillcolor=lightgrey];
-  n_5f7c6a9f4944f10f_0 [label="5f7c6a9f/0\\nline a", shape=box, style=filled, fillcolor=lightyellow];
-  n_5f7c6a9f4944f10f_2 [label="5f7c6a9f/2\\nline c", shape=box, style=filled, fillcolor=lightyellow];
-  n_5f7c6a9f4944f10f_3 [label="5f7c6a9f/3\\nline d", shape=box, style=filled, fillcolor=lightyellow];
-  n_daf2d6a88e63227b_0 [label="daf2d6a8/0\\nline Y", shape=box, style=filled, fillcolor=lightyellow];
-  n_f2d39c7393d7a98e_0 [label="f2d39c73/0\\nline X", shape=box, style=filled, fillcolor=lightyellow];
-  n_5f7c6a9f4944f10f_1 [label="5f7c6a9f/1\\nline b", shape=box, style="dashed,filled", fillcolor=lightgrey, fontcolor=grey40];
+  n_5f7c6a9f4944f10f_0 [label="5f7c6a9f/0\nline a", shape=box, style=filled, fillcolor=lightyellow];
+  n_5f7c6a9f4944f10f_2 [label="5f7c6a9f/2\nline c", shape=box, style=filled, fillcolor=lightyellow];
+  n_5f7c6a9f4944f10f_3 [label="5f7c6a9f/3\nline d", shape=box, style=filled, fillcolor=lightyellow];
+  n_daf2d6a88e63227b_0 [label="daf2d6a8/0\nline Y", shape=box, style=filled, fillcolor=lightyellow];
+  n_f2d39c7393d7a98e_0 [label="f2d39c73/0\nline X", shape=box, style=filled, fillcolor=lightyellow];
+  n_5f7c6a9f4944f10f_1 [label="5f7c6a9f/1\nline b", shape=box, style="dashed,filled", fillcolor=lightgrey, fontcolor=grey40];
 
   root -> n_5f7c6a9f4944f10f_0 [style=solid, color=black];
   n_5f7c6a9f4944f10f_0 -> n_5f7c6a9f4944f10f_1 [style=dashed, color=grey];

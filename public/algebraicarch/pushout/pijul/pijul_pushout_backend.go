@@ -314,7 +314,7 @@ func (inst *PushoutRepo) SetAndRecord(ctx context.Context, cells []KVLine, autho
 	if algo.HasConflicts(inst.Graggle) {
 		changes, err = inst.changesForResolution(cells)
 	} else {
-		changes = inst.changesForLineDiff(cells)
+		changes, err = inst.changesForLineDiff(cells)
 	}
 	if err != nil {
 		return
@@ -353,7 +353,7 @@ func (inst *PushoutRepo) SetAndRecord(ctx context.Context, cells []KVLine, autho
 	return
 }
 
-func (inst *PushoutRepo) changesForLineDiff(cells []KVLine) (changes []patch.Change) {
+func (inst *PushoutRepo) changesForLineDiff(cells []KVLine) (changes []patch.Change, err error) {
 	order := algo.LinearOrder(inst.Graggle)
 	var oldIDs []t.NodeID
 	var oldContents [][]byte
@@ -372,7 +372,11 @@ func (inst *PushoutRepo) changesForLineDiff(cells []KVLine) (changes []patch.Cha
 		}
 		newLines = append(newLines, []byte(formatCellLine(c)))
 	}
-	diff := patch.LineDiff(oldIDs, oldContents, newLines)
+	diff, derr := patch.LineDiff(oldIDs, oldContents, newLines)
+	if derr != nil {
+		err = derr
+		return
+	}
 	changes = diff.Changes
 	return
 }

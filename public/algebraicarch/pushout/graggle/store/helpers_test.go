@@ -78,3 +78,13 @@ func randomInsertPatch(base *patch.Patch, rng *rand.Rand, label string, lineCoun
 // nodes directly rather than through a patch. Tests that undelete must
 // pass the same hash back — UndeleteNode rejects unknown undeleters.
 var testDeleter = ph("test_deleter")
+
+// mustLineDiff fails the test on a LineDiff validation error.
+func mustLineDiff(tt *testing.T, oldIDs []t.NodeID, oldContents, newLines [][]byte) patch.DiffResult {
+	tt.Helper()
+	result, err := patch.LineDiff(oldIDs, oldContents, newLines)
+	if err != nil {
+		tt.Fatalf("LineDiff: %v", err)
+	}
+	return result
+}

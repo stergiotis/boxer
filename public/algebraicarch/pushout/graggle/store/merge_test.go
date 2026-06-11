@@ -288,7 +288,7 @@ func TestRoundtrip_DiffApplyRender(tt *testing.T) {
 	oldContents := [][]byte{[]byte("hello\n"), []byte("world\n")}
 	newLines := [][]byte{[]byte("hello\n"), []byte("beautiful\n"), []byte("world\n")}
 
-	diff := patch.LineDiff(oldIDs, oldContents, newLines)
+	diff := mustLineDiff(tt, oldIDs, oldContents, newLines)
 	p := patch.NewPatch("test", "add beautiful", []t.PatchHash{base.Hash}, diff.Changes)
 	if err := p.Apply(g); err != nil {
 		tt.Fatal(err)
@@ -317,7 +317,7 @@ func TestRoundtrip_DiffApplyUnapply(tt *testing.T) {
 	oldContents := [][]byte{[]byte("a\n"), []byte("b\n")}
 	newLines := [][]byte{[]byte("a\n"), []byte("X\n"), []byte("b\n")}
 
-	diff := patch.LineDiff(oldIDs, oldContents, newLines)
+	diff := mustLineDiff(tt, oldIDs, oldContents, newLines)
 	p := patch.NewPatch("test", "insert X", []t.PatchHash{base.Hash}, diff.Changes)
 	p.Apply(g)
 

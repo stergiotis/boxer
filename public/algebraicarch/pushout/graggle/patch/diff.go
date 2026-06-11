@@ -5,6 +5,8 @@ package patch
 import (
 	"bytes"
 
+	"github.com/stergiotis/boxer/public/observability/eh"
+
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
 )
 
@@ -13,6 +15,12 @@ type DiffResult struct {
 	Changes []Change
 }
 
+// maxLineDiffCells bounds the LCS dynamic-programming table at
+// (m+1)*(n+1) int cells (≈32 MiB of table). Quadratic LCS is fine for
+// the demo's file sizes; beyond the cap the caller gets an error instead
+// of an unbounded allocation.
+const maxLineDiffCells = 4 << 20
+
 // LineDiff computes changes between an old set of lines (with known NodeIDs)
 // and a new set of lines. The old lines are assumed to be in linear order
 // in the graggle.
@@ -20,10 +28,21 @@ type DiffResult struct {
 // oldIDs: NodeIDs of the current lines in order (after root).
 // oldContents: content of each old line.
 // newLines: content of the desired new lines.
-func LineDiff(oldIDs []t.NodeID, oldContents [][]byte, newLines [][]byte) (result DiffResult) {
+//
+// Errors on mismatched oldIDs/oldContents lengths and on inputs whose
+// LCS table would exceed maxLineDiffCells.
+func LineDiff(oldIDs []t.NodeID, oldContents [][]byte, newLines [][]byte) (result DiffResult, err error) {
+	if len(oldIDs) != len(oldContents) {
+		err = eh.Errorf("LineDiff: %d oldIDs but %d oldContents", len(oldIDs), len(oldContents))
+		return
+	}
 	// Compute LCS using standard DP.
 	m := len(oldContents)
 	n := len(newLines)
+	if (m+1)*(n+1) > maxLineDiffCells {
+		err = eh.Errorf("LineDiff: input too large for the quadratic LCS table (%d x %d lines, cap %d cells)", m, n, maxLineDiffCells)
+		return
+	}
 
 	// dp[i][j] = length of LCS of oldContents[:i] and newLines[:j]
 	dp := make([][]int, m+1)
