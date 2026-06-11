@@ -7,9 +7,12 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -51,9 +54,13 @@ func (inst *pushoutBackend) NewRepo(actor string, path string) (repo RepoI) {
 	return
 }
 
-// Clone copies src's on-disk envelopes to destPath/.pushout and produces
-// a destination repo with a deep-cloned in-memory graggle. Both repos
-// must come from this backend.
+// Clone snapshots src's in-memory state under its lock and materialises
+// the destination repo (graggle, applied list, envelope files) entirely
+// from that snapshot. Copying the changes directory from disk instead
+// would race with a concurrent SetAndRecord: memory could already hold a
+// patch whose envelope file had not been copied yet, leaving the clone
+// with an applied hash it can never ship. Both repos must come from this
+// backend.
 func (inst *pushoutBackend) Clone(ctx context.Context, src RepoI, destPath string, destActor string) (dest RepoI, audit string, err error) {
 	srcRepo, ok := src.(*PushoutRepo)
 	if !ok {
@@ -61,54 +68,31 @@ func (inst *pushoutBackend) Clone(ctx context.Context, src RepoI, destPath strin
 		return
 	}
 
-	werr := os.MkdirAll(filepath.Join(destPath, ".pushout", "changes"), 0755)
+	werr := os.MkdirAll(changesDir(destPath), 0755)
 	if werr != nil {
 		err = eh.Errorf("create dest repo dirs: %w", werr)
 		return
 	}
 
-	// Copy applied.txt + every envelope file.
-	srcApplied, rerr := os.ReadFile(appliedListPath(srcRepo.path))
-	if rerr != nil && !os.IsNotExist(rerr) {
-		err = eh.Errorf("read src applied.txt: %w", rerr)
-		return
-	}
-	werr = os.WriteFile(appliedListPath(destPath), srcApplied, 0644)
-	if werr != nil {
-		err = eh.Errorf("write dest applied.txt: %w", werr)
-		return
-	}
-	srcChangesDir := changesDir(srcRepo.path)
-	destChangesDir := changesDir(destPath)
-	entries, derr := os.ReadDir(srcChangesDir)
-	if derr != nil && !os.IsNotExist(derr) {
-		err = eh.Errorf("read src changes dir: %w", derr)
-		return
-	}
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		data, rerr := os.ReadFile(filepath.Join(srcChangesDir, e.Name()))
-		if rerr != nil {
-			err = eh.Errorf("read envelope %s: %w", e.Name(), rerr)
-			return
-		}
-		werr = os.WriteFile(filepath.Join(destChangesDir, e.Name()), data, 0644)
-		if werr != nil {
-			err = eh.Errorf("write envelope %s: %w", e.Name(), werr)
-			return
-		}
-	}
-
 	srcRepo.Mu.Lock()
-	cloned := srcRepo.Graggle.Clone()
-	clonedApplied := append([]t.PatchHash(nil), srcRepo.appliedHash...)
-	clonedMeta := make(map[t.PatchHash]envelope.EnvelopeV1, len(srcRepo.MetaByHash))
-	for k, v := range srcRepo.MetaByHash {
-		clonedMeta[k] = v
+	if srcRepo.Graggle == nil {
+		srcRepo.Mu.Unlock()
+		err = eh.Errorf("clone source %s is not initialised", srcRepo.path)
+		return
 	}
+	cloned := srcRepo.Graggle.Clone()
+	clonedApplied := slices.Clone(srcRepo.appliedHash)
+	clonedMeta := maps.Clone(srcRepo.MetaByHash)
 	srcRepo.Mu.Unlock()
+
+	if err = writeAppliedList(destPath, clonedApplied); err != nil {
+		return
+	}
+	for _, env := range clonedMeta {
+		if err = writeEnvelope(destPath, env); err != nil {
+			return
+		}
+	}
 
 	dest = &PushoutRepo{
 		actor:       destActor,
@@ -304,17 +288,24 @@ func (inst *PushoutRepo) metaToPatchMetadata(h t.PatchHash) (m PatchMetadata) {
 // requested cell list, builds a patch via [patch.LineDiff] +
 // [patch.NewPatch], applies it, and persists the resulting envelope.
 //
-// Conflict resolution is supported only when the user picks one of the
-// two existing sides ("Keep Alice" / "Keep Bob"). An arbitrary new
-// value entered into a conflicted row is rejected; the user must
-// resolve via the side-buttons. Multi-row conflicts are resolved one
-// click at a time, each click producing a delete-the-rejected-side
-// patch.
+// In conflict mode the patch carries both resolutions (keep one side,
+// or an arbitrary replacement value, per conflicted path) and the
+// user's edits/deletions of clean single-node paths — saving an
+// unrelated edit while some other cell is conflicted must not silently
+// drop it. Creating a brand-new cell during a conflict is rejected:
+// without a linear order there is no reliable anchor for a new row.
+//
+// The patch applies to a clone of the graggle; the working state and the
+// on-disk log advance only after every step (graph apply, envelope
+// write, applied-log append) has succeeded.
 func (inst *PushoutRepo) SetAndRecord(ctx context.Context, cells []KVLine, author string, message string) (id PatchID, audit string, err error) {
 	inst.Mu.Lock()
 	defer inst.Mu.Unlock()
 	if inst.Graggle == nil {
 		err = eh.Errorf("repo not initialised")
+		return
+	}
+	if err = validateCellPaths(cells); err != nil {
 		return
 	}
 	inst.Graggle.ResolvePseudoEdges()
@@ -335,8 +326,8 @@ func (inst *PushoutRepo) SetAndRecord(ctx context.Context, cells []KVLine, autho
 
 	deps := patch.ComputeDependencies(changes)
 	p := patch.NewPatch(author, message, deps, changes)
-	aerr := p.Apply(inst.Graggle)
-	if aerr != nil {
+	next := inst.Graggle.Clone()
+	if aerr := p.Apply(next); aerr != nil {
 		err = eh.Errorf("apply new patch: %w", aerr)
 		return
 	}
@@ -354,6 +345,7 @@ func (inst *PushoutRepo) SetAndRecord(ctx context.Context, cells []KVLine, autho
 		inst.MetaByHash[p.Hash] = env
 	}
 	inst.appliedHash = append(inst.appliedHash, p.Hash)
+	inst.Graggle = next
 
 	short := hex.EncodeToString(p.Hash[:8])
 	id = PatchID{Hex: hex.EncodeToString(p.Hash[:])}
@@ -385,20 +377,26 @@ func (inst *PushoutRepo) changesForLineDiff(cells []KVLine) (changes []patch.Cha
 	return
 }
 
-// changesForResolution turns the user's chosen cell values into the
-// graph operations that resolve every conflicted path. For each path
-// with multiple live nodes:
-//   - if exactly one node's content matches cell.Value, keep it and
-//     delete every other live sibling
-//   - otherwise (cell.Value is brand-new, or none matched), delete
-//     every live sibling and add a new node carrying cell.Value
+// changesForResolution turns the user's cell list into graph operations
+// while the graggle is conflicted. Paths are classified by the conflict
+// detector — a node is "conflicted" when it participates in an order or
+// cycle conflict; bare path multiplicity is NOT enough (two linearly
+// ordered duplicate-key rows are clean and must not be collapsed).
 //
-// This generalises both the original "Keep Alice / Keep Bob" path and
-// the previously-rejected "arbitrary value" path. It also handles
-// N-way conflicts (3+ actors editing the same cell) and cycle
-// conflicts (multiple live nodes for one path) uniformly — the
-// resolution is always "produce one live node per path with the
-// user's chosen value".
+// Per conflicted path with a chosen (non-Conflict) cell value:
+//   - if one sibling's content matches cell.Value, keep it and delete
+//     every other live sibling
+//   - otherwise delete every sibling and add a new node carrying
+//     cell.Value, anchored between a parent and a downstream the
+//     conflict siblings shared
+//
+// Per clean path: a changed value becomes delete+insert anchored via
+// the replaced node's own live neighbours; a path absent from the cell
+// list is deleted. Multi-node clean paths (duplicate keys) are left
+// untouched — there is no per-row identity in the KV cell model to
+// know which row the user meant. A cell whose path exists nowhere in
+// the graggle is rejected: creating new rows needs an anchor, and a
+// conflicted graggle has no linear order to derive one from.
 func (inst *PushoutRepo) changesForResolution(cells []KVLine) (changes []patch.Change, err error) {
 	cellByPath := make(map[string]KVLine, len(cells))
 	for _, c := range cells {
@@ -422,12 +420,76 @@ func (inst *PushoutRepo) changesForResolution(cells []KVLine) (changes []patch.C
 	}
 	sort.Strings(paths)
 
+	// Reject creation attempts before emitting any change.
+	for _, c := range cells {
+		if c.Conflict != nil {
+			continue
+		}
+		if _, exists := byPath[c.Path]; !exists {
+			err = eh.Errorf("cannot create cell %q while the graggle is conflicted — resolve conflicts first", c.Path)
+			return
+		}
+	}
+
+	conflicted := make(map[t.NodeID]struct{})
+	for _, ci := range algo.DetectConflicts(inst.Graggle) {
+		switch ci.Kind {
+		case "order":
+			// Nodes[0] is the common parent; the incomparable children
+			// are the actual conflict participants.
+			for _, n := range ci.Nodes[1:] {
+				conflicted[n] = struct{}{}
+			}
+		case "cycle", "orphan":
+			for _, n := range ci.Nodes {
+				conflicted[n] = struct{}{}
+			}
+		}
+	}
+
+	nodeValue := func(n t.NodeID) (v string, ok bool) {
+		_, v, ok = splitKVLine(strings.TrimSuffix(string(inst.Graggle.NodeContent(n)), "\n"))
+		return
+	}
+
 	var newNodeIndex uint64
 	for _, path := range paths {
 		nodes := byPath[path]
-		if len(nodes) < 2 {
+		isConflicted := slices.ContainsFunc(nodes, func(n t.NodeID) bool {
+			_, ok := conflicted[n]
+			return ok
+		})
+
+		if !isConflicted {
+			if len(nodes) != 1 {
+				// Duplicate-key clean path: no per-row identity to edit by.
+				continue
+			}
+			n := nodes[0]
+			cell, present := cellByPath[path]
+			switch {
+			case !present:
+				changes = append(changes, patch.Change{Kind: patch.ChangeKindDeleteNode, NodeID: n})
+			case cell.Conflict != nil:
+				// Stale conflict cell for a clean path; nothing to do.
+			default:
+				if v, ok := nodeValue(n); ok && v != cell.Value {
+					upCtx, downCtx := commonAnchors(inst.Graggle, nodes)
+					changes = append(changes,
+						patch.Change{Kind: patch.ChangeKindDeleteNode, NodeID: n},
+						patch.Change{
+							Kind:        patch.ChangeKindNewNode,
+							NodeID:      t.NodeID{Patch: t.PlaceholderHash, Index: newNodeIndex},
+							Content:     []byte(formatCellLine(cell)),
+							UpContext:   upCtx,
+							DownContext: downCtx,
+						})
+					newNodeIndex++
+				}
+			}
 			continue
 		}
+
 		cell, ok := cellByPath[path]
 		if !ok || cell.Conflict != nil {
 			// Partial resolution; this conflict stays unresolved
@@ -436,7 +498,7 @@ func (inst *PushoutRepo) changesForResolution(cells []KVLine) (changes []patch.C
 		}
 		matched := false
 		for _, n := range nodes {
-			_, v, vok := splitKVLine(strings.TrimSuffix(string(inst.Graggle.NodeContent(n)), "\n"))
+			v, vok := nodeValue(n)
 			if !vok {
 				continue
 			}
@@ -499,9 +561,11 @@ func commonAnchors(g *store.Graggle, conflictNodes []t.NodeID) (upContext, downC
 // Errors:
 //   - patch not currently applied (no-op on already-removed hash)
 //   - patch metadata missing from MetaByHash (corrupted state)
-//   - [patch.Patch.Unapply] rejection: the patch has dependents that
-//     still reference its nodes; the caller must Unrecord those first
-//     (Unapply enforces "no foreign edges into our nodes").
+//   - an applied patch lists this hash among its Dependencies: the
+//     caller must Unrecord dependents first. This is checked here, on
+//     the declared dependency graph, BEFORE touching the graggle —
+//     [patch.Patch.Unapply]'s structural pre-flights (foreign edges,
+//     foreign tombstones) remain as defense in depth.
 //
 // Unrecord does not affect the patch graph as seen by Pull/Push: the
 // hash is gone from appliedHash, so missingOn() will treat the patch
@@ -515,13 +579,7 @@ func (inst *PushoutRepo) Unrecord(ctx context.Context, hash t.PatchHash) (audit 
 		return
 	}
 
-	idx := -1
-	for i, h := range inst.appliedHash {
-		if h == hash {
-			idx = i
-			break
-		}
-	}
+	idx := slices.Index(inst.appliedHash, hash)
 	if idx < 0 {
 		err = eh.Errorf("patch %s not currently applied", hash)
 		return
@@ -531,21 +589,35 @@ func (inst *PushoutRepo) Unrecord(ctx context.Context, hash t.PatchHash) (audit 
 		err = eh.Errorf("patch %s metadata missing from MetaByHash", hash)
 		return
 	}
+	for _, h := range inst.appliedHash {
+		if h == hash {
+			continue
+		}
+		dependent, ok := inst.MetaByHash[h]
+		if !ok || dependent.Patch == nil {
+			continue
+		}
+		if slices.Contains(dependent.Patch.Dependencies, hash) {
+			err = eh.Errorf("patch %s is a dependency of applied patch %s — unrecord dependents first", hash, h)
+			return
+		}
+	}
 
-	if uerr := env.Patch.Unapply(inst.Graggle); uerr != nil {
+	// Unapply against a clone; swap in only after the on-disk applied
+	// list has been rewritten, so a failure at any step leaves both the
+	// working state and the log untouched.
+	next := inst.Graggle.Clone()
+	if uerr := env.Patch.Unapply(next); uerr != nil {
 		err = eh.Errorf("unapply patch %s: %w", hash, uerr)
 		return
 	}
-
-	// Remove from in-memory applied list, then rewrite the
-	// persisted file from the new in-memory state. The append-only
-	// helper [appendApplied] is the wrong tool here; rewriting is
-	// the simplest way to keep on-disk and in-memory consistent.
-	inst.appliedHash = append(inst.appliedHash[:idx], inst.appliedHash[idx+1:]...)
-	if werr := writeAppliedList(inst.path, inst.appliedHash); werr != nil {
+	newApplied := slices.Delete(slices.Clone(inst.appliedHash), idx, idx+1)
+	if werr := writeAppliedList(inst.path, newApplied); werr != nil {
 		err = eh.Errorf("rewrite applied list: %w", werr)
 		return
 	}
+	inst.appliedHash = newApplied
+	inst.Graggle = next
 
 	short := hex.EncodeToString(hash[:8])
 	audit = fmt.Sprintf("[pushout-native] unrecord %s", short)
@@ -553,8 +625,15 @@ func (inst *PushoutRepo) Unrecord(ctx context.Context, hash t.PatchHash) (audit 
 }
 
 // Apply ingests a foreign envelope. The patch must depend only on
-// patches we have already applied; otherwise we reject — pushout has
-// no on-the-fly dependency fetch.
+// patches that are currently APPLIED — merely having seen an envelope
+// (MetaByHash) is not enough: after Unrecord a dependency is known but
+// its nodes are gone from the graggle, and gating on the wrong set let a
+// dependent walk into a half-applicable state. Pushout has no
+// on-the-fly dependency fetch.
+//
+// The patch applies to a clone of the graggle; working state and the
+// on-disk log advance only after every step succeeded, so a failed
+// apply leaves no phantom nodes behind.
 func (inst *PushoutRepo) Apply(ctx context.Context, env PatchEnvelope) (audit string, err error) {
 	inst.Mu.Lock()
 	defer inst.Mu.Unlock()
@@ -567,33 +646,26 @@ func (inst *PushoutRepo) Apply(ctx context.Context, env PatchEnvelope) (audit st
 		err = eh.Errorf("decode envelope: %w", derr)
 		return
 	}
+	if slices.Contains(inst.appliedHash, decoded.Patch.Hash) {
+		audit = fmt.Sprintf("[pushout-native] apply %s: already present", PatchID{Hex: hex.EncodeToString(decoded.Patch.Hash[:])}.Short())
+		return
+	}
 	if cached, exists := inst.MetaByHash[decoded.Patch.Hash]; exists {
-		alreadyApplied := false
-		for _, h := range inst.appliedHash {
-			if h == decoded.Patch.Hash {
-				alreadyApplied = true
-				break
-			}
-		}
-		if alreadyApplied {
-			audit = fmt.Sprintf("[pushout-native] apply %s: already present", PatchID{Hex: hex.EncodeToString(decoded.Patch.Hash[:])}.Short())
-			return
-		}
 		// Hash is cached in MetaByHash but absent from appliedHash:
 		// this is the post-[Unrecord] re-apply path. Reuse the
 		// cached envelope (identical content, by hash equality) and
 		// fall through to the apply/persist sequence so the patch
-		// re-enters the applied set without being redundantly
-		// decoded.
+		// re-enters the applied set.
 		decoded = cached
 	}
 	for _, dep := range decoded.Patch.Dependencies {
-		if _, ok := inst.MetaByHash[dep]; !ok {
+		if !slices.Contains(inst.appliedHash, dep) {
 			err = eh.Errorf("missing dependency %s — apply prerequisite patches first", PatchID{Hex: hex.EncodeToString(dep[:])}.Short())
 			return
 		}
 	}
-	if aerr := decoded.Patch.Apply(inst.Graggle); aerr != nil {
+	next := inst.Graggle.Clone()
+	if aerr := decoded.Patch.Apply(next); aerr != nil {
 		err = eh.Errorf("apply patch %s: %w", decoded.Patch.Hash, aerr)
 		return
 	}
@@ -607,6 +679,7 @@ func (inst *PushoutRepo) Apply(ctx context.Context, env PatchEnvelope) (audit st
 		inst.MetaByHash[decoded.Patch.Hash] = decoded
 	}
 	inst.appliedHash = append(inst.appliedHash, decoded.Patch.Hash)
+	inst.Graggle = next
 	audit = fmt.Sprintf("[pushout-native] apply %s by %s", PatchID{Hex: hex.EncodeToString(decoded.Patch.Hash[:])}.Short(), decoded.Patch.Author)
 	return
 }
@@ -623,28 +696,38 @@ func (inst *PushoutRepo) Push(ctx context.Context, dest RepoI) (audit string, er
 	if err != nil {
 		return
 	}
+	var lines []string
 	for _, h := range missing {
 		env, rerr := readEnvelope(inst.path, h)
 		if rerr != nil {
 			err = rerr
+			audit = strings.Join(lines, "\n")
 			return
 		}
 		bytes, eerr := envelope.Encode(env)
 		if eerr != nil {
 			err = eerr
+			audit = strings.Join(lines, "\n")
 			return
 		}
-		_, aerr := other.Apply(ctx, PatchEnvelope{
+		applyAudit, aerr := other.Apply(ctx, PatchEnvelope{
 			ID:       PatchID{Hex: hex.EncodeToString(h[:])},
 			Producer: env.Producer,
 			Bytes:    bytes,
 		})
+		if applyAudit != "" {
+			lines = append(lines, applyAudit)
+		}
 		if aerr != nil {
+			// Keep the audit of what DID land before the failure — a
+			// partial push is real state the operator needs to see.
 			err = aerr
+			audit = strings.Join(lines, "\n")
 			return
 		}
 	}
-	audit = fmt.Sprintf("[pushout-native] push %s → %s (%d patches)", inst.path, other.path, len(missing))
+	lines = append(lines, fmt.Sprintf("[pushout-native] push %s → %s (%d patches)", inst.path, other.path, len(missing)))
+	audit = strings.Join(lines, "\n")
 	return
 }
 
@@ -662,24 +745,31 @@ func (inst *PushoutRepo) Pull(ctx context.Context, src RepoI) (audit string, had
 		err = merr
 		return
 	}
+	var lines []string
 	for _, h := range missing {
 		env, rerr := readEnvelope(other.path, h)
 		if rerr != nil {
 			err = rerr
+			audit = strings.Join(lines, "\n")
 			return
 		}
 		bytes, eerr := envelope.Encode(env)
 		if eerr != nil {
 			err = eerr
+			audit = strings.Join(lines, "\n")
 			return
 		}
-		_, aerr := inst.Apply(ctx, PatchEnvelope{
+		applyAudit, aerr := inst.Apply(ctx, PatchEnvelope{
 			ID:       PatchID{Hex: hex.EncodeToString(h[:])},
 			Producer: env.Producer,
 			Bytes:    bytes,
 		})
+		if applyAudit != "" {
+			lines = append(lines, applyAudit)
+		}
 		if aerr != nil {
 			err = aerr
+			audit = strings.Join(lines, "\n")
 			return
 		}
 	}
@@ -689,7 +779,8 @@ func (inst *PushoutRepo) Pull(ctx context.Context, src RepoI) (audit string, had
 		hadConflict = algo.HasConflicts(inst.Graggle)
 	}
 	inst.Mu.Unlock()
-	audit = fmt.Sprintf("[pushout-native] pull %s ← %s (%d patches)", inst.path, other.path, len(missing))
+	lines = append(lines, fmt.Sprintf("[pushout-native] pull %s ← %s (%d patches)", inst.path, other.path, len(missing)))
+	audit = strings.Join(lines, "\n")
 	return
 }
 
@@ -697,7 +788,9 @@ func (inst *PushoutRepo) Pull(ctx context.Context, src RepoI) (audit string, had
 // inst's apply order so dependencies precede dependents.
 func (inst *PushoutRepo) missingOn(other *PushoutRepo) (hashes []t.PatchHash, err error) {
 	inst.Mu.Lock()
-	have := inst.appliedHash
+	// Clone, not alias: the slice is iterated after the lock is released,
+	// and a concurrent mutation of the backing array would tear it.
+	have := slices.Clone(inst.appliedHash)
 	inst.Mu.Unlock()
 	other.Mu.Lock()
 	otherHas := make(map[t.PatchHash]struct{}, len(other.appliedHash))
@@ -810,10 +903,14 @@ func appendApplied(repoPath string, h t.PatchHash) (err error) {
 		err = eh.Errorf("open applied.txt: %w", oerr)
 		return
 	}
-	defer f.Close()
 	_, werr := fmt.Fprintln(f, hex.EncodeToString(h[:]))
+	cerr := f.Close()
 	if werr != nil {
 		err = eh.Errorf("write applied.txt: %w", werr)
+		return
+	}
+	if cerr != nil {
+		err = eh.Errorf("close applied.txt: %w", cerr)
 	}
 	return
 }
@@ -838,7 +935,12 @@ func writeAppliedList(repoPath string, hashes []t.PatchHash) (err error) {
 // text — including the trailing newline. The line is what gets stored
 // as a node's content; matching content across patches is what
 // [patch.LineDiff] uses to detect "kept" lines.
+//
+// The value is strconv.Quote'd so that quotes, backslashes, and even
+// newlines round-trip exactly through [splitKVLine]; the path is
+// validated by [validateCellPaths] to be quote/space/newline-free, so
+// the first space is always the separator.
 func formatCellLine(c KVLine) (s string) {
-	s = fmt.Sprintf("%s \"%s\"\n", c.Path, c.Value)
+	s = c.Path + " " + strconv.Quote(c.Value) + "\n"
 	return
 }

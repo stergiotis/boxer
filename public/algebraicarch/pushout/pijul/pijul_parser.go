@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"encoding/json/v2"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -96,7 +97,9 @@ func ApplyCreditToCells(creditOut string, cells []KVLine, entries []LogEntry) (o
 		if out[i].Conflict != nil {
 			continue
 		}
-		key := fmt.Sprintf(`%s "%s"`, out[i].Path, out[i].Value)
+		// The credit output echoes the tracked file's lines, which carry
+		// strconv.Quote'd values — the lookup key must match that form.
+		key := out[i].Path + " " + strconv.Quote(out[i].Value)
 		entry, ok := contentToEntry[key]
 		if !ok {
 			continue
@@ -155,10 +158,9 @@ func splitAndTrim(s string, sep string) (out []string) {
 // package's domain [KVLine] slice. Conflict blocks become cells with a
 // non-nil Conflict; clean rows become cells with Value populated.
 //
-// Limitations: handles only two-way conflicts spanning a single key,
-// and treats values as untyped trimmed-quote strings (so a value
-// containing an embedded `"` round-trips poorly). Both are
-// text-format issues and will not exist in the native backend.
+// Limitation: conflict blocks are assumed to span a single key. Values
+// are strconv.Quote'd literals (see [splitKVLine]) and round-trip
+// byte-exactly.
 func ParseRecordText(content string) (cells []KVLine, hasConflict bool) {
 	scanner := bufio.NewScanner(strings.NewReader(content))
 
@@ -212,22 +214,48 @@ func ParseRecordText(content string) (cells []KVLine, hasConflict bool) {
 	return
 }
 
+// splitKVLine parses one `<path> <quoted-value>` cell line. The value is
+// a strconv.Quote'd string literal — the exact inverse of
+// [formatCellLine] / [SerializeRecordText] — so quotes, backslashes, and
+// escaped newlines in values round-trip byte-exactly. A line whose value
+// part is not a single valid quoted literal returns ok=false (the
+// earlier strings.Trim(`"`) approach silently mangled values with
+// leading/trailing quotes instead).
 func splitKVLine(line string) (path string, value string, ok bool) {
 	parts := strings.SplitN(line, " ", 2)
 	if len(parts) < 2 {
 		return
 	}
+	v, uerr := strconv.Unquote(parts[1])
+	if uerr != nil {
+		return
+	}
 	path = parts[0]
-	value = strings.Trim(parts[1], `"`)
+	value = v
 	ok = true
 	return
 }
 
+// validateCellPaths rejects cell paths that cannot survive the
+// `<path> <quoted-value>` line format: the path must be non-empty and
+// free of spaces (the separator), quotes, and newlines. Values are
+// unrestricted — quoting handles them.
+func validateCellPaths(cells []KVLine) (err error) {
+	for _, c := range cells {
+		if c.Path == "" || strings.ContainsAny(c.Path, " \"\n") {
+			err = eh.Errorf("invalid cell path %q: must be non-empty, without spaces, quotes, or newlines", c.Path)
+			return
+		}
+	}
+	return
+}
+
 // SerializeRecordText is the inverse of [ParseRecordText]: render the
-// in-memory cell slice back to pijul's textual flat-KV format. The
-// trailing newline is structurally important — without it pijul's
-// patch graph treats the EOF context node as overlapping and may
-// promote unrelated edits into spurious conflicts.
+// in-memory cell slice back to pijul's textual flat-KV format, with
+// values strconv.Quote'd to match [splitKVLine]. The trailing newline is
+// structurally important — without it pijul's patch graph treats the EOF
+// context node as overlapping and may promote unrelated edits into
+// spurious conflicts.
 //
 // Conflict blocks use fixed side labels "1" and "2"; pijul does not
 // require any specific values in those slots, only that the block is
@@ -242,11 +270,11 @@ func SerializeRecordText(cells []KVLine) (raw []byte) {
 				if i > 0 {
 					out = append(out, "=======")
 				}
-				out = append(out, fmt.Sprintf(`%s "%s"`, c.Path, v))
+				out = append(out, c.Path+" "+strconv.Quote(v))
 			}
 			out = append(out, fmt.Sprintf("<<<<<<< %d", len(values)))
 		} else {
-			out = append(out, fmt.Sprintf(`%s "%s"`, c.Path, c.Value))
+			out = append(out, c.Path+" "+strconv.Quote(c.Value))
 		}
 	}
 	raw = []byte(strings.Join(out, "\n") + "\n")

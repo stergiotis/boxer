@@ -181,8 +181,12 @@ func (inst *pijulTextRepo) SetAndRecord(ctx context.Context, cells []KVLine, aut
 		return
 	}
 
-	hash, hashAudit, _ := inst.runner.LatestHash(ctx, inst.path)
+	hash, hashAudit, herr := inst.runner.LatestHash(ctx, inst.path)
 	audit = appendAuditLine(audit, hashAudit)
+	if herr != nil {
+		err = eh.Errorf("pijul record succeeded but reading the new hash failed: %w", herr)
+		return
+	}
 	id = PatchID{Hex: hash}
 	return
 }
@@ -242,10 +246,11 @@ func (inst *pijulTextRepo) ExportLatest(ctx context.Context) (env PatchEnvelope,
 		err = ferr
 		return
 	}
-	hash, hashAudit, _ := inst.runner.LatestHash(ctx, inst.path)
+	hash, hashAudit, herr := inst.runner.LatestHash(ctx, inst.path)
 	audit = hashAudit
-	if hash == "" {
-		hash = "unknown"
+	if herr != nil {
+		err = eh.Errorf("read latest hash: %w", herr)
+		return
 	}
 	bytes, rerr := os.ReadFile(srcFile)
 	if rerr != nil {
