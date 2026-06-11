@@ -17,6 +17,20 @@ import (
 
 var updateGolden = flag.Bool("update-golden", false, "update golden files")
 
+func TestStylesheet_Selectable(t *testing.T) {
+	// Obsidian is the default and equals DefaultStylesheet.
+	require.Equal(t, DefaultStylesheet(), Stylesheet(StylesheetObsidian))
+	require.Contains(t, Stylesheet(StylesheetObsidian), "--ob-bg")
+
+	// IDS is self-contained: generated palette tokens + classless base +
+	// obsidian coverage, with the @import folded in so it inlines cleanly.
+	ids := Stylesheet(StylesheetIDS)
+	require.Contains(t, ids, "--ids-bg-panel")  // generated palette token
+	require.Contains(t, ids, ".callout-title")  // obsidian-class coverage
+	require.Contains(t, ids, "max-width: 50em")               // reading column
+	require.NotContains(t, ids, "@import \"ids-palette.css\"") // statement folded in for inlining
+}
+
 func render(t *testing.T, opts Options, input string) string {
 	t.Helper()
 	md := New(opts)

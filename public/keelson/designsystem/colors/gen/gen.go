@@ -4,10 +4,11 @@
 //
 // Reads palette.toml + pairs.toml; performs OKLCh → sRGB gamut clipping;
 // runs APCA + WCAG 2.1 contrast verification; runs CVD ΔE > 15 verification;
-// runs IP-boundary verbatim search; emits four artefacts:
+// runs IP-boundary verbatim search; emits five artefacts:
 //
-//   - src/rust/imzero2_egui/src/style/tokens/palette_generated.rs
+//   - rust/imzero2/imzero2_egui/src/style/tokens/palette_generated.rs
 //   - public/keelson/designsystem/styletokens/palette_generated.go
+//   - public/keelson/designsystem/web/ids-palette.css   (ADR-0076)
 //   - doc/design-system/foundations/color.md
 //   - doc/design-system/foundations/ip-boundary-check.md
 //
@@ -94,8 +95,8 @@ func Run(ctx context.Context, cfg Config) (res Result, err error) {
 		}
 	}
 
-	paletteTomlPath := filepath.Join(repoRoot, "src/rust/assets/colors/palette.toml")
-	pairsTomlPath := filepath.Join(repoRoot, "src/rust/assets/colors/pairs.toml")
+	paletteTomlPath := filepath.Join(repoRoot, "rust/imzero2/assets/colors/palette.toml")
+	pairsTomlPath := filepath.Join(repoRoot, "rust/imzero2/assets/colors/pairs.toml")
 	ipRefsDir := filepath.Join(repoRoot, "public/keelson/designsystem/colors/ip-refs")
 
 	var pf palette.File
@@ -144,11 +145,13 @@ func Run(ctx context.Context, cfg Config) (res Result, err error) {
 	// ---- Emit ----
 	rustOut := emit.RustFile(tokens)
 	goOut := emit.GoFile(tokens)
+	cssOut := emit.CssFile(tokens)
 	colorMd := emit.ColorMd(tokens, apcaResults, contrastResults)
 	ipMd := emit.IPBoundaryMd(collisions, sources)
 
-	rustPath := filepath.Join(repoRoot, "src/rust/imzero2_egui/src/style/tokens/palette_generated.rs")
+	rustPath := filepath.Join(repoRoot, "rust/imzero2/imzero2_egui/src/style/tokens/palette_generated.rs")
 	goPath := filepath.Join(repoRoot, "public/keelson/designsystem/styletokens/palette_generated.go")
+	cssPath := filepath.Join(repoRoot, "public/keelson/designsystem/web/ids-palette.css")
 	colorMdPath := filepath.Join(repoRoot, "doc/design-system/foundations/color.md")
 	ipMdPath := filepath.Join(repoRoot, "doc/design-system/foundations/ip-boundary-check.md")
 
@@ -161,9 +164,17 @@ func Run(ctx context.Context, cfg Config) (res Result, err error) {
 		if err != nil {
 			return
 		}
+		err = verifyFile(cssPath, cssOut)
+		if err != nil {
+			return
+		}
 		// color.md and ip-boundary-check.md include time.Now(); skip byte-compare.
 	} else {
 		err = os.MkdirAll(filepath.Dir(colorMdPath), 0o755)
+		if err != nil {
+			return
+		}
+		err = os.MkdirAll(filepath.Dir(cssPath), 0o755)
 		if err != nil {
 			return
 		}
@@ -172,6 +183,7 @@ func Run(ctx context.Context, cfg Config) (res Result, err error) {
 		}{
 			{rustPath, rustOut},
 			{goPath, goOut},
+			{cssPath, cssOut},
 			{colorMdPath, colorMd},
 			{ipMdPath, ipMd},
 		} {

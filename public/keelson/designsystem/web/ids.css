@@ -1,0 +1,393 @@
+/* ==========================================================================
+   ids.css — IDS lean classless CSS (ADR-0076)
+   --------------------------------------------------------------------------
+   A small, standalone, reusable stylesheet for server-rendered HTML pages,
+   built on the ImZero2 Design System (IDS) tokens. Drop one <link> (or inline
+   it) and semantic HTML "just works" in the IDS dark look — no classes needed.
+
+   Layers:
+     1. Colour tokens          — @import ids-palette.css (generated; DO NOT EDIT)
+     2. Scalar tokens          — spacing / radius / stroke / type / motion
+     3. Classless element base — bare HTML styled directly
+     4. Obsidian-markdown      — every class the obsidian renderer emits
+                                 (public/semistructured/markdown/obsidian), so
+                                 this file is a drop-in replacement for that
+                                 package's static/obsidian.css.
+
+   Hand-authored (unlike ids-palette.css). The scalar tokens mirror the Go/Rust
+   constants in styletokens (spacing.go, rounding.go, stroke.go, typography.go,
+   motion.go) at Standard density. Fidelity note: this shares IDS *tokens and
+   feel*, it does not pixel-replicate egui's immediate-mode widgets.
+   ========================================================================== */
+
+@import "ids-palette.css";
+
+/* --------------------------------------------------------------------------
+   2. Scalar tokens (Standard density). Mirror of styletokens; see header.
+   -------------------------------------------------------------------------- */
+:root {
+  /* Spacing ladder — styletokens.PxTable Standard column, the 2 px grid */
+  --ids-space-0: 2px;
+  --ids-space-1: 4px;
+  --ids-space-2: 6px;
+  --ids-space-3: 8px;
+  --ids-space-4: 12px;
+  --ids-space-5: 16px;
+  --ids-space-6: 24px;
+  --ids-space-7: 32px;
+
+  /* Corner radius — RoundingNone/Sm/Md/Lg */
+  --ids-radius-none: 0;
+  --ids-radius-sm: 2px;
+  --ids-radius-md: 4px;
+  --ids-radius-lg: 6px;
+
+  /* Border / stroke widths — StrokeHair/Regular/Strong */
+  --ids-border-hair: 1px;
+  --ids-border-regular: 1.5px;
+  --ids-border-strong: 2px;
+
+  /* Type scale — DisplayPt..MicroPt as rem (logical points ≈ px at a 16px root) */
+  --ids-text-display: 1.375rem; /* 22 */
+  --ids-text-heading: 1rem;     /* 16 */
+  --ids-text-body: 0.8125rem;   /* 13 */
+  --ids-text-caption: 0.6875rem;/* 11 */
+  --ids-text-micro: 0.5625rem;  /*  9 */
+  --ids-line: 1.6;
+  --ids-line-tight: 1.3;
+
+  /* Motion — MotionQuick/Standard/Slow */
+  --ids-motion-quick: 80ms;
+  --ids-motion-standard: 160ms;
+  --ids-motion-slow: 320ms;
+
+  /* Font stacks — system by default so the sheet is asset-free and standalone.
+     IDS web-fonts (Iosevka Aile / IDS Mono / Phosphor) are an opt-in add-on. */
+  --ids-font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --ids-font-mono: ui-monospace, "Cascadia Code", "JetBrains Mono", "Fira Code", Consolas, "Liberation Mono", monospace;
+}
+
+/* --------------------------------------------------------------------------
+   3. Classless element base
+   -------------------------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  font-size: 100%;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin-block: 2em;
+  margin-inline: auto;
+  max-width: 50em;
+  padding-inline: var(--ids-space-5);
+  background: var(--ids-bg-panel);
+  color: var(--ids-text-primary);
+  font-family: var(--ids-font-sans);
+  font-size: var(--ids-text-body);
+  line-height: var(--ids-line);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Headings — markdown's six levels extend the IDS UI type scale (display is
+   its top step); h3 lands on heading, the rest interpolate around it. */
+h1, h2, h3, h4, h5, h6 {
+  margin: 1.4em 0 0.6em;
+  line-height: var(--ids-line-tight);
+  font-weight: 600;
+  color: var(--ids-text-extreme);
+}
+h1 { font-size: var(--ids-text-display); }
+h2 { font-size: 1.2rem; }
+h3 { font-size: var(--ids-text-heading); }
+h4 { font-size: 0.9rem; }
+h5 { font-size: var(--ids-text-body); }
+h6 {
+  font-size: var(--ids-text-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ids-text-secondary);
+}
+
+p { margin: 0.75em 0; }
+
+a {
+  color: var(--ids-accent);
+  text-decoration: none;
+  transition: color var(--ids-motion-quick) ease;
+}
+a:hover { text-decoration: underline; }
+
+strong, b { color: var(--ids-text-extreme); font-weight: 600; }
+em, i { font-style: italic; }
+small { font-size: var(--ids-text-caption); color: var(--ids-text-secondary); }
+
+ul, ol { margin: 0.75em 0; padding-left: 1.5em; }
+li { margin: 0.2em 0; }
+
+blockquote {
+  margin: 1em 0;
+  padding: 0.2em 0 0.2em 1em;
+  border-left: var(--ids-border-strong) solid var(--ids-border-default);
+  color: var(--ids-text-secondary);
+}
+
+hr {
+  margin: 1.5em 0;
+  border: none;
+  border-top: var(--ids-border-hair) solid var(--ids-border-faint);
+}
+
+mark {
+  background: var(--ids-warning-strong);
+  color: var(--ids-bg-extreme);
+  padding: 0.05em 0.2em;
+  border-radius: var(--ids-radius-sm);
+}
+
+del { color: var(--ids-text-disabled); text-decoration: line-through; }
+
+::selection { background: var(--ids-accent-subtle); color: var(--ids-text-extreme); }
+
+:focus-visible {
+  outline: var(--ids-border-strong) solid var(--ids-accent);
+  outline-offset: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   4. Code
+   -------------------------------------------------------------------------- */
+code, kbd, samp {
+  font-family: var(--ids-font-mono);
+  font-size: 0.9em;
+}
+:not(pre) > code, kbd {
+  background: var(--ids-bg-surface);
+  padding: 0.12em 0.35em;
+  border-radius: var(--ids-radius-sm);
+}
+kbd { border: var(--ids-border-hair) solid var(--ids-border-faint); }
+
+pre {
+  margin: 1em 0;
+  padding: var(--ids-space-4);
+  background: var(--ids-bg-surface);
+  border: var(--ids-border-hair) solid var(--ids-border-faint);
+  border-radius: var(--ids-radius-md);
+  overflow-x: auto;
+  line-height: 1.45;
+}
+pre code { background: none; padding: 0; font-size: 0.85rem; }
+
+/* --------------------------------------------------------------------------
+   5. Media
+   -------------------------------------------------------------------------- */
+img, svg, video { max-width: 100%; height: auto; }
+
+/* --------------------------------------------------------------------------
+   6. Tables (GFM)
+   -------------------------------------------------------------------------- */
+table {
+  border-collapse: collapse;
+  margin: 1em 0;
+  width: auto;
+  min-width: 40%;
+}
+th, td {
+  border: var(--ids-border-hair) solid var(--ids-border-faint);
+  padding: var(--ids-space-1) var(--ids-space-3);
+  text-align: left;
+}
+th {
+  background: var(--ids-bg-surface);
+  font-weight: 600;
+  color: var(--ids-text-extreme);
+}
+tbody tr:nth-child(even) td { background: var(--ids-bg-faint); }
+tbody tr:hover td { background: var(--ids-bg-surface); }
+
+/* --------------------------------------------------------------------------
+   7. Forms & controls
+   -------------------------------------------------------------------------- */
+button, input, select, textarea {
+  font: inherit;
+  color: var(--ids-text-primary);
+  background: var(--ids-bg-surface);
+  border: var(--ids-border-regular) solid var(--ids-border-default);
+  border-radius: var(--ids-radius-sm);
+  padding: var(--ids-space-1) var(--ids-space-3);
+  transition: border-color var(--ids-motion-quick) ease,
+              background var(--ids-motion-quick) ease;
+}
+button { cursor: pointer; }
+button:hover, input:hover, select:hover, textarea:hover { border-color: var(--ids-border-default); }
+button:hover { border-color: var(--ids-accent); }
+button:active { background: var(--ids-bg-faint); }
+:disabled { color: var(--ids-text-disabled); cursor: not-allowed; opacity: 0.7; }
+::placeholder { color: var(--ids-text-disabled); }
+
+/* ==========================================================================
+   8. Obsidian-markdown coverage
+   Mirrors every selector in the obsidian renderer's static/obsidian.css, so an
+   obsidian-rendered page styled by ids.css needs nothing else. Class set:
+   wikilink(-broken) · embed-image · embed-note(.embed-broken) · tag · callout
+   + callout-<type> · callout-title · callout-content · frontmatter · dl/dt/dd ·
+   contains-task-list · task-list-item.
+   ========================================================================== */
+
+/* Wikilinks */
+.wikilink {
+  color: var(--ids-accent);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--ids-motion-quick);
+}
+.wikilink:hover { border-bottom-color: var(--ids-accent); }
+.wikilink.wikilink-broken {
+  color: var(--ids-error);
+  border-bottom: 1px dashed var(--ids-error);
+  opacity: 0.85;
+}
+.wikilink.wikilink-broken:hover { opacity: 1; }
+
+/* Embeds */
+.embed-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--ids-radius-md);
+  margin: 0.5em 0;
+}
+.embed-image.embed-broken { outline: 1px dashed var(--ids-error); opacity: 0.7; }
+.embed-note {
+  margin: 0.75em 0;
+  padding: var(--ids-space-2) var(--ids-space-4);
+  background: var(--ids-bg-surface);
+  border: var(--ids-border-hair) solid var(--ids-border-faint);
+  border-left: 3px solid var(--ids-accent);
+  border-radius: var(--ids-radius-md);
+  color: var(--ids-text-secondary);
+  font-size: 0.9em;
+}
+.embed-note.embed-broken { border-left-color: var(--ids-error); opacity: 0.7; }
+
+/* Tags */
+.tag {
+  display: inline-block;
+  background: var(--ids-bg-surface);
+  color: var(--ids-text-secondary);
+  font-size: 0.85em;
+  padding: 0.1em 0.5em;
+  border-radius: 10px;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background var(--ids-motion-quick);
+}
+.tag:hover { background: var(--ids-bg-faint); }
+a.tag { cursor: pointer; }
+
+/* Callouts */
+.callout {
+  margin: 1em 0;
+  background: var(--ids-bg-surface);
+  border-radius: var(--ids-radius-md);
+  border-left: 4px solid var(--ids-border-default);
+  overflow: hidden;
+}
+.callout-title {
+  padding: var(--ids-space-2) var(--ids-space-4);
+  font-weight: 600;
+  font-size: 0.95em;
+  user-select: none;
+}
+.callout-content { padding: 0 var(--ids-space-4) var(--ids-space-2); }
+.callout-content > :first-child { margin-top: 0; }
+.callout-content > :last-child { margin-bottom: 0; }
+
+/* Foldable callouts (<details><summary class="callout-title">) */
+.callout details > summary.callout-title { cursor: pointer; list-style: none; }
+.callout details > summary.callout-title::before {
+  content: "\25B8"; /* ▸ */
+  display: inline-block;
+  margin-right: 0.4em;
+  transition: transform var(--ids-motion-quick);
+}
+.callout details[open] > summary.callout-title::before { transform: rotate(90deg); }
+.callout details > summary.callout-title::-webkit-details-marker { display: none; }
+
+/* Callout type accents — obsidian's callout vocabulary mapped to IDS tones */
+.callout-note, .callout-info, .callout-todo,
+.callout-abstract, .callout-summary, .callout-tldr { --ids-callout-accent: var(--ids-info); }
+.callout-tip, .callout-hint,
+.callout-success, .callout-check, .callout-done { --ids-callout-accent: var(--ids-success); }
+.callout-question, .callout-help, .callout-faq,
+.callout-warning, .callout-caution, .callout-attention { --ids-callout-accent: var(--ids-warning); }
+.callout-failure, .callout-fail, .callout-missing,
+.callout-danger, .callout-error, .callout-bug { --ids-callout-accent: var(--ids-error); }
+.callout-example { --ids-callout-accent: var(--ids-accent); }
+.callout-quote, .callout-cite { --ids-callout-accent: var(--ids-neutral); }
+
+.callout[class*="callout-"] { border-left-color: var(--ids-callout-accent, var(--ids-border-default)); }
+.callout[class*="callout-"] .callout-title { color: var(--ids-callout-accent, var(--ids-text-extreme)); }
+
+/* Frontmatter properties panel (<details class="frontmatter">) */
+.frontmatter {
+  margin-bottom: 1.5em;
+  background: var(--ids-bg-surface);
+  border: var(--ids-border-hair) solid var(--ids-border-faint);
+  border-radius: var(--ids-radius-md);
+  font-size: 0.9em;
+}
+.frontmatter > summary {
+  padding: var(--ids-space-2) var(--ids-space-4);
+  font-weight: 600;
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ids-text-secondary);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+.frontmatter > summary::before {
+  content: "\25B8"; /* ▸ */
+  display: inline-block;
+  margin-right: 0.4em;
+  transition: transform var(--ids-motion-quick);
+}
+.frontmatter[open] > summary::before { transform: rotate(90deg); }
+.frontmatter > summary::-webkit-details-marker { display: none; }
+.frontmatter dl {
+  margin: 0;
+  padding: 0 var(--ids-space-4) var(--ids-space-2);
+  display: grid;
+  grid-template-columns: minmax(8em, auto) 1fr;
+  gap: 0.25em 1em;
+  align-items: baseline;
+}
+.frontmatter dt { color: var(--ids-text-secondary); font-weight: 500; }
+.frontmatter dd { margin: 0; }
+.frontmatter dd dl { padding: 0; margin: 0.2em 0; }
+.frontmatter dd ul { margin: 0; padding-left: 1.2em; list-style: disc; }
+.frontmatter dd li { margin: 0.1em 0; }
+
+/* Task lists (GFM) */
+.contains-task-list { list-style: none; padding-left: 0.4em; }
+.task-list-item { position: relative; padding-left: 1.6em; }
+.task-list-item input[type="checkbox"] {
+  position: absolute;
+  left: 0;
+  top: 0.3em;
+  accent-color: var(--ids-accent);
+}
+
+/* --------------------------------------------------------------------------
+   9. Reduced motion
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+  }
+}

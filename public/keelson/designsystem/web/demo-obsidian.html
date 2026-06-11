@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IDS × Obsidian — coverage demo (ADR-0076)</title>
+<link rel="stylesheet" href="ids.css">
+</head>
+<body>
+<details class="frontmatter" open>
+<summary>Properties</summary>
+<dl>
+<dt>aliases</dt><dd><ul>
+<li>showcase-doc</li>
+</ul>
+</dd>
+<dt>author</dt><dd><dl>
+<dt>email</dt><dd>alice@example.com</dd>
+<dt>name</dt><dd>Alice</dd>
+</dl>
+</dd>
+<dt>cssclasses</dt><dd><ul>
+<li>wide</li>
+</ul>
+</dd>
+<dt>publish</dt><dd>true</dd>
+<dt>tags</dt><dd><ul>
+<li>demo</li>
+<li>obsidian</li>
+</ul>
+</dd>
+<dt>title</dt><dd>Feature Showcase</dd>
+<dt>version</dt><dd>3</dd>
+</dl>
+</details>
+<h1>Feature Showcase</h1>
+<p>This document demonstrates all supported Obsidian-flavored Markdown features.</p>
+<h2>Wikilinks</h2>
+<ul>
+<li>Simple link: <a href="/MyPage" class="wikilink">MyPage</a></li>
+<li>Link with alias: <a href="/MyPage" class="wikilink">click here</a></li>
+<li>Link with heading: <a href="/MyPage#introduction" class="wikilink">MyPage &gt; Introduction</a></li>
+<li>Link with heading and alias: <a href="/MyPage#getting-started" class="wikilink">get started</a></li>
+<li>Spaces in name: <a href="/My%20Cool%20Page" class="wikilink">My Cool Page</a></li>
+<li>Broken link: <a href="/NonExistent" class="wikilink wikilink-broken">NonExistent</a></li>
+</ul>
+<h2>Embeds</h2>
+<ul>
+<li>Image embed: <img src="/assets/photo.png" alt="photo.png" class="embed-image" /></li>
+<li>SVG embed: <img src="/assets/diagram.svg" alt="diagram.svg" class="embed-image" /></li>
+<li>Note embed: <div class="embed-note" data-src="/assets/SomeNote">SomeNote</div></li>
+<li>Note section embed: <div class="embed-note" data-src="/assets/SomeNote#details">SomeNote &gt; Details</div></li>
+</ul>
+<h2>Highlights</h2>
+<p>This sentence has <mark>highlighted text</mark> in the middle.</p>
+<p>You can use highlights for <mark>key terms</mark> and <mark>important phrases</mark>.</p>
+<h2>Comments</h2>
+<p>This is visible  and this is visible again.</p>
+<p>Another paragraph with  embedded.</p>
+<h2>Tags</h2>
+<p>Inline tags: <span class="tag">#project</span> <span class="tag">#status/active</span> <span class="tag">#priority-high</span></p>
+<p>Nested tags work too: <span class="tag">#area/frontend/components</span></p>
+<h2>Callouts</h2>
+<div class="callout callout-note">
+<div class="callout-title">Note</div>
+<div class="callout-content">
+<p>This is a standard note callout with default title.</p>
+</div>
+</div>
+<div class="callout callout-warning">
+<div class="callout-title">Watch Out</div>
+<div class="callout-content">
+<p>This callout has a custom title.</p>
+</div>
+</div>
+<div class="callout callout-tip">
+<details>
+<summary class="callout-title">Collapsed Tip</summary>
+<div class="callout-content">
+<p>This content is hidden by default. Click to expand.</p>
+</div>
+</details>
+</div>
+<div class="callout callout-example">
+<details open>
+<summary class="callout-title">Expanded Example</summary>
+<div class="callout-content">
+<p>This foldable callout starts open.</p>
+<p>It can contain <strong>bold</strong>, <em>italic</em>, and <code>code</code>.</p>
+</div>
+</details>
+</div>
+<div class="callout callout-danger">
+<div class="callout-title">Critical Issue</div>
+<div class="callout-content">
+<p>Something went very wrong here.</p>
+</div>
+</div>
+<div class="callout callout-quote">
+<div class="callout-title">Albert Einstein</div>
+<div class="callout-content">
+<p>Imagination is more important than knowledge.</p>
+</div>
+</div>
+<h2>GFM Features</h2>
+<h3>Tables</h3>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Status</th>
+<th>Priority</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Wikilinks</td>
+<td>Done</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Embeds</td>
+<td>Done</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Callouts</td>
+<td>Done</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>Math</td>
+<td>Planned</td>
+<td>Low</td>
+</tr>
+</tbody>
+</table>
+<h3>Task Lists</h3>
+<ul>
+<li><input checked="" disabled="" type="checkbox"> Implement wikilinks</li>
+<li><input checked="" disabled="" type="checkbox"> Implement embeds</li>
+<li><input checked="" disabled="" type="checkbox"> Implement callouts</li>
+<li><input disabled="" type="checkbox"> Implement math rendering</li>
+<li><input disabled="" type="checkbox"> Add dark theme</li>
+</ul>
+<h3>Strikethrough</h3>
+<p>This feature is <del>no longer supported</del> deprecated.</p>
+<h2>Combined Features</h2>
+<p>A paragraph with <mark>highlights</mark>, <a href="/wikilinks" class="wikilink">wikilinks</a>, <span class="tag">#tags</span>, and  all together.</p>
+<div class="callout callout-info">
+<div class="callout-title">Integration Note</div>
+<div class="callout-content">
+<p>You can use <mark>highlights</mark> and <span class="tag">#tags</span> inside callouts too.</p>
+</div>
+</div>
+<h2>Code</h2>
+<p>Inline <code>code</code> and a block:</p>
+<pre><code class="language-go">func main() {
+    fmt.Println(&quot;Hello, Obsidian!&quot;)
+}
+</code></pre>
+</body>
+</html>
