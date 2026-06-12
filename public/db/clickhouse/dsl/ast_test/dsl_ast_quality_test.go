@@ -15,6 +15,7 @@ Great! Works fine. We reached an important milestone. We have created:
 package ast_test
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/fxamacker/cbor/v2"
@@ -368,6 +369,23 @@ func TestCorpusRoundTrip(t *testing.T) {
 				_, err = nanopass.Parse(out)
 				assert.NoError(t, err,
 					"CBOR round-trip ToSQL not parseable for %s:\n  toSQL: %s", entry.Name, out)
+			}
+
+			// Round-trip 3: semantic — ToSQL output, re-canonicalised and
+			// re-converted, must yield a structurally identical AST.
+			// Parseability alone is blind to precedence regrouping and
+			// dropped clauses (both print valid SQL that means something
+			// else); structural equality is not.
+			{
+				out := query.ToSQL()
+				renorm, err := fullPipeline(out)
+				require.NoError(t, err, "re-canonicalise failed for %s:\n  toSQL: %s", entry.Name, out)
+				pr2, err := nanopass.ParseCanonical(renorm)
+				require.NoError(t, err, "re-ParseCanonical failed for %s:\n  toSQL: %s\n  renorm: %s", entry.Name, out, renorm)
+				q3, err := ast.ConvertCSTToAST(pr2)
+				require.NoError(t, err)
+				assert.True(t, reflect.DeepEqual(query, q3),
+					"semantic round-trip changed the AST for %s:\n  toSQL:    %s\n  resql:    %s", entry.Name, out, q3.ToSQL())
 			}
 
 			passed++

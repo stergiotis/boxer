@@ -148,10 +148,14 @@ func TestUnmarshalScalarHex(t *testing.T) {
 }
 
 func TestUnmarshalScalarOctal(t *testing.T) {
+	// ClickHouse has no octal literals: the server evaluates 0777 as
+	// decimal 777 (the grammar's OCTAL_LITERAL token notwithstanding).
+	// Interpreting it as octal 511 would silently diverge from server
+	// semantics in the compile-time evaluator.
 	lit, err := marshalling.UnmarshalScalarLiteral("0777")
 	require.NoError(t, err)
 	assert.Equal(t, ctabb.U64, lit.ScalarType)
-	assert.Equal(t, uint64(511), lit.UintVal)
+	assert.Equal(t, uint64(777), lit.UintVal)
 }
 
 func TestUnmarshalScalarTrue(t *testing.T) {

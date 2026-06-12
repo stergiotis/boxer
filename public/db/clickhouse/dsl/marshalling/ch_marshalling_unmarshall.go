@@ -37,34 +37,42 @@ func UnmarshalCompositeLiteralEx(sql string, mapClickHouseTypeToCanonical func(s
 		return
 	}
 
-	var exprNode antlr.ParserRuleContext
-	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-		if _, ok := ctx.(*grammar1.ProjectionClauseContext); ok {
-			return true
-		}
-		if _, ok := ctx.(*grammar1.ColumnExprListContext); ok {
-			return true
-		}
-		if _, ok := ctx.(*grammar1.ColumnsExprColumnContext); ok {
-			return true
-		}
-		switch ctx.(type) {
-		case *grammar1.ColumnExprLiteralContext,
-			*grammar1.ColumnExprFunctionContext,
-			*grammar1.ColumnExprArrayContext,
-			*grammar1.ColumnExprIdentifierContext,
-			*grammar1.ColumnExprCastContext,
-			*grammar1.ColumnExprTupleContext:
-			if exprNode == nil {
-				exprNode = ctx
-			}
-			return false
-		}
-		return true
+	// The input must be exactly one literal expression. Take the projection
+	// clause's single direct column and dispatch on its expression node —
+	// anything the dispatcher does not support (operators, subqueries,
+	// multiple columns) is an error, never silently reduced to its first
+	// literal fragment. Only DIRECT children count: the elements of an
+	// array/tuple literal are themselves columnsExpr nodes deeper down.
+	proj := nanopass.FindFirst(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
+		_, ok := ctx.(*grammar1.ProjectionClauseContext)
+		return ok
 	})
-
-	if exprNode == nil {
-		err = eb.Build().Str("sql", sql).Errorf("no expression found in input")
+	if proj == nil {
+		err = eb.Build().Str("sql", sql).Errorf("no projection found in input")
+		return
+	}
+	var exprNode antlr.ParserRuleContext
+	nCols := 0
+	for i := 0; i < proj.GetChildCount(); i++ {
+		cel, ok := proj.GetChild(i).(*grammar1.ColumnExprListContext)
+		if !ok {
+			continue
+		}
+		for j := 0; j < cel.GetChildCount(); j++ {
+			col, ok := cel.GetChild(j).(*grammar1.ColumnsExprColumnContext)
+			if !ok {
+				continue
+			}
+			nCols++
+			if col.GetChildCount() == 1 {
+				if inner, ok := col.GetChild(0).(antlr.ParserRuleContext); ok {
+					exprNode = inner
+				}
+			}
+		}
+	}
+	if nCols != 1 || exprNode == nil {
+		err = eb.Build().Str("sql", sql).Int("columns", nCols).Errorf("input is not a single literal expression")
 		return
 	}
 
@@ -220,7 +228,11 @@ func unmarshalCastFunctionCST(pr *nanopass.ParseResult, ctx *grammar1.ColumnExpr
 		err = eb.Build().Str("arg", typeText).Errorf("second arg is not a quoted type")
 		return
 	}
-	chType := typeText[1 : len(typeText)-1]
+	chType, unescErr := UnescapeString(typeText)
+	if unescErr != nil {
+		err = eh.Errorf("unmarshalCastFunctionCST: type arg: %w", unescErr)
+		return
+	}
 
 	if args[0].GetChildCount() == 0 {
 		err = eh.Errorf("unmarshalCastFunctionCST: empty first arg")
@@ -318,26 +330,20 @@ func unmarshalArrayCST(pr *nanopass.ParseResult, ctx *grammar1.ColumnExprArrayCo
 
 func unmarshalCastExprCST(pr *nanopass.ParseResult, ctx *grammar1.ColumnExprCastContext, mapType func(string) (canonicaltypes.PrimitiveAstNodeI, error)) (result TypedLiteral, err error) {
 	var chType string
-	for i := 0; i < ctx.GetChildCount(); i++ {
-		child := ctx.GetChild(i)
-		switch c := child.(type) {
-		case *grammar1.ColumnTypeExprSimpleContext:
-			chType = c.GetText()
-		case *grammar1.ColumnTypeExprComplexContext:
-			chType = c.GetText()
-		}
-	}
-
 	var exprNode antlr.ParserRuleContext
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		child := ctx.GetChild(i)
-		if ruleCtx, ok := child.(antlr.ParserRuleContext); ok {
-			_, isSimple := child.(*grammar1.ColumnTypeExprSimpleContext)
-			_, isComplex := child.(*grammar1.ColumnTypeExprComplexContext)
-			if !isSimple && !isComplex {
-				exprNode = ruleCtx
-				break
+		c, isCtx := ctx.GetChild(i).(antlr.ParserRuleContext)
+		if !isCtx {
+			continue
+		}
+		if isColumnTypeExprNode(c) {
+			if chType == "" {
+				chType = c.GetText()
 			}
+			continue
+		}
+		if exprNode == nil {
+			exprNode = c
 		}
 	}
 
@@ -395,6 +401,20 @@ func unmarshalTupleExprCST(pr *nanopass.ParseResult, ctx *grammar1.ColumnExprTup
 }
 
 // --- Helpers ---
+
+// isColumnTypeExprNode reports whether the node is any alternative of the
+// columnTypeExpr rule.
+func isColumnTypeExprNode(ctx antlr.ParserRuleContext) bool {
+	switch ctx.(type) {
+	case *grammar1.ColumnTypeExprSimpleContext,
+		*grammar1.ColumnTypeExprComplexContext,
+		*grammar1.ColumnTypeExprParamContext,
+		*grammar1.ColumnTypeExprNestedContext,
+		*grammar1.ColumnTypeExprEnumContext:
+		return true
+	}
+	return false
+}
 
 func mapChTypeToCanonical(chType string, mapFunc func(string) (canonicaltypes.PrimitiveAstNodeI, error)) string {
 	if mapFunc == nil || chType == "" {

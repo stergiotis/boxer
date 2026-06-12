@@ -408,8 +408,11 @@ func TestNormalizeIdentifiersCTE(t *testing.T) {
 }
 
 func TestNormalizeIdentifiersSettings(t *testing.T) {
+	// Setting names are configuration keys, not relations — they stay bare
+	// (the server does not resolve a quoted identifier there).
 	got := mustProduceValidSQL(t, passes.CanonicalizeIdentifiers, "SELECT a FROM t SETTINGS max_threads = 4")
-	assert.Contains(t, got, `"max_threads"`)
+	assert.Contains(t, got, "SETTINGS max_threads = 4")
+	assert.NotContains(t, got, `"max_threads"`)
 }
 
 func TestNormalizeIdentifiersKeywordsUntouched(t *testing.T) {

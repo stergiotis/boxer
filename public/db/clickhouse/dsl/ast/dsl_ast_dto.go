@@ -32,23 +32,30 @@ type SelectUnionItem struct {
 }
 
 type Select struct {
-	Distinct      bool             `cbor:"distinct,omitempty"`
-	Top           *TopClause       `cbor:"top,omitempty"`
-	Projection    []Expr           `cbor:"projection"`
-	ExceptColumns *ExceptClause    `cbor:"except,omitempty"`
-	With          []Expr           `cbor:"with,omitempty"`
-	From          *JoinExpr        `cbor:"from,omitempty"`
-	ArrayJoin     *ArrayJoinClause `cbor:"array_join,omitempty"`
-	WindowDef     *WindowDefClause `cbor:"window_def,omitempty"`
-	Qualify       *Expr            `cbor:"qualify,omitempty"`
-	Prewhere      *Expr            `cbor:"prewhere,omitempty"`
-	Where         *Expr            `cbor:"where,omitempty"`
-	GroupBy       *GroupByClause   `cbor:"group_by,omitempty"`
-	Having        *Expr            `cbor:"having,omitempty"`
-	OrderBy       *OrderByClause   `cbor:"order_by,omitempty"`
-	LimitBy       *LimitByClause   `cbor:"limit_by,omitempty"`
-	Limit         *LimitClause     `cbor:"limit,omitempty"`
-	Settings      []SettingPair    `cbor:"settings,omitempty"`
+	Distinct      bool          `cbor:"distinct,omitempty"`
+	Top           *TopClause    `cbor:"top,omitempty"`
+	Projection    []Expr        `cbor:"projection"`
+	ExceptColumns *ExceptClause `cbor:"except,omitempty"`
+
+	// With holds the scalar-alias items of a selectStmt-level WITH clause
+	// (`expr AS name`); CTEs holds its named-query items (`name AS (query)`).
+	// Both come from the same clause; ToSQL emits CTEs first, then the
+	// scalar items (the relative interleaving of the two groups in the
+	// source is not preserved).
+	With      []Expr           `cbor:"with,omitempty"`
+	CTEs      []CTE            `cbor:"sel_ctes,omitempty"`
+	From      *JoinExpr        `cbor:"from,omitempty"`
+	ArrayJoin *ArrayJoinClause `cbor:"array_join,omitempty"`
+	WindowDef *WindowDefClause `cbor:"window_def,omitempty"`
+	Qualify   *Expr            `cbor:"qualify,omitempty"`
+	Prewhere  *Expr            `cbor:"prewhere,omitempty"`
+	Where     *Expr            `cbor:"where,omitempty"`
+	GroupBy   *GroupByClause   `cbor:"group_by,omitempty"`
+	Having    *Expr            `cbor:"having,omitempty"`
+	OrderBy   *OrderByClause   `cbor:"order_by,omitempty"`
+	LimitBy   *LimitByClause   `cbor:"limit_by,omitempty"`
+	Limit     *LimitClause     `cbor:"limit,omitempty"`
+	Settings  []SettingPair    `cbor:"settings,omitempty"`
 }
 
 // ============================================================================

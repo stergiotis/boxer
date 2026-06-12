@@ -38,6 +38,15 @@ func canonicalizeIdentifiersImpl(sql string) (result string, err error) {
 
 	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
 		switch c := ctx.(type) {
+		case *grammar1.SettingExprContext:
+			// Setting names are configuration keys, not relations — the
+			// server expects them bare. The value side only carries
+			// literals and array()/tuple() constructors whose names are
+			// real functions; quoting them buys nothing.
+			return false
+		case *grammar1.IdentifierOrNullContext:
+			// The FORMAT clause name (queryStmt level) stays bare.
+			return false
 		case *grammar1.ParamSlotContext:
 			// {name: Type} — ClickHouse parameter syntax takes a bare name
 			// and a bare type; quoting either breaks the slot.

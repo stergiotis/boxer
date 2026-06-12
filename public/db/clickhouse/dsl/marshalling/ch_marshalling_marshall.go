@@ -257,22 +257,10 @@ func UnmarshalScalarLiteral(token string) (result TypedLiteral, err error) {
 		return
 	}
 
-	if len(numPart) > 1 && numPart[0] == '0' && isOctalDigit(numPart[1]) && !containsAnyByte(numPart, ".eE") {
-		var val uint64
-		val, err = strconv.ParseUint(numPart[1:], 8, 64)
-		if err != nil {
-			err = fmt.Errorf("UnmarshalScalarLiteral: invalid octal literal %q: %w", token, err)
-			return
-		}
-		if sign >= 0 {
-			result.ScalarType = ctabb.U64
-			result.UintVal = val
-		} else {
-			result.ScalarType = ctabb.I64
-			result.IntVal = -int64(val)
-		}
-		return
-	}
+	// Note: ClickHouse has no octal literals — a leading-zero integer like
+	// 0777 is decimal 777 on the server, even though the lexer grammar
+	// carries an OCTAL_LITERAL token type. Decimal parsing below matches
+	// server semantics.
 
 	if containsAnyByte(numPart, ".eE") {
 		result.ScalarType = ctabb.F64
@@ -611,6 +599,12 @@ func MarshalGoValueToSQLWithOptionsCast(val any, opts MarshalOptions) (sql strin
 	case []any:
 		sql, err = marshalGoArray(v, opts)
 		return
+	case []int:
+		sql, err = marshalGoArray(v, opts)
+		if err == nil && opts.PreserveCasts {
+			castType = "Array(Int64)"
+		}
+		return
 	case []int64:
 		sql, err = marshalGoArray(v, opts)
 		if err == nil && opts.PreserveCasts {
@@ -699,6 +693,18 @@ func MarshalGoValueToSQLWithOptionsCast(val any, opts MarshalOptions) (sql strin
 		return
 
 	// --- Scalars (wide) ---
+	case int:
+		sql, err = MarshalScalarToSQL(NewScalarInt64(int64(v)))
+		if err == nil && opts.PreserveCasts {
+			castType = "Int64"
+		}
+		return
+	case uint:
+		sql, err = MarshalScalarToSQL(NewScalarUint64(uint64(v)))
+		if err == nil && opts.PreserveCasts {
+			castType = "UInt64"
+		}
+		return
 	case int64:
 		sql, err = MarshalScalarToSQL(NewScalarInt64(v))
 		if err == nil && opts.PreserveCasts {
@@ -831,8 +837,4 @@ func containsAnyByte(s string, chars string) bool {
 		}
 	}
 	return false
-}
-
-func isOctalDigit(b byte) bool {
-	return b >= '0' && b <= '7'
 }

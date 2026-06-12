@@ -7,6 +7,7 @@ import (
 
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar2"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -250,7 +251,7 @@ func convertSelectStmt(pr *nanopass.ParseResult, ctx *grammar2.SelectStmtContext
 		case *grammar2.ProjectionClauseContext:
 			err = convertProjectionClause(pr, c, &sel)
 		case *grammar2.WithClauseContext:
-			sel.With, err = convertWithClause(pr, c)
+			sel.With, sel.CTEs, err = convertWithClause(pr, c)
 		case *grammar2.FromClauseContext:
 			var je JoinExpr
 			je, err = convertFromClause(pr, c)
@@ -374,24 +375,34 @@ func convertProjectionExceptClause(ctx *grammar2.ProjectionExceptClauseContext) 
 	return
 }
 
-func convertWithClause(pr *nanopass.ParseResult, ctx *grammar2.WithClauseContext) (exprs []Expr, err error) {
-	// withClause now holds a sequence of withItem alternatives. For the AST's
-	// Select.With (which models scalar/column expression aliases inside a
-	// selectStmt), collect only the WithItemColumnsExprContext items; any
-	// CTE-form items (rare inside a nested selectStmt) are skipped here and
-	// caught at the query level via convertCTEs.
+func convertWithClause(pr *nanopass.ParseResult, ctx *grammar2.WithClauseContext) (exprs []Expr, ctes []CTE, err error) {
+	// withClause holds a sequence of withItem alternatives: scalar aliases
+	// (`expr AS name`) land in exprs; named queries (`name AS (query)`) are
+	// CTEs declared at the selectStmt level — union branches and subqueries
+	// carry their WITH here, never via the query-level ctes rule — and land
+	// in ctes. Dropping them would detach every reference in the body.
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		wi, ok := ctx.GetChild(i).(*grammar2.WithItemColumnsExprContext)
-		if !ok {
-			continue
-		}
-		ce := wi.ColumnsExpr()
-		if ce == nil {
-			continue
-		}
-		exprs, err = appendColumnsExpr(pr, ce, exprs)
-		if err != nil {
-			return
+		switch wi := ctx.GetChild(i).(type) {
+		case *grammar2.WithItemColumnsExprContext:
+			ce := wi.ColumnsExpr()
+			if ce == nil {
+				continue
+			}
+			exprs, err = appendColumnsExpr(pr, ce, exprs)
+			if err != nil {
+				return
+			}
+		case *grammar2.WithItemNamedQueryContext:
+			nq, ok := wi.NamedQuery().(*grammar2.NamedQueryContext)
+			if !ok {
+				continue
+			}
+			var cte CTE
+			cte, err = convertNamedQuery(pr, nq)
+			if err != nil {
+				return
+			}
+			ctes = append(ctes, cte)
 		}
 	}
 	return
@@ -526,8 +537,15 @@ func convertLimitByClause(pr *nanopass.ParseResult, ctx *grammar2.LimitByClauseC
 
 func convertLimitExpr(pr *nanopass.ParseResult, ctx *grammar2.LimitExprContext) (ls LimitSpec, err error) {
 	exprs := make([]Expr, 0, 2)
+	commaForm := false
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if ce, ok := ctx.GetChild(i).(grammar2.IColumnExprContext); ok {
+		child := ctx.GetChild(i)
+		if term, ok := child.(*antlr.TerminalNodeImpl); ok {
+			if term.GetSymbol().GetTokenType() == grammar2.ClickHouseLexerCOMMA {
+				commaForm = true
+			}
+		}
+		if ce, ok := child.(grammar2.IColumnExprContext); ok {
 			var expr Expr
 			expr, err = convertColumnExpr(pr, ce.(antlr.ParserRuleContext))
 			if err != nil {
@@ -536,11 +554,16 @@ func convertLimitExpr(pr *nanopass.ParseResult, ctx *grammar2.LimitExprContext) 
 			exprs = append(exprs, expr)
 		}
 	}
-	if len(exprs) >= 1 {
+	switch {
+	case commaForm && len(exprs) >= 2:
+		// ClickHouse: LIMIT m, n ≡ LIMIT n OFFSET m — offset comes FIRST.
+		ls.Limit = exprs[1]
+		ls.Offset = &exprs[0]
+	case len(exprs) >= 2:
 		ls.Limit = exprs[0]
-	}
-	if len(exprs) >= 2 {
 		ls.Offset = &exprs[1]
+	case len(exprs) == 1:
+		ls.Limit = exprs[0]
 	}
 	return
 }
@@ -1051,16 +1074,17 @@ func convertColumnExprList(pr *nanopass.ParseResult, ctx *grammar2.ColumnExprLis
 
 // --- Helpers ---
 
+// stripQuotes maps an identifier spelling to the name it denotes,
+// decoding quoting and escapes ("a""b" → a"b). Inverse: writeIdent.
 func stripQuotes(s string) string {
-	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
-		return s[1 : len(s)-1]
-	}
-	return s
+	return nanopass.DecodeIdentifier(s)
 }
 
+// stripStringQuotes maps a string-literal spelling to its value, resolving
+// escape sequences. Inverse: marshalling.EscapeString at emission.
 func stripStringQuotes(s string) string {
-	if len(s) >= 2 && s[0] == '\'' && s[len(s)-1] == '\'' {
-		return s[1 : len(s)-1]
+	if unq, err := marshalling.UnescapeString(s); err == nil {
+		return unq
 	}
 	return s
 }

@@ -14,6 +14,7 @@ import (
 	"strconv"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/ast"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // ============================================================================
@@ -98,7 +99,9 @@ func Star(table ...string) E {
 }
 
 // Sub creates a subquery expression from a SelectBuilder.
-// Propagates any error from the sub-builder.
+// Propagates any error from the sub-builder. CTEs declared on the
+// sub-builder become selectStmt-level WITH items of the subquery's head —
+// a SelectUnion has no query-level CTE slot.
 func Sub(sb SelectBuilder) E {
 	if sb.err != nil {
 		return errE(sb.err)
@@ -362,15 +365,20 @@ func (inst SelectBuilder) Limit(n int) SelectBuilder {
 	return inst
 }
 
+// Offset sets the OFFSET of an existing LIMIT clause. Calling it without a
+// prior Limit() is a deferred error — the AST's LimitSpec requires a limit
+// expression, and a zero-valued one would make ToSQL emit garbage.
 func (inst SelectBuilder) Offset(n int) SelectBuilder {
-	off := litInt(n)
-	if inst.sel.Limit != nil {
-		lcCopy := *inst.sel.Limit
-		lcCopy.Limit.Offset = &off
-		inst.sel.Limit = &lcCopy
-	} else {
-		inst.sel.Limit = &ast.LimitClause{Limit: ast.LimitSpec{Offset: &off}}
+	if inst.sel.Limit == nil {
+		if inst.err == nil {
+			inst.err = eh.Errorf("Offset(%d) requires a preceding Limit()", n)
+		}
+		return inst
 	}
+	off := litInt(n)
+	lcCopy := *inst.sel.Limit
+	lcCopy.Limit.Offset = &off
+	inst.sel.Limit = &lcCopy
 	return inst
 }
 
@@ -442,14 +450,22 @@ func (inst SelectBuilder) ExceptAll(other SelectBuilder) SelectBuilder {
 
 // --- Build ---
 
+// buildUnion lowers the builder into a SelectUnion. CTEs accumulated via
+// With() are attached to the head Select's WITH clause (selectStmt-level)
+// because SelectUnion itself has no CTE slot; buildQuery hoists them to the
+// query level instead, which reads more conventionally at the top level.
 func (inst SelectBuilder) buildUnion() ast.SelectUnion {
-	return ast.SelectUnion{Head: inst.sel, Items: inst.items}
+	head := inst.sel
+	if len(inst.ctes) > 0 {
+		head.CTEs = append(append([]ast.CTE{}, inst.ctes...), head.CTEs...)
+	}
+	return ast.SelectUnion{Head: head, Items: inst.items}
 }
 
 func (inst SelectBuilder) buildQuery() ast.Query {
 	return ast.Query{
 		CTEs:   inst.ctes,
-		Body:   inst.buildUnion(),
+		Body:   ast.SelectUnion{Head: inst.sel, Items: inst.items},
 		Format: inst.fmt,
 	}
 }

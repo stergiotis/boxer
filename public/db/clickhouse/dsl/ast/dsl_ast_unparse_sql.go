@@ -5,7 +5,48 @@ package ast
 import (
 	"fmt"
 	"strings"
+	"sync"
+
+	"github.com/antlr4-go/antlr/v4"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 )
+
+// --- Identifier emission ---
+
+var identProbeCache sync.Map // name → bool (needs quoting)
+
+// identNeedsQuoting reports whether name must be emitted double-quoted: a
+// bare emission is safe only when the real lexer reads the name back as
+// exactly one IDENTIFIER token covering the whole input. Keywords, spaces,
+// operators, and exotic spellings all fail the probe.
+func identNeedsQuoting(name string) bool {
+	if name == "" {
+		return true
+	}
+	if v, ok := identProbeCache.Load(name); ok {
+		return v.(bool)
+	}
+	lexer := grammar1.NewClickHouseLexer(antlr.NewInputStream(name))
+	lexer.RemoveErrorListeners()
+	tok := lexer.NextToken()
+	needs := tok.GetTokenType() != grammar1.ClickHouseLexerIDENTIFIER ||
+		tok.GetText() != name ||
+		lexer.NextToken().GetTokenType() != antlr.TokenEOF
+	identProbeCache.Store(name, needs)
+	return needs
+}
+
+// writeIdent emits an identifier, double-quoting (with escape encoding)
+// whenever the bare spelling would not lex back to the same name.
+func writeIdent(b *strings.Builder, name string) {
+	if identNeedsQuoting(name) {
+		b.WriteString(nanopass.QuoteIdentifier(name))
+		return
+	}
+	b.WriteString(name)
+}
 
 // ToSQL converts a Query AST back to a valid SQL string.
 // The output is valid ClickHouse SQL but not necessarily canonicalized —
@@ -38,14 +79,14 @@ func (inst Query) ToSQL() string {
 }
 
 func writeCTE(b *strings.Builder, cte CTE) {
-	b.WriteString(cte.Name)
+	writeIdent(b, cte.Name)
 	if len(cte.ColumnAliases) > 0 {
 		b.WriteByte('(')
 		for i, a := range cte.ColumnAliases {
 			if i > 0 {
 				b.WriteString(", ")
 			}
-			b.WriteString(a)
+			writeIdent(b, a)
 		}
 		b.WriteByte(')')
 	}
@@ -84,9 +125,20 @@ func writeSelectUnion(b *strings.Builder, su SelectUnion) {
 }
 
 func writeSelect(b *strings.Builder, sel Select) {
-	if len(sel.With) > 0 {
+	if len(sel.CTEs) > 0 || len(sel.With) > 0 {
 		b.WriteString("WITH ")
-		writeExprList(b, sel.With)
+		for i, cte := range sel.CTEs {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			writeCTE(b, cte)
+		}
+		if len(sel.With) > 0 {
+			if len(sel.CTEs) > 0 {
+				b.WriteString(", ")
+			}
+			writeExprList(b, sel.With)
+		}
 		b.WriteByte(' ')
 	}
 	b.WriteString("SELECT ")
@@ -103,12 +155,17 @@ func writeSelect(b *strings.Builder, sel Select) {
 	if sel.ExceptColumns != nil {
 		b.WriteString(" EXCEPT ")
 		if sel.ExceptColumns.Dynamic != "" {
-			b.WriteString("COLUMNS('")
-			b.WriteString(sel.ExceptColumns.Dynamic)
-			b.WriteString("')")
+			b.WriteString("COLUMNS(")
+			b.WriteString(marshalling.EscapeString(sel.ExceptColumns.Dynamic))
+			b.WriteString(")")
 		} else {
 			b.WriteByte('(')
-			b.WriteString(strings.Join(sel.ExceptColumns.Static, ", "))
+			for i, c := range sel.ExceptColumns.Static {
+				if i > 0 {
+					b.WriteString(", ")
+				}
+				writeIdent(b, c)
+			}
 			b.WriteByte(')')
 		}
 	}
@@ -129,7 +186,7 @@ func writeSelect(b *strings.Builder, sel Select) {
 	}
 	if sel.WindowDef != nil {
 		b.WriteString(" WINDOW ")
-		b.WriteString(sel.WindowDef.Name)
+		writeIdent(b, sel.WindowDef.Name)
 		b.WriteString(" AS (")
 		writeWindowSpec(b, sel.WindowDef.Window)
 		b.WriteByte(')')
@@ -225,9 +282,8 @@ func writeOrderItem(b *strings.Builder, item OrderItem) {
 		b.WriteString(" NULLS LAST")
 	}
 	if item.Collate != "" {
-		b.WriteString(" COLLATE '")
-		b.WriteString(item.Collate)
-		b.WriteByte('\'')
+		b.WriteString(" COLLATE ")
+		b.WriteString(marshalling.EscapeString(item.Collate))
 	}
 }
 
@@ -257,12 +313,12 @@ func writeJoinTable(b *strings.Builder, td *JoinTableData) {
 	switch td.TableKind {
 	case TableKindRef:
 		if td.Database != "" {
-			b.WriteString(td.Database)
+			writeIdent(b, td.Database)
 			b.WriteByte('.')
 		}
-		b.WriteString(td.Table)
+		writeIdent(b, td.Table)
 	case TableKindFunc:
-		b.WriteString(td.FuncName)
+		writeIdent(b, td.FuncName)
 		b.WriteByte('(')
 		writeExprList(b, td.FuncArgs)
 		b.WriteByte(')')
@@ -286,7 +342,7 @@ func writeJoinTable(b *strings.Builder, td *JoinTableData) {
 	}
 	if td.Alias != "" {
 		b.WriteString(" AS ")
-		b.WriteString(td.Alias)
+		writeIdent(b, td.Alias)
 	}
 }
 
@@ -455,7 +511,7 @@ func writeExpr(b *strings.Builder, e Expr) {
 		writeIsNull(b, e.IsNull)
 	case KindInterval:
 		b.WriteString("INTERVAL ")
-		writeExpr(b, e.Interval.Value)
+		writeMaybeParens(b, e.Interval.Value, exprPrec(e.Interval.Value) < 9)
 		b.WriteByte(' ')
 		b.WriteString(intervalUnitSQL(e.Interval.Unit))
 	case KindLambda:
@@ -463,42 +519,42 @@ func writeExpr(b *strings.Builder, e Expr) {
 	case KindAlias:
 		writeExpr(b, e.Alias.Expr)
 		b.WriteString(" AS ")
-		b.WriteString(e.Alias.Name)
+		writeIdent(b, e.Alias.Name)
 	case KindSubquery:
 		b.WriteByte('(')
 		writeSelectUnion(b, e.Subquery.Query)
 		b.WriteByte(')')
 	case KindAsterisk:
 		if e.Asterisk.Table != "" {
-			b.WriteString(e.Asterisk.Table)
+			writeIdent(b, e.Asterisk.Table)
 			b.WriteByte('.')
 		}
 		b.WriteByte('*')
 	case KindDynColumn:
-		b.WriteString("COLUMNS('")
-		b.WriteString(e.DynCol.Pattern)
-		b.WriteString("')")
+		b.WriteString("COLUMNS(")
+		b.WriteString(marshalling.EscapeString(e.DynCol.Pattern))
+		b.WriteString(")")
 	}
 }
 
 func writeColumnRef(b *strings.Builder, ref *ColumnRefData) {
 	if ref.Database != "" {
-		b.WriteString(ref.Database)
+		writeIdent(b, ref.Database)
 		b.WriteByte('.')
 	}
 	if ref.Table != "" {
-		b.WriteString(ref.Table)
+		writeIdent(b, ref.Table)
 		b.WriteByte('.')
 	}
-	b.WriteString(ref.Column)
+	writeIdent(b, ref.Column)
 	if ref.Nested != "" {
 		b.WriteByte('.')
-		b.WriteString(ref.Nested)
+		writeIdent(b, ref.Nested)
 	}
 }
 
 func writeFuncCall(b *strings.Builder, fn *FuncCallData) {
-	b.WriteString(fn.Name)
+	writeIdent(b, fn.Name)
 	if len(fn.Params) > 0 {
 		b.WriteByte('(')
 		writeExprList(b, fn.Params)
@@ -513,7 +569,7 @@ func writeFuncCall(b *strings.Builder, fn *FuncCallData) {
 }
 
 func writeWindowFunc(b *strings.Builder, wfn *WindowFuncData) {
-	b.WriteString(wfn.Name)
+	writeIdent(b, wfn.Name)
 	if len(wfn.Params) > 0 {
 		b.WriteByte('(')
 		writeExprList(b, wfn.Params)
@@ -524,7 +580,7 @@ func writeWindowFunc(b *strings.Builder, wfn *WindowFuncData) {
 	b.WriteByte(')')
 	b.WriteString(" OVER ")
 	if wfn.WindowRef != "" {
-		b.WriteString(wfn.WindowRef)
+		writeIdent(b, wfn.WindowRef)
 	} else if wfn.Window != nil {
 		b.WriteByte('(')
 		writeWindowSpec(b, *wfn.Window)
@@ -532,64 +588,85 @@ func writeWindowFunc(b *strings.Builder, wfn *WindowFuncData) {
 	}
 }
 
-// binaryOpNeedsParens returns true if the binary operator has lower precedence
-// than common contexts where it appears, warranting parentheses on operands.
-// We parenthesize AND/OR operands conservatively to avoid ambiguity.
-func binaryNeedsParens(child Expr, parentOp BinaryOpE) bool {
-	if child.Kind != KindBinary {
-		return false
+// exprPrec mirrors Grammar1's columnExpr alternative ladder: an EARLIER
+// alternative binds TIGHTER. Verified against parse trees — BETWEEN and the
+// alias form are the loosest binders (below OR), unary minus and INTERVAL
+// the tightest non-atoms. Atoms (literals, refs, calls, subqueries, …)
+// never need parentheses and rank 99.
+func exprPrec(e Expr) int {
+	switch e.Kind {
+	case KindAlias:
+		return 0
+	case KindBetween:
+		return 1
+	case KindBinary:
+		switch e.Binary.Op {
+		case BinOpOr:
+			return 2
+		case BinOpAnd:
+			return 3
+		case BinOpEq, BinOpNotEq, BinOpLt, BinOpGt, BinOpLe, BinOpGe,
+			BinOpIn, BinOpNotIn, BinOpGlobalIn, BinOpGlobalNotIn,
+			BinOpLike, BinOpNotLike, BinOpILike, BinOpNotILike:
+			return 6
+		case BinOpPlus, BinOpMinus, BinOpConcat:
+			return 7
+		default: // *, /, %
+			return 8
+		}
+	case KindUnary:
+		if e.Unary != nil && e.Unary.Op == UnaryOpNot {
+			return 4
+		}
+		return 9
+	case KindIsNull:
+		return 5
+	case KindInterval:
+		return 9
+	default:
+		return 99
 	}
-	childPrec := binOpPrecedence(child.Binary.Op)
-	parentPrec := binOpPrecedence(parentOp)
-	return childPrec < parentPrec
 }
 
-func binOpPrecedence(op BinaryOpE) int {
-	switch op {
-	case BinOpOr:
-		return 1
-	case BinOpAnd:
-		return 2
-	case BinOpEq, BinOpNotEq, BinOpLt, BinOpGt, BinOpLe, BinOpGe,
-		BinOpIn, BinOpNotIn, BinOpGlobalIn, BinOpGlobalNotIn,
-		BinOpLike, BinOpNotLike, BinOpILike, BinOpNotILike:
-		return 3
-	case BinOpPlus, BinOpMinus, BinOpConcat:
-		return 4
-	case BinOpMultiply, BinOpDivide, BinOpModulo:
-		return 5
-	default:
-		return 0
+func binOpPrec(op BinaryOpE) int {
+	return exprPrec(Expr{Kind: KindBinary, Binary: &BinaryData{Op: op}})
+}
+
+func writeMaybeParens(b *strings.Builder, e Expr, parens bool) {
+	if parens {
+		b.WriteByte('(')
+		writeExpr(b, e)
+		b.WriteByte(')')
+		return
 	}
+	writeExpr(b, e)
 }
 
 func writeBinary(b *strings.Builder, bin *BinaryData) {
-	if binaryNeedsParens(bin.Left, bin.Op) {
-		b.WriteByte('(')
-		writeExpr(b, bin.Left)
-		b.WriteByte(')')
-	} else {
-		writeExpr(b, bin.Left)
-	}
+	p := binOpPrec(bin.Op)
+	// Left-associative grammar: a left operand of equal precedence reparses
+	// identically bare; a right operand of equal precedence must keep its
+	// parentheses (a - (b - c) ≠ a - b - c).
+	writeMaybeParens(b, bin.Left, exprPrec(bin.Left) < p)
 	b.WriteByte(' ')
 	b.WriteString(binaryOpSQL(bin.Op))
 	b.WriteByte(' ')
-	if binaryNeedsParens(bin.Right, bin.Op) {
-		b.WriteByte('(')
-		writeExpr(b, bin.Right)
-		b.WriteByte(')')
-	} else {
-		writeExpr(b, bin.Right)
-	}
+	writeMaybeParens(b, bin.Right, exprPrec(bin.Right) <= p)
 }
 
 func writeUnary(b *strings.Builder, un *UnaryData) {
 	switch un.Op {
 	case UnaryOpNot:
 		b.WriteString("NOT ")
-		writeExpr(b, un.Expr)
+		writeMaybeParens(b, un.Expr, exprPrec(un.Expr) < 4)
 	case UnaryOpNegate:
 		b.WriteByte('-')
+		if exprPrec(un.Expr) < 9 {
+			b.WriteByte('(')
+			writeExpr(b, un.Expr)
+			b.WriteByte(')')
+			return
+		}
 		var inner strings.Builder
 		writeExpr(&inner, un.Expr)
 		t := inner.String()
@@ -605,19 +682,24 @@ func writeUnary(b *strings.Builder, un *UnaryData) {
 }
 
 func writeBetween(b *strings.Builder, btw *BetweenData) {
-	writeExpr(b, btw.Expr)
+	// The subject parses at BETWEEN level or tighter; the low bound must
+	// stop before the structural AND, so anything at AND level or looser
+	// needs parentheses. The high bound is parsed greedily (a BETWEEN b
+	// AND c OR d groups as High = c OR d), so only BETWEEN-or-looser needs
+	// them there.
+	writeMaybeParens(b, btw.Expr, exprPrec(btw.Expr) <= 1)
 	if btw.Negate {
 		b.WriteString(" NOT BETWEEN ")
 	} else {
 		b.WriteString(" BETWEEN ")
 	}
-	writeExpr(b, btw.Low)
+	writeMaybeParens(b, btw.Low, exprPrec(btw.Low) <= 3)
 	b.WriteString(" AND ")
-	writeExpr(b, btw.High)
+	writeMaybeParens(b, btw.High, exprPrec(btw.High) <= 1)
 }
 
 func writeIsNull(b *strings.Builder, isn *IsNullData) {
-	writeExpr(b, isn.Expr)
+	writeMaybeParens(b, isn.Expr, exprPrec(isn.Expr) < 5)
 	if isn.Negate {
 		b.WriteString(" IS NOT NULL")
 	} else {
@@ -627,10 +709,15 @@ func writeIsNull(b *strings.Builder, isn *IsNullData) {
 
 func writeLambda(b *strings.Builder, lam *LambdaData) {
 	if len(lam.Params) == 1 {
-		b.WriteString(lam.Params[0])
+		writeIdent(b, lam.Params[0])
 	} else {
 		b.WriteByte('(')
-		b.WriteString(strings.Join(lam.Params, ", "))
+		for i, p := range lam.Params {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			writeIdent(b, p)
+		}
 		b.WriteByte(')')
 	}
 	b.WriteString(" -> ")

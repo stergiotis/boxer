@@ -168,6 +168,18 @@ func (inst *goEmitter) emitSelect(sel Select) {
 		inst.w(goStr(sp.ValueSQL))
 		inst.w(")")
 	}
+
+	// selectStmt-level CTEs emit as builder With() calls — the builder
+	// lowers them back into the head Select when the result is used as a
+	// subquery, and hoists them to the query level when built top-level
+	// (semantically equivalent visibility either way).
+	for _, cte := range sel.CTEs {
+		inst.w(".\n\tWith(")
+		inst.w(goStr(cte.Name))
+		inst.w(", ")
+		inst.emitSelectUnion(cte.Body.Body)
+		inst.w(")")
+	}
 }
 
 // --- FROM ---
