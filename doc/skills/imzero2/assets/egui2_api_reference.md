@@ -96,6 +96,7 @@ status: draft
 | MapMarker | BuilderFactory | No | 3 | 0 | 3 | Immediate |
 | MapPolyline | BuilderFactory | No | 2 | 0 | 2 | Immediate |
 | MeasureText | Procedural | No | 4 | 0 | - | - |
+| MeasureTextSize | Procedural | No | 5 | 0 | - | - |
 | MemoryResetAreas | Procedural | No | 0 | 0 | - | - |
 | MenuBar | BuilderFactory | No | 0 | 0 | 0 | Immediate, BlockIterator |
 | MenuButton | BuilderFactory | No | 0 | 1 | 0 | BlockIterator |
@@ -3131,6 +3132,23 @@ Block
 | Name | Kind | Type |
 |------|------|------|
 | measureId | plain | u64 |
+| text | plain | s |
+| fontSize | plain | f32 |
+| monospace | plain | b |
+
+---
+
+### MeasureTextSize
+
+- **Type:** Procedural
+- **Identity:** No
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| widthMeasureId | plain | u64 |
+| heightMeasureId | plain | u64 |
 | text | plain | s |
 | fontSize | plain | f32 |
 | monospace | plain | b |

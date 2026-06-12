@@ -43,3 +43,23 @@ func MeasureTextBind(measureId uint64, text string, fontSize float32, monospace 
 	MeasureText(measureId, text, fontSize, monospace)
 	CurrentApplicationState.StateManager.AddR9F64Databinding(measureId, out)
 }
+
+// MeasureTextSizeBind is MeasureTextBind's two-extent sibling: one layout
+// pass, width into *outW and height into *outH on the next Sync (one-frame
+// lag). Either out pointer may be nil to skip that binding — the Rust side
+// still pushes both values; an id nobody bound is simply never read.
+//
+// The height of a single non-wrapped line is the font's row height,
+// independent of the text content, so callers sizing text-bearing cells can
+// measure a short probe string once per (fontSize, monospace) and reuse the
+// height for any single-line label in that style (the treemap label gates).
+func MeasureTextSizeBind(widthMeasureId, heightMeasureId uint64, text string, fontSize float32, monospace bool, outW, outH *float64) {
+	MeasureTextSize(widthMeasureId, heightMeasureId, text, fontSize, monospace)
+	sm := CurrentApplicationState.StateManager
+	if outW != nil {
+		sm.AddR9F64Databinding(widthMeasureId, outW)
+	}
+	if outH != nil {
+		sm.AddR9F64Databinding(heightMeasureId, outH)
+	}
+}

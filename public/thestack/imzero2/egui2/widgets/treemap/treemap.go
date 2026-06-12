@@ -369,6 +369,8 @@ type Treemap struct {
 	// rendered on a second de-emphasized line beneath each cell's name (see
 	// WithCellLabel). Returning "" suppresses the line for that cell.
 	cellLabelFn func(*layout.Node) string
+	// metrics supplies the measured label-height gates (see metrics.go).
+	metrics labelMetrics
 
 	// Retained chrome colors (breadcrumb / container / leaf-view backgrounds)
 	colorBreadcrumbBg  color.Color
@@ -440,6 +442,7 @@ func New(ids *c.WidgetIdStack, scopeKey string, root *layout.Node, opts ...Optio
 	for _, opt := range opts {
 		opt(t)
 	}
+	t.metrics.init(scopeKey, t.density)
 	return t
 }
 
@@ -639,7 +642,9 @@ func (t *Treemap) paintHatch(r layout.Rect, seq uint64, spec HatchSpec) {
 
 // paintCellValue renders the optional secondary value label beneath a
 // cell's name. It is a no-op unless a cellLabelFn is set, the cell is tall
-// enough for a second line (r.H > minH), the cell is not a container
+// enough for the two-line block (r.H > minH — the caller passes
+// labelMetrics.valueMinH at its Frame geometry's vertical slack, so the
+// gate tracks the measured row heights), the cell is not a container
 // already showing its own children (rendersInner — the value would push
 // into the nested content), and fn returns a non-empty string. textColor
 // matches the name so the WCAG-picked contrast against the resolved fill
@@ -725,9 +730,13 @@ func (t *Treemap) renderZoom(node *layout.Node, bounds layout.Rect, depth, bcLev
 			rendersInner := hasChildren && (isActive || atFrontier)
 			for range frame.KeepIter() {
 				c.UiSetMinWidth(cellW - 7)
-				c.UiSetMinHeight(cellH - 5)
+				c.UiSetMinHeight(cellH - zoomCellVSlack)
 
-				if r.W > 40 && r.H > 18 {
+				// Height gate from measured row heights: the Frame sizes to
+				// content, so a label taller than the content box (cellH -
+				// zoomCellVSlack) would grow it past the cell rect and paint
+				// over the neighbors below (metrics.go).
+				if r.W > 40 && r.H > t.metrics.nameMinH(zoomCellVSlack) {
 					// Truncate with ellipsis when the name doesn't fit the cell
 					// horizontally, rather than wrapping or overflowing into
 					// neighbors. egui uses the Ui's available_width, which is
@@ -738,7 +747,7 @@ func (t *Treemap) renderZoom(node *layout.Node, bounds layout.Rect, depth, bcLev
 						BeginRichTextColored(textColor, t.colorTransparentBg, child.Name).
 						End().Keep()).
 						Truncate().Send()
-					t.paintCellValue(child, r, textColor, rendersInner, 34)
+					t.paintCellValue(child, r, textColor, rendersInner, t.metrics.valueMinH(zoomCellVSlack))
 				}
 			}
 		}
@@ -817,9 +826,11 @@ func (t *Treemap) renderLeafChildren(node *layout.Node, bounds layout.Rect, dept
 				KeepIter() {
 
 				c.UiSetMinWidth(cellW - 5)
-				c.UiSetMinHeight(cellH - 3)
+				c.UiSetMinHeight(cellH - previewCellVSlack)
 
-				if r.W > 35 && r.H > 14 {
+				// Same measured height gate as renderZoom, at the preview
+				// cells' tighter vertical chrome (metrics.go).
+				if r.W > 35 && r.H > t.metrics.nameMinH(previewCellVSlack) {
 					c.LabelAtoms(c.Atoms().
 						BeginRichTextColored(textColor, t.colorTransparentBg, child.Name).
 						End().Keep()).
@@ -828,7 +839,7 @@ func (t *Treemap) renderLeafChildren(node *layout.Node, bounds layout.Rect, dept
 					// the nesting budget allows another level; below the budget
 					// it's a terminal block, so the value line is safe to draw.
 					rendersInner := remaining > 1 && len(child.Children) > 0
-					t.paintCellValue(child, r, textColor, rendersInner, 30)
+					t.paintCellValue(child, r, textColor, rendersInner, t.metrics.valueMinH(previewCellVSlack))
 				}
 			}
 		}
@@ -863,6 +874,10 @@ func (t *Treemap) Render() {
 
 func (t *Treemap) renderBody() {
 	cur := t.Focused()
+
+	// Keep the measured label gates current across Sync's databind reset;
+	// the real row heights land one frame after the first call (metrics.go).
+	t.metrics.renewBindings()
 
 	// --- Breadcrumb bar ---
 	// Per-segment pills: ancestors are framed buttons; the tail is a

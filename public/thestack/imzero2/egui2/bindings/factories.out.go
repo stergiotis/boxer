@@ -775,6 +775,18 @@ func MeasureText(measureId uint64, text string, fontSize float32, monospace bool
 	r.SendIntermediate()
 }
 
+func MeasureTextSize(widthMeasureId uint64, heightMeasureId uint64, text string, fontSize float32, monospace bool) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdMeasureTextSize))
+	r.WriteUint64(widthMeasureId)
+	r.WriteUint64(heightMeasureId)
+	r.WriteString(text)
+	r.WriteFloat32(fontSize)
+	r.WriteBool(monospace)
+
+	r.SendIntermediate()
+}
+
 func MemoryResetAreas() {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteUint32(uint32(FuncProcIdMemoryResetAreas))

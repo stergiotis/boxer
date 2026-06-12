@@ -326,6 +326,37 @@ if {{EguiUiOptionalOuter}}.is_some() {
 			});
 			self.r9_f64_push(measure_id, width as f64);
 `)).Build())
+	// measureTextSize — measureText's two-extent sibling: one layout pass,
+	// width pushed under widthMeasureId and height under heightMeasureId.
+	// The height of a single non-wrapped line is the font's row height
+	// (content-independent), which is what cell-sizing callers need (the
+	// treemap label gates measure a short probe string once per text style).
+	// Two explicit ids rather than a derived second id (measureId|1 etc.):
+	// callers commonly hash-derive measure ids, where a bit-trick sibling id
+	// is collision-prone; explicit ids are collision-free by construction.
+	specials = append(specials,
+		idl.NewProceduralNode("measureTextSize").
+			AddArguments(idl.NewArgumentsBuilder().
+				PlainArg("widthMeasureId", ctabb.U64).
+				PlainArg("heightMeasureId", ctabb.U64).
+				PlainArg("text", ctabb.S).
+				PlainArg("fontSize", ctabb.F32).
+				PlainArg("monospace", ctabb.B).
+				Build()).
+			WithApplyCodeClientRust(rustClientCode(`
+			let font_id = if monospace {
+				egui::FontId::monospace(font_size)
+			} else {
+				egui::FontId::proportional(font_size)
+			};
+			// layout_no_wrap needs &mut FontsView (galley cache is mutable);
+			// hence fonts_mut rather than fonts.
+			let size = {{EguiContext}}.fonts_mut(|f| {
+				f.layout_no_wrap(text, font_id, egui::Color32::WHITE).rect.size()
+			});
+			self.r9_f64_push(width_measure_id, size.x as f64);
+			self.r9_f64_push(height_measure_id, size.y as f64);
+`)).Build())
 	// captureUiRect — snapshots the current ui.min_rect() into r21 parallel
 	// vectors keyed by seq, so a Go-side caller can read multiple Ui rects
 	// per frame via fetchR21UiRects. Used by the bezier-connector affordance

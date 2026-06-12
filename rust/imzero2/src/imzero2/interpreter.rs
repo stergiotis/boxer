@@ -7346,6 +7346,40 @@ self.end_consume_message()?;
 			self.r9_f64_push(measure_id, width as f64);
 
 }
+FuncProcId::MeasureTextSize => {
+    #[cfg(feature = "puffin")]
+	puffin::profile_scope!("match FuncProcId::MeasureTextSize");
+// arguments
+#[allow(unused_mut)]
+let mut width_measure_id = self.io.read_plain_u64()?;
+#[allow(unused_mut)]
+let mut height_measure_id = self.io.read_plain_u64()?;
+#[allow(unused_mut)]
+let mut text = self.io.read_plain_s()?;
+#[allow(unused_mut)]
+let mut font_size = self.io.read_plain_f32()?;
+#[allow(unused_mut)]
+let mut monospace = self.io.read_plain_b()?;
+if d == 0 {
+self.end_consume_message()?;
+}
+// apply
+// generating location: /home/spx/repo/boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+			let font_id = if monospace {
+				egui::FontId::monospace(font_size)
+			} else {
+				egui::FontId::proportional(font_size)
+			};
+			// layout_no_wrap needs &mut FontsView (galley cache is mutable);
+			// hence fonts_mut rather than fonts.
+			let size = c.fonts_mut(|f| {
+				f.layout_no_wrap(text, font_id, egui::Color32::WHITE).rect.size()
+			});
+			self.r9_f64_push(width_measure_id, size.x as f64);
+			self.r9_f64_push(height_measure_id, size.y as f64);
+
+}
 FuncProcId::MemoryResetAreas => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match FuncProcId::MemoryResetAreas");
