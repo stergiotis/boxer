@@ -9,3 +9,5 @@ var PackageProps = packageprops.Props{
 	WASMJS:           packageprops.WASMBlocked,
 	WASMFreestanding: packageprops.WASMBlocked,
 }
+
+func init() { packageprops.Register("github.com/stergiotis/boxer/public/llm/openaichat", PackageProps) }

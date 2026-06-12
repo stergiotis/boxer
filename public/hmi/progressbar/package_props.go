@@ -9,3 +9,7 @@ var PackageProps = packageprops.Props{
 	WASMJS:           packageprops.WASMCompiles,
 	WASMFreestanding: packageprops.WASMBlocked,
 }
+
+func init() {
+	packageprops.Register("github.com/stergiotis/boxer/public/hmi/progressbar", PackageProps)
+}

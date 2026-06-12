@@ -9,3 +9,7 @@ var PackageProps = packageprops.Props{
 	WASMJS:           packageprops.WASMBlocked,
 	WASMFreestanding: packageprops.WASMBlocked,
 }
+
+func init() {
+	packageprops.Register("github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexsummary", PackageProps)
+}

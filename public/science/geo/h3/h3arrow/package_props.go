@@ -9,3 +9,7 @@ var PackageProps = packageprops.Props{
 	WASMJS:           packageprops.WASMBlocked,
 	WASMFreestanding: packageprops.WASMBlocked,
 }
+
+func init() {
+	packageprops.Register("github.com/stergiotis/boxer/public/science/geo/h3/h3arrow", PackageProps)
+}

@@ -7,5 +7,9 @@ import "github.com/stergiotis/boxer/public/packageprops"
 var PackageProps = packageprops.Props{
 	WASMWASI:         packageprops.WASMBlocked,
 	WASMJS:           packageprops.WASMBlocked,
-	WASMFreestanding: packageprops.WASMBlocked,
+	WASMFreestanding: packageprops.WASMCompiles,
+}
+
+func init() {
+	packageprops.Register("github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown", PackageProps)
 }

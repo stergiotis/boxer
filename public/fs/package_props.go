@@ -5,7 +5,9 @@ import "github.com/stergiotis/boxer/public/packageprops"
 // PackageProps records this package's curated properties (ADR-0080).
 // Seeded by `wasmsurvey props generate`; curate by hand, then `wasmsurvey props verify`.
 var PackageProps = packageprops.Props{
-	WASMWASI:         packageprops.WASMBlocked,
-	WASMJS:           packageprops.WASMBlocked,
+	WASMWASI:         packageprops.WASMCompiles,
+	WASMJS:           packageprops.WASMCompiles,
 	WASMFreestanding: packageprops.WASMBlocked,
 }
+
+func init() { packageprops.Register("github.com/stergiotis/boxer/public/fs", PackageProps) }
