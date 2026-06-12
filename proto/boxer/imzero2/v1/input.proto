@@ -90,18 +90,22 @@ message SessionControl {
   }
 }
 
-// Server→client, first message after connect: stream geometry the viewer
-// needs to size its canvas and map pointer coordinates.
+// Server→client: stream geometry the viewer needs to size its canvas and
+// map pointer coordinates. Sent as the first message after connect AND
+// re-announced whenever the host applies a viewport resize — geometry
+// change implies a fresh encoder stream (SPS/PPS + IDR) follows, so the
+// viewer drops its decoder and rejoins at the next key frame.
 message SessionHello {
   uint32 width_px = 1;
   uint32 height_px = 2;
   float pixels_per_point = 3;
 }
 
-// Client→server. ADR-0024 SD7/SD8 (amended at acceptance): carries the
-// client's pixel scale (devicePixelRatio × page zoom) so the host can
-// render at native client resolution. v1 server logs and ignores this;
-// applying it (texture + encoder restart) is Phase 5 follow-up work.
+// Client→server. ADR-0024 SD7/SD8 (amended at acceptance): the client's
+// viewport in CSS pixels plus its pixel scale (devicePixelRatio × page
+// zoom). The host clamps it, rebuilds the offscreen target and encoder
+// at logical×scale physical pixels (rounded even), and answers with a
+// fresh SessionHello.
 message ViewportResize {
   float logical_width = 1;
   float logical_height = 2;

@@ -149,7 +149,7 @@ function sendPing(nonce) {
 
 // ---- video pipeline ----
 let ws = null, hello = null, decoder = null, configured = false;
-let framesDecoded = 0, lastStatus = 0;
+let framesDecoded = 0, lastStatus = 0, inputSetup = false;
 
 function findSps(au) { // Annex-B scan for NAL type 7
   for (let i = 0; i + 3 < au.length; i++) {
@@ -169,6 +169,7 @@ function codecStringFromSps(au, idx) {
 }
 
 function setupDecoder(codec) {
+  if (decoder) { try { decoder.close(); } catch (_) {} decoder = null; }
   decoder = new VideoDecoder({
     output(frame) {
       framesDecoded++;
@@ -233,6 +234,31 @@ function flushMove() {
   requestAnimationFrame(flushMove);
 }
 
+// ---- viewport reporting ----
+// Report the browser viewport (CSS px) and pixel scale (devicePixelRatio
+// × page zoom); the host rebuilds its render target + encoder at the new
+// geometry and answers with a fresh SessionHello. Guarded against echo
+// loops: a hello caused by our own report doesn't re-send unless the
+// window actually changed meanwhile.
+let lastSentGeometry = null;
+function measureAndSend() {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  const scale = window.devicePixelRatio || 1;
+  const lw = Math.max(320, window.innerWidth);
+  const lh = Math.max(240, window.innerHeight - statusEl.offsetHeight);
+  if (lastSentGeometry &&
+      Math.abs(lastSentGeometry[0] - lw) < 1 &&
+      Math.abs(lastSentGeometry[1] - lh) < 1 &&
+      Math.abs(lastSentGeometry[2] - scale) < 0.01) return;
+  lastSentGeometry = [lw, lh, scale];
+  sendResize(lw, lh, scale);
+}
+let resizeTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(measureAndSend, 300); // debounce drag-resizing
+});
+
 function setupInput() {
   canvas.addEventListener("pointermove", (e) => { pendingMove = logicalPos(e); });
   canvas.addEventListener("pointerdown", (e) => {
@@ -282,16 +308,20 @@ function connect() {
     else if (data[0] === PREFIX_SESSION) {
       const h = parseHello(payload);
       if (h) {
+        const changed = !hello || hello.width !== h.width || hello.height !== h.height || hello.ppp !== h.ppp;
         hello = h;
-        canvas.width = h.width;
-        canvas.height = h.height;
-        canvas.style.width = (h.width / h.ppp) + "px";
-        canvas.style.height = (h.height / h.ppp) + "px";
-        setupInput();
-        canvas.focus();
-        // Report our real scale; the server logs it at v1 and will apply
-        // it once resize lands (ADR-0024 Phase 5 follow-up).
-        sendResize(h.width / h.ppp, h.height / h.ppp, window.devicePixelRatio || 1);
+        if (changed) {
+          canvas.width = h.width;
+          canvas.height = h.height;
+          canvas.style.width = (h.width / h.ppp) + "px";
+          canvas.style.height = (h.height / h.ppp) + "px";
+          // New geometry means a fresh stream (SPS/PPS + IDR) follows;
+          // drop the decoder and rejoin at the keyframe, same as connect.
+          if (decoder) { try { decoder.close(); } catch (_) {} decoder = null; }
+          configured = false;
+        }
+        if (!inputSetup) { inputSetup = true; setupInput(); canvas.focus(); }
+        measureAndSend();
       }
     }
   };

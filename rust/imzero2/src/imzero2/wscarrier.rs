@@ -28,15 +28,22 @@ const VIDEO_CHANNEL_CAP: usize = 16;
 struct Inner {
     /// Raw wire events, drained by the render thread each tick.
     events: std::sync::Mutex<Vec<pb::input_event::Event>>,
-    /// Latest viewport-resize request (v1: logged, not yet applied).
+    /// Latest viewport-resize request; drained by the render thread,
+    /// which applies it (target rebuild + hello re-announce + encoder
+    /// restart) and answers with a fresh [`pb::SessionHello`].
     resize: std::sync::Mutex<Option<pb::ViewportResize>>,
     connected: std::sync::atomic::AtomicBool,
     /// Bumped on every accepted connection; the render thread compares it
     /// to decide when to (re)spawn the per-connection encoder.
     conn_gen: std::sync::atomic::AtomicU64,
-    /// Sender for pre-framed video payloads of the *current* connection.
+    /// Sender for pre-framed outbound payloads of the *current*
+    /// connection — video chunks and mid-session hello re-announcements
+    /// share it, which is what orders "hello before the new stream's IDR"
+    /// during a geometry change.
     video_tx: std::sync::Mutex<Option<tokio::sync::mpsc::Sender<Vec<u8>>>>,
-    hello: pb::SessionHello,
+    /// Current stream geometry; sent on connect and after each applied
+    /// resize. Updated by the render thread via [`WsCarrier::apply_geometry`].
+    hello: std::sync::Mutex<pb::SessionHello>,
 }
 
 pub struct WsCarrier {
@@ -45,7 +52,6 @@ pub struct WsCarrier {
     encoder_gen: u64,
     fps: f32,
     encoder_args: Vec<String>,
-    resize_logged: bool,
 }
 
 impl WsCarrier {
@@ -65,11 +71,11 @@ impl WsCarrier {
             connected: std::sync::atomic::AtomicBool::new(false),
             conn_gen: std::sync::atomic::AtomicU64::new(0),
             video_tx: std::sync::Mutex::new(None),
-            hello: pb::SessionHello {
+            hello: std::sync::Mutex::new(pb::SessionHello {
                 width_px,
                 height_px,
                 pixels_per_point,
-            },
+            }),
         });
         // Bind synchronously so startup errors (port in use) fail fast in
         // the caller instead of asynchronously on the carrier thread.
@@ -114,7 +120,6 @@ impl WsCarrier {
             encoder_gen: 0,
             fps,
             encoder_args,
-            resize_logged: false,
         })
     }
 
@@ -123,16 +128,44 @@ impl WsCarrier {
         if let Ok(mut events) = self.inner.events.lock() {
             out.append(&mut events);
         }
-        if !self.resize_logged {
-            if let Ok(resize) = self.inner.resize.lock() {
-                if let Some(r) = resize.as_ref() {
-                    // ADR-0024 acceptance amendment: the schema carries the
-                    // client pixel scale; applying it (texture + encoder
-                    // restart at new geometry) is named Phase 5 work.
-                    tracing::info!(logical_width=r.logical_width, logical_height=r.logical_height, pixel_scale=r.pixel_scale,
-                        "viewer requested viewport resize — not applied at v1 (fixed geometry)");
-                    self.resize_logged = true;
-                }
+    }
+
+    /// Latest pending viewport-resize request, if any (latest wins; the
+    /// render thread applies at tick granularity).
+    pub fn take_resize(&mut self) -> Option<pb::ViewportResize> {
+        self.inner.resize.lock().ok().and_then(|mut r| r.take())
+    }
+
+    /// Commit a new stream geometry (already clamped by the host): update
+    /// the hello for future connections, stop the current encoder, and —
+    /// if a viewer is connected — re-announce the hello through the
+    /// outbound channel *before* the next encoder spawns, so the viewer
+    /// resizes its canvas and rejoins at the new stream's first IDR.
+    pub fn apply_geometry(&mut self, width_px: u32, height_px: u32, pixels_per_point: f32) {
+        let hello = pb::SessionHello {
+            width_px,
+            height_px,
+            pixels_per_point,
+        };
+        if let Ok(mut guard) = self.inner.hello.lock() {
+            *guard = hello;
+        }
+        // Drop first: reap blocks until the old drain flushed its remaining
+        // (old-geometry) access units into the channel, so the hello below
+        // lands after them and before anything from the new stream.
+        if self.encoder.take().is_some() {
+            tracing::info!(width_px, height_px, pixels_per_point, "geometry change — encoder stopped for restart");
+        }
+        let tx = self.inner.video_tx.lock().ok().and_then(|g| g.clone());
+        if let Some(tx) = tx {
+            let msg = pb::SessionControl {
+                control: Some(pb::session_control::Control::Hello(hello)),
+            };
+            let mut framed = Vec::with_capacity(1 + msg.encoded_len());
+            framed.push(pb::PREFIX_SESSION);
+            let _ = msg.encode(&mut framed);
+            if tx.blocking_send(framed).is_err() {
+                tracing::debug!("hello re-announce skipped — connection mid-teardown");
             }
         }
     }
@@ -213,9 +246,12 @@ async fn handle_session(
     inner.connected.store(true, std::sync::atomic::Ordering::Release);
     tracing::info!(%peer, "viewer connected");
 
-    // First message: session hello with the stream geometry (SD6 0x03).
+    // First message: session hello with the current stream geometry
+    // (SD6 0x03). Geometry changes mid-session re-announce the same
+    // message through the outbound channel (see apply_geometry).
+    let current_hello = inner.hello.lock().map(|h| *h).unwrap_or_default();
     let hello = pb::SessionControl {
-        control: Some(pb::session_control::Control::Hello(inner.hello)),
+        control: Some(pb::session_control::Control::Hello(current_hello)),
     };
     let mut framed = Vec::with_capacity(1 + hello.encoded_len());
     framed.push(pb::PREFIX_SESSION);

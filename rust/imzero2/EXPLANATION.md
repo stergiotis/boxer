@@ -135,6 +135,15 @@ joinable:
   so every session begins with SPS/PPS + IDR by construction, and no
   encoding happens with nobody watching. Supervised encoder restarts
   (crash recovery) restart the stream the same way.
+- **Resize = a fresh stream, announced first.** The viewer reports its
+  viewport (CSS pixels) and pixel scale; the host clamps it, rebuilds the
+  offscreen target at logical × scale physical pixels, and re-announces
+  the session hello *through the same outbound channel as the video* —
+  channel ordering then guarantees the viewer sees the new geometry
+  (resize canvas, drop decoder) before the new stream's first IDR
+  arrives, and the normal join-at-keyframe path does the rest. rawvideo
+  dimensions are fixed per ffmpeg invocation, so a geometry change is an
+  encoder restart by necessity, not by choice.
 
 Frame dimensions are rounded up to even numbers at host start: 4:2:0
 chroma subsampling requires them, and baking the constraint into the

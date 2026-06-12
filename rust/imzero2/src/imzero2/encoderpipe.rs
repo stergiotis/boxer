@@ -135,7 +135,21 @@ impl EncoderSink {
 }
 
 impl FrameSink for EncoderSink {
-    fn on_frame(&mut self, bgra: &[u8], _width: u32, _height: u32, _frame_idx: u64) {
+    fn on_frame(&mut self, bgra: &[u8], width: u32, height: u32, _frame_idx: u64) {
+        if width != self.width || height != self.height {
+            // Frame geometry changed under us (viewport resize). rawvideo
+            // dimensions are fixed per ffmpeg invocation, so restart the
+            // stream at the new size — which also begins it at SPS/PPS+IDR.
+            tracing::info!(from_w = self.width, from_h = self.height, to_w = width, to_h = height,
+                "frame geometry changed — restarting encoder");
+            self.reap();
+            self.width = width;
+            self.height = height;
+            if let Err(e) = self.spawn(true) {
+                tracing::error!(error=%e, "encoder respawn after geometry change failed; will retry on next frame");
+                return;
+            }
+        }
         let write_failed = match self.stdin.as_mut() {
             Some(stdin) => std::io::Write::write_all(stdin, bgra).is_err(),
             None => true,

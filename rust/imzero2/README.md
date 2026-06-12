@@ -28,11 +28,12 @@ The desktop host is the daily-driven path. The headless host is a first
 cut of ADR-0024 v1 (2026-06-12): verified end-to-end against the demo
 carousel, with named gaps — **no authentication** (network reachability
 is the access control; keep it on localhost or a trusted network),
-single session, fixed geometry (the viewer's resize/pixel-scale report
-is received but not applied), render and encode share one cadence, and
-the protobuf codecs on both ends are hand-written mirrors of the .proto
-pending codegen. The full shipped/deviation list is in ADR-0024's
-2026-06-12 Updates entry.
+single session, render and encode share one cadence, and the protobuf
+codecs on both ends are hand-written mirrors of the .proto pending
+codegen. The viewer's viewport and pixel scale (devicePixelRatio × zoom)
+are applied live: the canvas follows the browser window and HiDPI
+clients get native-resolution pixels. The full shipped/deviation list is
+in ADR-0024's 2026-06-12 Updates entry.
 
 ## Remote access — quick start
 
@@ -61,7 +62,7 @@ these need no flag plumbing (`IMZERO2_RENDER_CADENCE` precedent):
 | `IMZERO2_HEADLESS_LISTEN` | unset | WebSocket bind address (e.g. `127.0.0.1:8089`); viewer page on port+1. Unset = no remote access. `hmi_headless.sh` sets `127.0.0.1:8089`. |
 | `IMZERO2_HEADLESS_FPS` | `60` | Render tick in Hz (`hmi_headless.sh` sets 30). Paces the FFFI2 loop in place of vsync. |
 | `IMZERO2_HEADLESS_ENCODER_ARGS` | VAAPI per SD3 | Whitespace-split ffmpeg args between rawvideo input and `-f h264` output. |
-| `IMZERO2_HEADLESS_PIXELS_PER_POINT` | `1.0` | HiDPI scale of the offscreen target. |
+| `IMZERO2_HEADLESS_PIXELS_PER_POINT` | `1.0` | Initial (pre-connect) HiDPI scale; a connected viewer's reported viewport + scale take over. |
 | `IMZERO2_HEADLESS_H264_OUT` | unset | Also write the raw Annex-B stream to this file (verification). |
 | `IMZERO2_HEADLESS_DUMP_DIR` / `_DUMP_EVERY` | unset / `60` | PNG-dump every Nth frame (verification). |
 | `IMZERO2_HEADLESS_MAX_FRAMES` | `0` | Stop after N frames (0 = unbounded; smoke tests). |
