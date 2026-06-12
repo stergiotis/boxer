@@ -63,8 +63,8 @@ type extractedArg struct {
 	Literal bool
 }
 
-// extractCallArgs scans the source bytes spanned by a function call (i.e.
-// the inclusive range covered by an ANTLR ColumnExprFunctionContext) and
+// extractCallArgs scans the source bytes spanned by a function call (the
+// half-open byte range covered by an ANTLR ColumnExprFunctionContext) and
 // returns one entry per top-level argument.
 //
 // The scanner is paren-aware (skips nested calls) and quote-aware (skips
@@ -78,10 +78,10 @@ type extractedArg struct {
 // nothing folding (Evaluated=false in the observation), but the regex
 // args are still recoverable from the source.
 func extractCallArgs(sql string, src nanopass.SourceRange) []extractedArg {
-	if src.Empty() || src.Start < 0 || src.Stop >= len(sql) {
+	if src.Empty() || src.Start < 0 || src.End > len(sql) {
 		return nil
 	}
-	body := sql[src.Start : src.Stop+1]
+	body := sql[src.Start:src.End]
 	open := strings.IndexByte(body, '(')
 	if open < 0 {
 		return nil
@@ -145,7 +145,7 @@ func parseArg(s string) extractedArg {
 // against the shared affordanceTestInput field on PlayApp.
 type multiMatchAffordance struct {
 	// Currently no per-affordance state beyond what's on PlayApp.
-	// Future: per-call test inputs would key on (Src.Start, Src.Stop).
+	// Future: per-call test inputs would key on (Src.Start, Src.End).
 }
 
 func (a *multiMatchAffordance) Matches(obs nanopass.Observation) bool {
@@ -157,7 +157,7 @@ func (a *multiMatchAffordance) Render(ctx *affordanceCtx) {
 	for range c.Vertical().KeepIter() {
 		// Header: function name + char range + non-literal hint.
 		header := fmt.Sprintf("multiMatchIndexAny @ %d–%d",
-			ctx.Obs.Src.Start, ctx.Obs.Src.Stop+1)
+			ctx.Obs.Src.Start, ctx.Obs.Src.End)
 		for range c.Horizontal().KeepIter() {
 			for rt := range c.RichTextLabel(header) {
 				rt.Strong()

@@ -24,6 +24,10 @@ SQL string
 
 `Pass.Run(sql)` does the full round-trip. `Sequence` shares the env across child passes — they all observe each other's mutations to settings and params. Re-parsing each Apply preserves composability at the cost of repeated parsing (negligible for typical query sizes). Whitespace and comments are preserved on the hidden channel (`channel(HIDDEN)`), enabling lossless round-trip fidelity.
 
+`Parse` collects both lexer and parser diagnostics (with `line:column` positions): input that fails to lex is rejected instead of having the offending characters silently dropped from the token stream. Panics inside a pass (e.g. conflicting token edits — the ANTLR rewriter panics at `GetText` for partially overlapping replaces) are recovered at the Pass boundary and returned as errors.
+
+Analytical passes signal "discard my body rewrite" via a comment-shaped marker (see `PassDiscardOutput`). The marker scan is quote-aware — marker text inside string literals or quoted identifiers does not trigger — and discard drops the *body rewrite only*: env mutations persist, so `Run(p) == Run(Sequence(p))` holds for analytical passes.
+
 ## Pass — first-class value
 
 ```go
@@ -56,6 +60,8 @@ func LiftBodyPass(name string, fn func(string)(string,error), props PassProperti
 
 The runner auto-wraps any pass with `NeedsFixedPoint: true` in `FixedPoint(p, DefaultFixedPointMaxIter)` (128). Pass authors who need a different cap call `FixedPoint(p, n)` explicitly. `Validating(g, p)` runs `p.Apply` then validates the body against grammar `g`; for pre-validation, insert `nanopass.ValidateGrammar1` as a prior step in a `Sequence`.
 
+Property propagation: `Validating` and `Conditional` delegate to the wrapped pass's own fixpoint execution and therefore *clear* `NeedsFixedPoint` on the wrapper (no nested double loop). `FixedPoint` preserves the wrapped properties, clears `NeedsFixedPoint`, and declares `Idempotent` — a converged fixpoint is a fixpoint of itself.
+
 ## Environment
 
 [`dsl/env`](../env) models the execution context surrounding a SELECT.
@@ -75,32 +81,40 @@ type Environment struct {
 
 | File | Purpose |
 |------|---------|
-| `nanopass_pipeline.go` | `Pass`, `PassProperties`, combinators, `Pass.Run`, `Pass.Apply`, validators |
+| `nanopass_pipeline.go` | `Pass`, `PassProperties`, combinators, `Pass.Run`, `Pass.Apply`, validators, discard-marker contract |
 | `nanopass_assert_properties.go` | `AssertProperties(t, p, corpus)` — corpus-backed contract enforcement |
-| `nanopass_parse.go` | `Parse` (Grammar1) and `ParseCanonical` (Grammar2) |
+| `nanopass_parse.go` | `Parse` (Grammar1) and `ParseCanonical` (Grammar2), lexer+parser diagnostics |
 | `nanopass_walk.go` | `WalkCST`, `FindAll`, `FindFirst` — depth-first CST traversal |
-| `nanopass_rewrite.go` | `ReplaceNode`, `DeleteNode`, `InsertBefore`, `InsertAfter`, `TrackedRewriter` |
-| `nanopass_scope.go` | `BuildScopes` — lexical scope tree with UNION ALL / CTE / subquery awareness |
+| `nanopass_rewrite.go` | `RewriterI`, `ReplaceNode`, `DeleteNode`, `InsertBefore`, `InsertAfter`, `TrackedRewriter` |
+| `nanopass_scope.go` | `BuildScopes`, `FlattenScopes` — lexical scope tree with UNION ALL / CTE / subquery awareness |
 | `nanopass_macro.go` | `MacroExpander` — function-call macro expansion with literal arguments |
+| `nanopass_identifier.go` | `DecodeIdentifier`, `QuoteIdentifier`, `NormalizeCallName` — identifier spelling codec |
+| `nanopass_observation.go` | `Observation`, `SourceRange` (half-open byte ranges), observer hook signature |
 
 ## Scope System
 
-`BuildScopes(pr, "defaultDB")` walks the CST and builds a tree of `SelectScope` objects:
+`BuildScopes(pr, "defaultDB")` walks the CST and builds a tree of `SelectScope` objects (returns an error for unexpected tree shapes):
 
-- Enumerates all UNION ALL branches
-- Resolves table aliases in FROM/JOIN
-- Tags CTE references vs. real tables (`TableSource.IsCTE`)
-- Links FROM subqueries and expression subqueries to inner scopes
+- Enumerates all UNION ALL branches, flattening parenthesised nested unions (`UnionMembers` lists every member including the scope itself)
+- Resolves table aliases in FROM/JOIN — both `t AS x` and bare `t x` forms
+- Tags CTE references vs. real tables (`TableSource.IsCTE`); CTE visibility covers chained CTEs (`WITH a …, b AS (… FROM a)`), `selectStmt`-level WITH clauses in union branches and subqueries, and nested WITH inside CTE bodies
+- Captures table functions (`numbers(10) AS n`) as `IsFunction` sources so aliases resolve; their arguments stay opaque
+- Links FROM subqueries (`TableSource.Scopes`, one per union branch) and expression subqueries — scalar, IN, and projection/function-argument position — to inner scopes
 - Tracks default database for unqualified table resolution (`TableSource.ResolvedDatabase(scope)`)
 
+Names (`Table`, `Database`, `Alias`, `CTEDef.Name`) are stored decoded — quoting and escapes removed — so `FROM "x"` matches `WITH x AS (…)`. Re-encode with `QuoteIdentifier` (or splice original node text) when rewriting.
+
 ```go
-scopes := nanopass.BuildScopes(pr, "production")
-for _, scope := range scopes {
+scopes, err := nanopass.BuildScopes(pr, "production")
+if err != nil { … }
+for _, scope := range nanopass.FlattenScopes(scopes) { // every scope exactly once
     for _, ts := range scope.Tables {
         db := ts.ResolvedDatabase(scope) // "production" for unqualified, explicit for qualified
     }
 }
 ```
+
+Iterate the full tree with `FlattenScopes` (CTE definitions are shared between union members; `FlattenScopes` and `AllScopes` deduplicate on traversal).
 
 Database resolution matches ClickHouse behavior: each table resolves independently against the connection default, with no ambient database inheritance from sibling tables.
 
@@ -171,8 +185,8 @@ All passes live in [`passes/`](passes). Properties shown reflect declared `PassP
 
 | Component | Description |
 |-----------|-------------|
-| `MacroExpander` | Expands registered function calls with literal arguments into SQL fragments |
-| `FunctionEvaluator` | Evaluates registered functions in Go, with recursive nested evaluation, partial evaluation, and `env.Params` slot resolution |
+| `MacroExpander` | Expands registered function calls with literal arguments into SQL fragments. Declares `NeedsFixedPoint` (nested macros). A registered macro whose arguments never become literals is an error — macros are not real ClickHouse functions. Name matching is case- and quoting-insensitive. |
+| `FunctionEvaluator` | Evaluates registered functions in Go, with recursive nested evaluation, partial evaluation, and `env.Params` slot resolution. Evaluation and serialisation failures fail the pass. |
 
 `FunctionEvaluator.Pass()` declares `NeedsFixedPoint: true`. It handles:
 
@@ -187,6 +201,7 @@ All passes live in [`passes/`](passes). Properties shown reflect declared `PassP
 - `Idempotent: true` ⇒ `p.Apply(p.Apply(b)) == p.Apply(b)` byte-for-byte.
 - `NeedsFixedPoint: true` ⇒ at least one corpus entry exhibits non-convergence on the second Apply.
 - `Idempotent` and `NeedsFixedPoint` not both set.
+- A declared property must be *exercised*: if `Apply` fails on every corpus entry the check fails instead of passing vacuously.
 
 `TestAssertProperties` in [`passes_test/`](passes_test/nanopass_passes_assert_properties_test.go) covers every exported pass against the shared `testdata/corpus/`, with a small additional nested-forms corpus for passes that declare `NeedsFixedPoint`.
 

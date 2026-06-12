@@ -43,8 +43,12 @@ func WrapColumnsWithDynamic(pattern string) nanopass.Pass {
 			}
 			rw := nanopass.NewRewriter(pr)
 
-			scopes := nanopass.BuildScopes(pr)
-			for _, scope := range scopes {
+			scopes, err := nanopass.BuildScopes(pr, "")
+			if err != nil {
+				err = eh.Errorf("WrapColumnsWithDynamic: %w", err)
+				return
+			}
+			for _, scope := range nanopass.FlattenScopes(scopes) {
 				wrapColumnsInScope(rw, scope, re)
 			}
 
@@ -59,7 +63,7 @@ func WrapColumnsWithDynamic(pattern string) nanopass.Pass {
 	)
 }
 
-func wrapColumnsInScope(rw *antlr.TokenStreamRewriter, scope *nanopass.SelectScope, re *regexp.Regexp) {
+func wrapColumnsInScope(rw nanopass.RewriterI, scope *nanopass.SelectScope, re *regexp.Regexp) {
 	stmt := scope.Node
 	projClause := stmt.ProjectionClause()
 	if projClause == nil {
@@ -68,7 +72,11 @@ func wrapColumnsInScope(rw *antlr.TokenStreamRewriter, scope *nanopass.SelectSco
 
 	// Walk the projection clause looking for ColumnsExprColumn nodes.
 	// Each ColumnsExprColumn wraps a single column expression in the SELECT list.
+	// Nested SELECTs are pruned — they are processed via their own scope.
 	nanopass.WalkCST(projClause.(antlr.ParserRuleContext), func(ctx antlr.ParserRuleContext) bool {
+		if isScopeBoundary(ctx) {
+			return false
+		}
 		colsExpr, ok := ctx.(*grammar1.ColumnsExprColumnContext)
 		if !ok {
 			return true
@@ -93,25 +101,6 @@ func wrapColumnsInScope(rw *antlr.TokenStreamRewriter, scope *nanopass.SelectSco
 
 		return false
 	})
-
-	// Recurse into CTE body scopes
-	for _, cte := range scope.CTEDefs {
-		if cte.Scope != nil {
-			wrapColumnsInScope(rw, cte.Scope, re)
-		}
-	}
-
-	// Recurse into FROM subquery scopes
-	for _, ts := range scope.Tables {
-		if ts.IsSubquery && ts.Scope != nil {
-			wrapColumnsInScope(rw, ts.Scope, re)
-		}
-	}
-
-	// Recurse into expression subqueries
-	for _, sub := range scope.Subqueries {
-		wrapColumnsInScope(rw, sub, re)
-	}
 }
 
 // extractBareColumnName checks if a ColumnsExprColumn contains a bare (unqualified,

@@ -20,7 +20,8 @@ func TestBuildScopesSimple(t *testing.T) {
 	pr, err := nanopass.Parse(sql)
 	require.NoError(t, err)
 
-	scopes := nanopass.BuildScopes(pr)
+	scopes, err := nanopass.BuildScopes(pr, "")
+	require.NoError(t, err)
 	require.Len(t, scopes, 1)
 
 	scope := scopes[0]
@@ -38,7 +39,8 @@ func TestBuildScopesQualifiedTable(t *testing.T) {
 	pr, err := nanopass.Parse(sql)
 	require.NoError(t, err)
 
-	scopes := nanopass.BuildScopes(pr)
+	scopes, err := nanopass.BuildScopes(pr, "")
+	require.NoError(t, err)
 	require.Len(t, scopes, 1)
 	require.Len(t, scopes[0].Tables, 1)
 	assert.Equal(t, "db", scopes[0].Tables[0].Database)
@@ -50,7 +52,8 @@ func TestBuildScopesAlias(t *testing.T) {
 	pr, err := nanopass.Parse(sql)
 	require.NoError(t, err)
 
-	scopes := nanopass.BuildScopes(pr)
+	scopes, err := nanopass.BuildScopes(pr, "")
+	require.NoError(t, err)
 	require.Len(t, scopes, 1)
 	require.Len(t, scopes[0].Tables, 1)
 	assert.Equal(t, "t", scopes[0].Tables[0].Table)
@@ -66,7 +69,8 @@ func TestBuildScopesJoin(t *testing.T) {
 	pr, err := nanopass.Parse(sql)
 	require.NoError(t, err)
 
-	scopes := nanopass.BuildScopes(pr)
+	scopes, err := nanopass.BuildScopes(pr, "")
+	require.NoError(t, err)
 	require.Len(t, scopes, 1)
 	require.Len(t, scopes[0].Tables, 2)
 
@@ -81,7 +85,8 @@ func TestBuildScopesUnionAll(t *testing.T) {
 	pr, err := nanopass.Parse(sql)
 	require.NoError(t, err)
 
-	scopes := nanopass.BuildScopes(pr)
+	scopes, err := nanopass.BuildScopes(pr, "")
+	require.NoError(t, err)
 	require.Len(t, scopes, 3)
 
 	assert.Equal(t, "t1", scopes[0].Tables[0].Table)
@@ -89,9 +94,9 @@ func TestBuildScopesUnionAll(t *testing.T) {
 	assert.Equal(t, "t3", scopes[2].Tables[0].Table)
 
 	// All branches should reference each other as union peers
-	assert.Len(t, scopes[0].UnionPeers, 3)
-	assert.Len(t, scopes[1].UnionPeers, 3)
-	assert.Equal(t, scopes[0].UnionPeers, scopes[1].UnionPeers)
+	assert.Len(t, scopes[0].UnionMembers, 3)
+	assert.Len(t, scopes[1].UnionMembers, 3)
+	assert.Equal(t, scopes[0].UnionMembers, scopes[1].UnionMembers)
 }
 
 func TestBuildScopesCTE(t *testing.T) {
@@ -99,7 +104,8 @@ func TestBuildScopesCTE(t *testing.T) {
 	pr, err := nanopass.Parse(sql)
 	require.NoError(t, err)
 
-	scopes := nanopass.BuildScopes(pr)
+	scopes, err := nanopass.BuildScopes(pr, "")
+	require.NoError(t, err)
 	require.Len(t, scopes, 1)
 
 	scope := scopes[0]
@@ -114,7 +120,7 @@ func TestBuildScopesCTE(t *testing.T) {
 	assert.Equal(t, "cte", scope.CTEDefs[0].Name)
 
 	// CTE body scope should reference the real table
-	cteScope := scope.CTEDefs[0].Scope
+	cteScope := scope.CTEDefs[0].Scopes[0]
 	require.NotNil(t, cteScope)
 	require.Len(t, cteScope.Tables, 1)
 	assert.Equal(t, "t_real", cteScope.Tables[0].Table)
@@ -126,7 +132,8 @@ func TestBuildScopesCTEResolution(t *testing.T) {
 	pr, err := nanopass.Parse(sql)
 	require.NoError(t, err)
 
-	scopes := nanopass.BuildScopes(pr)
+	scopes, err := nanopass.BuildScopes(pr, "")
+	require.NoError(t, err)
 	require.Len(t, scopes, 1)
 
 	def, found := scopes[0].ResolveCTE("cte")
@@ -142,7 +149,8 @@ func TestBuildScopesSubquery(t *testing.T) {
 	pr, err := nanopass.Parse(sql)
 	require.NoError(t, err)
 
-	scopes := nanopass.BuildScopes(pr)
+	scopes, err := nanopass.BuildScopes(pr, "")
+	require.NoError(t, err)
 	require.Len(t, scopes, 1)
 
 	// Outer SELECT should have one subquery source
@@ -155,7 +163,8 @@ func TestBuildScopesNoFrom(t *testing.T) {
 	pr, err := nanopass.Parse(sql)
 	require.NoError(t, err)
 
-	scopes := nanopass.BuildScopes(pr)
+	scopes, err := nanopass.BuildScopes(pr, "")
+	require.NoError(t, err)
 	require.Len(t, scopes, 1)
 	assert.Empty(t, scopes[0].Tables)
 }
@@ -165,7 +174,8 @@ func TestBuildScopesMultipleCTEs(t *testing.T) {
 	pr, err := nanopass.Parse(sql)
 	require.NoError(t, err)
 
-	scopes := nanopass.BuildScopes(pr)
+	scopes, err := nanopass.BuildScopes(pr, "")
+	require.NoError(t, err)
 	require.Len(t, scopes, 1)
 
 	scope := scopes[0]
@@ -184,7 +194,8 @@ func TestResolveAlias(t *testing.T) {
 	pr, err := nanopass.Parse(sql)
 	require.NoError(t, err)
 
-	scopes := nanopass.BuildScopes(pr)
+	scopes, err := nanopass.BuildScopes(pr, "")
+	require.NoError(t, err)
 	require.Len(t, scopes, 1)
 
 	{ // Resolve by alias
@@ -323,15 +334,16 @@ func TestBuildScopesSubqueryInFrom(t *testing.T) {
 	pr, err := nanopass.Parse(sql)
 	require.NoError(t, err)
 
-	scopes := nanopass.BuildScopes(pr)
+	scopes, err := nanopass.BuildScopes(pr, "")
+	require.NoError(t, err)
 	require.Len(t, scopes, 1)
 
 	outer := scopes[0]
 	require.Len(t, outer.Tables, 1)
 	assert.True(t, outer.Tables[0].IsSubquery)
-	require.NotNil(t, outer.Tables[0].Scope)
+	require.NotEmpty(t, outer.Tables[0].Scopes)
 
-	inner := outer.Tables[0].Scope
+	inner := outer.Tables[0].Scopes[0]
 	require.Len(t, inner.Tables, 1)
 	assert.Equal(t, "t_inner", inner.Tables[0].Table)
 	assert.Equal(t, outer, inner.Parent)
@@ -342,7 +354,8 @@ func TestBuildScopesSubqueryInWhere(t *testing.T) {
 	pr, err := nanopass.Parse(sql)
 	require.NoError(t, err)
 
-	scopes := nanopass.BuildScopes(pr)
+	scopes, err := nanopass.BuildScopes(pr, "")
+	require.NoError(t, err)
 	require.Len(t, scopes, 1)
 
 	outer := scopes[0]
@@ -362,18 +375,19 @@ func TestBuildScopesNestedSubqueries(t *testing.T) {
 	pr, err := nanopass.Parse(sql)
 	require.NoError(t, err)
 
-	scopes := nanopass.BuildScopes(pr)
+	scopes, err := nanopass.BuildScopes(pr, "")
+	require.NoError(t, err)
 	require.Len(t, scopes, 1)
 
 	outer := scopes[0]
 	require.Len(t, outer.Tables, 1)
-	require.NotNil(t, outer.Tables[0].Scope)
+	require.NotEmpty(t, outer.Tables[0].Scopes)
 
-	mid := outer.Tables[0].Scope
+	mid := outer.Tables[0].Scopes[0]
 	require.Len(t, mid.Tables, 1)
-	require.NotNil(t, mid.Tables[0].Scope)
+	require.NotEmpty(t, mid.Tables[0].Scopes)
 
-	deep := mid.Tables[0].Scope
+	deep := mid.Tables[0].Scopes[0]
 	require.Len(t, deep.Tables, 1)
 	assert.Equal(t, "t_deep", deep.Tables[0].Table)
 }
@@ -383,7 +397,8 @@ func TestBuildScopesAllScopes(t *testing.T) {
 	pr, err := nanopass.Parse(sql)
 	require.NoError(t, err)
 
-	scopes := nanopass.BuildScopes(pr)
+	scopes, err := nanopass.BuildScopes(pr, "")
+	require.NoError(t, err)
 	require.Len(t, scopes, 1)
 
 	all := scopes[0].AllScopes()
@@ -437,7 +452,8 @@ func TestBuildScopesAliasedSubqueryInJoin(t *testing.T) {
 	pr, err := nanopass.Parse(sql)
 	require.NoError(t, err)
 
-	scopes := nanopass.BuildScopes(pr)
+	scopes, err := nanopass.BuildScopes(pr, "")
+	require.NoError(t, err)
 	require.Len(t, scopes, 1)
 
 	outer := scopes[0]
@@ -450,9 +466,9 @@ func TestBuildScopesAliasedSubqueryInJoin(t *testing.T) {
 	// Second table is the subquery with alias "sub"
 	assert.True(t, outer.Tables[1].IsSubquery)
 	assert.Equal(t, "sub", outer.Tables[1].Alias)
-	require.NotNil(t, outer.Tables[1].Scope)
+	require.NotEmpty(t, outer.Tables[1].Scopes)
 
-	inner := outer.Tables[1].Scope
+	inner := outer.Tables[1].Scopes[0]
 	require.Len(t, inner.Tables, 1)
 	assert.Equal(t, "t2", inner.Tables[0].Table)
 }
@@ -462,7 +478,8 @@ func TestBuildScopesScalarSubqueryInSelectList(t *testing.T) {
 	pr, err := nanopass.Parse(sql)
 	require.NoError(t, err)
 
-	scopes := nanopass.BuildScopes(pr)
+	scopes, err := nanopass.BuildScopes(pr, "")
+	require.NoError(t, err)
 	require.Len(t, scopes, 1)
 
 	outer := scopes[0]
@@ -481,7 +498,8 @@ func TestBuildScopesExistsSubquery(t *testing.T) {
 	pr, err := nanopass.Parse(sql)
 	require.NoError(t, err)
 
-	scopes := nanopass.BuildScopes(pr)
+	scopes, err := nanopass.BuildScopes(pr, "")
+	require.NoError(t, err)
 	require.Len(t, scopes, 1)
 
 	outer := scopes[0]
@@ -500,7 +518,8 @@ func TestBuildScopesGlobalInSubquery(t *testing.T) {
 	pr, err := nanopass.Parse(sql)
 	require.NoError(t, err)
 
-	scopes := nanopass.BuildScopes(pr)
+	scopes, err := nanopass.BuildScopes(pr, "")
+	require.NoError(t, err)
 	require.Len(t, scopes, 1)
 
 	outer := scopes[0]
@@ -518,7 +537,8 @@ func TestBuildScopesNestedCTEWithSubqueryInWhere(t *testing.T) {
 	pr, err := nanopass.Parse(sql)
 	require.NoError(t, err)
 
-	scopes := nanopass.BuildScopes(pr)
+	scopes, err := nanopass.BuildScopes(pr, "")
+	require.NoError(t, err)
 	require.Len(t, scopes, 1)
 
 	outer := scopes[0]
@@ -526,7 +546,7 @@ func TestBuildScopesNestedCTEWithSubqueryInWhere(t *testing.T) {
 	assert.Equal(t, "cte", outer.CTEDefs[0].Name)
 
 	// CTE body scope
-	cteScope := outer.CTEDefs[0].Scope
+	cteScope := outer.CTEDefs[0].Scopes[0]
 	require.NotNil(t, cteScope)
 	require.Len(t, cteScope.Tables, 1)
 	assert.Equal(t, "t1", cteScope.Tables[0].Table)
@@ -543,7 +563,8 @@ func TestBuildScopesAllScopesDeep(t *testing.T) {
 	pr, err := nanopass.Parse(sql)
 	require.NoError(t, err)
 
-	scopes := nanopass.BuildScopes(pr)
+	scopes, err := nanopass.BuildScopes(pr, "")
+	require.NoError(t, err)
 	require.Len(t, scopes, 1)
 
 	all := scopes[0].AllScopes()
@@ -568,7 +589,8 @@ func TestBuildScopesDefaultDatabase(t *testing.T) {
 	pr, err := nanopass.Parse(sql)
 	require.NoError(t, err)
 
-	scopes := nanopass.BuildScopes(pr, "mydb")
+	scopes, err := nanopass.BuildScopes(pr, "mydb")
+	require.NoError(t, err)
 	require.Len(t, scopes, 1)
 
 	scope := scopes[0]
@@ -584,7 +606,8 @@ func TestBuildScopesExplicitDatabaseOverridesDefault(t *testing.T) {
 	pr, err := nanopass.Parse(sql)
 	require.NoError(t, err)
 
-	scopes := nanopass.BuildScopes(pr, "mydb")
+	scopes, err := nanopass.BuildScopes(pr, "mydb")
+	require.NoError(t, err)
 	require.Len(t, scopes, 1)
 
 	require.Len(t, scopes[0].Tables, 1)
@@ -597,7 +620,8 @@ func TestBuildScopesDefaultDatabasePropagates(t *testing.T) {
 	pr, err := nanopass.Parse(sql)
 	require.NoError(t, err)
 
-	scopes := nanopass.BuildScopes(pr, "mydb")
+	scopes, err := nanopass.BuildScopes(pr, "mydb")
+	require.NoError(t, err)
 	require.Len(t, scopes, 1)
 
 	// Outer scope has default database
@@ -605,7 +629,7 @@ func TestBuildScopesDefaultDatabasePropagates(t *testing.T) {
 
 	// CTE body scope inherits default database
 	require.Len(t, scopes[0].CTEDefs, 1)
-	cteScope := scopes[0].CTEDefs[0].Scope
+	cteScope := scopes[0].CTEDefs[0].Scopes[0]
 	require.NotNil(t, cteScope)
 	assert.Equal(t, "mydb", cteScope.DefaultDatabase)
 
@@ -619,13 +643,14 @@ func TestBuildScopesDefaultDatabaseInSubquery(t *testing.T) {
 	pr, err := nanopass.Parse(sql)
 	require.NoError(t, err)
 
-	scopes := nanopass.BuildScopes(pr, "mydb")
+	scopes, err := nanopass.BuildScopes(pr, "mydb")
+	require.NoError(t, err)
 	require.Len(t, scopes, 1)
 
 	require.Len(t, scopes[0].Tables, 1)
-	require.NotNil(t, scopes[0].Tables[0].Scope)
+	require.NotEmpty(t, scopes[0].Tables[0].Scopes)
 
-	innerScope := scopes[0].Tables[0].Scope
+	innerScope := scopes[0].Tables[0].Scopes[0]
 	assert.Equal(t, "mydb", innerScope.DefaultDatabase)
 	require.Len(t, innerScope.Tables, 1)
 	assert.Equal(t, "mydb", innerScope.Tables[0].ResolvedDatabase(innerScope))
@@ -636,7 +661,8 @@ func TestBuildScopesDefaultDatabaseUnionAll(t *testing.T) {
 	pr, err := nanopass.Parse(sql)
 	require.NoError(t, err)
 
-	scopes := nanopass.BuildScopes(pr, "mydb")
+	scopes, err := nanopass.BuildScopes(pr, "mydb")
+	require.NoError(t, err)
 	require.Len(t, scopes, 2)
 
 	// First branch: unqualified → resolves to default
@@ -654,7 +680,8 @@ func TestBuildScopesNoDefaultDatabase(t *testing.T) {
 	require.NoError(t, err)
 
 	// No default database — backward compatible
-	scopes := nanopass.BuildScopes(pr)
+	scopes, err := nanopass.BuildScopes(pr, "")
+	require.NoError(t, err)
 	require.Len(t, scopes, 1)
 
 	assert.Equal(t, "", scopes[0].DefaultDatabase)
@@ -666,7 +693,8 @@ func TestBuildScopesMixedDatabases(t *testing.T) {
 	pr, err := nanopass.Parse(sql)
 	require.NoError(t, err)
 
-	scopes := nanopass.BuildScopes(pr, "mydb")
+	scopes, err := nanopass.BuildScopes(pr, "mydb")
+	require.NoError(t, err)
 	require.Len(t, scopes, 1)
 
 	require.Len(t, scopes[0].Tables, 2)

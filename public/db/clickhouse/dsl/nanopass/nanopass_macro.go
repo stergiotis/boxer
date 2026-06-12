@@ -35,8 +35,11 @@ type LiteralArg struct {
 }
 
 // MacroExpander holds a registry of macro functions and provides a Pass.
+//
+// Not safe for concurrent use: Register must not be called while a Pass
+// returned by [MacroExpander.Pass] is running.
 type MacroExpander struct {
-	macros map[string]MacroFuncI // lowercase name → function
+	macros map[string]MacroFuncI // normalised name → function
 }
 
 // NewMacroExpander creates a new MacroExpander.
@@ -47,19 +50,42 @@ func NewMacroExpander() (inst *MacroExpander) {
 	return
 }
 
-// Register adds a macro function. Name matching is case-insensitive.
+// NormalizeCallName maps a function-call identifier (possibly quoted or
+// backquoted) to a registry key. Matching is case-insensitive — note this
+// deviates from ClickHouse, where most function names are case-sensitive;
+// registered names should not collide with real functions in any case
+// variant. Shared by MacroExpander and passes.FunctionEvaluator so both
+// registries match the same spellings.
+func NormalizeCallName(name string) string {
+	return strings.ToLower(DecodeIdentifier(name))
+}
+
+// Register adds a macro function. Name matching is case-insensitive and
+// quoting-insensitive: `myMacro(…)`, `MYMACRO(…)` and `"myMacro"(…)` all
+// match a registration under "myMacro".
 func (inst *MacroExpander) Register(name string, fn MacroFuncI) {
-	inst.macros[strings.ToLower(name)] = fn
+	inst.macros[NormalizeCallName(name)] = fn
 }
 
 // Pass returns a nanopass Pass that expands all registered macros.
+//
+// NeedsFixedPoint: a macro nested inside another macro's argument list only
+// becomes expandable after the inner call has been replaced by its literal
+// expansion, so a single Apply is not sufficient for nested invocations.
+//
+// A registered macro invoked with arguments that never become literals
+// (column references, lambdas, …) is an error: macros are not real
+// ClickHouse functions, so leaving the call in the output would fail at
+// query time, far from the cause. The error is raised at the iteration
+// where no further expansion progress is possible.
 func (inst *MacroExpander) Pass() Pass {
 	return Pass{
 		Name:  "MacroExpander",
 		Apply: inst.apply,
 		Properties: PassProperties{
-			Reads:  RegionBody,
-			Writes: RegionBody,
+			NeedsFixedPoint: true,
+			Reads:           RegionBody,
+			Writes:          RegionBody,
 		},
 	}
 }
@@ -73,29 +99,44 @@ func (inst *MacroExpander) apply(_ *env.Environment, body string) (result string
 	}
 	rw := NewRewriter(pr)
 
-	// Collect replacements first, then apply.
-	// This avoids issues with nested macros where inner nodes
-	// are invalidated by outer replacements.
+	// Collect replacements first, then apply. Matched macro subtrees are not
+	// descended into, so replacement ranges never overlap. A registered call
+	// whose arguments are not (yet) literals is recorded as skipped and its
+	// subtree IS descended — an inner macro expansion may make it literal on
+	// the next fixpoint iteration.
 	type replacement struct {
 		node antlr.ParserRuleContext
 		text string
 	}
+	type skipped struct {
+		name   string
+		reason error
+	}
 	var replacements []replacement
+	var skips []skipped
 
 	WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
+		if err != nil {
+			return false
+		}
 		funcExpr, ok := ctx.(*grammar1.ColumnExprFunctionContext)
 		if !ok {
 			return true
 		}
+		ident := funcExpr.Identifier()
+		if ident == nil {
+			return true
+		}
 
-		name := funcExpr.Identifier().GetText()
-		fn, found := inst.macros[strings.ToLower(name)]
+		name := NormalizeCallName(ident.GetText())
+		fn, found := inst.macros[name]
 		if !found {
 			return true
 		}
 
 		args, extractErr := ExtractLiteralArgs(funcExpr)
 		if extractErr != nil {
+			skips = append(skips, skipped{name: name, reason: extractErr})
 			return true
 		}
 
@@ -117,6 +158,18 @@ func (inst *MacroExpander) apply(_ *env.Environment, body string) (result string
 		return
 	}
 
+	// No expansion progress is possible and registered macros remain with
+	// non-literal arguments: fail now instead of shipping a call ClickHouse
+	// cannot resolve.
+	if len(replacements) == 0 && len(skips) > 0 {
+		first := skips[0]
+		err = eb.Build().
+			Str("macro", first.name).
+			Int("skippedCalls", len(skips)).
+			Errorf("registered macro invoked with non-literal arguments: %w", first.reason)
+		return
+	}
+
 	for _, r := range replacements {
 		ReplaceNode(rw, r.node, r.text)
 	}
@@ -134,14 +187,24 @@ func ExtractLiteralArgs(funcExpr *grammar1.ColumnExprFunctionContext) (args []Li
 		return
 	}
 
-	argExprs := argList.(*grammar1.ColumnArgListContext).AllColumnArgExpr()
+	argListCtx, ok := argList.(*grammar1.ColumnArgListContext)
+	if !ok {
+		err = eb.Build().Type("argList", argList).Errorf("unexpected argument list context")
+		return
+	}
+	argExprs := argListCtx.AllColumnArgExpr()
 	args = make([]LiteralArg, 0, len(argExprs))
 
 	for _, argExpr := range argExprs {
-		ae := argExpr.(*grammar1.ColumnArgExprContext)
+		ae, aeOk := argExpr.(*grammar1.ColumnArgExprContext)
+		if !aeOk {
+			err = eb.Build().Type("argExpr", argExpr).Errorf("unexpected argument context")
+			return
+		}
 		colExpr := ae.ColumnExpr()
 		if colExpr == nil {
-			err = eh.Errorf("argument is not an expression")
+			// columnArgExpr: columnLambdaExpr | columnExpr — nil means lambda.
+			err = eh.Errorf("argument is a lambda, not a literal")
 			return
 		}
 		arg, literalErr := extractLiteralFromExpr(colExpr)
@@ -162,30 +225,59 @@ func extractLiteralFromExpr(expr grammar1.IColumnExprContext) (arg LiteralArg, e
 			err = eh.Errorf("empty literal")
 			return
 		}
-		return classifyLiteral(literal.(*grammar1.LiteralContext))
+		litCtx, ok := literal.(*grammar1.LiteralContext)
+		if !ok {
+			err = eb.Build().Type("literal", literal).Errorf("unexpected literal context")
+			return
+		}
+		return classifyLiteral(litCtx)
 	case *grammar1.ColumnExprNegateContext:
-		// Handle negative numbers: -(literal)
+		// Negation: -(expr). The inner value may itself carry a sign (the
+		// numberLiteral rule owns an optional sign, and nesting like -(-5)
+		// is legal) — toggle instead of blindly prepending, or "--5" would
+		// open a SQL line comment when spliced back.
 		inner := c.ColumnExpr()
 		innerArg, innerErr := extractLiteralFromExpr(inner)
 		if innerErr != nil {
 			err = innerErr
 			return
 		}
-		if innerArg.Type == LiteralTypeInt || innerArg.Type == LiteralTypeFloat {
-			arg = LiteralArg{
-				Type:  innerArg.Type,
-				Value: "-" + innerArg.Value,
-			}
+		if innerArg.Type != LiteralTypeInt && innerArg.Type != LiteralTypeFloat {
+			err = eh.Errorf("cannot negate non-numeric literal")
 			return
 		}
-		err = eh.Errorf("cannot negate non-numeric literal")
+		arg = LiteralArg{Type: innerArg.Type, Value: negateNumericText(innerArg.Value)}
 		return
 	case *grammar1.ColumnExprParensContext:
 		// Unwrap parentheses
 		return extractLiteralFromExpr(c.ColumnExpr())
+	case *grammar1.ColumnExprIdentifierContext:
+		// Boolean keywords (true/false) reach expression position as
+		// identifiers, not via the literal rule.
+		if tok := c.GetStart(); tok != nil {
+			tt := tok.GetTokenType()
+			if tt == grammar1.ClickHouseLexerJSON_TRUE || tt == grammar1.ClickHouseLexerJSON_FALSE {
+				arg = LiteralArg{Type: LiteralTypeBool, Value: tok.GetText()}
+				return
+			}
+		}
+		err = eb.Build().Type("exprType", expr).Errorf("argument is not a literal")
+		return
 	default:
 		err = eb.Build().Type("exprType", expr).Errorf("argument is not a literal")
 		return
+	}
+}
+
+// negateNumericText toggles the sign of a numeric literal's text form.
+func negateNumericText(s string) string {
+	switch {
+	case strings.HasPrefix(s, "-"):
+		return s[1:]
+	case strings.HasPrefix(s, "+"):
+		return "-" + s[1:]
+	default:
+		return "-" + s
 	}
 }
 
@@ -199,7 +291,12 @@ func classifyLiteral(lit *grammar1.LiteralContext) (arg LiteralArg, err error) {
 		return
 	}
 	if lit.NumberLiteral() != nil {
-		return classifyNumberLiteral(lit.NumberLiteral().(*grammar1.NumberLiteralContext))
+		numCtx, ok := lit.NumberLiteral().(*grammar1.NumberLiteralContext)
+		if !ok {
+			err = eb.Build().Type("numberLiteral", lit.NumberLiteral()).Errorf("unexpected number literal context")
+			return
+		}
+		return classifyNumberLiteral(numCtx)
 	}
 	err = eh.Errorf("unrecognized literal type")
 	return

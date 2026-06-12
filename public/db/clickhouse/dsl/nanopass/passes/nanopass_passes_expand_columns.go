@@ -142,8 +142,12 @@ func ExpandColumns(schema SchemaProviderI, defaultDatabase string) nanopass.Pass
 			}
 			rw := nanopass.NewRewriter(pr)
 
-			scopes := nanopass.BuildScopes(pr, defaultDatabase)
-			for _, scope := range scopes {
+			scopes, err := nanopass.BuildScopes(pr, defaultDatabase)
+			if err != nil {
+				err = eh.Errorf("ExpandColumns: %w", err)
+				return
+			}
+			for _, scope := range nanopass.FlattenScopes(scopes) {
 				err = expandColumnsInScope(rw, scope, schema)
 				if err != nil {
 					return
@@ -161,7 +165,21 @@ func ExpandColumns(schema SchemaProviderI, defaultDatabase string) nanopass.Pass
 	)
 }
 
-func expandColumnsInScope(rw *antlr.TokenStreamRewriter, scope *nanopass.SelectScope, schema SchemaProviderI) (err error) {
+// isScopeBoundary reports CST nodes a per-scope projection walk must not
+// descend below: nested SELECTs belong to their own SelectScope (the caller
+// iterates FlattenScopes, so every scope is processed exactly once).
+func isScopeBoundary(ctx antlr.ParserRuleContext) bool {
+	switch ctx.(type) {
+	case *grammar1.SelectStmtContext,
+		*grammar1.TableExprSubqueryContext,
+		*grammar1.ColumnExprSubqueryContext,
+		*grammar1.ColumnsExprSubqueryContext:
+		return true
+	}
+	return false
+}
+
+func expandColumnsInScope(rw nanopass.RewriterI, scope *nanopass.SelectScope, schema SchemaProviderI) (err error) {
 	// Expand column expressions in this scope's SELECT list
 	stmt := scope.Node
 	projClause := stmt.ProjectionClause()
@@ -171,6 +189,9 @@ func expandColumnsInScope(rw *antlr.TokenStreamRewriter, scope *nanopass.SelectS
 
 	// Walk the projection clause looking for expandable expressions
 	nanopass.WalkCST(projClause.(antlr.ParserRuleContext), func(ctx antlr.ParserRuleContext) bool {
+		if isScopeBoundary(ctx) {
+			return false
+		}
 		switch c := ctx.(type) {
 		case *grammar1.ColumnsExprAsteriskContext:
 			expanded := expandAsterisk(c, scope, schema)
@@ -193,34 +214,6 @@ func expandColumnsInScope(rw *antlr.TokenStreamRewriter, scope *nanopass.SelectS
 		}
 		return true
 	})
-
-	// Recurse into CTE body scopes
-	for _, cte := range scope.CTEDefs {
-		if cte.Scope != nil {
-			err = expandColumnsInScope(rw, cte.Scope, schema)
-			if err != nil {
-				return
-			}
-		}
-	}
-
-	// Recurse into FROM subquery scopes
-	for _, ts := range scope.Tables {
-		if ts.IsSubquery && ts.Scope != nil {
-			err = expandColumnsInScope(rw, ts.Scope, schema)
-			if err != nil {
-				return
-			}
-		}
-	}
-
-	// Recurse into expression subqueries
-	for _, sub := range scope.Subqueries {
-		err = expandColumnsInScope(rw, sub, schema)
-		if err != nil {
-			return
-		}
-	}
 
 	return
 }
@@ -266,7 +259,7 @@ func extractStringLiteralFromDynamic(ctx *grammar1.DynamicColumnSelectionContext
 }
 func expandForTable(nameOrAlias string, scope *nanopass.SelectScope, schema SchemaProviderI) (expanded string) {
 	source, found := scope.ResolveAlias(nameOrAlias)
-	if !found || source.IsCTE || source.IsSubquery {
+	if !found || source.IsCTE || source.IsSubquery || source.IsFunction {
 		return ""
 	}
 
@@ -289,7 +282,7 @@ func expandForAllTables(scope *nanopass.SelectScope, schema SchemaProviderI) (ex
 	var allParts []string
 
 	for _, ts := range scope.Tables {
-		if ts.IsCTE || ts.IsSubquery {
+		if ts.IsCTE || ts.IsSubquery || ts.IsFunction {
 			continue
 		}
 
@@ -341,7 +334,7 @@ func expandDynamic(ctx *grammar1.ColumnExprDynamicContext, scope *nanopass.Selec
 
 	var matched []string
 	for _, ts := range scope.Tables {
-		if ts.IsCTE || ts.IsSubquery {
+		if ts.IsCTE || ts.IsSubquery || ts.IsFunction {
 			continue
 		}
 

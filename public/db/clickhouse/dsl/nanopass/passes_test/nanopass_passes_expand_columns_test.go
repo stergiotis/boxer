@@ -529,7 +529,8 @@ func TestExpandColumnsWithDefaultDatabase(t *testing.T) {
 	pr, err := nanopass.Parse(sql)
 	require.NoError(t, err)
 
-	scopes := nanopass.BuildScopes(pr, "mydb")
+	scopes, err := nanopass.BuildScopes(pr, "mydb")
+	require.NoError(t, err)
 	require.Len(t, scopes, 1)
 
 	// Verify ResolvedDatabase works

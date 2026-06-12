@@ -3,8 +3,6 @@
 package passes
 
 import (
-	"strings"
-
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
@@ -52,9 +50,7 @@ func canonicalizeIdentifiersImpl(sql string) (result string, err error) {
 	return
 }
 
-var _ nanopass.Pass = CanonicalizeIdentifiers
-
-func quoteIdentifierCtx(rw *antlr.TokenStreamRewriter, ctx *grammar1.IdentifierContext, processed map[int]bool) {
+func quoteIdentifierCtx(rw nanopass.RewriterI, ctx *grammar1.IdentifierContext, processed map[int]bool) {
 	tok := ctx.GetStart()
 	idx := tok.GetTokenIndex()
 	if processed[idx] {
@@ -81,11 +77,11 @@ func quoteIdentifierCtx(rw *antlr.TokenStreamRewriter, ctx *grammar1.IdentifierC
 		}
 	} else {
 		// Keyword or interval token used as name → quote it
-		nanopass.ReplaceToken(rw, idx, quoteIdentifier(text))
+		nanopass.ReplaceToken(rw, idx, nanopass.QuoteIdentifier(text))
 	}
 }
 
-func quoteAliasCtx(rw *antlr.TokenStreamRewriter, ctx *grammar1.AliasContext, processed map[int]bool) {
+func quoteAliasCtx(rw nanopass.RewriterI, ctx *grammar1.AliasContext, processed map[int]bool) {
 	// In Grammar1, alias: IDENTIFIER — always an IDENTIFIER token.
 	tok := ctx.GetStart()
 	idx := tok.GetTokenIndex()
@@ -101,28 +97,17 @@ func quoteAliasCtx(rw *antlr.TokenStreamRewriter, ctx *grammar1.AliasContext, pr
 	}
 }
 
-// ensureDoubleQuoted converts an IDENTIFIER token to double-quoted form.
+// ensureDoubleQuoted converts an IDENTIFIER token to canonical double-quoted
+// form by decoding the spelling (bare, backquoted, or double-quoted, with
+// escapes) and re-encoding:
 //
 //	bare_ident  → "bare_ident"
 //	`backtick`  → "backtick"
-//	"already"   → "already" (no change)
+//	"already"   → "already"
+//	`a\"b`      → "a""b"      (escapes normalised, same denoted name)
 func ensureDoubleQuoted(s string) string {
 	if len(s) == 0 {
 		return `""`
 	}
-	if s[0] == '"' && s[len(s)-1] == '"' {
-		return s
-	}
-	if s[0] == '`' && s[len(s)-1] == '`' {
-		inner := s[1 : len(s)-1]
-		inner = strings.ReplaceAll(inner, "``", "`")
-		return quoteIdentifier(inner)
-	}
-	return quoteIdentifier(s)
-}
-
-// quoteIdentifier wraps a string in double quotes, escaping internal double quotes.
-func quoteIdentifier(s string) string {
-	escaped := strings.ReplaceAll(s, `"`, `""`)
-	return `"` + escaped + `"`
+	return nanopass.QuoteIdentifier(nanopass.DecodeIdentifier(s))
 }

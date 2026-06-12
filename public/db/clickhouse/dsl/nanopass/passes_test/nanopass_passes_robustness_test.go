@@ -121,8 +121,10 @@ func TestPassesPreserveScopeStructure(t *testing.T) {
 				prAfter, err := nanopass.Parse(out)
 				require.NoError(t, err, "pass produced unparseable SQL: %s", out)
 
-				scopesBefore := nanopass.BuildScopes(prBefore)
-				scopesAfter := nanopass.BuildScopes(prAfter)
+				scopesBefore, err := nanopass.BuildScopes(prBefore, "")
+				require.NoError(t, err)
+				scopesAfter, err := nanopass.BuildScopes(prAfter, "")
+				require.NoError(t, err)
 
 				require.Equal(t, len(scopesBefore), len(scopesAfter),
 					"scope count changed: before=%d after=%d", len(scopesBefore), len(scopesAfter))

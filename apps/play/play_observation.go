@@ -34,7 +34,7 @@ func newAffordanceEvaluator(sink *[]nanopass.Observation) *passes.FunctionEvalua
 			Str("name", obs.Name).
 			Bool("evaluated", obs.Evaluated).
 			Int("src.start", obs.Src.Start).
-			Int("src.stop", obs.Src.Stop).
+			Int("src.end", obs.Src.End).
 			Interface("args", obs.Args).
 			Msg("play: SQL affordance observation")
 		*sink = append(*sink, obs)

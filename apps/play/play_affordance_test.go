@@ -10,7 +10,7 @@ import (
 
 func TestExtractCallArgsAllLiteral(t *testing.T) {
 	sql := "SELECT multiMatchIndexAny('hay', 'foo.*', 'bar.*')"
-	src := nanopass.SourceRange{Start: 7, Stop: len(sql) - 1}
+	src := nanopass.SourceRange{Start: 7, End: len(sql)}
 	args := extractCallArgs(sql, src)
 
 	if got := len(args); got != 3 {
@@ -28,7 +28,7 @@ func TestExtractCallArgsAllLiteral(t *testing.T) {
 
 func TestExtractCallArgsMixedLiteralAndColumnRef(t *testing.T) {
 	sql := "SELECT multiMatchIndexAny(text, 'foo.*', 'bar.*')"
-	src := nanopass.SourceRange{Start: 7, Stop: len(sql) - 1}
+	src := nanopass.SourceRange{Start: 7, End: len(sql)}
 	args := extractCallArgs(sql, src)
 
 	if got := len(args); got != 3 {
@@ -54,7 +54,7 @@ func TestExtractCallArgsMixedLiteralAndColumnRef(t *testing.T) {
 // top-level comma scanner.
 func TestExtractCallArgsNestedCall(t *testing.T) {
 	sql := "SELECT multiMatchIndexAny(text, concat('a', 'b'), 'c.*')"
-	src := nanopass.SourceRange{Start: 7, Stop: len(sql) - 1}
+	src := nanopass.SourceRange{Start: 7, End: len(sql)}
 	args := extractCallArgs(sql, src)
 
 	if got := len(args); got != 3 {
@@ -75,7 +75,7 @@ func TestExtractCallArgsNestedCall(t *testing.T) {
 // Commas inside string literals are not argument separators.
 func TestExtractCallArgsCommaInsideLiteral(t *testing.T) {
 	sql := "SELECT multiMatchIndexAny('hay', 'a,b', 'c')"
-	src := nanopass.SourceRange{Start: 7, Stop: len(sql) - 1}
+	src := nanopass.SourceRange{Start: 7, End: len(sql)}
 	args := extractCallArgs(sql, src)
 
 	if got := len(args); got != 3 {
@@ -89,7 +89,7 @@ func TestExtractCallArgsCommaInsideLiteral(t *testing.T) {
 // Backslash-escaped quote inside a literal must not terminate the literal.
 func TestExtractCallArgsEscapedQuote(t *testing.T) {
 	sql := `SELECT multiMatchIndexAny('hay', 'it\'s', 'x')`
-	src := nanopass.SourceRange{Start: 7, Stop: len(sql) - 1}
+	src := nanopass.SourceRange{Start: 7, End: len(sql)}
 	args := extractCallArgs(sql, src)
 
 	if got := len(args); got != 3 {

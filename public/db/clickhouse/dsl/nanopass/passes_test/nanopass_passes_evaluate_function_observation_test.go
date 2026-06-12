@@ -109,11 +109,11 @@ func TestOnObservationSourceRangePointsAtCall(t *testing.T) {
 	require.Len(t, observed, 1)
 	obs := observed[0]
 	require.False(t, obs.Src.Empty(), "src must be set")
-	slice := body[obs.Src.Start : obs.Src.Stop+1]
+	slice := body[obs.Src.Start:obs.Src.End]
 	assert.True(t, strings.HasPrefix(slice, "multiMatchIndexAny"),
 		"src.Start should point at the function name; got slice=%q", slice)
 	assert.True(t, strings.HasSuffix(slice, ")"),
-		"src.Stop should point at the closing paren; got slice=%q", slice)
+		"src.End should be just past the closing paren; got slice=%q", slice)
 }
 
 // Observation + discard mechanism interact correctly: every visited call

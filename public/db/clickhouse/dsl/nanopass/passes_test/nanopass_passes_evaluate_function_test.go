@@ -362,7 +362,7 @@ func TestEvalFunctionsFloat(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// --- Error in evaluation (left untouched) ---
+// --- Error in evaluation (fails the pass) ---
 
 func TestEvalFunctionsEvalError(t *testing.T) {
 	eval := passes.NewFunctionEvaluator()
@@ -371,9 +371,12 @@ func TestEvalFunctionsEvalError(t *testing.T) {
 	}, true)
 	pass := eval.Pass()
 
-	got, err := pass.Run("SELECT myFail(1)")
-	require.NoError(t, err)
-	assert.Equal(t, "SELECT myFail(1)", got) // left untouched
+	// A registered evaluator that runs and fails is a compile-time error —
+	// leaving the call in the output would surface as an unknown-function
+	// error at query time, far from the cause.
+	_, err := pass.Run("SELECT myFail(1)")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "intentional failure")
 }
 
 // --- Boolean result ---

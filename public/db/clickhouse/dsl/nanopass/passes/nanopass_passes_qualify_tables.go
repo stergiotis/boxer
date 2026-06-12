@@ -3,16 +3,19 @@
 package passes
 
 import (
-	"github.com/antlr4-go/antlr/v4"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // QualifyTables returns a Pass that qualifies all unqualified table
-// references with the given default database. Scope-aware: handles UNION ALL
-// branches, skips CTE references, and recurses into CTE bodies and
-// subqueries.
+// references with the given default database. Scope-aware: covers UNION
+// branches (including parenthesised nested unions), CTE bodies, FROM
+// subqueries, and expression subqueries; skips CTE references and table
+// functions.
+//
+// defaultDB is spliced verbatim — pass a quoted identifier if the database
+// name requires quoting.
 func QualifyTables(defaultDB string) nanopass.Pass {
 	return nanopass.LiftBodyPass(
 		"QualifyTables",
@@ -24,8 +27,12 @@ func QualifyTables(defaultDB string) nanopass.Pass {
 			}
 			rw := nanopass.NewRewriter(pr)
 
-			scopes := nanopass.BuildScopes(pr)
-			for _, scope := range scopes {
+			scopes, err := nanopass.BuildScopes(pr, "")
+			if err != nil {
+				err = eh.Errorf("QualifyTables: %w", err)
+				return
+			}
+			for _, scope := range nanopass.FlattenScopes(scopes) {
 				qualifyTablesInScope(rw, scope, defaultDB)
 			}
 
@@ -40,16 +47,9 @@ func QualifyTables(defaultDB string) nanopass.Pass {
 	)
 }
 
-func qualifyTablesInScope(rw *antlr.TokenStreamRewriter, scope *nanopass.SelectScope, defaultDB string) {
+func qualifyTablesInScope(rw nanopass.RewriterI, scope *nanopass.SelectScope, defaultDB string) {
 	for _, ts := range scope.Tables {
-		if ts.IsCTE {
-			continue
-		}
-		if ts.IsSubquery {
-			// Recurse into the subquery's scope
-			if ts.Scope != nil {
-				qualifyTablesInScope(rw, ts.Scope, defaultDB)
-			}
+		if ts.IsCTE || ts.IsSubquery || ts.IsFunction {
 			continue
 		}
 		if ts.Database != "" {
@@ -59,18 +59,8 @@ func qualifyTablesInScope(rw *antlr.TokenStreamRewriter, scope *nanopass.SelectS
 		if !ok {
 			continue
 		}
-		nanopass.ReplaceNode(rw, tid, defaultDB+"."+ts.Table)
-	}
-
-	// Recurse into CTE body scopes
-	for _, cte := range scope.CTEDefs {
-		if cte.Scope != nil {
-			qualifyTablesInScope(rw, cte.Scope, defaultDB)
-		}
-	}
-
-	// Recurse into expression subqueries (WHERE, SELECT list, HAVING, etc.)
-	for _, sub := range scope.Subqueries {
-		qualifyTablesInScope(rw, sub, defaultDB)
+		// Splice the original identifier token text (which preserves the
+		// source's quoting); ts.Table is the decoded name and would lose it.
+		nanopass.ReplaceNode(rw, tid, defaultDB+"."+tid.Identifier().GetText())
 	}
 }

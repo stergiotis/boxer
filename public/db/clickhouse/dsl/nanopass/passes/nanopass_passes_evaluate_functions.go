@@ -25,6 +25,12 @@ import (
 // evaluable call is treated as opaque — the outer call will not be invoked,
 // and its inner verbatim subtree is replaced via the partial-evaluation
 // descent. UnresolvedParamSlot values follow the same opaque rule.
+//
+// Errors are contract failures: a registered function returning an error
+// fails the whole pass (the call site is a compile-time construct — leaving
+// it in the output would surface as an unknown-function error at query
+// time, far from the cause). Functions should be pure; impure functions
+// must tolerate being re-invoked across fixpoint iterations.
 type EvalFuncI func(args []any) (any, error)
 
 // FunctionEvaluator holds a registry of Go-evaluable functions and provides
@@ -37,6 +43,9 @@ type EvalFuncI func(args []any) (any, error)
 // Go-typed Value as if it were a literal; an unresolved param makes the
 // outer call non-evaluable (the inner descent still folds independent
 // literal-only sibling calls).
+//
+// Not safe for concurrent use: Register/OnObservation must not be called
+// while a Pass returned by [FunctionEvaluator.Pass] is running.
 type FunctionEvaluator struct {
 	funcs map[string]struct {
 		f      EvalFuncI
@@ -45,12 +54,13 @@ type FunctionEvaluator struct {
 	onObservation nanopass.ObservationFuncI
 }
 
-// OnObservation sets a callback fired for every visited call whose name is
-// in the registry, regardless of whether the args were foldable
-// (always-fire semantics — see nanopass.Observation). Passing nil clears
-// it. Used by editor-side tooling to attach affordances (regex testers,
-// time-range pickers, …) to detected call sites without altering the
-// pass's rewrite behaviour.
+// OnObservation sets a callback fired for registered call sites during the
+// walk, regardless of whether the args were foldable (always-fire semantics
+// — see nanopass.Observation for the exact granularity: outermost
+// non-folded sites fire; calls nested inside a folded outer call are
+// consumed by that fold). Passing nil clears it. Used by editor-side
+// tooling to attach affordances (regex testers, time-range pickers, …) to
+// detected call sites without altering the pass's rewrite behaviour.
 //
 // The callback runs synchronously inside the walk; keep it cheap (log,
 // append, non-blocking channel send) — heavy work belongs on the consumer
@@ -70,9 +80,10 @@ func NewFunctionEvaluator() (inst *FunctionEvaluator) {
 	return
 }
 
-// Register adds a function evaluator. Name matching is case-insensitive.
+// Register adds a function evaluator. Name matching is case-insensitive and
+// quoting-insensitive (see nanopass.NormalizeCallName).
 func (inst *FunctionEvaluator) Register(name string, fn EvalFuncI, useAny bool) {
-	inst.funcs[strings.ToLower(name)] = struct {
+	inst.funcs[nanopass.NormalizeCallName(name)] = struct {
 		f      EvalFuncI
 		useAny bool
 	}{f: fn, useAny: useAny}
@@ -174,10 +185,25 @@ func (inst *FunctionEvaluator) apply(e *env.Environment, body string) (result st
 	}
 	rw := nanopass.NewRewriter(pr)
 
-	inst.walkAndEval(e, pr, rw, pr.Tree)
+	err = inst.walkAndEval(e, pr, rw, pr.Tree)
+	if err != nil {
+		return
+	}
 
 	result = nanopass.GetText(rw)
 	return
+}
+
+// evalOutcome carries the result of one tryEval: the evaluated value, the
+// args that produced it (so observers see exactly what the handler saw,
+// without re-running side-effecting evaluators), whether evaluation
+// happened, and a hard error (registered function failed) as opposed to
+// benign non-evaluability.
+type evalOutcome struct {
+	val       any
+	args      []any
+	evaluated bool
+	err       error
 }
 
 // walkAndEval walks the CST top-down. For each registered function call:
@@ -185,36 +211,50 @@ func (inst *FunctionEvaluator) apply(e *env.Environment, body string) (result st
 //     replace the entire call.
 //  2. If not fully evaluable — descend into children to partially evaluate
 //     inner calls.
-func (inst *FunctionEvaluator) walkAndEval(e *env.Environment, pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, node antlr.Tree) {
+//
+// Evaluation and serialisation failures abort the walk with an error: a
+// registered call left in the output is never valid ClickHouse SQL.
+func (inst *FunctionEvaluator) walkAndEval(e *env.Environment, pr *nanopass.ParseResult, rw nanopass.RewriterI, node antlr.Tree) (err error) {
 	ctx, ok := node.(antlr.ParserRuleContext)
 	if !ok {
 		return
 	}
 
-	if funcExpr, ok := ctx.(*grammar1.ColumnExprFunctionContext); ok {
-		name := strings.ToLower(funcExpr.Identifier().GetText())
-		name = strings.Trim(name, "\"`")
-		if fn, found := inst.funcs[name]; found {
-			val, evaluated, _ := inst.tryEval(e, pr, funcExpr)
-			if inst.onObservation != nil {
-				obs := nanopass.Observation{
-					Name:      name,
-					Evaluated: evaluated,
-					Src:       nanopass.SourceRangeFromCtx(funcExpr),
+	if funcExpr, isFn := ctx.(*grammar1.ColumnExprFunctionContext); isFn {
+		if ident := funcExpr.Identifier(); ident != nil {
+			name := nanopass.NormalizeCallName(ident.GetText())
+			if _, found := inst.funcs[name]; found {
+				outcome := inst.tryEval(e, pr, funcExpr)
+				if outcome.err != nil {
+					return outcome.err
 				}
-				if evaluated {
-					// Re-extract args so the observer sees what the handler
-					// saw. tryEval doesn't surface them; the cost is bounded
-					// by the number of registered calls in the body.
-					args, _ := inst.extractEvalArgs(e, pr, funcExpr, fn.useAny)
-					obs.Args = args
+				rewritten := false
+				var serErr error
+				if outcome.evaluated {
+					serialized, sErr := marshalling.MarshalGoValueToSQL(outcome.val)
+					if sErr != nil {
+						serErr = eb.Build().Str("function", name).Errorf("result serialization failed: %w", sErr)
+					} else {
+						nanopass.ReplaceNode(rw, funcExpr, serialized)
+						rewritten = true
+					}
 				}
-				inst.onObservation(obs)
-			}
-			if evaluated {
-				serialized, serErr := marshalling.MarshalGoValueToSQL(val)
-				if serErr == nil {
-					nanopass.ReplaceNode(rw, funcExpr, serialized)
+				if inst.onObservation != nil {
+					obs := nanopass.Observation{
+						Name:      name,
+						Evaluated: rewritten,
+						Src:       pr.SourceRangeOf(funcExpr),
+					}
+					if rewritten {
+						obs.Args = outcome.args
+					}
+					inst.onObservation(obs)
+				}
+				if serErr != nil {
+					return serErr
+				}
+				if rewritten {
+					// Replaced — the subtree is consumed, don't descend.
 					return
 				}
 			}
@@ -222,9 +262,12 @@ func (inst *FunctionEvaluator) walkAndEval(e *env.Environment, pr *nanopass.Pars
 	}
 
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		child := ctx.GetChild(i)
-		inst.walkAndEval(e, pr, rw, child)
+		err = inst.walkAndEval(e, pr, rw, ctx.GetChild(i))
+		if err != nil {
+			return
+		}
 	}
+	return
 }
 
 // TryEval attempts to evaluate a function call recursively against an
@@ -232,35 +275,47 @@ func (inst *FunctionEvaluator) walkAndEval(e *env.Environment, pr *nanopass.Pars
 // not all arguments are evaluable; (nil, false, error) on evaluation
 // failure.
 func (inst *FunctionEvaluator) TryEval(e *env.Environment, pr *nanopass.ParseResult, funcExpr *grammar1.ColumnExprFunctionContext) (val any, evaluated bool, err error) {
-	return inst.tryEval(e, pr, funcExpr)
+	outcome := inst.tryEval(e, pr, funcExpr)
+	return outcome.val, outcome.evaluated, outcome.err
 }
 
-func (inst *FunctionEvaluator) tryEval(e *env.Environment, pr *nanopass.ParseResult, funcExpr *grammar1.ColumnExprFunctionContext) (val any, evaluated bool, err error) {
-	name := strings.ToLower(funcExpr.Identifier().GetText())
-	name = strings.Trim(name, "\"`")
+func (inst *FunctionEvaluator) tryEval(e *env.Environment, pr *nanopass.ParseResult, funcExpr *grammar1.ColumnExprFunctionContext) (outcome evalOutcome) {
+	ident := funcExpr.Identifier()
+	if ident == nil {
+		return
+	}
+	name := nanopass.NormalizeCallName(ident.GetText())
 	fn, found := inst.funcs[name]
 	if !found {
 		return
 	}
 
-	args, ok := inst.extractEvalArgs(e, pr, funcExpr, fn.useAny)
+	args, ok, argErr := inst.extractEvalArgs(e, pr, funcExpr, fn.useAny)
+	if argErr != nil {
+		outcome.err = argErr
+		return
+	}
 	if !ok {
 		return
 	}
 
-	val, err = fn.f(args)
-	if err != nil {
-		err = eb.Build().Str("function", name).Errorf("evaluation failed: %w", err)
+	val, evalErr := fn.f(args)
+	if evalErr != nil {
+		outcome.err = eb.Build().Str("function", name).Errorf("evaluation failed: %w", evalErr)
 		return
 	}
-	evaluated = true
+	outcome.val = val
+	outcome.args = args
+	outcome.evaluated = true
 	return
 }
 
 // extractEvalArgs extracts arguments, recursively evaluating nested function
-// calls. Returns (args, true) if all args are evaluable, (nil, false)
-// otherwise.
-func (inst *FunctionEvaluator) extractEvalArgs(e *env.Environment, pr *nanopass.ParseResult, funcExpr *grammar1.ColumnExprFunctionContext, useAny bool) (args []any, ok bool) {
+// calls. Returns (args, true, nil) if all args are evaluable, (nil, false,
+// nil) when an argument is benignly non-evaluable (column ref, unresolved
+// param, verbatim SQL), and (nil, false, err) when a nested registered
+// evaluator failed.
+func (inst *FunctionEvaluator) extractEvalArgs(e *env.Environment, pr *nanopass.ParseResult, funcExpr *grammar1.ColumnExprFunctionContext, useAny bool) (args []any, ok bool, err error) {
 	argList := funcExpr.ColumnArgList()
 	if argList == nil {
 		args = make([]any, 0)
@@ -268,7 +323,10 @@ func (inst *FunctionEvaluator) extractEvalArgs(e *env.Environment, pr *nanopass.
 		return
 	}
 
-	argListCtx := argList.(*grammar1.ColumnArgListContext)
+	argListCtx, isArgList := argList.(*grammar1.ColumnArgListContext)
+	if !isArgList {
+		return
+	}
 	args = make([]any, 0, argListCtx.GetChildCount())
 
 	for i := 0; i < argListCtx.GetChildCount(); i++ {
@@ -278,18 +336,26 @@ func (inst *FunctionEvaluator) extractEvalArgs(e *env.Environment, pr *nanopass.
 			continue
 		}
 
-		val, evalOk := inst.evalArgExpr(e, pr, argExpr)
+		val, evalOk, evalErr := inst.evalArgExpr(e, pr, argExpr)
+		if evalErr != nil {
+			err = evalErr
+			args = nil
+			return
+		}
 		if !evalOk {
-			return nil, false
+			args = nil
+			return
 		}
 		// Verbatim SQL and unresolved param slots are opaque to outer
 		// evaluators — refuse to feed them as arguments. The descent in
 		// walkAndEval will still replace inner producers on its own.
 		if _, isVerbatim := val.(marshalling.VerbatimSql); isVerbatim {
-			return nil, false
+			args = nil
+			return
 		}
 		if _, isUnres := val.(marshalling.UnresolvedParamSlot); isUnres {
-			return nil, false
+			args = nil
+			return
 		}
 		// Resolved param slots travel through like literals — unwrap to
 		// the underlying Value before applying useAny conversion.
@@ -299,9 +365,10 @@ func (inst *FunctionEvaluator) extractEvalArgs(e *env.Environment, pr *nanopass.
 		if useAny {
 			switch t := val.(type) {
 			case marshalling.TypedLiteral:
-				a, err := t.ToAny()
-				if err != nil {
-					return nil, false
+				a, anyErr := t.ToAny()
+				if anyErr != nil {
+					args = nil
+					return
 				}
 				args = append(args, a)
 			default:
@@ -317,42 +384,56 @@ func (inst *FunctionEvaluator) extractEvalArgs(e *env.Environment, pr *nanopass.
 }
 
 // evalArgExpr evaluates a single argument expression.
-func (inst *FunctionEvaluator) evalArgExpr(e *env.Environment, pr *nanopass.ParseResult, argExpr *grammar1.ColumnArgExprContext) (val any, ok bool) {
+func (inst *FunctionEvaluator) evalArgExpr(e *env.Environment, pr *nanopass.ParseResult, argExpr *grammar1.ColumnArgExprContext) (val any, ok bool, err error) {
 	if argExpr.GetChildCount() == 0 {
-		return nil, false
+		return
 	}
 	colExpr := argExpr.GetChild(0)
 	return inst.evalColumnExpr(e, pr, colExpr)
 }
 
-// evalColumnExpr evaluates a column expression recursively.
-func (inst *FunctionEvaluator) evalColumnExpr(e *env.Environment, pr *nanopass.ParseResult, node antlr.Tree) (val any, ok bool) {
+// evalColumnExpr evaluates a column expression recursively. ok=false with
+// err=nil means benignly non-evaluable; err != nil means a registered
+// evaluator ran and failed.
+func (inst *FunctionEvaluator) evalColumnExpr(e *env.Environment, pr *nanopass.ParseResult, node antlr.Tree) (val any, ok bool, err error) {
 	ctx, isCtx := node.(antlr.ParserRuleContext)
 	if !isCtx {
-		return nil, false
+		return
 	}
 
 	switch c := ctx.(type) {
 	case *grammar1.ColumnExprLiteralContext:
-		return inst.evalLiteral(c)
+		val, ok = inst.evalLiteral(c)
+		return
 
 	case *grammar1.ColumnExprFunctionContext:
-		result, evaluated, evalErr := inst.tryEval(e, pr, c)
-		if evalErr != nil || !evaluated {
-			return nil, false
+		outcome := inst.tryEval(e, pr, c)
+		if outcome.err != nil {
+			err = outcome.err
+			return
 		}
-		return result, true
+		if !outcome.evaluated {
+			return
+		}
+		val = outcome.val
+		ok = true
+		return
 
 	case *grammar1.ColumnExprNegateContext:
 		if c.GetChildCount() < 2 {
-			return nil, false
+			return
 		}
 		inner := c.GetChild(1)
-		innerVal, innerOk := inst.evalColumnExpr(e, pr, inner)
-		if !innerOk {
-			return nil, false
+		innerVal, innerOk, innerErr := inst.evalColumnExpr(e, pr, inner)
+		if innerErr != nil {
+			err = innerErr
+			return
 		}
-		return negateValue(innerVal)
+		if !innerOk {
+			return
+		}
+		val, ok = negateValue(innerVal)
+		return
 
 	case *grammar1.ColumnExprParensContext:
 		for i := 0; i < c.GetChildCount(); i++ {
@@ -363,13 +444,14 @@ func (inst *FunctionEvaluator) evalColumnExpr(e *env.Environment, pr *nanopass.P
 				}
 			}
 		}
-		return nil, false
+		return
 
 	case *grammar1.ColumnExprParamSlotContext:
-		return resolveParamSlot(e, c)
+		val, ok = resolveParamSlot(e, c)
+		return
 
 	default:
-		return nil, false
+		return
 	}
 }
 
@@ -464,12 +546,34 @@ func (inst *FunctionEvaluator) evalLiteral(ctx *grammar1.ColumnExprLiteralContex
 	return nil, false
 }
 
+// negateValue negates an evaluated numeric value. Literals arrive as
+// marshalling.TypedLiteral (unwrapped via ToAny); nested evaluator results
+// arrive as raw Go numerics.
 func negateValue(val any) (result any, ok bool) {
 	switch v := val.(type) {
+	case marshalling.TypedLiteral:
+		a, err := v.ToAny()
+		if err != nil {
+			return nil, false
+		}
+		return negateValue(a)
 	case int64:
 		return -v, true
+	case int32:
+		return -int64(v), true
+	case int:
+		return -int64(v), true
+	case uint64:
+		if v > 1<<63 {
+			return nil, false // magnitude does not fit a signed 64-bit value
+		}
+		return -int64(v), true
+	case uint32:
+		return -int64(v), true
 	case float64:
 		return -v, true
+	case float32:
+		return -float64(v), true
 	default:
 		return nil, false
 	}

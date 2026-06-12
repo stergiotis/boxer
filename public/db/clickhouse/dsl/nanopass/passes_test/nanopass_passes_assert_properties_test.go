@@ -43,9 +43,9 @@ func TestAssertProperties(t *testing.T) {
 	nestedCorpus = append(nestedCorpus, nestedFormsCorpus...)
 
 	cases := []struct {
-		name    string
-		pass    nanopass.Pass
-		nested  bool // use nestedCorpus instead of baseCorpus
+		name   string
+		pass   nanopass.Pass
+		nested bool // use nestedCorpus instead of baseCorpus
 	}{
 		{name: "StripComments", pass: passes.StripComments},
 		{name: "CanonicalizeKeywordCase", pass: passes.CanonicalizeKeywordCase},

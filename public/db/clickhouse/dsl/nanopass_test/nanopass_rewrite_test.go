@@ -142,8 +142,8 @@ func TestTrackedRewriterNoOverlap(t *testing.T) {
 	rw.ReplaceDefault(0, 0, "select") // SELECT token
 	rw.ReplaceDefault(4, 4, "x")      // b token (index depends on whitespace)
 
-	assert.False(t, rw.HasOverlaps())
-	assert.Equal(t, 0, rw.OverlapCount())
+	assert.False(t, rw.HasConflicts())
+	assert.Equal(t, 0, rw.ConflictCount())
 }
 
 func TestTrackedRewriterDetectsOverlap(t *testing.T) {
@@ -154,12 +154,14 @@ func TestTrackedRewriterDetectsOverlap(t *testing.T) {
 	logger := zerolog.New(zerolog.NewTestWriter(t))
 	rw := nanopass.NewTrackedRewriter(pr, logger)
 
-	// Replace a range
+	// Replace a range, then a narrower range inside it. The ANTLR rewriter
+	// panics at GetText for this combination (the earlier op is not
+	// subsumed by the later one) — a fatal conflict.
 	rw.ReplaceDefault(2, 6, "x") // replace "a + b" range
-	rw.ReplaceDefault(4, 4, "y") // replace "b" — overlaps with previous
+	rw.ReplaceDefault(4, 4, "y") // replace "b" — inside the previous range
 
-	assert.True(t, rw.HasOverlaps())
-	assert.Equal(t, 1, rw.OverlapCount())
+	assert.True(t, rw.HasConflicts())
+	assert.Equal(t, 1, rw.ConflictCount())
 }
 
 func TestTrackedRewriterDetectsDoubleInsertBefore(t *testing.T) {
@@ -174,8 +176,8 @@ func TestTrackedRewriterDetectsDoubleInsertBefore(t *testing.T) {
 	rw.InsertBeforeDefault(2, "x")
 	rw.InsertBeforeDefault(2, "y")
 
-	// Not counted as range overlap but logged as warning
-	assert.False(t, rw.HasOverlaps()) // range overlaps only
+	// Lossy (texts concatenate) but not fatal — logged as warning only
+	assert.False(t, rw.HasConflicts())
 }
 
 func TestTrackedRewriterInPass(t *testing.T) {
@@ -187,15 +189,16 @@ func TestTrackedRewriterInPass(t *testing.T) {
 	logger := zerolog.New(zerolog.NewTestWriter(t))
 	rw := nanopass.NewTrackedRewriter(pr, logger)
 
-	// Simulate a pass replacing two column identifiers
+	// Simulate a pass replacing two column identifiers — the generic node
+	// helpers accept TrackedRewriter via the RewriterI interface.
 	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
 		if _, ok := ctx.(*grammar1.ColumnIdentifierContext); ok {
-			nanopass.TrackedReplaceNode(rw, ctx, "replaced")
+			nanopass.ReplaceNode(rw, ctx, "replaced")
 		}
 		return true
 	})
 
-	assert.False(t, rw.HasOverlaps())
-	result := nanopass.TrackedGetText(rw)
+	assert.False(t, rw.HasConflicts())
+	result := nanopass.GetText(rw)
 	assert.Contains(t, result, "replaced")
 }

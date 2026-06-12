@@ -224,8 +224,10 @@ func TestScopePreservationPerPass(t *testing.T) {
 						t.Skipf("output not parseable: %v", err)
 					}
 
-					scopesBefore := nanopass.BuildScopes(prBefore)
-					scopesAfter := nanopass.BuildScopes(prAfter)
+					scopesBefore, err := nanopass.BuildScopes(prBefore, "")
+					require.NoError(t, err)
+					scopesAfter, err := nanopass.BuildScopes(prAfter, "")
+					require.NoError(t, err)
 					require.Equal(t, len(scopesBefore), len(scopesAfter),
 						"scope count changed for %s", entry.Name)
 

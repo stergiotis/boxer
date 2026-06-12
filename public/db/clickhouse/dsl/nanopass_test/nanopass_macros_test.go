@@ -88,7 +88,7 @@ func TestMacroExpanderNoMatch(t *testing.T) {
 	assert.Equal(t, "SELECT count(*) FROM t", got)
 }
 
-func TestMacroExpanderNonLiteralArgSkipped(t *testing.T) {
+func TestMacroExpanderNonLiteralArgErrors(t *testing.T) {
 	expander := nanopass.NewMacroExpander()
 	expander.Register("myMacro", func(args []nanopass.LiteralArg) (string, error) {
 		return "replaced", nil
@@ -96,10 +96,12 @@ func TestMacroExpanderNonLiteralArgSkipped(t *testing.T) {
 
 	pass := expander.Pass()
 
-	// Non-literal argument (column reference) — macro should be skipped
-	got, err := pass.Run("SELECT myMacro(a) FROM t")
-	require.NoError(t, err)
-	assert.Equal(t, "SELECT myMacro(a) FROM t", got)
+	// Non-literal argument (column reference) — a registered macro is not a
+	// real ClickHouse function, so leaving the call in the output would fail
+	// at query time. The pass errors at compile time instead.
+	_, err := pass.Run("SELECT myMacro(a) FROM t")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "non-literal")
 }
 
 func TestMacroExpanderMultipleCalls(t *testing.T) {
@@ -149,13 +151,14 @@ func TestMacroExpanderNestedWithFixedPoint(t *testing.T) {
 		return args[0].Value + " + 1", nil
 	})
 
-	// Single pass only expands outer
+	// The pass declares NeedsFixedPoint, so Run iterates to convergence and
+	// expands the whole chain in one Run.
 	pass := expander.Pass()
 	got, err := pass.Run("SELECT outer_m(5) FROM t")
 	require.NoError(t, err)
-	assert.Equal(t, "SELECT inner_m(5) FROM t", got)
+	assert.Equal(t, "SELECT 5 + 1 FROM t", got)
 
-	// Fixed-point expands both
+	// An explicit FixedPoint wrap is equivalent (no double-loop surprises).
 	fpPass := nanopass.FixedPoint(pass, 5)
 	got, err = fpPass.Run("SELECT outer_m(5) FROM t")
 	require.NoError(t, err)

@@ -34,18 +34,18 @@ ClickHouse resolves table references to databases using these rules, in order:
 Every `SelectScope` carries a `DefaultDatabase` field set during `BuildScopes`:
 
 ```go
-scopes := nanopass.BuildScopes(pr, "mydb")  // "mydb" is the connection default
+scopes, err := nanopass.BuildScopes(pr, "mydb")  // "mydb" is the connection default
 ```
 
 This value propagates to all child scopes (CTEs, subqueries, UNION ALL branches) identically, matching ClickHouse's behavior where the connection default applies uniformly.
 
-If no default is provided, `BuildScopes(pr)` sets `DefaultDatabase` to `""`.
+Pass `""` when no default is known.
 
 ### TableSource.ResolvedDatabase
 
 Each `TableSource` has two database-related fields:
 
-- `Database` — the explicit database from the SQL text (populated from `TableIdentifierContext.DatabaseIdentifier()`). Empty if the table is unqualified.
+- `Database` — the explicit database from the SQL text (populated from `TableIdentifierContext.DatabaseIdentifier()`, decoded — quoting removed). Empty if the table is unqualified.
 - `ResolvedDatabase(scope)` — returns `Database` if non-empty, otherwise `scope.DefaultDatabase`
 
 ```go
@@ -57,8 +57,9 @@ for _, ts := range scope.Tables {
 
 ### CTE and Subquery Handling
 
-- `ts.IsCTE == true` — this table source references a CTE name, not a real table. `ResolvedDatabase` still works but is meaningless — CTE references have no database.
-- `ts.IsSubquery == true` — this table source is a `FROM (SELECT ...)`. It has no table name or database. Its inner scope (`ts.Scope`) carries the same `DefaultDatabase`.
+- `ts.IsCTE == true` — this table source references a CTE name, not a real table. `ResolvedDatabase` still works but is meaningless — CTE references have no database. CTE visibility covers chained CTEs, `selectStmt`-level WITH clauses (union branches, subqueries), and nested WITH inside CTE bodies; names compare decoded, so `FROM "x"` matches `WITH x AS (…)`.
+- `ts.IsSubquery == true` — this table source is a `FROM (SELECT ...)`. It has no table name or database. Its inner scopes (`ts.Scopes`, one per UNION branch) carry the same `DefaultDatabase`.
+- `ts.IsFunction == true` — this table source is a table function (`numbers(10)`, `remote(…)`). It participates in alias resolution but has no database; rewriting passes must leave it alone.
 
 ## Comparison With ClickHouse
 
@@ -72,7 +73,7 @@ for _, ts := range scope.Tables {
 | JOINs — `t2` does NOT inherit from `db1.t1` | Yes | `DefaultDatabase` is external, not inferred from siblings | ✅ |
 | CTE references are not database-qualified | Yes | `ts.IsCTE` flag prevents database resolution | ✅ |
 | `USE db` changes default mid-session | Yes | Not modeled — we process individual queries, not sessions | N/A |
-| Table functions (`remote(...)`) — db inside args | Yes | `TableExprFunctionContext` is skipped entirely | ✅ (correct to ignore) |
+| Table functions (`remote(...)`) — db inside args | Yes | Captured as `IsFunction` sources (alias resolves); arguments are opaque, never rewritten | ✅ |
 | `system.*` / `information_schema.*` tables | Always qualified | No special handling needed — explicit `db.table` works | ✅ |
 | Distributed/materialized view indirection | Runtime behavior | Not modeled — this is execution, not query syntax | N/A |
 
@@ -84,7 +85,7 @@ Nanopass processes individual SQL queries, not sessions. The `USE` statement cha
 
 ### Table Functions
 
-`remote('host', 'db', 'table')`, `file('path')`, `numbers(10)`, etc. — these are opaque to Nanopass. The database parameter (if any) is a function argument, not a table identifier. Nanopass skips `TableExprFunctionContext` nodes.
+`remote('host', 'db', 'table')`, `file('path')`, `numbers(10)`, etc. — their *arguments* are opaque to Nanopass. The database parameter (if any) is a function argument, not a table identifier, and is never rewritten. The source itself is captured (`IsFunction`) so that aliases like `FROM numbers(10) AS n` resolve during column analysis.
 
 ### Runtime Indirection
 
@@ -108,34 +109,21 @@ pass := passes.QualifyTables("production")
 ### ExpandColumns with Schema and Default Database
 
 ```go
-schema := passes.NewSchemaProvider(map[string][]string{
+schema := passes.NewStaticSchemaProvider(map[string][]string{
     "orders": {"id", "amount", "tenant_id"},
 })
 
 // BuildScopes with default database for ResolvedDatabase lookups
 pr, _ := nanopass.Parse(sql)
-scopes := nanopass.BuildScopes(pr, "production")
+scopes, _ := nanopass.BuildScopes(pr, "production")
 
-for _, scope := range scopes {
+for _, scope := range nanopass.FlattenScopes(scopes) {
     for _, ts := range scope.Tables {
         db := ts.ResolvedDatabase(scope)
-        // Use db + ts.Table to look up schema
-        cols, found := schema.GetColumns(ts.Table) // or use db-qualified lookup
+        cols, n, found := schema.GetColumns(db, ts.Table)
+        _, _, _ = cols, n, found
     }
 }
-```
-
-### EnforceRLS with Database-Aware Policies
-
-```go
-// Policy keyed by database.table for cross-database queries
-policy := passes.NewRLSPolicy(map[string]string{
-    "orders":    "orders.tenant_id = currentUser()",     // default db
-    "customers": "customers.visible = 1",                 // default db
-})
-
-// The RLS pass uses scope.Tables which has ResolvedDatabase available
-pass := passes.EnforceRLS(policy)
 ```
 
 ## Extending Database Resolution
@@ -143,13 +131,9 @@ pass := passes.EnforceRLS(policy)
 If future requirements need database-aware schema lookup (e.g., same table name in different databases with different columns), extend `SchemaProvider`:
 
 ```go
-// Current — table name only
-schema.GetColumns("orders") → ["id", "amount", ...]
-
-// Future — database-qualified lookup
 schema.GetColumns("production", "orders") → ["id", "amount", ...]
 schema.GetColumns("staging", "orders") → ["id", "amount", "debug_flag", ...]
 ```
 
-The `ResolvedDatabase` method on `TableSource` provides the database needed for this lookup. No changes to `SelectScope` or `BuildScopes` would be needed — only the `SchemaProvider` and the passes that use it.
+The `ResolvedDatabase` method on `TableSource` provides the database for this lookup; `StaticSchemaProvider` already accepts both `table` and `db.table` keys.
 

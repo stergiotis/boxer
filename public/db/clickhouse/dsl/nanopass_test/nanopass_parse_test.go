@@ -307,8 +307,7 @@ func TestNodeTextWorksWithGrammar2(t *testing.T) {
 
 func TestPipelineWithCanonicalValidation(t *testing.T) {
 	// A pipeline that ends with ValidateCanonical should pass for canonical SQL
-	result, err := nanopass.Sequence("test", nanopass.ValidateGrammar2,
-	).Run(
+	result, err := nanopass.Sequence("test", nanopass.ValidateGrammar2).Run(
 		`SELECT "a" FROM "t"`)
 	require.NoError(t, err)
 	assert.Equal(t, `SELECT "a" FROM "t"`, result)
@@ -316,8 +315,7 @@ func TestPipelineWithCanonicalValidation(t *testing.T) {
 
 func TestPipelineWithCanonicalValidationRejects(t *testing.T) {
 	// A pipeline that ends with ValidateCanonical should fail for non-canonical SQL
-	_, err := nanopass.Sequence("test", nanopass.ValidateGrammar2,
-	).Run(
+	_, err := nanopass.Sequence("test", nanopass.ValidateGrammar2).Run(
 		"SELECT CASE WHEN a = 1 THEN 'x' END FROM t")
 	assert.Error(t, err)
 }

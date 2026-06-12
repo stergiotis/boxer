@@ -12,9 +12,10 @@ import (
 )
 
 // analyticalPass is a test fixture: a body-only pass that returns the
-// discard marker (typically embedded in a SQL comment, but raw is fine for
-// the runner — it scans by Contains, not parse). Optionally counts
-// invocations so tests can assert single-shot semantics.
+// discard marker (typically embedded in a SQL comment; the runner's
+// quote-aware scan finds it anywhere outside string literals and quoted
+// identifiers). Optionally counts invocations so tests can assert
+// single-shot semantics.
 func analyticalPass(name string, calls *int) nanopass.Pass {
 	return nanopass.LiftBodyPass(name,
 		func(sql string) (string, error) {

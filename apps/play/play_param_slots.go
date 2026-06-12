@@ -95,7 +95,7 @@ func collectParamSlots(pr *nanopass.ParseResult) (out []paramSlot) {
 		out = append(out, paramSlot{
 			Name: name,
 			Type: strings.TrimSpace(nanopass.NodeText(pr, typeCtx)),
-			Src:  nanopass.SourceRangeFromCtx(ps),
+			Src:  pr.SourceRangeOf(ps),
 		})
 		return true
 	})

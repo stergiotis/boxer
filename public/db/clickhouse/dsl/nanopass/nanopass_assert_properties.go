@@ -14,7 +14,10 @@ import (
 // The check enforces:
 //
 //   - Idempotent and NeedsFixedPoint are mutually exclusive.
-//   - When Idempotent is true, p.Apply(p.Apply(b)) == p.Apply(b) for every b.
+//   - When Idempotent is true, p.Apply(p.Apply(b)) == p.Apply(b) for every b
+//     the pass accepts — and the pass must accept at least one corpus entry,
+//     otherwise the property was never exercised and the check fails
+//     instead of passing vacuously.
 //   - When NeedsFixedPoint is true, at least one corpus entry exhibits
 //     non-fixed-point behaviour on a single Apply (otherwise the flag is
 //     unjustified).
@@ -30,12 +33,14 @@ func AssertProperties(t *testing.T, p Pass, corpus []string) {
 	}
 
 	if p.Properties.Idempotent {
+		successes := 0
 		for _, body := range corpus {
 			e1 := env.NewEnvironment()
 			out1, err := p.Apply(e1, body)
 			if err != nil {
 				continue
 			}
+			successes++
 			e2 := env.NewEnvironment()
 			out2, err := p.Apply(e2, out1)
 			if err != nil {
@@ -46,9 +51,13 @@ func AssertProperties(t *testing.T, p Pass, corpus []string) {
 				t.Errorf("pass %q declares Idempotent=true but is not idempotent on body %q\n first: %q\nsecond: %q", p.Name, body, out1, out2)
 			}
 		}
+		if successes == 0 && len(corpus) > 0 {
+			t.Errorf("pass %q declares Idempotent=true but Apply failed on every corpus entry — the property was never exercised", p.Name)
+		}
 	}
 
 	if p.Properties.NeedsFixedPoint {
+		successes := 0
 		anyDiffers := false
 		for _, body := range corpus {
 			e1 := env.NewEnvironment()
@@ -61,12 +70,15 @@ func AssertProperties(t *testing.T, p Pass, corpus []string) {
 			if err != nil {
 				continue
 			}
+			successes++
 			if out1 != out2 {
 				anyDiffers = true
 				break
 			}
 		}
-		if !anyDiffers && len(corpus) > 0 {
+		if successes == 0 && len(corpus) > 0 {
+			t.Errorf("pass %q declares NeedsFixedPoint=true but Apply failed on every corpus entry — the property was never exercised", p.Name)
+		} else if !anyDiffers && len(corpus) > 0 {
 			t.Errorf("pass %q declares NeedsFixedPoint=true but converged in one Apply on every corpus entry — flag is unjustified or corpus is too narrow", p.Name)
 		}
 	}
