@@ -11,7 +11,9 @@
 #
 # Encoder defaults to VAAPI (ADR-0024 SD3). On boxes without VAAPI H.264
 # encode (e.g. Fedora's mesa without the freeworld drivers), override:
-#   IMZERO2_HEADLESS_ENCODER_ARGS="-c:v libopenh264 -b:v 4M -bf 0 -g 60"
+#   IMZERO2_HEADLESS_ENCODER_ARGS="-c:v libopenh264 -rc_mode off -bf 0 -g 100000"
+# (constant quality, no periodic IDR — periodic key frames visibly
+# re-pulse static content; connections always start at a key frame.)
 set -o pipefail
 here=$(dirname "$(readlink -f "$BASH_SOURCE")")
 cd "$here"

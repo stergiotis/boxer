@@ -202,8 +202,11 @@ function setupDecoder(codec) {
       }
     },
     error(e) {
-      statusEl.textContent = "decoder error: " + e.message + " — waiting for keyframe";
-      configured = false;
+      // The stream runs an effectively infinite GOP (key frame only at
+      // encoder start), so recovery = reconnect: the server starts a
+      // fresh encoder (SPS/PPS + IDR) for every connection.
+      statusEl.textContent = "decoder error: " + e.message + " — reconnecting";
+      try { ws.close(); } catch (_) {}
     },
   });
   decoder.configure({ codec, optimizeForLatency: true });
@@ -383,12 +386,22 @@ function setupInput() {
 }
 
 // ---- connection ----
+let reconnectDelay = 1000;
 function connect() {
   ws = new WebSocket(WS_URL);
   ws.binaryType = "arraybuffer";
-  ws.onopen = () => { statusEl.textContent = "connected — waiting for stream"; };
-  ws.onclose = () => { statusEl.textContent = "disconnected"; configured = false; };
-  ws.onerror = () => { statusEl.textContent = "websocket error"; };
+  ws.onopen = () => { reconnectDelay = 1000; statusEl.textContent = "connected — waiting for stream"; };
+  ws.onclose = () => {
+    statusEl.textContent = "disconnected — reconnecting…";
+    configured = false;
+    if (decoder) { try { decoder.close(); } catch (_) {} decoder = null; }
+    // A restarted server forgets the applied geometry; clear the echo
+    // guard so the post-reconnect hello triggers a fresh viewport report.
+    lastSentGeometry = null;
+    setTimeout(connect, reconnectDelay);
+    reconnectDelay = Math.min(reconnectDelay * 2, 5000);
+  };
+  ws.onerror = () => { /* onclose follows and handles retry */ };
   ws.onmessage = (e) => {
     const data = new Uint8Array(e.data);
     if (data.length < 1) return;

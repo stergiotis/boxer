@@ -94,8 +94,15 @@ SD3). Stock Fedora mesa ships VAAPI H.264 *encode* disabled; on such
 boxes use the software fallback:
 
 ```sh
-IMZERO2_HEADLESS_ENCODER_ARGS="-c:v libopenh264 -b:v 4M -bf 0 -g 60" ./hmi_headless.sh
+IMZERO2_HEADLESS_ENCODER_ARGS="-c:v libopenh264 -rc_mode off -bf 0 -g 100000" ./hmi_headless.sh
 ```
+
+The `-g 100000` (effectively no periodic key frames) is deliberate, in
+the VAAPI default too: every connection starts its own encoder at a key
+frame, the viewer reconnects on decode errors, and periodic IDR refresh
+re-quantizes the whole screen — which shows up as a color pulse on
+static content every GOP (measured: RMSE 316 at each IDR vs 0 between
+P-frames before the change; 0 throughout after).
 
 ### Configuration (environment variables)
 

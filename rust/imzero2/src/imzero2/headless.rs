@@ -38,8 +38,10 @@
 //! - `IMZERO2_HEADLESS_ENCODER_ARGS` — whitespace-split override of the
 //!   encode arguments between the rawvideo input and the `-f h264` output.
 //!   Default mirrors ImZero1 (SD3): VAAPI hwupload + `h264_vaapi -bf 0
-//!   -qp:v 26`. Example software fallback for boxes without VAAPI encode:
-//!   `-c:v libopenh264 -b:v 4M -bf 0`.
+//!   -qp:v 26 -g 100000`. Software fallback for boxes without VAAPI
+//!   encode: `-c:v libopenh264 -rc_mode off -bf 0 -g 100000` (constant
+//!   quality + infinite GOP — measured frame-stable, see
+//!   DEFAULT_ENCODER_ARGS).
 //! - `IMZERO2_HEADLESS_LISTEN` — bind address for the WebSocket carrier
 //!   (e.g. `127.0.0.1:8089`); the embedded browser viewer page is served
 //!   over HTTP on port+1. Unset = remote access disabled.
@@ -84,7 +86,13 @@ struct HeadlessOpts {
 
 /// ADR-0024 SD3: encoder arguments mirror ImZero1's validated
 /// configuration — VAAPI hardware encode, no B-frames (latency), constant
-/// QP 26. Overridable via IMZERO2_HEADLESS_ENCODER_ARGS.
+/// QP 26 — plus an effectively infinite GOP: periodic IDR refresh
+/// re-quantizes the whole (mostly static) screen every interval, which
+/// reads as a visible color pulse (measured RMSE 316 at each IDR vs 0
+/// between P-frames, 2026-06-12). Every viewer connection starts a fresh
+/// encoder (= leading IDR), and the viewer reconnects on decode errors,
+/// so mid-stream key frames buy nothing here. Overridable via
+/// IMZERO2_HEADLESS_ENCODER_ARGS.
 const DEFAULT_ENCODER_ARGS: &[&str] = &[
     "-vaapi_device",
     "/dev/dri/renderD128",
@@ -96,6 +104,8 @@ const DEFAULT_ENCODER_ARGS: &[&str] = &[
     "0",
     "-qp:v",
     "26",
+    "-g",
+    "100000",
 ];
 
 impl HeadlessOpts {
@@ -192,7 +202,19 @@ fn init_gpu(width_px: u32, height_px: u32) -> Result<Gpu, HeadlessError> {
         view_formats: &[],
     });
     let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-    let renderer = egui_wgpu::Renderer::new(&device, TARGET_FORMAT, egui_wgpu::RendererOptions::default());
+    let renderer = egui_wgpu::Renderer::new(
+        &device,
+        TARGET_FORMAT,
+        egui_wgpu::RendererOptions {
+            // Dithering exists to hide banding on a directly-viewed
+            // display; here the frames feed a video encoder, where the
+            // sub-quantization noise only adds bitrate and re-encode
+            // shimmer on gradients (window shadows). The desktop host
+            // keeps eframe's default (on).
+            dithering: false,
+            ..Default::default()
+        },
+    );
     let unpadded_bytes_per_row = width_px * 4;
     let padded_bytes_per_row =
         wgpu::util::align_to(unpadded_bytes_per_row, wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
