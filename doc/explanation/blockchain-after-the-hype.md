@@ -1,13 +1,21 @@
-# Blockchains after the hype: what survives, and what pushout should take from it
+---
+type: explanation
+audience: package maintainer
+status: draft
+# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to stable
+# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to stable
+---
 
-> **Status: research summary, 2026-06-12.** Web-verified facts were spot-checked
-> on this date; single-source details are marked. Legal observations are
-> engineering-grade context, not legal advice (same disclaimer as
-> [ADR-0025](../adr/0025-pushout-forget-architecture.md)). Scope: how
-> blockchain-derived techniques can (and cannot) increase robustness and trust
-> in P2P-shaped data management — read against the pushout architecture
-> (ADR-0079 seams, ADR-0025 erasure), OLAP storage (ClickHouse, DuckDB), and
-> hierarchical NATS transport.
+> **Status: draft — pre-human-review.** Research summary; web-verified facts
+> were spot-checked 2026-06-12 and single-source details are marked. Legal
+> observations are engineering-grade context, not legal advice (same
+> disclaimer as [ADR-0025](../adr/0025-pushout-forget-architecture.md)).
+> Scope: how blockchain-derived techniques can (and cannot) increase
+> robustness and trust in P2P-shaped data management — read against the
+> pushout architecture (ADR-0079 seams, ADR-0025 erasure), OLAP storage
+> (ClickHouse, DuckDB), and hierarchical NATS transport.
+
+# Blockchains after the hype: what survives, and what pushout should take from it
 
 ## 1. The post-hype ledger
 
