@@ -14,15 +14,36 @@ rust-version = "1.92"
 all-features = true
 targets = ["x86_64-unknown-linux-gnu"]
 
+[[bin]]
+name = "imzero2_ws_probe"
+path = "src/bin/ws_probe.rs"
+required-features = ["headless"]
+
 [features]
+# ADR-0024 SD1: two binary targets, one source tree. `desktop` (default)
+# keeps the eframe + winit host for hmi.sh; `headless` selects the
+# render-to-texture host (hand-rolled egui::Context + egui_wgpu loop, no
+# window system) that feeds the remote-access pixel pipeline. The FFFI2
+# interpreter body is shared verbatim between the two hosts.
+default = ["desktop"]
+desktop = ["dep:eframe"]
+headless = [
+    "dep:wgpu",
+    "dep:egui-wgpu",
+    "dep:pollster",
+    "dep:tokio",
+    "dep:tokio-tungstenite",
+    "dep:prost",
+    "dep:futures-util",
+]
 puffin = ["dep:puffin", "dep:puffin_http", "profiling/profile-with-puffin"]
 dhat-heap = ["dep:dhat"]
-wayland = ["eframe/wayland"]
-x11 = ["eframe/x11"]
+wayland = ["eframe?/wayland"]
+x11 = ["eframe?/x11"]
 
 [dependencies]
 egui = ">=0.34.1"
-eframe = { version = ">=0.34.1", default-features = false, features = [
+eframe = { version = ">=0.34.1", optional = true, default-features = false, features = [
     "accesskit",     # Make egui compatible with screen readers. NOTE: adds a lot of dependencies.
     "default_fonts", # Embed trust-analyzer.cargo.featureshe default egui fonts.
     "wgpu",          # Use the wgpu rendering backend. Alternative: "glow".
@@ -30,6 +51,20 @@ eframe = { version = ">=0.34.1", default-features = false, features = [
     "wayland",       # To support Linux (and CI)
     "x11",           # To support older Linux distributions (restores one of the default features)
 ] }
+# Headless host (ADR-0024 SD2): drives egui_wgpu::Renderer directly against
+# an offscreen texture; wgpu with default features so the native backends
+# (vulkan/gles) are present even when eframe is compiled out.
+wgpu = { version = "29.0.1", optional = true }
+egui-wgpu = { version = "0.34.1", optional = true }
+pollster = { version = "0.4", optional = true }
+# ADR-0024 SD4/SD6/SD7: WebSocket carrier + protobuf wire. The proto
+# contract lives at proto/boxer/imzero2/v1/input.proto; inputproto.rs
+# mirrors it with hand-tagged prost derives until protoc-based codegen
+# lands.
+tokio = { version = "1", optional = true, default-features = false, features = ["rt", "net", "sync", "time", "io-util", "macros"] }
+tokio-tungstenite = { version = "0.27", optional = true }
+prost = { version = "0.14", optional = true }
+futures-util = { version = "0.3", optional = true, default-features = false, features = ["sink", "std"] }
 log = "0.4.27"
 binary_rw = "4.1.0"
 thiserror = "2.0.17"

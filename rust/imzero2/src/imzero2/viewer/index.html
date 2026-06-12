@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<!--
+  imzero2 remote viewer (ADR-0024 Phase 4, v1).
+
+  Single-file page embedded into the headless host binary and served on
+  the carrier's page port. Speaks the boxer.imzero2.v1 wire (one binary
+  WebSocket, one-byte type prefix): decodes VideoChunk envelopes with a
+  hand-written minimal protobuf reader, feeds H.264 access units (Annex-B,
+  in-band SPS/PPS) to a WebCodecs VideoDecoder, draws to a canvas, and
+  returns DOM input as protobuf InputEvent messages via a matching
+  minimal writer.
+
+  The hand-written codec mirrors proto/boxer/imzero2/v1/input.proto and
+  must track it; replacing this page's codec with protobuf-es codegen is
+  the named follow-up (ADR-0024 SD7).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>imzero2 remote viewer</title>
+<style>
+  html, body { margin: 0; background: #101010; color: #9a9a9a;
+               font: 12px monospace; height: 100%; }
+  #status { padding: 4px 8px; }
+  #screen { display: block; margin: 0 auto; outline: none; }
+</style>
+</head>
+<body>
+<div id="status">connecting…</div>
+<canvas id="screen" tabindex="0"></canvas>
+<script>
+"use strict";
+
+const WS_PORT = "{{WS_PORT}}";
+const PREFIX_VIDEO = 0x01, PREFIX_INPUT = 0x02, PREFIX_SESSION = 0x03;
+
+const statusEl = document.getElementById("status");
+const canvas = document.getElementById("screen");
+const ctx2d = canvas.getContext("2d");
+
+// ---- minimal protobuf reader (proto3 subset used by the wire) ----
+class Reader {
+  constructor(bytes) { this.b = bytes; this.i = 0; }
+  eof() { return this.i >= this.b.length; }
+  varint() {
+    let r = 0n, s = 0n;
+    for (;;) {
+      const byte = this.b[this.i++];
+      r |= BigInt(byte & 0x7f) << s;
+      if ((byte & 0x80) === 0) return r;
+      s += 7n;
+    }
+  }
+  tag() { const v = Number(this.varint()); return [v >>> 3, v & 7]; }
+  float() {
+    const v = new DataView(this.b.buffer, this.b.byteOffset + this.i, 4).getFloat32(0, true);
+    this.i += 4; return v;
+  }
+  bytes() { const n = Number(this.varint()); const v = this.b.subarray(this.i, this.i + n); this.i += n; return v; }
+  skip(wire) {
+    if (wire === 0) this.varint();
+    else if (wire === 1) this.i += 8;
+    else if (wire === 2) this.bytes();
+    else if (wire === 5) this.i += 4;
+    else throw new Error("wire " + wire);
+  }
+}
+
+function parseHello(bytes) { // SessionControl{ hello = 1 }
+  const r = new Reader(bytes);
+  while (!r.eof()) {
+    const [field, wire] = r.tag();
+    if (field === 1 && wire === 2) {
+      const h = new Reader(r.bytes());
+      const out = { width: 0, height: 0, ppp: 1.0 };
+      while (!h.eof()) {
+        const [f, w] = h.tag();
+        if (f === 1 && w === 0) out.width = Number(h.varint());
+        else if (f === 2 && w === 0) out.height = Number(h.varint());
+        else if (f === 3 && w === 5) out.ppp = h.float();
+        else h.skip(w);
+      }
+      return out;
+    }
+    r.skip(wire);
+  }
+  return null;
+}
+
+function parseVideoChunk(bytes) {
+  const r = new Reader(bytes);
+  const out = { frameIndex: 0n, timestampMicros: 0n, keyframe: false, data: null };
+  while (!r.eof()) {
+    const [f, w] = r.tag();
+    if (f === 1 && w === 0) out.frameIndex = r.varint();
+    else if (f === 2 && w === 0) out.timestampMicros = r.varint();
+    else if (f === 3 && w === 0) out.keyframe = r.varint() !== 0n;
+    else if (f === 4 && w === 2) out.data = r.bytes();
+    else r.skip(w);
+  }
+  return out;
+}
+
+// ---- minimal protobuf writer ----
+class Writer {
+  constructor() { this.out = []; }
+  varint(v) { v = Number(v) >>> 0; for (;;) { if (v < 0x80) { this.out.push(v); return this; } this.out.push((v & 0x7f) | 0x80); v >>>= 7; } }
+  tag(field, wire) { return this.varint((field << 3) | wire); }
+  float(field, v) { this.tag(field, 5); const b = new Uint8Array(4); new DataView(b.buffer).setFloat32(0, v, true); this.out.push(...b); return this; }
+  uint(field, v) { if (v) { this.tag(field, 0).varint(v); } return this; }
+  bool(field, v) { if (v) { this.tag(field, 0).varint(1); } return this; }
+  str(field, s) { if (s) { const b = new TextEncoder().encode(s); this.tag(field, 2).varint(b.length); this.out.push(...b); } return this; }
+  sub(field, inner) { this.tag(field, 2).varint(inner.out.length); this.out.push(...inner.out); return this; }
+  bytes() { return new Uint8Array(this.out); }
+}
+
+function sendFramed(prefix, writer) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  const body = writer.bytes();
+  const framed = new Uint8Array(1 + body.length);
+  framed[0] = prefix;
+  framed.set(body, 1);
+  ws.send(framed);
+}
+
+// InputEvent oneof field numbers (input.proto): mouse_move=1,
+// mouse_button=2, mouse_wheel=3, key=4, text=5, pointer_gone=6.
+function sendMouseMove(x, y) { sendFramed(PREFIX_INPUT, new Writer().sub(1, new Writer().float(1, x).float(2, y))); }
+function sendMouseButton(x, y, button, pressed, mods) {
+  sendFramed(PREFIX_INPUT, new Writer().sub(2, new Writer().float(1, x).float(2, y).uint(3, button).bool(4, pressed).uint(5, mods)));
+}
+function sendMouseWheel(dx, dy, unit, mods) {
+  sendFramed(PREFIX_INPUT, new Writer().sub(3, new Writer().float(1, dx).float(2, dy).uint(3, unit).uint(4, mods)));
+}
+function sendKey(key, code, pressed, repeat, mods) {
+  sendFramed(PREFIX_INPUT, new Writer().sub(4, new Writer().str(1, key).str(2, code).bool(3, pressed).bool(4, repeat).uint(5, mods)));
+}
+function sendText(text) { sendFramed(PREFIX_INPUT, new Writer().sub(5, new Writer().str(1, text))); }
+function sendPointerGone() { sendFramed(PREFIX_INPUT, new Writer().sub(6, new Writer())); }
+function sendResize(lw, lh, scale) {
+  sendFramed(PREFIX_SESSION, new Writer().sub(2, new Writer().float(1, lw).float(2, lh).float(3, scale)));
+}
+// Decode-progress attestation: the server logs pings, which makes
+// "frames are actually being decoded in this browser" observable from
+// the server side (useful for headless verification and field debugging).
+function sendPing(nonce) {
+  sendFramed(PREFIX_SESSION, new Writer().sub(3, new Writer().uint(1, nonce)));
+}
+
+// ---- video pipeline ----
+let ws = null, hello = null, decoder = null, configured = false;
+let framesDecoded = 0, lastStatus = 0;
+
+function findSps(au) { // Annex-B scan for NAL type 7
+  for (let i = 0; i + 3 < au.length; i++) {
+    if (au[i] === 0 && au[i + 1] === 0 && au[i + 2] === 1) {
+      if ((au[i + 3] & 0x1f) === 7) return i + 3;
+      i += 2;
+    }
+  }
+  return -1;
+}
+
+function codecStringFromSps(au, idx) {
+  // profile_idc, constraint flags, level_idc are the three bytes after
+  // the NAL header byte.
+  const hex = (b) => b.toString(16).padStart(2, "0");
+  return "avc1." + hex(au[idx + 1]) + hex(au[idx + 2]) + hex(au[idx + 3]);
+}
+
+function setupDecoder(codec) {
+  decoder = new VideoDecoder({
+    output(frame) {
+      framesDecoded++;
+      ctx2d.drawImage(frame, 0, 0);
+      frame.close();
+      if (framesDecoded === 1 || framesDecoded % 300 === 0) sendPing(framesDecoded);
+      const now = performance.now();
+      if (now - lastStatus > 1000) {
+        lastStatus = now;
+        statusEl.textContent = `connected — ${hello.width}×${hello.height} @ppp ${hello.ppp} — ${framesDecoded} frames decoded`;
+      }
+    },
+    error(e) {
+      statusEl.textContent = "decoder error: " + e.message + " — waiting for keyframe";
+      configured = false;
+    },
+  });
+  decoder.configure({ codec, optimizeForLatency: true });
+  configured = true;
+}
+
+function onVideo(payload) {
+  const chunk = parseVideoChunk(payload);
+  if (!chunk.data) return;
+  if (!configured) {
+    if (!chunk.keyframe) return; // cannot join mid-GOP
+    const spsIdx = findSps(chunk.data);
+    if (spsIdx < 0) return;
+    setupDecoder(codecStringFromSps(chunk.data, spsIdx));
+  }
+  // Annex-B with in-band SPS/PPS: configure() without `description`
+  // selects Annex-B mode; data passes through unmodified.
+  decoder.decode(new EncodedVideoChunk({
+    type: chunk.keyframe ? "key" : "delta",
+    timestamp: Number(chunk.timestampMicros),
+    data: chunk.data,
+  }));
+}
+
+// ---- input capture ----
+function mods(e) {
+  let m = 0;
+  if (e.altKey) m |= 1;
+  if (e.ctrlKey) m |= 2 | 16; // egui command = ctrl on linux/windows
+  if (e.shiftKey) m |= 4;
+  if (e.metaKey) m |= 8 | 16;
+  return m;
+}
+
+function logicalPos(e) {
+  const rect = canvas.getBoundingClientRect();
+  const lw = hello.width / hello.ppp, lh = hello.height / hello.ppp;
+  return [
+    (e.clientX - rect.left) * lw / rect.width,
+    (e.clientY - rect.top) * lh / rect.height,
+  ];
+}
+
+let pendingMove = null;
+function flushMove() {
+  if (pendingMove) { sendMouseMove(pendingMove[0], pendingMove[1]); pendingMove = null; }
+  requestAnimationFrame(flushMove);
+}
+
+function setupInput() {
+  canvas.addEventListener("pointermove", (e) => { pendingMove = logicalPos(e); });
+  canvas.addEventListener("pointerdown", (e) => {
+    canvas.focus();
+    canvas.setPointerCapture(e.pointerId);
+    const [x, y] = logicalPos(e);
+    sendMouseButton(x, y, e.button, true, mods(e));
+    e.preventDefault();
+  });
+  canvas.addEventListener("pointerup", (e) => {
+    const [x, y] = logicalPos(e);
+    sendMouseButton(x, y, e.button, false, mods(e));
+    e.preventDefault();
+  });
+  canvas.addEventListener("pointerleave", () => sendPointerGone());
+  canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+  canvas.addEventListener("wheel", (e) => {
+    // deltaMode: 0=pixel (≈ logical points at ppp mapping), 1=line, 2=page.
+    const unit = e.deltaMode === 1 ? 1 : e.deltaMode === 2 ? 2 : 0;
+    sendMouseWheel(-e.deltaX, -e.deltaY, unit, mods(e));
+    e.preventDefault();
+  }, { passive: false });
+  canvas.addEventListener("keydown", (e) => {
+    sendKey(e.key, e.code, true, e.repeat, mods(e));
+    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) sendText(e.key);
+    if (!(e.key === "F5" || e.key === "F11" || e.key === "F12")) e.preventDefault();
+  });
+  canvas.addEventListener("keyup", (e) => {
+    sendKey(e.key, e.code, false, false, mods(e));
+    e.preventDefault();
+  });
+  requestAnimationFrame(flushMove);
+}
+
+// ---- connection ----
+function connect() {
+  ws = new WebSocket(`ws://${location.hostname}:${WS_PORT}/`);
+  ws.binaryType = "arraybuffer";
+  ws.onopen = () => { statusEl.textContent = "connected — waiting for stream"; };
+  ws.onclose = () => { statusEl.textContent = "disconnected"; configured = false; };
+  ws.onerror = () => { statusEl.textContent = "websocket error"; };
+  ws.onmessage = (e) => {
+    const data = new Uint8Array(e.data);
+    if (data.length < 1) return;
+    const payload = data.subarray(1);
+    if (data[0] === PREFIX_VIDEO) onVideo(payload);
+    else if (data[0] === PREFIX_SESSION) {
+      const h = parseHello(payload);
+      if (h) {
+        hello = h;
+        canvas.width = h.width;
+        canvas.height = h.height;
+        canvas.style.width = (h.width / h.ppp) + "px";
+        canvas.style.height = (h.height / h.ppp) + "px";
+        setupInput();
+        canvas.focus();
+        // Report our real scale; the server logs it at v1 and will apply
+        // it once resize lands (ADR-0024 Phase 5 follow-up).
+        sendResize(h.width / h.ppp, h.height / h.ppp, window.devicePixelRatio || 1);
+      }
+    }
+  };
+}
+
+if (!("VideoDecoder" in window)) {
+  statusEl.textContent = "WebCodecs is not available in this browser (need Chromium, Safari 16.4+, or Firefox 130+)";
+} else {
+  connect();
+}
+</script>
+</body>
+</html>

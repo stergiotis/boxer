@@ -1,0 +1,125 @@
+// ADR-0024 SD7: input events and session control for the imzero2
+// remote-access wire. This file is the canonical contract; the namespace
+// `boxer/imzero2/v1` was fixed at the ADR's acceptance (2026-06-12).
+// Versioning policy per the ADR's Derived practices: additions are
+// additive (new fields, new oneof variants) until a v2 is unavoidable.
+//
+// Codegen status: protoc is not part of the build yet. The Rust side
+// mirrors these messages with hand-tagged prost derives
+// (rust/imzero2/src/imzero2/inputproto.rs) and the v1 browser viewer
+// hand-encodes the client→server subset; `prost-build`/`protobuf-es`
+// codegen replacing both mirrors is a named follow-up. Tag numbers and
+// field types in the mirrors MUST match this file.
+//
+// Wire framing (ADR-0024 SD6): a single WebSocket carries everything as
+// binary messages with a one-byte type prefix:
+//   0x01 server→client  VideoChunk     (encoded H.264 access unit)
+//   0x02 client→server  InputEvent
+//   0x03 both ways      SessionControl (hello, resize, ping)
+
+syntax = "proto3";
+
+package boxer.imzero2.v1;
+
+// Modifier bitmask, mirroring egui::Modifiers: 1=alt, 2=ctrl, 4=shift,
+// 8=mac_cmd, 16=command.
+
+message InputEvent {
+  oneof event {
+    MouseMove mouse_move = 1;
+    MouseButton mouse_button = 2;
+    MouseWheel mouse_wheel = 3;
+    KeyEvent key = 4;
+    TextInput text = 5;
+    PointerGone pointer_gone = 6;
+  }
+}
+
+// Coordinates are in logical points (the egui coordinate space of the
+// stream); the viewer converts from CSS pixels using the SessionHello
+// geometry.
+message MouseMove {
+  float x = 1;
+  float y = 2;
+}
+
+message MouseButton {
+  float x = 1;
+  float y = 2;
+  // 0=primary, 1=secondary, 2=middle, 3=extra1, 4=extra2 (matches
+  // browser MouseEvent.button order and egui::PointerButton).
+  uint32 button = 3;
+  bool pressed = 4;
+  uint32 modifiers = 5;
+}
+
+message MouseWheel {
+  float dx = 1;
+  float dy = 2;
+  // 0=points (browser deltaMode PIXEL), 1=lines, 2=pages — matches
+  // egui::MouseWheelUnit.
+  uint32 unit = 3;
+  uint32 modifiers = 4;
+}
+
+message KeyEvent {
+  // Browser KeyboardEvent.key (also accepted spelled-out by
+  // egui::Key::from_name: "ArrowDown", "Enter", "A", ...).
+  string key = 1;
+  // Browser KeyboardEvent.code ("KeyA", ...). Reserved for a future
+  // layout-aware mapping; the v1 mapper uses `key`.
+  string code = 2;
+  bool pressed = 3;
+  bool repeat = 4;
+  uint32 modifiers = 5;
+}
+
+message TextInput {
+  string text = 1;
+}
+
+// Pointer left the canvas (browser pointerleave) — clears hover state.
+message PointerGone {
+}
+
+message SessionControl {
+  oneof control {
+    SessionHello hello = 1;
+    ViewportResize viewport_resize = 2;
+    Ping ping = 3;
+  }
+}
+
+// Server→client, first message after connect: stream geometry the viewer
+// needs to size its canvas and map pointer coordinates.
+message SessionHello {
+  uint32 width_px = 1;
+  uint32 height_px = 2;
+  float pixels_per_point = 3;
+}
+
+// Client→server. ADR-0024 SD7/SD8 (amended at acceptance): carries the
+// client's pixel scale (devicePixelRatio × page zoom) so the host can
+// render at native client resolution. v1 server logs and ignores this;
+// applying it (texture + encoder restart) is Phase 5 follow-up work.
+message ViewportResize {
+  float logical_width = 1;
+  float logical_height = 2;
+  float pixel_scale = 3;
+}
+
+message Ping {
+  uint64 nonce = 1;
+}
+
+// Server→client video payload (prefix 0x01). One message per H.264
+// access unit (ADR-0024 SD4); SPS/PPS ride in-band on every key frame
+// (`dump_extra=freq=keyframe`).
+message VideoChunk {
+  uint64 frame_index = 1;
+  // Microseconds since the encoder stream started; monotonic per
+  // connection (each (re)connect restarts the stream at an IDR).
+  uint64 timestamp_micros = 2;
+  bool keyframe = 3;
+  bytes data = 4;
+}

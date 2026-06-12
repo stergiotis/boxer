@@ -48,6 +48,34 @@ fn start_puffin_server() {
     }
 }
 
+/// Select the host loop for the `imzero2` command (ADR-0024 SD1).
+///
+/// - Build with only `desktop` (the default) → eframe host.
+/// - Build with only `headless` → headless render host.
+/// - Build with both → desktop by default; `IMZERO2_HEADLESS=1` (or `on`)
+///   selects the headless host at runtime.
+fn run_imzero2(cfg: imzero2::appconfig::AppConfig) -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(feature = "headless")]
+    {
+        let env_pick = std::env::var("IMZERO2_HEADLESS")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("on"))
+            .unwrap_or(false);
+        if env_pick || !cfg!(feature = "desktop") {
+            return imzero2::run_imzero2_headless_loop(cfg).map_err(Into::into);
+        }
+    }
+    #[cfg(feature = "desktop")]
+    {
+        return imzero2::run_imzero2_main_loop(cfg).map_err(Into::into);
+    }
+    #[cfg(not(feature = "desktop"))]
+    {
+        // With `headless` enabled (the only way to compile this far per the
+        // lib.rs compile_error guard) the branch above always returns.
+        unreachable!("no host feature matched");
+    }
+}
+
 fn usage(w: &mut impl std::io::Write, bin_name: &str, regular: bool) -> std::io::Result<()> {
     write!(w, "usage:\n")?;
     write!(w, "{bin_name} imzero2\n")?;
@@ -97,13 +125,7 @@ fn main() -> Result<(),Box<dyn std::error::Error>> {
                 cfg.parse(&mut used, &rest_args);
             }
             flags::validate_all_args_used(rest_args, rest_args.len() as u32,&used);
-            let r = imzero2::run_imzero2_main_loop(cfg);
-            if r.is_err() {
-                let e = r.err().unwrap();
-                Err(Box::<dyn std::error::Error>::from(e))
-            } else {
-                Ok(())
-            }
+            run_imzero2(cfg)
         },
         "ipc" => {
             let shm_path = flags::find_flag_default(rest_args.iter(), &mut used, "-shm-path","".to_string());
