@@ -47,7 +47,13 @@ if [[ "$*" == *"--launch"* ]]; then
 fi
 
 ws_port="${IMZERO2_HEADLESS_LISTEN##*:}"
-echo "viewer page: http://${IMZERO2_HEADLESS_LISTEN%%:*}:$((ws_port + 1))/" >&2
+page_host="${IMZERO2_HEADLESS_LISTEN%%:*}"
+if [ "$page_host" = "0.0.0.0" ]; then
+    # Binding all interfaces: print a routable address for the hint.
+    page_host="$(hostname -I 2>/dev/null | awk '{print $1}')"
+    page_host="${page_host:-<lan-ip>}"
+fi
+echo "viewer page: http://$page_host:$((ws_port + 1))/" >&2
 
 exec "$here/main_go" --logFormat=console --logLevel=info imzero2 demo \
     --clientBinary "$here/target/headless/release/imzero2" \

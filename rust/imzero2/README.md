@@ -44,6 +44,28 @@ in ADR-0024's 2026-06-12 Updates entry.
 ./hmi_headless.sh --launch play         # any demo selector (see `main_go imzero2 demo --list`)
 ```
 
+### Viewing from another host
+
+The recommended path is an SSH tunnel from the viewing machine — it
+needs no firewall changes, keeps the localhost bind (no unauthenticated
+exposure), and `http://127.0.0.1` is a secure context:
+
+```sh
+ssh -N -L 8089:127.0.0.1:8089 -L 8090:127.0.0.1:8090 user@server
+# then open http://127.0.0.1:8090/ on the viewing machine
+```
+
+Direct LAN binding works (`IMZERO2_HEADLESS_LISTEN=0.0.0.0:8089`, open
+ports 8089–8090 in the firewall) but runs into two things: there is
+**no authentication** — anyone who can reach the port gets full
+keyboard/mouse control — and browsers expose **WebCodecs only in secure
+contexts**: `http://127.0.0.1` qualifies, a plain-HTTP LAN origin does
+not, so the viewer will report "WebCodecs is not available". Workaround
+for trusted-LAN testing: Chromium's
+`--unsafely-treat-insecure-origin-as-secure=http://<lan-ip>:8090` flag
+(Firefox: `dom.securecontext.allowlist` in `about:config`). The real
+fix — TLS + auth — is the named ADR-0024 follow-up.
+
 The encoder defaults to VAAPI (`h264_vaapi -bf 0 -qp:v 26`, ADR-0024
 SD3). Stock Fedora mesa ships VAAPI H.264 *encode* disabled; on such
 boxes use the software fallback:
