@@ -60,16 +60,22 @@ depends on this repo.
   `pijulTextRepo` serialise cells to pijul's textual working-copy
   format on the way down and parse them back on the way up.
 - **`pijul_pushout_backend.go`** — the `pushout-native` realisation of
-  `BackendI` that uses the sibling `algebraicarch/pushout/graggle`
-  packages directly. Each actor holds an in-memory `*store.Graggle` plus
-  an on-disk patch log under `<repoDir>/.pushout/`; `SetAndRecord` runs
-  `patch.LineDiff` over the live subgraph and constructs a `Patch`
-  natively; `State` walks `algo.LinearOrder()` (or, in conflict mode,
-  groups live nodes by cell path) without any text round-trip. No
-  `pijul` binary is involved. All mutating verbs (`SetAndRecord`,
-  `Apply`, `Unrecord`) are transactional: the patch applies to a clone
-  of the graggle and the working state plus the on-disk log advance
-  only after every step succeeded.
+  `BackendI`: a thin KV adapter over the domain-neutral engine
+  (`pushout/repo`, ADR-0079). The adapter translates cells to changes
+  (`patch.LineDiff` on the clean path, conflict resolution otherwise)
+  and reads back through `Engine().View` read transactions; everything
+  else — persistence and recovery (`repo/filestore` under
+  `<repoDir>/.pushout/`), wire codecs (`envelope` framing + `jsonv1`),
+  dependency gating, identity disambiguation, retention sweeps, and
+  transactional verbs — is engine property. `Init` opens or RECOVERS
+  (an existing store is replayed, not reset); `Push`/`Pull` ride the
+  transport-agnostic `exchange` package over its in-process carrier;
+  `Clone` is open-fresh-plus-pull. No `pijul` binary is involved. Each
+  seam (storage, codec, transport) ships an executable conformance
+  suite (`repo/storagetest`, `envelope/codectest`,
+  `exchange/exchangetest`) for alternative implementations — the next
+  demonstrator implements NATS transport and a custom codec against
+  them.
 - **`pijul_runner.go`** — the *CLI-verb* seam: `RunnerI` is one
   method per `pijul` subcommand (Init, Clone, Add, Record, Push, Pull,
   ApplyPatch, Log, LatestHash, Credit, LatestChangeFile). Only
@@ -118,8 +124,8 @@ than surfacing a fatal-error block in the UI.
 
 An operator invokes `PushoutRepo.Unrecord(hash)` on a patch carrying
 personal data, expecting the data to be gone. The graggle's live
-subgraph no longer shows the patch's effect — but the envelope file at
-`.pushout/changes/<hash>.json` and the `MetaByHash[hash]` entry are
+subgraph no longer shows the patch's effect — but the envelope file under
+`.pushout/changes/` and the engine's patch-store entry are
 still present, and a future `Pull` from any peer that still has the
 patch will reapply it cleanly.
 
@@ -227,20 +233,27 @@ still load-bearing for the `pijul-text` realisation):
 
 Pushout-native backend internal invariants:
 
-- The on-disk layout is `<repoDir>/.pushout/changes/<full-hex-hash>.json`
-  for envelope files plus `<repoDir>/.pushout/applied.txt` listing
-  hashes in apply order (one per line). `applied.txt` is the apply
-  *log*; the in-memory `*Graggle` is the apply *result*. Push/Pull
-  computes a set-difference over the applied lists and ships envelopes
-  in apply-log order so dependencies always precede dependents
-  (`TestClaim_PushShipsDepsFirst`). Envelope files are content-addressed
-  and first-writer-wins; `readEnvelope` verifies the decoded patch is
-  the one asked for.
+- The on-disk layout (repo/filestore) is
+  `<repoDir>/.pushout/changes/<hh>/<full-hex-hash>` for framed envelope
+  files (sharded by the hash's first byte), `applied.txt` listing
+  hashes in apply order, and `snapshot.bin`. The log is the system of
+  record; the snapshot accelerates recovery and is honored only when
+  its applied list is a PREFIX of the log — otherwise it is discarded
+  and the log replays from empty (correctness never depends on
+  snapshot freshness). All writes are atomic (temp+fsync+rename); a
+  torn trailing log line is a never-acknowledged append and is
+  dropped on load. Sweeps snapshot BEFORE acknowledging, so purge
+  markers survive crashes. Push/Pull computes a set-difference over
+  the applied lists and ships envelopes in apply-log order so
+  dependencies always precede dependents
+  (`TestClaim_PushShipsDepsFirst`). Envelope files are
+  content-addressed and first-writer-wins.
 - Patch identity is the BLAKE3 hash of the canonicalized dependency
   set plus the changes. Author and description stay envelope-level
   provenance, so two actors recording the identical edit against the
   same state converge on one patch. Dependency tampering fails the
-  hash check at `envelope.Decode`. Changing either the hash function
+  hash check at `envelope.Validate` (run on every Registry
+  encode/decode). Changing either the hash function
   or its scope invalidates previously persisted envelope files.
 - Tombstones track their deleters: `store.Graggle.DeleteNode` records
   the deleting patch and tolerates further deleters (two actors
@@ -373,5 +386,6 @@ OQ1–OQ6 for the enumerated options and the engineering recommendation
 ## Further reading
 
 - Theory: [A Categorical Theory of Patches](https://arxiv.org/abs/1311.3903).
-- Decisions: ADRs may be added under `doc/adr/` once this experiment
-  graduates from `llm_generated_*` provenance.
+- Decisions: [ADR-0079](../../../../doc/adr/0079-pushout-production-storage-codec-exchange.md)
+  — production architecture (storage, wire-codec, and transport seams,
+  recovery semantics, conformance-suite pattern).
