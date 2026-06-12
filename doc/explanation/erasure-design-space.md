@@ -40,7 +40,12 @@ Every architecture in this space splits state into:
 The design question every family answers differently: which bytes go to
 which store, and what residue store 1 carries once a store-2 erasure has
 run. An architecture is only as good as the post-erasure status of that
-residue (anonymous vs. pseudonymous vs. personal data).
+residue (anonymous vs. pseudonymous vs. personal data). That status is
+assessed per holder: both Swiss law (Zurich HG190107-O) and, since CJEU
+*EDPS v SRB* (C-413/23 P, 2025), EU law take a recipient-perspective
+relative approach, so store-1 content can be non-personal in peers'
+hands while remaining personal in the controller's (ADR-0025 legal
+landscape).
 
 ## The three operations
 
