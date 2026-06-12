@@ -389,3 +389,7 @@ OQ1–OQ6 for the enumerated options and the engineering recommendation
 - Decisions: [ADR-0079](../../../../doc/adr/0079-pushout-production-storage-codec-exchange.md)
   — production architecture (storage, wire-codec, and transport seams,
   recovery semantics, conformance-suite pattern).
+- Distributed operation: [explanation](../../../../doc/explanation/pushout-distributed-operation.md)
+  — clocks and causality, version comparison, delta-discovery ladder
+  (set-reconciliation sketches), cherry-picking, broker vs. mesh
+  topologies.

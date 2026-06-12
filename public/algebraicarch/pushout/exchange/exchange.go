@@ -12,7 +12,9 @@
 // invariant), and applies them one by one. Duplicates are not errors
 // (apply is idempotent); the first real error stops the run and the
 // returned Stats describe what landed. Smarter reconciliation
-// (frontiers, set sketches) is ADR-0079 OQ-1.
+// (frontiers, set sketches) is ADR-0079 OQ-1;
+// doc/explanation/pushout-distributed-operation.md maps that design
+// space and the deployment topologies.
 //
 // Transport authors: errors crossing the carrier must preserve sentinel
 // classification — at minimum, a dependency rejection on the remote
