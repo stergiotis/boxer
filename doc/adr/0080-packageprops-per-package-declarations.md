@@ -147,6 +147,26 @@ var PackageProps = packageprops.Props{
    grouping. Proposed: `public/packageprops`.
 2. **Generated file name** — `package_props.go` vs `props_gen.go`; and whether
    `generate` ever rewrites (idempotent-create only, per SD3).
-3. **Rollout staging** — which subtree seeds first; whether `apps/` participates.
+3. ~~**Rollout staging**~~ — **done for `public/` 2026-06-12** (see Updates);
+   `apps/` remain unsurveyed.
 4. **Leeway-facts bridge** — wiring `props harvest` into runtime.facts /
    `godepview` (ADR-0078 #3/#4) once the declarations exist.
+
+## Updates
+
+### 2026-06-12 — seeded across `public/`
+
+Rolled out with `wasmsurvey props generate --overwrite --patterns ./public/...`
+(TinyGo 0.41.1, after the `eh` build-tag seam, [9eff543]): **361
+`package_props.go` files**, of which **122 compile for wasi (121 js, 120
+freestanding)** — up from 73/70/53 before the seam. `go build ./public/...`
+passes with all 361 files present, confirming the universal `packageprops`
+import is benign (SD2). Two corrections surfaced during the rollout, both now in
+the tool:
+
+- The static closure **and** the probe's export enumeration must model TinyGo's
+  `tinygo` build tag — otherwise build-tag seams (like `eh`'s tinygo-vs-native
+  split) are invisible to the triage, falsely keeping their beneficiaries Red or
+  failing the probe as `undefined: probe.X`.
+- `generate` must skip `packageprops` itself: writing a `package_props.go` into
+  the vocabulary package makes it import itself (an import cycle).
