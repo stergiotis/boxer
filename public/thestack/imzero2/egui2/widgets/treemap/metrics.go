@@ -8,12 +8,19 @@ import (
 )
 
 // Measured label-height gates. A cell's Frame sizes to its content with only
-// a minimum (UiSetMinWidth/UiSetMinHeight), and the allocated cell Ui is not
-// clipped, so a label block taller than the cell's content box grows the
-// Frame past the cell rect and paints over whatever lies below — the parent's
-// bottom inset, the parent's border, ultimately the container edge. Squarify
-// packs the smallest (shortest) cells into the last strips, so the overflow
-// clusters at the bottom of every container.
+// a minimum (UiSetMinWidth/UiSetMinHeight), so a label block taller than the
+// cell's content box grows the Frame past the cell rect; historically that
+// painted over whatever lay below — the parent's bottom inset, the parent's
+// border, ultimately the container edge. Squarify packs the smallest
+// (shortest) cells into the last strips, so the overflow clustered at the
+// bottom of every container.
+//
+// Two complementary mechanisms address this. The gates here are the primary
+// one: they keep the widget from emitting a label that cannot fit, so no
+// half-clipped glyphs are drawn. The UiClipToMaxRect call in each cell's
+// allocated Ui is the backstop: the cell rect is a hard paint boundary even
+// for content the gate model doesn't cover (clipping truncates pixels, so
+// on its own it would show amputated text — hence both).
 //
 // The previous fixed gates (name at r.H > 18/14, value at r.H > 34/30) were
 // calibrated for egui's default typography; under the IDS overlay (ADR-0030

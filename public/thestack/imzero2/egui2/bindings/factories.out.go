@@ -1971,6 +1971,13 @@ func Tree(i WidgetIdCreatorI) (inst TreeFluid) {
 	return
 }
 
+func UiClipToMaxRect() {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdUiClipToMaxRect))
+
+	r.SendIntermediate()
+}
+
 func UiDisable() {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteUint32(uint32(FuncProcIdUiDisable))

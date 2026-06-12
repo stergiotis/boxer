@@ -105,6 +105,25 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 					}
 `)).
 		Build())
+	// uiClipToMaxRect — constrain painting in the current Ui to its max_rect.
+	// egui sizes Frames to their content with only minimums and does not clip
+	// a Ui allocated at a fixed rect (allocateUiAtRect's max_rect is
+	// advisory), so content taller/wider than the rect paints over whatever
+	// lies beyond it. Emitting this as the first op inside the allocated Ui
+	// makes the rect a hard paint boundary. shrink_clip_rect intersects with
+	// the inherited clip, so an enclosing scroll area / window edge keeps
+	// clipping as before; this can only tighten, never widen. Layout is
+	// unaffected — min_rect growth (and the parent-size ratchet it feeds)
+	// is an allocation property, not a paint property.
+	widgets = append(widgets, idl.NewProceduralNode("uiClipToMaxRect").
+		WithApplyCodeClientRust(rustClientCode(`
+					if {{EguiUiOptionalOuter}}.is_some() {
+						let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
+						let r = ui.max_rect();
+						ui.shrink_clip_rect(r);
+					}
+`)).
+		Build())
 	widgets = append(widgets, idl.NewProceduralNode("uiSetWidth").
 		AddArguments(idl.NewArgumentsBuilder().PlainArg("width", ctabb.F32).Build()).
 		WithApplyCodeClientRust(rustClientCode(`

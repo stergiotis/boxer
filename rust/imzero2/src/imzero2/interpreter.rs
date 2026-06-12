@@ -11904,6 +11904,23 @@ if u.is_some() {
 }
 
 }
+FuncProcId::UiClipToMaxRect => {
+    #[cfg(feature = "puffin")]
+	puffin::profile_scope!("match FuncProcId::UiClipToMaxRect");
+// arguments
+if d == 0 {
+self.end_consume_message()?;
+}
+// apply
+// generating location: /home/spx/repo/boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+					if u.is_some() {
+						let ui = u.as_mut().unwrap();
+						let r = ui.max_rect();
+						ui.shrink_clip_rect(r);
+					}
+
+}
 FuncProcId::UiDisable => {
     #[cfg(feature = "puffin")]
 	puffin::profile_scope!("match FuncProcId::UiDisable");

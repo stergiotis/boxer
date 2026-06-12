@@ -180,6 +180,7 @@ status: draft
 | TimeRangePicker | BuilderFactory | Yes | 2 | 0 | 4 | Immediate, Retained |
 | TintedScope | BuilderFactory | Yes | 1 | 0 | 4 | Immediate, Retained, BlockIterator |
 | Tree | BuilderFactory | Yes | 0 | 0 | 0 | Immediate |
+| UiClipToMaxRect | Procedural | No | 0 | 0 | - | - |
 | UiDisable | Procedural | No | 0 | 0 | - | - |
 | UiSetHeight | Procedural | No | 1 | 0 | - | - |
 | UiSetMaxHeight | Procedural | No | 1 | 0 | - | - |
@@ -3293,6 +3294,13 @@ Block
 ---
 
 ### ShowPuffinProfiler
+
+- **Type:** Procedural
+- **Identity:** No
+
+---
+
+### UiClipToMaxRect
 
 - **Type:** Procedural
 - **Identity:** No

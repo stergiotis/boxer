@@ -608,6 +608,9 @@ func (t *Treemap) paintHatch(r layout.Rect, seq uint64, spec HatchSpec) {
 	}
 	spacing := float64(spec.Spacing)
 	for range c.AllocateUiAtRect(float32(r.X), float32(r.Y), float32(r.X+r.W), float32(r.Y+r.H)).KeepIter() {
+		// The line endpoints are already clamped to r; the clip additionally
+		// bounds stroke width and AA feather at the rect edge.
+		c.UiClipToMaxRect()
 		// Lines parameterized by cc = x + y (slope -1). Positive AngleDeg
 		// reflects horizontally to slope +1 (cc = y - x + H).
 		positive := spec.AngleDeg > 0
@@ -715,6 +718,9 @@ func (t *Treemap) renderZoom(node *layout.Node, bounds layout.Rect, depth, bcLev
 		cellW := float32(r.W)
 		cellH := float32(r.H)
 		for range c.AllocateUiAtRect(float32(r.X), float32(r.Y), float32(r.X+r.W), float32(r.Y+r.H)).KeepIter() {
+			// Backstop to the measured gates: the cell rect is a hard paint
+			// boundary even for content the gate model doesn't cover.
+			c.UiClipToMaxRect()
 			frame := c.Frame(frameCreator).
 				Fill(fill).
 				CornerRadius(visuals.CornerRadius).
@@ -818,6 +824,8 @@ func (t *Treemap) renderLeafChildren(node *layout.Node, bounds layout.Rect, dept
 		cellW := float32(r.W)
 		cellH := float32(r.H)
 		for range c.AllocateUiAtRect(float32(r.X), float32(r.Y), float32(r.X+r.W), float32(r.Y+r.H)).KeepIter() {
+			// Same paint backstop as the renderZoom cells.
+			c.UiClipToMaxRect()
 			for range c.Frame(frameCreator).
 				Fill(fill).
 				CornerRadius(visuals.CornerRadius).
