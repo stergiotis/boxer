@@ -2,6 +2,7 @@ package wasmsurvey
 
 import (
 	"context"
+	"slices"
 
 	"github.com/stergiotis/boxer/public/code/analysis/golang/godep"
 	"github.com/stergiotis/boxer/public/code/analysis/golang/godep/godepcollect"
@@ -25,7 +26,12 @@ func loadClosureE(ctx context.Context, dir string, patterns []string, tags []str
 	cfg := godepcollect.Config{
 		Dir:      dir,
 		Patterns: patterns,
-		Tags:     tags,
+		// TinyGo always defines the `tinygo` build tag, so the static closure
+		// must model it too — otherwise build-tag seams (e.g. eh's tinygo-vs-
+		// native split that drops os/exec and zerolog) are invisible to the
+		// triage, which would falsely keep the seam's beneficiaries Red and
+		// never probe them.
+		Tags: appendTag(tags, "tinygo"),
 		// Re-collect under the wasm target's GOOS so files gated by
 		// //go:build js / wasip1 are selected as TinyGo would see them.
 		Env: []string{
@@ -45,4 +51,13 @@ func loadClosureE(ctx context.Context, dir string, patterns []string, tags []str
 	// borrows pointers into manifest.Packages; we never reorder it after).
 	tc.index = tc.manifest.BuildIndex()
 	return
+}
+
+// appendTag returns tags with tag appended if not already present.
+func appendTag(tags []string, tag string) (out []string) {
+	if slices.Contains(tags, tag) {
+		return tags
+	}
+	out = append(out, tags...)
+	return append(out, tag)
 }

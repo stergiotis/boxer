@@ -203,7 +203,9 @@ func (v TargetVerdict) Disagrees() (b bool) {
 // AllTargets order.
 type PackageReport struct {
 	ImportPath string          `json:"importPath"`
-	Class      string          `json:"class"` // godep class: internal | external | stdlib
+	Name       string          `json:"name"`          // package-clause name (for props codegen)
+	Dir        string          `json:"dir,omitempty"` // on-disk dir (for props file writes)
+	Class      string          `json:"class"`         // godep class: internal | external | stdlib
 	NumExports int             `json:"numExports"`
 	Targets    []TargetVerdict `json:"targets"`
 }

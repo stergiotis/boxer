@@ -81,6 +81,8 @@ type probeOutcome struct {
 // sweeps each target.
 type aggregate struct {
 	class      string
+	name       string
+	dir        string
 	numExports int
 	exportsSet bool
 	verdicts   map[TargetID]TargetVerdict
@@ -182,7 +184,7 @@ func Run(ctx context.Context, opts Options) (survey Survey, err error) {
 			}
 			ag := aggs[node.ImportPath]
 			if ag == nil {
-				ag = &aggregate{class: node.Class, verdicts: make(map[TargetID]TargetVerdict, len(opts.Targets))}
+				ag = &aggregate{class: node.Class, name: node.Name, dir: node.Dir, verdicts: make(map[TargetID]TargetVerdict, len(opts.Targets))}
 				aggs[node.ImportPath] = ag
 			}
 			if !ag.exportsSet {
@@ -253,7 +255,7 @@ func Run(ctx context.Context, opts Options) (survey Survey, err error) {
 	survey.Packages = make([]PackageReport, 0, len(paths))
 	for _, p := range paths {
 		ag := aggs[p]
-		pr := PackageReport{ImportPath: p, Class: ag.class, NumExports: ag.numExports}
+		pr := PackageReport{ImportPath: p, Name: ag.name, Dir: ag.dir, Class: ag.class, NumExports: ag.numExports}
 		for _, t := range opts.Targets {
 			if v, ok := ag.verdicts[t]; ok {
 				pr.Targets = append(pr.Targets, v)
