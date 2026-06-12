@@ -15,25 +15,29 @@ import (
 // greens, so an imperfect seed costs at most a probe, never a wrong final
 // verdict (in `both` mode).
 
-// redStdlib are standard-library packages TinyGo does not provide on wasm, or
-// that require a host facility wasm lacks. A package reaching one of these is
-// seeded Red (not expected to compile/link). net/url, net/netip and similar
-// pure-parsing packages are intentionally absent (they are fine) — only the
-// socket/process/dynamic-loading surface is listed.
+// redStdlib are standard-library packages that genuinely fail to COMPILE/LINK
+// under TinyGo on wasm. The survey's verdict is compile+link (SD4), so this list
+// must not pre-judge packages that merely fail at *runtime*. And because a
+// seeded-Red package is pruned before the empirical probe ever runs, a wrong
+// entry here is never overturned — the "both mode never gives a wrong verdict"
+// property holds only for the Yellow seed (which is probed), not this one.
+//
+// Validated empirically against TinyGo 0.41.1 (2026-06-12, targets wasi +
+// wasm-unknown). The earlier seed marked the whole socket/process/dynamic-load
+// surface Red on intuition; the compiler disagrees. TinyGo overlays or stubs
+// most of it, so it compiles and links — Green by this survey's definition —
+// even though it fails at runtime on wasm. These all COMPILE and were removed:
+//
+//	net, os/exec, os/signal, runtime/cgo, net/http, net/http/httptest,
+//	net/rpc, net/textproto, crypto/tls, database/sql.
+//
+// plugin compiles on wasi but fails to link on wasm-unknown (dlopen); it is
+// target-dependent, so it is left to the per-target probe rather than a blanket
+// seed. net/url, net/netip and similar pure-parsing packages are fine and
+// absent. Only these still fail to compile on wasi (the most permissive target):
 var redStdlib = map[string]bool{
-	"os/exec":           true, // no process model under wasm
-	"os/signal":         true, // no OS signals
-	"plugin":            true, // dynamic loading unsupported
-	"runtime/cgo":       true, // cgo unavailable for wasm
-	"net":               true, // no raw sockets
-	"net/http":          true, // pulls net; TinyGo's wasm http surface is not the stdlib's
-	"net/http/httptest": true,
-	"net/http/httputil": true,
-	"net/rpc":           true,
-	"net/smtp":          true,
-	"net/textproto":     true, // pulls net
-	"crypto/tls":        true, // pulls net
-	"database/sql":      true, // reflect + drivers + net
+	"net/smtp":          true, // references tls.Conn, which TinyGo's crypto/tls omits
+	"net/http/httputil": true, // TinyGo's net/http overlay lacks a symbol dump.go needs
 }
 
 // partialStdlib are packages TinyGo provides only in part (chiefly the
