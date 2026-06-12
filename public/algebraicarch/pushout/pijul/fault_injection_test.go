@@ -12,7 +12,9 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
 // faultable wraps the chmod fault with restore-on-cleanup so TempDir
@@ -169,4 +171,58 @@ func TestFault_UnrecordAppliedRewriteFails(tt *testing.T) {
 		tt.Fatalf("recovery unrecord state: %+v", after)
 	}
 	assertRepoInvariants(tt, repo)
+}
+
+// Retention blocking through the backend: after a sweep purges the
+// tombstone a patch created, Unrecord of that patch (the sole deleter)
+// is rejected with the retention error and leaves the repo untouched.
+// Retention is session-local: a peer holding the same history but never
+// swept can still unrecord the same patch.
+func TestUnrecord_BlockedByRetentionAfterSweep(tt *testing.T) {
+	ctx := context.Background()
+	b := NewPushoutBackend()
+	alice := newTestRepo(tt, b, "alice")
+	bob := newTestRepo(tt, b, "bob")
+	for _, r := range []*PushoutRepo{alice, bob} {
+		r.Mu.Lock()
+		base := time.Unix(1_000_000, 0).UTC()
+		n := 0
+		r.Graggle.SetClock(func() time.Time { n++; return base.Add(time.Duration(n) * time.Minute) })
+		r.Mu.Unlock()
+	}
+
+	mustRecord(tt, alice, []KVLine{{Path: "k", Value: "v1"}}, "alice", "P")
+	idQ := mustRecord(tt, alice, []KVLine{{Path: "k", Value: "v2"}}, "alice", "Q") // deletes P's node
+	if _, err := alice.Push(ctx, bob); err != nil {
+		tt.Fatal(err)
+	}
+
+	// Sweep ONLY alice, far past every tombstone stamp.
+	alice.Mu.Lock()
+	purged, _ := alice.Graggle.SweepTombstones(time.Unix(2_000_000, 0).UTC(), 0)
+	alice.Mu.Unlock()
+	if purged == 0 {
+		tt.Fatal("setup: sweep purged nothing")
+	}
+
+	before, beforeLog := stateCells(tt, alice)
+	_, err := alice.Unrecord(ctx, mustHash(tt, idQ))
+	if err == nil || !strings.Contains(err.Error(), "permanent past retention") {
+		tt.Fatalf("expected retention rejection, got: %v", err)
+	}
+	after, afterLog := stateCells(tt, alice)
+	if len(after) != len(before) || after[0].Value != before[0].Value || len(afterLog) != len(beforeLog) {
+		tt.Fatalf("rejected unrecord mutated state: %+v -> %+v", before, after)
+	}
+	assertRepoInvariants(tt, alice)
+
+	// Bob never swept: the same unrecord works there.
+	if _, err := bob.Unrecord(ctx, mustHash(tt, idQ)); err != nil {
+		tt.Fatalf("retention must be session-local; bob's unrecord failed: %v", err)
+	}
+	bcells, _ := stateCells(tt, bob)
+	if len(bcells) != 1 || bcells[0].Value != "v1" {
+		tt.Fatalf("bob state after unrecord: %+v", bcells)
+	}
+	assertRepoInvariants(tt, bob)
 }

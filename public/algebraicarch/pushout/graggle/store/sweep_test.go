@@ -311,3 +311,80 @@ func TestSweepTombstones_NoTimeAdvanceMeansNoPurges(tt *testing.T) {
 		tt.Fatalf("tombstone at cutoff should be preserved (Before is strict), got %d", count)
 	}
 }
+
+// Multi-deleter retention semantics: when TWO patches hold a node
+// tombstoned and a sweep purges its content, unapplying a non-final
+// deleter must still succeed (it only shrinks the deleter set — no
+// resurrection, so the purge is irrelevant), while unapplying the LAST
+// deleter must fail with the retention error. Pins the deleterCount
+// branch in Patch.Unapply's purge pre-flight and UndeleteNode's
+// no-resurrection path, which no deterministic test exercised before.
+func TestPatchUnapply_PurgedMultiDeleterSemantics(tt *testing.T) {
+	g := New()
+	g.SetClock(fakeClock(time.Unix(1000, 0)))
+
+	pAdd := patch.NewPatch("alice", "add", nil, []patch.Change{{
+		Kind:      patch.ChangeKindNewNode,
+		NodeID:    t.NodeID{Patch: t.PlaceholderHash, Index: 0},
+		Content:   []byte("doomed\n"),
+		UpContext: []t.NodeID{t.RootNodeID},
+	}})
+	if err := pAdd.Apply(g); err != nil {
+		tt.Fatal(err)
+	}
+	target := t.NodeID{Patch: pAdd.Hash, Index: 0}
+
+	// Two convergent edits delete the same node (each with its own
+	// replacement so the patches are distinct).
+	mkDel := func(author, val string) *patch.Patch {
+		return patch.NewPatch(author, "edit", []t.PatchHash{pAdd.Hash}, []patch.Change{
+			{Kind: patch.ChangeKindDeleteNode, NodeID: target},
+			{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0},
+				Content: []byte(val + "\n"), UpContext: []t.NodeID{t.RootNodeID}},
+		})
+	}
+	p1 := mkDel("alice", "alice")
+	p2 := mkDel("bob", "bob")
+	if err := p1.Apply(g); err != nil {
+		tt.Fatal(err)
+	}
+	if err := p2.Apply(g); err != nil {
+		tt.Fatal(err)
+	}
+	if got := g.NodeDeleterCount(target); got != 2 {
+		tt.Fatalf("expected 2 deleters, got %d", got)
+	}
+
+	if n, _ := g.SweepTombstones(time.Unix(2000, 0), 0); n != 1 {
+		tt.Fatalf("expected exactly the tombstone purged, got %d", n)
+	}
+	if g.NodeContentStatus(target) != t.NodeContentStatusPurged {
+		tt.Fatal("setup: target not purged")
+	}
+
+	// Non-final deleter: must succeed without resurrecting.
+	if err := p2.Unapply(g); err != nil {
+		tt.Fatalf("unapply of non-final deleter must succeed despite purge: %v", err)
+	}
+	if !g.IsDeleted(target) {
+		tt.Fatal("target resurrected by non-final unapply")
+	}
+	if g.NodeContentStatus(target) != t.NodeContentStatusPurged {
+		tt.Fatal("purge marker lost on non-final unapply")
+	}
+	if got := g.NodeDeleterCount(target); got != 1 {
+		tt.Fatalf("expected 1 remaining deleter, got %d", got)
+	}
+	assertNoInvariantViolations(tt, g)
+
+	// Final deleter: resurrection would need the purged bytes — refuse,
+	// and leave the state untouched.
+	err := p1.Unapply(g)
+	if err == nil || !strings.Contains(err.Error(), "permanent past retention") {
+		tt.Fatalf("expected retention rejection for final deleter, got: %v", err)
+	}
+	if !g.IsDeleted(target) || g.NodeDeleterCount(target) != 1 {
+		tt.Fatal("rejected unapply mutated tombstone state")
+	}
+	assertNoInvariantViolations(tt, g)
+}

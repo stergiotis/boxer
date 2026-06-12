@@ -1,11 +1,16 @@
 // Stateful property harness for the pushout-native backend: a rapid
 // state machine drives random verb sequences (record / resolve / push /
-// pull / email-apply / unrecord) over three repos and checks, after
-// every action, the structural invariants of every graggle, content
-// conservation (every live node's bytes are traceable to an applied
-// patch), and dependency closure of the applied set. After the sequence,
-// pairwise syncing to a fixpoint must converge all repos to the same
-// observable state — the system-level commutativity claim.
+// pull / email-apply / unrecord / sweep / clone) over a fleet of repos
+// and checks, after every action, the structural invariants of every
+// graggle, content conservation (every live node's bytes are traceable
+// to an applied patch), no-live-purge, and dependency closure of the
+// applied set. After the sequence, pairwise syncing to a fixpoint must
+// converge all repos to the same observable state — the system-level
+// commutativity claim.
+//
+// Time is a deterministic fake: a shared clock that advances one minute
+// per DeleteNode stamp, so retention sweeps purge real tombstones in
+// milliseconds and rapid's replay/shrinking stays reproducible.
 package pijul
 
 import (
@@ -13,7 +18,9 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"pgregory.net/rapid"
 
@@ -25,11 +32,42 @@ var smPaths = []string{"alpha", "beta", "gamma", "delta"}
 
 var smValues = []string{"", "1", "2", "x", `q"q`, "multi\nline", `back\slash`}
 
+const smMaxRepos = 5
+
+// smClock is the deterministic time source shared by the whole fleet.
+// Each tombstone stamp advances it by one minute; Peek reads without
+// advancing (used as a sweep's "now"). Deterministic relative to the
+// drawn action sequence — never wall time, which would break rapid's
+// replay and shrinking.
+type smClock struct {
+	mu sync.Mutex
+	t  time.Time
+}
+
+func newSMClock() *smClock {
+	return &smClock{t: time.Unix(1_750_000_000, 0).UTC()}
+}
+
+func (c *smClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.t = c.t.Add(time.Minute)
+	return c.t
+}
+
+func (c *smClock) Peek() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.t
+}
+
 type repoMachine struct {
-	tb    *testing.T
-	ctx   context.Context
-	root  string
-	repos []*PushoutRepo
+	tb      *testing.T
+	ctx     context.Context
+	root    string
+	backend BackendI
+	clock   *smClock
+	repos   []*PushoutRepo
 }
 
 func (m *repoMachine) cleanup() {
@@ -37,8 +75,7 @@ func (m *repoMachine) cleanup() {
 }
 
 func newRepoMachine(tb *testing.T, rt *rapid.T) *repoMachine {
-	m := &repoMachine{tb: tb, ctx: context.Background()}
-	b := NewPushoutBackend()
+	m := &repoMachine{tb: tb, ctx: context.Background(), backend: NewPushoutBackend(), clock: newSMClock()}
 	// One root dir per property invocation, removed in cleanup() —
 	// rapid's shrinker re-runs the property thousands of times, and
 	// leaking three repo trees per run exhausts the tmpfs.
@@ -52,10 +89,15 @@ func newRepoMachine(tb *testing.T, rt *rapid.T) *repoMachine {
 		if err != nil {
 			rt.Fatalf("mkdir: %v", err)
 		}
-		repo := b.NewRepo(actor, dir).(*PushoutRepo)
+		repo := m.backend.NewRepo(actor, dir).(*PushoutRepo)
 		if _, err := repo.Init(m.ctx); err != nil {
 			rt.Fatalf("init %s: %v", actor, err)
 		}
+		// The fake clock propagates through every clone-and-swap and
+		// backend Clone, so one SetClock per Init suffices.
+		repo.Mu.Lock()
+		repo.Graggle.SetClock(m.clock.Now)
+		repo.Mu.Unlock()
 		m.repos = append(m.repos, repo)
 	}
 	// Seed a converged base so early pulls have something to move.
@@ -165,7 +207,9 @@ func (m *repoMachine) emailApply(rt *rapid.T) {
 }
 
 // unrecord backs out a randomly chosen applied patch. Dependent-ordering
-// rejections are expected; anything else must succeed.
+// rejections and retention-horizon rejections (the patch tombstoned a
+// node whose content a sweep has purged, and it is the last deleter)
+// are expected; anything else must succeed.
 func (m *repoMachine) unrecord(rt *rapid.T) {
 	repo := m.pick(rt, "repo")
 	repo.Mu.Lock()
@@ -179,8 +223,76 @@ func (m *repoMachine) unrecord(rt *rapid.T) {
 		return
 	}
 	_, err := repo.Unrecord(m.ctx, hash)
-	if err != nil && !strings.Contains(err.Error(), "unrecord dependents first") {
+	if err != nil &&
+		!strings.Contains(err.Error(), "unrecord dependents first") &&
+		!strings.Contains(err.Error(), "permanent past retention") {
 		rt.Fatalf("unrecord on %s: %v", repo.actor, err)
+	}
+}
+
+// sweep purges tombstone content past a drawn retention horizon on one
+// repo — retention is a session-local decision, so the fleet diverges
+// in what it CAN unrecord while staying convergent in observable state.
+// Oracles: every reported ID is a purged tombstone, the count matches,
+// and an immediate identical sweep is a no-op.
+func (m *repoMachine) sweep(rt *rapid.T) {
+	repo := m.pick(rt, "repo")
+	horizon := time.Duration(rapid.IntRange(0, 30).Draw(rt, "horizonMin")) * time.Minute
+	repo.Mu.Lock()
+	defer repo.Mu.Unlock()
+	g := repo.Graggle
+	if g == nil {
+		return
+	}
+	now := m.clock.Peek()
+	count, ids := g.SweepTombstones(now, horizon)
+	if count != len(ids) {
+		rt.Fatalf("sweep on %s: count %d != %d ids", repo.actor, count, len(ids))
+	}
+	for _, id := range ids {
+		if !g.IsDeleted(id) {
+			rt.Fatalf("sweep on %s purged non-tombstone %v", repo.actor, id)
+		}
+		if g.NodeContentStatus(id) != t.NodeContentStatusPurged {
+			rt.Fatalf("sweep on %s: %v not marked purged", repo.actor, id)
+		}
+	}
+	if again, _ := g.SweepTombstones(now, horizon); again != 0 {
+		rt.Fatalf("sweep on %s not idempotent: second pass purged %d", repo.actor, again)
+	}
+}
+
+// clone forks a random repo mid-session. The clone must be observably
+// identical to its source at birth, then joins the fleet (replacing a
+// random member once the fleet is full) and participates in every
+// subsequent verb including the final convergence.
+func (m *repoMachine) clone(rt *rapid.T) {
+	src := m.pick(rt, "src")
+	dir, err := os.MkdirTemp(m.root, "clone_*")
+	if err != nil {
+		rt.Fatalf("mkdir: %v", err)
+	}
+	dest, _, err := m.backend.Clone(m.ctx, src, dir, fmt.Sprintf("clone%d", len(m.repos)))
+	if err != nil {
+		rt.Fatalf("clone of %s: %v", src.actor, err)
+	}
+	d := dest.(*PushoutRepo)
+	if got, want := m.observable(d), m.observable(src); got != want {
+		rt.Fatalf("clone not observably identical to source:\nclone: %s\nsrc:   %s", got, want)
+	}
+	d.Mu.Lock()
+	srcAppliedLen := len(d.appliedHash)
+	d.Mu.Unlock()
+	src.Mu.Lock()
+	if len(src.appliedHash) != srcAppliedLen {
+		src.Mu.Unlock()
+		rt.Fatalf("clone applied-log length diverges from source")
+	}
+	src.Mu.Unlock()
+	if len(m.repos) < smMaxRepos {
+		m.repos = append(m.repos, d)
+	} else {
+		m.repos[rapid.IntRange(0, len(m.repos)-1).Draw(rt, "replaceSlot")] = d
 	}
 }
 
@@ -227,6 +339,10 @@ func (m *repoMachine) check(rt *rapid.T) {
 			if _, ok := knownContent[string(g.NodeContent(id))]; !ok {
 				repo.Mu.Unlock()
 				rt.Fatalf("%s: live node %v carries content not traceable to any applied patch: %q", repo.actor, id, g.NodeContent(id))
+			}
+			if g.NodeContentStatus(id) == t.NodeContentStatusPurged {
+				repo.Mu.Unlock()
+				rt.Fatalf("%s: LIVE node %v has purged content — sweep must only touch tombstones, and a purged tombstone must never resurrect", repo.actor, id)
 			}
 		}
 		repo.Mu.Unlock()
@@ -299,6 +415,8 @@ func TestPushoutBackend_StateMachine(tt *testing.T) {
 			"pull":       m.pull,
 			"emailApply": m.emailApply,
 			"unrecord":   m.unrecord,
+			"sweep":      m.sweep,
+			"clone":      m.clone,
 			"":           m.check,
 		})
 		m.converge(rt)
