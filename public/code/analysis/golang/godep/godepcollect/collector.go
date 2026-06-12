@@ -29,6 +29,14 @@ type Config struct {
 	// files these tags select — for this repo the tags are load-bearing, so
 	// an empty Tags with no GOFLAGS yields a degraded graph.
 	Tags []string
+	// Env, when non-empty, overrides the environment packages.Load runs
+	// under. Each entry is a "KEY=VALUE" pair appended to the process
+	// environment, so callers specify only the deltas — e.g.
+	// []string{"GOOS=wasip1", "GOARCH=wasm"} to collect the closure with the
+	// file selection (build constraints) a wasm target would see. Empty
+	// inherits the process environment unchanged. (Used by the wasmsurvey
+	// command to re-collect the graph per wasm target — ADR-0077.)
+	Env []string
 }
 
 // LiveCollector loads the Go package closure with
@@ -84,6 +92,9 @@ func (inst *LiveCollector) Load(ctx context.Context) (m godep.Manifest, err erro
 	}
 	if len(inst.cfg.Tags) > 0 {
 		cfg.BuildFlags = []string{"-tags=" + strings.Join(inst.cfg.Tags, ",")}
+	}
+	if len(inst.cfg.Env) > 0 {
+		cfg.Env = append(os.Environ(), inst.cfg.Env...)
 	}
 
 	var roots []*packages.Package
