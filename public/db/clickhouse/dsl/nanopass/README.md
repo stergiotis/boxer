@@ -26,6 +26,8 @@ SQL string
 
 `Parse` collects both lexer and parser diagnostics (with `line:column` positions): input that fails to lex is rejected instead of having the offending characters silently dropped from the token stream. Panics inside a pass (e.g. conflicting token edits — the ANTLR rewriter panics at `GetText` for partially overlapping replaces) are recovered at the Pass boundary and returned as errors.
 
+`Parse`/`ParseCanonical` are total over arbitrary input: `CheckInputGuards` rejects inputs that would drive the recursive-descent parser into measured pathological regimes — deep parenthesis nesting (adaptive-prediction cost grows ~quadratically: depth 400 ≈ 20s), deep CASE nesting (stack exhaustion between depth 16k and 64k), oversized payloads, and invalid UTF-8 (the rune-based input stream would silently transcode undecodable bytes to U+FFFD, corrupting string literals on any rewrite). Limits: `MaxInputBytes` (1 MiB), `MaxNestingDepth` (128, quote/comment-aware).
+
 Analytical passes signal "discard my body rewrite" via a comment-shaped marker (see `PassDiscardOutput`). The marker scan is quote-aware — marker text inside string literals or quoted identifiers does not trigger — and discard drops the *body rewrite only*: env mutations persist, so `Run(p) == Run(Sequence(p))` holds for analytical passes.
 
 ## Pass — first-class value
@@ -203,6 +205,8 @@ All passes live in [`passes/`](passes). Properties shown reflect declared `PassP
 - `Idempotent` and `NeedsFixedPoint` not both set.
 - A declared property must be *exercised*: if `Apply` fails on every corpus entry the check fails instead of passing vacuously.
 
+The sweep covers factory-built passes too: `MacroExpander.Pass()` and `FunctionEvaluator.Pass()` run against corpora containing registered call sites (the evaluator's `NeedsFixedPoint` is justified by the `VerbatimSql` escape hatch — plain nested literal calls fold in a single Apply via recursion), and `ValidateGrammar2` runs against the canonicalised corpus.
+
 `TestAssertProperties` in [`passes_test/`](passes_test/nanopass_passes_assert_properties_test.go) covers every exported pass against the shared `testdata/corpus/`, with a small additional nested-forms corpus for passes that declare `NeedsFixedPoint`.
 
 ## Usage Examples
@@ -305,6 +309,19 @@ Embedded SQL files in `testdata/corpus/` cover SELECT features from simple liter
 go test -bench BenchmarkNanopass -benchmem -run xxx ./public/db/clickhouse/dsl/nanopass_test/
 ```
 
+## Fuzzing
+
+`nanopass_test/nanopass_fuzz_test.go` carries four targets, seeded from the corpus and run as a regression table in plain `go test`:
+
+- `FuzzParse` — Parse is total (guards, never panics); successful parses reconstruct the input byte-for-byte; scope building terminates without duplicates.
+- `FuzzIdentifierCodec` — `QuoteIdentifier`∘`DecodeIdentifier` is identity on arbitrary names.
+- `FuzzIsDiscardOutput` — quote-aware marker-scan laws.
+- `FuzzCanonicalizeFull` — differential oracle: every Grammar1-parseable input canonicalises to Grammar2-parseable output or fails loudly (never via recovered panic).
+
+```
+go test -run xxx -fuzz FuzzParse -fuzztime 60s ./public/db/clickhouse/dsl/nanopass_test/
+```
+
 ## Test Strategy
 
 Every pass is tested with:
@@ -332,9 +349,11 @@ The upstream ClickHouse ANTLR4 grammar has these required modifications:
 
 - **Whitespace/comments**: `-> skip` changed to `-> channel(HIDDEN)` for `WHITESPACE`, `SINGLE_LINE_COMMENT`, `MULTI_LINE_COMMENT`. Without this, the `TokenStreamRewriter` cannot preserve original formatting.
 - **Setting values**: `settingExpr` extended with `settingValue` rule supporting arrays (`[1,2]`), tuples (`(1,2)`), and function-form constructors (`array(1,2)`, `tuple(1,2)`) alongside scalar literals.
+- **Grammar2 `typeName`**: type positions accept the lexer keywords that double as ClickHouse type names (`Array`, `Date`, `Interval`, `Timestamp`, `UUID`) — the shared lexer wins these over `IDENTIFIER`, and Grammar1 admits them via its keyword-tolerant `identifier` rule, so Grammar2 must too or canonicalisation cannot close `{d: Array(UInt8)}` / `CAST(x, 'Date')` into it.
 
 ## Known Grammar Limitations
 
+- Param slots with keyword names (`{date: UInt64}`) parse in Grammar1 but not Grammar2 — slot names there are bare `IDENTIFIER` tokens
 - `FROM t SELECT a` (FROM-first syntax)
 - `WITH (SELECT x) AS name` (scalar subquery CTE)
 - `EXISTS (SELECT ...)` (EXISTS predicate)

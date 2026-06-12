@@ -79,11 +79,14 @@ func (inst *errorListener) buildError(kind string) error {
 // being silently dropped from the token stream. The error message includes
 // line:column positions for up to five diagnostics.
 //
-// Trust boundary: the parser is recursive-descent with no depth guard.
-// Inputs are expected to be developer-authored queries; pathologically
-// nested input (tens of thousands of parentheses) exhausts the goroutine
-// stack, which is not recoverable. Do not feed unvetted external input.
+// Input guards: [CheckInputGuards] runs first, rejecting inputs that would
+// drive the recursive-descent parser into pathological regimes (CPU blowup
+// on deep parenthesis nesting, stack exhaustion on deep CASE nesting). See
+// MaxInputBytes / MaxNestingDepth for the limits and their rationale.
 func Parse(sql string) (pr *ParseResult, err error) {
+	if err = CheckInputGuards(sql); err != nil {
+		return
+	}
 	input := antlr.NewInputStream(sql)
 	lexer := grammar1.NewClickHouseLexer(input)
 	stream := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
@@ -129,11 +132,14 @@ func Parse(sql string) (pr *ParseResult, err error) {
 // parse error. This serves as structural validation that the normalization
 // pipeline is complete.
 //
-// Lexer diagnostics are collected like in [Parse]. The same trust boundary
-// applies: no recursion-depth guard.
+// Lexer diagnostics are collected like in [Parse], and the same input
+// guards apply (see [CheckInputGuards]).
 //
 // Used by the AST converter as its input parser.
 func ParseCanonical(sql string) (pr *ParseResult, err error) {
+	if err = CheckInputGuards(sql); err != nil {
+		return
+	}
 	input := antlr.NewInputStream(sql)
 	lexer := grammar2.NewClickHouseLexer(input)
 	stream := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)

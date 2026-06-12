@@ -5,6 +5,7 @@ package nanopass_test
 // finding. See doc/changelog for the review itself.
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
@@ -472,4 +473,50 @@ func TestRegressionIdentifiersPreserveSlots(t *testing.T) {
 	assert.Contains(t, out, "Nullable(String)")
 	assert.NotContains(t, out, `"UInt64"`)
 	assert.NotContains(t, out, `"Nullable"`)
+}
+
+// --- Round 3 (2026-06-12, guards + fuzzing) ---
+
+// Input guards: Parse is total — pathological inputs error instead of
+// exhausting CPU (deep parens: ~quadratic prediction cost) or stack
+// (deep CASE nesting), and invalid UTF-8 is rejected instead of being
+// silently transcoded to U+FFFD by the rune-based ANTLR input stream.
+func TestRegressionInputGuards(t *testing.T) {
+	deepParens := "SELECT " + strings.Repeat("(", 200) + "1" + strings.Repeat(")", 200)
+	_, err := nanopass.Parse(deepParens)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "MaxNestingDepth")
+
+	deepCase := "SELECT " + strings.Repeat("CASE WHEN ", 200) + "1" + strings.Repeat(" THEN 1 END", 200)
+	_, err = nanopass.Parse(deepCase)
+	require.Error(t, err)
+
+	_, err = nanopass.Parse("SELECT '\x80'")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "UTF-8")
+
+	_, err = nanopass.Parse(strings.Repeat(" ", nanopass.MaxInputBytes+1))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "MaxInputBytes")
+
+	// Quoted/commented bracket text does not count toward nesting.
+	ok := "SELECT '" + strings.Repeat("(", 300) + "' /* " + strings.Repeat("[", 300) + " */ FROM t"
+	_, err = nanopass.Parse(ok)
+	require.NoError(t, err)
+
+	// Realistic nesting stays well inside the limit.
+	moderate := "SELECT " + strings.Repeat("(", 30) + "1" + strings.Repeat(")", 30) + " FROM t"
+	_, err = nanopass.Parse(moderate)
+	require.NoError(t, err)
+}
+
+// Grammar2 closure: keyword-named types (Array, Date, UUID — keyword
+// tokens in the shared lexer) parse in Grammar2 type positions, so
+// canonicalised slots and casts round into ParseCanonical.
+func TestRegressionGrammar2KeywordTypes(t *testing.T) {
+	canonical, err := passes.CanonicalizeFull(16).Run(
+		"SELECT {d: Map(String, Array(UInt8))}, {e: Date}, CAST(x AS Array(UUID)) FROM t")
+	require.NoError(t, err)
+	_, err = nanopass.ParseCanonical(canonical)
+	require.NoError(t, err)
 }

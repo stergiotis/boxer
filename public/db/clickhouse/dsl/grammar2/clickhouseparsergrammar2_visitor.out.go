@@ -202,6 +202,9 @@ type ClickHouseParserGrammar2Visitor interface {
 	// Visit a parse tree produced by ClickHouseParserGrammar2#ColumnTypeExprParam.
 	VisitColumnTypeExprParam(ctx *ColumnTypeExprParamContext) interface{}
 
+	// Visit a parse tree produced by ClickHouseParserGrammar2#typeName.
+	VisitTypeName(ctx *TypeNameContext) interface{}
+
 	// Visit a parse tree produced by ClickHouseParserGrammar2#columnExprList.
 	VisitColumnExprList(ctx *ColumnExprListContext) interface{}
 

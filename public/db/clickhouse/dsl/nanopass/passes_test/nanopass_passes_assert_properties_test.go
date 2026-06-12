@@ -5,6 +5,7 @@ package passes_test
 import (
 	"testing"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/testdata"
@@ -45,10 +46,43 @@ func TestAssertProperties(t *testing.T) {
 	nestedCorpus = append(nestedCorpus, baseCorpus...)
 	nestedCorpus = append(nestedCorpus, nestedFormsCorpus...)
 
+	// Factory-built passes need their registries configured; their corpora
+	// must contain registered call sites or the property check is vacuous.
+	macroExpander := nanopass.NewMacroExpander()
+	macroExpander.Register("apTwo", func(args []nanopass.LiteralArg) (string, error) { return "2", nil })
+	macroExpander.Register("apDouble", func(args []nanopass.LiteralArg) (string, error) {
+		return "(" + args[0].Value + " * 2)", nil
+	})
+	macroCorpus := append(append([]string{}, nestedCorpus...),
+		"SELECT apDouble(apTwo()) FROM t",
+		"SELECT apDouble(3), apTwo() FROM t",
+	)
+
+	// FunctionEvaluator folds nested literal-only calls in a single Apply
+	// (tryEval recurses), so plain nesting converges immediately. The
+	// fixpoint flag is justified by the VerbatimSql escape hatch: spliced
+	// SQL may itself contain registered calls, which only the next
+	// iteration's re-parse can see.
+	evaluator := passes.NewFunctionEvaluator()
+	evaluator.Register("apSeven", func(args []any) (any, error) { return int64(7), nil }, true)
+	evaluator.Register("apWrap", func(args []any) (any, error) {
+		return marshalling.VerbatimSql{SQL: "apSeven(1)"}, nil
+	}, true)
+	evalCorpus := append(append([]string{}, nestedCorpus...),
+		"SELECT apWrap(0) FROM t",
+		"SELECT apSeven(apSeven(1)) FROM t",
+	)
+
+	expandSchema := passes.NewStaticSchemaProvider(map[string][]string{
+		"t":  {"a", "b"},
+		"t1": {"x", "y"},
+	})
+
 	cases := []struct {
 		name   string
 		pass   nanopass.Pass
-		nested bool // use nestedCorpus instead of baseCorpus
+		nested bool     // use nestedCorpus instead of baseCorpus
+		corpus []string // explicit corpus override (wins over nested)
 	}{
 		{name: "StripComments", pass: passes.StripComments},
 		{name: "CanonicalizeKeywordCase", pass: passes.CanonicalizeKeywordCase},
@@ -77,6 +111,11 @@ func TestAssertProperties(t *testing.T) {
 		{name: "InjectParamsAsCTE", pass: passes.InjectParamsAsCTE("", nil, nil)},
 		{name: "ExtractLiterals", pass: passes.ExtractLiterals(passes.NewExtractLiteralsConfig(0))},
 
+		{name: "MacroExpander", pass: macroExpander.Pass(), corpus: macroCorpus},
+		{name: "FunctionEvaluator", pass: evaluator.Pass(), corpus: evalCorpus},
+		{name: "ExpandColumns", pass: passes.ExpandColumns(expandSchema, "db")},
+		{name: "WriteSettings", pass: passes.WriteSettings(map[string]any{"max_threads": int64(8)})},
+
 		{name: "ValidateGrammar1", pass: nanopass.ValidateGrammar1},
 	}
 
@@ -86,7 +125,27 @@ func TestAssertProperties(t *testing.T) {
 			if c.nested {
 				corpus = nestedCorpus
 			}
+			if c.corpus != nil {
+				corpus = c.corpus
+			}
 			nanopass.AssertProperties(t, c.pass, corpus)
 		})
 	}
+
+	// ValidateGrammar2 accepts only canonical SQL — exercise its declared
+	// idempotency against the canonicalised corpus (entries the pipeline
+	// cannot canonicalise are skipped, but at least one must survive).
+	t.Run("ValidateGrammar2", func(t *testing.T) {
+		full := passes.CanonicalizeFull(16)
+		canonical := make([]string, 0, len(baseCorpus))
+		for _, sql := range baseCorpus {
+			out, err := full.Run(sql)
+			if err != nil {
+				continue
+			}
+			canonical = append(canonical, out)
+		}
+		require.NotEmpty(t, canonical, "no corpus entry canonicalised")
+		nanopass.AssertProperties(t, nanopass.ValidateGrammar2, canonical)
+	})
 }

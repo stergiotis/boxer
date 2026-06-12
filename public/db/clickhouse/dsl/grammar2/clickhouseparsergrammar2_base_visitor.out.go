@@ -267,6 +267,10 @@ func (v *BaseClickHouseParserGrammar2Visitor) VisitColumnTypeExprParam(ctx *Colu
 	return v.VisitChildren(ctx)
 }
 
+func (v *BaseClickHouseParserGrammar2Visitor) VisitTypeName(ctx *TypeNameContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
 func (v *BaseClickHouseParserGrammar2Visitor) VisitColumnExprList(ctx *ColumnExprListContext) interface{} {
 	return v.VisitChildren(ctx)
 }

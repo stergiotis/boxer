@@ -184,12 +184,19 @@ setStmt: SET settingExprList SEMICOLON;
 // Columns
 
 columnTypeExpr
-    : IDENTIFIER                                                                               # ColumnTypeExprSimple   // UInt64
-    | IDENTIFIER LPAREN IDENTIFIER columnTypeExpr (COMMA IDENTIFIER columnTypeExpr)* RPAREN    # ColumnTypeExprNested   // Nested
-    | IDENTIFIER LPAREN enumValue (COMMA enumValue)* RPAREN                                    # ColumnTypeExprEnum     // Enum
-    | IDENTIFIER LPAREN columnTypeExpr (COMMA columnTypeExpr)* RPAREN                          # ColumnTypeExprComplex  // Array, Tuple
-    | IDENTIFIER LPAREN columnExprList? RPAREN                                                 # ColumnTypeExprParam    // FixedString(N)
+    : typeName                                                                                 # ColumnTypeExprSimple   // UInt64
+    | typeName LPAREN typeName columnTypeExpr (COMMA typeName columnTypeExpr)* RPAREN          # ColumnTypeExprNested   // Nested
+    | typeName LPAREN enumValue (COMMA enumValue)* RPAREN                                      # ColumnTypeExprEnum     // Enum
+    | typeName LPAREN columnTypeExpr (COMMA columnTypeExpr)* RPAREN                            # ColumnTypeExprComplex  // Array, Tuple
+    | typeName LPAREN columnExprList? RPAREN                                                   # ColumnTypeExprParam    // FixedString(N)
     ;
+
+// typeName admits the lexer keywords that double as ClickHouse type names
+// (Array(UInt8), Date, UUID, …). The shared lexer wins these over
+// IDENTIFIER, and Grammar1 accepts them through its keyword-tolerant
+// identifier rule — Grammar2 must accept them too or canonicalisation
+// cannot close G1 type expressions into G2.
+typeName: IDENTIFIER | ARRAY | DATE | INTERVAL | TIMESTAMP | UUID;
 columnExprList: columnsExpr (COMMA columnsExpr)*;
 columnsExpr
     : (tableIdentifier DOT)? ASTERISK  # ColumnsExprAsterisk
