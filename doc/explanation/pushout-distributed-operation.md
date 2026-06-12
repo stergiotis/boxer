@@ -1,12 +1,12 @@
 ---
 type: explanation
 audience: package maintainer, demonstrator author
-status: draft
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to stable
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to stable
+status: stable
+reviewed-by: "@stergiotis"
+reviewed-date: 2026-06-12
 ---
 
-> **Status: draft — pre-human-review.** Synthesis of a design dialogue
+> **Scope.** Synthesis of a design dialogue
 > (2026-06-12) about operating `public/algebraicarch/pushout` repos as
 > a distributed system. It explains what is already shipped and maps
 > the design space for what is deliberately deferred; decisions live in

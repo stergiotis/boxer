@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-06-12
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "@stergiotis"
+reviewed-date: 2026-06-12
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0079: pushout production architecture — pluggable storage, wire codec, and transport seams
 
@@ -247,8 +245,10 @@ two very different storage shapes (files now, KV later, OQ-4).
 
 ## Status
 
-Proposed. Implementation phases P1–P7 tracked in the session plan;
-acceptance after human review of this document plus the landed seams.
+Accepted — 2026-06-12. Implementation phases P1–P7 landed, verified
+(full battery incl. race, conformance suites, state-machine soak with
+the reopen verb), and pushed; the hackathon_2026 pijuldemo consumes the
+engine through the public read API.
 
 ## Open questions
 
