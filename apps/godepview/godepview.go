@@ -18,11 +18,11 @@ const (
 	colImportPath = iota
 	colName
 	colClass
+	colWasm // kept near the front so it stays in the table's visible span
 	colModule
 	colFiles
 	colImports
 	colImportedBy
-	colWasm
 	numCols
 )
 

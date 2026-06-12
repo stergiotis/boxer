@@ -51,10 +51,11 @@ func (inst *App) renderExplorer() {
 	c.UiSetMinHeight(dockMinHeight)
 	for dock := range c.DockArea(inst.ids.PrepareStr("dock")) {
 		root := dock.InitRoot(tabPackages)
-		// Table keeps 55% of the width (eight columns); the graph and detail
-		// pane split the right column evenly so the detail lists are visible
-		// without scrolling. All leaves are drag-resizable and persist.
-		graphLeaf := dock.Split(root, c.DockRight, 0.55, tabGraph)
+		// Table keeps 60% of the width (eight columns, WASM kept in the visible
+		// span); the graph and detail pane split the right column evenly so the
+		// detail lists are visible without scrolling. All leaves are
+		// drag-resizable and persist.
+		graphLeaf := dock.Split(root, c.DockRight, 0.60, tabGraph)
 		dock.Split(graphLeaf, c.DockBelow, 0.50, tabDetail)
 
 		for range dock.Tab(tabPackages, "packages") {
@@ -277,11 +278,11 @@ func (inst *App) renderTable() {
 	cols[colImportPath] = colDef{"Import path", 380}
 	cols[colName] = colDef{"Name", 120}
 	cols[colClass] = colDef{"Class", 78}
+	cols[colWasm] = colDef{"WASM", 72} // wasi js freestanding glyphs (ADR-0080)
 	cols[colModule] = colDef{"Module", 200}
 	cols[colFiles] = colDef{"Files", 52}
 	cols[colImports] = colDef{"Out", 52}
 	cols[colImportedBy] = colDef{"In", 52}
-	cols[colWasm] = colDef{"WASM", 72} // wasi js freestanding glyphs (ADR-0080)
 
 	for i := range numCols {
 		c.EtColumn(cols[i].w).Resizable(true).Send()

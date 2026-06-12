@@ -69,7 +69,8 @@ func makeTourInit(layered bool) func(ids *c.WidgetIdStack) (state any) {
 		}
 		inst.idx = inst.man.BuildIndex()
 		// Focus a package with both importers and imports so the neighborhood
-		// graph shows edges in both directions (index 2 == "store").
+		// graph shows edges in both directions (index 2 == "progressbar", whose
+		// mixed wasm verdict also exercises the detail pane's WASM line).
 		if len(inst.man.Packages) > 2 {
 			inst.focus = inst.man.Packages[2].Id
 		}
@@ -101,13 +102,18 @@ func fixtureManifest() (m godep.Manifest) {
 		files   uint32
 		imports []int // indices into specs (forward import edges)
 	}
-	const root = "example.com/shop"
+	// Real first-party import paths so the WASM column (ADR-0080) lights up
+	// against the generated proptable: app/eh/option are all-green, progressbar
+	// is mixed (freestanding-blocked → amber), anchor is all-blocked (red). The
+	// external/stdlib rows carry no verdict and render "—". The import edges are
+	// illustrative — this is a seeded fixture, not a real collection.
+	const root = "github.com/stergiotis/boxer"
 	specs := []spec{
-		{root + "/cmd/server", "main", godep.ClassInternal, root, 1, []int{1, 2, 7}},
-		{root + "/service", "service", godep.ClassInternal, root, 4, []int{2, 3, 8}},
-		{root + "/store", "store", godep.ClassInternal, root, 3, []int{3, 9, 5}},
-		{root + "/util", "util", godep.ClassInternal, root, 2, []int{7, 10}},
-		{root + "/api", "api", godep.ClassInternal, root, 2, []int{1, 8}},
+		{root + "/public/keelson/runtime/app", "app", godep.ClassInternal, root, 1, []int{1, 2, 7}},
+		{root + "/public/observability/eh", "eh", godep.ClassInternal, root, 4, []int{2, 3, 8}},
+		{root + "/public/hmi/progressbar", "progressbar", godep.ClassInternal, root, 3, []int{3, 9, 5}},
+		{root + "/public/functional/option", "option", godep.ClassInternal, root, 2, []int{7, 10}},
+		{root + "/public/semistructured/leeway/anchor", "anchor", godep.ClassInternal, root, 2, []int{1, 8}},
 		{"github.com/lib/pq", "pq", godep.ClassExternal, "github.com/lib/pq", 18, []int{9, 6}},
 		{"github.com/jackc/pgx/v5", "pgx", godep.ClassExternal, "github.com/jackc/pgx/v5", 40, []int{9}},
 		{"fmt", "fmt", godep.ClassStdlib, "std", 12, []int{10}},

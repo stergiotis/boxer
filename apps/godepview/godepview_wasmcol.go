@@ -38,9 +38,9 @@ func wasmProps() (m map[string]packageprops.Props) {
 func wasmGlyph(s packageprops.WASMState) (g string) {
 	switch s {
 	case packageprops.WASMCompiles:
-		return "✓"
+		return "✓" // U+2713, present in Noto Sans
 	case packageprops.WASMBlocked:
-		return "✗"
+		return "×" // U+00D7 — not U+2717 ✗, which renders as a tofu box in Noto
 	default:
 		return "·"
 	}
