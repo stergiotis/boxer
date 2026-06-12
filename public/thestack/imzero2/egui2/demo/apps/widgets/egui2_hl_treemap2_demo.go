@@ -3,6 +3,8 @@
 package widgets
 
 import (
+	"fmt"
+
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
@@ -34,27 +36,11 @@ func init() {
 		Kind:        registry.DemoKindUX,
 		Description: "Frame-based treemap with click-to-zoom drill-down on a synthetic hierarchical dataset.",
 		Init: func(ids *c.WidgetIdStack) (state any) {
-			// Stretched depth palette into Batlow's bright half. The default
-			// DepthColoring(Batlow8) puts a shallow tree (2-3 rendered
-			// depths) into Batlow's dark navy/teal third (L≈0.15-0.20),
-			// which sits at the same luminance as bg.panel (L=0.16) and
-			// reads as uniform on the IDS dark canvas — the encoding is
-			// technically correct but visually invisible. Picking from
-			// the bright half (olive → orange → peach) puts every depth
-			// well above panel luminance and makes the depth distinction
-			// obvious. The treemap demo data renders at depths 0-1 (outer
-			// cells and their leaves); the trailing entry covers any
-			// deeper drill-down via DepthColoring's depth%len fallback.
-			stretchedDepthPalette := []uint32{
-				treemap.Batlow8[3], // olive  #627941 — outer cells (depth 0)
-				treemap.Batlow8[5], // orange #E69858 — inner cells (depth 1)
-				treemap.Batlow8[6], // peach  #FDB0A9 — leaves     (depth 2+)
-			}
 			state = &treemap2DemoState{
 				tm: treemap.New(ids, "tm2-demo", makeSampleTree(),
 					treemap.WithContainerSize(700, 450),
 					treemap.WithAnimationDuration(0.28),
-					treemap.WithColoring(treemap.DepthColoring(stretchedDepthPalette)),
+					treemap.WithColoring(treemap.DepthColoring(stretchedDepthPalette())),
 				),
 			}
 			return
@@ -63,6 +49,77 @@ func init() {
 			state.(*treemap2DemoState).tm.Render()
 		},
 	})
+	registry.Register(registry.Demo{
+		Name:     "treemap2-drilled",
+		Category: "Charts & plots",
+		Title:    icons.PhGridNine + " treemap (drilled)",
+		Stage:    [2]float32{1024, 600},
+		Kind:     registry.DemoKindUX,
+		Description: "The treemap pre-drilled to project › src › backend: off-path " +
+			"siblings render as hatched inert cells with their name/value above " +
+			"the hatch — the tour's only coverage of the hatch + drill state.",
+		Init: func(ids *c.WidgetIdStack) (state any) {
+			root := makeSampleTree()
+			state = &treemap2DemoState{
+				tm: treemap.New(ids, "tm2-demo-drilled", root,
+					treemap.WithContainerSize(700, 450),
+					treemap.WithAnimationDuration(0.28),
+					treemap.WithColoring(treemap.DepthColoring(stretchedDepthPalette())),
+					// A value line under each name exercises the two-line
+					// label path on hatched cells (paintLabelsAboveHatch).
+					treemap.WithCellLabel(func(n *layout.Node) string {
+						return fmt.Sprintf("%.0f lines", n.TotalSize())
+					}),
+					treemap.WithInitialPath(childPath(root, "src", "backend")),
+				),
+			}
+			return
+		},
+		RenderStateful: func(_ *c.WidgetIdStack, state any) {
+			state.(*treemap2DemoState).tm.Render()
+		},
+	})
+}
+
+// stretchedDepthPalette picks from Batlow's bright half. The default
+// DepthColoring(Batlow8) puts a shallow tree (2-3 rendered depths) into
+// Batlow's dark navy/teal third (L≈0.15-0.20), which sits at the same
+// luminance as bg.panel (L=0.16) and reads as uniform on the IDS dark
+// canvas — the encoding is technically correct but visually invisible.
+// Picking from the bright half (olive → orange → peach) puts every depth
+// well above panel luminance and makes the depth distinction obvious. The
+// treemap demo data renders at depths 0-1 (outer cells and their leaves);
+// the trailing entry covers any deeper drill-down via DepthColoring's
+// depth%len fallback.
+func stretchedDepthPalette() []uint32 {
+	return []uint32{
+		treemap.Batlow8[3], // olive  #627941 — outer cells (depth 0)
+		treemap.Batlow8[5], // orange #E69858 — inner cells (depth 1)
+		treemap.Batlow8[6], // peach  #FDB0A9 — leaves     (depth 2+)
+	}
+}
+
+// childPath walks root's Children by name and returns the breadcrumb path
+// (root inclusive) in the form treemap.WithInitialPath expects. Panics on a
+// missing name — it wires the fixed sample tree, so a miss is a typo here.
+func childPath(root *layout.Node, names ...string) []*layout.Node {
+	path := []*layout.Node{root}
+	cur := root
+	for _, name := range names {
+		var next *layout.Node
+		for _, ch := range cur.Children {
+			if ch.Name == name {
+				next = ch
+				break
+			}
+		}
+		if next == nil {
+			panic("treemap2 demo: childPath name not found: " + name)
+		}
+		path = append(path, next)
+		cur = next
+	}
+	return path
 }
 
 // makeSampleTree returns a synthetic project-tree used by the treemap demo.

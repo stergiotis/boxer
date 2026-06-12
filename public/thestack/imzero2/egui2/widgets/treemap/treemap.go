@@ -46,7 +46,6 @@ package treemap
 
 import (
 	"fmt"
-	"math"
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
@@ -600,46 +599,53 @@ func (t *Treemap) cellIds(seq uint64) (frameCreator c.WidgetIdCreatorI, handle w
 // flush the lines on top of the previously-drawn cell Frame. seq must be
 // unique per hatch instance within the enclosing IdScope.
 //
+// cornerRadius is the cell Frame's corner radius: hatchSegments trims the
+// lines away from the rounded corners so the hatch never overhangs the
+// fill's corner cutouts (a rectangular clip cannot follow the radii).
+//
 // Currently only ±45° angles are supported; other AngleDeg values fall back
 // to -45°. (Generalizing to arbitrary angles is straightforward but unused.)
-func (t *Treemap) paintHatch(r layout.Rect, seq uint64, spec HatchSpec) {
+func (t *Treemap) paintHatch(r layout.Rect, seq uint64, spec HatchSpec, cornerRadius float32) {
 	if spec.IsZero() {
 		return
 	}
-	spacing := float64(spec.Spacing)
+	segs := hatchSegments(r.W, r.H, float64(spec.Spacing), float64(cornerRadius), spec.AngleDeg > 0)
+	if len(segs) == 0 {
+		return
+	}
 	for range c.AllocateUiAtRect(float32(r.X), float32(r.Y), float32(r.X+r.W), float32(r.Y+r.H)).KeepIter() {
-		// The line endpoints are already clamped to r; the clip additionally
+		// The segments are already clamped to r; the clip additionally
 		// bounds stroke width and AA feather at the rect edge.
 		c.UiClipToMaxRect()
-		// Lines parameterized by cc = x + y (slope -1). Positive AngleDeg
-		// reflects horizontally to slope +1 (cc = y - x + H).
-		positive := spec.AngleDeg > 0
-		for cc := 0.0; cc <= r.W+r.H; cc += spacing {
-			var x0, y0, x1, y1 float64
-			if positive {
-				// slope +1: y = x + (cc - H), parameterize same as before
-				// but mirror Y.
-				x0 = math.Max(0, cc-r.H)
-				y0 = r.H - math.Min(r.H, cc)
-				x1 = math.Min(r.W, cc)
-				y1 = r.H - math.Max(0, cc-r.W)
-			} else {
-				x0 = math.Max(0, cc-r.H)
-				y0 = math.Min(r.H, cc)
-				x1 = math.Min(r.W, cc)
-				y1 = math.Max(0, cc-r.W)
-			}
-			if math.Abs(x1-x0) < 0.5 && math.Abs(y1-y0) < 0.5 {
-				continue
-			}
+		for _, s := range segs {
 			c.PaintLine(
-				float32(x0), float32(y0),
-				float32(x1), float32(y1),
+				float32(s.X0), float32(s.Y0),
+				float32(s.X1), float32(s.Y1),
 				color.Hex(spec.Color), spec.Width).Send()
 		}
 		// Cell seqs are even (stepped by 2); |1 gives a collision-free odd seq
 		// for the hatch canvas id.
 		c.PaintCanvas(t.ids.PrepareSeq(seq|1), float32(r.W), float32(r.H)).Send()
+	}
+}
+
+// paintLabelsAboveHatch re-renders a hatched cell's name (and optional value
+// line) on top of its hatch: the hatch canvas paints after — and therefore
+// over — the cell Frame's body, which would strike through text drawn there,
+// so hatched cells suppress the in-frame labels and emit them here instead.
+// The overlay allocates a plain Ui at the frame's label position (the cell
+// rect inset by the frame's inner margins — mX horizontal, mY vertical) with
+// no Frame, fill, or widget id, so it adds nothing to hit-testing and the
+// labels land exactly where the in-frame ones would. Clipped like the cell
+// body; valueGate is the caller's measured two-line threshold.
+func (t *Treemap) paintLabelsAboveHatch(node *layout.Node, r layout.Rect, textColor color.Color, rendersInner bool, mX, mY, valueGate float64) {
+	for range c.AllocateUiAtRect(float32(r.X+mX), float32(r.Y+mY), float32(r.X+r.W-mX), float32(r.Y+r.H-mY)).KeepIter() {
+		c.UiClipToMaxRect()
+		c.LabelAtoms(c.Atoms().
+			BeginRichTextColored(textColor, t.colorTransparentBg, node.Name).
+			End().Keep()).
+			Truncate().Send()
+		t.paintCellValue(node, r, textColor, rendersInner, valueGate)
 	}
 }
 
@@ -717,6 +723,22 @@ func (t *Treemap) renderZoom(node *layout.Node, bounds layout.Rect, depth, bcLev
 
 		cellW := float32(r.W)
 		cellH := float32(r.H)
+		// A cell shows its own children inside it when it's the drilled-in
+		// (active) container or a frontier container rendering a preview;
+		// such cells skip the secondary value line so it doesn't overrun
+		// the header into the nested content.
+		rendersInner := hasChildren && (isActive || atFrontier)
+		// Height gate from measured row heights: the Frame sizes to content,
+		// so a label taller than the content box (cellH - zoomCellVSlack)
+		// would grow it past the cell rect and paint over the neighbors
+		// below (metrics.go).
+		showName := r.W > 40 && r.H > t.metrics.nameMinH(zoomCellVSlack)
+		// Hatch is a StyleI decision — zero spec = no hatch. Callers who want
+		// "colored cells never hatched" can wrap DefaultStyle in their own
+		// StyleI that zeros Hatch when their own ColoringI applied. Hatched
+		// cells defer their labels to paintLabelsAboveHatch so the lines
+		// don't strike through the text.
+		hatched := !visuals.Hatch.IsZero()
 		for range c.AllocateUiAtRect(float32(r.X), float32(r.Y), float32(r.X+r.W), float32(r.Y+r.H)).KeepIter() {
 			// Backstop to the measured gates: the cell rect is a hard paint
 			// boundary even for content the gate model doesn't cover.
@@ -729,20 +751,11 @@ func (t *Treemap) renderZoom(node *layout.Node, bounds layout.Rect, depth, bcLev
 			if drillable || drillUpTo > 0 {
 				frame = frame.SenseClick()
 			}
-			// A cell shows its own children inside it when it's the drilled-in
-			// (active) container or a frontier container rendering a preview;
-			// such cells skip the secondary value line so it doesn't overrun
-			// the header into the nested content.
-			rendersInner := hasChildren && (isActive || atFrontier)
 			for range frame.KeepIter() {
 				c.UiSetMinWidth(cellW - 7)
 				c.UiSetMinHeight(cellH - zoomCellVSlack)
 
-				// Height gate from measured row heights: the Frame sizes to
-				// content, so a label taller than the content box (cellH -
-				// zoomCellVSlack) would grow it past the cell rect and paint
-				// over the neighbors below (metrics.go).
-				if r.W > 40 && r.H > t.metrics.nameMinH(zoomCellVSlack) {
+				if showName && !hatched {
 					// Truncate with ellipsis when the name doesn't fit the cell
 					// horizontally, rather than wrapping or overflowing into
 					// neighbors. egui uses the Ui's available_width, which is
@@ -758,11 +771,12 @@ func (t *Treemap) renderZoom(node *layout.Node, bounds layout.Rect, depth, bcLev
 			}
 		}
 
-		// Hatch is a StyleI decision — zero spec = no hatch. Callers who want
-		// "colored cells never hatched" can wrap DefaultStyle in their own
-		// StyleI that zeros Hatch when their own ColoringI applied.
-		if !visuals.Hatch.IsZero() {
-			t.paintHatch(r, *cellSeq, visuals.Hatch)
+		if hatched {
+			t.paintHatch(r, *cellSeq, visuals.Hatch, visuals.CornerRadius)
+			if showName {
+				// Inner margins (3, 3, 2, 2) — keep in sync with the Frame above.
+				t.paintLabelsAboveHatch(child, r, textColor, rendersInner, 3, 2, t.metrics.valueMinH(zoomCellVSlack))
+			}
 		}
 
 		if isActive && len(child.Children) > 0 {
@@ -823,6 +837,18 @@ func (t *Treemap) renderLeafChildren(node *layout.Node, bounds layout.Rect, dept
 
 		cellW := float32(r.W)
 		cellH := float32(r.H)
+		// A preview cell renders its own children inside it only when
+		// the nesting budget allows another level; below the budget
+		// it's a terminal block, so the value line is safe to draw.
+		rendersInner := remaining > 1 && len(child.Children) > 0
+		// Same measured height gate as renderZoom, at the preview
+		// cells' tighter vertical chrome (metrics.go).
+		showName := r.W > 35 && r.H > t.metrics.nameMinH(previewCellVSlack)
+		// StyleI is responsible for deciding whether preview cells are hatched.
+		// DefaultStyle returns no hatch for CellStatePreview; custom styles can
+		// override that policy. As in renderZoom, hatched cells defer their
+		// labels to paintLabelsAboveHatch.
+		hatched := !visuals.Hatch.IsZero()
 		for range c.AllocateUiAtRect(float32(r.X), float32(r.Y), float32(r.X+r.W), float32(r.Y+r.H)).KeepIter() {
 			// Same paint backstop as the renderZoom cells.
 			c.UiClipToMaxRect()
@@ -836,26 +862,21 @@ func (t *Treemap) renderLeafChildren(node *layout.Node, bounds layout.Rect, dept
 				c.UiSetMinWidth(cellW - 5)
 				c.UiSetMinHeight(cellH - previewCellVSlack)
 
-				// Same measured height gate as renderZoom, at the preview
-				// cells' tighter vertical chrome (metrics.go).
-				if r.W > 35 && r.H > t.metrics.nameMinH(previewCellVSlack) {
+				if showName && !hatched {
 					c.LabelAtoms(c.Atoms().
 						BeginRichTextColored(textColor, t.colorTransparentBg, child.Name).
 						End().Keep()).
 						Truncate().Send()
-					// A preview cell renders its own children inside it only when
-					// the nesting budget allows another level; below the budget
-					// it's a terminal block, so the value line is safe to draw.
-					rendersInner := remaining > 1 && len(child.Children) > 0
 					t.paintCellValue(child, r, textColor, rendersInner, t.metrics.valueMinH(previewCellVSlack))
 				}
 			}
 		}
-		// StyleI is responsible for deciding whether preview cells are hatched.
-		// DefaultStyle returns no hatch for CellStatePreview; custom styles can
-		// override that policy.
-		if !visuals.Hatch.IsZero() {
-			t.paintHatch(r, *cellSeq, visuals.Hatch)
+		if hatched {
+			t.paintHatch(r, *cellSeq, visuals.Hatch, visuals.CornerRadius)
+			if showName {
+				// Inner margins (2, 2, 1, 1) — keep in sync with the Frame above.
+				t.paintLabelsAboveHatch(child, r, textColor, rendersInner, 2, 1, t.metrics.valueMinH(previewCellVSlack))
+			}
 		}
 
 		// Recurse one level deeper when the nesting budget and cell size
