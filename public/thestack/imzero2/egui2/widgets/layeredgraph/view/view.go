@@ -20,7 +20,6 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph"
-	"github.com/zeebo/xxh3"
 )
 
 // Style holds the colours and metrics used to paint a Layout. A zero Style is
@@ -117,7 +116,17 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 	}
 
 	sm := c.CurrentApplicationState.StateManager
-	canvasID := c.MakeAbsoluteIdHighEntropy(idBase + 1)
+	// Derive canvas + per-node sense-region ids under an IdScope so the XOR
+	// chain prevents cross-instance collisions without arithmetic overflow risk.
+	wis := c.NewWidgetIdStack()
+	senseIDs := make([]c.AbsoluteWidgetId, len(lay.Nodes))
+	var canvasID c.AbsoluteWidgetId
+	for range c.IdScope(wis.PrepareHighEntropy(idBase)) {
+		canvasID = c.MakeAbsoluteIdHighEntropy(wis.PrepareStr("canvas").Derive())
+		for i, n := range lay.Nodes {
+			senseIDs[i] = c.MakeAbsoluteIdHighEntropy(wis.PrepareStr(n.ID).Derive())
+		}
+	}
 	scale, offX, offY, canvasW, canvasH := fit(lay, opts.CanvasW, opts.CanvasH)
 
 	// User pan/zoom (opt-in via opts.State) composes on top of fit-to-view as a
@@ -167,14 +176,6 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 	tf := func(p layeredgraph.Point) (x, y float32) {
 		return float32(p.X*escale + ox), float32(p.Y*escale + oy)
 	}
-	// Per-node sense-region ids, computed once and reused by the read + draw
-	// loops below (avoids hashing each id twice per frame). <<1 keeps bit 0
-	// clear so the |1 that Derive applies cannot collapse two distinct keys.
-	senseIDs := make([]c.AbsoluteWidgetId, len(lay.Nodes))
-	for i, n := range lay.Nodes {
-		senseIDs[i] = c.MakeAbsoluteIdHighEntropy(idBase + (xxh3.HashString(n.ID) << 1))
-	}
-
 	// Read previous-frame node interaction; it drives this frame's highlight.
 	hovered := make(map[string]bool, len(lay.Nodes))
 	var res RenderResult
