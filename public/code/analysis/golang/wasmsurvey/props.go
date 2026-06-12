@@ -128,6 +128,9 @@ func GenerateProps(ctx context.Context, opts Options, overwrite bool) (res Gener
 		if pr.Dir == "" || pr.Name == "" || !inScope(pr.ImportPath, prefixes) {
 			continue
 		}
+		if pr.ImportPath == propsImportPath {
+			continue // packageprops cannot declare props referencing itself (import cycle)
+		}
 		path := filepath.Join(pr.Dir, propsFileName)
 		_, statErr := os.Stat(path)
 		exists := statErr == nil
