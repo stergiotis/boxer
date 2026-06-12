@@ -14,7 +14,7 @@ pub const PREFIX_SESSION: u8 = 0x03;
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct InputEvent {
-    #[prost(oneof = "input_event::Event", tags = "1, 2, 3, 4, 5, 6")]
+    #[prost(oneof = "input_event::Event", tags = "1, 2, 3, 4, 5, 6, 7")]
     pub event: Option<input_event::Event>,
 }
 
@@ -33,6 +33,8 @@ pub mod input_event {
         Text(super::TextInput),
         #[prost(message, tag = "6")]
         PointerGone(super::PointerGone),
+        #[prost(message, tag = "7")]
+        PinchZoom(super::PinchZoom),
     }
 }
 
@@ -92,6 +94,12 @@ pub struct TextInput {
 
 #[derive(Clone, Copy, PartialEq, prost::Message)]
 pub struct PointerGone {}
+
+#[derive(Clone, Copy, PartialEq, prost::Message)]
+pub struct PinchZoom {
+    #[prost(float, tag = "1")]
+    pub factor: f32,
+}
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct SessionControl {

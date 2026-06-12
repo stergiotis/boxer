@@ -32,6 +32,7 @@ message InputEvent {
     KeyEvent key = 4;
     TextInput text = 5;
     PointerGone pointer_gone = 6;
+    PinchZoom pinch_zoom = 7;
   }
 }
 
@@ -80,6 +81,14 @@ message TextInput {
 
 // Pointer left the canvas (browser pointerleave) — clears hover state.
 message PointerGone {
+}
+
+// Pinch gesture (touch clients): multiplicative zoom factor for this
+// step, 1.0 = no change — maps to egui's Zoom event. Desktop pinch
+// arrives as ctrl+wheel through MouseWheel instead and needs no event
+// here (egui zooms on ctrl+scroll by itself).
+message PinchZoom {
+  float factor = 1;
 }
 
 message SessionControl {

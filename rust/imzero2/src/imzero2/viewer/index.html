@@ -17,12 +17,24 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<!-- Real device viewport (without this, mobile Safari lays out a ~980px
+     virtual viewport and our measured resize reports nonsense) and no
+     page pinch-zoom — pinch belongs to the app (PinchZoom event). -->
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>imzero2 remote viewer</title>
 <style>
   html, body { margin: 0; background: #101010; color: #9a9a9a;
-               font: 12px monospace; height: 100%; }
+               font: 12px monospace; height: 100%;
+               overscroll-behavior: none; }
   #status { padding: 4px 8px; }
-  #screen { display: block; margin: 0 auto; outline: none; }
+  /* touch-action: none hands every touch to our pointer handlers instead
+     of native scrolling — without it, mobile browsers cancel pointer
+     events mid-drag to scroll the page, which is what broken gestures
+     look like. The -webkit bits kill iOS long-press callouts/selection. */
+  #screen { display: block; margin: 0 auto; outline: none;
+            touch-action: none;
+            -webkit-user-select: none; user-select: none;
+            -webkit-touch-callout: none; }
 </style>
 </head>
 <body>
@@ -143,6 +155,7 @@ function sendKey(key, code, pressed, repeat, mods) {
 }
 function sendText(text) { sendFramed(PREFIX_INPUT, new Writer().sub(5, new Writer().str(1, text))); }
 function sendPointerGone() { sendFramed(PREFIX_INPUT, new Writer().sub(6, new Writer())); }
+function sendPinchZoom(factor) { sendFramed(PREFIX_INPUT, new Writer().sub(7, new Writer().float(1, factor))); }
 function sendResize(lw, lh, scale) {
   sendFramed(PREFIX_SESSION, new Writer().sub(2, new Writer().float(1, lw).float(2, lh).float(3, scale)));
 }
@@ -265,21 +278,91 @@ window.addEventListener("resize", () => {
   resizeTimer = setTimeout(measureAndSend, 300); // debounce drag-resizing
 });
 
+// ---- touch gesture layer ----
+// One finger forwards as the pointer (tap = click, drag = pointer drag —
+// egui's drag-to-scroll picks that up in scroll areas). Two fingers stop
+// being a pointer and become trackpad-style gestures: centroid movement →
+// MouseWheel (natural direction: content follows the fingers), distance
+// ratio → PinchZoom. Mouse/pen input bypasses all of this.
+const touchPoints = new Map(); // pointerId -> [x, y] (logical)
+let touchDownSent = false;     // a button-press was forwarded for the 1-finger gesture
+let lastCentroid = null, lastSpread = null;
+
+function centroidAndSpread() {
+  const pts = [...touchPoints.values()];
+  const [a, b] = pts;
+  const c = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  return [c, Math.hypot(a[0] - b[0], a[1] - b[1])];
+}
+
+function touchDown(e, pos) {
+  touchPoints.set(e.pointerId, pos);
+  if (touchPoints.size === 1) {
+    touchDownSent = true;
+    sendMouseMove(pos[0], pos[1]);
+    sendMouseButton(pos[0], pos[1], 0, true, 0);
+  } else if (touchPoints.size === 2) {
+    // Entering two-finger mode: release the forwarded press so egui
+    // doesn't keep dragging, then track gestures.
+    if (touchDownSent) { sendMouseButton(pos[0], pos[1], 0, false, 0); touchDownSent = false; }
+    sendPointerGone();
+    [lastCentroid, lastSpread] = centroidAndSpread();
+  } // 3+ fingers: ignored
+}
+
+function touchMove(e, pos) {
+  if (!touchPoints.has(e.pointerId)) return;
+  touchPoints.set(e.pointerId, pos);
+  if (touchPoints.size === 1) {
+    pendingMove = pos;
+  } else if (touchPoints.size === 2) {
+    const [c, spread] = centroidAndSpread();
+    const dx = c[0] - lastCentroid[0], dy = c[1] - lastCentroid[1];
+    if (dx !== 0 || dy !== 0) sendMouseWheel(dx, dy, 0, 0);
+    const factor = spread / lastSpread;
+    if (isFinite(factor) && factor > 0 && Math.abs(factor - 1) > 0.004) sendPinchZoom(factor);
+    [lastCentroid, lastSpread] = [c, spread];
+  }
+}
+
+function touchEnd(e, pos) {
+  if (!touchPoints.has(e.pointerId)) return;
+  touchPoints.delete(e.pointerId);
+  if (touchDownSent && touchPoints.size === 0) {
+    touchDownSent = false;
+    sendMouseButton(pos[0], pos[1], 0, false, 0);
+    sendPointerGone(); // no hover on touch
+  }
+  lastCentroid = null;
+  lastSpread = null;
+  if (touchPoints.size === 2) [lastCentroid, lastSpread] = centroidAndSpread();
+}
+
 function setupInput() {
-  canvas.addEventListener("pointermove", (e) => { pendingMove = logicalPos(e); });
+  canvas.addEventListener("pointermove", (e) => {
+    if (e.pointerType === "touch") { touchMove(e, logicalPos(e)); e.preventDefault(); return; }
+    pendingMove = logicalPos(e);
+  });
   canvas.addEventListener("pointerdown", (e) => {
     canvas.focus();
     canvas.setPointerCapture(e.pointerId);
+    if (e.pointerType === "touch") { touchDown(e, logicalPos(e)); e.preventDefault(); return; }
     const [x, y] = logicalPos(e);
     sendMouseButton(x, y, e.button, true, mods(e));
     e.preventDefault();
   });
-  canvas.addEventListener("pointerup", (e) => {
+  const upOrCancel = (e) => {
+    if (e.pointerType === "touch") { touchEnd(e, logicalPos(e)); e.preventDefault(); return; }
     const [x, y] = logicalPos(e);
     sendMouseButton(x, y, e.button, false, mods(e));
     e.preventDefault();
+  };
+  canvas.addEventListener("pointerup", upOrCancel);
+  canvas.addEventListener("pointercancel", upOrCancel);
+  canvas.addEventListener("pointerleave", (e) => {
+    if (e.pointerType === "touch") return; // handled by up/cancel
+    sendPointerGone();
   });
-  canvas.addEventListener("pointerleave", () => sendPointerGone());
   canvas.addEventListener("contextmenu", (e) => e.preventDefault());
   canvas.addEventListener("wheel", (e) => {
     // deltaMode: 0=pixel (≈ logical points at ppp mapping), 1=line, 2=page.

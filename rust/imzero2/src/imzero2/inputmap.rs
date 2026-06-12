@@ -109,6 +109,13 @@ impl InputTranslator {
             E::PointerGone(_) => {
                 out.push(egui::Event::PointerGone);
             }
+            E::PinchZoom(z) => {
+                // Touch pinch; sanitize against zero/NaN from a misbehaving
+                // client (egui multiplies zoom state by this factor).
+                if z.factor.is_finite() && z.factor > 0.0 {
+                    out.push(egui::Event::Zoom(z.factor.clamp(0.2, 5.0)));
+                }
+            }
         }
     }
 }

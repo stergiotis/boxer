@@ -49,6 +49,12 @@ WebSocket upgrade — requests are dispatched by sniffing the upgrade
 header, and the page connects back to its own origin. One port is
 therefore enough to forward or proxy.
 
+Touch clients (iPad etc.): the viewer translates gestures — one finger
+acts as the pointer (tap = click, drag = pointer drag, which scrolls in
+egui scroll areas via drag-to-scroll), two fingers scroll
+trackpad-style and pinch to zoom. Three and more fingers are ignored;
+there is no long-press right-click yet.
+
 ### Viewing from another host
 
 The recommended path is an SSH tunnel from the viewing machine — it

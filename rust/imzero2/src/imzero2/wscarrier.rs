@@ -259,8 +259,11 @@ async fn serve_page(mut stream: tokio::net::TcpStream, page: &str) {
     // single-page server has no routing worth parsing.
     let mut buf = [0u8; 4096];
     let _ = stream.read(&mut buf).await;
+    // no-store: the page is embedded in the binary and tiny; a browser
+    // heuristically caching yesterday's viewer against today's server is
+    // the only thing caching could buy here.
     let response = format!(
-        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n{}",
         page.len(),
         page
     );
