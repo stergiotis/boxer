@@ -135,8 +135,8 @@ machine-readable JSON form is emitted alongside.
 - The dominant wasm chokepoint is two pervasively-imported leaves:
   `public/observability/eh` imports `os/exec` (`zerolog.go`) and `eh/eb` (plus
   `github.com/rs/zerolog`) imports `net` (`builder.go`). Making a portable core
-  viable starts there. The survey is the instrument that makes such chokepoints
-  visible and measurable.
+  viable starts there (done 2026-06-12 — see the Update below). The survey is the
+  instrument that makes such chokepoints visible and measurable.
 - The verdict set is a snapshot for a given TinyGo + the repo's current tags; it
   is reproducible (`--json`) and cheap to re-run as either moves.
 
@@ -165,6 +165,55 @@ internal/ packages excluded as un-probeable):
   from VCS), never imports test-only or internal/ packages, and scores
   infrastructure failures *inconclusive* rather than Red.
 
+### Update 2026-06-12 — the two chokepoints cut; eh/eb/cbor-builder compile under TinyGo
+
+Both chokepoints named above are now cut at the `eh` seam, so the
+error-handling core (imported by ~337 files) no longer drags `os/exec` or `net`
+into a TinyGo build. The cuts are behind build tags: a normal `go build` behaves
+exactly as before — the only signature change, `IPAddr`'s, has no callers — and
+only `tinygo` builds take the slim path.
+
+- **`os/exec` (`eh`).** `detectedGoRoot`'s lone `exec.Command("go env GOROOT")`
+  fallback — a cosmetic path-shortener that already tolerated an empty result —
+  moved behind `goRootFromToolchain`: `goroot_native.go` (`//go:build !tinygo`)
+  keeps the exec call, `goroot_tinygo.go` (`//go:build tinygo`) returns `""`.
+- **`net` via `zerolog` (`eh`).** The zerolog-free fact model
+  (`gatherFactsAndStacks`, `errorFact`, `MarshalError`, the `WalkStreams`
+  projection) split into a new untagged `facts.go`; everything importing
+  `github.com/rs/zerolog` stayed in `zerolog.go` + `eh_format_zerolog.go`, now
+  `//go:build !tinygo`. Under TinyGo the structured zerolog egress and console
+  formatter are absent by design (a guest wires no zerolog sink); `WalkStreams`
+  still exposes the same fact tree everywhere.
+- **`net` via `eb`/`cbor-builder`.** `CborKVBuilder.IPAddr` and
+  `eb.ErrorBuilder.IPAddr` were retyped `net.IP → netip.Addr` (`net/netip` is
+  TinyGo-clean; the raw-socket `net` package is not). The interface's unused,
+  documentation-only `*zerolog.Event` conformance was dropped — `zerolog.Event`
+  is externally fixed to `net.IP`, so that archetype and TinyGo-cleanliness
+  cannot coexist; the sole production implementor `*eb.ErrorBuilder` still
+  conforms. (This also retired a latent, callerless nil-`To16` panic in the old
+  IPv6 branch.)
+
+Verification — a synthetic `main` over the exported surface of `eh`, `eb`, and
+`cbor/builder` links cleanly under TinyGo 0.41.1 / Go 1.26.4 on every target:
+
+| target          | verdict | artifact |
+|-----------------|---------|----------|
+| `wasi` (wasip1) | green   | 6.6 MB   |
+| `wasm` (js)     | green   | 6.5 MB   |
+| `wasm-unknown`  | green   | 5.0 MB   |
+
+Native `go build`/`go test` under the repo tags are unchanged (the `eh` suite,
+including the `errorContainer`/`CompactStackTrace` cases that drive the zerolog
+egress, still passes).
+
+This realizes the `--assume-clean eh,zerolog` counterfactual (open question 2)
+for real on the three seam packages. A full re-survey to re-count the lifted
+packages is deferred — the `wasmsurvey` tool is being extended in a parallel
+branch. Packages importing `zerolog`, `net`, `os/exec`, Arrow, or `x/tools`
+*directly* stay Red; the seam lifts only what was blocked *solely* through `eh`.
+Making `zerolog` itself net-free (for guests that use it directly) stays out of
+scope — that needs a fork or replacement.
+
 ## Alternatives considered
 
 - **Static only (O1).** Rejected as the *final* answer: it cannot tell a
@@ -184,7 +233,8 @@ internal/ packages excluded as un-probeable):
    TinyGo 0.41.1 honors it; json/v2-using packages compile Green.
 2. ~~**Counterfactual ("what-if") view.**~~ — **shipped** as `--assume-clean
    <prefix,…>`, which treats matching packages as Green sinks (`eh,zerolog` ⇒
-   ~110 packages leave the Red wall).
+   ~110 packages leave the Red wall). As of 2026-06-12 the assumption is *real*
+   for `eh`/`eb`/`cbor-builder` — see the Update under Consequences.
 3. **Persisting results as leeway/runtime.facts** (mirroring ADR-0064 SD7) — the
    report is markdown + JSON for now.
 4. **`godepview` verdict column** — deferred (see Alternatives).
