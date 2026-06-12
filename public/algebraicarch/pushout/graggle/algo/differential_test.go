@@ -162,9 +162,8 @@ func buildRandomGraggle(rt *rapid.T) *store.Graggle {
 	for i := 0; i < extra; i++ {
 		src := ids[rapid.IntRange(0, len(ids)-1).Draw(rt, "src")]
 		dest := ids[rapid.IntRange(1, len(ids)-1).Draw(rt, "dest")] // never into root
-		if src == dest {
-			continue
-		}
+		// src == dest is allowed: self-edges are representable engine
+		// state and were a detector blind spot once.
 		if err := g.AddEdge(src, dest, ph("extra")); err != nil {
 			rt.Fatalf("AddEdge: %v", err)
 		}

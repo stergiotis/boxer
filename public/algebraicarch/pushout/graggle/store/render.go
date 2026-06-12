@@ -94,7 +94,7 @@ func (inst *Graggle) renderWithConflicts() []byte {
 			visited[v] = true
 		}
 
-		if len(sccs[scc]) > 1 {
+		if len(sccs[scc]) > 1 || liveSelfEdge(inst, sccs[scc][0]) {
 			buf.WriteString(">>>>>>> cycle conflict\n")
 			for _, v := range sccs[scc] {
 				if v == t.RootNodeID {
@@ -153,6 +153,16 @@ func (inst *Graggle) renderWithConflicts() []byte {
 	}
 
 	return buf.Bytes()
+}
+
+// liveSelfEdge reports whether v carries a live/pseudo edge to itself.
+func liveSelfEdge(g *Graggle, v t.NodeID) bool {
+	for w := range g.LiveChildren(v) {
+		if w == v {
+			return true
+		}
+	}
+	return false
 }
 
 // RenderLines returns the rendered output split into lines (each line keeps

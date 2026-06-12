@@ -146,14 +146,14 @@ func (inst *Graggle) DeletedNodeCount() int {
 // downContext: nodes that should follow this node.
 func (inst *Graggle) AddNode(id t.NodeID, content []byte, patch t.PatchHash, upContext, downContext []t.NodeID) error {
 	if inst.HasNode(id) {
-		return eh.Errorf("node %v already exists", id)
+		return eh.Errorf("node %v: %w", id, ErrNodeExists)
 	}
 	inst.nodes.Add(id)
 	inst.contents[id] = content
 
 	for _, up := range upContext {
 		if !inst.HasNode(up) {
-			return eh.Errorf("up-context node %v does not exist", up)
+			return eh.Errorf("up-context node %v: %w", up, ErrNodeMissing)
 		}
 		kind := t.EdgeKindLive
 		if inst.IsDeleted(up) {
@@ -168,7 +168,7 @@ func (inst *Graggle) AddNode(id t.NodeID, content []byte, patch t.PatchHash, upC
 	}
 	for _, down := range downContext {
 		if !inst.HasNode(down) {
-			return eh.Errorf("down-context node %v does not exist", down)
+			return eh.Errorf("down-context node %v: %w", down, ErrNodeMissing)
 		}
 		kind := t.EdgeKindLive
 		if inst.IsDeleted(down) {
@@ -200,10 +200,10 @@ func (inst *Graggle) DeleteNode(id t.NodeID, deleter t.PatchHash) error {
 		return nil
 	}
 	if !inst.nodes.Contains(id) {
-		return eh.Errorf("node %v does not exist", id)
+		return eh.Errorf("node %v: %w", id, ErrNodeMissing)
 	}
 	if id == t.RootNodeID {
-		return eh.Errorf("cannot delete root node")
+		return eh.Errorf("%w", ErrRootImmutable)
 	}
 
 	// Move from live to deleted.
@@ -245,11 +245,11 @@ func (inst *Graggle) DeleteNode(id t.NodeID, deleter t.PatchHash) error {
 // pseudo-edge recomputation handles each independently.
 func (inst *Graggle) UndeleteNode(id t.NodeID, undeleter t.PatchHash) error {
 	if !inst.deletedNodes.Contains(id) {
-		return eh.Errorf("node %v is not deleted", id)
+		return eh.Errorf("node %v: %w", id, ErrNotDeleted)
 	}
 	set := inst.deleters[id]
 	if _, ok := set[undeleter]; !ok {
-		return eh.Errorf("node %v was not deleted by patch %s (deleters: %s)", id, undeleter, deleterList(set))
+		return eh.Errorf("node %v, undeleter %s (deleters: %s): %w", id, undeleter, deleterList(set), ErrWrongUndeleter)
 	}
 	if len(set) > 1 {
 		// Other still-applied patches keep the tombstone alive.
@@ -259,7 +259,7 @@ func (inst *Graggle) UndeleteNode(id t.NodeID, undeleter t.PatchHash) error {
 	// Last deleter: actual resurrection. The purge check applies only
 	// here — removing a non-final deleter never needs the content back.
 	if _, purged := inst.contentPurged[id]; purged {
-		return eh.Errorf("node %v has been swept (content purged past retention horizon); patch is permanent past retention", id)
+		return eh.Errorf("node %v has been swept; patch is permanent past retention: %w", id, ErrContentPurged)
 	}
 	delete(inst.deleters, id)
 
@@ -370,10 +370,10 @@ func (inst *Graggle) dropReasonsForRep(rep t.NodeID) {
 // AddEdge adds a directed edge between two existing nodes.
 func (inst *Graggle) AddEdge(src, dest t.NodeID, patch t.PatchHash) error {
 	if !inst.HasNode(src) {
-		return eh.Errorf("source node %v does not exist", src)
+		return eh.Errorf("source node %v: %w", src, ErrNodeMissing)
 	}
 	if !inst.HasNode(dest) {
-		return eh.Errorf("dest node %v does not exist", dest)
+		return eh.Errorf("dest node %v: %w", dest, ErrNodeMissing)
 	}
 	kind := t.EdgeKindLive
 	if inst.IsDeleted(src) || inst.IsDeleted(dest) {

@@ -257,7 +257,7 @@ func (inst *Patch) validateAgainst(g t.GraphReaderI) (err error) {
 		switch c.Kind {
 		case ChangeKindNewNode:
 			if exists(c.NodeID) {
-				err = eh.Errorf("node %v already exists", c.NodeID)
+				err = eh.Errorf("node %v: node already exists", c.NodeID)
 				return
 			}
 			for _, up := range c.UpContext {
@@ -351,11 +351,11 @@ func (inst *Patch) Unapply(g t.GraphStoreI) (err error) {
 			continue
 		}
 		if _, own := ownDeletes[c.NodeID]; !own {
-			err = eh.Errorf("unapply %s: node %v is tombstoned by another still-applied patch; unapply dependents first", inst.Hash, c.NodeID)
+			err = eh.Errorf("unapply %s: node %v is tombstoned by another still-applied patch: %w", inst.Hash, c.NodeID, ErrHasDependents)
 			return
 		}
 		if n, known := deleterCount(c.NodeID); known && n > 1 {
-			err = eh.Errorf("unapply %s: node %v is tombstoned by %d patches; unapply dependents first", inst.Hash, c.NodeID, n)
+			err = eh.Errorf("unapply %s: node %v is tombstoned by %d patches: %w", inst.Hash, c.NodeID, n, ErrHasDependents)
 			return
 		}
 	}
@@ -376,7 +376,7 @@ func (inst *Patch) Unapply(g t.GraphStoreI) (err error) {
 		if n, known := deleterCount(c.NodeID); known && n > 1 {
 			continue
 		}
-		err = eh.Errorf("unapply %s: node %v has been swept (content purged past retention horizon); patch is permanent past retention", inst.Hash, c.NodeID)
+		err = eh.Errorf("unapply %s: node %v has been swept: %w", inst.Hash, c.NodeID, ErrRetentionPermanent)
 		return
 	}
 
@@ -435,7 +435,7 @@ func assertNoForeignEdges(g t.GraphReaderI, id t.NodeID, own t.PatchHash) (err e
 			continue // pseudo-edges are derived, not authored
 		}
 		if e.IntroducedBy != own {
-			err = eh.Errorf("node %v has foreign forward edge from patch %s; unapply dependents first", id, e.IntroducedBy)
+			err = eh.Errorf("node %v has foreign forward edge from patch %s: %w", id, e.IntroducedBy, ErrHasDependents)
 			return
 		}
 	}
@@ -444,7 +444,7 @@ func assertNoForeignEdges(g t.GraphReaderI, id t.NodeID, own t.PatchHash) (err e
 			continue
 		}
 		if e.IntroducedBy != own {
-			err = eh.Errorf("node %v has foreign back edge from patch %s; unapply dependents first", id, e.IntroducedBy)
+			err = eh.Errorf("node %v has foreign back edge from patch %s: %w", id, e.IntroducedBy, ErrHasDependents)
 			return
 		}
 	}

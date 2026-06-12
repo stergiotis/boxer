@@ -210,10 +210,14 @@ type ConflictInfo struct {
 func DetectConflicts(g t.GraphReaderI) []ConflictInfo {
 	var conflicts []ConflictInfo
 
-	// Cyclic conflicts: multi-vertex SCCs.
+	// Cyclic conflicts: multi-vertex SCCs, plus single-vertex SCCs with
+	// a self-edge — Tarjan reports those as singletons, but a self-loop
+	// is a cycle and TopoSort refuses to order it (found by the snapshot
+	// fuzzer via qc invariant 13: LinearOrder()==nil with an empty
+	// conflict list).
 	sccs := Tarjan(g)
 	for _, scc := range sccs {
-		if len(scc) > 1 {
+		if len(scc) > 1 || hasSelfEdge(g, scc[0]) {
 			conflicts = append(conflicts, ConflictInfo{
 				Kind:  "cycle",
 				Nodes: scc,
@@ -299,6 +303,16 @@ func DetectConflicts(g t.GraphReaderI) []ConflictInfo {
 	}
 
 	return conflicts
+}
+
+// hasSelfEdge reports whether v has a live/pseudo edge to itself.
+func hasSelfEdge(g t.GraphReaderI, v t.NodeID) bool {
+	for w := range g.LiveChildren(v) {
+		if w == v {
+			return true
+		}
+	}
+	return false
 }
 
 // hasPath checks if there is a directed path from src to dest in the live subgraph.
