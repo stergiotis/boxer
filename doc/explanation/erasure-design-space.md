@@ -147,6 +147,7 @@ superseded options are listed in the shape they were proposed.
 
 - [ADR-0025 — Right-to-Erasure Architecture for the Pushout VCS](../adr/0025-pushout-forget-architecture.md)
 - [ADR-0027 — Swiss-Only Forget Architecture for the Pushout VCS](../adr/0027-pushout-forget-swiss-fadp.md)
+- [Commitments and Zero-Knowledge Proofs](commitments-and-zero-knowledge.md) — the cryptographic abstraction behind family (a), and why proof systems are a separable layer
 - [Article 29 WP Opinion 05/2014 on Anonymisation Techniques (WP216)](https://ec.europa.eu/justice/article-29/documentation/opinion-recommendation/files/2014/wp216_en.pdf)
 - [EDPB Guidelines 02/2025 on blockchain](https://www.edpb.europa.eu/system/files/2025-04/edpb_guidelines_202502_blockchain_en.pdf)
 - `public/algebraicarch/pushout/` — the system under analysis

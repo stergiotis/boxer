@@ -316,6 +316,7 @@ Background and context:
 In-repo siblings:
 
 - doc/explanation/erasure-design-space.md — taxonomy (families, two-store decomposition, operational modes, three operations); referenced throughout this ADR for vocabulary.
+- doc/explanation/commitments-and-zero-knowledge.md — what a commitment is and how it relates to zero-knowledge proofs; theory behind SD6 and Alternative G.
 - [ADR-0027 — Swiss-Only Forget Architecture for the Pushout VCS](0027-pushout-forget-swiss-fadp.md) — FADP-scope variant; uses the same taxonomy with different trade-offs.
 
 In-repo code:
