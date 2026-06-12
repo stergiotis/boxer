@@ -18,7 +18,10 @@ import (
 
 // --- ReadSettings: CST → Go ---
 
-// ReadSettings parses a SQL query and returns all settings as a map of Go values.
+// ReadSettings parses a SQL query and returns the settings of the
+// statement's first SELECT as a map of Go values. SETTINGS clauses inside
+// subqueries, CTE bodies, or later UNION branches are out of scope — they
+// belong to their own SELECT, not to the statement.
 // Value types: int64, float64, string (unquoted), nil (NULL), []any (array), *Tuple (tuple).
 // Returns an empty map if the query has no SETTINGS clause.
 func ReadSettings(sql string) (settings map[string]any, err error) {
@@ -60,16 +63,21 @@ func ReadSettings(sql string) (settings map[string]any, err error) {
 	return
 }
 
+// findSettingsClause returns the SETTINGS clause of the statement's first
+// SELECT (a direct child of that selectStmt). Clauses inside subqueries,
+// CTE bodies, or later UNION branches belong to their own SELECT and are
+// never returned.
 func findSettingsClause(pr *nanopass.ParseResult) *grammar1.SettingsClauseContext {
-	var result *grammar1.SettingsClauseContext
-	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-		if sc, ok := ctx.(*grammar1.SettingsClauseContext); ok {
-			result = sc
-			return false
+	stmt := findOutermostSelectStmt(pr)
+	if stmt == nil {
+		return nil
+	}
+	for i := 0; i < stmt.GetChildCount(); i++ {
+		if sc, ok := stmt.GetChild(i).(*grammar1.SettingsClauseContext); ok {
+			return sc
 		}
-		return true
-	})
-	return result
+	}
+	return nil
 }
 
 func extractSettingExpr(expr *grammar1.SettingExprContext) (name string, val any, err error) {

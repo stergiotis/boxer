@@ -677,11 +677,13 @@ func TestNormalizeIdentifiersPreservesOperators(t *testing.T) {
 }
 
 func TestNormalizeIdentifiersParamSlot(t *testing.T) {
+	// ClickHouse parameter slots take a bare name and a bare type — the
+	// server rejects quoted spellings. The pass must leave both untouched.
 	got, err := passes.CanonicalizeIdentifiers.Run("SELECT {p: UInt64} FROM t")
 	require.NoError(t, err)
-	assert.Contains(t, got, `"p"`)
-	// UInt64 is already an IDENTIFIER token (not a keyword), so it gets quoted too
-	assert.Contains(t, got, `"UInt64"`)
+	assert.Contains(t, got, "{p: UInt64}")
+	assert.NotContains(t, got, `"p"`)
+	assert.NotContains(t, got, `"UInt64"`)
 }
 
 func TestNormalizeIdentifiersInternalDoubleQuoteEscaping(t *testing.T) {

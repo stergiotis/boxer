@@ -9,17 +9,22 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
+// Precedence mirrors the columnExpr alternative order in Grammar1: an
+// EARLIER alternative binds TIGHTER. BETWEEN and the ternary operator are
+// the last operator alternatives — they bind looser than OR (verified by
+// parse trees: `a BETWEEN b AND c OR d` ≡ `a BETWEEN b AND (c OR d)`,
+// `a ? b : c OR d` ≡ `a ? b : (c OR d)`).
 const (
-	precOr         int32 = 1
-	precAnd        int32 = 2
-	precNot        int32 = 3
-	precIsNull     int32 = 4
-	precComparison int32 = 5
-	precBetween    int32 = 5
-	precAddSub     int32 = 6
-	precMulDiv     int32 = 7
-	precNegate     int32 = 8
-	precTernary    int32 = 9
+	precTernary    int32 = 0
+	precBetween    int32 = 1
+	precOr         int32 = 2
+	precAnd        int32 = 3
+	precNot        int32 = 4
+	precIsNull     int32 = 5
+	precComparison int32 = 6
+	precAddSub     int32 = 7
+	precMulDiv     int32 = 8
+	precNegate     int32 = 9
 	precAtom       int32 = 99
 )
 
@@ -144,7 +149,7 @@ func isINRightOperand(parenNode antlr.ParserRuleContext, parent antlr.ParserRule
 	}
 }
 
-func canRemoveParens(inner antlr.ParserRuleContext, parent antlr.ParserRuleContext, parenNode antlr.ParserRuleContext) bool {
+func canRemoveParens(pr *nanopass.ParseResult, inner antlr.ParserRuleContext, parent antlr.ParserRuleContext, parenNode antlr.ParserRuleContext) bool {
 	if isINRightOperand(parenNode, parent) {
 		return false
 	}
@@ -155,6 +160,20 @@ func canRemoveParens(inner antlr.ParserRuleContext, parent antlr.ParserRuleConte
 		if innerStartsWithMinus(inner) {
 			return false
 		}
+	}
+
+	// Same hazard with binary minus when the source has no whitespace:
+	// a-(-5) → a--5 starts a line comment. Keep the parens whenever the
+	// token immediately before '(' is a dash and the inner starts with one.
+	if innerStartsWithMinus(inner) && dashPrecedesParen(pr, parenNode) {
+		return false
+	}
+
+	// BETWEEN owns an AND inside its own syntax; removing parens around its
+	// operands can hand that AND to the wrong owner (`a BETWEEN (b AND c)
+	// AND d` reparses with a different middle operand). Only atoms are safe.
+	if _, isParentBetween := parent.(*grammar1.ColumnExprBetweenContext); isParentBetween {
+		return exprPrecedence(inner) == precAtom
 	}
 
 	// If the inner is unary minus and it's NOT the left operand of a binary operator,
@@ -186,7 +205,22 @@ func canRemoveParens(inner antlr.ParserRuleContext, parent antlr.ParserRuleConte
 // This covers both ColumnExprNegate (-expr) and negative literals (-1).
 func innerStartsWithMinus(ctx antlr.ParserRuleContext) bool {
 	startTok := ctx.GetStart()
-	return startTok.GetText() == "-"
+	return startTok != nil && startTok.GetText() == "-"
+}
+
+// dashPrecedesParen reports whether the token immediately before the
+// paren expression's '(' — with no intervening hidden tokens — is a dash.
+func dashPrecedesParen(pr *nanopass.ParseResult, parenNode antlr.ParserRuleContext) bool {
+	lparen := parenNode.GetStart()
+	if lparen == nil {
+		return false
+	}
+	idx := lparen.GetTokenIndex()
+	if idx == 0 {
+		return false
+	}
+	prev := pr.TokenStream.Get(idx - 1)
+	return prev.GetTokenType() == grammar1.ClickHouseLexerDASH
 }
 
 // RemoveRedundantParens removes parentheses that are unnecessary given
@@ -231,7 +265,7 @@ func removeRedundantParensImpl(sql string) (result string, err error) {
 			return true
 		}
 
-		if canRemoveParens(inner, parent, paren) {
+		if canRemoveParens(pr, inner, parent, paren) {
 			removeSurroundingParens(rw, paren)
 		}
 

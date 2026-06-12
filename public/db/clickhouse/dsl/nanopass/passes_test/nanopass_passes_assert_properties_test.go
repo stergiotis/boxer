@@ -18,8 +18,11 @@ var nestedFormsCorpus = []string{
 	"SELECT CASE WHEN CASE WHEN a = 1 THEN 'inner' ELSE 'other' END = 'inner' THEN 'yes' ELSE 'no' END FROM t",
 	"SELECT a ? b ? c : d : e FROM t",
 	"SELECT CAST(CAST(a AS UInt64) AS UInt32) FROM t",
+	"SELECT CAST(a::Int64 + 1 AS String) FROM t",
 	"SELECT array(array(1, 2), array(3, 4)) FROM t",
 	"SELECT [[1, 2], [3, 4]] FROM t",
+	"SELECT SUBSTRING(DATE '2024-01-02' FROM 1 FOR 4) FROM t",
+	"SELECT EXTRACT(DAY FROM DATE '2024-01-01') FROM t",
 }
 
 // TestAssertProperties exercises every pass against the shared corpus and
@@ -52,12 +55,13 @@ func TestAssertProperties(t *testing.T) {
 		{name: "CanonicalizeIdentifiers", pass: passes.CanonicalizeIdentifiers},
 		{name: "CanonicalizeEquals", pass: passes.CanonicalizeEquals},
 		{name: "CanonicalizeJoin", pass: passes.CanonicalizeJoin},
-		{name: "CanonicalizeSugar", pass: passes.CanonicalizeSugar},
+
 		{name: "CanonicalizeWhitespace", pass: passes.CanonicalizeWhitespace},
 		{name: "CanonicalizeWhitespaceSingleLine", pass: passes.CanonicalizeWhitespaceSingleLine},
 		{name: "CanonicalizeMultiIf", pass: passes.CanonicalizeMultiIf},
 		{name: "RemoveRedundantParens", pass: passes.RemoveRedundantParens},
 
+		{name: "CanonicalizeSugar", pass: passes.CanonicalizeSugar, nested: true},
 		{name: "CanonicalizeCaseConditionals", pass: passes.CanonicalizeCaseConditionals, nested: true},
 		{name: "CanonicalizeTernary", pass: passes.CanonicalizeTernary, nested: true},
 		{name: "CanonicalizeCasts", pass: passes.CanonicalizeCasts, nested: true},

@@ -78,10 +78,12 @@ func collectReferencedParamNames(body string, prefix string) (names map[string]b
 		switch c := ctx.(type) {
 		case *grammar1.ParamSlotContext:
 			if id := c.Identifier(); id != nil {
-				names[id.GetText()] = true
+				names[nanopass.DecodeIdentifier(id.GetText())] = true
 			}
 		case *grammar1.IdentifierContext:
-			text := c.GetText()
+			// Decode first — CTE-injected references may have been
+			// double-quoted by CanonicalizeIdentifiers.
+			text := nanopass.DecodeIdentifier(c.GetText())
 			if !strings.HasPrefix(text, bareNamePrefix) {
 				return true
 			}

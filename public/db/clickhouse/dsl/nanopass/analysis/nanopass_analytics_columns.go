@@ -14,7 +14,10 @@ type ColumnRef struct {
 	Column string // column name (may be nested like "a.b")
 }
 
-// ExtractColumns walks the CST and returns all column references found in ColumnIdentifier nodes.
+// ExtractColumns walks the CST and returns all column references found in
+// ColumnIdentifier nodes, with the table qualifier decoded (quoting
+// removed). Column may be a nested path ("a.b") and keeps its source
+// spelling per segment.
 func ExtractColumns(pr *nanopass.ParseResult) (refs []ColumnRef) {
 	nodes := nanopass.FindAll(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
 		_, ok := ctx.(*grammar1.ColumnIdentifierContext)
@@ -25,7 +28,7 @@ func ExtractColumns(pr *nanopass.ParseResult) (refs []ColumnRef) {
 		cid := n.(*grammar1.ColumnIdentifierContext)
 		ref := ColumnRef{}
 		if cid.TableIdentifier() != nil {
-			ref.Table = cid.TableIdentifier().GetText()
+			ref.Table = nanopass.DecodeIdentifier(cid.TableIdentifier().GetText())
 		}
 		if cid.NestedIdentifier() != nil {
 			ref.Column = cid.NestedIdentifier().GetText()

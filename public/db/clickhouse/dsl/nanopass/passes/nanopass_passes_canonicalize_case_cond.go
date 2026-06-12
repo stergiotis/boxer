@@ -135,8 +135,7 @@ func rewriteMultiIfToIf(rw *antlr.TokenStreamRewriter, pr *nanopass.ParseResult,
 		return
 	}
 
-	name := strings.ToLower(nameIdent.GetText())
-	if name != "multiif" {
+	if nanopass.NormalizeCallName(nameIdent.GetText()) != "multiif" {
 		return
 	}
 

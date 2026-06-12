@@ -48,6 +48,11 @@ func canonicalizeCastsOnce(sql string) (result string, err error) {
 			}
 			if canonicalizeCastExpr(pr, rw, castCtx) {
 				changed = true
+				// The whole node was replaced — casts nested deeper inside
+				// (e.g. CAST(x::Int64 + 1 AS String)) must not be rewritten
+				// in the same walk or the edits would overlap; the fixpoint
+				// re-parse picks them up.
+				return false
 			}
 		}
 		return true
@@ -79,6 +84,21 @@ func containsNonCanonicalCastChild(castCtx *grammar1.ColumnExprCastContext) bool
 	return false
 }
 
+// isColumnTypeExprNode reports whether the node is any alternative of the
+// columnTypeExpr rule — simple (UInt64), complex (Nullable(String)),
+// parametric (FixedString(16), DateTime64(3)), nested, or enum.
+func isColumnTypeExprNode(ctx antlr.ParserRuleContext) bool {
+	switch ctx.(type) {
+	case *grammar1.ColumnTypeExprSimpleContext,
+		*grammar1.ColumnTypeExprComplexContext,
+		*grammar1.ColumnTypeExprParamContext,
+		*grammar1.ColumnTypeExprNestedContext,
+		*grammar1.ColumnTypeExprEnumContext:
+		return true
+	}
+	return false
+}
+
 // canonicalizeCastExpr handles ColumnExprCastContext which covers:
 //   - expr::Type           (children: expr, ::, ColumnTypeExpr)
 //   - CAST(expr AS Type)   (children: CAST, (, expr, AS, ColumnTypeExpr, ))
@@ -100,49 +120,27 @@ func canonicalizeCastExpr(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewrite
 		// Could be CAST(expr AS Type) or :: form where first token is something else.
 		// Check if it's CAST
 		term := firstChild.(*antlr.TerminalNodeImpl)
-		if strings.ToUpper(term.GetText()) == "CAST" {
-			// CAST(expr AS Type) form
-			// Children: CAST, (, expr, AS, TypeExpr, )
-			for i := 0; i < castCtx.GetChildCount(); i++ {
-				child := castCtx.GetChild(i)
-				switch c := child.(type) {
-				case *grammar1.ColumnTypeExprSimpleContext:
-					typeText = c.GetText()
-				case *grammar1.ColumnTypeExprComplexContext:
-					typeText = c.GetText()
-				case antlr.ParserRuleContext:
-					if exprNode == nil {
-						_, isSimple := child.(*grammar1.ColumnTypeExprSimpleContext)
-						_, isComplex := child.(*grammar1.ColumnTypeExprComplexContext)
-						if !isSimple && !isComplex {
-							exprNode = c
-						}
-					}
-				}
-			}
-		} else {
+		if strings.ToUpper(term.GetText()) != "CAST" {
 			// Not a CAST terminal — not a form we handle
 			return false
 		}
-	} else {
-		// First child is an expression → expr::Type form
-		// Children: expr, ::, ColumnTypeExpr
-		for i := 0; i < castCtx.GetChildCount(); i++ {
-			child := castCtx.GetChild(i)
-			switch c := child.(type) {
-			case *grammar1.ColumnTypeExprSimpleContext:
+	}
+	// Both forms carry exactly one columnTypeExpr child and one expression
+	// child; the remaining children are terminals (CAST, parens, AS, ::).
+	for i := 0; i < castCtx.GetChildCount(); i++ {
+		child := castCtx.GetChild(i)
+		c, isCtx := child.(antlr.ParserRuleContext)
+		if !isCtx {
+			continue
+		}
+		if isColumnTypeExprNode(c) {
+			if typeText == "" {
 				typeText = c.GetText()
-			case *grammar1.ColumnTypeExprComplexContext:
-				typeText = c.GetText()
-			case antlr.ParserRuleContext:
-				if exprNode == nil {
-					_, isSimple := child.(*grammar1.ColumnTypeExprSimpleContext)
-					_, isComplex := child.(*grammar1.ColumnTypeExprComplexContext)
-					if !isSimple && !isComplex {
-						exprNode = c
-					}
-				}
 			}
+			continue
+		}
+		if exprNode == nil {
+			exprNode = c
 		}
 	}
 
@@ -151,7 +149,10 @@ func canonicalizeCastExpr(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewrite
 	}
 
 	exprText := nanopass.NodeText(pr, exprNode)
-	replacement := "CAST(" + exprText + ", '" + typeText + "')"
+	// Enum types carry single-quoted member names (Enum8('a' = 1)) — escape
+	// them for splicing into the single-quoted type string.
+	escapedType := strings.ReplaceAll(typeText, `'`, `\'`)
+	replacement := "CAST(" + exprText + ", '" + escapedType + "')"
 	nanopass.ReplaceNode(rw, castCtx, replacement)
 	return true
 }

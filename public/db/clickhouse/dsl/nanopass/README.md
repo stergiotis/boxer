@@ -131,7 +131,7 @@ All passes live in [`passes/`](passes). Properties shown reflect declared `PassP
 | `CanonicalizeWhitespace` | Collapses whitespace, preserves single newlines | Yes |
 | `CanonicalizeWhitespaceSingleLine` | Collapses all whitespace to single spaces | Yes |
 | `CanonicalizeEquals` | Replaces `==` with `=` | Yes |
-| `CanonicalizeIdentifiers` | Wraps identifiers in double quotes | Yes |
+| `CanonicalizeIdentifiers` | Wraps identifiers in double quotes; param slots (`{name: Type}`) and type expressions stay bare | Yes |
 
 ### Structural (scope-aware)
 
@@ -146,13 +146,13 @@ All passes live in [`passes/`](passes). Properties shown reflect declared `PassP
 | Pass | Description | Properties |
 |------|-------------|-----------|
 | `CanonicalizeJoin` | Strictness-before-direction, removes OUTER, comma→CROSS, parenthesises USING | Idempotent |
-| `CanonicalizeSugar` | DATE/TIMESTAMP/EXTRACT/SUBSTRING/TRIM → function-call form | Idempotent |
+| `CanonicalizeSugar` | DATE/TIMESTAMP/EXTRACT/SUBSTRING/TRIM → function-call form; sugar nests, outermost first | NeedsFixedPoint |
 | `CanonicalizeCasts` | `expr::Type` and `CAST(expr AS Type)` → `CAST(expr, 'Type')` | NeedsFixedPoint |
 | `CanonicalizeCaseConditionals` | CASE → `if`/`multiIf`/`caseWithExpression`; leaf-level | NeedsFixedPoint |
 | `CanonicalizeMultiIf` | `multiIf(c, r, d)` (3-arg) → `if(c, r, d)` | Idempotent |
 | `CanonicalizeTernary` | `cond ? a : b` → `if(cond, a, b)`; leaf-level | NeedsFixedPoint |
 | `CanonicalizeConstructors(form)` | tuple/array between literal and function form | NeedsFixedPoint |
-| `RemoveRedundantParens` | Removes parentheses unnecessary given operator precedence | Idempotent |
+| `RemoveRedundantParens` | Removes parentheses unnecessary given operator precedence (grammar ladder: BETWEEN and `?:` bind looser than OR; parens around them and around BETWEEN operands are load-bearing) | Idempotent |
 
 `CanonicalizeFull(maxIter)` returns a `Sequence` of the above in the canonical order, ending in `CanonicalizeKeywordCase` and `CanonicalizeIdentifiers`.
 
@@ -160,9 +160,9 @@ All passes live in [`passes/`](passes). Properties shown reflect declared `PassP
 
 | Pass | Description | Properties |
 |------|-------------|-----------|
-| `SetFormat(name)` | Sets, replaces, or removes the FORMAT clause; mirrors into env.Format | Idempotent |
+| `SetFormat(name)` | Sets, replaces, or removes the FORMAT clause (inserted before a trailing `;`, never into a trailing comment); mirrors into env.Format | Idempotent |
 | `RemoveFormat` | `SetFormat("")` | Idempotent |
-| `WriteSettings(map)` | Replaces SETTINGS clause; mirrors into env.StatementSettings | Idempotent |
+| `WriteSettings(map)` | Replaces the statement's SETTINGS clause (= the first SELECT's; subquery/CTE/later-branch clauses are out of scope); mirrors into env.StatementSettings | Idempotent |
 | `ModifySettings(fn)` | Atomic read-modify-write of SETTINGS | (factory; not idempotent under arbitrary modifier) |
 
 ### Param Lifecycle
@@ -295,7 +295,15 @@ result, err := passes.ExpandColumns(schema, "prod").Run(
 
 ## Test Corpus
 
-Embedded SQL files in `testdata/corpus/` cover SELECT features from simple literals to complex CTEs with window functions, UNION ALL, parametric aggregates, JSON functions, ARRAY JOIN, PREWHERE, SETTINGS with arrays/tuples, and FORMAT clauses. Loaded via `embed.FS` with `testdata.LoadCorpus()`.
+Embedded SQL files in `testdata/corpus/` cover SELECT features from simple literals to complex CTEs with window functions, UNION ALL, parametric aggregates, JSON functions, ARRAY JOIN, PREWHERE, SETTINGS with arrays/tuples, and FORMAT clauses — plus the shapes surfaced by the 2026-06 reviews: chained CTEs, parenthesised unions, `selectStmt`-level WITH, bare aliases, projection scalar subqueries, table functions, quoted CTE references, nested WITH, non-ASCII literals, nested sugar/casts, tuple-IN, and precedence-sensitive parens. Loaded via `embed.FS` with `testdata.LoadCorpus()`.
+
+## Benchmarks
+
+`nanopass_test/nanopass_bench_test.go` benchmarks the core: `Parse` (the dominant per-pass cost — a pipeline re-parses per pass per fixpoint iteration), `ParseCanonical`, `BuildScopes`/`FlattenScopes`, `WalkCST`/`FindAll`, the rewrite cycle, `Pass.Run` (including the full `CanonicalizeFull` pipeline), `IsDiscardOutput`, `SourceRangeOf`, the identifier codec, and `MacroExpander`; `highlight_test` benchmarks the editor highlighter. Run:
+
+```
+go test -bench BenchmarkNanopass -benchmem -run xxx ./public/db/clickhouse/dsl/nanopass_test/
+```
 
 ## Test Strategy
 

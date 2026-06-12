@@ -590,7 +590,17 @@ func writeUnary(b *strings.Builder, un *UnaryData) {
 		writeExpr(b, un.Expr)
 	case UnaryOpNegate:
 		b.WriteByte('-')
-		writeExpr(b, un.Expr)
+		var inner strings.Builder
+		writeExpr(&inner, un.Expr)
+		t := inner.String()
+		if strings.HasPrefix(t, "-") {
+			// "--" would open a line comment — parenthesize the operand.
+			b.WriteByte('(')
+			b.WriteString(t)
+			b.WriteByte(')')
+		} else {
+			b.WriteString(t)
+		}
 	}
 }
 

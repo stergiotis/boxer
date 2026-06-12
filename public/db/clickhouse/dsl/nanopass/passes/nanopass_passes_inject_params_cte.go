@@ -109,19 +109,7 @@ func InjectParamsAsCTE(
 
 			modifiedQuery := query
 			for _, ap := range accepted {
-				slotPrefix := "{" + ap.info.FullName + ":"
-				for {
-					idx := strings.Index(modifiedQuery, slotPrefix)
-					if idx < 0 {
-						break
-					}
-					endIdx := strings.Index(modifiedQuery[idx:], "}")
-					if endIdx < 0 {
-						break
-					}
-					endIdx += idx
-					modifiedQuery = modifiedQuery[:idx] + ap.info.FullName + modifiedQuery[endIdx+1:]
-				}
+				modifiedQuery = replaceParamSlots(modifiedQuery, ap.info.FullName, ap.info.FullName)
 			}
 
 			cteQuery, insertErr := insertCTEDefinitions(modifiedQuery, accepted)

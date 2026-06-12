@@ -364,3 +364,112 @@ func TestRegressionIdentifierCodec(t *testing.T) {
 		assert.Equal(t, want, nanopass.DecodeIdentifier(reenc), "round-trip %q", want)
 	}
 }
+
+// --- Round 2 (2026-06-12, passes/analysis/highlight review) ---
+
+// R2-F1: nested sugar converges in one Run (NeedsFixedPoint).
+func TestRegressionSugarNestedConverges(t *testing.T) {
+	out, err := passes.CanonicalizeSugar.Run("SELECT SUBSTRING(DATE '2024-01-02' FROM 1 FOR 4)")
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT substring(toDate('2024-01-02'), 1, 4)", out)
+}
+
+// R2-F2: a cast nested deeper than a direct child must not produce
+// conflicting edits.
+func TestRegressionCastNestedDeep(t *testing.T) {
+	out, err := passes.CanonicalizeCasts.Run("SELECT CAST(x::Int64 + 1 AS String) FROM t")
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT CAST(CAST(x, 'Int64') + 1, 'String') FROM t", out)
+}
+
+// R2-F3: parametric type spellings canonicalize.
+func TestRegressionCastParametricType(t *testing.T) {
+	out, err := passes.CanonicalizeCasts.Run("SELECT CAST(x AS FixedString(16)) FROM t")
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT CAST(x, 'FixedString(16)') FROM t", out)
+}
+
+// R2-F13: only the RIGHT operand of IN becomes array(); a row tuple on the
+// left stays a tuple.
+func TestRegressionConstructorsINSides(t *testing.T) {
+	p := passes.CanonicalizeConstructors(passes.ConstructorFormFunction)
+	out, err := p.Run("SELECT (a, b) IN ((1, 2), (3, 4)) FROM t")
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT tuple(a, b) IN array(tuple(1, 2), tuple(3, 4)) FROM t", out)
+}
+
+// R2-F12: tuple(x) and tuple() have no literal spelling — they stay in
+// function form in the ToLiteral direction.
+func TestRegressionConstructorsSmallTuples(t *testing.T) {
+	p := passes.CanonicalizeConstructors(passes.ConstructorFormLiteral)
+	out, err := p.Run("SELECT tuple(1), tuple(), tuple(1, 2) FROM t")
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT tuple(1), tuple(), (1, 2) FROM t", out)
+}
+
+// R2-F23: BETWEEN and ternary bind looser than OR in this grammar —
+// their parens are load-bearing.
+func TestRegressionParensPrecedenceFloor(t *testing.T) {
+	out, err := passes.RemoveRedundantParens.Run("SELECT (a ? b : c) OR d FROM t")
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT (a ? b : c) OR d FROM t", out)
+
+	out, err = passes.RemoveRedundantParens.Run("SELECT (a BETWEEN b AND c) OR d FROM t")
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT (a BETWEEN b AND c) OR d FROM t", out)
+}
+
+// R2-F23c: removing parens must not fuse "- -" into a line comment.
+func TestRegressionParensMinusMinus(t *testing.T) {
+	out, err := passes.RemoveRedundantParens.Run("SELECT a-(-5) FROM t")
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT a-(-5) FROM t", out)
+}
+
+// R2-F25: FORMAT inserts before a trailing semicolon and never lands
+// inside a trailing line comment.
+func TestRegressionSetFormatAnchors(t *testing.T) {
+	out, err := passes.SetFormat("JSON").Run("SELECT 1;")
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT 1 FORMAT JSON;", out)
+
+	out, err = passes.SetFormat("JSON").Run("SELECT 1 -- trailing")
+	require.NoError(t, err)
+	f, err := passes.GetFormat(out)
+	require.NoError(t, err)
+	assert.Equal(t, "JSON", f)
+}
+
+// R2-F30: ReadSettings is scoped to the statement's first SELECT — clauses
+// in subqueries or later UNION branches don't shadow it.
+func TestRegressionSettingsScoping(t *testing.T) {
+	s, err := passes.ReadSettings("SELECT (SELECT 1 SETTINGS max_threads = 1) FROM t SETTINGS max_threads = 2")
+	require.NoError(t, err)
+	assert.Equal(t, uint64(2), s["max_threads"])
+
+	s, err = passes.ReadSettings("SELECT 1 SETTINGS max_threads = 1 UNION ALL SELECT 2 SETTINGS max_threads = 9")
+	require.NoError(t, err)
+	assert.Equal(t, uint64(1), s["max_threads"])
+}
+
+// R2-F46: a constant row tuple on the LEFT of IN is not the candidate list.
+func TestRegressionExtractINListSide(t *testing.T) {
+	cfg := passes.NewExtractLiteralsConfig(0)
+	out, err := passes.ExtractLiterals(cfg).Run("SELECT x IN (1, 2, 3), (1, 2, 3) IN ((1, 2, 3), (4, 5, 6)) FROM t")
+	require.NoError(t, err)
+	// The flat RHS list extracts as one Array param; the LHS row tuple of
+	// the second expression must NOT be turned into an Array param.
+	assert.Contains(t, out, "x IN {")
+	assert.NotContains(t, out, "} IN ((")
+}
+
+// R2-F51: param slots and type expressions stay bare under identifier
+// canonicalization — ClickHouse rejects quoted slot names/types.
+func TestRegressionIdentifiersPreserveSlots(t *testing.T) {
+	out, err := passes.CanonicalizeIdentifiers.Run("SELECT {p: UInt64}, CAST(x AS Nullable(String)) FROM t")
+	require.NoError(t, err)
+	assert.Contains(t, out, "{p: UInt64}")
+	assert.Contains(t, out, "Nullable(String)")
+	assert.NotContains(t, out, `"UInt64"`)
+	assert.NotContains(t, out, `"Nullable"`)
+}

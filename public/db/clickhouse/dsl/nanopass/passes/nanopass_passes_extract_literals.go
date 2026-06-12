@@ -75,7 +75,7 @@ func (inst *ExtractLiteralsConfig) IsWhitelisted(name string) bool {
 }
 
 func normalizeFunctionName(name string) string {
-	return strings.ToLower(strings.TrimSpace(name))
+	return nanopass.NormalizeCallName(strings.TrimSpace(name))
 }
 
 // --- Internal types ---
@@ -451,9 +451,23 @@ func isINExpression(prec3 *grammar1.ColumnExprPrecedence3Context) bool {
 	return false
 }
 
+// findTupleInPrecedence3 returns the tuple serving as the IN candidate list
+// — the RIGHT operand, i.e. the tuple after the IN token. A constant row
+// tuple on the LEFT ((1,2) IN (…)) is a value, not a list.
 func findTupleInPrecedence3(prec3 *grammar1.ColumnExprPrecedence3Context) *grammar1.ColumnExprTupleContext {
+	seenIN := false
 	for i := 0; i < prec3.GetChildCount(); i++ {
-		if tuple, ok := prec3.GetChild(i).(*grammar1.ColumnExprTupleContext); ok {
+		child := prec3.GetChild(i)
+		if term, ok := child.(*antlr.TerminalNodeImpl); ok {
+			if term.GetSymbol().GetTokenType() == grammar1.ClickHouseLexerIN {
+				seenIN = true
+			}
+			continue
+		}
+		if !seenIN {
+			continue
+		}
+		if tuple, ok := child.(*grammar1.ColumnExprTupleContext); ok {
 			return tuple
 		}
 	}
@@ -1124,21 +1138,60 @@ func InjectParams(sets []string, prefix string, query string) (result string, er
 	}
 	result = query
 	for name, value := range paramMap {
-		pfx := "{" + name + ":"
-		for {
-			idx := strings.Index(result, pfx)
-			if idx < 0 {
-				break
-			}
-			endIdx := strings.Index(result[idx:], "}")
-			if endIdx < 0 {
-				break
-			}
-			endIdx += idx
-			result = result[:idx] + value + result[endIdx+1:]
-		}
+		result = replaceParamSlots(result, name, value)
 	}
 	return
+}
+
+// replaceParamSlots replaces every `{name: Type}` slot in text with
+// replacement. The scan is quote-aware — slot-shaped text inside string
+// literals or quoted identifiers is left alone.
+func replaceParamSlots(text string, name string, replacement string) string {
+	slotPrefix := "{" + name + ":"
+	var b strings.Builder
+	b.Grow(len(text))
+	for i := 0; i < len(text); {
+		c := text[i]
+		if c == '\'' || c == '"' || c == '`' {
+			end := skipQuotedToken(text, i)
+			b.WriteString(text[i:end])
+			i = end
+			continue
+		}
+		if c == '{' && strings.HasPrefix(text[i:], slotPrefix) {
+			if close := strings.IndexByte(text[i:], '}'); close >= 0 {
+				b.WriteString(replacement)
+				i += close + 1
+				continue
+			}
+		}
+		b.WriteByte(c)
+		i++
+	}
+	return b.String()
+}
+
+// skipQuotedToken returns the index just past the quoted token starting at
+// text[start]. Handles backslash escapes and doubled closing quotes; an
+// unterminated quote consumes the rest of the string.
+func skipQuotedToken(text string, start int) int {
+	q := text[start]
+	i := start + 1
+	for i < len(text) {
+		switch {
+		case text[i] == '\\' && i+1 < len(text):
+			i += 2
+		case text[i] == q:
+			if i+1 < len(text) && text[i+1] == q {
+				i += 2
+				continue
+			}
+			return i + 1
+		default:
+			i++
+		}
+	}
+	return i
 }
 
 func InjectParamsWithCasts(sets []string, query string, prefix string, mapCanonicalToClickHouse func(canonical string) (string, error)) (result string, err error) {
@@ -1168,26 +1221,14 @@ func InjectParamsWithCasts(sets []string, query string, prefix string, mapCanoni
 	}
 	result = query
 	for name, entry := range paramMap {
-		pfx := "{" + name + ":"
-		for {
-			idx := strings.Index(result, pfx)
-			if idx < 0 {
-				break
+		replacement := entry.value
+		if entry.castCanonical != "" && mapCanonicalToClickHouse != nil {
+			chType, mapErr := mapCanonicalToClickHouse(entry.castCanonical)
+			if mapErr == nil && chType != "" {
+				replacement = entry.value + "::" + chType
 			}
-			endIdx := strings.Index(result[idx:], "}")
-			if endIdx < 0 {
-				break
-			}
-			endIdx += idx
-			replacement := entry.value
-			if entry.castCanonical != "" && mapCanonicalToClickHouse != nil {
-				chType, mapErr := mapCanonicalToClickHouse(entry.castCanonical)
-				if mapErr == nil && chType != "" {
-					replacement = entry.value + "::" + chType
-				}
-			}
-			result = result[:idx] + replacement + result[endIdx+1:]
 		}
+		result = replaceParamSlots(result, name, replacement)
 	}
 	return
 }

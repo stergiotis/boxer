@@ -99,11 +99,13 @@ func canonicalizeToLiteral(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewrit
 }
 
 func rewriteTupleToLiteral(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, funcExpr *grammar1.ColumnExprFunctionContext) {
-	argList := funcExpr.ColumnArgList()
-	if argList == nil {
-		nanopass.ReplaceNode(rw, funcExpr, "()")
+	// tuple() has no literal spelling ("()" does not parse) and tuple(x)
+	// would collapse to scalar parens "(x)" — both stay in function form.
+	args := extractFunctionArgs(pr, funcExpr)
+	if len(args) < 2 {
 		return
 	}
+	argList := funcExpr.ColumnArgList()
 	argsText := nanopass.NodeText(pr, argList.(antlr.ParserRuleContext))
 	nanopass.ReplaceNode(rw, funcExpr, "("+argsText+")")
 }
@@ -178,23 +180,31 @@ func rewriteTupleToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewri
 	nanopass.ReplaceNode(rw, ctx, "tuple("+innerText+")")
 }
 
-// isINTupleArg reports whether the tuple appears as the RHS of an `IN`
-// (or `NOT IN` / `GLOBAL IN`) expression.
+// isINTupleArg reports whether the tuple is the RIGHT operand of an `IN`
+// (or `NOT IN` / `GLOBAL IN`) expression. The left operand of a tuple-IN
+// ((a, b) IN (…)) is a row tuple and must stay a tuple — only the
+// list-of-candidates side becomes array(…).
 func isINTupleArg(ctx *grammar1.ColumnExprTupleContext) bool {
 	parent, ok := ctx.GetParent().(*grammar1.ColumnExprPrecedence3Context)
 	if !ok {
 		return false
 	}
+	inIdx := -1
 	for i := 0; i < parent.GetChildCount(); i++ {
-		term, ok := parent.GetChild(i).(*antlr.TerminalNodeImpl)
-		if !ok {
+		term, isTerm := parent.GetChild(i).(*antlr.TerminalNodeImpl)
+		if !isTerm {
 			continue
 		}
 		if term.GetSymbol().GetTokenType() == grammar1.ClickHouseLexerIN {
-			return true
+			inIdx = term.GetSymbol().GetTokenIndex()
+			break
 		}
 	}
-	return false
+	if inIdx < 0 {
+		return false
+	}
+	start := ctx.GetStart()
+	return start != nil && start.GetTokenIndex() > inIdx
 }
 
 func rewriteArrayToFunction(pr *nanopass.ParseResult, rw *antlr.TokenStreamRewriter, ctx *grammar1.ColumnExprArrayContext) {

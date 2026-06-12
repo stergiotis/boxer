@@ -13,7 +13,9 @@ import (
 //
 // Walks IdentifierContext and AliasContext nodes and ensures their tokens are
 // double-quoted. Keyword tokens used as names (e.g. a table named "system")
-// are quoted. JSON_TRUE/JSON_FALSE are skipped (boolean literals, not names).
+// are quoted. JSON_TRUE/JSON_FALSE are skipped (boolean literals, not names),
+// as are param slots ({name: Type}) and type expressions — ClickHouse
+// requires both bare.
 var CanonicalizeIdentifiers = nanopass.LiftBodyPass(
 	"CanonicalizeIdentifiers",
 	canonicalizeIdentifiersImpl,
@@ -36,6 +38,18 @@ func canonicalizeIdentifiersImpl(sql string) (result string, err error) {
 
 	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
 		switch c := ctx.(type) {
+		case *grammar1.ParamSlotContext:
+			// {name: Type} — ClickHouse parameter syntax takes a bare name
+			// and a bare type; quoting either breaks the slot.
+			return false
+		case *grammar1.ColumnTypeExprSimpleContext,
+			*grammar1.ColumnTypeExprComplexContext,
+			*grammar1.ColumnTypeExprParamContext,
+			*grammar1.ColumnTypeExprNestedContext,
+			*grammar1.ColumnTypeExprEnumContext:
+			// Type names (CAST targets, slot types) are not relations —
+			// ClickHouse does not accept them quoted.
+			return false
 		case *grammar1.IdentifierContext:
 			quoteIdentifierCtx(rw, c, processed)
 			return false

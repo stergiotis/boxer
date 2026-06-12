@@ -33,7 +33,7 @@ func ExtractFunctions(pr *nanopass.ParseResult) (refs []FunctionRef) {
 		switch ctx := n.(type) {
 		case *grammar1.ColumnExprFunctionContext:
 			ref := FunctionRef{
-				Name: ctx.Identifier().GetText(),
+				Name: nanopass.DecodeIdentifier(ctx.Identifier().GetText()),
 			}
 			{ // Detect parametric syntax: presence of two LPAREN tokens
 				lparens := ctx.AllLPAREN()
@@ -42,7 +42,7 @@ func ExtractFunctions(pr *nanopass.ParseResult) (refs []FunctionRef) {
 			refs = append(refs, ref)
 		case *grammar1.ColumnExprWinFunctionContext:
 			ref := FunctionRef{
-				Name:     ctx.Identifier().GetText(),
+				Name:     nanopass.DecodeIdentifier(ctx.Identifier().GetText()),
 				IsWindow: true,
 			}
 			refs = append(refs, ref)
@@ -50,7 +50,7 @@ func ExtractFunctions(pr *nanopass.ParseResult) (refs []FunctionRef) {
 			identifiers := ctx.AllIdentifier()
 			if len(identifiers) > 0 {
 				ref := FunctionRef{
-					Name:     identifiers[0].GetText(),
+					Name:     nanopass.DecodeIdentifier(identifiers[0].GetText()),
 					IsWindow: true,
 				}
 				refs = append(refs, ref)

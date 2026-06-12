@@ -302,15 +302,13 @@ func extractAliasedExpression(pr *nanopass.ParseResult, ctx *grammar1.ColumnExpr
 	return ""
 }
 
+// unquoteAlias maps an alias spelling to the name it denotes. Identifier
+// quoting (double quotes, backticks, escapes) goes through the shared
+// decoder; the single-quote form has no escape handling and is kept for
+// backward compatibility with string-ish alias spellings.
 func unquoteAlias(s string) string {
-	if len(s) < 2 {
-		return s
-	}
-	first := s[0]
-	last := s[len(s)-1]
-
-	if (first == '"' && last == '"') || (first == '`' && last == '`') || (first == '\'' && last == '\'') {
+	if len(s) >= 2 && s[0] == '\'' && s[len(s)-1] == '\'' {
 		return s[1 : len(s)-1]
 	}
-	return s
+	return nanopass.DecodeIdentifier(s)
 }

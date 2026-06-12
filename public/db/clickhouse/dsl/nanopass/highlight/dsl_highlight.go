@@ -35,7 +35,9 @@ const (
 	CatParamSlot                     // {name: Type} parameter slot
 )
 
-// Span represents a highlighted region of the input SQL.
+// Span represents a highlighted region of the input SQL. Start/Stop are
+// byte offsets (half-open, suitable for slicing the input string); the
+// lexer reports rune offsets, which are converted during lexing.
 type Span struct {
 	Start    int    // byte offset (inclusive)
 	Stop     int    // byte offset (exclusive)
@@ -74,6 +76,10 @@ func lexHighlight(sql string) (spans []Span) {
 	lexer := grammar1.NewClickHouseLexer(antlr.NewInputStream(sql))
 	lexer.RemoveErrorListeners()
 
+	// Tokens arrive in source order; advance a rune→byte cursor alongside.
+	byteOff := 0
+	runeOff := 0
+
 	spans = make([]Span, 0, 64)
 	for {
 		tok := lexer.NextToken()
@@ -81,9 +87,17 @@ func lexHighlight(sql string) (spans []Span) {
 			break
 		}
 
-		start := tok.GetStart()
-		stop := tok.GetStop() + 1
 		text := tok.GetText()
+		for runeOff < tok.GetStart() && byteOff < len(sql) {
+			_, sz := decodeRune(sql[byteOff:])
+			byteOff += sz
+			runeOff++
+		}
+		start := byteOff
+		stop := byteOff + len(text)
+		byteOff = stop
+		runeOff += tok.GetStop() - tok.GetStart() + 1
+
 		cat := classifyTokenType(tok.GetTokenType(), tok.GetChannel())
 
 		spans = append(spans, Span{
@@ -95,6 +109,24 @@ func lexHighlight(sql string) (spans []Span) {
 	}
 
 	return
+}
+
+// decodeRune is a minimal UTF-8 size decoder (we only need the byte width).
+func decodeRune(s string) (r rune, size int) {
+	if len(s) == 0 {
+		return 0, 0
+	}
+	c := s[0]
+	switch {
+	case c < 0x80:
+		return rune(c), 1
+	case c < 0xE0:
+		return 0, 2
+	case c < 0xF0:
+		return 0, 3
+	default:
+		return 0, 4
+	}
 }
 
 func classifyTokenType(tokenType int, channel int) CategoryE {
@@ -176,20 +208,23 @@ func classifyTokenType(tokenType int, channel int) CategoryE {
 
 // --- Phase 2: Semantic refinement ---
 
+// buildTokenToSpanMap pairs parser tokens with lexer spans. Both sequences
+// come from the same lexer over the same input, so they line up 1:1 in
+// order — a single parallel sweep suffices (the spans carry byte offsets,
+// the tokens rune offsets, so offsets cannot be compared directly).
 func buildTokenToSpanMap(pr *nanopass.ParseResult, spans []Span) (tokenToSpan map[int]int) {
 	tokenToSpan = make(map[int]int, len(spans))
-	for i, span := range spans {
-		// Find the token at this byte offset
-		for j := 0; j < pr.TokenStream.Size(); j++ {
-			tok := pr.TokenStream.Get(j)
-			if tok.GetTokenType() == antlr.TokenEOF {
-				break
-			}
-			if tok.GetStart() == span.Start {
-				tokenToSpan[tok.GetTokenIndex()] = i
-				break
-			}
+	spanIdx := 0
+	for j := 0; j < pr.TokenStream.Size(); j++ {
+		tok := pr.TokenStream.Get(j)
+		if tok.GetTokenType() == antlr.TokenEOF {
+			break
 		}
+		if spanIdx >= len(spans) {
+			break
+		}
+		tokenToSpan[tok.GetTokenIndex()] = spanIdx
+		spanIdx++
 	}
 	return
 }

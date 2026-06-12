@@ -21,13 +21,17 @@ import (
 //	TRIM(BOTH str FROM expr)              → trimBoth(expr, str)
 //	TRIM(LEADING str FROM expr)           → trimLeading(expr, str)
 //	TRIM(TRAILING str FROM expr)          → trimTrailing(expr, str)
+//
+// Sugar forms nest (SUBSTRING(DATE '…' FROM 1), EXTRACT(DAY FROM DATE '…'));
+// each apply rewrites the outermost occurrences only, so the pass declares
+// NeedsFixedPoint and converges layer by layer.
 var CanonicalizeSugar = nanopass.LiftBodyPass(
 	"CanonicalizeSugar",
 	canonicalizeSugarImpl,
 	nanopass.PassProperties{
-		Idempotent: true,
-		Reads:      nanopass.RegionBody,
-		Writes:     nanopass.RegionBody,
+		NeedsFixedPoint: true,
+		Reads:           nanopass.RegionBody,
+		Writes:          nanopass.RegionBody,
 	},
 )
 

@@ -75,15 +75,27 @@ func setFormatBody(format string, sql string) (result string, err error) {
 	} else if hasExistingFormat {
 		nanopass.ReplaceNode(rw, formatNameCtx, format)
 	} else {
+		// Anchor on the last default-channel token: appending after a hidden
+		// trailing single-line comment would swallow the clause, and the
+		// queryStmt grammar puts FORMAT before the optional semicolon.
 		lastTokenIdx := -1
+		semicolonIdx := -1
 		for i := pr.TokenStream.Size() - 1; i >= 0; i-- {
 			tok := pr.TokenStream.Get(i)
-			if tok.GetTokenType() != antlr.TokenEOF {
-				lastTokenIdx = tok.GetTokenIndex()
-				break
+			if tok.GetTokenType() == antlr.TokenEOF || tok.GetChannel() != antlr.TokenDefaultChannel {
+				continue
 			}
+			if tok.GetTokenType() == grammar1.ClickHouseLexerSEMICOLON && lastTokenIdx < 0 {
+				semicolonIdx = tok.GetTokenIndex()
+				continue
+			}
+			lastTokenIdx = tok.GetTokenIndex()
+			break
 		}
-		if lastTokenIdx >= 0 {
+		switch {
+		case semicolonIdx >= 0:
+			rw.InsertBeforeDefault(semicolonIdx, " FORMAT "+format)
+		case lastTokenIdx >= 0:
 			rw.InsertAfterDefault(lastTokenIdx, " FORMAT "+format)
 		}
 	}
