@@ -10,11 +10,14 @@ package pijul
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
+
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/repo"
 )
 
 // faultable wraps the chmod fault with restore-on-cleanup so TempDir
@@ -45,7 +48,10 @@ func injectFault(tt *testing.T, path string, mode os.FileMode) (restore func()) 
 
 func readAppliedFile(tt *testing.T, repo *PushoutRepo) string {
 	tt.Helper()
-	data, err := os.ReadFile(filepath.Join(repo.path, ".pushout", "applied.txt"))
+	data, err := os.ReadFile(filepath.Join(repo.Path(), ".pushout", "applied.txt"))
+	if errors.Is(err, fs.ErrNotExist) {
+		return "" // fresh store: the log file appears on first append
+	}
 	if err != nil {
 		tt.Fatal(err)
 	}
@@ -84,7 +90,7 @@ func TestFault_SetAndRecordEnvelopeWriteFails(tt *testing.T) {
 	mustRecord(tt, repo, []KVLine{{Path: "k", Value: "v1"}}, "alice", "base")
 	cells, logLen, applied := snapshotObservable(tt, repo)
 
-	restore := injectFault(tt, filepath.Join(repo.path, ".pushout", "changes"), 0o555)
+	restore := injectFault(tt, filepath.Join(repo.Path(), ".pushout", "changes"), 0o555)
 	_, _, err := repo.SetAndRecord(ctx, []KVLine{{Path: "k", Value: "v2"}}, "alice", "blocked")
 	if err == nil {
 		tt.Fatal("expected envelope write failure to surface")
@@ -108,7 +114,7 @@ func TestFault_SetAndRecordAppliedLogAppendFails(tt *testing.T) {
 	// Fail the SECOND write of the sequence: the envelope lands (it is
 	// content-addressed; an orphan file is harmless), the log append
 	// fails, and no in-memory state may advance.
-	restore := injectFault(tt, filepath.Join(repo.path, ".pushout", "applied.txt"), 0o444)
+	restore := injectFault(tt, filepath.Join(repo.Path(), ".pushout", "applied.txt"), 0o444)
 	_, _, err := repo.SetAndRecord(ctx, []KVLine{{Path: "k", Value: "v2"}}, "alice", "blocked")
 	if err == nil {
 		tt.Fatal("expected applied-log append failure to surface")
@@ -132,7 +138,7 @@ func TestFault_PushIntoFaultyPeerLeavesPeerConsistent(tt *testing.T) {
 	mustRecord(tt, alice, []KVLine{{Path: "k", Value: "v2"}}, "alice", "Q")
 	bobCells, bobLog, bobApplied := snapshotObservable(tt, bob)
 
-	restore := injectFault(tt, filepath.Join(bob.path, ".pushout", "changes"), 0o555)
+	restore := injectFault(tt, filepath.Join(bob.Path(), ".pushout", "changes"), 0o555)
 	if _, err := alice.Push(ctx, bob); err == nil {
 		tt.Fatal("expected push into faulty peer to fail")
 	}
@@ -156,9 +162,9 @@ func TestFault_UnrecordAppliedRewriteFails(tt *testing.T) {
 	idQ := mustRecord(tt, repo, []KVLine{{Path: "k", Value: "v2"}}, "alice", "Q")
 	cells, logLen, applied := snapshotObservable(tt, repo)
 
-	restore := injectFault(tt, filepath.Join(repo.path, ".pushout", "applied.txt"), 0o444)
+	restore := injectFault(tt, filepath.Join(repo.Path(), ".pushout"), 0o555)
 	if _, err := repo.Unrecord(ctx, mustHash(tt, idQ)); err == nil {
-		tt.Fatal("expected applied-list rewrite failure to surface")
+		tt.Fatal("expected snapshot/log rewrite failure to surface")
 	}
 	assertUnchanged(tt, repo, cells, logLen, applied)
 
@@ -180,16 +186,11 @@ func TestFault_UnrecordAppliedRewriteFails(tt *testing.T) {
 // swept can still unrecord the same patch.
 func TestUnrecord_BlockedByRetentionAfterSweep(tt *testing.T) {
 	ctx := context.Background()
-	b := NewPushoutBackend()
+	base := time.Unix(1_000_000, 0).UTC()
+	n := 0
+	b := NewPushoutBackendWithClock(func() time.Time { n++; return base.Add(time.Duration(n) * time.Minute) })
 	alice := newTestRepo(tt, b, "alice")
 	bob := newTestRepo(tt, b, "bob")
-	for _, r := range []*PushoutRepo{alice, bob} {
-		r.Mu.Lock()
-		base := time.Unix(1_000_000, 0).UTC()
-		n := 0
-		r.Graggle.SetClock(func() time.Time { n++; return base.Add(time.Duration(n) * time.Minute) })
-		r.Mu.Unlock()
-	}
 
 	mustRecord(tt, alice, []KVLine{{Path: "k", Value: "v1"}}, "alice", "P")
 	idQ := mustRecord(tt, alice, []KVLine{{Path: "k", Value: "v2"}}, "alice", "Q") // deletes P's node
@@ -198,17 +199,18 @@ func TestUnrecord_BlockedByRetentionAfterSweep(tt *testing.T) {
 	}
 
 	// Sweep ONLY alice, far past every tombstone stamp.
-	alice.Mu.Lock()
-	purged, _ := alice.Graggle.SweepTombstones(time.Unix(2_000_000, 0).UTC(), 0)
-	alice.Mu.Unlock()
-	if purged == 0 {
+	report, err := alice.Sweep(ctx, time.Unix(2_000_000, 0).UTC(), 0)
+	if err != nil {
+		tt.Fatal(err)
+	}
+	if len(report.Purged) == 0 {
 		tt.Fatal("setup: sweep purged nothing")
 	}
 
 	before, beforeLog := stateCells(tt, alice)
-	_, err := alice.Unrecord(ctx, mustHash(tt, idQ))
-	if err == nil || !strings.Contains(err.Error(), "permanent past retention") {
-		tt.Fatalf("expected retention rejection, got: %v", err)
+	_, err = alice.Unrecord(ctx, mustHash(tt, idQ))
+	if !errors.Is(err, repo.ErrRetentionBlocked) {
+		tt.Fatalf("expected ErrRetentionBlocked, got: %v", err)
 	}
 	after, afterLog := stateCells(tt, alice)
 	if len(after) != len(before) || after[0].Value != before[0].Value || len(afterLog) != len(beforeLog) {

@@ -8,12 +8,14 @@ package pijul
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/qc"
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/repo"
 )
 
 func newTestRepo(tt *testing.T, b BackendI, actor string) *PushoutRepo {
@@ -51,15 +53,20 @@ func stateCells(tt *testing.T, repo *PushoutRepo) (cells []KVLine, log []PatchMe
 	return
 }
 
-func assertRepoInvariants(tt *testing.T, repo *PushoutRepo) {
+func assertRepoInvariants(tt *testing.T, pr *PushoutRepo) {
 	tt.Helper()
-	repo.Mu.Lock()
-	defer repo.Mu.Unlock()
-	if repo.Graggle == nil {
+	eng := pr.Engine()
+	if eng == nil {
 		return
 	}
-	for _, e := range qc.CheckInvariants(repo.Graggle) {
-		tt.Errorf("invariant violated on %s: %v", repo.path, e)
+	err := eng.View(context.Background(), func(v repo.ViewI) error {
+		for _, e := range qc.CheckInvariants(v.Graph().(t.InspectableI)) {
+			tt.Errorf("invariant violated on %s: %v", pr.Path(), e)
+		}
+		return nil
+	})
+	if err != nil {
+		tt.Fatal(err)
 	}
 }
 
@@ -115,8 +122,8 @@ func TestApply_DependencyGateUsesAppliedSet(tt *testing.T) {
 		tt.Fatal(err)
 	}
 	_, aerr := bob.Apply(ctx, envQ)
-	if aerr == nil || !strings.Contains(aerr.Error(), "missing dependency") {
-		tt.Fatalf("expected missing-dependency rejection (P seen but not applied), got: %v", aerr)
+	if !errors.Is(aerr, repo.ErrMissingDependency) {
+		tt.Fatalf("expected ErrMissingDependency (P seen but not applied), got: %v", aerr)
 	}
 
 	cells, log := stateCells(tt, bob)
@@ -197,8 +204,8 @@ func TestSetAndRecord_RejectsNewCellDuringConflict(tt *testing.T) {
 	cells, _ := stateCells(tt, bob)
 	cells = append(cells, KVLine{Path: "z", Value: "new"})
 	_, _, err := bob.SetAndRecord(context.Background(), cells, "bob", "create during conflict")
-	if err == nil || !strings.Contains(err.Error(), "cannot create cell") {
-		tt.Fatalf("expected creation rejection, got: %v", err)
+	if !errors.Is(err, ErrCellCreateWhileConflicted) {
+		tt.Fatalf("expected ErrCellCreateWhileConflicted, got: %v", err)
 	}
 }
 
@@ -251,8 +258,8 @@ func TestUnrecord_RefusesWhileDependentsApplied(tt *testing.T) {
 	idQ := mustRecord(tt, alice, []KVLine{{Path: "k", Value: "v2"}}, "alice", "Q")
 
 	_, err := alice.Unrecord(ctx, mustHash(tt, idP))
-	if err == nil || !strings.Contains(err.Error(), "unrecord dependents first") {
-		tt.Fatalf("expected dependent rejection, got: %v", err)
+	if !errors.Is(err, repo.ErrDependentExists) {
+		tt.Fatalf("expected ErrDependentExists, got: %v", err)
 	}
 	if _, err := alice.Unrecord(ctx, mustHash(tt, idQ)); err != nil {
 		tt.Fatal(err)

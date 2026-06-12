@@ -15,6 +15,7 @@ package pijul
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -26,6 +27,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/qc"
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
+	"github.com/stergiotis/boxer/public/algebraicarch/pushout/repo"
 )
 
 var smPaths = []string{"alpha", "beta", "gamma", "delta"}
@@ -75,7 +77,8 @@ func (m *repoMachine) cleanup() {
 }
 
 func newRepoMachine(tb *testing.T, rt *rapid.T) *repoMachine {
-	m := &repoMachine{tb: tb, ctx: context.Background(), backend: NewPushoutBackend(), clock: newSMClock()}
+	m := &repoMachine{tb: tb, ctx: context.Background(), clock: newSMClock()}
+	m.backend = NewPushoutBackendWithClock(m.clock.Now)
 	// One root dir per property invocation, removed in cleanup() —
 	// rapid's shrinker re-runs the property thousands of times, and
 	// leaking three repo trees per run exhausts the tmpfs.
@@ -93,11 +96,6 @@ func newRepoMachine(tb *testing.T, rt *rapid.T) *repoMachine {
 		if _, err := repo.Init(m.ctx); err != nil {
 			rt.Fatalf("init %s: %v", actor, err)
 		}
-		// The fake clock propagates through every clone-and-swap and
-		// backend Clone, so one SetClock per Init suffices.
-		repo.Mu.Lock()
-		repo.Graggle.SetClock(m.clock.Now)
-		repo.Mu.Unlock()
 		m.repos = append(m.repos, repo)
 	}
 	// Seed a converged base so early pulls have something to move.
@@ -156,9 +154,9 @@ func (m *repoMachine) record(rt *rapid.T) {
 		edited[idx] = KVLine{Path: path, Value: value, Conflict: nil, Credit: nil}
 	}
 
-	_, _, err = repo.SetAndRecord(m.ctx, edited, repo.actor, "sm edit "+path)
-	if err != nil && !strings.Contains(err.Error(), "cannot create cell") {
-		rt.Fatalf("record on %s: %v", repo.actor, err)
+	_, _, err = repo.SetAndRecord(m.ctx, edited, repo.Actor(), "sm edit "+path)
+	if err != nil && !errors.Is(err, ErrCellCreateWhileConflicted) {
+		rt.Fatalf("record on %s: %v", repo.Actor(), err)
 	}
 }
 
@@ -169,7 +167,7 @@ func (m *repoMachine) push(rt *rapid.T) {
 		return
 	}
 	if _, err := src.Push(m.ctx, dst); err != nil {
-		rt.Fatalf("push %s→%s: %v", src.actor, dst.actor, err)
+		rt.Fatalf("push %s→%s: %v", src.Actor(), dst.Actor(), err)
 	}
 }
 
@@ -180,7 +178,7 @@ func (m *repoMachine) pull(rt *rapid.T) {
 		return
 	}
 	if _, _, err := dst.Pull(m.ctx, src); err != nil {
-		rt.Fatalf("pull %s←%s: %v", dst.actor, src.actor, err)
+		rt.Fatalf("pull %s←%s: %v", dst.Actor(), src.Actor(), err)
 	}
 }
 
@@ -198,11 +196,11 @@ func (m *repoMachine) emailApply(rt *rapid.T) {
 		if strings.Contains(err.Error(), "no patches recorded") {
 			return
 		}
-		rt.Fatalf("export from %s: %v", src.actor, err)
+		rt.Fatalf("export from %s: %v", src.Actor(), err)
 	}
 	_, err = dst.Apply(m.ctx, env)
-	if err != nil && !strings.Contains(err.Error(), "missing dependency") {
-		rt.Fatalf("email-apply on %s: %v", dst.actor, err)
+	if err != nil && !errors.Is(err, repo.ErrMissingDependency) {
+		rt.Fatalf("email-apply on %s: %v", dst.Actor(), err)
 	}
 }
 
@@ -211,22 +209,20 @@ func (m *repoMachine) emailApply(rt *rapid.T) {
 // node whose content a sweep has purged, and it is the last deleter)
 // are expected; anything else must succeed.
 func (m *repoMachine) unrecord(rt *rapid.T) {
-	repo := m.pick(rt, "repo")
-	repo.Mu.Lock()
-	n := len(repo.appliedHash)
-	var hash t.PatchHash
-	if n > 0 {
-		hash = repo.appliedHash[rapid.IntRange(0, n-1).Draw(rt, "idx")]
+	pr := m.pick(rt, "repo")
+	applied, err := pr.Engine().Applied(m.ctx)
+	if err != nil {
+		rt.Fatalf("applied: %v", err)
 	}
-	repo.Mu.Unlock()
-	if n == 0 {
+	if len(applied) == 0 {
 		return
 	}
-	_, err := repo.Unrecord(m.ctx, hash)
+	hash := applied[rapid.IntRange(0, len(applied)-1).Draw(rt, "idx")]
+	_, err = pr.Unrecord(m.ctx, hash)
 	if err != nil &&
-		!strings.Contains(err.Error(), "unrecord dependents first") &&
-		!strings.Contains(err.Error(), "permanent past retention") {
-		rt.Fatalf("unrecord on %s: %v", repo.actor, err)
+		!errors.Is(err, repo.ErrDependentExists) &&
+		!errors.Is(err, repo.ErrRetentionBlocked) {
+		rt.Fatalf("unrecord on %s: %v", pr.Actor(), err)
 	}
 }
 
@@ -236,30 +232,52 @@ func (m *repoMachine) unrecord(rt *rapid.T) {
 // Oracles: every reported ID is a purged tombstone, the count matches,
 // and an immediate identical sweep is a no-op.
 func (m *repoMachine) sweep(rt *rapid.T) {
-	repo := m.pick(rt, "repo")
+	pr := m.pick(rt, "repo")
 	horizon := time.Duration(rapid.IntRange(0, 30).Draw(rt, "horizonMin")) * time.Minute
-	repo.Mu.Lock()
-	defer repo.Mu.Unlock()
-	g := repo.Graggle
-	if g == nil {
-		return
-	}
 	now := m.clock.Peek()
-	count, ids := g.SweepTombstones(now, horizon)
-	if count != len(ids) {
-		rt.Fatalf("sweep on %s: count %d != %d ids", repo.actor, count, len(ids))
+	report, err := pr.Sweep(m.ctx, now, horizon)
+	if err != nil {
+		rt.Fatalf("sweep on %s: %v", pr.Actor(), err)
 	}
-	for _, id := range ids {
-		if !g.IsDeleted(id) {
-			rt.Fatalf("sweep on %s purged non-tombstone %v", repo.actor, id)
+	verr := pr.Engine().View(m.ctx, func(v repo.ViewI) error {
+		g := v.Graph()
+		for _, id := range report.Purged {
+			if !g.IsDeleted(id) {
+				rt.Fatalf("sweep on %s purged non-tombstone %v", pr.Actor(), id)
+			}
+			if g.NodeContentStatus(id) != t.NodeContentStatusPurged {
+				rt.Fatalf("sweep on %s: %v not marked purged", pr.Actor(), id)
+			}
 		}
-		if g.NodeContentStatus(id) != t.NodeContentStatusPurged {
-			rt.Fatalf("sweep on %s: %v not marked purged", repo.actor, id)
-		}
+		return nil
+	})
+	if verr != nil {
+		rt.Fatalf("view: %v", verr)
 	}
-	if again, _ := g.SweepTombstones(now, horizon); again != 0 {
-		rt.Fatalf("sweep on %s not idempotent: second pass purged %d", repo.actor, again)
+	if again, err := pr.Sweep(m.ctx, now, horizon); err != nil || len(again.Purged) != 0 {
+		rt.Fatalf("sweep on %s not idempotent: %d purged, %v", pr.Actor(), len(again.Purged), err)
 	}
+}
+
+// reopen closes a repo and recovers it from storage in place — the
+// crash/restart oracle: the recovered repo must be observably identical
+// to the one that closed, including retention markers, under whatever
+// random history (records, unrecords, sweeps, pulls) preceded it.
+func (m *repoMachine) reopen(rt *rapid.T) {
+	idx := rapid.IntRange(0, len(m.repos)-1).Draw(rt, "repo")
+	old := m.repos[idx]
+	before := m.observable(old)
+	if err := old.Close(m.ctx); err != nil {
+		rt.Fatalf("close %s: %v", old.Actor(), err)
+	}
+	fresh := m.backend.NewRepo(old.Actor(), old.Path()).(*PushoutRepo)
+	if _, err := fresh.Init(m.ctx); err != nil {
+		rt.Fatalf("recover %s: %v", old.Actor(), err)
+	}
+	if got := m.observable(fresh); got != before {
+		rt.Fatalf("recovery diverged for %s:\nbefore:\n%s\nafter:\n%s", old.Actor(), before, got)
+	}
+	m.repos[idx] = fresh
 }
 
 // clone forks a random repo mid-session. The clone must be observably
@@ -274,21 +292,17 @@ func (m *repoMachine) clone(rt *rapid.T) {
 	}
 	dest, _, err := m.backend.Clone(m.ctx, src, dir, fmt.Sprintf("clone%d", len(m.repos)))
 	if err != nil {
-		rt.Fatalf("clone of %s: %v", src.actor, err)
+		rt.Fatalf("clone of %s: %v", src.Actor(), err)
 	}
 	d := dest.(*PushoutRepo)
 	if got, want := m.observable(d), m.observable(src); got != want {
 		rt.Fatalf("clone not observably identical to source:\nclone: %s\nsrc:   %s", got, want)
 	}
-	d.Mu.Lock()
-	srcAppliedLen := len(d.appliedHash)
-	d.Mu.Unlock()
-	src.Mu.Lock()
-	if len(src.appliedHash) != srcAppliedLen {
-		src.Mu.Unlock()
-		rt.Fatalf("clone applied-log length diverges from source")
+	dApplied, derr := d.Engine().Applied(m.ctx)
+	sApplied, serr := src.Engine().Applied(m.ctx)
+	if derr != nil || serr != nil || len(dApplied) != len(sApplied) {
+		rt.Fatalf("clone applied-log diverges from source: %d vs %d (%v %v)", len(dApplied), len(sApplied), derr, serr)
 	}
-	src.Mu.Unlock()
 	if len(m.repos) < smMaxRepos {
 		m.repos = append(m.repos, d)
 	} else {
@@ -297,55 +311,53 @@ func (m *repoMachine) clone(rt *rapid.T) {
 }
 
 // check runs after every action: structural invariants, content
-// conservation, and dependency closure on every repo.
+// conservation, and dependency closure on every repo — all through the
+// engine's read transaction.
 func (m *repoMachine) check(rt *rapid.T) {
-	for _, repo := range m.repos {
-		repo.Mu.Lock()
-		g := repo.Graggle
-		if g == nil {
-			repo.Mu.Unlock()
+	for _, pr := range m.repos {
+		eng := pr.Engine()
+		if eng == nil {
 			continue
 		}
-		for _, e := range qc.CheckInvariants(g) {
-			repo.Mu.Unlock()
-			rt.Fatalf("invariant violated on %s: %v", repo.actor, e)
-		}
-
-		applied := make(map[t.PatchHash]struct{}, len(repo.appliedHash))
-		knownContent := make(map[string]struct{})
-		for _, h := range repo.appliedHash {
-			applied[h] = struct{}{}
-			env, ok := repo.MetaByHash[h]
-			if !ok || env.Patch == nil {
-				repo.Mu.Unlock()
-				rt.Fatalf("%s: applied %s has no envelope", repo.actor, h)
+		err := eng.View(m.ctx, func(v repo.ViewI) error {
+			g := v.Graph()
+			for _, e := range qc.CheckInvariants(g.(t.InspectableI)) {
+				rt.Fatalf("invariant violated on %s: %v", pr.Actor(), e)
 			}
-			for _, c := range env.Patch.Changes {
-				knownContent[string(c.Content)] = struct{}{}
+			appliedSet := make(map[t.PatchHash]struct{})
+			knownContent := make(map[string]struct{})
+			for _, h := range v.Applied() {
+				info, ok := v.PatchInfo(h)
+				if !ok || info.Patch == nil {
+					rt.Fatalf("%s: applied %s has no envelope", pr.Actor(), h)
+				}
+				for _, c := range info.Patch.Changes {
+					knownContent[string(c.Content)] = struct{}{}
+				}
+				for _, dep := range info.Patch.Dependencies {
+					if _, ok := appliedSet[dep]; !ok {
+						// Apply order: a dep must precede its dependent.
+						rt.Fatalf("%s: applied %s before its dependency %s", pr.Actor(), h, dep)
+					}
+				}
+				appliedSet[h] = struct{}{}
 			}
-			for _, dep := range env.Patch.Dependencies {
-				if _, ok := applied[dep]; !ok {
-					// Order within appliedHash is apply order, so a dep
-					// must appear before its dependent.
-					repo.Mu.Unlock()
-					rt.Fatalf("%s: applied %s before its dependency %s", repo.actor, h, dep)
+			for id := range g.AllLiveNodes() {
+				if id == t.RootNodeID {
+					continue
+				}
+				if _, ok := knownContent[string(g.NodeContent(id))]; !ok {
+					rt.Fatalf("%s: live node %v carries content not traceable to any applied patch: %q", pr.Actor(), id, g.NodeContent(id))
+				}
+				if g.NodeContentStatus(id) == t.NodeContentStatusPurged {
+					rt.Fatalf("%s: LIVE node %v has purged content — sweep must only touch tombstones, and a purged tombstone must never resurrect", pr.Actor(), id)
 				}
 			}
+			return nil
+		})
+		if err != nil {
+			rt.Fatalf("view on %s: %v", pr.Actor(), err)
 		}
-		for id := range g.AllLiveNodes() {
-			if id == t.RootNodeID {
-				continue
-			}
-			if _, ok := knownContent[string(g.NodeContent(id))]; !ok {
-				repo.Mu.Unlock()
-				rt.Fatalf("%s: live node %v carries content not traceable to any applied patch: %q", repo.actor, id, g.NodeContent(id))
-			}
-			if g.NodeContentStatus(id) == t.NodeContentStatusPurged {
-				repo.Mu.Unlock()
-				rt.Fatalf("%s: LIVE node %v has purged content — sweep must only touch tombstones, and a purged tombstone must never resurrect", repo.actor, id)
-			}
-		}
-		repo.Mu.Unlock()
 	}
 }
 
@@ -379,16 +391,30 @@ func (m *repoMachine) converge(rt *rapid.T) {
 				if src == dst {
 					continue
 				}
-				missing, err := src.missingOn(dst)
-				if err != nil {
-					rt.Fatalf("missingOn: %v", err)
+				srcApplied, aerr := src.Engine().Applied(m.ctx)
+				if aerr != nil {
+					rt.Fatalf("applied: %v", aerr)
 				}
-				if len(missing) == 0 {
+				dstApplied, aerr := dst.Engine().Applied(m.ctx)
+				if aerr != nil {
+					rt.Fatalf("applied: %v", aerr)
+				}
+				dstHas := make(map[t.PatchHash]struct{}, len(dstApplied))
+				for _, h := range dstApplied {
+					dstHas[h] = struct{}{}
+				}
+				missing := 0
+				for _, h := range srcApplied {
+					if _, ok := dstHas[h]; !ok {
+						missing++
+					}
+				}
+				if missing == 0 {
 					continue
 				}
 				changed = true
 				if _, _, err := dst.Pull(m.ctx, src); err != nil {
-					rt.Fatalf("converge pull %s←%s: %v", dst.actor, src.actor, err)
+					rt.Fatalf("converge pull %s←%s: %v", dst.Actor(), src.Actor(), err)
 				}
 			}
 		}
@@ -399,7 +425,7 @@ func (m *repoMachine) converge(rt *rapid.T) {
 	want := m.observable(m.repos[0])
 	for _, repo := range m.repos[1:] {
 		if got := m.observable(repo); got != want {
-			rt.Fatalf("post-sync divergence:\n--- %s:\n%s--- %s:\n%s", m.repos[0].actor, want, repo.actor, got)
+			rt.Fatalf("post-sync divergence:\n--- %s:\n%s--- %s:\n%s", m.repos[0].Actor(), want, repo.Actor(), got)
 		}
 	}
 	m.check(rt)
@@ -417,6 +443,7 @@ func TestPushoutBackend_StateMachine(tt *testing.T) {
 			"unrecord":   m.unrecord,
 			"sweep":      m.sweep,
 			"clone":      m.clone,
+			"reopen":     m.reopen,
 			"":           m.check,
 		})
 		m.converge(rt)
