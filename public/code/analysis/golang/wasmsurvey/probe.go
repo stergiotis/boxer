@@ -85,7 +85,11 @@ func exportedFuncs(dir string, goos string, tags []string) (names []string, err 
 	bctx.GOOS = goos
 	bctx.GOARCH = "wasm"
 	bctx.CgoEnabled = false
-	bctx.BuildTags = append([]string(nil), tags...)
+	// Enumerate exports under the same build tags TinyGo compiles with —
+	// crucially `tinygo` — so a synthetic main never references a !tinygo-only
+	// export (e.g. eh's zerolog-gated funcs) that the real build won't have,
+	// which would fail as "undefined: probe.X" and falsely score the package Red.
+	bctx.BuildTags = appendTag(append([]string(nil), tags...), "tinygo")
 
 	var bp *build.Package
 	bp, err = bctx.ImportDir(dir, 0)
