@@ -132,15 +132,23 @@ machine-readable JSON form is emitted alongside.
   1.26 outright (the survey preflights this and falls back to static with a clear
   message); upstream **0.41.1** supports Go 1.26 and produced the results below.
   The static path needs no toolchain at all.
-- The dominant wasm chokepoint is two pervasively-imported leaves:
-  `public/observability/eh` imports `os/exec` (`zerolog.go`) and `eh/eb` (plus
-  `github.com/rs/zerolog`) imports `net` (`builder.go`). Making a portable core
-  viable starts there. The survey is the instrument that makes such chokepoints
-  visible and measurable.
+- **[Recanted 2026-06-12 — see the Update below.]** The first pass reported the
+  dominant wasm chokepoint as two pervasively-imported leaves (`os/exec` via
+  `public/observability/eh`, `net` via `github.com/rs/zerolog`/`eh/eb`). That was
+  wrong: both compile under TinyGo — the verdict came from a false-Red static
+  seed the tool pruned before probing. The survey is still the instrument that
+  makes real chokepoints visible and measurable; this one was a seed bug, not a
+  chokepoint.
 - The verdict set is a snapshot for a given TinyGo + the repo's current tags; it
   is reproducible (`--json`) and cheap to re-run as either moves.
 
-### First empirical pass (TinyGo 0.41.1, 2026-06-12)
+### First empirical pass (TinyGo 0.41.1, 2026-06-12) — SUPERSEDED
+
+> **⚠ Superseded 2026-06-12** (same day). The green/red counts below are wrong:
+> the static `redStdlib` seed marked `net`/`os/exec`/etc. Red and the tool pruned
+> them *before* the empirical probe, so those false-Reds were never compiled.
+> Corrected counts and root cause are in the Update immediately after this
+> subsection. Kept here as the record of what the buggy seed reported.
 
 `--mode both` over 362 importable library packages (package main, test-only, and
 internal/ packages excluded as un-probeable):
@@ -165,6 +173,47 @@ internal/ packages excluded as un-probeable):
   from VCS), never imports test-only or internal/ packages, and scores
   infrastructure failures *inconclusive* rather than Red.
 
+### Update 2026-06-12 — empirical pass recanted (false-Red static seed)
+
+The first pass is wrong, and the bug is instructive. SD3 claims an imperfect
+seed "costs at most a probe, never a wrong final verdict (in `both` mode)." That
+holds for the **Yellow** seed (which gets probed) but **not the Red seed**: a
+package matching `redStdlib`/`unsupportedExternalPrefix` is pruned as Red and
+never compiled, so a false entry there is never overturned. The Red seed was
+load-bearing and unvalidated.
+
+Direct probing (TinyGo 0.41.1 / Go 1.26.4, wasi + wasm-unknown) shows the
+flagged leaves all **compile and link**: `net` (TinyGo bundles `src/net` with
+`IP`/`IPNet`/`HardwareAddr`), `os/exec` (stubbed), and `github.com/rs/zerolog`
+including the `binary_log`/CBOR encoder and the `IPAddr`/`IPPrefix`/`MACAddr`
+methods. They fail at *runtime* on wasm (no process model / no host sockets), but
+the survey's verdict is compile+link (SD4) — so they are Green. Of the 13
+`redStdlib` entries, **11 were false-Reds**; only `net/smtp` (references
+`tls.Conn`, absent from TinyGo's `crypto/tls`) and `net/http/httputil` actually
+fail to compile on wasi. The seed was corrected to those two (commit `18d46743`).
+
+So the "portable core starts at eh+zerolog" framing was moot: a build-tag seam
+that cut `os/exec`+`net` out of `eh`/`eb`/`cbor-builder` (commit `9eff543`) was
+found unnecessary and **reverted** (`0ae7dd33`) — the unmodified packages compile
+under TinyGo as-is (`eh`/`eb`/`cbor-builder` verdict: Green on all three targets).
+
+**Corrected counts** — from the re-run materialized into the per-package
+`packageprops` records (ADR-0080) after the seed fix:
+
+| target              | compiles | blocked | (was)  |
+|---------------------|----------|---------|--------|
+| wasi (wasip1)       | **213**  | 148     | 73/289 |
+| js                  | **211**  | 150     | 73/289 |
+| wasm-unknown        | **216**  | 145     | 72/290 |
+
+Green roughly tripled — ~140 packages left the Red wall. Two caveats remain:
+the **external seed** (`unsupportedExternalPrefix`: Arrow, `golang.org/x/tools`,
+…) is still static and unprobed, so it carries the same blind spot and the ~148
+"blocked" may itself be inflated; and the prune-before-probe logic is unchanged —
+currently harmless (the two surviving `redStdlib` entries are genuine) but it
+will re-bite any future wrong seed. The clean fix is to probe seeded-Red packages
+in `both` mode rather than prune them (see open question 6).
+
 ## Alternatives considered
 
 - **Static only (O1).** Rejected as the *final* answer: it cannot tell a
@@ -184,10 +233,16 @@ internal/ packages excluded as un-probeable):
    TinyGo 0.41.1 honors it; json/v2-using packages compile Green.
 2. ~~**Counterfactual ("what-if") view.**~~ — **shipped** as `--assume-clean
    <prefix,…>`, which treats matching packages as Green sinks (`eh,zerolog` ⇒
-   ~110 packages leave the Red wall).
+   ~110 packages leave the Red wall). Note (2026-06-12): for `eh,zerolog` this
+   was never hypothetical — they are genuinely Green; see the Update.
 3. **Persisting results as leeway/runtime.facts** (mirroring ADR-0064 SD7) — the
    report is markdown + JSON for now.
 4. **`godepview` verdict column** — deferred (see Alternatives).
 5. **External allow/deny list curation.** `support.go` seeds a short
    high-confidence list and defaults unknown externals to Yellow; the empirical
    pass is what resolves them. Worth growing the list as the probe teaches us.
+6. **Red seed is pruned, not probed (2026-06-12).** A false `redStdlib` /
+   `unsupportedExternalPrefix` entry becomes a wrong final verdict because
+   seeded-Red packages are never compiled (see Update). `redStdlib` was
+   corrected; `unsupportedExternalPrefix` (Arrow, `x/tools`) is still
+   unvalidated. Fix: in `both` mode, probe seeded-Reds instead of pruning them.
