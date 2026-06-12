@@ -2,7 +2,8 @@ package builder
 
 import (
 	"fmt"
-	"net/netip"
+	"github.com/rs/zerolog"
+	"net"
 	"time"
 )
 
@@ -43,13 +44,8 @@ type CborKVBuilder[R any] interface {
 	Floats64(key string, f []float64) R
 	Time(key string, t time.Time) R
 	Times(key string, t []time.Time) R
-	IPAddr(key string, ip netip.Addr) R
+	IPAddr(key string, ip net.IP) R
 	Type(key string, val any) R
 }
 
-// CborKVBuilder was historically shaped to match *zerolog.Event, which
-// implemented every method including IPAddr(net.IP). IPAddr now takes a
-// netip.Addr so this package stays free of net/zerolog and compiles under
-// TinyGo (ADR-0078); *zerolog.Event consequently no longer conforms (only the
-// IPAddr argument type differs). The sole production implementor is
-// *eb.ErrorBuilder.
+var _ CborKVBuilder[*zerolog.Event] = (*zerolog.Event)(nil)

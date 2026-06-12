@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"hash"
+	"net"
 	"net/netip"
 	"reflect"
 	"time"
@@ -409,14 +410,17 @@ func (inst *ErrorBuilder) Times(key string, val []time.Time) *ErrorBuilder {
 	return inst
 }
 
-func (inst *ErrorBuilder) IPAddr(key string, ip netip.Addr) *ErrorBuilder {
+func (inst *ErrorBuilder) IPAddr(key string, ip net.IP) *ErrorBuilder {
 	if !inst.open {
 		return inst
 	}
 	_, _ = inst.encoder.EncodeString(key)
-	// netip.Addr already carries its family; EncodeIpAddr emits the right
-	// IPv4/IPv6 tag (see cbor.Encoder.EncodeIpAddr).
-	_, _ = inst.encoder.EncodeIpAddr(ip)
+	b := ip.To4()
+	if b != nil {
+		_, _ = inst.encoder.EncodeIpAddr(netip.AddrFrom4([4]byte(b)))
+	} else {
+		_, _ = inst.encoder.EncodeIpAddr(netip.AddrFrom16([16]byte(b.To16())))
+	}
 	return inst
 }
 
