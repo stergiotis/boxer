@@ -98,6 +98,6 @@ ffprobe -f h264 /tmp/probe.h264
 ## Related decisions
 
 - [ADR-0024](../../doc/adr/0024-imzero2-remote-access-browser-viewer.md) — remote access via pixel streaming (accepted; v1 record in Updates).
-- [ADR-0081](../../doc/adr/0081-imzero2-headless-rdp-egfx-head.md) — RDP head on the same foundation (proposed, spike-gated).
+- [ADR-0081](../../doc/adr/0081-imzero2-headless-rdp-egfx-head.md) — RDP head on the same foundation (withdrawn 2026-06-12; kept as reference analysis).
 - [ADR-0013](../../doc/adr/0013-imzero2-stateful-widget-contract.md) — stateful widget contract.
 - [ADR-0062](../../doc/adr/0062-imzero2-render-cadence.md) — render cadence (reactive mode is named follow-up for the headless host).

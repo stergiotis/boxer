@@ -17,8 +17,10 @@ rely on. The *decisions* behind this shape — why pixel streaming, why
 WebSocket + WebCodecs, why protobuf — live in
 [ADR-0024](../../doc/adr/0024-imzero2-remote-access-browser-viewer.md);
 this file should stay valid even if individual components are rewritten.
-The prospective RDP delivery head over the same pipeline is
-[ADR-0081](../../doc/adr/0081-imzero2-headless-rdp-egfx-head.md).
+An RDP delivery head over the same pipeline was designed and withdrawn
+the same day ([ADR-0081](../../doc/adr/0081-imzero2-headless-rdp-egfx-head.md),
+kept as reference analysis) — the browser path below is the delivery
+channel.
 
 ## Background
 
@@ -188,8 +190,8 @@ debugging, not for protocol correctness.
   uniform across client devices. The alternatives (and when they would
   win) are recorded in ADR-0024's design space.
 - Chroma is 4:2:0: fine chart linework pays a fidelity cost relative to
-  RGB. ADR-0081 notes AVC444 as the upgrade path on the RDP head;
-  the WebCodecs side currently has no equally mature counterpart.
+  RGB. A full-chroma upgrade has no mature WebCodecs-side path today
+  (the withdrawn RDP head had AVC444 as its lane for this).
 - A fixed render tick burns encode work on idle dashboards; reactive
   cadence (ADR-0062) on the headless host is named follow-up work.
 
@@ -199,7 +201,8 @@ debugging, not for protocol correctness.
   the design space, decisions, and the v1 implementation record
   (Updates, 2026-06-12).
 - [ADR-0081](../../doc/adr/0081-imzero2-headless-rdp-egfx-head.md) —
-  the RDP head over the same foundation (proposed, spike-gated).
+  the RDP head over the same foundation (withdrawn 2026-06-12; the
+  design space and ecosystem facts remain the reference).
 - [ADR-0013](../../doc/adr/0013-imzero2-stateful-widget-contract.md) —
   the widget contract remote input must respect.
 - [ADR-0062](../../doc/adr/0062-imzero2-render-cadence.md) — render

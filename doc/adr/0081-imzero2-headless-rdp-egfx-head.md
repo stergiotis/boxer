@@ -1,12 +1,11 @@
 ---
 type: adr
-status: proposed
+status: withdrawn
 date: 2026-06-12
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+withdrawn-date: 2026-06-12
 ---
 
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted. The Phase-0 gate in §SD1 applies even after acceptance.
+> **Status: withdrawn (2026-06-12) — retracted before acceptance; do not implement.** The same-day end-to-end verification of ADR-0024's browser path (see its 2026-06-12 implementation Updates entry) covered the remote-access need, and no concrete fleet requirement materialized to justify carrying a second delivery head. The Phase-0 spike was never run. The design space below — option assessment, kill-reasons for the session-shaped alternatives, and the verified IronRDP/lamco/xrdp ecosystem facts — remains valid reference: the ADR-0024 foundation is carrier-agnostic by construction, so if RDP reach resurfaces, re-opening starts from this analysis (likely as a fresh ADR re-verifying the ecosystem state), not from scratch.
 
 # ADR-0081: ImZero2 headless RDP head — in-process EGFX/AVC delivery to stock RDP clients
 
@@ -116,7 +115,7 @@ We will implement **O1**: an RDP head inside the ADR-0024 headless host, built o
 
 ## Status
 
-Proposed — awaiting review by @spx. Phasing: **Phase 0** — SD1 spike (independent; may precede ADR-0024 Phases 1–2) → **Phase 1** — head integration on the headless foundation (EGFX pipeline glue, SD5 input mapper, SD7 TLS) → **Phase 2** — interop hardening across the client matrix; SD6 resize per spike verdict → follow-ups per SD8 (NLA first among them).
+Withdrawn — 2026-06-12, same day as proposed, before review and before the Phase-0 spike ran. ADR-0024's browser delivery was implemented and verified end-to-end that day; with the primary remote-access channel working and no concrete RDP-only fleet requirement on the table, a second delivery head was not worth its protocol-machinery and interop-hardening cost. The phasing below is retained for reference only: **Phase 0** — SD1 spike (independent; may precede ADR-0024 Phases 1–2) → **Phase 1** — head integration on the headless foundation (EGFX pipeline glue, SD5 input mapper, SD7 TLS) → **Phase 2** — interop hardening across the client matrix; SD6 resize per spike verdict → follow-ups per SD8 (NLA first among them).
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`. See `doc/DOCUMENTATION_STANDARD.md` §1 ADR for the edit-policy tiers (Tier 1 in-place / Tier 2 `## Updates` H3 / Tier 3 superseding ADR).
 
