@@ -51,7 +51,7 @@ func (inst *App) renderExplorer() {
 	c.UiSetMinHeight(dockMinHeight)
 	for dock := range c.DockArea(inst.ids.PrepareStr("dock")) {
 		root := dock.InitRoot(tabPackages)
-		// Table keeps 55% of the width (seven columns); the graph and detail
+		// Table keeps 55% of the width (eight columns); the graph and detail
 		// pane split the right column evenly so the detail lists are visible
 		// without scrolling. All leaves are drag-resizable and persist.
 		graphLeaf := dock.Split(root, c.DockRight, 0.55, tabGraph)
@@ -281,6 +281,7 @@ func (inst *App) renderTable() {
 	cols[colFiles] = colDef{"Files", 52}
 	cols[colImports] = colDef{"Out", 52}
 	cols[colImportedBy] = colDef{"In", 52}
+	cols[colWasm] = colDef{"WASM", 72} // wasi js freestanding glyphs (ADR-0080)
 
 	for i := range numCols {
 		c.EtColumn(cols[i].w).Resizable(true).Send()
@@ -338,6 +339,9 @@ func (inst *App) renderTable() {
 		for range et.Cells(uint64(row), colImportedBy) {
 			c.Label(fmt.Sprintf("%d", p.NumImportedBy)).Send()
 		}
+		for range et.Cells(uint64(row), colWasm) {
+			inst.renderWasmCell(p.ImportPath)
+		}
 	}
 
 	if inst.focus != 0 {
@@ -357,7 +361,7 @@ func (inst *App) toggleSort(col int) {
 	} else {
 		inst.sortCol = col
 		// Numeric columns default to descending (biggest first); text ascending.
-		inst.sortDesc = col == colFiles || col == colImports || col == colImportedBy
+		inst.sortDesc = col == colFiles || col == colImports || col == colImportedBy || col == colWasm
 	}
 	inst.viewDirty = true
 }
@@ -408,6 +412,8 @@ func (inst *App) sortView() {
 			return pa.NumImports < pb.NumImports
 		case colImportedBy:
 			return pa.NumImportedBy < pb.NumImportedBy
+		case colWasm:
+			return wasmCompileCount(pa.ImportPath) < wasmCompileCount(pb.ImportPath)
 		default:
 			return pa.ImportPath < pb.ImportPath
 		}
@@ -547,6 +553,7 @@ func (inst *App) renderDetail() {
 		c.AddSpace(inst.spaceInner())
 		c.Label(fmt.Sprintf("out: %d  in: %d", p.NumImports, p.NumImportedBy)).Send()
 	}
+	inst.renderWasmDetail(p.ImportPath)
 	if p.Dir != "" {
 		for rt := range c.RichTextLabel(p.Dir) {
 			rt.Weak().Small()

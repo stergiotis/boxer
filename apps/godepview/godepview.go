@@ -22,6 +22,7 @@ const (
 	colFiles
 	colImports
 	colImportedBy
+	colWasm
 	numCols
 )
 
