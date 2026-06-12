@@ -66,11 +66,15 @@ func TestGolden_EnvelopeBytes(tt *testing.T) {
 		Producer:  "golden-producer",
 		Timestamp: time.Date(2026, 6, 12, 0, 0, 0, 0, time.UTC),
 	}
-	data, err := Encode(env)
+	reg, err := NewRegistry(JSONV1{})
 	if err != nil {
 		tt.Fatal(err)
 	}
-	path := filepath.Join("testdata", "golden_envelope.json")
+	data, err := reg.Encode(JSONV1Name, env)
+	if err != nil {
+		tt.Fatal(err)
+	}
+	path := filepath.Join("testdata", "golden_envelope.pxe1")
 	if *updateGolden {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			tt.Fatal(err)
@@ -86,7 +90,7 @@ func TestGolden_EnvelopeBytes(tt *testing.T) {
 	if !bytes.Equal(data, want) {
 		tt.Fatalf("canonical envelope bytes changed — wire format drift; if intentional, regenerate with -args -update and note that persisted envelopes invalidate.\n got:\n%s\nwant:\n%s", data, want)
 	}
-	if _, err := Decode(data); err != nil {
+	if _, _, err := reg.Decode(data); err != nil {
 		tt.Fatalf("golden envelope no longer decodes: %v", err)
 	}
 }

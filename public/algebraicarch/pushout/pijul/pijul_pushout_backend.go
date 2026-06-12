@@ -25,6 +25,17 @@ import (
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
 )
 
+// wireRegistry is the demo's wire-codec configuration: jsonv1 only.
+// Temporary wiring — the repo engine (ADR-0079 P3) takes codec
+// configuration over via repo.Options.
+var wireRegistry = func() *envelope.Registry {
+	reg, err := envelope.NewRegistry(envelope.JSONV1{})
+	if err != nil {
+		panic(err)
+	}
+	return reg
+}()
+
 // pushoutBackend is the native realisation of [BackendI]: per-actor
 // graggles backed by the sibling graggle packages, with on-disk patch
 // envelopes used as the peer-to-peer transport. There is no `pijul`
@@ -686,7 +697,7 @@ func (inst *PushoutRepo) Apply(ctx context.Context, env PatchEnvelope) (audit st
 		err = eh.Errorf("repo not initialised")
 		return
 	}
-	decoded, derr := envelope.Decode(env.Bytes)
+	decoded, _, derr := wireRegistry.Decode(env.Bytes)
 	if derr != nil {
 		err = eh.Errorf("decode envelope: %w", derr)
 		return
@@ -749,7 +760,7 @@ func (inst *PushoutRepo) Push(ctx context.Context, dest RepoI) (audit string, er
 			audit = strings.Join(lines, "\n")
 			return
 		}
-		bytes, eerr := envelope.Encode(env)
+		bytes, eerr := wireRegistry.Encode(envelope.JSONV1Name, env)
 		if eerr != nil {
 			err = eerr
 			audit = strings.Join(lines, "\n")
@@ -798,7 +809,7 @@ func (inst *PushoutRepo) Pull(ctx context.Context, src RepoI) (audit string, had
 			audit = strings.Join(lines, "\n")
 			return
 		}
-		bytes, eerr := envelope.Encode(env)
+		bytes, eerr := wireRegistry.Encode(envelope.JSONV1Name, env)
 		if eerr != nil {
 			err = eerr
 			audit = strings.Join(lines, "\n")
@@ -866,7 +877,7 @@ func (inst *PushoutRepo) ExportLatest(ctx context.Context) (env PatchEnvelope, a
 		err = rerr
 		return
 	}
-	bytes, eerr := envelope.Encode(envV1)
+	bytes, eerr := wireRegistry.Encode(envelope.JSONV1Name, envV1)
 	if eerr != nil {
 		err = eerr
 		return
@@ -913,7 +924,7 @@ func writeEnvelope(repoPath string, env envelope.EnvelopeV1) (err error) {
 	if _, serr := os.Stat(path); serr == nil {
 		return
 	}
-	bytes, eerr := envelope.Encode(env)
+	bytes, eerr := wireRegistry.Encode(envelope.JSONV1Name, env)
 	if eerr != nil {
 		err = eerr
 		return
@@ -932,7 +943,7 @@ func readEnvelope(repoPath string, h t.PatchHash) (env envelope.EnvelopeV1, err 
 		err = eh.Errorf("read envelope %s: %w", h, rerr)
 		return
 	}
-	env, err = envelope.Decode(bytes)
+	env, _, err = wireRegistry.Decode(bytes)
 	if err != nil {
 		return
 	}

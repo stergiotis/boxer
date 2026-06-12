@@ -22,7 +22,11 @@ func fuzzSeedEnvelope() []byte {
 	p := patch.NewPatch("alice", "edit", []t.PatchHash{dep.Hash}, []patch.Change{{
 		Kind: patch.ChangeKindDeleteNode, NodeID: t.NodeID{Patch: dep.Hash, Index: 0},
 	}})
-	data, err := Encode(EnvelopeV1{Patch: p, Producer: "alice", Timestamp: time.Unix(0, 0).UTC()})
+	reg, err := NewRegistry(JSONV1{})
+	if err != nil {
+		panic(err)
+	}
+	data, err := reg.Encode(JSONV1Name, EnvelopeV1{Patch: p, Producer: "alice", Timestamp: time.Unix(0, 0).UTC()})
 	if err != nil {
 		panic(err)
 	}
@@ -41,17 +45,21 @@ func FuzzDecode(f *testing.F) {
 		mutated[i] ^= 0x20
 		f.Add(mutated)
 	}
+	reg, rerr := NewRegistry(JSONV1{})
+	if rerr != nil {
+		f.Fatal(rerr)
+	}
 	f.Fuzz(func(tt *testing.T, data []byte) {
-		env, err := Decode(data)
+		env, name, err := reg.Decode(data)
 		if err != nil {
 			return
 		}
 		// Accepted envelopes must round-trip with identity intact.
-		again, eerr := Encode(env)
+		again, eerr := reg.Encode(name, env)
 		if eerr != nil {
 			tt.Fatalf("re-encode of accepted envelope failed: %v", eerr)
 		}
-		env2, derr := Decode(again)
+		env2, _, derr := reg.Decode(again)
 		if derr != nil {
 			tt.Fatalf("re-decode of re-encoded envelope failed: %v", derr)
 		}

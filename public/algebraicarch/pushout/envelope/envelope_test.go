@@ -5,6 +5,7 @@ package envelope
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +14,15 @@ import (
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/store"
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
 )
+
+func testRegistry(tt *testing.T) *Registry {
+	tt.Helper()
+	reg, err := NewRegistry(JSONV1{})
+	if err != nil {
+		tt.Fatal(err)
+	}
+	return reg
+}
 
 // samplePatch builds a small patch with two new nodes chained off root, so
 // the hash is non-trivial and the apply-equivalence test has something to
@@ -45,26 +55,27 @@ func sampleEnvelope(tt *testing.T) EnvelopeV1 {
 }
 
 // Encode → Decode → re-Encode must be byte-identical, otherwise the codec
-// is non-canonical and any signature / content-hash story over envelopes
-// would be meaningless.
+// path is non-canonical and any signature / content-hash story over framed
+// envelopes would be meaningless.
 func TestEnvelope_RoundTripByteIdentical(tt *testing.T) {
+	reg := testRegistry(tt)
 	env := sampleEnvelope(tt)
 
-	first, err := Encode(env)
+	first, err := reg.Encode(JSONV1Name, env)
 	if err != nil {
 		tt.Fatalf("first encode: %v", err)
 	}
-
-	decoded, err := Decode(first)
+	decoded, name, err := reg.Decode(first)
 	if err != nil {
 		tt.Fatalf("decode: %v", err)
 	}
-
-	second, err := Encode(decoded)
+	if name != JSONV1Name {
+		tt.Fatalf("frame name: %q", name)
+	}
+	second, err := reg.Encode(JSONV1Name, decoded)
 	if err != nil {
 		tt.Fatalf("second encode: %v", err)
 	}
-
 	if !bytes.Equal(first, second) {
 		tt.Fatalf("byte-identity violated:\nfirst:\n%s\nsecond:\n%s", first, second)
 	}
@@ -74,21 +85,20 @@ func TestEnvelope_RoundTripByteIdentical(tt *testing.T) {
 // rendered output as the original — semantic round-trip on top of the
 // byte-level one.
 func TestEnvelope_DecodedPatchAppliesEquivalently(tt *testing.T) {
+	reg := testRegistry(tt)
 	env := sampleEnvelope(tt)
 
-	// Apply the original to graggle A.
 	gA := store.New()
 	if err := env.Patch.Apply(gA); err != nil {
 		tt.Fatalf("original apply: %v", err)
 	}
 	wantRender := gA.Render()
 
-	// Encode + decode, then apply to graggle B.
-	data, err := Encode(env)
+	data, err := reg.Encode(JSONV1Name, env)
 	if err != nil {
 		tt.Fatalf("encode: %v", err)
 	}
-	decoded, err := Decode(data)
+	decoded, _, err := reg.Decode(data)
 	if err != nil {
 		tt.Fatalf("decode: %v", err)
 	}
@@ -96,84 +106,58 @@ func TestEnvelope_DecodedPatchAppliesEquivalently(tt *testing.T) {
 	if err := decoded.Patch.Apply(gB); err != nil {
 		tt.Fatalf("decoded apply: %v", err)
 	}
-	gotRender := gB.Render()
-
-	if !bytes.Equal(wantRender, gotRender) {
-		tt.Fatalf("render mismatch:\nwant: %q\ngot:  %q", wantRender, gotRender)
+	if got := gB.Render(); !bytes.Equal(wantRender, got) {
+		tt.Fatalf("render mismatch:\nwant: %q\ngot:  %q", wantRender, got)
 	}
 	if decoded.Patch.Hash != env.Patch.Hash {
 		tt.Fatalf("hash mismatch after round-trip: %v vs %v", decoded.Patch.Hash, env.Patch.Hash)
 	}
 }
 
-// A tampered envelope must be rejected at Decode time. We mutate the
-// description (which doesn't enter the hash) — the stored Hash stays put,
-// but ComputeHash on the decoded patch must equal the stored hash, so
-// that's not the right knob. Instead, mutate Changes (which does enter
-// the hash) and reset Hash back to the original; the recomputed hash will
-// no longer match.
-func TestEnvelope_DecodeRejectsTamperedHash(tt *testing.T) {
-	env := sampleEnvelope(tt)
-	original := env.Patch.Hash
-
-	data, err := Encode(env)
+// mutatePayload unframes, applies a JSON-level edit to the payload, and
+// re-frames — the standard tamper vehicle for these tests.
+func mutatePayload(tt *testing.T, framed []byte, edit func(patchObj map[string]any)) []byte {
+	tt.Helper()
+	name, payload, err := Unframe(framed)
 	if err != nil {
-		tt.Fatalf("encode: %v", err)
+		tt.Fatal(err)
 	}
-
-	// Round-trip into a generic map so we can edit one node's content
-	// (which feeds ComputeHash) without touching the stored Hash.
 	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err != nil {
-		tt.Fatalf("unmarshal raw: %v", err)
+	if err := json.Unmarshal(payload, &raw); err != nil {
+		tt.Fatal(err)
 	}
-	patchObj := raw["patch"].(map[string]any)
-	changes := patchObj["Changes"].([]any)
-	firstChange := changes[0].(map[string]any)
-	firstChange["Content"] = "dGFtcGVyZWQK" // base64("tampered\n"); valid base64 but different bytes
-	tampered, err := json.Marshal(raw)
+	edit(raw["patch"].(map[string]any))
+	mutated, err := json.Marshal(raw)
 	if err != nil {
-		tt.Fatalf("re-marshal: %v", err)
+		tt.Fatal(err)
 	}
+	reframed, err := Frame(name, mutated)
+	if err != nil {
+		tt.Fatal(err)
+	}
+	return reframed
+}
 
-	_, err = Decode(tampered)
-	if err == nil {
-		tt.Fatal("expected Decode to reject tampered envelope, got nil error")
+// Content tampering must fail the hash check.
+func TestEnvelope_DecodeRejectsTamperedContent(tt *testing.T) {
+	reg := testRegistry(tt)
+	framed, err := reg.Encode(JSONV1Name, sampleEnvelope(tt))
+	if err != nil {
+		tt.Fatal(err)
 	}
-	if !strings.Contains(err.Error(), "hash mismatch") {
-		tt.Fatalf("expected hash mismatch error, got: %v", err)
-	}
-	// Sanity: the stored hash in the tampered raw bytes is unchanged.
-	if storedHex, _ := original.MarshalText(); !bytes.Contains(tampered, storedHex) {
-		tt.Fatal("test setup did not preserve stored hash in the tampered bytes")
+	tampered := mutatePayload(tt, framed, func(po map[string]any) {
+		po["Changes"].([]any)[0].(map[string]any)["Content"] = "dGFtcGVyZWQK" // base64("tampered\n")
+	})
+	_, _, err = reg.Decode(tampered)
+	if !errors.Is(err, ErrTampered) {
+		tt.Fatalf("expected ErrTampered, got: %v", err)
 	}
 }
 
-// Decode must reject envelopes that omit the patch entirely.
-func TestEnvelope_DecodeRejectsMissingPatch(tt *testing.T) {
-	data := []byte(`{"producer":"alice","timestamp":"2026-05-01T00:00:00Z"}`)
-	_, err := Decode(data)
-	if err == nil {
-		tt.Fatal("expected error for missing patch, got nil")
-	}
-	if !strings.Contains(err.Error(), "missing patch") {
-		tt.Fatalf("expected missing patch error, got: %v", err)
-	}
-}
-
-// Encode must refuse a nil-patch envelope so we never produce a file that
-// would only fail at decode time.
-func TestEnvelope_EncodeRejectsNilPatch(tt *testing.T) {
-	_, err := Encode(EnvelopeV1{Producer: "alice"})
-	if err == nil {
-		tt.Fatal("expected error for nil patch, got nil")
-	}
-}
-
-// Dependency tampering must fail the hash check: the dependency set is
-// part of patch identity. Both stripping and extending the list are
-// covered.
+// Dependency tampering (strip or extend) must fail the hash check: the
+// dependency set is part of patch identity.
 func TestEnvelope_DecodeRejectsTamperedDependencies(tt *testing.T) {
+	reg := testRegistry(tt)
 	dep := patch.NewPatch("alice", "dep", nil, []patch.Change{{
 		Kind:      patch.ChangeKindNewNode,
 		NodeID:    t.NodeID{Patch: t.PlaceholderHash, Index: 0},
@@ -183,63 +167,56 @@ func TestEnvelope_DecodeRejectsTamperedDependencies(tt *testing.T) {
 	p := patch.NewPatch("alice", "edit", []t.PatchHash{dep.Hash}, []patch.Change{{
 		Kind: patch.ChangeKindDeleteNode, NodeID: t.NodeID{Patch: dep.Hash, Index: 0},
 	}})
-	env := EnvelopeV1{Patch: p, Producer: "alice", Timestamp: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)}
-	data, err := Encode(env)
+	framed, err := reg.Encode(JSONV1Name, EnvelopeV1{Patch: p, Producer: "alice", Timestamp: time.Unix(0, 0).UTC()})
 	if err != nil {
 		tt.Fatal(err)
 	}
 
-	mutate := func(edit func(patchObj map[string]any)) []byte {
-		var raw map[string]any
-		if err := json.Unmarshal(data, &raw); err != nil {
-			tt.Fatal(err)
-		}
-		patchObj := raw["patch"].(map[string]any)
-		edit(patchObj)
-		out, err := json.Marshal(raw)
-		if err != nil {
-			tt.Fatal(err)
-		}
-		return out
-	}
-
-	stripped := mutate(func(po map[string]any) { po["Dependencies"] = []any{} })
-	if _, err := Decode(stripped); err == nil || !strings.Contains(err.Error(), "hash mismatch") {
-		tt.Fatalf("stripped dependencies must fail the hash check, got: %v", err)
+	stripped := mutatePayload(tt, framed, func(po map[string]any) { po["Dependencies"] = []any{} })
+	if _, _, err := reg.Decode(stripped); !errors.Is(err, ErrTampered) {
+		tt.Fatalf("stripped dependencies: expected ErrTampered, got: %v", err)
 	}
 
 	bogus := t.PatchHash{9, 9, 9}
 	bogusHex, _ := bogus.MarshalText()
-	extended := mutate(func(po map[string]any) {
-		deps := po["Dependencies"].([]any)
-		po["Dependencies"] = append(deps, string(bogusHex))
+	extended := mutatePayload(tt, framed, func(po map[string]any) {
+		po["Dependencies"] = append(po["Dependencies"].([]any), string(bogusHex))
 	})
-	if _, err := Decode(extended); err == nil || !strings.Contains(err.Error(), "hash mismatch") {
-		tt.Fatalf("extended dependencies must fail the hash check, got: %v", err)
+	if _, _, err := reg.Decode(extended); !errors.Is(err, ErrTampered) {
+		tt.Fatalf("extended dependencies: expected ErrTampered, got: %v", err)
 	}
 }
 
 // A patch that hashes consistently but whose changes reference a patch the
-// dependency list does not declare was authored broken — Decode rejects it
-// before it can hit Apply's dependency gate with a vacuous list.
-func TestEnvelope_DecodeRejectsUndeclaredDependency(tt *testing.T) {
+// dependency list does not declare was authored broken — Validate rejects
+// it on encode AND decode.
+func TestEnvelope_RejectsUndeclaredDependency(tt *testing.T) {
+	reg := testRegistry(tt)
 	foreign := t.PatchHash{42}
-	p := patch.NewPatch("mallory", "deps stripped at authoring time", nil /* no deps */, []patch.Change{{
+	p := patch.NewPatch("mallory", "deps stripped at authoring time", nil, []patch.Change{{
 		Kind: patch.ChangeKindDeleteNode, NodeID: t.NodeID{Patch: foreign, Index: 0},
 	}})
-	data, err := Encode(EnvelopeV1{Patch: p, Producer: "mallory", Timestamp: time.Unix(0, 0).UTC()})
+	env := EnvelopeV1{Patch: p, Producer: "mallory", Timestamp: time.Unix(0, 0).UTC()}
+	if _, err := reg.Encode(JSONV1Name, env); !errors.Is(err, ErrUndeclaredDependency) {
+		tt.Fatalf("encode: expected ErrUndeclaredDependency, got: %v", err)
+	}
+	// Bypass the write-path guard via the raw codec, then decode.
+	payload, err := JSONV1{}.Encode(env)
 	if err != nil {
 		tt.Fatal(err)
 	}
-	_, err = Decode(data)
-	if err == nil || !strings.Contains(err.Error(), "does not declare it as a dependency") {
-		tt.Fatalf("expected undeclared-dependency rejection, got: %v", err)
+	framed, err := Frame(JSONV1Name, payload)
+	if err != nil {
+		tt.Fatal(err)
+	}
+	if _, _, err := reg.Decode(framed); !errors.Is(err, ErrUndeclaredDependency) {
+		tt.Fatalf("decode: expected ErrUndeclaredDependency, got: %v", err)
 	}
 }
 
-// Placeholder NodeIDs exist only in the pre-fixup form; a stored patch
-// carrying one cannot be applied meaningfully and must be rejected.
-func TestEnvelope_DecodeRejectsPlaceholderNodeIDs(tt *testing.T) {
+// Placeholder NodeIDs exist only in the pre-fixup form and are rejected.
+func TestEnvelope_RejectsPlaceholderNodeIDs(tt *testing.T) {
+	reg := testRegistry(tt)
 	p := &patch.Patch{
 		Author: "mallory",
 		Changes: []patch.Change{{
@@ -250,12 +227,36 @@ func TestEnvelope_DecodeRejectsPlaceholderNodeIDs(tt *testing.T) {
 		}},
 	}
 	p.Hash = p.ComputeHash() // self-consistent hash over the pre-fixup form
-	data, err := Encode(EnvelopeV1{Patch: p, Producer: "mallory", Timestamp: time.Unix(0, 0).UTC()})
+	env := EnvelopeV1{Patch: p, Producer: "mallory", Timestamp: time.Unix(0, 0).UTC()}
+	if _, err := reg.Encode(JSONV1Name, env); !errors.Is(err, ErrPlaceholderNodeID) {
+		tt.Fatalf("expected ErrPlaceholderNodeID, got: %v", err)
+	}
+}
+
+// Frame-level failures: missing patch, unknown codec, bad frame bytes.
+func TestEnvelope_FrameAndRegistryRejections(tt *testing.T) {
+	reg := testRegistry(tt)
+
+	if _, err := reg.Encode(JSONV1Name, EnvelopeV1{Producer: "alice"}); !errors.Is(err, ErrMissingPatch) {
+		tt.Fatalf("nil patch: expected ErrMissingPatch, got: %v", err)
+	}
+	payload, err := JSONV1{}.Encode(sampleEnvelope(tt))
 	if err != nil {
 		tt.Fatal(err)
 	}
-	_, err = Decode(data)
-	if err == nil || !strings.Contains(err.Error(), "placeholder NodeID") {
-		tt.Fatalf("expected placeholder rejection, got: %v", err)
+	framed, err := Frame("nope1", payload)
+	if err != nil {
+		tt.Fatal(err)
+	}
+	if _, _, err := reg.Decode(framed); !errors.Is(err, ErrUnknownCodec) {
+		tt.Fatalf("unknown codec: got %v", err)
+	}
+	for _, bad := range [][]byte{nil, []byte("XXXX"), []byte("PXE1"), []byte("PXE1\xff")} {
+		if _, _, err := reg.Decode(bad); !errors.Is(err, ErrBadFrame) {
+			tt.Fatalf("bad frame %q: got %v", bad, err)
+		}
+	}
+	if _, err := Frame(strings.Repeat("x", 64), nil); !errors.Is(err, ErrCodecName) {
+		tt.Fatal("overlong codec name must be rejected")
 	}
 }

@@ -1,19 +1,22 @@
-//go:build llm_generated_opus47
-
-// Package envelope provides a JSON codec for transmittable patch records.
+// Package envelope defines the transmissible form of a patch and its
+// wire-format seam.
 //
-// An envelope wraps a *patch.Patch with metadata (Producer, Timestamp) that
-// shouldn't live on the patch itself: the patch is a value type whose hash
-// identifies it, so author / send time must travel alongside, not within.
+// An [EnvelopeV1] wraps a *patch.Patch with provenance (Producer,
+// Timestamp) that must not enter the patch's content hash: the patch is
+// a value whose identity is the BLAKE3 hash of its canonicalized
+// dependencies plus changes, so author/send-time travel alongside, not
+// within. Provenance is NOT tamper-evident; identity and dependencies
+// are (they feed the hash).
 //
-// The envelope is the on-wire / on-disk form. Decode validates the embedded
-// patch's stored hash against a freshly recomputed hash and rejects any
-// mismatch — that catches both tampered envelopes and lossy round-trips
-// through a non-canonical encoder.
+// Wire bytes are self-describing frames — "PXE1", a codec name, then a
+// codec payload — so heterogeneous fleets interoperate as long as both
+// registries know the named codec (see [CodecI], [Registry], [JSONV1]).
+// [Validate] holds the codec-independent semantic checks and runs on
+// every Registry encode/decode.
 package envelope
 
 import (
-	"encoding/json"
+	"errors"
 	"slices"
 	"time"
 
@@ -23,52 +26,52 @@ import (
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
 )
 
-// EnvelopeV1 is the v1 transmissible form of a patch. Producer and
-// Timestamp are envelope-level (not patch-level) so they don't enter the
-// patch's content hash.
+// EnvelopeV1 is the v1 logical envelope. Producer and Timestamp are
+// envelope-level (not patch-level) so they don't enter the patch's
+// content hash.
 type EnvelopeV1 struct {
 	Patch     *patch.Patch `json:"patch"`
 	Producer  string       `json:"producer"`
 	Timestamp time.Time    `json:"timestamp"`
 }
 
-// Encode serialises an envelope to canonical JSON. The output is byte-stable
-// for byte-stable inputs (the encoder writes struct fields in declaration
-// order, slices preserve order, and PatchHash uses MarshalText to emit hex).
-func Encode(env EnvelopeV1) (data []byte, err error) {
-	if env.Patch == nil {
-		err = eh.Errorf("envelope: cannot encode envelope with nil patch")
-		return
-	}
-	data, err = json.MarshalIndent(env, "", "  ")
-	if err != nil {
-		err = eh.Errorf("envelope: marshal: %w", err)
-		return
-	}
-	return
-}
+// Sentinel errors for semantic envelope validation.
+var (
+	// ErrMissingPatch: the envelope carries no patch.
+	ErrMissingPatch = errors.New("envelope carries no patch")
+	// ErrTampered: the stored hash does not match the recomputed hash —
+	// the changes or dependency set were altered, or the bytes were
+	// produced against a different identity scheme.
+	ErrTampered = errors.New("patch hash mismatch")
+	// ErrUndeclaredDependency: the changes reference a patch the
+	// dependency list does not declare (authored broken; hashes
+	// consistently).
+	ErrUndeclaredDependency = errors.New("change references an undeclared dependency")
+	// ErrPlaceholderNodeID: the patch carries pre-fixup placeholder
+	// NodeIDs and can never apply meaningfully.
+	ErrPlaceholderNodeID = errors.New("patch carries a placeholder NodeID")
+)
 
-// Decode parses an envelope and verifies that the stored patch hash matches
-// a freshly computed hash. The hash covers the patch's canonicalized
-// dependency set plus its changes, so dependency tampering fails the check
-// too. Two further structural guards reject patches that hash consistently
-// but were authored broken: changes referencing a patch the dependency
-// list does not declare, and placeholder NodeIDs (which only exist in the
-// pre-fixup form and can never apply meaningfully). Author, description,
-// Producer, and Timestamp remain outside the hash — they are provenance,
-// not identity, and are NOT tamper-evident.
-func Decode(data []byte) (env EnvelopeV1, err error) {
-	if err = json.Unmarshal(data, &env); err != nil {
-		err = eh.Errorf("envelope: unmarshal: %w", err)
-		return
-	}
+// Validate performs the codec-independent semantic checks on a decoded
+// (or about-to-be-encoded) envelope:
+//
+//   - the stored patch hash equals the freshly recomputed hash; the hash
+//     covers the canonicalized dependency set plus the changes, so
+//     dependency tampering fails here too
+//   - every patch referenced by the changes is declared as a dependency
+//     (post-fixup self-references excluded)
+//   - no NodeID carries the pre-fixup placeholder hash
+//
+// Producer, Timestamp, Author, and Description are provenance and remain
+// outside these checks.
+func Validate(env EnvelopeV1) (err error) {
 	if env.Patch == nil {
-		err = eh.Errorf("envelope: missing patch")
+		err = eh.Errorf("%w", ErrMissingPatch)
 		return
 	}
 	computed := env.Patch.ComputeHash()
 	if env.Patch.Hash != computed {
-		err = eh.Errorf("envelope: hash mismatch (stored %s, computed %s) — envelope was tampered or truncated", env.Patch.Hash, computed)
+		err = eh.Errorf("stored %s, computed %s: %w", env.Patch.Hash, computed, ErrTampered)
 		return
 	}
 	declared := make(map[t.PatchHash]struct{}, len(env.Patch.Dependencies))
@@ -82,12 +85,12 @@ func Decode(data []byte) (env EnvelopeV1, err error) {
 			continue
 		}
 		if _, ok := declared[d]; !ok {
-			err = eh.Errorf("envelope: patch %s references %s but does not declare it as a dependency", env.Patch.Hash, d)
+			err = eh.Errorf("patch %s references %s: %w", env.Patch.Hash, d, ErrUndeclaredDependency)
 			return
 		}
 	}
 	if slices.ContainsFunc(env.Patch.Changes, changeHasPlaceholder) {
-		err = eh.Errorf("envelope: patch %s carries a placeholder NodeID — pre-fixup form cannot be applied", env.Patch.Hash)
+		err = eh.Errorf("patch %s: %w", env.Patch.Hash, ErrPlaceholderNodeID)
 		return
 	}
 	return
