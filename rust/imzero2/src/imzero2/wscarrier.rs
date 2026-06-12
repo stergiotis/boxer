@@ -1,7 +1,15 @@
 //! WebSocket carrier (ADR-0024 SD4/SD6, Phases 4–5).
 //!
-//! One TCP port serves the WebSocket data channel (`IMZERO2_HEADLESS_LISTEN`),
-//! port+1 serves the embedded single-file viewer page over plain HTTP.
+//! Two TCP listeners (`IMZERO2_HEADLESS_LISTEN` and port+1, kept for URL
+//! compatibility) run an identical dispatcher: a request that carries a
+//! WebSocket upgrade header becomes the data channel; anything else is
+//! answered with the embedded single-file viewer page. Sniffing uses
+//! `TcpStream::peek`, so the stream reaches the WebSocket handshake
+//! unconsumed. Either port therefore works for both the page and the
+//! socket — the viewer connects back to its own origin (`/ws`), which
+//! also makes a single TLS-terminating reverse proxy in front (or an SSH
+//! tunnel) sufficient for the whole wire.
+//!
 //! A single binary WebSocket carries everything with a one-byte type
 //! prefix (SD6): 0x01 video chunks server→client, 0x02 protobuf input
 //! events client→server, 0x03 session control both ways.
@@ -99,19 +107,22 @@ impl WsCarrier {
                     }
                 };
                 rt.block_on(async move {
-                    let ws = async {
+                    let page: std::sync::Arc<str> = std::sync::Arc::from(include_str!("viewer/index.html"));
+                    let a = async {
                         match tokio::net::TcpListener::from_std(ws_listener) {
-                            Ok(l) => accept_loop(l, inner_thread.clone()).await,
+                            Ok(l) => accept_loop(l, inner_thread.clone(), page.clone()).await,
                             Err(e) => tracing::error!(error=%e, "ws listener conversion failed"),
                         }
                     };
-                    let page = async {
+                    let inner_page = inner_thread.clone();
+                    let page2 = page.clone();
+                    let b = async {
                         match tokio::net::TcpListener::from_std(page_listener) {
-                            Ok(l) => page_loop(l, ws_addr.port()).await,
+                            Ok(l) => accept_loop(l, inner_page, page2).await,
                             Err(e) => tracing::error!(error=%e, "page listener conversion failed"),
                         }
                     };
-                    tokio::join!(ws, page);
+                    tokio::join!(a, b);
                 });
             })?;
         Ok(Self {
@@ -206,23 +217,83 @@ impl FrameSink for WsCarrier {
     }
 }
 
-async fn accept_loop(listener: tokio::net::TcpListener, inner: std::sync::Arc<Inner>) {
+/// Case-insensitive ASCII substring search over a request head.
+fn contains_ci(haystack: &[u8], needle: &[u8]) -> bool {
+    if needle.is_empty() || haystack.len() < needle.len() {
+        return false;
+    }
+    haystack
+        .windows(needle.len())
+        .any(|w| w.eq_ignore_ascii_case(needle))
+}
+
+/// Decide whether the incoming request is a WebSocket handshake by
+/// peeking (not consuming) the request head. Browsers send the whole
+/// head in one segment; a few short re-peeks cover stragglers.
+async fn sniff_websocket(stream: &tokio::net::TcpStream) -> bool {
+    let mut buf = [0u8; 2048];
+    for _ in 0..10 {
+        match stream.peek(&mut buf).await {
+            Ok(0) => return false,
+            Ok(n) => {
+                let head = buf.get(..n).unwrap_or_default();
+                if contains_ci(head, b"upgrade: websocket") {
+                    return true;
+                }
+                // Full head seen (or buffer exhausted) without an upgrade
+                // header: it is a plain HTTP request.
+                if n == buf.len() || head.windows(4).any(|w| w == b"\r\n\r\n") {
+                    return false;
+                }
+            }
+            Err(_) => return false,
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(15)).await;
+    }
+    false
+}
+
+async fn serve_page(mut stream: tokio::net::TcpStream, page: &str) {
+    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+    // Consume whatever fits of the request and answer unconditionally; a
+    // single-page server has no routing worth parsing.
+    let mut buf = [0u8; 4096];
+    let _ = stream.read(&mut buf).await;
+    let response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        page.len(),
+        page
+    );
+    let _ = stream.write_all(response.as_bytes()).await;
+    let _ = stream.shutdown().await;
+}
+
+async fn accept_loop(
+    listener: tokio::net::TcpListener,
+    inner: std::sync::Arc<Inner>,
+    page: std::sync::Arc<str>,
+) {
     loop {
         let (stream, peer) = match listener.accept().await {
             Ok(x) => x,
             Err(e) => {
-                tracing::error!(error=%e, "ws accept failed");
+                tracing::error!(error=%e, "carrier accept failed");
                 continue;
             }
         };
-        if inner.connected.load(std::sync::atomic::Ordering::Acquire) {
-            // Single session at v1 (ADR-0024): reject while busy.
-            tracing::info!(%peer, "rejecting second viewer connection (single-session v1)");
-            drop(stream);
-            continue;
-        }
         let inner = inner.clone();
+        let page = page.clone();
         tokio::spawn(async move {
+            if !sniff_websocket(&stream).await {
+                serve_page(stream, &page).await;
+                return;
+            }
+            if inner.connected.load(std::sync::atomic::Ordering::Acquire) {
+                // Single session at v1 (ADR-0024): reject while busy.
+                tracing::info!(%peer, "rejecting second viewer connection (single-session v1)");
+                drop(stream);
+                return;
+            }
             if let Err(e) = handle_session(stream, peer, inner).await {
                 tracing::info!(%peer, error=%e, "viewer session ended with error");
             }
@@ -332,33 +403,3 @@ fn handle_client_message(data: &[u8], inner: &Inner) {
     }
 }
 
-/// Minimal HTTP responder for the embedded viewer page: every GET gets the
-/// page (it is the only asset); the WebSocket port is templated in.
-async fn page_loop(listener: tokio::net::TcpListener, ws_port: u16) {
-    const VIEWER_HTML: &str = include_str!("viewer/index.html");
-    let page = VIEWER_HTML.replace("{{WS_PORT}}", &ws_port.to_string());
-    loop {
-        let (mut stream, _) = match listener.accept().await {
-            Ok(x) => x,
-            Err(e) => {
-                tracing::error!(error=%e, "page accept failed");
-                continue;
-            }
-        };
-        let page = page.clone();
-        tokio::spawn(async move {
-            use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
-            // Read whatever fits of the request and answer unconditionally;
-            // a single-page server has no routing worth parsing.
-            let mut buf = [0u8; 4096];
-            let _ = stream.read(&mut buf).await;
-            let response = format!(
-                "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                page.len(),
-                page
-            );
-            let _ = stream.write_all(response.as_bytes()).await;
-            let _ = stream.shutdown().await;
-        });
-    }
-}

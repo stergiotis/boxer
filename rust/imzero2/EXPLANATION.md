@@ -86,9 +86,11 @@ Five execution contexts, each with one job:
    splits the byte stream into access units, wraps each in the protobuf
    envelope, and pushes framed payloads into a bounded channel via a
    blocking send.
-4. **Carrier thread**: a current-thread tokio runtime running the
-   WebSocket accept/session loops and the single-page HTTP responder for
-   the embedded viewer (served on port+1).
+4. **Carrier thread**: a current-thread tokio runtime running two
+   identical listeners (the configured port and port+1): each peeks the
+   request head and dispatches — WebSocket upgrade → session, anything
+   else → the embedded viewer page. The page connects back to its own
+   origin, so one forwarded or proxied port carries the whole wire.
 5. **Browser**: decodes and presents; captures input.
 
 Cross-context communication is deliberately narrow: atomics for

@@ -31,8 +31,14 @@
 <script>
 "use strict";
 
-const WS_PORT = "{{WS_PORT}}";
 const PREFIX_VIDEO = 0x01, PREFIX_INPUT = 0x02, PREFIX_SESSION = 0x03;
+
+// The serving port accepts WebSocket upgrades too, so the data channel is
+// same-origin by default — which keeps one TLS-terminating reverse proxy
+// or SSH tunnel sufficient for the whole wire (wss follows https). A
+// `?ws=` query parameter overrides the endpoint for unusual deployments.
+const WS_URL = new URLSearchParams(location.search).get("ws")
+  || `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`;
 
 const statusEl = document.getElementById("status");
 const canvas = document.getElementById("screen");
@@ -295,7 +301,7 @@ function setupInput() {
 
 // ---- connection ----
 function connect() {
-  ws = new WebSocket(`ws://${location.hostname}:${WS_PORT}/`);
+  ws = new WebSocket(WS_URL);
   ws.binaryType = "arraybuffer";
   ws.onopen = () => { statusEl.textContent = "connected — waiting for stream"; };
   ws.onclose = () => { statusEl.textContent = "disconnected"; configured = false; };
