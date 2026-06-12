@@ -14,7 +14,7 @@ func mkNode(id uint64, path string, class string, imports ...uint64) godep.Packa
 
 // fixtureClosure builds a small hand-wired graph exercising every tier:
 //
-//	app(1,int) → mid(2,int) → os/exec(3,std,RED)
+//	app(1,int) → mid(2,int) → net/smtp(3,std,RED)
 //	pure(4,int) → fmt(5,std,green)
 //	refl(6,int) → reflect(7,std,YELLOW)
 //	denied(8,int) → x/tools(9,ext,RED)
@@ -23,7 +23,7 @@ func fixtureClosure(target TargetID) (tc targetClosure) {
 	nodes := []godep.PackageNode{
 		mkNode(1, "example.com/app", godep.ClassInternal, 2),
 		mkNode(2, "example.com/mid", godep.ClassInternal, 3),
-		mkNode(3, "os/exec", godep.ClassStdlib),
+		mkNode(3, "net/smtp", godep.ClassStdlib),
 		mkNode(4, "example.com/pure", godep.ClassInternal, 5),
 		mkNode(5, "fmt", godep.ClassStdlib),
 		mkNode(6, "example.com/refl", godep.ClassInternal, 7),
@@ -46,8 +46,8 @@ func TestClassifyStatic_Tiers(t *testing.T) {
 	v := classifyStatic(tc, internalOnly, nil)
 
 	want := map[uint64]Tier{
-		1:  TierRed,    // app → mid → os/exec
-		2:  TierRed,    // mid → os/exec
+		1:  TierRed,    // app → mid → net/smtp
+		2:  TierRed,    // mid → net/smtp
 		4:  TierGreen,  // pure → fmt
 		6:  TierYellow, // refl → reflect
 		8:  TierRed,    // denied → x/tools
@@ -65,7 +65,7 @@ func TestClassifyStatic_Tiers(t *testing.T) {
 	}
 	// Stdlib/external leaves must not receive a reported verdict under internalOnly.
 	if _, ok := v[3]; ok {
-		t.Error("os/exec (stdlib) should be filtered out of reported verdicts")
+		t.Error("net/smtp (stdlib) should be filtered out of reported verdicts")
 	}
 }
 
@@ -73,16 +73,16 @@ func TestClassifyStatic_Blame(t *testing.T) {
 	tc := fixtureClosure(TargetWASI)
 	v := classifyStatic(tc, internalOnly, nil)
 
-	// app is Red and the blame must be the shortest path to os/exec.
+	// app is Red and the blame must be the shortest path to net/smtp.
 	app := v[1]
 	if len(app.Reasons) == 0 {
 		t.Fatal("app: expected a blame reason")
 	}
 	r := app.Reasons[0]
-	if r.Kind != ReasonUnsupportedStdlib || r.Leaf != "os/exec" {
-		t.Errorf("app blame: got kind=%v leaf=%q, want unsupported-stdlib/os/exec", r.Kind, r.Leaf)
+	if r.Kind != ReasonUnsupportedStdlib || r.Leaf != "net/smtp" {
+		t.Errorf("app blame: got kind=%v leaf=%q, want unsupported-stdlib/net/smtp", r.Kind, r.Leaf)
 	}
-	wantPath := "example.com/app→example.com/mid→os/exec"
+	wantPath := "example.com/app→example.com/mid→net/smtp"
 	if got := strings.Join(r.Path, "→"); got != wantPath {
 		t.Errorf("app blame path: got %q, want %q", got, wantPath)
 	}
@@ -121,11 +121,11 @@ func TestClassifyStatic_WasmUnknownStricter(t *testing.T) {
 
 func TestClassifyStatic_AssumeClean(t *testing.T) {
 	tc := fixtureClosure(TargetWASI)
-	// Baseline: app(1) is Red through mid(2)→os/exec(3).
+	// Baseline: app(1) is Red through mid(2)→net/smtp(3).
 	if got := classifyStatic(tc, internalOnly, nil)[1].Static; got != TierRed {
 		t.Fatalf("baseline: app should be red, got %v", got)
 	}
-	// Counterfactual: assume mid is clean → app no longer reaches os/exec
+	// Counterfactual: assume mid is clean → app no longer reaches net/smtp
 	// through it → Green, and mid itself is reported Green.
 	v := classifyStatic(tc, internalOnly, []string{"example.com/mid"})
 	if got := v[1].Static; got != TierGreen {

@@ -25,7 +25,13 @@
 // verify` reconciles declaration against the freshly computed reality and gates
 // regressions in CI.
 //
-// This package must stay dependency-free (ADR-0080 SD2): every package imports
-// it, so any dependency would become universal and could create cycles or taint
-// the very wasm verdicts it records. It mirrors public/compiletimeflags.
+// Two discovery surfaces (registry.go): generated files Register their Props
+// from init, so packageprops.All() enumerates the packages compiled into the
+// running binary; `wasmsurvey props harvest --emit go` emits a static Table of
+// the whole repo for embedding into a binary that does not link everything.
+//
+// This package depends only on the standard library (sync, sort) and on no
+// boxer or external package (ADR-0080 SD2): every package imports it, so a
+// boxer/external dependency would become universal and could create cycles or
+// taint the very wasm verdicts it records. It mirrors public/compiletimeflags.
 package packageprops

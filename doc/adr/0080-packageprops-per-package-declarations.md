@@ -91,9 +91,10 @@ var PackageProps = packageprops.Props{
 - **`props generate`** — seeds a `package_props.go` in each package from the
   survey's computed verdict. Idempotent-create: it writes only where the file is
   absent, never clobbering a curated one (the *hybrid* lifecycle).
-- **`props harvest`** — go/ast-scans the tree for `PackageProps` declarations and
-  emits the overview as a leeway/arrow table (reusing the survey's existing
-  `go/packages` machinery).
+- **`props harvest`** — go/ast-scans the tree for `PackageProps` declarations
+  (no survey, no TinyGo) and emits the overview as a `--emit table` text grid or
+  `--emit go` source file (`var Table = packageprops.Table{…}`) for embedding the
+  whole-repo snapshot into a binary that does not link every package.
 - **`props verify`** — reconciles each *declared* `PackageProps` against the
   freshly *computed* verdict and reports mismatches; exits non-zero on a
   regression (a package declared `WASMCompiles` that is now `WASMBlocked`). The
@@ -119,6 +120,16 @@ var PackageProps = packageprops.Props{
   Go vocabulary (no leeway tags) avoids a half-built serialization contract; the
   harvester maps declarations → the leeway/arrow table it already knows how to
   build (ADR-0078 reuses godep, ADR-0064).
+- **SD6 — Two discovery surfaces, neither reflect-based.** Go has no runtime way
+  to enumerate the packages linked into a binary, so discovery is wired: (a) a
+  process-global **registry** (`packageprops.Register`/`All`/`Lookup`) that each
+  generated file feeds from `init` — since Go runs `init` for every linked
+  package and DCE never drops it, `All()` is exactly "what is compiled into this
+  binary"; (b) the **`--emit go` Table** (SD above) for the whole repo regardless
+  of what a binary links. `packageprops` therefore depends on `sync`+`sort` —
+  still no boxer/external deps, still wasm-green (probe-confirmed), so the
+  universal import stays benign. The registry uses an explicit import path (not
+  `runtime.Callers`), which TinyGo's name-stripping would defeat.
 
 ## Consequences
 

@@ -34,6 +34,29 @@ func TestPatternsToPrefixes(t *testing.T) {
 	}
 }
 
+func TestRenderHarvestGo(t *testing.T) {
+	rows := []HarvestRow{
+		{ImportPath: "example.com/a", WASMWASI: packageprops.WASMCompiles, WASMJS: packageprops.WASMBlocked, WASMFreestanding: packageprops.WASMUnknown},
+	}
+	src, err := renderHarvestGo(rows, "proptable")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(src)
+	for _, want := range []string{
+		"package proptable",
+		"var Table = packageprops.Table{",
+		`ImportPath: "example.com/a"`,
+		"packageprops.WASMCompiles",
+		"packageprops.WASMBlocked",
+		"packageprops.WASMUnknown",
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("emitted Go missing %q:\n%s", want, s)
+		}
+	}
+}
+
 func TestInScope(t *testing.T) {
 	pre := []string{"m/public/math"}
 	if !inScope("m/public/math", pre) || !inScope("m/public/math/numerical", pre) {

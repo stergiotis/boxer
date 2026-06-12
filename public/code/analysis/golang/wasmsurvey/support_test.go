@@ -15,8 +15,9 @@ func TestLeafSeed(t *testing.T) {
 		wantTier   Tier
 		wantKind   ReasonKind
 	}{
-		{"unsupported stdlib", "os/exec", godep.ClassStdlib, TargetWASI, TierRed, ReasonUnsupportedStdlib},
-		{"net is red", "net", godep.ClassStdlib, TargetJS, TierRed, ReasonUnsupportedStdlib},
+		{"unsupported stdlib (net/smtp)", "net/smtp", godep.ClassStdlib, TargetWASI, TierRed, ReasonUnsupportedStdlib},
+		{"net compiles under tinygo", "net", godep.ClassStdlib, TargetJS, TierGreen, ReasonNone},
+		{"os/exec compiles under tinygo", "os/exec", godep.ClassStdlib, TargetWASI, TierGreen, ReasonNone},
 		{"reflect partial", "reflect", godep.ClassStdlib, TargetWASI, TierYellow, ReasonReflect},
 		{"json on reflect subset", "encoding/json", godep.ClassStdlib, TargetWASI, TierYellow, ReasonReflect},
 		{"json v2 experiment", "encoding/json/v2", godep.ClassStdlib, TargetWASI, TierYellow, ReasonGoexperimentJSONv2},

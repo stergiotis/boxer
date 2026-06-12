@@ -29,10 +29,13 @@ func newPropsCommand() *cli.Command {
 			},
 			{
 				Name:  "harvest",
-				Usage: "Read committed PackageProps declarations into an overview table (no survey, no TinyGo)",
+				Usage: "Read committed PackageProps declarations into a table or a Go Table literal (no survey, no TinyGo)",
 				Flags: []cli.Flag{
 					&cli.StringFlag{Name: "dir", Usage: "module dir; empty resolves nearest go.mod above wd"},
 					&cli.StringSliceFlag{Name: "patterns", Usage: "scope, e.g. ./public/math/...", Value: cli.NewStringSlice("./...")},
+					&cli.StringFlag{Name: "emit", Usage: "output format: table | go", Value: "table"},
+					&cli.StringFlag{Name: "out", Usage: "output path for --emit go (\"-\" or empty = stdout)"},
+					&cli.StringFlag{Name: "package", Usage: "package clause for --emit go", Value: "proptable"},
 				},
 				Action: runPropsHarvest,
 			},
@@ -82,21 +85,45 @@ func runPropsHarvest(c *cli.Context) (err error) {
 		return err
 	}
 	prefixes := patternsToPrefixes(modPath, c.StringSlice("patterns"))
-
-	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "package\twasi\tjs\tfreestanding")
-	n := 0
+	scoped := make([]HarvestRow, 0, len(rows))
 	for _, r := range rows {
-		if !inScope(r.ImportPath, prefixes) {
-			continue
+		if inScope(r.ImportPath, prefixes) {
+			scoped = append(scoped, r)
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n",
-			strings.TrimPrefix(r.ImportPath, modPath+"/"), r.WASMWASI, r.WASMJS, r.WASMFreestanding)
-		n++
 	}
-	_ = tw.Flush()
-	fmt.Fprintf(os.Stdout, "%d declared package(s)\n", n)
-	return nil
+
+	switch c.String("emit") {
+	case "go":
+		var src []byte
+		if src, err = renderHarvestGo(scoped, c.String("package")); err != nil {
+			return err
+		}
+		out := c.String("out")
+		if out == "" || out == "-" {
+			_, err = os.Stdout.Write(src)
+			return err
+		}
+		if err = os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
+			return eb.Build().Str("out", out).Errorf("mkdir for emit: %w", err)
+		}
+		if err = os.WriteFile(out, src, 0o644); err != nil {
+			return eb.Build().Str("out", out).Errorf("write emit: %w", err)
+		}
+		fmt.Fprintf(os.Stdout, "wrote %s (%d packages)\n", out, len(scoped))
+		return nil
+	case "table", "":
+		tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(tw, "package\twasi\tjs\tfreestanding")
+		for _, r := range scoped {
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n",
+				strings.TrimPrefix(r.ImportPath, modPath+"/"), r.WASMWASI, r.WASMJS, r.WASMFreestanding)
+		}
+		_ = tw.Flush()
+		fmt.Fprintf(os.Stdout, "%d declared package(s)\n", len(scoped))
+		return nil
+	default:
+		return eb.Build().Str("emit", c.String("emit")).Errorf("unknown --emit (want table|go)")
+	}
 }
 
 func runPropsVerify(c *cli.Context) (err error) {
