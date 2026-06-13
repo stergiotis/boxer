@@ -96,6 +96,13 @@ func (inst *HumanReadableNaturalKeyRegistry[C]) Begin(nk naming.StylableName) (r
 			err = eb.Build().Str("origin1", w.origin).Str("origin2", origin).Stringer("nk", nk).Errorf("two different code locations register the same natural key value")
 			return
 		}
+		// Same-origin re-Begin: return the existing registration unchanged.
+		// Previously this fell through and minted a fresh id from the grown
+		// lu.Len(), making the natural-key -> id mapping unstable (review G-5).
+		r = RegisteredNaturalKeyDml{
+			w: w,
+		}
+		return
 	}
 	w = RegisteredNaturalKey{
 		id:                              inst.tag.ComposeId(inst.untaggedOffset + identifier.UntaggedId(lu.Len())),

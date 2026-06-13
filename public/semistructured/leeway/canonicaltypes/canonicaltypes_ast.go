@@ -45,8 +45,23 @@ func (inst StringAstNode) IsStringNode() bool {
 	return true
 }
 func (inst StringAstNode) IsValid() bool {
-	return (inst.WidthModifier == WidthModifierNone && inst.Width == 0) ||
-		(inst.WidthModifier == WidthModifierFixed && inst.Width > 0)
+	// Previously omitted the base-type check, so a zero-value StringAstNode
+	// passed validity yet String() emitted "" (review B-4).
+	switch inst.BaseType {
+	case BaseTypeStringUtf8, BaseTypeStringBytes, BaseTypeStringBool:
+	default:
+		return false
+	}
+	if !((inst.WidthModifier == WidthModifierNone && inst.Width == 0) ||
+		(inst.WidthModifier == WidthModifierFixed && inst.Width > 0)) {
+		return false
+	}
+	switch inst.ScalarModifier {
+	case ScalarModifierNone, ScalarModifierSet, ScalarModifierHomogenousArray:
+	default:
+		return false
+	}
+	return true
 }
 
 func (inst StringAstNode) IsTemporalNode() bool {
@@ -122,6 +137,23 @@ func (inst TemporalTypeAstNode) GenerateGoCode(w io.Writer) (err error) {
 	return
 }
 func (inst TemporalTypeAstNode) IsValid() bool {
+	// Previously unconditionally true, so zero-value/hand-built nodes passed
+	// validity yet String() emitted unparseable text (review B-4). Validity
+	// means "String() reparses": a known base type, a non-zero width (NUMBER
+	// forbids 0), and a known scalar modifier.
+	switch inst.BaseType {
+	case BaseTypeTemporalUtcDatetime, BaseTypeTemporalZonedDatetime, BaseTypeTemporalZonedTime:
+	default:
+		return false
+	}
+	if inst.Width == 0 {
+		return false
+	}
+	switch inst.ScalarModifier {
+	case ScalarModifierNone, ScalarModifierSet, ScalarModifierHomogenousArray:
+	default:
+		return false
+	}
 	return true
 }
 func (inst TemporalTypeAstNode) IsScalar() bool {
@@ -155,6 +187,28 @@ func (inst MachineNumericTypeAstNode) IsPrimitive() bool {
 }
 
 func (inst MachineNumericTypeAstNode) IsValid() bool {
+	// See TemporalTypeAstNode.IsValid (review B-4). Width must be non-zero so
+	// String() does not emit the unparseable "u0"; width set is intentionally
+	// not restricted to codegen-supported widths (e.g. f8/u128 reparse fine,
+	// the generators reject unsupported widths separately).
+	switch inst.BaseType {
+	case BaseTypeMachineNumericUnsigned, BaseTypeMachineNumericSigned, BaseTypeMachineNumericFloat:
+	default:
+		return false
+	}
+	if inst.Width == 0 {
+		return false
+	}
+	switch inst.ByteOrderModifier {
+	case ByteOrderModifierNone, ByteOrderModifierLittleEndian, ByteOrderModifierBigEndian:
+	default:
+		return false
+	}
+	switch inst.ScalarModifier {
+	case ScalarModifierNone, ScalarModifierSet, ScalarModifierHomogenousArray:
+	default:
+		return false
+	}
 	return true
 }
 func (inst MachineNumericTypeAstNode) IsSignature() bool {

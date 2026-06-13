@@ -113,7 +113,13 @@ func (inst *MembershipTagValueRegistry[C]) Begin(nk naming.StylableName, tv iden
 	}
 	origin := getOrigin()
 	var has bool
-	tg := tv.GetTag()
+	// The record's public identity (GetTagValue/GetId) is the offset-adjusted
+	// value; key the lookup tables by the same offset-adjusted tag so
+	// GetRecordByTagValue(rec.GetTagValue()) round-trips when offset != 0
+	// (review G-9). offset is constant per registry, so duplicate detection is
+	// unchanged.
+	etv := tv + inst.offset
+	tg := etv.GetTag()
 	var w RegisteredTagValue
 	w, has = inst.lookupTg.Get(tg)
 	if has {
@@ -123,7 +129,7 @@ func (inst *MembershipTagValueRegistry[C]) Begin(nk naming.StylableName, tv iden
 		}
 	}
 	w = RegisteredTagValue{
-		tv:         tv + inst.offset,
+		tv:         etv,
 		origin:     origin,
 		moduleInfo: getModuleInfo(2),
 		naturalKey: nk,

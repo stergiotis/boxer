@@ -215,6 +215,14 @@ func (inst *Parser) antlrTreeCanonicalTypeOrGroupToAst(context *grammar2.Canonic
 	for c := range antlr4utils.IterateAllByType[grammar2.ICanonicalTypeContext](cg) {
 		var n PrimitiveAstNodeI
 		n, err = inst.antlrTreeCanonicalTypeToAst(c)
+		if err != nil {
+			// Previously err was neither checked nor accumulated: a member
+			// parse error (e.g. width overflow) was overwritten and a nil node
+			// appended, handing the caller a nil-err GroupAstNode that panicked
+			// on the next String()/IsValid() (review B-3).
+			err = eb.Build().Errorf("unable to parse group member: %w", err)
+			return
+		}
 		members = append(members, n)
 	}
 	node = GroupAstNode{

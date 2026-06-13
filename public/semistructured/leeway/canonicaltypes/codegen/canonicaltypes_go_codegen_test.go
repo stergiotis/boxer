@@ -101,8 +101,14 @@ func TestGenerateGoCode(t *testing.T) {
 	if err != nil {
 		t.Skip(err.Error())
 	}
-	dest := path.Join(root, "public", "semistructured", "leeway", "canonicaltypes", "codegen", "canonicalTypes_go_codegen_dummy_test.gen.go")
+	// Must end in _test.go so Go classifies it as a test file; the previous
+	// "_test.gen.go" suffix made it a *production* file that pulled testing +
+	// testify into the production codegen package and its assertions never ran
+	// (review B-1).
+	dest := path.Join(root, "public", "semistructured", "leeway", "canonicaltypes", "codegen", "canonicaltypes_go_codegen_dummy_gen_test.go")
 	_ = os.Remove(dest)
+	// Remove the legacy mis-suffixed artifact if it is still present.
+	_ = os.Remove(path.Join(root, "public", "semistructured", "leeway", "canonicaltypes", "codegen", "canonicalTypes_go_codegen_dummy_test.gen.go"))
 
 	s := &strings.Builder{}
 	var imports []string

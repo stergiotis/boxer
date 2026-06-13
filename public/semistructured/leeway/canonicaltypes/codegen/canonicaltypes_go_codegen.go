@@ -84,6 +84,11 @@ func generateStringType(baseType canonicaltypes.BaseTypeStringE, widthModifier c
 				code = fmt.Sprintf("[%d]byte", width)
 				zeroValueLiteral = fmt.Sprintf("[%d]byte{}", width)
 			}
+			// Fixed-width UTF-8 (sxN): Go has no fixed-width string type, so it
+			// maps to the plain `string` set above. This is a deliberate
+			// cross-technology divergence — ClickHouse enforces the width via
+			// FixedString(N), Go does not (review B-5). u128/256 (no Go builtin)
+			// is handled distinctly and errors below.
 		default:
 			err = common.ErrNotImplemented
 		}
@@ -155,10 +160,13 @@ func generateMachineNumericType(baseMachineNumber canonicaltypes.BaseTypeMachine
 			code = "int"
 		}
 		switch width {
-		case 8, 16, 32, 64, 128, 256:
+		case 8, 16, 32, 64:
 			code = fmt.Sprintf("%s%d", code, width)
 			zeroValueLiteral = code + "(0)"
 		default:
+			// 128/256 are valid canonical widths (CH UInt128/256) but Go has no
+			// uint128/int256 builtin — emitting them produced uncompilable code
+			// with a nil error (review B-2/D-5). Fail loud instead.
 			err = common.ErrNotImplemented
 		}
 		switch scalarModifier {

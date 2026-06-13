@@ -45,7 +45,7 @@ func (inst *VcsManagedContract) ValidateMembershipVerbatimMachineReadable(m []by
 }
 
 func (inst *VcsManagedContract) ValidateMembershipVerbatimHumanReadable(name naming.StylableName) error {
-	if name.IsValid() {
+	if !name.IsValid() {
 		return eb.Build().Stringer("name", name).Errorf("name is not a valid stylable name")
 	}
 	return nil

@@ -146,7 +146,7 @@ func NewCborMapping() (tbl common.TableDesc, err error) {
 	//	pathMembershipSpec)
 	manip.MergeTaggedValueColumn("float32",
 		"value",
-		canonicaltypes2.MachineNumericTypeAstNode{BaseType: canonicaltypes2.BaseTypeMachineNumericFloat, Width: 64},
+		canonicaltypes2.MachineNumericTypeAstNode{BaseType: canonicaltypes2.BaseTypeMachineNumericFloat, Width: 32},
 		hintsFloat32, valueaspects.EmptyAspectSet,
 		useaspects.EmptyAspectSet,
 		pathMembershipSpec,

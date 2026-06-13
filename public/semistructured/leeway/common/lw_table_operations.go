@@ -53,9 +53,13 @@ func (inst *TableOperations) MergeTables(tbl1, tbl2 *TableDesc) (out *TableDesc,
 		err = eh.Errorf("unable to merge table in manipulator: %w", err)
 		return
 	}
+	// out was a never-allocated named pointer return; `*out = …` nil-derefed on
+	// every call (review A-1). Allocate before writing through it.
+	out = &TableDesc{}
 	*out, err = manip.BuildTableDesc()
 	if err != nil {
 		err = eh.Errorf("unable to get table from manipulator: %w", err)
+		out = nil
 		return
 	}
 	return
@@ -86,6 +90,8 @@ type TableSubsetCriteria struct {
 }
 
 func (inst *TableOperations) Subset(tbl *TableDesc, criteria TableSubsetCriteria) (out *TableDesc, err error) {
+	// Fail loud instead of silently returning (nil, nil) — review A-6.
+	err = eh.Errorf("TableOperations.Subset: %w", ErrNotImplemented)
 	return
 }
 func (inst *TableOperations) MustCompare(tbl1, tbl2 *TableDesc) (r int) {

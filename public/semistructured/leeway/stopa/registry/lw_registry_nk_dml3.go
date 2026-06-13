@@ -78,7 +78,7 @@ func (inst RegisteredNaturalKeyFinalDml) MustAddRestriction(sectionName naming.S
 	return inst
 }
 func (inst RegisteredNaturalKeyFinalDml) ClearFinal() RegisteredNaturalKeyDml {
-	inst.w.flags = inst.w.flags.ClearVirtual()
+	inst.w.flags = inst.w.flags.ClearFinal() // was ClearVirtual: cleared the wrong flag (review G-3)
 	inst.w.register(inst.w)
 	return RegisteredNaturalKeyDml(inst)
 }

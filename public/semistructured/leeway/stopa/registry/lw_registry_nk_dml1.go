@@ -84,6 +84,7 @@ func (inst RegisteredNaturalKeyDml) SetVirtual() RegisteredNaturalKeyVirtualDml 
 }
 func (inst RegisteredNaturalKeyDml) SetFinal() RegisteredNaturalKeyFinalDml {
 	inst.w.flags = inst.w.flags.SetFinal()
+	inst.w.register(inst.w) // mirror SetVirtual/SetDeprecated so the stored copy carries Final (review G-4)
 	return RegisteredNaturalKeyFinalDml(inst)
 }
 func (inst RegisteredNaturalKeyDml) SetDeprecated() RegisteredNaturalKeyDml {

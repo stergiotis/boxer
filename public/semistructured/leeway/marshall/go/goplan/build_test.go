@@ -193,9 +193,10 @@ func TestPlanBuilder_Reject(t *testing.T) {
 		{"missing kind", []fld{idCol}, "missing the `_` entity-level field"},
 		{"no plain cols", []fld{kindUS, {name: "V", lw: "v,sym", shape: shp("string")}}, "declares no plain columns"},
 		{"missing id plain", []fld{kindUS, {name: "Ts", lw: ",ts", shape: shp("time.Time")}}, "missing required plain column `id`"},
-		// A scalar canonical whose derived Go type (uint128) round-trips but is
-		// not a supported plain-column type — exercises ValidatePlainColumnShape.
-		{"plain unsupported type", []fld{kindUS, {name: "Id", lw: ",id", shape: goplan.FieldShape{Canonical: canonicaltypes.MachineNumericTypeAstNode{BaseType: canonicaltypes.BaseTypeMachineNumericUnsigned, Width: 128}}}}, "unsupported plain column Go type"},
+		// A u128 scalar has no Go builtin; the canonical->Go derivation now
+		// rejects it at the codegen layer (review B-2/D-5) before goplan's own
+		// plain-column-shape check runs.
+		{"plain unsupported type", []fld{kindUS, {name: "Id", lw: ",id", shape: goplan.FieldShape{Canonical: canonicaltypes.MachineNumericTypeAstNode{BaseType: canonicaltypes.BaseTypeMachineNumericUnsigned, Width: 128}}}}, "not implemented"},
 		{"plain unknown column", []fld{kindUS, idCol, {name: "X", lw: ",bogus", shape: shp("uint64")}}, "unknown plain column"},
 		{"plain carries a flag", []fld{kindUS, idCol, {name: "X", lw: ",ts,unit", shape: shp("time.Time")}}, "plain field cannot carry"},
 		{"plain non-scalar", []fld{kindUS, {name: "Id", lw: ",id", shape: sliceShp("uint64")}}, "plain field must be a scalar"},
