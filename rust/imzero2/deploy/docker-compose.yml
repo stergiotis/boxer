@@ -1,0 +1,33 @@
+# imzero2 pixel-streaming demo: the app (bound to the internal network only)
+# behind Caddy, which terminates TLS (auto Let's Encrypt) and enforces a
+# password — because v1 ships no in-app auth/TLS (ADR-0082 is proposed).
+#
+# Image is built by ./build.sh (engine-agnostic; works with `docker compose`
+# or `podman compose`). Config + secrets live in demo.env (copy demo.env.example).
+services:
+  imzero2:
+    image: imzero2-demo:latest
+    restart: unless-stopped
+    env_file: demo.env          # LAUNCH, IMZERO2_HEADLESS_ENCODER_ARGS, ...
+    expose:
+      - "8089"                  # internal only — never published to the host
+    # Reap the Go->Rust->ffmpeg process tree cleanly:
+    init: true
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - imzero2
+    env_file: demo.env          # DOMAIN, BASIC_AUTH_USER, BASIC_AUTH_HASH
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

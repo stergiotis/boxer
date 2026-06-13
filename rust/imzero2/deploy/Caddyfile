@@ -1,0 +1,17 @@
+# TLS termination (auto Let's Encrypt for $DOMAIN) + a password gate in front
+# of the unauthenticated v1 carrier. The carrier serves the page AND the
+# WebSocket same-origin on one port, so a single reverse_proxy covers the whole
+# wire; Caddy upgrades WebSockets automatically.
+#
+# Vars come from demo.env (passed via compose env_file). For a self-signed /
+# local test, set DOMAIN=localhost and run `caddy` with `tls internal`.
+{$DOMAIN} {
+	encode zstd gzip
+	basic_auth {
+		{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
+	}
+	reverse_proxy imzero2:8089 {
+		# Long-lived video WebSocket: stream, don't buffer.
+		flush_interval -1
+	}
+}
