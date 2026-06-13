@@ -760,7 +760,7 @@ func TestNormalizeSugarMultipleInSameQuery(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, got, "toDate(")
 	assert.Contains(t, got, "toDateTime(")
-	assert.Contains(t, got, "extract(")
+	assert.Contains(t, got, "toDayOfMonth(")
 	assert.NotContains(t, got, "DATE '")
 	assert.NotContains(t, got, "TIMESTAMP '")
 	assert.NotContains(t, got, "EXTRACT(")

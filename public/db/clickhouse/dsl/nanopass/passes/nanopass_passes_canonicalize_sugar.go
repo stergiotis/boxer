@@ -15,12 +15,19 @@ import (
 //
 //	DATE 'str'                            → toDate('str')
 //	TIMESTAMP 'str'                       → toDateTime('str')
-//	EXTRACT(interval FROM expr)           → extract(expr, 'interval')
+//	EXTRACT(unit FROM expr)               → toYear/toQuarter/toMonth/toISOWeek/
+//	                                        toDayOfMonth/toHour/toMinute/toSecond(expr)
 //	SUBSTRING(expr FROM expr)             → substring(expr, expr)
 //	SUBSTRING(expr FROM expr FOR expr)    → substring(expr, expr, expr)
 //	TRIM(BOTH str FROM expr)              → trimBoth(expr, str)
-//	TRIM(LEADING str FROM expr)           → trimLeading(expr, str)
-//	TRIM(TRAILING str FROM expr)          → trimTrailing(expr, str)
+//	TRIM(LEADING str FROM expr)           → trimLeft(expr, str)
+//	TRIM(TRAILING str FROM expr)          → trimRight(expr, str)
+//
+// The target functions are the server's own canonical rewrites (verified
+// against `clickhouse format`, ClickHouse 26.x). In particular
+// EXTRACT must NOT lower to `extract(expr, 'unit')` — ClickHouse's
+// extract(haystack, pattern) is the regex-extraction function, an illegal
+// type error on dates — and trimLeading/trimTrailing do not exist.
 //
 // Sugar forms nest (SUBSTRING(DATE '…' FROM 1), EXTRACT(DAY FROM DATE '…'));
 // each apply rewrites the outermost occurrences only, so the pass declares
@@ -92,7 +99,20 @@ func rewriteTimestamp(rw *antlr.TokenStreamRewriter, pr *nanopass.ParseResult, c
 	}
 }
 
-// EXTRACT(interval FROM expr) → extract(expr, 'interval')
+// extractUnitFunction maps an EXTRACT unit to the ClickHouse function the
+// server itself lowers it to (per `clickhouse format`).
+var extractUnitFunction = map[string]string{
+	"SECOND":  "toSecond",
+	"MINUTE":  "toMinute",
+	"HOUR":    "toHour",
+	"DAY":     "toDayOfMonth",
+	"WEEK":    "toISOWeek",
+	"MONTH":   "toMonth",
+	"QUARTER": "toQuarter",
+	"YEAR":    "toYear",
+}
+
+// EXTRACT(unit FROM expr) → <unitFunction>(expr)
 // Grammar: EXTRACT LPAREN interval FROM columnExpr RPAREN
 func rewriteExtract(rw *antlr.TokenStreamRewriter, pr *nanopass.ParseResult, ctx *grammar1.ColumnExprExtractContext) {
 	var intervalText string
@@ -108,7 +128,12 @@ func rewriteExtract(rw *antlr.TokenStreamRewriter, pr *nanopass.ParseResult, ctx
 		}
 	}
 
-	nanopass.ReplaceNode(rw, ctx, "extract("+exprText+", '"+intervalText+"')")
+	fn, known := extractUnitFunction[intervalText]
+	if !known {
+		// Unknown unit — leave the sugar in place rather than invent a call.
+		return
+	}
+	nanopass.ReplaceNode(rw, ctx, fn+"("+exprText+")")
 }
 
 // SUBSTRING(expr FROM expr [FOR expr]) → substring(expr, expr [, expr])
@@ -124,7 +149,8 @@ func rewriteSubstring(rw *antlr.TokenStreamRewriter, pr *nanopass.ParseResult, c
 	nanopass.ReplaceNode(rw, ctx, "substring("+strings.Join(exprs, ", ")+")")
 }
 
-// TRIM(BOTH|LEADING|TRAILING str FROM expr) → trimBoth|trimLeading|trimTrailing(expr, str)
+// TRIM(BOTH|LEADING|TRAILING str FROM expr) → trimBoth|trimLeft|trimRight(expr, str)
+// (the server's own canonical functions; trimLeading/trimTrailing do not exist)
 // Grammar: TRIM LPAREN (BOTH|LEADING|TRAILING) STRING_LITERAL FROM columnExpr RPAREN
 func rewriteTrim(rw *antlr.TokenStreamRewriter, pr *nanopass.ParseResult, ctx *grammar1.ColumnExprTrimContext) {
 	funcName := "trimBoth" // default
@@ -137,9 +163,9 @@ func rewriteTrim(rw *antlr.TokenStreamRewriter, pr *nanopass.ParseResult, ctx *g
 			tt := term.GetSymbol().GetTokenType()
 			switch tt {
 			case grammar1.ClickHouseLexerLEADING:
-				funcName = "trimLeading"
+				funcName = "trimLeft"
 			case grammar1.ClickHouseLexerTRAILING:
-				funcName = "trimTrailing"
+				funcName = "trimRight"
 			case grammar1.ClickHouseLexerBOTH:
 				funcName = "trimBoth"
 			case grammar1.ClickHouseLexerSTRING_LITERAL:

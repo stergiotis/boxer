@@ -251,10 +251,17 @@ func TestNormalizeSugarTimestamp(t *testing.T) {
 }
 
 func TestNormalizeSugarExtract(t *testing.T) {
+	// Server-verified target: EXTRACT lowers to the unit function the
+	// server itself uses (extract(expr, 'DAY') is the REGEX function and
+	// fails on dates with ILLEGAL_TYPE_OF_ARGUMENT).
 	got := mustProduceValidSQL(t, passes.CanonicalizeSugar, "SELECT EXTRACT(DAY FROM d) FROM t")
-	assert.Contains(t, got, "extract(")
-	assert.Contains(t, got, "'DAY'")
+	assert.Contains(t, got, "toDayOfMonth(")
+	assert.NotContains(t, got, "extract(")
 	assert.NotContains(t, got, "EXTRACT(")
+
+	got = mustProduceValidSQL(t, passes.CanonicalizeSugar, "SELECT EXTRACT(YEAR FROM d), EXTRACT(WEEK FROM d) FROM t")
+	assert.Contains(t, got, "toYear(")
+	assert.Contains(t, got, "toISOWeek(")
 }
 
 func TestNormalizeSugarSubstring(t *testing.T) {
@@ -282,14 +289,16 @@ func TestNormalizeSugarTrim(t *testing.T) {
 			contains: "trimBoth(",
 		},
 		{
+			// trimLeft/trimRight are the server's functions —
+			// trimLeading/trimTrailing do not exist (UNKNOWN_FUNCTION).
 			name:     "trim_leading",
 			input:    "SELECT TRIM(LEADING ' ' FROM s) FROM t",
-			contains: "trimLeading(",
+			contains: "trimLeft(",
 		},
 		{
 			name:     "trim_trailing",
 			input:    "SELECT TRIM(TRAILING ' ' FROM s) FROM t",
-			contains: "trimTrailing(",
+			contains: "trimRight(",
 		},
 	}
 	for _, tt := range tests {
@@ -305,7 +314,7 @@ func TestNormalizeSugarIdempotent(t *testing.T) {
 	sqls := []string{
 		"SELECT toDate('2024-01-01')",
 		"SELECT toDateTime('2024-01-01 00:00:00')",
-		"SELECT extract(d, 'DAY') FROM t",
+		"SELECT toDayOfMonth(d) FROM t",
 		"SELECT substring('hello', 1, 3)",
 		"SELECT trimBoth(s, ' ') FROM t",
 		"SELECT a FROM t",
