@@ -4,16 +4,17 @@ package task
 
 import (
 	"context"
+	"time"
 
 	"github.com/rs/zerolog"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 )
 
-// TaskApiI is the high-level, identity-aware surface MountContextI hands
-// to apps via Tasks(). The interface auto-injects OwnerAppId,
+// TaskApiI is the high-level, identity-aware surface task.ForApp builds
+// from a MountContextI. The interface auto-injects OwnerAppId,
 // OwnerTileKey, and OwnerRunId from the host into every spawned task,
 // composes the caller's context with the app's mount-cancel channel so
 // tasks auto-terminate on window close, and tags the producer-side
@@ -139,18 +140,6 @@ func (inst *BusApi) Spawn(callerCtx context.Context, opts SpawnOpts) (h HandleI,
 	if parent == nil {
 		parent = context.Background()
 	}
-	if inst.cfg.MountCancel != nil {
-		composed, cancelComposed := context.WithCancel(parent)
-		go func() {
-			select {
-			case <-inst.cfg.MountCancel:
-				cancelComposed()
-			case <-composed.Done():
-				// parent.Done or our own deferred teardown
-			}
-		}()
-		parent = composed
-	}
 
 	if opts.OwnerAppId == "" {
 		opts.OwnerAppId = inst.cfg.AppId
@@ -168,7 +157,10 @@ func (inst *BusApi) Spawn(callerCtx context.Context, opts SpawnOpts) (h HandleI,
 		opts.Logger = &base
 	}
 
-	h, err = Spawn(parent, inst.cfg.Bus, opts)
+	// MountCancel is threaded directly into the handle's single monitor
+	// goroutine (see spawnWithCancel) so a window close cascades into the
+	// task without a per-task watcher goroutine or composed context.
+	h, err = spawnWithCancel(parent, inst.cfg.Bus, opts, time.Now, inst.cfg.MountCancel)
 	return
 }
 

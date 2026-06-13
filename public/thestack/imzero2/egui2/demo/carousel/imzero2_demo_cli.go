@@ -171,8 +171,17 @@ func NewCommand() *cli.Command {
 			// counter sink keeps per-cap monotonic counts the
 			// inspector window renders on cap nodes (Phase 2 of the
 			// capability legibility direction).
+			// The durable facts sink issues a synchronous insert per audit
+			// row, and the bus calls Record inside Client.Request on the
+			// caller's goroutine — wrap it in an AsyncSink so audited
+			// Requests don't pay that round-trip inline. capinspector.Tally
+			// is an in-memory counter feeding the live UI; it stays
+			// synchronous. The deferred Close drains buffered audit rows at
+			// shutdown (after doReap stops the producers).
+			auditSink := audit.NewAsyncSink(factsstore.AsAuditSink(facts), 0)
+			defer auditSink.Close()
 			bus.SetAuditSink(audit.MultiSink{
-				factsstore.AsAuditSink(facts),
+				auditSink,
 				capinspector.Tally,
 			})
 

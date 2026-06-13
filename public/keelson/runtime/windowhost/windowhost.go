@@ -43,14 +43,20 @@ type WindowKeyT uint64
 
 // window holds per-open-window state. One per active Open call.
 type window struct {
-	key        WindowKeyT
-	manifest   app.Manifest
-	appInst    app.AppI
-	mountCtx   *app.StaticMountContext
-	frameCtx   *app.StaticFrameContext
-	mounted    bool
-	mountErr   error // sticky; window body renders an error label when set
-	closeReq   bool  // set by the in-body Close button or external Close()
+	key      WindowKeyT
+	manifest app.Manifest
+	appInst  app.AppI
+	mountCtx *app.StaticMountContext
+	frameCtx *app.StaticFrameContext
+	// mount is the per-AppI-instance shared Mount/Unmount lifecycle state.
+	// Singleton-registered apps return the same AppI for every Open, so two
+	// windows over one instance must share one Mount (on first Frame) and one
+	// Unmount (when the last window closes) — otherwise the instance sees
+	// double Mount/Unmount, double-acquiring and double-releasing resources.
+	// Factory-registered apps get a distinct instance (and thus a distinct
+	// instMount with refs==1) per window.
+	mount      *instMount
+	closeReq   bool // set by the in-body Close button or external Close()
 	stopReason string
 
 	// appIds is the per-window WidgetIdStack handed to the app via
@@ -75,6 +81,20 @@ type window struct {
 	// Frame loop reads openFlag at the end of each pass and triggers
 	// Close(key, "user-close") on the false transition.
 	openFlag bool
+}
+
+// instMount is the Mount/Unmount lifecycle shared by every window pointing
+// at one AppI instance. refs is the number of open windows referencing the
+// instance; Mount runs when the first window first Frames (capturing the
+// mountCtx it used so the matching Unmount uses the same context), and
+// Unmount runs when refs drops to zero. Factory-registered apps yield a
+// fresh AppI per Open, so each gets its own instMount with refs==1 — the
+// refcount only collapses for singleton-registered apps shown in >1 window.
+type instMount struct {
+	refs     int
+	mounted  bool
+	mountErr error // sticky; window body renders an error label when set
+	mountCtx *app.StaticMountContext
 }
 
 // Inst is the window host: the registry plus the list of open windows.
@@ -110,6 +130,12 @@ type Inst struct {
 	mu      sync.Mutex
 	nextKey uint64
 	windows []*window
+
+	// mountState shares Mount/Unmount lifecycle across windows that point at
+	// the same AppI instance (singleton-registered apps). Keyed by the AppI
+	// interface value; an entry is created on Open and removed when its last
+	// window is reaped.
+	mountState map[app.AppI]*instMount
 
 	// Per-window "Save as SVG" affordance (M2 of the per-window SVG
 	// export plan). One singleton picker for all windows — when a
@@ -151,9 +177,10 @@ type Inst struct {
 // that runId points at.
 func NewInst(registry *app.Registry, logger zerolog.Logger) (inst *Inst) {
 	inst = &Inst{
-		registry: registry,
-		logger:   logger,
-		density:  styletokens.DensityFromEnv(),
+		registry:   registry,
+		logger:     logger,
+		density:    styletokens.DensityFromEnv(),
+		mountState: make(map[app.AppI]*instMount),
 		fpSaveSvg: filepicker.New("windowhost-save-svg", filepicker.ModeSave,
 			filepicker.WithExtensionFilter(".svg"),
 			filepicker.WithDefaultFilename("window.svg"),
@@ -258,6 +285,15 @@ func (inst *Inst) Open(appId app.AppIdT) (key WindowKeyT, err error) {
 	appIds := c.NewWidgetIdStack()
 	mountCtx.SetIds(appIds)
 	frameCtx := app.NewStaticFrameContext(mountCtx, nil)
+	// Share Mount/Unmount state per AppI instance: a second window over a
+	// singleton-registered app reuses the existing instMount (refs++), so the
+	// instance is Mounted once and Unmounted only when its last window closes.
+	ms := inst.mountState[a]
+	if ms == nil {
+		ms = &instMount{}
+		inst.mountState[a] = ms
+	}
+	ms.refs++
 	inst.windows = append(inst.windows, &window{
 		key:      key,
 		manifest: m,
@@ -265,6 +301,7 @@ func (inst *Inst) Open(appId app.AppIdT) (key WindowKeyT, err error) {
 		mountCtx: mountCtx,
 		frameCtx: frameCtx,
 		appIds:   appIds,
+		mount:    ms,
 		openFlag: true,
 	})
 	runId := inst.runId
@@ -317,8 +354,8 @@ func (inst *Inst) ReapAll(reason string) {
 	inst.mu.Unlock()
 
 	for _, w := range wins {
-		if w.mounted {
-			umErr := w.appInst.Unmount(w.mountCtx)
+		if uc := inst.releaseMount(w); uc != nil {
+			umErr := w.appInst.Unmount(uc)
 			if umErr != nil {
 				inst.logger.Warn().Err(umErr).
 					Str("id", string(w.manifest.Id)).
@@ -330,6 +367,30 @@ func (inst *Inst) ReapAll(reason string) {
 			emitStopped(facts, inst.logger, runId, w, reason)
 		}
 	}
+}
+
+// releaseMount decrements the shared per-AppI-instance mount refcount for w
+// and returns the context to Unmount with when w was the last window
+// referencing that instance (nil otherwise — another window still holds it,
+// or the instance was never mounted). Removes the mountState entry on last
+// release. Takes the host lock; the returned Unmount runs outside it so an
+// Unmount that re-enters the host cannot deadlock.
+func (inst *Inst) releaseMount(w *window) (unmountCtx *app.StaticMountContext) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	ms := w.mount
+	if ms == nil {
+		return
+	}
+	ms.refs--
+	if ms.refs > 0 {
+		return
+	}
+	delete(inst.mountState, w.appInst)
+	if ms.mounted {
+		unmountCtx = ms.mountCtx
+	}
+	return
 }
 
 // Close requests removal of the window with the given key, attaching
@@ -401,8 +462,8 @@ func (inst *Inst) reapClosed() {
 	inst.mu.Unlock()
 
 	for _, w := range reaped {
-		if w.mounted {
-			umErr := w.appInst.Unmount(w.mountCtx)
+		if uc := inst.releaseMount(w); uc != nil {
+			umErr := w.appInst.Unmount(uc)
 			if umErr != nil {
 				inst.logger.Warn().Err(umErr).
 					Str("id", string(w.manifest.Id)).
@@ -425,7 +486,7 @@ func defaultStopReason(w *window) (reason string) {
 		reason = w.stopReason
 		return
 	}
-	if w.mountErr != nil {
+	if w.mount != nil && w.mount.mountErr != nil {
 		reason = "mount-error"
 		return
 	}
@@ -874,16 +935,19 @@ func renderWindowBody(w *window, logger zerolog.Logger) {
 		// about to tear down anyway.
 		return
 	}
-	if !w.mounted && w.mountErr == nil {
+	// Mount runs once per AppI instance (shared via w.mount), capturing the
+	// first window's mountCtx so the eventual Unmount uses the same context.
+	if !w.mount.mounted && w.mount.mountErr == nil {
 		mErr := w.appInst.Mount(w.mountCtx)
 		if mErr != nil {
-			w.mountErr = mErr
+			w.mount.mountErr = mErr
 		} else {
-			w.mounted = true
+			w.mount.mounted = true
+			w.mount.mountCtx = w.mountCtx
 		}
 	}
-	if w.mountErr != nil {
-		c.Label("windowhost: mount failed: " + w.mountErr.Error()).Send()
+	if w.mount.mountErr != nil {
+		c.Label("windowhost: mount failed: " + w.mount.mountErr.Error()).Send()
 		return
 	}
 	for range c.IdScope(w.appIds.PrepareSeq(uint64(w.key))) {

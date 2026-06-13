@@ -182,13 +182,13 @@ func TestService_Handle_CloseEvictsHandle(t *testing.T) {
 	_, err = appBus.Request(dr.HandleSubjectPrefix+".close", nil)
 	require.NoError(t, err)
 
-	// Subsequent read should fail (handle evicted).
-	closedReply, err := appBus.Request(dr.HandleSubjectPrefix+".read", nil)
-	require.NoError(t, err)
-	failed, err := fsbroker.UnmarshalDialogReply(closedReply)
-	require.NoError(t, err)
-	assert.False(t, failed.Granted)
-	assert.Contains(t, failed.Reason, "unknown handle")
+	// Subsequent access is denied at the bus layer: closing the handle
+	// revokes the fs.handle.{uuid}.> cap, so the app can no longer even
+	// publish to the handle subject (defense in depth on top of the
+	// service-side handle eviction).
+	_, err = appBus.Request(dr.HandleSubjectPrefix+".read", nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, inprocbus.ErrPermissionViolation)
 }
 
 func TestService_AppCannotAccessOtherAppsHandle(t *testing.T) {

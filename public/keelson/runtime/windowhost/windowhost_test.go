@@ -144,7 +144,7 @@ func TestInst_ReapClosed_CallsUnmount(t *testing.T) {
 	// Simulate the window being mounted (Frame would do this; we set
 	// the flag directly because Frame needs the Rust runtime).
 	h.mu.Lock()
-	h.windows[0].mounted = true
+	h.windows[0].mount.mounted = true
 	h.mu.Unlock()
 
 	h.Close(k, "")
@@ -270,7 +270,7 @@ func TestSetAudit_ReapEmitsMountErrorWhenSticky(t *testing.T) {
 	// we can't call Frame directly (needs the Rust runtime), so we
 	// flip the flag in place to match what renderWindowBody would do.
 	h.mu.Lock()
-	h.windows[0].mountErr = apps["test.a"].mountErr
+	h.windows[0].mount.mountErr = apps["test.a"].mountErr
 	h.mu.Unlock()
 	h.Close(k, "") // empty reason → defaultStopReason picks mount-error
 	h.reapClosed()

@@ -139,6 +139,16 @@ func (s *blockingStore) WriteLog(_ factsstore.LogRow) (id uint64, err error) {
 	id = s.n.Add(1)
 	return
 }
+func (s *blockingStore) WriteLogs(rows []factsstore.LogRow) (ids []uint64, err error) {
+	// Park the whole batch on the gate, matching WriteLog, so the flusher
+	// stalls and the ring overflows during the burst.
+	<-s.gate
+	ids = make([]uint64, len(rows))
+	for i := range rows {
+		ids[i] = s.n.Add(1)
+	}
+	return
+}
 func (s *blockingStore) LatestState(_ app.AppIdT, _ string) (value []byte, found bool, err error) {
 	return
 }

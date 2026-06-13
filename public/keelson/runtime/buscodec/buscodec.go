@@ -6,8 +6,12 @@
 // default codec is CBOR (fxamacker/cbor with canonical encoding); a
 // CodecI seam allows swapping for replay or debug builds.
 //
-// Field tags: implementations honour `cbor:` first, then fall back to
-// `json:` so structs predating the codec switch keep working unchanged.
+// Field tags: the default CBOR codec (fxamacker/cbor) honours `cbor:` tags
+// and otherwise uses the Go field name — it does NOT read `json:` tags.
+// Encode/Decode are symmetric through a single codec, so this is internally
+// consistent; the `json:` tags several DTOs carry only take effect under the
+// opt-in jsonCodec (NewJSON, for human-readable replay) and do not change the
+// CBOR wire. Do not assume a `json:`-named key appears on the CBOR wire.
 //
 // Versioning: this package does NOT impose envelope versioning on the
 // wire. Per-message versioning is a payload concern — brokers that need

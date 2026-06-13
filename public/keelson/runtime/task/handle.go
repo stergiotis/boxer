@@ -76,19 +76,27 @@ type Handle struct {
 	cancel            context.CancelFunc
 	unsubscribeCancel func()
 
+	// done is closed exactly once by finishLocked when the handle reaches
+	// a terminal state (Done/Error, or external parent/mount cancellation).
+	// The Spawn-time monitor goroutine selects on it so it exits promptly
+	// on normal completion instead of blocking on the parent context for
+	// the process lifetime.
+	done chan struct{}
+
 	// logger is the producer-side diagnostic logger. Pre-contextualised
-	// with task_id; the upstream MountContextI.Tasks() also adds run_id
+	// with task_id; the upstream task.ForApp(ctx) also adds run_id
 	// / app_id / instance_id. Zero value writes nowhere.
 	logger zerolog.Logger
 
-	mu          sync.Mutex
-	est         *estimator.Inst
-	lastHuman   string
-	lastEmitMs  int64
-	lastReport  *taskprogress.TaskProgress
-	terminated  bool
-	indetMode   bool
-	heartbeatMs int64
+	mu                sync.Mutex
+	est               *estimator.Inst
+	lastHuman         string
+	lastEmitMs        int64
+	lastReport        *taskprogress.TaskProgress
+	lastReportEmitted bool // whether lastReport has been published
+	terminated        bool
+	indetMode         bool
+	heartbeatMs       int64
 }
 
 var _ HandleI = (*Handle)(nil)
@@ -141,6 +149,7 @@ func (inst *Handle) Report(p ProgressReport) {
 		At:               now.UTC(),
 	}
 	inst.lastReport = &progress
+	inst.lastReportEmitted = false
 	inst.indetMode = p.Total == 0
 
 	// Emission gate: publish on humanized-change. Indeterminate-mode
@@ -156,6 +165,7 @@ func (inst *Handle) Report(p ProgressReport) {
 	}
 
 	inst.publishProgress(progress)
+	inst.lastReportEmitted = true
 	inst.lastHuman = human
 	inst.lastEmitMs = nowMs
 }
@@ -181,6 +191,7 @@ func (inst *Handle) Note(note string) {
 		progress.EtaMs = inst.lastReport.EtaMs
 	}
 	inst.lastReport = &progress
+	inst.lastReportEmitted = false
 
 	human := note
 	if human == inst.lastHuman {
@@ -189,6 +200,7 @@ func (inst *Handle) Note(note string) {
 		}
 	}
 	inst.publishProgress(progress)
+	inst.lastReportEmitted = true
 	inst.lastHuman = human
 	inst.lastEmitMs = nowMs
 }
@@ -269,15 +281,16 @@ func (inst *Handle) Error(taskErr error, reason string) (rerr error) {
 // was held back by the emission gate. Called once on Done/Error so the
 // final progress state is always visible to observers.
 func (inst *Handle) flushPendingReportLocked() {
-	if inst.lastReport == nil {
-		return
-	}
-	lastMs := inst.lastReport.At.UnixMilli()
-	if lastMs == inst.lastEmitMs {
+	// Publish the last buffered report iff it was held back by the emission
+	// gate. Tracked by an explicit flag rather than comparing timestamps: two
+	// reports in the same millisecond would make a ts comparison skip the
+	// second (gated) one, losing the final progress state.
+	if inst.lastReport == nil || inst.lastReportEmitted {
 		return
 	}
 	inst.publishProgress(*inst.lastReport)
-	inst.lastEmitMs = lastMs
+	inst.lastReportEmitted = true
+	inst.lastEmitMs = inst.lastReport.At.UnixMilli()
 }
 
 func (inst *Handle) publishProgress(progress taskprogress.TaskProgress) {
@@ -297,4 +310,24 @@ func (inst *Handle) finishLocked() {
 	if inst.cancel != nil {
 		inst.cancel()
 	}
+	// Release the monitor goroutine. Guarded by the terminated flag at every
+	// call site so this closes at most once.
+	if inst.done != nil {
+		close(inst.done)
+	}
+}
+
+// terminateExternal is invoked by the Spawn-time monitor goroutine when the
+// parent context or the host mount-cancel channel fires before the producer
+// reached a terminal verb. It marks the handle terminal (tearing down the
+// cancel subscription and cancelling Ctx) so a subsequent Done/Error no-ops
+// and the cancel-subscription does not leak — a cancelled task must not
+// publish a terminal event onto a bus that may already be tearing down.
+func (inst *Handle) terminateExternal() {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if inst.terminated {
+		return
+	}
+	inst.finishLocked()
 }

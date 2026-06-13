@@ -18,6 +18,7 @@ package fsbroker
 import (
 	"bytes"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -27,9 +28,9 @@ import (
 	"github.com/rs/zerolog"
 	"lukechampine.com/blake3"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // Subject taxonomy implemented by this service (ADR-0026 §SD3).
@@ -48,6 +49,14 @@ const (
 
 // ServiceAppId is the synthetic AppId the broker registers under.
 const ServiceAppId app.AppIdT = "runtime.fs"
+
+// DefaultMaxReadBytes caps a single fs.handle.{uuid}.read response. The
+// whole file is buffered into memory (and again as the bus payload), so an
+// app granted a handle to a multi-gigabyte file — or an unbounded special
+// file like /dev/zero — would otherwise drive the process OOM. Hosts that
+// genuinely need larger single-shot reads raise it via SetMaxReadBytes;
+// streaming reads are a separate follow-up.
+const DefaultMaxReadBytes int64 = 64 << 20
 
 // HandleModeE encodes whether a granted handle permits read, write, or
 // directory enumeration. Single-op semantics for M2.6.
@@ -112,10 +121,22 @@ type Service struct {
 	busClient *inprocbus.Client
 	unsub     func()
 
-	mu      sync.Mutex
-	handles map[string]*handle
-	pending map[string]*pendingEntry
-	watches map[string]*activeWatch
+	mu           sync.Mutex
+	handles      map[string]*handle
+	pending      map[string]*pendingEntry
+	watches      map[string]*activeWatch
+	maxReadBytes int64
+}
+
+// SetMaxReadBytes overrides DefaultMaxReadBytes for single-shot handle
+// reads. A non-positive value restores the default. Concurrent-safe.
+func (inst *Service) SetMaxReadBytes(n int64) {
+	inst.mu.Lock()
+	if n <= 0 {
+		n = DefaultMaxReadBytes
+	}
+	inst.maxReadBytes = n
+	inst.mu.Unlock()
 }
 
 // NewService constructs and subscribes the service.
@@ -125,11 +146,12 @@ func NewService(inst *inprocbus.Inst, log zerolog.Logger) (s *Service, err error
 		return
 	}
 	s = &Service{
-		inst:    inst,
-		log:     log.With().Str("app", string(ServiceAppId)).Logger(),
-		handles: make(map[string]*handle),
-		pending: make(map[string]*pendingEntry),
-		watches: make(map[string]*activeWatch),
+		inst:         inst,
+		log:          log.With().Str("app", string(ServiceAppId)).Logger(),
+		handles:      make(map[string]*handle),
+		pending:      make(map[string]*pendingEntry),
+		watches:      make(map[string]*activeWatch),
+		maxReadBytes: DefaultMaxReadBytes,
 	}
 	s.busClient = inst.NewClient(ServiceAppId, []app.SubjectFilter{
 		{Pattern: "fs.>", Direction: app.CapDirectionBoth, Reason: "fs Powerbox serves all fs subjects"},
@@ -316,6 +338,12 @@ func (inst *Service) handleRead(reply string, h *handle) {
 		inst.replyError(reply, "handle not opened for read")
 		return
 	}
+	inst.mu.Lock()
+	max := inst.maxReadBytes
+	inst.mu.Unlock()
+	if max <= 0 {
+		max = DefaultMaxReadBytes
+	}
 	f, err := os.Open(h.path)
 	if err != nil {
 		inst.replyError(reply, "open: "+err.Error())
@@ -323,9 +351,16 @@ func (inst *Service) handleRead(reply string, h *handle) {
 	}
 	defer f.Close()
 	buf := &bytes.Buffer{}
-	_, err = io.Copy(buf, f)
+	// Read at most max+1 bytes. Hitting the extra byte means the file
+	// exceeds the cap, so we refuse rather than buffer an unbounded payload
+	// into memory (and then again as the bus message).
+	n, err := io.Copy(buf, io.LimitReader(f, max+1))
 	if err != nil {
 		inst.replyError(reply, "read: "+err.Error())
+		return
+	}
+	if n > max {
+		inst.replyError(reply, fmt.Sprintf("file exceeds max read size (%d bytes)", max))
 		return
 	}
 	_ = inst.busClient.Publish(reply, buf.Bytes())
@@ -333,6 +368,7 @@ func (inst *Service) handleRead(reply string, h *handle) {
 
 func (inst *Service) handleClose(reply string, uuid string) {
 	inst.mu.Lock()
+	h := inst.handles[uuid]
 	w, hadWatch := inst.watches[uuid]
 	if hadWatch {
 		delete(inst.watches, uuid)
@@ -342,7 +378,24 @@ func (inst *Service) handleClose(reply string, uuid string) {
 	if hadWatch {
 		w.backend.Stop()
 	}
+	// Revoke the fs.handle.{uuid}.> cap granted at Resolve so the closed
+	// handle's subject stops matching and the app's cap set doesn't grow
+	// without bound across a long session.
+	if h != nil {
+		inst.revokeHandleCap(h.appId, uuid)
+	}
 	_ = inst.busClient.Publish(reply, nil)
+}
+
+// revokeHandleCap strips the per-handle cap from the owning app's bus
+// client. No-op when the client is gone. Mirrors the AddCap performed in
+// Resolve.
+func (inst *Service) revokeHandleCap(appId app.AppIdT, uuid string) {
+	client, ok := inst.inst.ClientByAppId(appId)
+	if !ok {
+		return
+	}
+	client.RemoveCap(HandleSubjectPrefix + uuid + ".>")
 }
 
 func (inst *Service) replyError(replySubject, reason string) {

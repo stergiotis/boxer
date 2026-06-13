@@ -40,17 +40,17 @@ type SpawnOpts struct {
 	// OwnerAppId attributes the task to the spawning app. Carried in the
 	// TaskCreated payload for audit and display; not validated. Empty is
 	// allowed for runtime-side tasks that don't correspond to a user app.
-	// Auto-filled by MountContextI.Tasks() — direct callers of Spawn
+	// Auto-filled by task.ForApp(ctx) — direct callers of Spawn
 	// supply it themselves.
 	OwnerAppId app.AppIdT
 
 	// OwnerTileKey is the host-minted per-window instance id. Auto-filled
-	// by MountContextI.Tasks() so audit rows can join back to
+	// by task.ForApp(ctx) so audit rows can join back to
 	// AppLifecycleRow.TileKey. Direct callers may leave it zero.
 	OwnerTileKey uint64
 
 	// OwnerRunId is the process-wide run id. Auto-filled by
-	// MountContextI.Tasks() so audit rows can join back to
+	// task.ForApp(ctx) so audit rows can join back to
 	// RuntimeStartRow.RunId. Direct callers may leave it empty.
 	OwnerRunId string
 
@@ -69,7 +69,7 @@ type SpawnOpts struct {
 	// whose total is unknown. Zero ⇒ default.
 	HeartbeatMs int64
 
-	// Logger is the producer-side diagnostic logger. MountContextI.Tasks()
+	// Logger is the producer-side diagnostic logger. task.ForApp(ctx)
 	// pre-contextualises it with run_id / app_id / instance_id; the
 	// handle adds task_id internally. nil ⇒ handle uses a no-op logger
 	// (zero-value zerolog.Logger writes nowhere). Pointer because
@@ -88,13 +88,24 @@ type SpawnOpts struct {
 // The handle's Ctx() is derived from parent and cancels on parent-cancel,
 // bus-cancel, or Done/Error.
 func Spawn(parent context.Context, bus app.BusI, opts SpawnOpts) (h HandleI, err error) {
-	h, err = SpawnWithClock(parent, bus, opts, time.Now)
+	h, err = spawnWithCancel(parent, bus, opts, time.Now, nil)
 	return
 }
 
 // SpawnWithClock is Spawn with an injected clock. Tests use this to make
 // AtMs values deterministic; production code calls Spawn.
 func SpawnWithClock(parent context.Context, bus app.BusI, opts SpawnOpts, nowFn func() time.Time) (h HandleI, err error) {
+	h, err = spawnWithCancel(parent, bus, opts, nowFn, nil)
+	return
+}
+
+// spawnWithCancel is the internal Spawn that additionally observes a
+// host-supplied mount-cancel channel. BusApi.Spawn passes its
+// ApiConfig.MountCancel here so the single monitor goroutine cascades a
+// window close into the task — replacing the previous composed-context +
+// watcher-goroutine pair, which leaked one goroutine and one context per
+// task until the mount channel fired. A nil cancelCh selects never.
+func spawnWithCancel(parent context.Context, bus app.BusI, opts SpawnOpts, nowFn func() time.Time, cancelCh <-chan struct{}) (h HandleI, err error) {
 	if bus == nil {
 		err = eh.Errorf("task: spawn: nil bus")
 		return
@@ -140,6 +151,7 @@ func SpawnWithClock(parent context.Context, bus app.BusI, opts SpawnOpts, nowFn 
 		now:         nowFn,
 		ctx:         ctx,
 		cancel:      cancel,
+		done:        make(chan struct{}),
 		est:         estimator.New(),
 		heartbeatMs: heartbeatMs,
 		logger:      logger,
@@ -193,17 +205,22 @@ func SpawnWithClock(parent context.Context, bus app.BusI, opts SpawnOpts, nowFn 
 		return
 	}
 
-	// Tie the parent context's cancellation to the handle: once parent
-	// cancels, fire finishLocked() so the cancel subscription is torn
-	// down (otherwise the subscription leaks until process exit).
+	// Monitor goroutine: cascade external cancellation (parent context or the
+	// host mount-cancel channel) into the handle, and — crucially — exit as
+	// soon as the handle reaches a terminal state via handle.done. The prior
+	// implementation blocked solely on parent.Done(), so a task completed via
+	// Done/Error under a long-lived (or Background) parent leaked this
+	// goroutine for the process lifetime.
 	go func() {
-		<-parent.Done()
-		handle.mu.Lock()
-		if !handle.terminated && handle.unsubscribeCancel != nil {
-			handle.unsubscribeCancel()
-			handle.unsubscribeCancel = nil
+		select {
+		case <-parent.Done():
+			handle.terminateExternal()
+		case <-cancelCh:
+			handle.terminateExternal()
+		case <-handle.done:
+			// Terminal reached via Done/Error; finishLocked already tore down
+			// the cancel subscription and cancelled Ctx. Nothing to do.
 		}
-		handle.mu.Unlock()
 	}()
 
 	h = handle

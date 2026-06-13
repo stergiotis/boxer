@@ -119,6 +119,21 @@ func (inst *Registry) RegisterFactory(m Manifest, ctor AppCtor) (err error) {
 		err = eb.Build().Str("id", string(m.Id)).Errorf("registry: duplicate Id")
 		return
 	}
+	// Distinct Ids must also produce distinct SubjectAliases: the alias is
+	// what keys persisted state and the auto-injected persist cap
+	// (runtime.persist.{alias}.>), so a collision would silently share one
+	// app's cold state and permissions with another. The Id-uniqueness check
+	// above does not catch this (e.g. ".../foo/play" and ".../bar/play" both
+	// alias to "play").
+	newAlias := m.Id.SubjectAlias()
+	for i := range inst.entries {
+		if inst.entries[i].manifest.Id.SubjectAlias() == newAlias {
+			err = eb.Build().Str("id", string(m.Id)).Str("alias", newAlias).
+				Str("collidesWith", string(inst.entries[i].manifest.Id)).
+				Errorf("registry: SubjectAlias %q collides with already-registered app %s", newAlias, string(inst.entries[i].manifest.Id))
+			return
+		}
+	}
 	idx := sort.Search(len(inst.entries), func(i int) bool {
 		return inst.entries[i].manifest.Id >= m.Id
 	})

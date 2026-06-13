@@ -42,7 +42,6 @@ package arrowrowcbor
 
 import (
 	"bytes"
-	"hash/fnv"
 	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -78,11 +77,11 @@ type ColumnBuilder interface {
 
 type Uint8Builder struct{ buf []uint8 }
 
-func (b *Uint8Builder) Append(v uint8)            { b.buf = append(b.buf, v) }
-func (b *Uint8Builder) Release()                  {}
-func (b *Uint8Builder) nRows() int                { return len(b.buf) }
-func (b *Uint8Builder) hasContent(r int) bool     { return true }
-func (b *Uint8Builder) reset()                    { b.buf = b.buf[:0] }
+func (b *Uint8Builder) Append(v uint8)        { b.buf = append(b.buf, v) }
+func (b *Uint8Builder) Release()              {}
+func (b *Uint8Builder) nRows() int            { return len(b.buf) }
+func (b *Uint8Builder) hasContent(r int) bool { return true }
+func (b *Uint8Builder) reset()                { b.buf = b.buf[:0] }
 func (b *Uint8Builder) emitValue(enc *cbor.Encoder, r int) (err error) {
 	_, err = enc.EncodeUint(uint64(b.buf[r]))
 	return
@@ -90,11 +89,11 @@ func (b *Uint8Builder) emitValue(enc *cbor.Encoder, r int) (err error) {
 
 type Uint16Builder struct{ buf []uint16 }
 
-func (b *Uint16Builder) Append(v uint16)            { b.buf = append(b.buf, v) }
-func (b *Uint16Builder) Release()                   {}
-func (b *Uint16Builder) nRows() int                 { return len(b.buf) }
-func (b *Uint16Builder) hasContent(r int) bool      { return true }
-func (b *Uint16Builder) reset()                     { b.buf = b.buf[:0] }
+func (b *Uint16Builder) Append(v uint16)       { b.buf = append(b.buf, v) }
+func (b *Uint16Builder) Release()              {}
+func (b *Uint16Builder) nRows() int            { return len(b.buf) }
+func (b *Uint16Builder) hasContent(r int) bool { return true }
+func (b *Uint16Builder) reset()                { b.buf = b.buf[:0] }
 func (b *Uint16Builder) emitValue(enc *cbor.Encoder, r int) (err error) {
 	_, err = enc.EncodeUint(uint64(b.buf[r]))
 	return
@@ -102,11 +101,11 @@ func (b *Uint16Builder) emitValue(enc *cbor.Encoder, r int) (err error) {
 
 type Uint32Builder struct{ buf []uint32 }
 
-func (b *Uint32Builder) Append(v uint32)            { b.buf = append(b.buf, v) }
-func (b *Uint32Builder) Release()                   {}
-func (b *Uint32Builder) nRows() int                 { return len(b.buf) }
-func (b *Uint32Builder) hasContent(r int) bool      { return true }
-func (b *Uint32Builder) reset()                     { b.buf = b.buf[:0] }
+func (b *Uint32Builder) Append(v uint32)       { b.buf = append(b.buf, v) }
+func (b *Uint32Builder) Release()              {}
+func (b *Uint32Builder) nRows() int            { return len(b.buf) }
+func (b *Uint32Builder) hasContent(r int) bool { return true }
+func (b *Uint32Builder) reset()                { b.buf = b.buf[:0] }
 func (b *Uint32Builder) emitValue(enc *cbor.Encoder, r int) (err error) {
 	_, err = enc.EncodeUint(uint64(b.buf[r]))
 	return
@@ -114,11 +113,11 @@ func (b *Uint32Builder) emitValue(enc *cbor.Encoder, r int) (err error) {
 
 type Uint64Builder struct{ buf []uint64 }
 
-func (b *Uint64Builder) Append(v uint64)            { b.buf = append(b.buf, v) }
-func (b *Uint64Builder) Release()                   {}
-func (b *Uint64Builder) nRows() int                 { return len(b.buf) }
-func (b *Uint64Builder) hasContent(r int) bool      { return true }
-func (b *Uint64Builder) reset()                     { b.buf = b.buf[:0] }
+func (b *Uint64Builder) Append(v uint64)       { b.buf = append(b.buf, v) }
+func (b *Uint64Builder) Release()              {}
+func (b *Uint64Builder) nRows() int            { return len(b.buf) }
+func (b *Uint64Builder) hasContent(r int) bool { return true }
+func (b *Uint64Builder) reset()                { b.buf = b.buf[:0] }
 func (b *Uint64Builder) emitValue(enc *cbor.Encoder, r int) (err error) {
 	_, err = enc.EncodeUint(b.buf[r])
 	return
@@ -126,11 +125,11 @@ func (b *Uint64Builder) emitValue(enc *cbor.Encoder, r int) (err error) {
 
 type Int8Builder struct{ buf []int8 }
 
-func (b *Int8Builder) Append(v int8)             { b.buf = append(b.buf, v) }
-func (b *Int8Builder) Release()                  {}
-func (b *Int8Builder) nRows() int                { return len(b.buf) }
-func (b *Int8Builder) hasContent(r int) bool     { return true }
-func (b *Int8Builder) reset()                    { b.buf = b.buf[:0] }
+func (b *Int8Builder) Append(v int8)         { b.buf = append(b.buf, v) }
+func (b *Int8Builder) Release()              {}
+func (b *Int8Builder) nRows() int            { return len(b.buf) }
+func (b *Int8Builder) hasContent(r int) bool { return true }
+func (b *Int8Builder) reset()                { b.buf = b.buf[:0] }
 func (b *Int8Builder) emitValue(enc *cbor.Encoder, r int) (err error) {
 	_, err = enc.EncodeInt(int64(b.buf[r]))
 	return
@@ -138,11 +137,11 @@ func (b *Int8Builder) emitValue(enc *cbor.Encoder, r int) (err error) {
 
 type Int16Builder struct{ buf []int16 }
 
-func (b *Int16Builder) Append(v int16)            { b.buf = append(b.buf, v) }
-func (b *Int16Builder) Release()                  {}
-func (b *Int16Builder) nRows() int                { return len(b.buf) }
-func (b *Int16Builder) hasContent(r int) bool     { return true }
-func (b *Int16Builder) reset()                    { b.buf = b.buf[:0] }
+func (b *Int16Builder) Append(v int16)        { b.buf = append(b.buf, v) }
+func (b *Int16Builder) Release()              {}
+func (b *Int16Builder) nRows() int            { return len(b.buf) }
+func (b *Int16Builder) hasContent(r int) bool { return true }
+func (b *Int16Builder) reset()                { b.buf = b.buf[:0] }
 func (b *Int16Builder) emitValue(enc *cbor.Encoder, r int) (err error) {
 	_, err = enc.EncodeInt(int64(b.buf[r]))
 	return
@@ -150,11 +149,11 @@ func (b *Int16Builder) emitValue(enc *cbor.Encoder, r int) (err error) {
 
 type Int32Builder struct{ buf []int32 }
 
-func (b *Int32Builder) Append(v int32)            { b.buf = append(b.buf, v) }
-func (b *Int32Builder) Release()                  {}
-func (b *Int32Builder) nRows() int                { return len(b.buf) }
-func (b *Int32Builder) hasContent(r int) bool     { return true }
-func (b *Int32Builder) reset()                    { b.buf = b.buf[:0] }
+func (b *Int32Builder) Append(v int32)        { b.buf = append(b.buf, v) }
+func (b *Int32Builder) Release()              {}
+func (b *Int32Builder) nRows() int            { return len(b.buf) }
+func (b *Int32Builder) hasContent(r int) bool { return true }
+func (b *Int32Builder) reset()                { b.buf = b.buf[:0] }
 func (b *Int32Builder) emitValue(enc *cbor.Encoder, r int) (err error) {
 	_, err = enc.EncodeInt(int64(b.buf[r]))
 	return
@@ -162,11 +161,11 @@ func (b *Int32Builder) emitValue(enc *cbor.Encoder, r int) (err error) {
 
 type Int64Builder struct{ buf []int64 }
 
-func (b *Int64Builder) Append(v int64)            { b.buf = append(b.buf, v) }
-func (b *Int64Builder) Release()                  {}
-func (b *Int64Builder) nRows() int                { return len(b.buf) }
-func (b *Int64Builder) hasContent(r int) bool     { return true }
-func (b *Int64Builder) reset()                    { b.buf = b.buf[:0] }
+func (b *Int64Builder) Append(v int64)        { b.buf = append(b.buf, v) }
+func (b *Int64Builder) Release()              {}
+func (b *Int64Builder) nRows() int            { return len(b.buf) }
+func (b *Int64Builder) hasContent(r int) bool { return true }
+func (b *Int64Builder) reset()                { b.buf = b.buf[:0] }
 func (b *Int64Builder) emitValue(enc *cbor.Encoder, r int) (err error) {
 	_, err = enc.EncodeInt(b.buf[r])
 	return
@@ -174,11 +173,11 @@ func (b *Int64Builder) emitValue(enc *cbor.Encoder, r int) (err error) {
 
 type Float32Builder struct{ buf []float32 }
 
-func (b *Float32Builder) Append(v float32)         { b.buf = append(b.buf, v) }
-func (b *Float32Builder) Release()                 {}
-func (b *Float32Builder) nRows() int               { return len(b.buf) }
-func (b *Float32Builder) hasContent(r int) bool    { return true }
-func (b *Float32Builder) reset()                   { b.buf = b.buf[:0] }
+func (b *Float32Builder) Append(v float32)      { b.buf = append(b.buf, v) }
+func (b *Float32Builder) Release()              {}
+func (b *Float32Builder) nRows() int            { return len(b.buf) }
+func (b *Float32Builder) hasContent(r int) bool { return true }
+func (b *Float32Builder) reset()                { b.buf = b.buf[:0] }
 func (b *Float32Builder) emitValue(enc *cbor.Encoder, r int) (err error) {
 	_, err = enc.EncodeFloat32(b.buf[r])
 	return
@@ -186,11 +185,11 @@ func (b *Float32Builder) emitValue(enc *cbor.Encoder, r int) (err error) {
 
 type Float64Builder struct{ buf []float64 }
 
-func (b *Float64Builder) Append(v float64)         { b.buf = append(b.buf, v) }
-func (b *Float64Builder) Release()                 {}
-func (b *Float64Builder) nRows() int               { return len(b.buf) }
-func (b *Float64Builder) hasContent(r int) bool    { return true }
-func (b *Float64Builder) reset()                   { b.buf = b.buf[:0] }
+func (b *Float64Builder) Append(v float64)      { b.buf = append(b.buf, v) }
+func (b *Float64Builder) Release()              {}
+func (b *Float64Builder) nRows() int            { return len(b.buf) }
+func (b *Float64Builder) hasContent(r int) bool { return true }
+func (b *Float64Builder) reset()                { b.buf = b.buf[:0] }
 func (b *Float64Builder) emitValue(enc *cbor.Encoder, r int) (err error) {
 	_, err = enc.EncodeFloat64(b.buf[r])
 	return
@@ -198,11 +197,11 @@ func (b *Float64Builder) emitValue(enc *cbor.Encoder, r int) (err error) {
 
 type BooleanBuilder struct{ buf []bool }
 
-func (b *BooleanBuilder) Append(v bool)            { b.buf = append(b.buf, v) }
-func (b *BooleanBuilder) Release()                 {}
-func (b *BooleanBuilder) nRows() int               { return len(b.buf) }
-func (b *BooleanBuilder) hasContent(r int) bool    { return true }
-func (b *BooleanBuilder) reset()                   { b.buf = b.buf[:0] }
+func (b *BooleanBuilder) Append(v bool)         { b.buf = append(b.buf, v) }
+func (b *BooleanBuilder) Release()              {}
+func (b *BooleanBuilder) nRows() int            { return len(b.buf) }
+func (b *BooleanBuilder) hasContent(r int) bool { return true }
+func (b *BooleanBuilder) reset()                { b.buf = b.buf[:0] }
 func (b *BooleanBuilder) emitValue(enc *cbor.Encoder, r int) (err error) {
 	_, err = enc.EncodeBool(b.buf[r])
 	return
@@ -210,11 +209,11 @@ func (b *BooleanBuilder) emitValue(enc *cbor.Encoder, r int) (err error) {
 
 type StringBuilder struct{ buf []string }
 
-func (b *StringBuilder) Append(v string)           { b.buf = append(b.buf, v) }
-func (b *StringBuilder) Release()                  {}
-func (b *StringBuilder) nRows() int                { return len(b.buf) }
-func (b *StringBuilder) hasContent(r int) bool     { return true }
-func (b *StringBuilder) reset()                    { b.buf = b.buf[:0] }
+func (b *StringBuilder) Append(v string)       { b.buf = append(b.buf, v) }
+func (b *StringBuilder) Release()              {}
+func (b *StringBuilder) nRows() int            { return len(b.buf) }
+func (b *StringBuilder) hasContent(r int) bool { return true }
+func (b *StringBuilder) reset()                { b.buf = b.buf[:0] }
 func (b *StringBuilder) emitValue(enc *cbor.Encoder, r int) (err error) {
 	_, err = enc.EncodeString(b.buf[r])
 	return
@@ -222,11 +221,11 @@ func (b *StringBuilder) emitValue(enc *cbor.Encoder, r int) (err error) {
 
 type BinaryBuilder struct{ buf [][]byte }
 
-func (b *BinaryBuilder) Append(v []byte)           { b.buf = append(b.buf, v) }
-func (b *BinaryBuilder) Release()                  {}
-func (b *BinaryBuilder) nRows() int                { return len(b.buf) }
-func (b *BinaryBuilder) hasContent(r int) bool     { return true }
-func (b *BinaryBuilder) reset()                    { b.buf = b.buf[:0] }
+func (b *BinaryBuilder) Append(v []byte)       { b.buf = append(b.buf, v) }
+func (b *BinaryBuilder) Release()              {}
+func (b *BinaryBuilder) nRows() int            { return len(b.buf) }
+func (b *BinaryBuilder) hasContent(r int) bool { return true }
+func (b *BinaryBuilder) reset()                { b.buf = b.buf[:0] }
 func (b *BinaryBuilder) emitValue(enc *cbor.Encoder, r int) (err error) {
 	// boxer's EncodeByteSlice rejects nil; coerce to empty so the
 	// wire stays well-formed (e.g. SetId with nil naturalKey).
@@ -451,8 +450,9 @@ func (r *Record) NumCols() int64        { return int64(len(r.schema.Fields())) }
 func (r *Record) Release()              {}
 func (r *Record) Retain()               {}
 
-// CBOR returns the underlying CBOR byte slice (array of indefinite-
-// length maps). Caller-owned; safe to retain past Release.
+// CBOR returns the underlying CBOR byte slice (a definite-length array of
+// definite-length per-row maps; see NewRecord). Caller-owned; safe to
+// retain past Release.
 func (r *Record) CBOR() []byte { return r.bytes }
 
 // NewSlice is the RollbackEntity-path stub; unused by the runtime.facts
@@ -482,11 +482,9 @@ func (r *Record) NewSlice(_, _ int64) *Record {
 func shortKeyForFieldName(physName string) string {
 	parts := strings.SplitN(physName, ":", 5)
 	if len(parts) < 2 {
-		// Fallback: hash the name into 4 hex bytes so duplicate fields
-		// still get unique keys. Not expected to fire on runtime.facts.
-		h := fnv.New32a()
-		_, _ = h.Write([]byte(physName))
-		return string(physName)
+		// Unparseable physical name (no colon separator). Not expected to
+		// fire on runtime.facts; fall back to the raw name as the map key.
+		return physName
 	}
 	if parts[0] == "tv" && len(parts) >= 3 {
 		return parts[1] + "." + parts[2]

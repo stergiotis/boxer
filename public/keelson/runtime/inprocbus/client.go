@@ -6,15 +6,14 @@ import (
 	"errors"
 	"math/rand/v2"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audit"
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // InboxPrefix is the subject prefix the bus uses for ephemeral reply inboxes
@@ -28,11 +27,11 @@ const InboxPrefix = "_INBOX."
 // Inst.NewClient; the type is exported so privileged consumers (e.g. the
 // cap broker) can call AddCap to extend permissions at runtime.
 type Client struct {
-	inst    *Inst
-	appId   app.AppIdT
-	capsMu  sync.RWMutex
-	caps    []app.SubjectFilter
-	inboxN  atomic.Uint64
+	inst   *Inst
+	appId  app.AppIdT
+	capsMu sync.RWMutex
+	caps   []app.SubjectFilter
+	inboxN atomic.Uint64
 }
 
 var _ app.BusI = (*Client)(nil)
@@ -68,6 +67,32 @@ func (inst *Client) AddCap(filter app.SubjectFilter) {
 	inst.caps = append(inst.caps, filter)
 }
 
+// RemoveCap drops every SubjectFilter whose Pattern equals pattern and
+// returns the number removed. The cap broker / fs Powerbox call this to
+// revoke a grant when its backing resource goes away (e.g. an fs handle is
+// closed): without it, caps only ever grow, a long session accumulates dead
+// permissions, and a revoked subject keeps matching on every subsequent
+// Publish/Subscribe. Idempotent — removing an absent pattern returns 0.
+func (inst *Client) RemoveCap(pattern string) (removed int) {
+	inst.capsMu.Lock()
+	defer inst.capsMu.Unlock()
+	kept := inst.caps[:0]
+	for _, c := range inst.caps {
+		if c.Pattern == pattern {
+			removed++
+			continue
+		}
+		kept = append(kept, c)
+	}
+	// Clear the now-unused tail so revoked filters don't linger in the
+	// backing array (the strings they reference can be GC'd).
+	for i := len(kept); i < len(inst.caps); i++ {
+		inst.caps[i] = app.SubjectFilter{}
+	}
+	inst.caps = kept
+	return
+}
+
 // Caps returns a snapshot of the current subject-filter set. Returned slice
 // is a copy; callers may not assume it tracks subsequent AddCap calls.
 func (inst *Client) Caps() (caps []app.SubjectFilter) {
@@ -79,8 +104,14 @@ func (inst *Client) Caps() (caps []app.SubjectFilter) {
 }
 
 func (inst *Client) Subscribe(subject string, handler app.MsgHandlerFunc) (unsubscribe func(), err error) {
-	isInbox := strings.HasPrefix(subject, InboxPrefix)
-	if !isInbox && !inst.canSubscribe(subject) {
+	// Every public subscribe is cap-checked, including _INBOX.* subjects.
+	// Request allocates and subscribes its own reply inbox through the
+	// internal Inst.subscribe (which bypasses the cap check by design), so
+	// no legitimate caller needs a public _INBOX bypass — and granting one
+	// would let any client wildcard-subscribe `_INBOX.>` and read every
+	// reply in the process (file bytes, query results), defeating the
+	// Powerbox subjects whose whole point is mediated access.
+	if !inst.canSubscribe(subject) {
 		err = eb.Build().Str("subject", subject).Str("appId", string(inst.appId)).
 			Errorf("bus subscribe denied: %w", ErrPermissionViolation)
 		return
@@ -182,4 +213,3 @@ func (inst *Client) canSubscribe(subject string) (ok bool) {
 	ok = SubjectAllowed(inst.caps, subject, app.CapDirectionSub)
 	return
 }
-

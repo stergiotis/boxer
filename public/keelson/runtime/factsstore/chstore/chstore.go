@@ -20,14 +20,14 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"lukechampine.com/blake3"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	factsddl "github.com/stergiotis/boxer/public/keelson/runtime/factsschema/ddl"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // Config carries the connection coordinates + qualified target table.
@@ -63,7 +63,6 @@ type Store struct {
 
 var _ factsstore.FactsStoreI = (*Store)(nil)
 
-
 // New constructs a Store. Does not connect or create the table — call Ping
 // to verify reachability and SetupTable to apply DDL.
 func New(cfg Config) (s *Store, err error) {
@@ -93,7 +92,14 @@ func (inst *Store) Ping(ctx context.Context) (err error) {
 // (e.g. "id:id:u64:2k:0:0:") since the table has no logical aliases.
 func (inst *Store) SetupTable(ctx context.Context, engineClause string) (err error) {
 	if engineClause == "" {
-		engineClause = "MergeTree() ORDER BY tuple()"
+		// Time-ordered by default: every audit read (RecentLogs,
+		// LifecyclesByRun, LatestState) is ORDER BY ts, so a sorted primary
+		// key turns those into a sparse-index range read instead of the full
+		// scan that ORDER BY tuple() forced. Retention — TTL / partitioning to
+		// bound a forever-growing heartbeat table — is intentionally left to
+		// the operator's own engine clause rather than imposed here, since it
+		// deletes data.
+		engineClause = "MergeTree() ORDER BY `ts:ts:z64:2k:0:0:`"
 	}
 	var ddl string
 	ddl, err = factsddl.ComposeCreateTableSql(engineClause)
@@ -199,9 +205,45 @@ func (inst *Store) WriteAudit(row factsstore.AuditRow) (id uint64, err error) {
 // value) pairs without parsing.
 func (inst *Store) WriteLog(row factsstore.LogRow) (id uint64, err error) {
 	id = inst.nextId.Add(1)
+	ent := dml.NewInEntityFacts(inst.allocator, 1)
+	encodeLogEntity(ent, id, row)
+	err = inst.commitAndShip(context.Background(), ent)
+	return
+}
+
+// WriteLogs lands a whole batch of KindLog rows as a single multi-row Arrow
+// IPC insert (one HTTP round-trip), instead of one POST per row. This is the
+// shape logbridge.drain feeds — its in-memory ring already batches up to
+// FlushN rows off the producer's hot path, and writing them one INSERT at a
+// time created one ClickHouse part per row (heavy merge pressure) and
+// defeated the batching. ids[i] corresponds to rows[i]. An empty batch is a
+// no-op.
+func (inst *Store) WriteLogs(rows []factsstore.LogRow) (ids []uint64, err error) {
+	if len(rows) == 0 {
+		return
+	}
+	ent := dml.NewInEntityFacts(inst.allocator, len(rows))
+	ids = make([]uint64, len(rows))
+	for i := range rows {
+		id := inst.nextId.Add(1)
+		ids[i] = id
+		encodeLogEntity(ent, id, rows[i])
+		if cErr := ent.CommitEntity(); cErr != nil {
+			err = eh.Errorf("chstore: write logs: commit entity %d: %w", i, cErr)
+			return
+		}
+	}
+	err = inst.shipRecords(context.Background(), ent)
+	return
+}
+
+// encodeLogEntity encodes one KindLog row into ent (BeginEntity through the
+// last section, no CommitEntity — the caller commits). Shared by the
+// single-row WriteLog and the batched WriteLogs so the two paths cannot
+// drift in how a log row maps onto the runtime.facts sections.
+func encodeLogEntity(ent *dml.InEntityFacts, id uint64, row factsstore.LogRow) {
 	ts := defaultTs(row.Ts)
 	nk := naturalKeyForLog(row, ts)
-	ent := dml.NewInEntityFacts(inst.allocator, 1)
 	ent.BeginEntity().SetId(id, nk).SetTimestamp(ts)
 
 	logFieldMembId := vocab.MembLogField.GetId().Value()
@@ -245,9 +287,6 @@ func (inst *Store) WriteLog(row factsstore.LogRow) (id uint64, err error) {
 	}
 
 	writeLogTypedFields(ent, row.Fields, logFieldMembId)
-
-	err = inst.commitAndShip(context.Background(), ent)
-	return
 }
 
 // writeLogTypedFields fans the non-string LogFields out to their matching
@@ -448,32 +487,19 @@ func (inst *Store) WriteState(row factsstore.StateRow) (id uint64, err error) {
 	return
 }
 
-// LatestState returns the most recent state value for (appId, key). Relies
-// on the positional invariant of WriteState — symbol.value[1] = "state",
-// symbol.value[2] = appId string, symbol.value[3] = key. The filter uses
-// has(symbol.lr, MembKindState.id) as a sanity check plus the positional
-// matches; the blob value is hex-encoded over the wire for binary safety.
-// Tombstone rows (the most recent write for (appId, key) is a DeleteState)
-// return found=false.
+// LatestState returns the most recent state value for (appId, key). The
+// (appId, key) match and the value read are membership-keyed — appId via the
+// MembRuntimeApp mixed-membership (arrayFirst over symbol.mrhp), key via the
+// MembPersistKey low-card-ref (the same cumulative-sum lookup pickLcrString
+// uses), and the value via the MembPersistKey-tagged blob attribute. This
+// matches RecentLogs / LifecyclesByRun and deliberately does NOT rely on the
+// positional order of symbol attributes, which the canonicalized,
+// low-cardinality symbol encoding does not guarantee. The blob value is
+// hex-encoded over the wire for binary safety; tombstone rows (the most
+// recent write for (appId, key) is a DeleteState) return found=false.
 func (inst *Store) LatestState(appId app.AppIdT, key string) (value []byte, found bool, err error) {
 	ctx := context.Background()
-	sql := fmt.Sprintf(`
-SELECT
-  hex(arrayElement(`+"`tv:blobArray:value:val:yh:g:0:0:0::data`"+`, 1)) AS v_hex,
-  has(`+"`tv:bool:lr:lr:u64:2q:0:0:0::data`"+`, %d) AS is_tombstone
-FROM %s
-WHERE
-  has(`+"`tv:symbol:lr:lr:u64:2q:0:0:0::data`"+`, %d)
-  AND arrayElement(`+"`tv:symbol:value:val:s:m:0:24:0::data`"+`, 2) = %s
-  AND arrayElement(`+"`tv:symbol:value:val:s:m:0:24:0::data`"+`, 3) = %s
-ORDER BY `+"`ts:ts:z64:2k:0:0:`"+` DESC
-LIMIT 1
-FORMAT TabSeparated`,
-		vocab.MembPersistTombstone.GetId().Value(),
-		inst.qualifiedTable(),
-		vocab.MembKindState.GetId().Value(),
-		quoteSqlString(string(appId)),
-		quoteSqlString(key))
+	sql := composeLatestStateSql(inst.qualifiedTable(), appId, key)
 	body, err := inst.cli.Query(ctx, sql)
 	if err != nil {
 		err = eh.Errorf("chstore: latest state query: %w", err)
@@ -525,10 +551,60 @@ func (inst *Store) DeleteState(appId app.AppIdT, key string) (err error) {
 	return
 }
 
+// composeLatestStateSql builds the membership-keyed LatestState query. The
+// appId match reuses appIdPredicate (MembRuntimeApp via symbol.mrhp), the key
+// match reuses pickLcrString (MembPersistKey via the lrcard cumulative sum),
+// and the value reads the MembPersistKey-tagged blob attribute by the same
+// cumulative-sum lookup over the blobArray columns — none of which depend on
+// the positional order of symbol attributes.
+func composeLatestStateSql(table string, appId app.AppIdT, key string) (sql string) {
+	const (
+		symLR      = "`tv:symbol:lr:lr:u64:2q:0:0:0::data`"
+		symLMR     = "`tv:symbol:lmr:lmr:u64:2q:0:0:0::data`"
+		symValue   = "`tv:symbol:value:val:s:m:0:24:0::data`"
+		symLRCard  = "`tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data`"
+		blobValue  = "`tv:blobArray:value:val:yh:g:0:0:0::data`"
+		blobLR     = "`tv:blobArray:lr:lr:u64:2q:0:0:0::data`"
+		blobLRCard = "`tv:blobArray:lrcard:lrcard:u64:4gw:0:0:0::data`"
+		boolLR     = "`tv:bool:lr:lr:u64:2q:0:0:0::data`"
+		tsCol      = "`ts:ts:z64:2k:0:0:`"
+	)
+	// Value: the blob attribute tagged MembPersistKey, located the same way
+	// pickLcrString locates a scalar — find the membership in lr, map through
+	// arrayCumSum(lrcard) to the value position — then hex-encode the bytes.
+	// '' (the not-found default) hex-encodes to '', which the caller parses
+	// as an empty value; row existence (the WHERE) drives the found flag.
+	blobIdxInLr := fmt.Sprintf("indexOf(%s, %d)", blobLR, vocab.MembPersistKey.GetId().Value())
+	valuePick := fmt.Sprintf("hex(if(%s > 0, arrayElement(%s, indexOf(arrayCumSum(%s), %s)), ''))",
+		blobIdxInLr, blobValue, blobLRCard, blobIdxInLr)
+	keyPick := pickLcrString(symValue, symLR, symLRCard, vocab.MembPersistKey.GetId().Value())
+	whereParts := []string{
+		fmt.Sprintf("has(%s, %d)", symLR, vocab.MembKindState.GetId().Value()),
+		fmt.Sprintf("has(%s, %d)", symLMR, vocab.MembRuntimeApp.GetId().Value()),
+		appIdPredicate(appId),
+		fmt.Sprintf("(%s) = %s", keyPick, quoteSqlString(key)),
+	}
+	sql = fmt.Sprintf(`
+SELECT
+  %s AS v_hex,
+  has(%s, %d) AS is_tombstone
+FROM %s
+WHERE %s
+ORDER BY %s DESC
+LIMIT 1
+FORMAT TabSeparated`,
+		valuePick,
+		boolLR, vocab.MembPersistTombstone.GetId().Value(),
+		table,
+		strings.Join(whereParts, " AND "),
+		tsCol)
+	return
+}
+
 // quoteSqlString single-quotes s for inline SQL, escaping single quotes by
-// doubling. Used for the positional ARRAY-element equality predicates in
-// LatestState — those values come from the caller-controlled appId/key and
-// are not amenable to FORMAT-time parameter binding.
+// doubling. Used for the membership-keyed equality predicates that compare
+// caller-controlled appId/key values; those are not amenable to FORMAT-time
+// parameter binding over the HTTP interface.
 func quoteSqlString(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }
@@ -566,14 +642,23 @@ func (inst *Store) DropTable(ctx context.Context) (err error) {
 	return
 }
 
-// commitAndShip CommitEntities, TransferRecords, InsertArrows, and releases
-// the records. Returns the first error encountered.
+// commitAndShip commits the single buffered entity then ships it. Used by
+// the one-row Write* methods that build exactly one entity.
 func (inst *Store) commitAndShip(ctx context.Context, ent *dml.InEntityFacts) (err error) {
 	err = ent.CommitEntity()
 	if err != nil {
 		err = eh.Errorf("chstore: commit entity: %w", err)
 		return
 	}
+	err = inst.shipRecords(ctx, ent)
+	return
+}
+
+// shipRecords TransferRecords, InsertArrows, and releases the records.
+// Entities must already be committed (commitAndShip commits the single-row
+// case; WriteLogs commits each row before calling this). Returns the first
+// error encountered.
+func (inst *Store) shipRecords(ctx context.Context, ent *dml.InEntityFacts) (err error) {
 	var records []arrow.RecordBatch
 	records, err = ent.TransferRecords(nil)
 	if err != nil {

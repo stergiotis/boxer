@@ -328,10 +328,14 @@ func (inst *inotifyWatcher) Start() (err error) {
 }
 
 func (inst *inotifyWatcher) Stop() {
-	if !inst.stopped.CompareAndSwap(false, true) {
-		return
-	}
-	_ = unix.Close(inst.fd)
+	// Only signal termination. The loop goroutine owns inst.fd and closes
+	// it on exit (see loop). Closing here would race the concurrent
+	// unix.Read in loop(), and — because the fd is non-blocking and polled —
+	// the fd number could be reused by an unrelated open() in the window
+	// between our Close and loop()'s next Read, making loop() read a
+	// different file's descriptor. loop() observes inst.stopped within one
+	// poll interval (~20 ms) and tears down cleanly.
+	inst.stopped.CompareAndSwap(false, true)
 }
 
 func (inst *inotifyWatcher) Events() (ch <-chan WatchEvent) {
@@ -344,9 +348,18 @@ func (inst *inotifyWatcher) Events() (ch <-chan WatchEvent) {
 // cookie(uint32) len(uint32) followed by len bytes of NUL-padded name.
 func (inst *inotifyWatcher) loop() {
 	defer close(inst.events)
+	// Single-owner close: the loop goroutine is the only place inst.fd is
+	// closed, so no other goroutine can close it out from under an in-flight
+	// Read (see Stop). Ordered after the events-close defer so the fd is
+	// released first.
+	defer func() { _ = unix.Close(inst.fd) }()
 	buf := make([]byte, 4096)
 	for {
 		if inst.stopped.Load() {
+			// Emit a final Closed so consumers see the same terminal event
+			// the previous fd-close-from-Stop path produced before the
+			// events channel closes.
+			inst.emit(WatchEvent{Kind: WatchEventClosed, Ts: time.Now().UnixNano()})
 			return
 		}
 		n, err := unix.Read(inst.fd, buf)

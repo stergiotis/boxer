@@ -281,6 +281,11 @@ type FactsStoreI interface {
 	WriteAudit(row AuditRow) (id uint64, err error)
 	WriteState(row StateRow) (id uint64, err error)
 	WriteLog(row LogRow) (id uint64, err error)
+	// WriteLogs persists a batch of log rows. Implementations should land
+	// the whole batch in one transport operation (e.g. a single Arrow
+	// insert) so a batching producer like logbridge is not silently
+	// de-batched into one round-trip per row. ids[i] corresponds to rows[i].
+	WriteLogs(rows []LogRow) (ids []uint64, err error)
 	WriteRuntimeStart(row RuntimeStartRow) (id uint64, err error)
 	WriteRuntimeHeartbeat(row HeartbeatRow) (id uint64, err error)
 	WriteAppLifecycle(row AppLifecycleRow) (id uint64, err error)
@@ -365,6 +370,23 @@ func (inst *InMemoryFactsStore) WriteLog(row LogRow) (id uint64, err error) {
 	inst.mu.Lock()
 	inst.logs = append(inst.logs, row)
 	inst.mu.Unlock()
+	return
+}
+
+// WriteLogs appends a batch of captured zerolog events. Each row is
+// defensively copied via WriteLog. WriteLog never errors in the in-memory
+// store, so the loop runs to completion; ids[i] corresponds to rows[i].
+func (inst *InMemoryFactsStore) WriteLogs(rows []LogRow) (ids []uint64, err error) {
+	if len(rows) == 0 {
+		return
+	}
+	ids = make([]uint64, len(rows))
+	for i := range rows {
+		ids[i], err = inst.WriteLog(rows[i])
+		if err != nil {
+			return
+		}
+	}
 	return
 }
 

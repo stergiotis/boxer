@@ -306,13 +306,12 @@ func TestService_Watch_HandleCloseTearsDownWatch(t *testing.T) {
 	_, err = appBus.Request(prefix+".close", nil)
 	require.NoError(t, err)
 
-	// A subsequent watch op should fail because the handle is gone.
-	rePayload, err := appBus.Request(prefix+".watch", nil)
-	require.NoError(t, err)
-	re, err := fsbroker.UnmarshalDialogReply(rePayload)
-	require.NoError(t, err)
-	assert.False(t, re.Granted)
-	assert.Contains(t, re.Reason, "unknown handle")
+	// A subsequent watch op is denied at the bus layer: closing the handle
+	// revokes the fs.handle.{uuid}.> cap, so the app can no longer publish to
+	// the handle subject at all.
+	_, err = appBus.Request(prefix+".watch", nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, inprocbus.ErrPermissionViolation)
 }
 
 // startRecursiveWatch is the common prefix every recursive test uses:

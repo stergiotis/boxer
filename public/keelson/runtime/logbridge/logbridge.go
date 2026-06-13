@@ -29,9 +29,9 @@ import (
 	"github.com/fxamacker/cbor/v2"
 	"github.com/rs/zerolog"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // AppIdFieldName is the zerolog context field name from which the Sink
@@ -134,6 +134,7 @@ type Sink struct {
 	decoded   atomic.Uint64
 	written   atomic.Uint64
 	parseErrs atomic.Uint64
+	writeErrs atomic.Uint64
 
 	stopCh chan struct{}
 	doneCh chan struct{}
@@ -356,14 +357,18 @@ func (inst *Sink) drain() {
 		inst.head = (inst.head + take) % inst.cfg.Capacity
 		inst.count -= take
 		inst.mu.Unlock()
-		for _, r := range batch {
-			_, werr := inst.store.WriteLog(r)
-			if werr != nil {
-				inst.parseErrs.Add(1)
-				continue
-			}
-			inst.written.Add(1)
+		// Land the whole batch in one store call. WriteLogs ships it as a
+		// single insert; the prior per-row loop turned a FlushN-sized batch
+		// into FlushN round-trips (one ClickHouse part each), defeating the
+		// ring's batching.
+		_, werr := inst.store.WriteLogs(batch)
+		if werr != nil {
+			// Store-write failures are their own counter, NOT parseErrs: a
+			// ClickHouse outage must not read as "wrong zerolog build tag".
+			inst.writeErrs.Add(uint64(len(batch)))
+			continue
 		}
+		inst.written.Add(uint64(len(batch)))
 	}
 }
 
@@ -400,11 +405,22 @@ func (inst *Sink) Written() (n uint64) {
 	return
 }
 
-// ParseErrors returns the running count of CBOR decode failures plus
-// store WriteLog errors. A persistently nonzero value usually means a
-// mismatched zerolog build tag (JSON wire format despite `binary_log`).
+// ParseErrors returns the running count of CBOR decode failures only.
+// A persistently nonzero value usually means a mismatched zerolog build
+// tag (JSON wire format despite `binary_log`). Store-write failures are
+// tracked separately by WriteErrors so a ClickHouse outage is not
+// misread as a decode/build-tag problem.
 func (inst *Sink) ParseErrors() (n uint64) {
 	n = inst.parseErrs.Load()
+	return
+}
+
+// WriteErrors returns the running count of rows the store rejected
+// (FactsStoreI.WriteLogs returned an error). Distinct from ParseErrors:
+// a nonzero value points at the store/transport (e.g. ClickHouse
+// unreachable), not the decode path.
+func (inst *Sink) WriteErrors() (n uint64) {
+	n = inst.writeErrs.Load()
 	return
 }
 
