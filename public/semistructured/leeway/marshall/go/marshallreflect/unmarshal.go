@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/RoaringBitmap/roaring"
+	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/goplan"
@@ -129,7 +130,7 @@ func unmarshalPlain(row reflect.Value, plan *mappingplan.Plan, args UnmarshalArg
 // from row i of its Arrow array col. col's concrete type must be the one
 // goplan.PlainArrowArrayType maps goType to. []byte / FixedSizeBinary
 // are defensively copied out of the Arrow buffer; time.Time is rebuilt
-// from int64 nanos (Arrow's physical timestamp form).
+// from the column's int64 timestamp honoring its declared TimeUnit.
 func readPlainArrow(fld reflect.Value, goType string, col any, i int) (err error) {
 	switch goType {
 	case "uint8":
@@ -162,8 +163,16 @@ func readPlainArrow(fld reflect.Value, goType string, col any, i int) (err error
 		copy(cp, src)
 		fld.SetBytes(cp)
 	case "time.Time":
-		ns := int64(col.(*array.Timestamp).Value(i))
-		fld.Set(reflect.ValueOf(time.Unix(0, ns).UTC()))
+		// Honor the column's self-describing TimeUnit rather than assuming
+		// nanoseconds. Plain ts/expiresAt columns are millisecond-width
+		// (z32) in the in-tree schemas while section temporal columns are
+		// nanosecond-width (z64); reading the raw int64 as nanos would be a
+		// 10^6x error on a millisecond column. ToTime is exactly what the
+		// generated ra readers + gocodegen.ArrowTypeToGoType use, and it
+		// already normalises to UTC.
+		ts := col.(*array.Timestamp)
+		unit := ts.DataType().(*arrow.TimestampType).Unit
+		fld.Set(reflect.ValueOf(ts.Value(i).ToTime(unit)))
 	default:
 		if _, ok := goplan.FixedByteArrayLen(goType); ok {
 			src := col.(*array.FixedSizeBinary).Value(i)

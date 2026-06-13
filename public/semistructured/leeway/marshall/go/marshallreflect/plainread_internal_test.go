@@ -79,6 +79,47 @@ func TestReadPlainArrow_AllArms(t *testing.T) {
 	}
 }
 
+// TestReadPlainArrow_TimestampUnits pins the 2026-06-13 review fix: a plain
+// time.Time column must be reconstructed honoring its declared Arrow TimeUnit,
+// not as hardcoded nanoseconds. In-tree plain ts/expiresAt columns are
+// millisecond-width (z32, "ts:ts:z32" with Unit: arrow.Millisecond), so the
+// old `time.Unix(0, raw)` reader under-scaled them by 10^6. Every unit the
+// generator can emit is exercised; before the fix the non-nanosecond arms
+// reconstructed the wrong instant.
+func TestReadPlainArrow_TimestampUnits(t *testing.T) {
+	mem := memory.NewGoAllocator()
+	// A wall-clock instant whose fractional part is below millisecond, to also
+	// confirm sub-unit truncation matches the column's resolution rather than
+	// silently surviving via a nanosecond round-trip.
+	want := time.Date(2026, 6, 13, 8, 9, 10, 123_456_789, time.UTC)
+
+	cases := []struct {
+		name string
+		unit arrow.TimeUnit
+		raw  arrow.Timestamp
+		want time.Time
+	}{
+		{"Second", arrow.Second, arrow.Timestamp(want.Unix()), time.Unix(want.Unix(), 0).UTC()},
+		{"Millisecond", arrow.Millisecond, arrow.Timestamp(want.UnixMilli()), time.UnixMilli(want.UnixMilli()).UTC()},
+		{"Microsecond", arrow.Microsecond, arrow.Timestamp(want.UnixMicro()), time.UnixMicro(want.UnixMicro()).UTC()},
+		{"Nanosecond", arrow.Nanosecond, arrow.Timestamp(want.UnixNano()), time.Unix(0, want.UnixNano()).UTC()},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			b := array.NewTimestampBuilder(mem, &arrow.TimestampType{Unit: c.unit})
+			b.Append(c.raw)
+			arr := b.NewArray()
+			defer arr.Release()
+
+			fld := reflect.New(goTypeReflect("time.Time")).Elem()
+			require.NoError(t, readPlainArrow(fld, "time.Time", arr, 0))
+			got := fld.Interface().(time.Time)
+			require.Truef(t, c.want.Equal(got), "unit %s: want %s, got %s", c.name, c.want, got)
+			require.Equal(t, time.UTC, got.Location(), "reconstructed time must be UTC")
+		})
+	}
+}
+
 // plainRolesDTO declares all four entity-header roles. With no tagged fields
 // the section readers are never consulted, so Unmarshal can be driven from
 // hand-built plain Arrow arrays alone — covering unmarshalPlain's iteration
