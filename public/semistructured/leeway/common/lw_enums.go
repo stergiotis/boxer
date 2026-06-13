@@ -54,6 +54,7 @@ var AllColumnRoles = []ColumnRoleE{
 	ColumnRoleLowCardVerbatim,
 	ColumnRoleMixedLowCardRef,
 	ColumnRoleMixedRefHighCardParameters,
+	ColumnRoleMixedVerbatimHighCardParameters,
 	ColumnRoleMixedLowCardVerbatim,
 	ColumnRoleValue,
 	ColumnRoleLength,
@@ -396,7 +397,7 @@ var AllPlainItemTypes = []PlainItemTypeE{
 	PlainItemTypeOpaque,
 }
 
-var MaxPlainItemTypeExcl = PlainItemTypeE(len(AllMembershipSpecs))
+var MaxPlainItemTypeExcl = PlainItemTypeE(len(AllPlainItemTypes))
 
 func (inst PlainItemTypeE) String() string {
 	switch inst {

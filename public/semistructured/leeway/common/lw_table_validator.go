@@ -106,7 +106,21 @@ func (inst *TableValidator) validateTable(table *TableDesc) {
 		}
 	}
 	addErr(inst.validateNamesTypes(table.PlainValuesNames, table.PlainValuesTypes))
+	// The plain-value attributes are co-slices keyed by name; a short companion
+	// slice slips past validateNamesTypes (which only compares names vs types)
+	// and then panics inside Normalize's co-sort swaps (review A-8).
+	n := len(table.PlainValuesNames)
+	addErr(checkCoSliceLen("plain values", "encodingHints", n, len(table.PlainValuesEncodingHints)))
+	addErr(checkCoSliceLen("plain values", "itemTypes", n, len(table.PlainValuesItemTypes)))
+	addErr(checkCoSliceLen("plain values", "valueSemantics", n, len(table.PlainValuesValueSemantics)))
 	inst.errors = errs
+}
+
+func checkCoSliceLen(owner string, sliceName string, want int, got int) (err error) {
+	if want != got {
+		err = eb.Build().Str("owner", owner).Str("slice", sliceName).Int("expected", want).Int("actual", got).Errorf("co-slice length mismatch")
+	}
+	return
 }
 func (inst *TableValidator) validateSection(section TaggedValuesSection) {
 	errs := inst.errors
@@ -120,6 +134,9 @@ func (inst *TableValidator) validateSection(section TaggedValuesSection) {
 		addErr(eb.Build().Stringer("section", section.Name).Errorf("section aspects are not valid"))
 	}
 	addErr(inst.validateNamesTypes(section.ValueColumnNames, section.ValueColumnTypes))
+	n := len(section.ValueColumnNames)
+	addErr(checkCoSliceLen("section "+section.Name.String(), "encodingHints", n, len(section.ValueEncodingHints)))
+	addErr(checkCoSliceLen("section "+section.Name.String(), "valueSemantics", n, len(section.ValueSemantics)))
 	for _, t := range section.ValueEncodingHints {
 		if !t.IsValid() {
 			addErr(eb.Build().Stringer("section", section.Name).Errorf("section value column encoding hints are not valid"))
@@ -146,9 +163,13 @@ func (inst *TableValidator) buildError(errs []error) (err error) {
 	return
 }
 func (inst *TableValidator) ValidateSection(section TaggedValuesSection) (err error) {
-	errs := inst.errors[:0]
+	// validateSection appends into inst.errors; reset it first and build the
+	// result from the populated slice (the previous code captured a stale
+	// len-0 snapshot before validateSection ran, so it always returned nil —
+	// review A-2/C-7).
+	inst.errors = inst.errors[:0]
 	inst.validateSection(section)
-	return inst.buildError(errs)
+	return inst.buildError(inst.errors)
 }
 func (inst *TableValidator) ValidateTable(table *TableDesc) (err error) {
 	inst.validateTable(table)

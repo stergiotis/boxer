@@ -416,6 +416,10 @@ func (inst *HumanReadableNamingConvention) composePlainValueColumn(prefix string
 		err = eh.Errorf("column name is for the given naming convention: %w", err)
 		return
 	}
+	err = inst.checkKeyComponent(streamingGroup)
+	if err != nil {
+		return
+	}
 	if !ct.IsValid() {
 		err = eb.Build().Stringer("canonicalType", ct).Str("prefix", prefix).Str("name", name).Errorf("%w", ErrInvalidCanonicalType)
 		return
@@ -446,6 +450,14 @@ func (inst *HumanReadableNamingConvention) composeTaggedValuesColumn(sectionName
 		return
 	}
 	err = inst.checkNameComponent(name)
+	if err != nil {
+		return
+	}
+	err = inst.checkKeyComponent(coSectionGroup)
+	if err != nil {
+		return
+	}
+	err = inst.checkKeyComponent(streamingGroup)
 	if err != nil {
 		return
 	}
@@ -491,6 +503,19 @@ func (inst *HumanReadableNamingConvention) checkNameComponent(component string) 
 	}
 	if component == "" {
 		return ErrInvalidColumns
+	}
+	return
+}
+
+// checkKeyComponent validates a naming.Key (coSectionGroup / streamingGroup)
+// that is embedded verbatim into the physical column name. Unlike a section or
+// column name an empty key is the common, legal case (no group), but a key
+// containing the structural separator would corrupt the column-name grammar:
+// distinct keys could render an identical physical name and re-parse would
+// mis-split the name (review C-2).
+func (inst *HumanReadableNamingConvention) checkKeyComponent(key naming.Key) (err error) {
+	if strings.Contains(key.String(), inst.separator) {
+		return eb.Build().Str("key", key.String()).Str("separator", inst.separator).Errorf("invalid grouping key: %w", ErrNameComponentContainsSeparator)
 	}
 	return
 }

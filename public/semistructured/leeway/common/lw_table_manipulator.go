@@ -31,7 +31,7 @@ func NewTableManipulator() (inst *TableManipulator, err error) {
 	inst = &TableManipulator{
 		marshaller:                marshaller,
 		buffer:                    bytes.NewBuffer(make([]byte, 0, 4096*4)),
-		validator:                 nil,
+		validator:                 NewTableValidator(),
 		receivedInvalidAspects:    false,
 		upsertedCount:             0,
 		plainValueItemNameToIndex: plu,
@@ -62,6 +62,15 @@ func (inst *TableManipulator) BuildTableDesc() (tbl TableDesc, err error) {
 	err = inst.marshaller.DecodeTableCbor(b, &tbl)
 	if err != nil {
 		err = eh.Errorf("unable to unmarshalling table: %w", err)
+		return
+	}
+	// Validate the built table so the manipulator cannot hand out states the
+	// validator rejects (cross-style duplicate names, co-slice length skews
+	// that would panic in Normalize) — review A-8.
+	inst.validator.Reset()
+	err = inst.validator.ValidateTable(&tbl)
+	if err != nil {
+		err = eh.Errorf("built table failed validation: %w", err)
 		return
 	}
 	return
@@ -310,10 +319,22 @@ func (inst *TableManipulator) LoadFromIntermediates(it IntermediateColumnIterato
 	return
 }
 func (inst *TableManipulator) MergeTable(tbl *TableDesc) (err error) {
+	// Carry the table name/comment through the merge so DeepCopy/Compare do not
+	// silently ignore them (A-4); last-non-empty-wins on a multi-table merge.
+	if tbl.DictionaryEntry.Name != "" {
+		inst.table.DictionaryEntry.Name = tbl.DictionaryEntry.Name
+	}
+	if tbl.DictionaryEntry.Comment != "" {
+		inst.table.DictionaryEntry.Comment = tbl.DictionaryEntry.Comment
+	}
 	for i, name := range tbl.PlainValuesNames {
 		inst.AddPlainValueItem(tbl.PlainValuesItemTypes[i], name, tbl.PlainValuesTypes[i], tbl.PlainValuesEncodingHints[i], tbl.PlainValuesValueSemantics[i])
 	}
-	inst.SetOpaqueColumnStreamingGroup(tbl.OpaqueStreamingGroup)
+	// last-non-empty-wins, consistent with the section co/streaming groups
+	// below — merging an empty table must not clobber an existing group (A-13).
+	if tbl.OpaqueStreamingGroup != "" {
+		inst.SetOpaqueColumnStreamingGroup(tbl.OpaqueStreamingGroup)
+	}
 	for _, sec := range tbl.TaggedValuesSections {
 		inst.MergeTaggedValueSection(sec.Name, sec.UseAspects, sec.MembershipSpec, sec.CoSectionGroup, sec.StreamingGroup)
 		for j, name := range sec.ValueColumnNames {

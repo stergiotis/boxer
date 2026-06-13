@@ -31,3 +31,25 @@ func TestJoinComponents(t *testing.T) {
 	require.Equal(t, "tricky", comps[2].String())
 	require.Equal(t, "case", comps[3].String())
 }
+
+// Regression for review C-1: ValidateNameComponent ranged over a []rune with a
+// single loop variable, so it compared the *index* against the separator rune
+// values — separators inside a component were never detected and any component
+// of length ≥46 was bogusly rejected (index 45 == '-'). Verify both directions.
+func TestValidateNameComponentDetectsSeparators(t *testing.T) {
+	require.Error(t, ValidateNameComponent("foo-bar"), "spinal-case separator inside a component must be rejected")
+	require.Error(t, ValidateNameComponent("foo_bar"), "snake-case separator inside a component must be rejected")
+
+	// A long single-token component (≥46 runes) must be accepted — the old
+	// index-based loop falsely flagged it as containing the '-' separator.
+	long := StylableName("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") // 51×'a'
+	require.NoError(t, ValidateNameComponent(long), "a long separator-free component must validate")
+
+	// The uniqueness property on StylableName depends on this: a hyphenated
+	// component must not join-collide with two separate components.
+	joined, err := JoinComponents("foo", "bar")
+	require.NoError(t, err)
+	_, err = JoinComponents("foo-bar")
+	require.Error(t, err, "a component carrying the join separator must be rejected, preserving JoinComponents injectivity")
+	require.Equal(t, "foo-bar", joined.String())
+}

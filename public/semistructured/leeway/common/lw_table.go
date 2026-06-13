@@ -37,8 +37,7 @@ func (inst *TableDesc) Reset() {
 
 	inst.DictionaryEntry.Name = ""
 	inst.DictionaryEntry.Comment = ""
-	inst.DictionaryEntry.Name = ""
-	inst.DictionaryEntry.Comment = ""
+	inst.OpaqueStreamingGroup = ""
 	clear(inst.TaggedValuesSections)
 	inst.TaggedValuesSections = initSlice(inst.TaggedValuesSections, taggedSecEst)
 }
@@ -94,6 +93,7 @@ func (inst *TableDesc) AddTaggedValuesSections(secs []TaggedValuesSectionDto) (e
 
 func (inst *TableDesc) LoadFrom(dto *TableDescDto) (err error) {
 	inst.DictionaryEntry = dto.DictionaryEntry
+	inst.OpaqueStreamingGroup = dto.OpaqueColumnStreamingGroup
 
 	for _, t := range AllPlainItemTypes {
 		if t == PlainItemTypeNone {
@@ -134,6 +134,7 @@ func (inst *TableDesc) GetPlainItemValueSemantics(itemType PlainItemTypeE, in []
 }
 func (inst *TableDesc) LoadTo(dto *TableDescDto) (err error) {
 	dto.DictionaryEntry = inst.DictionaryEntry
+	dto.OpaqueColumnStreamingGroup = inst.OpaqueStreamingGroup
 	tmp := make([]string, 0, 10)
 	tmp2 := make([]encodingaspects.AspectSet, 0, 10)
 	tmp3 := make([]valueaspects.AspectSet, 0, 10)

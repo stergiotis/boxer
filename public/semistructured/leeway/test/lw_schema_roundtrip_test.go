@@ -131,6 +131,10 @@ func TestSmoke(t *testing.T) {
 
 	manip.AddPlainValueItem(common2.PlainItemTypeEntityId, "a", ct1, encodingaspects.EmptyAspectSet, valueaspects.EmptyAspectSet)
 	manip.AddPlainValueItem(common2.PlainItemTypeEntityId, "b", ct2, encodingaspects.EmptyAspectSet, valueaspects.EmptyAspectSet)
+	// An opaque plain column carries the table-level opaque streaming group
+	// through the IR and physical-column round trips (the group rides on the
+	// opaque column; without one it cannot survive those lossy-by-design paths).
+	manip.AddPlainValueItem(common2.PlainItemTypeOpaque, "c", ct2, encodingaspects.EmptyAspectSet, valueaspects.EmptyAspectSet)
 
 	manip.MergeTaggedValueColumn("sec0", "u", ct1, encodingaspects.EmptyAspectSet, valueaspects.EmptyAspectSet, useaspects.EmptyAspectSet, common2.MembershipSpecHighCardRef, naming.Key("coSectionGroup1"), naming.Key("streamingGroup1"))
 	manip.MergeTaggedValueColumn("sec0", "v", ct2, encodingaspects.EmptyAspectSet, valueaspects.EmptyAspectSet, useaspects.EmptyAspectSet, common2.MembershipSpecHighCardRef, naming.Key("coSectionGroup2"), naming.Key("streamingGroup2"))

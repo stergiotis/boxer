@@ -112,7 +112,7 @@ func ValidateNameComponent[S ~string](component S) (err error) {
 	if unicode.ToLower(runes[0]) == unicode.ToUpper(runes[0]) {
 		return eb.Build().Str("initialRune", string(runes[0])).Str("component", string(component)).Errorf("first rune must not be the same in lower- and upper-case")
 	}
-	for r := range runes {
+	for _, r := range runes {
 		switch r {
 		case SpinalCaseSeparator:
 			return eb.Build().Str("component", string(component)).Str("separator", string(SpinalCaseSeparator)).Errorf("component contains spinal case separator")
