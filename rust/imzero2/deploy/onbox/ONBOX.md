@@ -86,11 +86,14 @@ On a new tag: the timer fires the deploy → fetch → checkout → build (incre
 during the cold/first build and the restart blip; a build or gate failure leaves
 `current` untouched.
 
-## Notes / Phase 1 scope
+## Notes / scope
 
-- **Happy path only.** Rollback/retention (ADR-0085 SD6) and signed-tag
-  verification (SD8) are later phases; the deploy keeps a failed candidate on
-  disk and never swaps it in.
+- **Phases 1–2 implemented.** Happy path + post-restart health re-probe with
+  automatic **rollback** and **keep-last-K retention** (ADR-0085 SD6). A failed
+  build or pre-swap gate keeps `current` untouched; a release that fails to
+  serve after the swap is rolled back to the previous one (no rebuild), and old
+  releases beyond `--keep` are pruned. Signed-tag verification (SD8) and the
+  env-registry migration (SD7) remain later phases.
 - **Flags → env registry** is Phase 3; today the knobs are `imzero2 deploy`
   flags (`--scratch-port`, `--gate-aus`, `--gate-timeout`, `--encoder-args`, …).
 - **Restart permission** comes from the polkit rule; no sudo in the tool.

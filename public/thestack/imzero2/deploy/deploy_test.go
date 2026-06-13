@@ -1,6 +1,9 @@
 package deploy
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestSelectNewestTag(t *testing.T) {
 	cases := []struct {
@@ -35,5 +38,43 @@ func TestParseProbe(t *testing.T) {
 	}
 	if a, k := parseProbe("nonsense"); a != 0 || k != 0 {
 		t.Fatalf("parseProbe(nonsense) = (%d, %d), want (0, 0)", a, k)
+	}
+}
+
+func TestSelectPrune(t *testing.T) {
+	mk := func(p string, ageSecs int) relEntry {
+		return relEntry{path: p, mtime: time.Unix(int64(10000-ageSecs), 0)} // smaller age = newer
+	}
+	// newest -> oldest: v4, v3, v2, v1, v0
+	rels := []relEntry{mk("/r/v2", 2), mk("/r/v4", 0), mk("/r/v0", 4), mk("/r/v3", 1), mk("/r/v1", 3)}
+
+	t.Run("current is newest, keep 2", func(t *testing.T) {
+		// keep v3,v2 (newest non-current) + v4 (current); delete v1,v0
+		assertSet(t, selectPrune(rels, "/r/v4", 2), []string{"/r/v1", "/r/v0"})
+	})
+	t.Run("current is older (post-rollback), keep 2", func(t *testing.T) {
+		// v1 (current) always kept; keep v4,v3; delete v2,v0
+		assertSet(t, selectPrune(rels, "/r/v1", 2), []string{"/r/v2", "/r/v0"})
+	})
+	t.Run("keep >= count deletes nothing", func(t *testing.T) {
+		if got := selectPrune(rels, "/r/v4", 10); len(got) != 0 {
+			t.Fatalf("selectPrune keep=10 = %v, want none", got)
+		}
+	})
+}
+
+func assertSet(t *testing.T, got, want []string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	seen := make(map[string]bool, len(got))
+	for _, g := range got {
+		seen[g] = true
+	}
+	for _, w := range want {
+		if !seen[w] {
+			t.Fatalf("got %v, want %v (missing %s)", got, want, w)
+		}
 	}
 }

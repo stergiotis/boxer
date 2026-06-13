@@ -44,6 +44,8 @@ type Config struct {
 	ScratchPort  int           // gate: candidate carrier loopback port
 	GateAUs      int           // gate: access units ws_probe must receive
 	GateTimeout  time.Duration // gate: overall budget
+	LivePort     int           // post-restart health probe: the demo service's listen port
+	KeepReleases int           // retain the last K release dirs (rollback history)
 	EncoderArgs  string        // IMZERO2_HEADLESS_ENCODER_ARGS for the gate run
 	MainFont     string        // optional; fc-match'd if empty
 	PhosphorFont string        // optional; the release's bundled asset if empty
@@ -96,12 +98,23 @@ func Run(ctx context.Context, lg zerolog.Logger, cfg Config) (deployed bool, err
 		lg.Warn().Str("tag", newest).Str("release", relDir).Msg("deploy: dry-run — built + gated OK, skipping swap + restart")
 		return true, nil
 	}
+	prev := currentTarget(cfg) // for rollback; "" on the first deploy
 	if err = swap(ctx, lg, cfg, relDir); err != nil {
 		return false, err
 	}
-	if err = restart(ctx, lg, cfg); err != nil {
-		return false, err
+	if actErr := activate(ctx, lg, cfg, relDir); actErr != nil {
+		lg.Error().Err(actErr).Str("tag", newest).Msg("deploy: activation failed — rolling back")
+		if prev == "" {
+			return false, eh.Errorf("deploy: %s failed to activate and no previous release exists: %w", newest, actErr)
+		}
+		if rbErr := rollback(ctx, lg, cfg, prev); rbErr != nil {
+			return false, eb.Build().Str("rollback_error", rbErr.Error()).
+				Errorf("deploy: %s failed to activate AND rollback to %s failed: %w", newest, filepath.Base(prev), actErr)
+		}
+		prune(lg, cfg)
+		return false, eh.Errorf("deploy: %s rolled back to %s after activation failure: %w", newest, filepath.Base(prev), actErr)
 	}
+	prune(lg, cfg)
 	lg.Info().Str("tag", newest).Msg("deploy: live")
 	return true, nil
 }
@@ -143,7 +156,7 @@ func build(ctx context.Context, lg zerolog.Logger, cfg Config) error {
 	return step(ctx, lg, "build-go", rustDir, nil, "bash", "build_go.sh")
 }
 
-func stage(ctx context.Context, lg zerolog.Logger, cfg Config, tag string) (string, error) {
+func stage(_ context.Context, lg zerolog.Logger, cfg Config, tag string) (string, error) {
 	relDir := filepath.Join(cfg.ReleasesDir, tag)
 	tmp := relDir + ".staging"
 	if err := os.RemoveAll(tmp); err != nil {
@@ -222,17 +235,9 @@ func gate(ctx context.Context, lg zerolog.Logger, cfg Config, relDir string) err
 		_ = cmd.Wait()
 	}()
 
-	if err := waitForPage(gctx, fmt.Sprintf("http://127.0.0.1:%d/", cfg.ScratchPort)); err != nil {
-		return eb.Build().Str("candidate", tail(buf.String(), 1500)).Errorf("deploy: gate — carrier did not come up: %w", err)
-	}
-	outFile := filepath.Join(os.TempDir(), "imzero2-gate-"+filepath.Base(relDir)+".h264")
-	pout, perr := run(gctx, "", nil,
-		filepath.Join(relDir, "ws_probe"),
-		fmt.Sprintf("ws://127.0.0.1:%d/", cfg.ScratchPort), outFile, strconv.Itoa(cfg.GateAUs))
-	_ = os.Remove(outFile)
-	aus, kf := parseProbe(pout)
+	aus, kf, pout, perr := probeStream(gctx, filepath.Join(relDir, "ws_probe"), cfg.ScratchPort, cfg.GateAUs)
 	if perr != nil {
-		return eb.Build().Int("aus", aus).Str("probe", tail(pout, 800)).Errorf("deploy: gate probe failed: %w", perr)
+		return eb.Build().Str("candidate", tail(buf.String(), 1500)).Str("probe", tail(pout, 600)).Errorf("deploy: gate — %w", perr)
 	}
 	if aus < cfg.GateAUs || kf < 1 {
 		return eb.Build().Int("aus", aus).Int("want", cfg.GateAUs).Int("keyframes", kf).
@@ -242,21 +247,152 @@ func gate(ctx context.Context, lg zerolog.Logger, cfg Config, relDir string) err
 	return nil
 }
 
-func swap(ctx context.Context, lg zerolog.Logger, cfg Config, relDir string) error {
-	tmp := cfg.CurrentLink + ".tmp"
-	_ = os.Remove(tmp)
-	if err := os.Symlink(relDir, tmp); err != nil {
-		return eh.Errorf("deploy: prepare symlink: %w", err)
-	}
-	if err := os.Rename(tmp, cfg.CurrentLink); err != nil { // POSIX-atomic over the existing link
-		return eh.Errorf("deploy: atomic swap: %w", err)
+func swap(_ context.Context, lg zerolog.Logger, cfg Config, relDir string) error {
+	if err := atomicSymlink(cfg.CurrentLink, relDir); err != nil {
+		return err
 	}
 	lg.Info().Str("current", cfg.CurrentLink).Str("target", relDir).Msg("deploy: swapped current")
 	return nil
 }
 
+// atomicSymlink points link at target via a temp symlink + rename, which is
+// atomic over an existing link.
+func atomicSymlink(link, target string) error {
+	tmp := link + ".tmp"
+	_ = os.Remove(tmp)
+	if err := os.Symlink(target, tmp); err != nil {
+		return eh.Errorf("deploy: prepare symlink: %w", err)
+	}
+	if err := os.Rename(tmp, link); err != nil {
+		return eh.Errorf("deploy: atomic swap: %w", err)
+	}
+	return nil
+}
+
 func restart(ctx context.Context, lg zerolog.Logger, cfg Config) error {
 	return step(ctx, lg, "restart", "", nil, "systemctl", "restart", cfg.ServiceName)
+}
+
+// --- Phase 2: activate / health re-probe / rollback / retention (SD6) ---
+
+// activate restarts the service onto `current` and verifies it streams.
+func activate(ctx context.Context, lg zerolog.Logger, cfg Config, relDir string) error {
+	if err := restart(ctx, lg, cfg); err != nil {
+		return err
+	}
+	return healthCheck(ctx, lg, cfg, relDir)
+}
+
+// healthCheck probes the live demo service after a restart (SD6): the
+// release just made current must actually serve and stream.
+func healthCheck(ctx context.Context, lg zerolog.Logger, cfg Config, relDir string) error {
+	hctx, cancel := context.WithTimeout(ctx, cfg.GateTimeout)
+	defer cancel()
+	aus, kf, pout, err := probeStream(hctx, filepath.Join(relDir, "ws_probe"), cfg.LivePort, cfg.GateAUs)
+	if err != nil {
+		return eb.Build().Str("probe", tail(pout, 600)).Errorf("deploy: health — %w", err)
+	}
+	if aus < cfg.GateAUs || kf < 1 {
+		return eb.Build().Int("aus", aus).Int("keyframes", kf).Errorf("deploy: health — live service did not stream after restart")
+	}
+	lg.Info().Int("aus", aus).Int("keyframes", kf).Msg("deploy: post-restart health probe passed")
+	return nil
+}
+
+// rollback repoints `current` at a previous release and restarts (SD6) —
+// instant, no rebuild.
+func rollback(ctx context.Context, lg zerolog.Logger, cfg Config, prevRelDir string) error {
+	if err := atomicSymlink(cfg.CurrentLink, prevRelDir); err != nil {
+		return err
+	}
+	lg.Warn().Str("current", cfg.CurrentLink).Str("target", prevRelDir).Msg("deploy: rolled back current")
+	return restart(ctx, lg, cfg)
+}
+
+// probeStream waits for the carrier page on port, then requires ws_probe to
+// decode wantAUs access units. Returns the AU/keyframe counts and the raw
+// probe output for diagnostics. Shared by the pre-swap gate and the
+// post-restart health check.
+func probeStream(ctx context.Context, wsProbeBin string, port, wantAUs int) (aus, keyframes int, out string, err error) {
+	if err = waitForPage(ctx, fmt.Sprintf("http://127.0.0.1:%d/", port)); err != nil {
+		return 0, 0, "", eh.Errorf("carrier did not come up: %w", err)
+	}
+	outFile := filepath.Join(os.TempDir(), fmt.Sprintf("imzero2-probe-%d.h264", port))
+	out, perr := run(ctx, "", nil, wsProbeBin, fmt.Sprintf("ws://127.0.0.1:%d/", port), outFile, strconv.Itoa(wantAUs))
+	_ = os.Remove(outFile)
+	aus, keyframes = parseProbe(out)
+	if perr != nil {
+		return aus, keyframes, out, eh.Errorf("ws_probe: %w", perr)
+	}
+	return aus, keyframes, out, nil
+}
+
+// currentTarget resolves the absolute, cleaned path `current` points at, or "".
+func currentTarget(cfg Config) string {
+	t, err := os.Readlink(cfg.CurrentLink)
+	if err != nil {
+		return ""
+	}
+	if !filepath.IsAbs(t) {
+		t = filepath.Join(filepath.Dir(cfg.CurrentLink), t)
+	}
+	return filepath.Clean(t)
+}
+
+type relEntry struct {
+	path  string
+	mtime time.Time
+}
+
+// selectPrune returns the release dirs to delete: everything beyond the
+// `keep` newest by mtime, never including `current`. Pure, for testability.
+func selectPrune(rels []relEntry, current string, keep int) []string {
+	if keep < 1 {
+		keep = 1
+	}
+	sorted := append([]relEntry(nil), rels...)
+	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].mtime.After(sorted[j].mtime) })
+	var del []string
+	kept := 0
+	for _, r := range sorted {
+		if r.path == current {
+			continue // never prune the live release
+		}
+		if kept < keep {
+			kept++
+			continue
+		}
+		del = append(del, r.path)
+	}
+	return del
+}
+
+// prune trims releases/ to the retention window (SD6), protecting `current`.
+func prune(lg zerolog.Logger, cfg Config) {
+	entries, err := os.ReadDir(cfg.ReleasesDir)
+	if err != nil {
+		lg.Warn().Err(err).Msg("deploy: prune skipped")
+		return
+	}
+	cur := currentTarget(cfg)
+	var rels []relEntry
+	for _, e := range entries {
+		if !e.IsDir() || strings.HasSuffix(e.Name(), ".staging") {
+			continue
+		}
+		info, ierr := e.Info()
+		if ierr != nil {
+			continue
+		}
+		rels = append(rels, relEntry{filepath.Join(cfg.ReleasesDir, e.Name()), info.ModTime()})
+	}
+	for _, p := range selectPrune(rels, cur, cfg.KeepReleases) {
+		if rerr := os.RemoveAll(p); rerr != nil {
+			lg.Warn().Str("release", p).Err(rerr).Msg("deploy: prune failed")
+		} else {
+			lg.Info().Str("release", p).Msg("deploy: pruned old release")
+		}
+	}
 }
 
 // --- tag selection (pure; unit-tested) ---
@@ -321,11 +457,10 @@ func compareVer(a, b []int) int {
 // --- helpers ---
 
 func currentTag(cfg Config) string {
-	target, err := os.Readlink(cfg.CurrentLink)
-	if err != nil {
-		return ""
+	if t := currentTarget(cfg); t != "" {
+		return filepath.Base(t)
 	}
-	return filepath.Base(target)
+	return ""
 }
 
 func step(ctx context.Context, lg zerolog.Logger, what, dir string, env []string, name string, args ...string) error {
