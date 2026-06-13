@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package supervisor
 
 // AppId is the conventional bus identity the host registers for the

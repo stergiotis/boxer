@@ -1,4 +1,4 @@
-//go:build linux && gpu_intel && llm_generated_opus47
+//go:build linux && gpu_intel
 
 package intel
 

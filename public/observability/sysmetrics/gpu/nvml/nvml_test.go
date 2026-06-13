@@ -1,4 +1,4 @@
-//go:build linux && gpu_nvml && llm_generated_opus47
+//go:build linux && gpu_nvml
 
 package nvml_test
 

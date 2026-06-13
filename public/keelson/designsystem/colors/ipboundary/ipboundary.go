@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package ipboundary searches IDS-generated palette hex values against
 // the cached published anchors of major design systems (ADR-0029 §SD12,
 // ADR-0033 §SD7).

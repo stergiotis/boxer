@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package demo is the imzero2 demo carousel — the registry shell that
 // resolves demo subcommands to their renderer functions and orchestrates
 // switching between built-in apps under cmd/imzero2's `imzero2 demo`

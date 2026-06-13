@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package styletokens
 
 // Rounding scale (ADR-0032 §SD3). Density-independent.

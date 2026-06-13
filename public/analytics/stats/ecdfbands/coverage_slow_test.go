@@ -1,4 +1,4 @@
-//go:build llm_generated_opus47 && slow
+//go:build slow
 
 // Empirical-coverage test battery for the simultaneous CDF bands.
 //

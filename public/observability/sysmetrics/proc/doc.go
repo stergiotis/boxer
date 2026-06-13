@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package proc samples the Linux process table by walking
 // /proc/[pid]/{comm,cmdline,stat,statm,status} and yielding one [Info]
 // per visible process.

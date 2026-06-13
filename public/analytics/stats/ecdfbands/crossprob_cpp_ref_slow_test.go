@@ -1,4 +1,4 @@
-//go:build llm_generated_opus47 && slow
+//go:build slow
 
 // Cross-validation against Moscovich's published C++ reference
 // implementation of the boundary-crossing-probability algorithms.

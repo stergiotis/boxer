@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package l10stroke implements IDS Tier 1 rule L10 — flag literal numeric
 // stroke-width values in stroke-aware API calls outside the styletokens
 // allowlist.

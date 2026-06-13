@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package codegen drives the leeway code generators for the runtime
 // facts schema (ADR-0026 M2.5b, plus ADR-0042's Phase-1 pivot). Mirrors
 // the spinnaker pattern at boxerstaging/spinnaker/codegen but targets

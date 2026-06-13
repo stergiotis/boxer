@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package mem samples Linux memory statistics from /proc/meminfo and,
 // optionally, the ZFS ARC accounting at /proc/spl/kstat/zfs/arcstats.
 //

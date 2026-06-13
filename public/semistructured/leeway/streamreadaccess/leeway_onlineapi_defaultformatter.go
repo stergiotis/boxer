@@ -1,5 +1,3 @@
-//go:build llm_generated_opus46
-
 package streamreadaccess
 
 import "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"

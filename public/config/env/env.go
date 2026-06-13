@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package env is the boxer-wide environment variable registry.
 //
 // Each variable is declared once as a package-level value via NewString /

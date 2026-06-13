@@ -1,4 +1,4 @@
-//go:build linux && gpu_rocm && llm_generated_opus47
+//go:build linux && gpu_rocm
 
 // Package rocm samples AMD GPU state via the kernel's amdgpu sysfs
 // surface. Each [Sample] reads the per-card scalars and emits one

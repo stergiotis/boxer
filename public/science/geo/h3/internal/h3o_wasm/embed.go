@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package h3o_wasm embeds the compiled h3 bridge WebAssembly artifact so the
 // parent package can instantiate it without host filesystem access.
 //

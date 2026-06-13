@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package markdown renders Obsidian-flavored Markdown documents through
 // the imzero2 / egui2 widget tree.
 //

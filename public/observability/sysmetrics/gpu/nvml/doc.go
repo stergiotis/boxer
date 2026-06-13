@@ -1,4 +1,4 @@
-//go:build linux && gpu_nvml && llm_generated_opus47
+//go:build linux && gpu_nvml
 
 // Package nvml samples NVIDIA GPU state via the NVIDIA Management
 // Library (NVML). Symbols are loaded at runtime via

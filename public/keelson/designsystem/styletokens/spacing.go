@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package styletokens
 
 // PxTable is the IDS spacing magnitude ladder (ADR-0032 §SD2).

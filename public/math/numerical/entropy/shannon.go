@@ -1,5 +1,3 @@
-//go:build llm_generated_opus46
-
 // Package entropy provides numerically stable Shannon entropy computation.
 package entropy
 

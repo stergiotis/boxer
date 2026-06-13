@@ -1,4 +1,4 @@
-//go:build integration && llm_generated_opus47
+//go:build integration
 
 // Copyright 2026 Panos Stergiotis
 //

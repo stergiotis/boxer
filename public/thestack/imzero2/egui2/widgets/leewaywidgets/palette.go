@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package leewaywidgets
 
 // ColorPaletteE selects the section-accent colour ladder used by Card and

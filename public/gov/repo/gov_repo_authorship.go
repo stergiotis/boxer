@@ -1,16 +1,25 @@
-//go:build llm_generated_opus46
-
 package repo
 
 import (
 	"context"
 	"iter"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
+// AuthorshipRecord holds cumulative authored-line counts through the end of
+// Month, split by author type (human vs LLM) and code vs test files.
+//
+// Attribution reads git history directly: a commit's added lines count as LLM
+// when it carries a Co-Authored-By trailer naming a known code-generation
+// model, otherwise human. This is the provenance source of record since the
+// llm_generated_* build tags were retired. Counts are cumulative additions
+// (deletions are not subtracted), so the final record approximates current
+// authorship volume and the series shows how authorship shifted over the
+// project's life.
 type AuthorshipRecord struct {
 	Month          string
 	HumanLines     int
@@ -25,100 +34,144 @@ type AuthorshipRecord struct {
 
 type AuthorshipAnalyzer struct{}
 
+// commitIsLLM reports whether a commit's joined Co-Authored-By trailer values
+// name a known code-generation model. Matching the vendor family (rather than
+// exact model strings) keeps successive model revisions attributed without a
+// registry to maintain — the failure mode the per-model build tags suffered.
+func commitIsLLM(coauthors string) bool {
+	s := strings.ToLower(coauthors)
+	return strings.Contains(s, "claude") || strings.Contains(s, "gemini")
+}
+
+// monthAgg accumulates one month's additions plus the count of files first
+// seen that month in each category, so a cumulative sweep yields per-month
+// running totals for both lines and distinct files.
+type monthAgg struct {
+	month                    string
+	humanLines, llmLines     int
+	humanTest, llmTest       int
+	newTotalCode, newLLMCode int
+	newTotalTest, newLLMTest int
+}
+
 func (inst *AuthorshipAnalyzer) Run(ctx context.Context, git *GitRunner) iter.Seq2[AuthorshipRecord, error] {
 	return func(yield func(AuthorshipRecord, error) bool) {
-		// Step 1: get one commit hash per month (last commit of each month)
-		type monthCommit struct {
-			month string
-			hash  string
+		months := make([]*monthAgg, 0, 64)
+		idx := make(map[string]int, 64)
+		agg := func(m string) *monthAgg {
+			if i, ok := idx[m]; ok {
+				return months[i]
+			}
+			a := &monthAgg{month: m}
+			idx[m] = len(months)
+			months = append(months, a)
+			return a
 		}
-		seen := make(map[string]int, 64) // month -> index in commits
-		commits := make([]monthCommit, 0, 64)
-		for line, err := range git.RunLines(ctx, "log", "--format=%H %ai", "--reverse", "--", "*.go") {
+
+		// Distinct-file tracking, so LLMFiles counts files that ever received
+		// an LLM-authored addition (the post-tag analogue of a tagged file).
+		seenCode := make(map[string]struct{}, 1024)
+		seenCodeLLM := make(map[string]struct{}, 1024)
+		seenTest := make(map[string]struct{}, 1024)
+		seenTestLLM := make(map[string]struct{}, 1024)
+
+		const sep = "\x01"
+		var curMonth string
+		var curLLM bool
+		// --reverse walks oldest-first so months accrue in order. Each commit
+		// header line is prefixed with sep; the lines between headers are the
+		// --numstat rows (added \t deleted \t path) for that commit.
+		for line, err := range git.RunLines(ctx, "log", "--reverse", "--no-merges",
+			"--numstat", "--date=format:%Y-%m",
+			"--format="+sep+"%H\t%ad\t%(trailers:key=Co-authored-by,valueonly,separator=\x1f)",
+			"--", "*.go") {
 			if err != nil {
 				yield(AuthorshipRecord{}, eh.Errorf("unable to read git log: %w", err))
 				return
 			}
-			if len(line) < 48 {
+			if strings.HasPrefix(line, sep) {
+				parts := strings.SplitN(line[len(sep):], "\t", 3)
+				if len(parts) < 2 {
+					continue
+				}
+				curMonth = parts[1]
+				coauthors := ""
+				if len(parts) == 3 {
+					coauthors = parts[2]
+				}
+				curLLM = commitIsLLM(coauthors)
 				continue
 			}
-			hash := line[:40]
-			month := line[41:48] // "YYYY-MM"
-			if idx, ok := seen[month]; ok {
-				commits[idx].hash = hash
+			if curMonth == "" {
+				continue
+			}
+			cols := strings.SplitN(line, "\t", 3)
+			if len(cols) < 3 || cols[0] == "-" {
+				continue // header gap or binary file
+			}
+			path := cols[2]
+			if !strings.HasSuffix(path, ".go") || strings.Contains(path, " => ") {
+				continue // non-Go or rename row
+			}
+			if strings.Contains(path, ".gen.") || strings.Contains(path, ".out.") || strings.Contains(path, "golay24") {
+				continue // generated
+			}
+			added, convErr := strconv.Atoi(cols[0])
+			if convErr != nil {
+				continue
+			}
+			a := agg(curMonth)
+			if strings.HasSuffix(path, "_test.go") {
+				if curLLM {
+					a.llmTest += added
+				} else {
+					a.humanTest += added
+				}
+				if _, ok := seenTest[path]; !ok {
+					seenTest[path] = struct{}{}
+					a.newTotalTest++
+				}
+				if curLLM {
+					if _, ok := seenTestLLM[path]; !ok {
+						seenTestLLM[path] = struct{}{}
+						a.newLLMTest++
+					}
+				}
 			} else {
-				seen[month] = len(commits)
-				commits = append(commits, monthCommit{month: month, hash: hash})
+				if curLLM {
+					a.llmLines += added
+				} else {
+					a.humanLines += added
+				}
+				if _, ok := seenCode[path]; !ok {
+					seenCode[path] = struct{}{}
+					a.newTotalCode++
+				}
+				if curLLM {
+					if _, ok := seenCodeLLM[path]; !ok {
+						seenCodeLLM[path] = struct{}{}
+						a.newLLMCode++
+					}
+				}
 			}
 		}
-		sort.Slice(commits, func(i, j int) bool {
-			return commits[i].month < commits[j].month
-		})
 
-		// Step 2: for each monthly snapshot, count human vs LLM lines
-		for _, mc := range commits {
-			rec, err := inst.snapshot(ctx, git, mc.hash)
-			if err != nil {
-				yield(AuthorshipRecord{}, eh.Errorf("snapshot %s (%s) failed: %w", mc.month, mc.hash[:8], err))
-				return
-			}
-			rec.Month = mc.month
+		sort.Slice(months, func(i, j int) bool { return months[i].month < months[j].month })
+
+		var rec AuthorshipRecord
+		for _, a := range months {
+			rec.Month = a.month
+			rec.HumanLines += a.humanLines
+			rec.LLMLines += a.llmLines
+			rec.HumanTestLines += a.humanTest
+			rec.LLMTestLines += a.llmTest
+			rec.TotalFiles += a.newTotalCode
+			rec.LLMFiles += a.newLLMCode
+			rec.TotalTestFiles += a.newTotalTest
+			rec.LLMTestFiles += a.newLLMTest
 			if !yield(rec, nil) {
 				return
 			}
 		}
 	}
-}
-
-func (inst *AuthorshipAnalyzer) snapshot(ctx context.Context, git *GitRunner, hash string) (rec AuthorshipRecord, err error) {
-	// List all files in tree
-	var files []string
-	for line, iterErr := range git.RunLines(ctx, "ls-tree", "-r", "--name-only", hash) {
-		if iterErr != nil {
-			err = eh.Errorf("ls-tree failed: %w", iterErr)
-			return
-		}
-		if !strings.HasSuffix(line, ".go") {
-			continue
-		}
-		if strings.Contains(line, ".gen.") || strings.Contains(line, ".out.") || strings.Contains(line, "golay24") {
-			continue
-		}
-		files = append(files, line)
-	}
-
-	// Count lines per file, check first line for LLM tag
-	for _, path := range files {
-		isTest := strings.HasSuffix(path, "_test.go")
-		lineCount := 0
-		isLLM := false
-		for line, iterErr := range git.RunLines(ctx, "show", hash+":"+path) {
-			if iterErr != nil {
-				err = eh.Errorf("show %s failed: %w", path, iterErr)
-				return
-			}
-			if lineCount == 0 {
-				isLLM = strings.HasPrefix(line, "//go:build llm_generated")
-			}
-			lineCount++
-		}
-		if isTest {
-			rec.TotalTestFiles++
-			if isLLM {
-				rec.LLMTestLines += lineCount
-				rec.LLMTestFiles++
-			} else {
-				rec.HumanTestLines += lineCount
-			}
-		} else {
-			rec.TotalFiles++
-			if isLLM {
-				rec.LLMLines += lineCount
-				rec.LLMFiles++
-			} else {
-				rec.HumanLines += lineCount
-			}
-		}
-	}
-	return
 }

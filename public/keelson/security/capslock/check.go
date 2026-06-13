@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package capslock cross-references google/capslock JSON output against
 // runtime/app manifests per ADR-0026 §SD10. M2.7 advisory mode: prints
 // findings to stdout and always returns exit code 0 — CI does not gate

@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package color provides the unified ImZero2 color type per ADR-0052.
 //
 // Callers construct Color values via [Hex], [RGB], [RGBA], or [Gray] and pass

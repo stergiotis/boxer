@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package llmtag applies //go:build llm_generated_* markers to Go source
 // files whose git-blame attribution points to commits authored with an
 // LLM Co-Authored-By trailer.

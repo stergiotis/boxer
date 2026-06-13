@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package supervisor is the ADR-0038 M3 audit + heartbeat layer for the
 // task primitive. Apps using the M1 / M2 surface need no supervisor;
 // hosts that want a durable record of started / finished / cancelled /

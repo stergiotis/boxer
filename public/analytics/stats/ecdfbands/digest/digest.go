@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package digest bridges a tdigest.TDigest to the ecdfbands library.
 // BandsForDigest is a one-call wrapper that builds the (xs, fnAt)
 // grid from a streaming sketch and forwards to BandsForGrid; the

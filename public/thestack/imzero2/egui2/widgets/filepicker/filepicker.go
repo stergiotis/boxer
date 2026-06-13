@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package filepicker is an in-app file open / save / pick-folder dialog
 // rendered as an egui::Window. The directory tree is walked Go-side via
 // the stdlib [io/fs.FS] interface; the default backend is

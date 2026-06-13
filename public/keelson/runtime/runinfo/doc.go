@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package runinfo captures the identity of a single pebble2impl process
 // boot — a "run" — and makes it discoverable to every app launched
 // inside that run via two channels: the PEBBLE2_RUN_ID environment

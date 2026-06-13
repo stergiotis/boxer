@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package utfsafe coerces arbitrary byte streams into UTF-8-valid
 // strings for the FFFI wire and other UTF-8-strict consumers.
 //

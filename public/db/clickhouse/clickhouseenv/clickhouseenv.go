@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package clickhouseenv centralises the ClickHouse-related environment
 // variables consumed across boxer: the funccharacterize fuzzer,
 // the spinnaker play HMI, and the live test harness. Each spec is

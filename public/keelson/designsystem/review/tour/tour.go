@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package tour implements the Tier 2 SSIM pre-filter for the screenshot
 // tour (ADR-0029 §SD9). It walks two directories of PNGs, pairs files
 // by basename, and computes the pairwise SSIM via the sibling

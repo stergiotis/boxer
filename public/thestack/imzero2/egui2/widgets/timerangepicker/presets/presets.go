@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Copyright 2014-2022 Grafana Labs
 // Copyright 2026 Panos Stergiotis
 //

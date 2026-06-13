@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package idsshowcase renders the IDS token catalogue (palette spine +
 // semantic roles + density + rounding + stroke) as a single carousel app.
 //

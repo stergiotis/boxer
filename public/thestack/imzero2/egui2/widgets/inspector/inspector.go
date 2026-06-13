@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package inspector is the shared infrastructure backing the project's
 // "value inspector" widgets — small surfaces that bind to a domain
 // value (FSM state, distribution digest, arbitrary record, error chain)

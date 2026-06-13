@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package store
 
 import t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"

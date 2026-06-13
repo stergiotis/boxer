@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package fieldview renders a hierarchical list of typed key-value
 // pairs as a compact two-line-per-leaf inspector: name + kind tag on
 // one line, value (wrapping, monospace) below. Container kinds

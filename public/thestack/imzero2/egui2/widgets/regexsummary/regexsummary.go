@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package regexsummary implements a two-level summary widget for a
 // single regular-expression value.
 //

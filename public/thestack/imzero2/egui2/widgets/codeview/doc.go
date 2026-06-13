@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package codeview composes the egui2 CodeViewJob primitive with the
 // project's SQL, JSON, and Go highlighters into a small set of retained-
 // holder builders. The three highlighters share the same shape — palette

@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package bindings
 
 // Animation helpers wrap the egui::Context::animate_* primitives. Each tween

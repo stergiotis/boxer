@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package factsstore is the durable view of runtime facts per ADR-0026 §SD6.
 // Capability grants from the broker, audit records from the bus, and state
 // writes from the persist service all flow through FactsStoreI; M2.5 ships

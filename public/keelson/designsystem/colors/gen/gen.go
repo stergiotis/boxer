@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package gen implements the IDS semantic palette generator (ADR-0033 §SD5).
 //
 // Reads palette.toml + pairs.toml; performs OKLCh → sRGB gamut clipping;

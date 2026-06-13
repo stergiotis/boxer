@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package capabilitygrant is the ADR-0042 M4 retrofit of the
 // rowmarshall.CapabilityGrant hand-coded writer. The generator
 // produces a byte-equivalent `Marshal` over a SoA Columns buffer; the

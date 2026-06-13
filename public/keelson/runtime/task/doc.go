@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package task is keelson's bus-protocol primitive for long-running,
 // cancellable, observable work — the M1 surface of ADR-0038.
 //

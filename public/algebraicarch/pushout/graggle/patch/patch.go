@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package patch provides patch construction, application, and dependency
 // tracking for the pushout revision control system.
 package patch

@@ -1,4 +1,4 @@
-//go:build llm_generated_opus47 && binary_log
+//go:build binary_log
 
 package logbridge_test
 

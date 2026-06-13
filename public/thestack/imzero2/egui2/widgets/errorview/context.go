@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package errorview renders a structured wrapped-error chain as a
 // collapsing tree: per-stream sub-headers, per-fact rows showing
 // message (red), stack frame triple (monospace muted), and CBOR

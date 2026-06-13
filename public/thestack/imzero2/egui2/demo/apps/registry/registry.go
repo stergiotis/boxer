@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package registry is the single source of truth for the ImZero2 demo
 // catalog. Each demo file calls Register in its init() with a Demo value
 // carrying Name, Category, Render closure, and per-demo flags. Three hosts

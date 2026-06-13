@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package buscodec is the runtime's canonical message-bus codec. Every
 // thestack broker MUST encode bus payloads through this package and MUST
 // NOT import encoding/json or call cbor.Marshal/Unmarshal directly. The

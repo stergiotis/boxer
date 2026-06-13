@@ -1,5 +1,3 @@
-//go:build llm_generated_opus46
-
 /*
 Great! Works fine. We reached an important milestone. We have created:
 * two grammars `grammar1` and `grammar2` (embodying "be generous what you accept, careful what you send").

@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package apca implements the Accessible Perceptual Contrast Algorithm
 // (APCA) per Andrew Somers' Myndex SAPC-APCA Beta 0.1.9 reference.
 //

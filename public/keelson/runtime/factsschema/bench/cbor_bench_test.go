@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Phase-0' benchmarks: arrowrowcbor sparse-CBOR shim. Same fixtures as
 // bench_test.go (Arrow) and rowbinary_bench_test.go (RowBinary), routed
 // through dml_cbor. Direct cross-comparison with both prior phases.

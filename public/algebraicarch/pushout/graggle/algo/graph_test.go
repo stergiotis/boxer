@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package algo_test
 
 import (

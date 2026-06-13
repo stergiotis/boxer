@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package pickerbridge connects the fs Powerbox service to the egui
 // filepicker widget. Hosts call Bridge.Render(ids) once per frame from
 // the rendering loop. The bridge pulls pending fs.dialog requests off

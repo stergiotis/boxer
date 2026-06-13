@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package battery samples battery and AC-adapter state from
 // /sys/class/power_supply.
 //

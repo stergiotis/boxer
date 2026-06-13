@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package taskmonitor is the M4 of ADR-0038 — a reusable widget that
 // observes task.> over the bus and renders an in-flight list (with
 // progress bar + per-row cancel button) and a rolling history of

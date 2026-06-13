@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package badge implements a compact labelled tag rendered as a Frame
 // (rounded fill + optional stroke + padding) wrapping a styled LabelAtoms.
 // The composition rides on existing FFFI2 primitives (Frame, Atoms,

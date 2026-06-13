@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package contrast implements WCAG 2.1 contrast ratios for IDS palette
 // pair verification (ADR-0031 §SD5).
 //

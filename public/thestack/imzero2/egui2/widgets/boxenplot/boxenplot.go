@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package boxenplot is the imzero2 widget for letter-value (Hofmann,
 // Wickham & Kafadar 2017) plots. It composes:
 //

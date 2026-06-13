@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package chstats provides the ClickHouse-side counterpart to boxer's
 // in-process tdigest. Where tdigest does the streaming sketch in Go,
 // chstats builds the SQL fragment that pushes the same computation

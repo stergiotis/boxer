@@ -1,4 +1,4 @@
-//go:build linux && gpu_intel && llm_generated_opus47
+//go:build linux && gpu_intel
 
 // Package intel samples Intel integrated- and discrete-GPU state via the
 // i915 driver's perf PMU. Each [Sample] reads the per-engine busy

@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package logdemo is the companion AppI for the logviewer widget: a
 // small interactive panel that emits zerolog events on demand so the
 // operator can watch them stream into the viewer's tail in real time.

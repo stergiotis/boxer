@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package styletokens
 
 // Stroke widths (ADR-0032 §SD4). Density-independent — strokes are

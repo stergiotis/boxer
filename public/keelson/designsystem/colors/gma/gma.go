@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package gma implements the CSS Color Module Level 4 §13 Gamut Mapping
 // Algorithm, the perceptually-correct way to map an out-of-gamut OKLCh
 // color into the sRGB display gamut.

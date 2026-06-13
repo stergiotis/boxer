@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package taskcreated is the leeway-coded wire form of the spawn
 // payload published once per task on `task.<id>.created`. Second
 // broker DTO to migrate off the buscodec fxamacker-cbor default

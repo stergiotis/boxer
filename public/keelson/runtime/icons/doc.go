@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package icons supplies the IDS iconography catalogue. All icons —
 // UI affordances (gear, search, chart, file, …) and the available
 // brand / language marks (Linux, GitHub, Apple, Google, …) — render

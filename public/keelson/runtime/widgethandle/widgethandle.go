@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package widgethandle provides an opaque, runtime-scoped handle for widget IDs.
 //
 // A WidgetHandle is an XOR-obfuscated wrapper around an internal uint64 widget ID.

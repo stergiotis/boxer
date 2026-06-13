@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package pijul is the domain half of a multi-actor patch-theory
 // event-store demo: four working copies (Server + Alice/Bob/Charlie)
 // backed by a [BackendI] and driven through the [RepoI] interface. The

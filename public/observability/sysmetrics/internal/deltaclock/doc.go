@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package deltaclock helps collectors compute delta-rate metrics from
 // monotonically-increasing counters sampled over time. It exists so that
 // each domain collector (cpu /proc/stat ticks, net rx_bytes, RAPL

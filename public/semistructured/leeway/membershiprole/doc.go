@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package membershiprole classifies Leeway memberships as primary or secondary
 // and decides whether their parameters contribute to attribute identity.
 //

@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package l11motion implements IDS Tier 1 rule L11 — flag literal numeric
 // duration values in motion-aware (animate-*) API calls outside the
 // styletokens allowlist.

@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package timerangepicker holds the value types and library code for
 // the imzero2 time range picker (ADR-0016). The package is the umbrella
 // for the picker's pure-Go layer: TimeRange (user-input expressions

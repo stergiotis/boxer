@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package types defines the core data types and interfaces for the pushout
 // revision control system. This is the leaf package in the dependency graph —
 // all other graggle sub-packages import it, and it imports nothing internal.

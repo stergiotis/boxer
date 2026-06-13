@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package factsschema defines the runtime.facts leeway table per ADR-0026
 // §SD6. Modelled after spinnaker.facts
 // (public/boxerstaging/spinnaker/schema/spinnaker_schema.go):

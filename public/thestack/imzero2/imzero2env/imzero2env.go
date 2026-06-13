@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package imzero2env centralises the IMZERO2_* environment variables
 // consumed across the imzero2 demo carousel, tours, and embedded
 // applications. Each spec is registered with the boxer-wide registry

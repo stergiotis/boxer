@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package dot provides Graphviz DOT format export for graggle graphs.
 package dot
 

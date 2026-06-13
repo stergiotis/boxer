@@ -1,5 +1,3 @@
-//go:build llm_generated_opus46
-
 package repo
 
 import (
@@ -439,7 +437,7 @@ func (inst *ReportGenerator) writeAuthorship(w io.Writer, records []AuthorshipRe
 	}
 	if codeTotal := last.HumanLines + last.LLMLines; codeTotal > 0 {
 		pct := 100.0 * float64(last.LLMLines) / float64(codeTotal)
-		line := fmt.Sprintf("  Current code:  %d human, %d LLM (%d files), %.1f%% LLM", last.HumanLines, last.LLMLines, last.LLMFiles, pct)
+		line := fmt.Sprintf("  Authored code:  %d human, %d LLM (%d files), %.1f%% LLM", last.HumanLines, last.LLMLines, last.LLMFiles, pct)
 		err = wRow(w, line)
 		if err != nil {
 			return
@@ -447,7 +445,7 @@ func (inst *ReportGenerator) writeAuthorship(w io.Writer, records []AuthorshipRe
 	}
 	if testTotal := last.HumanTestLines + last.LLMTestLines; testTotal > 0 {
 		pct := 100.0 * float64(last.LLMTestLines) / float64(testTotal)
-		line := fmt.Sprintf("  Current tests: %d human, %d LLM (%d files), %.1f%% LLM", last.HumanTestLines, last.LLMTestLines, last.LLMTestFiles, pct)
+		line := fmt.Sprintf("  Authored tests: %d human, %d LLM (%d files), %.1f%% LLM", last.HumanTestLines, last.LLMTestLines, last.LLMTestFiles, pct)
 		err = wRow(w, line)
 		if err != nil {
 			return
@@ -455,7 +453,7 @@ func (inst *ReportGenerator) writeAuthorship(w io.Writer, records []AuthorshipRe
 	}
 	if codeTotal := last.HumanLines + last.LLMLines; codeTotal > 0 {
 		ratio := float64(last.HumanTestLines+last.LLMTestLines) / float64(codeTotal)
-		line := fmt.Sprintf("  Current ratio: %.2f test lines per code line", ratio)
+		line := fmt.Sprintf("  Authored ratio: %.2f test lines per code line", ratio)
 		err = wRow(w, line)
 		if err != nil {
 			return

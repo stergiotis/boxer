@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package egui2gen exposes the FFFI2 egui2-widget code generator as a boxer
 // subcommand. The generation logic lives in the egui2/driver command; this
 // folds the former standalone egui2gen main into public/app per the

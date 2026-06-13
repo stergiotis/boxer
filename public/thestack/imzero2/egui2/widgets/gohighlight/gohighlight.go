@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package gohighlight performs AST-aware syntax highlighting for Go source.
 //
 // It pairs go/scanner for lexical baseline classification with go/parser

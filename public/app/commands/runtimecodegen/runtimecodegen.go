@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package runtimecodegen is the CLI wiring for the runtime/factsschema
 // code generator. Mirrors the pattern established by designsystem and
 // envgen: a thin urfave/cli v2 surface that bridges to the existing

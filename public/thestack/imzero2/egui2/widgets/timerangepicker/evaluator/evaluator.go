@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package evaluator runs ClickHouse SQL time-range expressions
 // against a runtime-mediated clickhouse-local worker pool. Phase 4
 // of ADR-0016's port (see doc/howto/imzero2-time-range-picker-port.md)

@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package windowhost is the M3 multi-app host. Each open app renders
 // as a top-level c.Window (egui::Window — movable, resizable, titled),
 // so "click app → see app on the desktop" is the natural interaction

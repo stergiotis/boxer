@@ -1,4 +1,3 @@
-//go:build llm_generated_gemini3pro || llm_generated_opus46 || llm_generated_opus47
 package gov
 
 import (

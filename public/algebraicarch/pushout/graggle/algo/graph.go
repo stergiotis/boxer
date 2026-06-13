@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package algo provides pure graph algorithms operating on the GraphReaderI
 // interface. It has no knowledge of the concrete Graggle implementation.
 package algo

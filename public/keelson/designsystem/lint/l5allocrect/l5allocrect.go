@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package l5allocrect implements IDS Tier 1 rule L5 — flag
 // c.AllocateUiAtRect(...) lexically nested inside a Vertical / Horizontal /
 // Grid flow container.

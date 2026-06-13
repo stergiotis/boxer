@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package watchreply_test
 
 import (

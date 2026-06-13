@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package jsonhighlight tokenizes JSON for syntax highlighting.
 //
 // It drives encoding/json/jsontext.Decoder once over the input, emitting one

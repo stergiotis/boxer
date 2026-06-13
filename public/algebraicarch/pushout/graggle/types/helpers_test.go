@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package types
 
 import "crypto/sha256"

@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package persistreply is the leeway-coded wire form of the
 // runtime.persist reply payload.
 //

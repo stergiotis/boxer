@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package gpu hosts the vendor-neutral GPU types — [Device], [Snapshot],
 // and the [SamplerI] interface — that [sysmetrics.Bundle] wires for
 // cross-vendor consumers. Vendor-specific richness (per-engine breakdown

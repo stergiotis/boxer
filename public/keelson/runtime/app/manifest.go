@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package app is the runtime's first-class app abstraction. An app is a
 // program with a static Manifest declaring identity, surface, window
 // chrome metadata (Title/Icon), declared subject-filter capabilities,

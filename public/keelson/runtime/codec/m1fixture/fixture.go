@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package m1fixture is the ADR-0042 M1 demonstration fact kind: a flat
 // DTO exercising every plain type the generator must support (string,
 // uint{8,16,32,64}, float{32,64}, bool, time, [4]byte, [16]byte) under

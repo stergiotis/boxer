@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package chclient is a HTTP-based ClickHouse client for runtime services
 // per ADR-0026 M2.5b. Modelled on play.Client (the SQL-playground HTTP
 // client) plus the card_anchor integration test's minimal InsertArrow

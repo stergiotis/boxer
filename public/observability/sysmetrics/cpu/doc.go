@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package cpu samples Linux CPU state — totals, per-core utilization,
 // load averages, frequency, RAPL power, and the cgroup-effective cpuset
 // — into a single [Snapshot] per sample.

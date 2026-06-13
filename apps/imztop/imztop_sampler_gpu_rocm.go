@@ -1,4 +1,4 @@
-//go:build linux && gpu_rocm && llm_generated_opus47
+//go:build linux && gpu_rocm
 
 package imztop
 

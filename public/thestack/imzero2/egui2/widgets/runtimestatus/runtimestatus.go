@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package runtimestatus renders a one-line snapshot of the active
 // runtime services suitable for embedding in the carousel's bottom
 // panel. Values are captured once at carousel startup (the set of

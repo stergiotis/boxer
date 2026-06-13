@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package ecdf is the imzero2 widget for plotting an empirical CDF
 // together with a finite-sample exact simultaneous confidence band
 // (Berk-Jones by default; DKW / equal-precision / higher-criticism

@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package tdigest provides a streaming quantile sketch with tail-biased
 // accuracy, based on Dunning 2019 (arXiv:1902.04023).
 //

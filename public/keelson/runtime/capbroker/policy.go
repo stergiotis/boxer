@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package capbroker
 
 // GrantPolicyI is the decision interface — the broker delegates yes/no on

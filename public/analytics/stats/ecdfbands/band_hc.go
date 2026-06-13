@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package ecdfbands
 
 // higherCriticismFamily implements the Donoho & Jin (2004)

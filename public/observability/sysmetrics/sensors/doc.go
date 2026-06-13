@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package sensors enumerates Linux temperature sensors via the /sys/class/
 // hwmon subsystem. Each TempReading is one hwmon temp*_input file paired
 // with its label, critical threshold, and a label-based hint of whether

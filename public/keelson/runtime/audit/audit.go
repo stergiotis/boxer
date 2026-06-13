@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package audit defines the bus audit infrastructure per ADR-0026 §SD12 M2.5.
 // Every Client.Request call on inprocbus is captured as an AuditRecord and
 // routed to a configured AuditSinkI. The records carry the per-request

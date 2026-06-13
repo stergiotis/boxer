@@ -1,4 +1,4 @@
-//go:build !bootstrap && llm_generated_opus47
+//go:build !bootstrap
 
 package application
 

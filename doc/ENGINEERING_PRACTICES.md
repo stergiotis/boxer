@@ -70,13 +70,17 @@ debuggability and individually-versioned tool pins.
 ## 3. Build-tag discipline
 
 The file [./tags](../tags) is a single-line, comma-separated set of build tags
-read by every build, test, and lint script. Without `-tags
-"$(cat tags)"`, tag-gated packages (most notably the `llm_generated_*`
-files) fail to type-check with misleading "undefined" errors.
+read by every build, test, and lint script. Its active tags are
+`identifier_tag_fixed16`, `boxer_enable_profiling`, and `goexperiment.jsonv2`;
+packages that opt into one of these fail to type-check with misleading
+"undefined" errors when the tags are omitted.
 
-Active tags include `identifier_tag_fixed16`, `boxer_enable_profiling`,
-`goexperiment.jsonv2`, and the three `llm_generated_*` author tags
-(`gemini3pro`, `opus46`, `opus47`).
+Until 2026-06 the set also carried per-model `llm_generated_*` author tags
+(`gemini3pro`, `opus46`, `opus47`, `opus48`) that gated every LLM-authored file
+so an AI-free build stayed possible. That scheme was retired
+([ADR-0083](adr/0083-retire-llm-generated-build-tags.md)): authorship provenance
+now lives in git `Co-Authored-By` trailers, surfaced by `gov repo authorship`,
+and the directives were stripped from ~1130 files.
 
 Centralising tags in a tracked file is uncommon — most Go projects either
 avoid tags or scatter them across per-package `Makefile` targets. The
@@ -98,7 +102,7 @@ go test -race -json -short -cover -tags "$tags" ./... \
   [scripts/dev/coveragehtml.sh](../scripts/dev/coveragehtml.sh), which reads
   `$GOCOVERDIR` and pipes `go tool covdata textfmt` into `go tool cover -html`.
 - Integration tests are explicitly tagged
-  (`//go:build integration && llm_generated_opus47`) and use
+  (`//go:build integration`) and use
   [testcontainers-go](https://pkg.go.dev/github.com/testcontainers/testcontainers-go);
   see [the Kafka integration test](../public/streaming/persisted/kafka/integration_test.go),
   which boots a Redpanda container. The tag doubles as a dependency-isolation

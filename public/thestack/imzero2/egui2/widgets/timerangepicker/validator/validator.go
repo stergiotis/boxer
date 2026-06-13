@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package validator wraps boxer's nanopass.Parse (ClickHouse Grammar1)
 // to provide sub-millisecond in-process syntax validation for the
 // time range picker's expression fields. The picker calls Validate on

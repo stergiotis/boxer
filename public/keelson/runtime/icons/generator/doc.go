@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package generator is the codegen library behind cmd/iconsgen. It reads
 // the @phosphor-icons/core src/icons.ts catalogue (vendored at
 // keelson/runtime/icons/phosphor-icons.ts) and emits Go constants for

@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package streamreadaccess
 
 // DriveSchema walks the IR once, calling structural sink methods only.

@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package layout
 
 // CollapsePaths returns a transformed copy of the tree rooted at root in

@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package ecdfdigest bridges a boxer tdigest.TDigest to the ecdf
 // widget. The widget itself accepts an explicit (xs, fnAt, n) grid
 // via RenderGrid; this helper builds that grid from a streaming

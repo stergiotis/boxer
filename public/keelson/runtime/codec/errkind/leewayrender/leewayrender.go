@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package leewayrender bridges a captured errkind.Error into the
 // leeway widget pipeline (Table2CardEmitter and any other
 // streamreadaccess.SinkI).

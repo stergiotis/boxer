@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package task
 
 import "github.com/stergiotis/boxer/public/keelson/runtime/app"

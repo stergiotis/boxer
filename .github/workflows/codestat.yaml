@@ -27,10 +27,9 @@ jobs:
           cache-dependency-path: 'go.sum'
       - name: Code statistics (all)
         run: go tool scc --not-match '(\.gen\.|\.out\.|golay24)' --sort code --wide .
-      - name: Code statistics (human written)
-        run: grep -rL '//go:build llm_generated' --include='*.go' . | grep -vE '\.(gen|out)\.|golay24' | xargs go tool scc --sort code --wide
-      - name: Code statistics (LLM generated)
-        run: grep -rl '//go:build llm_generated' --include='*.go' . | grep -vE '\.(gen|out)\.|golay24' | xargs go tool scc --sort code --wide
+      # Human-vs-LLM attribution comes from git Co-Authored-By trailers via the
+      # "Code authorship" step below, not build tags — the llm_generated_* tags
+      # were retired (ADR-0083).
       - name: Dependency count
         run: |
           echo "Direct dependencies:"
@@ -47,16 +46,6 @@ jobs:
             echo '### All Code'
             echo '```'
             go tool scc --not-match '(\.gen\.|\.out\.|golay24)' --sort code --wide .
-            echo '```'
-            echo ''
-            echo '### Human Written'
-            echo '```'
-            grep -rL '//go:build llm_generated' --include='*.go' . | grep -vE '\.(gen|out)\.|golay24' | xargs go tool scc --sort code --wide
-            echo '```'
-            echo ''
-            echo '### LLM Generated'
-            echo '```'
-            grep -rl '//go:build llm_generated' --include='*.go' . | grep -vE '\.(gen|out)\.|golay24' | xargs go tool scc --sort code --wide || echo '(none)'
             echo '```'
             echo ''
             echo '### Code Authorship Over Time'

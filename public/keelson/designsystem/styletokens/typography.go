@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package styletokens
 
 // Type scale (ADR-0030 §SD3) — five size steps at Standard density.

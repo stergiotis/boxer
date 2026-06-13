@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package l1labelcasing implements IDS Tier 1 rule L1 (v1 partial) — flag
 // the obvious lowercase-first-letter typos in c.Label(...) call sites.
 //

@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package passes
 
 import "github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"

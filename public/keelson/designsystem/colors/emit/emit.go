@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package emit writes the four generator artefacts:
 //   - palette_generated.rs (Rust Color32 consts)
 //   - palette_generated.go (Go egui-equivalent consts)
@@ -82,7 +80,6 @@ func RustFile(tokens []palette.Token) (s string) {
 // GoFile renders palette_generated.go.
 func GoFile(tokens []palette.Token) (s string) {
 	var sb strings.Builder
-	sb.WriteString("//go:build llm_generated_opus47\n\n")
 	sb.WriteString(generatedHeader)
 	sb.WriteString("\npackage styletokens\n\n")
 	sb.WriteString("// RGBA8 is a gamma-encoded sRGB color with alpha = 255.\n")

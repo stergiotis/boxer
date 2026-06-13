@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package metricsoverlay renders frame-timing readouts suitable for
 // embedding in a menu or status bar. The time/byte values reflect the
 // previous completed frame (one-frame display lag, invisible at 60 Hz) and

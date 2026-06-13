@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package layout provides the pure-Go layout primitives for the ImZero2
 // timeline widget: greedy lane packing for interval events, multi-resolution
 // bin indexing for point events, and a wrapper over boxer's timeticks for

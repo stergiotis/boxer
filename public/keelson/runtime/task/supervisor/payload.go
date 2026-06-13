@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package supervisor
 
 // InflightStateE classifies an in-flight row. Promoted to abandoned by

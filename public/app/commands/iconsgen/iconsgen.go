@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package iconsgen exposes the keelson phosphor-icon lookup generator as a boxer
 // subcommand, folding the former standalone iconsgen main into public/app per
 // the entry-point standard. The generation logic lives in

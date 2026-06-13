@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package colorscale renders a value-axis legend for a colormap.Config — the
 // same colormap type the scientific texture widgets (heatmapscroll) and treemap
 // use. Pass one Config to colorscale.New and to whatever renders the data (a

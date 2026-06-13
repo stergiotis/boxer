@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package container detects which (if any) container runtime hosts the
 // current process, exposing a typed [EngineE] plus an optional Detail
 // string for runtimes that publish a free-form identifier (e.g.

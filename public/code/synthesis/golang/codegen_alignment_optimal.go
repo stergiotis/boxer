@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Vendored from github.com/dkorunic/betteralign@v0.8.0 (BSD-style license),
 // itself a fork of golang.org/x/tools/go/analysis/passes/fieldalignment.
 // Copyright 2020 The Go Authors. Modifications copyright 2022-2025 Dinko Korunic.

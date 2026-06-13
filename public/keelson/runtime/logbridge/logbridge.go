@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package logbridge routes zerolog events into runtime.facts. With the
 // `binary_log` build tag set (already on the project tag list), zerolog
 // hands each event to its configured io.Writer as a CBOR-encoded

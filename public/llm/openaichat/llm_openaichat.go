@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package openaichat is an OpenAI-compatible chat-completions client. It
 // targets any backend that speaks the /v1/chat/completions wire shape — LM
 // Studio (local), Ollama (local), Google AI Studio / Gemini (remote), and

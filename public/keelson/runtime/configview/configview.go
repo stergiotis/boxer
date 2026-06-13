@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package configview renders the boxer/public/config/env registry as
 // a read-only inspector. Layout: a search/Only-set/Reveal-sensitive
 // header above a ScrollArea of category sections; each section is a

@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package h3
 
 // Status triage helpers for the per-element [StatusE] slices returned by

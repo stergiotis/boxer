@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package capinspector renders the capability detail / schematic that
 // the carousel's status-bar segments open on click. One App per
 // window; the carousel pushes a selectedCap onto an internal queue

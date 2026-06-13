@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package styletokens is the Go-side mirror of the IDS token layer
 // (Rust source-of-truth at src/rust/imzero2_egui/src/style/tokens/).
 //

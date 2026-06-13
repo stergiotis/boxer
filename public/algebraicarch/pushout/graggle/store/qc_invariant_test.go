@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Negative tests for the qc invariant detectors. These live in package
 // store (white-box) so they can deliberately corrupt unexported Graggle
 // state and confirm each detector reports the violation.

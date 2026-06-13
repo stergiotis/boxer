@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Bezier-connector PoC for inspector ↔ source-value tethering (v2).
 //
 // v0 painted everything as primitives in a single canvas. v1 lifted the

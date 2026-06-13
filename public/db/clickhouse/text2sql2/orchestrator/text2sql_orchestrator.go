@@ -1,5 +1,3 @@
-//go:build llm_generated_opus46
-
 // Package orchestrator implements the query pipeline for the ClickHouse
 // semantic proxy. It coordinates template parsing, LLM-based SQL compilation,
 // grammar validation, policy enforcement, parameterization, and execution.

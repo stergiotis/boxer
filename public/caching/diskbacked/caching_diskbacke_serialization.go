@@ -1,4 +1,3 @@
-//go:build llm_generated_gemini3pro
 package diskbacked
 
 import "github.com/fxamacker/cbor/v2"

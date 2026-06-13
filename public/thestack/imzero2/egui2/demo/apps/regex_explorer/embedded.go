@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package regex_explorer
 
 // Embedded entry point — hosts the regex explorer inside another widget's

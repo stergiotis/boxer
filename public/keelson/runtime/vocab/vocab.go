@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package vocab is the runtime's leeway natural-key vocabulary per
 // ADR-0026 §SD6. Each constant below is a registered membership whose
 // uint64 id (via GetId().Value()) is what the generated DML builders'

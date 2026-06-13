@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package bindings
 
 // GraphLayoutE selects the node-placement algorithm used by a Graph

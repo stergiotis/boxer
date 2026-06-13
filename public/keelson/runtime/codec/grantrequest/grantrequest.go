@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package grantrequest is the leeway-coded wire form of the
 // capability-grant request payload published on
 // `runtime.cap.request`. First broker request/reply DTO to migrate

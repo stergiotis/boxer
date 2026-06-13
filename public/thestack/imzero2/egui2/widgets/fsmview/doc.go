@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package fsmview provides a two-level finite-state-machine visualization
 // widget for the ImZero2 framework.
 //

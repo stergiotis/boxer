@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package help is the runtime's inline-help index. Apps that ship
 // Markdown documentation populate [app.Manifest.Help] with an fs.FS
 // (typically an embed.FS rooted at the app's `help/` directory); the

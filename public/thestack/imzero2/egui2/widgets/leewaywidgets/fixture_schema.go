@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Schema for the leewaywidgets fixture: a single in-memory leeway table that
 // the demo + play app drive through streamreadaccess.Driver. The TableDesc
 // is the source of truth — fixture_dml.out.go is regenerated from it via

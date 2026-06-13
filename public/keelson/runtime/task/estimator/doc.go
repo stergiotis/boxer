@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package estimator is the throughput + humanized-form computation that
 // gates emission inside a task.Handle. Per ADR-0038, a producer's
 // h.Report(p) call publishes a TaskProgress only when the visible

@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package l9radiochanged implements IDS Tier 1 rule L9 — flag
 // `.HasChanged()` calls on a chain rooted at `c.RadioButton(...)`.
 //

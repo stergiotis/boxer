@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package taskprogress is the leeway-coded wire form of the periodic
 // progress payload published on `task.<id>.progress`. It is the first
 // broker DTO to migrate off the buscodec default (fxamacker-cbor)

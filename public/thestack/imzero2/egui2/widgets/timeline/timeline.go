@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package timeline provides a calendar-axis interval-event widget for the
 // ImZero2 framework. It packs IntervalEvents into non-overlapping lanes
 // (greedy left-to-right) and paints them as filled rectangles on a

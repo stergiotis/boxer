@@ -1,5 +1,3 @@
-//go:build llm_generated_opus46
-
 // Package astbuilder provides a fluent builder for constructing ClickHouse DQL
 // queries as ast.Query values.
 //

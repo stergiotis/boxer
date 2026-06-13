@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package bindings
 
 // Hand-written helpers for the generated DatePickerButton opcode (see

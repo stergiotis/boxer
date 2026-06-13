@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package scctree converts `go tool scc --by-file --format json` output
 // into a *layout.Node hierarchy keyed on directory path, suitable for
 // visualization with the treemap widget.

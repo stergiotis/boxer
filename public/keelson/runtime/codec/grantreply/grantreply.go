@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package grantreply is the leeway-coded wire form of the
 // capability-grant reply payload. Sibling to
 // [keelson/runtime/codec/grantrequest]; both opened the broker

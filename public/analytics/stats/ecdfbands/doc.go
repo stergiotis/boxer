@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package ecdfbands implements finite-sample exact simultaneous
 // confidence bands on the empirical cumulative distribution function
 // of an iid univariate sample.

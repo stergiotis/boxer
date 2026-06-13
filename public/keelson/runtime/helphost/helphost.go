@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package helphost is the keelson runtime's inline help reader app. It
 // consumes [help.DefaultLibrary] and renders the indexed corpora into a
 // two-pane layout: a left nav listing every app with help docs, and a

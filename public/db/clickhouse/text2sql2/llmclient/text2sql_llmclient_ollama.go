@@ -1,5 +1,3 @@
-//go:build llm_generated_opus46
-
 // Package llmclient provides LLMClientI implementations for the orchestrator.
 package llmclient
 

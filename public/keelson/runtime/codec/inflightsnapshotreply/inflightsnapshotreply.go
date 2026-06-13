@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package inflightsnapshotreply is the leeway-coded wire form of the
 // supervisor's list-inflight reply payload. Final task.* DTO in the
 // broker-DTO migration cohort.

@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package timeticks generates calendar-aware tick layouts for time axes.
 //
 // It is the time-axis counterpart to

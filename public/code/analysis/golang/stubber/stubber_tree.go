@@ -1,4 +1,3 @@
-//go:build llm_generated_gemini3pro
 package stubber
 
 import (

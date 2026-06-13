@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package marshallreflect is the runtime-reflection sibling of
 // boxer/public/semistructured/leeway/marshall/go/marshallgen. Both build on
 // the shared Plan IR (mappingplan) and the Go-DTO construction machinery

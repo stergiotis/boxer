@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package oklab implements OKLab / OKLCh ↔ sRGB conversions per
 // Björn Ottosson, "A perceptual color space for image processing" (2020):
 // https://bottosson.github.io/posts/oklab/

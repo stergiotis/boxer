@@ -1,5 +1,3 @@
-//go:build llm_generated_opus46
-
 // Package layout provides a squarified treemap layout algorithm and
 // immediate-mode rendering helpers for the ImZero2 egui2 framework.
 package layout

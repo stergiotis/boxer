@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package watchevent is the leeway-coded wire form of one
 // filesystem-watch event published on `fs.handle.{uuid}.event`.
 //

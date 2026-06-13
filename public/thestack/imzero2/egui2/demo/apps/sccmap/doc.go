@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package sccmap is the "Repo code exploration" app — visualises
 // `go tool scc` output over the current repository as a frame-based
 // treemap with one or two distsummary widgets reporting the

@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package ignoreann parses line-level `// designlint:ignore=<rule-id> (reason)`
 // suppressions per
 // [tier1-mechanical.md §annotations](../../../../../doc/design-system/policy/tier1-mechanical.md).

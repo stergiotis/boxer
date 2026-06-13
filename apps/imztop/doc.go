@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package imztop is a btop-style desktop resource monitor built on
 // ImZero2 + egui2, consuming the in-repo `observability/sysmetrics`
 // data layer. Wired as the imzero2 demo subcommand `appCode == 7`.

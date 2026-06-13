@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package cvd simulates color-vision deficiency via the
 // Brettel-Viénot-Mollon (1997) method, used by the IDS palette verifier
 // (ADR-0031 §SD5, ADR-0033 §SD6) to assert ΔE > 15 between same-emphasis

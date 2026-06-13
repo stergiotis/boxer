@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package net samples per-interface network statistics — link state,
 // IPv4/IPv6 addresses, MAC, and rx/tx byte counters with derived rates —
 // from /sys/class/net and the standard library's [net.Interfaces]

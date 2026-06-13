@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package procfs is a small set of read-only primitives over a /proc-shaped
 // directory tree. It is internal to sysmetrics; per-domain collectors
 // (cpu, mem, proc, ...) use the [Reader] to read raw bytes and the package

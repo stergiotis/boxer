@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package heartbeat emits periodic liveness ticks into FactsStoreI for
 // the current run. Used by the carousel so a crashed process (no
 // runtime-stop, no app-lifecycle stop) is distinguishable from a

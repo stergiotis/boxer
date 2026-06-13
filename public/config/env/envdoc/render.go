@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package envdoc renders the env-var registry to a Diátaxis-typed
 // reference markdown file. Two consumers today:
 //

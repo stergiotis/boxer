@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package l4rounding implements IDS Tier 1 rule L4 — flag literal numeric
 // values in rounding-aware API calls outside the styletokens allowlist.
 //

@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package disk samples filesystem mounts and per-block-device I/O state.
 //
 // Two complementary views land in each [Snapshot]:

@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package store provides the concrete Graggle data structure implementing
 // all graph interfaces defined in the types package.
 package store

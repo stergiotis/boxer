@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package qc provides structural invariant checking for graggle graphs.
 package qc
 

@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package jobprogress is a small, stateless widget that renders the
 // progress of a background job — an optional title, a progress bar, and
 // a humanized "…% · Ns left" status line — for embedding inline beneath

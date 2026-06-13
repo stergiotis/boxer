@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package arrowrowcbor is the Phase-0' sparse-CBOR sibling of
 // arrowrowbinary. Same drop-in shim shape over arrow/array.*Builder,
 // but emits self-describing sparse CBOR instead of fixed-width

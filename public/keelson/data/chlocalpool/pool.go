@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package chlocalpool implements ADR-0028's pool of pre-spawned
 // `clickhouse-local` worker processes.
 //

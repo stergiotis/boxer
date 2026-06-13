@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package sysmetrics is the entry point for the Linux system metrics
 // collector tree. Subpackages cover one metric domain each (cpu, mem,
 // sensors and — in later milestones — disk, net, proc, battery, container,

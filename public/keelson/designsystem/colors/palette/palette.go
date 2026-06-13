@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package palette parses palette.toml (ADR-0033 §SD3) and resolves token
 // names to OKLCh + sRGB triples after gamut clipping.
 package palette

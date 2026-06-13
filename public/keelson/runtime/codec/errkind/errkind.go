@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package errkind is the ADR-0042 M5 retrofit of the
 // rowmarshall.Error hand-coded writer (ADR-0041's parallel-array
 // shredded shape). The DTO is pre-shredded — callers flatten the

@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package treemap provides an interactive Frame-based treemap widget with
 // zoom-from-rect transitions on drill-in and drill-up. Cells are egui Frames
 // with .SenseClick() so hover and click handling flows through egui's response

@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package persist implements the ADR-0026 §SD3 runtime.persist.{alias}.{key}.{op}
 // subject family. The Service subscribes to runtime.persist.>, parses each
 // request, and dispatches to a pluggable StorageBackendI for the actual

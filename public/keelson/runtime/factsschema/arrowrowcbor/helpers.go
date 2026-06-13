@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package arrowrowcbor
 
 // JoinRecords concatenates the sparse-CBOR bytes carried by the

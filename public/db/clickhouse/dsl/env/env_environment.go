@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package env models the Chez-Scheme-style environment that surrounds a
 // ClickHouse SELECT statement. An Environment holds settings, parameters, and
 // the FORMAT clause as Go values — anything a pass might want to manipulate

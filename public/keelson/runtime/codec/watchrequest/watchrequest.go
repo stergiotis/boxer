@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package watchrequest is the leeway-coded wire form of the
 // watch-request payload on `fs.handle.{uuid}.watch`.
 //

@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package regex_explorer
 
 // ClickHouse transport: capability-mediated via ADR-0028's

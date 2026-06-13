@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package l2color implements IDS Tier 1 rule L2 — flag raw color constructor
 // calls outside the token-module allowlist.
 //

@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package h3
 
 // ResolutionE is an H3 cell resolution in the inclusive range [0, 15].

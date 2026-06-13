@@ -158,37 +158,6 @@ else
     step_end fail
 fi
 
-step_begin "llmtag"
-# Surfaces Go files whose //go:build llm_generated_<model> directive is
-# missing, stale (dominant model changed), no longer warranted (substantial
-# human edits), or in conflict with another build tag. The check is
-# bidirectional: it both adds tags to LLM-dominated files and flags tags on
-# files now dominated by humans. Pre-cutoff trailerless commits on
-# already-tagged files are attributed to the existing tag (auto-detected
-# from the earliest LLM-trailered commit), so legitimately-Gemini-authored
-# code is not flagged. A non-zero exit sets rc=1. Same `if out=$(...)`
-# pattern as doclint above — required because the script runs under `set -e`.
-#
-# --trailer-cutoff: the pebble2impl import (merged to main 2026-05-29, see
-# doc/migration/2026-05-pebble2impl-import.md) landed ~600 already-tagged
-# files as fresh commits with no AI-attribution trailer. Auto-detect can't
-# anchor them (they have no LLM-trailered commit at all), so every preserved
-# tag would read as stale. The explicit cutoff attributes those pre-import
-# trailerless commits to their existing tag; genuinely human-authored work
-# committed after this date is still evaluated normally.
-if out=$("$here/../../boxer.sh" gov llmtag --diff --trailer-cutoff 2026-05-30T00:00:00Z --root . --repo . 2>/dev/null); then
-    if [ -n "$out" ]; then
-        echo "$out"
-    else
-        echo "passed"
-    fi
-    step_end pass
-else
-    echo "$out"
-    rc=1
-    step_end fail
-fi
-
 step_begin "h3_wasm_parity"
 # Rebuilds rust/h3bridge to wasm and byte-compares against the committed
 # public/science/geo/h3/internal/h3o_wasm/h3.wasm. Gracefully skipped when

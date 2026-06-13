@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package l12manifestid_test
 
 import (

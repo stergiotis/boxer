@@ -1,5 +1,3 @@
-//go:build llm_generated_opus46
-
 package swisstopo
 
 // Approximate formulas for converting between WGS84 and CH1903+/LV95

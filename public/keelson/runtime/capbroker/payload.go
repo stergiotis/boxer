@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package capbroker is the ADR-0026 §SD7 capability broker — a runtime-
 // internal subject handler bound to runtime.cap.request that arbitrates
 // dynamic permission grants. For M2.3 the broker decides via a pluggable

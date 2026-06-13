@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package regex_explorer
 
 // Unit + integration tests for the regex explorer's testable surface.

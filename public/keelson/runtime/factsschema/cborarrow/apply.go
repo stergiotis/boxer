@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package cborarrow converts runtime.facts rows from sparse-CBOR (per
 // arrowrowcbor's wire shape) into an ArrowStream IPC payload using the
 // typed Arrow builder generated under factsschema/dml.

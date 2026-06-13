@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package chstore is the ClickHouse-backed factsstore.FactsStoreI per
 // ADR-0026 M2.5c. Writes go through the generated leeway DML builders
 // (runtime/factsschema/dml.InEntityFacts) and ship as Arrow IPC via

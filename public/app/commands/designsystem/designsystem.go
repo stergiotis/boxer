@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package designsystem is the CLI wiring for the IDS toolchain
 // (ADR-0029). It exposes the same command tree to both consumers:
 //

@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package l2color_test
 
 import (

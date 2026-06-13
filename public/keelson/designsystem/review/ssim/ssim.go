@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package ssim implements the Structural Similarity Index Measure
 // (Wang, Bovik, Sheikh, Simoncelli 2004) and its DSSIM variant.
 //

@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package factswrapper implements marshallgen.WrapperEmitterI for the
 // keelson runtime.facts schema. It provides the schema-specific blocks
 // — kindXxx vdd-resolved variables, ActiveSections / ActiveFields

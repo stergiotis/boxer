@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package color
 
 // Colors is a bulk-color payload type. Literal-only per ADR-0052 SD9; retained

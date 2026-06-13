@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package keelsoncodec exposes the keelson Go <-> leeway codec generator
 // (ADR-0042) as a boxer subcommand, folding the former standalone keelsoncodec
 // main into public/app per the entry-point standard.

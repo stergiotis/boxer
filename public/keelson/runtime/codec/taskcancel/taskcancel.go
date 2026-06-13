@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package taskcancel is the leeway-coded wire form of the
 // cancellation request published on `task.<id>.cancel`. Third broker
 // DTO to migrate off the buscodec fxamacker-cbor default onto the

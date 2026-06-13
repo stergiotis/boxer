@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Copyright 2026 Panos Stergiotis
 //
 // Licensed under the Apache License, Version 2.0 (the "License");

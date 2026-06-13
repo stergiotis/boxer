@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package regex_explorer is an interactive GUI for testing ClickHouse-flavoured
 // regular expressions. Modelled on regexr.com, scoped to ClickHouse's function
 // surface: RE2-backed single-pattern functions (match, extractAll,

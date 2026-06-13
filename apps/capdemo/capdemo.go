@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package capdemo is the M2 capability-broker showcase app. One window,
 // four sections: a fs.dialog.read round-trip (pick a file, get a
 // handle, fetch contents), a runtime.persist.{ownAlias}.scratchpad

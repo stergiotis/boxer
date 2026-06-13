@@ -1,5 +1,3 @@
-//go:build llm_generated_gemini3pro
-
 package splitmix64
 
 // Package splitmix64 implements a bijective (reversible) 64-bit integer mixing function.

@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package taskdone is the leeway-coded wire form of the
 // terminal-success payload published on `task.<id>.done`. Fifth and
 // final broker DTO from the task package to migrate off the buscodec

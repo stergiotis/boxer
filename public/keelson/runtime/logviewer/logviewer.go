@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package logviewer is the imzero2 AppI that visualises the logbridge
 // Sink: counters at the top (capacity / dropped / decoded / written /
 // parse errors), a filter row below (level / app id substring /

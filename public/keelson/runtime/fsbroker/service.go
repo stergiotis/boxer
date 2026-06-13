@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package fsbroker is the runtime's file-system Powerbox per ADR-0026 §SD7.
 // Apps that want to read a file publish to fs.dialog.read; the broker
 // queues a pending request that the host's file picker resolves on user

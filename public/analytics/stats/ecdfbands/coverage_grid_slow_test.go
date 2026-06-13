@@ -1,4 +1,4 @@
-//go:build llm_generated_opus47 && slow
+//go:build slow
 
 // Expanded Monte-Carlo coverage grid: K = 10⁵ replicates across a
 // 6×5 grid of (n, α) per family. Tightens the calibration evidence

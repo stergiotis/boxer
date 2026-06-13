@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package taskdemo is the ADR-0038 M2 + M4 showcase app. One window
 // with two sections: spawn controls (pick a unit, pick a duration,
 // pick whether the task should "fail" near the end), and a

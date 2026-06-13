@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package l12manifestid implements lint rule L12 — flag `app.AppIdT`
 // string literals (in `app.Manifest{Id: …}` composites and in typed
 // const / var declarations) whose value does not match the enclosing

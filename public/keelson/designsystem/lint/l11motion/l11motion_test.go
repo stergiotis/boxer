@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package l11motion_test
 
 import (

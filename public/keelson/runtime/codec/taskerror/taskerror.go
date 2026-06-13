@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package taskerror is the leeway-coded wire form of the
 // terminal-failure payload published on `task.<id>.error`. Fourth
 // broker DTO to migrate off the buscodec fxamacker-cbor default onto

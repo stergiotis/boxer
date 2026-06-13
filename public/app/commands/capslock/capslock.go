@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package capslock is the CLI wiring for the ADR-0026 §SD10 capslock
 // cross-checker. Mirrors the pattern established by designsystem and
 // envgen: a thin urfave/cli v2 surface that bridges to the existing

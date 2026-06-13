@@ -1,5 +1,3 @@
-//go:build llm_generated_opus46
-
 package tag
 
 import "github.com/yuin/goldmark/ast"

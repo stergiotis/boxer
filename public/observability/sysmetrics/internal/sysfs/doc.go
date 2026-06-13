@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package sysfs is a small set of read-only primitives over a /sys-shaped
 // directory tree. It mirrors [procfs] in shape (root-injectable [Reader],
 // ReadFile + ReadString convenience, directory enumeration) but its access

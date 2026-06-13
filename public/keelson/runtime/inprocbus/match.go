@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package inprocbus is the in-process subject-pattern router that ADR-0026
 // §SD5 ships in M2 as the pre-NATS transport for app.BusI. NATS-shaped
 // semantics: subjects are dotted token sequences; pattern wildcards match

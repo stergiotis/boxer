@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Copyright 2024 Redpanda Data, Inc.
 // Copyright 2026 Panos Stergiotis
 //

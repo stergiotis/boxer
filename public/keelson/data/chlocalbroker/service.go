@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package chlocalbroker is the runtime's broker for ADR-0028's
 // `ch.local.exec.<pool>` capability surface. It subscribes to
 // `ch.local.exec.>` on the in-proc bus (ADR-0026 §SD5), lazy-creates

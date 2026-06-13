@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package bindings
 
 // SnarlEventKindE discriminates the variants of SnarlEvent. Mirror of the

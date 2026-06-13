@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package h3arrow provides zero-copy adapters from the h3 package's
 // Struct-of-Arrays and CSR outputs to arrow-go arrays.
 //

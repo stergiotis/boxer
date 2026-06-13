@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package markdownhighlight syntax-highlights markdown source by routing it
 // through goldmark's AST and re-emitting a canonical form, recording the
 // byte offset of every marker as it is written.

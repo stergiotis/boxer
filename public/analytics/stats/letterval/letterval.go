@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 // Package letterval computes letter-value summaries (Hofmann, Wickham &
 // Kafadar 2017) from any source that can answer Quantile/CDF queries.
 //
