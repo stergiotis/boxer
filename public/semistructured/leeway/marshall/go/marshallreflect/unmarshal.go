@@ -412,6 +412,13 @@ func unmarshalMultiSubColumn(row reflect.Value, g goplan.SectionGroup, attrs, me
 		subs = append(subs, subAcc{Field: f, ColName: sc.Name, Val: reflect.New(goTypeReflect(f.GoType())).Elem()})
 	}
 
+	// Dispatch on the section's (uniform) channel like the single-membership
+	// path, instead of hard-coding GetMembValueLowCardRef + uint64-id matching.
+	// The previous code never matched a verbatim membership (hasID==false),
+	// skipping every attribute and failing every such DTO (review E-1).
+	ch := g.Channel()
+	method := "GetMembValue" + ch.AddMethodSuffix()
+	embedsName := ch.EmbedsLiteralName()
 	n := mustCall(attrs, "GetNumberOfAttributes", reflect.ValueOf(entityIdx(i)))[0].Int()
 	count := 0
 	for attrJ := int64(0); attrJ < n; attrJ++ {
@@ -419,10 +426,16 @@ func unmarshalMultiSubColumn(row reflect.Value, g goplan.SectionGroup, attrs, me
 		for k, s := range subs {
 			locals[k] = mustCall(attrs, "GetAttrValue"+mappingplan.UpperFirst(s.ColName), reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
 		}
-		seq := mustCall(membs, "GetMembValueLowCardRef", reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
+		seq := mustCall(membs, method, reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
 		for _, v := range collectIterSeq(seq) {
-			if !hasID || v.Uint() != expectedID {
-				continue
+			if embedsName {
+				if string(v.Bytes()) != memb.LWMembership {
+					continue
+				}
+			} else {
+				if !hasID || v.Uint() != expectedID {
+					continue
+				}
 			}
 			for k := range subs {
 				subs[k].Val = locals[k]

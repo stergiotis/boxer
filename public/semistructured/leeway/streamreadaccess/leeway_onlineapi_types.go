@@ -14,8 +14,10 @@ import (
 // All tagged-value columns are List<X>. Entity row i → list offsets → flat inner array.
 // Cardinality columns (List<Uint64>) partition inner arrays per attribute.
 //
-// Errors are accumulated in inst.err (first-error-wins).
-// The driver never panics.
+// Errors are accumulated in inst.errs (up to MaxErrorsToMerge, with
+// consecutive duplicates deduped) and surfaced by DriveRecordBatch.
+// The driver does not panic on malformed input — including an unknown column
+// role or a cardinality column of the wrong Arrow type (review F-4).
 type Driver struct {
 	tblDesc *common.TableDesc
 	ir      *common.IntermediateTableRepresentation

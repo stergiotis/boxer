@@ -88,6 +88,13 @@ func classifyReflectType(rt reflect.Type) (s goplan.FieldShape, err error) {
 		elem := rt.Elem()
 		// []byte: scalar blob lane.
 		if elem.Kind() == reflect.Uint8 {
+			// A named []byte (e.g. json.RawMessage) is not a plain []byte; the
+			// AST front-end rejects its source spelling, so the reflect path
+			// must too rather than accept-then-panic at marshal (review E-2).
+			if rt.PkgPath() != "" {
+				err = eb.Build().Str("type", rt.String()).Errorf("named []byte type is not supported; use plain []byte")
+				return
+			}
 			s.Canonical, err = goplan.ScalarCanonicalForGoType("[]byte")
 			return
 		}
@@ -136,6 +143,15 @@ func classifyReflectType(rt reflect.Type) (s goplan.FieldShape, err error) {
 func reflectGoTypeName(rt reflect.Type) string {
 	if rt.PkgPath() == "time" && rt.Name() == "Time" {
 		return "time.Time"
+	}
+	// A named type from a package (e.g. `type Severity uint8`, time.Duration,
+	// json.RawMessage) is not a builtin. The AST front-end rejects its source
+	// spelling at plan-build, so the reflect front-end must too: mapping it to
+	// the underlying-kind spelling here would accept it and then panic at
+	// marshal time (reflect.Set with a non-assignable named type) — violating
+	// the "both front-ends accept exactly the same DTOs" contract (review E-2).
+	if rt.PkgPath() != "" {
+		return rt.String()
 	}
 	switch rt.Kind() {
 	case reflect.Uint8:
