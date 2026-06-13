@@ -1,0 +1,23 @@
+[Unit]
+Description=imzero2 headless pixel-streaming demo — current release (ADR-0085)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=imzero2
+Group=imzero2
+Environment=IMZERO2_HEADLESS_LISTEN=127.0.0.1:8089
+Environment=IMZERO2_HEADLESS_FPS=30
+Environment=IMZERO2_HEADLESS_ENCODER_ARGS=-c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 100000
+Environment=LIBGL_ALWAYS_SOFTWARE=1
+ExecStart=/opt/imzero2/run-current.sh
+Restart=on-failure
+RestartSec=2
+# Light hardening (the carrier needs no privilege). Tighten further
+# (ProtectSystem=strict, etc.) once the FFFI2 shm path is confirmed.
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

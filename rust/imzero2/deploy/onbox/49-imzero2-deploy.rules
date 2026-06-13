@@ -1,0 +1,11 @@
+// ADR-0085: allow the unprivileged `imzero2` user to restart the demo unit.
+// The deploy oneshot calls `systemctl restart imzero2-demo.service` after an
+// atomic swap; this grants exactly that, nothing more. Install to
+// /etc/polkit-1/rules.d/49-imzero2-deploy.rules.
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.systemd1.manage-units" &&
+        subject.user == "imzero2" &&
+        action.lookup("unit") == "imzero2-demo.service") {
+        return polkit.Result.YES;
+    }
+});

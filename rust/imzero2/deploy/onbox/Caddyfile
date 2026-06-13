@@ -1,0 +1,20 @@
+# ADR-0085 / ADR-0082: TLS (auto Let's Encrypt) + a password in front of the
+# unauthenticated v1 carrier; handle_errors serves the holding page during
+# builds and the restart swap (upstream momentarily down). Vars come from the
+# environment (DOMAIN, BASIC_AUTH_USER, BASIC_AUTH_HASH) — see ONBOX.md.
+{$DOMAIN} {
+	encode zstd gzip
+	basic_auth {
+		{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
+	}
+	reverse_proxy 127.0.0.1:8089 {
+		# Long-lived video WebSocket: stream, don't buffer.
+		flush_interval -1
+	}
+	handle_errors {
+		rewrite * /building.html
+		file_server {
+			root /opt/imzero2/holding
+		}
+	}
+}

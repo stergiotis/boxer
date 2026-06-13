@@ -1,0 +1,10 @@
+[Unit]
+Description=Poll for a new imzero2 demo release tag (ADR-0085)
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

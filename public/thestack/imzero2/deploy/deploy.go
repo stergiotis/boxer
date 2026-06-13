@@ -1,0 +1,460 @@
+// Package deploy implements ADR-0085: on-box pull-build-and-atomic-deploy
+// for the imzero2 headless demo. This is the logic layer (SD2); systemd
+// supplies supervision and the poll timer.
+//
+// Phase 1 (this file) is the happy path:
+//
+//	resolve tag -> checkout -> build -> stage -> ws_probe gate -> atomic
+//	symlink swap -> restart
+//
+// Rollback/retention (SD6) and the env-registry / runinfo / audited-bus
+// wiring (SD7-8) are later phases; the seams are left explicit.
+package deploy
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"syscall"
+	"time"
+
+	"github.com/rs/zerolog"
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
+)
+
+// Config is a deploy run's configuration. Phase 1 takes it from cli flags;
+// ADR-0085 SD7 moves these knobs into the imzero2env registry in Phase 3.
+type Config struct {
+	Remote       string        // git remote name in the workspace clone (read-only)
+	Workspace    string        // persistent clone + cargo/go caches; builds run here
+	ReleasesDir  string        // immutable release snapshots: <ReleasesDir>/<tag>/
+	CurrentLink  string        // `current` symlink the systemd unit ExecStarts through
+	ServiceName  string        // systemd unit restarted on swap
+	ScratchPort  int           // gate: candidate carrier loopback port
+	GateAUs      int           // gate: access units ws_probe must receive
+	GateTimeout  time.Duration // gate: overall budget
+	EncoderArgs  string        // IMZERO2_HEADLESS_ENCODER_ARGS for the gate run
+	MainFont     string        // optional; fc-match'd if empty
+	PhosphorFont string        // optional; the release's bundled asset if empty
+	FallbackFont string        // optional; fc-match'd if empty
+	DryRun       bool          // stage + gate but skip the swap + restart
+}
+
+// Build-artifact locations relative to the workspace clone root.
+const (
+	rustDirRel   = "rust/imzero2"
+	mainGoRel    = "rust/imzero2/main_go"
+	clientBinRel = "rust/imzero2/target/headless/release/imzero2"
+	wsProbeRel   = "rust/imzero2/target/headless/release/ws_probe"
+	assetsRel    = "rust/imzero2/assets"
+	phosphorRel  = "assets/fonts/phosphor/Phosphor.ttf" // within a release dir
+)
+
+// Run executes the Phase 1 happy path. deployed reports whether a new tag
+// was cut over (false when already current, or no release tag was found).
+func Run(ctx context.Context, lg zerolog.Logger, cfg Config) (deployed bool, err error) {
+	newest, current, err := resolveTags(ctx, lg, cfg)
+	if err != nil {
+		return false, err
+	}
+	if newest == "" {
+		lg.Info().Msg("deploy: no release tag found; nothing to do")
+		return false, nil
+	}
+	if newest == current {
+		lg.Info().Str("tag", current).Msg("deploy: already current; nothing to do")
+		return false, nil
+	}
+	lg.Info().Str("from", orNone(current)).Str("to", newest).Msg("deploy: new release tag")
+
+	if err = checkout(ctx, lg, cfg, newest); err != nil {
+		return false, err
+	}
+	if err = build(ctx, lg, cfg); err != nil {
+		return false, err
+	}
+	relDir, err := stage(ctx, lg, cfg, newest)
+	if err != nil {
+		return false, err
+	}
+	if err = gate(ctx, lg, cfg, relDir); err != nil {
+		// `current` is untouched; the candidate stays on disk for inspection.
+		return false, eh.Errorf("deploy: gate failed for %s (current untouched): %w", newest, err)
+	}
+	if cfg.DryRun {
+		lg.Warn().Str("tag", newest).Str("release", relDir).Msg("deploy: dry-run — built + gated OK, skipping swap + restart")
+		return true, nil
+	}
+	if err = swap(ctx, lg, cfg, relDir); err != nil {
+		return false, err
+	}
+	if err = restart(ctx, lg, cfg); err != nil {
+		return false, err
+	}
+	lg.Info().Str("tag", newest).Msg("deploy: live")
+	return true, nil
+}
+
+// --- steps ---
+
+func resolveTags(ctx context.Context, lg zerolog.Logger, cfg Config) (newest, current string, err error) {
+	if err = step(ctx, lg, "fetch", cfg.Workspace, nil, "git", "fetch", "--tags", "--prune", cfg.Remote); err != nil {
+		return "", "", err
+	}
+	out, e := run(ctx, cfg.Workspace, nil, "git", "tag", "--list")
+	if e != nil {
+		return "", "", eb.Build().Str("output", tail(out, 1000)).Errorf("deploy: git tag list: %w", e)
+	}
+	current = currentTag(cfg)
+	if n, ok := selectNewestTag(strings.Fields(out)); ok {
+		newest = n
+	}
+	return newest, current, nil
+}
+
+func checkout(ctx context.Context, lg zerolog.Logger, cfg Config, tag string) error {
+	return step(ctx, lg, "checkout", cfg.Workspace, nil, "git", "checkout", "--force", "--detach", tag)
+}
+
+func build(ctx context.Context, lg zerolog.Logger, cfg Config) error {
+	rustDir := filepath.Join(cfg.Workspace, rustDirRel)
+	// The headless Rust client (+ assets), via the project's own script.
+	if err := step(ctx, lg, "build-rust", rustDir, nil, "bash", "build_rust_headless.sh"); err != nil {
+		return err
+	}
+	// ws_probe (the gate client) shares the headless target-dir.
+	if err := step(ctx, lg, "build-ws_probe", rustDir, nil,
+		"cargo", "build", "--release", "--no-default-features", "--features", "headless",
+		"--bin", "ws_probe", "--target-dir", "target/headless"); err != nil {
+		return err
+	}
+	// The Go launcher (carries this very `deploy` subcommand for the next run).
+	return step(ctx, lg, "build-go", rustDir, nil, "bash", "build_go.sh")
+}
+
+func stage(ctx context.Context, lg zerolog.Logger, cfg Config, tag string) (string, error) {
+	relDir := filepath.Join(cfg.ReleasesDir, tag)
+	tmp := relDir + ".staging"
+	if err := os.RemoveAll(tmp); err != nil {
+		return "", eh.Errorf("deploy: clear staging: %w", err)
+	}
+	if err := os.MkdirAll(tmp, 0o755); err != nil {
+		return "", eh.Errorf("deploy: mkdir staging: %w", err)
+	}
+	bins := []struct{ src, dst string }{
+		{filepath.Join(cfg.Workspace, mainGoRel), "main_go"},
+		{filepath.Join(cfg.Workspace, clientBinRel), "imzero2"},
+		{filepath.Join(cfg.Workspace, wsProbeRel), "ws_probe"},
+	}
+	for _, b := range bins {
+		if err := copyFile(b.src, filepath.Join(tmp, b.dst), 0o755); err != nil {
+			return "", eh.Errorf("deploy: stage %s: %w", b.dst, err)
+		}
+	}
+	if err := copyTree(filepath.Join(cfg.Workspace, assetsRel), filepath.Join(tmp, "assets")); err != nil {
+		return "", eh.Errorf("deploy: stage assets: %w", err)
+	}
+	// Finalize: a release dir is never observed half-populated.
+	if err := os.RemoveAll(relDir); err != nil {
+		return "", eh.Errorf("deploy: clear release: %w", err)
+	}
+	if err := os.Rename(tmp, relDir); err != nil {
+		return "", eh.Errorf("deploy: finalize release: %w", err)
+	}
+	lg.Info().Str("release", relDir).Msg("deploy: staged")
+	return relDir, nil
+}
+
+// gate starts the candidate on a scratch loopback port (interactive
+// carousel: no --launch, so no clickhouse-local is needed) and requires
+// ws_probe to decode real access units before the swap is allowed.
+func gate(ctx context.Context, lg zerolog.Logger, cfg Config, relDir string) error {
+	gctx, cancel := context.WithTimeout(ctx, cfg.GateTimeout)
+	defer cancel()
+
+	args := []string{
+		"--logLevel=warn", "imzero2", "demo",
+		"--clientBinary", filepath.Join(relDir, "imzero2"),
+		"--clientInitialMainWindowWidth", "1280",
+		"--clientInitialMainWindowHeight", "800",
+	}
+	if f := resolveFont(cfg.MainFont, "Noto Sans"); f != "" {
+		args = append(args, "--mainFontTTF", f)
+	}
+	phosphor := cfg.PhosphorFont
+	if phosphor == "" {
+		phosphor = filepath.Join(relDir, phosphorRel)
+	}
+	args = append(args, "--phosphorFontTTF", phosphor)
+	if f := resolveFont(cfg.FallbackFont, "Noto Sans CJK JP"); f != "" {
+		args = append(args, "--fallbackFontTTF", f)
+	}
+
+	cmd := exec.CommandContext(gctx, filepath.Join(relDir, "main_go"), args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true} // own group → kill the whole tree
+	cmd.Env = append(os.Environ(),
+		"IMZERO2_HEADLESS_LISTEN=127.0.0.1:"+strconv.Itoa(cfg.ScratchPort),
+		"IMZERO2_HEADLESS_FPS=30",
+		"IMZERO2_HEADLESS_ENCODER_ARGS="+cfg.EncoderArgs,
+		"LIBGL_ALWAYS_SOFTWARE=1",
+	)
+	var buf lockedBuffer
+	cmd.Stdout = &buf
+	cmd.Stderr = &buf
+	if err := cmd.Start(); err != nil {
+		return eh.Errorf("deploy: gate start: %w", err)
+	}
+	defer func() {
+		if cmd.Process != nil {
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) // the group: main_go + rust client + ffmpeg
+		}
+		_ = cmd.Wait()
+	}()
+
+	if err := waitForPage(gctx, fmt.Sprintf("http://127.0.0.1:%d/", cfg.ScratchPort)); err != nil {
+		return eb.Build().Str("candidate", tail(buf.String(), 1500)).Errorf("deploy: gate — carrier did not come up: %w", err)
+	}
+	outFile := filepath.Join(os.TempDir(), "imzero2-gate-"+filepath.Base(relDir)+".h264")
+	pout, perr := run(gctx, "", nil,
+		filepath.Join(relDir, "ws_probe"),
+		fmt.Sprintf("ws://127.0.0.1:%d/", cfg.ScratchPort), outFile, strconv.Itoa(cfg.GateAUs))
+	_ = os.Remove(outFile)
+	aus, kf := parseProbe(pout)
+	if perr != nil {
+		return eb.Build().Int("aus", aus).Str("probe", tail(pout, 800)).Errorf("deploy: gate probe failed: %w", perr)
+	}
+	if aus < cfg.GateAUs || kf < 1 {
+		return eb.Build().Int("aus", aus).Int("want", cfg.GateAUs).Int("keyframes", kf).
+			Errorf("deploy: gate — stream did not deliver the required frames")
+	}
+	lg.Info().Int("aus", aus).Int("keyframes", kf).Msg("deploy: gate passed")
+	return nil
+}
+
+func swap(ctx context.Context, lg zerolog.Logger, cfg Config, relDir string) error {
+	tmp := cfg.CurrentLink + ".tmp"
+	_ = os.Remove(tmp)
+	if err := os.Symlink(relDir, tmp); err != nil {
+		return eh.Errorf("deploy: prepare symlink: %w", err)
+	}
+	if err := os.Rename(tmp, cfg.CurrentLink); err != nil { // POSIX-atomic over the existing link
+		return eh.Errorf("deploy: atomic swap: %w", err)
+	}
+	lg.Info().Str("current", cfg.CurrentLink).Str("target", relDir).Msg("deploy: swapped current")
+	return nil
+}
+
+func restart(ctx context.Context, lg zerolog.Logger, cfg Config) error {
+	return step(ctx, lg, "restart", "", nil, "systemctl", "restart", cfg.ServiceName)
+}
+
+// --- tag selection (pure; unit-tested) ---
+
+var releaseTagRe = regexp.MustCompile(`^v?\d+(\.\d+)*$`)
+
+// selectNewestTag returns the highest semver-ish release tag (`v?N(.N)*`),
+// ignoring non-release tags; comparison is numeric and component-wise.
+func selectNewestTag(tags []string) (string, bool) {
+	type cand struct {
+		tag string
+		ver []int
+	}
+	var cands []cand
+	for _, t := range tags {
+		if ver, ok := parseReleaseTag(t); ok {
+			cands = append(cands, cand{t, ver})
+		}
+	}
+	if len(cands) == 0 {
+		return "", false
+	}
+	sort.SliceStable(cands, func(i, j int) bool { return compareVer(cands[i].ver, cands[j].ver) > 0 })
+	return cands[0].tag, true
+}
+
+func parseReleaseTag(t string) ([]int, bool) {
+	if !releaseTagRe.MatchString(t) {
+		return nil, false
+	}
+	parts := strings.Split(strings.TrimPrefix(t, "v"), ".")
+	ver := make([]int, 0, len(parts))
+	for _, p := range parts {
+		n, err := strconv.Atoi(p)
+		if err != nil {
+			return nil, false
+		}
+		ver = append(ver, n)
+	}
+	return ver, true
+}
+
+func compareVer(a, b []int) int {
+	for i := 0; i < len(a) || i < len(b); i++ {
+		var x, y int
+		if i < len(a) {
+			x = a[i]
+		}
+		if i < len(b) {
+			y = b[i]
+		}
+		if x != y {
+			if x < y {
+				return -1
+			}
+			return 1
+		}
+	}
+	return 0
+}
+
+// --- helpers ---
+
+func currentTag(cfg Config) string {
+	target, err := os.Readlink(cfg.CurrentLink)
+	if err != nil {
+		return ""
+	}
+	return filepath.Base(target)
+}
+
+func step(ctx context.Context, lg zerolog.Logger, what, dir string, env []string, name string, args ...string) error {
+	lg.Info().Str("step", what).Str("cmd", name+" "+strings.Join(args, " ")).Msg("deploy: step")
+	out, err := run(ctx, dir, env, name, args...)
+	if err != nil {
+		return eb.Build().Str("step", what).Str("output", tail(out, 2000)).Errorf("deploy: step %q failed: %w", what, err)
+	}
+	lg.Debug().Str("step", what).Msg("deploy: step ok")
+	return nil
+}
+
+func run(ctx context.Context, dir string, env []string, name string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Dir = dir
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
+func waitForPage(ctx context.Context, url string) error {
+	cl := &http.Client{Timeout: 2 * time.Second}
+	for {
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if resp, err := cl.Do(req); err == nil {
+			_ = resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				return nil
+			}
+		}
+		t := time.NewTimer(500 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			t.Stop()
+			return ctx.Err()
+		case <-t.C:
+		}
+	}
+}
+
+var probeRe = regexp.MustCompile(`probe done:\s*(\d+)\s+AUs,\s*\d+\s+bytes,\s*(\d+)\s+keyframes`)
+
+func parseProbe(s string) (aus, keyframes int) {
+	if m := probeRe.FindStringSubmatch(s); m != nil {
+		aus, _ = strconv.Atoi(m[1])
+		keyframes, _ = strconv.Atoi(m[2])
+	}
+	return aus, keyframes
+}
+
+func resolveFont(override, family string) string {
+	if override != "" {
+		return override
+	}
+	out, err := exec.Command("fc-match", "-f", "%{file}", family).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func copyFile(src, dst string, mode os.FileMode) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = in.Close() }()
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
+	if err != nil {
+		return err
+	}
+	if _, err = io.Copy(out, in); err != nil {
+		_ = out.Close()
+		return err
+	}
+	return out.Close()
+}
+
+func copyTree(src, dst string) error {
+	return filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		return copyFile(path, target, info.Mode().Perm())
+	})
+}
+
+func tail(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return "…" + s[len(s)-n:]
+}
+
+func orNone(s string) string {
+	if s == "" {
+		return "(none)"
+	}
+	return s
+}
+
+// lockedBuffer is a concurrency-safe sink for a child's merged stdout+stderr.
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}

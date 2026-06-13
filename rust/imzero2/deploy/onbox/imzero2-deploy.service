@@ -1,0 +1,19 @@
+[Unit]
+Description=imzero2 demo — pull, build, gate, atomically deploy a new release tag (ADR-0085)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=imzero2
+Group=imzero2
+# The current release's main_go carries the `deploy` subcommand. (For the
+# very first run, bootstrap from workspace/rust/imzero2/main_go — see ONBOX.md.)
+ExecStart=/opt/imzero2/current/main_go --logFormat=console --logLevel=info imzero2 deploy --root /opt/imzero2
+# A cold build is long; never kill mid-build.
+TimeoutStartSec=infinity
+# git/cargo/go state lives under the deploy root.
+Environment=HOME=/opt/imzero2
+Environment=CARGO_HOME=/opt/imzero2/.cargo
+# Restart of imzero2-demo.service is allowed via the polkit rule
+# (49-imzero2-deploy.rules); no sudo needed.
