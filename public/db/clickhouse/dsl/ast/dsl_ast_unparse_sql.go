@@ -1,11 +1,8 @@
-//go:build llm_generated_opus46
-
 package ast
 
 import (
 	"fmt"
 	"strings"
-	"sync"
 
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
@@ -15,27 +12,28 @@ import (
 
 // --- Identifier emission ---
 
-var identProbeCache sync.Map // name → bool (needs quoting)
-
 // identNeedsQuoting reports whether name must be emitted double-quoted: a
 // bare emission is safe only when the real lexer reads the name back as
 // exactly one IDENTIFIER token covering the whole input. Keywords, spaces,
 // operators, and exotic spellings all fail the probe.
+//
+// Not cached: a per-call lexer spin-up over one short name is microseconds,
+// and a package-global cache keyed by arbitrary names is an unbounded leak
+// for long-running callers (and OOMs a fuzz worker over millions of names).
 func identNeedsQuoting(name string) bool {
 	if name == "" {
 		return true
 	}
-	if v, ok := identProbeCache.Load(name); ok {
-		return v.(bool)
-	}
 	lexer := grammar1.NewClickHouseLexer(antlr.NewInputStream(name))
 	lexer.RemoveErrorListeners()
 	tok := lexer.NextToken()
-	needs := tok.GetTokenType() != grammar1.ClickHouseLexerIDENTIFIER ||
+	// A name whose own bytes form a quoted spelling ("x", `x`, "" …) lexes
+	// as a single IDENTIFIER too, but raw emission would re-lex into the
+	// DECODED name — it must be re-quoted like any other exotic spelling.
+	return tok.GetTokenType() != grammar1.ClickHouseLexerIDENTIFIER ||
 		tok.GetText() != name ||
+		name[0] == '"' || name[0] == '`' ||
 		lexer.NextToken().GetTokenType() != antlr.TokenEOF
-	identProbeCache.Store(name, needs)
-	return needs
 }
 
 // writeIdent emits an identifier, double-quoting (with escape encoding)
@@ -55,18 +53,24 @@ func (inst Query) ToSQL() string {
 	var b strings.Builder
 	for _, sp := range inst.Settings {
 		b.WriteString("SET ")
-		b.WriteString(sp.Key)
+		writeIdent(&b, sp.Key)
 		b.WriteString(" = ")
 		b.WriteString(sp.ValueSQL)
 		b.WriteString(";\n")
 	}
-	if len(inst.CTEs) > 0 {
+	if len(inst.CTEs) > 0 || len(inst.With) > 0 {
 		b.WriteString("WITH ")
 		for i, cte := range inst.CTEs {
 			if i > 0 {
 				b.WriteString(", ")
 			}
 			writeCTE(&b, cte)
+		}
+		if len(inst.With) > 0 {
+			if len(inst.CTEs) > 0 {
+				b.WriteString(", ")
+			}
+			writeExprList(&b, inst.With)
 		}
 		b.WriteByte(' ')
 	}
@@ -252,7 +256,7 @@ func writeSelect(b *strings.Builder, sel Select) {
 			if i > 0 {
 				b.WriteString(", ")
 			}
-			b.WriteString(sp.Key)
+			writeIdent(b, sp.Key)
 			b.WriteString(" = ")
 			b.WriteString(sp.ValueSQL)
 		}
@@ -329,6 +333,12 @@ func writeJoinTable(b *strings.Builder, td *JoinTableData) {
 		}
 		b.WriteByte(')')
 	}
+	// The alias binds to the table expression and must precede the
+	// FINAL/SAMPLE modifiers (joinExprTable: tableExpr FINAL? sample?).
+	if td.Alias != "" {
+		b.WriteString(" AS ")
+		writeIdent(b, td.Alias)
+	}
 	if td.Final {
 		b.WriteString(" FINAL")
 	}
@@ -339,10 +349,6 @@ func writeJoinTable(b *strings.Builder, td *JoinTableData) {
 			b.WriteString(" OFFSET ")
 			writeRatio(b, *td.Sample.Offset)
 		}
-	}
-	if td.Alias != "" {
-		b.WriteString(" AS ")
-		writeIdent(b, td.Alias)
 	}
 }
 

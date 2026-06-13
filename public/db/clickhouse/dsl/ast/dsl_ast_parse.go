@@ -1,8 +1,7 @@
-//go:build llm_generated_opus46
-
 package ast
 
 import (
+	"sort"
 	"strconv"
 
 	"github.com/antlr4-go/antlr/v4"
@@ -60,10 +59,16 @@ func convertQuery(pr *nanopass.ParseResult, ctx *grammar2.QueryContext) (query Q
 			}
 			query.Settings = append(query.Settings, settings...)
 		case *grammar2.CtesContext:
-			query.CTEs, err = convertCTEs(pr, c)
+			var scalarWith []Expr
+			query.CTEs, scalarWith, err = convertCTEs(pr, c)
 			if err != nil {
 				return
 			}
+			// Scalar WITH items (`expr AS name`) at the query level share
+			// the WITH clause with CTEs — Query.With is their home (ToSQL
+			// emits them in the same WITH). Dropping them, as the previous
+			// converter did, detached every reference.
+			query.With = append(query.With, scalarWith...)
 		case *grammar2.SelectUnionStmtContext:
 			query.Body, err = convertSelectUnion(pr, c)
 			if err != nil {
@@ -71,7 +76,46 @@ func convertQuery(pr *nanopass.ParseResult, ctx *grammar2.QueryContext) (query Q
 			}
 		}
 	}
+	// Normalise WITH placement: a top-level single SELECT carries its WITH
+	// either in the query-level ctes rule (unparenthesised) or in the
+	// head selectStmt's withClause (when the source wrapped it in parens
+	// that the unparser then strips). Both denote the same query-scoped
+	// WITH, so hoist the head's items to the query level for a single
+	// canonical home. Union bodies are excluded — a WITH on the first
+	// branch is branch-scoped, not query-scoped.
+	if len(query.Body.Items) == 0 {
+		query.CTEs = append(query.CTEs, query.Body.Head.CTEs...)
+		query.With = append(query.With, query.Body.Head.With...)
+		query.Body.Head.CTEs = nil
+		query.Body.Head.With = nil
+	}
+	// Canonicalise the query-level SET prelude to match env's semantics:
+	// duplicate keys collapse last-wins (the server applies the last SET),
+	// and the survivors emit sorted by key — env.Integrate does exactly
+	// this, so an AST built from body-resident SET statements must agree
+	// or a round trip through the prelude form diverges.
+	query.Settings = dedupSettingsLastWins(query.Settings)
 	return
+}
+
+func dedupSettingsLastWins(settings []SettingPair) []SettingPair {
+	if len(settings) <= 1 {
+		return settings
+	}
+	lastValue := make(map[string]string, len(settings))
+	for _, sp := range settings {
+		lastValue[sp.Key] = sp.ValueSQL
+	}
+	keys := make([]string, 0, len(lastValue))
+	for k := range lastValue {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	out := make([]SettingPair, len(keys))
+	for i, k := range keys {
+		out[i] = SettingPair{Key: k, ValueSQL: lastValue[k]}
+	}
+	return out
 }
 
 // --- SET ---
@@ -111,25 +155,34 @@ func convertSettingExpr(pr *nanopass.ParseResult, ctx *grammar2.SettingExprConte
 
 // --- CTEs ---
 
-func convertCTEs(pr *nanopass.ParseResult, ctx *grammar2.CtesContext) (ctes []CTE, err error) {
-	// Items under ctes are withItem alternatives: WithItemNamedQueryContext is
-	// the CTE form; WithItemColumnsExprContext is the scalar alias form, which
-	// has no AST representation here and is skipped.
+func convertCTEs(pr *nanopass.ParseResult, ctx *grammar2.CtesContext) (ctes []CTE, scalarWith []Expr, err error) {
+	// Items under ctes are withItem alternatives: WithItemNamedQueryContext
+	// is the CTE form (`name AS (query)`); WithItemColumnsExprContext is the
+	// scalar alias form (`expr AS name`). Both are returned — the scalar
+	// items are query-scoped WITH expressions, not CTEs.
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		wi, ok := ctx.GetChild(i).(*grammar2.WithItemNamedQueryContext)
-		if !ok {
-			continue
+		switch wi := ctx.GetChild(i).(type) {
+		case *grammar2.WithItemNamedQueryContext:
+			nq, ok := wi.NamedQuery().(*grammar2.NamedQueryContext)
+			if !ok {
+				continue
+			}
+			var cte CTE
+			cte, err = convertNamedQuery(pr, nq)
+			if err != nil {
+				return
+			}
+			ctes = append(ctes, cte)
+		case *grammar2.WithItemColumnsExprContext:
+			ce := wi.ColumnsExpr()
+			if ce == nil {
+				continue
+			}
+			scalarWith, err = appendColumnsExpr(pr, ce, scalarWith)
+			if err != nil {
+				return
+			}
 		}
-		nq, ok := wi.NamedQuery().(*grammar2.NamedQueryContext)
-		if !ok {
-			continue
-		}
-		var cte CTE
-		cte, err = convertNamedQuery(pr, nq)
-		if err != nil {
-			return
-		}
-		ctes = append(ctes, cte)
 	}
 	return
 }

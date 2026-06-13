@@ -1,5 +1,3 @@
-//go:build llm_generated_opus46
-
 package marshalling
 
 import (
@@ -140,32 +138,59 @@ func EscapeIdentifier(s string) string {
 	return buf.String()
 }
 
-// EscapeString produces a ClickHouse single-quoted string literal from a Go string.
+// EscapeString produces a ClickHouse single-quoted string literal from a Go
+// string. The output is always valid UTF-8 (boxer's parser requires it):
+// printable ASCII and well-formed multi-byte runes pass through, control
+// characters use their named escapes, and any byte that is not part of a
+// valid UTF-8 sequence is emitted as a `\x##` escape — so a value carrying
+// raw bytes (e.g. from a decoded `\x80`) round-trips through valid SQL
+// rather than corrupting the text.
 func EscapeString(s string) string {
 	var buf strings.Builder
 	buf.Grow(len(s) + 2)
 	buf.WriteByte('\'')
-	for i := 0; i < len(s); i++ {
+	for i := 0; i < len(s); {
 		ch := s[i]
-		switch ch {
-		case '\\':
-			buf.WriteString("\\\\")
-		case '\'':
-			buf.WriteString("\\'")
-		case '\n':
-			buf.WriteString("\\n")
-		case '\t':
-			buf.WriteString("\\t")
-		case '\r':
-			buf.WriteString("\\r")
-		case 0:
-			buf.WriteString("\\0")
-		default:
-			buf.WriteByte(ch)
+		if ch < utf8.RuneSelf {
+			switch ch {
+			case '\\':
+				buf.WriteString("\\\\")
+			case '\'':
+				buf.WriteString("\\'")
+			case '\n':
+				buf.WriteString("\\n")
+			case '\t':
+				buf.WriteString("\\t")
+			case '\r':
+				buf.WriteString("\\r")
+			case 0:
+				buf.WriteString("\\0")
+			default:
+				buf.WriteByte(ch)
+			}
+			i++
+			continue
 		}
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if r == utf8.RuneError && size == 1 {
+			buf.WriteString("\\x")
+			buf.WriteByte(hexDigit(ch >> 4))
+			buf.WriteByte(hexDigit(ch & 0x0f))
+			i++
+			continue
+		}
+		buf.WriteString(s[i : i+size])
+		i += size
 	}
 	buf.WriteByte('\'')
 	return buf.String()
+}
+
+func hexDigit(n byte) byte {
+	if n < 10 {
+		return '0' + n
+	}
+	return 'a' + (n - 10)
 }
 
 // --- Unmarshal scalar ---
@@ -247,7 +272,9 @@ func UnmarshalScalarLiteral(token string) (result TypedLiteral, err error) {
 			err = fmt.Errorf("UnmarshalScalarLiteral: invalid hex literal %q: %w", token, err)
 			return
 		}
-		if sign >= 0 {
+		if sign >= 0 || val == 0 {
+			// Negative zero is zero — keep the unsigned domain so the
+			// marshal⇄unmarshal normal form is type-stable.
 			result.ScalarType = ctabb.U64
 			result.UintVal = val
 		} else {
@@ -281,7 +308,9 @@ func UnmarshalScalarLiteral(token string) (result TypedLiteral, err error) {
 			result.Unknown = true
 			return
 		}
-		if sign >= 0 {
+		if sign >= 0 || val == 0 {
+			// Negative zero is zero — keep the unsigned domain so the
+			// marshal⇄unmarshal normal form is type-stable.
 			result.ScalarType = ctabb.U64
 			result.UintVal = val
 		} else {
@@ -330,6 +359,13 @@ func MarshalScalarToSQL(lit TypedLiteral) (result string, err error) {
 			result = "NaN"
 		} else {
 			result = strconv.FormatFloat(lit.FloatVal, 'g', -1, 64)
+			// Keep the float-ness visible: 5.0 must not emit as "5", which
+			// re-reads as an integer and changes the value's type domain
+			// (a re-parsing evaluator would hand the next function a
+			// uint64 where a float64 went in).
+			if !containsAnyByte(result, ".eE") {
+				result += ".0"
+			}
 		}
 	default:
 		err = eb.Build().Stringer("type", lit.ScalarType).Errorf("MarshalScalarToSQL: unknown scalar type")

@@ -1,5 +1,3 @@
-//go:build llm_generated_opus46
-
 package ast
 
 // ============================================================================
@@ -9,8 +7,11 @@ package ast
 type Query struct {
 	Settings []SettingPair `cbor:"settings,omitempty"`
 	CTEs     []CTE         `cbor:"ctes,omitempty"`
-	Body     SelectUnion   `cbor:"body"`
-	Format   string        `cbor:"format,omitempty"`
+	// With holds query-level scalar WITH items (`expr AS name`) that share
+	// the WITH clause with CTEs; ToSQL emits CTEs first, then these.
+	With   []Expr      `cbor:"qwith,omitempty"`
+	Body   SelectUnion `cbor:"body"`
+	Format string      `cbor:"format,omitempty"`
 }
 
 // ============================================================================

@@ -359,3 +359,5 @@ The upstream ClickHouse ANTLR4 grammar has these required modifications:
 - `EXISTS (SELECT ...)` (EXISTS predicate)
 - `* EXCEPT(col)`, `COLUMNS('...') APPLY(func)`, `REPLACE(...)` (column modifiers)
 - Map literals in SET (`SET param = {'key': [1,2]}`)
+
+Grammar1 also *over-accepts* a few shapes that ClickHouse itself rejects (empty quoted identifiers, param-slot **type** expressions that are not real data types, `INTERVAL <expr> <non-unit>`); the converter rejects them at the AST boundary. The full pipeline limitations list lives in [`../EXPLANATION.md`](../EXPLANATION.md#limitations-and-over-acceptance-boundaries).

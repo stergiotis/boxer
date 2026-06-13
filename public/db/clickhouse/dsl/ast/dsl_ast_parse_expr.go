@@ -1,5 +1,3 @@
-//go:build llm_generated_opus46
-
 package ast
 
 import (
@@ -299,18 +297,59 @@ func convertInterval(pr *nanopass.ParseResult, ctx *grammar2.ColumnExprIntervalC
 }
 
 func convertNegate(pr *nanopass.ParseResult, ctx *grammar2.ColumnExprNegateContext) (expr Expr, err error) {
-	expr.Kind = KindUnary
-	un := &UnaryData{Op: UnaryOpNegate}
+	var inner Expr
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		if ce, ok := ctx.GetChild(i).(grammar2.IColumnExprContext); ok {
-			un.Expr, err = convertColumnExpr(pr, ce.(antlr.ParserRuleContext))
+			inner, err = convertColumnExpr(pr, ce.(antlr.ParserRuleContext))
 			if err != nil {
 				return
 			}
 		}
 	}
-	expr.Unary = un
+	// Negating a numeric literal folds into the signed literal: that is the
+	// same value, and it is also exactly how `-5` re-parses (the
+	// numberLiteral rule owns the optional sign), so without folding the
+	// round trip would oscillate between Unary{Negate, "5"} and "-5".
+	if inner.Kind == KindLiteral && inner.Literal != nil && isNumericLiteralText(inner.Literal.SQL) {
+		expr.Kind = KindLiteral
+		expr.Literal = &LiteralData{SQL: negateNumericText(inner.Literal.SQL)}
+		return
+	}
+	expr.Kind = KindUnary
+	expr.Unary = &UnaryData{Op: UnaryOpNegate, Expr: inner}
 	return
+}
+
+// isNumericLiteralText reports whether s is a numeric literal spelling
+// (decimal, hex, octal, float, with optional leading sign) — i.e. one the
+// grammar's numberLiteral rule can carry a sign on. String literals, NULL,
+// and booleans are excluded.
+func isNumericLiteralText(s string) bool {
+	if s == "" {
+		return false
+	}
+	i := 0
+	if s[0] == '+' || s[0] == '-' {
+		i = 1
+	}
+	if i >= len(s) {
+		return false
+	}
+	c := s[i]
+	return (c >= '0' && c <= '9') || c == '.'
+}
+
+// negateNumericText toggles the sign of a numeric literal's text form
+// without ever producing a leading "--" (which would open a line comment).
+func negateNumericText(s string) string {
+	switch {
+	case strings.HasPrefix(s, "-"):
+		return s[1:]
+	case strings.HasPrefix(s, "+"):
+		return "-" + s[1:]
+	default:
+		return "-" + s
+	}
 }
 
 func convertNot(pr *nanopass.ParseResult, ctx *grammar2.ColumnExprNotContext) (expr Expr, err error) {

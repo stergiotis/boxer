@@ -1,5 +1,3 @@
-//go:build llm_generated_opus47
-
 package env
 
 import (
@@ -69,7 +67,11 @@ type preludeEntry struct {
 }
 
 // harvestSetPrelude pulls leading `SET key = value;` lines out of sql,
-// returning their (name, raw) pairs and the remaining body.
+// returning their (name, raw) pairs and the remaining body. A single line
+// may carry several semicolon-separated SET statements; the split is
+// quote-aware so a `;` inside a string value never terminates a statement.
+// A line that does not parse cleanly in its entirety is left to the body —
+// half-harvesting would silently drop or corrupt statements.
 func harvestSetPrelude(sql string) (entries []preludeEntry, body string) {
 	lines := strings.Split(sql, "\n")
 	consumed := 0
@@ -79,11 +81,11 @@ func harvestSetPrelude(sql string) (entries []preludeEntry, body string) {
 			consumed++
 			continue
 		}
-		name, raw, ok := parseSetLine(trimmed)
+		lineEntries, ok := parseSetLine(trimmed)
 		if !ok {
 			break
 		}
-		entries = append(entries, preludeEntry{name: name, raw: raw})
+		entries = append(entries, lineEntries...)
 		consumed++
 	}
 	if consumed >= len(lines) {
@@ -92,27 +94,142 @@ func harvestSetPrelude(sql string) (entries []preludeEntry, body string) {
 	return entries, strings.Join(lines[consumed:], "\n")
 }
 
-// parseSetLine matches `SET key = value;`. Returns name and raw value; ok
-// false if the line is not a SET statement.
-func parseSetLine(line string) (name string, raw string, ok bool) {
-	const prefix = "SET "
-	if !strings.HasPrefix(line, prefix) && !strings.HasPrefix(line, "set ") {
-		return
+// parseSetLine matches one or more `SET key = value;` statements on a
+// single line (case-insensitive SET, `=` with or without surrounding
+// spaces). ok is false — and no entries are returned — unless the WHOLE
+// line consists of SET statements.
+func parseSetLine(line string) (entries []preludeEntry, ok bool) {
+	// A statement whose string value spans lines (SET a = 'x\ny';) cannot
+	// be split line-wise — an unterminated quote on this line means the
+	// whole prelude attempt stops here and the statement stays in the
+	// body, where the grammar parses it correctly.
+	if lineHasUnterminatedQuote(line) {
+		return nil, false
 	}
-	rest := line[len(prefix):]
-	eqIdx := strings.Index(rest, " = ")
-	if eqIdx < 0 {
-		return
+	rest := line
+	for {
+		rest = strings.TrimSpace(rest)
+		if rest == "" {
+			break
+		}
+		if len(rest) < 4 || !strings.EqualFold(rest[:3], "SET") || (rest[3] != ' ' && rest[3] != '\t') {
+			return nil, false
+		}
+		stmt := rest[4:]
+		end := indexOutsideQuotes(stmt, ';')
+		if end >= 0 {
+			rest = stmt[end+1:]
+			stmt = stmt[:end]
+		} else {
+			rest = ""
+		}
+		eqIdx := indexOutsideQuotes(stmt, '=')
+		if eqIdx < 0 {
+			return nil, false
+		}
+		name := strings.TrimSpace(stmt[:eqIdx])
+		raw := strings.TrimSpace(stmt[eqIdx+1:])
+		if name == "" || raw == "" || !plausibleSettingName(name) {
+			return nil, false
+		}
+		entries = append(entries, preludeEntry{name: name, raw: raw})
 	}
-	name = strings.TrimSpace(rest[:eqIdx])
-	raw = strings.TrimSpace(rest[eqIdx+3:])
-	raw = strings.TrimSuffix(raw, ";")
-	raw = strings.TrimSpace(raw)
-	if name == "" {
-		return
+	if len(entries) == 0 {
+		return nil, false
 	}
-	ok = true
-	return
+	return entries, true
+}
+
+// plausibleSettingName reports whether name can be a SET key: a bare
+// identifier-shaped name (keywords included — the grammar's identifier
+// rule tolerates them) or a quoted spelling. Garbage like `0` or names
+// with spaces reject the line so it stays in the body and fails loudly
+// through the parser instead of round-tripping as invalid SET output.
+func plausibleSettingName(name string) bool {
+	c := name[0]
+	if c == '"' || c == '`' {
+		return len(name) >= 2 && name[len(name)-1] == c
+	}
+	if !(c == '_' || c == '$' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
+		return false
+	}
+	for i := 1; i < len(name); i++ {
+		c := name[i]
+		if !(c == '_' || c == '$' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
+			return false
+		}
+	}
+	return true
+}
+
+// lineHasUnterminatedQuote reports whether a quoted region opened on this
+// line is still open at its end.
+func lineHasUnterminatedQuote(s string) bool {
+	for i := 0; i < len(s); {
+		ch := s[i]
+		if ch == '\'' || ch == '"' || ch == '`' {
+			q := ch
+			i++
+			closed := false
+			for i < len(s) {
+				if s[i] == '\\' && i+1 < len(s) {
+					i += 2
+					continue
+				}
+				if s[i] == q {
+					if i+1 < len(s) && s[i+1] == q {
+						i += 2
+						continue
+					}
+					i++
+					closed = true
+					break
+				}
+				i++
+			}
+			if !closed {
+				return true
+			}
+			continue
+		}
+		i++
+	}
+	return false
+}
+
+// indexOutsideQuotes returns the index of the first occurrence of c in s
+// that is not inside a single-quoted string, double-quoted identifier, or
+// backquoted identifier (backslash escapes and doubled closing quotes
+// respected). Returns -1 if none.
+func indexOutsideQuotes(s string, c byte) int {
+	for i := 0; i < len(s); {
+		ch := s[i]
+		if ch == '\'' || ch == '"' || ch == '`' {
+			q := ch
+			i++
+			for i < len(s) {
+				if s[i] == '\\' && i+1 < len(s) {
+					i += 2
+					continue
+				}
+				if s[i] == q {
+					if i+1 < len(s) && s[i+1] == q {
+						i += 2
+						continue
+					}
+					i++
+					break
+				}
+				i++
+			}
+			continue
+		}
+		if ch == c {
+			return i
+		}
+		i++
+	}
+	return -1
 }
 
 // scanBody parses body and populates env.Params Type from slot occurrences,
@@ -122,6 +239,9 @@ func parseSetLine(line string) (name string, raw string, ok bool) {
 func scanBody(body string, e *Environment) {
 	input := antlr.NewInputStream(body)
 	lexer := grammar1.NewClickHouseLexer(input)
+	// Best-effort scan: diagnostics are not surfaced, but the default
+	// listeners print to stderr — drop them on the lexer too.
+	lexer.RemoveErrorListeners()
 	stream := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
 	parser := grammar1.NewClickHouseParserGrammar1(stream)
 	parser.RemoveErrorListeners()

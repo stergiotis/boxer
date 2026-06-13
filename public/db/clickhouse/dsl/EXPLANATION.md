@@ -150,3 +150,65 @@ Correctness is verified at multiple levels:
 - **CBOR round-trip** — SQL → AST → CBOR → AST → ToSQL() → parse
 - **Generated round-trip** — SQL → AST → ToGoCode() → compile → execute →
   ast.Query → ToSQL() → parse (via `go generate`)
+- **Structural round-trip** — SQL → AST → ToSQL() → re-canonicalize → AST
+  must be `reflect.DeepEqual` to the first AST. Parseability alone is blind
+  to precedence regrouping and dropped clauses (both print valid SQL that
+  means something else); structural equality is not. Runs over the whole
+  corpus and as the `FuzzAstRoundTrip` invariant.
+- **Fuzzing** — `FuzzAstRoundTrip` (ast_test), `FuzzCanonicalizeFull` /
+  `FuzzParse` (nanopass_test), and the marshalling escape/scalar codecs.
+  These found, among others, the unparser precedence and identifier-fusion
+  bugs and the EscapeString non-UTF-8 leak.
+- **Server truth** — `clickhouse format` (the server's parser) accepts the
+  canonical form and every `ToSQL()` output; `clickhouse local` confirms
+  the original query and its round-tripped rendering evaluate identically
+  for table-free expressions (skipped when no `clickhouse` binary is on
+  PATH). This grounds judgment calls — octal-is-decimal, comma-LIMIT,
+  EXTRACT/TRIM canonical functions — against the real server rather than
+  belief.
+
+## Limitations and Over-Acceptance Boundaries
+
+Grammar1 is deliberately generous ("accept liberally"); Grammar2 and the
+AST are strict ("emit canonically"). The gap is intentional, but it means
+some inputs Grammar1 parses have no canonical form or no AST representation.
+These are by design — verified against ClickHouse 26.x where noted — and
+must not be "fixed" without re-checking the server:
+
+**Grammar surface (unsupported syntax):**
+
+- `FROM t SELECT a` (FROM-first syntax)
+- `WITH (SELECT x) AS name` (scalar subquery CTE)
+- `EXISTS (SELECT ...)` (EXISTS predicate)
+- `* EXCEPT(col)`, `COLUMNS('...') APPLY(func)`, `REPLACE(...)` (column modifiers)
+- Map literals in SET (`SET param = {'key': [1,2]}`)
+
+**Grammar1 over-acceptance (parses in G1, rejected by ClickHouse):**
+
+- Empty identifiers (`""`, `` `` ``) — the IDENTIFIER lexer rule allows a
+  zero-length quoted name; the server rejects empty identifiers everywhere.
+- Param-slot **type** expressions beyond real data types (`{x: A(0 % b(1))}`)
+  — the columnTypeExpr param form admits arbitrary expressions; the server
+  rejects non-types.
+- `INTERVAL <expr> <non-unit>` (`INTERVAL 0 YYYY`) — ANTLR error-recovers a
+  non-keyword unit into an interval node; the converter rejects the bogus
+  unit. (The server parses `INTERVAL` as a column there instead.)
+- Keyword-named param slots (`{date: UInt64}`) parse in Grammar1 but not
+  Grammar2 — slot names there are bare IDENTIFIER tokens.
+
+**AST / unparser:**
+
+- WITH-item ordering: CTEs (`name AS (query)`) and scalar aliases
+  (`expr AS name`) that interleave in one WITH clause are split into two
+  groups and re-emitted CTEs-first; the source interleaving is not preserved
+  (semantically irrelevant — names are unique).
+- `NOT(x)` parses as a function call (ClickHouse's real `not()`), so it
+  canonicalizes and round-trips as `"NOT"(x)` — semantically equivalent.
+- The Go-source emitter (`ToGoCode`) does not emit query-level scalar WITH
+  items (`Query.With`); the builder API has no primitive for them. CTEs and
+  all other clauses are covered.
+
+**Input guards (nanopass):** input must be valid UTF-8 (the rune-based
+ANTLR stream would otherwise transcode invalid bytes to U+FFFD and corrupt
+string literals on rewrite); bracket/CASE nesting is capped at
+`MaxNestingDepth` and total size at `MaxInputBytes`. See `nanopass_guard.go`.

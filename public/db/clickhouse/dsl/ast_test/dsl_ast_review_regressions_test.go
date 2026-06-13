@@ -161,3 +161,83 @@ func TestRegressionAstSettingNameQuoting(t *testing.T) {
 		t.Errorf("regression: canonical form quotes setting names (server compatibility risk): %q", out)
 	}
 }
+
+// --- Round 5 (2026-06-13): findings from the AST round-trip fuzzer and the
+// clickhouse-local server-truth harness. ---
+
+// Fold negate-of-numeric-literal into the signed literal — `-(0)` and `-0`
+// must converge to one AST shape (the numberLiteral rule owns the sign, so
+// `-0` re-parses as a single literal).
+func TestRegressionAstNegateLiteralFold(t *testing.T) {
+	for _, sql := range []string{"SELECT -(0)", "SELECT -(5)", "SELECT -(-3)", "SELECT -(2.5)"} {
+		q1, q2, out := roundTripSemantics(t, sql)
+		if !reflect.DeepEqual(q1, q2) {
+			t.Errorf("negate fold not stable for %q (out=%q)", sql, out)
+		}
+		require.NotContains(t, out, "--", "double-minus must never appear: %q", out)
+	}
+}
+
+// EXTRACT lowers to the server's own unit functions, not extract(expr,'U')
+// (which is the regex function — illegal on dates) and not nonexistent
+// trimLeading/trimTrailing.
+func TestRegressionAstSugarServerCanonical(t *testing.T) {
+	out, err := passes.CanonicalizeSugar.Run("SELECT EXTRACT(DAY FROM d), EXTRACT(YEAR FROM d) FROM t")
+	require.NoError(t, err)
+	require.Contains(t, out, "toDayOfMonth(")
+	require.Contains(t, out, "toYear(")
+	require.NotContains(t, out, "extract(")
+
+	out, err = passes.CanonicalizeSugar.Run("SELECT TRIM(LEADING ' ' FROM s), TRIM(TRAILING ' ' FROM s) FROM t")
+	require.NoError(t, err)
+	require.Contains(t, out, "trimLeft(")
+	require.Contains(t, out, "trimRight(")
+	require.NotContains(t, out, "trimLeading(")
+	require.NotContains(t, out, "trimTrailing(")
+}
+
+// A scalar WITH item at the query level (`expr AS name`) must not be
+// dropped — the previous converter skipped non-CTE WITH items, detaching
+// every reference.
+func TestRegressionAstQueryLevelScalarWith(t *testing.T) {
+	q, _ := toAST(t, "WITH 0 AS z SELECT z")
+	out := q.ToSQL()
+	require.Contains(t, out, "WITH")
+	require.Contains(t, out, "AS z")
+	// And it round-trips structurally.
+	_, q2, _ := roundTripSemantics(t, "WITH 0 AS z SELECT z")
+	require.True(t, reflect.DeepEqual(q, q2))
+}
+
+// A keyword-shaped setting/CTE name must be emitted quoted (Grammar2 needs
+// IDENTIFIER), while ordinary names stay bare.
+func TestRegressionAstKeywordSettingKey(t *testing.T) {
+	q, _ := toAST(t, `SELECT 1 SETTINGS "AS" = 1`)
+	out := q.ToSQL()
+	require.Contains(t, out, `"AS" = 1`)
+	_, err := nanopass.ParseCanonical(mustCanon(t, out))
+	require.NoError(t, err)
+}
+
+// Identifier emission must never fuse adjacent quoted names into one token
+// (`"a""b"` is the escape form): `SELECT "x", "y"` stays two columns.
+func TestRegressionAstNoIdentifierFusion(t *testing.T) {
+	for _, sql := range []string{`SELECT ""A""`, `SELECT "x", "y"`, "SELECT `a`, `b`"} {
+		q1, q2, out := roundTripSemantics(t, sql)
+		require.True(t, reflect.DeepEqual(q1, q2), "fusion changed AST for %q (out=%q)", sql, out)
+	}
+}
+
+// EscapeString output is always valid UTF-8: a value carrying a raw byte
+// (decoded from \x80) round-trips through parseable SQL.
+func TestRegressionAstEscapeUTF8(t *testing.T) {
+	q1, q2, out := roundTripSemantics(t, `SELECT COLUMNS('\x80')`)
+	require.True(t, reflect.DeepEqual(q1, q2), "out=%q", out)
+}
+
+func mustCanon(t *testing.T, sql string) string {
+	t.Helper()
+	out, err := passes.CanonicalizeFull(16).Run(sql)
+	require.NoError(t, err)
+	return out
+}
