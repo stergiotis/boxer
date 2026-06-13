@@ -46,6 +46,7 @@ const (
 	TypeDuration         TypeE = "duration"
 	TypePath             TypeE = "path"
 	TypeCategorialString TypeE = "categorial-string"
+	TypeFloat64          TypeE = "float64"
 )
 
 // Origin identifies the declaring site of a Spec. It is auto-derived at

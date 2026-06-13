@@ -404,6 +404,80 @@ func TestCategorialStringVarAsCliFlagUserActionRunsAfterValidation(t *testing.T)
 	}
 }
 
+func TestFloatVarDefault(t *testing.T) {
+	resetRegistryForTest()
+	v := NewFloat(Spec{
+		Name:        "BOXER_TEST_FLOAT",
+		Default:     "1.5",
+		Description: "test fixture",
+		Category:    CategoryDev,
+	})
+	got := v.Get()
+	if got != 1.5 {
+		t.Errorf("Get default = %v, want 1.5", got)
+	}
+}
+
+func TestFloatVarSetForTest(t *testing.T) {
+	resetRegistryForTest()
+	v := NewFloat(Spec{
+		Name:        "BOXER_TEST_FLOAT_SFT",
+		Default:     "1.0",
+		Description: "test fixture",
+		Category:    CategoryDev,
+	})
+	v.SetForTest(t, "3.14")
+	got := v.Get()
+	if got != 3.14 {
+		t.Errorf("Get after SetForTest = %v, want 3.14", got)
+	}
+}
+
+func TestFloatVarBadEnvFallsBack(t *testing.T) {
+	resetRegistryForTest()
+	v := NewFloat(Spec{
+		Name:        "BOXER_TEST_FLOAT_BAD",
+		Default:     "2.0",
+		Description: "test fixture",
+		Category:    CategoryDev,
+	})
+	v.SetForTest(t, "not-a-number")
+	got := v.Get()
+	if got != 2.0 {
+		t.Errorf("Get with bad env = %v, want fallback 2.0", got)
+	}
+}
+
+func TestFloatVarBadDefaultPanics(t *testing.T) {
+	resetRegistryForTest()
+	v := NewFloat(Spec{
+		Name:        "BOXER_TEST_FLOAT_BAD_DEFAULT",
+		Default:     "not-a-float",
+		Description: "test fixture",
+		Category:    CategoryDev,
+	})
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatalf("expected panic for unparseable float default")
+		}
+	}()
+	_ = v.Get() // triggers parseDefault
+}
+
+func TestFloatVarZeroDefault(t *testing.T) {
+	resetRegistryForTest()
+	v := NewFloat(Spec{
+		Name:        "BOXER_TEST_FLOAT_ZERO",
+		Description: "test fixture",
+		Category:    CategoryDev,
+	})
+	got := v.Get()
+	if got != 0 {
+		t.Errorf("Get with empty Default = %v, want 0", got)
+	}
+}
+
 func TestPathVarHomeExpansion(t *testing.T) {
 	resetRegistryForTest()
 	v := NewPath(Spec{

@@ -112,9 +112,7 @@ var (
 	// environment), not by Go; they are registered here so the ADR-0058
 	// catalog (doc/env-vars.md) is the single place every IMZERO2_* knob
 	// is discoverable, as with the Rust-read IMZERO2_SCREENSHOT_* vars
-	// above. The Rust side parses and clamps the numeric ones (FPS,
-	// PIXELS_PER_POINT are floats), so those are typed string here rather
-	// than mistyped as integers.
+	// above.
 
 	// HeadlessListen is the carrier bind address (host:port); this port
 	// and port+1 each serve the viewer page and accept the WebSocket
@@ -127,9 +125,9 @@ var (
 
 	// HeadlessFps is the headless render tick in Hz (Rust clamps to
 	// 1–240). Paces the FFFI2 loop in place of vsync.
-	HeadlessFps = env.NewString(env.Spec{
+	HeadlessFps = env.NewFloat(env.Spec{
 		Name:        "IMZERO2_HEADLESS_FPS",
-		Description: "headless render tick in Hz, 1-240 (float)",
+		Description: "headless render tick in Hz, 1-240; Rust clamps to that range",
 		Category:    env.CategoryDev,
 		Default:     "60",
 	})
@@ -137,9 +135,9 @@ var (
 	// HeadlessPixelsPerPoint is the initial HiDPI scale of the offscreen
 	// target (Rust clamps to 0.25–4.0); a connected viewer's reported
 	// devicePixelRatio then takes over.
-	HeadlessPixelsPerPoint = env.NewString(env.Spec{
+	HeadlessPixelsPerPoint = env.NewFloat(env.Spec{
 		Name:        "IMZERO2_HEADLESS_PIXELS_PER_POINT",
-		Description: "initial offscreen HiDPI scale, 0.25-4.0 (float); a connected viewer's devicePixelRatio takes over",
+		Description: "initial offscreen HiDPI scale, 0.25-4.0; a connected viewer's devicePixelRatio takes over",
 		Category:    env.CategoryDev,
 		Default:     "1.0",
 	})
