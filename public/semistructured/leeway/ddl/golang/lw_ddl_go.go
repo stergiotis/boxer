@@ -17,6 +17,15 @@ import (
 	encodingaspects2 "github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 )
 
+// TechnologySpecificCodeGenerator is the Go-struct DDL backend. Its GenerateType
+// path (the Go type for a single column) is consumed by the dml / readaccess /
+// cli generators and is exercised there. Its GenerateColumnCode path (emitting a
+// full struct field per physical column) is an incomplete prototype with no
+// in-repo consumers or goldens: it now produces valid identifiers and a valid
+// struct tag (review D-1/D-2), but it still does NOT demote non-scalar value
+// columns, so a set/array column emits [][]T where ClickHouse/Arrow flatten to a
+// single Array level plus a length column. Treat GenerateColumnCode output as
+// not production-ready until that demotion is implemented.
 type TechnologySpecificCodeGenerator struct {
 	codeBuilder              *strings.Builder
 	membershipRepresentation common.TechnologySpecificMembershipSetGenI
@@ -117,8 +126,24 @@ func (inst *TechnologySpecificCodeGenerator) GenerateColumnCode(idx int, phy com
 	if err != nil {
 		return
 	}
-	//name := strcase.ToPascal(phy.GetName())
-	name := strings.ToUpper(phy.String()[0:1]) + phy.String()[1:]
+	// phy.String() joins the name components with the structural separator
+	// (":") so the raw value is not a valid Go identifier (review D-1). Build an
+	// exported camel-case identifier from the meaningful components only,
+	// skipping the separators (identified via NameComponentsExplanation).
+	// Note: this backend still does not demote non-scalar value columns, so a
+	// set/array column emits [][]T where ClickHouse/Arrow flatten to one Array
+	// level + a length column — see the package-level note.
+	meaningful := make([]string, 0, len(phy.NameComponents))
+	for i, c := range phy.NameComponents {
+		if c == "" {
+			continue
+		}
+		if i < len(phy.NameComponentsExplanation) && phy.NameComponentsExplanation[i] == ddl2.SeparatorExplanation {
+			continue
+		}
+		meaningful = append(meaningful, c)
+	}
+	name := strcase.ToPascal(strings.Join(meaningful, "_"))
 	_, err = b.WriteString(name)
 	if err != nil {
 		return
@@ -164,17 +189,12 @@ func (inst *TechnologySpecificCodeGenerator) GenerateColumnCode(idx int, phy com
 		err = eh.Errorf("unable to generate type: %w", err)
 		return
 	}
-	if phy.Comment != "" {
-		_, err = b.WriteString("// ")
-		if err != nil {
-			return
-		}
-		_, err = b.WriteString(phy.Comment) // FIXME escaping
-		if err != nil {
-			return
-		}
-	}
 	{
+		// Struct tags are space-separated `key:"value"` pairs. The previous
+		// emission used a comma after the cbor value and wrote the leeway value
+		// unquoted, producing a malformed (and tag-swallowing, because the
+		// comment was emitted first) struct tag (review D-2). Emit a valid,
+		// space-separated, quoted tag; the trailing comment comes after it.
 		_, err = b.WriteString(" `cbor:\"")
 		if err != nil {
 			return
@@ -187,22 +207,32 @@ func (inst *TechnologySpecificCodeGenerator) GenerateColumnCode(idx int, phy com
 		if err != nil {
 			return
 		}
-		if true {
-			_, err = b.WriteString(",leeway:")
-			if err != nil {
-				return
-			}
-			tag := LeewayGoStructTag{
-				ColumnNameComponents:            phy.NameComponents,
-				ColumnNameComponentsExplanation: phy.NameComponentsExplanation,
-				Comment:                         phy.Comment,
-			}
-			err = tag.Marshall(b)
-			if err != nil {
-				return
-			}
+		tag := LeewayGoStructTag{
+			ColumnNameComponents:            phy.NameComponents,
+			ColumnNameComponentsExplanation: phy.NameComponentsExplanation,
+			Comment:                         phy.Comment,
+		}
+		tagBuf := bytes.NewBuffer(make([]byte, 0, 256))
+		err = tag.Marshall(tagBuf)
+		if err != nil {
+			return
+		}
+		// tag.Marshall already emits a JSON-quoted string (a valid Go struct-tag
+		// value); just trim the encoder's trailing newline so it stays on one
+		// line.
+		_, err = b.WriteString(" leeway:" + strings.TrimSpace(tagBuf.String()))
+		if err != nil {
+			return
 		}
 		_, err = b.WriteRune('`')
+		if err != nil {
+			return
+		}
+	}
+
+	if phy.Comment != "" {
+		// Strip newlines so the comment stays on the field's line.
+		_, err = b.WriteString(" // " + strings.ReplaceAll(phy.Comment, "\n", " "))
 		if err != nil {
 			return
 		}
