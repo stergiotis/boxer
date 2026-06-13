@@ -4,7 +4,7 @@ audience: contributor
 status: draft
 generated: true
 generator: public/app env gen-docs
-generated-at: 2026-06-13T14:05:38Z
+generated-at: 2026-06-13T15:00:29Z
 ---
 
 > **Status: draft — pre-human-review.** Machine-generated registry snapshot;
@@ -51,11 +51,11 @@ generated-at: 2026-06-13T14:05:38Z
 | `IMZERO2_HEADLESS_DUMP_DIR` | path | — | — |  | directory for per-frame PNG dumps (verification); empty disables |
 | `IMZERO2_HEADLESS_DUMP_EVERY` | int64 | `60` | — |  | with IMZERO2_HEADLESS_DUMP_DIR, dump every Nth frame |
 | `IMZERO2_HEADLESS_ENCODER_ARGS` | string | — | — |  | override ffmpeg encode args between rawvideo input and -f h264 output; empty uses the VAAPI default |
-| `IMZERO2_HEADLESS_FPS` | string | `60` | — |  | headless render tick in Hz, 1-240 (float) |
+| `IMZERO2_HEADLESS_FPS` | float64 | `60` | — |  | headless render tick in Hz, 1-240; Rust clamps to that range |
 | `IMZERO2_HEADLESS_H264_OUT` | path | — | — |  | append the raw Annex-B H.264 stream to this file (verification); empty disables |
 | `IMZERO2_HEADLESS_LISTEN` | string | — | — |  | headless carrier bind address host:port (port and port+1 both serve page + WebSocket); empty disables remote access |
 | `IMZERO2_HEADLESS_MAX_FRAMES` | int64 | `0` | — |  | stop after N rendered frames (0 = unbounded); smoke-test hook |
-| `IMZERO2_HEADLESS_PIXELS_PER_POINT` | string | `1.0` | — |  | initial offscreen HiDPI scale, 0.25-4.0 (float); a connected viewer's devicePixelRatio takes over |
+| `IMZERO2_HEADLESS_PIXELS_PER_POINT` | float64 | `1.0` | — |  | initial offscreen HiDPI scale, 0.25-4.0; a connected viewer's devicePixelRatio takes over |
 | `IMZERO2_RENDER_CADENCE` | categorial-string | `continuous` | — |  | frame-loop repaint cadence when idle: continuous (vsync rate) \| reactive (idle heartbeat)<br>**Allowed:** `continuous` \| `reactive` |
 | `IMZERO2_SCREENSHOT_DETERMINISTIC` | string | — | — |  | non-empty: skip non-deterministic demos / tours so captures are byte-stable across runs |
 | `IMZERO2_SCREENSHOT_DIR` | path | — | — |  | destination directory for per-window PNG captures; empty disables capture |
