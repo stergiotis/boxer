@@ -110,10 +110,13 @@ func (g *Generator) Generate(plan *mappingplan.Plan) (a Artefacts, err error) {
 	presence := newPresenceSet()
 	validator := newTermSet()
 
-	addSlot := func(name, expr string, ct canonicaltypes.PrimitiveAstNodeI) error {
+	addSlot := func(name, expr string, ct canonicaltypes.PrimitiveAstNodeI, nullable bool) error {
 		chType, terr := g.chType(ct)
 		if terr != nil {
 			return eb.Build().Str("slot", name).Errorf("unable to render ClickHouse type: %w", terr)
+		}
+		if nullable {
+			chType = "Nullable(" + chType + ")"
 		}
 		exprs = append(exprs, expr)
 		slotTypes = append(slotTypes, slotName(name)+" "+chType)
@@ -126,7 +129,7 @@ func (g *Generator) Generate(plan *mappingplan.Plan) (a Artefacts, err error) {
 			err = eb.Build().Str("plainColumn", pc.Column).Str("kind", plan.KindName).Errorf("plain column not found in schema")
 			return
 		}
-		if err = addSlot(pc.GoField, pi.col, pi.canonicalType); err != nil {
+		if err = addSlot(pc.GoField, pi.col, pi.canonicalType, false); err != nil {
 			return
 		}
 	}
@@ -139,7 +142,7 @@ func (g *Generator) Generate(plan *mappingplan.Plan) (a Artefacts, err error) {
 			return
 		}
 		if fa.valExpr != "" {
-			if err = addSlot(f.GoFieldName, fa.valExpr, fa.canonicalType); err != nil {
+			if err = addSlot(f.GoFieldName, fa.valExpr, fa.canonicalType, fa.nullableSlot); err != nil {
 				return
 			}
 		}
@@ -169,6 +172,7 @@ func (g *Generator) chType(ct canonicaltypes.PrimitiveAstNodeI) (string, error) 
 type fieldArtefacts struct {
 	valExpr       string // "" for const fields (validation-only)
 	canonicalType canonicaltypes.PrimitiveAstNodeI
+	nullableSlot  bool           // project as Nullable(T): scalar Option fields
 	presence      []presenceTerm // empty for Option fields
 	validator     string
 }
@@ -248,6 +252,18 @@ func (g *Generator) field(f *mappingplan.TaggedField) (res fieldArtefacts, err e
 	case f.IsConst:
 		// Fixed value: the membership is present exactly once and carries the
 		// constant. Const fields are validation-only (no projected slot).
+		//
+		// ConstValue is a single string and the write path marshals it through
+		// the scalar lane, so the value-equality check is a scalar comparison.
+		// On a non-scalar value column valExpr is an array (LEEWAY_LIST_BY_TAG)
+		// and `array = 'const'` is a query-time CANNOT_READ_ARRAY_FROM_TEXT —
+		// reject at generation rather than emit SQL that fails when run. (The
+		// tag parser admits const on array string sections, but it has no
+		// well-defined read-back semantics; revisit with a write+read design.)
+		if vinfo.subType != common.IntermediateColumnsSubTypeScalar {
+			err = eb.Build().Str("section", sec).Stringer("subType", vinfo.subType).Errorf("const fields are only supported on scalar value sections")
+			return
+		}
 		constLit := marshalling.EscapeString(f.ConstValue)
 		res.presence = []presenceTerm{{col: idCol, lit: lit}}
 		if _, isString := vinfo.canonicalType.(canonicaltypes.StringAstNode); isString && vinfo.subType == common.IntermediateColumnsSubTypeScalar {
@@ -260,8 +276,18 @@ func (g *Generator) field(f *mappingplan.TaggedField) (res fieldArtefacts, err e
 		res.validator = countExpr + " = 1 AND " + valExpr + " = " + constLit
 	case f.IsOption:
 		// Optional: no presence requirement; if present, the membership must
-		// identify a single attribute.
-		res.valExpr = valExpr
+		// identify a single attribute. A scalar Option projects as
+		// Nullable(T) returning NULL when the membership is absent, so an
+		// absent optional is distinguishable from one present with the type
+		// default (ADR-0066 decision 4). Array/set Options cannot: ClickHouse
+		// forbids Nullable(Array(...)), so they keep the empty-array sentinel
+		// — absent and present-empty are indistinguishable there (v1 concern).
+		if vinfo.subType == common.IntermediateColumnsSubTypeScalar {
+			res.valExpr = "if(has(" + idCol + ", " + lit + "), " + valExpr + ", NULL)"
+			res.nullableSlot = true
+		} else {
+			res.valExpr = valExpr
+		}
 		res.validator = countExpr + " <= 1"
 	default:
 		res.valExpr = valExpr

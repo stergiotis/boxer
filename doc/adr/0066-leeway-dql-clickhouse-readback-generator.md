@@ -424,6 +424,32 @@ membership (and const-bearing value) columns is the candidate design; a `set(N)`
 additionally serves `countEqual`/`indexOf` while per-granule distinct membership-array values
 stay ≤ N (verified), which fits homogeneous-ingest tables.
 
+### 2026-06-13 — hostile review: optional nullability + const-section guard
+
+A focused review (clickhouse-local 26.x as oracle) of the generator found two
+defects, both fixed, plus the gap that hid them:
+
+- **Optional projection fidelity (decision 4).** Scalar `option.Option[T]`
+  fields projected as the bare type returning the type default when absent, so
+  an absent optional was indistinguishable from one present with the default —
+  the ADR's "nullable slots in (b)" was unimplemented. Fixed: a scalar Option
+  now projects `if(has(idCol, lit), value, NULL)` with a `Nullable(T)` slot.
+  Array/set Options cannot follow — ClickHouse forbids `Nullable(Array(...))` —
+  so they keep the empty-array sentinel (absent and present-empty collide); this
+  is a v1 concern, now documented at the call site.
+- **Const on a non-scalar section.** The tag parser admits `const=` on array
+  string sections, but the generator emitted `LEEWAY_LIST_BY_TAG_EQUAL(...) =
+  'const'` — an array-vs-scalar comparison that errors at query time
+  (`CANNOT_READ_ARRAY_FROM_TEXT`). The write path marshals a const through the
+  scalar lane, so const has no defined non-scalar read-back; the generator now
+  rejects it at generation time rather than emitting query-time-broken SQL.
+- **The gap.** The round-trip tests only ever fed *matching* rows asserting
+  presence=validator=1, so a validator that always returned 1 would have passed
+  — the discriminative power (the artefacts' whole purpose) was untested. Added
+  a discrimination regression: real rows fed to a phantom kind's artefacts must
+  yield presence=validator=0. (No-false-positive confirmed; the no-false-negative
+  direction is covered by the existing positive round-trips.)
+
 ## References
 
 - [ADR-0008 — leeway marshall extensions](./0008-leeway-marshall-extensions.md) — the `Plan`, the `lw:` tag grammar, membership channels (D3), the Cut-2 parametrized/mixed channels the resolver anticipates.
