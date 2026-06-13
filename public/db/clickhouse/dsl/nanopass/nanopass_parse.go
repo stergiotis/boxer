@@ -90,6 +90,13 @@ func Parse(sql string) (pr *ParseResult, err error) {
 	stream := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
 	parser := grammar1.NewClickHouseParserGrammar1(stream)
 
+	// Point the parser at the bounded process-local DFA cache instead of the
+	// grammar's unbounded package global (ADR-0084). release ends the parse and
+	// periodically rebuilds the cache if it has grown past MaxDFAStates.
+	sim, release := grammar1DFA.acquire(parser)
+	parser.Interpreter = sim
+	defer release()
+
 	// Remove default error listeners (which print to stderr), collect instead.
 	// The lexer needs its own listener: lexical errors never reach the parser
 	// — the offending characters are simply absent from the token stream.
@@ -142,6 +149,11 @@ func ParseCanonical(sql string) (pr *ParseResult, err error) {
 	lexer := grammar2.NewClickHouseLexer(input)
 	stream := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
 	parser := grammar2.NewClickHouseParserGrammar2(stream)
+
+	// Bounded process-local DFA cache, see Parse and ADR-0084.
+	sim, release := grammar2DFA.acquire(parser)
+	parser.Interpreter = sim
+	defer release()
 
 	errListener := &errorListener{}
 	lexer.RemoveErrorListeners()
