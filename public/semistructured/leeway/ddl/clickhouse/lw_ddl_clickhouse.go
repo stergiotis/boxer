@@ -129,6 +129,25 @@ func (inst *TechnologySpecificCodeGenerator) generateTypeAndCodec(canonicalType 
 		return
 	}
 
+	// Classify the (scalar element) type for codec<->type compatibility gating:
+	// Gorilla/FPC are float-only and T64 is integer-only; ClickHouse rejects the
+	// mismatched combinations. The aspect-support filter is type-blind, so guard
+	// here and skip an inapplicable transform rather than emit invalid DDL
+	// (review D-4).
+	scalarType := canonicalType
+	if list {
+		scalarType = canonicaltypes.DemoteToScalarPrim(canonicalType)
+	}
+	isFloat, isInteger := false, false
+	if mn, ok := scalarType.(canonicaltypes.MachineNumericTypeAstNode); ok {
+		switch mn.BaseType {
+		case canonicaltypes.BaseTypeMachineNumericFloat:
+			isFloat = true
+		case canonicaltypes.BaseTypeMachineNumericUnsigned, canonicaltypes.BaseTypeMachineNumericSigned:
+			isInteger = true
+		}
+	}
+
 	codecChain := make([]string, 1, 6)
 	codecChain[0] = " CODEC("
 	switch delta {
@@ -137,23 +156,33 @@ func (inst *TechnologySpecificCodeGenerator) generateTypeAndCodec(canonicalType 
 	case 2:
 		codecChain = append(codecChain, "DoubleDelta")
 	}
-	switch floatc {
-	case 1:
-		codecChain = append(codecChain, "FPC(4)")
-	case 2:
-		codecChain = append(codecChain, "FPC(12)")
-	case 3:
-		codecChain = append(codecChain, "Gorilla")
-	case 4:
-		codecChain = append(codecChain, "Gorilla")
+	if isFloat {
+		switch floatc {
+		case 1:
+			codecChain = append(codecChain, "FPC(4)")
+		case 2:
+			codecChain = append(codecChain, "FPC(12)")
+		case 3, 4:
+			codecChain = append(codecChain, "Gorilla")
+		}
 	}
-	switch biased {
-	case 1, 2:
-		codecChain = append(codecChain, "T64")
+	if isInteger {
+		switch biased {
+		case 1, 2:
+			codecChain = append(codecChain, "T64")
+		}
 	}
+	// The transform codecs appended so far need a real following compressor —
+	// ClickHouse rejects "CODEC(Delta,NONE)". A hint-less column (no transforms,
+	// no compression aspect) emits no CODEC clause at all so it inherits the
+	// server-default compression, rather than the old unconditional CODEC(NONE)
+	// which disabled it (review D-3).
+	hasTransform := len(codecChain) > 1
 	switch compr {
 	case 0:
-		codecChain = append(codecChain, "NONE")
+		if hasTransform {
+			codecChain = append(codecChain, "LZ4(4)")
+		}
 	case 1:
 		codecChain = append(codecChain, "LZ4(4)")
 	case 2:
