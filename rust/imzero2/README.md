@@ -108,7 +108,9 @@ P-frames before the change; 0 throughout after).
 ### Configuration (environment variables)
 
 The Go launcher passes its environment through to the Rust client, so
-these need no flag plumbing (`IMZERO2_RENDER_CADENCE` precedent):
+these need no flag plumbing (`IMZERO2_RENDER_CADENCE` precedent). They
+are also catalogued in the boxer-wide env registry (ADR-0058) and
+surface in [`doc/env-vars.md`](../../doc/env-vars.md):
 
 | Variable | Default | Effect |
 |---|---|---|

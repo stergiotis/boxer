@@ -104,6 +104,98 @@ var (
 		Category:    env.CategoryDev,
 		Default:     RenderCadenceContinuous,
 	}, []string{RenderCadenceContinuous, RenderCadenceReactive})
+
+	// The IMZERO2_HEADLESS_* group configures the headless remote-access
+	// host (ADR-0024): the Rust client renders offscreen, encodes H.264
+	// via ffmpeg, and serves a browser viewer over one WebSocket. These
+	// are read by the Rust client (which inherits the launcher's
+	// environment), not by Go; they are registered here so the ADR-0058
+	// catalog (doc/env-vars.md) is the single place every IMZERO2_* knob
+	// is discoverable, as with the Rust-read IMZERO2_SCREENSHOT_* vars
+	// above. The Rust side parses and clamps the numeric ones (FPS,
+	// PIXELS_PER_POINT are floats), so those are typed string here rather
+	// than mistyped as integers.
+
+	// HeadlessListen is the carrier bind address (host:port); this port
+	// and port+1 each serve the viewer page and accept the WebSocket
+	// upgrade. Empty disables remote access.
+	HeadlessListen = env.NewString(env.Spec{
+		Name:        "IMZERO2_HEADLESS_LISTEN",
+		Description: "headless carrier bind address host:port (port and port+1 both serve page + WebSocket); empty disables remote access",
+		Category:    env.CategoryDev,
+	})
+
+	// HeadlessFps is the headless render tick in Hz (Rust clamps to
+	// 1–240). Paces the FFFI2 loop in place of vsync.
+	HeadlessFps = env.NewString(env.Spec{
+		Name:        "IMZERO2_HEADLESS_FPS",
+		Description: "headless render tick in Hz, 1-240 (float)",
+		Category:    env.CategoryDev,
+		Default:     "60",
+	})
+
+	// HeadlessPixelsPerPoint is the initial HiDPI scale of the offscreen
+	// target (Rust clamps to 0.25–4.0); a connected viewer's reported
+	// devicePixelRatio then takes over.
+	HeadlessPixelsPerPoint = env.NewString(env.Spec{
+		Name:        "IMZERO2_HEADLESS_PIXELS_PER_POINT",
+		Description: "initial offscreen HiDPI scale, 0.25-4.0 (float); a connected viewer's devicePixelRatio takes over",
+		Category:    env.CategoryDev,
+		Default:     "1.0",
+	})
+
+	// HeadlessEncoderArgs overrides the ffmpeg encode arguments between
+	// the rawvideo input and the -f h264 output. Empty uses the VAAPI
+	// default (h264_vaapi -bf 0 -qp:v 26 -g 100000); the documented
+	// software fallback is "-c:v libopenh264 -rc_mode off -bf 0 -g 100000".
+	HeadlessEncoderArgs = env.NewString(env.Spec{
+		Name:        "IMZERO2_HEADLESS_ENCODER_ARGS",
+		Description: "override ffmpeg encode args between rawvideo input and -f h264 output; empty uses the VAAPI default",
+		Category:    env.CategoryDev,
+	})
+
+	// HeadlessMaxFrames stops the host after N rendered frames (0 =
+	// unbounded). A smoke-test hook.
+	HeadlessMaxFrames = env.NewInt(env.Spec{
+		Name:        "IMZERO2_HEADLESS_MAX_FRAMES",
+		Description: "stop after N rendered frames (0 = unbounded); smoke-test hook",
+		Category:    env.CategoryDev,
+		Default:     "0",
+	})
+
+	// HeadlessDumpDir, when set, dumps rendered frames as PNG into the
+	// directory for verification. Empty disables.
+	HeadlessDumpDir = env.NewPath(env.Spec{
+		Name:        "IMZERO2_HEADLESS_DUMP_DIR",
+		Description: "directory for per-frame PNG dumps (verification); empty disables",
+		Category:    env.CategoryDev,
+	})
+
+	// HeadlessDumpEvery dumps every Nth frame when IMZERO2_HEADLESS_DUMP_DIR
+	// is set.
+	HeadlessDumpEvery = env.NewInt(env.Spec{
+		Name:        "IMZERO2_HEADLESS_DUMP_EVERY",
+		Description: "with IMZERO2_HEADLESS_DUMP_DIR, dump every Nth frame",
+		Category:    env.CategoryDev,
+		Default:     "60",
+	})
+
+	// HeadlessH264Out appends the raw Annex-B H.264 elementary stream to
+	// this file for verification. Empty disables.
+	HeadlessH264Out = env.NewPath(env.Spec{
+		Name:        "IMZERO2_HEADLESS_H264_OUT",
+		Description: "append the raw Annex-B H.264 stream to this file (verification); empty disables",
+		Category:    env.CategoryDev,
+	})
+
+	// HeadlessSelect, in a dual-feature (desktop + headless) build, picks
+	// the headless host at runtime when set to "1" or "on"; ignored in
+	// single-host builds (the compiled feature decides).
+	HeadlessSelect = env.NewString(env.Spec{
+		Name:        "IMZERO2_HEADLESS",
+		Description: "dual-feature builds only: 1 or on selects the headless host at runtime; ignored in single-host builds",
+		Category:    env.CategoryDev,
+	})
 )
 
 // ScreenshotSizeWH parses [ScreenshotSize] as "WxH". Returns (0,0,false)
