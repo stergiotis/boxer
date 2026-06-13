@@ -76,45 +76,59 @@ decode-progress ping). Payloads are protobuf, package `boxer.imzero2.v1`
 
 Five execution contexts, each with one job:
 
-1. **Render thread** (process main): paces the frame loop at a fixed
-   tick, drives the interpreter, renders, reads back, feeds sinks. It is
-   the only context that touches egui or wgpu.
-2. **ffmpeg subprocess**: encoding is invoked, not linked (the
+1. **Render thread** (process main): paces the frame loop (fixed tick or
+   reactive), drives the interpreter, renders, reads back, and `submit`s
+   each frame to the encoder mailbox (non-blocking). It is the only
+   context that touches egui or wgpu.
+2. **Encoder feeder thread** (one per encoder instance): drains the
+   depth-1 mailbox into ffmpeg's stdin (SD9). Blocking here under
+   congestion does not reach the render thread.
+3. **ffmpeg subprocess**: encoding is invoked, not linked (the
    encoder-as-subprocess practice from ADR-0024). Its stdin is fed by the
-   render thread; its stderr joins ours.
-3. **Drain thread** (one per encoder instance): reads ffmpeg's stdout,
+   feeder thread; its stderr joins ours.
+4. **Drain thread** (one per encoder instance): reads ffmpeg's stdout,
    splits the byte stream into access units, wraps each in the protobuf
    envelope, and pushes framed payloads into a bounded channel via a
    blocking send.
-4. **Carrier thread**: a current-thread tokio runtime running two
+5. **Carrier thread**: a current-thread tokio runtime running two
    identical listeners (the configured port and port+1): each peeks the
    request head and dispatches — WebSocket upgrade → session, anything
    else → the embedded viewer page. The page connects back to its own
    origin, so one forwarded or proxied port carries the whole wire.
-5. **Browser**: decodes and presents; captures input.
+6. **Browser**: decodes and presents; captures input.
 
 Cross-context communication is deliberately narrow: atomics for
 connection state (connected flag + generation counter), one mutex-guarded
-vector for inbound events, one bounded channel for outbound video.
+vector for inbound events, one bounded channel for outbound video, and
+the depth-1 frame mailbox (mutex + condvar) between render and feeder.
 
 ## Backpressure: one chain, no drops after the encoder
 
-A slow or stalled viewer must not cause unbounded buffering, and encoded
-frames must never be discarded — with B-frames disabled every encoded
-frame is a reference frame, so dropping one breaks decode until the next
-IDR. The pipeline therefore propagates pressure *upstream* instead of
-dropping *downstream*:
+A slow or stalled viewer must not cause unbounded buffering, must not
+stall the render/FFFI2 loop, and encoded frames must never be discarded
+— with B-frames disabled every encoded frame is a reference frame, so
+dropping one breaks decode until the next IDR. The pipeline propagates
+pressure *upstream* and drops only *before* the encoder.
+
+A depth-1, latest-wins mailbox sits between the render thread and a
+dedicated encoder feeder thread (ADR-0024 SD9). The render thread
+`submit`s the freshest frame and returns — never blocking. Under
+congestion the pressure chain is:
 
 WebSocket send stalls → bounded channel fills → drain thread's blocking
 send blocks → ffmpeg's stdout pipe fills → ffmpeg stops consuming stdin →
-the render thread's frame write blocks → rendering slows to what the
-viewer sustains.
+the **feeder thread** blocks on `write_all`.
 
-Frames may be skipped *before* encoding (that is just a lower frame
-rate), never after. ADR-0024 SD9 names a refinement — a ring that decouples
-render cadence from encoder cadence so a slow consumer cannot slow the
-FFFI2 loop itself — which is not built yet; until then render and encode
-share one cadence and the chain above is the whole story.
+It stops there. The render thread keeps producing into the mailbox,
+which coalesces to the latest frame and recycles the superseded one — so
+stale frames are dropped *before* the encoder, the FFFI2 loop runs at its
+own cadence regardless of the viewer, and nothing is dropped *after* the
+encoder. This also decouples render cadence from encoder cadence: the
+encoder samples the freshest available frame as fast as the pipe
+sustains, not at a fixed sub-rate (which is what makes it compose with
+reactive cadence — an idle screen produces nothing to sample). Verified
+by holding a viewer's reads for 6 s and observing the render loop
+continue at full rate throughout (2026-06-13).
 
 ## Stream mechanics
 

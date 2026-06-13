@@ -45,12 +45,23 @@ async fn main() {
     let mut click: Option<(f32, f32, u64)> = None;
     let mut resize: Option<(f32, f32, f32, u64)> = None;
     let mut set_cadence: Option<(u32, u64)> = None;
+    // SD9 verification: after `after_au` AUs, stop reading the socket for
+    // `hold_secs` — the server's send buffer + bounded channel + ffmpeg
+    // pipes fill, congesting the encoder. With SD9 the server's render
+    // loop must keep running regardless.
+    let mut stall: Option<(u64, u64)> = None;
     let mut i = 4;
     while i < args.len() {
         if args.get(i).map(String::as_str) == Some("cadence") {
             set_cadence = Some((
                 args.get(i + 1).and_then(|v| v.parse().ok()).expect("cadence mode"),
                 args.get(i + 2).and_then(|v| v.parse().ok()).expect("cadence after_au"),
+            ));
+            i += 3;
+        } else if args.get(i).map(String::as_str) == Some("stall") {
+            stall = Some((
+                args.get(i + 1).and_then(|v| v.parse().ok()).expect("stall after_au"),
+                args.get(i + 2).and_then(|v| v.parse().ok()).expect("stall hold_secs"),
             ));
             i += 3;
         } else if args.get(i).map(String::as_str) == Some("resize") {
@@ -122,6 +133,14 @@ async fn main() {
                     }
                     let sink: &mut std::fs::File = resized_out.as_mut().unwrap_or(&mut out);
                     std::io::Write::write_all(sink, &chunk.data).expect("write au");
+                    if let Some((after, hold)) = stall {
+                        if aus >= after {
+                            stall = None;
+                            eprintln!("STALL: not reading the socket for {hold}s after AU {aus} (congesting the encoder)");
+                            tokio::time::sleep(std::time::Duration::from_secs(hold)).await;
+                            eprintln!("STALL: resuming reads");
+                        }
+                    }
                     if let Some((mode, after)) = set_cadence {
                         if aus >= after {
                             set_cadence = None;

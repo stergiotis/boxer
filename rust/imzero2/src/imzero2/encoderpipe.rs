@@ -1,4 +1,4 @@
-//! ffmpeg encoder subprocess (ADR-0024 SD3, Phase 2).
+//! ffmpeg encoder subprocess (ADR-0024 SD3, Phase 2; SD9 pacing, 2026-06-13).
 //!
 //! Feeds tightly-packed BGRA frames to ffmpeg's stdin (`-f rawvideo
 //! -pix_fmt bgra`) and drains the raw Annex-B H.264 byte stream from its
@@ -10,18 +10,42 @@
 //!   (ffmpeg is told to insert Access Unit Delimiters and repeat SPS/PPS
 //!   on key frames), wrap each AU in the ADR-0024 SD4 protobuf envelope
 //!   with the 0x01 prefix, and push it into the WebSocket carrier's
-//!   bounded channel. A full channel blocks the drain thread, which backs
-//!   up ffmpeg and ultimately the render loop — encoded frames are never
-//!   dropped (the acceptance-review backpressure rule; the SD9 ring
-//!   refines this at Phase 5).
+//!   bounded channel.
 //!
-//! The subprocess is supervised per SD3: on a write failure the child is
-//! reaped, logged, and respawned. Each respawn restarts the elementary
-//! stream at SPS/PPS + IDR, which also satisfies the SD4 (re)connect rule.
+//! **SD9 pacing.** The render/FFFI2 loop must never block on the encoder
+//! or a slow viewer. [`EncoderSink::on_frame`] (called on the render
+//! thread) only copies the frame into a depth-1, latest-wins
+//! [`FrameMailbox`] and returns; a dedicated feeder thread drains the
+//! mailbox into ffmpeg's stdin. When the wire congests, backpressure
+//! still propagates upstream — bounded channel fills → drain thread
+//! blocks → ffmpeg stdout fills → ffmpeg stops reading stdin → the
+//! *feeder* blocks on `write_all` — but it stops at the feeder thread:
+//! the render thread keeps producing, the mailbox coalesces to the
+//! freshest frame, and the stale ones are dropped **before** the encoder.
+//! Encoded frames are never dropped (with `-bf 0` every frame is a
+//! reference; a post-encode gap breaks decode until the next IDR). This
+//! also decouples render cadence from encoder cadence: the encoder
+//! samples the latest frame as fast as the pipe sustains, rather than at
+//! a fixed sub-rate.
+//!
+//! Supervision (SD3): the feeder marks the mailbox `dead` on a write
+//! failure and exits; the render thread observes that on its next
+//! `on_frame` and reaps + respawns (off any blocking path). A geometry
+//! change (viewport resize) takes the same reap+respawn path, since
+//! rawvideo dimensions are fixed per ffmpeg invocation. Every (re)spawn
+//! begins the stream at SPS/PPS + IDR, satisfying the SD4 (re)connect
+//! rule.
 
 use crate::imzero2::framesink::FrameSink;
 use crate::imzero2::inputproto as pb;
 use prost::Message as _;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
+
+/// Cap on recycled BGRA buffers held to avoid per-frame reallocation.
+/// latest(1) + free(≤2) + the one the feeder holds ≈ a handful of frame
+/// buffers; bounded so a paused feeder can't grow memory without limit.
+const FREE_LIST_CAP: usize = 2;
 
 pub enum EncoderTarget {
     File(std::path::PathBuf),
@@ -29,10 +53,106 @@ pub enum EncoderTarget {
     Channel(tokio::sync::mpsc::Sender<Vec<u8>>),
 }
 
+/// Depth-1, latest-wins handoff from the render thread to the feeder
+/// thread (SD9). `submit` never blocks; an unconsumed frame is dropped
+/// (recycled) when a newer one arrives — the pre-encode drop.
+struct FrameMailbox {
+    inner: Mutex<MailboxInner>,
+    cv: Condvar,
+    /// Set by the feeder on a write failure; observed by the render
+    /// thread to trigger a reap + respawn.
+    dead: AtomicBool,
+}
+
+struct MailboxInner {
+    latest: Option<Vec<u8>>,
+    free: Vec<Vec<u8>>,
+    closed: bool,
+}
+
+impl FrameMailbox {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            inner: Mutex::new(MailboxInner {
+                latest: None,
+                free: Vec::new(),
+                closed: false,
+            }),
+            cv: Condvar::new(),
+            dead: AtomicBool::new(false),
+        })
+    }
+
+    /// Copy `src` into the mailbox as the new latest frame, recycling any
+    /// previously-unconsumed buffer. Non-blocking.
+    fn submit(&self, src: &[u8]) {
+        let mut g = self.inner.lock().expect("frame mailbox poisoned");
+        let mut buf = g.free.pop().unwrap_or_default();
+        buf.clear();
+        buf.extend_from_slice(src);
+        if let Some(old) = g.latest.replace(buf) {
+            if g.free.len() < FREE_LIST_CAP {
+                g.free.push(old);
+            }
+        }
+        drop(g);
+        self.cv.notify_one();
+    }
+
+    /// Block until a frame is available; return None once closed and
+    /// drained.
+    fn wait_next(&self) -> Option<Vec<u8>> {
+        let mut g = self.inner.lock().expect("frame mailbox poisoned");
+        loop {
+            if let Some(buf) = g.latest.take() {
+                return Some(buf);
+            }
+            if g.closed {
+                return None;
+            }
+            g = self.cv.wait(g).expect("frame mailbox poisoned");
+        }
+    }
+
+    fn recycle(&self, buf: Vec<u8>) {
+        let mut g = self.inner.lock().expect("frame mailbox poisoned");
+        if g.free.len() < FREE_LIST_CAP {
+            g.free.push(buf);
+        }
+    }
+
+    /// Wake a feeder waiting on the condvar so it can exit. A feeder
+    /// blocked inside `write_all` is unblocked separately by killing the
+    /// child (broken pipe).
+    fn close(&self) {
+        let mut g = self.inner.lock().expect("frame mailbox poisoned");
+        g.closed = true;
+        drop(g);
+        self.cv.notify_all();
+    }
+}
+
+/// Drain the mailbox into ffmpeg's stdin until closed or a write fails.
+/// Blocking here (ffmpeg stdin full under congestion) does not reach the
+/// render thread — that is the point of SD9.
+fn run_feeder(mailbox: Arc<FrameMailbox>, stdin: Option<std::process::ChildStdin>) {
+    let Some(mut stdin) = stdin else { return };
+    while let Some(buf) = mailbox.wait_next() {
+        if let Err(e) = std::io::Write::write_all(&mut stdin, &buf) {
+            tracing::warn!(error=%e, "ffmpeg stdin write failed — feeder stopping (render thread will respawn)");
+            mailbox.dead.store(true, Ordering::Release);
+            return;
+        }
+        mailbox.recycle(buf);
+    }
+    // Closed: dropping `stdin` here closes ffmpeg's input → flush + EOF.
+}
+
 pub struct EncoderSink {
     child: Option<std::process::Child>,
-    stdin: Option<std::process::ChildStdin>,
+    feeder: Option<std::thread::JoinHandle<()>>,
     drain: Option<std::thread::JoinHandle<()>>,
+    mailbox: Arc<FrameMailbox>,
     width: u32,
     height: u32,
     fps: f32,
@@ -51,8 +171,9 @@ impl EncoderSink {
     ) -> std::io::Result<Self> {
         let mut sink = Self {
             child: None,
-            stdin: None,
+            feeder: None,
             drain: None,
+            mailbox: FrameMailbox::new(),
             width,
             height,
             fps,
@@ -114,19 +235,39 @@ impl EncoderSink {
                     .spawn(move || drain_to_channel(stdout, &tx))?
             }
         };
+        // Fresh mailbox per spawn: a new generation cleanly separates the
+        // new feeder from any prior one, and discards stale-geometry
+        // buffers from before a resize.
+        let mailbox = FrameMailbox::new();
+        let feeder = {
+            let mb = mailbox.clone();
+            std::thread::Builder::new()
+                .name("imzero2-h264-feeder".to_owned())
+                .spawn(move || run_feeder(mb, stdin))?
+        };
         self.child = Some(child);
-        self.stdin = stdin;
+        self.mailbox = mailbox;
+        self.feeder = Some(feeder);
         self.drain = Some(drain);
         Ok(())
     }
 
     fn reap(&mut self) {
-        self.stdin = None; // closes the pipe → ffmpeg flushes and exits
+        // Wake a feeder parked on the condvar...
+        self.mailbox.close();
+        // ...and unblock one stuck inside write_all under congestion by
+        // killing the child (broken pipe makes the write return). On every
+        // reap we are restarting (fresh IDR) or shutting down, so the old
+        // stream's flushed tail is not wanted.
         if let Some(mut child) = self.child.take() {
+            let _ = child.kill();
             match child.wait() {
                 Ok(status) => tracing::info!(%status, "ffmpeg encoder exited"),
                 Err(e) => tracing::error!(error=%e, "failed to reap ffmpeg encoder"),
             }
+        }
+        if let Some(feeder) = self.feeder.take() {
+            let _ = feeder.join();
         }
         if let Some(drain) = self.drain.take() {
             let _ = drain.join();
@@ -136,36 +277,27 @@ impl EncoderSink {
 
 impl FrameSink for EncoderSink {
     fn on_frame(&mut self, bgra: &[u8], width: u32, height: u32, _frame_idx: u64) {
-        if width != self.width || height != self.height {
-            // Frame geometry changed under us (viewport resize). rawvideo
-            // dimensions are fixed per ffmpeg invocation, so restart the
-            // stream at the new size — which also begins it at SPS/PPS+IDR.
-            tracing::info!(from_w = self.width, from_h = self.height, to_w = width, to_h = height,
-                "frame geometry changed — restarting encoder");
+        let geometry_changed = width != self.width || height != self.height;
+        let died = self.mailbox.dead.load(Ordering::Acquire);
+        if geometry_changed || died {
+            if geometry_changed {
+                tracing::info!(from_w = self.width, from_h = self.height, to_w = width, to_h = height,
+                    "frame geometry changed — restarting encoder");
+            } else {
+                self.restarts += 1;
+                tracing::error!(restarts = self.restarts, "ffmpeg encoder feeder died — restarting encoder");
+            }
             self.reap();
             self.width = width;
             self.height = height;
             if let Err(e) = self.spawn(true) {
-                tracing::error!(error=%e, "encoder respawn after geometry change failed; will retry on next frame");
+                tracing::error!(error=%e, "ffmpeg encoder respawn failed; will retry on next frame");
                 return;
             }
         }
-        let write_failed = match self.stdin.as_mut() {
-            Some(stdin) => std::io::Write::write_all(stdin, bgra).is_err(),
-            None => true,
-        };
-        if write_failed {
-            // SD3 supervision: log, reap, respawn. The new process restarts
-            // the elementary stream at SPS/PPS + IDR, so downstream
-            // consumers can resynchronize.
-            self.restarts += 1;
-            tracing::error!(restarts = self.restarts, "ffmpeg encoder write failed — restarting encoder");
-            self.reap();
-            std::thread::sleep(std::time::Duration::from_millis(500));
-            if let Err(e) = self.spawn(true) {
-                tracing::error!(error=%e, "ffmpeg encoder respawn failed; will retry on next frame");
-            }
-        }
+        // Non-blocking handoff (SD9): the render thread never waits on the
+        // encoder or the wire.
+        self.mailbox.submit(bgra);
     }
 }
 

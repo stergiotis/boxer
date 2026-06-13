@@ -32,10 +32,9 @@ clients get native-resolution pixels), render cadence is reactive or
 continuous and switchable at runtime, and the Rust wire types are
 generated from the .proto. Named gaps: **no authentication** (network
 reachability is the access control; keep it on localhost or a trusted
-network), single session, the encoder shares the render cadence (the
-SD9 decoupling ring is unbuilt), and the browser viewer's protobuf
-codec is hand-written (by choice — see the wire-types note below). The
-full shipped/deviation list is in ADR-0024's 2026-06-12 Updates entry.
+network), single session, and the browser viewer's protobuf codec is
+hand-written (by choice — see the wire-types note below). The full
+shipped/deviation list is in ADR-0024's 2026-06-12 Updates entry.
 
 ## Remote access — quick start
 
@@ -143,6 +142,14 @@ reactive for the full effect.
 Independent of cadence, frames whose pixels are unchanged are never
 encoded (blake3 dedup), and passes with no pixel consumer (no viewer,
 no dump sink) skip rendering and readback entirely.
+
+The encoder runs on its own thread fed by a depth-1 latest-wins mailbox
+(ADR-0024 SD9), so the render/FFFI2 loop never blocks on the encoder or
+a slow viewer: under wire congestion the feeder thread blocks on
+ffmpeg's stdin while the render loop keeps producing and the mailbox
+coalesces to the freshest frame, dropping stale frames *before* the
+encoder. Encoded frames are never dropped (every frame is a reference
+with `-bf 0`).
 
 ### Probing without a browser
 
