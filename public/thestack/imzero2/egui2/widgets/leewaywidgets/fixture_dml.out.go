@@ -57,7 +57,7 @@ func CreateSchemaFixture() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1257
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1266
 
 type InEntityFixture struct {
 	errs           []error
@@ -137,7 +137,7 @@ var InEntityFixtureSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1434
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1443
 
 func (inst *InEntityFixture) SetId(id0 uint64, internalKey1 string, naturalKey2 string) *InEntityFixture {
 	if inst.state != runtime.EntityStateInEntity {
@@ -246,8 +246,13 @@ func (inst *InEntityFixture) validateEntity() {
 			break
 		}
 	}
+	{ // co-section group "geo": attribute counts must be equal per entity
+		n := inst.section00Inst.attributeCount
+		if inst.section01Inst.attributeCount != n {
+			inst.AppendError(eb.Build().Str("coSectionGroup", "geo").Str("section", "geoPoint").Int("expectedAttributeCount", n).Int("actualAttributeCount", inst.section01Inst.attributeCount).Errorf("co-section group attribute count mismatch"))
+		}
+	}
 
-	// FIXME check coSectionGroup consistency
 	return
 }
 func (inst *InEntityFixture) CommitEntity() (err error) {
@@ -281,6 +286,7 @@ func (inst *InEntityFixture) RollbackEntity() (err error) {
 		return
 	}
 
+	inst.clearErrors()       // rollback is the recovery mechanism: discard the entity's errors
 	inst.appendPlainValues() // arrow fields must all have one row
 	inst.resetPlainValues()
 	inst.resetSections()
@@ -302,8 +308,7 @@ func (inst *InEntityFixture) TransferRecords(recordsIn []arrow.RecordBatch) (rec
 		return
 	}
 
-	recordsOut = slices.Grow(recordsIn, len(inst.records)+1)
-	copy(recordsOut, inst.records)
+	recordsOut = append(recordsIn, inst.records...)
 	clear(inst.records)
 	inst.records = inst.records[:0]
 	rec := inst.builder.NewRecord()
@@ -328,6 +333,7 @@ type InEntityFixtureSectionGeoArea struct {
 	errs                           []error
 	inAttr                         *InEntityFixtureSectionGeoAreaInAttr
 	state                          runtime.EntityStateE
+	attributeCount                 int
 	parent                         *InEntityFixture
 	scalarFieldBuilder025          *array.StringBuilder
 	scalarListBuilder025           *array.ListBuilder
@@ -369,6 +375,7 @@ func (inst *InEntityFixtureSectionGeoArea) BeginAttribute(code25 string) *InEnti
 		return inst.inAttr
 	}
 	inst.scalarFieldBuilder025.Append(code25)
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -395,11 +402,14 @@ func (inst *InEntityFixtureSectionGeoArea) EndSection() *InEntityFixture {
 
 func (inst *InEntityFixtureSectionGeoArea) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntityFixtureSectionGeoArea) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
@@ -516,6 +526,7 @@ type InEntityFixtureSectionGeoPoint struct {
 	errs                  []error
 	inAttr                *InEntityFixtureSectionGeoPointInAttr
 	state                 runtime.EntityStateE
+	attributeCount        int
 	parent                *InEntityFixture
 	scalarFieldBuilder021 *array.Float32Builder
 	scalarListBuilder021  *array.ListBuilder
@@ -558,6 +569,7 @@ func (inst *InEntityFixtureSectionGeoPoint) BeginAttribute(lat21 float32, lng22 
 	}
 	inst.scalarFieldBuilder021.Append(lat21)
 	inst.scalarFieldBuilder022.Append(lng22)
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -581,11 +593,14 @@ func (inst *InEntityFixtureSectionGeoPoint) EndSection() *InEntityFixture {
 
 func (inst *InEntityFixtureSectionGeoPoint) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntityFixtureSectionGeoPoint) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
@@ -713,6 +728,7 @@ type InEntityFixtureSectionMetric struct {
 	errs                           []error
 	inAttr                         *InEntityFixtureSectionMetricInAttr
 	state                          runtime.EntityStateE
+	attributeCount                 int
 	parent                         *InEntityFixture
 	scalarFieldBuilder003          *array.Float64Builder
 	scalarListBuilder003           *array.ListBuilder
@@ -763,6 +779,7 @@ func (inst *InEntityFixtureSectionMetric) BeginAttribute(value3 float64, rawBlob
 	}
 	inst.scalarFieldBuilder003.Append(value3)
 	inst.scalarFieldBuilder004.Append(rawBlob4)
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -789,11 +806,14 @@ func (inst *InEntityFixtureSectionMetric) EndSection() *InEntityFixture {
 
 func (inst *InEntityFixtureSectionMetric) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntityFixtureSectionMetric) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 

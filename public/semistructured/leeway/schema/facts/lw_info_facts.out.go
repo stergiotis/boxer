@@ -59,7 +59,7 @@ func createRecordBuilder() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1257
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1266
 
 type InEntity struct {
 	errs                  []error
@@ -141,7 +141,7 @@ var InEntitySectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1434
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1443
 
 func (inst *InEntity) SetId(hash0 [32]byte) *InEntity {
 	if inst.state != runtime.EntityStateInEntity {
@@ -313,7 +313,6 @@ func (inst *InEntity) validateEntity() {
 		}
 	}
 
-	// FIXME check coSectionGroup consistency
 	return
 }
 func (inst *InEntity) CommitEntity() (err error) {
@@ -347,6 +346,7 @@ func (inst *InEntity) RollbackEntity() (err error) {
 		return
 	}
 
+	inst.clearErrors()       // rollback is the recovery mechanism: discard the entity's errors
 	inst.appendPlainValues() // arrow fields must all have one row
 	inst.resetPlainValues()
 	inst.resetSections()
@@ -368,8 +368,7 @@ func (inst *InEntity) TransferRecords(recordsIn []arrow.RecordBatch) (recordsOut
 		return
 	}
 
-	recordsOut = slices.Grow(recordsIn, len(inst.records)+1)
-	copy(recordsOut, inst.records)
+	recordsOut = append(recordsIn, inst.records...)
 	clear(inst.records)
 	inst.records = inst.records[:0]
 	rec := inst.builder.NewRecord()
@@ -394,6 +393,7 @@ type InEntityBool struct {
 	errs                  []error
 	inAttr                *InEntityBoolInAttr
 	state                 runtime.EntityStateE
+	attributeCount        int
 	parent                *InEntity
 	scalarFieldBuilder013 *array.BooleanBuilder
 	scalarListBuilder013  *array.ListBuilder
@@ -431,6 +431,7 @@ func (inst *InEntityBool) BeginAttribute(value13 bool) *InEntityBoolInAttr {
 		return inst.inAttr
 	}
 	inst.scalarFieldBuilder013.Append(value13)
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -454,11 +455,14 @@ func (inst *InEntityBool) EndSection() *InEntity {
 
 func (inst *InEntityBool) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntityBool) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
@@ -593,6 +597,7 @@ type InEntityDate32 struct {
 	errs                  []error
 	inAttr                *InEntityDate32InAttr
 	state                 runtime.EntityStateE
+	attributeCount        int
 	parent                *InEntity
 	scalarFieldBuilder025 *array.TimestampBuilder
 	scalarListBuilder025  *array.ListBuilder
@@ -630,6 +635,7 @@ func (inst *InEntityDate32) BeginAttribute(value25 time.Time) *InEntityDate32InA
 		return inst.inAttr
 	}
 	inst.scalarFieldBuilder025.Append(arrow.Timestamp(value25.UnixMilli()))
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -653,11 +659,14 @@ func (inst *InEntityDate32) EndSection() *InEntity {
 
 func (inst *InEntityDate32) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntityDate32) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
@@ -792,6 +801,7 @@ type InEntityInt64 struct {
 	errs                  []error
 	inAttr                *InEntityInt64InAttr
 	state                 runtime.EntityStateE
+	attributeCount        int
 	parent                *InEntity
 	scalarFieldBuilder021 *array.Int64Builder
 	scalarListBuilder021  *array.ListBuilder
@@ -829,6 +839,7 @@ func (inst *InEntityInt64) BeginAttribute(value21 int64) *InEntityInt64InAttr {
 		return inst.inAttr
 	}
 	inst.scalarFieldBuilder021.Append(value21)
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -852,11 +863,14 @@ func (inst *InEntityInt64) EndSection() *InEntity {
 
 func (inst *InEntityInt64) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntityInt64) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
@@ -991,6 +1005,7 @@ type InEntityString struct {
 	errs                  []error
 	inAttr                *InEntityStringInAttr
 	state                 runtime.EntityStateE
+	attributeCount        int
 	parent                *InEntity
 	scalarFieldBuilder005 *array.StringBuilder
 	scalarListBuilder005  *array.ListBuilder
@@ -1028,6 +1043,7 @@ func (inst *InEntityString) BeginAttribute(value5 string) *InEntityStringInAttr 
 		return inst.inAttr
 	}
 	inst.scalarFieldBuilder005.Append(value5)
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -1051,11 +1067,14 @@ func (inst *InEntityString) EndSection() *InEntity {
 
 func (inst *InEntityString) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntityString) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
@@ -1190,6 +1209,7 @@ type InEntitySymbol struct {
 	errs                  []error
 	inAttr                *InEntitySymbolInAttr
 	state                 runtime.EntityStateE
+	attributeCount        int
 	parent                *InEntity
 	scalarFieldBuilder001 *array.Uint64Builder
 	scalarListBuilder001  *array.ListBuilder
@@ -1227,6 +1247,7 @@ func (inst *InEntitySymbol) BeginAttribute(ref1 uint64) *InEntitySymbolInAttr {
 		return inst.inAttr
 	}
 	inst.scalarFieldBuilder001.Append(ref1)
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -1250,11 +1271,14 @@ func (inst *InEntitySymbol) EndSection() *InEntity {
 
 func (inst *InEntitySymbol) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntitySymbol) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
@@ -1389,6 +1413,7 @@ type InEntityText struct {
 	errs                  []error
 	inAttr                *InEntityTextInAttr
 	state                 runtime.EntityStateE
+	attributeCount        int
 	parent                *InEntity
 	scalarFieldBuilder009 *array.StringBuilder
 	scalarListBuilder009  *array.ListBuilder
@@ -1426,6 +1451,7 @@ func (inst *InEntityText) BeginAttribute(english9 string) *InEntityTextInAttr {
 		return inst.inAttr
 	}
 	inst.scalarFieldBuilder009.Append(english9)
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -1449,11 +1475,14 @@ func (inst *InEntityText) EndSection() *InEntity {
 
 func (inst *InEntityText) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntityText) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
@@ -1588,6 +1617,7 @@ type InEntityUint64 struct {
 	errs                  []error
 	inAttr                *InEntityUint64InAttr
 	state                 runtime.EntityStateE
+	attributeCount        int
 	parent                *InEntity
 	scalarFieldBuilder017 *array.Uint64Builder
 	scalarListBuilder017  *array.ListBuilder
@@ -1625,6 +1655,7 @@ func (inst *InEntityUint64) BeginAttribute(value17 uint64) *InEntityUint64InAttr
 		return inst.inAttr
 	}
 	inst.scalarFieldBuilder017.Append(value17)
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -1648,11 +1679,14 @@ func (inst *InEntityUint64) EndSection() *InEntity {
 
 func (inst *InEntityUint64) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntityUint64) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 

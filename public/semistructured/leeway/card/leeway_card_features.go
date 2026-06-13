@@ -100,7 +100,7 @@ func FeatureNames() []string {
 // FeatureExtractor is an OnlineApiSinkI that computes 16 numerical
 // features per entity. Call Results() after driving to get the features.
 type FeatureExtractor struct {
-	sizeWriter ea.SizeMeasureWriter
+	sizeWriter *ea.SizeMeasureWriter
 	zstdEnc    *zstd.Encoder
 	results    []EntityFeatures
 
@@ -145,10 +145,10 @@ type FeatureExtractor struct {
 var _ streamreadaccess.MembershipSinkI = (*FeatureExtractor)(nil)
 
 func NewFeatureExtractor() (*FeatureExtractor, error) {
-	d := ea.SizeMeasureWriter{
+	d := &ea.SizeMeasureWriter{
 		Size: 0,
 	}
-	enc, err := zstd.NewWriter(&d, zstd.WithEncoderLevel(zstd.SpeedDefault))
+	enc, err := zstd.NewWriter(d, zstd.WithEncoderLevel(zstd.SpeedDefault))
 	if err != nil {
 		return nil, err
 	}
@@ -295,8 +295,16 @@ func (f *FeatureExtractor) compressionRatio(data []byte) float64 {
 	if len(data) == 0 {
 		return 0
 	}
+	// One self-contained frame per measurement: Reset starts a fresh stream
+	// on the (shared) size-measuring writer, Close flushes it so the full
+	// compressed size is observable before reading.
 	f.sizeWriter.Size = 0
+	f.zstdEnc.Reset(f.sizeWriter)
 	_, err := f.zstdEnc.Write(data)
+	if err != nil {
+		return 0.0
+	}
+	err = f.zstdEnc.Close()
 	if err != nil {
 		return 0.0
 	}

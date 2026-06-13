@@ -235,6 +235,10 @@ func (inst *GoClassBuilder) composeFieldRelatedCode(op structFieldOperationE, cc
 		inst.AppendError(err)
 	}
 `, prefix, idx, arrowConversionPrefix, argName, arrowConversionSuffix)
+			if !ct.IsScalar() {
+				_, err = fmt.Fprintf(b, `	inst.%sContainerLength%03d++
+`, prefix, idx)
+			}
 		} else {
 			_, err = fmt.Fprintf(b, `	inst.%sFieldBuilder%03d.Append(%s%s%s)
 `, prefix, idx, arrowConversionPrefix, argName, arrowConversionSuffix)
@@ -392,6 +396,7 @@ func (inst *GoClassBuilder) ComposeSectionClassAndFactoryCode(clsNamer gocodegen
 	errs []error
     inAttr *%s
 	state runtime.EntityStateE
+	attributeCount int
     parent *%s
 `, clsNames.InSectionClassName, clsNames.InAttributeClassName, clsNames.InEntityClassName)
 	if err != nil {
@@ -1101,9 +1106,10 @@ func (inst *GoClassBuilder) ComposeSectionCode(clsNamer gocodegen.GoClassNamerI,
 		}
 		err = inst.composeFieldRelatedCodeAll(structFieldOperationAppendScalar, scalarIRH.IterateColumnProps(), "")
 		if err != nil {
-
+			return
 		}
-		_, err = fmt.Fprintf(b, `
+		_, err = fmt.Fprintf(b, `	inst.attributeCount++
+
 	inst.inAttr.state = inst.state
 	return inst.inAttr
 }
@@ -1202,6 +1208,7 @@ func (inst *GoClassBuilder) ComposeSectionCode(clsNamer gocodegen.GoClassNamerI,
 		_, err = fmt.Fprintf(b, `
 func (inst *%s) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 `, clsNames.InSectionClassName)
@@ -1213,6 +1220,8 @@ func (inst *%s) beginSection() {
 		_, err = fmt.Fprintf(b, `
 func (inst *%s) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 `, clsNames.InSectionClassName)
@@ -1662,8 +1671,50 @@ func (inst *GoClassBuilder) ComposeEntityCode(clsNamer gocodegen.GoClassNamerI, 
 				return
 			}
 		}
+		{ // co-section groups require equal attribute counts per entity across
+			// all member sections (the read side slices by shared offsets).
+			coGroups := make(map[naming.Key][]int)
+			coGroupOrder := make([]naming.Key, 0, len(ir.TaggedValueDesc))
+			for i, sectionName := range sectionNames {
+				for _, t := range ir.TaggedValueDesc {
+					if t.SectionName == sectionName {
+						if t.CoSectionGroup != "" {
+							if _, ok := coGroups[t.CoSectionGroup]; !ok {
+								coGroupOrder = append(coGroupOrder, t.CoSectionGroup)
+							}
+							coGroups[t.CoSectionGroup] = append(coGroups[t.CoSectionGroup], i)
+						}
+						break
+					}
+				}
+			}
+			for _, g := range coGroupOrder {
+				idxs := coGroups[g]
+				if len(idxs) < 2 {
+					continue
+				}
+				_, err = fmt.Fprintf(b, `	{ // co-section group %q: attribute counts must be equal per entity
+		n := inst.section%02dInst.attributeCount
+`, string(g), idxs[0])
+				if err != nil {
+					return
+				}
+				for _, j := range idxs[1:] {
+					_, err = fmt.Fprintf(b, `		if inst.section%02dInst.attributeCount != n {
+			inst.AppendError(eb.Build().Str("coSectionGroup",%q).Str("section",%q).Int("expectedAttributeCount",n).Int("actualAttributeCount",inst.section%02dInst.attributeCount).Errorf("co-section group attribute count mismatch"))
+		}
+`, j, string(g), string(sectionNames[j]), j)
+					if err != nil {
+						return
+					}
+				}
+				_, err = fmt.Fprint(b, "	}\n")
+				if err != nil {
+					return
+				}
+			}
+		}
 		_, err = fmt.Fprint(b, `
-	// FIXME check coSectionGroup consistency
 	return
 }
 `)
@@ -1703,6 +1754,7 @@ func (inst *GoClassBuilder) ComposeEntityCode(clsNamer gocodegen.GoClassNamerI, 
 			return
 		}
 		_, err = fmt.Fprintf(b, `
+	inst.clearErrors() // rollback is the recovery mechanism: discard the entity's errors
 	inst.appendPlainValues() // arrow fields must all have one row
 	inst.resetPlainValues()
 	inst.resetSections()
@@ -1731,8 +1783,7 @@ func (inst *%s) TransferRecords(recordsIn []%s) (recordsOut []%s, err error) {
 			return
 		}
 		_, err = fmt.Fprintf(b, `
-	recordsOut = slices.Grow(recordsIn, len(inst.records)+1)
-	copy(recordsOut, inst.records)
+	recordsOut = append(recordsIn, inst.records...)
 	clear(inst.records)
 	inst.records = inst.records[:0]
 	rec := inst.builder.NewRecord()

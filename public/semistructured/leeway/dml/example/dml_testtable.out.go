@@ -59,7 +59,7 @@ func CreateSchemaTesttable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1257
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1266
 
 type InEntityTesttable struct {
 	plainTs1              time.Time
@@ -140,7 +140,7 @@ var InEntityTesttableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1434
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1443
 
 func (inst *InEntityTesttable) SetId(id0 uint64) *InEntityTesttable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -155,7 +155,7 @@ func (inst *InEntityTesttable) SetId(id0 uint64) *InEntityTesttable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1434
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1443
 
 func (inst *InEntityTesttable) SetTimestamp(ts1 time.Time) *InEntityTesttable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -295,7 +295,6 @@ func (inst *InEntityTesttable) validateEntity() {
 		}
 	}
 
-	// FIXME check coSectionGroup consistency
 	return
 }
 func (inst *InEntityTesttable) CommitEntity() (err error) {
@@ -329,6 +328,7 @@ func (inst *InEntityTesttable) RollbackEntity() (err error) {
 		return
 	}
 
+	inst.clearErrors()       // rollback is the recovery mechanism: discard the entity's errors
 	inst.appendPlainValues() // arrow fields must all have one row
 	inst.resetPlainValues()
 	inst.resetSections()
@@ -350,8 +350,7 @@ func (inst *InEntityTesttable) TransferRecords(recordsIn []arrow.RecordBatch) (r
 		return
 	}
 
-	recordsOut = slices.Grow(recordsIn, len(inst.records)+1)
-	copy(recordsOut, inst.records)
+	recordsOut = append(recordsIn, inst.records...)
 	clear(inst.records)
 	inst.records = inst.records[:0]
 	rec := inst.builder.NewRecord()
@@ -378,6 +377,7 @@ type InEntityTesttableSectionBool struct {
 	scalarFieldBuilder002 *array.BooleanBuilder
 	scalarListBuilder002  *array.ListBuilder
 	errs                  []error
+	attributeCount        int
 	state                 runtime.EntityStateE
 }
 
@@ -413,6 +413,7 @@ func (inst *InEntityTesttableSectionBool) BeginAttribute(value2 bool) *InEntityT
 		return inst.inAttr
 	}
 	inst.scalarFieldBuilder002.Append(value2)
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -436,11 +437,14 @@ func (inst *InEntityTesttableSectionBool) EndSection() *InEntityTesttable {
 
 func (inst *InEntityTesttableSectionBool) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntityTesttableSectionBool) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
@@ -578,6 +582,7 @@ type InEntityTesttableSectionFloat64 struct {
 	scalarFieldBuilder010 *array.Float64Builder
 	scalarListBuilder010  *array.ListBuilder
 	errs                  []error
+	attributeCount        int
 	state                 runtime.EntityStateE
 }
 
@@ -613,6 +618,7 @@ func (inst *InEntityTesttableSectionFloat64) BeginAttribute(value10 float64) *In
 		return inst.inAttr
 	}
 	inst.scalarFieldBuilder010.Append(value10)
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -636,11 +642,14 @@ func (inst *InEntityTesttableSectionFloat64) EndSection() *InEntityTesttable {
 
 func (inst *InEntityTesttableSectionFloat64) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntityTesttableSectionFloat64) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
@@ -782,6 +791,7 @@ type InEntityTesttableSectionMulti struct {
 	setFieldBuilder023             *array.Uint64Builder
 	setListBuilder023              *array.ListBuilder
 	errs                           []error
+	attributeCount                 int
 	state                          runtime.EntityStateE
 }
 
@@ -821,6 +831,7 @@ func (inst *InEntityTesttableSectionMulti) BeginAttribute(name21 string) *InEnti
 		return inst.inAttr
 	}
 	inst.scalarFieldBuilder021.Append(name21)
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -847,11 +858,14 @@ func (inst *InEntityTesttableSectionMulti) EndSection() *InEntityTesttable {
 
 func (inst *InEntityTesttableSectionMulti) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntityTesttableSectionMulti) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
@@ -1039,6 +1053,7 @@ type InEntityTesttableSectionSpecial struct {
 	homogenousArrayFieldBuilder016 *array.Uint32Builder
 	homogenousArrayListBuilder016  *array.ListBuilder
 	errs                           []error
+	attributeCount                 int
 	state                          runtime.EntityStateE
 }
 
@@ -1078,6 +1093,7 @@ func (inst *InEntityTesttableSectionSpecial) BeginAttribute(spc14 string) *InEnt
 		return inst.inAttr
 	}
 	inst.scalarFieldBuilder014.Append(spc14)
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -1104,11 +1120,14 @@ func (inst *InEntityTesttableSectionSpecial) EndSection() *InEntityTesttable {
 
 func (inst *InEntityTesttableSectionSpecial) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntityTesttableSectionSpecial) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
@@ -1284,6 +1303,7 @@ type InEntityTesttableSectionString struct {
 	scalarFieldBuilder006 *array.StringBuilder
 	scalarListBuilder006  *array.ListBuilder
 	errs                  []error
+	attributeCount        int
 	state                 runtime.EntityStateE
 }
 
@@ -1319,6 +1339,7 @@ func (inst *InEntityTesttableSectionString) BeginAttribute(value6 string) *InEnt
 		return inst.inAttr
 	}
 	inst.scalarFieldBuilder006.Append(value6)
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -1342,11 +1363,14 @@ func (inst *InEntityTesttableSectionString) EndSection() *InEntityTesttable {
 
 func (inst *InEntityTesttableSectionString) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntityTesttableSectionString) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 

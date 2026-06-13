@@ -86,7 +86,7 @@ func CreateSchemaDroneTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1257
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1266
 
 type InEntityDroneTable struct {
 	errs                  []error
@@ -162,7 +162,7 @@ var InEntityDroneTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1434
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1443
 
 func (inst *InEntityDroneTable) SetId(id0 uint64) *InEntityDroneTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -298,7 +298,6 @@ func (inst *InEntityDroneTable) validateEntity() {
 		}
 	}
 
-	// FIXME check coSectionGroup consistency
 	return
 }
 func (inst *InEntityDroneTable) CommitEntity() (err error) {
@@ -332,6 +331,7 @@ func (inst *InEntityDroneTable) RollbackEntity() (err error) {
 		return
 	}
 
+	inst.clearErrors()       // rollback is the recovery mechanism: discard the entity's errors
 	inst.appendPlainValues() // arrow fields must all have one row
 	inst.resetPlainValues()
 	inst.resetSections()
@@ -353,8 +353,7 @@ func (inst *InEntityDroneTable) TransferRecords(recordsIn []arrow.RecordBatch) (
 		return
 	}
 
-	recordsOut = slices.Grow(recordsIn, len(inst.records)+1)
-	copy(recordsOut, inst.records)
+	recordsOut = append(recordsIn, inst.records...)
 	clear(inst.records)
 	inst.records = inst.records[:0]
 	rec := inst.builder.NewRecord()
@@ -379,6 +378,7 @@ type InEntityDroneTableSectionGeoPoint struct {
 	errs                  []error
 	inAttr                *InEntityDroneTableSectionGeoPointInAttr
 	state                 runtime.EntityStateE
+	attributeCount        int
 	parent                *InEntityDroneTable
 	scalarFieldBuilder033 *array.Float32Builder
 	scalarListBuilder033  *array.ListBuilder
@@ -426,6 +426,7 @@ func (inst *InEntityDroneTableSectionGeoPoint) BeginAttribute(pointLat33 float32
 	inst.scalarFieldBuilder033.Append(pointLat33)
 	inst.scalarFieldBuilder034.Append(pointLng34)
 	inst.scalarFieldBuilder035.Append(h335)
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -449,11 +450,14 @@ func (inst *InEntityDroneTableSectionGeoPoint) EndSection() *InEntityDroneTable 
 
 func (inst *InEntityDroneTableSectionGeoPoint) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntityDroneTableSectionGeoPoint) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
@@ -700,6 +704,7 @@ type InEntityDroneTableSectionSymbol struct {
 	errs                  []error
 	inAttr                *InEntityDroneTableSectionSymbolInAttr
 	state                 runtime.EntityStateE
+	attributeCount        int
 	parent                *InEntityDroneTable
 	scalarFieldBuilder001 *array.StringBuilder
 	scalarListBuilder001  *array.ListBuilder
@@ -737,6 +742,7 @@ func (inst *InEntityDroneTableSectionSymbol) BeginAttribute(value1 string) *InEn
 		return inst.inAttr
 	}
 	inst.scalarFieldBuilder001.Append(value1)
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -760,11 +766,14 @@ func (inst *InEntityDroneTableSectionSymbol) EndSection() *InEntityDroneTable {
 
 func (inst *InEntityDroneTableSectionSymbol) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntityDroneTableSectionSymbol) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
@@ -1001,6 +1010,7 @@ type InEntityDroneTableSectionSymbolArray struct {
 	errs                           []error
 	inAttr                         *InEntityDroneTableSectionSymbolArrayInAttr
 	state                          runtime.EntityStateE
+	attributeCount                 int
 	parent                         *InEntityDroneTable
 	homogenousArrayFieldBuilder022 *array.StringBuilder
 	homogenousArrayListBuilder022  *array.ListBuilder
@@ -1037,6 +1047,7 @@ func (inst *InEntityDroneTableSectionSymbolArray) BeginAttribute() *InEntityDron
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst.inAttr
 	}
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -1063,11 +1074,14 @@ func (inst *InEntityDroneTableSectionSymbolArray) EndSection() *InEntityDroneTab
 
 func (inst *InEntityDroneTableSectionSymbolArray) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntityDroneTableSectionSymbolArray) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
@@ -1327,6 +1341,7 @@ type InEntityDroneTableSectionTimeRange struct {
 	errs                  []error
 	inAttr                *InEntityDroneTableSectionTimeRangeInAttr
 	state                 runtime.EntityStateE
+	attributeCount        int
 	parent                *InEntityDroneTable
 	scalarFieldBuilder045 *array.TimestampBuilder
 	scalarListBuilder045  *array.ListBuilder
@@ -1369,6 +1384,7 @@ func (inst *InEntityDroneTableSectionTimeRange) BeginAttribute(beginIncl45 time.
 	}
 	inst.scalarFieldBuilder045.Append(arrow.Timestamp(beginIncl45.UnixNano()))
 	inst.scalarFieldBuilder046.Append(arrow.Timestamp(endExcl46.UnixNano()))
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -1392,11 +1408,14 @@ func (inst *InEntityDroneTableSectionTimeRange) EndSection() *InEntityDroneTable
 
 func (inst *InEntityDroneTableSectionTimeRange) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntityDroneTableSectionTimeRange) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
@@ -1638,6 +1657,7 @@ type InEntityDroneTableSectionU64Array struct {
 	errs                           []error
 	inAttr                         *InEntityDroneTableSectionU64ArrayInAttr
 	state                          runtime.EntityStateE
+	attributeCount                 int
 	parent                         *InEntityDroneTable
 	homogenousArrayFieldBuilder011 *array.Uint64Builder
 	homogenousArrayListBuilder011  *array.ListBuilder
@@ -1674,6 +1694,7 @@ func (inst *InEntityDroneTableSectionU64Array) BeginAttribute() *InEntityDroneTa
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst.inAttr
 	}
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -1700,11 +1721,14 @@ func (inst *InEntityDroneTableSectionU64Array) EndSection() *InEntityDroneTable 
 
 func (inst *InEntityDroneTableSectionU64Array) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntityDroneTableSectionU64Array) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 

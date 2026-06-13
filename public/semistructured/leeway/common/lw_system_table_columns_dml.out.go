@@ -64,7 +64,7 @@ func CreateSchemaSystemTableColumns() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1257
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1266
 
 type InEntitySystemTableColumns struct {
 	allocator             memory.Allocator
@@ -148,7 +148,7 @@ var InEntitySystemTableColumnsSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1434
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1443
 
 func (inst *InEntitySystemTableColumns) SetId(tableHash0 uint64, columnIndex1 uint64) *InEntitySystemTableColumns {
 	if inst.state != runtime.EntityStateInEntity {
@@ -164,7 +164,7 @@ func (inst *InEntitySystemTableColumns) SetId(tableHash0 uint64, columnIndex1 ui
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1434
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1443
 
 func (inst *InEntitySystemTableColumns) SetRouting(tableName2 string) *InEntitySystemTableColumns {
 	if inst.state != runtime.EntityStateInEntity {
@@ -290,7 +290,6 @@ func (inst *InEntitySystemTableColumns) validateEntity() {
 		}
 	}
 
-	// FIXME check coSectionGroup consistency
 	return
 }
 func (inst *InEntitySystemTableColumns) CommitEntity() (err error) {
@@ -324,6 +323,7 @@ func (inst *InEntitySystemTableColumns) RollbackEntity() (err error) {
 		return
 	}
 
+	inst.clearErrors()       // rollback is the recovery mechanism: discard the entity's errors
 	inst.appendPlainValues() // arrow fields must all have one row
 	inst.resetPlainValues()
 	inst.resetSections()
@@ -345,8 +345,7 @@ func (inst *InEntitySystemTableColumns) TransferRecords(recordsIn []arrow.Record
 		return
 	}
 
-	recordsOut = slices.Grow(recordsIn, len(inst.records)+1)
-	copy(recordsOut, inst.records)
+	recordsOut = append(recordsIn, inst.records...)
 	clear(inst.records)
 	inst.records = inst.records[:0]
 	rec := inst.builder.NewRecord()
@@ -373,6 +372,7 @@ type InEntitySystemTableColumnsSectionString struct {
 	scalarFieldBuilder011 *array.StringBuilder
 	scalarListBuilder011  *array.ListBuilder
 	errs                  []error
+	attributeCount        int
 	state                 runtime.EntityStateE
 }
 
@@ -408,6 +408,7 @@ func (inst *InEntitySystemTableColumnsSectionString) BeginAttribute(value11 stri
 		return inst.inAttr
 	}
 	inst.scalarFieldBuilder011.Append(value11)
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -431,11 +432,14 @@ func (inst *InEntitySystemTableColumnsSectionString) EndSection() *InEntitySyste
 
 func (inst *InEntitySystemTableColumnsSectionString) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntitySystemTableColumnsSectionString) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
@@ -641,6 +645,7 @@ type InEntitySystemTableColumnsSectionSymbol struct {
 	scalarFieldBuilder003 *array.StringBuilder
 	scalarListBuilder003  *array.ListBuilder
 	errs                  []error
+	attributeCount        int
 	state                 runtime.EntityStateE
 }
 
@@ -676,6 +681,7 @@ func (inst *InEntitySystemTableColumnsSectionSymbol) BeginAttribute(value3 strin
 		return inst.inAttr
 	}
 	inst.scalarFieldBuilder003.Append(value3)
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -699,11 +705,14 @@ func (inst *InEntitySystemTableColumnsSectionSymbol) EndSection() *InEntitySyste
 
 func (inst *InEntitySystemTableColumnsSectionSymbol) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntitySystemTableColumnsSectionSymbol) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
@@ -909,6 +918,7 @@ type InEntitySystemTableColumnsSectionText struct {
 	scalarFieldBuilder027 *array.StringBuilder
 	scalarListBuilder027  *array.ListBuilder
 	errs                  []error
+	attributeCount        int
 	state                 runtime.EntityStateE
 }
 
@@ -944,6 +954,7 @@ func (inst *InEntitySystemTableColumnsSectionText) BeginAttribute(value27 string
 		return inst.inAttr
 	}
 	inst.scalarFieldBuilder027.Append(value27)
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -967,11 +978,14 @@ func (inst *InEntitySystemTableColumnsSectionText) EndSection() *InEntitySystemT
 
 func (inst *InEntitySystemTableColumnsSectionText) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntitySystemTableColumnsSectionText) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
@@ -1177,6 +1191,7 @@ type InEntitySystemTableColumnsSectionU64 struct {
 	scalarFieldBuilder019 *array.Uint64Builder
 	scalarListBuilder019  *array.ListBuilder
 	errs                  []error
+	attributeCount        int
 	state                 runtime.EntityStateE
 }
 
@@ -1212,6 +1227,7 @@ func (inst *InEntitySystemTableColumnsSectionU64) BeginAttribute(value19 uint64)
 		return inst.inAttr
 	}
 	inst.scalarFieldBuilder019.Append(value19)
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -1235,11 +1251,14 @@ func (inst *InEntitySystemTableColumnsSectionU64) EndSection() *InEntitySystemTa
 
 func (inst *InEntitySystemTableColumnsSectionU64) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntitySystemTableColumnsSectionU64) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 

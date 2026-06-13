@@ -274,7 +274,7 @@ func (inst *MembershipPackDroneTableShared1) LoadFromRecord(rec runtime.RecordI)
 	if err != nil {
 		return
 	}
-	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexMixedLowCardRefAccel, rec, inst.AccelMixedRefHighCardParameters)
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexMixedRefHighCardParametersAccel, rec, inst.AccelMixedRefHighCardParameters)
 	if err != nil {
 		return
 	}
@@ -906,7 +906,7 @@ func (inst *ReadAccessDroneTableTaggedU64ArrayAttributes) LoadFromRecord(rec run
 
 func (inst *ReadAccessDroneTableTaggedSymbolAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
 	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) > (e - b) {
+	if int64(attrIdx) >= (e - b) {
 		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
 	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
@@ -980,7 +980,7 @@ func (inst *ReadAccessDroneTableTaggedSymbolArrayAttributes) GetAttrValueSingleO
 }
 func (inst *ReadAccessDroneTableTaggedGeoPointAttributes) GetAttrValuePointLat(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue float32) {
 	b, e := inst.ValuePointLat.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) > (e - b) {
+	if int64(attrIdx) >= (e - b) {
 		log.Panic().Str("attribute", "PointLat").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
 	scalarAttrValue = inst.ValuePointLatElements.Value(int(b) + int(attrIdx))
@@ -988,7 +988,7 @@ func (inst *ReadAccessDroneTableTaggedGeoPointAttributes) GetAttrValuePointLat(e
 }
 func (inst *ReadAccessDroneTableTaggedGeoPointAttributes) GetAttrValuePointLng(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue float32) {
 	b, e := inst.ValuePointLng.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) > (e - b) {
+	if int64(attrIdx) >= (e - b) {
 		log.Panic().Str("attribute", "PointLng").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
 	scalarAttrValue = inst.ValuePointLngElements.Value(int(b) + int(attrIdx))
@@ -996,7 +996,7 @@ func (inst *ReadAccessDroneTableTaggedGeoPointAttributes) GetAttrValuePointLng(e
 }
 func (inst *ReadAccessDroneTableTaggedGeoPointAttributes) GetAttrValueH3(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue uint64) {
 	b, e := inst.ValueH3.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) > (e - b) {
+	if int64(attrIdx) >= (e - b) {
 		log.Panic().Str("attribute", "H3").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
 	scalarAttrValue = inst.ValueH3Elements.Value(int(b) + int(attrIdx))
@@ -1004,7 +1004,7 @@ func (inst *ReadAccessDroneTableTaggedGeoPointAttributes) GetAttrValueH3(entityI
 }
 func (inst *ReadAccessDroneTableTaggedTimeRangeAttributes) GetAttrValueBeginIncl(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue time.Time) {
 	b, e := inst.ValueBeginIncl.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) > (e - b) {
+	if int64(attrIdx) >= (e - b) {
 		log.Panic().Str("attribute", "BeginIncl").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
 	scalarAttrValue = inst.ValueBeginInclElements.Value(int(b) + int(attrIdx)).ToTime(arrow.Nanosecond)
@@ -1012,7 +1012,7 @@ func (inst *ReadAccessDroneTableTaggedTimeRangeAttributes) GetAttrValueBeginIncl
 }
 func (inst *ReadAccessDroneTableTaggedTimeRangeAttributes) GetAttrValueEndExcl(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue time.Time) {
 	b, e := inst.ValueEndExcl.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) > (e - b) {
+	if int64(attrIdx) >= (e - b) {
 		log.Panic().Str("attribute", "EndExcl").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
 	scalarAttrValue = inst.ValueEndExclElements.Value(int(b) + int(attrIdx)).ToTime(arrow.Nanosecond)

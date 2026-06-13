@@ -657,7 +657,7 @@ func (inst *MembershipPackTestTableShared1) LoadFromRecord(rec runtime.RecordI) 
 	if err != nil {
 		return
 	}
-	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexMixedLowCardRefAccel, rec, inst.AccelMixedRefHighCardParameters)
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexMixedRefHighCardParametersAccel, rec, inst.AccelMixedRefHighCardParameters)
 	if err != nil {
 		return
 	}
@@ -2709,7 +2709,7 @@ func (inst *ReadAccessTestTableTaggedU8ArrayAttributes) LoadFromRecord(rec runti
 
 func (inst *ReadAccessTestTableTaggedForeignKeyAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue uint64) {
 	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) > (e - b) {
+	if int64(attrIdx) >= (e - b) {
 		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
 	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
@@ -2717,7 +2717,7 @@ func (inst *ReadAccessTestTableTaggedForeignKeyAttributes) GetAttrValueValue(ent
 }
 func (inst *ReadAccessTestTableTaggedSymbolAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
 	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) > (e - b) {
+	if int64(attrIdx) >= (e - b) {
 		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
 	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
@@ -2791,7 +2791,7 @@ func (inst *ReadAccessTestTableTaggedStringArrayAttributes) GetAttrValueSingleOr
 }
 func (inst *ReadAccessTestTableTaggedTextAttributes) GetAttrValueText(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
 	b, e := inst.ValueText.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) > (e - b) {
+	if int64(attrIdx) >= (e - b) {
 		log.Panic().Str("attribute", "Text").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
 	scalarAttrValue = inst.ValueTextElements.Value(int(b) + int(attrIdx))
@@ -3212,7 +3212,7 @@ func (inst *ReadAccessTestTableTaggedI64ArrayAttributes) GetAttrValueSingleOrDef
 }
 func (inst *ReadAccessTestTableTaggedTimeRangeAttributes) GetAttrValueBeginIncl(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue time.Time) {
 	b, e := inst.ValueBeginIncl.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) > (e - b) {
+	if int64(attrIdx) >= (e - b) {
 		log.Panic().Str("attribute", "BeginIncl").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
 	scalarAttrValue = inst.ValueBeginInclElements.Value(int(b) + int(attrIdx)).ToTime(arrow.Nanosecond)
@@ -3220,7 +3220,7 @@ func (inst *ReadAccessTestTableTaggedTimeRangeAttributes) GetAttrValueBeginIncl(
 }
 func (inst *ReadAccessTestTableTaggedTimeRangeAttributes) GetAttrValueEndExcl(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue time.Time) {
 	b, e := inst.ValueEndExcl.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) > (e - b) {
+	if int64(attrIdx) >= (e - b) {
 		log.Panic().Str("attribute", "EndExcl").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
 	scalarAttrValue = inst.ValueEndExclElements.Value(int(b) + int(attrIdx)).ToTime(arrow.Nanosecond)
@@ -3294,7 +3294,7 @@ func (inst *ReadAccessTestTableTaggedF64ArrayAttributes) GetAttrValueSingleOrDef
 }
 func (inst *ReadAccessTestTableTaggedGeoPointAttributes) GetAttrValuePointLat(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue float32) {
 	b, e := inst.ValuePointLat.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) > (e - b) {
+	if int64(attrIdx) >= (e - b) {
 		log.Panic().Str("attribute", "PointLat").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
 	scalarAttrValue = inst.ValuePointLatElements.Value(int(b) + int(attrIdx))
@@ -3302,7 +3302,7 @@ func (inst *ReadAccessTestTableTaggedGeoPointAttributes) GetAttrValuePointLat(en
 }
 func (inst *ReadAccessTestTableTaggedGeoPointAttributes) GetAttrValuePointLng(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue float32) {
 	b, e := inst.ValuePointLng.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) > (e - b) {
+	if int64(attrIdx) >= (e - b) {
 		log.Panic().Str("attribute", "PointLng").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
 	scalarAttrValue = inst.ValuePointLngElements.Value(int(b) + int(attrIdx))
@@ -3310,7 +3310,7 @@ func (inst *ReadAccessTestTableTaggedGeoPointAttributes) GetAttrValuePointLng(en
 }
 func (inst *ReadAccessTestTableTaggedGeoPointAttributes) GetAttrValueH3(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue uint64) {
 	b, e := inst.ValueH3.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) > (e - b) {
+	if int64(attrIdx) >= (e - b) {
 		log.Panic().Str("attribute", "H3").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
 	scalarAttrValue = inst.ValueH3Elements.Value(int(b) + int(attrIdx))

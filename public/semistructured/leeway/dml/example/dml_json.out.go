@@ -56,7 +56,7 @@ func CreateSchemaJson() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1257
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1266
 
 type InEntityJson struct {
 	allocator             memory.Allocator
@@ -138,7 +138,7 @@ var InEntityJsonSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1434
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1443
 
 func (inst *InEntityJson) SetId(blake3hash0 []byte) *InEntityJson {
 	if inst.state != runtime.EntityStateInEntity {
@@ -310,7 +310,6 @@ func (inst *InEntityJson) validateEntity() {
 		}
 	}
 
-	// FIXME check coSectionGroup consistency
 	return
 }
 func (inst *InEntityJson) CommitEntity() (err error) {
@@ -344,6 +343,7 @@ func (inst *InEntityJson) RollbackEntity() (err error) {
 		return
 	}
 
+	inst.clearErrors()       // rollback is the recovery mechanism: discard the entity's errors
 	inst.appendPlainValues() // arrow fields must all have one row
 	inst.resetPlainValues()
 	inst.resetSections()
@@ -365,8 +365,7 @@ func (inst *InEntityJson) TransferRecords(recordsIn []arrow.RecordBatch) (record
 		return
 	}
 
-	recordsOut = slices.Grow(recordsIn, len(inst.records)+1)
-	copy(recordsOut, inst.records)
+	recordsOut = append(recordsIn, inst.records...)
 	clear(inst.records)
 	inst.records = inst.records[:0]
 	rec := inst.builder.NewRecord()
@@ -393,6 +392,7 @@ type InEntityJsonSectionBool struct {
 	scalarFieldBuilder001 *array.BooleanBuilder
 	scalarListBuilder001  *array.ListBuilder
 	errs                  []error
+	attributeCount        int
 	state                 runtime.EntityStateE
 }
 
@@ -428,6 +428,7 @@ func (inst *InEntityJsonSectionBool) BeginAttribute(value1 bool) *InEntityJsonSe
 		return inst.inAttr
 	}
 	inst.scalarFieldBuilder001.Append(value1)
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -451,11 +452,14 @@ func (inst *InEntityJsonSectionBool) EndSection() *InEntityJson {
 
 func (inst *InEntityJsonSectionBool) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntityJsonSectionBool) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
@@ -593,6 +597,7 @@ type InEntityJsonSectionFloat64 struct {
 	scalarFieldBuilder019 *array.Float64Builder
 	scalarListBuilder019  *array.ListBuilder
 	errs                  []error
+	attributeCount        int
 	state                 runtime.EntityStateE
 }
 
@@ -628,6 +633,7 @@ func (inst *InEntityJsonSectionFloat64) BeginAttribute(value19 float64) *InEntit
 		return inst.inAttr
 	}
 	inst.scalarFieldBuilder019.Append(value19)
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -651,11 +657,14 @@ func (inst *InEntityJsonSectionFloat64) EndSection() *InEntityJson {
 
 func (inst *InEntityJsonSectionFloat64) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntityJsonSectionFloat64) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
@@ -793,6 +802,7 @@ type InEntityJsonSectionInt64 struct {
 	scalarFieldBuilder023 *array.Int64Builder
 	scalarListBuilder023  *array.ListBuilder
 	errs                  []error
+	attributeCount        int
 	state                 runtime.EntityStateE
 }
 
@@ -828,6 +838,7 @@ func (inst *InEntityJsonSectionInt64) BeginAttribute(value23 int64) *InEntityJso
 		return inst.inAttr
 	}
 	inst.scalarFieldBuilder023.Append(value23)
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -851,11 +862,14 @@ func (inst *InEntityJsonSectionInt64) EndSection() *InEntityJson {
 
 func (inst *InEntityJsonSectionInt64) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntityJsonSectionInt64) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
@@ -988,10 +1002,11 @@ func (inst *InEntityJsonSectionInt64InAttr) clearErrors() {
 }
 
 type InEntityJsonSectionNull struct {
-	inAttr *InEntityJsonSectionNullInAttr
-	parent *InEntityJson
-	errs   []error
-	state  runtime.EntityStateE
+	inAttr         *InEntityJsonSectionNullInAttr
+	parent         *InEntityJson
+	errs           []error
+	attributeCount int
+	state          runtime.EntityStateE
 }
 
 func NewInEntityJsonSectionNull(builder *array.RecordBuilder, parent *InEntityJson) (inst *InEntityJsonSectionNull) {
@@ -1023,6 +1038,7 @@ func (inst *InEntityJsonSectionNull) BeginAttribute() *InEntityJsonSectionNullIn
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst.inAttr
 	}
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -1046,11 +1062,14 @@ func (inst *InEntityJsonSectionNull) EndSection() *InEntityJson {
 
 func (inst *InEntityJsonSectionNull) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntityJsonSectionNull) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
@@ -1183,6 +1202,7 @@ type InEntityJsonSectionString struct {
 	scalarFieldBuilder011 *array.StringBuilder
 	scalarListBuilder011  *array.ListBuilder
 	errs                  []error
+	attributeCount        int
 	state                 runtime.EntityStateE
 }
 
@@ -1218,6 +1238,7 @@ func (inst *InEntityJsonSectionString) BeginAttribute(value11 string) *InEntityJ
 		return inst.inAttr
 	}
 	inst.scalarFieldBuilder011.Append(value11)
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -1241,11 +1262,14 @@ func (inst *InEntityJsonSectionString) EndSection() *InEntityJson {
 
 func (inst *InEntityJsonSectionString) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntityJsonSectionString) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
@@ -1383,6 +1407,7 @@ type InEntityJsonSectionSymbol struct {
 	scalarFieldBuilder015 *array.StringBuilder
 	scalarListBuilder015  *array.ListBuilder
 	errs                  []error
+	attributeCount        int
 	state                 runtime.EntityStateE
 }
 
@@ -1418,6 +1443,7 @@ func (inst *InEntityJsonSectionSymbol) BeginAttribute(value15 string) *InEntityJ
 		return inst.inAttr
 	}
 	inst.scalarFieldBuilder015.Append(value15)
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -1441,11 +1467,14 @@ func (inst *InEntityJsonSectionSymbol) EndSection() *InEntityJson {
 
 func (inst *InEntityJsonSectionSymbol) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntityJsonSectionSymbol) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
@@ -1578,10 +1607,11 @@ func (inst *InEntityJsonSectionSymbolInAttr) clearErrors() {
 }
 
 type InEntityJsonSectionUndefined struct {
-	inAttr *InEntityJsonSectionUndefinedInAttr
-	parent *InEntityJson
-	errs   []error
-	state  runtime.EntityStateE
+	inAttr         *InEntityJsonSectionUndefinedInAttr
+	parent         *InEntityJson
+	errs           []error
+	attributeCount int
+	state          runtime.EntityStateE
 }
 
 func NewInEntityJsonSectionUndefined(builder *array.RecordBuilder, parent *InEntityJson) (inst *InEntityJsonSectionUndefined) {
@@ -1613,6 +1643,7 @@ func (inst *InEntityJsonSectionUndefined) BeginAttribute() *InEntityJsonSectionU
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst.inAttr
 	}
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -1636,11 +1667,14 @@ func (inst *InEntityJsonSectionUndefined) EndSection() *InEntityJson {
 
 func (inst *InEntityJsonSectionUndefined) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntityJsonSectionUndefined) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 

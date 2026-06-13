@@ -550,7 +550,7 @@ func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableR
 						clsNamer.ComposeValueFieldElementAccessor(name2),
 						typeName2,
 
-						columnIndexFieldName1,
+						columnIndexFieldName2,
 						clsNamer.ComposeAccelFieldName(name2),
 					)
 					if err != nil {
@@ -1386,7 +1386,7 @@ func (inst *%s%s) Len() (nEntities int) {
 				case common.IntermediateColumnsSubTypeScalar:
 					_, err = fmt.Fprintf(b, `func (inst *%s%s) GetAttrValue%s(entityIdx runtime.EntityIdx,attrIdx runtime.AttributeIdx) (scalarAttrValue %s) {
 	b, e := inst.%s.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) > (e-b) {
+	if int64(attrIdx) >= (e-b) {
 		log.Panic().Str("attribute",%q).Int("beginIncl",int(b)).Int("endExcl",int(e)).Int("attrIdx",int(attrIdx)).Msg("attribute index is out of range")
 	}
 	scalarAttrValue = %sinst.%s.Value(int(b) + int(attrIdx))%s

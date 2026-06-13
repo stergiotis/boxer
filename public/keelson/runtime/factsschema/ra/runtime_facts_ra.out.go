@@ -554,7 +554,7 @@ func (inst *MembershipPackFactsShared1) LoadFromRecord(rec runtime.RecordI) (err
 	if err != nil {
 		return
 	}
-	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexMixedLowCardRefAccel, rec, inst.AccelMixedRefHighCardParameters)
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexMixedRefHighCardParametersAccel, rec, inst.AccelMixedRefHighCardParameters)
 	if err != nil {
 		return
 	}
@@ -2514,7 +2514,7 @@ func (inst *ReadAccessFactsTaggedU8ArrayAttributes) LoadFromRecord(rec runtime.R
 
 func (inst *ReadAccessFactsTaggedForeignKeyAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue uint64) {
 	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) > (e - b) {
+	if int64(attrIdx) >= (e - b) {
 		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
 	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
@@ -2588,7 +2588,7 @@ func (inst *ReadAccessFactsTaggedStringArrayAttributes) GetAttrValueSingleOrDefa
 }
 func (inst *ReadAccessFactsTaggedSymbolAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
 	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) > (e - b) {
+	if int64(attrIdx) >= (e - b) {
 		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
 	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
@@ -3058,7 +3058,7 @@ func (inst *ReadAccessFactsTaggedF64ArrayAttributes) GetAttrValueSingleOrDefault
 }
 func (inst *ReadAccessFactsTaggedU32RangeAttributes) GetAttrValueBeginIncl(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue uint32) {
 	b, e := inst.ValueBeginIncl.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) > (e - b) {
+	if int64(attrIdx) >= (e - b) {
 		log.Panic().Str("attribute", "BeginIncl").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
 	scalarAttrValue = inst.ValueBeginInclElements.Value(int(b) + int(attrIdx))
@@ -3066,7 +3066,7 @@ func (inst *ReadAccessFactsTaggedU32RangeAttributes) GetAttrValueBeginIncl(entit
 }
 func (inst *ReadAccessFactsTaggedU32RangeAttributes) GetAttrValueEndExcl(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue uint32) {
 	b, e := inst.ValueEndExcl.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) > (e - b) {
+	if int64(attrIdx) >= (e - b) {
 		log.Panic().Str("attribute", "EndExcl").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
 	scalarAttrValue = inst.ValueEndExclElements.Value(int(b) + int(attrIdx))
@@ -3107,7 +3107,7 @@ func (inst *ReadAccessFactsTaggedTimeArrayAttributes) GetAttrValueSingleOrDefaul
 }
 func (inst *ReadAccessFactsTaggedBoolAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue bool) {
 	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) > (e - b) {
+	if int64(attrIdx) >= (e - b) {
 		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
 	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))

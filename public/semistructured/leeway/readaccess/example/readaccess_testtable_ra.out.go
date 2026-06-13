@@ -156,7 +156,7 @@ func (inst *MembershipPackTestTableShared1) LoadFromRecord(rec runtime.RecordI) 
 	if err != nil {
 		return
 	}
-	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexMixedLowCardVerbatimAccel, rec, inst.AccelMixedVerbatimHighCardParameters)
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexMixedVerbatimHighCardParametersAccel, rec, inst.AccelMixedVerbatimHighCardParameters)
 	if err != nil {
 		return
 	}
@@ -635,7 +635,7 @@ func (inst *ReadAccessTestTableTaggedTextAttributes) LoadFromRecord(rec runtime.
 
 func (inst *ReadAccessTestTableTaggedGeoAttributes) GetAttrValueLat(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue float32) {
 	b, e := inst.ValueLat.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) > (e - b) {
+	if int64(attrIdx) >= (e - b) {
 		log.Panic().Str("attribute", "Lat").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
 	scalarAttrValue = inst.ValueLatElements.Value(int(b) + int(attrIdx))
@@ -643,7 +643,7 @@ func (inst *ReadAccessTestTableTaggedGeoAttributes) GetAttrValueLat(entityIdx ru
 }
 func (inst *ReadAccessTestTableTaggedGeoAttributes) GetAttrValueLng(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue float32) {
 	b, e := inst.ValueLng.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) > (e - b) {
+	if int64(attrIdx) >= (e - b) {
 		log.Panic().Str("attribute", "Lng").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
 	scalarAttrValue = inst.ValueLngElements.Value(int(b) + int(attrIdx))
@@ -651,7 +651,7 @@ func (inst *ReadAccessTestTableTaggedGeoAttributes) GetAttrValueLng(entityIdx ru
 }
 func (inst *ReadAccessTestTableTaggedGeoAttributes) GetAttrValueH3Res1(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue uint64) {
 	b, e := inst.ValueH3Res1.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) > (e - b) {
+	if int64(attrIdx) >= (e - b) {
 		log.Panic().Str("attribute", "H3Res1").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
 	scalarAttrValue = inst.ValueH3Res1Elements.Value(int(b) + int(attrIdx))
@@ -659,7 +659,7 @@ func (inst *ReadAccessTestTableTaggedGeoAttributes) GetAttrValueH3Res1(entityIdx
 }
 func (inst *ReadAccessTestTableTaggedGeoAttributes) GetAttrValueH3Res2(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue uint64) {
 	b, e := inst.ValueH3Res2.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) > (e - b) {
+	if int64(attrIdx) >= (e - b) {
 		log.Panic().Str("attribute", "H3Res2").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
 	scalarAttrValue = inst.ValueH3Res2Elements.Value(int(b) + int(attrIdx))
@@ -667,7 +667,7 @@ func (inst *ReadAccessTestTableTaggedGeoAttributes) GetAttrValueH3Res2(entityIdx
 }
 func (inst *ReadAccessTestTableTaggedTextAttributes) GetAttrValueText(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
 	b, e := inst.ValueText.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) > (e - b) {
+	if int64(attrIdx) >= (e - b) {
 		log.Panic().Str("attribute", "Text").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
 	scalarAttrValue = inst.ValueTextElements.Value(int(b) + int(attrIdx))

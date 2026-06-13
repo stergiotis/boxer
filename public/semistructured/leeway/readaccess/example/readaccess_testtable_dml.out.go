@@ -51,7 +51,7 @@ func CreateSchemaTestTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1257
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1266
 
 type InEntityTestTable struct {
 	plainTs1              time.Time
@@ -128,7 +128,7 @@ var InEntityTestTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1434
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1443
 
 func (inst *InEntityTestTable) SetId(id0 uint64) *InEntityTestTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -143,7 +143,7 @@ func (inst *InEntityTestTable) SetId(id0 uint64) *InEntityTestTable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1434
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1443
 
 func (inst *InEntityTestTable) SetTimestamp(ts1 time.Time, proc2 []time.Time) *InEntityTestTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -237,7 +237,6 @@ func (inst *InEntityTestTable) validateEntity() {
 		}
 	}
 
-	// FIXME check coSectionGroup consistency
 	return
 }
 func (inst *InEntityTestTable) CommitEntity() (err error) {
@@ -271,6 +270,7 @@ func (inst *InEntityTestTable) RollbackEntity() (err error) {
 		return
 	}
 
+	inst.clearErrors()       // rollback is the recovery mechanism: discard the entity's errors
 	inst.appendPlainValues() // arrow fields must all have one row
 	inst.resetPlainValues()
 	inst.resetSections()
@@ -292,8 +292,7 @@ func (inst *InEntityTestTable) TransferRecords(recordsIn []arrow.RecordBatch) (r
 		return
 	}
 
-	recordsOut = slices.Grow(recordsIn, len(inst.records)+1)
-	copy(recordsOut, inst.records)
+	recordsOut = append(recordsIn, inst.records...)
 	clear(inst.records)
 	inst.records = inst.records[:0]
 	rec := inst.builder.NewRecord()
@@ -326,6 +325,7 @@ type InEntityTestTableSectionGeo struct {
 	scalarFieldBuilder006 *array.Uint64Builder
 	scalarListBuilder006  *array.ListBuilder
 	errs                  []error
+	attributeCount        int
 	state                 runtime.EntityStateE
 }
 
@@ -370,6 +370,7 @@ func (inst *InEntityTestTableSectionGeo) BeginAttribute(lat3 float32, lng4 float
 	inst.scalarFieldBuilder004.Append(lng4)
 	inst.scalarFieldBuilder005.Append(h3Res15)
 	inst.scalarFieldBuilder006.Append(h3Res26)
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -393,11 +394,14 @@ func (inst *InEntityTestTableSectionGeo) EndSection() *InEntityTestTable {
 
 func (inst *InEntityTestTableSectionGeo) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntityTestTableSectionGeo) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
@@ -588,6 +592,7 @@ type InEntityTestTableSectionText struct {
 	homogenousArrayFieldBuilder014 *array.StringBuilder
 	homogenousArrayListBuilder014  *array.ListBuilder
 	errs                           []error
+	attributeCount                 int
 	state                          runtime.EntityStateE
 }
 
@@ -627,6 +632,7 @@ func (inst *InEntityTestTableSectionText) BeginAttribute(text12 string) *InEntit
 		return inst.inAttr
 	}
 	inst.scalarFieldBuilder012.Append(text12)
+	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
@@ -653,11 +659,14 @@ func (inst *InEntityTestTableSectionText) EndSection() *InEntityTestTable {
 
 func (inst *InEntityTestTableSectionText) beginSection() {
 	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
 func (inst *InEntityTestTableSectionText) resetSection() {
 	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
