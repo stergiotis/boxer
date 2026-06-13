@@ -107,7 +107,7 @@ func SplitLW(tag string) (out ParsedLWTag, err error) {
 		case "mixedLowCardRef":
 			// ADR-0008 D3 Cut-2: the first carrier-paired channel. Pairs a
 			// value field with a marshalltypes.MixedLowCardRef sibling
-			// (id + params); see mappingplan.PlanBuilder + the Cut-2 update.
+			// (id + params); see goplan.PlanBuilder + the Cut-2 update.
 			if err = setChannelFlag(&out.Flags, mappingplan.MembershipChannelMixedLowCardRef, token); err != nil {
 				return
 			}

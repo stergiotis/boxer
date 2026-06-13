@@ -79,7 +79,7 @@ func ParsePlan(inputPath string) (plan *mappingplan.Plan, err error) {
 	}
 
 	// Per-field validation + plan assembly is shared with the reflect
-	// front-end (marshallreflect.buildPlan) via mappingplan.PlanBuilder; this loop
+	// front-end (marshallreflect.buildPlan) via goplan.PlanBuilder; this loop
 	// only handles the go/ast-specific concerns (tag extraction, the
 	// multi-name/anonymous-field check, type classification).
 	b := goplan.NewPlanBuilder(inputPath, file.Name.Name, kindType)
@@ -146,7 +146,7 @@ func fieldNamesString(field *ast.Field) (out string) {
 }
 
 // classifyType walks an AST type expression and reports its shape as a
-// shared mappingplan.FieldShape (consumed by mappingplan.PlanBuilder).
+// shared goplan.FieldShape (consumed by goplan.PlanBuilder).
 // It is canonical-native: the shape's value type is a leeway Canonical
 // (the Go-facing GoType / IsSlice / IsRoaring are derived from it by
 // PlanBuilder). Rejects forbidden shapes: `Option[[]T]` (except

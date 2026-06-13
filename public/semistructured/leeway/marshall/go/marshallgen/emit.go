@@ -1275,7 +1275,7 @@ func writeFieldMembCase(sb *strings.Builder, f mappingplan.TaggedField, prefix, 
 		linef(sb, 4, "case %s:", f.KindVar())
 	}
 	// Single-value read accessor chosen by field shape, shared with the
-	// reflect codec via mappingplan.SingleValueReadAccessor so the two
+	// reflect codec via goplan.SingleValueReadAccessor so the two
 	// front-ends cannot pick different accessors for the same shape.
 	singleVal := func() string {
 		return fmt.Sprintf("%s.%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))", attrsVar, goplan.SingleValueReadAccessor(f))

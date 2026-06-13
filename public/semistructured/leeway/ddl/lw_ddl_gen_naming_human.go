@@ -556,7 +556,7 @@ func (inst *HumanReadableNamingConvention) discoverTableFromSortedPhysicalColumn
 		case 13:
 			hints := encodingaspects2.AspectSet(components[parseStructure13.encodingHintsIndex])
 			if !hints.IsValid() {
-				err = eb.Build().Stringer("physicalColumn", phy).Str("component", components[parseStructure13.encodingHintsIndex]).Errorf("unable to parse encoding aspects (hints): %w", err)
+				err = eb.Build().Stringer("physicalColumn", phy).Str("component", components[parseStructure13.encodingHintsIndex]).Errorf("encoding aspects (hints) are not valid")
 				return
 			}
 			var ct canonicaltypes.PrimitiveAstNodeI
@@ -573,7 +573,7 @@ func (inst *HumanReadableNamingConvention) discoverTableFromSortedPhysicalColumn
 			}
 			valueSemantics := valueaspects.AspectSet(components[parseStructure13.valueSemanticsIndex])
 			if !valueSemantics.IsValid() {
-				err = eb.Build().Stringer("physicalColumn", phy).Str("component", components[parseStructure13.valueSemanticsIndex]).Errorf("unable to parse value semantics aspects: %w", err)
+				err = eb.Build().Stringer("physicalColumn", phy).Str("component", components[parseStructure13.valueSemanticsIndex]).Errorf("value semantics aspects are not valid")
 				return
 			}
 			name := components[parseStructure13.columnNameIndex]
@@ -613,7 +613,7 @@ func (inst *HumanReadableNamingConvention) discoverTableFromSortedPhysicalColumn
 				}
 				hints := encodingaspects2.AspectSet(components[parseStructure21.encodingHintsIndex])
 				if !hints.IsValid() {
-					err = eb.Build().Stringer("physicalColumn", phy).Str("component", components[parseStructure21.encodingHintsIndex]).Errorf("unable to parse encoding aspects (hints) type: %w", err)
+					err = eb.Build().Stringer("physicalColumn", phy).Str("component", components[parseStructure21.encodingHintsIndex]).Errorf("encoding aspects (hints) are not valid")
 					return
 				}
 				useAspects := useaspects2.AspectSet(components[parseStructure21.useAspectsIndex])

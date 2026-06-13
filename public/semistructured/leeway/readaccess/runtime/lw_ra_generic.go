@@ -2,7 +2,11 @@
 
 package runtime
 
-import "github.com/apache/arrow-go/v18/arrow"
+import (
+	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
+)
 
 type RecordI[C ColumnI[D], D ArrayDataI] interface {
 	ReferenceCountingI

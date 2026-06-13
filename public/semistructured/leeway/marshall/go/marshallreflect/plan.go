@@ -24,7 +24,7 @@ var planCache sync.Map // map[reflect.Type]*planEntry
 // resolvedPlan bundles a built Plan with its section grouping. Both are
 // pure functions of the DTO type, so they are computed once per type and
 // cached together: Marshal, Unmarshal, and RowComposer all read the
-// shared groups instead of recomputing mappingplan.ComputeGroups per row
+// shared groups instead of recomputing goplan.ComputeGroups per row
 // / per call.
 type resolvedPlan struct {
 	plan   *mappingplan.Plan
@@ -64,8 +64,8 @@ func planForType(rt reflect.Type) (plan *mappingplan.Plan, err error) {
 }
 
 // buildPlan is the reflect front-end of the shared plan builder: it
-// classifies each struct field's reflect.Type into a mappingplan.FieldShape
-// and feeds it to mappingplan.PlanBuilder, which applies exactly the same
+// classifies each struct field's reflect.Type into a goplan.FieldShape
+// and feeds it to goplan.PlanBuilder, which applies exactly the same
 // per-field validation + assembly the codegen front-end (marshallgen.ParsePlan)
 // uses. The result is a mappingplan.Plan the Marshal / Unmarshal helpers
 // drive via the shared TaggedField vocabulary.

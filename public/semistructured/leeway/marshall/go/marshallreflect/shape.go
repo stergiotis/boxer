@@ -22,11 +22,11 @@ const roaringPkgPath = "github.com/RoaringBitmap/roaring"
 
 // marshalltypesPkgPath is the import path of the Cut-2 carrier structs
 // (marshalltypes.MixedLowCardRef, …). A struct field from this package is
-// a carrier, paired with its value sibling by mappingplan.PlanBuilder.
+// a carrier, paired with its value sibling by goplan.PlanBuilder.
 const marshalltypesPkgPath = "github.com/stergiotis/boxer/public/semistructured/leeway/marshall/marshalltypes"
 
 // classifyReflectType inspects rt and returns the corresponding shared
-// mappingplan.FieldShape (consumed by mappingplan.PlanBuilder). It is
+// goplan.FieldShape (consumed by goplan.PlanBuilder). It is
 // canonical-native: the shape's value type is a leeway Canonical (the
 // Go-facing GoType / IsSlice / IsRoaring are derived from it by
 // PlanBuilder). Forbids the same Go shapes the codegen classifier forbids:
@@ -35,7 +35,7 @@ const marshalltypesPkgPath = "github.com/stergiotis/boxer/public/semistructured/
 // The Go-side spelling each reflect kind maps to is the same go-type token
 // the AST classifier produces ("uint64", "time.Time", "[4]byte", "[]byte",
 // …); both front-ends funnel those tokens through
-// mappingplan.ScalarCanonicalForGoType so they cannot drift.
+// goplan.ScalarCanonicalForGoType so they cannot drift.
 func classifyReflectType(rt reflect.Type) (s goplan.FieldShape, err error) {
 	switch rt.Kind() {
 
@@ -51,7 +51,7 @@ func classifyReflectType(rt reflect.Type) (s goplan.FieldShape, err error) {
 
 	case reflect.Struct:
 		// marshalltypes carrier (Cut-2): recognised by package + name;
-		// paired with its value sibling in mappingplan.PlanBuilder.
+		// paired with its value sibling in goplan.PlanBuilder.
 		if rt.PkgPath() == marshalltypesPkgPath {
 			s.CarrierType = rt.Name()
 			return

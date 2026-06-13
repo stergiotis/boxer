@@ -605,7 +605,7 @@ func ValidatePlainColumnShape(column, goType string) (err error) {
 	case "id", "naturalKey", "ts", "expiresAt":
 		// Recognized role; the Go type is the setter's arg type verbatim.
 		if !IsSupportedPlainType(goType) {
-			err = eb.Build().Str("column", column).Str("goType", goType).Errorf("unsupported plain column Go type (see mappingplan.PlainArrowArrayType for the supported set)")
+			err = eb.Build().Str("column", column).Str("goType", goType).Errorf("unsupported plain column Go type (see goplan.PlainArrowArrayType for the supported set)")
 		}
 	default:
 		err = eb.Build().Str("column", column).Errorf("unknown plain column (allowed: id, naturalKey, ts, expiresAt)")

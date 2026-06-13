@@ -12,7 +12,7 @@ import (
 )
 
 // These tests exercise the reflect front-end (classifyReflectType +
-// buildPlan) feeding the shared mappingplan.PlanBuilder. The validation
+// buildPlan) feeding the shared goplan.PlanBuilder. The validation
 // RULES are covered exhaustively by marshallgen's parse_test.go against
 // the go/ast front-end; the cases here confirm the reflect front-end
 // classifies each Go shape identically and routes rejections through the

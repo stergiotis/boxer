@@ -69,7 +69,7 @@ type MyDTO struct {
 Plain columns are `id` / `naturalKey` / `ts` / `expiresAt` — the
 entity-header roles that drive `SetId` / `SetTimestamp` / `SetLifecycle`.
 Their Go types map **1:1** onto the setter argument types (the codec
-inserts no conversion); `mappingplan.PlainArrowArrayType` is the single
+inserts no conversion); `goplan.PlainArrowArrayType` is the single
 source of truth for the supported set. `naturalKey` is optional — its
 presence selects `SetId`'s two-argument form — and plain fields are
 mandatory (no `Option[T]` / slice / roaring). Tagged-value fields
@@ -246,7 +246,7 @@ consumer surfaces the need.
   fixed entity-header roles every leeway schema exposes via `SetId` /
   `SetTimestamp` / `SetLifecycle`. The *names* are not user-extensible,
   but the Go *types* are taken 1:1 from the DTO (constrained only to the
-  `mappingplan.PlainArrowArrayType` set), so the plain wiring is no
+  `goplan.PlainArrowArrayType` set), so the plain wiring is no
   longer coupled to one schema's column types. Data outside these four
   roles is carried as per-field tagged values.
 

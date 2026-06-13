@@ -24,7 +24,7 @@ type UnmarshalArgs struct {
 
 	// PlainCol returns the Arrow array backing a plain column, looked up
 	// by role name ("id" / "naturalKey" / "ts" / "expiresAt"). The
-	// concrete type must be the one mappingplan.PlainArrowArrayType maps
+	// concrete type must be the one goplan.PlainArrowArrayType maps
 	// the DTO field's Go type to (e.g. *array.Uint64 for a uint64 id,
 	// *array.Timestamp for a time.Time ts, *array.FixedSizeBinary for a
 	// [16]byte). Required for every plain column the DTO declares; "id"
@@ -127,7 +127,7 @@ func unmarshalPlain(row reflect.Value, plan *mappingplan.Plan, args UnmarshalArg
 
 // readPlainArrow sets fld (a DTO plain field of source-form type goType)
 // from row i of its Arrow array col. col's concrete type must be the one
-// mappingplan.PlainArrowArrayType maps goType to. []byte / FixedSizeBinary
+// goplan.PlainArrowArrayType maps goType to. []byte / FixedSizeBinary
 // are defensively copied out of the Arrow buffer; time.Time is rebuilt
 // from int64 nanos (Arrow's physical timestamp form).
 func readPlainArrow(fld reflect.Value, goType string, col any, i int) (err error) {
@@ -342,7 +342,7 @@ func consumeValue(attrs reflect.Value, i int, attrJ int64, f mappingplan.TaggedF
 		}
 	default:
 		// Single-value read — accessor chosen by field shape, shared with
-		// the codegen emitter via mappingplan.SingleValueReadAccessor.
+		// the codegen emitter via goplan.SingleValueReadAccessor.
 		v := mustCall(attrs, goplan.SingleValueReadAccessor(f), reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
 		switch goplan.CopyStrategy(f.GoType()) {
 		case goplan.CopyFixedByte:
@@ -478,7 +478,7 @@ func unmarshalCarrierSection(row reflect.Value, g goplan.SectionGroup, attrs, me
 	readMethod := "GetMembValue" + f.Flags.Channel.CarrierReadMethodSuffix()
 	carrierType := carrierStructType(row, f)
 	// Mirror the codegen emitter's accessor choice so the two front-ends read
-	// the same accessor (shared via mappingplan.SingleValueReadAccessor).
+	// the same accessor (shared via goplan.SingleValueReadAccessor).
 	valMethod := goplan.SingleValueReadAccessor(*f)
 	n := mustCall(attrs, "GetNumberOfAttributes", reflect.ValueOf(entityIdx(i)))[0].Int()
 

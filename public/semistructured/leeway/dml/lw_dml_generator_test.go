@@ -164,7 +164,9 @@ func TestGenerateDmlJsonMapping(t *testing.T) {
 	require.NoError(t, err)
 }
 func TestGoClassBuilderSample(t *testing.T) {
-	rnd := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
+	seed1, seed2 := rand.Uint64(), rand.Uint64()
+	t.Logf("randomized test seed: %d %d (rand.NewPCG)", seed1, seed2) // review G-15: log seed for reproducibility
+	rnd := rand.New(rand.NewPCG(seed1, seed2))
 	manip, err := common.NewTableManipulator()
 	require.NoError(t, err)
 

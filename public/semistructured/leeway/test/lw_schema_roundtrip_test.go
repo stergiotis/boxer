@@ -20,8 +20,18 @@ import (
 	"github.com/yassinebenaid/godump"
 )
 
+// newSeededRand builds a PRNG from explicit seeds and logs them so a failing
+// randomized run is reproducible (review G-15: the seeds were previously
+// unlogged, making failures irreproducible).
+func newSeededRand(t *testing.T) *rand.Rand {
+	t.Helper()
+	seed1, seed2 := rand.Uint64(), rand.Uint64()
+	t.Logf("randomized test seed: %d %d (rand.NewPCG)", seed1, seed2)
+	return rand.New(rand.NewPCG(seed1, seed2))
+}
+
 func TestSimpleRoundtrip(t *testing.T) {
-	rnd := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
+	rnd := newSeededRand(t)
 	tblOp, err := common2.NewTableOperations()
 	require.NoError(t, err)
 	var marshaller *common2.TableMarshaller
@@ -180,7 +190,7 @@ func TestSmoke(t *testing.T) {
 	require.Equal(t, tableRowConfig, tableRowConfig2)
 }
 func TestTableOpsRoundtrip(t *testing.T) {
-	rnd := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
+	rnd := newSeededRand(t)
 	tech := clickhouse.NewTechnologySpecificCodeGenerator()
 	acceptCanonicalType := tech.CheckTypeCompatibility
 	acceptEncodingAspect := ddl.EncodingAspectFilterFuncFromTechnology(tech, common2.ImplementationStatusPartial)
@@ -220,7 +230,7 @@ func TestTableOpsRoundtrip(t *testing.T) {
 }
 
 func TestIntermediateRoundtrip(t *testing.T) {
-	rnd := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
+	rnd := newSeededRand(t)
 	tech := clickhouse.NewTechnologySpecificCodeGenerator()
 	acceptCanonicalType := tech.CheckTypeCompatibility
 	acceptEncodingAspect := ddl.EncodingAspectFilterFuncFromTechnology(tech, common2.ImplementationStatusPartial)
@@ -262,7 +272,7 @@ func TestIntermediateRoundtrip(t *testing.T) {
 	}
 }
 func TestNamingConventionRoundtrip(t *testing.T) {
-	rnd := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
+	rnd := newSeededRand(t)
 	tech := clickhouse.NewTechnologySpecificCodeGenerator()
 	acceptCanonicalType := tech.CheckTypeCompatibility
 	acceptEncodingAspect := ddl.EncodingAspectFilterFuncFromTechnology(tech, common2.ImplementationStatusPartial)
