@@ -135,6 +135,13 @@ opt-level = 2
 # ----------------------------------------------------------------------------------------
 # Lints:
 
+[build-dependencies]
+# ADR-0024 SD7: generate the wire types from the .proto at build time
+# (pure Rust, no system protoc). Only active under the `headless` feature
+# — see build.rs.
+protox = "0.9"
+prost-build = "0.14"
+
 [lints]
 workspace = true
 

@@ -4,18 +4,18 @@
 // Versioning policy per the ADR's Derived practices: additions are
 // additive (new fields, new oneof variants) until a v2 is unavoidable.
 //
-// Codegen status: protoc is not part of the build yet. The Rust side
-// mirrors these messages with hand-tagged prost derives
-// (rust/imzero2/src/imzero2/inputproto.rs) and the v1 browser viewer
-// hand-encodes the client→server subset; `prost-build`/`protobuf-es`
-// codegen replacing both mirrors is a named follow-up. Tag numbers and
-// field types in the mirrors MUST match this file.
+// Codegen status: the Rust side is generated from this file at build
+// time (rust/imzero2/build.rs, protox + prost-build, pure Rust — no
+// system protoc), so it cannot drift from the contract. The v1 browser
+// viewer still hand-encodes/decodes the messages it uses (a deliberate
+// choice — protobuf-es would add a bundling step to the self-contained
+// single-file viewer); keep that hand codec in sync by hand.
 //
 // Wire framing (ADR-0024 SD6): a single WebSocket carries everything as
 // binary messages with a one-byte type prefix:
 //   0x01 server→client  VideoChunk     (encoded H.264 access unit)
 //   0x02 client→server  InputEvent
-//   0x03 both ways      SessionControl (hello, resize, ping)
+//   0x03 both ways      SessionControl (hello, resize, ping, set-cadence)
 
 syntax = "proto3";
 

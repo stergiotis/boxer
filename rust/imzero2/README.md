@@ -25,15 +25,17 @@ hosts from one source tree:
 ## Maturity
 
 The desktop host is the daily-driven path. The headless host is a first
-cut of ADR-0024 v1 (2026-06-12): verified end-to-end against the demo
-carousel, with named gaps — **no authentication** (network reachability
-is the access control; keep it on localhost or a trusted network),
-single session, render and encode share one cadence, and the protobuf
-codecs on both ends are hand-written mirrors of the .proto pending
-codegen. The viewer's viewport and pixel scale (devicePixelRatio × zoom)
-are applied live: the canvas follows the browser window and HiDPI
-clients get native-resolution pixels. The full shipped/deviation list is
-in ADR-0024's 2026-06-12 Updates entry.
+cut of ADR-0024 v1 (2026-06-12), verified end-to-end against the demo
+carousel. The viewer's viewport and pixel scale (devicePixelRatio ×
+zoom) are applied live (the canvas follows the browser window and HiDPI
+clients get native-resolution pixels), render cadence is reactive or
+continuous and switchable at runtime, and the Rust wire types are
+generated from the .proto. Named gaps: **no authentication** (network
+reachability is the access control; keep it on localhost or a trusted
+network), single session, the encoder shares the render cadence (the
+SD9 decoupling ring is unbuilt), and the browser viewer's protobuf
+codec is hand-written (by choice — see the wire-types note below). The
+full shipped/deviation list is in ADR-0024's 2026-06-12 Updates entry.
 
 ## Remote access — quick start
 
@@ -152,6 +154,22 @@ target/headless/release/imzero2_ws_probe ws://127.0.0.1:8089/ /tmp/probe.h264 15
 ffprobe -f h264 /tmp/probe.h264
 ```
 
+It can also inject a `resize <lw> <lh> <scale> <after_au>` and a
+`cadence <0|1> <after_au>` (verifying the resize and SetCadence wire
+paths end to end), in any combination after the click triple.
+
+### Wire types
+
+`proto/boxer/imzero2/v1/input.proto` is the canonical contract. The Rust
+types are generated from it at build time (`build.rs`: protox +
+prost-build, pure Rust — no system `protoc`; active only under the
+`headless` feature), so the server side cannot drift from the schema.
+The browser viewer hand-encodes/decodes the messages it uses with a
+small inline codec, kept deliberately so the viewer stays a single
+self-contained HTML file with no bundling step; that codec must be
+updated by hand when the schema changes (a protobuf-es step is the
+escape hatch if it ever outgrows hand-maintenance).
+
 ## Layout
 
 | Path | Contents |
@@ -163,8 +181,9 @@ ffprobe -f h264 /tmp/probe.h264
 | `src/imzero2/encoderpipe.rs` | ffmpeg subprocess + access-unit framing |
 | `src/imzero2/wscarrier.rs` | WebSocket carrier + embedded viewer serving |
 | `src/imzero2/viewer/index.html` | Browser viewer (WebCodecs + input capture) |
-| `src/imzero2/inputproto.rs`, `inputmap.rs` | Wire mirror of the proto + egui translation |
-| `../../proto/boxer/imzero2/v1/input.proto` | Canonical wire contract |
+| `src/imzero2/inputproto.rs`, `inputmap.rs` | Generated wire types (`include!` of the build.rs codegen) + egui translation |
+| `build.rs` | protox + prost-build codegen of the wire types (headless feature only) |
+| `../../proto/boxer/imzero2/v1/input.proto` | Canonical wire contract (Rust generated from it; viewer hand-codes it) |
 
 ## Related decisions
 
