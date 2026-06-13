@@ -124,6 +124,24 @@ When both binaries exist, the Go launcher selects via
 `--clientBinary` (`target/release/imzero2` vs
 `target/headless/release/imzero2`).
 
+### Render cadence
+
+`IMZERO2_RENDER_CADENCE=reactive` (shared with the desktop host and the
+Go-side decorator) starts the host in reactive mode: a pass runs when
+egui schedules a repaint, when wire input arrives, or at a 1 s idle
+heartbeat — capped at the configured fps. Measured on the idle widgets
+demo: 16 passes per 12 s reactive vs 407 continuous. The cadence can be
+switched at runtime from the viewer (status-bar toggle, or
+`?cadence=continuous|reactive` once at load) — host scope, survives
+reconnects. Caveat: the Go decorator reads the variable at startup, so
+a server *launched* continuous keeps requesting per-frame repaints and
+a runtime switch to reactive only stops encoding, not rendering; launch
+reactive for the full effect.
+
+Independent of cadence, frames whose pixels are unchanged are never
+encoded (blake3 dedup), and passes with no pixel consumer (no viewer,
+no dump sink) skip rendering and readback entirely.
+
 ### Probing without a browser
 
 `imzero2_ws_probe` (built with the headless feature) connects like a

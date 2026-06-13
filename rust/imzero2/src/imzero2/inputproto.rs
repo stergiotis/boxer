@@ -103,7 +103,7 @@ pub struct PinchZoom {
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct SessionControl {
-    #[prost(oneof = "session_control::Control", tags = "1, 2, 3")]
+    #[prost(oneof = "session_control::Control", tags = "1, 2, 3, 4")]
     pub control: Option<session_control::Control>,
 }
 
@@ -116,6 +116,8 @@ pub mod session_control {
         ViewportResize(super::ViewportResize),
         #[prost(message, tag = "3")]
         Ping(super::Ping),
+        #[prost(message, tag = "4")]
+        SetCadence(super::SetCadence),
     }
 }
 
@@ -127,6 +129,14 @@ pub struct SessionHello {
     pub height_px: u32,
     #[prost(float, tag = "3")]
     pub pixels_per_point: f32,
+    #[prost(uint32, tag = "4")]
+    pub cadence: u32,
+}
+
+#[derive(Clone, Copy, PartialEq, prost::Message)]
+pub struct SetCadence {
+    #[prost(uint32, tag = "1")]
+    pub cadence: u32,
 }
 
 #[derive(Clone, Copy, PartialEq, prost::Message)]

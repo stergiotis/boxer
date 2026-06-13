@@ -240,6 +240,20 @@ fn init_gpu(width_px: u32, height_px: u32) -> Result<Gpu, HeadlessError> {
 }
 
 impl Gpu {
+    /// Consume a pass's texture deltas without rendering. Used when no
+    /// sink wants pixels (no viewer, no dump): deltas are incremental, so
+    /// dropping them would permanently corrupt the renderer's texture
+    /// state for a viewer that connects later; the render pass and the
+    /// readback are the only parts that can be skipped.
+    fn apply_textures_only(&mut self, out: egui::FullOutput) {
+        for (id, delta) in &out.textures_delta.set {
+            self.renderer.update_texture(&self.device, &self.queue, *id, delta);
+        }
+        for id in &out.textures_delta.free {
+            self.renderer.free_texture(id);
+        }
+    }
+
     /// Recreate the offscreen target and staging buffer at a new physical
     /// size (viewport resize). Device, queue and the egui renderer carry
     /// over — the renderer is size-agnostic (the per-frame
@@ -373,6 +387,64 @@ fn even_up(v: u32) -> u32 {
     v + (v & 1)
 }
 
+/// Render cadence of the headless host (ADR-0062 brought to ADR-0024's
+/// host). Initial mode comes from IMZERO2_RENDER_CADENCE — the same
+/// variable the Go-side decorator reads at startup — and can be switched
+/// at runtime per the wire's SetCadence message.
+///
+/// Continuous: fixed tick at the configured fps (the original behavior).
+/// Reactive: a pass runs when egui schedules a repaint (animations,
+/// caret blink, Go-side RequestRepaint opcodes), when wire activity
+/// arrives (input, resize, connect), or at a 1 s idle heartbeat —
+/// whichever is soonest, floored by the fps cap. Note: full idle savings
+/// require the *server launched* reactive, because the Go decorator
+/// requests an immediate repaint every frame in continuous mode and a
+/// runtime switch cannot reach it; in that configuration reactive still
+/// avoids encoding (frame dedup) but not rendering.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Cadence {
+    Continuous,
+    Reactive,
+}
+
+/// Idle repaint cadence in reactive mode: the only path by which
+/// Go-side data changes surface when egui itself is idle (mirrors the
+/// desktop host's heartbeat).
+const IDLE_HEARTBEAT: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// Sleep until `deadline`, returning early — but never before
+/// `min_next` (the fps cap) — when the carrier signals activity.
+/// Pending wake tokens are drained so a burst counts once.
+fn sleep_until_or_wake(
+    deadline: std::time::Instant,
+    min_next: std::time::Instant,
+    waker: &std::sync::mpsc::Receiver<()>,
+) {
+    loop {
+        let now = std::time::Instant::now();
+        if now >= deadline {
+            return;
+        }
+        match waker.recv_timeout(deadline - now) {
+            Ok(()) => {
+                while waker.try_recv().is_ok() {}
+                let now = std::time::Instant::now();
+                if now < min_next {
+                    std::thread::sleep(min_next - now);
+                }
+                return;
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => return,
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                // No carrier holds a sender (host keeps one, so this is
+                // defensive): plain sleep.
+                std::thread::sleep(deadline - now);
+                return;
+            }
+        }
+    }
+}
+
 /// Validate and clamp a viewer resize request into applicable physical
 /// geometry. Returns None when the request is invalid or changes nothing.
 fn clamp_resize(
@@ -426,12 +498,8 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
         std::io::stdin().lock(),
         std::io::stdout().lock(),
     );
-    if reactive {
-        // SD9/ADR-0062: the headless host currently paces at a fixed tick;
-        // reactive cadence (skip render+encode when nothing changed) is a
-        // named follow-up, not v1. Record the request so nobody wonders.
-        tracing::info!("IMZERO2_RENDER_CADENCE=reactive noted — headless v1 renders at a fixed tick; reactive cadence lands with SD9 pacing");
-    }
+    let mut cadence = if reactive { Cadence::Reactive } else { Cadence::Continuous };
+    tracing::info!(?cadence, "render cadence (IMZERO2_RENDER_CADENCE; runtime-switchable via the wire)");
 
     let mut sinks: Vec<Box<dyn FrameSink>> = Vec::new();
     if let Some(dir) = &opts.dump_dir {
@@ -446,17 +514,24 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
             EncoderTarget::File(out.clone()),
         )?));
     }
-    // The WebSocket carrier (ADR-0024 Phases 4–5) is a sink too: it owns
-    // the per-connection encoder so the stream starts at an IDR for every
-    // viewer and nothing is encoded while nobody watches.
+    // The waker lets carrier activity (input, resize, cadence change,
+    // connect) interrupt a reactive sleep; the host keeps one sender so
+    // the channel never disconnects.
+    let (waker_tx, waker_rx) = std::sync::mpsc::channel::<()>();
+    let _waker_keepalive = waker_tx.clone();
+    // The WebSocket carrier (ADR-0024 Phases 4–5) owns the per-connection
+    // encoder so the stream starts at an IDR for every viewer and nothing
+    // is encoded while nobody watches.
     let mut carrier: Option<WsCarrier> = match &opts.listen {
         Some(listen) => Some(WsCarrier::start(
             listen,
             width_px,
             height_px,
             ppp,
+            cadence as u32,
             opts.fps,
             opts.encoder_args.clone(),
+            waker_tx,
         )?),
         None => None,
     };
@@ -467,6 +542,10 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
     let frame_dt = std::time::Duration::from_secs_f32(1.0 / opts.fps);
     let start = std::time::Instant::now();
     let mut next_deadline = std::time::Instant::now();
+    // Reactive bookkeeping: when the last pass ran, and how soon egui
+    // asked to be run again (repaint_delay of the last pass).
+    let mut last_pass = std::time::Instant::now() - frame_dt;
+    let mut repaint_hint = std::time::Duration::ZERO;
     let mut frame_idx: u64 = 0;
     let mut bgra_frame: Vec<u8> = Vec::new();
     let mut translator = InputTranslator::default();
@@ -478,14 +557,46 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
     );
 
     loop {
-        let now = std::time::Instant::now();
-        if now < next_deadline {
-            std::thread::sleep(next_deadline - now);
+        match cadence {
+            Cadence::Continuous => {
+                let now = std::time::Instant::now();
+                if now < next_deadline {
+                    // Fixed tick: wake tokens are drained but do not move
+                    // the deadline (predictable cadence).
+                    sleep_until_or_wake(next_deadline, next_deadline, &waker_rx);
+                }
+                next_deadline += frame_dt;
+                if next_deadline < std::time::Instant::now() {
+                    // Fell behind (slow frame); skip missed ticks instead of bursting.
+                    next_deadline = std::time::Instant::now();
+                }
+            }
+            Cadence::Reactive => {
+                // Next pass when egui asked for one (animations, scheduled
+                // repaints, Go-side RequestRepaint) or at the idle
+                // heartbeat — whichever is sooner, floored by the fps cap.
+                // Wire activity (input/resize/connect) wakes us early.
+                let min_next = last_pass + frame_dt;
+                let deadline = (last_pass + repaint_hint.min(IDLE_HEARTBEAT)).max(min_next);
+                sleep_until_or_wake(deadline, min_next, &waker_rx);
+                // Keep the continuous anchor fresh so a runtime switch
+                // doesn't burst to catch up.
+                next_deadline = std::time::Instant::now() + frame_dt;
+            }
         }
-        next_deadline += frame_dt;
-        if next_deadline < std::time::Instant::now() {
-            // Fell behind (slow frame); skip missed ticks instead of bursting.
-            next_deadline = std::time::Instant::now();
+        last_pass = std::time::Instant::now();
+
+        // Runtime cadence switch (wire SetCadence — the viewer's toggle).
+        if let Some(c) = &mut carrier {
+            if let Some(req) = c.take_cadence() {
+                let new = if req == 1 { Cadence::Reactive } else { Cadence::Continuous };
+                if new != cadence {
+                    cadence = new;
+                    c.set_hello_cadence(cadence as u32);
+                    next_deadline = std::time::Instant::now();
+                    tracing::info!(?cadence, "render cadence switched at runtime");
+                }
+            }
         }
 
         // Viewport resize: apply the viewer's reported geometry — rebuild
@@ -563,13 +674,33 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
             tracing::info!("viewport close requested — shutting down headless host");
             shutdown = true;
         }
+        repaint_hint = out
+            .viewport_output
+            .get(&egui::ViewportId::ROOT)
+            .map(|v| v.repaint_delay)
+            .unwrap_or(std::time::Duration::ZERO);
 
-        gpu.render_and_readback(&ctx, out, &screen, &mut bgra_frame)?;
-        for sink in &mut sinks {
-            sink.on_frame(&bgra_frame, width_px, height_px, frame_idx);
-        }
-        if let Some(c) = &mut carrier {
-            c.on_frame(&bgra_frame, width_px, height_px, frame_idx);
+        let need_pixels = !sinks.is_empty()
+            || carrier.as_ref().map(WsCarrier::connected).unwrap_or(false);
+        if need_pixels {
+            gpu.render_and_readback(&ctx, out, &screen, &mut bgra_frame)?;
+            for sink in &mut sinks {
+                sink.on_frame(&bgra_frame, width_px, height_px, frame_idx);
+            }
+            if let Some(c) = &mut carrier {
+                c.on_frame(&bgra_frame, width_px, height_px, frame_idx);
+            }
+        } else {
+            // Nobody consumes pixels: skip tessellation, the render pass
+            // and the readback, but keep the renderer's texture state
+            // current. The empty on_frame lets the carrier reap a
+            // just-disconnected session's encoder promptly (a race to
+            // connected here only feeds a zero-length frame, which the
+            // encoder ignores).
+            gpu.apply_textures_only(out);
+            if let Some(c) = &mut carrier {
+                c.on_frame(&[], width_px, height_px, frame_idx);
+            }
         }
         frame_idx += 1;
 

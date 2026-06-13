@@ -26,7 +26,7 @@
 //! bounded video channel.
 
 use crate::imzero2::encoderpipe::{EncoderSink, EncoderTarget};
-use crate::imzero2::framesink::FrameSink;
+use crate::imzero2::framesink::FrameSink as _;
 use crate::imzero2::inputproto as pb;
 use futures_util::{SinkExt as _, StreamExt as _};
 use prost::Message as _;
@@ -40,6 +40,13 @@ struct Inner {
     /// which applies it (target rebuild + hello re-announce + encoder
     /// restart) and answers with a fresh [`pb::SessionHello`].
     resize: std::sync::Mutex<Option<pb::ViewportResize>>,
+    /// Latest runtime cadence request (0 continuous / 1 reactive),
+    /// drained by the render thread.
+    cadence_request: std::sync::Mutex<Option<u32>>,
+    /// Wakes the render thread out of its reactive sleep when anything
+    /// arrives that wants a pass soon: input, resize, cadence change,
+    /// connect/disconnect. Sends are fire-and-forget.
+    waker: std::sync::mpsc::Sender<()>,
     connected: std::sync::atomic::AtomicBool,
     /// Bumped on every accepted connection; the render thread compares it
     /// to decide when to (re)spawn the per-connection encoder.
@@ -60,22 +67,32 @@ pub struct WsCarrier {
     encoder_gen: u64,
     fps: f32,
     encoder_args: Vec<String>,
+    /// blake3 of the last frame fed to the encoder; identical frames are
+    /// skipped (no encode, no wire bytes). Reset whenever the encoder is
+    /// (re)spawned so a fresh stream always begins with a real frame.
+    last_frame_hash: Option<blake3::Hash>,
 }
 
 impl WsCarrier {
     /// Bind `listen` (e.g. "127.0.0.1:8089") for WebSocket and `port+1`
     /// for the viewer page, then run both on a dedicated tokio thread.
+    /// `waker` is signalled whenever wire activity wants a render pass
+    /// soon (input, resize, cadence change, connect/disconnect).
     pub fn start(
         listen: &str,
         width_px: u32,
         height_px: u32,
         pixels_per_point: f32,
+        cadence: u32,
         fps: f32,
         encoder_args: Vec<String>,
+        waker: std::sync::mpsc::Sender<()>,
     ) -> std::io::Result<Self> {
         let inner = std::sync::Arc::new(Inner {
             events: std::sync::Mutex::new(Vec::new()),
             resize: std::sync::Mutex::new(None),
+            cadence_request: std::sync::Mutex::new(None),
+            waker,
             connected: std::sync::atomic::AtomicBool::new(false),
             conn_gen: std::sync::atomic::AtomicU64::new(0),
             video_tx: std::sync::Mutex::new(None),
@@ -83,6 +100,7 @@ impl WsCarrier {
                 width_px,
                 height_px,
                 pixels_per_point,
+                cadence,
             }),
         });
         // Bind synchronously so startup errors (port in use) fail fast in
@@ -131,7 +149,26 @@ impl WsCarrier {
             encoder_gen: 0,
             fps,
             encoder_args,
+            last_frame_hash: None,
         })
+    }
+
+    /// True while a viewer session is active — the host skips rendering
+    /// pixels entirely when nothing consumes them.
+    pub fn connected(&self) -> bool {
+        self.inner.connected.load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    /// Latest pending runtime cadence request, if any.
+    pub fn take_cadence(&mut self) -> Option<u32> {
+        self.inner.cadence_request.lock().ok().and_then(|mut c| c.take())
+    }
+
+    /// Record the applied cadence so future hellos report it.
+    pub fn set_hello_cadence(&mut self, cadence: u32) {
+        if let Ok(mut hello) = self.inner.hello.lock() {
+            hello.cadence = cadence;
+        }
     }
 
     /// Drain wire input events into `out` for the render thread.
@@ -153,12 +190,14 @@ impl WsCarrier {
     /// outbound channel *before* the next encoder spawns, so the viewer
     /// resizes its canvas and rejoins at the new stream's first IDR.
     pub fn apply_geometry(&mut self, width_px: u32, height_px: u32, pixels_per_point: f32) {
-        let hello = pb::SessionHello {
+        let mut hello = pb::SessionHello {
             width_px,
             height_px,
             pixels_per_point,
+            cadence: 0,
         };
         if let Ok(mut guard) = self.inner.hello.lock() {
+            hello.cadence = guard.cadence; // geometry changes don't touch cadence
             *guard = hello;
         }
         // Drop first: reap blocks until the old drain flushed its remaining
@@ -182,18 +221,24 @@ impl WsCarrier {
     }
 }
 
-impl FrameSink for WsCarrier {
-    fn on_frame(&mut self, bgra: &[u8], width: u32, height: u32, frame_idx: u64) {
+impl WsCarrier {
+    /// Feed one rendered frame. Frames whose pixels are identical to the
+    /// previous fed one (blake3) are skipped — no encode, no wire
+    /// traffic — except the first frame of a fresh encoder, which must
+    /// exist for the stream to start at an IDR.
+    pub fn on_frame(&mut self, bgra: &[u8], width: u32, height: u32, frame_idx: u64) {
         let connected = self.inner.connected.load(std::sync::atomic::Ordering::Acquire);
         let cur_gen = self.inner.conn_gen.load(std::sync::atomic::Ordering::Acquire);
         if !connected {
             if self.encoder.take().is_some() {
                 tracing::info!("viewer disconnected — stopping encoder");
+                self.last_frame_hash = None;
             }
             return;
         }
         if self.encoder.is_none() || self.encoder_gen != cur_gen {
             self.encoder = None; // reap a previous connection's encoder first
+            self.last_frame_hash = None;
             let tx = self.inner.video_tx.lock().ok().and_then(|g| g.clone());
             if let Some(tx) = tx {
                 match EncoderSink::new(width, height, self.fps, self.encoder_args.clone(), EncoderTarget::Channel(tx)) {
@@ -211,8 +256,13 @@ impl FrameSink for WsCarrier {
                 return; // connection is mid-teardown
             }
         }
+        let hash = blake3::hash(bgra);
+        if self.last_frame_hash == Some(hash) {
+            return; // pixel-identical to the last fed frame
+        }
         if let Some(enc) = &mut self.encoder {
             enc.on_frame(bgra, width, height, frame_idx);
+            self.last_frame_hash = Some(hash);
         }
     }
 }
@@ -318,6 +368,7 @@ async fn handle_session(
     }
     inner.conn_gen.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
     inner.connected.store(true, std::sync::atomic::Ordering::Release);
+    let _ = inner.waker.send(()); // a fresh viewer wants a frame promptly
     tracing::info!(%peer, "viewer connected");
 
     // First message: session hello with the current stream geometry
@@ -367,6 +418,7 @@ async fn handle_session(
     if let Ok(mut guard) = inner.video_tx.lock() {
         *guard = None;
     }
+    let _ = inner.waker.send(()); // let the host reap the encoder promptly
     tracing::info!(%peer, "viewer disconnected");
     result
 }
@@ -382,6 +434,7 @@ fn handle_client_message(data: &[u8], inner: &Inner) {
                     if let Ok(mut events) = inner.events.lock() {
                         events.push(ev);
                     }
+                    let _ = inner.waker.send(()); // input wants a pass now
                 }
             }
             Err(e) => tracing::debug!(error=%e, "undecodable input event"),
@@ -392,6 +445,13 @@ fn handle_client_message(data: &[u8], inner: &Inner) {
                     if let Ok(mut resize) = inner.resize.lock() {
                         *resize = Some(r);
                     }
+                    let _ = inner.waker.send(());
+                }
+                Some(pb::session_control::Control::SetCadence(c)) => {
+                    if let Ok(mut pending) = inner.cadence_request.lock() {
+                        *pending = Some(c.cadence);
+                    }
+                    let _ = inner.waker.send(());
                 }
                 Some(pb::session_control::Control::Ping(p)) => {
                     // The viewer pings with its decoded-frame count: a remote

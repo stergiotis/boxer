@@ -27,6 +27,7 @@
                font: 12px monospace; height: 100%;
                overscroll-behavior: none; }
   #status { padding: 4px 8px; }
+  #cadence { color: #6a9fb5; text-decoration: none; }
   /* touch-action: none hands every touch to our pointer handlers instead
      of native scrolling — without it, mobile browsers cancel pointer
      events mid-drag to scroll the page, which is what broken gestures
@@ -38,7 +39,7 @@
 </style>
 </head>
 <body>
-<div id="status">connecting…</div>
+<div id="status"><span id="statusmsg">connecting…</span> · <a id="cadence" href="#" title="toggle render cadence (host-wide)"></a></div>
 <canvas id="screen" tabindex="0"></canvas>
 <script>
 "use strict";
@@ -52,9 +53,25 @@ const PREFIX_VIDEO = 0x01, PREFIX_INPUT = 0x02, PREFIX_SESSION = 0x03;
 const WS_URL = new URLSearchParams(location.search).get("ws")
   || `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`;
 
-const statusEl = document.getElementById("status");
+const statusBar = document.getElementById("status");
+const statusEl = document.getElementById("statusmsg");
+const cadenceEl = document.getElementById("cadence");
 const canvas = document.getElementById("screen");
 const ctx2d = canvas.getContext("2d");
+
+// 0 = continuous, 1 = reactive; truth arrives with the hello, toggled
+// optimistically on click (host scope, not per session).
+let cadence = 0;
+function renderCadence() {
+  cadenceEl.textContent = cadence === 1 ? "cadence: reactive" : "cadence: continuous";
+}
+cadenceEl.addEventListener("click", (e) => {
+  e.preventDefault();
+  cadence = cadence === 1 ? 0 : 1;
+  sendSetCadence(cadence);
+  renderCadence();
+});
+renderCadence();
 
 // ---- minimal protobuf reader (proto3 subset used by the wire) ----
 class Reader {
@@ -90,12 +107,13 @@ function parseHello(bytes) { // SessionControl{ hello = 1 }
     const [field, wire] = r.tag();
     if (field === 1 && wire === 2) {
       const h = new Reader(r.bytes());
-      const out = { width: 0, height: 0, ppp: 1.0 };
+      const out = { width: 0, height: 0, ppp: 1.0, cadence: 0 };
       while (!h.eof()) {
         const [f, w] = h.tag();
         if (f === 1 && w === 0) out.width = Number(h.varint());
         else if (f === 2 && w === 0) out.height = Number(h.varint());
         else if (f === 3 && w === 5) out.ppp = h.float();
+        else if (f === 4 && w === 0) out.cadence = Number(h.varint());
         else h.skip(w);
       }
       return out;
@@ -156,6 +174,10 @@ function sendKey(key, code, pressed, repeat, mods) {
 function sendText(text) { sendFramed(PREFIX_INPUT, new Writer().sub(5, new Writer().str(1, text))); }
 function sendPointerGone() { sendFramed(PREFIX_INPUT, new Writer().sub(6, new Writer())); }
 function sendPinchZoom(factor) { sendFramed(PREFIX_INPUT, new Writer().sub(7, new Writer().float(1, factor))); }
+// Runtime render-cadence switch: 0 = continuous, 1 = reactive. Host
+// scope (survives reconnects). Full idle savings need a server launched
+// with IMZERO2_RENDER_CADENCE=reactive — see the .proto note.
+function sendSetCadence(mode) { sendFramed(PREFIX_SESSION, new Writer().sub(4, new Writer().uint(1, mode))); }
 function sendResize(lw, lh, scale) {
   sendFramed(PREFIX_SESSION, new Writer().sub(2, new Writer().float(1, lw).float(2, lh).float(3, scale)));
 }
@@ -168,7 +190,7 @@ function sendPing(nonce) {
 
 // ---- video pipeline ----
 let ws = null, hello = null, decoder = null, configured = false;
-let framesDecoded = 0, lastStatus = 0, inputSetup = false;
+let framesDecoded = 0, lastStatus = 0, inputSetup = false, cadenceParamApplied = false;
 
 function findSps(au) { // Annex-B scan for NAL type 7
   for (let i = 0; i + 3 < au.length; i++) {
@@ -267,7 +289,7 @@ function measureAndSend() {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
   const scale = window.devicePixelRatio || 1;
   const lw = Math.max(320, window.innerWidth);
-  const lh = Math.max(240, window.innerHeight - statusEl.offsetHeight);
+  const lh = Math.max(240, window.innerHeight - statusBar.offsetHeight);
   if (lastSentGeometry &&
       Math.abs(lastSentGeometry[0] - lw) < 1 &&
       Math.abs(lastSentGeometry[1] - lh) < 1 &&
@@ -422,7 +444,20 @@ function connect() {
           if (decoder) { try { decoder.close(); } catch (_) {} decoder = null; }
           configured = false;
         }
+        cadence = h.cadence;
+        renderCadence();
         if (!inputSetup) { inputSetup = true; setupInput(); canvas.focus(); }
+        // ?cadence=reactive|continuous applies once per page load.
+        if (!cadenceParamApplied) {
+          cadenceParamApplied = true;
+          const want = new URLSearchParams(location.search).get("cadence");
+          const mode = want === "reactive" || want === "1" ? 1 : want === "continuous" || want === "0" ? 0 : null;
+          if (mode !== null && mode !== cadence) {
+            cadence = mode;
+            sendSetCadence(mode);
+            renderCadence();
+          }
+        }
         measureAndSend();
       }
     }

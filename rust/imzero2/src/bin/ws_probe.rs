@@ -44,9 +44,16 @@ async fn main() {
     // `resize <lw> <lh> <scale> <after>`.
     let mut click: Option<(f32, f32, u64)> = None;
     let mut resize: Option<(f32, f32, f32, u64)> = None;
+    let mut set_cadence: Option<(u32, u64)> = None;
     let mut i = 4;
     while i < args.len() {
-        if args.get(i).map(String::as_str) == Some("resize") {
+        if args.get(i).map(String::as_str) == Some("cadence") {
+            set_cadence = Some((
+                args.get(i + 1).and_then(|v| v.parse().ok()).expect("cadence mode"),
+                args.get(i + 2).and_then(|v| v.parse().ok()).expect("cadence after_au"),
+            ));
+            i += 3;
+        } else if args.get(i).map(String::as_str) == Some("resize") {
             resize = Some((
                 args.get(i + 1).and_then(|v| v.parse().ok()).expect("resize lw"),
                 args.get(i + 2).and_then(|v| v.parse().ok()).expect("resize lh"),
@@ -115,6 +122,22 @@ async fn main() {
                     }
                     let sink: &mut std::fs::File = resized_out.as_mut().unwrap_or(&mut out);
                     std::io::Write::write_all(sink, &chunk.data).expect("write au");
+                    if let Some((mode, after)) = set_cadence {
+                        if aus >= after {
+                            set_cadence = None;
+                            eprintln!("injecting SetCadence({mode}) after AU {aus}");
+                            let msg = pb::SessionControl {
+                                control: Some(pb::session_control::Control::SetCadence(
+                                    pb::SetCadence { cadence: mode },
+                                )),
+                            };
+                            tx.send(tokio_tungstenite::tungstenite::Message::Binary(
+                                framed(pb::PREFIX_SESSION, &msg).into(),
+                            ))
+                            .await
+                            .expect("send cadence");
+                        }
+                    }
                     if let Some((lw, lh, scale, after)) = resize {
                         if !resize_sent && aus >= after {
                             resize_sent = true;

@@ -96,7 +96,20 @@ message SessionControl {
     SessionHello hello = 1;
     ViewportResize viewport_resize = 2;
     Ping ping = 3;
+    SetCadence set_cadence = 4;
   }
+}
+
+// Client→server: switch the host render cadence at runtime.
+// 0 = continuous (fixed tick at the configured fps), 1 = reactive (pass
+// only when egui schedules a repaint, with a 1 s idle heartbeat; frames
+// identical to the previous one are never encoded in either mode).
+// Scope is the host, not the session — it survives reconnects. Note:
+// the Go side reads IMZERO2_RENDER_CADENCE at startup; full idle savings
+// need the server launched reactive (otherwise the Go side keeps
+// requesting per-frame repaints and reactive degrades to dedup-only).
+message SetCadence {
+  uint32 cadence = 1;
 }
 
 // Server→client: stream geometry the viewer needs to size its canvas and
@@ -108,6 +121,9 @@ message SessionHello {
   uint32 width_px = 1;
   uint32 height_px = 2;
   float pixels_per_point = 3;
+  // Current host cadence (0 = continuous, 1 = reactive) so the viewer's
+  // toggle reflects truth at connect.
+  uint32 cadence = 4;
 }
 
 // Client→server. ADR-0024 SD7/SD8 (amended at acceptance): the client's
