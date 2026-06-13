@@ -1,0 +1,2 @@
+go test fuzz v1
+string("SET A= '';SET A00='';\nSELECT{B:A(0% ArrAY(00))}")

@@ -1,0 +1,2 @@
+go test fuzz v1
+string("(WITH(0)SELECT 0)")

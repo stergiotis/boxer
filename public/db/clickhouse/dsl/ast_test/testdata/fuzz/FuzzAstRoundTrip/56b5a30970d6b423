@@ -1,0 +1,2 @@
+go test fuzz v1
+string("SET A0= '\nSET 0=';\nSELECT{A:A}")
