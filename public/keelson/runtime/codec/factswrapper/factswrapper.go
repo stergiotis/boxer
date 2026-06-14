@@ -93,7 +93,7 @@ func isNonScalarSectionName(s string) bool {
 // sync.OnceValue), arrow/arrow + ipc + memory (Allocator + IPC
 // reader), and the per-package codec / facts imports.
 func (FactsWrapper) Imports(plan *mappingplan.Plan) []string {
-	return []string{
+	imports := []string{
 		`"bytes"`,
 		`"io"`,
 		`"strings"`,
@@ -108,8 +108,23 @@ func (FactsWrapper) Imports(plan *mappingplan.Plan) []string {
 		`cbdml "github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml_cbor"`,
 		`"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/ra"`,
 		`"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/cborarrow"`,
-		`"github.com/stergiotis/boxer/public/keelson/vdd"`,
 	}
+	// vdd is used only by Init's `vdd.MembXxx.GetId()` lookups, one per
+	// kindXxx var. A kind with no ref-channel membership (a plain-only or
+	// verbatim/parametrized-only DTO) emits no lookups, so importing vdd
+	// would be unused.
+	if len(uniqueMemberships(plan)) > 0 {
+		imports = append(imports, `"github.com/stergiotis/boxer/public/keelson/vdd"`)
+	}
+	// The codec's Decode "expected 1 row" check uses eb. The marshallgen
+	// core imports eb only when the plan has a non-const field; for a
+	// plain-only kind it does not, so supply it here to avoid an undefined
+	// reference. (When the core already imports it, adding it again would
+	// duplicate — hence the guard.)
+	if !plan.HasNonConstField() {
+		imports = append(imports, `"github.com/stergiotis/boxer/public/observability/eh/eb"`)
+	}
+	return imports
 }
 
 // KindVars emits `var kindXxx uint64` for each unique non-verbatim

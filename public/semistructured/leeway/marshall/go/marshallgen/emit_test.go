@@ -87,6 +87,35 @@ type MyDTO struct {
 	mustNotContain(t, out, "BeginAttributeSingle")
 }
 
+// TestEmit_PlainOnly pins the 2026-06-14 review fix: a DTO with no tagged
+// sections (only plain columns) must emit valid Go. Previously FillFromArrow
+// got an empty type-parameter list `func F[](…)` — invalid Go, rejected by
+// gofmt — and the section-only imports (iter / dmlruntime / raruntime / eb)
+// were emitted unconditionally and went unused (go build error). FillFromArrow
+// is now non-generic and those imports are omitted.
+func TestEmit_PlainOnly(t *testing.T) {
+	out := generate(t, `package demo
+type MyDTO struct {
+	_  struct{}  `+"`kind:\"my\"`"+`
+	Id uint64    `+"`lw:\",id\"`"+`
+	Ts time.Time `+"`lw:\",ts\"`"+`
+}
+`)
+	parseGo(t, out)                                    // would fail pre-fix: "empty type parameter list"
+	mustContain(t, out, "func MyDTOFillFromArrow(")    // non-generic
+	mustNotContain(t, out, "func MyDTOFillFromArrow[") // no empty type-param list
+	// BuildEntities keeps its Ent / DML params even with zero sections.
+	mustContain(t, out, "func MyDTOBuildEntities[")
+	// Section-only imports must be omitted (else unused-import build error).
+	mustNotContain(t, out, "\"iter\"")
+	mustNotContain(t, out, "observability/eh/eb")
+	mustNotContain(t, out, "dml/runtime")
+	mustNotContain(t, out, "readaccess/runtime")
+	// Plain-path imports stay.
+	mustContain(t, out, "arrow/array")
+	mustContain(t, out, "observability/eh\"")
+}
+
 func TestEmit_ScalarBegin_Unit(t *testing.T) {
 	out := generate(t, `package demo
 type MyDTO struct {

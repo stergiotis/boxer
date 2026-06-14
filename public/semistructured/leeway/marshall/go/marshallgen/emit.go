@@ -154,8 +154,18 @@ func writeImports(sb *strings.Builder, plan *mappingplan.Plan, wrapper WrapperEm
 	}
 	extra := wrapper.Imports(plan)
 
+	// iter (Seq accessors), dmlruntime (AttrI membership-add interfaces) and
+	// raruntime (the read interfaces + FillFromArrow section walk) are used
+	// only by the per-section interfaces / decode. A plain-only DTO (no tagged
+	// fields, only plain columns) emits none of those, so importing them would
+	// be unused imports (go build error). array + eh stay unconditional: plain
+	// reads use array, BuildEntities's commit wrap uses eh.
+	hasTagged := len(plan.Fields) > 0
+
 	line(sb, 0, "import (")
-	line(sb, 1, "\"iter\"")
+	if hasTagged {
+		line(sb, 1, "\"iter\"")
+	}
 	if needsTime {
 		line(sb, 1, "\"time\"")
 	}
@@ -165,12 +175,20 @@ func writeImports(sb *strings.Builder, plan *mappingplan.Plan, wrapper WrapperEm
 	}
 	line(sb, 1, "\"github.com/apache/arrow-go/v18/arrow/array\"")
 	blank(sb)
-	// eh + eb power BuildEntities (CommitEntity error wrap) and
-	// FillFromArrow ("expected exactly one occurrence per row" check).
+	// eh powers BuildEntities's CommitEntity error wrap — always present.
 	line(sb, 1, "\"github.com/stergiotis/boxer/public/observability/eh\"")
-	line(sb, 1, "\"github.com/stergiotis/boxer/public/observability/eh/eb\"")
-	line(sb, 1, "dmlruntime \"github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime\"")
-	line(sb, 1, "raruntime \"github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime\"")
+	// eb powers the FillFromArrow occurrence / carrier-count checks, which
+	// exist only when there is at least one non-const tagged field. A
+	// plain-only (or const-only) DTO emits no eb use, so importing it would
+	// be an unused import (go build error). Wrappers that need eb for a
+	// plain-only kind add it via their own Imports().
+	if plan.HasNonConstField() {
+		line(sb, 1, "\"github.com/stergiotis/boxer/public/observability/eh/eb\"")
+	}
+	if hasTagged {
+		line(sb, 1, "dmlruntime \"github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime\"")
+		line(sb, 1, "raruntime \"github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime\"")
+	}
 	if needsMarshalltypes {
 		line(sb, 1, "\"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/marshalltypes\"")
 	}
@@ -928,13 +946,21 @@ func writeFillFromArrowFunc(sb *strings.Builder, plan *mappingplan.Plan, groups 
 	line(sb, 0, "// plain + tagged-section values into c. Plain columns enter as")
 	line(sb, 0, "// concrete Arrow accessors; per-section Attrs + Membs bind through")
 	line(sb, 0, "// type-parameter interfaces.")
-	linef(sb, 0, "func %sFillFromArrow[", kind)
-	for _, g := range groups {
-		method := methodFor(g.Section)
-		linef(sb, 1, "%sAttrs %s%sAttrsReadI,", method, kind, method)
-		linef(sb, 1, "%sMembs %s%sMembsReadI,", method, kind, method)
+	if len(groups) == 0 {
+		// Plain-only entity (no tagged sections): FillFromArrow is a plain,
+		// non-generic func. An empty type-parameter list `[]` is invalid Go,
+		// so the `[ … ]` block is emitted only when there is at least one
+		// per-section reader type parameter to put in it.
+		linef(sb, 0, "func %sFillFromArrow(", kind)
+	} else {
+		linef(sb, 0, "func %sFillFromArrow[", kind)
+		for _, g := range groups {
+			method := methodFor(g.Section)
+			linef(sb, 1, "%sAttrs %s%sAttrsReadI,", method, kind, method)
+			linef(sb, 1, "%sMembs %s%sMembsReadI,", method, kind, method)
+		}
+		line(sb, 0, "](")
 	}
-	line(sb, 0, "](")
 	linef(sb, 1, "c *%sColumns,", kind)
 	line(sb, 1, "n int,")
 	linef(sb, 1, "idCol %s,", plainArrowParam(idCol))

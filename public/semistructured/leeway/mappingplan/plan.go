@@ -28,6 +28,22 @@ type Plan struct {
 	Fields      []TaggedField
 }
 
+// HasNonConstField reports whether the plan declares at least one
+// non-const tagged field. It is the exact condition under which the
+// generated codec uses the eb package (the FillFromArrow occurrence /
+// carrier-count checks and the BuildEntities explode-length check) — a
+// plain-only or const-only DTO has none, so eb must not be imported.
+// Both marshallgen (core import gating) and codegen wrappers (deciding
+// whether to supply eb themselves) read this so they cannot disagree.
+func (p *Plan) HasNonConstField() bool {
+	for i := range p.Fields {
+		if !p.Fields[i].IsConst {
+			return true
+		}
+	}
+	return false
+}
+
 // PlainCol describes one fact-row plain column wired from a Go field
 // via an empty-membership `lw:` tag (e.g. `Id uint64 `+"`lw:\",id\"`"+`).
 // Plain columns route to physical row columns (id / ts / naturalKey /
