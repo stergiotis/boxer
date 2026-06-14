@@ -130,7 +130,7 @@ func TestPlayApp_PersistSql_NilStorage_NoOp(t *testing.T) {
 	store := NewQueryStore(nil, memory.NewGoAllocator(), 10)
 	inst := NewPlayApp(nil, store, "-- initial")
 	// No SetCapabilities → inst.storage stays nil.
-	inst.PersistSql()        // must not panic / error
+	inst.PersistSql() // must not panic / error
 	inst.RestorePersistedSql()
 	assert.Equal(t, "-- initial", inst.sql, "Restore is a no-op when storage is nil")
 }

@@ -5,11 +5,11 @@ import (
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/anchor"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/anchor"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stretchr/testify/require"
 )

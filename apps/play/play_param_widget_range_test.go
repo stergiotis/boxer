@@ -106,11 +106,11 @@ func TestDateTimeRangeStateDefaultsWhenDraftsEmpty(t *testing.T) {
 
 func TestQuoteForCH(t *testing.T) {
 	cases := map[string]string{
-		"":                       "",
-		"2026-05-24 12:00:00":    "'2026-05-24 12:00:00'",
-		"'already quoted'":       "'already quoted'",
-		"(expression)":           "(expression)",
-		"anchor_now":             "anchor_now",
+		"":                             "",
+		"2026-05-24 12:00:00":          "'2026-05-24 12:00:00'",
+		"'already quoted'":             "'already quoted'",
+		"(expression)":                 "(expression)",
+		"anchor_now":                   "anchor_now",
 		"anchor_now - INTERVAL 1 HOUR": "anchor_now - INTERVAL 1 HOUR",
 	}
 	for in, want := range cases {

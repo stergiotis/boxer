@@ -47,12 +47,12 @@ const (
 type timelineContract struct {
 	Mode timelineMode
 
-	ColTime     int32
-	UnitTime    arrow.TimeUnit
-	ColTimeEnd  int32
-	UnitTimeEnd arrow.TimeUnit
-	ColLabel    int32
-	ColLane     int32
+	ColTime      int32
+	UnitTime     arrow.TimeUnit
+	ColTimeEnd   int32
+	UnitTimeEnd  arrow.TimeUnit
+	ColLabel     int32
+	ColLane      int32
 	ColIntensity int32
 
 	Reject string
@@ -84,8 +84,8 @@ type TimelineDriver struct {
 	seenExecuted time.Time
 	contract     timelineContract
 
-	dataMinMS   int64
-	dataMaxMS   int64
+	dataMinMS       int64
+	dataMaxMS       int64
 	dataExtentValid bool
 
 	bands             []layout.BackgroundBand

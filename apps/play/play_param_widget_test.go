@@ -93,13 +93,13 @@ func TestScalarTextWidgetEmptyRejects(t *testing.T) {
 
 func TestScanUngroupHint(t *testing.T) {
 	cases := map[string]bool{
-		"-- play: ungroup\nSELECT 1":               true,
-		"--play: ungroup\nSELECT 1":                true,
-		"  --  play: ungroup  \nSELECT 1":          true,
-		"-- PLAY: UNGROUP\nSELECT 1":               true,
-		"SELECT 1 -- play: ungroup":                false, // not a line comment
-		"-- some other comment\nSELECT 1":          false,
-		"SELECT 1":                                 false,
+		"-- play: ungroup\nSELECT 1":      true,
+		"--play: ungroup\nSELECT 1":       true,
+		"  --  play: ungroup  \nSELECT 1": true,
+		"-- PLAY: UNGROUP\nSELECT 1":      true,
+		"SELECT 1 -- play: ungroup":       false, // not a line comment
+		"-- some other comment\nSELECT 1": false,
+		"SELECT 1":                        false,
 	}
 	for sql, want := range cases {
 		if got := scanUngroupHint(sql); got != want {

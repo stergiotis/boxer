@@ -8,9 +8,9 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/card"
-	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )

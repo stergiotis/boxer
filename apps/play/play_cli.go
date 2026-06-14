@@ -7,9 +7,9 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/config"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/application"

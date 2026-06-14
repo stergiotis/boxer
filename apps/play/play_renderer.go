@@ -13,6 +13,8 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
@@ -20,8 +22,6 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/pager"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker/evaluator"
-	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 )
 
 // persistKeyLastSql is the runtime.persist key the playground uses to
@@ -29,8 +29,8 @@ import (
 // dots) per the persist.Client contract; matches the manifest's
 // PersistedKeys entry.
 const (
-	persistKeyLastSql           = "lastSql"
-	persistKeyTimelineBandsSql  = "timelineBandsSql"
+	persistKeyLastSql          = "lastSql"
+	persistKeyTimelineBandsSql = "timelineBandsSql"
 )
 
 const (
@@ -62,9 +62,9 @@ const (
 )
 
 type PlayApp struct {
-	ids          *c.WidgetIdStack
-	store        *QueryStore
-	client       *Client
+	ids    *c.WidgetIdStack
+	store  *QueryStore
+	client *Client
 
 	// density resolves IDS spacing tokens at the active preset
 	// (ADR-0032 §SD2); cached once at NewPlayApp.
@@ -79,10 +79,10 @@ type PlayApp struct {
 	// renderSnippetsTab, captured-and-cleared by renderSqlEditor.
 	pendingSnippetInsert  string
 	pendingSnippetReplace string
-	requestRun  bool
-	selectedRow      int64
-	cards            *CardDriver
-	projector        *Projector
+	requestRun            bool
+	selectedRow           int64
+	cards                 *CardDriver
+	projector             *Projector
 
 	// projFSM mirrors projector lifecycle into a fsmview.Machine so the
 	// renderer can show a chip + drill-down popup (table / graph /
@@ -96,10 +96,10 @@ type PlayApp struct {
 	// queryFSM tracks the result↔input lifecycle (play_querystate.go) so the
 	// status bar names the state and flags stale/empty output; queryFSMWidget
 	// surfaces the graph + transition history + provenance as a status-bar chip.
-	queryFSM       *fsmview.Machine[queryStateE]
-	queryFSMWidget *fsmview.Widget[queryStateE]
-	timeline              *TimelineDriver
-	timelineBandsSql      string
+	queryFSM               *fsmview.Machine[queryStateE]
+	queryFSMWidget         *fsmview.Widget[queryStateE]
+	timeline               *TimelineDriver
+	timelineBandsSql       string
 	timelineNowLineEnabled bool
 
 	// colorByFeature picks the EntityFeatures field whose value drives the
@@ -363,15 +363,15 @@ func NewPlayApp(client *Client, store *QueryStore, initialSQL string) *PlayApp {
 	projFSM := newProjectorFSM()
 	queryFSM := newQueryFSM()
 	inst := &PlayApp{
-		ids:            c.NewWidgetIdStack(),
-		store:          store,
-		client:         client,
-		density:        styletokens.DensityFromEnv(),
-		sql:            initialSQL,
-		selectedRow:    -1,
-		cards:          cards,
-		projector:      NewProjector(projectorIds, cards),
-		projFSM:        projFSM,
+		ids:         c.NewWidgetIdStack(),
+		store:       store,
+		client:      client,
+		density:     styletokens.DensityFromEnv(),
+		sql:         initialSQL,
+		selectedRow: -1,
+		cards:       cards,
+		projector:   NewProjector(projectorIds, cards),
+		projFSM:     projFSM,
 		projFSMWidget: fsmview.New(projFSMIds, "projector-fsm", projFSM).
 			Title("UMAP projector").
 			ShowSubscript(true).

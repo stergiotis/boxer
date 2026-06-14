@@ -6,12 +6,12 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/config/env"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
+	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker"
 )
 
