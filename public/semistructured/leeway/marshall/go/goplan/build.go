@@ -382,11 +382,13 @@ func (b *PlanBuilder) AddField(goFieldName, lwTag string, shape FieldShape) (err
 
 	// In-DTO uniqueness: (membership, sub-column) is the key. Two fields
 	// can share a membership iff they target distinct sub-columns of a
-	// multi-column section (u32Range with beginIncl + endExcl).
-	dupKey := membership
-	if column != "" {
-		dupKey = membership + ":" + column
-	}
+	// multi-column section (u32Range with beginIncl + endExcl). The
+	// separator is NUL, not ":", so a colon inside a (verbatim) membership
+	// name cannot alias a membership+column pair — e.g. membership "a:b"
+	// vs membership "a" column "b" both keyed "a:b" under a ":" separator,
+	// which false-rejects the second valid field. Matches the carriers
+	// map key below.
+	dupKey := membership + "\x00" + column
 	if prev, dup := b.usedMemberships[dupKey]; dup {
 		err = eb.Build().Str("membership", membership).Str("column", column).Str("first", prev).Str("second", goFieldName).Errorf("membership+column appears on two DTO fields")
 		return

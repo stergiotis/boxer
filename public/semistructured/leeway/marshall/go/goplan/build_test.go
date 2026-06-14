@@ -244,3 +244,22 @@ func TestPlanBuilder_Reject(t *testing.T) {
 		})
 	}
 }
+
+// TestPlanBuilder_MembershipColonNoFalseCollision pins the 2026-06-14 review
+// fix: the (membership, sub-column) uniqueness key uses a NUL separator, not
+// ":", so a colon inside a verbatim membership name cannot alias a
+// membership+column pair. Here a scalar field with membership "a:b" and a
+// multi-sub-column section whose membership is "a" with sub-column "b" are
+// distinct, valid, emittable fields — but a ":" separator keyed both "a:b"
+// and false-rejected the second as a duplicate. Verbatim is used so the
+// colon label declares no kindXxx Go identifier.
+func TestPlanBuilder_MembershipColonNoFalseCollision(t *testing.T) {
+	p, err := buildPlan(
+		kindUS, idCol,
+		fld{name: "Alpha", lw: "a:b,sym,verbatim", shape: shp("string")},
+		fld{name: "Beg", lw: "a,rng:b,verbatim", shape: shp("uint32")},
+		fld{name: "End", lw: "a,rng:c,verbatim", shape: shp("uint32")},
+	)
+	require.NoError(t, err, "membership %q and membership %q+column %q must not collide", "a:b", "a", "b")
+	require.Len(t, p.Fields, 3)
+}
