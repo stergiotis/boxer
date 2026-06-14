@@ -1,12 +1,10 @@
 ---
 type: how-to
 audience: engineer with a specific task
-status: draft
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to stable
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to stable
+status: stable
+reviewed-by: "@stergiotis"
+reviewed-date: 2026-06-15
 ---
-
-> **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
 
 # How to sign and verify boxer releases
 
