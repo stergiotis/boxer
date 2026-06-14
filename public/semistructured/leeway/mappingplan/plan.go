@@ -325,21 +325,56 @@ func (c MembershipChannel) HasParams() bool                  { return c.desc().h
 // invariant check (see TestChannelTableAxes), not a runtime path.
 func validateChannelTable() (err error) {
 	for i := range channelTable {
-		c := MembershipChannel(i)
-		d := channelTable[i]
-		if (d.identity == ChannelIdentityRef) != d.needsKindVar {
-			return eb.Build().Str("channel", c.String()).Errorf("identity=Ref must match needsKindVar")
+		if err = validateChannelDescriptor(MembershipChannel(i).String(), channelTable[i]); err != nil {
+			return
 		}
-		if (d.identity == ChannelIdentityVerbatim) != d.embedsLiteralName {
-			return eb.Build().Str("channel", c.String()).Errorf("identity=Verbatim must match embedsLiteralName")
-		}
-		carrier := d.identity.HasParams()
-		if carrier != d.usesCarrier {
-			return eb.Build().Str("channel", c.String()).Errorf("a per-row identity must match usesCarrier")
-		}
-		if carrier != d.hasParams {
-			return eb.Build().Str("channel", c.String()).Errorf("hasParams must match the per-row (carrier) identity")
-		}
+	}
+	return nil
+}
+
+// validateChannelDescriptor asserts one descriptor row is self-consistent:
+// its carriage axes match the behavioural dispatch booleans, and the de-facto
+// runtime-coupling fields (the method-name suffixes + carrier type/Seq2 list,
+// which name the DML's AddMembership<…>P and the RA's GetMembValue<…>) are
+// populated consistently with the channel class. The latter is what catches a
+// new or mis-edited row that forgets / typos a coupling field: it then fails at
+// load instead of silently naming a method that does not exist — which would
+// otherwise stay latent for any channel no codec exercises yet (the carrier
+// channels have no in-tree codec consumer). Split out from validateChannelTable
+// so the per-row contract is unit-testable against deliberately-broken rows.
+func validateChannelDescriptor(name string, d channelDescriptor) (err error) {
+	if (d.identity == ChannelIdentityRef) != d.needsKindVar {
+		return eb.Build().Str("channel", name).Errorf("identity=Ref must match needsKindVar")
+	}
+	if (d.identity == ChannelIdentityVerbatim) != d.embedsLiteralName {
+		return eb.Build().Str("channel", name).Errorf("identity=Verbatim must match embedsLiteralName")
+	}
+	carrier := d.identity.HasParams()
+	if carrier != d.usesCarrier {
+		return eb.Build().Str("channel", name).Errorf("a per-row identity must match usesCarrier")
+	}
+	if carrier != d.hasParams {
+		return eb.Build().Str("channel", name).Errorf("hasParams must match the per-row (carrier) identity")
+	}
+	// Coupling fields. Every channel names a write + read method; only carrier
+	// channels name a carrier type + combined read accessor; only mixed
+	// carriers (a per-row id/name value beside params) read via a Seq2, while
+	// the parametrized carriers (params-only) read via a plain Seq.
+	if d.addMethodSuffix == "" {
+		return eb.Build().Str("channel", name).Errorf("addMethodSuffix must be non-empty")
+	}
+	if d.readIterElemType == "" {
+		return eb.Build().Str("channel", name).Errorf("readIterElemType must be non-empty")
+	}
+	if (d.carrierType != "") != carrier {
+		return eb.Build().Str("channel", name).Errorf("carrierType must be set iff the channel uses a carrier")
+	}
+	if (d.carrierReadSuffix != "") != carrier {
+		return eb.Build().Str("channel", name).Errorf("carrierReadSuffix must be set iff the channel uses a carrier")
+	}
+	mixed := d.identity == ChannelIdentityPerRowId || d.identity == ChannelIdentityPerRowName
+	if (d.carrierSeq2Types != "") != mixed {
+		return eb.Build().Str("channel", name).Errorf("carrierSeq2Types must be set iff the channel is a mixed carrier")
 	}
 	return nil
 }
