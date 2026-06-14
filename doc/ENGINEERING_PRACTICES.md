@@ -180,6 +180,11 @@ since been retired in favour of trailer-based attribution.
 - No vendoring; [go.mod](../go.mod) is authoritative. The
   [test workflow](../.github/workflows/test.yaml) contains a (currently
   commented-out) `go mod tidy --diff` drift check.
+- **Release signing.** Release tags are SSH-signed; anything that builds or
+  deploys from a tag verifies the signature against a trusted public key first
+  (`git verify-tag`). The imzero2 on-box deploy enforces it — it refuses to build
+  an unsigned tag ([ADR-0085](./adr/0085-imzero2-demo-pull-build-atomic-deploy.md)
+  SD8). Recipe: [How to sign and verify boxer releases](./howto/release-signing.md).
 
 CycloneDX SBOMs are increasingly standard for SLSA / supply-chain conscious
 projects (Kubernetes, OpenTelemetry, GitHub itself). Many repos delegate
