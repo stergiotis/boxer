@@ -83,6 +83,16 @@ func Run(ctx context.Context, lg zerolog.Logger, cfg Config) (deployed bool, err
 	if err = checkout(ctx, lg, cfg, newest); err != nil {
 		return false, err
 	}
+	commit, clean, hErr := headInfo(ctx, cfg.Workspace) // SD7: deployed-revision agreement
+	if hErr != nil {
+		lg.Warn().Err(hErr).Msg("deploy: could not resolve HEAD (deployed-revision agreement unverified)")
+	} else {
+		lg.Info().Str("tag", newest).Str("commit", short(commit)).Bool("clean", clean).
+			Msg("deploy: building revision (the demo's runinfo will report this commit)")
+		if !clean {
+			lg.Warn().Str("tag", newest).Msg("deploy: workspace not clean after checkout — built vcs_revision will be marked modified")
+		}
+	}
 	if err = build(ctx, lg, cfg); err != nil {
 		return false, err
 	}
@@ -115,7 +125,7 @@ func Run(ctx context.Context, lg zerolog.Logger, cfg Config) (deployed bool, err
 		return false, eh.Errorf("deploy: %s rolled back to %s after activation failure: %w", newest, filepath.Base(prev), actErr)
 	}
 	prune(lg, cfg)
-	lg.Info().Str("tag", newest).Msg("deploy: live")
+	lg.Info().Str("tag", newest).Str("commit", short(commit)).Msg("deploy: live")
 	return true, nil
 }
 
@@ -572,6 +582,30 @@ func tail(s string, n int) string {
 func orNone(s string) string {
 	if s == "" {
 		return "(none)"
+	}
+	return s
+}
+
+// headInfo returns the workspace's resolved HEAD commit and whether the tree
+// is clean. The Go build stamps this commit as the binary's vcs revision, so
+// the running demo's runinfo will report it — ADR-0085 SD7's deployed-revision
+// agreement, by construction.
+func headInfo(ctx context.Context, workspace string) (commit string, clean bool, err error) {
+	rev, e := run(ctx, workspace, nil, "git", "rev-parse", "HEAD")
+	if e != nil {
+		return "", false, eb.Build().Str("output", tail(rev, 400)).Errorf("deploy: rev-parse HEAD: %w", e)
+	}
+	commit = strings.TrimSpace(rev)
+	st, e := run(ctx, workspace, nil, "git", "status", "--porcelain")
+	if e != nil {
+		return commit, false, eh.Errorf("deploy: git status: %w", e)
+	}
+	return commit, strings.TrimSpace(st) == "", nil
+}
+
+func short(s string) string {
+	if len(s) > 12 {
+		return s[:12]
 	}
 	return s
 }

@@ -2,18 +2,18 @@ package deploy
 
 import (
 	"path/filepath"
-	"time"
 
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
 	"github.com/urfave/cli/v2"
 )
 
-// NewCommand returns the `imzero2 deploy` subcommand (ADR-0085). It is
-// meant to be fired by a systemd timer: it polls the workspace clone's
-// tags and, on a newer release tag than `current`, checks out, builds via
-// the project scripts, snapshots the artifacts into releases/<tag>/,
-// verifies the build actually streams (ws_probe), then atomically swaps the
-// `current` symlink and restarts the service. Phase 1: happy path only.
+const defaultEncoderArgs = "-c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 100000"
+
+// NewCommand returns the `imzero2 deploy` subcommand (ADR-0085). Flag
+// defaults come from the IMZERO2_DEPLOY_* env registry (SD7) — so systemd
+// `Environment=` configures the tool and every knob self-documents in
+// doc/env-vars.md — and a flag passed on the command line overrides the env.
 func NewCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "deploy",
@@ -23,21 +23,23 @@ func NewCommand() *cli.Command {
 			"release tag than `current` it checks out, builds via the project\n" +
 			"scripts, snapshots the artifacts into releases/<tag>/, verifies the\n" +
 			"build streams (ws_probe on a scratch port), then atomically swaps the\n" +
-			"`current` symlink and restarts the service. Rollback/retention are a\n" +
-			"later phase; --dry-run stops after build+gate.",
+			"`current` symlink and restarts the service. A release that fails to\n" +
+			"serve after the swap is rolled back; old releases beyond --keep are\n" +
+			"pruned. --dry-run stops after build+gate. Knobs default from the\n" +
+			"IMZERO2_DEPLOY_* env vars (see doc/env-vars.md); flags override.",
 		Flags: []cli.Flag{
-			&cli.StringFlag{Name: "root", Value: "/opt/imzero2", Usage: "deploy root; workspace/releases/current derive from it unless overridden"},
-			&cli.StringFlag{Name: "workspace", Usage: "persistent git clone + build caches (default <root>/workspace)"},
-			&cli.StringFlag{Name: "releases-dir", Usage: "immutable release snapshots (default <root>/releases)"},
-			&cli.StringFlag{Name: "current", Usage: "the `current` symlink (default <root>/current)"},
-			&cli.StringFlag{Name: "remote", Value: "origin", Usage: "git remote name in the workspace clone (read-only)"},
-			&cli.StringFlag{Name: "service", Value: "imzero2-demo.service", Usage: "systemd unit restarted on swap"},
-			&cli.IntFlag{Name: "scratch-port", Value: 18089, Usage: "loopback port the gate binds the candidate carrier on"},
-			&cli.IntFlag{Name: "gate-aus", Value: 30, Usage: "access units ws_probe must receive for the gate to pass"},
-			&cli.DurationFlag{Name: "gate-timeout", Value: 120 * time.Second, Usage: "overall gate budget"},
-			&cli.IntFlag{Name: "live-port", Value: 8089, Usage: "the demo service's listen port (post-restart health-probe target)"},
-			&cli.IntFlag{Name: "keep", Value: 5, Usage: "release dirs to retain for rollback history"},
-			&cli.StringFlag{Name: "encoder-args", Value: "-c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 100000", Usage: "IMZERO2_HEADLESS_ENCODER_ARGS for the gate run"},
+			&cli.StringFlag{Name: "root", Value: imzero2env.DeployRoot.Get(), Usage: "deploy root; workspace/releases/current derive from it unless overridden"},
+			&cli.StringFlag{Name: "workspace", Value: imzero2env.DeployWorkspace.Get(), Usage: "persistent git clone + build caches (default <root>/workspace)"},
+			&cli.StringFlag{Name: "releases-dir", Value: imzero2env.DeployReleasesDir.Get(), Usage: "immutable release snapshots (default <root>/releases)"},
+			&cli.StringFlag{Name: "current", Value: imzero2env.DeployCurrent.Get(), Usage: "the `current` symlink (default <root>/current)"},
+			&cli.StringFlag{Name: "remote", Value: imzero2env.DeployRemote.Get(), Usage: "git remote name in the workspace clone (read-only)"},
+			&cli.StringFlag{Name: "service", Value: imzero2env.DeployService.Get(), Usage: "systemd unit restarted on swap"},
+			&cli.IntFlag{Name: "scratch-port", Value: int(imzero2env.DeployScratchPort.Get()), Usage: "loopback port the gate binds the candidate carrier on"},
+			&cli.IntFlag{Name: "live-port", Value: int(imzero2env.DeployLivePort.Get()), Usage: "the demo service's listen port (post-restart health-probe target)"},
+			&cli.IntFlag{Name: "gate-aus", Value: int(imzero2env.DeployGateAUs.Get()), Usage: "access units ws_probe must receive for the gate to pass"},
+			&cli.DurationFlag{Name: "gate-timeout", Value: imzero2env.DeployGateTimeout.Get(), Usage: "overall gate / health-probe budget"},
+			&cli.IntFlag{Name: "keep", Value: int(imzero2env.DeployKeep.Get()), Usage: "release dirs to retain for rollback history"},
+			&cli.StringFlag{Name: "encoder-args", Value: gateEncoderDefault(), Usage: "IMZERO2_HEADLESS_ENCODER_ARGS for the gate run; defaults to the live service's encoder, else x264"},
 			&cli.StringFlag{Name: "main-font", Usage: "main font TTF (default: fc-match 'Noto Sans')"},
 			&cli.StringFlag{Name: "phosphor-font", Usage: "phosphor font TTF (default: the release's bundled asset)"},
 			&cli.StringFlag{Name: "fallback-font", Usage: "fallback font TTF (default: fc-match 'Noto Sans CJK JP')"},
@@ -52,9 +54,9 @@ func NewCommand() *cli.Command {
 				CurrentLink:  orDefault(c.String("current"), filepath.Join(root, "current")),
 				ServiceName:  c.String("service"),
 				ScratchPort:  c.Int("scratch-port"),
+				LivePort:     c.Int("live-port"),
 				GateAUs:      c.Int("gate-aus"),
 				GateTimeout:  c.Duration("gate-timeout"),
-				LivePort:     c.Int("live-port"),
 				KeepReleases: c.Int("keep"),
 				EncoderArgs:  c.String("encoder-args"),
 				MainFont:     c.String("main-font"),
@@ -66,6 +68,15 @@ func NewCommand() *cli.Command {
 			return err
 		},
 	}
+}
+
+// gateEncoderDefault reuses the live service's encoder (IMZERO2_HEADLESS_ENCODER_ARGS)
+// for the gate run so the gate exercises the same path, falling back to x264.
+func gateEncoderDefault() string {
+	if v := imzero2env.HeadlessEncoderArgs.Get(); v != "" {
+		return v
+	}
+	return defaultEncoderArgs
 }
 
 func orDefault(v, def string) string {

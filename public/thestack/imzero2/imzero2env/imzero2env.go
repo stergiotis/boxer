@@ -192,6 +192,97 @@ var (
 		Description: "dual-feature builds only: 1 or on selects the headless host at runtime; ignored in single-host builds",
 		Category:    env.CategoryDev,
 	})
+
+	// The IMZERO2_DEPLOY_* group configures the on-box pull-build-and-atomic-
+	// deploy tool (ADR-0085, `imzero2 deploy`): a build-capable box polls
+	// boxer's release tags, builds on-box, gates with ws_probe, and atomically
+	// swaps a `current` symlink. Read by the Go deploy command; each has a
+	// matching cli flag that overrides the env value.
+
+	DeployRoot = env.NewPath(env.Spec{
+		Name:        "IMZERO2_DEPLOY_ROOT",
+		Description: "on-box deploy root (ADR-0085); workspace/releases/current derive from it unless overridden",
+		Category:    env.CategorySystem,
+		Default:     "/opt/imzero2",
+		CliFlagName: "root",
+	})
+
+	DeployWorkspace = env.NewPath(env.Spec{
+		Name:        "IMZERO2_DEPLOY_WORKSPACE",
+		Description: "persistent git clone + build caches; empty derives <root>/workspace",
+		Category:    env.CategorySystem,
+		CliFlagName: "workspace",
+	})
+
+	DeployReleasesDir = env.NewPath(env.Spec{
+		Name:        "IMZERO2_DEPLOY_RELEASES_DIR",
+		Description: "immutable release snapshots releases/<tag>/; empty derives <root>/releases",
+		Category:    env.CategorySystem,
+		CliFlagName: "releases-dir",
+	})
+
+	DeployCurrent = env.NewPath(env.Spec{
+		Name:        "IMZERO2_DEPLOY_CURRENT",
+		Description: "the `current` symlink the demo unit runs through; empty derives <root>/current",
+		Category:    env.CategorySystem,
+		CliFlagName: "current",
+	})
+
+	DeployRemote = env.NewString(env.Spec{
+		Name:        "IMZERO2_DEPLOY_REMOTE",
+		Description: "git remote name in the workspace clone (read-only)",
+		Category:    env.CategorySystem,
+		Default:     "origin",
+		CliFlagName: "remote",
+	})
+
+	DeployService = env.NewString(env.Spec{
+		Name:        "IMZERO2_DEPLOY_SERVICE",
+		Description: "systemd unit restarted on an atomic swap",
+		Category:    env.CategorySystem,
+		Default:     "imzero2-demo.service",
+		CliFlagName: "service",
+	})
+
+	DeployScratchPort = env.NewInt(env.Spec{
+		Name:        "IMZERO2_DEPLOY_SCRATCH_PORT",
+		Description: "loopback port the pre-swap gate binds the candidate carrier on",
+		Category:    env.CategorySystem,
+		Default:     "18089",
+		CliFlagName: "scratch-port",
+	})
+
+	DeployLivePort = env.NewInt(env.Spec{
+		Name:        "IMZERO2_DEPLOY_LIVE_PORT",
+		Description: "the demo service's listen port (post-restart health-probe target)",
+		Category:    env.CategorySystem,
+		Default:     "8089",
+		CliFlagName: "live-port",
+	})
+
+	DeployGateAUs = env.NewInt(env.Spec{
+		Name:        "IMZERO2_DEPLOY_GATE_AUS",
+		Description: "access units ws_probe must decode for the gate and post-restart health check to pass",
+		Category:    env.CategorySystem,
+		Default:     "30",
+		CliFlagName: "gate-aus",
+	})
+
+	DeployGateTimeout = env.NewDuration(env.Spec{
+		Name:        "IMZERO2_DEPLOY_GATE_TIMEOUT",
+		Description: "overall budget for the gate and the post-restart health probe",
+		Category:    env.CategorySystem,
+		Default:     "120s",
+		CliFlagName: "gate-timeout",
+	})
+
+	DeployKeep = env.NewInt(env.Spec{
+		Name:        "IMZERO2_DEPLOY_KEEP",
+		Description: "release dirs to retain for rollback history",
+		Category:    env.CategorySystem,
+		Default:     "5",
+		CliFlagName: "keep",
+	})
 )
 
 // ScreenshotSizeWH parses [ScreenshotSize] as "WxH". Returns (0,0,false)
