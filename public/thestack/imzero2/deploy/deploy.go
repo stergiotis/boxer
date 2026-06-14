@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -61,7 +62,7 @@ const (
 	rustDirRel   = "rust/imzero2"
 	mainGoRel    = "rust/imzero2/main_go"
 	clientBinRel = "rust/imzero2/target/headless/release/imzero2"
-	wsProbeRel   = "rust/imzero2/target/headless/release/ws_probe"
+	wsProbeRel   = "rust/imzero2/target/headless/release/imzero2_ws_probe" // Cargo bin target name (file is ws_probe.rs)
 	assetsRel    = "rust/imzero2/assets"
 	phosphorRel  = "assets/fonts/phosphor/Phosphor.ttf" // within a release dir
 )
@@ -183,14 +184,14 @@ func build(ctx context.Context, lg zerolog.Logger, cfg Config) error {
 	// ws_probe (the gate client) shares the headless target-dir.
 	if err := step(ctx, lg, "build-ws_probe", rustDir, nil,
 		"cargo", "build", "--release", "--no-default-features", "--features", "headless",
-		"--bin", "ws_probe", "--target-dir", "target/headless"); err != nil {
+		"--bin", "imzero2_ws_probe", "--target-dir", "target/headless"); err != nil {
 		return err
 	}
 	// The Go launcher (carries this very `deploy` subcommand for the next run).
 	return step(ctx, lg, "build-go", rustDir, nil, "bash", "build_go.sh")
 }
 
-func stage(_ context.Context, lg zerolog.Logger, cfg Config, tag string) (string, error) {
+func stage(ctx context.Context, lg zerolog.Logger, cfg Config, tag string) (string, error) {
 	relDir := filepath.Join(cfg.ReleasesDir, tag)
 	tmp := relDir + ".staging"
 	if err := os.RemoveAll(tmp); err != nil {
@@ -219,8 +220,36 @@ func stage(_ context.Context, lg zerolog.Logger, cfg Config, tag string) (string
 	if err := os.Rename(tmp, relDir); err != nil {
 		return "", eh.Errorf("deploy: finalize release: %w", err)
 	}
+	relabelSELinux(ctx, lg, relDir) // exec under enforcing SELinux; backstop (see deploy/ansible/README.md)
 	lg.Info().Str("release", relDir).Msg("deploy: staged")
 	return relDir, nil
+}
+
+// relabelSELinux best-effort restores SELinux file contexts on a freshly
+// staged release so the gate (and the live demo) can exec its binaries under
+// enforcing policy. The durable mechanism is the persistent fcontext rule the
+// provisioner installs (the releases tree -> bin_t) plus parent-dir label
+// inheritance; this re-applies it per release and catches label drift. It is a
+// no-op when SELinux is not enabled or restorecon is absent, and never fatal —
+// a relabel hiccup must not strand an otherwise-good release. It works when the
+// deploy runs in an unconfined service domain (which may relabel); a confined
+// domain can lack the permission, in which case the fcontext rule + inheritance
+// carry the label instead.
+func relabelSELinux(ctx context.Context, lg zerolog.Logger, dir string) {
+	if _, err := os.Stat("/sys/fs/selinux/enforce"); err != nil {
+		return // SELinux not enabled on this box
+	}
+	bin, err := exec.LookPath("restorecon")
+	if err != nil {
+		lg.Warn().Str("dir", dir).Msg("deploy: SELinux enabled but restorecon not found (policycoreutils); relying on fcontext + inheritance")
+		return
+	}
+	if out, rErr := run(ctx, "", nil, bin, "-RF", dir); rErr != nil {
+		lg.Warn().Str("dir", dir).Str("output", tail(out, 500)).Err(rErr).
+			Msg("deploy: SELinux relabel failed; if the demo will not exec, label the releases tree bin_t (deploy/ansible/README.md)")
+		return
+	}
+	lg.Debug().Str("dir", dir).Msg("deploy: SELinux contexts restored on release")
 }
 
 // gate starts the candidate on a scratch loopback port (interactive
@@ -229,6 +258,19 @@ func stage(_ context.Context, lg zerolog.Logger, cfg Config, tag string) (string
 func gate(ctx context.Context, lg zerolog.Logger, cfg Config, relDir string) error {
 	gctx, cancel := context.WithTimeout(ctx, cfg.GateTimeout)
 	defer cancel()
+
+	// The candidate carrier binds the scratch port (ws) plus scratch+1 (its
+	// viewer page); ws_probe then connects to the scratch port. If either is
+	// already held — a carrier leaked by a crashed prior deploy, or a port
+	// collision with the live service — the candidate can't own the port and
+	// ws_probe could decode a STRANGER's stream, waving a broken release
+	// through the gate. Fail fast rather than gate against an unknown listener.
+	for _, p := range []int{cfg.ScratchPort, cfg.ScratchPort + 1} {
+		if !portFree(p) {
+			return eb.Build().Int("port", p).Errorf(
+				"deploy: gate — scratch port %d already in use (stale carrier or collision with the live port); refusing to probe an unknown listener", p)
+		}
+	}
 
 	args := []string{
 		"--logLevel=warn", "imzero2", "demo",
@@ -250,7 +292,7 @@ func gate(ctx context.Context, lg zerolog.Logger, cfg Config, relDir string) err
 
 	cmd := exec.CommandContext(gctx, filepath.Join(relDir, "main_go"), args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true} // own group → kill the whole tree
-	cmd.Env = append(os.Environ(),
+	cmd.Env = envWith(
 		"IMZERO2_HEADLESS_LISTEN=127.0.0.1:"+strconv.Itoa(cfg.ScratchPort),
 		"IMZERO2_HEADLESS_FPS=30",
 		"IMZERO2_HEADLESS_ENCODER_ARGS="+cfg.EncoderArgs,
@@ -505,6 +547,39 @@ func step(ctx context.Context, lg zerolog.Logger, what, dir string, env []string
 	}
 	lg.Debug().Str("step", what).Msg("deploy: step ok")
 	return nil
+}
+
+// portFree reports whether a loopback TCP port can be bound right now. The gate
+// uses it to refuse probing a scratch port something else already holds (see the
+// caller) — a held port means the candidate isn't the listener ws_probe reaches.
+func portFree(port int) bool {
+	l, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
+	if err != nil {
+		return false
+	}
+	_ = l.Close()
+	return true
+}
+
+// envWith returns os.Environ() with the given KEY=VALUE entries, replacing any
+// inherited entry for those keys rather than appending duplicates. getenv
+// returns the FIRST match for a duplicate key, so a plain append would let an
+// inherited IMZERO2_HEADLESS_ENCODER_ARGS shadow the encoder the gate intends.
+func envWith(kv ...string) []string {
+	override := make(map[string]bool, len(kv))
+	for _, e := range kv {
+		if i := strings.IndexByte(e, '='); i > 0 {
+			override[e[:i]] = true
+		}
+	}
+	out := make([]string, 0, len(kv)+8)
+	for _, e := range os.Environ() {
+		if i := strings.IndexByte(e, '='); i > 0 && override[e[:i]] {
+			continue
+		}
+		out = append(out, e)
+	}
+	return append(out, kv...)
 }
 
 func run(ctx context.Context, dir string, env []string, name string, args ...string) (string, error) {
