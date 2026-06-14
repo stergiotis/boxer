@@ -143,6 +143,14 @@ Implementation phasing: **Phase 1** — bind-address gate (SD1) + token-in-subpr
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See `doc/DOCUMENTATION_STANDARD.md` §1 ADR for the edit-policy tiers (Tier 1 in-place / Tier 2 `## Updates` H3 / Tier 3 superseding ADR).
 
+## Updates
+
+### 2026-06-14 — Client-architecture envelope accepted as ADR-0087; active/passive viewer tier proposed as ADR-0086
+
+The client-side direction deferred here split into two follow-ups. [ADR-0087](./0087-imzero2-client-compositor-compartmentalization.md) (accepted 2026-06-14, as a posture plus a gated deferral) records the embeddable-web-component + in-client window-manager + multi-app **compartmentalization** posture: the browser client is a presentation compositor, never an enforcement boundary; the topology is MILS (separate single-level backends + a composing client) with enforcement in per-backend auth + network separation + a controlled host. Two consequences land on this ADR. **SD5's single-active session becomes the per-backend substrate** (a focused window is active, the rest passive). And **SD6 clipboard *sync* inverts to per-compartment *isolation*** in the compartmentalized (trusted-shell) deployment tier, because `navigator.clipboard` is page-global — the untrusted-embed tier makes no clipboard-isolation claim.
+
+Separately, the deliberate re-opening of the **rejected O4** (concurrent multi-viewer) that the Alternatives held the kill-reason for is designed in [ADR-0086](./0086-imzero2-active-passive-viewers-and-roster.md) (proposed): a read-only **passive** tier that meets the multi-viewer need without N× encode or a mid-stream-IDR pulse. There, **SD5's "standby" is renamed "passive"** and gains a low-cost read-only video view plus a first-class connection **roster**. On ADR-0086's acceptance this ADR gains its own dated pointer for that standby→passive refinement.
+
 ## References
 
 - [ADR-0024 — ImZero2 remote access via headless render + ffmpeg + browser viewer](./0024-imzero2-remote-access-browser-viewer.md) — the parent; this ADR is its promised auth / multi-tenancy follow-up. SD3 (no mid-stream IDR), SD4/SD6 (wire framing), the per-connection encoder + SD9 mailbox, SD11 (deferral list) are load-bearing here.
