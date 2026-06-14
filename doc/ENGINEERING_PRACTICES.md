@@ -30,7 +30,7 @@ none combine multiple gates.
 
 | Workflow | Trigger | Entry point | Purpose |
 |---|---|---|---|
-| [lint.yaml](../.github/workflows/lint.yaml) | push to `main`, PRs | [scripts/ci/lint.sh](../scripts/ci/lint.sh) | `go vet`, staticcheck, errcheck, doclint, llmtag, h3 wasm parity |
+| [lint.yaml](../.github/workflows/lint.yaml) | push to `main`, PRs | [scripts/ci/lint.sh](../scripts/ci/lint.sh) | `go vet`, staticcheck, errcheck, doclint, h3 wasm parity |
 | [test.yaml](../.github/workflows/test.yaml) | every push | [scripts/ci/gotest.sh](../scripts/ci/gotest.sh) | race + cover + JSON tests, tparse-formatted |
 | [vuln.yaml](../.github/workflows/vuln.yaml) | every push | [scripts/ci/govuln.sh](../scripts/ci/govuln.sh) | `govulncheck -show verbose ./public/...` |
 | [licenses.yaml](../.github/workflows/licenses.yaml) | every push | [scripts/ci/license_gate.sh](../scripts/ci/license_gate.sh) | CycloneDX SBOM → in-tree policy gate |
@@ -147,18 +147,20 @@ The full invariant-to-rule mapping is in
 ### `boxer gov llmtag`
 
 Sources under [github.com/stergiotis/boxer/public/gov/llmtag](../public/gov/llmtag).
-Bidirectional checker that maintains `//go:build llm_generated_<model>`
-directives by attributing line authorship via `git blame` plus
-`Co-Authored-By` trailers. Flags both missing tags on LLM-dominated files and
-stale tags on files now dominated by human edits. The
-[codestat.yaml](../.github/workflows/codestat.yaml) workflow consumes the
-same signal to produce human-vs-LLM line counts in the job summary.
+Attributes line authorship via `git blame` plus `Co-Authored-By` trailers and
+can apply or strip `//go:build llm_generated_<model>` directives. This
+per-model build-tag governance was **retired**
+([ADR-0083](adr/0083-retire-llm-generated-build-tags.md)): the directives were
+stripped tree-wide, the CI gate dropped, and human-vs-LLM attribution moved to
+`gov repo authorship` reading the `Co-Authored-By` trailers directly. The tool
+is kept dormant as the reversal path — `gov llmtag --apply` reconstructs the
+tags from history at any time.
 
 Documentation-as-code linting is well-developed in the Python ecosystem
 (`sphinx-build -W`, `interrogate`) but rare in Go — most repos rely on
 `gofmt` / `go vet` for doc comments and human review for Markdown. LLM
-authorship tracking by build tag is, as far as we are aware, idiosyncratic
-to this project.
+authorship tracking by build tag was idiosyncratic to this project; it has
+since been retired in favour of trailer-based attribution.
 
 ## 6. Supply-chain and license gates
 

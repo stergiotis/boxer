@@ -188,8 +188,6 @@ every dispatch. Suitable for apps that use package-level state
 sensibly coexist with a sibling instance. This is the M1–M2 default.
 
 ```go
-//go:build llm_generated_opus47
-
 package myapp
 
 import (

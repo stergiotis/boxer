@@ -106,7 +106,7 @@ Build a viewer bound to the given machine. Panics on nil `ids`, nil `m`, or empt
 ## Conventions
 
 - **Receivers**: pointer (`*Widget[T]`) for the stateful composite; pointer (`*Machine[T]`) so callers can pass the machine to multiple widgets without copying.
-- **Build tag**: `//go:build llm_generated_opus47`, matching peer widgets.
+- **Build tag**: none — the widget compiles unconditionally.
 - **IDS tokens**: `AccentDefault` for the active state, `AccentSubtle` for next-possible edges, `NeutralBorderFaint` / `NeutralSubtle` / `NeutralTextSecondary` for resting affordances. No raw hex; everything goes through `styletokens.*.AsHex()` + `widgets/color.Hex` per ADR-0031 §SD2.
 - **One-frame lag**: chip click, tab switch, popup-X — all reflect the previous frame's input, like every other R7/R10-backed widget in the framework.
 

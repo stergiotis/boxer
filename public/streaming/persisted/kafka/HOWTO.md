@@ -16,7 +16,7 @@ This file exists because every realistic Kafka recipe needs a running broker. An
 
 ## Prerequisites
 
-- Go 1.26+ with the build tags from `./tags`. All package code is gated behind `llm_generated_opus47`; invoke tooling as `go ... -tags "$(cat tags | tr -d $'\n')"`.
+- Go 1.26+ with the build tags from `./tags`; invoke tooling as `go ... -tags "$(cat tags | tr -d $'\n')"`.
 - A reachable Kafka or Redpanda broker. For tests, the package ships a testcontainers-based [integration_test.go](integration_test.go) — see "Run integration tests" below.
 - Familiarity with [`github.com/twmb/franz-go/pkg/kgo`](https://pkg.go.dev/github.com/twmb/franz-go/pkg/kgo): records (`kgo.Record`), client construction, consumer groups, and the partitioner choices.
 

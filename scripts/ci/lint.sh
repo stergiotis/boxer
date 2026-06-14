@@ -74,7 +74,7 @@ fi
 # step_begin "nilaway"
 # # nilaway's own -tags flag is deprecated/no-op; build tags must be passed via
 # # GOFLAGS so the analysis driver picks them up. Without this, tag-gated
-# # packages (e.g. llm_generated_*) are excluded and importers cascade into
+# # packages (e.g. gpu_intel, integration) are excluded and importers cascade into
 # # hundreds of bogus "could not import / undefined" lines.
 # # -include-pkgs restricts analysis to first-party code; stdlib and 3rd-party
 # # returns are then assumed non-nil, which suppresses the bulk of noise from
