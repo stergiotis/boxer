@@ -49,6 +49,27 @@ func DeriveGoShape(canonical canonicaltypes.PrimitiveAstNodeI) (goType string, i
 	return
 }
 
+// IsIdentifierLike reports whether s is non-empty and composed only of ASCII
+// letters, digits, and underscores — the characters permitted in the Go
+// identifiers the codec builds from a ref-channel membership name
+// (kind<UpperFirst(memb)> in the marshallgen core, vdd.Memb<UpperFirst(memb)>
+// in the facts target). The name is always used as an identifier *suffix*
+// after a "kind"/"Memb" prefix, so a leading digit is fine; only out-of-set
+// characters (hyphen, dot, space, colon, …) break the generated code.
+// ASCII-only matches UpperFirst's scope (it capitalises ASCII only).
+func IsIdentifierLike(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_') {
+			return false
+		}
+	}
+	return true
+}
+
 // UpperFirst upper-cases the first byte of s when it is an ASCII
 // lower-case letter; every other input is returned unchanged. Used to
 // derive PascalCase section / sub-column method names from the lw: tag

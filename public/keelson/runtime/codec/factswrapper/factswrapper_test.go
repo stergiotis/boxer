@@ -48,3 +48,27 @@ func TestImports_DeclaresOwnNeeds(t *testing.T) {
 		t.Error("plain-only: vdd is unused (no memberships) and must be omitted")
 	}
 }
+
+// TestCheckRefMembershipsAreIdentifiers pins the facts-target rule that every
+// ref-channel membership (value or const) must be a Go identifier — Init
+// resolves each via vdd.Memb<Name>. This is stricter than the shared builder
+// (which rejects only const ref non-identifiers): a value ref field with a
+// hyphenated membership is valid for the anchor target but rejected here,
+// because the facts target needs a vdd symbol. Verbatim memberships are wire
+// labels, never vdd-resolved, so they stay unrestricted.
+func TestCheckRefMembershipsAreIdentifiers(t *testing.T) {
+	refPlan := func(memb string, ch mappingplan.MembershipChannel) *mappingplan.Plan {
+		return &mappingplan.Plan{Fields: []mappingplan.TaggedField{
+			{GoFieldName: "F", LWMembership: memb, LWSection: "symbol", Flags: mappingplan.FieldFlags{Channel: ch}},
+		}}
+	}
+	if checkRefMembershipsAreIdentifiers(refPlan("my-app", mappingplan.MembershipChannelHighCardRef)) == nil {
+		t.Error("value ref membership 'my-app' must be rejected (facts would emit vdd.MembMy-app)")
+	}
+	if err := checkRefMembershipsAreIdentifiers(refPlan("myApp", mappingplan.MembershipChannelHighCardRef)); err != nil {
+		t.Errorf("identifier ref membership must be accepted: %v", err)
+	}
+	if err := checkRefMembershipsAreIdentifiers(refPlan("my-label", mappingplan.MembershipChannelLowCardVerbatim)); err != nil {
+		t.Errorf("verbatim membership (not vdd-resolved) must be accepted: %v", err)
+	}
+}

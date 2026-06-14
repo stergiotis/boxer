@@ -263,3 +263,41 @@ func TestPlanBuilder_MembershipColonNoFalseCollision(t *testing.T) {
 	require.NoError(t, err, "membership %q and membership %q+column %q must not collide", "a:b", "a", "b")
 	require.Len(t, p.Fields, 3)
 }
+
+// TestPlanBuilder_ConstRefMembershipMustBeIdentifier pins the 2026-06-14
+// hardening at the shared (both-front-end) level: a CONST ref-channel field's
+// membership becomes kind<Upper(memb)> in the marshallgen core emit, so a
+// non-identifier name is rejected at plan-build. Value ref fields key kindXxx
+// on the Go field name (the membership is a lookup key), so they stay valid
+// here — that case is the facts target's concern. Verbatim memberships are wire
+// labels, never identifiers, so they are unrestricted.
+func TestPlanBuilder_ConstRefMembershipMustBeIdentifier(t *testing.T) {
+	// const ref membership with an illegal identifier char → rejected.
+	for _, bad := range []string{"bad-name", "foo.bar", "foo bar", "a:b"} {
+		_, err := buildPlan(kindUS, idCol,
+			fld{us: true, lw: bad + ",symbol,const=v"})
+		require.Errorf(t, err, "const ref membership %q must be rejected", bad)
+		if err != nil {
+			require.Contains(t, err.Error(), "Go identifier")
+		}
+	}
+
+	// A value ref field keys kindXxx on the Go field name, so an arbitrary
+	// membership (a lookup key) is accepted by the shared builder — anchor emits
+	// kind<Field>, reflect uses it as a map key. (TestEmit_HighCardRef relies on
+	// exactly this; the facts target validates value ref memberships itself.)
+	_, err := buildPlan(kindUS, idCol,
+		fld{name: "App", lw: "my-app,symbol,highCardRef", shape: shp("string")})
+	require.NoError(t, err, "value ref membership is a lookup key, not an identifier")
+
+	// A verbatim const membership is a wire label, not an identifier — OK.
+	_, err = buildPlan(kindUS, idCol,
+		fld{us: true, lw: "any-label.v2,symbol,verbatim,const=v"})
+	require.NoError(t, err, "verbatim membership names need not be identifiers")
+
+	// A leading digit is fine — the name is only ever an identifier *suffix*
+	// (kind<Name>), so "kind3d" is valid.
+	_, err = buildPlan(kindUS, idCol,
+		fld{us: true, lw: "3d,symbol,const=v"})
+	require.NoError(t, err, "a leading digit is valid after the kind prefix")
+}

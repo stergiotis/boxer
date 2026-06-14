@@ -44,6 +44,9 @@ func (FactsWrapper) Generate(inputPath, outputPath string) (out []byte, err erro
 		return
 	}
 	inferUnitFromSectionSuffix(plan)
+	if err = checkRefMembershipsAreIdentifiers(plan); err != nil {
+		return
+	}
 	out, err = marshallgen.EmitPlan(plan, FactsWrapper{})
 	if err != nil {
 		return
@@ -523,6 +526,26 @@ func uniqueMemberships(plan *mappingplan.Plan) (out []mappingplan.TaggedField) {
 		}
 		seen[f.LWMembership] = true
 		out = append(out, f)
+	}
+	return
+}
+
+// checkRefMembershipsAreIdentifiers rejects a ref-channel membership whose name
+// is not a Go identifier. Unlike the anchor target (where a value field's
+// kindXxx keys on the Go field name), the facts target's Init resolves every
+// ref membership via vdd.Memb<UpperFirst(memb)>, so a non-identifier name would
+// emit a reference to a malformed vdd symbol that fails to compile. Verbatim /
+// carrier memberships are not vdd-resolved — uniqueMemberships already filters
+// to the ref channels (NeedsKindVar) — so arbitrary names there are fine. The
+// shared PlanBuilder additionally rejects const ref non-identifier memberships
+// (those break the marshallgen core for every target); this covers the value
+// ref fields it leaves to the facts target.
+func checkRefMembershipsAreIdentifiers(plan *mappingplan.Plan) (err error) {
+	for _, f := range uniqueMemberships(plan) {
+		if !mappingplan.IsIdentifierLike(f.LWMembership) {
+			err = eb.Build().Str("membership", f.LWMembership).Errorf("facts target: ref-channel membership must be a Go identifier (it becomes vdd.Memb<Name>); use a verbatim channel for an arbitrary wire label")
+			return
+		}
 	}
 	return
 }
