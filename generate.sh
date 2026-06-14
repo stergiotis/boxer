@@ -56,7 +56,8 @@ run keelsoncodec \
 #    schema-agnostic surface only (no facts wrapper), proving the keelsoncodec
 #    output is portable across leeway schemas.
 run keelsoncodec --target=anchor \
-    public/semistructured/leeway/anchor/codecdemo/dronemission.go
+    public/semistructured/leeway/anchor/codecdemo/dronemission.go \
+    public/semistructured/leeway/anchor/codecdemo/sensorreading.go
 
 # 4. runtime/factsschema codegen (ADR-0026). DDL / DML (plain, cbor) /
 #    read-access wrappers for the runtime facts schema.
