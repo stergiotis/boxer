@@ -49,22 +49,22 @@ func NewCommand() *cli.Command {
 		Action: func(c *cli.Context) error {
 			root := c.String("root")
 			cfg := Config{
-				Remote:       c.String("remote"),
-				Workspace:    orDefault(c.String("workspace"), filepath.Join(root, "workspace")),
-				ReleasesDir:  orDefault(c.String("releases-dir"), filepath.Join(root, "releases")),
-				CurrentLink:  orDefault(c.String("current"), filepath.Join(root, "current")),
-				ServiceName:  c.String("service"),
-				ScratchPort:  c.Int("scratch-port"),
-				LivePort:     c.Int("live-port"),
-				GateAUs:      c.Int("gate-aus"),
-				GateTimeout:  c.Duration("gate-timeout"),
+				Remote:            c.String("remote"),
+				Workspace:         orDefault(c.String("workspace"), filepath.Join(root, "workspace")),
+				ReleasesDir:       orDefault(c.String("releases-dir"), filepath.Join(root, "releases")),
+				CurrentLink:       orDefault(c.String("current"), filepath.Join(root, "current")),
+				ServiceName:       c.String("service"),
+				ScratchPort:       c.Int("scratch-port"),
+				LivePort:          c.Int("live-port"),
+				GateAUs:           c.Int("gate-aus"),
+				GateTimeout:       c.Duration("gate-timeout"),
 				KeepReleases:      c.Int("keep"),
 				RequireSignedTags: c.Bool("require-signed-tags"),
 				EncoderArgs:       c.String("encoder-args"),
-				MainFont:     c.String("main-font"),
-				PhosphorFont: c.String("phosphor-font"),
-				FallbackFont: c.String("fallback-font"),
-				DryRun:       c.Bool("dry-run"),
+				MainFont:          c.String("main-font"),
+				PhosphorFont:      c.String("phosphor-font"),
+				FallbackFont:      c.String("fallback-font"),
+				DryRun:            c.Bool("dry-run"),
 			}
 			_, err := Run(c.Context, log.Logger, cfg)
 			return err

@@ -51,10 +51,10 @@ type Config struct {
 	// false is a loopback/dev escape only.
 	RequireSignedTags bool
 	EncoderArgs       string // IMZERO2_HEADLESS_ENCODER_ARGS for the gate run
-	MainFont     string        // optional; fc-match'd if empty
-	PhosphorFont string        // optional; the release's bundled asset if empty
-	FallbackFont string        // optional; fc-match'd if empty
-	DryRun       bool          // stage + gate but skip the swap + restart
+	MainFont          string // optional; fc-match'd if empty
+	PhosphorFont      string // optional; the release's bundled asset if empty
+	FallbackFont      string // optional; fc-match'd if empty
+	DryRun            bool   // stage + gate but skip the swap + restart
 }
 
 // Build-artifact locations relative to the workspace clone root.
@@ -220,7 +220,7 @@ func stage(ctx context.Context, lg zerolog.Logger, cfg Config, tag string) (stri
 	if err := os.Rename(tmp, relDir); err != nil {
 		return "", eh.Errorf("deploy: finalize release: %w", err)
 	}
-	relabelSELinux(ctx, lg, relDir) // exec under enforcing SELinux; backstop (see deploy/ansible/README.md)
+	relabelSELinux(ctx, lg, relDir) // exec under enforcing SELinux; backstop (see showcase/ansible/README.md)
 	lg.Info().Str("release", relDir).Msg("deploy: staged")
 	return relDir, nil
 }
@@ -246,7 +246,7 @@ func relabelSELinux(ctx context.Context, lg zerolog.Logger, dir string) {
 	}
 	if out, rErr := run(ctx, "", nil, bin, "-RF", dir); rErr != nil {
 		lg.Warn().Str("dir", dir).Str("output", tail(out, 500)).Err(rErr).
-			Msg("deploy: SELinux relabel failed; if the demo will not exec, label the releases tree bin_t (deploy/ansible/README.md)")
+			Msg("deploy: SELinux relabel failed; if the demo will not exec, label the releases tree bin_t (showcase/ansible/README.md)")
 		return
 	}
 	lg.Debug().Str("dir", dir).Msg("deploy: SELinux contexts restored on release")

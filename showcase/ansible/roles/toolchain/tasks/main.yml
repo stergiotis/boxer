@@ -1,0 +1,58 @@
+---
+# Go 1.26 (pinned upstream tarball) + rustup/Rust 1.92. Installed where the
+# systemd-driven build can reach them: go on the system PATH, cargo via the
+# deploy unit's PATH drop-in (units role). rustup honours rust/imzero2/
+# rust-toolchain on first cargo, so the channel here just primes the cache.
+
+- name: Map kernel arch → Go arch
+  ansible.builtin.set_fact:
+    go_arch: "{{ {'x86_64': 'amd64', 'aarch64': 'arm64'}[ansible_architecture] }}"
+
+- name: Query installed Go
+  ansible.builtin.command: /usr/local/go/bin/go version
+  register: _go
+  changed_when: false
+  failed_when: false
+
+- name: Install Go {{ go_version }}
+  when: ('go' ~ go_version) not in _go.stdout
+  block:
+    - name: Download the Go tarball (checksum-verified via the go.dev sidecar)
+      ansible.builtin.get_url:
+        url: "https://go.dev/dl/go{{ go_version }}.linux-{{ go_arch }}.tar.gz"
+        dest: "/tmp/go-{{ go_version }}.tar.gz"
+        checksum: "sha256:https://go.dev/dl/go{{ go_version }}.linux-{{ go_arch }}.tar.gz.sha256"
+        mode: "0644"
+    - name: Remove any previous Go
+      ansible.builtin.file:
+        path: /usr/local/go
+        state: absent
+    - name: Unpack Go into /usr/local
+      ansible.builtin.unarchive:
+        src: "/tmp/go-{{ go_version }}.tar.gz"
+        dest: /usr/local
+        remote_src: true
+
+- name: Expose go/gofmt on the system PATH (systemd's default PATH finds these)
+  ansible.builtin.file:
+    src: "/usr/local/go/bin/{{ item }}"
+    dest: "/usr/local/bin/{{ item }}"
+    state: link
+  loop:
+    - go
+    - gofmt
+
+- name: Install rustup + Rust {{ rust_version }} (as {{ imzero2_user }})
+  become: true
+  become_user: "{{ imzero2_user }}"
+  ansible.builtin.shell: >-
+    set -o pipefail;
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs |
+    sh -s -- -y --no-modify-path --profile minimal
+    --default-toolchain {{ rust_version }} -c rustfmt -c clippy
+  args:
+    creates: "{{ imzero2_home }}/.cargo/bin/rustup"
+    executable: /bin/bash
+  environment:
+    RUSTUP_HOME: "{{ imzero2_home }}/.rustup"
+    CARGO_HOME: "{{ imzero2_home }}/.cargo"

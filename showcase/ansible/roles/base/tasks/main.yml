@@ -1,0 +1,70 @@
+---
+# Host packages + firewall the deploy tool (and the headless carrier) assume.
+
+- name: Install build + runtime packages
+  ansible.builtin.package:
+    name:
+      # Build the 663-crate headless wgpu release + the cgo-free Go launcher.
+      - git
+      - curl
+      - tar
+      - gzip
+      - gcc
+      - gcc-c++
+      - make
+      - cmake
+      - pkgconf-pkg-config
+      - openssl-devel
+      - fontconfig-devel
+      - freetype-devel
+      - perl-interpreter
+      # Runtime: software Vulkan/GL (no GPU), fonts (run-current.sh fc-match's
+      # 'Noto Sans' + 'Noto Sans CJK JP'), and the holding/serve path.
+      - mesa-vulkan-drivers
+      - mesa-dri-drivers
+      - vulkan-loader
+      - fontconfig
+      - google-noto-sans-fonts
+      - google-noto-sans-cjk-fonts
+    state: present
+
+- name: Install ffmpeg (Fedora ffmpeg-free → libopenh264)
+  ansible.builtin.package:
+    name: ffmpeg-free
+    state: present
+  when: not imzero2_install_rpmfusion_ffmpeg
+
+- name: Install RPM Fusion ffmpeg (libx264) instead
+  when: imzero2_install_rpmfusion_ffmpeg
+  block:
+    - name: Enable RPM Fusion (free)
+      ansible.builtin.command: >-
+        dnf -y install
+        https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-{{ ansible_distribution_major_version }}.noarch.rpm
+      args:
+        creates: /etc/yum.repos.d/rpmfusion-free.repo
+    - name: Install the full ffmpeg (replaces ffmpeg-free)
+      ansible.builtin.command: dnf -y --allowerasing install ffmpeg
+      register: _ff
+      changed_when: "'Nothing to do' not in _ff.stdout"
+
+- name: Is firewalld active?
+  ansible.builtin.command: systemctl is-active firewalld
+  register: _firewalld
+  changed_when: false
+  failed_when: false
+
+- name: Open 80/443 (Let's Encrypt challenge + TLS)
+  when: imzero2_open_firewall and _firewalld.stdout == 'active'
+  block:
+    - name: Permit http/https in firewalld
+      ansible.builtin.command: firewall-cmd --permanent --add-service={{ item }}
+      register: _fw
+      changed_when: "'ALREADY_ENABLED' not in (_fw.stdout ~ _fw.stderr)"
+      failed_when: _fw.rc != 0 and 'ALREADY_ENABLED' not in (_fw.stdout ~ _fw.stderr)
+      loop:
+        - http
+        - https
+    - name: Reload firewalld
+      ansible.builtin.command: firewall-cmd --reload
+      changed_when: true

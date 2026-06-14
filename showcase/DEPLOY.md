@@ -4,6 +4,13 @@ A single-box demo: the headless imzero2 carrier (ADR-0024) behind Caddy, which
 adds the TLS + password that v1 does **not** ship (ADR-0082 is proposed). One
 viewer at a time (v1 single-session); software render + encode (no GPU needed).
 
+> **Two deploy paths (ADR-0085).** This is the **off-box / manual** path ("O2"):
+> build the image locally, ship it, `compose up` — best for a box that should
+> not build (small/cheap, no toolchain on it) or a future fleet. For the
+> **on-box**, self-updating path ("O1": build on-box from signed tags, gate,
+> atomic swap), see [`onbox/ONBOX.md`](onbox/ONBOX.md) and the ansible-pull
+> provisioner in [`ansible/`](ansible/README.md).
+
 ## What you get / limits
 
 - `https://<your-domain>` → password prompt → the live demo in a WebCodecs
@@ -36,7 +43,7 @@ cd rust/imzero2
 ## 1. Build the image (local)
 
 ```bash
-cd rust/imzero2/deploy
+cd showcase
 ./build.sh                 # ENGINE=docker ./build.sh  if you use docker
 ```
 
@@ -64,7 +71,7 @@ ssh root@<box-ip> 'curl -fsSL https://get.docker.com | sh'
 No registry needed — pipe the image straight over SSH:
 
 ```bash
-# from rust/imzero2/deploy  (~1 GB image → ~400 MB over the wire with gzip)
+# from showcase  (~1 GB image → ~400 MB over the wire with gzip)
 podman save imzero2-demo:latest | gzip | ssh root@<box-ip> 'gunzip | docker load'
 scp docker-compose.yml Caddyfile demo.env.example root@<box-ip>:/root/imzero2/
 ```

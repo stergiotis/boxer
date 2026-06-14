@@ -1,0 +1,23 @@
+---
+# Provision a fresh Fedora 44 box for the imzero2 on-box deploy (ADR-0085).
+#
+# Covers ONLY what the Go deploy tool (the `imzero2 deploy` subcommand)
+# assumes pre-exists: the service user, toolchain, read-only clone, the systemd
+# units + the Fedora glue the stock units lack, and Caddy. The deploy tool owns
+# fetch → build → gate → swap → rollback → prune from there. See README.md.
+#
+# Idempotent and safe to re-run (that is how the ansible-pull timer keeps host
+# config converged). It never touches the workspace checkout once cloned — the
+# deploy tool owns that (detached HEAD at a release tag).
+- name: imzero2 on-box deploy — Fedora 44 provisioning
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: true
+  roles:
+    - base       # dnf packages + firewall
+    - user       # imzero2 system user + /opt/imzero2 tree
+    - toolchain  # Go 1.26 + rustup (Rust 1.92)
+    - repo       # read-only clone (clone-if-absent) + signer trust
+    - units      # systemd units + polkit + Fedora drop-ins + the pull timer
+    - caddy      # TLS + password front door

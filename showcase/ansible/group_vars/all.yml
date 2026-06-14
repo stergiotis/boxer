@@ -1,0 +1,69 @@
+---
+# Defaults for the imzero2 on-box-deploy provisioner. Non-secret, repo-committed.
+# Site-specific values and secrets (domain, basic-auth hash, trusted signers)
+# belong in a root-only file the pull loop reads via `-e @<file>` — see
+# `imzero2_extra_vars_file` and README.md. CLI `-e` overrides anything here.
+
+# --- identity / paths (match onbox/ONBOX.md) ---
+imzero2_user: imzero2
+imzero2_home: /opt/imzero2
+imzero2_workspace: "{{ imzero2_home }}/workspace"
+
+# --- source (read-only; the box never holds push creds) ---
+imzero2_repo_url: "https://github.com/stergiotis/boxer.git"
+imzero2_repo_branch: main
+
+# --- toolchain pins ---
+# go_version is the patch to install; it only needs to be >= go.mod's floor
+# (go 1.26.0). Bump freely — the tarball is checksum-verified from go.dev's
+# sidecar, so any real version string just works. rust_version matches
+# rust/imzero2/rust-toolchain.
+go_version: "1.26.4"
+rust_version: "1.92"
+
+# --- H.264 encoder ---
+# Fedora's ffmpeg ships libopenh264, NOT libx264 (GPL). This overrides the
+# units' hardcoded x264 for BOTH the live demo and the deploy gate. demo.env
+# .example calls this the "ADR-verified frame-stable path". Set
+# imzero2_install_rpmfusion_ffmpeg=true to get x264 from RPM Fusion instead.
+imzero2_encoder_args: "-c:v libopenh264 -b:v 4M -bf 0 -g 60"
+imzero2_install_rpmfusion_ffmpeg: false
+
+# --- deploy security (SD8) ---
+# With signed tags required (default, correct for an exposed box) you MUST list
+# the release signer(s) in imzero2_allowed_signers, else the deploy refuses to
+# build. Format: ["release@you ssh-ed25519 AAAA...", ...]. Set require=false
+# only on a trusted/loopback box.
+imzero2_require_signed_tags: true
+imzero2_allowed_signers: []
+
+# --- Caddy / exposure (set the secret bits in the extra-vars file) ---
+imzero2_caddy_install: copr        # copr | skip  (skip = you install caddy yourself)
+imzero2_domain: ""                 # e.g. demo.example.com or <box-ip>.nip.io  (REQUIRED to serve)
+imzero2_basic_auth_user: "demo"
+imzero2_basic_auth_hash: ""        # caddy hash-password --plaintext '...'
+imzero2_open_firewall: true
+
+# --- ansible-pull self-convergence (host config only; the app self-updates via
+#     the deploy timer — two separate loops, see README) ---
+imzero2_pull_url: "{{ imzero2_repo_url }}"
+imzero2_pull_playbook: "showcase/ansible/site.yml"
+imzero2_pull_oncalendar: "daily"
+imzero2_extra_vars_file: /etc/imzero2/provision.yml
+
+# --- systemd sandboxing (drop-ins; see README "Hardening") ---
+# Adds ProtectSystem=strict + the Protect*/Restrict* knobs to both units. The
+# demo also gets PrivateDevices + a syscall allowlist + loopback-only egress.
+# Verify the stream + a cold build survive before trusting it on; flip off fast
+# if something breaks. NB: MemoryDenyWriteExecute is never set (llvmpipe JIT).
+imzero2_systemd_hardening: true
+
+# --- SELinux (Fedora is enforcing) ---
+# Install the persistent fcontext rule (release tree + run-current.sh -> bin_t)
+# so new release binaries inherit an exec-able label and `restorecon` re-applies
+# it. The deploy tool also restorecons each release as a backstop. Together this
+# is the end-to-end SELinux story; leave on for a Fedora box.
+imzero2_selinux_label_releases: true
+
+# --- optional ---
+imzero2_bootstrap_first_release: false  # run the (long, cold) first build inside the play

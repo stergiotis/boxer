@@ -1,0 +1,46 @@
+---
+# Read-only clone the deploy tool builds from. CLONE-IF-ABSENT ONLY: once it
+# exists, `imzero2 deploy` owns the checkout (it `git checkout --force --detach
+# <tag>`s), so Ansible must never fetch/reset it — that is why this is guarded
+# by a stat instead of the git module's update path.
+
+- name: Is the workspace already cloned?
+  ansible.builtin.stat:
+    path: "{{ imzero2_workspace }}/.git"
+  register: _ws
+
+- name: Clone boxer into the workspace (first run only)
+  when: not _ws.stat.exists
+  become: true
+  become_user: "{{ imzero2_user }}"
+  environment:
+    HOME: "{{ imzero2_home }}"
+  ansible.builtin.git:
+    repo: "{{ imzero2_repo_url }}"
+    dest: "{{ imzero2_workspace }}"
+    version: "{{ imzero2_repo_branch }}"
+    accept_hostkey: true
+
+- name: Trust the release signer (SSH tag signatures, SD8)
+  when: imzero2_allowed_signers | length > 0
+  become: true
+  become_user: "{{ imzero2_user }}"
+  environment:
+    HOME: "{{ imzero2_home }}"
+  block:
+    - name: Ensure the git config dir
+      ansible.builtin.file:
+        path: "{{ imzero2_home }}/.config/git"
+        state: directory
+        mode: "0755"
+    - name: Write allowed_signers
+      ansible.builtin.copy:
+        dest: "{{ imzero2_home }}/.config/git/allowed_signers"
+        content: "{{ imzero2_allowed_signers | join('\n') }}\n"
+        mode: "0644"
+    - name: Point git at the SSH allowed_signers file
+      ansible.builtin.command: "git config --global {{ item }}"
+      loop:
+        - "gpg.format ssh"
+        - "gpg.ssh.allowedSignersFile {{ imzero2_home }}/.config/git/allowed_signers"
+      changed_when: false

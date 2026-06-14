@@ -1,0 +1,24 @@
+---
+# The unprivileged service user + the deploy tree (mirrors ONBOX.md step 1).
+
+- name: Create the imzero2 system user
+  ansible.builtin.user:
+    name: "{{ imzero2_user }}"
+    system: true
+    create_home: true
+    home: "{{ imzero2_home }}"
+    shell: /usr/sbin/nologin           # ansible become + systemd User= both bypass it
+    comment: imzero2 on-box deploy (ADR-0085)
+
+- name: Create the deploy tree
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ imzero2_user }}"
+    group: "{{ imzero2_user }}"
+    mode: "0755"
+  loop:
+    - "{{ imzero2_home }}"
+    - "{{ imzero2_home }}/releases"
+    - "{{ imzero2_home }}/holding"
+    - "{{ imzero2_home }}/.cargo"

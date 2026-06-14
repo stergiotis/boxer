@@ -1,0 +1,79 @@
+---
+# TLS (auto Let's Encrypt) + basic-auth in front of the v1 carrier (ADR-0082).
+# The Caddyfile + holding page come from onbox/; secrets come from the env file.
+
+- name: Install Caddy from the official COPR
+  when: imzero2_caddy_install == 'copr'
+  block:
+    - name: Ensure the dnf copr plugin (Fedora 44 = dnf5)
+      ansible.builtin.package:
+        name: dnf5-plugins
+        state: present
+    - name: Enable the Caddy COPR
+      ansible.builtin.command: dnf -y copr enable @caddy/caddy
+      register: _copr
+      changed_when: "'Repository successfully enabled' in (_copr.stdout ~ _copr.stderr)"
+      failed_when: _copr.rc != 0 and 'already enabled' not in (_copr.stdout ~ _copr.stderr)
+    - name: Install Caddy
+      ansible.builtin.package:
+        name: caddy
+        state: present
+
+- name: Is caddy.service present?
+  ansible.builtin.stat:
+    path: /usr/lib/systemd/system/caddy.service
+  register: _caddy_unit
+
+- name: Configure + run Caddy
+  when: _caddy_unit.stat.exists
+  block:
+    - name: Install the imzero2 Caddyfile
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../onbox/Caddyfile"
+        dest: /etc/caddy/Caddyfile
+        mode: "0644"
+
+    - name: Write the Caddy environment (DOMAIN + basic-auth)
+      ansible.builtin.copy:
+        dest: /etc/caddy/imzero2.env
+        owner: caddy
+        group: caddy
+        mode: "0640"
+        content: |
+          DOMAIN={{ imzero2_domain }}
+          BASIC_AUTH_USER={{ imzero2_basic_auth_user }}
+          BASIC_AUTH_HASH={{ imzero2_basic_auth_hash }}
+
+    - name: Ensure the caddy drop-in directory
+      ansible.builtin.file:
+        path: /etc/systemd/system/caddy.service.d
+        state: directory
+        mode: "0755"
+
+    - name: Wire the env file into caddy.service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/caddy.service.d/10-imzero2.conf
+        mode: "0644"
+        content: |
+          [Service]
+          EnvironmentFile=/etc/caddy/imzero2.env
+
+    - name: Enable + (re)start Caddy
+      when: imzero2_domain | length > 0 and imzero2_basic_auth_hash | length > 0
+      ansible.builtin.systemd:
+        name: caddy
+        enabled: true
+        state: restarted
+        daemon_reload: true
+
+    - name: Caddy not started — missing DOMAIN / basic-auth hash
+      when: not (imzero2_domain | length > 0 and imzero2_basic_auth_hash | length > 0)
+      ansible.builtin.debug:
+        msg: >-
+          Caddy is installed + configured but NOT started: set imzero2_domain and
+          imzero2_basic_auth_hash (in {{ imzero2_extra_vars_file }}) and re-run.
+
+- name: Caddy not installed by this play (imzero2_caddy_install=skip or no unit)
+  when: not _caddy_unit.stat.exists
+  ansible.builtin.debug:
+    msg: "caddy.service not found — install Caddy yourself, then re-run to wire the Caddyfile + env."

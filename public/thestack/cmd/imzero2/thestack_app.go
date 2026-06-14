@@ -18,9 +18,9 @@ import (
 	"github.com/stergiotis/boxer/public/observability/profiling"
 	"github.com/stergiotis/boxer/public/observability/tracing"
 	"github.com/stergiotis/boxer/public/observability/vcs"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/deploy"
 	demo2 "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/carousel"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/driver"
+	"github.com/stergiotis/boxer/showcase/deploy"
 	"github.com/urfave/cli/v2"
 )
 

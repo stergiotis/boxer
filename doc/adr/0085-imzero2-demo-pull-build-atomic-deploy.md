@@ -12,7 +12,7 @@ date: 2026-06-13
 
 ## Context
 
-[ADR-0024](./0024-imzero2-remote-access-browser-viewer.md) shipped the headless imzero2 demo (offscreen render → ffmpeg H.264 → WebSocket carrier → browser viewer), and a deploy kit (`rust/imzero2/deploy/`) packages it for a single VPS: a runtime-only container built off-box and run behind Caddy, which supplies the TLS + password the v1 carrier lacks (auth/TLS are [ADR-0082](./0082-imzero2-remote-session-auth-tls-fanout.md), accepted but unbuilt). That kit is a *manual* deploy — build locally, ship the image, `compose up`.
+[ADR-0024](./0024-imzero2-remote-access-browser-viewer.md) shipped the headless imzero2 demo (offscreen render → ffmpeg H.264 → WebSocket carrier → browser viewer), and a deploy kit (`showcase/`) packages it for a single VPS: a runtime-only container built off-box and run behind Caddy, which supplies the TLS + password the v1 carrier lacks (auth/TLS are [ADR-0082](./0082-imzero2-remote-session-auth-tls-fanout.md), accepted but unbuilt). That kit is a *manual* deploy — build locally, ship the image, `compose up`.
 
 This ADR covers a different operating mode requested for an internet-facing **demo box that updates itself**: when a new *tagged* release lands on boxer, the box should rebuild and cut over to it, unattended, atomically, with rollback — in a way that fits the sovereign-appliance posture the surrounding design favours (the box reaches out, nothing reaches in; it builds what it runs from source it can audit; no external registry or CI it must trust).
 
@@ -90,7 +90,7 @@ We adopt **O1**. Concretely:
 
 ## Alternatives
 
-- **O2 — off-box CI image + image-pull (watchtower/Flux).** The box stays dumb; CI builds the image on tag, a registry stores it, the box pulls and recreates the container. Strictly better on box load and the right answer for a fleet or any box that should not build. Rejected as the *baseline* only because it forfeits C2: a registry and a CI pipeline the box must trust enter the chain, and the box runs an image it did not build from source it can audit — the property the sovereign-appliance posture values. Held as the escape and the multi-box path; the existing `rust/imzero2/deploy/` container kit is most of its artifact already.
+- **O2 — off-box CI image + image-pull (watchtower/Flux).** The box stays dumb; CI builds the image on tag, a registry stores it, the box pulls and recreates the container. Strictly better on box load and the right answer for a fleet or any box that should not build. Rejected as the *baseline* only because it forfeits C2: a registry and a CI pipeline the box must trust enter the chain, and the box runs an image it did not build from source it can audit — the property the sovereign-appliance posture values. Held as the escape and the multi-box path; the existing `showcase/` container kit is most of its artifact already.
 - **O3 — push (CI SSHes into the box).** Rejected on C3: an inbound deploy channel and standing credentials into an internet-exposed box is the exposure the pull model removes.
 - **O4 — on-box in-place build.** `git pull && hmi_headless.sh && restart`. Rejected: a failing or non-streaming build can tear down the live demo, half-built state can run, and rollback means rebuilding the previous tag. The immutable-releases + gate machinery (SD3–SD6) is precisely what makes an *unattended* loop safe.
 - **A bash script instead of a Go command (for the logic).** Adequate to the mechanics, and the SD2 systemd layer is shell anyway. Rejected for the *logic* because it would not log, error, configure, or emit observability the boxer way — the ask was idiomatic, and an internet-exposed auto-deployer is exactly where structured, audited, configurable behaviour earns its place.
@@ -126,7 +126,7 @@ We adopt **O1**. Concretely:
 
 Proposed — awaiting review by p@stergiotis.
 
-Implementation phasing: **Phase 1** — the `deploy` subcommand happy path (fetch → checkout → build via the existing scripts → stage to `releases/<tag>/` → `ws_probe` gate → symlink swap → restart). **Phase 2** — rollback + retention + post-restart re-probe (SD6). **Phase 3** — env-registry knobs (SD7) surfaced in `doc/env-vars.md`; `runinfo` agreement asserted. **Phase 4** — signed-tag verification (SD8) + the optional audited bus record (SD7). **Phase 5** — the systemd `service`/`timer` units, the Caddy `handle_errors` holding page, and end-to-end validation on a build-sized Hetzner box. The existing container kit (`rust/imzero2/deploy/`) is untouched and remains the manual / off-box path (and the basis of O2).
+Implementation phasing: **Phase 1** — the `deploy` subcommand happy path (fetch → checkout → build via the existing scripts → stage to `releases/<tag>/` → `ws_probe` gate → symlink swap → restart). **Phase 2** — rollback + retention + post-restart re-probe (SD6). **Phase 3** — env-registry knobs (SD7) surfaced in `doc/env-vars.md`; `runinfo` agreement asserted. **Phase 4** — signed-tag verification (SD8) + the optional audited bus record (SD7). **Phase 5** — the systemd `service`/`timer` units, the Caddy `handle_errors` holding page, and end-to-end validation on a build-sized Hetzner box. The existing container kit (`showcase/`) is untouched and remains the manual / off-box path (and the basis of O2).
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See `doc/DOCUMENTATION_STANDARD.md` §1 ADR for the edit-policy tiers (Tier 1 in-place / Tier 2 `## Updates` H3 / Tier 3 superseding ADR).
@@ -136,6 +136,6 @@ See `doc/DOCUMENTATION_STANDARD.md` §1 ADR for the edit-policy tiers (Tier 1 in
 - [ADR-0024 — imzero2 remote access via headless render + ffmpeg + browser viewer](./0024-imzero2-remote-access-browser-viewer.md) — the demo this deploys; `hmi_headless.sh` builds-then-runs; the carrier and `ws_probe`.
 - [ADR-0082 — securing the imzero2 remote session](./0082-imzero2-remote-session-auth-tls-fanout.md) — Caddy supplies the v1-missing TLS/auth; the secure-by-default / fail-closed ethos SD8 extends to tag provenance.
 - [ADR-0009 — environment variable registry](./0009-environment-variable-registry.md) — `imzero2env`, where SD7's knobs register and surface in `doc/env-vars.md`.
-- `rust/imzero2/deploy/` — the existing manual / container deploy kit; the basis of the O2 escape.
+- `showcase/` — the existing manual / container deploy kit; the basis of the O2 escape.
 - Building blocks: `public/keelson/runtime/runinfo` (deployed-revision truth), `public/keelson/runtime/inprocbus` (audited deploy records — `Request`, not `Publish`), `public/keelson/data/chlocalpool` (the in-tree external-binary-by-path precedent), `rust/imzero2/src/bin/ws_probe.rs` (the gate), `rust/imzero2/{build_rust_headless.sh,build_go.sh,hmi_headless.sh}`.
 - Capistrano-style symlinked releases — prior art for the immutable-`releases/` + `current`-symlink atomic-deploy pattern.
