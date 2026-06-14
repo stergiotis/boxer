@@ -55,6 +55,25 @@ glibc matches by construction.
    `BASIC_AUTH_USER`, `BASIC_AUTH_HASH` (`caddy hash-password --plaintext '...'`).
    `DOMAIN=<box-ip>.nip.io` works with no DNS. Open 80/443. `systemctl enable --now caddy`.
 
+## Tag signing (SD8)
+
+By default the deploy **refuses to build an unsigned tag** — a compromised
+mirror or forged ref must not make the box build arbitrary code. So:
+
+- Publish releases as **signed annotated tags**: `git tag -s v0.1.0 -m '...'`
+  (lightweight tags have no signature and will be rejected).
+- The box must **trust the signer**. For GPG, import the signer's public key
+  into the `imzero2` user's keyring (`sudo -u imzero2 gpg --import signer.asc`).
+  For SSH signing, set (as the `imzero2` user):
+  ```bash
+  git config --global gpg.format ssh
+  git config --global gpg.ssh.allowedSignersFile /opt/imzero2/.config/git/allowed_signers
+  # allowed_signers: one line "release@you  ssh-ed25519 AAAA..." per trusted key
+  ```
+- **Dev/loopback escape only:** `IMZERO2_DEPLOY_REQUIRE_SIGNED_TAGS=0` (or
+  `--require-signed-tags=false`) skips verification. The deploy logs a loud
+  warning; never use it on an internet-exposed box.
+
 ## Bootstrap the first release
 
 `current/` does not exist yet, so run the deploy from the workspace once. Build
@@ -88,12 +107,13 @@ during the cold/first build and the restart blip; a build or gate failure leaves
 
 ## Notes / scope
 
-- **Phases 1–2 implemented.** Happy path + post-restart health re-probe with
-  automatic **rollback** and **keep-last-K retention** (ADR-0085 SD6). A failed
-  build or pre-swap gate keeps `current` untouched; a release that fails to
-  serve after the swap is rolled back to the previous one (no rebuild), and old
-  releases beyond `--keep` are pruned. Signed-tag verification (SD8) and the
-  env-registry migration (SD7) remain later phases.
+- **Phases 1–4 implemented.** Happy path; post-restart health re-probe with
+  automatic **rollback** + **keep-last-K retention** (SD6); knobs in the
+  `IMZERO2_DEPLOY_*` env registry with deployed-revision logging (SD7); and
+  **signed-tag verification** (SD8, above). A failed build, gate, or signature
+  check keeps `current` untouched; a release that fails to serve after the swap
+  is rolled back (no rebuild). The audited-bus deploy record (optional in SD7)
+  is deferred — deploy events already reach the facts store via the logbridge.
 - **Flags → env registry** is Phase 3; today the knobs are `imzero2 deploy`
   flags (`--scratch-port`, `--gate-aus`, `--gate-timeout`, `--encoder-args`, …).
 - **Restart permission** comes from the polkit rule; no sudo in the tool.

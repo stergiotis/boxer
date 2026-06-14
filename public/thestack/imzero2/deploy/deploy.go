@@ -46,7 +46,10 @@ type Config struct {
 	GateTimeout  time.Duration // gate: overall budget
 	LivePort     int           // post-restart health probe: the demo service's listen port
 	KeepReleases int           // retain the last K release dirs (rollback history)
-	EncoderArgs  string        // IMZERO2_HEADLESS_ENCODER_ARGS for the gate run
+	// RequireSignedTags gates building on a valid GPG/SSH tag signature (SD8);
+	// false is a loopback/dev escape only.
+	RequireSignedTags bool
+	EncoderArgs       string // IMZERO2_HEADLESS_ENCODER_ARGS for the gate run
 	MainFont     string        // optional; fc-match'd if empty
 	PhosphorFont string        // optional; the release's bundled asset if empty
 	FallbackFont string        // optional; fc-match'd if empty
@@ -80,6 +83,9 @@ func Run(ctx context.Context, lg zerolog.Logger, cfg Config) (deployed bool, err
 	}
 	lg.Info().Str("from", orNone(current)).Str("to", newest).Msg("deploy: new release tag")
 
+	if err = verifyTag(ctx, lg, cfg, newest); err != nil {
+		return false, err
+	}
 	if err = checkout(ctx, lg, cfg, newest); err != nil {
 		return false, err
 	}
@@ -148,6 +154,24 @@ func resolveTags(ctx context.Context, lg zerolog.Logger, cfg Config) (newest, cu
 
 func checkout(ctx context.Context, lg zerolog.Logger, cfg Config, tag string) error {
 	return step(ctx, lg, "checkout", cfg.Workspace, nil, "git", "checkout", "--force", "--detach", tag)
+}
+
+// verifyTag enforces SD8: the tag must carry a valid GPG/SSH signature from a
+// trusted key (git verify-tag) before the box builds it, so a compromised
+// mirror or a forged ref cannot make the box build arbitrary code. Disabling
+// the check is a loopback/dev escape only — it is loud about it.
+func verifyTag(ctx context.Context, lg zerolog.Logger, cfg Config, tag string) error {
+	if !cfg.RequireSignedTags {
+		lg.Warn().Str("tag", tag).Msg("deploy: signed-tag verification DISABLED — dev/loopback only, do NOT use on an internet-exposed box")
+		return nil
+	}
+	out, err := run(ctx, cfg.Workspace, nil, "git", "verify-tag", tag)
+	if err != nil {
+		return eb.Build().Str("tag", tag).Str("output", tail(out, 1500)).
+			Errorf("deploy: tag %s has no valid signature from a trusted key — refusing to build: %w", tag, err)
+	}
+	lg.Info().Str("tag", tag).Msg("deploy: tag signature verified")
+	return nil
 }
 
 func build(ctx context.Context, lg zerolog.Logger, cfg Config) error {

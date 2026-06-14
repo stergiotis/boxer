@@ -283,6 +283,14 @@ var (
 		Default:     "5",
 		CliFlagName: "keep",
 	})
+
+	DeployRequireSignedTags = env.NewBool(env.Spec{
+		Name:        "IMZERO2_DEPLOY_REQUIRE_SIGNED_TAGS",
+		Description: "verify a tag's GPG/SSH signature (git verify-tag) before building; disable only on a trusted/loopback box",
+		Category:    env.CategorySystem,
+		Default:     "true",
+		CliFlagName: "require-signed-tags",
+	})
 )
 
 // ScreenshotSizeWH parses [ScreenshotSize] as "WxH". Returns (0,0,false)
