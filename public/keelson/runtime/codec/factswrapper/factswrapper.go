@@ -108,21 +108,20 @@ func (FactsWrapper) Imports(plan *mappingplan.Plan) []string {
 		`cbdml "github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml_cbor"`,
 		`"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/ra"`,
 		`"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/cborarrow"`,
+		// eh + eb back this wrapper's own emitted code: Marshal's error wrap
+		// (eh) and the codec Decode row-count check (eb). Declared because the
+		// wrapper uses them, full stop — the import set dedups against the
+		// core's own eh/eb, so there is no duplicate and, unlike before, no
+		// need to mirror the core's eb gating here.
+		`"github.com/stergiotis/boxer/public/observability/eh"`,
+		`"github.com/stergiotis/boxer/public/observability/eh/eb"`,
 	}
 	// vdd is used only by Init's `vdd.MembXxx.GetId()` lookups, one per
 	// kindXxx var. A kind with no ref-channel membership (a plain-only or
-	// verbatim/parametrized-only DTO) emits no lookups, so importing vdd
-	// would be unused.
+	// verbatim/parametrized-only DTO) emits no lookups, so include vdd only
+	// when there is at least one.
 	if len(uniqueMemberships(plan)) > 0 {
 		imports = append(imports, `"github.com/stergiotis/boxer/public/keelson/vdd"`)
-	}
-	// The codec's Decode "expected 1 row" check uses eb. The marshallgen
-	// core imports eb only when the plan has a non-const field; for a
-	// plain-only kind it does not, so supply it here to avoid an undefined
-	// reference. (When the core already imports it, adding it again would
-	// duplicate — hence the guard.)
-	if !plan.HasNonConstField() {
-		imports = append(imports, `"github.com/stergiotis/boxer/public/observability/eh/eb"`)
 	}
 	return imports
 }

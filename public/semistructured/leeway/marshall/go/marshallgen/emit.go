@@ -152,53 +152,136 @@ func writeImports(sb *strings.Builder, plan *mappingplan.Plan, wrapper WrapperEm
 			needsTime = true
 		}
 	}
-	extra := wrapper.Imports(plan)
-
-	// iter (Seq accessors), dmlruntime (AttrI membership-add interfaces) and
-	// raruntime (the read interfaces + FillFromArrow section walk) are used
-	// only by the per-section interfaces / decode. A plain-only DTO (no tagged
-	// fields, only plain columns) emits none of those, so importing them would
-	// be unused imports (go build error). array + eh stay unconditional: plain
-	// reads use array, BuildEntities's commit wrap uses eh.
+	// Each contributor declares the imports its OWN emitted code uses; the
+	// import set dedups by path so the core and the wrapper need not coordinate
+	// (e.g. both may declare eb — it collapses to one, no duplicate-import
+	// error and no need for either to mirror the other's gating). Section-only
+	// imports (iter Seq accessors, the dml/ra runtimes) are gated on the plan
+	// actually having a tagged field; eb on it having a non-const field (the
+	// only thing that emits an occurrence / carrier-count check). array + eh
+	// are unconditional — plain reads use array, BuildEntities's commit wrap
+	// uses eh.
 	hasTagged := len(plan.Fields) > 0
 
-	line(sb, 0, "import (")
+	imps := newImportSet()
+
+	stdlib := []string{}
 	if hasTagged {
-		line(sb, 1, "\"iter\"")
+		stdlib = append(stdlib, `"iter"`)
 	}
 	if needsTime {
-		line(sb, 1, "\"time\"")
+		stdlib = append(stdlib, `"time"`)
 	}
-	blank(sb)
+	imps.group(stdlib...)
+
+	thirdParty := []string{}
 	if needsRoaring {
-		line(sb, 1, "\"github.com/RoaringBitmap/roaring\"")
+		thirdParty = append(thirdParty, `"github.com/RoaringBitmap/roaring"`)
 	}
-	line(sb, 1, "\"github.com/apache/arrow-go/v18/arrow/array\"")
-	blank(sb)
-	// eh powers BuildEntities's CommitEntity error wrap — always present.
-	line(sb, 1, "\"github.com/stergiotis/boxer/public/observability/eh\"")
-	// eb powers the FillFromArrow occurrence / carrier-count checks, which
-	// exist only when there is at least one non-const tagged field. A
-	// plain-only (or const-only) DTO emits no eb use, so importing it would
-	// be an unused import (go build error). Wrappers that need eb for a
-	// plain-only kind add it via their own Imports().
+	thirdParty = append(thirdParty, `"github.com/apache/arrow-go/v18/arrow/array"`)
+	imps.group(thirdParty...)
+
+	boxer := []string{`"github.com/stergiotis/boxer/public/observability/eh"`}
 	if plan.HasNonConstField() {
-		line(sb, 1, "\"github.com/stergiotis/boxer/public/observability/eh/eb\"")
+		boxer = append(boxer, `"github.com/stergiotis/boxer/public/observability/eh/eb"`)
 	}
 	if hasTagged {
-		line(sb, 1, "dmlruntime \"github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime\"")
-		line(sb, 1, "raruntime \"github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime\"")
+		boxer = append(boxer,
+			`dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"`,
+			`raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"`)
 	}
 	if needsMarshalltypes {
-		line(sb, 1, "\"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/marshalltypes\"")
+		boxer = append(boxer, `"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/marshalltypes"`)
 	}
-	if len(extra) > 0 {
-		blank(sb)
-		for _, imp := range extra {
-			linef(sb, 1, "%s", imp)
+	imps.group(boxer...)
+
+	// Wrapper-supplied groups (its "" entries delimit them). Deduped against the
+	// core's imports above.
+	for _, g := range splitImportGroups(wrapper.Imports(plan)) {
+		imps.group(g...)
+	}
+
+	imps.render(sb)
+}
+
+// importSet accumulates Go import specs into blank-line-delimited groups and
+// renders a deduplicated import block. A spec whose import path was already
+// added — in any group — is dropped, so independent contributors (the
+// schema-agnostic core and a WrapperEmitterI) can each declare the imports
+// their own emitted code needs without coordinating: overlaps (e.g. both using
+// eb) collapse to one import rather than a duplicate-import compile error.
+// go/format sorts within each group and collapses any blank line a dropped spec
+// would otherwise leave behind.
+type importSet struct {
+	seen   map[string]struct{}
+	groups [][]string
+}
+
+func newImportSet() *importSet { return &importSet{seen: map[string]struct{}{}} }
+
+// group adds one blank-line-delimited group, skipping blank entries and any
+// spec whose import path is already present. A group left empty is not emitted.
+func (s *importSet) group(specs ...string) {
+	var g []string
+	for _, spec := range specs {
+		p := importSpecPath(spec)
+		if p == "" {
+			continue
+		}
+		if _, dup := s.seen[p]; dup {
+			continue
+		}
+		s.seen[p] = struct{}{}
+		g = append(g, spec)
+	}
+	if len(g) > 0 {
+		s.groups = append(s.groups, g)
+	}
+}
+
+func (s *importSet) render(sb *strings.Builder) {
+	line(sb, 0, "import (")
+	for i, g := range s.groups {
+		if i > 0 {
+			blank(sb)
+		}
+		for _, spec := range g {
+			linef(sb, 1, "%s", spec)
 		}
 	}
 	line(sb, 0, ")\n")
+}
+
+// importSpecPath extracts the quoted path from an import spec line, e.g.
+// `cbdml "github.com/x/y"` → "github.com/x/y", `"iter"` → "iter". Returns ""
+// for a spec carrying no quoted path (a "" group separator).
+func importSpecPath(spec string) string {
+	i := strings.IndexByte(spec, '"')
+	j := strings.LastIndexByte(spec, '"')
+	if i < 0 || j <= i {
+		return ""
+	}
+	return spec[i+1 : j]
+}
+
+// splitImportGroups splits a WrapperEmitterI.Imports() result into groups on its
+// "" blank-line separators — the convention wrappers use to group imports.
+func splitImportGroups(specs []string) (out [][]string) {
+	var cur []string
+	for _, s := range specs {
+		if s == "" {
+			if len(cur) > 0 {
+				out = append(out, cur)
+				cur = nil
+			}
+			continue
+		}
+		cur = append(cur, s)
+	}
+	if len(cur) > 0 {
+		out = append(out, cur)
+	}
+	return
 }
 
 // --- Columns SoA + Append/Row adapters. ---
