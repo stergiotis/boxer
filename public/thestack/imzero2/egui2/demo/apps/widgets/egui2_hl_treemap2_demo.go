@@ -60,7 +60,12 @@ func init() {
 			root := makeSampleTree()
 			state = &treemap2DemoState{
 				tm: treemap.New(ids, "tm2-demo-drilled", root,
-					treemap.WithContainerSize(700, 450),
+					// Shorter than the interactive scene's 700x450: the
+					// container must fit the 600px stage below the window
+					// chrome (~200px) so the capture includes the treemap's
+					// bottom edge — the hatched bottom corners are exactly
+					// what this scene exists to show.
+					treemap.WithContainerSize(700, 360),
 					treemap.WithAnimationDuration(0.28),
 					treemap.WithColoring(treemap.DepthColoring(stretchedDepthPalette())),
 					// A value line under each name exercises the two-line
