@@ -6,7 +6,7 @@
 
 - name: Map kernel arch → Go arch
   ansible.builtin.set_fact:
-    go_arch: "{{ {'x86_64': 'amd64', 'aarch64': 'arm64'}[ansible_architecture] }}"
+    go_arch: "{{ {'x86_64': 'amd64', 'aarch64': 'arm64'}[ansible_facts['architecture']] }}"
 
 - name: Query installed Go
   ansible.builtin.command: /usr/local/go/bin/go version
@@ -16,20 +16,41 @@
 
 - name: Install Go {{ go_version }}
   when: ('go' ~ go_version) not in _go.stdout
+  vars:
+    _go_tarball: "go{{ go_version }}.linux-{{ go_arch }}.tar.gz"
   block:
-    - name: Download the Go tarball (checksum-verified via the go.dev sidecar)
+    # The go.dev .sha256 sidecar no longer serves a bare hash (it redirects to an
+    # HTML page), so get_url's checksum:URL can't parse it. Read the authoritative
+    # SHA256 from the release index JSON instead.
+    - name: Fetch the go.dev release index (authoritative SHA256s)
+      ansible.builtin.uri:
+        url: "https://go.dev/dl/?mode=json&include=all"
+        return_content: true
+      register: _go_index
+
+    - name: Resolve this tarball's SHA256 from the index
+      ansible.builtin.set_fact:
+        _go_sha256: "{{ ((_go_index.content | from_json) | selectattr('version', 'equalto', 'go' ~ go_version) | map(attribute='files') | flatten | selectattr('filename', 'equalto', _go_tarball) | map(attribute='sha256') | first | default('')) }}"
+
+    - name: Fail clearly if the index has no checksum for this version/arch
+      ansible.builtin.assert:
+        that: _go_sha256 | length == 64
+        fail_msg: "No SHA256 for {{ _go_tarball }} in the go.dev index — check go_version ({{ go_version }})."
+
+    - name: Download + verify the Go tarball
       ansible.builtin.get_url:
-        url: "https://go.dev/dl/go{{ go_version }}.linux-{{ go_arch }}.tar.gz"
-        dest: "/tmp/go-{{ go_version }}.tar.gz"
-        checksum: "sha256:https://go.dev/dl/go{{ go_version }}.linux-{{ go_arch }}.tar.gz.sha256"
+        url: "https://go.dev/dl/{{ _go_tarball }}"
+        dest: "/tmp/{{ _go_tarball }}"
+        checksum: "sha256:{{ _go_sha256 }}"
         mode: "0644"
+
     - name: Remove any previous Go
       ansible.builtin.file:
         path: /usr/local/go
         state: absent
     - name: Unpack Go into /usr/local
       ansible.builtin.unarchive:
-        src: "/tmp/go-{{ go_version }}.tar.gz"
+        src: "/tmp/{{ _go_tarball }}"
         dest: /usr/local
         remote_src: true
 
