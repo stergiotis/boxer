@@ -48,6 +48,7 @@
 
 use crate::imzero2::appconfig::AppConfig;
 use crate::imzero2::apphost;
+use crate::imzero2::codeclane::{CodecLane, VideoCodec};
 use crate::imzero2::encoderpipe::{EncoderSink, EncoderTarget};
 use crate::imzero2::framesink::{FrameSink, NullSink, PngDumpSink};
 use crate::imzero2::inputmap::InputTranslator;
@@ -78,7 +79,7 @@ struct HeadlessOpts {
     dump_every: u64,
     pixels_per_point: f32,
     h264_out: Option<std::path::PathBuf>,
-    encoder_args: Vec<String>,
+    lane: CodecLane,
     /// WebSocket carrier bind address (e.g. "127.0.0.1:8089"); the viewer
     /// page is served on port+1. None = carrier disabled.
     listen: Option<String>,
@@ -122,11 +123,6 @@ impl HeadlessOpts {
                 .filter(|v| !v.is_empty())
                 .map(std::path::PathBuf::from)
         }
-        let encoder_args = std::env::var("IMZERO2_HEADLESS_ENCODER_ARGS")
-            .ok()
-            .filter(|v| !v.trim().is_empty())
-            .map(|v| v.split_whitespace().map(str::to_owned).collect())
-            .unwrap_or_else(|| DEFAULT_ENCODER_ARGS.iter().map(|s| (*s).to_owned()).collect());
         Self {
             fps: parse("IMZERO2_HEADLESS_FPS", 60.0f32).clamp(1.0, 240.0),
             max_frames: parse("IMZERO2_HEADLESS_MAX_FRAMES", 0u64),
@@ -134,11 +130,34 @@ impl HeadlessOpts {
             dump_every: parse("IMZERO2_HEADLESS_DUMP_EVERY", 60u64).max(1),
             pixels_per_point: parse("IMZERO2_HEADLESS_PIXELS_PER_POINT", 1.0f32).clamp(0.25, 4.0),
             h264_out: path_var("IMZERO2_HEADLESS_H264_OUT"),
-            encoder_args,
+            lane: build_codec_lane(),
             listen: std::env::var("IMZERO2_HEADLESS_LISTEN")
                 .ok()
                 .filter(|v| !v.is_empty()),
         }
+    }
+}
+
+/// Select the startup codec lane (ADR-0088 SD4). `IMZERO2_HEADLESS_CODEC`
+/// picks `h264` | `vp9` | `av1`; the runtime switch is a later phase. For
+/// H.264 the legacy `IMZERO2_HEADLESS_ENCODER_ARGS` override (or the VAAPI
+/// `DEFAULT_ENCODER_ARGS`) still applies, so an existing deployment with no
+/// codec var set behaves exactly as before.
+fn build_codec_lane() -> CodecLane {
+    fn h264_args() -> Vec<String> {
+        std::env::var("IMZERO2_HEADLESS_ENCODER_ARGS")
+            .ok()
+            .filter(|v| !v.trim().is_empty())
+            .map(|v| v.split_whitespace().map(str::to_owned).collect())
+            .unwrap_or_else(|| DEFAULT_ENCODER_ARGS.iter().map(|s| (*s).to_owned()).collect())
+    }
+    match std::env::var("IMZERO2_HEADLESS_CODEC")
+        .ok()
+        .and_then(|v| VideoCodec::parse(&v))
+    {
+        Some(VideoCodec::Vp9) => CodecLane::software(VideoCodec::Vp9),
+        Some(VideoCodec::Av1) => CodecLane::software(VideoCodec::Av1),
+        Some(VideoCodec::H264) | None => CodecLane::h264_annexb(h264_args()),
     }
 }
 
@@ -510,7 +529,7 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
             width_px,
             height_px,
             opts.fps,
-            opts.encoder_args.clone(),
+            opts.lane.clone(),
             EncoderTarget::File(out.clone()),
         )?));
     }
@@ -530,7 +549,7 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
             ppp,
             cadence as u32,
             opts.fps,
-            opts.encoder_args.clone(),
+            opts.lane.clone(),
             waker_tx,
         )?),
         None => None,

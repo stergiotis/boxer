@@ -36,8 +36,10 @@
 //! begins the stream at SPS/PPS + IDR, satisfying the SD4 (re)connect
 //! rule.
 
+use crate::imzero2::codeclane::{CodecLane, Framing};
 use crate::imzero2::framesink::FrameSink;
 use crate::imzero2::inputproto as pb;
+use crate::imzero2::nutreader::NutReader;
 use prost::Message as _;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
@@ -156,7 +158,7 @@ pub struct EncoderSink {
     width: u32,
     height: u32,
     fps: f32,
-    encoder_args: Vec<String>,
+    lane: CodecLane,
     target: EncoderTarget,
     restarts: u32,
 }
@@ -166,7 +168,7 @@ impl EncoderSink {
         width: u32,
         height: u32,
         fps: f32,
-        encoder_args: Vec<String>,
+        lane: CodecLane,
         target: EncoderTarget,
     ) -> std::io::Result<Self> {
         let mut sink = Self {
@@ -177,7 +179,7 @@ impl EncoderSink {
             width,
             height,
             fps,
-            encoder_args,
+            lane,
             target,
             restarts: 0,
         };
@@ -200,17 +202,28 @@ impl EncoderSink {
             .arg(format!("{}", self.fps))
             .arg("-i")
             .arg("pipe:0")
-            .args(&self.encoder_args);
-        if matches!(self.target, EncoderTarget::Channel(_)) {
-            // AU-accurate framing for the live carrier: AUDs delimit access
-            // units without slice-header parsing, and SPS/PPS repeat on
-            // every key frame so a (re)joining viewer can configure its
-            // decoder from the stream alone (ADR-0024 SD4).
+            .args(&self.lane.encoder_args);
+        if matches!(self.target, EncoderTarget::Channel(_)) && self.lane.framing == Framing::AnnexB {
+            // AU-accurate framing for the legacy Annex-B carrier: AUDs
+            // delimit access units without slice-header parsing, and SPS/PPS
+            // repeat on every key frame so a (re)joining viewer can configure
+            // its decoder from the stream alone (ADR-0024 SD4). The NUT path
+            // (ADR-0088) reads frame boundaries + key-frame flags from the
+            // container instead, so it needs no bitstream filter here.
             cmd.arg("-bsf:v")
                 .arg("h264_metadata=aud=insert,dump_extra=freq=keyframe");
         }
+        if self.lane.framing == Framing::Nut {
+            // Flush each coded frame promptly so the muxer does not coalesce
+            // frames into latency (ADR-0088 SD4).
+            cmd.arg("-flush_packets").arg("1");
+        }
+        let out_fmt = match self.lane.framing {
+            Framing::AnnexB => "h264",
+            Framing::Nut => "nut",
+        };
         cmd.arg("-f")
-            .arg("h264")
+            .arg(out_fmt)
             .arg("pipe:1")
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
@@ -230,9 +243,13 @@ impl EncoderSink {
             }
             EncoderTarget::Channel(tx) => {
                 let tx = tx.clone();
+                let framing = self.lane.framing;
                 std::thread::Builder::new()
-                    .name("imzero2-h264-drain".to_owned())
-                    .spawn(move || drain_to_channel(stdout, &tx))?
+                    .name("imzero2-video-drain".to_owned())
+                    .spawn(move || match framing {
+                        Framing::Nut => drain_to_channel_nut(stdout, &tx),
+                        Framing::AnnexB => drain_to_channel(stdout, &tx),
+                    })?
             }
         };
         // Fresh mailbox per spawn: a new generation cleanly separates the
@@ -407,18 +424,8 @@ fn drain_to_channel(
             for pair in auds.windows(2) {
                 if let &[a, b] = pair {
                     let au = pending.get(a..b).unwrap_or_default();
-                    let envelope = pb::VideoChunk {
-                        frame_index,
-                        timestamp_micros: started.elapsed().as_micros() as u64,
-                        keyframe: au_has_idr(au),
-                        data: au.to_vec(),
-                    };
+                    let framed = frame_payload(frame_index, started, au_has_idr(au), au.to_vec());
                     frame_index += 1;
-                    let mut framed = Vec::with_capacity(1 + envelope.encoded_len());
-                    framed.push(pb::PREFIX_VIDEO);
-                    if envelope.encode(&mut framed).is_err() {
-                        continue; // Vec encode cannot fail in practice
-                    }
                     sent_bytes += framed.len() as u64;
                     if tx.blocking_send(framed).is_err() {
                         tracing::info!(frames = frame_index, "viewer channel closed — stopping h264 drain");
@@ -433,4 +440,78 @@ fn drain_to_channel(
         }
     }
     tracing::info!(frames = frame_index, bytes = sent_bytes, "h264 drain finished (encoder eof)");
+}
+
+/// Wrap one coded frame's native payload in the ADR-0024 SD4 envelope
+/// (0x01 prefix + `VideoChunk`), ready to push to the carrier channel.
+fn frame_payload(
+    frame_index: u64,
+    started: std::time::Instant,
+    keyframe: bool,
+    data: Vec<u8>,
+) -> Vec<u8> {
+    let envelope = pb::VideoChunk {
+        frame_index,
+        timestamp_micros: started.elapsed().as_micros() as u64,
+        keyframe,
+        data,
+    };
+    let mut framed = Vec::with_capacity(1 + envelope.encoded_len());
+    framed.push(pb::PREFIX_VIDEO);
+    // Encoding into a Vec is infallible in practice.
+    let _ = envelope.encode(&mut framed);
+    framed
+}
+
+/// Drain ffmpeg's NUT output (ADR-0088 SD4). [`NutReader`] yields each
+/// coded frame's native bitstream plus the container-level key-frame flag
+/// for any codec — no per-codec depacketizer or keyframe parser — so this
+/// is the single drain that serves H.264, VP9, AV1, and future lanes.
+/// Returns when ffmpeg's stdout closes, the channel is dropped (viewer
+/// disconnected), or the stream is unparseable.
+fn drain_to_channel_nut(
+    stdout: Option<std::process::ChildStdout>,
+    tx: &tokio::sync::mpsc::Sender<Vec<u8>>,
+) {
+    use std::io::Read as _;
+    let Some(mut so) = stdout else { return };
+    let started = std::time::Instant::now();
+    let mut reader = NutReader::new();
+    let mut chunk = vec![0u8; 64 * 1024];
+    let mut frame_index: u64 = 0;
+    let mut sent_bytes: u64 = 0;
+    loop {
+        let n = match so.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(n) => n,
+            Err(e) => {
+                tracing::error!(error=%e, "nut drain read failed");
+                break;
+            }
+        };
+        reader.push(chunk.get(..n).unwrap_or_default());
+        loop {
+            match reader.next_frame() {
+                Ok(Some(frame)) => {
+                    let framed = frame_payload(frame_index, started, frame.keyframe, frame.data);
+                    frame_index += 1;
+                    sent_bytes += framed.len() as u64;
+                    if tx.blocking_send(framed).is_err() {
+                        tracing::info!(frames = frame_index, "viewer channel closed — stopping nut drain");
+                        // Keep consuming so ffmpeg can exit cleanly once our
+                        // stdin side closes.
+                        let _ = std::io::copy(&mut so, &mut std::io::sink());
+                        return;
+                    }
+                }
+                Ok(None) => break,
+                Err(e) => {
+                    tracing::error!(error=%e, "nut demux error — stopping drain (encoder respawns on reconnect)");
+                    let _ = std::io::copy(&mut so, &mut std::io::sink());
+                    return;
+                }
+            }
+        }
+    }
+    tracing::info!(frames = frame_index, bytes = sent_bytes, "nut drain finished (encoder eof)");
 }

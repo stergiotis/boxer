@@ -12,7 +12,11 @@ pub mod headless;
 #[cfg(feature = "headless")]
 pub mod framesink;
 #[cfg(feature = "headless")]
+pub mod codeclane;
+#[cfg(feature = "headless")]
 pub mod encoderpipe;
+#[cfg(feature = "headless")]
+pub mod nutreader;
 #[cfg(feature = "headless")]
 pub mod inputproto;
 #[cfg(feature = "headless")]

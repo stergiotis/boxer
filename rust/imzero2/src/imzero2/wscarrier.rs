@@ -25,6 +25,7 @@
 //! to it only through atomics, a mutex-guarded event vector, and the
 //! bounded video channel.
 
+use crate::imzero2::codeclane::CodecLane;
 use crate::imzero2::encoderpipe::{EncoderSink, EncoderTarget};
 use crate::imzero2::framesink::FrameSink as _;
 use crate::imzero2::inputproto as pb;
@@ -66,7 +67,7 @@ pub struct WsCarrier {
     encoder: Option<EncoderSink>,
     encoder_gen: u64,
     fps: f32,
-    encoder_args: Vec<String>,
+    lane: CodecLane,
     /// blake3 of the last frame fed to the encoder; identical frames are
     /// skipped (no encode, no wire bytes). Reset whenever the encoder is
     /// (re)spawned so a fresh stream always begins with a real frame.
@@ -85,7 +86,7 @@ impl WsCarrier {
         pixels_per_point: f32,
         cadence: u32,
         fps: f32,
-        encoder_args: Vec<String>,
+        lane: CodecLane,
         waker: std::sync::mpsc::Sender<()>,
     ) -> std::io::Result<Self> {
         let inner = std::sync::Arc::new(Inner {
@@ -148,7 +149,7 @@ impl WsCarrier {
             encoder: None,
             encoder_gen: 0,
             fps,
-            encoder_args,
+            lane,
             last_frame_hash: None,
         })
     }
@@ -241,7 +242,7 @@ impl WsCarrier {
             self.last_frame_hash = None;
             let tx = self.inner.video_tx.lock().ok().and_then(|g| g.clone());
             if let Some(tx) = tx {
-                match EncoderSink::new(width, height, self.fps, self.encoder_args.clone(), EncoderTarget::Channel(tx)) {
+                match EncoderSink::new(width, height, self.fps, self.lane.clone(), EncoderTarget::Channel(tx)) {
                     Ok(enc) => {
                         tracing::info!(conn_gen = cur_gen, "viewer connected — encoder started");
                         self.encoder = Some(enc);
