@@ -1,14 +1,15 @@
 //! Codec lane — the per-codec configuration (ADR-0088 SD4) that turns the
 //! generic encoder pipeline into a concrete codec. A lane bundles the
-//! ffmpeg encoder argv, how the encoded stream is framed out of ffmpeg,
-//! and the codec identity. Because the NUT path ([`crate::imzero2::nutreader`])
-//! carries per-frame boundaries and the keyframe flag for *every* codec,
-//! adding a codec is otherwise just declarative config here — no per-codec
-//! depacketizer or keyframe parser.
+//! ffmpeg encoder argv and an optional bitstream filter; every lane muxes
+//! through NUT, which [`crate::imzero2::nutreader`] demuxes to recover each
+//! frame's native bitstream and key-frame flag. Adding a codec is therefore
+//! just declarative config here — no per-codec depacketizer or keyframe
+//! parser.
 //!
 //! Backend (hardware/software) selection and the runtime switch are later
-//! ADR-0088 phases; this module currently provides software lanes plus the
-//! original H.264 Annex-B path for back-compat.
+//! ADR-0088 phases; this module currently provides software lanes plus an
+//! explicit-args H.264 lane (the legacy `IMZERO2_HEADLESS_ENCODER_ARGS` /
+//! VAAPI default).
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VideoCodec {
@@ -38,16 +39,11 @@ impl VideoCodec {
     }
 }
 
-/// How the encoded elementary stream leaves ffmpeg.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Framing {
-    /// Raw H.264 Annex-B, AUD-delimited access units (the original
-    /// ADR-0024 path; H.264 only). Drained by the AUD splitter.
-    AnnexB,
-    /// NUT container, demuxed by `nutreader` (ADR-0088; any codec). The
-    /// demuxed payload is the native bitstream WebCodecs consumes.
-    Nut,
-}
+/// H.264 bitstream filter: repeat SPS/PPS on every key frame so a
+/// (re)joining viewer can configure its decoder from the stream alone. NUT
+/// supplies frame boundaries, so no AUD insertion is needed (ADR-0088 SD4 —
+/// this replaces the retired `aud=insert` of the original Annex-B path).
+const H264_BSF: &str = "dump_extra=freq=keyframe";
 
 #[derive(Clone, Debug)]
 pub struct CodecLane {
@@ -55,25 +51,26 @@ pub struct CodecLane {
     /// ffmpeg arguments between the rawvideo input and the muxer output
     /// (selects the encoder and its rate control; excludes the `-f` muxer).
     pub encoder_args: Vec<String>,
-    pub framing: Framing,
+    /// Optional `-bsf:v` bitstream filter applied after the encoder.
+    pub bsf: Option<&'static str>,
 }
 
 impl CodecLane {
-    /// H.264 on the original Annex-B path, with explicit ffmpeg args
-    /// (preserves `IMZERO2_HEADLESS_ENCODER_ARGS` / the VAAPI default).
-    pub fn h264_annexb(encoder_args: Vec<String>) -> Self {
+    /// H.264 with explicit ffmpeg args (preserves the legacy
+    /// `IMZERO2_HEADLESS_ENCODER_ARGS` override / the VAAPI default), muxed
+    /// through NUT like every other codec (ADR-0088 Phase 2).
+    pub fn h264(encoder_args: Vec<String>) -> Self {
         Self {
             codec: VideoCodec::H264,
             encoder_args,
-            framing: Framing::AnnexB,
+            bsf: Some(H264_BSF),
         }
     }
 
-    /// Default software lane for a codec, routed through NUT (except H.264,
-    /// which stays on the proven Annex-B path during the staged migration —
-    /// ADR-0088 Phase 1/2). Latency-tuned with an effectively-infinite GOP:
-    /// a viewer (re)connect or a codec switch forces a fresh key frame, so
-    /// periodic IDRs buy nothing (ADR-0024 SD3).
+    /// Default software lane for a codec, muxed through NUT (ADR-0088 SD4).
+    /// Latency-tuned with an effectively-infinite GOP: a viewer (re)connect
+    /// or a codec switch forces a fresh key frame, so periodic IDRs buy
+    /// nothing (ADR-0024 SD3).
     pub fn software(codec: VideoCodec) -> Self {
         // `-pix_fmt yuv420p` is load-bearing: the render readback is BGRA, and
         // left to choose, ffmpeg converts it to a 4:4:4(+alpha) format the
@@ -92,14 +89,13 @@ impl CodecLane {
                 "-c:v", "libsvtav1", "-preset", "8", "-g", "100000", "-pix_fmt", "yuv420p",
             ],
         };
-        let framing = match codec {
-            VideoCodec::H264 => Framing::AnnexB,
-            VideoCodec::Vp9 | VideoCodec::Av1 => Framing::Nut,
-        };
         Self {
             codec,
             encoder_args: args.iter().map(|s| (*s).to_owned()).collect(),
-            framing,
+            bsf: match codec {
+                VideoCodec::H264 => Some(H264_BSF),
+                VideoCodec::Vp9 | VideoCodec::Av1 => None,
+            },
         }
     }
 }

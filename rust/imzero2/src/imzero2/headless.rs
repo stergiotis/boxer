@@ -157,7 +157,7 @@ fn build_codec_lane() -> CodecLane {
     {
         Some(VideoCodec::Vp9) => CodecLane::software(VideoCodec::Vp9),
         Some(VideoCodec::Av1) => CodecLane::software(VideoCodec::Av1),
-        Some(VideoCodec::H264) | None => CodecLane::h264_annexb(h264_args()),
+        Some(VideoCodec::H264) | None => CodecLane::h264(h264_args()),
     }
 }
 

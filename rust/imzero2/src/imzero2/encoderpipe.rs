@@ -1,16 +1,17 @@
-//! ffmpeg encoder subprocess (ADR-0024 SD3, Phase 2; SD9 pacing, 2026-06-13).
+//! ffmpeg encoder subprocess (ADR-0024 SD3; SD9 pacing; ADR-0088 SD4 codec
+//! lanes + NUT framing).
 //!
 //! Feeds tightly-packed BGRA frames to ffmpeg's stdin (`-f rawvideo
-//! -pix_fmt bgra`) and drains the raw Annex-B H.264 byte stream from its
-//! stdout on a separate thread, into one of two targets:
+//! -pix_fmt bgra`) and drains the encoded stream from its stdout on a
+//! separate thread, into one of two targets:
 //!
-//! - [`EncoderTarget::File`] — append the raw elementary stream to a file
-//!   (Phase 2 verification; `IMZERO2_HEADLESS_H264_OUT`).
-//! - [`EncoderTarget::Channel`] — split the stream into access units
-//!   (ffmpeg is told to insert Access Unit Delimiters and repeat SPS/PPS
-//!   on key frames), wrap each AU in the ADR-0024 SD4 protobuf envelope
-//!   with the 0x01 prefix, and push it into the WebSocket carrier's
-//!   bounded channel.
+//! - [`EncoderTarget::Channel`] — the wire path. ffmpeg muxes to the NUT
+//!   container; [`drain_to_channel_nut`] demuxes each coded frame (native
+//!   bitstream + container key-frame flag, for any codec — ADR-0088 SD4),
+//!   wraps it in the ADR-0024 SD4 protobuf envelope with the 0x01 prefix,
+//!   and pushes it into the WebSocket carrier's bounded channel.
+//! - [`EncoderTarget::File`] — a raw H.264 elementary-stream dump for
+//!   verification (`IMZERO2_HEADLESS_H264_OUT`; meaningful for H.264).
 //!
 //! **SD9 pacing.** The render/FFFI2 loop must never block on the encoder
 //! or a slow viewer. [`EncoderSink::on_frame`] (called on the render
@@ -36,7 +37,7 @@
 //! begins the stream at SPS/PPS + IDR, satisfying the SD4 (re)connect
 //! rule.
 
-use crate::imzero2::codeclane::{CodecLane, Framing};
+use crate::imzero2::codeclane::CodecLane;
 use crate::imzero2::framesink::FrameSink;
 use crate::imzero2::inputproto as pb;
 use crate::imzero2::nutreader::NutReader;
@@ -203,24 +204,20 @@ impl EncoderSink {
             .arg("-i")
             .arg("pipe:0")
             .args(&self.lane.encoder_args);
-        if matches!(self.target, EncoderTarget::Channel(_)) && self.lane.framing == Framing::AnnexB {
-            // AU-accurate framing for the legacy Annex-B carrier: AUDs
-            // delimit access units without slice-header parsing, and SPS/PPS
-            // repeat on every key frame so a (re)joining viewer can configure
-            // its decoder from the stream alone (ADR-0024 SD4). The NUT path
-            // (ADR-0088) reads frame boundaries + key-frame flags from the
-            // container instead, so it needs no bitstream filter here.
-            cmd.arg("-bsf:v")
-                .arg("h264_metadata=aud=insert,dump_extra=freq=keyframe");
+        // Per-codec bitstream filter (e.g. H.264 SPS/PPS on every key frame).
+        if let Some(bsf) = self.lane.bsf {
+            cmd.arg("-bsf:v").arg(bsf);
         }
-        if self.lane.framing == Framing::Nut {
-            // Flush each coded frame promptly so the muxer does not coalesce
-            // frames into latency (ADR-0088 SD4).
-            cmd.arg("-flush_packets").arg("1");
-        }
-        let out_fmt = match self.lane.framing {
-            Framing::AnnexB => "h264",
-            Framing::Nut => "nut",
+        // The wire path muxes to NUT (ADR-0088 SD4) — one container the host
+        // demuxes for every codec — and flushes each frame so the muxer adds
+        // no latency. The File verification dump stays a raw H.264 elementary
+        // stream (IMZERO2_HEADLESS_H264_OUT; meaningful for the H.264 codec).
+        let out_fmt = match &self.target {
+            EncoderTarget::Channel(_) => {
+                cmd.arg("-flush_packets").arg("1");
+                "nut"
+            }
+            EncoderTarget::File(_) => "h264",
         };
         cmd.arg("-f")
             .arg(out_fmt)
@@ -243,13 +240,9 @@ impl EncoderSink {
             }
             EncoderTarget::Channel(tx) => {
                 let tx = tx.clone();
-                let framing = self.lane.framing;
                 std::thread::Builder::new()
                     .name("imzero2-video-drain".to_owned())
-                    .spawn(move || match framing {
-                        Framing::Nut => drain_to_channel_nut(stdout, &tx),
-                        Framing::AnnexB => drain_to_channel(stdout, &tx),
-                    })?
+                    .spawn(move || drain_to_channel_nut(stdout, &tx))?
             }
         };
         // Fresh mailbox per spawn: a new generation cleanly separates the
@@ -348,98 +341,6 @@ fn drain_to_file(stdout: Option<std::process::ChildStdout>, path: &std::path::Pa
         }
     }
     let _ = std::io::Write::flush(&mut file);
-}
-
-/// NAL unit type of the Annex-B unit starting at `idx` (the position of
-/// the 00 00 01 prefix).
-fn nal_type_at(buf: &[u8], idx: usize) -> Option<u8> {
-    buf.get(idx + 3).map(|b| b & 0x1f)
-}
-
-/// Positions of all 00-00-01 start codes in `buf` whose NAL type is AUD
-/// (9). A leading 00 of a 4-byte start code stays with the preceding AU,
-/// which decoders ignore.
-fn find_aud_positions(buf: &[u8]) -> Vec<usize> {
-    let mut out = Vec::new();
-    let mut i = 0usize;
-    while i + 3 < buf.len() {
-        if buf.get(i) == Some(&0) && buf.get(i + 1) == Some(&0) && buf.get(i + 2) == Some(&1) {
-            if nal_type_at(buf, i) == Some(9) {
-                out.push(i);
-            }
-            i += 3;
-        } else {
-            i += 1;
-        }
-    }
-    out
-}
-
-/// True when the access unit contains an IDR slice (NAL type 5).
-fn au_has_idr(au: &[u8]) -> bool {
-    let mut i = 0usize;
-    while i + 3 < au.len() {
-        if au.get(i) == Some(&0) && au.get(i + 1) == Some(&0) && au.get(i + 2) == Some(&1) {
-            if nal_type_at(au, i) == Some(5) {
-                return true;
-            }
-            i += 3;
-        } else {
-            i += 1;
-        }
-    }
-    false
-}
-
-/// Incrementally split ffmpeg's Annex-B output into access units (AUD to
-/// AUD), wrap each in the SD4 envelope, and push framed payloads into the
-/// carrier channel. Returns when ffmpeg's stdout closes or the channel is
-/// dropped (viewer disconnected).
-fn drain_to_channel(
-    stdout: Option<std::process::ChildStdout>,
-    tx: &tokio::sync::mpsc::Sender<Vec<u8>>,
-) {
-    use std::io::Read as _;
-    let Some(mut so) = stdout else { return };
-    let started = std::time::Instant::now();
-    let mut pending: Vec<u8> = Vec::with_capacity(256 * 1024);
-    let mut chunk = vec![0u8; 64 * 1024];
-    let mut frame_index: u64 = 0;
-    let mut sent_bytes: u64 = 0;
-    loop {
-        let n = match so.read(&mut chunk) {
-            Ok(0) => break,
-            Ok(n) => n,
-            Err(e) => {
-                tracing::error!(error=%e, "h264 drain read failed");
-                break;
-            }
-        };
-        pending.extend_from_slice(chunk.get(..n).unwrap_or_default());
-        let auds = find_aud_positions(&pending);
-        // Emit every complete AU (between consecutive AUDs); keep the tail
-        // from the last AUD onwards — it is still accumulating.
-        if auds.len() >= 2 {
-            let last = *auds.last().unwrap_or(&0);
-            for pair in auds.windows(2) {
-                if let &[a, b] = pair {
-                    let au = pending.get(a..b).unwrap_or_default();
-                    let framed = frame_payload(frame_index, started, au_has_idr(au), au.to_vec());
-                    frame_index += 1;
-                    sent_bytes += framed.len() as u64;
-                    if tx.blocking_send(framed).is_err() {
-                        tracing::info!(frames = frame_index, "viewer channel closed — stopping h264 drain");
-                        // Keep consuming so ffmpeg can exit cleanly once our
-                        // stdin side closes.
-                        let _ = std::io::copy(&mut so, &mut std::io::sink());
-                        return;
-                    }
-                }
-            }
-            pending.drain(..last);
-        }
-    }
-    tracing::info!(frames = frame_index, bytes = sent_bytes, "h264 drain finished (encoder eof)");
 }
 
 /// Wrap one coded frame's native payload in the ADR-0024 SD4 envelope
