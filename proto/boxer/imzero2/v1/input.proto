@@ -97,7 +97,25 @@ message SessionControl {
     ViewportResize viewport_resize = 2;
     Ping ping = 3;
     SetCadence set_cadence = 4;
+    DecodeCapabilities decode_capabilities = 5;
   }
+}
+
+// Client→server: the viewer's decode capabilities (ADR-0088 SD2/SD8),
+// probed against the current stream geometry. (Re)sent after the hello and
+// after a resize, since smooth / power-efficient depend on resolution. The
+// host forwards these to the Go interpreter, which offers the intersection
+// of browser-can-decode and host-can-encode in the output control.
+message DecodeCapabilities {
+  repeated CodecCapability codecs = 1;
+}
+
+// One probed WebCodecs configuration.
+message CodecCapability {
+  string codec = 1;          // WebCodecs codec string (avc1.* / vp09.* / av01.*)
+  bool supported = 2;        // VideoDecoder.isConfigSupported
+  bool smooth = 3;           // navigator.mediaCapabilities.decodingInfo
+  bool power_efficient = 4;  // navigator.mediaCapabilities.decodingInfo
 }
 
 // Client→server: switch the host render cadence at runtime.

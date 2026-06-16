@@ -60,6 +60,9 @@ struct Inner {
     /// Current stream geometry; sent on connect and after each applied
     /// resize. Updated by the render thread via [`WsCarrier::apply_geometry`].
     hello: std::sync::Mutex<pb::SessionHello>,
+    /// Latest decode capabilities reported by the viewer (ADR-0088 SD2/SD8),
+    /// drained by the render thread to forward to the Go interpreter.
+    decode_caps: std::sync::Mutex<Option<pb::DecodeCapabilities>>,
 }
 
 pub struct WsCarrier {
@@ -104,6 +107,7 @@ impl WsCarrier {
                 cadence,
                 codec: lane.webcodecs_codec_string().to_owned(),
             }),
+            decode_caps: std::sync::Mutex::new(None),
         });
         // Bind synchronously so startup errors (port in use) fail fast in
         // the caller instead of asynchronously on the carrier thread.
@@ -460,6 +464,18 @@ fn handle_client_message(data: &[u8], inner: &Inner) {
                     // The viewer pings with its decoded-frame count: a remote
                     // attestation that WebCodecs decode is working client-side.
                     tracing::info!(frames_decoded = p.nonce, "viewer decode-progress ping");
+                }
+                Some(pb::session_control::Control::DecodeCapabilities(caps)) => {
+                    tracing::info!(
+                        codecs = ?caps.codecs.iter()
+                            .map(|c| format!("{}:s{}m{}p{}", c.codec, c.supported as u8, c.smooth as u8, c.power_efficient as u8))
+                            .collect::<Vec<_>>(),
+                        "viewer decode capabilities"
+                    );
+                    if let Ok(mut guard) = inner.decode_caps.lock() {
+                        *guard = Some(caps);
+                    }
+                    let _ = inner.waker.send(());
                 }
                 Some(pb::session_control::Control::Hello(_)) | None => {}
             },

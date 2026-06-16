@@ -189,6 +189,49 @@ function sendPing(nonce) {
   sendFramed(PREFIX_SESSION, new Writer().sub(3, new Writer().uint(1, nonce)));
 }
 
+// Client→server decode capabilities (ADR-0088 SD2/SD8). For each codec the
+// host can offer, probe a representative WebCodecs string at the current
+// geometry via VideoDecoder.isConfigSupported (authoritative for the path
+// we use) plus navigator.mediaCapabilities.decodingInfo (the smooth /
+// power-efficient hints). The host forwards these to the Go interpreter.
+const CAP_CANDIDATES = [
+  { codec: "avc1.42E01E", contentType: 'video/mp4; codecs="avc1.42E01E"' },
+  { codec: "vp09.00.41.08", contentType: 'video/webm; codecs="vp09.00.41.08"' },
+  { codec: "av01.0.08M.08", contentType: 'video/mp4; codecs="av01.0.08M.08"' },
+];
+async function probeAndSendCapabilities() {
+  if (!hello) return;
+  const w = hello.width || 1280, h = hello.height || 720, fps = 30;
+  const caps = [];
+  for (const cand of CAP_CANDIDATES) {
+    let supported = false, smooth = false, powerEfficient = false;
+    try {
+      if (window.VideoDecoder && VideoDecoder.isConfigSupported) {
+        const r = await VideoDecoder.isConfigSupported({ codec: cand.codec, codedWidth: w, codedHeight: h });
+        supported = !!(r && r.supported);
+      }
+    } catch (_) {}
+    try {
+      if (navigator.mediaCapabilities && navigator.mediaCapabilities.decodingInfo) {
+        const info = await navigator.mediaCapabilities.decodingInfo({
+          type: "media-source",
+          video: { contentType: cand.contentType, width: w, height: h, bitrate: 4000000, framerate: fps },
+        });
+        if (info) { supported = supported || !!info.supported; smooth = !!info.smooth; powerEfficient = !!info.powerEfficient; }
+      }
+    } catch (_) {}
+    caps.push({ codec: cand.codec, supported, smooth, powerEfficient });
+  }
+  sendDecodeCapabilities(caps);
+}
+function sendDecodeCapabilities(caps) {
+  const dc = new Writer(); // DecodeCapabilities { repeated CodecCapability codecs = 1 }
+  for (const c of caps) {
+    dc.sub(1, new Writer().str(1, c.codec).bool(2, c.supported).bool(3, c.smooth).bool(4, c.powerEfficient));
+  }
+  sendFramed(PREFIX_SESSION, new Writer().sub(5, dc)); // SessionControl.decode_capabilities = 5
+}
+
 // ---- video pipeline ----
 let ws = null, hello = null, decoder = null, configured = false;
 let framesDecoded = 0, lastStatus = 0, inputSetup = false, cadenceParamApplied = false;
@@ -450,6 +493,7 @@ function connect() {
           // drop the decoder and rejoin at the keyframe, same as connect.
           if (decoder) { try { decoder.close(); } catch (_) {} decoder = null; }
           configured = false;
+          probeAndSendCapabilities(); // (re)probe at the new geometry (ADR-0088 SD8)
         }
         cadence = h.cadence;
         renderCadence();
