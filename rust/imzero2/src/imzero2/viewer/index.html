@@ -107,13 +107,14 @@ function parseHello(bytes) { // SessionControl{ hello = 1 }
     const [field, wire] = r.tag();
     if (field === 1 && wire === 2) {
       const h = new Reader(r.bytes());
-      const out = { width: 0, height: 0, ppp: 1.0, cadence: 0 };
+      const out = { width: 0, height: 0, ppp: 1.0, cadence: 0, codec: "" };
       while (!h.eof()) {
         const [f, w] = h.tag();
         if (f === 1 && w === 0) out.width = Number(h.varint());
         else if (f === 2 && w === 0) out.height = Number(h.varint());
         else if (f === 3 && w === 5) out.ppp = h.float();
         else if (f === 4 && w === 0) out.cadence = Number(h.varint());
+        else if (f === 5 && w === 2) out.codec = new TextDecoder().decode(h.bytes());
         else h.skip(w);
       }
       return out;
@@ -240,12 +241,18 @@ function onVideo(payload) {
   if (!chunk.data) return;
   if (!configured) {
     if (!chunk.keyframe) return; // cannot join mid-GOP
-    const spsIdx = findSps(chunk.data);
-    if (spsIdx < 0) return;
-    setupDecoder(codecStringFromSps(chunk.data, spsIdx));
+    // The host names VP9/AV1 (and may name H.264) in the hello; otherwise
+    // H.264 self-describes via its in-band SPS.
+    let codec = hello && hello.codec ? hello.codec : null;
+    if (!codec) {
+      const spsIdx = findSps(chunk.data);
+      if (spsIdx < 0) return;
+      codec = codecStringFromSps(chunk.data, spsIdx);
+    }
+    setupDecoder(codec);
   }
-  // Annex-B with in-band SPS/PPS: configure() without `description`
-  // selects Annex-B mode; data passes through unmodified.
+  // configure() gets no `description`: H.264 Annex-B (in-band SPS/PPS) and
+  // VP9/AV1 (native frames) both pass through unmodified.
   decoder.decode(new EncodedVideoChunk({
     type: chunk.keyframe ? "key" : "delta",
     timestamp: Number(chunk.timestampMicros),

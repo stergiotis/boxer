@@ -102,6 +102,7 @@ impl WsCarrier {
                 height_px,
                 pixels_per_point,
                 cadence,
+                codec: lane.webcodecs_codec_string().to_owned(),
             }),
         });
         // Bind synchronously so startup errors (port in use) fail fast in
@@ -196,10 +197,11 @@ impl WsCarrier {
             height_px,
             pixels_per_point,
             cadence: 0,
+            codec: self.lane.webcodecs_codec_string().to_owned(),
         };
         if let Ok(mut guard) = self.inner.hello.lock() {
             hello.cadence = guard.cadence; // geometry changes don't touch cadence
-            *guard = hello;
+            *guard = hello.clone();
         }
         // Drop first: reap blocks until the old drain flushed its remaining
         // (old-geometry) access units into the channel, so the hello below
@@ -375,7 +377,7 @@ async fn handle_session(
     // First message: session hello with the current stream geometry
     // (SD6 0x03). Geometry changes mid-session re-announce the same
     // message through the outbound channel (see apply_geometry).
-    let current_hello = inner.hello.lock().map(|h| *h).unwrap_or_default();
+    let current_hello = inner.hello.lock().map(|h| (*h).clone()).unwrap_or_default();
     let hello = pb::SessionControl {
         control: Some(pb::session_control::Control::Hello(current_hello)),
     };

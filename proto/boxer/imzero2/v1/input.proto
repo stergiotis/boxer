@@ -124,6 +124,11 @@ message SessionHello {
   // Current host cadence (0 = continuous, 1 = reactive) so the viewer's
   // toggle reflects truth at connect.
   uint32 cadence = 4;
+  // WebCodecs codec string for VideoDecoder.configure (ADR-0088 SD6).
+  // Empty for H.264 (the viewer derives avc1.* from the in-band SPS);
+  // VP9/AV1 are named here (e.g. "vp09.00.41.08", "av01.0.08M.08"). A
+  // codec switch re-announces the hello with the new string.
+  string codec = 5;
 }
 
 // Client→server. ADR-0024 SD7/SD8 (amended at acceptance): the client's

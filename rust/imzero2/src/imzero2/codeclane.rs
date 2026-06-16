@@ -67,6 +67,21 @@ impl CodecLane {
         }
     }
 
+    /// The WebCodecs `VideoDecoder.configure` codec string the viewer needs
+    /// (ADR-0088 SD6). Empty for H.264 — the viewer derives `avc1.*` from the
+    /// in-band SPS, which carries the exact profile/level. VP9/AV1 expose no
+    /// in-band descriptor the viewer parses, so the host names them here.
+    /// These are generous-but-valid defaults (profile + 8-bit certain; level
+    /// set high enough for desktop resolutions); ADR-0088 Phase 4's
+    /// `isConfigSupported` probe confirms or corrects them per browser.
+    pub fn webcodecs_codec_string(&self) -> &'static str {
+        match self.codec {
+            VideoCodec::H264 => "",
+            VideoCodec::Vp9 => "vp09.00.41.08",
+            VideoCodec::Av1 => "av01.0.08M.08",
+        }
+    }
+
     /// Default software lane for a codec, muxed through NUT (ADR-0088 SD4).
     /// Latency-tuned with an effectively-infinite GOP: a viewer (re)connect
     /// or a codec switch forces a fresh key frame, so periodic IDRs buy
