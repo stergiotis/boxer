@@ -172,20 +172,30 @@ impl CodecLane {
             VideoCodec::Av1 => ("av1_vaapi", "nv12"),
             VideoCodec::Av1Hi444 => ("av1_vaapi", "vuyx"),
         };
+        let mut encoder_args = vec![
+            "-vaapi_device".to_owned(),
+            "/dev/dri/renderD128".to_owned(),
+            "-vf".to_owned(),
+            format!("format={upload},hwupload"),
+            "-c:v".to_owned(),
+            cv.to_owned(),
+        ];
+        // h264_vaapi defaults to High profile, but the browser WebCodecs viewer
+        // fails to decode it — it errors on the first frame and drops the
+        // connection, so an auto-selected VAAPI H.264 encode renders the
+        // headless host unreachable. The software libopenh264 lane emits
+        // Constrained Baseline, which the viewer decodes; pin the hardware lane
+        // to the same profile so HW encode produces a viewer-decodable stream
+        // (ADR-0024 SD3). The other codecs name their profile via the codec
+        // string instead, so only H.264 needs this.
+        if codec == VideoCodec::H264 {
+            encoder_args.push("-profile:v".to_owned());
+            encoder_args.push("constrained_baseline".to_owned());
+        }
+        encoder_args.extend(["-bf", "0", "-g", "100000"].iter().map(|s| (*s).to_owned()));
         Self {
             codec,
-            encoder_args: vec![
-                "-vaapi_device".to_owned(),
-                "/dev/dri/renderD128".to_owned(),
-                "-vf".to_owned(),
-                format!("format={upload},hwupload"),
-                "-c:v".to_owned(),
-                cv.to_owned(),
-                "-bf".to_owned(),
-                "0".to_owned(),
-                "-g".to_owned(),
-                "100000".to_owned(),
-            ],
+            encoder_args,
             bsf: match codec {
                 VideoCodec::H264 => Some(H264_BSF),
                 VideoCodec::Vp9 | VideoCodec::Av1 | VideoCodec::Av1Hi444 => None,
