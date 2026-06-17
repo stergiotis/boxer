@@ -17,23 +17,29 @@ import (
 )
 
 // Show refreshes the model from the host and renders the codec picker. `ids`
-// scopes the widget ids (e.g. ids.PrepareStr("videoout")); `model` is owned by
-// the caller.
+// is the parent id scope (Show derives a "videoout" child under it); pass an
+// Initial-state stack, not a pre-prepared one. `model` is owned by the caller.
 func Show(ids *c.WidgetIdStack, model *videopipeline.Model) {
 	model.Update(videopipeline.Decode(c.NewFetcher().FetchVideoCapabilities()))
 	offered := model.Offered()
 	if len(offered) == 0 {
 		return // no remote sink / no capabilities yet — render nothing
 	}
-	for range c.Horizontal().KeepIter() {
-		c.Label("Codec:").Send()
-		for _, cc := range offered {
-			id := ids.PrepareStr("codec-" + cc.Codec.String())
-			checked := model.Active == cc.Codec
-			if c.SelectableLabel(id, checked, codecLabel(cc)).SendResp().HasPrimaryClicked() {
-				if cc.Offerable() && model.Active != cc.Codec {
-					model.Active = cc.Codec
-					c.SetVideoPipeline(uint32(cc.Codec))
+	// Scope the per-codec ids under a "videoout" node — egui2 id-stack
+	// discipline: IdScope does DeriveStacked on entry and PopIdFromStackChecked
+	// on exit, so the per-codec PrepareStr calls nest cleanly and the stack
+	// returns to Initial.
+	for range c.IdScope(ids.PrepareStr("videoout")) {
+		for range c.Horizontal().KeepIter() {
+			c.Label("Codec:").Send()
+			for _, cc := range offered {
+				id := ids.PrepareStr("codec-" + cc.Codec.String())
+				checked := model.Active == cc.Codec
+				if c.SelectableLabel(id, checked, codecLabel(cc)).SendResp().HasPrimaryClicked() {
+					if cc.Offerable() && model.Active != cc.Codec {
+						model.Active = cc.Codec
+						c.SetVideoPipeline(uint32(cc.Codec))
+					}
 				}
 			}
 		}

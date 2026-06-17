@@ -726,7 +726,13 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
         // ADR-0088: publish current video-pipeline capabilities for the Go
         // control to fetch while it builds this frame (must precede dispatch).
         if let Some(c) = &carrier {
-            let caps = build_video_caps(&host_encode_caps, c.decode_caps().as_ref());
+            // Publish capabilities only while a viewer is connected, so the Go
+            // control self-hides when there is no remote sink.
+            let caps = if c.connected() {
+                build_video_caps(&host_encode_caps, c.decode_caps().as_ref())
+            } else {
+                Vec::new()
+            };
             fffi.set_video_capabilities(&caps);
         }
         // Mirrors eframe 0.34's epi_integration: `run_ui(raw_input, |ui| {

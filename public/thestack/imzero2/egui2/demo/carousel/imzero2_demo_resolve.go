@@ -168,7 +168,7 @@ func decorateRenderer(r func() error, extraMenus func(), status *runtimestatus.S
 					metricsoverlay.RenderInline(ids.PrepareStr("fps"))
 					// ADR-0088 video-output control: codec picker for the remote
 					// stream, rendered only when a remote viewer is connected.
-					videooutput.Show(ids.PrepareStr("videoout"), videoModel)
+					videooutput.Show(ids, videoModel)
 				}
 			}
 		}
