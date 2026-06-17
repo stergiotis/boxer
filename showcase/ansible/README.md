@@ -115,6 +115,39 @@ Watch a deploy: `journalctl -fu imzero2-deploy.service`.
   rule with `semanage fcontext -l | grep imzero2`. Turn it off
   (`imzero2_selinux_label_releases: false`) only on a box with SELinux disabled.
 
+## ClickHouse (optional, off by default)
+
+Two independent toggles in the `clickhouse` role add ClickHouse to the box. Both
+default off and pull from ClickHouse's official RPM repo (arch-resolved by dnf —
+this box is x86_64, a Hetzner CPX/CX, not ARM).
+
+- **`imzero2_install_clickhouse_local: true`** installs `/usr/bin/clickhouse-local`,
+  the per-query subprocess the demo spawns via `chlocalpool`/`chlocalbroker`
+  (ADR-0028). No daemon, no port. `regex_explorer` and the `--launch <app>` SQL
+  resolution **require** it; without it the carousel still boots but logs
+  `ch.local.* will be unbound`. The lean default image omits it (+~2 GB).
+- **`imzero2_install_clickhouse_server: true`** installs a `clickhouse-server`
+  daemon **bound to loopback only** (`127.0.0.1` + `::1`), default user, empty
+  password — safe precisely because it is not routable. It backs the
+  HTTP-endpoint path (`CLICKHOUSE_ENDPOINT` / `CLICKHOUSE_URL`, default
+  `http://localhost:8123/`); nothing in the stock demo dials it yet, so enable it
+  only when an app is wired to it. Server memory is capped at
+  `imzero2_clickhouse_max_memory_bytes` (2 GiB default) so it coexists with the
+  carrier and the on-box build.
+
+Enabling the server pulls in `clickhouse-local` too (shared dependency). **No
+firewall port is opened** — the server stays on loopback, which is what makes the
+empty-password default user safe. Turn a toggle on in the root-only extra-vars
+file (the pull loop re-reads it), then re-run:
+
+```bash
+echo 'imzero2_install_clickhouse_local: true' | sudo tee -a /etc/imzero2/provision.yml
+sudo systemctl start imzero2-pull.service          # or wait for the daily timer
+```
+
+Verify: `clickhouse-local --query "SELECT 1"` (local binary) and, for the server,
+`systemctl status clickhouse-server` + `clickhouse-client --query "SELECT 1"`.
+
 ## Hardening (systemd sandboxing)
 
 `imzero2_systemd_hardening: true` (default) adds sandbox drop-ins to both units —

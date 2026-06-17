@@ -1,0 +1,112 @@
+---
+# Optional ClickHouse on the showcase box (OFF by default). Two independent
+# toggles, both pulling from ClickHouse's official RPM repo:
+#
+#   imzero2_install_clickhouse_local  -> /usr/bin/clickhouse-local, the per-query
+#       subprocess the demo spawns via chlocalpool/chlocalbroker (ADR-0028). NO
+#       daemon, NO port. This is what regex_explorer and `--launch <app>` SQL
+#       resolution need (imzero2_demo_resolve.go hard-errors without it); the lean
+#       default image omits it (+~2 GB). The carousel is best-effort otherwise —
+#       it boots and logs "ch.local.* will be unbound" if the binary is absent.
+#
+#   imzero2_install_clickhouse_server -> a clickhouse-server daemon bound to
+#       LOOPBACK ONLY (127.0.0.1 + ::1), default user, empty password. Serves the
+#       HTTP-endpoint path (CLICKHOUSE_ENDPOINT / CLICKHOUSE_URL, default
+#       http://localhost:8123/). NOTHING in the stock demo dials it yet — enable
+#       it only once you wire an app to it.
+#
+# The repo baseurl is arch-agnostic; dnf resolves the x86_64 packages for this
+# box (Hetzner CPX/CX, AMD/Intel) — no aarch64 assumption is baked in.
+#
+# NO firewall port is opened here, on purpose. The server stays on loopback; the
+# default user's empty password is safe ONLY because of that. The Hetzner cloud
+# firewall (pebble2impl provisioning) is likewise left untouched.
+
+- name: ClickHouse RPM repo + signing key (needed by either toggle)
+  when: imzero2_install_clickhouse_server or imzero2_install_clickhouse_local
+  block:
+    - name: Import the ClickHouse package-signing key
+      ansible.builtin.rpm_key:
+        key: "{{ imzero2_clickhouse_rpm_gpgkey }}"
+        state: present
+
+    - name: Add the ClickHouse stable RPM repository
+      # Mirrors https://packages.clickhouse.com/rpm/clickhouse.repo
+      ansible.builtin.yum_repository:
+        name: clickhouse-stable
+        description: ClickHouse - Stable Repository
+        baseurl: "{{ imzero2_clickhouse_rpm_baseurl }}"
+        gpgkey: "{{ imzero2_clickhouse_rpm_gpgkey }}"
+        gpgcheck: true
+        repo_gpgcheck: false
+        enabled: true
+
+# --- clickhouse-local: the per-query subprocess binary (no daemon) -----------
+- name: Install clickhouse-local (the binary chlocalpool spawns)
+  when: imzero2_install_clickhouse_local
+  # clickhouse-common-static carries /usr/bin/clickhouse + the clickhouse-local
+  # symlink == chlocalpool.DefaultBinaryPath (/usr/bin/clickhouse-local).
+  ansible.builtin.package:
+    name: clickhouse-common-static
+    state: present
+
+- name: Verify /usr/bin/clickhouse-local landed where the app expects it
+  when: imzero2_install_clickhouse_local
+  ansible.builtin.stat:
+    path: /usr/bin/clickhouse-local
+  register: _ch_local_bin
+  failed_when: not _ch_local_bin.stat.exists
+
+# --- clickhouse-server: loopback-only daemon, default user, empty password ----
+- name: Install ClickHouse server + client
+  when: imzero2_install_clickhouse_server
+  # clickhouse-server depends on clickhouse-common-static, so this ALSO provides
+  # /usr/bin/clickhouse-local even when imzero2_install_clickhouse_local is false.
+  # On a non-interactive (Ansible) install the `default` user is left with an
+  # EMPTY password — exactly the wanted posture, safe behind the loopback bind.
+  ansible.builtin.package:
+    name:
+      - clickhouse-server
+      - clickhouse-client
+    state: present
+
+- name: Configure + run clickhouse-server (loopback bind, memory cap)
+  when: imzero2_install_clickhouse_server
+  block:
+    - name: Bind ClickHouse to loopback only
+      ansible.builtin.copy:
+        dest: /etc/clickhouse-server/config.d/10-imzero2-listen.xml
+        owner: clickhouse
+        group: clickhouse
+        mode: "0644"
+        content: |
+          <clickhouse>
+              <!-- imzero2: loopback only. The `default` user ships with an EMPTY
+                   password and access from any network; THIS bind is what keeps
+                   that safe. Do NOT add a routable <listen_host> without also
+                   setting a password / restricting <networks> in users.d. -->
+              <listen_host>127.0.0.1</listen_host>
+              <listen_host>::1</listen_host>
+          </clickhouse>
+      notify: Restart clickhouse-server
+
+    - name: Cap clickhouse-server memory (coexist with the carrier + on-box build)
+      ansible.builtin.copy:
+        dest: /etc/clickhouse-server/config.d/10-imzero2-memory.xml
+        owner: clickhouse
+        group: clickhouse
+        mode: "0644"
+        content: |
+          <clickhouse>
+              <!-- imzero2: keep ClickHouse from starving the streaming carrier on a
+                   small shared box. Tune via imzero2_clickhouse_max_memory_bytes. -->
+              <max_server_memory_usage>{{ imzero2_clickhouse_max_memory_bytes }}</max_server_memory_usage>
+          </clickhouse>
+      notify: Restart clickhouse-server
+
+    - name: Enable + start clickhouse-server
+      ansible.builtin.systemd:
+        name: clickhouse-server
+        enabled: true
+        state: started
+        daemon_reload: true

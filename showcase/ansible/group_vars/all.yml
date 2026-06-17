@@ -67,3 +67,15 @@ imzero2_selinux_label_releases: true
 
 # --- optional ---
 imzero2_bootstrap_first_release: false  # run the (long, cold) first build inside the play
+
+# --- optional ClickHouse (off by default; see roles/clickhouse) ---
+# clickhouse-local is the /usr/bin/clickhouse-local binary the demo spawns per
+# query (ADR-0028) for regex_explorer + `--launch` resolution. The server is a
+# loopback-only daemon (default user, empty password) for the HTTP-endpoint path
+# (CLICKHOUSE_ENDPOINT / CLICKHOUSE_URL) — nothing in the stock demo dials it yet.
+# Flip either on in the root-only extra-vars file (imzero2_extra_vars_file).
+imzero2_install_clickhouse_local: false
+imzero2_install_clickhouse_server: false
+imzero2_clickhouse_max_memory_bytes: 2147483648   # 2 GiB server cap; bump on a bigger box
+imzero2_clickhouse_rpm_baseurl: "https://packages.clickhouse.com/rpm/stable/"
+imzero2_clickhouse_rpm_gpgkey: "https://packages.clickhouse.com/CLICKHOUSE-KEY.GPG"
