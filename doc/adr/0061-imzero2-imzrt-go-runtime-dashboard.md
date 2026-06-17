@@ -354,6 +354,30 @@ one-line delegate; the apps' divergent `humanDuration` helpers and imzrt-only
 the shared packages carry their own unit tests. Surfaced by a `dupl` sweep; the
 accepted decision stands, so `status` / `reviewed-date` are not re-stamped.
 
+### 2026-06-17 — Spectrogram flipped to newest-right (SD10 → M3)
+
+The scheduling-latency spectrogram now scrolls **newest-on-the-right**
+(`heatmapscroll.ScrollLeft`), reversing the newest-left direction SD10 inherited
+from imztop's CPU heatmap. SD10 and M3 were in tension: SD10 wanted imztop's
+pattern reused verbatim (newest-left), while M3 wanted "the p99 line overlays the
+spectrogram's hot band" — but the p99 line plot (like every `egui_plot` series in
+the app) is newest-right, so the two never lined up vertically; the same instant
+landed on opposite sides. This resolves it in favour of M3: the spectrogram's hot
+band and the p99 line below now share a screen-x, and the spectrogram reads the
+same direction as the Goroutines and p99 plots stacked with it.
+
+imztop's CPU heatmap ([ADR-0020](./0020-imzero2-imztop-resource-monitor.md)) was
+flipped to `ScrollLeft` in the same change so the two dashboards stay consistent
+with each other, and — since its texture was a fixed 600 px left-aligned in a
+wider panel — it now stretches to fill the panel width like this spectrogram,
+landing the newest column on the panel's right edge. Both apps' x-axis ticks and
+the imztop hover-cursor strip were re-derived for the new direction (oldest → left,
+newest → right). The `heatmapscroll` substrate is unchanged — both orientations
+were always supported (ADR-0058 SD8); only the consumer's choice flipped.
+
+The accepted decision stands; this records a presentation reversal of SD10, so
+`status` / `reviewed-date` are not re-stamped.
+
 ## References
 
 - [ADR-0020](./0020-imzero2-imztop-resource-monitor.md) — `imztop`; the structural template this ADR mirrors.

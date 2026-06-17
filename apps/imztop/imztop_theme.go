@@ -34,6 +34,13 @@ var (
 	// white) gives the cursor maximal pop against any palette stop
 	// it crosses while still sourcing from the IDS catalogue.
 	colorCursor = color.Hex(styletokens.NeutralTextExtreme.AsHex())
+
+	// colorAxisTick / colorAxisLabel style the CPU heatmap's time-axis
+	// tick marks and labels. Mirror imzrt's spectrogram axis styling so
+	// the two dashboards' scrolling-heatmap chrome reads identically: a
+	// faint IDS border for the ticks, secondary text for the labels.
+	colorAxisTick  = color.Hex(styletokens.NeutralBorderFaint.AsHex())
+	colorAxisLabel = color.Hex(styletokens.NeutralTextSecondary.AsHex())
 )
 
 // withAlpha overrides the alpha byte of an IDS palette token while

@@ -152,14 +152,14 @@ func (inst *App) renderSchedSpectrogram(snap *PublishedSnapshot) {
 		st.cfg.BadColor = bg
 		st.cfg.UnderflowColor = bg
 		st.hs = heatmapscroll.New(inst.ids, "sched-spectro", st.cfg, spectroWidthSlots, uint32(st.nDisplay))
-		// ScrollRight — newest column on the LEFT, ageing rightward. Matches
-		// imztop's CPU heatmap so the sibling dashboards scroll the same way
-		// and the x-tick labels (rendered newest-left below) line up with it.
-		// Deliberately opposite to this panel's Goroutines/p99 line plots
-		// (newest-right): we favour ADR-0061 SD10 (reuse imztop's pattern) over
-		// M3's "p99 aligns with the hot band" goal. Don't flip to newest-right
-		// without revisiting that trade-off.
-		st.hs.SetOrientation(heatmapscroll.ScrollRight)
+		// ScrollLeft — newest column on the RIGHT, ageing leftward, matching
+		// this panel's Goroutines/p99 line plots and every other plot in the
+		// app. The spectrogram's hot band now lines up vertically with the p99
+		// line below (same instant → same screen-x), delivering ADR-0061 M3's
+		// "p99 aligns with the hot band" goal. (Until 2026-06-17 this used
+		// ScrollRight/newest-left to mirror imztop's CPU heatmap per SD10;
+		// imztop was flipped in tandem, so the two dashboards stay consistent.)
+		st.hs.SetOrientation(heatmapscroll.ScrollLeft)
 		st.colBuf = make([]float32, st.nDisplay)
 		// Prefill the ring so it opens as a full background rectangle.
 		for range spectroWidthSlots {
@@ -225,7 +225,7 @@ func (inst *App) renderSchedSpectrogram(snap *PublishedSnapshot) {
 		xw = float32(spectroWidthSlots)
 	}
 	inst.renderSpectroXTicks(snap.HistTimeUnixSec, xw)
-	c.Label("y: latency (log) · x: time, newest left").Send()
+	c.Label("y: latency (log) · x: time, newest right").Send()
 	c.Label("colour = goroutines waiting per interval (log):").Send()
 	st.legend.Render()
 }
@@ -248,12 +248,13 @@ func clipBucketRange(buckets []float64, loSec, hiSec float64) (lo, hi int) {
 }
 
 // renderSpectroXTicks paints calendar-aware time labels under the spectrogram,
-// spanning the texture width w. The spectrogram scrolls ScrollRight (newest on
-// the left), so the newest tick sits at x=0 and time increases right-to-left.
-// Labels are positioned by time across the full width (not fixed-gap), so the
-// axis is fully populated. Only the last spectroWidthSlots samples are visible,
-// so the range comes from that tail of the history. Edge ticks anchor inward to
-// avoid clipping; indented by spectroYAxisW to align under the texture.
+// spanning the texture width w. The spectrogram scrolls ScrollLeft (newest on
+// the right), so the newest tick sits at x=w and time increases left-to-right,
+// matching the p99 line plot below. Labels are positioned by time across the
+// full width (not fixed-gap), so the axis is fully populated. Only the last
+// spectroWidthSlots samples are visible, so the range comes from that tail of
+// the history. Edge ticks anchor inward to avoid clipping; indented by
+// spectroYAxisW to align under the texture.
 func (inst *App) renderSpectroXTicks(timeUnixSec []float64, w float32) {
 	n := len(timeUnixSec)
 	if n < 2 || w <= 0 {
@@ -282,9 +283,9 @@ func (inst *App) renderSpectroXTicks(timeUnixSec []float64, w float32) {
 			if i >= len(layout.TickLabels) {
 				break
 			}
-			// newest-left: oldest → right edge (x=w), newest → x=0.
+			// newest-right: oldest → x=0, newest → right edge (x=w).
 			norm := float64(tv.UnixMilli()-minMS) / float64(spanMS)
-			px := float32((1 - norm) * float64(w))
+			px := float32(norm * float64(w))
 			if px < 0 || px > w {
 				continue
 			}

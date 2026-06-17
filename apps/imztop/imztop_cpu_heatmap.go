@@ -55,6 +55,24 @@ const cpuHeatmapReservedBelowPx float32 = 480
 // per-core sparklines off the visible region.
 const cpuHeatmapMaxStretch float32 = 4.0
 
+// cpuHeatmapAxisPad reserves width for item spacing/margin when the
+// heatmap stretches to fill the panel, so the texture and its x-axis
+// don't trip a horizontal scrollbar. cpuHeatmapMinTexW is the floor
+// below which the native slot-count width is kept instead of stretching.
+// Mirrors imzrt's spectroAxisPad / spectroMinTexW.
+const (
+	cpuHeatmapAxisPad float32 = 16
+	cpuHeatmapMinTexW float32 = 240
+)
+
+// cpuHeatmapXAxisH is the height of the time-axis tick+label row painted
+// under the heatmap; cpuHeatmapXAxisFont is that row's label font size.
+// Mirrors imzrt's spectroXAxisH / spectroYAxisFont.
+const (
+	cpuHeatmapXAxisH    float32 = 18
+	cpuHeatmapXAxisFont float32 = 10
+)
+
 // cpuHeatmapCellBgAlpha is the alpha applied to palette colours when
 // reused as cell backgrounds (process table CPU% column). Full opacity
 // would dominate the cell text; ~50% lets the dark theme text show
@@ -136,11 +154,13 @@ func (inst *App) renderCPUHeatmap(snap *PublishedSnapshot) {
 			A: 0xff,
 		}
 		st.hs = heatmapscroll.New(inst.ids, "cpu-heatmap", st.cfg, cpuHeatmapWidthSlots, st.heightSlots)
-		// ScrollRight: newest column on the LEFT, oldest on the RIGHT,
-		// matching the user's mental model "the heatmap grows from
-		// right to left". X tick labels render in the same order
-		// (newest leftmost) so motion and labels point the same way.
-		st.hs.SetOrientation(heatmapscroll.ScrollRight)
+		// ScrollLeft: newest column on the RIGHT, oldest on the LEFT,
+		// scrolling right-to-left like the per-core sparklines below and
+		// every other plot in the app. X tick labels render in the same
+		// order (newest rightmost) so motion and labels point the same way.
+		// (Until 2026-06-17 this used ScrollRight/newest-left; flipped in
+		// tandem with imzrt's spectrogram so both dashboards scroll alike.)
+		st.hs.SetOrientation(heatmapscroll.ScrollLeft)
 		st.colBuf = make([]float32, st.heightSlots)
 		// Prefill the ring with NaN columns so the widget shows a
 		// full rectangle on first open instead of a sparse strip of
@@ -177,43 +197,61 @@ func (inst *App) renderCPUHeatmap(snap *PublishedSnapshot) {
 
 	c.AddSpace(inst.spaceTight())
 
-	// Stretch the heatmap to fill available vertical space (minus the
-	// chrome + sparkline grid below) so users see it grow when they
-	// enlarge the panel. One-frame lag is fine — the captured size
-	// reflects the previous frame's available_size which is stable
-	// across consecutive frames at the same dock leaf height.
+	// Stretch the heatmap to fill the panel: full width (minus a small pad)
+	// so the newest column lands on the panel's right edge — matching the
+	// per-core sparklines, the line plots, and imzrt's spectrogram — and as
+	// much vertical space as the chrome + sparkline grid below leave free, so
+	// users see it grow when they enlarge the panel. 0 along an axis keeps the
+	// native slot-count size as a first-frame fallback before the available
+	// size is known. One-frame lag is fine — the captured size reflects the
+	// previous frame's available_size, stable across frames at a fixed leaf.
 	c.CaptureAvailableSize()
 	avail := c.CurrentApplicationState.StateManager.GetAvailableSize()
+	texW := float32(0)
+	if avail.W > 0 && !math.IsNaN(float64(avail.W)) {
+		if cand := avail.W - cpuHeatmapAxisPad; cand > cpuHeatmapMinTexW {
+			texW = cand
+		}
+	}
+	texH := float32(0)
 	if avail.H > 0 && !math.IsNaN(float64(avail.H)) {
 		minH := float32(st.heightSlots)
 		maxH := minH * cpuHeatmapMaxStretch
-		target := avail.H - cpuHeatmapReservedBelowPx
-		if target < minH {
-			target = minH
+		texH = avail.H - cpuHeatmapReservedBelowPx
+		if texH < minH {
+			texH = minH
 		}
-		if target > maxH {
-			target = maxH
+		if texH > maxH {
+			texH = maxH
 		}
-		st.hs.SetDisplaySize(0, target)
 	}
+	st.hs.SetDisplaySize(texW, texH)
 
 	st.hs.Render()
+
+	// Effective rendered width for the x-axis + cursor strip below: the
+	// stretched texW, or the native slot count before the size is known.
+	xw := texW
+	if xw <= 0 {
+		xw = float32(cpuHeatmapWidthSlots)
+	}
 
 	// Layout below the heatmap, top-to-bottom:
 	//   1. Time-axis tick labels — kept adjacent to the plot so the
 	//      reader can read column → time without their eye travelling
-	//      past the hover row first. The proportional-spacing labels
-	//      from timeticks read as "approximately at this time".
+	//      past the hover row first. Labels are positioned by time
+	//      across the texture width and read as "approximately at
+	//      this time".
 	//   2. Cursor strip — a transparent canvas the same width as the
 	//      heatmap with a single vertical line at the hovered column's
-	//      screen-x. Still column-aligned because both widgets share
-	//      the widthSlots size.
+	//      screen-x. Stays column-aligned because both widgets render
+	//      at the same stretched width (xw).
 	//   3. "hover: X ago" readout — the descriptive text floats lowest
 	//      so it doesn't crowd the axis labels.
 	if len(snap.HistoryTimeUnixSec) >= 2 {
-		renderCPUHeatmapXTicks(snap.HistoryTimeUnixSec)
+		inst.renderCPUHeatmapXTicks(snap.HistoryTimeUnixSec, xw)
 	}
-	st.renderCPUHeatmapCursor(inst)
+	st.renderCPUHeatmapCursor(inst, xw)
 }
 
 // cpuPercentBgColor maps a CPU percentage through the heatmap
@@ -251,15 +289,15 @@ func (inst *App) cpuPercentBgColor(pct float32) (col egcolor.Color) {
 }
 
 // renderCPUHeatmapCursor emits the cursor strip + "X ago" readout.
-// Layout: a transparent canvas the same width as the heatmap with a
-// single vertical line at the hovered column's screen-x, followed by
-// a label rendered through go-humanize so durations format the same
-// way the rest of the runtime does ("5 seconds ago", "2 minutes ago",
-// "an hour ago"). When the pointer isn't over the heatmap the label
-// falls back to "—" so the row's vertical space stays stable.
-func (st *cpuHeatmapState) renderCPUHeatmapCursor(inst *App) {
+// Layout: a transparent canvas the same width as the heatmap (w) with a
+// single vertical line at the hovered column's screen-x, followed by a
+// label rendered through go-humanize so durations format the same way the
+// rest of the runtime does ("5 seconds ago", "2 minutes ago", "an hour
+// ago"). When the pointer isn't over the heatmap the label falls back to
+// "—" so the row's vertical space stays stable.
+func (st *cpuHeatmapState) renderCPUHeatmapCursor(inst *App, w float32) {
 	_, col, hovered := st.hs.HoveredCell()
-	w := cpuHeatmapWidthSlots
+	slots := cpuHeatmapWidthSlots
 
 	tickInterval := 1 * time.Second
 	if sampler != nil {
@@ -267,67 +305,93 @@ func (st *cpuHeatmapState) renderCPUHeatmapCursor(inst *App) {
 	}
 
 	label := "—"
-	var xScreen uint32
+	var pxCursor float32
 	if hovered {
-		// ScrollRight maps screen-x to "ticks since newest": x=0 is the
-		// just-pushed column, x=w-1 is the oldest. Derive from the ring
-		// col and the post-push head Go has handy.
+		// age = ticks since the newest column; independent of scroll
+		// direction. head-1 is the just-pushed (newest) ring slot, so the
+		// gap back to the hovered col (mod slots) is how many ticks ago it
+		// was pushed.
 		head := st.hs.Head()
-		xScreen = (head + w - 1 - col) % w
-		age := time.Duration(int64(xScreen)) * tickInterval
+		age := (head + slots - 1 - col) % slots
+		// ScrollLeft puts the newest column on the RIGHT (slot x = slots-1)
+		// and the oldest on the left, so slot x = (slots-1) - age. Scale
+		// that slot to a pixel on the stretched strip (cell centre).
+		slotX := slots - 1 - age
+		pxCursor = (float32(slotX) + 0.5) / float32(slots) * w
+		dur := time.Duration(int64(age)) * tickInterval
 		// humanize.Time wraps the relative format ("X ago" / "in X").
 		// Negative offset from now gives "X ago" for any positive age.
-		label = humanize.Time(time.Now().Add(-age))
+		label = humanize.Time(time.Now().Add(-dur))
 	}
 
 	if hovered {
 		c.PaintLine(
-			float32(xScreen), 0,
-			float32(xScreen), cpuHeatmapCursorStripHeight,
+			pxCursor, 0,
+			pxCursor, cpuHeatmapCursorStripHeight,
 			colorCursor, 1.5,
 		).Send()
 	}
 	c.PaintCanvas(
 		inst.ids.PrepareStr("cpu-heatmap-cursor"),
-		float32(w), cpuHeatmapCursorStripHeight,
+		w, cpuHeatmapCursorStripHeight,
 	).Background(egcolor.Transparent).Send()
 
 	c.AddSpace(inst.spaceHair())
 	c.Label(fmt.Sprintf("hover: %s", label)).Send()
 }
 
-// renderCPUHeatmapXTicks emits a row of timeticks-derived labels under
-// the heatmap. Uses boxer's calendar-aware tick generator so labels
-// are stable across the run ("15:42:00", "15:43:00", …) instead of
-// raw unix seconds.
-func renderCPUHeatmapXTicks(timeUnixSec []float64) {
-	if len(timeUnixSec) < 2 {
+// renderCPUHeatmapXTicks paints calendar-aware time labels under the heatmap,
+// spanning the texture width w. The heatmap scrolls ScrollLeft (newest on the
+// right), so the newest tick sits at x=w and time increases left-to-right —
+// matching the per-core sparklines and every other plot in the app. Labels are
+// positioned by time across the full width (not fixed-gap) so they stay aligned
+// with the stretched texture. Only the last cpuHeatmapWidthSlots samples are
+// visible, so the range comes from that tail of the history. Edge ticks anchor
+// inward to avoid clipping. Uses boxer's calendar-aware tick generator so
+// labels are stable across the run ("15:42:00", "15:43:00", …).
+func (inst *App) renderCPUHeatmapXTicks(timeUnixSec []float64, w float32) {
+	n := len(timeUnixSec)
+	if n < 2 || w <= 0 {
 		return
 	}
-	minT := time.Unix(int64(timeUnixSec[0]), 0).Local()
-	maxT := time.Unix(int64(timeUnixSec[len(timeUnixSec)-1]), 0).Local()
-	if !maxT.After(minT) {
+	lo := 0
+	if n > int(cpuHeatmapWidthSlots) {
+		lo = n - int(cpuHeatmapWidthSlots)
+	}
+	minT := time.Unix(int64(timeUnixSec[lo]), 0).Local()
+	maxT := time.Unix(int64(timeUnixSec[n-1]), 0).Local()
+	minMS := minT.UnixMilli()
+	spanMS := maxT.UnixMilli() - minMS
+	if spanMS <= 0 {
 		return
 	}
 	layout := timeticks.TimeTicks(minT, maxT, timeticks.TimeTickOptions{
-		PanelWidthPx:    600,
+		PanelWidthPx:    int32(w),
 		TargetSpacingPx: 120,
 		Location:        time.Local,
 	})
-	if len(layout.TickLabels) == 0 {
-		return
-	}
-	// Render labels NEWEST → OLDEST so the leftmost label aligns with
-	// the heatmap's leftmost column (which is the most recently pushed
-	// data under ScrollRight). timeticks returns ascending
-	// (oldest → newest); iterate in reverse to match the heatmap.
-	n := len(layout.TickLabels)
-	for range c.Horizontal().KeepIter() {
-		for i := n - 1; i >= 0; i-- {
-			c.Label(layout.TickLabels[i]).Send()
-			if i > 0 {
-				c.AddSpace(24)
-			}
+	const edgeGuard float32 = 18
+	for i, tv := range layout.TickValues {
+		if i >= len(layout.TickLabels) {
+			break
 		}
+		// newest-right: oldest → x=0, newest → right edge (x=w).
+		norm := float64(tv.UnixMilli()-minMS) / float64(spanMS)
+		px := float32(norm * float64(w))
+		if px < 0 || px > w {
+			continue
+		}
+		c.PaintLine(px, 0, px, 4, colorAxisTick, 1.0).Send()
+		ah := uint8(1)
+		switch {
+		case px < edgeGuard:
+			ah = 0
+		case px > w-edgeGuard:
+			ah = 2
+		}
+		c.PaintText(px, 6, ah, 0, layout.TickLabels[i], cpuHeatmapXAxisFont, colorAxisLabel).Send()
 	}
+	c.PaintCanvas(inst.ids.PrepareStr("cpu-heatmap-xaxis"), w, cpuHeatmapXAxisH).
+		Background(colorBgClear).
+		Send()
 }
