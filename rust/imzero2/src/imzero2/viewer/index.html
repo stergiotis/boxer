@@ -260,7 +260,7 @@ function setupDecoder(codec) {
       framesDecoded++;
       ctx2d.drawImage(frame, 0, 0);
       frame.close();
-      if (framesDecoded === 1 || framesDecoded % 300 === 0) sendPing(framesDecoded);
+      if (framesDecoded === 1 || framesDecoded % 5 === 0) sendPing(framesDecoded);
       const now = performance.now();
       if (now - lastStatus > 1000) {
         lastStatus = now;

@@ -42,7 +42,7 @@ use crate::imzero2::framesink::FrameSink;
 use crate::imzero2::inputproto as pb;
 use crate::imzero2::nutreader::NutReader;
 use prost::Message as _;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
 /// Cap on recycled BGRA buffers held to avoid per-frame reallocation.
@@ -65,6 +65,9 @@ struct FrameMailbox {
     /// Set by the feeder on a write failure; observed by the render
     /// thread to trigger a reap + respawn.
     dead: AtomicBool,
+    /// Count of frames coalesced (dropped) in the mailbox under congestion
+    /// (SD9 pre-encode drop), surfaced to the Go control.
+    dropped: AtomicU64,
 }
 
 struct MailboxInner {
@@ -83,6 +86,7 @@ impl FrameMailbox {
             }),
             cv: Condvar::new(),
             dead: AtomicBool::new(false),
+            dropped: AtomicU64::new(0),
         })
     }
 
@@ -94,12 +98,17 @@ impl FrameMailbox {
         buf.clear();
         buf.extend_from_slice(src);
         if let Some(old) = g.latest.replace(buf) {
+            self.dropped.fetch_add(1, Ordering::Relaxed);
             if g.free.len() < FREE_LIST_CAP {
                 g.free.push(old);
             }
         }
         drop(g);
         self.cv.notify_one();
+    }
+
+    fn dropped(&self) -> u64 {
+        self.dropped.load(Ordering::Relaxed)
     }
 
     /// Block until a frame is available; return None once closed and
@@ -186,6 +195,11 @@ impl EncoderSink {
         };
         sink.spawn(false)?;
         Ok(sink)
+    }
+
+    /// Frames coalesced (dropped) before the encoder under congestion (SD9).
+    pub fn dropped(&self) -> u64 {
+        self.mailbox.dropped()
     }
 
     fn spawn(&mut self, restart: bool) -> std::io::Result<()> {

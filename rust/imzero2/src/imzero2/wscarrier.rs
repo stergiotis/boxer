@@ -63,6 +63,11 @@ struct Inner {
     /// Latest decode capabilities reported by the viewer (ADR-0088 SD2/SD8),
     /// drained by the render thread to forward to the Go interpreter.
     decode_caps: std::sync::Mutex<Option<pb::DecodeCapabilities>>,
+    /// Wire telemetry (ADR-0088): bytes + frames sent to the viewer, and the
+    /// viewer's latest decoded-frame count (from its progress pings).
+    bytes_sent: std::sync::atomic::AtomicU64,
+    frames_sent: std::sync::atomic::AtomicU64,
+    frames_decoded: std::sync::atomic::AtomicU64,
 }
 
 pub struct WsCarrier {
@@ -108,6 +113,9 @@ impl WsCarrier {
                 codec: lane.webcodecs_codec_string().to_owned(),
             }),
             decode_caps: std::sync::Mutex::new(None),
+            bytes_sent: std::sync::atomic::AtomicU64::new(0),
+            frames_sent: std::sync::atomic::AtomicU64::new(0),
+            frames_decoded: std::sync::atomic::AtomicU64::new(0),
         });
         // Bind synchronously so startup errors (port in use) fail fast in
         // the caller instead of asynchronously on the carrier thread.
@@ -260,6 +268,19 @@ impl WsCarrier {
     /// ADR-0088: a clone of the viewer's latest reported decode capabilities.
     pub fn decode_caps(&self) -> Option<pb::DecodeCapabilities> {
         self.inner.decode_caps.lock().ok().and_then(|g| g.clone())
+    }
+
+    /// ADR-0088 wire telemetry for the Go control: (bytes_sent, frames_sent,
+    /// frames_decoded, frames_dropped). Cumulative for the current connection.
+    pub fn stats(&self) -> (u64, u64, u64, u64) {
+        use std::sync::atomic::Ordering::Relaxed;
+        let dropped = self.encoder.as_ref().map(|e| e.dropped()).unwrap_or(0);
+        (
+            self.inner.bytes_sent.load(Relaxed),
+            self.inner.frames_sent.load(Relaxed),
+            self.inner.frames_decoded.load(Relaxed),
+            dropped,
+        )
     }
 }
 
@@ -435,6 +456,8 @@ async fn handle_session(
                 chunk = video_rx.recv() => {
                     match chunk {
                         Some(payload) => {
+                            inner.bytes_sent.fetch_add(payload.len() as u64, std::sync::atomic::Ordering::Relaxed);
+                            inner.frames_sent.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             if let Err(e) = ws_tx.send(tokio_tungstenite::tungstenite::Message::Binary(payload.into())).await {
                                 break Err(e);
                             }
@@ -498,7 +521,8 @@ fn handle_client_message(data: &[u8], inner: &Inner) {
                 Some(pb::session_control::Control::Ping(p)) => {
                     // The viewer pings with its decoded-frame count: a remote
                     // attestation that WebCodecs decode is working client-side.
-                    tracing::info!(frames_decoded = p.nonce, "viewer decode-progress ping");
+                    inner.frames_decoded.store(p.nonce, std::sync::atomic::Ordering::Relaxed);
+                    tracing::debug!(frames_decoded = p.nonce, "viewer decode-progress ping");
                 }
                 Some(pb::session_control::Control::DecodeCapabilities(caps)) => {
                     tracing::info!(

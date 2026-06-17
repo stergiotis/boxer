@@ -63,6 +63,63 @@ func (c CodecCaps) HostCanEncode() bool { return c.EncodeSoftware || c.EncodeHar
 // precondition for selecting it.
 func (c CodecCaps) Offerable() bool { return c.HostCanEncode() && c.DecodeSupported }
 
+// EncoderName is the ffmpeg encoder the host would use for this codec — the
+// VAAPI encoder when hardware encode is available here, else the software lane.
+func (c CodecCaps) EncoderName() string {
+	if c.EncodeHardware {
+		switch c.Codec {
+		case CodecVP9:
+			return "vp9_vaapi"
+		case CodecAV1:
+			return "av1_vaapi"
+		default:
+			return "h264_vaapi"
+		}
+	}
+	switch c.Codec {
+	case CodecVP9:
+		return "libvpx-vp9"
+	case CodecAV1:
+		return "libsvtav1"
+	default:
+		return "libopenh264"
+	}
+}
+
+// CodecString is the representative WebCodecs string for this codec. The active
+// H.264 stream's exact profile may differ (the viewer derives it from the SPS).
+func (c CodecCaps) CodecString() string {
+	switch c.Codec {
+	case CodecVP9:
+		return "vp09.00.41.08"
+	case CodecAV1:
+		return "av01.0.08M.08"
+	default:
+		return "avc1.42E01E"
+	}
+}
+
+// EncodeBackend / DecodeBackend name the hardware/software path for the table.
+func (c CodecCaps) EncodeBackend() string {
+	if c.EncodeHardware {
+		return "hardware"
+	}
+	return "software"
+}
+
+func (c CodecCaps) DecodeBackend() string {
+	switch {
+	case !c.DecodeSupported:
+		return "unsupported"
+	case c.DecodeHardware:
+		return "hardware"
+	case c.DecodeSmooth:
+		return "software"
+	default:
+		return "software?"
+	}
+}
+
 // Decode unpacks a FetchVideoCapabilities result. flags is the iterator the
 // generated fetcher returns; it is consumed once.
 func Decode(codecIds []uint64, flags iter.Seq[uint32]) []CodecCaps {
@@ -88,25 +145,47 @@ func Decode(codecIds []uint64, flags iter.Seq[uint32]) []CodecCaps {
 	return out
 }
 
-// StreamInfo is the active stream's geometry and frame rate (ADR-0088
-// fetchVideoStreamInfo: [width, height, fps]).
+// StreamInfo is the active stream's telemetry (ADR-0088 fetchVideoStreamInfo:
+// [width, height, fps, cadence, bitrate_kbps, frames_sent, frames_dropped,
+// frames_in_flight]).
 type StreamInfo struct {
 	Width, Height, Fps int
+	Reactive           bool // render cadence: false=continuous, true=reactive
+	BitrateKbps        int  // EMA of the wire bitrate
+	FramesSent         int
+	FramesDropped      int // coalesced before the encoder under congestion (SD9)
+	FramesInFlight     int // sent − decoded: how far the viewer is behind
 }
 
 // Valid is true once the host has reported a geometry (i.e. a viewer is live).
 func (s StreamInfo) Valid() bool { return s.Width > 0 && s.Height > 0 }
 
-// DecodeStreamInfo unpacks a FetchVideoStreamInfo result.
+// CadenceName is the render cadence as a word.
+func (s StreamInfo) CadenceName() string {
+	if s.Reactive {
+		return "reactive"
+	}
+	return "continuous"
+}
+
+// DecodeStreamInfo unpacks a FetchVideoStreamInfo result (3 or 8 values).
 func DecodeStreamInfo(info iter.Seq[uint64]) StreamInfo {
-	v := make([]uint64, 0, 3)
+	v := make([]uint64, 0, 8)
 	for x := range info {
 		v = append(v, x)
 	}
 	if len(v) < 3 {
 		return StreamInfo{}
 	}
-	return StreamInfo{Width: int(v[0]), Height: int(v[1]), Fps: int(v[2])}
+	s := StreamInfo{Width: int(v[0]), Height: int(v[1]), Fps: int(v[2])}
+	if len(v) >= 8 {
+		s.Reactive = v[3] != 0
+		s.BitrateKbps = int(v[4])
+		s.FramesSent = int(v[5])
+		s.FramesDropped = int(v[6])
+		s.FramesInFlight = int(v[7])
+	}
+	return s
 }
 
 // Model is the first-class video-pipeline state the control owns.

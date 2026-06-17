@@ -54,19 +54,38 @@ func ShowDialog(ids *c.WidgetIdStack, st *State) {
 		return
 	}
 	for range c.Window(ids.PrepareStr("videoout-win"), c.WidgetText().Text("Video output").Keep()).
-		Resizable(false).Collapsible(false).TitleBar(true).DefaultWidth(340).KeepIter() {
+		Resizable(false).Collapsible(false).TitleBar(true).DefaultWidth(470).KeepIter() {
 		if s := st.model.Stream; s.Valid() {
-			c.Label(fmt.Sprintf("Stream: %d×%d @ %d fps", s.Width, s.Height, s.Fps)).Send()
+			c.Label(fmt.Sprintf("Stream: %d×%d @ %d fps · %s", s.Width, s.Height, s.Fps, s.CadenceName())).Send()
+			c.Label(fmt.Sprintf("%.1f Mbps · %d sent · %d coalesced · %d behind",
+				float64(s.BitrateKbps)/1000.0, s.FramesSent, s.FramesDropped, s.FramesInFlight)).Send()
 			c.Separator().Horizontal().Send()
 		}
-		c.Label("Codec — encode (host) · decode (this viewer):").Send()
-		for _, cc := range st.model.Offered() {
-			if c.SelectableLabel(ids.PrepareStr("codec-"+cc.Codec.String()), st.model.Active == cc.Codec, dialogCodecLabel(cc)).
-				SendResp().HasPrimaryClicked() {
-				if cc.Offerable() && st.model.Active != cc.Codec {
-					st.model.Active = cc.Codec
-					c.SetVideoPipeline(uint32(cc.Codec))
+		// Codec table (egui Grid). The codec name cell is selectable — click it
+		// to switch; the rest are read-only columns. "encode" is the host
+		// backend, "decode" is this browser — the two are reported separately.
+		for range c.Grid(ids.PrepareStr("videoout-grid")).NumColumns(6).Striped(true).KeepIter() {
+			c.Label("Codec").Send()
+			c.Label("Encoder").Send()
+			c.Label("Encode").Send()
+			c.Label("Decode").Send()
+			c.Label("WebCodecs").Send()
+			c.Label("Pixels").Send()
+			c.EndRow()
+			for _, cc := range st.model.Offered() {
+				if c.SelectableLabel(ids.PrepareStr("codec-"+cc.Codec.String()), st.model.Active == cc.Codec, cc.Codec.String()).
+					SendResp().HasPrimaryClicked() {
+					if cc.Offerable() && st.model.Active != cc.Codec {
+						st.model.Active = cc.Codec
+						c.SetVideoPipeline(uint32(cc.Codec))
+					}
 				}
+				c.Label(cc.EncoderName()).Send()
+				c.Label(cc.EncodeBackend()).Send()
+				c.Label(cc.DecodeBackend()).Send()
+				c.Label(cc.CodecString()).Send()
+				c.Label("4:2:0 8-bit").Send()
+				c.EndRow()
 			}
 		}
 		c.Separator().Horizontal().Send()
@@ -74,26 +93,4 @@ func ShowDialog(ids *c.WidgetIdStack, st *State) {
 			st.dialogOpen = false
 		}
 	}
-}
-
-// dialogCodecLabel describes a codec's host-encode backend and browser-decode
-// standing for the dialog rows (ADR-0088 SD8 — differentiate the two HW sides
-// instead of conflating them).
-func dialogCodecLabel(cc videopipeline.CodecCaps) string {
-	enc := "software"
-	if cc.EncodeHardware {
-		enc = "hardware"
-	}
-	dec := "unsupported"
-	switch {
-	case !cc.DecodeSupported:
-		dec = "unsupported"
-	case cc.DecodeHardware:
-		dec = "hardware"
-	case cc.DecodeSmooth:
-		dec = "software"
-	default:
-		dec = "software (may stutter)"
-	}
-	return fmt.Sprintf("%-6s  enc %s · dec %s", cc.Codec.String(), enc, dec)
 }

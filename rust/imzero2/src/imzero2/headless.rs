@@ -594,6 +594,11 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
         encode = ?host_encode_caps.iter().map(|(c, sw, hw)| format!("{}:sw{}hw{}", c.as_str(), *sw as u8, *hw as u8)).collect::<Vec<_>>(),
         "host video-encode probe"
     );
+    // Wire-bitrate EMA state (ADR-0088 telemetry), updated ~4×/s from the
+    // carrier's cumulative byte counter.
+    let mut bitrate_prev_bytes = 0u64;
+    let mut bitrate_prev_inst = std::time::Instant::now();
+    let mut bitrate_kbps = 0u64;
     if sinks.is_empty() && carrier.is_none() {
         sinks.push(Box::new(NullSink));
     }
@@ -718,7 +723,25 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
             // connected, so the Go control self-hides when there is no sink.
             if c.connected() {
                 fffi.set_video_capabilities(&build_video_caps(&host_encode_caps, c.decode_caps().as_ref()));
-                fffi.set_video_stream_info(width_px, height_px, opts.fps as u32);
+                let (bytes_sent, frames_sent, frames_decoded, frames_dropped) = c.stats();
+                let now = std::time::Instant::now();
+                let dt = now.duration_since(bitrate_prev_inst).as_secs_f64();
+                if dt >= 0.25 {
+                    let inst = (bytes_sent.saturating_sub(bitrate_prev_bytes) as f64 * 8.0 / dt / 1000.0) as u64;
+                    bitrate_kbps = (bitrate_kbps * 3 + inst) / 4; // EMA, ~250 ms window
+                    bitrate_prev_bytes = bytes_sent;
+                    bitrate_prev_inst = now;
+                }
+                fffi.set_video_stream_info(&[
+                    width_px as u64,
+                    height_px as u64,
+                    opts.fps as u64,
+                    cadence as u64,
+                    bitrate_kbps,
+                    frames_sent,
+                    frames_dropped,
+                    frames_sent.saturating_sub(frames_decoded),
+                ]);
             } else {
                 fffi.set_video_capabilities(&[]);
             }
