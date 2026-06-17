@@ -1,14 +1,17 @@
-// Package videooutput is the ADR-0088 "video output" control widget: a codec
-// picker for the imzero2 remote-stream pipeline. It refreshes a
-// [videopipeline.Model] from the headless host's published capabilities
-// (fetchVideoCapabilities — the browser-decode ∩ host-encode set), renders the
-// offered codecs annotated by the viewer's decode standing, and on a change
-// drives the runtime switch via bindings.SetVideoPipeline.
+// Package videooutput is the ADR-0088 "video output" control for the imzero2
+// remote-stream pipeline. It has two parts:
 //
-// The control is Go-owned state (ADR-0088 SD1/SD10): the caller holds the
-// [videopipeline.Model] across frames (it carries the active selection). In the
-// desktop host there is no remote sink, so the capabilities are empty and the
-// control renders a quiet placeholder.
+//   - [ShowStatus] — a compact active-codec indicator for the status bar that
+//     refreshes the model from the host each frame (the single capability
+//     fetch) and toggles the settings dialog on click;
+//   - [ShowDialog] — a floating settings window (rendered at the frame top
+//     level) with the full codec picker, each codec annotated by how well the
+//     connected viewer can play it.
+//
+// The control is Go-owned state (ADR-0088 SD1/SD10): the caller holds a [State]
+// across frames. Both parts render nothing when no remote viewer has reported
+// capabilities (so the control is invisible under the desktop host), and
+// selecting a codec drives the runtime switch via bindings.SetVideoPipeline.
 package videooutput
 
 import (
@@ -16,49 +19,69 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/videopipeline"
 )
 
-// Show refreshes the model from the host and renders the codec picker. `ids`
-// is the parent id scope (Show derives a "videoout" child under it); pass an
-// Initial-state stack, not a pre-prepared one. `model` is owned by the caller.
-func Show(ids *c.WidgetIdStack, model *videopipeline.Model) {
-	model.Update(videopipeline.Decode(c.NewFetcher().FetchVideoCapabilities()))
-	offered := model.Offered()
-	if len(offered) == 0 {
-		return // no remote sink / no capabilities yet — render nothing
+// State is the control's persistent state across frames: the pipeline model
+// (capabilities + active codec) plus whether the settings dialog is open.
+type State struct {
+	model      videopipeline.Model
+	dialogOpen bool
+}
+
+// ShowStatus refreshes the model from the host (the single per-frame capability
+// fetch) and renders the compact active-codec indicator. Clicking it toggles
+// the settings dialog. Renders nothing — and closes any open dialog — when no
+// remote viewer has reported capabilities.
+func ShowStatus(ids *c.WidgetIdStack, st *State) {
+	st.model.Update(videopipeline.Decode(c.NewFetcher().FetchVideoCapabilities()))
+	if len(st.model.Offered()) == 0 {
+		st.dialogOpen = false
+		return
 	}
-	// Scope the per-codec ids under a "videoout" node — egui2 id-stack
-	// discipline: IdScope does DeriveStacked on entry and PopIdFromStackChecked
-	// on exit, so the per-codec PrepareStr calls nest cleanly and the stack
-	// returns to Initial.
-	for range c.IdScope(ids.PrepareStr("videoout")) {
-		for range c.Horizontal().KeepIter() {
-			c.Label("Codec:").Send()
-			for _, cc := range offered {
-				id := ids.PrepareStr("codec-" + cc.Codec.String())
-				checked := model.Active == cc.Codec
-				if c.SelectableLabel(id, checked, codecLabel(cc)).SendResp().HasPrimaryClicked() {
-					if cc.Offerable() && model.Active != cc.Codec {
-						model.Active = cc.Codec
-						c.SetVideoPipeline(uint32(cc.Codec))
-					}
+	label := "codec: " + st.model.Active.String()
+	if c.SelectableLabel(ids.PrepareStr("videoout-ind"), st.dialogOpen, label).SendResp().HasPrimaryClicked() {
+		st.dialogOpen = !st.dialogOpen
+	}
+}
+
+// ShowDialog renders the video-output settings window when open. Call it at the
+// frame top level (outside the panels) so it floats over the app. It reads the
+// model that ShowStatus refreshed this frame — it does not fetch again, so call
+// ShowStatus earlier in the same frame.
+func ShowDialog(ids *c.WidgetIdStack, st *State) {
+	if !st.dialogOpen || len(st.model.Offered()) == 0 {
+		return
+	}
+	for range c.Window(ids.PrepareStr("videoout-win"), c.WidgetText().Text("Video output").Keep()).
+		Resizable(false).Collapsible(false).TitleBar(true).DefaultWidth(300).KeepIter() {
+		c.Label("Stream codec — what the connected viewer plays:").Send()
+		for _, cc := range st.model.Offered() {
+			if c.SelectableLabel(ids.PrepareStr("codec-"+cc.Codec.String()), st.model.Active == cc.Codec, dialogCodecLabel(cc)).
+				SendResp().HasPrimaryClicked() {
+				if cc.Offerable() && st.model.Active != cc.Codec {
+					st.model.Active = cc.Codec
+					c.SetVideoPipeline(uint32(cc.Codec))
 				}
 			}
+		}
+		c.Separator().Horizontal().Send()
+		if c.Button(ids.PrepareStr("videoout-close"), c.Atoms().Text("Close").Keep()).SendResp().HasPrimaryClicked() {
+			st.dialogOpen = false
 		}
 	}
 }
 
-// codecLabel annotates a codec with its browser decode standing so the picker
-// communicates why a codec might be a poor choice without hiding it (ADR-0088
-// SD8: surface the AV1-is-software case rather than letting the user pick blind).
-func codecLabel(cc videopipeline.CodecCaps) string {
+// dialogCodecLabel describes a codec's playability for the dialog rows — it
+// surfaces the AV1-is-software / not-decodable cases rather than hiding them
+// (ADR-0088 SD8).
+func dialogCodecLabel(cc videopipeline.CodecCaps) string {
 	name := cc.Codec.String()
 	switch {
 	case !cc.DecodeSupported:
-		return name + " (no decode)"
+		return name + " — not decodable in this viewer"
 	case cc.PowerEfficient:
-		return name + " ⚡" // hardware-accelerated decode
-	case !cc.Smooth:
-		return name + " (sw)" // software decode — may be janky
+		return name + " — hardware-accelerated"
+	case cc.Smooth:
+		return name + " — software (smooth)"
 	default:
-		return name
+		return name + " — software (may stutter)"
 	}
 }

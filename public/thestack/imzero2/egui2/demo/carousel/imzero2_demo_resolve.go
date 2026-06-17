@@ -24,8 +24,6 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/runtimestatus"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/videooutput"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/videopipeline"
-
 	// Side-effect imports — each app's init() registers itself into
 	// app.DefaultRegistry. Carousel is the single import site that pulls all
 	// M3-migrated apps; the dock host iterates the registry directly.
@@ -92,7 +90,7 @@ func decorateRenderer(r func() error, extraMenus func(), status *runtimestatus.S
 	// ADR-0088: the remote-stream codec control. Persists the selected codec
 	// across frames; renders only when a remote viewer has reported decode
 	// capabilities (so it is invisible under the desktop host).
-	videoModel := &videopipeline.Model{}
+	videoState := &videooutput.State{}
 	return func() error {
 		// F1 global shortcut: open or focus HelpHost. The cached value
 		// was drained from egui's input queue during StateManager.Sync
@@ -166,12 +164,15 @@ func decorateRenderer(r func() error, extraMenus func(), status *runtimestatus.S
 						c.AddSpace(styletokens.GapSections(density))
 					}
 					metricsoverlay.RenderInline(ids.PrepareStr("fps"))
-					// ADR-0088 video-output control: codec picker for the remote
-					// stream, rendered only when a remote viewer is connected.
-					videooutput.Show(ids, videoModel)
+					// ADR-0088: compact active-codec indicator; clicking it opens
+					// the video-output settings dialog (ShowDialog, below).
+					videooutput.ShowStatus(ids, videoState)
 				}
 			}
 		}
+		// ADR-0088: the video-output settings dialog floats over the app when
+		// opened from the status-bar indicator (self-hides otherwise).
+		videooutput.ShowDialog(ids, videoState)
 		return r()
 	}
 }
