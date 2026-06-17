@@ -160,6 +160,19 @@ The pipeline landed in eight commits (`6f593270` … `ec4dae61` on `main`):
 
 Deferred (additive, not blocking): bitrate / encoder-backend args on `setVideoPipeline` (codec-only today); a dedicated `videooutput` demo-tour registration; per-viewer capability reconciliation (SD12).
 
+### 2026-06-17 — control enrichments, per-lane probe reasons, help + tour
+
+The Phase 7 manual step is **accepted**: a browser-driven codec switch was exercised live — clicking a codec in the picker switches the pipeline and the viewer's decode resumes, and a VAAPI lane that fails the host probe stays un-offered. SD7 is confirmed by decode now, not only by construction.
+
+The `videooutput` control grew from the bare picker (SD10) into a full settings surface, opened from a status-bar indicator that shows the active codec and self-hides with no viewer:
+
+- **Stream readouts** — geometry, fps, and render cadence, plus live telemetry: a wire-bitrate EMA and the frames sent / coalesced (the SD9 mailbox drops) / behind (viewer backlog) counters.
+- **Codec table** — per offered codec, the ffmpeg encoder, the host **encode** backend and the browser **decode** standing reported *separately* (they accelerate independently), the WebCodecs string, and the pixel format.
+- **Disabled-encoders table** — each lane the host probed unusable, with the specific cause. `probe_lane` now classifies the failed trial encode from ffmpeg's stderr (`LaneProbe`: NotBuilt / NoDevice / EncodeRejected / Other) and packs the reason into spare capability-flag bits (5–7 hardware lane, 8–10 software), which the Go `videopipeline` model renders as the table's reason — so a Fedora-mesa VAAPI lane reads "GPU driver can't encode this codec" rather than a generic "unavailable" (sharpening SD5).
+- **Help** — a `reference` doc (keelson help facility) documents every readout, registered as the "Video output" book and reachable from the Help app.
+
+The deferred demo-tour registration is done: a `videooutput` gallery scene renders the dialog over a representative model, so the tour captures it. Still deferred: bitrate / encoder-backend / cadence on `setVideoPipeline` (codec-only today — the rest of the originally-scoped control surface), and per-viewer reconciliation (SD12).
+
 ## References
 
 - [ADR-0024](./0024-imzero2-remote-access-browser-viewer.md) — the headless render + ffmpeg + browser WebCodecs foundation this ADR extends; SD3/SD4/SD5 (encoder, Annex-B framing, WebCodecs), SD8 (input edge bent here), SD11 (encoder-backend selection deferred — revisited here), and the acceptance notes (VAAPI ENOSYS, resize teardown/rebuild, SD9 mailbox).
