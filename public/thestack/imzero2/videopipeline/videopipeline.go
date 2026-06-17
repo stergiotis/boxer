@@ -35,6 +35,33 @@ func (c Codec) String() string {
 	}
 }
 
+// hardwareEncoderName and softwareEncoderName name the VAAPI and the software
+// ffmpeg encoder for the codec, independent of which one is currently usable.
+// [CodecCaps.EncoderName] picks between them by the probed hardware bit; the
+// disabled-encoder list (see [Model.DisabledEncoders]) needs both names even
+// when neither lane works.
+func (c Codec) hardwareEncoderName() string {
+	switch c {
+	case CodecVP9:
+		return "vp9_vaapi"
+	case CodecAV1:
+		return "av1_vaapi"
+	default:
+		return "h264_vaapi"
+	}
+}
+
+func (c Codec) softwareEncoderName() string {
+	switch c {
+	case CodecVP9:
+		return "libvpx-vp9"
+	case CodecAV1:
+		return "libsvtav1"
+	default:
+		return "libopenh264"
+	}
+}
+
 // Capability flag bits — must match build_video_caps in
 // rust/imzero2/src/imzero2/headless.rs.
 const (
@@ -67,23 +94,9 @@ func (c CodecCaps) Offerable() bool { return c.HostCanEncode() && c.DecodeSuppor
 // VAAPI encoder when hardware encode is available here, else the software lane.
 func (c CodecCaps) EncoderName() string {
 	if c.EncodeHardware {
-		switch c.Codec {
-		case CodecVP9:
-			return "vp9_vaapi"
-		case CodecAV1:
-			return "av1_vaapi"
-		default:
-			return "h264_vaapi"
-		}
+		return c.Codec.hardwareEncoderName()
 	}
-	switch c.Codec {
-	case CodecVP9:
-		return "libvpx-vp9"
-	case CodecAV1:
-		return "libsvtav1"
-	default:
-		return "libopenh264"
-	}
+	return c.Codec.softwareEncoderName()
 }
 
 // CodecString is the representative WebCodecs string for this codec. The active
@@ -230,6 +243,48 @@ func (m *Model) Offered() []CodecCaps {
 	for _, c := range m.Caps {
 		if c.HostCanEncode() {
 			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// DisabledEncoder is one encoder lane the host probed but cannot use: a
+// (codec, backend) pair with the ffmpeg encoder name and a human reason. The
+// hardware lane being disabled does not stop a codec being offered — the
+// software lane still serves it — so these are surfaced in their own table
+// rather than removing the codec from [Model.Offered].
+type DisabledEncoder struct {
+	Codec   Codec
+	Encoder string // the ffmpeg encoder that is unavailable, e.g. "h264_vaapi"
+	Backend string // "hardware" or "software"
+	Reason  string // why the host cannot use it
+}
+
+// DisabledEncoders lists the encoder lanes the host probed unusable, in codec
+// order with the hardware lane before the software one. Each codec contributes
+// a row per lane that failed its probe (a false EncodeHardware/EncodeSoftware
+// bit); a codec whose lanes both work contributes none. The host probes every
+// lane with a short trial encode (codeclane.probe_lane), so a disabled row
+// means that trial did not produce output — not merely that the lane went
+// unselected.
+func (m *Model) DisabledEncoders() []DisabledEncoder {
+	out := make([]DisabledEncoder, 0, 2*len(m.Caps))
+	for _, c := range m.Caps {
+		if !c.EncodeHardware {
+			out = append(out, DisabledEncoder{
+				Codec:   c.Codec,
+				Encoder: c.Codec.hardwareEncoderName(),
+				Backend: "hardware",
+				Reason:  "no usable VAAPI encoder on this host",
+			})
+		}
+		if !c.EncodeSoftware {
+			out = append(out, DisabledEncoder{
+				Codec:   c.Codec,
+				Encoder: c.Codec.softwareEncoderName(),
+				Backend: "software",
+				Reason:  "encoder unavailable in this ffmpeg build",
+			})
 		}
 	}
 	return out

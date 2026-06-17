@@ -54,7 +54,7 @@ func ShowDialog(ids *c.WidgetIdStack, st *State) {
 		return
 	}
 	for range c.Window(ids.PrepareStr("videoout-win"), c.WidgetText().Text("Video output").Keep()).
-		Resizable(false).Collapsible(false).TitleBar(true).DefaultWidth(470).KeepIter() {
+		Resizable(false).Collapsible(false).TitleBar(true).DefaultWidth(560).KeepIter() {
 		if s := st.model.Stream; s.Valid() {
 			c.Label(fmt.Sprintf("Stream: %d×%d @ %d fps · %s", s.Width, s.Height, s.Fps, s.CadenceName())).Send()
 			c.Label(fmt.Sprintf("%.1f Mbps · %d sent · %d coalesced · %d behind",
@@ -86,6 +86,28 @@ func ShowDialog(ids *c.WidgetIdStack, st *State) {
 				c.Label(cc.CodecString()).Send()
 				c.Label("4:2:0 8-bit").Send()
 				c.EndRow()
+			}
+		}
+		// Disabled-encoder table: lanes the host probed but cannot use. A
+		// disabled hardware lane doesn't remove the codec — software still
+		// serves it — so it lives in its own table rather than greyed-out above.
+		// Hidden entirely when every probed lane works.
+		if dis := st.model.DisabledEncoders(); len(dis) > 0 {
+			c.Separator().Horizontal().Send()
+			c.Label("Disabled encoders").Send()
+			for range c.Grid(ids.PrepareStr("videoout-disabled-grid")).NumColumns(4).Striped(true).KeepIter() {
+				c.Label("Codec").Send()
+				c.Label("Encoder").Send()
+				c.Label("Backend").Send()
+				c.Label("Reason").Send()
+				c.EndRow()
+				for _, d := range dis {
+					c.Label(d.Codec.String()).Send()
+					c.Label(d.Encoder).Send()
+					c.Label(d.Backend).Send()
+					c.Label(d.Reason).Send()
+					c.EndRow()
+				}
 			}
 		}
 		c.Separator().Horizontal().Send()

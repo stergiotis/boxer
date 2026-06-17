@@ -79,3 +79,26 @@ either can be hardware while the other is software.
   from the bitstream.
 - **Pixels** — the pixel format the pipeline encodes: `4:2:0 8-bit` chroma
   subsampling, the broadly-decodable baseline these codecs share.
+
+## Disabled encoders
+
+This table appears only when the host could not use one of its encoders. At
+startup the host runs a short trial encode for every codec on both backends —
+the VAAPI (hardware) encoder and the software library — and lists here each
+lane that did not produce output. A disabled lane is a real probe failure, not
+merely an unselected option.
+
+A disabled *hardware* lane does not remove the codec: the software encoder
+still serves it, so the codec stays in the table above (with `Encode` reading
+`software`). The disabled table simply makes the missing acceleration visible
+and says why.
+
+- **Codec / Encoder / Backend** — which codec, the ffmpeg encoder that is
+  unavailable (e.g. `h264_vaapi`), and whether it is the hardware or software
+  lane.
+- **Reason** — why the host cannot use it. `no usable VAAPI encoder on this
+  host` covers a missing GPU device, a driver without that encoder, or a
+  driver that accepts the encoder but fails at encode time (common on
+  Mesa/VAAPI). `encoder unavailable in this ffmpeg build` means the software
+  library for that codec was not compiled into the ffmpeg on this host.
+
