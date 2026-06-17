@@ -221,10 +221,13 @@ function capCandidates(w, h) {
   const avc = "avc1.42E0" + h264Level(w, h);
   const vp9 = "vp09.00." + vp9Level(w, h) + ".08";
   const av1 = "av01.0." + av1Level(w, h) + "M.08";
+  // AV1 High profile (4:4:4): profile 1, monochrome 0, chroma 000.
+  const av1_444 = "av01.1." + av1Level(w, h) + "M.08.0.000";
   return [
     { codec: avc, contentType: 'video/mp4; codecs="' + avc + '"' },
     { codec: vp9, contentType: 'video/webm; codecs="' + vp9 + '"' },
     { codec: av1, contentType: 'video/mp4; codecs="' + av1 + '"' },
+    { codec: av1_444, contentType: 'video/mp4; codecs="' + av1_444 + '"' },
   ];
 }
 async function probeAndSendCapabilities() {

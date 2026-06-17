@@ -19,9 +19,10 @@ import "iter"
 type Codec uint32
 
 const (
-	CodecH264 Codec = 0
-	CodecVP9  Codec = 1
-	CodecAV1  Codec = 2
+	CodecH264     Codec = 0
+	CodecVP9      Codec = 1
+	CodecAV1      Codec = 2
+	CodecAV1Hi444 Codec = 3 // AV1 High profile, 4:4:4 chroma
 )
 
 func (c Codec) String() string {
@@ -30,6 +31,8 @@ func (c Codec) String() string {
 		return "VP9"
 	case CodecAV1:
 		return "AV1"
+	case CodecAV1Hi444:
+		return "AV1 4:4:4"
 	default:
 		return "H.264"
 	}
@@ -44,7 +47,7 @@ func (c Codec) hardwareEncoderName() string {
 	switch c {
 	case CodecVP9:
 		return "vp9_vaapi"
-	case CodecAV1:
+	case CodecAV1, CodecAV1Hi444:
 		return "av1_vaapi"
 	default:
 		return "h264_vaapi"
@@ -57,6 +60,8 @@ func (c Codec) softwareEncoderName() string {
 		return "libvpx-vp9"
 	case CodecAV1:
 		return "libsvtav1"
+	case CodecAV1Hi444:
+		return "libaom-av1"
 	default:
 		return "libopenh264"
 	}
@@ -154,6 +159,8 @@ func (c CodecCaps) CodecString(width, height int) string {
 		return "vp09.00." + vp9Level(width, height) + ".08"
 	case CodecAV1:
 		return "av01.0." + av1Level(width, height) + "M.08"
+	case CodecAV1Hi444:
+		return "av01.1." + av1Level(width, height) + "M.08.0.000"
 	default:
 		return "avc1.42E0" + h264Level(width, height)
 	}

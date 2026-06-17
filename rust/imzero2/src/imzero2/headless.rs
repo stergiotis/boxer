@@ -101,23 +101,35 @@ impl HeadlessOpts {
                 .filter(|v| !v.is_empty())
                 .map(std::path::PathBuf::from)
         }
+        let h264_out = path_var("IMZERO2_HEADLESS_H264_OUT");
+        let listen = std::env::var("IMZERO2_HEADLESS_LISTEN")
+            .ok()
+            .filter(|v| !v.is_empty());
+        // Resolve (and thus probe) the encoder lane only when something will
+        // actually encode — a remote carrier or the file dump. PNG-only / null
+        // runs never spawn ffmpeg, so probing the VAAPI lane (CodecLane::best)
+        // would be pure startup cost (L2). The placeholder lane is never used in
+        // that case (no encoder reads it).
+        let lane = if listen.is_some() || h264_out.is_some() {
+            build_codec_lane()
+        } else {
+            CodecLane::software(VideoCodec::H264)
+        };
         Self {
             fps: parse("IMZERO2_HEADLESS_FPS", 60.0f32).clamp(1.0, 240.0),
             max_frames: parse("IMZERO2_HEADLESS_MAX_FRAMES", 0u64),
             dump_dir: path_var("IMZERO2_HEADLESS_DUMP_DIR"),
             dump_every: parse("IMZERO2_HEADLESS_DUMP_EVERY", 60u64).max(1),
             pixels_per_point: parse("IMZERO2_HEADLESS_PIXELS_PER_POINT", 1.0f32).clamp(0.25, 4.0),
-            h264_out: path_var("IMZERO2_HEADLESS_H264_OUT"),
-            lane: build_codec_lane(),
-            listen: std::env::var("IMZERO2_HEADLESS_LISTEN")
-                .ok()
-                .filter(|v| !v.is_empty()),
+            h264_out,
+            lane,
+            listen,
         }
     }
 }
 
 /// Select the startup codec lane (ADR-0088 SD4). `IMZERO2_HEADLESS_CODEC`
-/// picks `h264` | `vp9` | `av1` (default `h264`); the runtime
+/// picks `h264` | `vp9` | `av1` | `av1-444` (AV1 4:4:4; default `h264`); the runtime
 /// `setVideoPipeline` switch re-selects the same way. The backend is
 /// `CodecLane::best` — hardware (VAAPI) when it encodes on this host, else the
 /// portable software lane (SD5; avoids the Fedora-mesa `h264_vaapi` ENOSYS
@@ -159,6 +171,7 @@ fn build_video_caps(
         VideoCodec::H264 => 0u8,
         VideoCodec::Vp9 => 1,
         VideoCodec::Av1 => 2,
+        VideoCodec::Av1Hi444 => 3,
     };
     let mut out: Vec<(u8, u32)> = host
         .iter()
@@ -182,6 +195,9 @@ fn build_video_caps(
                 0u8
             } else if cap.codec.starts_with("vp9") || cap.codec.starts_with("vp09") {
                 1
+            } else if cap.codec.starts_with("av01.1") {
+                // AV1 High profile = 4:4:4 — must precede the generic av01 arm.
+                3
             } else if cap.codec.starts_with("av1") || cap.codec.starts_with("av01") {
                 2
             } else {
@@ -457,11 +473,14 @@ fn even_up(v: u32) -> u32 {
 /// Reactive: a pass runs when egui schedules a repaint (animations,
 /// caret blink, Go-side RequestRepaint opcodes), when wire activity
 /// arrives (input, resize, connect), or at a 1 s idle heartbeat —
-/// whichever is soonest, floored by the fps cap. Note: full idle savings
-/// require the *server launched* reactive, because the Go decorator
-/// requests an immediate repaint every frame in continuous mode and a
-/// runtime switch cannot reach it; in that configuration reactive still
-/// avoids encoding (frame dedup) but not rendering.
+/// whichever is soonest, floored by the fps cap. A runtime switch (the
+/// viewer's toggle) reaches the Go decorator too, closing the loop that
+/// would otherwise defeat it: the host echoes the active cadence in the
+/// fetchVideoStreamInfo telemetry and the decorator reads it back (Go's
+/// videooutput.State.HostReactive) to drop its per-frame immediate
+/// repaint. The switch settles a frame or two later, once that telemetry
+/// has round-tripped. While no viewer is connected the decorator falls
+/// back to the launch-time IMZERO2_RENDER_CADENCE.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Cadence {
     Continuous,
@@ -599,11 +618,19 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
     // SD5: probe which codecs this host can actually encode (a real
     // probe-encode, not a listing — catches VAAPI ENOSYS). Fed to the Go
     // control via fetchVideoCapabilities so unavailable codecs aren't offered.
-    let host_encode_caps = crate::imzero2::codeclane::probe_host_encode();
-    tracing::info!(
-        encode = ?host_encode_caps.iter().map(|(c, sw, hw)| format!("{}:sw={:?}hw={:?}", c.as_str(), sw, hw)).collect::<Vec<_>>(),
-        "host video-encode probe"
-    );
+    // Only worth running when a viewer can connect: the probe is a handful of
+    // ffmpeg trial-encodes and its result is consumed solely on the connected-
+    // carrier path below, so with no carrier it is pure startup cost (L2).
+    let host_encode_caps = if carrier.is_some() {
+        let caps = crate::imzero2::codeclane::probe_host_encode();
+        tracing::info!(
+            encode = ?caps.iter().map(|(c, sw, hw)| format!("{}:sw={:?}hw={:?}", c.as_str(), sw, hw)).collect::<Vec<_>>(),
+            "host video-encode probe"
+        );
+        caps
+    } else {
+        Vec::new()
+    };
     // Wire-bitrate EMA state (ADR-0088 telemetry), updated ~4×/s from the
     // carrier's cumulative byte counter.
     let mut bitrate_prev_bytes = 0u64;

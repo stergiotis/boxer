@@ -21,9 +21,10 @@ const (
 // contract: the Rust client's VideoCodec::parse (codeclane.rs) accepts these
 // canonical spellings when reading IMZERO2_HEADLESS_CODEC.
 const (
-	HeadlessCodecH264 = "h264"
-	HeadlessCodecVP9  = "vp9"
-	HeadlessCodecAV1  = "av1"
+	HeadlessCodecH264   = "h264"
+	HeadlessCodecVP9    = "vp9"
+	HeadlessCodecAV1    = "av1"
+	HeadlessCodecAV1444 = "av1-444" // AV1 High profile, 4:4:4 chroma
 )
 
 var (
@@ -166,10 +167,10 @@ var (
 	// output" control. Read by the Rust client (codeclane.rs), not by Go.
 	HeadlessCodec = env.NewCategorialString(env.Spec{
 		Name:        "IMZERO2_HEADLESS_CODEC",
-		Description: "startup video codec lane: h264 (default; honours ENCODER_ARGS) | vp9 | av1; runtime-switchable from the Go control",
+		Description: "startup video codec lane: h264 (default; honours ENCODER_ARGS) | vp9 | av1 | av1-444 (AV1 4:4:4); runtime-switchable from the Go control",
 		Category:    env.CategoryDev,
 		Default:     HeadlessCodecH264,
-	}, []string{HeadlessCodecH264, HeadlessCodecVP9, HeadlessCodecAV1})
+	}, []string{HeadlessCodecH264, HeadlessCodecVP9, HeadlessCodecAV1, HeadlessCodecAV1444})
 
 	// HeadlessMaxFrames stops the host after N rendered frames (0 =
 	// unbounded). A smoke-test hook.

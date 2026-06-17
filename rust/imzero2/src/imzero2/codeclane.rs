@@ -20,6 +20,12 @@ pub enum VideoCodec {
     H264,
     Vp9,
     Av1,
+    /// AV1 High profile, 4:4:4 chroma — full-chroma desktop/text fidelity for
+    /// chart linework. Encoder is `av1_vaapi` (4:4:4 surface) when the GPU
+    /// supports it, else `libaom-av1` (`libsvtav1` is 4:2:0-only). Browser
+    /// decode is software (dav1d) on most GPUs; the capability handshake hides
+    /// it from viewers that cannot decode it.
+    Av1Hi444,
 }
 
 impl VideoCodec {
@@ -28,6 +34,7 @@ impl VideoCodec {
             VideoCodec::H264 => "h264",
             VideoCodec::Vp9 => "vp9",
             VideoCodec::Av1 => "av1",
+            VideoCodec::Av1Hi444 => "av1-444",
         }
     }
 
@@ -38,16 +45,18 @@ impl VideoCodec {
             "h264" | "avc" | "avc1" | "h.264" => Some(VideoCodec::H264),
             "vp9" | "vp09" => Some(VideoCodec::Vp9),
             "av1" | "av01" | "aom" => Some(VideoCodec::Av1),
+            "av1-444" | "av1_444" | "av1444" | "av1-hi444" => Some(VideoCodec::Av1Hi444),
             _ => None,
         }
     }
 
     /// Map the Go-side codec id (ADR-0088 `setVideoPipeline`): 1=VP9, 2=AV1,
-    /// anything else = H.264.
+    /// 3=AV1 4:4:4, anything else = H.264.
     pub fn from_u8(v: u8) -> Self {
         match v {
             1 => VideoCodec::Vp9,
             2 => VideoCodec::Av1,
+            3 => VideoCodec::Av1Hi444,
             _ => VideoCodec::H264,
         }
     }
@@ -98,6 +107,8 @@ impl CodecLane {
             VideoCodec::H264 => String::new(),
             VideoCodec::Vp9 => format!("vp09.00.{}.08", vp9_level(width, height)),
             VideoCodec::Av1 => format!("av01.0.{}M.08", av1_level(width, height)),
+            // Profile 1 (High), 8-bit, monochrome=0, chroma `000` = 4:4:4.
+            VideoCodec::Av1Hi444 => format!("av01.1.{}M.08.0.000", av1_level(width, height)),
         }
     }
 
@@ -122,13 +133,21 @@ impl CodecLane {
             VideoCodec::Av1 => &[
                 "-c:v", "libsvtav1", "-preset", "8", "-g", "100000", "-pix_fmt", "yuv420p",
             ],
+            // 4:4:4 lane: libsvtav1 is 4:2:0-only, so libaom-av1 (which does
+            // yuv444p). Realtime usage + cpu-used 8 keeps it interactive
+            // (verified ~6x realtime at 256²). `-pix_fmt yuv444p` is the whole
+            // point — full chroma for chart/text linework.
+            VideoCodec::Av1Hi444 => &[
+                "-c:v", "libaom-av1", "-usage", "realtime", "-cpu-used", "8",
+                "-g", "100000", "-pix_fmt", "yuv444p",
+            ],
         };
         Self {
             codec,
             encoder_args: args.iter().map(|s| (*s).to_owned()).collect(),
             bsf: match codec {
                 VideoCodec::H264 => Some(H264_BSF),
-                VideoCodec::Vp9 | VideoCodec::Av1 => None,
+                VideoCodec::Vp9 | VideoCodec::Av1 | VideoCodec::Av1Hi444 => None,
             },
         }
     }
@@ -136,31 +155,33 @@ impl CodecLane {
     /// Hardware (VAAPI) lane for a codec. Probe it with [`probe_lane`] before
     /// use — VAAPI opens then ENOSYS-fails on stock Fedora mesa.
     pub fn hardware(codec: VideoCodec) -> Self {
-        let cv = match codec {
-            VideoCodec::H264 => "h264_vaapi",
-            VideoCodec::Vp9 => "vp9_vaapi",
-            VideoCodec::Av1 => "av1_vaapi",
+        // `cv` is the VAAPI encoder; `upload` is the sw pixel format hwupload
+        // maps onto the VA surface — `nv12` (4:2:0) for the standard lanes, the
+        // packed 8-bit 4:4:4 surface `vuyx` for the High-4:4:4 lane. An
+        // unsupported 4:4:4 surface only probe-fails and falls back to libaom.
+        let (cv, upload) = match codec {
+            VideoCodec::H264 => ("h264_vaapi", "nv12"),
+            VideoCodec::Vp9 => ("vp9_vaapi", "nv12"),
+            VideoCodec::Av1 => ("av1_vaapi", "nv12"),
+            VideoCodec::Av1Hi444 => ("av1_vaapi", "vuyx"),
         };
         Self {
             codec,
-            encoder_args: [
-                "-vaapi_device",
-                "/dev/dri/renderD128",
-                "-vf",
-                "format=nv12,hwupload",
-                "-c:v",
-                cv,
-                "-bf",
-                "0",
-                "-g",
-                "100000",
-            ]
-            .iter()
-            .map(|s| (*s).to_owned())
-            .collect(),
+            encoder_args: vec![
+                "-vaapi_device".to_owned(),
+                "/dev/dri/renderD128".to_owned(),
+                "-vf".to_owned(),
+                format!("format={upload},hwupload"),
+                "-c:v".to_owned(),
+                cv.to_owned(),
+                "-bf".to_owned(),
+                "0".to_owned(),
+                "-g".to_owned(),
+                "100000".to_owned(),
+            ],
             bsf: match codec {
                 VideoCodec::H264 => Some(H264_BSF),
-                VideoCodec::Vp9 | VideoCodec::Av1 => None,
+                VideoCodec::Vp9 | VideoCodec::Av1 | VideoCodec::Av1Hi444 => None,
             },
         }
     }
@@ -253,7 +274,7 @@ fn classify_probe_stderr(stderr: &str) -> LaneProbe {
 /// so an unavailable codec is never offered, the encode backend (HW vs SW) is
 /// reported truthfully, and a disabled lane carries why it failed.
 pub fn probe_host_encode() -> Vec<(VideoCodec, LaneProbe, LaneProbe)> {
-    [VideoCodec::H264, VideoCodec::Vp9, VideoCodec::Av1]
+    [VideoCodec::H264, VideoCodec::Vp9, VideoCodec::Av1, VideoCodec::Av1Hi444]
         .into_iter()
         .map(|c| {
             (
@@ -387,6 +408,11 @@ mod tests {
         // Default 1280×800: minimal sufficient level.
         assert_eq!(vp9.webcodecs_codec_string(1280, 800), "vp09.00.40.08");
         assert_eq!(av1.webcodecs_codec_string(1280, 800), "av01.0.05M.08");
+        // AV1 4:4:4: profile 1, chroma 000, level tracks resolution like AV1.
+        assert_eq!(
+            CodecLane::software(VideoCodec::Av1Hi444).webcodecs_codec_string(1280, 800),
+            "av01.1.05M.08.0.000"
+        );
         // 4K must declare a higher level than the ~2K default (the M2 fix).
         assert_eq!(vp9.webcodecs_codec_string(3840, 2160), "vp09.00.50.08");
         assert_eq!(av1.webcodecs_codec_string(3840, 2160), "av01.0.12M.08");
