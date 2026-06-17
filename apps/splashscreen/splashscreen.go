@@ -40,7 +40,7 @@ var ids = c.NewWidgetIdStack()
 var instanceCounter atomic.Uint64
 
 const (
-	splashAssetPath = "assets/patronus.png"
+	splashAssetPath = "assets/splash.png"
 	noticeAssetPath = "assets/NOTICE"
 )
 
