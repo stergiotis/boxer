@@ -12,7 +12,7 @@ reviewed-date: 2026-06-16
 
 [ADR-0024](./0024-imzero2-remote-access-browser-viewer.md) shipped the headless pixel-streaming head: the Rust host renders egui to an offscreen BGRA texture, an `ffmpeg` subprocess (`rust/imzero2/src/imzero2/encoderpipe.rs`, `EncoderSink`) encodes it to H.264, and a single-file browser viewer (`rust/imzero2/src/imzero2/viewer/index.html`) decodes via WebCodecs. Two facts about the shipped state set up this ADR:
 
-- **The encoder is fixed at process start.** `IMZERO2_HEADLESS_ENCODER_ARGS` (registered in `imzero2env`, [ADR-0009](./0009-imzero2-env-var-registry.md)) is read once and whitespace-split into the `ffmpeg` argv. Codec is H.264 end-to-end; the viewer derives its `avc1.…` `VideoDecoder` string from the in-band SPS and performs **no** capability detection (`VideoDecoder.isConfigSupported` and `navigator.mediaCapabilities` are unused).
+- **The encoder is fixed at process start.** `IMZERO2_HEADLESS_ENCODER_ARGS` (registered in `imzero2env`, [ADR-0009](./0009-environment-variable-registry.md)) is read once and whitespace-split into the `ffmpeg` argv. Codec is H.264 end-to-end; the viewer derives its `avc1.…` `VideoDecoder` string from the in-band SPS and performs **no** capability detection (`VideoDecoder.isConfigSupported` and `navigator.mediaCapabilities` are unused).
 - **Two stream properties are nonetheless already runtime-switchable**, by tearing the encoder down and rebuilding it with a fresh IDR and a re-announced `SessionHello`: **cadence** (`SetCadence`, [ADR-0062](./0062-imzero2-render-cadence.md)) and **geometry** (`ViewportResize`). The resize path (`input.proto:115-138`) establishes the exact mechanism — clamp, rebuild target+encoder, re-announce `SessionHello`, viewer drops its decoder and rejoins at the next key frame — with a *hello-before-IDR* ordering guarantee. The "short downtime while switching is acceptable" requirement is satisfied by this already-shipped shape.
 
 The request has two parts. **(1) Make the video coding pipeline choosable at runtime.** **(2) Make the connected web client's video-playback capabilities first-class state in the imzero2 Go part, so GUI controls can be built to change the output.**
@@ -142,6 +142,22 @@ Accepted — 2026-06-16 (reviewed-by p@stergiotis). Implementation phasing: **Ph
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`. ADRs are append-only; supersession is recorded, not deleted.
 
+## Updates
+
+### 2026-06-17 — v1 implemented across Phases 0–7
+
+The pipeline landed in eight commits (`6f593270` … `ec4dae61` on `main`):
+
+- **Phase 0–1** — `nutreader.rs` (independent NUT demuxer; the §SD4 licence posture) validated against `ffprobe` for H.264/VP9/AV1, whole-buffer and fed in 7-byte chunks; `codeclane.rs` `CodecLane`; `EncoderSink` muxes to NUT. `IMZERO2_HEADLESS_CODEC=h264|vp9|av1` selects the startup lane.
+- **Phase 2** — all codecs fold onto the one NUT drain; the Annex-B AUD splitter is retired. (Deviation: software lanes force `-pix_fmt yuv420p` — BGRA readback otherwise becomes `gbrap` and libvpx-vp9 refuses to open.)
+- **Phase 3** — `SessionHello.codec`; the viewer configures `VideoDecoder` from it (H.264 keeps SPS-derivation), reconfiguring on a codec change — so VP9/AV1 decode in the browser at startup.
+- **Phase 4** — `DecodeCapabilities` wire message; the browser probes `isConfigSupported` + `mediaCapabilities.decodingInfo`.
+- **Phase 5** — the two seams: a `setVideoPipeline` egui2 opcode (Go→Rust, drained by the headless loop → `WsCarrier::set_video_codec`, resize-shaped) and a `fetchVideoCapabilities` fetcher (Rust→Go); the SD5 host-encode probe is a real probe-encode; the Go `videopipeline` model holds the browser-decode ∩ host-encode set. (Deviation: SD5's probe moved from Phase 2 to Phase 5, where its consumer lives. The `codec_description` escape hatch (SD6) was not needed.)
+- **Phase 6** — the `videooutput` codec-picker widget (SD10).
+- **Phase 7** — verified per layer: host-encode probe (all three encode here), NUT demux (vs `ffprobe`), lane encodes (BGRA→NUT), codegen drift-free, Rust binaries + Go launcher build. **Not yet exercised live:** a browser-driven codec switch (click the picker → switch → decode resumes) needs a running app + a real browser, so it remains the manual acceptance step — the SD7 switch is verified by construction and compile, not yet by a live decode.
+
+Deferred (additive, not blocking): bitrate / encoder-backend args on `setVideoPipeline` (codec-only today); wiring `videooutput` into a live settings panel / the demo tour; per-viewer capability reconciliation (SD12).
+
 ## References
 
 - [ADR-0024](./0024-imzero2-remote-access-browser-viewer.md) — the headless render + ffmpeg + browser WebCodecs foundation this ADR extends; SD3/SD4/SD5 (encoder, Annex-B framing, WebCodecs), SD8 (input edge bent here), SD11 (encoder-backend selection deferred — revisited here), and the acceptance notes (VAAPI ENOSYS, resize teardown/rebuild, SD9 mailbox).
@@ -149,7 +165,7 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 - [ADR-0062](./0062-imzero2-render-cadence.md) — the cadence control folded into the SD10 panel; `SetCadence` is the runtime-control proof-of-pattern.
 - [ADR-0086](./0086-imzero2-active-passive-viewers-and-roster.md) (proposed) — active/passive viewers; SD12 scopes capability modeling to the active viewer and defers multi-viewer reconciliation to this ADR's resolution.
 - [ADR-0087](./0087-imzero2-client-compositor-compartmentalization.md) (accepted) — client compositor posture; the browser decode-probe (SD8) lives in the viewer's decode path.
-- [ADR-0009](./0009-imzero2-env-var-registry.md) — `IMZERO2_HEADLESS_ENCODER_ARGS` remains the startup default selector.
+- [ADR-0009](./0009-environment-variable-registry.md) — `IMZERO2_HEADLESS_ENCODER_ARGS` remains the startup default selector.
 - [ADR-0048](./0048-go-file-package-naming.md) — naming for the `videopipeline` package (SD9).
 - `proto/boxer/imzero2/v1/input.proto` — the wire contract; `SessionHello` (SD6) and the new `DecodeCapabilities` `SessionControl` variant (SD2).
 - `rust/imzero2/src/imzero2/encoderpipe.rs` (`EncoderSink`, frame mailbox), `wscarrier.rs` (`SessionControl` handling), `viewer/index.html` (WebCodecs decode + the rich probe of SD8).
