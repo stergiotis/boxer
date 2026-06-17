@@ -25,8 +25,10 @@ func NewCommand() *cli.Command {
 			"build streams (ws_probe on a scratch port), then atomically swaps the\n" +
 			"`current` symlink and restarts the service. A release that fails to\n" +
 			"serve after the swap is rolled back; old releases beyond --keep are\n" +
-			"pruned. --dry-run stops after build+gate. Knobs default from the\n" +
-			"IMZERO2_DEPLOY_* env vars (see doc/env-vars.md); flags override.",
+			"pruned. --dry-run stops after build+gate. --ref <commitish> is the\n" +
+			"operator out-of-cadence path: deploy an exact revision now (an\n" +
+			"emergency hotfix or a pin-back), verified like a tag. Knobs default\n" +
+			"from the IMZERO2_DEPLOY_* env vars (see doc/env-vars.md); flags override.",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "root", Value: imzero2env.DeployRoot.Get(), Usage: "deploy root; workspace/releases/current derive from it unless overridden"},
 			&cli.StringFlag{Name: "workspace", Value: imzero2env.DeployWorkspace.Get(), Usage: "persistent git clone + build caches (default <root>/workspace)"},
@@ -39,7 +41,8 @@ func NewCommand() *cli.Command {
 			&cli.IntFlag{Name: "gate-aus", Value: int(imzero2env.DeployGateAUs.Get()), Usage: "access units ws_probe must receive for the gate to pass"},
 			&cli.DurationFlag{Name: "gate-timeout", Value: imzero2env.DeployGateTimeout.Get(), Usage: "overall gate / health-probe budget"},
 			&cli.IntFlag{Name: "keep", Value: int(imzero2env.DeployKeep.Get()), Usage: "release dirs to retain for rollback history"},
-			&cli.BoolFlag{Name: "require-signed-tags", Value: imzero2env.DeployRequireSignedTags.Get(), Usage: "verify the tag's GPG/SSH signature (git verify-tag) before building; disable only on a trusted/loopback box"},
+			&cli.BoolFlag{Name: "require-signed-tags", Value: imzero2env.DeployRequireSignedTags.Get(), Usage: "verify the GPG/SSH signature of the tag (git verify-tag) or, with --ref, the commit (git verify-commit) before building; disable only on a trusted/loopback box"},
+			&cli.StringFlag{Name: "ref", Usage: "operator override (SD10): deploy this exact revision (commit/branch/tag) now, bypassing tag-selection; its commit signature is verified like a tag (SD11). A per-invocation action — not box config, so no env default"},
 			&cli.StringFlag{Name: "encoder-args", Value: gateEncoderDefault(), Usage: "IMZERO2_HEADLESS_ENCODER_ARGS for the gate run; defaults to the live service's encoder, else x264"},
 			&cli.StringFlag{Name: "main-font", Usage: "main font TTF (default: fc-match 'Noto Sans')"},
 			&cli.StringFlag{Name: "phosphor-font", Usage: "phosphor font TTF (default: the release's bundled asset)"},
@@ -65,6 +68,7 @@ func NewCommand() *cli.Command {
 				PhosphorFont:      c.String("phosphor-font"),
 				FallbackFont:      c.String("fallback-font"),
 				DryRun:            c.Bool("dry-run"),
+				Ref:               c.String("ref"),
 			}
 			_, err := Run(c.Context, log.Logger, cfg)
 			return err

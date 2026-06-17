@@ -55,6 +55,10 @@ type Config struct {
 	PhosphorFont      string // optional; the release's bundled asset if empty
 	FallbackFont      string // optional; fc-match'd if empty
 	DryRun            bool   // stage + gate but skip the swap + restart
+	// Ref, when set, is the operator out-of-cadence path (SD10): deploy this
+	// exact revision (commit/branch/tag) now, bypassing tag-selection, with its
+	// commit signature verified like a tag (SD11). Empty = the autonomous tag poll.
+	Ref string
 }
 
 // Build-artifact locations relative to the workspace clone root.
@@ -67,9 +71,14 @@ const (
 	phosphorRel  = "assets/fonts/phosphor/Phosphor.ttf" // within a release dir
 )
 
-// Run executes the Phase 1 happy path. deployed reports whether a new tag
-// was cut over (false when already current, or no release tag was found).
+// Run is the deploy entrypoint. With cfg.Ref set it is the operator
+// out-of-cadence path (SD10–SD11); otherwise it is the autonomous tag poll —
+// cut over to the newest release tag when it is strictly newer than the running
+// release (SD12). deployed reports whether a release was cut over.
 func Run(ctx context.Context, lg zerolog.Logger, cfg Config) (deployed bool, err error) {
+	if cfg.Ref != "" {
+		return runRef(ctx, lg, cfg) // SD10: operator deploys an exact revision now
+	}
 	newest, current, err := resolveTags(ctx, lg, cfg)
 	if err != nil {
 		return false, err
@@ -78,41 +87,77 @@ func Run(ctx context.Context, lg zerolog.Logger, cfg Config) (deployed bool, err
 		lg.Info().Msg("deploy: no release tag found; nothing to do")
 		return false, nil
 	}
-	if newest == current {
-		lg.Info().Str("tag", current).Msg("deploy: already current; nothing to do")
+	// SD12: cut over only when the newest tag is strictly newer than the running
+	// release's version floor (the running tag, or the tag a --ref release
+	// descends from, encoded in its name). A bare `newest == current` string test
+	// would let a pre-existing tag clobber a --ref release on the very next poll.
+	if !supersedes(newest, current) {
+		lg.Info().Str("running", orNone(current)).Str("newest", newest).Msg("deploy: already current; nothing to do")
 		return false, nil
 	}
 	lg.Info().Str("from", orNone(current)).Str("to", newest).Msg("deploy: new release tag")
-
 	if err = verifyTag(ctx, lg, cfg, newest); err != nil {
 		return false, err
 	}
-	if err = checkout(ctx, lg, cfg, newest); err != nil {
+	return deployResolved(ctx, lg, cfg, newest, newest)
+}
+
+// runRef is the operator out-of-cadence path (SD10–SD11): deploy the exact
+// revision cfg.Ref names — a commit, branch, or tag — bypassing tag-selection,
+// with its commit signature verified against the same trusted keys as tags. The
+// release is named by `git describe`, which doubles as its SD12 version floor.
+func runRef(ctx context.Context, lg zerolog.Logger, cfg Config) (deployed bool, err error) {
+	if err = step(ctx, lg, "fetch", cfg.Workspace, nil, "git", "fetch", "--tags", "--prune", cfg.Remote); err != nil {
+		return false, err
+	}
+	commit, err := resolveCommit(ctx, cfg.Workspace, cfg.Ref)
+	if err != nil {
+		return false, err
+	}
+	relName := describeName(ctx, cfg.Workspace, commit)
+	if relName == currentTag(cfg) {
+		lg.Info().Str("ref", cfg.Ref).Str("release", relName).Msg("deploy: requested ref already current; nothing to do")
+		return false, nil
+	}
+	lg.Warn().Str("ref", cfg.Ref).Str("commit", short(commit)).Str("release", relName).
+		Msg("deploy: operator --ref deploy (out-of-cadence; bypasses tag-selection)")
+	if err = verifyCommit(ctx, lg, cfg, commit); err != nil {
+		return false, err
+	}
+	return deployResolved(ctx, lg, cfg, commit, relName)
+}
+
+// deployResolved checks out `committish`, builds, gates, then atomically swaps
+// `current` to releases/<relName>/, rolling back on activation failure and
+// pruning to the retention window. Shared by the autonomous tag path and the
+// operator --ref path; provenance is already verified by the caller.
+func deployResolved(ctx context.Context, lg zerolog.Logger, cfg Config, committish, relName string) (deployed bool, err error) {
+	if err = checkout(ctx, lg, cfg, committish); err != nil {
 		return false, err
 	}
 	commit, clean, hErr := headInfo(ctx, cfg.Workspace) // SD7: deployed-revision agreement
 	if hErr != nil {
 		lg.Warn().Err(hErr).Msg("deploy: could not resolve HEAD (deployed-revision agreement unverified)")
 	} else {
-		lg.Info().Str("tag", newest).Str("commit", short(commit)).Bool("clean", clean).
+		lg.Info().Str("release", relName).Str("commit", short(commit)).Bool("clean", clean).
 			Msg("deploy: building revision (the demo's runinfo will report this commit)")
 		if !clean {
-			lg.Warn().Str("tag", newest).Msg("deploy: workspace not clean after checkout — built vcs_revision will be marked modified")
+			lg.Warn().Str("release", relName).Msg("deploy: workspace not clean after checkout — built vcs_revision will be marked modified")
 		}
 	}
 	if err = build(ctx, lg, cfg); err != nil {
 		return false, err
 	}
-	relDir, err := stage(ctx, lg, cfg, newest)
+	relDir, err := stage(ctx, lg, cfg, relName)
 	if err != nil {
 		return false, err
 	}
 	if err = gate(ctx, lg, cfg, relDir); err != nil {
 		// `current` is untouched; the candidate stays on disk for inspection.
-		return false, eh.Errorf("deploy: gate failed for %s (current untouched): %w", newest, err)
+		return false, eh.Errorf("deploy: gate failed for %s (current untouched): %w", relName, err)
 	}
 	if cfg.DryRun {
-		lg.Warn().Str("tag", newest).Str("release", relDir).Msg("deploy: dry-run — built + gated OK, skipping swap + restart")
+		lg.Warn().Str("release", relName).Str("dir", relDir).Msg("deploy: dry-run — built + gated OK, skipping swap + restart")
 		return true, nil
 	}
 	prev := currentTarget(cfg) // for rollback; "" on the first deploy
@@ -120,19 +165,19 @@ func Run(ctx context.Context, lg zerolog.Logger, cfg Config) (deployed bool, err
 		return false, err
 	}
 	if actErr := activate(ctx, lg, cfg, relDir); actErr != nil {
-		lg.Error().Err(actErr).Str("tag", newest).Msg("deploy: activation failed — rolling back")
+		lg.Error().Err(actErr).Str("release", relName).Msg("deploy: activation failed — rolling back")
 		if prev == "" {
-			return false, eh.Errorf("deploy: %s failed to activate and no previous release exists: %w", newest, actErr)
+			return false, eh.Errorf("deploy: %s failed to activate and no previous release exists: %w", relName, actErr)
 		}
 		if rbErr := rollback(ctx, lg, cfg, prev); rbErr != nil {
 			return false, eb.Build().Str("rollback_error", rbErr.Error()).
-				Errorf("deploy: %s failed to activate AND rollback to %s failed: %w", newest, filepath.Base(prev), actErr)
+				Errorf("deploy: %s failed to activate AND rollback to %s failed: %w", relName, filepath.Base(prev), actErr)
 		}
 		prune(lg, cfg)
-		return false, eh.Errorf("deploy: %s rolled back to %s after activation failure: %w", newest, filepath.Base(prev), actErr)
+		return false, eh.Errorf("deploy: %s rolled back to %s after activation failure: %w", relName, filepath.Base(prev), actErr)
 	}
 	prune(lg, cfg)
-	lg.Info().Str("tag", newest).Str("commit", short(commit)).Msg("deploy: live")
+	lg.Info().Str("release", relName).Str("commit", short(commit)).Msg("deploy: live")
 	return true, nil
 }
 
@@ -172,6 +217,53 @@ func verifyTag(ctx context.Context, lg zerolog.Logger, cfg Config, tag string) e
 			Errorf("deploy: tag %s has no valid signature from a trusted key — refusing to build: %w", tag, err)
 	}
 	lg.Info().Str("tag", tag).Msg("deploy: tag signature verified")
+	return nil
+}
+
+// resolveCommit peels cfg.Ref to a concrete commit in the workspace, erroring if
+// it does not name one — e.g. a ref that was never pushed to the remote the box
+// fetches. Operator --ref path (SD10).
+func resolveCommit(ctx context.Context, workspace, ref string) (string, error) {
+	out, err := run(ctx, workspace, nil, "git", "rev-parse", "--verify", "--quiet", ref+"^{commit}")
+	if c := strings.TrimSpace(out); err == nil && c != "" {
+		return c, nil
+	}
+	return "", eb.Build().Str("ref", ref).Str("output", tail(out, 400)).
+		Errorf("deploy: --ref %q does not resolve to a commit in the workspace (is it pushed to the remote the box fetches?)", ref)
+}
+
+// describeName names a --ref release by `git describe --tags`, which doubles as
+// the SD12 version floor: "v0.1.3-2-gabc1234" sorts above v0.1.3 (a re-tag of
+// the base cannot clobber the hotfix) and below v0.1.4 (the next real release
+// supersedes it). With no ancestor tag it falls back to "commit-<short>" — a
+// name [floorVersion] reads as zero floor, so any tag then supersedes (and which
+// can never be mis-parsed as a version the way a bare all-digits hash could).
+func describeName(ctx context.Context, workspace, commit string) string {
+	out, err := run(ctx, workspace, nil, "git", "describe", "--tags", commit)
+	name := strings.TrimSpace(out)
+	if err != nil || name == "" {
+		return "commit-" + short(commit)
+	}
+	return strings.ReplaceAll(name, "/", "-") // keep it a single path segment
+}
+
+// verifyCommit enforces SD11 for the operator --ref path: the commit must carry
+// a valid signature from a trusted key (git verify-commit, the same
+// allowed_signers as tags) before the box builds it. Disabling it
+// (--require-signed-tags=false) is the interim break-glass — a loopback/dev
+// escape, loud about it; the audited, marker-writing break-glass is the Phase-6
+// follow-on.
+func verifyCommit(ctx context.Context, lg zerolog.Logger, cfg Config, commit string) error {
+	if !cfg.RequireSignedTags {
+		lg.Warn().Str("commit", short(commit)).Msg("deploy: commit signature verification DISABLED (interim break-glass) — dev/loopback only, do NOT use on an internet-exposed box")
+		return nil
+	}
+	out, err := run(ctx, cfg.Workspace, nil, "git", "verify-commit", commit)
+	if err != nil {
+		return eb.Build().Str("commit", short(commit)).Str("output", tail(out, 1500)).
+			Errorf("deploy: commit %s has no valid signature from a trusted key — refusing to build: %w", short(commit), err)
+	}
+	lg.Info().Str("commit", short(commit)).Msg("deploy: commit signature verified")
 	return nil
 }
 
@@ -528,6 +620,40 @@ func compareVer(a, b []int) int {
 		}
 	}
 	return 0
+}
+
+// describeRe matches a `git describe --tags` name ("v0.1.3-2-gabc1234"), peeling
+// the "-<commits>-g<hash>" suffix so a --ref release's base tag (its SD12 floor)
+// can be recovered from the release dir name.
+var describeRe = regexp.MustCompile(`^(v?\d+(?:\.\d+)*)-\d+-g[0-9a-f]+$`)
+
+// floorVersion is the version a release dir name counts as for supersession
+// (SD12): the tag itself, or the base tag of a `git describe` name. Returns
+// false for a "commit-<hash>" or empty name — no floor, i.e. older than every tag.
+func floorVersion(name string) ([]int, bool) {
+	if v, ok := parseReleaseTag(name); ok {
+		return v, true
+	}
+	if m := describeRe.FindStringSubmatch(name); m != nil {
+		return parseReleaseTag(m[1])
+	}
+	return nil, false
+}
+
+// supersedes reports whether release tag `newest` is strictly newer than the
+// running release named `current` (SD12). A running release with no parseable
+// floor — the first deploy, or a --ref of a commit with no ancestor tag — is
+// always superseded by a real tag.
+func supersedes(newest, current string) bool {
+	nv, ok := parseReleaseTag(newest)
+	if !ok {
+		return false
+	}
+	fv, ok := floorVersion(current)
+	if !ok {
+		return true
+	}
+	return compareVer(nv, fv) > 0
 }
 
 // --- helpers ---

@@ -78,3 +78,64 @@ func assertSet(t *testing.T, got, want []string) {
 		}
 	}
 }
+
+func TestSupersedes(t *testing.T) {
+	cases := []struct {
+		name    string
+		newest  string // highest release tag found
+		current string // running release dir name
+		want    bool
+	}{
+		{"first deploy (no current)", "v1.0.0", "", true},
+		{"same tag is not newer", "v1.2.0", "v1.2.0", false},
+		{"higher tag supersedes", "v1.2.1", "v1.2.0", true},
+		{"lower tag does not", "v1.1.0", "v1.2.0", false},
+		{"ref hotfix holds against its base tag", "v0.1.3", "v0.1.3-2-gabc1234", false},
+		{"ref hotfix superseded by next release", "v0.1.4", "v0.1.3-2-gabc1234", true},
+		{"commit-named ref has zero floor", "v0.1.0", "commit-abc1234", true},
+		{"varied component counts", "v1.0.1", "v1.0", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := supersedes(tc.newest, tc.current); got != tc.want {
+				t.Fatalf("supersedes(%q, %q) = %v, want %v", tc.newest, tc.current, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestFloorVersion(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want []int
+		ok   bool
+	}{
+		{"plain tag", "v0.1.3", []int{0, 1, 3}, true},
+		{"no v prefix", "1.2", []int{1, 2}, true},
+		{"describe name", "v0.1.3-2-gabc1234", []int{0, 1, 3}, true},
+		{"commit-named (no ancestor tag)", "commit-abc1234", nil, false},
+		{"empty", "", nil, false},
+		{"non-release tag base", "nightly-2-gabc1234", nil, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := floorVersion(tc.in)
+			if ok != tc.ok || !equalInts(got, tc.want) {
+				t.Fatalf("floorVersion(%q) = (%v, %v), want (%v, %v)", tc.in, got, ok, tc.want, tc.ok)
+			}
+		})
+	}
+}
+
+func equalInts(a, b []int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
