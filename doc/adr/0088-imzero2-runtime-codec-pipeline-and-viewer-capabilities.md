@@ -156,7 +156,9 @@ The pipeline landed in eight commits (`6f593270` … `ec4dae61` on `main`):
 - **Phase 6** — the `videooutput` codec-picker widget (SD10).
 - **Phase 7** — verified per layer: host-encode probe (all three encode here), NUT demux (vs `ffprobe`), lane encodes (BGRA→NUT), codegen drift-free, Rust binaries + Go launcher build. **Not yet exercised live:** a browser-driven codec switch (click the picker → switch → decode resumes) needs a running app + a real browser, so it remains the manual acceptance step — the SD7 switch is verified by construction and compile, not yet by a live decode.
 
-Deferred (additive, not blocking): bitrate / encoder-backend args on `setVideoPipeline` (codec-only today); wiring `videooutput` into a live settings panel / the demo tour; per-viewer capability reconciliation (SD12).
+`videooutput` is now wired into the live carousel chrome (`decorateRenderer`'s bottom status bar, `9ba0a623`), holding a persistent `videopipeline.Model` and self-hiding when no remote viewer is connected.
+
+Deferred (additive, not blocking): bitrate / encoder-backend args on `setVideoPipeline` (codec-only today); a dedicated `videooutput` demo-tour registration; per-viewer capability reconciliation (SD12).
 
 ## References
 
