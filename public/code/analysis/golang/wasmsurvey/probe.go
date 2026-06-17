@@ -67,7 +67,7 @@ func tinygoPreflightE(ctx context.Context, root string, target TargetID, tags []
 	args = append(args, ".")
 	cmd := exec.CommandContext(cctx, "tinygo", args...)
 	cmd.Dir = tmp
-	cmd.Env = append(os.Environ(), "GOEXPERIMENT=jsonv2")
+	cmd.Env = append(os.Environ(), "GOEXPERIMENT=jsonv2") //boxer:lint disable=CS011 reason="forwards the ambient process environment into the tinygo build subprocess; not a boxer config read — the env registry cannot model inheriting the whole environment for a child process"
 	out, runErr := cmd.CombinedOutput()
 	if runErr == nil {
 		return true, ""
@@ -194,7 +194,7 @@ func probePackageE(ctx context.Context, root string, importPath string, dir stri
 	// Carry the repo's json/v2 experiment into the TinyGo build. Whether
 	// TinyGo honors it is the survey's open question (ADR-0078); a rejection
 	// is captured as the goexperiment reason rather than a tool error.
-	cmd.Env = append(os.Environ(), "GOEXPERIMENT=jsonv2")
+	cmd.Env = append(os.Environ(), "GOEXPERIMENT=jsonv2") //boxer:lint disable=CS011 reason="forwards the ambient process environment into the tinygo build subprocess; not a boxer config read — the env registry cannot model inheriting the whole environment for a child process"
 
 	start := time.Now()
 	combined, runErr := cmd.CombinedOutput()

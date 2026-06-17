@@ -154,7 +154,7 @@ const (
 // five-way split makes the axis bijective with the realized channels, so
 // CarrierValueField / CarrierValueIsBytes derive from it rather than from
 // separate descriptor fields. Channels never use the IdentityNone zero value.
-type ChannelIdentityE = membership.IdentityEncoding
+type ChannelIdentityE = membership.IdentityEncoding //boxer:lint disable=CS008 reason="deliberate re-export alias of the shared membership.IdentityEncoding (ADR-0072 OQ3); keeps ChannelIdentityE and the ChannelIdentity* constants assignable across the membership boundary — the textbook re-export use of a type alias"
 
 const (
 	ChannelIdentityRef        = membership.IdentityRef

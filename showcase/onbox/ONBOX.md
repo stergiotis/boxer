@@ -1,3 +1,13 @@
+---
+type: how-to
+audience: operator provisioning a build box
+status: draft
+# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to stable
+# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to stable
+---
+
+> **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
+
 # On-box pull-build-and-atomic-deploy (ADR-0085) — setup
 
 The **build-on-box, bare-OS** mode (Option B). A build-capable box polls boxer's

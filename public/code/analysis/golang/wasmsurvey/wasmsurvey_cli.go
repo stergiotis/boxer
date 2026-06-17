@@ -141,7 +141,7 @@ func resolveTags(flagVal string, root string) (tags []string) {
 			return t
 		}
 	}
-	if gf := os.Getenv("GOFLAGS"); gf != "" {
+	if gf := os.Getenv("GOFLAGS"); gf != "" { //boxer:lint disable=CS011 reason="GOFLAGS is a Go-toolchain variable owned by the toolchain, not a boxer config var; read here only to mirror the toolchain's own -tags resolution as the last-resort fallback"
 		for f := range strings.SplitSeq(gf, " ") {
 			if after, ok := strings.CutPrefix(strings.TrimSpace(f), "-tags="); ok {
 				return splitTags(after)

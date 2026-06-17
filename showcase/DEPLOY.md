@@ -1,3 +1,13 @@
+---
+type: how-to
+audience: operator deploying the demo
+status: draft
+# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to stable
+# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to stable
+---
+
+> **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
+
 # Deploy the imzero2 pixel-streaming demo on a Hetzner VPS
 
 A single-box demo: the headless imzero2 carrier (ADR-0024) behind Caddy, which

@@ -94,7 +94,7 @@ func (inst *LiveCollector) Load(ctx context.Context) (m godep.Manifest, err erro
 		cfg.BuildFlags = []string{"-tags=" + strings.Join(inst.cfg.Tags, ",")}
 	}
 	if len(inst.cfg.Env) > 0 {
-		cfg.Env = append(os.Environ(), inst.cfg.Env...)
+		cfg.Env = append(os.Environ(), inst.cfg.Env...) //boxer:lint disable=CS011 reason="forwards the ambient process environment into the go/packages loader subprocess; not a boxer config read, and the env registry has no construct for inheriting the whole environment for a child process"
 	}
 
 	var roots []*packages.Package

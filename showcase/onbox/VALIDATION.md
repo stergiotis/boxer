@@ -1,3 +1,13 @@
+---
+type: how-to
+audience: operator validating a deploy
+status: draft
+# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to stable
+# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to stable
+---
+
+> **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
+
 # On-box validation checklist — ADR-0085 deploy
 
 The unit tests prove tag selection / probe parsing / prune *selection*; they do

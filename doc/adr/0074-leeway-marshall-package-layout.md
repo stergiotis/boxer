@@ -198,7 +198,7 @@ under `marshall/go/`; the carrier structs move to `marshall/marshalltypes`; and 
 ClickHouse read-back generator becomes `marshall/clickhouse/readback`.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
-See [DOCUMENTATION_STANDARD §1 ADR](../../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
+See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
 
 ## References
 

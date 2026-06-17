@@ -1,8 +1,11 @@
 package doclint
 
 import (
+	"bytes"
 	"io/fs"
 	"iter"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -115,12 +118,86 @@ func shouldSkipDir(name string) (skip bool) {
 	return
 }
 
+// gitIgnoredSet collects the absolute paths git ignores within root. It is
+// best-effort: when git is unavailable, root is not inside a work tree, or the
+// command fails, it returns nil and callers lint every file (the prior
+// behaviour). A file git would never track — e.g. the git-ignored
+// doc/leeway-map render artefacts (doc/.gitignore) — can only produce findings
+// that cannot be committed, so the walkers skip it to keep a local run aligned
+// with a clean CI checkout. Tracked files are never returned: --others lists
+// untracked paths only.
+//
+// Fully-ignored directories are collapsed to a single entry by --directory, so
+// the returned set holds directory paths (consult on the dir node to prune the
+// whole subtree via SkipDir) as well as individually-ignored file paths.
+func gitIgnoredSet(root string) (ignored map[string]struct{}) {
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return
+	}
+	gitDir := absRoot
+	if fi, statErr := os.Stat(absRoot); statErr != nil || !fi.IsDir() {
+		gitDir = filepath.Dir(absRoot)
+	}
+	top, err := runGit(gitDir, "rev-parse", "--show-toplevel")
+	if err != nil {
+		return
+	}
+	toplevel := strings.TrimSpace(top)
+	if toplevel == "" {
+		return
+	}
+	out, err := runGit(gitDir,
+		"ls-files", "--others", "--ignored", "--exclude-standard",
+		"--directory", "--full-name", "-z", "--", absRoot)
+	if err != nil {
+		return
+	}
+	for e := range strings.SplitSeq(out, "\x00") {
+		if e == "" {
+			continue
+		}
+		if ignored == nil {
+			ignored = make(map[string]struct{})
+		}
+		ignored[filepath.Clean(filepath.Join(toplevel, e))] = struct{}{}
+	}
+	return
+}
+
+// runGit runs git in dir and returns its stdout. Stderr is discarded; the
+// error alone signals failure, which every caller treats as "fall back to
+// no filtering".
+func runGit(dir string, args ...string) (out string, err error) {
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	var buf bytes.Buffer
+	cmd.Stdout = &buf
+	err = cmd.Run()
+	out = buf.String()
+	return
+}
+
+// isGitIgnored reports whether path is in the ignored set produced by
+// gitIgnoredSet. An empty set (git unavailable / nothing ignored) matches
+// nothing.
+func isGitIgnored(ignored map[string]struct{}, path string) (yes bool) {
+	if len(ignored) == 0 {
+		return
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return
+	}
+	_, yes = ignored[filepath.Clean(abs)]
+	return
+}
+
 // runMarkdownCheck is the shared filesystem traversal for rules whose scope is
 // "every in-scope Markdown file under the standard". It walks each root,
-// skipping the directories shouldSkipDir excludes and the files
-// IsInScopeForDL001 rejects, and invokes checkOne for each surviving .md file.
-// A walk-time error aborts the rule's pass and is labelled with ruleID; checkOne
-// returning cont=false stops the walk early (filepath.SkipAll).
+// skipping the directories shouldSkipDir excludes, git-ignored paths, and the
+// files IsInScopeForDL001 rejects, and invokes checkOne for each surviving .md
+// file. A walk-time error aborts the rule's pass and is labelled with ruleID;
+// checkOne returning cont=false stops the walk early (filepath.SkipAll).
 //
 // DL001/003/004/006/007/010/011 share this verbatim; only ruleID and the
 // checkOne callback differ. Rules with a different scope (e.g. DL009) walk
@@ -132,18 +209,22 @@ func runMarkdownCheck(
 ) iter.Seq2[Finding, error] {
 	return func(yield func(Finding, error) bool) {
 		for _, root := range roots {
+			ignored := gitIgnoredSet(root)
 			err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
 				if walkErr != nil {
 					return walkErr
 				}
 				if d.IsDir() {
-					if shouldSkipDir(d.Name()) {
+					if shouldSkipDir(d.Name()) || isGitIgnored(ignored, path) {
 						return filepath.SkipDir
 					}
 					return nil
 				}
 				base := filepath.Base(path)
 				if !strings.HasSuffix(strings.ToLower(base), ".md") {
+					return nil
+				}
+				if isGitIgnored(ignored, path) {
 					return nil
 				}
 				if !IsInScopeForDL001(path, base) {

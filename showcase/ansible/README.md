@@ -1,3 +1,13 @@
+---
+type: how-to
+audience: operator provisioning a fresh box
+status: draft
+# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to stable
+# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to stable
+---
+
+> **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
+
 # ansible-pull provisioning for the imzero2 on-box deploy (ADR-0085)
 
 Bring a **fresh Fedora 44 box** up to the point where the Go deploy tool

@@ -112,3 +112,10 @@ model tag simultaneously, so their union was always co-compilable.
 - **Keep, fix the drift only** (add `opus48` to the registry). Lowest effort, but
   banks the full recurring cost to preserve the symbolic artifact. Rejected for
   the same reason.
+
+## Status
+
+Proposed — awaiting review by p@stergiotis. Implemented on a review branch (the `llm_generated_*` directives were stripped tree-wide and `gov llmtag` retired); do not treat as accepted until reviewed and merged.
+
+Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
+See `doc/DOCUMENTATION_STANDARD.md` §1 ADR for the edit-policy tiers (Tier 1 in-place / Tier 2 `## Updates` H3 / Tier 3 superseding ADR).

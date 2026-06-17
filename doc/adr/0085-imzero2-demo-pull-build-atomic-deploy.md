@@ -12,7 +12,7 @@ date: 2026-06-13
 
 ## Context
 
-[ADR-0024](./0024-imzero2-remote-access-browser-viewer.md) shipped the headless imzero2 demo (offscreen render → ffmpeg H.264 → WebSocket carrier → browser viewer), and a deploy kit (`showcase/`) packages it for a single VPS: a runtime-only container built off-box and run behind Caddy, which supplies the TLS + password the v1 carrier lacks (auth/TLS are [ADR-0082](./0082-imzero2-remote-session-auth-tls-fanout.md), accepted but unbuilt). That kit is a *manual* deploy — build locally, ship the image, `compose up`.
+[ADR-0024](./0024-imzero2-remote-access-browser-viewer.md) shipped the headless imzero2 demo (offscreen render → ffmpeg H.264 → WebSocket carrier → browser viewer), and a deploy kit (`showcase/`) packages it for a single VPS: a runtime-only container built off-box and run behind Caddy, which supplies the TLS + password the v1 carrier lacks (auth/TLS are [ADR-0082](./0082-imzero2-remote-session-auth-tls.md), accepted but unbuilt). That kit is a *manual* deploy — build locally, ship the image, `compose up`.
 
 This ADR covers a different operating mode requested for an internet-facing **demo box that updates itself**: when a new *tagged* release lands on boxer, the box should rebuild and cut over to it, unattended, atomically, with rollback — in a way that fits the sovereign-appliance posture the surrounding design favours (the box reaches out, nothing reaches in; it builds what it runs from source it can audit; no external registry or CI it must trust).
 
@@ -84,7 +84,7 @@ We adopt **O1**. Concretely:
 
 - **SD7 — boxer-idiomatic surface.** urfave/cli subcommand; zerolog (`--logFormat`/`--logLevel`, run_id fields); `eh`/`eb` structured errors. **All knobs register in the [ADR-0009](./0009-environment-variable-registry.md) env registry** (`imzero2env`) — repo, poll cadence, `workspace`/`releases` roots, keep-K, scratch port, gate timeout, the `LAUNCH`/encoder env handed to the service — so they document themselves in `doc/env-vars.md`. **`runinfo` is the deployed-revision source of truth**: the command checks the workspace out at the tag's commit, so the running demo's `runinfo` boot line (`vcs_revision`) and the `current` tag agree by construction — no separate state file. Each deploy is optionally emitted as an **audited `inprocbus` `Request`** (the audited path; `Publish` is not) carrying tag, revision, build/gate durations, and verdict — putting the deploy trail in the same observability plane as the app.
 
-- **SD8 — Tag provenance is the trust gate.** The box authenticates to the repo **read-only** (a deploy key or a public mirror); it never holds write/push credentials. For the hostile, internet-exposed target the command **verifies the tag's signature before building** (GPG/SSH-signed tags), so a compromised mirror or a forged ref cannot make the box build arbitrary code — matching [ADR-0082](./0082-imzero2-remote-session-auth-tls-fanout.md)'s fail-closed, secure-by-default ethos. Unsigned-tag acceptance is a loopback/dev convenience, not the internet default.
+- **SD8 — Tag provenance is the trust gate.** The box authenticates to the repo **read-only** (a deploy key or a public mirror); it never holds write/push credentials. For the hostile, internet-exposed target the command **verifies the tag's signature before building** (GPG/SSH-signed tags), so a compromised mirror or a forged ref cannot make the box build arbitrary code — matching [ADR-0082](./0082-imzero2-remote-session-auth-tls.md)'s fail-closed, secure-by-default ethos. Unsigned-tag acceptance is a loopback/dev convenience, not the internet default.
 
 - **SD9 — Out of scope / deferred.** Blue-green zero-downtime cutover (the single-session demo does not need it; the escalation if an always-live SLA appears). Multi-box fleet coordination (this is one box; the moment there are several, O2's CI-image-pull is the better substrate). Test-gating beyond the smoke probe — CI already runs the suite on the tag, so the box trusts the tag and only verifies that *this* build streams. The off-box-CI-image path (O2) itself, retained as the escape for a dumb box.
 
@@ -120,7 +120,7 @@ We adopt **O1**. Concretely:
 
 - **boxer ops tools are Go cli commands on the house libraries** (cli/zerolog/eh-eb/env-registry, observable via the bus), not standalone scripts — the default for future on-box tooling.
 - **Atomic on-box deploy = immutable `releases/` + symlink swap + a real smoke gate (the app's own probe), restart blip absorbed by a holding page** — the reusable recipe.
-- **An unattended internet-exposed auto-deployer gates on tag provenance** (signed tags, fail-closed), extending [ADR-0082](./0082-imzero2-remote-session-auth-tls-fanout.md)'s secure-by-default posture to the supply chain.
+- **An unattended internet-exposed auto-deployer gates on tag provenance** (signed tags, fail-closed), extending [ADR-0082](./0082-imzero2-remote-session-auth-tls.md)'s secure-by-default posture to the supply chain.
 
 ## Status
 
@@ -134,7 +134,7 @@ See `doc/DOCUMENTATION_STANDARD.md` §1 ADR for the edit-policy tiers (Tier 1 in
 ## References
 
 - [ADR-0024 — imzero2 remote access via headless render + ffmpeg + browser viewer](./0024-imzero2-remote-access-browser-viewer.md) — the demo this deploys; `hmi_headless.sh` builds-then-runs; the carrier and `ws_probe`.
-- [ADR-0082 — securing the imzero2 remote session](./0082-imzero2-remote-session-auth-tls-fanout.md) — Caddy supplies the v1-missing TLS/auth; the secure-by-default / fail-closed ethos SD8 extends to tag provenance.
+- [ADR-0082 — securing the imzero2 remote session](./0082-imzero2-remote-session-auth-tls.md) — Caddy supplies the v1-missing TLS/auth; the secure-by-default / fail-closed ethos SD8 extends to tag provenance.
 - [ADR-0009 — environment variable registry](./0009-environment-variable-registry.md) — `imzero2env`, where SD7's knobs register and surface in `doc/env-vars.md`.
 - `showcase/` — the existing manual / container deploy kit; the basis of the O2 escape.
 - Building blocks: `public/keelson/runtime/runinfo` (deployed-revision truth), `public/keelson/runtime/inprocbus` (audited deploy records — `Request`, not `Publish`), `public/keelson/data/chlocalpool` (the in-tree external-binary-by-path precedent), `rust/imzero2/src/bin/ws_probe.rs` (the gate), `rust/imzero2/{build_rust_headless.sh,build_go.sh,hmi_headless.sh}`.

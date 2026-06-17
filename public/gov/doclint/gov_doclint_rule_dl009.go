@@ -54,14 +54,18 @@ func (inst *RuleDL009) Id() (id string) {
 func (inst *RuleDL009) Check(roots []string) iter.Seq2[Finding, error] {
 	return func(yield func(Finding, error) bool) {
 		for _, root := range roots {
+			ignored := gitIgnoredSet(root)
 			err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
 				if walkErr != nil {
 					return walkErr
 				}
 				if d.IsDir() {
-					if shouldSkipDir(d.Name()) {
+					if shouldSkipDir(d.Name()) || isGitIgnored(ignored, path) {
 						return filepath.SkipDir
 					}
+					return nil
+				}
+				if isGitIgnored(ignored, path) {
 					return nil
 				}
 				if !IsInScopeForDL009(path) {

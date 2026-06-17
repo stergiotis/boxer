@@ -298,8 +298,8 @@ CI-friendly variant when no server is present.
 
 ## Further reading
 
-- [ADR-0066 — leeway dql ClickHouse read-back generator](../../../../doc/adr/0066-leeway-dql-clickhouse-readback-generator.md) — the decision this sub-design fills in (open-question 1).
-- [ADR-0008 — leeway marshall extensions](../../../../doc/adr/0008-leeway-marshall-extensions.md) — membership channels; the Cut-2 parametrized/mixed channels.
+- [ADR-0066 — leeway dql ClickHouse read-back generator](../../../../../../doc/adr/0066-leeway-dql-clickhouse-readback-generator.md) — the decision this sub-design fills in (open-question 1).
+- [ADR-0008 — leeway marshall extensions](../../../../../../doc/adr/0008-leeway-marshall-extensions.md) — membership channels; the Cut-2 parametrized/mixed channels.
 - `streamreadaccess/EXPLANATION.md` — the column-major vs attribute-major layout and the cardinality-support reading the driver already does.
 - `marshallreflect/unmarshal.go` — the read-back behaviour that is this mapping's oracle.
 - `anchor/card_anchor_udf_unflatten_leeway_array.sql` — the existing unflatten UDF generalized as `leeway_unflatten`; `anchor/card_anchor_integration2_test.go` — the harness pattern.

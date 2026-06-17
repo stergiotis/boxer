@@ -1,3 +1,13 @@
+---
+type: explanation
+audience: contributor or operator
+status: draft
+# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to stable
+# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to stable
+---
+
+> **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
+
 # showcase — the boxer/keelson demonstrator
 
 How the public **boxer/keelson demonstrator** is built, deployed, and served: a

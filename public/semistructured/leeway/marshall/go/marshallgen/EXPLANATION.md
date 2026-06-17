@@ -12,7 +12,7 @@ status: draft
 
 `marshallgen` is the code generator for the leeway DTO codec: it reads an
 annotated Go struct (the DTO) via go/ast into a
-[`mappingplan.Plan`](../mappingplan/) and emits a `.out.go` carrying typed
+[`mappingplan.Plan`](../../../mappingplan/) and emits a `.out.go` carrying typed
 SoA columns plus generic `<Kind>BuildEntities` / `<Kind>FillFromArrow`
 helpers that bind to any leeway DML / RA via Go's type inference at the
 call site.
@@ -21,7 +21,7 @@ The DTO model itself is not defined here. The `Plan`, the `lw:` tag
 grammar (`SplitLW`), per-field validation and assembly (`PlanBuilder`),
 the `MembershipChannel` enum, section grouping (`ComputeGroups`), and
 field-shape classification (`ClassifyBegin`) all live in the sibling
-[`mappingplan`](../mappingplan/) package. `marshallgen` is the go/ast
+[`mappingplan`](../../../mappingplan/) package. `marshallgen` is the go/ast
 front-end plus emitter over that model; the reflect-driven
 [`marshallreflect`](../marshallreflect/) is the other front-end and a
 runtime codec over the same model. The two front-ends share `mappingplan`
@@ -252,7 +252,7 @@ consumer surfaces the need.
 
 ## Further reading
 
-- Model: [`mappingplan/`](../mappingplan/) — the shared DTO model both front-ends build on: `Plan`, the `lw:` grammar (`SplitLW`), `PlanBuilder` validation, the membership channels, section grouping, and field-shape classification.
+- Model: [`mappingplan/`](../../../mappingplan/) — the shared DTO model both front-ends build on: `Plan`, the `lw:` grammar (`SplitLW`), `PlanBuilder` validation, the membership channels, section grouping, and field-shape classification.
 - Sibling: [`marshallreflect/`](../marshallreflect/) — runtime-reflection codec over the same `mappingplan.Plan` model.
 - Wrapper consumer: `keelson/runtime/codec/factswrapper/` — facts target.
 - Splice semantics: project-memory note `reference_leeway_splice_semantics.md` — empty non-scalars vanish on the wire (codec authors must emit 0 attributes for empty collections).

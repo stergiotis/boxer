@@ -4,6 +4,8 @@ status: proposed
 date: 2026-06-11
 ---
 
+> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
+
 # ADR-0076: Lean classless CSS render target for IDS
 
 ## Context
