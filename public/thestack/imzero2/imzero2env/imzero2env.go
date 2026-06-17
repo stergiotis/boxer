@@ -17,6 +17,15 @@ const (
 	RenderCadenceReactive   = "reactive"
 )
 
+// Startup video codec values for [HeadlessCodec] (ADR-0088). A cross-language
+// contract: the Rust client's VideoCodec::parse (codeclane.rs) accepts these
+// canonical spellings when reading IMZERO2_HEADLESS_CODEC.
+const (
+	HeadlessCodecH264 = "h264"
+	HeadlessCodecVP9  = "vp9"
+	HeadlessCodecAV1  = "av1"
+)
+
 var (
 	// ScreenshotDir is the destination for per-window PNG captures
 	// produced by the demo tour infrastructure. Empty means
@@ -149,6 +158,18 @@ var (
 		Description: "override ffmpeg encode args between rawvideo input and -f h264 output; empty uses the VAAPI default",
 		Category:    env.CategoryDev,
 	})
+
+	// HeadlessCodec picks the startup video codec lane (ADR-0088 SD4): the host
+	// muxes through NUT and the viewer decodes via WebCodecs. h264 (default)
+	// also honours IMZERO2_HEADLESS_ENCODER_ARGS; vp9/av1 use the built-in
+	// lanes. The active codec is then runtime-switchable from the Go "video
+	// output" control. Read by the Rust client (codeclane.rs), not by Go.
+	HeadlessCodec = env.NewCategorialString(env.Spec{
+		Name:        "IMZERO2_HEADLESS_CODEC",
+		Description: "startup video codec lane: h264 (default; honours ENCODER_ARGS) | vp9 | av1; runtime-switchable from the Go control",
+		Category:    env.CategoryDev,
+		Default:     HeadlessCodecH264,
+	}, []string{HeadlessCodecH264, HeadlessCodecVP9, HeadlessCodecAV1})
 
 	// HeadlessMaxFrames stops the host after N rendered frames (0 =
 	// unbounded). A smoke-test hook.

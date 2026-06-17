@@ -50,6 +50,13 @@ use std::sync::{Arc, Condvar, Mutex};
 /// buffers; bounded so a paused feeder can't grow memory without limit.
 const FREE_LIST_CAP: usize = 2;
 
+/// Poll interval for the channel drain's cancellable bounded send. While
+/// the video channel is full (a slow/stalled viewer) the drain parks here
+/// between retries before re-checking the reap stop flag. Short enough to
+/// add no meaningful latency once a slot frees; it only spins under
+/// congestion, where the mailbox is already coalescing frames pre-encoder.
+const DRAIN_BACKPRESSURE_POLL: std::time::Duration = std::time::Duration::from_millis(2);
+
 pub enum EncoderTarget {
     File(std::path::PathBuf),
     /// Pre-framed WebSocket payloads (0x01 + VideoChunk) for the carrier.
@@ -165,6 +172,14 @@ pub struct EncoderSink {
     feeder: Option<std::thread::JoinHandle<()>>,
     drain: Option<std::thread::JoinHandle<()>>,
     mailbox: Arc<FrameMailbox>,
+    /// Set by [`EncoderSink::reap`] to break a channel drain out of its
+    /// bounded-send backpressure wait. Killing ffmpeg unblocks the *feeder*
+    /// (broken stdin pipe), but a drain parked trying to push a frame into a
+    /// full video channel (a slow viewer not draining the socket) is waiting
+    /// on channel capacity, not on stdout — so `reap` must signal it
+    /// explicitly, or `drain.join()` would block the render thread that calls
+    /// `reap` on a resize or a runtime codec switch (ADR-0024 SD9).
+    drain_stop: Arc<AtomicBool>,
     width: u32,
     height: u32,
     fps: f32,
@@ -186,6 +201,7 @@ impl EncoderSink {
             feeder: None,
             drain: None,
             mailbox: FrameMailbox::new(),
+            drain_stop: Arc::new(AtomicBool::new(false)),
             width,
             height,
             fps,
@@ -245,6 +261,11 @@ impl EncoderSink {
         let mut child = cmd.spawn()?;
         let stdin = child.stdin.take();
         let stdout = child.stdout.take();
+        // Fresh per-spawn stop flag: a later reap() sets it to abort a channel
+        // drain parked in backpressure, so the render thread never blocks
+        // (ADR-0024 SD9). The file drain reads stdout and is unblocked by the
+        // child kill, so it needs no flag.
+        let drain_stop = Arc::new(AtomicBool::new(false));
         let drain = match &self.target {
             EncoderTarget::File(path) => {
                 let path = path.clone();
@@ -254,9 +275,10 @@ impl EncoderSink {
             }
             EncoderTarget::Channel(tx) => {
                 let tx = tx.clone();
+                let stop = drain_stop.clone();
                 std::thread::Builder::new()
                     .name("imzero2-video-drain".to_owned())
-                    .spawn(move || drain_to_channel_nut(stdout, &tx))?
+                    .spawn(move || drain_to_channel_nut(stdout, &tx, &stop))?
             }
         };
         // Fresh mailbox per spawn: a new generation cleanly separates the
@@ -271,6 +293,7 @@ impl EncoderSink {
         };
         self.child = Some(child);
         self.mailbox = mailbox;
+        self.drain_stop = drain_stop;
         self.feeder = Some(feeder);
         self.drain = Some(drain);
         Ok(())
@@ -279,6 +302,12 @@ impl EncoderSink {
     fn reap(&mut self) {
         // Wake a feeder parked on the condvar...
         self.mailbox.close();
+        // ...signal a channel drain parked in backpressure to abandon its
+        // pending frame and exit (a full-channel send can't be unblocked by
+        // the child kill below — it is waiting on channel capacity, not
+        // stdout); this is what keeps reap() — and the render thread calling
+        // it on resize / codec switch — from blocking on a stalled viewer...
+        self.drain_stop.store(true, Ordering::Release);
         // ...and unblock one stuck inside write_all under congestion by
         // killing the child (broken pipe makes the write return). On every
         // reap we are restarting (fresh IDR) or shutting down, so the old
@@ -378,6 +407,47 @@ fn frame_payload(
     framed
 }
 
+/// Result of a [`cancellable_send`].
+enum SendOutcome {
+    /// The payload reached the channel.
+    Sent,
+    /// The receiver was dropped (viewer disconnected).
+    Closed,
+    /// The reap stop flag fired while parked on a full channel — teardown.
+    Cancelled,
+}
+
+/// Push one payload into the bounded video channel, blocking for
+/// backpressure but cancellable on teardown (ADR-0024 SD9). A full channel
+/// means a slow/stalled viewer; parking here keeps backpressure flowing
+/// upstream (full channel → full ffmpeg stdout → paused encode → the SD9
+/// mailbox coalesces pre-encoder), which is the steady-state behaviour we
+/// want. The difference from `tx.blocking_send` — which cannot be
+/// interrupted — is that this bails the instant `stop` is set, so a
+/// `reap()` triggered by a resize or a runtime codec switch never waits on
+/// a viewer that has stopped reading the socket. `try_send` + a short poll
+/// gives the sync drain thread a wakeup it can re-check the flag on.
+fn cancellable_send(
+    tx: &tokio::sync::mpsc::Sender<Vec<u8>>,
+    payload: Vec<u8>,
+    stop: &AtomicBool,
+) -> SendOutcome {
+    let mut pending = payload;
+    loop {
+        match tx.try_send(pending) {
+            Ok(()) => return SendOutcome::Sent,
+            Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => return SendOutcome::Closed,
+            Err(tokio::sync::mpsc::error::TrySendError::Full(returned)) => {
+                if stop.load(Ordering::Acquire) {
+                    return SendOutcome::Cancelled;
+                }
+                pending = returned;
+                std::thread::sleep(DRAIN_BACKPRESSURE_POLL);
+            }
+        }
+    }
+}
+
 /// Drain ffmpeg's NUT output (ADR-0088 SD4). [`NutReader`] yields each
 /// coded frame's native bitstream plus the container-level key-frame flag
 /// for any codec — no per-codec depacketizer or keyframe parser — so this
@@ -387,6 +457,7 @@ fn frame_payload(
 fn drain_to_channel_nut(
     stdout: Option<std::process::ChildStdout>,
     tx: &tokio::sync::mpsc::Sender<Vec<u8>>,
+    stop: &AtomicBool,
 ) {
     use std::io::Read as _;
     let Some(mut so) = stdout else { return };
@@ -411,12 +482,23 @@ fn drain_to_channel_nut(
                     let framed = frame_payload(frame_index, started, frame.keyframe, frame.data);
                     frame_index += 1;
                     sent_bytes += framed.len() as u64;
-                    if tx.blocking_send(framed).is_err() {
-                        tracing::info!(frames = frame_index, "viewer channel closed — stopping nut drain");
-                        // Keep consuming so ffmpeg can exit cleanly once our
-                        // stdin side closes.
-                        let _ = std::io::copy(&mut so, &mut std::io::sink());
-                        return;
+                    match cancellable_send(tx, framed, stop) {
+                        SendOutcome::Sent => {}
+                        SendOutcome::Closed => {
+                            tracing::info!(frames = frame_index, "viewer channel closed — stopping nut drain");
+                            // Keep consuming so ffmpeg can exit cleanly once
+                            // our stdin side closes.
+                            let _ = std::io::copy(&mut so, &mut std::io::sink());
+                            return;
+                        }
+                        SendOutcome::Cancelled => {
+                            // reap() is tearing this encoder down (resize /
+                            // codec switch / disconnect) and kills the child,
+                            // so just stop — abandoning the in-flight frame is
+                            // intended (the old stream's tail is discarded).
+                            tracing::debug!(frames = frame_index, "nut drain cancelled under backpressure — encoder teardown");
+                            return;
+                        }
                     }
                 }
                 Ok(None) => break,
@@ -429,4 +511,62 @@ fn drain_to_channel_nut(
         }
     }
     tracing::info!(frames = frame_index, bytes = sent_bytes, "nut drain finished (encoder eof)");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// H1: a drain parked on a full video channel (a viewer that stopped
+    /// reading the socket) must abandon its send the moment reap() sets the
+    /// stop flag — this is what keeps reap(), and the render thread that
+    /// calls it on a resize / codec switch, from blocking on a stalled
+    /// viewer. (No tokio runtime needed: try_send/try_recv are sync.)
+    #[test]
+    fn cancellable_send_unblocks_on_stop() {
+        let (tx, _rx) = tokio::sync::mpsc::channel::<Vec<u8>>(1);
+        tx.try_send(vec![0u8; 4]).expect("fill the one slot"); // _rx never reads
+        let stop = Arc::new(AtomicBool::new(false));
+        let (tx2, stop2) = (tx.clone(), stop.clone());
+        let h = std::thread::spawn(move || cancellable_send(&tx2, vec![1u8; 4], &stop2));
+
+        // It should be parked (channel full, stop not yet set).
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        assert!(!h.is_finished(), "send must still be parked on the full channel");
+
+        // Once reap signals teardown it must return promptly.
+        stop.store(true, Ordering::Release);
+        let start = std::time::Instant::now();
+        let outcome = h.join().expect("join send thread");
+        assert!(matches!(outcome, SendOutcome::Cancelled), "must report Cancelled");
+        assert!(
+            start.elapsed() < std::time::Duration::from_secs(1),
+            "cancel must be prompt, not wedged"
+        );
+    }
+
+    /// A dropped receiver (viewer disconnected) is reported as Closed, not
+    /// retried forever.
+    #[test]
+    fn cancellable_send_reports_closed() {
+        let (tx, rx) = tokio::sync::mpsc::channel::<Vec<u8>>(1);
+        drop(rx);
+        let stop = Arc::new(AtomicBool::new(false));
+        assert!(matches!(
+            cancellable_send(&tx, vec![2u8; 4], &stop),
+            SendOutcome::Closed
+        ));
+    }
+
+    /// The happy path: room in the channel delivers immediately.
+    #[test]
+    fn cancellable_send_delivers_when_space() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<Vec<u8>>(1);
+        let stop = Arc::new(AtomicBool::new(false));
+        assert!(matches!(
+            cancellable_send(&tx, vec![3u8; 4], &stop),
+            SendOutcome::Sent
+        ));
+        assert_eq!(rx.try_recv().expect("delivered"), vec![3u8; 4]);
+    }
 }

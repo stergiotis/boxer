@@ -142,16 +142,88 @@ func (c CodecCaps) EncoderName() string {
 	return c.Codec.softwareEncoderName()
 }
 
-// CodecString is the representative WebCodecs string for this codec. The active
-// H.264 stream's exact profile may differ (the viewer derives it from the SPS).
-func (c CodecCaps) CodecString() string {
+// CodecString is the WebCodecs string for this codec at the given stream
+// dimensions. The level is derived from the resolution (WebCodecs validates the
+// codec-string level against the coded size), mirroring the Rust host
+// (codeclane.rs) and the viewer probe (viewer/index.html) — keep the three in
+// sync. H.264's exact profile/level the viewer derives from the SPS; this is the
+// representative string for the control's table.
+func (c CodecCaps) CodecString(width, height int) string {
 	switch c.Codec {
 	case CodecVP9:
-		return "vp09.00.41.08"
+		return "vp09.00." + vp9Level(width, height) + ".08"
 	case CodecAV1:
-		return "av01.0.08M.08"
+		return "av01.0." + av1Level(width, height) + "M.08"
 	default:
-		return "avc1.42E01E"
+		return "avc1.42E0" + h264Level(width, height)
+	}
+}
+
+// vp9Level / av1Level / h264Level pick the smallest level whose max picture
+// size (VP9/AV1) or max frame size in macroblocks (H.264) covers width×height.
+// These mirror codeclane.rs (Rust host) and viewer/index.html — keep identical.
+func vp9Level(w, h int) string {
+	switch s := w * h; {
+	case s <= 36864:
+		return "10"
+	case s <= 73728:
+		return "11"
+	case s <= 122880:
+		return "20"
+	case s <= 245760:
+		return "21"
+	case s <= 552960:
+		return "30"
+	case s <= 983040:
+		return "31"
+	case s <= 2228224:
+		return "40"
+	case s <= 8912896:
+		return "50"
+	case s <= 35651584:
+		return "60"
+	default:
+		return "61"
+	}
+}
+
+func av1Level(w, h int) string {
+	switch s := w * h; {
+	case s <= 147456:
+		return "00"
+	case s <= 278784:
+		return "01"
+	case s <= 665856:
+		return "04"
+	case s <= 1065024:
+		return "05"
+	case s <= 2359296:
+		return "08"
+	case s <= 8912896:
+		return "12"
+	default:
+		return "16"
+	}
+}
+
+func h264Level(w, h int) string {
+	switch mbs := ((w + 15) / 16) * ((h + 15) / 16); {
+	case mbs <= 1620:
+		return "1e"
+	case mbs <= 3600:
+		return "1f"
+	case mbs <= 5120:
+		return "20"
+	case mbs <= 8192:
+		return "28"
+	case mbs <= 8704:
+		return "2a"
+	case mbs <= 22080:
+		return "32"
+	case mbs <= 36864:
+		return "33"
+	default:
+		return "3c"
 	}
 }
 

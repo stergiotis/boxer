@@ -82,17 +82,22 @@ impl CodecLane {
     }
 
     /// The WebCodecs `VideoDecoder.configure` codec string the viewer needs
-    /// (ADR-0088 SD6). Empty for H.264 — the viewer derives `avc1.*` from the
-    /// in-band SPS, which carries the exact profile/level. VP9/AV1 expose no
-    /// in-band descriptor the viewer parses, so the host names them here.
-    /// These are generous-but-valid defaults (profile + 8-bit certain; level
-    /// set high enough for desktop resolutions); ADR-0088 Phase 4's
-    /// `isConfigSupported` probe confirms or corrects them per browser.
-    pub fn webcodecs_codec_string(&self) -> &'static str {
+    /// (ADR-0088 SD6), at the stream's physical `width`×`height`. Empty for
+    /// H.264 — the viewer derives `avc1.*` from the in-band SPS, which carries
+    /// the exact profile/level. VP9/AV1 expose no in-band descriptor the viewer
+    /// parses, so the host names them here, with the **level computed from the
+    /// resolution**: WebCodecs validates the codec-string level against the
+    /// coded dimensions at `configure`, so a level below what the resolution
+    /// needs makes decode fail — the bug a fixed ~4.x level had once a viewer
+    /// resized past ~2K (M2). The level is frame-rate-agnostic (rate is not part
+    /// of `VideoDecoderConfig`). The `vp9_level` / `av1_level` tables are
+    /// mirrored in the browser viewer's capability probe (`viewer/index.html`)
+    /// and the Go `videopipeline` model — keep the three in sync.
+    pub fn webcodecs_codec_string(&self, width: u32, height: u32) -> String {
         match self.codec {
-            VideoCodec::H264 => "",
-            VideoCodec::Vp9 => "vp09.00.41.08",
-            VideoCodec::Av1 => "av01.0.08M.08",
+            VideoCodec::H264 => String::new(),
+            VideoCodec::Vp9 => format!("vp09.00.{}.08", vp9_level(width, height)),
+            VideoCodec::Av1 => format!("av01.0.{}M.08", av1_level(width, height)),
         }
     }
 
@@ -286,6 +291,40 @@ pub fn probe_lane(lane: &CodecLane) -> LaneProbe {
     }
 }
 
+/// Smallest VP9 level code (the `LL` field of `vp09.PP.LL.BD`) whose max luma
+/// picture size covers `width*height`. WebCodecs validates the codec-string
+/// level against the coded dimensions at `configure`, so the level must be ≥
+/// what the resolution needs; it is frame-rate-agnostic. Mirrored in
+/// `viewer/index.html` and the Go `videopipeline` model — keep them identical.
+fn vp9_level(width: u32, height: u32) -> &'static str {
+    match width as u64 * height as u64 {
+        s if s <= 36_864 => "10",
+        s if s <= 73_728 => "11",
+        s if s <= 122_880 => "20",
+        s if s <= 245_760 => "21",
+        s if s <= 552_960 => "30",
+        s if s <= 983_040 => "31",
+        s if s <= 2_228_224 => "40",
+        s if s <= 8_912_896 => "50",
+        s if s <= 35_651_584 => "60",
+        _ => "61",
+    }
+}
+
+/// Smallest AV1 `seq_level_idx` code (the `LL` field of `av01.P.LLT.BD`) whose
+/// max picture size covers `width*height`. Mirrored in the viewer and Go model.
+fn av1_level(width: u32, height: u32) -> &'static str {
+    match width as u64 * height as u64 {
+        s if s <= 147_456 => "00",
+        s if s <= 278_784 => "01",
+        s if s <= 665_856 => "04",
+        s if s <= 1_065_024 => "05",
+        s if s <= 2_359_296 => "08",
+        s if s <= 8_912_896 => "12",
+        _ => "16",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -329,5 +368,24 @@ mod tests {
         assert_eq!(LaneProbe::NoDevice.reason_code(), 2);
         assert_eq!(LaneProbe::EncodeRejected.reason_code(), 3);
         assert_eq!(LaneProbe::Other.reason_code(), 4);
+    }
+
+    /// M2: the codec-string level must scale with resolution. A fixed ~4.x
+    /// level under-declared once a viewer resized past ~2K, failing decode.
+    #[test]
+    fn codec_string_level_tracks_resolution() {
+        let vp9 = CodecLane::software(VideoCodec::Vp9);
+        let av1 = CodecLane::software(VideoCodec::Av1);
+        // H.264 self-describes via its in-band SPS — the host names nothing.
+        assert_eq!(CodecLane::software(VideoCodec::H264).webcodecs_codec_string(3840, 2160), "");
+        // Default 1280×800: minimal sufficient level.
+        assert_eq!(vp9.webcodecs_codec_string(1280, 800), "vp09.00.40.08");
+        assert_eq!(av1.webcodecs_codec_string(1280, 800), "av01.0.05M.08");
+        // 4K must declare a higher level than the ~2K default (the M2 fix).
+        assert_eq!(vp9.webcodecs_codec_string(3840, 2160), "vp09.00.50.08");
+        assert_eq!(av1.webcodecs_codec_string(3840, 2160), "av01.0.12M.08");
+        // Up to the clamp_resize ceiling (8192²).
+        assert_eq!(vp9.webcodecs_codec_string(7680, 4320), "vp09.00.60.08");
+        assert_eq!(av1.webcodecs_codec_string(7680, 4320), "av01.0.16M.08");
     }
 }

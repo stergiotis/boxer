@@ -194,16 +194,44 @@ function sendPing(nonce) {
 // geometry via VideoDecoder.isConfigSupported (authoritative for the path
 // we use) plus navigator.mediaCapabilities.decodingInfo (the smooth /
 // power-efficient hints). The host forwards these to the Go interpreter.
-const CAP_CANDIDATES = [
-  { codec: "avc1.42E01E", contentType: 'video/mp4; codecs="avc1.42E01E"' },
-  { codec: "vp09.00.41.08", contentType: 'video/webm; codecs="vp09.00.41.08"' },
-  { codec: "av01.0.08M.08", contentType: 'video/mp4; codecs="av01.0.08M.08"' },
-];
+// Codec level scales with resolution: WebCodecs validates the codec-string
+// level against the coded size, so the probe must use the level the host will
+// actually stream at this geometry — otherwise a high-res VP9/AV1 is wrongly
+// probed as unsupported and the Go control hides a codec that in fact works.
+// These tables mirror the Rust host (codeclane.rs) and the Go model
+// (videopipeline.go) — keep the three in sync.
+function vp9Level(w, h) {
+  const s = w * h;
+  return s <= 36864 ? "10" : s <= 73728 ? "11" : s <= 122880 ? "20"
+    : s <= 245760 ? "21" : s <= 552960 ? "30" : s <= 983040 ? "31"
+    : s <= 2228224 ? "40" : s <= 8912896 ? "50" : s <= 35651584 ? "60" : "61";
+}
+function av1Level(w, h) {
+  const s = w * h;
+  return s <= 147456 ? "00" : s <= 278784 ? "01" : s <= 665856 ? "04"
+    : s <= 1065024 ? "05" : s <= 2359296 ? "08" : s <= 8912896 ? "12" : "16";
+}
+function h264Level(w, h) {
+  const mbs = Math.ceil(w / 16) * Math.ceil(h / 16);
+  return mbs <= 1620 ? "1e" : mbs <= 3600 ? "1f" : mbs <= 5120 ? "20"
+    : mbs <= 8192 ? "28" : mbs <= 8704 ? "2a" : mbs <= 22080 ? "32"
+    : mbs <= 36864 ? "33" : "3c";
+}
+function capCandidates(w, h) {
+  const avc = "avc1.42E0" + h264Level(w, h);
+  const vp9 = "vp09.00." + vp9Level(w, h) + ".08";
+  const av1 = "av01.0." + av1Level(w, h) + "M.08";
+  return [
+    { codec: avc, contentType: 'video/mp4; codecs="' + avc + '"' },
+    { codec: vp9, contentType: 'video/webm; codecs="' + vp9 + '"' },
+    { codec: av1, contentType: 'video/mp4; codecs="' + av1 + '"' },
+  ];
+}
 async function probeAndSendCapabilities() {
   if (!hello) return;
   const w = hello.width || 1280, h = hello.height || 720, fps = 30;
   const caps = [];
-  for (const cand of CAP_CANDIDATES) {
+  for (const cand of capCandidates(w, h)) {
     let supported = false, smooth = false, powerEfficient = false;
     try {
       if (window.VideoDecoder && VideoDecoder.isConfigSupported) {

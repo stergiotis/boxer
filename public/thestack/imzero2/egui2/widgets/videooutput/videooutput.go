@@ -55,64 +55,74 @@ func ShowDialog(ids *c.WidgetIdStack, st *State) {
 	}
 	for range c.Window(ids.PrepareStr("videoout-win"), c.WidgetText().Text("Video output").Keep()).
 		Resizable(false).Collapsible(false).TitleBar(true).DefaultWidth(560).KeepIter() {
-		if s := st.model.Stream; s.Valid() {
-			c.Label(fmt.Sprintf("Stream: %d×%d @ %d fps · %s", s.Width, s.Height, s.Fps, s.CadenceName())).Send()
-			c.Label(fmt.Sprintf("%.1f Mbps · %d sent · %d coalesced · %d behind",
-				float64(s.BitrateKbps)/1000.0, s.FramesSent, s.FramesDropped, s.FramesInFlight)).Send()
-			c.Separator().Horizontal().Send()
-		}
-		// Codec table (egui Grid). The codec name cell is selectable — click it
-		// to switch; the rest are read-only columns. "encode" is the host
-		// backend, "decode" is this browser — the two are reported separately.
-		for range c.Grid(ids.PrepareStr("videoout-grid")).NumColumns(6).Striped(true).KeepIter() {
-			c.Label("Codec").Send()
-			c.Label("Encoder").Send()
-			c.Label("Encode").Send()
-			c.Label("Decode").Send()
-			c.Label("WebCodecs").Send()
-			c.Label("Pixels").Send()
-			c.EndRow()
-			for _, cc := range st.model.Offered() {
-				if c.SelectableLabel(ids.PrepareStr("codec-"+cc.Codec.String()), st.model.Active == cc.Codec, cc.Codec.String()).
-					SendResp().HasPrimaryClicked() {
-					if cc.Offerable() && st.model.Active != cc.Codec {
-						st.model.Active = cc.Codec
-						c.SetVideoPipeline(uint32(cc.Codec))
-					}
-				}
-				c.Label(cc.EncoderName()).Send()
-				c.Label(cc.EncodeBackend()).Send()
-				c.Label(cc.DecodeBackend()).Send()
-				c.Label(cc.CodecString()).Send()
-				c.Label("4:2:0 8-bit").Send()
-				c.EndRow()
-			}
-		}
-		// Disabled-encoder table: lanes the host probed but cannot use. A
-		// disabled hardware lane doesn't remove the codec — software still
-		// serves it — so it lives in its own table rather than greyed-out above.
-		// Hidden entirely when every probed lane works.
-		if dis := st.model.DisabledEncoders(); len(dis) > 0 {
-			c.Separator().Horizontal().Send()
-			c.Label("Disabled encoders").Send()
-			for range c.Grid(ids.PrepareStr("videoout-disabled-grid")).NumColumns(4).Striped(true).KeepIter() {
-				c.Label("Codec").Send()
-				c.Label("Encoder").Send()
-				c.Label("Backend").Send()
-				c.Label("Reason").Send()
-				c.EndRow()
-				for _, d := range dis {
-					c.Label(d.Codec.String()).Send()
-					c.Label(d.Encoder).Send()
-					c.Label(d.Backend).Send()
-					c.Label(d.Reason).Send()
-					c.EndRow()
-				}
-			}
-		}
+		showContent(ids, st)
 		c.Separator().Horizontal().Send()
 		if c.Button(ids.PrepareStr("videoout-close"), c.Atoms().Text("Close").Keep()).SendResp().HasPrimaryClicked() {
 			st.dialogOpen = false
+		}
+	}
+}
+
+// showContent renders the dialog body — the stream readouts, the codec table,
+// and the disabled-encoder table — without the window chrome or the Close
+// button. Shared by [ShowDialog] (inside a c.Window) and the gallery's
+// ShowGallery (inline in a c.IdScope); both guard on a non-empty Offered set
+// before calling it, so the body always renders at least the codec table and
+// returns with the id stack back in its initial state.
+func showContent(ids *c.WidgetIdStack, st *State) {
+	if s := st.model.Stream; s.Valid() {
+		c.Label(fmt.Sprintf("Stream: %d×%d @ %d fps · %s", s.Width, s.Height, s.Fps, s.CadenceName())).Send()
+		c.Label(fmt.Sprintf("%.1f Mbps · %d sent · %d coalesced · %d behind",
+			float64(s.BitrateKbps)/1000.0, s.FramesSent, s.FramesDropped, s.FramesInFlight)).Send()
+		c.Separator().Horizontal().Send()
+	}
+	// Codec table (egui Grid). The codec name cell is selectable — click it
+	// to switch; the rest are read-only columns. "encode" is the host
+	// backend, "decode" is this browser — the two are reported separately.
+	for range c.Grid(ids.PrepareStr("videoout-grid")).NumColumns(6).Striped(true).KeepIter() {
+		c.Label("Codec").Send()
+		c.Label("Encoder").Send()
+		c.Label("Encode").Send()
+		c.Label("Decode").Send()
+		c.Label("WebCodecs").Send()
+		c.Label("Pixels").Send()
+		c.EndRow()
+		for _, cc := range st.model.Offered() {
+			if c.SelectableLabel(ids.PrepareStr("codec-"+cc.Codec.String()), st.model.Active == cc.Codec, cc.Codec.String()).
+				SendResp().HasPrimaryClicked() {
+				if cc.Offerable() && st.model.Active != cc.Codec {
+					st.model.Active = cc.Codec
+					c.SetVideoPipeline(uint32(cc.Codec))
+				}
+			}
+			c.Label(cc.EncoderName()).Send()
+			c.Label(cc.EncodeBackend()).Send()
+			c.Label(cc.DecodeBackend()).Send()
+			c.Label(cc.CodecString(st.model.Stream.Width, st.model.Stream.Height)).Send()
+			c.Label("4:2:0 8-bit").Send()
+			c.EndRow()
+		}
+	}
+	// Disabled-encoder table: lanes the host probed but cannot use. A
+	// disabled hardware lane doesn't remove the codec — software still
+	// serves it — so it lives in its own table rather than greyed-out above.
+	// Hidden entirely when every probed lane works.
+	if dis := st.model.DisabledEncoders(); len(dis) > 0 {
+		c.Separator().Horizontal().Send()
+		c.Label("Disabled encoders").Send()
+		for range c.Grid(ids.PrepareStr("videoout-disabled-grid")).NumColumns(4).Striped(true).KeepIter() {
+			c.Label("Codec").Send()
+			c.Label("Encoder").Send()
+			c.Label("Backend").Send()
+			c.Label("Reason").Send()
+			c.EndRow()
+			for _, d := range dis {
+				c.Label(d.Codec.String()).Send()
+				c.Label(d.Encoder).Send()
+				c.Label(d.Backend).Send()
+				c.Label(d.Reason).Send()
+				c.EndRow()
+			}
 		}
 	}
 }

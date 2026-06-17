@@ -34,6 +34,15 @@ use prost::Message as _;
 
 const VIDEO_CHANNEL_CAP: usize = 16;
 
+/// Render-thread control sends (the hello re-announce on a resize or codec
+/// switch) must never block the render/FFFI2 loop on a stalled viewer
+/// (ADR-0024 SD9). They ride out a transient-full channel with a brief
+/// bounded retry, then give up. ~64 ms total: long enough to absorb a burst
+/// on the 16-deep / 30 fps channel, short enough to be a non-issue on the
+/// resize/switch that already gaps the stream.
+const RENDER_SEND_POLL: std::time::Duration = std::time::Duration::from_millis(2);
+const RENDER_SEND_MAX_POLLS: u32 = 32;
+
 struct Inner {
     /// Raw wire events, drained by the render thread each tick.
     events: std::sync::Mutex<Vec<pb::input_event::Event>>,
@@ -110,7 +119,7 @@ impl WsCarrier {
                 height_px,
                 pixels_per_point,
                 cadence,
-                codec: lane.webcodecs_codec_string().to_owned(),
+                codec: lane.webcodecs_codec_string(width_px, height_px),
             }),
             decode_caps: std::sync::Mutex::new(None),
             bytes_sent: std::sync::atomic::AtomicU64::new(0),
@@ -209,7 +218,7 @@ impl WsCarrier {
             height_px,
             pixels_per_point,
             cadence: 0,
-            codec: self.lane.webcodecs_codec_string().to_owned(),
+            codec: self.lane.webcodecs_codec_string(width_px, height_px),
         };
         if let Ok(mut guard) = self.inner.hello.lock() {
             hello.cadence = guard.cadence; // geometry changes don't touch cadence
@@ -229,8 +238,12 @@ impl WsCarrier {
             let mut framed = Vec::with_capacity(1 + msg.encoded_len());
             framed.push(pb::PREFIX_SESSION);
             let _ = msg.encode(&mut framed);
-            if tx.blocking_send(framed).is_err() {
-                tracing::debug!("hello re-announce skipped — connection mid-teardown");
+            // Non-blocking on the render thread (ADR-0024 SD9): a healthy
+            // viewer keeps the channel drained so this lands first try; a
+            // stalled viewer drops the re-announce and resyncs on its
+            // decode-error reconnect rather than wedging the render loop.
+            if !send_control_render_thread(&tx, framed) {
+                tracing::debug!("hello re-announce skipped — viewer stalled or mid-teardown");
             }
         }
     }
@@ -247,7 +260,10 @@ impl WsCarrier {
         }
         self.lane = crate::imzero2::codeclane::CodecLane::best(codec);
         if let Ok(mut h) = self.inner.hello.lock() {
-            h.codec = self.lane.webcodecs_codec_string().to_owned();
+            // Geometry is unchanged on a codec switch — reuse the current
+            // stream size so the new codec announces a resolution-correct level.
+            let (w, ht) = (h.width_px, h.height_px);
+            h.codec = self.lane.webcodecs_codec_string(w, ht);
         }
         self.encoder.take(); // flush old stream; on_frame respawns the new lane
         self.last_frame_hash = None;
@@ -260,7 +276,8 @@ impl WsCarrier {
             let mut framed = Vec::with_capacity(1 + msg.encoded_len());
             framed.push(pb::PREFIX_SESSION);
             let _ = msg.encode(&mut framed);
-            let _ = tx.blocking_send(framed);
+            // Non-blocking on the render thread (ADR-0024 SD9) — see apply_geometry.
+            let _ = send_control_render_thread(&tx, framed);
         }
         tracing::info!(codec = self.lane.codec.as_str(), "video codec switched at runtime");
     }
@@ -330,6 +347,30 @@ impl WsCarrier {
     }
 }
 
+/// Enqueue a pre-framed message into the current connection's outbound
+/// channel from the render thread without an unbounded block (ADR-0024 SD9).
+/// Returns true if it was queued. A dropped receiver (mid-teardown) or a
+/// channel that stays full past the bounded retry (a stalled viewer not
+/// reading the socket) returns false; the caller treats either as "skip" —
+/// the stalled case self-heals on the viewer's reconnect. Unlike the encoder
+/// drain (a background thread that may block for backpressure), this runs on
+/// the render thread, so it bounds its wait instead of using `blocking_send`.
+fn send_control_render_thread(tx: &tokio::sync::mpsc::Sender<Vec<u8>>, framed: Vec<u8>) -> bool {
+    use tokio::sync::mpsc::error::TrySendError;
+    let mut pending = framed;
+    for _ in 0..RENDER_SEND_MAX_POLLS {
+        match tx.try_send(pending) {
+            Ok(()) => return true,
+            Err(TrySendError::Closed(_)) => return false,
+            Err(TrySendError::Full(returned)) => {
+                pending = returned;
+                std::thread::sleep(RENDER_SEND_POLL);
+            }
+        }
+    }
+    false
+}
+
 /// Case-insensitive ASCII substring search over a request head.
 fn contains_ci(haystack: &[u8], needle: &[u8]) -> bool {
     if needle.is_empty() || haystack.len() < needle.len() {
@@ -384,6 +425,23 @@ async fn serve_page(mut stream: tokio::net::TcpStream, page: &str) {
     let _ = stream.shutdown().await;
 }
 
+/// Atomically claim the single-session slot (ADR-0024 v1). Returns true to
+/// exactly one caller while the slot is free; concurrent callers get false.
+/// This must be a `compare_exchange`, not a load-then-store: the original
+/// split (`load` in the accept task, `store(true)` only after the upgrade
+/// handshake) raced across the handshake await — two near-simultaneous
+/// upgrades could both observe "free" and both be admitted (M1).
+fn try_claim_session(connected: &std::sync::atomic::AtomicBool) -> bool {
+    connected
+        .compare_exchange(
+            false,
+            true,
+            std::sync::atomic::Ordering::AcqRel,
+            std::sync::atomic::Ordering::Relaxed,
+        )
+        .is_ok()
+}
+
 async fn accept_loop(
     listener: tokio::net::TcpListener,
     inner: std::sync::Arc<Inner>,
@@ -404,15 +462,22 @@ async fn accept_loop(
                 serve_page(stream, &page).await;
                 return;
             }
-            if inner.connected.load(std::sync::atomic::Ordering::Acquire) {
-                // Single session at v1 (ADR-0024): reject while busy.
+            // Single session at v1 (ADR-0024): claim the slot atomically
+            // *before* the upgrade handshake, so two concurrent upgrades can
+            // never both be admitted (M1). The loser is rejected.
+            if !try_claim_session(&inner.connected) {
                 tracing::info!(%peer, "rejecting second viewer connection (single-session v1)");
                 drop(stream);
                 return;
             }
-            if let Err(e) = handle_session(stream, peer, inner).await {
+            if let Err(e) = handle_session(stream, peer, inner.clone()).await {
                 tracing::info!(%peer, error=%e, "viewer session ended with error");
             }
+            // Release the slot on every exit path — including a handshake
+            // failure that returns before handle_session sets up its session —
+            // then wake the host so it reaps the encoder promptly.
+            inner.connected.store(false, std::sync::atomic::Ordering::Release);
+            let _ = inner.waker.send(());
         });
     }
 }
@@ -430,8 +495,10 @@ async fn handle_session(
         *guard = Some(video_tx);
     }
     inner.conn_gen.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
-    inner.connected.store(true, std::sync::atomic::Ordering::Release);
-    let _ = inner.waker.send(()); // a fresh viewer wants a frame promptly
+    // The single-session slot was already claimed in accept_loop (before the
+    // handshake) — see try_claim_session — so this only wakes the host to
+    // render the first frame for the fresh viewer promptly.
+    let _ = inner.waker.send(());
     tracing::info!(%peer, "viewer connected");
 
     // First message: session hello with the current stream geometry
@@ -479,11 +546,13 @@ async fn handle_session(
         }
     };
 
-    inner.connected.store(false, std::sync::atomic::Ordering::Release);
+    // The single-session slot is released by accept_loop once this returns, so
+    // it is freed on every exit path (including a handshake failure that
+    // returns before this point via `?`); here we only drop this session's own
+    // resources. The host reaps the encoder when accept_loop clears `connected`.
     if let Ok(mut guard) = inner.video_tx.lock() {
         *guard = None;
     }
-    let _ = inner.waker.send(()); // let the host reap the encoder promptly
     tracing::info!(%peer, "viewer disconnected");
     result
 }
@@ -541,6 +610,83 @@ fn handle_client_message(data: &[u8], inner: &Inner) {
             Err(e) => tracing::debug!(error=%e, "undecodable session control"),
         },
         other => tracing::debug!(prefix = other, "unknown message prefix from viewer"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// ADR-0024 SD9: a render-thread control send must return — not hang —
+    /// when the viewer has stopped reading and the channel stays full. This
+    /// is the carrier-side half of the H1 fix (the encoder drain is the other).
+    #[test]
+    fn render_send_gives_up_on_full_channel() {
+        let (tx, _rx) = tokio::sync::mpsc::channel::<Vec<u8>>(1);
+        tx.try_send(vec![0u8; 2]).expect("fill the one slot"); // _rx never reads
+        let start = std::time::Instant::now();
+        assert!(
+            !send_control_render_thread(&tx, vec![1u8; 2]),
+            "must give up on a stalled viewer, not block the render loop"
+        );
+        let waited = start.elapsed();
+        assert!(waited >= RENDER_SEND_POLL, "should have retried at least once");
+        assert!(waited < std::time::Duration::from_secs(2), "wait must stay bounded");
+    }
+
+    /// Room in the channel delivers immediately (the common resize case on a
+    /// healthy viewer).
+    #[test]
+    fn render_send_delivers_when_space() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<Vec<u8>>(1);
+        assert!(send_control_render_thread(&tx, vec![7u8; 3]));
+        assert_eq!(rx.try_recv().expect("delivered"), vec![7u8; 3]);
+    }
+
+    /// A dropped receiver (mid-teardown) returns false rather than retrying.
+    #[test]
+    fn render_send_false_on_closed() {
+        let (tx, rx) = tokio::sync::mpsc::channel::<Vec<u8>>(1);
+        drop(rx);
+        assert!(!send_control_render_thread(&tx, vec![9u8; 1]));
+    }
+
+    /// M1: under maximal contention the single-session slot admits exactly one
+    /// claimant — the guarantee the load-then-store split could not make.
+    #[test]
+    fn single_session_admits_exactly_one_under_contention() {
+        use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+        use std::sync::{Arc, Barrier};
+        let slot = Arc::new(AtomicBool::new(false));
+        let gate = Arc::new(Barrier::new(8));
+        let wins = Arc::new(AtomicU32::new(0));
+        let handles: Vec<_> = (0..8)
+            .map(|_| {
+                let (slot, gate, wins) = (slot.clone(), gate.clone(), wins.clone());
+                std::thread::spawn(move || {
+                    gate.wait(); // release all threads at once for real contention
+                    if try_claim_session(&slot) {
+                        wins.fetch_add(1, Ordering::Relaxed);
+                    }
+                })
+            })
+            .collect();
+        for h in handles {
+            h.join().expect("join claimant");
+        }
+        assert_eq!(wins.load(Ordering::Relaxed), 1, "exactly one viewer admitted");
+        assert!(slot.load(Ordering::Relaxed), "slot left claimed by the winner");
+    }
+
+    /// The slot is reclaimable once released (the disconnect → next-viewer path).
+    #[test]
+    fn single_session_reclaimable_after_release() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let slot = AtomicBool::new(false);
+        assert!(try_claim_session(&slot), "first claim wins");
+        assert!(!try_claim_session(&slot), "second rejected while busy");
+        slot.store(false, Ordering::Release);
+        assert!(try_claim_session(&slot), "reclaimable after release");
     }
 }
 
