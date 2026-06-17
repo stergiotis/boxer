@@ -85,30 +85,6 @@ struct HeadlessOpts {
     listen: Option<String>,
 }
 
-/// ADR-0024 SD3: encoder arguments mirror ImZero1's validated
-/// configuration — VAAPI hardware encode, no B-frames (latency), constant
-/// QP 26 — plus an effectively infinite GOP: periodic IDR refresh
-/// re-quantizes the whole (mostly static) screen every interval, which
-/// reads as a visible color pulse (measured RMSE 316 at each IDR vs 0
-/// between P-frames, 2026-06-12). Every viewer connection starts a fresh
-/// encoder (= leading IDR), and the viewer reconnects on decode errors,
-/// so mid-stream key frames buy nothing here. Overridable via
-/// IMZERO2_HEADLESS_ENCODER_ARGS.
-const DEFAULT_ENCODER_ARGS: &[&str] = &[
-    "-vaapi_device",
-    "/dev/dri/renderD128",
-    "-vf",
-    "format=nv12,hwupload",
-    "-c:v",
-    "h264_vaapi",
-    "-bf",
-    "0",
-    "-qp:v",
-    "26",
-    "-g",
-    "100000",
-];
-
 impl HeadlessOpts {
     fn from_env() -> Self {
         fn parse<T: std::str::FromStr>(name: &str, default: T) -> T {
@@ -144,48 +120,32 @@ impl HeadlessOpts {
 /// `DEFAULT_ENCODER_ARGS`) still applies, so an existing deployment with no
 /// codec var set behaves exactly as before.
 fn build_codec_lane() -> CodecLane {
-    fn h264_args() -> Vec<String> {
-        std::env::var("IMZERO2_HEADLESS_ENCODER_ARGS")
-            .ok()
-            .filter(|v| !v.trim().is_empty())
-            .map(|v| v.split_whitespace().map(str::to_owned).collect())
-            .unwrap_or_else(|| DEFAULT_ENCODER_ARGS.iter().map(|s| (*s).to_owned()).collect())
-    }
-    let lane = match std::env::var("IMZERO2_HEADLESS_CODEC")
+    let codec = std::env::var("IMZERO2_HEADLESS_CODEC")
         .ok()
         .and_then(|v| VideoCodec::parse(&v))
-    {
-        Some(VideoCodec::Vp9) => CodecLane::software(VideoCodec::Vp9),
-        Some(VideoCodec::Av1) => CodecLane::software(VideoCodec::Av1),
-        Some(VideoCodec::H264) | None => CodecLane::h264(h264_args()),
-    };
-    // Fall back to the portable software lane if the configured encoder can't
-    // encode on this host — e.g. h264_vaapi opens then returns ENOSYS on stock
-    // Fedora mesa, which would otherwise loop the encoder respawn forever (SD5).
-    if crate::imzero2::codeclane::probe_lane(&lane) {
-        return lane;
+        .unwrap_or(VideoCodec::H264);
+    // Legacy explicit H.264 encoder args (IMZERO2_HEADLESS_ENCODER_ARGS) are
+    // honoured verbatim; otherwise pick the best working lane — hardware
+    // (VAAPI) if it encodes on this host, else the portable software lane
+    // (SD5; avoids the Fedora-mesa h264_vaapi ENOSYS respawn loop).
+    if codec == VideoCodec::H264 {
+        if let Some(args) = std::env::var("IMZERO2_HEADLESS_ENCODER_ARGS")
+            .ok()
+            .filter(|v| !v.trim().is_empty())
+        {
+            return CodecLane::h264(args.split_whitespace().map(str::to_owned).collect());
+        }
     }
-    let sw = CodecLane::software(lane.codec);
-    if crate::imzero2::codeclane::probe_lane(&sw) {
-        tracing::warn!(
-            codec = lane.codec.as_str(),
-            "configured video encoder failed the startup probe — falling back to the software lane"
-        );
-        return sw;
-    }
-    tracing::error!(
-        codec = lane.codec.as_str(),
-        "no working video encoder on this host (configured and software lanes both failed the probe)"
-    );
-    lane
+    CodecLane::best(codec)
 }
 
 /// ADR-0088: combine the host-encode probe with the viewer's reported decode
 /// capabilities into the (codecId, flags) packing `fetchVideoCapabilities`
-/// hands to Go. codecId 0=H.264, 1=VP9, 2=AV1; flags bit0=host-encode,
-/// bit1=decode-supported, bit2=smooth, bit3=power-efficient.
+/// hands to Go. codecId 0=H.264, 1=VP9, 2=AV1; flags bit0=sw-encode,
+/// bit1=decode-supported, bit2=decode-smooth, bit3=decode-hardware,
+/// bit4=hw-encode.
 fn build_video_caps(
-    host: &[(VideoCodec, bool)],
+    host: &[(VideoCodec, bool, bool)],
     decode: Option<&crate::imzero2::inputproto::DecodeCapabilities>,
 ) -> Vec<(u8, u32)> {
     let codec_id = |c: VideoCodec| match c {
@@ -195,7 +155,16 @@ fn build_video_caps(
     };
     let mut out: Vec<(u8, u32)> = host
         .iter()
-        .map(|&(c, enc)| (codec_id(c), u32::from(enc)))
+        .map(|&(c, sw, hw)| {
+            let mut f = 0u32;
+            if sw {
+                f |= 1;
+            }
+            if hw {
+                f |= 16;
+            }
+            (codec_id(c), f)
+        })
         .collect();
     if let Some(dc) = decode {
         for cap in &dc.codecs {
@@ -622,7 +591,7 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
     // control via fetchVideoCapabilities so unavailable codecs aren't offered.
     let host_encode_caps = crate::imzero2::codeclane::probe_host_encode();
     tracing::info!(
-        encodable = ?host_encode_caps.iter().filter(|(_, ok)| *ok).map(|(c, _)| c.as_str()).collect::<Vec<_>>(),
+        encode = ?host_encode_caps.iter().map(|(c, sw, hw)| format!("{}:sw{}hw{}", c.as_str(), *sw as u8, *hw as u8)).collect::<Vec<_>>(),
         "host video-encode probe"
     );
     if sinks.is_empty() && carrier.is_none() {
@@ -745,14 +714,14 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
         // ADR-0088: publish current video-pipeline capabilities for the Go
         // control to fetch while it builds this frame (must precede dispatch).
         if let Some(c) = &carrier {
-            // Publish capabilities only while a viewer is connected, so the Go
-            // control self-hides when there is no remote sink.
-            let caps = if c.connected() {
-                build_video_caps(&host_encode_caps, c.decode_caps().as_ref())
+            // Publish capabilities + stream geometry only while a viewer is
+            // connected, so the Go control self-hides when there is no sink.
+            if c.connected() {
+                fffi.set_video_capabilities(&build_video_caps(&host_encode_caps, c.decode_caps().as_ref()));
+                fffi.set_video_stream_info(width_px, height_px, opts.fps as u32);
             } else {
-                Vec::new()
-            };
-            fffi.set_video_capabilities(&caps);
+                fffi.set_video_capabilities(&[]);
+            }
         }
         // Mirrors eframe 0.34's epi_integration: `run_ui(raw_input, |ui| {
         // app.logic(ui.ctx(), ..) })` — the interpreter dispatches against

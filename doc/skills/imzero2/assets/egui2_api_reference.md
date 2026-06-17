@@ -71,6 +71,7 @@ status: draft
 | FetchR9U64 | Fetcher | No | 0 | 0 | - | - |
 | FetchSnarlEvents | Fetcher | No | 0 | 0 | - | - |
 | FetchVideoCapabilities | Fetcher | No | 0 | 0 | - | - |
+| FetchVideoStreamInfo | Fetcher | No | 0 | 0 | - | - |
 | Frame | BuilderFactory | Yes | 0 | 0 | 21 | Immediate, Retained, BlockIterator |
 | Graph | BuilderFactory | Yes | 0 | 0 | 31 | Immediate, Retained |
 | GraphEdge | BuilderFactory | No | 2 | 0 | 2 | Immediate |
@@ -3757,5 +3758,17 @@ Block
 |------|------|
 | codecIds | u64h |
 | flags | u32h |
+
+---
+
+### FetchVideoStreamInfo
+
+- **Type:** Fetcher
+
+#### Return Values
+
+| Name | Type |
+|------|------|
+| info | u64h |
 
 ---

@@ -182,3 +182,8 @@ func (inst *Fetcher) FetchVideoCapabilities() (codecIds []uint64, flags iter.Seq
 	flags = inst.iterateU32h()
 	return
 }
+func (inst *Fetcher) FetchVideoStreamInfo() (info iter.Seq[uint64]) {
+	inst.invoke(FuncProcIdFetchVideoStreamInfo)
+	info = inst.iterateU64h()
+	return
+}

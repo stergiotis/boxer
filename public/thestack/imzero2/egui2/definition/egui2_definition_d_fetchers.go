@@ -26,6 +26,16 @@ self.io.write_plain_u32h(len, self.video_cap_flags.drain(..))?;
 		AddReturnValue("codecIds", ctabb.U64h).
 		AddReturnValue("flags", ctabb.U32h).
 		Build())
+	// ADR-0088: the active stream geometry the host published this frame —
+	// [width, height, fps] (empty when no viewer).
+	fetchers = append(fetchers, idl.NewFetcherNode("fetchVideoStreamInfo").
+		WithApplyCodeClientRust(rustClientCode(`
+let len = self.video_stream_info.len();
+self.io.write_plain_u64h(len, self.video_stream_info.drain(..))?;
+{{SendMessage}}
+`)).
+		AddReturnValue("info", ctabb.U64h).
+		Build())
 	fetchers = append(fetchers, idl.NewFetcherNode("fetchR7").
 		WithApplyCodeClientRust(rustClientCode(`
 let len = self.r7_ids.len();

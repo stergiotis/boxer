@@ -1918,6 +1918,7 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     video_pipeline_request: Option<u8>,
     video_cap_ids: Vec<u64>,
     video_cap_flags: Vec<u32>,
+    video_stream_info: Vec<u64>,
     // egui_table prefetch feedback: per-table visible range, filled by
     // EtStripedDelegate::prepare (declared in the endETable IDL apply
     // code) and drained by fetchR9EtPrefetch. 5 values per id:
@@ -2168,6 +2169,15 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             self.video_cap_flags.push(flags);
         }
     }
+
+    /// ADR-0088: publish the active stream geometry/fps for Go to drain via
+    /// `fetchVideoStreamInfo` (`[width, height, fps]`).
+    pub fn set_video_stream_info(&mut self, width: u32, height: u32, fps: u32) {
+        self.video_stream_info.clear();
+        self.video_stream_info.push(width as u64);
+        self.video_stream_info.push(height as u64);
+        self.video_stream_info.push(fps as u64);
+    }
 }
 
 impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
@@ -2281,6 +2291,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             video_pipeline_request: None,
             video_cap_ids: Vec::new(),
             video_cap_flags: Vec::new(),
+            video_stream_info: Vec::new(),
             graph_pending_nodes: Vec::with_capacity(64),
             graph_pending_edges: Vec::with_capacity(64),
             graph_states: std::collections::HashMap::new(),
@@ -5750,6 +5761,21 @@ self.end_consume_message()?;
 let len = self.video_cap_ids.len();
 self.io.write_plain_u64h(len, self.video_cap_ids.drain(..))?;
 self.io.write_plain_u32h(len, self.video_cap_flags.drain(..))?;
+self.io.flush()?;
+
+
+}
+FuncProcId::FetchVideoStreamInfo => {
+    #[cfg(feature = "puffin")]
+	puffin::profile_scope!("match FuncProcId::FetchVideoStreamInfo");
+if d == 0 {
+self.end_consume_message()?;
+}
+// apply
+// generating location: /home/spx/repo/boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+let len = self.video_stream_info.len();
+self.io.write_plain_u64h(len, self.video_stream_info.drain(..))?;
 self.io.flush()?;
 
 

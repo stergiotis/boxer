@@ -123,17 +123,73 @@ impl CodecLane {
             },
         }
     }
+
+    /// Hardware (VAAPI) lane for a codec. Probe it with [`probe_lane`] before
+    /// use — VAAPI opens then ENOSYS-fails on stock Fedora mesa.
+    pub fn hardware(codec: VideoCodec) -> Self {
+        let cv = match codec {
+            VideoCodec::H264 => "h264_vaapi",
+            VideoCodec::Vp9 => "vp9_vaapi",
+            VideoCodec::Av1 => "av1_vaapi",
+        };
+        Self {
+            codec,
+            encoder_args: [
+                "-vaapi_device",
+                "/dev/dri/renderD128",
+                "-vf",
+                "format=nv12,hwupload",
+                "-c:v",
+                cv,
+                "-bf",
+                "0",
+                "-g",
+                "100000",
+            ]
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect(),
+            bsf: match codec {
+                VideoCodec::H264 => Some(H264_BSF),
+                VideoCodec::Vp9 | VideoCodec::Av1 => None,
+            },
+        }
+    }
+
+    /// The best working lane for a codec on this host: hardware (VAAPI) if it
+    /// actually encodes here, else the portable software lane (SD5). The same
+    /// rule drives the startup default and the runtime switch, so the encode
+    /// backend reported to the Go control matches what is used.
+    pub fn best(codec: VideoCodec) -> Self {
+        let hw = Self::hardware(codec);
+        if probe_lane(&hw) {
+            return hw;
+        }
+        Self::software(codec)
+    }
+
+    /// True when this lane uses a hardware (VAAPI) encoder.
+    pub fn is_hardware(&self) -> bool {
+        self.encoder_args.iter().any(|a| a.ends_with("_vaapi"))
+    }
 }
 
-/// SD5 host-encode probe: which codecs actually encode on this host. Runs a
-/// 2-frame probe-encode per software lane to `-f null` — a *listing* would
-/// miss the Fedora-mesa `h264_vaapi`→ENOSYS class, where the encoder opens
-/// and only fails at encode time. The result feeds the Go control so an
-/// unavailable codec is never offered.
-pub fn probe_host_encode() -> Vec<(VideoCodec, bool)> {
+/// SD5 host-encode probe: per codec, whether the **software** and **hardware**
+/// lanes actually encode on this host. A 2-frame probe-encode to `-f null` per
+/// lane — a *listing* would miss the Fedora-mesa `h264_vaapi`→ENOSYS class,
+/// where the encoder opens and only fails at encode time. The result feeds the
+/// Go control so an unavailable codec is never offered and the encode backend
+/// (HW vs SW) is reported truthfully.
+pub fn probe_host_encode() -> Vec<(VideoCodec, bool, bool)> {
     [VideoCodec::H264, VideoCodec::Vp9, VideoCodec::Av1]
         .into_iter()
-        .map(|c| (c, probe_lane(&CodecLane::software(c))))
+        .map(|c| {
+            (
+                c,
+                probe_lane(&CodecLane::software(c)),
+                probe_lane(&CodecLane::hardware(c)),
+            )
+        })
         .collect()
 }
 

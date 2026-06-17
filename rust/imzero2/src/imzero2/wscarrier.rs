@@ -237,7 +237,7 @@ impl WsCarrier {
         if codec == self.lane.codec {
             return;
         }
-        self.lane = crate::imzero2::codeclane::CodecLane::software(codec);
+        self.lane = crate::imzero2::codeclane::CodecLane::best(codec);
         if let Ok(mut h) = self.inner.hello.lock() {
             h.codec = self.lane.webcodecs_codec_string().to_owned();
         }
