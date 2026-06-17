@@ -48,7 +48,7 @@
 
 use crate::imzero2::appconfig::AppConfig;
 use crate::imzero2::apphost;
-use crate::imzero2::codeclane::{CodecLane, VideoCodec};
+use crate::imzero2::codeclane::{CodecLane, LaneProbe, VideoCodec};
 use crate::imzero2::encoderpipe::{EncoderSink, EncoderTarget};
 use crate::imzero2::framesink::{FrameSink, NullSink, PngDumpSink};
 use crate::imzero2::inputmap::InputTranslator;
@@ -143,9 +143,10 @@ fn build_codec_lane() -> CodecLane {
 /// capabilities into the (codecId, flags) packing `fetchVideoCapabilities`
 /// hands to Go. codecId 0=H.264, 1=VP9, 2=AV1; flags bit0=sw-encode,
 /// bit1=decode-supported, bit2=decode-smooth, bit3=decode-hardware,
-/// bit4=hw-encode.
+/// bit4=hw-encode, bits5-7=hardware-lane fail reason, bits8-10=software-lane
+/// fail reason (0=ok, see codeclane::LaneProbe::reason_code).
 fn build_video_caps(
-    host: &[(VideoCodec, bool, bool)],
+    host: &[(VideoCodec, LaneProbe, LaneProbe)],
     decode: Option<&crate::imzero2::inputproto::DecodeCapabilities>,
 ) -> Vec<(u8, u32)> {
     let codec_id = |c: VideoCodec| match c {
@@ -157,12 +158,15 @@ fn build_video_caps(
         .iter()
         .map(|&(c, sw, hw)| {
             let mut f = 0u32;
-            if sw {
+            if sw.is_ok() {
                 f |= 1;
             }
-            if hw {
+            if hw.is_ok() {
                 f |= 16;
             }
+            // bits 5-7: hardware-lane fail reason; bits 8-10: software-lane.
+            f |= ((hw.reason_code() as u32) & 0x7) << 5;
+            f |= ((sw.reason_code() as u32) & 0x7) << 8;
             (codec_id(c), f)
         })
         .collect();
@@ -591,7 +595,7 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
     // control via fetchVideoCapabilities so unavailable codecs aren't offered.
     let host_encode_caps = crate::imzero2::codeclane::probe_host_encode();
     tracing::info!(
-        encode = ?host_encode_caps.iter().map(|(c, sw, hw)| format!("{}:sw{}hw{}", c.as_str(), *sw as u8, *hw as u8)).collect::<Vec<_>>(),
+        encode = ?host_encode_caps.iter().map(|(c, sw, hw)| format!("{}:sw={:?}hw={:?}", c.as_str(), sw, hw)).collect::<Vec<_>>(),
         "host video-encode probe"
     );
     // Wire-bitrate EMA state (ADR-0088 telemetry), updated ~4×/s from the

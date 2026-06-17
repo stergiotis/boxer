@@ -96,9 +96,13 @@ and says why.
 - **Codec / Encoder / Backend** — which codec, the ffmpeg encoder that is
   unavailable (e.g. `h264_vaapi`), and whether it is the hardware or software
   lane.
-- **Reason** — why the host cannot use it. `no usable VAAPI encoder on this
-  host` covers a missing GPU device, a driver without that encoder, or a
-  driver that accepts the encoder but fails at encode time (common on
-  Mesa/VAAPI). `encoder unavailable in this ffmpeg build` means the software
-  library for that codec was not compiled into the ffmpeg on this host.
+- **Reason** — the specific cause the startup probe found:
+  - `GPU driver can't encode this codec` — the VAAPI device opened but the
+    driver rejected the encode (no usable profile / `ENOSYS`). Common on stock
+    Mesa: the encoder loads and only fails at encode time.
+  - `no VAAPI device on this host` — no usable GPU/VAAPI display was found at
+    all.
+  - `encoder not built into this ffmpeg` — the ffmpeg on this host has no such
+    encoder; the usual cause for a missing software library (e.g. `libsvtav1`).
+  - `encoder probe failed` — the trial encode failed for some other reason.
 

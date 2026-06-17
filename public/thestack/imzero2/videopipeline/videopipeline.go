@@ -70,7 +70,46 @@ const (
 	flagDecodeSmooth    = 1 << 2
 	flagDecodeHardware  = 1 << 3 // browser mediaCapabilities powerEfficient
 	flagEncodeHardware  = 1 << 4 // host VAAPI encoder probed working
+
+	// Per-lane probe-fail reason codes (codeclane.LaneProbe.reason_code):
+	// bits 5-7 carry the hardware lane's reason, bits 8-10 the software
+	// lane's. Zero when the lane works (its flagEncode* bit is set) or the
+	// host reported no reason.
+	shiftHardwareFail = 5
+	shiftSoftwareFail = 8
+	maskFailReason    = 0x7
 )
+
+// ProbeFailReason is why an encoder lane failed its host trial-encode — the
+// wire code the Rust host packs into the capability flags (mirrors
+// codeclane.LaneProbe). ProbeOK means the lane works, or no reason was
+// reported.
+type ProbeFailReason uint8
+
+const (
+	ProbeOK             ProbeFailReason = 0
+	ProbeNotBuilt       ProbeFailReason = 1 // ffmpeg lacks the encoder (not compiled in)
+	ProbeNoDevice       ProbeFailReason = 2 // no usable VAAPI device on the host
+	ProbeEncodeRejected ProbeFailReason = 3 // device opened, driver rejected the encode (ENOSYS)
+	ProbeOther          ProbeFailReason = 4 // some other ffmpeg failure
+)
+
+// String is a concise, table-ready phrase for the failure, or "" for ProbeOK
+// (and any unknown future code, so the caller can fall back).
+func (r ProbeFailReason) String() string {
+	switch r {
+	case ProbeNotBuilt:
+		return "encoder not built into this ffmpeg"
+	case ProbeNoDevice:
+		return "no VAAPI device on this host"
+	case ProbeEncodeRejected:
+		return "GPU driver can't encode this codec"
+	case ProbeOther:
+		return "encoder probe failed"
+	default:
+		return ""
+	}
+}
 
 // CodecCaps is one codec's published availability: the host encode side and
 // the browser decode side, each split into hardware vs software.
@@ -81,6 +120,10 @@ type CodecCaps struct {
 	DecodeSupported bool
 	DecodeSmooth    bool
 	DecodeHardware  bool
+	// EncodeHardwareFail / EncodeSoftwareFail say why the respective encode
+	// lane is unavailable when its Encode* bit is false (ProbeOK otherwise).
+	EncodeHardwareFail ProbeFailReason
+	EncodeSoftwareFail ProbeFailReason
 }
 
 // HostCanEncode is true when the host has a working encoder (HW or SW).
@@ -147,12 +190,14 @@ func Decode(codecIds []uint64, flags iter.Seq[uint32]) []CodecCaps {
 		}
 		f := fs[i]
 		out = append(out, CodecCaps{
-			Codec:           Codec(id),
-			EncodeSoftware:  f&flagEncodeSoftware != 0,
-			EncodeHardware:  f&flagEncodeHardware != 0,
-			DecodeSupported: f&flagDecodeSupported != 0,
-			DecodeSmooth:    f&flagDecodeSmooth != 0,
-			DecodeHardware:  f&flagDecodeHardware != 0,
+			Codec:              Codec(id),
+			EncodeSoftware:     f&flagEncodeSoftware != 0,
+			EncodeHardware:     f&flagEncodeHardware != 0,
+			DecodeSupported:    f&flagDecodeSupported != 0,
+			DecodeSmooth:       f&flagDecodeSmooth != 0,
+			DecodeHardware:     f&flagDecodeHardware != 0,
+			EncodeHardwareFail: ProbeFailReason((f >> shiftHardwareFail) & maskFailReason),
+			EncodeSoftwareFail: ProbeFailReason((f >> shiftSoftwareFail) & maskFailReason),
 		})
 	}
 	return out
@@ -266,7 +311,8 @@ type DisabledEncoder struct {
 // bit); a codec whose lanes both work contributes none. The host probes every
 // lane with a short trial encode (codeclane.probe_lane), so a disabled row
 // means that trial did not produce output — not merely that the lane went
-// unselected.
+// unselected. Reason is the specific probe cause (ProbeFailReason) when the
+// host reported one.
 func (m *Model) DisabledEncoders() []DisabledEncoder {
 	out := make([]DisabledEncoder, 0, 2*len(m.Caps))
 	for _, c := range m.Caps {
@@ -275,7 +321,7 @@ func (m *Model) DisabledEncoders() []DisabledEncoder {
 				Codec:   c.Codec,
 				Encoder: c.Codec.hardwareEncoderName(),
 				Backend: "hardware",
-				Reason:  "no usable VAAPI encoder on this host",
+				Reason:  failReason(c.EncodeHardwareFail, "hardware"),
 			})
 		}
 		if !c.EncodeSoftware {
@@ -283,9 +329,23 @@ func (m *Model) DisabledEncoders() []DisabledEncoder {
 				Codec:   c.Codec,
 				Encoder: c.Codec.softwareEncoderName(),
 				Backend: "software",
-				Reason:  "encoder unavailable in this ffmpeg build",
+				Reason:  failReason(c.EncodeSoftwareFail, "software"),
 			})
 		}
 	}
 	return out
+}
+
+// failReason renders the table reason for a disabled lane: the specific probe
+// cause when the host reported one, else a backend-appropriate generic phrase.
+// The fallback covers a host that predates per-lane reasons (it reports ProbeOK
+// with the encode bit clear), so the table never shows an empty reason.
+func failReason(r ProbeFailReason, backend string) string {
+	if s := r.String(); s != "" {
+		return s
+	}
+	if backend == "hardware" {
+		return "no usable VAAPI encoder on this host"
+	}
+	return "encoder unavailable in this ffmpeg build"
 }
