@@ -44,6 +44,7 @@ scripts that stay put: `rust/imzero2/build_rust_headless.sh` + `build_go.sh`.
 
 ## Start here
 
+- How the running system is wired (the processes + transports) → [`EXPLANATION.md`](EXPLANATION.md).
 - Standing up a box → [`ansible/README.md`](ansible/README.md) (Fedora 44, ansible-pull).
 - The on-box deploy model → [`onbox/ONBOX.md`](onbox/ONBOX.md).
 - The container/off-box path → [`DEPLOY.md`](DEPLOY.md).
