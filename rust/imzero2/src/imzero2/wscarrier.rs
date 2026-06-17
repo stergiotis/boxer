@@ -226,6 +226,41 @@ impl WsCarrier {
             }
         }
     }
+
+    /// ADR-0088 SD7: switch the active codec at runtime. Updates the lane and
+    /// the hello's codec string, stops the current encoder (its drain flushes
+    /// the old codec's tail), re-announces the hello so it lands between the
+    /// old and new streams, and lets `on_frame` respawn the encoder with the
+    /// new lane (fresh key frame). Geometry is unchanged — the same
+    /// resize-shaped teardown, codec in place of size.
+    pub fn set_video_codec(&mut self, codec: crate::imzero2::codeclane::VideoCodec) {
+        if codec == self.lane.codec {
+            return;
+        }
+        self.lane = crate::imzero2::codeclane::CodecLane::software(codec);
+        if let Ok(mut h) = self.inner.hello.lock() {
+            h.codec = self.lane.webcodecs_codec_string().to_owned();
+        }
+        self.encoder.take(); // flush old stream; on_frame respawns the new lane
+        self.last_frame_hash = None;
+        let hello = self.inner.hello.lock().map(|h| (*h).clone()).unwrap_or_default();
+        let tx = self.inner.video_tx.lock().ok().and_then(|g| g.clone());
+        if let Some(tx) = tx {
+            let msg = pb::SessionControl {
+                control: Some(pb::session_control::Control::Hello(hello)),
+            };
+            let mut framed = Vec::with_capacity(1 + msg.encoded_len());
+            framed.push(pb::PREFIX_SESSION);
+            let _ = msg.encode(&mut framed);
+            let _ = tx.blocking_send(framed);
+        }
+        tracing::info!(codec = self.lane.codec.as_str(), "video codec switched at runtime");
+    }
+
+    /// ADR-0088: a clone of the viewer's latest reported decode capabilities.
+    pub fn decode_caps(&self) -> Option<pb::DecodeCapabilities> {
+        self.inner.decode_caps.lock().ok().and_then(|g| g.clone())
+    }
 }
 
 impl WsCarrier {

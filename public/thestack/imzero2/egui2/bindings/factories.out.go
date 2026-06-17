@@ -1682,6 +1682,14 @@ func SetAnimationFreeze(freeze bool) {
 	r.SendIntermediate()
 }
 
+func SetVideoPipeline(codec uint32) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdSetVideoPipeline))
+	r.WriteUint32(codec)
+
+	r.SendIntermediate()
+}
+
 func SetWindowCollapsed(h widgethandle.WidgetHandle, collapsed bool) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteUint32(uint32(FuncProcIdSetWindowCollapsed))

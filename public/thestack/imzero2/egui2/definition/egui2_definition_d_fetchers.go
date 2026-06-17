@@ -12,6 +12,20 @@ import (
 
 func definitionsFetcher() (fetchers []ir.NodeI) {
 	fetchers = make([]ir.NodeI, 0, 16)
+	// ADR-0088: drain the video-pipeline capabilities (browser-decode ∩
+	// host-encode) the headless host published this frame. codecIds carry
+	// 0=H.264 / 1=VP9 / 2=AV1; flags bit0=host-encode, bit1=decode-supported,
+	// bit2=smooth, bit3=power-efficient.
+	fetchers = append(fetchers, idl.NewFetcherNode("fetchVideoCapabilities").
+		WithApplyCodeClientRust(rustClientCode(`
+let len = self.video_cap_ids.len();
+self.io.write_plain_u64h(len, self.video_cap_ids.drain(..))?;
+self.io.write_plain_u32h(len, self.video_cap_flags.drain(..))?;
+{{SendMessage}}
+`)).
+		AddReturnValue("codecIds", ctabb.U64h).
+		AddReturnValue("flags", ctabb.U32h).
+		Build())
 	fetchers = append(fetchers, idl.NewFetcherNode("fetchR7").
 		WithApplyCodeClientRust(rustClientCode(`
 let len = self.r7_ids.len();

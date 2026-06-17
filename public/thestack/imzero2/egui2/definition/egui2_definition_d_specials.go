@@ -8,6 +8,16 @@ import (
 
 func definitionsSpecial() (specials []ir.NodeI) {
 	specials = make([]ir.NodeI, 0, 16)
+	// ADR-0088 runtime video-pipeline control. Stashes the requested codec
+	// (0=H.264, 1=VP9, 2=AV1) into ImZeroFffi::video_pipeline_request; the
+	// headless host drains it after dispatch and re-points the encoder.
+	specials = append(specials,
+		idl.NewProceduralNode("setVideoPipeline").
+			AddArguments(idl.NewArgumentsBuilder().
+				PlainArg("codec", ctabb.U32).
+				Build()).
+			WithApplyCodeClientRust(rustClientCode("self.video_pipeline_request = Some(codec as u8);\n")).
+			Build())
 	specials = append(specials, idl.NewProceduralNode("end").
 		WithApplyCodeClientRust(rustClientCode("r = true;\n")).
 		Build())

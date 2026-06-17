@@ -161,6 +161,50 @@ fn build_codec_lane() -> CodecLane {
     }
 }
 
+/// ADR-0088: combine the host-encode probe with the viewer's reported decode
+/// capabilities into the (codecId, flags) packing `fetchVideoCapabilities`
+/// hands to Go. codecId 0=H.264, 1=VP9, 2=AV1; flags bit0=host-encode,
+/// bit1=decode-supported, bit2=smooth, bit3=power-efficient.
+fn build_video_caps(
+    host: &[(VideoCodec, bool)],
+    decode: Option<&crate::imzero2::inputproto::DecodeCapabilities>,
+) -> Vec<(u8, u32)> {
+    let codec_id = |c: VideoCodec| match c {
+        VideoCodec::H264 => 0u8,
+        VideoCodec::Vp9 => 1,
+        VideoCodec::Av1 => 2,
+    };
+    let mut out: Vec<(u8, u32)> = host
+        .iter()
+        .map(|&(c, enc)| (codec_id(c), u32::from(enc)))
+        .collect();
+    if let Some(dc) = decode {
+        for cap in &dc.codecs {
+            let id = if cap.codec.starts_with("avc") {
+                0u8
+            } else if cap.codec.starts_with("vp9") || cap.codec.starts_with("vp09") {
+                1
+            } else if cap.codec.starts_with("av1") || cap.codec.starts_with("av01") {
+                2
+            } else {
+                continue;
+            };
+            if let Some(entry) = out.iter_mut().find(|(cid, _)| *cid == id) {
+                if cap.supported {
+                    entry.1 |= 2;
+                }
+                if cap.smooth {
+                    entry.1 |= 4;
+                }
+                if cap.power_efficient {
+                    entry.1 |= 8;
+                }
+            }
+        }
+    }
+    out
+}
+
 /// Offscreen wgpu state: device/queue, render target, the reused staging
 /// buffer for readback, and the egui renderer.
 struct Gpu {
@@ -554,6 +598,14 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
         )?),
         None => None,
     };
+    // SD5: probe which codecs this host can actually encode (a real
+    // probe-encode, not a listing — catches VAAPI ENOSYS). Fed to the Go
+    // control via fetchVideoCapabilities so unavailable codecs aren't offered.
+    let host_encode_caps = crate::imzero2::codeclane::probe_host_encode();
+    tracing::info!(
+        encodable = ?host_encode_caps.iter().filter(|(_, ok)| *ok).map(|(c, _)| c.as_str()).collect::<Vec<_>>(),
+        "host video-encode probe"
+    );
     if sinks.is_empty() && carrier.is_none() {
         sinks.push(Box::new(NullSink));
     }
@@ -671,6 +723,12 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
             .native_pixels_per_point = Some(ppp);
 
         let mut shutdown = false;
+        // ADR-0088: publish current video-pipeline capabilities for the Go
+        // control to fetch while it builds this frame (must precede dispatch).
+        if let Some(c) = &carrier {
+            let caps = build_video_caps(&host_encode_caps, c.decode_caps().as_ref());
+            fffi.set_video_capabilities(&caps);
+        }
         // Mirrors eframe 0.34's epi_integration: `run_ui(raw_input, |ui| {
         // app.logic(ui.ctx(), ..) })` — the interpreter dispatches against
         // the live pass exactly as it does under the desktop host.
@@ -699,6 +757,14 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
             .map(|v| v.repaint_delay)
             .unwrap_or(std::time::Duration::ZERO);
 
+        // ADR-0088: apply a runtime codec switch the Go control requested
+        // (drained after dispatch; the carrier re-points the encoder).
+        if let Some(req) = fffi.take_video_pipeline_request() {
+            if let Some(c) = &mut carrier {
+                c.set_video_codec(VideoCodec::from_u8(req));
+                next_deadline = std::time::Instant::now();
+            }
+        }
         let need_pixels = !sinks.is_empty()
             || carrier.as_ref().map(WsCarrier::connected).unwrap_or(false);
         if need_pixels {

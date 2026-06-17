@@ -70,6 +70,7 @@ status: draft
 | FetchR9S | Fetcher | No | 0 | 0 | - | - |
 | FetchR9U64 | Fetcher | No | 0 | 0 | - | - |
 | FetchSnarlEvents | Fetcher | No | 0 | 0 | - | - |
+| FetchVideoCapabilities | Fetcher | No | 0 | 0 | - | - |
 | Frame | BuilderFactory | Yes | 0 | 0 | 21 | Immediate, Retained, BlockIterator |
 | Graph | BuilderFactory | Yes | 0 | 0 | 31 | Immediate, Retained |
 | GraphEdge | BuilderFactory | No | 2 | 0 | 2 | Immediate |
@@ -160,6 +161,7 @@ status: draft
 | SelectableLabel | BuilderFactory | Yes | 2 | 0 | 0 | Immediate |
 | Separator | BuilderFactory | No | 0 | 0 | 5 | Immediate |
 | SetAnimationFreeze | Procedural | No | 1 | 0 | - | - |
+| SetVideoPipeline | Procedural | No | 1 | 0 | - | - |
 | SetWindowCollapsed | Procedural | Yes | 1 | 0 | - | - |
 | ShowDebugTools | Procedural | No | 0 | 0 | - | - |
 | ShowPuffinProfiler | Procedural | No | 0 | 0 | - | - |
@@ -3273,6 +3275,19 @@ Block
 
 ---
 
+### SetVideoPipeline
+
+- **Type:** Procedural
+- **Identity:** No
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| codec | plain | u32 |
+
+---
+
 ### SetWindowCollapsed
 
 - **Type:** Procedural
@@ -3729,5 +3744,18 @@ Block
 | portsB | u32h |
 | xs | f32h |
 | ys | f32h |
+
+---
+
+### FetchVideoCapabilities
+
+- **Type:** Fetcher
+
+#### Return Values
+
+| Name | Type |
+|------|------|
+| codecIds | u64h |
+| flags | u32h |
 
 ---

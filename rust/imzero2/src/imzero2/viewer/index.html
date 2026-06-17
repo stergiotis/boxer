@@ -482,7 +482,7 @@ function connect() {
     else if (data[0] === PREFIX_SESSION) {
       const h = parseHello(payload);
       if (h) {
-        const changed = !hello || hello.width !== h.width || hello.height !== h.height || hello.ppp !== h.ppp;
+        const changed = !hello || hello.width !== h.width || hello.height !== h.height || hello.ppp !== h.ppp || hello.codec !== h.codec;
         hello = h;
         if (changed) {
           canvas.width = h.width;

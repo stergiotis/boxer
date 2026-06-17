@@ -37,6 +37,16 @@ impl VideoCodec {
             _ => None,
         }
     }
+
+    /// Map the Go-side codec id (ADR-0088 `setVideoPipeline`): 1=VP9, 2=AV1,
+    /// anything else = H.264.
+    pub fn from_u8(v: u8) -> Self {
+        match v {
+            1 => VideoCodec::Vp9,
+            2 => VideoCodec::Av1,
+            _ => VideoCodec::H264,
+        }
+    }
 }
 
 /// H.264 bitstream filter: repeat SPS/PPS on every key frame so a
@@ -113,4 +123,33 @@ impl CodecLane {
             },
         }
     }
+}
+
+/// SD5 host-encode probe: which codecs actually encode on this host. Runs a
+/// 2-frame probe-encode per software lane to `-f null` — a *listing* would
+/// miss the Fedora-mesa `h264_vaapi`→ENOSYS class, where the encoder opens
+/// and only fails at encode time. The result feeds the Go control so an
+/// unavailable codec is never offered.
+pub fn probe_host_encode() -> Vec<(VideoCodec, bool)> {
+    [VideoCodec::H264, VideoCodec::Vp9, VideoCodec::Av1]
+        .into_iter()
+        .map(|c| (c, probe_encode_one(&CodecLane::software(c))))
+        .collect()
+}
+
+fn probe_encode_one(lane: &CodecLane) -> bool {
+    let mut cmd = std::process::Command::new("ffmpeg");
+    cmd.args([
+        "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
+        "color=c=black:s=64x64:r=30", "-frames:v", "2",
+    ])
+    .args(&lane.encoder_args);
+    if let Some(bsf) = lane.bsf {
+        cmd.arg("-bsf:v").arg(bsf);
+    }
+    cmd.args(["-f", "null", "-"])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    cmd.status().map(|s| s.success()).unwrap_or(false)
 }

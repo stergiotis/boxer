@@ -1910,6 +1910,14 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     // invocation for the same widget id (so it never leaks across widgets,
     // even when the editor is culled). See ADR-0063.
     text_edit_pending_insert: Option<String>,
+    // ADR-0088 runtime codec pipeline: `setVideoPipeline` stashes the
+    // requested codec here (0=H.264, 1=VP9, 2=AV1); the headless host drains
+    // it after dispatch and re-points the encoder. `video_cap_*` are pushed
+    // by the host each frame (browser-decode ∩ host-encode capabilities) and
+    // drained to Go by `fetchVideoCapabilities`.
+    video_pipeline_request: Option<u8>,
+    video_cap_ids: Vec<u64>,
+    video_cap_flags: Vec<u32>,
     // egui_table prefetch feedback: per-table visible range, filled by
     // EtStripedDelegate::prepare (declared in the endETable IDL apply
     // code) and drained by fetchR9EtPrefetch. 5 values per id:
@@ -2142,6 +2150,27 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
 }
 
 impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
+    /// ADR-0088: take a pending runtime codec-pipeline request (set by the
+    /// `setVideoPipeline` opcode); the headless host applies it to the encoder.
+    pub fn take_video_pipeline_request(&mut self) -> Option<u8> {
+        self.video_pipeline_request.take()
+    }
+
+    /// ADR-0088: publish the video-pipeline capabilities for Go to drain via
+    /// `fetchVideoCapabilities`. Each entry is (codecId, flags); flags bit0 =
+    /// host-can-encode, bit1 = browser-decode-supported, bit2 = smooth,
+    /// bit3 = power-efficient. Replaces any not-yet-fetched set.
+    pub fn set_video_capabilities(&mut self, caps: &[(u8, u32)]) {
+        self.video_cap_ids.clear();
+        self.video_cap_flags.clear();
+        for &(id, flags) in caps {
+            self.video_cap_ids.push(id as u64);
+            self.video_cap_flags.push(flags);
+        }
+    }
+}
+
+impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
     pub fn new(r: R, w: W) -> Self {
         //let default_resp = || {
         //    let rect = egui::Rect {
@@ -2249,6 +2278,9 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             r21_ui_rect_max_x: Vec::with_capacity(8),
             r21_ui_rect_max_y: Vec::with_capacity(8),
             dock_states: std::collections::HashMap::new(),
+            video_pipeline_request: None,
+            video_cap_ids: Vec::new(),
+            video_cap_flags: Vec::new(),
             graph_pending_nodes: Vec::with_capacity(64),
             graph_pending_edges: Vec::with_capacity(64),
             graph_states: std::collections::HashMap::new(),
@@ -5702,6 +5734,22 @@ self.io.write_plain_u64h(len, node_ids_b)?;
 self.io.write_plain_u32h(len, ports_b)?;
 self.io.write_plain_f32h(len, xs)?;
 self.io.write_plain_f32h(len, ys)?;
+self.io.flush()?;
+
+
+}
+FuncProcId::FetchVideoCapabilities => {
+    #[cfg(feature = "puffin")]
+	puffin::profile_scope!("match FuncProcId::FetchVideoCapabilities");
+if d == 0 {
+self.end_consume_message()?;
+}
+// apply
+// generating location: /home/spx/repo/boxer/public/thestack/imzero2/egui2/definition/egui2_definition_templating.go:66 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+let len = self.video_cap_ids.len();
+self.io.write_plain_u64h(len, self.video_cap_ids.drain(..))?;
+self.io.write_plain_u32h(len, self.video_cap_flags.drain(..))?;
 self.io.flush()?;
 
 
@@ -10297,6 +10345,19 @@ self.end_consume_message()?;
 // apply
 
 			self.animation_freeze = freeze;
+
+}
+FuncProcId::SetVideoPipeline => {
+    #[cfg(feature = "puffin")]
+	puffin::profile_scope!("match FuncProcId::SetVideoPipeline");
+// arguments
+#[allow(unused_mut)]
+let mut codec = self.io.read_plain_u32()?;
+if d == 0 {
+self.end_consume_message()?;
+}
+// apply
+self.video_pipeline_request = Some(codec as u8);
 
 }
 FuncProcId::SetWindowCollapsed => {

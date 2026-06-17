@@ -176,3 +176,9 @@ func (inst *Fetcher) FetchSnarlEvents() (editorIds []uint64, kinds []uint32, nod
 	ys = inst.iterateF32h()
 	return
 }
+func (inst *Fetcher) FetchVideoCapabilities() (codecIds []uint64, flags iter.Seq[uint32]) {
+	inst.invoke(FuncProcIdFetchVideoCapabilities)
+	codecIds = inst.readU64h()
+	flags = inst.iterateU32h()
+	return
+}
