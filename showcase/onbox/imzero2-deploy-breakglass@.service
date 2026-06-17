@@ -1,0 +1,20 @@
+[Unit]
+Description=imzero2 demo — BREAK-GLASS deploy of an UNSIGNED exact revision (ADR-0085 SD10/SD11 interim)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=imzero2
+Group=imzero2
+# Interim break-glass: identical to imzero2-deploy@.service but SKIPS signature
+# verification (--require-signed-tags=false) for a revision that genuinely cannot
+# be signed in the moment. A DELIBERATELY distinct, loud unit name — you cannot
+# break glass by accident, and it must never appear in a timer. The deploy logs a
+# WARN; the proper audited, marker-writing break-glass (SD11) is the Phase-6
+# follow-on. Prefer the signed imzero2-deploy@.service whenever the commit can be
+# signed (same trusted keys as release tags).
+ExecStart=/opt/imzero2/current/main_go --logFormat=console --logLevel=info imzero2 deploy --root /opt/imzero2 --ref %I --require-signed-tags=false
+TimeoutStartSec=infinity
+Environment=HOME=/opt/imzero2
+Environment=CARGO_HOME=/opt/imzero2/.cargo

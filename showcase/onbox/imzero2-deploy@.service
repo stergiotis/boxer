@@ -1,0 +1,24 @@
+[Unit]
+Description=imzero2 demo — operator out-of-cadence deploy of an exact revision (ADR-0085 SD10)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=imzero2
+Group=imzero2
+# Same entrypoint, env, and sandbox as imzero2-deploy.service — its 10-fedora
+# (toolchain PATH/RUSTUP_HOME) and 20-hardening drop-ins are mirrored into
+# imzero2-deploy@.service.d/ by the provisioner — so an operator --ref deploy
+# runs in the IDENTICAL toolchain context as the poll timer. No hand-built PATH,
+# no `cargo: command not found`. The instance is the revision; %I is its
+# unescaped form, so `systemctl start imzero2-deploy@<ref>.service` (run
+# <ref> through systemd-escape if it contains '/'). See onbox/deploy-ref.sh.
+ExecStart=/opt/imzero2/current/main_go --logFormat=console --logLevel=info imzero2 deploy --root /opt/imzero2 --ref %I
+# A cold build is long; never kill mid-build.
+TimeoutStartSec=infinity
+# git/cargo/go state lives under the deploy root.
+Environment=HOME=/opt/imzero2
+Environment=CARGO_HOME=/opt/imzero2/.cargo
+# Restart of imzero2-demo.service is allowed via the polkit rule
+# (49-imzero2-deploy.rules), exactly as for the poll service.

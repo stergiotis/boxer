@@ -58,6 +58,8 @@ glibc matches by construction.
    install -m755 run-current.sh /opt/imzero2/run-current.sh
    install -m644 building.html  /opt/imzero2/holding/building.html
    install -m644 imzero2-demo.service imzero2-deploy.service imzero2-deploy.timer /etc/systemd/system/
+   install -m644 'imzero2-deploy@.service' 'imzero2-deploy-breakglass@.service' /etc/systemd/system/
+   install -m755 deploy-ref.sh /opt/imzero2/deploy-ref.sh
    install -m644 49-imzero2-deploy.rules /etc/polkit-1/rules.d/
    chown -R imzero2:imzero2 /opt/imzero2
    ```
@@ -83,6 +85,41 @@ mirror or forged ref must not make the box build arbitrary code. So:
 - **Dev/loopback escape only:** `IMZERO2_DEPLOY_REQUIRE_SIGNED_TAGS=0` (or
   `--require-signed-tags=false`) skips verification. The deploy logs a loud
   warning; never use it on an internet-exposed box.
+
+## Emergency deploy of an exact revision (operator `--ref`, SD10)
+
+The poll timer only deploys signed *release tags*. To deploy a specific revision
+out-of-cadence — an emergency hotfix that is not yet a release, or a pin back to
+a known-good commit — use the operator entrypoint. It runs in the **same systemd
+unit env + sandbox as the timer**, so the on-box build finds cargo/go and you
+never hand-reconstruct `PATH` (the `cargo: command not found` trap of a bare
+manual run):
+
+```bash
+# verified: the commit must be signed by a trusted key (the same allowed_signers
+# as tags, SD11). Push it to the remote the box fetches first.
+sudo /opt/imzero2/deploy-ref.sh origin/hotfix          # a branch, commit SHA, or tag
+
+# interim break-glass: an UNSIGNED revision that genuinely cannot be signed now.
+# A distinct, loud unit — never leave it in a timer.
+sudo /opt/imzero2/deploy-ref.sh --break-glass <ref>
+```
+
+`deploy-ref.sh` is a thin wrapper over the templated unit; since it is
+`Type=oneshot`, the start blocks and returns the deploy's exit status. The raw
+form, if you prefer it:
+
+```bash
+sudo systemctl start "imzero2-deploy@$(systemd-escape -- origin/hotfix).service"
+journalctl -u "imzero2-deploy@$(systemd-escape -- origin/hotfix).service" -f
+# break-glass is the imzero2-deploy-breakglass@ template instead.
+```
+
+The release is named by `git describe` (e.g. `v0.1.3-2-gabc1234`), which is its
+**version floor**: the next *newer* signed tag supersedes it on the following
+poll, but a re-tag of the base or an older tag will not revert it (SD12). If
+`current/main_go` is itself broken, bootstrap from the workspace launcher as in
+the next section, adding `--ref <rev>`.
 
 ## Bootstrap the first release
 
