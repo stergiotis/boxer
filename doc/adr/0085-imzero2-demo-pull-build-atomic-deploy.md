@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-06-13
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-06-17
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0085: On-box pull-build-and-atomic-deploy for the imzero2 headless demo
 
@@ -139,7 +137,7 @@ We adopt **O1**. Concretely:
 
 ## Status
 
-Proposed — awaiting review by p@stergiotis.
+Accepted (reviewed 2026-06-17 by p@stergiotis).
 
 Implementation phasing: **Phase 1** — the `deploy` subcommand happy path (fetch → checkout → build via the existing scripts → stage to `releases/<tag>/` → `ws_probe` gate → symlink swap → restart). **Phase 2** — rollback + retention + post-restart re-probe (SD6). **Phase 3** — env-registry knobs (SD7) surfaced in `doc/env-vars.md`; `runinfo` agreement asserted. **Phase 4** — signed-tag verification (SD8) + the optional audited bus record (SD7). **Phase 5** — the systemd `service`/`timer` units, the Caddy `handle_errors` holding page, and end-to-end validation on a build-sized Hetzner box. The existing container kit (`showcase/`) is untouched and remains the manual / off-box path (and the basis of O2). **Phase 6** — the operator/emergency path (SD10–SD12): `--ref` deploy through the env-correct entrypoint, `git verify-commit` provenance, the version-floor supersession rule, and the audited self-reverting `--break-glass`. Per the descope-over-gate practice, the first cut is `--ref` + commit-verification + the version floor — which removes the emergency friction and the hotfix-revert trap and covers signed hotfixes once commit-signing is adopted; the proper `--break-glass` then landed: a per-release `BREAKGLASS` marker + an append-only `breakglass-audit.jsonl` trail under the deploy root (the oneshot has no bus for SD7's audited `Request`). Remaining: `validate.sh` `--ref`/break-glass coverage and an on-box run.
 
