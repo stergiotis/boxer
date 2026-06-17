@@ -272,9 +272,15 @@ pub fn probe_host_encode() -> Vec<(VideoCodec, LaneProbe, LaneProbe)> {
 /// discarded on success.
 pub fn probe_lane(lane: &CodecLane) -> LaneProbe {
     let mut cmd = std::process::Command::new("ffmpeg");
+    // The probe frame must clear hardware encoders' minimum coded size: AMD VCN
+    // rejects anything below 128×128 ("Hardware does not support encoding at
+    // size …" → "Error while opening encoder"), which classify_probe_stderr
+    // would otherwise read as EncodeRejected and wrongly disqualify a VAAPI lane
+    // that encodes fine at real stream sizes. 256×256 clears the floor for both
+    // H.264 (128–4096) and AV1 (128–8192 × 128–4352).
     cmd.args([
         "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
-        "color=c=black:s=64x64:r=30", "-frames:v", "2",
+        "color=c=black:s=256x256:r=30", "-frames:v", "2",
     ])
     .args(&lane.encoder_args);
     if let Some(bsf) = lane.bsf {
