@@ -11,8 +11,8 @@ Group=imzero2
 # verification (--require-signed-tags=false) for a revision that genuinely cannot
 # be signed in the moment. A DELIBERATELY distinct, loud unit name — you cannot
 # break glass by accident, and it must never appear in a timer. The deploy logs a
-# WARN; the proper audited, marker-writing break-glass (SD11) is the Phase-6
-# follow-on. Prefer the signed imzero2-deploy@.service whenever the commit can be
+# WARN, writes a BREAKGLASS marker into the release, and appends to the box's
+# breakglass-audit.jsonl trail (SD11). Prefer the signed imzero2-deploy@.service whenever the commit can be
 # signed (same trusted keys as release tags).
 ExecStart=/opt/imzero2/current/main_go --logFormat=console --logLevel=info imzero2 deploy --root /opt/imzero2 --ref %I --require-signed-tags=false
 TimeoutStartSec=infinity

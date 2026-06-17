@@ -105,6 +105,11 @@ sudo /opt/imzero2/deploy-ref.sh origin/hotfix          # a branch, commit SHA, o
 sudo /opt/imzero2/deploy-ref.sh --break-glass <ref>
 ```
 
+A break-glass deploy is recorded three ways: a `BREAKGLASS` file in the release
+dir (so `ls /opt/imzero2/current/` shows it is unverified), a JSON line appended
+to `/opt/imzero2/breakglass-audit.jsonl` (the durable trail of every unsigned
+deploy), and a loud `WARN` in the journal.
+
 `deploy-ref.sh` is a thin wrapper over the templated unit; since it is
 `Type=oneshot`, the start blocks and returns the deploy's exit status. The raw
 form, if you prefer it:

@@ -14,6 +14,7 @@ package deploy
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -59,6 +60,9 @@ type Config struct {
 	// exact revision (commit/branch/tag) now, bypassing tag-selection, with its
 	// commit signature verified like a tag (SD11). Empty = the autonomous tag poll.
 	Ref string
+	// Root is the deploy root (<root>/{workspace,releases,current}); the
+	// append-only break-glass audit log (SD11) lives here.
+	Root string
 }
 
 // Build-artifact locations relative to the workspace clone root.
@@ -152,6 +156,17 @@ func deployResolved(ctx context.Context, lg zerolog.Logger, cfg Config, committi
 	if err != nil {
 		return false, err
 	}
+	// SD11: a release built without signature verification self-identifies via a
+	// BREAKGLASS marker (it rides into `current` on swap); the durable audit line
+	// is appended once it actually goes live, below.
+	var bg breakglassRecord
+	if !cfg.RequireSignedTags {
+		bg = newBreakglassRecord(relDir, committish, commit)
+		if mErr := writeBreakglassMarker(relDir, bg); mErr != nil {
+			lg.Warn().Err(mErr).Str("release", relName).Msg("deploy: could not write BREAKGLASS marker")
+		}
+		lg.Warn().Str("release", relName).Str("commit", short(commit)).Msg("deploy: BREAKGLASS — building an UNVERIFIED release (signature check skipped)")
+	}
 	if err = gate(ctx, lg, cfg, relDir); err != nil {
 		// `current` is untouched; the candidate stays on disk for inspection.
 		return false, eh.Errorf("deploy: gate failed for %s (current untouched): %w", relName, err)
@@ -177,6 +192,14 @@ func deployResolved(ctx context.Context, lg zerolog.Logger, cfg Config, committi
 		return false, eh.Errorf("deploy: %s rolled back to %s after activation failure: %w", relName, filepath.Base(prev), actErr)
 	}
 	prune(lg, cfg)
+	if !cfg.RequireSignedTags {
+		audit := breakglassAuditPath(cfg)
+		if aErr := appendAuditLine(audit, bg); aErr != nil {
+			lg.Warn().Err(aErr).Str("audit", audit).Msg("deploy: could not append break-glass audit record")
+		} else {
+			lg.Warn().Str("audit", audit).Str("release", relName).Msg("deploy: BREAKGLASS deploy recorded to the audit log")
+		}
+	}
 	lg.Info().Str("release", relName).Str("commit", short(commit)).Msg("deploy: live")
 	return true, nil
 }
@@ -265,6 +288,93 @@ func verifyCommit(ctx context.Context, lg zerolog.Logger, cfg Config, commit str
 	}
 	lg.Info().Str("commit", short(commit)).Msg("deploy: commit signature verified")
 	return nil
+}
+
+// --- break-glass marker + audit (SD11) ---
+
+// breakglassMarkerName is the file dropped into a release dir that was deployed
+// without signature verification.
+const breakglassMarkerName = "BREAKGLASS"
+
+// breakglassRecord is one unverified ("break-glass") deploy. The deploy oneshot
+// is a separate process with no inprocbus / ClickHouse-backed audit sink (it is
+// deliberately CH-free, SD5), so the SD7 in-process-bus audit does not apply
+// here; this is the durable record instead — a marker in the release dir plus a
+// JSON line in the box's append-only break-glass log.
+type breakglassRecord struct {
+	Ts       string `json:"ts"`
+	Event    string `json:"event"`
+	Ref      string `json:"ref"`
+	Commit   string `json:"commit"`
+	Release  string `json:"release"`
+	Verified bool   `json:"verified"`
+	Host     string `json:"host"`
+	User     string `json:"user,omitempty"`
+	Operator string `json:"operator,omitempty"`
+}
+
+func newBreakglassRecord(relDir, committish, commit string) breakglassRecord {
+	host, _ := os.Hostname()
+	return breakglassRecord{
+		Ts:       time.Now().UTC().Format(time.RFC3339),
+		Event:    "breakglass_deploy",
+		Ref:      committish,
+		Commit:   commit,
+		Release:  filepath.Base(relDir),
+		Verified: false,
+		Host:     host,
+		User:     firstEnv("USER", "LOGNAME"),
+		// Best-effort; the systemd-launched unit usually has neither, but the
+		// human who started it is captured by journald/auditd's login uid.
+		Operator: firstEnv("IMZERO2_DEPLOY_OPERATOR", "SUDO_USER"),
+	}
+}
+
+// writeBreakglassMarker drops a human-readable BREAKGLASS file into relDir so the
+// running release self-identifies as deployed without signature verification.
+func writeBreakglassMarker(relDir string, rec breakglassRecord) error {
+	body := fmt.Sprintf(`UNVERIFIED RELEASE — signature verification was skipped (break-glass, ADR-0085 SD11).
+
+deployed: %s
+ref:      %s
+commit:   %s
+release:  %s
+host:     %s
+
+This release's provenance was NOT verified against a trusted key. Roll forward to
+a signed release as soon as possible (doc/howto/release-signing.md).
+`, rec.Ts, rec.Ref, rec.Commit, rec.Release, rec.Host)
+	return os.WriteFile(filepath.Join(relDir, breakglassMarkerName), []byte(body), 0o644)
+}
+
+// breakglassAuditPath is the box's append-only break-glass audit log.
+func breakglassAuditPath(cfg Config) string {
+	return filepath.Join(cfg.Root, "breakglass-audit.jsonl")
+}
+
+// appendAuditLine appends one JSON record to the append-only audit log at path
+// (created if absent) — the durable, greppable trail of every unverified deploy.
+func appendAuditLine(path string, rec breakglassRecord) error {
+	line, err := json.Marshal(rec)
+	if err != nil {
+		return err
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o640)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+	_, err = f.Write(append(line, '\n'))
+	return err
+}
+
+func firstEnv(keys ...string) string {
+	for _, k := range keys {
+		if v := os.Getenv(k); v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func build(ctx context.Context, lg zerolog.Logger, cfg Config) error {

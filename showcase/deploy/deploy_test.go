@@ -1,6 +1,10 @@
 package deploy
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -138,4 +142,51 @@ func equalInts(a, b []int) bool {
 		}
 	}
 	return true
+}
+
+func TestBreakglassMarkerAndAudit(t *testing.T) {
+	root := t.TempDir()
+	relDir := filepath.Join(root, "releases", "v0.1.3-2-gabc1234")
+	if err := os.MkdirAll(relDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rec := newBreakglassRecord(relDir, "origin/hotfix", "abc1234def5678")
+
+	// The marker rides in the release dir and names the ref + commit.
+	if err := writeBreakglassMarker(relDir, rec); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(relDir, breakglassMarkerName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"UNVERIFIED", "origin/hotfix", "abc1234def5678"} {
+		if !strings.Contains(string(got), want) {
+			t.Fatalf("marker missing %q:\n%s", want, got)
+		}
+	}
+
+	// The audit log APPENDS (never truncates) one JSON record per deploy.
+	audit := filepath.Join(root, "breakglass-audit.jsonl")
+	if err := appendAuditLine(audit, rec); err != nil {
+		t.Fatal(err)
+	}
+	if err := appendAuditLine(audit, rec); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(audit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("want 2 audit lines, got %d:\n%s", len(lines), raw)
+	}
+	var rr breakglassRecord
+	if err := json.Unmarshal([]byte(lines[0]), &rr); err != nil {
+		t.Fatalf("audit line not JSON: %v", err)
+	}
+	if rr.Verified || rr.Ref != "origin/hotfix" || rr.Event != "breakglass_deploy" {
+		t.Fatalf("unexpected record: %+v", rr)
+	}
 }

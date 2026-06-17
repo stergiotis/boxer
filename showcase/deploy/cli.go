@@ -69,6 +69,7 @@ func NewCommand() *cli.Command {
 				FallbackFont:      c.String("fallback-font"),
 				DryRun:            c.Bool("dry-run"),
 				Ref:               c.String("ref"),
+				Root:              root,
 			}
 			_, err := Run(c.Context, log.Logger, cfg)
 			return err
