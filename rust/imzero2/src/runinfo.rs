@@ -79,16 +79,23 @@ pub fn log_bound_run() {
 mod tests {
     use super::*;
 
+    // These tests mutate the process-global ENV_VAR (PEBBLE2_RUN_ID) and cargo
+    // runs tests in parallel, so a shared lock serializes them — otherwise one
+    // test's set_var races another's remove_var + assert (the flake that hit
+    // parse_helper_returns_none_when_unset). Recover from poisoning so a single
+    // genuinely-failing test doesn't mask the rest behind lock-panic noise.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     // OnceLock memoises the first env-var read, so a single process
     // can only exercise one branch of run_id() per test binary. This
     // test asserts the present-value path; the absent path is covered
     // by parse_helper below which doesn't touch the global.
     #[test]
     fn parse_helper_returns_some_when_set() {
-        // SAFETY: Rust 2024 marks env mutation unsafe due to
-        // multi-thread hazards; cargo test is multi-threaded by
-        // default, but ENV_VAR is namespaced to this codebase and
-        // these tests don't race a producing thread.
+        let _env = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        // SAFETY: Rust 2024 marks env mutation unsafe due to multi-thread
+        // hazards; ENV_LOCK serializes the env-mutating tests against each
+        // other, and no non-test thread reads ENV_VAR during the test run.
         unsafe {
             std::env::set_var(ENV_VAR, "abcdef1234567890");
         }
@@ -101,6 +108,7 @@ mod tests {
 
     #[test]
     fn parse_helper_returns_none_when_unset() {
+        let _env = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         unsafe {
             std::env::remove_var(ENV_VAR);
         }
@@ -110,6 +118,7 @@ mod tests {
 
     #[test]
     fn parse_helper_returns_none_on_empty() {
+        let _env = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         unsafe {
             std::env::set_var(ENV_VAR, "");
         }
