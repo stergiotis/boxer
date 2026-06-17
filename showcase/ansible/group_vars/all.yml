@@ -29,6 +29,19 @@ rust_version: "1.92"
 imzero2_encoder_args: "-c:v libopenh264 -b:v 4M -bf 0 -g 60"
 imzero2_install_rpmfusion_ffmpeg: false
 
+# --- hardware video encode (GPU boxes only) ---
+# Install RPM Fusion's freeworld Mesa VA-API driver (+ vainfo) so the GPU's
+# VCN/Quick Sync does H.264/HEVC/AV1 in hardware — imzero2 headless then
+# auto-selects it (ADR-0088 CodecLane::best probes VAAPI, else software). Also
+# pulls the full ffmpeg (for its VA-API encoder wrappers). On the demo unit it
+# also clears IMZERO2_HEADLESS_ENCODER_ARGS (so best() auto-selects HW instead
+# of the software pin) and, when imzero2_systemd_hardening is on, exposes the
+# GPU render node (PrivateDevices=false + DeviceAllow=char-drm). INERT without a
+# GPU: a no-GPU cloud box (e.g. Hetzner cpx32) has no render node, so best()
+# falls back to libopenh264 regardless — leave this off there. Recipe:
+# doc/howto/amd-hardware-video-encoding.md.
+imzero2_install_vaapi_freeworld: false
+
 # --- deploy security (SD8) ---
 # With signed tags required (default, correct for an exposed box) you MUST list
 # the release signer(s) in imzero2_allowed_signers, else the deploy refuses to

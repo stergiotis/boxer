@@ -28,14 +28,22 @@
       - google-noto-sans-cjk-fonts
     state: present
 
-- name: Install ffmpeg (Fedora ffmpeg-free → libopenh264)
+# ffmpeg + optional hardware video encode. Three cases:
+#   - neither flag: Fedora's ffmpeg-free (libopenh264 software encode).
+#   - imzero2_install_rpmfusion_ffmpeg: full ffmpeg from RPM Fusion (adds libx264).
+#   - imzero2_install_vaapi_freeworld: the freeworld Mesa VA-API driver so the
+#     GPU's VCN/Quick Sync does H.264/HEVC/AV1 — imzero2 auto-selects it
+#     (ADR-0088 CodecLane::best). Inert without a GPU; also pulls full ffmpeg.
+# Either flag enables the RPM Fusion free repo + full ffmpeg (and its VA-API
+# encoder wrappers); the freeworld flag adds the driver + vainfo on top.
+- name: Install ffmpeg-free (Fedora libopenh264 build)
   ansible.builtin.package:
     name: ffmpeg-free
     state: present
-  when: not imzero2_install_rpmfusion_ffmpeg
+  when: not (imzero2_install_rpmfusion_ffmpeg or imzero2_install_vaapi_freeworld)
 
-- name: Install RPM Fusion ffmpeg (libx264) instead
-  when: imzero2_install_rpmfusion_ffmpeg
+- name: RPM Fusion media stack (full ffmpeg; optional freeworld VA-API driver)
+  when: imzero2_install_rpmfusion_ffmpeg or imzero2_install_vaapi_freeworld
   block:
     - name: Enable RPM Fusion (free)
       ansible.builtin.command: >-
@@ -43,10 +51,15 @@
         https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-{{ ansible_distribution_major_version }}.noarch.rpm
       args:
         creates: /etc/yum.repos.d/rpmfusion-free.repo
-    - name: Install the full ffmpeg (replaces ffmpeg-free)
+    - name: Install the full ffmpeg (replaces ffmpeg-free; libx264 + VA-API encoder wrappers)
       ansible.builtin.command: dnf -y --allowerasing install ffmpeg
       register: _ff
       changed_when: "'Nothing to do' not in _ff.stdout"
+    - name: Install the freeworld Mesa VA-API driver + vainfo (hardware H.264/HEVC/AV1 encode)
+      ansible.builtin.command: dnf -y --allowerasing install mesa-va-drivers-freeworld libva-utils
+      register: _va
+      changed_when: "'Nothing to do' not in _va.stdout"
+      when: imzero2_install_vaapi_freeworld
 
 - name: Is firewalld active?
   ansible.builtin.command: systemctl is-active firewalld
