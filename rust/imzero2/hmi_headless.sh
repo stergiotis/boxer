@@ -5,7 +5,10 @@
 #
 #   ./hmi_headless.sh                          # widgets demo on 127.0.0.1:8089
 #   ./hmi_headless.sh --launch play            # any demo selector
-#   IMZERO2_HEADLESS_LISTEN=0.0.0.0:8089 ...   # expose beyond localhost (trusted networks only — no auth at v1)
+#   IMZERO2_HEADLESS_LISTEN=0.0.0.0:8089 ...   # off-loopback bind is REFUSED (host has no auth/TLS yet,
+#                                              # ADR-0082): front it with an authenticating TLS reverse
+#                                              # proxy, or set IMZERO2_HEADLESS_INSECURE_EXPOSE=1 to
+#                                              # override on a trusted / air-gapped network
 #
 # Viewer page: http://<host>:<port+1>/  (WebCodecs-capable browser required)
 #
@@ -33,6 +36,35 @@ export IMZERO2_HEADLESS_LISTEN="${IMZERO2_HEADLESS_LISTEN:-127.0.0.1:8089}"
 export IMZERO2_HEADLESS_FPS="${IMZERO2_HEADLESS_FPS:-30}"
 WINDOW_W="${WINDOW_W:-1280}"
 WINDOW_H="${WINDOW_H:-800}"
+
+# Bind-address gate (ADR-0082). The headless carrier has no authentication or TLS
+# yet — ADR-0082 is accepted but not implemented in wscarrier.rs — so an
+# off-loopback bind serves an unauthenticated, unencrypted stream, and because the
+# same WebSocket carries input, anyone who can reach it gets full remote control.
+# Fail closed: refuse a non-loopback IMZERO2_HEADLESS_LISTEN unless the operator
+# explicitly accepts the risk (trusted/air-gapped LAN, or behind an authenticating
+# TLS-terminating reverse proxy). Drop this gate once the carrier enforces token +
+# TLS itself.
+listen_addr="$IMZERO2_HEADLESS_LISTEN"
+if [[ "$listen_addr" == \[*\]:* ]]; then
+	bind_host="${listen_addr#\[}"; bind_host="${bind_host%%\]*}"   # [ipv6]:port
+else
+	bind_host="${listen_addr%:*}"                                  # host:port (or bare host)
+fi
+case "$bind_host" in
+	127.*|::1|localhost) ;;                                        # loopback — always allowed
+	*)
+		if [[ "$IMZERO2_HEADLESS_INSECURE_EXPOSE" == 1 ]]; then
+			echo "hmi_headless.sh: WARNING — binding non-loopback '${bind_host:-<all interfaces>}' with NO auth/TLS (ADR-0082 unimplemented);" >&2
+			echo "hmi_headless.sh:           the stream AND its input channel are exposed to anyone who can reach this address." >&2
+		else
+			echo "hmi_headless.sh: refusing non-loopback bind '${bind_host:-<all interfaces>}' — the headless host has no auth/TLS yet (ADR-0082)." >&2
+			echo "hmi_headless.sh: an off-loopback stream is unauthenticated and grants remote input control. Front it with an" >&2
+			echo "hmi_headless.sh: authenticating TLS reverse proxy, or set IMZERO2_HEADLESS_INSECURE_EXPOSE=1 to override on a trusted network." >&2
+			exit 1
+		fi
+		;;
+esac
 
 # Rebuild policy: compile only when launched interactively. The edit/run loop
 # wants a fresh binary, but a non-interactive launcher (a systemd unit, the
