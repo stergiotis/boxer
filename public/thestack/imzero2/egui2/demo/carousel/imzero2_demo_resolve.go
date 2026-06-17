@@ -81,11 +81,15 @@ func decorateRenderer(r func() error, extraMenus func(), status *runtimestatus.S
 	//      pass renders for capture, rather than the interactive idle
 	//      heartbeat below.
 	screenshotMode := imzero2env.ScreenshotDir.Get() != ""
-	// Render cadence (IMZERO2_RENDER_CADENCE), captured once. Continuous
-	// (default) paints at vsync rate; reactive drops to an idle heartbeat
-	// when nothing is happening. The Rust client reads the same variable;
-	// both sides must agree, since egui takes the soonest repaint deadline —
-	// an immediate request on either side overrides the other's heartbeat.
+	// Render cadence (IMZERO2_RENDER_CADENCE), captured once — the launch-time
+	// default, and the fallback when no remote stream is live. Continuous
+	// (default) paints at vsync rate; reactive drops to an idle heartbeat when
+	// nothing is happening. The Rust client reads the same variable; both sides
+	// must agree, since egui takes the soonest repaint deadline (an immediate
+	// request on either side overrides the other's heartbeat). The headless
+	// host's cadence is also runtime-switchable from the viewer, so the
+	// per-frame closure prefers that live value (videoState.HostReactive) over
+	// this flag when a stream is connected.
 	reactive := imzero2env.RenderCadence.Get() == imzero2env.RenderCadenceReactive
 	// ADR-0088: the remote-stream codec control. Persists the selected codec
 	// across frames; renders only when a remote viewer has reported decode
@@ -109,7 +113,21 @@ func decorateRenderer(r func() error, extraMenus func(), status *runtimestatus.S
 		// input and animation (it keeps the earliest deadline), so interaction
 		// stays at vsync rate while a visible-but-idle window drops to a few
 		// fps. The Rust side mirrors this (src/imzero2/app.rs).
-		if screenshotMode || !reactive {
+		//
+		// The headless host's cadence is runtime-switchable from the browser
+		// viewer (ADR-0088/0024): prefer the host's live cadence over the
+		// launch-time flag so a viewer-driven switch takes effect on the Go side
+		// too. videoState carries the value the host reported on the previous
+		// frame (refreshed by videooutput.ShowStatus below — a one-frame lag).
+		// Without this the Go side stays pinned to the launch cadence, and the
+		// immediate repaint defeats a runtime switch to reactive since egui
+		// takes the soonest repaint deadline. Falls back to the launch-time flag
+		// when no stream is live (desktop host, or before a viewer connects).
+		reactiveNow := reactive
+		if live, ok := videoState.HostReactive(); ok {
+			reactiveNow = live
+		}
+		if screenshotMode || !reactiveNow {
 			c.RequestRepaint()
 		} else {
 			c.RequestRepaintAfter(idleRepaintIntervalSecs)

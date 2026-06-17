@@ -45,6 +45,27 @@ func ShowStatus(ids *c.WidgetIdStack, st *State) {
 	}
 }
 
+// HostReactive reports the host's *live* render cadence as last refreshed by
+// [ShowStatus] from the remote stream: reactive is true when a stream is live
+// and the host is in reactive cadence. ok is false when no stream is live (the
+// desktop host, or before a viewer connects) — the caller then keeps its own
+// default.
+//
+// The headless host's cadence is runtime-switchable from the viewer (its
+// toggle sends SetCadence over the wire), whereas the launch-time
+// IMZERO2_RENDER_CADENCE the Go renderer captured at startup is not. The host
+// echoes its active cadence back in the fetchVideoStreamInfo telemetry; the
+// carousel's decorateRenderer reads it here so a viewer-driven switch reaches
+// the Go side too. Otherwise Go keeps emitting an immediate RequestRepaint
+// every frame, and because egui takes the soonest repaint deadline that pins
+// the host's reactive loop back to the full frame rate.
+func (st *State) HostReactive() (reactive bool, ok bool) {
+	if st.model.Stream.Valid() {
+		return st.model.Stream.Reactive, true
+	}
+	return false, false
+}
+
 // ShowDialog renders the video-output settings window when open. Call it at the
 // frame top level (outside the panels) so it floats over the app. It reads the
 // model ShowStatus refreshed this frame — it does not fetch again, so call
