@@ -6,10 +6,14 @@
 //! just declarative config here — no per-codec depacketizer or keyframe
 //! parser.
 //!
-//! Backend (hardware/software) selection and the runtime switch are later
-//! ADR-0088 phases; this module currently provides software lanes plus an
-//! explicit-args H.264 lane (the legacy `IMZERO2_HEADLESS_ENCODER_ARGS` /
-//! VAAPI default).
+//! Backend (hardware/software) selection is [`CodecLane::best`]: per codec it
+//! prefers the hardware (VAAPI) lane when [`probe_lane`] confirms it actually
+//! encodes on this host, else the portable software lane (ADR-0088 SD5). The
+//! same rule drives both the startup default and the runtime `setVideoPipeline`
+//! switch, so the encode backend reported to the Go control always matches what
+//! is used. H.264 also has an explicit-args escape hatch ([`CodecLane::h264`] —
+//! the `IMZERO2_HEADLESS_ENCODER_ARGS` override) for forcing software or pinning
+//! specific encoder args.
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VideoCodec {
@@ -66,9 +70,9 @@ pub struct CodecLane {
 }
 
 impl CodecLane {
-    /// H.264 with explicit ffmpeg args (preserves the legacy
-    /// `IMZERO2_HEADLESS_ENCODER_ARGS` override / the VAAPI default), muxed
-    /// through NUT like every other codec (ADR-0088 Phase 2).
+    /// H.264 with explicit ffmpeg args — the `IMZERO2_HEADLESS_ENCODER_ARGS`
+    /// escape hatch, used verbatim in place of [`CodecLane::best`]'s auto
+    /// HW/SW pick. Muxed through NUT like every other codec (ADR-0088 Phase 2).
     pub fn h264(encoder_args: Vec<String>) -> Self {
         Self {
             codec: VideoCodec::H264,

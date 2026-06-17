@@ -35,13 +35,15 @@
 //!   (ADR-0024 SD3) and append the raw Annex-B H.264 byte stream to this
 //!   file. Phase 2 verification target; the Phase 4/5 WebSocket carrier
 //!   replaces the file writer with a broadcaster.
-//! - `IMZERO2_HEADLESS_ENCODER_ARGS` — whitespace-split override of the
-//!   encode arguments between the rawvideo input and the `-f h264` output.
-//!   Default mirrors ImZero1 (SD3): VAAPI hwupload + `h264_vaapi -bf 0
-//!   -qp:v 26 -g 100000`. Software fallback for boxes without VAAPI
-//!   encode: `-c:v libopenh264 -rc_mode off -bf 0 -g 100000` (constant
-//!   quality + infinite GOP — measured frame-stable, see
-//!   DEFAULT_ENCODER_ARGS).
+//! - `IMZERO2_HEADLESS_ENCODER_ARGS` — whitespace-split override of the H.264
+//!   encode arguments (between the rawvideo input and the muxer). Applies to
+//!   H.264 only, and only when `IMZERO2_HEADLESS_CODEC` is unset or `h264`.
+//!   When unset, the lane is chosen automatically (`CodecLane::best` — VAAPI
+//!   when it encodes on this host, else `libopenh264`); set this to force
+//!   software — e.g. `-c:v libopenh264 -rc_mode off -bf 0 -g 100000` (constant
+//!   quality + infinite GOP, measured frame-stable) — or to pin specific
+//!   encoder args. VP9/AV1 have no equivalent override; they always take
+//!   `CodecLane::best`.
 //! - `IMZERO2_HEADLESS_LISTEN` — bind address for the WebSocket carrier
 //!   (e.g. `127.0.0.1:8089`); the embedded browser viewer page is served
 //!   over HTTP on port+1. Unset = remote access disabled.
@@ -115,10 +117,14 @@ impl HeadlessOpts {
 }
 
 /// Select the startup codec lane (ADR-0088 SD4). `IMZERO2_HEADLESS_CODEC`
-/// picks `h264` | `vp9` | `av1`; the runtime switch is a later phase. For
-/// H.264 the legacy `IMZERO2_HEADLESS_ENCODER_ARGS` override (or the VAAPI
-/// `DEFAULT_ENCODER_ARGS`) still applies, so an existing deployment with no
-/// codec var set behaves exactly as before.
+/// picks `h264` | `vp9` | `av1` (default `h264`); the runtime
+/// `setVideoPipeline` switch re-selects the same way. The backend is
+/// `CodecLane::best` — hardware (VAAPI) when it encodes on this host, else the
+/// portable software lane (SD5; avoids the Fedora-mesa `h264_vaapi` ENOSYS
+/// respawn loop). For H.264, a non-empty `IMZERO2_HEADLESS_ENCODER_ARGS`
+/// short-circuits that with the given args verbatim — the escape hatch to
+/// force software (`-c:v libopenh264 …`) or pin a specific encoder — so an
+/// existing deployment that sets it behaves exactly as before.
 fn build_codec_lane() -> CodecLane {
     let codec = std::env::var("IMZERO2_HEADLESS_CODEC")
         .ok()
