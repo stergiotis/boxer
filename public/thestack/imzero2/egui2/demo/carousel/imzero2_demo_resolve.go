@@ -22,7 +22,9 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/metricsoverlay"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/runtimestatus"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/videooutput"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/videopipeline"
 
 	// Side-effect imports — each app's init() registers itself into
 	// app.DefaultRegistry. Carousel is the single import site that pulls all
@@ -87,6 +89,10 @@ func decorateRenderer(r func() error, extraMenus func(), status *runtimestatus.S
 	// both sides must agree, since egui takes the soonest repaint deadline —
 	// an immediate request on either side overrides the other's heartbeat.
 	reactive := imzero2env.RenderCadence.Get() == imzero2env.RenderCadenceReactive
+	// ADR-0088: the remote-stream codec control. Persists the selected codec
+	// across frames; renders only when a remote viewer has reported decode
+	// capabilities (so it is invisible under the desktop host).
+	videoModel := &videopipeline.Model{}
 	return func() error {
 		// F1 global shortcut: open or focus HelpHost. The cached value
 		// was drained from egui's input queue during StateManager.Sync
@@ -160,6 +166,9 @@ func decorateRenderer(r func() error, extraMenus func(), status *runtimestatus.S
 						c.AddSpace(styletokens.GapSections(density))
 					}
 					metricsoverlay.RenderInline(ids.PrepareStr("fps"))
+					// ADR-0088 video-output control: codec picker for the remote
+					// stream, rendered only when a remote viewer is connected.
+					videooutput.Show(ids.PrepareStr("videoout"), videoModel)
 				}
 			}
 		}

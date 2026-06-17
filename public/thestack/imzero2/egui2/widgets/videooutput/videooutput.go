@@ -23,8 +23,7 @@ func Show(ids *c.WidgetIdStack, model *videopipeline.Model) {
 	model.Update(videopipeline.Decode(c.NewFetcher().FetchVideoCapabilities()))
 	offered := model.Offered()
 	if len(offered) == 0 {
-		c.Label("video output: no remote viewer / capabilities pending").Send()
-		return
+		return // no remote sink / no capabilities yet — render nothing
 	}
 	for range c.Horizontal().KeepIter() {
 		c.Label("Codec:").Send()
