@@ -133,11 +133,14 @@ impl CodecLane {
 pub fn probe_host_encode() -> Vec<(VideoCodec, bool)> {
     [VideoCodec::H264, VideoCodec::Vp9, VideoCodec::Av1]
         .into_iter()
-        .map(|c| (c, probe_encode_one(&CodecLane::software(c))))
+        .map(|c| (c, probe_lane(&CodecLane::software(c))))
         .collect()
 }
 
-fn probe_encode_one(lane: &CodecLane) -> bool {
+/// Probe whether a specific lane actually encodes on this host (SD5): a
+/// 2-frame probe-encode to `-f null`. Returns false when the encoder can't
+/// open or encode (e.g. `h264_vaapi` → ENOSYS on stock Fedora mesa).
+pub fn probe_lane(lane: &CodecLane) -> bool {
     let mut cmd = std::process::Command::new("ffmpeg");
     cmd.args([
         "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",

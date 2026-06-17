@@ -151,14 +151,33 @@ fn build_codec_lane() -> CodecLane {
             .map(|v| v.split_whitespace().map(str::to_owned).collect())
             .unwrap_or_else(|| DEFAULT_ENCODER_ARGS.iter().map(|s| (*s).to_owned()).collect())
     }
-    match std::env::var("IMZERO2_HEADLESS_CODEC")
+    let lane = match std::env::var("IMZERO2_HEADLESS_CODEC")
         .ok()
         .and_then(|v| VideoCodec::parse(&v))
     {
         Some(VideoCodec::Vp9) => CodecLane::software(VideoCodec::Vp9),
         Some(VideoCodec::Av1) => CodecLane::software(VideoCodec::Av1),
         Some(VideoCodec::H264) | None => CodecLane::h264(h264_args()),
+    };
+    // Fall back to the portable software lane if the configured encoder can't
+    // encode on this host — e.g. h264_vaapi opens then returns ENOSYS on stock
+    // Fedora mesa, which would otherwise loop the encoder respawn forever (SD5).
+    if crate::imzero2::codeclane::probe_lane(&lane) {
+        return lane;
     }
+    let sw = CodecLane::software(lane.codec);
+    if crate::imzero2::codeclane::probe_lane(&sw) {
+        tracing::warn!(
+            codec = lane.codec.as_str(),
+            "configured video encoder failed the startup probe — falling back to the software lane"
+        );
+        return sw;
+    }
+    tracing::error!(
+        codec = lane.codec.as_str(),
+        "no working video encoder on this host (configured and software lanes both failed the probe)"
+    );
+    lane
 }
 
 /// ADR-0088: combine the host-encode probe with the viewer's reported decode
