@@ -30,17 +30,14 @@ func init() {
 		Name:     "videooutput",
 		Category: "Inspectors & feedback",
 		Title:    icons.PhScreencast + " video output",
-		Stage:    [2]float32{660, 540},
+		Stage:    [2]float32{660, 700},
+		Flags:    registry.DemoFlagNeedsLargeArea,
 		Kind:     registry.DemoKindMixed,
-		Description: "The imzero2 remote-stream codec control (ADR-0088). In production it " +
-			"opens from a status-bar indicator when a browser viewer is connected. The dialog " +
-			"shows the live stream geometry/fps/cadence and telemetry (bitrate, frames sent / " +
-			"coalesced / behind); a codec picker annotated with the host encode backend and the " +
-			"browser decode standing (reported separately), the WebCodecs string, and the pixel " +
-			"format; and a 'Disabled encoders' table listing each lane the host probed unusable " +
-			"with the specific cause — here the VAAPI lanes a Fedora-mesa host opens but cannot " +
-			"encode with. Fed a representative model; production fetches it from the live host " +
-			"each frame.",
+		Description: "The imzero2 remote-stream codec control (ADR-0088): the stream " +
+			"geometry/fps/cadence and live telemetry, a codec picker annotated with the host " +
+			"encode backend and the browser decode standing (reported separately), and a " +
+			"'Disabled encoders' table naming each lane the host probed unusable. Opens from a " +
+			"status-bar indicator in production; fed a representative model here.",
 		Init: func(ids *c.WidgetIdStack) (state any) {
 			return &videoOutputDemoState{st: videooutput.NewGalleryState(videoOutputDemoModel())}
 		},
