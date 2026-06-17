@@ -34,8 +34,30 @@ export IMZERO2_HEADLESS_FPS="${IMZERO2_HEADLESS_FPS:-30}"
 WINDOW_W="${WINDOW_W:-1280}"
 WINDOW_H="${WINDOW_H:-800}"
 
-./build_rust_headless.sh || exit 1
-./build_go.sh || exit 1
+# Rebuild policy: compile only when launched interactively. The edit/run loop
+# wants a fresh binary, but a non-interactive launcher (a systemd unit, the
+# ansible deploy timer, CI) should run the already-built artifact rather than
+# invoke the toolchain on the box. The probe is stdin, so piping the output —
+# `./hmi_headless.sh | tee run.log` — still counts as interactive. HMI_BUILD=1/0
+# forces the decision; a missing binary rebuilds regardless, so a launcher never
+# starts nothing.
+go_bin="$here/main_go"
+rust_bin="$here/target/headless/release/imzero2"
+if [[ "$HMI_BUILD" == 0 ]]; then
+	do_build=0
+elif [[ "$HMI_BUILD" == 1 || -t 0 ]]; then
+	do_build=1
+elif [[ ! -x "$go_bin" || ! -x "$rust_bin" ]]; then
+	echo "hmi_headless.sh: pre-built binary missing — rebuilding despite non-interactive launch" >&2
+	do_build=1
+else
+	echo "hmi_headless.sh: non-interactive launch — skipping rebuild (HMI_BUILD=1 to force)" >&2
+	do_build=0
+fi
+if [[ "$do_build" == 1 ]]; then
+	./build_rust_headless.sh || exit 1
+	./build_go.sh || exit 1
+fi
 
 projectRoot="$here"
 while [ "$projectRoot" != "/" ] && [ ! -f "$projectRoot/go.mod" ]; do

@@ -67,8 +67,30 @@ if [[ -n "$IMZERO2_SCREENSHOT_SIZE" ]]; then
     fi
 fi
 
-./build_rust.sh || exit 1
-./build_go.sh || exit 1
+# Rebuild policy: compile only when launched interactively. The edit/run loop
+# wants a fresh binary, but a non-interactive launcher (a systemd unit, the
+# ansible deploy timer, CI) should run the already-built artifact rather than
+# invoke the toolchain on the box. The probe is stdin, so piping the output —
+# `./hmi.sh | tee run.log` — still counts as interactive. HMI_BUILD=1/0 forces
+# the decision; a missing binary rebuilds regardless, so a launcher never
+# starts nothing.
+go_bin="$here/main_go"
+rust_bin="$here/target/release/imzero2"
+if [[ "$HMI_BUILD" == 0 ]]; then
+	do_build=0
+elif [[ "$HMI_BUILD" == 1 || -t 0 ]]; then
+	do_build=1
+elif [[ ! -x "$go_bin" || ! -x "$rust_bin" ]]; then
+	echo "hmi.sh: pre-built binary missing — rebuilding despite non-interactive launch" >&2
+	do_build=1
+else
+	echo "hmi.sh: non-interactive launch — skipping rebuild (HMI_BUILD=1 to force)" >&2
+	do_build=0
+fi
+if [[ "$do_build" == 1 ]]; then
+	./build_rust.sh || exit 1
+	./build_go.sh || exit 1
+fi
 export BOXER_LOG_OS_PID_ON_START="true"
 export BOXER_LOG_OS_HOST_ON_START="true"
 #export BOXER_LOG_OS_ARGS_ON_START="true"
