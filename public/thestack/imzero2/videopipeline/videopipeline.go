@@ -38,6 +38,16 @@ func (c Codec) String() string {
 	}
 }
 
+// PixelFormat is the chroma subsampling + bit depth the codec's lane encodes,
+// for the control's "Pixels" column — only AV1 4:4:4 differs from the 4:2:0
+// 8-bit the other lanes use.
+func (c Codec) PixelFormat() string {
+	if c == CodecAV1Hi444 {
+		return "4:4:4 8-bit"
+	}
+	return "4:2:0 8-bit"
+}
+
 // hardwareEncoderName and softwareEncoderName name the VAAPI and the software
 // ffmpeg encoder for the codec, independent of which one is currently usable.
 // [CodecCaps.EncoderName] picks between them by the probed hardware bit; the
@@ -160,7 +170,10 @@ func (c CodecCaps) CodecString(width, height int) string {
 	case CodecAV1:
 		return "av01.0." + av1Level(width, height) + "M.08"
 	case CodecAV1Hi444:
-		return "av01.1." + av1Level(width, height) + "M.08.0.000"
+		// Full color description (BT.709/sRGB/BT.709/full) is required — browsers
+		// report the truncated av01.1…000 form as unsupported via
+		// isConfigSupported. Mirrors codeclane.rs and the viewer probe.
+		return "av01.1." + av1Level(width, height) + "M.08.0.000.01.13.01.1"
 	default:
 		return "avc1.42E0" + h264Level(width, height)
 	}

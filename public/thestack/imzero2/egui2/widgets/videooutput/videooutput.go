@@ -120,7 +120,7 @@ func showContent(ids *c.WidgetIdStack, st *State) {
 			c.Label(cc.EncodeBackend()).Send()
 			c.Label(cc.DecodeBackend()).Send()
 			c.Label(cc.CodecString(st.model.Stream.Width, st.model.Stream.Height)).Send()
-			c.Label("4:2:0 8-bit").Send()
+			c.Label(cc.Codec.PixelFormat()).Send()
 			c.EndRow()
 		}
 	}

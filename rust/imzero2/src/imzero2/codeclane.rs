@@ -107,8 +107,15 @@ impl CodecLane {
             VideoCodec::H264 => String::new(),
             VideoCodec::Vp9 => format!("vp09.00.{}.08", vp9_level(width, height)),
             VideoCodec::Av1 => format!("av01.0.{}M.08", av1_level(width, height)),
-            // Profile 1 (High), 8-bit, monochrome=0, chroma `000` = 4:4:4.
-            VideoCodec::Av1Hi444 => format!("av01.1.{}M.08.0.000", av1_level(width, height)),
+            // Profile 1 (High), 8-bit, mono=0, chroma `000` = 4:4:4, then the
+            // full color description `.cp.tc.mc.F` = BT.709/sRGB/BT.709/full. The
+            // color fields are REQUIRED: browsers (verified Firefox 151) report
+            // the truncated `av01.1…000` form as unsupported via
+            // isConfigSupported, so without them the codec is listed but
+            // unselectable. Mirrored in the Go model and the viewer probe.
+            VideoCodec::Av1Hi444 => {
+                format!("av01.1.{}M.08.0.000.01.13.01.1", av1_level(width, height))
+            }
         }
     }
 
@@ -408,10 +415,11 @@ mod tests {
         // Default 1280×800: minimal sufficient level.
         assert_eq!(vp9.webcodecs_codec_string(1280, 800), "vp09.00.40.08");
         assert_eq!(av1.webcodecs_codec_string(1280, 800), "av01.0.05M.08");
-        // AV1 4:4:4: profile 1, chroma 000, level tracks resolution like AV1.
+        // AV1 4:4:4: profile 1, chroma 000, full color description (required by
+        // browsers); level tracks resolution like AV1.
         assert_eq!(
             CodecLane::software(VideoCodec::Av1Hi444).webcodecs_codec_string(1280, 800),
-            "av01.1.05M.08.0.000"
+            "av01.1.05M.08.0.000.01.13.01.1"
         );
         // 4K must declare a higher level than the ~2K default (the M2 fix).
         assert_eq!(vp9.webcodecs_codec_string(3840, 2160), "vp09.00.50.08");
