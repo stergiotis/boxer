@@ -60,17 +60,12 @@ func loadIdReader(t *testing.T, rec arrow.RecordBatch) (*anchor.ReadAccessTestTa
 	return r, r.Release
 }
 
-// plainColFn returns the standard id/naturalKey PlainCol resolver.
-func plainColFn(idReader *anchor.ReadAccessTestTablePlainEntityIdAttributes) func(string) any {
-	return func(name string) any {
-		switch name {
-		case "id":
-			return idReader.ValueId
-		case "naturalKey":
-			return idReader.ValueNaturalKey
-		}
-		return nil
-	}
+// idReaders seeds a SectionReaders with the id + naturalKey plain columns every
+// DTO in this file declares; chain .Section(...) for the section under test.
+func idReaders(idReader *anchor.ReadAccessTestTablePlainEntityIdAttributes) *marshallreflect.SectionReaders {
+	return marshallreflect.NewSectionReaders(idReader.Len()).
+		PlainColumn("id", idReader.ValueId).
+		PlainColumn("naturalKey", idReader.ValueNaturalKey)
 }
 
 // --- Multi-sub-column: timeRange (beginIncl + endExcl). ---
@@ -110,22 +105,8 @@ func TestRoundTrip_MultiSubColumn_TimeRange(t *testing.T) {
 	// One tuple attribute per row.
 	require.Equal(t, int64(1), trReader.GetAttributes().GetNumberOfAttributes(0))
 
-	args := marshallreflect.UnmarshalArgs{
-		NumRows:  idReader.Len(),
-		PlainCol: plainColFn(idReader),
-		SectionAttrs: func(name string) any {
-			if name == "timeRange" {
-				return trReader.GetAttributes()
-			}
-			return nil
-		},
-		SectionMembs: func(name string) any {
-			if name == "timeRange" {
-				return trReader.GetMemberships()
-			}
-			return nil
-		},
-	}
+	args := idReaders(idReader).
+		Section("timeRange", trReader.GetAttributes(), trReader.GetMemberships())
 	var got []rangeDrone
 	require.NoError(t, marshallreflect.Unmarshal(args, &got, lookup))
 
@@ -174,22 +155,8 @@ func TestRoundTrip_Container_RoaringBitmap(t *testing.T) {
 	// Container shape: exactly one attribute per row carries the whole set.
 	require.Equal(t, int64(1), u32Reader.GetAttributes().GetNumberOfAttributes(0))
 
-	args := marshallreflect.UnmarshalArgs{
-		NumRows:  idReader.Len(),
-		PlainCol: plainColFn(idReader),
-		SectionAttrs: func(name string) any {
-			if name == "u32Array" {
-				return u32Reader.GetAttributes()
-			}
-			return nil
-		},
-		SectionMembs: func(name string) any {
-			if name == "u32Array" {
-				return u32Reader.GetMemberships()
-			}
-			return nil
-		},
-	}
+	args := idReaders(idReader).
+		Section("u32Array", u32Reader.GetAttributes(), u32Reader.GetMemberships())
 	var got []roaringDrone
 	require.NoError(t, marshallreflect.Unmarshal(args, &got, lookup))
 
@@ -233,22 +200,8 @@ func TestRoundTrip_Container_Slice(t *testing.T) {
 	// Container shape: one attribute per row holds the whole slice.
 	require.Equal(t, int64(1), u32Reader.GetAttributes().GetNumberOfAttributes(0))
 
-	args := marshallreflect.UnmarshalArgs{
-		NumRows:  idReader.Len(),
-		PlainCol: plainColFn(idReader),
-		SectionAttrs: func(name string) any {
-			if name == "u32Array" {
-				return u32Reader.GetAttributes()
-			}
-			return nil
-		},
-		SectionMembs: func(name string) any {
-			if name == "u32Array" {
-				return u32Reader.GetMemberships()
-			}
-			return nil
-		},
-	}
+	args := idReaders(idReader).
+		Section("u32Array", u32Reader.GetAttributes(), u32Reader.GetMemberships())
 	var got []sliceDrone
 	require.NoError(t, marshallreflect.Unmarshal(args, &got, lookup))
 
@@ -294,22 +247,8 @@ func TestRoundTrip_Explode(t *testing.T) {
 	require.Equal(t, int64(3), u32Reader.GetAttributes().GetNumberOfAttributes(0))
 	require.Equal(t, int64(1), u32Reader.GetAttributes().GetNumberOfAttributes(1))
 
-	args := marshallreflect.UnmarshalArgs{
-		NumRows:  idReader.Len(),
-		PlainCol: plainColFn(idReader),
-		SectionAttrs: func(name string) any {
-			if name == "u32Array" {
-				return u32Reader.GetAttributes()
-			}
-			return nil
-		},
-		SectionMembs: func(name string) any {
-			if name == "u32Array" {
-				return u32Reader.GetMemberships()
-			}
-			return nil
-		},
-	}
+	args := idReaders(idReader).
+		Section("u32Array", u32Reader.GetAttributes(), u32Reader.GetMemberships())
 	var got []explodeDrone
 	require.NoError(t, marshallreflect.Unmarshal(args, &got, lookup))
 
@@ -359,22 +298,8 @@ func TestRoundTrip_Explode_Roaring(t *testing.T) {
 	require.Equal(t, int64(3), u32Reader.GetAttributes().GetNumberOfAttributes(0))
 	require.Equal(t, int64(1), u32Reader.GetAttributes().GetNumberOfAttributes(1))
 
-	args := marshallreflect.UnmarshalArgs{
-		NumRows:  idReader.Len(),
-		PlainCol: plainColFn(idReader),
-		SectionAttrs: func(name string) any {
-			if name == "u32Array" {
-				return u32Reader.GetAttributes()
-			}
-			return nil
-		},
-		SectionMembs: func(name string) any {
-			if name == "u32Array" {
-				return u32Reader.GetMemberships()
-			}
-			return nil
-		},
-	}
+	args := idReaders(idReader).
+		Section("u32Array", u32Reader.GetAttributes(), u32Reader.GetMemberships())
 	var got []roaringExplodeDrone
 	require.NoError(t, marshallreflect.Unmarshal(args, &got, lookup))
 
@@ -420,22 +345,8 @@ func TestRoundTrip_OptionScalar(t *testing.T) {
 	require.Equal(t, int64(1), symReader.GetAttributes().GetNumberOfAttributes(0))
 	require.Equal(t, int64(0), symReader.GetAttributes().GetNumberOfAttributes(1))
 
-	args := marshallreflect.UnmarshalArgs{
-		NumRows:  idReader.Len(),
-		PlainCol: plainColFn(idReader),
-		SectionAttrs: func(name string) any {
-			if name == "symbol" {
-				return symReader.GetAttributes()
-			}
-			return nil
-		},
-		SectionMembs: func(name string) any {
-			if name == "symbol" {
-				return symReader.GetMemberships()
-			}
-			return nil
-		},
-	}
+	args := idReaders(idReader).
+		Section("symbol", symReader.GetAttributes(), symReader.GetMemberships())
 	var got []optDrone
 	require.NoError(t, marshallreflect.Unmarshal(args, &got, lookup))
 
@@ -482,22 +393,8 @@ func TestRoundTrip_FixedByteArray(t *testing.T) {
 	require.NoError(t, blobReader.LoadFromRecord(rec))
 	defer blobReader.Release()
 
-	args := marshallreflect.UnmarshalArgs{
-		NumRows:  idReader.Len(),
-		PlainCol: plainColFn(idReader),
-		SectionAttrs: func(name string) any {
-			if name == "blobArray" {
-				return blobReader.GetAttributes()
-			}
-			return nil
-		},
-		SectionMembs: func(name string) any {
-			if name == "blobArray" {
-				return blobReader.GetMemberships()
-			}
-			return nil
-		},
-	}
+	args := idReaders(idReader).
+		Section("blobArray", blobReader.GetAttributes(), blobReader.GetMemberships())
 	var got []fixedDrone
 	require.NoError(t, marshallreflect.Unmarshal(args, &got, lookup))
 
@@ -539,22 +436,8 @@ func TestRoundTrip_OptionBlob(t *testing.T) {
 	require.Equal(t, int64(1), blobReader.GetAttributes().GetNumberOfAttributes(0))
 	require.Equal(t, int64(0), blobReader.GetAttributes().GetNumberOfAttributes(1))
 
-	args := marshallreflect.UnmarshalArgs{
-		NumRows:  idReader.Len(),
-		PlainCol: plainColFn(idReader),
-		SectionAttrs: func(name string) any {
-			if name == "blobArray" {
-				return blobReader.GetAttributes()
-			}
-			return nil
-		},
-		SectionMembs: func(name string) any {
-			if name == "blobArray" {
-				return blobReader.GetMemberships()
-			}
-			return nil
-		},
-	}
+	args := idReaders(idReader).
+		Section("blobArray", blobReader.GetAttributes(), blobReader.GetMemberships())
 	var got []optBlobDrone
 	require.NoError(t, marshallreflect.Unmarshal(args, &got, lookup))
 
@@ -599,22 +482,8 @@ func TestRoundTrip_MixedLowCardRef(t *testing.T) {
 	// One scalar attribute per row in the symbol section.
 	require.Equal(t, int64(1), symReader.GetAttributes().GetNumberOfAttributes(0))
 
-	args := marshallreflect.UnmarshalArgs{
-		NumRows:  idReader.Len(),
-		PlainCol: plainColFn(idReader),
-		SectionAttrs: func(name string) any {
-			if name == "symbol" {
-				return symReader.GetAttributes()
-			}
-			return nil
-		},
-		SectionMembs: func(name string) any {
-			if name == "symbol" {
-				return symReader.GetMemberships()
-			}
-			return nil
-		},
-	}
+	args := idReaders(idReader).
+		Section("symbol", symReader.GetAttributes(), symReader.GetMemberships())
 	var got []mixedDrone
 	require.NoError(t, marshallreflect.Unmarshal(args, &got, marshallreflect.NoLookup{}))
 

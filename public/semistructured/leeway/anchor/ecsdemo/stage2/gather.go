@@ -98,46 +98,14 @@ func (inst *FatRow) Archetype(idx int) []string {
 	return a
 }
 
-func (inst *FatRow) args() marshallreflect.UnmarshalArgs {
-	return marshallreflect.UnmarshalArgs{
-		NumRows: inst.id.Len(),
-		PlainCol: func(name string) any {
-			if name == "id" {
-				return inst.id.ValueId
-			}
-			return nil
-		},
-		SectionAttrs: func(name string) any {
-			switch name {
-			case "symbol":
-				return inst.symbol.GetAttributes()
-			case "u64Array":
-				return inst.u64Array.GetAttributes()
-			case "symbolArray":
-				return inst.symbolArr.GetAttributes()
-			case "geoPoint":
-				return inst.geoPoint.GetAttributes()
-			case "timeRange":
-				return inst.timeRange.GetAttributes()
-			}
-			return nil
-		},
-		SectionMembs: func(name string) any {
-			switch name {
-			case "symbol":
-				return inst.symbol.GetMemberships()
-			case "u64Array":
-				return inst.u64Array.GetMemberships()
-			case "symbolArray":
-				return inst.symbolArr.GetMemberships()
-			case "geoPoint":
-				return inst.geoPoint.GetMemberships()
-			case "timeRange":
-				return inst.timeRange.GetMemberships()
-			}
-			return nil
-		},
-	}
+func (inst *FatRow) readerSet() *marshallreflect.SectionReaders {
+	return marshallreflect.NewSectionReaders(inst.id.Len()).
+		PlainColumn("id", inst.id.ValueId).
+		Section("symbol", inst.symbol.GetAttributes(), inst.symbol.GetMemberships()).
+		Section("u64Array", inst.u64Array.GetAttributes(), inst.u64Array.GetMemberships()).
+		Section("symbolArray", inst.symbolArr.GetAttributes(), inst.symbolArr.GetMemberships()).
+		Section("geoPoint", inst.geoPoint.GetAttributes(), inst.geoPoint.GetMemberships()).
+		Section("timeRange", inst.timeRange.GetAttributes(), inst.timeRange.GetMemberships())
 }
 
 // Extract reads component T out of the fat row for every entity, in row order. T
@@ -147,7 +115,7 @@ func (inst *FatRow) args() marshallreflect.UnmarshalArgs {
 // section yields the component's zero value; pair with a presence check
 // (GetNumberOfAttributes) to distinguish absent from zero.
 func Extract[T any](inst *FatRow) (out []T, err error) {
-	if err = marshallreflect.Unmarshal(inst.args(), &out, droneLookup); err != nil {
+	if err = marshallreflect.Unmarshal(inst.readerSet(), &out, droneLookup); err != nil {
 		err = eh.Errorf("extract component from fat row: %w", err)
 	}
 	return

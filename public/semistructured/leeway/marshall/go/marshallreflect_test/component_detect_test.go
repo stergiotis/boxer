@@ -93,40 +93,12 @@ func TestComponentDetectAndDecode_Light(t *testing.T) {
 	}
 
 	// DECODE: typed unmarshal recovers the component values.
-	args := marshallreflect.UnmarshalArgs{
-		NumRows: idReader.Len(),
-		PlainCol: func(name string) any {
-			switch name {
-			case "id":
-				return idReader.ValueId
-			case "naturalKey":
-				return idReader.ValueNaturalKey
-			}
-			return nil
-		},
-		SectionAttrs: func(name string) any {
-			switch name {
-			case "symbol":
-				return symbolReader.GetAttributes()
-			case "u64Array":
-				return u64Reader.GetAttributes()
-			case "timeRange":
-				return timeRangeReader.GetAttributes()
-			}
-			return nil
-		},
-		SectionMembs: func(name string) any {
-			switch name {
-			case "symbol":
-				return symbolReader.GetMemberships()
-			case "u64Array":
-				return u64Reader.GetMemberships()
-			case "timeRange":
-				return timeRangeReader.GetMemberships()
-			}
-			return nil
-		},
-	}
+	args := marshallreflect.NewSectionReaders(idReader.Len()).
+		PlainColumn("id", idReader.ValueId).
+		PlainColumn("naturalKey", idReader.ValueNaturalKey).
+		Section("symbol", symbolReader.GetAttributes(), symbolReader.GetMemberships()).
+		Section("u64Array", u64Reader.GetAttributes(), u64Reader.GetMemberships()).
+		Section("timeRange", timeRangeReader.GetAttributes(), timeRangeReader.GetMemberships())
 	var got []droneRow
 	require.NoError(t, marshallreflect.Unmarshal(args, &got, lookup))
 

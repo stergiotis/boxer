@@ -72,36 +72,11 @@ func TestRoundTrip_AnchorDroneMission(t *testing.T) {
 	require.NoError(t, u64ArrayReader.LoadFromRecord(rec))
 	defer u64ArrayReader.Release()
 
-	args := marshallreflect.UnmarshalArgs{
-		NumRows: idReader.Len(),
-		PlainCol: func(name string) any {
-			switch name {
-			case "id":
-				return idReader.ValueId
-			case "naturalKey":
-				return idReader.ValueNaturalKey
-			}
-			return nil
-		},
-		SectionAttrs: func(name string) any {
-			switch name {
-			case "symbol":
-				return symbolReader.GetAttributes()
-			case "u64Array":
-				return u64ArrayReader.GetAttributes()
-			}
-			return nil
-		},
-		SectionMembs: func(name string) any {
-			switch name {
-			case "symbol":
-				return symbolReader.GetMemberships()
-			case "u64Array":
-				return u64ArrayReader.GetMemberships()
-			}
-			return nil
-		},
-	}
+	args := marshallreflect.NewSectionReaders(idReader.Len()).
+		PlainColumn("id", idReader.ValueId).
+		PlainColumn("naturalKey", idReader.ValueNaturalKey).
+		Section("symbol", symbolReader.GetAttributes(), symbolReader.GetMemberships()).
+		Section("u64Array", u64ArrayReader.GetAttributes(), u64ArrayReader.GetMemberships())
 	var got []reflectDrone
 	require.NoError(t, marshallreflect.Unmarshal(args, &got, lookup))
 
@@ -186,36 +161,11 @@ func TestRoundTrip_ConstAndVerbatim(t *testing.T) {
 	require.NoError(t, symbolArrayReader.LoadFromRecord(rec))
 	defer symbolArrayReader.Release()
 
-	args := marshallreflect.UnmarshalArgs{
-		NumRows: idReader.Len(),
-		PlainCol: func(name string) any {
-			switch name {
-			case "id":
-				return idReader.ValueId
-			case "naturalKey":
-				return idReader.ValueNaturalKey
-			}
-			return nil
-		},
-		SectionAttrs: func(name string) any {
-			switch name {
-			case "symbol":
-				return symbolReader.GetAttributes()
-			case "symbolArray":
-				return symbolArrayReader.GetAttributes()
-			}
-			return nil
-		},
-		SectionMembs: func(name string) any {
-			switch name {
-			case "symbol":
-				return symbolReader.GetMemberships()
-			case "symbolArray":
-				return symbolArrayReader.GetMemberships()
-			}
-			return nil
-		},
-	}
+	args := marshallreflect.NewSectionReaders(idReader.Len()).
+		PlainColumn("id", idReader.ValueId).
+		PlainColumn("naturalKey", idReader.ValueNaturalKey).
+		Section("symbol", symbolReader.GetAttributes(), symbolReader.GetMemberships()).
+		Section("symbolArray", symbolArrayReader.GetAttributes(), symbolArrayReader.GetMemberships())
 	var got []reflectDroneExt
 	require.NoError(t, marshallreflect.Unmarshal(args, &got, lookup))
 

@@ -2,6 +2,7 @@ package marshallreflect
 
 import (
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/RoaringBitmap/roaring"
@@ -14,48 +15,84 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 )
 
-// UnmarshalArgs gathers the plain-column accessors and per-section
-// reader providers Unmarshal needs. Mirrors the parameter set of
-// marshallgen's emitted <Kind>FillFromArrow but as a struct so the
-// caller can populate the optional fields without positional empty
-// slots.
-type UnmarshalArgs struct {
-	// NumRows is the entity count to project. Typically the id column's Len().
-	NumRows int
-
-	// PlainCol returns the Arrow array backing a plain column, looked up
-	// by role name ("id" / "naturalKey" / "ts" / "expiresAt"). The
-	// concrete type must be the one goplan.PlainArrowArrayType maps
-	// the DTO field's Go type to (e.g. *array.Uint64 for a uint64 id,
-	// *array.Timestamp for a time.Time ts, *array.FixedSizeBinary for a
-	// [16]byte). Required for every plain column the DTO declares; "id"
-	// is always declared.
-	PlainCol func(name string) any
-
-	// SectionAttrs returns the per-section attribute reader (e.g.
-	// *ra.ReadAccessFactsTagged<X>.Attributes). Lookup-by-section-name.
-	SectionAttrs func(sectionName string) any
-
-	// SectionMembs returns the per-section membership reader (e.g.
-	// *ra.ReadAccessFactsTagged<X>.Memberships).
-	SectionMembs func(sectionName string) any
+// SectionReaders carries the read-side inputs Unmarshal needs: the Arrow array
+// behind each plain column and, per section, the attribute + membership
+// readers. Build it with NewSectionReaders and the chained PlainColumn /
+// Section setters; Unmarshal validates up front that every plain column and
+// section the DTO's Plan declares has a registered reader, so a forgotten one
+// is a single clear error rather than a nil dereference mid-row.
+//
+// The registered values are typed any because the concrete readers are
+// schema-specific (the generated ra.ReadAccess… types). A plain column's array
+// must be the type goplan.PlainArrowArrayType maps the field's Go type to (e.g.
+// *array.Uint64 for a uint64 id, *array.Timestamp for a time.Time ts,
+// *array.FixedSizeBinary for a [16]byte); a section's attrs / membs are that
+// section's generated attribute / membership readers (its GetAttributes() /
+// GetMemberships()).
+type SectionReaders struct {
+	numRows   int
+	plainCols map[string]any
+	sections  map[string]sectionReaderPair
 }
 
-// Unmarshal appends NumRows entities to *out by reading the plain
-// columns and walking per-section attribute / membership readers via
-// reflect. T's struct tags drive the field-by-field decode. Lookup
-// resolves non-verbatim membership names to uint64 ids so the per-
-// row dispatch can match against the wire's LowCardRef channel.
-func Unmarshal[T any](args UnmarshalArgs, out *[]T, lookup LookupI) (err error) {
+type sectionReaderPair struct {
+	attrs any
+	membs any
+}
+
+// NewSectionReaders starts a reader set for numRows entities (typically the id
+// column's Len()).
+func NewSectionReaders(numRows int) *SectionReaders {
+	return &SectionReaders{
+		numRows:   numRows,
+		plainCols: map[string]any{},
+		sections:  map[string]sectionReaderPair{},
+	}
+}
+
+// PlainColumn registers the Arrow array backing the plain column with the given
+// role ("id" / "naturalKey" / "ts" / "expiresAt"), returning the receiver for
+// chaining.
+func (r *SectionReaders) PlainColumn(role string, arr any) *SectionReaders {
+	r.plainCols[role] = arr
+	return r
+}
+
+// Section registers a section's attribute + membership readers under its lw:
+// section name, paired so a caller cannot supply one without the other.
+// Returns the receiver for chaining.
+func (r *SectionReaders) Section(name string, attrs, membs any) *SectionReaders {
+	r.sections[name] = sectionReaderPair{attrs: attrs, membs: membs}
+	return r
+}
+
+// Unmarshal appends readers' numRows entities to *out by reading the plain
+// columns and walking the per-section attribute / membership readers via
+// reflect. T's struct tags drive the field-by-field decode. lookup resolves
+// non-verbatim membership names to uint64 ids so the per-row dispatch can match
+// the wire's ref channels.
+//
+// Unmarshal first checks that readers covers every plain column and section T's
+// Plan declares, reporting all gaps in one error before reading any row.
+func Unmarshal[T any](readers *SectionReaders, out *[]T, lookup LookupI) (err error) {
 	if lookup == nil {
 		lookup = NoLookup{}
 	}
-	rowType := reflect.TypeOf((*T)(nil)).Elem()
+	if readers == nil {
+		err = eb.Build().Errorf("SectionReaders is nil")
+		return
+	}
+	rowType := reflect.TypeFor[T]()
 	r, err := resolveForType(rowType)
 	if err != nil {
 		return
 	}
 	plan := r.plan
+	groups := r.groups
+
+	if err = readers.checkCoverage(plan, groups); err != nil {
+		return
+	}
 
 	// Pre-resolve ref-channel membership ids — cached so the inner
 	// dispatch loop doesn't pay one lookup per attribute per row. Only
@@ -75,18 +112,16 @@ func Unmarshal[T any](args UnmarshalArgs, out *[]T, lookup LookupI) (err error) 
 		membIDs[f.LWMembership] = id
 	}
 
-	groups := r.groups
-
-	for i := 0; i < args.NumRows; i++ {
+	for i := 0; i < readers.numRows; i++ {
 		rowPtr := reflect.New(rowType)
 		rowVal := rowPtr.Elem()
-		err = unmarshalPlain(rowVal, plan, args, i)
+		err = unmarshalPlain(rowVal, plan, readers, i)
 		if err != nil {
 			err = eb.Build().Int("row", i).Errorf("plain decode: %w", err)
 			return
 		}
 		for _, g := range groups {
-			err = unmarshalSection(rowVal, g, args, i, membIDs)
+			err = unmarshalSection(rowVal, g, readers, i, membIDs)
 			if err != nil {
 				err = eb.Build().Int("row", i).Str("section", g.Section).Errorf("%w", err)
 				return
@@ -97,22 +132,43 @@ func Unmarshal[T any](args UnmarshalArgs, out *[]T, lookup LookupI) (err error) 
 	return
 }
 
+// checkCoverage reports, in one error, every plain column and section the Plan
+// declares that has no registered reader (or a nil one) — turning a forgotten
+// reader into an up-front failure instead of a nil dereference at row i.
+func (r *SectionReaders) checkCoverage(plan *mappingplan.Plan, groups []goplan.SectionGroup) (err error) {
+	var missing []string
+	for _, role := range [...]string{"id", "naturalKey", "ts", "expiresAt"} {
+		if goplan.FindPlainCol(plan, role) == nil {
+			continue
+		}
+		if v, ok := r.plainCols[role]; !ok || v == nil {
+			missing = append(missing, "plain column "+role)
+		}
+	}
+	for _, g := range groups {
+		sr, ok := r.sections[g.Section]
+		if !ok || sr.attrs == nil || sr.membs == nil {
+			missing = append(missing, "section "+g.Section)
+		}
+	}
+	if len(missing) > 0 {
+		return eb.Build().Str("kind", plan.KindName).Errorf("SectionReaders is missing readers for: %s", strings.Join(missing, ", "))
+	}
+	return nil
+}
+
 // unmarshalPlain reads the declared plain (entity-header) columns into
 // the row. Strict 1:1: each column's Arrow array is read straight into
 // its DTO field, whose Go type the writer already matched to the
 // column. The four roles are read in fixed order; only those the DTO
 // declares are present.
-func unmarshalPlain(row reflect.Value, plan *mappingplan.Plan, args UnmarshalArgs, i int) (err error) {
-	if args.PlainCol == nil {
-		err = eb.Build().Errorf("UnmarshalArgs.PlainCol is required")
-		return
-	}
+func unmarshalPlain(row reflect.Value, plan *mappingplan.Plan, readers *SectionReaders, i int) (err error) {
 	for _, role := range [...]string{"id", "naturalKey", "ts", "expiresAt"} {
 		p := goplan.FindPlainCol(plan, role)
 		if p == nil {
 			continue
 		}
-		col := args.PlainCol(role)
+		col := readers.plainCols[role]
 		if col == nil {
 			err = eb.Build().Str("column", role).Errorf("plain column reader is nil")
 			return
@@ -186,9 +242,10 @@ func readPlainArrow(fld reflect.Value, goType string, col any, i int) (err error
 	return
 }
 
-func unmarshalSection(row reflect.Value, g goplan.SectionGroup, args UnmarshalArgs, i int, membIDs map[string]uint64) (err error) {
-	attrs := reflect.ValueOf(args.SectionAttrs(g.Section))
-	membs := reflect.ValueOf(args.SectionMembs(g.Section))
+func unmarshalSection(row reflect.Value, g goplan.SectionGroup, readers *SectionReaders, i int, membIDs map[string]uint64) (err error) {
+	sr := readers.sections[g.Section]
+	attrs := reflect.ValueOf(sr.attrs)
+	membs := reflect.ValueOf(sr.membs)
 	if !attrs.IsValid() || !membs.IsValid() {
 		err = eb.Build().Str("section", g.Section).Errorf("section reader returned nil")
 		return
@@ -228,17 +285,15 @@ func unmarshalSection(row reflect.Value, g goplan.SectionGroup, args UnmarshalAr
 	ch := g.Channel()
 	n := mustCall(attrs, "GetNumberOfAttributes", reflect.ValueOf(entityIdx(i)))[0].Int()
 	for attrJ := int64(0); attrJ < n; attrJ++ {
-		matchedField, found := dispatchMembership(membs, i, attrJ, fields, membIDs, ch)
-		if !found {
-			continue
-		}
-		if matchedField.IsConst {
-			continue
-		}
-		a := accs[matchedField.GoFieldName]
-		err = consumeValue(attrs, i, attrJ, matchedField, a)
-		if err != nil {
-			return
+		// Every membership on the attribute dispatches to its field, mirroring
+		// the codegen switch — a multi-membership attribute feeds each matching
+		// field. dispatchMemberships filters consts, which have no accumulator.
+		for _, matchedField := range dispatchMemberships(membs, i, attrJ, fields, membIDs, ch) {
+			a := accs[matchedField.GoFieldName]
+			err = consumeValue(attrs, i, attrJ, matchedField, a)
+			if err != nil {
+				return
+			}
 		}
 	}
 
@@ -252,14 +307,13 @@ func unmarshalSection(row reflect.Value, g goplan.SectionGroup, args UnmarshalAr
 	return
 }
 
-// dispatchMembership iterates the per-attribute membership channel
-// (uint64 or []byte) and returns the first DTO field whose membership
-// matches. Const fields are skipped (their value is fixed on the
-// write side; nothing to project here).
+// dispatchMemberships iterates the per-attribute membership channel (uint64 or
+// []byte) and returns every DTO field whose membership matches — one entry per
+// (membership value, matching field) pair, in seq order. Const fields are
+// skipped (their value is fixed on the write side; nothing to project here).
 //
-// Multi-membership read asymmetry vs marshallgen. The codegen-emitted
-// <Kind>FillFromArrow uses an inline switch inside the membership
-// loop:
+// It mirrors the codegen-emitted <Kind>FillFromArrow, which loops the
+// membership seq and switches per value:
 //
 //	for membID := range membsVar.GetMembValueLowCardRef(...) {
 //	    switch membID {
@@ -268,20 +322,13 @@ func unmarshalSection(row reflect.Value, g goplan.SectionGroup, args UnmarshalAr
 //	    }
 //	}
 //
-// If a single attribute carries memberships for both `foo` and `bar`,
-// the codegen reader fires BOTH cases — the value is consumed once
-// per matching DTO field. This implementation returns on the first
-// match, so only one field's accumulator increments.
-//
-// The divergence is unreachable through codec-written wire: both
-// the marshallgen-emitted BuildEntities and marshallreflect.Marshal emit
-// exactly one membership per attribute. The asymmetry only surfaces
-// when a third-party producer of leeway-shaped data attaches
-// multiple memberships to the same attribute. Codec wire
-// compatibility (encode-then-decode through either path) is
-// preserved; cross-producer compatibility against multi-membership
-// attributes is not.
-func dispatchMembership(membs reflect.Value, i int, attrJ int64, fields []mappingplan.TaggedField, membIDs map[string]uint64, ch mappingplan.MembershipChannel) (matched mappingplan.TaggedField, found bool) {
+// An attribute carrying memberships for both `foo` and `bar` feeds the value to
+// both fields under either front-end. Codec-written wire never does this (both
+// BuildEntities and Marshal emit exactly one membership per attribute), so for
+// codec round-trips the result is identical to a first-match dispatch; the two
+// paths now also agree for a third-party producer that attaches multiple
+// memberships to one attribute.
+func dispatchMemberships(membs reflect.Value, i int, attrJ int64, fields []mappingplan.TaggedField, membIDs map[string]uint64, ch mappingplan.MembershipChannel) (matched []mappingplan.TaggedField) {
 	// ch is the section's (uniform) membership channel, resolved once by
 	// the caller — all fields in a section agree on it per the plan's
 	// channel-uniformity check.
@@ -296,7 +343,7 @@ func dispatchMembership(membs reflect.Value, i int, attrJ int64, fields []mappin
 					continue
 				}
 				if f.LWMembership == name {
-					return f, true
+					matched = append(matched, f)
 				}
 			}
 		}
@@ -310,7 +357,7 @@ func dispatchMembership(membs reflect.Value, i int, attrJ int64, fields []mappin
 				continue
 			}
 			if membIDs[f.LWMembership] == id {
-				return f, true
+				matched = append(matched, f)
 			}
 		}
 	}

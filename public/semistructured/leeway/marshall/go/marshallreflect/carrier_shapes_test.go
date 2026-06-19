@@ -229,29 +229,9 @@ func buildIDNK(t *testing.T, ids []uint64, nks [][]byte) (*array.Uint64, *array.
 	return idB.NewArray().(*array.Uint64), nkB.NewArray().(*array.Binary)
 }
 
-func carrierArgs(idArr, nkArr arrow.Array, attrs, membs any) marshallreflect.UnmarshalArgs {
-	return marshallreflect.UnmarshalArgs{
-		NumRows: idArr.Len(),
-		PlainCol: func(name string) any {
-			switch name {
-			case "id":
-				return idArr
-			case "naturalKey":
-				return nkArr
-			}
-			return nil
-		},
-		SectionAttrs: func(name string) any {
-			if name == "symbol" {
-				return attrs
-			}
-			return nil
-		},
-		SectionMembs: func(name string) any {
-			if name == "symbol" {
-				return membs
-			}
-			return nil
-		},
-	}
+func carrierArgs(idArr, nkArr arrow.Array, attrs, membs any) *marshallreflect.SectionReaders {
+	return marshallreflect.NewSectionReaders(idArr.Len()).
+		PlainColumn("id", idArr).
+		PlainColumn("naturalKey", nkArr).
+		Section("symbol", attrs, membs)
 }

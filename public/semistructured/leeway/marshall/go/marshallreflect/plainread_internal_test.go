@@ -167,23 +167,11 @@ func TestUnmarshalPlain_AllRoles_ReadOnly(t *testing.T) {
 	exArr := exB.NewArray()
 	defer exArr.Release()
 
-	args := UnmarshalArgs{
-		NumRows: 2,
-		PlainCol: func(name string) any {
-			switch name {
-			case "id":
-				return idArr
-			case "naturalKey":
-				return nkArr
-			case "ts":
-				return tsArr
-			case "expiresAt":
-				return exArr
-			}
-			return nil
-		},
-		// No tagged fields → SectionAttrs / SectionMembs are never called.
-	}
+	args := NewSectionReaders(2).
+		PlainColumn("id", idArr).
+		PlainColumn("naturalKey", nkArr).
+		PlainColumn("ts", tsArr).
+		PlainColumn("expiresAt", exArr)
 	var got []plainRolesDTO
 	require.NoError(t, Unmarshal(args, &got, nil))
 

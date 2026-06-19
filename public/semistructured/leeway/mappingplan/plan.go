@@ -31,8 +31,17 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/membership"
 )
 
-// Plan is the parsed DTO ready for emission. ParsePlan produces it from
-// a single .go source file; EmitPlan consumes it.
+// Plan is the schema-agnostic model of one DTO. It is produced by a front-end
+// through goplan.PlanBuilder — marshallgen.ParsePlan (go/ast) or
+// marshallreflect.PlanFor (reflect) — and consumed by the back-ends:
+// marshallgen.EmitPlan, the marshallreflect runtime codec, and the ClickHouse
+// readback generator.
+//
+// The fields are exported so goplan.PlanBuilder can assemble the value and so
+// consumers can inspect it read-only; a Plan is not meant to be hand-built in
+// production. A test fixture may construct one directly, but every PlainCol /
+// TaggedField must then carry a Canonical type — the derived views (GoType,
+// IsSlice, IsRoaring) panic on a nil canonical (see PlainCol.GoType).
 type Plan struct {
 	InputPath   string
 	PackageName string

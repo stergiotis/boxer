@@ -78,30 +78,10 @@ func TestParametrized_ReadReconstructsParams(t *testing.T) {
 	attrs := mvAttrsMock{vals: []string{"alpha", "beta"}}
 	membs := pmMembsMock{blobs: [][]byte{[]byte("blob-a"), []byte("blob-b")}}
 
-	args := marshallreflect.UnmarshalArgs{
-		NumRows: 2,
-		PlainCol: func(name string) any {
-			switch name {
-			case "id":
-				return idArr
-			case "naturalKey":
-				return nkArr
-			}
-			return nil
-		},
-		SectionAttrs: func(name string) any {
-			if name == "symbol" {
-				return attrs
-			}
-			return nil
-		},
-		SectionMembs: func(name string) any {
-			if name == "symbol" {
-				return membs
-			}
-			return nil
-		},
-	}
+	args := marshallreflect.NewSectionReaders(2).
+		PlainColumn("id", idArr).
+		PlainColumn("naturalKey", nkArr).
+		Section("symbol", attrs, membs)
 	var got []parametrizedDrone
 	require.NoError(t, marshallreflect.Unmarshal(args, &got, marshallreflect.NoLookup{}))
 
