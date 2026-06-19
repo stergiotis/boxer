@@ -29,4 +29,63 @@
 // facts target wraps vdd.KeelsonHrNkRegistry; an anchor or schema-
 // agnostic target can use NoLookup if every membership in its DTOs
 // carries `,verbatim`.
+//
+// # The DML write contract
+//
+// Marshal / RowComposer drive `dml` (passed as any) by reflected method
+// dispatch; the method set below IS the contract. Today a missing or mis-typed
+// method panics mid-marshal (mustCall); a preflight that reports the whole
+// mismatch up front is planned.
+//
+// Entity frame, on dml:
+//   - BeginEntity() — open an entity.
+//   - SetId(id), or SetId(id, naturalKey) — two args iff a naturalKey plain column is declared.
+//   - SetTimestamp(ts) — only if a `ts` plain column is declared.
+//   - SetLifecycle(expiresAt) — only if an `expiresAt` plain column is declared.
+//   - GetSection<X>() Sec — one per section; X = UpperFirst(section name).
+//   - CommitEntity() [error] — close the entity; a returned error is surfaced.
+//
+// Plain-column setter arguments are passed verbatim: the DTO field's Go type is
+// the setter's argument type (strict 1:1, no conversion).
+//
+// Section frame, on the Sec from GetSection<X>:
+//   - BeginAttribute(v) Attr — scalar value (ShapeScalarBegin / exploded element).
+//   - BeginAttributeSingle(v) Attr — scalar value with `,unit`.
+//   - BeginAttribute() Attr — container open, no args (default multi shape).
+//   - BeginAttribute(v1, v2, …) Attr — multi-sub-column section: one arg per sub-column.
+//   - EndSection() — close the section.
+//
+// Attribute frame, on the Attr from a Begin call:
+//   - AddToContainerP(v) — append one container value.
+//   - AddMembership<Suffix>P(…) — push the membership; the Suffix and argument
+//     list are the channel's (see mappingplan.MembershipChannel): Ref →
+//     …RefP(id uint64); Verbatim → …VerbatimP(name []byte); MixedLowCardRef →
+//     …P(id uint64, params []byte); MixedLowCardVerbatim → …P(name []byte,
+//     params []byte); *Parametrized → …P(params []byte).
+//   - EndAttributeP() — close the attribute.
+//
+// # The RA read contract
+//
+// Unmarshal reads through the per-section attribute + membership readers the
+// caller registers via a SectionReaders builder (NewSectionReaders +
+// PlainColumn / Section). Index arguments are raruntime.EntityIdx (int) and
+// raruntime.AttributeIdx (int64).
+//
+// Plain columns: the caller returns the Arrow array goplan.PlainArrowArrayType
+// maps the field's Go type to — e.g. *array.Uint64 for uint64, *array.Timestamp
+// for time.Time, *array.FixedSizeBinary for [16]byte.
+//
+// Attribute reader, per section:
+//   - GetNumberOfAttributes(e) int64 — attribute count for entity e.
+//   - GetAttrValueValue(e, a) iter.Seq[T] — container / multi values (also the
+//     scalar or exploded-element single value).
+//   - GetAttrValueSingleOrDefault(e, a) T — single value for HA / single-slot shapes.
+//   - GetAttrValue<Col>(e, a) T — multi-sub-column accessor; Col = UpperFirst(sub-column).
+//
+// The single-value accessor is chosen by goplan.SingleValueReadAccessor, so the
+// reflect codec and the generated codec cannot diverge on the choice.
+//
+// Membership reader, per section:
+//   - GetMembValue<Suffix>(e, a) — simple channels: iter.Seq[uint64] (Ref) or iter.Seq[[]byte] (Verbatim).
+//   - GetMembValue<CarrierReadSuffix>(e, a) — carrier channels: iter.Seq2[…] (mixed) or iter.Seq[[]byte] (parametrized).
 package marshallreflect

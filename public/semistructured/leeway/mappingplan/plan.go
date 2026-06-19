@@ -1,14 +1,28 @@
-// Package mappingplan is the schema-agnostic model of a leeway DTO ↔
-// codec mapping: the parsed Plan (plain columns + tagged-value fields),
-// the lw: tag grammar (SplitLW), per-field validation and assembly
-// (PlanBuilder), the membership-channel enum, section grouping, and
-// field-shape classification.
+// Package mappingplan is the schema-agnostic data model of a leeway DTO ↔
+// codec mapping: the parsed Plan (plain columns + tagged-value fields), the
+// membership-channel enum and its carriage axes, and the canonical→Go derived
+// views on Plan / PlainCol / TaggedField (GoType / IsSlice / IsRoaring, backed
+// by DeriveGoShape).
 //
-// Two front-ends produce a Plan and two back-ends drive it: marshallgen
-// (go/ast → Plan → generated codec) and marshallreflect (reflect → Plan
-// → runtime codec). Keeping the model here lets both depend on it as
-// siblings — with no dependency on the code generator and no go/ast or
-// reflect pulled into this package.
+// It is the narrow leaf of the marshalling stack and imports neither go/ast,
+// reflect, nor the code generator, so a Plan can be consumed anywhere. The
+// Go-DTO front-end machinery is deliberately NOT here — it lives in the sibling
+// goplan package: the lw: tag grammar (goplan.SplitLW), per-field validation
+// and assembly (goplan.PlanBuilder), field-shape classification
+// (goplan.FieldShape), and section grouping (goplan.ComputeGroups).
+//
+// The split tracks two kinds of consumer:
+//
+//   - Plan producers import goplan (the front-end toolkit): the marshallgen
+//     (go/ast) and marshallreflect (reflect) front-ends classify a DTO's fields
+//     and drive goplan.PlanBuilder to assemble a *Plan.
+//   - Plan consumers import this model alone, without the toolkit — e.g. the
+//     ClickHouse readback generator and codegen WrapperEmitterI implementations
+//     (the facts wrapper). Merging the packages would force these onto the
+//     grammar / builder / grouping machinery they never use.
+//
+// Stability: this model is the broad, frozen surface; goplan's surface carries
+// a narrower promise — see goplan's package doc.
 package mappingplan
 
 import (
