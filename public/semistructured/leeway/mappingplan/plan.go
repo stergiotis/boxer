@@ -455,6 +455,14 @@ type FieldFlags struct {
 	// Non-`_` fields carrying HasConst are rejected by the parser.
 	HasConst   bool
 	ConstValue string
+
+	// CanonicalType is the optional `,ct=<canonical>` override: a leeway
+	// canonical-type string (e.g. "v" IPv4, "w" IPv6, "vc" IPv4-CIDR) that
+	// replaces the canonical the front-end derives from the field's Go type.
+	// The override must reproduce the field's Go/wire shape — PlanBuilder
+	// rejects one that would reshape it — so it only relabels (e.g. a [4]byte
+	// field as IPv4) without changing the bytes. "" when absent.
+	CanonicalType string
 }
 
 // TaggedField is one DTO field (or constant) bound to a leeway

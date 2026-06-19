@@ -28,8 +28,9 @@ func ArrowTypeToGoType(ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspec
 			prefix = ""
 			suffix = ".ToTime(arrow." + unit + ")"
 		case canonicaltypes2.BaseTypeTemporalZonedDatetime:
-			prefix = ""
-			suffix = ".ToTime(arrow." + unit + ")"
+			// Reading a zoned datetime as a UTC time.Time silently drops the
+			// zone; not implemented end-to-end yet (tracked: zoned temporal).
+			err = common.ErrNotImplemented
 		case canonicaltypes2.BaseTypeTemporalZonedTime:
 			err = common.ErrNotImplemented
 		default:
@@ -99,8 +100,7 @@ func GoTypeToArrowType(ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspec
 			prefix = "arrow.Timestamp("
 			suffix = unit + ")"
 		case canonicaltypes2.BaseTypeTemporalZonedDatetime:
-			prefix = "arrow.Timestamp("
-			suffix = unit + ")"
+			err = common.ErrNotImplemented
 		case canonicaltypes2.BaseTypeTemporalZonedTime:
 			err = common.ErrNotImplemented
 		default:
@@ -149,10 +149,11 @@ func CanonicalTypeToArrowBaseClassName(ct canonicaltypes2.PrimitiveAstNodeI, enc
 		switch ctt.BaseType {
 		case canonicaltypes2.BaseTypeTemporalUtcDatetime:
 			name = "Timestamp"
-		case canonicaltypes2.BaseTypeTemporalZonedDatetime:
-			name = "Timestamp"
-		case canonicaltypes2.BaseTypeTemporalZonedTime:
-			name = "Timestamp"
+		case canonicaltypes2.BaseTypeTemporalZonedDatetime, canonicaltypes2.BaseTypeTemporalZonedTime:
+			// Both were silently mapped to a plain Timestamp, dropping the zone;
+			// not implemented end-to-end yet (tracked: zoned temporal).
+			err = eb.Build().Stringer("baseType", ctt.BaseType).Errorf("zoned temporal not implemented: %w", common.ErrNotImplemented)
+			return
 		default:
 			err = eb.Build().Stringer("baseType", ctt.BaseType).Errorf("unhandled base type")
 			return

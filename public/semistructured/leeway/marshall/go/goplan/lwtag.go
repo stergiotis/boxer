@@ -59,7 +59,7 @@ func SplitLW(tag string) (out ParsedLWTag, err error) {
 		if token == "" {
 			continue
 		}
-		// Key=value flags (currently only `const=<value>`).
+		// Key=value flags (`const=<value>`, `ct=<canonical>`).
 		if eq := strings.IndexByte(token, '='); eq > 0 {
 			key := token[:eq]
 			val := token[eq+1:]
@@ -71,8 +71,18 @@ func SplitLW(tag string) (out ParsedLWTag, err error) {
 				}
 				out.Flags.HasConst = true
 				out.Flags.ConstValue = val
+			case "ct":
+				if out.Flags.CanonicalType != "" {
+					err = eb.Build().Str("flag", key).Errorf("flag declared twice")
+					return
+				}
+				if val == "" {
+					err = eb.Build().Str("flag", key).Errorf("ct= requires a canonical-type string (e.g. ct=v for IPv4)")
+					return
+				}
+				out.Flags.CanonicalType = val
 			default:
-				err = eb.Build().Str("flag", key).Errorf("unknown key=value flag (recognised: const=<value>)")
+				err = eb.Build().Str("flag", key).Errorf("unknown key=value flag (recognised: const=<value>, ct=<canonical>)")
 				return
 			}
 			continue
@@ -131,7 +141,7 @@ func SplitLW(tag string) (out ParsedLWTag, err error) {
 				return
 			}
 		default:
-			err = eb.Build().Str("flag", token).Errorf("unknown flag token (recognised: unit, explode, verbatim / lowCardVerbatim, highCardRef, highCardVerbatim, const=<value>)")
+			err = eb.Build().Str("flag", token).Errorf("unknown flag token (recognised: unit, explode, verbatim / lowCardVerbatim, highCardRef, highCardVerbatim, const=<value>, ct=<canonical>)")
 			return
 		}
 	}

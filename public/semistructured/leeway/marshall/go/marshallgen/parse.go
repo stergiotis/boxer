@@ -33,7 +33,8 @@ import (
 //
 //   - lw: tag grammar (comma layout, optional section, optional sub-
 //     column, optional trailing flag tokens).
-//   - Recognised flag tokens (`unit`, `explode`).
+//   - Recognised flag tokens (`unit`, `explode`, channel flags, `const=`,
+//     `ct=<canonical>`).
 //   - Flag-vs-Go-shape consistency (see mappingplan.FieldFlags doc).
 //   - mappingplan.Plan completeness (kind name present, at least one plain column).
 //   - In-DTO uniqueness of (membership, sub-column) pairs.

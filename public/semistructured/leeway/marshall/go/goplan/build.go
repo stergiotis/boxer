@@ -333,8 +333,8 @@ func (b *PlanBuilder) AddField(goFieldName, lwTag string, shape FieldShape) (err
 			err = eb.Build().Str("tag", lwTag).Errorf("plain field cannot carry sub-column (`:<col>`)")
 			return
 		}
-		if flags.Unit || flags.Explode || flags.HasConst || flags.Channel != mappingplan.MembershipChannelLowCardRef {
-			err = eb.Build().Str("field", goFieldName).Errorf("plain field cannot carry channel / `unit` / `explode` / `const` flags (flags apply to tagged-value attributes only)")
+		if flags.Unit || flags.Explode || flags.HasConst || flags.CanonicalType != "" || flags.Channel != mappingplan.MembershipChannelLowCardRef {
+			err = eb.Build().Str("field", goFieldName).Errorf("plain field cannot carry channel / `unit` / `explode` / `const` / `ct=` flags (flags apply to tagged-value attributes only)")
 			return
 		}
 		if shape.IsOption || isRoaring || isSlice {
@@ -427,15 +427,52 @@ func (b *PlanBuilder) AddField(goFieldName, lwTag string, shape FieldShape) (err
 		}
 	}
 
+	// Resolve the field's canonical, applying a `,ct=<canonical>` override if
+	// present. The override must reproduce the field's Go/wire shape — it
+	// relabels the canonical (e.g. a [N]byte field as IPv4) without changing the
+	// bytes, so Plan-consuming tooling sees the richer type and both front-ends
+	// stay wire-compatible.
+	fieldCanonical := shape.Canonical
+	if flags.CanonicalType != "" {
+		fieldCanonical, err = resolveCanonicalOverride(goFieldName, flags.CanonicalType, goType, isSlice, isRoaring)
+		if err != nil {
+			return
+		}
+	}
+
 	b.plan.Fields = append(b.plan.Fields, mappingplan.TaggedField{
 		GoFieldName:  goFieldName,
 		IsOption:     shape.IsOption,
-		Canonical:    shape.Canonical,
+		Canonical:    fieldCanonical,
 		LWMembership: membership,
 		LWSection:    section,
 		LWColumn:     column,
 		Flags:        flags,
 	})
+	return
+}
+
+// resolveCanonicalOverride parses a `,ct=<canonical>` string and checks it
+// reproduces the field's Go/wire shape (goType + multiplicity). It may only
+// relabel the canonical — e.g. a [4]byte field as IPv4 — never reshape it, so
+// the emitted bytes are unchanged and the codegen / reflect front-ends stay
+// wire-compatible.
+func resolveCanonicalOverride(goFieldName, ctStr, goType string, isSlice, isRoaring bool) (out canonicaltypes.PrimitiveAstNodeI, err error) {
+	out, err = canonicaltypes.NewParser().ParsePrimitiveTypeAst(ctStr)
+	if err != nil {
+		err = eb.Build().Str("field", goFieldName).Str("ct", ctStr).Errorf("parse `,ct=` canonical: %w", err)
+		return
+	}
+	ovGoType, ovIsSlice, ovIsRoaring, derr := mappingplan.DeriveGoShape(out)
+	if derr != nil {
+		err = eb.Build().Str("field", goFieldName).Str("ct", ctStr).Errorf("`,ct=` canonical has no Go representation: %w", derr)
+		return
+	}
+	if ovGoType != goType || ovIsSlice != isSlice || ovIsRoaring != isRoaring {
+		out = nil
+		err = eb.Build().Str("field", goFieldName).Str("ct", ctStr).Str("ctGoType", ovGoType).Str("fieldGoType", goType).Errorf("`,ct=` canonical's Go shape does not match the field's — the override may only relabel, not reshape")
+		return
+	}
 	return
 }
 
@@ -460,8 +497,8 @@ func (b *PlanBuilder) addCarrierField(goFieldName, membership, section, column s
 		err = eb.Build().Str("field", goFieldName).Str("carrier", shape.CarrierType).Str("channel", flags.Channel.String()).Str("wantCarrier", want).Errorf("carrier type does not match the channel flag")
 		return
 	}
-	if flags.Unit || flags.Explode || flags.HasConst {
-		err = eb.Build().Str("field", goFieldName).Errorf("carrier field cannot carry `unit` / `explode` / `const` flags")
+	if flags.Unit || flags.Explode || flags.HasConst || flags.CanonicalType != "" {
+		err = eb.Build().Str("field", goFieldName).Errorf("carrier field cannot carry `unit` / `explode` / `const` / `ct=` flags")
 		return
 	}
 	key := membership + "\x00" + section
