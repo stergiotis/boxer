@@ -21,6 +21,19 @@ set -o pipefail
 here=$(dirname "$(readlink -f "$BASH_SOURCE")")
 cd "$here"
 
+# --sandbox (ours, NOT a main_go flag): run the demo inside a transient systemd
+# unit whose filesystem + syscall sandbox mirrors the deployed
+# imzero2-demo.service drop-in (showcase/onbox/20-hardening.conf), so the box's
+# "limited filesystem access" is reproducible ad-hoc. Strip it from the args
+# before launch-detection or main_go ever see it; the build still runs on the
+# host (the sandbox is read-only) — see the wrapped exec at the end.
+SANDBOX=0
+_sbx_args=()
+for _a in "$@"; do
+	if [ "$_a" = "--sandbox" ]; then SANDBOX=1; else _sbx_args+=("$_a"); fi
+done
+set -- "${_sbx_args[@]}"
+
 resolve_noto() {
     local family="$1" want="$2" line file fam
     command -v fc-match >/dev/null 2>&1 || return 0
@@ -111,12 +124,53 @@ if [ "$page_host" = "0.0.0.0" ]; then
 fi
 echo "viewer page: http://$page_host:$ws_port/ (also :$((ws_port + 1)))" >&2
 
-exec "$here/main_go" --logFormat=console --logLevel=info imzero2 demo \
-    --clientBinary "$here/target/headless/release/imzero2" \
-    --clientInitialMainWindowWidth "$WINDOW_W" \
-    --clientInitialMainWindowHeight "$WINDOW_H" \
-    ${MAIN_FONT:+--mainFontTTF "$MAIN_FONT"} \
-    ${PHOSPHOR_FONT:+--phosphorFontTTF "$PHOSPHOR_FONT"} \
-    ${FALLBACK_FONT:+--fallbackFontTTF "$FALLBACK_FONT"} \
-    $launch \
-    "$@"
+cmd=("$here/main_go" --logFormat=console --logLevel=info imzero2 demo
+    --clientBinary "$here/target/headless/release/imzero2"
+    --clientInitialMainWindowWidth "$WINDOW_W"
+    --clientInitialMainWindowHeight "$WINDOW_H")
+[ -n "$MAIN_FONT" ]     && cmd+=(--mainFontTTF "$MAIN_FONT")
+[ -n "$PHOSPHOR_FONT" ] && cmd+=(--phosphorFontTTF "$PHOSPHOR_FONT")
+[ -n "$FALLBACK_FONT" ] && cmd+=(--fallbackFontTTF "$FALLBACK_FONT")
+cmd+=($launch "$@")
+
+if [ "$SANDBOX" != 1 ]; then
+    exec "${cmd[@]}"
+fi
+
+# --sandbox: launch main_go inside a transient systemd unit whose FS + syscall
+# sandbox is PARSED from the deployment's own drop-in, so the two never drift.
+command -v systemd-run >/dev/null 2>&1 || { echo "hmi_headless.sh: --sandbox needs systemd-run (systemd)" >&2; exit 1; }
+hardening="$projectRoot/showcase/onbox/20-hardening.conf"
+[ -f "$hardening" ] || { echo "hmi_headless.sh: --sandbox: drop-in not found: $hardening" >&2; exit 1; }
+
+# Replay every [Service] directive as a `systemd-run -p`, minus ProtectHome: the
+# box runs from /opt so it hides all homes, but a dev checkout lives under /home
+# — so hide every home EXCEPT this repo (read-only), the ad-hoc analogue of the
+# box exposing only /opt/imzero2.
+sandbox_props=()
+while IFS= read -r kv; do
+    sandbox_props+=(-p "$kv")
+done < <(awk '
+    /^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
+    /^\[/ { insvc = ($0 ~ /^\[Service\]/); next }
+    insvc {
+        k = $0; sub(/=.*/, "", k); gsub(/[[:space:]]/, "", k)
+        if (k != "ProtectHome") print
+    }' "$hardening")
+sandbox_props+=(-p "ProtectHome=tmpfs" -p "BindReadOnlyPaths=$projectRoot")
+
+# systemd-run does NOT inherit our environment: forward every IMZERO2_* the
+# launcher set, plus a software encoder default (PrivateDevices hides /dev/dri,
+# so VAAPI is unavailable in here) and a writable cache under the private /tmp.
+: "${LIBGL_ALWAYS_SOFTWARE:=1}"
+: "${IMZERO2_HEADLESS_ENCODER_ARGS:=-c:v libopenh264 -rc_mode off -bf 0 -g 100000}"
+: "${XDG_CACHE_HOME:=/tmp/.cache}"
+export LIBGL_ALWAYS_SOFTWARE IMZERO2_HEADLESS_ENCODER_ARGS XDG_CACHE_HOME
+sandbox_env=()
+for _v in "${!IMZERO2_@}"; do sandbox_env+=(--setenv="$_v=${!_v}"); done
+sandbox_env+=(--setenv="LIBGL_ALWAYS_SOFTWARE=$LIBGL_ALWAYS_SOFTWARE" --setenv="XDG_CACHE_HOME=$XDG_CACHE_HOME")
+
+echo "hmi_headless.sh: --sandbox → transient systemd unit (ProtectSystem=strict; homes hidden;" >&2
+echo "hmi_headless.sh:   only $projectRoot visible, read-only). IPAddress* is parsed but NOT enforced" >&2
+echo "hmi_headless.sh:   under --user — use 'sudo systemd-run -p User=\$USER …' for egress-deny fidelity." >&2
+exec systemd-run --user --pty --collect "${sandbox_props[@]}" "${sandbox_env[@]}" -- "${cmd[@]}"
