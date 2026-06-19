@@ -248,7 +248,7 @@ func (inst *App) renderAbout() {
 		c.Label(vcs.CopyrightInfo()).Send()
 		c.Label("Licensed under the MIT License (see the NOTICE tab).").Send()
 		c.AddSpace(styletokens.GapItems(inst.density))
-		c.Label("A data-engineering toolkit. This window shows the splash artwork, the build provenance of the running binary, and the project NOTICE.").Send()
+		c.Label("Data Engineering Toolbelt - DB-to-Glass. This window shows the splash artwork, the build provenance of the running binary, and the project NOTICE.").Send()
 		c.AddSpace(styletokens.PaddingOuter(inst.density))
 		c.Separator().Horizontal().Send()
 		c.AddSpace(styletokens.GapItems(inst.density))
