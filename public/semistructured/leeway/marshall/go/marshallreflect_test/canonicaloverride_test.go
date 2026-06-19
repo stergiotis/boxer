@@ -73,3 +73,30 @@ func TestCanonicalOverride_Rejections(t *testing.T) {
 	_, err = marshallreflect.PlanFor[ctBadDrone]()
 	require.Error(t, err, "unparseable ct= canonical must be rejected")
 }
+
+// ipCidrDrone carries CIDR-form addresses: IPv4 CIDR packs into [5]byte (4
+// address + 1 prefix-length), IPv6 CIDR into [17]byte.
+type ipCidrDrone struct {
+	_    struct{} `kind:"ipc"`
+	Id   uint64   `lw:",id"`
+	Net4 [5]byte  `lw:"net4,cidr4Section,ct=vc"`
+	Net6 [17]byte `lw:"net6,cidr6Section,ct=wc"`
+}
+
+// TestCanonicalOverride_CIDR confirms the variable-width CIDR canonicals reach
+// the Plan via ct= and that the override's [N]byte width is validated.
+func TestCanonicalOverride_CIDR(t *testing.T) {
+	plan, err := marshallreflect.PlanFor[ipCidrDrone]()
+	require.NoError(t, err)
+
+	got := map[string]string{}
+	for _, f := range plan.Fields {
+		switch f.GoFieldName {
+		case "Net4", "Net6":
+			require.True(t, f.Canonical.IsNetworkNode(), "%s should carry a network canonical", f.GoFieldName)
+			got[f.GoFieldName] = f.GoType()
+		}
+	}
+	require.Equal(t, "[5]byte", got["Net4"], "IPv4 CIDR is address + prefix byte")
+	require.Equal(t, "[17]byte", got["Net6"], "IPv6 CIDR is address + prefix byte")
+}

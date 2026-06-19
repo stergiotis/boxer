@@ -30,12 +30,40 @@
 // agnostic target can use NoLookup if every membership in its DTOs
 // carries `,verbatim`.
 //
+// # Round-trip recipe
+//
+// Write side — marshal rows into a leeway DML, then drain to Arrow records:
+//
+//	dml := schema.NewMyTable(allocator, len(rows)) // a generated leeway DML
+//	if err := marshallreflect.Marshal(dml, rows, lookup); err != nil { … }
+//	recs, err := dml.TransferRecords(nil)          // wire bytes live in the records
+//
+// Read side — bind each section's read-access reader to the record, register
+// them, then unmarshal:
+//
+//	idR := schema.NewReadAccessMyTablePlainEntityIdAttributes()
+//	idR.SetColumnIndices(idR.GetColumnIndices()); _ = idR.LoadFromRecord(recs[0])
+//	symR := schema.NewReadAccessMyTableTaggedSymbol()
+//	symR.SetColumnIndices(symR.GetColumnIndices()); _ = symR.LoadFromRecord(recs[0])
+//
+//	readers := marshallreflect.NewSectionReaders(idR.Len()).
+//		PlainColumn("id", idR.ValueId).
+//		Section("symbol", symR.GetAttributes(), symR.GetMemberships())
+//	var out []MyDTO
+//	err = marshallreflect.Unmarshal(readers, &out, lookup)
+//
+// The same mappingplan.Plan drives both directions, so the bytes round-trip (and
+// equal what marshallgen's generated <Kind>BuildEntities / <Kind>FillFromArrow
+// produce). Validate[T](dml) preflights the write contract; SectionReaders'
+// up-front coverage check reports any plain column / section the readers omit.
+// Worked end-to-end examples live in marshallreflect_test/shapes_roundtrip_test.go.
+//
 // # The DML write contract
 //
 // Marshal / RowComposer drive `dml` (passed as any) by reflected method
-// dispatch; the method set below IS the contract. Today a missing or mis-typed
-// method panics mid-marshal (mustCall); a preflight that reports the whole
-// mismatch up front is planned.
+// dispatch; the method set below IS the contract. A missing or mis-typed method
+// otherwise panics mid-marshal (mustCall); Validate[T](dml) preflights the whole
+// set and reports every mismatch in one error before the first row.
 //
 // Entity frame, on dml:
 //   - BeginEntity() — open an entity.
