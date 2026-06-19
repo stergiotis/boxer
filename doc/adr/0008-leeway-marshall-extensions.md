@@ -773,6 +773,41 @@ joins the key, remain the `membershiprole` classifier, now over
 `membershiprole` ← consumers (card / streamreadaccess driver / leewaywidgets).
 See [ADR-0007](0007-leeway-membership-role-classifier.md).
 
+### 2026-06-19 — marshall API stabilization (mappingplan + marshall surface review)
+
+A DX/coverage review to freeze the `mappingplan` + `marshall` surface before more API
+consumers. The Cut-1/Cut-2 decisions above are unchanged; this records the surface
+refinements (code in `mappingplan`, `marshall/go/{goplan,marshallreflect,marshallgen}`):
+
+- **Two layers, documented (not merged).** `mappingplan` = the model leaf (no go/ast,
+  reflect, or grammar); `goplan` = the Go-DTO front-end toolkit imported only by the two
+  front-ends. The split is load-bearing (readback + `WrapperEmitterI` impls consume the
+  model without the toolkit), so it stays, with a per-layer stability promise (model =
+  broad/frozen; goplan authoring API stable; goplan codec-shared helpers narrower).
+- **Reflect contract published + preflighted.** The DML-write / RA-read method contract
+  is spelled out in `marshallreflect`'s package doc; `marshallreflect.Validate[T](dml)`
+  aggregates every missing / wrong-arity method (incl. `SetId` arity and the channel's
+  `AddMembership…P`) into one up-front error instead of a mid-row `mustCall` panic. A
+  static entity interface was dropped — per-section method names are data, so the
+  contract can't be faithfully typed; the preflight is the check.
+- **`UnmarshalArgs` → `SectionReaders` (breaking).** The `func(name) any` closure triplet
+  becomes a typed builder (`NewSectionReaders(n).PlainColumn(…).Section(name, attrs, membs)`);
+  `Unmarshal` checks up front that the Plan's plain columns + sections are all registered.
+  In-tree consumers migrated.
+- **`Plan` is front-end-produced.** Fields are exported for `goplan.PlanBuilder` + read-only
+  inspection; hand-construction is test-fixtures-only and must set `Canonical`. `GoType()`
+  still panics on a corrupt plan (invariant signal; no signature churn).
+- **`,ct=<canonical>` override.** A field may relabel its canonical via leeway's type
+  grammar (`ct=v`/`w`/`vc`); `PlanBuilder` rejects an override whose Go/wire shape differs
+  from the field's (relabel, not reshape). Closes the network-type Plan-fidelity gap — a
+  `[N]byte` field carries the IPv4/IPv6 canonical — without touching the wire.
+- **Multi-membership read parity.** `marshallreflect` read dispatch now feeds every matching
+  field per attribute (was first-match), matching codegen's `FillFromArrow` switch.
+- **Zoned-temporal fail-fast.** `gocodegen_arrow`'s silent `ZonedDatetime`→`Timestamp`
+  (zone-dropping) now errors, like the codegen/DDL paths. A byte-order fail-fast was reverted
+  — it distorts the DDL coverage model (l/n = 2/3 of the machine-numeric sample space, long
+  counted as covered); byte order stays a separate canonical-model decision, out of scope here.
+
 ## References
 
 - [`../../public/semistructured/leeway/mappingplan/`](../../public/semistructured/leeway/mappingplan/) — shared DTO model: `Plan`, `lw:` grammar, `PlanBuilder`, membership channels, section grouping, shape classification.

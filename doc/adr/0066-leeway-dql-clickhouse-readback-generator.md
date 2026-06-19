@@ -450,6 +450,14 @@ defects, both fixed, plus the gap that hid them:
   yield presence=validator=0. (No-false-positive confirmed; the no-false-negative
   direction is covered by the existing positive round-trips.)
 
+### 2026-06-19 — Plan↔IR conformance extracted as `ValidatePlanAgainstIR`
+
+The generator's inline Plan↔schema existence checks (plain columns, value sub-columns,
+per-channel membership support columns) were factored into a shared `locate` and exposed
+as `ValidatePlanAgainstIR(plan, ir) error`, so a consumer can verify a DTO Plan against a
+schema at plan-build time without emitting SQL. `Generate` runs it first — behaviour
+unchanged. (Part of the 2026-06-19 marshall API stabilization, ADR-0008.)
+
 ## References
 
 - [ADR-0008 — leeway marshall extensions](./0008-leeway-marshall-extensions.md) — the `Plan`, the `lw:` tag grammar, membership channels (D3), the Cut-2 parametrized/mixed channels the resolver anticipates.

@@ -105,6 +105,9 @@ func NewGenerator(ir *InformationRetrieval, resolver MembershipResolver) *Genera
 // membership once.
 func (g *Generator) Generate(plan *mappingplan.Plan) (a Artefacts, err error) {
 	a.Kind = plan.KindName
+	if err = g.validate(plan); err != nil {
+		return
+	}
 
 	var exprs, slotTypes []string
 	presence := newPresenceSet()
@@ -158,6 +161,36 @@ func (g *Generator) Generate(plan *mappingplan.Plan) (a Artefacts, err error) {
 	return
 }
 
+// validate reports the first plain column or tagged-field column the Plan
+// references that the schema lacks — the conformance subset of Generate, with
+// no SQL emission and no membership resolution.
+func (g *Generator) validate(plan *mappingplan.Plan) (err error) {
+	for _, pc := range plan.PlainCols {
+		if _, ok := g.plain[pc.Column]; !ok {
+			err = eb.Build().Str("plainColumn", pc.Column).Str("kind", plan.KindName).Errorf("plain column not found in schema")
+			return
+		}
+	}
+	for i := range plan.Fields {
+		f := &plan.Fields[i]
+		if _, lerr := g.locate(f); lerr != nil {
+			err = eb.Build().Str("field", f.GoFieldName).Str("section", f.LWSection).Str("membership", f.LWMembership).Errorf("plan does not conform to schema: %w", lerr)
+			return
+		}
+	}
+	return
+}
+
+// ValidatePlanAgainstIR reports whether every plain column, section, value
+// sub-column, and per-channel membership support column the Plan references
+// exists in the schema loaded into ir — the conformance check the readback
+// generator runs before emitting SQL, exposed so a consumer can verify a DTO
+// Plan against a schema at plan-build time without generating ClickHouse
+// artefacts. It resolves no membership ids (needs no MembershipResolver).
+func ValidatePlanAgainstIR(plan *mappingplan.Plan, ir *InformationRetrieval) error {
+	return NewGenerator(ir, nil).validate(plan)
+}
+
 // chType renders a canonical type as its ClickHouse type via the ddl/clickhouse
 // generator (e.g. String, UInt64, Array(UInt64), DateTime64(9,'UTC')).
 func (g *Generator) chType(ct canonicaltypes.PrimitiveAstNodeI) (string, error) {
@@ -184,7 +217,22 @@ type presenceTerm struct {
 	lit string
 }
 
-func (g *Generator) field(f *mappingplan.TaggedField) (res fieldArtefacts, err error) {
+// fieldLocators are the physical columns and channel spec a tagged field
+// resolves to in the schema. locate produces them (reporting any column the
+// Plan references but the schema lacks); field consumes them to build SQL,
+// validate to check existence alone.
+type fieldLocators struct {
+	vinfo      colInfo
+	spec       common.MembershipSpecE
+	idCol      string
+	cardCol    string
+	subtypeCol string // length (homogenous array) / cardinality (set) support col; "" for scalar
+}
+
+// locate resolves a tagged field to its physical columns, erroring on the first
+// one the schema lacks. Shared by field (Generate) and validate
+// (ValidatePlanAgainstIR) so the conformance rules cannot drift between them.
+func (g *Generator) locate(f *mappingplan.TaggedField) (loc fieldLocators, err error) {
 	sec := f.LWSection
 	subCol := f.LWColumn
 	if subCol == "" {
@@ -195,55 +243,72 @@ func (g *Generator) field(f *mappingplan.TaggedField) (res fieldArtefacts, err e
 		err = eb.Build().Str("section", sec).Str("subColumn", subCol).Errorf("value column not found in schema")
 		return
 	}
-	res.canonicalType = vinfo.canonicalType
+	loc.vinfo = vinfo
 
-	spec, err := channelSpec(f.Flags.Channel)
+	loc.spec, err = channelSpec(f.Flags.Channel)
 	if err != nil {
 		return
 	}
-	roles, err := membershipRoles(spec)
+	roles, err := membershipRoles(loc.spec)
 	if err != nil {
 		return
 	}
-	idCol, ok := g.support[sec][roles.identity]
+	loc.idCol, ok = g.support[sec][roles.identity]
 	if !ok {
 		err = eb.Build().Str("section", sec).Stringer("role", roles.identity).Errorf("membership column not found in schema")
 		return
 	}
-	cardCol, ok := g.support[sec][roles.card]
+	loc.cardCol, ok = g.support[sec][roles.card]
 	if !ok {
 		err = eb.Build().Str("section", sec).Stringer("role", roles.card).Errorf("membership cardinality column not found in schema")
 		return
 	}
 
-	resolved, err := g.resolver.Resolve(f.LWMembership, spec)
+	switch vinfo.subType {
+	case common.IntermediateColumnsSubTypeScalar:
+		// no extra support column
+	case common.IntermediateColumnsSubTypeHomogenousArray:
+		loc.subtypeCol, ok = g.support[sec][common.ColumnRoleLength]
+		if !ok {
+			err = eb.Build().Str("section", sec).Errorf("homogenous-array length support column not found in schema")
+			return
+		}
+	case common.IntermediateColumnsSubTypeSet:
+		loc.subtypeCol, ok = g.support[sec][common.ColumnRoleCardinality]
+		if !ok {
+			err = eb.Build().Str("section", sec).Errorf("set cardinality support column not found in schema")
+			return
+		}
+	default:
+		err = eb.Build().Stringer("subType", vinfo.subType).Str("section", sec).Errorf("unsupported value subtype")
+		return
+	}
+	return
+}
+
+func (g *Generator) field(f *mappingplan.TaggedField) (res fieldArtefacts, err error) {
+	loc, err := g.locate(f)
+	if err != nil {
+		return
+	}
+	sec := f.LWSection
+	vinfo := loc.vinfo
+	idCol := loc.idCol
+	res.canonicalType = vinfo.canonicalType
+
+	resolved, err := g.resolver.Resolve(f.LWMembership, loc.spec)
 	if err != nil {
 		return
 	}
 	lit := resolved.Identity().Literal
-	m2v := "LEEWAY_LU_MEMB_IDX_TO_VAL_IDX(" + cardCol + ")"
+	m2v := "LEEWAY_LU_MEMB_IDX_TO_VAL_IDX(" + loc.cardCol + ")"
 
 	var valExpr string
 	switch vinfo.subType {
 	case common.IntermediateColumnsSubTypeScalar:
 		valExpr = "LEEWAY_VALUE_BY_TAG_EQUAL(" + vinfo.col + ", " + idCol + ", " + lit + ", " + m2v + ")"
-	case common.IntermediateColumnsSubTypeHomogenousArray:
-		lenCol, ok := g.support[sec][common.ColumnRoleLength]
-		if !ok {
-			err = eb.Build().Str("section", sec).Errorf("homogenous-array length support column not found in schema")
-			return
-		}
-		valExpr = "LEEWAY_LIST_BY_TAG_EQUAL(" + vinfo.col + ", " + lenCol + ", " + idCol + ", " + lit + ", " + m2v + ")"
-	case common.IntermediateColumnsSubTypeSet:
-		setCardCol, ok := g.support[sec][common.ColumnRoleCardinality]
-		if !ok {
-			err = eb.Build().Str("section", sec).Errorf("set cardinality support column not found in schema")
-			return
-		}
-		valExpr = "LEEWAY_LIST_BY_TAG_EQUAL(" + vinfo.col + ", " + setCardCol + ", " + idCol + ", " + lit + ", " + m2v + ")"
-	default:
-		err = eb.Build().Stringer("subType", vinfo.subType).Str("section", sec).Errorf("unsupported value subtype")
-		return
+	case common.IntermediateColumnsSubTypeHomogenousArray, common.IntermediateColumnsSubTypeSet:
+		valExpr = "LEEWAY_LIST_BY_TAG_EQUAL(" + vinfo.col + ", " + loc.subtypeCol + ", " + idCol + ", " + lit + ", " + m2v + ")"
 	}
 
 	countExpr := "countEqual(" + idCol + ", " + lit + ")"
