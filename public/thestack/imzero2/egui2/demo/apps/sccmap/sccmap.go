@@ -196,23 +196,26 @@ func buildTreeForMetrics(sizeIdx, colorIdx int, keep func(*scctree.SccFile) bool
 		root = &layout.Node{Name: fmt.Sprintf("scc failed: %v", sccDataErr), Size: 1}
 		valueFn = func(*layout.Node) float64 { return 0 }
 		maxValue = 1
-		return
-	}
-	sizeW := sccMetrics[sizeIdx].W
-	colorW := sccMetrics[colorIdx].W
-	root, valueFn, maxValue = scctree.BuildColormappedTree(
-		sccGroups, sccRootName,
-		sizeW, colorW,
-		keep,
-	)
-	if len(root.Children) == 0 {
-		root = &layout.Node{Name: "no files with non-zero size", Size: 1}
-		valueFn = func(*layout.Node) float64 { return 0 }
-		maxValue = 1
+	} else {
+		sizeW := sccMetrics[sizeIdx].W
+		colorW := sccMetrics[colorIdx].W
+		root, valueFn, maxValue = scctree.BuildColormappedTree(
+			sccGroups, sccRootName,
+			sizeW, colorW,
+			keep,
+		)
+		if len(root.Children) == 0 {
+			root = &layout.Node{Name: "no files with non-zero size", Size: 1}
+			valueFn = func(*layout.Node) float64 { return 0 }
+			maxValue = 1
+		}
 	}
 	// NewLogColormap requires strictly min < max with both > 0. Clamp the
-	// upper bound to a value safely above 1 so the panic contract holds
-	// for empty or all-zero datasets.
+	// upper bound to a value safely above 1 so the panic contract holds for
+	// every degenerate dataset. This must run on ALL paths — the scc-failed
+	// branch above used to return early with maxValue=1, which slipped past
+	// the clamp and panicked NewLogColormap(palette, 1, 1) when the demo had
+	// no source tree to analyse.
 	if maxValue < 2 {
 		maxValue = 2
 	}
