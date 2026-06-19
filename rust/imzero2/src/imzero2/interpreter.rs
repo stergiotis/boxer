@@ -8845,6 +8845,8 @@ let mut y_grid_values: Vec<f64> = Vec::new();
 let mut y_grid_labels: Vec<String> = Vec::new();
 let mut clamp_x: Option<(f64, f64)> = None;
 let mut clamp_y: Option<(f64, f64)> = None;
+let mut x_auto_ticks = false;
+let mut reset_bounds = false;
 // methods
 loop {
     let (m,_) = self.read_from_repr(PlotBuilderMethodId::from_repr)?;
@@ -9086,6 +9088,18 @@ let mut hi = self.io.read_plain_f64()?;
 clamp_y = Some((lo, hi));
 
 }
+PlotBuilderMethodId::XAxisAutoTicks => {
+    #[cfg(feature = "puffin")]
+	puffin::profile_scope!("match PlotBuilderMethodId::XAxisAutoTicks");
+x_auto_ticks = true;
+
+}
+PlotBuilderMethodId::ResetBounds => {
+    #[cfg(feature = "puffin")]
+	puffin::profile_scope!("match PlotBuilderMethodId::ResetBounds");
+reset_bounds = true;
+
+}
 }
 }
 if d == 0 {
@@ -9136,6 +9150,84 @@ if u.is_some() {
             format!("{}", gm.value)
         });
     }
+    // X-axis nice-number tick spacer (opt-in via xAxisAutoTicks). egui_plot's
+    // default log spacer puts its thinnest labelled level at [1x, 10x)
+    // base_step_size, but a mark is only labelled when
+    // dpos_dvalue*step_size > 60 px, i.e. step_size > 7.5x base_step_size
+    // (label_spacing.min=60, grid_spacing.min=8) — so that level is culled and
+    // the coarse fallback often leaves 0-1 ticks on bounded/narrow ranges.
+    // base_step_size = dvalue_dpos * grid_spacing.min (8 px), so a 1/2/5x10^k
+    // step ~10x base_step_size targets ~80 px (full label opacity) and every
+    // emitted mark is labelled. Recomputed each frame from the visible bounds,
+    // so the count stays healthy through zoom.
+    if x_auto_ticks {
+        plot = plot.x_grid_spacer(|input: egui_plot::GridInput| -> Vec<egui_plot::GridMark> {
+            // Smallest 1/2/5x10^k value >= x.
+            fn nice_125_ceil(x: f64) -> f64 {
+                if !(x > 0.0) || !x.is_finite() {
+                    return 1.0;
+                }
+                let pow = 10f64.powf(x.log10().floor());
+                let frac = x / pow; // in [1, 10)
+                let nice = if frac <= 1.0 {
+                    1.0
+                } else if frac <= 2.0 {
+                    2.0
+                } else if frac <= 5.0 {
+                    5.0
+                } else {
+                    10.0
+                };
+                nice * pow
+            }
+            // Largest 1/2/5x10^k value <= x.
+            fn nice_125_floor(x: f64) -> f64 {
+                if !(x > 0.0) || !x.is_finite() {
+                    return 0.0;
+                }
+                let pow = 10f64.powf(x.log10().floor());
+                let frac = x / pow; // in [1, 10)
+                let nice = if frac >= 5.0 {
+                    5.0
+                } else if frac >= 2.0 {
+                    2.0
+                } else {
+                    1.0
+                };
+                nice * pow
+            }
+            let (lo, hi) = input.bounds;
+            let range = hi - lo;
+            if !(range > 0.0) || !range.is_finite() || input.base_step_size.abs() < f64::EPSILON {
+                return Vec::new();
+            }
+            let mut step = nice_125_ceil(input.base_step_size * 10.0);
+            // Guard for plots too narrow (under ~160 px) for one ~80 px nice
+            // step to fit twice across the range: drop to the largest nice step
+            // that fits at least twice so a couple of ticks still show (labels
+            // may fade below 60 px, but some axis beats none).
+            if !(step > 0.0) || step * 2.0 > range {
+                step = nice_125_floor(range / 2.0);
+            }
+            if !(step > 0.0) || !step.is_finite() {
+                return Vec::new();
+            }
+            let first = (lo / step).ceil() as i64;
+            let last = (hi / step).floor() as i64;
+            let mut marks = Vec::new();
+            // The width-aware step keeps this count small; the bound is a
+            // backstop against a pathological (lo, hi, step) blowing up the Vec.
+            if last >= first && (last - first) < 4096 {
+                for k in first..=last {
+                    marks.push(egui_plot::GridMark {
+                        value: (k as f64) * step,
+                        step_size: step,
+                    });
+                }
+            }
+            marks
+        });
+    }
     let lines: Vec<PlotLineData> = self.plot_lines.drain(..).collect();
     let scatters: Vec<PlotScatterData> = self.plot_scatters.drain(..).collect();
     let bars_data: Vec<PlotBarsData> = self.plot_bars.drain(..).collect();
@@ -9145,6 +9237,14 @@ if u.is_some() {
     let boxes_series: Vec<PlotBoxesData> = self.plot_boxes.drain(..).collect();
     let polygons_series: Vec<PlotPolygonData> = self.plot_polygons.drain(..).collect();
     let plot_response = plot.show(ui, |plot_ui| {
+        // Programmatic zoom reset (opt-in via resetBounds) — the equivalent of
+        // egui_plot's undiscoverable double-click reset. set_auto_bounds takes
+        // effect on the next frame's bounds computation; the clamp below only
+        // overrides when the *current* (pre-reset) bounds exceed the cap, which
+        // a zoomed-in view never does, so the reset settles to the data fit.
+        if reset_bounds {
+            plot_ui.set_auto_bounds(egui::Vec2b::from([true, true]));
+        }
         // Viewport clamping. Runs first so subsequent primitives are
         // rendered against the clamped bounds and the reader cannot
         // momentarily glimpse the unbounded view. egui_plot 0.35 has

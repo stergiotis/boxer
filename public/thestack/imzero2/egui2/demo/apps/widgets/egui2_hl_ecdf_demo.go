@@ -27,6 +27,10 @@ type ecdfDemoState struct {
 	sampleIdx int
 	methodIdx int
 	alphaIdx  int
+	// resetRequested is a one-frame latch set by the "Reset zoom" button and
+	// consumed in the plot block (forwarded to PlotFluid.ResetBounds), so the
+	// programmatic auto-fit fires exactly on the frame the button was clicked.
+	resetRequested bool
 }
 
 type ecdfSample struct {
@@ -48,6 +52,11 @@ var (
 	}
 
 	ecdfDemoAlphas = []float64{0.01, 0.05, 0.10}
+
+	// F(x) is bounded to [0, 1], so the y-axis reads best with fixed
+	// quarter-point ticks rather than egui_plot's data-driven spacer.
+	ecdfDemoYTickVals   = []float64{0, 0.25, 0.5, 0.75, 1}
+	ecdfDemoYTickLabels = []string{"0", "0.25", "0.5", "0.75", "1"}
 )
 
 func init() {
@@ -147,6 +156,24 @@ func demoEcdf(ids *c.WidgetIdStack, st *ecdfDemoState) {
 	c.Separator().Horizontal().Send()
 	c.AddSpace(padInner())
 
+	// Reset-zoom affordance + interaction hint, placed directly above the plot
+	// so the controls read as belonging to it. The button latches
+	// st.resetRequested; the plot block below consumes it via ResetBounds so the
+	// auto-fit fires on the same frame the button is clicked.
+	for range c.Horizontal().KeepIter() {
+		if c.Button(ids.PrepareStr("ecdf-reset-zoom"),
+			c.Atoms().Text("Reset zoom").Keep()).
+			Small().
+			SendResp().HasPrimaryClicked() {
+			st.resetRequested = true
+		}
+		c.AddSpace(gapSections())
+		c.LabelAtoms(c.Atoms().BeginRichText(
+			"Double-click the plot or use Reset zoom to fit the view").
+			Small().Weak().End().Keep()).Send()
+	}
+	c.AddSpace(padInner())
+
 	// --- Plot ------------------------------------------------------------
 	method := ecdfDemoMethods[st.methodIdx].method
 	alpha := ecdfDemoAlphas[st.alphaIdx]
@@ -179,8 +206,17 @@ func demoEcdf(ids *c.WidgetIdStack, st *ecdfDemoState) {
 	// cannot strand the reader in empty space — ECDF support
 	// is naturally [0, 1] on Y, and the sample's [min, max]
 	// bounds X. Zooming in remains unrestricted.
+	//
+	// XAxisAutoTicks swaps egui_plot's default log spacer for a nice-number
+	// spacer that keeps a healthy, round-numbered tick count at every zoom
+	// level — the default culls labels on a bounded range and can leave 0–1
+	// ticks. YGridMarks pins F(x) to quarter points. ResetBounds (wired to the
+	// Reset zoom button above) re-fits the view to the data.
 	xLo, xHi := sample.sorted[0], sample.sorted[len(sample.sorted)-1]
-	c.Plot(plotID).
+	// Consume the one-frame reset latch set by the Reset zoom button.
+	resetZoom := st.resetRequested
+	st.resetRequested = false
+	plot := c.Plot(plotID).
 		Width(900).Height(500).
 		XAxisLabel("value").
 		YAxisLabel("F(x)").
@@ -189,10 +225,15 @@ func demoEcdf(ids *c.WidgetIdStack, st *ecdfDemoState) {
 		AllowDrag(false).
 		AllowScroll(false).
 		ShowGrid(true, true).
+		XAxisAutoTicks().
+		YGridMarks(ecdfDemoYTickVals, ecdfDemoYTickLabels).
 		IncludeY(0).IncludeY(1).
 		ClampX(xLo, xHi).
-		ClampY(0, 1).
-		Send()
+		ClampY(0, 1)
+	if resetZoom {
+		plot = plot.ResetBounds()
+	}
+	plot.Send()
 
 	c.AddSpace(padInner())
 	ecdf.WriteStatusLine(ch)

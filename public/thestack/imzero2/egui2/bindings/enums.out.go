@@ -675,6 +675,8 @@ const (
 	PlotMethodIdYGridMarks            PlotMethodIdE = 25
 	PlotMethodIdClampX                PlotMethodIdE = 26
 	PlotMethodIdClampY                PlotMethodIdE = 27
+	PlotMethodIdXAxisAutoTicks        PlotMethodIdE = 28
+	PlotMethodIdResetBounds           PlotMethodIdE = 29
 )
 
 const (

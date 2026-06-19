@@ -3226,6 +3226,20 @@ func (inst PlotFluid) ClampY(lo float64, hi float64) PlotFluid {
 	return inst
 }
 
+func (inst PlotFluid) XAxisAutoTicks() PlotFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotMethodIdXAxisAutoTicks))
+
+	return inst
+}
+
+func (inst PlotFluid) ResetBounds() PlotFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PlotMethodIdResetBounds))
+
+	return inst
+}
+
 func (inst PlotFluid) Send() {
 	r := inst.r
 	r.WriteOpCode(uint32(PlotMethodIdBuild))

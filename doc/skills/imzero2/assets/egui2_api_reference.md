@@ -136,7 +136,7 @@ status: draft
 | PanelTop | BuilderFactory | Yes | 0 | 0 | 3 | Immediate, BlockIterator |
 | PanelTopInside | BuilderFactory | Yes | 0 | 0 | 3 | Immediate, BlockIterator |
 | Passthrough | Procedural | Yes | 1 | 0 | - | - |
-| Plot | BuilderFactory | Yes | 0 | 0 | 27 | Immediate, Retained |
+| Plot | BuilderFactory | Yes | 0 | 0 | 29 | Immediate, Retained |
 | PlotBars | BuilderFactory | No | 3 | 0 | 4 | Immediate |
 | PlotBoxes | BuilderFactory | No | 11 | 0 | 4 | Immediate |
 | PlotHLine | BuilderFactory | No | 2 | 0 | 3 | Immediate |
@@ -1955,6 +1955,8 @@ Block
 - **YGridMarks**(values: f64h, labels: sh)
 - **ClampX**(lo: f64, hi: f64)
 - **ClampY**(lo: f64, hi: f64)
+- **XAxisAutoTicks**()
+- **ResetBounds**()
 
 #### Return Type
 

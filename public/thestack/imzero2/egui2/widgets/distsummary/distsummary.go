@@ -238,6 +238,10 @@ type instanceState struct {
 	// host Window's auto-grow loop. 0 until the first ECDF frame; reset on
 	// close so a reopen re-fills from the popupWidth floor.
 	lastEcdfPlotW float32
+	// ecdfResetReq is a one-frame latch set by the ECDF tab's "Reset zoom"
+	// button and consumed by the plot block (forwarded to ResetBounds), which
+	// re-fits the curve to the data. Cleared on close.
+	ecdfResetReq bool
 }
 
 // instanceStates is the package-level pinned-state map, keyed by
@@ -514,6 +518,8 @@ func (inst Renderer) Render(idGen c.WidgetIdCreatorI, digest *tdigest.TDigest, e
 		// floor up to the (possibly resized) window rather than the grow guard
 		// pinning it to a stale value.
 		state.lastEcdfPlotW = 0
+		// Clear any pending zoom-reset latch so a reopen starts un-latched.
+		state.ecdfResetReq = false
 		return
 	}
 	inst.renderPinnedWindow(scope, tether, state, digest, extremes)
@@ -766,16 +772,25 @@ func (inst Renderer) renderEcdfBody(scope string, state *instanceState, digest *
 	if pad > 0 {
 		c.AddSpace(pad)
 	}
+	// Consume the one-frame reset latch set by the Reset zoom button below.
+	resetZoom := state.ecdfResetReq
+	state.ecdfResetReq = false
 	for range c.Horizontal().KeepIter() {
 		if pad > 0 {
 			c.AddSpace(pad)
 		}
-		c.Plot(plotID).
+		// XAxisAutoTicks replaces egui_plot's default log spacer with a nice-
+		// number spacer that keeps a healthy, round-numbered tick count through
+		// zoom — the default culls labels on this bounded, sometimes-narrow
+		// surface and was the cause of the 0–1 X ticks worked around by the
+		// width logic above.
+		plot := c.Plot(plotID).
 			Width(plotW).
 			Height(inst.popupHeight).
 			XAxisLabel("value").
 			YAxisLabel("F(x)").
 			ShowGrid(true, true).
+			XAxisAutoTicks().
 			YGridMarks(ecdfYTickVals, ecdfYTickLabels).
 			AllowZoom(true).
 			AllowDrag(false).
@@ -783,10 +798,24 @@ func (inst Renderer) renderEcdfBody(scope string, state *instanceState, digest *
 			IncludeY(0).
 			IncludeY(1).
 			ClampX(xmin, xmax).
-			ClampY(0, 1).
-			Send()
+			ClampY(0, 1)
+		if resetZoom {
+			plot = plot.ResetBounds()
+		}
+		plot.Send()
 		if pad > 0 {
 			c.AddSpace(pad)
+		}
+	}
+	// Reset-zoom affordance below the curve — re-fits after the reader zooms
+	// into tail detail. egui_plot's double-click reset also works but is
+	// undiscoverable; this latches ecdfResetReq, consumed on the next frame.
+	for range c.Horizontal().KeepIter() {
+		if c.Button(c.MakeAbsoluteIdStr(scope+"-ecdf-reset"),
+			c.Atoms().Text("Reset zoom").Keep()).
+			Small().
+			SendResp().HasPrimaryClicked() {
+			state.ecdfResetReq = true
 		}
 	}
 	if pad > 0 {

@@ -1016,6 +1016,8 @@ pub enum PlotBuilderMethodId {
     YGridMarks = 25,
     ClampX = 26,
     ClampY = 27,
+    XAxisAutoTicks = 28,
+    ResetBounds = 29,
 }
 
 #[allow(dead_code)]
