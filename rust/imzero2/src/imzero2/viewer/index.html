@@ -25,6 +25,14 @@
 <style>
   html, body { margin: 0; background: #101010; color: #9a9a9a;
                font: 12px monospace; height: 100%;
+               /* The canvas IS the whole UI — the page must never scroll.
+                  Without this, a sub-pixel canvas overshoot spawns a
+                  scrollbar, whose gutter inflates window.inner{Width,Height}
+                  on the next measure, which grows the canvas further: a
+                  feedback loop that leaves BOTH bars stuck (seen in Edge on
+                  Windows, where the gutter is ~17 px — the "off by tens of
+                  pixels" the surface measurement appeared to have). */
+               overflow: hidden;
                overscroll-behavior: none; }
   #status { padding: 4px 8px; }
   #cadence { color: #6a9fb5; text-decoration: none; }
@@ -371,8 +379,14 @@ let lastSentGeometry = null;
 function measureAndSend() {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
   const scale = window.devicePixelRatio || 1;
-  const lw = Math.max(320, window.innerWidth);
-  const lh = Math.max(240, window.innerHeight - statusBar.offsetHeight);
+  // documentElement.client{Width,Height} exclude the scrollbar gutter;
+  // window.inner{Width,Height} include it. With overflow:hidden no gutter
+  // exists, so they normally agree — but measuring the content box directly
+  // is the correct, gutter-proof source and also yields integer CSS px (no
+  // fractional offsetHeight rounding feeding back into the geometry).
+  const doc = document.documentElement;
+  const lw = Math.max(320, doc.clientWidth);
+  const lh = Math.max(240, doc.clientHeight - statusBar.offsetHeight);
   if (lastSentGeometry &&
       Math.abs(lastSentGeometry[0] - lw) < 1 &&
       Math.abs(lastSentGeometry[1] - lh) < 1 &&
