@@ -24,7 +24,25 @@ var (
 	samplerOnce sync.Once
 	sampler     *Sampler
 	samplerErr  error
+
+	samplerBusMu sync.Mutex
+	samplerBus   app.BusI
 )
+
+// setSamplerBus records the bus the singleton Sampler subscribes on. The first
+// non-nil bus wins — captured from the first window's MountCtx.Bus() (carousel),
+// or set by the tour/tests before ensureSampler. Ignored once the Sampler is
+// built (samplerOnce has fired).
+func setSamplerBus(bus app.BusI) {
+	if bus == nil {
+		return
+	}
+	samplerBusMu.Lock()
+	if samplerBus == nil {
+		samplerBus = bus
+	}
+	samplerBusMu.Unlock()
+}
 
 // App is the per-window imztop instance. The registry's factory ctor
 // allocates a fresh App per Open() so two windows have independent UI
@@ -148,6 +166,9 @@ func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.tasks = task.ForApp(ctx)
+	// Capture the host-provided capability bus for the singleton Sampler to
+	// subscribe on (ADR-0090): imztop consumes metrics, it never reads /proc.
+	setSamplerBus(ctx.Bus())
 	return
 }
 func (inst *App) Unmount(ctx app.MountContextI) (err error) { return }
@@ -170,7 +191,10 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 
 func ensureSampler() (s *Sampler, err error) {
 	samplerOnce.Do(func() {
-		built, buildErr := NewSampler(SamplerOptions{})
+		samplerBusMu.Lock()
+		bus := samplerBus
+		samplerBusMu.Unlock()
+		built, buildErr := NewSampler(SamplerOptions{}, bus)
 		if buildErr != nil {
 			samplerErr = buildErr
 			log.Error().Err(buildErr).Msg("Imztop: sampler init failed")

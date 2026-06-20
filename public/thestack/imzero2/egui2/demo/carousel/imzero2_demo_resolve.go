@@ -2,8 +2,10 @@ package demo
 
 import (
 	"bytes"
+	"context"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/apps/capinspector"
@@ -16,6 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker/pickerbridge"
 	"github.com/stergiotis/boxer/public/keelson/runtime/helphost"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -224,6 +227,18 @@ func buildWindowedRenderer(apps []app.AppI, runId string, facts factsstore.Facts
 		// real inprocbus.Client at Open. SetBus after Open has no
 		// retroactive effect on already-mounted windows.
 		host.SetBus(bus)
+		// Run the co-located system-metrics scraper (ADR-0090): it reads /proc
+		// and publishes the metric plane so imztop (and any consumer) gets data
+		// over MountCtx.Bus() without holding a collector capability itself.
+		// Process-lifetime; on a /proc-restricted host this fails and the metric
+		// panels stay empty — the headless-sandboxed deployment instead needs an
+		// external sysmetricsd over a NATS host bus (the remaining M4 step).
+		scraperPub := bus.NewClient(sysmetricsbus.ServiceAppId, []app.SubjectFilter{
+			{Pattern: sysmetricsbus.SubjectWildcard, Direction: app.CapDirectionPub},
+		})
+		if _, serr := sysmetricsbus.StartScraper(context.Background(), scraperPub, sysmetricsbus.DefaultHostToken(), time.Second, log.Logger); serr != nil {
+			log.Warn().Err(serr).Msg("carousel: sysmetrics scraper unavailable; imztop panels will be empty")
+		}
 	}
 	if runId != "" && facts != nil {
 		host.SetAudit(runId, facts)

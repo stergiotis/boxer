@@ -79,5 +79,7 @@ func DefaultBundleOptions() (bopts BundleOptions, err error) {
 	} else {
 		bopts.PSI = psiC
 	}
+	// GPU is vendor-build-tag-gated (gpu_rocm wires AMD; a no-op otherwise).
+	wireGPU(&bopts)
 	return
 }

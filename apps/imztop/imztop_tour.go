@@ -15,9 +15,15 @@
 package imztop
 
 import (
+	"context"
+	"sync"
 	"time"
 
+	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
 )
@@ -66,13 +72,37 @@ type imztopDemoState struct {
 	filter string
 }
 
+var tourScraperOnce sync.Once
+
+// ensureTourScraper wires a co-located in-proc scraper for the screenshot tour,
+// which runs without a host bus: an inprocbus carries StartScraper's published
+// bundles to the singleton consumer Sampler. Idempotent; the scraper runs for
+// the process lifetime (the tour is a capture harness). This is the one place
+// the imztop package still reaches the collectors — only on the tour path, not
+// in the production App; full capslock-clean SD6 would relocate it (tracked).
+func ensureTourScraper() {
+	tourScraperOnce.Do(func() {
+		bus := inprocbus.NewInst(log.Logger)
+		pub := bus.NewClient(sysmetricsbus.ServiceAppId, []app.SubjectFilter{
+			{Pattern: sysmetricsbus.SubjectWildcard, Direction: app.CapDirectionPub},
+		})
+		sub := bus.NewClient(manifest.Id, []app.SubjectFilter{
+			{Pattern: sysmetricsbus.SubjectWildcard, Direction: app.CapDirectionSub},
+		})
+		setSamplerBus(sub)
+		if _, err := sysmetricsbus.StartScraper(context.Background(), pub, sysmetricsbus.DefaultHostToken(), tourSamplerPeriod, log.Logger); err != nil {
+			log.Warn().Err(err).Msg("imztop tour: scraper unavailable; panels will be empty")
+		}
+	})
+}
+
 // makeTourInit returns an Init that builds an imztop App bound to the host id
-// stack and tunes the shared sampler for capture cadence. ensureSampler starts
-// the sampler on first call; tuning once per Demo Init is harmless.
+// stack, wires the tour-local scraper, and tunes the EWMA cadence for capture.
 func makeTourInit(filter string) func(ids *c.WidgetIdStack) (state any) {
 	return func(ids *c.WidgetIdStack) (state any) {
 		inst := newApp()
 		inst.ids = ids
+		ensureTourScraper() // the tour has no host bus; feed the consumer locally
 		if s, err := ensureSampler(); err == nil && s != nil {
 			s.SetInterval(tourSamplerPeriod)
 		}

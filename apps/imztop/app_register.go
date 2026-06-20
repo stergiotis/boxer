@@ -4,6 +4,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 )
 
 // manifest is the static AppI descriptor every imztop instance
@@ -19,6 +20,17 @@ var manifest = app.Manifest{
 	Icon:     icons.PhGauge,
 	Category: "Tools",
 	Surface:  app.SurfaceWindowed,
+	// imztop is a pure consumer of the system-metrics plane (ADR-0090): it
+	// subscribes to a scraper's published bundles and holds no filesystem or
+	// system-state capability of its own. The host mints its MountCtx.Bus()
+	// client gated on this cap.
+	Caps: []app.SubjectFilter{
+		{
+			Pattern:   sysmetricsbus.SubjectWildcard,
+			Direction: app.CapDirectionSub,
+			Reason:    "subscribe to system metrics (CPU/mem/disk/net/proc/...)",
+		},
+	},
 }
 
 func init() {
