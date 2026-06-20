@@ -4,6 +4,10 @@
 // views on Plan / PlainCol / TaggedField (GoType / IsSlice / IsRoaring, backed
 // by DeriveGoShape).
 //
+// Per ADR-0071 §B1, a field's value type IS the leeway Canonical
+// (canonicaltypes.PrimitiveAstNodeI) — the single source of truth; the Go-facing
+// type is always derived (DeriveGoShape), never stored.
+//
 // It is the narrow leaf of the marshalling stack and imports neither go/ast,
 // reflect, nor the code generator, so a Plan can be consumed anywhere. The
 // Go-DTO front-end machinery is deliberately NOT here — it lives in the sibling
