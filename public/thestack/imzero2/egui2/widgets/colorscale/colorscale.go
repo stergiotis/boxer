@@ -26,8 +26,9 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colormap"
 )
 
-// OrientationE selects the scale's primary axis. Phase 1 only implements
-// OrientationHorizontal; OrientationVertical is reserved for a follow-up.
+// OrientationE selects the scale's primary axis: a horizontal gradient with tick
+// marks and labels below it (the default), or a vertical gradient (max at the top)
+// with tick marks and labels to its right — the conventional colorbar legend.
 type OrientationE uint8
 
 const (
@@ -75,6 +76,9 @@ func (inst TickerE) String() string {
 var (
 	// DefaultSize is the default widget size [w, h] in logical pixels (horizontal orientation).
 	DefaultSize = [2]float32{500, 40}
+	// DefaultSizeVertical is the default widget size [w, h] for vertical orientation:
+	// a narrow strip tall enough to serve as a colorbar legend beside a heatmap.
+	DefaultSizeVertical = [2]float32{64, 320}
 	// DefaultDesiredTicks is the default tick-count target passed to the chosen TickerE.
 	DefaultDesiredTicks = 6
 	// DefaultFontSize is the default tick-label font size in logical pixels.
@@ -98,11 +102,10 @@ func WithSize(w, h float32) Option {
 	if w <= 0 || h <= 0 {
 		panic(fmt.Sprintf("colorscale: WithSize requires positive w,h (got %v,%v)", w, h))
 	}
-	return func(inst *ColorScale) { inst.width, inst.height = w, h }
+	return func(inst *ColorScale) { inst.width, inst.height, inst.sizeSet = w, h, true }
 }
 
-// WithOrientation selects horizontal vs vertical layout. Only OrientationHorizontal is
-// currently implemented.
+// WithOrientation selects horizontal vs vertical layout.
 func WithOrientation(o OrientationE) Option {
 	return func(inst *ColorScale) { inst.orientation = o }
 }
@@ -139,7 +142,8 @@ func WithLabelFormat(fn func(float64) string) Option {
 // Ok=false when the pointer is not over the widget.
 type HoverInfo struct {
 	Value float64
-	PxX   float32
+	PxX   float32 // hover pixel along the axis (horizontal orientation)
+	PxY   float32 // hover pixel along the axis (vertical orientation)
 	Ok    bool
 }
 
@@ -151,6 +155,7 @@ type ColorScale struct {
 	cmap         *colormap.Config
 	width        float32
 	height       float32
+	sizeSet      bool
 	orientation  OrientationE
 	desiredTicks int
 	ticker       TickerE
@@ -224,14 +229,25 @@ func New(ids *c.WidgetIdStack, scopeKey string, cm *colormap.Config, opts ...Opt
 	for _, opt := range opts {
 		opt(inst)
 	}
-	if inst.orientation != OrientationHorizontal {
-		panic("colorscale: only OrientationHorizontal orientation is implemented in this version")
+	// When the caller didn't fix a size, pick an orientation-appropriate default
+	// (the horizontal default was seeded above).
+	if !inst.sizeSet && inst.orientation == OrientationVertical {
+		inst.width, inst.height = DefaultSizeVertical[0], DefaultSizeVertical[1]
 	}
 	return inst
 }
 
 // Colormap returns the colormap.Config this scale is bound to.
 func (inst *ColorScale) Colormap() *colormap.Config { return inst.cmap }
+
+// SetSize overrides the widget's logical-pixel size after construction. Non-positive
+// arguments are ignored. Useful when the caller sizes the legend to a sub-rect that
+// changes with the window (e.g. a colorbar beside a resizing heatmap).
+func (inst *ColorScale) SetSize(w, h float32) {
+	if w > 0 && h > 0 {
+		inst.width, inst.height, inst.sizeSet = w, h, true
+	}
+}
 
 // HoveredValue returns the colormap value under the pointer as of the most
 // recent Render. The returned ok is false when the pointer is not over the
@@ -248,38 +264,18 @@ func (inst *ColorScale) OnHover(fn func(HoverInfo)) { inst.onHover = fn }
 // don't collide on painter-canvas ids.
 func (inst *ColorScale) Render() {
 	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
-		inst.renderHorizontal()
+		if inst.orientation == OrientationVertical {
+			inst.renderVertical()
+		} else {
+			inst.renderHorizontal()
+		}
 	}
 }
 
 func (inst *ColorScale) renderHorizontal() {
 	cm := inst.cmap
 	min, max := cm.Range()
-
-	// Recompute only when an input that affects the Talbot score changes,
-	// or when last frame's Talbot run used approximate widths (because it
-	// saw new labels the measurer hadn't cached yet) and the real widths
-	// have now arrived from Sync.
-	if !inst.cachedValid ||
-		inst.pendingRemeasure ||
-		inst.cachedMin != min ||
-		inst.cachedMax != max ||
-		inst.cachedWidth != float64(inst.width) ||
-		inst.cachedTicks != inst.desiredTicks ||
-		inst.cachedTicker != inst.ticker {
-		inst.cachedAxis = inst.computeAxis(min, max)
-		inst.cachedMin = min
-		inst.cachedMax = max
-		inst.cachedWidth = float64(inst.width)
-		inst.cachedTicks = inst.desiredTicks
-		inst.cachedTicker = inst.ticker
-		inst.cachedValid = true
-	}
-	// Keep measurement databindings alive for the next Sync regardless of
-	// whether Talbot ran — the cache entries that are live this frame
-	// should stay live next frame.
-	inst.measurer.RenewBindings()
-	axis := inst.cachedAxis
+	axis := inst.ensureAxis(min, max, float64(inst.width))
 
 	// Layout: gradient takes the upper 55% of the widget height; tick marks
 	// occupy a 5-px strip below it; labels fill the rest.
@@ -299,7 +295,7 @@ func (inst *ColorScale) renderHorizontal() {
 	// plenty of smoothness for typical widget widths.
 	const steps = 128
 	stepW := inst.width / float32(steps)
-	for i := 0; i < steps; i++ {
+	for i := range steps {
 		t := float64(i) / float64(steps-1)
 		val := min + t*(max-min)
 		rgba := cm.At(val)
@@ -382,23 +378,142 @@ func (inst *ColorScale) renderHorizontal() {
 	}
 }
 
+// renderVertical mirrors renderHorizontal with the axes transposed: a gradient
+// strip down the left (max at the top, the conventional colorbar), tick marks in a
+// column to its right, labels to the right of those, and a horizontal hover marker.
+func (inst *ColorScale) renderVertical() {
+	cm := inst.cmap
+	min, max := cm.Range()
+	axis := inst.ensureAxis(min, max, float64(inst.height))
+
+	// Layout: gradient strip on the left; a tickMarkW-wide tick column to its
+	// right; labels fill the remaining width.
+	const (
+		tickMarkW    float32 = 5
+		gradientGapX float32 = 1
+	)
+	gradientW := inst.width * 0.30
+	if gradientW < 10 {
+		gradientW = 10
+	}
+	tickX1 := gradientW + gradientGapX + tickMarkW
+	labelX := tickX1 + 2
+
+	// --- Paint gradient: N thin horizontal rects sampling Colormap.At, max at top.
+	const steps = 128
+	stepH := inst.height / float32(steps)
+	for i := range steps {
+		t := float64(i) / float64(steps-1) // 0 at the top
+		val := max - t*(max-min)           // top=max, bottom=min
+		rgba := cm.At(val)
+		y := float32(i) * stepH
+		c.PaintRectFilled(0, y, gradientW, y+stepH+0.5, 0, color.Hex(rgba)).Send()
+	}
+
+	// --- Gradient border.
+	c.PaintRectStroke(0, 0, gradientW, inst.height, 0, color.Hex(inst.borderColor), 0.8).Send()
+
+	// --- Tick marks + labels. Labels are vertically center-anchored, except within
+	// edgeGuard px of the top/bottom edges where we switch to top/bottom anchor so the
+	// text doesn't clip the boundary. Format via inst.labelFormat so a WithLabelFormat
+	// override and the log-aware default apply uniformly (the renderHorizontal policy).
+	const edgeGuard float32 = 8
+	for _, tickVal := range axis.TickValues {
+		tickLabel := inst.labelFormat(tickVal)
+		py := float32(1-cm.Normalize(tickVal)) * inst.height // top=max, bottom=min
+		c.PaintLine(gradientW, py, tickX1, py, color.Hex(inst.tickColor), 1.0).Send()
+		var anchorV uint8 = 1 // center
+		switch {
+		case py < edgeGuard:
+			anchorV = 0 // top
+		case py > inst.height-edgeGuard:
+			anchorV = 2 // bottom
+		}
+		c.PaintText(labelX, py, 0 /*anchorH=left*/, anchorV, tickLabel, inst.fontSize, color.Hex(inst.labelColor)).Send()
+	}
+
+	// --- Hover marker: a thick horizontal line at last frame's hover y (one-frame
+	// lag, as in renderHorizontal).
+	if inst.lastHover.Ok {
+		hy := inst.lastHover.PxY
+		if hy < 0 {
+			hy = 0
+		}
+		if hy > inst.height {
+			hy = inst.height
+		}
+		c.PaintLine(0, hy, tickX1, hy, color.Hex(0xffffffff), 2.0).Send()
+	}
+
+	// Flush the accumulated paint into an egui-allocated canvas (see
+	// renderHorizontal for the cache-read rationale).
+	c.PaintCanvas(inst.ids.PrepareStr("canvas"), inst.width, inst.height).
+		Background(color.Hex(inst.bgColor)).
+		Send()
+
+	cp := c.CurrentApplicationState.StateManager.GetCanvasPointer()
+	hy := cp.HoverY
+	hover := HoverInfo{}
+	if !math.IsNaN(float64(hy)) && hy >= 0 && hy <= inst.height {
+		t := float64(hy) / float64(inst.height) // 0 at the top
+		hover.PxY = hy
+		hover.Value = max - t*(max-min) // top=max
+		if cm.IsLog() {
+			lMin, lMax := math.Log10(min), math.Log10(max)
+			hover.Value = math.Pow(10, lMax-t*(lMax-lMin))
+		}
+		hover.Ok = true
+	}
+	inst.lastHover = hover
+	if inst.onHover != nil {
+		inst.onHover(hover)
+	}
+}
+
+// ensureAxis returns the cached tick layout, recomputing it only when an input that
+// affects tick selection changes: range (min,max), the axis length in pixels (width
+// for horizontal, height for vertical), desiredTicks, the ticker, or a pending
+// remeasure from last frame's approximate label widths. It also renews the
+// measurement databindings so cache entries live this frame stay live next Sync.
+func (inst *ColorScale) ensureAxis(min, max, axisLen float64) finddivisions.AxisLayout {
+	if !inst.cachedValid ||
+		inst.pendingRemeasure ||
+		inst.cachedMin != min ||
+		inst.cachedMax != max ||
+		inst.cachedWidth != axisLen ||
+		inst.cachedTicks != inst.desiredTicks ||
+		inst.cachedTicker != inst.ticker {
+		inst.cachedAxis = inst.computeAxis(min, max, axisLen)
+		inst.cachedMin = min
+		inst.cachedMax = max
+		inst.cachedWidth = axisLen
+		inst.cachedTicks = inst.desiredTicks
+		inst.cachedTicker = inst.ticker
+		inst.cachedValid = true
+	}
+	inst.measurer.RenewBindings()
+	return inst.cachedAxis
+}
+
 // computeAxis picks the best tick layout for the current colormap using the
-// currently selected TickerE. On failure any path falls back to a two-tick
-// endpoint axis and logs a warning (validation policy: log + safe default).
-func (inst *ColorScale) computeAxis(min, max float64) finddivisions.AxisLayout {
+// currently selected TickerE. axisLen is the axis length in pixels (width for
+// horizontal, height for vertical), used by the Talbot legibility scorer. On
+// failure any path falls back to a two-tick endpoint axis and logs a warning
+// (validation policy: log + safe default).
+func (inst *ColorScale) computeAxis(min, max, axisLen float64) finddivisions.AxisLayout {
 	switch inst.ticker {
 	case TickerHeckbert:
 		return inst.computeAxisHeckbert(min, max)
 	case TickerNelder:
 		return inst.computeAxisNelder(min, max)
 	default:
-		return inst.computeAxisTalbot(min, max)
+		return inst.computeAxisTalbot(min, max, axisLen)
 	}
 }
 
 // computeAxisTalbot uses Talbot + TypesettingScorer for linear colormaps and
 // TalbotLogarithmic for log colormaps.
-func (inst *ColorScale) computeAxisTalbot(min, max float64) finddivisions.AxisLayout {
+func (inst *ColorScale) computeAxisTalbot(min, max, axisLen float64) finddivisions.AxisLayout {
 	if inst.cmap.IsLog() {
 		// TalbotLogarithmic calls the inner Talbot with the supplied opts
 		// (only Qs is overwritten internally). Without populated Weights
@@ -428,8 +543,8 @@ func (inst *ColorScale) computeAxisTalbot(min, max float64) finddivisions.AxisLa
 	// re-run Talbot next frame once the real widths have arrived.
 	scorer, err := finddivisions.NewTypesettingScorer(
 		float64(inst.fontSize),
-		96.0, // assumed logical DPI; egui treats font size in logical px
-		float64(inst.width),
+		96.0,    // assumed logical DPI; egui treats font size in logical px
+		axisLen, // available span along the axis (width horizontal, height vertical)
 		inst.measurer,
 	)
 	if err != nil {
