@@ -41,3 +41,7 @@ go.work
 
 # Rust build artifacts — cargo target directories under rust/<crate>/target.
 rust/*/target/
+
+# boxer adr tool cache — the `boxer adr build` default --out dir. It can be
+# created in any working directory (the command takes --root), so not anchored.
+.adrcache/

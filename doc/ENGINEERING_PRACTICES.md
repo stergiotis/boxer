@@ -219,7 +219,13 @@ local-skip / CI-enforce split keeps contribution friction low.
   [doc/adr](./adr), monotonically numbered and append-only, with a state
   machine (`proposed → accepted / deferred / deprecated / superseded`). A
   Questions–Options–Criteria (QOC) matrix is required when a decision
-  involves ≥3 options × ≥3 criteria.
+  involves ≥3 options × ≥3 criteria. The corpus is itself queryable:
+  [`boxer adr`](./howto/adr-overview.md) loads every ADR's front-matter together
+  with the `ADR-NNNN` markers found in source code into Apache Arrow tables and
+  runs `clickhouse-local` over them, crossing the decision state machine against
+  an implementation-degree signal read from how the code cites each ADR — which
+  the [ADR-reference coding standard](../CODINGSTANDARDS.md#adr-references) keeps
+  trustworthy.
 - **Front-matter** (YAML stanza with `type`, `status`, `reviewed-by`,
   `reviewed-date`) is mandatory on every Markdown doc except the root
   [README.md](../README.md) and per-module `README.md` landing pages. The

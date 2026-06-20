@@ -4,6 +4,7 @@ import (
 	"os"
 
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/app/commands/adr"
 	"github.com/stergiotis/boxer/public/app/commands/capslock"
 	"github.com/stergiotis/boxer/public/app/commands/codedriven"
 	"github.com/stergiotis/boxer/public/app/commands/compression"
@@ -87,6 +88,7 @@ func mainC() (exitCode int) {
 			// dev/env(=envgen)/gov are intentionally omitted as boxer wires them
 			// from their home packages above; adversarialreview/clarityrate are
 			// dropped (depended on the absent cmd/adversarial-review tree).
+			adr.NewCliCommand(),
 			capslock.NewCliCommand(),
 			codedriven.NewCliCommand(),
 			compression.NewCliCommand(),

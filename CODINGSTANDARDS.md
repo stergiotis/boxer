@@ -245,6 +245,32 @@ var Mask = (uint32(1)<<4)-1
 ```
 *   **Invariants:** Explicitly document assumptions about the runtime environment (e.g., "Assumes Little Endian").
 
+## ADR References
+
+When code implements, enforces, or is shaped by an Architecture Decision Record
+([doc/adr](./doc/adr/)), it **must** cite that ADR by its `ADR-NNNN` marker in a doc comment on the package, type, or
+function the decision governs. Where the decision is decomposed — phases, cuts,
+milestones, sub-decisions — pin the specific part with the `§` qualifier the ADR
+uses (`§SD3`, `§M2`, `§4`), so the reference states *which* part of the decision
+the code realises, not merely that the ADR exists.
+
+```go
+// Package capslock is the CLI wiring for the ADR-0026 §SD10 capslock
+// cap-vs-manifest cross-checker.
+```
+
+The bare `ADR-NNNN` form (zero-padded, four digits) is canonical; a prose link to
+`doc/adr/NNNN-…` also counts. Cite wherever a reader needs the decision to follow
+the code — typically the package doc comment and the central types/functions —
+not on every line that touches the area.
+
+Rationale: these markers are the evidence [`boxer adr`](./doc/howto/adr-overview.md)
+reads to gauge each ADR's *implementation degree* — how many files cite it, across
+how many packages, pinned to which sections — and crosses it against the
+front-matter `status`. A decision built without a marker reads as un-built; a
+marker without its `§` qualifier loses per-section fidelity. The citation is what
+makes the decision↔code mapping queryable instead of tribal knowledge.
+
 ## Portability
 Microsoft Windows is not a target runtime.
 Nevertheless, use stdlib functions aiming at writing portable code where it helps to capture intent and semantics. For example: Use `filepath` to manipulate paths.
