@@ -45,7 +45,3 @@ rust/*/target/
 # boxer adr tool cache — the `boxer adr build` default --out dir. It can be
 # created in any working directory (the command takes --root), so not anchored.
 .adrcache/
-
-# boxer claudemine tool cache — the `boxer claudemine build` default --out dir.
-# Holds mined transcript data (prompt text, file paths); keep it local-only.
-.claudeminecache/
