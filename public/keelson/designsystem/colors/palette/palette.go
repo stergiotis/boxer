@@ -1,4 +1,4 @@
-// Package palette parses palette.toml (ADR-0033 §SD3) and resolves token
+// Package palette parses palette.toml (ADR-0040, consolidating ADR-0033 §SD3) and resolves token
 // names to OKLCh + sRGB triples after gamut clipping.
 package palette
 

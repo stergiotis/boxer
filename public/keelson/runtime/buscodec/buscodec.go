@@ -1,4 +1,4 @@
-// Package buscodec is the runtime's canonical message-bus codec. Every
+// Package buscodec is the runtime's canonical message-bus codec (ADR-0036). Every
 // thestack broker MUST encode bus payloads through this package and MUST
 // NOT import encoding/json or call cbor.Marshal/Unmarshal directly. The
 // default codec is CBOR (fxamacker/cbor with canonical encoding); a

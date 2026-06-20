@@ -1,5 +1,7 @@
 // Package marshalltypes holds the plain carrier structs for the leeway
 // codec's Cut-2 parametrized / mixed membership channels (ADR-0008 D3).
+// marshalltypes is the carrier-struct layer of the marshall package; the
+// marshalltypes/go/clickhouse layout split is recorded in ADR-0074.
 //
 // A carrier rides alongside a value field in a DTO, sharing the same
 // (membership, section, channel) lw: triple. For these channels the

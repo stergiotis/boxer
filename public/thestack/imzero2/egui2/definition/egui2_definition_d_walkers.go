@@ -4,6 +4,8 @@ package definition
 // WALKERS (slippy map) binding — plain widget + register-drain overlays
 // =============================================================================
 //
+// Implements ADR-0056 — slippy map + H3 cell overlays via walkers + h3o/h3o-wazero.
+//
 // API shape (small by design; heavy lifting stays on Go):
 //
 //   Widget:    walkersMap(id, initLat, initLon, tileSource, noTiles)
