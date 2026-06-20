@@ -7,7 +7,7 @@
 // Repository membership of every touched path is recorded per event
 // (target_repo), so "references to a given repo's code" are answerable
 // regardless of which session — in which working directory — made them. See
-// ADR-0091.
+// ADR-P-0002.
 package claudemine
 
 import (

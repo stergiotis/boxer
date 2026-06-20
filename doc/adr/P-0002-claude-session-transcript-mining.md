@@ -8,7 +8,9 @@ date: 2026-06-20
 
 > **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
-# ADR-0091: Claude session transcripts as a queryable Arrow event table
+# ADR-P-0002: Claude session transcripts as a queryable Arrow event table
+
+Numbered in the `ADR-P-NNNN` scheme (the naming pebble2impl introduced for its own ADRs, continued here) rather than boxer's core `00NN` architecture line: this records a personal/meta tooling decision over the author's own Claude session data, not a core-toolkit architecture decision. The command itself lives in boxer (`public/app/commands/claudemine/`).
 
 ## Context
 
