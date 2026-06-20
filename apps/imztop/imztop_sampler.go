@@ -7,6 +7,9 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/apps/imztop/sysmetricsbus"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/battery"
@@ -99,8 +102,6 @@ type SamplerI interface {
 // Sampler runs a goroutine that periodically calls Bundle.Sample and
 // publishes a PublishedSnapshot via atomic.Pointer.
 type Sampler struct {
-	bundle *sysmetrics.Bundle
-
 	intervalNs atomic.Int64
 	histN      int32
 
@@ -131,10 +132,15 @@ type Sampler struct {
 	procCPUEWMA map[procEWMAKey]float32
 
 	latest atomic.Pointer[PublishedSnapshot]
-	paused atomic.Bool
 
-	cancel context.CancelFunc
-	done   chan struct{}
+	// Bisection seam (ADR-0090 P2). The producer owns the collectors and
+	// the tick loop; it samples /proc and publishes each BundleSnapshot to
+	// bus. This Sampler is the consumer: it subscribes and folds what
+	// arrives into the windows/EWMA above. Co-located, both halves share
+	// one private in-proc bus; the same split runs over NATS in P3.
+	bus      *inprocbus.Inst
+	producer *sysmetricsbus.Producer
+	consumer *sysmetricsbus.Consumer
 }
 
 var _ SamplerI = (*Sampler)(nil)
@@ -227,7 +233,6 @@ func NewSampler(opts SamplerOptions) (inst *Sampler, err error) {
 	}
 
 	inst = &Sampler{
-		bundle:      bundle,
 		histN:       histN,
 		timeWindow:  NewSlidingWindow[float64](histN),
 		cpuTotal:    NewSlidingWindow[float64](histN),
@@ -246,14 +251,58 @@ func NewSampler(opts SamplerOptions) (inst *Sampler, err error) {
 		procCPUEWMA: make(map[procEWMAKey]float32),
 	}
 	inst.intervalNs.Store(int64(opts.UpdateInterval))
+
+	// Wire the producer/consumer bisection over a private in-proc bus
+	// (ADR-0090 P2 co-located special case). The producer publishes under
+	// the scraper-service identity; this app subscribes under its own. The
+	// same shape runs over NATS in P3 by swapping the bus clients.
+	bus := inprocbus.NewInst(log.Logger)
+	subject := sysmetricsbus.BundleSubject(sysmetricsbus.DefaultHostToken())
+	codec := sysmetricsbus.NewCBORCodec()
+	pubClient := bus.NewClient(sysmetricsbus.ServiceAppId, []app.SubjectFilter{
+		{Pattern: sysmetricsbus.SubjectWildcard, Direction: app.CapDirectionPub},
+	})
+	subClient := bus.NewClient(manifest.Id, []app.SubjectFilter{
+		{Pattern: sysmetricsbus.SubjectWildcard, Direction: app.CapDirectionSub},
+	})
+	producer, prodErr := sysmetricsbus.NewProducer(sysmetricsbus.ProducerOptions{
+		Bundle:   bundle,
+		Bus:      pubClient,
+		Subject:  subject,
+		Codec:    codec,
+		Interval: opts.UpdateInterval,
+		Log:      log.Logger,
+	})
+	if prodErr != nil {
+		_ = bundle.Close()
+		err = eh.Errorf("imztop: build sysmetrics producer: %w", prodErr)
+		return
+	}
+	consumer, consErr := sysmetricsbus.NewConsumer(sysmetricsbus.ConsumerOptions{
+		Bus:     subClient,
+		Subject: subject,
+		Codec:   codec,
+		Handler: inst.onBundle,
+		Log:     log.Logger,
+	})
+	if consErr != nil {
+		_ = bundle.Close()
+		err = eh.Errorf("imztop: build sysmetrics consumer: %w", consErr)
+		return
+	}
+	inst.bus = bus
+	inst.producer = producer
+	inst.consumer = consumer
 	return
 }
 
 func (inst *Sampler) Start(ctx context.Context) {
-	runCtx, cancel := context.WithCancel(ctx)
-	inst.cancel = cancel
-	inst.done = make(chan struct{})
-	go inst.loop(runCtx)
+	// Subscribe before the producer ticks so the first published sample is
+	// not missed (inprocbus has no replay).
+	if err := inst.consumer.Start(); err != nil {
+		log.Error().Err(err).Msg("imztop: sysmetrics consumer subscribe failed")
+	}
+	inst.producer.Start(ctx)
 }
 
 func (inst *Sampler) Latest() (snap *PublishedSnapshot) {
@@ -262,11 +311,15 @@ func (inst *Sampler) Latest() (snap *PublishedSnapshot) {
 }
 
 func (inst *Sampler) Pause(p bool) {
-	inst.paused.Store(p)
+	if inst.producer != nil {
+		inst.producer.Pause(p)
+	}
 }
 
 func (inst *Sampler) IsPaused() (p bool) {
-	p = inst.paused.Load()
+	if inst.producer != nil {
+		p = inst.producer.IsPaused()
+	}
 	return
 }
 
@@ -281,13 +334,14 @@ func (inst *Sampler) IntervalLabel() (out string) {
 // [100ms, 60s] range; the next tick after the current ticker fires
 // uses the new period.
 func (inst *Sampler) SetInterval(d time.Duration) {
-	if d < 100*time.Millisecond {
-		d = 100 * time.Millisecond
-	}
-	if d > 60*time.Second {
-		d = 60 * time.Second
-	}
+	d = min(max(d, sysmetricsbus.MinInterval), sysmetricsbus.MaxInterval)
+	// The consumer keeps its own interval as the EWMA time-constant input
+	// (updateProcCPUEWMA reads Interval()); the producer owns the actual
+	// tick cadence. Co-located we set both so they stay in lockstep.
 	inst.intervalNs.Store(int64(d))
+	if inst.producer != nil {
+		inst.producer.SetInterval(d)
+	}
 }
 
 // Interval returns the current tick period.
@@ -297,56 +351,30 @@ func (inst *Sampler) Interval() (d time.Duration) {
 }
 
 func (inst *Sampler) Close() (err error) {
-	if inst.cancel != nil {
-		inst.cancel()
+	// Producer.Close stops the tick loop and closes the Bundle it owns;
+	// Consumer.Close unsubscribes.
+	if inst.producer != nil {
+		err = inst.producer.Close()
 	}
-	if inst.done != nil {
-		<-inst.done
+	if inst.consumer != nil {
+		if cerr := inst.consumer.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
 	}
-	err = inst.bundle.Close()
 	return
 }
 
-func (inst *Sampler) loop(ctx context.Context) {
-	defer close(inst.done)
-
-	inst.tick(ctx)
-
-	cur := time.Duration(inst.intervalNs.Load())
-	ticker := time.NewTicker(cur)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			inst.tick(ctx)
-			next := time.Duration(inst.intervalNs.Load())
-			if next != cur {
-				ticker.Reset(next)
-				cur = next
-			}
-		}
-	}
-}
-
-func (inst *Sampler) tick(ctx context.Context) {
-	// Pause must short-circuit before Sample. The collectors walk
-	// /proc, /sys, sysfs, etc.; running them under a "paused" sampler
-	// burns CPU the user just asked us to stop spending. The freeze
-	// semantics in ADR-0020 SD14 are about the published snapshot, but
-	// nothing is gained by also continuing to sample.
-	if inst.paused.Load() {
-		return
-	}
-	bundleSnap, err := inst.bundle.Sample(ctx)
-	if err != nil {
-		if ctx.Err() == nil {
-			log.Warn().Err(err).Msg("imztop: bundle sample returned error")
-		}
-		return
-	}
-
+// onBundle folds one received BundleSnapshot into the sliding-window
+// history and the per-process CPU EWMA, then publishes a PublishedSnapshot
+// for the renderer. This is the consumer half of the ADR-0090 bisection:
+// the producer samples /proc and publishes; this runs for each delivered
+// frame (under inprocbus, on the producer's goroutine — the same single
+// writer the pre-bisection tick was), so the window state and procCPUEWMA
+// need no locking.
+//
+// Pause/freeze (ADR-0020 SD14) is enforced producer-side: a paused producer
+// publishes nothing, so no onBundle runs and the last snapshot stays put.
+func (inst *Sampler) onBundle(bundleSnap *sysmetrics.BundleSnapshot) {
 	inst.timeWindow.Push(float64(bundleSnap.SampledAtUnixMs) / 1000.0)
 	if bundleSnap.CPU != nil {
 		inst.cpuTotal.Push(float64(bundleSnap.CPU.TotalPercent))
