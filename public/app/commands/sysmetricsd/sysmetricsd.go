@@ -20,7 +20,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/natsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/sysmetrics"
 	"github.com/urfave/cli/v2"
 )
 
@@ -58,49 +57,27 @@ func run(c *cli.Context) (err error) {
 	if h := c.String("host"); h != "" {
 		host = sysmetricsbus.HostToken(h)
 	}
-	subject := sysmetricsbus.BundleSubject(host)
-
-	bopts, err := sysmetrics.DefaultBundleOptions()
-	if err != nil {
-		return eh.Errorf("sysmetricsd: %w", err)
-	}
-	bundle, err := sysmetrics.NewBundle(bopts)
-	if err != nil {
-		return eh.Errorf("sysmetricsd: build bundle: %w", err)
-	}
-
 	client, err := natsbus.Connect(natsbus.Options{URL: url, AppId: sysmetricsbus.ServiceAppId})
 	if err != nil {
-		_ = bundle.Close()
 		return eh.Errorf("sysmetricsd: %w", err)
-	}
-
-	producer, err := sysmetricsbus.NewProducer(sysmetricsbus.ProducerOptions{
-		Bundle:   bundle,
-		Bus:      client,
-		Subject:  subject,
-		Codec:    sysmetricsbus.NewCBORCodec(),
-		Interval: c.Duration("interval"),
-		Log:      log.Logger,
-	})
-	if err != nil {
-		_ = bundle.Close()
-		_ = client.Close()
-		return eh.Errorf("sysmetricsd: build producer: %w", err)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	log.Info().Str("subject", subject).Stringer("interval", c.Duration("interval")).
+	stopScraper, err := sysmetricsbus.StartScraper(ctx, client, host, c.Duration("interval"), log.Logger)
+	if err != nil {
+		_ = client.Close()
+		return eh.Errorf("sysmetricsd: %w", err)
+	}
+	log.Info().Str("subject", sysmetricsbus.BundleSubject(host)).Stringer("interval", c.Duration("interval")).
 		Msg("sysmetricsd: publishing system metrics over NATS")
-	producer.Start(ctx)
 	<-ctx.Done()
 
 	log.Info().Msg("sysmetricsd: shutting down")
-	cerr := producer.Close() // stops the loop and closes the bundle it owns
-	if clErr := client.Close(); clErr != nil && cerr == nil {
-		cerr = clErr
+	serr := stopScraper() // halts the loop and closes the bundle
+	if clErr := client.Close(); clErr != nil && serr == nil {
+		serr = clErr
 	}
-	return cerr
+	return serr
 }
