@@ -6,6 +6,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/app/commands/adr"
 	"github.com/stergiotis/boxer/public/app/commands/capslock"
+	"github.com/stergiotis/boxer/public/app/commands/claudemine"
 	"github.com/stergiotis/boxer/public/app/commands/codedriven"
 	"github.com/stergiotis/boxer/public/app/commands/compression"
 	"github.com/stergiotis/boxer/public/app/commands/datasource"
@@ -90,6 +91,7 @@ func mainC() (exitCode int) {
 			// dropped (depended on the absent cmd/adversarial-review tree).
 			adr.NewCliCommand(),
 			capslock.NewCliCommand(),
+			claudemine.NewCliCommand(),
 			codedriven.NewCliCommand(),
 			compression.NewCliCommand(),
 			datasource.NewCliCommand(),
