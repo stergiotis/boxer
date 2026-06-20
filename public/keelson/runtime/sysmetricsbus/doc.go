@@ -21,9 +21,10 @@
 // not inprocbus. The dataflow is strictly one way — there is no
 // consumer→producer channel here.
 //
-// Placement: this lives under apps/imztop for P2 — imztop is its only
-// consumer, so it is app-local, not a shared runtime package. When P3 makes
-// the scraper a standalone service (its own process, NATS core), the
-// genuinely-shared pieces (Producer, Codec, subjects) promote to
-// keelson/runtime per ADR-0090 SD2; the consumer/windowing half stays here.
+// Placement: keelson/runtime, shared (ADR-0090 SD2). P2 kept this app-local
+// under apps/imztop while imztop was the only consumer; P3 adds the
+// standalone sysmetricsd scraper as a second, cross-process consumer, so the
+// shared pieces (Producer, Codec, subjects) were promoted here. Co-located
+// consumers (imztop) drive the Producer + Consumer over inprocbus; the
+// standalone scraper drives only the Producer over NATS (see runtime/natsbus).
 package sysmetricsbus

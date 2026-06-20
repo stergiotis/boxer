@@ -87,6 +87,17 @@ type BusI interface {
 	Request(subject string, payload []byte) (reply []byte, err error)
 }
 
+// BusProvider mints per-app BusI clients over a concrete transport. The host
+// (windowhost) holds one and calls NewBusClient at Open, so the transport —
+// the in-proc bus co-located, a NATS connection in deployment (ADR-0026 §SD4,
+// ADR-0090 P3) — is a host decision apps never see. inprocbus.Inst and
+// natsbus.Provider implement it. caps carries the app's declared
+// SubjectFilters: an in-proc client enforces them locally; a NATS client
+// treats them as advisory (the server enforces via NKey/JWT).
+type BusProvider interface {
+	NewBusClient(appId AppIdT, caps []SubjectFilter) (bus BusI, err error)
+}
+
 // MsgHandlerFunc is the per-message callback handed to Subscribe. The Msg
 // pointer is owned by the bus and must not be retained past the handler
 // return.

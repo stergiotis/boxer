@@ -12,7 +12,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
-	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -118,12 +117,13 @@ type Inst struct {
 	runId string
 	facts factsstore.FactsStoreI
 
-	// bus is the M2 in-proc subject router (ADR-0026 §SD3, §SD5).
-	// When non-nil, Open mints a per-app inprocbus.Client carrying
-	// the app's Manifest.Caps and passes it through MountCtx.Bus().
-	// When nil, MountCtx.Bus() falls back to NoopBus — the M1
-	// shape every app was bootstrapped against.
-	bus *inprocbus.Inst
+	// busProvider mints per-app BusI clients over the host's chosen
+	// transport (ADR-0026 §SD3/§SD5/§SD4). When non-nil, Open mints a
+	// per-app client carrying the app's Manifest.Caps and passes it through
+	// MountCtx.Bus(); inprocbus.Inst provides it co-located, natsbus.Provider
+	// in a NATS deployment. When nil, MountCtx.Bus() falls back to NoopBus —
+	// the M1 shape every app was bootstrapped against.
+	busProvider app.BusProvider
 
 	mu      sync.Mutex
 	nextKey uint64
@@ -187,18 +187,18 @@ func NewInst(registry *app.Registry, logger zerolog.Logger) (inst *Inst) {
 	return
 }
 
-// SetBus attaches an in-proc bus to the window host. Once set, each
-// Open mints a per-app inprocbus.Client (gated on the app's
-// Manifest.Caps) and threads it through MountCtx.Bus() so apps can
-// publish/subscribe/request through the M2 subject router (ADR-0026
-// §SD3, §SD5). Passing nil clears the wiring (subsequent Opens
-// hand out NoopBus). Calling SetBus after windows have been opened
-// is supported but only affects subsequent Opens — already-mounted
-// windows keep the bus they were given.
-func (inst *Inst) SetBus(bus *inprocbus.Inst) {
+// SetBus attaches a bus provider to the window host. Once set, each Open
+// mints a per-app BusI client (gated on the app's Manifest.Caps) and threads
+// it through MountCtx.Bus() so apps can publish/subscribe/request (ADR-0026
+// §SD3/§SD5). The provider chooses the transport: inprocbus.Inst co-located,
+// natsbus.Provider in a NATS deployment (§SD4) — apps never see it. Passing
+// nil clears the wiring (subsequent Opens hand out NoopBus). Calling SetBus
+// after windows have been opened only affects subsequent Opens — already-
+// mounted windows keep the bus they were given.
+func (inst *Inst) SetBus(provider app.BusProvider) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	inst.bus = bus
+	inst.busProvider = provider
 }
 
 // SetAudit attaches a runId + FactsStoreI to the window host. Once
@@ -236,39 +236,40 @@ func (inst *Inst) Open(appId app.AppIdT) (key WindowKeyT, err error) {
 	inst.mu.Lock()
 	inst.nextKey++
 	key = WindowKeyT(inst.nextKey)
-	// Mint a per-app bus client when the host has an inprocbus.Inst
-	// attached. inprocbus.Client implements app.BusI; per-app caps
-	// from the manifest are baked in at construction time (additional
-	// caps land via capbroker grants in a later phase). When the host
-	// has no bus, the nil falls through to NoopBus inside
+	// Mint a per-app bus client when a provider is attached. The provider
+	// chooses the transport (inprocbus co-located, natsbus in deployment);
+	// the per-app caps below are baked in at construction. When no provider
+	// is set, busC stays nil and falls through to NoopBus inside
 	// NewStaticMountContext.
 	var busC app.BusI
 	var storageC app.StorageI
-	if inst.bus != nil {
-		client := inst.bus.NewClient(m.Id, m.Caps)
-		busC = client
-		// Phase C: auto-inject the persist cap for any app declaring
-		// PersistedKeys. The manifest field exists exactly so apps
-		// don't have to repeat the boilerplate cap pattern; the
-		// host materialises it when needed.
+	if inst.busProvider != nil {
+		// Compute the full cap set before minting: manifest caps plus the
+		// host-injected persist cap for apps declaring PersistedKeys, so the
+		// transport-agnostic provider needs no post-hoc AddCap.
+		caps := m.Caps
 		if len(m.PersistedKeys) > 0 {
-			client.AddCap(app.SubjectFilter{
+			caps = append(append([]app.SubjectFilter(nil), m.Caps...), app.SubjectFilter{
 				Pattern:   persist.SubjectPrefix + m.Id.SubjectAlias() + ".>",
 				Direction: app.CapDirectionPub,
 				Reason:    "host-injected for declared PersistedKeys",
 			})
 		}
-		// Storage client wraps the same bus client so MountCtx.Storage()
-		// shares the per-app permission set with MountCtx.Bus(). Errors
-		// from NewClient are impossible here (busC is non-nil) but the
-		// signature returns one — if it ever fires, surface as nil so
-		// the app sees NoopStorage rather than a half-built client.
-		sc, sErr := persist.NewClient(busC, m.Id)
-		if sErr != nil {
-			inst.logger.Warn().Err(sErr).Str("appId", string(m.Id)).
-				Msg("windowhost: persist client construction failed; using NoopStorage")
+		client, busErr := inst.busProvider.NewBusClient(m.Id, caps)
+		if busErr != nil {
+			inst.logger.Warn().Err(busErr).Str("appId", string(m.Id)).
+				Msg("windowhost: bus client construction failed; using NoopBus")
 		} else {
-			storageC = sc
+			busC = client
+			// Storage client wraps the same bus client so MountCtx.Storage()
+			// shares the per-app permission set with MountCtx.Bus().
+			sc, sErr := persist.NewClient(busC, m.Id)
+			if sErr != nil {
+				inst.logger.Warn().Err(sErr).Str("appId", string(m.Id)).
+					Msg("windowhost: persist client construction failed; using NoopStorage")
+			} else {
+				storageC = sc
+			}
 		}
 	}
 	// Per-window logger: app_id + instance_id pre-tagged so any zerolog

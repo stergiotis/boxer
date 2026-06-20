@@ -5,9 +5,9 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audit"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // DefaultRequestTimeout is the wait Request applies before returning
@@ -70,6 +70,16 @@ func (inst *Inst) NewClient(appId app.AppIdT, caps []app.SubjectFilter) (c *Clie
 	inst.mu.Lock()
 	inst.clients[appId] = c
 	inst.mu.Unlock()
+	return
+}
+
+var _ app.BusProvider = (*Inst)(nil)
+
+// NewBusClient satisfies app.BusProvider, minting a per-app client as
+// app.BusI. The error is always nil (NewClient cannot fail); the signature
+// matches the interface so NATS providers can surface dial errors.
+func (inst *Inst) NewBusClient(appId app.AppIdT, caps []app.SubjectFilter) (bus app.BusI, err error) {
+	bus = inst.NewClient(appId, caps)
 	return
 }
 

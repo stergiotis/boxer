@@ -35,6 +35,7 @@ require (
 	github.com/matoous/go-nanoid/v2 v2.1.0
 	github.com/mattn/go-isatty v0.0.22
 	github.com/nao1215/markdown v0.13.0
+	github.com/nats-io/nats.go v1.52.0
 	github.com/nozzle/umap-go v0.0.0-20260301204052-79bd84384eff
 	github.com/pkoukk/tiktoken-go v0.1.8
 	github.com/rs/zerolog v1.35.1
@@ -165,6 +166,8 @@ require (
 	github.com/mschoch/smat v0.2.0 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/nats-io/nkeys v0.4.15 // indirect
+	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/olekukonko/cat v0.0.0-20250911104152-50322a0618f6 // indirect
 	github.com/olekukonko/errors v1.2.0 // indirect
 	github.com/olekukonko/ll v0.1.8 // indirect

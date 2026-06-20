@@ -35,6 +35,15 @@ func BundleSubject(hostToken string) (subject string) {
 	return
 }
 
+// BundleSubjectWildcard matches every host's whole-bundle subject
+// (sysmetrics.*.bundle). A consumer that wants any one box's metrics off a
+// shared bus subscribes here; on a single-box deployment it resolves to the
+// one scraper.
+func BundleSubjectWildcard() (subject string) {
+	subject = SubjectRoot + ".*.bundle"
+	return
+}
+
 // HostToken sanitises s into a single bus subject token: every character
 // outside [A-Za-z0-9_-] becomes '_' (the inprocbus/NATS token rule). An
 // empty result falls back to "local".

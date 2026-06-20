@@ -9,7 +9,8 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
-	"github.com/stergiotis/boxer/apps/imztop/sysmetricsbus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/natsbus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/battery"
@@ -23,15 +24,6 @@ import (
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/psi"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sensors"
 )
-
-// procSampleCap bounds the number of processes fully sampled per tick.
-// /proc/[pid]/{cmdline,status} are read only for the top-N by CPU% (RSS
-// desc tiebreak); a desktop with ~600 PIDs would otherwise burst ~40 MB
-// of short-lived bytes.growSlice garbage per second, exceeding the
-// GOGC=100 trigger every tick and yanking the render goroutine into
-// mark-assist. 256 still exceeds what the proc panel surfaces in
-// practice on the screens this widget targets.
-const procSampleCap = 256
 
 // PublishedSnapshot is the read-only frame the renderer consumes. Built
 // once per Sampler tick and replaced atomically; slices are owned by
@@ -133,22 +125,32 @@ type Sampler struct {
 
 	latest atomic.Pointer[PublishedSnapshot]
 
-	// Bisection seam (ADR-0090 P2). The producer owns the collectors and
-	// the tick loop; it samples /proc and publishes each BundleSnapshot to
-	// bus. This Sampler is the consumer: it subscribes and folds what
-	// arrives into the windows/EWMA above. Co-located, both halves share
-	// one private in-proc bus; the same split runs over NATS in P3.
-	bus      *inprocbus.Inst
-	producer *sysmetricsbus.Producer
-	consumer *sysmetricsbus.Consumer
+	// localPaused freezes the published snapshot. Co-located it complements
+	// producer.Pause (which also stops sampling); in NATS mode it is the only
+	// pause available — the remote scraper keeps publishing (unidirectional
+	// plane, ADR-0090 SD5), so onBundle drops frames while paused.
+	localPaused atomic.Bool
+
+	// Bisection seam (ADR-0090). This Sampler is the consumer; it folds each
+	// received BundleSnapshot into the windows/EWMA above. Two wirings:
+	//   - co-located (P2): a private in-proc bus + an in-process producer
+	//     that owns the collectors and the tick loop.
+	//   - NATS (P3): natsClient subscribes to a standalone sysmetricsd
+	//     scraper; no producer and no collectors here.
+	bus        *inprocbus.Inst
+	natsClient *natsbus.Client
+	producer   *sysmetricsbus.Producer
+	consumer   *sysmetricsbus.Consumer
 }
 
 var _ SamplerI = (*Sampler)(nil)
 
-// NewSampler builds a Sampler with the M2 collector set: CPU + Mem +
-// Disk + Net + Battery + Sensors plus optional GPU when a vendor build
-// tag is enabled (gpu_rocm wires AMD; gpu_intel and gpu_nvml are not
-// baked into the default ADR-0020 build).
+// NewSampler builds a Sampler in one of two modes (ADR-0090). With
+// IMZERO2_SYSMETRICS_NATS_URL set it is a pure NATS subscriber — a standalone
+// sysmetricsd scraper is the producer in its own process. Otherwise it runs
+// the co-located producer over the M2 collector set (CPU + Mem + Disk + Net +
+// Battery + Sensors + Proc + Container + PSI, plus GPU when a vendor build tag
+// is enabled — gpu_rocm wires AMD) connected through a private in-proc bus.
 func NewSampler(opts SamplerOptions) (inst *Sampler, err error) {
 	if opts.UpdateInterval <= 0 {
 		opts.UpdateInterval = 1 * time.Second
@@ -158,79 +160,6 @@ func NewSampler(opts SamplerOptions) (inst *Sampler, err error) {
 	}
 
 	histN := max(int32(opts.HistoryWindow/opts.UpdateInterval), 2)
-
-	bopts := sysmetrics.BundleOptions{}
-
-	cpuC, cerr := cpu.New(cpu.Options{})
-	if cerr != nil {
-		err = eh.Errorf("imztop: build cpu collector: %w", cerr)
-		return
-	}
-	bopts.CPU = cpuC
-
-	memC, merr := mem.New(mem.Options{})
-	if merr != nil {
-		err = eh.Errorf("imztop: build mem collector: %w", merr)
-		return
-	}
-	bopts.Mem = memC
-
-	diskC, derr := disk.New(disk.Options{})
-	if derr != nil {
-		log.Warn().Err(derr).Msg("imztop: build disk collector failed; disk panel disabled")
-	} else {
-		bopts.Disk = diskC
-	}
-
-	netC, nerr := netcoll.New(netcoll.Options{})
-	if nerr != nil {
-		log.Warn().Err(nerr).Msg("imztop: build net collector failed; net panel disabled")
-	} else {
-		bopts.Net = netC
-	}
-
-	batC, berr := battery.New(battery.Options{})
-	if berr != nil {
-		log.Warn().Err(berr).Msg("imztop: build battery collector failed; battery panel disabled")
-	} else {
-		bopts.Battery = batC
-	}
-
-	senC, serr := sensors.New(sensors.Options{})
-	if serr != nil {
-		log.Warn().Err(serr).Msg("imztop: build sensors collector failed; sensors panel disabled")
-	} else {
-		bopts.Sensors = senC
-	}
-
-	procC, perr := proc.New(proc.Options{MaxProcs: procSampleCap})
-	if perr != nil {
-		log.Warn().Err(perr).Msg("imztop: build proc collector failed; process panel disabled")
-	} else {
-		bopts.Proc = procC
-	}
-
-	cntC, cerr2 := container.New(container.Options{})
-	if cerr2 != nil {
-		log.Warn().Err(cerr2).Msg("imztop: build container detector failed; container badge disabled")
-	} else {
-		bopts.Container = cntC
-	}
-
-	psiC, psierr := psi.New(psi.Options{})
-	if psierr != nil {
-		log.Warn().Err(psierr).Msg("imztop: build PSI collector failed; pressure panel disabled")
-	} else {
-		bopts.PSI = psiC
-	}
-
-	wireGPUSampler(&bopts)
-
-	bundle, berr2 := sysmetrics.NewBundle(bopts)
-	if berr2 != nil {
-		err = eh.Errorf("imztop: build bundle: %w", berr2)
-		return
-	}
 
 	inst = &Sampler{
 		histN:       histN,
@@ -251,6 +180,53 @@ func NewSampler(opts SamplerOptions) (inst *Sampler, err error) {
 		procCPUEWMA: make(map[procEWMAKey]float32),
 	}
 	inst.intervalNs.Store(int64(opts.UpdateInterval))
+
+	// NATS mode (ADR-0090 P3): when a NATS URL is configured, a standalone
+	// sysmetricsd scraper is the producer in its own process and this Sampler
+	// is a pure subscriber — no collectors, no /proc here. It subscribes to
+	// any host's bundle (sysmetrics.*.bundle); a co-resident demo box runs a
+	// single scraper, so the wildcard resolves to the local one.
+	if url := sysmetricsbus.NatsURL.Get(); url != "" {
+		codec := sysmetricsbus.NewCBORCodec()
+		client, nerr := natsbus.Connect(natsbus.Options{URL: url, AppId: manifest.Id})
+		if nerr != nil {
+			err = eh.Errorf("imztop: connect sysmetrics NATS %q: %w", url, nerr)
+			return
+		}
+		consumer, consErr := sysmetricsbus.NewConsumer(sysmetricsbus.ConsumerOptions{
+			Bus:     client,
+			Subject: sysmetricsbus.BundleSubjectWildcard(),
+			Codec:   codec,
+			Handler: inst.onBundle,
+			Log:     log.Logger,
+		})
+		if consErr != nil {
+			_ = client.Close()
+			err = eh.Errorf("imztop: build sysmetrics NATS consumer: %w", consErr)
+			return
+		}
+		inst.natsClient = client
+		inst.consumer = consumer
+		log.Info().Str("url", url).Msg("imztop: consuming system metrics over NATS")
+		return
+	}
+
+	// Co-located mode (ADR-0090 P2 default): build the collector set and run
+	// the producer in-process, wired to this consumer through a private
+	// in-proc bus (below). DefaultBundleOptions keeps the collector set
+	// identical to the standalone sysmetricsd scraper; GPU is the one extra,
+	// wired here because it is vendor-build-tag-gated.
+	bopts, boptsErr := sysmetrics.DefaultBundleOptions()
+	if boptsErr != nil {
+		err = eh.Errorf("imztop: %w", boptsErr)
+		return
+	}
+	wireGPUSampler(&bopts)
+	bundle, berr := sysmetrics.NewBundle(bopts)
+	if berr != nil {
+		err = eh.Errorf("imztop: build bundle: %w", berr)
+		return
+	}
 
 	// Wire the producer/consumer bisection over a private in-proc bus
 	// (ADR-0090 P2 co-located special case). The producer publishes under
@@ -298,11 +274,14 @@ func NewSampler(opts SamplerOptions) (inst *Sampler, err error) {
 
 func (inst *Sampler) Start(ctx context.Context) {
 	// Subscribe before the producer ticks so the first published sample is
-	// not missed (inprocbus has no replay).
+	// not missed (neither inprocbus nor NATS core replays).
 	if err := inst.consumer.Start(); err != nil {
 		log.Error().Err(err).Msg("imztop: sysmetrics consumer subscribe failed")
 	}
-	inst.producer.Start(ctx)
+	// NATS mode has no local producer — the scraper runs elsewhere.
+	if inst.producer != nil {
+		inst.producer.Start(ctx)
+	}
 }
 
 func (inst *Sampler) Latest() (snap *PublishedSnapshot) {
@@ -311,16 +290,14 @@ func (inst *Sampler) Latest() (snap *PublishedSnapshot) {
 }
 
 func (inst *Sampler) Pause(p bool) {
+	inst.localPaused.Store(p) // freezes the published frame (both modes)
 	if inst.producer != nil {
-		inst.producer.Pause(p)
+		inst.producer.Pause(p) // co-located: also stop sampling
 	}
 }
 
 func (inst *Sampler) IsPaused() (p bool) {
-	if inst.producer != nil {
-		p = inst.producer.IsPaused()
-	}
-	return
+	return inst.localPaused.Load()
 }
 
 // IntervalLabel returns the configured tick interval as a short
@@ -351,8 +328,9 @@ func (inst *Sampler) Interval() (d time.Duration) {
 }
 
 func (inst *Sampler) Close() (err error) {
-	// Producer.Close stops the tick loop and closes the Bundle it owns;
-	// Consumer.Close unsubscribes.
+	// Producer.Close stops the tick loop and closes the Bundle it owns
+	// (co-located only); Consumer.Close unsubscribes; natsClient.Close drains
+	// and closes the NATS connection (NATS mode only).
 	if inst.producer != nil {
 		err = inst.producer.Close()
 	}
@@ -361,20 +339,29 @@ func (inst *Sampler) Close() (err error) {
 			err = cerr
 		}
 	}
+	if inst.natsClient != nil {
+		if cerr := inst.natsClient.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}
 	return
 }
 
 // onBundle folds one received BundleSnapshot into the sliding-window
 // history and the per-process CPU EWMA, then publishes a PublishedSnapshot
-// for the renderer. This is the consumer half of the ADR-0090 bisection:
-// the producer samples /proc and publishes; this runs for each delivered
-// frame (under inprocbus, on the producer's goroutine — the same single
-// writer the pre-bisection tick was), so the window state and procCPUEWMA
-// need no locking.
+// for the renderer. This is the consumer half of the ADR-0090 bisection; it
+// runs for each delivered frame on a single goroutine (inprocbus's
+// synchronous dispatch co-located, or the NATS subscription goroutine), so
+// the window state and procCPUEWMA need no locking.
 //
-// Pause/freeze (ADR-0020 SD14) is enforced producer-side: a paused producer
-// publishes nothing, so no onBundle runs and the last snapshot stays put.
+// Pause (ADR-0020 SD14): co-located the producer also stops sampling, but
+// localPaused is the authoritative freeze — and the only one in NATS mode,
+// where the remote scraper keeps publishing — so paused frames are dropped
+// here.
 func (inst *Sampler) onBundle(bundleSnap *sysmetrics.BundleSnapshot) {
+	if inst.localPaused.Load() {
+		return
+	}
 	inst.timeWindow.Push(float64(bundleSnap.SampledAtUnixMs) / 1000.0)
 	if bundleSnap.CPU != nil {
 		inst.cpuTotal.Push(float64(bundleSnap.CPU.TotalPercent))
