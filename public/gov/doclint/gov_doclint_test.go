@@ -366,6 +366,13 @@ func TestIsInScopeForDL001ModuleRootReadme(t *testing.T) {
 		"package-level README.md (no sibling go.mod) must remain in scope")
 }
 
+func TestIsInScopeForDL001ClaudeShim(t *testing.T) {
+	require.False(t, IsInScopeForDL001(filepath.Join("repo", "CLAUDE.md"), "CLAUDE.md"),
+		"CLAUDE.md agent-instruction shim must be out of scope")
+	require.True(t, IsInScopeForDL001(filepath.Join("repo", "AGENTS.md"), "AGENTS.md"),
+		"AGENTS.md carries front-matter and must remain in scope")
+}
+
 func TestRuleDL008ChecksGoDocLinks(t *testing.T) {
 	rule := NewRuleDL008()
 	findings := collectFindings(t, rule, []string{"testdata/dl008"})

@@ -44,8 +44,9 @@ type frontMatterDL001 struct {
 
 // IsInScopeForDL001 returns true if path/base should be evaluated by DL001.
 // The intent is to exclude generated, vendored, fixture, and out-of-standard
-// files (changelog summaries, Claude Code SKILL files, and the module-root
-// README.md that serves as the GitHub landing page per §3).
+// files (changelog summaries, Claude Code SKILL files, the CLAUDE.md
+// agent-instruction shim, and the module-root README.md that serves as the
+// GitHub landing page per §3).
 func IsInScopeForDL001(path string, base string) (in bool) {
 	if strings.HasSuffix(base, ".gen.md") {
 		return
@@ -58,6 +59,12 @@ func IsInScopeForDL001(path string, base string) (in bool) {
 		return
 	}
 	if base == "SKILL.md" {
+		return
+	}
+	// CLAUDE.md is a one-line shim that imports AGENTS.md for Claude Code; like
+	// SKILL.md it is an agent-tool file, not a Diátaxis doc. AGENTS.md itself
+	// carries front-matter and remains in scope.
+	if base == "CLAUDE.md" {
 		return
 	}
 	if base == "README.md" {
