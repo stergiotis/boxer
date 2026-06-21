@@ -253,5 +253,4 @@ rewrite, but none are blocking the v1 use case.
 - Stdlib reference: <https://pkg.go.dev/testing/fstest>
 - Humanization: <https://pkg.go.dev/github.com/dustin/go-humanize>
 - Sibling packages: `markdown/EXPLANATION.md`,
-  `regex_explorer/regex_explorer.go` (panel-based Window layout),
-  `hn_explorer/hn_explorer.go` (split-pane layout).
+  `regex_explorer/regex_explorer.go` (panel-based Window layout).

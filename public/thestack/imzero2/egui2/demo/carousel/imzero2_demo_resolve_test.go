@@ -14,7 +14,6 @@ import (
 
 const (
 	idWidgets       = "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/widgets"
-	idHnExplorer    = "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/hn_explorer"
 	idLeewaywidgets = "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/leewaywidgets"
 	idPlay          = "github.com/stergiotis/boxer/apps/play"
 	idRegexExplorer = "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/regex_explorer"
@@ -49,7 +48,7 @@ func TestExpandLaunchExpr_BareAlias(t *testing.T) {
 }
 
 func TestExpandLaunchExpr_BareAliasWithUnderscore(t *testing.T) {
-	assert.Equal(t, "subject_alias = 'hn_explorer'", expandLaunchExpr("hn_explorer"))
+	assert.Equal(t, "subject_alias = 'regex_explorer'", expandLaunchExpr("regex_explorer"))
 }
 
 func TestExpandLaunchExpr_BareAliasWithDigit(t *testing.T) {
@@ -130,10 +129,10 @@ func TestResolveLaunchSql_InList(t *testing.T) {
 
 func TestResolveLaunchSql_LegacyCodeInList(t *testing.T) {
 	skipIfNoClickhouseLocal(t)
-	apps, err := resolveLaunchSql("legacy_code IN (1, 2, 5)")
+	apps, err := resolveLaunchSql("legacy_code IN (1, 5, 7)")
 	require.NoError(t, err)
 	assert.ElementsMatch(t,
-		[]app.AppIdT{idWidgets, idHnExplorer, idPlay},
+		[]app.AppIdT{idWidgets, idPlay, idImztop},
 		extractIds(apps))
 }
 
@@ -201,13 +200,12 @@ func TestAdaptToRenderer_MultipleInstancesShareUnderlying(t *testing.T) {
 	assert.Equal(t, 2, count)
 }
 
-func TestRegistry_AllSixAppsRegistered(t *testing.T) {
+func TestRegistry_CoreAppsRegistered(t *testing.T) {
 	// init() in each app's package fires when this test binary's imports
 	// transitively pull them in (via the side-effect imports in
 	// imzero2_demo_resolve.go).
 	wantIds := []app.AppIdT{
 		idWidgets,
-		idHnExplorer,
 		idLeewaywidgets,
 		idPlay,
 		idRegexExplorer,

@@ -12,7 +12,7 @@ status: draft
 
 How the public **boxer/keelson demonstrator** is built, deployed, and served: a
 live gallery of capability-scoped apps (the keelson app runtime, ADR-0026 —
-`play`, `imztop`, `idsshowcase`, `hn_explorer`, the leeway widgets, …) rendered
+`play`, `imztop`, `idsshowcase`, the leeway widgets, …) rendered
 through the **imzero2** headless pixel-streaming host (ADR-0024) into a browser
 tab.
 

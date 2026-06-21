@@ -104,7 +104,6 @@ flightRecord="$here/flightRecorder.trace"
 rm -f "$flightRecord"
 	#--waitForDebugger \
 #export BOXER_IMZERO_DEBUG_MODE="flamegraph"
-export HN_EXPLORER_CLICKHOUSE_URL="http://default:hack@localhost:8123/"
 # regex_explorer uses `clickhouse local` via subprocess — no server
 # needed. Set REGEX_EXPLORER_CLICKHOUSE_LOCAL_BIN to override the
 # binary path; default resolves "clickhouse-local" through $PATH.

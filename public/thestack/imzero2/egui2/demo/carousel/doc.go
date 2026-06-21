@@ -16,7 +16,7 @@
 //   - `--launch <ref[,ref...]>` seeds initial windows. Each ref is
 //     resolved by trying, in order: full manifest Id ("org.pebble2.play"),
 //     legacy numeric code ("a005" / "5"), and SubjectAlias (the last
-//     '/' segment of the Id — e.g. "play", "widgets", "hn_explorer").
+//     '/' segment of the Id — e.g. "play", "widgets", "regex_explorer").
 //     Unresolved refs are logged and skipped — they do not abort startup.
 //     Use `--list` to discover the alias / code / Id columns.
 package demo

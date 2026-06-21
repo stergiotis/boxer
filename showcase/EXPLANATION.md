@@ -57,7 +57,7 @@ root and treats imzero2 as a dependency.
                                                     │  encode  │              │   (optional)    │
                                                     └──────────┘              └─────────────────┘
                                                                        clickhouse server :8123
-                                                                       (external) ──▶ play, hn_explorer
+                                                                       (external) ──▶ play
 ```
 
 ## Process tree
@@ -174,8 +174,7 @@ shapes above:
   [`github.com/stergiotis/boxer/public/keelson/data/chlocalbroker`](../public/keelson/data/chlocalbroker),
   ADR-0028) reached over the in-process bus, not a per-query spawn.
 - **`clickhouse` server (HTTP `:8123`) — external.** Only `play` (a SQL
-  playground, default `localhost`) and `hn_explorer` (a separate public cluster
-  via `HN_EXPLORER_CLICKHOUSE_URL`) dial a server, through
+  playground, default `localhost`) dials a server, through
   [`github.com/stergiotis/boxer/public/keelson/data/chclient`](../public/keelson/data/chclient).
   The showcase box does not run one.
 

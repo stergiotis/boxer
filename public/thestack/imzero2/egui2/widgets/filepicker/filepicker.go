@@ -601,7 +601,7 @@ func (inst *Inst) applyPendingCwd() {
 
 // renderBody draws the dialog interior inside the Window+IdScope scope.
 //
-// Layout uses the panel pattern from regex_explorer / hn_explorer:
+// Layout uses the panel pattern from regex_explorer:
 // PanelTopInside pins the breadcrumbs to the top, PanelBottomInside
 // pins the footer (and, in save mode, the filename row above it) to
 // the bottom, and PanelCentralInside fills whatever's left for the

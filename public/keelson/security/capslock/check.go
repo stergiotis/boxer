@@ -3,7 +3,7 @@
 // findings to stdout and always returns exit code 0 — CI does not gate
 // on this until a later promotion phase. Findings format:
 //
-//	[FILES]   github.com/.../hn_explorer  — no fs.* cap declared
+//	[FILES]   github.com/.../someapp      — no fs.* cap declared
 //	[NETWORK] github.com/.../play         — ok (matches ch.query.>)
 //
 // The mapping table comes from ADR-0026 §SD10:
@@ -33,7 +33,6 @@ import (
 	// Side-effect imports: each app's init() registers into app.DefaultRegistry.
 	_ "github.com/stergiotis/boxer/apps/imztop"
 	_ "github.com/stergiotis/boxer/apps/play"
-	_ "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/hn_explorer"
 	_ "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/leewaywidgets"
 	_ "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/regex_explorer"
 	_ "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/widgets"

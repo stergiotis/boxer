@@ -41,7 +41,6 @@ import (
 	_ "github.com/stergiotis/boxer/apps/taskdemo"
 	_ "github.com/stergiotis/boxer/public/keelson/runtime/configview"
 	_ "github.com/stergiotis/boxer/public/keelson/runtime/logviewer"
-	_ "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/hn_explorer"
 	_ "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/idsshowcase"
 	_ "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/leewaywidgets"
 	_ "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/logdemo"
@@ -317,7 +316,6 @@ func buildWindowedRenderer(apps []app.AppI, runId string, facts factsstore.Facts
 // this map goes with it.
 var legacyCodeToId = map[uint64]app.AppIdT{
 	1: "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/widgets",
-	2: "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/hn_explorer",
 	4: "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/leewaywidgets",
 	5: "github.com/stergiotis/boxer/apps/play",
 	6: "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/regex_explorer",
@@ -333,7 +331,7 @@ var legacyCodeToId = map[uint64]app.AppIdT{
 var bareAliasRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 // expandLaunchExpr rewrites the --launch flag value into the WHERE
-// clause body. A bare identifier (`play`, `hn_explorer`) is the common
+// clause body. A bare identifier (`play`, `regex_explorer`) is the common
 // case and expands to `subject_alias = '<value>'`; anything else
 // (already a SQL expression with operators, an IN list, a LIKE
 // pattern, …) flows through verbatim. Whitespace-only or empty values

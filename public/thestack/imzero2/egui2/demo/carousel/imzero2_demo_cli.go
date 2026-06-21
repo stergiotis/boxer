@@ -55,7 +55,7 @@ func NewCommand() *cli.Command {
 			"\n" +
 			"Non-interactive launch — bare identifier shorthand:\n" +
 			"   imzero2 demo --launch play           # shorthand for: subject_alias = 'play'\n" +
-			"   imzero2 demo --launch hn_explorer\n" +
+			"   imzero2 demo --launch regex_explorer\n" +
 			"\n" +
 			"For richer predicates, --launch is a SQL WHERE clause over the\n" +
 			"registered-applications table from --list; the runtime wraps it as\n" +
