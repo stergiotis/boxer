@@ -68,6 +68,32 @@ type neighborhoodSig struct {
 	hideStd bool
 }
 
+// archSig is the cache key for the architecture (group quotient) graph: any
+// change rebuilds the group graph and its dot layout.
+type archSig struct {
+	depth   int
+	showExt bool
+	hideStd bool
+}
+
+// Module-table column indices (the modules-lens master view).
+const (
+	mcolModule = iota
+	mcolPkgs
+	mcolDirect
+	mcolFanIn
+	mcolBlast
+	numModCols
+)
+
+// Widget-id seq bases for the module table's headers / rows. Kept disjoint from
+// the package table's bases (hdrSeqBase / rowSeqBase) so PrepareSeq never
+// collides even though only one master view renders per frame.
+const (
+	modHdrSeqBase uint64 = 0xB000_0000
+	modRowSeqBase uint64 = 0xC000_0000
+)
+
 // App is the per-window godepview instance (ADR-0064). It depends only on
 // the godep manifest and the godep.SourceI port; the concrete collector is
 // injected by the registry ctor (app_register.go), keeping the render path
@@ -128,6 +154,33 @@ type App struct {
 	detailFocus     uint64
 	detailImports   []uint64
 	detailImporters []uint64
+
+	// Master-pane mode + modules-lens state. showModules flips the master leaf
+	// from the package table to the external-module rollup; the modules slice is
+	// the derived per-module footprint (ADR-0064 group/module Update), built once.
+	showModules    bool
+	modules        []godep.ModuleStat
+	modulesReady   bool
+	modSortCol     int
+	modSortDesc    bool
+	modView        []int // display order: indices into modules
+	modViewDirty   bool
+	focusModule    string // selected module path; "" = none
+
+	// Architecture (group quotient) graph state. The group graph + its dot
+	// layout are cached against archSig; violations are grouping-independent and
+	// cached once. violEdge maps a forbidden (from,to) group pair to red.
+	archMode    bool
+	groupDepth  float64 // grouping granularity slider (path segments)
+	archShowExt bool    // include external module groups in the architecture view
+	archGraph   *godep.GroupGraph
+	archLayout  *layeredgraph.Layout
+	archErr     error
+	archView    lgview.ViewState
+	archSig     archSig
+	violReady   bool
+	violations  []godep.SiblingViolation
+	violEdge    map[[2]godep.GroupKey]struct{}
 }
 
 var _ app.AppI = (*App)(nil)
@@ -147,6 +200,11 @@ func newApp(src godep.SourceI) (inst *App) {
 		graphHideStd: true, // stdlib hubs flood the graph; the table still lists them
 		seed:         instanceCounter.Add(1),
 		viewDirty:    true,
+
+		groupDepth:  godep.DefaultInternalDepth, // separates each apps/<name> by default
+		archShowExt: false,                      // architecture starts internal-only (coupling focus)
+		modSortCol:  mcolFanIn,                  // most-leaned-on module first
+		modSortDesc: true,
 	}
 	return
 }

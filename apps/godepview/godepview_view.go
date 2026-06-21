@@ -39,36 +39,64 @@ func (inst *App) renderExplorer() {
 		inst.rebuildView()
 	}
 	inst.ensureNeighborhood()
+	// Build the derived lenses the active modes need before the controls read
+	// their counts (architecture: group quotient + violations; modules: rollup).
+	if inst.archMode {
+		inst.ensureArch()
+	}
+	if inst.showModules {
+		inst.ensureModules()
+	}
 	inst.renderControls()
 	c.AddSpace(inst.spaceTight())
 
-	// Master–detail as a three-leaf dock: the package table (master) on the
-	// left, the focus-neighborhood graph top-right, and the focus detail pane
-	// bottom-right. A dock leaf hands its content a bounded rect, which is what
-	// lets the detail pane's ScrollArea clip+scroll and the graph fill its pane
-	// (a width-pinned column would collapse a ScrollArea to its first child —
-	// schemaview's hard-won idiom).
+	// Master–detail as a three-leaf dock: the master pane (package table, or the
+	// module rollup) on the left, the graph (focus neighborhood, or the
+	// architecture quotient) top-right, and the detail pane bottom-right. A dock
+	// leaf hands its content a bounded rect, which is what lets the detail pane's
+	// ScrollArea clip+scroll and the graph fill its pane (a width-pinned column
+	// would collapse a ScrollArea to its first child — schemaview's hard-won
+	// idiom). The two master/graph toggles switch each pane's content; the leaf
+	// labels name both options so the active mode reads off the controls.
 	c.UiSetMinHeight(dockMinHeight)
 	for dock := range c.DockArea(inst.ids.PrepareStr("dock")) {
 		root := dock.InitRoot(tabPackages)
-		// Table keeps 60% of the width (eight columns, WASM kept in the visible
-		// span); the graph and detail pane split the right column evenly so the
-		// detail lists are visible without scrolling. All leaves are
-		// drag-resizable and persist.
 		graphLeaf := dock.Split(root, c.DockRight, 0.60, tabGraph)
 		dock.Split(graphLeaf, c.DockBelow, 0.50, tabDetail)
 
-		for range dock.Tab(tabPackages, "packages") {
-			inst.renderTable()
+		for range dock.Tab(tabPackages, "packages / modules") {
+			if inst.showModules {
+				inst.renderModules()
+			} else {
+				inst.renderTable()
+			}
 		}
-		for range dock.Tab(tabGraph, "neighborhood") {
-			inst.renderNeighborhoodGraph()
+		for range dock.Tab(tabGraph, "neighborhood / architecture") {
+			if inst.archMode {
+				inst.renderGraphArchitecture()
+			} else {
+				inst.renderNeighborhoodGraph()
+			}
 		}
 		for range dock.Tab(tabDetail, "detail") {
 			for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
-				inst.renderDetail()
+				inst.renderDetailDispatch()
 			}
 		}
+	}
+}
+
+// renderDetailDispatch routes the detail pane to the lens that matches the
+// active master/graph modes: a focused module's footprint, the architecture
+// violations list, or (default) the focused package's metadata + dep lists.
+func (inst *App) renderDetailDispatch() {
+	switch {
+	case inst.showModules && inst.focusModule != "":
+		inst.renderModuleDetail()
+	case inst.archMode:
+		inst.renderArchDetail()
+	default:
+		inst.renderDetail()
 	}
 }
 
@@ -93,22 +121,50 @@ func (inst *App) renderControls() {
 		c.AddSpace(inst.spaceInner())
 		resp := c.TextEdit(inst.ids.PrepareStr("flt"), inst.filter, false).
 			DesiredWidth(280).
-			HintText("import-path substring").
+			HintText("path / module substring").
 			SendRespVal(&inst.filter)
 		if resp.HasChanged() {
 			inst.viewDirty = true
+			inst.modViewDirty = true // the filter box is shared with the modules table
 		}
 		c.AddSpace(inst.spaceOuter())
 		inst.classToggle("cls-std", godep.ClassStdlib, &inst.showStd)
 		inst.classToggle("cls-int", godep.ClassInternal, &inst.showInt)
 		inst.classToggle("cls-ext", godep.ClassExternal, &inst.showExt)
 		c.AddSpace(inst.spaceOuter())
-		c.Label(fmt.Sprintf("%d shown", len(inst.view))).Send()
+		shown := len(inst.view)
+		if inst.showModules {
+			shown = len(inst.modView)
+		}
+		c.Label(fmt.Sprintf("%d shown", shown)).Send()
 	}
 	c.AddSpace(inst.spaceTight())
 
-	// Row 2: neighborhood (graph) controls. The focused package is shown in the
-	// detail pane (with its own clear button), not here.
+	// Row 2: pane modes — master (packages / modules) and graph (neighborhood /
+	// architecture). Each toggle switches one pane's content independently.
+	for range c.Horizontal().KeepIter() {
+		c.Label("master").Send()
+		inst.masterToggle("m-pkgs", "packages", false)
+		inst.masterToggle("m-mods", "modules", true)
+		c.AddSpace(inst.spaceOuter())
+		c.Label("graph").Send()
+		inst.graphModeToggle("g-nbhd", "neighborhood", false)
+		inst.graphModeToggle("g-arch", "architecture", true)
+	}
+	c.AddSpace(inst.spaceTight())
+
+	// Row 3: context controls for the active graph mode.
+	if inst.archMode {
+		inst.renderArchControls()
+	} else {
+		inst.renderNeighborhoodControls()
+	}
+}
+
+// renderNeighborhoodControls is the per-package focus row: depth, direction,
+// hide-stdlib, and the live/layered engine switch. The focused package is shown
+// in the detail pane (with its own clear button), not here.
+func (inst *App) renderNeighborhoodControls() {
 	for range c.Horizontal().KeepIter() {
 		c.Label("Neighborhood").Send()
 		c.AddSpace(inst.spaceInner())
@@ -125,6 +181,54 @@ func (inst *App) renderControls() {
 		c.Label("engine").Send()
 		inst.engineToggle("eng-live", "live", false)
 		inst.engineToggle("eng-layered", "layered", true)
+	}
+}
+
+// renderArchControls is the architecture row: grouping granularity, whether to
+// fold in external modules, hide-stdlib (shared with the neighborhood), and a
+// live verdict on the keelson apps-independence rule. The architecture graph is
+// always laid out by the dot engine, so there is no live/layered switch here.
+func (inst *App) renderArchControls() {
+	for range c.Horizontal().KeepIter() {
+		c.Label("Architecture").Send()
+		c.AddSpace(inst.spaceInner())
+		c.SliderF64(inst.ids.PrepareStr("gdepth"), inst.groupDepth, 1, 4).
+			Text("group depth").
+			SendRespVal(&inst.groupDepth)
+		c.AddSpace(inst.spaceOuter())
+		inst.boolToggle("arch-ext", "show external", &inst.archShowExt)
+		c.AddSpace(inst.spaceOuter())
+		inst.boolToggle("hide-std-a", "hide stdlib", &inst.graphHideStd)
+		c.AddSpace(inst.spaceOuter())
+		if n := len(inst.violations); n > 0 {
+			for range c.RichTextLabelColored(egcolor.Hex(styletokens.ErrorDefault.AsHex()), egcolor.Transparent,
+				fmt.Sprintf("⚠ %d app→app violations", n)) {
+			}
+		} else if inst.violReady {
+			for rt := range c.RichTextLabel("✓ apps independent") {
+				rt.Weak()
+			}
+		}
+	}
+}
+
+// masterToggle is one segment of the packages/modules master switch.
+func (inst *App) masterToggle(id string, label string, modules bool) {
+	if c.Button(inst.ids.PrepareStr(id), c.Atoms().Text(label).Keep()).
+		Selected(inst.showModules == modules).
+		Frame(true).
+		SendResp().HasPrimaryClicked() {
+		inst.showModules = modules
+	}
+}
+
+// graphModeToggle is one segment of the neighborhood/architecture graph switch.
+func (inst *App) graphModeToggle(id string, label string, arch bool) {
+	if c.Button(inst.ids.PrepareStr(id), c.Atoms().Text(label).Keep()).
+		Selected(inst.archMode == arch).
+		Frame(true).
+		SendResp().HasPrimaryClicked() {
+		inst.archMode = arch
 	}
 }
 

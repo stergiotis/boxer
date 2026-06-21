@@ -1,0 +1,276 @@
+package godepview
+
+import (
+	"context"
+	"fmt"
+	"strconv"
+	"strings"
+
+	"github.com/stergiotis/boxer/public/code/analysis/golang/godep"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	egcolor "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph/goccyengine"
+	lgview "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph/view"
+)
+
+// This file is the architecture (altitude) view: instead of one package's
+// neighborhood, it folds the whole closure into a group quotient (each
+// apps/<name>, public/<area>, external module a node) and draws it whole with
+// the layeredgraph widget — the quotient is tens of nodes, so unlike the package
+// closure it needs no focus or cap. Forbidden app→app edges (the keelson rule)
+// are painted red; the offending package pairs are listed in the detail pane.
+
+// archIDSalt seeds the architecture canvas + sense-region ids; it is distinct
+// from the neighborhood layered canvas (layeredIDSalt) so the two graphs never
+// collide even across instances (the seed disambiguates open windows).
+const archIDSalt uint64 = 0x2545f4914f6cdd1d
+
+func (inst *App) archIDBase() (id uint64) { id = archIDSalt + inst.seed; return }
+
+// groupDepthInt rounds the grouping-granularity slider to the segment count the
+// quotient uses.
+func (inst *App) groupDepthInt() (d int) { d = max(int(inst.groupDepth+0.5), 1); return }
+
+// ensureArch rebuilds the group quotient (and clears its cached dot layout) only
+// when the grouping signature changes, so a stable depth/showExt/hideStd costs
+// neither a rebuild nor a re-layout per frame. Violations are
+// grouping-independent and computed once.
+func (inst *App) ensureArch() {
+	if inst.idx == nil {
+		return
+	}
+	sig := archSig{depth: inst.groupDepthInt(), showExt: inst.archShowExt, hideStd: inst.graphHideStd}
+	if inst.archGraph != nil && sig == inst.archSig {
+		return
+	}
+	inst.archSig = sig
+	inst.archLayout = nil
+	inst.archErr = nil
+	inst.archView = lgview.ViewState{}
+
+	include := func(p *godep.PackageNode) (ok bool) {
+		switch p.Class {
+		case godep.ClassStdlib:
+			return !sig.hideStd
+		case godep.ClassExternal:
+			return sig.showExt
+		default:
+			return true
+		}
+	}
+	inst.archGraph = inst.idx.BuildGroupGraph(inst.man.Run.RootModulePath, godep.GroupingOpts{InternalDepth: sig.depth}, include)
+
+	inst.ensureViolations()
+	inst.violEdge = make(map[[2]godep.GroupKey]struct{}, len(inst.violations))
+	for _, v := range inst.violations {
+		inst.violEdge[[2]godep.GroupKey{v.FromGroup, v.ToGroup}] = struct{}{}
+	}
+}
+
+// ensureViolations computes the keelson apps-independence violations once. They
+// key on apps/<name> directly (not the view's grouping depth), so they are
+// stable across grouping changes and computed a single time per collection.
+func (inst *App) ensureViolations() {
+	if inst.violReady {
+		return
+	}
+	inst.violReady = true
+	if inst.idx == nil {
+		return
+	}
+	inst.violations = inst.idx.SiblingViolations(inst.man.Run.RootModulePath, "apps/")
+}
+
+// renderGraphArchitecture draws the group quotient with the layeredgraph widget,
+// class-coloured nodes, and forbidden app→app edges in the error tone. Clicking
+// an internal group filters the package table to it; clicking an external module
+// opens the modules lens on it.
+func (inst *App) renderGraphArchitecture() {
+	inst.ensureArch()
+	if inst.archGraph == nil || len(inst.archGraph.Nodes) == 0 {
+		c.Label("No groups to show — widen the grouping depth, show external, or unhide stdlib.").Send()
+		return
+	}
+	if inst.archLayout == nil && inst.archErr == nil {
+		inst.archLayout, inst.archErr = layoutGroupGraph(inst.archGraph)
+	}
+	if inst.archErr != nil {
+		c.Label("architecture layout unavailable: " + inst.archErr.Error()).Send()
+		return
+	}
+	lay := inst.archLayout
+	if lay == nil || len(lay.Nodes) == 0 {
+		return
+	}
+	if n := len(inst.violations); n > 0 {
+		for range c.RichTextLabelColored(egcolor.Hex(styletokens.ErrorDefault.AsHex()), egcolor.Transparent,
+			fmt.Sprintf("⚠ %d forbidden app→app edge(s) in red — listed in the detail pane", n)) {
+		}
+	}
+
+	w, h := inst.paneAvail(640, 320)
+	res := lgview.Render(inst.archIDBase(), lay, lgview.RenderOpts{
+		CanvasW:    w,
+		CanvasH:    h - 6,
+		NodeFill:   inst.archNodeFill(),
+		NodeText:   inst.layeredNodeText(), // dark ink on the light *Default fills
+		EdgeStroke: inst.archEdgeStroke(),
+		State:      &inst.archView,
+	})
+	if res.Clicked != "" {
+		inst.onArchClick(godep.GroupKey(res.Clicked))
+	}
+}
+
+// layoutGroupGraph builds the dot model from the group quotient — one box per
+// group keyed by its group key, one edge per group pair (labelled with the
+// crossing-import count when > 1) — and lays it out left→right.
+func layoutGroupGraph(gg *godep.GroupGraph) (lay *layeredgraph.Layout, err error) {
+	eng, err := goccyengine.Shared()
+	if err != nil {
+		return nil, err
+	}
+	m := layeredgraph.GraphModel{
+		Nodes: make([]layeredgraph.Node, 0, len(gg.Nodes)),
+		Edges: make([]layeredgraph.Edge, 0, len(gg.Edges)),
+	}
+	for _, n := range gg.Nodes {
+		m.Nodes = append(m.Nodes, layeredgraph.Node{
+			ID:    string(n.Key),
+			Label: shortGroup(n.Key),
+			Shape: layeredgraph.NodeShapeBox,
+		})
+	}
+	for _, e := range gg.Edges {
+		label := ""
+		if e.Weight > 1 {
+			label = strconv.Itoa(e.Weight)
+		}
+		m.Edges = append(m.Edges, layeredgraph.Edge{From: string(e.From), To: string(e.To), Label: label})
+	}
+	return eng.Layout(context.Background(), m, layeredgraph.LayoutOpts{
+		RankDir:  layeredgraph.RankDirLeftRight,
+		FontSize: 13,
+	})
+}
+
+// archNodeFill colours each group by its dominant class, matching the
+// neighborhood palette (internal accent / external info / stdlib neutral).
+func (inst *App) archNodeFill() func(id string) (col egcolor.Color, ok bool) {
+	return func(id string) (col egcolor.Color, ok bool) {
+		class := ""
+		if n, found := inst.archGraph.Node(godep.GroupKey(id)); found {
+			class = n.Class
+		}
+		return egcolor.Hex(classRGBA(class)), true
+	}
+}
+
+// archEdgeStroke paints a group edge in the error tone when it carries a
+// forbidden app→app dependency. At grouping depths that collapse apps into one
+// node the pair no longer matches an edge — the detail-pane list stays
+// authoritative (see SiblingViolations).
+func (inst *App) archEdgeStroke() func(from string, to string) (col egcolor.Color, ok bool) {
+	red := egcolor.Hex(styletokens.ErrorDefault.AsHex())
+	return func(from string, to string) (col egcolor.Color, ok bool) {
+		if _, bad := inst.violEdge[[2]godep.GroupKey{godep.GroupKey(from), godep.GroupKey(to)}]; bad {
+			return red, true
+		}
+		return egcolor.Color{}, false
+	}
+}
+
+// onArchClick routes a group click: an external module group opens the modules
+// lens on it; any other group filters the package table to its path prefix.
+func (inst *App) onArchClick(key godep.GroupKey) {
+	n, ok := inst.archGraph.Node(key)
+	if !ok {
+		return
+	}
+	if n.Class == godep.ClassExternal {
+		inst.showModules = true
+		inst.focusModule = string(key)
+		return
+	}
+	inst.showModules = false
+	inst.filter = string(key) // substring of the full import path → filters the table to this group
+	inst.viewDirty = true
+}
+
+// renderArchDetail is the architecture companion in the detail pane: the
+// grouping summary and the authoritative list of forbidden app→app edges, each
+// a click-through to the offending importer's neighborhood.
+func (inst *App) renderArchDetail() {
+	inst.ensureViolations()
+	groups := 0
+	if inst.archGraph != nil {
+		groups = len(inst.archGraph.Nodes)
+	}
+	for rt := range c.RichTextLabel("Architecture") {
+		rt.Strong().Size(14)
+	}
+	c.Label(fmt.Sprintf("%d groups · grouping depth %d · %d crossing edges",
+		groups, inst.groupDepthInt(), inst.archEdgeCount())).Send()
+	c.AddSpace(inst.spaceTight())
+	c.Separator().Horizontal().Send()
+	c.AddSpace(inst.spaceTight())
+
+	if len(inst.violations) == 0 {
+		for rt := range c.RichTextLabel("✓ No forbidden app→app dependencies") {
+			rt.Strong()
+		}
+		c.Label("Each apps/<name> tree imports no other app's packages.").Send()
+		return
+	}
+	for rt := range c.RichTextLabel(fmt.Sprintf("Forbidden app→app edges (%d)", len(inst.violations))) {
+		rt.Strong()
+	}
+	for rt := range c.RichTextLabel("keelson apps should not depend on each other — click an edge to inspect the importing package") {
+		rt.Weak().Small()
+	}
+	c.AddSpace(inst.spaceTight())
+	shown := min(len(inst.violations), maxDetailListRows)
+	for i := range shown {
+		v := inst.violations[i]
+		label := fmt.Sprintf("%s ▶ %s", shortPath(inst.pathOf(v.FromPkg)), shortPath(inst.pathOf(v.ToPkg)))
+		if c.SelectableLabel(inst.ids.PrepareSeq(violSeqBase+uint64(i)), false, label).
+			SendResp().HasPrimaryClicked() {
+			inst.focus = v.FromPkg
+			inst.archMode = false // jump to the offender's neighborhood
+		}
+	}
+	if len(inst.violations) > shown {
+		for rt := range c.RichTextLabel(fmt.Sprintf("… +%d more", len(inst.violations)-shown)) {
+			rt.Weak().Small()
+		}
+	}
+}
+
+// archEdgeCount reports the number of crossing group edges (0 when the quotient
+// is not yet built).
+func (inst *App) archEdgeCount() (n int) {
+	if inst.archGraph != nil {
+		n = len(inst.archGraph.Edges)
+	}
+	return
+}
+
+// violSeqBase is the id seq base for the violations list — disjoint from the
+// table seq bases.
+const violSeqBase uint64 = 0xD000_0000
+
+// shortGroup is the architecture node label: the last two segments of a group
+// key, since a full module path or deep internal path is too long for a box.
+func shortGroup(k godep.GroupKey) (s string) {
+	s = string(k)
+	if s == "" {
+		return "(root)"
+	}
+	segs := strings.Split(s, "/")
+	if len(segs) <= 2 {
+		return s
+	}
+	return strings.Join(segs[len(segs)-2:], "/")
+}
