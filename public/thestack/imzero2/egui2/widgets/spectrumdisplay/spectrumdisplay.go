@@ -473,7 +473,14 @@ func (inst *SpectrumDisplay) updateReadout() {
 		ro.BinRow = row
 		ro.RingCol = col
 		if w, _ := inst.hs.Size(); w > 0 {
-			ro.Age = int((inst.hs.Head() - 1 - col + w) % w)
+			// Signed arithmetic: a plain uint32 (Head-1-col+w)%w is only correct when w
+			// is a power of two (the wraparound modulus is 2³²), but widthSlots is
+			// unconstrained.
+			age := (int64(inst.hs.Head()) - 1 - int64(col)) % int64(w)
+			if age < 0 {
+				age += int64(w)
+			}
+			ro.Age = int(age)
 		}
 		if int(row) < len(inst.lastCol) {
 			ro.Db = float64(inst.lastCol[row])

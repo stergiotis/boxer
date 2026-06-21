@@ -125,7 +125,7 @@ func WithDesiredTicks(n int) Option {
 // overlap-aware tick selection. Heckbert/Nelder are cheaper alternatives that
 // ignore label widths.
 func WithTicker(t TickerE) Option {
-	return func(inst *ColorScale) { inst.ticker = t }
+	return func(inst *ColorScale) { inst.ticker, inst.tickerSet = t, true }
 }
 
 // WithLabelFormat overrides the tick-label formatter. By default, Heckbert's
@@ -159,6 +159,7 @@ type ColorScale struct {
 	orientation  OrientationE
 	desiredTicks int
 	ticker       TickerE
+	tickerSet    bool
 	labelFormat  func(float64) string
 	fontSize     float32
 	bgColor      uint32
@@ -233,6 +234,12 @@ func New(ids *c.WidgetIdStack, scopeKey string, cm *colormap.Config, opts ...Opt
 	// (the horizontal default was seeded above).
 	if !inst.sizeSet && inst.orientation == OrientationVertical {
 		inst.width, inst.height = DefaultSizeVertical[0], DefaultSizeVertical[1]
+	}
+	// Default the vertical orientation to Heckbert: the Talbot legibility scorer
+	// penalizes label width, but a vertical axis is constrained by label height, so
+	// the width model overcrowds it. WithTicker still overrides.
+	if !inst.tickerSet && inst.orientation == OrientationVertical {
+		inst.ticker = TickerHeckbert
 	}
 	return inst
 }
