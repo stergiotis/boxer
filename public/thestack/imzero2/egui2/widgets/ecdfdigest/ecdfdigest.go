@@ -65,16 +65,33 @@ func RenderDigest(renderer ecdf.Renderer, digest *tdigest.TDigest, gridN int) (e
 // path; callers worried about edge cases should validate gridN
 // upstream.
 func BuildDigestGrid(digest *tdigest.TDigest, gridN int) (xs, fn []float64) {
+	return BuildDigestGridRange(digest, gridN, digest.Min(), digest.Max())
+}
+
+// BuildDigestGridRange is BuildDigestGrid restricted to an explicit
+// x-window [lo, hi]: it samples a uniform grid of length gridN across
+// [lo, hi] (not the digest's full support) and evaluates the digest's
+// CDF at each point. This is how a caller concentrates grid resolution
+// in a visible body after clipping a long tail (ADR-0093) — the uniform
+// full-range grid wastes most of its points in a flat tail, leaving the
+// informative body coarse. The CDF values still come from the whole digest, so
+// F_n(hi) reflects the true fraction at or below the cutoff (≈ the cutoff
+// quantile) rather than 1; the band's calibration likewise depends on the
+// total observation count, not on this window.
+//
+// lo / hi are used as given (caller computes them, e.g. from quantiles);
+// when hi ≤ lo the window collapses and every grid point lands at lo
+// (step 0) — callers should pass a non-degenerate window. gridN < 2 is
+// clamped to 2.
+func BuildDigestGridRange(digest *tdigest.TDigest, gridN int, lo, hi float64) (xs, fn []float64) {
 	if gridN < 2 {
 		gridN = 2
 	}
-	xmin := digest.Min()
-	xmax := digest.Max()
 	xs = make([]float64, gridN)
 	fn = make([]float64, gridN)
-	step := (xmax - xmin) / float64(gridN-1)
+	step := (hi - lo) / float64(gridN-1)
 	for i := range xs {
-		xs[i] = xmin + step*float64(i)
+		xs[i] = lo + step*float64(i)
 		fn[i] = digest.CDF(xs[i])
 	}
 	return

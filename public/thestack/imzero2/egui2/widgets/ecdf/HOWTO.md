@@ -104,11 +104,13 @@ for _, m := range methods {
 
 ## Recipe 4 — Cursor crosshair + status line
 
-Wire a hover-driven vertical crosshair on the plot plus a status
-line beneath it that reports `(x, F_n(x), band, nearest order
-statistic)`. The widget reads the cached r15 plot hover register
-on each frame, computes the lookups, and emits one `PlotVLine` and
-one `LabelAtoms` row.
+Wire a hover-driven vertical crosshair on the plot plus a verbose,
+plain-language readout beneath it that describes the cursor's reading
+— `F_n(x)`, the nearest observation (or grid point), and the
+confidence interval with its provenance (exact family + calibration n,
+or the conservative DKW preview). The widget reads the cached r15 plot
+hover register each frame, computes the lookups, and emits one
+`PlotVLine` plus a fixed-height stack of `LabelAtoms` rows.
 
 ```go
 import (
@@ -134,7 +136,10 @@ c.Plot(plotID).
     Send()
 
 c.AddSpace(styletokens.PaddingDefault(styletokens.DensityStandard))
-ecdf.WriteStatusLine(ch)      // "x = …  F_n(x) = …  (1-α)·100% band […]  nearest X_(i) = …"
+ecdf.WriteStatusLine(ch)      // verbose readout: "Cursor at value x = …" /
+                              // "Empirical CDF F_n(x) = … — an estimated …% …" /
+                              // "Nearest observation X_(i) = …" /
+                              // "Simultaneous 95% confidence band (exact, Berk-Jones, n=…): F(x) ∈ […]"
 ```
 
 The grid path is symmetric: swap `r.At(plotID, sample)` for
@@ -145,10 +150,17 @@ registers.
 
 `Crosshair.Valid` is false when the cursor is outside the plot,
 when the hover refers to a different plot id, or when no plot has
-rendered yet this session. Both `PaintCrosshair` and
-`WriteStatusLine` no-op on `!ch.Valid`; callers that want a
-placeholder ("hover over the plot to inspect cursor values") should
-emit it themselves on the `!ch.Valid` branch.
+rendered yet this session. `PaintCrosshair` no-ops on `!ch.Valid`;
+`WriteStatusLine` does *not* — it emits a one-line hover hint
+("Hover over the curve to read F(x) and its confidence interval.")
+padded to the same `ecdf.ReadoutLineCount` height as the full readout,
+so the status area never reflows as the cursor enters and leaves the
+curve. (If you build your own readout, the pure `formatReadout` is not
+exported; reproduce the hint yourself on the `!ch.Valid` branch.)
+
+To name the band in an always-visible line of your own (independent of
+hover) — e.g. while the cursor is off the curve — read
+`r.BandMethod()` for the configured exact family.
 
 ## Verification
 

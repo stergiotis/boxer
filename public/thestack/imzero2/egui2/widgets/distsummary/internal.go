@@ -1,11 +1,13 @@
 package distsummary
 
 import (
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
 
 	"github.com/dustin/go-humanize"
+	"github.com/stergiotis/boxer/public/analytics/stats/ecdfbands"
 	"github.com/stergiotis/boxer/public/analytics/stats/tdigest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 )
@@ -47,6 +49,122 @@ func computeFiveNumberSummary(d *tdigest.TDigest) (out fiveNumberSummary) {
 	out.min = d.Min()
 	out.max = d.Max()
 	return
+}
+
+// exactBandBucketFloor is the sample size at or below which
+// [bucketExactN] returns n unchanged. Below it the exact O(n²) solve is
+// sub-second and the tighter band is worth keeping; bucketing only buys
+// stability for the expensive large-n solves, so small samples stay
+// exact.
+const exactBandBucketFloor = 256
+
+// bucketExactN rounds n DOWN to a coarse geometric ladder (steps of
+// `ratio`) so a digest whose size drifts a little reuses the same cached
+// exact-band solve instead of cancelling and restarting it every frame —
+// which is what lets a live / repeatedly-recomputed inspector's exact
+// band settle rather than spin forever (ADR-0093 §Decision; see
+// [Renderer.renderEcdfBody]).
+//
+// Rounding DOWN is deliberate: the bucketed value is ≤ n, so the band is
+// calibrated at no more samples than were observed and is therefore a
+// conservative over-cover, never an under-coverage. The gap between the
+// bucket and the true n is surfaced in the readout (BandN < SampleN), so
+// the conservatism is visible rather than silent. Relative conservatism
+// is bounded by √ratio on the band half-width.
+//
+// ratio ≤ 1 disables bucketing (returns n); n ≤ [exactBandBucketFloor]
+// is returned unchanged.
+func bucketExactN(n int, ratio float64) int {
+	if ratio <= 1 || n <= exactBandBucketFloor {
+		return n
+	}
+	k := math.Floor(math.Log(float64(n)) / math.Log(ratio))
+	bn := max(int(math.Floor(math.Pow(ratio, k))), exactBandBucketFloor)
+	bn = min(bn, n) // floating-point guard: never exceed the true count
+	return bn
+}
+
+// tailClipBounds computes the ECDF's x-view window, clipping a long tail
+// adaptively and per-side (ADR-0093 §Decision). The cutoff itself is a
+// quantile (so the retained fraction reads straight off the F(x) axis),
+// but a side is
+// clipped only when its tail is long relative to the spread — the
+// Tukey-style ratio (max−Q3)/IQR or (Q1−min)/IQR exceeding triggerIQR
+// (~3, the "far out" multiple). A well-behaved distribution thus renders
+// full-range; only a genuinely heavy tail is trimmed. The band's
+// calibration is unaffected — it always uses the true observation count,
+// not this window.
+//
+// Returns the window [lo, hi] and which side(s) were clipped (for the
+// hidden-tail annotation). When clipping is disabled, the spread is
+// degenerate (IQR ≤ 0 / non-finite), or a clip would collapse the window,
+// it falls back to the full [Min, Max] with both clipped flags false.
+func tailClipBounds(d *tdigest.TDigest, lowerP, upperP, triggerIQR float64, enabled bool) (lo, hi float64, clippedLo, clippedHi bool) {
+	xmin := d.Min()
+	xmax := d.Max()
+	lo, hi = xmin, xmax
+	if !enabled {
+		return
+	}
+	// One buffer flush for the four quantiles the trigger + cutoff need.
+	q := d.Quantiles([]float64{0.25, 0.75, lowerP, upperP})
+	q1, q3, qLo, qHi := q[0], q[1], q[2], q[3]
+	iqr := q3 - q1
+	if !(iqr > 0) { // degenerate / non-finite spread: no robust trigger
+		return
+	}
+	// Upper tail long relative to spread → clip to the upper quantile.
+	if (xmax-q3)/iqr > triggerIQR && isFinite(qHi) && qHi > lo && qHi < xmax {
+		hi = qHi
+		clippedHi = true
+	}
+	// Lower tail, symmetric.
+	if (q1-xmin)/iqr > triggerIQR && isFinite(qLo) && qLo < hi && qLo > xmin {
+		lo = qLo
+		clippedLo = true
+	}
+	if !(hi > lo) { // never collapse the window
+		lo, hi = xmin, xmax
+		clippedLo, clippedHi = false, false
+	}
+	return
+}
+
+// isFinite reports whether x is neither NaN nor ±Inf.
+func isFinite(x float64) bool { return !math.IsNaN(x) && !math.IsInf(x, 0) }
+
+// formatTailClipNote builds the always-visible annotation shown below a
+// clipped ECDF, naming the visible window and how much of which tail the
+// cutoff hid (so the trim is honest, never silent). Returns "" when
+// neither side was clipped. fn formats x values for display (the
+// renderer's value formatter). The hidden fraction is read from the
+// digest's CDF at the cutoff rather than assumed equal to 1−upperP, since
+// the digest's quantile and CDF are not exact inverses.
+func formatTailClipNote(d *tdigest.TDigest, clipLo, clipHi float64, clippedLo, clippedHi bool, fn FormatFunc) string {
+	var parts []string
+	if clippedLo {
+		parts = append(parts, fmt.Sprintf("lower tail to min=%s hidden (%.2g%% of n)", fn(d.Min()), d.CDF(clipLo)*100))
+	}
+	if clippedHi {
+		parts = append(parts, fmt.Sprintf("upper tail to max=%s hidden (%.2g%% of n)", fn(d.Max()), (1-d.CDF(clipHi))*100))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "showing x ∈ [" + fn(clipLo) + ", " + fn(clipHi) + "] · " + strings.Join(parts, " · ")
+}
+
+// formatBandStateLine builds the always-visible band-state line shown
+// when the exact band is ready: the family and the sample size it was
+// calibrated at, flagged conservative when that size lags the true count
+// (a capped or bucketed solve, bandN < sampleN) — the staleness made
+// visible without needing a hover. Pure (no egui) so it is unit-testable.
+func formatBandStateLine(method ecdfbands.BandMethodE, bandN, sampleN int) string {
+	s := "exact band · " + method.String() + " · n=" + strconv.Itoa(bandN)
+	if bandN < sampleN {
+		s += "  (sample " + strconv.Itoa(sampleN) + ", conservative)"
+	}
+	return s
 }
 
 // humanizeValue renders one summary value for the compact level-1 label

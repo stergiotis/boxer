@@ -24,6 +24,18 @@
 //     preserved so the ECDF returns automatically once the digest
 //     recovers.
 //
+// The ECDF tab clips a long tail adaptively per-side (a quantile cutoff,
+// engaged only when a tail is long relative to the IQR — see
+// [tailClipBounds] / [Renderer.TailClip]) so a heavy-tailed distribution's
+// body fills the plot instead of being crushed into the left edge, and
+// annotates the hidden tail below the curve. A fixed-height verbose
+// readout below the plot describes the cursor's F(x) reading and its
+// confidence interval, and an always-visible band-state line names the
+// band (exact family + calibration n, or the conservative DKW preview),
+// flagging it conservative when the calibration n lags the true count —
+// which also lets a live or recomputed inspector's exact band settle
+// rather than restart its solve every frame (see [bucketExactN]).
+//
 // Each idPrefix names one logical distsummary instance: the pinned
 // open/closed state is held in a package-level state map keyed by
 // idPrefix, so the value-receiver / fluent-builder pattern stays
@@ -144,6 +156,39 @@ const bandWarmRepaintIntervalSecs = 0.05
 // opt-in — the instant DKW preview band covers the gap meanwhile.
 const exactBandAutoMaxN = 500
 
+// defaultTailLowerP / defaultTailUpperP are the per-side quantile cutoffs
+// the ECDF x-view clips to when a tail is long enough to trigger clipping
+// (see [tailClipBounds]). p0.1 / p99.9 hide only the extreme 0.1% on a
+// clipped side — enough to recover a heavy-tailed body without dropping
+// visible structure. Tunable via [Renderer.TailClip].
+const (
+	defaultTailLowerP = 0.001
+	defaultTailUpperP = 0.999
+)
+
+// defaultTailTriggerIQR is the tail-length-over-IQR ratio past which a
+// side is clipped — Tukey's "far out" 3×IQR multiple, used here only as
+// the trigger (the cutoff itself is a quantile). A side whose extreme
+// lies within 3·IQR of its quartile is left unclipped, so a well-behaved
+// distribution renders full-range. Tunable via [Renderer.TailTrigger].
+const defaultTailTriggerIQR = 3.0
+
+// defaultExactBandBucketRatio is the geometric step [bucketExactN] rounds
+// the exact-band n down to so a drifting sample size reuses a cached
+// solve instead of restarting it every frame. 1.25 caps the resulting
+// band conservatism at √1.25 ≈ 1.12 (~12% wider half-width worst case)
+// while coarsening enough to let live / recomputed inspectors settle.
+// Tunable (or disabled, ratio ≤ 1) via [Renderer.ExactBandBucket].
+const defaultExactBandBucketRatio = 1.25
+
+// ecdfStatusBudget is the vertical room (points) the ECDF tab's status
+// area needs below the plot in the first-open window envelope: the
+// Reset-zoom button, the optional hidden-tail note, the band-state /
+// controls row, and the fixed-height verbose cursor readout
+// ([ecdf.ReadoutLineCount] rows). Sized generously so the readout is
+// visible without an immediate resize; the window stays resizable.
+const ecdfStatusBudget float32 = 140
+
 // FormatFunc converts one of the summary's float values into a display
 // string for the level-1 label. The default ([humanizeValue]) prints
 // plain ~3-significant-figure decimals in the comfortable [0.001, 1000)
@@ -189,6 +234,23 @@ type Renderer struct {
 	// over-cover. Set via ExactBandMaxN; the demos cap it so the exact path
 	// is demonstrable.
 	exactBandMaxN int
+
+	// tailClipEnabled / tailLowerP / tailUpperP / tailTriggerIQR configure
+	// the ECDF x-view's adaptive, per-side tail cutoff (see [tailClipBounds]
+	// and [Renderer.TailClip] / [Renderer.TailTrigger] / [Renderer.NoTailClip]).
+	// Defaults: enabled, p0.1 / p99.9 cutoffs, 3×IQR trigger. The cutoff only
+	// bounds the view — the band's calibration always uses the true count.
+	tailClipEnabled bool
+	tailLowerP      float64
+	tailUpperP      float64
+	tailTriggerIQR  float64
+
+	// exactBandBucketRatio is the geometric ladder [bucketExactN] rounds the
+	// exact-band n down to so a drifting sample size reuses a cached solve
+	// instead of restarting it every frame — what lets a live / recomputed
+	// inspector's exact band settle. Default [defaultExactBandBucketRatio];
+	// ≤ 1 disables bucketing. Set via [Renderer.ExactBandBucket].
+	exactBandBucketRatio float64
 
 	// provenance, when non-zero, renders the standard
 	// [inspector.ProvenanceChip] inside the inspector window's body so
@@ -293,6 +355,12 @@ func New(idPrefix string) (inst Renderer) {
 		plot:        boxenplot.New(idPrefix + "-bp"),
 		ecdfPlot:    ecdf.New(),
 		gridN:       defaultEcdfGridN,
+
+		tailClipEnabled:      true,
+		tailLowerP:           defaultTailLowerP,
+		tailUpperP:           defaultTailUpperP,
+		tailTriggerIQR:       defaultTailTriggerIQR,
+		exactBandBucketRatio: defaultExactBandBucketRatio,
 	}
 	return
 }
@@ -345,6 +413,58 @@ func (inst Renderer) ExactBandMaxN(n int) (out Renderer) {
 		n = 0
 	}
 	inst.exactBandMaxN = n
+	out = inst
+	return
+}
+
+// TailClip sets the per-side quantile cutoffs the ECDF x-view clips to
+// when a tail triggers clipping, and (re-)enables clipping. lowerP /
+// upperP are clamped to [0, 1] and swapped if mis-ordered; pass e.g.
+// (0.001, 0.999) to hide the extreme 0.1% on a clipped side. Clipping
+// stays adaptive — a side is trimmed only when its tail is long relative
+// to the IQR (see [Renderer.TailTrigger]) — so this never trims a
+// well-behaved distribution. Use [Renderer.NoTailClip] to turn it off.
+func (inst Renderer) TailClip(lowerP, upperP float64) (out Renderer) {
+	if upperP < lowerP {
+		lowerP, upperP = upperP, lowerP
+	}
+	inst.tailLowerP = min(1, max(0, lowerP))
+	inst.tailUpperP = min(1, max(0, upperP))
+	inst.tailClipEnabled = true
+	out = inst
+	return
+}
+
+// TailTrigger sets the tail-length-over-IQR ratio past which the ECDF
+// x-view clips a side (default [defaultTailTriggerIQR]). Larger clips less
+// eagerly (only longer tails); ≤ 0 clips whenever the cutoff quantile lies
+// strictly inside the support. Does not re-enable clipping if
+// [Renderer.NoTailClip] turned it off.
+func (inst Renderer) TailTrigger(iqrRatio float64) (out Renderer) {
+	inst.tailTriggerIQR = iqrRatio
+	out = inst
+	return
+}
+
+// NoTailClip disables the ECDF x-view tail cutoff, restoring the full
+// [Min, Max] range (the pre-cutoff behaviour): the grid spans the whole
+// support again. The level-1 summary and band are unaffected either way.
+func (inst Renderer) NoTailClip() (out Renderer) {
+	inst.tailClipEnabled = false
+	out = inst
+	return
+}
+
+// ExactBandBucket sets the geometric step the exact-band n is rounded
+// down to so a drifting sample size reuses a cached solve instead of
+// restarting it every frame (see [bucketExactN]) — the mechanism that
+// lets a live or repeatedly-recomputed inspector's exact band settle.
+// Default [defaultExactBandBucketRatio]; a ratio ≤ 1 disables bucketing
+// (the band is calibrated at the exact, capped n, which can thrash and
+// never settle on a fast-growing digest — it then stays on the DKW
+// preview, which the readout explains).
+func (inst Renderer) ExactBandBucket(ratio float64) (out Renderer) {
+	inst.exactBandBucketRatio = ratio
 	out = inst
 	return
 }
@@ -659,13 +779,22 @@ func (inst Renderer) renderBoxenplotBody(scope string, digest *tdigest.TDigest, 
 // boxenplot's so the r15 hover register stays per-tab and a cached hover
 // from the previous tab does not surface here as a stale crosshair.
 //
+// The x-view is clipped adaptively per-side ([tailClipBounds]) so a long
+// tail does not crush the body, and the grid is built over the clipped
+// window so resolution lands where it is visible. The cutoff bounds only
+// the view; the band's calibration uses the true count.
+//
 // The exact (1-α) band needs an O(n²) critical-value inversion that runs
 // into minutes past a few thousand points, so it is never on the critical
-// render path. The body always draws the instant closed-form DKW preview
-// band and layers the tighter exact band on top in one of three states,
-// mirrored in the status row below the plot:
-//   - exact: the exact band for this (capped n, α, method) is cached —
-//     draw it and the hover crosshair directly.
+// render path. The exact-band n is capped ([Renderer.exactBandMaxN]) and
+// then bucketed ([bucketExactN]) so a drifting sample size reuses a cached
+// solve rather than restarting it every frame. The body always draws the
+// instant closed-form DKW preview band and layers the tighter exact band
+// on top in one of three states, named in the always-visible band-state
+// row below the plot:
+//   - exact: the exact band for this (bucketed n, α, method) is cached —
+//     draw it and the hover crosshair directly; the row names the family
+//     and calibration n (flagged conservative when it lags the true n).
 //   - warming: the exact band was requested (auto for small n, else via
 //     the Compute button) and is warming on a keelson background job
 //     (ADR-0038); keep drawing the DKW preview meanwhile with progress +
@@ -673,6 +802,11 @@ func (inst Renderer) renderBoxenplotBody(scope string, digest *tdigest.TDigest, 
 //     finds the cache warm.
 //   - preview: the exact band is opt-in and not yet requested — draw the
 //     DKW preview alone with a "Compute exact band" affordance.
+//
+// Below those, a fixed-height verbose cursor readout ([ecdf.WriteStatusLine])
+// describes F(x) and the confidence interval at the hover (a hint when the
+// cursor is off the curve), and a hidden-tail note appears when a side was
+// clipped.
 //
 // Order matters the same way as [renderBoxenplotBody]: At*() snapshots the
 // hover before Render* stages the band rectangles + ECDF polyline, and
@@ -689,7 +823,14 @@ func (inst Renderer) renderEcdfBody(scope string, state *instanceState, digest *
 	}
 	plotID := c.MakeAbsoluteIdStr(scope + "-ecdf-plot")
 	n := int(digest.Count())
-	xs, fn := ecdfdigest.BuildDigestGrid(digest, inst.gridN)
+	// Adaptive, per-side tail cutoff: clip a long tail to a quantile so the
+	// body fills the plot, and build the grid over the clipped window so the
+	// resolution lands where it is visible — a full-range uniform grid wastes
+	// most of its points in a flat tail. The cutoff bounds only the view; the
+	// band's calibration still uses the true count n, not this window.
+	clipLo, clipHi, clippedLo, clippedHi := tailClipBounds(
+		digest, inst.tailLowerP, inst.tailUpperP, inst.tailTriggerIQR, inst.tailClipEnabled)
+	xs, fn := ecdfdigest.BuildDigestGridRange(digest, inst.gridN, clipLo, clipHi)
 
 	// The exact band's critical value is computed at a capped n so the
 	// opt-in solve stays tractable + cancellable on large samples; the DKW
@@ -698,6 +839,13 @@ func (inst Renderer) renderEcdfBody(scope string, state *instanceState, digest *
 	if inst.exactBandMaxN > 0 && nExact > inst.exactBandMaxN {
 		nExact = inst.exactBandMaxN
 	}
+	// Bucket the (capped) exact-band n down to a stable value so a digest
+	// whose size drifts reuses the cached solve instead of cancelling and
+	// restarting it every frame — what lets a live / recomputed inspector's
+	// exact band settle. The bucketed value is the calibration n shown in the
+	// readout (flagged conservative when it lags the true count). See
+	// [bucketExactN].
+	nExact = bucketExactN(nExact, inst.exactBandBucketRatio)
 
 	// Seed the exact-band choice once per open: auto-request when its solve
 	// is cheap (small effective n), opt-in above. Reset on close (see Render)
@@ -713,6 +861,7 @@ func (inst Renderer) renderEcdfBody(scope string, state *instanceState, digest *
 	switch {
 	case exactReady:
 		ch = inst.ecdfPlot.AtGrid(plotID, xs, fn, nExact)
+		ch.SampleN = n // AtGrid only knew the bucketed/capped solve size
 		if err := inst.ecdfPlot.RenderGrid(xs, fn, nExact); err != nil {
 			// A grid the exact band rejects (e.g. a sub-ULP non-monotone F_n)
 			// must not blank the plot — fall back to the curve so the ECDF is
@@ -722,6 +871,7 @@ func (inst Renderer) renderEcdfBody(scope string, state *instanceState, digest *
 		inst.ecdfPlot.PaintCrosshair(ch)
 	default: // warming or preview — both draw the instant DKW preview band
 		ch = inst.ecdfPlot.AtGridPreview(plotID, xs, fn, n)
+		ch.SampleN = n // already the true n on the preview path; explicit for parity
 		_ = inst.ecdfPlot.RenderGridPreview(xs, fn, n)
 		inst.ecdfPlot.PaintCrosshair(ch)
 	}
@@ -797,7 +947,7 @@ func (inst Renderer) renderEcdfBody(scope string, state *instanceState, digest *
 			AllowScroll(false).
 			IncludeY(0).
 			IncludeY(1).
-			ClampX(xmin, xmax).
+			ClampX(clipLo, clipHi).
 			ClampY(0, 1)
 		if resetZoom {
 			plot = plot.ResetBounds()
@@ -821,9 +971,18 @@ func (inst Renderer) renderEcdfBody(scope string, state *instanceState, digest *
 	if pad > 0 {
 		c.AddSpace(pad)
 	}
+	// Hidden-tail annotation: always visible when a side was clipped, so the
+	// trim is honest about which tail (and how much mass) it dropped.
+	if note := formatTailClipNote(digest, clipLo, clipHi, clippedLo, clippedHi, inst.formatFunc); note != "" {
+		c.LabelAtoms(c.Atoms().BeginRichText(note).Small().Weak().End().Keep()).Send()
+	}
+	// Band-state row / controls: always visible per state, independent of
+	// hover, so staleness (calibration n vs sample n) is readable without
+	// pointing at the curve.
 	switch {
 	case exactReady:
-		ecdf.WriteStatusLine(ch)
+		c.LabelAtoms(c.Atoms().BeginRichText(
+			formatBandStateLine(inst.ecdfPlot.BandMethod(), nExact, n)).Small().Weak().End().Keep()).Send()
 	case warming:
 		switch job.State {
 		case ecdf.BandJobError:
@@ -832,9 +991,10 @@ func (inst Renderer) renderEcdfBody(scope string, state *instanceState, digest *
 			// The inline progress widget renders a Cancel button; a click
 			// aborts the exact solve and drops back to the DKW preview band +
 			// Compute affordance (exactRequested = false) rather than
-			// respawning the solve on the next frame.
+			// respawning the solve on the next frame. The title names the
+			// target family + bucketed n so the work in flight is identifiable.
 			if jobprogress.Render(jobprogress.Input{
-				Title:    "computing exact band",
+				Title:    "computing exact band (" + inst.ecdfPlot.BandMethod().String() + ", n=" + strconv.Itoa(nExact) + ")",
 				Fraction: job.Fraction,
 				EtaMs:    job.EtaMs,
 				CancelId: c.MakeAbsoluteIdStr(scope + "-band-cancel"),
@@ -846,7 +1006,7 @@ func (inst Renderer) renderEcdfBody(scope string, state *instanceState, digest *
 	default: // DKW preview shown — offer to upgrade to the exact band
 		for range c.Horizontal().KeepIter() {
 			c.LabelAtoms(
-				c.Atoms().BeginRichText("conservative DKW band").Small().Weak().End().Keep(),
+				c.Atoms().BeginRichText("conservative DKW preview band").Small().Weak().End().Keep(),
 			).Send()
 			c.AddSpace(8)
 			if c.Button(c.MakeAbsoluteIdStr(scope+"-band-compute"), c.Atoms().Text("Compute exact band").Keep()).
@@ -856,9 +1016,11 @@ func (inst Renderer) renderEcdfBody(scope string, state *instanceState, digest *
 				state.exactRequested = true
 			}
 		}
-		// Full hover readout below the affordance row (no-op when !Valid).
-		ecdf.WriteStatusLine(ch)
 	}
+	// Verbose cursor readout: fixed-height stack below the controls,
+	// describing F(x) and the confidence interval at the hover (a hover hint
+	// when the cursor is off the curve). See [ecdf.WriteStatusLine].
+	ecdf.WriteStatusLine(ch)
 	rendered = true
 	return
 }
@@ -894,7 +1056,11 @@ func (inst Renderer) renderPinnedWindow(scope string, tether inspector.AnchorTet
 		bodyW = defaultEcdfPlotWidth
 	}
 	envW := bodyW + 2*inst.popupPad + 24
-	envH := inst.popupHeight + 2*inst.popupPad + 40 + tabBarBudget
+	// ecdfStatusBudget reserves room for the ECDF tab's status area (band
+	// state, hidden-tail note, and the fixed-height verbose readout) so the
+	// window first-opens tall enough to show it without an immediate resize;
+	// the narrow boxenplot tab simply leaves that space below its status line.
+	envH := inst.popupHeight + 2*inst.popupPad + 40 + tabBarBudget + ecdfStatusBudget
 	win := c.Window(winId, c.WidgetText().Text(title).Keep()).
 		DefaultOpen(true).
 		Resizable(true).

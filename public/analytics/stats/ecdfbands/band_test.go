@@ -8,6 +8,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestBandMethodString pins the human-readable display names used in
+// status lines/legends, and the unknown-value fallback (never blanks).
+func TestBandMethodString(t *testing.T) {
+	assert.Equal(t, "Berk-Jones", BandMethodBerkJones.String())
+	assert.Equal(t, "DKW", BandMethodDKW.String())
+	assert.Equal(t, "equal-precision", BandMethodEqualPrecision.String())
+	assert.Equal(t, "higher-criticism", BandMethodHigherCriticism.String())
+	assert.Contains(t, BandMethodE(250).String(), "unknown")
+}
+
 // TestBJBoundariesContainCentre verifies the structural invariant
 // L_i ≤ p_i ≤ H_i — the band is centred on the i-th rank's null
 // expectation.

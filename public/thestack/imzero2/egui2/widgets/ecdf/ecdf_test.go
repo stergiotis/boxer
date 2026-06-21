@@ -1,6 +1,7 @@
 package ecdf
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/analytics/stats/ecdfbands"
@@ -176,4 +177,91 @@ func TestAtReturnsInvalidWhenSortedEmpty(t *testing.T) {
 	assert.False(t, ch.Valid)
 	assert.Equal(t, -1, ch.NearestIdx)
 	assert.Equal(t, 0.05, ch.Alpha)
+}
+
+// TestFormatReadoutHoverHint: an invalid crosshair yields exactly one
+// hint row (so the host can rely on a stable, non-empty readout).
+func TestFormatReadoutHoverHint(t *testing.T) {
+	lines := formatReadout(Crosshair{Valid: false})
+	require.Len(t, lines, 1)
+	assert.Contains(t, lines[0], "Hover over the curve")
+}
+
+// TestFormatReadoutExactRawSample exercises the raw-sample exact path:
+// the reading, a genuine order-statistic "nearest", and an exact band
+// line naming the family and calibration n with no staleness flag.
+func TestFormatReadoutExactRawSample(t *testing.T) {
+	ch := Crosshair{
+		Valid: true, X: 1240, FnX: 0.973,
+		LowerX: 0.961, UpperX: 0.982,
+		NearestX: 1210, NearestIdx: 1780,
+		Alpha:    0.05,
+		BandKind: BandExact, Method: ecdfbands.BandMethodBerkJones,
+		BandN: 1832, SampleN: 1832, FromGrid: false,
+	}
+	lines := formatReadout(ch)
+	joined := strings.Join(lines, "\n")
+	assert.Contains(t, joined, "Cursor at value x = 1240")
+	assert.Contains(t, joined, "Empirical CDF F_n(x) = 0.973")
+	assert.Contains(t, joined, "97.3%")
+	assert.Contains(t, joined, "1832 observations")
+	// Raw-sample path: the nearest is a true order statistic X_(rank).
+	assert.Contains(t, joined, "Nearest observation X_(1781) = 1210")
+	assert.Contains(t, joined, "exact, Berk-Jones, n=1832")
+	assert.Contains(t, joined, "F(x) ∈ [0.961, 0.982]")
+	// Coverage label must read cleanly, never the float-error form.
+	assert.Contains(t, joined, "95%")
+	assert.NotContains(t, joined, "94.99")
+	// No staleness flag when BandN == SampleN.
+	assert.NotContains(t, joined, "conservative")
+	assert.LessOrEqual(t, len(lines), ReadoutLineCount)
+}
+
+// TestFormatReadoutGridPreview exercises the streaming preview path: no
+// order-statistic "nearest" line (a grid point is not an X_(i)), and the
+// band names the conservative DKW preview rather than an exact family.
+func TestFormatReadoutGridPreview(t *testing.T) {
+	ch := Crosshair{
+		Valid: true, X: 50, FnX: 0.5,
+		LowerX: 0.42, UpperX: 0.58,
+		NearestX: 49, NearestIdx: 7,
+		Alpha:    0.05,
+		BandKind: BandPreview, Method: ecdfbands.BandMethodDKW,
+		BandN: 2000, SampleN: 2000, FromGrid: true,
+	}
+	joined := strings.Join(formatReadout(ch), "\n")
+	assert.NotContains(t, joined, "Nearest observation X_(")
+	assert.Contains(t, joined, "DKW preview")
+	assert.Contains(t, joined, "F(x) ∈ [0.420, 0.580]")
+}
+
+// TestFormatReadoutStaleExact: when the calibration n lags the true
+// sample size (capped / bucketed solve) the band line flags it
+// conservative and reports both sizes — the staleness made visible.
+func TestFormatReadoutStaleExact(t *testing.T) {
+	ch := Crosshair{
+		Valid: true, X: 3, FnX: 0.8,
+		LowerX: 0.7, UpperX: 0.9,
+		Alpha:    0.05,
+		BandKind: BandExact, Method: ecdfbands.BandMethodBerkJones,
+		BandN: 413, SampleN: 505, FromGrid: true,
+	}
+	joined := strings.Join(formatReadout(ch), "\n")
+	assert.Contains(t, joined, "n=413")
+	assert.Contains(t, joined, "sample 505")
+	assert.Contains(t, joined, "conservative")
+}
+
+// TestFormatReadoutCoverageVariesWithAlpha pins the coverage label to the
+// renderer's alpha (90% / 99%) without float noise.
+func TestFormatReadoutCoverageVariesWithAlpha(t *testing.T) {
+	mk := func(alpha float64) string {
+		return strings.Join(formatReadout(Crosshair{
+			Valid: true, FnX: 0.5, Alpha: alpha,
+			BandKind: BandExact, Method: ecdfbands.BandMethodBerkJones, BandN: 100, SampleN: 100,
+		}), "\n")
+	}
+	assert.Contains(t, mk(0.10), "90%")
+	assert.Contains(t, mk(0.01), "99%")
+	assert.NotContains(t, mk(0.01), "99.0000")
 }

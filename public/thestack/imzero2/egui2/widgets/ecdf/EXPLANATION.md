@@ -81,10 +81,10 @@ of 1/n at each X_(i), horizontal extension between consecutive X's.
 
 ## Cursor crosshair
 
-A second API surface — `Crosshair`, `Renderer.At` / `Renderer.AtGrid`,
-`Renderer.PaintCrosshair`, and the package-free `WriteStatusLine` —
-reads the egui_plot hover register every frame and surfaces the
-derived ECDF statistics at the cursor:
+A second API surface — `Crosshair`, `Renderer.At` / `Renderer.AtGrid` /
+`Renderer.AtGridPreview`, `Renderer.PaintCrosshair`, and the
+package-free `WriteStatusLine` — reads the egui_plot hover register
+every frame and surfaces the derived ECDF statistics at the cursor:
 
 - `F_n(cursor.x)` via `fnAtXSorted` (binary search) or `fnAtXGrid`
   (piecewise-linear, matching what egui_plot's `PlotLine` draws).
@@ -93,6 +93,32 @@ derived ECDF statistics at the cursor:
   `emitBandRectangles`).
 - The nearest order statistic `X_(NearestIdx+1)` (right-biased
   tie-break on equidistant ordering).
+
+### Band provenance + the verbose readout
+
+`Crosshair` also carries *band provenance* so the readout can describe
+the cursor honestly rather than in bare notation:
+
+- `BandKind` (`BandExact` / `BandPreview` / `BandNone`) and `Method` —
+  which band the `[LowerX, UpperX]` edges came from. `At` / `AtGrid`
+  set `BandExact` + the configured `Method`; `AtGridPreview` sets
+  `BandPreview` (the conservative closed-form DKW strip).
+- `BandN` / `SampleN` — the size the band's critical value was
+  *calibrated* at vs the true current count. The grid entry points set
+  `BandN`; the host sets `SampleN`, because only it knows the true count
+  distinct from a capped or bucketed solve size. When `BandN < SampleN`
+  the readout flags the band conservative — the staleness made visible.
+- `FromGrid` — true on the streaming paths, where "nearest" is a grid
+  evaluation point, not an observed order statistic. The readout omits
+  the `X_(i)` clause there instead of mislabelling a grid point.
+
+`WriteStatusLine` renders a plain-language, multi-line paragraph (the
+reading, the nearest clause, and the confidence interval with its
+provenance) via the pure, testable `formatReadout`. It always emits
+`ReadoutLineCount` rows — the description when the cursor is over the
+curve, a one-line hover hint otherwise, padded to a constant height so
+hovering on / off never reflows the host (which, in the distsummary
+host, would re-enter the plot-width grow guard).
 
 The Renderer is value-typed and stateless — every call re-reads
 `c.CurrentApplicationState.StateManager.GetPlotPointer()`. The cache
@@ -148,11 +174,14 @@ multi-canvas semantics noted in CLAUDE.md.
   legend toggles, zoom/drag policies. The widget contributes one
   band polygon + one ECDF polyline per Render and otherwise stays
   out of the Plot's way.
-- **No streaming variant in the widget.** `BandsForGrid` is
-  available in the underlying library for callers holding a
-  t-digest sketch; the widget here always consumes a sorted
-  sample. A `RenderStreaming(digest, gridN)` arm is straightforward
-  to add if a use case appears.
+- **Streaming via an explicit grid.** Besides `Render(sorted)` for a
+  raw sample, the widget exposes `RenderGrid` / `RenderGridPreview`
+  (and matching `AtGrid` / `AtGridPreview`) for callers holding a
+  sketch: they pass an `(xs, fnAt, n)` grid — typically built from a
+  t-digest via the `ecdfdigest` bridge, whose `BuildDigestGridRange`
+  concentrates the grid in a clipped window so a long tail does not
+  starve the visible body of resolution. The band is calibrated at the
+  total count `n`, never the grid length.
 
 ## Further reading
 

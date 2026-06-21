@@ -2,6 +2,7 @@ package distsummary
 
 import (
 	"math"
+	"math/rand"
 	"strconv"
 	"strings"
 	"testing"
@@ -197,7 +198,7 @@ func TestHumanizeValue(t *testing.T) {
 		{12.5, "12.5"},
 		{2.66, "2.66"},
 		{999, "999"},
-		{0.1, "0.1"},      // not "100m" — fractions stay plain
+		{0.1, "0.1"}, // not "100m" — fractions stay plain
 		{0.093, "0.093"},
 		{0.005, "0.005"},
 		{0.001, "0.001"}, // lower band edge stays plain
@@ -242,3 +243,132 @@ func TestInstanceStateDefaultsToEcdfTab(t *testing.T) {
 	assert.Equal(t, tabECDF, s.tab)
 }
 
+// TestRendererTailClipDefaults pins the documented default-on adaptive
+// cutoff so existing callers get it without opting in.
+func TestRendererTailClipDefaults(t *testing.T) {
+	r := New("t")
+	assert.True(t, r.tailClipEnabled)
+	assert.Equal(t, defaultTailLowerP, r.tailLowerP)
+	assert.Equal(t, defaultTailUpperP, r.tailUpperP)
+	assert.Equal(t, defaultTailTriggerIQR, r.tailTriggerIQR)
+	assert.Equal(t, defaultExactBandBucketRatio, r.exactBandBucketRatio)
+}
+
+// TestRendererTailClipSetters exercises the value-receiver builders:
+// TailClip swaps mis-ordered args and clamps to [0,1] and enables;
+// NoTailClip disables; TailTrigger / ExactBandBucket set their knobs;
+// all return copies that leave the base untouched.
+func TestRendererTailClipSetters(t *testing.T) {
+	base := New("t")
+	// Mis-ordered + out-of-range args are normalised.
+	clip := base.TailClip(1.5, -0.2)
+	assert.Equal(t, 0.0, clip.tailLowerP)
+	assert.Equal(t, 1.0, clip.tailUpperP)
+	assert.True(t, clip.tailClipEnabled)
+	// In-range pass-through.
+	clip2 := base.TailClip(0.005, 0.995)
+	assert.Equal(t, 0.005, clip2.tailLowerP)
+	assert.Equal(t, 0.995, clip2.tailUpperP)
+	// NoTailClip disables; base untouched (value receiver).
+	off := base.NoTailClip()
+	assert.False(t, off.tailClipEnabled)
+	assert.True(t, base.tailClipEnabled)
+	// TailTrigger / ExactBandBucket set their knobs.
+	assert.Equal(t, 5.0, base.TailTrigger(5).tailTriggerIQR)
+	assert.Equal(t, 2.0, base.ExactBandBucket(2).exactBandBucketRatio)
+}
+
+// TestBucketExactN pins the round-down ladder: identity below the floor
+// and when disabled, ≤ n always, and stable across small drift within a
+// bucket (the property that lets a live solve settle).
+func TestBucketExactN(t *testing.T) {
+	// Disabled (ratio ≤ 1) and small-n (≤ floor) are identity.
+	assert.Equal(t, 2000, bucketExactN(2000, 1.0))
+	assert.Equal(t, 200, bucketExactN(200, 1.25))
+	assert.Equal(t, exactBandBucketFloor, bucketExactN(exactBandBucketFloor, 1.25))
+	// Above the floor: rounds DOWN (≤ n) so the band is an over-cover.
+	b := bucketExactN(2000, 1.25)
+	assert.LessOrEqual(t, b, 2000)
+	assert.Greater(t, b, 1600) // within √ratio of n, not collapsed
+	// Stable across small upward drift inside the same bucket.
+	assert.Equal(t, b, bucketExactN(2050, 1.25))
+	assert.Equal(t, b, bucketExactN(2100, 1.25))
+	// Monotone non-decreasing as n grows into the next bucket.
+	assert.GreaterOrEqual(t, bucketExactN(3000, 1.25), b)
+}
+
+// TestTailClipBoundsHeavyTail: a smooth heavy right tail (exponential —
+// the realistic shape, unlike a single outlier which a t-digest smears
+// across the gap) triggers an upper clip strictly below the max, above
+// the median, leaving the short lower side alone.
+func TestTailClipBoundsHeavyTail(t *testing.T) {
+	d := tdigest.NewTDigest()
+	rnd := rand.New(rand.NewSource(3))
+	for range 10_000 {
+		d.Push(rnd.ExpFloat64()) // mean 1, long right tail
+	}
+	lo, hi, clippedLo, clippedHi := tailClipBounds(d, 0.001, 0.999, 3.0, true)
+	assert.True(t, clippedHi, "long upper tail must trigger an upper clip")
+	assert.False(t, clippedLo, "short lower side must not clip")
+	assert.Equal(t, d.Min(), lo)
+	assert.Less(t, hi, d.Max(), "clip cutoff must sit below the max (tail hidden)")
+	assert.Greater(t, hi, d.Quantile(0.5), "cutoff must stay above the body")
+}
+
+// TestTailClipBoundsWellBehavedNoClip: a uniform distribution whose
+// extremes lie within ~3·IQR of the quartiles is shown full-range.
+func TestTailClipBoundsWellBehavedNoClip(t *testing.T) {
+	d := tdigest.NewTDigest()
+	for i := range 1001 {
+		d.Push(float64(i)) // uniform 0..1000
+	}
+	lo, hi, clippedLo, clippedHi := tailClipBounds(d, 0.001, 0.999, 3.0, true)
+	assert.False(t, clippedLo)
+	assert.False(t, clippedHi)
+	assert.Equal(t, d.Min(), lo)
+	assert.Equal(t, d.Max(), hi)
+}
+
+// TestTailClipBoundsDisabled returns the full support without touching
+// the digest's quantiles.
+func TestTailClipBoundsDisabled(t *testing.T) {
+	d := tdigest.NewTDigest()
+	for i := range 500 {
+		d.Push(float64(i % 10))
+	}
+	d.Push(1e9)
+	lo, hi, clippedLo, clippedHi := tailClipBounds(d, 0.001, 0.999, 3.0, false)
+	assert.False(t, clippedLo)
+	assert.False(t, clippedHi)
+	assert.Equal(t, d.Min(), lo)
+	assert.Equal(t, d.Max(), hi)
+}
+
+// TestFormatBandStateLine names the family + calibration n, flagging
+// conservative only when that n lags the true sample size.
+func TestFormatBandStateLine(t *testing.T) {
+	fresh := formatBandStateLine(ecdfbands.BandMethodBerkJones, 1832, 1832)
+	assert.Contains(t, fresh, "Berk-Jones")
+	assert.Contains(t, fresh, "n=1832")
+	assert.NotContains(t, fresh, "conservative")
+	stale := formatBandStateLine(ecdfbands.BandMethodBerkJones, 413, 505)
+	assert.Contains(t, stale, "n=413")
+	assert.Contains(t, stale, "sample 505")
+	assert.Contains(t, stale, "conservative")
+}
+
+// TestFormatTailClipNote is empty when nothing was clipped and names the
+// visible window + hidden upper tail (with mass) when it was.
+func TestFormatTailClipNote(t *testing.T) {
+	d := tdigest.NewTDigest()
+	for i := range 2000 {
+		d.Push(float64(i % 100))
+	}
+	d.Push(1e9)
+	assert.Equal(t, "", formatTailClipNote(d, d.Min(), d.Max(), false, false, humanizeValue))
+	note := formatTailClipNote(d, d.Min(), 99, false, true, humanizeValue)
+	assert.Contains(t, note, "showing x ∈")
+	assert.Contains(t, note, "upper tail")
+	assert.Contains(t, note, "hidden")
+	assert.Contains(t, note, "% of n")
+}

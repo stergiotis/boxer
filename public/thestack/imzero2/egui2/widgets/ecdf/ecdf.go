@@ -14,9 +14,9 @@ import (
 	"math"
 
 	"github.com/stergiotis/boxer/public/analytics/stats/ecdfbands"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
+	"github.com/stergiotis/boxer/public/observability/eh"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )
@@ -66,6 +66,11 @@ func (inst Renderer) Method(m ecdfbands.BandMethodE) (out Renderer) {
 	out = inst
 	return
 }
+
+// BandMethod returns the configured exact-band family — the getter
+// counterpart to [Renderer.Method], so a host widget can name the band
+// (e.g. in an always-visible status line) without re-deriving it.
+func (inst Renderer) BandMethod() ecdfbands.BandMethodE { return inst.method }
 
 // Alpha sets the complement-of-coverage level. The band realises
 // (1-α)·100% simultaneous coverage. Default 0.05.
@@ -284,6 +289,22 @@ func packRGBA(col styletokens.RGBA8, alpha uint8) uint32 {
 	return (uint32(col.R) << 24) | (uint32(col.G) << 16) | (uint32(col.B) << 8) | uint32(alpha)
 }
 
+// BandKindE classifies which confidence band a [Crosshair]'s [LowerX,
+// UpperX] edges were read from, so the readout can name it honestly.
+type BandKindE uint8
+
+const (
+	// BandNone: no band edges populated. The readout omits the band line.
+	BandNone BandKindE = iota
+	// BandExact: edges from the configured exact family ([Crosshair.Method])
+	// at calibration size [Crosshair.BandN] — the tighter band behind the
+	// optional background warm-up.
+	BandExact
+	// BandPreview: edges from the instant closed-form DKW preview (always at
+	// the true sample size); wider / conservative.
+	BandPreview
+)
+
 // Crosshair captures the cursor position over an ECDF plot and the
 // derived statistics most readers want to inspect at that point: the
 // empirical CDF value F_n(x), the simultaneous confidence band
@@ -294,7 +315,9 @@ func packRGBA(col styletokens.RGBA8, alpha uint8) uint32 {
 //
 // Alpha echoes Renderer.Alpha so WriteStatusLine can derive the
 // coverage label "(1-α)·100%" without the caller having to plumb it
-// through.
+// through. The band-provenance fields (BandKind, Method, BandN,
+// SampleN, FromGrid) let WriteStatusLine name the band honestly and
+// surface staleness — see those fields' notes (ADR-0093).
 type Crosshair struct {
 	Valid      bool
 	X          float64
@@ -305,6 +328,27 @@ type Crosshair struct {
 	NearestX   float64
 	NearestIdx int
 	Alpha      float64
+
+	// BandKind classifies [LowerX, UpperX] (exact vs DKW preview vs none)
+	// so the readout can label it; Method names the exact family
+	// (immaterial for the DKW preview, which the readout names explicitly).
+	BandKind BandKindE
+	Method   ecdfbands.BandMethodE
+
+	// BandN is the sample size the band's critical value was calibrated at;
+	// SampleN is the true current sample size. They differ when the host
+	// caps or buckets the exact-band n (BandN < SampleN) — then the band is
+	// a conservative over-cover and the readout says so. The grid entry
+	// points set BandN; the host sets SampleN, since only it knows the true
+	// count distinct from the bucketed / capped solve size.
+	BandN   int
+	SampleN int
+
+	// FromGrid is true for the streaming/grid paths (AtGrid / AtGridPreview),
+	// where "nearest" is a grid evaluation point rather than an observed
+	// order statistic — the readout phrases it honestly instead of
+	// mislabelling a grid point as X_(i).
+	FromGrid bool
 }
 
 // At returns the crosshair info for the sample at the cursor
@@ -341,6 +385,11 @@ func (inst Renderer) At(plotID c.AbsoluteWidgetId, sorted []float64) (out Crossh
 	out.LowerX, out.UpperX = bandAtX(band.Xs, band.LowerCDF, band.UpperCDF, x)
 	out.NearestX = sorted[nIdx]
 	out.NearestIdx = nIdx
+	out.BandKind = BandExact
+	out.Method = inst.method
+	out.BandN = len(sorted)
+	out.SampleN = len(sorted)
+	out.FromGrid = false
 	return
 }
 
@@ -371,6 +420,11 @@ func (inst Renderer) AtGrid(plotID c.AbsoluteWidgetId, xs, fnAt []float64, n int
 	out.LowerX, out.UpperX = bandAtX(g.Xs, g.LowerCDF, g.UpperCDF, x)
 	out.NearestX = xs[nIdx]
 	out.NearestIdx = nIdx
+	out.BandKind = BandExact
+	out.Method = inst.method
+	out.BandN = n
+	out.SampleN = n
+	out.FromGrid = true
 	return
 }
 
@@ -402,6 +456,11 @@ func (inst Renderer) AtGridPreview(plotID c.AbsoluteWidgetId, xs, fnAt []float64
 	out.LowerX, out.UpperX = bandAtX(g.Xs, g.LowerCDF, g.UpperCDF, x)
 	out.NearestX = xs[nIdx]
 	out.NearestIdx = nIdx
+	out.BandKind = BandPreview
+	out.Method = ecdfbands.BandMethodDKW
+	out.BandN = n
+	out.SampleN = n
+	out.FromGrid = true
 	return
 }
 
@@ -420,22 +479,93 @@ func (inst Renderer) PaintCrosshair(ch Crosshair) {
 		Send()
 }
 
-// WriteStatusLine emits a single weak-styled LabelAtoms row that
-// summarises ch in standard ECDF notation —
-// `x = …  F_n(x) = …  (1-α)·100% band […, …]  nearest X_(i) = …` —
-// suitable for placement immediately below the c.Plot.
-//
-// No-op when ch.Valid is false; callers that want a placeholder
-// message ("hover over the plot to inspect cursor values") should
-// emit it themselves on the !Valid branch.
+// ReadoutLineCount is the fixed number of text rows WriteStatusLine
+// emits, so the status area keeps a constant height whether or not the
+// cursor is over the curve. A height that jumped on hover would shift the
+// layout and, in the distsummary host, re-enter the plot-width grow
+// guard. Hosts budget vertical space for the readout from this.
+const ReadoutLineCount = 5
+
+// WriteStatusLine emits the verbose, plain-language cursor readout
+// immediately below the c.Plot as a fixed-height stack of weak-styled
+// rows: the description when ch.Valid, a one-line hover hint otherwise,
+// padded with blank rows to [ReadoutLineCount] so hovering on / off never
+// reflows the host. The text is produced by the pure [formatReadout] so
+// the wording is unit-testable without egui.
 func WriteStatusLine(ch Crosshair) {
-	if !ch.Valid {
-		return
+	lines := formatReadout(ch)
+	for _, ln := range lines {
+		c.LabelAtoms(c.Atoms().BeginRichText(ln).Small().Weak().End().Keep()).Send()
 	}
-	coverage := (1 - ch.Alpha) * 100
-	txt := fmt.Sprintf(
-		"x = %.4g │ F_n(x) = %.3f │ %.0f%% band [%.3f, %.3f] │ nearest X_(%d) = %.4g",
-		ch.X, ch.FnX, coverage, ch.LowerX, ch.UpperX, ch.NearestIdx+1, ch.NearestX,
-	)
-	c.LabelAtoms(c.Atoms().BeginRichText(txt).Small().Weak().End().Keep()).Send()
+	// Pad to a constant height (NBSP keeps an empty row at line height).
+	for i := len(lines); i < ReadoutLineCount; i++ {
+		c.LabelAtoms(c.Atoms().BeginRichText(" ").Small().Weak().End().Keep()).Send()
+	}
+}
+
+// formatReadout renders ch into the verbose readout's text rows (at most
+// [ReadoutLineCount]), describing the cursor's empirical-CDF reading and
+// its simultaneous confidence interval in plain language. Pure — no egui
+// calls — so the wording is unit-testable. Returns a single hover-hint
+// row when ch is not Valid.
+//
+// The "nearest" clause distinguishes an observed order statistic
+// (raw-sample path) from a grid evaluation point (streaming path, where
+// it is omitted) rather than mislabelling the latter as X_(i). The band
+// line is delegated to [formatBandLines].
+func formatReadout(ch Crosshair) (lines []string) {
+	if !ch.Valid {
+		return []string{"Hover over the curve to read F(x) and its confidence interval."}
+	}
+	lines = make([]string, 0, ReadoutLineCount)
+	lines = append(lines, fmt.Sprintf("Cursor at value x = %.4g.", ch.X))
+	lines = append(lines, fmt.Sprintf(
+		"Empirical CDF F_n(x) = %.3f — an estimated %.1f%% of %d observations are ≤ %.4g.",
+		ch.FnX, ch.FnX*100, ch.SampleN, ch.X))
+	if !ch.FromGrid {
+		// Raw-sample path: NearestX is a genuine order statistic.
+		lines = append(lines, fmt.Sprintf(
+			"Nearest observation X_(%d) = %.4g.", ch.NearestIdx+1, ch.NearestX))
+	}
+	lines = append(lines, formatBandLines(ch)...)
+	if len(lines) > ReadoutLineCount {
+		lines = lines[:ReadoutLineCount]
+	}
+	return
+}
+
+// formatBandLines renders the two-row confidence-band description for a
+// valid crosshair, naming the band's provenance honestly: the exact
+// family + the n it was calibrated at, or the conservative DKW preview.
+// When the calibration n lags the true sample size (a capped or bucketed
+// solve, BandN < SampleN) it flags the band as conservative — the
+// staleness made visible. Coverage is rounded for display (%.6g) so the
+// label reads "95%", not the float-error "94.99999999999999%".
+func formatBandLines(ch Crosshair) (lines []string) {
+	if ch.BandKind == BandNone {
+		return []string{"No confidence band available at this point."}
+	}
+	cov := (1 - ch.Alpha) * 100
+	var head string
+	switch ch.BandKind {
+	case BandPreview:
+		head = fmt.Sprintf(
+			"Simultaneous %.6g%% confidence band (conservative DKW preview, n=%d):",
+			cov, ch.BandN)
+	default: // BandExact
+		if ch.BandN < ch.SampleN {
+			head = fmt.Sprintf(
+				"Simultaneous %.6g%% band (exact, %s, n=%d; sample %d, conservative):",
+				cov, ch.Method.String(), ch.BandN, ch.SampleN)
+		} else {
+			head = fmt.Sprintf(
+				"Simultaneous %.6g%% confidence band (exact, %s, n=%d):",
+				cov, ch.Method.String(), ch.BandN)
+		}
+	}
+	lines = append(lines, head)
+	lines = append(lines, fmt.Sprintf(
+		"true CDF F(x) ∈ [%.3f, %.3f] with %.6g%% joint coverage.",
+		ch.LowerX, ch.UpperX, cov))
+	return
 }

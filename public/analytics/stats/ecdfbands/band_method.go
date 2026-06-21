@@ -1,6 +1,9 @@
 package ecdfbands
 
-import "math"
+import (
+	"math"
+	"strconv"
+)
 
 // BandMethodE selects the test statistic whose acceptance region
 // defines the simultaneous confidence band. Each value names a
@@ -51,6 +54,26 @@ const (
 	// heterogeneous departures at small or large i/n.
 	BandMethodHigherCriticism
 )
+
+// String returns a human-readable display name for the band family,
+// suitable for status lines and legends — distinct from the internal
+// lowercase name() each family uses for cache keys and error messages.
+// An unrecognised value renders as "unknown(<d>)" rather than panicking
+// so a status line never blanks on a stray enum.
+func (m BandMethodE) String() string {
+	switch m {
+	case BandMethodBerkJones:
+		return "Berk-Jones"
+	case BandMethodDKW:
+		return "DKW"
+	case BandMethodEqualPrecision:
+		return "equal-precision"
+	case BandMethodHigherCriticism:
+		return "higher-criticism"
+	default:
+		return "unknown(" + strconv.Itoa(int(m)) + ")"
+	}
+}
 
 // bandFamilyI is the internal contract every band family implements.
 // External callers do not see this interface; they select a family by
