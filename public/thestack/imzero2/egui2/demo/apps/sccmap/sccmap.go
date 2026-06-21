@@ -561,6 +561,22 @@ func renderMetricCombo(ids *c.WidgetIdStack, scopeKey, label string, idx int) (o
 	return
 }
 
+// gutterLabel draws text left-aligned in a fixed distGutterW-wide cell so the
+// distsummary rendered after it starts at the same x regardless of how wide the
+// metric name makes the label. The min-width must be set on this nested scope,
+// not on the enclosing Horizontal row: UiSetMinWidth applies to the current Ui,
+// so calling it on the row only widens the whole row and lets the bare label —
+// and the summary after it — still shift as the metric name changes. min (not
+// min+max) so an over-long label grows the cell rather than truncating; the
+// distGutterW const is sized for the widest gutter form, so in practice every
+// label fits and the cell stays exactly distGutterW wide.
+func (inst *App) gutterLabel(text string) {
+	for range c.Vertical().KeepIter() {
+		c.UiSetMinWidth(distGutterW)
+		c.Label(text).Send()
+	}
+}
+
 // renderDistSummaries paints one or two distsummary widgets — one per
 // currently-selected metric — inside a single Horizontal row. The row
 // uses a fixed-width "Size: " / "Color: " gutter label so the inline
@@ -579,17 +595,16 @@ func (inst *App) renderDistSummaries() {
 	colorName := sccMetrics[inst.colorMetricIdx].Name
 	aliased := inst.sizeDigest == inst.colorDigest
 	for range c.Horizontal().KeepIter() {
-		c.UiSetMinWidth(distGutterW)
 		if aliased {
-			c.Label("Size & color (" + sizeName + "):").Send()
+			inst.gutterLabel("Size & color (" + sizeName + "):")
 		} else {
-			c.Label("Size (" + sizeName + "):").Send()
+			inst.gutterLabel("Size (" + sizeName + "):")
 		}
 		c.AddSpace(styletokens.GapItems(inst.density))
 		inst.distRenderer.Render(inst.ids.PrepareStr("size-dist"), inst.sizeDigest, nil)
 		if !aliased {
 			c.AddSpace(styletokens.GapSections(inst.density))
-			c.Label("Color (" + colorName + "):").Send()
+			inst.gutterLabel("Color (" + colorName + "):")
 			c.AddSpace(styletokens.GapItems(inst.density))
 			inst.distRenderer.Render(inst.ids.PrepareStr("color-dist"), inst.colorDigest, nil)
 		}
