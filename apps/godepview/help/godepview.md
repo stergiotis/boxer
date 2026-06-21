@@ -9,57 +9,75 @@ title: Go Dependency Explorer
 
 # Go Dependency Explorer
 
-Explores this module's Go dependency graph: every package in the transitive
-closure (your packages, their external dependencies, and the standard
-library) as nodes, with `import` relations as edges.
+Explores this module's Go dependency graph — every package in the transitive
+closure (your packages, their external dependencies, and the standard library)
+as nodes, with `import` relations as edges. The data is a one-shot snapshot
+collected when the window opens, via `go/packages` under the active build tags.
 
-## What you see
+## Three views, one switch
 
-The window is a three-pane dock you can drag-resize:
+The **view** switch at the top chooses what the window is about. Each view fills
+the same three-pane dock — a master table on the left, a graph top-right, a
+detail pane bottom-right — around a single focus object, so the panes always
+agree. Drag the pane borders to resize; the layout persists.
 
-- **packages** (master) — one row per package across the whole closure.
-  Columns: import path, package name, class (stdlib / internal / external),
-  owning module, `.go` file count, out-degree (**Out** = packages it
-  imports), and in-degree (**In** = packages that import it). Click a column
-  header to sort; click again to reverse.
-- **neighborhood** (graph) — the import neighborhood of the *focused* package
-  only, not the whole closure (which is far too large to draw). Click a table
-  row, a graph node, or a detail-pane entry to set the focus.
-- **detail** — the focused package's full path, class, module, directory, file
-  count, and degrees, plus its direct **Imports** and **Imported by** lists.
-  Every list entry is click-to-focus, so you can walk the graph even when a
-  neighborhood is too large to draw.
+| View | Master | Graph | Detail | About |
+|------|--------|-------|--------|-------|
+| **Packages** | every package | the focused package's neighbourhood | its imports / importers | one package |
+| **Architecture** | groups (subsystems) | the group quotient | violations, cycles, members | one group |
+| **Modules** | external modules | the quotient with modules folded in | a module's footprint + witness | one module |
 
-## Controls
+The **filter** box (shared by the package and module tables) does a substring
+match; the count beside it is how many rows the active table shows.
 
-- **Filter** — substring match on the import path.
-- **stdlib / internal / external** — toggle which classes the table shows.
-- **depth** — how many import hops out from the focus the graph expands.
-- **imports ▸ / importers ◂ / both** — which direction the neighborhood
-  follows: packages the focus imports, packages that import the focus, or
-  both.
-- **hide stdlib** — drop standard-library packages from the *graph* (the
-  table still lists them). Stdlib hubs like `fmt` and `errors` are imported by
-  almost everything, so hiding them keeps the neighborhood legible.
-- **engine** — switch the graph between **live** (interactive force/hierarchical
-  layout, drag nodes around) and **layered** (a Graphviz-`dot` Sugiyama layout
-  computed in-process, with arrow-headed edges and pan/zoom).
-- **clear** — in the detail pane, drops the current focus.
+## Packages view
 
-## Notes
+The starting view, and the right one for "what does this one package touch?".
 
-- The neighborhood graph is capped (currently 200 nodes); a hub package whose
-  raw neighborhood is most of the closure shows its closest neighbors and a
-  "capped — narrow with …" note. Use depth, direction, or **hide stdlib** to
-  bring it into range, or read the complete import/importer lists in the detail
-  pane.
-- The live engine lays out hierarchically; the collected (production) import
-  graph is acyclic, so the levels are well-defined. Test-only imports are
-  not collected this iteration.
-- The data shown is a one-shot snapshot collected when the window opened,
-  via `go/packages`. Collection reflects the active build tags — launch
-  through the boxer wrapper so the repo's tags are in effect, or the graph
-  will be missing tag-gated packages.
-- The collected snapshot is a marshallgen-serializable manifest (ADR-0064);
-  a future iteration persists it to `runtime.facts` and reads historical
-  snapshots back.
+- **table** — one row per package across the whole closure: import path, name,
+  class, owning module, `.go` file count, **Out** (packages it imports) and
+  **In** (packages that import it). Click a header to sort, again to reverse.
+- **graph** — the import neighbourhood of the *focused* package only (the whole
+  closure is far too large to draw). **depth**, direction (imports ▸ / importers
+  ◂ / both), and **hide stdlib** keep it legible; the **engine** toggle switches
+  between a live force/hierarchical layout and a Graphviz-`dot` layered one.
+- **detail** — the focused package's metadata plus its direct **Imports** and
+  **Imported by** lists, every entry click-to-focus.
+
+## Architecture view
+
+Steps back from packages to **groups** — each `apps/<name>`, each `public/<area>`,
+each external module, with the standard library collapsed. The group **quotient**
+(one node per group; edges weighted by how many imports cross between them) is
+small enough to draw whole. Use it to see how subsystems relate, whether sibling
+apps stay independent, and where dependency cycles hide. The **group depth**
+slider trades detail for overview; **show external** folds the third-party
+modules in.
+
+See the how-to guides *Check that keelson apps stay independent* and *Find
+dependency cycles and coupling*.
+
+## Modules view
+
+Rolls the external packages up by their owning module to answer third-party
+questions: how many of your packages lean on a module (**fan-in**), whether you
+depend on it **directly** or only transitively, and its **blast radius** (the
+first-party packages a change would reach). Selecting a module and clicking a
+blast-radius package traces the **witness path** — the shortest import chain
+explaining why your code pulls the module in.
+
+See the how-to guide *Trace why you depend on a module*.
+
+## Concepts
+
+- **Class** — a package is **stdlib** (standard library), **internal** (in this
+  module), or **external** (a third-party dependency).
+- **Closure** — the full set of packages reachable by `import` from this module,
+  on the order of thousands of nodes. The Packages table scales to all of them;
+  the graphs stay legible by drawing a bounded neighbourhood (Packages) or the
+  small group quotient (Architecture / Modules).
+- **Group / quotient** — packages folded by directory prefix (or by module, for
+  externals); the quotient is the graph of those groups.
+- **Snapshot** — collection runs once when the window opens and reflects the
+  active build tags. Launch through the boxer wrapper so the repo's tags are in
+  effect, or tag-gated packages are missing. Test-only imports are not collected.
