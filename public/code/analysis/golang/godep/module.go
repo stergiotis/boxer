@@ -105,6 +105,53 @@ func (idx *Index) ReverseReachInternal(seeds []uint64) (internal []uint64) {
 	return internal
 }
 
+// ShortestImportPathTo returns the shortest forward-import chain from `from` to
+// the nearest package satisfying isTarget, as package ids [from, …, target]
+// (inclusive). It is the minimum-hop witness for "why does `from` depend on
+// (something satisfying isTarget)" — e.g. why a first-party package pulls in a
+// given external module. It is a breadth-first walk of the forward Imports
+// edges; it returns [from] when `from` itself satisfies isTarget, and nil when
+// no target is reachable.
+func (idx *Index) ShortestImportPathTo(from uint64, isTarget func(id uint64) bool) (path []uint64) {
+	if isTarget(from) {
+		return []uint64{from}
+	}
+	prev := map[uint64]uint64{from: from} // child → parent; from is its own parent (the stop sentinel)
+	queue := []uint64{from}
+	var hit uint64
+	found := false
+	for len(queue) > 0 && !found {
+		id := queue[0]
+		queue = queue[1:]
+		p, ok := idx.byID[id]
+		if !ok {
+			continue
+		}
+		for _, to := range p.Imports {
+			if _, seen := prev[to]; seen {
+				continue
+			}
+			prev[to] = id
+			if isTarget(to) {
+				hit, found = to, true
+				break
+			}
+			queue = append(queue, to)
+		}
+	}
+	if !found {
+		return nil
+	}
+	for cur := hit; ; cur = prev[cur] {
+		path = append(path, cur)
+		if cur == from {
+			break
+		}
+	}
+	slices.Reverse(path)
+	return path
+}
+
 // ModuleImporters returns the first-party packages that import directly into the
 // given module's packages (the fan-in set, not the transitive blast radius),
 // sorted. seeds are the module's package ids (ModuleStat.PkgIDs).

@@ -66,12 +66,12 @@ func TestGroupOf(t *testing.T) {
 		want  godep.GroupKey
 	}{
 		{testRoot + "/apps/alpha", 2, "apps/alpha"},
-		{testRoot + "/apps/alpha/sub", 2, "apps/alpha"},  // sub-package folds into the app
+		{testRoot + "/apps/alpha/sub", 2, "apps/alpha"}, // sub-package folds into the app
 		{testRoot + "/apps/beta", 2, "apps/beta"},
 		{testRoot + "/public/lib/util", 2, "public/lib"}, // depth 2 truncates the path
 		{testRoot + "/public/lib/util", 3, "public/lib/util"},
 		{testRoot + "/public/lib/util", 1, "public"},
-		{"github.com/foo/pkg", 2, "github.com/foo"},      // external groups by module, ignoring depth
+		{"github.com/foo/pkg", 2, "github.com/foo"}, // external groups by module, ignoring depth
 		{"github.com/grpc/pkg", 3, "github.com/grpc"},
 		{"fmt", 2, godep.StdlibGroup},
 	}
@@ -218,6 +218,67 @@ func TestModuleStats(t *testing.T) {
 	// Transitive, yet a change still reaches the same first-party set through foo.
 	if grpc.BlastRadius != 4 {
 		t.Errorf("github.com/grpc BlastRadius = %d, want 4", grpc.BlastRadius)
+	}
+}
+
+func TestShortestImportPathTo(t *testing.T) {
+	m := testManifest()
+	idx := m.BuildIndex()
+
+	// Why does apps/alpha depend on the (transitive) grpc module? The witness is
+	// alpha → public/lib/util → foo/pkg → grpc/pkg.
+	got := idx.ShortestImportPathTo(idAlpha, func(id uint64) bool { return id == idGrpc })
+	want := []uint64{idAlpha, idLib, idFoo, idGrpc}
+	if len(got) != len(want) {
+		t.Fatalf("path = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("path = %v, want %v", got, want)
+		}
+	}
+
+	// A nearer target stops the walk earlier (foo is one hop closer than grpc).
+	if p := idx.ShortestImportPathTo(idAlpha, func(id uint64) bool { return id == idFoo }); len(p) != 3 || p[2] != idFoo {
+		t.Errorf("path to foo = %v, want [alpha lib foo]", p)
+	}
+	// from satisfies the target immediately → [from].
+	if p := idx.ShortestImportPathTo(idAlpha, func(id uint64) bool { return id == idAlpha }); len(p) != 1 || p[0] != idAlpha {
+		t.Errorf("path to self = %v, want [alpha]", p)
+	}
+	// Unreachable (grpc imports nothing first-party).
+	if p := idx.ShortestImportPathTo(idGrpc, func(id uint64) bool { return id == idAlpha }); p != nil {
+		t.Errorf("unreachable path = %v, want nil", p)
+	}
+}
+
+func TestStronglyConnected(t *testing.T) {
+	// The standard manifest's quotient is acyclic.
+	base := testManifest()
+	gg := base.BuildIndex().BuildGroupGraph(testRoot, godep.GroupingOpts{InternalDepth: 2}, nil)
+	if comps := gg.StronglyConnected(); len(comps) != 0 {
+		t.Errorf("acyclic quotient: got %d SCCs, want 0: %v", len(comps), comps)
+	}
+
+	// A cyclic quotient: public/a ⇄ public/b (group-level cycle through distinct
+	// packages, even though package imports stay acyclic).
+	pkg := func(id uint64, path string, imports ...uint64) godep.PackageNode {
+		return godep.PackageNode{Id: id, ImportPath: path, ModulePath: testRoot, Class: godep.ClassInternal, Imports: imports}
+	}
+	var m godep.Manifest
+	m.Run = godep.CollectionRun{RootModulePath: testRoot}
+	m.Packages = []godep.PackageNode{
+		pkg(100, testRoot+"/public/a/x", 200), // public/a → public/b
+		pkg(200, testRoot+"/public/b/y", 101), // public/b → public/a (a different a package)
+		pkg(101, testRoot+"/public/a/z"),      // leaf
+	}
+	gg2 := m.BuildIndex().BuildGroupGraph(testRoot, godep.GroupingOpts{InternalDepth: 2}, nil)
+	comps := gg2.StronglyConnected()
+	if len(comps) != 1 {
+		t.Fatalf("cyclic quotient: got %d SCCs, want 1: %v", len(comps), comps)
+	}
+	if len(comps[0]) != 2 || comps[0][0] != "public/a" || comps[0][1] != "public/b" {
+		t.Errorf("SCC = %v, want [public/a public/b]", comps[0])
 	}
 }
 

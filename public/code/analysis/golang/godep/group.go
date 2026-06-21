@@ -228,6 +228,77 @@ func dominantClass(votes map[string]int) (class string) {
 	return class
 }
 
+// StronglyConnected returns the non-trivial strongly-connected components of the
+// quotient — sets of two or more groups that mutually depend, each reachable
+// from the others through group edges. Singletons (the acyclic majority) are
+// omitted. Go forbids package import cycles, but the *group* quotient can still
+// cycle: two areas can each import some package from the other, so a group-level
+// cycle is the deepest "intertangled" signal the per-package view cannot show.
+// Members within a component are sorted; components are ordered by their
+// smallest member, so the result is deterministic.
+//
+// It is Tarjan's algorithm over the quotient (tens of nodes), so the recursion
+// depth is bounded by the group count.
+func (gg *GroupGraph) StronglyConnected() (comps [][]GroupKey) {
+	adj := make(map[GroupKey][]GroupKey, len(gg.Nodes))
+	for _, e := range gg.Edges {
+		adj[e.From] = append(adj[e.From], e.To)
+	}
+	type tjState struct {
+		index   int
+		low     int
+		onStack bool
+	}
+	st := make(map[GroupKey]*tjState, len(gg.Nodes))
+	var stack []GroupKey
+	counter := 0
+	var strongconnect func(v GroupKey)
+	strongconnect = func(v GroupKey) {
+		s := &tjState{index: counter, low: counter, onStack: true}
+		st[v] = s
+		counter++
+		stack = append(stack, v)
+		for _, w := range adj[v] {
+			ws, seen := st[w]
+			switch {
+			case !seen:
+				strongconnect(w)
+				if st[w].low < s.low {
+					s.low = st[w].low
+				}
+			case ws.onStack:
+				if ws.index < s.low {
+					s.low = ws.index
+				}
+			}
+		}
+		if s.low == s.index {
+			var comp []GroupKey
+			for {
+				n := len(stack) - 1
+				w := stack[n]
+				stack = stack[:n]
+				st[w].onStack = false
+				comp = append(comp, w)
+				if w == v {
+					break
+				}
+			}
+			if len(comp) >= 2 {
+				slices.Sort(comp)
+				comps = append(comps, comp)
+			}
+		}
+	}
+	for _, n := range gg.Nodes { // gg.Nodes is key-sorted, so the traversal is deterministic
+		if _, seen := st[n.Key]; !seen {
+			strongconnect(n.Key)
+		}
+	}
+	sort.Slice(comps, func(i, j int) bool { return comps[i][0] < comps[j][0] })
+	return comps
+}
+
 // SiblingViolation is one forbidden import edge between two distinct siblings
 // directly under a guarded prefix (e.g. two different apps/<name> trees). It is
 // the package-level evidence behind a reddened architecture edge — From/To name
